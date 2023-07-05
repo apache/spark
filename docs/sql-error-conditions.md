@@ -111,6 +111,12 @@ Unable to find batch `<batchMetadataFile>`.
 
 `<value1>` `<symbol>` `<value2>` caused overflow.
 
+### CALL_ON_STREAMING_DATASET_UNSUPPORTED
+
+SQLSTATE: none assigned
+
+The method `<methodName>` can not be called on streaming Dataset/DataFrame.
+
 ### CANNOT_CAST_DATATYPE
 
 [SQLSTATE: 42846](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
@@ -1567,6 +1573,12 @@ The table or view `<relationName>` cannot be found. Verify the spelling and corr
 If you did not qualify the name with a schema, verify the current_schema() output, or qualify the name with the correct schema and catalog.
 
 To tolerate the error on drop use DROP VIEW IF EXISTS or DROP TABLE IF EXISTS.
+
+### TABLE_VALUED_FUNCTION_TOO_MANY_TABLE_ARGUMENTS
+
+SQLSTATE: none assigned
+
+There are too many table arguments for table-valued function. It allows one table argument, but got: `<num>`. If you want to allow it, please set "spark.sql.allowMultipleTableArguments.enabled" to "true"
 
 ### TASK_WRITE_FAILED
 

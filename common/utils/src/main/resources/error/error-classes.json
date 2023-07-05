@@ -91,6 +91,11 @@
     ],
     "sqlState" : "22003"
   },
+  "CALL_ON_STREAMING_DATASET_UNSUPPORTED" : {
+    "message" : [
+      "The method <methodName> can not be called on streaming Dataset/DataFrame."
+    ]
+  },
   "CANNOT_CAST_DATATYPE" : {
     "message" : [
       "Cannot cast <sourceType> to <targetType>."
@@ -551,6 +556,11 @@
       "STACK_COLUMN_DIFF_TYPES" : {
         "message" : [
           "The data type of the column (<columnIndex>) do not have the same type: <leftType> (<leftParamIndex>) <> <rightType> (<rightParamIndex>)."
+        ]
+      },
+      "TYPE_CHECK_FAILURE_WITH_HINT" : {
+        "message" : [
+          "<msg><hint>."
         ]
       },
       "UNEXPECTED_CLASS_TYPE" : {
@@ -1325,6 +1335,33 @@
     "message" : [
       "Numeric literal <rawStrippedQualifier> is outside the valid range for <typeName> with minimum value of <minValue> and maximum value of <maxValue>. Please adjust the value accordingly."
     ]
+  },
+  "INVALID_OBSERVED_METRICS" : {
+    "message" : [
+      "Invalid observed metrics."
+    ],
+    "subClass" : {
+      "MISSING_NAME" : {
+        "message" : [
+          "The observed metrics should be named: <operator>."
+        ]
+      },
+      "NESTED_AGGREGATES_UNSUPPORTED" : {
+        "message" : [
+          "Nested aggregates are not allowed in observed metrics, but found: <expr>."
+        ]
+      },
+      "NON_AGGREGATE_FUNC_ARG_IS_NON_DETERMINISTIC" : {
+        "message" : [
+          "Non-deterministic expression <expr> can only be used as an argument to an aggregate function."
+        ]
+      },
+      "WINDOW_EXPRESSIONS_UNSUPPORTED" : {
+        "message" : [
+          "Window expressions are not allowed in observed metrics, but found: <expr>."
+        ]
+      }
+    }
   },
   "INVALID_OPTIONS" : {
     "message" : [
@@ -2197,6 +2234,11 @@
       "To tolerate the error on drop use DROP VIEW IF EXISTS or DROP TABLE IF EXISTS."
     ],
     "sqlState" : "42P01"
+  },
+  "TABLE_VALUED_FUNCTION_TOO_MANY_TABLE_ARGUMENTS" : {
+    "message" : [
+      "There are too many table arguments for table-valued function. It allows one table argument, but got: <num>. If you want to allow it, please set \"spark.sql.allowMultipleTableArguments.enabled\" to \"true\""
+    ]
   },
   "TASK_WRITE_FAILED" : {
     "message" : [
@@ -5602,51 +5644,6 @@
   "_LEGACY_ERROR_TEMP_2278" : {
     "message" : [
       "The input <valueType> '<input>' does not match the given number format: '<format>'."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2311" : {
-    "message" : [
-      "'writeTo' can not be called on streaming Dataset/DataFrame."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2312" : {
-    "message" : [
-      "'write' can not be called on streaming Dataset/DataFrame."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2313" : {
-    "message" : [
-      "Hint not found: <name>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2314" : {
-    "message" : [
-      "cannot resolve '<sqlExpr>' due to argument data type mismatch: <msg>"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2315" : {
-    "message" : [
-      "cannot resolve '<sqlExpr>' due to data type mismatch: <msg><hint>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2316" : {
-    "message" : [
-      "observed metrics should be named: <operator>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2317" : {
-    "message" : [
-      "window expressions are not allowed in observed metrics, but found: <sqlExpr>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2318" : {
-    "message" : [
-      "non-deterministic expression <sqlExpr> can only be used as an argument to an aggregate function."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2319" : {
-    "message" : [
-      "nested aggregates are not allowed in observed metrics, but found: <sqlExpr>."
     ]
   },
   "_LEGACY_ERROR_TEMP_2320" : {
