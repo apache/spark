@@ -19,8 +19,7 @@ package org.apache.spark.sql
 import java.sql.Timestamp
 import java.util.Arrays
 
-import io.grpc.StatusRuntimeException
-
+import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes.Append
 import org.apache.spark.sql.connect.client.util.QueryTest
 import org.apache.spark.sql.functions._
@@ -179,7 +178,7 @@ class KeyValueGroupedDatasetE2ETestSuite extends QueryTest with SQLHelper {
     assert(values == Arrays.asList[String]("0", "8,6,4,2,0", "1", "9,7,5,3,1"))
 
     // Star is not allowed as group sort column
-    val message = intercept[StatusRuntimeException] {
+    val message = intercept[SparkException] {
       grouped
         .flatMapSortedGroups(col("*")) { (g, iter) =>
           Iterator(String.valueOf(g), iter.mkString(","))
@@ -434,14 +433,12 @@ class KeyValueGroupedDatasetE2ETestSuite extends QueryTest with SQLHelper {
   }
 
   test("SPARK-26085: fix key attribute name for atomic type for typed aggregation") {
-    // TODO(SPARK-43416): Recursively rename the position based tuple to the schema name from the
-    //  server.
     val ds = Seq(1, 2, 3).toDS()
-    assert(ds.groupByKey(x => x).count().schema.head.name == "_1")
+    assert(ds.groupByKey(x => x).count().schema.head.name == "key")
 
     // Enable legacy flag to follow previous Spark behavior
     withSQLConf("spark.sql.legacy.dataset.nameNonStructGroupingKeyAsValue" -> "true") {
-      assert(ds.groupByKey(x => x).count().schema.head.name == "_1")
+      assert(ds.groupByKey(x => x).count().schema.head.name == "value")
     }
   }
 
