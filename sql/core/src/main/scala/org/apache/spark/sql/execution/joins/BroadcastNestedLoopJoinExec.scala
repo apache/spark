@@ -72,16 +72,6 @@ case class BroadcastNestedLoopJoinExec(
     case _ => Nil
   }
 
-  private[this] def genResultProjection: UnsafeProjection = joinType match {
-    case LeftExistence(_) =>
-      UnsafeProjection.create(output, output)
-    case _ =>
-      // Always put the stream side on left to simplify implementation
-      // both of left and right side could be null
-      UnsafeProjection.create(
-        output, (streamed.output ++ broadcast.output).map(_.withNullability(true)))
-  }
-
   override def output: Seq[Attribute] = {
     joinType match {
       case _: InnerLike =>
@@ -397,12 +387,18 @@ case class BroadcastNestedLoopJoinExec(
     }
 
     val numOutputRows = longMetric("numOutputRows")
-    resultRdd.mapPartitionsWithIndexInternal { (index, iter) =>
-      val resultProj = genResultProjection
-      resultProj.initialize(index)
-      iter.map { r =>
-        numOutputRows += 1
-        resultProj(r)
+    val evaluatorFactory = new BroadcastNestedLoopJoinEvaluatorFactory(
+      output,
+      streamed.output,
+      broadcast.output,
+      joinType,
+      numOutputRows)
+    if (conf.usePartitionEvaluator) {
+      resultRdd.mapPartitionsWithEvaluator(evaluatorFactory)
+    } else {
+      resultRdd.mapPartitionsWithIndexInternal { (index, iter) =>
+        val evaluator = evaluatorFactory.createEvaluator()
+        evaluator.eval(index, iter)
       }
     }
   }

@@ -19,7 +19,6 @@ package org.apache.spark.sql.execution.joins
 
 import scala.collection.mutable
 
-import org.apache.spark.TaskContext
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
@@ -121,37 +120,23 @@ case class BroadcastHashJoinExec(
 
   protected override def doExecute(): RDD[InternalRow] = {
     val numOutputRows = longMetric("numOutputRows")
-
     val broadcastRelation = buildPlan.executeBroadcast[HashedRelation]()
-    if (isNullAwareAntiJoin) {
-      streamedPlan.execute().mapPartitionsInternal { streamedIter =>
-        val hashed = broadcastRelation.value.asReadOnlyCopy()
-        TaskContext.get().taskMetrics().incPeakExecutionMemory(hashed.estimatedSize)
-        if (hashed == EmptyHashedRelation) {
-          streamedIter
-        } else if (hashed == HashedRelationWithAllNullKeys) {
-          Iterator.empty
-        } else {
-          val keyGenerator = streamSideKeyGenerator()
-          streamedIter.filter { row =>
-            val lookupKey: UnsafeRow = keyGenerator(row)
-            if (lookupKey.anyNull()) {
-              false
-            } else {
-              // Anti Join: Drop the row on the streamed side if it is a match on the build
-              hashed.get(lookupKey) == null
-            }
-          }.map { row =>
-            numOutputRows += 1
-            row
-          }
-        }
-      }
+
+    val evaluatorFactory = new BroadcastHashJoinEvaluatorFactory(
+      broadcastRelation,
+      join,
+      buildSide,
+      left.output,
+      right.output,
+      streamedKeys,
+      isNullAwareAntiJoin,
+      numOutputRows)
+    if (conf.usePartitionEvaluator) {
+      streamedPlan.execute().mapPartitionsWithEvaluator(evaluatorFactory)
     } else {
-      streamedPlan.execute().mapPartitions { streamedIter =>
-        val hashed = broadcastRelation.value.asReadOnlyCopy()
-        TaskContext.get().taskMetrics().incPeakExecutionMemory(hashed.estimatedSize)
-        join(streamedIter, hashed, numOutputRows)
+      streamedPlan.execute().mapPartitionsInternal { streamedIter =>
+        val evaluator = evaluatorFactory.createEvaluator()
+        evaluator.eval(0, streamedIter)
       }
     }
   }
