@@ -287,7 +287,6 @@ private object PostgresDialect extends JdbcDialect with SQLConfHelper {
    * PostgreSQL has four special "infinity values" that we need clamp to avoid overflow.
    * If it is not one of the infinity values, fall back to default behavior. */
   override def convertJavaTimestampToTimestamp(t: Timestamp): Long = {
-
     // variable names come from PostgreSQL "constant field docs":
     // https://jdbc.postgresql.org/documentation/publicapi/index.html?constant-values.html
     val POSTGRESQL_DATE_NEGATIVE_INFINITY = -9223372036832400000L
