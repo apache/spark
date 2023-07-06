@@ -120,6 +120,7 @@ private[client] class GrpcRetryHandler(private val retryPolicy: GrpcRetryHandler
 
     private var opened = false // only retries on first call
     private var streamObserver = call(request)
+
     override def onNext(v: U): Unit = {
       if (!opened) {
         opened = true
@@ -138,10 +139,12 @@ private[client] class GrpcRetryHandler(private val retryPolicy: GrpcRetryHandler
         streamObserver.onNext(v)
       }
     }
+
     override def onError(throwable: Throwable): Unit = {
       opened = true
       streamObserver.onError(throwable)
     }
+
     override def onCompleted(): Unit = {
       opened = true
       streamObserver.onCompleted()

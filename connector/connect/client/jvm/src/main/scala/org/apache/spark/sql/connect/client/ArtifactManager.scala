@@ -52,10 +52,10 @@ import org.apache.spark.util.{SparkFileUtils, SparkThreadUtils}
  *   An async stub to the server.
  */
 class ArtifactManager(
-    private val userContext: proto.UserContext,
-    private val sessionId: String,
-    private val bstub: CustomSparkConnectBlockingStub,
-    private val stub: CustomSparkConnectStub) {
+    userContext: proto.UserContext,
+    sessionId: String,
+    bstub: CustomSparkConnectBlockingStub,
+    stub: CustomSparkConnectStub) {
   // Using the midpoint recommendation of 32KiB for chunk size as specified in
   // https://github.com/grpc/grpc.github.io/issues/371.
   private val CHUNK_SIZE: Int = 32 * 1024
