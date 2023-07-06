@@ -56,16 +56,44 @@ class ClientDistributedCacheManagerSuite extends SparkFunSuite with MockitoSugar
     val destURI = destPath.toUri
     val localResources = HashMap[String, LocalResource]()
     val statCache: Map[URI, FileStatus] = HashMap[URI, FileStatus]()
-    assert(statCache.contains(destURI) === false)
+
+    when(distMgr.checkPermissionOfOther(any[FileSystem], any[URI], any[FsAction],
+      any[Map[URI, FileStatus]])).thenAnswer((invocation: InvocationOnMock) => {
+        val uri = invocation.getArgument[URI](1)
+        val statCache = invocation.getArgument[Map[URI, FileStatus]](3)
+        assert(statCache.contains(uri))
+        true
+      })
+
+    when(distMgr.isPublic(any[Configuration], any[URI], any[Map[URI, FileStatus]])).
+      thenAnswer((invocation: InvocationOnMock) => {
+        val uri = invocation.getArgument[URI](1)
+        val statCache = invocation.getArgument[Map[URI, FileStatus]](2)
+        distMgr.checkPermissionOfOther(fs, uri, FsAction.READ, statCache)
+        true
+      })
+
+    when(distMgr.getVisibility(any[Configuration], any[URI], any[Map[URI, FileStatus]])).
+      thenAnswer((invocation: InvocationOnMock) => {
+        val uri = invocation.getArgument[URI](1)
+        val statCache = invocation.getArgument[Map[URI, FileStatus]](2)
+        distMgr.isPublic(conf, uri, statCache)
+        LocalResourceVisibility.PRIVATE
+      })
+
+    when(distMgr.addResource(any[FileSystem], any[Configuration], any[Path],
+      any[HashMap[String, LocalResource]], any[LocalResourceType], any[String],
+      any[Map[URI, FileStatus]], any[Boolean])).thenAnswer((invocation: InvocationOnMock) => {
+      val destPath = invocation.getArgument[Path](2)
+      val statCache = invocation.getArgument[Map[URI, FileStatus]](6)
+
+      statCache.getOrElseUpdate(destPath.toUri, fs.getFileStatus(destPath))
+      assert(statCache.contains(destURI))
+      distMgr.getVisibility(conf, destPath.toUri(), statCache)
+    })
+
     distMgr.addResource(fs, conf, destPath, localResources, LocalResourceType.FILE, "link",
       statCache, false)
-    when(distMgr.getFileStatus(any[FileSystem], any[URI], any[Map[URI, FileStatus]]))
-      .thenAnswer((invocation: InvocationOnMock) => {
-      val destURI = invocation.getArgument[URI](1)
-      val statCache = invocation.getArgument[Map[URI, FileStatus]](3)
-      assert(!statCache.contains(destURI))
-      true
-    })
   }
 
   test("SPARK-44272: test getParentURI") {

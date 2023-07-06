@@ -117,7 +117,8 @@ private[spark] class ClientDistributedCacheManager() extends Logging {
    * Returns a boolean to denote whether a cache file is visible to all (public)
    * @return true if the path in the uri is visible to all, false otherwise
    */
-  private def isPublic(conf: Configuration, uri: URI, statCache: Map[URI, FileStatus]): Boolean = {
+  private[yarn] def isPublic(conf: Configuration, uri: URI, statCache: Map[URI, FileStatus]):
+  Boolean = {
     val fs = FileSystem.get(uri, conf)
     // the leaf level file should be readable by others
     if (!checkPermissionOfOther(fs, uri, FsAction.READ, statCache)) {
@@ -168,7 +169,7 @@ private[spark] class ClientDistributedCacheManager() extends Logging {
    * imply the permission in the passed FsAction
    * @return true if the path in the uri is visible to all, false otherwise
    */
-  private def checkPermissionOfOther(
+  private[yarn] def checkPermissionOfOther(
       fs: FileSystem,
       uri: URI,
       action: FsAction,
