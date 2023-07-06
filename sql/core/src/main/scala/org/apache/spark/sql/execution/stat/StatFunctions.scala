@@ -109,8 +109,18 @@ object StatFunctions extends Logging {
 
   /** Calculate the Pearson Correlation Coefficient for the given columns */
   def pearsonCorrelation(df: DataFrame, cols: Seq[String]): Double = {
+    calculateCorrImpl(df, cols).head.getDouble(0)
+  }
+
+  private[sql] def calculateCorrImpl(
+    df: DataFrame,
+    cols: Seq[String],
+    method: String = "pearson"): DataFrame = {
+    require(method == "pearson", "Currently only the calculation of the Pearson Correlation " +
+      "coefficient is supported.")
     require(cols.length == 2,
       "Currently correlation calculation is supported between two columns.")
+
     val Seq(col1, col2) = cols.map { c =>
       val dataType = df.resolve(c).dataType
       require(dataType.isInstanceOf[NumericType],
@@ -123,7 +133,8 @@ object StatFunctions extends Logging {
     df.select(
       when(isnull(correlation), lit(Double.NaN))
         .otherwise(correlation)
-    ).head.getDouble(0)
+        .as("corr")
+    )
   }
 
   /**

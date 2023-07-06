@@ -147,6 +147,13 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationSuite {
       |('2013-04-05 12:01:02'),
       |('2013-04-05 18:01:02.123'),
       |('2013-04-05 18:01:02.123456')""".stripMargin).executeUpdate()
+
+    conn.prepareStatement("CREATE DOMAIN not_null_text AS TEXT DEFAULT ''").executeUpdate()
+    conn.prepareStatement("create table custom_type(type_array not_null_text[]," +
+      "type not_null_text)").executeUpdate()
+    conn.prepareStatement("INSERT INTO custom_type (type_array, type) VALUES" +
+      "('{1,fds,fdsa}','fdasfasdf')").executeUpdate()
+
   }
 
   test("Type mapping for various types") {
@@ -415,5 +422,14 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationSuite {
 
     val df_actual = sqlContext.read.jdbc(jdbcUrl, "timestamp_ntz_roundtrip", prop)
     assert(df_actual.collect()(0) == df_expected.collect()(0))
+  }
+
+  test("SPARK-43267: user-defined column in array test") {
+    val df = sqlContext.read.jdbc(jdbcUrl, "custom_type", new Properties)
+    val row = df.collect()
+    assert(row.length === 1)
+    assert(row(0).length === 2)
+    assert(row(0).getSeq[String](0) == Seq("1", "fds", "fdsa"))
+    assert(row(0).getString(1) == "fdasfasdf")
   }
 }

@@ -102,6 +102,7 @@ object LiteralValueProtoConverter {
     }
   }
 
+  @scala.annotation.tailrec
   def toLiteralProtoBuilder(
       literal: Any,
       dataType: DataType): proto.Expression.Literal.Builder = {

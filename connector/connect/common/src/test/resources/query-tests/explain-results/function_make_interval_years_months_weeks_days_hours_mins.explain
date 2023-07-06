@@ -1,0 +1,2 @@
+Project [make_interval(a#0, a#0, a#0, a#0, a#0, a#0, 0.000000, false) AS make_interval(a, a, a, a, a, a, 0.000000)#0]
++- LocalRelation <empty>, [id#0L, a#0, b#0, d#0, e#0, f#0, g#0]

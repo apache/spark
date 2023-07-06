@@ -35,6 +35,7 @@ Normal Functions
     isnan
     isnull
     monotonically_increasing_id
+    named_struct
     nanvl
     rand
     randn
@@ -64,11 +65,13 @@ Math Functions
     bin
     cbrt
     ceil
+    ceiling
     conv
     cos
     cosh
     cot
     csc
+    e
     exp
     expm1
     factorial
@@ -76,12 +79,18 @@ Math Functions
     hex
     unhex
     hypot
+    ln
     log
     log10
     log1p
     log2
+    negate
+    negative
+    pi
     pmod
+    positive
     pow
+    power
     rint
     round
     bround
@@ -89,15 +98,25 @@ Math Functions
     shiftleft
     shiftright
     shiftrightunsigned
+    sign
     signum
     sin
     sinh
     tan
     tanh
     toDegrees
+    try_add
+    try_avg
+    try_divide
+    try_multiply
+    try_subtract
+    try_sum
+    try_to_binary
+    try_to_number
     degrees
     toRadians
     radians
+    width_bucket
 
 
 Datetime Functions
@@ -106,16 +125,26 @@ Datetime Functions
     :toctree: api/
 
     add_months
+    convert_timezone
+    curdate
     current_date
     current_timestamp
+    current_timezone
     date_add
+    date_diff
     date_format
+    date_from_unix_date
     date_sub
     date_trunc
+    dateadd
     datediff
+    day
+    date_part
+    datepart
     dayofmonth
     dayofweek
     dayofyear
+    extract
     second
     weekofyear
     year
@@ -123,21 +152,39 @@ Datetime Functions
     month
     last_day
     localtimestamp
+    make_dt_interval
+    make_interval
+    make_timestamp
+    make_timestamp_ltz
+    make_timestamp_ntz
+    make_ym_interval
     minute
     months_between
     next_day
     hour
     make_date
+    now
     from_unixtime
     unix_timestamp
+    to_unix_timestamp
     to_timestamp
+    to_timestamp_ltz
+    to_timestamp_ntz
     to_date
     trunc
     from_utc_timestamp
     to_utc_timestamp
+    weekday
     window
     session_window
+    timestamp_micros
+    timestamp_millis
     timestamp_seconds
+    try_to_timestamp
+    unix_date
+    unix_micros
+    unix_millis
+    unix_seconds
     window_time
 
 
@@ -156,6 +203,7 @@ Collection Functions
     array_position
     element_at
     array_append
+    array_size
     array_sort
     array_insert
     array_remove
@@ -188,7 +236,10 @@ Collection Functions
     from_json
     schema_of_json
     to_json
+    json_array_length
+    json_object_keys
     size
+    cardinality
     struct
     sort_array
     array_max
@@ -207,7 +258,9 @@ Collection Functions
     map_concat
     from_csv
     schema_of_csv
+    str_to_map
     to_csv
+    try_element_at
 
 
 Partition Transformation Functions
@@ -227,24 +280,38 @@ Aggregate Functions
 .. autosummary::
     :toctree: api/
 
+    any_value
     approxCountDistinct
     approx_count_distinct
+    approx_percentile
+    array_agg
     avg
+    bit_and
+    bit_or
+    bit_xor
+    bool_and
+    bool_or
     collect_list
     collect_set
     corr
     count
     count_distinct
     countDistinct
+    count_min_sketch
+    count_if
     covar_pop
     covar_samp
+    every
     first
+    first_value
     grouping
     grouping_id
+    histogram_numeric
     hll_sketch_agg
     hll_union_agg
     kurtosis
     last
+    last_value
     max
     max_by
     mean
@@ -252,9 +319,22 @@ Aggregate Functions
     min
     min_by
     mode
+    percentile
     percentile_approx
     product
+    reduce
+    regr_avgx
+    regr_avgy
+    regr_count
+    regr_intercept
+    regr_r2
+    regr_slope
+    regr_sxx
+    regr_sxy
+    regr_syy
     skewness
+    some
+    std
     stddev
     stddev_pop
     stddev_samp
@@ -303,35 +383,80 @@ String Functions
     ascii
     base64
     bit_length
+    btrim
+    char
+    character_length
+    char_length
+    chr
     concat_ws
+    contains
     decode
+    elt
     encode
+    endswith
+    find_in_set
     format_number
     format_string
+    ilike
     initcap
     instr
+    lcase
     length
+    like
     lower
+    left
     levenshtein
     locate
     lpad
     ltrim
+    mask
     octet_length
+    parse_url
+    position
+    printf
+    rlike
+    regexp
+    regexp_like
+    regexp_count
     regexp_extract
+    regexp_extract_all
     regexp_replace
+    regexp_substr
+    regexp_instr
+    replace
+    right
+    ucase
     unbase64
     rpad
     repeat
     rtrim
     soundex
     split
+    split_part
+    startswith
+    substr
     substring
     substring_index
     overlay
     sentences
+    to_binary
+    to_char
+    to_number
     translate
     trim
     upper
+    url_decode
+    url_encode
+
+
+Bitwise Functions
+-----------------
+.. autosummary::
+    :toctree: api/
+
+    bit_count
+    bit_get
+    getbit
 
 
 UDF
@@ -342,6 +467,7 @@ UDF
     call_udf
     pandas_udf
     udf
+    udtf
     unwrap_udt
 
 Misc Functions
@@ -349,7 +475,16 @@ Misc Functions
 .. autosummary::
     :toctree: api/
 
+    aes_decrypt
+    aes_encrypt
+    current_catalog
+    current_database
+    current_schema
+    current_user
+    input_file_block_length
+    input_file_block_start
     md5
+    sha
     sha1
     sha2
     crc32
@@ -357,6 +492,41 @@ Misc Functions
     xxhash64
     assert_true
     raise_error
+    reflect
     hll_sketch_estimate
     hll_union
+    java_method
+    random
+    stack
+    typeof
+    user
+    uuid
+    version
+
+Predicate Functions
+-------------------
+.. autosummary::
+    :toctree: api/
+
+    equal_null
+    ifnull
+    isnotnull
+    nullif
+    nvl
+    nvl2
+
+Xml Functions
+--------------
+.. autosummary::
+    :toctree: api/
+
+    xpath
+    xpath_boolean
+    xpath_double
+    xpath_float
+    xpath_int
+    xpath_long
+    xpath_number
+    xpath_short
+    xpath_string
 

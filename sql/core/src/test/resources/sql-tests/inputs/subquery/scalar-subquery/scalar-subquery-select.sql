@@ -247,3 +247,11 @@ WITH T AS (SELECT 1 AS a)
 SELECT (SELECT sum(1) FROM T WHERE a = col OR upper(col)= 'Y')
 FROM (SELECT null as col) as foo;
 set spark.sql.optimizer.optimizeOneRowRelationSubquery.alwaysInline=true;
+
+-- SPARK-43760: the result of the subquery can be NULL.
+select * from (
+ select t1.id c1, (
+  select t2.id c from range (1, 2) t2
+  where t1.id = t2.id  ) c2
+ from range (1, 3) t1 ) t
+where t.c2 is not null;

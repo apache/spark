@@ -121,6 +121,10 @@ The key of map cannot be/contain `<keyType>`.
 
 The `<functionName>` does not support ordering on type `<dataType>`.
 
+## INVALID_ROW_LEVEL_OPERATION_ASSIGNMENTS
+
+`<errors>`
+
 ## IN_SUBQUERY_DATA_TYPE_MISMATCH
 
 The data type of one or more elements in the left hand side of an IN subquery is not compatible with the data type of the output of the subquery. Mismatched columns: [`<mismatchedColumns>`], left side: [`<leftType>`], right side: [`<rightType>`].
@@ -202,6 +206,10 @@ The lower bound of a window frame must be `<comparison>` to the upper bound.
 ## STACK_COLUMN_DIFF_TYPES
 
 The data type of the column (`<columnIndex>`) do not have the same type: `<leftType>` (`<leftParamIndex>`) <> `<rightType>` (`<rightParamIndex>`).
+
+## TYPE_CHECK_FAILURE_WITH_HINT
+
+`<msg>``<hint>`.
 
 ## UNEXPECTED_CLASS_TYPE
 

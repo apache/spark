@@ -21,30 +21,27 @@ import java.nio.file.Files
 import java.util.Properties
 
 import scala.collection.JavaConverters._
-import scala.concurrent.{ExecutionContext, Future}
-import scala.concurrent.duration._
-import scala.util.{Failure, Success}
+import scala.collection.mutable
 
-import io.grpc.StatusRuntimeException
 import org.apache.commons.io.FileUtils
 import org.apache.commons.io.output.TeeOutputStream
 import org.apache.commons.lang3.{JavaVersion, SystemUtils}
 import org.scalactic.TolerantNumerics
-import org.scalatest.concurrent.Eventually._
+import org.scalatest.PrivateMethodTester
 
 import org.apache.spark.{SPARK_VERSION, SparkException}
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.StringEncoder
 import org.apache.spark.sql.catalyst.expressions.GenericRowWithSchema
 import org.apache.spark.sql.catalyst.parser.ParseException
-import org.apache.spark.sql.connect.client.SparkConnectClient
+import org.apache.spark.sql.connect.client.{SparkConnectClient, SparkResult}
 import org.apache.spark.sql.connect.client.util.{IntegrationTestUtils, RemoteSparkSession}
 import org.apache.spark.sql.connect.client.util.SparkConnectServerUtils.port
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
-import org.apache.spark.util.ThreadUtils
+import org.apache.spark.sql.vectorized.ColumnarBatch
 
-class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper {
+class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper with PrivateMethodTester {
 
   // Spark Result
   test("spark result schema") {
@@ -67,7 +64,7 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper {
     assume(IntegrationTestUtils.isSparkHiveJarAvailable)
     withTable("test_martin") {
       // Fails, because table does not exist.
-      assertThrows[StatusRuntimeException] {
+      assertThrows[SparkException] {
         spark.sql("select * from test_martin").collect()
       }
       // Execute eager, DML
@@ -155,7 +152,7 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper {
             StructField("job", StringType) :: Nil))
       .csv(testDataPath.toString)
     // Failed because the path cannot be provided both via option and load method (csv).
-    assertThrows[StatusRuntimeException] {
+    assertThrows[SparkException] {
       df.collect()
     }
   }
@@ -239,7 +236,7 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper {
         assert(result.length == 10)
       } finally {
         // clean up
-        assertThrows[StatusRuntimeException] {
+        assertThrows[SparkException] {
           spark.read.jdbc(url = s"$url;drop=true", table, new Properties()).collect()
         }
       }
@@ -356,7 +353,7 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper {
     val df = spark.range(10)
     val outputFolderPath = Files.createTempDirectory("output").toAbsolutePath
     // Failed because the path cannot be provided both via option and save method.
-    assertThrows[StatusRuntimeException] {
+    assertThrows[SparkException] {
       df.write.option("path", outputFolderPath.toString).save(outputFolderPath.toString)
     }
   }
@@ -395,7 +392,7 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper {
     checkFragments(result, fragmentsToCheck)
   }
 
-  private val simpleSchema = new StructType().add("value", "long", nullable = true)
+  private val simpleSchema = new StructType().add("id", "long", nullable = false)
 
   // Dataset tests
   test("Dataset inspection") {
@@ -406,15 +403,15 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper {
     assert(!df.isLocal)
     assert(local.isLocal)
     assert(!df.isStreaming)
-    assert(df.toString.contains("[value: bigint]"))
+    assert(df.toString.contains("[id: bigint]"))
     assert(df.inputFiles.isEmpty)
   }
 
   test("Dataset schema") {
     val df = spark.range(10)
     assert(df.schema === simpleSchema)
-    assert(df.dtypes === Array(("value", "LongType")))
-    assert(df.columns === Array("value"))
+    assert(df.dtypes === Array(("id", "LongType")))
+    assert(df.columns === Array("id"))
     testCapturedStdOut(df.printSchema(), simpleSchema.treeString)
     testCapturedStdOut(df.printSchema(5), simpleSchema.treeString(5))
   }
@@ -890,6 +887,51 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper {
     assert(message.contains("PARSE_SYNTAX_ERROR"))
   }
 
+  test("Dataset result destructive iterator") {
+    // Helper methods for accessing private field `idxToBatches` from SparkResult
+    val _idxToBatches =
+      PrivateMethod[mutable.Map[Int, ColumnarBatch]](Symbol("idxToBatches"))
+
+    def getColumnarBatches(result: SparkResult[_]): Seq[ColumnarBatch] = {
+      val idxToBatches = result invokePrivate _idxToBatches()
+
+      // Sort by key to get stable results.
+      idxToBatches.toSeq.sortBy(_._1).map(_._2)
+    }
+
+    val df = spark
+      .range(0, 10, 1, 10)
+      .filter("id > 5 and id < 9")
+
+    df.withResult { result =>
+      try {
+        // build and verify the destructive iterator
+        val iterator = result.destructiveIterator
+        // batches is empty before traversing the result iterator
+        assert(getColumnarBatches(result).isEmpty)
+        var previousBatch: ColumnarBatch = null
+        val buffer = mutable.Buffer.empty[Long]
+        while (iterator.hasNext) {
+          // always having 1 batch, since a columnar batch will be removed and closed after
+          // its data got consumed.
+          val batches = getColumnarBatches(result)
+          assert(batches.size === 1)
+          assert(batches.head != previousBatch)
+          previousBatch = batches.head
+
+          buffer.append(iterator.next())
+        }
+        // Batches should be closed and removed after traversing all the records.
+        assert(getColumnarBatches(result).isEmpty)
+
+        val expectedResult = Seq(6L, 7L, 8L)
+        assert(buffer.size === 3 && expectedResult.forall(buffer.contains))
+      } finally {
+        result.close()
+      }
+    }
+  }
+
   test("SparkSession.createDataFrame - large data set") {
     val threshold = 1024 * 1024
     withSQLConf(SQLConf.LOCAL_RELATION_CACHE_THRESHOLD.key -> threshold.toString) {
@@ -897,75 +939,36 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper {
       val suffix = "abcdef"
       val str = scala.util.Random.alphanumeric.take(1024 * 1024).mkString + suffix
       val data = Seq.tabulate(count)(i => (i, str))
-      val df = spark.createDataFrame(data)
-      assert(df.count() === count)
-      assert(!df.filter(df("_2").endsWith(suffix)).isEmpty)
-    }
-  }
-
-  test("interrupt all - background queries, foreground interrupt") {
-    val session = spark
-    import session.implicits._
-    implicit val ec = ExecutionContext.global
-    val q1 = Future {
-      spark.range(10).map(n => { Thread.sleep(30000); n }).collect()
-    }
-    val q2 = Future {
-      spark.range(10).map(n => { Thread.sleep(30000); n }).collect()
-    }
-    var q1Interrupted = false
-    var q2Interrupted = false
-    var error: Option[String] = None
-    q1.onComplete {
-      case Success(_) =>
-        error = Some("q1 shouldn't have finished!")
-      case Failure(t) if t.getMessage.contains("cancelled") =>
-        q1Interrupted = true
-      case Failure(t) =>
-        error = Some("unexpected failure in q1: " + t.toString)
-    }
-    q2.onComplete {
-      case Success(_) =>
-        error = Some("q2 shouldn't have finished!")
-      case Failure(t) if t.getMessage.contains("cancelled") =>
-        q2Interrupted = true
-      case Failure(t) =>
-        error = Some("unexpected failure in q2: " + t.toString)
-    }
-    // 20 seconds is < 30 seconds the queries should be running,
-    // because it should be interrupted sooner
-    eventually(timeout(20.seconds), interval(1.seconds)) {
-      // keep interrupting every second, until both queries get interrupted.
-      spark.interruptAll()
-      assert(error.isEmpty, s"Error not empty: $error")
-      assert(q1Interrupted)
-      assert(q2Interrupted)
-    }
-  }
-
-  test("interrupt all - foreground queries, background interrupt") {
-    val session = spark
-    import session.implicits._
-    implicit val ec = ExecutionContext.global
-
-    @volatile var finished = false
-    val interruptor = Future {
-      eventually(timeout(20.seconds), interval(1.seconds)) {
-        spark.interruptAll()
-        assert(finished)
+      for (_ <- 0 until 2) {
+        val df = spark.createDataFrame(data)
+        assert(df.count() === count)
+        assert(!df.filter(df("_2").endsWith(suffix)).isEmpty)
       }
-      finished
     }
-    val e1 = intercept[io.grpc.StatusRuntimeException] {
-      spark.range(10).map(n => { Thread.sleep(30.seconds.toMillis); n }).collect()
-    }
-    assert(e1.getMessage.contains("cancelled"), s"Unexpected exception: $e1")
-    val e2 = intercept[io.grpc.StatusRuntimeException] {
-      spark.range(10).map(n => { Thread.sleep(30.seconds.toMillis); n }).collect()
-    }
-    assert(e2.getMessage.contains("cancelled"), s"Unexpected exception: $e2")
-    finished = true
-    assert(ThreadUtils.awaitResult(interruptor, 10.seconds) == true)
+  }
+
+  test("sql() with positional parameters") {
+    val result0 = spark.sql("select 1", Array.empty).collect()
+    assert(result0.length == 1 && result0(0).getInt(0) === 1)
+
+    val result1 = spark.sql("select ?", Array(1)).collect()
+    assert(result1.length == 1 && result1(0).getInt(0) === 1)
+
+    val result2 = spark.sql("select ?, ?", Array(1, "abc")).collect()
+    assert(result2.length == 1)
+    assert(result2(0).getInt(0) === 1)
+    assert(result2(0).getString(1) === "abc")
+  }
+
+  test("sql() with named parameters") {
+    val result0 = spark.sql("select 1", Map.empty[String, Any]).collect()
+    assert(result0.length == 1 && result0(0).getInt(0) === 1)
+
+    val result1 = spark.sql("select :abc", Map("abc" -> 1)).collect()
+    assert(result1.length == 1 && result1(0).getInt(0) === 1)
+
+    val result2 = spark.sql("select :c0 limit :l0", Map("l0" -> 1, "c0" -> "abc")).collect()
+    assert(result2.length == 1 && result2(0).getString(0) === "abc")
   }
 }
 

@@ -551,6 +551,17 @@ class KryoSerializerSuite extends SparkFunSuite with SharedSparkContext {
     val set = new OpenHashMap[Double, Double](10)
     ser.serialize(set)
   }
+
+  test("SPARK-43898: Register scala.collection.immutable.ArraySeq$ofRef for Scala 2.13") {
+    assume(scala.util.Properties.versionNumberString.startsWith("2.13"))
+    val conf = new SparkConf(false)
+    conf.set(KRYO_REGISTRATION_REQUIRED, true)
+    val ser = new KryoSerializer(conf).newInstance()
+    def check[T: ClassTag](t: T): Unit = {
+      assert(ser.deserialize[T](ser.serialize(t)) === t)
+    }
+    check(Utils.classForName("scala.collection.immutable.ArraySeq$ofRef"))
+  }
 }
 
 class KryoSerializerAutoResetDisabledSuite extends SparkFunSuite with SharedSparkContext {

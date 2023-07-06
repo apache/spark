@@ -598,9 +598,7 @@ class SparkConversionMixin:
 
         # Determine arrow types to coerce data when creating batches
         if isinstance(schema, StructType):
-            arrow_types = [
-                to_arrow_type(_deduplicate_field_names(f.dataType)) for f in schema.fields
-            ]
+            spark_types = [_deduplicate_field_names(f.dataType) for f in schema.fields]
         elif isinstance(schema, DataType):
             raise PySparkTypeError(
                 error_class="UNSUPPORTED_DATA_TYPE_FOR_ARROW",
@@ -608,10 +606,8 @@ class SparkConversionMixin:
             )
         else:
             # Any timestamps must be coerced to be compatible with Spark
-            arrow_types = [
-                to_arrow_type(TimestampType())
-                if is_datetime64_dtype(t) or is_datetime64tz_dtype(t)
-                else None
+            spark_types = [
+                TimestampType() if is_datetime64_dtype(t) or is_datetime64tz_dtype(t) else None
                 for t in pdf.dtypes
             ]
 
@@ -619,9 +615,12 @@ class SparkConversionMixin:
         step = self._jconf.arrowMaxRecordsPerBatch()
         pdf_slices = (pdf.iloc[start : start + step] for start in range(0, len(pdf), step))
 
-        # Create list of Arrow (columns, type) for serializer dump_stream
+        # Create list of Arrow (columns, arrow_type, spark_type) for serializer dump_stream
         arrow_data = [
-            [(c, t) for (_, c), t in zip(pdf_slice.items(), arrow_types)]
+            [
+                (c, to_arrow_type(t) if t is not None else None, t)
+                for (_, c), t in zip(pdf_slice.items(), spark_types)
+            ]
             for pdf_slice in pdf_slices
         ]
 

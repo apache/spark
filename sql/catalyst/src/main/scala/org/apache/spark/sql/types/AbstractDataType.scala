@@ -18,8 +18,7 @@
 package org.apache.spark.sql.types
 
 import org.apache.spark.annotation.Stable
-import org.apache.spark.sql.catalyst.expressions.Expression
-import org.apache.spark.sql.errors.QueryExecutionErrors
+import org.apache.spark.sql.errors.DataTypeErrors
 
 /**
  * A non-concrete data type, reserved for internal uses.
@@ -108,7 +107,7 @@ protected[sql] object AnyDataType extends AbstractDataType with Serializable {
   // Note that since AnyDataType matches any concrete types, defaultConcreteType should never
   // be invoked.
   override private[sql] def defaultConcreteType: DataType =
-    throw QueryExecutionErrors.unsupportedOperationExceptionError()
+    throw DataTypeErrors.unsupportedOperationExceptionError()
 
   override private[sql] def simpleString: String = "any"
 
@@ -121,16 +120,7 @@ protected[sql] object AnyDataType extends AbstractDataType with Serializable {
  */
 protected[sql] abstract class AtomicType extends DataType
 
-object AtomicType {
-  /**
-   * Enables matching against AtomicType for expressions:
-   * {{{
-   *   case Cast(child @ AtomicType(), StringType) =>
-   *     ...
-   * }}}
-   */
-  def unapply(e: Expression): Boolean = e.dataType.isInstanceOf[AtomicType]
-}
+object AtomicType
 
 
 /**
@@ -143,15 +133,6 @@ abstract class NumericType extends AtomicType
 
 
 private[spark] object NumericType extends AbstractDataType {
-  /**
-   * Enables matching against NumericType for expressions:
-   * {{{
-   *   case Cast(child @ NumericType(), StringType) =>
-   *     ...
-   * }}}
-   */
-  def unapply(e: Expression): Boolean = e.dataType.isInstanceOf[NumericType]
-
   override private[spark] def defaultConcreteType: DataType = DoubleType
 
   override private[spark] def simpleString: String = "numeric"
@@ -162,15 +143,6 @@ private[spark] object NumericType extends AbstractDataType {
 
 
 private[sql] object IntegralType extends AbstractDataType {
-  /**
-   * Enables matching against IntegralType for expressions:
-   * {{{
-   *   case Cast(child @ IntegralType(), StringType) =>
-   *     ...
-   * }}}
-   */
-  def unapply(e: Expression): Boolean = e.dataType.isInstanceOf[IntegralType]
-
   override private[sql] def defaultConcreteType: DataType = IntegerType
 
   override private[sql] def simpleString: String = "integral"
@@ -182,16 +154,7 @@ private[sql] object IntegralType extends AbstractDataType {
 private[sql] abstract class IntegralType extends NumericType
 
 
-private[sql] object FractionalType {
-  /**
-   * Enables matching against FractionalType for expressions:
-   * {{{
-   *   case Cast(child @ FractionalType(), StringType) =>
-   *     ...
-   * }}}
-   */
-  def unapply(e: Expression): Boolean = e.dataType.isInstanceOf[FractionalType]
-}
+private[sql] object FractionalType
 
 
 private[sql] abstract class FractionalType extends NumericType
@@ -203,8 +166,6 @@ private[sql] object AnyTimestampType extends AbstractDataType with Serializable 
     other.isInstanceOf[TimestampType] || other.isInstanceOf[TimestampNTZType]
 
   override private[sql] def simpleString = "(timestamp or timestamp without time zone)"
-
-  def unapply(e: Expression): Boolean = acceptsType(e.dataType)
 }
 
 private[sql] abstract class DatetimeType extends AtomicType

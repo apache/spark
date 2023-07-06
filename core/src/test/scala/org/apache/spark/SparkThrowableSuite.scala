@@ -47,7 +47,7 @@ class SparkThrowableSuite extends SparkFunSuite {
    }}}
    */
   private val errorJsonFilePath = getWorkspaceFilePath(
-    "core", "src", "main", "resources", "error", "error-classes.json")
+    "common", "utils", "src", "main", "resources", "error", "error-classes.json")
 
   private val errorReader = new ErrorClassesJsonReader(Seq(errorJsonFilePath.toUri.toURL))
 
@@ -139,6 +139,57 @@ class SparkThrowableSuite extends SparkFunSuite {
       .values.toSeq.flatMap { i => Seq(i.messageTemplate) }
     checkCondition(messageFormats, s => s != null)
     checkIfUnique(messageFormats)
+  }
+
+  test("SPARK-44268: Error classes match with document") {
+    val sqlstateDoc = "sql-error-conditions-sqlstates.md"
+    val errors = errorReader.errorInfoMap
+    val errorDocPaths = getWorkspaceFilePath("docs").toFile
+      .listFiles(_.getName.startsWith("sql-error-conditions-"))
+      .filter(!_.getName.equals(sqlstateDoc))
+      .map(f => IOUtils.toString(f.toURI, StandardCharsets.UTF_8)).map(_.split("\n"))
+    // check the error classes in document should be in error-classes.json
+    val linkInDocRegex = "\\[(.*)\\]\\((.*)\\)".r
+    val commonErrorsInDoc = IOUtils.toString(getWorkspaceFilePath("docs",
+      "sql-error-conditions.md").toUri, StandardCharsets.UTF_8).split("\n")
+      .filter(_.startsWith("###")).map(s => s.replace("###", "").trim)
+      .filter(linkInDocRegex.findFirstMatchIn(_).isEmpty)
+
+    commonErrorsInDoc.foreach(s => assert(errors.contains(s),
+      s"Error class: $s is not in error-classes.json"))
+
+    val titlePrefix = "title:"
+    val errorsInDoc = errorDocPaths.map(lines => {
+      val errorClass = lines.filter(_.startsWith(titlePrefix))
+        .map(s => s.replace("error class", "").replace(titlePrefix, "").trim).head
+      assert(errors.contains(errorClass), s"Error class: $errorClass is not in error-classes.json")
+      val subClasses = lines.filter(_.startsWith("##")).map(s => s.replace("##", "").trim)
+        .map { s =>
+          assert(errors(errorClass).subClass.get.contains(s),
+            s"Error class: $errorClass does not contain sub class: $s in error-classes.json")
+          s
+        }
+      errorClass -> subClasses
+    }).toMap
+
+    // check the error classes in error-classes.json should be in document
+    errors.foreach { e =>
+      val errorClass = e._1
+      val subClasses = e._2.subClass.getOrElse(Map.empty).keys.toSeq
+      if (subClasses.nonEmpty) {
+        assert(errorsInDoc.contains(errorClass),
+          s"Error class: $errorClass do not have sql-error-conditions sub doc, please create it")
+        val subClassesInDoc = errorsInDoc(errorClass)
+        subClasses.foreach { s =>
+          assert(subClassesInDoc.contains(s),
+            s"Error class: $errorClass contains sub class: $s which is not in " +
+              s"sql-error-conditions sub doc")
+        }
+      } else if (!errorClass.startsWith("_LEGACY_ERROR_TEMP_")) {
+        assert(commonErrorsInDoc.contains(errorClass),
+          s"Error class: $errorClass is not in sql-error-conditions.md")
+      }
+    }
   }
 
   test("Round trip") {

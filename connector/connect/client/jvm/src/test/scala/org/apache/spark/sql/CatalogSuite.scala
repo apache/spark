@@ -19,9 +19,9 @@ package org.apache.spark.sql
 
 import java.io.{File, FilenameFilter}
 
-import io.grpc.StatusRuntimeException
 import org.apache.commons.io.FileUtils
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.connect.client.util.RemoteSparkSession
 import org.apache.spark.sql.types.{DoubleType, LongType, StructType}
 import org.apache.spark.storage.StorageLevel
@@ -39,9 +39,14 @@ class CatalogSuite extends RemoteSparkSession with SQLHelper {
         assert(dbs.length == 2)
         assert(dbs.map(_.name) sameElements Array(db, currentDb))
         assert(dbs.map(_.catalog).distinct sameElements Array("spark_catalog"))
+        var databasesWithPattern = spark.catalog.listDatabases("def*").collect().sortBy(_.name)
+        assert(databasesWithPattern.length == 1)
+        assert(databasesWithPattern.map(_.name) sameElements Array(currentDb))
+        databasesWithPattern = spark.catalog.listDatabases("def2*").collect().sortBy(_.name)
+        assert(databasesWithPattern.length == 0)
         val database = spark.catalog.getDatabase(db)
         assert(database.name == db)
-        val message = intercept[StatusRuntimeException] {
+        val message = intercept[SparkException] {
           spark.catalog.getDatabase("notExists")
         }.getMessage
         assert(message.contains("SCHEMA_NOT_FOUND"))
@@ -61,7 +66,7 @@ class CatalogSuite extends RemoteSparkSession with SQLHelper {
       val catalogs = spark.catalog.listCatalogs().collect()
       assert(catalogs.length == 1)
       assert(catalogs.map(_.name) sameElements Array("spark_catalog"))
-      val message = intercept[StatusRuntimeException] {
+      val message = intercept[SparkException] {
         spark.catalog.setCurrentCatalog("notExists")
       }.getMessage
       assert(message.contains("plugin class not found"))
@@ -70,6 +75,11 @@ class CatalogSuite extends RemoteSparkSession with SQLHelper {
       val catalogsAfterChange = spark.catalog.listCatalogs().collect()
       assert(catalogsAfterChange.length == 2)
       assert(catalogsAfterChange.map(_.name).toSet == Set("testcat", "spark_catalog"))
+      var catalogsWithPattern = spark.catalog.listCatalogs("spark*").collect()
+      assert(catalogsWithPattern.length == 1)
+      assert(catalogsWithPattern.map(_.name) sameElements Array("spark_catalog"))
+      catalogsWithPattern = spark.catalog.listCatalogs("hive*").collect()
+      assert(catalogsWithPattern.length == 0)
     } finally {
       spark.catalog.setCurrentCatalog(currentCatalog)
       assert(spark.catalog.currentCatalog() == "spark_catalog")
@@ -116,6 +126,14 @@ class CatalogSuite extends RemoteSparkSession with SQLHelper {
               parquetTableName,
               orcTableName,
               jsonTableName))
+          assert(
+            spark.catalog
+              .listTables(spark.catalog.currentDatabase, "par*")
+              .collect()
+              .map(_.name)
+              .toSet == Set(parquetTableName))
+          assert(
+            spark.catalog.listTables(spark.catalog.currentDatabase, "txt*").collect().isEmpty)
         }
         assert(spark.catalog.tableExists(parquetTableName))
         assert(!spark.catalog.tableExists(orcTableName))
@@ -123,7 +141,7 @@ class CatalogSuite extends RemoteSparkSession with SQLHelper {
         assert(spark.catalog.listTables().collect().map(_.name).toSet == Set(parquetTableName))
       }
     }
-    val message = intercept[StatusRuntimeException] {
+    val message = intercept[SparkException] {
       spark.catalog.getTable(parquetTableName)
     }.getMessage
     assert(message.contains("TABLE_OR_VIEW_NOT_FOUND"))
@@ -189,10 +207,17 @@ class CatalogSuite extends RemoteSparkSession with SQLHelper {
     assert(spark.catalog.getFunction(absFunctionName).name == absFunctionName)
     val notExistsFunction = "notExists"
     assert(!spark.catalog.functionExists(notExistsFunction))
-    val message = intercept[StatusRuntimeException] {
+    val message = intercept[SparkException] {
       spark.catalog.getFunction(notExistsFunction)
     }.getMessage
     assert(message.contains("UNRESOLVED_ROUTINE"))
+
+    val functionsWithPattern1 = spark.catalog.listFunctions(dbName, "to*").collect()
+    assert(functionsWithPattern1.nonEmpty)
+    assert(functionsWithPattern1.exists(f => f.name == "to_date"))
+    val functionsWithPattern2 =
+      spark.catalog.listFunctions(dbName, "*not_existing_func*").collect()
+    assert(functionsWithPattern2.isEmpty)
   }
 
   test("recoverPartitions") {

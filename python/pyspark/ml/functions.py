@@ -512,11 +512,10 @@ def predict_batch_udf(
         ...         # outputs.shape = [batch_size]
         ...         return inputs * 2
         ...     return predict
-        >>>
+        ...
         >>> times_two_udf = predict_batch_udf(make_times_two_fn,
         ...                                   return_type=FloatType(),
         ...                                   batch_size=10)
-        >>>
         >>> df = spark.createDataFrame(pd.DataFrame(np.arange(100)))
         >>> df.withColumn("x2", times_two_udf("0")).show(5)
         +---+---+
@@ -561,12 +560,11 @@ def predict_batch_udf(
         ...         # outputs.shape = [batch_size]
         ...         return np.sum(inputs, axis=1)
         ...     return predict
-        >>>
+        ...
         >>> sum_udf = predict_batch_udf(make_sum_fn,
         ...                             return_type=FloatType(),
         ...                             batch_size=10,
         ...                             input_tensor_shapes=[[4]])
-        >>>
         >>> df.withColumn("sum", sum_udf(array("a", "b", "c", "d"))).show(5)
         +----+----+----+----+----+
         |   a|   b|   c|   d| sum|
@@ -591,11 +589,10 @@ def predict_batch_udf(
         ...         # outputs.shape = [batch_size]
         ...         return x1 + x2 + x3 + x4
         ...     return predict
-        >>>
+        ...
         >>> sum_udf = predict_batch_udf(make_sum_fn,
         ...                             return_type=FloatType(),
         ...                             batch_size=10)
-        >>>
         >>> df.withColumn("sum", sum_udf("a", "b", "c", "d")).show(5)
         +----+----+----+----+----+
         |   a|   b|   c|   d| sum|
@@ -643,14 +640,13 @@ def predict_batch_udf(
         ...         # outputs.shape = [batch_size]
         ...         return np.sum(x1, axis=1) + np.sum(x2, axis=1)
         ...     return predict
-        >>>
+        ...
         >>> multi_sum_udf = predict_batch_udf(
         ...     make_multi_sum_fn,
         ...     return_type=FloatType(),
         ...     batch_size=5,
         ...     input_tensor_shapes=[[4], [3]],
         ... )
-        >>>
         >>> df.withColumn("sum", multi_sum_udf("t1", "t2")).show(5)
         +--------------------+------------------+-----+
         |                  t1|                t2|  sum|
@@ -676,7 +672,7 @@ def predict_batch_udf(
         ...             "sum2": np.sum(x2, axis=1)
         ...         }
         ...     return predict_columnar
-        >>>
+        ...
         >>> multi_sum_udf = predict_batch_udf(
         ...     make_multi_sum_fn,
         ...     return_type=StructType([
@@ -686,7 +682,6 @@ def predict_batch_udf(
         ...     batch_size=5,
         ...     input_tensor_shapes=[[4], [3]],
         ... )
-        >>>
         >>> df.withColumn("preds", multi_sum_udf("t1", "t2")).select("t1", "t2", "preds.*").show(5)
         +--------------------+------------------+----+----+
         |                  t1|                t2|sum1|sum2|
@@ -705,7 +700,7 @@ def predict_batch_udf(
         ...         # x2.shape = [batch_size, 3]
         ...         return [{'sum1': np.sum(x1[i]), 'sum2': np.sum(x2[i])} for i in range(len(x1))]
         ...     return predict_row
-        >>>
+        ...
         >>> multi_sum_udf = predict_batch_udf(
         ...     make_multi_sum_fn,
         ...     return_type=StructType([
@@ -715,7 +710,6 @@ def predict_batch_udf(
         ...     batch_size=5,
         ...     input_tensor_shapes=[[4], [3]],
         ... )
-        >>>
         >>> df.withColumn("sum", multi_sum_udf("t1", "t2")).select("t1", "t2", "sum.*").show(5)
         +--------------------+------------------+----+----+
         |                  t1|                t2|sum1|sum2|
@@ -736,7 +730,7 @@ def predict_batch_udf(
         ...         # x2.shape = [batch_size, 3]
         ...         return {"t1x2": x1 * 2, "t2x2": x2 * 2}
         ...     return predict
-        >>>
+        ...
         >>> multi_times_two_udf = predict_batch_udf(
         ...     make_multi_times_two_fn,
         ...     return_type=StructType([
@@ -746,7 +740,6 @@ def predict_batch_udf(
         ...     batch_size=5,
         ...     input_tensor_shapes=[[4], [3]],
         ... )
-        >>>
         >>> df.withColumn("x2", multi_times_two_udf("t1", "t2")).select("t1", "t2", "x2.*").show(5)
         +--------------------+------------------+--------------------+------------------+
         |                  t1|                t2|                t1x2|              t2x2|

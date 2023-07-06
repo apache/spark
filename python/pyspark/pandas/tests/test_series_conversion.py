@@ -17,6 +17,7 @@
 
 import unittest
 import sys
+from distutils.version import LooseVersion
 
 import pandas as pd
 
@@ -48,6 +49,10 @@ class SeriesConversionTestsMixin:
             psser.to_clipboard(sep=",", index=False), pser.to_clipboard(sep=",", index=False)
         )
 
+    @unittest.skipIf(
+        LooseVersion(pd.__version__) >= LooseVersion("2.0.0"),
+        "TODO(SPARK-43458): Enable SeriesConversionTests.test_to_latex for pandas 2.0.0.",
+    )
     def test_to_latex(self):
         pser = self.pser
         psser = self.psser

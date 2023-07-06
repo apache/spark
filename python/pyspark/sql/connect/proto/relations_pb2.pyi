@@ -98,6 +98,7 @@ class Relation(google.protobuf.message.Message):
     APPLY_IN_PANDAS_WITH_STATE_FIELD_NUMBER: builtins.int
     HTML_STRING_FIELD_NUMBER: builtins.int
     CACHED_LOCAL_RELATION_FIELD_NUMBER: builtins.int
+    CACHED_REMOTE_RELATION_FIELD_NUMBER: builtins.int
     FILL_NA_FIELD_NUMBER: builtins.int
     DROP_NA_FIELD_NUMBER: builtins.int
     REPLACE_FIELD_NUMBER: builtins.int
@@ -185,6 +186,8 @@ class Relation(google.protobuf.message.Message):
     @property
     def cached_local_relation(self) -> global___CachedLocalRelation: ...
     @property
+    def cached_remote_relation(self) -> global___CachedRemoteRelation: ...
+    @property
     def fill_na(self) -> global___NAFill:
         """NA functions"""
     @property
@@ -257,6 +260,7 @@ class Relation(google.protobuf.message.Message):
         apply_in_pandas_with_state: global___ApplyInPandasWithState | None = ...,
         html_string: global___HtmlString | None = ...,
         cached_local_relation: global___CachedLocalRelation | None = ...,
+        cached_remote_relation: global___CachedRemoteRelation | None = ...,
         fill_na: global___NAFill | None = ...,
         drop_na: global___NADrop | None = ...,
         replace: global___NAReplace | None = ...,
@@ -283,6 +287,8 @@ class Relation(google.protobuf.message.Message):
             b"approx_quantile",
             "cached_local_relation",
             b"cached_local_relation",
+            "cached_remote_relation",
+            b"cached_remote_relation",
             "catalog",
             b"catalog",
             "co_group_map",
@@ -390,6 +396,8 @@ class Relation(google.protobuf.message.Message):
             b"approx_quantile",
             "cached_local_relation",
             b"cached_local_relation",
+            "cached_remote_relation",
+            b"cached_remote_relation",
             "catalog",
             b"catalog",
             "co_group_map",
@@ -524,6 +532,7 @@ class Relation(google.protobuf.message.Message):
         "apply_in_pandas_with_state",
         "html_string",
         "cached_local_relation",
+        "cached_remote_relation",
         "fill_na",
         "drop_na",
         "replace",
@@ -613,6 +622,7 @@ class SQL(google.protobuf.message.Message):
 
     QUERY_FIELD_NUMBER: builtins.int
     ARGS_FIELD_NUMBER: builtins.int
+    POS_ARGS_FIELD_NUMBER: builtins.int
     query: builtins.str
     """(Required) The SQL query."""
     @property
@@ -622,6 +632,13 @@ class SQL(google.protobuf.message.Message):
         builtins.str, pyspark.sql.connect.proto.expressions_pb2.Expression.Literal
     ]:
         """(Optional) A map of parameter names to literal expressions."""
+    @property
+    def pos_args(
+        self,
+    ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
+        pyspark.sql.connect.proto.expressions_pb2.Expression.Literal
+    ]:
+        """(Optional) A sequence of literal expressions for positional parameters in the SQL query text."""
     def __init__(
         self,
         *,
@@ -630,9 +647,16 @@ class SQL(google.protobuf.message.Message):
             builtins.str, pyspark.sql.connect.proto.expressions_pb2.Expression.Literal
         ]
         | None = ...,
+        pos_args: collections.abc.Iterable[
+            pyspark.sql.connect.proto.expressions_pb2.Expression.Literal
+        ]
+        | None = ...,
     ) -> None: ...
     def ClearField(
-        self, field_name: typing_extensions.Literal["args", b"args", "query", b"query"]
+        self,
+        field_name: typing_extensions.Literal[
+            "args", b"args", "pos_args", b"pos_args", "query", b"query"
+        ],
     ) -> None: ...
 
 global___SQL = SQL
@@ -1592,6 +1616,25 @@ class CachedLocalRelation(google.protobuf.message.Message):
     ) -> None: ...
 
 global___CachedLocalRelation = CachedLocalRelation
+
+class CachedRemoteRelation(google.protobuf.message.Message):
+    """Represents a remote relation that has been cached on server."""
+
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    RELATION_ID_FIELD_NUMBER: builtins.int
+    relation_id: builtins.str
+    """(Required) ID of the remote related (assigned by the service)."""
+    def __init__(
+        self,
+        *,
+        relation_id: builtins.str = ...,
+    ) -> None: ...
+    def ClearField(
+        self, field_name: typing_extensions.Literal["relation_id", b"relation_id"]
+    ) -> None: ...
+
+global___CachedRemoteRelation = CachedRemoteRelation
 
 class Sample(google.protobuf.message.Message):
     """Relation of type [[Sample]] that samples a fraction of the dataset."""
@@ -2986,6 +3029,11 @@ class GroupMap(google.protobuf.message.Message):
     GROUPING_EXPRESSIONS_FIELD_NUMBER: builtins.int
     FUNC_FIELD_NUMBER: builtins.int
     SORTING_EXPRESSIONS_FIELD_NUMBER: builtins.int
+    INITIAL_INPUT_FIELD_NUMBER: builtins.int
+    INITIAL_GROUPING_EXPRESSIONS_FIELD_NUMBER: builtins.int
+    IS_MAP_GROUPS_WITH_STATE_FIELD_NUMBER: builtins.int
+    OUTPUT_MODE_FIELD_NUMBER: builtins.int
+    TIMEOUT_CONF_FIELD_NUMBER: builtins.int
     @property
     def input(self) -> global___Relation:
         """(Required) Input relation for Group Map API: apply, applyInPandas."""
@@ -3006,6 +3054,24 @@ class GroupMap(google.protobuf.message.Message):
         pyspark.sql.connect.proto.expressions_pb2.Expression
     ]:
         """(Optional) Expressions for sorting. Only used by Scala Sorted Group Map API."""
+    @property
+    def initial_input(self) -> global___Relation:
+        """Below fields are only used by (Flat)MapGroupsWithState
+        (Optional) Input relation for initial State.
+        """
+    @property
+    def initial_grouping_expressions(
+        self,
+    ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
+        pyspark.sql.connect.proto.expressions_pb2.Expression
+    ]:
+        """(Optional) Expressions for grouping keys of the initial state input relation."""
+    is_map_groups_with_state: builtins.bool
+    """(Optional) True if MapGroupsWithState, false if FlatMapGroupsWithState."""
+    output_mode: builtins.str
+    """(Optional) The output mode of the function."""
+    timeout_conf: builtins.str
+    """(Optional) Timeout configuration for groups that do not receive data for a while."""
     def __init__(
         self,
         *,
@@ -3020,23 +3086,82 @@ class GroupMap(google.protobuf.message.Message):
             pyspark.sql.connect.proto.expressions_pb2.Expression
         ]
         | None = ...,
+        initial_input: global___Relation | None = ...,
+        initial_grouping_expressions: collections.abc.Iterable[
+            pyspark.sql.connect.proto.expressions_pb2.Expression
+        ]
+        | None = ...,
+        is_map_groups_with_state: builtins.bool | None = ...,
+        output_mode: builtins.str | None = ...,
+        timeout_conf: builtins.str | None = ...,
     ) -> None: ...
     def HasField(
-        self, field_name: typing_extensions.Literal["func", b"func", "input", b"input"]
+        self,
+        field_name: typing_extensions.Literal[
+            "_is_map_groups_with_state",
+            b"_is_map_groups_with_state",
+            "_output_mode",
+            b"_output_mode",
+            "_timeout_conf",
+            b"_timeout_conf",
+            "func",
+            b"func",
+            "initial_input",
+            b"initial_input",
+            "input",
+            b"input",
+            "is_map_groups_with_state",
+            b"is_map_groups_with_state",
+            "output_mode",
+            b"output_mode",
+            "timeout_conf",
+            b"timeout_conf",
+        ],
     ) -> builtins.bool: ...
     def ClearField(
         self,
         field_name: typing_extensions.Literal[
+            "_is_map_groups_with_state",
+            b"_is_map_groups_with_state",
+            "_output_mode",
+            b"_output_mode",
+            "_timeout_conf",
+            b"_timeout_conf",
             "func",
             b"func",
             "grouping_expressions",
             b"grouping_expressions",
+            "initial_grouping_expressions",
+            b"initial_grouping_expressions",
+            "initial_input",
+            b"initial_input",
             "input",
             b"input",
+            "is_map_groups_with_state",
+            b"is_map_groups_with_state",
+            "output_mode",
+            b"output_mode",
             "sorting_expressions",
             b"sorting_expressions",
+            "timeout_conf",
+            b"timeout_conf",
         ],
     ) -> None: ...
+    @typing.overload
+    def WhichOneof(
+        self,
+        oneof_group: typing_extensions.Literal[
+            "_is_map_groups_with_state", b"_is_map_groups_with_state"
+        ],
+    ) -> typing_extensions.Literal["is_map_groups_with_state"] | None: ...
+    @typing.overload
+    def WhichOneof(
+        self, oneof_group: typing_extensions.Literal["_output_mode", b"_output_mode"]
+    ) -> typing_extensions.Literal["output_mode"] | None: ...
+    @typing.overload
+    def WhichOneof(
+        self, oneof_group: typing_extensions.Literal["_timeout_conf", b"_timeout_conf"]
+    ) -> typing_extensions.Literal["timeout_conf"] | None: ...
 
 global___GroupMap = GroupMap
 

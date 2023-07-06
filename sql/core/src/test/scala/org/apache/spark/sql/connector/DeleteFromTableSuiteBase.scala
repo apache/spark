@@ -17,10 +17,8 @@
 
 package org.apache.spark.sql.connector
 
-import org.apache.spark.sql.{AnalysisException, Row}
-import org.apache.spark.sql.execution.{QueryExecution, SparkPlan}
+import org.apache.spark.sql.Row
 import org.apache.spark.sql.execution.datasources.v2.{DeleteFromTableExec, ReplaceDataExec, WriteDeltaExec}
-import org.apache.spark.sql.util.QueryExecutionListener
 
 abstract class DeleteFromTableSuiteBase extends RowLevelOperationSuiteBase {
 
@@ -451,19 +449,6 @@ abstract class DeleteFromTableSuiteBase extends RowLevelOperationSuiteBase {
     }
   }
 
-  test("delete with nondeterministic conditions") {
-    createAndInitTable("pk INT NOT NULL, id INT, dep STRING",
-      """{ "pk": 1, "id": 1, "dep": "hr" }
-        |{ "pk": 2, "id": 2, "dep": "software" }
-        |{ "pk": 3, "id": 3, "dep": "hr" }
-        |""".stripMargin)
-
-    val e = intercept[AnalysisException] {
-      sql(s"DELETE FROM $tableNameAsString WHERE id <= 1 AND rand() > 0.5")
-    }
-    assert(e.message.contains("nondeterministic expressions are only allowed"))
-  }
-
   test("delete without condition executed as delete with filters") {
     createAndInitTable("pk INT NOT NULL, id INT, dep INT",
       """{ "pk": 1, "id": 1, "dep": 100 }
@@ -550,25 +535,5 @@ abstract class DeleteFromTableSuiteBase extends RowLevelOperationSuiteBase {
       case other =>
         fail("unexpected executed plan: " + other)
     }
-  }
-
-  // executes an operation and keeps the executed plan
-  protected def executeAndKeepPlan(func: => Unit): SparkPlan = {
-    var executedPlan: SparkPlan = null
-
-    val listener = new QueryExecutionListener {
-      override def onSuccess(funcName: String, qe: QueryExecution, durationNs: Long): Unit = {
-        executedPlan = qe.executedPlan
-      }
-      override def onFailure(funcName: String, qe: QueryExecution, exception: Exception): Unit = {
-      }
-    }
-    spark.listenerManager.register(listener)
-
-    func
-
-    sparkContext.listenerBus.waitUntilEmpty()
-
-    stripAQEPlan(executedPlan)
   }
 }

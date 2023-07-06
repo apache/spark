@@ -53,4 +53,25 @@ class DeltaBasedUpdateTableSuite extends UpdateTableSuiteBase {
       sql(s"SELECT * FROM $tableNameAsString"),
       Row(10, 1, "hr") :: Row(2, 2, "software") :: Row(3, 3, "hr") :: Nil)
   }
+
+  test("update with nondeterministic conditions") {
+    createAndInitTable("pk INT NOT NULL, id INT, dep STRING",
+      """{ "pk": 1, "id": 1, "dep": "hr" }
+        |{ "pk": 2, "id": 2, "dep": "software" }
+        |{ "pk": 3, "id": 3, "dep": "hr" }
+        |""".stripMargin)
+
+    checkError(
+      exception = intercept[AnalysisException] {
+        sql(s"UPDATE $tableNameAsString SET dep = 'invalid' WHERE id <= 1 AND rand() > 0.5")
+      },
+      errorClass = "INVALID_NON_DETERMINISTIC_EXPRESSIONS",
+      parameters = Map(
+        "sqlExprs" -> "\"((id <= 1) AND (rand() > 0.5))\""),
+      context = ExpectedContext(
+        fragment = "UPDATE cat.ns1.test_table SET dep = 'invalid' WHERE id <= 1 AND rand() > 0.5",
+        start = 0,
+        stop = 75)
+    )
+  }
 }

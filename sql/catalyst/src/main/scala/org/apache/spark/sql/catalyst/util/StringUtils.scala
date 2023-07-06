@@ -19,15 +19,12 @@ package org.apache.spark.sql.catalyst.util
 
 import java.util.regex.{Pattern, PatternSyntaxException}
 
-import scala.collection.mutable.ArrayBuffer
-
 import org.apache.commons.text.similarity.LevenshteinDistance
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.unsafe.array.ByteArrayMethods
 import org.apache.spark.unsafe.types.UTF8String
 
 object StringUtils extends Logging {
@@ -82,36 +79,26 @@ object StringUtils extends Logging {
 
   private[spark] def orderSuggestedIdentifiersBySimilarity(
       baseString: String,
-      testStrings: Seq[String]): Seq[String] = {
-    // This method is used to generate suggested list of candidates closest to `baseString` from the
-    // list of `testStrings`. Spark uses it to clarify error message in case a query refers to non
-    // existent column or attribute. The `baseString` could be single part or multi part and this
-    // method will try to match suggestions.
-    // Note that identifiers from `testStrings` could represent columns or attributes from different
-    // catalogs, schemas or tables. We preserve suggested identifier prefix and reconstruct
-    // multi-part identifier after ordering if there are more than one unique prefix in a list. This
-    // will also reconstruct multi-part identifier for the cases of nested columns. E.g. for a
-    // table `t` with columns `a`, `b`, `c.d` (nested) and requested column `d` we will create
-    // prefixes `t`, `t`, and `t.c`. Since there is more than one distinct prefix we will return
-    // sorted suggestions as multi-part identifiers => (`t`.`c`.`d`, `t`.`a`, `t`.`b`).
-    val multiPart = UnresolvedAttribute.parseAttributeName(baseString).size > 1
-    if (multiPart) {
-      testStrings.sortBy(LevenshteinDistance.getDefaultInstance.apply(_, baseString))
-    } else {
-      val split = testStrings.map { ident =>
-        val parts = UnresolvedAttribute.parseAttributeName(ident).map(quoteIfNeeded)
-        (parts.init.mkString("."), parts.last)
-      }
-      val sorted =
-        split.sortBy(pair => LevenshteinDistance.getDefaultInstance.apply(pair._2, baseString))
-      if (sorted.map(_._1).toSet.size == 1) {
-        // All identifier belong to the same relation
-        sorted.map(_._2)
+      candidates: Seq[Seq[String]]): Seq[String] = {
+    val baseParts = UnresolvedAttribute.parseAttributeName(baseString)
+    val strippedCandidates =
+      // Group by the qualifier. If all identifiers have the same qualifier, strip it.
+      // For example: Seq(`abc`.`def`.`t1`, `abc`.`def`.`t2`) => Seq(`t1`, `t2`)
+      if (baseParts.size == 1 && candidates.groupBy(_.dropRight(1)).size == 1) {
+        candidates.map(_.takeRight(1))
+      // Group by the qualifier excluding table name. If all identifiers have the same prefix
+      // (namespace) excluding table names, strip this prefix.
+      // For example: Seq(`abc`.`def`.`t1`, `abc`.`xyz`.`t2`) => Seq(`def`.`t1`, `xyz`.`t2`)
+      } else if (baseParts.size <= 2 && candidates.groupBy(_.dropRight(2)).size == 1) {
+        candidates.map(_.takeRight(2))
       } else {
-        // More than one relation
-        sorted.map(x => s"${x._1}.${x._2}")
+        // Some candidates have different qualifiers
+        candidates
       }
-    }
+
+    strippedCandidates
+      .map(quoteNameParts)
+      .sortBy(LevenshteinDistance.getDefaultInstance.apply(_, baseString))
   }
 
   // scalastyle:off caselocale
@@ -139,50 +126,6 @@ object StringUtils extends Logging {
       }
     }
     funcNames.toSeq
-  }
-
-  /**
-   * Concatenation of sequence of strings to final string with cheap append method
-   * and one memory allocation for the final string.  Can also bound the final size of
-   * the string.
-   */
-  class StringConcat(val maxLength: Int = ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH) {
-    protected val strings = new ArrayBuffer[String]
-    protected var length: Int = 0
-
-    def atLimit: Boolean = length >= maxLength
-
-    /**
-     * Appends a string and accumulates its length to allocate a string buffer for all
-     * appended strings once in the toString method.  Returns true if the string still
-     * has room for further appends before it hits its max limit.
-     */
-    def append(s: String): Unit = {
-      if (s != null) {
-        val sLen = s.length
-        if (!atLimit) {
-          val available = maxLength - length
-          val stringToAppend = if (available >= sLen) s else s.substring(0, available)
-          strings.append(stringToAppend)
-        }
-
-        // Keeps the total length of appended strings. Note that we need to cap the length at
-        // `ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH`; otherwise, we will overflow
-        // length causing StringIndexOutOfBoundsException in the substring call above.
-        length = Math.min(length.toLong + sLen, ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH).toInt
-      }
-    }
-
-    /**
-     * The method allocates memory for all appended strings, writes them to the memory and
-     * returns concatenated string.
-     */
-    override def toString: String = {
-      val finalLength = if (atLimit) maxLength else length
-      val result = new java.lang.StringBuilder(finalLength)
-      strings.foreach(result.append)
-      result.toString
-    }
   }
 
   /**

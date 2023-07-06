@@ -69,7 +69,7 @@ CreateNamespace true
 
 
 -- !query
-CREATE TABLE s.tab(c1 INT) USING PARQUET
+CREATE TABLE s.tab(c1 INT) USING CSV
 -- !query analysis
 CreateDataSourceTableCommand `spark_catalog`.`s`.`tab`, false
 
@@ -83,7 +83,7 @@ SetNamespaceCommand [s]
 -- !query
 INSERT INTO IDENTIFIER('ta' || 'b') VALUES(1)
 -- !query analysis
-InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/s.db/tab, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/s.db/tab], Append, `spark_catalog`.`s`.`tab`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/s.db/tab), [c1]
+InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/s.db/tab, false, CSV, [path=file:[not included in comparison]/{warehouse_dir}/s.db/tab], Append, `spark_catalog`.`s`.`tab`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/s.db/tab), [c1]
 +- Project [cast(col1#x as int) AS c1#x]
    +- LocalRelation [col1#x]
 
@@ -116,15 +116,13 @@ org.apache.spark.SparkUnsupportedOperationException
 
 -- !query
 MERGE INTO IDENTIFIER('ta' || 'b') AS t USING IDENTIFIER('ta' || 'b') AS s ON s.c1 = t.c1
-  WHEN MATCHED UPDATE SET c1 = 3
+  WHEN MATCHED THEN UPDATE SET c1 = 3
 -- !query analysis
-org.apache.spark.sql.catalyst.parser.ParseException
+org.apache.spark.SparkUnsupportedOperationException
 {
-  "errorClass" : "PARSE_SYNTAX_ERROR",
-  "sqlState" : "42601",
+  "errorClass" : "_LEGACY_ERROR_TEMP_2096",
   "messageParameters" : {
-    "error" : "'UPDATE'",
-    "hint" : ""
+    "ddl" : "MERGE INTO TABLE"
   }
 }
 
@@ -134,7 +132,7 @@ SELECT * FROM IDENTIFIER('tab')
 -- !query analysis
 Project [c1#x]
 +- SubqueryAlias spark_catalog.s.tab
-   +- Relation spark_catalog.s.tab[c1#x] parquet
+   +- Relation spark_catalog.s.tab[c1#x] csv
 
 
 -- !query
@@ -142,7 +140,7 @@ SELECT * FROM IDENTIFIER('s.tab')
 -- !query analysis
 Project [c1#x]
 +- SubqueryAlias spark_catalog.s.tab
-   +- Relation spark_catalog.s.tab[c1#x] parquet
+   +- Relation spark_catalog.s.tab[c1#x] csv
 
 
 -- !query
@@ -150,7 +148,7 @@ SELECT * FROM IDENTIFIER('`s`.`tab`')
 -- !query analysis
 Project [c1#x]
 +- SubqueryAlias spark_catalog.s.tab
-   +- Relation spark_catalog.s.tab[c1#x] parquet
+   +- Relation spark_catalog.s.tab[c1#x] csv
 
 
 -- !query
@@ -158,7 +156,7 @@ SELECT * FROM IDENTIFIER('t' || 'a' || 'b')
 -- !query analysis
 Project [c1#x]
 +- SubqueryAlias spark_catalog.s.tab
-   +- Relation spark_catalog.s.tab[c1#x] parquet
+   +- Relation spark_catalog.s.tab[c1#x] csv
 
 
 -- !query
@@ -170,7 +168,8 @@ SetNamespaceCommand [default]
 -- !query
 DROP TABLE s.tab
 -- !query analysis
-DropTableCommand `spark_catalog`.`s`.`tab`, false, false, false
+DropTable false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), s.tab
 
 
 -- !query
@@ -202,7 +201,7 @@ Project [id#xL]
 
 
 -- !query
-CREATE TABLE IDENTIFIER('tab')(c1 INT) USING parquet
+CREATE TABLE IDENTIFIER('tab')(c1 INT) USING CSV
 -- !query analysis
 CreateDataSourceTableCommand `spark_catalog`.`default`.`tab`, false
 
@@ -210,7 +209,8 @@ CreateDataSourceTableCommand `spark_catalog`.`default`.`tab`, false
 -- !query
 DROP TABLE IF EXISTS IDENTIFIER('ta' || 'b')
 -- !query analysis
-DropTableCommand `spark_catalog`.`default`.`tab`, true, false, false
+DropTable true, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.tab
 
 
 -- !query
@@ -228,7 +228,7 @@ SetCatalogAndNamespace
 
 
 -- !query
-CREATE TABLE IDENTIFIER('ta' || 'b')(c1 INT) USING parquet
+CREATE TABLE IDENTIFIER('ta' || 'b')(c1 INT) USING CSV
 -- !query analysis
 CreateDataSourceTableCommand `spark_catalog`.`identifier_clauses`.`tab`, false
 
@@ -236,17 +236,18 @@ CreateDataSourceTableCommand `spark_catalog`.`identifier_clauses`.`tab`, false
 -- !query
 DROP TABLE IF EXISTS IDENTIFIER('identifier_clauses.' || 'tab')
 -- !query analysis
-DropTableCommand `spark_catalog`.`identifier_clauses`.`tab`, true, false, false
+DropTable true, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), identifier_clauses.tab
 
 
 -- !query
-CREATE TABLE IDENTIFIER('identifier_clauses.' || 'tab')(c1 INT) USING parquet
+CREATE TABLE IDENTIFIER('identifier_clauses.' || 'tab')(c1 INT) USING CSV
 -- !query analysis
 CreateDataSourceTableCommand `spark_catalog`.`identifier_clauses`.`tab`, false
 
 
 -- !query
-REPLACE TABLE IDENTIFIER('identifier_clauses.' || 'tab')(c1 INT) USING parquet
+REPLACE TABLE IDENTIFIER('identifier_clauses.' || 'tab')(c1 INT) USING CSV
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
@@ -264,7 +265,7 @@ CACHE TABLE IDENTIFIER('ta' || 'b')
 -- !query analysis
 CacheTable [tab], false, true
    +- SubqueryAlias spark_catalog.identifier_clauses.tab
-      +- Relation spark_catalog.identifier_clauses.tab[c1#x] parquet
+      +- Relation spark_catalog.identifier_clauses.tab[c1#x] csv
 
 
 -- !query
@@ -272,13 +273,14 @@ UNCACHE TABLE IDENTIFIER('ta' || 'b')
 -- !query analysis
 UncacheTable false, true
    +- SubqueryAlias spark_catalog.identifier_clauses.tab
-      +- Relation spark_catalog.identifier_clauses.tab[c1#x] parquet
+      +- Relation spark_catalog.identifier_clauses.tab[c1#x] csv
 
 
 -- !query
 DROP TABLE IF EXISTS IDENTIFIER('ta' || 'b')
 -- !query analysis
-DropTableCommand `spark_catalog`.`identifier_clauses`.`tab`, true, false, false
+DropTable true, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), identifier_clauses.tab
 
 
 -- !query
@@ -296,7 +298,7 @@ DropNamespace false, false
 
 
 -- !query
-CREATE TABLE tab(c1 INT) USING parquet
+CREATE TABLE tab(c1 INT) USING CSV
 -- !query analysis
 CreateDataSourceTableCommand `spark_catalog`.`default`.`tab`, false
 
@@ -304,7 +306,7 @@ CreateDataSourceTableCommand `spark_catalog`.`default`.`tab`, false
 -- !query
 INSERT INTO tab VALUES (1)
 -- !query analysis
-InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/tab, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/tab], Append, `spark_catalog`.`default`.`tab`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/tab), [c1]
+InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/tab, false, CSV, [path=file:[not included in comparison]/{warehouse_dir}/tab], Append, `spark_catalog`.`default`.`tab`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/tab), [c1]
 +- Project [cast(col1#x as int) AS c1#x]
    +- LocalRelation [col1#x]
 
@@ -314,7 +316,7 @@ SELECT c1 FROM tab
 -- !query analysis
 Project [c1#x]
 +- SubqueryAlias spark_catalog.default.tab
-   +- Relation spark_catalog.default.tab[c1#x] parquet
+   +- Relation spark_catalog.default.tab[c1#x] csv
 
 
 -- !query
@@ -383,7 +385,8 @@ TruncateTableCommand `spark_catalog`.`default`.`tab`
 -- !query
 DROP TABLE IF EXISTS tab
 -- !query analysis
-DropTableCommand `spark_catalog`.`default`.`tab`, true, false, false
+DropTable true, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.tab
 
 
 -- !query
@@ -768,9 +771,9 @@ org.apache.spark.sql.AnalysisException
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 8,
-    "stopIndex" : 22,
-    "fragment" : "IDENTIFIER(1)()"
+    "startIndex" : 19,
+    "stopIndex" : 19,
+    "fragment" : "1"
   } ]
 }
 
@@ -1052,7 +1055,7 @@ org.apache.spark.sql.catalyst.parser.ParseException
 
 
 -- !query
-CREATE TABLE tab(IDENTIFIER('c1') INT) USING parquet
+CREATE TABLE tab(IDENTIFIER('c1') INT) USING CSV
 -- !query analysis
 org.apache.spark.sql.catalyst.parser.ParseException
 {

@@ -100,7 +100,7 @@ trait ToStringBase { self: UnaryExpression with TimeZoneAwareExpression =>
           builder.append(keyToUTF8String(keyArray.get(0, kt)).asInstanceOf[UTF8String])
           builder.append(" ->")
           if (valueArray.isNullAt(0)) {
-            if (nullString.nonEmpty) builder.append(nullString)
+            if (nullString.nonEmpty) builder.append(" " + nullString)
           } else {
             builder.append(" ")
             builder.append(valueToUTF8String(valueArray.get(0, vt)).asInstanceOf[UTF8String])
