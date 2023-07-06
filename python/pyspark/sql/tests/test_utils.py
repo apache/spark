@@ -37,6 +37,7 @@ from pyspark.sql.types import (
     DoubleType,
     StructField,
     TimestampType,
+    IntegerType,
 )
 
 
@@ -298,6 +299,53 @@ class UtilsTestsMixin:
 
         assertDataFrameEqual(df1, df2)
 
+    def test_assert_equal_nested_struct_str(self):
+        df1 = self.spark.createDataFrame(
+            data=[
+                (1, ("jane", "anne", "doe")),
+                (2, ("john", "bob", "smith")),
+            ],
+            schema=StructType(
+                [
+                    StructField("id", IntegerType(), True),
+                    StructField(
+                        "name",
+                        StructType(
+                            [
+                                StructField("first", StringType(), True),
+                                StructField("middle", StringType(), True),
+                                StructField("last", StringType(), True),
+                            ]
+                        ),
+                    ),
+                ]
+            ),
+        )
+
+        df2 = self.spark.createDataFrame(
+            data=[
+                (1, ("jane", "anne", "doe")),
+                (2, ("john", "bob", "smith")),
+            ],
+            schema=StructType(
+                [
+                    StructField("id", IntegerType(), True),
+                    StructField(
+                        "name",
+                        StructType(
+                            [
+                                StructField("first", StringType(), True),
+                                StructField("middle", StringType(), True),
+                                StructField("last", StringType(), True),
+                            ]
+                        ),
+                    ),
+                ]
+            ),
+        )
+
+        assertDataFrameEqual(df1, df2)
+
     def test_assert_equal_timestamp(self):
         df1 = self.spark.createDataFrame(
             data=[("1", "2023-01-01 12:01:01.000")], schema=["id", "timestamp"]
@@ -310,7 +358,7 @@ class UtilsTestsMixin:
         df1 = df1.withColumn("timestamp", to_timestamp("timestamp"))
         df2 = df2.withColumn("timestamp", to_timestamp("timestamp"))
 
-        assertDataFrameEqual(df1, df2, ignore_row_order=False)
+        assertDataFrameEqual(df1, df2)
 
     def test_assert_equal_nullrow(self):
         df1 = self.spark.createDataFrame(
@@ -378,6 +426,34 @@ class UtilsTestsMixin:
 
         assertDataFrameEqual(df1, df2)
 
+    def test_assert_error_pandas_df(self):
+        import pandas as pd
+
+        df1 = pd.DataFrame(data=[10, 20, 30], columns=["Numbers"])
+        df2 = pd.DataFrame(data=[10, 20, 30], columns=["Numbers"])
+
+        with self.assertRaises(PySparkAssertionError) as pe:
+            assertDataFrameEqual(df1, df2)
+
+        self.check_error(
+            exception=pe.exception,
+            error_class="UNSUPPORTED_DATA_TYPE",
+            message_parameters={"data_type": pd.DataFrame},
+        )
+
+    def test_assert_error_non_pyspark_df(self):
+        dict1 = {"a": 1, "b": 2}
+        dict2 = {"a": 1, "b": 2}
+
+        with self.assertRaises(PySparkAssertionError) as pe:
+            assertDataFrameEqual(dict1, dict2)
+
+        self.check_error(
+            exception=pe.exception,
+            error_class="UNSUPPORTED_DATA_TYPE",
+            message_parameters={"data_type": type(dict1)},
+        )
+
     def test_ignore_row_order(self):
         # test that row order is ignored by default
         df1 = self.spark.createDataFrame(
@@ -397,16 +473,69 @@ class UtilsTestsMixin:
 
         assertDataFrameEqual(df1, df2)
 
-    def remove_non_word_characters(self, col):
-        return F.regexp_replace(col, "[^\\w\\s]+", "")
+    def test_ignore_row_order_error(self):
+        # test that row order is ignored by default
+        df1 = self.spark.createDataFrame(
+            data=[
+                ("2", 3000.00),
+                ("1", 1000.00),
+            ],
+            schema=["id", "amount"],
+        )
+        df2 = self.spark.createDataFrame(
+            data=[
+                ("1", 1000.00),
+                ("2", 3000.00),
+            ],
+            schema=["id", "amount"],
+        )
+
+        expected_error_message = "Results do not match: "
+        percent_diff = 2 / 2
+        expected_error_message += "( %.5f %% )" % percent_diff
+        diff_msg = (
+            "[df]"
+            + "\n"
+            + str(df1.collect()[0])
+            + "\n\n"
+            + "[expected]"
+            + "\n"
+            + str(df2.collect()[0])
+            + "\n\n"
+            + "********************"
+            + "\n\n"
+        )
+        diff_msg += (
+            "[df]"
+            + "\n"
+            + str(df1.collect()[1])
+            + "\n\n"
+            + "[expected]"
+            + "\n"
+            + str(df2.collect()[1])
+            + "\n\n"
+            + "********************"
+            + "\n\n"
+        )
+        expected_error_message += "\n" + diff_msg
+
+        with self.assertRaises(PySparkAssertionError) as pe:
+            assertDataFrameEqual(df1, df2, ignore_row_order=False)
+
+        self.check_error(
+            exception=pe.exception,
+            error_class="DIFFERENT_ROWS",
+            message_parameters={"error_msg": expected_error_message},
+        )
 
     def test_remove_non_word_characters_long(self):
+        def remove_non_word_characters(col):
+            return F.regexp_replace(col, "[^\\w\\s]+", "")
+
         source_data = [("jo&&se",), ("**li**",), ("#::luisa",), (None,)]
         source_df = self.spark.createDataFrame(source_data, ["name"])
 
-        actual_df = source_df.withColumn(
-            "clean_name", self.remove_non_word_characters(F.col("name"))
-        )
+        actual_df = source_df.withColumn("clean_name", remove_non_word_characters(F.col("name")))
 
         expected_data = [("jo&&se", "jose"), ("**li**", "li"), ("#::luisa", "luisa"), (None, None)]
         expected_df = self.spark.createDataFrame(expected_data, ["name", "clean_name"])
@@ -545,6 +674,35 @@ class UtilsTestsMixin:
             exception=pe.exception,
             error_class="UNSUPPORTED_DATA_TYPE_FOR_IGNORE_ROW_ORDER",
             message_parameters={},
+        )
+
+    def test_spark_sql(self):
+        assertDataFrameEqual(self.spark.sql("select 1 + 2 AS x"), self.spark.sql("select 3 AS x"))
+
+    def test_spark_sql_sort_rows(self):
+        df1 = self.spark.createDataFrame(
+            data=[
+                (1, 3000),
+                (2, 1000),
+            ],
+            schema=["id", "amount"],
+        )
+
+        df2 = self.spark.createDataFrame(
+            data=[
+                (2, 1000),
+                (1, 3000),
+            ],
+            schema=["id", "amount"],
+        )
+
+        df1.createOrReplaceTempView("df1")
+        df2.createOrReplaceTempView("df2")
+
+        assertDataFrameEqual(
+            self.spark.sql("select * from df1 order by amount"),
+            self.spark.sql("select * from df2"),
+            ignore_row_order=False,
         )
 
 

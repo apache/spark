@@ -234,11 +234,29 @@ class PySparkErrorTestUtils:
         )
 
 
-def assertDataFrameEqual(df: DataFrame, expected: DataFrame, ignore_row_order: bool = True):
+def assertDataFrameEqual(
+    df: DataFrame, expected: Union[DataFrame, List[Row]], ignore_row_order: bool = True
+):
+    """
+    A util function to assert equality between DataFrames `df` and `expected`, with
+    optional arg `ignore_row_order`.
+    For float values, assert approximate equality (1e-5 by default).
+    """
     if df is None and expected is None:
         return True
     elif df is None or expected is None:
         return False
+
+    if not isinstance(df, DataFrame):
+        raise PySparkAssertionError(
+            error_class="UNSUPPORTED_DATA_TYPE",
+            message_parameters={"data_type": type(df)},
+        )
+    elif not isinstance(expected, DataFrame):
+        raise PySparkAssertionError(
+            error_class="UNSUPPORTED_DATA_TYPE",
+            message_parameters={"data_type": type(expected)},
+        )
 
     def compare_rows(r1: Row, r2: Row):
         def compare_vals(val1, val2):
