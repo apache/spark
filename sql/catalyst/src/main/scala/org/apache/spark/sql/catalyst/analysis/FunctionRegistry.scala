@@ -896,10 +896,8 @@ object FunctionRegistry {
       since: Option[String] = None): (String, (ExpressionInfo, FunctionBuilder)) = {
     val info = FunctionRegistryBase.expressionInfo[T](name, since)
     val funcBuilder = (expressions: Seq[Expression]) => {
-      val rearrangedExpressions =
-        SupportsNamedArguments.getRearrangedExpressions[T](expressions, name)
-      assert(rearrangedExpressions.forall(_.resolved), "function arguments must be resolved.")
-      val expr = builder.build(name, rearrangedExpressions)
+      assert(expressions.forall(_.resolved), "function arguments must be resolved.")
+      val expr = builder.build(name, expressions)
       if (setAlias) expr.setTagValue(FUNC_ALIAS, name)
       expr
     }
