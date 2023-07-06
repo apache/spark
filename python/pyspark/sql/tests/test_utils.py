@@ -23,8 +23,8 @@ from pyspark.errors import (
     IllegalArgumentException,
     SparkUpgradeException,
 )
-from pyspark.testing.utils import assertDataFrameEqual, blue, red
-from pyspark.testing.sqlutils import ReusedSQLTestCase, have_pandas, pandas_requirement_message
+from pyspark.testing.utils import assertDataFrameEqual
+from pyspark.testing.sqlutils import ReusedSQLTestCase
 import pyspark.sql.functions as F
 from pyspark.sql.functions import to_date, unix_timestamp, from_unixtime
 from pyspark.sql.types import (
@@ -36,7 +36,6 @@ from pyspark.sql.types import (
     FloatType,
     DoubleType,
     StructField,
-    TimestampType,
     IntegerType,
 )
 

@@ -59,19 +59,6 @@ except ImportError:
 SPARK_HOME = _find_spark_home()
 
 
-NO_COLOR = "\033[0m"  # No Color, reset all
-LIGHT_RED = "\033[31m"
-LIGHT_BLUE = "\033[34m"
-
-
-def red(s):
-    return LIGHT_RED + str(s) + NO_COLOR
-
-
-def blue(s):
-    return LIGHT_BLUE + str(s) + NO_COLOR
-
-
 def read_int(b):
     return struct.unpack("!i", b)[0]
 
@@ -268,7 +255,7 @@ def assertDataFrameEqual(
                 error_class="UNSUPPORTED_DATA_TYPE",
                 message_parameters={"data_type": type(expected)},
             )
-    except:
+    except Exception:
         if not isinstance(df, DataFrame):
             raise PySparkAssertionError(
                 error_class="UNSUPPORTED_DATA_TYPE",
@@ -352,7 +339,7 @@ def assertDataFrameEqual(
 
             df = renamed_df.sort(renamed_df.columns).toDF(*df.columns)
             expected = renamed_expected.sort(renamed_expected.columns).toDF(*df.columns)
-        except:
+        except Exception:
             raise PySparkAssertionError(
                 error_class="UNSUPPORTED_DATA_TYPE_FOR_IGNORE_ROW_ORDER",
                 message_parameters={},
