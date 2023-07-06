@@ -24,7 +24,9 @@ import org.apache.spark.sql.types.AbstractDataType
 
 /**
  * The class which companion objects of function expression may implement to
- * support named arguments for that function expression.
+ * support named arguments for that function expression. Please note that variadic final
+ * arguments are NOT supported for named arguments. Do not use for functions that
+ * has variadic final arguments!
  *
  * Example:
  *  object CountMinSketchAgg extends SupportsNamedArguments {
@@ -84,7 +86,7 @@ object SupportsNamedArguments {
    * @tparam T The actual expression class.
    * @return positional argument list
    */
-  final def getRearrangedExpressions[T <: Expression : ClassTag](
+  final def getRearrangedExpressions[T : ClassTag](
       expressions: Seq[Expression], functionName: String): Seq[Expression] = {
 
     if (!expressions.exists(_.isInstanceOf[NamedArgumentExpression])) {
@@ -205,8 +207,8 @@ case class FixedArgumentType(dataType: AbstractDataType) extends NamedArgumentTy
  */
 case class NamedArgument(
     name: String,
-                          dataType: NamedArgumentType,
-                          default: Option[Expression] = None)
+    dataType: NamedArgumentType,
+    default: Option[Expression] = None)
 
 /**
  * Represents a method signature and the list of arguments it receives as input.

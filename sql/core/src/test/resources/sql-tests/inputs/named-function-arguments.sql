@@ -25,14 +25,25 @@ SELECT hex(count_min_sketch(t2d, seed => 1, epsilon => 0.5d, confidence => 0.5d)
 SELECT hex(count_min_sketch(seed => 1, epsilon => 0.5d, confidence => 0.5d, column => t2d)) FROM t2;
 SELECT hex(count_min_sketch(t2d, 0.5d, seed => 1, confidence => 0.5d)) FROM t2;
 
+-- Tests for explode table-valued function
+SELECT explode(collection => array(10, 20));
+
+-- Test for TABLE parser rule
+CREATE OR REPLACE TEMPORARY VIEW v AS SELECT id FROM range(0, 8);
+SELECT * FROM explode(collection => TABLE v);
+
 -- Unexpected positional argument
 SELECT mask(lowerChar => 'q', 'AbCD123-@$#', upperChar => 'Q', otherChar => 'o', digitChar => 'd');
+
 -- Duplicate parameter assignment
 SELECT mask('AbCD123-@$#', lowerChar => 'q', upperChar => 'Q', otherChar => 'o', digitChar => 'd', digitChar => 'e');
 SELECT mask('AbCD123-@$#', lowerChar => 'q', upperChar => 'Q', otherChar => 'o', digitChar => 'd', str => 'AbC');
+
 -- Required parameter not found
 SELECT mask(lowerChar => 'q', upperChar => 'Q', otherChar => 'o', digitChar => 'd');
+
 -- Unrecognized parameter name
 SELECT mask('AbCD123-@$#', lowerChar => 'q', upperChar => 'Q', otherChar => 'o', digitChar => 'd', cellular => 'automata');
+
 -- Named arguments not supported
 SELECT encode(str => 'a', charset => 'utf-8');

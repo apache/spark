@@ -896,8 +896,10 @@ object FunctionRegistry {
       since: Option[String] = None): (String, (ExpressionInfo, FunctionBuilder)) = {
     val info = FunctionRegistryBase.expressionInfo[T](name, since)
     val funcBuilder = (expressions: Seq[Expression]) => {
-      assert(expressions.forall(_.resolved), "function arguments must be resolved.")
-      val expr = builder.build(name, expressions)
+      val rearrangedExpressions =
+        SupportsNamedArguments.getRearrangedExpressions[T](expressions, name)
+      assert(rearrangedExpressions.forall(_.resolved), "function arguments must be resolved.")
+      val expr = builder.build(name, rearrangedExpressions)
       if (setAlias) expr.setTagValue(FUNC_ALIAS, name)
       expr
     }
@@ -979,7 +981,9 @@ object TableFunctionRegistry {
       : (String, (ExpressionInfo, TableFunctionBuilder)) = {
     val (info, builder) = FunctionRegistryBase.build[T](name, since = None)
     val newBuilder = (expressions: Seq[Expression]) => {
-      val generator = builder(expressions)
+      val rearrangedExpressions =
+        SupportsNamedArguments.getRearrangedExpressions[T](expressions, name)
+      val generator = builder(rearrangedExpressions)
       assert(generator.isInstanceOf[Generator])
       Generate(
         generator,

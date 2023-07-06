@@ -26,6 +26,7 @@ import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.expressions.Cast._
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
+import org.apache.spark.sql.catalyst.plans.logical.{FixedArgumentType, FunctionSignature, NamedArgument, SupportsNamedArguments}
 import org.apache.spark.sql.catalyst.trees.TreePattern.{GENERATOR, TreePattern}
 import org.apache.spark.sql.catalyst.util.{ArrayData, MapData}
 import org.apache.spark.sql.catalyst.util.SQLKeywordUtils._
@@ -429,6 +430,11 @@ case class Explode(child: Expression) extends ExplodeBase {
   override val position: Boolean = false
   override protected def withNewChildInternal(newChild: Expression): Explode =
     copy(child = newChild)
+}
+
+object Explode extends SupportsNamedArguments {
+  override def functionSignatures: Seq[FunctionSignature] =
+    Seq(FunctionSignature(Seq(NamedArgument("collection", FixedArgumentType(ArrayType)))))
 }
 
 /**
