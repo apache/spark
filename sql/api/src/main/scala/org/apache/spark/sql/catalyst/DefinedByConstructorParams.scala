@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+package org.apache.spark.sql.catalyst
 
 /**
  * A helper trait to create [[org.apache.spark.sql.catalyst.encoders.ExpressionEncoder]]s
