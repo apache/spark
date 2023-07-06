@@ -1,0 +1,132 @@
+OpenJDK 64-Bit Server VM 11.0.19+7 on Linux 5.15.0-1040-azure
+Intel(R) Xeon(R) Platinum 8171M CPU @ 2.60GHz
+TPCH Snappy:                              Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+q1                                                  173            309         104          0.0      Infinity       1.0X
+
+OpenJDK 64-Bit Server VM 11.0.19+7 on Linux 5.15.0-1040-azure
+Intel(R) Xeon(R) Platinum 8171M CPU @ 2.60GHz
+TPCH Snappy:                              Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+q2                                                  571            600          38          0.0      Infinity       1.0X
+
+OpenJDK 64-Bit Server VM 11.0.19+7 on Linux 5.15.0-1040-azure
+Intel(R) Xeon(R) Platinum 8171M CPU @ 2.60GHz
+TPCH Snappy:                              Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+q3                                                  175            243          63          0.0      Infinity       1.0X
+
+OpenJDK 64-Bit Server VM 11.0.19+7 on Linux 5.15.0-1040-azure
+Intel(R) Xeon(R) Platinum 8171M CPU @ 2.60GHz
+TPCH Snappy:                              Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+q4                                                   92            144          48          0.0      Infinity       1.0X
+
+OpenJDK 64-Bit Server VM 11.0.19+7 on Linux 5.15.0-1040-azure
+Intel(R) Xeon(R) Platinum 8171M CPU @ 2.60GHz
+TPCH Snappy:                              Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+q5                                                  258            355          55          0.0      Infinity       1.0X
+
+OpenJDK 64-Bit Server VM 11.0.19+7 on Linux 5.15.0-1040-azure
+Intel(R) Xeon(R) Platinum 8171M CPU @ 2.60GHz
+TPCH Snappy:                              Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+q6                                                   77            115          40          0.0      Infinity       1.0X
+
+OpenJDK 64-Bit Server VM 11.0.19+7 on Linux 5.15.0-1040-azure
+Intel(R) Xeon(R) Platinum 8171M CPU @ 2.60GHz
+TPCH Snappy:                              Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+q7                                                  320            334          18          0.0      Infinity       1.0X
+
+OpenJDK 64-Bit Server VM 11.0.19+7 on Linux 5.15.0-1040-azure
+Intel(R) Xeon(R) Platinum 8171M CPU @ 2.60GHz
+TPCH Snappy:                              Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+q8                                                  301            412          78          0.0      Infinity       1.0X
+
+OpenJDK 64-Bit Server VM 11.0.19+7 on Linux 5.15.0-1040-azure
+Intel(R) Xeon(R) Platinum 8171M CPU @ 2.60GHz
+TPCH Snappy:                              Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+q9                                                  196            282          55          0.0      Infinity       1.0X
+
+OpenJDK 64-Bit Server VM 11.0.19+7 on Linux 5.15.0-1040-azure
+Intel(R) Xeon(R) Platinum 8171M CPU @ 2.60GHz
+TPCH Snappy:                              Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+q10                                                 179            224          39          0.0      Infinity       1.0X
+
+OpenJDK 64-Bit Server VM 11.0.19+7 on Linux 5.15.0-1040-azure
+Intel(R) Xeon(R) Platinum 8171M CPU @ 2.60GHz
+TPCH Snappy:                              Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+q11                                                 148            212          51          0.0      Infinity       1.0X
+
+OpenJDK 64-Bit Server VM 11.0.19+7 on Linux 5.15.0-1040-azure
+Intel(R) Xeon(R) Platinum 8171M CPU @ 2.60GHz
+TPCH Snappy:                              Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+q12                                                  84            131          36          0.0      Infinity       1.0X
+
+OpenJDK 64-Bit Server VM 11.0.19+7 on Linux 5.15.0-1040-azure
+Intel(R) Xeon(R) Platinum 8171M CPU @ 2.60GHz
+TPCH Snappy:                              Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+q13                                                 120            174          34          0.0      Infinity       1.0X
+
+OpenJDK 64-Bit Server VM 11.0.19+7 on Linux 5.15.0-1040-azure
+Intel(R) Xeon(R) Platinum 8171M CPU @ 2.60GHz
+TPCH Snappy:                              Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+q14                                                  88            127          33          0.0      Infinity       1.0X
+
+OpenJDK 64-Bit Server VM 11.0.19+7 on Linux 5.15.0-1040-azure
+Intel(R) Xeon(R) Platinum 8171M CPU @ 2.60GHz
+TPCH Snappy:                              Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+q15                                                 105            148          51          0.0      Infinity       1.0X
+
+OpenJDK 64-Bit Server VM 11.0.19+7 on Linux 5.15.0-1040-azure
+Intel(R) Xeon(R) Platinum 8171M CPU @ 2.60GHz
+TPCH Snappy:                              Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+q16                                                 151            196          34          0.0      Infinity       1.0X
+
+OpenJDK 64-Bit Server VM 11.0.19+7 on Linux 5.15.0-1040-azure
+Intel(R) Xeon(R) Platinum 8171M CPU @ 2.60GHz
+TPCH Snappy:                              Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+q17                                                 128            183          42          0.0      Infinity       1.0X
+
+OpenJDK 64-Bit Server VM 11.0.19+7 on Linux 5.15.0-1040-azure
+Intel(R) Xeon(R) Platinum 8171M CPU @ 2.60GHz
+TPCH Snappy:                              Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+q18                                                 111            166          29          0.0      Infinity       1.0X
+
+OpenJDK 64-Bit Server VM 11.0.19+7 on Linux 5.15.0-1040-azure
+Intel(R) Xeon(R) Platinum 8171M CPU @ 2.60GHz
+TPCH Snappy:                              Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+q19                                                 104            144          37          0.0      Infinity       1.0X
+
+OpenJDK 64-Bit Server VM 11.0.19+7 on Linux 5.15.0-1040-azure
+Intel(R) Xeon(R) Platinum 8171M CPU @ 2.60GHz
+TPCH Snappy:                              Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+q20                                                 128            194          52          0.0      Infinity       1.0X
+
+OpenJDK 64-Bit Server VM 11.0.19+7 on Linux 5.15.0-1040-azure
+Intel(R) Xeon(R) Platinum 8171M CPU @ 2.60GHz
+TPCH Snappy:                              Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+q21                                                 185            262          69          0.0      Infinity       1.0X
+
+OpenJDK 64-Bit Server VM 11.0.19+7 on Linux 5.15.0-1040-azure
+Intel(R) Xeon(R) Platinum 8171M CPU @ 2.60GHz
+TPCH Snappy:                              Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+q22                                                 198            266          59          0.0      Infinity       1.0X
+

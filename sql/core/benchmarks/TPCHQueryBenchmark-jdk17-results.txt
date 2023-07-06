@@ -1,0 +1,132 @@
+OpenJDK 64-Bit Server VM 17.0.7+7 on Linux 5.15.0-1040-azure
+Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
+TPCH Snappy:                              Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+q1                                                  136            186          33          0.0      Infinity       1.0X
+
+OpenJDK 64-Bit Server VM 17.0.7+7 on Linux 5.15.0-1040-azure
+Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
+TPCH Snappy:                              Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+q2                                                  385            424          41          0.0      Infinity       1.0X
+
+OpenJDK 64-Bit Server VM 17.0.7+7 on Linux 5.15.0-1040-azure
+Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
+TPCH Snappy:                              Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+q3                                                  110            135          20          0.0      Infinity       1.0X
+
+OpenJDK 64-Bit Server VM 17.0.7+7 on Linux 5.15.0-1040-azure
+Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
+TPCH Snappy:                              Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+q4                                                   73             87          11          0.0      Infinity       1.0X
+
+OpenJDK 64-Bit Server VM 17.0.7+7 on Linux 5.15.0-1040-azure
+Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
+TPCH Snappy:                              Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+q5                                                  148            208          34          0.0      Infinity       1.0X
+
+OpenJDK 64-Bit Server VM 17.0.7+7 on Linux 5.15.0-1040-azure
+Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
+TPCH Snappy:                              Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+q6                                                   57             64           8          0.0      Infinity       1.0X
+
+OpenJDK 64-Bit Server VM 17.0.7+7 on Linux 5.15.0-1040-azure
+Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
+TPCH Snappy:                              Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+q7                                                  124            181          42          0.0      Infinity       1.0X
+
+OpenJDK 64-Bit Server VM 17.0.7+7 on Linux 5.15.0-1040-azure
+Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
+TPCH Snappy:                              Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+q8                                                  192            251          55          0.0      Infinity       1.0X
+
+OpenJDK 64-Bit Server VM 17.0.7+7 on Linux 5.15.0-1040-azure
+Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
+TPCH Snappy:                              Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+q9                                                  126            169          37          0.0      Infinity       1.0X
+
+OpenJDK 64-Bit Server VM 17.0.7+7 on Linux 5.15.0-1040-azure
+Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
+TPCH Snappy:                              Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+q10                                                  81            126          24          0.0      Infinity       1.0X
+
+OpenJDK 64-Bit Server VM 17.0.7+7 on Linux 5.15.0-1040-azure
+Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
+TPCH Snappy:                              Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+q11                                                  87            106          13          0.0      Infinity       1.0X
+
+OpenJDK 64-Bit Server VM 17.0.7+7 on Linux 5.15.0-1040-azure
+Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
+TPCH Snappy:                              Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+q12                                                  60             67           6          0.0      Infinity       1.0X
+
+OpenJDK 64-Bit Server VM 17.0.7+7 on Linux 5.15.0-1040-azure
+Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
+TPCH Snappy:                              Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+q13                                                  78             90           9          0.0      Infinity       1.0X
+
+OpenJDK 64-Bit Server VM 17.0.7+7 on Linux 5.15.0-1040-azure
+Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
+TPCH Snappy:                              Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+q14                                                  65             74           8          0.0      Infinity       1.0X
+
+OpenJDK 64-Bit Server VM 17.0.7+7 on Linux 5.15.0-1040-azure
+Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
+TPCH Snappy:                              Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+q15                                                  74             80           5          0.0      Infinity       1.0X
+
+OpenJDK 64-Bit Server VM 17.0.7+7 on Linux 5.15.0-1040-azure
+Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
+TPCH Snappy:                              Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+q16                                                  88             98           8          0.0      Infinity       1.0X
+
+OpenJDK 64-Bit Server VM 17.0.7+7 on Linux 5.15.0-1040-azure
+Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
+TPCH Snappy:                              Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+q17                                                  76             87          10          0.0      Infinity       1.0X
+
+OpenJDK 64-Bit Server VM 17.0.7+7 on Linux 5.15.0-1040-azure
+Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
+TPCH Snappy:                              Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+q18                                                  74             90          10          0.0      Infinity       1.0X
+
+OpenJDK 64-Bit Server VM 17.0.7+7 on Linux 5.15.0-1040-azure
+Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
+TPCH Snappy:                              Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+q19                                                  72             79           9          0.0      Infinity       1.0X
+
+OpenJDK 64-Bit Server VM 17.0.7+7 on Linux 5.15.0-1040-azure
+Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
+TPCH Snappy:                              Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+q20                                                  87            106          24          0.0      Infinity       1.0X
+
+OpenJDK 64-Bit Server VM 17.0.7+7 on Linux 5.15.0-1040-azure
+Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
+TPCH Snappy:                              Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+q21                                                  95            139          26          0.0      Infinity       1.0X
+
+OpenJDK 64-Bit Server VM 17.0.7+7 on Linux 5.15.0-1040-azure
+Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
+TPCH Snappy:                              Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+q22                                                 122            131           9          0.0      Infinity       1.0X
+
