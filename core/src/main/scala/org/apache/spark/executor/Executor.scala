@@ -513,12 +513,7 @@ private[spark] class Executor(
     override def run(): Unit = {
 
       // Classloader isolation
-      val isolatedSession = taskDescription.artifacts.state match {
-        case Some(jobArtifactState) => isolatedSessionCache.get(
-          jobArtifactState.uuid,
-          () => newSessionState(jobArtifactState))
-        case _ => defaultSessionState
-      }
+      val isolatedSession = getIsolatedSession(taskDescription)
 
       setMDCForTask(taskName, mdcProperties)
       threadId = Thread.currentThread.getId
@@ -543,11 +538,16 @@ private[spark] class Executor(
         // requires access to properties contained within (e.g. for access control).
         Executor.taskDeserializationProps.set(taskDescription.properties)
 
-        updateDependencies(
+        val updated = updateDependencies(
           taskDescription.artifacts.files,
           taskDescription.artifacts.jars,
           taskDescription.artifacts.archives,
           isolatedSession)
+        if (updated) {
+          // reset the thread class loader
+          val newIsolatedSession = getIsolatedSession(taskDescription)
+          Thread.currentThread.setContextClassLoader(newIsolatedSession.replClassLoader)
+        }
         task = ser.deserialize[Task[Any]](
           taskDescription.serializedTask, Thread.currentThread.getContextClassLoader)
         task.localProperties = taskDescription.properties
@@ -860,6 +860,14 @@ private[spark] class Executor(
     }
   }
 
+  private def getIsolatedSession(
+      taskDescription: TaskDescription) = {
+    taskDescription.artifacts.state match {
+      case Some(jobArtifactState) =>
+        isolatedSessionCache.get(jobArtifactState.uuid, () => newSessionState(jobArtifactState))
+      case _ => defaultSessionState
+    }
+  }
   private def setMDCForTask(taskName: String, mdc: Seq[(String, String)]): Unit = {
     try {
       mdc.foreach { case (key, value) => MDC.put(key, value) }
@@ -1014,9 +1022,15 @@ private[spark] class Executor(
     logInfo(s"Starting executor with user classpath (userClassPathFirst = $userClassPathFirst): " +
         urls.mkString("'", ",", "'"))
     if (userClassPathFirst) {
-      new ChildFirstURLClassLoader(urls, systemLoader)
+      // user -> (sys -> stub)
+      val stubClassLoader =
+        StubClassLoader(systemLoader, conf.get(CONNECT_SCALA_UDF_STUB_CLASSES))
+      new ChildFirstURLClassLoader(urls, stubClassLoader)
     } else {
-      new MutableURLClassLoader(urls, systemLoader)
+      // sys -> user -> stub
+      val stubClassLoader =
+        StubClassLoader(null, conf.get(CONNECT_SCALA_UDF_STUB_CLASSES))
+      new ChildFirstURLClassLoader(urls, stubClassLoader, systemLoader)
     }
   }
 
@@ -1047,7 +1061,8 @@ private[spark] class Executor(
       newArchives: immutable.Map[String, Long],
       state: IsolatedSessionState,
       testStartLatch: Option[CountDownLatch] = None,
-      testEndLatch: Option[CountDownLatch] = None): Unit = {
+      testEndLatch: Option[CountDownLatch] = None): Boolean = {
+    var updated = false;
     lazy val hadoopConf = SparkHadoopUtil.get.newConfiguration(conf)
     updateDependenciesLock.lockInterruptibly()
     try {
@@ -1102,12 +1117,19 @@ private[spark] class Executor(
           val url = new File(root, localName).toURI.toURL
           if (!state.urlClassLoader.getURLs().contains(url)) {
             logInfo(s"Adding $url to class loader")
-            state.urlClassLoader.addURL(url)
+            // TODO: make use of the session cache for the class loader.
+            // Currently we invalidate all when adding a new url to always clear the stubbed
+            // classes in the current repl class loader.
+            // This is not always needed if the newly added jar does not contains any stubbed
+            // classes.
+            isolatedSessionCache.invalidateAll()
+            updated = true
           }
         }
       }
       // For testing, so we can simulate a slow file download:
       testEndLatch.foreach(_.await())
+      updated
     } finally {
       updateDependenciesLock.unlock()
     }

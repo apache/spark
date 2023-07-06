@@ -211,6 +211,23 @@ trait RemoteSparkSession extends ConnectFunSuite with BeforeAndAfterAll {
         throw error
       }
     }
+
+    addClientTestArtifactInServerClasspath(spark)
+  }
+
+  // For UDF maven E2E tests, the server needs the client test code to find the UDFs defined in
+  // tests.
+  private[sql] def addClientTestArtifactInServerClasspath(
+      session: SparkSession,
+      testJar: Boolean = true): Unit = {
+    tryFindJar(
+      "connector/connect/client/jvm",
+      // SBT passes the client & test jars to the server process automatically.
+      // So we skip building or finding this jar for SBT.
+      "sbt-tests-do-not-need-this-jar",
+      "spark-connect-client-jvm",
+      test = testJar
+    ).foreach(clientTestJar => session.addArtifact(clientTestJar.getCanonicalPath))
   }
 
   override def afterAll(): Unit = {

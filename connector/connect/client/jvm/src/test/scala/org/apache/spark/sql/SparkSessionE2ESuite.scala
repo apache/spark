@@ -25,7 +25,6 @@ import org.scalatest.concurrent.Eventually._
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.connect.client.util.RemoteSparkSession
-import org.apache.spark.sql.types.{StringType, StructField, StructType}
 import org.apache.spark.util.ThreadUtils
 
 /**
@@ -247,20 +246,5 @@ class SparkSessionE2ESuite extends RemoteSparkSession {
       result.toArray
     }
     assert(e.getMessage contains "OPERATION_CANCELED")
-  }
-
-  test("spark result schema") {
-    val df = spark.sql("select val from (values ('Hello'), ('World')) as t(val)")
-//    val result = df.collectResult()
-//    try {
-//      val schema = result.schema
-//      assert(schema == StructType(StructField("val", StringType, nullable = false) :: Nil))
-//    } finally {
-//      result.close()
-//    }
-    df.withResult { result =>
-      val schema = result.schema
-      assert(schema == StructType(StructField("val", StringType, nullable = false) :: Nil))
-    }
   }
 }
