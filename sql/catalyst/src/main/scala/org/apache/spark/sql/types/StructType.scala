@@ -24,6 +24,7 @@ import scala.util.control.NonFatal
 import org.json4s.JsonDSL._
 
 import org.apache.spark.annotation.Stable
+import org.apache.spark.sql.SqlApiConf
 import org.apache.spark.sql.catalyst.analysis.Resolver
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
 import org.apache.spark.sql.catalyst.parser.{DataTypeParser, LegacyTypeStringParser}
@@ -32,7 +33,6 @@ import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.util.{SparkStringUtils, StringConcat}
 import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns._
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.util.collection.Utils
 
 /**
@@ -425,7 +425,7 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
     SparkStringUtils.truncatedString(
       fieldTypes,
       "struct<", ",", ">",
-      SQLConf.get.maxToStringFields)
+      SqlApiConf.get.maxToStringFields)
   }
 
   override def catalogString: String = {
