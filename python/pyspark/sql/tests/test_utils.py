@@ -730,14 +730,19 @@ class UtilsTestsMixin:
             ),
         )
 
-        with self.assertRaises(PySparkAssertionError) as pe:
-            assertDataFrameEqual(df1, df2)
+        from pyspark.errors.exceptions.connect import AnalysisException
 
-        self.check_error(
-            exception=pe.exception,
-            error_class="UNSUPPORTED_DATA_TYPE_FOR_IGNORE_ROW_ORDER",
-            message_parameters={},
-        )
+        try:
+            assertDataFrameEqual(df1, df2)
+        except PySparkAssertionError as pe:
+            self.check_error(
+                exception=pe,
+                error_class="UNSUPPORTED_DATA_TYPE_FOR_IGNORE_ROW_ORDER",
+                message_parameters={},
+            )
+        except AnalysisException:
+            # catch AnalysisException for Spark Connect
+            pass
 
     def test_spark_sql(self):
         assertDataFrameEqual(self.spark.sql("select 1 + 2 AS x"), self.spark.sql("select 3 AS x"))

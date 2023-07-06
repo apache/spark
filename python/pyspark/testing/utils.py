@@ -254,30 +254,31 @@ def assertDataFrameEqual(
     elif df is None or expected is None:
         return False
 
-    if not isinstance(df, DataFrame):
-        raise PySparkAssertionError(
-            error_class="UNSUPPORTED_DATA_TYPE",
-            message_parameters={"data_type": type(df)},
-        )
-    elif not isinstance(expected, DataFrame):
-        raise PySparkAssertionError(
-            error_class="UNSUPPORTED_DATA_TYPE",
-            message_parameters={"data_type": type(expected)},
-        )
+    try:
+        # If Spark Connect dependencies are available, allow Spark Connect DataFrame
+        from pyspark.sql.connect.dataframe import DataFrame as ConnectDataFrame
 
-    # import pyspark
-    # from pyspark.sql.connect.dataframe import DataFrame as ConnectDataFrame
-    #
-    # if not isinstance(df, pyspark.sql.dataframe.DataFrame) or not isinstance(df, ConnectDataFrame):
-    #     raise PySparkAssertionError(
-    #         error_class="UNSUPPORTED_DATA_TYPE",
-    #         message_parameters={"data_type": type(df)},
-    #     )
-    # elif not isinstance(expected, pyspark.sql.dataframe.DataFrame) or not isinstance(expected, ConnectDataFrame):
-    #     raise PySparkAssertionError(
-    #         error_class="UNSUPPORTED_DATA_TYPE",
-    #         message_parameters={"data_type": type(expected)},
-    #     )
+        if not isinstance(df, DataFrame) and not isinstance(df, ConnectDataFrame):
+            raise PySparkAssertionError(
+                error_class="UNSUPPORTED_DATA_TYPE",
+                message_parameters={"data_type": type(df)},
+            )
+        elif not isinstance(expected, DataFrame) and not isinstance(expected, ConnectDataFrame):
+            raise PySparkAssertionError(
+                error_class="UNSUPPORTED_DATA_TYPE",
+                message_parameters={"data_type": type(expected)},
+            )
+    except:
+        if not isinstance(df, DataFrame):
+            raise PySparkAssertionError(
+                error_class="UNSUPPORTED_DATA_TYPE",
+                message_parameters={"data_type": type(df)},
+            )
+        elif not isinstance(expected, DataFrame):
+            raise PySparkAssertionError(
+                error_class="UNSUPPORTED_DATA_TYPE",
+                message_parameters={"data_type": type(expected)},
+            )
 
     def rename_duplicate_cols(input_df):
         df_cols = input_df.columns
