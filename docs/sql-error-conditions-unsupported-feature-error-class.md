@@ -81,6 +81,10 @@ Referencing a lateral column alias `<lca>` in the aggregate function `<aggFunc>`
 
 Referencing lateral column alias `<lca>` in the aggregate query both with window expressions and with having clause. Please rewrite the aggregate query by removing the having clause or removing lateral alias reference in the SELECT list.
 
+## LATERAL_COLUMN_ALIAS_IN_GROUP_BY
+
+Referencing a lateral column alias via GROUP BY alias/ALL is not supported yet.
+
 ## LATERAL_COLUMN_ALIAS_IN_WINDOW
 
 Referencing a lateral column alias `<lca>` in window expression `<windowExpr>`.
