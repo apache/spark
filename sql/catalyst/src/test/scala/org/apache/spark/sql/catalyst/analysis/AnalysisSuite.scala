@@ -785,9 +785,11 @@ class AnalysisSuite extends AnalysisTest with Matchers {
     }
 
     // Unwrapped attribute
-    checkAnalysisError(
-      a :: Nil,
-      "Attribute", "can only be used as an argument to an aggregate function")
+    assertAnalysisErrorClass(
+      CollectMetrics("event", a :: Nil, testRelation),
+      expectedErrorClass = "INVALID_OBSERVED_METRICS.NON_AGGREGATE_FUNC_ARG_IS_ATTRIBUTE",
+      expectedMessageParameters = Map("expr" -> "\"a\"")
+    )
 
     // Unwrapped non-deterministic expression
     assertAnalysisErrorClass(
@@ -797,9 +799,15 @@ class AnalysisSuite extends AnalysisTest with Matchers {
     )
 
     // Distinct aggregate
-    checkAnalysisError(
-      Sum(a).toAggregateExpression(isDistinct = true).as("sum") :: Nil,
-    "distinct aggregates are not allowed in observed metrics, but found")
+    assertAnalysisErrorClass(
+      CollectMetrics(
+        "event",
+        Sum(a).toAggregateExpression(isDistinct = true).as("sum") :: Nil,
+        testRelation),
+      expectedErrorClass =
+        "INVALID_OBSERVED_METRICS.AGGREGATE_EXPRESSION_WITH_DISTINCT_UNSUPPORTED",
+      expectedMessageParameters = Map("expr" -> "\"sum(DISTINCT a) AS sum\"")
+    )
 
     // Nested aggregate
     assertAnalysisErrorClass(
@@ -873,9 +881,12 @@ class AnalysisSuite extends AnalysisTest with Matchers {
     val sumWithFilter = sum.transform {
       case a: AggregateExpression => a.copy(filter = Some(true))
     }.asInstanceOf[NamedExpression]
-    assertAnalysisError(
+    assertAnalysisErrorClass(
       CollectMetrics("evt1", sumWithFilter :: Nil, testRelation),
-      "aggregates with filter predicate are not allowed" :: Nil)
+      expectedErrorClass =
+        "INVALID_OBSERVED_METRICS.AGGREGATE_EXPRESSION_WITH_FILTER_UNSUPPORTED",
+      expectedMessageParameters = Map("expr" -> "\"sum(a) FILTER (WHERE true) AS sum\"")
+    )
   }
 
   test("Analysis exceed max iterations") {
