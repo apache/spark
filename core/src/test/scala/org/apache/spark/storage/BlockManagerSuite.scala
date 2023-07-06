@@ -1938,16 +1938,17 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with PrivateMethodTe
   }
 
   test("SPARK-43221: the BlockManager with the persisted block is preferred.") {
-    master.updateBlockInfo(BlockManagerId("exec-0", "host1", 100), BlockId("test_1"),
+    val blockId = BlockId("test_1")
+    master.updateBlockInfo(BlockManagerId("exec-0", "host1", 100), blockId,
       StorageLevel.MEMORY_ONLY, 128, 0)
-    master.updateBlockInfo(BlockManagerId("exec-1", "host1", 101), BlockId("test_1"),
+    master.updateBlockInfo(BlockManagerId("exec-1", "host1", 101), blockId,
       StorageLevel.DISK_ONLY, 0, 128)
-    master.updateBlockInfo(BlockManagerId("exec-2", "host1", 102), BlockId("test_1"),
+    master.updateBlockInfo(BlockManagerId("exec-2", "host1", 102), blockId,
       StorageLevel.MEMORY_ONLY, 128, 0)
-    master.updateBlockInfo(BlockManagerId("exec-3", "host1", 103), BlockId("test_1"),
+    master.updateBlockInfo(BlockManagerId("exec-3", "host1", 103), blockId,
       StorageLevel.MEMORY_ONLY, 128, 0)
 
-    val locationsAndStatusOption = master.getLocationsAndStatus(BlockId("test_1"), "host1")
+    val locationsAndStatusOption = master.getLocationsAndStatus(blockId, "host1")
 
     assert(locationsAndStatusOption.get.status.memSize == 0)
     assert(locationsAndStatusOption.get.status.diskSize == 128)
@@ -1956,9 +1957,9 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with PrivateMethodTe
     assert(locationsAndStatusOption.get.status.memSize == 128)
     assert(locationsAndStatusOption.get.status.diskSize == 0)
 
-    master.updateBlockInfo(BlockManagerId("exec-4", "host1", 104), BlockId("test_1"),
+    master.updateBlockInfo(BlockManagerId("exec-4", "host1", 104), blockId,
       StorageLevel.DISK_ONLY, 0, 128)
-    val renewLocationsAndStatusOption = master.getLocationsAndStatus(BlockId("test_1"), "host1")
+    val renewLocationsAndStatusOption = master.getLocationsAndStatus(blockId, "host1")
     assert(locationsAndStatusOption.get.status.memSize == 0)
     assert(locationsAndStatusOption.get.status.diskSize == 128)
   }
