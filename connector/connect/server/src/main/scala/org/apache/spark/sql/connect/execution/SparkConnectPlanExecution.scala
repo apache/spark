@@ -31,7 +31,7 @@ import org.apache.spark.sql.connect.common.DataTypeProtoConverter
 import org.apache.spark.sql.connect.common.LiteralValueProtoConverter.toLiteralProto
 import org.apache.spark.sql.connect.config.Connect.CONNECT_GRPC_ARROW_MAX_BATCH_SIZE
 import org.apache.spark.sql.connect.planner.SparkConnectPlanner
-import org.apache.spark.sql.connect.service.ExecutionHolder
+import org.apache.spark.sql.connect.service.ExecuteHolder
 import org.apache.spark.sql.execution.{LocalTableScanExec, SQLExecution}
 import org.apache.spark.sql.execution.arrow.ArrowConverters
 import org.apache.spark.sql.types.StructType
@@ -40,17 +40,17 @@ import org.apache.spark.util.ThreadUtils
 /**
  * Handle ExecutePlanRequest where the operatoin to handle is Plan execution of type
  * proto.Plan.OpTypeCase.ROOT
- * @param executionHolder
+ * @param executeHolder
  */
-class SparkConnectPlanExecution(executionHolder: ExecutionHolder) {
+class SparkConnectPlanExecution(executeHolder: ExecuteHolder) {
 
-  private val sessionHolder = executionHolder.sessionHolder
-  private val session = executionHolder.session
+  private val sessionHolder = executeHolder.sessionHolder
+  private val session = executeHolder.session
 
   def handlePlan(responseObserver: ExecutePlanResponseObserver): Unit = {
-    val request = executionHolder.executePlanRequest.getOrElse {
+    val request = executeHolder.executePlanRequest.getOrElse {
       throw new IllegalStateException(
-        s"Execution ${executionHolder.operationId} doesn't have an ExecutePlanRequest.")
+        s"Execution ${executeHolder.operationId} doesn't have an ExecutePlanRequest.")
     }
     if (request.getPlan.getOpTypeCase != proto.Plan.OpTypeCase.ROOT) {
       throw new IllegalStateException(

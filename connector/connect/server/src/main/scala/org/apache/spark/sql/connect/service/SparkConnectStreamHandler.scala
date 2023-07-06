@@ -28,11 +28,11 @@ class SparkConnectStreamHandler(responseObserver: StreamObserver[ExecutePlanResp
   def handle(v: ExecutePlanRequest): Unit = {
     val sessionHolder = SparkConnectService
       .getOrCreateIsolatedSession(v.getUserContext.getUserId, v.getSessionId)
-    val executionHolder = sessionHolder.createExecutionHolder()
+    val executeHolder = sessionHolder.createExecuteHolder()
     try {
-      executionHolder.run(v, responseObserver)
+      executeHolder.run(v, responseObserver)
     } finally {
-      sessionHolder.removeExecutePlanHolder(executionHolder.operationId)
+      sessionHolder.removeExecutePlanHolder(executeHolder.operationId)
     }
   }
 }

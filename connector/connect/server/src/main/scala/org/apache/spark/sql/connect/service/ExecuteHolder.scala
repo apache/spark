@@ -35,7 +35,7 @@ import org.apache.spark.util.Utils
 /**
  * Object used to hold the Spark Connect execution state, and perform
  */
-case class ExecutionHolder(operationId: String, sessionHolder: SessionHolder) extends Logging {
+case class ExecuteHolder(operationId: String, sessionHolder: SessionHolder) extends Logging {
 
   val jobTag =
     s"User_${sessionHolder.userId}_Session_${sessionHolder.sessionId}_Request_${operationId}"

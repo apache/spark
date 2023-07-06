@@ -39,17 +39,17 @@ import org.apache.spark.util.Utils
 case class SessionHolder(userId: String, sessionId: String, session: SparkSession)
     extends Logging {
 
-  val executions: ConcurrentMap[String, ExecutionHolder] =
-    new ConcurrentHashMap[String, ExecutionHolder]()
+  val executions: ConcurrentMap[String, ExecuteHolder] =
+    new ConcurrentHashMap[String, ExecuteHolder]()
 
   // Mapping from relation ID (passed to client) to runtime dataframe. Used for callbacks like
   // foreachBatch() in Streaming. Lazy since most sessions don't need it.
   private lazy val dataFrameCache: ConcurrentMap[String, DataFrame] = new ConcurrentHashMap()
 
-  private[connect] def createExecutionHolder(): ExecutionHolder = {
+  private[connect] def createExecuteHolder(): ExecuteHolder = {
 
     val operationId = UUID.randomUUID().toString
-    val executePlanHolder = ExecutionHolder(operationId, this)
+    val executePlanHolder = ExecuteHolder(operationId, this)
     assert(executions.putIfAbsent(operationId, executePlanHolder) == null)
     executePlanHolder
   }
