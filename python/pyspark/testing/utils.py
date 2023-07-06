@@ -280,21 +280,6 @@ def assertDataFrameEqual(
                 message_parameters={"data_type": type(expected)},
             )
 
-    def rename_duplicate_cols(input_df):
-        df_cols = input_df.columns
-
-        duplicate_col_indices = [idx for idx, val in enumerate(df_cols) if val in df_cols[:idx]]
-
-        # Create a new list by renaming duplicate
-        # columns by adding prefix '_duplicate_'+index
-        for i in duplicate_col_indices:
-            df_cols[i] = df_cols[i] + "_duplicate_" + str(i)
-
-        # Rename duplicate columns
-        result_df = input_df.toDF(*df_cols)
-
-        return result_df
-
     def compare_rows(r1: Row, r2: Row):
         def compare_vals(val1, val2):
             if isinstance(val1, list) and isinstance(val2, list):
@@ -361,10 +346,12 @@ def assertDataFrameEqual(
 
     if ignore_row_order:
         try:
-            df = rename_duplicate_cols(df)
-            expected = rename_duplicate_cols(expected)
-            df = df.sort(df.columns)
-            expected = expected.sort(expected.columns)
+            # rename duplicate columns for sorting
+            renamed_df = df.toDF(*[f"_{i}" for i in range(len(df.columns))])
+            renamed_expected = expected.toDF(*[f"_{i}" for i in range(len(df.columns))])
+
+            df = renamed_df.sort(renamed_df.columns).toDF(*df.columns)
+            expected = renamed_expected.sort(renamed_expected.columns).toDF(*df.columns)
         except:
             raise PySparkAssertionError(
                 error_class="UNSUPPORTED_DATA_TYPE_FOR_IGNORE_ROW_ORDER",
