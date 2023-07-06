@@ -153,6 +153,12 @@ Cannot convert SQL `<sqlColumn>` to Protobuf `<protobufColumn>` because `<data>`
 
 Cannot decode url : `<url>`.
 
+### CANNOT_INVOKE_IN_TRANSFORMATIONS
+
+SQLSTATE: none assigned
+
+Dataset transformations and actions can only be invoked by the driver, not inside of other Dataset transformations; for example, dataset1.map(x => dataset2.values.count() * x) is invalid because the values transformation and count action cannot be performed inside of the dataset1.map transformation. For more information, see SPARK-28702.
+
 ### CANNOT_LOAD_FUNCTION_CLASS
 
 SQLSTATE: none assigned
