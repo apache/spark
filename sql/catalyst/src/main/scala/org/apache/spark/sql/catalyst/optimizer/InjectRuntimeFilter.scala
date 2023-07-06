@@ -171,12 +171,12 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
   }
 
   private def isProbablyShuffleJoin(left: LogicalPlan,
-                                    right: LogicalPlan,
-                                    hint: JoinHint,
-                                    joinType: JoinType): Boolean = {
+      right: LogicalPlan,
+      hint: JoinHint,
+      joinType: JoinType): Boolean = {
     // If any of the side can be broadcast, then it is not a shuffle join.
-    !canLeftSideBeBroadcast(left, conf, hint, joinType) &&
-      !canRightSideBeBroadcast(right, conf, hint, joinType)
+    !(canLeftSideBeBroadcast(left, conf, hint, joinType) ||
+      canRightSideBeBroadcast(right, conf, hint, joinType))
   }
 
   private def probablyHasShuffle(plan: LogicalPlan): Boolean = {
