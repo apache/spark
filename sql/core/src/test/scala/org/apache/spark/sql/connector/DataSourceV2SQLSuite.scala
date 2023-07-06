@@ -1694,6 +1694,24 @@ class DataSourceV2SQLSuiteV1Filter
     )
   }
 
+  test("SPARK-44313: generation expression validation passes when there is a char/varchar column") {
+    val tblName = "my_tab"
+    // InMemoryTableCatalog.capabilities() = {SUPPORTS_CREATE_TABLE_WITH_GENERATED_COLUMNS}
+    for (charVarCharCol <- Seq("name VARCHAR(64)", "name CHAR(64)")) {
+      withTable(s"testcat.$tblName") {
+        sql(
+          s"""
+             |CREATE TABLE testcat.$tblName(
+             |  $charVarCharCol,
+             |  tstamp TIMESTAMP,
+             |  tstamp_date DATE GENERATED ALWAYS AS (CAST(tstamp AS DATE))
+             |) USING foo
+             |""".stripMargin)
+        assert(catalog("testcat").asTableCatalog.tableExists(Identifier.of(Array(), tblName)))
+      }
+    }
+  }
+
   test("ShowCurrentNamespace: basic tests") {
     def testShowCurrentNamespace(expectedCatalogName: String, expectedNamespace: String): Unit = {
       val schema = new StructType()
