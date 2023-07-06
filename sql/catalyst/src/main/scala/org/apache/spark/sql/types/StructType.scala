@@ -24,15 +24,15 @@ import scala.util.control.NonFatal
 import org.json4s.JsonDSL._
 
 import org.apache.spark.annotation.Stable
+import org.apache.spark.sql.SqlApiConf
 import org.apache.spark.sql.catalyst.analysis.Resolver
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
-import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, LegacyTypeStringParser}
+import org.apache.spark.sql.catalyst.parser.{DataTypeParser, LegacyTypeStringParser}
 import org.apache.spark.sql.catalyst.trees.Origin
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.util.{SparkStringUtils, StringConcat}
 import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns._
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.util.collection.Utils
 
 /**
@@ -219,7 +219,7 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
    * }}}
    */
   def add(name: String, dataType: String): StructType = {
-    add(name, CatalystSqlParser.parseDataType(dataType), nullable = true, Metadata.empty)
+    add(name, DataTypeParser.parseDataType(dataType), nullable = true, Metadata.empty)
   }
 
   /**
@@ -234,7 +234,7 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
    * }}}
    */
   def add(name: String, dataType: String, nullable: Boolean): StructType = {
-    add(name, CatalystSqlParser.parseDataType(dataType), nullable, Metadata.empty)
+    add(name, DataTypeParser.parseDataType(dataType), nullable, Metadata.empty)
   }
 
   /**
@@ -252,7 +252,7 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
       dataType: String,
       nullable: Boolean,
       metadata: Metadata): StructType = {
-    add(name, CatalystSqlParser.parseDataType(dataType), nullable, metadata)
+    add(name, DataTypeParser.parseDataType(dataType), nullable, metadata)
   }
 
   /**
@@ -270,7 +270,7 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
       dataType: String,
       nullable: Boolean,
       comment: String): StructType = {
-    add(name, CatalystSqlParser.parseDataType(dataType), nullable, comment)
+    add(name, DataTypeParser.parseDataType(dataType), nullable, comment)
   }
 
   /**
@@ -425,7 +425,7 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
     SparkStringUtils.truncatedString(
       fieldTypes,
       "struct<", ",", ">",
-      SQLConf.get.maxToStringFields)
+      SqlApiConf.get.maxToStringFields)
   }
 
   override def catalogString: String = {
@@ -534,7 +534,7 @@ object StructType extends AbstractDataType {
    *
    * @since 2.2.0
    */
-  def fromDDL(ddl: String): StructType = CatalystSqlParser.parseTableSchema(ddl)
+  def fromDDL(ddl: String): StructType = DataTypeParser.parseTableSchema(ddl)
 
   def apply(fields: Seq[StructField]): StructType = StructType(fields.toArray)
 

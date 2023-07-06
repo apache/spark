@@ -49,6 +49,10 @@ The escape character is not allowed to end with.
 
 The escape character is not allowed to precede `<char>`.
 
+## MISMATCH_INPUT
+
+The input <inputType> '<input>' does not match the format.
+
 ## THOUSANDS_SEPS_MUST_BEFORE_DEC
 
 Thousands separators (, or G) may not appear after the decimal point in the number format.

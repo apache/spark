@@ -153,6 +153,12 @@ Cannot convert SQL `<sqlColumn>` to Protobuf `<protobufColumn>` because `<data>`
 
 Cannot decode url : `<url>`.
 
+### CANNOT_INVOKE_IN_TRANSFORMATIONS
+
+SQLSTATE: none assigned
+
+Dataset transformations and actions can only be invoked by the driver, not inside of other Dataset transformations; for example, dataset1.map(x => dataset2.values.count() * x) is invalid because the values transformation and count action cannot be performed inside of the dataset1.map transformation. For more information, see SPARK-28702.
+
 ### CANNOT_LOAD_FUNCTION_CLASS
 
 SQLSTATE: none assigned
@@ -497,6 +503,12 @@ SQLSTATE: none assigned
 
 Failed to rename temp file `<srcPath>` to `<dstPath>` as FileSystem.rename returned false.
 
+### FIELDS_ALREADY_EXISTS
+
+SQLSTATE: none assigned
+
+Cannot `<op>` column, because `<fieldNames>` already exists in <struct>.
+
 ### FIELD_NOT_FOUND
 
 [SQLSTATE: 42704](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
@@ -749,6 +761,12 @@ SQLSTATE: none assigned
 The boundary `<boundary>` is invalid: `<invalidValue>`.
 
  For more details see [INVALID_BOUNDARY](sql-error-conditions-invalid-boundary.html)
+
+### INVALID_BITMAP_POSITION
+
+[SQLSTATE: 22003](sql-error-conditions-sqlstates.html#class-22-data-exception)
+
+The 0-indexed bitmap position `<bitPosition>` is out of bounds. The bitmap has `<bitmapNumBits>` bits (`<bitmapNumBytes>` bytes).
 
 ### INVALID_BUCKET_FILE
 
@@ -1903,6 +1921,12 @@ You're using untyped Scala UDF, which does not have the input type information. 
 2. use Java UDF APIs, e.g. `udf(new UDF1[String, Integer] { override def call(s: String): Integer = s.length() }, IntegerType)`, if input types are all non primitive.
 
 3. set "spark.sql.legacy.allowUntypedScalaUDF" to "true" and use this API with caution.
+
+### UPDATE_FIELD_WITH_STRUCT_UNSUPPORTED
+
+SQLSTATE: none assigned
+
+Cannot update `<table>` field `<fieldName>` type: update a struct by updating its fields.
 
 ### VIEW_ALREADY_EXISTS
 
