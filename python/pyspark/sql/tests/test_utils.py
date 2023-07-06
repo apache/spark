@@ -193,7 +193,7 @@ class UtilsTestsMixin:
             ),
         )
 
-        assertDataFrameEqual(df1, df2, ignore_row_order=False)
+        assertDataFrameEqual(df1, df2, check_row_order=True)
 
     def test_assert_approx_equal_maptype_double(self):
         df1 = self.spark.createDataFrame(
@@ -221,7 +221,7 @@ class UtilsTestsMixin:
             ),
         )
 
-        assertDataFrameEqual(df1, df2, ignore_row_order=False)
+        assertDataFrameEqual(df1, df2, check_row_order=True)
 
     def test_assert_approx_equal_maptype_double(self):
         df1 = self.spark.createDataFrame(
@@ -249,7 +249,7 @@ class UtilsTestsMixin:
             ),
         )
 
-        assertDataFrameEqual(df1, df2, ignore_row_order=False)
+        assertDataFrameEqual(df1, df2, check_row_order=True)
 
     def test_assert_approx_equal_nested_struct_double(self):
         df1 = self.spark.createDataFrame(
@@ -516,8 +516,8 @@ class UtilsTestsMixin:
             message_parameters={"data_type": type(dict1)},
         )
 
-    def test_ignore_row_order(self):
-        # test that row order is ignored by default
+    def test_row_order_ignored(self):
+        # test that row order is ignored (not checked) by default
         df1 = self.spark.createDataFrame(
             data=[
                 ("2", 3000.00),
@@ -535,8 +535,8 @@ class UtilsTestsMixin:
 
         assertDataFrameEqual(df1, df2)
 
-    def test_ignore_row_order_error(self):
-        # test that row order is ignored by default
+    def test_check_row_order_error(self):
+        # test check_row_order=True
         df1 = self.spark.createDataFrame(
             data=[
                 ("2", 3000.00),
@@ -582,7 +582,7 @@ class UtilsTestsMixin:
         expected_error_message += "\n" + diff_msg
 
         with self.assertRaises(PySparkAssertionError) as pe:
-            assertDataFrameEqual(df1, df2, ignore_row_order=False)
+            assertDataFrameEqual(df1, df2, check_row_order=True)
 
         self.check_error(
             exception=pe.exception,
@@ -767,9 +767,7 @@ class UtilsTestsMixin:
         df2.createOrReplaceTempView("df2")
 
         assertDataFrameEqual(
-            self.spark.sql("select * from df1 order by amount"),
-            self.spark.sql("select * from df2"),
-            ignore_row_order=False,
+            self.spark.sql("select * from df1 order by amount"), self.spark.sql("select * from df2")
         )
 
 

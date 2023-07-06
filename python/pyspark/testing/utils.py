@@ -222,19 +222,58 @@ class PySparkErrorTestUtils:
 
 
 def assertDataFrameEqual(
-    df: DataFrame, expected: Union[DataFrame, List[Row]], ignore_row_order: bool = True
+    df: DataFrame, expected: Union[DataFrame, List[Row]], check_row_order: bool = False
 ):
     """
     A util function to assert equality between DataFrames `df` and `expected`, with
-    optional parameter `ignore_row_order`.
+    optional parameter `check_row_order`.
+
+    .. versionadded:: 3.5.0
 
     For float values, assert approximate equality (1e-5 by default).
 
     Parameters
     ----------
     df : DataFrame
-    expected : DataFrame or List of Row
-    ignore_row_order: bool, default True
+        The DataFrame that is being compared or tested.
+
+    expected : DataFrame or list of Row
+        The expected result of the operation, for comparison with the actual result.
+
+    check_row_order : bool, optional
+        A flag indicates whether the order of rows should be considered in the comparison.
+        If set to `False` (default), the row order is not taken into account.
+        If set to `True`, the order of rows is important and will be checked during comparison.
+
+    Examples
+    --------
+    >>> df1 = spark.createDataFrame(data=[("1", 1000), ("2", 3000)], schema=["id", "amount"])
+    >>> df2 = spark.createDataFrame(data=[("1", 1000), ("2", 3000)], schema=["id", "amount"])
+    >>> assertDataFrameEqual(df1, df2) # pass
+
+
+    >>> df1 = spark.createDataFrame(data=[("1", 1000.00), ("2", 3000.00), ("3", 2000.00)], \
+        schema=["id", "amount"])
+    >>> df2 = spark.createDataFrame(data=[("1", 1001.00), ("2", 3000.00), ("3", 2003.00)], \
+        schema=["id", "amount"])
+    >>> assertDataFrameEqual(df1, df2) # fail
+
+    Results do not match: ( 0.66667 % )
+    [df]
+    Row(id='1', amount=1000.0)
+
+    [expected]
+    Row(id='1', amount=1001.0)
+
+    ********************
+
+    [df]
+    Row(id='3', amount=2000.0)
+
+    [expected]
+    Row(id='3', amount=2003.0)
+
+    ********************
     """
     if df is None and expected is None:
         return True
@@ -331,7 +370,7 @@ def assertDataFrameEqual(
                 message_parameters={"error_msg": error_msg},
             )
 
-    if ignore_row_order:
+    if not check_row_order:
         try:
             # rename duplicate columns for sorting
             renamed_df = df.toDF(*[f"_{i}" for i in range(len(df.columns))])
