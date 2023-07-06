@@ -480,6 +480,16 @@ def read_udtf(pickleSer, infile, eval_type):
             timezone,
             safecheck,
             assign_cols_by_name(runner_conf),
+            # Do not convert struct type inputs into a pandas DataFrame.
+            df_for_struct=False,
+            # TODO: should use `row`.
+            struct_in_pandas="dict",
+            # For array type inputs, Arrow converts them into numpy.ndarrays.
+            # For consistency in the behavior of both regular and arrow-optimized UDTFs,
+            # we convert these numpy.ndarrays into Python lists.
+            ndarray_as_list=True,
+            # Explicitly cast the mismatched return type of Arrow Python UDTFs.
+            arrow_cast=True,
         )
     else:
         # Each row is a group so do not batch but send one by one.

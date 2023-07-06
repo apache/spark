@@ -21,8 +21,14 @@ from typing import Iterator
 
 from py4j.protocol import Py4JJavaError
 
-from pyspark.errors import PySparkAttributeError, PythonException, AnalysisException
-from pyspark.sql.functions import lit, udtf
+from pyspark.errors import (
+    PySparkAttributeError,
+    PythonException,
+    PySparkTypeError,
+    AnalysisException,
+)
+from pyspark.rdd import PythonEvalType
+from pyspark.sql.functions import lit, udf, udtf
 from pyspark.sql.types import Row
 from pyspark.testing.sqlutils import (
     have_pandas,
@@ -375,6 +381,118 @@ class BaseUDTFTestsMixin:
         ):
             TestUDTF(rand(0) * 100).collect()
 
+    def test_udtf_with_struct_input_type(self):
+        @udtf(returnType="x: string")
+        class TestUDTF:
+            def eval(self, person):
+                yield f"{person.name}: {person.age}",
+
+        self.spark.udtf.register("test_udtf", TestUDTF)
+        self.assertEqual(
+            self.spark.sql(
+                "select * from test_udtf(named_struct('name', 'Alice', 'age', 1))"
+            ).collect(),
+            [Row(x="Alice: 1")],
+        )
+
+    def test_udtf_with_array_input_type(self):
+        @udtf(returnType="x: string")
+        class TestUDTF:
+            def eval(self, args):
+                yield str(args),
+
+        self.spark.udtf.register("test_udtf", TestUDTF)
+        self.assertEqual(
+            self.spark.sql("select * from test_udtf(array(1, 2, 3))").collect(),
+            [Row(x="[1, 2, 3]")],
+        )
+
+    def test_udtf_with_map_input_type(self):
+        @udtf(returnType="x: string")
+        class TestUDTF:
+            def eval(self, m):
+                yield str(m),
+
+        self.spark.udtf.register("test_udtf", TestUDTF)
+        self.assertEqual(
+            self.spark.sql("select * from test_udtf(map('key', 'value'))").collect(),
+            [Row(x="{'key': 'value'}")],
+        )
+
+    def test_udtf_with_struct_output_types(self):
+        @udtf(returnType="x: struct<a:int,b:int>")
+        class TestUDTF:
+            def eval(self, x: int):
+                yield {"a": x, "b": x + 1},
+
+        self.assertEqual(TestUDTF(lit(1)).collect(), [Row(x=Row(a=1, b=2))])
+
+    def test_udtf_with_array_output_types(self):
+        @udtf(returnType="x: array<int>")
+        class TestUDTF:
+            def eval(self, x: int):
+                yield [x, x + 1, x + 2],
+
+        self.assertEqual(TestUDTF(lit(1)).collect(), [Row(x=[1, 2, 3])])
+
+    def test_udtf_with_map_output_types(self):
+        @udtf(returnType="x: map<int,string>")
+        class TestUDTF:
+            def eval(self, x: int):
+                yield {x: str(x)},
+
+        self.assertEqual(TestUDTF(lit(1)).collect(), [Row(x={1: "1"})])
+
+    def test_udtf_with_pandas_input_type(self):
+        import pandas as pd
+
+        @udtf(returnType="corr: double")
+        class TestUDTF:
+            def eval(self, s1: pd.Series, s2: pd.Series):
+                yield s1.corr(s2)
+
+        self.spark.udtf.register("test_udtf", TestUDTF)
+        # TODO(SPARK-43968): check during compile time instead of runtime
+        with self.assertRaisesRegex(
+            PythonException, "AttributeError: 'int' object has no attribute 'corr'"
+        ):
+            self.spark.sql(
+                "select * from values (1, 2), (2, 3) t(a, b), " "lateral test_udtf(a, b)"
+            ).collect()
+
+    def test_eval_type(self):
+        def upper(x: str):
+            return upper(x)
+
+        class TestUDTF:
+            def eval(self, x: str):
+                return upper(x)
+
+        self.assertEqual(
+            udtf(TestUDTF, returnType="x: string", useArrow=False).evalType,
+            PythonEvalType.SQL_TABLE_UDF,
+        )
+
+        self.assertEqual(
+            udtf(TestUDTF, returnType="x: string", useArrow=True).evalType,
+            PythonEvalType.SQL_ARROW_TABLE_UDF,
+        )
+
+        # Test register
+        scalar_udf = udf(upper)
+
+        with self.assertRaises(PySparkTypeError) as e:
+            self.spark.udtf.register("test_udf", scalar_udf)
+
+        self.check_error(
+            exception=e.exception,
+            error_class="INVALID_UDTF_EVAL_TYPE",
+            message_parameters={
+                "name": "test_udf",
+                "eval_type": "SQL_TABLE_UDF, SQL_ARROW_TABLE_UDF",
+            },
+        )
+
     def test_udtf_no_eval(self):
         with self.assertRaises(PySparkAttributeError) as e:
 
@@ -697,6 +815,10 @@ class UDTFArrowTestsMixin(BaseUDTFTestsMixin):
 
         with self.assertRaisesRegex(PythonException, err_msg):
             TestUDTF(lit(1)).collect()
+
+    @unittest.skip("Need to treat struct types inputs as rows")
+    def test_udtf_with_struct_input_type(self):
+        super().test_udtf_with_struct_input_type()
 
 
 class UDTFArrowTests(UDTFArrowTestsMixin, ReusedSQLTestCase):

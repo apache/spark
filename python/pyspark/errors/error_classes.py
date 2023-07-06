@@ -267,14 +267,14 @@ ERROR_CLASSES_JSON = """
       "The eval type for the UDTF '<name>' is invalid. It must be one of <eval_type>."
     ]
   },
-  "INVALID_UDTF_NO_EVAL" : {
-    "message" : [
-      "The UDTF '<name>' is invalid. It does not implement the required 'eval' method. Please implement the 'eval' method in '<name>' and try again."
-    ]
-  },
   "INVALID_ARROW_UDTF_RETURN_TYPE" : {
     "message" : [
       "The return type of the arrow-optimized Python UDTF should be of type 'pandas.DataFrame', but the function returned a value of type <type_name> with value: <value>."
+    ]
+  },
+  "INVALID_UDTF_NO_EVAL" : {
+    "message" : [
+      "The UDTF '<name>' is invalid. It does not implement the required 'eval' method. Please implement the 'eval' method in '<name>' and try again."
     ]
   },
   "INVALID_WHEN_USAGE": {

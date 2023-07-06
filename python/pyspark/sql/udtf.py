@@ -61,16 +61,17 @@ def _create_py_udtf(
     useArrow: Optional[bool] = None,
 ) -> "UserDefinedTableFunction":
     """Create a regular or an Arrow-optimized Python UDTF."""
-    from pyspark.sql import SparkSession
-
     # Determine whether to create Arrow-optimized UDTFs.
-    # Use arrow-optimization by default.
-    session = SparkSession._instantiatedSession
-    if session is None:
-        arrow_enabled = useArrow or True
+    if useArrow is not None:
+        arrow_enabled = useArrow
     else:
+        from pyspark.sql import SparkSession
+
+        session = SparkSession._instantiatedSession
         arrow_enabled = (
-            useArrow or session.conf.get("spark.sql.execution.pythonUDTF.arrow.enabled") == "true"
+            session.conf.get("spark.sql.execution.pythonUDTF.arrow.enabled") == "true"
+            if session is not None
+            else True
         )
 
     # Create a regular Python UDTF and check for invalid handler class.
