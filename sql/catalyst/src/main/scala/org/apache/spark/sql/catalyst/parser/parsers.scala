@@ -23,8 +23,7 @@ import org.antlr.v4.runtime.tree.TerminalNodeImpl
 
 import org.apache.spark.{QueryContext, SparkThrowableHelper}
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.SQLConfHelper
+import org.apache.spark.sql.{AnalysisException, SqlApiConf}
 import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, Origin}
 import org.apache.spark.sql.errors.QueryParsingErrors
 import org.apache.spark.sql.types.{DataType, StructType}
@@ -32,7 +31,7 @@ import org.apache.spark.sql.types.{DataType, StructType}
 /**
  * Base SQL parsing infrastructure.
  */
-abstract class AbstractParser extends DataTypeParserInterface with SQLConfHelper with Logging {
+abstract class AbstractParser extends DataTypeParserInterface with Logging {
   /** Creates/Resolves DataType for a given SQL string. */
   override def parseDataType(sqlText: String): DataType = parse(sqlText) { parser =>
     astBuilder.visitSingleDataType(parser.singleDataType())
@@ -99,6 +98,8 @@ abstract class AbstractParser extends DataTypeParserInterface with SQLConfHelper
           e.errorClass, e.messageParameters)
     }
   }
+
+  private def conf: SqlApiConf = SqlApiConf.get
 }
 
 /**
