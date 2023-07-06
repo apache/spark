@@ -17,6 +17,7 @@
 package org.apache.spark.sql.errors
 
 import org.apache.spark.{SparkArithmeticException, SparkException, SparkRuntimeException, SparkUnsupportedOperationException}
+import org.apache.spark.sql.catalyst.util.QuotingUtils
 import org.apache.spark.unsafe.types.UTF8String
 
 /**
@@ -24,7 +25,7 @@ import org.apache.spark.unsafe.types.UTF8String
  * This does not include exceptions thrown during the eager execution of commands, which are
  * grouped into [[QueryCompilationErrors]].
  */
-private[sql] object DataTypeErrors {
+private[sql] object DataTypeErrors extends DataTypeErrorsBase {
   def unsupportedOperationExceptionError(): SparkUnsupportedOperationException = {
     new SparkUnsupportedOperationException(
       errorClass = "_LEGACY_ERROR_TEMP_2225",
@@ -91,5 +92,58 @@ private[sql] object DataTypeErrors {
     new SparkRuntimeException(
       errorClass = "_LEGACY_ERROR_TEMP_2120",
       messageParameters = Map("clazz" -> clazz.toString()))
+  }
+
+  def schemaFailToParseError(schema: String, e: Throwable): Throwable = {
+    new SparkException(
+      errorClass = "INVALID_SCHEMA.PARSE_ERROR",
+      messageParameters = Map(
+        "inputSchema" -> QuotingUtils.toSQLSchema(schema),
+        "reason" -> e.getMessage
+      ),
+      cause = e)
+  }
+
+  def invalidDayTimeIntervalType(startFieldName: String, endFieldName: String): Throwable = {
+    new SparkException(
+      errorClass = "_LEGACY_ERROR_TEMP_1224",
+      messageParameters = Map(
+        "startFieldName" -> startFieldName,
+        "endFieldName" -> endFieldName),
+      cause = null)
+  }
+
+  def invalidDayTimeField(field: Byte, supportedIds: Seq[String]): Throwable = {
+    new SparkException(
+      errorClass = "_LEGACY_ERROR_TEMP_1223",
+      messageParameters = Map(
+        "field" -> field.toString,
+        "supportedIds" -> supportedIds.mkString(", ")),
+      cause = null)
+  }
+
+  def invalidYearMonthField(field: Byte, supportedIds: Seq[String]): Throwable = {
+    new SparkException(
+      errorClass = "_LEGACY_ERROR_TEMP_1225",
+      messageParameters = Map(
+        "field" -> field.toString,
+        "supportedIds" -> supportedIds.mkString(", ")),
+      cause = null)
+  }
+
+  def decimalCannotGreaterThanPrecisionError(scale: Int, precision: Int): Throwable = {
+    new SparkException(
+      errorClass = "_LEGACY_ERROR_TEMP_1228",
+      messageParameters = Map(
+        "scale" -> scale.toString,
+        "precision" -> precision.toString),
+      cause = null)
+  }
+
+  def negativeScaleNotAllowedError(scale: Int): Throwable = {
+    val sqlConf = QuotingUtils.toSQLConf("spark.sql.legacy.allowNegativeScaleOfDecimal")
+    SparkException.internalError(s"Negative scale is not allowed: ${scale.toString}." +
+      s" Set the config ${sqlConf}" +
+      " to \"true\" to allow it.")
   }
 }

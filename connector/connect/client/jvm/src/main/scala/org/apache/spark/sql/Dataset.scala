@@ -239,17 +239,13 @@ class Dataset[T] private[sql] (
    * @since 3.4.0
    */
   def schema: StructType = {
-    if (encoder == UnboundRowEncoder) {
-      DataTypeProtoConverter
-        .toCatalystType(
-          sparkSession
-            .analyze(plan, proto.AnalyzePlanRequest.AnalyzeCase.SCHEMA)
-            .getSchema
-            .getSchema)
-        .asInstanceOf[StructType]
-    } else {
-      encoder.schema
-    }
+    DataTypeProtoConverter
+      .toCatalystType(
+        sparkSession
+          .analyze(plan, proto.AnalyzePlanRequest.AnalyzeCase.SCHEMA)
+          .getSchema
+          .getSchema)
+      .asInstanceOf[StructType]
   }
 
   /**

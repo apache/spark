@@ -38,7 +38,7 @@ import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 import org.apache.spark.sql.connector.catalog.functions.{BoundFunction, UnboundFunction}
 import org.apache.spark.sql.connector.expressions.filter.Predicate
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.internal.SQLConf.{LEGACY_ALLOW_NEGATIVE_SCALE_OF_DECIMAL_ENABLED, LEGACY_CTE_PRECEDENCE_POLICY}
+import org.apache.spark.sql.internal.SQLConf.LEGACY_CTE_PRECEDENCE_POLICY
 import org.apache.spark.sql.sources.Filter
 import org.apache.spark.sql.streaming.OutputMode
 import org.apache.spark.sql.types._
@@ -1045,16 +1045,6 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
       messageParameters = Map(
         "key" -> toSQLConf(key),
         "totalAmountOfParts" -> totalAmountOfParts))
-  }
-
-  def schemaFailToParseError(schema: String, e: Throwable): Throwable = {
-    new AnalysisException(
-      errorClass = "INVALID_SCHEMA.PARSE_ERROR",
-      messageParameters = Map(
-        "inputSchema" -> toSQLSchema(schema),
-        "reason" -> e.getMessage
-      ),
-      cause = Some(e))
   }
 
   def unexpectedSchemaTypeError(exp: Expression): Throwable = {
@@ -2359,34 +2349,6 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
       messageParameters = Map("resourceType" -> resourceType))
   }
 
-  def invalidDayTimeField(field: Byte): Throwable = {
-    val supportedIds = DayTimeIntervalType.dayTimeFields
-      .map(i => s"$i (${DayTimeIntervalType.fieldToString(i)})")
-    new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1223",
-      messageParameters = Map(
-        "field" -> field.toString,
-        "supportedIds" -> supportedIds.mkString(", ")))
-  }
-
-  def invalidDayTimeIntervalType(startFieldName: String, endFieldName: String): Throwable = {
-    new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1224",
-      messageParameters = Map(
-        "startFieldName" -> startFieldName,
-        "endFieldName" -> endFieldName))
-  }
-
-  def invalidYearMonthField(field: Byte): Throwable = {
-    val supportedIds = YearMonthIntervalType.yearMonthFields
-      .map(i => s"$i (${YearMonthIntervalType.fieldToString(i)})")
-    new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1225",
-      messageParameters = Map(
-        "field" -> field.toString,
-        "supportedIds" -> supportedIds.mkString(", ")))
-  }
-
   def configRemovedInVersionError(
       configName: String,
       version: String,
@@ -2397,20 +2359,6 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
         "configName" -> configName,
         "version" -> version,
         "comment" -> comment))
-  }
-
-  def decimalCannotGreaterThanPrecisionError(scale: Int, precision: Int): Throwable = {
-    new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1228",
-      messageParameters = Map(
-        "scale" -> scale.toString,
-        "precision" -> precision.toString))
-  }
-
-  def negativeScaleNotAllowedError(scale: Int): Throwable = {
-    SparkException.internalError(s"Negative scale is not allowed: ${scale.toString}." +
-      s" Set the config ${toSQLConf(LEGACY_ALLOW_NEGATIVE_SCALE_OF_DECIMAL_ENABLED.key)}" +
-      " to \"true\" to allow it.")
   }
 
   def invalidPartitionColumnKeyInTableError(key: String, tblName: String): Throwable = {
