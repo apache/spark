@@ -34,7 +34,7 @@ from itertools import zip_longest
 from pyspark import SparkContext, SparkConf
 from pyspark.errors import PySparkAssertionError, PySparkException
 from pyspark.find_spark_home import _find_spark_home
-from pyspark.sql.dataframe import DataFrame
+from pyspark.sql.dataframe import DataFrame as DataFrame
 from pyspark.sql import Row
 from pyspark.sql.types import StructType, AtomicType
 
@@ -239,8 +239,15 @@ def assertDataFrameEqual(
 ):
     """
     A util function to assert equality between DataFrames `df` and `expected`, with
-    optional arg `ignore_row_order`.
+    optional parameter `ignore_row_order`.
+
     For float values, assert approximate equality (1e-5 by default).
+
+    Parameters
+    ----------
+    df : DataFrame
+    expected : DataFrame or List of Row
+    ignore_row_order: bool, default True
     """
     if df is None and expected is None:
         return True
@@ -257,6 +264,35 @@ def assertDataFrameEqual(
             error_class="UNSUPPORTED_DATA_TYPE",
             message_parameters={"data_type": type(expected)},
         )
+
+    # import pyspark
+    # from pyspark.sql.connect.dataframe import DataFrame as ConnectDataFrame
+    #
+    # if not isinstance(df, pyspark.sql.dataframe.DataFrame) or not isinstance(df, ConnectDataFrame):
+    #     raise PySparkAssertionError(
+    #         error_class="UNSUPPORTED_DATA_TYPE",
+    #         message_parameters={"data_type": type(df)},
+    #     )
+    # elif not isinstance(expected, pyspark.sql.dataframe.DataFrame) or not isinstance(expected, ConnectDataFrame):
+    #     raise PySparkAssertionError(
+    #         error_class="UNSUPPORTED_DATA_TYPE",
+    #         message_parameters={"data_type": type(expected)},
+    #     )
+
+    def rename_duplicate_cols(input_df):
+        df_cols = input_df.columns
+
+        duplicate_col_indices = [idx for idx, val in enumerate(df_cols) if val in df_cols[:idx]]
+
+        # Create a new list by renaming duplicate
+        # columns by adding prefix '_duplicate_'+index
+        for i in duplicate_col_indices:
+            df_cols[i] = df_cols[i] + "_duplicate_" + str(i)
+
+        # Rename duplicate columns
+        result_df = input_df.toDF(*df_cols)
+
+        return result_df
 
     def compare_rows(r1: Row, r2: Row):
         def compare_vals(val1, val2):
@@ -324,6 +360,8 @@ def assertDataFrameEqual(
 
     if ignore_row_order:
         try:
+            df = rename_duplicate_cols(df)
+            expected = rename_duplicate_cols(expected)
             df = df.sort(df.columns)
             expected = expected.sort(expected.columns)
         except:

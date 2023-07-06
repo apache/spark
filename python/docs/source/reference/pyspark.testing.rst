@@ -16,13 +16,13 @@
     under the License.
 
 
-===
+=======
 Testing
-===
+=======
 
 .. currentmodule:: pyspark.testing
 
 .. autosummary::
     :toctree: api/
 
-    assertDataframeEqual
+    assertDataFrameEqual

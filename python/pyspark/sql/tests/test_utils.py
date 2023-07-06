@@ -346,6 +346,69 @@ class UtilsTestsMixin:
 
         assertDataFrameEqual(df1, df2)
 
+    def test_assert_equal_nested_struct_str_duplicate(self):
+        df1 = self.spark.createDataFrame(
+            data=[
+                (1, ("jane doe", "jane doe")),
+                (2, ("john smith", "john smith")),
+            ],
+            schema=StructType(
+                [
+                    StructField("id", IntegerType(), True),
+                    StructField(
+                        "full name",
+                        StructType(
+                            [
+                                StructField("name", StringType(), True),
+                                StructField("name", StringType(), True),
+                            ]
+                        ),
+                    ),
+                ]
+            ),
+        )
+
+        df2 = self.spark.createDataFrame(
+            data=[
+                (1, ("jane doe", "jane doe")),
+                (2, ("john smith", "john smith")),
+            ],
+            schema=StructType(
+                [
+                    StructField("id", IntegerType(), True),
+                    StructField(
+                        "full name",
+                        StructType(
+                            [
+                                StructField("name", StringType(), True),
+                                StructField("name", StringType(), True),
+                            ]
+                        ),
+                    ),
+                ]
+            ),
+        )
+
+        assertDataFrameEqual(df1, df2)
+
+    def test_assert_equal_duplicate_col(self):
+        df1 = self.spark.createDataFrame(
+            data=[
+                (1, "Python", 1, 1),
+                (2, "Scala", 2, 2),
+            ],
+            schema=["number", "language", "number", "number"],
+        )
+        df2 = self.spark.createDataFrame(
+            data=[
+                (1, "Python", 1, 1),
+                (2, "Scala", 2, 2),
+            ],
+            schema=["number", "language", "number", "number"],
+        )
+
+        assertDataFrameEqual(df1, df2)
+
     def test_assert_equal_timestamp(self):
         df1 = self.spark.createDataFrame(
             data=[("1", "2023-01-01 12:01:01.000")], schema=["id", "timestamp"]
