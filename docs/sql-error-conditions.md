@@ -153,6 +153,12 @@ Cannot convert SQL `<sqlColumn>` to Protobuf `<protobufColumn>` because `<data>`
 
 Cannot decode url : `<url>`.
 
+### CANNOT_INVOKE_IN_TRANSFORMATIONS
+
+SQLSTATE: none assigned
+
+Dataset transformations and actions can only be invoked by the driver, not inside of other Dataset transformations; for example, dataset1.map(x => dataset2.values.count() * x) is invalid because the values transformation and count action cannot be performed inside of the dataset1.map transformation. For more information, see SPARK-28702.
+
 ### CANNOT_LOAD_FUNCTION_CLASS
 
 SQLSTATE: none assigned
@@ -737,6 +743,12 @@ SQLSTATE: none assigned
 The boundary `<boundary>` is invalid: `<invalidValue>`.
 
  For more details see [INVALID_BOUNDARY](sql-error-conditions-invalid-boundary.html)
+
+### INVALID_BITMAP_POSITION
+
+[SQLSTATE: 22003](sql-error-conditions-sqlstates.html#class-22-data-exception)
+
+The 0-indexed bitmap position `<bitPosition>` is out of bounds. The bitmap has `<bitmapNumBits>` bits (`<bitmapNumBytes>` bytes).
 
 ### INVALID_BUCKET_FILE
 
