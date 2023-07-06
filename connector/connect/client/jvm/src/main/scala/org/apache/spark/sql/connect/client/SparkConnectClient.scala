@@ -35,9 +35,6 @@ private[sql] class SparkConnectClient(
     private[sql] val configuration: SparkConnectClient.Configuration,
     private val channel: ManagedChannel) {
 
-  def this(configuration: SparkConnectClient.Configuration) =
-    this(configuration, configuration.createChannel())
-
   private val userContext: UserContext = configuration.userContext
 
   private[this] val stub = proto.SparkConnectServiceGrpc.newBlockingStub(channel)
@@ -197,7 +194,7 @@ private[sql] class SparkConnectClient(
     stub.interrupt(request)
   }
 
-  def copy(): SparkConnectClient = new SparkConnectClient(configuration)
+  def copy(): SparkConnectClient = configuration.toSparkConnectClient
 
   /**
    * Add a single artifact to the client session.
@@ -457,7 +454,18 @@ object SparkConnectClient {
       this
     }
 
-    def build(): SparkConnectClient = new SparkConnectClient(_configuration)
+    /**
+     * Add an interceptor to be used during channel creation.
+     *
+     * Note that interceptors added last are executed first by grpc.
+     */
+    def interceptor(interceptor: ClientInterceptor): Builder = {
+      val interceptors = _configuration.interceptors ++ List(interceptor)
+      _configuration = _configuration.copy(interceptors = interceptors)
+      this
+    }
+
+    def build(): SparkConnectClient = _configuration.toSparkConnectClient
   }
 
   /**
@@ -471,7 +479,8 @@ object SparkConnectClient {
       token: Option[String] = None,
       isSslEnabled: Option[Boolean] = None,
       metadata: Map[String, String] = Map.empty,
-      userAgent: String = DEFAULT_USER_AGENT) {
+      userAgent: String = DEFAULT_USER_AGENT,
+      interceptors: List[ClientInterceptor] = List.empty) {
 
     def userContext: proto.UserContext = {
       val builder = proto.UserContext.newBuilder()
@@ -502,12 +511,20 @@ object SparkConnectClient {
 
     def createChannel(): ManagedChannel = {
       val channelBuilder = Grpc.newChannelBuilderForAddress(host, port, credentials)
+
       if (metadata.nonEmpty) {
         channelBuilder.intercept(new MetadataHeaderClientInterceptor(metadata))
       }
+
+      for (interceptor <- interceptors) {
+        channelBuilder.intercept(interceptor)
+      }
+
       channelBuilder.maxInboundMessageSize(ConnectCommon.CONNECT_GRPC_MAX_MESSAGE_SIZE)
       channelBuilder.build()
     }
+
+    def toSparkConnectClient: SparkConnectClient = new SparkConnectClient(this, createChannel())
   }
 
   /**
@@ -532,10 +549,6 @@ object SparkConnectClient {
             applier.fail(Status.UNAUTHENTICATED.withCause(e));
         }
       })
-    }
-
-    override def thisUsesUnstableApi(): Unit = {
-      // Marks this API is not stable. Left empty on purpose.
     }
   }
 

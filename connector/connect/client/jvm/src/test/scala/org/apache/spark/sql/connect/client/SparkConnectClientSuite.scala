@@ -17,15 +17,12 @@
 package org.apache.spark.sql.connect.client
 
 import java.util.concurrent.TimeUnit
-
 import scala.collection.JavaConverters._
 import scala.collection.mutable
-
-import io.grpc.{Server, StatusRuntimeException}
+import io.grpc.{CallOptions, Channel, ClientCall, ClientInterceptor, MethodDescriptor, Server, StatusRuntimeException}
 import io.grpc.netty.NettyServerBuilder
 import io.grpc.stub.StreamObserver
 import org.scalatest.BeforeAndAfterEach
-
 import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.{AddArtifactsRequest, AddArtifactsResponse, AnalyzePlanRequest, AnalyzePlanResponse, ArtifactStatusesRequest, ArtifactStatusesResponse, ExecutePlanRequest, ExecutePlanResponse, SparkConnectServiceGrpc}
 import org.apache.spark.sql.SparkSession
@@ -117,6 +114,28 @@ class SparkConnectClientSuite extends ConnectFunSuite with BeforeAndAfterEach {
     val df = session.range(10)
     df.analyze // Trigger RPC
     assert(df.plan === service.getAndClearLatestInputPlan())
+  }
+
+  test("CustomInterceptor") {
+    startDummyServer(0)
+    client = SparkConnectClient
+      .builder()
+      .connectionString(s"sc://localhost:${server.getPort}")
+      .interceptor(new ClientInterceptor {
+        override def interceptCall[ReqT, RespT](
+                                                 methodDescriptor: MethodDescriptor[ReqT, RespT],
+                                                 callOptions: CallOptions,
+                                                 channel: Channel): ClientCall[ReqT, RespT] = {
+          throw new RuntimeException("Blocked")
+        }
+      })
+      .build()
+
+    val session = SparkSession.builder().client(client).create()
+
+    assertThrows[RuntimeException] {
+      session.range(10).count()
+    }
   }
 
   private case class TestPackURI(
