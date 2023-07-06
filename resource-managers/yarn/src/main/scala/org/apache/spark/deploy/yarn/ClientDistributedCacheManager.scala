@@ -127,8 +127,8 @@ private[spark] class ClientDistributedCacheManager() extends Logging {
   }
 
   /**
-   * Get the Parent URI of the given URI. Notes that the query & fragment of original URI will not be
-   * inherited when obtaining parent URI.
+   * Get the Parent URI of the given URI. Notes that the query & fragment of original URI will not
+   * be inherited when obtaining parent URI.
    *
    * @return the parent URI, null if the given uri is the root
    */
