@@ -26,10 +26,13 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.FileStatus
 import org.apache.hadoop.fs.FileSystem
 import org.apache.hadoop.fs.Path
+import org.apache.hadoop.fs.permission.FsAction
 import org.apache.hadoop.yarn.api.records.LocalResource
 import org.apache.hadoop.yarn.api.records.LocalResourceType
 import org.apache.hadoop.yarn.api.records.LocalResourceVisibility
+import org.mockito.ArgumentMatchers.any
 import org.mockito.Mockito.when
+import org.mockito.invocation.InvocationOnMock
 import org.scalatestplus.mockito.MockitoSugar
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
@@ -44,37 +47,25 @@ class ClientDistributedCacheManagerSuite extends SparkFunSuite with MockitoSugar
     }
   }
 
-  /*
-  * This this a customized ClientDistributedCacheManager to test statCache.
-  * */
-  class CustomizedClientDistributedCacheManager extends ClientDistributedCacheManager {
-    override def addResource(fs: FileSystem, conf: Configuration, destPath: Path,
-      localResources: HashMap[String, LocalResource], resourceType: LocalResourceType,
-      link: String, statCache: Map[URI, FileStatus], appMasterOnly: Boolean): Unit = {
-      statCache.getOrElseUpdate(destPath.toUri(), fs.getFileStatus(destPath))
-    }
-
-    /*
-    * This simulates the isPublic method. It will return true if the result is cached in the
-    *  statCache.
-    * */
-    def isPublicResultCached(uri: URI, statCache: Map[URI, FileStatus]): Boolean = {
-      statCache.contains(uri)
-    }
-  }
-
   test("SPARK-44272: test addResource added FileStatus to statCache and getVisibility can read" +
     " from statCache") {
-    val distMgr = new CustomizedClientDistributedCacheManager()
+    val distMgr = mock[ClientDistributedCacheManager]
     val fs = mock[FileSystem]
     val conf = new Configuration()
     val destPath = new Path("file:///foo.invalid.com:8080/tmp/testing")
+    val destURI = destPath.toUri
     val localResources = HashMap[String, LocalResource]()
     val statCache: Map[URI, FileStatus] = HashMap[URI, FileStatus]()
-    assert(distMgr.isPublicResultCached(destPath.toUri(), statCache) === false)
+    assert(statCache.contains(destURI) === false)
     distMgr.addResource(fs, conf, destPath, localResources, LocalResourceType.FILE, "link",
       statCache, false)
-    assert(distMgr.isPublicResultCached(destPath.toUri(), statCache) === true)
+    when(distMgr.getFileStatus(any[FileSystem], any[URI], any[Map[URI, FileStatus]]))
+      .thenAnswer((invocation: InvocationOnMock) => {
+      val destURI = invocation.getArgument[URI](1)
+      val statCache = invocation.getArgument[Map[URI, FileStatus]](3)
+      assert(!statCache.contains(destURI))
+      true
+    })
   }
 
   test("SPARK-44272: test getParentURI") {
