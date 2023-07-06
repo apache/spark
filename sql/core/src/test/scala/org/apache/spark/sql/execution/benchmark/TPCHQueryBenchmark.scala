@@ -33,7 +33,7 @@ import org.apache.spark.sql.types.StructType
  *      Results will be written to "benchmarks/TPCHQueryBenchmark-results.txt".
  * }}}
  */
-object TPCHQueryBenchmark extends TPCBenchmarkUtils {
+object TPCHQueryBenchmark extends TPCBasedBenchmark {
   override val tables: Seq[String] = Seq("part", "supplier", "partsupp", "customer", "orders",
     "lineitem", "nation", "region")
   override val queryType: String = "TPCH"

@@ -33,7 +33,7 @@ import org.apache.spark.sql.types.StructType
  *      Results will be written to "benchmarks/TPCDSQueryBenchmark-results.txt".
  * }}}
  */
-object TPCDSQueryBenchmark extends TPCBenchmarkUtils {
+object TPCDSQueryBenchmark extends TPCBasedBenchmark {
 
   override val tables: Seq[String] = Seq("catalog_page", "catalog_returns", "customer",
     "customer_address", "customer_demographics", "date_dim", "household_demographics",

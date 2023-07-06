@@ -25,6 +25,9 @@ class TPCQueryBenchmarkArguments(val args: Array[String], val dataLocationEnv: S
   var queryFilter: Set[String] = Set.empty
   var cboEnabled: Boolean = false
 
+  parseArgs(args.toList)
+  validateArguments()
+
   private def optionMatch(optionName: String, s: String): Boolean = {
     optionName == s.toLowerCase(Locale.ROOT)
   }

@@ -32,7 +32,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StructType
 
 
-trait TPCBenchmarkUtils extends SqlBasedBenchmark with Logging {
+trait TPCBasedBenchmark extends SqlBasedBenchmark with Logging {
 
   val tables: Seq[String]
   val queryType: String
