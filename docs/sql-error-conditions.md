@@ -738,6 +738,12 @@ The boundary `<boundary>` is invalid: `<invalidValue>`.
 
  For more details see [INVALID_BOUNDARY](sql-error-conditions-invalid-boundary.html)
 
+### INVALID_BITMAP_POSITION
+
+[SQLSTATE: 22003](sql-error-conditions-sqlstates.html#class-22-data-exception)
+
+The 0-indexed bitmap position `<bitPosition>` is out of bounds. The bitmap has `<bitmapNumBits>` bits (`<bitmapNumBytes>` bytes).
+
 ### INVALID_BUCKET_FILE
 
 SQLSTATE: none assigned
