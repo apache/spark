@@ -726,7 +726,7 @@
   },
   "FAILED_RENAME_TEMP_FILE" : {
     "message" : [
-      "Failed to rename temp file <srcPath> to <dstPath> as rename returned false."
+      "Failed to rename temp file <srcPath> to <dstPath> as FileSystem.rename returned false."
     ]
   },
   "FIELD_NOT_FOUND" : {
