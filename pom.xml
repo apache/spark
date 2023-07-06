@@ -196,7 +196,11 @@
     <datanucleus-core.version>4.1.17</datanucleus-core.version>
     <guava.version>14.0.1</guava.version>
     <janino.version>3.1.9</janino.version>
-    <jersey.version>2.36</jersey.version>
+    <!--
+      Please don't upgrade the version to 3.0.0+,
+      Because it transition Jakarta REST API from javax to jakarta package.
+    -->
+    <jersey.version>2.40</jersey.version>
     <joda.version>2.12.5</joda.version>
     <jodd.version>3.5.2</jodd.version>
     <jsr305.version>3.0.0</jsr305.version>
