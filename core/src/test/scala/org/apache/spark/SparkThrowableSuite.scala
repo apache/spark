@@ -158,7 +158,7 @@ class SparkThrowableSuite extends SparkFunSuite {
 
     def assertWithOnlyClue(condition: Boolean, clue: String): Unit = {
       if (!condition) {
-       throw new TestFailedException(s"assertion failed: $clue", 0)
+        throw new TestFailedException(s"assertion failed: $clue", 0)
       }
     }
 
