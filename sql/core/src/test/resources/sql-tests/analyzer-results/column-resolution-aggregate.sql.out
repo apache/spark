@@ -94,27 +94,21 @@ org.apache.spark.sql.AnalysisException
 -- !query
 SELECT k AS lca, lca + 1 AS col FROM v1 GROUP BY k, col
 -- !query analysis
-Project [lca#x, (lca#x + 1) AS col#x]
-+- Project [k#x, k#x AS lca#x]
-   +- Aggregate [k#x, (k#x + 1)], [k#x]
-      +- SubqueryAlias v1
-         +- View (`v1`, [a#x,b#x,k#x])
-            +- Project [cast(a#x as int) AS a#x, cast(b#x as int) AS b#x, cast(k#x as int) AS k#x]
-               +- SubqueryAlias t
-                  +- LocalRelation [a#x, b#x, k#x]
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "UNSUPPORTED_FEATURE.LATERAL_COLUMN_ALIAS_IN_GROUP_BY",
+  "sqlState" : "0A000"
+}
 
 
 -- !query
 SELECT k AS lca, lca + 1 AS col FROM v1 GROUP BY all
 -- !query analysis
-Project [lca#x, (lca#x + 1) AS col#x]
-+- Project [k#x, k#x AS lca#x]
-   +- Aggregate [k#x, (k#x + 1)], [k#x]
-      +- SubqueryAlias v1
-         +- View (`v1`, [a#x,b#x,k#x])
-            +- Project [cast(a#x as int) AS a#x, cast(b#x as int) AS b#x, cast(k#x as int) AS k#x]
-               +- SubqueryAlias t
-                  +- LocalRelation [a#x, b#x, k#x]
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "UNSUPPORTED_FEATURE.LATERAL_COLUMN_ALIAS_IN_GROUP_BY",
+  "sqlState" : "0A000"
+}
 
 
 -- !query
