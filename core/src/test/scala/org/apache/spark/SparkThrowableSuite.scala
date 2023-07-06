@@ -31,6 +31,7 @@ import com.fasterxml.jackson.databind.SerializationFeature
 import com.fasterxml.jackson.databind.json.JsonMapper
 import com.fasterxml.jackson.module.scala.DefaultScalaModule
 import org.apache.commons.io.{FileUtils, IOUtils}
+import org.scalatest.exceptions.TestFailedException
 
 import org.apache.spark.SparkThrowableHelper._
 import org.apache.spark.util.Utils
@@ -155,17 +156,24 @@ class SparkThrowableSuite extends SparkFunSuite {
       .filter(_.startsWith("###")).map(s => s.replace("###", "").trim)
       .filter(linkInDocRegex.findFirstMatchIn(_).isEmpty)
 
-    commonErrorsInDoc.foreach(s => assert(errors.contains(s),
+    def assertWithOnlyClue(condition: Boolean, clue: String): Unit = {
+      if (!condition) {
+       throw new TestFailedException(s"assertion failed: $clue", 0)
+      }
+    }
+
+    commonErrorsInDoc.foreach(s => assertWithOnlyClue(errors.contains(s),
       s"Error class: $s is not in error-classes.json"))
 
     val titlePrefix = "title:"
     val errorsInDoc = errorDocPaths.map(lines => {
       val errorClass = lines.filter(_.startsWith(titlePrefix))
         .map(s => s.replace("error class", "").replace(titlePrefix, "").trim).head
-      assert(errors.contains(errorClass), s"Error class: $errorClass is not in error-classes.json")
+      assertWithOnlyClue(errors.contains(errorClass),
+        s"Error class: $errorClass is not in error-classes.json")
       val subClasses = lines.filter(_.startsWith("##")).map(s => s.replace("##", "").trim)
         .map { s =>
-          assert(errors(errorClass).subClass.get.contains(s),
+          assertWithOnlyClue(errors(errorClass).subClass.get.contains(s),
             s"Error class: $errorClass does not contain sub class: $s in error-classes.json")
           s
         }
@@ -177,16 +185,16 @@ class SparkThrowableSuite extends SparkFunSuite {
       val errorClass = e._1
       val subClasses = e._2.subClass.getOrElse(Map.empty).keys.toSeq
       if (subClasses.nonEmpty) {
-        assert(errorsInDoc.contains(errorClass),
+        assertWithOnlyClue(errorsInDoc.contains(errorClass),
           s"Error class: $errorClass do not have sql-error-conditions sub doc, please create it")
         val subClassesInDoc = errorsInDoc(errorClass)
         subClasses.foreach { s =>
-          assert(subClassesInDoc.contains(s),
+          assertWithOnlyClue(subClassesInDoc.contains(s),
             s"Error class: $errorClass contains sub class: $s which is not in " +
               s"sql-error-conditions sub doc")
         }
       } else if (!errorClass.startsWith("_LEGACY_ERROR_TEMP_")) {
-        assert(commonErrorsInDoc.contains(errorClass),
+        assertWithOnlyClue(commonErrorsInDoc.contains(errorClass),
           s"Error class: $errorClass is not in sql-error-conditions.md")
       }
     }
