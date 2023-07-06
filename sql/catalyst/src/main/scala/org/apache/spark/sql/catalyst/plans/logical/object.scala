@@ -19,13 +19,14 @@ package org.apache.spark.sql.catalyst.plans.logical
 
 import org.apache.spark.api.java.function.FilterFunction
 import org.apache.spark.broadcast.Broadcast
-import org.apache.spark.sql.{Encoder, Row}
-import org.apache.spark.sql.catalyst.analysis.UnresolvedDeserializer
+import org.apache.spark.sql.{catalyst, Encoder, Row}
+import org.apache.spark.sql.catalyst.analysis.{Resolver, UnresolvedDeserializer}
 import org.apache.spark.sql.catalyst.encoders._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.objects.Invoke
-import org.apache.spark.sql.catalyst.plans.ReferenceAllColumns
+import org.apache.spark.sql.catalyst.plans.{InnerLike, LeftAnti, LeftSemi, ReferenceAllColumns}
 import org.apache.spark.sql.catalyst.trees.TreePattern._
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.{GroupStateTimeout, OutputMode}
 import org.apache.spark.sql.types._
@@ -718,4 +719,101 @@ case class CoGroup(
     right: LogicalPlan) extends BinaryNode with ObjectProducer {
   override protected def withNewChildrenInternal(
       newLeft: LogicalPlan, newRight: LogicalPlan): CoGroup = copy(left = newLeft, right = newRight)
+}
+
+// TODO (SPARK-44225): Move this into analyzer
+object JoinWith {
+  /**
+   * find the trivially true predicates and automatically resolves them to both sides.
+   */
+  private[sql] def resolveSelfJoinCondition(resolver: Resolver, plan: Join): Join = {
+    val cond = plan.condition.map {
+      _.transform {
+        case catalyst.expressions.EqualTo(a: AttributeReference, b: AttributeReference)
+          if a.sameRef(b) =>
+          catalyst.expressions.EqualTo(
+            plan.left.resolveQuoted(a.name, resolver).getOrElse(
+              throw QueryCompilationErrors.resolveException(a.name, plan.left.schema.fieldNames)),
+            plan.right.resolveQuoted(b.name, resolver).getOrElse(
+              throw QueryCompilationErrors.resolveException(b.name, plan.right.schema.fieldNames)))
+        case catalyst.expressions.EqualNullSafe(a: AttributeReference, b: AttributeReference)
+          if a.sameRef(b) =>
+          catalyst.expressions.EqualNullSafe(
+            plan.left.resolveQuoted(a.name, resolver).getOrElse(
+              throw QueryCompilationErrors.resolveException(a.name, plan.left.schema.fieldNames)),
+            plan.right.resolveQuoted(b.name, resolver).getOrElse(
+              throw QueryCompilationErrors.resolveException(b.name, plan.right.schema.fieldNames)))
+      }
+    }
+    plan.copy(condition = cond)
+  }
+
+  private[sql] def typedJoinWith(
+      plan: Join,
+      isAutoSelfJoinAliasEnable: Boolean,
+      resolver: Resolver,
+      isLeftFlattenableToRow: Boolean,
+      isRightFlattenableToRow: Boolean): LogicalPlan = {
+    var joined = plan
+    if (joined.joinType == LeftSemi || joined.joinType == LeftAnti) {
+      throw QueryCompilationErrors.invalidJoinTypeInJoinWithError(joined.joinType)
+    }
+    // If auto self join alias is enable
+    if (isAutoSelfJoinAliasEnable) {
+      joined = resolveSelfJoinCondition(resolver, joined)
+    }
+
+    val leftResultExpr = {
+      if (!isLeftFlattenableToRow) {
+        assert(joined.left.output.length == 1)
+        Alias(joined.left.output.head, "_1")()
+      } else {
+        Alias(CreateStruct(joined.left.output), "_1")()
+      }
+    }
+
+    val rightResultExpr = {
+      if (!isRightFlattenableToRow) {
+        assert(joined.right.output.length == 1)
+        Alias(joined.right.output.head, "_2")()
+      } else {
+        Alias(CreateStruct(joined.right.output), "_2")()
+      }
+    }
+
+    if (joined.joinType.isInstanceOf[InnerLike]) {
+      // For inner joins, we can directly perform the join and then can project the join
+      // results into structs. This ensures that data remains flat during shuffles /
+      // exchanges (unlike the outer join path, which nests the data before shuffling).
+      Project(Seq(leftResultExpr, rightResultExpr), joined)
+    } else { // outer joins
+      // For both join sides, combine all outputs into a single column and alias it with "_1
+      // or "_2", to match the schema for the encoder of the join result.
+      // Note that we do this before joining them, to enable the join operator to return null
+      // for one side, in cases like outer-join.
+      val left = Project(leftResultExpr :: Nil, joined.left)
+      val right = Project(rightResultExpr :: Nil, joined.right)
+
+      // Rewrites the join condition to make the attribute point to correct column/field,
+      // after we combine the outputs of each join side.
+      val conditionExpr = joined.condition.get transformUp {
+        case a: Attribute if joined.left.outputSet.contains(a) =>
+          if (!isLeftFlattenableToRow) {
+            left.output.head
+          } else {
+            val index = joined.left.output.indexWhere(_.exprId == a.exprId)
+            GetStructField(left.output.head, index)
+          }
+        case a: Attribute if joined.right.outputSet.contains(a) =>
+          if (!isRightFlattenableToRow) {
+            right.output.head
+          } else {
+            val index = joined.right.output.indexWhere(_.exprId == a.exprId)
+            GetStructField(right.output.head, index)
+          }
+      }
+
+      Join(left, right, joined.joinType, Some(conditionExpr), JoinHint.NONE)
+    }
+  }
 }

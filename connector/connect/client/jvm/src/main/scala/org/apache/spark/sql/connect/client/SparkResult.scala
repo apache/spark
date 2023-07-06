@@ -28,11 +28,11 @@ import org.apache.arrow.vector.ipc.ArrowStreamReader
 import org.apache.spark.connect.proto
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.encoders.{AgnosticEncoder, ExpressionEncoder, RowEncoder}
-import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.UnboundRowEncoder
+import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{ProductEncoder, UnboundRowEncoder}
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder.Deserializer
 import org.apache.spark.sql.connect.client.util.{AutoCloseables, Cleanable}
 import org.apache.spark.sql.connect.common.DataTypeProtoConverter
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.types.{DataType, StructType}
 import org.apache.spark.sql.util.ArrowUtils
 import org.apache.spark.sql.vectorized.{ArrowColumnVector, ColumnarBatch, ColumnVector}
 
@@ -50,13 +50,31 @@ private[sql] class SparkResult[T](
   private val idxToBatches = mutable.Map.empty[Int, ColumnarBatch]
 
   private def createEncoder(schema: StructType): ExpressionEncoder[T] = {
-    val agnosticEncoder = if (encoder == UnboundRowEncoder) {
-      // Create a row encoder based on the schema.
-      RowEncoder.encoderFor(schema).asInstanceOf[AgnosticEncoder[T]]
-    } else {
-      encoder
-    }
+    val agnosticEncoder = createEncoder(encoder, schema).asInstanceOf[AgnosticEncoder[T]]
     ExpressionEncoder(agnosticEncoder)
+  }
+
+  /**
+   * Update RowEncoder and recursively update the fields of the ProductEncoder if found.
+   */
+  private def createEncoder[_](
+      enc: AgnosticEncoder[_],
+      dataType: DataType): AgnosticEncoder[_] = {
+    enc match {
+      case UnboundRowEncoder =>
+        // Replace the row encoder with the encoder inferred from the schema.
+        RowEncoder.encoderFor(dataType.asInstanceOf[StructType])
+      case ProductEncoder(clsTag, fields) if ProductEncoder.isTuple(clsTag) =>
+        // Recursively continue updating the tuple product encoder
+        val schema = dataType.asInstanceOf[StructType]
+        assert(fields.length <= schema.fields.length)
+        val updatedFields = fields.zipWithIndex.map { case (f, id) =>
+          f.copy(enc = createEncoder(f.enc, schema.fields(id).dataType))
+        }
+        ProductEncoder(clsTag, updatedFields)
+      case _ =>
+        enc
+    }
   }
 
   private def processResponses(stopOnFirstNonEmptyResponse: Boolean): Boolean = {
