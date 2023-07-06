@@ -55,13 +55,9 @@ import org.apache.spark.util.random.RandomSampler
  * The AstBuilder converts an ANTLR4 ParseTree into a catalyst Expression, LogicalPlan or
  * TableIdentifier.
  */
-class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper with Logging {
+class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
   import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
   import ParserUtils._
-
-  protected def typedVisit[T](ctx: ParseTree): T = {
-    ctx.accept(this).asInstanceOf[T]
-  }
 
   protected def withIdentClause(
       ctx: IdentifierReferenceContext,
@@ -1527,6 +1523,18 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
     }
   }
 
+  private def extractNamedArgument(expr: FunctionArgumentContext, funcName: String) : Expression = {
+    Option(expr.namedArgumentExpression).map { n =>
+      if (conf.getConf(SQLConf.ALLOW_NAMED_FUNCTION_ARGUMENTS)) {
+        NamedArgumentExpression(n.key.getText, expression(n.value))
+      } else {
+        throw QueryCompilationErrors.namedArgumentsNotEnabledError(funcName, n.key.getText)
+      }
+    }.getOrElse {
+      expression(expr)
+    }
+  }
+
   private def withTimeTravel(
       ctx: TemporalClauseContext, plan: LogicalPlan): LogicalPlan = withOrigin(ctx) {
     val v = ctx.version
@@ -1537,6 +1545,33 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
         "timestamp expression cannot refer to any columns", ctx.timestamp)
     }
     RelationTimeTravel(plan, timestamp, version)
+  }
+
+  /**
+   * Create a relation argument for a table-valued function argument.
+   */
+  override def visitFunctionTableSubqueryArgument(
+      ctx: FunctionTableSubqueryArgumentContext): Expression = withOrigin(ctx) {
+    val p = Option(ctx.identifierReference).map { r =>
+      createUnresolvedRelation(r)
+    }.getOrElse {
+      plan(ctx.query)
+    }
+    FunctionTableSubqueryArgumentExpression(p)
+  }
+
+  private def extractFunctionTableNamedArgument(
+      expr: FunctionTableReferenceArgumentContext, funcName: String) : Expression = {
+    Option(expr.functionTableNamedArgumentExpression).map { n =>
+      if (conf.getConf(SQLConf.ALLOW_NAMED_FUNCTION_ARGUMENTS)) {
+        NamedArgumentExpression(
+          n.key.getText, visitFunctionTableSubqueryArgument(n.functionTableSubqueryArgument))
+      } else {
+        throw QueryCompilationErrors.namedArgumentsNotEnabledError(funcName, n.key.getText)
+      }
+    }.getOrElse {
+      visitFunctionTableSubqueryArgument(expr.functionTableSubqueryArgument)
+    }
   }
 
   /**
@@ -1551,17 +1586,26 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
       Seq.empty
     }
 
-    withFuncIdentClause(func.functionName, ident => {
-      if (ident.length > 1) {
-        throw QueryParsingErrors.invalidTableValuedFunctionNameError(ident, ctx)
-      }
+    withFuncIdentClause(
+      func.functionName,
+      ident => {
+        if (ident.length > 1) {
+          throw QueryParsingErrors.invalidTableValuedFunctionNameError(ident, ctx)
+        }
+        val funcName = func.functionName.getText
+        val args = func.functionTableArgument.asScala.map { e =>
+          Option(e.functionArgument).map(extractNamedArgument(_, funcName))
+            .getOrElse {
+              extractFunctionTableNamedArgument(e.functionTableReferenceArgument, funcName)
+            }
+        }.toSeq
 
-      val tvf = UnresolvedTableValuedFunction(ident, func.expression.asScala.map(expression).toSeq)
+        val tvf = UnresolvedTableValuedFunction(ident, args)
 
-      val tvfAliases = if (aliases.nonEmpty) UnresolvedTVFAliases(ident, tvf, aliases) else tvf
+        val tvfAliases = if (aliases.nonEmpty) UnresolvedTVFAliases(ident, tvf, aliases) else tvf
 
-      tvfAliases.optionalMap(func.tableAlias.strictIdentifier)(aliasPlan)
-    })
+        tvfAliases.optionalMap(func.tableAlias.strictIdentifier)(aliasPlan)
+      })
   }
 
   /**
@@ -1617,7 +1661,7 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
       // normal subquery names, so that parent operators can only access the columns in subquery by
       // unqualified names. Users can still use this special qualifier to access columns if they
       // know it, but that's not recommended.
-      SubqueryAlias("__auto_generated_subquery_name", relation)
+      SubqueryAlias(SubqueryAlias.generateSubqueryName(), relation)
     } else {
       mayApplyAliasPlan(ctx.tableAlias, relation)
     }
@@ -2186,7 +2230,9 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
     val name = ctx.functionName.getText
     val isDistinct = Option(ctx.setQuantifier()).exists(_.DISTINCT != null)
     // Call `toSeq`, otherwise `ctx.argument.asScala.map(expression)` is `Buffer` in Scala 2.13
-    val arguments = ctx.argument.asScala.map(expression).toSeq match {
+    val arguments = ctx.argument.asScala.map { e =>
+      extractNamedArgument(e, name)
+    }.toSeq match {
       case Seq(UnresolvedStar(None))
         if name.toLowerCase(Locale.ROOT) == "count" && !isDistinct =>
         // Transform COUNT(*) into COUNT(1).
@@ -2976,126 +3022,10 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
    * ******************************************************************************************** */
 
   /**
-   * Resolve/create a primitive type.
-   */
-  override def visitPrimitiveDataType(ctx: PrimitiveDataTypeContext): DataType = withOrigin(ctx) {
-    val typeName = ctx.`type`.start.getType
-    (typeName, ctx.INTEGER_VALUE().asScala.toList) match {
-      case (BOOLEAN, Nil) => BooleanType
-      case (TINYINT | BYTE, Nil) => ByteType
-      case (SMALLINT | SHORT, Nil) => ShortType
-      case (INT | INTEGER, Nil) => IntegerType
-      case (BIGINT | LONG, Nil) => LongType
-      case (FLOAT | REAL, Nil) => FloatType
-      case (DOUBLE, Nil) => DoubleType
-      case (DATE, Nil) => DateType
-      case (TIMESTAMP, Nil) => SQLConf.get.timestampType
-      case (TIMESTAMP_NTZ, Nil) => TimestampNTZType
-      case (TIMESTAMP_LTZ, Nil) => TimestampType
-      case (STRING, Nil) => StringType
-      case (CHARACTER | CHAR, length :: Nil) => CharType(length.getText.toInt)
-      case (VARCHAR, length :: Nil) => VarcharType(length.getText.toInt)
-      case (BINARY, Nil) => BinaryType
-      case (DECIMAL | DEC | NUMERIC, Nil) => DecimalType.USER_DEFAULT
-      case (DECIMAL | DEC | NUMERIC, precision :: Nil) =>
-        DecimalType(precision.getText.toInt, 0)
-      case (DECIMAL | DEC | NUMERIC, precision :: scale :: Nil) =>
-        DecimalType(precision.getText.toInt, scale.getText.toInt)
-      case (VOID, Nil) => NullType
-      case (INTERVAL, Nil) => CalendarIntervalType
-      case (CHARACTER | CHAR | VARCHAR, Nil) =>
-        throw QueryParsingErrors.charTypeMissingLengthError(ctx.`type`.getText, ctx)
-      case (ARRAY | STRUCT | MAP, Nil) =>
-        throw QueryParsingErrors.nestedTypeMissingElementTypeError(ctx.`type`.getText, ctx)
-      case (_, params) =>
-        val badType = ctx.`type`.getText
-        val dtStr = if (params.nonEmpty) s"$badType(${params.mkString(",")})" else badType
-        throw QueryParsingErrors.dataTypeUnsupportedError(dtStr, ctx)
-    }
-  }
-
-  override def visitYearMonthIntervalDataType(ctx: YearMonthIntervalDataTypeContext): DataType = {
-    val startStr = ctx.from.getText.toLowerCase(Locale.ROOT)
-    val start = YearMonthIntervalType.stringToField(startStr)
-    if (ctx.to != null) {
-      val endStr = ctx.to.getText.toLowerCase(Locale.ROOT)
-      val end = YearMonthIntervalType.stringToField(endStr)
-      if (end <= start) {
-        throw QueryParsingErrors.fromToIntervalUnsupportedError(startStr, endStr, ctx)
-      }
-      YearMonthIntervalType(start, end)
-    } else {
-      YearMonthIntervalType(start)
-    }
-  }
-
-  override def visitDayTimeIntervalDataType(ctx: DayTimeIntervalDataTypeContext): DataType = {
-    val startStr = ctx.from.getText.toLowerCase(Locale.ROOT)
-    val start = DayTimeIntervalType.stringToField(startStr)
-    if (ctx.to != null ) {
-      val endStr = ctx.to.getText.toLowerCase(Locale.ROOT)
-      val end = DayTimeIntervalType.stringToField(endStr)
-      if (end <= start) {
-        throw QueryParsingErrors.fromToIntervalUnsupportedError(startStr, endStr, ctx)
-      }
-      DayTimeIntervalType(start, end)
-    } else {
-      DayTimeIntervalType(start)
-    }
-  }
-
-  /**
-   * Create a complex DataType. Arrays, Maps and Structures are supported.
-   */
-  override def visitComplexDataType(ctx: ComplexDataTypeContext): DataType = withOrigin(ctx) {
-    ctx.complex.getType match {
-      case SqlBaseParser.ARRAY =>
-        ArrayType(typedVisit(ctx.dataType(0)))
-      case SqlBaseParser.MAP =>
-        MapType(typedVisit(ctx.dataType(0)), typedVisit(ctx.dataType(1)))
-      case SqlBaseParser.STRUCT =>
-        StructType(Option(ctx.complexColTypeList).toArray.flatMap(visitComplexColTypeList))
-    }
-  }
-
-  /**
-   * Create top level table schema.
-   */
-  protected def createSchema(ctx: ColTypeListContext): StructType = {
-    StructType(Option(ctx).toArray.flatMap(visitColTypeList))
-  }
-
-  /**
    * Create top level table schema.
    */
   protected def createSchema(ctx: CreateOrReplaceTableColTypeListContext): StructType = {
     StructType(Option(ctx).toArray.flatMap(visitCreateOrReplaceTableColTypeList))
-  }
-
-  /**
-   * Create a [[StructType]] from a number of column definitions.
-   */
-  override def visitColTypeList(ctx: ColTypeListContext): Seq[StructField] = withOrigin(ctx) {
-    ctx.colType().asScala.map(visitColType).toSeq
-  }
-
-  /**
-   * Create a top level [[StructField]] from a column definition.
-   */
-  override def visitColType(ctx: ColTypeContext): StructField = withOrigin(ctx) {
-    import ctx._
-
-    val builder = new MetadataBuilder
-    // Add comment to metadata
-    Option(commentSpec()).map(visitCommentSpec).foreach {
-      builder.putString("comment", _)
-    }
-
-    StructField(
-      name = colName.getText,
-      dataType = typedVisit[DataType](ctx.dataType),
-      nullable = NULL == null,
-      metadata = builder.build())
   }
 
   /**
@@ -3180,33 +3110,6 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
   }
 
   /**
-   * Create a [[StructType]] from a sequence of [[StructField]]s.
-   */
-  protected def createStructType(ctx: ComplexColTypeListContext): StructType = {
-    StructType(Option(ctx).toArray.flatMap(visitComplexColTypeList))
-  }
-
-  /**
-   * Create a [[StructType]] from a number of column definitions.
-   */
-  override def visitComplexColTypeList(
-      ctx: ComplexColTypeListContext): Seq[StructField] = withOrigin(ctx) {
-    ctx.complexColType().asScala.map(visitComplexColType).toSeq
-  }
-
-  /**
-   * Create a [[StructField]] from a column definition.
-   */
-  override def visitComplexColType(ctx: ComplexColTypeContext): StructField = withOrigin(ctx) {
-    import ctx._
-    val structField = StructField(
-      name = identifier.getText,
-      dataType = typedVisit(dataType()),
-      nullable = NULL == null)
-    Option(commentSpec).map(visitCommentSpec).map(structField.withComment).getOrElse(structField)
-  }
-
-  /**
    * Create a location string.
    */
   override def visitLocationSpec(ctx: LocationSpecContext): String = withOrigin(ctx) {
@@ -3218,13 +3121,6 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
    */
   protected def visitLocationSpecList(ctx: java.util.List[LocationSpecContext]): Option[String] = {
     ctx.asScala.headOption.map(visitLocationSpec)
-  }
-
-  /**
-   * Create a comment string.
-   */
-  override def visitCommentSpec(ctx: CommentSpecContext): String = withOrigin(ctx) {
-    string(visitStringLit(ctx.stringLit))
   }
 
   private def verifyAndGetExpression(exprCtx: ExpressionContext): String = {
@@ -3366,18 +3262,6 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
       key -> value
     }.toSeq
     OptionList(options)
-  }
-
-  override def visitStringLit(ctx: StringLitContext): Token = {
-    if (ctx != null) {
-      if (ctx.STRING_LITERAL != null) {
-        ctx.STRING_LITERAL.getSymbol
-      } else {
-        ctx.DOUBLEQUOTED_STRING.getSymbol
-      }
-    } else {
-      null
-    }
   }
 
   /**

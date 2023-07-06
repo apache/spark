@@ -23,7 +23,6 @@ import java.util.Properties
 import scala.collection.JavaConverters._
 import scala.collection.mutable
 
-import io.grpc.StatusRuntimeException
 import org.apache.commons.io.FileUtils
 import org.apache.commons.io.output.TeeOutputStream
 import org.apache.commons.lang3.{JavaVersion, SystemUtils}
@@ -65,7 +64,7 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper with PrivateM
     assume(IntegrationTestUtils.isSparkHiveJarAvailable)
     withTable("test_martin") {
       // Fails, because table does not exist.
-      assertThrows[StatusRuntimeException] {
+      assertThrows[SparkException] {
         spark.sql("select * from test_martin").collect()
       }
       // Execute eager, DML
@@ -153,7 +152,7 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper with PrivateM
             StructField("job", StringType) :: Nil))
       .csv(testDataPath.toString)
     // Failed because the path cannot be provided both via option and load method (csv).
-    assertThrows[StatusRuntimeException] {
+    assertThrows[SparkException] {
       df.collect()
     }
   }
@@ -237,7 +236,7 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper with PrivateM
         assert(result.length == 10)
       } finally {
         // clean up
-        assertThrows[StatusRuntimeException] {
+        assertThrows[SparkException] {
           spark.read.jdbc(url = s"$url;drop=true", table, new Properties()).collect()
         }
       }
@@ -354,7 +353,7 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper with PrivateM
     val df = spark.range(10)
     val outputFolderPath = Files.createTempDirectory("output").toAbsolutePath
     // Failed because the path cannot be provided both via option and save method.
-    assertThrows[StatusRuntimeException] {
+    assertThrows[SparkException] {
       df.write.option("path", outputFolderPath.toString).save(outputFolderPath.toString)
     }
   }
@@ -393,7 +392,7 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper with PrivateM
     checkFragments(result, fragmentsToCheck)
   }
 
-  private val simpleSchema = new StructType().add("value", "long", nullable = true)
+  private val simpleSchema = new StructType().add("id", "long", nullable = false)
 
   // Dataset tests
   test("Dataset inspection") {
@@ -404,15 +403,15 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper with PrivateM
     assert(!df.isLocal)
     assert(local.isLocal)
     assert(!df.isStreaming)
-    assert(df.toString.contains("[value: bigint]"))
+    assert(df.toString.contains("[id: bigint]"))
     assert(df.inputFiles.isEmpty)
   }
 
   test("Dataset schema") {
     val df = spark.range(10)
     assert(df.schema === simpleSchema)
-    assert(df.dtypes === Array(("value", "LongType")))
-    assert(df.columns === Array("value"))
+    assert(df.dtypes === Array(("id", "LongType")))
+    assert(df.columns === Array("id"))
     testCapturedStdOut(df.printSchema(), simpleSchema.treeString)
     testCapturedStdOut(df.printSchema(5), simpleSchema.treeString(5))
   }

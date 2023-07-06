@@ -224,6 +224,7 @@ class ArtifactManagerSuite extends SharedSparkSession with ResourceHelper {
   test("Classloaders for spark sessions are isolated") {
     val holder1 = SparkConnectService.getOrCreateIsolatedSession("c1", "session1")
     val holder2 = SparkConnectService.getOrCreateIsolatedSession("c2", "session2")
+    val holder3 = SparkConnectService.getOrCreateIsolatedSession("c3", "session3")
 
     def addHelloClass(holder: SessionHolder): Unit = {
       val copyDir = Utils.createTempDir().toPath
@@ -234,7 +235,7 @@ class ArtifactManagerSuite extends SharedSparkSession with ResourceHelper {
       holder.addArtifact(remotePath, stagingPath, None)
     }
 
-    // Add the classfile only for the first user
+    // Add the "Hello" classfile for the first user
     addHelloClass(holder1)
 
     val classLoader1 = holder1.classloader
@@ -246,7 +247,8 @@ class ArtifactManagerSuite extends SharedSparkSession with ResourceHelper {
     val udf1 = org.apache.spark.sql.functions.udf(instance1)
 
     holder1.withSession { session =>
-      session.range(10).select(udf1(col("id").cast("string"))).collect()
+      val result = session.range(10).select(udf1(col("id").cast("string"))).collect()
+      assert(result.forall(_.getString(0).contains("Talon")))
     }
 
     assertThrows[ClassNotFoundException] {
@@ -257,6 +259,38 @@ class ArtifactManagerSuite extends SharedSparkSession with ResourceHelper {
         .newInstance("Talon")
         .asInstanceOf[String => String]
     }
+
+    // Add the "Hello" classfile for the third user
+    addHelloClass(holder3)
+    val instance3 = holder3.classloader
+      .loadClass("Hello")
+      .getDeclaredConstructor(classOf[String])
+      .newInstance("Ahri")
+      .asInstanceOf[String => String]
+    val udf3 = org.apache.spark.sql.functions.udf(instance3)
+
+    holder3.withSession { session =>
+      val result = session.range(10).select(udf3(col("id").cast("string"))).collect()
+      assert(result.forall(_.getString(0).contains("Ahri")))
+    }
+  }
+
+  test("SPARK-44300: Cleaning up resources only deletes session-specific resources") {
+    val copyDir = Utils.createTempDir().toPath
+    FileUtils.copyDirectory(artifactPath.toFile, copyDir.toFile)
+    val stagingPath = copyDir.resolve("Hello.class")
+    val remotePath = Paths.get("classes/Hello.class")
+
+    val sessionHolder = SparkConnectService.getOrCreateIsolatedSession("c1", "session")
+    sessionHolder.addArtifact(remotePath, stagingPath, None)
+
+    val sessionDirectory =
+      SparkConnectArtifactManager.getArtifactDirectoryAndUriForSession(sessionHolder)._1.toFile
+    assert(sessionDirectory.exists())
+
+    sessionHolder.artifactManager.cleanUpResources()
+    assert(!sessionDirectory.exists())
+    assert(SparkConnectArtifactManager.artifactRootPath.toFile.exists())
   }
 }
 

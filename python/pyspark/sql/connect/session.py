@@ -573,6 +573,13 @@ class SparkSession:
 
     stop.__doc__ = PySparkSession.stop.__doc__
 
+    @property
+    def is_stopped(self) -> bool:
+        """
+        Returns if this session was stopped
+        """
+        return self.client.is_closed
+
     @classmethod
     def getActiveSession(cls) -> Any:
         raise PySparkNotImplementedError(

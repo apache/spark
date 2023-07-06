@@ -1199,7 +1199,7 @@ private[spark] class DAGScheduler(
     val jobIds = activeJobs.filter { activeJob =>
       Option(activeJob.properties).exists { properties =>
         Option(properties.getProperty(SparkContext.SPARK_JOB_TAGS)).getOrElse("")
-          .split(SparkContext.SPARK_JOB_TAGS_SEP).toSet.contains(tag)
+          .split(SparkContext.SPARK_JOB_TAGS_SEP).filter(!_.isEmpty).toSet.contains(tag)
       }
     }.map(_.jobId)
     jobIds.foreach(handleJobCancellation(_,
@@ -3003,8 +3003,8 @@ private[scheduler] class DAGSchedulerEventProcessLoop(dagScheduler: DAGScheduler
     case JobGroupCancelled(groupId) =>
       dagScheduler.handleJobGroupCancelled(groupId)
 
-    case JobTagCancelled(groupId) =>
-      dagScheduler.handleJobTagCancelled(groupId)
+    case JobTagCancelled(tag) =>
+      dagScheduler.handleJobTagCancelled(tag)
 
     case AllJobsCancelled =>
       dagScheduler.doCancelAllJobs()

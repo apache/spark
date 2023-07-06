@@ -937,6 +937,34 @@ class QueryExecutionErrorsSuite
       sqlState = "XX000")
   }
 
+  test("INVALID_BITMAP_POSITION: position out of bounds") {
+    val e = intercept[SparkException] {
+      sql("select bitmap_construct_agg(col) from values (32768) as tab(col)").collect()
+    }.getCause.asInstanceOf[SparkArrayIndexOutOfBoundsException]
+    checkError(
+      exception = e,
+      errorClass = "INVALID_BITMAP_POSITION",
+      parameters = Map(
+        "bitPosition" -> "32768",
+        "bitmapNumBytes" -> "4096",
+        "bitmapNumBits" -> "32768"),
+      sqlState = "22003")
+  }
+
+  test("INVALID_BITMAP_POSITION: negative position") {
+    val e = intercept[SparkException] {
+      sql("select bitmap_construct_agg(col) from values (-1) as tab(col)").collect()
+    }.getCause.asInstanceOf[SparkArrayIndexOutOfBoundsException]
+    checkError(
+      exception = e,
+      errorClass = "INVALID_BITMAP_POSITION",
+      parameters = Map(
+        "bitPosition" -> "-1",
+        "bitmapNumBytes" -> "4096",
+        "bitmapNumBits" -> "32768"),
+      sqlState = "22003")
+  }
+
   test("SPARK-43589: Use bytesToString instead of shift operation") {
     checkError(
       exception = intercept[SparkException] {

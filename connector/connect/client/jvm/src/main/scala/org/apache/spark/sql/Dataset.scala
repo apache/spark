@@ -239,17 +239,13 @@ class Dataset[T] private[sql] (
    * @since 3.4.0
    */
   def schema: StructType = {
-    if (encoder == UnboundRowEncoder) {
-      DataTypeProtoConverter
-        .toCatalystType(
-          sparkSession
-            .analyze(plan, proto.AnalyzePlanRequest.AnalyzeCase.SCHEMA)
-            .getSchema
-            .getSchema)
-        .asInstanceOf[StructType]
-    } else {
-      encoder.schema
-    }
+    DataTypeProtoConverter
+      .toCatalystType(
+        sparkSession
+          .analyze(plan, proto.AnalyzePlanRequest.AnalyzeCase.SCHEMA)
+          .getSchema
+          .getSchema)
+      .asInstanceOf[StructType]
   }
 
   /**
@@ -535,7 +531,7 @@ class Dataset[T] private[sql] (
       assert(result.schema.size == 1)
       // scalastyle:off println
       println(result.toArray.head)
-    // scalastyle:on println
+      // scalastyle:on println
     }
   }
 
@@ -2214,10 +2210,9 @@ class Dataset[T] private[sql] (
    * tied to this Spark application.
    *
    * Global temporary view is cross-session. Its lifetime is the lifetime of the Spark
-   * application,
-   * i.e. it will be automatically dropped when the application terminates. It's tied to a system
-   * preserved database `global_temp`, and we must use the qualified name to refer a global temp
-   * view, e.g. `SELECT * FROM global_temp.view1`.
+   * application, i.e. it will be automatically dropped when the application terminates. It's tied
+   * to a system preserved database `global_temp`, and we must use the qualified name to refer a
+   * global temp view, e.g. `SELECT * FROM global_temp.view1`.
    *
    * @throws AnalysisException
    *   if the view name is invalid or already exists
@@ -2235,10 +2230,9 @@ class Dataset[T] private[sql] (
    * temporary view is tied to this Spark application.
    *
    * Global temporary view is cross-session. Its lifetime is the lifetime of the Spark
-   * application,
-   * i.e. it will be automatically dropped when the application terminates. It's tied to a system
-   * preserved database `global_temp`, and we must use the qualified name to refer a global temp
-   * view, e.g. `SELECT * FROM global_temp.view1`.
+   * application, i.e. it will be automatically dropped when the application terminates. It's tied
+   * to a system preserved database `global_temp`, and we must use the qualified name to refer a
+   * global temp view, e.g. `SELECT * FROM global_temp.view1`.
    *
    * @group basic
    * @since 3.4.0

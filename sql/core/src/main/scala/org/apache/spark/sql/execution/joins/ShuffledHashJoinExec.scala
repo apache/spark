@@ -340,8 +340,10 @@ case class ShuffledHashJoinExec(
 
   override def supportCodegen: Boolean = joinType match {
     case FullOuter => conf.getConf(SQLConf.ENABLE_FULL_OUTER_SHUFFLED_HASH_JOIN_CODEGEN)
-    case LeftOuter if buildSide == BuildLeft => false
-    case RightOuter if buildSide == BuildRight => false
+    case LeftOuter if buildSide == BuildLeft =>
+      conf.getConf(SQLConf.ENABLE_BUILD_SIDE_OUTER_SHUFFLED_HASH_JOIN_CODEGEN)
+    case RightOuter if buildSide == BuildRight =>
+      conf.getConf(SQLConf.ENABLE_BUILD_SIDE_OUTER_SHUFFLED_HASH_JOIN_CODEGEN)
     case _ => true
   }
 
@@ -362,9 +364,15 @@ case class ShuffledHashJoinExec(
   }
 
   override def doProduce(ctx: CodegenContext): String = {
-    // Specialize `doProduce` code for full outer join, because full outer join needs to
-    // iterate streamed and build side separately.
-    if (joinType != FullOuter) {
+    // Specialize `doProduce` code for full outer join and build-side outer join,
+    // because we need to iterate streamed and build side separately.
+    val specializedProduce = joinType match {
+      case FullOuter => true
+      case LeftOuter if buildSide == BuildLeft => true
+      case RightOuter if buildSide == BuildRight => true
+      case _ => false
+    }
+    if (!specializedProduce) {
       return super.doProduce(ctx)
     }
 
@@ -407,21 +415,24 @@ case class ShuffledHashJoinExec(
       case BuildLeft => buildResultVars ++ streamedResultVars
       case BuildRight => streamedResultVars ++ buildResultVars
     }
-    val consumeFullOuterJoinRow = ctx.freshName("consumeFullOuterJoinRow")
-    ctx.addNewFunction(consumeFullOuterJoinRow,
+    val consumeOuterJoinRow = ctx.freshName("consumeOuterJoinRow")
+    ctx.addNewFunction(consumeOuterJoinRow,
       s"""
-         |private void $consumeFullOuterJoinRow() throws java.io.IOException {
+         |private void $consumeOuterJoinRow() throws java.io.IOException {
          |  ${metricTerm(ctx, "numOutputRows")}.add(1);
          |  ${consume(ctx, resultVars)}
          |}
        """.stripMargin)
 
-    val joinWithUniqueKey = codegenFullOuterJoinWithUniqueKey(
+    val isFullOuterJoin = joinType == FullOuter
+    val joinWithUniqueKey = codegenBuildSideOrFullOuterJoinWithUniqueKey(
       ctx, (streamedRow, buildRow), (streamedInput, buildInput), streamedKeyEv, streamedKeyAnyNull,
-      streamedKeyExprCode.value, relationTerm, conditionCheck, consumeFullOuterJoinRow)
-    val joinWithNonUniqueKey = codegenFullOuterJoinWithNonUniqueKey(
+      streamedKeyExprCode.value, relationTerm, conditionCheck, consumeOuterJoinRow,
+      isFullOuterJoin)
+    val joinWithNonUniqueKey = codegenBuildSideOrFullOuterJoinNonUniqueKey(
       ctx, (streamedRow, buildRow), (streamedInput, buildInput), streamedKeyEv, streamedKeyAnyNull,
-      streamedKeyExprCode.value, relationTerm, conditionCheck, consumeFullOuterJoinRow)
+      streamedKeyExprCode.value, relationTerm, conditionCheck, consumeOuterJoinRow,
+      isFullOuterJoin)
 
     s"""
        |if ($keyIsUnique) {
@@ -433,10 +444,10 @@ case class ShuffledHashJoinExec(
   }
 
   /**
-   * Generates the code for full outer join with unique join keys.
-   * This is code-gen version of `fullOuterJoinWithUniqueKey()`.
+   * Generates the code for build-side or full outer join with unique join keys.
+   * This is code-gen version of `buildSideOrFullOuterJoinUniqueKey()`.
    */
-  private def codegenFullOuterJoinWithUniqueKey(
+  private def codegenBuildSideOrFullOuterJoinWithUniqueKey(
       ctx: CodegenContext,
       rows: (String, String),
       inputs: (String, String),
@@ -445,7 +456,8 @@ case class ShuffledHashJoinExec(
       streamedKeyValue: ExprValue,
       relationTerm: String,
       conditionCheck: String,
-      consumeFullOuterJoinRow: String): String = {
+      consumeOuterJoinRow: String,
+      isFullOuterJoin: Boolean): String = {
     // Inline mutable state since not many join operations in a task
     val matchedKeySetClsName = classOf[BitSet].getName
     val matchedKeySet = ctx.addMutableState(matchedKeySetClsName, "matchedKeySet",
@@ -484,7 +496,10 @@ case class ShuffledHashJoinExec(
          |    }
          |  }
          |
-         |  $consumeFullOuterJoinRow();
+         |  if ($foundMatch || $isFullOuterJoin) {
+         |    $consumeOuterJoinRow();
+         |  }
+         |
          |  if (shouldStop()) return;
          |}
        """.stripMargin
@@ -500,7 +515,7 @@ case class ShuffledHashJoinExec(
          |  // check if key index is not in matched keys set
          |  if (!$matchedKeySet.get($rowWithIndex.getKeyIndex())) {
          |    $buildRow = $rowWithIndex.getValue();
-         |    $consumeFullOuterJoinRow();
+         |    $consumeOuterJoinRow();
          |  }
          |
          |  if (shouldStop()) return;
@@ -514,10 +529,10 @@ case class ShuffledHashJoinExec(
   }
 
   /**
-   * Generates the code for full outer join with non-unique join keys.
-   * This is code-gen version of `fullOuterJoinWithNonUniqueKey()`.
+   * Generates the code for build-side or full outer join with non-unique join keys.
+   * This is code-gen version of `buildSideOrFullOuterJoinNonUniqueKey()`.
    */
-  private def codegenFullOuterJoinWithNonUniqueKey(
+  private def codegenBuildSideOrFullOuterJoinNonUniqueKey(
       ctx: CodegenContext,
       rows: (String, String),
       inputs: (String, String),
@@ -526,7 +541,8 @@ case class ShuffledHashJoinExec(
       streamedKeyValue: ExprValue,
       relationTerm: String,
       conditionCheck: String,
-      consumeFullOuterJoinRow: String): String = {
+      consumeOuterJoinRow: String,
+      isFullOuterJoin: Boolean): String = {
     // Inline mutable state since not many join operations in a task
     val matchedRowSetClsName = classOf[OpenHashSet[_]].getName
     val matchedRowSet = ctx.addMutableState(matchedRowSetClsName, "matchedRowSet",
@@ -572,13 +588,15 @@ case class ShuffledHashJoinExec(
          |      // set row index in matched row set
          |      $matchedRowSet.add($rowIndex);
          |      $foundMatch = true;
-         |      $consumeFullOuterJoinRow();
+         |      $consumeOuterJoinRow();
          |    }
          |  }
          |
          |  if (!$foundMatch) {
          |    $buildRow = null;
-         |    $consumeFullOuterJoinRow();
+         |    if ($isFullOuterJoin) {
+         |      $consumeOuterJoinRow();
+         |    }
          |  }
          |
          |  if (shouldStop()) return;
@@ -603,7 +621,7 @@ case class ShuffledHashJoinExec(
          |  // check if row index is not in matched row set
          |  if (!$matchedRowSet.contains($rowIndex)) {
          |    $buildRow = $rowWithIndex.getValue();
-         |    $consumeFullOuterJoinRow();
+         |    $consumeOuterJoinRow();
          |  }
          |
          |  if (shouldStop()) return;

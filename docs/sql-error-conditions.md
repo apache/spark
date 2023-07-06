@@ -23,6 +23,32 @@ This is a list of common, named error conditions returned by Spark SQL.
 
 Also see [SQLSTATE Codes](sql-error-conditions-sqlstates.html).
 
+### AGGREGATE_FUNCTION_WITH_NONDETERMINISTIC_EXPRESSION
+
+SQLSTATE: none assigned
+
+Non-deterministic expression `<sqlExpr>` should not appear in the arguments of an aggregate function.
+
+### ALL_PARTITION_COLUMNS_NOT_ALLOWED
+
+SQLSTATE: none assigned
+
+Cannot use all columns for partition columns.
+
+### ALTER_TABLE_COLUMN_DESCRIPTOR_DUPLICATE
+
+[SQLSTATE: 42710](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+ALTER TABLE `<type>` column `<columnName>` specifies descriptor "`<optionName>`" more than once, which is invalid.
+
+### AMBIGUOUS_ALIAS_IN_NESTED_CTE
+
+SQLSTATE: none assigned
+
+Name <name> is ambiguous in nested CTE.
+Please set <config> to "CORRECTED" so that name defined in inner CTE takes precedence. If set it to "LEGACY", outer CTE definitions will take precedence.
+See '<docroot>/sql-migration-guide.html#query-engine'.
+
 ### AMBIGUOUS_COLUMN_OR_FIELD
 
 [SQLSTATE: 42702](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
@@ -52,6 +78,44 @@ Ambiguous reference to the field `<field>`. It appears `<count>` times in the sc
 [SQLSTATE: 22003](sql-error-conditions-sqlstates.html#class-22-data-exception)
 
 `<message>`.`<alternative>` If necessary set `<config>` to "false" to bypass this error.
+
+### [AS_OF_JOIN](sql-error-conditions-invalid-as-of-join.html)
+
+SQLSTATE: none assigned
+
+Invalid as-of join.
+
+For more details see [AS_OF_JOIN](sql-error-conditions-invalid-as-of-join.html)
+
+### AVRO_INCORRECT_TYPE
+
+SQLSTATE: none assigned
+
+Cannot convert Avro `<avroPath>` to SQL `<sqlPath>` because the original encoded data type is `<avroType>`, however you're trying to read the field as `<sqlType>`, which would lead to an incorrect answer. To allow reading this field, enable the SQL configuration: `<key>`.
+
+### AVRO_LOWER_PRECISION
+
+SQLSTATE: none assigned
+
+Cannot convert Avro `<avroPath>` to SQL `<sqlPath>` because the original encoded data type is `<avroType>`, however you're trying to read the field as `<sqlType>`, which leads to data being read as null. Please provide a wider decimal type to get the correct result. To allow reading null to this field, enable the SQL configuration: `<key>`.
+
+### BATCH_METADATA_NOT_FOUND
+
+[SQLSTATE: 42K03](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+Unable to find batch `<batchMetadataFile>`.
+
+### BINARY_ARITHMETIC_OVERFLOW
+
+[SQLSTATE: 22003](sql-error-conditions-sqlstates.html#class-22-data-exception)
+
+`<value1>` `<symbol>` `<value2>` caused overflow.
+
+### CALL_ON_STREAMING_DATASET_UNSUPPORTED
+
+SQLSTATE: none assigned
+
+The method `<methodName>` can not be called on streaming Dataset/DataFrame.
 
 ### CANNOT_CAST_DATATYPE
 
@@ -89,6 +153,12 @@ Cannot convert SQL `<sqlColumn>` to Protobuf `<protobufColumn>` because `<data>`
 
 Cannot decode url : `<url>`.
 
+### CANNOT_INVOKE_IN_TRANSFORMATIONS
+
+SQLSTATE: none assigned
+
+Dataset transformations and actions can only be invoked by the driver, not inside of other Dataset transformations; for example, dataset1.map(x => dataset2.values.count() * x) is invalid because the values transformation and count action cannot be performed inside of the dataset1.map transformation. For more information, see SPARK-28702.
+
 ### CANNOT_LOAD_FUNCTION_CLASS
 
 SQLSTATE: none assigned
@@ -107,6 +177,16 @@ Could not load Protobuf class with name `<protobufClassName>`. `<explanation>`.
 
 Failed to merge incompatible data types `<left>` and `<right>`.
 
+### CANNOT_MERGE_SCHEMAS
+
+[SQLSTATE: 42KD9](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+Failed merging schemas:
+Initial schema:
+`<left>`
+Schema that cannot be merged with the initial schema:
+`<right>`.
+
 ### CANNOT_MODIFY_CONFIG
 
 [SQLSTATE: 46110](sql-error-conditions-sqlstates.html#class-46-java-ddl-1)
@@ -118,6 +198,12 @@ See also '`<docroot>`/sql-migration-guide.html#ddl-statements'.
 ### CANNOT_PARSE_DECIMAL
 
 [SQLSTATE: 22018](sql-error-conditions-sqlstates.html#class-22-data-exception)
+
+### CANNOT_PARSE_INTERVAL
+
+SQLSTATE: none assigned
+
+Unable to parse `<intervalString>`. Please ensure that the value provided is in a valid format for defining an interval. You can reference the documentation for the correct format. If the issue persists, please double check that the input value is not null or empty and try again.
 
 Cannot parse decimal.
 
@@ -144,6 +230,18 @@ Error parsing file `<descFilePath>` descriptor byte[] into Descriptor object.
 SQLSTATE: none assigned
 
 Could not read footer for file: `<file>`.
+
+### CANNOT_RENAME_ACROSS_SCHEMA
+
+[SQLSTATE: 0AKD0](sql-error-conditions-sqlstates.html#class-0A-feature-not-supported)
+
+Renaming a `<type>` across schemas is not allowed.
+
+### CANNOT_RESOLVE_STAR_EXPAND
+
+SQLSTATE: none assigned
+
+Cannot resolve `<targetString>`.* given input columns `<columns>`. Please check that the specified table or struct exists and is accessible in the input columns.
 
 ### CANNOT_RECOGNIZE_HIVE_TYPE
 
@@ -183,11 +281,35 @@ The value `<value>` of the type `<sourceType>` cannot be cast to `<targetType>` 
 
 Fail to insert a value of `<sourceType>` type into the `<targetType>` type column `<columnName>` due to an overflow. Use `try_cast` on the input value to tolerate overflow and return NULL instead.
 
+### CODEC_NOT_AVAILABLE
+
+SQLSTATE: none assigned
+
+The codec `<codecName>` is not available. Consider to set the config `<configKey>` to `<configVal>`.
+
+### CODEC_SHORT_NAME_NOT_FOUND
+
+SQLSTATE: none assigned
+
+Cannot find a short name for the codec `<codecName>`.
+
+### COLUMN_ALIASES_IS_NOT_ALLOWED
+
+SQLSTATE: none assigned
+
+Columns aliases are not allowed in `<op>`.
+
 ### COLUMN_ALREADY_EXISTS
 
 [SQLSTATE: 42711](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
 
 The column `<columnName>` already exists. Consider to choose another name or rename the existing column.
+
+### COLUMN_NOT_DEFINED_IN_TABLE
+
+SQLSTATE: none assigned
+
+`<colType>` column `<colName>` is not defined in table `<tableName>`, defined table columns are: `<tableCols>`.
 
 ### COLUMN_NOT_FOUND
 
@@ -207,6 +329,14 @@ SQLSTATE: none assigned
 
 Another instance of this query was just started by a concurrent session.
 
+### CONCURRENT_STREAM_LOG_UPDATE
+
+<!-- TODO Add 40000 link -->
+SQLSTATE: 40000
+
+Concurrent update to the log. Multiple streaming jobs detected for `<batchId>`.
+Please make sure only one streaming job runs on a specific checkpoint location at a time.
+
 ### [CONNECT](sql-error-conditions-connect-error-class.html)
 
 SQLSTATE: none assigned
@@ -221,11 +351,17 @@ Generic Spark Connect error.
 
 The value `<str>` (`<fmt>`) cannot be converted to `<targetType>` because it is malformed. Correct the value as per the syntax, or change its format. Use `<suggestion>` to tolerate malformed input and return NULL instead.
 
-### CREATE_TABLE_COLUMN_OPTION_DUPLICATE
+### CREATE_PERMANENT_VIEW_WITHOUT_ALIAS
+
+SQLSTATE: none assigned
+
+Not allowed to create the permanent view `<name>` without explicitly assigning an alias for the expression `<attr>`.
+
+### CREATE_TABLE_COLUMN_DESCRIPTOR_DUPLICATE
 
 [SQLSTATE: 42710](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
 
-CREATE TABLE column `<columnName>` specifies option "`<optionName>`" more than once, which is invalid.
+CREATE TABLE column `<columnName>` specifies descriptor "`<optionName>`" more than once, which is invalid.
 
 ### [DATATYPE_MISMATCH](sql-error-conditions-datatype-mismatch-error-class.html)
 
@@ -265,17 +401,41 @@ Decimal precision `<precision>` exceeds max precision `<maxPrecision>`.
 
 Default database `<defaultDatabase>` does not exist, please create it first or change default database to ``<defaultDatabase>``.
 
+### DISTINCT_WINDOW_FUNCTION_UNSUPPORTED
+
+SQLSTATE: none assigned
+
+Distinct window functions are not supported: `<windowExpr>`.
+
 ### DIVIDE_BY_ZERO
 
 [SQLSTATE: 22012](sql-error-conditions-sqlstates.html#class-22-data-exception)
 
 Division by zero. Use `try_divide` to tolerate divisor being 0 and return NULL instead. If necessary set `<config>` to "false" to bypass this error.
 
+### DUPLICATED_FIELD_NAME_IN_ARROW_STRUCT
+
+SQLSTATE: none assigned
+
+Duplicated field names in Arrow Struct are not allowed, got <fieldNames>.
+
 ### DUPLICATED_MAP_KEY
 
 [SQLSTATE: 23505](sql-error-conditions-sqlstates.html#class-23-integrity-constraint-violation)
 
 Duplicate map key `<key>` was found, please check the input data. If you want to remove the duplicated keys, you can set `<mapKeyDedupPolicy>` to "LAST_WIN" so that the key inserted at last takes precedence.
+
+### DUPLICATED_METRICS_NAME
+
+SQLSTATE: none assigned
+
+The metric name is not unique: `<metricName>`. The same name cannot be used for metrics with different results. However multiple instances of metrics with with same result and name are allowed (e.g. self-joins).
+
+### DUPLICATE_CLAUSES
+
+SQLSTATE: none assigned
+
+Found duplicate clauses: `<clauseName>`. Please, remove one of them.
 
 ### DUPLICATE_KEY
 
@@ -295,6 +455,24 @@ SQLSTATE: none assigned
 
 Not found an encoder of the type `<typeName>` to Spark SQL internal representation. Consider to change the input type to one of supported at '`<docroot>`/sql-ref-datatypes.html'.
 
+### EVENT_TIME_IS_NOT_ON_TIMESTAMP_TYPE
+
+SQLSTATE: none assigned
+
+The event time `<eventName>` has the invalid type `<eventType>`, but expected "TIMESTAMP".
+
+### EXCEED_LIMIT_LENGTH
+
+SQLSTATE: none assigned
+
+Exceeds char/varchar type length limitation: `<limit>`.
+
+### EXPRESSION_TYPE_IS_NOT_ORDERABLE
+
+SQLSTATE: none assigned
+
+Column expression `<expr>` cannot be sorted because its type `<exprType>` is not orderable.
+
 ### FAILED_EXECUTE_UDF
 
 [SQLSTATE: 39000](sql-error-conditions-sqlstates.html#class-39-external-routine-invocation-exception)
@@ -307,11 +485,23 @@ Failed to execute user defined function (`<functionName>`: (`<signature>`) => `<
 
 Failed preparing of the function `<funcName>` for call. Please, double check function's arguments.
 
+### FAILED_PARSE_STRUCT_TYPE
+
+[SQLSTATE: 22018](sql-error-conditions-sqlstates.html#class-22-data-exception)
+
+Failed parsing struct: `<raw>`.
+
 ### FAILED_RENAME_PATH
 
 [SQLSTATE: 42K04](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
 
 Failed to rename `<sourcePath>` to `<targetPath>` as destination already exists.
+
+### FIELDS_ALREADY_EXISTS
+
+SQLSTATE: none assigned
+
+Cannot `<op>` column, because `<fieldNames>` already exists in <struct>.
 
 ### FIELD_NOT_FOUND
 
@@ -378,6 +568,30 @@ GROUP BY `<index>` refers to an expression `<aggExpr>` that contains an aggregat
 [SQLSTATE: 42805](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
 
 GROUP BY position `<index>` is not in select list (valid range is [1, `<size>`]).
+
+### GROUP_EXPRESSION_TYPE_IS_NOT_ORDERABLE
+
+SQLSTATE: none assigned
+
+The expression `<sqlExpr>` cannot be used as a grouping expression because its data type <dataType> is not an orderable data type.
+
+### HLL_INVALID_INPUT_SKETCH_BUFFER
+
+SQLSTATE: none assigned
+
+Invalid call to <function>; only valid HLL sketch buffers are supported as inputs (such as those produced by the `hll_sketch_agg` function)."
+
+### HLL_INVALID_LG_K
+
+SQLSTATE: none assigned
+
+Invalid call to <function>; the `lgConfigK` value must be between <min> and <max>, inclusive: <value>."
+
+### HLL_UNION_DIFFERENT_LG_K
+
+SQLSTATE: none assigned
+
+Sketches have different `lgConfigK` values: <left> and <right>. Set the `allowDifferentLgConfigK` parameter to true to call <function> with different `lgConfigK` values."
 
 ### IDENTIFIER_TOO_MANY_NAME_PARTS
 
@@ -457,7 +671,48 @@ Cannot create the index `<indexName>` on table `<tableName>` because it already 
 
 Cannot find the index `<indexName>` on table `<tableName>`.
 
+### INSERT_PARTITION_COLUMN_ARITY_MISMATCH
+
+[SQLSTATE: 21S01](sql-error-conditions-sqlstates.html#class-21-cardinality-violation)
+
+Cannot write to '`<tableName>`', `<reason>`:
+Table columns: `<tableColumns>`.
+Partition columns with static values: `<staticPartCols>`.
+Data columns: `<dataColumns>`.
+
+### [INSUFFICIENT_TABLE_PROPERTY](sql-error-conditions-insufficient-table-property.html)
+
+SQLSTATE: none assigned
+
+Can't find table property:
+
+ For more details see [INSUFFICIENT_TABLE_PROPERTY](sql-error-conditions-insufficient-table-property.html)
+
 ### INTERNAL_ERROR
+
+[SQLSTATE: XX000](sql-error-conditions-sqlstates.html#class-XX-internal-error)
+
+`<message>`
+
+### INTERNAL_ERROR_BROADCAST
+
+[SQLSTATE: XX000](sql-error-conditions-sqlstates.html#class-XX-internal-error)
+
+`<message>`
+
+### INTERNAL_ERROR_EXECUTOR
+
+[SQLSTATE: XX000](sql-error-conditions-sqlstates.html#class-XX-internal-error)
+
+`<message>`
+
+### INTERNAL_ERROR_MEMORY
+
+[SQLSTATE: XX000](sql-error-conditions-sqlstates.html#class-XX-internal-error)
+
+`<message>`
+
+### INTERNAL_ERROR_NETWORK
 
 [SQLSTATE: XX000](sql-error-conditions-sqlstates.html#class-XX-internal-error)
 
@@ -487,6 +742,20 @@ The index `<indexValue>` is out of bounds. The array has `<arraySize>` elements.
 
 The index `<indexValue>` is out of bounds. The array has `<arraySize>` elements. Use `try_element_at` to tolerate accessing element at invalid index and return NULL instead. If necessary set `<ansiConfig>` to "false" to bypass this error.
 
+### [INVALID_BOUNDARY](sql-error-conditions-invalid-boundary.html)
+
+SQLSTATE: none assigned
+
+The boundary `<boundary>` is invalid: `<invalidValue>`.
+
+ For more details see [INVALID_BOUNDARY](sql-error-conditions-invalid-boundary.html)
+
+### INVALID_BITMAP_POSITION
+
+[SQLSTATE: 22003](sql-error-conditions-sqlstates.html#class-22-data-exception)
+
+The 0-indexed bitmap position `<bitPosition>` is out of bounds. The bitmap has `<bitmapNumBits>` bits (`<bitmapNumBytes>` bytes).
+
 ### INVALID_BUCKET_FILE
 
 SQLSTATE: none assigned
@@ -511,11 +780,45 @@ The datasource `<datasource>` cannot save the column `<columnName>` because its 
 
 Column or field `<name>` is of type `<type>` while it's required to be `<expectedType>`.
 
+### [INVALID_DEFAULT_VALUE](sql-error-conditions-invalid-default-value.html)
+
+SQLSTATE: none assigned
+
+Failed to execute `<statement>` command because the destination table column `<colName>` has a DEFAULT value `<defaultValue>`,
+    
+ For more details see [INVALID_DEFAULT_VALUE](sql-error-conditions-invalid-default-value.html)
+
+### INVALID_DRIVER_MEMORY
+
+<!-- TODO Add F0000 link -->
+SQLSTATE: F0000
+
+System memory `<systemMemory>` must be at least `<minSystemMemory>`. Please increase heap size using the --driver-memory option or "`<config>`" in Spark configuration.
+
 ### INVALID_EMPTY_LOCATION
 
 [SQLSTATE: 42K05](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
 
 The location name cannot be empty string, but ``<location>`` was given.
+
+### INVALID_ESC
+
+SQLSTATE: none assigned
+
+Found an invalid escape string: `<invalidEscape>`. The escape string must contain only one character.
+
+### INVALID_ESCAPE_CHAR
+
+SQLSTATE: none assigned
+
+`EscapeChar` should be a string literal of length one, but got `<sqlExpr>`.
+
+### INVALID_EXECUTOR_MEMORY
+
+<!-- TODO Add F0000 link -->
+SQLSTATE: F0000
+
+Executor memory `<executorMemory>` must be at least `<minSystemMemory>`. Please increase executor memory using the --executor-memory option or "`<config>`" in Spark configuration."
 
 ### INVALID_EXTRACT_BASE_FIELD_TYPE
 
@@ -555,6 +858,12 @@ The format is invalid: `<format>`.
 
 The fraction of sec must be zero. Valid range is [0, 60]. If necessary set `<ansiConfig>` to "false" to bypass this error.
 
+### INVALID_HIVE_COLUMN_NAME
+
+SQLSTATE: none assigned
+
+Cannot create the table `<tableName>` having the nested column `<columnName>` whose name contains invalid characters `<invalidChars>` in Hive metastore.
+
 ### INVALID_IDENTIFIER
 
 [SQLSTATE: 42602](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
@@ -579,11 +888,39 @@ Cannot convert JSON root field to target Spark type.
 
 Input schema `<jsonSchema>` can only contain STRING as a key type for a MAP.
 
+### [INVALID_LAMBDA_FUNCTION_CALL](sql-error-conditions-invalid-lamdba-function-call.html)
+
+SQLSTATE: none assigned
+
+Invalid lambda function call.
+
+For more details see [INVALID_LAMBDA_FUNCTION_CALL](sql-error-conditions-invalid-lamdba-function-call.html)
+
 ### INVALID_LATERAL_JOIN_TYPE
 
 [SQLSTATE: 42613](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
 
 The `<joinType>` JOIN with LATERAL correlation is not allowed because an OUTER subquery cannot correlate to its join partner. Remove the LATERAL correlation or use an INNER JOIN, or LEFT OUTER JOIN instead.
+
+### [INVALID_LIMIT_LIKE_EXPRESSION](sql-error-conditions-invalid-limit-like-expression.html)
+
+SQLSTATE: none assigned
+
+The limit like expression `<expr>` is invalid.
+
+For more details see [INVALID_LIMIT_LIKE_EXPRESSION](sql-error-conditions-invalid-limit-like-expression.html)
+
+### INVALID_NON_DETERMINISTIC_EXPRESSIONS
+
+SQLSTATE: none assigned
+
+The operator expects a deterministic expression, but the actual expression is `<sqlExprs>`.
+
+### INVALID_NUMERIC_LITERAL_RANGE
+
+SQLSTATE: none assigned
+
+Numeric literal `<rawStrippedQualifier>` is outside the valid range for `<typeName>` with minimum value of `<minValue>` and maximum value of `<maxValue>`. Please adjust the value accordingly.
 
 ### [INVALID_OPTIONS](sql-error-conditions-invalid-options-error-class.html)
 
@@ -606,6 +943,14 @@ The group aggregate pandas UDF `<functionList>` cannot be invoked together with 
 The value of parameter(s) `<parameter>` in `<functionName>` is invalid:
 
  For more details see [INVALID_PARAMETER_VALUE](sql-error-conditions-invalid-parameter-value-error-class.html)
+
+### [INVALID_PARTITION_OPERATION](sql-error-conditions-invalid-partition-operation.html)
+
+SQLSTATE: none assigned
+
+The partition command is invalid.
+
+For more details see [INVALID_PARTITION_OPERATION](sql-error-conditions-invalid-partition-operation.html)
 
 ### INVALID_PROPERTY_KEY
 
@@ -639,7 +984,7 @@ SQLSTATE: none assigned
 
 The argument `<name>` of `sql()` is invalid. Consider to replace it by a SQL literal.
 
-### INVALID_SQL_SYNTAX
+### [INVALID_SQL_SYNTAX](sql-error-conditions-invalid-sql-syntax.html)
 
 [SQLSTATE: 42000](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
 
@@ -659,11 +1004,43 @@ SQLSTATE: none assigned
 
 Cannot create the persistent object `<objName>` of the type `<obj>` because it references to the temporary object `<tempObjName>` of the type `<tempObj>`. Please make the temporary object `<tempObjName>` persistent, or make the persistent object `<objName>` temporary.
 
+### [INVALID_TIME_TRAVEL_TIMESTAMP_EXPR](sql-error-conditions-invalid-time-travel-timestamp-expr.html)
+
+SQLSTATE: none assigned
+
+The time travel timestamp expression `<expr>` is invalid.
+
+ For more details see [INVALID_TIME_TRAVEL_TIMESTAMP_EXPR](sql-error-conditions-invalid-time-travel-timestamp-expr.html)
+
 ### INVALID_TYPED_LITERAL
 
 [SQLSTATE: 42604](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
 
 The value of the typed literal `<valueType>` is invalid: `<value>`.
+
+### INVALID_UDF_IMPLEMENTATION
+
+SQLSTATE: none assigned
+
+Function <funcName> does not implement ScalarFunction or AggregateFunction.
+
+### INVALID_URL
+
+SQLSTATE: none assigned
+
+The url is invalid: `<url>`. If necessary set `<ansiConfig>` to "false" to bypass this error.
+
+### INVALID_USAGE_OF_STAR_OR_REGEX
+
+[SQLSTATE: 42000](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+Invalid usage of `<elem>` in `<prettyName>`.
+
+### INVALID_VIEW_TEXT
+
+SQLSTATE: none assigned
+
+The view `<viewName>` cannot be displayed due to invalid view text: `<viewText>`. This may be caused by an unauthorized modification of the view or an incorrect query syntax. Please check your query syntax and verify that the view has not been tampered with.
 
 ### INVALID_WHERE_CONDITION
 
@@ -672,6 +1049,32 @@ The value of the typed literal `<valueType>` is invalid: `<value>`.
 The WHERE condition `<condition>` contains invalid expressions: `<expressionList>`.
 
 Rewrite the query to avoid window functions, aggregate functions, and generator functions in the WHERE clause.
+
+### INVALID_WINDOW_SPEC_FOR_AGGREGATION_FUNC
+
+SQLSTATE: none assigned
+
+Cannot specify ORDER BY or a window frame for `<aggFunc>`.
+
+### [INVALID_WRITE_DISTRIBUTION](sql-error-conditions-invalid-write-distribution.html)
+
+SQLSTATE: none assigned
+
+The requested write distribution is invalid.
+
+ For more details see [INVALID_WRITE_DISTRIBUTION](sql-error-conditions-invalid-write-distribution.html)
+
+### JOIN_CONDITION_IS_NOT_BOOLEAN_TYPE
+
+SQLSTATE: none assigned
+
+The join condition `<joinCondition>` has the invalid type `<conditionType>`, expected "BOOLEAN".
+
+### LOCAL_MUST_WITH_SCHEMA_FILE
+
+SQLSTATE: none assigned
+
+LOCAL must be used together with the schema of `file`, but got: `<actualSchema>`.
 
 ### LOCATION_ALREADY_EXISTS
 
@@ -691,13 +1094,21 @@ SQLSTATE: none assigned
 
 Malformed Protobuf messages are detected in message deserialization. Parse Mode: `<failFastMode>`. To process malformed protobuf message as null result, try setting the option 'mode' as 'PERMISSIVE'.
 
-### MALFORMED_RECORD_IN_PARSING
+### [MALFORMED_RECORD_IN_PARSING](sql-error-conditions-malformed-record-in-parsing.html)
 
-SQLSTATE: none assigned
+[SQLSTATE: 22023](sql-error-conditions-sqlstates.html#class-22-data-exception)
 
 Malformed records are detected in record parsing: `<badRecord>`.
-
 Parse Mode: `<failFastMode>`. To process malformed records as null result, try setting the option 'mode' as 'PERMISSIVE'.
+
+ For more details see [MALFORMED_RECORD_IN_PARSING](sql-error-conditions-malformed-record-in-parsing.html)
+
+### MERGE_CARDINALITY_VIOLATION
+
+[SQLSTATE: 23K01](sql-error-conditions-sqlstates.html#class-23-integrity-constraint-violation)
+
+The ON search condition of the MERGE statement matched a single row from the target table with multiple rows of the source table.
+This could result in the target row being operated on more than once with an update or delete operation and is not allowed.
 
 ### MISSING_AGGREGATION
 
@@ -707,17 +1118,37 @@ The non-aggregating expression `<expression>` is based on columns which are not 
 
 Add the columns or the expression to the GROUP BY, aggregate the expression, or use `<expressionAnyValue>` if you do not care which of the values within a group is returned.
 
+### [MISSING_ATTRIBUTES](sql-error-conditions-missing-attributes.html)
+
+SQLSTATE: none assigned
+
+Resolved attribute(s) `<missingAttributes>` missing from `<input>` in operator `<operator>`.
+
+ For more details see [MISSING_ATTRIBUTES](sql-error-conditions-missing-attributes.html)
+
 ### MISSING_GROUP_BY
 
 [SQLSTATE: 42803](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
 
 The query does not include a GROUP BY clause. Add GROUP BY or turn it into the window functions using OVER clauses.
 
+### MULTI_SOURCES_UNSUPPORTED_FOR_EXPRESSION
+
+SQLSTATE: none assigned
+
+The expression `<expr>` does not support more than one source.
+
 ### MULTI_UDF_INTERFACE_ERROR
 
 SQLSTATE: none assigned
 
 Not allowed to implement multiple UDF interfaces, UDF class `<className>`.
+
+### NAMED_ARGUMENTS_SUPPORT_DISABLED
+
+SQLSTATE: none assigned
+
+Cannot call function `<functionName>` because named argument references are not enabled here. In this case, the named argument reference was `<argument>`. Set "spark.sql.allowNamedFunctionArguments" to "true" to turn on feature.
 
 ### NESTED_AGGREGATE_FUNCTION
 
@@ -755,6 +1186,28 @@ Literal expressions required for pivot values, found `<expression>`.
 
 PARTITION clause cannot contain the non-partition column: `<columnName>`.
 
+### NON_TIME_WINDOW_NOT_SUPPORTED_IN_STREAMING
+
+SQLSTATE: none assigned
+
+Window function is not supported in `<windowFunc>` (as column `<columnName>`) on streaming DataFrames/Datasets. Structured Streaming only supports time-window aggregation using the WINDOW function. (window specification: `<windowSpec>`)
+
+### [NOT_ALLOWED_IN_FROM](sql-error-conditions-not-allowed-in-from.html)
+
+SQLSTATE: none assigned
+
+Not allowed in the FROM clause:
+
+ For more details see [NOT_ALLOWED_IN_FROM](sql-error-conditions-not-allowed-in-from.html)
+
+### [NOT_A_CONSTANT_STRING](sql-error-conditions-not-a-constant-string-error-class.html)
+
+[SQLSTATE: 42601](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+The expression `<expr>` used for the routine or clause `<name>` must be a constant STRING which is NOT NULL.
+
+For more details see [NOT_A_CONSTANT_STRING](sql-error-conditions-not-a-constant-string-error-class.html)
+
 ### NOT_A_PARTITIONED_TABLE
 
 SQLSTATE: none assigned
@@ -768,6 +1221,38 @@ Operation `<operation>` is not allowed for `<tableIdentWithDB>` because it is no
 Assigning a NULL is not allowed here.
 
  For more details see [NOT_NULL_CONSTRAINT_VIOLATION](sql-error-conditions-not-null-constraint-violation-error-class.html)
+
+### NOT_SUPPORTED_CHANGE_COLUMN
+
+SQLSTATE: none assigned
+
+ALTER TABLE ALTER/CHANGE COLUMN is not supported for changing `<table>`'s column `<originName>` with type `<originType>` to `<newName>` with type `<newType>`.
+
+### NOT_SUPPORTED_COMMAND_FOR_V2_TABLE
+
+[SQLSTATE: 46110](sql-error-conditions-sqlstates.html#class-46-java-ddl-1)
+
+`<cmd>` is not supported for v2 tables.
+
+### NOT_SUPPORTED_COMMAND_WITHOUT_HIVE_SUPPORT
+
+SQLSTATE: none assigned
+
+`<cmd>` is not supported, if you want to enable it, please set "spark.sql.catalogImplementation" to "hive".
+
+### [NOT_SUPPORTED_IN_JDBC_CATALOG](sql-error-conditions-not-supported-in-jdbc-catalog.html)
+
+SQLSTATE: none assigned
+
+Not supported command in JDBC catalog:
+
+ For more details see [NOT_SUPPORTED_IN_JDBC_CATALOG](sql-error-conditions-not-supported-in-jdbc-catalog.html)
+
+### NO_DEFAULT_COLUMN_VALUE_AVAILABLE
+
+[SQLSTATE: 42608](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+Can't determine the default value for `<colName>` since it is not nullable and it has no default value.
 
 ### NO_HANDLER_FOR_UDAF
 
@@ -822,6 +1307,12 @@ The value `<value>` cannot be interpreted as a numeric since it has more than 38
 [SQLSTATE: 42826](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
 
 `<operator>` can only be performed on inputs with the same number of columns, but the first input has `<firstNumColumns>` columns and the `<invalidOrdinalNum>` input has `<invalidNumColumns>` columns.
+
+### NUM_TABLE_VALUE_ALIASES_MISMATCH
+
+SQLSTATE: none assigned
+
+Number of given aliases does not match number of output columns. Function name: `<funcName>`; number of aliases: `<aliasesNum>`; number of output columns: `<outColsNum>`.
 
 ### ORDER_BY_POS_OUT_OF_RANGE
 
@@ -937,6 +1428,18 @@ SQLSTATE: none assigned
 
 Found recursive reference in Protobuf schema, which can not be processed by Spark by default: `<fieldDescriptor>`. try setting the option `recursive.fields.max.depth` 0 to 10. Going beyond 10 levels of recursion is not allowed.
 
+### RECURSIVE_VIEW
+
+SQLSTATE: none assigned
+
+Recursive view `<viewIdent>` detected (cycle: `<newPath>`).
+
+### REF_DEFAULT_VALUE_IS_NOT_ALLOWED_IN_PARTITION
+
+SQLSTATE: none assigned
+
+References to DEFAULT column values are not allowed within the PARTITION clause.
+
 ### RENAME_SRC_PATH_NOT_FOUND
 
 [SQLSTATE: 42K03](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
@@ -972,6 +1475,12 @@ The function `<routineName>` cannot be found. Verify the spelling and correctnes
 If you did not qualify the name with a schema and catalog, verify the current_schema() output, or qualify the name with the correct schema and catalog.
 
 To tolerate the error on drop use DROP FUNCTION IF EXISTS.
+
+### SCALAR_SUBQUERY_IS_IN_GROUP_BY_OR_AGGREGATE_FUNCTION
+
+SQLSTATE: none assigned
+
+The correlated scalar subquery '`<sqlExpr>`' is neither present in GROUP BY, nor in an aggregate function. Add it to GROUP BY using ordinal position or wrap it in `first()` (or `first_value`) if you don't care which value you get.
 
 ### SCALAR_SUBQUERY_TOO_MANY_ROWS
 
@@ -1011,11 +1520,35 @@ To tolerate the error on drop use DROP SCHEMA IF EXISTS.
 
 The second argument of `<functionName>` function needs to be an integer.
 
+### SEED_EXPRESSION_IS_UNFOLDABLE
+
+SQLSTATE: none assigned
+
+The seed expression `<seedExpr>` of the expression `<exprWithSeed>` must be foldable.
+
 ### SORT_BY_WITHOUT_BUCKETING
 
 SQLSTATE: none assigned
 
 sortBy must be used together with bucketBy.
+
+### SPECIFY_BUCKETING_IS_NOT_ALLOWED
+
+SQLSTATE: none assigned
+
+Cannot specify bucketing information if the table schema is not specified when creating and will be inferred at runtime.
+
+### SPECIFY_PARTITION_IS_NOT_ALLOWED
+
+SQLSTATE: none assigned
+
+It is not allowed to specify partition columns when the table schema is not defined. When the table schema is not provided, schema and partition columns will be inferred.
+
+### SQL_CONF_NOT_FOUND
+
+SQLSTATE: none assigned
+
+The SQL config `<sqlConf>` cannot be found. Please verify that the config exists.
 
 ### STAR_GROUP_BY_POS
 
@@ -1035,6 +1568,12 @@ SQLSTATE: none assigned
 
 Query [id = `<id>`, runId = `<runId>`] terminated with exception: `<message>`
 
+### SUM_OF_LIMIT_AND_OFFSET_EXCEEDS_MAX_INT
+
+SQLSTATE: none assigned
+
+The sum of the LIMIT clause and the OFFSET clause must not be greater than the maximum 32-bit integer value (2,147,483,647) but found limit = `<limit>`, offset = `<offset>`.
+
 ### TABLE_OR_VIEW_ALREADY_EXISTS
 
 [SQLSTATE: 42P07](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
@@ -1052,6 +1591,12 @@ The table or view `<relationName>` cannot be found. Verify the spelling and corr
 If you did not qualify the name with a schema, verify the current_schema() output, or qualify the name with the correct schema and catalog.
 
 To tolerate the error on drop use DROP VIEW IF EXISTS or DROP TABLE IF EXISTS.
+
+### TABLE_VALUED_FUNCTION_TOO_MANY_TABLE_ARGUMENTS
+
+SQLSTATE: none assigned
+
+There are too many table arguments for table-valued function. It allows one table argument, but got: `<num>`. If you want to allow it, please set "spark.sql.allowMultipleTableArguments.enabled" to "true"
 
 ### TASK_WRITE_FAILED
 
@@ -1078,6 +1623,12 @@ CREATE TEMPORARY VIEW or the corresponding Dataset APIs only accept single-part 
 [SQLSTATE: 54000](sql-error-conditions-sqlstates.html#class-54-program-limit-exceeded)
 
 Cannot initialize array with `<numElements>` elements of size `<size>`.
+
+### UDTF_ALIAS_NUMBER_MISMATCH
+
+SQLSTATE: none assigned
+
+The number of aliases supplied in the AS clause does not match the number of columns output by the UDTF. Expected `<aliasesSize>` aliases, but got `<aliasesNames>`. Please ensure that the number of aliases provided matches the number of columns output by the UDTF.
 
 ### UNABLE_TO_ACQUIRE_MEMORY
 
@@ -1151,6 +1702,12 @@ All unpivot value columns must have the same size as there are value column name
 
 Unrecognized SQL type - name: `<typeName>`, id: `<jdbcType>`.
 
+### UNRESOLVABLE_TABLE_VALUED_FUNCTION
+
+SQLSTATE: none assigned
+
+Could not resolve `<name>` to a table-valued function. Please make sure that <name> is defined as a table-valued function and that all required parameters are provided correctly. If `<name>` is not defined, please create the table-valued function before using it. For more information about defining table-valued functions, please refer to the Apache Spark documentation.
+
 ### UNRESOLVED_ALL_IN_GROUP_BY
 
 [SQLSTATE: 42803](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
@@ -1193,11 +1750,31 @@ Cannot resolve function `<routineName>` on search path `<searchPath>`.
 
 USING column `<colName>` cannot be resolved on the `<side>` side of the join. The `<side>`-side columns: [`<suggestion>`].
 
+### UNSET_NONEXISTENT_PROPERTIES
+
+SQLSTATE: none assigned
+
+Attempted to unset non-existent properties [`<properties>`] in table `<table>`.
+
+### [UNSUPPORTED_ADD_FILE](sql-error-conditions-unsupported-add-file.html)
+
+SQLSTATE: none assigned
+
+Don't support add file.
+
+ For more details see [UNSUPPORTED_ADD_FILE](sql-error-conditions-unsupported-add-file.html)
+
 ### UNSUPPORTED_ARROWTYPE
 
 [SQLSTATE: 0A000](sql-error-conditions-sqlstates.html#class-0A-feature-not-supported)
 
 Unsupported arrow type `<typeName>`.
+
+### UNSUPPORTED_CHAR_OR_VARCHAR_AS_STRING
+
+SQLSTATE: none assigned
+
+The char/varchar type can't be used in the table schema. If you want Spark treat them as string type as same as Spark 3.0 and earlier, please set "spark.sql.legacy.charVarcharAsString" to "true".
 
 ### UNSUPPORTED_DATASOURCE_FOR_DIRECT_QUERY
 
@@ -1210,6 +1787,20 @@ Unsupported data source type for direct query on files: `<dataSourceType>`
 [SQLSTATE: 0A000](sql-error-conditions-sqlstates.html#class-0A-feature-not-supported)
 
 Unsupported data type `<typeName>`.
+
+### UNSUPPORTED_DATA_SOURCE_FOR_DIRECT_QUERY
+
+SQLSTATE: none assigned
+
+The direct query on files does not support the data source type: `<className>`. Please try a different data source type or consider using a different query method.
+
+### [UNSUPPORTED_DEFAULT_VALUE](sql-error-conditions-unsupported-default-value.html)
+
+SQLSTATE: none assigned
+
+DEFAULT column values is not supported.
+
+ For more details see [UNSUPPORTED_DEFAULT_VALUE](sql-error-conditions-unsupported-default-value.html)
 
 ### [UNSUPPORTED_DESERIALIZER](sql-error-conditions-unsupported-deserializer-error-class.html)
 
@@ -1261,6 +1852,30 @@ SQLSTATE: none assigned
 
 grouping()/grouping_id() can only be used with GroupingSets/Cube/Rollup.
 
+### [UNSUPPORTED_INSERT](sql-error-conditions-unsupported-insert.html)
+
+SQLSTATE: none assigned
+
+Can't insert into the target.
+
+ For more details see [UNSUPPORTED_INSERT](sql-error-conditions-unsupported-insert.html)
+
+### [UNSUPPORTED_MERGE_CONDITION](sql-error-conditions-unsupported-merge-condition.html)
+
+SQLSTATE: none assigned
+
+MERGE operation contains unsupported `<condName>` condition.
+
+ For more details see [UNSUPPORTED_MERGE_CONDITION](sql-error-conditions-unsupported-merge-condition.html)
+
+### [UNSUPPORTED_OVERWRITE](sql-error-conditions-unsupported-overwrite.html)
+
+SQLSTATE: none assigned
+
+Can't overwrite the target that is also being read from.
+
+ For more details see [UNSUPPORTED_OVERWRITE](sql-error-conditions-unsupported-overwrite.html)
+
 ### [UNSUPPORTED_SAVE_MODE](sql-error-conditions-unsupported-save-mode-error-class.html)
 
 SQLSTATE: none assigned
@@ -1295,6 +1910,12 @@ You're using untyped Scala UDF, which does not have the input type information. 
 
 3. set "spark.sql.legacy.allowUntypedScalaUDF" to "true" and use this API with caution.
 
+### UPDATE_FIELD_WITH_STRUCT_UNSUPPORTED
+
+SQLSTATE: none assigned
+
+Cannot update `<table>` field `<fieldName>` type: update a struct by updating its fields.
+
 ### VIEW_ALREADY_EXISTS
 
 [SQLSTATE: 42P07](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
@@ -1312,6 +1933,18 @@ The view `<relationName>` cannot be found. Verify the spelling and correctness o
 If you did not qualify the name with a schema, verify the current_schema() output, or qualify the name with the correct schema and catalog.
 
 To tolerate the error on drop use DROP VIEW IF EXISTS.
+
+### WINDOW_FUNCTION_AND_FRAME_MISMATCH
+
+SQLSTATE: none assigned
+
+`<funcName>` function can only be evaluated in an ordered row-based window frame with a single offset: `<windowExpr>`.
+
+### WINDOW_FUNCTION_WITHOUT_OVER_CLAUSE
+
+SQLSTATE: none assigned
+
+Window function `<funcName>` requires an OVER clause.
 
 ### WRITE_STREAM_NOT_ALLOWED
 

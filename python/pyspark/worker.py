@@ -61,10 +61,10 @@ from pyspark.sql.pandas.serializers import (
     ApplyInPandasWithStateSerializer,
 )
 from pyspark.sql.pandas.types import to_arrow_type
-from pyspark.sql.types import StructType
+from pyspark.sql.types import StructType, _parse_datatype_json_string
 from pyspark.util import fail_on_stopiteration, try_simplify_traceback
 from pyspark import shuffle
-from pyspark.errors import PySparkRuntimeError, PySparkValueError
+from pyspark.errors import PySparkRuntimeError
 
 pickleSer = CPickleSerializer()
 utf8_deserializer = UTF8Deserializer()
@@ -461,20 +461,11 @@ def assign_cols_by_name(runner_conf):
 # ensure the UDTF is valid. This function also prepares a mapper function for applying
 # the UDTF logic to input rows.
 def read_udtf(pickleSer, infile, eval_type):
-    num_udtfs = read_int(infile)
-    if num_udtfs != 1:
-        raise PySparkValueError(f"Unexpected number of UDTFs. Expected 1 but got {num_udtfs}.")
-
-    # See `PythonUDFRunner.writeUDFs`.
+    # See `PythonUDTFRunner.PythonUDFWriterThread.writeCommand'
     num_arg = read_int(infile)
     arg_offsets = [read_int(infile) for _ in range(num_arg)]
-    num_chained_funcs = read_int(infile)
-    if num_chained_funcs != 1:
-        raise PySparkValueError(
-            f"Unexpected number of chained UDTFs. Expected 1 but got {num_chained_funcs}."
-        )
-
-    handler, return_type = read_command(pickleSer, infile)
+    handler = read_command(pickleSer, infile)
+    return_type = _parse_datatype_json_string(utf8_deserializer.loads(infile))
     if not isinstance(handler, type):
         raise PySparkRuntimeError(
             f"Invalid UDTF handler type. Expected a class (type 'type'), but "
@@ -598,6 +589,8 @@ def read_udfs(pickleSer, infile, eval_type):
                 "row" if eval_type == PythonEvalType.SQL_ARROW_BATCHED_UDF else "dict"
             )
             ndarray_as_list = eval_type == PythonEvalType.SQL_ARROW_BATCHED_UDF
+            # Arrow-optimized Python UDF uses explicit Arrow cast for type coercion
+            arrow_cast = eval_type == PythonEvalType.SQL_ARROW_BATCHED_UDF
             ser = ArrowStreamPandasUDFSerializer(
                 timezone,
                 safecheck,
@@ -605,6 +598,7 @@ def read_udfs(pickleSer, infile, eval_type):
                 df_for_struct,
                 struct_in_pandas,
                 ndarray_as_list,
+                arrow_cast,
             )
     else:
         ser = BatchedSerializer(CPickleSerializer(), 100)

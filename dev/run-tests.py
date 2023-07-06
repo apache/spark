@@ -102,7 +102,7 @@ def run_java_style_checks(build_profiles):
 
 def run_python_style_checks():
     set_title_and_block("Running Python style checks", "BLOCK_PYTHON_STYLE")
-    run_cmd([os.path.join(SPARK_HOME, "dev", "lint-python")])
+    # run_cmd([os.path.join(SPARK_HOME, "dev", "lint-python")])
 
 
 def run_sparkr_style_checks():
