@@ -33,18 +33,6 @@ import org.apache.spark.connect.proto.ExecutePlanResponse
 class ExecutePlanResponseObserver(responseObserver: StreamObserver[ExecutePlanResponse])
     extends StreamObserver[ExecutePlanResponse] {
 
-  val jobTag =
-    "SparkConnect_" +
-      s"User_${sessionHolder.userId}_Session_${sessionHolder.sessionId}_Request_${operationId}"
-
-  def interrupt(): Unit = {
-    // TODO/WIP: This only interrupts active Spark jobs that are actively running.
-    // This would then throw the error from ExecutePlan and terminate it.
-    // But if the query is not running a Spark job, but executing code on Spark driver, this
-    // would be a noop and the execution will keep running.
-    sessionHolder.session.sparkContext.cancelJobsWithTag(jobTag)
-  }
-
   def onNext(r: ExecutePlanResponse): Unit = {
     responseObserver.onNext(r)
   }

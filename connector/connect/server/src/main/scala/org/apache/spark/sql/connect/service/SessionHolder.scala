@@ -26,7 +26,6 @@ import scala.util.control.NonFatal
 
 import org.apache.spark.JobArtifactSet
 import org.apache.spark.SparkException
-import org.apache.spark.connect.proto
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.SparkSession

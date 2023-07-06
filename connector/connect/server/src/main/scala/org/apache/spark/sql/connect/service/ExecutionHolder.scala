@@ -27,7 +27,6 @@ import org.apache.spark.SparkSQLException
 import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.{ExecutePlanRequest, ExecutePlanResponse}
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.connect.artifact.SparkConnectArtifactManager
 import org.apache.spark.sql.connect.common.ProtoUtils
 import org.apache.spark.sql.connect.execution.{ExecutePlanResponseObserver, SparkConnectPlanExecution}
 import org.apache.spark.sql.connect.planner.SparkConnectPlanner
@@ -96,7 +95,7 @@ case class ExecutionHolder(operationId: String, sessionHolder: SessionHolder) ex
     }
   }
 
-  protected def execute() = SparkConnectArtifactManager.withArtifactClassLoader {
+  protected def execute() = {
     try {
       // synchronized - check if already got interrupted while starting.
       synchronized {
@@ -111,8 +110,8 @@ case class ExecutionHolder(operationId: String, sessionHolder: SessionHolder) ex
         val debugString = requestString(executePlanRequest.get)
 
         // Set tag for query cancellation
-        session.sparkContext.addJobTag(executeHolder.jobTag)
-        session.sparkContext.setDescription(
+        session.sparkContext.addJobTag(jobTag)
+        session.sparkContext.setJobDescription(
           s"Spark Connect - ${StringUtils.abbreviate(debugString, 128)}")
         session.sparkContext.setInterruptOnCancel(true)
 
@@ -141,7 +140,7 @@ case class ExecutionHolder(operationId: String, sessionHolder: SessionHolder) ex
         // scalastyle:off
         logDebug(s"Exception in execute: $e")
         // Always cancel all remaining execution after error.
-        sessionHolder.session.sparkContext.cancelJobGroup(jobGroupId)
+        sessionHolder.session.sparkContext.cancelJobsWithTag(jobTag)
         executionError = if (interrupted) {
           // Turn the interrupt into OPERATION_CANCELLED error.
           Some(new SparkSQLException("OPERATION_CANCELLED", Map.empty))
