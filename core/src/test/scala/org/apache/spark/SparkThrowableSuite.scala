@@ -297,7 +297,8 @@ class SparkThrowableSuite extends SparkFunSuite {
             StandardCharsets.UTF_8)
         }
       } else {
-        assert(subErrorDoc.trim == errorsInDoc.trim)
+        assert(subErrorDoc.trim == errorsInDoc.trim,
+          "The error class document is not up to date. Please regenerate it.")
       }
     })
 
@@ -319,7 +320,8 @@ class SparkThrowableSuite extends SparkFunSuite {
           StandardCharsets.UTF_8)
       }
     } else {
-      assert(sqlErrorParentDoc.trim == commonErrorsInDoc.trim)
+      assert(sqlErrorParentDoc.trim == commonErrorsInDoc.trim,
+        "The error class document is not up to date. Please regenerate it.")
     }
   }
 
