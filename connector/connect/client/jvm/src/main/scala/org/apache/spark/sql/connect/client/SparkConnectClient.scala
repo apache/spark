@@ -40,7 +40,8 @@ private[sql] class SparkConnectClient(
 
   private val userContext: UserContext = configuration.userContext
 
-  private[this] val stub = new CustomSparkConnectBlockingStub(channel, configuration.retryPolicy)
+  private[this] val bstub = new CustomSparkConnectBlockingStub(channel, configuration.retryPolicy)
+  private[this] val stub = new CustomSparkConnectStub(channel, configuration.retryPolicy)
 
   private[client] def userAgent: String = configuration.userAgent
 
@@ -57,7 +58,7 @@ private[sql] class SparkConnectClient(
   private[sql] val sessionId: String = UUID.randomUUID.toString
 
   private[client] val artifactManager: ArtifactManager = {
-    new ArtifactManager(userContext, sessionId, channel, configuration.retryPolicy)
+    new ArtifactManager(userContext, sessionId, bstub, stub)
   }
 
   /**
@@ -67,7 +68,7 @@ private[sql] class SparkConnectClient(
    */
   def analyze(request: proto.AnalyzePlanRequest): proto.AnalyzePlanResponse = {
     artifactManager.uploadAllClassFileArtifacts()
-    stub.analyzePlan(request)
+    bstub.analyzePlan(request)
   }
 
   def execute(plan: proto.Plan): java.util.Iterator[proto.ExecutePlanResponse] = {
@@ -79,7 +80,7 @@ private[sql] class SparkConnectClient(
       .setSessionId(sessionId)
       .setClientType(userAgent)
       .build()
-    stub.executePlan(request)
+    bstub.executePlan(request)
   }
 
   /**
@@ -95,7 +96,7 @@ private[sql] class SparkConnectClient(
       .setClientType(userAgent)
       .setUserContext(userContext)
       .build()
-    stub.config(request)
+    bstub.config(request)
   }
 
   /**
@@ -194,7 +195,7 @@ private[sql] class SparkConnectClient(
       .setClientType(userAgent)
       .setInterruptType(proto.InterruptRequest.InterruptType.INTERRUPT_TYPE_ALL)
       .build()
-    stub.interrupt(request)
+    bstub.interrupt(request)
   }
 
   def copy(): SparkConnectClient = new SparkConnectClient(configuration)

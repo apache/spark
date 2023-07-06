@@ -118,11 +118,11 @@ private[client] class GrpcRetryHandler(private val retryPolicy: GrpcRetryHandler
   class RetryStreamObserver[T, U](request: T, call: T => StreamObserver[U])
       extends StreamObserver[U] {
 
-    private var firstOnNext = false // only retries on first onNext call
+    private var opened = false // only retries on first call
     private var streamObserver = call(request)
     override def onNext(v: U): Unit = {
-      if (!firstOnNext) {
-        firstOnNext = false
+      if (!opened) {
+        opened = true
         var firstTry = true
         retry {
           if (firstTry) {
@@ -139,11 +139,11 @@ private[client] class GrpcRetryHandler(private val retryPolicy: GrpcRetryHandler
       }
     }
     override def onError(throwable: Throwable): Unit = {
-      firstOnNext = false
+      opened = true
       streamObserver.onError(throwable)
     }
     override def onCompleted(): Unit = {
-      firstOnNext = false
+      opened = true
       streamObserver.onCompleted()
     }
   }
@@ -155,8 +155,14 @@ private[client] class GrpcRetryHandler(private val retryPolicy: GrpcRetryHandler
 }
 
 private[client] object GrpcRetryHandler {
-  def apply(retryPolicy: RetryPolicy): GrpcRetryHandler = new GrpcRetryHandler(retryPolicy)
 
+  /**
+   * Default canRetry in [[RetryPolicy]].
+   * @param e
+   *   The exception to check.
+   * @return
+   *   true if the exception is a [[StatusRuntimeException]] with code UNAVAILABLE.
+   */
   private[client] def retryException(e: Throwable): Boolean = {
     e match {
       case e: StatusRuntimeException => e.getStatus.getCode == Status.Code.UNAVAILABLE

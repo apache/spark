@@ -31,7 +31,6 @@ import scala.util.control.NonFatal
 
 import Artifact._
 import com.google.protobuf.ByteString
-import io.grpc.ManagedChannel
 import io.grpc.stub.StreamObserver
 import org.apache.commons.codec.digest.DigestUtils.sha256Hex
 
@@ -44,21 +43,23 @@ import org.apache.spark.util.{SparkFileUtils, SparkThreadUtils}
  * The Artifact Manager is responsible for handling and transferring artifacts from the local
  * client to the server (local/remote).
  * @param userContext
+ *   The user context the artifact manager operates in.
  * @param sessionId
  *   An unique identifier of the session which the artifact manager belongs to.
- * @param channel
+ * @param bstub
+ *   A blocking stub to the server.
+ * @param stub
+ *   An async stub to the server.
  */
 class ArtifactManager(
-    userContext: proto.UserContext,
-    sessionId: String,
-    channel: ManagedChannel,
-    retryPolicy: GrpcRetryHandler.RetryPolicy) {
+    private val userContext: proto.UserContext,
+    private val sessionId: String,
+    private val bstub: CustomSparkConnectBlockingStub,
+    private val stub: CustomSparkConnectStub) {
   // Using the midpoint recommendation of 32KiB for chunk size as specified in
   // https://github.com/grpc/grpc.github.io/issues/371.
   private val CHUNK_SIZE: Int = 32 * 1024
 
-  private[this] val stub = new CustomSparkConnectStub(channel, retryPolicy)
-  private[this] val bstub = new CustomSparkConnectBlockingStub(channel, retryPolicy)
   private[this] val classFinders = new CopyOnWriteArrayList[ClassFinder]
 
   /**

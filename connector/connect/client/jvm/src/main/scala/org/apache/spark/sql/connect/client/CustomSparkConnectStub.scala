@@ -19,15 +19,14 @@ package org.apache.spark.sql.connect.client
 import io.grpc.ManagedChannel
 import io.grpc.stub.StreamObserver
 
-import org.apache.spark.connect.proto
-import org.apache.spark.connect.proto.{AddArtifactsRequest, AddArtifactsResponse}
+import org.apache.spark.connect.proto.{AddArtifactsRequest, AddArtifactsResponse, SparkConnectServiceGrpc}
 
 private[client] class CustomSparkConnectStub(
     channel: ManagedChannel,
     retryPolicy: GrpcRetryHandler.RetryPolicy) {
 
-  private val stub = proto.SparkConnectServiceGrpc.newStub(channel)
-  private val retryHandler = GrpcRetryHandler(retryPolicy)
+  private val stub = SparkConnectServiceGrpc.newStub(channel)
+  private val retryHandler = new GrpcRetryHandler(retryPolicy)
 
   def addArtifacts(responseObserver: StreamObserver[AddArtifactsResponse])
       : StreamObserver[AddArtifactsRequest] = {

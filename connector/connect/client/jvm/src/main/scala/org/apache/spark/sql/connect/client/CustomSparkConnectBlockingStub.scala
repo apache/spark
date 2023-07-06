@@ -18,15 +18,14 @@ package org.apache.spark.sql.connect.client
 
 import io.grpc.ManagedChannel
 
-import org.apache.spark.connect.proto.{AnalyzePlanRequest, AnalyzePlanResponse, ArtifactStatusesRequest, ArtifactStatusesResponse, ConfigRequest, ConfigResponse, ExecutePlanRequest, ExecutePlanResponse, InterruptRequest, InterruptResponse}
-import org.apache.spark.connect.proto
+import org.apache.spark.connect.proto._
 
 private[client] class CustomSparkConnectBlockingStub(
     channel: ManagedChannel,
     retryPolicy: GrpcRetryHandler.RetryPolicy) {
 
-  private val stub = proto.SparkConnectServiceGrpc.newBlockingStub(channel)
-  private val retryHandler = GrpcRetryHandler(retryPolicy)
+  private val stub = SparkConnectServiceGrpc.newBlockingStub(channel)
+  private val retryHandler = new GrpcRetryHandler(retryPolicy)
 
   def executePlan(request: ExecutePlanRequest): java.util.Iterator[ExecutePlanResponse] = {
     GrpcExceptionConverter.convert {
