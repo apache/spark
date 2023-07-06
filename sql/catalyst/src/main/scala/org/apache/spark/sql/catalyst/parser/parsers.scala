@@ -21,7 +21,7 @@ import org.antlr.v4.runtime.atn.PredictionMode
 import org.antlr.v4.runtime.misc.{Interval, ParseCancellationException}
 import org.antlr.v4.runtime.tree.TerminalNodeImpl
 
-import org.apache.spark.{QueryContext, SparkThrowableHelper}
+import org.apache.spark.{QueryContext, SparkException, SparkThrowableHelper}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.SQLConfHelper
@@ -140,7 +140,7 @@ private[parser] class UpperCaseCharStream(wrapped: CodePointCharStream) extends 
 }
 
 /**
- * The ParseErrorListener converts parse errors into AnalysisExceptions.
+ * The ParseErrorListener converts parse errors into ParseExceptions.
  */
 case object ParseErrorListener extends BaseErrorListener {
   override def syntaxError(
@@ -170,25 +170,23 @@ case object ParseErrorListener extends BaseErrorListener {
 }
 
 /**
- * A [[ParseException]] is an [[AnalysisException]] that is thrown during the parse process. It
+ * A [[ParseException]] is an [[SparkException]] that is thrown during the parse process. It
  * contains fields and an extended error message that make reporting and diagnosing errors easier.
  */
 class ParseException(
     val command: Option[String],
-    message: String,
+    val message: String,
     val start: Origin,
     val stop: Origin,
-    errorClass: Option[String] = None,
-    messageParameters: Map[String, String] = Map.empty,
-    queryContext: Array[QueryContext] = ParseException.getQueryContext())
-  extends AnalysisException(
+    val errorClass: Option[String] = None,
+    val messageParameters: Map[String, String] = Map.empty,
+    val queryContext: Array[QueryContext] = ParseException.getQueryContext())
+  extends SparkException(
     message,
-    start.line,
-    start.startPosition,
-    None,
-    None,
+    cause = null,
     errorClass,
-    messageParameters) {
+    messageParameters,
+    queryContext) {
 
   def this(errorClass: String, messageParameters: Map[String, String], ctx: ParserRuleContext) =
     this(Option(ParserUtils.command(ctx)),
@@ -214,6 +212,14 @@ class ParseException(
       stop,
       Some(errorClass),
       messageParameters)
+
+  // Methods added to retain compatibility with AnalysisException.
+  @deprecated("Use start.line instead.")
+  def line: Option[Int] = start.line
+  @deprecated("Use start.startPosition instead.")
+  def startPosition: Option[Int] = start.startPosition
+  @deprecated("ParseException is never caused by another exception.")
+  def cause: Option[Throwable] = None
 
   override def getMessage: String = {
     val builder = new StringBuilder
