@@ -121,7 +121,6 @@ abstract class JdbcDialect extends Serializable with Logging {
    * @throws IllegalArgumentException if t is null
    */
   def convertJavaTimestampToTimestamp(t: Timestamp): Long = {
-    require(t != null, "timestamp must be non-null")
     DateTimeUtils.fromJavaTimestamp(t)
   }
 
