@@ -5901,6 +5901,19 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
     checkAnswer(df2, Seq(Row(Row(1, 2))))
     assert(df2.schema === expectedSchema)
   }
+
+  test("CANNOT_INVOKE_IN_TRANSFORMATIONS - Dataset transformations and actions " +
+    "can only be invoked by the driver, not inside of other Dataset transformations") {
+    val df1 = Seq((1)).toDF("a")
+    val df2 = Seq((4, 5)).toDF("e", "f")
+    checkError(
+      exception = intercept[SparkException] {
+        df1.map(r => df2.count() * r.getInt(0)).collect()
+      }.getCause.asInstanceOf[SparkException],
+      errorClass = "CANNOT_INVOKE_IN_TRANSFORMATIONS",
+      parameters = Map.empty
+    )
+  }
 }
 
 object DataFrameFunctionsSuite {
