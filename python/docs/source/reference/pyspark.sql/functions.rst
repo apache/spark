@@ -460,11 +460,12 @@ Bitwise Functions
     getbit
 
 
-UDF
+Call Functions
 ---
 .. autosummary::
     :toctree: api/
 
+    call_function
     call_udf
     pandas_udf
     udf
