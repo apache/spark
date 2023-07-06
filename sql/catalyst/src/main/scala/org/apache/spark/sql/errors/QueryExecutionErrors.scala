@@ -262,6 +262,18 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
       summary = getSummary(context))
   }
 
+  def invalidBitmapPositionError(bitPosition: Long,
+                                 bitmapNumBytes: Long): ArrayIndexOutOfBoundsException = {
+    new SparkArrayIndexOutOfBoundsException(
+      errorClass = "INVALID_BITMAP_POSITION",
+      messageParameters = Map(
+        "bitPosition" -> s"$bitPosition",
+        "bitmapNumBytes" -> s"$bitmapNumBytes",
+        "bitmapNumBits" -> s"${bitmapNumBytes * 8}"),
+      context = Array.empty,
+      summary = "")
+  }
+
   def invalidFractionOfSecondError(): DateTimeException = {
     new SparkDateTimeException(
       errorClass = "INVALID_FRACTION_OF_SECOND",

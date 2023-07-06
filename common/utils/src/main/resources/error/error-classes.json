@@ -1038,6 +1038,12 @@
     ],
     "sqlState" : "22003"
   },
+  "INVALID_BITMAP_POSITION" : {
+    "message" : [
+      "The 0-indexed bitmap position <bitPosition> is out of bounds. The bitmap has <bitmapNumBits> bits (<bitmapNumBytes> bytes)."
+    ],
+    "sqlState" : "22003"
+  },
   "INVALID_BOUNDARY" : {
     "message" : [
       "The boundary <boundary> is invalid: <invalidValue>."
