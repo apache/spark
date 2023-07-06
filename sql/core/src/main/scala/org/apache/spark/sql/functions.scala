@@ -464,7 +464,7 @@ object functions {
   def count_distinct(expr: Column, exprs: Column*): Column =
     // For usage like countDistinct("*"), we should let analyzer expand star and
     // resolve function.
-    call_function("count", true, expr +: exprs: _*)
+    Column(UnresolvedFunction("count", (expr +: exprs).map(_.expr), isDistinct = true))
 
   /**
    * Aggregate function: returns the population covariance for two columns.
@@ -8370,18 +8370,6 @@ object functions {
   @scala.annotation.varargs
   def call_function(funcName: String, cols: Column*): Column =
     withExpr { UnresolvedFunction(funcName, cols.map(_.expr), false) }
-
-  /**
-   * Call a builtin or temp function.
-   *
-   * @param funcName function name
-   * @param cols the expression parameters of function
-   * @param isDistinct the distinct for aggregate functions
-   * @since 3.5.0
-   */
-  @scala.annotation.varargs
-  def call_function(funcName: String, isDistinct: Boolean, cols: Column*): Column =
-    withExpr { UnresolvedFunction(funcName, cols.map(_.expr), isDistinct) }
 
   /**
    * Unwrap UDT data type column into its underlying type.
