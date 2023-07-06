@@ -38,11 +38,12 @@ from typing import (
 
 import numpy as np
 
-from pyspark import keyword_only, since, SparkContext, inheritable_thread_target
+from pyspark import keyword_only, since, inheritable_thread_target
 from pyspark.ml.connect import Estimator, Transformer, Model
 from pyspark.ml.connect.base import Evaluator
+from pyspark.ml.connect.io_utils import MetaAlgorithmReadWrite, CoreModelReadWrite, ParamsReadWrite
 from pyspark.ml.param import Params, Param, TypeConverters
-from pyspark.ml.param.shared import HasCollectSubModels, HasParallelism, HasSeed
+from pyspark.ml.param.shared import HasParallelism, HasSeed
 from pyspark.sql.functions import col, lit, rand, UserDefinedFunction
 from pyspark.sql.types import BooleanType
 from pyspark.sql.dataframe import DataFrame
@@ -504,3 +505,59 @@ class CrossValidatorModel(
         return self._copyValues(
             CrossValidatorModel(bestModel, avgMetrics=avgMetrics, stdMetrics=stdMetrics), extra=extra
         )
+
+
+class _CrossValidatorReadWrite(MetaAlgorithmReadWrite):
+    def _get_skip_saving_params(self) -> List[str]:
+        """
+        Returns params to be skipped when saving metadata.
+        """
+        return ["estimator", "estimatorParamMaps", "evaluator"]
+
+    def _save_meta_algorithm(self, root_path: str, node_path: List[str]) -> Dict[str, Any]:
+        metadata = self._get_metadata_to_save()
+        metadata["estimator"] = self.getEstimator()._get_metadata_to_save()
+        metadata["evaluator"] = self.getEvaluator()._get_metadata_to_save()
+        metadata["estimatorParamMaps"] = [[{
+                "parent": param.parent,
+                "name": param.name,
+                "value": value
+            } for param, value in param_map.items() ]
+            for param_map in self.getEstimatorParamMaps()
+        ]
+
+        if isinstance(self, CrossValidatorModel):
+            metadata["avgMetrics"] = self.avgMetrics
+            metadata["stdMetrics"] = self.stdMetrics
+
+            metadata["best_model_metadata"] = self.bestModel._get_metadata_to_save()
+            if isinstance(self.bestModel, CoreModelReadWrite):
+                best_model_core_model_path = ".".join(
+                    node_path + ["cross_validator_best_model", self.bestModel._get_core_model_filename()]
+                )
+                self.bestModel._save_core_model(os.path.join(root_path, best_model_core_model_path))
+                metadata["best_model_metadata"]["core_model_path"] = best_model_core_model_path
+        return metadata
+
+    def _load_meta_algorithm(self, root_path: str, node_metadata: Dict[str, Any]) -> None:
+        # TODO: support meta estimator.
+        self.set(
+            self.estimator,
+            ParamsReadWrite._load_from_metadata(node_metadata["estimator"])
+        )
+        self.set(
+            self.evaluator,
+            ParamsReadWrite._load_from_metadata(node_metadata["evaluator"])
+        )
+        # TODO: Load back epm.
+
+        if isinstance(self, CrossValidatorModel):
+            self.avgMetrics = node_metadata["avgMetrics"]
+            self.stdMetrics = node_metadata["stdMetrics"]
+
+            self.bestModel = ParamsReadWrite._load_from_metadata(node_metadata["best_model_metadata"])
+
+            # TODO: support meta model
+            if isinstance(self.bestModel, CoreModelReadWrite):
+                core_model_path = node_metadata["best_model_metadata"]["core_model_path"]
+                self.bestModel._load_core_model(os.path.join(root_path, core_model_path))
