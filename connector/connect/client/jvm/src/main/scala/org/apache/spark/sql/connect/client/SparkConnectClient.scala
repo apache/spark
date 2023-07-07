@@ -22,7 +22,7 @@ import java.util.UUID
 import java.util.concurrent.Executor
 
 import com.google.protobuf.ByteString
-import io.grpc.{CallCredentials, CallOptions, Channel, ChannelCredentials, ClientCall, ClientInterceptor, CompositeChannelCredentials, ForwardingClientCall, Grpc, InsecureChannelCredentials, ManagedChannel, Metadata, MethodDescriptor, Status, TlsChannelCredentials}
+import io.grpc._
 
 import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.UserContext
@@ -40,7 +40,8 @@ private[sql] class SparkConnectClient(
 
   private val userContext: UserContext = configuration.userContext
 
-  private[this] val stub = new CustomSparkConnectBlockingStub(channel)
+  private[this] val bstub = new CustomSparkConnectBlockingStub(channel, configuration.retryPolicy)
+  private[this] val stub = new CustomSparkConnectStub(channel, configuration.retryPolicy)
 
   private[client] def userAgent: String = configuration.userAgent
 
@@ -57,7 +58,7 @@ private[sql] class SparkConnectClient(
   private[sql] val sessionId: String = UUID.randomUUID.toString
 
   private[client] val artifactManager: ArtifactManager = {
-    new ArtifactManager(userContext, sessionId, channel)
+    new ArtifactManager(userContext, sessionId, bstub, stub)
   }
 
   /**
@@ -67,7 +68,7 @@ private[sql] class SparkConnectClient(
    */
   def analyze(request: proto.AnalyzePlanRequest): proto.AnalyzePlanResponse = {
     artifactManager.uploadAllClassFileArtifacts()
-    stub.analyzePlan(request)
+    bstub.analyzePlan(request)
   }
 
   def execute(plan: proto.Plan): java.util.Iterator[proto.ExecutePlanResponse] = {
@@ -79,7 +80,7 @@ private[sql] class SparkConnectClient(
       .setSessionId(sessionId)
       .setClientType(userAgent)
       .build()
-    stub.executePlan(request)
+    bstub.executePlan(request)
   }
 
   /**
@@ -95,7 +96,7 @@ private[sql] class SparkConnectClient(
       .setClientType(userAgent)
       .setUserContext(userContext)
       .build()
-    stub.config(request)
+    bstub.config(request)
   }
 
   /**
@@ -194,7 +195,7 @@ private[sql] class SparkConnectClient(
       .setClientType(userAgent)
       .setInterruptType(proto.InterruptRequest.InterruptType.INTERRUPT_TYPE_ALL)
       .build()
-    stub.interrupt(request)
+    bstub.interrupt(request)
   }
 
   def copy(): SparkConnectClient = new SparkConnectClient(configuration)
@@ -355,6 +356,11 @@ object SparkConnectClient {
 
     def sslEnabled: Boolean = _configuration.isSslEnabled.contains(true)
 
+    def retryPolicy(policy: GrpcRetryHandler.RetryPolicy): Builder = {
+      _configuration = _configuration.copy(retryPolicy = policy)
+      this
+    }
+
     private object URIParams {
       val PARAM_USER_ID = "user_id"
       val PARAM_USE_SSL = "use_ssl"
@@ -471,7 +477,8 @@ object SparkConnectClient {
       token: Option[String] = None,
       isSslEnabled: Option[Boolean] = None,
       metadata: Map[String, String] = Map.empty,
-      userAgent: String = DEFAULT_USER_AGENT) {
+      userAgent: String = DEFAULT_USER_AGENT,
+      retryPolicy: GrpcRetryHandler.RetryPolicy = GrpcRetryHandler.RetryPolicy()) {
 
     def userContext: proto.UserContext = {
       val builder = proto.UserContext.newBuilder()

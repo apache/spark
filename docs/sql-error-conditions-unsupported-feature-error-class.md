@@ -69,6 +69,10 @@ DESC TABLE COLUMN for a specific partition.
 
 Drop the namespace `<namespace>`.
 
+## HIVE_WITH_ANSI_INTERVALS
+
+Hive table `<tableName>` with ANSI intervals.
+
 ## INSERT_PARTITION_SPEC_IF_NOT_EXISTS
 
 INSERT INTO `<tableName>` with IF NOT EXISTS in the PARTITION spec.
@@ -80,6 +84,10 @@ Referencing a lateral column alias `<lca>` in the aggregate function `<aggFunc>`
 ## LATERAL_COLUMN_ALIAS_IN_AGGREGATE_WITH_WINDOW_AND_HAVING
 
 Referencing lateral column alias `<lca>` in the aggregate query both with window expressions and with having clause. Please rewrite the aggregate query by removing the having clause or removing lateral alias reference in the SELECT list.
+
+## LATERAL_COLUMN_ALIAS_IN_GROUP_BY
+
+Referencing a lateral column alias via GROUP BY alias/ALL is not supported yet.
 
 ## LATERAL_COLUMN_ALIAS_IN_WINDOW
 
@@ -132,6 +140,10 @@ Python UDF in the ON clause of a `<joinType>` JOIN. In case of an INNNER JOIN co
 ## REMOVE_NAMESPACE_COMMENT
 
 Remove a comment from the namespace `<namespace>`.
+
+## REPLACE_NESTED_COLUMN
+
+The replace function does not support nested column `<colName>`.
 
 ## SET_NAMESPACE_PROPERTY
 

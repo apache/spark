@@ -1,7 +1,7 @@
 ---
 layout: global
-title: NOT_SUPPORTED_IN_JDBC_CATALOG error class
-displayTitle: NOT_SUPPORTED_IN_JDBC_CATALOG error class
+title: INSERT_COLUMN_ARITY_MISMATCH error class
+displayTitle: INSERT_COLUMN_ARITY_MISMATCH error class
 license: |
   Licensed to the Apache Software Foundation (ASF) under one or more
   contributor license agreements.  See the NOTICE file distributed with
@@ -19,16 +19,22 @@ license: |
   limitations under the License.
 ---
 
-[SQLSTATE: 46110](sql-error-conditions-sqlstates.html#class-46-java-ddl-1)
+[SQLSTATE: 21S01](sql-error-conditions-sqlstates.html#class-21-cardinality-violation)
 
-Not supported command in JDBC catalog:
+Cannot write to `<tableName>`, the reason is
 
 This error class has the following derived error classes:
 
-## COMMAND
+## NOT_ENOUGH_DATA_COLUMNS
 
-`<cmd>`
+not enough data columns:
+Table columns: `<tableColumns>`.
+Data columns: `<dataColumns>`.
 
-## COMMAND_WITH_PROPERTY
+## TOO_MANY_DATA_COLUMNS
 
-`<cmd>` with property `<property>`.
+too many data columns:
+Table columns: `<tableColumns>`.
+Data columns: `<dataColumns>`.
+
+

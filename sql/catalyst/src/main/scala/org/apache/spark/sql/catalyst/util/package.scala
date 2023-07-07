@@ -123,9 +123,7 @@ package object util extends Logging {
   }
 
   def quoteIdentifier(name: String): String = {
-    // Escapes back-ticks within the identifier name with double-back-ticks, and then quote the
-    // identifier with back-ticks.
-    "`" + name.replace("`", "``") + "`"
+    SparkStringUtils.quoteIdentifier(name)
   }
 
   def quoteNameParts(name: Seq[String]): String = {

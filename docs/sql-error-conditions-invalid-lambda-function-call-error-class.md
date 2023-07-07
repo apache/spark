@@ -1,7 +1,7 @@
 ---
 layout: global
-title: INSUFFICIENT_TABLE_PROPERTY error class
-displayTitle: INSUFFICIENT_TABLE_PROPERTY error class
+title: INVALID_LAMBDA_FUNCTION_CALL error class
+displayTitle: INVALID_LAMBDA_FUNCTION_CALL error class
 license: |
   Licensed to the Apache Software Foundation (ASF) under one or more
   contributor license agreements.  See the NOTICE file distributed with
@@ -19,14 +19,22 @@ license: |
   limitations under the License.
 ---
 
-Can't find table property:
+SQLSTATE: none assigned
+
+Invalid lambda function call.
 
 This error class has the following derived error classes:
 
-## MISSING_KEY
+## DUPLICATE_ARG_NAMES
 
-`<key>`.
+The lambda function has duplicate arguments `<args>`. Please, consider to rename the argument names or set `<caseSensitiveConfig>` to "true".
 
-## MISSING_KEY_PART
+## NON_HIGHER_ORDER_FUNCTION
 
-`<key>`, `<totalAmountOfParts>` parts are expected.
+A lambda function should only be used in a higher order function. However, its class is `<class>`, which is not a higher order function.
+
+## NUM_ARGS_MISMATCH
+
+A higher order function expects `<expectedNumArgs>` arguments, but got `<actualNumArgs>`.
+
+

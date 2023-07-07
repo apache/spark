@@ -1,7 +1,7 @@
 ---
 layout: global
-title: UNSUPPORTED_DEFAULT_VALUE error class
-displayTitle: UNSUPPORTED_DEFAULT_VALUE error class
+title: NOT_SUPPORTED_IN_JDBC_CATALOG error class
+displayTitle: NOT_SUPPORTED_IN_JDBC_CATALOG error class
 license: |
   Licensed to the Apache Software Foundation (ASF) under one or more
   contributor license agreements.  See the NOTICE file distributed with
@@ -19,14 +19,18 @@ license: |
   limitations under the License.
 ---
 
-DEFAULT column values is not supported.
+[SQLSTATE: 46110](sql-error-conditions-sqlstates.html#class-46-java-ddl-1)
+
+Not supported command in JDBC catalog:
 
 This error class has the following derived error classes:
 
-## WITHOUT_SUGGESTION
+## COMMAND
 
-AES-`<mode>` with the padding `<padding>` by the `<functionName>` function.
+`<cmd>`
 
-## WITH_SUGGESTION
+## COMMAND_WITH_PROPERTY
 
-Enable it by setting "spark.sql.defaultColumn.enabled" to "true".
+`<cmd>` with property `<property>`.
+
+

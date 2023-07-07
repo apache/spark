@@ -1,7 +1,7 @@
 ---
 layout: global
-title: UNSUPPORTED_MERGE_CONDITION error class
-displayTitle: UNSUPPORTED_MERGE_CONDITION error class
+title: AS_OF_JOIN error class
+displayTitle: AS_OF_JOIN error class
 license: |
   Licensed to the Apache Software Foundation (ASF) under one or more
   contributor license agreements.  See the NOTICE file distributed with
@@ -21,18 +21,16 @@ license: |
 
 SQLSTATE: none assigned
 
-MERGE operation contains unsupported `<condName>` condition.
+Invalid as-of join.
 
 This error class has the following derived error classes:
 
-## AGGREGATE
+## TOLERANCE_IS_NON_NEGATIVE
 
-Aggregates are not allowed: `<cond>`.
+The input argument `tolerance` must be non-negative.
 
-## NON_DETERMINISTIC
+## TOLERANCE_IS_UNFOLDABLE
 
-Non-deterministic expressions are not allowed: `<cond>`.
+The input argument `tolerance` must be a constant.
 
-## SUBQUERY
 
-Subqueries are not allowed: `<cond>`.
