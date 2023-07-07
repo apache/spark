@@ -21,7 +21,11 @@ from typing import Any, Dict, List, Optional, Union, cast, TYPE_CHECKING
 
 from pyspark import keyword_only, since
 from pyspark.ml.connect.base import Estimator, Model, Transformer
-from pyspark.ml.connect.io_utils import ParamsReadWrite, MetaAlgorithmReadWrite, CoreModelReadWrite
+from pyspark.ml.connect.io_utils import (
+    ParamsReadWrite,
+    MetaAlgorithmReadWrite,
+    CoreModelReadWrite,
+)
 from pyspark.ml.param import Param, Params
 from pyspark.ml.common import inherit_doc
 from pyspark.sql.dataframe import DataFrame
@@ -32,13 +36,23 @@ if TYPE_CHECKING:
 
 
 class _PipelineReadWrite(MetaAlgorithmReadWrite):
+    def _get_child_stages(self):
+        if isinstance(self, Pipeline):
+            return list(self.getStages())
+        elif isinstance(self, PipelineModel):
+            return list(self.stages)
+        else:
+            raise ValueError(f"Unknown type {self.__class__}")
+
     def _get_skip_saving_params(self) -> List[str]:
         """
         Returns params to be skipped when saving metadata.
         """
         return ["stages"]
 
-    def _save_meta_algorithm(self, root_path: str, node_path: List[str]) -> Dict[str, Any]:
+    def _save_meta_algorithm(
+        self, root_path: str, node_path: List[str]
+    ) -> Dict[str, Any]:
         metadata = self._get_metadata_to_save()
         metadata["stages"] = []
 
@@ -47,7 +61,7 @@ class _PipelineReadWrite(MetaAlgorithmReadWrite):
         elif isinstance(self, PipelineModel):
             stages = self.stages
         else:
-            raise ValueError()
+            raise ValueError(f"Unknown type {self.__class__}")
 
         for stage_index, stage in enumerate(stages):
             stage_name = f"pipeline_stage_{stage_index}"
@@ -57,7 +71,9 @@ class _PipelineReadWrite(MetaAlgorithmReadWrite):
             else:
                 stage_metadata = stage._get_metadata_to_save()  # type: ignore[attr-defined]
                 if isinstance(stage, CoreModelReadWrite):
-                    core_model_path = ".".join(node_path + [stage._get_core_model_filename()])
+                    core_model_path = ".".join(
+                        node_path + [stage._get_core_model_filename()]
+                    )
                     stage._save_core_model(os.path.join(root_path, core_model_path))
                     stage_metadata["core_model_path"] = core_model_path
 
@@ -65,7 +81,9 @@ class _PipelineReadWrite(MetaAlgorithmReadWrite):
             node_path.pop()
         return metadata
 
-    def _load_meta_algorithm(self, root_path: str, node_metadata: Dict[str, Any]) -> None:
+    def _load_meta_algorithm(
+        self, root_path: str, node_metadata: Dict[str, Any]
+    ) -> None:
         stages = []
         for stage_meta in node_metadata["stages"]:
             stage = ParamsReadWrite._load_from_metadata(stage_meta)
@@ -164,7 +182,9 @@ class Pipeline(Estimator["PipelineModel"], _PipelineReadWrite):
         stages = self.getStages()
         for stage in stages:
             if not (isinstance(stage, Estimator) or isinstance(stage, Transformer)):
-                raise TypeError("Cannot recognize a pipeline stage of type %s." % type(stage))
+                raise TypeError(
+                    "Cannot recognize a pipeline stage of type %s." % type(stage)
+                )
         indexOfLastEstimator = -1
         for i, stage in enumerate(stages):
             if isinstance(stage, Estimator):
@@ -221,7 +241,9 @@ class PipelineModel(Model, _PipelineReadWrite):
         super(PipelineModel, self).__init__()
         self.stages = stages  # type: ignore[assignment]
 
-    def transform(self, dataset: Union[DataFrame, pd.DataFrame]) -> Union[DataFrame, pd.DataFrame]:
+    def transform(
+        self, dataset: Union[DataFrame, pd.DataFrame]
+    ) -> Union[DataFrame, pd.DataFrame]:
         for t in self.stages:
             dataset = t.transform(dataset)  # type: ignore[attr-defined]
         return dataset

@@ -41,7 +41,11 @@ import numpy as np
 from pyspark import keyword_only, since, inheritable_thread_target
 from pyspark.ml.connect import Estimator, Transformer, Model
 from pyspark.ml.connect.base import Evaluator
-from pyspark.ml.connect.io_utils import MetaAlgorithmReadWrite, CoreModelReadWrite, ParamsReadWrite
+from pyspark.ml.connect.io_utils import (
+    MetaAlgorithmReadWrite,
+    CoreModelReadWrite,
+    ParamsReadWrite,
+)
 from pyspark.ml.param import Params, Param, TypeConverters
 from pyspark.ml.param.shared import HasParallelism, HasSeed
 from pyspark.sql.functions import col, lit, rand, UserDefinedFunction
@@ -116,7 +120,7 @@ class _CrossValidatorParams(_ValidatorParams):
         + "with range [0, numFolds) and Spark will throw exception on out-of-range "
         + "fold numbers.",
         typeConverter=TypeConverters.toString,
-        )
+    )
 
     def __init__(self, *args: Any):
         super(_CrossValidatorParams, self).__init__(*args)
@@ -138,11 +142,11 @@ class _CrossValidatorParams(_ValidatorParams):
 
 
 def _parallelFitTasks(
-        estimator: Estimator,
-        train: DataFrame,
-        evaluator: Evaluator,
-        validation: DataFrame,
-        epm: Sequence["ParamMap"],
+    estimator: Estimator,
+    train: DataFrame,
+    evaluator: Evaluator,
+    validation: DataFrame,
+    epm: Sequence["ParamMap"],
 ) -> List[Callable[[], Tuple[int, float, Transformer]]]:
     """
     Creates a list of callables which can be called from different threads to fit and evaluate
@@ -168,17 +172,16 @@ def _parallelFitTasks(
     tuple
         (int, float, subModel), an index into `epm` and the associated metric value.
     """
+
     def get_single_task(index, param_map):
         def single_task() -> Tuple[int, float, Transformer]:
             model = estimator.fit(train, param_map)
             metric = evaluator.evaluate(model.transform(validation, param_map))
             return index, metric
+
         return single_task
 
-    return [
-        get_single_task(index, param_map)
-        for index, param_map in enumerate(epm)
-    ]
+    return [get_single_task(index, param_map) for index, param_map in enumerate(epm)]
 
 
 class CrossValidator(
@@ -330,7 +333,9 @@ class CrossValidator(
         return self._set(collectSubModels=value)
 
     @staticmethod
-    def _gen_avg_and_std_metrics(metrics_all: List[List[float]]) -> Tuple[List[float], List[float]]:
+    def _gen_avg_and_std_metrics(
+        metrics_all: List[List[float]],
+    ) -> Tuple[List[float], List[float]]:
         avg_metrics = np.mean(metrics_all, axis=0)
         std_metrics = np.std(metrics_all, axis=0)
         return list(avg_metrics), list(std_metrics)
@@ -398,19 +403,25 @@ class CrossValidator(
             def checker(foldNum: int) -> bool:
                 if foldNum < 0 or foldNum >= nFolds:
                     raise ValueError(
-                        "Fold number must be in range [0, %s), but got %s." % (nFolds, foldNum)
+                        "Fold number must be in range [0, %s), but got %s."
+                        % (nFolds, foldNum)
                     )
                 return True
 
             checker_udf = UserDefinedFunction(checker, BooleanType())
             for i in range(nFolds):
-                training = dataset.filter(checker_udf(dataset[foldCol]) & (col(foldCol) != lit(i)))
+                training = dataset.filter(
+                    checker_udf(dataset[foldCol]) & (col(foldCol) != lit(i))
+                )
                 validation = dataset.filter(
                     checker_udf(dataset[foldCol]) & (col(foldCol) == lit(i))
                 )
                 if training.rdd.getNumPartitions() == 0 or len(training.take(1)) == 0:
                     raise ValueError("The training data at fold %s is empty." % i)
-                if validation.rdd.getNumPartitions() == 0 or len(validation.take(1)) == 0:
+                if (
+                    validation.rdd.getNumPartitions() == 0
+                    or len(validation.take(1)) == 0
+                ):
                     raise ValueError("The validation data at fold %s is empty." % i)
                 datasets.append((training, validation))
 
@@ -446,9 +457,7 @@ class CrossValidator(
         return newCV
 
 
-class CrossValidatorModel(
-    Model, _CrossValidatorParams
-):
+class CrossValidatorModel(Model, _CrossValidatorParams):
     """
     CrossValidatorModel contains the model with the highest average cross-validation
     metric across folds and uses this model to transform input data. CrossValidatorModel
@@ -458,10 +467,10 @@ class CrossValidatorModel(
     """
 
     def __init__(
-            self,
-            bestModel: Model,
-            avgMetrics: Optional[List[float]] = None,
-            stdMetrics: Optional[List[float]] = None,
+        self,
+        bestModel: Model,
+        avgMetrics: Optional[List[float]] = None,
+        stdMetrics: Optional[List[float]] = None,
     ):
         super(CrossValidatorModel, self).__init__()
         #: best model from cross validation
@@ -503,7 +512,10 @@ class CrossValidatorModel(
         stdMetrics = list(self.stdMetrics)
 
         return self._copyValues(
-            CrossValidatorModel(bestModel, avgMetrics=avgMetrics, stdMetrics=stdMetrics), extra=extra
+            CrossValidatorModel(
+                bestModel, avgMetrics=avgMetrics, stdMetrics=stdMetrics
+            ),
+            extra=extra,
         )
 
 
@@ -514,15 +526,17 @@ class _CrossValidatorReadWrite(MetaAlgorithmReadWrite):
         """
         return ["estimator", "estimatorParamMaps", "evaluator"]
 
-    def _save_meta_algorithm(self, root_path: str, node_path: List[str]) -> Dict[str, Any]:
+    def _save_meta_algorithm(
+        self, root_path: str, node_path: List[str]
+    ) -> Dict[str, Any]:
         metadata = self._get_metadata_to_save()
         metadata["estimator"] = self.getEstimator()._get_metadata_to_save()
         metadata["evaluator"] = self.getEvaluator()._get_metadata_to_save()
-        metadata["estimatorParamMaps"] = [[{
-                "parent": param.parent,
-                "name": param.name,
-                "value": value
-            } for param, value in param_map.items() ]
+        metadata["estimatorParamMaps"] = [
+            [
+                {"parent": param.parent, "name": param.name, "value": value}
+                for param, value in param_map.items()
+            ]
             for param_map in self.getEstimatorParamMaps()
         ]
 
@@ -533,21 +547,31 @@ class _CrossValidatorReadWrite(MetaAlgorithmReadWrite):
             metadata["best_model_metadata"] = self.bestModel._get_metadata_to_save()
             if isinstance(self.bestModel, CoreModelReadWrite):
                 best_model_core_model_path = ".".join(
-                    node_path + ["cross_validator_best_model", self.bestModel._get_core_model_filename()]
+                    node_path
+                    + [
+                        "cross_validator_best_model",
+                        self.bestModel._get_core_model_filename(),
+                    ]
                 )
-                self.bestModel._save_core_model(os.path.join(root_path, best_model_core_model_path))
-                metadata["best_model_metadata"]["core_model_path"] = best_model_core_model_path
+                self.bestModel._save_core_model(
+                    os.path.join(root_path, best_model_core_model_path)
+                )
+                metadata["best_model_metadata"][
+                    "core_model_path"
+                ] = best_model_core_model_path
         return metadata
 
-    def _load_meta_algorithm(self, root_path: str, node_metadata: Dict[str, Any]) -> None:
+    def _load_meta_algorithm(
+        self, root_path: str, node_metadata: Dict[str, Any]
+    ) -> None:
         # TODO: support meta estimator.
         self.set(
             self.estimator,
-            ParamsReadWrite._load_from_metadata(node_metadata["estimator"])
+            ParamsReadWrite._load_from_metadata(node_metadata["estimator"]),
         )
         self.set(
             self.evaluator,
-            ParamsReadWrite._load_from_metadata(node_metadata["evaluator"])
+            ParamsReadWrite._load_from_metadata(node_metadata["evaluator"]),
         )
         # TODO: Load back epm.
 
@@ -555,9 +579,15 @@ class _CrossValidatorReadWrite(MetaAlgorithmReadWrite):
             self.avgMetrics = node_metadata["avgMetrics"]
             self.stdMetrics = node_metadata["stdMetrics"]
 
-            self.bestModel = ParamsReadWrite._load_from_metadata(node_metadata["best_model_metadata"])
+            self.bestModel = ParamsReadWrite._load_from_metadata(
+                node_metadata["best_model_metadata"]
+            )
 
             # TODO: support meta model
             if isinstance(self.bestModel, CoreModelReadWrite):
-                core_model_path = node_metadata["best_model_metadata"]["core_model_path"]
-                self.bestModel._load_core_model(os.path.join(root_path, core_model_path))
+                core_model_path = node_metadata["best_model_metadata"][
+                    "core_model_path"
+                ]
+                self.bestModel._load_core_model(
+                    os.path.join(root_path, core_model_path)
+                )

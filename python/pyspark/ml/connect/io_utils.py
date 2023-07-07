@@ -39,7 +39,9 @@ def _copy_file_from_local_to_fs(local_path: str, dest_path: str) -> None:
         session.copyFromLocalToFs(local_path, dest_path)
     else:
         jvm = session.sparkContext._gateway.jvm  # type: ignore[union-attr]
-        jvm.org.apache.spark.ml.python.MLUtil.copyFileFromLocalToFs(local_path, dest_path)
+        jvm.org.apache.spark.ml.python.MLUtil.copyFileFromLocalToFs(
+            local_path, dest_path
+        )
 
 
 def _copy_dir_from_local_to_fs(local_path: str, dest_path: str) -> None:
@@ -283,10 +285,17 @@ class MetaAlgorithmReadWrite(ParamsReadWrite):
     Meta-algorithm such as pipeline and cross validator must implement this interface.
     """
 
-    def _save_meta_algorithm(self, root_path: str, node_path: List[str]) -> Dict[str, Any]:
+    def _get_child_stages(self):
         raise NotImplementedError()
 
-    def _load_meta_algorithm(self, root_path: str, node_metadata: Dict[str, Any]) -> None:
+    def _save_meta_algorithm(
+        self, root_path: str, node_path: List[str]
+    ) -> Dict[str, Any]:
+        raise NotImplementedError()
+
+    def _load_meta_algorithm(
+        self, root_path: str, node_metadata: Dict[str, Any]
+    ) -> None:
         raise NotImplementedError()
 
     def _save_to_local(self, path: str) -> None:
@@ -303,3 +312,28 @@ class MetaAlgorithmReadWrite(ParamsReadWrite):
         instance._load_meta_algorithm(path, metadata)  # type: ignore[attr-defined]
 
         return instance
+
+    @staticmethod
+    def _get_all_nested_stages(instance):
+        if isinstance(instance, MetaAlgorithmReadWrite):
+            child_stages = instance._get_child_stages()
+        else:
+            child_stages = []
+
+        nested_stages = []
+        for stage in child_stages:
+            nested_stages.extend(MetaAlgorithmReadWrite._get_all_nested_stages(stage))
+
+        return [instance] + nested_stages
+
+    @staticmethod
+    def get_uid_map(instance):
+        all_nested_stages = MetaAlgorithmReadWrite._get_all_nested_stages(instance)
+        uid_map = {stage.uid: stage for stage in all_nested_stages}
+        if len(all_nested_stages) != len(uid_map):
+            raise RuntimeError(
+                f"{instance.__class__.__module__}.{instance.__class__.__name__}"
+                f"is a compound estimator with stages with duplicate "
+                f"UIDs. List of UIDs: {list(uid_map.keys())}."
+            )
+        return uid_map
