@@ -86,10 +86,9 @@ object BlockingLineStream {
 }
 
 trait DataGenerator extends Serializable {
-  protected val toolsDir: String
-
   protected def generateData(
       sparkContext: SparkContext,
+      toolsDir: String,
       tableName: String,
       partitions: Int,
       scaleFactor: Int,
@@ -123,21 +122,18 @@ trait DataGenerator extends Serializable {
 }
 
 class Dsdgen(dsdgenDir: String) extends DataGenerator with Serializable {
-  override protected val toolsDir: String = s"$dsdgenDir"
-
   override def generate(
       sparkContext: SparkContext,
       tableName: String,
       partitions: Int,
       scaleFactor: Int): RDD[String] = {
     val command = s"./dsdgen -table $tableName -filter Y -scale $scaleFactor -RNGSEED 100"
-    generateData(sparkContext, tableName, partitions, scaleFactor, command)
+    generateData(sparkContext, dsdgenDir, tableName, partitions, scaleFactor, command)
   }
 }
 
 class Dbgen(dbgenDir: String, params: Seq[String] = Nil)
   extends DataGenerator with Serializable {
-  override protected val toolsDir: String = s"$dbgenDir"
   override def generate(
       sparkContext: SparkContext,
       tableName: String,
@@ -155,7 +151,7 @@ class Dbgen(dbgenDir: String, params: Seq[String] = Nil)
     )
     val paramsString = params.mkString(" ")
     val command = s"./dbgen -q $paramsString -T ${shortTableNames(tableName)} -s $scaleFactor"
-    generateData(sparkContext, tableName, partitions, scaleFactor, command)
+    generateData(sparkContext, dbgenDir, tableName, partitions, scaleFactor, command)
   }
 }
 
