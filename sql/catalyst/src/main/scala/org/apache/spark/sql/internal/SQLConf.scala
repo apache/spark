@@ -177,7 +177,6 @@ object SQLConf {
    * See [[get]] for more information.
    */
   def setSQLConfGetter(getter: () => SQLConf): Unit = {
-    SqlApiConf.setConfGetter(getter)
     confGetter.set(getter)
   }
 
