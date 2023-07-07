@@ -18,34 +18,51 @@ package org.apache.spark.sql.connect.client
 
 import io.grpc.ManagedChannel
 
-import org.apache.spark.connect.proto.{AnalyzePlanRequest, AnalyzePlanResponse, ConfigRequest, ConfigResponse, ExecutePlanRequest, ExecutePlanResponse, InterruptRequest, InterruptResponse}
-import org.apache.spark.connect.proto
+import org.apache.spark.connect.proto._
 
-private[client] class CustomSparkConnectBlockingStub(channel: ManagedChannel) {
+private[client] class CustomSparkConnectBlockingStub(
+    channel: ManagedChannel,
+    retryPolicy: GrpcRetryHandler.RetryPolicy) {
 
-  private val stub = proto.SparkConnectServiceGrpc.newBlockingStub(channel)
+  private val stub = SparkConnectServiceGrpc.newBlockingStub(channel)
+  private val retryHandler = new GrpcRetryHandler(retryPolicy)
 
   def executePlan(request: ExecutePlanRequest): java.util.Iterator[ExecutePlanResponse] = {
     GrpcExceptionConverter.convert {
-      GrpcExceptionConverter.convertIterator[ExecutePlanResponse](stub.executePlan(request))
+      GrpcExceptionConverter.convertIterator[ExecutePlanResponse](
+        retryHandler.RetryIterator(request, stub.executePlan))
     }
   }
 
   def analyzePlan(request: AnalyzePlanRequest): AnalyzePlanResponse = {
     GrpcExceptionConverter.convert {
-      stub.analyzePlan(request)
+      retryHandler.retry {
+        stub.analyzePlan(request)
+      }
     }
   }
 
   def config(request: ConfigRequest): ConfigResponse = {
     GrpcExceptionConverter.convert {
-      stub.config(request)
+      retryHandler.retry {
+        stub.config(request)
+      }
     }
   }
 
   def interrupt(request: InterruptRequest): InterruptResponse = {
     GrpcExceptionConverter.convert {
-      stub.interrupt(request)
+      retryHandler.retry {
+        stub.interrupt(request)
+      }
+    }
+  }
+
+  def artifactStatus(request: ArtifactStatusesRequest): ArtifactStatusesResponse = {
+    GrpcExceptionConverter.convert {
+      retryHandler.retry {
+        stub.artifactStatus(request)
+      }
     }
   }
 }
