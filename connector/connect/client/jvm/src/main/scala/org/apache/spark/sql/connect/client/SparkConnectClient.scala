@@ -463,7 +463,7 @@ object SparkConnectClient {
     /**
      * Add an interceptor to be used during channel creation.
      *
-     * Note that interceptors added last are executed first by grpc.
+     * Note that interceptors added last are executed first by gRPC.
      */
     def interceptor(interceptor: ClientInterceptor): Builder = {
       val interceptors = _configuration.interceptors ++ List(interceptor)
