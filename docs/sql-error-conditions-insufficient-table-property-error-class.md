@@ -1,7 +1,7 @@
 ---
 layout: global
-title: INVALID_WRITE_DISTRIBUTION error class
-displayTitle: INVALID_WRITE_DISTRIBUTION error class
+title: INSUFFICIENT_TABLE_PROPERTY error class
+displayTitle: INSUFFICIENT_TABLE_PROPERTY error class
 license: |
   Licensed to the Apache Software Foundation (ASF) under one or more
   contributor license agreements.  See the NOTICE file distributed with
@@ -19,18 +19,18 @@ license: |
   limitations under the License.
 ---
 
-The requested write distribution is invalid.
+SQLSTATE: none assigned
+
+Can't find table property:
 
 This error class has the following derived error classes:
 
-## PARTITION_NUM_AND_SIZE
+## MISSING_KEY
 
-The partition number and advisory partition size can't be specified at the same time.
+`<key>`.
 
-## PARTITION_NUM_WITH_UNSPECIFIED_DISTRIBUTION
+## MISSING_KEY_PART
 
-The number of partitions can't be specified with unspecified distribution.
+`<key>`, `<totalAmountOfParts>` parts are expected.
 
-## PARTITION_SIZE_WITH_UNSPECIFIED_DISTRIBUTION
 
-The advisory partition size can't be specified with unspecified distribution.

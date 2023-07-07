@@ -1,7 +1,7 @@
 ---
 layout: global
-title: INVALID_TIME_TRAVEL_TIMESTAMP_EXPR error class
-displayTitle: INVALID_TIME_TRAVEL_TIMESTAMP_EXPR error class
+title: INVALID_BOUNDARY error class
+displayTitle: INVALID_BOUNDARY error class
 license: |
   Licensed to the Apache Software Foundation (ASF) under one or more
   contributor license agreements.  See the NOTICE file distributed with
@@ -19,18 +19,18 @@ license: |
   limitations under the License.
 ---
 
-The time travel timestamp expression `<expr>` is invalid.
+SQLSTATE: none assigned
+
+The boundary `<boundary>` is invalid: `<invalidValue>`.
 
 This error class has the following derived error classes:
 
-## INPUT
+## END
 
-Cannot be casted to the "TIMESTAMP" type.
+Expected the value is '0', '`<longMaxValue>`', '[`<intMinValue>`, `<intMaxValue>`]'.
 
-## NON_DETERMINISTIC
+## START
 
-Must be deterministic.
+Expected the value is '0', '`<longMinValue>`', '[`<intMinValue>`, `<intMaxValue>`]'.
 
-## UNEVALUABLE
 
-Must be evaluable.

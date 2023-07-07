@@ -36,7 +36,6 @@ The input expression should be evaluated to struct type, but got `<dataType>`.
 ## PARSE_ERROR
 
 Cannot parse the schema:
-
 `<reason>`
 
 
