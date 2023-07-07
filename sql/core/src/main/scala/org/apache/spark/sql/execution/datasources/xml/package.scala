@@ -18,6 +18,8 @@ package org.apache.spark.sql.execution.datasources
 
 import org.apache.hadoop.io.compress.CompressionCodec
 
+import org.apache.spark.sql.{DataFrame, DataFrameReader, DataFrameWriter, Dataset}
+import org.apache.spark.sql.{Encoders, Row, SparkSession, SQLContext}
 import org.apache.spark.sql.execution.datasources.xml.parsers.StaxXmlParser
 import org.apache.spark.sql.execution.datasources.xml.util.{InferSchema, XmlFile}
 import org.apache.spark.sql.types.{ArrayType, StructType}
@@ -80,7 +82,8 @@ package object xml {
    * the DataFileReader
    */
   implicit class XmlDataFrameReader(reader: DataFrameReader) {
-    def xml: String => DataFrame = reader.format("org.apache.spark.sql.xml").load
+    def xml: String => DataFrame = reader
+      .format("org.apache.spark.sql.execution.datasources.xml").load
 
     @deprecated("Use XmlReader directly", "0.13.0")
     def xml(xmlDataset: Dataset[String]): DataFrame = {
@@ -110,7 +113,8 @@ package object xml {
     //   </fieldA>
     //
     // Namely, roundtrip in writing and reading can end up in different schema structure.
-    def xml: String => Unit = writer.format("org.apache.spark.sql.xml").save
+    def xml: String => Unit = writer
+      .format("org.apache.spark.sql.execution.datasources.xml").save
   }
 
   /**

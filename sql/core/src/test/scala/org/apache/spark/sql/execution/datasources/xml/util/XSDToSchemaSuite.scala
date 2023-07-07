@@ -16,12 +16,14 @@
  */
 package org.apache.spark.sql.execution.datasources.xml.util
 
+import java.nio.file.Paths
+
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.execution.datasources.xml.TestUtils._
 import org.apache.spark.sql.types.{ArrayType, DecimalType, FloatType, LongType, StringType}
 
 class XSDToSchemaSuite extends SparkFunSuite {
-  
+
   private val resDir = "src/test/resources"
 
   test("Basic parsing") {
@@ -81,7 +83,7 @@ class XSDToSchemaSuite extends SparkFunSuite {
     val expectedSchema = buildSchema(field("bar", nullable = false), field("foo", nullable = false))
     assert(expectedSchema === parsedSchema)
   }
-  
+
   test("xs:any schema") {
     val parsedSchema = XSDToSchema.read(Paths.get(s"$resDir/xsany.xsd"))
     val expectedSchema = buildSchema(

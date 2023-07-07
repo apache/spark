@@ -304,10 +304,10 @@ private[xml] object StaxXmlParser extends Serializable {
     convertAttributes(rootAttributes, schema, options).toSeq.foreach { case (f, v) =>
       nameToIndex.get(f).foreach { row(_) = v }
     }
-    
+
     val wildcardColName = options.wildcardColName
     val hasWildcard = schema.exists(_.name == wildcardColName)
-    
+
     var badRecordException: Option[Throwable] = None
 
     var shouldStop = false

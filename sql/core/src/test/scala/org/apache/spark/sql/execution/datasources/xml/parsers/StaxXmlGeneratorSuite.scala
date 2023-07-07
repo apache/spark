@@ -91,7 +91,7 @@ final class StaxXmlGeneratorSuite extends SparkFunSuite with BeforeAndAfterAll {
           ZoneId.of("America/New_York")).toInstant),
         nullDatum = null)
     )
-    
+
     val df = dataset.toDF().orderBy("booleanDatum")
     val targetFile =
       Files.createTempDirectory("StaxXmlGeneratorSuite").resolve("roundtrip.xml").toString

@@ -31,6 +31,8 @@ import org.junit.Test;
 import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.Row;
 import org.apache.spark.sql.SparkSession;
+import org.apache.spark.sql.execution.datasources.xml.XmlOptions;
+import org.apache.spark.sql.execution.datasources.xml.XmlReader;
 
 public final class JavaXmlSuite {
 
@@ -57,11 +59,11 @@ public final class JavaXmlSuite {
     @Before
     public void setUp() throws IOException {
         setEnv("SPARK_LOCAL_IP", "127.0.0.1");
-        spark = SparkSession.builder().
-            master("local[2]").
-            appName("XmlSuite").
-            config("spark.ui.enabled", false).
-            getOrCreate();
+        spark = SparkSession.builder()
+            .master("local[2]")
+            .appName("XmlSuite")
+            .config("spark.ui.enabled", false)
+            .getOrCreate();
         spark.sparkContext().setLogLevel("WARN");
         tempDir = Files.createTempDirectory("JavaXmlSuite");
         tempDir.toFile().deleteOnExit();
