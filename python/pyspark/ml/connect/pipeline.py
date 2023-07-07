@@ -64,13 +64,9 @@ class _PipelineReadWrite(MetaAlgorithmReadWrite):
             raise ValueError(f"Unknown type {self.__class__}")
 
         for stage_index, stage in enumerate(stages):
-            stage_name = f"pipeline_stage_{stage_index}"
-            node_path.append(stage_name)
-
-            stage_metadata = stage._save_to_node_path(root_path, node_path)
+            stage_node_path = node_path + [f"pipeline_stage_{stage_index}"]
+            stage_metadata = stage._save_to_node_path(root_path, stage_node_path)
             metadata["stages"].append(stage_metadata)
-
-            node_path.pop()
         return metadata
 
     def _load_meta_algorithm(
