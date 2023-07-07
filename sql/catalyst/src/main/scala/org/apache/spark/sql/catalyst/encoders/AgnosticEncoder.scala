@@ -36,6 +36,8 @@ import org.apache.spark.util.Utils
  * called lenient serialization. An example of this is lenient date serialization, in this case both
  * [[java.sql.Date]] and [[java.time.LocalDate]] are allowed. Deserialization is never lenient; it
  * will always produce instance of the external type.
+ *
+ * An encoder is flattenable if it contains fields that can be fattened to a row.
  */
 trait AgnosticEncoder[T] extends Encoder[T] {
   def isPrimitive: Boolean
@@ -43,6 +45,7 @@ trait AgnosticEncoder[T] extends Encoder[T] {
   def dataType: DataType
   override def schema: StructType = StructType(StructField("value", dataType, nullable) :: Nil)
   def lenientSerialization: Boolean = false
+  def isFlattenable: Boolean = false
 }
 
 object AgnosticEncoders {
@@ -99,19 +102,23 @@ object AgnosticEncoders {
     def structField: StructField = StructField(name, enc.dataType, nullable, metadata)
   }
 
+  // Contains a sequence of fields. The fields can be flattened to columns in a row.
+  trait FieldsEncoder[K] extends AgnosticEncoder[K] {
+    val fields: Seq[EncoderField]
+    override def isPrimitive: Boolean = false
+    override def schema: StructType = StructType(fields.map(_.structField))
+    override def dataType: DataType = schema
+    override val isFlattenable: Boolean = true
+  }
+
   // This supports both Product and DefinedByConstructorParams
   case class ProductEncoder[K](
       override val clsTag: ClassTag[K],
-      fields: Seq[EncoderField])
-    extends AgnosticEncoder[K] {
-    override def isPrimitive: Boolean = false
-    override val schema: StructType = StructType(fields.map(_.structField))
-    override def dataType: DataType = schema
-  }
+      override val fields: Seq[EncoderField]) extends FieldsEncoder[K]
 
   object ProductEncoder {
     val cachedCls = new ConcurrentHashMap[Int, Class[_]]
-    def tuple(encoders: Seq[AgnosticEncoder[_]]): AgnosticEncoder[_] = {
+    private[sql] def tuple(encoders: Seq[AgnosticEncoder[_]]): AgnosticEncoder[_] = {
       val fields = encoders.zipWithIndex.map {
         case (e, id) => EncoderField(s"_${id + 1}", e, e.nullable, Metadata.empty)
       }
@@ -119,30 +126,27 @@ object AgnosticEncoders {
         _ => Utils.getContextOrSparkClassLoader.loadClass(s"scala.Tuple${encoders.size}"))
       ProductEncoder[Any](ClassTag(cls), fields)
     }
+
+    private[sql] def isTuple(tag: ClassTag[_]): Boolean = {
+      tag.runtimeClass.getName.startsWith("scala.Tuple")
+    }
   }
 
-  abstract class BaseRowEncoder extends AgnosticEncoder[Row] {
-    override def isPrimitive: Boolean = false
-    override def dataType: DataType = schema
+  abstract class BaseRowEncoder extends FieldsEncoder[Row] {
     override def clsTag: ClassTag[Row] = classTag[Row]
   }
 
-  case class RowEncoder(fields: Seq[EncoderField]) extends BaseRowEncoder {
-    override val schema: StructType = StructType(fields.map(_.structField))
-  }
+  case class RowEncoder(override val fields: Seq[EncoderField]) extends BaseRowEncoder
 
   object UnboundRowEncoder extends BaseRowEncoder {
     override val schema: StructType = new StructType()
-  }
+    override val fields: Seq[EncoderField] = Seq.empty
+}
 
   case class JavaBeanEncoder[K](
       override val clsTag: ClassTag[K],
-      fields: Seq[EncoderField])
-    extends AgnosticEncoder[K] {
-    override def isPrimitive: Boolean = false
-    override val schema: StructType = StructType(fields.map(_.structField))
-    override def dataType: DataType = schema
-  }
+      override val fields: Seq[EncoderField])
+    extends FieldsEncoder[K]
 
   // This will only work for encoding from/to Sparks' InternalRow format.
   // It is here for compatibility.

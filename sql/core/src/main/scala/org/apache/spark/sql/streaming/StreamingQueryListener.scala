@@ -19,6 +19,11 @@ package org.apache.spark.sql.streaming
 
 import java.util.UUID
 
+import org.json4s.{JObject, JString}
+import org.json4s.JsonAST.JValue
+import org.json4s.JsonDSL.{jobject2assoc, pair2Assoc}
+import org.json4s.jackson.JsonMethods.{compact, render}
+
 import org.apache.spark.annotation.Evolving
 import org.apache.spark.scheduler.SparkListenerEvent
 
@@ -123,7 +128,17 @@ object StreamingQueryListener {
       val id: UUID,
       val runId: UUID,
       val name: String,
-      val timestamp: String) extends Event
+      val timestamp: String) extends Event {
+
+    def json: String = compact(render(jsonValue))
+
+    private def jsonValue: JValue = {
+      ("id" -> JString(id.toString)) ~
+      ("runId" -> JString(runId.toString)) ~
+      ("name" -> JString(name)) ~
+      ("timestamp" -> JString(timestamp))
+    }
+  }
 
   /**
    * Event representing any progress updates in a query.
@@ -131,7 +146,12 @@ object StreamingQueryListener {
    * @since 2.1.0
    */
   @Evolving
-  class QueryProgressEvent private[sql](val progress: StreamingQueryProgress) extends Event
+  class QueryProgressEvent private[sql](val progress: StreamingQueryProgress) extends Event {
+
+    def json: String = compact(render(jsonValue))
+
+    private def jsonValue: JValue = JObject("progress" -> progress.jsonValue)
+  }
 
   /**
    * Event representing that query is idle and waiting for new data to process.
@@ -145,7 +165,16 @@ object StreamingQueryListener {
   class QueryIdleEvent private[sql](
       val id: UUID,
       val runId: UUID,
-      val timestamp: String) extends Event
+      val timestamp: String) extends Event {
+
+    def json: String = compact(render(jsonValue))
+
+    private def jsonValue: JValue = {
+      ("id" -> JString(id.toString)) ~
+      ("runId" -> JString(runId.toString)) ~
+      ("timestamp" -> JString(timestamp))
+    }
+  }
 
   /**
    * Event representing that termination of a query.
@@ -170,6 +199,15 @@ object StreamingQueryListener {
     // compatibility with versions in prior to 3.5.0
     def this(id: UUID, runId: UUID, exception: Option[String]) = {
       this(id, runId, exception, None)
+    }
+
+    def json: String = compact(render(jsonValue))
+
+    private def jsonValue: JValue = {
+      ("id" -> JString(id.toString)) ~
+      ("runId" -> JString(runId.toString)) ~
+      ("exception" -> JString(exception.orNull)) ~
+      ("errorClassOnException" -> JString(errorClassOnException.orNull))
     }
   }
 }

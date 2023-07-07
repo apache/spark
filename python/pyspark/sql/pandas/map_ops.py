@@ -73,6 +73,7 @@ class PandasMapOpsMixin:
         >>> def filter_func(iterator):
         ...     for pdf in iterator:
         ...         yield pdf[pdf.id == 1]
+        ...
         >>> df.mapInPandas(filter_func, df.schema).show()  # doctest: +SKIP
         +---+---+
         | id|age|

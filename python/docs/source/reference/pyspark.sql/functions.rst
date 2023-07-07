@@ -35,6 +35,7 @@ Normal Functions
     isnan
     isnull
     monotonically_increasing_id
+    named_struct
     nanvl
     rand
     randn
@@ -104,6 +105,14 @@ Math Functions
     tan
     tanh
     toDegrees
+    try_add
+    try_avg
+    try_divide
+    try_multiply
+    try_subtract
+    try_sum
+    try_to_binary
+    try_to_number
     degrees
     toRadians
     radians
@@ -116,18 +125,26 @@ Datetime Functions
     :toctree: api/
 
     add_months
+    convert_timezone
     curdate
     current_date
     current_timestamp
     current_timezone
     date_add
+    date_diff
     date_format
+    date_from_unix_date
     date_sub
     date_trunc
+    dateadd
     datediff
+    day
+    date_part
+    datepart
     dayofmonth
     dayofweek
     dayofyear
+    extract
     second
     weekofyear
     year
@@ -146,6 +163,7 @@ Datetime Functions
     next_day
     hour
     make_date
+    now
     from_unixtime
     unix_timestamp
     to_unix_timestamp
@@ -156,9 +174,13 @@ Datetime Functions
     trunc
     from_utc_timestamp
     to_utc_timestamp
+    weekday
     window
     session_window
+    timestamp_micros
+    timestamp_millis
     timestamp_seconds
+    try_to_timestamp
     unix_date
     unix_micros
     unix_millis
@@ -181,6 +203,7 @@ Collection Functions
     array_position
     element_at
     array_append
+    array_size
     array_sort
     array_insert
     array_remove
@@ -213,7 +236,10 @@ Collection Functions
     from_json
     schema_of_json
     to_json
+    json_array_length
+    json_object_keys
     size
+    cardinality
     struct
     sort_array
     array_max
@@ -234,6 +260,7 @@ Collection Functions
     schema_of_csv
     str_to_map
     to_csv
+    try_element_at
 
 
 Partition Transformation Functions
@@ -257,16 +284,24 @@ Aggregate Functions
     approxCountDistinct
     approx_count_distinct
     approx_percentile
+    array_agg
     avg
+    bit_and
+    bit_or
+    bit_xor
+    bool_and
+    bool_or
     collect_list
     collect_set
     corr
     count
     count_distinct
     countDistinct
+    count_min_sketch
     count_if
     covar_pop
     covar_samp
+    every
     first
     first_value
     grouping
@@ -298,6 +333,7 @@ Aggregate Functions
     regr_sxy
     regr_syy
     skewness
+    some
     std
     stddev
     stddev_pop
@@ -347,20 +383,37 @@ String Functions
     ascii
     base64
     bit_length
+    btrim
+    char
+    character_length
+    char_length
+    chr
     concat_ws
+    contains
     decode
+    elt
     encode
+    endswith
+    find_in_set
     format_number
     format_string
+    ilike
     initcap
     instr
+    lcase
     length
+    like
     lower
+    left
     levenshtein
     locate
     lpad
     ltrim
+    mask
     octet_length
+    parse_url
+    position
+    printf
     rlike
     regexp
     regexp_like
@@ -370,12 +423,18 @@ String Functions
     regexp_replace
     regexp_substr
     regexp_instr
+    replace
+    right
+    ucase
     unbase64
     rpad
     repeat
     rtrim
     soundex
     split
+    split_part
+    startswith
+    substr
     substring
     substring_index
     overlay
@@ -386,6 +445,18 @@ String Functions
     translate
     trim
     upper
+    url_decode
+    url_encode
+
+
+Bitwise Functions
+-----------------
+.. autosummary::
+    :toctree: api/
+
+    bit_count
+    bit_get
+    getbit
 
 
 UDF
@@ -404,11 +475,16 @@ Misc Functions
 .. autosummary::
     :toctree: api/
 
+    aes_decrypt
+    aes_encrypt
     current_catalog
     current_database
     current_schema
     current_user
+    input_file_block_length
+    input_file_block_start
     md5
+    sha
     sha1
     sha2
     crc32
@@ -416,9 +492,28 @@ Misc Functions
     xxhash64
     assert_true
     raise_error
+    reflect
     hll_sketch_estimate
     hll_union
+    java_method
+    random
+    stack
+    typeof
     user
+    uuid
+    version
+
+Predicate Functions
+-------------------
+.. autosummary::
+    :toctree: api/
+
+    equal_null
+    ifnull
+    isnotnull
+    nullif
+    nvl
+    nvl2
 
 Xml Functions
 --------------

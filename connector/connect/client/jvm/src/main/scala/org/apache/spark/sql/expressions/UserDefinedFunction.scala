@@ -142,7 +142,10 @@ object ScalarUserDefinedFunction {
 
     ScalarUserDefinedFunction(
       function = function,
-      inputEncoders = parameterTypes.map(tag => ScalaReflection.encoderFor(tag)),
+      // Input can be a row because the input data schema can be found from the plan.
+      inputEncoders =
+        parameterTypes.map(tag => ScalaReflection.encoderForWithRowEncoderSupport(tag)),
+      // Output cannot be a row as there is no good way to get the return data type.
       outputEncoder = ScalaReflection.encoderFor(returnType))
   }
 

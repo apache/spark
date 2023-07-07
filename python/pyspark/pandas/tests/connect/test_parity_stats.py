@@ -22,35 +22,7 @@ from pyspark.testing.pandasutils import PandasOnSparkTestUtils
 
 
 class StatsParityTests(StatsTestsMixin, PandasOnSparkTestUtils, ReusedConnectTestCase):
-    @unittest.skip(
-        "TODO(SPARK-43626): Enable pyspark.pandas.spark.functions.kurt in Spark Connect."
-    )
-    def test_axis_on_dataframe(self):
-        super().test_axis_on_dataframe()
-
-    @unittest.skip(
-        "TODO(SPARK-43627): Enable pyspark.pandas.spark.functions.skew in Spark Connect."
-    )
-    def test_skew_kurt_numerical_stability(self):
-        super().test_skew_kurt_numerical_stability()
-
-    @unittest.skip(
-        "TODO(SPARK-43627): Enable pyspark.pandas.spark.functions.skew in Spark Connect."
-    )
-    def test_stat_functions(self):
-        super().test_stat_functions()
-
-    @unittest.skip(
-        "TODO(SPARK-43627): Enable pyspark.pandas.spark.functions.skew in Spark Connect."
-    )
-    def test_stat_functions_multiindex_column(self):
-        super().test_stat_functions_multiindex_column()
-
-    @unittest.skip(
-        "TODO(SPARK-43626): Enable pyspark.pandas.spark.functions.kurt in Spark Connect."
-    )
-    def test_stats_on_non_numeric_columns_should_be_discarded_if_numeric_only_is_true(self):
-        super().test_stats_on_non_numeric_columns_should_be_discarded_if_numeric_only_is_true()
+    pass
 
 
 if __name__ == "__main__":

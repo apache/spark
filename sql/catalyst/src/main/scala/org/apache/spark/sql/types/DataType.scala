@@ -30,12 +30,11 @@ import org.json4s.jackson.JsonMethods._
 import org.apache.spark.SparkThrowable
 import org.apache.spark.annotation.Stable
 import org.apache.spark.sql.catalyst.analysis.Resolver
-import org.apache.spark.sql.catalyst.expressions.Expression
-import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
+import org.apache.spark.sql.catalyst.parser.DataTypeParser
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.util.DataTypeJsonUtils.{DataTypeJsonDeserializer, DataTypeJsonSerializer}
-import org.apache.spark.sql.catalyst.util.StringUtils.StringConcat
-import org.apache.spark.sql.errors.QueryCompilationErrors
+import org.apache.spark.sql.catalyst.util.StringConcat
+import org.apache.spark.sql.errors.DataTypeErrors
 import org.apache.spark.sql.types.DayTimeIntervalType._
 import org.apache.spark.sql.types.YearMonthIntervalType._
 import org.apache.spark.util.Utils
@@ -50,15 +49,6 @@ import org.apache.spark.util.Utils
 @JsonSerialize(using = classOf[DataTypeJsonSerializer])
 @JsonDeserialize(using = classOf[DataTypeJsonDeserializer])
 abstract class DataType extends AbstractDataType {
-  /**
-   * Enables matching against DataType for expressions:
-   * {{{
-   *   case Cast(child @ BinaryType(), StringType) =>
-   *     ...
-   * }}}
-   */
-  private[sql] def unapply(e: Expression): Boolean = e.dataType == this
-
   /**
    * The default size of a value of this data type, used internally for size estimation.
    */
@@ -121,8 +111,8 @@ object DataType {
   def fromDDL(ddl: String): DataType = {
     parseTypeWithFallback(
       ddl,
-      CatalystSqlParser.parseDataType,
-      fallbackParser = str => CatalystSqlParser.parseTableSchema(str))
+      DataTypeParser.parseDataType,
+      fallbackParser = str => DataTypeParser.parseTableSchema(str))
   }
 
   /**
@@ -150,7 +140,7 @@ object DataType {
             if (e.isInstanceOf[SparkThrowable]) {
               throw e
             }
-            throw QueryCompilationErrors.schemaFailToParseError(schema, e)
+            throw DataTypeErrors.schemaFailToParseError(schema, e)
         }
     }
   }

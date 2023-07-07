@@ -368,6 +368,23 @@ object functions {
    */
   def collect_set(columnName: String): Column = collect_set(Column(columnName))
 
+  /**
+   * Returns a count-min sketch of a column with the given esp, confidence and seed. The result
+   * is an array of bytes, which can be deserialized to a `CountMinSketch` before usage.
+   * Count-min sketch is a probabilistic data structure used for cardinality estimation using
+   * sub-linear space.
+   *
+   * @group agg_funcs
+   * @since 3.5.0
+   */
+  def count_min_sketch(
+    e: Column,
+    eps: Column,
+    confidence: Column,
+    seed: Column): Column = withAggregateFunction {
+    new CountMinSketchAgg(e.expr, eps.expr, confidence.expr, seed.expr)
+  }
+
   private[spark] def collect_top_k(e: Column, num: Int, reverse: Boolean): Column =
     withAggregateFunction { CollectTopK(e.expr, num, reverse) }
 
@@ -1283,6 +1300,70 @@ object functions {
   def histogram_numeric(e: Column, nBins: Column): Column =
     withAggregateFunction { new HistogramNumeric(e.expr, nBins.expr) }
 
+  /**
+   * Aggregate function: returns true if all values of `e` are true.
+   *
+   * @group agg_funcs
+   * @since 3.5.0
+   */
+  def every(e: Column): Column = withAggregateFunction { BoolAnd(e.expr) }
+
+  /**
+   * Aggregate function: returns true if all values of `e` are true.
+   *
+   * @group agg_funcs
+   * @since 3.5.0
+   */
+  def bool_and(e: Column): Column = withAggregateFunction { BoolAnd(e.expr) }
+
+  /**
+   * Aggregate function: returns true if at least one value of `e` is true.
+   *
+   * @group agg_funcs
+   * @since 3.5.0
+   */
+  def some(e: Column): Column = withAggregateFunction { BoolOr(e.expr) }
+
+  /**
+   * Aggregate function: returns true if at least one value of `e` is true.
+   *
+   * @group agg_funcs
+   * @since 3.5.0
+   */
+  def any(e: Column): Column = withAggregateFunction { BoolOr(e.expr) }
+
+  /**
+   * Aggregate function: returns true if at least one value of `e` is true.
+   *
+   * @group agg_funcs
+   * @since 3.5.0
+   */
+  def bool_or(e: Column): Column = withAggregateFunction { BoolOr(e.expr) }
+
+  /**
+   * Aggregate function: returns the bitwise AND of all non-null input values, or null if none.
+   *
+   * @group agg_funcs
+   * @since 3.5.0
+   */
+  def bit_and(e: Column): Column = withAggregateFunction { BitAndAgg(e.expr) }
+
+  /**
+   * Aggregate function: returns the bitwise OR of all non-null input values, or null if none.
+   *
+   * @group agg_funcs
+   * @since 3.5.0
+   */
+  def bit_or(e: Column): Column = withAggregateFunction { BitOrAgg(e.expr) }
+
+  /**
+   * Aggregate function: returns the bitwise XOR of all non-null input values, or null if none.
+   *
+   * @group agg_funcs
+   * @since 3.5.0
+   */
+  def bit_xor(e: Column): Column = withAggregateFunction { BitXorAgg(e.expr) }
+
   //////////////////////////////////////////////////////////////////////////////////////////////
   // Window functions
   //////////////////////////////////////////////////////////////////////////////////////////////
@@ -1569,6 +1650,14 @@ object functions {
   def map(cols: Column*): Column = withExpr { CreateMap(cols.map(_.expr)) }
 
   /**
+   * Creates a struct with the given field names and values.
+   *
+   * @group normal_funcs
+   * @since 3.5.0
+   */
+  def named_struct(cols: Column*): Column = withExpr { CreateNamedStruct(cols.map(_.expr)) }
+
+  /**
    * Creates a new map column. The array in the first column is used for keys. The array in the
    * second column is used for values. All elements in the array for key should not be null.
    *
@@ -1817,6 +1906,70 @@ object functions {
   def sqrt(colName: String): Column = sqrt(Column(colName))
 
   /**
+   * Returns the sum of `left` and `right` and the result is null on overflow. The acceptable
+   * input types are the same with the `+` operator.
+   *
+   * @group math_funcs
+   * @since 3.5.0
+   */
+  def try_add(left: Column, right: Column): Column = withExpr {
+    UnresolvedFunction("try_add", Seq(left.expr, right.expr), isDistinct = false)
+  }
+
+  /**
+   * Returns the mean calculated from values of a group and the result is null on overflow.
+   *
+   * @group math_funcs
+   * @since 3.5.0
+   */
+  def try_avg(e: Column): Column = withAggregateFunction {
+    Average(e.expr, EvalMode.TRY)
+  }
+
+  /**
+   * Returns `dividend``/``divisor`. It always performs floating point division. Its result is
+   * always null if `divisor` is 0.
+   *
+   * @group math_funcs
+   * @since 3.5.0
+   */
+  def try_divide(dividend: Column, divisor: Column): Column = withExpr {
+    UnresolvedFunction("try_divide", Seq(dividend.expr, divisor.expr), isDistinct = false)
+  }
+
+  /**
+   * Returns `left``*``right` and the result is null on overflow. The acceptable input types are
+   * the same with the `*` operator.
+   *
+   * @group math_funcs
+   * @since 3.5.0
+   */
+  def try_multiply(left: Column, right: Column): Column = withExpr {
+    UnresolvedFunction("try_multiply", Seq(left.expr, right.expr), isDistinct = false)
+  }
+
+  /**
+   * Returns `left``-``right` and the result is null on overflow. The acceptable input types are
+   * the same with the `-` operator.
+   *
+   * @group math_funcs
+   * @since 3.5.0
+   */
+  def try_subtract(left: Column, right: Column): Column = withExpr {
+    UnresolvedFunction("try_subtract", Seq(left.expr, right.expr), isDistinct = false)
+  }
+
+  /**
+   * Returns the sum calculated from values of a group and the result is null on overflow.
+   *
+   * @group math_funcs
+   * @since 3.5.0
+   */
+  def try_sum(e: Column): Column = withAggregateFunction {
+    Sum(e.expr, EvalMode.TRY)
+  }
+
+  /**
    * Creates a new struct column.
    * If the input column is a column in a `DataFrame`, or a derived column expression
    * that is named (i.e. aliased), its name would be retained as the StructField's name,
@@ -1881,6 +2034,35 @@ object functions {
    * @since 3.2.0
    */
   def bitwise_not(e: Column): Column = withExpr { BitwiseNot(e.expr) }
+
+  /**
+   * Returns the number of bits that are set in the argument expr as an unsigned 64-bit integer,
+   * or NULL if the argument is NULL.
+   *
+   * @group bitwise_funcs
+   * @since 3.5.0
+   */
+  def bit_count(e: Column): Column = withExpr { BitwiseCount(e.expr) }
+
+  /**
+   * Returns the value of the bit (0 or 1) at the specified position.
+   * The positions are numbered from right to left, starting at zero.
+   * The position argument cannot be negative.
+   *
+   * @group bitwise_funcs
+   * @since 3.5.0
+   */
+  def bit_get(e: Column, pos: Column): Column = withExpr { BitwiseGet(e.expr, pos.expr) }
+
+  /**
+   * Returns the value of the bit (0 or 1) at the specified position.
+   * The positions are numbered from right to left, starting at zero.
+   * The position argument cannot be negative.
+   *
+   * @group bitwise_funcs
+   * @since 3.5.0
+   */
+  def getbit(e: Column, pos: Column): Column = bit_get(e, pos)
 
   /**
    * Parses the expression string into the column that it represents, similar to
@@ -3177,6 +3359,298 @@ object functions {
    */
   def user(): Column = withExpr { CurrentUser() }
 
+  /**
+   * Returns an universally unique identifier (UUID) string. The value is returned as a canonical
+   * UUID 36-character string.
+   *
+   * @group misc_funcs
+   * @since 3.5.0
+   */
+  def uuid(): Column = withExpr { new Uuid() }
+
+  /**
+   * Returns an encrypted value of `input` using AES in given `mode` with the specified `padding`.
+   * Key lengths of 16, 24 and 32 bits are supported. Supported combinations of (`mode`,
+   * `padding`) are ('ECB', 'PKCS'), ('GCM', 'NONE') and ('CBC', 'PKCS'). Optional initialization
+   * vectors (IVs) are only supported for CBC and GCM modes. These must be 16 bytes for CBC and 12
+   * bytes for GCM. If not provided, a random vector will be generated and prepended to the
+   * output. Optional additional authenticated data (AAD) is only supported for GCM. If provided
+   * for encryption, the identical AAD value must be provided for decryption. The default mode is
+   * GCM.
+   *
+   * @param input
+   *   The binary value to encrypt.
+   * @param key
+   *   The passphrase to use to encrypt the data.
+   * @param mode
+   *   Specifies which block cipher mode should be used to encrypt messages. Valid modes: ECB,
+   *   GCM, CBC.
+   * @param padding
+   *   Specifies how to pad messages whose length is not a multiple of the block size. Valid
+   *   values: PKCS, NONE, DEFAULT. The DEFAULT padding means PKCS for ECB, NONE for GCM and PKCS
+   *   for CBC.
+   * @param iv
+   *   Optional initialization vector. Only supported for CBC and GCM modes. Valid values: None or
+   *   "". 16-byte array for CBC mode. 12-byte array for GCM mode.
+   * @param aad
+   *   Optional additional authenticated data. Only supported for GCM mode. This can be any
+   *   free-form input and must be provided for both encryption and decryption.
+   *
+   * @group misc_funcs
+   * @since 3.5.0
+   */
+  def aes_encrypt(
+      input: Column,
+      key: Column,
+      mode: Column,
+      padding: Column,
+      iv: Column,
+      aad: Column): Column = withExpr {
+    AesEncrypt(input.expr, key.expr, mode.expr, padding.expr, iv.expr, aad.expr)
+  }
+
+  /**
+   * Returns an encrypted value of `input`.
+   *
+   * @see
+   *   `org.apache.spark.sql.functions.aes_encrypt(Column, Column, Column, Column, Column,
+   *   Column)`
+   *
+   * @group misc_funcs
+   * @since 3.5.0
+   */
+  def aes_encrypt(
+      input: Column,
+      key: Column,
+      mode: Column,
+      padding: Column,
+      iv: Column): Column = withExpr {
+    new AesEncrypt(input.expr, key.expr, mode.expr, padding.expr, iv.expr)
+  }
+
+  /**
+   * Returns an encrypted value of `input`.
+   *
+   * @see
+   *   `org.apache.spark.sql.functions.aes_encrypt(Column, Column, Column, Column, Column,
+   *   Column)`
+   *
+   * @group misc_funcs
+   * @since 3.5.0
+   */
+  def aes_encrypt(input: Column, key: Column, mode: Column, padding: Column): Column = withExpr {
+    new AesEncrypt(input.expr, key.expr, mode.expr, padding.expr)
+  }
+
+  /**
+   * Returns an encrypted value of `input`.
+   *
+   * @see
+   *   `org.apache.spark.sql.functions.aes_encrypt(Column, Column, Column, Column, Column,
+   *   Column)`
+   *
+   * @group misc_funcs
+   * @since 3.5.0
+   */
+  def aes_encrypt(input: Column, key: Column, mode: Column): Column = withExpr {
+    new AesEncrypt(input.expr, key.expr, mode.expr)
+  }
+
+  /**
+   * Returns an encrypted value of `input`.
+   *
+   * @see
+   *   `org.apache.spark.sql.functions.aes_encrypt(Column, Column, Column, Column, Column,
+   *   Column)`
+   *
+   * @group misc_funcs
+   * @since 3.5.0
+   */
+  def aes_encrypt(input: Column, key: Column): Column = withExpr {
+    new AesEncrypt(input.expr, key.expr)
+  }
+
+  /**
+   * Returns a decrypted value of `input` using AES in `mode` with `padding`. Key lengths of 16,
+   * 24 and 32 bits are supported. Supported combinations of (`mode`, `padding`) are ('ECB',
+   * 'PKCS'), ('GCM', 'NONE') and ('CBC', 'PKCS'). Optional additional authenticated data (AAD) is
+   * only supported for GCM. If provided for encryption, the identical AAD value must be provided
+   * for decryption. The default mode is GCM.
+   *
+   * @param input
+   *   The binary value to decrypt.
+   * @param key
+   *   The passphrase to use to decrypt the data.
+   * @param mode
+   *   Specifies which block cipher mode should be used to decrypt messages. Valid modes: ECB,
+   *   GCM, CBC.
+   * @param padding
+   *   Specifies how to pad messages whose length is not a multiple of the block size. Valid
+   *   values: PKCS, NONE, DEFAULT. The DEFAULT padding means PKCS for ECB, NONE for GCM and PKCS
+   *   for CBC.
+   * @param aad
+   *   Optional additional authenticated data. Only supported for GCM mode. This can be any
+   *   free-form input and must be provided for both encryption and decryption.
+   *
+   * @group misc_funcs
+   * @since 3.5.0
+   */
+  def aes_decrypt(
+      input: Column,
+      key: Column,
+      mode: Column,
+      padding: Column,
+      aad: Column): Column = withExpr {
+    AesDecrypt(input.expr, key.expr, mode.expr, padding.expr, aad.expr)
+  }
+
+  /**
+   * Returns a decrypted value of `input`.
+   *
+   * @see
+   *   `org.apache.spark.sql.functions.aes_decrypt(Column, Column, Column, Column, Column)`
+   *
+   * @group misc_funcs
+   * @since 3.5.0
+   */
+  def aes_decrypt(
+      input: Column,
+      key: Column,
+      mode: Column,
+      padding: Column): Column = withExpr {
+    new AesDecrypt(input.expr, key.expr, mode.expr, padding.expr)
+  }
+
+  /**
+   * Returns a decrypted value of `input`.
+   *
+   * @see
+   *   `org.apache.spark.sql.functions.aes_decrypt(Column, Column, Column, Column, Column)`
+   *
+   * @group misc_funcs
+   * @since 3.5.0
+   */
+  def aes_decrypt(input: Column, key: Column, mode: Column): Column = withExpr {
+    new AesDecrypt(input.expr, key.expr, mode.expr)
+  }
+
+  /**
+   * Returns a decrypted value of `input`.
+   *
+   * @see
+   *   `org.apache.spark.sql.functions.aes_decrypt(Column, Column, Column, Column, Column)`
+   *
+   * @group misc_funcs
+   * @since 3.5.0
+   */
+  def aes_decrypt(input: Column, key: Column): Column = withExpr {
+    new AesDecrypt(input.expr, key.expr)
+  }
+
+  /**
+   * Returns a sha1 hash value as a hex string of the `col`.
+   *
+   * @group misc_funcs
+   * @since 3.5.0
+   */
+  def sha(col: Column): Column = withExpr {
+    Sha1(col.expr)
+  }
+
+  /**
+   * Returns the length of the block being read, or -1 if not available.
+   *
+   * @group misc_funcs
+   * @since 3.5.0
+   */
+  def input_file_block_length(): Column = withExpr {
+    InputFileBlockLength()
+  }
+
+  /**
+   * Returns the start offset of the block being read, or -1 if not available.
+   *
+   * @group misc_funcs
+   * @since 3.5.0
+   */
+  def input_file_block_start(): Column = withExpr {
+    InputFileBlockStart()
+  }
+
+  /**
+   * Calls a method with reflection.
+   *
+   * @group misc_funcs
+   * @since 3.5.0
+   */
+  def reflect(cols: Column*): Column = withExpr {
+    CallMethodViaReflection(cols.map(_.expr))
+  }
+
+  /**
+   * Calls a method with reflection.
+   *
+   * @group misc_funcs
+   * @since 3.5.0
+   */
+  def java_method(cols: Column*): Column = withExpr {
+    CallMethodViaReflection(cols.map(_.expr))
+  }
+
+  /**
+   * Returns the Spark version. The string contains 2 fields, the first being a release version
+   * and the second being a git revision.
+   *
+   * @group misc_funcs
+   * @since 3.5.0
+   */
+  def version(): Column = withExpr {
+    SparkVersion()
+  }
+
+  /**
+   * Return DDL-formatted type string for the data type of the input.
+   *
+   * @group misc_funcs
+   * @since 3.5.0
+   */
+  def typeof(col: Column): Column = withExpr {
+    TypeOf(col.expr)
+  }
+
+  /**
+   * Separates `col1`, ..., `colk` into `n` rows. Uses column names col0, col1, etc. by default
+   * unless specified otherwise.
+   *
+   * @group misc_funcs
+   * @since 3.5.0
+   */
+  def stack(cols: Column*): Column = withExpr {
+    Stack(cols.map(_.expr))
+  }
+
+  /**
+   * Returns a random value with independent and identically distributed (i.i.d.) uniformly
+   * distributed values in [0, 1).
+   *
+   * @group misc_funcs
+   * @since 3.5.0
+   */
+  def random(seed: Column): Column = withExpr {
+    Rand(seed.expr)
+  }
+
+  /**
+   * Returns a random value with independent and identically distributed (i.i.d.) uniformly
+   * distributed values in [0, 1).
+   *
+   * @group misc_funcs
+   * @since 3.5.0
+   */
+  def random(): Column = withExpr {
+    new Rand()
+  }
+
   //////////////////////////////////////////////////////////////////////////////////////////////
   // String functions
   //////////////////////////////////////////////////////////////////////////////////////////////
@@ -3302,6 +3776,16 @@ object functions {
    * @since 1.5.0
    */
   def length(e: Column): Column = withExpr { Length(e.expr) }
+
+  /**
+   * Computes the character length of a given string or number of bytes of a binary string.
+   * The length of character strings include the trailing spaces. The length of binary strings
+   * includes binary zeros.
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def len(e: Column): Column = withExpr { Length(e.expr) }
 
   /**
    * Converts a string column to lower case.
@@ -3815,6 +4299,407 @@ object functions {
     ToNumber(e.expr, format.expr)
   }
 
+  /**
+   * Replaces all occurrences of `search` with `replace`.
+   *
+   * @param src
+   *   A column of string to be replaced
+   * @param search
+   *   A column of string, If `search` is not found in `str`, `str` is returned unchanged.
+   * @param replace
+   *   A column of string, If `replace` is not specified or is an empty string, nothing replaces
+   *   the string that is removed from `str`.
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def replace(src: Column, search: Column, replace: Column): Column = withExpr {
+    StringReplace(src.expr, search.expr, replace.expr)
+  }
+
+  /**
+   * Replaces all occurrences of `search` with `replace`.
+   *
+   * @param src
+   *   A column of string to be replaced
+   * @param search
+   *   A column of string, If `search` is not found in `src`, `src` is returned unchanged.
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def replace(src: Column, search: Column): Column = withExpr {
+    new StringReplace(src.expr, search.expr)
+  }
+
+  /**
+   * Splits `str` by delimiter and return requested part of the split (1-based).
+   * If any input is null, returns null. if `partNum` is out of range of split parts,
+   * returns empty string. If `partNum` is 0, throws an error. If `partNum` is negative,
+   * the parts are counted backward from the end of the string.
+   * If the `delimiter` is an empty string, the `str` is not split.
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def split_part(str: Column, delimiter: Column, partNum: Column): Column = withExpr {
+    SplitPart(str.expr, delimiter.expr, partNum.expr)
+  }
+
+  /**
+   * Returns the substring of `str` that starts at `pos` and is of length `len`,
+   * or the slice of byte array that starts at `pos` and is of length `len`.
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def substr(str: Column, pos: Column, len: Column): Column = withExpr {
+    Substring(str.expr, pos.expr, len.expr)
+  }
+
+  /**
+   * Returns the substring of `str` that starts at `pos`,
+   * or the slice of byte array that starts at `pos`.
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def substr(str: Column, pos: Column): Column = withExpr {
+    new Substring(str.expr, pos.expr)
+  }
+
+  /**
+   * Extracts a part from a URL.
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def parse_url(url: Column, partToExtract: Column, key: Column): Column = withExpr {
+    ParseUrl(Seq(url.expr, partToExtract.expr, key.expr))
+  }
+
+  /**
+   * Extracts a part from a URL.
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def parse_url(url: Column, partToExtract: Column): Column = withExpr {
+    ParseUrl(Seq(url.expr, partToExtract.expr))
+  }
+
+  /**
+   * Formats the arguments in printf-style and returns the result as a string column.
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def printf(format: Column, arguments: Column*): Column = withExpr {
+    FormatString((lit(format) +: arguments).map(_.expr): _*)
+  }
+
+  /**
+   * Decodes a `str` in 'application/x-www-form-urlencoded' format
+   * using a specific encoding scheme.
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def url_decode(str: Column): Column = withExpr {
+    UrlDecode(str.expr)
+  }
+
+  /**
+   * Translates a string into 'application/x-www-form-urlencoded' format
+   * using a specific encoding scheme.
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def url_encode(str: Column): Column = withExpr {
+    UrlEncode(str.expr)
+  }
+
+  /**
+   * Returns the position of the first occurrence of `substr` in `str` after position `start`.
+   * The given `start` and return value are 1-based.
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def position(substr: Column, str: Column, start: Column): Column = withExpr {
+    StringLocate(substr.expr, str.expr, start.expr)
+  }
+
+  /**
+   * Returns the position of the first occurrence of `substr` in `str` after position `1`.
+   * The return value are 1-based.
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def position(substr: Column, str: Column): Column = withExpr {
+    new StringLocate(substr.expr, str.expr)
+  }
+
+  /**
+   * Returns a boolean. The value is True if str ends with suffix.
+   * Returns NULL if either input expression is NULL. Otherwise, returns False.
+   * Both str or suffix must be of STRING or BINARY type.
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def endswith(str: Column, suffix: Column): Column = withExpr {
+    UnresolvedFunction(Seq("endswith"), Seq(str.expr, suffix.expr), isDistinct = false)
+  }
+
+  /**
+   * Returns a boolean. The value is True if str starts with prefix.
+   * Returns NULL if either input expression is NULL. Otherwise, returns False.
+   * Both str or prefix must be of STRING or BINARY type.
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def startswith(str: Column, prefix: Column): Column = withExpr {
+    UnresolvedFunction(Seq("startswith"), Seq(str.expr, prefix.expr), isDistinct = false)
+  }
+
+  /**
+   * Returns the ASCII character having the binary equivalent to `n`.
+   * If n is larger than 256 the result is equivalent to char(n % 256)
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def char(n: Column): Column = withExpr {
+    Chr(n.expr)
+  }
+
+  /**
+   * Removes the leading and trailing space characters from `str`.
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def btrim(str: Column): Column = withExpr {
+    new StringTrimBoth(str.expr)
+  }
+
+  /**
+   * Remove the leading and trailing `trim` characters from `str`.
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def btrim(str: Column, trim: Column): Column = withExpr {
+    new StringTrimBoth(str.expr, trim.expr)
+  }
+
+  /**
+   * This is a special version of `to_binary` that performs the same operation, but returns a NULL
+   * value instead of raising an error if the conversion cannot be performed.
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def try_to_binary(e: Column, format: Column): Column = withExpr {
+    new TryToBinary(e.expr, format.expr)
+  }
+
+  /**
+   * This is a special version of `to_binary` that performs the same operation, but returns a NULL
+   * value instead of raising an error if the conversion cannot be performed.
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def try_to_binary(e: Column): Column = withExpr {
+    new TryToBinary(e.expr)
+  }
+
+  /**
+   * Convert string `e` to a number based on the string format `format`. Returns NULL if the
+   * string `e` does not match the expected format. The format follows the same semantics as the
+   * to_number function.
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def try_to_number(e: Column, format: Column): Column = withExpr {
+    TryToNumber(e.expr, format.expr)
+  }
+
+  /**
+   * Returns the character length of string data or number of bytes of binary data.
+   * The length of string data includes the trailing spaces.
+   * The length of binary data includes binary zeros.
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def char_length(str: Column): Column = withExpr {
+    Length(str.expr)
+  }
+
+  /**
+   * Returns the character length of string data or number of bytes of binary data.
+   * The length of string data includes the trailing spaces.
+   * The length of binary data includes binary zeros.
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def character_length(str: Column): Column = withExpr {
+    Length(str.expr)
+  }
+
+  /**
+   * Returns the ASCII character having the binary equivalent to `n`.
+   * If n is larger than 256 the result is equivalent to chr(n % 256)
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def chr(n: Column): Column = withExpr {
+    Chr(n.expr)
+  }
+
+  /**
+   * Returns a boolean. The value is True if right is found inside left.
+   * Returns NULL if either input expression is NULL. Otherwise, returns False.
+   * Both left or right must be of STRING or BINARY type.
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def contains(left: Column, right: Column): Column = withExpr {
+    UnresolvedFunction(Seq("contains"), Seq(left.expr, right.expr), isDistinct = false)
+  }
+
+  /**
+   * Returns the `n`-th input, e.g., returns `input2` when `n` is 2.
+   * The function returns NULL if the index exceeds the length of the array
+   * and `spark.sql.ansi.enabled` is set to false. If `spark.sql.ansi.enabled` is set to true,
+   * it throws ArrayIndexOutOfBoundsException for invalid indices.
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  @scala.annotation.varargs
+  def elt(inputs: Column*): Column = withExpr {
+    Elt(inputs.map(_.expr))
+  }
+
+  /**
+   * Returns the index (1-based) of the given string (`str`) in the comma-delimited
+   * list (`strArray`). Returns 0, if the string was not found or if the given string (`str`)
+   * contains a comma.
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def find_in_set(str: Column, strArray: Column): Column = withExpr {
+    FindInSet(str.expr, strArray.expr)
+  }
+
+  /**
+   * Returns true if str matches `pattern` with `escapeChar`, null if any arguments are null,
+   * false otherwise.
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def like(str: Column, pattern: Column, escapeChar: Column): Column = withExpr {
+    escapeChar.expr match {
+      case StringLiteral(v) if v.length == 1 =>
+        Like(str.expr, pattern.expr, v.charAt(0))
+      case _ =>
+        throw QueryCompilationErrors.invalidEscapeChar(escapeChar.expr)
+    }
+  }
+
+  /**
+   * Returns true if str matches `pattern` with `escapeChar`('\'), null if any arguments are null,
+   * false otherwise.
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def like(str: Column, pattern: Column): Column = withExpr {
+    new Like(str.expr, pattern.expr)
+  }
+
+  /**
+   * Returns true if str matches `pattern` with `escapeChar` case-insensitively, null if any
+   * arguments are null, false otherwise.
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def ilike(str: Column, pattern: Column, escapeChar: Column): Column = withExpr {
+    escapeChar.expr match {
+      case StringLiteral(v) if v.length == 1 =>
+        ILike(str.expr, pattern.expr, v.charAt(0))
+      case _ =>
+        throw QueryCompilationErrors.invalidEscapeChar(escapeChar.expr)
+    }
+  }
+
+  /**
+   * Returns true if str matches `pattern` with `escapeChar`('\') case-insensitively, null if any
+   * arguments are null, false otherwise.
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def ilike(str: Column, pattern: Column): Column = withExpr {
+    new ILike(str.expr, pattern.expr)
+  }
+
+  /**
+   * Returns `str` with all characters changed to lowercase.
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def lcase(str: Column): Column = withExpr {
+    Lower(str.expr)
+  }
+
+  /**
+   * Returns `str` with all characters changed to uppercase.
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def ucase(str: Column): Column = withExpr {
+    Upper(str.expr)
+  }
+
+  /**
+   * Returns the leftmost `len`(`len` can be string type) characters from the string `str`,
+   * if `len` is less or equal than 0 the result is an empty string.
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def left(str: Column, len: Column): Column = withExpr {
+    Left(str.expr, len.expr)
+  }
+
+  /**
+   * Returns the rightmost `len`(`len` can be string type) characters from the string `str`,
+   * if `len` is less or equal than 0 the result is an empty string.
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def right(str: Column, len: Column): Column = withExpr {
+    Right(str.expr, len.expr)
+  }
+
   //////////////////////////////////////////////////////////////////////////////////////////////
   // DateTime functions
   //////////////////////////////////////////////////////////////////////////////////////////////
@@ -3882,6 +4767,14 @@ object functions {
   def current_timestamp(): Column = withExpr { CurrentTimestamp() }
 
   /**
+   * Returns the current timestamp at the start of query evaluation.
+   *
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def now(): Column = withExpr { Now() }
+
+  /**
    * Returns the current timestamp without time zone at the start of query evaluation
    * as a timestamp without time zone column.
    * All calls of localtimestamp within the same query return the same value.
@@ -3938,6 +4831,18 @@ object functions {
   def date_add(start: Column, days: Column): Column = withExpr { DateAdd(start.expr, days.expr) }
 
   /**
+   * Returns the date that is `days` days after `start`
+   *
+   * @param start A date, timestamp or string. If a string, the data must be in a format that
+   *              can be cast to a date, such as `yyyy-MM-dd` or `yyyy-MM-dd HH:mm:ss.SSSS`
+   * @param days  A column of the number of days to add to `start`, can be negative to subtract days
+   * @return A date, or null if `start` was a string that could not be cast to a date
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def dateadd(start: Column, days: Column): Column = date_add(start, days)
+
+  /**
    * Returns the date that is `days` days before `start`
    *
    * @param start A date, timestamp or string. If a string, the data must be in a format that
@@ -3983,6 +4888,34 @@ object functions {
   def datediff(end: Column, start: Column): Column = withExpr { DateDiff(end.expr, start.expr) }
 
   /**
+   * Returns the number of days from `start` to `end`.
+   *
+   * Only considers the date part of the input. For example:
+   * {{{
+   * dateddiff("2018-01-10 00:00:00", "2018-01-09 23:59:59")
+   * // returns 1
+   * }}}
+   *
+   * @param end A date, timestamp or string. If a string, the data must be in a format that
+   *            can be cast to a date, such as `yyyy-MM-dd` or `yyyy-MM-dd HH:mm:ss.SSSS`
+   * @param start A date, timestamp or string. If a string, the data must be in a format that
+   *              can be cast to a date, such as `yyyy-MM-dd` or `yyyy-MM-dd HH:mm:ss.SSSS`
+   * @return An integer, or null if either `end` or `start` were strings that could not be cast to
+   *         a date. Negative if `end` is before `start`
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def date_diff(end: Column, start: Column): Column = datediff(end, start)
+
+  /**
+   * Create date from the number of `days` since 1970-01-01.
+   *
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def date_from_unix_date(days: Column): Column = withExpr { DateFromUnixDate(days.expr) }
+
+  /**
    * Extracts the year as an integer from a given date/timestamp/string.
    * @return An integer, or null if the input was a string that could not be cast to a date
    * @group datetime_funcs
@@ -4024,6 +4957,14 @@ object functions {
   def dayofmonth(e: Column): Column = withExpr { DayOfMonth(e.expr) }
 
   /**
+   * Extracts the day of the month as an integer from a given date/timestamp/string.
+   * @return An integer, or null if the input was a string that could not be cast to a date
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def day(e: Column): Column = dayofmonth(e)
+
+  /**
    * Extracts the day of the year as an integer from a given date/timestamp/string.
    * @return An integer, or null if the input was a string that could not be cast to a date
    * @group datetime_funcs
@@ -4038,6 +4979,47 @@ object functions {
    * @since 1.5.0
    */
   def hour(e: Column): Column = withExpr { Hour(e.expr) }
+
+  /**
+   * Extracts a part of the date/timestamp or interval source.
+   *
+   * @param field selects which part of the source should be extracted.
+   * @param source a date/timestamp or interval column from where `field` should be extracted.
+   * @return a part of the date/timestamp or interval source
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def extract(field: Column, source: Column): Column = withExpr {
+    UnresolvedFunction("extract", Seq(field.expr, source.expr), isDistinct = false)
+  }
+
+  /**
+   * Extracts a part of the date/timestamp or interval source.
+   *
+   * @param field selects which part of the source should be extracted, and supported string values
+   *              are as same as the fields of the equivalent function `extract`.
+   * @param source a date/timestamp or interval column from where `field` should be extracted.
+   * @return a part of the date/timestamp or interval source
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def date_part(field: Column, source: Column): Column = withExpr {
+    UnresolvedFunction("date_part", Seq(field.expr, source.expr), isDistinct = false)
+  }
+
+  /**
+   * Extracts a part of the date/timestamp or interval source.
+   *
+   * @param field selects which part of the source should be extracted, and supported string values
+   *              are as same as the fields of the equivalent function `EXTRACT`.
+   * @param source a date/timestamp or interval column from where `field` should be extracted.
+   * @return a part of the date/timestamp or interval source
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def datepart(field: Column, source: Column): Column = withExpr {
+    UnresolvedFunction("datepart", Seq(field.expr, source.expr), isDistinct = false)
+  }
 
   /**
    * Returns the last day of the month which the given date belongs to.
@@ -4059,6 +5041,14 @@ object functions {
    * @since 1.5.0
    */
   def minute(e: Column): Column = withExpr { Minute(e.expr) }
+
+  /**
+   * Returns the day of the week for date/timestamp (0 = Monday, 1 = Tuesday, ..., 6 = Sunday).
+   *
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def weekday(e: Column): Column = withExpr { WeekDay(e.expr) }
 
   /**
    * @return A date created from year, month and day fields.
@@ -4272,6 +5262,30 @@ object functions {
    */
   def to_timestamp(s: Column, fmt: String): Column = withExpr {
     new ParseToTimestamp(s.expr, Literal(fmt))
+  }
+
+  /**
+   * Parses the `s` with the `format` to a timestamp. The function always returns null on an
+   * invalid input with`/`without ANSI SQL mode enabled. The result data type is consistent with
+   * the value of configuration `spark.sql.timestampType`.
+   *
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def try_to_timestamp(s: Column, format: Column): Column = withExpr {
+    new ParseToTimestamp(s.expr, format.expr)
+  }
+
+  /**
+   * Parses the `s` to a timestamp. The function always returns null on an invalid
+   * input with`/`without ANSI SQL mode enabled. It follows casting rules to a timestamp. The
+   * result data type is consistent with the value of configuration `spark.sql.timestampType`.
+   *
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def try_to_timestamp(s: Column): Column = withExpr {
+    new ParseToTimestamp(s.expr)
   }
 
   /**
@@ -4683,6 +5697,26 @@ object functions {
   }
 
   /**
+   * Creates timestamp from the number of milliseconds since UTC epoch.
+   *
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def timestamp_millis(e: Column): Column = withExpr {
+    MillisToTimestamp(e.expr)
+  }
+
+  /**
+   * Creates timestamp from the number of microseconds since UTC epoch.
+   *
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def timestamp_micros(e: Column): Column = withExpr {
+    MicrosToTimestamp(e.expr)
+  }
+
+  /**
    * Parses the `timestamp` expression with the `format` expression
    * to a timestamp without time zone. Returns null with invalid input.
    *
@@ -4863,6 +5897,21 @@ object functions {
    */
   def element_at(column: Column, value: Any): Column = withExpr {
     ElementAt(column.expr, lit(value).expr)
+  }
+
+  /**
+   * (array, index) - Returns element of array at given (1-based) index. If Index is 0, Spark will
+   * throw an error. If index &lt; 0, accesses elements from the last to the first. The function
+   * always returns NULL if the index exceeds the length of the array.
+   *
+   * (map, key) - Returns value for given key. The function always returns NULL if the key is not
+   * contained in the map.
+   *
+   * @group map_funcs
+   * @since 3.5.0
+   */
+  def try_element_at(column: Column, value: Column): Column = withExpr {
+    new TryElementAt(column.expr, value.expr)
   }
 
   /**
@@ -5605,6 +6654,29 @@ object functions {
     withExpr(SchemaOfJson(json.expr, options.asScala.toMap))
   }
 
+  /**
+   * Returns the number of elements in the outermost JSON array. `NULL` is returned in case of
+   * any other valid JSON string, `NULL` or an invalid JSON.
+   *
+   * @group collection_funcs
+   * @since 3.5.0
+   */
+  def json_array_length(jsonArray: Column): Column = withExpr {
+    LengthOfJsonArray(jsonArray.expr)
+  }
+
+  /**
+   * Returns all the keys of the outermost JSON object as an array. If a valid JSON object is
+   * given, all the keys of the outermost object will be returned as an array. If it is any
+   * other valid JSON string, an invalid JSON string or an empty string, the function returns null.
+   *
+   * @group collection_funcs
+   * @since 3.5.0
+   */
+  def json_object_keys(json: Column): Column = withExpr {
+    JsonObjectKeys(json.expr)
+  }
+
   // scalastyle:off line.size.limit
   /**
    * (Scala-specific) Converts a column containing a `StructType`, `ArrayType` or
@@ -5666,6 +6738,108 @@ object functions {
     to_json(e, Map.empty[String, String])
 
   /**
+   * Masks the given string value. The function replaces characters with 'X' or 'x', and numbers
+   * with 'n'.
+   * This can be useful for creating copies of tables with sensitive information removed.
+   *
+   * @param input string value to mask. Supported types: STRING, VARCHAR, CHAR
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def mask(input: Column): Column = withExpr {
+    new Mask(input.expr)
+  }
+
+  /**
+   * Masks the given string value. The function replaces upper-case characters with specific
+   * character, lower-case characters with 'x', and numbers with 'n'.
+   * This can be useful for creating copies of tables with sensitive information removed.
+   *
+   * @param input
+   *   string value to mask. Supported types: STRING, VARCHAR, CHAR
+   * @param upperChar
+   *   character to replace upper-case characters with. Specify NULL to retain original character.
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def mask(input: Column, upperChar: Column): Column = withExpr {
+    new Mask(input.expr, upperChar.expr)
+  }
+
+  /**
+   * Masks the given string value. The function replaces upper-case and lower-case characters with
+   * the characters specified respectively, and numbers with 'n'.
+   * This can be useful for creating copies of tables with sensitive information removed.
+   *
+   * @param input
+   *   string value to mask. Supported types: STRING, VARCHAR, CHAR
+   * @param upperChar
+   *   character to replace upper-case characters with. Specify NULL to retain original character.
+   * @param lowerChar
+   *   character to replace lower-case characters with. Specify NULL to retain original character.
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def mask(input: Column, upperChar: Column, lowerChar: Column): Column = withExpr {
+    new Mask(input.expr, upperChar.expr, lowerChar.expr)
+  }
+
+  /**
+   * Masks the given string value. The function replaces upper-case, lower-case characters and
+   * numbers with the characters specified respectively.
+   * This can be useful for creating copies of tables with sensitive information removed.
+   *
+   * @param input
+   *   string value to mask. Supported types: STRING, VARCHAR, CHAR
+   * @param upperChar
+   *   character to replace upper-case characters with. Specify NULL to retain original character.
+   * @param lowerChar
+   *   character to replace lower-case characters with. Specify NULL to retain original character.
+   * @param digitChar
+   *   character to replace digit characters with. Specify NULL to retain original character.
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def mask(input: Column, upperChar: Column, lowerChar: Column, digitChar: Column): Column = {
+    withExpr {
+      new Mask(input.expr, upperChar.expr, lowerChar.expr, digitChar.expr)
+    }
+  }
+
+  /**
+   * Masks the given string value. This can be useful for creating copies of tables with sensitive
+   * information removed.
+   *
+   * @param input
+   *   string value to mask. Supported types: STRING, VARCHAR, CHAR
+   * @param upperChar
+   *   character to replace upper-case characters with. Specify NULL to retain original character.
+   * @param lowerChar
+   *   character to replace lower-case characters with. Specify NULL to retain original character.
+   * @param digitChar
+   *   character to replace digit characters with. Specify NULL to retain original character.
+   * @param otherChar
+   *   character to replace all other characters with. Specify NULL to retain original character.
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def mask(
+    input: Column,
+    upperChar: Column,
+    lowerChar: Column,
+    digitChar: Column,
+    otherChar: Column): Column = {
+    withExpr {
+      Mask(input.expr, upperChar.expr, lowerChar.expr, digitChar.expr, otherChar.expr)
+    }
+  }
+
+  /**
    * Returns length of array or map.
    *
    * The function returns null for null input if spark.sql.legacy.sizeOfNull is set to false or
@@ -5676,6 +6850,18 @@ object functions {
    * @since 1.5.0
    */
   def size(e: Column): Column = withExpr { Size(e.expr) }
+
+  /**
+   * Returns length of array or map. This is an alias of `size` function.
+   *
+   * The function returns null for null input if spark.sql.legacy.sizeOfNull is set to false or
+   * spark.sql.ansi.enabled is set to true. Otherwise, the function returns -1 for null input.
+   * With the default settings, the function returns -1 for null input.
+   *
+   * @group collection_funcs
+   * @since 3.5.0
+   */
+  def cardinality(e: Column): Column = size(e)
 
   /**
    * Sorts the input array for the given column in ascending order,
@@ -5716,6 +6902,24 @@ object functions {
    * @since 2.4.0
    */
   def array_max(e: Column): Column = withExpr { ArrayMax(e.expr) }
+
+  /**
+   * Returns the total number of elements in the array. The function returns null for null input.
+   *
+   * @group collection_funcs
+   * @since 3.5.0
+   */
+  def array_size(e: Column): Column = withExpr { ArraySize(e.expr) }
+
+  /**
+   * Aggregate function: returns a list of objects with duplicates.
+   *
+   * @note The function is non-deterministic because the order of collected results depends
+   *       on the order of the rows which may be non-deterministic after a shuffle.
+   * @group agg_funcs
+   * @since 3.5.0
+   */
+  def array_agg(e: Column): Column = collect_list(e)
 
   /**
    * Returns a random permutation of the given array.
@@ -6084,6 +7288,34 @@ object functions {
   def hours(e: Column): Column = withExpr { Hours(e.expr) }
 
   /**
+   * Converts the timestamp without time zone `sourceTs`
+   * from the `sourceTz` time zone to `targetTz`.
+   *
+   * @param sourceTz the time zone for the input timestamp. If it is missed,
+   *                 the current session time zone is used as the source time zone.
+   * @param targetTz the time zone to which the input timestamp should be converted.
+   * @param sourceTs a timestamp without time zone.
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def convert_timezone(sourceTz: Column, targetTz: Column, sourceTs: Column): Column = withExpr {
+    ConvertTimezone(sourceTz.expr, targetTz.expr, sourceTs.expr)
+  }
+
+  /**
+   * Converts the timestamp without time zone `sourceTs`
+   * from the current time zone to `targetTz`.
+   *
+   * @param targetTz the time zone to which the input timestamp should be converted.
+   * @param sourceTs a timestamp without time zone.
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def convert_timezone(targetTz: Column, sourceTs: Column): Column = withExpr {
+    new ConvertTimezone(targetTz.expr, sourceTs.expr)
+  }
+
+  /**
    * Make DayTimeIntervalType duration from days, hours, mins and secs.
    *
    * @group datetime_funcs
@@ -6386,6 +7618,71 @@ object functions {
    */
   def bucket(numBuckets: Int, e: Column): Column = withExpr {
     Bucket(Literal(numBuckets), e.expr)
+  }
+
+  //////////////////////////////////////////////////////////////////////////////////////////////
+  // Predicates functions
+  //////////////////////////////////////////////////////////////////////////////////////////////
+
+  /**
+   * Returns `col2` if `col1` is null, or `col1` otherwise.
+   *
+   * @group predicates_funcs
+   * @since 3.5.0
+   */
+  def ifnull(col1: Column, col2: Column): Column = withExpr {
+    new Nvl(col1.expr, col2.expr)
+  }
+
+  /**
+   * Returns true if `col` is not null, or false otherwise.
+   *
+   * @group predicates_funcs
+   * @since 3.5.0
+   */
+  def isnotnull(col: Column): Column = withExpr {
+    IsNotNull(col.expr)
+  }
+
+  /**
+   * Returns same result as the EQUAL(=) operator for non-null operands,
+   * but returns true if both are null, false if one of the them is null.
+   *
+   * @group predicates_funcs
+   * @since 3.5.0
+   */
+  def equal_null(col1: Column, col2: Column): Column = withExpr {
+    new EqualNull(col1.expr, col2.expr)
+  }
+
+  /**
+   * Returns null if `col1` equals to `col2`, or `col1` otherwise.
+   *
+   * @group predicates_funcs
+   * @since 3.5.0
+   */
+  def nullif(col1: Column, col2: Column): Column = withExpr {
+    new NullIf(col1.expr, col2.expr)
+  }
+
+  /**
+   * Returns `col2` if `col1` is null, or `col1` otherwise.
+   *
+   * @group predicates_funcs
+   * @since 3.5.0
+   */
+  def nvl(col1: Column, col2: Column): Column = withExpr {
+    new Nvl(col1.expr, col2.expr)
+  }
+
+  /**
+   * Returns `col2` if `col1` is not null, or `col3` otherwise.
+   *
+   * @group predicates_funcs
+   * @since 3.5.0
+   */
+  def nvl2(col1: Column, col2: Column, col3: Column): Column = withExpr {
+    new Nvl2(col1.expr, col2.expr, col3.expr)
   }
 
   // scalastyle:off line.size.limit
