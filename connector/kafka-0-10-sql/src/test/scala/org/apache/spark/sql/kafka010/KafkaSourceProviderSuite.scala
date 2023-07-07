@@ -88,8 +88,11 @@ class KafkaSourceProviderSuite extends SparkFunSuite with SharedSparkSession {
           "software.amazon.msk.auth.iam.IAMLoginModule required;",
         "kafka.security.protocol" -> "SASL_SSL",
         "kafka.sasl.client.callback.handler.class" ->
-          "software.amazon.msk.auth.iam.IAMClientCallbackHandler"
+          "software.amazon.msk.auth.iam.IAMClientCallbackHandler",
+        "retries" -> "0"
       )
+
+      testUtils.createTopic(options("subscribe"))
 
       var e: Throwable = null
       if (testType.contains("stream")) {
@@ -98,15 +101,16 @@ class KafkaSourceProviderSuite extends SparkFunSuite with SharedSparkSession {
             spark.readStream.format("kafka").options(options).load()
               .writeStream.format("console").start().processAllAvailable()
           }
-          TestUtils.assertExceptionMsg(e, "Timed out")
+          TestUtils.assertExceptionMsg(e, "Timed out waiting for a node assignment")
         } else {
           e = intercept[StreamingQueryException] {
             spark.readStream.format("rate").option("rowsPerSecond", 10).load()
               .withColumn("value", col("value").cast(StringType)).writeStream
               .format("kafka").options(options).option("checkpointLocation", "temp/testing")
-              .option("topic", "msk-123").start().processAllAvailable()
+              .option("topic", options("subscribe")).start().processAllAvailable()
           }
-          TestUtils.assertExceptionMsg(e, "Timeout")
+          TestUtils.assertExceptionMsg(e, s"TimeoutException: Topic ${options("subscribe")} " +
+            s"not present in metadata")
         }
       } else {
         if (testType.contains("source")) {
@@ -114,18 +118,21 @@ class KafkaSourceProviderSuite extends SparkFunSuite with SharedSparkSession {
             spark.read.format("kafka").options(options).load()
               .write.format("console").save()
           }
-          TestUtils.assertExceptionMsg(e, "Timed out")
+          TestUtils.assertExceptionMsg(e, "Timed out waiting for a node assignment")
         } else {
           val schema = new StructType().add("value", "string")
           e = intercept[SparkException] {
             spark.createDataFrame(Seq(Row("test"), Row("test2")).asJava, schema)
               .write.mode("append").format("kafka")
               .options(options).option("checkpointLocation", "temp/testing/1")
-              .option("topic", "msk-123").save()
+              .option("topic", options("subscribe")).save()
           }
-          TestUtils.assertExceptionMsg(e, "Timeout")
+          TestUtils.assertExceptionMsg(e, s"TimeoutException: Topic ${options("subscribe")} " +
+            s"not present in metadata")
         }
       }
+
+      testUtils.deleteTopic(options("subscribe"))
     }
   }
 
