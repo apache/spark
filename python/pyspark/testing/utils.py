@@ -221,9 +221,7 @@ class PySparkErrorTestUtils:
         )
 
 
-def assertDataFrameEqual(
-    df: DataFrame, expected: Union[DataFrame, List[Row]], check_row_order: bool = False
-):
+def assertDataFrameEqual(df: DataFrame, expected: DataFrame, check_row_order: bool = False):
     """
     A util function to assert equality between DataFrames `df` and `expected`, with
     optional parameter `check_row_order`.
@@ -237,7 +235,7 @@ def assertDataFrameEqual(
     df : DataFrame
         The DataFrame that is being compared or tested.
 
-    expected : DataFrame or list of Row
+    expected : DataFrame
         The expected result of the operation, for comparison with the actual result.
 
     check_row_order : bool, optional
@@ -351,7 +349,7 @@ def assertDataFrameEqual(
                 message_parameters={"df_schema": df_schema, "expected_schema": expected_schema},
             )
 
-    def assert_rows_equal(rows1: Row, rows2: Row):
+    def assert_rows_equal(rows1: List[Row], rows2: List[Row]):
         zipped = list(zip_longest(rows1, rows2))
         rows_equal = True
         error_msg = "Results do not match: "
@@ -380,10 +378,10 @@ def assertDataFrameEqual(
         try:
             # rename duplicate columns for sorting
             renamed_df = df.toDF(*[f"_{i}" for i in range(len(df.columns))])
-            renamed_expected = expected.toDF(*[f"_{i}" for i in range(len(df.columns))])
+            renamed_expected = expected.toDF(*[f"_{i}" for i in range(len(expected.columns))])
 
             df = renamed_df.sort(renamed_df.columns).toDF(*df.columns)
-            expected = renamed_expected.sort(renamed_expected.columns).toDF(*df.columns)
+            expected = renamed_expected.sort(renamed_expected.columns).toDF(*expected.columns)
         except Exception:
             raise PySparkAssertionError(
                 error_class="UNSUPPORTED_DATA_TYPE_FOR_IGNORE_ROW_ORDER",

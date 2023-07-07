@@ -703,6 +703,32 @@ class UtilsTestsMixin:
             message_parameters={"df_schema": df1.schema, "expected_schema": df2.schema},
         )
 
+    def test_diff_schema_lens(self):
+        df1 = self.spark.createDataFrame(
+            data=[
+                (1, 3000),
+                (2, 1000),
+            ],
+            schema=["id", "amount"],
+        )
+
+        df2 = self.spark.createDataFrame(
+            data=[
+                (1, 3000, "a"),
+                (2, 1000, "b"),
+            ],
+            schema=["id", "amount", "letter"],
+        )
+
+        with self.assertRaises(PySparkAssertionError) as pe:
+            assertDataFrameEqual(df1, df2)
+
+        self.check_error(
+            exception=pe.exception,
+            error_class="DIFFERENT_SCHEMA",
+            message_parameters={"df_schema": df1.schema, "expected_schema": df2.schema},
+        )
+
     def test_assert_equal_maptype(self):
         df1 = self.spark.createDataFrame(
             data=[
