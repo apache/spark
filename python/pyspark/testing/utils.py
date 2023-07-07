@@ -225,24 +225,24 @@ def assertDataFrameEqual(df: DataFrame, expected: DataFrame, check_row_order: bo
     """
     A util function to assert equality between DataFrames `df` and `expected`, with
     optional parameter `check_row_order`.
-    <BLANKLINE>
+
     .. versionadded:: 3.5.0
-    <BLANKLINE>
+
     For float values, assert approximate equality (1e-5 by default).
-    <BLANKLINE>
+
     Parameters
     ----------
     df : DataFrame
         The DataFrame that is being compared or tested.
-    <BLANKLINE>
+
     expected : DataFrame
         The expected result of the operation, for comparison with the actual result.
-    <BLANKLINE>
+
     check_row_order : bool, optional
         A flag indicates whether the order of rows should be considered in the comparison.
         If set to `False` (default), the row order is not taken into account.
         If set to `True`, the order of rows is important and will be checked during comparison.
-    <BLANKLINE>
+
     Examples
     --------
     >>> from pyspark.sql import SparkSession
