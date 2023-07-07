@@ -245,10 +245,10 @@ class ResolveSubquerySuite extends AnalysisTest {
       LateralJoin(t1,
         LateralSubquery(t0.select(newArray.as(newArray.sql)), Seq(a, b)), Inner, None)
     )
-    assertAnalysisError(
+    assertAnalysisErrorClass(
       lateralJoin(t1.as("t1"), t0.select(Count(star("t1")))),
-      Seq("Invalid usage of '*' in expression 'count'")
-    )
+      expectedErrorClass = "INVALID_USAGE_OF_STAR_OR_REGEX",
+      expectedMessageParameters = Map("elem" -> "'*'", "prettyName" -> "expression `count`"))
   }
 
   test("SPARK-35618: lateral join with struct type star expansion") {

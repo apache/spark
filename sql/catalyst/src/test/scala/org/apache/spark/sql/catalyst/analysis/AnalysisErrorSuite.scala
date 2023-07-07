@@ -20,14 +20,13 @@ package org.apache.spark.sql.catalyst.analysis
 import org.scalatest.Assertions._
 
 import org.apache.spark.SparkException
-import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.{Count, Max}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
-import org.apache.spark.sql.catalyst.plans.{Cross, LeftOuter, RightOuter}
+import org.apache.spark.sql.catalyst.plans.{AsOfJoinDirection, Cross, Inner, LeftOuter, RightOuter}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, GenericArrayData, MapData}
 import org.apache.spark.sql.internal.SQLConf
@@ -332,10 +331,12 @@ class AnalysisErrorSuite extends AnalysisTest {
     "UNRESOLVED_COLUMN.WITH_SUGGESTION",
     Map("objectName" -> "`havingCondition`", "proposal" -> "`max(b)`"))
 
-  errorTest(
+  errorClassTest(
     "unresolved star expansion in max",
     testRelation2.groupBy($"a")(sum(UnresolvedStar(None))),
-    "Invalid usage of '*' in expression 'sum'." :: Nil)
+    errorClass = "INVALID_USAGE_OF_STAR_OR_REGEX",
+    messageParameters = Map("elem" -> "'*'", "prettyName" -> "expression `sum`")
+  )
 
   errorClassTest(
     "sorting by unsupported column types",
@@ -781,11 +782,73 @@ class AnalysisErrorSuite extends AnalysisTest {
 
   test("error test for self-join") {
     val join = Join(testRelation, testRelation, Cross, None, JoinHint.NONE)
-    val error = intercept[AnalysisException] {
-      SimpleAnalyzer.checkAnalysis(join)
-    }
-    assert(error.message.contains("Failure when resolving conflicting references in Join"))
-    assert(error.message.contains("Conflicting attributes"))
+    checkError(
+      exception = intercept[SparkException] {
+        SimpleAnalyzer.checkAnalysis(join)
+      },
+      errorClass = "INTERNAL_ERROR",
+      parameters = Map("message" ->
+        """
+          |Failure when resolving conflicting references in Join:
+          |'Join Cross
+          |:- LocalRelation <empty>, [a#x]
+          |+- LocalRelation <empty>, [a#x]
+          |
+          |Conflicting attributes: "a".""".stripMargin))
+  }
+
+  test("error test for self-intersect") {
+    val intersect = Intersect(testRelation, testRelation, true)
+    checkError(
+      exception = intercept[SparkException] {
+        SimpleAnalyzer.checkAnalysis(intersect)
+      },
+      errorClass = "INTERNAL_ERROR",
+      parameters = Map("message" ->
+        """
+          |Failure when resolving conflicting references in Intersect All:
+          |'Intersect All true
+          |:- LocalRelation <empty>, [a#x]
+          |+- LocalRelation <empty>, [a#x]
+          |
+          |Conflicting attributes: "a".""".stripMargin))
+  }
+
+  test("error test for self-except") {
+    val except = Except(testRelation, testRelation, true)
+    checkError(
+      exception = intercept[SparkException] {
+        SimpleAnalyzer.checkAnalysis(except)
+      },
+      errorClass = "INTERNAL_ERROR",
+      parameters = Map("message" ->
+        """
+          |Failure when resolving conflicting references in Except All:
+          |'Except All true
+          |:- LocalRelation <empty>, [a#x]
+          |+- LocalRelation <empty>, [a#x]
+          |
+          |Conflicting attributes: "a".""".stripMargin))
+  }
+
+  test("error test for self-asOfJoin") {
+    val asOfJoin =
+      AsOfJoin(testRelation, testRelation, testRelation.output(0), testRelation.output(0),
+      None, Inner, tolerance = None, allowExactMatches = true,
+      direction = AsOfJoinDirection("backward"))
+    checkError(
+      exception = intercept[SparkException] {
+        SimpleAnalyzer.checkAnalysis(asOfJoin)
+      },
+      errorClass = "INTERNAL_ERROR",
+      parameters = Map("message" ->
+        """
+          |Failure when resolving conflicting references in AsOfJoin:
+          |'AsOfJoin (a#x >= a#x), Inner
+          |:- LocalRelation <empty>, [a#x]
+          |+- LocalRelation <empty>, [a#x]
+          |
+          |Conflicting attributes: "a".""".stripMargin))
   }
 
   test("check grouping expression data types") {
@@ -1102,10 +1165,12 @@ class AnalysisErrorSuite extends AnalysisTest {
     )
     assert(plan.resolved)
 
-    val error = intercept[AnalysisException] {
-      SimpleAnalyzer.checkAnalysis(plan)
-    }
-    assert(error.message.contains(s"Hint not found: ${hintName}"))
+    checkError(
+      exception = intercept[SparkException] {
+        SimpleAnalyzer.checkAnalysis(plan)
+      },
+      errorClass = "INTERNAL_ERROR",
+      parameters = Map("message" -> "Hint not found: `some_random_hint_that_does_not_exist`"))
 
     // UnresolvedHint be removed by batch `Remove Unresolved Hints`
     assertAnalysisSuccess(plan, true)
@@ -1138,38 +1203,74 @@ class AnalysisErrorSuite extends AnalysisTest {
     val t2 = LocalRelation(b, c).as("t2")
 
     // SELECT * FROM t1 WHERE a = (SELECT sum(c) FROM t2 WHERE t1.* = t2.b)
-    assertAnalysisError(
+    assertAnalysisErrorClass(
       Filter(EqualTo(a, ScalarSubquery(t2.select(sum(c)).where(star("t1") === b))), t1),
-      "Invalid usage of '*' in Filter" :: Nil
+      expectedErrorClass = "INVALID_USAGE_OF_STAR_OR_REGEX",
+      expectedMessageParameters = Map("elem" -> "'*'", "prettyName" -> "Filter")
     )
 
     // SELECT * FROM t1 JOIN t2 ON (EXISTS (SELECT 1 FROM t2 WHERE t1.* = b))
-    assertAnalysisError(
+    assertAnalysisErrorClass(
       t1.join(t2, condition = Some(Exists(t2.select(1).where(star("t1") === b)))),
-      "Invalid usage of '*' in Filter" :: Nil
+      expectedErrorClass = "INVALID_USAGE_OF_STAR_OR_REGEX",
+      expectedMessageParameters = Map("elem" -> "'*'", "prettyName" -> "Filter")
     )
   }
 
   test("SPARK-36488: Regular expression expansion should fail with a meaningful message") {
     withSQLConf(SQLConf.SUPPORT_QUOTED_REGEX_COLUMN_NAME.key -> "true") {
-      assertAnalysisError(testRelation.select(Divide(UnresolvedRegex(".?", None, false), "a")),
-        s"Invalid usage of regular expression '.?' in" :: Nil)
-      assertAnalysisError(testRelation.select(
-        Divide(UnresolvedRegex(".?", None, false), UnresolvedRegex(".*", None, false))),
-        s"Invalid usage of regular expressions '.?', '.*' in" :: Nil)
-      assertAnalysisError(testRelation.select(
-        Divide(UnresolvedRegex(".?", None, false), UnresolvedRegex(".?", None, false))),
-        s"Invalid usage of regular expression '.?' in" :: Nil)
-      assertAnalysisError(testRelation.select(Divide(UnresolvedStar(None), "a")),
-        "Invalid usage of '*' in" :: Nil)
-      assertAnalysisError(testRelation.select(Divide(UnresolvedStar(None), UnresolvedStar(None))),
-        "Invalid usage of '*' in" :: Nil)
-      assertAnalysisError(testRelation.select(Divide(UnresolvedStar(None),
-        UnresolvedRegex(".?", None, false))),
-        "Invalid usage of '*' and regular expression '.?' in" :: Nil)
-      assertAnalysisError(testRelation.select(Least(Seq(UnresolvedStar(None),
-        UnresolvedRegex(".*", None, false), UnresolvedRegex(".?", None, false)))),
-        "Invalid usage of '*' and regular expressions '.*', '.?' in" :: Nil)
+      assertAnalysisErrorClass(
+        testRelation.select(Divide(UnresolvedRegex(".?", None, false), "a")),
+        expectedErrorClass = "INVALID_USAGE_OF_STAR_OR_REGEX",
+        expectedMessageParameters = Map(
+          "elem" -> "regular expression '.?'",
+          "prettyName" -> "expression `divide`")
+      )
+      assertAnalysisErrorClass(
+        testRelation.select(
+          Divide(UnresolvedRegex(".?", None, false), UnresolvedRegex(".*", None, false))),
+        expectedErrorClass = "INVALID_USAGE_OF_STAR_OR_REGEX",
+        expectedMessageParameters = Map(
+          "elem" -> "regular expressions '.?', '.*'",
+          "prettyName" -> "expression `divide`")
+      )
+      assertAnalysisErrorClass(
+        testRelation.select(
+          Divide(UnresolvedRegex(".?", None, false), UnresolvedRegex(".?", None, false))),
+        expectedErrorClass = "INVALID_USAGE_OF_STAR_OR_REGEX",
+        expectedMessageParameters = Map(
+          "elem" -> "regular expression '.?'",
+          "prettyName" -> "expression `divide`")
+      )
+      assertAnalysisErrorClass(
+        testRelation.select(Divide(UnresolvedStar(None), "a")),
+        expectedErrorClass = "INVALID_USAGE_OF_STAR_OR_REGEX",
+        expectedMessageParameters = Map(
+          "elem" -> "'*'",
+          "prettyName" -> "expression `divide`")
+      )
+      assertAnalysisErrorClass(
+        testRelation.select(Divide(UnresolvedStar(None), UnresolvedStar(None))),
+        expectedErrorClass = "INVALID_USAGE_OF_STAR_OR_REGEX",
+        expectedMessageParameters = Map(
+          "elem" -> "'*'",
+          "prettyName" -> "expression `divide`")
+      )
+      assertAnalysisErrorClass(
+        testRelation.select(Divide(UnresolvedStar(None), UnresolvedRegex(".?", None, false))),
+        expectedErrorClass = "INVALID_USAGE_OF_STAR_OR_REGEX",
+        expectedMessageParameters = Map(
+          "elem" -> "'*' and regular expression '.?'",
+          "prettyName" -> "expression `divide`")
+      )
+      assertAnalysisErrorClass(
+        testRelation.select(Least(Seq(UnresolvedStar(None),
+          UnresolvedRegex(".*", None, false), UnresolvedRegex(".?", None, false)))),
+        expectedErrorClass = "INVALID_USAGE_OF_STAR_OR_REGEX",
+        expectedMessageParameters = Map(
+          "elem" -> "'*' and regular expressions '.*', '.?'",
+          "prettyName" -> "expression `least`")
+      )
     }
   }
 }

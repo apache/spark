@@ -61,6 +61,9 @@ message SqlCommand {
 
   // (Optional) A map of parameter names to literal expressions.
   map<string, Expression.Literal> args = 2;
+
+  // (Optional) A sequence of literal expressions for positional parameters in the SQL query text.
+  repeated Expression.Literal pos_args = 3;
 }
 
 // A command that can create DataFrame global temp view or local temp view.

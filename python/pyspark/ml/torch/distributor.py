@@ -767,8 +767,8 @@ class TorchDistributor(Distributor):
             schema_file_path = os.path.join(save_dir, "schema.json")
             schema_json_string = json.dumps(input_schema_json)
 
-            with open(schema_file_path, "w") as f:  # type:ignore
-                f.write(schema_json_string)  # type:ignore
+            with open(schema_file_path, "w") as f:
+                f.write(schema_json_string)
 
             os.environ[SPARK_PARTITION_ARROW_DATA_FILE] = arrow_file_path
             os.environ[SPARK_DATAFRAME_SCHEMA_FILE] = schema_file_path
@@ -959,7 +959,7 @@ class TorchDistributor(Distributor):
 
 
 def _get_spark_partition_data_loader(
-    num_samples: int, batch_size: int, num_workers: int = 1, prefetch_factor: Optional[int] = 2
+    num_samples: int, batch_size: int, num_workers: int = 1, prefetch_factor: int = 2
 ) -> Any:
     """
     This function must be called inside the `train_function` where `train_function`
@@ -995,4 +995,11 @@ def _get_spark_partition_data_loader(
 
     dataset = _SparkPartitionTorchDataset(arrow_file, schema, num_samples)
 
-    return DataLoader(dataset, batch_size, num_workers=num_workers, prefetch_factor=prefetch_factor)
+    if num_workers > 0:
+        return DataLoader(
+            dataset, batch_size, num_workers=num_workers, prefetch_factor=prefetch_factor
+        )
+    else:
+        # if num_workers is zero, we cannot set `prefetch_factor` otherwise
+        # torch will raise error.
+        return DataLoader(dataset, batch_size, num_workers=num_workers)

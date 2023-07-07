@@ -98,6 +98,7 @@ class Relation(google.protobuf.message.Message):
     APPLY_IN_PANDAS_WITH_STATE_FIELD_NUMBER: builtins.int
     HTML_STRING_FIELD_NUMBER: builtins.int
     CACHED_LOCAL_RELATION_FIELD_NUMBER: builtins.int
+    CACHED_REMOTE_RELATION_FIELD_NUMBER: builtins.int
     FILL_NA_FIELD_NUMBER: builtins.int
     DROP_NA_FIELD_NUMBER: builtins.int
     REPLACE_FIELD_NUMBER: builtins.int
@@ -185,6 +186,8 @@ class Relation(google.protobuf.message.Message):
     @property
     def cached_local_relation(self) -> global___CachedLocalRelation: ...
     @property
+    def cached_remote_relation(self) -> global___CachedRemoteRelation: ...
+    @property
     def fill_na(self) -> global___NAFill:
         """NA functions"""
     @property
@@ -257,6 +260,7 @@ class Relation(google.protobuf.message.Message):
         apply_in_pandas_with_state: global___ApplyInPandasWithState | None = ...,
         html_string: global___HtmlString | None = ...,
         cached_local_relation: global___CachedLocalRelation | None = ...,
+        cached_remote_relation: global___CachedRemoteRelation | None = ...,
         fill_na: global___NAFill | None = ...,
         drop_na: global___NADrop | None = ...,
         replace: global___NAReplace | None = ...,
@@ -283,6 +287,8 @@ class Relation(google.protobuf.message.Message):
             b"approx_quantile",
             "cached_local_relation",
             b"cached_local_relation",
+            "cached_remote_relation",
+            b"cached_remote_relation",
             "catalog",
             b"catalog",
             "co_group_map",
@@ -390,6 +396,8 @@ class Relation(google.protobuf.message.Message):
             b"approx_quantile",
             "cached_local_relation",
             b"cached_local_relation",
+            "cached_remote_relation",
+            b"cached_remote_relation",
             "catalog",
             b"catalog",
             "co_group_map",
@@ -524,6 +532,7 @@ class Relation(google.protobuf.message.Message):
         "apply_in_pandas_with_state",
         "html_string",
         "cached_local_relation",
+        "cached_remote_relation",
         "fill_na",
         "drop_na",
         "replace",
@@ -613,6 +622,7 @@ class SQL(google.protobuf.message.Message):
 
     QUERY_FIELD_NUMBER: builtins.int
     ARGS_FIELD_NUMBER: builtins.int
+    POS_ARGS_FIELD_NUMBER: builtins.int
     query: builtins.str
     """(Required) The SQL query."""
     @property
@@ -622,6 +632,13 @@ class SQL(google.protobuf.message.Message):
         builtins.str, pyspark.sql.connect.proto.expressions_pb2.Expression.Literal
     ]:
         """(Optional) A map of parameter names to literal expressions."""
+    @property
+    def pos_args(
+        self,
+    ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
+        pyspark.sql.connect.proto.expressions_pb2.Expression.Literal
+    ]:
+        """(Optional) A sequence of literal expressions for positional parameters in the SQL query text."""
     def __init__(
         self,
         *,
@@ -630,9 +647,16 @@ class SQL(google.protobuf.message.Message):
             builtins.str, pyspark.sql.connect.proto.expressions_pb2.Expression.Literal
         ]
         | None = ...,
+        pos_args: collections.abc.Iterable[
+            pyspark.sql.connect.proto.expressions_pb2.Expression.Literal
+        ]
+        | None = ...,
     ) -> None: ...
     def ClearField(
-        self, field_name: typing_extensions.Literal["args", b"args", "query", b"query"]
+        self,
+        field_name: typing_extensions.Literal[
+            "args", b"args", "pos_args", b"pos_args", "query", b"query"
+        ],
     ) -> None: ...
 
 global___SQL = SQL
@@ -940,11 +964,37 @@ class Join(google.protobuf.message.Message):
     JOIN_TYPE_LEFT_SEMI: Join.JoinType.ValueType  # 6
     JOIN_TYPE_CROSS: Join.JoinType.ValueType  # 7
 
+    class JoinDataType(google.protobuf.message.Message):
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+        IS_LEFT_FLATTENABLE_TO_ROW_FIELD_NUMBER: builtins.int
+        IS_RIGHT_FLATTENABLE_TO_ROW_FIELD_NUMBER: builtins.int
+        is_left_flattenable_to_row: builtins.bool
+        """If the left data type is a struct that can be flatten to a row."""
+        is_right_flattenable_to_row: builtins.bool
+        """If the right data type is a struct that can be flatten to a row."""
+        def __init__(
+            self,
+            *,
+            is_left_flattenable_to_row: builtins.bool = ...,
+            is_right_flattenable_to_row: builtins.bool = ...,
+        ) -> None: ...
+        def ClearField(
+            self,
+            field_name: typing_extensions.Literal[
+                "is_left_flattenable_to_row",
+                b"is_left_flattenable_to_row",
+                "is_right_flattenable_to_row",
+                b"is_right_flattenable_to_row",
+            ],
+        ) -> None: ...
+
     LEFT_FIELD_NUMBER: builtins.int
     RIGHT_FIELD_NUMBER: builtins.int
     JOIN_CONDITION_FIELD_NUMBER: builtins.int
     JOIN_TYPE_FIELD_NUMBER: builtins.int
     USING_COLUMNS_FIELD_NUMBER: builtins.int
+    JOIN_DATA_TYPE_FIELD_NUMBER: builtins.int
     @property
     def left(self) -> global___Relation:
         """(Required) Left input relation for a Join."""
@@ -969,6 +1019,9 @@ class Join(google.protobuf.message.Message):
 
         This field does not co-exist with join_condition.
         """
+    @property
+    def join_data_type(self) -> global___Join.JoinDataType:
+        """(Optional) Only used by joinWith. Set the left and right join data types."""
     def __init__(
         self,
         *,
@@ -977,18 +1030,32 @@ class Join(google.protobuf.message.Message):
         join_condition: pyspark.sql.connect.proto.expressions_pb2.Expression | None = ...,
         join_type: global___Join.JoinType.ValueType = ...,
         using_columns: collections.abc.Iterable[builtins.str] | None = ...,
+        join_data_type: global___Join.JoinDataType | None = ...,
     ) -> None: ...
     def HasField(
         self,
         field_name: typing_extensions.Literal[
-            "join_condition", b"join_condition", "left", b"left", "right", b"right"
+            "_join_data_type",
+            b"_join_data_type",
+            "join_condition",
+            b"join_condition",
+            "join_data_type",
+            b"join_data_type",
+            "left",
+            b"left",
+            "right",
+            b"right",
         ],
     ) -> builtins.bool: ...
     def ClearField(
         self,
         field_name: typing_extensions.Literal[
+            "_join_data_type",
+            b"_join_data_type",
             "join_condition",
             b"join_condition",
+            "join_data_type",
+            b"join_data_type",
             "join_type",
             b"join_type",
             "left",
@@ -999,6 +1066,9 @@ class Join(google.protobuf.message.Message):
             b"using_columns",
         ],
     ) -> None: ...
+    def WhichOneof(
+        self, oneof_group: typing_extensions.Literal["_join_data_type", b"_join_data_type"]
+    ) -> typing_extensions.Literal["join_data_type"] | None: ...
 
 global___Join = Join
 
@@ -1592,6 +1662,25 @@ class CachedLocalRelation(google.protobuf.message.Message):
     ) -> None: ...
 
 global___CachedLocalRelation = CachedLocalRelation
+
+class CachedRemoteRelation(google.protobuf.message.Message):
+    """Represents a remote relation that has been cached on server."""
+
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    RELATION_ID_FIELD_NUMBER: builtins.int
+    relation_id: builtins.str
+    """(Required) ID of the remote related (assigned by the service)."""
+    def __init__(
+        self,
+        *,
+        relation_id: builtins.str = ...,
+    ) -> None: ...
+    def ClearField(
+        self, field_name: typing_extensions.Literal["relation_id", b"relation_id"]
+    ) -> None: ...
+
+global___CachedRemoteRelation = CachedRemoteRelation
 
 class Sample(google.protobuf.message.Message):
     """Relation of type [[Sample]] that samples a fraction of the dataset."""

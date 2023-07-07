@@ -16,12 +16,13 @@
  */
 package org.apache.spark.sql.catalyst.types
 
+import org.apache.spark.sql.SqlApiConf
 import org.apache.spark.sql.catalyst.analysis.Resolver
-import org.apache.spark.sql.catalyst.expressions.Cast
-import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Cast, Literal}
 import org.apache.spark.sql.internal.SQLConf.StoreAssignmentPolicy
 import org.apache.spark.sql.internal.SQLConf.StoreAssignmentPolicy.{ANSI, STRICT}
-import org.apache.spark.sql.types.{ArrayType, AtomicType, DataType, MapType, NullType, StructType}
+import org.apache.spark.sql.types.{ArrayType, AtomicType, DataType, Decimal, DecimalType, MapType, NullType, StructField, StructType}
+import org.apache.spark.sql.types.DecimalType.{forType, fromDecimal}
 
 object DataTypeUtils {
   /**
@@ -29,7 +30,7 @@ object DataTypeUtils {
    * (`StructField.nullable`, `ArrayType.containsNull`, and `MapType.valueContainsNull`).
    */
   def sameType(left: DataType, right: DataType): Boolean =
-    if (SQLConf.get.caseSensitiveAnalysis) {
+    if (SqlApiConf.get.caseSensitiveAnalysis) {
       equalsIgnoreNullability(left, right)
     } else {
       equalsIgnoreCaseAndNullability(left, right)
@@ -211,6 +212,22 @@ object DataTypeUtils {
           s"${w.catalogString} is incompatible with ${r.catalogString}")
         false
     }
+  }
+
+  /**
+   * Convert a StructField to a AttributeReference.
+   */
+  def toAttribute(field: StructField): AttributeReference =
+    AttributeReference(field.name, field.dataType, field.nullable, field.metadata)()
+
+  /**
+   * Convert a literal to a DecimalType.
+   */
+  def fromLiteral(literal: Literal): DecimalType = literal.value match {
+    case v: Short => fromDecimal(Decimal(BigDecimal(v)))
+    case v: Int => fromDecimal(Decimal(BigDecimal(v)))
+    case v: Long => fromDecimal(Decimal(BigDecimal(v)))
+    case _ => forType(literal.dataType)
   }
 }
 

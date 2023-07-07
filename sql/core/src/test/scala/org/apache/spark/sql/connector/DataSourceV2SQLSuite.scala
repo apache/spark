@@ -1690,6 +1690,24 @@ class DataSourceV2SQLSuiteV1Filter
     )
   }
 
+  test("SPARK-44313: generation expression validation passes when there is a char/varchar column") {
+    val tblName = "my_tab"
+    // InMemoryTableCatalog.capabilities() = {SUPPORTS_CREATE_TABLE_WITH_GENERATED_COLUMNS}
+    for (charVarCharCol <- Seq("name VARCHAR(64)", "name CHAR(64)")) {
+      withTable(s"testcat.$tblName") {
+        sql(
+          s"""
+             |CREATE TABLE testcat.$tblName(
+             |  $charVarCharCol,
+             |  tstamp TIMESTAMP,
+             |  tstamp_date DATE GENERATED ALWAYS AS (CAST(tstamp AS DATE))
+             |) USING foo
+             |""".stripMargin)
+        assert(catalog("testcat").asTableCatalog.tableExists(Identifier.of(Array(), tblName)))
+      }
+    }
+  }
+
   test("ShowCurrentNamespace: basic tests") {
     def testShowCurrentNamespace(expectedCatalogName: String, expectedNamespace: String): Unit = {
       val schema = new StructType()
@@ -2161,10 +2179,10 @@ class DataSourceV2SQLSuiteV1Filter
            |THEN INSERT *""".stripMargin
       checkError(
         exception = analysisException(sql1),
-        errorClass = "_LEGACY_ERROR_TEMP_2309",
+        errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
         parameters = Map(
-          "sqlExpr" -> "target.dummy",
-          "cols" -> "target.age, target.id, target.name, target.p"),
+          "objectName" -> "`target`.`dummy`",
+          "proposal" -> "`age`, `id`, `name`, `p`"),
         context = ExpectedContext("target.dummy = source.age", 206, 230))
 
       // UPDATE using non-existing column
@@ -2177,11 +2195,10 @@ class DataSourceV2SQLSuiteV1Filter
              |WHEN MATCHED AND (target.age > 10) THEN UPDATE SET target.age = source.dummy
              |WHEN NOT MATCHED AND (target.col2='insert')
              |THEN INSERT *""".stripMargin),
-        errorClass = "_LEGACY_ERROR_TEMP_2309",
+        errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
         parameters = Map(
-          "sqlExpr" -> "source.dummy",
-          "cols" -> ("target.age, source.age, target.id, source.id, " +
-            "target.name, source.name, target.p, source.p")),
+          "objectName" -> "`source`.`dummy`",
+          "proposal" -> "`age`, `age`, `id`, `id`, `name`, `name`, `p`, `p`"),
         context = ExpectedContext("source.dummy", 219, 230))
 
       // MERGE INTO is not implemented yet.

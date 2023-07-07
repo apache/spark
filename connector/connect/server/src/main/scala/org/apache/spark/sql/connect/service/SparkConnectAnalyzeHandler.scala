@@ -24,7 +24,6 @@ import io.grpc.stub.StreamObserver
 import org.apache.spark.connect.proto
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.Dataset
-import org.apache.spark.sql.connect.artifact.SparkConnectArtifactManager
 import org.apache.spark.sql.connect.common.{DataTypeProtoConverter, InvalidPlanInput, StorageLevelProtoConverter}
 import org.apache.spark.sql.connect.planner.SparkConnectPlanner
 import org.apache.spark.sql.execution.{CodegenMode, CostMode, ExtendedMode, FormattedMode, SimpleMode}
@@ -33,16 +32,18 @@ private[connect] class SparkConnectAnalyzeHandler(
     responseObserver: StreamObserver[proto.AnalyzePlanResponse])
     extends Logging {
 
-  def handle(request: proto.AnalyzePlanRequest): Unit =
-    SparkConnectArtifactManager.withArtifactClassLoader {
-      val sessionHolder = SparkConnectService
-        .getOrCreateIsolatedSession(request.getUserContext.getUserId, request.getSessionId)
-      sessionHolder.session.withActive {
-        val response = process(request, sessionHolder)
-        responseObserver.onNext(response)
-        responseObserver.onCompleted()
-      }
+  def handle(request: proto.AnalyzePlanRequest): Unit = {
+    val sessionHolder = SparkConnectService.getOrCreateIsolatedSession(
+      request.getUserContext.getUserId,
+      request.getSessionId)
+    // `withSession` ensures that session-specific artifacts (such as JARs and class files) are
+    // available during processing (such as deserialization).
+    sessionHolder.withSession { _ =>
+      val response = process(request, sessionHolder)
+      responseObserver.onNext(response)
+      responseObserver.onCompleted()
     }
+  }
 
   def process(
       request: proto.AnalyzePlanRequest,

@@ -35,6 +35,7 @@ Normal Functions
     isnan
     isnull
     monotonically_increasing_id
+    named_struct
     nanvl
     rand
     randn
@@ -202,6 +203,7 @@ Collection Functions
     array_position
     element_at
     array_append
+    array_size
     array_sort
     array_insert
     array_remove
@@ -234,7 +236,10 @@ Collection Functions
     from_json
     schema_of_json
     to_json
+    json_array_length
+    json_object_keys
     size
+    cardinality
     struct
     sort_array
     array_max
@@ -279,6 +284,7 @@ Aggregate Functions
     approxCountDistinct
     approx_count_distinct
     approx_percentile
+    array_agg
     avg
     bit_and
     bit_or
@@ -291,6 +297,7 @@ Aggregate Functions
     count
     count_distinct
     countDistinct
+    count_min_sketch
     count_if
     covar_pop
     covar_samp
@@ -402,6 +409,7 @@ String Functions
     locate
     lpad
     ltrim
+    mask
     octet_length
     parse_url
     position
@@ -467,11 +475,16 @@ Misc Functions
 .. autosummary::
     :toctree: api/
 
+    aes_decrypt
+    aes_encrypt
     current_catalog
     current_database
     current_schema
     current_user
+    input_file_block_length
+    input_file_block_start
     md5
+    sha
     sha1
     sha2
     crc32
@@ -479,9 +492,16 @@ Misc Functions
     xxhash64
     assert_true
     raise_error
+    reflect
     hll_sketch_estimate
     hll_union
+    java_method
+    random
+    stack
+    typeof
     user
+    uuid
+    version
 
 Predicate Functions
 -------------------

@@ -29,7 +29,7 @@ import org.mockito.Mockito.{mock, spy, when}
 import org.apache.spark._
 import org.apache.spark.sql.{AnalysisException, DataFrame, Dataset, QueryTest, Row, SaveMode}
 import org.apache.spark.sql.catalyst.FunctionIdentifier
-import org.apache.spark.sql.catalyst.analysis.{Parameter, UnresolvedGenerator}
+import org.apache.spark.sql.catalyst.analysis.{NamedParameter, UnresolvedGenerator}
 import org.apache.spark.sql.catalyst.expressions.{Grouping, Literal, RowNumber}
 import org.apache.spark.sql.catalyst.expressions.CodegenObjectFactoryMode._
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenContext
@@ -409,13 +409,17 @@ class QueryExecutionErrorsSuite
       spark.sql("select luckyCharOfWord(word, index) from words").collect()
     }
     assert(e.getCause.isInstanceOf[SparkException])
+    val functionNameRegex = if (Utils.isJavaVersionAtLeast21) {
+      "`luckyCharOfWord \\(QueryExecutionErrorsSuite\\$\\$Lambda/\\w+\\)`"
+    } else {
+      "`luckyCharOfWord \\(QueryExecutionErrorsSuite\\$\\$Lambda\\$\\d+/\\w+\\)`"
+    }
 
     checkError(
       exception = e.getCause.asInstanceOf[SparkException],
       errorClass = "FAILED_EXECUTE_UDF",
       parameters = Map(
-        "functionName" ->
-          "`luckyCharOfWord \\(QueryExecutionErrorsSuite\\$\\$Lambda\\$\\d+/\\w+\\)`",
+        "functionName" -> functionNameRegex,
         "signature" -> "string, int",
         "result" -> "string"),
       matchPVals = true)
@@ -430,11 +434,16 @@ class QueryExecutionErrorsSuite
       words.select(luckyCharOfWord($"word", $"index")).collect()
     }
     assert(e.getCause.isInstanceOf[SparkException])
+    val functionNameRegex = if (Utils.isJavaVersionAtLeast21) {
+      "`QueryExecutionErrorsSuite\\$\\$Lambda/\\w+`"
+    } else {
+      "`QueryExecutionErrorsSuite\\$\\$Lambda\\$\\d+/\\w+`"
+    }
 
     checkError(
       exception = e.getCause.asInstanceOf[SparkException],
       errorClass = "FAILED_EXECUTE_UDF",
-      parameters = Map("functionName" -> "`QueryExecutionErrorsSuite\\$\\$Lambda\\$\\d+/\\w+`",
+      parameters = Map("functionName" -> functionNameRegex,
         "signature" -> "string, int",
         "result" -> "string"),
       matchPVals = true)
@@ -866,26 +875,26 @@ class QueryExecutionErrorsSuite
 
   test("INTERNAL_ERROR: Calling eval on Unevaluable expression") {
     val e = intercept[SparkException] {
-      Parameter("foo").eval()
+      NamedParameter("foo").eval()
     }
     checkError(
       exception = e,
       errorClass = "INTERNAL_ERROR",
-      parameters = Map("message" -> "Cannot evaluate expression: parameter(foo)"),
+      parameters = Map("message" -> "Cannot evaluate expression: namedparameter(foo)"),
       sqlState = "XX000")
   }
 
   test("INTERNAL_ERROR: Calling doGenCode on unresolved") {
     val e = intercept[SparkException] {
       val ctx = new CodegenContext
-      Grouping(Parameter("foo")).genCode(ctx)
+      Grouping(NamedParameter("foo")).genCode(ctx)
     }
     checkError(
       exception = e,
       errorClass = "INTERNAL_ERROR",
       parameters = Map(
         "message" -> ("Cannot generate code for expression: " +
-          "grouping(parameter(foo))")),
+          "grouping(namedparameter(foo))")),
       sqlState = "XX000")
   }
 
@@ -926,6 +935,34 @@ class QueryExecutionErrorsSuite
       parameters = Map(
         "message" -> "The aggregate window function `row_number` does not support merging."),
       sqlState = "XX000")
+  }
+
+  test("INVALID_BITMAP_POSITION: position out of bounds") {
+    val e = intercept[SparkException] {
+      sql("select bitmap_construct_agg(col) from values (32768) as tab(col)").collect()
+    }.getCause.asInstanceOf[SparkArrayIndexOutOfBoundsException]
+    checkError(
+      exception = e,
+      errorClass = "INVALID_BITMAP_POSITION",
+      parameters = Map(
+        "bitPosition" -> "32768",
+        "bitmapNumBytes" -> "4096",
+        "bitmapNumBits" -> "32768"),
+      sqlState = "22003")
+  }
+
+  test("INVALID_BITMAP_POSITION: negative position") {
+    val e = intercept[SparkException] {
+      sql("select bitmap_construct_agg(col) from values (-1) as tab(col)").collect()
+    }.getCause.asInstanceOf[SparkArrayIndexOutOfBoundsException]
+    checkError(
+      exception = e,
+      errorClass = "INVALID_BITMAP_POSITION",
+      parameters = Map(
+        "bitPosition" -> "-1",
+        "bitmapNumBytes" -> "4096",
+        "bitmapNumBits" -> "32768"),
+      sqlState = "22003")
   }
 
   test("SPARK-43589: Use bytesToString instead of shift operation") {

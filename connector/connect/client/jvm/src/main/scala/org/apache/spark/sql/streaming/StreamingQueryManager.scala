@@ -27,6 +27,7 @@ import org.apache.spark.annotation.Evolving
 import org.apache.spark.connect.proto.Command
 import org.apache.spark.connect.proto.StreamingQueryManagerCommand
 import org.apache.spark.connect.proto.StreamingQueryManagerCommandResult
+import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.connect.common.StreamingListenerPacket
 import org.apache.spark.util.Utils
@@ -37,7 +38,7 @@ import org.apache.spark.util.Utils
  * @since 3.5.0
  */
 @Evolving
-class StreamingQueryManager private[sql] (sparkSession: SparkSession) {
+class StreamingQueryManager private[sql] (sparkSession: SparkSession) extends Logging {
 
   /**
    * Returns a list of active queries associated with this SQLContext

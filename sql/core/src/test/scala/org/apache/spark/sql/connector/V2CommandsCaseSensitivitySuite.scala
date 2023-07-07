@@ -292,7 +292,7 @@ class V2CommandsCaseSensitivitySuite
   }
 
   test("SPARK-36381: Check column name exist case sensitive and insensitive when add column") {
-    alterTableTest(
+    alterTableErrorClass(
       AddColumns(
         table,
         Seq(QualifiedColType(
@@ -303,14 +303,22 @@ class V2CommandsCaseSensitivitySuite
           None,
           Some(UnresolvedFieldPosition(ColumnPosition.after("id"))),
           None))),
-      Seq("Cannot add column, because ID already exists in root"),
+      "FIELDS_ALREADY_EXISTS",
+      Map(
+        "op" -> "add",
+        "fieldNames" -> "`ID`",
+        "struct" -> "\"STRUCT<id: BIGINT, data: STRING, point: STRUCT<x: DOUBLE, y: DOUBLE>>\""),
       expectErrorOnCaseSensitive = false)
   }
 
   test("SPARK-36381: Check column name exist case sensitive and insensitive when rename column") {
-    alterTableTest(
+    alterTableErrorClass(
       RenameColumn(table, UnresolvedFieldName(Array("id")), "DATA"),
-      Seq("Cannot rename column, because DATA already exists in root"),
+      "FIELDS_ALREADY_EXISTS",
+      Map(
+        "op" -> "rename",
+        "fieldNames" -> "`DATA`",
+        "struct" -> "\"STRUCT<id: BIGINT, data: STRING, point: STRUCT<x: DOUBLE, y: DOUBLE>>\""),
       expectErrorOnCaseSensitive = false)
   }
 
@@ -390,6 +398,24 @@ class V2CommandsCaseSensitivitySuite
         val expectError = if (expectErrorOnCaseSensitive) caseSensitive else !caseSensitive
         if (expectError) {
           assertAnalysisError(alter, error, caseSensitive)
+        } else {
+          assertAnalysisSuccess(alter, caseSensitive)
+        }
+      }
+    }
+  }
+
+  private def alterTableErrorClass(
+      alter: => AlterTableCommand,
+      errorClass: String,
+      messageParameters: Map[String, String],
+      expectErrorOnCaseSensitive: Boolean = true): Unit = {
+    Seq(true, false).foreach { caseSensitive =>
+      withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
+        val expectError = if (expectErrorOnCaseSensitive) caseSensitive else !caseSensitive
+        if (expectError) {
+          assertAnalysisErrorClass(
+            alter, errorClass, messageParameters, caseSensitive = caseSensitive)
         } else {
           assertAnalysisSuccess(alter, caseSensitive)
         }

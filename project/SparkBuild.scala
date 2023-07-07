@@ -91,7 +91,7 @@ object BuildCommons {
   // SPARK-41247: needs to be consistent with `protobuf.version` in `pom.xml`.
   val protoVersion = "3.23.2"
   // GRPC version used for Spark Connect.
-  val gprcVersion = "1.47.0"
+  val gprcVersion = "1.56.0"
 }
 
 object SparkBuild extends PomBuild {
@@ -1110,7 +1110,7 @@ object DependencyOverrides {
     dependencyOverrides += "com.google.guava" % "guava" % guavaVersion,
     dependencyOverrides += "xerces" % "xercesImpl" % "2.12.2",
     dependencyOverrides += "jline" % "jline" % "2.14.6",
-    dependencyOverrides += "org.apache.avro" % "avro" % "1.11.1")
+    dependencyOverrides += "org.apache.avro" % "avro" % "1.11.2")
 }
 
 /**
@@ -1580,6 +1580,19 @@ object TestSettings {
       "SPARK_TESTING" -> "1",
       "JAVA_HOME" -> sys.env.get("JAVA_HOME").getOrElse(sys.props("java.home")),
       "SPARK_BEELINE_OPTS" -> "-DmyKey=yourValue"),
+
+    // Copy system properties to forked JVMs so that tests know proxy settings
+    (Test / javaOptions) ++= {
+      val q = "\""
+      sys.props.toList
+        .filter {
+          case (key, value) => key.startsWith("http.") || key.startsWith("https.")
+        }
+        .map {
+          case (key, value) => s"-D$key=$q$value$q"
+        }
+    },
+
     (Test / javaOptions) += s"-Djava.io.tmpdir=$testTempDir",
     (Test / javaOptions) += "-Dspark.test.home=" + sparkHome,
     (Test / javaOptions) += "-Dspark.testing=1",

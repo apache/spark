@@ -159,7 +159,7 @@ abstract class UnevaluableGenerator extends Generator {
 case class PythonUDTF(
     name: String,
     func: PythonFunction,
-    override val elementSchema: StructType,
+    elementSchema: StructType,
     children: Seq[Expression],
     udfDeterministic: Boolean,
     resultId: ExprId = NamedExpression.newExprId)

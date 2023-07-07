@@ -70,6 +70,7 @@ message Relation {
     ApplyInPandasWithState apply_in_pandas_with_state = 34;
     HtmlString html_string = 35;
     CachedLocalRelation cached_local_relation = 36;
+    CachedRemoteRelation cached_remote_relation = 37;
 
     // NA functions
     NAFill fill_na = 90;
@@ -115,6 +116,9 @@ message SQL {
 
   // (Optional) A map of parameter names to literal expressions.
   map<string, Expression.Literal> args = 2;
+
+  // (Optional) A sequence of literal expressions for positional parameters in the SQL query text.
+  repeated Expression.Literal pos_args = 3;
 }
 
 // Relation that reads from a file / table or other data source. Does not have additional
@@ -220,6 +224,16 @@ message Join {
     JOIN_TYPE_LEFT_ANTI = 5;
     JOIN_TYPE_LEFT_SEMI = 6;
     JOIN_TYPE_CROSS = 7;
+  }
+
+  // (Optional) Only used by joinWith. Set the left and right join data types.
+  optional JoinDataType join_data_type = 6;
+
+  message JoinDataType {
+    // If the left data type is a struct that can be flatten to a row.
+    bool is_left_flattenable_to_row = 1;
+    // If the right data type is a struct that can be flatten to a row.
+    bool is_right_flattenable_to_row = 2;
   }
 }
 
@@ -393,6 +407,12 @@ message CachedLocalRelation {
 
   // (Required) A sha-256 hash of the serialized local relation in proto, see LocalRelation.
   string hash = 3;
+}
+
+// Represents a remote relation that has been cached on server.
+message CachedRemoteRelation {
+  // (Required) ID of the remote related (assigned by the service).
+  string relation_id = 1;
 }
 
 // Relation of type [[Sample]] that samples a fraction of the dataset.

@@ -16,19 +16,27 @@
  */
 
 /* global $, Mustache, createRESTEndPointForExecutorsPage, createRESTEndPointForMiscellaneousProcess, */
-/* global createTemplateURI, formatBytes, formatDuration, formatLogsCells, getStandAloneAppId, */
+/* global createTemplateURI, formatBytes, formatDate, formatDuration, formatLogsCells, getStandAloneAppId, */
 /* global jQuery, setDataTableDefaults */
 
 var threadDumpEnabled = false;
+var heapHistogramEnabled = false;
 
 /* eslint-disable no-unused-vars */
 function setThreadDumpEnabled(val) {
   threadDumpEnabled = val;
 }
+function setHeapHistogramEnabled(val) {
+  heapHistogramEnabled = val;
+}
 /* eslint-enable no-unused-vars */
 
 function getThreadDumpEnabled() {
   return threadDumpEnabled;
+}
+
+function getHeapHistogramEnabled() {
+  return heapHistogramEnabled;
 }
 
 function formatLossReason(removeReason) {
@@ -139,7 +147,7 @@ function totalDurationColor(totalGCTime, totalDuration) {
 }
 
 var sumOptionalColumns = [3, 4];
-var execOptionalColumns = [5, 6, 7, 8, 9, 10, 13, 14, 25];
+var execOptionalColumns = [5, 6, 7, 8, 9, 10, 13, 14, 26];
 var execDataTable;
 var sumDataTable;
 
@@ -552,21 +560,27 @@ $(document).ready(function () {
               }
             },
             {
+              name: 'heapHistogramCol',
+              data: 'id', render: function (data, type) {
+                return type === 'display' ? ("<a href='heapHistogram/?executorId=" + data + "'>Heap Histogram</a>") : data;
+              }
+            },
+            {
               data: 'removeReason',
               render: formatLossReason
+            },
+            {
+              data: 'addTime',
+              render: formatDate
+            },
+            {
+              data: 'removeTime',
+              render: formatDate
             }
           ],
           "order": [[0, "asc"]],
           "columnDefs": [
-            {"visible": false, "targets": 5},
-            {"visible": false, "targets": 6},
-            {"visible": false, "targets": 7},
-            {"visible": false, "targets": 8},
-            {"visible": false, "targets": 9},
-            {"visible": false, "targets": 10},
-            {"visible": false, "targets": 13},
-            {"visible": false, "targets": 14},
-            {"visible": false, "targets": 25}
+            {"visible": false, "targets": execOptionalColumns}
           ],
           "deferRender": true
         };
@@ -574,6 +588,7 @@ $(document).ready(function () {
         execDataTable = $(selector).DataTable(conf);
         execDataTable.column('executorLogsCol:name').visible(logsExist(response));
         execDataTable.column('threadDumpCol:name').visible(getThreadDumpEnabled());
+        execDataTable.column('heapHistogramCol:name').visible(getHeapHistogramEnabled());
         $('#active-executors [data-toggle="tooltip"]').tooltip();
     
         // This section should be visible once API gives the response.
@@ -697,10 +712,8 @@ $(document).ready(function () {
           "searching": false,
           "info": false,
           "columnDefs": [
-            {"visible": false, "targets": 3},
-            {"visible": false, "targets": 4}
+            {"visible": false, "targets": sumOptionalColumns}
           ]
-
         };
 
         sumDataTable = $(sumSelector).DataTable(sumConf);
@@ -721,7 +734,7 @@ $(document).ready(function () {
           "<div id='direct_mapped_pool_memory' class='direct_mapped_pool_memory-checkbox-div'><input type='checkbox' class='toggle-vis' data-sum-col-idx='' data-exec-col-idx='10'> Peak Pool Memory Direct / Mapped</div>" +
           "<div id='extra_resources' class='resources-checkbox-div'><input type='checkbox' class='toggle-vis' data-sum-col-idx='' data-exec-col-idx='13'> Resources</div>" +
           "<div id='resource_prof_id' class='resource-prof-id-checkbox-div'><input type='checkbox' class='toggle-vis' data-sum-col-idx='' data-exec-col-idx='14'> Resource Profile Id</div>" +
-          "<div id='exec_loss_reason' class='exec-loss-reason-checkbox-div'><input type='checkbox' class='toggle-vis' data-sum-col-idx='' data-exec-col-idx='25'> Exec Loss Reason</div>" +
+          "<div id='exec_loss_reason' class='exec-loss-reason-checkbox-div'><input type='checkbox' class='toggle-vis' data-sum-col-idx='' data-exec-col-idx='26'> Exec Loss Reason</div>" +
           "</div>");
 
         reselectCheckboxesBasedOnTaskTableState();

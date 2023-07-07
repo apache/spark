@@ -296,7 +296,10 @@ class ChannelBuilder:
             or "_SPARK_CONNECT_PYTHON" when not specified.
             The returned value will be percent encoded.
         """
-        user_agent = self.params.get(ChannelBuilder.PARAM_USER_AGENT, "_SPARK_CONNECT_PYTHON")
+        user_agent = self.params.get(
+            ChannelBuilder.PARAM_USER_AGENT,
+            os.getenv("SPARK_CONNECT_USER_AGENT", "_SPARK_CONNECT_PYTHON"),
+        )
         ua_len = len(urllib.parse.quote(user_agent))
         if ua_len > 2048:
             raise SparkConnectException(
@@ -594,6 +597,7 @@ class SparkConnectClient(object):
             self._user_id = os.getenv("USER", None)
 
         self._channel = self._builder.toChannel()
+        self._closed = False
         self._stub = grpc_lib.SparkConnectServiceStub(self._channel)
         self._artifact_manager = ArtifactManager(self._user_id, self._session_id, self._channel)
         # Configure logging for the SparkConnect client.
@@ -835,6 +839,14 @@ class SparkConnectClient(object):
         Close the channel.
         """
         self._channel.close()
+        self._closed = True
+
+    @property
+    def is_closed(self) -> bool:
+        """
+        Returns if the channel was closed previously using close() method
+        """
+        return self._closed
 
     @property
     def host(self) -> str:

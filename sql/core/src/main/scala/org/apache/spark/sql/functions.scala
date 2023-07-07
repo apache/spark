@@ -368,6 +368,23 @@ object functions {
    */
   def collect_set(columnName: String): Column = collect_set(Column(columnName))
 
+  /**
+   * Returns a count-min sketch of a column with the given esp, confidence and seed. The result
+   * is an array of bytes, which can be deserialized to a `CountMinSketch` before usage.
+   * Count-min sketch is a probabilistic data structure used for cardinality estimation using
+   * sub-linear space.
+   *
+   * @group agg_funcs
+   * @since 3.5.0
+   */
+  def count_min_sketch(
+    e: Column,
+    eps: Column,
+    confidence: Column,
+    seed: Column): Column = withAggregateFunction {
+    new CountMinSketchAgg(e.expr, eps.expr, confidence.expr, seed.expr)
+  }
+
   private[spark] def collect_top_k(e: Column, num: Int, reverse: Boolean): Column =
     withAggregateFunction { CollectTopK(e.expr, num, reverse) }
 
@@ -1313,6 +1330,14 @@ object functions {
    * @group agg_funcs
    * @since 3.5.0
    */
+  def any(e: Column): Column = withAggregateFunction { BoolOr(e.expr) }
+
+  /**
+   * Aggregate function: returns true if at least one value of `e` is true.
+   *
+   * @group agg_funcs
+   * @since 3.5.0
+   */
   def bool_or(e: Column): Column = withAggregateFunction { BoolOr(e.expr) }
 
   /**
@@ -1623,6 +1648,14 @@ object functions {
    */
   @scala.annotation.varargs
   def map(cols: Column*): Column = withExpr { CreateMap(cols.map(_.expr)) }
+
+  /**
+   * Creates a struct with the given field names and values.
+   *
+   * @group normal_funcs
+   * @since 3.5.0
+   */
+  def named_struct(cols: Column*): Column = withExpr { CreateNamedStruct(cols.map(_.expr)) }
 
   /**
    * Creates a new map column. The array in the first column is used for keys. The array in the
@@ -3326,6 +3359,298 @@ object functions {
    */
   def user(): Column = withExpr { CurrentUser() }
 
+  /**
+   * Returns an universally unique identifier (UUID) string. The value is returned as a canonical
+   * UUID 36-character string.
+   *
+   * @group misc_funcs
+   * @since 3.5.0
+   */
+  def uuid(): Column = withExpr { new Uuid() }
+
+  /**
+   * Returns an encrypted value of `input` using AES in given `mode` with the specified `padding`.
+   * Key lengths of 16, 24 and 32 bits are supported. Supported combinations of (`mode`,
+   * `padding`) are ('ECB', 'PKCS'), ('GCM', 'NONE') and ('CBC', 'PKCS'). Optional initialization
+   * vectors (IVs) are only supported for CBC and GCM modes. These must be 16 bytes for CBC and 12
+   * bytes for GCM. If not provided, a random vector will be generated and prepended to the
+   * output. Optional additional authenticated data (AAD) is only supported for GCM. If provided
+   * for encryption, the identical AAD value must be provided for decryption. The default mode is
+   * GCM.
+   *
+   * @param input
+   *   The binary value to encrypt.
+   * @param key
+   *   The passphrase to use to encrypt the data.
+   * @param mode
+   *   Specifies which block cipher mode should be used to encrypt messages. Valid modes: ECB,
+   *   GCM, CBC.
+   * @param padding
+   *   Specifies how to pad messages whose length is not a multiple of the block size. Valid
+   *   values: PKCS, NONE, DEFAULT. The DEFAULT padding means PKCS for ECB, NONE for GCM and PKCS
+   *   for CBC.
+   * @param iv
+   *   Optional initialization vector. Only supported for CBC and GCM modes. Valid values: None or
+   *   "". 16-byte array for CBC mode. 12-byte array for GCM mode.
+   * @param aad
+   *   Optional additional authenticated data. Only supported for GCM mode. This can be any
+   *   free-form input and must be provided for both encryption and decryption.
+   *
+   * @group misc_funcs
+   * @since 3.5.0
+   */
+  def aes_encrypt(
+      input: Column,
+      key: Column,
+      mode: Column,
+      padding: Column,
+      iv: Column,
+      aad: Column): Column = withExpr {
+    AesEncrypt(input.expr, key.expr, mode.expr, padding.expr, iv.expr, aad.expr)
+  }
+
+  /**
+   * Returns an encrypted value of `input`.
+   *
+   * @see
+   *   `org.apache.spark.sql.functions.aes_encrypt(Column, Column, Column, Column, Column,
+   *   Column)`
+   *
+   * @group misc_funcs
+   * @since 3.5.0
+   */
+  def aes_encrypt(
+      input: Column,
+      key: Column,
+      mode: Column,
+      padding: Column,
+      iv: Column): Column = withExpr {
+    new AesEncrypt(input.expr, key.expr, mode.expr, padding.expr, iv.expr)
+  }
+
+  /**
+   * Returns an encrypted value of `input`.
+   *
+   * @see
+   *   `org.apache.spark.sql.functions.aes_encrypt(Column, Column, Column, Column, Column,
+   *   Column)`
+   *
+   * @group misc_funcs
+   * @since 3.5.0
+   */
+  def aes_encrypt(input: Column, key: Column, mode: Column, padding: Column): Column = withExpr {
+    new AesEncrypt(input.expr, key.expr, mode.expr, padding.expr)
+  }
+
+  /**
+   * Returns an encrypted value of `input`.
+   *
+   * @see
+   *   `org.apache.spark.sql.functions.aes_encrypt(Column, Column, Column, Column, Column,
+   *   Column)`
+   *
+   * @group misc_funcs
+   * @since 3.5.0
+   */
+  def aes_encrypt(input: Column, key: Column, mode: Column): Column = withExpr {
+    new AesEncrypt(input.expr, key.expr, mode.expr)
+  }
+
+  /**
+   * Returns an encrypted value of `input`.
+   *
+   * @see
+   *   `org.apache.spark.sql.functions.aes_encrypt(Column, Column, Column, Column, Column,
+   *   Column)`
+   *
+   * @group misc_funcs
+   * @since 3.5.0
+   */
+  def aes_encrypt(input: Column, key: Column): Column = withExpr {
+    new AesEncrypt(input.expr, key.expr)
+  }
+
+  /**
+   * Returns a decrypted value of `input` using AES in `mode` with `padding`. Key lengths of 16,
+   * 24 and 32 bits are supported. Supported combinations of (`mode`, `padding`) are ('ECB',
+   * 'PKCS'), ('GCM', 'NONE') and ('CBC', 'PKCS'). Optional additional authenticated data (AAD) is
+   * only supported for GCM. If provided for encryption, the identical AAD value must be provided
+   * for decryption. The default mode is GCM.
+   *
+   * @param input
+   *   The binary value to decrypt.
+   * @param key
+   *   The passphrase to use to decrypt the data.
+   * @param mode
+   *   Specifies which block cipher mode should be used to decrypt messages. Valid modes: ECB,
+   *   GCM, CBC.
+   * @param padding
+   *   Specifies how to pad messages whose length is not a multiple of the block size. Valid
+   *   values: PKCS, NONE, DEFAULT. The DEFAULT padding means PKCS for ECB, NONE for GCM and PKCS
+   *   for CBC.
+   * @param aad
+   *   Optional additional authenticated data. Only supported for GCM mode. This can be any
+   *   free-form input and must be provided for both encryption and decryption.
+   *
+   * @group misc_funcs
+   * @since 3.5.0
+   */
+  def aes_decrypt(
+      input: Column,
+      key: Column,
+      mode: Column,
+      padding: Column,
+      aad: Column): Column = withExpr {
+    AesDecrypt(input.expr, key.expr, mode.expr, padding.expr, aad.expr)
+  }
+
+  /**
+   * Returns a decrypted value of `input`.
+   *
+   * @see
+   *   `org.apache.spark.sql.functions.aes_decrypt(Column, Column, Column, Column, Column)`
+   *
+   * @group misc_funcs
+   * @since 3.5.0
+   */
+  def aes_decrypt(
+      input: Column,
+      key: Column,
+      mode: Column,
+      padding: Column): Column = withExpr {
+    new AesDecrypt(input.expr, key.expr, mode.expr, padding.expr)
+  }
+
+  /**
+   * Returns a decrypted value of `input`.
+   *
+   * @see
+   *   `org.apache.spark.sql.functions.aes_decrypt(Column, Column, Column, Column, Column)`
+   *
+   * @group misc_funcs
+   * @since 3.5.0
+   */
+  def aes_decrypt(input: Column, key: Column, mode: Column): Column = withExpr {
+    new AesDecrypt(input.expr, key.expr, mode.expr)
+  }
+
+  /**
+   * Returns a decrypted value of `input`.
+   *
+   * @see
+   *   `org.apache.spark.sql.functions.aes_decrypt(Column, Column, Column, Column, Column)`
+   *
+   * @group misc_funcs
+   * @since 3.5.0
+   */
+  def aes_decrypt(input: Column, key: Column): Column = withExpr {
+    new AesDecrypt(input.expr, key.expr)
+  }
+
+  /**
+   * Returns a sha1 hash value as a hex string of the `col`.
+   *
+   * @group misc_funcs
+   * @since 3.5.0
+   */
+  def sha(col: Column): Column = withExpr {
+    Sha1(col.expr)
+  }
+
+  /**
+   * Returns the length of the block being read, or -1 if not available.
+   *
+   * @group misc_funcs
+   * @since 3.5.0
+   */
+  def input_file_block_length(): Column = withExpr {
+    InputFileBlockLength()
+  }
+
+  /**
+   * Returns the start offset of the block being read, or -1 if not available.
+   *
+   * @group misc_funcs
+   * @since 3.5.0
+   */
+  def input_file_block_start(): Column = withExpr {
+    InputFileBlockStart()
+  }
+
+  /**
+   * Calls a method with reflection.
+   *
+   * @group misc_funcs
+   * @since 3.5.0
+   */
+  def reflect(cols: Column*): Column = withExpr {
+    CallMethodViaReflection(cols.map(_.expr))
+  }
+
+  /**
+   * Calls a method with reflection.
+   *
+   * @group misc_funcs
+   * @since 3.5.0
+   */
+  def java_method(cols: Column*): Column = withExpr {
+    CallMethodViaReflection(cols.map(_.expr))
+  }
+
+  /**
+   * Returns the Spark version. The string contains 2 fields, the first being a release version
+   * and the second being a git revision.
+   *
+   * @group misc_funcs
+   * @since 3.5.0
+   */
+  def version(): Column = withExpr {
+    SparkVersion()
+  }
+
+  /**
+   * Return DDL-formatted type string for the data type of the input.
+   *
+   * @group misc_funcs
+   * @since 3.5.0
+   */
+  def typeof(col: Column): Column = withExpr {
+    TypeOf(col.expr)
+  }
+
+  /**
+   * Separates `col1`, ..., `colk` into `n` rows. Uses column names col0, col1, etc. by default
+   * unless specified otherwise.
+   *
+   * @group misc_funcs
+   * @since 3.5.0
+   */
+  def stack(cols: Column*): Column = withExpr {
+    Stack(cols.map(_.expr))
+  }
+
+  /**
+   * Returns a random value with independent and identically distributed (i.i.d.) uniformly
+   * distributed values in [0, 1).
+   *
+   * @group misc_funcs
+   * @since 3.5.0
+   */
+  def random(seed: Column): Column = withExpr {
+    Rand(seed.expr)
+  }
+
+  /**
+   * Returns a random value with independent and identically distributed (i.i.d.) uniformly
+   * distributed values in [0, 1).
+   *
+   * @group misc_funcs
+   * @since 3.5.0
+   */
+  def random(): Column = withExpr {
+    new Rand()
+  }
+
   //////////////////////////////////////////////////////////////////////////////////////////////
   // String functions
   //////////////////////////////////////////////////////////////////////////////////////////////
@@ -3451,6 +3776,16 @@ object functions {
    * @since 1.5.0
    */
   def length(e: Column): Column = withExpr { Length(e.expr) }
+
+  /**
+   * Computes the character length of a given string or number of bytes of a binary string.
+   * The length of character strings include the trailing spaces. The length of binary strings
+   * includes binary zeros.
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def len(e: Column): Column = withExpr { Length(e.expr) }
 
   /**
    * Converts a string column to lower case.
@@ -6319,6 +6654,29 @@ object functions {
     withExpr(SchemaOfJson(json.expr, options.asScala.toMap))
   }
 
+  /**
+   * Returns the number of elements in the outermost JSON array. `NULL` is returned in case of
+   * any other valid JSON string, `NULL` or an invalid JSON.
+   *
+   * @group collection_funcs
+   * @since 3.5.0
+   */
+  def json_array_length(jsonArray: Column): Column = withExpr {
+    LengthOfJsonArray(jsonArray.expr)
+  }
+
+  /**
+   * Returns all the keys of the outermost JSON object as an array. If a valid JSON object is
+   * given, all the keys of the outermost object will be returned as an array. If it is any
+   * other valid JSON string, an invalid JSON string or an empty string, the function returns null.
+   *
+   * @group collection_funcs
+   * @since 3.5.0
+   */
+  def json_object_keys(json: Column): Column = withExpr {
+    JsonObjectKeys(json.expr)
+  }
+
   // scalastyle:off line.size.limit
   /**
    * (Scala-specific) Converts a column containing a `StructType`, `ArrayType` or
@@ -6380,6 +6738,108 @@ object functions {
     to_json(e, Map.empty[String, String])
 
   /**
+   * Masks the given string value. The function replaces characters with 'X' or 'x', and numbers
+   * with 'n'.
+   * This can be useful for creating copies of tables with sensitive information removed.
+   *
+   * @param input string value to mask. Supported types: STRING, VARCHAR, CHAR
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def mask(input: Column): Column = withExpr {
+    new Mask(input.expr)
+  }
+
+  /**
+   * Masks the given string value. The function replaces upper-case characters with specific
+   * character, lower-case characters with 'x', and numbers with 'n'.
+   * This can be useful for creating copies of tables with sensitive information removed.
+   *
+   * @param input
+   *   string value to mask. Supported types: STRING, VARCHAR, CHAR
+   * @param upperChar
+   *   character to replace upper-case characters with. Specify NULL to retain original character.
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def mask(input: Column, upperChar: Column): Column = withExpr {
+    new Mask(input.expr, upperChar.expr)
+  }
+
+  /**
+   * Masks the given string value. The function replaces upper-case and lower-case characters with
+   * the characters specified respectively, and numbers with 'n'.
+   * This can be useful for creating copies of tables with sensitive information removed.
+   *
+   * @param input
+   *   string value to mask. Supported types: STRING, VARCHAR, CHAR
+   * @param upperChar
+   *   character to replace upper-case characters with. Specify NULL to retain original character.
+   * @param lowerChar
+   *   character to replace lower-case characters with. Specify NULL to retain original character.
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def mask(input: Column, upperChar: Column, lowerChar: Column): Column = withExpr {
+    new Mask(input.expr, upperChar.expr, lowerChar.expr)
+  }
+
+  /**
+   * Masks the given string value. The function replaces upper-case, lower-case characters and
+   * numbers with the characters specified respectively.
+   * This can be useful for creating copies of tables with sensitive information removed.
+   *
+   * @param input
+   *   string value to mask. Supported types: STRING, VARCHAR, CHAR
+   * @param upperChar
+   *   character to replace upper-case characters with. Specify NULL to retain original character.
+   * @param lowerChar
+   *   character to replace lower-case characters with. Specify NULL to retain original character.
+   * @param digitChar
+   *   character to replace digit characters with. Specify NULL to retain original character.
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def mask(input: Column, upperChar: Column, lowerChar: Column, digitChar: Column): Column = {
+    withExpr {
+      new Mask(input.expr, upperChar.expr, lowerChar.expr, digitChar.expr)
+    }
+  }
+
+  /**
+   * Masks the given string value. This can be useful for creating copies of tables with sensitive
+   * information removed.
+   *
+   * @param input
+   *   string value to mask. Supported types: STRING, VARCHAR, CHAR
+   * @param upperChar
+   *   character to replace upper-case characters with. Specify NULL to retain original character.
+   * @param lowerChar
+   *   character to replace lower-case characters with. Specify NULL to retain original character.
+   * @param digitChar
+   *   character to replace digit characters with. Specify NULL to retain original character.
+   * @param otherChar
+   *   character to replace all other characters with. Specify NULL to retain original character.
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def mask(
+    input: Column,
+    upperChar: Column,
+    lowerChar: Column,
+    digitChar: Column,
+    otherChar: Column): Column = {
+    withExpr {
+      Mask(input.expr, upperChar.expr, lowerChar.expr, digitChar.expr, otherChar.expr)
+    }
+  }
+
+  /**
    * Returns length of array or map.
    *
    * The function returns null for null input if spark.sql.legacy.sizeOfNull is set to false or
@@ -6390,6 +6850,18 @@ object functions {
    * @since 1.5.0
    */
   def size(e: Column): Column = withExpr { Size(e.expr) }
+
+  /**
+   * Returns length of array or map. This is an alias of `size` function.
+   *
+   * The function returns null for null input if spark.sql.legacy.sizeOfNull is set to false or
+   * spark.sql.ansi.enabled is set to true. Otherwise, the function returns -1 for null input.
+   * With the default settings, the function returns -1 for null input.
+   *
+   * @group collection_funcs
+   * @since 3.5.0
+   */
+  def cardinality(e: Column): Column = size(e)
 
   /**
    * Sorts the input array for the given column in ascending order,
@@ -6430,6 +6902,24 @@ object functions {
    * @since 2.4.0
    */
   def array_max(e: Column): Column = withExpr { ArrayMax(e.expr) }
+
+  /**
+   * Returns the total number of elements in the array. The function returns null for null input.
+   *
+   * @group collection_funcs
+   * @since 3.5.0
+   */
+  def array_size(e: Column): Column = withExpr { ArraySize(e.expr) }
+
+  /**
+   * Aggregate function: returns a list of objects with duplicates.
+   *
+   * @note The function is non-deterministic because the order of collected results depends
+   *       on the order of the rows which may be non-deterministic after a shuffle.
+   * @group agg_funcs
+   * @since 3.5.0
+   */
+  def array_agg(e: Column): Column = collect_list(e)
 
   /**
    * Returns a random permutation of the given array.

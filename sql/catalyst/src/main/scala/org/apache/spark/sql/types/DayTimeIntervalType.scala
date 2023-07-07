@@ -18,7 +18,7 @@
 package org.apache.spark.sql.types
 
 import org.apache.spark.annotation.Unstable
-import org.apache.spark.sql.errors.QueryCompilationErrors
+import org.apache.spark.sql.errors.DataTypeErrors
 import org.apache.spark.sql.types.DayTimeIntervalType.fieldToString
 
 /**
@@ -56,7 +56,7 @@ case class DayTimeIntervalType(startField: Byte, endField: Byte) extends AnsiInt
     } else if (startField < endField) {
       s"interval $startFieldName to $endFieldName"
     } else {
-      throw QueryCompilationErrors.invalidDayTimeIntervalType(startFieldName, endFieldName)
+      throw DataTypeErrors.invalidDayTimeIntervalType(startFieldName, endFieldName)
     }
   }
 }
@@ -79,7 +79,10 @@ case object DayTimeIntervalType extends AbstractDataType {
     case HOUR => "hour"
     case MINUTE => "minute"
     case SECOND => "second"
-    case invalid => throw QueryCompilationErrors.invalidDayTimeField(invalid)
+    case invalid =>
+      val supportedIds = DayTimeIntervalType.dayTimeFields
+        .map(i => s"$i (${DayTimeIntervalType.fieldToString(i)})")
+      throw DataTypeErrors.invalidDayTimeField(invalid, supportedIds)
   }
 
   val stringToField: Map[String, Byte] = dayTimeFields.map(i => fieldToString(i) -> i).toMap

@@ -20,7 +20,7 @@ package org.apache.spark.sql.types
 import org.json4s.JsonDSL._
 
 import org.apache.spark.annotation.Stable
-import org.apache.spark.sql.catalyst.util.StringUtils.StringConcat
+import org.apache.spark.sql.catalyst.util.StringConcat
 
 /**
  * Companion object for ArrayType.

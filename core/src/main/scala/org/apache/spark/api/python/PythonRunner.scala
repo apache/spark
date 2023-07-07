@@ -707,7 +707,12 @@ private[spark] object PythonRunner {
   // already running worker monitor threads for worker and task attempts ID pairs
   val runningMonitorThreads = ConcurrentHashMap.newKeySet[(Socket, Long)]()
 
+  private var printPythonInfo: AtomicBoolean = new AtomicBoolean(true)
+
   def apply(func: PythonFunction): PythonRunner = {
+    if (printPythonInfo.compareAndSet(true, false)) {
+      PythonUtils.logPythonInfo(func.pythonExec)
+    }
     new PythonRunner(Seq(ChainedPythonFunctions(Seq(func))))
   }
 }
