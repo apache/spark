@@ -111,7 +111,7 @@ class RegressionEvaluator(_TorchMetricEvaluator, HasLabelCol, HasPredictionCol, 
     def isLargerBetter(self) -> bool:
         if self.getOrDefault(self.metricName) == "r2":
             return True
-        
+
         return False
 
 
