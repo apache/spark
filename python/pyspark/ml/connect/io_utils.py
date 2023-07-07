@@ -132,12 +132,7 @@ class ParamsReadWrite(Params):
         pass
 
     def _save_to_local(self, path: str) -> None:
-        metadata = self._get_metadata_to_save()
-        if isinstance(self, CoreModelReadWrite):
-            core_model_path = self._get_core_model_filename()
-            self._save_core_model(os.path.join(path, core_model_path))
-            metadata["core_model_path"] = core_model_path
-
+        metadata = self._save_to_node_path(path, [])
         with open(os.path.join(path, _META_DATA_FILE_NAME), "w") as fp:
             json.dump(metadata, fp)
 
@@ -160,7 +155,7 @@ class ParamsReadWrite(Params):
         self._save_to_local(path)
 
     @classmethod
-    def _load_from_metadata(cls, metadata: Dict[str, Any]) -> "Params":
+    def _load_metadata(cls, metadata: Dict[str, Any]) -> "Params":
         if "type" not in metadata or metadata["type"] != "spark_connect":
             raise RuntimeError(
                 "The saved data is not saved by ML algorithm implemented in 'pyspark.ml.connect' "
@@ -186,17 +181,24 @@ class ParamsReadWrite(Params):
         return instance
 
     @classmethod
-    def _load_from_local(cls, path: str) -> "Params":
-        with open(os.path.join(path, _META_DATA_FILE_NAME), "r") as fp:
-            metadata = json.load(fp)
-
-        instance = cls._load_from_metadata(metadata)
+    def _load_instance_from_metadata(cls, metadata, path):
+        instance = cls._load_metadata(metadata)
 
         if isinstance(instance, CoreModelReadWrite):
             core_model_path = metadata["core_model_path"]
             instance._load_core_model(os.path.join(path, core_model_path))
 
+        if isinstance(instance, MetaAlgorithmReadWrite):
+            instance._load_meta_algorithm(path, metadata)
+
         return instance
+
+    @classmethod
+    def _load_from_local(cls, path: str) -> "Params":
+        with open(os.path.join(path, _META_DATA_FILE_NAME), "r") as fp:
+            metadata = json.load(fp)
+
+        return cls._load_instance_from_metadata(metadata, path)
 
     @classmethod
     def loadFromLocal(cls, path: str) -> "Params":
@@ -206,6 +208,23 @@ class ParamsReadWrite(Params):
         .. versionadded:: 3.5.0
         """
         return cls._load_from_local(path)
+
+    def _save_to_node_path(self, root_path, node_path):
+        """
+        Save the instance to provided node path, and return the node metadata.
+        """
+        if isinstance(self, MetaAlgorithmReadWrite):
+            metadata = self._save_meta_algorithm(root_path, node_path)
+        else:
+            metadata = self._get_metadata_to_save()  # type: ignore[attr-defined]
+            if isinstance(self, CoreModelReadWrite):
+                core_model_path = ".".join(
+                    node_path + [self._get_core_model_filename()]
+                )
+                self._save_core_model(os.path.join(root_path, core_model_path))
+                metadata["core_model_path"] = core_model_path
+
+        return metadata
 
     def save(self, path: str, *, overwrite: bool = False) -> None:
         """
@@ -297,21 +316,6 @@ class MetaAlgorithmReadWrite(ParamsReadWrite):
         self, root_path: str, node_metadata: Dict[str, Any]
     ) -> None:
         raise NotImplementedError()
-
-    def _save_to_local(self, path: str) -> None:
-        metadata = self._save_meta_algorithm(path, [])
-        with open(os.path.join(path, _META_DATA_FILE_NAME), "w") as fp:
-            json.dump(metadata, fp)
-
-    @classmethod
-    def _load_from_local(cls, path: str) -> Any:
-        with open(os.path.join(path, _META_DATA_FILE_NAME), "r") as fp:
-            metadata = json.load(fp)
-
-        instance = cls._load_from_metadata(metadata)
-        instance._load_meta_algorithm(path, metadata)  # type: ignore[attr-defined]
-
-        return instance
 
     @staticmethod
     def _get_all_nested_stages(instance):

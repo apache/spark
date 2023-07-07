@@ -530,9 +530,13 @@ class _CrossValidatorReadWrite(MetaAlgorithmReadWrite):
         self, root_path: str, node_path: List[str]
     ) -> Dict[str, Any]:
         metadata = self._get_metadata_to_save()
-        metadata["estimator"] = self.getEstimator()._get_metadata_to_save()
-        metadata["evaluator"] = self.getEvaluator()._get_metadata_to_save()
-        metadata["estimatorParamMaps"] = [
+        metadata["estimator"] = self.getEstimator()._save_to_node_path(
+            root_path, node_path + ["crossvalidator_estimator"]
+        )
+        metadata["evaluator"] = self.getEvaluator()._save_to_node_path(
+            root_path, node_path + ["crossvalidator_evaluator"]
+        )
+        metadata["estimator_param_maps"] = [
             [
                 {"parent": param.parent, "name": param.name, "value": value}
                 for param, value in param_map.items()
@@ -541,53 +545,43 @@ class _CrossValidatorReadWrite(MetaAlgorithmReadWrite):
         ]
 
         if isinstance(self, CrossValidatorModel):
-            metadata["avgMetrics"] = self.avgMetrics
-            metadata["stdMetrics"] = self.stdMetrics
+            metadata["avg_metrics"] = self.avgMetrics
+            metadata["std_metrics"] = self.stdMetrics
 
-            metadata["best_model_metadata"] = self.bestModel._get_metadata_to_save()
-            if isinstance(self.bestModel, CoreModelReadWrite):
-                best_model_core_model_path = ".".join(
-                    node_path
-                    + [
-                        "cross_validator_best_model",
-                        self.bestModel._get_core_model_filename(),
-                    ]
-                )
-                self.bestModel._save_core_model(
-                    os.path.join(root_path, best_model_core_model_path)
-                )
-                metadata["best_model_metadata"][
-                    "core_model_path"
-                ] = best_model_core_model_path
+            metadata["best_model"] = self.bestModel._save_to_node_path(
+                root_path, node_path + ["crossvalidator_best_model"]
+            )
         return metadata
 
     def _load_meta_algorithm(
         self, root_path: str, node_metadata: Dict[str, Any]
     ) -> None:
-        # TODO: support meta estimator.
-        self.set(
-            self.estimator,
-            ParamsReadWrite._load_from_metadata(node_metadata["estimator"]),
-        )
-        self.set(
-            self.evaluator,
-            ParamsReadWrite._load_from_metadata(node_metadata["evaluator"]),
-        )
-        # TODO: Load back epm.
+        estimator = ParamsReadWrite._load_instance_from_metadata(node_metadata["estimator"])
+        self.set(self.estimator, estimator)
+
+        evaluator = ParamsReadWrite._load_instance_from_metadata(node_metadata["evaluator"])
+        self.set(self.evaluator, evaluator)
+
+        json_epm = node_metadata["estimator_param_maps"]
+
+        uid_to_instances = MetaAlgorithmReadWrite.get_uid_map(estimator)
+
+        epm = []
+        for json_param_map in json_epm:
+            param_map = {}
+            for json_param in json_param_map:
+                est = uid_to_instances[json_param["parent"]]
+                param = getattr(est, json_param["name"])
+                value = json_param["value"]
+                param_map[param] = value
+            epm.append(param_map)
+
+        self.set(self.estimatorParamMaps, epm)
 
         if isinstance(self, CrossValidatorModel):
-            self.avgMetrics = node_metadata["avgMetrics"]
-            self.stdMetrics = node_metadata["stdMetrics"]
+            self.avgMetrics = node_metadata["avg_metrics"]
+            self.stdMetrics = node_metadata["std_metrics"]
 
-            self.bestModel = ParamsReadWrite._load_from_metadata(
-                node_metadata["best_model_metadata"]
+            self.bestModel = ParamsReadWrite._load_instance_from_metadata(
+                node_metadata["best_model"]
             )
-
-            # TODO: support meta model
-            if isinstance(self.bestModel, CoreModelReadWrite):
-                core_model_path = node_metadata["best_model_metadata"][
-                    "core_model_path"
-                ]
-                self.bestModel._load_core_model(
-                    os.path.join(root_path, core_model_path)
-                )

@@ -66,18 +66,10 @@ class _PipelineReadWrite(MetaAlgorithmReadWrite):
         for stage_index, stage in enumerate(stages):
             stage_name = f"pipeline_stage_{stage_index}"
             node_path.append(stage_name)
-            if isinstance(stage, MetaAlgorithmReadWrite):
-                stage_metadata = stage._save_meta_algorithm(root_path, node_path)
-            else:
-                stage_metadata = stage._get_metadata_to_save()  # type: ignore[attr-defined]
-                if isinstance(stage, CoreModelReadWrite):
-                    core_model_path = ".".join(
-                        node_path + [stage._get_core_model_filename()]
-                    )
-                    stage._save_core_model(os.path.join(root_path, core_model_path))
-                    stage_metadata["core_model_path"] = core_model_path
 
+            stage_metadata = stage._save_to_node_path(root_path, node_path)
             metadata["stages"].append(stage_metadata)
+
             node_path.pop()
         return metadata
 
@@ -86,15 +78,7 @@ class _PipelineReadWrite(MetaAlgorithmReadWrite):
     ) -> None:
         stages = []
         for stage_meta in node_metadata["stages"]:
-            stage = ParamsReadWrite._load_from_metadata(stage_meta)
-
-            if isinstance(stage, MetaAlgorithmReadWrite):
-                stage._load_meta_algorithm(root_path, stage_meta)
-
-            if isinstance(stage, CoreModelReadWrite):
-                core_model_path = stage_meta["core_model_path"]
-                stage._load_core_model(os.path.join(root_path, core_model_path))
-
+            stage = ParamsReadWrite._load_instance_from_metadata(stage_meta)
             stages.append(stage)
 
         if isinstance(self, Pipeline):
