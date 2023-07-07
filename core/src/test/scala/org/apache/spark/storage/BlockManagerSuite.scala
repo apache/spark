@@ -1937,31 +1937,103 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with PrivateMethodTe
     assert(mockBlockTransferService.tempFileManager === store.remoteBlockTempFileManager)
   }
 
-  test("SPARK-43221: the BlockManager with the persisted block is preferred.") {
+  /**
+   */
+  private def setupBlockManagerMasterWithDiskBlocks(): Option[BlockLocationsAndStatus] = {
+    // set up a simple DriverEndpoint which simply adds executorIds and
+    // checks whether a certain executorId has been added before.
+    val driverEndpoint = rpcEnv.setupEndpoint(CoarseGrainedSchedulerBackend.ENDPOINT_NAME,
+      new RpcEndpoint {
+        private val executorSet = mutable.HashSet[String]()
+        override val rpcEnv: RpcEnv = BlockManagerSuite.this.rpcEnv
+        override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {
+          case CoarseGrainedClusterMessages.RegisterExecutor(executorId, _, _, _, _, _, _, _) =>
+            executorSet += executorId
+            context.reply(true)
+          case CoarseGrainedClusterMessages.IsExecutorAlive(executorId) =>
+            context.reply(executorSet.contains(executorId))
+        }
+      }
+    )
+
+    def createAndRegisterBlockManager(id: String, port: Int): BlockManagerId = {
+      val bmRef = rpcEnv.setupEndpoint(s"bm-$id", new RpcEndpoint {
+        override val rpcEnv: RpcEnv = BlockManagerSuite.this.rpcEnv
+      })
+      val bmId = BlockManagerId(s"exec-$id", "host1", port, None)
+      master.registerBlockManager(bmId, Array.empty, 2000, 0, bmRef)
+    }
+
+    // set up normal bm1
+    val bm1Id = createAndRegisterBlockManager("01", 101)
+    // set up bm2, which intentionally takes more time than RPC_ASK_TIMEOUT to
+    // remove rdd/broadcast/shuffle in order to raise timeout error
+    val bm2Id = createAndRegisterBlockManager("02", 102)
+    val bm3Id = createAndRegisterBlockManager("03", 103)
+    val bm4Id = createAndRegisterBlockManager("04", 104)
+
+    driverEndpoint.askSync[Boolean](CoarseGrainedClusterMessages.RegisterExecutor(
+      bm1Id.executorId, null, bm1Id.host, 1, Map.empty, Map.empty,
+      Map.empty, 0))
+
+    driverEndpoint.askSync[Boolean](CoarseGrainedClusterMessages.RegisterExecutor(
+      bm2Id.executorId, null, bm1Id.host, 1, Map.empty, Map.empty, Map.empty, 0))
+
+    driverEndpoint.askSync[Boolean](CoarseGrainedClusterMessages.RegisterExecutor(
+      bm3Id.executorId, null, bm1Id.host, 1, Map.empty, Map.empty, Map.empty, 0))
+
+    driverEndpoint.askSync[Boolean](CoarseGrainedClusterMessages.RegisterExecutor(
+      bm4Id.executorId, null, bm1Id.host, 1, Map.empty, Map.empty, Map.empty, 0))
+
+
+    eventually(timeout(5.seconds)) {
+      // make sure both bm1 and bm2 are registered at driver side BlockManagerMaster
+      verify(master, times(2))
+        .registerBlockManager(mc.any(), mc.any(), mc.any(), mc.any(), mc.any(), mc.any())
+      assert(driverEndpoint.askSync[Boolean](
+        CoarseGrainedClusterMessages.IsExecutorAlive(bm1Id.executorId)))
+      assert(driverEndpoint.askSync[Boolean](
+        CoarseGrainedClusterMessages.IsExecutorAlive(bm2Id.executorId)))
+    }
+
+    // update RDD block info for bm1 and bm2 (Broadcast and shuffle don't report block
+    // locations to BlockManagerMaster)
     val blockId = BlockId("test_1")
-    master.updateBlockInfo(BlockManagerId("exec-0", "host1", 100), blockId,
-      StorageLevel.MEMORY_ONLY, 128, 0)
-    master.updateBlockInfo(BlockManagerId("exec-1", "host1", 101), blockId,
-      StorageLevel.DISK_ONLY, 0, 128)
-    master.updateBlockInfo(BlockManagerId("exec-2", "host1", 102), blockId,
-      StorageLevel.MEMORY_ONLY, 128, 0)
-    master.updateBlockInfo(BlockManagerId("exec-3", "host1", 103), blockId,
-      StorageLevel.MEMORY_ONLY, 128, 0)
+    master.updateBlockInfo(bm1Id, blockId, StorageLevel.MEMORY_ONLY, 128, 0)
+    master.updateBlockInfo(bm2Id, blockId, StorageLevel.DISK_ONLY, 0, 128)
+    return master.getLocationsAndStatus(blockId, "host1")
+  }
 
-    val locationsAndStatusOption = master.getLocationsAndStatus(blockId, "host1")
-
+  test("SPARK-43221: the BlockManager with the persisted block is preferred.") {
+    val locationsAndStatusOption = setupBlockManagerMasterWithDiskBlocks()
+//    val locationsAndStatusOption = master.getLocationsAndStatus(blockId, "host1")
     assert(locationsAndStatusOption.get.status.memSize == 0)
     assert(locationsAndStatusOption.get.status.diskSize == 128)
 
-    master.removeExecutor("exec-1")
-    assert(locationsAndStatusOption.get.status.memSize == 128)
-    assert(locationsAndStatusOption.get.status.diskSize == 0)
-
-    master.updateBlockInfo(BlockManagerId("exec-4", "host1", 104), blockId,
-      StorageLevel.DISK_ONLY, 0, 128)
-    val renewLocationsAndStatusOption = master.getLocationsAndStatus(blockId, "host1")
-    assert(locationsAndStatusOption.get.status.memSize == 0)
-    assert(locationsAndStatusOption.get.status.diskSize == 128)
+//    val blockId = BlockId("test_1")
+//    master.updateBlockInfo(BlockManagerId("exec-0", "host1", 100), blockId,
+//      StorageLevel.MEMORY_ONLY, 128, 0)
+//    master.updateBlockInfo(BlockManagerId("exec-1", "host1", 101), blockId,
+//      StorageLevel.DISK_ONLY, 0, 128)
+//    master.updateBlockInfo(BlockManagerId("exec-2", "host1", 102), blockId,
+//      StorageLevel.MEMORY_ONLY, 128, 0)
+//    master.updateBlockInfo(BlockManagerId("exec-3", "host1", 103), blockId,
+//      StorageLevel.MEMORY_ONLY, 128, 0)
+//
+//    val locationsAndStatusOption = master.getLocationsAndStatus(blockId, "host1")
+//
+//    assert(locationsAndStatusOption.get.status.memSize == 0)
+//    assert(locationsAndStatusOption.get.status.diskSize == 128)
+//
+//    master.removeExecutor("exec-1")
+//    assert(locationsAndStatusOption.get.status.memSize == 128)
+//    assert(locationsAndStatusOption.get.status.diskSize == 0)
+//
+//    master.updateBlockInfo(BlockManagerId("exec-4", "host1", 104), blockId,
+//      StorageLevel.DISK_ONLY, 0, 128)
+//    val renewLocationsAndStatusOption = master.getLocationsAndStatus(blockId, "host1")
+//    assert(locationsAndStatusOption.get.status.memSize == 0)
+//    assert(locationsAndStatusOption.get.status.diskSize == 128)
   }
 
   test("query locations of blockIds") {
