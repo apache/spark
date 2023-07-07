@@ -476,10 +476,11 @@ class DataFrameAggregateSuite extends QueryTest
     checkAnswer(testData2.agg(regr_syy($"a", $"b")), testData2.selectExpr("regr_syy(a, b)"))
   }
 
-  test("every | bool_and | some | bool_or") {
+  test("every | bool_and | some | any | bool_or") {
     checkAnswer(complexData.agg(every($"b")), complexData.selectExpr("every(b)"))
     checkAnswer(complexData.agg(bool_and($"b")), complexData.selectExpr("bool_and(b)"))
     checkAnswer(complexData.agg(some($"b")), complexData.selectExpr("some(b)"))
+    checkAnswer(complexData.agg(any($"b")), complexData.selectExpr("any(b)"))
     checkAnswer(complexData.agg(bool_or($"b")), complexData.selectExpr("bool_or(b)"))
   }
 
