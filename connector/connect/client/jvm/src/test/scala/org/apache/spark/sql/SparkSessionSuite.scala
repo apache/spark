@@ -13,15 +13,48 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
- */
+*/
 package org.apache.spark.sql
 
+import java.util.concurrent.TimeUnit
+
+import io.grpc.{CallOptions, Channel, ClientCall, ClientInterceptor, MethodDescriptor, Server}
+import io.grpc.netty.NettyServerBuilder
+import org.scalatest.BeforeAndAfterEach
+
+import org.apache.spark.sql.connect.client.DummySparkConnectService
 import org.apache.spark.sql.connect.client.util.ConnectFunSuite
 
 /**
  * Tests for non-dataframe related SparkSession operations.
  */
-class SparkSessionSuite extends ConnectFunSuite {
+class SparkSessionSuite extends ConnectFunSuite with BeforeAndAfterEach {
+  private var service: DummySparkConnectService = _
+  private var server: Server = _
+
+  private def startDummyServer(port: Int): Unit = {
+    service = new DummySparkConnectService
+    server = NettyServerBuilder
+      .forPort(port)
+      .addService(service)
+      .build()
+    server.start()
+  }
+
+  override def beforeEach(): Unit = {
+    super.beforeEach()
+    server = null
+    service = null
+  }
+
+  override def afterEach(): Unit = {
+    if (server != null) {
+      server.shutdownNow()
+      assert(server.awaitTermination(5, TimeUnit.SECONDS), "server failed to shutdown")
+    }
+  }
+
+
   test("default") {
     val session = SparkSession.builder().getOrCreate()
     assert(session.client.configuration.host == "localhost")
@@ -71,6 +104,24 @@ class SparkSessionSuite extends ConnectFunSuite {
     } finally {
       session1.close()
       session2.close()
+    }
+  }
+
+  test("Custom Interceptor") {
+    // external API
+    startDummyServer(0)
+    val session = SparkSession
+      .builder()
+      .interceptor(new ClientInterceptor {
+        override def interceptCall[ReqT, RespT](methodDescriptor: MethodDescriptor[ReqT, RespT],
+                                                callOptions: CallOptions,
+                                                channel: Channel): ClientCall[ReqT, RespT] = {
+          throw new RuntimeException("Blocked")
+        }
+      }).create()
+
+    assertThrows[RuntimeException] {
+      session.range(10).count()
     }
   }
 }

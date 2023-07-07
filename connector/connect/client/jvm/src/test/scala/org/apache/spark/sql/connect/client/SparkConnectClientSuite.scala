@@ -17,10 +17,11 @@
 package org.apache.spark.sql.connect.client
 
 import java.util.concurrent.TimeUnit
+
 import scala.collection.JavaConverters._
 import scala.collection.mutable
 
-import io.grpc.Server
+import io.grpc.{CallOptions, Channel, ClientCall, ClientInterceptor, MethodDescriptor, Server}
 import io.grpc.netty.NettyServerBuilder
 import io.grpc.stub.StreamObserver
 import org.scalatest.BeforeAndAfterEach
@@ -122,20 +123,18 @@ class SparkConnectClientSuite extends ConnectFunSuite with BeforeAndAfterEach {
     assert(df.plan === service.getAndClearLatestInputPlan())
   }
 
-  test("CustomInterceptor") {
+  test("Custom Interceptor") {
     startDummyServer(0)
     client = SparkConnectClient
       .builder()
       .connectionString(s"sc://localhost:${server.getPort}")
       .interceptor(new ClientInterceptor {
-        override def interceptCall[ReqT, RespT](
-                                                 methodDescriptor: MethodDescriptor[ReqT, RespT],
-                                                 callOptions: CallOptions,
-                                                 channel: Channel): ClientCall[ReqT, RespT] = {
+        override def interceptCall[ReqT, RespT](methodDescriptor: MethodDescriptor[ReqT, RespT],
+                                                callOptions: CallOptions,
+                                                channel: Channel): ClientCall[ReqT, RespT] = {
           throw new RuntimeException("Blocked")
         }
-      })
-      .build()
+      }).build()
 
     val session = SparkSession.builder().client(client).create()
 
