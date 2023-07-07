@@ -416,12 +416,25 @@ trait AlterTableTests extends SharedSparkSession with QueryErrorsBase {
            |USING $v2Format""".stripMargin)
 
       Seq("id", "point.x", "arr.element.x", "mk.key.x", "mv.value.x").foreach { field =>
-
-        val e = intercept[AnalysisException] {
-          sql(s"ALTER TABLE $t ADD COLUMNS $field double")
-        }
-        assert(e.getMessage.contains("add"))
-        assert(e.getMessage.contains(s"$field already exists"))
+        val expectedParameters = Map(
+          "op" -> "add",
+          "fieldNames" -> s"${toSQLId(field)}",
+          "struct" ->
+            """"STRUCT<id: INT, point: STRUCT<x: DOUBLE, y: DOUBLE>,
+              |arr: ARRAY<STRUCT<x: DOUBLE, y: DOUBLE>>,
+              |mk: MAP<STRUCT<x: DOUBLE, y: DOUBLE>, STRING>,
+              |mv: MAP<STRING, STRUCT<x: DOUBLE, y: DOUBLE>>>"""".stripMargin.replace("\n", " "))
+        checkError(
+          exception = intercept[AnalysisException] {
+            sql(s"ALTER TABLE $t ADD COLUMNS $field double")
+          },
+          errorClass = "FIELDS_ALREADY_EXISTS",
+          parameters = expectedParameters,
+          context = ExpectedContext(
+            fragment = s"ALTER TABLE $t ADD COLUMNS $field double",
+            start = 0,
+            stop = 31 + t.length + field.length)
+        )
       }
     }
   }
@@ -521,13 +534,28 @@ trait AlterTableTests extends SharedSparkSession with QueryErrorsBase {
     val t = fullTableName("table_name")
     withTable(t) {
       sql(s"CREATE TABLE $t (id int, point struct<x: double, y: double>) USING $v2Format")
+      val sqlText =
+        s"ALTER TABLE $t ALTER COLUMN point TYPE struct<x: double, y: double, z: double>"
 
-      val exc = intercept[AnalysisException] {
-        sql(s"ALTER TABLE $t ALTER COLUMN point TYPE struct<x: double, y: double, z: double>")
+      val fullName = if (catalogAndNamespace.isEmpty) {
+        s"spark_catalog.default.table_name"
+      } else {
+        t
       }
 
-      assert(exc.getMessage.contains("point"))
-      assert(exc.getMessage.contains("update a struct by updating its fields"))
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(sqlText)
+        },
+        errorClass = "UPDATE_FIELD_WITH_STRUCT_UNSUPPORTED",
+        parameters = Map(
+          "table" -> s"${toSQLId(fullName)}",
+          "fieldName" -> "`point`"),
+        context = ExpectedContext(
+          fragment = sqlText,
+          start = 0,
+          stop = 75 + t.length)
+      )
 
       val table = getTableMetadata(t)
 
@@ -1002,18 +1030,40 @@ trait AlterTableTests extends SharedSparkSession with QueryErrorsBase {
            |USING $v2Format""".stripMargin)
 
       Seq(
-        "id" -> "user_id",
-        "point.x" -> "y",
-        "arr.element.x" -> "y",
-        "mk.key.x" -> "y",
-        "mv.value.x" -> "y").foreach { case (field, newName) =>
+        ("id" -> "user_id") -> "user_id",
+        ("point.x" -> "y") -> "point.y",
+        ("arr.element.x" -> "y") -> "arr.element.y",
+        ("mk.key.x" -> "y") -> "mk.key.y",
+        ("mv.value.x" -> "y") -> "mv.value.y").foreach { case ((field, newName), expectedName) =>
 
-        val e = intercept[AnalysisException] {
-          sql(s"ALTER TABLE $t RENAME COLUMN $field TO $newName")
+        val expectedStruct =
+          """"
+            |STRUCT<id: INT, user_id: INT,
+            | point: STRUCT<x: DOUBLE, y: DOUBLE>,
+            | arr: ARRAY<STRUCT<x: DOUBLE, y: DOUBLE>>,
+            | mk: MAP<STRUCT<x: DOUBLE, y: DOUBLE>, STRING>,
+            | mv: MAP<STRING, STRUCT<x: DOUBLE, y: DOUBLE>>>
+            |"""".stripMargin.replace("\n", "")
+        val expectedStop = if (expectedName == "user_id") {
+          39 + t.length
+        } else {
+          31 + t.length + expectedName.length
         }
-        assert(e.getMessage.contains("rename"))
-        assert(e.getMessage.contains((field.split("\\.").init :+ newName).mkString(".")))
-        assert(e.getMessage.contains("already exists"))
+
+        checkError(
+          exception = intercept[AnalysisException] {
+            sql(s"ALTER TABLE $t RENAME COLUMN $field TO $newName")
+          },
+          errorClass = "FIELDS_ALREADY_EXISTS",
+          parameters = Map(
+            "op" -> "rename",
+            "fieldNames" -> s"${toSQLId(expectedName)}",
+            "struct" -> expectedStruct),
+          context = ExpectedContext(
+            fragment = s"ALTER TABLE $t RENAME COLUMN $field TO $newName",
+            start = 0,
+            stop = expectedStop)
+        )
       }
     }
   }
