@@ -284,7 +284,10 @@ private object PostgresDialect extends JdbcDialect with SQLConfHelper {
   }
 
   /**
-   * PostgreSQL has four special "infinity values" that we need clamp to avoid overflow.
+   * java.sql timestamps are measured with millisecond accuracy (from Long.MinValue
+   * milliseconds to Long.MaxValue milliseconds), see here while Spark timestamps
+   * are measured at microseconds accuracy. For the “infinity values” in PostgreSQL
+   * (represented by big constants), we need clamp them to avoid overflow.
    * If it is not one of the infinity values, fall back to default behavior. */
   override def convertJavaTimestampToTimestamp(t: Timestamp): Long = {
     // Variable names come from PostgreSQL "constant field docs":
