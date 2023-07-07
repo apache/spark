@@ -523,9 +523,7 @@ object SparkConnectClient {
         channelBuilder.intercept(new MetadataHeaderClientInterceptor(metadata))
       }
 
-      for (interceptor <- interceptors) {
-        channelBuilder.intercept(interceptor)
-      }
+      interceptors.forEach(channelBuilder.intercept(_))
 
       channelBuilder.maxInboundMessageSize(ConnectCommon.CONNECT_GRPC_MAX_MESSAGE_SIZE)
       channelBuilder.build()
