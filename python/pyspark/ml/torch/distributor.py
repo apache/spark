@@ -44,7 +44,6 @@ import subprocess
 
 
 from pyspark import cloudpickle
-from pyspark.pandas.missing import frame
 from pyspark.resource.information import ResourceInformation
 from pyspark.sql import DataFrame, SparkSession
 from pyspark.taskcontext import BarrierTaskContext
