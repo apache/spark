@@ -108,7 +108,6 @@ class SparkSessionSuite extends ConnectFunSuite with BeforeAndAfterEach {
   }
 
   test("Custom Interceptor") {
-    // external API
     startDummyServer(0)
     val session = SparkSession
       .builder()
