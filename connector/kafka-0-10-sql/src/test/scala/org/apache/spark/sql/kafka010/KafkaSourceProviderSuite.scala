@@ -91,6 +91,7 @@ class KafkaSourceProviderSuite extends SparkFunSuite with SharedSparkSession {
           "software.amazon.msk.auth.iam.IAMClientCallbackHandler",
         "retries" -> "0",
         "kafka.request.timeout.ms" -> "3000",
+        "kafka.default.api.timeout.ms" -> "3000",
         "kafka.max.block.ms" -> "3000"
       )
 
