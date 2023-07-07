@@ -1033,11 +1033,9 @@ class DeepspeedTorchDistributor(TorchDistributor):
         if isinstance(deepspeed_config, dict):
             with tempfile.NamedTemporaryFile(mode='w+', delete=False, suffix='.json') as fil:
                 json.dump(deepspeed_config, fil)
-                deepspeed_config_path = fil.name
-        else:
-            deepspeed_config_path = deepspeed_config
-        
-        if deepspeed_config_path == None:
+                return fil.name
+        deepspeed_config_path = deepspeed_config
+        if deepspeed_config == None:
             deepspeed_config_path = "" # empty value means the deepspeed will fall back to default settings
 
         return deepspeed_config_path
@@ -1045,22 +1043,24 @@ class DeepspeedTorchDistributor(TorchDistributor):
 
     @staticmethod 
     def _get_torchrun_args(local_mode, num_processes):
+        # given the number of processes and the mode, create the torchrun arguments to use when creating deepspeed command
         if local_mode:
             torchrun_args = ["--standalone", "--nnodes=1"]
             processes_per_node = num_processes
-        else:
-            master_addr, master_port = (
-                os.environ["MASTER_ADDR"],
-                os.environ["MASTER_PORT"],
-            )
-            node_rank = os.environ["RANK"]
-            torchrun_args = [
-                f"--nnodes={num_processes}",
-                f"--node_rank={node_rank}",
-                f"--rdzv_endpoint={master_addr}:{master_port}",
-                "--rdzv_id=0",
-            ]
-            processes_per_node = 1
+            return torchrun_args, processes_per_node
+
+        master_addr, master_port = (
+            os.environ["MASTER_ADDR"],
+            os.environ["MASTER_PORT"],
+        )
+        node_rank = os.environ["RANK"]
+        torchrun_args = [
+            f"--nnodes={num_processes}",
+            f"--node_rank={node_rank}",
+            f"--rdzv_endpoint={master_addr}:{master_port}",
+            "--rdzv_id=0",
+        ]
+        processes_per_node = 1
         return torchrun_args, processes_per_node
 
     @staticmethod
