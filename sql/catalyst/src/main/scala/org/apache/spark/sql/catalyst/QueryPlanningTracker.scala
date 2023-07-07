@@ -97,7 +97,7 @@ object QueryPlanningTracker {
  * @since 3.5.0
  */
 @DeveloperApi
-abstract class QueryPlanningTrackerCallback {
+private[sql] abstract class QueryPlanningTrackerCallback {
   /**
    * Called when query has been analyzed.
    *
@@ -105,14 +105,14 @@ abstract class QueryPlanningTrackerCallback {
    * @param analyzedPlan The plan after analysis,
    *                     see @org.apache.spark.sql.catalyst.analysis.Analyzer
    */
-  def analyzed(tracker: QueryPlanningTracker, analyzedPlan: LogicalPlan): Unit
+  private[sql] def analyzed(tracker: QueryPlanningTracker, analyzedPlan: LogicalPlan): Unit
 
   /**
    * Called when query is ready for execution.
    * This is after analysis for eager commands and after planning for other queries.
    * @param tracker tracker that triggered the callback.
    */
-  def readyForExecution(tracker: QueryPlanningTracker): Unit
+  private[sql] def readyForExecution(tracker: QueryPlanningTracker): Unit
 }
 
 /**
@@ -159,7 +159,7 @@ class QueryPlanningTracker(
    * @param analyzedPlan The plan after analysis,
    *                     see @org.apache.spark.sql.catalyst.analysis.Analyzer
    */
-  def setAnalyzed(analyzedPlan: LogicalPlan): Unit = {
+  private[sql] def setAnalyzed(analyzedPlan: LogicalPlan): Unit = {
     if (!analyzed) {
       analyzed = true
       trackerCallback.foreach(_.analyzed(this, analyzedPlan))
@@ -172,7 +172,7 @@ class QueryPlanningTracker(
    * see @link org.apache.spark.sql.execution.CommandExecutionMode
    * When called multiple times, ignores subsequent call.
    */
-  def setReadyForExecution(): Unit = {
+  private[sql] def setReadyForExecution(): Unit = {
     if (!readyForExecution) {
       readyForExecution = true
       trackerCallback.foreach(_.readyForExecution(this))
