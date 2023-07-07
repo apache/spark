@@ -486,8 +486,8 @@ object SparkConnectClient {
       isSslEnabled: Option[Boolean] = None,
       metadata: Map[String, String] = Map.empty,
       userAgent: String = DEFAULT_USER_AGENT,
-      interceptors: List[ClientInterceptor] = List.empty,
-      retryPolicy: GrpcRetryHandler.RetryPolicy = GrpcRetryHandler.RetryPolicy()) {
+      retryPolicy: GrpcRetryHandler.RetryPolicy = GrpcRetryHandler.RetryPolicy(),
+      interceptors: List[ClientInterceptor] = List.empty) {
 
     def userContext: proto.UserContext = {
       val builder = proto.UserContext.newBuilder()
