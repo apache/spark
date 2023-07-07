@@ -22,6 +22,7 @@ import scala.collection.JavaConverters._
 import org.apache.spark.SparkException
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
+import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.util.quoteIdentifier
 import org.apache.spark.sql.connector.catalog.CatalogV2Util.withDefaultOwnership
 import org.apache.spark.sql.connector.catalog.Table
@@ -129,10 +130,10 @@ trait AlterTableTests extends SharedSparkSession with QueryErrorsBase {
     withTable(t) {
       sql(s"CREATE TABLE $t (id int, point struct<x: double, y: double>) USING $v2Format")
       val e1 =
-        intercept[AnalysisException](sql(s"ALTER TABLE $t ADD COLUMN data interval"))
+        intercept[ParseException](sql(s"ALTER TABLE $t ADD COLUMN data interval"))
       assert(e1.getMessage.contains("Cannot use interval type in the table schema."))
       val e2 =
-        intercept[AnalysisException](sql(s"ALTER TABLE $t ADD COLUMN point.z interval"))
+        intercept[ParseException](sql(s"ALTER TABLE $t ADD COLUMN point.z interval"))
       assert(e2.getMessage.contains("Cannot use interval type in the table schema."))
     }
   }
