@@ -42,7 +42,7 @@ import org.apache.spark.sql.types.StringType
 class SparkSqlParserSuite extends AnalysisTest with SharedSparkSession {
   import org.apache.spark.sql.catalyst.dsl.expressions._
 
-  private lazy val parser = new SparkSqlParser()
+  private lazy val parser = spark.sessionState.sqlParser
 
   private def assertEqual(sqlCommand: String, plan: LogicalPlan): Unit = {
     comparePlans(parser.parsePlan(sqlCommand), plan)

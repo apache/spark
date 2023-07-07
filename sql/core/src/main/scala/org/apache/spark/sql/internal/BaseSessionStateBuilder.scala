@@ -135,7 +135,7 @@ abstract class BaseSessionStateBuilder(
    * Note: this depends on the `conf` field.
    */
   protected lazy val sqlParser: ParserInterface = {
-    extensions.buildParser(session, new SparkSqlParser())
+    extensions.buildParser(session, new SparkSqlParser(conf))
   }
 
   /**

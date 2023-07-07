@@ -25,12 +25,11 @@ import org.apache.spark.sql.catalyst.dsl.plans
 import org.apache.spark.sql.catalyst.dsl.plans.DslLogicalPlan
 import org.apache.spark.sql.catalyst.expressions.JsonTuple
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.execution.SparkSqlParser
 import org.apache.spark.sql.test.SharedSparkSession
 
 class DDLParserSuite extends AnalysisTest with SharedSparkSession {
   import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
-  private lazy val parser = new SparkSqlParser()
+  private lazy val parser = spark.sessionState.sqlParser
 
   private def parseException(sqlText: String): SparkThrowable = {
     super.parseException(parser.parsePlan)(sqlText)

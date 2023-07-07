@@ -1570,7 +1570,7 @@ class Dataset[T] private[sql](
    * @since 2.0.0
    */
   @scala.annotation.varargs
-  def selectExpr(exprs: String*): DataFrame = sparkSession.withActive {
+  def selectExpr(exprs: String*): DataFrame = {
     select(exprs.map { expr =>
       Column(sparkSession.sessionState.sqlParser.parseExpression(expr))
     }: _*)

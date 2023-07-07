@@ -16,11 +16,13 @@
  */
 package org.apache.spark.sql.catalyst.parser
 
+import org.apache.spark.sql.internal.SQLConf
+
 /**
  * Concrete SQL parser for Catalyst-only SQL statements.
  */
 class CatalystSqlParser extends AbstractSqlParser {
-  override val astBuilder: AstBuilder = new AstBuilder
+  override val astBuilder: AstBuilder = new AstBuilder(new SQLConf())
 }
 
 /** For test-only. */
