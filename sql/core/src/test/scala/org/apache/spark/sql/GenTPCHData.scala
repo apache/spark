@@ -59,7 +59,7 @@ object GenTPCHData {
       .getOrCreate()
 
     val tables = new TPCHTables(
-      spark.sqlContext,
+      spark,
       config)
 
     tables.genData(
