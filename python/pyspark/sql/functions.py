@@ -15527,32 +15527,20 @@ def udtf(
     returnType : :class:`pyspark.sql.types.StructType` or str
         the return type of the user-defined table function. The value can be either a
         :class:`pyspark.sql.types.StructType` object or a DDL-formatted struct type string.
-    useArrow : bool or None
-        whether to use Arrow to optimize the (de)serializations. When it is None, the
-        Spark config "spark.sql.execution.pythonUDTF.arrow.enabled" takes effect.
+    useArrow : bool or None, optional
+        whether to use Arrow to optimize the (de)serializations. When it's set to None, the
+        Spark config "spark.sql.execution.pythonUDTF.arrow.enabled" is used.
 
     Examples
     --------
-    Implement the UDTF class
+    Implement the UDTF class and create a UDTF:
 
     >>> class TestUDTF:
     ...     def eval(self, *args: Any):
     ...         yield "hello", "world"
-
-    Create the UDTF
-
+    ...
     >>> from pyspark.sql.functions import udtf
     >>> test_udtf = udtf(TestUDTF, returnType="c1: string, c2: string")
-
-    Create the UDTF using the decorator
-
-    >>> @udtf(returnType="c1: int, c2: int")
-    ... class PlusOne:
-    ...     def eval(self, x: int):
-    ...         yield x, x + 1
-
-    Invoke the UDTF
-
     >>> test_udtf().show()
     +-----+-----+
     |   c1|   c2|
@@ -15560,10 +15548,29 @@ def udtf(
     |hello|world|
     +-----+-----+
 
-    Invoke the UDTF with parameters
+    UDTF can also be created using the decorator syntax:
 
+    >>> @udtf(returnType="c1: int, c2: int")
+    ... class PlusOne:
+    ...     def eval(self, x: int):
+    ...         yield x, x + 1
+    ...
     >>> from pyspark.sql.functions import lit
     >>> PlusOne(lit(1)).show()
+    +---+---+
+    | c1| c2|
+    +---+---+
+    |  1|  2|
+    +---+---+
+
+    Arrow optimization can be explicitly enabled when creating UDTFs:
+
+    >>> @udtf(returnType="c1: int, c2: int", useArrow=True)
+    ... class ArrowPlusOne:
+    ...     def eval(self, x: int):
+    ...         yield x, x + 1
+    ...
+    >>> ArrowPlusOne(lit(1)).show()
     +---+---+
     | c1| c2|
     +---+---+

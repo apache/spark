@@ -720,6 +720,13 @@ class UDTFTests(BaseUDTFTestsMixin, ReusedSQLTestCase):
         super(UDTFTests, cls).setUpClass()
         cls.spark.conf.set("spark.sql.execution.pythonUDTF.arrow.enabled", "false")
 
+    @classmethod
+    def tearDownClass(cls):
+        try:
+            cls.spark.conf.unset("spark.sql.execution.pythonUDTF.arrow.enabled")
+        finally:
+            super(UDTFTests, cls).tearDownClass()
+
 
 @unittest.skipIf(
     not have_pandas or not have_pyarrow, pandas_requirement_message or pyarrow_requirement_message
@@ -792,10 +799,6 @@ class UDTFArrowTestsMixin(BaseUDTFTestsMixin):
         # Arrow-optimized UDTF can support this.
         self.assertEqual(TestUDTF(lit(1)).collect(), [Row(a=None)])
 
-    @unittest.skip("Failed with yield a[0], b[0] KeyError: 0")
-    def test_udtf_with_table_argument_multiple(self):
-        super().test_udtf_with_table_argument_multiple()
-
     def test_udtf_with_wrong_num_output(self):
         # The error message for arrow-optimized UDTF is different.
         err_msg = "The number of columns in the result does not match the specified schema."
@@ -815,10 +818,6 @@ class UDTFArrowTestsMixin(BaseUDTFTestsMixin):
 
         with self.assertRaisesRegex(PythonException, err_msg):
             TestUDTF(lit(1)).collect()
-
-    @unittest.skip("Need to treat struct types inputs as rows")
-    def test_udtf_with_struct_input_type(self):
-        super().test_udtf_with_struct_input_type()
 
 
 class UDTFArrowTests(UDTFArrowTestsMixin, ReusedSQLTestCase):

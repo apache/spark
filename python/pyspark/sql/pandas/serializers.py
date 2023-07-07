@@ -388,13 +388,7 @@ class ArrowStreamPandasUDFSerializer(ArrowStreamPandasSerializer):
 
         arrs = []
         for s, t in series:
-            if self._struct_in_pandas == "dict" and t is not None and pa.types.is_struct(t):
-                if not isinstance(s, pd.DataFrame):
-                    raise PySparkValueError(
-                        "A field of type StructType expects a pandas.DataFrame, "
-                        "but got: %s" % str(type(s))
-                    )
-
+            if t is not None and pa.types.is_struct(t) and isinstance(s, pd.DataFrame):
                 # Input partition and result pandas.DataFrame empty, make empty Arrays with struct
                 if len(s) == 0 and len(s.columns) == 0:
                     arrs_names = [(pa.array([], type=field.type), field.name) for field in t]

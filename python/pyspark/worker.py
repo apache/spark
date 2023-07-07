@@ -480,15 +480,19 @@ def read_udtf(pickleSer, infile, eval_type):
             timezone,
             safecheck,
             assign_cols_by_name(runner_conf),
-            # Do not convert struct type inputs into a pandas DataFrame.
+            # Set to 'False' to avoid converting struct type inputs into a pandas DataFrame.
             df_for_struct=False,
-            # TODO: should use `row`.
-            struct_in_pandas="dict",
-            # For array type inputs, Arrow converts them into numpy.ndarrays.
-            # For consistency in the behavior of both regular and arrow-optimized UDTFs,
-            # we convert these numpy.ndarrays into Python lists.
+            # Defines how struct type inputs are converted. If set to "row", struct type inputs
+            # are converted into Rows. Without this setting, a struct type input would be treated
+            # as a dictionary. For example, for named_struct('name', 'Alice', 'age', 1),
+            # if struct_in_pandas="dict", it becomes {"name": "Alice", "age": 1}
+            # if struct_in_pandas="row", it becomes Row(name="Alice", age=1)
+            struct_in_pandas="row",
+            # When dealing with array type inputs, Arrow converts them into numpy.ndarrays.
+            # To ensure consistency across regular and arrow-optimized UDTFs, we further
+            # convert these numpy.ndarrays into Python lists.
             ndarray_as_list=True,
-            # Explicitly cast the mismatched return type of Arrow Python UDTFs.
+            # Enables explicit casting for mismatched return types of Arrow Python UDTFs.
             arrow_cast=True,
         )
     else:

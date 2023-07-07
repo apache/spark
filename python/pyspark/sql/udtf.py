@@ -100,7 +100,7 @@ def _create_arrow_udtf(regular_udtf: "UserDefinedTableFunction") -> "UserDefined
     cls = regular_udtf.func
 
     class VectorizedUDTF:
-        def __init__(self):
+        def __init__(self) -> None:
             self.func = cls()
 
         def eval(self, *args: pd.Series) -> Iterator[pd.DataFrame]:
