@@ -74,7 +74,7 @@ class _PipelineReadWrite(MetaAlgorithmReadWrite):
     ) -> None:
         stages = []
         for stage_meta in node_metadata["stages"]:
-            stage = ParamsReadWrite._load_instance_from_metadata(stage_meta)
+            stage = ParamsReadWrite._load_instance_from_metadata(stage_meta, root_path)
             stages.append(stage)
 
         if isinstance(self, Pipeline):

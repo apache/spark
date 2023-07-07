@@ -447,13 +447,15 @@ class CrossValidator(
         else:
             bestIndex = np.argmin(metrics)
         bestModel = est.fit(dataset, epm[bestIndex])
-        return self._copyValues(
+        cv_model = self._copyValues(
             CrossValidatorModel(
                 bestModel,
                 avgMetrics=metrics,
                 stdMetrics=std_metrics,
             )
         )
+        cv_model._resetUid(self.uid)
+        return cv_model
 
     def _kFold(self, dataset: DataFrame) -> List[Tuple[DataFrame, DataFrame]]:
         nFolds = self.getOrDefault(self.numFolds)
