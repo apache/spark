@@ -20,12 +20,12 @@ package org.apache.spark.sql
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.types.StructType
 
-class TPCDSTables(sqlContext: SQLContext, dsdgenDir: String, scaleFactor: Int)
+class TPCDSTables(spark: SparkSession, config: GenTPCDataConfig)
   extends TableGenerator with TPCDSSchema with Logging with Serializable {
 
-  override protected val dataGenerator: DataGenerator = new Dsdgen(dsdgenDir)
-  override protected val sparkSQLContext: SQLContext = sqlContext
-  override protected val tpcScaleFactor: Int = scaleFactor
+  override protected val dataGenerator: DataGenerator = new Dsdgen(config.dsdgenDir)
+  override protected val sqlContext: SQLContext = spark.sqlContext
+  override protected val scaleFactor: Int = config.scaleFactor
   override protected def tables: Seq[Table] = tableColumns.map { case (tableName, schemaString) =>
     val partitionColumns = tablePartitionColumns.getOrElse(tableName, Nil)
       .map(_.stripPrefix("`").stripSuffix("`"))
@@ -58,9 +58,8 @@ object GenTPCDSData {
       .getOrCreate()
 
     val tables = new TPCDSTables(
-      spark.sqlContext,
-      dsdgenDir = config.dsdgenDir,
-      scaleFactor = config.scaleFactor)
+      spark,
+      config)
 
     tables.genData(
       location = config.location,

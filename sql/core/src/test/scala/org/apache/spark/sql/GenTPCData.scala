@@ -135,7 +135,7 @@ class Dsdgen(dsdgenDir: String) extends DataGenerator with Serializable {
   }
 }
 
-class Dbgen(dbgenDir: String, params: Seq[String])
+class Dbgen(dbgenDir: String, params: Seq[String] = Nil)
   extends DataGenerator with Serializable {
   override protected val toolsDir: String = s"$dbgenDir"
   override def generate(
@@ -161,8 +161,8 @@ class Dbgen(dbgenDir: String, params: Seq[String])
 
 trait TableGenerator extends Serializable with Logging {
   protected val dataGenerator: DataGenerator
-  protected val sparkSQLContext: SQLContext
-  protected val tpcScaleFactor: Int
+  protected val sqlContext: SQLContext
+  protected val scaleFactor: Int
   protected def tables: Seq[Table]
 
   protected case class Table(name: String, partitionColumns: Seq[String], schema: StructType) {
@@ -172,7 +172,7 @@ trait TableGenerator extends Serializable with Logging {
 
     private def df(numPartition: Int) = {
       val generatedData = dataGenerator.generate(
-        sparkSQLContext.sparkContext, name, numPartition, tpcScaleFactor)
+        sqlContext.sparkContext, name, numPartition, scaleFactor)
       val rows = generatedData.mapPartitions { iter =>
         iter.map { l =>
           val values = l.split("\\|", -1).dropRight(1).map { v =>
@@ -188,7 +188,7 @@ trait TableGenerator extends Serializable with Logging {
       }
 
       val stringData =
-        sparkSQLContext.createDataFrame(
+        sqlContext.createDataFrame(
           rows,
           StructType(schema.fields.map(f => StructField(f.name, StringType))))
 
@@ -244,7 +244,7 @@ trait TableGenerator extends Serializable with Logging {
                |DISTRIBUTE BY
                |  $partitionColumnString
             """.stripMargin
-          val grouped = sparkSQLContext.sql(query)
+          val grouped = sqlContext.sql(query)
           logInfo(s"Pre-clustering with partitioning columns with query $query.")
           grouped.write
         } else {
@@ -258,7 +258,7 @@ trait TableGenerator extends Serializable with Logging {
           // result will be the same.
           val numRows = data.count
           val maxRecordPerFile = Try {
-            sparkSQLContext.getConf("spark.sql.files.maxRecordsPerFile").toInt
+            sqlContext.getConf("spark.sql.files.maxRecordsPerFile").toInt
           }.getOrElse(0)
 
           if (maxRecordPerFile > 0 && numRows > maxRecordPerFile) {
@@ -278,7 +278,7 @@ trait TableGenerator extends Serializable with Logging {
       }
       logInfo(s"Generating table $name in database to $location with save mode $mode.")
       writer.save(location)
-      sparkSQLContext.dropTempTable(tempTableName)
+      sqlContext.dropTempTable(tempTableName)
     }
   }
 
