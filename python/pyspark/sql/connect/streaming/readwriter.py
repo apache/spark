@@ -584,6 +584,18 @@ class DataStreamWriter:
     toTable.__doc__ = PySparkDataStreamWriter.toTable.__doc__
 
 
+# XXX Temporary:
+# Foreach batch steps:
+#   - Investigate how UDF starts the external process.
+#   - Connect over local unix socket.
+#   - pass the credentials, note down any todos w.r.t. credentials.
+#   - trigger execution from the driver
+#   - Cache the Dataframe and remove it once the execution is done.
+#   - Ensure there is only one.
+#   - Handle the errors.
+#   - Handle missing python process.
+#   - Write tests.
+
 def _test() -> None:
     import sys
     import doctest

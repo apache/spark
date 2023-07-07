@@ -222,6 +222,8 @@ message StreamingForeachWriter {
     PythonUDF python_writer = 1;
     ScalarScalaUDF scala_writer = 2;
   }
+
+  CommonInlineUserDefinedFunction for_each_batch = 13;
 }
 
 message WriteStreamOperationStartResult {

@@ -894,6 +894,11 @@ class SparkConnectPlanner(val sessionHolder: SessionHolder) extends Logging {
       .logicalPlan
   }
 
+  private def transformDataFrameRef(rel: proto.DataFrameRef): LogicalPlan = {
+    val refId = rel.getRefId
+    DataFrameMap.dataFrames(refId).logicalPlan
+  }
+
   private def transformWithColumnsRenamed(rel: proto.WithColumnsRenamed): LogicalPlan = {
     Dataset
       .ofRows(session, transformRelation(rel.getInput))
@@ -2647,6 +2652,38 @@ class SparkConnectPlanner(val sessionHolder: SessionHolder) extends Logging {
             foreachWriterPkt.datasetEncoder.asInstanceOf[AgnosticEncoder[Any]])).toOption
         writer.foreachImplementation(clientWriter.asInstanceOf[ForeachWriter[Any]], encoder)
       }
+    }
+
+    val forEachBatchFunc: (Dataset[_], Long, DataOutputStream, DataInputStream) => Unit = {
+      (ds: Dataset[_], batchId: Long, dataOut: DataOutputStream, dataIn: DataInputStream) => {
+        // Cache the dataframe so that it can be retrieved when calling from spark connect
+        val dfRefId = UUID.randomUUID.toString
+        // XXX DataFrameMap.dataFrames(dfRefId) = ds
+
+        PythonRDD.writeUTF(dfRefId, dataOut)
+        dataOut.writeLong(batchId)
+        dataOut.flush()
+
+        val res = dataIn.readInt()
+        log.info(s"##### server for each batch receive finished signal res=$res")
+      }
+    }
+
+    if (writeOp.hasForEachBatch) {
+      log.info("##### write stream has ForEachBatch")
+      val forEachBatchUDF = transformPythonUDF(writeOp.getForEachBatch)
+      val runner = StreamingPythonRunner(forEachBatchUDF.func)
+
+      log.info("##### start runner init")
+      val (dataOut, dataIn) = runner.init(sessionId)
+
+      val func = forEachBatchFunc(_, _, dataOut, dataIn)
+
+      writer.foreachBatch(func)
+
+      // TODO: how/when to terminate the python process
+      // TODO: handle error where foreachBatch throw exception
+      // TODO: start process within daemon case?
     }
 
     val query = writeOp.getPath match {
