@@ -14,7 +14,6 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 package org.apache.spark.sql.catalyst.util
 
 import java.util.Locale
@@ -25,9 +24,9 @@ import java.util.Locale
  * nested case-insensitive map creation, otherwise the keys in the original map will become
  * case-insensitive in this scenario.
  * Note: CaseInsensitiveMap is serializable. However, after transformation, e.g. `filterKeys()`,
- *       it may become not serializable.
+ * it may become not serializable.
  */
-class CaseInsensitiveMap[T] private (val originalMap: Map[String, T]) extends Map[String, T]
+class CaseInsensitiveMap[T] private(val originalMap: Map[String, T]) extends Map[String, T]
   with Serializable {
 
   //  Note: this class supports Scala 2.12. A parallel source tree has a 2.13 implementation.
@@ -55,11 +54,3 @@ class CaseInsensitiveMap[T] private (val originalMap: Map[String, T]) extends Ma
 
   def toMap: Map[String, T] = originalMap
 }
-
-object CaseInsensitiveMap {
-  def apply[T](params: Map[String, T]): CaseInsensitiveMap[T] = params match {
-    case caseSensitiveMap: CaseInsensitiveMap[T] => caseSensitiveMap
-    case _ => new CaseInsensitiveMap(params)
-  }
-}
-
