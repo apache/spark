@@ -1012,12 +1012,21 @@ def _get_spark_partition_data_loader(
 class DeepspeedTorchDistributor(TorchDistributor):
     
     def __init__(self, num_gpus: int = 1, nnodes: int = 1, local_mode: bool = True, use_gpu: bool = True, deepspeed_config = None):
+        """
+            @param: num_gpus: the number of gpus per node (the same num_gpus argument in deepspeed command)
+            @param: nnodes: the number of nodes that you want to run with (analagous to deepspeed command)
+            @param: local_mode: boolean value representing whether you want distributed training or to run the training locally
+            @param: use_gpu: represents whether or not to use GPUs
+            @param: deepspeed_config: can be a dictionary representing arguments for deepspeed config, or can be a string representing the path
+                    to a config file. If nothing is specified, deepspeed will use its default optimizers and settings
+        """
         num_processes = num_gpus * nnodes
         super().__init__(num_processes, local_mode, use_gpu)
         self.deepspeed_config = deepspeed_config 
         self.ssl_conf = "deepspeed.spark.distributor.ignoreSsl"
         self._validate_input_params()
         self.input_params = self._create_input_params()
+        self.cleanup_deepspeed_conf = False
 
     @staticmethod
     def _get_deepspeed_config_path(deepspeed_config):
@@ -1063,6 +1072,7 @@ class DeepspeedTorchDistributor(TorchDistributor):
         
         deepspeed_config_path = DeepspeedTorchDistributor._get_deepspeed_config_path(deepspeed_config)
 
+
         torchrun_args, processes_per_node = DeepspeedTorchDistributor._get_torchrun_args(local_mode, num_processes)
 
         args_string = list(map(str, args))
@@ -1079,7 +1089,6 @@ class DeepspeedTorchDistributor(TorchDistributor):
                           "--deepspeed_config",
                           deepspeed_config_path
                         ]
-        print(command_to_run)
         return command_to_run
 
 
