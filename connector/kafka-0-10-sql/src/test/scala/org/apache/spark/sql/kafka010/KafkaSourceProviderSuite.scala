@@ -89,7 +89,9 @@ class KafkaSourceProviderSuite extends SparkFunSuite with SharedSparkSession {
         "kafka.security.protocol" -> "SASL_SSL",
         "kafka.sasl.client.callback.handler.class" ->
           "software.amazon.msk.auth.iam.IAMClientCallbackHandler",
-        "retries" -> "0"
+        "retries" -> "0",
+        "kafka.request.timeout.ms" -> "3000",
+        "kafka.max.block.ms" -> "3000"
       )
 
       testUtils.createTopic(options("subscribe"))
