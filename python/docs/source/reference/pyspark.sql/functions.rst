@@ -461,7 +461,7 @@ Bitwise Functions
 
 
 Call Functions
----
+--------------
 .. autosummary::
     :toctree: api/
 
