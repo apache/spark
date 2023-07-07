@@ -1,7 +1,7 @@
 ---
 layout: global
-title: INVALID_INLINE_TABLE error class
-displayTitle: INVALID_INLINE_TABLE error class
+title: INVALID_WRITE_DISTRIBUTION error class
+displayTitle: INVALID_WRITE_DISTRIBUTION error class
 license: |
   Licensed to the Apache Software Foundation (ASF) under one or more
   contributor license agreements.  See the NOTICE file distributed with
@@ -19,22 +19,22 @@ license: |
   limitations under the License.
 ---
 
-Invalid inline table.
+SQLSTATE: none assigned
+
+The requested write distribution is invalid.
 
 This error class has the following derived error classes:
 
-## CANNOT_EVALUATE_EXPRESSION_IN_INLINE_TABLE
+## PARTITION_NUM_AND_SIZE
 
-Cannot evaluate the expression `<expr>` in inline table definition.
+The partition number and advisory partition size can't be specified at the same time.
 
-## FAILED_SQL_EXPRESSION_EVALUATION
+## PARTITION_NUM_WITH_UNSPECIFIED_DISTRIBUTION
 
-Failed to evaluate the SQL expression `<sqlExpr>`. Please check your syntax and ensure all required tables and columns are available.
+The number of partitions can't be specified with unspecified distribution.
 
-## INCOMPATIBLE_TYPES_IN_INLINE_TABLE
+## PARTITION_SIZE_WITH_UNSPECIFIED_DISTRIBUTION
 
-Found incompatible types in the column `<colName>` for inline table.
+The advisory partition size can't be specified with unspecified distribution.
 
-## NUM_COLUMNS_MISMATCH
 
-Inline table expected `<expectedNumCols>` columns but found `<actualNumCols>` columns in row `<rowIndex>`.

@@ -71,7 +71,7 @@ Drop the namespace `<namespace>`.
 
 ## HIVE_WITH_ANSI_INTERVALS
 
-Hive table <tableName> with ANSI intervals.
+Hive table `<tableName>` with ANSI intervals.
 
 ## INSERT_PARTITION_SPEC_IF_NOT_EXISTS
 
@@ -125,10 +125,6 @@ Parameter markers are not allowed in `<statement>`.
 
 Invalid partitioning: `<cols>` is missing or is in a map or array.
 
-## REPLACE_NESTED_COLUMN
-
-The replace function does not support nested column <colName>.
-
 ## PIVOT_AFTER_GROUP_BY
 
 PIVOT clause following a GROUP BY clause. Consider pushing the GROUP BY into a subquery.
@@ -144,6 +140,10 @@ Python UDF in the ON clause of a `<joinType>` JOIN. In case of an INNNER JOIN co
 ## REMOVE_NAMESPACE_COMMENT
 
 Remove a comment from the namespace `<namespace>`.
+
+## REPLACE_NESTED_COLUMN
+
+The replace function does not support nested column `<colName>`.
 
 ## SET_NAMESPACE_PROPERTY
 

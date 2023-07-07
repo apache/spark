@@ -1,7 +1,7 @@
 ---
 layout: global
-title: INSERT_COLUMN_ARITY_MISMATCH error class
-displayTitle: INSERT_COLUMN_ARITY_MISMATCH error class
+title: UNSUPPORTED_ADD_FILE error class
+displayTitle: UNSUPPORTED_ADD_FILE error class
 license: |
   Licensed to the Apache Software Foundation (ASF) under one or more
   contributor license agreements.  See the NOTICE file distributed with
@@ -19,20 +19,18 @@ license: |
   limitations under the License.
 ---
 
-[SQLSTATE: 21S01](sql-error-conditions-sqlstates.html#class-21-cardinality-violation)
+SQLSTATE: none assigned
 
-Cannot write to `<tableName>`, the reason is
+Don't support add file.
 
 This error class has the following derived error classes:
 
-## NOT_ENOUGH_DATA_COLUMNS
+## DIRECTORY
 
-not enough data columns:
-Table columns: `<tableColumns>`.
-Data columns: `<dataColumns>`.
+The file `<path>` is a directory, consider to set "spark.sql.legacy.addSingleFileInAddFile" to "false".
 
-## TOO_MANY_DATA_COLUMNS
+## LOCAL_DIRECTORY
 
-too many data columns:
-Table columns: `<tableColumns>`.
-Data columns: `<dataColumns>`.
+The local directory `<path>` is not supported in a non-local master mode.
+
+

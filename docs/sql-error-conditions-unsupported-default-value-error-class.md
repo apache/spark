@@ -1,7 +1,7 @@
 ---
 layout: global
-title: MALFORMED_RECORD_IN_PARSING error class
-displayTitle: MALFORMED_RECORD_IN_PARSING error class
+title: UNSUPPORTED_DEFAULT_VALUE error class
+displayTitle: UNSUPPORTED_DEFAULT_VALUE error class
 license: |
   Licensed to the Apache Software Foundation (ASF) under one or more
   contributor license agreements.  See the NOTICE file distributed with
@@ -19,16 +19,18 @@ license: |
   limitations under the License.
 ---
 
-[SQLSTATE: 22023](sql-error-conditions-sqlstates.html#class-22-data-exception)
+SQLSTATE: none assigned
 
-Malformed records are detected in record parsing: `<badRecord>`.
-Parse Mode: `<failFastMode>`. To process malformed records as null result, try setting the option 'mode' as 'PERMISSIVE'.
+DEFAULT column values is not supported.
 
 This error class has the following derived error classes:
 
-## CANNOT_PARSE_JSON_ARRAYS_AS_STRUCTS
-
-Parsing JSON arrays as structs is forbidden.
-
 ## WITHOUT_SUGGESTION
+
+
+
+## WITH_SUGGESTION
+
+Enable it by setting "spark.sql.defaultColumn.enabled" to "true".
+
 

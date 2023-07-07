@@ -1,7 +1,7 @@
 ---
 layout: global
-title: INVALID_DEFAULT_VALUE error class
-displayTitle: INVALID_DEFAULT_VALUE error class
+title: INVALID_TIME_TRAVEL_TIMESTAMP_EXPR error class
+displayTitle: INVALID_TIME_TRAVEL_TIMESTAMP_EXPR error class
 license: |
   Licensed to the Apache Software Foundation (ASF) under one or more
   contributor license agreements.  See the NOTICE file distributed with
@@ -19,18 +19,22 @@ license: |
   limitations under the License.
 ---
 
-Failed to execute `<statement>` command because the destination table column `<colName>` has a DEFAULT value `<defaultValue>`,
+SQLSTATE: none assigned
+
+The time travel timestamp expression `<expr>` is invalid.
 
 This error class has the following derived error classes:
 
-## DATA_TYPE
+## INPUT
 
-which requires `<expectedType>` type, but the statement provided a value of incompatible `<actualType>` type.
+Cannot be casted to the "TIMESTAMP" type.
 
-## SUBQUERY_EXPRESSION
+## NON_DETERMINISTIC
 
-which contains subquery expressions.
+Must be deterministic.
 
-## UNRESOLVED_EXPRESSION
+## UNEVALUABLE
 
-which fails to resolve as a valid expression.
+Must be evaluable.
+
+
