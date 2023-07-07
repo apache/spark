@@ -29,7 +29,7 @@ from typing import Callable, Dict, Any
 import unittest
 from unittest.mock import patch
 
-from pyspark.ml.torch.deepspeed_disributed import DeepspeedDistributor
+from pyspark.ml.torch.distributor import DeepspeedTorchDistributor
 
 have_torch = True
 try:

@@ -1012,12 +1012,27 @@ class DeepspeedTorchDistributor(TorchDistributor):
     
     def __init__(self, num_gpus: int = 1, nnodes: int = 1, local_mode: bool = True, use_gpu: bool = True, deepspeed_config = None):
         """
-            @param: num_gpus: the number of gpus per node (the same num_gpus argument in deepspeed command)
-            @param: nnodes: the number of nodes that you want to run with (analagous to deepspeed command)
-            @param: local_mode: boolean value representing whether you want distributed training or to run the training locally
-            @param: use_gpu: represents whether or not to use GPUs
-            @param: deepspeed_config: can be a dictionary representing arguments for deepspeed config, or can be a string representing the path
-                    to a config file. If nothing is specified, deepspeed will use its default optimizers and settings
+            This class is used to run deepspeed training workloads with spark clusters. The user has the option to 
+            specify the number of gpus per node and the number of nodes (the same as if running from terminal), 
+            as well as specify a deepspeed configuration file.
+
+            Parameters
+            ----------
+            num_gpus: int
+                the number of GPUs to use per node (analagous to num_gpus in deepspeed command)
+
+            nnodes: int
+                the number of nodes that should be used for the run
+
+            local_mode: bool
+                whether or not to run the training in a distributed fashion or just locally
+
+            use_gpu: bool
+                boolean flag to determine whether to utilize gpus
+
+            deepspeed_config: Union[Dict[str,Any], str] or None:
+                the configuration file to be used for launching the deepspeed application. If it is a dictionary mapping parameters to values, then we will create the file.
+                If None, deepspeed will fall back to default parameters.
         """
         num_processes = num_gpus * nnodes
         super().__init__(num_processes, local_mode, use_gpu)
@@ -1034,15 +1049,16 @@ class DeepspeedTorchDistributor(TorchDistributor):
                 json.dump(deepspeed_config, fil)
                 return fil.name
         deepspeed_config_path = deepspeed_config
+        # Empty value means the deepspeed will fall back to default settings.
         if deepspeed_config == None:
-            deepspeed_config_path = "" # empty value means the deepspeed will fall back to default settings
+            deepspeed_config_path = "" 
 
         return deepspeed_config_path
 
 
     @staticmethod 
     def _get_torchrun_args(local_mode, num_processes):
-        # given the number of processes and the mode, create the torchrun arguments to use when creating deepspeed command
+        # Given the number of processes and the mode, create the torchrun arguments to use when creating deepspeed command.
         if local_mode:
             torchrun_args = ["--standalone", "--nnodes=1"]
             processes_per_node = num_processes
@@ -1090,7 +1106,6 @@ class DeepspeedTorchDistributor(TorchDistributor):
                         ]
         return command_to_run
 
-
     @staticmethod
     def _run_training_on_pytorch_file(input_params: Dict[str, Any], train_path: str, *args: Any, **kwargs : Any) -> None :
         if kwargs:
@@ -1101,7 +1116,7 @@ class DeepspeedTorchDistributor(TorchDistributor):
         DeepspeedTorchDistributor._execute_command(training_command, log_streaming_client=log_streaming_client)
 
     def run(self, train_object: Union[Callable, str], *args : Any, **kwargs: Any) -> Optional[Any]:
-        # if the "train_object" is a string, then we assume it's a filepath. Otherwise, we assume it's a function
+        # If the "train_object" is a string, then we assume it's a filepath. Otherwise, we assume it's a function.
         if isinstance(train_object, str):
             framework_wrapper_fn = DeepspeedTorchDistributor._run_training_on_pytorch_file
         else:
@@ -1110,7 +1125,7 @@ class DeepspeedTorchDistributor(TorchDistributor):
         if self.local_mode:
             output = self._run_local_training(framework_wrapper_fn, train_object, *args, **kwargs)
         else:
-            output = self._run_distributed_training(framework_wrapper_fn, train_object, None, *args, **kwargs)
+            output = self._run_distributed_training(framework_wrapper_fn, train_object, spark_dataframe=None, *args, **kwargs)
         return output
 
 
