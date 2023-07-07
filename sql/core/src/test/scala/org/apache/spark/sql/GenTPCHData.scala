@@ -60,8 +60,7 @@ object GenTPCHData {
 
     val tables = new TPCHTables(
       spark.sqlContext,
-      dbgenDir = config.dbgenDir,
-      scaleFactor = config.scaleFactor)
+      config)
 
     tables.genData(
       location = config.location,
