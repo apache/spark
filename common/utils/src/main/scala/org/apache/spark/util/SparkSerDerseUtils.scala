@@ -18,7 +18,7 @@ package org.apache.spark.util
 
 import java.io.{ByteArrayOutputStream, ObjectOutputStream}
 
-object SparkSerDeserUtils {
+object SparkSerDerseUtils {
   /** Serialize an object using Java serialization */
   def serialize[T](o: T): Array[Byte] = {
     val bos = new ByteArrayOutputStream()
