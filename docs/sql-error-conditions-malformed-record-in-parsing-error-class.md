@@ -1,7 +1,7 @@
 ---
 layout: global
-title: INVALID_LAMBDA_FUNCTION_CALL error class
-displayTitle: INVALID_LAMBDA_FUNCTION_CALL error class
+title: MALFORMED_RECORD_IN_PARSING error class
+displayTitle: MALFORMED_RECORD_IN_PARSING error class
 license: |
   Licensed to the Apache Software Foundation (ASF) under one or more
   contributor license agreements.  See the NOTICE file distributed with
@@ -19,18 +19,19 @@ license: |
   limitations under the License.
 ---
 
-Invalid lambda function call.
+[SQLSTATE: 22023](sql-error-conditions-sqlstates.html#class-22-data-exception)
+
+Malformed records are detected in record parsing: `<badRecord>`.
+Parse Mode: `<failFastMode>`. To process malformed records as null result, try setting the option 'mode' as 'PERMISSIVE'.
 
 This error class has the following derived error classes:
 
-## DUPLICATE_ARG_NAMES
+## CANNOT_PARSE_JSON_ARRAYS_AS_STRUCTS
 
-The lambda function has duplicate arguments <args>. Please, consider to rename the argument names or set <caseSensitiveConfig> to "true".
+Parsing JSON arrays as structs is forbidden.
 
-## NON_HIGHER_ORDER_FUNCTION
+## WITHOUT_SUGGESTION
 
-A lambda function should only be used in a higher order function. However, its class is `<class>`, which is not a higher order function.
 
-## NUM_ARGS_MISMATCH
 
-A higher order function expects <expectedNumArgs> arguments, but got <actualNumArgs>.
+

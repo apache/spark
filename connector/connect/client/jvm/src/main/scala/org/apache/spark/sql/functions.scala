@@ -1258,6 +1258,14 @@ object functions {
    * @group agg_funcs
    * @since 3.5.0
    */
+  def any(e: Column): Column = Column.fn("any", e)
+
+  /**
+   * Aggregate function: returns true if at least one value of `e` is true.
+   *
+   * @group agg_funcs
+   * @since 3.5.0
+   */
   def bool_or(e: Column): Column = Column.fn("bool_or", e)
 
   /**
@@ -3685,6 +3693,16 @@ object functions {
    * @since 3.4.0
    */
   def length(e: Column): Column = Column.fn("length", e)
+
+  /**
+   * Computes the character length of a given string or number of bytes of a binary string. The
+   * length of character strings include the trailing spaces. The length of binary strings
+   * includes binary zeros.
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def len(e: Column): Column = Column.fn("len", e)
 
   /**
    * Converts a string column to lower case.
