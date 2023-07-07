@@ -347,7 +347,7 @@ jobs:
           - >-
             pyspark-sql, pyspark-mllib, pyspark-resource
           - >-
-            pyspark-core, pyspark-streaming, pyspark-ml
+            pyspark-core, pyspark-streaming, pyspark-ml, pyspark-testing
           - >-
             pyspark-pandas
           - >-

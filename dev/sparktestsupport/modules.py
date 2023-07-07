@@ -507,6 +507,16 @@ pyspark_sql = Module(
     ],
 )
 
+pyspark_testing = Module(
+    name="pyspark-testing",
+    dependencies=[pyspark_core, pyspark_sql],
+    source_file_regexes=["python/pyspark/testing"],
+    python_test_goals=[
+        # doctests
+        "pyspark.testing.utils",
+    ],
+)
+
 pyspark_resource = Module(
     name="pyspark-resource",
     dependencies=[pyspark_core],
