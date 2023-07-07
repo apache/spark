@@ -2141,8 +2141,8 @@ case class ArrayMax(child: Expression)
  */
 @ExpressionDescription(
   usage = """
-    _FUNC_(array, element) - Returns the (1-based) index of the first matching element of the array as long,
-      or 0 if no match is found.
+    _FUNC_(array, element) - Returns the (1-based) index of the first matching element of
+      the array as long, or 0 if no match is found.
   """,
   examples = """
     Examples:
