@@ -306,6 +306,12 @@ def assertDataFrameEqual(
                 message_parameters={"data_type": type(expected)},
             )
 
+    # special cases: empty datasets, datasets with 0 columns
+    if (df.first() is None and expected.first() is None) or (
+        len(df.columns) == 0 and len(expected.columns) == 0
+    ):
+        return True
+
     def compare_rows(r1: Row, r2: Row):
         def compare_vals(val1, val2):
             if isinstance(val1, list) and isinstance(val2, list):

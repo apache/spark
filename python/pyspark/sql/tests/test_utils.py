@@ -770,6 +770,27 @@ class UtilsTestsMixin:
             self.spark.sql("select * from df1 order by amount"), self.spark.sql("select * from df2")
         )
 
+    def test_empty_dataset(self):
+        df1 = self.spark.range(0, 10).limit(0)
+
+        df2 = self.spark.range(0, 10).limit(0)
+
+        assertDataFrameEqual(df1, df2)
+
+    def test_no_column(self):
+        df1 = self.spark.range(0, 10).drop("id")
+
+        df2 = self.spark.range(0, 10).drop("id")
+
+        assertDataFrameEqual(df1, df2)
+
+    def test_empty_no_column(self):
+        df1 = self.spark.range(0, 10).drop("id").limit(0)
+
+        df2 = self.spark.range(0, 10).drop("id").limit(0)
+
+        assertDataFrameEqual(df1, df2)
+
 
 class UtilsTests(ReusedSQLTestCase, UtilsTestsMixin):
     def test_capture_analysis_exception(self):
