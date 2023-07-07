@@ -62,3 +62,4 @@ object CaseInsensitiveMap {
     case _ => new CaseInsensitiveMap(params)
   }
 }
+
