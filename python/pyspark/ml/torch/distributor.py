@@ -1106,6 +1106,7 @@ class DeepspeedTorchDistributor(TorchDistributor):
         if isinstance(train_object, str):
             framework_wrapper_fn = DeepspeedTorchDistributor._run_training_on_pytorch_file
         else:
+            raise RuntimeError("Work in progress; not supported atm")
             framework_wrapper_fn = TorchDistributor._run_training_on_pytorch_file
         if self.local_mode:
             output = self._run_local_training(framework_wrapper_fn, train_object, *args, **kwargs)
