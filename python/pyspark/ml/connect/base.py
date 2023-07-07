@@ -261,7 +261,7 @@ class Evaluator(Params, metaclass=ABCMeta):
         (True, default) or minimized (False).
         A given evaluator may support multiple metrics which may be maximized or minimized.
         """
-        return True
+        raise NotImplementedError()
 
 
 @inherit_doc

@@ -37,6 +37,7 @@ from typing import (
 )
 
 import numpy as np
+import pandas as pd
 
 from pyspark import keyword_only, since, inheritable_thread_target
 from pyspark.ml.connect import Estimator, Transformer, Model
@@ -410,7 +411,11 @@ class CrossValidator(
         std_metrics = np.std(metrics_all, axis=0)
         return list(avg_metrics), list(std_metrics)
 
-    def _fit(self, dataset: DataFrame) -> "CrossValidatorModel":
+    def _fit(self, dataset: Union[pd.DataFrame, DataFrame]) -> "CrossValidatorModel":
+        if isinstance(dataset, pd.DataFrame):
+            # TODO: support pandas dataframe fitting
+            raise NotImplementedError("Fitting pandas dataframe is not supported yet.")
+
         est = self.getOrDefault(self.estimator)
         epm = self.getOrDefault(self.estimatorParamMaps)
         numModels = len(epm)
@@ -552,7 +557,7 @@ class CrossValidatorModel(Model, _CrossValidatorParams, _CrossValidatorReadWrite
         #: CrossValidator.estimatorParamMaps, in the corresponding order.
         self.stdMetrics = stdMetrics or []
 
-    def _transform(self, dataset: DataFrame) -> DataFrame:
+    def _transform(self, dataset: Union[DataFrame, pd.DataFrame]) -> Union[DataFrame, pd.DataFrame]:
         return self.bestModel.transform(dataset)
 
     def copy(self, extra: Optional["ParamMap"] = None) -> "CrossValidatorModel":
