@@ -1011,7 +1011,8 @@ def _get_spark_partition_data_loader(
 
 class DeepspeedTorchDistributor(TorchDistributor):
     
-    def __init__(self, num_processes: int = 1, local_mode: bool = True, use_gpu: bool = True, deepspeed_config = None):
+    def __init__(self, num_gpus: int = 1, nnodes: int = 1, local_mode: bool = True, use_gpu: bool = True, deepspeed_config = None):
+        num_processes = num_gpus * nnodes
         super().__init__(num_processes, local_mode, use_gpu)
         self.deepspeed_config = deepspeed_config 
         self.ssl_conf = "deepspeed.spark.distributor.ignoreSsl"
@@ -1026,6 +1027,10 @@ class DeepspeedTorchDistributor(TorchDistributor):
                 deepspeed_config_path = fil.name
         else:
             deepspeed_config_path = deepspeed_config
+        
+        if deepspeed_config_path == None:
+            deepspeed_config_path = "" # empty value means the deepspeed will fall back to default settings
+
         return deepspeed_config_path
 
 

@@ -607,7 +607,7 @@ class DeepspeedTorchDistributorUnitTests(unittest.TestCase):
                     f"--nproc_per_node={NUM_PROCS}",
                     TRAIN_FILE_PATH,
                     "--deepspeed",
-                    "-deepspeed_config",
+                    "--deepspeed_config",
                     DEEPSPEED_CONF
                     ]
         local_cmd = DeepspeedTorchDistributor._create_torchrun_command(input_params, TRAIN_FILE_PATH)
@@ -620,19 +620,51 @@ class DeepspeedTorchDistributorUnitTests(unittest.TestCase):
                     *local_mode_version_args,
                     f"--nproc_per_node={NUM_PROCS}",
                     TRAIN_FILE_PATH,
-                    "--deepspeed",
-                    "-deepspeed_config",
+                    "-deepspeed",
+                    "--deepspeed_config",
                     DEEPSPEED_CONF
                     ]
+
         local_cmd_with_args = DeepspeedTorchDistributor._create_torchrun_command(input_params, TRAIN_FILE_PATH)
         assert(local_cmd_with_args == LOCAL_CMD_ARGS_EXPECTED)
-
-
-
-
         
-
-
+        # distributed training environment
+        distributed_master_address, distributed_master_port, distributed_rank = self._get_env_variables_distributed()
+        distributed_torchrun_args = [
+                f"--nnodes={NUM_PROCS}",
+                f"--node_rank={distributed_rank}",
+                f"--rdzv_endpoint={distributed_master_address}:{distributed_master_port}",
+                "--rdzv_id=0",
+            ]
+        DISTRIBUTED_CMD_NO_ARGS_EXPECTED = [sys.executable,
+                                            "-m",
+                                            "torch.distributed.run",
+                                            *distributed_torchrun_args,
+                                            "--nproc_per_node=1",
+                                            TRAIN_FILE_PATH,
+                                            "-deepspeed",
+                                            "--deepspeed_config",
+                                            DEEPSPEED_CONF
+                                            ]
+        # test distributed training without arguments
+        input_params["local_mode"] = False
+        distributed_command = DeepspeedTorchDistributor._create_torchrun_command(input_params, TRAIN_FILE_PATH)
+        assert(DISTRIBUTED_CMD_NO_ARGS_EXPECTED == distributed_command)
+        # test distributed training with arguments
+        distributed_extra_args = ["--distributed=true", "--args2"]
+        DISTRIBUTED_CMD_ARGS_EXPECTED = [sys.executable,
+                                            "-m",
+                                            "torch.distributed.run",
+                                            *distributed_torchrun_args,
+                                            "--nproc_per_node=1",
+                                            TRAIN_FILE_PATH,
+                                            *distributed_extra_args,
+                                            "-deepspeed",
+                                            "--deepspeed_config",
+                                            DEEPSPEED_CONF
+                                            ]
+        distributed_command_with_args = DeepspeedTorchDistributor._create_torchrun_command(input_params, TRAIN_FILE_PATH, distributed_extra_args)
+        assert(DISTRIBUTED_CMD_ARGS_EXPECTED == distributed_command_with_args)
 
 if __name__ == "__main__":
     from pyspark.ml.torch.tests.test_distributor import *  # noqa: F401,F403
