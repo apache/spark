@@ -1057,8 +1057,23 @@ class DeepspeedTorchDistributor(TorchDistributor):
 
 
     @staticmethod 
-    def _get_torchrun_args(local_mode, num_processes):
-        # Given the number of processes and the mode, create the torchrun arguments to use when creating deepspeed command.
+    def _get_torchrun_args(local_mode: bool, num_processes: int) -> Tuple[List[Any], int]:
+        """
+        Given the mode and the number of processes, create the arguments to be given to deepspeed
+        
+        Parameters
+        ---------
+        local_mode: bool
+            Whether or not we are running training locally or in a distributed fashion
+
+        num_processes: int
+            The number of processes that we are going to use (number of gpus per node * number of nodes)
+
+        Returns
+        ------
+        Tuple[List[Any], int]
+            A tuple containing a list of arguments to pass as pytorch args to deepspeed, as well as the number of processes per node
+        """
         if local_mode:
             torchrun_args = ["--standalone", "--nnodes=1"]
             processes_per_node = num_processes
