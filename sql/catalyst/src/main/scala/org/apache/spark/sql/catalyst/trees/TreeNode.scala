@@ -61,11 +61,14 @@ object AlwaysProcess {
 }
 
 // scalastyle:off
-abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product with TreePatternBits {
+abstract class TreeNode[BaseType <: TreeNode[BaseType]]
+  extends Product
+  with TreePatternBits
+  with WithOrigin {
 // scalastyle:on
   self: BaseType =>
 
-  val origin: Origin = CurrentOrigin.get
+  override val origin: Origin = CurrentOrigin.get
 
   /**
    * A mutable map for holding auxiliary information of this tree node. It will be carried over

@@ -22,7 +22,7 @@ import scala.collection.JavaConverters._
 import org.apache.spark.{QueryContext, SparkThrowable, SparkThrowableHelper}
 import org.apache.spark.annotation.Stable
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-import org.apache.spark.sql.catalyst.trees.Origin
+import org.apache.spark.sql.catalyst.trees.{Origin, WithOrigin}
 
 /**
  * Thrown when a query fails to analyze, usually because the query itself is invalid.
@@ -40,7 +40,7 @@ class AnalysisException protected[sql] (
     val errorClass: Option[String] = None,
     val messageParameters: Map[String, String] = Map.empty,
     val context: Array[QueryContext] = Array.empty)
-  extends Exception(message, cause.orNull) with SparkThrowable with Serializable {
+  extends Exception(message, cause.orNull) with SparkThrowable with Serializable with WithOrigin {
 
   def this(
       errorClass: String,
@@ -139,4 +139,6 @@ class AnalysisException protected[sql] (
   override def getErrorClass: String = errorClass.orNull
 
   override def getQueryContext: Array[QueryContext] = context
+
+  override lazy val origin: Origin = Origin(line, startPosition)
 }

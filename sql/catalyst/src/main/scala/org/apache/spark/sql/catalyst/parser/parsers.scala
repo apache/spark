@@ -16,16 +16,17 @@
  */
 package org.apache.spark.sql.catalyst.parser
 
+import scala.collection.JavaConverters._
+
 import org.antlr.v4.runtime._
 import org.antlr.v4.runtime.atn.PredictionMode
 import org.antlr.v4.runtime.misc.{Interval, ParseCancellationException}
 import org.antlr.v4.runtime.tree.TerminalNodeImpl
 
-import org.apache.spark.{QueryContext, SparkException, SparkThrowableHelper}
+import org.apache.spark.{QueryContext, SparkException, SparkThrowable, SparkThrowableHelper}
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.SQLConfHelper
-import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, Origin}
+import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, Origin, WithOrigin}
 import org.apache.spark.sql.errors.QueryParsingErrors
 import org.apache.spark.sql.types.{DataType, StructType}
 
@@ -93,10 +94,15 @@ abstract class AbstractParser extends DataTypeParserInterface with SQLConfHelper
         throw e
       case e: ParseException =>
         throw e.withCommand(command)
-      case e: AnalysisException =>
-        val position = Origin(e.line, e.startPosition)
-        throw new ParseException(Option(command), e.message, position, position,
-          e.errorClass, e.messageParameters)
+      case e: SparkThrowable with WithOrigin =>
+        throw new ParseException(
+          command = Option(command),
+          message = e.getMessage,
+          start = e.origin,
+          stop = e.origin,
+          errorClass = Option(e.getErrorClass),
+          messageParameters = e.getMessageParameters.asScala.toMap,
+          queryContext = e.getQueryContext)
     }
   }
 }
