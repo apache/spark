@@ -254,6 +254,14 @@ SQLSTATE: none assigned
 
 Failed to set permissions on created path `<path>` back to `<permission>`.
 
+### [CANNOT_UPDATE_FIELD](sql-error-conditions-cannot-update-field-error-class.html)
+
+SQLSTATE: none assigned
+
+Cannot update `<table>` field `<fieldName>` type:
+
+For more details see [CANNOT_UPDATE_FIELD](sql-error-conditions-cannot-update-field-error-class.html)
+
 ### CANNOT_UP_CAST_DATATYPE
 
 SQLSTATE: none assigned
@@ -1043,14 +1051,6 @@ The value of the typed literal `<valueType>` is invalid: `<value>`.
 SQLSTATE: none assigned
 
 Function `<funcName>` does not implement ScalarFunction or AggregateFunction.
-
-### [INVALID_UPDATE_FIELD](sql-error-conditions-invalid-update-field-error-class.html)
-
-SQLSTATE: none assigned
-
-Cannot update `<table>` field `<fieldName>` type:
-
-For more details see [INVALID_UPDATE_FIELD](sql-error-conditions-invalid-update-field-error-class.html)
 
 ### INVALID_URL
 

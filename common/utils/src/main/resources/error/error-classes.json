@@ -1674,32 +1674,32 @@
       "Function <funcName> does not implement ScalarFunction or AggregateFunction."
     ]
   },
-  "INVALID_UPDATE_FIELD" : {
+  "CANNOT_UPDATE_FIELD" : {
     "message" : [
       "Cannot update <table> field <fieldName> type:"
     ],
     "subClass" : {
-      "ARRAY_TYPE_UNSUPPORTED" : {
+      "ARRAY_TYPE" : {
         "message" : [
           "Update the element by updating <fieldName>.element."
         ]
       },
-      "INTERVAL_TYPE_UNSUPPORTED" : {
+      "INTERVAL_TYPE" : {
         "message" : [
           "Update an interval by updating its fields."
         ]
       },
-      "MAP_TYPE_UNSUPPORTED" : {
+      "MAP_TYPE" : {
         "message" : [
           "Update a map by updating <fieldName>.key or <fieldName>.value."
         ]
       },
-      "STRUCT_TYPE_UNSUPPORTED" : {
+      "STRUCT_TYPE" : {
         "message" : [
           "Update a struct by updating its fields."
         ]
       },
-      "USER_DEFINED_TYPE_UNSUPPORTED" : {
+      "USER_DEFINED_TYPE" : {
         "message" : [
           "Update a UserDefinedType[<udtSql>] by updating its fields."
         ]

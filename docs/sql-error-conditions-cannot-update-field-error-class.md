@@ -1,7 +1,7 @@
 ---
 layout: global
-title: INVALID_UPDATE_FIELD error class
-displayTitle: INVALID_UPDATE_FIELD error class
+title: CANNOT_UPDATE_FIELD error class
+displayTitle: CANNOT_UPDATE_FIELD error class
 license: |
   Licensed to the Apache Software Foundation (ASF) under one or more
   contributor license agreements.  See the NOTICE file distributed with
@@ -25,23 +25,23 @@ Cannot update `<table>` field `<fieldName>` type:
 
 This error class has the following derived error classes:
 
-## ARRAY_TYPE_UNSUPPORTED
+## ARRAY_TYPE
 
 Update the element by updating `<fieldName>`.element.
 
-## INTERVAL_TYPE_UNSUPPORTED
+## INTERVAL_TYPE
 
 Update an interval by updating its fields.
 
-## MAP_TYPE_UNSUPPORTED
+## MAP_TYPE
 
 Update a map by updating `<fieldName>`.key or `<fieldName>`.value.
 
-## STRUCT_TYPE_UNSUPPORTED
+## STRUCT_TYPE
 
 Update a struct by updating its fields.
 
-## USER_DEFINED_TYPE_UNSUPPORTED
+## USER_DEFINED_TYPE
 
 Update a UserDefinedType[`<udtSql>`] by updating its fields.
 

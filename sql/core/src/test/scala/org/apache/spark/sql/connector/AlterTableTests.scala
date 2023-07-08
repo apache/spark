@@ -500,7 +500,7 @@ trait AlterTableTests extends SharedSparkSession with QueryErrorsBase {
               exception = intercept[AnalysisException] {
                 sql(sqlText)
               },
-              errorClass = "INVALID_UPDATE_FIELD.INTERVAL_TYPE_UNSUPPORTED",
+              errorClass = "CANNOT_UPDATE_FIELD.INTERVAL_TYPE",
               parameters = Map(
                 "table" -> s"${toSQLId(prependCatalogName(t))}",
                 "fieldName" -> "`id`"),
@@ -562,7 +562,7 @@ trait AlterTableTests extends SharedSparkSession with QueryErrorsBase {
         exception = intercept[AnalysisException] {
           sql(sqlText)
         },
-        errorClass = "INVALID_UPDATE_FIELD.STRUCT_TYPE_UNSUPPORTED",
+        errorClass = "CANNOT_UPDATE_FIELD.STRUCT_TYPE",
         parameters = Map(
           "table" -> s"${toSQLId(prependCatalogName(t))}",
           "fieldName" -> "`point`"),
@@ -593,7 +593,7 @@ trait AlterTableTests extends SharedSparkSession with QueryErrorsBase {
         exception = intercept[AnalysisException] {
           sql(sqlText)
         },
-        errorClass = "INVALID_UPDATE_FIELD.ARRAY_TYPE_UNSUPPORTED",
+        errorClass = "CANNOT_UPDATE_FIELD.ARRAY_TYPE",
         parameters = Map(
           "table" -> s"${toSQLId(prependCatalogName(t))}",
           "fieldName" -> "`points`"),
@@ -637,7 +637,7 @@ trait AlterTableTests extends SharedSparkSession with QueryErrorsBase {
         exception = intercept[AnalysisException] {
           sql(sqlText)
         },
-        errorClass = "INVALID_UPDATE_FIELD.MAP_TYPE_UNSUPPORTED",
+        errorClass = "CANNOT_UPDATE_FIELD.MAP_TYPE",
         parameters = Map(
           "table" -> s"${toSQLId(prependCatalogName(t))}",
           "fieldName" -> "`m`"),
