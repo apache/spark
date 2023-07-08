@@ -96,8 +96,8 @@ case class ColumnarToRowExec(child: SparkPlan) extends ColumnarToRowTransition w
     if (conf.usePartitionEvaluator) {
       child.executeColumnar().mapPartitionsWithEvaluator(evaluatorFactory)
     } else {
+      val evaluator = evaluatorFactory.createEvaluator()
       child.executeColumnar().mapPartitionsInternal { batches =>
-        val evaluator = evaluatorFactory.createEvaluator()
         evaluator.eval(0, batches)
       }
     }
