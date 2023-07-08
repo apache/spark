@@ -3276,8 +3276,8 @@ class HiveDDLSuite
 
       val jarName = "TestUDTF.jar"
       val jar = spark.asInstanceOf[TestHiveSparkSession].getHiveFile(jarName).toURI.toString
-      spark.sparkContext.addedJars.keys.find(_.contains(jarName))
-        .foreach(spark.sparkContext.addedJars.remove)
+      spark.sparkContext.allAddedJars.keys.find(_.contains(jarName))
+        .foreach(spark.sparkContext.addedJars("default").remove)
       assert(!spark.sparkContext.listJars().exists(_.contains(jarName)))
       val e = intercept[AnalysisException] {
         sql("CREATE TEMPORARY FUNCTION f1 AS " +
