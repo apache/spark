@@ -50,7 +50,7 @@ trait TPCBasedBenchmark extends SqlBasedBenchmark with Logging {
       .set("spark.serializer", "org.apache.spark.serializer.KryoSerializer")
       .set("spark.kryo.registrationRequired", "true")
 
-    SparkSession.builder.config(conf).getOrCreate()
+    SparkSession.builder().config(conf).getOrCreate()
   }
 
   protected def setupTables(
@@ -81,7 +81,7 @@ trait TPCBasedBenchmark extends SqlBasedBenchmark with Logging {
       // This is an indirect hack to estimate the size of each query's input by traversing the
       // logical plan and adding up the sizes of all tables that appear in the plan.
       val queryRelations = scala.collection.mutable.HashSet[String]()
-      spark.sparkContext.setJobGroup(name, s"$name:\n$queryString", true)
+      spark.sparkContext.setJobGroup(name, s"$name:\n$queryString", interruptOnCancel = true)
       spark.sql(queryString).queryExecution.analyzed.foreach {
         case SubqueryAlias(alias, _: LogicalRelation) =>
           queryRelations.add(alias.name)
