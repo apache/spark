@@ -470,8 +470,8 @@ case class RowToColumnarExec(child: SparkPlan) extends RowToColumnarTransition {
     if (conf.usePartitionEvaluator) {
       child.execute().mapPartitionsWithEvaluator(evaluatorFactory)
     } else {
+      val evaluator = evaluatorFactory.createEvaluator()
       child.execute().mapPartitionsInternal { rowIterator =>
-        val evaluator = evaluatorFactory.createEvaluator()
         evaluator.eval(0, rowIterator)
       }
     }
