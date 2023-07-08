@@ -53,7 +53,9 @@ trait TPCBasedBenchmark extends SqlBasedBenchmark with Logging {
     SparkSession.builder.config(conf).getOrCreate()
   }
 
-  def setupTables(dataLocation: String, tableColumns: Map[String, StructType]): Map[String, Long] =
+  protected def setupTables(
+      dataLocation: String,
+      tableColumns: Map[String, StructType]): Map[String, Long] =
     tables.map { tableName =>
       spark.sql(s"DROP TABLE IF EXISTS $tableName")
       val options = Map("path" -> s"$dataLocation/$tableName")
@@ -67,7 +69,7 @@ trait TPCBasedBenchmark extends SqlBasedBenchmark with Logging {
       tableName -> spark.table(tableName).count()
     }.toMap
 
-  def runTpcQueries(
+  protected def runTpcQueries(
       queryLocation: String,
       queries: Seq[String],
       tableSizes: Map[String, Long],
@@ -98,7 +100,7 @@ trait TPCBasedBenchmark extends SqlBasedBenchmark with Logging {
     }
   }
 
-  def filterQueries(
+  protected def filterQueries(
       origQueries: Seq[String],
       queryFilter: Set[String],
       nameSuffix: String = ""): Seq[String] = {
@@ -113,7 +115,7 @@ trait TPCBasedBenchmark extends SqlBasedBenchmark with Logging {
     }
   }
 
-  def configureCbo(benchmarkArgs: TPCQueryBenchmarkArguments): Unit = {
+  protected def configureCbo(benchmarkArgs: TPCQueryBenchmarkArguments): Unit = {
     if (benchmarkArgs.cboEnabled) {
       spark.sql(s"SET ${SQLConf.CBO_ENABLED.key}=true")
       spark.sql(s"SET ${SQLConf.PLAN_STATS_ENABLED.key}=true")

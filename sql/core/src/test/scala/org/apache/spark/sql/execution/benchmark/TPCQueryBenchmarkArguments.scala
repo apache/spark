@@ -63,15 +63,15 @@ class TPCQueryBenchmarkArguments(val args: Array[String], val dataLocationEnv: S
     System.err.println("""
       |Usage: spark-submit --class <this class> <spark sql test jar> [Options]
       |Options:
-      |  --data-location      Path to TPCDS/H data
+      |  --data-location      Path to TPC-DS/TPC-H data
       |  --query-filter       Queries to filter, e.g., q3,q5,q13
       |  --cbo                Whether to enable cost-based optimization
       |
       |------------------------------------------------------------------------------------------------------------------
       |In order to run this benchmark, please follow the instructions at
       |https://github.com/databricks/spark-sql-perf/blob/master/README.md
-      |to generate the TPCDS/H data locally (preferably with a scale factor of 5 for benchmarking).
-      |Thereafter, the value of <TPCDS/H data location> needs to be set to the location where the generated data is stored.
+      |to generate the TPC-DS/TPC-H data locally (preferably with a scale factor of 5 for benchmarking).
+      |Thereafter, the value of <TPC-DS/TPC-H data location> needs to be set to the location where the generated data is stored.
       """.stripMargin)
     // scalastyle:on
     System.exit(exitCode)
