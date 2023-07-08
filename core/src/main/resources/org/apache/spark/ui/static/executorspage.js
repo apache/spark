@@ -99,18 +99,6 @@ jQuery.extend(jQuery.fn.dataTableExt.oSort, {
 jQuery.extend( jQuery.fn.dataTableExt.oSort, {
   "executor-id-asc": function ( a, b ) {
     if ($.isNumeric(a) && $.isNumeric(b)) {
-      return parseFloat(b) - parseFloat(a);
-    } else if (!$.isNumeric(a) && $.isNumeric(b)) {
-      return 1;
-    } else if ($.isNumeric(a) && !$.isNumeric(b)) {
-      return -1;
-    } else {
-      return b.localeCompare(a);
-    }
-  },
-
-  "executor-id-desc": function ( a, b ) {
-    if ($.isNumeric(a) && $.isNumeric(b)) {
       return parseFloat(a) - parseFloat(b);
     } else if (!$.isNumeric(a) && $.isNumeric(b)) {
       return -1;
@@ -118,6 +106,18 @@ jQuery.extend( jQuery.fn.dataTableExt.oSort, {
       return 1;
     } else {
       return a.localeCompare(b);
+    }
+  },
+
+  "executor-id-desc": function ( a, b ) {
+    if ($.isNumeric(a) && $.isNumeric(b)) {
+      return parseFloat(b) - parseFloat(a);
+    } else if (!$.isNumeric(a) && $.isNumeric(b)) {
+      return 1;
+    } else if ($.isNumeric(a) && !$.isNumeric(b)) {
+      return -1;
+    } else {
+      return b.localeCompare(a);
     }
   }
 });
