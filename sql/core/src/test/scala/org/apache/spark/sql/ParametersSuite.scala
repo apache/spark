@@ -19,6 +19,7 @@ package org.apache.spark.sql
 
 import java.time.{Instant, LocalDate, LocalDateTime, ZoneId}
 
+import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.functions.lit
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
@@ -239,7 +240,7 @@ class ParametersSuite extends QueryTest with SharedSparkSession {
     val sqlText = "CREATE VIEW v AS SELECT :p AS p"
     val args = Map("p" -> 1)
     checkError(
-      exception = intercept[AnalysisException] {
+      exception = intercept[ParseException] {
         spark.sql(sqlText, args)
       },
       errorClass = "UNSUPPORTED_FEATURE.PARAMETER_MARKER_IN_UNEXPECTED_STATEMENT",
@@ -254,7 +255,7 @@ class ParametersSuite extends QueryTest with SharedSparkSession {
     val sqlText = "CREATE VIEW v AS SELECT ? AS p"
     val args = Array(1)
     checkError(
-      exception = intercept[AnalysisException] {
+      exception = intercept[ParseException] {
         spark.sql(sqlText, args)
       },
       errorClass = "UNSUPPORTED_FEATURE.PARAMETER_MARKER_IN_UNEXPECTED_STATEMENT",
@@ -269,7 +270,7 @@ class ParametersSuite extends QueryTest with SharedSparkSession {
     val sqlText = "CREATE VIEW v AS WITH cte(a) AS (SELECT (SELECT :p) AS a)  SELECT a FROM cte"
     val args = Map("p" -> 1)
     checkError(
-      exception = intercept[AnalysisException] {
+      exception = intercept[ParseException] {
         spark.sql(sqlText, args)
       },
       errorClass = "UNSUPPORTED_FEATURE.PARAMETER_MARKER_IN_UNEXPECTED_STATEMENT",
@@ -284,7 +285,7 @@ class ParametersSuite extends QueryTest with SharedSparkSession {
     val sqlText = "CREATE VIEW v AS WITH cte(a) AS (SELECT (SELECT ?) AS a)  SELECT a FROM cte"
     val args = Array(1)
     checkError(
-      exception = intercept[AnalysisException] {
+      exception = intercept[ParseException] {
         spark.sql(sqlText, args)
       },
       errorClass = "UNSUPPORTED_FEATURE.PARAMETER_MARKER_IN_UNEXPECTED_STATEMENT",
@@ -303,7 +304,7 @@ class ParametersSuite extends QueryTest with SharedSparkSession {
         |SELECT a FROM cte)""".stripMargin
     val args = Map("p" -> 1)
     checkError(
-      exception = intercept[AnalysisException] {
+      exception = intercept[ParseException] {
         spark.sql(sqlText, args)
       },
       errorClass = "UNSUPPORTED_FEATURE.PARAMETER_MARKER_IN_UNEXPECTED_STATEMENT",
@@ -322,7 +323,7 @@ class ParametersSuite extends QueryTest with SharedSparkSession {
         |SELECT a FROM cte)""".stripMargin
     val args = Array(1)
     checkError(
-      exception = intercept[AnalysisException] {
+      exception = intercept[ParseException] {
         spark.sql(sqlText, args)
       },
       errorClass = "UNSUPPORTED_FEATURE.PARAMETER_MARKER_IN_UNEXPECTED_STATEMENT",

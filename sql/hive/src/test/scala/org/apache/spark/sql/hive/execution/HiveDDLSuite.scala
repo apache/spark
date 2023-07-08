@@ -3025,7 +3025,7 @@ class HiveDDLSuite
         """CREATE TABLE targetDsTable LIKE sourceHiveTable USING PARQUET
           |ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe'""".stripMargin
       checkError(
-        exception = intercept[AnalysisException] {
+        exception = intercept[ParseException] {
           sql(sql1)
         },
         errorClass = "_LEGACY_ERROR_TEMP_0035",
@@ -3041,7 +3041,7 @@ class HiveDDLSuite
           |ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe'
           |WITH SERDEPROPERTIES ('test' = 'test')""".stripMargin
       checkError(
-        exception = intercept[AnalysisException] {
+        exception = intercept[ParseException] {
           sql(sql2)
         },
         errorClass = "_LEGACY_ERROR_TEMP_0035",
@@ -3057,7 +3057,7 @@ class HiveDDLSuite
           |ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe'
           |WITH SERDEPROPERTIES ('test' = 'test')""".stripMargin
       checkError(
-        exception = intercept[AnalysisException] {
+        exception = intercept[ParseException] {
           sql(sql3)
         },
         errorClass = "_LEGACY_ERROR_TEMP_0047",
@@ -3071,7 +3071,7 @@ class HiveDDLSuite
           |STORED AS INPUTFORMAT 'inFormat' OUTPUTFORMAT 'outFormat'
           |ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe'""".stripMargin
       checkError(
-        exception = intercept[AnalysisException] {
+        exception = intercept[ParseException] {
           sql(sql4)
         },
         errorClass = "_LEGACY_ERROR_TEMP_0035",
@@ -3145,7 +3145,7 @@ class HiveDDLSuite
                  |ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe'
                  |STORED AS $format""".stripMargin
             checkError(
-              exception = intercept[AnalysisException] {
+              exception = intercept[ParseException] {
                 sql(sql1)
               },
               errorClass = "_LEGACY_ERROR_TEMP_0035",
@@ -3184,7 +3184,7 @@ class HiveDDLSuite
                |ROW FORMAT DELIMITED
                |STORED AS PARQUET""".stripMargin
           checkError(
-            exception = intercept[AnalysisException] {
+            exception = intercept[ParseException] {
               sql(sql1)
             },
             errorClass = "_LEGACY_ERROR_TEMP_0035",
