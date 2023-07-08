@@ -1204,8 +1204,7 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Prot
   }
 
   test("Converting nested Any fields to JSON") {
-    // This tests Any fields initialized with Any.getDefaultInstance().
-    // Such a field does not contain "type url" or "value".
+    // This is a more involved version of the previous test with nested Any field inside an array.
 
     // Takes json string and return a json with all the extra whitespace removed.
     def compactJson(json: String): String = {
