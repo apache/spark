@@ -3575,6 +3575,51 @@ object functions {
    */
   def random(): Column = Column.fn("random")
 
+  /**
+   * Returns the bit position for the given input column.
+   *
+   * @group misc_funcs
+   * @since 3.5.0
+   */
+  def bitmap_bit_position(col: Column): Column =
+    Column.fn("bitmap_bit_position", col)
+
+  /**
+   * Returns the bucket number for the given input column.
+   *
+   * @group misc_funcs
+   * @since 3.5.0
+   */
+  def bitmap_bucket_number(col: Column): Column =
+    Column.fn("bitmap_bucket_number", col)
+
+  /**
+   * Returns a bitmap with the positions of the bits set from all the values from the input
+   * column. The input column will most likely be bitmap_bit_position().
+   *
+   * @group misc_funcs
+   * @since 3.5.0
+   */
+  def bitmap_construct_agg(col: Column): Column =
+    Column.fn("bitmap_construct_agg", col)
+
+  /**
+   * Returns the number of set bits in the input bitmap.
+   *
+   * @group misc_funcs
+   * @since 3.5.0
+   */
+  def bitmap_count(col: Column): Column = Column.fn("bitmap_count", col)
+
+  /**
+   * Returns a bitmap that is the bitwise OR of all of the bitmaps from the input column. The
+   * input column should be bitmaps created from bitmap_construct_agg().
+   *
+   * @group misc_funcs
+   * @since 3.5.0
+   */
+  def bitmap_or_agg(col: Column): Column = Column.fn("bitmap_or_agg", col)
+
   //////////////////////////////////////////////////////////////////////////////////////////////
   // String functions
   //////////////////////////////////////////////////////////////////////////////////////////////

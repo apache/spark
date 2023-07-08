@@ -15045,6 +15045,117 @@ def random(
         return _invoke_function_over_columns("random")
 
 
+@try_remote_functions
+def bitmap_bit_position(col: "ColumnOrName") -> Column:
+    """
+    Returns the bit position for the given input column.
+
+    .. versionadded:: 3.5.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        The input column.
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([(123,)], ["a"])
+    >>> df.select(bitmap_bit_position(df.a).alias("r")).collect()
+    [Row(r=122)]
+    """
+    return _invoke_function_over_columns("bitmap_bit_position", col)
+
+
+@try_remote_functions
+def bitmap_bucket_number(col: "ColumnOrName") -> Column:
+    """
+    Returns the bucket number for the given input column.
+
+    .. versionadded:: 3.5.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        The input column.
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([(123,)], ["a"])
+    >>> df.select(bitmap_bucket_number(df.a).alias("r")).collect()
+    [Row(r=1)]
+    """
+    return _invoke_function_over_columns("bitmap_bucket_number", col)
+
+
+@try_remote_functions
+def bitmap_construct_agg(col: "ColumnOrName") -> Column:
+    """
+    Returns a bitmap with the positions of the bits set from all the values from the input column.
+    The input column will most likely be bitmap_bit_position().
+
+    .. versionadded:: 3.5.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        The input column will most likely be bitmap_bit_position().
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([(1,),(2,),(3,)], ["a"])
+    >>> df.select(substring(hex(
+    ...     bitmap_construct_agg(bitmap_bit_position(df.a))
+    ... ), 0, 6).alias("r")).collect()
+    [Row(r='070000')]
+    """
+    return _invoke_function_over_columns("bitmap_construct_agg", col)
+
+
+@try_remote_functions
+def bitmap_count(col: "ColumnOrName") -> Column:
+    """
+    Returns the number of set bits in the input bitmap.
+
+    .. versionadded:: 3.5.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        The input bitmap.
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([("FFFF",)], ["a"])
+    >>> df.select(bitmap_count(to_binary(df.a, lit("hex"))).alias('r')).collect()
+    [Row(r=16)]
+    """
+    return _invoke_function_over_columns("bitmap_count", col)
+
+
+@try_remote_functions
+def bitmap_or_agg(col: "ColumnOrName") -> Column:
+    """
+    Returns a bitmap that is the bitwise OR of all of the bitmaps from the input column.
+    The input column should be bitmaps created from bitmap_construct_agg().
+
+    .. versionadded:: 3.5.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        The input column should be bitmaps created from bitmap_construct_agg().
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([("10",),("20",),("40",)], ["a"])
+    >>> df.select(substring(hex(
+    ...     bitmap_or_agg(to_binary(df.a, lit("hex")))
+    ... ), 0, 6).alias("r")).collect()
+    [Row(r='700000')]
+    """
+    return _invoke_function_over_columns("bitmap_or_agg", col)
+
+
 # ---------------------------- User Defined Function ----------------------------------
 
 
