@@ -16,7 +16,7 @@
  */
 
 /* global $, Mustache, createRESTEndPointForExecutorsPage, createRESTEndPointForMiscellaneousProcess, */
-/* global createTemplateURI, formatBytes, formatDuration, formatLogsCells, getStandAloneAppId, */
+/* global createTemplateURI, formatBytes, formatDate, formatDuration, formatLogsCells, getStandAloneAppId, */
 /* global jQuery, setDataTableDefaults */
 
 var threadDumpEnabled = false;
@@ -568,6 +568,14 @@ $(document).ready(function () {
             {
               data: 'removeReason',
               render: formatLossReason
+            },
+            {
+              data: 'addTime',
+              render: formatDate
+            },
+            {
+              data: 'removeTime',
+              render: formatDate
             }
           ],
           "order": [[0, "asc"]],

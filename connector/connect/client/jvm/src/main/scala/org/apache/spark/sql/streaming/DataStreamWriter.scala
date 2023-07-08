@@ -35,7 +35,7 @@ import org.apache.spark.sql.execution.streaming.AvailableNowTrigger
 import org.apache.spark.sql.execution.streaming.ContinuousTrigger
 import org.apache.spark.sql.execution.streaming.OneTimeTrigger
 import org.apache.spark.sql.execution.streaming.ProcessingTimeTrigger
-import org.apache.spark.util.Utils
+import org.apache.spark.util.SparkSerDerseUtils
 
 /**
  * Interface used to write a streaming `Dataset` to external storage systems (e.g. file systems,
@@ -214,7 +214,7 @@ final class DataStreamWriter[T] private[sql] (ds: Dataset[T]) extends Logging {
    * @since 3.5.0
    */
   def foreach(writer: ForeachWriter[T]): DataStreamWriter[T] = {
-    val serialized = Utils.serialize(ForeachWriterPacket(writer, ds.encoder))
+    val serialized = SparkSerDerseUtils.serialize(ForeachWriterPacket(writer, ds.encoder))
     val scalaWriterBuilder = proto.ScalarScalaUDF
       .newBuilder()
       .setPayload(ByteString.copyFrom(serialized))

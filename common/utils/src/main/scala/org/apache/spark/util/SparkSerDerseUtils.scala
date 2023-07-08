@@ -14,29 +14,17 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+package org.apache.spark.util
 
-package org.apache.spark.scheduler
+import java.io.{ByteArrayOutputStream, ObjectOutputStream}
 
-import java.io.{IOException, ObjectInputStream, ObjectOutputStream}
-
-import org.apache.spark.{JobArtifactSet, TaskContext}
-
-/**
- * A Task implementation that fails to serialize.
- */
-private[spark] class NotSerializableFakeTask(myId: Int, stageId: Int)
-  extends Task[Array[Byte]](stageId, 0, 0, 1, JobArtifactSet.emptyJobArtifactSet) {
-
-  override def runTask(context: TaskContext): Array[Byte] = Array.empty[Byte]
-  override def preferredLocations: Seq[TaskLocation] = Seq[TaskLocation]()
-
-  @throws(classOf[IOException])
-  private def writeObject(out: ObjectOutputStream): Unit = {
-    if (stageId == 0) {
-      throw new IllegalStateException("Cannot serialize")
-    }
+object SparkSerDerseUtils {
+  /** Serialize an object using Java serialization */
+  def serialize[T](o: T): Array[Byte] = {
+    val bos = new ByteArrayOutputStream()
+    val oos = new ObjectOutputStream(bos)
+    oos.writeObject(o)
+    oos.close()
+    bos.toByteArray
   }
-
-  @throws(classOf[IOException])
-  private def readObject(in: ObjectInputStream): Unit = {}
 }
