@@ -136,8 +136,8 @@ private[spark] class ApplicationInfo(
         nextExecutorId = math.max(nextExecutorId, id + 1)
         id
       case None =>
-        nextExecutorId += 1
         val id = nextExecutorId
+        nextExecutorId += 1
         id
     }
   }
