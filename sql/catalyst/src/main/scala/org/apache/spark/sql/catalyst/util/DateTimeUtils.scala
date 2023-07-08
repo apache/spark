@@ -255,7 +255,7 @@ object DateTimeUtils {
    * Converts milliseconds since the epoch to microseconds.
    */
   def millisToMicros(millis: Long): Long = {
-    Math.multiplyExact(millis, MICROS_PER_MILLIS)
+    SparkDateTimeUtils.millisToMicros(millis)
   }
 
   private final val gmtUtf8 = UTF8String.fromString("GMT")

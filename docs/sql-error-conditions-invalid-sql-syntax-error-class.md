@@ -19,74 +19,78 @@ license: |
   limitations under the License.
 ---
 
-Invalid SQL syntax.
+[SQLSTATE: 42000](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+Invalid SQL syntax:
 
 This error class has the following derived error classes:
-
-## CREATE_TEMP_FUNC_WITH_IF_NOT_EXISTS
-
-CREATE TEMPORARY FUNCTION with IF NOT EXISTS is not allowed.
 
 ## ANALYZE_TABLE_UNEXPECTED_NOSCAN
 
 ANALYZE TABLE(S) ... COMPUTE STATISTICS ... `<ctx>` must be either NOSCAN or empty.
 
-## SHOW_FUNCTIONS_INVALID_SCOPE
+## CREATE_FUNC_WITH_IF_NOT_EXISTS_AND_REPLACE
 
-SHOW `<scope>` FUNCTIONS not supported.
+CREATE FUNCTION with both IF NOT EXISTS and REPLACE is not allowed.
 
 ## CREATE_TEMP_FUNC_WITH_DATABASE
 
 CREATE TEMPORARY FUNCTION with specifying a database(`<database>`) is not allowed.
 
-## REPETITIVE_WINDOW_DEFINITION
+## CREATE_TEMP_FUNC_WITH_IF_NOT_EXISTS
 
-The definition of window `<windowName>` is repetitive.
-
-## MULTI_PART_NAME
-
-`<statement>` with multiple part function name(`<funcName>`) is not allowed.
-
-## LATERAL_WITHOUT_SUBQUERY_OR_TABLE_VALUED_FUNC
-
-LATERAL can only be used with subquery and table-valued functions.
-
-## OPTION_IS_INVALID
-
-option or property key `<key>` is invalid; only `<supported>` are supported
-
-## INVALID_WINDOW_REFERENCE
-
-Window reference `<windowName>` is not a window specification.
-
-## CREATE_FUNC_WITH_IF_NOT_EXISTS_AND_REPLACE
-
-CREATE FUNCTION with both IF NOT EXISTS and REPLACE is not allowed.
+CREATE TEMPORARY FUNCTION with IF NOT EXISTS is not allowed.
 
 ## EMPTY_PARTITION_VALUE
 
 Partition key `<partKey>` must set value.
 
-## TRANSFORM_WRONG_NUM_ARGS
+## INVALID_COLUMN_REFERENCE
 
-The transform`<transform>` requires `<expectedNum>` parameters but the actual number is `<actualNum>`.
+Expected a column reference for transform `<transform>`: `<expr>`.
+
+## INVALID_TABLE_VALUED_FUNC_NAME
+
+Table valued function cannot specify database name: `<funcName>`.
+
+## INVALID_WINDOW_REFERENCE
+
+Window reference `<windowName>` is not a window specification.
+
+## LATERAL_WITHOUT_SUBQUERY_OR_TABLE_VALUED_FUNC
+
+LATERAL can only be used with subquery and table-valued functions.
+
+## MULTI_PART_NAME
+
+`<statement>` with multiple part function name(`<funcName>`) is not allowed.
+
+## OPTION_IS_INVALID
+
+option or property key `<key>` is invalid; only `<supported>` are supported
+
+## REPETITIVE_WINDOW_DEFINITION
+
+The definition of window `<windowName>` is repetitive.
 
 ## SHOW_FUNCTIONS_INVALID_PATTERN
 
 Invalid pattern in SHOW FUNCTIONS: `<pattern>`. It must be a "STRING" literal.
 
-## UNSUPPORTED_FUNC_NAME
+## SHOW_FUNCTIONS_INVALID_SCOPE
 
-Unsupported function name `<funcName>`.
+SHOW `<scope>` FUNCTIONS not supported.
 
-## INVALID_COLUMN_REFERENCE
+## TRANSFORM_WRONG_NUM_ARGS
 
-Expected a column reference for transform `<transform>`: `<expr>`.
+The transform`<transform>` requires `<expectedNum>` parameters but the actual number is `<actualNum>`.
 
 ## UNRESOLVED_WINDOW_REFERENCE
 
 Cannot resolve window reference `<windowName>`.
 
-## INVALID_TABLE_VALUED_FUNC_NAME
+## UNSUPPORTED_FUNC_NAME
 
-Table valued function cannot specify database name: `<funcName>`.
+Unsupported function name `<funcName>`.
+
+

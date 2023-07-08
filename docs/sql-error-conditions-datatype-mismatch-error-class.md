@@ -64,13 +64,11 @@ cannot cast `<srcType>` to `<targetType>`.
 ## CAST_WITH_CONF_SUGGESTION
 
 cannot cast `<srcType>` to `<targetType>` with ANSI mode on.
-
 If you have to cast `<srcType>` to `<targetType>`, you can set `<config>` as `<configVal>`.
 
 ## CAST_WITH_FUNC_SUGGESTION
 
 cannot cast `<srcType>` to `<targetType>`.
-
 To convert values from `<srcType>` to `<targetType>`, you can use the functions `<functionNames>` instead.
 
 ## CREATE_MAP_KEY_DIFF_TYPES
@@ -176,11 +174,8 @@ A range window frame cannot be used in an unordered window specification.
 ## SEQUENCE_WRONG_INPUT_TYPES
 
 `<functionName>` uses the wrong parameter type. The parameter type must conform to:
-
 1. The start and stop expressions must resolve to the same type.
-
 2. If start and stop expressions resolve to the `<startType>` type, then the step expression must resolve to the `<stepType>` type.
-
 3. Otherwise, if start and stop expressions resolve to the `<otherStartType>` type, then the step expression must resolve to the same type.
 
 ## SPECIFIED_WINDOW_FRAME_DIFF_TYPES

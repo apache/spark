@@ -1181,6 +1181,10 @@ class PlanGenerationTestSuite
     boolean.select(fn.some(fn.col("flag")))
   }
 
+  test("function any") {
+    boolean.select(fn.any(fn.col("flag")))
+  }
+
   test("function bool_or") {
     boolean.select(fn.bool_or(fn.col("flag")))
   }
@@ -1627,6 +1631,10 @@ class PlanGenerationTestSuite
 
   functionTest("length") {
     fn.length(fn.col("g"))
+  }
+
+  functionTest("len") {
+    fn.len(fn.col("g"))
   }
 
   functionTest("lower") {

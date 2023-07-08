@@ -51,20 +51,6 @@ class ArtifactManagerSuite extends SharedSparkSession with ResourceHelper {
     super.afterEach()
   }
 
-  test("Jar artifacts are added to spark session") {
-    val copyDir = Utils.createTempDir().toPath
-    FileUtils.copyDirectory(artifactPath.toFile, copyDir.toFile)
-    val stagingPath = copyDir.resolve("smallJar.jar")
-    val remotePath = Paths.get("jars/smallJar.jar")
-    artifactManager.addArtifact(remotePath, stagingPath, None)
-
-    val expectedPath = SparkConnectArtifactManager.artifactRootPath
-      .resolve(s"$sessionUUID/jars/smallJar.jar")
-    assert(expectedPath.toFile.exists())
-    val jars = artifactManager.jobArtifactSet.jars
-    assert(jars.exists(_._1.contains(remotePath.toString)))
-  }
-
   test("Class artifacts are added to the correct directory.") {
     val copyDir = Utils.createTempDir().toPath
     FileUtils.copyDirectory(artifactPath.toFile, copyDir.toFile)

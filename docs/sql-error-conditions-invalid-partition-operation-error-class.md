@@ -1,7 +1,7 @@
 ---
 layout: global
-title: UNSUPPORTED_ADD_FILE error class
-displayTitle: UNSUPPORTED_ADD_FILE error class
+title: INVALID_PARTITION_OPERATION error class
+displayTitle: INVALID_PARTITION_OPERATION error class
 license: |
   Licensed to the Apache Software Foundation (ASF) under one or more
   contributor license agreements.  See the NOTICE file distributed with
@@ -21,14 +21,16 @@ license: |
 
 SQLSTATE: none assigned
 
-Don't support add file.
+The partition command is invalid.
 
 This error class has the following derived error classes:
 
-## DIRECTORY
+## PARTITION_MANAGEMENT_IS_UNSUPPORTED
 
-The file `<path>` is a directory, consider to set "spark.sql.legacy.addSingleFileInAddFile" to "false".
+Table `<name>` does not support partition management.
 
-## LOCAL_DIRECTORY
+## PARTITION_SCHEMA_IS_EMPTY
 
-The local directory `<path>` is not supported in a non-local master mode.
+Table `<name>` is not partitioned.
+
+

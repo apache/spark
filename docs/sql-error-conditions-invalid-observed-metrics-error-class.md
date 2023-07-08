@@ -19,6 +19,8 @@ license: |
   limitations under the License.
 ---
 
+SQLSTATE: none assigned
+
 Invalid observed metrics.
 
 This error class has the following derived error classes:

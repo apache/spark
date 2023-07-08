@@ -1,7 +1,7 @@
 ---
 layout: global
-title: INVALID_PARTITION_OPERATION error class
-displayTitle: INVALID_PARTITION_OPERATION error class
+title: UNSUPPORTED_MERGE_CONDITION error class
+displayTitle: UNSUPPORTED_MERGE_CONDITION error class
 license: |
   Licensed to the Apache Software Foundation (ASF) under one or more
   contributor license agreements.  See the NOTICE file distributed with
@@ -19,14 +19,22 @@ license: |
   limitations under the License.
 ---
 
-The partition command is invalid.
+SQLSTATE: none assigned
+
+MERGE operation contains unsupported `<condName>` condition.
 
 This error class has the following derived error classes:
 
-## PARTITION_MANAGEMENT_IS_UNSUPPORTED
+## AGGREGATE
 
-Table `<name>` does not support partition management.
+Aggregates are not allowed: `<cond>`.
 
-## PARTITION_SCHEMA_IS_EMPTY
+## NON_DETERMINISTIC
 
-Table `<name>` is not partitioned.
+Non-deterministic expressions are not allowed: `<cond>`.
+
+## SUBQUERY
+
+Subqueries are not allowed: `<cond>`.
+
+

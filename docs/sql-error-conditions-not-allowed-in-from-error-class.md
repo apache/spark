@@ -19,6 +19,8 @@ license: |
   limitations under the License.
 ---
 
+SQLSTATE: none assigned
+
 Not allowed in the FROM clause:
 
 This error class has the following derived error classes:
@@ -34,3 +36,5 @@ LATERAL together with UNPIVOT.
 ## UNPIVOT_WITH_PIVOT
 
 UNPIVOT together with PIVOT.
+
+
