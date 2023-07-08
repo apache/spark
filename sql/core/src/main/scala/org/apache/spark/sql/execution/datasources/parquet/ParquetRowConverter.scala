@@ -188,7 +188,7 @@ private[parquet] class ParquetRowConverter(
 
   private[this] val currentRow = new SpecificInternalRow(catalystType.map(_.dataType))
 
-  private[this] val bitmask = ResolveDefaultColumns.existenceDefaultsBitmask(catalystType)
+  private[this] lazy val bitmask = ResolveDefaultColumns.existenceDefaultsBitmask(catalystType)
 
   /**
    * The [[InternalRow]] converted from an entire Parquet record.

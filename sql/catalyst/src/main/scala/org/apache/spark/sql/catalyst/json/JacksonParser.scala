@@ -448,7 +448,7 @@ class JacksonParser(
     var skipRow = false
 
     structFilters.reset()
-    val bitmask = ResolveDefaultColumns.existenceDefaultsBitmask(schema)
+    lazy val bitmask = ResolveDefaultColumns.existenceDefaultsBitmask(schema)
     resetExistenceDefaultsBitmask(schema, bitmask)
     while (!skipRow && nextUntil(parser, JsonToken.END_OBJECT)) {
       schema.getFieldIndex(parser.getCurrentName) match {

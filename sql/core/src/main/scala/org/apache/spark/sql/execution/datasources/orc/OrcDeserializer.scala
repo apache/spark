@@ -37,7 +37,7 @@ class OrcDeserializer(
 
   private val resultRow = new SpecificInternalRow(requiredSchema.map(_.dataType))
 
-  private val bitmask = ResolveDefaultColumns.existenceDefaultsBitmask(requiredSchema)
+  private lazy val bitmask = ResolveDefaultColumns.existenceDefaultsBitmask(requiredSchema)
 
   // `fieldWriters(index)` is
   // - null if the respective source column is missing, since the output value
