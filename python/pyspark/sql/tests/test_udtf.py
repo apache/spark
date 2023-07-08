@@ -460,29 +460,13 @@ class BaseUDTFTestsMixin:
                 "select * from values (1, 2), (2, 3) t(a, b), " "lateral test_udtf(a, b)"
             ).collect()
 
-    def test_eval_type(self):
-        def upper(x: str):
-            return upper(x)
-
-        class TestUDTF:
-            def eval(self, x: str):
-                return upper(x)
-
-        self.assertEqual(
-            udtf(TestUDTF, returnType="x: string", useArrow=False).evalType,
-            PythonEvalType.SQL_TABLE_UDF,
-        )
-
-        self.assertEqual(
-            udtf(TestUDTF, returnType="x: string", useArrow=True).evalType,
-            PythonEvalType.SQL_ARROW_TABLE_UDF,
-        )
-
-        # Test register
-        scalar_udf = udf(upper)
+    def test_udtf_register_error(self):
+        @udf
+        def upper(s: str):
+            return s.upper()
 
         with self.assertRaises(PySparkTypeError) as e:
-            self.spark.udtf.register("test_udf", scalar_udf)
+            self.spark.udtf.register("test_udf", upper)
 
         self.check_error(
             exception=e.exception,
@@ -732,6 +716,24 @@ class UDTFTests(BaseUDTFTestsMixin, ReusedSQLTestCase):
     not have_pandas or not have_pyarrow, pandas_requirement_message or pyarrow_requirement_message
 )
 class UDTFArrowTestsMixin(BaseUDTFTestsMixin):
+    def test_eval_type(self):
+        def upper(x: str):
+            return upper(x)
+
+        class TestUDTF:
+            def eval(self, x: str):
+                return upper(x)
+
+        self.assertEqual(
+            udtf(TestUDTF, returnType="x: string", useArrow=False).evalType,
+            PythonEvalType.SQL_TABLE_UDF,
+        )
+
+        self.assertEqual(
+            udtf(TestUDTF, returnType="x: string", useArrow=True).evalType,
+            PythonEvalType.SQL_ARROW_TABLE_UDF,
+        )
+
     def test_udtf_eval_returning_non_tuple(self):
         class TestUDTF:
             def eval(self, a: int):

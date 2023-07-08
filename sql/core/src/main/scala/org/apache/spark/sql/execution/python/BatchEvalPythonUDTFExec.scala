@@ -119,12 +119,6 @@ class PythonUDTFRunner(
 
 object PythonUDTFRunner {
 
-  def writeUTF(str: String, dataOut: DataOutputStream): Unit = {
-    val bytes = str.getBytes(UTF_8)
-    dataOut.writeInt(bytes.length)
-    dataOut.write(bytes)
-  }
-
   def writeUDTF(dataOut: DataOutputStream, udtf: PythonUDTF, argOffsets: Array[Int]): Unit = {
     dataOut.writeInt(argOffsets.length)
     argOffsets.foreach { offset =>
@@ -132,6 +126,8 @@ object PythonUDTFRunner {
     }
     dataOut.writeInt(udtf.func.command.length)
     dataOut.write(udtf.func.command.toArray)
-    writeUTF(udtf.elementSchema.json, dataOut)
+    val schemaBytes = udtf.elementSchema.json.getBytes(UTF_8)
+    dataOut.writeInt(schemaBytes.length)
+    dataOut.write(schemaBytes)
   }
 }

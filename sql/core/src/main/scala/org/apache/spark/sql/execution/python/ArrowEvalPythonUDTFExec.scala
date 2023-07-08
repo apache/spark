@@ -53,10 +53,10 @@ case class ArrowEvalPythonUDTFExec(
   private[this] val jobArtifactUUID = JobArtifactSet.getCurrentJobArtifactState.map(_.uuid)
 
   override protected def evaluate(
-    argOffsets: Array[Int],
-    iter: Iterator[InternalRow],
-    schema: StructType,
-    context: TaskContext): Iterator[Iterator[InternalRow]] = {
+      argOffsets: Array[Int],
+      iter: Iterator[InternalRow],
+      schema: StructType,
+      context: TaskContext): Iterator[Iterator[InternalRow]] = {
 
     val batchIter = if (batchSize > 0) new BatchIterator(iter, batchSize) else Iterator(iter)
 

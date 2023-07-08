@@ -24,9 +24,9 @@ from typing import Iterator, Type, TYPE_CHECKING, Optional, Union
 from py4j.java_gateway import JavaObject
 
 from pyspark.errors import PySparkAttributeError, PySparkTypeError
+from pyspark.rdd import PythonEvalType
 from pyspark.sql.column import _to_java_column, _to_seq
 from pyspark.sql.pandas.utils import require_minimum_pandas_version, require_minimum_pyarrow_version
-from pyspark.rdd import PythonEvalType
 from pyspark.sql.types import StructType, _parse_datatype_string
 from pyspark.sql.udf import _wrap_function
 
@@ -103,9 +103,7 @@ def _create_arrow_udtf(regular_udtf: "UserDefinedTableFunction") -> "UserDefined
         def __init__(self) -> None:
             self.func = cls()
 
-        def eval(self, *args: pd.Series) -> Iterator[pd.DataFrame]:
-            # TODO: check the signature of the `eval` method and make sure
-            # it does not use pd.Series or pd.DataFrame.
+        def eval(self, *args: pd.Series) -> Iterator[list[pd.Series]]:
             if len(args) == 0:
                 yield pd.DataFrame(self.func.eval())
             else:

@@ -360,6 +360,56 @@ class ArrowStreamPandasUDFSerializer(ArrowStreamPandasSerializer):
             )
         return s
 
+    def _create_struct_array(self, df, arrow_struct_type):
+        """
+        Create an Arrow StructArray from the given pandas.DataFrame and arrow struct type.
+
+        Parameters
+        ----------
+        df : pandas.DataFrame
+            A pandas DataFrame
+        arrow_struct_type : pyarrow.DataType
+            pyarrow struct type
+
+        Returns
+        -------
+        pyarrow.Array
+        """
+        import pyarrow as pa
+
+        # Input partition and result pandas.DataFrame empty, make empty Arrays with struct
+        if len(df) == 0 and len(df.columns) == 0:
+            arrs_names = [
+                (pa.array([], type=field.type), field.name) for field in arrow_struct_type
+            ]
+        # Assign result columns by schema name if user labeled with strings
+        elif self._assign_cols_by_name and any(isinstance(name, str) for name in df.columns):
+            arrs_names = [
+                (
+                    self._create_array(df[field.name], field.type, arrow_cast=self._arrow_cast),
+                    field.name,
+                )
+                for field in arrow_struct_type
+            ]
+        # Assign result columns by position
+        else:
+            arrs_names = [
+                # the selected series has name '1', so we rename it to field.name
+                # as the name is used by _create_array to provide a meaningful error message
+                (
+                    self._create_array(
+                        df[df.columns[i]].rename(field.name),
+                        field.type,
+                        arrow_cast=self._arrow_cast,
+                    ),
+                    field.name,
+                )
+                for i, field in enumerate(arrow_struct_type)
+            ]
+
+        struct_arrs, struct_names = zip(*arrs_names)
+        return pa.StructArray.from_arrays(struct_arrs, struct_names)
+
     def _create_batch(self, series):
         """
         Create an Arrow record batch from the given pandas.Series pandas.DataFrame
@@ -388,39 +438,24 @@ class ArrowStreamPandasUDFSerializer(ArrowStreamPandasSerializer):
 
         arrs = []
         for s, t in series:
-            if t is not None and pa.types.is_struct(t) and isinstance(s, pd.DataFrame):
-                # Input partition and result pandas.DataFrame empty, make empty Arrays with struct
-                if len(s) == 0 and len(s.columns) == 0:
-                    arrs_names = [(pa.array([], type=field.type), field.name) for field in t]
-                # Assign result columns by schema name if user labeled with strings
-                elif self._assign_cols_by_name and any(isinstance(name, str) for name in s.columns):
-                    arrs_names = [
-                        (
-                            self._create_array(
-                                s[field.name], field.type, arrow_cast=self._arrow_cast
-                            ),
-                            field.name,
-                        )
-                        for field in t
-                    ]
-                # Assign result columns by  position
-                else:
-                    arrs_names = [
-                        # the selected series has name '1', so we rename it to field.name
-                        # as the name is used by _create_array to provide a meaningful error message
-                        (
-                            self._create_array(
-                                s[s.columns[i]].rename(field.name),
-                                field.type,
-                                arrow_cast=self._arrow_cast,
-                            ),
-                            field.name,
-                        )
-                        for i, field in enumerate(t)
-                    ]
-
-                struct_arrs, struct_names = zip(*arrs_names)
-                arrs.append(pa.StructArray.from_arrays(struct_arrs, struct_names))
+            if self._struct_in_pandas == "dict" and t is not None and pa.types.is_struct(t):
+                # A pandas UDF should return pd.DataFrame when the return type is a struct type.
+                # If it returns a pd.Series, it should throw an error.
+                if not isinstance(s, pd.DataFrame):
+                    raise PySparkValueError(
+                        "A field of type StructType expects a pandas.DataFrame, "
+                        "but got: %s" % str(type(s))
+                    )
+                arrs.append(self._create_struct_array(s, t))
+            elif (
+                self._struct_in_pandas == "row"
+                and t is not None
+                and pa.types.is_struct(t)
+                and isinstance(s, pd.DataFrame)
+            ):
+                # Handles arrow-optimized Python UDTFs.
+                # A UDTF returns a pandas.DataFrame and treat struct type values as Rows.
+                arrs.append(self._create_struct_array(s, t))
             else:
                 arrs.append(self._create_array(s, t, arrow_cast=self._arrow_cast))
 
