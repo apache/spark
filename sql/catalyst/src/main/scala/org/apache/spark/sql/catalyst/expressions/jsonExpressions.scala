@@ -144,6 +144,18 @@ case class GetJsonObject(json: Expression, path: Expression)
 
   @transient private lazy val parsedPath = parsePath(path.eval().asInstanceOf[UTF8String])
 
+  // Used to rewrite GetJsonObject to JsonTuple. It only supports `.name` paths
+  @transient private[catalyst] lazy val rewriteToJsonTuplePath: Option[Expression] = {
+    if (path.foldable) {
+      parsedPath match {
+        case Some(List(Key, Named(name))) => Some(Literal.create(name, StringType))
+        case _ => None
+      }
+    } else {
+      None
+    }
+  }
+
   override def eval(input: InternalRow): Any = {
     val jsonStr = json.eval(input).asInstanceOf[UTF8String]
     if (jsonStr == null) {
@@ -337,24 +349,6 @@ case class GetJsonObject(json: Expression, path: Expression)
       case _ =>
         p.skipChildren()
         false
-    }
-  }
-
-  /**
-   * Used to rewrite GetJsonObject to JsonTuple
-   */
-  private[sql] lazy val rewrittenPathName: Option[Expression] = {
-    if (path.foldable) {
-      parsedPath.flatMap {
-        _.filter(_.isInstanceOf[PathInstruction.Named]) match {
-          case PathInstruction.Named(name) :: Nil =>
-            Some(Literal.create(name, StringType))
-          case _ =>
-            None
-        }
-      }
-    } else {
-      None
     }
   }
 

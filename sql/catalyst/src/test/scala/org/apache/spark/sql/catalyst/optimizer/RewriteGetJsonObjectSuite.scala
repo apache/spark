@@ -19,11 +19,18 @@ package org.apache.spark.sql.catalyst.optimizer
 
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.expressions.{GetJsonObject, JsonTuple}
+import org.apache.spark.sql.catalyst.expressions.{Concat, GetJsonObject, JsonTuple}
 import org.apache.spark.sql.catalyst.plans.PlanTest
-import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
+import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
+import org.apache.spark.sql.catalyst.rules.RuleExecutor
 
 class RewriteGetJsonObjectSuite extends PlanTest {
+
+  object Optimize extends RuleExecutor[LogicalPlan] {
+    val batches =
+      Batch("Rewrite GetJsonObject", Once,
+        RewriteGetJsonObject) :: Nil
+  }
 
   private val testRelation = LocalRelation($"a".string, $"b".string, $"c".string)
 
@@ -43,10 +50,10 @@ class RewriteGetJsonObjectSuite extends PlanTest {
       .select($"c1".as("c1"), $"c2".as("c2"), $"c3".as("c3"))
 
     val getJsonObjects = query.expressions.flatMap { _.collect {
-        case gjo: GetJsonObject if gjo.rewrittenPathName.nonEmpty => gjo
+        case gjo: GetJsonObject if gjo.rewriteToJsonTuplePath.nonEmpty => gjo
     }}
-    assert(getJsonObjects.forall(_.rewrittenPathName.nonEmpty))
-    comparePlans(RewriteGetJsonObject(query.analyze), correctAnswer.analyze)
+    assert(getJsonObjects.forall(_.rewriteToJsonTuplePath.nonEmpty))
+    comparePlans(Optimize.execute(query.analyze), correctAnswer.analyze)
   }
 
   test("Rewrite to multiple JsonTuples") {
@@ -76,14 +83,38 @@ class RewriteGetJsonObjectSuite extends PlanTest {
 
     val getJsonObjects = query.expressions.flatMap {
       _.collect {
-        case gjo: GetJsonObject if gjo.rewrittenPathName.nonEmpty => gjo
+        case gjo: GetJsonObject if gjo.rewriteToJsonTuplePath.nonEmpty => gjo
       }
     }
-    assert(getJsonObjects.forall(_.rewrittenPathName.nonEmpty))
-    comparePlans(RewriteGetJsonObject(query.analyze), correctAnswer.analyze)
+    assert(getJsonObjects.forall(_.rewriteToJsonTuplePath.nonEmpty))
+    comparePlans(Optimize.execute(query.analyze), correctAnswer.analyze)
   }
 
-  test("Do not rewrite is rewrittenPathName is empty") {
+  test("Rewrite GetJsonObject with other UDFs") {
+    val query = testRelation
+      .select(
+        Concat(Seq(GetJsonObject($"a", stringToLiteral("$.c1")),
+          GetJsonObject($"a", stringToLiteral("$.c2")),
+          GetJsonObject($"a", stringToLiteral("$.c3")))).as("c"))
+
+    val correctAnswer = testRelation
+      .generate(
+        JsonTuple(Seq($"a", stringToLiteral("c1"), stringToLiteral("c2"), stringToLiteral("c3"))),
+        Nil,
+        alias = Some("a"),
+        outputNames = Seq("c1", "c2", "c3"))
+      .select(Concat(Seq($"c1", $"c2", $"c3")).as("c"))
+
+    val getJsonObjects = query.expressions.flatMap {
+      _.collect {
+        case gjo: GetJsonObject if gjo.rewriteToJsonTuplePath.nonEmpty => gjo
+      }
+    }
+    assert(getJsonObjects.forall(_.rewriteToJsonTuplePath.nonEmpty))
+    comparePlans(Optimize.execute(query.analyze), correctAnswer.analyze)
+  }
+
+  test("Do not rewrite if parsed path is empty") {
     val query = testRelation
       .select(
         GetJsonObject($"a", stringToLiteral("c1")).as("c1"),
@@ -92,10 +123,40 @@ class RewriteGetJsonObjectSuite extends PlanTest {
 
     val getJsonObjects = query.expressions.flatMap {
       _.collect {
-        case gjo: GetJsonObject if gjo.rewrittenPathName.nonEmpty => gjo
+        case gjo: GetJsonObject if gjo.rewriteToJsonTuplePath.nonEmpty => gjo
       }
     }
-    assert(getJsonObjects.forall(_.rewrittenPathName.isEmpty))
-    comparePlans(RewriteGetJsonObject(query.analyze), query.analyze)
+    assert(getJsonObjects.forall(_.rewriteToJsonTuplePath.isEmpty))
+    comparePlans(Optimize.execute(query.analyze), query.analyze)
+  }
+
+  test("Do not rewrite if parsed path is not Key and Named") {
+    val query = testRelation
+      .select(
+        GetJsonObject($"a", stringToLiteral("$[0]")).as("c1"),
+        GetJsonObject($"a", stringToLiteral("$[1]")).as("c2"))
+
+    val getJsonObjects = query.expressions.flatMap {
+      _.collect {
+        case gjo: GetJsonObject if gjo.rewriteToJsonTuplePath.nonEmpty => gjo
+      }
+    }
+    assert(getJsonObjects.forall(_.rewriteToJsonTuplePath.isEmpty))
+    comparePlans(Optimize.execute(query.analyze), query.analyze)
+  }
+
+  test("Do not rewrite if parsed path contains multiple Named") {
+    val query = testRelation
+      .select(
+        GetJsonObject($"a", stringToLiteral("$.a.b")).as("c1"),
+        GetJsonObject($"a", stringToLiteral("$.c.d")).as("c2"))
+
+    val getJsonObjects = query.expressions.flatMap {
+      _.collect {
+        case gjo: GetJsonObject if gjo.rewriteToJsonTuplePath.nonEmpty => gjo
+      }
+    }
+    assert(getJsonObjects.forall(_.rewriteToJsonTuplePath.isEmpty))
+    comparePlans(Optimize.execute(query.analyze), query.analyze)
   }
 }
