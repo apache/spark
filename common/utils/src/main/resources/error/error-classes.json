@@ -729,6 +729,11 @@
     ],
     "sqlState" : "42K04"
   },
+  "FAILED_RENAME_TEMP_FILE" : {
+    "message" : [
+      "Failed to rename temp file <srcPath> to <dstPath> as FileSystem.rename returned false."
+    ]
+  },
   "FIELDS_ALREADY_EXISTS" : {
     "message" : [
       "Cannot <op> column, because <fieldNames> already exists in <struct>."
@@ -1019,6 +1024,12 @@
     "sqlState" : "XX000"
   },
   "INTERNAL_ERROR_NETWORK" : {
+    "message" : [
+      "<message>"
+    ],
+    "sqlState" : "XX000"
+  },
+  "INTERNAL_ERROR_SHUFFLE" : {
     "message" : [
       "<message>"
     ],
@@ -5298,11 +5309,6 @@
   "_LEGACY_ERROR_TEMP_2198" : {
     "message" : [
       "Failed to rename as <dstPath> already exists."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2199" : {
-    "message" : [
-      "Failed to rename temp file <srcPath> to <dstPath> as rename returned false."
     ]
   },
   "_LEGACY_ERROR_TEMP_2200" : {
