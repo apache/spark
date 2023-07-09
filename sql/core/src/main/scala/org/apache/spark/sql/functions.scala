@@ -3572,8 +3572,8 @@ object functions {
   }
 
   /**
-   * This is a special version of `aes_decrypt` that performs the same operation,
-   * but returns a NULL value instead of raising an error if the decryption cannot be performed.
+   * This is a special version of `aes_decrypt` that performs the same operation, but returns a
+   * NULL value instead of raising an error if the decryption cannot be performed.
    *
    * @param input
    *   The binary value to decrypt.

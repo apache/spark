@@ -666,7 +666,7 @@ object functions {
    * @since 3.5.0
    */
   def hll_union_agg(e: Column, allowDifferentLgConfigK: Column): Column =
-     Column.fn("hll_union_agg", e, allowDifferentLgConfigK)
+    Column.fn("hll_union_agg", e, allowDifferentLgConfigK)
 
   /**
    * Aggregate function: returns the updatable binary representation of the Datasketches
@@ -3514,8 +3514,8 @@ object functions {
     Column.fn("aes_encrypt", input, key)
 
   /**
-   * This is a special version of `aes_decrypt` that performs the same operation,
-   * but returns a NULL value instead of raising an error if the decryption cannot be performed.
+   * This is a special version of `aes_decrypt` that performs the same operation, but returns a
+   * NULL value instead of raising an error if the decryption cannot be performed.
    *
    * @param input
    *   The binary value to decrypt.
@@ -3552,11 +3552,7 @@ object functions {
    * @group misc_funcs
    * @since 3.5.0
    */
-  def try_aes_decrypt(
-      input: Column,
-      key: Column,
-      mode: Column,
-      padding: Column): Column =
+  def try_aes_decrypt(input: Column, key: Column, mode: Column, padding: Column): Column =
     Column.fn("try_aes_decrypt", input, key, mode, padding)
 
   /**
