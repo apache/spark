@@ -440,6 +440,10 @@ object ResolveDefaultColumns extends QueryErrorsBase {
     rows.toSeq
   }
 
+  /**
+   * These define existence default values for the struct fields for efficiency purposes.
+   * The caller should avoid using such methods in a loop for efficiency.
+   */
   def existenceDefaultValues(schema: StructType): Array[Any] =
     getExistenceDefaultValues(schema)
   def existenceDefaultsBitmask(schema: StructType): Array[Boolean] =

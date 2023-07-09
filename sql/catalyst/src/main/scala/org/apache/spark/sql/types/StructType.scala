@@ -497,10 +497,6 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
   override private[spark] def existsRecursively(f: (DataType) => Boolean): Boolean = {
     f(this) || fields.exists(field => field.dataType.existsRecursively(f))
   }
-
-  /**
-   * These define and cache existence default values for the struct fields for efficiency purposes.
-   */
 }
 
 /**
