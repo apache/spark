@@ -44,10 +44,12 @@ class TextOptions(@transient private val parameters: CaseInsensitiveMap[String])
 
   val encoding: Option[String] = parameters.get(ENCODING)
 
-  val lineSeparator: Option[String] = parameters.get(LINE_SEP).map { lineSep =>
+  val lineSeparator: Option[String] = parameters.get(LINE_SEP) match {
+    case Some(lineSep) if lineSep != null =>
     require(lineSep.nonEmpty, s"'$LINE_SEP' cannot be an empty string.")
-
-    lineSep
+      Some(lineSep)
+    case _ =>
+      None
   }
 
   // Note that the option 'lineSep' uses a different default value in read and write.
