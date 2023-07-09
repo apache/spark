@@ -14436,14 +14436,17 @@ def hll_sketch_agg(col: "ColumnOrName", lgConfigK: Optional[Union[int, Column]] 
     +------------+
     |           3|
     +------------+
-    >>> df2 = df.agg(hll_sketch_estimate(hll_sketch_agg("value", lit(12))).alias("distinct_cnt"))
+    >>> df2 = df.agg(hll_sketch_estimate(
+    ...     hll_sketch_agg("value", lit(12))
+    ... ).alias("distinct_cnt"))
     >>> df2.show()
     +------------+
     |distinct_cnt|
     +------------+
     |           3|
     +------------+
-    >>> df3 = df.agg(hll_sketch_estimate(hll_sketch_agg(col("value"), lit(12))).alias("distinct_cnt"))
+    >>> df3 = df.agg(hll_sketch_estimate(
+    ...     hll_sketch_agg(col("value"), lit(12))).alias("distinct_cnt"))
     >>> df3.show()
     +------------+
     |distinct_cnt|
@@ -14487,21 +14490,27 @@ def hll_union_agg(
     >>> df1 = df1.agg(hll_sketch_agg("value").alias("sketch"))
     >>> df2 = spark.createDataFrame([4,5,5,6], "INT")
     >>> df2 = df2.agg(hll_sketch_agg("value").alias("sketch"))
-    >>> df3 = df1.union(df2).agg(hll_sketch_estimate(hll_union_agg("sketch")).alias("distinct_cnt"))
+    >>> df3 = df1.union(df2).agg(hll_sketch_estimate(
+    ...     hll_union_agg("sketch")
+    ... ).alias("distinct_cnt"))
     >>> df3.drop("sketch").show()
     +------------+
     |distinct_cnt|
     +------------+
     |           6|
     +------------+
-    >>> df4 = df1.union(df2).agg(hll_sketch_estimate(hll_union_agg("sketch", lit(False))).alias("distinct_cnt"))
+    >>> df4 = df1.union(df2).agg(hll_sketch_estimate(
+    ...     hll_union_agg("sketch", lit(False))
+    ... ).alias("distinct_cnt"))
     >>> df4.drop("sketch").show()
     +------------+
     |distinct_cnt|
     +------------+
     |           6|
     +------------+
-    >>> df5 = df1.union(df2).agg(hll_sketch_estimate(hll_union_agg(col("sketch"), lit(False))).alias("distinct_cnt"))
+    >>> df5 = df1.union(df2).agg(hll_sketch_estimate(
+    ...     hll_union_agg(col("sketch"), lit(False))
+    ... ).alias("distinct_cnt"))
     >>> df5.drop("sketch").show()
     +------------+
     |distinct_cnt|
