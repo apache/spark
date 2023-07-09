@@ -97,10 +97,14 @@ case class CreateViewCommand(
     }
     val analyzedPlan = plan
 
-    if (userSpecifiedColumns.nonEmpty &&
-        userSpecifiedColumns.length != analyzedPlan.output.length) {
-      throw QueryCompilationErrors.createViewNumColumnsMismatchUserSpecifiedColumnLengthError(
-        analyzedPlan.output.length, userSpecifiedColumns.length)
+    if (userSpecifiedColumns.nonEmpty) {
+      if (userSpecifiedColumns.length > analyzedPlan.output.length) {
+        throw QueryCompilationErrors.cannotCreateViewNotEnoughColumnsError(
+          name, analyzedPlan.output.length, userSpecifiedColumns.length)
+      } else if (userSpecifiedColumns.length < analyzedPlan.output.length) {
+        throw QueryCompilationErrors.cannotCreateViewTooManyColumnsError(
+          name, analyzedPlan.output.length, userSpecifiedColumns.length)
+      }
     }
 
     val catalog = sparkSession.sessionState.catalog
