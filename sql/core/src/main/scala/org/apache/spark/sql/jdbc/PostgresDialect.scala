@@ -282,7 +282,7 @@ private object PostgresDialect extends JdbcDialect with SQLConfHelper {
     }
     s"ALTER TABLE ${getFullyQualifiedQuotedTableName(oldTable)} RENAME TO ${newTable.name()}"
   }
-
+  
   /**
    * java.sql timestamps are measured with millisecond accuracy (from Long.MinValue
    * milliseconds to Long.MaxValue milliseconds), see here while Spark timestamps
