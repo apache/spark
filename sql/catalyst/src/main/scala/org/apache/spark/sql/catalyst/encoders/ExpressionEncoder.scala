@@ -112,7 +112,7 @@ object ExpressionEncoder {
         case GetColumnByOrdinal(0, _) => input
       }
 
-      if (enc.objSerializer.nullable) {
+      if (enc.objSerializer.nullable && !enc.isOptionClass) {
         nullSafe(input, childDeserializer)
       } else {
         childDeserializer
@@ -294,6 +294,8 @@ case class ExpressionEncoder[T](
     StructField(s.name, s.dataType, s.nullable)
   })
 
+  def isOptionClass: Boolean = classOf[Option[_]].isAssignableFrom(clsTag.runtimeClass)
+
   /**
    * Returns true if the type `T` is serialized as a struct by `objSerializer`.
    */
@@ -307,7 +309,7 @@ case class ExpressionEncoder[T](
    * returns true if `T` is serialized as struct and is not `Option` type.
    */
   def isSerializedAsStructForTopLevel: Boolean = {
-    isSerializedAsStruct && !classOf[Option[_]].isAssignableFrom(clsTag.runtimeClass)
+    isSerializedAsStruct && !isOptionClass
   }
 
   // serializer expressions are used to encode an object to a row, while the object is usually an

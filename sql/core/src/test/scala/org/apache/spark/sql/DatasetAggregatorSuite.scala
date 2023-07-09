@@ -228,6 +228,16 @@ case class FooAgg(s: Int) extends Aggregator[Row, Int, Int] {
   def outputEncoder: Encoder[Int] = Encoders.scalaInt
 }
 
+object OptionStringAgg extends Aggregator[Option[String], Option[String], Option[String]] {
+  override def zero: Option[String] = None
+  override def reduce(b: Option[String], a: Option[String]): Option[String] = merge(b, a)
+  override def finish(reduction: Option[String]): Option[String] = reduction
+  override def merge(b1: Option[String], b2: Option[String]): Option[String] =
+    b1.map(b1v => b2.map(b2v => b1v ++ b2v).getOrElse(b1v)).orElse(b2)
+  override def bufferEncoder: Encoder[Option[String]] = ExpressionEncoder()
+  override def outputEncoder: Encoder[Option[String]] = ExpressionEncoder()
+}
+
 class DatasetAggregatorSuite extends QueryTest with SharedSparkSession {
   import testImplicits._
 
@@ -431,5 +441,16 @@ class DatasetAggregatorSuite extends QueryTest with SharedSparkSession {
 
     val agg = df.select(mode(col("a"))).as[String]
     checkDataset(agg, "3")
+  }
+
+  test("typed aggregation: option string") {
+    val ds = Seq((1, Some("a")), (1, None), (1, Some("c")), (2, None)).toDS()
+
+    checkDataset(
+      ds.groupByKey(_._1).mapValues(_._2).agg(
+        OptionStringAgg.toColumn
+      ),
+      (1, Some("ac")), (2, None)
+    )
   }
 }
