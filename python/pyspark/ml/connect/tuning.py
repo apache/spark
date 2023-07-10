@@ -15,24 +15,18 @@
 # limitations under the License.
 #
 
-import os
-import sys
-import itertools
 from multiprocessing.pool import ThreadPool
 
 from typing import (
     Any,
     Callable,
     Dict,
-    Iterable,
     List,
     Optional,
     Sequence,
     Tuple,
-    Type,
     Union,
     cast,
-    overload,
     TYPE_CHECKING,
 )
 
@@ -40,11 +34,10 @@ import numpy as np
 import pandas as pd
 
 from pyspark import keyword_only, since, inheritable_thread_target
-from pyspark.ml.connect import Estimator, Transformer, Model
+from pyspark.ml.connect import Estimator, Model
 from pyspark.ml.connect.base import Evaluator
 from pyspark.ml.connect.io_utils import (
     MetaAlgorithmReadWrite,
-    CoreModelReadWrite,
     ParamsReadWrite,
 )
 from pyspark.ml.param import Params, Param, TypeConverters
@@ -151,7 +144,7 @@ def _parallelFitTasks(
     evaluator: Evaluator,
     validation: DataFrame,
     epm: Sequence["ParamMap"],
-) -> List[Callable[[], Tuple[int, float, Transformer]]]:
+) -> List[Callable[[], Tuple[int, float]]]:
     """
     Creates a list of callables which can be called from different threads to fit and evaluate
     an estimator in parallel. Each callable returns an `(index, metric)` pair.
@@ -174,7 +167,7 @@ def _parallelFitTasks(
     Returns
     -------
     tuple
-        (int, float, subModel), an index into `epm` and the associated metric value.
+        (int, float), an index into `epm` and the associated metric value.
     """
 
     active_session = SparkSession.getActiveSession()
@@ -184,14 +177,18 @@ def _parallelFitTasks(
             "An active SparkSession is required for running cross valiator fit tasks."
         )
 
-    def get_single_task(index, param_map):
-        def single_task() -> Tuple[int, float, Transformer]:
+    def get_single_task(index: int, param_map: Any) -> Callable[[], Tuple[int, float]]:
+        def single_task() -> Tuple[int, float]:
             # Active session is thread-local variable, in background thread the active session
             # is not set, the following line sets it as the main thread active session.
-            active_session._jvm.SparkSession.setActiveSession(active_session._jsparkSession)
+            active_session._jvm.SparkSession.setActiveSession(  # type: ignore[union-attr]
+                active_session._jsparkSession  # type: ignore[union-attr]
+            )
 
             model = estimator.fit(train, param_map)
-            metric = evaluator.evaluate(model.transform(validation, param_map))
+            metric = evaluator.evaluate(
+                model.transform(validation, param_map)  # type: ignore[union-attr]
+            )
             return index, metric
 
         return single_task
@@ -208,10 +205,14 @@ class _CrossValidatorReadWrite(MetaAlgorithmReadWrite):
 
     def _save_meta_algorithm(self, root_path: str, node_path: List[str]) -> Dict[str, Any]:
         metadata = self._get_metadata_to_save()
-        metadata["estimator"] = self.getEstimator()._save_to_node_path(
+        metadata[
+            "estimator"
+        ] = self.getEstimator()._save_to_node_path(  # type: ignore[attr-defined]
             root_path, node_path + ["crossvalidator_estimator"]
         )
-        metadata["evaluator"] = self.getEvaluator()._save_to_node_path(
+        metadata[
+            "evaluator"
+        ] = self.getEvaluator()._save_to_node_path(  # type: ignore[attr-defined]
             root_path, node_path + ["crossvalidator_evaluator"]
         )
         metadata["estimator_param_maps"] = [
@@ -219,7 +220,7 @@ class _CrossValidatorReadWrite(MetaAlgorithmReadWrite):
                 {"parent": param.parent, "name": param.name, "value": value}
                 for param, value in param_map.items()
             ]
-            for param_map in self.getEstimatorParamMaps()
+            for param_map in self.getEstimatorParamMaps()  # type: ignore[attr-defined]
         ]
 
         if isinstance(self, CrossValidatorModel):
@@ -235,12 +236,12 @@ class _CrossValidatorReadWrite(MetaAlgorithmReadWrite):
         estimator = ParamsReadWrite._load_instance_from_metadata(
             node_metadata["estimator"], root_path
         )
-        self.set(self.estimator, estimator)
+        self.set(self.estimator, estimator)  # type: ignore[attr-defined]
 
         evaluator = ParamsReadWrite._load_instance_from_metadata(
             node_metadata["evaluator"], root_path
         )
-        self.set(self.evaluator, evaluator)
+        self.set(self.evaluator, evaluator)  # type: ignore[attr-defined]
 
         json_epm = node_metadata["estimator_param_maps"]
 
@@ -256,7 +257,7 @@ class _CrossValidatorReadWrite(MetaAlgorithmReadWrite):
                 param_map[param] = value
             epm.append(param_map)
 
-        self.set(self.estimatorParamMaps, epm)
+        self.set(self.estimatorParamMaps, epm)  # type: ignore[attr-defined]
 
         if isinstance(self, CrossValidatorModel):
             self.avgMetrics = node_metadata["avg_metrics"]
@@ -410,7 +411,7 @@ class CrossValidator(
 
             tasks = _parallelFitTasks(est, train, eva, validation, epm)
             if not is_remote():
-                tasks = map(inheritable_thread_target, tasks)
+                tasks = list(map(inheritable_thread_target, tasks))
 
             for j, metric in pool.imap_unordered(lambda f: f(), tasks):
                 metrics_all[i][j] = metric
@@ -424,7 +425,7 @@ class CrossValidator(
             bestIndex = np.argmax(metrics)
         else:
             bestIndex = np.argmin(metrics)
-        bestModel = est.fit(dataset, epm[bestIndex])
+        bestModel = cast(Model, est.fit(dataset, epm[bestIndex]))
         cv_model = self._copyValues(
             CrossValidatorModel(
                 bestModel,
@@ -517,10 +518,10 @@ class CrossValidatorModel(Model, _CrossValidatorParams, _CrossValidatorReadWrite
 
     def __init__(
         self,
-        bestModel: Model = None,
+        bestModel: Optional[Model] = None,
         avgMetrics: Optional[List[float]] = None,
         stdMetrics: Optional[List[float]] = None,
-    ):
+    ) -> None:
         super(CrossValidatorModel, self).__init__()
         #: best model from cross validation
         self.bestModel = bestModel

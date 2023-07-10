@@ -38,7 +38,7 @@ class _TorchMetricEvaluator(Evaluator):
         typeConverter=TypeConverters.toString,
     )
 
-    def getMetricName(self) -> "RegressionEvaluatorMetricType":
+    def getMetricName(self) -> str:
         """
         Gets the value of metricName or its default value.
 
@@ -78,7 +78,7 @@ class _TorchMetricEvaluator(Evaluator):
         )
 
 
-def _get_rmse_torchmetric():
+def _get_rmse_torchmetric() -> Any:
     import torch
     import torcheval.metrics as torchmetrics
 

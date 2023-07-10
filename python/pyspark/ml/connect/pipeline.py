@@ -36,7 +36,7 @@ if TYPE_CHECKING:
 
 
 class _PipelineReadWrite(MetaAlgorithmReadWrite):
-    def _get_child_stages(self):
+    def _get_child_stages(self) -> List[Any]:
         if isinstance(self, Pipeline):
             return list(self.getStages())
         elif isinstance(self, PipelineModel):
@@ -63,7 +63,9 @@ class _PipelineReadWrite(MetaAlgorithmReadWrite):
 
         for stage_index, stage in enumerate(stages):
             stage_node_path = node_path + [f"pipeline_stage_{stage_index}"]
-            stage_metadata = stage._save_to_node_path(root_path, stage_node_path)
+            stage_metadata = stage._save_to_node_path(  # type: ignore[attr-defined]
+                root_path, stage_node_path
+            )
             metadata["stages"].append(stage_metadata)
         return metadata
 
@@ -217,7 +219,7 @@ class PipelineModel(Model, _PipelineReadWrite):
 
     def _transform(self, dataset: Union[DataFrame, pd.DataFrame]) -> Union[DataFrame, pd.DataFrame]:
         for t in self.stages:
-            dataset = t.transform(dataset)  # type: ignore[attr-defined]
+            dataset = t.transform(dataset)
         return dataset
 
     def copy(self, extra: Optional["ParamMap"] = None) -> "PipelineModel":

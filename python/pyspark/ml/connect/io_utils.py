@@ -179,7 +179,7 @@ class ParamsReadWrite(Params):
         return instance
 
     @classmethod
-    def _load_instance_from_metadata(cls, metadata, path):
+    def _load_instance_from_metadata(cls, metadata: Dict[str, Any], path: str) -> Any:
         instance = cls._load_metadata(metadata)
 
         if isinstance(instance, CoreModelReadWrite):
@@ -207,14 +207,14 @@ class ParamsReadWrite(Params):
         """
         return cls._load_from_local(path)
 
-    def _save_to_node_path(self, root_path, node_path):
+    def _save_to_node_path(self, root_path: str, node_path: List[str]) -> Any:
         """
         Save the instance to provided node path, and return the node metadata.
         """
         if isinstance(self, MetaAlgorithmReadWrite):
             metadata = self._save_meta_algorithm(root_path, node_path)
         else:
-            metadata = self._get_metadata_to_save()  # type: ignore[attr-defined]
+            metadata = self._get_metadata_to_save()
             if isinstance(self, CoreModelReadWrite):
                 core_model_path = ".".join(node_path + [self._get_core_model_filename()])
                 self._save_core_model(os.path.join(root_path, core_model_path))
@@ -300,7 +300,7 @@ class MetaAlgorithmReadWrite(ParamsReadWrite):
     Meta-algorithm such as pipeline and cross validator must implement this interface.
     """
 
-    def _get_child_stages(self):
+    def _get_child_stages(self) -> List[Any]:
         raise NotImplementedError()
 
     def _save_meta_algorithm(self, root_path: str, node_path: List[str]) -> Dict[str, Any]:
@@ -310,7 +310,7 @@ class MetaAlgorithmReadWrite(ParamsReadWrite):
         raise NotImplementedError()
 
     @staticmethod
-    def _get_all_nested_stages(instance):
+    def _get_all_nested_stages(instance: Any) -> List[Any]:
         if isinstance(instance, MetaAlgorithmReadWrite):
             child_stages = instance._get_child_stages()
         else:
@@ -323,7 +323,7 @@ class MetaAlgorithmReadWrite(ParamsReadWrite):
         return [instance] + nested_stages
 
     @staticmethod
-    def get_uid_map(instance):
+    def get_uid_map(instance: Any) -> Dict[str, Any]:
         all_nested_stages = MetaAlgorithmReadWrite._get_all_nested_stages(instance)
         uid_map = {stage.uid: stage for stage in all_nested_stages}
         if len(all_nested_stages) != len(uid_map):
