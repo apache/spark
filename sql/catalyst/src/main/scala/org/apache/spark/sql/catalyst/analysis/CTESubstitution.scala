@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.analysis
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.sql.catalyst.expressions.SubqueryExpression
-import org.apache.spark.sql.catalyst.plans.logical.{Command, CTERelationDef, CTERelationRef, InsertIntoDir, LogicalPlan, ParsedStatement, SubqueryAlias, UnresolvedWith, WithCTE}
+import org.apache.spark.sql.catalyst.plans.logical.{Command, CTERelationDef, CTERelationRef, InsertIntoDir, InsertIntoStatement, LogicalPlan, ParsedStatement, SubqueryAlias, UnresolvedWith, WithCTE}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.catalyst.util.TypeUtils._
@@ -52,20 +52,27 @@ object CTESubstitution extends Rule[LogicalPlan] {
     if (!plan.containsPattern(UNRESOLVED_WITH)) {
       return plan
     }
-    val isCommand = plan.exists {
+    val isUnsupportedCommand = plan.exists {
+      case _: InsertIntoStatement => false
       case _: Command | _: ParsedStatement | _: InsertIntoDir => true
       case _ => false
+    }
+    // New plan with CTEs moved to command's query.
+    val planWithCTE = plan match {
+      case UnresolvedWith(child: InsertIntoStatement, cteRelations) =>
+        child.copy(query = UnresolvedWith(child.query, cteRelations))
+      case _ => plan
     }
     val cteDefs = ArrayBuffer.empty[CTERelationDef]
     val (substituted, firstSubstituted) =
       LegacyBehaviorPolicy.withName(conf.getConf(LEGACY_CTE_PRECEDENCE_POLICY)) match {
         case LegacyBehaviorPolicy.EXCEPTION =>
-          assertNoNameConflictsInCTE(plan)
-          traverseAndSubstituteCTE(plan, isCommand, Seq.empty, cteDefs)
+          assertNoNameConflictsInCTE(planWithCTE)
+          traverseAndSubstituteCTE(planWithCTE, isUnsupportedCommand, Seq.empty, cteDefs)
         case LegacyBehaviorPolicy.LEGACY =>
-          (legacyTraverseAndSubstituteCTE(plan, cteDefs), None)
+          (legacyTraverseAndSubstituteCTE(planWithCTE, cteDefs), None)
         case LegacyBehaviorPolicy.CORRECTED =>
-          traverseAndSubstituteCTE(plan, isCommand, Seq.empty, cteDefs)
+          traverseAndSubstituteCTE(planWithCTE, isUnsupportedCommand, Seq.empty, cteDefs)
     }
     if (cteDefs.isEmpty) {
       substituted
