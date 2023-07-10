@@ -1436,17 +1436,23 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
           val newDataType = a.dataType.get
           newDataType match {
             case _: StructType => alter.failAnalysis(
-              "UPDATE_FIELD_WITH_STRUCT_UNSUPPORTED",
+              "CANNOT_UPDATE_FIELD.STRUCT_TYPE",
               Map("table" -> toSQLId(table.name), "fieldName" -> toSQLId(fieldName)))
             case _: MapType => alter.failAnalysis(
-              "_LEGACY_ERROR_TEMP_2325", Map("table" -> table.name, "fieldName" -> fieldName))
+              "CANNOT_UPDATE_FIELD.MAP_TYPE",
+              Map("table" -> toSQLId(table.name), "fieldName" -> toSQLId(fieldName)))
             case _: ArrayType => alter.failAnalysis(
-              "_LEGACY_ERROR_TEMP_2326", Map("table" -> table.name, "fieldName" -> fieldName))
+              "CANNOT_UPDATE_FIELD.ARRAY_TYPE",
+              Map("table" -> toSQLId(table.name), "fieldName" -> toSQLId(fieldName)))
             case u: UserDefinedType[_] => alter.failAnalysis(
-              "_LEGACY_ERROR_TEMP_2327",
-              Map("table" -> table.name, "fieldName" -> fieldName, "udtSql" -> u.sql))
+              "CANNOT_UPDATE_FIELD.USER_DEFINED_TYPE",
+              Map(
+                "table" -> toSQLId(table.name),
+                "fieldName" -> toSQLId(fieldName),
+                "udtSql" -> toSQLType(u)))
             case _: CalendarIntervalType | _: AnsiIntervalType => alter.failAnalysis(
-              "_LEGACY_ERROR_TEMP_2328", Map("table" -> table.name, "fieldName" -> fieldName))
+              "CANNOT_UPDATE_FIELD.INTERVAL_TYPE",
+              Map("table" -> toSQLId(table.name), "fieldName" -> toSQLId(fieldName)))
             case _ => // update is okay
           }
 
