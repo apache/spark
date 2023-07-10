@@ -62,11 +62,9 @@ class DeepspeedTorchDistributor(TorchDistributor):
                 If None, deepspeed will fall back to default parameters.
         """
         num_processes = num_gpus * nnodes
-        super().__init__(num_processes, local_mode, use_gpu)
+        DEEPSPEED_SSL_CONF= "deepspeed.spark.distributor.ignoreSsl"
         self.deepspeed_config = deepspeed_config 
-        self.ssl_conf = "deepspeed.spark.distributor.ignoreSsl"
-        self._validate_input_params()
-        self.input_params = self._create_input_params()
+        super().__init__(num_processes, local_mode, use_gpu, _ssl_conf=DEEPSPEED_SSL_CONF)
         self.cleanup_deepspeed_conf = False
 
     @staticmethod

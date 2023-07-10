@@ -160,6 +160,7 @@ class Distributor:
         num_processes: int = 1,
         local_mode: bool = True,
         use_gpu: bool = True,
+        ssl_conf = None
     ):
         from pyspark.sql.utils import is_remote
 
@@ -178,7 +179,7 @@ class Distributor:
         self.local_mode = local_mode
         self.use_gpu = use_gpu
         self.num_tasks = self._get_num_tasks()
-        self.ssl_conf = None
+        self.ssl_conf = ssl_conf 
 
     def _create_input_params(self) -> Dict[str, Any]:
         input_params = self.__dict__.copy()
@@ -358,12 +359,13 @@ class TorchDistributor(Distributor):
     _PICKLED_FUNC_FILE = "func.pickle"
     _TRAIN_FILE = "train.py"
     _PICKLED_OUTPUT_FILE = "output.pickle"
-
+    _TORCH_SSL_CONF = "pytorch.spark.distributor.ignoreSsl"  # type: ignore
     def __init__(
         self,
         num_processes: int = 1,
         local_mode: bool = True,
         use_gpu: bool = True,
+        _ssl_conf=_TORCH_SSL_CONF
     ):
         """Initializes the distributor.
 
@@ -389,8 +391,7 @@ class TorchDistributor(Distributor):
         RuntimeError
             If an active SparkSession is unavailable.
         """
-        super().__init__(num_processes, local_mode, use_gpu)
-        self.ssl_conf = "pytorch.spark.distributor.ignoreSsl"  # type: ignore
+        super().__init__(num_processes, local_mode, use_gpu, ssl_conf=_ssl_conf)
         self._validate_input_params()
         self.input_params = self._create_input_params()
 
