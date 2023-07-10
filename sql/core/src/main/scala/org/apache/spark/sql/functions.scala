@@ -3651,6 +3651,58 @@ object functions {
     new Rand()
   }
 
+  /**
+   * Returns the bucket number for the given input column.
+   *
+   * @group misc_funcs
+   * @since 3.5.0
+   */
+  def bitmap_bucket_number(col: Column): Column = withExpr {
+    BitmapBucketNumber(col.expr)
+  }
+
+  /**
+   * Returns the bit position for the given input column.
+   *
+   * @group misc_funcs
+   * @since 3.5.0
+   */
+  def bitmap_bit_position(col: Column): Column = withExpr {
+    BitmapBitPosition(col.expr)
+  }
+
+  /**
+   * Returns a bitmap with the positions of the bits set from all the values from the input column.
+   * The input column will most likely be bitmap_bit_position().
+   *
+   * @group misc_funcs
+   * @since 3.5.0
+   */
+  def bitmap_construct_agg(col: Column): Column = withAggregateFunction {
+    BitmapConstructAgg(col.expr)
+  }
+
+  /**
+   * Returns the number of set bits in the input bitmap.
+   *
+   * @group misc_funcs
+   * @since 3.5.0
+   */
+  def bitmap_count(col: Column): Column = withExpr {
+    BitmapCount(col.expr)
+  }
+
+  /**
+   * Returns a bitmap that is the bitwise OR of all of the bitmaps from the input column.
+   * The input column should be bitmaps created from bitmap_construct_agg().
+   *
+   * @group misc_funcs
+   * @since 3.5.0
+   */
+  def bitmap_or_agg(col: Column): Column = withAggregateFunction {
+    BitmapOrAgg(col.expr)
+  }
+
   //////////////////////////////////////////////////////////////////////////////////////////////
   // String functions
   //////////////////////////////////////////////////////////////////////////////////////////////

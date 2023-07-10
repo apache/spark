@@ -502,6 +502,12 @@ Failed parsing struct: `<raw>`.
 
 Failed to rename `<sourcePath>` to `<targetPath>` as destination already exists.
 
+### FAILED_RENAME_TEMP_FILE
+
+SQLSTATE: none assigned
+
+Failed to rename temp file `<srcPath>` to `<dstPath>` as FileSystem.rename returned false.
+
 ### FIELDS_ALREADY_EXISTS
 
 SQLSTATE: none assigned
@@ -725,6 +731,12 @@ For more details see [INSUFFICIENT_TABLE_PROPERTY](sql-error-conditions-insuffic
 `<message>`
 
 ### INTERNAL_ERROR_NETWORK
+
+[SQLSTATE: XX000](sql-error-conditions-sqlstates.html#class-XX-internal-error)
+
+`<message>`
+
+### INTERNAL_ERROR_SHUFFLE
 
 [SQLSTATE: XX000](sql-error-conditions-sqlstates.html#class-XX-internal-error)
 

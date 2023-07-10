@@ -3788,6 +3788,41 @@ def random(
 random.__doc__ = pysparkfuncs.random.__doc__
 
 
+def bitmap_bit_position(col: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("bitmap_bit_position", col)
+
+
+bitmap_bit_position.__doc__ = pysparkfuncs.bitmap_bit_position.__doc__
+
+
+def bitmap_bucket_number(col: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("bitmap_bucket_number", col)
+
+
+bitmap_bucket_number.__doc__ = pysparkfuncs.bitmap_bucket_number.__doc__
+
+
+def bitmap_construct_agg(col: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("bitmap_construct_agg", col)
+
+
+bitmap_construct_agg.__doc__ = pysparkfuncs.bitmap_construct_agg.__doc__
+
+
+def bitmap_count(col: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("bitmap_count", col)
+
+
+bitmap_count.__doc__ = pysparkfuncs.bitmap_count.__doc__
+
+
+def bitmap_or_agg(col: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("bitmap_or_agg", col)
+
+
+bitmap_or_agg.__doc__ = pysparkfuncs.bitmap_or_agg.__doc__
+
+
 # User Defined Function
 
 
