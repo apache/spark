@@ -239,7 +239,7 @@ def assertDataFrameEqual(df: DataFrame, expected: DataFrame, check_row_order: bo
         The expected result of the operation, for comparison with the actual result.
 
     check_row_order : bool, optional
-        A flag indicates whether the order of rows should be considered in the comparison.
+        A flag indicating whether the order of rows should be considered in the comparison.
         If set to `False` (default), the row order is not taken into account.
         If set to `True`, the order of rows is important and will be checked during comparison.
 
@@ -258,7 +258,7 @@ def assertDataFrameEqual(df: DataFrame, expected: DataFrame, check_row_order: bo
     >>> assertDataFrameEqual(df1, df2) # fail  # doctest: +IGNORE_EXCEPTION_DETAIL
     Traceback (most recent call last):
     ...
-    PySparkAssertionError: [DIFFERENT_ROWS] Results do not match: ( 0.66667 % )
+    PySparkAssertionError: [DIFFERENT_ROWS] Results do not match: ( 66.667 % )
     [df]
     Row(id='1', amount=1000.0)
     <BLANKLINE>
@@ -370,7 +370,7 @@ def assertDataFrameEqual(df: DataFrame, expected: DataFrame, check_row_order: bo
                 diff_msg += "********************" + "\n\n"
 
         if not rows_equal:
-            percent_diff = diff_rows_cnt / len(zipped)
+            percent_diff = (diff_rows_cnt / len(zipped)) * 100
             error_msg += "( %.5f %% )" % percent_diff
             error_msg += "\n" + diff_msg
             raise PySparkAssertionError(
