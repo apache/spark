@@ -273,7 +273,7 @@ class ArtifactTests(ReusedConnectTestCase):
             spark_session.addArtifacts(f"{package_path}.zip", pyfile=True)
             self.assertEqual(spark_session.range(1).select(func("id")).first()[0], 5)
 
-    @unittest.skip("SPARK-44348: Reeanble Session-based artifact test cases")
+    @unittest.skip("SPARK-44348: Reenable Session-based artifact test cases")
     def test_add_zipped_package(self):
         self.check_add_zipped_package(self.spark)
 
