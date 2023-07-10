@@ -442,6 +442,7 @@ String Functions
     to_binary
     to_char
     to_number
+    to_varchar
     translate
     trim
     upper
@@ -503,6 +504,7 @@ Misc Functions
     java_method
     random
     stack
+    try_aes_decrypt
     typeof
     user
     uuid

@@ -2496,6 +2496,13 @@ def to_char(col: "ColumnOrName", format: "ColumnOrName") -> Column:
 to_char.__doc__ = pysparkfuncs.to_char.__doc__
 
 
+def to_varchar(col: "ColumnOrName", format: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("to_varchar", col, format)
+
+
+to_varchar.__doc__ = pysparkfuncs.to_varchar.__doc__
+
+
 def to_number(col: "ColumnOrName", format: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("to_number", col, format)
 
@@ -3591,21 +3598,27 @@ def sha2(col: "ColumnOrName", numBits: int) -> Column:
 sha2.__doc__ = pysparkfuncs.sha2.__doc__
 
 
-def hll_sketch_agg(col: "ColumnOrName", lgConfigK: Optional[int] = None) -> Column:
-    if lgConfigK is not None:
-        return _invoke_function("hll_sketch_agg", _to_col(col), lit(lgConfigK))
+def hll_sketch_agg(col: "ColumnOrName", lgConfigK: Optional[Union[int, Column]] = None) -> Column:
+    if lgConfigK is None:
+        return _invoke_function_over_columns("hll_sketch_agg", col)
     else:
-        return _invoke_function("hll_sketch_agg", _to_col(col))
+        _lgConfigK = lit(lgConfigK) if isinstance(lgConfigK, int) else lgConfigK
+        return _invoke_function_over_columns("hll_sketch_agg", col, _lgConfigK)
 
 
 hll_sketch_agg.__doc__ = pysparkfuncs.hll_sketch_agg.__doc__
 
 
 def hll_union_agg(col: "ColumnOrName", allowDifferentLgConfigK: Optional[bool] = None) -> Column:
-    if allowDifferentLgConfigK is not None:
-        return _invoke_function("hll_union_agg", _to_col(col), lit(allowDifferentLgConfigK))
+    if allowDifferentLgConfigK is None:
+        return _invoke_function_over_columns("hll_union_agg", col)
     else:
-        return _invoke_function("hll_union_agg", _to_col(col))
+        _allowDifferentLgConfigK = (
+            lit(allowDifferentLgConfigK)
+            if isinstance(allowDifferentLgConfigK, bool)
+            else allowDifferentLgConfigK
+        )
+        return _invoke_function_over_columns("hll_union_agg", col, _allowDifferentLgConfigK)
 
 
 hll_union_agg.__doc__ = pysparkfuncs.hll_union_agg.__doc__
@@ -3718,6 +3731,23 @@ def aes_decrypt(
 
 
 aes_decrypt.__doc__ = pysparkfuncs.aes_decrypt.__doc__
+
+
+def try_aes_decrypt(
+    input: "ColumnOrName",
+    key: "ColumnOrName",
+    mode: Optional["ColumnOrName"] = None,
+    padding: Optional["ColumnOrName"] = None,
+    aad: Optional["ColumnOrName"] = None,
+) -> Column:
+    _mode = lit("GCM") if mode is None else _to_col(mode)
+    _padding = lit("DEFAULT") if padding is None else _to_col(padding)
+    _aad = lit("") if aad is None else _to_col(aad)
+
+    return _invoke_function_over_columns("try_aes_decrypt", input, key, _mode, _padding, _aad)
+
+
+try_aes_decrypt.__doc__ = pysparkfuncs.try_aes_decrypt.__doc__
 
 
 def sha(col: "ColumnOrName") -> Column:
