@@ -1028,6 +1028,10 @@ setGeneric("decode", function(x, charset) { standardGeneric("decode") })
 #' @name NULL
 setGeneric("dense_rank", function(x = "missing") { standardGeneric("dense_rank") })
 
+#' @rdname column_math_functions
+#' @name NULL
+setGeneric("e", function(x = "missing") { standardGeneric("e") })
+
 #' @rdname column_collection_functions
 #' @name NULL
 setGeneric("element_at", function(x, extraction) { standardGeneric("element_at") })
@@ -1152,6 +1156,10 @@ setGeneric("levenshtein", function(y, x) { standardGeneric("levenshtein") })
 #' @name NULL
 setGeneric("lit", function(x) { standardGeneric("lit") })
 
+#' @rdname column_math_functions
+#' @name NULL
+setGeneric("ln", function(x) { standardGeneric("ln") })
+
 #' @rdname column_string_functions
 #' @name NULL
 setGeneric("locate", function(substr, str, ...) { standardGeneric("locate") })
@@ -1252,15 +1260,6 @@ setGeneric("negate", function(x) { standardGeneric("negate") })
 #' @name NULL
 setGeneric("negative", function(x) { standardGeneric("negative") })
 
-#' @rdname column_nonaggregate_functions
-#' @name NULL
-setGeneric("positive", function(x) { standardGeneric("positive") })
-
-#' @rdname column_math_functions
-#' @name NULL
-setGeneric("width_bucket",
-           function(v, min, max, numBucket) { standardGeneric("width_bucket") })
-
 #' @rdname not
 setGeneric("not", function(x) { standardGeneric("not") })
 
@@ -1295,15 +1294,15 @@ setGeneric("percentile_approx",
 
 #' @rdname column_math_functions
 #' @name NULL
+setGeneric("pi", function(x = "missing") { standardGeneric("pi") })
+
+#' @rdname column_math_functions
+#' @name NULL
 setGeneric("pmod", function(y, x) { standardGeneric("pmod") })
 
-#' @rdname column_math_functions
+#' @rdname column_nonaggregate_functions
 #' @name NULL
-setGeneric("pow", function(y, x) { standardGeneric("pow") })
-
-#' @rdname column_math_functions
-#' @name NULL
-setGeneric("power", function(y, x) { standardGeneric("power") })
+setGeneric("positive", function(x) { standardGeneric("positive") })
 
 #' @rdname column_collection_functions
 #' @name NULL
@@ -1312,6 +1311,14 @@ setGeneric("posexplode", function(x) { standardGeneric("posexplode") })
 #' @rdname column_collection_functions
 #' @name NULL
 setGeneric("posexplode_outer", function(x) { standardGeneric("posexplode_outer") })
+
+#' @rdname column_math_functions
+#' @name NULL
+setGeneric("pow", function(y, x) { standardGeneric("pow") })
+
+#' @rdname column_math_functions
+#' @name NULL
+setGeneric("power", function(y, x) { standardGeneric("power") })
 
 #' @rdname column_aggregate_functions
 #' @name NULL
@@ -1589,6 +1596,11 @@ setGeneric("vector_to_array", function(x, ...) { standardGeneric("vector_to_arra
 #' @rdname column_datetime_functions
 #' @name NULL
 setGeneric("weekofyear", function(x) { standardGeneric("weekofyear") })
+
+#' @rdname column_math_functions
+#' @name NULL
+setGeneric("width_bucket",
+           function(v, min, max, numBucket) { standardGeneric("width_bucket") })
 
 #' @rdname column_datetime_functions
 #' @name NULL

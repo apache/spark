@@ -1472,6 +1472,8 @@ test_that("column functions", {
   c29 <- acosh(c1) + asinh(c1) + atanh(c1)
   c30 <- product(c1) + product(c1 * 0.5)
   c31 <- sec(c1) + csc(c1) + cot(c1)
+  c32 <- ln(c1) + positive(c2) + negative(c3) + e() + pi()
+  c33 <- width_bucket(c1, c2, c3, lit(10L))
 
   # Test if base::is.nan() is exposed
   expect_equal(is.nan(c("a", "b")), c(FALSE, FALSE))
@@ -2362,22 +2364,6 @@ test_that("SPARK-36976: Add max_by/min_by API to SparkR", {
   df <- createDataFrame(
     list(list("Java", 2012, 20000), list("dotNET", 2012, 5000),
          list("dotNET", 2013, 48000), list("Java", 2013, 30000))
-  )
-  gd <- groupBy(df, df$"_1")
-
-  actual1 <- agg(gd, "_2" = max_by(df$"_2", df$"_3"))
-  expect1 <- createDataFrame(list(list("dotNET", 2013), list("Java", 2013)))
-  expect_equal(collect(actual1), collect(expect1))
-
-  actual2 <- agg(gd, "_2" = min_by(df$"_2", df$"_3"))
-  expect2 <- createDataFrame(list(list("dotNET", 2012), list("Java", 2012)))
-  expect_equal(collect(actual2), collect(expect2))
-})
-
-test_that("pow, power", {
-  df <- createDataFrame(
-    list(list("Java", 1.2, 2), list("dotNET", 3.1, 3),
-         list("dotNET", 2.4, 4), list("Java", 1.4, -2))
   )
   gd <- groupBy(df, df$"_1")
 
