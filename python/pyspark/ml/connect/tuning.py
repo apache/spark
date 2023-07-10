@@ -105,7 +105,7 @@ class _CrossValidatorParams(_ValidatorParams):
     """
     Params for :py:class:`CrossValidator` and :py:class:`CrossValidatorModel`.
 
-    .. versionadded:: 3.0.0
+    .. versionadded:: 3.5.0
     """
 
     numFolds: Param[int] = Param(
@@ -282,42 +282,7 @@ class CrossValidator(
     each of which uses 2/3 of the data for training and 1/3 for testing. Each fold is used as the
     test set exactly once.
 
-    .. versionadded:: 1.4.0
-
-    Examples
-    --------
-    >>> from pyspark.ml.classification import LogisticRegression
-    >>> from pyspark.ml.evaluation import BinaryClassificationEvaluator
-    >>> from pyspark.ml.linalg import Vectors
-    >>> from pyspark.ml.tuning import CrossValidator, ParamGridBuilder, CrossValidatorModel
-    >>> import tempfile
-    >>> dataset = spark.createDataFrame(
-    ...     [(Vectors.dense([0.0]), 0.0),
-    ...      (Vectors.dense([0.4]), 1.0),
-    ...      (Vectors.dense([0.5]), 0.0),
-    ...      (Vectors.dense([0.6]), 1.0),
-    ...      (Vectors.dense([1.0]), 1.0)] * 10,
-    ...     ["features", "label"])
-    >>> lr = LogisticRegression()
-    >>> grid = ParamGridBuilder().addGrid(lr.maxIter, [0, 1]).build()
-    >>> evaluator = BinaryClassificationEvaluator()
-    >>> cv = CrossValidator(estimator=lr, estimatorParamMaps=grid, evaluator=evaluator,
-    ...     parallelism=2)
-    >>> cvModel = cv.fit(dataset)
-    >>> cvModel.getNumFolds()
-    3
-    >>> cvModel.avgMetrics[0]
-    0.5
-    >>> path = tempfile.mkdtemp()
-    >>> model_path = path + "/model"
-    >>> cvModel.write().save(model_path)
-    >>> cvModelRead = CrossValidatorModel.read().load(model_path)
-    >>> cvModelRead.avgMetrics
-    [0.5, ...
-    >>> evaluator.evaluate(cvModel.transform(dataset))
-    0.8333...
-    >>> evaluator.evaluate(cvModelRead.transform(dataset))
-    0.8333...
+    .. versionadded:: 3.5.0
     """
 
     _input_kwargs: Dict[str, Any]
