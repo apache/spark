@@ -339,8 +339,8 @@ class MapInPandasTestsMixin:
 
     def check_empty_dataframes_with_other_columns(self):
         def empty_dataframes_with_other_columns(iterator):
-            for pdf in iterator:
-                yield pdf.rename(columns={"id": "iid"})
+            for _ in iterator:
+                yield pd.DataFrame({"iid": [], "value": []})
 
         with self.assertRaisesRegex(
             PythonException,
