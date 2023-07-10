@@ -287,7 +287,7 @@ class GroupedApplyInPandasTestsMixin:
         with self.assertRaisesRegex(
             PythonException,
             "Return type of the user-defined function should be pandas.DataFrame, "
-            "but is <class 'tuple'>",
+            "but is tuple.",
         ):
             self._test_apply_in_pandas(lambda key, pdf: key)
 

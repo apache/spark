@@ -23,7 +23,7 @@ from typing import cast
 
 from pyspark.sql import Row
 from pyspark.sql.functions import col, encode, lit
-from pyspark.errors import PythonException, PySparkRuntimeError
+from pyspark.errors import PythonException
 from pyspark.testing.sqlutils import (
     ReusedSQLTestCase,
     have_pandas,
@@ -151,14 +151,14 @@ class MapInPandasTestsMixin:
         with self.assertRaisesRegex(
             PythonException,
             "Return type of the user-defined function should be iterator of pandas.DataFrame, "
-            "but is <class 'int'>",
+            "but is int.",
         ):
             (self.spark.range(10, numPartitions=3).mapInPandas(no_iter, "a int").count())
 
         with self.assertRaisesRegex(
             PythonException,
             "Return type of the user-defined function should be iterator of pandas.DataFrame, "
-            "but is iterator of <class 'int'>",
+            "but is iterator of int.",
         ):
             (self.spark.range(10, numPartitions=3).mapInPandas(bad_iter_elem, "a int").count())
 
