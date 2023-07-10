@@ -71,7 +71,7 @@ class DeepspeedTorchDistributor(TorchDistributor):
         self.cleanup_deepspeed_conf = False
 
     @staticmethod
-    def _get_deepspeed_config_path(deepspeed_config):
+    def _get_deepspeed_config_path(deepspeed_config) -> str:
         if isinstance(deepspeed_config, dict):
             with tempfile.NamedTemporaryFile(mode="w+", delete=False, suffix=".json") as file:
                 json.dump(deepspeed_config, file)
