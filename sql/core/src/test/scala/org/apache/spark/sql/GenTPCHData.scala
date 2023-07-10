@@ -20,11 +20,10 @@ package org.apache.spark.sql
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.types.StructType
 
-class TPCHTables(sparkSession: SparkSession, config: GenTPCDataConfig)
+class TPCHTables(val spark: SparkSession, config: GenTPCDataConfig)
   extends TableGenerator with TPCHSchema with Logging with Serializable {
 
   override protected val dataGenerator: DataGenerator = new Dbgen(config.dbgenDir)
-  override protected val spark: SparkSession = sparkSession
   override protected val scaleFactor: Int = config.scaleFactor
 
   override protected def tables: Seq[Table] = tableColumns.map { case (tableName, schemaString) =>
