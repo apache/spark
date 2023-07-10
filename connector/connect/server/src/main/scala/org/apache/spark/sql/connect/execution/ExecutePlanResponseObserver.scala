@@ -17,14 +17,11 @@
 
 package org.apache.spark.sql.connect.execution
 
+import scala.collection.mutable.ListBuffer
+
 import io.grpc.stub.StreamObserver
 
 import org.apache.spark.connect.proto.ExecutePlanResponse
-
-case class CachedExecutePlanResponse(
-    r: ExecutePlanResponse, // the actual response
-    index: Long // index of the response in the response stream (starting from 1)
-)
 
 /**
  * Container for ExecutePlanResponses responses.
@@ -34,118 +31,81 @@ case class CachedExecutePlanResponse(
  *
  * @param responseObserver
  */
-private[connect] class ExecutePlanResponseObserver(var responseSender: ExecutePlanResponseSender)
-    extends StreamObserver[ExecutePlanResponse] {
+private[connect] class ExecutePlanResponseObserver() extends StreamObserver[ExecutePlanResponse] {
 
   // Cached stream state.
-  private val responses = new scala.mutable.ListBuffer[CachedExecutePlanResponse]()
+  private val responses = new ListBuffer[CachedExecutePlanResponse]()
   private var error: Option[Throwable] = None
   private var completed: Boolean = false
   private var lastIndex: Option[Long] = None // index of last response before completed.
   private var index: Long = 0 // first response will have index 1
 
+  // sender to notify of available responses.
+  private var responseSender: Option[ExecutePlanResponseSender] = None
+
   def onNext(r: ExecutePlanResponse): Unit = synchronized {
+    if (lastIndex.nonEmpty) {
+      throw new IllegalStateException("Stream onNext can't be called after stream completed")
+    }
     index += 1
     responses += CachedExecutePlanResponse(r, index)
     notifySender()
   }
 
   def onError(t: Throwable): Unit = synchronized {
+    if (lastIndex.nonEmpty) {
+      throw new IllegalStateException("Stream onError can't be called after stream completed")
+    }
     error = Some(t)
-    lastIndex = Some(0) // no responses to be send after error.
+    lastIndex = Some(index) // no responses to be send after error.
     notifySender()
   }
 
   def onCompleted(): Unit = synchronized {
+    if (lastIndex.nonEmpty) {
+      throw new IllegalStateException("Stream onCompleted can't be called after stream completed")
+    }
     lastIndex = Some(index)
     notifySender()
   }
 
   /** Set a new response sender. */
-  def setExecutePlanResponseSender(var newSender) = synchronized {
-    responseSender = newSender
-    newSender.notify()
+  def setExecutePlanResponseSender(newSender: ExecutePlanResponseSender): Unit = synchronized {
+    responseSender.foreach(_.detach()) // detach the current sender before attaching new one
+    responseSender = Some(newSender)
+    notifySender()
   }
 
   /** Remove cached responses until index */
-  def removeUntilIndex(val index: Long) = synchronized {
-    while (responses.nonEmpty && a(0).index <= index) {
-      a.remove(0)
+  def removeUntilIndex(index: Long): Unit = synchronized {
+    while (responses.nonEmpty && responses(0).index <= index) {
+      responses.remove(0)
     }
   }
 
-  def getResponse(val index: Long): Option[CachedExecutePlanResponse] = synchronized {
-    if (responses.nonEmpty && index - responses(0).index < responses.size) {
-      responses(index - responses(0).index)
+  /** Get response with a given index in the stream, if set. */
+  def getResponse(index: Long): Option[CachedExecutePlanResponse] = synchronized {
+    if (responses.nonEmpty && (index - responses(0).index).toInt < responses.size) {
+      // Note: index access in ListBuffer is linear; we assume here the buffer is not too long.
+      val ret = responses((index - responses(0).index).toInt)
+      assert(ret.index == index)
+      Some(ret)
     } else {
       None
     }
   }
 
-  def getError() = synchronized {
+  /** Get the stream error, if set.  */
+  def getError(): Option[Throwable] = synchronized {
     error
   }
 
-  def getLastIndex() = synchronized {
+  /** If the stream is finished, the index of the last response, otherwise unset. */
+  def getLastIndex(): Option[Long] = synchronized {
     lastIndex
   }
 
   private def notifySender() = synchronized {
-    responseSender.notify()
-  }
-}
-
-/**
- * ExecutePlanResponseSender sends responses to the GRPC stream.
- * It runs on the RPC thread, and gets notified by ExecutePlanResponseObserver about available
- * responses.
- * It notifies the ExecutePlanResponseObserver back about cached responses that can be removed
- * after being sent out.
- * @param responseObserver the GRPC request StreamObserver
- */
-private[connect] class ExecutePlanResponseSender(
-  executionObserver: ExecutePlanResponseObserver,
-  grpcObserver: StreamObserver[ExecutePlanResponse]) {
-
-  private val signal = new Object
-
-  def notify(): Unit = {
-    signal.synchronized {
-      signal.notify()
-    }
-  }
-
-  def run(val lastSentIndex: Long) {
-    // register to be notified about available responses.
-    executionObserver.setExecutePlanResponseSender(this)
-
-    var currentIndex = lastSentIndex + 1
-    var finished = false
-
-    // TODOTODOTODO - unfinished
-    // do not want to block on grpcObserver.onXXX, while holding signal that can block exec
-    // thread.
-    do {
-      signal.synchronized {
-        error = executionObserver.getError()
-        if (error.isEmpty) {
-          response = executionObserver.getResponse(currentIndex)
-        }
-
-      if (error.isDefined()) {
-        grpcObserver.onError(error.get)
-        finished = true
-      } else if (response.isDefined) {
-        grpcObserver.onNext(response.r)
-        currentIndex += 1
-        if (getLastIndex().forall(currentIndex <= _)) {
-          grpcObserver.onCompleted()
-          finished = true
-        }
-      } else {
-        // Nothing available, wait to be notified.
-        signal.wait()
-      }
-    } while (!finished)
+    responseSender.foreach(_.notifyResponse())
   }
 }

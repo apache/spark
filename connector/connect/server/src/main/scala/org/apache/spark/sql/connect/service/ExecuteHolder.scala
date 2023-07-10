@@ -28,7 +28,7 @@ import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.{ExecutePlanRequest, ExecutePlanResponse}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.connect.common.ProtoUtils
-import org.apache.spark.sql.connect.execution.{ExecutePlanResponseObserver, SparkConnectPlanExecution}
+import org.apache.spark.sql.connect.execution.{ExecutePlanResponseObserver, ExecutePlanResponseSender, SparkConnectPlanExecution}
 import org.apache.spark.sql.connect.planner.SparkConnectPlanner
 import org.apache.spark.util.Utils
 
@@ -46,6 +46,8 @@ case class ExecuteHolder(operationId: String, sessionHolder: SessionHolder) exte
 
   var executePlanResponseObserver: Option[ExecutePlanResponseObserver] = None
 
+  var executePlanResponseSender: Option[ExecutePlanResponseSender] = None
+
   private var executionThread: Thread = null
 
   private var executionError: Option[Throwable] = None
@@ -57,7 +59,11 @@ case class ExecuteHolder(operationId: String, sessionHolder: SessionHolder) exte
       responseObserver: StreamObserver[ExecutePlanResponse]): Unit = {
     // Set the state of what needs to be run.
     this.executePlanRequest = Some(request)
-    this.executePlanResponseObserver = Some(new ExecutePlanResponseObserver(responseObserver))
+    this.executePlanResponseObserver = Some(new ExecutePlanResponseObserver())
+    this.executePlanResponseSender = Some(new ExecutePlanResponseSender(
+      executionObserver = this.executePlanResponseObserver.get,
+      grpcObserver = responseObserver))
+
     // And start the execution.
     startExecute()
   }
@@ -78,9 +84,10 @@ case class ExecuteHolder(operationId: String, sessionHolder: SessionHolder) exte
     try {
       // Start execution thread..
       this.executionThread.start()
-      // ... and wait for execution thread to finish.
+      // Send back the responses received.
+      this.executePlanResponseSender.foreach(_.run(0))
       // TODO: Detach execution from RPC request. Then this can return early, and results
-      // are served to the client via additional RPCs from ExecutePlanResponseObserver.
+      // are served to the client via additional RPCs.
       this.executionThread.join()
 
       executionError.foreach { error =>
