@@ -132,8 +132,6 @@ class QueryPlanningTracker(
 
   private var readyForExecution = false
 
-  private var analyzed = false
-
   /**
    * Measure the start and end time of a phase. Note that if this function is called multiple
    * times for the same phase, the recorded start time will be the start time of the first call,
@@ -155,15 +153,12 @@ class QueryPlanningTracker(
 
   /**
    * Set when the query has been analysed.
-   * When called multiple times, ignores subsequent call.
+   * Can be called multiple times upon plan change.
    * @param analyzedPlan The plan after analysis,
    *                     see @org.apache.spark.sql.catalyst.analysis.Analyzer
    */
   private[sql] def setAnalyzed(analyzedPlan: LogicalPlan): Unit = {
-    if (!analyzed) {
-      analyzed = true
-      trackerCallback.foreach(_.analyzed(this, analyzedPlan))
-    }
+    trackerCallback.foreach(_.analyzed(this, analyzedPlan))
   }
 
   /**
