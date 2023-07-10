@@ -23,7 +23,7 @@ from pyspark.errors import (
     IllegalArgumentException,
     SparkUpgradeException,
 )
-from pyspark.testing.utils import assertDataFrameEqual
+from pyspark.testing.utils import assertDataFrameEqual, assertSchemaEqual
 from pyspark.testing.sqlutils import ReusedSQLTestCase
 import pyspark.sql.functions as F
 from pyspark.sql.functions import to_date, unix_timestamp, from_unixtime
@@ -694,13 +694,26 @@ class UtilsTestsMixin:
             schema=["id", "amount"],
         )
 
+        expected_error_msg = "Schemas do not match: \n"
+
+        expected_error_msg += (
+            "[df]"
+            + "\n"
+            + str(df1.schema[0])
+            + "\n\n"
+            + "[expected]"
+            + "\n"
+            + str(df2.schema[0])
+            + "\n\n"
+        )
+
         with self.assertRaises(PySparkAssertionError) as pe:
             assertDataFrameEqual(df1, df2)
 
         self.check_error(
             exception=pe.exception,
             error_class="DIFFERENT_SCHEMA",
-            message_parameters={"df_schema": df1.schema, "expected_schema": df2.schema},
+            message_parameters={"error_msg": expected_error_msg},
         )
 
     def test_diff_schema_lens(self):
@@ -720,13 +733,91 @@ class UtilsTestsMixin:
             schema=["id", "amount", "letter"],
         )
 
+        expected_error_msg = "Schemas do not match: \n"
+
+        expected_error_msg += (
+            "[df]" + "\n" + "None" + "\n\n" + "[expected]" + "\n" + str(df2.schema[2]) + "\n\n"
+        )
+
         with self.assertRaises(PySparkAssertionError) as pe:
             assertDataFrameEqual(df1, df2)
 
         self.check_error(
             exception=pe.exception,
             error_class="DIFFERENT_SCHEMA",
-            message_parameters={"df_schema": df1.schema, "expected_schema": df2.schema},
+            message_parameters={"error_msg": expected_error_msg},
+        )
+
+    def test_schema_ignore_nullable(self):
+        s1 = StructType(
+            [StructField("id", IntegerType(), True), StructField("name", StringType(), True)]
+        )
+
+        df1 = self.spark.createDataFrame([(1, "jane"), (2, "john")], s1)
+
+        s2 = StructType(
+            [StructField("id", IntegerType(), True), StructField("name", StringType(), False)]
+        )
+
+        df2 = self.spark.createDataFrame([(1, "jane"), (2, "john")], s2)
+
+        assertDataFrameEqual(df1, df2, ignore_nullable=True)
+
+    def test_schema_ignore_nullable_array_equal(self):
+        s1 = StructType([StructField("names", ArrayType(DoubleType(), True), True)])
+        s2 = StructType([StructField("names", ArrayType(DoubleType(), False), True)])
+
+        assertSchemaEqual(s1, s2, ignore_nullable=True)
+
+    def test_schema_ignore_nullable_struct_equal(self):
+        s1 = StructType(
+            [StructField("names", StructType([StructField("age", IntegerType(), True)]), True)]
+        )
+        s2 = StructType(
+            [StructField("names", StructType([StructField("age", IntegerType(), False)]), True)]
+        )
+        assertSchemaEqual(s1, s2, ignore_nullable=True)
+
+    def test_schema_ignore_nullable_array_unequal(self):
+        s1 = StructType([StructField("names", ArrayType(IntegerType(), True), True)])
+        s2 = StructType([StructField("names", ArrayType(DoubleType(), False), True)])
+
+        expected_error_msg = "Schemas do not match: \n"
+
+        expected_error_msg += (
+            "[df]" + "\n" + str(s1[0]) + "\n\n" + "[expected]" + "\n" + str(s2[0]) + "\n\n"
+        )
+
+        with self.assertRaises(PySparkAssertionError) as pe:
+            assertSchemaEqual(s1, s2)
+
+        self.check_error(
+            exception=pe.exception,
+            error_class="DIFFERENT_SCHEMA",
+            message_parameters={"error_msg": expected_error_msg},
+        )
+
+    def test_schema_ignore_nullable_struct_unequal(self):
+        s1 = StructType(
+            [StructField("names", StructType([StructField("age", DoubleType(), True)]), True)]
+        )
+        s2 = StructType(
+            [StructField("names", StructType([StructField("age", IntegerType(), True)]), True)]
+        )
+
+        expected_error_msg = "Schemas do not match: \n"
+
+        expected_error_msg += (
+            "[df]" + "\n" + str(s1[0]) + "\n\n" + "[expected]" + "\n" + str(s2[0]) + "\n\n"
+        )
+
+        with self.assertRaises(PySparkAssertionError) as pe:
+            assertSchemaEqual(s1, s2)
+
+        self.check_error(
+            exception=pe.exception,
+            error_class="DIFFERENT_SCHEMA",
+            message_parameters={"error_msg": expected_error_msg},
         )
 
     def test_assert_equal_maptype(self):

@@ -221,7 +221,128 @@ class PySparkErrorTestUtils:
         )
 
 
-def assertDataFrameEqual(df: DataFrame, expected: DataFrame, check_row_order: bool = False):
+def assertSchemaEqual(
+    df_schema: StructType, expected_schema: StructType, ignore_nullable: bool = False
+):
+    """
+    A util function to assert equality between DataFrame schemas `df_schema`
+    and `expected_schema`, with optional parameter `ignore_nullable`.
+
+    .. versionadded:: 3.5.0
+
+    Parameters
+    ----------
+    df_schema : StructType
+        The DataFrame schema that is being compared or tested.
+
+    expected_schema : StructType
+        The expected schema, for comparison with the actual schema.
+
+    ignore_nullable : bool, optional
+        A flag indicating whether the nullable flag should be ignored in schema comparison.
+        If set to `False` (default), the nullable flag in the schemas is not taken into account.
+        If set to `True`, the nullable flag will be checked during schema comparison.
+
+    Examples
+    --------
+    >>> from pyspark.sql.types import StructType, StructField, ArrayType, IntegerType, DoubleType
+    >>> s1 = StructType([StructField("names", ArrayType(DoubleType(), True), True)])
+    >>> s2 = StructType([StructField("names", ArrayType(DoubleType(), True), True)])
+    >>> assertSchemaEqual(s1, s2) # pass
+    >>> s1 = StructType([StructField("names", ArrayType(IntegerType(), True), True)])
+    >>> s2 = StructType([StructField("names", ArrayType(DoubleType(), False), True)])
+    >>> assertSchemaEqual(s1, s2) # fail  # doctest: +IGNORE_EXCEPTION_DETAIL
+    Traceback (most recent call last):
+    ...
+    PySparkAssertionError: [DIFFERENT_SCHEMA] Schemas do not match:
+    [df]
+    StructField("names", ArrayType(IntegerType(), True), True)
+    <BLANKLINE>
+    [expected]
+    StructField("names", ArrayType(DoubleType(), False), True)
+    <BLANKLINE>
+    """
+
+    def compare_schemas_ignore_nullable(s1, s2):
+        if len(s1) != len(s2):
+            return False
+        zipped = zip_longest(s1, s2)
+        for sf1, sf2 in zipped:
+            if not compare_structfields_ignore_nullable(sf1, sf2):
+                return False
+        return True
+
+    def compare_datatypes(dt1, dt2):
+        # checks datatype equality, using recursion to unpack structs and arrays
+        if dt1.typeName() == dt2.typeName():
+            if dt1.typeName() == "array":
+                return compare_datatypes(dt1.elementType, dt2.elementType)
+            elif dt1.typeName() == "struct":
+                return compare_schemas_ignore_nullable(dt1, dt2)
+            else:
+                return True
+        else:
+            return False
+
+    def compare_structfields_ignore_nullable(df_structfield, expected_structfield):
+        if ignore_nullable:
+            if df_structfield is None and expected_structfield is None:
+                return True
+            elif df_structfield is None or expected_structfield is None:
+                return False
+            if df_structfield.name != expected_structfield.name:
+                return False
+            else:
+                return compare_datatypes(df_structfield.dataType, expected_structfield.dataType)
+        else:
+            return df_structfield == expected_structfield
+
+    schemas_equal = True
+    error_msg = "Schemas do not match: \n"
+
+    if ignore_nullable:
+        if not compare_schemas_ignore_nullable(df_schema, expected_schema):
+            zipped = zip_longest(df_schema, expected_schema)
+            for df_structfield, expected_structfield in zipped:
+                if not compare_structfields_ignore_nullable(df_structfield, expected_structfield):
+                    schemas_equal = False
+                    error_msg += (
+                        "[df]"
+                        + "\n"
+                        + str(df_structfield)
+                        + "\n\n"
+                        + "[expected]"
+                        + "\n"
+                        + str(expected_structfield)
+                        + "\n\n"
+                    )
+    else:
+        if df_schema != expected_schema:
+            schemas_equal = False
+            zipped = zip_longest(df_schema, expected_schema)
+            for df_structfield, expected_structfield in zipped:
+                if df_structfield != expected_structfield:
+                    error_msg += (
+                        "[df]"
+                        + "\n"
+                        + str(df_structfield)
+                        + "\n\n"
+                        + "[expected]"
+                        + "\n"
+                        + str(expected_structfield)
+                        + "\n\n"
+                    )
+
+    if not schemas_equal:
+        raise PySparkAssertionError(
+            error_class="DIFFERENT_SCHEMA",
+            message_parameters={"error_msg": error_msg},
+        )
+
+
+def assertDataFrameEqual(
+    df: DataFrame, expected: DataFrame, check_row_order: bool = False, ignore_nullable: bool = False
+):
     """
     A util function to assert equality between DataFrames `df` and `expected`, with
     optional parameter `check_row_order`.
@@ -239,9 +360,14 @@ def assertDataFrameEqual(df: DataFrame, expected: DataFrame, check_row_order: bo
         The expected result of the operation, for comparison with the actual result.
 
     check_row_order : bool, optional
-        A flag indicates whether the order of rows should be considered in the comparison.
+        A flag indicating whether the order of rows should be considered in the comparison.
         If set to `False` (default), the row order is not taken into account.
         If set to `True`, the order of rows is important and will be checked during comparison.
+
+    ignore_nullable : bool, optional
+        A flag indicating whether the nullable flag should be ignored in schema comparison.
+        If set to `False` (default), the nullable flag in the schemas is not taken into account.
+        If set to `True`, the nullable flag will be checked during schema comparison.
 
     Examples
     --------
@@ -343,16 +469,6 @@ def assertDataFrameEqual(df: DataFrame, expected: DataFrame, check_row_order: bo
 
         return compare_vals(r1, r2)
 
-    def assert_schema_equal(
-        df_schema: StructType,
-        expected_schema: StructType,
-    ):
-        if df_schema != expected_schema:
-            raise PySparkAssertionError(
-                error_class="DIFFERENT_SCHEMA",
-                message_parameters={"df_schema": df_schema, "expected_schema": expected_schema},
-            )
-
     def assert_rows_equal(rows1: List[Row], rows2: List[Row]):
         zipped = list(zip_longest(rows1, rows2))
         rows_equal = True
@@ -392,7 +508,7 @@ def assertDataFrameEqual(df: DataFrame, expected: DataFrame, check_row_order: bo
                 message_parameters={},
             )
 
-    assert_schema_equal(df.schema, expected.schema)
+    assertSchemaEqual(df.schema, expected.schema, ignore_nullable)
     assert_rows_equal(df.collect(), expected.collect())
 
 

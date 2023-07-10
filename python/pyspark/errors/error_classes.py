@@ -171,9 +171,7 @@ ERROR_CLASSES_JSON = """
   },
   "DIFFERENT_SCHEMA" : {
     "message" : [
-      "Schemas do not match:",
-      "df schema: <df_schema>",
-      "expected schema: <expected_schema>"
+      "<error_msg>"
     ]
   },
   "DISALLOWED_TYPE_FOR_CONTAINER" : {
