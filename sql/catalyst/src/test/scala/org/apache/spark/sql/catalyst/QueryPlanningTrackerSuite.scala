@@ -93,12 +93,13 @@ class QueryPlanningTrackerSuite extends SparkFunSuite {
 
   test("test ready for execution callback") {
     val mockCallback = mock[QueryPlanningTrackerCallback]
-    val mockPlan = mock[LogicalPlan]
+    val mockPlan1 = mock[LogicalPlan]
+    val mockPlan2 = mock[LogicalPlan]
     val t = new QueryPlanningTracker(Some(mockCallback))
-    t.setAnalyzed(mockPlan)
-    verify(mockCallback, times(1)).analyzed(t, mockPlan)
-    t.setAnalyzed(mockPlan)
-    verify(mockCallback, times(1)).analyzed(t, mockPlan)
+    t.setAnalyzed(mockPlan1)
+    verify(mockCallback, times(1)).analyzed(t, mockPlan1)
+    t.setAnalyzed(mockPlan2)
+    verify(mockCallback, times(1)).analyzed(t, mockPlan2)
     t.setReadyForExecution()
     verify(mockCallback, times(1)).readyForExecution(t)
     t.setReadyForExecution()
