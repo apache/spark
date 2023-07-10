@@ -20,11 +20,14 @@ import java.io.Closeable
 import java.net.URI
 import java.util.concurrent.TimeUnit._
 import java.util.concurrent.atomic.AtomicLong
+
 import scala.collection.JavaConverters._
 import scala.reflect.runtime.universe.TypeTag
+
 import com.google.common.cache.{CacheBuilder, CacheLoader}
 import io.grpc.ClientInterceptor
 import org.apache.arrow.memory.RootAllocator
+
 import org.apache.spark.annotation.{DeveloperApi, Experimental}
 import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.ExecutePlanResponse

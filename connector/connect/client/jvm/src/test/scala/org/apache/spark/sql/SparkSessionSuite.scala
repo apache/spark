@@ -16,14 +16,14 @@
  */
 package org.apache.spark.sql
 
-import io.grpc.{CallOptions, Channel, ClientCall, ClientInterceptor, MethodDescriptor, Server}
+import io.grpc.{CallOptions, Channel, ClientCall, ClientInterceptor, MethodDescriptor}
 
 import org.apache.spark.sql.connect.client.util.ConnectFunSuite
 
 /**
  * Tests for non-dataframe related SparkSession operations.
  */
-class SparkSessionSuite extends ConnectFunSuite with BeforeAndAfterEach {
+class SparkSessionSuite extends ConnectFunSuite {
   test("default") {
     val session = SparkSession.builder().getOrCreate()
     assert(session.client.configuration.host == "localhost")
