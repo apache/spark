@@ -991,8 +991,8 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
         analyzePlan(
           transform(connectTestRelation.observe("my_metric", "id".protoAttr.cast("string"))))
       },
-      errorClass = "_LEGACY_ERROR_TEMP_2322",
-      parameters = Map("sqlExpr" -> "CAST(id AS STRING) AS id"))
+      errorClass = "INVALID_OBSERVED_METRICS.NON_AGGREGATE_FUNC_ARG_IS_ATTRIBUTE",
+      parameters = Map("expr" -> "\"id AS id\""))
 
     val connectPlan2 =
       connectTestRelation.observe(
@@ -1022,8 +1022,8 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
           transform(
             connectTestRelation.observe(Observation("my_metric"), "id".protoAttr.cast("string"))))
       },
-      errorClass = "_LEGACY_ERROR_TEMP_2322",
-      parameters = Map("sqlExpr" -> "CAST(id AS STRING) AS id"))
+      errorClass = "INVALID_OBSERVED_METRICS.NON_AGGREGATE_FUNC_ARG_IS_ATTRIBUTE",
+      parameters = Map("expr" -> "\"id AS id\""))
   }
 
   test("Test RandomSplit") {

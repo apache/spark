@@ -190,7 +190,7 @@ class ArrowStreamPandasSerializer(ArrowStreamSerializer):
         )
         return converter(s)
 
-    def _create_array(self, series, arrow_type, spark_type=None):
+    def _create_array(self, series, arrow_type, spark_type=None, arrow_cast=False):
         """
         Create an Arrow Array from the given pandas.Series and optional type.
 
@@ -202,6 +202,9 @@ class ArrowStreamPandasSerializer(ArrowStreamSerializer):
             If None, pyarrow's inferred type will be used
         spark_type : DataType, optional
             If None, spark type converted from arrow_type will be used
+        arrow_cast: bool, optional
+            Whether to apply Arrow casting when the user-specified return type mismatches the
+            actual return values.
 
         Returns
         -------
@@ -226,7 +229,17 @@ class ArrowStreamPandasSerializer(ArrowStreamSerializer):
         else:
             mask = series.isnull()
         try:
-            return pa.Array.from_pandas(series, mask=mask, type=arrow_type, safe=self._safecheck)
+            try:
+                return pa.Array.from_pandas(
+                    series, mask=mask, type=arrow_type, safe=self._safecheck
+                )
+            except pa.lib.ArrowInvalid:
+                if arrow_cast:
+                    return pa.Array.from_pandas(series, mask=mask).cast(
+                        target_type=arrow_type, safe=self._safecheck
+                    )
+                else:
+                    raise
         except TypeError as e:
             error_msg = (
                 "Exception thrown when converting pandas.Series (%s) "
@@ -319,12 +332,14 @@ class ArrowStreamPandasUDFSerializer(ArrowStreamPandasSerializer):
         df_for_struct=False,
         struct_in_pandas="dict",
         ndarray_as_list=False,
+        arrow_cast=False,
     ):
         super(ArrowStreamPandasUDFSerializer, self).__init__(timezone, safecheck)
         self._assign_cols_by_name = assign_cols_by_name
         self._df_for_struct = df_for_struct
         self._struct_in_pandas = struct_in_pandas
         self._ndarray_as_list = ndarray_as_list
+        self._arrow_cast = arrow_cast
 
     def arrow_to_pandas(self, arrow_column):
         import pyarrow.types as types
@@ -386,7 +401,13 @@ class ArrowStreamPandasUDFSerializer(ArrowStreamPandasSerializer):
                 # Assign result columns by schema name if user labeled with strings
                 elif self._assign_cols_by_name and any(isinstance(name, str) for name in s.columns):
                     arrs_names = [
-                        (self._create_array(s[field.name], field.type), field.name) for field in t
+                        (
+                            self._create_array(
+                                s[field.name], field.type, arrow_cast=self._arrow_cast
+                            ),
+                            field.name,
+                        )
+                        for field in t
                     ]
                 # Assign result columns by  position
                 else:
@@ -394,7 +415,11 @@ class ArrowStreamPandasUDFSerializer(ArrowStreamPandasSerializer):
                         # the selected series has name '1', so we rename it to field.name
                         # as the name is used by _create_array to provide a meaningful error message
                         (
-                            self._create_array(s[s.columns[i]].rename(field.name), field.type),
+                            self._create_array(
+                                s[s.columns[i]].rename(field.name),
+                                field.type,
+                                arrow_cast=self._arrow_cast,
+                            ),
                             field.name,
                         )
                         for i, field in enumerate(t)
@@ -403,7 +428,7 @@ class ArrowStreamPandasUDFSerializer(ArrowStreamPandasSerializer):
                 struct_arrs, struct_names = zip(*arrs_names)
                 arrs.append(pa.StructArray.from_arrays(struct_arrs, struct_names))
             else:
-                arrs.append(self._create_array(s, t))
+                arrs.append(self._create_array(s, t, arrow_cast=self._arrow_cast))
 
         return pa.RecordBatch.from_arrays(arrs, ["_%d" % i for i in range(len(arrs))])
 

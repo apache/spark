@@ -18,7 +18,7 @@
 package org.apache.spark.sql.types
 
 import org.apache.spark.annotation.Unstable
-import org.apache.spark.sql.errors.QueryCompilationErrors
+import org.apache.spark.sql.errors.DataTypeErrors
 import org.apache.spark.sql.types.YearMonthIntervalType.fieldToString
 
 /**
@@ -54,7 +54,7 @@ case class YearMonthIntervalType(startField: Byte, endField: Byte) extends AnsiI
     } else if (startField < endField) {
       s"interval $startFieldName to $endFieldName"
     } else {
-      throw QueryCompilationErrors.invalidDayTimeIntervalType(startFieldName, endFieldName)
+      throw DataTypeErrors.invalidDayTimeIntervalType(startFieldName, endFieldName)
     }
   }
 }
@@ -73,7 +73,10 @@ case object YearMonthIntervalType extends AbstractDataType {
   def fieldToString(field: Byte): String = field match {
     case YEAR => "year"
     case MONTH => "month"
-    case invalid => throw QueryCompilationErrors.invalidYearMonthField(invalid)
+    case invalid =>
+      val supportedIds = YearMonthIntervalType.yearMonthFields
+        .map(i => s"$i (${YearMonthIntervalType.fieldToString(i)})")
+      throw DataTypeErrors.invalidYearMonthField(invalid, supportedIds)
   }
 
   val stringToField: Map[String, Byte] = yearMonthFields.map(i => fieldToString(i) -> i).toMap

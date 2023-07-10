@@ -79,6 +79,13 @@ class SparkConnectClientTestCase(unittest.TestCase):
         client.interrupt_all()
         self.assertIsNotNone(mock.req, "Interrupt API was not called when expected")
 
+    def test_is_closed(self):
+        client = SparkConnectClient("sc://foo/;token=bar")
+
+        self.assertFalse(client.is_closed)
+        client.close()
+        self.assertTrue(client.is_closed)
+
 
 class MockService:
     # Simplest mock of the SparkConnectService.

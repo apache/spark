@@ -16,7 +16,7 @@
  */
 
 /* global $, Mustache, createRESTEndPointForExecutorsPage, createRESTEndPointForMiscellaneousProcess, */
-/* global createTemplateURI, formatBytes, formatDuration, formatLogsCells, getStandAloneAppId, */
+/* global createTemplateURI, formatBytes, formatDate, formatDuration, formatLogsCells, getStandAloneAppId, */
 /* global jQuery, setDataTableDefaults */
 
 var threadDumpEnabled = false;
@@ -147,7 +147,7 @@ function totalDurationColor(totalGCTime, totalDuration) {
 }
 
 var sumOptionalColumns = [3, 4];
-var execOptionalColumns = [5, 6, 7, 8, 9, 10, 13, 14, 25];
+var execOptionalColumns = [5, 6, 7, 8, 9, 10, 13, 14, 26];
 var execDataTable;
 var sumDataTable;
 
@@ -568,19 +568,19 @@ $(document).ready(function () {
             {
               data: 'removeReason',
               render: formatLossReason
+            },
+            {
+              data: 'addTime',
+              render: formatDate
+            },
+            {
+              data: 'removeTime',
+              render: formatDate
             }
           ],
           "order": [[0, "asc"]],
           "columnDefs": [
-            {"visible": false, "targets": 5},
-            {"visible": false, "targets": 6},
-            {"visible": false, "targets": 7},
-            {"visible": false, "targets": 8},
-            {"visible": false, "targets": 9},
-            {"visible": false, "targets": 10},
-            {"visible": false, "targets": 13},
-            {"visible": false, "targets": 14},
-            {"visible": false, "targets": 26}
+            {"visible": false, "targets": execOptionalColumns}
           ],
           "deferRender": true
         };
@@ -712,10 +712,8 @@ $(document).ready(function () {
           "searching": false,
           "info": false,
           "columnDefs": [
-            {"visible": false, "targets": 3},
-            {"visible": false, "targets": 4}
+            {"visible": false, "targets": sumOptionalColumns}
           ]
-
         };
 
         sumDataTable = $(sumSelector).DataTable(sumConf);

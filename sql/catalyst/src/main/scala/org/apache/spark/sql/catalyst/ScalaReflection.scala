@@ -45,14 +45,6 @@ import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 
 
-/**
- * A helper trait to create [[org.apache.spark.sql.catalyst.encoders.ExpressionEncoder]]s
- * for classes whose fields are entirely defined by constructor params but should not be
- * case classes.
- */
-trait DefinedByConstructorParams
-
-
 private[catalyst] object ScalaSubtypeLock
 
 
