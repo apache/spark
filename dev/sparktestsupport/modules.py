@@ -468,7 +468,6 @@ pyspark_sql = Module(
         "pyspark.sql.pandas.typehints",
         "pyspark.sql.pandas.utils",
         "pyspark.sql.observation",
-        "pyspark.testing.utils",
         # unittests
         "pyspark.sql.tests.test_arrow",
         "pyspark.sql.tests.test_arrow_python_udf",
