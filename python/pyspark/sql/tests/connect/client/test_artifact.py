@@ -245,6 +245,7 @@ class ArtifactTests(ReusedConnectTestCase):
             spark_session.addArtifacts(pyfile_path, pyfile=True)
             self.assertEqual(spark_session.range(1).select(func("id")).first()[0], 10)
 
+    @unittest.skip("SPARK-44348: Reeanble Session-based artifact test cases")
     def test_add_pyfile(self):
         self.check_add_pyfile(self.spark)
 
@@ -272,6 +273,7 @@ class ArtifactTests(ReusedConnectTestCase):
             spark_session.addArtifacts(f"{package_path}.zip", pyfile=True)
             self.assertEqual(spark_session.range(1).select(func("id")).first()[0], 5)
 
+    @unittest.skip("SPARK-44348: Reeanble Session-based artifact test cases")
     def test_add_zipped_package(self):
         self.check_add_zipped_package(self.spark)
 
@@ -303,6 +305,7 @@ class ArtifactTests(ReusedConnectTestCase):
             spark_session.addArtifacts(f"{archive_path}.zip#my_files", archive=True)
             self.assertEqual(spark_session.range(1).select(func("id")).first()[0], "hello world!")
 
+    @unittest.skip("SPARK-44348: Reeanble Session-based artifact test cases")
     def test_add_archive(self):
         self.check_add_archive(self.spark)
 
@@ -328,6 +331,7 @@ class ArtifactTests(ReusedConnectTestCase):
             spark_session.addArtifacts(file_path, file=True)
             self.assertEqual(spark_session.range(1).select(func("id")).first()[0], "Hello world!!")
 
+    @unittest.skip("SPARK-44348: Reeanble Session-based artifact test cases")
     def test_add_file(self):
         self.check_add_file(self.spark)
 
