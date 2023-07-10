@@ -2572,7 +2572,7 @@
   },
   "UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE" : {
     "message" : [
-      "The <format> datasource don't support column <columnName> with the type of <columnType>."
+      "The <format> datasource doesn't support the column <columnName> of the type <columnType>."
     ]
   },
   "UNSUPPORTED_DEFAULT_VALUE" : {
