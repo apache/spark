@@ -19,13 +19,15 @@
 import tempfile
 import unittest
 import numpy as np
+import pandas as pd
 from pyspark.ml.param import Param, Params
 from pyspark.ml.connect import Model, Estimator
 from pyspark.ml.connect.feature import StandardScaler
 from pyspark.ml.connect.classification import LogisticRegression as LORV2
 from pyspark.ml.connect.pipeline import Pipeline
-from pyspark.ml.connect.tuning import CrossValidator, ParamGridBuilder, CrossValidatorModel
+from pyspark.ml.connect.tuning import CrossValidator, CrossValidatorModel
 from pyspark.ml.connect.evaluation import BinaryClassificationEvaluator, RegressionEvaluator
+from pyspark.ml.tuning import ParamGridBuilder
 from pyspark.sql import SparkSession
 from pyspark.sql.functions import rand
 
@@ -190,20 +192,11 @@ class CrossValidatorTestsMixin:
             schema="features: array<double>, label: long",
         )
 
-        eval_dataset = self.spark.createDataFrame(
-            zip(sk_dataset.data[1::2].tolist(), [int(t) for t in sk_dataset.target[1::2]]),
-            schema="features: array<double>, label: long",
-        )
-
         scaler = StandardScaler(inputCol="features", outputCol="scaled_features")
         lorv2 = LORV2(numTrainWorkers=2, featuresCol="scaled_features")
         pipeline = Pipeline(stages=[scaler, lorv2])
 
-        grid2 = (
-            ParamGridBuilder().addGrid(lorv2.maxIter, [2, 200])
-            # .addGrid(lorv2.learningRate, [0.001, 0.00001])
-            .build()
-        )
+        grid2 = ParamGridBuilder().addGrid(lorv2.maxIter, [2, 200]).build()
         cv = CrossValidator(
             estimator=pipeline,
             estimatorParamMaps=grid2,
@@ -211,6 +204,15 @@ class CrossValidatorTestsMixin:
             evaluator=BinaryClassificationEvaluator(),
         )
         cv_model = cv.fit(train_dataset)
+        transformed_result = (
+            cv_model.transform(train_dataset).select("prediction", "probability").toPandas()
+        )
+        expected_transformed_result = (
+            cv_model.bestModel.transform(train_dataset)
+            .select("prediction", "probability")
+            .toPandas()
+        )
+        pd.testing.assert_frame_equal(transformed_result, expected_transformed_result)
 
         assert cv_model.bestModel.stages[1].getMaxIter() == 200
 

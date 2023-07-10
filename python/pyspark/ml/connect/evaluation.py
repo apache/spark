@@ -14,11 +14,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-import math
 import numpy as np
-
 import pandas as pd
-from typing import Any, Union, List, Tuple, Optional
+from typing import Any, Union, List, Tuple
 
 from pyspark import keyword_only
 from pyspark.ml.param import Param, Params, TypeConverters
@@ -161,7 +159,13 @@ class BinaryClassificationEvaluator(
         probabilityCol: str = "probability",
     ) -> None:
         """
-        __init__(self, *, metricName='rmse', labelCol='label', probabilityCol='probability') -> None:
+        __init__(
+            self,
+            *,
+            metricName='rmse',
+            labelCol='label',
+            probabilityCol='probability'
+        ) -> None:
         """
         super().__init__()
         self._set(metricName=metricName, labelCol=labelCol, probabilityCol=probabilityCol)
@@ -212,7 +216,13 @@ class MulticlassClassificationEvaluator(
         predictionCol: str = "prediction",
     ) -> None:
         """
-        __init__(self, *, metricName='accuracy', labelCol='label', predictionCol='prediction') -> None:
+        __init__(
+            self,
+            *,
+            metricName='accuracy',
+            labelCol='label',
+            predictionCol='prediction'
+        ) -> None:
         """
         super().__init__()
         self._set(metricName=metricName, labelCol=labelCol, predictionCol=predictionCol)

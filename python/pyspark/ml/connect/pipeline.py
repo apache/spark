@@ -14,8 +14,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-import os
-
 import pandas as pd
 from typing import Any, Dict, List, Optional, Union, cast, TYPE_CHECKING
 
@@ -24,7 +22,6 @@ from pyspark.ml.connect.base import Estimator, Model, Transformer
 from pyspark.ml.connect.io_utils import (
     ParamsReadWrite,
     MetaAlgorithmReadWrite,
-    CoreModelReadWrite,
 )
 from pyspark.ml.param import Param, Params
 from pyspark.ml.common import inherit_doc

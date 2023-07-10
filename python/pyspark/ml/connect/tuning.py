@@ -49,7 +49,6 @@ from pyspark.sql import SparkSession
 
 from pyspark.sql.utils import is_remote
 
-from pyspark.ml.tuning import ParamGridBuilder
 
 if TYPE_CHECKING:
     from pyspark.ml._typing import ParamMap
