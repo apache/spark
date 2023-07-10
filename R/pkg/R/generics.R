@@ -1248,6 +1248,18 @@ setGeneric("nanvl", function(y, x) { standardGeneric("nanvl") })
 #' @name NULL
 setGeneric("negate", function(x) { standardGeneric("negate") })
 
+#' @rdname column_nonaggregate_functions
+#' @name NULL
+setGeneric("negative", function(x) { standardGeneric("negative") })
+
+#' @rdname column_nonaggregate_functions
+#' @name NULL
+setGeneric("positive", function(x) { standardGeneric("positive") })
+
+#' @rdname column_math_functions
+#' @name NULL
+setGeneric("width_bucket", function(x) { standardGeneric("width_bucket") })
+
 #' @rdname not
 setGeneric("not", function(x) { standardGeneric("not") })
 
@@ -1283,6 +1295,14 @@ setGeneric("percentile_approx",
 #' @rdname column_math_functions
 #' @name NULL
 setGeneric("pmod", function(y, x) { standardGeneric("pmod") })
+
+#' @rdname column_math_functions
+#' @name NULL
+setGeneric("pow", function(y, x) { standardGeneric("pow") })
+
+#' @rdname column_math_functions
+#' @name NULL
+setGeneric("power", function(y, x) { standardGeneric("power") })
 
 #' @rdname column_collection_functions
 #' @name NULL
@@ -1440,6 +1460,10 @@ setGeneric("spark_partition_id", function(x = "missing") { standardGeneric("spar
 #' @rdname column_aggregate_functions
 #' @name NULL
 setGeneric("stddev", function(x) { standardGeneric("stddev") })
+
+#' @rdname column_aggregate_functions
+#' @name NULL
+setGeneric("std", function(x) { standardGeneric("std") })
 
 #' @rdname column_aggregate_functions
 #' @name NULL
