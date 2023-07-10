@@ -52,6 +52,7 @@ from pyspark.ml.param.shared import HasParallelism, HasSeed
 from pyspark.sql.functions import col, lit, rand, UserDefinedFunction
 from pyspark.sql.types import BooleanType
 from pyspark.sql.dataframe import DataFrame
+from pyspark.sql import SparkSession
 
 from pyspark.sql.utils import is_remote
 
@@ -176,8 +177,19 @@ def _parallelFitTasks(
         (int, float, subModel), an index into `epm` and the associated metric value.
     """
 
+    active_session = SparkSession.getActiveSession()
+
+    if active_session is None:
+        raise RuntimeError(
+            "An active SparkSession is required for running cross valiator fit tasks."
+        )
+
     def get_single_task(index, param_map):
         def single_task() -> Tuple[int, float, Transformer]:
+            # Active session is thread-local variable, in background thread the active session
+            # is not set, the following line sets it as the main thread active session.
+            active_session._jvm.SparkSession.setActiveSession(active_session._jsparkSession)
+
             model = estimator.fit(train, param_map)
             metric = evaluator.evaluate(model.transform(validation, param_map))
             return index, metric
@@ -433,7 +445,8 @@ class CrossValidator(
             train = datasets[i][0].cache()
 
             tasks = _parallelFitTasks(est, train, eva, validation, epm)
-            tasks = map(inheritable_thread_target, tasks)
+            if not is_remote():
+                tasks = map(inheritable_thread_target, tasks)
 
             for j, metric in pool.imap_unordered(lambda f: f(), tasks):
                 metrics_all[i][j] = metric

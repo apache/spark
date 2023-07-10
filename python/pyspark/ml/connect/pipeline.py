@@ -221,7 +221,7 @@ class PipelineModel(Model, _PipelineReadWrite):
         super(PipelineModel, self).__init__()
         self.stages = stages  # type: ignore[assignment]
 
-    def transform(
+    def _transform(
         self, dataset: Union[DataFrame, pd.DataFrame]
     ) -> Union[DataFrame, pd.DataFrame]:
         for t in self.stages:

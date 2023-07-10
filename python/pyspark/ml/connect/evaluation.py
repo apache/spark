@@ -70,10 +70,21 @@ class _TorchMetricEvaluator(Evaluator):
         )
 
 
+def _get_rmse_torchmetric():
+    import torch
+    import torcheval.metrics as torchmetrics
+
+    class _RootMeanSquaredError(torchmetrics.MeanSquaredError):
+        def compute(self: Any) -> torch.Tensor:
+            return torch.sqrt(super().compute())
+
+    return _RootMeanSquaredError()
+
+
 class RegressionEvaluator(_TorchMetricEvaluator, HasLabelCol, HasPredictionCol, ParamsReadWrite):
     """
     Evaluator for Regression, which expects input columns prediction and label.
-    Supported metrics are 'rmse' and 'r2'.
+    Supported metrics are 'rmse', 'mse' and 'r2'.
 
     .. versionadded:: 3.5.0
     """
@@ -91,10 +102,12 @@ class RegressionEvaluator(_TorchMetricEvaluator, HasLabelCol, HasPredictionCol, 
 
         metric_name = self.getOrDefault(self.metricName)
 
-        if metric_name == "rmse":
+        if metric_name == "mse":
             return math.sqrt(torchmetrics.MeanSquaredError())
         if metric_name == "r2":
             return torchmetrics.R2Score()
+        if metric_name == "rmse":
+            return _get_rmse_torchmetric()
 
         raise ValueError(f"Unsupported regressor evaluator metric name: {metric_name}")
 

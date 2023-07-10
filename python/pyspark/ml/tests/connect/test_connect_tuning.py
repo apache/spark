@@ -18,7 +18,7 @@
 
 import unittest
 from pyspark.sql import SparkSession
-from pyspark.ml.tests.connect.test_legacy_mode_crossvaliator import CrossValidatorTestsMixin
+from pyspark.ml.tests.connect.test_legacy_mode_tuning import CrossValidatorTestsMixin
 
 
 class CrossValidatorTestsOnConnect(CrossValidatorTestsMixin, unittest.TestCase):
