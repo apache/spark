@@ -655,9 +655,11 @@ object SparkSession extends Logging {
     }
 
     /**
-     * Add an interceptor to be used during channel creation.
+     * Add an interceptor [[ClientInterceptor]] to be used during channel creation.
      *
      * Note that interceptors added last are executed first by gRPC.
+     *
+     * @since 3.5.0
      */
     def interceptor(interceptor: ClientInterceptor): Builder = {
       builder.interceptor(interceptor)
