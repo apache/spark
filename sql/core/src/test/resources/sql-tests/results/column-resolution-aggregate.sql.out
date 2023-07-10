@@ -91,17 +91,25 @@ org.apache.spark.sql.AnalysisException
 -- !query
 SELECT k AS lca, lca + 1 AS col FROM v1 GROUP BY k, col
 -- !query schema
-struct<lca:int,col:int>
+struct<>
 -- !query output
-1	2
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "UNSUPPORTED_FEATURE.LATERAL_COLUMN_ALIAS_IN_GROUP_BY",
+  "sqlState" : "0A000"
+}
 
 
 -- !query
 SELECT k AS lca, lca + 1 AS col FROM v1 GROUP BY all
 -- !query schema
-struct<lca:int,col:int>
+struct<>
 -- !query output
-1	2
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "UNSUPPORTED_FEATURE.LATERAL_COLUMN_ALIAS_IN_GROUP_BY",
+  "sqlState" : "0A000"
+}
 
 
 -- !query

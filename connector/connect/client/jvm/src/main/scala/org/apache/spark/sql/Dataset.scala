@@ -20,6 +20,7 @@ import java.util.{Collections, Locale}
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable
+import scala.reflect.ClassTag
 import scala.util.control.NonFatal
 
 import org.apache.spark.SparkException
@@ -568,7 +569,7 @@ class Dataset[T] private[sql] (
     }
   }
 
-  private def toJoinType(name: String): proto.Join.JoinType = {
+  private def toJoinType(name: String, skipSemiAnti: Boolean = false): proto.Join.JoinType = {
     name.trim.toLowerCase(Locale.ROOT) match {
       case "inner" =>
         proto.Join.JoinType.JOIN_TYPE_INNER
@@ -580,12 +581,12 @@ class Dataset[T] private[sql] (
         proto.Join.JoinType.JOIN_TYPE_LEFT_OUTER
       case "right" | "rightouter" | "right_outer" =>
         proto.Join.JoinType.JOIN_TYPE_RIGHT_OUTER
-      case "semi" | "leftsemi" | "left_semi" =>
+      case "semi" | "leftsemi" | "left_semi" if !skipSemiAnti =>
         proto.Join.JoinType.JOIN_TYPE_LEFT_SEMI
-      case "anti" | "leftanti" | "left_anti" =>
+      case "anti" | "leftanti" | "left_anti" if !skipSemiAnti =>
         proto.Join.JoinType.JOIN_TYPE_LEFT_ANTI
-      case _ =>
-        throw new IllegalArgumentException(s"Unsupported join type `joinType`.")
+      case e =>
+        throw new IllegalArgumentException(s"Unsupported join type '$e'.")
     }
   }
 
@@ -833,6 +834,80 @@ class Dataset[T] private[sql] (
         .setIsGlobal(global)
         .addAllOrder(sortExprs.map(_.sortOrder).asJava)
     }
+  }
+
+  /**
+   * Joins this Dataset returning a `Tuple2` for each pair where `condition` evaluates to true.
+   *
+   * This is similar to the relation `join` function with one important difference in the result
+   * schema. Since `joinWith` preserves objects present on either side of the join, the result
+   * schema is similarly nested into a tuple under the column names `_1` and `_2`.
+   *
+   * This type of join can be useful both for preserving type-safety with the original object
+   * types as well as working with relational data where either side of the join has column names
+   * in common.
+   *
+   * @param other
+   *   Right side of the join.
+   * @param condition
+   *   Join expression.
+   * @param joinType
+   *   Type of join to perform. Default `inner`. Must be one of: `inner`, `cross`, `outer`,
+   *   `full`, `fullouter`,`full_outer`, `left`, `leftouter`, `left_outer`, `right`, `rightouter`,
+   *   `right_outer`.
+   *
+   * @group typedrel
+   * @since 3.5.0
+   */
+  def joinWith[U](other: Dataset[U], condition: Column, joinType: String): Dataset[(T, U)] = {
+    val joinTypeValue = toJoinType(joinType, skipSemiAnti = true)
+    val (leftNullable, rightNullable) = joinTypeValue match {
+      case proto.Join.JoinType.JOIN_TYPE_INNER | proto.Join.JoinType.JOIN_TYPE_CROSS =>
+        (false, false)
+      case proto.Join.JoinType.JOIN_TYPE_FULL_OUTER =>
+        (true, true)
+      case proto.Join.JoinType.JOIN_TYPE_LEFT_OUTER =>
+        (false, true)
+      case proto.Join.JoinType.JOIN_TYPE_RIGHT_OUTER =>
+        (true, false)
+      case e =>
+        throw new IllegalArgumentException(s"Unsupported join type '$e'.")
+    }
+
+    val tupleEncoder =
+      ProductEncoder[(T, U)](
+        ClassTag(Utils.getContextOrSparkClassLoader.loadClass(s"scala.Tuple2")),
+        Seq(
+          EncoderField(s"_1", this.encoder, leftNullable, Metadata.empty),
+          EncoderField(s"_2", other.encoder, rightNullable, Metadata.empty)))
+
+    sparkSession.newDataset(tupleEncoder) { builder =>
+      val joinBuilder = builder.getJoinBuilder
+      joinBuilder
+        .setLeft(plan.getRoot)
+        .setRight(other.plan.getRoot)
+        .setJoinType(joinTypeValue)
+        .setJoinCondition(condition.expr)
+        .setJoinDataType(joinBuilder.getJoinDataTypeBuilder
+          .setIsLeftFlattenableToRow(this.encoder.isFlattenable)
+          .setIsRightFlattenableToRow(other.encoder.isFlattenable))
+    }
+  }
+
+  /**
+   * Using inner equi-join to join this Dataset returning a `Tuple2` for each pair where
+   * `condition` evaluates to true.
+   *
+   * @param other
+   *   Right side of the join.
+   * @param condition
+   *   Join expression.
+   *
+   * @group typedrel
+   * @since 3.5.0
+   */
+  def joinWith[U](other: Dataset[U], condition: Column): Dataset[(T, U)] = {
+    joinWith(other, condition, "inner")
   }
 
   /**

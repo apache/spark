@@ -21,7 +21,7 @@ import java.util.concurrent.TimeUnit
 import scala.collection.JavaConverters._
 import scala.collection.mutable
 
-import io.grpc.Server
+import io.grpc.{Server, Status, StatusRuntimeException}
 import io.grpc.netty.NettyServerBuilder
 import io.grpc.stub.StreamObserver
 import org.scalatest.BeforeAndAfterEach
@@ -188,6 +188,61 @@ class SparkConnectClientSuite extends ConnectFunSuite with BeforeAndAfterEach {
         checkTestPack(testPack)
       }
     }
+  }
+
+  private class DummyFn(val e: Throwable) {
+    var counter = 0
+    def fn(): Int = {
+      if (counter < 3) {
+        counter += 1
+        throw e
+      } else {
+        42
+      }
+    }
+  }
+
+  test("SPARK-44275: retry actually retries") {
+    val dummyFn = new DummyFn(new StatusRuntimeException(Status.UNAVAILABLE))
+    val retryPolicy = GrpcRetryHandler.RetryPolicy()
+    val retryHandler = new GrpcRetryHandler(retryPolicy)
+    val result = retryHandler.retry { dummyFn.fn() }
+
+    assert(result == 42)
+    assert(dummyFn.counter == 3)
+  }
+
+  test("SPARK-44275: default retryException retries only on UNAVAILABLE") {
+    val dummyFn = new DummyFn(new StatusRuntimeException(Status.ABORTED))
+    val retryPolicy = GrpcRetryHandler.RetryPolicy()
+    val retryHandler = new GrpcRetryHandler(retryPolicy)
+
+    assertThrows[StatusRuntimeException] {
+      retryHandler.retry { dummyFn.fn() }
+    }
+    assert(dummyFn.counter == 1)
+  }
+
+  test("SPARK-44275: retry uses canRetry to filter exceptions") {
+    val dummyFn = new DummyFn(new StatusRuntimeException(Status.UNAVAILABLE))
+    val retryPolicy = GrpcRetryHandler.RetryPolicy(canRetry = _ => false)
+    val retryHandler = new GrpcRetryHandler(retryPolicy)
+
+    assertThrows[StatusRuntimeException] {
+      retryHandler.retry { dummyFn.fn() }
+    }
+    assert(dummyFn.counter == 1)
+  }
+
+  test("SPARK-44275: retry does not exceed maxRetries") {
+    val dummyFn = new DummyFn(new StatusRuntimeException(Status.UNAVAILABLE))
+    val retryPolicy = GrpcRetryHandler.RetryPolicy(canRetry = _ => true, maxRetries = 1)
+    val retryHandler = new GrpcRetryHandler(retryPolicy)
+
+    assertThrows[StatusRuntimeException] {
+      retryHandler.retry { dummyFn.fn() }
+    }
+    assert(dummyFn.counter == 2)
   }
 }
 

@@ -694,14 +694,14 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
       }
 
       withTable("gen__tmp") {
-        val e = intercept[AnalysisException] {
+        val e = intercept[ParseException] {
           sql("create table gen__tmp(a int, b string) as select key, value from mytable1")
         }.getMessage
         assert(e.contains("Schema may not be specified in a Create Table As Select (CTAS)"))
       }
 
       withTable("gen__tmp") {
-        val e = intercept[AnalysisException] {
+        val e = intercept[ParseException] {
           sql(
             """
               |CREATE TABLE gen__tmp
@@ -1231,7 +1231,7 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
           .save(path)
 
         // We don't support creating a temporary table while specifying a database
-        intercept[AnalysisException] {
+        intercept[ParseException] {
           spark.sql(
             s"""
               |CREATE TEMPORARY VIEW db.t

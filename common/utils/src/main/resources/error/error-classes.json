@@ -221,6 +221,38 @@
       "Failed to set permissions on created path <path> back to <permission>."
     ]
   },
+  "CANNOT_UPDATE_FIELD" : {
+    "message" : [
+      "Cannot update <table> field <fieldName> type:"
+    ],
+    "subClass" : {
+      "ARRAY_TYPE" : {
+        "message" : [
+          "Update the element by updating <fieldName>.element."
+        ]
+      },
+      "INTERVAL_TYPE" : {
+        "message" : [
+          "Update an interval by updating its fields."
+        ]
+      },
+      "MAP_TYPE" : {
+        "message" : [
+          "Update a map by updating <fieldName>.key or <fieldName>.value."
+        ]
+      },
+      "STRUCT_TYPE" : {
+        "message" : [
+          "Update a struct by updating its fields."
+        ]
+      },
+      "USER_DEFINED_TYPE" : {
+        "message" : [
+          "Update a UserDefinedType[<udtSql>] by updating its fields."
+        ]
+      }
+    }
+  },
   "CANNOT_UP_CAST_DATATYPE" : {
     "message" : [
       "Cannot up cast <expression> from <sourceType> to <targetType>.",
@@ -729,6 +761,16 @@
     ],
     "sqlState" : "42K04"
   },
+  "FAILED_RENAME_TEMP_FILE" : {
+    "message" : [
+      "Failed to rename temp file <srcPath> to <dstPath> as FileSystem.rename returned false."
+    ]
+  },
+  "FIELDS_ALREADY_EXISTS" : {
+    "message" : [
+      "Cannot <op> column, because <fieldNames> already exists in <struct>."
+    ]
+  },
   "FIELD_NOT_FOUND" : {
     "message" : [
       "No such struct field <fieldName> in <fields>."
@@ -1019,6 +1061,12 @@
     ],
     "sqlState" : "XX000"
   },
+  "INTERNAL_ERROR_SHUFFLE" : {
+    "message" : [
+      "<message>"
+    ],
+    "sqlState" : "XX000"
+  },
   "INTERVAL_ARITHMETIC_OVERFLOW" : {
     "message" : [
       "<message>.<alternative>"
@@ -1209,7 +1257,7 @@
       },
       "UNEXPECTED_TOKEN" : {
         "message" : [
-          "Found the unexpected <token> in the format string; the structure of the format string must match: [MI|S] [$] [0|9|G|,]* [.|D] [0|9]* [$] [PR|MI|S]."
+          "Found the unexpected <token> in the format string; the structure of the format string must match: `[MI|S]` `[$]` `[0|9|G|,]*` `[.|D]` `[0|9]*` `[$]` `[PR|MI|S]`."
         ]
       },
       "WRONG_NUM_DIGIT" : {
@@ -1357,6 +1405,16 @@
       "Invalid observed metrics."
     ],
     "subClass" : {
+      "AGGREGATE_EXPRESSION_WITH_DISTINCT_UNSUPPORTED" : {
+        "message" : [
+          "Aggregate expression with distinct are not allowed in observed metrics, but found: <expr>."
+        ]
+      },
+      "AGGREGATE_EXPRESSION_WITH_FILTER_UNSUPPORTED" : {
+        "message" : [
+          "Aggregate expression with filter predicate are not allowed in observed metrics, but found: <expr>."
+        ]
+      },
       "MISSING_NAME" : {
         "message" : [
           "The observed metrics should be named: <operator>."
@@ -1365,6 +1423,11 @@
       "NESTED_AGGREGATES_UNSUPPORTED" : {
         "message" : [
           "Nested aggregates are not allowed in observed metrics, but found: <expr>."
+        ]
+      },
+      "NON_AGGREGATE_FUNC_ARG_IS_ATTRIBUTE" : {
+        "message" : [
+          "Attribute <expr> can only be used as an argument to an aggregate function."
         ]
       },
       "NON_AGGREGATE_FUNC_ARG_IS_NON_DETERMINISTIC" : {
@@ -2611,6 +2674,11 @@
       "LATERAL_COLUMN_ALIAS_IN_AGGREGATE_WITH_WINDOW_AND_HAVING" : {
         "message" : [
           "Referencing lateral column alias <lca> in the aggregate query both with window expressions and with having clause. Please rewrite the aggregate query by removing the having clause or removing lateral alias reference in the SELECT list."
+        ]
+      },
+      "LATERAL_COLUMN_ALIAS_IN_GROUP_BY" : {
+        "message" : [
+          "Referencing a lateral column alias via GROUP BY alias/ALL is not supported yet."
         ]
       },
       "LATERAL_COLUMN_ALIAS_IN_WINDOW" : {
@@ -5270,11 +5338,6 @@
       "Failed to rename as <dstPath> already exists."
     ]
   },
-  "_LEGACY_ERROR_TEMP_2199" : {
-    "message" : [
-      "Failed to rename temp file <srcPath> to <dstPath> as rename returned false."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_2200" : {
     "message" : [
       "Error: we detected a possible problem with the location of your \"_spark_metadata\"",
@@ -5650,51 +5713,6 @@
   "_LEGACY_ERROR_TEMP_2277" : {
     "message" : [
       "Number of dynamic partitions created is <numWrittenParts>, which is more than <maxDynamicPartitions>. To solve this try to set <maxDynamicPartitionsKey> to at least <numWrittenParts>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2320" : {
-    "message" : [
-      "distinct aggregates are not allowed in observed metrics, but found: <sqlExpr>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2321" : {
-    "message" : [
-      "aggregates with filter predicate are not allowed in observed metrics, but found: <sqlExpr>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2322" : {
-    "message" : [
-      "attribute <sqlExpr> can only be used as an argument to an aggregate function."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2323" : {
-    "message" : [
-      "Cannot <op> column, because <fieldNames> already exists in <struct>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2324" : {
-    "message" : [
-      "Cannot update <table> field <fieldName> type: update a struct by updating its fields."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2325" : {
-    "message" : [
-      "Cannot update <table> field <fieldName> type: update a map by updating <fieldName>.key or <fieldName>.value."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2326" : {
-    "message" : [
-      "Cannot update <table> field <fieldName> type: update the element by updating <fieldName>.element."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2327" : {
-    "message" : [
-      "Cannot update <table> field <fieldName> type: update a UserDefinedType[<udtSql>] by updating its fields."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2328" : {
-    "message" : [
-      "Cannot update <table> field <fieldName> to interval type."
     ]
   },
   "_LEGACY_ERROR_TEMP_2330" : {

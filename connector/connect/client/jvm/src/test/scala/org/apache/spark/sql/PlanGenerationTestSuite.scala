@@ -1181,6 +1181,10 @@ class PlanGenerationTestSuite
     boolean.select(fn.some(fn.col("flag")))
   }
 
+  test("function any") {
+    boolean.select(fn.any(fn.col("flag")))
+  }
+
   test("function bool_or") {
     boolean.select(fn.bool_or(fn.col("flag")))
   }
@@ -1629,6 +1633,10 @@ class PlanGenerationTestSuite
     fn.length(fn.col("g"))
   }
 
+  functionTest("len") {
+    fn.len(fn.col("g"))
+  }
+
   functionTest("lower") {
     fn.lower(fn.col("g"))
   }
@@ -1969,6 +1977,26 @@ class PlanGenerationTestSuite
 
   functionTest("row_number") {
     fn.row_number().over(Window.partitionBy(Column("a")).orderBy(Column("id")))
+  }
+
+  functionTest("bitmap_bucket_number") {
+    fn.bitmap_bit_position(fn.col("id"))
+  }
+
+  functionTest("bitmap_bit_position") {
+    fn.bitmap_bit_position(fn.col("id"))
+  }
+
+  functionTest("bitmap_construct_agg") {
+    fn.bitmap_construct_agg(fn.col("id"))
+  }
+
+  test("function bitmap_count") {
+    binary.select(fn.bitmap_count(fn.col("bytes")))
+  }
+
+  test("function bitmap_or_agg") {
+    binary.select(fn.bitmap_or_agg(fn.col("bytes")))
   }
 
   private def temporalFunctionTest(name: String)(f: => Column): Unit = {
@@ -2522,6 +2550,10 @@ class PlanGenerationTestSuite
     fn.to_char(fn.col("b"), lit("$99.99"))
   }
 
+  functionTest("to_varchar") {
+    fn.to_varchar(fn.col("b"), lit("$99.99"))
+  }
+
   functionTest("to_number") {
     fn.to_number(fn.col("g"), lit("$99.99"))
   }
@@ -2793,6 +2825,22 @@ class PlanGenerationTestSuite
     fn.aes_decrypt(fn.col("g"), fn.col("g"))
   }
 
+  functionTest("try_aes_decrypt with mode padding aad") {
+    fn.try_aes_decrypt(fn.col("g"), fn.col("g"), fn.col("g"), fn.col("g"), fn.col("g"))
+  }
+
+  functionTest("try_aes_decrypt with mode padding") {
+    fn.try_aes_decrypt(fn.col("g"), fn.col("g"), fn.col("g"), fn.col("g"))
+  }
+
+  functionTest("try_aes_decrypt with mode") {
+    fn.try_aes_decrypt(fn.col("g"), fn.col("g"), fn.col("g"))
+  }
+
+  functionTest("try_aes_decrypt") {
+    fn.try_aes_decrypt(fn.col("g"), fn.col("g"))
+  }
+
   functionTest("sha") {
     fn.sha(fn.col("g"))
   }
@@ -2823,6 +2871,50 @@ class PlanGenerationTestSuite
 
   functionTest("random with seed") {
     fn.random(lit(1))
+  }
+
+  functionTest("call_function") {
+    fn.call_function("lower", fn.col("g"))
+  }
+
+  test("hll_sketch_agg with column lgConfigK") {
+    binary.select(fn.hll_sketch_agg(fn.col("bytes"), lit(0)))
+  }
+
+  test("hll_sketch_agg with column lgConfigK_int") {
+    binary.select(fn.hll_sketch_agg(fn.col("bytes"), 0))
+  }
+
+  test("hll_sketch_agg with columnName lgConfigK_int") {
+    binary.select(fn.hll_sketch_agg("bytes", 0))
+  }
+
+  test("hll_sketch_agg") {
+    binary.select(fn.hll_sketch_agg(fn.col("bytes")))
+  }
+
+  test("hll_sketch_agg with columnName") {
+    binary.select(fn.hll_sketch_agg("bytes"))
+  }
+
+  test("hll_union_agg with column allowDifferentLgConfigK") {
+    binary.select(fn.hll_union_agg(fn.col("bytes"), lit(false)))
+  }
+
+  test("hll_union_agg with column allowDifferentLgConfigK_boolean") {
+    binary.select(fn.hll_union_agg(fn.col("bytes"), false))
+  }
+
+  test("hll_union_agg with columnName allowDifferentLgConfigK_boolean") {
+    binary.select(fn.hll_union_agg("bytes", false))
+  }
+
+  test("hll_union_agg") {
+    binary.select(fn.hll_union_agg(fn.col("bytes")))
+  }
+
+  test("hll_union_agg with columnName") {
+    binary.select(fn.hll_union_agg("bytes"))
   }
 
   test("groupby agg") {

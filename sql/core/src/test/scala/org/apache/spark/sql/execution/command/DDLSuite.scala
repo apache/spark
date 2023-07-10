@@ -31,6 +31,7 @@ import org.apache.spark.sql.catalyst.{FunctionIdentifier, QualifiedTableName, Ta
 import org.apache.spark.sql.catalyst.analysis.TempTableAlreadyExistsException
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
+import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
 import org.apache.spark.sql.connector.catalog.SupportsNamespaces.PROP_OWNER
 import org.apache.spark.sql.internal.SQLConf
@@ -960,7 +961,7 @@ abstract class DDLSuite extends QueryTest with DDLSuiteBase {
     createTable(catalog, tableIdent)
     val sql1 = "ALTER TABLE dbx.tab1 CLUSTERED BY (blood, lemon, grape) INTO 11 BUCKETS"
     checkError(
-      exception = intercept[AnalysisException] {
+      exception = intercept[ParseException] {
         sql(sql1)
       },
       errorClass = "_LEGACY_ERROR_TEMP_0035",
@@ -968,7 +969,7 @@ abstract class DDLSuite extends QueryTest with DDLSuiteBase {
       context = ExpectedContext(fragment = sql1, start = 0, stop = 70))
     val sql2 = "ALTER TABLE dbx.tab1 CLUSTERED BY (fuji) SORTED BY (grape) INTO 5 BUCKETS"
     checkError(
-      exception = intercept[AnalysisException] {
+      exception = intercept[ParseException] {
         sql(sql2)
       },
       errorClass = "_LEGACY_ERROR_TEMP_0035",
@@ -976,7 +977,7 @@ abstract class DDLSuite extends QueryTest with DDLSuiteBase {
       context = ExpectedContext(fragment = sql2, start = 0, stop = 72))
     val sql3 = "ALTER TABLE dbx.tab1 NOT CLUSTERED"
     checkError(
-      exception = intercept[AnalysisException] {
+      exception = intercept[ParseException] {
         sql(sql3)
       },
       errorClass = "_LEGACY_ERROR_TEMP_0035",
@@ -984,7 +985,7 @@ abstract class DDLSuite extends QueryTest with DDLSuiteBase {
       context = ExpectedContext(fragment = sql3, start = 0, stop = 33))
     val sql4 = "ALTER TABLE dbx.tab1 NOT SORTED"
     checkError(
-      exception = intercept[AnalysisException] {
+      exception = intercept[ParseException] {
         sql(sql4)
       },
       errorClass = "_LEGACY_ERROR_TEMP_0035",
@@ -1000,7 +1001,7 @@ abstract class DDLSuite extends QueryTest with DDLSuiteBase {
     val sql1 = "ALTER TABLE dbx.tab1 SKEWED BY (dt, country) ON " +
       "(('2008-08-08', 'us'), ('2009-09-09', 'uk'), ('2010-10-10', 'cn'))"
     checkError(
-      exception = intercept[AnalysisException] {
+      exception = intercept[ParseException] {
         sql(sql1)
       },
       errorClass = "_LEGACY_ERROR_TEMP_0035",
@@ -1010,7 +1011,7 @@ abstract class DDLSuite extends QueryTest with DDLSuiteBase {
     val sql2 = "ALTER TABLE dbx.tab1 SKEWED BY (dt, country) ON " +
       "(('2008-08-08', 'us'), ('2009-09-09', 'uk')) STORED AS DIRECTORIES"
     checkError(
-      exception = intercept[AnalysisException] {
+      exception = intercept[ParseException] {
         sql(sql2)
       },
       errorClass = "_LEGACY_ERROR_TEMP_0035",
@@ -1019,7 +1020,7 @@ abstract class DDLSuite extends QueryTest with DDLSuiteBase {
     )
     val sql3 = "ALTER TABLE dbx.tab1 NOT SKEWED"
     checkError(
-      exception = intercept[AnalysisException] {
+      exception = intercept[ParseException] {
         sql(sql3)
       },
       errorClass = "_LEGACY_ERROR_TEMP_0035",
@@ -1028,7 +1029,7 @@ abstract class DDLSuite extends QueryTest with DDLSuiteBase {
     )
     val sql4 = "ALTER TABLE dbx.tab1 NOT STORED AS DIRECTORIES"
     checkError(
-      exception = intercept[AnalysisException] {
+      exception = intercept[ParseException] {
         sql(sql4)
       },
       errorClass = "_LEGACY_ERROR_TEMP_0035",
@@ -1040,7 +1041,7 @@ abstract class DDLSuite extends QueryTest with DDLSuiteBase {
   test("alter table: add partition is not supported for views") {
     val sql1 = "ALTER VIEW dbx.tab1 ADD IF NOT EXISTS PARTITION (b='2')"
     checkError(
-      exception = intercept[AnalysisException] {
+      exception = intercept[ParseException] {
         sql(sql1)
       },
       errorClass = "_LEGACY_ERROR_TEMP_0035",
@@ -1052,7 +1053,7 @@ abstract class DDLSuite extends QueryTest with DDLSuiteBase {
   test("alter table: drop partition is not supported for views") {
     val sql1 = "ALTER VIEW dbx.tab1 DROP IF EXISTS PARTITION (b='2')"
     checkError(
-      exception = intercept[AnalysisException] {
+      exception = intercept[ParseException] {
         sql(sql1)
       },
       errorClass = "_LEGACY_ERROR_TEMP_0035",
@@ -1159,7 +1160,7 @@ abstract class DDLSuite extends QueryTest with DDLSuiteBase {
     // table to alter does not exist
     val sql1 = "ALTER TABLE does_not_exist UNSET TBLPROPERTIES ('c' = 'lan')"
     checkError(
-      exception = intercept[AnalysisException] {
+      exception = intercept[ParseException] {
         sql(sql1)
       },
       errorClass = "_LEGACY_ERROR_TEMP_0035",
