@@ -39,8 +39,6 @@ from typing import (
     Generator,
     Iterator,
 )
-import shutil
-import subprocess
 
 
 from pyspark import cloudpickle

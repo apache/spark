@@ -543,6 +543,7 @@ class TorchWrapperUnitTestsMixin:
 class TorchWrapperUnitTests(TorchWrapperUnitTestsMixin, unittest.TestCase):
     pass
 
+
 if __name__ == "__main__":
     from pyspark.ml.torch.tests.test_distributor import *  # noqa: F401,F403
 
