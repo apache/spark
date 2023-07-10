@@ -32,6 +32,8 @@ from pyspark.ml.torch.distributor import TorchDistributor
 
 
 class DeepspeedTorchDistributor(TorchDistributor):
+
+    _DEEPSPEED_SSL_CONF = "deepspeed.spark.distributor.ignoreSsl"
     def __init__(
         self,
         num_gpus: int = 1,
@@ -65,9 +67,8 @@ class DeepspeedTorchDistributor(TorchDistributor):
             If None, deepspeed will fall back to default parameters.
         """
         num_processes = num_gpus * nnodes
-        DEEPSPEED_SSL_CONF = "deepspeed.spark.distributor.ignoreSsl"
         self.deepspeed_config = deepspeed_config
-        super().__init__(num_processes, local_mode, use_gpu, _ssl_conf=DEEPSPEED_SSL_CONF)
+        super().__init__(num_processes, local_mode, use_gpu, _ssl_conf=DeepspeedTorchDistributor._DEEPSPEED_SSL_CONF)
         self.cleanup_deepspeed_conf = False
 
     @staticmethod
@@ -105,16 +106,12 @@ class DeepspeedTorchDistributor(TorchDistributor):
             train_path,
             *args_string,
             "-deepspeed",
-            "--deepspeed_config",
-            deepspeed_config_path,
         ]
 
         # Don't have the deepspeed_config argument if no path is provided or no parameters set
         if deepspeed_config_path == "":
-            command_to_run.pop()
-            command_to_run.pop()
-
-        return command_to_run
+            return command_to_run
+        return command_to_run + [ "--deepspeed_config", deepspeed_config_path]
 
     @staticmethod
     def _run_training_on_pytorch_file(
