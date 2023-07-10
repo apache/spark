@@ -29,8 +29,6 @@ from typing import Callable, Dict, Any
 import unittest
 from unittest.mock import patch
 
-from pyspark.ml.torch.distributor import DeepspeedTorchDistributor
-
 have_torch = True
 try:
     import torch  # noqa: F401
@@ -551,9 +549,8 @@ class DeepspeedTorchDistributorUnitTests(unittest.TestCase):
         value = os.getenv(var_name)
         if value:
             return value
-        else:
-            os.environ[var_name] = default_value
-            value = default_value
+        os.environ[var_name] = str(default_value)
+        value = default_value
         return value
 
     def _get_env_variables_distributed(self):
@@ -562,19 +559,18 @@ class DeepspeedTorchDistributorUnitTests(unittest.TestCase):
         RANK = self._get_env_var("RANK", 0)
         return MASTER_ADDR, MASTER_PORT, RANK
 
-
-
-    def test_get_torchrun_args(self):
+    def test_get_torchrun_args_local(self):
         number_of_processes = 5
         EXPECTED_TORCHRUN_ARGS_LOCAL= [
                 "--standalone", "--nnodes=1"
                 ]
         EXPECTED_PROCESSES_PER_NODE_LOCAL = number_of_processes
-
-            
         get_local_mode_torchrun_args, process_per_node= DeepspeedTorchDistributor._get_torchrun_args(True, number_of_processes)
         assert(get_local_mode_torchrun_args == EXPECTED_TORCHRUN_ARGS_LOCAL)
         assert(EXPECTED_PROCESSES_PER_NODE_LOCAL == process_per_node)
+
+    def test_get_torchrun_args_distributed(self):
+        number_of_processes = 5
         MASTER_ADDR, MASTER_PORT, RANK = self._get_env_variables_distributed()
         EXPECTED_TORCHRUN_ARGS_DISTRIBUTED = [
                         f"--nnodes={number_of_processes}",
@@ -586,8 +582,7 @@ class DeepspeedTorchDistributorUnitTests(unittest.TestCase):
         assert(torchrun_args_distributed == EXPECTED_TORCHRUN_ARGS_DISTRIBUTED)
         assert(process_per_node == 1)
 
-    
-    def test_create_torchrun_command(self):
+    def test_create_torchrun_command_local(self):
         DEEPSPEED_CONF = "path/to/deepspeed"
         TRAIN_FILE_PATH = "path/to/exec"
         NUM_PROCS = 10
@@ -627,7 +622,15 @@ class DeepspeedTorchDistributorUnitTests(unittest.TestCase):
 
         local_cmd_with_args = DeepspeedTorchDistributor._create_torchrun_command(input_params, TRAIN_FILE_PATH)
         assert(local_cmd_with_args == LOCAL_CMD_ARGS_EXPECTED)
-        
+    
+    def test_create_torchrun_command_distributed(self):
+        DEEPSPEED_CONF = "path/to/deepspeed"
+        TRAIN_FILE_PATH = "path/to/exec"
+        NUM_PROCS = 10
+        input_params = {}
+        input_params["local_mode"] = True
+        input_params['num_processes'] = NUM_PROCS
+        input_params["deepspeed_config"] = DEEPSPEED_CONF
         # distributed training environment
         distributed_master_address, distributed_master_port, distributed_rank = self._get_env_variables_distributed()
         distributed_torchrun_args = [
@@ -650,8 +653,8 @@ class DeepspeedTorchDistributorUnitTests(unittest.TestCase):
         input_params["local_mode"] = False
         distributed_command = DeepspeedTorchDistributor._create_torchrun_command(input_params, TRAIN_FILE_PATH)
         assert(DISTRIBUTED_CMD_NO_ARGS_EXPECTED == distributed_command)
-        # test distributed training with arguments
-        distributed_extra_args = ["--distributed=true", "--args2"]
+        # test distributed training with random arguments
+        distributed_extra_args = ["-args1", "--args2"]
         DISTRIBUTED_CMD_ARGS_EXPECTED = [sys.executable,
                                             "-m",
                                             "torch.distributed.run",
