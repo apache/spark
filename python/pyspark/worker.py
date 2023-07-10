@@ -65,7 +65,7 @@ from pyspark.sql.pandas.types import to_arrow_type
 from pyspark.sql.types import StructType, _parse_datatype_json_string
 from pyspark.util import fail_on_stopiteration, try_simplify_traceback
 from pyspark import shuffle
-from pyspark.errors import PySparkRuntimeError
+from pyspark.errors import PySparkRuntimeError, PySparkTypeError
 
 pickleSer = CPickleSerializer()
 utf8_deserializer = UTF8Deserializer()
@@ -111,9 +111,12 @@ def wrap_scalar_pandas_udf(f, return_type):
     def verify_result_type(result):
         if not hasattr(result, "__len__"):
             pd_type = "pandas.DataFrame" if type(return_type) == StructType else "pandas.Series"
-            raise TypeError(
-                "Return type of the user-defined function should be "
-                "{}, but is {}".format(pd_type, type(result))
+            raise PySparkTypeError(
+                error_class="UDF_RETURN_TYPE",
+                message_parameters={
+                    "expected": pd_type,
+                    "actual": type(result).__name__,
+                },
             )
         return result
 
@@ -140,9 +143,12 @@ def wrap_pandas_batch_iter_udf(f, return_type):
 
     def verify_result(result):
         if not isinstance(result, Iterator) and not hasattr(result, "__iter__"):
-            raise TypeError(
-                "Return type of the user-defined function should be "
-                "iterator of {}, but is {}".format(iter_type_label, type(result))
+            raise PySparkTypeError(
+                error_class="UDF_RETURN_TYPE",
+                message_parameters={
+                    "expected": "iterator of {}".format(iter_type_label),
+                    "actual": type(result).__name__,
+                },
             )
         return result
 
@@ -150,9 +156,12 @@ def wrap_pandas_batch_iter_udf(f, return_type):
         import pandas as pd
 
         if not isinstance(elem, pd.DataFrame if type(return_type) == StructType else pd.Series):
-            raise TypeError(
-                "Return type of the user-defined function should be "
-                "iterator of {}, but is iterator of {}".format(iter_type_label, type(elem))
+            raise PySparkTypeError(
+                error_class="UDF_RETURN_TYPE",
+                message_parameters={
+                    "expected": "iterator of {}".format(iter_type_label),
+                    "actual": "iterator of {}".format(type(elem).__name__),
+                },
             )
 
         verify_pandas_result(elem, return_type, True, True)
@@ -169,9 +178,12 @@ def verify_pandas_result(result, return_type, assign_cols_by_name, truncate_retu
 
     if type(return_type) == StructType:
         if not isinstance(result, pd.DataFrame):
-            raise TypeError(
-                "Return type of the user-defined function should be "
-                "pandas.DataFrame, but is {}".format(type(result))
+            raise PySparkTypeError(
+                error_class="UDF_RETURN_TYPE",
+                message_parameters={
+                    "expected": "pandas.DataFrame",
+                    "actual": type(result).__name__,
+                },
             )
 
         # check the schema of the result only if it is not empty or has columns
@@ -215,9 +227,9 @@ def verify_pandas_result(result, return_type, assign_cols_by_name, truncate_retu
                 )
     else:
         if not isinstance(result, pd.Series):
-            raise TypeError(
-                "Return type of the user-defined function should be "
-                "pandas.Series, but is {}".format(type(result))
+            raise PySparkTypeError(
+                error_class="UDF_RETURN_TYPE",
+                message_parameters={"expected": "pandas.Series", "actual": type(result).__name__},
             )
 
 
@@ -226,9 +238,12 @@ def wrap_arrow_batch_iter_udf(f, return_type):
 
     def verify_result(result):
         if not isinstance(result, Iterator) and not hasattr(result, "__iter__"):
-            raise TypeError(
-                "Return type of the user-defined function should be "
-                "iterator of pyarrow.RecordBatch, but is {}".format(type(result))
+            raise PySparkTypeError(
+                error_class="UDF_RETURN_TYPE",
+                message_parameters={
+                    "expected": "iterator of pyarrow.RecordBatch",
+                    "actual": type(result).__name__,
+                },
             )
         return result
 
@@ -236,9 +251,12 @@ def wrap_arrow_batch_iter_udf(f, return_type):
         import pyarrow as pa
 
         if not isinstance(elem, pa.RecordBatch):
-            raise TypeError(
-                "Return type of the user-defined function should be "
-                "iterator of pyarrow.RecordBatch, but is iterator of {}".format(type(elem))
+            raise PySparkTypeError(
+                error_class="UDF_RETURN_TYPE",
+                message_parameters={
+                    "expected": "iterator of pyarrow.RecordBatch",
+                    "actual": "iterator of {}".format(type(elem).__name__),
+                },
             )
 
         return elem
@@ -330,9 +348,12 @@ def wrap_grouped_map_pandas_udf_with_state(f, return_type):
 
         def verify_element(result):
             if not isinstance(result, pd.DataFrame):
-                raise TypeError(
-                    "The type of element in return iterator of the user-defined function "
-                    "should be pandas.DataFrame, but is {}".format(type(result))
+                raise PySparkTypeError(
+                    error_class="UDF_RETURN_TYPE",
+                    message_parameters={
+                        "expected": "iterator of pandas.DataFrame",
+                        "actual": "iterator of {}".format(type(result).__name__),
+                    },
                 )
             # the number of columns of result have to match the return type
             # but it is fine for result to have no columns at all if it is empty
@@ -351,17 +372,20 @@ def wrap_grouped_map_pandas_udf_with_state(f, return_type):
             return result
 
         if isinstance(result_iter, pd.DataFrame):
-            raise TypeError(
-                "Return type of the user-defined function should be "
-                "iterable of pandas.DataFrame, but is {}".format(type(result_iter))
+            raise PySparkTypeError(
+                error_class="UDF_RETURN_TYPE",
+                message_parameters={
+                    "expected": "iterable of pandas.DataFrame",
+                    "actual": type(result_iter).__name__,
+                },
             )
 
         try:
             iter(result_iter)
         except TypeError:
-            raise TypeError(
-                "Return type of the user-defined function should be "
-                "iterable, but is {}".format(type(result_iter))
+            raise PySparkTypeError(
+                error_class="UDF_RETURN_TYPE",
+                message_parameters={"expected": "iterable", "actual": type(result_iter).__name__},
             )
 
         result_iter_with_validation = (verify_element(x) for x in result_iter)

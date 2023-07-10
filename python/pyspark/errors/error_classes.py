@@ -643,6 +643,11 @@ ERROR_CLASSES_JSON = """
       "Expected <expected> values for `<item>`, got <actual>."
     ]
   },
+  "UDF_RETURN_TYPE" : {
+    "message" : [
+      "Return type of the user-defined function should be <expected>, but is <actual>."
+    ]
+  },
   "UNEXPECTED_RESPONSE_FROM_SERVER" : {
     "message" : [
       "Unexpected response from iterator server."
