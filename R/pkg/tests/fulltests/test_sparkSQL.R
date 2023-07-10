@@ -1473,7 +1473,7 @@ test_that("column functions", {
   c30 <- product(c1) + product(c1 * 0.5)
   c31 <- sec(c1) + csc(c1) + cot(c1)
   c32 <- ln(c1) + positive(c2) + negative(c3) + e() + pi()
-  c33 <- width_bucket(c1, c2, c3, lit(10L))
+  c33 <- width_bucket(lit(2.5), lit(2.0), lit(3.0), lit(10L))
 
   # Test if base::is.nan() is exposed
   expect_equal(is.nan(c("a", "b")), c(FALSE, FALSE))

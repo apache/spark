@@ -24,7 +24,8 @@ test_that("Check masked functions", {
   namesOfMaskedCompletely <- c("cov", "filter", "sample", "not")
   namesOfMasked <- c("describe", "cov", "filter", "lag", "na.omit", "predict", "sd", "var",
                      "colnames", "colnames<-", "intersect", "rank", "rbind", "sample", "subset",
-                     "summary", "transform", "drop", "window", "as.data.frame", "union", "not")
+                     "summary", "transform", "drop", "window", "as.data.frame", "union", "not",
+                     "pi", "power")
   version <- packageVersion("base")
   is33Above <- as.numeric(version$major) >= 3 && as.numeric(version$minor) >= 3
   is40Above <- as.numeric(version$major) >= 4
