@@ -62,42 +62,6 @@ class DeepspeedTorchDistributor(TorchDistributor):
             return "" 
         return deepspeed_config_path
 
-
-    @staticmethod 
-    def _get_torchrun_args(local_mode: bool, num_processes: int) -> Tuple[List[Any], int]:
-        """
-        Given the mode and the number of processes, create the arguments to be given to deepspeed
-        
-        Parameters
-        ---------
-        local_mode: bool
-            Whether or not we are running training locally or in a distributed fashion
-
-        num_processes: int
-            The number of processes that we are going to use (number of gpus per node * number of nodes)
-
-        Returns
-        ------
-        Tuple[List[Any], int]
-            A tuple containing a list of arguments to pass as pytorch args to deepspeed, as well as the number of processes per node
-        """
-        if local_mode:
-            torchrun_args = ["--standalone","--nnodes=1"]
-            processes_per_node = num_processes
-            return torchrun_args, processes_per_node
-
-        master_addr = os.environ["MASTER_ADDR"]
-        master_port = os.environ["MASTER_PORT"]
-        node_rank = os.environ["RANK"]
-        torchrun_args = [
-            f"--nnodes={num_processes}",
-            f"--node_rank={node_rank}",
-            f"--rdzv_endpoint={master_addr}:{master_port}",
-            "--rdzv_id=0",
-        ]
-        processes_per_node = 1
-        return torchrun_args, processes_per_node
-
     @staticmethod
     def _create_torchrun_command(
             input_params: Dict[str, Any], train_path: str, *args: Any) -> List[str]:
@@ -105,7 +69,7 @@ class DeepspeedTorchDistributor(TorchDistributor):
         num_processes = input_params["num_processes"]
         deepspeed_config = input_params["deepspeed_config"]
         deepspeed_config_path = DeepspeedTorchDistributor._get_deepspeed_config_path(deepspeed_config)
-        torchrun_args, processes_per_node = DeepspeedTorchDistributor._get_torchrun_args(local_mode, num_processes)
+        torchrun_args, processes_per_node = TorchDistributor._get_torchrun_args(local_mode, num_processes)
         args_string = list(map(str, args))
         command_to_run = [ 
                           sys.executable,
@@ -136,7 +100,7 @@ class DeepspeedTorchDistributor(TorchDistributor):
             framework_wrapper_fn = DeepspeedTorchDistributor._run_training_on_pytorch_file
         else:
             raise RuntimeError("Work in progress; not supported atm")
-            framework_wrapper_fn = TorchDistributor._run_training_on_pytorch_file
+
         if self.local_mode:
             output = self._run_local_training(framework_wrapper_fn, train_object, *args, **kwargs)
             return output
