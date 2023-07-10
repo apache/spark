@@ -16,8 +16,6 @@
  */
 package org.apache.spark.sql.catalyst.analysis
 
-import scala.reflect.ClassTag
-
 import org.apache.spark.SparkThrowable
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Expression, Literal, NamedArgumentExpression}
@@ -49,30 +47,6 @@ object DummyExpression extends SupportsNamedArguments {
   }
 }
 
-case class SignaturesExpression() extends Expression {
-  override def nullable: Boolean = false
-  override def eval(input: InternalRow): Any = None
-  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = null
-  override def dataType: DataType = null
-  override def children: Seq[Expression] = Nil
-  override protected def withNewChildrenInternal(
-    newChildren: IndexedSeq[Expression]): Expression = null
-}
-
-object SignaturesExpression extends SupportsNamedArguments {
-  override def functionSignatures: Seq[FunctionSignature] = Seq(null, null)
-}
-
-case class NoNamedArgumentsExpression() extends Expression {
-  override def nullable: Boolean = false
-  override def eval(input: InternalRow): Any = None
-  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = null
-  override def dataType: DataType = null
-  override def children: Seq[Expression] = Nil
-  override protected def withNewChildrenInternal(
-    newChildren: IndexedSeq[Expression]): Expression = null
-}
-
 class NamedArgumentFunctionSuite extends AnalysisTest {
 
   final val k1Arg = Literal("v1")
@@ -82,21 +56,9 @@ class NamedArgumentFunctionSuite extends AnalysisTest {
   final val args = Seq(k1Arg, k4Arg, k2Arg, k3Arg)
   final val expectedSeq = Seq(Literal("v1"), Literal("v2"), Literal("v3"), Literal("v4"))
 
-  def rearrangeExpressions[T <: Expression : ClassTag](
-        expressions: Seq[Expression], functionName: String = "function"): Seq[Expression] = {
-    SupportsNamedArguments.getRearrangedExpressions[T](expressions, functionName)
-  }
-
   test("Check rearrangement of expressions") {
     val rearrangedArgs = SupportsNamedArguments.defaultRearrange(
       DummyExpression.defaultFunctionSignature, args, "function")
-    for ((returnedArg, expectedArg) <- rearrangedArgs.zip(expectedSeq)) {
-      assert(returnedArg == expectedArg)
-    }
-  }
-
-  test("Check inheritance restrictions are enforced.") {
-    val rearrangedArgs = rearrangeExpressions[DummyExpression](args)
     for ((returnedArg, expectedArg) <- rearrangedArgs.zip(expectedSeq)) {
       assert(returnedArg == expectedArg)
     }
@@ -107,25 +69,6 @@ class NamedArgumentFunctionSuite extends AnalysisTest {
                                       functionName: String = "function"): SparkThrowable = {
     intercept[SparkThrowable](
       SupportsNamedArguments.defaultRearrange(functionSignature, expressions, functionName))
-  }
-  private def parseExternalException[T <: Expression : ClassTag]
-    (expressions: Seq[Expression], functionName: String) : SparkThrowable = {
-    intercept[SparkThrowable](
-      rearrangeExpressions[T](expressions, functionName))
-  }
-
-  case class IllegalExpression() extends Expression {
-    override def nullable: Boolean = false
-    override def eval(input: InternalRow): Any = None
-    override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = null
-    override def dataType: DataType = null
-    override def children: Seq[Expression] = Nil
-    override protected def withNewChildrenInternal(
-        newChildren: IndexedSeq[Expression]): Expression = null
-  }
-
-  object IllegalExpression extends SupportsNamedArguments {
-    override def functionSignatures: Seq[FunctionSignature] = Nil
   }
 
   test("DUPLICATE_ROUTINE_PARAMETER_ASSIGNMENT") {
@@ -162,32 +105,6 @@ class NamedArgumentFunctionSuite extends AnalysisTest {
         Seq(k2Arg, k3Arg, k1Arg, k4Arg), "foo"),
       errorClass = "UNEXPECTED_POSITIONAL_ARGUMENT",
       parameters = Map("functionName" -> toSQLId("foo"))
-    )
-  }
-
-  test("INTERNAL_ERROR: Companion object cannot be inside enclosing class") {
-    checkError(
-      exception = parseExternalException[IllegalExpression](args, "foo"),
-      errorClass = "INTERNAL_ERROR",
-      parameters = Map("message" -> ("Cannot obtain companion object for function expression:" +
-        " foo. Please note that this companion must be a top-level object."))
-    )
-  }
-
-  test("INTERNAL_ERROR: Overloads currently not supported") {
-    checkError(
-      exception = parseExternalException[SignaturesExpression](args, "bar"),
-      errorClass = "INTERNAL_ERROR",
-      parameters = Map("message" -> ("Function bar cannot have multiple method signatures. " +
-        "The function signatures found were: \nnull\nnull\n"))
-    )
-  }
-
-  test("NAMED_ARGUMENTS_NOT_SUPPORTED") {
-    checkError(
-      exception = parseExternalException[NoNamedArgumentsExpression](args, "dolphin"),
-      errorClass = "NAMED_ARGUMENTS_NOT_SUPPORTED",
-      parameters = Map("functionName" -> toSQLId("dolphin"))
     )
   }
 }

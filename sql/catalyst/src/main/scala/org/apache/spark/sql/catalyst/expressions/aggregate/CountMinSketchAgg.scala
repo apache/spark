@@ -18,12 +18,12 @@
 package org.apache.spark.sql.catalyst.expressions.aggregate
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
+import org.apache.spark.sql.catalyst.analysis.{ExpressionBuilder, TypeCheckResult}
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{DataTypeMismatch, TypeCheckSuccess}
 import org.apache.spark.sql.catalyst.expressions.{ExpectsInputTypes, Expression, ExpressionDescription, Literal}
-import org.apache.spark.sql.catalyst.plans.logical.{FixedArgumentType, FunctionSignature, NamedArgument, SupportsNamedArguments}
+import org.apache.spark.sql.catalyst.plans.logical.{FixedArgumentType, FunctionSignature, NamedArgument}
 import org.apache.spark.sql.catalyst.trees.QuaternaryLike
-import org.apache.spark.sql.errors.QueryErrorsBase
+import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryErrorsBase}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.sketch.CountMinSketch
@@ -210,7 +210,7 @@ case class CountMinSketchAgg(
       seedExpression = fourth)
 }
 
-object CountMinSketchAgg extends SupportsNamedArguments {
+object CountMinSketchAggExpressionBuilder extends ExpressionBuilder {
   final val functionSignature = FunctionSignature(Seq(
     NamedArgument("column",
                   FixedArgumentType(TypeCollection(IntegralType, StringType, BinaryType))),
@@ -219,4 +219,10 @@ object CountMinSketchAgg extends SupportsNamedArguments {
     NamedArgument("seed", FixedArgumentType(IntegerType))
   ))
   override def functionSignatures: Seq[FunctionSignature] = Seq(functionSignature)
+  override def build(funcName: String, expressions: Seq[Expression]): Expression = {
+    if (expressions.length != 4) {
+      throw QueryCompilationErrors.wrongNumArgsError(funcName, Seq(4), expressions.length)
+    }
+    new CountMinSketchAgg(expressions(0), expressions(1), expressions(2), expressions(3))
+  }
 }

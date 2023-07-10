@@ -18,12 +18,12 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
+import org.apache.spark.sql.catalyst.analysis.{ExpressionBuilder, TypeCheckResult}
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
-import org.apache.spark.sql.catalyst.plans.logical.{FixedArgumentType, FunctionSignature, NamedArgument, SupportsNamedArguments}
-import org.apache.spark.sql.errors.QueryErrorsBase
+import org.apache.spark.sql.catalyst.plans.logical.{FixedArgumentType, FunctionSignature, NamedArgument}
+import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryErrorsBase}
 import org.apache.spark.sql.types.{AbstractDataType, DataType, StringType}
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -276,15 +276,15 @@ case class Mask(
 
 case class MaskArgument(maskChar: Char, ignore: Boolean)
 
-object Mask extends SupportsNamedArguments {
+object Mask {
   // Default character to replace upper-case characters
-  private val MASKED_UPPERCASE = 'X'
+  val MASKED_UPPERCASE = 'X'
   // Default character to replace lower-case characters
-  private val MASKED_LOWERCASE = 'x'
+  val MASKED_LOWERCASE = 'x'
   // Default character to replace digits
-  private val MASKED_DIGIT = 'n'
+  val MASKED_DIGIT = 'n'
   // This value helps to retain original value in the input by ignoring the replacement rules
-  private val MASKED_IGNORE = null
+  val MASKED_IGNORE = null
 
   def transformInput(
       input: Any,
@@ -321,7 +321,9 @@ object Mask extends SupportsNamedArguments {
       case _ => maskedChar(c, maskOther)
     }
   }
+}
 
+object MaskExpressionBuilder extends ExpressionBuilder {
   override def functionSignatures: Seq[FunctionSignature] = {
     val strArg = NamedArgument("str", FixedArgumentType(StringType))
     val upperCharArg = NamedArgument(
@@ -344,4 +346,13 @@ object Mask extends SupportsNamedArguments {
       strArg, upperCharArg, lowerCharArg, digitCharArg, otherCharArg))
     Seq(functionSignature)
   }
+
+  override def build(funcName: String, expressions: Seq[Expression]): Expression = {
+    if (expressions.length < 1 || expressions.length > 5) {
+      throw QueryCompilationErrors.wrongNumArgsError(
+        funcName, Seq(1, 2, 3, 4, 5), expressions.length)
+    }
+    new Mask(expressions(0), expressions(1), expressions(2), expressions(3), expressions(4))
+  }
 }
+

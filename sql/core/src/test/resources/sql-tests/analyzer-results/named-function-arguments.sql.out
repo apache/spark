@@ -101,46 +101,6 @@ Aggregate [hex(count_min_sketch(t2d#xL, 0.5, 0.5, 1, 0, 0)) AS hex(count_min_ske
 
 
 -- !query
-SELECT explode(collection => array(10, 20))
--- !query analysis
-Project [col#x]
-+- Generate explode(array(10, 20)), false, [col#x]
-   +- OneRowRelation
-
-
--- !query
-CREATE OR REPLACE TEMPORARY VIEW v AS SELECT id FROM range(0, 8)
--- !query analysis
-CreateViewCommand `v`, SELECT id FROM range(0, 8), false, true, LocalTempView, true
-   +- Project [id#xL]
-      +- Range (0, 8, step=1, splits=None)
-
-
--- !query
-SELECT * FROM explode(collection => TABLE v)
--- !query analysis
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
-  "sqlState" : "42K09",
-  "messageParameters" : {
-    "inputSql" : "\"outer(__auto_generated_subquery_name_0.c)\"",
-    "inputType" : "\"STRUCT<id: BIGINT>\"",
-    "paramIndex" : "1",
-    "requiredType" : "(\"ARRAY\" or \"MAP\")",
-    "sqlExpr" : "\"explode(outer(__auto_generated_subquery_name_0.c))\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 15,
-    "stopIndex" : 44,
-    "fragment" : "explode(collection => TABLE v)"
-  } ]
-}
-
-
--- !query
 SELECT mask(lowerChar => 'q', 'AbCD123-@$#', upperChar => 'Q', otherChar => 'o', digitChar => 'd')
 -- !query analysis
 org.apache.spark.sql.AnalysisException
@@ -248,18 +208,5 @@ org.apache.spark.sql.AnalysisException
 -- !query
 SELECT encode(str => 'a', charset => 'utf-8')
 -- !query analysis
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "NAMED_ARGUMENTS_NOT_SUPPORTED",
-  "sqlState" : "4274K",
-  "messageParameters" : {
-    "functionName" : "`encode`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 8,
-    "stopIndex" : 45,
-    "fragment" : "encode(str => 'a', charset => 'utf-8')"
-  } ]
-}
+Project [encode(str => a, charset => utf-8) AS encode(namedargumentexpression(a), namedargumentexpression(utf-8))#x]
++- OneRowRelation

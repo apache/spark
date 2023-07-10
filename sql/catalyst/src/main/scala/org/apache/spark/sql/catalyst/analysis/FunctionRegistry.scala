@@ -29,7 +29,7 @@ import org.apache.spark.sql.catalyst.FunctionIdentifier
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.expressions.xml._
-import org.apache.spark.sql.catalyst.plans.logical.{Generate, LogicalPlan, OneRowRelation, Range, SupportsNamedArguments}
+import org.apache.spark.sql.catalyst.plans.logical.{FunctionSignature, Generate, LogicalPlan, OneRowRelation, Range, SupportsNamedArguments}
 import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.types._
@@ -491,7 +491,7 @@ object FunctionRegistry {
     expression[CollectList]("collect_list"),
     expression[CollectList]("array_agg", true, Some("3.3.0")),
     expression[CollectSet]("collect_set"),
-    expression[CountMinSketchAgg]("count_min_sketch"),
+    expressionBuilder("count_min_sketch", CountMinSketchAggExpressionBuilder),
     expression[BoolAnd]("every", true),
     expression[BoolAnd]("bool_and"),
     expression[BoolOr]("any", true),
@@ -816,7 +816,7 @@ object FunctionRegistry {
     castAlias("string", StringType),
 
     // mask functions
-    expression[Mask]("mask"),
+    expressionBuilder("mask", MaskExpressionBuilder),
 
     // csv
     expression[CsvToStructs]("from_csv"),
@@ -880,9 +880,7 @@ object FunctionRegistry {
       since: Option[String] = None): (String, (ExpressionInfo, FunctionBuilder)) = {
     val (expressionInfo, builder) = FunctionRegistryBase.build[T](name, since)
     val newBuilder = (expressions: Seq[Expression]) => {
-      val rearrangedExpressions =
-        SupportsNamedArguments.getRearrangedExpressions[T](expressions, name)
-      val expr = builder(rearrangedExpressions)
+      val expr = builder(expressions)
       if (setAlias) expr.setTagValue(FUNC_ALIAS, name)
       expr
     }
@@ -897,7 +895,20 @@ object FunctionRegistry {
     val info = FunctionRegistryBase.expressionInfo[T](name, since)
     val funcBuilder = (expressions: Seq[Expression]) => {
       assert(expressions.forall(_.resolved), "function arguments must be resolved.")
-      val expr = builder.build(name, expressions)
+      val rearrangedExpressions =
+        if (builder.functionSignatures != Nil) {
+          if (builder.functionSignatures.length != 1) {
+            throw QueryCompilationErrors.multipleFunctionSignatures(
+              name, builder.functionSignatures)
+          }
+          builder.rearrange(builder.functionSignatures.head, expressions, name)
+        } else {
+          expressions
+        }
+      if (rearrangedExpressions.exists(_.isInstanceOf[NamedArgumentExpression])) {
+        throw QueryCompilationErrors.namedArgumentsNotSupported(name)
+      }
+      val expr = builder.build(name, rearrangedExpressions)
       if (setAlias) expr.setTagValue(FUNC_ALIAS, name)
       expr
     }
@@ -979,9 +990,7 @@ object TableFunctionRegistry {
       : (String, (ExpressionInfo, TableFunctionBuilder)) = {
     val (info, builder) = FunctionRegistryBase.build[T](name, since = None)
     val newBuilder = (expressions: Seq[Expression]) => {
-      val rearrangedExpressions =
-        SupportsNamedArguments.getRearrangedExpressions[T](expressions, name)
-      val generator = builder(rearrangedExpressions)
+      val generator = builder(expressions)
       assert(generator.isInstanceOf[Generator])
       Generate(
         generator,
@@ -1020,5 +1029,14 @@ object TableFunctionRegistry {
 }
 
 trait ExpressionBuilder {
+  def functionSignatures: Seq[FunctionSignature] = Nil
+
+  def rearrange(
+      expectedSignature: FunctionSignature,
+      providedArguments: Seq[Expression],
+      functionName: String) : Seq[Expression] = {
+    SupportsNamedArguments.defaultRearrange(expectedSignature, providedArguments, functionName)
+  }
+
   def build(funcName: String, expressions: Seq[Expression]): Expression
 }

@@ -16,8 +16,6 @@
  */
 package org.apache.spark.sql.catalyst.plans.logical
 
-import scala.reflect.ClassTag
-
 import org.apache.spark.sql.catalyst.expressions.{Expression, NamedArgumentExpression}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.types.AbstractDataType
@@ -71,73 +69,17 @@ abstract class SupportsNamedArguments {
 }
 
 object SupportsNamedArguments {
-
-  /**
-   * Given a generic type, we check if the companion object of said type exists.
-   * If that object extends the trait [[SupportsNamedArguments]], then we rearrange
-   * the expressions in the order specified by the object.
-   *
-   * It is here we resubstitute [[Unevaluable]] [[NamedArgumentExpression]]s with
-   * normal expressions. This method will produce an positional argument list which
-   * is equivalent to the original argumnet list, except the expressions are now
-   * fit for consumption by [[ResolveFunctions]]
-   *
-   * @param expressions The list of positional and named argument expressions
-   * @tparam T The actual expression class.
-   * @return positional argument list
-   */
-  final def getRearrangedExpressions[T : ClassTag](
-      expressions: Seq[Expression], functionName: String): Seq[Expression] = {
-
-    if (!expressions.exists(_.isInstanceOf[NamedArgumentExpression])) {
-      return expressions
-    }
-
-    import scala.reflect.runtime.currentMirror
-
-    // This code heavily utilizes Scala reflection which is unfamiliar to most developers.
-    // Here are the steps of this function:
-    // 1. Obtain the module symbol for the companion object of the function expression.
-    // 2. Obtain the module class symbol that represents the companion object.
-    // 3. Check if the base classes of the module class symbol contains SupportsNamedArguments.
-    //    This checks if the companion object is an implementor of SupportsNamedArguments.
-    // 4. Check if the module class symbol is a top level object. Reflection is unable to
-    //    obtain a companion object instance if it is member of some enclosing class unless
-    //    instance of said enclosing class is provided which we do not have.
-    // 5. Use reflection to obtain instance of companion object and perform immediate cast to
-    //    SupportsNamedArguments as it is already verified the cast is safe.
-    // 6. Obtain function signature and rearrange expression according to the given signature.
-    val runtimeClass = scala.reflect.classTag[T].runtimeClass
-    val targetModuleSymbol = currentMirror.classSymbol(runtimeClass).companion
-    val parentClass = scala.reflect.classTag[SupportsNamedArguments].runtimeClass
-    val parentSymbol = currentMirror.classSymbol(parentClass)
-
-    if(targetModuleSymbol == scala.reflect.runtime.universe.NoSymbol) {
-      throw QueryCompilationErrors.namedArgumentsNotSupported(functionName)
-    }
-
-    val moduleClassSymbol = targetModuleSymbol.asModule.moduleClass.asClass
-    if (!moduleClassSymbol.baseClasses.contains(parentSymbol)) {
-      throw QueryCompilationErrors.namedArgumentsNotSupported(functionName)
-    }
-    if (currentMirror.runtimeClass(moduleClassSymbol).getEnclosingClass != null) {
-      throw QueryCompilationErrors.cannotObtainCompanionObjectInstance(functionName)
-    }
-    val instance = currentMirror.reflectModule(targetModuleSymbol.asModule)
-      .instance.asInstanceOf[SupportsNamedArguments]
-    if (instance.functionSignatures.size != 1) {
-      throw QueryCompilationErrors.multipleFunctionSignatures(
-        functionName, instance.functionSignatures)
-    }
-    instance.rearrange(instance.functionSignatures.head, expressions, functionName)
-  }
-
   final def defaultRearrange(functionSignature: FunctionSignature,
       args: Seq[Expression],
       functionName: String): Seq[Expression] = {
     val parameters: Seq[NamedArgument] = functionSignature.parameters
     val firstNamedArgIdx: Int = args.indexWhere(_.isInstanceOf[NamedArgumentExpression])
-    val (positionalArgs, namedArgs) = args.splitAt(firstNamedArgIdx)
+    val (positionalArgs, namedArgs) =
+      if (firstNamedArgIdx == -1) {
+        (args, Nil)
+      } else {
+        args.splitAt(firstNamedArgIdx)
+      }
     val namedParameters: Seq[NamedArgument] = parameters.drop(positionalArgs.size)
 
     // Performing some checking to ensure valid argument list
