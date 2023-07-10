@@ -30,11 +30,11 @@ import org.json4s.jackson.JsonMethods._
 import org.apache.spark.SparkThrowable
 import org.apache.spark.annotation.Stable
 import org.apache.spark.sql.catalyst.analysis.Resolver
-import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
+import org.apache.spark.sql.catalyst.parser.DataTypeParser
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.util.DataTypeJsonUtils.{DataTypeJsonDeserializer, DataTypeJsonSerializer}
 import org.apache.spark.sql.catalyst.util.StringConcat
-import org.apache.spark.sql.errors.QueryCompilationErrors
+import org.apache.spark.sql.errors.DataTypeErrors
 import org.apache.spark.sql.types.DayTimeIntervalType._
 import org.apache.spark.sql.types.YearMonthIntervalType._
 import org.apache.spark.util.Utils
@@ -111,8 +111,8 @@ object DataType {
   def fromDDL(ddl: String): DataType = {
     parseTypeWithFallback(
       ddl,
-      CatalystSqlParser.parseDataType,
-      fallbackParser = str => CatalystSqlParser.parseTableSchema(str))
+      DataTypeParser.parseDataType,
+      fallbackParser = str => DataTypeParser.parseTableSchema(str))
   }
 
   /**
@@ -140,7 +140,7 @@ object DataType {
             if (e.isInstanceOf[SparkThrowable]) {
               throw e
             }
-            throw QueryCompilationErrors.schemaFailToParseError(schema, e)
+            throw DataTypeErrors.schemaFailToParseError(schema, e)
         }
     }
   }

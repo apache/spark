@@ -20,13 +20,11 @@ package org.apache.spark.sql.catalyst
 import java.io._
 import java.nio.charset.Charset
 import java.nio.charset.StandardCharsets.UTF_8
-import java.util.concurrent.atomic.AtomicBoolean
 
 import com.google.common.io.ByteStreams
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{MetadataBuilder, NumericType, StringType, StructType}
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.Utils
@@ -125,9 +123,7 @@ package object util extends Logging {
   }
 
   def quoteIdentifier(name: String): String = {
-    // Escapes back-ticks within the identifier name with double-back-ticks, and then quote the
-    // identifier with back-ticks.
-    "`" + name.replace("`", "``") + "`"
+    SparkStringUtils.quoteIdentifier(name)
   }
 
   def quoteNameParts(name: Seq[String]): String = {
@@ -155,9 +151,6 @@ package object util extends Logging {
     builder.toString()
   }
 
-  /** Whether we have warned about plan string truncation yet. */
-  private val truncationWarningPrinted = new AtomicBoolean(false)
-
   /**
    * Format a sequence with semantics similar to calling .mkString(). Any elements beyond
    * maxNumToStringFields will be dropped and replaced by a "... N more fields" placeholder.
@@ -170,23 +163,12 @@ package object util extends Logging {
       sep: String,
       end: String,
       maxFields: Int): String = {
-    if (seq.length > maxFields) {
-      if (truncationWarningPrinted.compareAndSet(false, true)) {
-        logWarning(
-          "Truncated the string representation of a plan since it was too large. This " +
-            s"behavior can be adjusted by setting '${SQLConf.MAX_TO_STRING_FIELDS.key}'.")
-      }
-      val numFields = math.max(0, maxFields - 1)
-      seq.take(numFields).mkString(
-        start, sep, sep + "... " + (seq.length - numFields) + " more fields" + end)
-    } else {
-      seq.mkString(start, sep, end)
-    }
+    SparkStringUtils.truncatedString(seq, start, sep, end, maxFields)
   }
 
   /** Shorthand for calling truncatedString() without start or end strings. */
   def truncatedString[T](seq: Seq[T], sep: String, maxFields: Int): String = {
-    truncatedString(seq, "", sep, "", maxFields)
+    SparkStringUtils.truncatedString(seq, "", sep, "", maxFields)
   }
 
   val METADATA_COL_ATTR_KEY = "__metadata_col"

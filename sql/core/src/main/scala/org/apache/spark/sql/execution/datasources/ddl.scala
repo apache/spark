@@ -59,6 +59,15 @@ case class CreateTable(
   override protected def withNewChildrenInternal(
       newChildren: IndexedSeq[LogicalPlan]): LogicalPlan =
     copy(query = if (query.isDefined) Some(newChildren.head) else None)
+
+  /**
+   * Identifies the underlying table's location is qualified or absent.
+   *
+   * @return true if the location is absolute or absent, false otherwise.
+   */
+  def locationQualifiedOrAbsent: Boolean = {
+    tableDesc.storage.locationUri.map(_.isAbsolute).getOrElse(true)
+  }
 }
 
 /**

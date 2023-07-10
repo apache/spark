@@ -35,6 +35,7 @@ Normal Functions
     isnan
     isnull
     monotonically_increasing_id
+    named_struct
     nanvl
     rand
     randn
@@ -202,6 +203,7 @@ Collection Functions
     array_position
     element_at
     array_append
+    array_size
     array_sort
     array_insert
     array_remove
@@ -234,7 +236,10 @@ Collection Functions
     from_json
     schema_of_json
     to_json
+    json_array_length
+    json_object_keys
     size
+    cardinality
     struct
     sort_array
     array_max
@@ -279,6 +284,7 @@ Aggregate Functions
     approxCountDistinct
     approx_count_distinct
     approx_percentile
+    array_agg
     avg
     bit_and
     bit_or
@@ -291,6 +297,7 @@ Aggregate Functions
     count
     count_distinct
     countDistinct
+    count_min_sketch
     count_if
     covar_pop
     covar_samp
@@ -402,6 +409,7 @@ String Functions
     locate
     lpad
     ltrim
+    mask
     octet_length
     parse_url
     position
@@ -434,6 +442,7 @@ String Functions
     to_binary
     to_char
     to_number
+    to_varchar
     translate
     trim
     upper
@@ -469,6 +478,11 @@ Misc Functions
 
     aes_decrypt
     aes_encrypt
+    bitmap_bit_position
+    bitmap_bucket_number
+    bitmap_construct_agg
+    bitmap_count
+    bitmap_or_agg
     current_catalog
     current_database
     current_schema
@@ -490,6 +504,7 @@ Misc Functions
     java_method
     random
     stack
+    try_aes_decrypt
     typeof
     user
     uuid

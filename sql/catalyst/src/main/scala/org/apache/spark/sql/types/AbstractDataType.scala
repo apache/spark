@@ -18,8 +18,7 @@
 package org.apache.spark.sql.types
 
 import org.apache.spark.annotation.Stable
-import org.apache.spark.sql.catalyst.expressions.Expression
-import org.apache.spark.sql.errors.QueryExecutionErrors
+import org.apache.spark.sql.errors.DataTypeErrors
 
 /**
  * A non-concrete data type, reserved for internal uses.
@@ -108,7 +107,7 @@ protected[sql] object AnyDataType extends AbstractDataType with Serializable {
   // Note that since AnyDataType matches any concrete types, defaultConcreteType should never
   // be invoked.
   override private[sql] def defaultConcreteType: DataType =
-    throw QueryExecutionErrors.unsupportedOperationExceptionError()
+    throw DataTypeErrors.unsupportedOperationExceptionError()
 
   override private[sql] def simpleString: String = "any"
 
@@ -167,8 +166,6 @@ private[sql] object AnyTimestampType extends AbstractDataType with Serializable 
     other.isInstanceOf[TimestampType] || other.isInstanceOf[TimestampNTZType]
 
   override private[sql] def simpleString = "(timestamp or timestamp without time zone)"
-
-  def unapply(e: Expression): Boolean = acceptsType(e.dataType)
 }
 
 private[sql] abstract class DatetimeType extends AtomicType

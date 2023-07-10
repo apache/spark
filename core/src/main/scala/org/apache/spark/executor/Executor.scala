@@ -169,25 +169,25 @@ private[spark] class Executor(
 
   private val systemLoader = Utils.getContextOrSparkClassLoader
 
-  private def newSessionState(
-      sessionUUID: String,
-      classUri: Option[String]): IsolatedSessionState = {
+  private def newSessionState(jobArtifactState: JobArtifactState): IsolatedSessionState = {
     val currentFiles = new HashMap[String, Long]
     val currentJars = new HashMap[String, Long]
     val currentArchives = new HashMap[String, Long]
     val urlClassLoader = createClassLoader(currentJars)
-    val replClassLoader = addReplClassLoaderIfNeeded(urlClassLoader, classUri)
+    val replClassLoader = addReplClassLoaderIfNeeded(
+      urlClassLoader, jobArtifactState.replClassDirUri)
     new IsolatedSessionState(
-      sessionUUID, urlClassLoader, replClassLoader, currentFiles, currentJars, currentArchives)
+      jobArtifactState.uuid, urlClassLoader, replClassLoader,
+      currentFiles, currentJars, currentArchives)
   }
 
   // Classloader isolation
   // The default isolation group
-  val defaultSessionState = newSessionState("default", None)
+  val defaultSessionState = newSessionState(JobArtifactState("default", None))
 
   val isolatedSessionCache = CacheBuilder.newBuilder()
     .maximumSize(100)
-    .expireAfterAccess(5, TimeUnit.MINUTES)
+    .expireAfterAccess(30, TimeUnit.MINUTES)
     .build[String, IsolatedSessionState]
 
   // Set the classloader for serializer
@@ -513,11 +513,10 @@ private[spark] class Executor(
     override def run(): Unit = {
 
       // Classloader isolation
-      val isolatedSessionUUID: Option[String] = taskDescription.artifacts.uuid
-      val isolatedSession = isolatedSessionUUID match {
-        case Some(uuid) => isolatedSessionCache.get(
-          uuid,
-          () => newSessionState(uuid, taskDescription.artifacts.replClassDirUri))
+      val isolatedSession = taskDescription.artifacts.state match {
+        case Some(jobArtifactState) => isolatedSessionCache.get(
+          jobArtifactState.uuid,
+          () => newSessionState(jobArtifactState))
         case _ => defaultSessionState
       }
 
@@ -1054,12 +1053,22 @@ private[spark] class Executor(
     try {
       // For testing, so we can simulate a slow file download:
       testStartLatch.foreach(_.countDown())
+
+      // If the session ID was specified from SparkSession, it's from a Spark Connect client.
+      // Specify a dedicated directory for Spark Connect client.
+      lazy val root = if (state.sessionUUID != "default") {
+        val newDest = new File(SparkFiles.getRootDirectory(), state.sessionUUID)
+        newDest.mkdir()
+        newDest
+      } else {
+        new File(SparkFiles.getRootDirectory())
+      }
+
       // Fetch missing dependencies
       for ((name, timestamp) <- newFiles if state.currentFiles.getOrElse(name, -1L) < timestamp) {
         logInfo(s"Fetching $name with timestamp $timestamp")
         // Fetch file with useCache mode, close cache for local mode.
-        Utils.fetchFile(name, new File(SparkFiles.getRootDirectory()), conf,
-          hadoopConf, timestamp, useCache = !isLocal)
+        Utils.fetchFile(name, root, conf, hadoopConf, timestamp, useCache = !isLocal)
         state.currentFiles(name) = timestamp
       }
       for ((name, timestamp) <- newArchives if
@@ -1070,7 +1079,7 @@ private[spark] class Executor(
         val source = Utils.fetchFile(uriToDownload.toString, Utils.createTempDir(), conf,
           hadoopConf, timestamp, useCache = !isLocal, shouldUntar = false)
         val dest = new File(
-          SparkFiles.getRootDirectory(),
+          root,
           if (sourceURI.getFragment != null) sourceURI.getFragment else source.getName)
         logInfo(
           s"Unpacking an archive $name from ${source.getAbsolutePath} to ${dest.getAbsolutePath}")
@@ -1086,11 +1095,11 @@ private[spark] class Executor(
         if (currentTimeStamp < timestamp) {
           logInfo(s"Fetching $name with timestamp $timestamp")
           // Fetch file with useCache mode, close cache for local mode.
-          Utils.fetchFile(name, new File(SparkFiles.getRootDirectory()), conf,
+          Utils.fetchFile(name, root, conf,
             hadoopConf, timestamp, useCache = !isLocal)
           state.currentJars(name) = timestamp
           // Add it to our class loader
-          val url = new File(SparkFiles.getRootDirectory(), localName).toURI.toURL
+          val url = new File(root, localName).toURI.toURL
           if (!state.urlClassLoader.getURLs().contains(url)) {
             logInfo(s"Adding $url to class loader")
             state.urlClassLoader.addURL(url)

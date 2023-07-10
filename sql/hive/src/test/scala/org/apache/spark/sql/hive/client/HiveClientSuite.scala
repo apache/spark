@@ -900,7 +900,7 @@ class HiveClientSuite(version: String, allVersions: Seq[String])
   test("Decimal support of Avro Hive serde") {
     val tableName = "tab1"
     // TODO: add the other logical types. For details, see the link:
-    // https://avro.apache.org/docs/1.11.1/specification/#logical-types
+    // https://avro.apache.org/docs/1.11.2/specification/#logical-types
     val avroSchema =
     """{
       |  "name": "test_record",
