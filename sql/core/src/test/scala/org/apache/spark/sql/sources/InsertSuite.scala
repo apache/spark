@@ -2528,6 +2528,14 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
     }
   }
 
+  test("SPARK-XXXXX: CTE on top of INSERT INTO") {
+    withTable("t") {
+      sql("CREATE TABLE t(i int, part1 int, part2 int) using parquet")
+      sql("WITH v1(c1) as (values (1)) INSERT INTO t select c1, 2, 3 from v1")
+      checkAnswer(spark.table("t"), Row(1, 2, 3))
+    }
+  }
+
   test("SELECT clause with star wildcard") {
     withTable("t1") {
       sql("CREATE TABLE t1(c1 int, c2 string) using parquet")
