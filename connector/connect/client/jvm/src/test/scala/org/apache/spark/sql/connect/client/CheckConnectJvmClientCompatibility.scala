@@ -244,8 +244,6 @@ object CheckConnectJvmClientCompatibility {
         "org.apache.spark.sql.SparkSession#Builder.enableHiveSupport"),
       ProblemFilters.exclude[DirectMissingMethodProblem](
         "org.apache.spark.sql.SparkSession#Builder.withExtensions"),
-      ProblemFilters.exclude[DirectMissingMethodProblem](
-        "org.apache.spark.sql.SparkSession#Builder.interceptor"),
 
       // RuntimeConfig
       ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.RuntimeConfig$"),
@@ -386,6 +384,8 @@ object CheckConnectJvmClientCompatibility {
       ),
       ProblemFilters.exclude[DirectMissingMethodProblem](
         "org.apache.spark.sql.SparkSession#Builder.create"),
+      ProblemFilters.exclude[DirectMissingMethodProblem](
+        "org.apache.spark.sql.SparkSession#Builder.interceptor"),
 
       // Steaming API
       ProblemFilters.exclude[MissingTypesProblem](
