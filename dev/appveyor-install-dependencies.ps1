@@ -49,8 +49,10 @@ Function InstallR {
 }
 
 Function InstallRtools {
-  $rtoolsver = $rToolsVer.Split('.')[0..1] -Join ''
-  $rtoolsurl = $CRAN + "/bin/windows/Rtools/rtools$rtoolsver-x86_64.exe"
+  # $rtoolsver = $rToolsVer.Split('-')[0..1] -Join ''
+  # hard code to test, will fix later
+  # $rtoolsurl = $CRAN + "/bin/windows/Rtools/rtools$rtoolsver/files/rtools$rtoolsver.exe"
+  $rtoolsurl = $CRAN + "/bin/windows/Rtools/rtools43/files/rtools43-5550-5548.exe"
 
   # Downloading Rtools
   Start-FileDownload $rtoolsurl "Rtools-current.exe"
@@ -67,8 +69,8 @@ Function InstallRtools {
   Else {
     $gccPath = $env:GCC_PATH
   }
-  $env:PATH = $RtoolsDrive + '\Rtools40\bin;' + $RtoolsDrive + '\Rtools40\mingw64\bin;' + $RtoolsDrive + '\Rtools40\' + $gccPath + '\bin;' + $env:PATH
-  $env:BINPREF=$RtoolsDrive + '/Rtools40/mingw$(WIN)/bin/'
+  $env:PATH = $RtoolsDrive + '\Rtools43\bin;' + $RtoolsDrive + '\Rtools43\mingw64\bin;' + $RtoolsDrive + '\Rtools43\' + $gccPath + '\bin;' + $env:PATH
+  $env:BINPREF=$RtoolsDrive + '/Rtools43/mingw$(WIN)/bin/'
 }
 
 # create tools directory outside of Spark directory
@@ -130,7 +132,7 @@ Pop-Location
 
 # ========================== R
 $rVer = "4.3.1"
-$rToolsVer = "4.3.0"
+$rToolsVer = "43-5550-5548"
 
 InstallR
 InstallRtools
