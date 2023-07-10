@@ -24,7 +24,7 @@ import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.sql.{AnalysisException, DataFrame}
 import org.apache.spark.sql.catalog.{Column, Database, Function, Table}
-import org.apache.spark.sql.catalyst.{FunctionIdentifier, ScalaReflection, TableIdentifier}
+import org.apache.spark.sql.catalyst.{DefinedByConstructorParams, FunctionIdentifier, ScalaReflection, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.AnalysisTest
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.expressions.Expression
@@ -449,10 +449,10 @@ class CatalogSuite extends SharedSparkSession with AnalysisTest with BeforeAndAf
     val function = new Function("nama", "cataloa", Array("databasa"), "descripta", "classa", false)
     val column = new Column(
       "nama", "descripta", "typa", nullable = false, isPartition = true, isBucket = true)
-    val dbFields = ScalaReflection.getConstructorParameterValues(db)
-    val tableFields = ScalaReflection.getConstructorParameterValues(table)
-    val functionFields = ScalaReflection.getConstructorParameterValues(function)
-    val columnFields = ScalaReflection.getConstructorParameterValues(column)
+    val dbFields = getConstructorParameterValues(db)
+    val tableFields = getConstructorParameterValues(table)
+    val functionFields = getConstructorParameterValues(function)
+    val columnFields = getConstructorParameterValues(column)
     assert(dbFields == Seq("nama", "cataloa", "descripta", "locata"))
     assert(Seq(tableFields(0), tableFields(1), tableFields(3), tableFields(4), tableFields(5)) ==
       Seq("nama", "cataloa", "descripta", "typa", false))
@@ -1043,5 +1043,11 @@ class CatalogSuite extends SharedSparkSession with AnalysisTest with BeforeAndAf
       func2.catalog === "testcat" && func2.description === "hello" &&
       func2.isTemporary === false &&
       func2.className.startsWith("org.apache.spark.sql.internal.CatalogSuite"))
+  }
+
+  private def getConstructorParameterValues(obj: DefinedByConstructorParams): Seq[AnyRef] = {
+    ScalaReflection.getConstructorParameterNames(obj.getClass).map { name =>
+      obj.getClass.getMethod(name).invoke(obj)
+    }
   }
 }

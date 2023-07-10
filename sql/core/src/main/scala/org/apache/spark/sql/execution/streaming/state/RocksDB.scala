@@ -93,9 +93,6 @@ class RocksDB(
 
   private val columnFamilyOptions = new ColumnFamilyOptions()
 
-  private val dbOptions =
-    new Options(new DBOptions(), columnFamilyOptions) // options to open the RocksDB
-
   // Set RocksDB options around MemTable memory usage. By default, we let RocksDB
   // use its internal default values for these settings.
   if (conf.writeBufferSizeMB > 0L) {
@@ -105,6 +102,9 @@ class RocksDB(
   if (conf.maxWriteBufferNumber > 0L) {
     columnFamilyOptions.setMaxWriteBufferNumber(conf.maxWriteBufferNumber)
   }
+
+  private val dbOptions =
+    new Options(new DBOptions(), columnFamilyOptions) // options to open the RocksDB
 
   dbOptions.setCreateIfMissing(true)
   dbOptions.setTableFormatConfig(tableFormatConfig)

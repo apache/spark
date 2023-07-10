@@ -1251,7 +1251,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
     withTable("t") {
       withSQLConf(SQLConf.ENABLE_DEFAULT_COLUMNS.key -> "false") {
         checkError(
-          exception = intercept[AnalysisException] {
+          exception = intercept[ParseException] {
             sql("create table t(i boolean, s bigint default 42L) using parquet")
           },
           errorClass = "UNSUPPORTED_DEFAULT_VALUE.WITH_SUGGESTION",
@@ -1628,7 +1628,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
       withSQLConf(SQLConf.ENABLE_DEFAULT_COLUMNS.key -> "false") {
         sql("create table t(i boolean) using parquet")
         checkError(
-          exception = intercept[AnalysisException] {
+          exception = intercept[ParseException] {
             sql("alter table t add column s bigint default 42L")
           },
           errorClass = "UNSUPPORTED_DEFAULT_VALUE.WITH_SUGGESTION",

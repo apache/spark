@@ -164,6 +164,18 @@ ERROR_CLASSES_JSON = """
       "Remote client cannot create a SparkContext. Create SparkSession instead."
     ]
   },
+  "DIFFERENT_ROWS" : {
+    "message" : [
+      "<error_msg>"
+    ]
+  },
+  "DIFFERENT_SCHEMA" : {
+    "message" : [
+      "Schemas do not match:",
+      "df schema: <df_schema>",
+      "expected schema: <expected_schema>"
+    ]
+  },
   "DISALLOWED_TYPE_FOR_CONTAINER" : {
     "message" : [
       "Argument `<arg_name>`(type: <arg_type>) should only contain a type in [<allowed_types>], got <return_type>"
@@ -674,6 +686,11 @@ ERROR_CLASSES_JSON = """
   "UNSUPPORTED_DATA_TYPE_FOR_ARROW_VERSION" : {
     "message" : [
       "<data_type> is only supported with pyarrow 2.0.0 and above."
+    ]
+  },
+  "UNSUPPORTED_DATA_TYPE_FOR_IGNORE_ROW_ORDER" : {
+    "message" : [
+      "Cannot ignore row order because undefined sorting for data type."
     ]
   },
   "UNSUPPORTED_JOIN_TYPE" : {
