@@ -24,7 +24,7 @@ class TPCDSTables(spark: SparkSession, config: GenTPCDataConfig)
   extends TableGenerator with TPCDSSchema with Logging with Serializable {
 
   override protected val dataGenerator: DataGenerator = new Dsdgen(config.dsdgenDir)
-  override protected val sqlContext: SQLContext = spark.sqlContext
+  override protected val spark: SparkSession = sparkSession
   override protected val scaleFactor: Int = config.scaleFactor
   override protected def tables: Seq[Table] = tableColumns.map { case (tableName, schemaString) =>
     val partitionColumns = tablePartitionColumns.getOrElse(tableName, Nil)
