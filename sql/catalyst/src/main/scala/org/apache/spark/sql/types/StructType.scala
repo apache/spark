@@ -31,7 +31,6 @@ import org.apache.spark.sql.catalyst.parser.{DataTypeParser, LegacyTypeStringPar
 import org.apache.spark.sql.catalyst.trees.Origin
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.util.{SparkStringUtils, StringConcat}
-import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns._
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.util.collection.Utils
 
@@ -498,13 +497,6 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
   override private[spark] def existsRecursively(f: (DataType) => Boolean): Boolean = {
     f(this) || fields.exists(field => field.dataType.existsRecursively(f))
   }
-
-  /**
-   * These define and cache existence default values for the struct fields for efficiency purposes.
-   */
-  private[sql] lazy val existenceDefaultValues: Array[Any] = getExistenceDefaultValues(this)
-  private[sql] lazy val existenceDefaultsBitmask: Array[Boolean] = getExistenceDefaultsBitmask(this)
-  private[sql] lazy val hasExistenceDefaultValues = existenceDefaultValues.exists(_ != null)
 }
 
 /**

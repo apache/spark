@@ -47,6 +47,14 @@ trait AlterTableTests extends SharedSparkSession with QueryErrorsBase {
     }
   }
 
+  private def prependCatalogName(tableName: String): String = {
+    if (catalogAndNamespace.isEmpty) {
+      s"spark_catalog.$tableName"
+    } else {
+      tableName
+    }
+  }
+
   test("AlterTable: table does not exist") {
     val t2 = s"${catalogAndNamespace}fake_table"
     val quoted = UnresolvedAttribute.parseAttributeName(s"${catalogAndNamespace}table_name")
@@ -486,9 +494,21 @@ trait AlterTableTests extends SharedSparkSession with QueryErrorsBase {
       (DataTypeTestUtils.dayTimeIntervalTypes ++ DataTypeTestUtils.yearMonthIntervalTypes)
         .foreach {
           case d: DataType => d.typeName
-            val e = intercept[AnalysisException](
-              sql(s"ALTER TABLE $t ALTER COLUMN id TYPE ${d.typeName}"))
-            assert(e.getMessage.contains("id to interval type"))
+            val sqlText = s"ALTER TABLE $t ALTER COLUMN id TYPE ${d.typeName}"
+
+            checkError(
+              exception = intercept[AnalysisException] {
+                sql(sqlText)
+              },
+              errorClass = "CANNOT_UPDATE_FIELD.INTERVAL_TYPE",
+              parameters = Map(
+                "table" -> s"${toSQLId(prependCatalogName(t))}",
+                "fieldName" -> "`id`"),
+              context = ExpectedContext(
+                fragment = sqlText,
+                start = 0,
+                stop = 33 + d.typeName.length + t.length)
+            )
         }
     }
   }
@@ -538,19 +558,13 @@ trait AlterTableTests extends SharedSparkSession with QueryErrorsBase {
       val sqlText =
         s"ALTER TABLE $t ALTER COLUMN point TYPE struct<x: double, y: double, z: double>"
 
-      val fullName = if (catalogAndNamespace.isEmpty) {
-        s"spark_catalog.default.table_name"
-      } else {
-        t
-      }
-
       checkError(
         exception = intercept[AnalysisException] {
           sql(sqlText)
         },
-        errorClass = "UPDATE_FIELD_WITH_STRUCT_UNSUPPORTED",
+        errorClass = "CANNOT_UPDATE_FIELD.STRUCT_TYPE",
         parameters = Map(
-          "table" -> s"${toSQLId(fullName)}",
+          "table" -> s"${toSQLId(prependCatalogName(t))}",
           "fieldName" -> "`point`"),
         context = ExpectedContext(
           fragment = sqlText,
@@ -573,12 +587,21 @@ trait AlterTableTests extends SharedSparkSession with QueryErrorsBase {
     val t = fullTableName("table_name")
     withTable(t) {
       sql(s"CREATE TABLE $t (id int, points array<int>) USING $v2Format")
+      val sqlText = s"ALTER TABLE $t ALTER COLUMN points TYPE array<long>"
 
-      val exc = intercept[AnalysisException] {
-        sql(s"ALTER TABLE $t ALTER COLUMN points TYPE array<long>")
-      }
-
-      assert(exc.getMessage.contains("update the element by updating points.element"))
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(sqlText)
+        },
+        errorClass = "CANNOT_UPDATE_FIELD.ARRAY_TYPE",
+        parameters = Map(
+          "table" -> s"${toSQLId(prependCatalogName(t))}",
+          "fieldName" -> "`points`"),
+        context = ExpectedContext(
+          fragment = sqlText,
+          start = 0,
+          stop = 48 + t.length)
+      )
 
       val table = getTableMetadata(t)
 
@@ -608,12 +631,21 @@ trait AlterTableTests extends SharedSparkSession with QueryErrorsBase {
     val t = fullTableName("table_name")
     withTable(t) {
       sql(s"CREATE TABLE $t (id int, m map<string, int>) USING $v2Format")
+      val sqlText = s"ALTER TABLE $t ALTER COLUMN m TYPE map<string, long>"
 
-      val exc = intercept[AnalysisException] {
-        sql(s"ALTER TABLE $t ALTER COLUMN m TYPE map<string, long>")
-      }
-
-      assert(exc.getMessage.contains("update a map by updating m.key or m.value"))
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(sqlText)
+        },
+        errorClass = "CANNOT_UPDATE_FIELD.MAP_TYPE",
+        parameters = Map(
+          "table" -> s"${toSQLId(prependCatalogName(t))}",
+          "fieldName" -> "`m`"),
+        context = ExpectedContext(
+          fragment = sqlText,
+          start = 0,
+          stop = 49 + t.length)
+      )
 
       val table = getTableMetadata(t)
 

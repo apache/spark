@@ -254,6 +254,14 @@ SQLSTATE: none assigned
 
 Failed to set permissions on created path `<path>` back to `<permission>`.
 
+### [CANNOT_UPDATE_FIELD](sql-error-conditions-cannot-update-field-error-class.html)
+
+SQLSTATE: none assigned
+
+Cannot update `<table>` field `<fieldName>` type:
+
+For more details see [CANNOT_UPDATE_FIELD](sql-error-conditions-cannot-update-field-error-class.html)
+
 ### CANNOT_UP_CAST_DATATYPE
 
 SQLSTATE: none assigned
@@ -1921,12 +1929,6 @@ You're using untyped Scala UDF, which does not have the input type information. 
 1. use typed Scala UDF APIs(without return type parameter), e.g. `udf((x: Int) => x)`.
 2. use Java UDF APIs, e.g. `udf(new UDF1[String, Integer] { override def call(s: String): Integer = s.length() }, IntegerType)`, if input types are all non primitive.
 3. set "spark.sql.legacy.allowUntypedScalaUDF" to "true" and use this API with caution.
-
-### UPDATE_FIELD_WITH_STRUCT_UNSUPPORTED
-
-SQLSTATE: none assigned
-
-Cannot update `<table>` field `<fieldName>` type: update a struct by updating its fields.
 
 ### VIEW_ALREADY_EXISTS
 
