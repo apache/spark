@@ -34,7 +34,7 @@ class CrossValidatorTestsOnConnect(CrossValidatorTestsMixin, unittest.TestCase):
 
 
 if __name__ == "__main__":
-    from pyspark.ml.tests.connect.test_connect_crossvalidator import *  # noqa: F401,F403
+    from pyspark.ml.tests.connect.test_connect_tuning import *  # noqa: F401,F403
 
     try:
         import xmlrunner  # type: ignore[import]
