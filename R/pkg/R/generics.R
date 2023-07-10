@@ -1258,7 +1258,8 @@ setGeneric("positive", function(x) { standardGeneric("positive") })
 
 #' @rdname column_math_functions
 #' @name NULL
-setGeneric("width_bucket", function(x) { standardGeneric("width_bucket") })
+setGeneric("width_bucket",
+           function(v, min, max, numBucket) { standardGeneric("width_bucket") })
 
 #' @rdname not
 setGeneric("not", function(x) { standardGeneric("not") })
