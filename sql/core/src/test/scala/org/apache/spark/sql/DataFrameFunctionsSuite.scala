@@ -5915,6 +5915,10 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       parameters = Map.empty
     )
   }
+
+  test("call_function") {
+    checkAnswer(testData2.select(call_function("avg", $"a")), testData2.selectExpr("avg(a)"))
+  }
 }
 
 object DataFrameFunctionsSuite {
