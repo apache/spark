@@ -36,7 +36,7 @@ final class XmlPartitioningSuite extends SparkFunSuite with Matchers with Before
       .getOrCreate()
     spark.sparkContext.setLogLevel("WARN")
     try {
-      val fileName = s"fias_house${if (large) ".large" else ""}.xml$suffix"
+      val fileName = s"test-data/xml-resources/fias_house${if (large) ".large" else ""}.xml$suffix"
       val xmlFile = getClass.getClassLoader.getResource(fileName).getFile
       val results = spark.read.option("rowTag", "House").option("mode", "FAILFAST").xml(xmlFile)
       // Test file has 37 records; large file is 20x the records

@@ -37,7 +37,7 @@ import org.apache.spark.sql.execution.datasources.xml.XmlReader;
 public final class JavaXmlSuite {
 
     private static final int numBooks = 12;
-    private static final String booksFile = "src/test/resources/books.xml";
+    private static final String booksFile = "src/test/resources/test-data/xml-resources/books.xml";
     private static final String booksFileTag = "book";
 
     private SparkSession spark;

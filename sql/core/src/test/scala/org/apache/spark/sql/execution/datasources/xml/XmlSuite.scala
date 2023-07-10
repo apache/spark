@@ -29,22 +29,23 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.io.{LongWritable, Text}
 import org.apache.hadoop.io.compress.GzipCodec
 import org.apache.hadoop.mapreduce.lib.input.InvalidInputException
-import org.scalatest.BeforeAndAfterAll
 
-import org.apache.spark.{SparkException, SparkFunSuite}
+import org.apache.spark.SparkException
 import org.apache.spark.sql.{Row, SaveMode, SparkSession}
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.execution.datasources.xml.TestUtils._
 import org.apache.spark.sql.execution.datasources.xml.XmlOptions._
 import org.apache.spark.sql.execution.datasources.xml.functions._
 import org.apache.spark.sql.functions.{column, explode}
+import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.types._
 
-final class XmlSuite extends SparkFunSuite with BeforeAndAfterAll {
+final class XmlSuite extends SQLTestUtils {
 
-  private val resDir = "src/test/resources/"
+  private val resDir = "test-data/xml-resources/"
 
-  private lazy val spark: SparkSession = {
+  protected def spark: SparkSession = {
     // It is intentionally a val to allow import implicits.
     SparkSession.builder().
       master("local[2]").
@@ -78,7 +79,7 @@ final class XmlSuite extends SparkFunSuite with BeforeAndAfterAll {
 
   test("DSL test") {
     val results = spark.read.format("xml")
-      .load(resDir + "cars.xml")
+      .load(getTestResourcePath(resDir + "cars.xml"))
       .select("year")
       .collect()
 
@@ -88,14 +89,14 @@ final class XmlSuite extends SparkFunSuite with BeforeAndAfterAll {
   test("DSL test with xml having unbalanced datatypes") {
     val results = spark.read
       .option("treatEmptyValuesAsNulls", "true")
-      .xml(resDir + "gps-empty-field.xml")
+      .xml(getTestResourcePath(resDir + "gps-empty-field.xml"))
 
     assert(results.collect().length === 2)
   }
 
   test("DSL test with mixed elements (attributes, no child)") {
     val results = spark.read
-      .xml(resDir + "cars-mixed-attr-no-child.xml")
+      .xml(getTestResourcePath(resDir + "cars-mixed-attr-no-child.xml"))
       .select("date")
       .collect()
 
@@ -109,7 +110,7 @@ final class XmlSuite extends SparkFunSuite with BeforeAndAfterAll {
   test("DSL test for inconsistent element attributes as fields") {
     val results = spark.read
       .option("rowTag", "book")
-      .xml(resDir + "books-attributes-in-no-child.xml")
+      .xml(getTestResourcePath(resDir + "books-attributes-in-no-child.xml"))
       .select("price")
 
     // This should not throw an exception `java.lang.ArrayIndexOutOfBoundsException`
@@ -120,7 +121,7 @@ final class XmlSuite extends SparkFunSuite with BeforeAndAfterAll {
   test("DSL test with mixed elements (struct, string)") {
     val results = spark.read
       .option("rowTag", "person")
-      .xml(resDir + "ages-mixed-types.xml")
+      .xml(getTestResourcePath(resDir + "ages-mixed-types.xml"))
       .collect()
     assert(results.length === 3)
   }
@@ -128,7 +129,7 @@ final class XmlSuite extends SparkFunSuite with BeforeAndAfterAll {
   test("DSL test with elements in array having attributes") {
     val results = spark.read
       .option("rowTag", "person")
-      .xml(resDir + "ages.xml")
+      .xml(getTestResourcePath(resDir + "ages.xml"))
       .collect()
     val attrValOne = results(0).getStruct(0).getAs[Date](1)
     val attrValTwo = results(1).getStruct(0).getAs[Date](1)
@@ -139,7 +140,7 @@ final class XmlSuite extends SparkFunSuite with BeforeAndAfterAll {
 
   test("DSL test for iso-8859-1 encoded file") {
     val dataFrame = new XmlReader(Map("charset" -> StandardCharsets.ISO_8859_1.name))
-      .xmlFile(spark, resDir + "cars-iso-8859-1.xml")
+      .xmlFile(spark, getTestResourcePath(resDir + "cars-iso-8859-1.xml"))
     assert(dataFrame.select("year").collect().length === 3)
 
     val results = dataFrame
@@ -151,7 +152,7 @@ final class XmlSuite extends SparkFunSuite with BeforeAndAfterAll {
 
   test("DSL test compressed file") {
     val results = spark.read
-      .xml(resDir + "cars.xml.gz")
+      .xml(getTestResourcePath(resDir + "cars.xml.gz"))
       .select("year")
       .collect()
 
@@ -160,7 +161,7 @@ final class XmlSuite extends SparkFunSuite with BeforeAndAfterAll {
 
   test("DSL test splittable compressed file") {
     val results = spark.read
-      .xml(resDir + "cars.xml.bz2")
+      .xml(getTestResourcePath(resDir + "cars.xml.bz2"))
       .select("year")
       .collect()
 
@@ -171,7 +172,7 @@ final class XmlSuite extends SparkFunSuite with BeforeAndAfterAll {
     val exception = intercept[UnsupportedCharsetException] {
       spark.read
         .option("charset", "1-9588-osi")
-        .xml(resDir + "cars.xml")
+        .xml(getTestResourcePath(resDir + "cars.xml"))
         .select("year")
         .collect()
     }
@@ -181,8 +182,8 @@ final class XmlSuite extends SparkFunSuite with BeforeAndAfterAll {
   test("DDL test") {
     spark.sql(s"""
          |CREATE TEMPORARY VIEW carsTable1
-         |USING org.apache.spark.sql.xml
-         |OPTIONS (path "${resDir + "cars.xml"}")
+         |USING org.apache.spark.sql.execution.datasources.xml
+         |OPTIONS (path "${getTestResourcePath(resDir + "cars.xml")}")
       """.stripMargin.replaceAll("\n", " "))
 
     assert(spark.sql("SELECT year FROM carsTable1").collect().length === 3)
@@ -192,7 +193,7 @@ final class XmlSuite extends SparkFunSuite with BeforeAndAfterAll {
     spark.sql(s"""
          |CREATE TEMPORARY VIEW carsTable2
          |USING xml
-         |OPTIONS (path "${resDir + "cars.xml"}")
+         |OPTIONS (path "${getTestResourcePath(resDir + "cars.xml")}")
       """.stripMargin.replaceAll("\n", " "))
 
     assert(spark.sql("SELECT year FROM carsTable2").collect().length === 3)
@@ -200,14 +201,14 @@ final class XmlSuite extends SparkFunSuite with BeforeAndAfterAll {
 
   test("DSL test for parsing a malformed XML file") {
     val results = new XmlReader(Map("mode" -> DropMalformedMode.name))
-      .xmlFile(spark, resDir + "cars-malformed.xml")
+      .xmlFile(spark, getTestResourcePath(resDir + "cars-malformed.xml"))
 
     assert(results.count() === 1)
   }
 
   test("DSL test for dropping malformed rows") {
     val cars = new XmlReader(Map("mode" -> DropMalformedMode.name))
-      .xmlFile(spark, resDir + "cars-malformed.xml")
+      .xmlFile(spark, getTestResourcePath(resDir + "cars-malformed.xml"))
 
     assert(cars.count() == 1)
     assert(cars.head() === Row("Chevy", "Volt", 2015))
@@ -216,7 +217,7 @@ final class XmlSuite extends SparkFunSuite with BeforeAndAfterAll {
   test("DSL test for failing fast") {
     val exceptionInParse = intercept[SparkException] {
       new XmlReader(Map("mode" -> FailFastMode.name))
-        .xmlFile(spark, resDir + "cars-malformed.xml")
+        .xmlFile(spark, getTestResourcePath(resDir + "cars-malformed.xml"))
         .collect()
     }
     assert(exceptionInParse.getMessage.contains("Malformed line in FAILFAST mode"))
@@ -227,7 +228,7 @@ final class XmlSuite extends SparkFunSuite with BeforeAndAfterAll {
       spark.read
         .option("rowTag", "book")
         .option("mode", "FAILFAST")
-        .xml(resDir + "unclosed_tag.xml")
+        .xml(getTestResourcePath(resDir + "unclosed_tag.xml"))
         .show()
     }
     assert(exceptionInParse.getMessage.contains("Malformed line in FAILFAST mode"))
@@ -237,7 +238,7 @@ final class XmlSuite extends SparkFunSuite with BeforeAndAfterAll {
     val carsDf = new XmlReader(Map(
         "mode" -> PermissiveMode.name,
         "columnNameOfCorruptRecord" -> "_malformed_records"))
-      .xmlFile(spark, resDir + "cars-malformed.xml")
+      .xmlFile(spark, getTestResourcePath(resDir + "cars-malformed.xml"))
     val cars = carsDf.collect()
     assert(cars.length === 3)
 
@@ -258,7 +259,7 @@ final class XmlSuite extends SparkFunSuite with BeforeAndAfterAll {
 
   test("DSL test with empty file and known schema") {
     val results = new XmlReader(buildSchema(field("column", StringType, false)))
-      .xmlFile(spark, resDir + "empty.xml")
+      .xmlFile(spark, getTestResourcePath(resDir + "empty.xml"))
       .count()
 
     assert(results === 0)
@@ -272,7 +273,7 @@ final class XmlSuite extends SparkFunSuite with BeforeAndAfterAll {
       field("model"),
       field("comment"))
     val results = new XmlReader(schema)
-      .xmlFile(spark, resDir + "cars-unbalanced-elements.xml")
+      .xmlFile(spark, getTestResourcePath(resDir + "cars-unbalanced-elements.xml"))
       .count()
 
     assert(results === 3)
@@ -282,8 +283,8 @@ final class XmlSuite extends SparkFunSuite with BeforeAndAfterAll {
     spark.sql(s"""
            |CREATE TEMPORARY VIEW carsTable3
            |(year double, make string, model string, comments string, grp string)
-           |USING org.apache.spark.sql.xml
-           |OPTIONS (path "${resDir + "empty.xml"}")
+           |USING org.apache.spark.sql.execution.datasources.xml
+           |OPTIONS (path "${getTestResourcePath(resDir + "empty.xml")}")
       """.stripMargin.replaceAll("\n", " "))
 
     assert(spark.sql("SELECT count(*) FROM carsTable3").collect().head(0) === 0)
@@ -293,14 +294,14 @@ final class XmlSuite extends SparkFunSuite with BeforeAndAfterAll {
     val tempPath = getEmptyTempDir()
     spark.sql(s"""
          |CREATE TEMPORARY VIEW booksTableIO
-         |USING org.apache.spark.sql.xml
-         |OPTIONS (path "${resDir + "books.xml"}", rowTag "book")
+         |USING org.apache.spark.sql.execution.datasources.xml
+         |OPTIONS (path "${getTestResourcePath(resDir + "books.xml")}", rowTag "book")
       """.stripMargin.replaceAll("\n", " "))
     spark.sql(s"""
          |CREATE TEMPORARY VIEW booksTableEmpty
          |(author string, description string, genre string,
          |id string, price double, publish_date string, title string)
-         |USING org.apache.spark.sql.xml
+         |USING org.apache.spark.sql.execution.datasources.xml
          |OPTIONS (path "$tempPath")
       """.stripMargin.replaceAll("\n", " "))
 
@@ -318,7 +319,7 @@ final class XmlSuite extends SparkFunSuite with BeforeAndAfterAll {
   test("DSL save with gzip compression codec") {
     val copyFilePath = getEmptyTempDir().resolve("cars-copy.xml")
 
-    val cars = spark.read.xml(resDir + "cars.xml")
+    val cars = spark.read.xml(getTestResourcePath(resDir + "cars.xml"))
     cars.write
       .mode(SaveMode.Overwrite)
       .options(Map("codec" -> classOf[GzipCodec].getName))
@@ -335,7 +336,7 @@ final class XmlSuite extends SparkFunSuite with BeforeAndAfterAll {
   test("DSL save with gzip compression codec by shorten name") {
     val copyFilePath = getEmptyTempDir().resolve("cars-copy.xml")
 
-    val cars = spark.read.xml(resDir + "cars.xml")
+    val cars = spark.read.xml(getTestResourcePath(resDir + "cars.xml"))
     cars.write
       .mode(SaveMode.Overwrite)
       .options(Map("compression" -> "gZiP"))
@@ -355,7 +356,7 @@ final class XmlSuite extends SparkFunSuite with BeforeAndAfterAll {
 
     val books = spark.read
       .option("rowTag", "book")
-      .xml(resDir + "books-complicated.xml")
+      .xml(getTestResourcePath(resDir + "books-complicated.xml"))
     books.write
       .options(Map("rootTag" -> "books", "rowTag" -> "book"))
       .xml(copyFilePath.toString)
@@ -372,7 +373,7 @@ final class XmlSuite extends SparkFunSuite with BeforeAndAfterAll {
 
     val books = spark.read
       .option("rowTag", "book")
-      .xml(resDir + "books-complicated.xml")
+      .xml(getTestResourcePath(resDir + "books-complicated.xml"))
 
     books.write
       .options(Map("rootTag" -> "books", "rowTag" -> "book", "declaration" -> ""))
@@ -402,7 +403,7 @@ final class XmlSuite extends SparkFunSuite with BeforeAndAfterAll {
 
     val books = spark.read
       .option("rowTag", "book")
-      .xml(resDir + "books-complicated.xml")
+      .xml(getTestResourcePath(resDir + "books-complicated.xml"))
     books.write
       .options(Map("rootTag" -> "books", "rowTag" -> "book", "nullValue" -> ""))
       .xml(copyFilePath.toString)
@@ -424,7 +425,7 @@ final class XmlSuite extends SparkFunSuite with BeforeAndAfterAll {
       .option("valueTag", "#VALUE")
       .option("attributePrefix", "#")
       .option("rowTag", "book")
-      .xml(resDir + "books-attributes-in-no-child.xml")
+      .xml(getTestResourcePath(resDir + "books-attributes-in-no-child.xml"))
 
     books.write
       .option("valueTag", "#VALUE")
@@ -507,7 +508,7 @@ final class XmlSuite extends SparkFunSuite with BeforeAndAfterAll {
   }
 
   test("DSL test schema inferred correctly") {
-    val results = spark.read.option("rowTag", "book").xml(resDir + "books.xml")
+    val results = spark.read.option("rowTag", "book").xml(getTestResourcePath(resDir + "books.xml"))
 
     assert(results.schema === buildSchema(
       field(s"${DEFAULT_ATTRIBUTE_PREFIX}id"),
@@ -525,7 +526,7 @@ final class XmlSuite extends SparkFunSuite with BeforeAndAfterAll {
     val results = spark.read
       .option("rowTag", "book")
       .option("samplingRatio", 0.5)
-      .xml(resDir + "books.xml")
+      .xml(getTestResourcePath(resDir + "books.xml"))
 
     assert(results.schema === buildSchema(
       field(s"${DEFAULT_ATTRIBUTE_PREFIX}id"),
@@ -542,7 +543,7 @@ final class XmlSuite extends SparkFunSuite with BeforeAndAfterAll {
   test("DSL test schema (object) inferred correctly") {
     val results = spark.read
       .option("rowTag", "book")
-      .xml(resDir + "books-nested-object.xml")
+      .xml(getTestResourcePath(resDir + "books-nested-object.xml"))
 
     assert(results.schema === buildSchema(
       field(s"${DEFAULT_ATTRIBUTE_PREFIX}id"),
@@ -560,7 +561,7 @@ final class XmlSuite extends SparkFunSuite with BeforeAndAfterAll {
   test("DSL test schema (array) inferred correctly") {
     val results = spark.read
       .option("rowTag", "book")
-      .xml(resDir + "books-nested-array.xml")
+      .xml(getTestResourcePath(resDir + "books-nested-array.xml"))
 
     assert(results.schema === buildSchema(
       field(s"${DEFAULT_ATTRIBUTE_PREFIX}id"),
@@ -577,7 +578,7 @@ final class XmlSuite extends SparkFunSuite with BeforeAndAfterAll {
   test("DSL test schema (complicated) inferred correctly") {
     val results = spark.read
       .option("rowTag", "book")
-      .xml(resDir + "books-complicated.xml")
+      .xml(getTestResourcePath(resDir + "books-complicated.xml"))
 
     assert(results.schema == buildSchema(
       field(s"${DEFAULT_ATTRIBUTE_PREFIX}id"),
@@ -601,7 +602,7 @@ final class XmlSuite extends SparkFunSuite with BeforeAndAfterAll {
   test("DSL test parsing and inferring attribute in elements having no child element") {
     // Default value.
     val resultsOne = new XmlReader(Map("rowTag" -> "book"))
-      .xmlFile(spark, resDir + "books-attributes-in-no-child.xml")
+      .xmlFile(spark, getTestResourcePath(resDir + "books-attributes-in-no-child.xml"))
 
     val schemaOne = buildSchema(
       field("_id"),
@@ -621,7 +622,7 @@ final class XmlSuite extends SparkFunSuite with BeforeAndAfterAll {
     val resultsTwo = new XmlReader(Map(
         "rowTag" -> "book", "attributePrefix" -> attributePrefix,
         "valueTag" -> valueTag))
-      .xmlFile(spark, resDir + "books-attributes-in-no-child.xml")
+      .xmlFile(spark, getTestResourcePath(resDir + "books-attributes-in-no-child.xml"))
 
     val schemaTwo = buildSchema(
       field(s"${attributePrefix}id"),
@@ -638,7 +639,7 @@ final class XmlSuite extends SparkFunSuite with BeforeAndAfterAll {
 
   test("DSL test schema (excluding tags) inferred correctly") {
     val results = new XmlReader(Map("excludeAttribute" -> true, "rowTag" -> "book"))
-      .xmlFile(spark, resDir + "books.xml")
+      .xmlFile(spark, getTestResourcePath(resDir + "books.xml"))
 
     val schema = buildSchema(
       field("author"),
@@ -659,14 +660,14 @@ final class XmlSuite extends SparkFunSuite with BeforeAndAfterAll {
       field("color"),
       field("year", IntegerType))
     val results = new XmlReader(schema)
-      .xmlFile(spark, resDir + "cars-unbalanced-elements.xml")
+      .xmlFile(spark, getTestResourcePath(resDir + "cars-unbalanced-elements.xml"))
       .count()
 
     assert(results === 3)
   }
 
   test("DSL test inferred schema passed through") {
-    val dataFrame = spark.read.xml(resDir + "cars.xml")
+    val dataFrame = spark.read.xml(getTestResourcePath(resDir + "cars.xml"))
 
     val results = dataFrame
       .select("comment", "year")
@@ -680,7 +681,7 @@ final class XmlSuite extends SparkFunSuite with BeforeAndAfterAll {
       field("name", StringType, false),
       field("age"))
     val results = new XmlReader(schema)
-      .xmlFile(spark, resDir + "null-numbers.xml")
+      .xmlFile(spark, getTestResourcePath(resDir + "null-numbers.xml"))
       .collect()
 
     assert(results(0) === Row("alice", "35"))
@@ -693,7 +694,7 @@ final class XmlSuite extends SparkFunSuite with BeforeAndAfterAll {
       field("name", StringType, false),
       field("age", IntegerType))
     val results = new XmlReader(schema, Map("treatEmptyValuesAsNulls" -> true))
-      .xmlFile(spark, resDir + "null-numbers.xml")
+      .xmlFile(spark, getTestResourcePath(resDir + "null-numbers.xml"))
       .collect()
 
     assert(results(1) === Row("bob", null))
@@ -702,7 +703,7 @@ final class XmlSuite extends SparkFunSuite with BeforeAndAfterAll {
   test("DSL test with namespaces ignored") {
     val results = spark.read
       .option("rowTag", "Topic")
-      .xml(resDir + "topics-namespaces.xml")
+      .xml(getTestResourcePath(resDir + "topics-namespaces.xml"))
       .collect()
 
     assert(results.length === 1)
@@ -717,7 +718,8 @@ final class XmlSuite extends SparkFunSuite with BeforeAndAfterAll {
       field("price", DoubleType),
       field("publish_date"),
       field("xs_any"))
-    val results = spark.read.schema(schema).option("rowTag", "book").xml(resDir + "books.xml")
+    val results = spark.read.schema(schema).option("rowTag", "book")
+      .xml(getTestResourcePath(resDir + "books.xml"))
       // .select("xs_any")
       .collect()
     results.foreach { r =>
@@ -732,7 +734,8 @@ final class XmlSuite extends SparkFunSuite with BeforeAndAfterAll {
       field("description"),
       field("genre"),
       array("xs_any", StringType))
-    val results = spark.read.schema(schema).option("rowTag", "book").xml(resDir + "books.xml")
+    val results = spark.read.schema(schema).option("rowTag", "book")
+      .xml(getTestResourcePath(resDir + "books.xml"))
       .collect()
     results.foreach { r =>
       assert(r.getAs[Seq[String]]("xs_any").size === 3)
@@ -742,7 +745,7 @@ final class XmlSuite extends SparkFunSuite with BeforeAndAfterAll {
   test("Missing nested struct represented as Row of nulls instead of null") {
     val result = spark.read
       .option("rowTag", "item")
-      .xml(resDir + "null-nested-struct.xml")
+      .xml(getTestResourcePath(resDir + "null-nested-struct.xml"))
       .select("b.es")
       .collect()
 
@@ -759,7 +762,7 @@ final class XmlSuite extends SparkFunSuite with BeforeAndAfterAll {
     val result = spark.read
       .option("rowTag", "item")
       .schema(schema)
-      .xml(resDir + "null-nested-struct-2.xml")
+      .xml(getTestResourcePath(resDir + "null-nested-struct-2.xml"))
       .collect()
 
     assert(result(0) === Row(Row(null)))
@@ -776,7 +779,7 @@ final class XmlSuite extends SparkFunSuite with BeforeAndAfterAll {
         field("a", IntegerType)))
 
     val result = new XmlReader(schema)
-      .xmlFile(spark, resDir + "simple-nested-objects.xml")
+      .xmlFile(spark, getTestResourcePath(resDir + "simple-nested-objects.xml"))
       .select("c.a", "c.b")
       .collect()
 
@@ -784,7 +787,7 @@ final class XmlSuite extends SparkFunSuite with BeforeAndAfterAll {
   }
 
   private[this] def testNextedElementFromFile(xmlFile: String): Unit = {
-    val lines = getLines(Paths.get(xmlFile)).toList
+    val lines = getLines(Paths.get(xmlFile.replace("file:/", "/"))).toList
     val firstExpected = lines(2).trim
     val lastExpected = lines(3).trim
     val config = new Configuration(spark.sessionState.newHadoopConf())
@@ -805,16 +808,18 @@ final class XmlSuite extends SparkFunSuite with BeforeAndAfterAll {
   }
 
   test("Nested element with same name as parent delineation") {
-    testNextedElementFromFile(resDir + "nested-element-with-name-of-parent.xml")
+    testNextedElementFromFile(getTestResourcePath(resDir +
+      "nested-element-with-name-of-parent.xml"))
   }
 
   test("Nested element including attribute with same name as parent delineation") {
-    testNextedElementFromFile(resDir + "nested-element-with-attributes-and-name-of-parent.xml")
+    testNextedElementFromFile(getTestResourcePath(resDir +
+      "nested-element-with-attributes-and-name-of-parent.xml"))
   }
 
   test("Nested element with same name as parent schema inference") {
     val df = new XmlReader(Map("rowTag" -> "parent"))
-      .xmlFile(spark, resDir + "nested-element-with-name-of-parent.xml")
+      .xmlFile(spark, getTestResourcePath(resDir + "nested-element-with-name-of-parent.xml"))
 
     val schema = buildSchema(
       field("child"),
@@ -824,7 +829,7 @@ final class XmlSuite extends SparkFunSuite with BeforeAndAfterAll {
   }
 
   test("Skip and project currently XML files without indentation") {
-    val df = spark.read.xml(resDir + "cars-no-indentation.xml")
+    val df = spark.read.xml(getTestResourcePath(resDir + "cars-no-indentation.xml"))
     val results = df.select("model").collect()
     val years = results.map(_(0)).toSet
     assert(years === Set("S", "E350", "Volt"))
@@ -833,7 +838,7 @@ final class XmlSuite extends SparkFunSuite with BeforeAndAfterAll {
   test("Select correctly all child fields regardless of pushed down projection") {
     val results = spark.read
       .option("rowTag", "book")
-      .xml(resDir + "books-complicated.xml")
+      .xml(getTestResourcePath(resDir + "books-complicated.xml"))
       .selectExpr("publish_dates")
       .collect()
     results.foreach { row =>
@@ -844,35 +849,35 @@ final class XmlSuite extends SparkFunSuite with BeforeAndAfterAll {
 
   test("Empty string not allowed for rowTag, attributePrefix and valueTag.") {
     val messageOne = intercept[IllegalArgumentException] {
-      spark.read.option("rowTag", "").xml(resDir + "cars.xml")
+      spark.read.option("rowTag", "").xml(getTestResourcePath(resDir + "cars.xml"))
     }.getMessage
     assert(messageOne === "requirement failed: 'rowTag' option should not be empty string.")
 
     val messageThree = intercept[IllegalArgumentException] {
-      spark.read.option("valueTag", "").xml(resDir + "cars.xml")
+      spark.read.option("valueTag", "").xml(getTestResourcePath(resDir + "cars.xml"))
     }.getMessage
     assert(messageThree === "requirement failed: 'valueTag' option should not be empty string.")
   }
 
   test("'rowTag' and 'rootTag' should not include angle brackets") {
     val messageOne = intercept[IllegalArgumentException] {
-      spark.read.option("rowTag", "ROW>").xml(resDir + "cars.xml")
+      spark.read.option("rowTag", "ROW>").xml(getTestResourcePath(resDir + "cars.xml"))
     }.getMessage
     assert(messageOne === "requirement failed: 'rowTag' should not include angle brackets")
 
     val messageTwo = intercept[IllegalArgumentException] {
-            spark.read.option("rowTag", "<ROW").xml(resDir + "cars.xml")
+            spark.read.option("rowTag", "<ROW").xml(getTestResourcePath(resDir + "cars.xml"))
     }.getMessage
     assert(
       messageTwo === "requirement failed: 'rowTag' should not include angle brackets")
 
     val messageThree = intercept[IllegalArgumentException] {
-      spark.read.option("rootTag", "ROWSET>").xml(resDir + "cars.xml")
+      spark.read.option("rootTag", "ROWSET>").xml(getTestResourcePath(resDir + "cars.xml"))
     }.getMessage
     assert(messageThree === "requirement failed: 'rootTag' should not include angle brackets")
 
     val messageFour = intercept[IllegalArgumentException] {
-      spark.read.option("rootTag", "<ROWSET").xml(resDir + "cars.xml")
+      spark.read.option("rootTag", "<ROWSET").xml(getTestResourcePath(resDir + "cars.xml"))
     }.getMessage
     assert(messageFour === "requirement failed: 'rootTag' should not include angle brackets")
   }
@@ -882,7 +887,7 @@ final class XmlSuite extends SparkFunSuite with BeforeAndAfterAll {
       spark.read
         .option("valueTag", "#abc")
         .option("attributePrefix", "#abc")
-        .xml(resDir + "cars.xml")
+        .xml(getTestResourcePath(resDir + "cars.xml"))
     }.getMessage
     assert(messageOne ===
       "requirement failed: 'valueTag' and 'attributePrefix' options should not be the same.")
@@ -891,7 +896,7 @@ final class XmlSuite extends SparkFunSuite with BeforeAndAfterAll {
   test("nullValue and treatEmptyValuesAsNulls test") {
     val resultsOne = spark.read
       .option("treatEmptyValuesAsNulls", "true")
-      .xml(resDir + "gps-empty-field.xml")
+      .xml(getTestResourcePath(resDir + "gps-empty-field.xml"))
     assert(resultsOne.selectExpr("extensions.TrackPointExtension").head().getStruct(0) !== null)
     assert(resultsOne.selectExpr("extensions.TrackPointExtension")
       .head().getStruct(0)(0) === null)
@@ -901,7 +906,7 @@ final class XmlSuite extends SparkFunSuite with BeforeAndAfterAll {
 
     val resultsTwo = spark.read
       .option("nullValue", "2013-01-24T06:18:43Z")
-      .xml(resDir + "gps-empty-field.xml")
+      .xml(getTestResourcePath(resDir + "gps-empty-field.xml"))
     assert(resultsTwo.selectExpr("time").head().getStruct(0) === null)
     assert(resultsTwo.collect().length === 2)
   }
@@ -911,14 +916,14 @@ final class XmlSuite extends SparkFunSuite with BeforeAndAfterAll {
       .option("inferSchema", true)
       .option("rowTag", "entry")
       .option("ignoreSurroundingSpaces", true)
-      .xml(resDir + "feed-with-spaces.xml")
+      .xml(getTestResourcePath(resDir + "feed-with-spaces.xml"))
     val results = df.collect().map(_.getString(0))
     assert(results === Array("A", "B", "C", "D"))
   }
 
   test("ignoreSurroundingSpaces with non-string types") {
     val results = new XmlReader(Map("ignoreSurroundingSpaces" -> true, "rowTag" -> "person"))
-      .xmlFile(spark, resDir + "ages-with-spaces.xml")
+      .xmlFile(spark, getTestResourcePath(resDir + "ages-with-spaces.xml"))
       .collect()
     val attrValOne = results(0).getStruct(0)(1)
     val attrValTwo = results(1).getStruct(0)(0)
@@ -929,7 +934,7 @@ final class XmlSuite extends SparkFunSuite with BeforeAndAfterAll {
 
   test("DSL test with malformed attributes") {
     val results = new XmlReader(Map("mode" -> DropMalformedMode.name, "rowTag" -> "book"))
-        .xmlFile(spark, resDir + "books-malformed-attributes.xml")
+        .xmlFile(spark, getTestResourcePath(resDir + "books-malformed-attributes.xml"))
         .collect()
 
     assert(results.length === 2)
@@ -941,7 +946,7 @@ final class XmlSuite extends SparkFunSuite with BeforeAndAfterAll {
     val df = spark.read
       .option("excludeAttribute", "false")
       .option("rowTag", "House")
-      .xml(resDir + "fias_house.xml")
+      .xml(getTestResourcePath(resDir + "fias_house.xml"))
 
     assert(df.collect().length === 37)
     assert(df.select().where("_HOUSEID is null").count() == 0)
@@ -966,7 +971,7 @@ final class XmlSuite extends SparkFunSuite with BeforeAndAfterAll {
         .option("ignoreNamespace", "true")
         .option("excludeAttribute", "false")
         .option("rowTag", "note")
-        .xml(resDir + file)
+        .xml(getTestResourcePath(resDir + file))
       assert(df.schema === schema)
       assert(df.count() === rowsCount)
     }
@@ -978,7 +983,7 @@ final class XmlSuite extends SparkFunSuite with BeforeAndAfterAll {
       field("self-closing-tag", IntegerType))
 
     val result = new XmlReader(schema)
-      .xmlFile(spark, resDir + "self-closing-tag.xml")
+      .xmlFile(spark, getTestResourcePath(resDir + "self-closing-tag.xml"))
       .collect()
 
     assert(result(0) === Row(1, null))
@@ -989,7 +994,7 @@ final class XmlSuite extends SparkFunSuite with BeforeAndAfterAll {
 
     val books = spark.read
       .option("rowTag", "book")
-      .xml(resDir + "books-complicated-null-attribute.xml")
+      .xml(getTestResourcePath(resDir + "books-complicated-null-attribute.xml"))
     books.write
       .options(Map("rootTag" -> "books", "rowTag" -> "book"))
       .xml(copyFilePath.toString)
@@ -1019,7 +1024,7 @@ final class XmlSuite extends SparkFunSuite with BeforeAndAfterAll {
       .option("mode", "PERMISSIVE")
       .option("columnNameOfCorruptRecord", "_malformed_records")
       .schema(schema)
-      .xml(resDir + "datatypes-valid-and-invalid.xml")
+      .xml(getTestResourcePath(resDir + "datatypes-valid-and-invalid.xml"))
 
     assert(results.schema === schema)
 
@@ -1041,7 +1046,7 @@ final class XmlSuite extends SparkFunSuite with BeforeAndAfterAll {
     val fruit = spark.read
       .option("rowTag", "row")
       .option("nullValue", "")
-      .xml(resDir + "null-empty-string.xml")
+      .xml(getTestResourcePath(resDir + "null-empty-string.xml"))
     assert(fruit.head().getAs[String]("color") === null)
   }
 
@@ -1049,7 +1054,7 @@ final class XmlSuite extends SparkFunSuite with BeforeAndAfterAll {
     val text = spark.read
       .option("rowTag", "ROW")
       .option("inferSchema", "false")
-      .xml(resDir + "textColumn.xml")
+      .xml(getTestResourcePath(resDir + "textColumn.xml"))
     assert(text.head().getAs[String]("col1") === "00010")
 
   }
@@ -1058,7 +1063,7 @@ final class XmlSuite extends SparkFunSuite with BeforeAndAfterAll {
     val default = spark.read
       .option("rowTag", "ROW")
       .option("inferSchema", "true")
-      .xml(resDir + "textColumn.xml")
+      .xml(getTestResourcePath(resDir + "textColumn.xml"))
     assert(default.head().getAs[Int]("col1") === 10)
   }
 
@@ -1066,7 +1071,7 @@ final class XmlSuite extends SparkFunSuite with BeforeAndAfterAll {
     val processingDF = spark.read
       .option("rowTag", "foo")
       .option("inferSchema", "true")
-      .xml(resDir + "processing.xml")
+      .xml(getTestResourcePath(resDir + "processing.xml"))
     assert(processingDF.count() === 1)
   }
 
@@ -1074,7 +1079,7 @@ final class XmlSuite extends SparkFunSuite with BeforeAndAfterAll {
     val mixedDF = spark.read
       .option("rowTag", "root")
       .option("inferSchema", true)
-      .xml(resDir + "mixed_children.xml")
+      .xml(getTestResourcePath(resDir + "mixed_children.xml"))
     val mixedRow = mixedDF.head()
     assert(mixedRow.getAs[Row](0).toSeq === Seq(" lorem "))
     assert(mixedRow.getString(1) === " ipsum ")
@@ -1084,7 +1089,7 @@ final class XmlSuite extends SparkFunSuite with BeforeAndAfterAll {
     val mixedDF = spark.read
       .option("rowTag", "root")
       .option("inferSchema", true)
-      .xml(resDir + "mixed_children_2.xml")
+      .xml(getTestResourcePath(resDir + "mixed_children_2.xml"))
     assert(mixedDF.select("foo.bar").head().getString(0) === " lorem ")
     assert(mixedDF.select("foo.baz.bing").head().getLong(0) === 2)
     assert(mixedDF.select("missing").head().getString(0) === " ipsum ")
@@ -1094,8 +1099,9 @@ final class XmlSuite extends SparkFunSuite with BeforeAndAfterAll {
     val basketDF = spark.read
       .option("rowTag", "basket")
       .option("inferSchema", true)
-      .option("rowValidationXSDPath", resDir + "basket.xsd")
-      .xml(resDir + "basket.xml")
+      .option("rowValidationXSDPath", getTestResourcePath(resDir + "basket.xsd")
+        .replace("file:/", "/"))
+      .xml(getTestResourcePath(resDir + "basket.xml"))
     // Mostly checking it doesn't fail
     assert(basketDF.selectExpr("entry[0].key").head().getLong(0) === 9027)
   }
@@ -1104,22 +1110,23 @@ final class XmlSuite extends SparkFunSuite with BeforeAndAfterAll {
     val basketDF = spark.read
       .option("rowTag", "basket")
       .option("inferSchema", true)
-      .option("rowValidationXSDPath", resDir + "basket.xsd")
+      .option("rowValidationXSDPath", getTestResourcePath(resDir + "basket.xsd")
+        .replace("file:/", "/"))
       .option("mode", "PERMISSIVE")
       .option("columnNameOfCorruptRecord", "_malformed_records")
-      .xml(resDir + "basket_invalid.xml")
+      .xml(getTestResourcePath(resDir + "basket_invalid.xml"))
     assert(basketDF.select("_malformed_records").head().getString(0).startsWith("<basket>"))
   }
 
   test("test XSD validation with addFile() with validation error") {
-    spark.sparkContext.addFile(resDir + "basket.xsd")
+    spark.sparkContext.addFile(getTestResourcePath(resDir + "basket.xsd"))
     val basketDF = spark.read
       .option("rowTag", "basket")
       .option("inferSchema", true)
       .option("rowValidationXSDPath", "basket.xsd")
       .option("mode", "PERMISSIVE")
       .option("columnNameOfCorruptRecord", "_malformed_records")
-      .xml(resDir + "basket_invalid.xml")
+      .xml(getTestResourcePath(resDir + "basket_invalid.xml"))
     assert(basketDF.select("_malformed_records").head().getString(0).startsWith("<basket>"))
   }
 
@@ -1148,10 +1155,12 @@ final class XmlSuite extends SparkFunSuite with BeforeAndAfterAll {
     assert(result.select("decoded._foo").head().getString(0) === "bar")
   }
 
+
   test("from_xml array basic test") {
     val xmlData = Array(
       "<parent><pid>14ft3</pid><name>dave guy</name></parent>",
       "<parent><pid>12345</pid><name>other guy</name></parent>")
+    val spark = this.spark
     import spark.implicits._
     val df = spark.createDataFrame(Seq((8, xmlData))).toDF("number", "payload")
     val xmlSchema = schema_of_xml_array(df.select("payload").as[Array[String]])
@@ -1159,6 +1168,7 @@ final class XmlSuite extends SparkFunSuite with BeforeAndAfterAll {
     val result = df.withColumn("decoded", from_xml(df.col("payload"), xmlSchema))
 
     assert(expectedSchema === result.schema)
+    // Following assert failed when SharedSparkSession was used instead of SQLTestUtils
     assert(result.selectExpr("decoded[0].pid").head().getString(0) === "14ft3")
     assert(result.selectExpr("decoded[1].pid").head().getString(0) === "12345")
   }
@@ -1211,6 +1221,7 @@ final class XmlSuite extends SparkFunSuite with BeforeAndAfterAll {
   }
 
   test("decimals with scale greater than precision") {
+    val spark = this.spark;
     import spark.implicits._
     val schema = buildSchema(field("Number", DecimalType(7, 4)))
     val outputDF = Seq("0.0000", "0.01")
@@ -1229,7 +1240,7 @@ final class XmlSuite extends SparkFunSuite with BeforeAndAfterAll {
     val whitespaceDF = spark.read
       .option("rowTag", "Books")
       .schema(schema)
-      .xml(resDir + "whitespace_error.xml")
+      .xml(getTestResourcePath(resDir + "whitespace_error.xml"))
 
     assert(whitespaceDF.count() === 1)
     assert(whitespaceDF.take(1).head.getAs[String]("_corrupt_record") !== null)
@@ -1240,7 +1251,7 @@ final class XmlSuite extends SparkFunSuite with BeforeAndAfterAll {
     val booksDF = spark.read
       .option("rowTag", "book")
       .schema(schema)
-      .xml(resDir + "books.xml")
+      .xml(getTestResourcePath(resDir + "books.xml"))
 
     assert(booksDF.count() === 12)
   }
@@ -1250,7 +1261,7 @@ final class XmlSuite extends SparkFunSuite with BeforeAndAfterAll {
     val result = spark.read
       .option("rowTag", "ROWSET")
       .schema(schema)
-      .xml(resDir + "cars-attribute.xml")
+      .xml(getTestResourcePath(resDir + "cars-attribute.xml"))
       .collect()
     assert(result.head.getString(0).contains("<comment foo=\"bar\">No</comment>"))
   }
@@ -1273,7 +1284,7 @@ final class XmlSuite extends SparkFunSuite with BeforeAndAfterAll {
     val results = spark.read
       .option("rowTag", "book")
       .option("ignoreNamespace", true)
-      .xml(resDir + "books-namespaces.xml")
+      .xml(getTestResourcePath(resDir + "books-namespaces.xml"))
     assert(results.filter("author IS NOT NULL").count() === 3)
     assert(results.filter("_id IS NOT NULL").count() === 3)
   }
@@ -1285,7 +1296,7 @@ final class XmlSuite extends SparkFunSuite with BeforeAndAfterAll {
       field("PMTarget", MapType(StringType, StringType)))
     val df = spark.read.option("rowTag", "PMSetup").
       schema(schema).
-      xml(resDir + "map-attribute.xml").
+      xml(getTestResourcePath(resDir + "map-attribute.xml")).
       select("PMTarget")
     val map = df.collect().head.getAs[Map[String, String]](0)
     assert(map.contains("_measurementType"))
@@ -1294,7 +1305,8 @@ final class XmlSuite extends SparkFunSuite with BeforeAndAfterAll {
   }
 
   test("StructType with missing optional StructType child") {
-    val df = spark.read.option("rowTag", "Foo").xml(resDir + "struct_with_optional_child.xml")
+    val df = spark.read.option("rowTag", "Foo")
+      .xml(getTestResourcePath(resDir + "struct_with_optional_child.xml"))
     assert(df.selectExpr("SIZE(Bar)").collect().head.getInt(0) === 2)
   }
 
@@ -1343,7 +1355,7 @@ final class XmlSuite extends SparkFunSuite with BeforeAndAfterAll {
       .option("inferSchema", false)
       .option("rowTag", "row")
       .schema(schema)
-      .xml(resDir + "manual_schema_corrupt_record.xml")
+      .xml(getTestResourcePath(resDir + "manual_schema_corrupt_record.xml"))
 
     // Assert it works at all
     assert(df.collect().head.getAs[String]("_corrupt_record") !== null)
@@ -1354,14 +1366,14 @@ final class XmlSuite extends SparkFunSuite with BeforeAndAfterAll {
     val df = spark.read
       .option("rowTag", "book")
       .schema(schema)
-      .xml(resDir + "date.xml")
+      .xml(getTestResourcePath(resDir + "date.xml"))
     assert(df.collect().head.getAs[Date](1).toString === "2021-02-01")
   }
 
   test("Test date type inference") {
     val df = spark.read
       .option("rowTag", "book")
-      .xml(resDir + "date.xml")
+      .xml(getTestResourcePath(resDir + "date.xml"))
     val expectedSchema =
       buildSchema(field("author"), field("date", DateType), field("date2", StringType))
     assert(df.schema === expectedSchema)
@@ -1374,14 +1386,14 @@ final class XmlSuite extends SparkFunSuite with BeforeAndAfterAll {
     val df = spark.read
       .option("rowTag", "book")
       .schema(schema)
-      .xml(resDir + "time.xml")
+      .xml(getTestResourcePath(resDir + "time.xml"))
     assert(df.collect().head.getAs[Timestamp](1).getTime === 1322907330000L)
   }
 
   test("Test timestamp type inference") {
     val df = spark.read
       .option("rowTag", "book")
-      .xml(resDir + "time.xml")
+      .xml(getTestResourcePath(resDir + "time.xml"))
     val expectedSchema =
       buildSchema(
         field("author"),
@@ -1398,7 +1410,7 @@ final class XmlSuite extends SparkFunSuite with BeforeAndAfterAll {
     val df = spark.read
       .option("rowTag", "book")
       .option("dateFormat", "MM-dd-yyyy")
-      .xml(resDir + "date.xml")
+      .xml(getTestResourcePath(resDir + "date.xml"))
     val expectedSchema =
       buildSchema(field("author"), field("date", DateType), field("date2", DateType))
     assert(df.schema === expectedSchema)
@@ -1409,7 +1421,7 @@ final class XmlSuite extends SparkFunSuite with BeforeAndAfterAll {
     val df = spark.read
       .option("rowTag", "book")
       .option("timestampFormat", "MM-dd-yyyy HH:mm:ss z")
-      .xml(resDir + "time.xml")
+      .xml(getTestResourcePath(resDir + "time.xml"))
     val expectedSchema =
       buildSchema(
         field("author"),
@@ -1424,28 +1436,31 @@ final class XmlSuite extends SparkFunSuite with BeforeAndAfterAll {
   }
 
   test("Test custom timestampFormat without timezone") {
-    val df = spark.read
-      .option("rowTag", "book")
-      .option("timestampFormat", "yyyy/MM/dd HH:mm:ss")
-      .xml(resDir + "time.xml")
-    val expectedSchema =
-      buildSchema(
-        field("author"),
-        field("time", TimestampType),
-        field("time2", StringType),
-        field("time3", TimestampType),
-        field("time4", StringType)
-      )
-    assert(df.schema === expectedSchema)
-    assert(df.collect().head.getAs[Timestamp](1).getTime === 1322907330000L)
-    assert(df.collect().head.getAs[Timestamp](3).getTime === 1322892930000L)
+    withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
+      TimeZone.setDefault(TimeZone.getTimeZone("UTC"))
+      val df = spark.read
+        .option("rowTag", "book")
+        .option("timestampFormat", "yyyy/MM/dd HH:mm:ss")
+        .xml(getTestResourcePath(resDir + "time.xml"))
+      val expectedSchema =
+        buildSchema(
+          field("author"),
+          field("time", TimestampType),
+          field("time2", StringType),
+          field("time3", TimestampType),
+          field("time4", StringType)
+        )
+      assert(df.schema === expectedSchema)
+      assert(df.collect().head.getAs[Timestamp](1).getTime === 1322907330000L)
+      assert(df.collect().head.getAs[Timestamp](3).getTime === 1322892930000L)
+    }
   }
 
   test("Test custom timestampFormat with offset") {
     val df = spark.read
       .option("rowTag", "book")
       .option("timestampFormat", "yyyy/MM/dd HH:mm:ss xx")
-      .xml(resDir + "time.xml")
+      .xml(getTestResourcePath(resDir + "time.xml"))
     val expectedSchema =
       buildSchema(
         field("author"),
@@ -1469,7 +1484,7 @@ final class XmlSuite extends SparkFunSuite with BeforeAndAfterAll {
     val df = spark.read.option("rowTag", "TEST")
       .option("nullValue", "")
       .schema(schema)
-      .xml(resDir + "null-numbers-2.xml")
+      .xml(getTestResourcePath(resDir + "null-numbers-2.xml"))
       .select(explode(column("T")))
 
     assert(df.collect()(1).getStruct(0).get(2) === null)
@@ -1481,7 +1496,7 @@ final class XmlSuite extends SparkFunSuite with BeforeAndAfterAll {
       new Thread {
         override def run(): Unit = {
           val df = spark.read.option("rowTag", "person").format("xml")
-            .load(resDir + "ages.xml")
+            .load(getTestResourcePath(resDir + "ages.xml"))
           if (df.schema.fields.isEmpty) {
             failedAgesSet.add(i)
           }
@@ -1494,7 +1509,7 @@ final class XmlSuite extends SparkFunSuite with BeforeAndAfterAll {
       new Thread {
         override def run(): Unit = {
           val df = spark.read.option("rowTag", "book").format("xml")
-            .load(resDir + "books.xml")
+            .load(getTestResourcePath(resDir + "books.xml"))
           if (df.schema.fields.isEmpty) {
             failedBooksSet.add(i)
           }
@@ -1523,7 +1538,7 @@ final class XmlSuite extends SparkFunSuite with BeforeAndAfterAll {
     val textResults = spark.read
       .schema(buildSchema(field("text")))
       .option("rowTag", "book")
-      .xml(resDir + "mixed_children_as_string.xml")
+      .xml(getTestResourcePath(resDir + "mixed_children_as_string.xml"))
     val textHead = textResults.select("text").head().getString(0)
     assert(textHead.contains(
       "Lorem ipsum dolor sit amet. Ut <i>voluptas</i> distinctio et impedit deserunt"))
@@ -1533,7 +1548,7 @@ final class XmlSuite extends SparkFunSuite with BeforeAndAfterAll {
     val bookResults = spark.read
       .schema(buildSchema(field("book")))
       .option("rowTag", "books")
-      .xml(resDir + "mixed_children_as_string.xml")
+      .xml(getTestResourcePath(resDir + "mixed_children_as_string.xml"))
     val bookHead = bookResults.select("book").head().getString(0)
     assert(bookHead.contains(
       "Lorem ipsum dolor sit amet. Ut <i>voluptas</i> distinctio et impedit deserunt"))

@@ -18,38 +18,28 @@ package org.apache.spark.sql.execution.datasources.xml.util
 
 import java.nio.charset.{StandardCharsets, UnsupportedCharsetException}
 
-import org.scalatest.BeforeAndAfterAll
+import org.apache.spark.sql.test.SharedSparkSession
 
-import org.apache.spark.SparkContext
-import org.apache.spark.SparkFunSuite
+final class XmlFileSuite extends SharedSparkSession {
 
-final class XmlFileSuite extends SparkFunSuite with BeforeAndAfterAll {
-
-  private val booksFile = "src/test/resources/books.xml"
-  private val booksUnicodeInTagNameFile = "src/test/resources/books-unicode-in-tag-name.xml"
+  private val resourcePrefix = "test-data/xml-resources/"
+  private val booksFile = testFile(resourcePrefix + "books.xml")
+  private val booksUnicodeInTagNameFile = testFile(resourcePrefix + "books-unicode-in-tag-name.xml")
   private val booksFileTag = "book"
   private val booksUnicodeFileTag = "\u66F8" // scalastyle:ignore
   private val numBooks = 12
   private val numBooksUnicodeInTagName = 3
-  private val fiasHouse = "src/test/resources/fias_house.xml"
+  private val fiasHouse = testFile(resourcePrefix + "fias_house.xml")
   private val fiasRowTag = "House"
   private val numHouses = 37
   private val utf8 = StandardCharsets.UTF_8.name
 
-  private var sparkContext: SparkContext = _
-
   override def beforeAll(): Unit = {
     super.beforeAll()
-    sparkContext = new SparkContext("local[2]", "TextFileSuite")
   }
 
   override def afterAll(): Unit = {
-    try {
-      sparkContext.stop()
-      sparkContext = null
-    } finally {
-      super.afterAll()
-    }
+    super.afterAll()
   }
 
   test("read utf-8 encoded file") {

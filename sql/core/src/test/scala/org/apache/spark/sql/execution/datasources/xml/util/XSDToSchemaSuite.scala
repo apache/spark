@@ -18,16 +18,17 @@ package org.apache.spark.sql.execution.datasources.xml.util
 
 import java.nio.file.Paths
 
-import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.execution.datasources.xml.TestUtils._
+import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{ArrayType, DecimalType, FloatType, LongType, StringType}
 
-class XSDToSchemaSuite extends SparkFunSuite {
+class XSDToSchemaSuite extends SharedSparkSession {
 
-  private val resDir = "src/test/resources"
+  private val resDir = "test-data/xml-resources/"
 
   test("Basic parsing") {
-    val parsedSchema = XSDToSchema.read(Paths.get(s"$resDir/basket.xsd"))
+    val parsedSchema = XSDToSchema.read(Paths.get(testFile(resDir + "basket.xsd")
+      .replace("file:/", "/")))
     val expectedSchema = buildSchema(
       field("basket",
         struct(
@@ -38,7 +39,8 @@ class XSDToSchemaSuite extends SparkFunSuite {
   }
 
   test("Relative path parsing") {
-    val parsedSchema = XSDToSchema.read(Paths.get(s"$resDir/include-example/first.xsd"))
+    val parsedSchema = XSDToSchema.read(Paths.get(testFile(resDir + "include-example/first.xsd")
+      .replace("file:/", "/")))
     val expectedSchema = buildSchema(
       field("basket",
         struct(
@@ -49,7 +51,8 @@ class XSDToSchemaSuite extends SparkFunSuite {
   }
 
   test("Test schema types and attributes") {
-    val parsedSchema = XSDToSchema.read(Paths.get(s"$resDir/catalog.xsd"))
+    val parsedSchema = XSDToSchema.read(Paths.get(testFile(resDir + "catalog.xsd")
+      .replace("file:/", "/")))
     val expectedSchema = buildSchema(
       field("catalog",
         struct(
@@ -72,20 +75,23 @@ class XSDToSchemaSuite extends SparkFunSuite {
   }
 
   test("Test xs:choice nullability") {
-    val parsedSchema = XSDToSchema.read(Paths.get(s"$resDir/choice.xsd"))
+    val parsedSchema = XSDToSchema.read(Paths.get(testFile(resDir + "choice.xsd")
+      .replace("file:/", "/")))
     val expectedSchema = buildSchema(
       field("el", struct(field("foo"), field("bar"), field("baz")), nullable = false))
     assert(expectedSchema === parsedSchema)
   }
 
   test("Two root elements") {
-    val parsedSchema = XSDToSchema.read(Paths.get(s"$resDir/twoelements.xsd"))
+    val parsedSchema = XSDToSchema.read(Paths.get(testFile(resDir + "twoelements.xsd")
+      .replace("file:/", "/")))
     val expectedSchema = buildSchema(field("bar", nullable = false), field("foo", nullable = false))
     assert(expectedSchema === parsedSchema)
   }
 
   test("xs:any schema") {
-    val parsedSchema = XSDToSchema.read(Paths.get(s"$resDir/xsany.xsd"))
+    val parsedSchema = XSDToSchema.read(Paths.get(testFile(resDir + "xsany.xsd")
+      .replace("file:/", "/")))
     val expectedSchema = buildSchema(
       field("root",
         struct(
@@ -110,7 +116,8 @@ class XSDToSchemaSuite extends SparkFunSuite {
   }
 
   test("Tests xs:long type / Issue 520") {
-    val parsedSchema = XSDToSchema.read(Paths.get(s"$resDir/long.xsd"))
+    val parsedSchema = XSDToSchema.read(Paths.get(testFile(resDir + "long.xsd")
+      .replace("file:/", "/")))
     val expectedSchema = buildSchema(
       field("test",
         struct(field("userId", LongType, nullable = false)), nullable = false))
@@ -118,7 +125,8 @@ class XSDToSchemaSuite extends SparkFunSuite {
   }
 
   test("Test xs:decimal type with restriction[fractionalDigits]") {
-    val parsedSchema = XSDToSchema.read(Paths.get(s"$resDir/decimal-with-restriction.xsd"))
+    val parsedSchema = XSDToSchema.read(Paths.get(testFile(resDir +
+      "decimal-with-restriction.xsd").replace("file:/", "/")))
     val expectedSchema = buildSchema(
       field("decimal_type_3", DecimalType(12, 6), nullable = false),
       field("decimal_type_1", DecimalType(38, 18), nullable = false),
@@ -128,7 +136,8 @@ class XSDToSchemaSuite extends SparkFunSuite {
   }
 
   test("Test ref attribute / Issue 617") {
-    val parsedSchema = XSDToSchema.read(Paths.get(s"$resDir/ref-attribute.xsd"))
+    val parsedSchema = XSDToSchema.read(Paths.get(testFile(resDir + "ref-attribute.xsd")
+      .replace("file:/", "/")))
     val expectedSchema = buildSchema(
       field(
         "book",
@@ -156,7 +165,8 @@ class XSDToSchemaSuite extends SparkFunSuite {
   }
 
   test("Test complex content with extension element / Issue 554") {
-    val parsedSchema = XSDToSchema.read(Paths.get(s"$resDir/complex-content-extension.xsd"))
+    val parsedSchema = XSDToSchema.read(Paths.get(testFile(resDir +
+      "complex-content-extension.xsd").replace("file:/", "/")))
 
     val expectedSchema = buildSchema(
       field(
