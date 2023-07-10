@@ -679,7 +679,7 @@ object StructType extends AbstractDataType {
         // Found a missing field in `source`.
         newFields += field
       } else if (bothStructType(found.get.dataType, field.dataType) &&
-          !DataTypeUtils.sameType(found.get.dataType, field.dataType)) {
+          !found.get.dataType.sameType(field.dataType)) {
         // Found a field with same name, but different data type.
         findMissingFields(found.get.dataType.asInstanceOf[StructType],
           field.dataType.asInstanceOf[StructType], resolver).map { missingType =>
