@@ -27,6 +27,7 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
+import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.Filter
@@ -137,7 +138,7 @@ trait FileFormat {
       sparkSession, dataSchema, partitionSchema, requiredSchema, filters, options, hadoopConf)
 
     new (PartitionedFile => Iterator[InternalRow]) with Serializable {
-      private val fullSchema = requiredSchema.toAttributes ++ partitionSchema.toAttributes
+      private val fullSchema = toAttributes(requiredSchema) ++ toAttributes(partitionSchema)
 
       // Using lazy val to avoid serialization
       private lazy val appendPartitionColumns =

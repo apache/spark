@@ -38,7 +38,7 @@ import org.apache.spark.sql.catalyst.encoders.AgnosticEncoder
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.objects._
-import org.apache.spark.sql.catalyst.types.{PhysicalBinaryType, PhysicalIntegerType, PhysicalLongType}
+import org.apache.spark.sql.catalyst.types.{DataTypeUtils, PhysicalBinaryType, PhysicalIntegerType, PhysicalLongType}
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, ArrayData, MapData}
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.types._
@@ -654,7 +654,7 @@ object ScalaReflection extends ScalaReflection {
   /** Returns a Sequence of attributes for the given case class type. */
   def attributesFor[T: TypeTag]: Seq[Attribute] = schemaFor[T] match {
     case Schema(s: StructType, _) =>
-      s.toAttributes
+      DataTypeUtils.toAttributes(s)
     case others => throw QueryExecutionErrors.attributesForTypeUnsupportedError(others)
   }
 
