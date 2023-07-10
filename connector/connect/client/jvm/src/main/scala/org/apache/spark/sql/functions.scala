@@ -7905,4 +7905,16 @@ object functions {
   }
   // scalastyle:off line.size.limit
 
+  /**
+   * Call a builtin or temp function.
+   *
+   * @param funcName
+   *   function name
+   * @param cols
+   *   the expression parameters of function
+   * @since 3.5.0
+   */
+  @scala.annotation.varargs
+  def call_function(funcName: String, cols: Column*): Column = Column.fn(funcName, cols: _*)
+
 }

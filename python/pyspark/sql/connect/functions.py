@@ -3853,7 +3853,7 @@ def bitmap_or_agg(col: "ColumnOrName") -> Column:
 bitmap_or_agg.__doc__ = pysparkfuncs.bitmap_or_agg.__doc__
 
 
-# User Defined Function
+# Call Functions
 
 
 def call_udf(udfName: str, *cols: "ColumnOrName") -> Column:
@@ -3889,6 +3889,13 @@ def udf(
 
 
 udf.__doc__ = pysparkfuncs.udf.__doc__
+
+
+def call_function(udfName: str, *cols: "ColumnOrName") -> Column:
+    return _invoke_function(udfName, *[_to_col(c) for c in cols])
+
+
+call_function.__doc__ = pysparkfuncs.call_function.__doc__
 
 
 def _test() -> None:
