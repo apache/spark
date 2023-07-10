@@ -52,27 +52,26 @@ object CTESubstitution extends Rule[LogicalPlan] {
     if (!plan.containsPattern(UNRESOLVED_WITH)) {
       return plan
     }
-    val isUnsupportedCommand = plan.exists {
-      case _: InsertIntoStatement => false
+    // New plan with CTEs moved to command's query.
+    val (planWithCTE, isCommandWithCTE) = plan match {
+      case UnresolvedWith(child: InsertIntoStatement, cteRelations) =>
+        (child.copy(query = UnresolvedWith(child.query, cteRelations)), true)
+      case _ => (plan, false)
+    }
+    val isCommand = !isCommandWithCTE && plan.exists {
       case _: Command | _: ParsedStatement | _: InsertIntoDir => true
       case _ => false
-    }
-    // New plan with CTEs moved to command's query.
-    val planWithCTE = plan match {
-      case UnresolvedWith(child: InsertIntoStatement, cteRelations) =>
-        child.copy(query = UnresolvedWith(child.query, cteRelations))
-      case _ => plan
     }
     val cteDefs = ArrayBuffer.empty[CTERelationDef]
     val (substituted, firstSubstituted) =
       LegacyBehaviorPolicy.withName(conf.getConf(LEGACY_CTE_PRECEDENCE_POLICY)) match {
         case LegacyBehaviorPolicy.EXCEPTION =>
           assertNoNameConflictsInCTE(planWithCTE)
-          traverseAndSubstituteCTE(planWithCTE, isUnsupportedCommand, Seq.empty, cteDefs)
+          traverseAndSubstituteCTE(planWithCTE, isCommand, Seq.empty, cteDefs)
         case LegacyBehaviorPolicy.LEGACY =>
           (legacyTraverseAndSubstituteCTE(planWithCTE, cteDefs), None)
         case LegacyBehaviorPolicy.CORRECTED =>
-          traverseAndSubstituteCTE(planWithCTE, isUnsupportedCommand, Seq.empty, cteDefs)
+          traverseAndSubstituteCTE(planWithCTE, isCommand, Seq.empty, cteDefs)
     }
     if (cteDefs.isEmpty) {
       substituted
