@@ -28,8 +28,7 @@ class DeepspeedTorchDistributorUnitTests(unittest.TestCase):
         if value:
             return value
         os.environ[var_name] = str(default_value)
-        value = default_value
-        return value
+        return default_value
 
     def _get_env_variables_distributed(self):
         MASTER_ADDR = self._get_env_var("MASTER_ADDR", "127.0.0.1")

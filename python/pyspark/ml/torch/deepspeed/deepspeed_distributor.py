@@ -116,10 +116,8 @@ class DeepspeedTorchDistributor(TorchDistributor):
         if isinstance(train_object, str):
             framework_wrapper_fn = DeepspeedTorchDistributor._run_training_on_pytorch_file
         else:
-            raise RuntimeError("Work in progress; not supported atm")
+            raise RuntimeError("The DeepspeedTorchDistributor doesn't support Python training functions as input at this time")
 
         if self.local_mode:
-            output = self._run_local_training(framework_wrapper_fn, train_object, *args, **kwargs)
-            return output
-        output = self._run_distributed_training(framework_wrapper_fn, train_object, spark_dataframe=None, *args, **kwargs)
-        return output
+             return self._run_local_training(framework_wrapper_fn, train_object, *args, **kwargs)
+        return self._run_distributed_training(framework_wrapper_fn, train_object, spark_dataframe=None, *args, **kwargs)

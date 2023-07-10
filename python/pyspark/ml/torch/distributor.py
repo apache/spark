@@ -40,7 +40,6 @@ from typing import (
     Iterator,
 )
 
-
 from pyspark import cloudpickle
 from pyspark.resource.information import ResourceInformation
 from pyspark.sql import DataFrame, SparkSession
@@ -426,7 +425,7 @@ class TorchDistributor(Distributor):
             f"--nnodes={num_processes}",
             f"--node_rank={node_rank}",
             f"--rdzv_endpoint={master_addr}:{master_port}",
-            "--rdzv_id=0",
+            "--rdzv_id=0", # TODO: setup random ID that is gleaned from env variables
         ]
         processes_per_node = 1
         return torchrun_args, processes_per_node
