@@ -765,7 +765,7 @@ class UtilsTestsMixin:
 
     def test_schema_ignore_nullable_array_equal(self):
         s1 = StructType([StructField("names", ArrayType(DoubleType(), True), True)])
-        s2 = StructType([StructField("names", ArrayType(DoubleType(), False), True)])
+        s2 = StructType([StructField("names", ArrayType(DoubleType(), False), False)])
 
         assertSchemaEqual(s1, s2, ignore_nullable=True)
 
@@ -774,13 +774,13 @@ class UtilsTestsMixin:
             [StructField("names", StructType([StructField("age", IntegerType(), True)]), True)]
         )
         s2 = StructType(
-            [StructField("names", StructType([StructField("age", IntegerType(), False)]), True)]
+            [StructField("names", StructType([StructField("age", IntegerType(), False)]), False)]
         )
         assertSchemaEqual(s1, s2, ignore_nullable=True)
 
     def test_schema_ignore_nullable_array_unequal(self):
         s1 = StructType([StructField("names", ArrayType(IntegerType(), True), True)])
-        s2 = StructType([StructField("names", ArrayType(DoubleType(), False), True)])
+        s2 = StructType([StructField("names", ArrayType(DoubleType(), False), False)])
 
         expected_error_msg = "Schemas do not match: \n"
 
