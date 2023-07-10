@@ -186,6 +186,8 @@ private[spark] class SparkSubmit extends Logging {
               } else {
                 throw e
               }
+          } finally {
+            FileSystem.closeAllForUGI(proxyUser)
           }
         }
       } else {

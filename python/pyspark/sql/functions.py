@@ -3146,6 +3146,32 @@ def collect_list(col: "ColumnOrName") -> Column:
 
 
 @try_remote_functions
+def array_agg(col: "ColumnOrName") -> Column:
+    """
+    Aggregate function: returns a list of objects with duplicates.
+
+    .. versionadded:: 3.5.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        target column to compute on.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        list of objects with duplicates.
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([[1],[1],[2]], ["c"])
+    >>> df.agg(array_agg('c').alias('r')).collect()
+    [Row(r=[1, 1, 2])]
+    """
+    return _invoke_function_over_columns("array_agg", col)
+
+
+@try_remote_functions
 def collect_set(col: "ColumnOrName") -> Column:
     """
     Aggregate function: returns a set of objects with duplicate elements eliminated.
@@ -4070,6 +4096,47 @@ def grouping_id(*cols: "ColumnOrName") -> Column:
 
 
 @try_remote_functions
+def count_min_sketch(
+    col: "ColumnOrName",
+    eps: "ColumnOrName",
+    confidence: "ColumnOrName",
+    seed: "ColumnOrName",
+) -> Column:
+    """
+    Returns a count-min sketch of a column with the given esp, confidence and seed.
+    The result is an array of bytes, which can be deserialized to a `CountMinSketch` before usage.
+    Count-min sketch is a probabilistic data structure used for cardinality estimation
+    using sub-linear space.
+
+    .. versionadded:: 3.5.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        target column to compute on.
+    eps : :class:`~pyspark.sql.Column` or str
+        relative error, must be positive
+    confidence : :class:`~pyspark.sql.Column` or str
+        confidence, must be positive and less than 1.0
+    seed : :class:`~pyspark.sql.Column` or str
+        random seed
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        count-min sketch of the column
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([[1], [2], [1]], ['data'])
+    >>> df = df.agg(count_min_sketch(df.data, lit(0.5), lit(0.5), lit(1)).alias('sketch'))
+    >>> df.select(hex(df.sketch).alias('r')).collect()
+    [Row(r='0000000100000000000000030000000100000004000000005D8D6AB90000000000000000000000000000000200000000000000010000000000000000')]
+    """
+    return _invoke_function_over_columns("count_min_sketch", col, eps, confidence, seed)
+
+
+@try_remote_functions
 def input_file_name() -> Column:
     """
     Creates a string column for the file name of the current Spark task.
@@ -4891,6 +4958,31 @@ def struct(
     if len(cols) == 1 and isinstance(cols[0], (list, set)):
         cols = cols[0]  # type: ignore[assignment]
     return _invoke_function_over_seq_of_columns("struct", cols)  # type: ignore[arg-type]
+
+
+@try_remote_functions
+def named_struct(*cols: "ColumnOrName") -> Column:
+    """
+    Creates a struct with the given field names and values.
+
+    .. versionadded:: 3.5.0
+
+    Parameters
+    ----------
+    cols : :class:`~pyspark.sql.Column` or str
+        list of columns to work on.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([(1, 2, 3)], ['a', 'b', 'c'])
+    >>> df.select(named_struct(lit('x'), df.a, lit('y'), df.b).alias('r')).collect()
+    [Row(r=Row(x=1, y=2))]
+    """
+    return _invoke_function_over_seq_of_columns("named_struct", cols)
 
 
 @try_remote_functions
@@ -9738,6 +9830,46 @@ def to_char(col: "ColumnOrName", format: "ColumnOrName") -> Column:
 
 
 @try_remote_functions
+def to_varchar(col: "ColumnOrName", format: "ColumnOrName") -> Column:
+    """
+    Convert `col` to a string based on the `format`.
+    Throws an exception if the conversion fails. The format can consist of the following
+    characters, case insensitive:
+    '0' or '9': Specifies an expected digit between 0 and 9. A sequence of 0 or 9 in the
+    format string matches a sequence of digits in the input value, generating a result
+    string of the same length as the corresponding sequence in the format string.
+    The result string is left-padded with zeros if the 0/9 sequence comprises more digits
+    than the matching part of the decimal value, starts with 0, and is before the decimal
+    point. Otherwise, it is padded with spaces.
+    '.' or 'D': Specifies the position of the decimal point (optional, only allowed once).
+    ',' or 'G': Specifies the position of the grouping (thousands) separator (,).
+    There must be a 0 or 9 to the left and right of each grouping separator.
+    '$': Specifies the location of the $ currency sign. This character may only be specified once.
+    'S' or 'MI': Specifies the position of a '-' or '+' sign (optional, only allowed once at
+    the beginning or end of the format string). Note that 'S' prints '+' for positive
+    values but 'MI' prints a space.
+    'PR': Only allowed at the end of the format string; specifies that the result string
+    will be wrapped by angle brackets if the input value is negative.
+
+    .. versionadded:: 3.5.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        Input column or strings.
+    format : :class:`~pyspark.sql.Column` or str, optional
+        format to use to convert char values.
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([(78.12,)], ["e"])
+    >>> df.select(to_varchar(df.e, lit("$99.99")).alias('r')).collect()
+    [Row(r='$78.12')]
+    """
+    return _invoke_function_over_columns("to_varchar", col, format)
+
+
+@try_remote_functions
 def to_number(col: "ColumnOrName", format: "ColumnOrName") -> Column:
     """
     Convert string 'col' to a number based on the string format 'format'.
@@ -10540,6 +10672,61 @@ def right(str: "ColumnOrName", len: "ColumnOrName") -> Column:
     [Row(r='SQL')]
     """
     return _invoke_function_over_columns("right", str, len)
+
+
+@try_remote_functions
+def mask(
+    col: "ColumnOrName",
+    upperChar: Optional["ColumnOrName"] = None,
+    lowerChar: Optional["ColumnOrName"] = None,
+    digitChar: Optional["ColumnOrName"] = None,
+    otherChar: Optional["ColumnOrName"] = None,
+) -> Column:
+    """
+    Masks the given string value. This can be useful for creating copies of tables with sensitive
+    information removed.
+
+    .. versionadded:: 3.5.0
+
+    Parameters
+    ----------
+    col: :class:`~pyspark.sql.Column` or str
+        target column to compute on.
+    upperChar: :class:`~pyspark.sql.Column` or str
+        character to replace upper-case characters with. Specify NULL to retain original character.
+    lowerChar: :class:`~pyspark.sql.Column` or str
+        character to replace lower-case characters with. Specify NULL to retain original character.
+    digitChar: :class:`~pyspark.sql.Column` or str
+        character to replace digit characters with. Specify NULL to retain original character.
+    otherChar: :class:`~pyspark.sql.Column` or str
+        character to replace all other characters with. Specify NULL to retain original character.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([("AbCD123-@$#",), ("abcd-EFGH-8765-4321",)], ['data'])
+    >>> df.select(mask(df.data).alias('r')).collect()
+    [Row(r='XxXXnnn-@$#'), Row(r='xxxx-XXXX-nnnn-nnnn')]
+    >>> df.select(mask(df.data, lit('Y')).alias('r')).collect()
+    [Row(r='YxYYnnn-@$#'), Row(r='xxxx-YYYY-nnnn-nnnn')]
+    >>> df.select(mask(df.data, lit('Y'), lit('y')).alias('r')).collect()
+    [Row(r='YyYYnnn-@$#'), Row(r='yyyy-YYYY-nnnn-nnnn')]
+    >>> df.select(mask(df.data, lit('Y'), lit('y'), lit('d')).alias('r')).collect()
+    [Row(r='YyYYddd-@$#'), Row(r='yyyy-YYYY-dddd-dddd')]
+    >>> df.select(mask(df.data, lit('Y'), lit('y'), lit('d'), lit('*')).alias('r')).collect()
+    [Row(r='YyYYddd****'), Row(r='yyyy*YYYY*dddd*dddd')]
+    """
+
+    _upperChar = lit("X") if upperChar is None else upperChar
+    _lowerChar = lit("x") if lowerChar is None else lowerChar
+    _digitChar = lit("n") if digitChar is None else digitChar
+    _otherChar = lit(None) if otherChar is None else otherChar
+    return _invoke_function_over_columns(
+        "mask", col, _upperChar, _lowerChar, _digitChar, _otherChar
+    )
 
 
 # ---------------------- Collection functions ------------------------------
@@ -11865,6 +12052,61 @@ def schema_of_json(json: "ColumnOrName", options: Optional[Dict[str, str]] = Non
 
 
 @try_remote_functions
+def json_array_length(col: "ColumnOrName") -> Column:
+    """
+    Returns the number of elements in the outermost JSON array. `NULL` is returned in case of
+    any other valid JSON string, `NULL` or an invalid JSON.
+
+    .. versionadded:: 3.5.0
+
+    Parameters
+    ----------
+    col: :class:`~pyspark.sql.Column` or str
+        target column to compute on.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        length of json array.
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([(None,), ('[1, 2, 3]',), ('[]',)], ['data'])
+    >>> df.select(json_array_length(df.data).alias('r')).collect()
+    [Row(r=None), Row(r=3), Row(r=0)]
+    """
+    return _invoke_function_over_columns("json_array_length", col)
+
+
+@try_remote_functions
+def json_object_keys(col: "ColumnOrName") -> Column:
+    """
+    Returns all the keys of the outermost JSON object as an array. If a valid JSON object is
+    given, all the keys of the outermost object will be returned as an array. If it is any
+    other valid JSON string, an invalid JSON string or an empty string, the function returns null.
+
+    .. versionadded:: 3.5.0
+
+    Parameters
+    ----------
+    col: :class:`~pyspark.sql.Column` or str
+        target column to compute on.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        all the keys of the outermost JSON object.
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([(None,), ('{}',), ('{"key1":1, "key2":2}',)], ['data'])
+    >>> df.select(json_object_keys(df.data).alias('r')).collect()
+    [Row(r=None), Row(r=[]), Row(r=['key1', 'key2'])]
+    """
+    return _invoke_function_over_columns("json_object_keys", col)
+
+
+@try_remote_functions
 def schema_of_csv(csv: "ColumnOrName", options: Optional[Dict[str, str]] = None) -> Column:
     """
     Parses a CSV string and infers its schema in DDL format.
@@ -12035,6 +12277,58 @@ def array_max(col: "ColumnOrName") -> Column:
     [Row(max=3), Row(max=10)]
     """
     return _invoke_function_over_columns("array_max", col)
+
+
+@try_remote_functions
+def array_size(col: "ColumnOrName") -> Column:
+    """
+    Returns the total number of elements in the array. The function returns null for null input.
+
+    .. versionadded:: 3.5.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        target column to compute on.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        total number of elements in the array.
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([([2, 1, 3],), (None,)], ['data'])
+    >>> df.select(array_size(df.data).alias('r')).collect()
+    [Row(r=3), Row(r=None)]
+    """
+    return _invoke_function_over_columns("array_size", col)
+
+
+@try_remote_functions
+def cardinality(col: "ColumnOrName") -> Column:
+    """
+    Collection function: returns the length of the array or map stored in the column.
+
+    .. versionadded:: 3.5.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        target column to compute on.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        length of the array/map.
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([([1, 2, 3],),([1],),([],)], ['data'])
+    >>> df.select(cardinality(df.data).alias('r')).collect()
+    [Row(r=3), Row(r=1), Row(r=0)]
+    """
+    return _invoke_function_over_columns("cardinality", col)
 
 
 @try_remote_functions
@@ -14114,7 +14408,7 @@ def unwrap_udt(col: "ColumnOrName") -> Column:
 
 
 @try_remote_functions
-def hll_sketch_agg(col: "ColumnOrName", lgConfigK: Optional[int] = None) -> Column:
+def hll_sketch_agg(col: "ColumnOrName", lgConfigK: Optional[Union[int, Column]] = None) -> Column:
     """
     Aggregate function: returns the updatable binary representation of the Datasketches
     HllSketch configured with lgConfigK arg.
@@ -14123,7 +14417,7 @@ def hll_sketch_agg(col: "ColumnOrName", lgConfigK: Optional[int] = None) -> Colu
 
     Parameters
     ----------
-    col : :class:`~pyspark.sql.Column` or str
+    col : :class:`~pyspark.sql.Column` or str or int
     lgConfigK : int, optional
         The log-base-2 of K, where K is the number of buckets or slots for the HllSketch
 
@@ -14135,22 +14429,42 @@ def hll_sketch_agg(col: "ColumnOrName", lgConfigK: Optional[int] = None) -> Colu
     Examples
     --------
     >>> df = spark.createDataFrame([1,2,2,3], "INT")
-    >>> df = df.agg(hll_sketch_estimate(hll_sketch_agg("value")).alias("distinct_cnt"))
-    >>> df.show()
+    >>> df1 = df.agg(hll_sketch_estimate(hll_sketch_agg("value")).alias("distinct_cnt"))
+    >>> df1.show()
+    +------------+
+    |distinct_cnt|
+    +------------+
+    |           3|
+    +------------+
+    >>> df2 = df.agg(hll_sketch_estimate(
+    ...     hll_sketch_agg("value", lit(12))
+    ... ).alias("distinct_cnt"))
+    >>> df2.show()
+    +------------+
+    |distinct_cnt|
+    +------------+
+    |           3|
+    +------------+
+    >>> df3 = df.agg(hll_sketch_estimate(
+    ...     hll_sketch_agg(col("value"), lit(12))).alias("distinct_cnt"))
+    >>> df3.show()
     +------------+
     |distinct_cnt|
     +------------+
     |           3|
     +------------+
     """
-    if lgConfigK is not None:
-        return _invoke_function("hll_sketch_agg", _to_java_column(col), lgConfigK)
+    if lgConfigK is None:
+        return _invoke_function_over_columns("hll_sketch_agg", col)
     else:
-        return _invoke_function("hll_sketch_agg", _to_java_column(col))
+        _lgConfigK = lit(lgConfigK) if isinstance(lgConfigK, int) else lgConfigK
+        return _invoke_function_over_columns("hll_sketch_agg", col, _lgConfigK)
 
 
 @try_remote_functions
-def hll_union_agg(col: "ColumnOrName", allowDifferentLgConfigK: Optional[bool] = None) -> Column:
+def hll_union_agg(
+    col: "ColumnOrName", allowDifferentLgConfigK: Optional[Union[bool, Column]] = None
+) -> Column:
     """
     Aggregate function: returns the updatable binary representation of the Datasketches
     HllSketch, generated by merging previously created Datasketches HllSketch instances
@@ -14161,7 +14475,7 @@ def hll_union_agg(col: "ColumnOrName", allowDifferentLgConfigK: Optional[bool] =
 
     Parameters
     ----------
-    col : :class:`~pyspark.sql.Column` or str
+    col : :class:`~pyspark.sql.Column` or str or bool
     allowDifferentLgConfigK : bool, optional
         Allow sketches with different lgConfigK values to be merged (defaults to false).
 
@@ -14176,18 +14490,43 @@ def hll_union_agg(col: "ColumnOrName", allowDifferentLgConfigK: Optional[bool] =
     >>> df1 = df1.agg(hll_sketch_agg("value").alias("sketch"))
     >>> df2 = spark.createDataFrame([4,5,5,6], "INT")
     >>> df2 = df2.agg(hll_sketch_agg("value").alias("sketch"))
-    >>> df = df1.union(df2).agg(hll_sketch_estimate(hll_union_agg("sketch")).alias("distinct_cnt"))
-    >>> df.drop("sketch").show()
+    >>> df3 = df1.union(df2).agg(hll_sketch_estimate(
+    ...     hll_union_agg("sketch")
+    ... ).alias("distinct_cnt"))
+    >>> df3.drop("sketch").show()
+    +------------+
+    |distinct_cnt|
+    +------------+
+    |           6|
+    +------------+
+    >>> df4 = df1.union(df2).agg(hll_sketch_estimate(
+    ...     hll_union_agg("sketch", lit(False))
+    ... ).alias("distinct_cnt"))
+    >>> df4.drop("sketch").show()
+    +------------+
+    |distinct_cnt|
+    +------------+
+    |           6|
+    +------------+
+    >>> df5 = df1.union(df2).agg(hll_sketch_estimate(
+    ...     hll_union_agg(col("sketch"), lit(False))
+    ... ).alias("distinct_cnt"))
+    >>> df5.drop("sketch").show()
     +------------+
     |distinct_cnt|
     +------------+
     |           6|
     +------------+
     """
-    if allowDifferentLgConfigK is not None:
-        return _invoke_function("hll_union_agg", _to_java_column(col), allowDifferentLgConfigK)
+    if allowDifferentLgConfigK is None:
+        return _invoke_function_over_columns("hll_union_agg", col)
     else:
-        return _invoke_function("hll_union_agg", _to_java_column(col))
+        _allowDifferentLgConfigK = (
+            lit(allowDifferentLgConfigK)
+            if isinstance(allowDifferentLgConfigK, bool)
+            else allowDifferentLgConfigK
+        )
+        return _invoke_function_over_columns("hll_union_agg", col, _allowDifferentLgConfigK)
 
 
 @try_remote_functions
@@ -14582,6 +14921,82 @@ def aes_decrypt(
 
 
 @try_remote_functions
+def try_aes_decrypt(
+    input: "ColumnOrName",
+    key: "ColumnOrName",
+    mode: Optional["ColumnOrName"] = None,
+    padding: Optional["ColumnOrName"] = None,
+    aad: Optional["ColumnOrName"] = None,
+) -> Column:
+    """
+    This is a special version of `aes_decrypt` that performs the same operation,
+    but returns a NULL value instead of raising an error if the decryption cannot be performed.
+    Returns a decrypted value of `input` using AES in `mode` with `padding`. Key lengths of 16,
+    24 and 32 bits are supported. Supported combinations of (`mode`, `padding`) are ('ECB',
+    'PKCS'), ('GCM', 'NONE') and ('CBC', 'PKCS'). Optional additional authenticated data (AAD) is
+    only supported for GCM. If provided for encryption, the identical AAD value must be provided
+    for decryption. The default mode is GCM.
+
+    .. versionadded:: 3.5.0
+
+    Parameters
+    ----------
+    input : :class:`~pyspark.sql.Column` or str
+        The binary value to decrypt.
+    key : :class:`~pyspark.sql.Column` or str
+        The passphrase to use to decrypt the data.
+    mode : :class:`~pyspark.sql.Column` or str, optional
+        Specifies which block cipher mode should be used to decrypt messages. Valid modes: ECB,
+        GCM, CBC.
+    padding : :class:`~pyspark.sql.Column` or str, optional
+        Specifies how to pad messages whose length is not a multiple of the block size. Valid
+        values: PKCS, NONE, DEFAULT. The DEFAULT padding means PKCS for ECB, NONE for GCM and PKCS
+        for CBC.
+    aad : :class:`~pyspark.sql.Column` or str, optional
+        Optional additional authenticated data. Only supported for GCM mode. This can be any
+        free-form input and must be provided for both encryption and decryption.
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([(
+    ...     "AAAAAAAAAAAAAAAAQiYi+sTLm7KD9UcZ2nlRdYDe/PX4",
+    ...     "abcdefghijklmnop12345678ABCDEFGH", "GCM", "DEFAULT",
+    ...     "This is an AAD mixed into the input",)],
+    ...     ["input", "key", "mode", "padding", "aad"]
+    ... )
+    >>> df.select(try_aes_decrypt(
+    ...     unbase64(df.input), df.key, df.mode, df.padding, df.aad).alias('r')
+    ... ).collect()
+    [Row(r=bytearray(b'Spark'))]
+
+    >>> df = spark.createDataFrame([(
+    ...     "AAAAAAAAAAAAAAAAAAAAAPSd4mWyMZ5mhvjiAPQJnfg=",
+    ...     "abcdefghijklmnop12345678ABCDEFGH", "CBC", "DEFAULT",)],
+    ...     ["input", "key", "mode", "padding"]
+    ... )
+    >>> df.select(try_aes_decrypt(
+    ...     unbase64(df.input), df.key, df.mode, df.padding).alias('r')
+    ... ).collect()
+    [Row(r=bytearray(b'Spark'))]
+
+    >>> df.select(try_aes_decrypt(unbase64(df.input), df.key, df.mode).alias('r')).collect()
+    [Row(r=bytearray(b'Spark'))]
+
+    >>> df = spark.createDataFrame([(
+    ...     "83F16B2AA704794132802D248E6BFD4E380078182D1544813898AC97E709B28A94",
+    ...     "0000111122223333",)],
+    ...     ["input", "key"]
+    ... )
+    >>> df.select(try_aes_decrypt(unhex(df.input), df.key).alias('r')).collect()
+    [Row(r=bytearray(b'Spark'))]
+    """
+    _mode = lit("GCM") if mode is None else mode
+    _padding = lit("DEFAULT") if padding is None else padding
+    _aad = lit("") if aad is None else aad
+    return _invoke_function_over_columns("try_aes_decrypt", input, key, _mode, _padding, _aad)
+
+
+@try_remote_functions
 def sha(col: "ColumnOrName") -> Column:
     """
     Returns a sha1 hash value as a hex string of the `col`.
@@ -14789,6 +15204,117 @@ def random(
         return _invoke_function_over_columns("random", seed)
     else:
         return _invoke_function_over_columns("random")
+
+
+@try_remote_functions
+def bitmap_bit_position(col: "ColumnOrName") -> Column:
+    """
+    Returns the bit position for the given input column.
+
+    .. versionadded:: 3.5.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        The input column.
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([(123,)], ["a"])
+    >>> df.select(bitmap_bit_position(df.a).alias("r")).collect()
+    [Row(r=122)]
+    """
+    return _invoke_function_over_columns("bitmap_bit_position", col)
+
+
+@try_remote_functions
+def bitmap_bucket_number(col: "ColumnOrName") -> Column:
+    """
+    Returns the bucket number for the given input column.
+
+    .. versionadded:: 3.5.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        The input column.
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([(123,)], ["a"])
+    >>> df.select(bitmap_bucket_number(df.a).alias("r")).collect()
+    [Row(r=1)]
+    """
+    return _invoke_function_over_columns("bitmap_bucket_number", col)
+
+
+@try_remote_functions
+def bitmap_construct_agg(col: "ColumnOrName") -> Column:
+    """
+    Returns a bitmap with the positions of the bits set from all the values from the input column.
+    The input column will most likely be bitmap_bit_position().
+
+    .. versionadded:: 3.5.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        The input column will most likely be bitmap_bit_position().
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([(1,),(2,),(3,)], ["a"])
+    >>> df.select(substring(hex(
+    ...     bitmap_construct_agg(bitmap_bit_position(df.a))
+    ... ), 0, 6).alias("r")).collect()
+    [Row(r='070000')]
+    """
+    return _invoke_function_over_columns("bitmap_construct_agg", col)
+
+
+@try_remote_functions
+def bitmap_count(col: "ColumnOrName") -> Column:
+    """
+    Returns the number of set bits in the input bitmap.
+
+    .. versionadded:: 3.5.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        The input bitmap.
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([("FFFF",)], ["a"])
+    >>> df.select(bitmap_count(to_binary(df.a, lit("hex"))).alias('r')).collect()
+    [Row(r=16)]
+    """
+    return _invoke_function_over_columns("bitmap_count", col)
+
+
+@try_remote_functions
+def bitmap_or_agg(col: "ColumnOrName") -> Column:
+    """
+    Returns a bitmap that is the bitwise OR of all of the bitmaps from the input column.
+    The input column should be bitmaps created from bitmap_construct_agg().
+
+    .. versionadded:: 3.5.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        The input column should be bitmaps created from bitmap_construct_agg().
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([("10",),("20",),("40",)], ["a"])
+    >>> df.select(substring(hex(
+    ...     bitmap_or_agg(to_binary(df.a, lit("hex")))
+    ... ), 0, 6).alias("r")).collect()
+    [Row(r='700000')]
+    """
+    return _invoke_function_over_columns("bitmap_or_agg", col)
 
 
 # ---------------------------- User Defined Function ----------------------------------

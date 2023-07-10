@@ -2875,9 +2875,6 @@ class HiveDDLSuite
   }
 
   test("SPARK-24681 checks if nested column names do not include ',', ':', and ';'") {
-    val expectedMsg = "Cannot create a table having a nested column whose name contains invalid " +
-      "characters (',', ':', ';') in Hive metastore."
-
     Seq("nested,column", "nested:column", "nested;column").foreach { nestedColumnName =>
       withTable("t") {
         checkError(
@@ -2888,8 +2885,11 @@ class HiveDDLSuite
               .format("hive")
               .saveAsTable("t")
           },
-          errorClass = null,
-          parameters = Map.empty
+          errorClass = "INVALID_HIVE_COLUMN_NAME",
+          parameters = Map(
+            "invalidChars" -> "',', ':', ';'",
+            "tableName" -> "`spark_catalog`.`default`.`t`",
+            "columnName" -> s"`$nestedColumnName`")
         )
       }
     }
@@ -3025,7 +3025,7 @@ class HiveDDLSuite
         """CREATE TABLE targetDsTable LIKE sourceHiveTable USING PARQUET
           |ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe'""".stripMargin
       checkError(
-        exception = intercept[AnalysisException] {
+        exception = intercept[ParseException] {
           sql(sql1)
         },
         errorClass = "_LEGACY_ERROR_TEMP_0035",
@@ -3041,7 +3041,7 @@ class HiveDDLSuite
           |ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe'
           |WITH SERDEPROPERTIES ('test' = 'test')""".stripMargin
       checkError(
-        exception = intercept[AnalysisException] {
+        exception = intercept[ParseException] {
           sql(sql2)
         },
         errorClass = "_LEGACY_ERROR_TEMP_0035",
@@ -3057,7 +3057,7 @@ class HiveDDLSuite
           |ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe'
           |WITH SERDEPROPERTIES ('test' = 'test')""".stripMargin
       checkError(
-        exception = intercept[AnalysisException] {
+        exception = intercept[ParseException] {
           sql(sql3)
         },
         errorClass = "_LEGACY_ERROR_TEMP_0047",
@@ -3071,7 +3071,7 @@ class HiveDDLSuite
           |STORED AS INPUTFORMAT 'inFormat' OUTPUTFORMAT 'outFormat'
           |ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe'""".stripMargin
       checkError(
-        exception = intercept[AnalysisException] {
+        exception = intercept[ParseException] {
           sql(sql4)
         },
         errorClass = "_LEGACY_ERROR_TEMP_0035",
@@ -3145,7 +3145,7 @@ class HiveDDLSuite
                  |ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe'
                  |STORED AS $format""".stripMargin
             checkError(
-              exception = intercept[AnalysisException] {
+              exception = intercept[ParseException] {
                 sql(sql1)
               },
               errorClass = "_LEGACY_ERROR_TEMP_0035",
@@ -3184,7 +3184,7 @@ class HiveDDLSuite
                |ROW FORMAT DELIMITED
                |STORED AS PARQUET""".stripMargin
           checkError(
-            exception = intercept[AnalysisException] {
+            exception = intercept[ParseException] {
               sql(sql1)
             },
             errorClass = "_LEGACY_ERROR_TEMP_0035",
@@ -3276,8 +3276,8 @@ class HiveDDLSuite
 
       val jarName = "TestUDTF.jar"
       val jar = spark.asInstanceOf[TestHiveSparkSession].getHiveFile(jarName).toURI.toString
-      spark.sparkContext.addedJars.keys.find(_.contains(jarName))
-        .foreach(spark.sparkContext.addedJars.remove)
+      spark.sparkContext.allAddedJars.keys.find(_.contains(jarName))
+        .foreach(spark.sparkContext.addedJars("default").remove)
       assert(!spark.sparkContext.listJars().exists(_.contains(jarName)))
       val e = intercept[AnalysisException] {
         sql("CREATE TEMPORARY FUNCTION f1 AS " +
@@ -3311,7 +3311,7 @@ class HiveDDLSuite
           exception = intercept[SparkUnsupportedOperationException] {
             sql(sqlCmd)
           },
-          errorClass = "_LEGACY_ERROR_TEMP_2276",
+          errorClass = "UNSUPPORTED_FEATURE.HIVE_WITH_ANSI_INTERVALS",
           parameters = Map("tableName" -> s"`$SESSION_CATALOG_NAME`.`default`.`$tbl`")
         )
       }
@@ -3362,7 +3362,7 @@ class HiveDDLSuite
       exception = intercept[AnalysisException] {
         sql("CREATE TABLE tab (c1 int) PARTITIONED BY (c1) STORED AS PARQUET")
       },
-      errorClass = null,
+      errorClass = "ALL_PARTITION_COLUMNS_NOT_ALLOWED",
       parameters = Map.empty
     )
   }

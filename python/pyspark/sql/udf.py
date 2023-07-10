@@ -51,9 +51,13 @@ __all__ = ["UDFRegistration"]
 
 
 def _wrap_function(
-    sc: SparkContext, func: Callable[..., Any], returnType: "DataTypeOrString"
+    sc: SparkContext, func: Callable[..., Any], returnType: Optional[DataType] = None
 ) -> JavaObject:
-    command = (func, returnType)
+    command: Any
+    if returnType is None:
+        command = func
+    else:
+        command = (func, returnType)
     pickled_command, broadcast_vars, env, includes = _prepare_for_python_RDD(sc, command)
     assert sc._jvm is not None
     return sc._jvm.SimplePythonFunction(

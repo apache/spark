@@ -185,3 +185,19 @@ def null_index(col: Column) -> Column:
     else:
         sc = SparkContext._active_spark_context
         return Column(sc._jvm.PythonSQLUtils.nullIndex(col._jc))
+
+
+def timestampdiff(unit: str, start: Column, end: Column) -> Column:
+    if is_remote():
+        from pyspark.sql.connect.functions import _invoke_function_over_columns, lit
+
+        return _invoke_function_over_columns(  # type: ignore[return-value]
+            "timestampdiff",
+            lit(unit),
+            start,  # type: ignore[arg-type]
+            end,  # type: ignore[arg-type]
+        )
+
+    else:
+        sc = SparkContext._active_spark_context
+        return Column(sc._jvm.PythonSQLUtils.timestampDiff(unit, start._jc, end._jc))

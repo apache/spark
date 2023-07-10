@@ -428,8 +428,8 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
               UnaryMinus(r, mode == EvalMode.ANSI), ansiEnabled = mode == EvalMode.ANSI))
           case (_, CalendarIntervalType | _: DayTimeIntervalType) =>
             Cast(DatetimeSub(l, r, TimeAdd(l, UnaryMinus(r, mode == EvalMode.ANSI))), l.dataType)
-          case _ if AnyTimestampType.unapply(l) || AnyTimestampType.unapply(r) =>
-            SubtractTimestamps(l, r)
+          case _ if AnyTimestampTypeExpression.unapply(l) ||
+            AnyTimestampTypeExpression.unapply(r) => SubtractTimestamps(l, r)
           case (_, DateType) => SubtractDates(l, r)
           case (DateType, dt) if dt != StringType => DateSub(l, r)
           case _ => s
@@ -1787,12 +1787,12 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
       e.references.filter(!_.resolved).foreach { a =>
         // Note: This will throw error only on unresolved attribute issues,
         // not other resolution errors like mismatched data types.
-        val cols = p.inputSet.toSeq.map(_.sql).mkString(", ")
+        val cols = p.inputSet.toSeq.map(attr => toSQLId(attr.name)).mkString(", ")
         a.failAnalysis(
-          errorClass = "_LEGACY_ERROR_TEMP_2309",
+          errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
           messageParameters = Map(
-            "sqlExpr" -> a.sql,
-            "cols" -> cols))
+            "objectName" -> toSQLId(a.name),
+            "proposal" -> cols))
       }
     }
 
@@ -1897,7 +1897,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
           })
         // count(*) has been replaced by count(1)
         case o if containsStar(o.children) =>
-          throw QueryCompilationErrors.invalidStarUsageError(s"expression '${o.prettyName}'",
+          throw QueryCompilationErrors.invalidStarUsageError(s"expression `${o.prettyName}`",
             extractStar(o.children))
       }
     }
@@ -2058,7 +2058,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
       case u: UnresolvedTableValuedFunction if u.functionArgs.forall(_.resolved) =>
         withPosition(u) {
           try {
-            resolveBuiltinOrTempTableFunction(u.name, u.functionArgs).getOrElse {
+            val resolvedFunc = resolveBuiltinOrTempTableFunction(u.name, u.functionArgs).getOrElse {
               val CatalogAndIdentifier(catalog, ident) = expandIdentifier(u.name)
               if (CatalogV2Util.isSessionCatalog(catalog)) {
                 v1SessionCatalog.resolvePersistentTableFunction(
@@ -2067,6 +2067,30 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
                 throw QueryCompilationErrors.missingCatalogAbilityError(
                   catalog, "table-valued functions")
               }
+            }
+
+            val tableArgs = mutable.ArrayBuffer.empty[LogicalPlan]
+            val tvf = resolvedFunc.transformAllExpressionsWithPruning(
+              _.containsPattern(FUNCTION_TABLE_RELATION_ARGUMENT_EXPRESSION), ruleId)  {
+              case t: FunctionTableSubqueryArgumentExpression =>
+                val alias = SubqueryAlias.generateSubqueryName(s"_${tableArgs.size}")
+                tableArgs.append(SubqueryAlias(alias, t.evaluable))
+                UnresolvedAttribute(Seq(alias, "c"))
+            }
+            if (tableArgs.nonEmpty) {
+              if (!conf.tvfAllowMultipleTableArguments && tableArgs.size > 1) {
+                throw QueryCompilationErrors.tableValuedFunctionTooManyTableArgumentsError(
+                  tableArgs.size)
+              }
+              val alias = SubqueryAlias.generateSubqueryName(s"_${tableArgs.size}")
+              Project(
+                Seq(UnresolvedStar(Some(Seq(alias)))),
+                LateralJoin(
+                  tableArgs.reduceLeft(Join(_, _, Inner, None, JoinHint.NONE)),
+                  LateralSubquery(SubqueryAlias(alias, tvf)), Inner, None)
+              )
+            } else {
+              tvf
             }
           } catch {
             case _: NoSuchFunctionException =>
@@ -2083,9 +2107,9 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
         // Checks if the number of the aliases is equal to expected one
         if (u.outputNames.size != outputAttrs.size) {
           u.failAnalysis(
-            errorClass = "_LEGACY_ERROR_TEMP_2307",
+            errorClass = "NUM_TABLE_VALUE_ALIASES_MISMATCH",
             messageParameters = Map(
-              "funcName" -> u.name.quoted,
+              "funcName" -> toSQLId(u.name),
               "aliasesNum" -> u.outputNames.size.toString,
               "outColsNum" -> outputAttrs.size.toString))
         }
@@ -2103,7 +2127,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
             resolveBuiltinOrTempFunction(nameParts, arguments, Some(u)).map {
               case func: HigherOrderFunction => func
               case other => other.failAnalysis(
-                errorClass = "_LEGACY_ERROR_TEMP_2306",
+                errorClass = "INVALID_LAMBDA_FUNCTION_CALL.NON_HIGHER_ORDER_FUNCTION",
                 messageParameters = Map(
                   "class" -> other.getClass.getCanonicalName))
             }.getOrElse {
@@ -2416,6 +2440,8 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
           InSubquery(values, expr.asInstanceOf[ListQuery])
         case s @ LateralSubquery(sub, _, exprId, _, _) if !sub.resolved =>
           resolveSubQuery(s, outer)(LateralSubquery(_, _, exprId))
+        case a @ FunctionTableSubqueryArgumentExpression(sub, _, exprId) if !sub.resolved =>
+          resolveSubQuery(a, outer)(FunctionTableSubqueryArgumentExpression(_, _, exprId))
       }
     }
 
@@ -2436,6 +2462,8 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
         resolveSubQueries(r, r)
       case j: Join if j.childrenResolved && j.duplicateResolved =>
         resolveSubQueries(j, j)
+      case tvf: UnresolvedTableValuedFunction =>
+        resolveSubQueries(tvf, tvf)
       case s: SupportsSubquery if s.childrenResolved =>
         resolveSubQueries(s, s)
     }

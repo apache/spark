@@ -31,7 +31,7 @@ import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.expressions.codegen.{ByteCodeStats, CodeFormatter, CodegenContext, CodeGenerator, ExprCode}
 import org.apache.spark.sql.catalyst.plans.physical.Partitioning
 import org.apache.spark.sql.catalyst.trees.TreeNodeRef
-import org.apache.spark.sql.catalyst.util.StringUtils.StringConcat
+import org.apache.spark.sql.catalyst.util.StringConcat
 import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanExec, QueryStageExec}
 import org.apache.spark.sql.execution.streaming.{StreamExecution, StreamingQueryWrapper}
 import org.apache.spark.sql.internal.SQLConf

@@ -16,9 +16,9 @@
  */
 package org.apache.spark.sql.catalyst.types
 
+import org.apache.spark.sql.SqlApiConf
 import org.apache.spark.sql.catalyst.analysis.Resolver
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Cast, Literal}
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.StoreAssignmentPolicy
 import org.apache.spark.sql.internal.SQLConf.StoreAssignmentPolicy.{ANSI, STRICT}
 import org.apache.spark.sql.types.{ArrayType, AtomicType, DataType, Decimal, DecimalType, MapType, NullType, StructField, StructType}
@@ -30,7 +30,7 @@ object DataTypeUtils {
    * (`StructField.nullable`, `ArrayType.containsNull`, and `MapType.valueContainsNull`).
    */
   def sameType(left: DataType, right: DataType): Boolean =
-    if (SQLConf.get.caseSensitiveAnalysis) {
+    if (SqlApiConf.get.caseSensitiveAnalysis) {
       equalsIgnoreNullability(left, right)
     } else {
       equalsIgnoreCaseAndNullability(left, right)
