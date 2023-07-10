@@ -2528,7 +2528,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
     }
   }
 
-  test("SPARK-XXXXX: CTE on top of INSERT INTO") {
+  test("SPARK-44356: CTE on top of INSERT INTO") {
     withTable("t") {
       sql("CREATE TABLE t(i int, part1 int, part2 int) using parquet")
       sql("WITH v1(c1) as (values (1)) INSERT INTO t select c1, 2, 3 from v1")
