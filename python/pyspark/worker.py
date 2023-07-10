@@ -134,13 +134,9 @@ def wrap_scalar_pandas_udf(f, return_type):
     )
 
 
-def wrap_batch_iter_udf(f, return_type, is_arrow_iter=False):
+def wrap_pandas_batch_iter_udf(f, return_type):
     arrow_return_type = to_arrow_type(return_type)
-    iter_type_label = (
-        "pyarrow.RecordBatch"
-        if is_arrow_iter
-        else ("pandas.DataFrame" if type(return_type) == StructType else "pandas.Series")
-    )
+    iter_type_label = "pandas.DataFrame" if type(return_type) == StructType else "pandas.Series"
 
     def verify_result(result):
         if not isinstance(result, Iterator) and not hasattr(result, "__iter__"):
@@ -151,24 +147,15 @@ def wrap_batch_iter_udf(f, return_type, is_arrow_iter=False):
         return result
 
     def verify_element(elem):
-        if is_arrow_iter:
-            import pyarrow as pa
+        import pandas as pd
 
-            if not isinstance(elem, pa.RecordBatch):
-                raise TypeError(
-                    "Return type of the user-defined function should be "
-                    "iterator of {}, but is iterator of {}".format(iter_type_label, type(elem))
-                )
-        else:
-            import pandas as pd
+        if not isinstance(elem, pd.DataFrame if type(return_type) == StructType else pd.Series):
+            raise TypeError(
+                "Return type of the user-defined function should be "
+                "iterator of {}, but is iterator of {}".format(iter_type_label, type(elem))
+            )
 
-            if not isinstance(elem, pd.DataFrame if type(return_type) == StructType else pd.Series):
-                raise TypeError(
-                    "Return type of the user-defined function should be "
-                    "iterator of {}, but is iterator of {}".format(iter_type_label, type(elem))
-                )
-
-            verify_pandas_result(elem, return_type, True, True)
+        verify_pandas_result(elem, return_type, True, True)
 
         return elem
 
@@ -232,6 +219,33 @@ def verify_pandas_result(result, return_type, assign_cols_by_name, truncate_retu
                 "Return type of the user-defined function should be "
                 "pandas.Series, but is {}".format(type(result))
             )
+
+
+def wrap_arrow_batch_iter_udf(f, return_type):
+    arrow_return_type = to_arrow_type(return_type)
+
+    def verify_result(result):
+        if not isinstance(result, Iterator) and not hasattr(result, "__iter__"):
+            raise TypeError(
+                "Return type of the user-defined function should be "
+                "iterator of pyarrow.RecordBatch, but is {}".format(type(result))
+            )
+        return result
+
+    def verify_element(elem):
+        import pyarrow as pa
+
+        if not isinstance(elem, pa.RecordBatch):
+            raise TypeError(
+                "Return type of the user-defined function should be "
+                "iterator of pyarrow.RecordBatch, but is iterator of {}".format(type(elem))
+            )
+
+        return elem
+
+    return lambda *iterator: map(
+        lambda res: (res, arrow_return_type), map(verify_element, verify_result(f(*iterator)))
+    )
 
 
 def wrap_cogrouped_map_pandas_udf(f, return_type, argspec, runner_conf):
@@ -461,11 +475,11 @@ def read_single_udf(pickleSer, infile, eval_type, runner_conf, udf_index):
     if eval_type in (PythonEvalType.SQL_SCALAR_PANDAS_UDF, PythonEvalType.SQL_ARROW_BATCHED_UDF):
         return arg_offsets, wrap_scalar_pandas_udf(func, return_type)
     elif eval_type == PythonEvalType.SQL_SCALAR_PANDAS_ITER_UDF:
-        return arg_offsets, wrap_batch_iter_udf(func, return_type)
+        return arg_offsets, wrap_pandas_batch_iter_udf(func, return_type)
     elif eval_type == PythonEvalType.SQL_MAP_PANDAS_ITER_UDF:
-        return arg_offsets, wrap_batch_iter_udf(func, return_type)
+        return arg_offsets, wrap_pandas_batch_iter_udf(func, return_type)
     elif eval_type == PythonEvalType.SQL_MAP_ARROW_ITER_UDF:
-        return arg_offsets, wrap_batch_iter_udf(func, return_type, is_arrow_iter=True)
+        return arg_offsets, wrap_arrow_batch_iter_udf(func, return_type)
     elif eval_type == PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF:
         argspec = getfullargspec(chained_func)  # signature was lost when wrapping it
         return arg_offsets, wrap_grouped_map_pandas_udf(func, return_type, argspec, runner_conf)
