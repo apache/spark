@@ -213,19 +213,19 @@ class CrossValidatorTestsMixin:
             # .addGrid(lorv2.learningRate, [0.001, 0.00001])
             .build()
         )
-        cv2 = CrossValidator(
+        cv = CrossValidator(
             estimator=pipeline,
             estimatorParamMaps=grid2,
             parallelism=2,
             evaluator=BinaryClassificationEvaluator(),
         )
-        cv2_model = cv2.fit(train_dataset)
+        cv_model = cv.fit(train_dataset)
 
-        assert cv2_model.bestModel.stages[1].getMaxIter() == 200
+        assert cv_model.bestModel.stages[1].getMaxIter() == 200
 
         # trial of index 2 should have better metric value
         # because it sets higher `maxIter` param.
-        assert cv2_model.avgMetrics[1] > cv2_model.avgMetrics[0]
+        assert cv_model.avgMetrics[1] > cv_model.avgMetrics[0]
 
         def _verify_cv_saved_params(instance, loaded_instance):
             assert instance.getEstimator().uid == loaded_instance.getEstimator().uid
@@ -234,24 +234,24 @@ class CrossValidatorTestsMixin:
 
         # Test save / load
         with tempfile.TemporaryDirectory() as tmp_dir:
-            cv2.saveToLocal(f"{tmp_dir}/cv")
-            loaded_cv2 = CrossValidator.loadFromLocal(f"{tmp_dir}/cv")
+            cv.saveToLocal(f"{tmp_dir}/cv")
+            loaded_cv = CrossValidator.loadFromLocal(f"{tmp_dir}/cv")
 
-            _verify_cv_saved_params(cv2, loaded_cv2)
+            _verify_cv_saved_params(cv, loaded_cv)
 
-            cv2_model.saveToLocal(f"{tmp_dir}/cv_model")
-            loaded_cv2_model = CrossValidatorModel.loadFromLocal(f"{tmp_dir}/cv_model")
+            cv_model.saveToLocal(f"{tmp_dir}/cv_model")
+            loaded_cv_model = CrossValidatorModel.loadFromLocal(f"{tmp_dir}/cv_model")
 
-            _verify_cv_saved_params(cv2_model, loaded_cv2_model)
+            _verify_cv_saved_params(cv_model, loaded_cv_model)
 
-            assert cv2_model.uid == loaded_cv2_model.uid
-            assert cv2_model.bestModel.uid == loaded_cv2_model.bestModel.uid
-            assert cv2_model.bestModel.stages[0].uid == loaded_cv2_model.bestModel.stages[0].uid
-            assert cv2_model.bestModel.stages[1].uid == loaded_cv2_model.bestModel.stages[1].uid
-            assert loaded_cv2_model.bestModel.stages[1].getMaxIter() == 200
+            assert cv_model.uid == loaded_cv_model.uid
+            assert cv_model.bestModel.uid == loaded_cv_model.bestModel.uid
+            assert cv_model.bestModel.stages[0].uid == loaded_cv_model.bestModel.stages[0].uid
+            assert cv_model.bestModel.stages[1].uid == loaded_cv_model.bestModel.stages[1].uid
+            assert loaded_cv_model.bestModel.stages[1].getMaxIter() == 200
 
-            np.testing.assert_allclose(cv2_model.avgMetrics, loaded_cv2_model.avgMetrics)
-            np.testing.assert_allclose(cv2_model.stdMetrics, loaded_cv2_model.stdMetrics)
+            np.testing.assert_allclose(cv_model.avgMetrics, loaded_cv_model.avgMetrics)
+            np.testing.assert_allclose(cv_model.stdMetrics, loaded_cv_model.stdMetrics)
 
 
 class CrossValidatorTests(CrossValidatorTestsMixin, unittest.TestCase):

@@ -38,6 +38,14 @@ class _TorchMetricEvaluator(Evaluator):
         typeConverter=TypeConverters.toString,
     )
 
+    def getMetricName(self) -> "RegressionEvaluatorMetricType":
+        """
+        Gets the value of metricName or its default value.
+
+        .. versionadded:: 3.5.0
+        """
+        return self.getOrDefault(self.metricName)
+
     def _get_torch_metric(self) -> Any:
         raise NotImplementedError()
 
@@ -103,7 +111,7 @@ class RegressionEvaluator(_TorchMetricEvaluator, HasLabelCol, HasPredictionCol, 
         metric_name = self.getOrDefault(self.metricName)
 
         if metric_name == "mse":
-            return math.sqrt(torchmetrics.MeanSquaredError())
+            return torchmetrics.MeanSquaredError()
         if metric_name == "r2":
             return torchmetrics.R2Score()
         if metric_name == "rmse":
