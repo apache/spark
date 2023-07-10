@@ -71,7 +71,7 @@ private[spark] class ClientDistributedCacheManager() extends Logging {
     val destStatus = statCache.getOrElseUpdate(destPath.toUri(), fs.getFileStatus(destPath))
     val amJarRsrc = Records.newRecord(classOf[LocalResource])
     amJarRsrc.setType(resourceType)
-    val visibility = getVisibility(conf, destPath.toUri(), statCache)
+    val visibility = getVisibility(fs, destPath.toUri(), statCache)
     amJarRsrc.setVisibility(visibility)
     amJarRsrc.setResource(URL.fromPath(destPath))
     amJarRsrc.setTimestamp(destStatus.getModificationTime())
@@ -103,10 +103,10 @@ private[spark] class ClientDistributedCacheManager() extends Logging {
    * @return LocalResourceVisibility
    */
   private[yarn] def getVisibility(
-      conf: Configuration,
+      fs: FileSystem,
       uri: URI,
       statCache: Map[URI, FileStatus]): LocalResourceVisibility = {
-    if (isPublic(conf, uri, statCache)) {
+    if (isPublic(fs, uri, statCache)) {
       LocalResourceVisibility.PUBLIC
     } else {
       LocalResourceVisibility.PRIVATE
@@ -117,9 +117,7 @@ private[spark] class ClientDistributedCacheManager() extends Logging {
    * Returns a boolean to denote whether a cache file is visible to all (public)
    * @return true if the path in the uri is visible to all, false otherwise
    */
-  private[yarn] def isPublic(conf: Configuration, uri: URI, statCache: Map[URI, FileStatus]):
-  Boolean = {
-    val fs = FileSystem.get(uri, conf)
+  private def isPublic(fs: FileSystem, uri: URI, statCache: Map[URI, FileStatus]): Boolean = {
     // the leaf level file should be readable by others
     if (!checkPermissionOfOther(fs, uri, FsAction.READ, statCache)) {
       return false
@@ -169,7 +167,7 @@ private[spark] class ClientDistributedCacheManager() extends Logging {
    * imply the permission in the passed FsAction
    * @return true if the path in the uri is visible to all, false otherwise
    */
-  private[yarn] def checkPermissionOfOther(
+  private def checkPermissionOfOther(
       fs: FileSystem,
       uri: URI,
       action: FsAction,

@@ -26,13 +26,10 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.FileStatus
 import org.apache.hadoop.fs.FileSystem
 import org.apache.hadoop.fs.Path
-import org.apache.hadoop.fs.permission.FsAction
 import org.apache.hadoop.yarn.api.records.LocalResource
 import org.apache.hadoop.yarn.api.records.LocalResourceType
 import org.apache.hadoop.yarn.api.records.LocalResourceVisibility
-import org.mockito.ArgumentMatchers.any
-import org.mockito.Mockito.when
-import org.mockito.invocation.InvocationOnMock
+import org.mockito.Mockito.{times, verify, when}
 import org.scalatestplus.mockito.MockitoSugar
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
@@ -41,7 +38,7 @@ import org.apache.spark.deploy.yarn.config._
 class ClientDistributedCacheManagerSuite extends SparkFunSuite with MockitoSugar {
 
   class MockClientDistributedCacheManager extends ClientDistributedCacheManager {
-    override def getVisibility(conf: Configuration, uri: URI, statCache: Map[URI, FileStatus]):
+    override def getVisibility(fs: FileSystem, uri: URI, statCache: Map[URI, FileStatus]):
         LocalResourceVisibility = {
       LocalResourceVisibility.PRIVATE
     }
@@ -49,51 +46,17 @@ class ClientDistributedCacheManagerSuite extends SparkFunSuite with MockitoSugar
 
   test("SPARK-44272: test addResource added FileStatus to statCache and getVisibility can read" +
     " from statCache") {
-    val distMgr = mock[ClientDistributedCacheManager]
+    val distMgr = new ClientDistributedCacheManager()
     val fs = mock[FileSystem]
     val conf = new Configuration()
     val destPath = new Path("file:///foo.invalid.com:8080/tmp/testing")
-    val destURI = destPath.toUri
     val localResources = HashMap[String, LocalResource]()
     val statCache: Map[URI, FileStatus] = HashMap[URI, FileStatus]()
-
-    when(distMgr.checkPermissionOfOther(any[FileSystem], any[URI], any[FsAction],
-      any[Map[URI, FileStatus]])).thenAnswer((invocation: InvocationOnMock) => {
-        val uri = invocation.getArgument[URI](1)
-        val statCache = invocation.getArgument[Map[URI, FileStatus]](3)
-        assert(statCache.contains(uri))
-        true
-      })
-
-    when(distMgr.isPublic(any[Configuration], any[URI], any[Map[URI, FileStatus]])).
-      thenAnswer((invocation: InvocationOnMock) => {
-        val uri = invocation.getArgument[URI](1)
-        val statCache = invocation.getArgument[Map[URI, FileStatus]](2)
-        distMgr.checkPermissionOfOther(fs, uri, FsAction.READ, statCache)
-        true
-      })
-
-    when(distMgr.getVisibility(any[Configuration], any[URI], any[Map[URI, FileStatus]])).
-      thenAnswer((invocation: InvocationOnMock) => {
-        val uri = invocation.getArgument[URI](1)
-        val statCache = invocation.getArgument[Map[URI, FileStatus]](2)
-        distMgr.isPublic(conf, uri, statCache)
-        LocalResourceVisibility.PRIVATE
-      })
-
-    when(distMgr.addResource(any[FileSystem], any[Configuration], any[Path],
-      any[HashMap[String, LocalResource]], any[LocalResourceType], any[String],
-      any[Map[URI, FileStatus]], any[Boolean])).thenAnswer((invocation: InvocationOnMock) => {
-      val destPath = invocation.getArgument[Path](2)
-      val statCache = invocation.getArgument[Map[URI, FileStatus]](6)
-
-      statCache.getOrElseUpdate(destPath.toUri, fs.getFileStatus(destPath))
-      assert(statCache.contains(destURI))
-      distMgr.getVisibility(conf, destPath.toUri(), statCache)
-    })
-
+    when(fs.getFileStatus(destPath.getParent)).thenReturn(new FileStatus())
+    when(fs.getFileStatus(destPath)).thenReturn(new FileStatus())
     distMgr.addResource(fs, conf, destPath, localResources, LocalResourceType.FILE, "link",
       statCache, false)
+    verify(fs, times(1)).getFileStatus(destPath)
   }
 
   test("SPARK-44272: test getParentURI") {
