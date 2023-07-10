@@ -155,11 +155,7 @@ class Distributor:
     """
 
     def __init__(
-        self,
-        num_processes: int = 1,
-        local_mode: bool = True,
-        use_gpu: bool = True,
-        ssl_conf = None
+        self, num_processes: int = 1, local_mode: bool = True, use_gpu: bool = True, ssl_conf=None
     ):
         from pyspark.sql.utils import is_remote
 
@@ -178,7 +174,7 @@ class Distributor:
         self.local_mode = local_mode
         self.use_gpu = use_gpu
         self.num_tasks = self._get_num_tasks()
-        self.ssl_conf = ssl_conf 
+        self.ssl_conf = ssl_conf
 
     def _create_input_params(self) -> Dict[str, Any]:
         input_params = self.__dict__.copy()
@@ -359,12 +355,13 @@ class TorchDistributor(Distributor):
     _TRAIN_FILE = "train.py"
     _PICKLED_OUTPUT_FILE = "output.pickle"
     _TORCH_SSL_CONF = "pytorch.spark.distributor.ignoreSsl"  # type: ignore
+
     def __init__(
         self,
         num_processes: int = 1,
         local_mode: bool = True,
         use_gpu: bool = True,
-        _ssl_conf=_TORCH_SSL_CONF
+        _ssl_conf=_TORCH_SSL_CONF,
     ):
         """Initializes the distributor.
 
@@ -394,12 +391,11 @@ class TorchDistributor(Distributor):
         self._validate_input_params()
         self.input_params = self._create_input_params()
 
-
-    @staticmethod 
+    @staticmethod
     def _get_torchrun_args(local_mode: bool, num_processes: int) -> Tuple[List[Any], int]:
         """
-        Given the mode and the number of processes, create the arguments to be given to for torch 
-        
+        Given the mode and the number of processes, create the arguments to be given to for torch
+
         Parameters
         ---------
         local_mode: bool
@@ -414,7 +410,7 @@ class TorchDistributor(Distributor):
             A tuple containing a list of arguments to pass as pytorch args , as well as the number of processes per node
         """
         if local_mode:
-            torchrun_args = ["--standalone","--nnodes=1"]
+            torchrun_args = ["--standalone", "--nnodes=1"]
             processes_per_node = num_processes
             return torchrun_args, processes_per_node
 
@@ -425,7 +421,7 @@ class TorchDistributor(Distributor):
             f"--nnodes={num_processes}",
             f"--node_rank={node_rank}",
             f"--rdzv_endpoint={master_addr}:{master_port}",
-            "--rdzv_id=0", # TODO: setup random ID that is gleaned from env variables
+            "--rdzv_id=0",  # TODO: setup random ID that is gleaned from env variables
         ]
         processes_per_node = 1
         return torchrun_args, processes_per_node
@@ -436,8 +432,10 @@ class TorchDistributor(Distributor):
     ) -> List[str]:
         local_mode = input_params["local_mode"]
         num_processes = input_params["num_processes"]
-        
-        torchrun_args, processes_per_node = TorchDistributor._get_torchrun_args(local_mode=local_mode, num_processes=num_processes)
+
+        torchrun_args, processes_per_node = TorchDistributor._get_torchrun_args(
+            local_mode=local_mode, num_processes=num_processes
+        )
         args_string = list(map(str, args))  # converting all args to strings
 
         return [
