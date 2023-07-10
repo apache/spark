@@ -25,7 +25,7 @@
 | org.apache.spark.sql.catalyst.expressions.ArrayJoin | array_join | SELECT array_join(array('hello', 'world'), ' ') | struct<array_join(array(hello, world),  ):string> |
 | org.apache.spark.sql.catalyst.expressions.ArrayMax | array_max | SELECT array_max(array(1, 20, null, 3)) | struct<array_max(array(1, 20, NULL, 3)):int> |
 | org.apache.spark.sql.catalyst.expressions.ArrayMin | array_min | SELECT array_min(array(1, 20, null, 3)) | struct<array_min(array(1, 20, NULL, 3)):int> |
-| org.apache.spark.sql.catalyst.expressions.ArrayPosition | array_position | SELECT array_position(array(3, 2, 1), 1) | struct<array_position(array(3, 2, 1), 1):bigint> |
+| org.apache.spark.sql.catalyst.expressions.ArrayPosition | array_position | SELECT array_position(array(312, 773, 708, 708), 708) | struct<array_position(array(312, 773, 708, 708), 708):bigint> |
 | org.apache.spark.sql.catalyst.expressions.ArrayPrepend | array_prepend | SELECT array_prepend(array('b', 'd', 'c', 'a'), 'd') | struct<array_prepend(array(b, d, c, a), d):array<string>> |
 | org.apache.spark.sql.catalyst.expressions.ArrayRemove | array_remove | SELECT array_remove(array(1, 2, 3, null, 3), 3) | struct<array_remove(array(1, 2, 3, NULL, 3), 3):array<int>> |
 | org.apache.spark.sql.catalyst.expressions.ArrayRepeat | array_repeat | SELECT array_repeat('123', 2) | struct<array_repeat(123, 2):array<string>> |
@@ -48,7 +48,7 @@
 | org.apache.spark.sql.catalyst.expressions.BitLength | bit_length | SELECT bit_length('Spark SQL') | struct<bit_length(Spark SQL):int> |
 | org.apache.spark.sql.catalyst.expressions.BitmapBitPosition | bitmap_bit_position | SELECT bitmap_bit_position(1) | struct<bitmap_bit_position(1):bigint> |
 | org.apache.spark.sql.catalyst.expressions.BitmapBucketNumber | bitmap_bucket_number | SELECT bitmap_bucket_number(123) | struct<bitmap_bucket_number(123):bigint> |
-| org.apache.spark.sql.catalyst.expressions.BitmapConstructAgg | bitmap_construct_agg | SELECT substring(hex(bitmap_construct_agg((bitmap_bit_position(col)))), 0, 6) FROM VALUES (1), (2), (3) AS tab(col) | struct<substring(hex(bitmap_construct_agg(bitmap_bit_position(col))), 0, 6):string> |
+| org.apache.spark.sql.catalyst.expressions.BitmapConstructAgg | bitmap_construct_agg | SELECT substring(hex(bitmap_construct_agg(bitmap_bit_position(col))), 0, 6) FROM VALUES (1), (2), (3) AS tab(col) | struct<substring(hex(bitmap_construct_agg(bitmap_bit_position(col))), 0, 6):string> |
 | org.apache.spark.sql.catalyst.expressions.BitmapCount | bitmap_count | SELECT bitmap_count(X '1010') | struct<bitmap_count(X'1010'):bigint> |
 | org.apache.spark.sql.catalyst.expressions.BitmapOrAgg | bitmap_or_agg | SELECT substring(hex(bitmap_or_agg(col)), 0, 6) FROM VALUES (X '10'), (X '20'), (X '40') AS tab(col) | struct<substring(hex(bitmap_or_agg(col)), 0, 6):string> |
 | org.apache.spark.sql.catalyst.expressions.BitwiseAnd | & | SELECT 3 & 5 | struct<(3 & 5):int> |

@@ -17,7 +17,7 @@
 
 package org.apache.spark.api.python
 
-import java.io.{DataInputStream, DataOutputStream, EOFException, InputStream}
+import java.io.{DataInputStream, DataOutputStream, EOFException, File, InputStream}
 import java.net.{InetAddress, ServerSocket, Socket, SocketException}
 import java.util.Arrays
 import java.util.concurrent.TimeUnit
@@ -157,6 +157,10 @@ private[spark] class PythonWorkerFactory(pythonExec: String, envVars: Map[String
 
       // Create and start the worker
       val pb = new ProcessBuilder(Arrays.asList(pythonExec, "-m", workerModule))
+      val sessionId = envVars.getOrElse("SPARK_CONNECT_SESSION_UUID", "default")
+      if (sessionId != "default") {
+        pb.directory(new File(SparkFiles.getRootDirectory(), sessionId))
+      }
       val workerEnv = pb.environment()
       workerEnv.putAll(envVars.asJava)
       workerEnv.put("PYTHONPATH", pythonPath)
@@ -210,6 +214,10 @@ private[spark] class PythonWorkerFactory(pythonExec: String, envVars: Map[String
         // Create and start the daemon
         val command = Arrays.asList(pythonExec, "-m", daemonModule)
         val pb = new ProcessBuilder(command)
+        val sessionId = envVars.getOrElse("SPARK_CONNECT_SESSION_UUID", "default")
+        if (sessionId != "default") {
+          pb.directory(new File(SparkFiles.getRootDirectory(), sessionId))
+        }
         val workerEnv = pb.environment()
         workerEnv.putAll(envVars.asJava)
         workerEnv.put("PYTHONPATH", pythonPath)
