@@ -74,7 +74,7 @@ class KafkaSourceProviderSuite extends SparkFunSuite with SharedSparkSession {
     while using IAM authentication which times out since it doesn't have IAM auth enabled.
     Thus, it is expected that a timeout error will be thrown.
   */
-  private var mskIAMTestKafkaOptions: Map[String, String] = Map(
+  private val mskIAMTestKafkaOptions: Map[String, String] = Map(
     "subscribe" -> "msk-123",
     "startingOffsets" -> "earliest",
     "kafka.sasl.mechanism" -> "AWS_MSK_IAM",
