@@ -67,8 +67,8 @@ Function InstallRtools {
   Else {
     $gccPath = $env:GCC_PATH
   }
-  $env:PATH = $RtoolsDrive + '\Rtools43\bin;' + $RtoolsDrive + '\Rtools43\mingw64\bin;' + $RtoolsDrive + '\Rtools43\' + $gccPath + '\bin;' + $env:PATH
-  $env:BINPREF=$RtoolsDrive + '/Rtools43/mingw$(WIN)/bin/'
+  $env:PATH = $RtoolsDrive + '\Rtools42\bin;' + $RtoolsDrive + '\Rtools42\mingw64\bin;' + $RtoolsDrive + '\Rtools42\' + $gccPath + '\bin;' + $env:PATH
+  $env:BINPREF=$RtoolsDrive + '/Rtools42/mingw$(WIN)/bin/'
 }
 
 # create tools directory outside of Spark directory
@@ -130,7 +130,7 @@ Pop-Location
 
 # ========================== R
 $rVer = "4.3.1"
-$rToolsVer = "43-5550-5548"
+$rToolsVer = "42-5355-5357"
 
 InstallR
 InstallRtools
