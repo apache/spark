@@ -71,37 +71,38 @@ class DeepspeedTorchDistributorUnitTests(unittest.TestCase):
 
         # get the arguments for no argument, local run
         torchrun_local_args_expected = ["--standalone", "--nnodes=1"]
+        with self.subTest(msg="Testing local training with no extra args"):
+            LOCAL_CMD_NO_ARGS_EXPECTED= [
+                         sys.executable,
+                        "-m",
+                        "torch.distributed.run",
+                        *torchrun_local_args_expected,
+                        f"--nproc_per_node={NUM_PROCS}",
+                        TRAIN_FILE_PATH,
+                        "-deepspeed",
+                        "--deepspeed_config",
+                        DEEPSPEED_CONF
+                        ]
+            local_cmd = DeepspeedTorchDistributor._create_torchrun_command(input_params, TRAIN_FILE_PATH)
+            self.assertEqual(local_cmd,LOCAL_CMD_NO_ARGS_EXPECTED)
+        with self.subTest(msg="Testing local training with extra args for the training script"):
+            local_mode_version_args = ["--arg1", "--arg2"]
+            LOCAL_CMD_ARGS_EXPECTED= [
+                         sys.executable,
+                        "-m",
+                        "torch.distributed.run",
+                        *torchrun_local_args_expected,
+                        f"--nproc_per_node={NUM_PROCS}",
+                        TRAIN_FILE_PATH,
+                        *local_mode_version_args,
+                        "-deepspeed",
+                        "--deepspeed_config",
+                        DEEPSPEED_CONF
+                        ]
 
-        LOCAL_CMD_NO_ARGS_EXPECTED= [
-                     sys.executable,
-                    "-m",
-                    "torch.distributed.run",
-                    *torchrun_local_args_expected,
-                    f"--nproc_per_node={NUM_PROCS}",
-                    TRAIN_FILE_PATH,
-                    "-deepspeed",
-                    "--deepspeed_config",
-                    DEEPSPEED_CONF
-                    ]
-        local_cmd = DeepspeedTorchDistributor._create_torchrun_command(input_params, TRAIN_FILE_PATH)
-        self.assertEqual(local_cmd,LOCAL_CMD_NO_ARGS_EXPECTED)
-        local_mode_version_args = ["--arg1", "--arg2"]
-        LOCAL_CMD_ARGS_EXPECTED= [
-                     sys.executable,
-                    "-m",
-                    "torch.distributed.run",
-                    *torchrun_local_args_expected,
-                    f"--nproc_per_node={NUM_PROCS}",
-                    TRAIN_FILE_PATH,
-                    *local_mode_version_args,
-                    "-deepspeed",
-                    "--deepspeed_config",
-                    DEEPSPEED_CONF
-                    ]
+            local_cmd_with_args = DeepspeedTorchDistributor._create_torchrun_command(input_params, TRAIN_FILE_PATH, *local_mode_version_args)
+            self.assertEqual(local_cmd_with_args,LOCAL_CMD_ARGS_EXPECTED)
 
-        local_cmd_with_args = DeepspeedTorchDistributor._create_torchrun_command(input_params, TRAIN_FILE_PATH, *local_mode_version_args)
-        self.assertEqual(local_cmd_with_args,LOCAL_CMD_ARGS_EXPECTED)
-    
     def test_create_torchrun_command_distributed(self):
         DEEPSPEED_CONF = "path/to/deepspeed"
         TRAIN_FILE_PATH = "path/to/exec"
