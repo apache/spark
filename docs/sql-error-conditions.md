@@ -1836,7 +1836,7 @@ The direct query on files does not support the data source type: `<className>`. 
 
 SQLSTATE: none assigned
 
-The `<format>` datasource don't support column `<columnName>` with the type of `<columnType>`.
+The `<format>` datasource doesn't support the column `<columnName>` of the type `<columnType>`.
 
 ### [UNSUPPORTED_DEFAULT_VALUE](sql-error-conditions-unsupported-default-value-error-class.html)
 
