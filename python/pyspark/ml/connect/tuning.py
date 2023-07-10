@@ -53,6 +53,8 @@ from pyspark.sql.functions import col, lit, rand, UserDefinedFunction
 from pyspark.sql.types import BooleanType
 from pyspark.sql.dataframe import DataFrame
 
+from pyspark.sql.utils import is_remote
+
 from pyspark.ml.tuning import ParamGridBuilder
 
 if TYPE_CHECKING:
@@ -430,10 +432,9 @@ class CrossValidator(
             validation = datasets[i][1].cache()
             train = datasets[i][0].cache()
 
-            tasks = map(
-                inheritable_thread_target,
-                _parallelFitTasks(est, train, eva, validation, epm),
-            )
+            tasks = _parallelFitTasks(est, train, eva, validation, epm)
+            tasks = map(inheritable_thread_target, tasks)
+
             for j, metric in pool.imap_unordered(lambda f: f(), tasks):
                 metrics_all[i][j] = metric
 
