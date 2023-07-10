@@ -146,7 +146,9 @@ class Transformer(Params, metaclass=ABCMeta):
         """
         raise NotImplementedError()
 
-    def transform(self, dataset: Union[DataFrame, pd.DataFrame], params: Optional["ParamMap"] = None) -> Union[DataFrame, pd.DataFrame]:
+    def transform(
+        self, dataset: Union[DataFrame, pd.DataFrame], params: Optional["ParamMap"] = None
+    ) -> Union[DataFrame, pd.DataFrame]:
         """
         Transforms the input dataset.
         The dataset can be either pandas dataframe or spark dataframe,

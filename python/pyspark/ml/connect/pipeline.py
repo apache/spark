@@ -50,9 +50,7 @@ class _PipelineReadWrite(MetaAlgorithmReadWrite):
         """
         return ["stages"]
 
-    def _save_meta_algorithm(
-        self, root_path: str, node_path: List[str]
-    ) -> Dict[str, Any]:
+    def _save_meta_algorithm(self, root_path: str, node_path: List[str]) -> Dict[str, Any]:
         metadata = self._get_metadata_to_save()
         metadata["stages"] = []
 
@@ -69,9 +67,7 @@ class _PipelineReadWrite(MetaAlgorithmReadWrite):
             metadata["stages"].append(stage_metadata)
         return metadata
 
-    def _load_meta_algorithm(
-        self, root_path: str, node_metadata: Dict[str, Any]
-    ) -> None:
+    def _load_meta_algorithm(self, root_path: str, node_metadata: Dict[str, Any]) -> None:
         stages = []
         for stage_meta in node_metadata["stages"]:
             stage = ParamsReadWrite._load_instance_from_metadata(stage_meta, root_path)
@@ -162,9 +158,7 @@ class Pipeline(Estimator["PipelineModel"], _PipelineReadWrite):
         stages = self.getStages()
         for stage in stages:
             if not (isinstance(stage, Estimator) or isinstance(stage, Transformer)):
-                raise TypeError(
-                    "Cannot recognize a pipeline stage of type %s." % type(stage)
-                )
+                raise TypeError("Cannot recognize a pipeline stage of type %s." % type(stage))
         indexOfLastEstimator = -1
         for i, stage in enumerate(stages):
             if isinstance(stage, Estimator):
@@ -221,9 +215,7 @@ class PipelineModel(Model, _PipelineReadWrite):
         super(PipelineModel, self).__init__()
         self.stages = stages  # type: ignore[assignment]
 
-    def _transform(
-        self, dataset: Union[DataFrame, pd.DataFrame]
-    ) -> Union[DataFrame, pd.DataFrame]:
+    def _transform(self, dataset: Union[DataFrame, pd.DataFrame]) -> Union[DataFrame, pd.DataFrame]:
         for t in self.stages:
             dataset = t.transform(dataset)  # type: ignore[attr-defined]
         return dataset

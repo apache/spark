@@ -98,7 +98,13 @@ class RegressionEvaluator(_TorchMetricEvaluator, HasLabelCol, HasPredictionCol, 
     """
 
     @keyword_only
-    def __init__(self, *, metricName: str = 'rmse', labelCol: str = 'label', predictionCol: str = 'prediction') -> None:
+    def __init__(
+        self,
+        *,
+        metricName: str = "rmse",
+        labelCol: str = "label",
+        predictionCol: str = "prediction",
+    ) -> None:
         """
         __init__(self, *, metricName='rmse', labelCol='label', predictionCol='prediction') -> None:
         """
@@ -147,7 +153,13 @@ class BinaryClassificationEvaluator(
     """
 
     @keyword_only
-    def __init__(self, *, metricName: str = 'areaUnderROC', labelCol: str = 'label', probabilityCol: str = 'probability') -> None:
+    def __init__(
+        self,
+        *,
+        metricName: str = "areaUnderROC",
+        labelCol: str = "label",
+        probabilityCol: str = "probability",
+    ) -> None:
         """
         __init__(self, *, metricName='rmse', labelCol='label', probabilityCol='probability') -> None:
         """
@@ -193,7 +205,12 @@ class MulticlassClassificationEvaluator(
     .. versionadded:: 3.5.0
     """
 
-    def __init__(self, metricName: str = 'accuracy', labelCol: str = 'label', predictionCol: str = 'prediction') -> None:
+    def __init__(
+        self,
+        metricName: str = "accuracy",
+        labelCol: str = "label",
+        predictionCol: str = "prediction",
+    ) -> None:
         """
         __init__(self, *, metricName='accuracy', labelCol='label', predictionCol='prediction') -> None:
         """

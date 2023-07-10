@@ -39,9 +39,7 @@ def _copy_file_from_local_to_fs(local_path: str, dest_path: str) -> None:
         session.copyFromLocalToFs(local_path, dest_path)
     else:
         jvm = session.sparkContext._gateway.jvm  # type: ignore[union-attr]
-        jvm.org.apache.spark.ml.python.MLUtil.copyFileFromLocalToFs(
-            local_path, dest_path
-        )
+        jvm.org.apache.spark.ml.python.MLUtil.copyFileFromLocalToFs(local_path, dest_path)
 
 
 def _copy_dir_from_local_to_fs(local_path: str, dest_path: str) -> None:
@@ -218,9 +216,7 @@ class ParamsReadWrite(Params):
         else:
             metadata = self._get_metadata_to_save()  # type: ignore[attr-defined]
             if isinstance(self, CoreModelReadWrite):
-                core_model_path = ".".join(
-                    node_path + [self._get_core_model_filename()]
-                )
+                core_model_path = ".".join(node_path + [self._get_core_model_filename()])
                 self._save_core_model(os.path.join(root_path, core_model_path))
                 metadata["core_model_path"] = core_model_path
 
@@ -307,14 +303,10 @@ class MetaAlgorithmReadWrite(ParamsReadWrite):
     def _get_child_stages(self):
         raise NotImplementedError()
 
-    def _save_meta_algorithm(
-        self, root_path: str, node_path: List[str]
-    ) -> Dict[str, Any]:
+    def _save_meta_algorithm(self, root_path: str, node_path: List[str]) -> Dict[str, Any]:
         raise NotImplementedError()
 
-    def _load_meta_algorithm(
-        self, root_path: str, node_metadata: Dict[str, Any]
-    ) -> None:
+    def _load_meta_algorithm(self, root_path: str, node_metadata: Dict[str, Any]) -> None:
         raise NotImplementedError()
 
     @staticmethod

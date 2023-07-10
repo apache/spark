@@ -200,16 +200,13 @@ def _parallelFitTasks(
 
 
 class _CrossValidatorReadWrite(MetaAlgorithmReadWrite):
-
     def _get_skip_saving_params(self) -> List[str]:
         """
         Returns params to be skipped when saving metadata.
         """
         return ["estimator", "estimatorParamMaps", "evaluator"]
 
-    def _save_meta_algorithm(
-            self, root_path: str, node_path: List[str]
-    ) -> Dict[str, Any]:
+    def _save_meta_algorithm(self, root_path: str, node_path: List[str]) -> Dict[str, Any]:
         metadata = self._get_metadata_to_save()
         metadata["estimator"] = self.getEstimator()._save_to_node_path(
             root_path, node_path + ["crossvalidator_estimator"]
@@ -234,13 +231,15 @@ class _CrossValidatorReadWrite(MetaAlgorithmReadWrite):
             )
         return metadata
 
-    def _load_meta_algorithm(
-            self, root_path: str, node_metadata: Dict[str, Any]
-    ) -> None:
-        estimator = ParamsReadWrite._load_instance_from_metadata(node_metadata["estimator"], root_path)
+    def _load_meta_algorithm(self, root_path: str, node_metadata: Dict[str, Any]) -> None:
+        estimator = ParamsReadWrite._load_instance_from_metadata(
+            node_metadata["estimator"], root_path
+        )
         self.set(self.estimator, estimator)
 
-        evaluator = ParamsReadWrite._load_instance_from_metadata(node_metadata["evaluator"], root_path)
+        evaluator = ParamsReadWrite._load_instance_from_metadata(
+            node_metadata["evaluator"], root_path
+        )
         self.set(self.evaluator, evaluator)
 
         json_epm = node_metadata["estimator_param_maps"]
@@ -459,25 +458,19 @@ class CrossValidator(
             def checker(foldNum: int) -> bool:
                 if foldNum < 0 or foldNum >= nFolds:
                     raise ValueError(
-                        "Fold number must be in range [0, %s), but got %s."
-                        % (nFolds, foldNum)
+                        "Fold number must be in range [0, %s), but got %s." % (nFolds, foldNum)
                     )
                 return True
 
             checker_udf = UserDefinedFunction(checker, BooleanType())
             for i in range(nFolds):
-                training = dataset.filter(
-                    checker_udf(dataset[foldCol]) & (col(foldCol) != lit(i))
-                )
+                training = dataset.filter(checker_udf(dataset[foldCol]) & (col(foldCol) != lit(i)))
                 validation = dataset.filter(
                     checker_udf(dataset[foldCol]) & (col(foldCol) == lit(i))
                 )
                 if training.rdd.getNumPartitions() == 0 or len(training.take(1)) == 0:
                     raise ValueError("The training data at fold %s is empty." % i)
-                if (
-                    validation.rdd.getNumPartitions() == 0
-                    or len(validation.take(1)) == 0
-                ):
+                if validation.rdd.getNumPartitions() == 0 or len(validation.take(1)) == 0:
                     raise ValueError("The validation data at fold %s is empty." % i)
                 datasets.append((training, validation))
 
@@ -568,8 +561,6 @@ class CrossValidatorModel(Model, _CrossValidatorParams, _CrossValidatorReadWrite
         stdMetrics = list(self.stdMetrics)
 
         return self._copyValues(
-            CrossValidatorModel(
-                bestModel, avgMetrics=avgMetrics, stdMetrics=stdMetrics
-            ),
+            CrossValidatorModel(bestModel, avgMetrics=avgMetrics, stdMetrics=stdMetrics),
             extra=extra,
         )

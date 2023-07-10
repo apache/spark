@@ -186,30 +186,21 @@ class CrossValidatorTestsMixin:
         sk_dataset = load_breast_cancer()
 
         train_dataset = self.spark.createDataFrame(
-            zip(
-                sk_dataset.data.tolist(),
-                [int(t) for t in sk_dataset.target]
-            ),
-            schema="features: array<double>, label: long"
+            zip(sk_dataset.data.tolist(), [int(t) for t in sk_dataset.target]),
+            schema="features: array<double>, label: long",
         )
 
         eval_dataset = self.spark.createDataFrame(
-            zip(
-                sk_dataset.data[1::2].tolist(),
-                [int(t) for t in sk_dataset.target[1::2]]
-            ),
-            schema="features: array<double>, label: long"
+            zip(sk_dataset.data[1::2].tolist(), [int(t) for t in sk_dataset.target[1::2]]),
+            schema="features: array<double>, label: long",
         )
 
         scaler = StandardScaler(inputCol="features", outputCol="scaled_features")
-        lorv2 = LORV2(
-            numTrainWorkers=2, featuresCol="scaled_features"
-        )
+        lorv2 = LORV2(numTrainWorkers=2, featuresCol="scaled_features")
         pipeline = Pipeline(stages=[scaler, lorv2])
 
         grid2 = (
-            ParamGridBuilder()
-            .addGrid(lorv2.maxIter, [2, 200])
+            ParamGridBuilder().addGrid(lorv2.maxIter, [2, 200])
             # .addGrid(lorv2.learningRate, [0.001, 0.00001])
             .build()
         )
