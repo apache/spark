@@ -155,7 +155,11 @@ class Distributor:
     """
 
     def __init__(
-        self, num_processes: int = 1, local_mode: bool = True, use_gpu: bool = True, ssl_conf=None
+        self,
+        num_processes: int = 1,
+        local_mode: bool = True,
+        use_gpu: bool = True,
+        ssl_conf: Optional[str] = None,
     ):
         from pyspark.sql.utils import is_remote
 
@@ -361,7 +365,7 @@ class TorchDistributor(Distributor):
         num_processes: int = 1,
         local_mode: bool = True,
         use_gpu: bool = True,
-        _ssl_conf=_TORCH_SSL_CONF,
+        _ssl_conf: str = _TORCH_SSL_CONF,
     ):
         """Initializes the distributor.
 
