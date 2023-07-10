@@ -23,7 +23,7 @@ from typing import cast
 
 from pyspark.sql import Row
 from pyspark.sql.functions import col, encode, lit
-from pyspark.errors import PythonException
+from pyspark.errors import PythonException, PySparkRuntimeError
 from pyspark.testing.sqlutils import (
     ReusedSQLTestCase,
     have_pandas,
@@ -173,7 +173,8 @@ class MapInPandasTestsMixin:
 
         with self.assertRaisesRegex(
             PythonException,
-            "RuntimeError: Column names of the returned pandas.DataFrame do not match "
+            "PySparkRuntimeError: \\[RESULT_COLUMNS_MISMATCH_FOR_PANDAS_UDF\\] "
+            "Column names of the returned pandas.DataFrame do not match "
             "specified schema. Missing: id. Unexpected: iid.\n",
         ):
             (
@@ -194,7 +195,8 @@ class MapInPandasTestsMixin:
 
         with self.assertRaisesRegex(
             PythonException,
-            "RuntimeError: Column names of the returned pandas.DataFrame do not match "
+            "PySparkRuntimeError: \\[RESULT_COLUMNS_MISMATCH_FOR_PANDAS_UDF\\] "
+            "Column names of the returned pandas.DataFrame do not match "
             "specified schema. Missing: id2.\n",
         ):
             (
@@ -214,7 +216,8 @@ class MapInPandasTestsMixin:
 
         with self.assertRaisesRegex(
             PythonException,
-            "RuntimeError: Column names of the returned pandas.DataFrame do not match "
+            "PySparkRuntimeError: \\[RESULT_COLUMNS_MISMATCH_FOR_PANDAS_UDF\\] "
+            "Column names of the returned pandas.DataFrame do not match "
             "specified schema. Missing: id2.\n",
         ):
             f = self.identity_dataframes_iter("id", "value")
@@ -222,7 +225,8 @@ class MapInPandasTestsMixin:
 
         with self.assertRaisesRegex(
             PythonException,
-            "RuntimeError: Number of columns of the returned pandas.DataFrame doesn't match "
+            "PySparkRuntimeError: \\[RESULT_LENGTH_MISMATCH_FOR_PANDAS_UDF\\] "
+            "Number of columns of the returned pandas.DataFrame doesn't match "
             "specified schema. Expected: 3 Actual: 2\n",
         ):
             f = self.identity_dataframes_wo_column_names_iter("id", "value")
@@ -316,7 +320,8 @@ class MapInPandasTestsMixin:
     def check_empty_dataframes_with_less_columns(self):
         with self.assertRaisesRegex(
             PythonException,
-            "RuntimeError: Column names of the returned pandas.DataFrame do not match "
+            "PySparkRuntimeError: \\[RESULT_COLUMNS_MISMATCH_FOR_PANDAS_UDF\\] "
+            "Column names of the returned pandas.DataFrame do not match "
             "specified schema. Missing: value.\n",
         ):
             f = self.dataframes_and_empty_dataframe_iter("id")
@@ -344,7 +349,8 @@ class MapInPandasTestsMixin:
 
         with self.assertRaisesRegex(
             PythonException,
-            "RuntimeError: Column names of the returned pandas.DataFrame do not match "
+            "PySparkRuntimeError: \\[RESULT_COLUMNS_MISMATCH_FOR_PANDAS_UDF\\] "
+            "Column names of the returned pandas.DataFrame do not match "
             "specified schema. Missing: id. Unexpected: iid.\n",
         ):
             (
