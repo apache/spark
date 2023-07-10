@@ -209,7 +209,6 @@ object CheckConnectJvmClientCompatibility {
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.RelationalGroupedDataset.apply"),
 
       // SparkSession
-      ProblemFilters.exclude[Problem]("org.apache.spark.sql.SparkSession#Builder.intercept"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.SparkSession.clearDefaultSession"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.SparkSession.setDefaultSession"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.SparkSession.sparkContext"),
@@ -245,6 +244,8 @@ object CheckConnectJvmClientCompatibility {
         "org.apache.spark.sql.SparkSession#Builder.enableHiveSupport"),
       ProblemFilters.exclude[DirectMissingMethodProblem](
         "org.apache.spark.sql.SparkSession#Builder.withExtensions"),
+      ProblemFilters.exclude[DirectMissingMethodProblem](
+        "org.apache.spark.sql.SparkSession#Builder.interceptor"),
 
       // RuntimeConfig
       ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.RuntimeConfig$"),
