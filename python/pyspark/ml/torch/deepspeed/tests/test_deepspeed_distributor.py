@@ -71,7 +71,6 @@ class DeepspeedTorchDistributorUnitTests(unittest.TestCase):
         input_params["num_processes"] = NUM_PROCS
         input_params["deepspeed_config"] = DEEPSPEED_CONF
 
-        # get the arguments for no argument, local run
         torchrun_local_args_expected = ["--standalone", "--nnodes=1"]
         with self.subTest(msg="Testing local training with no extra args"):
             LOCAL_CMD_NO_ARGS_EXPECTED = [
@@ -117,7 +116,6 @@ class DeepspeedTorchDistributorUnitTests(unittest.TestCase):
         input_params["local_mode"] = True
         input_params["num_processes"] = NUM_PROCS
         input_params["deepspeed_config"] = DEEPSPEED_CONF
-        # distributed training environment
         (
             distributed_master_address,
             distributed_master_port,
@@ -141,14 +139,12 @@ class DeepspeedTorchDistributorUnitTests(unittest.TestCase):
                 "--deepspeed_config",
                 DEEPSPEED_CONF,
             ]
-            # test distributed training without arguments
             input_params["local_mode"] = False
             distributed_command = DeepspeedTorchDistributor._create_torchrun_command(
                 input_params, TRAIN_FILE_PATH
             )
             self.assertEqual(DISTRIBUTED_CMD_NO_ARGS_EXPECTED, distributed_command)
         with self.subTest(msg="Distributed training command verification with extra arguments"):
-            # test distributed training with random arguments
             distributed_extra_args = ["-args1", "--args2"]
             DISTRIBUTED_CMD_ARGS_EXPECTED = [
                 sys.executable,
