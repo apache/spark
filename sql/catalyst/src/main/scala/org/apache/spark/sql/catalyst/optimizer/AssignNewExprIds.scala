@@ -26,19 +26,34 @@ import org.apache.spark.sql.catalyst.rules.Rule
 
 /**
  * Reassigns expression IDs in every expression of the given LogicalPlan (including subqueries
- * contained in the plan).
+ * contained in the plan). The rule applies to CTEs as well as subquery expressions.
+ * After the rule is done, we guarantee that all expression IDs in the plan are different from the
+ * original plan (except intermediate results of aggregate functions), and there is a consistent
+ * mapping between all the original IDs and the newly assigned IDs throughout the plan.
+ * Intermediate results of aggregate functions (such as PartialMerge etc) retain their IDs.
+ * The purpose of the rule is to support safely adding multiple copies of the same subplan, e.g.
+ * during subquery decorrelation.
  */
 object AssignNewExprIds extends Rule[LogicalPlan] {
+  def apply(plan: LogicalPlan): LogicalPlan = {
+    val reassignedExprs = mutable.HashMap.empty[ExprId, Attribute]
+    plan.transformUpWithSubqueries {
+      case q => q.transformExpressionsUp({
+        case e: Expression => assignNewExprIdsinExpr(e, reassignedExprs)
+      })
+    }
+  }
 
   private def assignNewExprIdsinExpr(input: Expression,
-                                     reassignedExprs: mutable.HashMap[ExprId, Attribute]):
-  Expression = input match {
+    reassignedExprs: mutable.HashMap[ExprId, Attribute]): Expression =
+    input match {
     case a: Attribute =>
-      val newAttribute = reassignedExprs.getOrElse(a.exprId,
-        a.withExprId(NamedExpression.newExprId))
-      reassignedExprs.put(a.exprId, newAttribute)
-      reassignedExprs.put(newAttribute.exprId, newAttribute)
-      newAttribute
+      reassignedExprs.get(a.exprId).getOrElse {
+        val newAttribute = a.withExprId(NamedExpression.newExprId)
+        reassignedExprs.put(a.exprId, newAttribute)
+        reassignedExprs.put(newAttribute.exprId, newAttribute)
+        newAttribute
+      }
     case a: Alias =>
       val newAlias = Alias(a.child, a.name)(NamedExpression.newExprId,
         a.qualifier, a.explicitMetadata, a.nonInheritableMetadataKeys)
@@ -51,34 +66,14 @@ object AssignNewExprIds extends Rule[LogicalPlan] {
         // In order to avoid renaming attributes of final aggregations, keep the intermediate
         // attributes as is.
         reassignedExprs.put(a.resultAttribute.exprId, a.resultAttribute)
-        return a
+        a
+      } else {
+        val newResultId = NamedExpression.newExprId
+        val updatedExpression = a.copy(resultId = newResultId)
+        reassignedExprs.put(newResultId, updatedExpression.resultAttribute)
+        reassignedExprs.put(a.resultId, updatedExpression.resultAttribute)
+        updatedExpression
       }
-      val newResultId = NamedExpression.newExprId
-      val updatedExpression = a.copy(resultId = newResultId)
-      reassignedExprs.put(newResultId, updatedExpression.resultAttribute)
-      reassignedExprs.put(a.resultId, updatedExpression.resultAttribute)
-      updatedExpression
     case p: Expression => p
-  }
-
-  private def transformUpAllExpressions(plan: LogicalPlan,
-                                        rule: PartialFunction[Expression, Expression]):
-  LogicalPlan = {
-    plan.transformUpWithSubqueries {
-      case q => q.transformExpressionsUp(rule)
-    }
-  }
-
-  private def assignNewExprIds(plan: LogicalPlan,
-                               reassignedExprs: mutable.HashMap[ExprId, Attribute]):
-  LogicalPlan = {
-    transformUpAllExpressions(plan, {
-      case e: Expression => assignNewExprIdsinExpr(e, reassignedExprs)
-    })
-  }
-
-  def apply(plan: LogicalPlan): LogicalPlan = {
-    val reassignedExprs = mutable.HashMap.empty[ExprId, Attribute]
-    assignNewExprIds(plan, reassignedExprs)
   }
 }

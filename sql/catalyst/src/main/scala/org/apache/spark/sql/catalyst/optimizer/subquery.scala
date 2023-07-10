@@ -36,7 +36,6 @@ import org.apache.spark.sql.internal.SQLConf.REASSIGN_IDS_IN_SCALAR_SUBQUERY
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
-
 /*
  * This file defines optimization rules related to subqueries.
  */
@@ -607,9 +606,9 @@ object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] with AliasHelpe
         } else {
           query
         }
+        // Result of the scalar subquery is Nullable by default.
         val newOutput = newQuery.output.head.withNullability(true)
         val replacementMap = AttributeMap(query.output.zip(newQuery.output).toMap)
-
         val newConditions = conditions.map(_.transform {
           case a: Attribute => replacementMap.getOrElse(a, a)
         })

@@ -19,9 +19,9 @@ package org.apache.spark.sql.catalyst.optimizer
 
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.expressions.{AttributeSet, InSubquery, ListQuery, ScalarSubquery}
-import org.apache.spark.sql.catalyst.plans.{LeftSemi, PlanTest}
-import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
+import org.apache.spark.sql.catalyst.expressions.{AttributeSet, Exists, InSubquery, ListQuery, ScalarSubquery}
+import org.apache.spark.sql.catalyst.plans.{Inner, LeftSemi, PlanTest}
+import org.apache.spark.sql.catalyst.plans.logical.{CTERelationDef, CTERelationRef, LocalRelation, LogicalPlan, WithCTE}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 
 class AssignNewExprIdsSuite extends PlanTest {
@@ -80,6 +80,32 @@ class AssignNewExprIdsSuite extends PlanTest {
       testRelation1
         .where(InSubquery(Seq($"a"), ListQuery(subPlan)))
         .select($"a").analyze
+    check(query)
+  }
+
+  test("Reassign IDs in self-join") {
+    val plan =
+      testRelation1.join(testRelation1.as("t1"), Inner, Some($"a" == $"t1.a")).analyze
+    check(plan)
+  }
+
+  test("Reassign IDs in EXISTS subquery") {
+    val subPlan =
+      testRelation2
+        .where($"b" < $"d")
+        .select($"c")
+    val query =
+      testRelation1
+        .where(Exists(subPlan))
+        .select($"a").analyze
+    check(query)
+  }
+
+  test("Reassign IDs in a plan with CTE") {
+    val join = testRelation1.as("left").join(testRelation1.as("right"))
+    val cteDef = CTERelationDef(join)
+    val cteRef = CTERelationRef(cteDef.id, false, Nil)
+    val query = WithCTE(cteRef.select($"left.a"), Seq(cteDef)).analyze
     check(query)
   }
 }

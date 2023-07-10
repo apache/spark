@@ -4283,7 +4283,8 @@ object SQLConf {
   val REASSIGN_IDS_IN_SCALAR_SUBQUERY =
     buildConf("spark.sql.optimizer.reassignIdsInScalarSubquery.enabled")
       .internal()
-      .doc("Reassigns expression IDs in scalar subqueries.")
+      .doc("Reassigns expression IDs in scalar subqueries. Used to avoid duplicate expression IDs " +
+        "when unnesting subqueries.")
       .version("3.5.0")
       .booleanConf
       .createWithDefault(false)
