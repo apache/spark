@@ -237,10 +237,10 @@ class _CrossValidatorReadWrite(MetaAlgorithmReadWrite):
     def _load_meta_algorithm(
             self, root_path: str, node_metadata: Dict[str, Any]
     ) -> None:
-        estimator = ParamsReadWrite._load_instance_from_metadata(node_metadata["estimator"])
+        estimator = ParamsReadWrite._load_instance_from_metadata(node_metadata["estimator"], root_path)
         self.set(self.estimator, estimator)
 
-        evaluator = ParamsReadWrite._load_instance_from_metadata(node_metadata["evaluator"])
+        evaluator = ParamsReadWrite._load_instance_from_metadata(node_metadata["evaluator"], root_path)
         self.set(self.evaluator, evaluator)
 
         json_epm = node_metadata["estimator_param_maps"]
@@ -264,7 +264,7 @@ class _CrossValidatorReadWrite(MetaAlgorithmReadWrite):
             self.stdMetrics = node_metadata["std_metrics"]
 
             self.bestModel = ParamsReadWrite._load_instance_from_metadata(
-                node_metadata["best_model"]
+                node_metadata["best_model"], root_path
             )
 
 
@@ -559,7 +559,7 @@ class CrossValidatorModel(Model, _CrossValidatorParams, _CrossValidatorReadWrite
 
     def __init__(
         self,
-        bestModel: Model,
+        bestModel: Model = None,
         avgMetrics: Optional[List[float]] = None,
         stdMetrics: Optional[List[float]] = None,
     ):

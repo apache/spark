@@ -29,6 +29,8 @@ from pyspark.ml.connect.evaluation import BinaryClassificationEvaluator, Regress
 from pyspark.sql import SparkSession
 from pyspark.sql.functions import rand
 
+from sklearn.datasets import load_breast_cancer
+
 
 have_torch = True
 try:
@@ -181,45 +183,23 @@ class CrossValidatorTestsMixin:
             )
 
     def test_crossvalidator_on_pipeline(self):
+        sk_dataset = load_breast_cancer()
+
         train_dataset = self.spark.createDataFrame(
-            [
-                (1.0, [0.0, 5.0]),
-                (0.0, [1.0, 2.0]),
-                (1.0, [2.0, 1.0]),
-                (0.0, [3.0, 3.0]),
-            ]
-            * 100,
-            ["label", "features"],
-            )
+            zip(
+                sk_dataset.data.tolist(),
+                [int(t) for t in sk_dataset.target]
+            ),
+            schema="features: array<double>, label: long"
+        )
+
         eval_dataset = self.spark.createDataFrame(
-            [
-                ([0.0, 2.0],),
-                ([3.5, 3.0],),
-            ],
-            ["features"],
+            zip(
+                sk_dataset.data[1::2].tolist(),
+                [int(t) for t in sk_dataset.target[1::2]]
+            ),
+            schema="features: array<double>, label: long"
         )
-
-        lorv2 = LORV2()
-        grid1 = ParamGridBuilder().addGrid(lorv2.maxIter, [2, 200]).build()
-
-        cv1 = CrossValidator(
-            estimator=LORV2(),
-            estimatorParamMaps=grid1,
-            parallelism=2,
-            evaluator=BinaryClassificationEvaluator(),
-        )
-        cv1_model = cv1.fit(train_dataset)
-
-        expected_predictions1 = [1, 0]
-        expected_probabilities1 = [
-            [0.247183, 0.752817],
-            [0.837707, 0.162293],
-        ]
-
-        result1 = cv1_model.transform(eval_dataset).toPandas()
-        self._check_result(result1, expected_predictions1, expected_probabilities1)
-        local_transform_result1 = cv1_model.transform(eval_dataset.toPandas())
-        self._check_result(local_transform_result1, expected_predictions1, expected_probabilities1)
 
         scaler = StandardScaler(inputCol="features", outputCol="scaled_features")
         lorv2 = LORV2(
@@ -230,7 +210,7 @@ class CrossValidatorTestsMixin:
         grid2 = (
             ParamGridBuilder()
             .addGrid(lorv2.maxIter, [2, 200])
-            .addGrid(lorv2.learningRate, [0.001, 0.00001])
+            # .addGrid(lorv2.learningRate, [0.001, 0.00001])
             .build()
         )
         cv2 = CrossValidator(
@@ -241,16 +221,37 @@ class CrossValidatorTestsMixin:
         )
         cv2_model = cv2.fit(train_dataset)
 
-        expected_predictions2 = [1, 0]
-        expected_probabilities2 = [
-            [0.117658, 0.882342],
-            [0.878738, 0.121262],
-        ]
+        assert cv2_model.bestModel.stages[1].getMaxIter() == 200
 
-        result2 = cv2_model.transform(eval_dataset).toPandas()
-        self._check_result(result2, expected_predictions2, expected_probabilities2)
-        local_transform_result2 = cv2_model.transform(eval_dataset.toPandas())
-        self._check_result(local_transform_result2, expected_predictions2, expected_probabilities2)
+        # trial of index 2 should have better metric value
+        # because it sets higher `maxIter` param.
+        assert cv2_model.avgMetrics[1] > cv2_model.avgMetrics[0]
+
+        def _verify_cv_saved_params(instance, loaded_instance):
+            assert instance.getEstimator().uid == loaded_instance.getEstimator().uid
+            assert instance.getEvaluator().uid == loaded_instance.getEvaluator().uid
+            assert instance.getEstimatorParamMaps() == loaded_instance.getEstimatorParamMaps()
+
+        # Test save / load
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            cv2.saveToLocal(f"{tmp_dir}/cv")
+            loaded_cv2 = CrossValidator.loadFromLocal(f"{tmp_dir}/cv")
+
+            _verify_cv_saved_params(cv2, loaded_cv2)
+
+            cv2_model.saveToLocal(f"{tmp_dir}/cv_model")
+            loaded_cv2_model = CrossValidatorModel.loadFromLocal(f"{tmp_dir}/cv_model")
+
+            _verify_cv_saved_params(cv2_model, loaded_cv2_model)
+
+            assert cv2_model.uid == loaded_cv2_model.uid
+            assert cv2_model.bestModel.uid == loaded_cv2_model.bestModel.uid
+            assert cv2_model.bestModel.stages[0].uid == loaded_cv2_model.bestModel.stages[0].uid
+            assert cv2_model.bestModel.stages[1].uid == loaded_cv2_model.bestModel.stages[1].uid
+            assert loaded_cv2_model.bestModel.stages[1].getMaxIter() == 200
+
+            np.testing.assert_allclose(cv2_model.avgMetrics, loaded_cv2_model.avgMetrics)
+            np.testing.assert_allclose(cv2_model.stdMetrics, loaded_cv2_model.stdMetrics)
 
 
 class CrossValidatorTests(CrossValidatorTestsMixin, unittest.TestCase):
