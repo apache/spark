@@ -291,7 +291,11 @@ def assertDataFrameEqual(df: DataFrame, expected: DataFrame, check_row_order: bo
                 error_class="UNSUPPORTED_DATA_TYPE",
                 message_parameters={"data_type": type(df)},
             )
-        elif not isinstance(expected, DataFrame) and not isinstance(expected, ConnectDataFrame):
+        elif (
+            not isinstance(expected, DataFrame)
+            and not isinstance(expected, ConnectDataFrame)
+            and not isinstance(expected, List)
+        ):
             raise PySparkAssertionError(
                 error_class="UNSUPPORTED_DATA_TYPE",
                 message_parameters={"data_type": type(expected)},
@@ -302,7 +306,7 @@ def assertDataFrameEqual(df: DataFrame, expected: DataFrame, check_row_order: bo
                 error_class="UNSUPPORTED_DATA_TYPE",
                 message_parameters={"data_type": type(df)},
             )
-        elif not isinstance(expected, DataFrame):
+        elif not isinstance(expected, DataFrame) and not isinstance(expected, List):
             raise PySparkAssertionError(
                 error_class="UNSUPPORTED_DATA_TYPE",
                 message_parameters={"data_type": type(expected)},
@@ -370,7 +374,7 @@ def assertDataFrameEqual(df: DataFrame, expected: DataFrame, check_row_order: bo
                 diff_msg += "********************" + "\n\n"
 
         if not rows_equal:
-            percent_diff = diff_rows_cnt / len(zipped)
+            percent_diff = (diff_rows_cnt / len(zipped)) * 100
             error_msg += "( %.5f %% )" % percent_diff
             error_msg += "\n" + diff_msg
             raise PySparkAssertionError(
@@ -382,18 +386,24 @@ def assertDataFrameEqual(df: DataFrame, expected: DataFrame, check_row_order: bo
         try:
             # rename duplicate columns for sorting
             renamed_df = df.toDF(*[f"_{i}" for i in range(len(df.columns))])
-            renamed_expected = expected.toDF(*[f"_{i}" for i in range(len(expected.columns))])
-
             df = renamed_df.sort(renamed_df.columns).toDF(*df.columns)
-            expected = renamed_expected.sort(renamed_expected.columns).toDF(*expected.columns)
+            if isinstance(expected, DataFrame):
+                renamed_expected = expected.toDF(*[f"_{i}" for i in range(len(expected.columns))])
+                expected = renamed_expected.sort(renamed_expected.columns).toDF(*expected.columns)
+            else:
+                # expected is type List[Row]
+                expected.sort()
         except Exception:
             raise PySparkAssertionError(
                 error_class="UNSUPPORTED_DATA_TYPE_FOR_IGNORE_ROW_ORDER",
                 message_parameters={},
             )
 
-    assert_schema_equal(df.schema, expected.schema)
-    assert_rows_equal(df.collect(), expected.collect())
+    if isinstance(expected, DataFrame):
+        assert_schema_equal(df.schema, expected.schema)
+        assert_rows_equal(df.collect(), expected.collect())
+    else:
+        assert_rows_equal(df.collect(), expected)
 
 
 def _test() -> None:
