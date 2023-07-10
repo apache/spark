@@ -331,7 +331,7 @@ class ArtifactTests(ReusedConnectTestCase):
             spark_session.addArtifacts(file_path, file=True)
             self.assertEqual(spark_session.range(1).select(func("id")).first()[0], "Hello world!!")
 
-    @unittest.skip("SPARK-44348: Reeanble Session-based artifact test cases")
+    @unittest.skip("SPARK-44348: Reenable Session-based artifact test cases")
     def test_add_file(self):
         self.check_add_file(self.spark)
 
