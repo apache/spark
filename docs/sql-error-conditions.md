@@ -254,6 +254,14 @@ SQLSTATE: none assigned
 
 Failed to set permissions on created path `<path>` back to `<permission>`.
 
+### [CANNOT_UPDATE_FIELD](sql-error-conditions-cannot-update-field-error-class.html)
+
+SQLSTATE: none assigned
+
+Cannot update `<table>` field `<fieldName>` type:
+
+For more details see [CANNOT_UPDATE_FIELD](sql-error-conditions-cannot-update-field-error-class.html)
+
 ### CANNOT_UP_CAST_DATATYPE
 
 SQLSTATE: none assigned
@@ -494,6 +502,12 @@ Failed parsing struct: `<raw>`.
 
 Failed to rename `<sourcePath>` to `<targetPath>` as destination already exists.
 
+### FAILED_RENAME_TEMP_FILE
+
+SQLSTATE: none assigned
+
+Failed to rename temp file `<srcPath>` to `<dstPath>` as FileSystem.rename returned false.
+
 ### FIELDS_ALREADY_EXISTS
 
 SQLSTATE: none assigned
@@ -717,6 +731,12 @@ For more details see [INSUFFICIENT_TABLE_PROPERTY](sql-error-conditions-insuffic
 `<message>`
 
 ### INTERNAL_ERROR_NETWORK
+
+[SQLSTATE: XX000](sql-error-conditions-sqlstates.html#class-XX-internal-error)
+
+`<message>`
+
+### INTERNAL_ERROR_SHUFFLE
 
 [SQLSTATE: XX000](sql-error-conditions-sqlstates.html#class-XX-internal-error)
 
@@ -1909,12 +1929,6 @@ You're using untyped Scala UDF, which does not have the input type information. 
 1. use typed Scala UDF APIs(without return type parameter), e.g. `udf((x: Int) => x)`.
 2. use Java UDF APIs, e.g. `udf(new UDF1[String, Integer] { override def call(s: String): Integer = s.length() }, IntegerType)`, if input types are all non primitive.
 3. set "spark.sql.legacy.allowUntypedScalaUDF" to "true" and use this API with caution.
-
-### UPDATE_FIELD_WITH_STRUCT_UNSUPPORTED
-
-SQLSTATE: none assigned
-
-Cannot update `<table>` field `<fieldName>` type: update a struct by updating its fields.
 
 ### VIEW_ALREADY_EXISTS
 

@@ -442,6 +442,7 @@ String Functions
     to_binary
     to_char
     to_number
+    to_varchar
     translate
     trim
     upper
@@ -477,6 +478,11 @@ Misc Functions
 
     aes_decrypt
     aes_encrypt
+    bitmap_bit_position
+    bitmap_bucket_number
+    bitmap_construct_agg
+    bitmap_count
+    bitmap_or_agg
     current_catalog
     current_database
     current_schema
@@ -498,6 +504,7 @@ Misc Functions
     java_method
     random
     stack
+    try_aes_decrypt
     typeof
     user
     uuid
