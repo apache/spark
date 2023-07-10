@@ -176,7 +176,9 @@ class SessionResourceLoader(session: SparkSession) extends FunctionResourceLoade
    * to add the jar to its hive client for the current session. Hence, it still needs to be in
    * [[SessionState]].
    */
-  def addJar(path: String): Unit = {
+  def addJar(path: String): Unit = addJar(path: String, sessionId = "default")
+
+  private[spark] def addJar(path: String, sessionId: String): Unit = {
     val uri = Utils.resolveURI(path)
     resolveJars(uri).foreach { p =>
       session.sparkContext.addJar(p)

@@ -396,27 +396,30 @@ object ResolveDefaultColumns extends QueryErrorsBase {
    * above, for convenience.
    */
   def getExistenceDefaultsBitmask(schema: StructType): Array[Boolean] = {
-    Array.fill[Boolean](schema.existenceDefaultValues.size)(true)
+    Array.fill[Boolean](existenceDefaultValues(schema).size)(true)
   }
 
   /**
    * Resets the elements of the array initially returned from [[getExistenceDefaultsBitmask]] above.
    * Afterwards, set element(s) to false before calling [[applyExistenceDefaultValuesToRow]] below.
    */
-  def resetExistenceDefaultsBitmask(schema: StructType): Unit = {
-    for (i <- 0 until schema.existenceDefaultValues.size) {
-      schema.existenceDefaultsBitmask(i) = (schema.existenceDefaultValues(i) != null)
+  def resetExistenceDefaultsBitmask(schema: StructType, bitmask: Array[Boolean]): Unit = {
+    val defaultValues = existenceDefaultValues(schema)
+    for (i <- 0 until defaultValues.size) {
+      bitmask(i) = (defaultValues(i) != null)
     }
   }
 
   /**
    * Updates a subset of columns in the row with default values from the metadata in the schema.
    */
-  def applyExistenceDefaultValuesToRow(schema: StructType, row: InternalRow): Unit = {
-    if (schema.hasExistenceDefaultValues) {
-      for (i <- 0 until schema.existenceDefaultValues.size) {
-        if (schema.existenceDefaultsBitmask(i)) {
-          row.update(i, schema.existenceDefaultValues(i))
+  def applyExistenceDefaultValuesToRow(schema: StructType, row: InternalRow,
+      bitmask: Array[Boolean]): Unit = {
+    val existingValues = existenceDefaultValues(schema)
+    if (hasExistenceDefaultValues(schema)) {
+      for (i <- 0 until existingValues.size) {
+        if (bitmask(i)) {
+          row.update(i, existingValues(i))
         }
       }
     }
@@ -436,6 +439,17 @@ object ResolveDefaultColumns extends QueryErrorsBase {
     }
     rows.toSeq
   }
+
+  /**
+   * These define existence default values for the struct fields for efficiency purposes.
+   * The caller should avoid using such methods in a loop for efficiency.
+   */
+  def existenceDefaultValues(schema: StructType): Array[Any] =
+    getExistenceDefaultValues(schema)
+  def existenceDefaultsBitmask(schema: StructType): Array[Boolean] =
+    getExistenceDefaultsBitmask(schema)
+  def hasExistenceDefaultValues(schema: StructType): Boolean =
+    existenceDefaultValues(schema).exists(_ != null)
 
   /**
    * This is an Analyzer for processing default column values using built-in functions only.

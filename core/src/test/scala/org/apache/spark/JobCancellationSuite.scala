@@ -215,7 +215,9 @@ class JobCancellationSuite extends SparkFunSuite with Matchers with BeforeAndAft
         }
       }(executionContext)
       val jobC = Future {
-        assert(sc.getJobTags() == Set())
+        sc.addJobTag("foo")
+        sc.removeJobTag("foo")
+        assert(sc.getJobTags() == Set()) // check that remove works removing the last tag
         sc.addJobTag("two")
         assert(sc.getJobTags() == Set("two"))
         try {

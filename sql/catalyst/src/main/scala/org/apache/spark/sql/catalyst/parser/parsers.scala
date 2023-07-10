@@ -16,57 +16,27 @@
  */
 package org.apache.spark.sql.catalyst.parser
 
+import scala.collection.JavaConverters._
+
 import org.antlr.v4.runtime._
 import org.antlr.v4.runtime.atn.PredictionMode
 import org.antlr.v4.runtime.misc.{Interval, ParseCancellationException}
 import org.antlr.v4.runtime.tree.TerminalNodeImpl
 
-import org.apache.spark.{QueryContext, SparkThrowableHelper}
+import org.apache.spark.{QueryContext, SparkException, SparkThrowable, SparkThrowableHelper}
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.{FunctionIdentifier, SQLConfHelper, TableIdentifier}
-import org.apache.spark.sql.catalyst.expressions.Expression
-import org.apache.spark.sql.catalyst.parser.ParserUtils.withOrigin
-import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, Origin}
+import org.apache.spark.sql.SqlApiConf
+import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, Origin, WithOrigin}
 import org.apache.spark.sql.errors.QueryParsingErrors
 import org.apache.spark.sql.types.{DataType, StructType}
 
 /**
  * Base SQL parsing infrastructure.
  */
-abstract class AbstractSqlParser extends ParserInterface with SQLConfHelper with Logging {
-
+abstract class AbstractParser extends DataTypeParserInterface with Logging {
   /** Creates/Resolves DataType for a given SQL string. */
   override def parseDataType(sqlText: String): DataType = parse(sqlText) { parser =>
     astBuilder.visitSingleDataType(parser.singleDataType())
-  }
-
-  /** Creates Expression for a given SQL string. */
-  override def parseExpression(sqlText: String): Expression = parse(sqlText) { parser =>
-    val ctx = parser.singleExpression()
-    withOrigin(ctx, Some(sqlText)) {
-      astBuilder.visitSingleExpression(ctx)
-    }
-  }
-
-  /** Creates TableIdentifier for a given SQL string. */
-  override def parseTableIdentifier(sqlText: String): TableIdentifier = parse(sqlText) { parser =>
-    astBuilder.visitSingleTableIdentifier(parser.singleTableIdentifier())
-  }
-
-  /** Creates FunctionIdentifier for a given SQL string. */
-  override def parseFunctionIdentifier(sqlText: String): FunctionIdentifier = {
-    parse(sqlText) { parser =>
-      astBuilder.visitSingleFunctionIdentifier(parser.singleFunctionIdentifier())
-    }
-  }
-
-  /** Creates a multi-part identifier for a given SQL string */
-  override def parseMultipartIdentifier(sqlText: String): Seq[String] = {
-    parse(sqlText) { parser =>
-      astBuilder.visitSingleMultipartIdentifier(parser.singleMultipartIdentifier())
-    }
   }
 
   /**
@@ -77,29 +47,8 @@ abstract class AbstractSqlParser extends ParserInterface with SQLConfHelper with
     astBuilder.visitSingleTableSchema(parser.singleTableSchema())
   }
 
-  /** Creates LogicalPlan for a given SQL string of query. */
-  override def parseQuery(sqlText: String): LogicalPlan = parse(sqlText) { parser =>
-    val ctx = parser.query()
-    withOrigin(ctx, Some(sqlText)) {
-      astBuilder.visitQuery(ctx)
-    }
-  }
-
-  /** Creates LogicalPlan for a given SQL string. */
-  override def parsePlan(sqlText: String): LogicalPlan = parse(sqlText) { parser =>
-    val ctx = parser.singleStatement()
-    withOrigin(ctx, Some(sqlText)) {
-      astBuilder.visitSingleStatement(ctx) match {
-        case plan: LogicalPlan => plan
-        case _ =>
-          val position = Origin(None, None)
-          throw QueryParsingErrors.sqlStatementUnsupportedError(sqlText, position)
-      }
-    }
-  }
-
   /** Get the builder (visitor) which converts a ParseTree into an AST. */
-  protected def astBuilder: AstBuilder
+  protected def astBuilder: DataTypeAstBuilder
 
   protected def parse[T](command: String)(toResult: SqlBaseParser => T): T = {
     logDebug(s"Parsing command: $command")
@@ -145,23 +94,20 @@ abstract class AbstractSqlParser extends ParserInterface with SQLConfHelper with
         throw e
       case e: ParseException =>
         throw e.withCommand(command)
-      case e: AnalysisException =>
-        val position = Origin(e.line, e.startPosition)
-        throw new ParseException(Option(command), e.message, position, position,
-          e.errorClass, e.messageParameters)
+      case e: SparkThrowable with WithOrigin =>
+        throw new ParseException(
+          command = Option(command),
+          message = e.getMessage,
+          start = e.origin,
+          stop = e.origin,
+          errorClass = Option(e.getErrorClass),
+          messageParameters = e.getMessageParameters.asScala.toMap,
+          queryContext = e.getQueryContext)
     }
   }
-}
 
-/**
- * Concrete SQL parser for Catalyst-only SQL statements.
- */
-class CatalystSqlParser extends AbstractSqlParser {
-  val astBuilder = new AstBuilder
+  private def conf: SqlApiConf = SqlApiConf.get
 }
-
-/** For test-only. */
-object CatalystSqlParser extends CatalystSqlParser
 
 /**
  * This string stream provides the lexer with upper case characters only. This greatly simplifies
@@ -202,7 +148,7 @@ private[parser] class UpperCaseCharStream(wrapped: CodePointCharStream) extends 
 }
 
 /**
- * The ParseErrorListener converts parse errors into AnalysisExceptions.
+ * The ParseErrorListener converts parse errors into ParseExceptions.
  */
 case object ParseErrorListener extends BaseErrorListener {
   override def syntaxError(
@@ -232,25 +178,23 @@ case object ParseErrorListener extends BaseErrorListener {
 }
 
 /**
- * A [[ParseException]] is an [[AnalysisException]] that is thrown during the parse process. It
+ * A [[ParseException]] is an [[SparkException]] that is thrown during the parse process. It
  * contains fields and an extended error message that make reporting and diagnosing errors easier.
  */
 class ParseException(
     val command: Option[String],
-    message: String,
+    val message: String,
     val start: Origin,
     val stop: Origin,
-    errorClass: Option[String] = None,
-    messageParameters: Map[String, String] = Map.empty,
-    queryContext: Array[QueryContext] = ParseException.getQueryContext())
-  extends AnalysisException(
+    val errorClass: Option[String] = None,
+    val messageParameters: Map[String, String] = Map.empty,
+    val queryContext: Array[QueryContext] = ParseException.getQueryContext())
+  extends SparkException(
     message,
-    start.line,
-    start.startPosition,
-    None,
-    None,
+    cause = null,
     errorClass,
-    messageParameters) {
+    messageParameters,
+    queryContext) {
 
   def this(errorClass: String, messageParameters: Map[String, String], ctx: ParserRuleContext) =
     this(Option(ParserUtils.command(ctx)),
@@ -276,6 +220,14 @@ class ParseException(
       stop,
       Some(errorClass),
       messageParameters)
+
+  // Methods added to retain compatibility with AnalysisException.
+  @deprecated("Use start.line instead.")
+  def line: Option[Int] = start.line
+  @deprecated("Use start.startPosition instead.")
+  def startPosition: Option[Int] = start.startPosition
+  @deprecated("ParseException is never caused by another exception.")
+  def cause: Option[Throwable] = None
 
   override def getMessage: String = {
     val builder = new StringBuilder
@@ -438,5 +390,8 @@ case class UnclosedCommentProcessor(
         stop = Origin(Option(failedToken.getStopIndex)))
     }
   }
+}
 
+object DataTypeParser extends AbstractParser {
+  override protected def astBuilder: DataTypeAstBuilder = new DataTypeAstBuilder
 }

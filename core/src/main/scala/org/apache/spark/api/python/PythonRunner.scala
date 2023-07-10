@@ -165,6 +165,9 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
       envVars.put("PYTHON_FAULTHANDLER_DIR", BasePythonRunner.faultHandlerLogDir.toString)
     }
 
+    val sessionUUID = JobArtifactSet.getCurrentClientSessionState.map(_.uuid).getOrElse("default")
+    envVars.put("SPARK_CONNECT_SESSION_UUID", sessionUUID)
+
     val (worker: Socket, pid: Option[Int]) = env.createPythonWorker(
       pythonExec, envVars.asScala.toMap)
     // Whether is the worker released into idle pool or closed. When any codes try to release or
