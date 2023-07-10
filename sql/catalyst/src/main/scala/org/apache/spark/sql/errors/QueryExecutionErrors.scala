@@ -2895,7 +2895,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
 
   def cannotLoadStore(e: Throwable): Throwable = {
     new SparkException(
-      errorClass = "CANNOT_LOAD_STATE_STORE.WRAPPER",
+      errorClass = "CANNOT_LOAD_STATE_STORE.UNCATEGORIZED",
       messageParameters = Map.empty,
       cause = e)
   }

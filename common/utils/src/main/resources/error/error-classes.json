@@ -169,11 +169,13 @@
           "Thread holding the lock has trace: <stackTraceOutput>"
         ]
       },
-      "WRAPPER" : {
-        "message" : [""]
+      "UNCATEGORIZED" : {
+        "message" : [
+          ""
+        ]
       }
     },
-    "sqlState" : "40000"
+    "sqlState" : "58030"
   },
   "CANNOT_MERGE_INCOMPATIBLE_DATA_TYPE" : {
     "message" : [

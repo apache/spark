@@ -130,7 +130,7 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
     }
     checkError(
       ex,
-      errorClass = "CANNOT_LOAD_STATE_STORE.WRAPPER",
+      errorClass = "CANNOT_LOAD_STATE_STORE.UNCATEGORIZED",
       parameters = Map.empty
     )
     ex = intercept[SparkException] {
@@ -138,16 +138,19 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
     }
     checkError(
       ex,
-      errorClass = "CANNOT_LOAD_STATE_STORE.WRAPPER",
+      errorClass = "CANNOT_LOAD_STATE_STORE.UNCATEGORIZED",
       parameters = Map.empty
     )
 
     val remoteDir = Utils.createTempDir().toString
     new File(remoteDir).delete()  // to make sure that the directory gets created
     withDB(remoteDir) { db =>
-      intercept[IllegalStateException] {
+      ex = intercept[SparkException] {
         db.load(1)
       }
+      assert(ex.isInstanceOf[SparkException])
+      assert(ex.getMessage.contains("Error reading streaming state file") &&
+        ex.getCause.getMessage.contains("does not exist"))
     }
   }
 

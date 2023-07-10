@@ -217,7 +217,7 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
       }
       checkError(
         e,
-        errorClass = "CANNOT_LOAD_STATE_STORE.WRAPPER",
+        errorClass = "CANNOT_LOAD_STATE_STORE.UNCATEGORIZED",
         parameters = Map.empty
       )
 
@@ -229,7 +229,7 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
       }
       checkError(
         e,
-        errorClass = "CANNOT_LOAD_STATE_STORE.WRAPPER",
+        errorClass = "CANNOT_LOAD_STATE_STORE.UNCATEGORIZED",
         parameters = Map.empty
       )
 
@@ -893,15 +893,13 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
         provider.getStore(2)
       }
       assert(e.getCause.isInstanceOf[SparkException])
-      assert(e.getCause.getMessage.contains("Error reading streaming state file") &&
-        e.getCause.getMessage.contains("does not exist"))
+      assert(e.getCause.getMessage.contains("does not exist"))
 
       e = intercept[SparkException] {
         getData(provider, 2)
       }
       assert(e.getCause.isInstanceOf[SparkException])
-      assert(e.getCause.getMessage.contains("Error reading streaming state file") &&
-        e.getCause.getMessage.contains("does not exist"))
+      assert(e.getCause.getMessage.contains("does not exist"))
 
       // New updates to the reloaded store with new version, and does not change old version
       tryWithProviderResource(newStoreProvider(store.id)) { reloadedProvider =>
@@ -1044,7 +1042,7 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
         }
         checkError(
           e,
-          errorClass = "CANNOT_LOAD_STATE_STORE.WRAPPER",
+          errorClass = "CANNOT_LOAD_STATE_STORE.UNCATEGORIZED",
           parameters = Map.empty
         )
       }
