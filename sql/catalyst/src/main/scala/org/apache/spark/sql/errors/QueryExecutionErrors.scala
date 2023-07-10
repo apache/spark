@@ -2906,7 +2906,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
       messageParameters = Map.empty,
       cause = e)
   }
-    
+
   def hllInvalidLgK(function: String, min: Int, max: Int, value: String): Throwable = {
     new SparkRuntimeException(
       errorClass = "HLL_INVALID_LG_K",
