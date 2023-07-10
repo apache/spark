@@ -20,7 +20,7 @@ package org.apache.spark.sql
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.types.StructType
 
-class TPCDSTables(val spark: SparkSession, val dsdgenDir: String, val scaleFactor: Int)
+class TPCDSTables(val spark: SparkSession, dsdgenDir: String, val scaleFactor: Int)
   extends TableGenerator with TPCDSSchema with Logging with Serializable {
 
   override protected val dataGenerator: DataGenerator = new Dsdgen(dsdgenDir)
