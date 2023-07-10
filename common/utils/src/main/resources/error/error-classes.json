@@ -221,6 +221,38 @@
       "Failed to set permissions on created path <path> back to <permission>."
     ]
   },
+  "CANNOT_UPDATE_FIELD" : {
+    "message" : [
+      "Cannot update <table> field <fieldName> type:"
+    ],
+    "subClass" : {
+      "ARRAY_TYPE" : {
+        "message" : [
+          "Update the element by updating <fieldName>.element."
+        ]
+      },
+      "INTERVAL_TYPE" : {
+        "message" : [
+          "Update an interval by updating its fields."
+        ]
+      },
+      "MAP_TYPE" : {
+        "message" : [
+          "Update a map by updating <fieldName>.key or <fieldName>.value."
+        ]
+      },
+      "STRUCT_TYPE" : {
+        "message" : [
+          "Update a struct by updating its fields."
+        ]
+      },
+      "USER_DEFINED_TYPE" : {
+        "message" : [
+          "Update a UserDefinedType[<udtSql>] by updating its fields."
+        ]
+      }
+    }
+  },
   "CANNOT_UP_CAST_DATATYPE" : {
     "message" : [
       "Cannot up cast <expression> from <sourceType> to <targetType>.",
@@ -3006,11 +3038,6 @@
       "3. set \"spark.sql.legacy.allowUntypedScalaUDF\" to \"true\" and use this API with caution."
     ]
   },
-  "UPDATE_FIELD_WITH_STRUCT_UNSUPPORTED" : {
-    "message" : [
-      "Cannot update <table> field <fieldName> type: update a struct by updating its fields."
-    ]
-  },
   "VIEW_ALREADY_EXISTS" : {
     "message" : [
       "Cannot create view <relationName> because it already exists.",
@@ -5702,26 +5729,6 @@
   "_LEGACY_ERROR_TEMP_2277" : {
     "message" : [
       "Number of dynamic partitions created is <numWrittenParts>, which is more than <maxDynamicPartitions>. To solve this try to set <maxDynamicPartitionsKey> to at least <numWrittenParts>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2325" : {
-    "message" : [
-      "Cannot update <table> field <fieldName> type: update a map by updating <fieldName>.key or <fieldName>.value."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2326" : {
-    "message" : [
-      "Cannot update <table> field <fieldName> type: update the element by updating <fieldName>.element."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2327" : {
-    "message" : [
-      "Cannot update <table> field <fieldName> type: update a UserDefinedType[<udtSql>] by updating its fields."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2328" : {
-    "message" : [
-      "Cannot update <table> field <fieldName> to interval type."
     ]
   },
   "_LEGACY_ERROR_TEMP_2330" : {
