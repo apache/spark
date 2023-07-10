@@ -272,18 +272,6 @@ def assertSchemaEqual(
                 return False
         return True
 
-    def compare_datatypes(dt1, dt2):
-        # checks datatype equality, using recursion to unpack structs and arrays
-        if dt1.typeName() == dt2.typeName():
-            if dt1.typeName() == "array":
-                return compare_datatypes(dt1.elementType, dt2.elementType)
-            elif dt1.typeName() == "struct":
-                return compare_schemas_ignore_nullable(dt1, dt2)
-            else:
-                return True
-        else:
-            return False
-
     def compare_structfields_ignore_nullable(df_structfield, expected_structfield):
         if ignore_nullable:
             if df_structfield is None and expected_structfield is None:
@@ -296,6 +284,18 @@ def assertSchemaEqual(
                 return compare_datatypes(df_structfield.dataType, expected_structfield.dataType)
         else:
             return df_structfield == expected_structfield
+
+    def compare_datatypes(dt1, dt2):
+        # checks datatype equality, using recursion to unpack structs and arrays
+        if dt1.typeName() == dt2.typeName():
+            if dt1.typeName() == "array":
+                return compare_datatypes(dt1.elementType, dt2.elementType)
+            elif dt1.typeName() == "struct":
+                return compare_schemas_ignore_nullable(dt1, dt2)
+            else:
+                return True
+        else:
+            return False
 
     schemas_equal = True
     error_msg = "Schemas do not match: \n"
