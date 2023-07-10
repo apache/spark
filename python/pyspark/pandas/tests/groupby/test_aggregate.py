@@ -15,6 +15,7 @@
 # limitations under the License.
 #
 import unittest
+from distutils.version import LooseVersion
 
 import pandas as pd
 
@@ -39,6 +40,10 @@ class GroupbyAggregateMixin:
     def psdf(self):
         return ps.from_pandas(self.pdf)
 
+    @unittest.skipIf(
+        LooseVersion(pd.__version__) >= LooseVersion("2.0.0"),
+        "TODO(SPARK-44289): Enable GroupbyAggregateTests.test_aggregate for pandas 2.0.0.",
+    )
     def test_aggregate(self):
         pdf = pd.DataFrame(
             {"A": [1, 1, 2, 2], "B": [1, 2, 3, 4], "C": [0.362, 0.227, 1.267, -0.562]}
