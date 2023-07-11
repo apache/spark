@@ -82,9 +82,7 @@ trait SparkConnectPlanTest extends SharedSparkSession {
    *   the data of LocalRelation
    * @return
    */
-  def createLocalRelationProto(
-      schema: StructType,
-      data: Seq[InternalRow]): proto.Relation = {
+  def createLocalRelationProto(schema: StructType, data: Seq[InternalRow]): proto.Relation = {
     createLocalRelationProto(DataTypeUtils.toAttributes(schema), data)
   }
 
