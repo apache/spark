@@ -215,12 +215,21 @@ message WriteStreamOperationStart {
   }
 
   StreamingForeachWriter foreach_writer = 13;
+  StreamingForeachFunction foreach_batch = 14;
 }
 
 message StreamingForeachWriter {
+  // TODO: Remove this in favor of StreamingForeachUDF below. May be now?
   oneof writer {
     PythonUDF python_writer = 1;
     ScalarScalaUDF scala_writer = 2;
+  }
+}
+
+message StreamingForeachFunction {
+  oneof function {
+    PythonUDF python_function = 1;
+    ScalarScalaUDF scala_function = 2;
   }
 }
 

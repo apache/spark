@@ -26,7 +26,7 @@ import org.scalatest.concurrent.Eventually.eventually
 import org.scalatest.concurrent.Futures.timeout
 import org.scalatest.time.SpanSugar._
 
-import org.apache.spark.sql.{ForeachWriter, Row, SparkSession, SQLHelper}
+import org.apache.spark.sql.{DataFrame, ForeachWriter, Row, SparkSession, SQLHelper}
 import org.apache.spark.sql.connect.client.util.RemoteSparkSession
 import org.apache.spark.sql.functions.col
 import org.apache.spark.sql.functions.window
@@ -266,6 +266,24 @@ class StreamingQuerySuite extends RemoteSparkSession with SQLHelper {
     q.stop()
     assert(!q1.isActive)
   }
+
+  test("foreachBatch") {
+
+    val q = spark.readStream
+      .format("rate")
+      .load()
+      .writeStream
+      .foreachBatch(StreamingQuerySuite.foreachBatchFnForTest1)
+      .start()
+
+    eventually(timeout(30.seconds)) {
+      // There should be row(s) in temporary view created by foreachBatch.
+      val count = spark.sql("select count(*) from foreachBatchTest1")
+        .collect()(0)
+        .asInstanceOf[Long]
+      assert(count > 0)
+    }
+  }
 }
 
 class TestForeachWriter[T] extends ForeachWriter[T] {
@@ -291,4 +309,15 @@ class TestForeachWriter[T] extends ForeachWriter[T] {
 
 case class TestClass(value: Int) {
   override def toString: String = value.toString
+}
+
+object StreamingQuerySuite {
+
+  // A foreach batch function for use in test above. Stores the count of records in a temp view.
+  def foreachBatchFnForTest1(df: DataFrame, batchId: Long): Unit = {
+    val count = df.count()
+    df.sparkSession
+      .createDataFrame(Seq((batchId, count)))
+      .createOrReplaceTempView("foreachBatchTest1")
+  }
 }

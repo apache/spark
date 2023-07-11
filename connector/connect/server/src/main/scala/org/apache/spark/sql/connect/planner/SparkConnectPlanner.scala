@@ -33,13 +33,14 @@ import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.{ExecutePlanResponse, SqlCommand, StreamingQueryCommand, StreamingQueryCommandResult, StreamingQueryInstanceId, WriteStreamOperationStart, WriteStreamOperationStartResult}
 import org.apache.spark.connect.proto.ExecutePlanResponse.SqlCommandResult
 import org.apache.spark.connect.proto.Parse.ParseFormat
+import org.apache.spark.connect.proto.StreamingForeachFunction
 import org.apache.spark.connect.proto.StreamingQueryManagerCommand
 import org.apache.spark.connect.proto.StreamingQueryManagerCommandResult
 import org.apache.spark.connect.proto.StreamingQueryManagerCommandResult.StreamingQueryInstance
 import org.apache.spark.connect.proto.WriteStreamOperationStart.TriggerCase
 import org.apache.spark.internal.Logging
 import org.apache.spark.ml.{functions => MLFunctions}
-import org.apache.spark.sql.{Column, Dataset, Encoders, ForeachWriter, RelationalGroupedDataset, SparkSession}
+import org.apache.spark.sql.{Column, DataFrame, Dataset, Encoders, ForeachWriter, RelationalGroupedDataset, SparkSession}
 import org.apache.spark.sql.avro.{AvroDataToCatalyst, CatalystDataToAvro}
 import org.apache.spark.sql.catalyst.{expressions, AliasIdentifier, FunctionIdentifier}
 import org.apache.spark.sql.catalyst.analysis.{GlobalTempView, LocalTempView, MultiAlias, NameParameterizedQuery, PosParameterizedQuery, UnresolvedAlias, UnresolvedAttribute, UnresolvedDeserializer, UnresolvedExtractValue, UnresolvedFunction, UnresolvedRegex, UnresolvedRelation, UnresolvedStar}
@@ -2647,6 +2648,30 @@ class SparkConnectPlanner(val sessionHolder: SessionHolder) extends Logging {
             foreachWriterPkt.datasetEncoder.asInstanceOf[AgnosticEncoder[Any]])).toOption
         writer.foreachImplementation(clientWriter.asInstanceOf[ForeachWriter[Any]], encoder)
       }
+    }
+
+    if (writeOp.hasForeachBatch) {
+      val foreachBatchFn = writeOp.getForeachBatch.getFunctionCase match {
+        case StreamingForeachFunction.FunctionCase.PYTHON_FUNCTION =>
+          throw InvalidPlanInput("Python ForeachBatch is not supported yet. WIP.")
+
+        case StreamingForeachFunction.FunctionCase.SCALA_FUNCTION =>
+          val serializedFn = writeOp
+            .getForeachBatch
+            .getScalaFunction
+            .getPayload
+            .toByteArray
+          val scalaFn = Utils
+            .deserialize(serializedFn)
+            .asInstanceOf[StreamingForeachBatchHelper.ForeachBatchFnType]
+
+          StreamingForeachBatchHelper.scalaForeachBatchWrapper(scalaFn, sessionHolder)
+
+        case StreamingForeachFunction.FunctionCase.FUNCTION_NOT_SET =>
+          throw InvalidPlanInput("Unexpected")
+      }
+
+      writer.foreachBatch(foreachBatchFn)
     }
 
     val query = writeOp.getPath match {
