@@ -168,6 +168,11 @@
           "Error reading streaming state file of <fileToRead> does not exist. If the stream job is restarted with a new or updated state operation, please create a new checkpoint location or clear the existing checkpoint location."
         ]
       },
+      "UNCATEGORIZED" : {
+        "message" : [
+          ""
+        ]
+      },
       "UNEXPECTED_FILE_SIZE" : {
         "message" : [
           "Copied <dfsFile> to <localFile>, expected <expectedSize> bytes, found <localFileSize> bytes."
@@ -177,11 +182,6 @@
         "message" : [
           "<loggingId>: RocksDB instance could not be acquired by <newAcquiredThreadInfo> as it was not released by <acquiredThreadInfo> after <timeWaitedMs> ms.",
           "Thread holding the lock has trace: <stackTraceOutput>"
-        ]
-      },
-      "UNCATEGORIZED" : {
-        "message" : [
-          ""
         ]
       }
     },
