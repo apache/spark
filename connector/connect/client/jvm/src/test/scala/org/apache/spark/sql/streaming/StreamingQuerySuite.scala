@@ -340,7 +340,7 @@ class EventCollector extends StreamingQueryListener {
   private val _progressEvents = new mutable.Queue[StreamingQueryProgress]
 
   def progressEvents: Seq[StreamingQueryProgress] = _progressEvents.synchronized {
-    _progressEvents.filter(_.numInputRows > 0)
+    _progressEvents.filter(_.numInputRows > 0).toSeq
   }
 
   override def onQueryStarted(event: StreamingQueryListener.QueryStartedEvent): Unit = {

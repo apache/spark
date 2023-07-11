@@ -2934,7 +2934,8 @@ class SparkConnectPlanner(val sessionHolder: SessionHolder) extends Logging {
         val listenerId = Utils
           .deserialize[StreamingListenerPacket](
             command.getRemoveListener.getListenerPayload.toByteArray,
-            Utils.getContextOrSparkClassLoader).id
+            Utils.getContextOrSparkClassLoader)
+          .id
         val listener: StreamingQueryListener = sessionHolder.getListenerOrThrow(listenerId)
         session.streams.removeListener(listener)
         respBuilder.setRemoveListener(true)

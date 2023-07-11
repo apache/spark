@@ -170,8 +170,11 @@ class StreamingQueryManager private[sql] (sparkSession: SparkSession) extends Lo
   def listListeners(): Array[StreamingQueryListener] = {
     executeManagerCmd(_.setListListeners(true)).getListListeners.getListenersList.asScala.map {
       listener =>
-        Utils.deserialize[StreamingListenerPacket](listener.getListenerPayload.toByteArray,
-            Utils.getContextOrSparkClassLoader).listener
+        Utils
+          .deserialize[StreamingListenerPacket](
+            listener.getListenerPayload.toByteArray,
+            Utils.getContextOrSparkClassLoader)
+          .listener
           .asInstanceOf[StreamingQueryListener]
     }.toArray
   }
