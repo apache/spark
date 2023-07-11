@@ -31,7 +31,6 @@ import org.apache.spark.{SparkConf, SparkEnv}
 import org.apache.spark.serializer._
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.{InternalRow, ScalaReflection}
-import org.apache.spark.sql.catalyst.encoders.EncoderUtils
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
@@ -59,10 +58,10 @@ trait InvokeLike extends Expression with NonSQLExpression with ImplicitCastInput
   protected lazy val needNullCheck: Boolean = needNullCheckForIndex.contains(true)
   protected lazy val needNullCheckForIndex: Array[Boolean] =
     arguments.map(a => a.nullable && (propagateNull ||
-        EncoderUtils.dataTypeJavaClass(a.dataType).isPrimitive)).toArray
+        ScalaReflection.dataTypeJavaClass(a.dataType).isPrimitive)).toArray
   protected lazy val evaluatedArgs: Array[Object] = new Array[Object](arguments.length)
   private lazy val boxingFn: Any => Any =
-    EncoderUtils.typeBoxedJavaMapping
+    ScalaReflection.typeBoxedJavaMapping
       .get(dataType)
       .map(cls => v => cls.cast(v))
       .getOrElse(identity)
@@ -278,7 +277,7 @@ case class StaticInvoke(
   override def children: Seq[Expression] = arguments
   override lazy val deterministic: Boolean = isDeterministic && arguments.forall(_.deterministic)
 
-  lazy val argClasses = EncoderUtils.expressionJavaClasses(arguments)
+  lazy val argClasses = ScalaReflection.expressionJavaClasses(arguments)
   @transient lazy val method = findMethod(cls, functionName, argClasses)
 
   override def eval(input: InternalRow): Any = {
@@ -371,7 +370,7 @@ case class Invoke(
     returnNullable : Boolean = true,
     isDeterministic: Boolean = true) extends InvokeLike {
 
-  lazy val argClasses = EncoderUtils.expressionJavaClasses(arguments)
+  lazy val argClasses = ScalaReflection.expressionJavaClasses(arguments)
 
   final override val nodePatterns: Seq[TreePattern] = Seq(INVOKE)
 
@@ -547,7 +546,7 @@ case class NewInstance(
   }
 
   @transient private lazy val constructor: (Seq[AnyRef]) => Any = {
-    val paramTypes = EncoderUtils.expressionJavaClasses(arguments)
+    val paramTypes = ScalaReflection.expressionJavaClasses(arguments)
     val getConstructor = (paramClazz: Seq[Class[_]]) => {
       ScalaReflection.findConstructor(cls, paramClazz).getOrElse {
         throw QueryExecutionErrors.constructorNotFoundError(cls.toString)
@@ -893,8 +892,8 @@ case class MapObjects private(
   private def elementClassTag(): ClassTag[Any] = {
     val clazz = lambdaFunction.dataType match {
       case ObjectType(cls) => cls
-      case dt if lambdaFunction.nullable => EncoderUtils.javaBoxedType(dt)
-      case dt => EncoderUtils.dataTypeJavaClass(dt)
+      case dt if lambdaFunction.nullable => ScalaReflection.javaBoxedType(dt)
+      case dt => ScalaReflection.dataTypeJavaClass(dt)
     }
     ClassTag(clazz).asInstanceOf[ClassTag[Any]]
   }
@@ -1730,8 +1729,7 @@ case class InitializeJavaBean(beanInstance: Expression, setters: Map[String, Exp
       case (name, expr) =>
         // Looking for known type mapping.
         // But also looking for general `Object`-type parameter for generic methods.
-        val paramTypes = EncoderUtils.expressionJavaClasses(Seq(expr)) :+
-          classOf[Object]
+        val paramTypes = ScalaReflection.expressionJavaClasses(Seq(expr)) ++ Seq(classOf[Object])
         val methods = paramTypes.flatMap { fieldClass =>
           try {
             Some(beanClass.getDeclaredMethod(name, fieldClass))
@@ -1941,7 +1939,7 @@ case class ValidateExternalType(child: Expression, expected: DataType, externalD
         value.isInstanceOf[java.sql.Timestamp] || value.isInstanceOf[java.time.Instant]
       }
     case _ =>
-      val dataTypeClazz = EncoderUtils.javaBoxedType(dataType)
+      val dataTypeClazz = ScalaReflection.javaBoxedType(dataType)
       (value: Any) => {
         dataTypeClazz.isInstance(value)
       }
