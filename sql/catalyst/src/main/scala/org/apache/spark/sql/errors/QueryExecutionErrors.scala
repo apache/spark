@@ -2862,7 +2862,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
         "data" -> data,
         "enumString" -> enumString))
   }
-  
+
   def unreleasedThreadError(loggingId: String, newAcquiredThreadInfo: String,
                             AcquiredThreadInfo: String, timeWaitedMs: Long,
                             stackTraceOutput: String): Throwable = {
