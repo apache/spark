@@ -448,14 +448,15 @@ class JacksonParser(
     var skipRow = false
 
     structFilters.reset()
-    resetExistenceDefaultsBitmask(schema)
+    lazy val bitmask = ResolveDefaultColumns.existenceDefaultsBitmask(schema)
+    resetExistenceDefaultsBitmask(schema, bitmask)
     while (!skipRow && nextUntil(parser, JsonToken.END_OBJECT)) {
       schema.getFieldIndex(parser.getCurrentName) match {
         case Some(index) =>
           try {
             row.update(index, fieldConverters(index).apply(parser))
             skipRow = structFilters.skipRow(row, index)
-            schema.existenceDefaultsBitmask(index) = false
+            bitmask(index) = false
           } catch {
             case e: SparkUpgradeException => throw e
             case NonFatal(e) if isRoot || enablePartialResults =>
@@ -469,7 +470,7 @@ class JacksonParser(
     if (skipRow) {
       None
     } else if (badRecordException.isEmpty) {
-      applyExistenceDefaultValuesToRow(schema, row)
+      applyExistenceDefaultValuesToRow(schema, row, bitmask)
       Some(row)
     } else {
       throw PartialResultException(row, badRecordException.get)

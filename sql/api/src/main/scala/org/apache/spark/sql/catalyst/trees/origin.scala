@@ -43,6 +43,13 @@ case class Origin(
 }
 
 /**
+ * Helper trait for objects that can be traced back to an [[Origin]].
+ */
+trait WithOrigin {
+  def origin: Origin
+}
+
+/**
  * Provides a location for TreeNodes to ask about the context of their origin.  For example, which
  * line of code is currently being parsed.
  */
