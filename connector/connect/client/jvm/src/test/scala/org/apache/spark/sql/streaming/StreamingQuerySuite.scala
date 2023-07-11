@@ -28,13 +28,13 @@ import org.scalatest.concurrent.Futures.timeout
 import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.sql.{ForeachWriter, Row, SparkSession, SQLHelper}
-import org.apache.spark.sql.connect.client.util.RemoteSparkSession
+import org.apache.spark.sql.connect.client.util.QueryTest
 import org.apache.spark.sql.functions.col
 import org.apache.spark.sql.functions.window
 import org.apache.spark.sql.streaming.StreamingQueryListener.{QueryIdleEvent, QueryStartedEvent, QueryTerminatedEvent}
 import org.apache.spark.util.Utils
 
-class StreamingQuerySuite extends RemoteSparkSession with SQLHelper {
+class StreamingQuerySuite extends QueryTest with SQLHelper {
 
   test("Streaming API with windowed aggregate query") {
     // This verifies standard streaming API by starting a streaming query with windowed count.
@@ -287,9 +287,11 @@ class StreamingQuerySuite extends RemoteSparkSession with SQLHelper {
       q.processAllAvailable()
       eventually(timeout(30.seconds)) {
         assert(q.isActive)
+        checkAnswer(spark.table("my_listener_table").toDF(), Seq(Row(1, 2), Row(4, 5)))
       }
     } finally {
       q.stop()
+      spark.sql("DROP TABLE IF EXISTS my_listener_table")
     }
 
     // List listeners after adding a new listener, length should be 2.
@@ -345,6 +347,9 @@ class EventCollector extends StreamingQueryListener {
 
   override def onQueryStarted(event: StreamingQueryListener.QueryStartedEvent): Unit = {
     startEvent = event
+    val spark = SparkSession.builder().getOrCreate()
+    val df = spark.createDataFrame(Seq((1, 2), (4, 5)))
+    df.write.saveAsTable("my_listener_table")
   }
 
   override def onQueryProgress(event: StreamingQueryListener.QueryProgressEvent): Unit = {

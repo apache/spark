@@ -17,4 +17,16 @@
 
 package org.apache.spark.sql.connect.common
 
+/**
+ * A wrapper class around the StreamingQueryListener and an id associated with it.
+ *
+ * This class is shared between the client and the server to allow for serialization and
+ * deserialization of the JVM object. We'll need to cache a mapping between the id and listener
+ * object on server side in order to identify the correct server side listener object.
+ *
+ * @param id
+ *   The id for the StreamingQueryListener.
+ * @param listener
+ *   The StreamingQueryListener instance.
+ */
 case class StreamingListenerPacket(id: String, listener: AnyRef) extends Serializable

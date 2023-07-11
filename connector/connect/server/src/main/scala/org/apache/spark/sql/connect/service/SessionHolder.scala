@@ -48,6 +48,8 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
   // foreachBatch() in Streaming. Lazy since most sessions don't need it.
   private lazy val dataFrameCache: ConcurrentMap[String, DataFrame] = new ConcurrentHashMap()
 
+  // Mapping from id to StreamingQueryListener. Used for methods like removeListener() in
+  // StreamingQueryManager.
   private lazy val listenerCache: ConcurrentMap[String, StreamingQueryListener] =
     new ConcurrentHashMap()
 
@@ -175,6 +177,13 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
       .getOrElse {
         throw InvalidPlanInput(s"No listener with id $id is found in the session $sessionId")
       }
+  }
+
+  /**
+   * Removes corresponding StreamingQueryListener by ID.
+   */
+  private[connect] def removeCachedListener(id: String): StreamingQueryListener = {
+    listenerCache.remove(id)
   }
 }
 

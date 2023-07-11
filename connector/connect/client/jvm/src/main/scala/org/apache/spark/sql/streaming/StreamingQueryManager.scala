@@ -41,6 +41,10 @@ import org.apache.spark.util.Utils
 @Evolving
 class StreamingQueryManager private[sql] (sparkSession: SparkSession) extends Logging {
 
+  // Mapping from StreamingQueryListener to id. There's another mapping from id to
+  // StreamingQueryListener on server side. This is used by removeListener() to find the id
+  // of previously added StreamingQueryListener and pass it to server side to find the
+  // corresponding listener on server side.
   private lazy val listenerCache: ConcurrentMap[StreamingQueryListener, String] =
     new ConcurrentHashMap()
 
@@ -160,6 +164,7 @@ class StreamingQueryManager private[sql] (sparkSession: SparkSession) extends Lo
       _.getRemoveListenerBuilder
         .setListenerPayload(ByteString.copyFrom(Utils
           .serialize(StreamingListenerPacket(id, listener)))))
+    removeCachedListenerId(listener)
   }
 
   /**
@@ -207,5 +212,9 @@ class StreamingQueryManager private[sql] (sparkSession: SparkSession) extends Lo
     Option(listenerCache.get(listener)).getOrElse {
       throw InvalidPlanInput(s"No id with listener $listener is found.")
     }
+  }
+
+  private def removeCachedListenerId(listener: StreamingQueryListener): String = {
+    listenerCache.remove(listener)
   }
 }
