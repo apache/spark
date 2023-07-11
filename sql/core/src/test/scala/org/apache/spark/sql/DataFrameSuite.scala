@@ -3651,7 +3651,7 @@ class DataFrameSuite extends QueryTest
     checkAnswer(df1, df2)
   }
 
-  test("filter respects active session and it's params respects parser") {
+  test("SPARK-44373: filter respects active session and it's params respects parser") {
     withSQLConf(SQLConf.ANSI_ENABLED.key -> "true",
       SQLConf.ENFORCE_RESERVED_KEYWORDS.key -> "true") {
       checkError(
@@ -3663,7 +3663,7 @@ class DataFrameSuite extends QueryTest
     }
   }
 
-  test("createTempView respects active session and it's params respects parser") {
+  test("SPARK-44373: createTempView respects active session and it's params respects parser") {
     withSQLConf(SQLConf.ANSI_ENABLED.key -> "true",
       SQLConf.ENFORCE_RESERVED_KEYWORDS.key -> "true") {
       checkError(
