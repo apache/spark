@@ -19,7 +19,6 @@ package org.apache.spark.sql.catalyst
 
 import scala.collection.JavaConverters._
 
-import org.apache.spark.annotation.{DeveloperApi}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.util.BoundedPriorityQueue
 
@@ -93,11 +92,8 @@ object QueryPlanningTracker {
 
 /**
  * Callbacks after planning phase completion.
- *
- * @since 3.5.0
  */
-@DeveloperApi
-private[sql] abstract class QueryPlanningTrackerCallback {
+abstract class QueryPlanningTrackerCallback {
   /**
    * Called when query has been analyzed.
    *
