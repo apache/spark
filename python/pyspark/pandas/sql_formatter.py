@@ -25,7 +25,6 @@ import pandas as pd
 
 from pyspark.pandas.internal import InternalFrame
 from pyspark.pandas.namespace import _get_index_map
-from pyspark.sql.functions import lit
 from pyspark import pandas as ps
 from pyspark.sql import SparkSession
 from pyspark.pandas.utils import default_session
