@@ -1225,11 +1225,11 @@ class HiveDDLSuite
           exception = intercept[AnalysisException] {
             sql("CREATE VIEW view1 (col1, col3) AS SELECT * FROM tab1")
           },
-          errorClass = "CREATE_VIEW_COLUMN_ARITY_MISMATCH.NOT_ENOUGH_SOURCE_COLUMNS",
+          errorClass = "CREATE_VIEW_COLUMN_ARITY_MISMATCH.NOT_ENOUGH_DATA_COLUMNS",
           parameters = Map(
-            "viewName" -> "`spark_catalog`.`default`.`view1`",
-            "sourceColumnsLength" -> "1",
-            "specifiedColumnsLength" -> "2"
+            "viewName" -> s"`$SESSION_CATALOG_NAME`.`default`.`view1`",
+            "viewColumns" -> "`col1`, `col3`",
+            "dataColumns" -> "`id`"
           )
         )
       }
@@ -1241,11 +1241,11 @@ class HiveDDLSuite
           exception = intercept[AnalysisException] {
             sql("CREATE VIEW view2 (col1, col3) AS SELECT * FROM tab2")
           },
-          errorClass = "CREATE_VIEW_COLUMN_ARITY_MISMATCH.TOO_MANY_SOURCE_COLUMNS",
+          errorClass = "CREATE_VIEW_COLUMN_ARITY_MISMATCH.TOO_MANY_DATA_COLUMNS",
           parameters = Map(
-            "viewName" -> "`spark_catalog`.`default`.`view2`",
-            "sourceColumnsLength" -> "3",
-            "specifiedColumnsLength" -> "2"
+            "viewName" -> s"`$SESSION_CATALOG_NAME`.`default`.`view2`",
+            "viewColumns" -> "`col1`, `col3`",
+            "dataColumns" -> "`col1`, `col2`, `col3`"
           )
         )
       }

@@ -370,7 +370,7 @@ CREATE TABLE column `<columnName>` specifies descriptor "`<optionName>`" more th
 
 ### [CREATE_VIEW_COLUMN_ARITY_MISMATCH](sql-error-conditions-create-view-column-arity-mismatch-error-class.html)
 
-SQLSTATE: none assigned
+[SQLSTATE: 21S01](sql-error-conditions-sqlstates.html#class-21-cardinality-violation)
 
 Cannot create view `<viewName>`, the reason is
 

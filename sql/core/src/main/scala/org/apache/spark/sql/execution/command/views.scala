@@ -100,10 +100,10 @@ case class CreateViewCommand(
     if (userSpecifiedColumns.nonEmpty) {
       if (userSpecifiedColumns.length > analyzedPlan.output.length) {
         throw QueryCompilationErrors.cannotCreateViewNotEnoughColumnsError(
-          name, analyzedPlan.output.length, userSpecifiedColumns.length)
+          name, userSpecifiedColumns.map(_._1), analyzedPlan)
       } else if (userSpecifiedColumns.length < analyzedPlan.output.length) {
         throw QueryCompilationErrors.cannotCreateViewTooManyColumnsError(
-          name, analyzedPlan.output.length, userSpecifiedColumns.length)
+          name, userSpecifiedColumns.map(_._1), analyzedPlan)
       }
     }
 

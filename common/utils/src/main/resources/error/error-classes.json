@@ -375,21 +375,22 @@
       "Cannot create view <viewName>, the reason is"
     ],
     "subClass" : {
-      "NOT_ENOUGH_SOURCE_COLUMNS" : {
+      "NOT_ENOUGH_DATA_COLUMNS" : {
         "message" : [
-          "not enough source columns:",
-          "Source columns length: <sourceColumnsLength>.",
-          "Specified columns length: <specifiedColumnsLength>."
+          "not enough data columns:",
+          "View columns: <viewColumns>.",
+          "Data columns: <dataColumns>."
         ]
       },
-      "TOO_MANY_SOURCE_COLUMNS" : {
+      "TOO_MANY_DATA_COLUMNS" : {
         "message" : [
-          "too many source columns:",
-          "Source columns length: <sourceColumnsLength>.",
-          "Specified columns length: <specifiedColumnsLength>."
+          "too many data columns:",
+          "View columns: <viewColumns>.",
+          "Data columns: <dataColumns>."
         ]
       }
-    }
+    },
+    "sqlState" : "21S01"
   },
   "DATATYPE_MISMATCH" : {
     "message" : [

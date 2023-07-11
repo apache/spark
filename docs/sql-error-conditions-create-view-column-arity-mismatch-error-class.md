@@ -19,22 +19,22 @@ license: |
   limitations under the License.
 ---
 
-SQLSTATE: none assigned
+[SQLSTATE: 21S01](sql-error-conditions-sqlstates.html#class-21-cardinality-violation)
 
 Cannot create view `<viewName>`, the reason is
 
 This error class has the following derived error classes:
 
-## NOT_ENOUGH_SOURCE_COLUMNS
+## NOT_ENOUGH_DATA_COLUMNS
 
-not enough source columns:
-Source columns length: `<sourceColumnsLength>`.
-Specified columns length: `<specifiedColumnsLength>`.
+not enough data columns:
+View columns: `<viewColumns>`.
+Data columns: `<dataColumns>`.
 
-## TOO_MANY_SOURCE_COLUMNS
+## TOO_MANY_DATA_COLUMNS
 
-too many source columns:
-Source columns length: `<sourceColumnsLength>`.
-Specified columns length: `<specifiedColumnsLength>`.
+too many data columns:
+View columns: `<viewColumns>`.
+Data columns: `<dataColumns>`.
 
 

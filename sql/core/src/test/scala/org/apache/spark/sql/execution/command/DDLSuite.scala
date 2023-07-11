@@ -1356,11 +1356,11 @@ abstract class DDLSuite extends QueryTest with DDLSuiteBase {
           exception = intercept[AnalysisException] {
             sql("CREATE TEMPORARY VIEW view1 (col1, col3) AS SELECT * FROM tab1")
           },
-          errorClass = "CREATE_VIEW_COLUMN_ARITY_MISMATCH.NOT_ENOUGH_SOURCE_COLUMNS",
+          errorClass = "CREATE_VIEW_COLUMN_ARITY_MISMATCH.NOT_ENOUGH_DATA_COLUMNS",
           parameters = Map(
             "viewName" -> "`view1`",
-            "sourceColumnsLength" -> "1",
-            "specifiedColumnsLength" -> "2")
+            "viewColumns" -> "`col1`, `col3`",
+            "dataColumns" -> "`id`")
         )
       }
     }

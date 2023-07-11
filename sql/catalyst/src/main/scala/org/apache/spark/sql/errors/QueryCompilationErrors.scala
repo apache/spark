@@ -2651,26 +2651,26 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
 
   def cannotCreateViewTooManyColumnsError(
       viewIdent: TableIdentifier,
-      analyzedPlanLength: Int,
-      userSpecifiedColumnsLength: Int): Throwable = {
+      expected: Seq[String],
+      query: LogicalPlan): Throwable = {
     new AnalysisException(
-      errorClass = "CREATE_VIEW_COLUMN_ARITY_MISMATCH.TOO_MANY_SOURCE_COLUMNS",
+      errorClass = "CREATE_VIEW_COLUMN_ARITY_MISMATCH.TOO_MANY_DATA_COLUMNS",
       messageParameters = Map(
         "viewName" -> toSQLId(viewIdent.nameParts),
-        "sourceColumnsLength" -> analyzedPlanLength.toString,
-        "specifiedColumnsLength" -> userSpecifiedColumnsLength.toString))
+        "viewColumns" -> expected.map(c => toSQLId(c)).mkString(", "),
+        "dataColumns" -> query.output.map(c => toSQLId(c.name)).mkString(", ")))
   }
 
   def cannotCreateViewNotEnoughColumnsError(
       viewIdent: TableIdentifier,
-      analyzedPlanLength: Int,
-      userSpecifiedColumnsLength: Int): Throwable = {
+      expected: Seq[String],
+      query: LogicalPlan): Throwable = {
     new AnalysisException(
-      errorClass = "CREATE_VIEW_COLUMN_ARITY_MISMATCH.NOT_ENOUGH_SOURCE_COLUMNS",
+      errorClass = "CREATE_VIEW_COLUMN_ARITY_MISMATCH.NOT_ENOUGH_DATA_COLUMNS",
       messageParameters = Map(
         "viewName" -> toSQLId(viewIdent.nameParts),
-        "sourceColumnsLength" -> analyzedPlanLength.toString,
-        "specifiedColumnsLength" -> userSpecifiedColumnsLength.toString))
+        "viewColumns" -> expected.map(c => toSQLId(c)).mkString(", "),
+        "dataColumns" -> query.output.map(c => toSQLId(c.name)).mkString(", ")))
   }
 
   def tableIsNotViewError(name: TableIdentifier): Throwable = {

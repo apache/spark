@@ -717,11 +717,11 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
           exception = intercept[AnalysisException] {
             sql("CREATE VIEW testView2(x, y, z) AS SELECT * FROM tab1")
           },
-          errorClass = "CREATE_VIEW_COLUMN_ARITY_MISMATCH.NOT_ENOUGH_SOURCE_COLUMNS",
+          errorClass = "CREATE_VIEW_COLUMN_ARITY_MISMATCH.NOT_ENOUGH_DATA_COLUMNS",
           parameters = Map(
             "viewName" -> s"`$SESSION_CATALOG_NAME`.`default`.`testView2`",
-            "sourceColumnsLength" -> "2",
-            "specifiedColumnsLength" -> "3")
+            "viewColumns" -> "`x`, `y`, `z`",
+            "dataColumns" -> "`id`, `id1`")
         )
 
         // Correctly resolve a view when the referenced table schema changes.
