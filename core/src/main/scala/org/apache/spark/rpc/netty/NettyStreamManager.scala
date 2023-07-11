@@ -19,6 +19,7 @@ package org.apache.spark.rpc.netty
 import java.io.File
 import java.util.concurrent.ConcurrentHashMap
 
+import org.apache.spark.JobArtifactSet
 import org.apache.spark.network.buffer.{FileSegmentManagedBuffer, ManagedBuffer}
 import org.apache.spark.network.server.StreamManager
 import org.apache.spark.rpc.RpcEnvFileServer
@@ -67,20 +68,30 @@ private[netty] class NettyStreamManager(rpcEnv: NettyRpcEnv)
 
   override def addFile(file: File): String = {
     val canonicalFile = file.getCanonicalFile
-    val existingPath = files.putIfAbsent(file.getName, canonicalFile)
+    val name = JobArtifactSet.getCurrentJobArtifactState
+      .map(s => s"${s.uuid}/${file.getName}").getOrElse(file.getName)
+    val existingPath = files.putIfAbsent(name, canonicalFile)
     require(existingPath == null || existingPath == canonicalFile,
       s"File ${file.getName} was already registered with a different path " +
         s"(old path = $existingPath, new path = $file")
-    s"${rpcEnv.address.toSparkURL}/files/${Utils.encodeFileNameToURIRawPath(file.getName())}"
+    // File name cannot contains '/', see Utils.encodeFileNameToURIRawPath
+    val rawName = name.split("/").map(
+      Utils.encodeFileNameToURIRawPath).mkString("/")
+    s"${rpcEnv.address.toSparkURL}/files/$rawName"
   }
 
   override def addJar(file: File): String = {
     val canonicalFile = file.getCanonicalFile
-    val existingPath = jars.putIfAbsent(file.getName, canonicalFile)
+    val name = JobArtifactSet.getCurrentJobArtifactState
+      .map(s => s"${s.uuid}/${file.getName}").getOrElse(file.getName)
+    val existingPath = jars.putIfAbsent(name, canonicalFile)
     require(existingPath == null || existingPath == canonicalFile,
       s"File ${file.getName} was already registered with a different path " +
         s"(old path = $existingPath, new path = $file")
-    s"${rpcEnv.address.toSparkURL}/jars/${Utils.encodeFileNameToURIRawPath(file.getName())}"
+    // File name cannot contains '/', see Utils.encodeFileNameToURIRawPath
+    val rawName = name.split("/").map(
+      Utils.encodeFileNameToURIRawPath).mkString("/")
+    s"${rpcEnv.address.toSparkURL}/jars/$rawName"
   }
 
   override def addDirectory(baseUri: String, path: File): String = {

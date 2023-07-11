@@ -25,7 +25,7 @@ import scala.collection.mutable.ArrayBuffer
 
 import net.razorvine.pickle.Unpickler
 
-import org.apache.spark.{ContextAwareIterator, SparkEnv, TaskContext}
+import org.apache.spark.{ContextAwareIterator, JobArtifactSet, SparkEnv, TaskContext}
 import org.apache.spark.api.python.{ChainedPythonFunctions, PythonEvalType}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
@@ -51,6 +51,8 @@ case class BatchEvalPythonUDTFExec(
     resultAttrs: Seq[Attribute],
     child: SparkPlan)
   extends UnaryExecNode with PythonSQLMetrics {
+
+  private[this] val jobArtifactUUID = JobArtifactSet.getCurrentJobArtifactState.map(_.uuid)
 
   override def output: Seq[Attribute] = requiredChildOutput ++ resultAttrs
 
@@ -145,7 +147,7 @@ case class BatchEvalPythonUDTFExec(
 
     // Output iterator for results from Python.
     val outputIterator =
-      new PythonUDTFRunner(udtf, argOffsets, pythonMetrics)
+      new PythonUDTFRunner(udtf, argOffsets, pythonMetrics, jobArtifactUUID)
         .compute(inputIterator, context.partitionId(), context)
 
     val unpickle = new Unpickler
@@ -173,10 +175,11 @@ case class BatchEvalPythonUDTFExec(
 class PythonUDTFRunner(
     udtf: PythonUDTF,
     argOffsets: Array[Int],
-    pythonMetrics: Map[String, SQLMetric])
+    pythonMetrics: Map[String, SQLMetric],
+    jobArtifactUUID: Option[String])
   extends BasePythonUDFRunner(
     Seq(ChainedPythonFunctions(Seq(udtf.func))),
-    PythonEvalType.SQL_TABLE_UDF, Array(argOffsets), pythonMetrics) {
+    PythonEvalType.SQL_TABLE_UDF, Array(argOffsets), pythonMetrics, jobArtifactUUID) {
 
   protected override def newWriterThread(
       env: SparkEnv,

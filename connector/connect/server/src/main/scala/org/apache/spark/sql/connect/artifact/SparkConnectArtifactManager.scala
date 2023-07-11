@@ -29,7 +29,7 @@ import scala.reflect.ClassTag
 import org.apache.commons.io.FileUtils
 import org.apache.hadoop.fs.{LocalFileSystem, Path => FSPath}
 
-import org.apache.spark.{JobArtifactState, SparkContext, SparkEnv}
+import org.apache.spark.{JobArtifactSet, JobArtifactState, SparkContext, SparkEnv}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.connect.artifact.util.ArtifactUtils
@@ -92,7 +92,7 @@ class SparkConnectArtifactManager(sessionHolder: SessionHolder) extends Logging 
   private[connect] def addArtifact(
       remoteRelativePath: Path,
       serverLocalStagingPath: Path,
-      fragment: Option[String]): Unit = {
+      fragment: Option[String]): Unit = JobArtifactSet.withActiveJobArtifactState(state) {
     require(!remoteRelativePath.isAbsolute)
     if (remoteRelativePath.startsWith(s"cache${File.separator}")) {
       val tmpFile = serverLocalStagingPath.toFile
@@ -133,15 +133,10 @@ class SparkConnectArtifactManager(sessionHolder: SessionHolder) extends Logging 
       Files.move(serverLocalStagingPath, target)
       if (remoteRelativePath.startsWith(s"jars${File.separator}")) {
         sessionHolder.session.sessionState.resourceLoader
-          .addJar(target.toString, state.uuid)
+          .addJar(target.toString)
         jarsList.add(target)
       } else if (remoteRelativePath.startsWith(s"pyfiles${File.separator}")) {
-        sessionHolder.session.sparkContext.addFile(
-          target.toString,
-          recursive = false,
-          addedOnSubmit = false,
-          isArchive = false,
-          sessionUUID = state.uuid)
+        sessionHolder.session.sparkContext.addFile(target.toString)
         val stringRemotePath = remoteRelativePath.toString
         if (stringRemotePath.endsWith(".zip") || stringRemotePath.endsWith(
             ".egg") || stringRemotePath.endsWith(".jar")) {
@@ -150,19 +145,9 @@ class SparkConnectArtifactManager(sessionHolder: SessionHolder) extends Logging 
       } else if (remoteRelativePath.startsWith(s"archives${File.separator}")) {
         val canonicalUri =
           fragment.map(UriBuilder.fromUri(target.toUri).fragment).getOrElse(target.toUri)
-        sessionHolder.session.sparkContext.addFile(
-          canonicalUri.toString,
-          recursive = false,
-          addedOnSubmit = false,
-          isArchive = true,
-          sessionUUID = state.uuid)
+        sessionHolder.session.sparkContext.addArchive(canonicalUri.toString)
       } else if (remoteRelativePath.startsWith(s"files${File.separator}")) {
-        sessionHolder.session.sparkContext.addFile(
-          target.toString,
-          recursive = false,
-          addedOnSubmit = false,
-          isArchive = false,
-          sessionUUID = state.uuid)
+        sessionHolder.session.sparkContext.addFile(target.toString)
       }
     }
   }

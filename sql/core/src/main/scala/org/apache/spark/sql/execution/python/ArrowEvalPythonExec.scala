@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.python
 
 import scala.collection.JavaConverters._
 
-import org.apache.spark.TaskContext
+import org.apache.spark.{JobArtifactSet, TaskContext}
 import org.apache.spark.api.python.ChainedPythonFunctions
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
@@ -67,6 +67,7 @@ case class ArrowEvalPythonExec(udfs: Seq[PythonUDF], resultAttrs: Seq[Attribute]
   private val sessionLocalTimeZone = conf.sessionLocalTimeZone
   private val largeVarTypes = conf.arrowUseLargeVarTypes
   private val pythonRunnerConf = ArrowUtils.getPythonRunnerConfMap(conf)
+  private[this] val jobArtifactUUID = JobArtifactSet.getCurrentJobArtifactState.map(_.uuid)
 
   protected override def evaluate(
       funcs: Seq[ChainedPythonFunctions],
@@ -88,7 +89,8 @@ case class ArrowEvalPythonExec(udfs: Seq[PythonUDF], resultAttrs: Seq[Attribute]
       sessionLocalTimeZone,
       largeVarTypes,
       pythonRunnerConf,
-      pythonMetrics).compute(batchIter, context.partitionId(), context)
+      pythonMetrics,
+      jobArtifactUUID).compute(batchIter, context.partitionId(), context)
 
     columnarBatchIter.flatMap { batch =>
       val actualDataTypes = (0 until batch.numCols()).map(i => batch.column(i).dataType())

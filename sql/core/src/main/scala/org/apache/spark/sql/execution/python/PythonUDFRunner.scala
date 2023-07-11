@@ -33,9 +33,10 @@ abstract class BasePythonUDFRunner(
     funcs: Seq[ChainedPythonFunctions],
     evalType: Int,
     argOffsets: Array[Array[Int]],
-    pythonMetrics: Map[String, SQLMetric])
+    pythonMetrics: Map[String, SQLMetric],
+    jobArtifactUUID: Option[String])
   extends BasePythonRunner[Array[Byte], Array[Byte]](
-    funcs, evalType, argOffsets) {
+    funcs, evalType, argOffsets, jobArtifactUUID) {
 
   override val pythonExec: String =
     SQLConf.get.pysparkWorkerPythonExecutable.getOrElse(
@@ -105,8 +106,9 @@ class PythonUDFRunner(
     funcs: Seq[ChainedPythonFunctions],
     evalType: Int,
     argOffsets: Array[Array[Int]],
-    pythonMetrics: Map[String, SQLMetric])
-  extends BasePythonUDFRunner(funcs, evalType, argOffsets, pythonMetrics) {
+    pythonMetrics: Map[String, SQLMetric],
+    jobArtifactUUID: Option[String])
+  extends BasePythonUDFRunner(funcs, evalType, argOffsets, pythonMetrics, jobArtifactUUID) {
 
   protected override def newWriterThread(
       env: SparkEnv,

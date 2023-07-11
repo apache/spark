@@ -21,7 +21,7 @@ import java.io.File
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.locks.ReentrantLock
 
-import org.apache.spark.{SparkEnv, TaskContext}
+import org.apache.spark.{JobArtifactSet, SparkEnv, TaskContext}
 import org.apache.spark.api.python._
 import org.apache.spark.internal.Logging
 import org.apache.spark.memory.TaskMemoryManager
@@ -39,6 +39,8 @@ class PythonForeachWriter(func: PythonFunction, schema: StructType)
     context.taskMemoryManager, new File(Utils.getLocalDir(SparkEnv.get.conf)), schema.fields.length)
   private lazy val inputRowIterator = buffer.iterator
 
+  private[this] val jobArtifactUUID = JobArtifactSet.getCurrentJobArtifactState.map(_.uuid)
+
   private lazy val inputByteIterator = {
     EvaluatePython.registerPicklers()
     val objIterator = inputRowIterator.map { row => EvaluatePython.toJava(row, schema) }
@@ -46,7 +48,7 @@ class PythonForeachWriter(func: PythonFunction, schema: StructType)
   }
 
   private lazy val pythonRunner = {
-    new PythonRunner(Seq(ChainedPythonFunctions(Seq(func)))) {
+    new PythonRunner(Seq(ChainedPythonFunctions(Seq(func))), jobArtifactUUID) {
       override val pythonExec: String =
         SQLConf.get.pysparkWorkerPythonExecutable.getOrElse(
           funcs.head.funcs.head.pythonExec)
