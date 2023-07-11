@@ -92,6 +92,8 @@ def main(infile, outfile):
 
     outfile.flush()
 
+    listener.setSparkSession(sparkConnectSession)
+
     # TODO: move the logic to streaming_worker
     def process(listener_event_str, listener_event_type):
         listener_event = json.loads(listener_event_str)

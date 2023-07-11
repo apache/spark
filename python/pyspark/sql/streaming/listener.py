@@ -23,6 +23,7 @@ from py4j.java_gateway import JavaObject
 
 from pyspark.sql import Row
 from pyspark import cloudpickle
+# from pyspark.sql import SparkSession
 
 __all__ = ["StreamingQueryListener"]
 
@@ -120,6 +121,34 @@ class StreamingQueryListener(ABC):
         )
         return self._jlistenerobj
 
+
+class ConnectStreamingQueryListener(StreamingQueryListener):
+
+    def set_spark_session(self, spark):
+        self._sparkSession = spark
+
+    @property
+    def spark(self) -> Optional["SparkSession"]:
+        return self._sparkSession
+
+    def __init__(self) -> None:
+        self._sparkSession = None
+
+    @abstractmethod
+    def onQueryStarted(self, event: "QueryStartedEvent") -> None:
+        pass
+
+    @abstractmethod
+    def onQueryProgress(self, event: "QueryProgressEvent") -> None:
+        pass
+
+    @abstractmethod
+    def onQueryIdle(self, event: "QueryIdleEvent") -> None:
+        pass
+
+    @abstractmethod
+    def onQueryTerminated(self, event: "QueryTerminatedEvent") -> None:
+        pass
 
 class JStreamingQueryListener:
     """
