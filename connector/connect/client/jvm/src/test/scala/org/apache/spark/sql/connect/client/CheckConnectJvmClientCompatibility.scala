@@ -384,6 +384,8 @@ object CheckConnectJvmClientCompatibility {
       ),
       ProblemFilters.exclude[DirectMissingMethodProblem](
         "org.apache.spark.sql.SparkSession#Builder.create"),
+      ProblemFilters.exclude[DirectMissingMethodProblem](
+        "org.apache.spark.sql.SparkSession#Builder.interceptor"),
 
       // Steaming API
       ProblemFilters.exclude[MissingTypesProblem](

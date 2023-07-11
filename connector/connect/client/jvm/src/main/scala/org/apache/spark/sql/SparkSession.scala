@@ -25,6 +25,7 @@ import scala.collection.JavaConverters._
 import scala.reflect.runtime.universe.TypeTag
 
 import com.google.common.cache.{CacheBuilder, CacheLoader}
+import io.grpc.ClientInterceptor
 import org.apache.arrow.memory.RootAllocator
 
 import org.apache.spark.annotation.{DeveloperApi, Experimental}
@@ -629,7 +630,7 @@ object SparkSession extends Logging {
    * Create a new [[SparkSession]] based on the connect client [[Configuration]].
    */
   private[sql] def create(configuration: Configuration): SparkSession = {
-    new SparkSession(new SparkConnectClient(configuration), cleaner, planIdGenerator)
+    new SparkSession(configuration.toSparkConnectClient, cleaner, planIdGenerator)
   }
 
   /**
@@ -653,6 +654,18 @@ object SparkSession extends Logging {
 
     def remote(connectionString: String): Builder = {
       builder.connectionString(connectionString)
+      this
+    }
+
+    /**
+     * Add an interceptor [[ClientInterceptor]] to be used during channel creation.
+     *
+     * Note that interceptors added last are executed first by gRPC.
+     *
+     * @since 3.5.0
+     */
+    def interceptor(interceptor: ClientInterceptor): Builder = {
+      builder.interceptor(interceptor)
       this
     }
 
