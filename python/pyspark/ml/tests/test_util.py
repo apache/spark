@@ -15,6 +15,7 @@
 # limitations under the License.
 #
 
+import os
 import unittest
 
 from pyspark.ml import Pipeline
@@ -72,6 +73,29 @@ class MetaAlgorithmReadWriteTests(SparkSessionTestCase):
             [nested_pipeline, ova_pipeline, vs, ova, lr],
         )
 
+def test_function(x: float, y: float) -> float:
+    return x**2 + y**2
+
+from pyspark import cloudpickle
+from pyspark.ml.util import FunctionPickler
+class TestFunctionPickler(unittest.TestCase):
+
+    def __init__(self):
+        pass
+    
+    def check_if_test_function_pickled(self, f, og_fn, *arguments, **key_word_args):
+        fn, args, kwargs = cloudpickle.load(f)
+        self.assertEqual(fn, og_fn)
+        self.assertEqual(args, arguments)
+        self.assertEqual(kwargs, key_word_args)
+
+    def test_pickle_func_and_get_path(self):
+        x, y = 1, 3 # args of test_function
+        with self.subTest(msg="See if it pickles correctly if no file_path or save_dir are specified"):
+            pickled_fn_path = FunctionPickler.pickle_func_and_get_path(test_function, "", "", x, y)
+            with open(pickled_fn_path, "rb") as f:
+                self.check_if_test_function_pickled(f, test_function, x, y)
+            os.remove(pickled_fn_path)
 
 if __name__ == "__main__":
     from pyspark.ml.tests.test_util import *  # noqa: F401
