@@ -639,7 +639,7 @@ class SparkConnectPlanner(val sessionHolder: SessionHolder) extends Logging {
           ds.groupingAttributes,
           ds.dataAttributes,
           udf.inputDeserializer(ds.groupingAttributes),
-          LocalRelation(initialDs.vEncoder.schema.toAttributes), // empty data set
+          LocalRelation(initialDs.vEncoder.schema), // empty data set
           ds.analyzed)
       }
       SerializeFromObject(udf.outputNamedExpression, flatMapGroupsWithState)
