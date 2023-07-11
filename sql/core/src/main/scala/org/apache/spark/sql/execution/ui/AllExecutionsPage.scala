@@ -91,8 +91,16 @@ private[ui] class AllExecutionsPage(parent: SQLTab) extends WebUIPage("") with L
 
       if (running.nonEmpty) {
         val runningPageTable =
-          executionsTable(request, "running", running.toSeq,
-            executionIdToSubExecutions.mapValues(_.toSeq).toMap, currentTime, true, true, true)
+          executionsTable(
+            request,
+            "running",
+            running.toSeq,
+            executionIdToSubExecutions.mapValues(_.toSeq).toMap,
+            currentTime,
+            showErrorMessage = false,
+            showRunningJobs = true,
+            showSucceededJobs = true,
+            showFailedJobs = true)
 
         _content ++=
           <span id="running" class="collapse-aggregated-runningExecutions collapse-table"
@@ -109,9 +117,16 @@ private[ui] class AllExecutionsPage(parent: SQLTab) extends WebUIPage("") with L
       }
 
       if (completed.nonEmpty) {
-        val completedPageTable =
-          executionsTable(request, "completed", completed.toSeq,
-            executionIdToSubExecutions.mapValues(_.toSeq).toMap, currentTime, false, true, false)
+        val completedPageTable = executionsTable(
+          request,
+          "completed",
+          completed.toSeq,
+          executionIdToSubExecutions.mapValues(_.toSeq).toMap,
+          currentTime,
+          showErrorMessage = false,
+          showRunningJobs = false,
+          showSucceededJobs = true,
+          showFailedJobs = false)
 
         _content ++=
           <span id="completed" class="collapse-aggregated-completedExecutions collapse-table"
@@ -129,8 +144,16 @@ private[ui] class AllExecutionsPage(parent: SQLTab) extends WebUIPage("") with L
 
       if (failed.nonEmpty) {
         val failedPageTable =
-          executionsTable(request, "failed", failed.toSeq,
-            executionIdToSubExecutions.mapValues(_.toSeq).toMap, currentTime, false, true, true)
+          executionsTable(
+            request,
+            "failed",
+            failed.toSeq,
+            executionIdToSubExecutions.mapValues(_.toSeq).toMap,
+            currentTime,
+            showErrorMessage = true,
+            showRunningJobs = false,
+            showSucceededJobs = true,
+            showFailedJobs = true)
 
         _content ++=
           <span id="failed" class="collapse-aggregated-failedExecutions collapse-table"
@@ -192,6 +215,7 @@ private[ui] class AllExecutionsPage(parent: SQLTab) extends WebUIPage("") with L
     executionData: Seq[SQLExecutionUIData],
     executionIdToSubExecutions: Map[Long, Seq[SQLExecutionUIData]],
     currentTime: Long,
+    showErrorMessage: Boolean,
     showRunningJobs: Boolean,
     showSucceededJobs: Boolean,
     showFailedJobs: Boolean): Seq[Node] = {
@@ -211,6 +235,7 @@ private[ui] class AllExecutionsPage(parent: SQLTab) extends WebUIPage("") with L
         UIUtils.prependBaseUri(request, parent.basePath),
         "SQL", // subPath
         currentTime,
+        showErrorMessage,
         showRunningJobs,
         showSucceededJobs,
         showFailedJobs,
@@ -236,6 +261,7 @@ private[ui] class ExecutionPagedTable(
     basePath: String,
     subPath: String,
     currentTime: Long,
+    showErrorMessage: Boolean,
     showRunningJobs: Boolean,
     showSucceededJobs: Boolean,
     showFailedJobs: Boolean,
@@ -302,6 +328,12 @@ private[ui] class ExecutionPagedTable(
           ("Failed Job IDs", true, None))
       } else {
         Seq(("Job IDs", true, None))
+      }
+    } ++ {
+      if (showErrorMessage) {
+        Seq(("Error Message", true, None))
+      } else {
+        Nil
       }
     } ++ {
       if (showSubExecutions) {
@@ -377,6 +409,11 @@ private[ui] class ExecutionPagedTable(
         {if (showFailedJobs) {
           <td>
             {jobLinks(executionTableRow.failedJobData)}
+          </td>
+        }}
+        {if (showErrorMessage) {
+          <td>
+            {executionUIData.errorMessage.getOrElse("")}
           </td>
         }}
         {if (showSubExecutions) {
