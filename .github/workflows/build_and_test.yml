@@ -345,7 +345,7 @@ jobs:
           - ${{ inputs.java }}
         modules:
           - >-
-            pyspark-sql, pyspark-mllib, pyspark-resource
+            pyspark-sql, pyspark-mllib, pyspark-resource, pyspark-testing
           - >-
             pyspark-core, pyspark-streaming, pyspark-ml
           - >-
