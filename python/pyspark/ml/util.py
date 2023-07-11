@@ -802,7 +802,7 @@ class FunctionPickler:
                 The path to the file where the function and arguments are pickled.
         """
         if file_path != "":
-            with open(file_path, "wa") as f:
+            with open(file_path, "wb") as f:
                 cloudpickle.dump((train_fn, args, kwargs), f)
                 return f.name
 
@@ -860,7 +860,7 @@ class FunctionPickler:
                             cloudpickle.dump(output, f)
                     """
         )
-        with open(training_script_save_path, "aw") as f:
+        with open(training_script_save_path, "w") as f:
             if prefix_code != "":
                 f.write(prefix_code)
             f.write(code_snippet)
