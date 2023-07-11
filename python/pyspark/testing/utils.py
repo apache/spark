@@ -221,10 +221,12 @@ class PySparkErrorTestUtils:
         )
 
 
-def assertDataFrameEqual(df: DataFrame, expected: DataFrame, check_row_order: bool = False):
+def assertDataFrameEqual(
+    df: DataFrame, expected: Union[DataFrame, List[Row]], check_row_order: bool = False
+):
     """
-    A util function to assert equality between DataFrames `df` and `expected`, with
-    optional parameter `check_row_order`.
+    A util function to assert equality between `df` (DataFrame) and `expected`
+    (either DataFrame or List[Row]), with optional parameter `check_row_order`.
 
     .. versionadded:: 3.5.0
 
@@ -235,7 +237,7 @@ def assertDataFrameEqual(df: DataFrame, expected: DataFrame, check_row_order: bo
     df : DataFrame
         The DataFrame that is being compared or tested.
 
-    expected : DataFrame
+    expected : DataFrame or List[Row]
         The expected result of the operation, for comparison with the actual result.
 
     check_row_order : bool, optional
