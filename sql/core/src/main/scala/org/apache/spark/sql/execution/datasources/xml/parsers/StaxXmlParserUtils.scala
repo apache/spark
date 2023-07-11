@@ -22,7 +22,7 @@ import javax.xml.stream.{EventFilter, XMLEventReader, XMLInputFactory, XMLStream
 import javax.xml.stream.events._
 
 import scala.annotation.tailrec
-import scala.jdk.CollectionConverters._
+import scala.collection.JavaConverters._
 
 import org.apache.spark.sql.execution.datasources.xml.XmlOptions
 

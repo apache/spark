@@ -21,9 +21,9 @@ import java.nio.file.{Files, Path, Paths}
 import java.sql.{Date, Timestamp}
 import java.util.TimeZone
 
+import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.io.Source
-import scala.jdk.CollectionConverters._
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.io.{LongWritable, Text}

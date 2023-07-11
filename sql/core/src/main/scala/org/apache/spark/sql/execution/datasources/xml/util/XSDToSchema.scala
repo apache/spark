@@ -20,7 +20,7 @@ import java.io.{File, FileInputStream, InputStreamReader, StringReader}
 import java.nio.charset.StandardCharsets
 import java.nio.file.Path
 
-import scala.jdk.CollectionConverters._
+import scala.collection.JavaConverters._
 
 import org.apache.ws.commons.schema._
 import org.apache.ws.commons.schema.constants.Constants

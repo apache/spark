@@ -22,8 +22,8 @@ import javax.xml.stream.events.{Attribute, Characters, EndElement, StartElement,
 import javax.xml.transform.stream.StreamSource
 
 import scala.annotation.tailrec
+import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
-import scala.jdk.CollectionConverters._
 import scala.util.control.NonFatal
 
 import org.apache.spark.rdd.RDD

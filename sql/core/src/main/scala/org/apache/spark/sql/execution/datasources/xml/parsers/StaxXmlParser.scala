@@ -22,8 +22,8 @@ import javax.xml.stream.events.{Attribute, Characters, EndElement, StartElement,
 import javax.xml.transform.stream.StreamSource
 import javax.xml.validation.Schema
 
+import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
-import scala.jdk.CollectionConverters._
 import scala.util.Try
 import scala.util.control.NonFatal
 
