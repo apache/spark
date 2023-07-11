@@ -512,6 +512,20 @@ class Dataset[T] private[sql](
     Project.matchSchema(logicalPlan, schema, sparkSession.sessionState.conf)
   }
 
+  private def parseColumn(colName: String): Column = sparkSession.withActive {
+    val parser = sparkSession.sessionState.sqlParser
+    Column(parser.parseExpression(colName))
+  }
+
+  private def parseColumns(colNames: Seq[String]): Seq[Column] = sparkSession.withActive {
+    val parser = sparkSession.sessionState.sqlParser
+    colNames.map(parser.parseExpression).map(Column(_))
+  }
+
+  private def parseColumnNames(colNames: Seq[String]): Seq[String] = {
+    parseColumns(colNames).map(_.named.name)
+  }
+
   /**
    * Converts this strongly typed collection of data to generic `DataFrame` with columns renamed.
    * This can be quite convenient in conversion from an RDD of tuples into a `DataFrame` with
@@ -531,8 +545,8 @@ class Dataset[T] private[sql](
       "The number of columns doesn't match.\n" +
         s"Old column names (${schema.size}): " + schema.fields.map(_.name).mkString(", ") + "\n" +
         s"New column names (${colNames.size}): " + colNames.mkString(", "))
-
-    val newCols = logicalPlan.output.zip(colNames).map { case (oldAttribute, newName) =>
+    val parsedNames = parseColumnNames(colNames)
+    val newCols = logicalPlan.output.zip(parsedNames).map { case (oldAttribute, newName) =>
       Column(oldAttribute).as(newName)
     }
     select(newCols : _*)
@@ -1087,11 +1101,12 @@ class Dataset[T] private[sql](
       Join(logicalPlan, right.logicalPlan, joinType = JoinType(joinType), None, JoinHint.NONE))
       .analyzed.asInstanceOf[Join]
 
+    val parsedColumnNames = parseColumnNames(usingColumns)
     withPlan {
       Join(
         joined.left,
         joined.right,
-        UsingJoin(JoinType(joinType), usingColumns),
+        UsingJoin(JoinType(joinType), parsedColumnNames),
         None,
         JoinHint.NONE)
     }
@@ -1315,7 +1330,7 @@ class Dataset[T] private[sql](
    */
   @scala.annotation.varargs
   def sortWithinPartitions(sortCol: String, sortCols: String*): Dataset[T] = {
-    sortWithinPartitions((sortCol +: sortCols).map(Column(_)) : _*)
+    sortWithinPartitions(parseColumns(sortCol +: sortCols): _*)
   }
 
   /**
@@ -1345,7 +1360,7 @@ class Dataset[T] private[sql](
    */
   @scala.annotation.varargs
   def sort(sortCol: String, sortCols: String*): Dataset[T] = {
-    sort((sortCol +: sortCols).map(Column(_)) : _*)
+    sort(parseColumns(sortCol +: sortCols): _*)
   }
 
   /**
@@ -1482,7 +1497,7 @@ class Dataset[T] private[sql](
    * @since 1.6.0
    */
   def as(alias: String): Dataset[T] = withTypedPlan {
-    SubqueryAlias(alias, logicalPlan)
+    SubqueryAlias(parseColumn(alias).named.name, logicalPlan)
   }
 
   /**
@@ -1554,7 +1569,7 @@ class Dataset[T] private[sql](
    * @since 2.0.0
    */
   @scala.annotation.varargs
-  def select(col: String, cols: String*): DataFrame = select((col +: cols).map(Column(_)) : _*)
+  def select(col: String, cols: String*): DataFrame = select(parseColumns(col +: cols) : _*)
 
   /**
    * Selects a set of SQL expressions. This is a variant of `select` that accepts
@@ -1571,9 +1586,7 @@ class Dataset[T] private[sql](
    */
   @scala.annotation.varargs
   def selectExpr(exprs: String*): DataFrame = sparkSession.withActive {
-    select(exprs.map { expr =>
-      Column(sparkSession.sessionState.sqlParser.parseExpression(expr))
-    }: _*)
+    select(parseColumns(exprs): _*)
   }
 
   /**
@@ -1660,6 +1673,10 @@ class Dataset[T] private[sql](
       c5: TypedColumn[T, U5]): Dataset[(U1, U2, U3, U4, U5)] =
     selectUntyped(c1, c2, c3, c4, c5).asInstanceOf[Dataset[(U1, U2, U3, U4, U5)]]
 
+  private def filterInternal(condition: Column): Dataset[T] = withTypedPlan {
+    Filter(condition.expr, logicalPlan)
+  }
+
   /**
    * Filters rows using the given condition.
    * {{{
@@ -1671,8 +1688,8 @@ class Dataset[T] private[sql](
    * @group typedrel
    * @since 1.6.0
    */
-  def filter(condition: Column): Dataset[T] = withTypedPlan {
-    Filter(condition.expr, logicalPlan)
+  def filter(condition: Column): Dataset[T] = {
+    filter(condition.named.name)
   }
 
   /**
@@ -1685,7 +1702,7 @@ class Dataset[T] private[sql](
    * @since 1.6.0
    */
   def filter(conditionExpr: String): Dataset[T] = {
-    filter(Column(sparkSession.sessionState.sqlParser.parseExpression(conditionExpr)))
+    filterInternal(parseColumn(conditionExpr))
   }
 
   /**
@@ -1710,9 +1727,7 @@ class Dataset[T] private[sql](
    * @group typedrel
    * @since 1.6.0
    */
-  def where(conditionExpr: String): Dataset[T] = {
-    filter(Column(sparkSession.sessionState.sqlParser.parseExpression(conditionExpr)))
-  }
+  def where(conditionExpr: String): Dataset[T] = filter(conditionExpr)
 
   /**
    * Groups the Dataset using the specified columns, so we can run aggregation on them. See
@@ -1734,7 +1749,8 @@ class Dataset[T] private[sql](
    */
   @scala.annotation.varargs
   def groupBy(cols: Column*): RelationalGroupedDataset = {
-    RelationalGroupedDataset(toDF(), cols.map(_.expr), RelationalGroupedDataset.GroupByType)
+    val parsed = parseColumns(cols.map(_.named.name))
+    RelationalGroupedDataset(toDF(), parsed.map(_.expr), RelationalGroupedDataset.GroupByType)
   }
 
   /**
@@ -1758,7 +1774,8 @@ class Dataset[T] private[sql](
    */
   @scala.annotation.varargs
   def rollup(cols: Column*): RelationalGroupedDataset = {
-    RelationalGroupedDataset(toDF(), cols.map(_.expr), RelationalGroupedDataset.RollupType)
+    val parsed = parseColumns(cols.map(_.named.name))
+    RelationalGroupedDataset(toDF(), parsed.map(_.expr), RelationalGroupedDataset.RollupType)
   }
 
   /**
@@ -1782,7 +1799,8 @@ class Dataset[T] private[sql](
    */
   @scala.annotation.varargs
   def cube(cols: Column*): RelationalGroupedDataset = {
-    RelationalGroupedDataset(toDF(), cols.map(_.expr), RelationalGroupedDataset.CubeType)
+    val parsed = parseColumns(cols.map(_.named.name))
+    RelationalGroupedDataset(toDF(), parsed.map(_.expr), RelationalGroupedDataset.CubeType)
   }
 
   /**
@@ -1807,7 +1825,7 @@ class Dataset[T] private[sql](
    */
   @scala.annotation.varargs
   def groupBy(col1: String, cols: String*): RelationalGroupedDataset = {
-    val colNames: Seq[String] = col1 +: cols
+    val colNames: Seq[String] = parseColumnNames(col1 +: cols)
     RelationalGroupedDataset(
       toDF(), colNames.map(colName => resolve(colName)), RelationalGroupedDataset.GroupByType)
   }
@@ -1887,7 +1905,7 @@ class Dataset[T] private[sql](
    */
   @scala.annotation.varargs
   def rollup(col1: String, cols: String*): RelationalGroupedDataset = {
-    val colNames: Seq[String] = col1 +: cols
+    val colNames: Seq[String] = parseColumnNames(col1 +: cols)
     RelationalGroupedDataset(
       toDF(), colNames.map(colName => resolve(colName)), RelationalGroupedDataset.RollupType)
   }
@@ -1915,7 +1933,7 @@ class Dataset[T] private[sql](
    */
   @scala.annotation.varargs
   def cube(col1: String, cols: String*): RelationalGroupedDataset = {
-    val colNames: Seq[String] = col1 +: cols
+    val colNames: Seq[String] = parseColumnNames(col1 +: cols)
     RelationalGroupedDataset(
       toDF(), colNames.map(colName => resolve(colName)), RelationalGroupedDataset.CubeType)
   }

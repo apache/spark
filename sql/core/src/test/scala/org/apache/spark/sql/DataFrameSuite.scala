@@ -28,8 +28,8 @@ import scala.reflect.runtime.universe.TypeTag
 import scala.util.Random
 
 import org.scalatest.matchers.should.Matchers._
-
 import org.apache.spark.{SparkException, SparkIllegalArgumentException}
+
 import org.apache.spark.api.python.PythonEvalType
 import org.apache.spark.scheduler.{SparkListener, SparkListenerJobEnd}
 import org.apache.spark.sql.catalyst.{InternalRow, TableIdentifier}
@@ -37,6 +37,7 @@ import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
 import org.apache.spark.sql.catalyst.encoders.{ExpressionEncoder, RowEncoder}
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, AttributeReference, EqualTo, ExpressionSet, GreaterThan, Literal, PythonUDF, Uuid}
 import org.apache.spark.sql.catalyst.optimizer.ConvertToLocalRelation
+import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.logical.{ColumnStat, LeafNode, LocalRelation, LogicalPlan, OneRowRelation, Statistics}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.connector.FakeV2Provider
@@ -3648,6 +3649,48 @@ class DataFrameSuite extends QueryTest
     val df1 = _spark.sql("select '2023-01-01'+ INTERVAL 1 YEAR as b")
     val df2 = _spark.sql("select '2023-01-01' as a").selectExpr("a + INTERVAL 1 YEAR as b")
     checkAnswer(df1, df2)
+  }
+
+  test("toDF API respects active session and it's params respects parser") {
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true",
+      SQLConf.ENFORCE_RESERVED_KEYWORDS.key -> "true") {
+      checkError(
+        exception = intercept[ParseException] {
+          spark.range(1).toDF("CASE").collect()
+        },
+        errorClass = "PARSE_SYNTAX_ERROR",
+        parameters = Map("error" -> "'CASE'", "hint" -> ""))
+    }
+  }
+
+  test("join API respects active session and it's params respects parser") {
+    withSQLConf(SQLConf.ENFORCE_RESERVED_KEYWORDS.key -> "false") {
+      val df = spark.range(1).toDF("CASE")
+      withSQLConf(SQLConf.ANSI_ENABLED.key -> "true",
+        SQLConf.ENFORCE_RESERVED_KEYWORDS.key -> "true") {
+        checkError(
+          exception = intercept[ParseException] {
+            df.join(df, "CASE").collect()
+          },
+          errorClass = "PARSE_SYNTAX_ERROR",
+          parameters = Map("error" -> "'CASE'", "hint" -> ""))
+      }
+    }
+  }
+
+  test("sort API respects active session and it's params respects parser") {
+    withSQLConf(SQLConf.ENFORCE_RESERVED_KEYWORDS.key -> "false") {
+      val df = spark.range(1).toDF("CASE")
+      withSQLConf(SQLConf.ANSI_ENABLED.key -> "true",
+        SQLConf.ENFORCE_RESERVED_KEYWORDS.key -> "true") {
+        checkError(
+          exception = intercept[ParseException] {
+            df.sort("CASE").collect()
+          },
+          errorClass = "PARSE_SYNTAX_ERROR",
+          parameters = Map("error" -> "'CASE'", "hint" -> ""))
+      }
+    }
   }
 }
 
