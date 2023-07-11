@@ -729,46 +729,6 @@ class UtilsTestsMixin:
             message_parameters={"df_schema": df1.schema, "expected_schema": df2.schema},
         )
 
-    def test_assert_equal_maptype(self):
-        df1 = self.spark.createDataFrame(
-            data=[
-                ("student1", {"id": 222342203655477580}),
-                ("student2", {"grad_year": 422322203155477692}),
-            ],
-            schema=StructType(
-                [
-                    StructField("student", StringType(), True),
-                    StructField("properties", MapType(StringType(), LongType()), True),
-                ]
-            ),
-        )
-        df2 = self.spark.createDataFrame(
-            data=[
-                ("student1", {"id": 222342203655477580}),
-                ("student2", {"id": 422322203155477692}),
-            ],
-            schema=StructType(
-                [
-                    StructField("student", StringType(), True),
-                    StructField("properties", MapType(StringType(), LongType()), True),
-                ]
-            ),
-        )
-
-        from pyspark.errors.exceptions.connect import AnalysisException
-
-        try:
-            assertDataFrameEqual(df1, df2)
-        except PySparkAssertionError as pe:
-            self.check_error(
-                exception=pe,
-                error_class="UNSUPPORTED_DATA_TYPE_FOR_IGNORE_ROW_ORDER",
-                message_parameters={},
-            )
-        except AnalysisException:
-            # catch AnalysisException for Spark Connect
-            pass
-
     def test_spark_sql(self):
         assertDataFrameEqual(self.spark.sql("select 1 + 2 AS x"), self.spark.sql("select 3 AS x"))
 

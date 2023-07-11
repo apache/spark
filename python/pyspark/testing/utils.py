@@ -384,27 +384,22 @@ def assertDataFrameEqual(
                 message_parameters={"error_msg": error_msg},
             )
 
-    if not check_row_order:
-        try:
-            # rename duplicate columns for sorting
-            renamed_df = df.toDF(*[f"_{i}" for i in range(len(df.columns))])
-            df = renamed_df.sort(renamed_df.columns).toDF(*df.columns)
-            if isinstance(expected, List):
-                expected.sort()
-            else:
-                renamed_expected = expected.toDF(*[f"_{i}" for i in range(len(expected.columns))])
-                expected = renamed_expected.sort(renamed_expected.columns).toDF(*expected.columns)
-        except Exception:
-            raise PySparkAssertionError(
-                error_class="UNSUPPORTED_DATA_TYPE_FOR_IGNORE_ROW_ORDER",
-                message_parameters={},
-            )
-
-    if isinstance(expected, List):
-        assert_rows_equal(df.collect(), expected)
-    else:
+    # convert df and expected to list
+    if isinstance(expected, DataFrame) or isinstance(expected, ConnectDataFrame):
+        # only compare schema if expected is not a List
         assert_schema_equal(df.schema, expected.schema)
-        assert_rows_equal(df.collect(), expected.collect())
+        expected_list = expected.collect()
+    else:
+        expected_list = expected
+
+    df_list = df.collect()
+
+    if not check_row_order:
+        # rename duplicate columns for sorting
+        df_list = sorted(df_list, key=lambda x: str(x))
+        expected_list = sorted(expected_list, key=lambda x: str(x))
+
+    assert_rows_equal(df_list, expected_list)
 
 
 def _test() -> None:
