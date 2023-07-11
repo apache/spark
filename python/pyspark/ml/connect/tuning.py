@@ -281,7 +281,7 @@ class CrossValidator(
     test set exactly once.
 
     .. versionadded:: 3.5.0
-    
+
     Examples
     --------
     >>> from pyspark.ml.connect.tuning import CrossValidator

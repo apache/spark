@@ -199,6 +199,7 @@ class StandardScalerModel(Model, HasInputCol, HasOutputCol, ParamsReadWrite, Cor
 
     .. versionadded:: 3.5.0
     """
+
     def __init__(
         self,
         mean_values: Optional["np.ndarray"] = None,
