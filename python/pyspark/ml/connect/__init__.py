@@ -26,7 +26,6 @@ from pyspark.ml.connect.base import (
 from pyspark.ml.connect import (
     feature,
     evaluation,
-    tuning,
 )
 
 from pyspark.ml.connect.pipeline import Pipeline, PipelineModel
@@ -40,5 +39,4 @@ __all__ = [
     "evaluation",
     "Pipeline",
     "PipelineModel",
-    "tuning",
 ]
