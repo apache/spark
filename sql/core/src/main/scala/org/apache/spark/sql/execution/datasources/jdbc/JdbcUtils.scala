@@ -222,7 +222,8 @@ object JdbcUtils extends Logging with SQLConfHelper {
       // including java.sql.Types.ARRAY,DATALINK,DISTINCT,JAVA_OBJECT,NULL,OTHER,REF_CURSOR,
       // TIME_WITH_TIMEZONE,TIMESTAMP_WITH_TIMEZONE, and among others.
       val jdbcType = classOf[JDBCType].getEnumConstants()
-        .find(_.getVendorTypeNumber == sqlType)
+        .filter(_.getVendorTypeNumber == sqlType)
+        .headOption
         .map(_.getName)
         .getOrElse(sqlType.toString)
       throw QueryExecutionErrors.unrecognizedSqlTypeError(jdbcType, typeName)

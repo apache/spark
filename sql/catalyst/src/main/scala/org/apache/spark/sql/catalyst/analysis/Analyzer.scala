@@ -1366,7 +1366,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
               // column names. We need to make sure the static partition column name doesn't appear
               // there to catch the following ambiguous query:
               // INSERT OVERWRITE t PARTITION (c='1') (c) VALUES ('2')
-              if (query.output.exists(col => conf.resolver(col.name, staticName))) {
+              if (query.output.find(col => conf.resolver(col.name, staticName)).nonEmpty) {
                 throw QueryCompilationErrors.staticPartitionInUserSpecifiedColumnsError(staticName)
               }
             }
