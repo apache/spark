@@ -32,6 +32,7 @@ import org.apache.spark.sql.connect.common.LiteralValueProtoConverter.toLiteralP
 import org.apache.spark.sql.connect.config.Connect.CONNECT_GRPC_ARROW_MAX_BATCH_SIZE
 import org.apache.spark.sql.connect.planner.SparkConnectPlanner
 import org.apache.spark.sql.connect.service.ExecuteHolder
+import org.apache.spark.sql.connect.utils.MetricGenerator
 import org.apache.spark.sql.execution.{LocalTableScanExec, SQLExecution}
 import org.apache.spark.sql.execution.arrow.ArrowConverters
 import org.apache.spark.sql.types.StructType

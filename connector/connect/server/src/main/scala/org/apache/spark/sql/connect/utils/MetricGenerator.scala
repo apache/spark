@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.connect.execution
+package org.apache.spark.sql.connect.utils
 
 import scala.collection.JavaConverters._
 
@@ -27,7 +27,7 @@ import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanExec, AdaptiveS
 /**
  * Helper object for generating responses with metrics from queries.
  */
-object MetricGenerator extends AdaptiveSparkPlanHelper {
+private[connect] object MetricGenerator extends AdaptiveSparkPlanHelper {
 
   def createMetricsResponse(sessionId: String, rows: DataFrame): ExecutePlanResponse = {
     ExecutePlanResponse

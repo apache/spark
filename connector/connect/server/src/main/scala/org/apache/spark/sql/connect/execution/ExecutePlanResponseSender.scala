@@ -20,6 +20,7 @@ package org.apache.spark.sql.connect.execution
 import io.grpc.stub.StreamObserver
 
 import org.apache.spark.connect.proto.ExecutePlanResponse
+import org.apache.spark.internal.Logging
 
 /**
  * ExecutePlanResponseSender sends responses to the GRPC stream.
@@ -31,23 +32,14 @@ import org.apache.spark.connect.proto.ExecutePlanResponse
  */
 private[connect] class ExecutePlanResponseSender(
   executionObserver: ExecutePlanResponseObserver,
-  grpcObserver: StreamObserver[ExecutePlanResponse]) {
+  grpcObserver: StreamObserver[ExecutePlanResponse]) extends Logging {
 
-  executionObserver.setExecutePlanResponseSender(this)
-
-  private val signal = new Object
   private var detached = false
 
-  def notifyResponse(): Unit = {
-    signal.synchronized {
-      signal.notify()
-    }
-  }
-
   def detach(): Unit = {
-    signal.synchronized {
+    executionObserver.synchronized {
       this.detached = true
-      signal.notify()
+      executionObserver.notifyAll()
     }
   }
 
@@ -61,7 +53,7 @@ private[connect] class ExecutePlanResponseSender(
     // register to be notified about available responses.
     executionObserver.setExecutePlanResponseSender(this)
 
-    var currentIndex = lastSentIndex + 1
+    var nextIndex = lastSentIndex + 1
     var finished = false
 
     while (!finished) {
@@ -69,35 +61,43 @@ private[connect] class ExecutePlanResponseSender(
       // Get next available response.
       // Wait until either this sender got detached or next response is ready,
       // or the stream is complete and it had already sent all responses.
-      signal.synchronized {
+      logDebug(s"Trying to get next response with index=$nextIndex.")
+      executionObserver.synchronized {
+        logDebug(s"Acquired lock.")
         while (!detached && response.isEmpty &&
-            executionObserver.getLastIndex().forall(currentIndex <= _)) {
-          response = executionObserver.getResponse(currentIndex)
-          // If response is empty, wait to get notified.
-          // We are cholding signal here, so:
-          // - if detach() is waiting on signal, and will acquire it after wait()
-          //   here releases it, and wait() will be waked up by notify.
-          // - if getLastIndex() or getResponse() changed, executionObserver would call
-          //   notify(), which would wait on signal, and will acquire it after wait() here releases
-          //   it, and wait will be waked up by notify.
+            executionObserver.getLastIndex().forall(nextIndex <= _)) {
+          logDebug(s"Try to get response with index=$nextIndex from observer.")
+          response = executionObserver.getResponse(nextIndex)
+          logDebug(s"Response index=$nextIndex from observer: ${response.isDefined}")
+          // If response is empty, release executionObserver lock and wait to get notified.
+          // The state of detached, response and lastIndex are change under lock in
+          // executionObserver, and will notify upon state change.
           if (response.isEmpty) {
-            signal.wait()
+            logDebug(s"Wait for response to become available.")
+            executionObserver.wait()
+            logDebug(s"Reacquired lock after waiting.")
           }
         }
+        logDebug(s"Exiting loop: detached=$detached, response=$response," +
+          s"lastIndex=${executionObserver.getLastIndex()}")
       }
 
       // Send next available response.
       if (detached) {
         // This sender got detached by the observer.
+        logDebug(s"Detached from observer at index ${nextIndex - 1}. Complete stream.")
+        grpcObserver.onCompleted()
         finished = true
       } else if (response.isDefined) {
         // There is a response available to be sent.
         grpcObserver.onNext(response.get.r)
+        logDebug(s"Sent response index=$nextIndex.")
         // Remove after sending.
-        executionObserver.removeUntilIndex(currentIndex)
-        currentIndex += 1
-      } else if (executionObserver.getLastIndex().forall(currentIndex > _)) {
+        executionObserver.removeUntilIndex(nextIndex)
+        nextIndex += 1
+      } else if (executionObserver.getLastIndex().forall(nextIndex > _)) {
         // Stream is finished and all responses have been sent
+        logDebug(s"Sent all responses up to index ${nextIndex - 1}.")
         executionObserver.getError() match {
           case Some(t) => grpcObserver.onError(t)
           case None => grpcObserver.onCompleted()

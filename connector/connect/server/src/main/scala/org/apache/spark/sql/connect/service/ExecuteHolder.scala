@@ -30,6 +30,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.connect.common.ProtoUtils
 import org.apache.spark.sql.connect.execution.{ExecutePlanResponseObserver, ExecutePlanResponseSender, SparkConnectPlanExecution}
 import org.apache.spark.sql.connect.planner.SparkConnectPlanner
+import org.apache.spark.sql.connect.utils.ErrorUtils
 import org.apache.spark.util.Utils
 
 /**
@@ -76,7 +77,15 @@ case class ExecuteHolder(operationId: String, sessionHolder: SessionHolder) exte
       // forwarding of thread locals needs to be taken into account.
       this.executionThread = new Thread() {
         override def run(): Unit = {
-          execute()
+          try {
+            execute()
+          } catch {
+            ErrorUtils.handleError(
+              "execute",
+              executePlanResponseObserver.get,
+              sessionHolder.userId,
+              sessionHolder.sessionId)
+          }
         }
       }
     }
@@ -148,12 +157,12 @@ case class ExecuteHolder(operationId: String, sessionHolder: SessionHolder) exte
         logDebug(s"Exception in execute: $e")
         // Always cancel all remaining execution after error.
         sessionHolder.session.sparkContext.cancelJobsWithTag(jobTag)
-        executionError = if (interrupted) {
+        if (interrupted) {
           // Turn the interrupt into OPERATION_CANCELLED error.
-          Some(new SparkSQLException("OPERATION_CANCELLED", Map.empty))
+          throw new SparkSQLException("OPERATION_CANCELLED", Map.empty)
         } else {
-          // Return the originally thrown error.
-          Some(e)
+          // Rethrown the original error.
+          throw e
         }
     } finally {
       session.sparkContext.removeJobTag(jobTag)

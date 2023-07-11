@@ -22,7 +22,7 @@ import io.grpc.stub.StreamObserver
 import org.apache.spark.connect.proto.{ExecutePlanRequest, ExecutePlanResponse}
 import org.apache.spark.internal.Logging
 
-class SparkConnectStreamHandler(responseObserver: StreamObserver[ExecutePlanResponse])
+class SparkConnectExecutePlanHandler(responseObserver: StreamObserver[ExecutePlanResponse])
     extends Logging {
 
   def handle(v: ExecutePlanRequest): Unit = {

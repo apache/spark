@@ -22,6 +22,7 @@ import scala.collection.mutable.ListBuffer
 import io.grpc.stub.StreamObserver
 
 import org.apache.spark.connect.proto.ExecutePlanResponse
+import org.apache.spark.internal.Logging
 
 /**
  * Container for ExecutePlanResponses responses.
@@ -31,7 +32,9 @@ import org.apache.spark.connect.proto.ExecutePlanResponse
  *
  * @param responseObserver
  */
-private[connect] class ExecutePlanResponseObserver() extends StreamObserver[ExecutePlanResponse] {
+private[connect] class ExecutePlanResponseObserver()
+  extends StreamObserver[ExecutePlanResponse]
+  with Logging {
 
   // Cached stream state.
   private val responses = new ListBuffer[CachedExecutePlanResponse]()
@@ -49,7 +52,8 @@ private[connect] class ExecutePlanResponseObserver() extends StreamObserver[Exec
     }
     index += 1
     responses += CachedExecutePlanResponse(r, index)
-    notifySender()
+    logDebug(s"Saved response with index=$index")
+    notifyAll()
   }
 
   def onError(t: Throwable): Unit = synchronized {
@@ -58,7 +62,8 @@ private[connect] class ExecutePlanResponseObserver() extends StreamObserver[Exec
     }
     error = Some(t)
     lastIndex = Some(index) // no responses to be send after error.
-    notifySender()
+    logDebug(s"Error. Last stream index is $index.")
+    notifyAll()
   }
 
   def onCompleted(): Unit = synchronized {
@@ -66,14 +71,15 @@ private[connect] class ExecutePlanResponseObserver() extends StreamObserver[Exec
       throw new IllegalStateException("Stream onCompleted can't be called after stream completed")
     }
     lastIndex = Some(index)
-    notifySender()
+    logDebug(s"Completed. Last stream index is $index.")
+    notifyAll()
   }
 
   /** Set a new response sender. */
   def setExecutePlanResponseSender(newSender: ExecutePlanResponseSender): Unit = synchronized {
     responseSender.foreach(_.detach()) // detach the current sender before attaching new one
     responseSender = Some(newSender)
-    notifySender()
+    notifyAll()
   }
 
   /** Remove cached responses until index */
@@ -81,6 +87,7 @@ private[connect] class ExecutePlanResponseObserver() extends StreamObserver[Exec
     while (responses.nonEmpty && responses(0).index <= index) {
       responses.remove(0)
     }
+    logDebug(s"Removed saved responses until index $index.")
   }
 
   /** Get response with a given index in the stream, if set. */
@@ -103,9 +110,5 @@ private[connect] class ExecutePlanResponseObserver() extends StreamObserver[Exec
   /** If the stream is finished, the index of the last response, otherwise unset. */
   def getLastIndex(): Option[Long] = synchronized {
     lastIndex
-  }
-
-  private def notifySender() = synchronized {
-    responseSender.foreach(_.notifyResponse())
   }
 }
