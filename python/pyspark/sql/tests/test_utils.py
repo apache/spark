@@ -142,7 +142,7 @@ class UtilsTestsMixin:
         )
 
         expected_error_message = "Results do not match: "
-        percent_diff = 1 / 2
+        percent_diff = (1 / 2) * 100
         expected_error_message += "( %.5f %% )" % percent_diff
         diff_msg = (
             "[df]"
@@ -457,7 +457,7 @@ class UtilsTestsMixin:
         )
 
         expected_error_message = "Results do not match: "
-        percent_diff = 1 / 2
+        percent_diff = (1 / 2) * 100
         expected_error_message += "( %.5f %% )" % percent_diff
         diff_msg = (
             "[df]"
@@ -553,7 +553,7 @@ class UtilsTestsMixin:
         )
 
         expected_error_message = "Results do not match: "
-        percent_diff = 2 / 2
+        percent_diff = (2 / 2) * 100
         expected_error_message += "( %.5f %% )" % percent_diff
         diff_msg = (
             "[df]"
@@ -641,7 +641,7 @@ class UtilsTestsMixin:
         )
 
         expected_error_message = "Results do not match: "
-        percent_diff = 2 / 3
+        percent_diff = (2 / 3) * 100
         expected_error_message += "( %.5f %% )" % percent_diff
         diff_msg = (
             "[df]"
