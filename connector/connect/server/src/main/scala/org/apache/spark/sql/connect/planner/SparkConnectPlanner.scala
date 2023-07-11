@@ -52,7 +52,6 @@ import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.plans.logical.{AppendColumns, CoGroup, CollectMetrics, CommandResult, Deduplicate, DeduplicateWithinWatermark, DeserializeToObject, Except, FlatMapGroupsWithState, Intersect, JoinWith, LocalRelation, LogicalGroupState, LogicalPlan, MapGroups, MapPartitions, Project, Sample, SerializeFromObject, Sort, SubqueryAlias, TypedFilter, Union, Unpivot, UnresolvedHint}
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, CharVarcharUtils}
-import org.apache.spark.sql.connect.artifact.SparkConnectArtifactManager
 import org.apache.spark.sql.connect.common.{DataTypeProtoConverter, ForeachWriterPacket, InvalidPlanInput, LiteralValueProtoConverter, StorageLevelProtoConverter, StreamingListenerPacket, UdfPacket}
 import org.apache.spark.sql.connect.config.Connect.CONNECT_GRPC_ARROW_MAX_BATCH_SIZE
 import org.apache.spark.sql.connect.plugin.SparkConnectPluginRegistry
@@ -2880,7 +2879,8 @@ class SparkConnectPlanner(val sessionHolder: SessionHolder) extends Logging {
       listener: StreamingQueryListener): StreamingQueryListenerInstance = {
     StreamingQueryListenerInstance
       .newBuilder()
-      .setListenerPayload(ByteString.copyFrom(Utils.serialize(StreamingListenerPacket(listener))))
+      .setListenerPayload(ByteString
+        .copyFrom(Utils.serialize(StreamingListenerPacket("", listener))))
       .build()
   }
 
@@ -2919,20 +2919,23 @@ class SparkConnectPlanner(val sessionHolder: SessionHolder) extends Logging {
         respBuilder.setResetTerminated(true)
 
       case StreamingQueryManagerCommand.CommandCase.ADD_LISTENER =>
-        val listener = Utils
+        val listenerPacket = Utils
           .deserialize[StreamingListenerPacket](
             command.getAddListener.getListenerPayload.toByteArray,
-            SparkConnectArtifactManager.classLoaderWithArtifacts).listener
+            Utils.getContextOrSparkClassLoader)
+        val listener: StreamingQueryListener = listenerPacket.listener
           .asInstanceOf[StreamingQueryListener]
+        val id: String = listenerPacket.id
+        sessionHolder.cacheListenerById(id, listener)
         session.streams.addListener(listener)
         respBuilder.setAddListener(true)
 
       case StreamingQueryManagerCommand.CommandCase.REMOVE_LISTENER =>
-        val listener = Utils
+        val listenerId = Utils
           .deserialize[StreamingListenerPacket](
             command.getRemoveListener.getListenerPayload.toByteArray,
-            SparkConnectArtifactManager.classLoaderWithArtifacts).listener
-          .asInstanceOf[StreamingQueryListener]
+            Utils.getContextOrSparkClassLoader).id
+        val listener: StreamingQueryListener = sessionHolder.getListenerOrThrow(listenerId)
         session.streams.removeListener(listener)
         respBuilder.setRemoveListener(true)
 

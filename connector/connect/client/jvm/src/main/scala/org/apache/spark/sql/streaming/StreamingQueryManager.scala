@@ -18,6 +18,7 @@
 package org.apache.spark.sql.streaming
 
 import java.util.UUID
+import java.util.concurrent.{ConcurrentHashMap, ConcurrentMap}
 
 import scala.collection.JavaConverters._
 
@@ -29,7 +30,7 @@ import org.apache.spark.connect.proto.StreamingQueryManagerCommand
 import org.apache.spark.connect.proto.StreamingQueryManagerCommandResult
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SparkSession
-import org.apache.spark.sql.connect.common.StreamingListenerPacket
+import org.apache.spark.sql.connect.common.{InvalidPlanInput, StreamingListenerPacket}
 import org.apache.spark.util.Utils
 
 /**
@@ -39,6 +40,9 @@ import org.apache.spark.util.Utils
  */
 @Evolving
 class StreamingQueryManager private[sql] (sparkSession: SparkSession) extends Logging {
+
+  private lazy val listenerCache: ConcurrentMap[StreamingQueryListener, String] =
+    new ConcurrentHashMap()
 
   /**
    * Returns a list of active queries associated with this SQLContext
@@ -137,10 +141,12 @@ class StreamingQueryManager private[sql] (sparkSession: SparkSession) extends Lo
    * @since 3.5.0
    */
   def addListener(listener: StreamingQueryListener): Unit = {
+    val id = UUID.randomUUID.toString
+    cacheIdByListener(listener, id)
     executeManagerCmd(
       _.getAddListenerBuilder
         .setListenerPayload(ByteString.copyFrom(Utils
-          .serialize(StreamingListenerPacket(listener)))))
+          .serialize(StreamingListenerPacket(id, listener)))))
   }
 
   /**
@@ -149,10 +155,11 @@ class StreamingQueryManager private[sql] (sparkSession: SparkSession) extends Lo
    * @since 3.5.0
    */
   def removeListener(listener: StreamingQueryListener): Unit = {
+    val id = getIdByListener(listener)
     executeManagerCmd(
       _.getRemoveListenerBuilder
         .setListenerPayload(ByteString.copyFrom(Utils
-          .serialize(StreamingListenerPacket(listener)))))
+          .serialize(StreamingListenerPacket(id, listener)))))
   }
 
   /**
@@ -187,5 +194,15 @@ class StreamingQueryManager private[sql] (sparkSession: SparkSession) extends Lo
     }
 
     resp.getStreamingQueryManagerCommandResult
+  }
+
+  private def cacheIdByListener(listener: StreamingQueryListener, id: String): Unit = {
+    listenerCache.putIfAbsent(listener, id)
+  }
+
+  private def getIdByListener(listener: StreamingQueryListener): String = {
+    Option(listenerCache.get(listener)).getOrElse {
+      throw InvalidPlanInput(s"No id with listener $listener is found.")
+    }
   }
 }

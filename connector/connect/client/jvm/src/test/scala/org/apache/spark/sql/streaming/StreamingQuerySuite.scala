@@ -21,6 +21,7 @@ import java.io.{File, FileWriter}
 import java.util.concurrent.TimeUnit
 
 import scala.collection.JavaConverters._
+import scala.collection.mutable
 
 import org.scalatest.concurrent.Eventually.eventually
 import org.scalatest.concurrent.Futures.timeout
@@ -30,6 +31,7 @@ import org.apache.spark.sql.{ForeachWriter, Row, SparkSession, SQLHelper}
 import org.apache.spark.sql.connect.client.util.RemoteSparkSession
 import org.apache.spark.sql.functions.col
 import org.apache.spark.sql.functions.window
+import org.apache.spark.sql.streaming.StreamingQueryListener.{QueryIdleEvent, QueryStartedEvent, QueryTerminatedEvent}
 import org.apache.spark.util.Utils
 
 class StreamingQuerySuite extends RemoteSparkSession with SQLHelper {
@@ -266,6 +268,43 @@ class StreamingQuerySuite extends RemoteSparkSession with SQLHelper {
     q.stop()
     assert(!q1.isActive)
   }
+
+  test("streaming query listener") {
+    // There's a default StreamingQueryStatusListener.
+    assert(spark.streams.listListeners().length == 1)
+
+    val listener = new EventCollector
+    spark.streams.addListener(listener)
+
+    val q = spark.readStream
+      .format("rate")
+      .load()
+      .writeStream
+      .format("console")
+      .start()
+
+    try {
+      q.processAllAvailable()
+      eventually(timeout(30.seconds)) {
+        assert(q.isActive)
+      }
+    } finally {
+      q.stop()
+    }
+
+    // List listeners after adding a new listener, length should be 2.
+    val listeners = spark.streams.listListeners()
+    assert(listeners.length == 2)
+
+    val currListener = listeners(1).asInstanceOf[EventCollector]
+    assert(q.id.equals(currListener.startEvent.id))
+    assert(q.runId.equals(currListener.terminationEvent.runId))
+    assert(q.lastProgress.numInputRows == currListener.progressEvents.last.numInputRows)
+
+    // Remove the listener, length should be 1.
+    spark.streams.removeListener(listener)
+    assert(spark.streams.listListeners().length == 1)
+  }
 }
 
 class TestForeachWriter[T] extends ForeachWriter[T] {
@@ -291,4 +330,32 @@ class TestForeachWriter[T] extends ForeachWriter[T] {
 
 case class TestClass(value: Int) {
   override def toString: String = value.toString
+}
+
+class EventCollector extends StreamingQueryListener {
+  @volatile var startEvent: QueryStartedEvent = null
+  @volatile var terminationEvent: QueryTerminatedEvent = null
+  @volatile var idleEvent: QueryIdleEvent = null
+
+  private val _progressEvents = new mutable.Queue[StreamingQueryProgress]
+
+  def progressEvents: Seq[StreamingQueryProgress] = _progressEvents.synchronized {
+    _progressEvents.filter(_.numInputRows > 0)
+  }
+
+  override def onQueryStarted(event: StreamingQueryListener.QueryStartedEvent): Unit = {
+    startEvent = event
+  }
+
+  override def onQueryProgress(event: StreamingQueryListener.QueryProgressEvent): Unit = {
+    _progressEvents += event.progress
+  }
+
+  override def onQueryIdle(event: StreamingQueryListener.QueryIdleEvent): Unit = {
+    idleEvent = event
+  }
+
+  override def onQueryTerminated(event: StreamingQueryListener.QueryTerminatedEvent): Unit = {
+    terminationEvent = event
+  }
 }

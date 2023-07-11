@@ -17,4 +17,4 @@
 
 package org.apache.spark.sql.connect.common
 
-case class StreamingListenerPacket(listener: AnyRef) extends Serializable
+case class StreamingListenerPacket(id: String, listener: AnyRef) extends Serializable
