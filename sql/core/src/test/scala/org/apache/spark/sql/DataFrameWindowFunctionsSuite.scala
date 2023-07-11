@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql
 
+import org.scalactic.source.Position
+import org.scalatest.Tag
 import org.scalatest.matchers.must.Matchers.the
 
 import org.apache.spark.TestUtils.{assertNotSpilled, assertSpilled}
@@ -43,6 +45,17 @@ class DataFrameWindowFunctionsSuite extends QueryTest
   with AdaptiveSparkPlanHelper {
 
   import testImplicits._
+
+  override protected def test(testName: String, testTags: Tag*)(testFun: => Any)
+      (implicit pos: Position): Unit = {
+    super.test(testName, testTags: _*) {
+      Seq(true, false).foreach { enable =>
+        withSQLConf(SQLConf.USE_PARTITION_EVALUATOR.key -> enable.toString) {
+          testFun
+        }
+      }
+    }
+  }
 
   test("reuse window partitionBy") {
     val df = Seq((1, "1"), (2, "2"), (1, "1"), (2, "2")).toDF("key", "value")
