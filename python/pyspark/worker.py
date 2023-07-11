@@ -584,13 +584,18 @@ def read_udfs(pickleSer, infile, eval_type):
                 or eval_type == PythonEvalType.SQL_SCALAR_PANDAS_ITER_UDF
                 or eval_type == PythonEvalType.SQL_MAP_PANDAS_ITER_UDF
             )
-            # Arrow-optimized Python UDF takes a struct type argument as a Row
-            struct_in_pandas = (
-                "row" if eval_type == PythonEvalType.SQL_ARROW_BATCHED_UDF else "dict"
-            )
-            ndarray_as_list = eval_type == PythonEvalType.SQL_ARROW_BATCHED_UDF
-            # Arrow-optimized Python UDF uses explicit Arrow cast for type coercion
-            arrow_cast = eval_type == PythonEvalType.SQL_ARROW_BATCHED_UDF
+
+            if eval_type == PythonEvalType.SQL_ARROW_BATCHED_UDF:
+                struct_in_pandas = "row"
+                ndarray_as_list = True
+                arrow_cast = True
+                null_int_float = False
+            else:
+                struct_in_pandas = "dict"
+                ndarray_as_list = False
+                arrow_cast = False
+                null_int_float = True
+
             ser = ArrowStreamPandasUDFSerializer(
                 timezone,
                 safecheck,
@@ -599,6 +604,7 @@ def read_udfs(pickleSer, infile, eval_type):
                 struct_in_pandas,
                 ndarray_as_list,
                 arrow_cast,
+                null_int_float,
             )
     else:
         ser = BatchedSerializer(CPickleSerializer(), 100)

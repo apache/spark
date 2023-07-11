@@ -172,7 +172,9 @@ class ArrowStreamPandasSerializer(ArrowStreamSerializer):
         self._timezone = timezone
         self._safecheck = safecheck
 
-    def arrow_to_pandas(self, arrow_column, struct_in_pandas="dict", ndarray_as_list=False):
+    def arrow_to_pandas(
+        self, arrow_column, struct_in_pandas="dict", ndarray_as_list=False, null_int_float=False
+    ):
         # If the given column is a date type column, creates a series of datetime.date directly
         # instead of creating datetime64[ns] as intermediate data to avoid overflow caused by
         # datetime64[ns] type handling.
@@ -200,7 +202,7 @@ class ArrowStreamPandasSerializer(ArrowStreamSerializer):
             struct_in_pandas=struct_in_pandas,
             error_on_duplicated_field_names=True,
             ndarray_as_list=ndarray_as_list,
-            null_int_float=False,
+            null_int_float=null_int_float,
         )
         return converter(s)
 
@@ -347,6 +349,7 @@ class ArrowStreamPandasUDFSerializer(ArrowStreamPandasSerializer):
         struct_in_pandas="dict",
         ndarray_as_list=False,
         arrow_cast=False,
+        null_int_float=False,
     ):
         super(ArrowStreamPandasUDFSerializer, self).__init__(timezone, safecheck)
         self._assign_cols_by_name = assign_cols_by_name
@@ -354,6 +357,7 @@ class ArrowStreamPandasUDFSerializer(ArrowStreamPandasSerializer):
         self._struct_in_pandas = struct_in_pandas
         self._ndarray_as_list = ndarray_as_list
         self._arrow_cast = arrow_cast
+        self._null_int_float = null_int_float
 
     def arrow_to_pandas(self, arrow_column):
         import pyarrow.types as types
@@ -363,14 +367,16 @@ class ArrowStreamPandasUDFSerializer(ArrowStreamPandasSerializer):
 
             series = [
                 super(ArrowStreamPandasUDFSerializer, self)
-                .arrow_to_pandas(column, self._struct_in_pandas, self._ndarray_as_list)
+                .arrow_to_pandas(
+                    column, self._struct_in_pandas, self._ndarray_as_list, self._null_int_float
+                )
                 .rename(field.name)
                 for column, field in zip(arrow_column.flatten(), arrow_column.type)
             ]
             s = pd.concat(series, axis=1)
         else:
             s = super(ArrowStreamPandasUDFSerializer, self).arrow_to_pandas(
-                arrow_column, self._struct_in_pandas, self._ndarray_as_list
+                arrow_column, self._struct_in_pandas, self._ndarray_as_list, self._null_int_float
             )
         return s
 
