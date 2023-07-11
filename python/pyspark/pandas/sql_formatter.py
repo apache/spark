@@ -31,7 +31,6 @@ from pyspark.sql import SparkSession
 from pyspark.pandas.utils import default_session
 from pyspark.pandas.frame import DataFrame
 from pyspark.pandas.series import Series
-from pyspark.sql.utils import is_remote
 
 
 __all__ = ["sql"]
@@ -266,13 +265,10 @@ class PandasSQLStringFormatter(string.Formatter):
             val._to_spark().createOrReplaceTempView(df_name)
             return df_name
         elif isinstance(val, str):
-            if is_remote():
-                # This is matched to behavior from JVM implementation.
-                # See `sql` definition from `sql/catalyst/src/main/scala/org/apache/spark/
-                # sql/catalyst/expressions/literals.scala`
-                return "'" + val.replace("\\", "\\\\").replace("'", "\\'") + "'"
-            else:
-                return lit(val)._jc.expr().sql()  # for escaped characters.
+            # This is matched to behavior from JVM implementation.
+            # See `sql` definition from `sql/catalyst/src/main/scala/org/apache/spark/
+            # sql/catalyst/expressions/literals.scala`
+            return "'" + val.replace("\\", "\\\\").replace("'", "\\'") + "'"
         else:
             return val
 
