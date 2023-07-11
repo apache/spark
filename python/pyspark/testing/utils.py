@@ -221,7 +221,9 @@ class PySparkErrorTestUtils:
         )
 
 
-def assertDataFrameEqual(df: DataFrame, expected: DataFrame, check_row_order: bool = False):
+def assertDataFrameEqual(
+    df: DataFrame, expected: DataFrame, check_row_order: bool = False, precision: float = 1e-5
+):
     """
     A util function to assert equality between DataFrames `df` and `expected`, with
     optional parameter `check_row_order`.
@@ -242,6 +244,10 @@ def assertDataFrameEqual(df: DataFrame, expected: DataFrame, check_row_order: bo
         A flag indicating whether the order of rows should be considered in the comparison.
         If set to `False` (default), the row order is not taken into account.
         If set to `True`, the order of rows is important and will be checked during comparison.
+
+    precision : float, optional
+        The level of precision when asserting approximate equality for float values in df
+        and expected. Set to 1e-5 by default.
 
     Examples
     --------
@@ -329,7 +335,7 @@ def assertDataFrameEqual(df: DataFrame, expected: DataFrame, check_row_order: bo
                     and all(compare_vals(val1[k], val2[k]) for k in val1.keys())
                 )
             elif isinstance(val1, float) and isinstance(val2, float):
-                if abs(val1 - val2) > 1e-5:
+                if abs(val1 - val2) > precision:
                     return False
             else:
                 if val1 != val2:
