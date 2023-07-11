@@ -267,7 +267,11 @@ class PandasSQLStringFormatter(string.Formatter):
             return df_name
         elif isinstance(val, str):
             if is_remote():
-                return f"'{val}'"
+                special_characters = ["\\", "'", '"', "\0", "\b", "\n", "\r", "\t", "\Z"]
+                escaped_val = val
+                for char in special_characters:
+                    escaped_val = escaped_val.replace(char, "\\" + char)
+                return f"'{escaped_val}'"
             else:
                 return lit(val)._jc.expr().sql()  # for escaped characters.
         else:
