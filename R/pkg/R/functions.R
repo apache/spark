@@ -1715,58 +1715,6 @@ setMethod("positive",
           })
 
 #' @details
-#' \code{pow}: The value of the first argument raised to the power of the second argument.
-#'
-#' @rdname column_math_functions
-#' @aliases pow pow,Column-method
-#' @note pow since 3.5.0
-setMethod("pow", signature(y = "Column"),
-          function(y, x) {
-            if (class(x) == "Column") {
-              x <- x@jc
-            }
-            jc <- callJStatic("org.apache.spark.sql.functions", "pow", y@jc, x)
-            column(jc)
-          })
-
-#' @details
-#' \code{power}: Alias for \code{pow}.
-#'
-#' @rdname column_math_functions
-#' @aliases power power,Column-method
-#' @note negative since 3.5.0
-setMethod("power", signature(y = "Column"),
-          function(y, x) {
-            pow(y, x)
-          })
-
-#' @details
-#' \code{e}: Euler's number.
-#'
-#' @rdname column_math_functions
-#' @aliases e e,Column-method
-#' @note e since 3.5.0
-setMethod("e",
-          signature("missing"),
-          function() {
-            jc <- callJStatic("org.apache.spark.sql.functions", "e")
-            column(jc)
-          })
-
-#' @details
-#' \code{pi}: Pi.
-#'
-#' @rdname column_math_functions
-#' @aliases pi pi,Column-method
-#' @note pi since 3.5.0
-setMethod("pi",
-          signature("missing"),
-          function() {
-            jc <- callJStatic("org.apache.spark.sql.functions", "pi")
-            column(jc)
-          })
-
-#' @details
 #' \code{width_bucket} Returns the bucket number into which the value of this expression would
 #' fall after being evaluated. Note that input arguments must follow conditions listed below;
 #' otherwise, the method will return null.
@@ -1784,7 +1732,7 @@ setMethod("width_bucket",
           function(v, min, max, numBucket) {
             jc <- callJStatic(
               "org.apache.spark.sql.functions", "width_bucket",
-              v, min, max, numBucket
+              v@jc, min@jc, max@jc, numBucket@jc
             )
             column(jc)
           })
