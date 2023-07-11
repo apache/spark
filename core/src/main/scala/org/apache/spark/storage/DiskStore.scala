@@ -29,7 +29,7 @@ import com.google.common.io.Closeables
 import io.netty.channel.DefaultFileRegion
 import org.apache.commons.io.FileUtils
 
-import org.apache.spark.{SecurityManager, SparkConf}
+import org.apache.spark.{SecurityManager, SparkConf, SparkException}
 import org.apache.spark.internal.{config, Logging}
 import org.apache.spark.network.buffer.ManagedBuffer
 import org.apache.spark.network.util.{AbstractFileRegion, JavaUtils}
@@ -67,8 +67,9 @@ private[spark] class DiskStore(
         diskManager.getFile(blockId).delete()
       } catch {
         case e: Exception =>
-          throw new IllegalStateException(
-            s"Block $blockId is already present in the disk store and could not delete it $e")
+          throw SparkException.internalError(
+            s"Block $blockId is already present in the disk store and could not delete it $e",
+            category = "STORAGE")
       }
     }
     logDebug(s"Attempting to put block $blockId")
