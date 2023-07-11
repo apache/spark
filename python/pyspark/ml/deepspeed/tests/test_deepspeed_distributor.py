@@ -168,7 +168,7 @@ if __name__ == "__main__":
     from pyspark.ml.deepspeed.tests.test_deepspeed_distributor import *  # noqa: F401,F403
 
     try:
-        import xmlrunner
+        import xmlrunner  # type:ignore
 
         testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
     except ImportError:
