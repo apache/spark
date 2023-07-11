@@ -69,10 +69,9 @@ class KafkaSourceProviderSuite extends SparkFunSuite with SharedSparkSession {
     the goal of these test is to verify the functionality of the aws msk IAM auth
     how this test works:
     In each case, we test that the library paths are discoverable since
-    if the library was not to be found, another error message would be thrown.
-    The kafka client keeps calling the 'describeTopics' endpoint on the broker
-    while using IAM authentication which times out since it doesn't have IAM auth enabled.
-    Thus, it is expected that a timeout error will be thrown.
+      if the library was not to be found for instance, then
+      a 'org.apache.kafka.common.config.ConfigException:' error message would be thrown
+      since the KafkaAdmin client tries to load any classes specified in its configs.
   */
   private val mskIAMTestKafkaOptions: Map[String, String] = Map(
     "subscribe" -> "msk-123",
@@ -86,57 +85,71 @@ class KafkaSourceProviderSuite extends SparkFunSuite with SharedSparkSession {
     "retries" -> "0",
     "kafka.request.timeout.ms" -> "3000",
     "kafka.default.api.timeout.ms" -> "3000",
-    "kafka.max.block.ms" -> "3000"
+    "kafka.max.block.ms" -> "6000"
   )
 
+  /*
+    The kafka client, when used as a source,
+      keeps calling the 'describeTopics' endpoint on the broker
+      while using IAM authentication which times out since it doesn't have IAM auth enabled.
+    Thus, it is expected, that a timeout error will be thrown.
+  */
   test("test MSK IAM auth with streaming API and with kafka source") {
-    testUtils.createTopic(mskIAMTestKafkaOptions("subscribe"))
     val e = intercept[StreamingQueryException] {
       spark.readStream.format("kafka").options(mskIAMTestKafkaOptions)
         .option("kafka.bootstrap.servers", testUtils.brokerAddress).load()
         .writeStream.format("console").start().processAllAvailable()
     }
     TestUtils.assertExceptionMsg(e, "Timed out waiting for a node assignment")
-    testUtils.deleteTopic(mskIAMTestKafkaOptions("subscribe"))
-  }
-
-  test("test MSK IAM auth with streaming API and with kafka sink") {
-    testUtils.createTopic(mskIAMTestKafkaOptions("subscribe"))
-    val e = intercept[StreamingQueryException] {
-      spark.readStream.format("rate").option("rowsPerSecond", 10).load()
-        .withColumn("value", col("value").cast(StringType)).writeStream
-        .format("kafka").options(mskIAMTestKafkaOptions).option("kafka.bootstrap.servers",
-        testUtils.brokerAddress).option("checkpointLocation", "temp/testing")
-        .option("topic", mskIAMTestKafkaOptions("subscribe")).start().processAllAvailable()
-    }
-    TestUtils.assertExceptionMsg(e,
-      s"TimeoutException: Topic ${mskIAMTestKafkaOptions("subscribe")} not present in metadata")
-    testUtils.deleteTopic(mskIAMTestKafkaOptions("subscribe"))
   }
 
   test("test MSK IAM auth with batch API and with kafka source") {
-    testUtils.createTopic(mskIAMTestKafkaOptions("subscribe"))
     val e = intercept[ExecutionException] {
       spark.read.format("kafka").options(mskIAMTestKafkaOptions)
       .option("kafka.bootstrap.servers", testUtils.brokerAddress).load()
         .write.format("console").save()
     }
     TestUtils.assertExceptionMsg(e, "Timed out waiting for a node assignment")
+  }
+
+  /*
+    The kafka client, when used as sink, tries to update the metadata on the broker
+      but this fails as the broker doesn't have IAM auth enabled.
+    Thus, it is expected, that a timeout error will be thrown.
+  */
+  test("test MSK IAM auth with streaming API and with kafka sink") {
+    testUtils.createTopic(mskIAMTestKafkaOptions("subscribe"))
+    withTempDir { checkpointDir =>
+      val e = intercept[StreamingQueryException] {
+        spark.readStream.format("rate").option("rowsPerSecond", 10).load()
+          .withColumn("value", col("value").cast(StringType)).writeStream
+          .format("kafka").options(mskIAMTestKafkaOptions).option("kafka.bootstrap.servers",
+          testUtils.brokerAddress).option("checkpointLocation",
+          checkpointDir.getCanonicalPath()).option("topic", mskIAMTestKafkaOptions("subscribe"))
+          .start().processAllAvailable()
+      }
+      TestUtils.assertExceptionMsg(e,
+        s"TimeoutException: Topic ${mskIAMTestKafkaOptions("subscribe")} not present in metadata")
+      // the topic does exist, read above for more details on the rationale for this error message
+    }
     testUtils.deleteTopic(mskIAMTestKafkaOptions("subscribe"))
   }
 
   test("test MSK IAM auth with batch API and with kafka sink") {
     testUtils.createTopic(mskIAMTestKafkaOptions("subscribe"))
-    val schema = new StructType().add("value", "string")
-    val e = intercept[SparkException] {
-      spark.createDataFrame(Seq(Row("test"), Row("test2")).asJava, schema)
-        .write.mode("append").format("kafka")
-        .options(mskIAMTestKafkaOptions).option("checkpointLocation", "temp/testing/1")
-        .option("kafka.bootstrap.servers", testUtils.brokerAddress)
-        .option("topic", mskIAMTestKafkaOptions("subscribe")).save()
+    withTempDir { checkpointDir =>
+      val schema = new StructType().add("value", "string")
+      val e = intercept[SparkException] {
+        spark.createDataFrame(Seq(Row("test"), Row("test2")).asJava, schema)
+          .write.mode("append").format("kafka")
+          .options(mskIAMTestKafkaOptions).option("checkpointLocation",
+          checkpointDir.getCanonicalPath()).option("kafka.bootstrap.servers",
+          testUtils.brokerAddress).option("topic", mskIAMTestKafkaOptions("subscribe")).save()
+      }
+      TestUtils.assertExceptionMsg(e,
+        s"TimeoutException: Topic ${mskIAMTestKafkaOptions("subscribe")} not present in metadata")
+      // the topic does exist, read above for more details on the rationale for this error message
     }
-    TestUtils.assertExceptionMsg(e,
-      s"TimeoutException: Topic ${mskIAMTestKafkaOptions("subscribe")} not present in metadata")
     testUtils.deleteTopic(mskIAMTestKafkaOptions("subscribe"))
   }
 
