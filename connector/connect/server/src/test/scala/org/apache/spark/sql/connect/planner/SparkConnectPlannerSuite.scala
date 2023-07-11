@@ -18,9 +18,11 @@
 package org.apache.spark.sql.connect.planner
 
 import scala.collection.JavaConverters._
+
 import com.google.protobuf.ByteString
 import io.grpc.stub.StreamObserver
 import org.apache.commons.lang3.{JavaVersion, SystemUtils}
+
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.ExecutePlanResponse
