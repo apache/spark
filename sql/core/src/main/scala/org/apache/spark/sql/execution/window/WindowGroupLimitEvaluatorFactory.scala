@@ -32,32 +32,23 @@ class WindowGroupLimitEvaluatorFactory(
   extends PartitionEvaluatorFactory[InternalRow, InternalRow] {
 
   override def createEvaluator(): PartitionEvaluator[InternalRow, InternalRow] = {
-    rankLikeFunction match {
-      case _: RowNumber if partitionSpec.isEmpty =>
-        new WindowGroupLimitPartitionEvaluator(
-          input => SimpleLimitIterator(input, limit, numOutputRows))
+    val limitFunc = rankLikeFunction match {
       case _: RowNumber =>
-        new WindowGroupLimitPartitionEvaluator(
-          input => new GroupedLimitIterator(input, childOutput, partitionSpec,
-            (input: Iterator[InternalRow]) => SimpleLimitIterator(input, limit, numOutputRows)))
-      case _: Rank if partitionSpec.isEmpty =>
-        new WindowGroupLimitPartitionEvaluator(
-          input => RankLimitIterator(childOutput, input, orderSpec, limit, numOutputRows))
+        (iter: Iterator[InternalRow]) => SimpleLimitIterator(iter, limit, numOutputRows)
       case _: Rank =>
-        new WindowGroupLimitPartitionEvaluator(
-          input => new GroupedLimitIterator(input, childOutput, partitionSpec,
-            (input: Iterator[InternalRow]) =>
-              RankLimitIterator(childOutput, input, orderSpec, limit, numOutputRows)))
-      case _: DenseRank if partitionSpec.isEmpty =>
-        new WindowGroupLimitPartitionEvaluator(
-          input => DenseRankLimitIterator(childOutput, input, orderSpec, limit, numOutputRows))
+        (iter: Iterator[InternalRow]) =>
+          RankLimitIterator(childOutput, iter, orderSpec, limit, numOutputRows)
       case _: DenseRank =>
-        new WindowGroupLimitPartitionEvaluator(
-          input => new GroupedLimitIterator(input, childOutput, partitionSpec,
-            (input: Iterator[InternalRow]) =>
-              DenseRankLimitIterator(childOutput, input, orderSpec, limit, numOutputRows)))
+        (iter: Iterator[InternalRow]) =>
+          DenseRankLimitIterator(childOutput, iter, orderSpec, limit, numOutputRows)
     }
 
+    if (partitionSpec.isEmpty) {
+      new WindowGroupLimitPartitionEvaluator(limitFunc)
+    } else {
+      new WindowGroupLimitPartitionEvaluator(
+        input => new GroupedLimitIterator(input, childOutput, partitionSpec, limitFunc))
+    }
   }
 
   class WindowGroupLimitPartitionEvaluator(f: Iterator[InternalRow] => Iterator[InternalRow])
