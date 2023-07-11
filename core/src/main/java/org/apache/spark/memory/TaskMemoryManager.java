@@ -20,7 +20,13 @@ package org.apache.spark.memory;
 import javax.annotation.concurrent.GuardedBy;
 import java.io.IOException;
 import java.nio.channels.ClosedByInterruptException;
-import java.util.*;
+import java.util.Arrays;
+import java.util.BitSet;
+import java.util.Deque;
+import java.util.HashSet;
+import java.util.LinkedList;
+import java.util.Map;
+import java.util.TreeMap;
 
 import com.google.common.annotations.VisibleForTesting;
 import org.slf4j.Logger;
@@ -180,9 +186,9 @@ public class TaskMemoryManager {
           if (currentEntry == null) {
             currentEntry = sortedConsumers.lastEntry();
           }
-          Deque<MemoryConsumer> cList = currentEntry.getValue();
-          got += trySpillAndAcquire(requestingConsumer, required - got, cList);
-          if (cList.isEmpty()) {
+          Deque<MemoryConsumer> deque = currentEntry.getValue();
+          got += trySpillAndAcquire(requestingConsumer, required - got, deque);
+          if (deque.isEmpty()) {
             sortedConsumers.remove(currentEntry.getKey());
           }
         }
@@ -198,9 +204,9 @@ public class TaskMemoryManager {
   }
 
   /**
-   * Try to acquire as much memory as possible from `deque[idx]`, up to `requested` bytes by
+   * Try to acquire as much memory as possible from `deque.getLast()`, up to `requested` bytes by
    * spilling and then acquiring the freed memory. If no more memory can be spilled from
-   * `deque[idx]`, remove it from the list.
+   * `deque.getLast()`, remove it from the deque.
    *
    * @return number of bytes acquired (<= requested)
    * @throws RuntimeException if task is interrupted
