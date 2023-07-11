@@ -52,6 +52,9 @@ private[hive] case class HiveSimpleUDF(
   override lazy val deterministic: Boolean =
     evaluator.isUDFDeterministic && children.forall(_.deterministic)
 
+  // It's stateful because `evaluator.inputs` is stateful.
+  override def stateful: Boolean = true
+
   override def nullable: Boolean = true
 
   override def foldable: Boolean = evaluator.isUDFDeterministic && children.forall(_.foldable)
@@ -60,7 +63,7 @@ private[hive] case class HiveSimpleUDF(
 
   // TODO: Finish input output types.
   override def eval(input: InternalRow): Any = {
-    children.zipWithIndex.map {
+    children.zipWithIndex.foreach {
       case (child, idx) => evaluator.setArg(idx, child.eval(input))
     }
     evaluator.evaluate()
@@ -115,6 +118,9 @@ private[hive] case class HiveGenericUDF(
   with HiveInspectors
   with UserDefinedExpression {
 
+  // It's stateful because `evaluator.deferredObjects` is stateful.
+  override def stateful: Boolean = true
+
   override def nullable: Boolean = true
 
   override lazy val deterministic: Boolean =
@@ -129,7 +135,7 @@ private[hive] case class HiveGenericUDF(
   private lazy val evaluator = new HiveGenericUDFEvaluator(funcWrapper, children)
 
   override def eval(input: InternalRow): Any = {
-    children.zipWithIndex.map {
+    children.zipWithIndex.foreach {
       case (child, idx) => evaluator.setArg(idx, child.eval(input))
     }
     evaluator.evaluate()

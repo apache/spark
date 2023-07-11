@@ -358,12 +358,12 @@ class NoOpSerializer(FramedSerializer):
         return obj
 
 
-if sys.version_info < (3, 8) or os.environ.get("PYSPARK_ENABLE_NAMEDTUPLE_PATCH") == "1":
+if os.environ.get("PYSPARK_ENABLE_NAMEDTUPLE_PATCH") == "1":
     # Hack namedtuple, make it picklable.
     # For Python 3.8+, we use CPickle-based cloudpickle.
-    # For Python 3.7 and below, we use legacy build-in CPickle which
-    # requires namedtuple hack.
-    # The whole hack here should be removed once we drop Python 3.7.
+    # SPARK-41189: There are still behaviour differences between regular pickle
+    # and Cloudpickle e.g., bug fixes from the upstream. It's safer to have
+    # a switch to turn on and off for the time being.
 
     __cls = {}  # type: ignore[var-annotated]
 
@@ -472,7 +472,7 @@ class CloudPickleSerializer(FramedSerializer):
         return cloudpickle.loads(obj, encoding=encoding)
 
 
-if sys.version_info < (3, 8) or os.environ.get("PYSPARK_ENABLE_NAMEDTUPLE_PATCH") == "1":
+if os.environ.get("PYSPARK_ENABLE_NAMEDTUPLE_PATCH") == "1":
     CPickleSerializer = PickleSerializer
 else:
     CPickleSerializer = CloudPickleSerializer  # type: ignore[misc, assignment]

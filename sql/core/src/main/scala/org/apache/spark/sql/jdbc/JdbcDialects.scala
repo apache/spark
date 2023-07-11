@@ -18,7 +18,7 @@
 package org.apache.spark.sql.jdbc
 
 import java.sql.{Connection, Date, Driver, Statement, Timestamp}
-import java.time.{Instant, LocalDate}
+import java.time.{Instant, LocalDate, LocalDateTime}
 import java.util
 
 import scala.collection.mutable.ArrayBuilder
@@ -31,6 +31,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.CatalystTypeConverters
 import org.apache.spark.sql.catalyst.util.{DateFormatter, DateTimeUtils, TimestampFormatter}
+import org.apache.spark.sql.catalyst.util.DateTimeUtils.{localDateTimeToMicros, toJavaTimestampNoRebase}
 import org.apache.spark.sql.connector.catalog.{Identifier, TableChange}
 import org.apache.spark.sql.connector.catalog.TableChange._
 import org.apache.spark.sql.connector.catalog.functions.UnboundFunction
@@ -103,6 +104,31 @@ abstract class JdbcDialect extends Serializable with Logging {
    * @return The new JdbcType if there is an override for this DataType
    */
   def getJDBCType(dt: DataType): Option[JdbcType] = None
+
+  /**
+   * Convert java.sql.Timestamp to a LocalDateTime representing the same wall-clock time as the
+   * value stored in a remote database.
+   * JDBC dialects should override this function to provide implementations that suite their
+   * JDBC drivers.
+   * @param t Timestamp returned from JDBC driver getTimestamp method.
+   * @return A LocalDateTime representing the same wall clock time as the timestamp in database.
+   */
+  @Since("3.5.0")
+  def convertJavaTimestampToTimestampNTZ(t: Timestamp): LocalDateTime = {
+    DateTimeUtils.microsToLocalDateTime(DateTimeUtils.fromJavaTimestampNoRebase(t))
+  }
+
+  /**
+   * Converts a LocalDateTime representing a TimestampNTZ type to an
+   * instance of `java.sql.Timestamp`.
+   * @param ldt representing a TimestampNTZType.
+   * @return A Java Timestamp representing this LocalDateTime.
+   */
+  @Since("3.5.0")
+  def convertTimestampNTZToJavaTimestamp(ldt: LocalDateTime): Timestamp = {
+    val micros = localDateTimeToMicros(ldt)
+    toJavaTimestampNoRebase(micros)
+  }
 
   /**
    * Returns a factory for creating connections to the given JDBC URL.
@@ -398,8 +424,22 @@ abstract class JdbcDialect extends Serializable with Logging {
    * @param newTable New name of the table.
    * @return The SQL statement to use for renaming the table.
    */
+  @deprecated("Please override renameTable method with identifiers", "3.5.0")
   def renameTable(oldTable: String, newTable: String): String = {
     s"ALTER TABLE $oldTable RENAME TO $newTable"
+  }
+
+  /**
+   * Rename an existing table.
+   *
+   * @param oldTable The existing table.
+   * @param newTable New name of the table.
+   * @return The SQL statement to use for renaming the table.
+   */
+  @Since("3.5.0")
+  def renameTable(oldTable: Identifier, newTable: Identifier): String = {
+    s"ALTER TABLE ${getFullyQualifiedQuotedTableName(oldTable)} RENAME TO " +
+      s"${getFullyQualifiedQuotedTableName(newTable)}"
   }
 
   /**
@@ -598,6 +638,14 @@ abstract class JdbcDialect extends Serializable with Logging {
 
   def getTableSample(sample: TableSampleInfo): String =
     throw new UnsupportedOperationException("TableSample is not supported by this data source")
+
+  /**
+   * Return the DB-specific quoted and fully qualified table name
+   */
+  @Since("3.5.0")
+  def getFullyQualifiedQuotedTableName(ident: Identifier): String = {
+    (ident.namespace() :+ ident.name()).map(quoteIdentifier).mkString(".")
+  }
 }
 
 /**
@@ -660,6 +708,6 @@ object JdbcDialects {
 /**
  * NOOP dialect object, always returning the neutral element.
  */
-private object NoopDialect extends JdbcDialect {
+object NoopDialect extends JdbcDialect {
   override def canHandle(url : String): Boolean = true
 }

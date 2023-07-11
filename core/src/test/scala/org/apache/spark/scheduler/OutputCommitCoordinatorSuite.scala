@@ -87,7 +87,8 @@ class OutputCommitCoordinatorSuite extends SparkFunSuite with BeforeAndAfter {
           isLocal: Boolean,
           listenerBus: LiveListenerBus): SparkEnv = {
         outputCommitCoordinator =
-          spy(new OutputCommitCoordinator(conf, isDriver = true, Option(this)))
+          spy[OutputCommitCoordinator](
+            new OutputCommitCoordinator(conf, isDriver = true, Option(this)))
         // Use Mockito.spy() to maintain the default infrastructure everywhere else.
         // This mocking allows us to control the coordinator responses in test cases.
         SparkEnv.createDriverEnv(conf, isLocal, listenerBus,
@@ -95,7 +96,8 @@ class OutputCommitCoordinatorSuite extends SparkFunSuite with BeforeAndAfter {
       }
     }
     // Use Mockito.spy() to maintain the default infrastructure everywhere else
-    val mockTaskScheduler = spy(sc.taskScheduler.asInstanceOf[TaskSchedulerImpl])
+    val mockTaskScheduler = spy[TaskSchedulerImpl](
+      sc.taskScheduler.asInstanceOf[TaskSchedulerImpl])
 
     doAnswer { (invoke: InvocationOnMock) =>
       // Submit the tasks, then force the task scheduler to dequeue the

@@ -293,8 +293,13 @@ class StructTypeSuite extends SparkFunSuite with SQLHelper {
         new StructType().add("a", "int"),
         new StructType().add("b", "int")
       ))
+      .add("m3", MapType(IntegerType, MapType(
+        IntegerType,
+        new StructType().add("ma", IntegerType))
+      ))
       .add("a1", ArrayType(IntegerType))
       .add("a2", ArrayType(new StructType().add("c", "int")))
+      .add("a3", ArrayType(ArrayType(new StructType().add("d", "int"))))
 
     def check(field: Seq[String], expect: Option[(Seq[String], StructField)]): Unit = {
       val res = input.findNestedField(field, resolver = caseInsensitiveResolution)
@@ -322,15 +327,19 @@ class StructTypeSuite extends SparkFunSuite with SQLHelper {
     var e = intercept[AnalysisException] {
       check(Seq("S1", "S12", "S123"), None)
     }
-    assert(e.getMessage.contains(
-      "Field name `S1`.`S12`.`S123` is invalid: `s1`.`s12` is not a struct"))
+    checkError(
+      exception = e,
+      errorClass = "INVALID_FIELD_NAME",
+      parameters = Map(
+        "fieldName" -> "`S1`.`S12`.`S123`",
+        "path" -> "`s1`.`s12`"))
 
     // ambiguous name
-    e = intercept[AnalysisException] {
+    var e2 = intercept[AnalysisException] {
       check(Seq("S2", "x"), None)
     }
     checkError(
-      exception = e,
+      exception = e2,
       errorClass = "AMBIGUOUS_COLUMN_OR_FIELD",
       parameters = Map("name" -> "`S2`.`x`", "n" -> "2"))
     caseSensitiveCheck(Seq("s2", "x"), Some(Seq("s2") -> StructField("x", IntegerType)))
@@ -339,19 +348,32 @@ class StructTypeSuite extends SparkFunSuite with SQLHelper {
     e = intercept[AnalysisException] {
       check(Seq("m1", "key"), None)
     }
-    assert(e.getMessage.contains("Field name `m1`.`key` is invalid: `m1` is not a struct"))
+    checkError(
+      exception = e,
+      errorClass = "INVALID_FIELD_NAME",
+      parameters = Map(
+        "fieldName" -> "`m1`.`key`",
+        "path" -> "`m1`"))
     checkCollection(Seq("m1", "key"), Some(Seq("m1") -> StructField("key", IntegerType, false)))
     checkCollection(Seq("M1", "value"), Some(Seq("m1") -> StructField("value", IntegerType)))
     e = intercept[AnalysisException] {
       checkCollection(Seq("M1", "key", "name"), None)
     }
-    assert(e.getMessage.contains(
-      "Field name `M1`.`key`.`name` is invalid: `m1`.`key` is not a struct"))
+    checkError(
+      exception = e,
+      errorClass = "INVALID_FIELD_NAME",
+      parameters = Map(
+        "fieldName" -> "`M1`.`key`.`name`",
+        "path" -> "`m1`.`key`"))
     e = intercept[AnalysisException] {
       checkCollection(Seq("M1", "value", "name"), None)
     }
-    assert(e.getMessage.contains(
-      "Field name `M1`.`value`.`name` is invalid: `m1`.`value` is not a struct"))
+    checkError(
+      exception = e,
+      errorClass = "INVALID_FIELD_NAME",
+      parameters = Map(
+        "fieldName" -> "`M1`.`value`.`name`",
+        "path" -> "`m1`.`value`"))
 
     // map of struct
     checkCollection(Seq("M2", "key", "A"),
@@ -363,25 +385,41 @@ class StructTypeSuite extends SparkFunSuite with SQLHelper {
     e = intercept[AnalysisException] {
       checkCollection(Seq("m2", "key", "A", "name"), None)
     }
-    assert(e.getMessage.contains(
-      "Field name `m2`.`key`.`A`.`name` is invalid: `m2`.`key`.`a` is not a struct"))
+    checkError(
+      exception = e,
+      errorClass = "INVALID_FIELD_NAME",
+      parameters = Map(
+        "fieldName" -> "`m2`.`key`.`A`.`name`",
+        "path" -> "`m2`.`key`.`a`"))
     e = intercept[AnalysisException] {
       checkCollection(Seq("M2", "value", "b", "name"), None)
     }
-    assert(e.getMessage.contains(
-      "Field name `M2`.`value`.`b`.`name` is invalid: `m2`.`value`.`b` is not a struct"))
-
+    checkError(
+      exception = e,
+      errorClass = "INVALID_FIELD_NAME",
+      parameters = Map(
+        "fieldName" -> "`M2`.`value`.`b`.`name`",
+        "path" -> "`m2`.`value`.`b`"))
     // simple array type
     e = intercept[AnalysisException] {
       check(Seq("A1", "element"), None)
     }
-    assert(e.getMessage.contains("Field name `A1`.`element` is invalid: `a1` is not a struct"))
+    checkError(
+      exception = e,
+      errorClass = "INVALID_FIELD_NAME",
+      parameters = Map(
+        "fieldName" -> "`A1`.`element`",
+        "path" -> "`a1`"))
     checkCollection(Seq("A1", "element"), Some(Seq("a1") -> StructField("element", IntegerType)))
     e = intercept[AnalysisException] {
       checkCollection(Seq("A1", "element", "name"), None)
     }
-    assert(e.getMessage.contains(
-      "Field name `A1`.`element`.`name` is invalid: `a1`.`element` is not a struct"))
+    checkError(
+      exception = e,
+      errorClass = "INVALID_FIELD_NAME",
+      parameters = Map(
+        "fieldName" -> "`A1`.`element`.`name`",
+        "path" -> "`a1`.`element`"))
 
     // array of struct
     checkCollection(Seq("A2", "element", "C"),
@@ -390,8 +428,41 @@ class StructTypeSuite extends SparkFunSuite with SQLHelper {
     e = intercept[AnalysisException] {
       checkCollection(Seq("a2", "element", "C", "name"), None)
     }
-    assert(e.getMessage.contains(
-      "Field name `a2`.`element`.`C`.`name` is invalid: `a2`.`element`.`c` is not a struct"))
+    checkError(
+      exception = e,
+      errorClass = "INVALID_FIELD_NAME",
+      parameters = Map(
+        "fieldName" -> "`a2`.`element`.`C`.`name`",
+        "path" -> "`a2`.`element`.`c`"))
+
+    // nested maps
+    checkCollection(Seq("M3", "value", "value", "MA"),
+      Some(Seq("m3", "value", "value") -> StructField("ma", IntegerType)))
+    checkCollection(Seq("M3", "value", "value", "non_exist"), None)
+    e = intercept[AnalysisException] {
+      checkCollection(Seq("M3", "value", "value", "MA", "name"), None)
+    }
+    checkError(
+      exception = e,
+      errorClass = "INVALID_FIELD_NAME",
+      parameters = Map(
+        "fieldName" -> "`M3`.`value`.`value`.`MA`.`name`",
+        "path" -> "`m3`.`value`.`value`.`ma`"))
+
+    // nested arrays
+    checkCollection(Seq("A3", "element", "element", "D"),
+      Some(Seq("a3", "element", "element") -> StructField("d", IntegerType)))
+    checkCollection(Seq("A3", "element", "element", "non_exist"), None)
+    e = intercept[AnalysisException] {
+      checkCollection(Seq("A3", "element", "element", "D", "name"), None)
+    }
+    checkError(
+      exception = e,
+      errorClass = "INVALID_FIELD_NAME",
+      parameters = Map(
+        "fieldName" -> "`A3`.`element`.`element`.`D`.`name`",
+        "path" -> "`a3`.`element`.`element`.`d`")
+    )
   }
 
   test("SPARK-36807: Merge ANSI interval types to a tightest common type") {
@@ -467,10 +538,10 @@ class StructTypeSuite extends SparkFunSuite with SQLHelper {
           .putString(ResolveDefaultColumns.CURRENT_DEFAULT_COLUMN_METADATA_KEY, "'abc'")
           .build()),
       StructField("c3", BooleanType)))
-    assert(source1.existenceDefaultValues.size == 3)
-    assert(source1.existenceDefaultValues(0) == 42)
-    assert(source1.existenceDefaultValues(1) == UTF8String.fromString("abc"))
-    assert(source1.existenceDefaultValues(2) == null)
+    assert(ResolveDefaultColumns.existenceDefaultValues(source1).size == 3)
+    assert(ResolveDefaultColumns.existenceDefaultValues(source1)(0) == 42)
+    assert(ResolveDefaultColumns.existenceDefaultValues(source1)(1) == UTF8String.fromString("abc"))
+    assert(ResolveDefaultColumns.existenceDefaultValues(source1)(2) == null)
 
     // Positive test: StructType.defaultValues works because the existence default value parses and
     // resolves successfully, then evaluates to a non-literal expression: this is constant-folded at
@@ -482,8 +553,8 @@ class StructTypeSuite extends SparkFunSuite with SQLHelper {
           .putString(ResolveDefaultColumns.CURRENT_DEFAULT_COLUMN_METADATA_KEY, "1 + 1")
           .build())))
     val error = "fails to parse as a valid literal value"
-    assert(source2.existenceDefaultValues.size == 1)
-    assert(source2.existenceDefaultValues(0) == 2)
+    assert(ResolveDefaultColumns.existenceDefaultValues(source2).size == 1)
+    assert(ResolveDefaultColumns.existenceDefaultValues(source2)(0) == 2)
 
     // Negative test: StructType.defaultValues fails because the existence default value fails to
     // parse.
@@ -494,7 +565,7 @@ class StructTypeSuite extends SparkFunSuite with SQLHelper {
           .putString(ResolveDefaultColumns.CURRENT_DEFAULT_COLUMN_METADATA_KEY, "invalid")
           .build())))
     assert(intercept[AnalysisException] {
-      source3.existenceDefaultValues
+      ResolveDefaultColumns.existenceDefaultValues(source3)
     }.getMessage.contains(error))
 
     // Negative test: StructType.defaultValues fails because the existence default value fails to
@@ -510,7 +581,7 @@ class StructTypeSuite extends SparkFunSuite with SQLHelper {
             "(SELECT 'abc' FROM missingtable)")
           .build())))
     assert(intercept[AnalysisException] {
-      source4.existenceDefaultValues
+      ResolveDefaultColumns.existenceDefaultValues(source4)
     }.getMessage.contains(error))
   }
 }

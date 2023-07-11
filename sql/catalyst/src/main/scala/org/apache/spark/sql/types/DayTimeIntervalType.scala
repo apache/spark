@@ -17,12 +17,8 @@
 
 package org.apache.spark.sql.types
 
-import scala.math.Ordering
-import scala.reflect.runtime.universe.typeTag
-
 import org.apache.spark.annotation.Unstable
-import org.apache.spark.sql.catalyst.types.{PhysicalDataType, PhysicalLongType}
-import org.apache.spark.sql.errors.QueryCompilationErrors
+import org.apache.spark.sql.errors.DataTypeErrors
 import org.apache.spark.sql.types.DayTimeIntervalType.fieldToString
 
 /**
@@ -45,23 +41,10 @@ import org.apache.spark.sql.types.DayTimeIntervalType.fieldToString
 @Unstable
 case class DayTimeIntervalType(startField: Byte, endField: Byte) extends AnsiIntervalType {
   /**
-   * Internally, values of day-time intervals are stored in `Long` values as amount of time in terms
-   * of microseconds that are calculated by the formula:
-   *   -/+ (24*60*60 * DAY + 60*60 * HOUR + 60 * MINUTE + SECOND) * 1000000
-   */
-  private[sql] type InternalType = Long
-
-  @transient private[sql] lazy val tag = typeTag[InternalType]
-
-  private[sql] val ordering = implicitly[Ordering[InternalType]]
-
-  /**
    * The day-time interval type has constant precision. A value of the type always occupies 8 bytes.
    * The DAY field is constrained by the upper bound 106751991 to fit to `Long`.
    */
   override def defaultSize: Int = 8
-
-  private[sql] override def physicalDataType: PhysicalDataType = PhysicalLongType
 
   private[spark] override def asNullable: DayTimeIntervalType = this
 
@@ -73,7 +56,7 @@ case class DayTimeIntervalType(startField: Byte, endField: Byte) extends AnsiInt
     } else if (startField < endField) {
       s"interval $startFieldName to $endFieldName"
     } else {
-      throw QueryCompilationErrors.invalidDayTimeIntervalType(startFieldName, endFieldName)
+      throw DataTypeErrors.invalidDayTimeIntervalType(startFieldName, endFieldName)
     }
   }
 }
@@ -96,7 +79,10 @@ case object DayTimeIntervalType extends AbstractDataType {
     case HOUR => "hour"
     case MINUTE => "minute"
     case SECOND => "second"
-    case invalid => throw QueryCompilationErrors.invalidDayTimeField(invalid)
+    case invalid =>
+      val supportedIds = DayTimeIntervalType.dayTimeFields
+        .map(i => s"$i (${DayTimeIntervalType.fieldToString(i)})")
+      throw DataTypeErrors.invalidDayTimeField(invalid, supportedIds)
   }
 
   val stringToField: Map[String, Byte] = dayTimeFields.map(i => fieldToString(i) -> i).toMap

@@ -21,6 +21,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator, ExprCode}
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.trees.SQLQueryContext
+import org.apache.spark.sql.catalyst.types.PhysicalDecimalType
 import org.apache.spark.sql.catalyst.util.TypeUtils
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.SQLConf
@@ -273,7 +274,8 @@ case class DecimalDivideWithOverflowCheck(
       }
     } else {
       val value2 = right.eval(input)
-      dataType.fractional.asInstanceOf[Fractional[Any]].div(value1, value2).asInstanceOf[Decimal]
+      PhysicalDecimalType(dataType.precision, dataType.scale)
+        .fractional.asInstanceOf[Fractional[Any]].div(value1, value2).asInstanceOf[Decimal]
         .toPrecision(dataType.precision, dataType.scale, Decimal.ROUND_HALF_UP, nullOnOverflow,
           getContextOrNull())
     }

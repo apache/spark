@@ -26,6 +26,7 @@ import org.scalatest.BeforeAndAfterEach
 import org.scalatest.matchers.must.Matchers
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
+import org.apache.spark.deploy.ExecutorFailureTracker
 import org.apache.spark.deploy.yarn.config.{YARN_EXCLUDE_NODES, YARN_EXECUTOR_LAUNCH_EXCLUDE_ON_FAILURE_ENABLED}
 import org.apache.spark.internal.config.{EXCLUDE_ON_FAILURE_TIMEOUT_CONF, MAX_FAILED_EXEC_PER_NODE}
 import org.apache.spark.util.ManualClock
@@ -52,7 +53,7 @@ class YarnAllocatorHealthTrackerSuite extends SparkFunSuite with Matchers
 
   private def createYarnAllocatorHealthTracker(
       sparkConf: SparkConf = sparkConf): YarnAllocatorNodeHealthTracker = {
-    val failureTracker = new FailureTracker(sparkConf, clock)
+    val failureTracker = new ExecutorFailureTracker(sparkConf, clock)
     val yarnHealthTracker =
       new YarnAllocatorNodeHealthTracker(sparkConf, amClientMock, failureTracker)
     yarnHealthTracker.setNumClusterNodes(4)

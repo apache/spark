@@ -17,7 +17,7 @@
 
 package org.apache.spark.deploy.k8s.integrationtest.backend
 
-import io.fabric8.kubernetes.client.DefaultKubernetesClient
+import io.fabric8.kubernetes.client.KubernetesClient
 
 import org.apache.spark.deploy.k8s.integrationtest.ProcessUtils
 import org.apache.spark.deploy.k8s.integrationtest.TestConstants._
@@ -27,7 +27,7 @@ import org.apache.spark.deploy.k8s.integrationtest.backend.minikube.MinikubeTest
 
 private[spark] trait IntegrationTestBackend {
   def initialize(): Unit
-  def getKubernetesClient: DefaultKubernetesClient
+  def getKubernetesClient: KubernetesClient
   def cleanUp(): Unit = {}
   def describePods(labels: String): Seq[String] =
     ProcessUtils.executeProcess(

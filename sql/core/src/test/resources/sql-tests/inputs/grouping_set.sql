@@ -60,3 +60,7 @@ SELECT grouping(k1), k1, k2, avg(v) FROM (VALUES (1,1,1),(2,2,2)) AS t(k1,k2,v) 
 
 -- grouping_id function
 SELECT grouping_id(k1, k2), avg(v) from (VALUES (1,1,1),(2,2,2)) AS t(k1,k2,v) GROUP BY k1, k2 GROUPING SETS ((k2, k1), k1);
+
+SELECT CASE WHEN a IS NULL THEN count(b) WHEN b IS NULL THEN count(c) END
+FROM grouping
+GROUP BY GROUPING SETS (a, b, c);

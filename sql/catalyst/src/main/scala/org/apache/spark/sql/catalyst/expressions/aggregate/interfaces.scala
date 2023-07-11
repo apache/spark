@@ -86,11 +86,7 @@ object AggregateExpression {
   }
 
   def containsAggregate(expr: Expression): Boolean = {
-    expr.exists(isAggregate)
-  }
-
-  def isAggregate(expr: Expression): Boolean = {
-    expr.isInstanceOf[AggregateExpression] || PythonUDF.isGroupedAggPandasUDF(expr)
+    expr.exists(_.isInstanceOf[AggregateExpression])
   }
 }
 

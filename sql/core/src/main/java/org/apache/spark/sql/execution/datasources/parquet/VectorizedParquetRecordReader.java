@@ -23,6 +23,9 @@ import java.util.Arrays;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+
+import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns;
+import scala.Option;
 import scala.collection.JavaConverters;
 
 import com.google.common.annotations.VisibleForTesting;
@@ -30,6 +33,7 @@ import org.apache.hadoop.mapreduce.InputSplit;
 import org.apache.hadoop.mapreduce.TaskAttemptContext;
 import org.apache.parquet.column.ColumnDescriptor;
 import org.apache.parquet.column.page.PageReadStore;
+import org.apache.parquet.hadoop.metadata.ParquetMetadata;
 import org.apache.parquet.schema.GroupType;
 import org.apache.parquet.schema.MessageType;
 import org.apache.parquet.schema.Type;
@@ -181,6 +185,16 @@ public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBa
     initializeInternal();
   }
 
+  @Override
+  public void initialize(
+      InputSplit inputSplit,
+      TaskAttemptContext taskAttemptContext,
+      Option<ParquetMetadata> fileFooter)
+      throws IOException, InterruptedException, UnsupportedOperationException {
+    super.initialize(inputSplit, taskAttemptContext, fileFooter);
+    initializeInternal();
+  }
+
   /**
    * Utility API that will read all the data in path. This circumvents the need to create Hadoop
    * objects to use this class. `columns` can contain the list of columns to project.
@@ -267,7 +281,7 @@ public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBa
     for (int i = 0; i < columnVectors.length; i++) {
       Object defaultValue = null;
       if (sparkRequestedSchema != null) {
-        defaultValue = sparkRequestedSchema.existenceDefaultValues()[i];
+        defaultValue = ResolveDefaultColumns.existenceDefaultValues(sparkRequestedSchema)[i];
       }
       columnVectors[i] = new ParquetColumnVector(parquetColumn.children().apply(i),
         (WritableColumnVector) vectors[i], capacity, memMode, missingColumns, true, defaultValue);

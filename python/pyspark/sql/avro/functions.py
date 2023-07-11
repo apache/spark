@@ -25,13 +25,14 @@ from typing import Dict, Optional, TYPE_CHECKING, cast
 from py4j.java_gateway import JVMView
 
 from pyspark.sql.column import Column, _to_java_column
-from pyspark.sql.utils import get_active_spark_context
+from pyspark.sql.utils import get_active_spark_context, try_remote_avro_functions
 from pyspark.util import _print_missing_jar
 
 if TYPE_CHECKING:
     from pyspark.sql._typing import ColumnOrName
 
 
+@try_remote_avro_functions
 def from_avro(
     data: "ColumnOrName", jsonFormatSchema: str, options: Optional[Dict[str, str]] = None
 ) -> Column:
@@ -43,6 +44,9 @@ def from_avro(
     set via the option avroSchema.
 
     .. versionadded:: 3.0.0
+
+    .. versionchanged:: 3.5.0
+        Supports Spark Connect.
 
     Parameters
     ----------
@@ -88,11 +92,15 @@ def from_avro(
     return Column(jc)
 
 
+@try_remote_avro_functions
 def to_avro(data: "ColumnOrName", jsonFormatSchema: str = "") -> Column:
     """
     Converts a column into binary of avro format.
 
     .. versionadded:: 3.0.0
+
+    .. versionchanged:: 3.5.0
+        Supports Spark Connect.
 
     Parameters
     ----------

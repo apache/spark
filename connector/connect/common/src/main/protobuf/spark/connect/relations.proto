@@ -26,6 +26,7 @@ import "spark/connect/catalog.proto";
 
 option java_multiple_files = true;
 option java_package = "org.apache.spark.connect.proto";
+option go_package = "internal/generated";
 
 // The main [[Relation]] type. Fundamentally, a relation is a typed container
 // that has exactly one explicit relation type set.
@@ -65,6 +66,11 @@ message Relation {
     Parse parse = 30;
     GroupMap group_map = 31;
     CoGroupMap co_group_map = 32;
+    WithWatermark with_watermark = 33;
+    ApplyInPandasWithState apply_in_pandas_with_state = 34;
+    HtmlString html_string = 35;
+    CachedLocalRelation cached_local_relation = 36;
+    CachedRemoteRelation cached_remote_relation = 37;
 
     // NA functions
     NAFill fill_na = 90;
@@ -108,11 +114,11 @@ message SQL {
   // (Required) The SQL query.
   string query = 1;
 
-  // (Optional) A map of parameter names to string values that are parsed as
-  // SQL literal expressions. For example, map keys: "rank", "name", "birthdate";
-  // map values: "1", "'Steven'", "DATE'2023-03-21'". The fragments of string values
-  // belonged to SQL comments are skipped while parsing.
-  map<string, string> args = 2;
+  // (Optional) A map of parameter names to literal expressions.
+  map<string, Expression.Literal> args = 2;
+
+  // (Optional) A sequence of literal expressions for positional parameters in the SQL query text.
+  repeated Expression.Literal pos_args = 3;
 }
 
 // Relation that reads from a file / table or other data source. Does not have additional
@@ -122,6 +128,9 @@ message Read {
     NamedTable named_table = 1;
     DataSource data_source = 2;
   }
+
+  // (Optional) Indicates if this is a streaming read.
+  bool is_streaming = 3;
 
   message NamedTable {
     // (Required) Unparsed identifier for the table.
@@ -215,6 +224,16 @@ message Join {
     JOIN_TYPE_LEFT_ANTI = 5;
     JOIN_TYPE_LEFT_SEMI = 6;
     JOIN_TYPE_CROSS = 7;
+  }
+
+  // (Optional) Only used by joinWith. Set the left and right join data types.
+  optional JoinDataType join_data_type = 6;
+
+  message JoinDataType {
+    // If the left data type is a struct that can be flatten to a row.
+    bool is_left_flattenable_to_row = 1;
+    // If the right data type is a struct that can be flatten to a row.
+    bool is_right_flattenable_to_row = 2;
   }
 }
 
@@ -359,6 +378,9 @@ message Deduplicate {
   //
   // This field does not co-use with `column_names`.
   optional bool all_columns_as_keys = 3;
+
+  // (Optional) Deduplicate within the time range of watermark.
+  optional bool within_watermark = 4;
 }
 
 // A relation that does not need to be qualified by name.
@@ -373,6 +395,24 @@ message LocalRelation {
   // The server side will update the column names and data types according to this schema.
   // If the 'data' is not provided, then this schema will be required.
   optional string schema = 2;
+}
+
+// A local relation that has been cached already.
+message CachedLocalRelation {
+  // (Required) An identifier of the user which created the local relation
+  string userId = 1;
+
+  // (Required) An identifier of the Spark SQL session in which the user created the local relation.
+  string sessionId = 2;
+
+  // (Required) A sha-256 hash of the serialized local relation in proto, see LocalRelation.
+  string hash = 3;
+}
+
+// Represents a remote relation that has been cached on server.
+message CachedRemoteRelation {
+  // (Required) ID of the remote related (assigned by the service).
+  string relation_id = 1;
 }
 
 // Relation of type [[Sample]] that samples a fraction of the dataset.
@@ -453,6 +493,20 @@ message ShowString {
 
   // (Required) If set to true, prints output rows vertically (one line per column value).
   bool vertical = 4;
+}
+
+// Compose the string representing rows for output.
+// It will invoke 'Dataset.htmlString' to compute the results.
+message HtmlString {
+  // (Required) The input relation.
+  Relation input = 1;
+
+  // (Required) Number of rows to show.
+  int32 num_rows = 2;
+
+  // (Required) If set to more than 0, truncates strings to
+  // `truncate` characters and all cells will be aligned right.
+  int32 truncate = 3;
 }
 
 // Computes specified statistics for numeric and string columns.
@@ -729,6 +783,18 @@ message WithColumns {
   repeated Expression.Alias aliases = 2;
 }
 
+message WithWatermark {
+
+  // (Required) The input relation
+  Relation input = 1;
+
+  // (Required) Name of the column containing event time.
+  string event_time = 2;
+
+  // (Required)
+  string delay_threshold = 3;
+}
+
 // Specify a hint over a relation. Hint should have a name and optional parameters.
 message Hint {
   // (Required) The input relation.
@@ -795,7 +861,7 @@ message MapPartitions {
   // (Required) Input user-defined function.
   CommonInlineUserDefinedFunction func = 2;
 
-  // (Optional) isBarrier.
+  // (Optional) Whether to use barrier mode execution or not.
   optional bool is_barrier = 3;
 }
 
@@ -808,6 +874,25 @@ message GroupMap {
 
   // (Required) Input user-defined function.
   CommonInlineUserDefinedFunction func = 3;
+
+  // (Optional) Expressions for sorting. Only used by Scala Sorted Group Map API.
+  repeated Expression sorting_expressions = 4;
+
+  // Below fields are only used by (Flat)MapGroupsWithState
+  // (Optional) Input relation for initial State.
+  Relation initial_input = 5;
+
+  // (Optional) Expressions for grouping keys of the initial state input relation.
+  repeated Expression initial_grouping_expressions = 6;
+
+  // (Optional) True if MapGroupsWithState, false if FlatMapGroupsWithState.
+  optional bool is_map_groups_with_state = 7;
+
+  // (Optional) The output mode of the function.
+  optional string output_mode = 8;
+
+  // (Optional) Timeout configuration for groups that do not receive data for a while.
+  optional string timeout_conf = 9;
 }
 
 message CoGroupMap {
@@ -825,6 +910,35 @@ message CoGroupMap {
 
   // (Required) Input user-defined function.
   CommonInlineUserDefinedFunction func = 5;
+
+  // (Optional) Expressions for sorting. Only used by Scala Sorted CoGroup Map API.
+  repeated Expression input_sorting_expressions = 6;
+
+  // (Optional) Expressions for sorting. Only used by Scala Sorted CoGroup Map API.
+  repeated Expression other_sorting_expressions = 7;
+}
+
+message ApplyInPandasWithState {
+  // (Required) Input relation for applyInPandasWithState.
+  Relation input = 1;
+
+  // (Required) Expressions for grouping keys.
+  repeated Expression grouping_expressions = 2;
+
+  // (Required) Input user-defined function.
+  CommonInlineUserDefinedFunction func = 3;
+
+  // (Required) Schema for the output DataFrame.
+  string output_schema = 4;
+
+  // (Required) Schema for the state.
+  string state_schema = 5;
+
+  // (Required) The output mode of the function.
+  string output_mode = 6;
+
+  // (Required) Timeout configuration for groups that do not receive data for a while.
+  string timeout_conf = 7;
 }
 
 // Collect arbitrary (named) metrics from a dataset.

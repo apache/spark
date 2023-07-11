@@ -24,7 +24,7 @@ from pyspark.pandas.config import set_option, reset_option
 from pyspark.testing.pandasutils import PandasOnSparkTestCase, TestUtils
 
 
-class OpsOnDiffFramesGroupByExpandingTest(PandasOnSparkTestCase, TestUtils):
+class OpsOnDiffFramesGroupByExpandingTestsMixin:
     @classmethod
     def setUpClass(cls):
         super().setUpClass()
@@ -92,6 +92,12 @@ class OpsOnDiffFramesGroupByExpandingTest(PandasOnSparkTestCase, TestUtils):
 
     def test_groupby_expanding_var(self):
         self._test_groupby_expanding_func("var")
+
+
+class OpsOnDiffFramesGroupByExpandingTests(
+    OpsOnDiffFramesGroupByExpandingTestsMixin, PandasOnSparkTestCase, TestUtils
+):
+    pass
 
 
 if __name__ == "__main__":

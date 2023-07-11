@@ -659,7 +659,7 @@ class HasTrainingSummary(Generic[T]):
     .. versionadded:: 3.0.0
     """
 
-    @property  # type: ignore[misc]
+    @property
     @since("2.1.0")
     def hasSummary(self) -> bool:
         """
@@ -668,7 +668,7 @@ class HasTrainingSummary(Generic[T]):
         """
         return cast("JavaWrapper", self)._call_java("hasSummary")
 
-    @property  # type: ignore[misc]
+    @property
     @since("2.1.0")
     def summary(self) -> T:
         """
@@ -747,3 +747,16 @@ def try_remote_functions(f: FuncT) -> FuncT:
             return f(*args, **kwargs)
 
     return cast(FuncT, wrapped)
+
+
+def _get_active_session(is_remote: bool) -> SparkSession:
+    if not is_remote:
+        spark = SparkSession.getActiveSession()
+    else:
+        import pyspark.sql.connect.session
+
+        spark = pyspark.sql.connect.session._active_spark_session  # type: ignore[assignment]
+
+    if spark is None:
+        raise RuntimeError("An active SparkSession is required for the distributor.")
+    return spark

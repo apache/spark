@@ -18,9 +18,6 @@ license: |
   limitations under the License.
 ---
 
-* This will become a table of contents (this text will be scraped).
-{:toc}
-
 Since Spark 3.4.0 release, [Spark SQL](https://spark.apache.org/docs/latest/sql-programming-guide.html) provides built-in support for reading and writing protobuf data.
 
 ## Deploying
@@ -49,20 +46,18 @@ Kafka key-value record will be augmented with some metadata, such as the ingesti
 
 Spark SQL schema is generated based on the protobuf descriptor file or protobuf class passed to `from_protobuf` and `to_protobuf`. The specified protobuf class or protobuf descriptor file must match the data, otherwise, the behavior is undefined: it may fail or return arbitrary results.
 
-<div class="codetabs">
-
-<div data-lang="python" markdown="1">
-{% highlight python %}
+### Python
+```python
 from pyspark.sql.protobuf.functions import from_protobuf, to_protobuf
 
-# `from_protobuf` and `to_protobuf` provides two schema choices. First, via the protobuf descriptor
-# file, and then via the protobuf message class name.
+# `from_protobuf` and `to_protobuf` provides two schema choices. Via Protobuf descriptor file,
+# or via shaded Java class.
 # give input .proto protobuf schema
 # syntax  = "proto3"
 # message AppEvent {
-#    string name = 1;
-#    int64 id = 2;
-#    string context = 3;
+#  string name = 1;
+#  int64 id = 2;
+#  string context = 3;
 # }
 
 df = spark\
@@ -107,16 +102,14 @@ query = output\
 .option("kafka.bootstrap.servers", "host1:port1,host2:port2")\
 .option("topic", "topic2")\
 .start()
+```
 
-{% endhighlight %}
-</div>
-
-<div data-lang="scala" markdown="1">
-{% highlight scala %}
+### Scala
+```scala
 import org.apache.spark.sql.protobuf.functions._
 
-// `from_protobuf` and `to_protobuf` provides two schema choices. First, via the protobuf descriptor
-// file, and then via the protobuf message class name.
+// `from_protobuf` and `to_protobuf` provides two schema choices. Via Protobuf descriptor file,
+// or via shaded Java class.
 // give input .proto protobuf schema
 // syntax  = "proto3"
 // message AppEvent {
@@ -172,23 +165,21 @@ val query = output
 .option("kafka.bootstrap.servers", "host1:port1,host2:port2")
 .option("topic", "topic2")
 .start()
+```
 
-{% endhighlight %}
-</div>
-
-<div data-lang="java" markdown="1">
-{% highlight java %}
+### Java
+```java
 import static org.apache.spark.sql.functions.col;
 import static org.apache.spark.sql.protobuf.functions.*;
 
-// `from_protobuf` and `to_protobuf` provides two schema choices. First, via the protobuf descriptor
-// file, and then via the protobuf message class name.
+// `from_protobuf` and `to_protobuf` provides two schema choices. Via Protobuf descriptor file,
+// or via shaded Java class.
 // give input .proto protobuf schema
 // syntax  = "proto3"
 // message AppEvent {
-//    string name = 1;
-//    int64 id = 2;
-//    string context = 3;
+//  string name = 1;
+//  int64 id = 2;
+//  string context = 3;
 // }
 
 Dataset<Row> df = spark
@@ -235,18 +226,14 @@ StreamingQuery query = output
 .option("kafka.bootstrap.servers", "host1:port1,host2:port2")
 .option("topic", "topic2")
 .start();
-
-{% endhighlight %}
-</div>
-
-</div>
+```
 
 ## Supported types for Protobuf -> Spark SQL conversion
 Currently Spark supports reading [protobuf scalar types](https://developers.google.com/protocol-buffers/docs/proto3#scalar), [enum types](https://developers.google.com/protocol-buffers/docs/proto3#enum), [nested type](https://developers.google.com/protocol-buffers/docs/proto3#nested), and [maps type](https://developers.google.com/protocol-buffers/docs/proto3#maps) under messages of Protobuf.
 In addition to the these types, `spark-protobuf` also introduces support for Protobuf `OneOf` fields. which allows you to handle messages that can have multiple possible sets of fields, but only one set can be present at a time. This is useful for situations where the data you are working with is not always in the same format, and you need to be able to handle messages with different sets of fields without encountering errors.
 
-<table class="table table-striped">
-  <thead><tr><th><b>Protobuf type</b></th><th><b>Spark SQL type</b></th></tr></thead>
+<table class="table">
+  <tr><th><b>Protobuf type</b></th><th><b>Spark SQL type</b></th></tr>
   <tr>
     <td>boolean</td>
     <td>BooleanType</td>
@@ -295,12 +282,16 @@ In addition to the these types, `spark-protobuf` also introduces support for Pro
     <td>OneOf</td>
     <td>Struct</td>
   </tr>
+  <tr>
+    <td>Any</td>
+    <td>StructType</td>
+  </tr>
 </table>
 
 It also supports reading the following Protobuf types [Timestamp](https://developers.google.com/protocol-buffers/docs/reference/google.protobuf#timestamp) and [Duration](https://developers.google.com/protocol-buffers/docs/reference/google.protobuf#duration)
 
-<table class="table table-striped">
-  <thead><tr><th><b>Protobuf logical type</b></th><th><b>Protobuf schema</b></th><th><b>Spark SQL type</b></th></tr></thead>
+<table class="table">
+  <tr><th><b>Protobuf logical type</b></th><th><b>Protobuf schema</b></th><th><b>Spark SQL type</b></th></tr>
   <tr>
     <td>duration</td>
     <td>MessageType{seconds: Long, nanos: Int}</td>
@@ -316,8 +307,8 @@ It also supports reading the following Protobuf types [Timestamp](https://develo
 ## Supported types for Spark SQL -> Protobuf conversion
 Spark supports the writing of all Spark SQL types into Protobuf. For most types, the mapping from Spark types to Protobuf types is straightforward (e.g. IntegerType gets converted to int);
 
-<table class="table table-striped">
-  <thead><tr><th><b>Spark SQL type</b></th><th><b>Protobuf type</b></th></tr></thead>
+<table class="table">
+  <tr><th><b>Spark SQL type</b></th><th><b>Protobuf type</b></th></tr>
   <tr>
     <td>BooleanType</td>
     <td>boolean</td>
@@ -366,14 +357,13 @@ Spark supports the writing of all Spark SQL types into Protobuf. For most types,
 
 ## Handling circular references protobuf fields
 One common issue that can arise when working with Protobuf data is the presence of circular references. In Protobuf, a circular reference occurs when a field refers back to itself or to another field that refers back to the original field. This can cause issues when parsing the data, as it can result in infinite loops or other unexpected behavior.
-To address this issue, the latest version of spark-protobuf introduces a new feature: the ability to check for circular references through field types. This allows users use the `recursive.fields.max.depth` option to specify the maximum number of levels of recursion to allow when parsing the schema. By default, `spark-protobuf` will not permit recursive fields by setting `recursive.fields.max.depth` to -1. However, you can set this option to 0 to 10 if needed.
+To address this issue, the latest version of spark-protobuf introduces a new feature: the ability to check for circular references through field types. This allows users use the `recursive.fields.max.depth` option to specify the maximum number of levels of recursion to allow when parsing the schema. By default, `spark-protobuf` will not permit recursive fields by setting `recursive.fields.max.depth` to -1. However, you can set this option to 0 to 10 if needed. 
 
 Setting `recursive.fields.max.depth` to 0 drops all recursive fields, setting it to 1 allows it to be recursed once, and setting it to 2 allows it to be recursed twice. A `recursive.fields.max.depth` value greater than 10 is not allowed, as it can lead to performance issues and even stack overflows.
 
 SQL Schema for the below protobuf message will vary based on the value of `recursive.fields.max.depth`.
 
-<div data-lang="scala" markdown="1">
-{% highlight scala %}
+```proto
 syntax  = "proto3"
 message Person {
   string name = 1;
@@ -386,6 +376,4 @@ message Person {
 0: struct<name: string, bff: null>
 1: struct<name string, bff: <name: string, bff: null>>
 2: struct<name string, bff: <name: string, bff: struct<name: string, bff: null>>> ...
-
-{% endhighlight %}
-</div>
+```

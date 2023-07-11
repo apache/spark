@@ -194,7 +194,10 @@ object ArrowSerializer {
       encoder: AgnosticEncoder[T],
       allocator: BufferAllocator,
       timeZoneId: String): (VectorSchemaRoot, Serializer) = {
-    val arrowSchema = ArrowUtils.toArrowSchema(encoder.schema, timeZoneId)
+    val arrowSchema = ArrowUtils.toArrowSchema(
+      encoder.schema,
+      timeZoneId,
+      errorOnDuplicatedFieldNames = true)
     val root = VectorSchemaRoot.create(arrowSchema, allocator)
     val serializer = if (encoder.schema != encoder.dataType) {
       assert(root.getSchema.getFields.size() == 1)
@@ -354,7 +357,7 @@ object ArrowSerializer {
       case (ArrayEncoder(element, _), v: ListVector) =>
         val elementSerializer = serializerFor(element, v.getDataVector)
         val toIterator = { array: Any =>
-          mutable.WrappedArray.make(array.asInstanceOf[AnyRef]).iterator
+          mutable.WrappedArray.make(array.asInstanceOf[Array[_]]).iterator
         }
         new ArraySerializer(v, toIterator, elementSerializer)
 

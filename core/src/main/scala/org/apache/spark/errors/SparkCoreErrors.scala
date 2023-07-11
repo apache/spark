@@ -17,7 +17,7 @@
 
 package org.apache.spark.errors
 
-import java.io.IOException
+import java.io.{File, IOException}
 import java.util.concurrent.TimeoutException
 
 import scala.collection.JavaConverters._
@@ -43,7 +43,7 @@ private[spark] object SparkCoreErrors {
 
   def eofExceptionWhileReadPortNumberError(
       daemonModule: String,
-      daemonExitValue: Option[Int] = null): Throwable = {
+      daemonExitValue: Option[Int] = None): Throwable = {
     new SparkException(
       errorClass = "_LEGACY_ERROR_TEMP_3001",
       messageParameters = Map(
@@ -465,5 +465,40 @@ private[spark] object SparkCoreErrors {
       Map(
         "requestedBytes" -> requestedBytes.toString,
         "receivedBytes" -> receivedBytes.toString).asJava)
+  }
+
+  def failedRenameTempFileError(srcFile: File, dstFile: File): Throwable = {
+    new SparkException(
+      errorClass = "FAILED_RENAME_TEMP_FILE",
+      messageParameters = Map(
+        "srcPath" -> srcFile.toString,
+        "dstPath" -> dstFile.toString),
+      cause = null)
+  }
+
+  def addLocalDirectoryError(path: Path): Throwable = {
+    new SparkException(
+      errorClass = "UNSUPPORTED_ADD_FILE.LOCAL_DIRECTORY",
+       messageParameters = Map("path" -> path.toString),
+      cause = null)
+  }
+
+  def addDirectoryError(path: Path): Throwable = {
+    new SparkException(
+      errorClass = "UNSUPPORTED_ADD_FILE.DIRECTORY",
+      messageParameters = Map("path" -> path.toString),
+      cause = null)
+  }
+
+  private def quoteByDefault(elem: String): String = {
+    "\"" + elem + "\""
+  }
+
+  def toConf(conf: String): String = {
+    quoteByDefault(conf)
+  }
+
+  def toConfVal(conf: String): String = {
+    quoteByDefault(conf)
   }
 }

@@ -27,7 +27,7 @@ import org.apache.parquet.schema.PrimitiveType.PrimitiveTypeName
 import org.apache.parquet.schema.Type._
 
 import org.apache.spark.SparkException
-import org.apache.spark.sql.catalyst.ScalaReflection
+import org.apache.spark.sql.catalyst.expressions.Cast.toSQLType
 import org.apache.spark.sql.execution.datasources.SchemaColumnConvertNotSupportedException
 import org.apache.spark.sql.functions.desc
 import org.apache.spark.sql.internal.SQLConf
@@ -50,7 +50,7 @@ abstract class ParquetSchemaTest extends ParquetTest with SharedSparkSession {
       nanosAsLong: Boolean = false): Unit = {
     testSchema(
       testName,
-      StructType.fromAttributes(ScalaReflection.attributesFor[T]),
+      schemaFor[T],
       messageType,
       binaryAsString,
       int96AsTimestamp,
@@ -223,8 +223,7 @@ class ParquetSchemaInferenceSuite extends ParquetSchemaTest {
     writeLegacyParquetFormat = true,
     expectedParquetColumn = Some(
       ParquetColumn(
-        sparkType = StructType.fromAttributes(
-          ScalaReflection.attributesFor[Tuple1[Long]]),
+        sparkType = schemaFor[Tuple1[Long]],
         descriptor = None,
         repetitionLevel = 0,
         definitionLevel = 0,
@@ -254,8 +253,7 @@ class ParquetSchemaInferenceSuite extends ParquetSchemaTest {
     writeLegacyParquetFormat = true,
     expectedParquetColumn = Some(
       ParquetColumn(
-        sparkType = StructType.fromAttributes(
-          ScalaReflection.attributesFor[(Boolean, Int, Long, Float, Double, Array[Byte])]),
+        sparkType = schemaFor[(Boolean, Int, Long, Float, Double, Array[Byte])],
         descriptor = None,
         repetitionLevel = 0,
         definitionLevel = 0,
@@ -293,8 +291,7 @@ class ParquetSchemaInferenceSuite extends ParquetSchemaTest {
     writeLegacyParquetFormat = true,
     expectedParquetColumn = Some(
       ParquetColumn(
-        sparkType = StructType.fromAttributes(
-          ScalaReflection.attributesFor[(Byte, Short, Int, Long, java.sql.Date)]),
+        sparkType = schemaFor[(Byte, Short, Int, Long, java.sql.Date)],
         descriptor = None,
         repetitionLevel = 0,
         definitionLevel = 0,
@@ -325,8 +322,7 @@ class ParquetSchemaInferenceSuite extends ParquetSchemaTest {
     writeLegacyParquetFormat = true,
     expectedParquetColumn = Some(
       ParquetColumn(
-        sparkType = StructType.fromAttributes(
-          ScalaReflection.attributesFor[Tuple1[String]]),
+        sparkType = schemaFor[Tuple1[String]],
         descriptor = None,
         repetitionLevel = 0,
         definitionLevel = 0,
@@ -349,8 +345,7 @@ class ParquetSchemaInferenceSuite extends ParquetSchemaTest {
     writeLegacyParquetFormat = true,
     expectedParquetColumn = Some(
       ParquetColumn(
-        sparkType = StructType.fromAttributes(
-          ScalaReflection.attributesFor[Tuple1[String]]),
+        sparkType = schemaFor[Tuple1[String]],
         descriptor = None,
         repetitionLevel = 0,
         definitionLevel = 0,
@@ -980,20 +975,24 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
     }
   }
 
-  test("schema merging failure error message") {
+  test("CANNOT_MERGE_SCHEMAS: Failed merging schemas") {
     import testImplicits._
 
     withTempPath { dir =>
       val path = dir.getCanonicalPath
-      spark.range(3).write.parquet(s"$path/p=1")
-      spark.range(3).select($"id" cast IntegerType as Symbol("id"))
-        .write.parquet(s"$path/p=2")
-
-      val message = intercept[SparkException] {
-        spark.read.option("mergeSchema", "true").parquet(path).schema
-      }.getMessage
-
-      assert(message.contains("Failed merging schema"))
+      val df1 = spark.range(3)
+      df1.write.parquet(s"$path/p=1")
+      val df2 = spark.range(3).select($"id" cast IntegerType as Symbol("id"))
+      df2.write.parquet(s"$path/p=2")
+      checkError(
+        exception = intercept[SparkException] {
+          spark.read.option("mergeSchema", "true").parquet(path)
+        },
+        errorClass = "CANNOT_MERGE_SCHEMAS",
+        sqlState = "42KD9",
+        parameters = Map(
+          "left" -> toSQLType(df1.schema),
+          "right" -> toSQLType(df2.schema)))
     }
   }
 

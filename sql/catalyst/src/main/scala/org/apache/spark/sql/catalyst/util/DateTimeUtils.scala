@@ -211,12 +211,13 @@ object DateTimeUtils {
   /**
    * Converts an Java object to microseconds.
    *
-   * @param obj Either an object of `java.sql.Timestamp` or `java.time.Instant`.
+   * @param obj Either an object of `java.sql.Timestamp` or `java.time.{Instant,LocalDateTime}`.
    * @return The number of micros since the epoch.
    */
   def anyToMicros(obj: Any): Long = obj match {
     case t: Timestamp => fromJavaTimestamp(t)
     case i: Instant => instantToMicros(i)
+    case ldt: LocalDateTime => localDateTimeToMicros(ldt)
   }
 
   /**
@@ -254,7 +255,7 @@ object DateTimeUtils {
    * Converts milliseconds since the epoch to microseconds.
    */
   def millisToMicros(millis: Long): Long = {
-    Math.multiplyExact(millis, MICROS_PER_MILLIS)
+    SparkDateTimeUtils.millisToMicros(millis)
   }
 
   private final val gmtUtf8 = UTF8String.fromString("GMT")

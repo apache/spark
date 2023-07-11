@@ -233,18 +233,33 @@ class AnalyzePlanRequest(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
         PLAN_FIELD_NUMBER: builtins.int
+        LEVEL_FIELD_NUMBER: builtins.int
         @property
         def plan(self) -> global___Plan:
             """(Required) The logical plan to be analyzed."""
+        level: builtins.int
+        """(Optional) Max level of the schema."""
         def __init__(
             self,
             *,
             plan: global___Plan | None = ...,
+            level: builtins.int | None = ...,
         ) -> None: ...
         def HasField(
-            self, field_name: typing_extensions.Literal["plan", b"plan"]
+            self,
+            field_name: typing_extensions.Literal[
+                "_level", b"_level", "level", b"level", "plan", b"plan"
+            ],
         ) -> builtins.bool: ...
-        def ClearField(self, field_name: typing_extensions.Literal["plan", b"plan"]) -> None: ...
+        def ClearField(
+            self,
+            field_name: typing_extensions.Literal[
+                "_level", b"_level", "level", b"level", "plan", b"plan"
+            ],
+        ) -> None: ...
+        def WhichOneof(
+            self, oneof_group: typing_extensions.Literal["_level", b"_level"]
+        ) -> typing_extensions.Literal["level"] | None: ...
 
     class IsLocal(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
@@ -986,10 +1001,39 @@ class ExecutePlanRequest(google.protobuf.message.Message):
 
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
+    class RequestOption(google.protobuf.message.Message):
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+        EXTENSION_FIELD_NUMBER: builtins.int
+        @property
+        def extension(self) -> google.protobuf.any_pb2.Any:
+            """Extension type for request options"""
+        def __init__(
+            self,
+            *,
+            extension: google.protobuf.any_pb2.Any | None = ...,
+        ) -> None: ...
+        def HasField(
+            self,
+            field_name: typing_extensions.Literal[
+                "extension", b"extension", "request_option", b"request_option"
+            ],
+        ) -> builtins.bool: ...
+        def ClearField(
+            self,
+            field_name: typing_extensions.Literal[
+                "extension", b"extension", "request_option", b"request_option"
+            ],
+        ) -> None: ...
+        def WhichOneof(
+            self, oneof_group: typing_extensions.Literal["request_option", b"request_option"]
+        ) -> typing_extensions.Literal["extension"] | None: ...
+
     SESSION_ID_FIELD_NUMBER: builtins.int
     USER_CONTEXT_FIELD_NUMBER: builtins.int
     PLAN_FIELD_NUMBER: builtins.int
     CLIENT_TYPE_FIELD_NUMBER: builtins.int
+    REQUEST_OPTIONS_FIELD_NUMBER: builtins.int
     session_id: builtins.str
     """(Required)
 
@@ -1012,6 +1056,15 @@ class ExecutePlanRequest(google.protobuf.message.Message):
     can be used for language or version specific information and is only intended for
     logging purposes and will not be interpreted by the server.
     """
+    @property
+    def request_options(
+        self,
+    ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
+        global___ExecutePlanRequest.RequestOption
+    ]:
+        """Repeated element for options that can be passed to the request. This element is currently
+        unused but allows to pass in an extension value used for arbitrary options.
+        """
     def __init__(
         self,
         *,
@@ -1019,6 +1072,8 @@ class ExecutePlanRequest(google.protobuf.message.Message):
         user_context: global___UserContext | None = ...,
         plan: global___Plan | None = ...,
         client_type: builtins.str | None = ...,
+        request_options: collections.abc.Iterable[global___ExecutePlanRequest.RequestOption]
+        | None = ...,
     ) -> None: ...
     def HasField(
         self,
@@ -1042,6 +1097,8 @@ class ExecutePlanRequest(google.protobuf.message.Message):
             b"client_type",
             "plan",
             b"plan",
+            "request_options",
+            b"request_options",
             "session_id",
             b"session_id",
             "user_context",
@@ -1235,6 +1292,10 @@ class ExecutePlanResponse(google.protobuf.message.Message):
     SESSION_ID_FIELD_NUMBER: builtins.int
     ARROW_BATCH_FIELD_NUMBER: builtins.int
     SQL_COMMAND_RESULT_FIELD_NUMBER: builtins.int
+    WRITE_STREAM_OPERATION_START_RESULT_FIELD_NUMBER: builtins.int
+    STREAMING_QUERY_COMMAND_RESULT_FIELD_NUMBER: builtins.int
+    GET_RESOURCES_COMMAND_RESULT_FIELD_NUMBER: builtins.int
+    STREAMING_QUERY_MANAGER_COMMAND_RESULT_FIELD_NUMBER: builtins.int
     EXTENSION_FIELD_NUMBER: builtins.int
     METRICS_FIELD_NUMBER: builtins.int
     OBSERVED_METRICS_FIELD_NUMBER: builtins.int
@@ -1245,6 +1306,26 @@ class ExecutePlanResponse(google.protobuf.message.Message):
     @property
     def sql_command_result(self) -> global___ExecutePlanResponse.SqlCommandResult:
         """Special case for executing SQL commands."""
+    @property
+    def write_stream_operation_start_result(
+        self,
+    ) -> pyspark.sql.connect.proto.commands_pb2.WriteStreamOperationStartResult:
+        """Response for a streaming query."""
+    @property
+    def streaming_query_command_result(
+        self,
+    ) -> pyspark.sql.connect.proto.commands_pb2.StreamingQueryCommandResult:
+        """Response for commands on a streaming query."""
+    @property
+    def get_resources_command_result(
+        self,
+    ) -> pyspark.sql.connect.proto.commands_pb2.GetResourcesCommandResult:
+        """Response for 'SparkContext.resources'."""
+    @property
+    def streaming_query_manager_command_result(
+        self,
+    ) -> pyspark.sql.connect.proto.commands_pb2.StreamingQueryManagerCommandResult:
+        """Response for commands on the streaming query manager."""
     @property
     def extension(self) -> google.protobuf.any_pb2.Any:
         """Support arbitrary result objects."""
@@ -1269,6 +1350,14 @@ class ExecutePlanResponse(google.protobuf.message.Message):
         session_id: builtins.str = ...,
         arrow_batch: global___ExecutePlanResponse.ArrowBatch | None = ...,
         sql_command_result: global___ExecutePlanResponse.SqlCommandResult | None = ...,
+        write_stream_operation_start_result: pyspark.sql.connect.proto.commands_pb2.WriteStreamOperationStartResult
+        | None = ...,
+        streaming_query_command_result: pyspark.sql.connect.proto.commands_pb2.StreamingQueryCommandResult
+        | None = ...,
+        get_resources_command_result: pyspark.sql.connect.proto.commands_pb2.GetResourcesCommandResult
+        | None = ...,
+        streaming_query_manager_command_result: pyspark.sql.connect.proto.commands_pb2.StreamingQueryManagerCommandResult
+        | None = ...,
         extension: google.protobuf.any_pb2.Any | None = ...,
         metrics: global___ExecutePlanResponse.Metrics | None = ...,
         observed_metrics: collections.abc.Iterable[global___ExecutePlanResponse.ObservedMetrics]
@@ -1282,6 +1371,8 @@ class ExecutePlanResponse(google.protobuf.message.Message):
             b"arrow_batch",
             "extension",
             b"extension",
+            "get_resources_command_result",
+            b"get_resources_command_result",
             "metrics",
             b"metrics",
             "response_type",
@@ -1290,6 +1381,12 @@ class ExecutePlanResponse(google.protobuf.message.Message):
             b"schema",
             "sql_command_result",
             b"sql_command_result",
+            "streaming_query_command_result",
+            b"streaming_query_command_result",
+            "streaming_query_manager_command_result",
+            b"streaming_query_manager_command_result",
+            "write_stream_operation_start_result",
+            b"write_stream_operation_start_result",
         ],
     ) -> builtins.bool: ...
     def ClearField(
@@ -1299,6 +1396,8 @@ class ExecutePlanResponse(google.protobuf.message.Message):
             b"arrow_batch",
             "extension",
             b"extension",
+            "get_resources_command_result",
+            b"get_resources_command_result",
             "metrics",
             b"metrics",
             "observed_metrics",
@@ -1311,11 +1410,25 @@ class ExecutePlanResponse(google.protobuf.message.Message):
             b"session_id",
             "sql_command_result",
             b"sql_command_result",
+            "streaming_query_command_result",
+            b"streaming_query_command_result",
+            "streaming_query_manager_command_result",
+            b"streaming_query_manager_command_result",
+            "write_stream_operation_start_result",
+            b"write_stream_operation_start_result",
         ],
     ) -> None: ...
     def WhichOneof(
         self, oneof_group: typing_extensions.Literal["response_type", b"response_type"]
-    ) -> typing_extensions.Literal["arrow_batch", "sql_command_result", "extension"] | None: ...
+    ) -> typing_extensions.Literal[
+        "arrow_batch",
+        "sql_command_result",
+        "write_stream_operation_start_result",
+        "streaming_query_command_result",
+        "get_resources_command_result",
+        "streaming_query_manager_command_result",
+        "extension",
+    ] | None: ...
 
 global___ExecutePlanResponse = ExecutePlanResponse
 
@@ -1940,3 +2053,241 @@ class AddArtifactsResponse(google.protobuf.message.Message):
     ) -> None: ...
 
 global___AddArtifactsResponse = AddArtifactsResponse
+
+class ArtifactStatusesRequest(google.protobuf.message.Message):
+    """Request to get current statuses of artifacts at the server side."""
+
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    SESSION_ID_FIELD_NUMBER: builtins.int
+    USER_CONTEXT_FIELD_NUMBER: builtins.int
+    CLIENT_TYPE_FIELD_NUMBER: builtins.int
+    NAMES_FIELD_NUMBER: builtins.int
+    session_id: builtins.str
+    """(Required)
+
+    The session_id specifies a spark session for a user id (which is specified
+    by user_context.user_id). The session_id is set by the client to be able to
+    collate streaming responses from different queries within the dedicated session.
+    """
+    @property
+    def user_context(self) -> global___UserContext:
+        """User context"""
+    client_type: builtins.str
+    """Provides optional information about the client sending the request. This field
+    can be used for language or version specific information and is only intended for
+    logging purposes and will not be interpreted by the server.
+    """
+    @property
+    def names(
+        self,
+    ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.str]:
+        """The name of the artifact is expected in the form of a "Relative Path" that is made up of a
+        sequence of directories and the final file element.
+        Examples of "Relative Path"s: "jars/test.jar", "classes/xyz.class", "abc.xyz", "a/b/X.jar".
+        The server is expected to maintain the hierarchy of files as defined by their name. (i.e
+        The relative path of the file on the server's filesystem will be the same as the name of
+        the provided artifact)
+        """
+    def __init__(
+        self,
+        *,
+        session_id: builtins.str = ...,
+        user_context: global___UserContext | None = ...,
+        client_type: builtins.str | None = ...,
+        names: collections.abc.Iterable[builtins.str] | None = ...,
+    ) -> None: ...
+    def HasField(
+        self,
+        field_name: typing_extensions.Literal[
+            "_client_type",
+            b"_client_type",
+            "client_type",
+            b"client_type",
+            "user_context",
+            b"user_context",
+        ],
+    ) -> builtins.bool: ...
+    def ClearField(
+        self,
+        field_name: typing_extensions.Literal[
+            "_client_type",
+            b"_client_type",
+            "client_type",
+            b"client_type",
+            "names",
+            b"names",
+            "session_id",
+            b"session_id",
+            "user_context",
+            b"user_context",
+        ],
+    ) -> None: ...
+    def WhichOneof(
+        self, oneof_group: typing_extensions.Literal["_client_type", b"_client_type"]
+    ) -> typing_extensions.Literal["client_type"] | None: ...
+
+global___ArtifactStatusesRequest = ArtifactStatusesRequest
+
+class ArtifactStatusesResponse(google.protobuf.message.Message):
+    """Response to checking artifact statuses."""
+
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    class ArtifactStatus(google.protobuf.message.Message):
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+        EXISTS_FIELD_NUMBER: builtins.int
+        exists: builtins.bool
+        """Exists or not particular artifact at the server."""
+        def __init__(
+            self,
+            *,
+            exists: builtins.bool = ...,
+        ) -> None: ...
+        def ClearField(
+            self, field_name: typing_extensions.Literal["exists", b"exists"]
+        ) -> None: ...
+
+    class StatusesEntry(google.protobuf.message.Message):
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+        KEY_FIELD_NUMBER: builtins.int
+        VALUE_FIELD_NUMBER: builtins.int
+        key: builtins.str
+        @property
+        def value(self) -> global___ArtifactStatusesResponse.ArtifactStatus: ...
+        def __init__(
+            self,
+            *,
+            key: builtins.str = ...,
+            value: global___ArtifactStatusesResponse.ArtifactStatus | None = ...,
+        ) -> None: ...
+        def HasField(
+            self, field_name: typing_extensions.Literal["value", b"value"]
+        ) -> builtins.bool: ...
+        def ClearField(
+            self, field_name: typing_extensions.Literal["key", b"key", "value", b"value"]
+        ) -> None: ...
+
+    STATUSES_FIELD_NUMBER: builtins.int
+    @property
+    def statuses(
+        self,
+    ) -> google.protobuf.internal.containers.MessageMap[
+        builtins.str, global___ArtifactStatusesResponse.ArtifactStatus
+    ]:
+        """A map of artifact names to their statuses."""
+    def __init__(
+        self,
+        *,
+        statuses: collections.abc.Mapping[
+            builtins.str, global___ArtifactStatusesResponse.ArtifactStatus
+        ]
+        | None = ...,
+    ) -> None: ...
+    def ClearField(
+        self, field_name: typing_extensions.Literal["statuses", b"statuses"]
+    ) -> None: ...
+
+global___ArtifactStatusesResponse = ArtifactStatusesResponse
+
+class InterruptRequest(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    class _InterruptType:
+        ValueType = typing.NewType("ValueType", builtins.int)
+        V: typing_extensions.TypeAlias = ValueType
+
+    class _InterruptTypeEnumTypeWrapper(
+        google.protobuf.internal.enum_type_wrapper._EnumTypeWrapper[
+            InterruptRequest._InterruptType.ValueType
+        ],
+        builtins.type,
+    ):  # noqa: F821
+        DESCRIPTOR: google.protobuf.descriptor.EnumDescriptor
+        INTERRUPT_TYPE_UNSPECIFIED: InterruptRequest._InterruptType.ValueType  # 0
+        INTERRUPT_TYPE_ALL: InterruptRequest._InterruptType.ValueType  # 1
+        """Interrupt all running executions within session with provided session_id."""
+
+    class InterruptType(_InterruptType, metaclass=_InterruptTypeEnumTypeWrapper): ...
+    INTERRUPT_TYPE_UNSPECIFIED: InterruptRequest.InterruptType.ValueType  # 0
+    INTERRUPT_TYPE_ALL: InterruptRequest.InterruptType.ValueType  # 1
+    """Interrupt all running executions within session with provided session_id."""
+
+    SESSION_ID_FIELD_NUMBER: builtins.int
+    USER_CONTEXT_FIELD_NUMBER: builtins.int
+    CLIENT_TYPE_FIELD_NUMBER: builtins.int
+    INTERRUPT_TYPE_FIELD_NUMBER: builtins.int
+    session_id: builtins.str
+    """(Required)
+
+    The session_id specifies a spark session for a user id (which is specified
+    by user_context.user_id). The session_id is set by the client to be able to
+    collate streaming responses from different queries within the dedicated session.
+    """
+    @property
+    def user_context(self) -> global___UserContext:
+        """(Required) User context"""
+    client_type: builtins.str
+    """Provides optional information about the client sending the request. This field
+    can be used for language or version specific information and is only intended for
+    logging purposes and will not be interpreted by the server.
+    """
+    interrupt_type: global___InterruptRequest.InterruptType.ValueType
+    """(Required) The type of interrupt to execute."""
+    def __init__(
+        self,
+        *,
+        session_id: builtins.str = ...,
+        user_context: global___UserContext | None = ...,
+        client_type: builtins.str | None = ...,
+        interrupt_type: global___InterruptRequest.InterruptType.ValueType = ...,
+    ) -> None: ...
+    def HasField(
+        self,
+        field_name: typing_extensions.Literal[
+            "_client_type",
+            b"_client_type",
+            "client_type",
+            b"client_type",
+            "user_context",
+            b"user_context",
+        ],
+    ) -> builtins.bool: ...
+    def ClearField(
+        self,
+        field_name: typing_extensions.Literal[
+            "_client_type",
+            b"_client_type",
+            "client_type",
+            b"client_type",
+            "interrupt_type",
+            b"interrupt_type",
+            "session_id",
+            b"session_id",
+            "user_context",
+            b"user_context",
+        ],
+    ) -> None: ...
+    def WhichOneof(
+        self, oneof_group: typing_extensions.Literal["_client_type", b"_client_type"]
+    ) -> typing_extensions.Literal["client_type"] | None: ...
+
+global___InterruptRequest = InterruptRequest
+
+class InterruptResponse(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    SESSION_ID_FIELD_NUMBER: builtins.int
+    session_id: builtins.str
+    def __init__(
+        self,
+        *,
+        session_id: builtins.str = ...,
+    ) -> None: ...
+    def ClearField(
+        self, field_name: typing_extensions.Literal["session_id", b"session_id"]
+    ) -> None: ...
+
+global___InterruptResponse = InterruptResponse

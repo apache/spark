@@ -47,8 +47,8 @@ class TypesParityTests(TypesTestsMixin, ReusedConnectTestCase):
         super().test_infer_array_element_type_with_struct()
 
     @unittest.skip("Spark Connect does not support RDD but the tests depend on them.")
-    def test_infer_array_merge_element_types(self):
-        super().test_infer_array_merge_element_types()
+    def test_infer_array_merge_element_types_with_rdd(self):
+        super().test_infer_array_merge_element_types_with_rdd()
 
     @unittest.skip("Spark Connect does not support RDD but the tests depend on them.")
     def test_infer_binary_type(self):
@@ -59,8 +59,8 @@ class TypesParityTests(TypesTestsMixin, ReusedConnectTestCase):
         super().test_infer_long_type()
 
     @unittest.skip("Spark Connect does not support RDD but the tests depend on them.")
-    def test_infer_nested_dict_as_struct(self):
-        super().test_infer_nested_dict_as_struct()
+    def test_infer_nested_dict_as_struct_with_rdd(self):
+        super().test_infer_nested_dict_as_struct_with_rdd()
 
     @unittest.skip("Spark Connect does not support RDD but the tests depend on them.")
     def test_infer_nested_schema(self):
@@ -69,11 +69,6 @@ class TypesParityTests(TypesTestsMixin, ReusedConnectTestCase):
     @unittest.skip("Spark Connect does not support RDD but the tests depend on them.")
     def test_infer_schema(self):
         super().test_infer_schema()
-
-    # TODO(SPARK-42020): createDataFrame with UDT
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_infer_schema_specification(self):
-        super().test_infer_schema_specification()
 
     @unittest.skip("Spark Connect does not support RDD but the tests depend on them.")
     def test_infer_schema_to_local(self):

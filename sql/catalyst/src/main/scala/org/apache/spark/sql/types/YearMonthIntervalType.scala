@@ -17,12 +17,8 @@
 
 package org.apache.spark.sql.types
 
-import scala.math.Ordering
-import scala.reflect.runtime.universe.typeTag
-
 import org.apache.spark.annotation.Unstable
-import org.apache.spark.sql.catalyst.types.{PhysicalDataType, PhysicalIntegerType}
-import org.apache.spark.sql.errors.QueryCompilationErrors
+import org.apache.spark.sql.errors.DataTypeErrors
 import org.apache.spark.sql.types.YearMonthIntervalType.fieldToString
 
 /**
@@ -43,23 +39,10 @@ import org.apache.spark.sql.types.YearMonthIntervalType.fieldToString
 @Unstable
 case class YearMonthIntervalType(startField: Byte, endField: Byte) extends AnsiIntervalType {
   /**
-   * Internally, values of year-month intervals are stored in `Int` values as amount of months
-   * that are calculated by the formula:
-   *   -/+ (12 * YEAR + MONTH)
-   */
-  private[sql] type InternalType = Int
-
-  @transient private[sql] lazy val tag = typeTag[InternalType]
-
-  private[sql] val ordering = implicitly[Ordering[InternalType]]
-
-  /**
    * Year-month interval values always occupy 4 bytes.
    * The YEAR field is constrained by the upper bound 178956970 to fit to `Int`.
    */
   override def defaultSize: Int = 4
-
-  private[sql] override def physicalDataType: PhysicalDataType = PhysicalIntegerType
 
   private[spark] override def asNullable: YearMonthIntervalType = this
 
@@ -71,7 +54,7 @@ case class YearMonthIntervalType(startField: Byte, endField: Byte) extends AnsiI
     } else if (startField < endField) {
       s"interval $startFieldName to $endFieldName"
     } else {
-      throw QueryCompilationErrors.invalidDayTimeIntervalType(startFieldName, endFieldName)
+      throw DataTypeErrors.invalidDayTimeIntervalType(startFieldName, endFieldName)
     }
   }
 }
@@ -90,7 +73,10 @@ case object YearMonthIntervalType extends AbstractDataType {
   def fieldToString(field: Byte): String = field match {
     case YEAR => "year"
     case MONTH => "month"
-    case invalid => throw QueryCompilationErrors.invalidYearMonthField(invalid)
+    case invalid =>
+      val supportedIds = YearMonthIntervalType.yearMonthFields
+        .map(i => s"$i (${YearMonthIntervalType.fieldToString(i)})")
+      throw DataTypeErrors.invalidYearMonthField(invalid, supportedIds)
   }
 
   val stringToField: Map[String, Byte] = yearMonthFields.map(i => fieldToString(i) -> i).toMap

@@ -51,7 +51,7 @@ import org.apache.spark.sql.types._
  *
  * @since 3.4.0
  */
-class Column private[sql] (private[sql] val expr: proto.Expression) extends Logging {
+class Column private[sql] (@DeveloperApi val expr: proto.Expression) extends Logging {
 
   private[sql] def this(name: String, planId: Option[Long]) =
     this(Column.nameToExpression(name, planId))

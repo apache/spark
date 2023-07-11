@@ -328,6 +328,10 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
     int size = (int) indexFile.length();
     // First entry is the zero offset
     int numChunks = (size / Long.BYTES) - 1;
+    if (numChunks <= 0) {
+      throw new RuntimeException(String.format(
+          "Merged shuffle index file %s is empty", indexFile.getPath()));
+    }
     File metaFile = appShuffleInfo.getMergedShuffleMetaFile(shuffleId, shuffleMergeId, reduceId);
     if (!metaFile.exists()) {
       throw new RuntimeException(String.format("Merged shuffle meta file %s not found",
@@ -494,7 +498,7 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
   @VisibleForTesting
   void removeAppAttemptPathInfoFromDB(String appId, int attemptId) {
     AppAttemptId appAttemptId = new AppAttemptId(appId, attemptId);
-    if (db != null) {
+    if (db != null && AppsWithRecoveryDisabled.isRecoveryEnabledForApp(appId)) {
       try {
         byte[] key = getDbAppAttemptPathsKey(appAttemptId);
         db.delete(key);
@@ -967,7 +971,7 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
    * Write the application attempt's local path information to the DB
    */
   private void writeAppPathsInfoToDb(String appId, int attemptId, AppPathsInfo appPathsInfo) {
-    if (db != null) {
+    if (db != null && AppsWithRecoveryDisabled.isRecoveryEnabledForApp(appId)) {
       AppAttemptId appAttemptId = new AppAttemptId(appId, attemptId);
       try {
         byte[] key = getDbAppAttemptPathsKey(appAttemptId);
@@ -985,7 +989,8 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
    */
   private void writeAppAttemptShuffleMergeInfoToDB(
       AppAttemptShuffleMergeId appAttemptShuffleMergeId) {
-    if (db != null) {
+    if (db != null && AppsWithRecoveryDisabled.isRecoveryEnabledForApp(
+        appAttemptShuffleMergeId.appId)) {
       // Write AppAttemptShuffleMergeId into LevelDB for finalized shuffles
       try{
         byte[] dbKey = getDbAppAttemptShufflePartitionKey(appAttemptShuffleMergeId);
