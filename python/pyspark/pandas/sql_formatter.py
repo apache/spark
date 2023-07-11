@@ -267,11 +267,10 @@ class PandasSQLStringFormatter(string.Formatter):
             return df_name
         elif isinstance(val, str):
             if is_remote():
-                special_characters = ["\\", "'", '"', "\0", "\b", "\n", "\r", "\t"]
-                escaped_val = val
-                for char in special_characters:
-                    escaped_val = escaped_val.replace(char, "\\" + char)
-                return f"'{escaped_val}'"
+                # This is matched to behavior from JVM implementation.
+                # See `sql` definition from `sql/catalyst/src/main/scala/org/apache/spark/
+                # sql/catalyst/expressions/literals.scala`
+                return "'" + val.replace("\\", "\\\\").replace("'", "\\'") + "'"
             else:
                 return lit(val)._jc.expr().sql()  # for escaped characters.
         else:
