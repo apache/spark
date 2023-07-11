@@ -469,17 +469,14 @@ object ArrowSerializer {
   }
 
   private abstract class FieldSerializer[E, V <: FieldVector](val vector: V) extends Serializer {
-    private[this] val nullable = vector.getField.isNullable
     def set(index: Int, value: E): Unit
 
     override def write(index: Int, raw: Any): Unit = {
       val value = raw.asInstanceOf[E]
       if (value != null) {
         set(index, value)
-      } else if (nullable) {
-        vector.setNull(index)
       } else {
-        throw new NullPointerException()
+        vector.setNull(index)
       }
     }
   }
@@ -510,13 +507,9 @@ object ArrowSerializer {
       struct: StructVector,
       fieldSerializers: Seq[StructFieldSerializer])
       extends Serializer {
-    private[this] val nullable = struct != null && struct.getField.isNullable
 
     override def write(index: Int, value: Any): Unit = {
       if (value == null) {
-        if (!nullable) {
-          throw new NullPointerException()
-        }
         if (struct != null) {
           struct.setNull(index)
         }
