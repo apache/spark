@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.analysis
 
 import scala.collection.mutable
 
-import org.apache.spark.sql.catalyst.expressions.{Alias, AttributeMap, AttributeSet, NamedExpression, OuterReference, SubqueryExpression}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeMap, AttributeSet, NamedExpression, OuterReference, SortOrder, SubqueryExpression}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern._
@@ -220,7 +220,52 @@ object DeduplicateRelations extends Rule[LogicalPlan] {
           if (attrMap.isEmpty) {
             planWithNewChildren
           } else {
-            planWithNewChildren.rewriteAttrs(attrMap)
+            def rewriteAttrsMatchWithSubPlan(
+                attrs: Seq[Attribute],
+                attrMap: AttributeMap[Attribute],
+                planOutput: Seq[Attribute]): Seq[Attribute] = {
+              val canRewriteAttrs = attrMap.filter(a => planOutput.contains(a._2))
+              attrs.map(attr => canRewriteAttrs.getOrElse(attr, attr))
+            }
+
+            def rewriteOrderMatchWithSubPlan(
+                attrs: Seq[SortOrder],
+                attrMap: AttributeMap[Attribute],
+                planOutput: Seq[Attribute]): Seq[SortOrder] = {
+              val canRewriteAttrs = attrMap.filter(a => planOutput.contains(a._2))
+              attrs.filter(_.child.isInstanceOf[Attribute]).map(attr => {
+                if (canRewriteAttrs.contains(attr.child.asInstanceOf[Attribute])) {
+                  attr.copy(child = canRewriteAttrs(attr.child.asInstanceOf[Attribute]))
+                } else {
+                  attr
+                }
+              })
+            }
+
+            planWithNewChildren match {
+              case c @ CoGroup(_, keyDeserializer, leftDeserializer, rightDeserializer,
+              leftGroup, rightGroup, leftAttr, rightAttr, leftOrder, rightOrder, _, left,
+              right) =>
+                // SPARK-43781: CoGroup is a special case, as it has different output attributes
+                // from its children. We need to update the output attributes of CoGroup manually.
+                val newLeftAttr = rewriteAttrsMatchWithSubPlan(leftAttr, attrMap, left.output)
+                val newRightAttr = rewriteAttrsMatchWithSubPlan(rightAttr, attrMap, right.output)
+                val newLeftGroup = rewriteAttrsMatchWithSubPlan(leftGroup, attrMap, left.output)
+                c.copy(
+                  keyDeserializer = keyDeserializer.asInstanceOf[UnresolvedDeserializer]
+                    .copy(inputAttributes = newLeftGroup),
+                  leftDeserializer = leftDeserializer.asInstanceOf[UnresolvedDeserializer]
+                    .copy(inputAttributes = newLeftAttr),
+                  rightDeserializer = rightDeserializer.asInstanceOf[UnresolvedDeserializer]
+                    .copy(inputAttributes = newRightAttr),
+                  leftGroup = newLeftGroup,
+                  rightGroup = rewriteAttrsMatchWithSubPlan(rightGroup, attrMap, right.output),
+                  leftAttr = newLeftAttr,
+                  rightAttr = newRightAttr,
+                  leftOrder = rewriteOrderMatchWithSubPlan(leftOrder, attrMap, left.output),
+                  rightOrder = rewriteOrderMatchWithSubPlan(rightOrder, attrMap, right.output))
+              case _ => planWithNewChildren.rewriteAttrs(attrMap)
+            }
           }
         } else {
           planWithNewSubquery.withNewChildren(newChildren.toSeq)
