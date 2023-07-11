@@ -26,6 +26,7 @@ import javax.annotation.Nullable
 import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
 import scala.reflect.ClassTag
+import scala.util.Properties
 import scala.util.control.NonFatal
 
 import com.esotericsoftware.kryo.{Kryo, KryoException, Serializer => KryoClassSerializer}
@@ -219,6 +220,9 @@ class KryoSerializer(conf: SparkConf)
 
     kryo.register(None.getClass)
     kryo.register(Nil.getClass)
+    if (Properties.versionNumberString.startsWith("2.13")) {
+      kryo.register(Utils.classForName("scala.collection.immutable.ArraySeq$ofRef"))
+    }
     kryo.register(Utils.classForName("scala.collection.immutable.$colon$colon"))
     kryo.register(Utils.classForName("scala.collection.immutable.Map$EmptyMap$"))
     kryo.register(Utils.classForName("scala.math.Ordering$Reverse"))

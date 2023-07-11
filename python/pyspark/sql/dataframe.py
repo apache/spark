@@ -1418,6 +1418,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         ...     [(14, "Tom"), (23, "Alice"), (16, "Bob")], ["age", "name"])
         >>> def func(person):
         ...     print(person.name)
+        ...
         >>> df.foreach(func)
         """
         self.rdd.foreach(f)
@@ -1442,6 +1443,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         >>> def func(itr):
         ...     for person in itr:
         ...         print(person.name)
+        ...
         >>> df.foreachPartition(func)
         """
         self.rdd.foreachPartition(f)  # type: ignore[arg-type]
@@ -1871,11 +1873,11 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         Examples
         --------
         >>> df = spark.range(10)
-        >>> df.sample(0.5, 3).count()
+        >>> df.sample(0.5, 3).count() # doctest: +SKIP
         7
-        >>> df.sample(fraction=0.5, seed=3).count()
+        >>> df.sample(fraction=0.5, seed=3).count() # doctest: +SKIP
         7
-        >>> df.sample(withReplacement=True, fraction=0.5, seed=3).count()
+        >>> df.sample(withReplacement=True, fraction=0.5, seed=3).count() # doctest: +SKIP
         1
         >>> df.sample(1.0).count()
         10
@@ -3062,9 +3064,16 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         >>> df = df.withColumn('id2', lit(3))
         >>> [attr for attr in dir(df) if attr[0] == 'i'][:7] # result includes id2 and sorted
         ['i_like_pancakes', 'id', 'id2', 'inputFiles', 'intersect', 'intersectAll', 'isEmpty']
+
+        Don't include columns that are not valid python identifiers.
+
+        >>> df = df.withColumn('1', lit(4))
+        >>> df = df.withColumn('name 1', lit(5))
+        >>> [attr for attr in dir(df) if attr[0] == 'i'][:7] # Doesn't include 1 or name 1
+        ['i_like_pancakes', 'id', 'id2', 'inputFiles', 'intersect', 'intersectAll', 'isEmpty']
         """
         attrs = set(super().__dir__())
-        attrs.update(self.columns)
+        attrs.update(filter(lambda s: s.isidentifier(), self.columns))
         return sorted(attrs)
 
     @overload
@@ -4868,6 +4877,22 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
             self._jdf.stat().freqItems(_to_seq(self._sc, cols), support), self.sparkSession
         )
 
+    def _ipython_key_completions_(self) -> List[str]:
+        """Returns the names of columns in this :class:`DataFrame`.
+
+        Examples
+        --------
+        >>> df = spark.createDataFrame([(2, "Alice"), (5, "Bob")], ["age", "name"])
+        >>> df._ipython_key_completions_()
+        ['age', 'name']
+
+        Would return illegal identifiers.
+        >>> df = spark.createDataFrame([(2, "Alice"), (5, "Bob")], ["age 1", "name?1"])
+        >>> df._ipython_key_completions_()
+        ['age 1', 'name?1']
+        """
+        return self.columns
+
     def withColumns(self, *colsMap: Dict[str, Column]) -> "DataFrame":
         """
         Returns a new :class:`DataFrame` by adding multiple columns or replacing the
@@ -5311,8 +5336,10 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         >>> df = spark.createDataFrame([(1, 1.0), (2, 2.0)], ["int", "float"])
         >>> def cast_all_to_int(input_df):
         ...     return input_df.select([col(col_name).cast("int") for col_name in input_df.columns])
+        ...
         >>> def sort_columns_asc(input_df):
         ...     return input_df.select(*sorted(input_df.columns))
+        ...
         >>> df.transform(cast_all_to_int).transform(sort_columns_asc).show()
         +-----+---+
         |float|int|

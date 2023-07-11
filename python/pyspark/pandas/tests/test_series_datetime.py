@@ -17,6 +17,7 @@
 
 import datetime
 import unittest
+from distutils.version import LooseVersion
 
 import numpy as np
 import pandas as pd
@@ -115,6 +116,10 @@ class SeriesDateTimeTestsMixin:
         self.assertRaisesRegex(TypeError, expected_err_msg, lambda: psser - other)
         self.assertRaises(NotImplementedError, lambda: py_datetime - psser)
 
+    @unittest.skipIf(
+        LooseVersion(pd.__version__) >= LooseVersion("2.0.0"),
+        "TODO(SPARK-43462): Enable SeriesDateTimeTests.test_date_subtraction for pandas 2.0.0.",
+    )
     def test_date_subtraction(self):
         pdf = self.pdf1
         psdf = ps.from_pandas(pdf)
@@ -171,24 +176,52 @@ class SeriesDateTimeTestsMixin:
         with self.assertRaises(NotImplementedError):
             self.check_func(lambda x: x.dt.timetz)
 
+    @unittest.skipIf(
+        LooseVersion(pd.__version__) >= LooseVersion("2.0.0"),
+        "TODO(SPARK-43736): Enable SeriesDateTimeTests.test_year for pandas 2.0.0.",
+    )
     def test_year(self):
         self.check_func(lambda x: x.dt.year)
 
+    @unittest.skipIf(
+        LooseVersion(pd.__version__) >= LooseVersion("2.0.0"),
+        "TODO(SPARK-43731): Enable SeriesDateTimeTests.test_month for pandas 2.0.0.",
+    )
     def test_month(self):
         self.check_func(lambda x: x.dt.month)
 
+    @unittest.skipIf(
+        LooseVersion(pd.__version__) >= LooseVersion("2.0.0"),
+        "TODO(SPARK-43722): Enable SeriesDateTimeTests.test_day for pandas 2.0.0.",
+    )
     def test_day(self):
         self.check_func(lambda x: x.dt.day)
 
+    @unittest.skipIf(
+        LooseVersion(pd.__version__) >= LooseVersion("2.0.0"),
+        "TODO(SPARK-43728): Enable SeriesDateTimeTests.test_hour for pandas 2.0.0.",
+    )
     def test_hour(self):
         self.check_func(lambda x: x.dt.hour)
 
+    @unittest.skipIf(
+        LooseVersion(pd.__version__) >= LooseVersion("2.0.0"),
+        "TODO(SPARK-43730): Enable SeriesDateTimeTests.test_minute for pandas 2.0.0.",
+    )
     def test_minute(self):
         self.check_func(lambda x: x.dt.minute)
 
+    @unittest.skipIf(
+        LooseVersion(pd.__version__) >= LooseVersion("2.0.0"),
+        "TODO(SPARK-43733): Enable SeriesDateTimeTests.test_second for pandas 2.0.0.",
+    )
     def test_second(self):
         self.check_func(lambda x: x.dt.second)
 
+    @unittest.skipIf(
+        LooseVersion(pd.__version__) >= LooseVersion("2.0.0"),
+        "TODO(SPARK-43729): Enable SeriesDateTimeTests.test_microsecond for pandas 2.0.0.",
+    )
     def test_microsecond(self):
         self.check_func(lambda x: x.dt.microsecond)
 
@@ -196,21 +229,45 @@ class SeriesDateTimeTestsMixin:
         with self.assertRaises(NotImplementedError):
             self.check_func(lambda x: x.dt.nanosecond)
 
+    @unittest.skipIf(
+        LooseVersion(pd.__version__) >= LooseVersion("2.0.0"),
+        "TODO(SPARK-42617): Support `isocalendar`",
+    )
     def test_week(self):
         self.check_func(lambda x: x.dt.week)
 
+    @unittest.skipIf(
+        LooseVersion(pd.__version__) >= LooseVersion("2.0.0"),
+        "TODO(SPARK-42617): Support `isocalendar`",
+    )
     def test_weekofyear(self):
         self.check_func(lambda x: x.dt.weekofyear)
 
+    @unittest.skipIf(
+        LooseVersion(pd.__version__) >= LooseVersion("2.0.0"),
+        "TODO(SPARK-43723): Enable SeriesDateTimeTests.test_dayofweek for pandas 2.0.0.",
+    )
     def test_dayofweek(self):
         self.check_func(lambda x: x.dt.dayofweek)
 
+    @unittest.skipIf(
+        LooseVersion(pd.__version__) >= LooseVersion("2.0.0"),
+        "TODO(SPARK-43735): Enable SeriesDateTimeTests.test_weekday for pandas 2.0.0.",
+    )
     def test_weekday(self):
         self.check_func(lambda x: x.dt.weekday)
 
+    @unittest.skipIf(
+        LooseVersion(pd.__version__) >= LooseVersion("2.0.0"),
+        "TODO(SPARK-43724): Enable SeriesDateTimeTests.test_dayofyear for pandas 2.0.0.",
+    )
     def test_dayofyear(self):
         self.check_func(lambda x: x.dt.dayofyear)
 
+    @unittest.skipIf(
+        LooseVersion(pd.__version__) >= LooseVersion("2.0.0"),
+        "TODO(SPARK-43732): Enable SeriesDateTimeTests.test_quarter for pandas 2.0.0.",
+    )
     def test_quarter(self):
         self.check_func(lambda x: x.dt.quarter)
 
@@ -235,9 +292,17 @@ class SeriesDateTimeTestsMixin:
     def test_is_leap_year(self):
         self.check_func(lambda x: x.dt.is_leap_year)
 
+    @unittest.skipIf(
+        LooseVersion(pd.__version__) >= LooseVersion("2.0.0"),
+        "TODO(SPARK-43726): Enable SeriesDateTimeTests.test_daysinmonth for pandas 2.0.0.",
+    )
     def test_daysinmonth(self):
         self.check_func(lambda x: x.dt.daysinmonth)
 
+    @unittest.skipIf(
+        LooseVersion(pd.__version__) >= LooseVersion("2.0.0"),
+        "TODO(SPARK-43725): Enable SeriesDateTimeTests.test_days_in_month for pandas 2.0.0.",
+    )
     def test_days_in_month(self):
         self.check_func(lambda x: x.dt.days_in_month)
 

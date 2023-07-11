@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.plans.logical
 
 import org.apache.spark.sql.catalyst.{AliasIdentifier, SQLConfHelper}
-import org.apache.spark.sql.catalyst.analysis.{AnsiTypeCoercion, MultiInstanceRelation, Resolver, TypeCoercion, TypeCoercionBase}
+import org.apache.spark.sql.catalyst.analysis.{AnsiTypeCoercion, MultiInstanceRelation, Resolver, TypeCoercion, TypeCoercionBase, UnresolvedUnaryNode}
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable}
 import org.apache.spark.sql.catalyst.catalog.CatalogTable.VIEW_STORING_ANALYZED_PLAN
 import org.apache.spark.sql.catalyst.expressions._
@@ -185,7 +185,7 @@ object Project {
           createNewColumn(columnExpr, f.name, f.metadata, Metadata.empty)
         } else {
           if (columnPath.isEmpty) {
-            val candidates = fields.map(_._1)
+            val candidates = fields.map(field => Seq(field._1))
             val orderedCandidates =
               StringUtils.orderSuggestedIdentifiersBySimilarity(f.name, candidates)
             throw QueryCompilationErrors.unresolvedColumnError(f.name, orderedCandidates)
@@ -844,7 +844,17 @@ case class CTERelationRef(
 
   override lazy val resolved: Boolean = _resolved
 
-  override def newInstance(): LogicalPlan = copy(output = output.map(_.newInstance()))
+  override def newInstance(): LogicalPlan = {
+    // CTERelationRef inherits the output attributes from a query, which may contain duplicated
+    // attributes, for queries like `SELECT a, a FROM t`. It's important to keep the duplicated
+    // attributes to have the same id in the new instance, as column resolution allows more than one
+    // matching attributes if their ids are the same.
+    // For example, `Project('a, CTERelationRef(a#1, a#1))` can be resolved properly as the matching
+    // attributes `a` have the same id, but `Project('a, CTERelationRef(a#2, a#3))` can't be
+    // resolved.
+    val oldAttrToNewAttr = AttributeMap(output.zip(output.map(_.newInstance())))
+    copy(output = output.map(attr => oldAttrToNewAttr(attr)))
+  }
 
   def withNewStats(statsOpt: Option[Statistics]): CTERelationRef = copy(statsOpt = statsOpt)
 
@@ -1488,12 +1498,10 @@ case class Unpivot(
     aliases: Option[Seq[Option[String]]],
     variableColumnName: String,
     valueColumnNames: Seq[String],
-    child: LogicalPlan) extends UnaryNode {
+    child: LogicalPlan) extends UnresolvedUnaryNode {
   // There should be no code path that creates `Unpivot` with both set None
   assert(ids.isDefined || values.isDefined, "at least one of `ids` and `values` must be defined")
 
-  override lazy val resolved = false  // Unpivot will be replaced after being resolved.
-  override def output: Seq[Attribute] = Nil
   override def metadataOutput: Seq[Attribute] = Nil
   final override val nodePatterns: Seq[TreePattern] = Seq(UNPIVOT)
 
@@ -1699,7 +1707,12 @@ object SubqueryAlias {
       child: LogicalPlan): SubqueryAlias = {
     SubqueryAlias(AliasIdentifier(multipartIdentifier.last, multipartIdentifier.init), child)
   }
+
+  def generateSubqueryName(suffix: String = ""): String = {
+    s"__auto_generated_subquery_name$suffix"
+  }
 }
+
 /**
  * Sample the dataset.
  *

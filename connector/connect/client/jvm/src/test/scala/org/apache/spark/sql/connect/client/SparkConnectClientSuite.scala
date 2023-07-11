@@ -18,15 +18,17 @@ package org.apache.spark.sql.connect.client
 
 import java.util.concurrent.TimeUnit
 
+import scala.collection.JavaConverters._
 import scala.collection.mutable
 
-import io.grpc.{Server, StatusRuntimeException}
+import io.grpc.{CallOptions, Channel, ClientCall, ClientInterceptor, MethodDescriptor, Server, Status, StatusRuntimeException}
 import io.grpc.netty.NettyServerBuilder
 import io.grpc.stub.StreamObserver
 import org.scalatest.BeforeAndAfterEach
 
+import org.apache.spark.SparkException
 import org.apache.spark.connect.proto
-import org.apache.spark.connect.proto.{AddArtifactsRequest, AddArtifactsResponse, AnalyzePlanRequest, AnalyzePlanResponse, ExecutePlanRequest, ExecutePlanResponse, SparkConnectServiceGrpc}
+import org.apache.spark.connect.proto.{AddArtifactsRequest, AddArtifactsResponse, AnalyzePlanRequest, AnalyzePlanResponse, ArtifactStatusesRequest, ArtifactStatusesResponse, ExecutePlanRequest, ExecutePlanResponse, SparkConnectServiceGrpc}
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.connect.client.util.ConnectFunSuite
 import org.apache.spark.sql.connect.common.config.ConnectCommon
@@ -103,19 +105,44 @@ class SparkConnectClientSuite extends ConnectFunSuite with BeforeAndAfterEach {
     val request = AnalyzePlanRequest.newBuilder().setSessionId("abc123").build()
 
     // Failed the ssl handshake as the dummy server does not have any server credentials installed.
-    assertThrows[StatusRuntimeException] {
+    assertThrows[SparkException] {
       client.analyze(request)
     }
   }
 
   test("SparkSession initialisation with connection string") {
-    val testPort = 16002
-    client = SparkConnectClient.builder().connectionString(s"sc://localhost:$testPort").build()
-    startDummyServer(testPort)
+    startDummyServer(0)
+    client = SparkConnectClient
+      .builder()
+      .connectionString(s"sc://localhost:${server.getPort}")
+      .build()
+
     val session = SparkSession.builder().client(client).create()
     val df = session.range(10)
     df.analyze // Trigger RPC
     assert(df.plan === service.getAndClearLatestInputPlan())
+  }
+
+  test("Custom Interceptor") {
+    startDummyServer(0)
+    client = SparkConnectClient
+      .builder()
+      .connectionString(s"sc://localhost:${server.getPort}")
+      .interceptor(new ClientInterceptor {
+        override def interceptCall[ReqT, RespT](
+            methodDescriptor: MethodDescriptor[ReqT, RespT],
+            callOptions: CallOptions,
+            channel: Channel): ClientCall[ReqT, RespT] = {
+          throw new RuntimeException("Blocked")
+        }
+      })
+      .build()
+
+    val session = SparkSession.builder().client(client).create()
+
+    assertThrows[RuntimeException] {
+      session.range(10).count()
+    }
   }
 
   private case class TestPackURI(
@@ -132,11 +159,17 @@ class SparkConnectClientSuite extends ConnectFunSuite with BeforeAndAfterEach {
     TestPackURI(
       "sc://localhost:1234/",
       isCorrect = true,
-      client => testClientConnection(1234)(_ => client)),
+      client => {
+        assert(client.configuration.host == "localhost")
+        assert(client.configuration.port == 1234)
+      }),
     TestPackURI(
       "sc://localhost/;",
       isCorrect = true,
-      client => testClientConnection(ConnectCommon.CONNECT_GRPC_BINDING_PORT)(_ => client)),
+      client => {
+        assert(client.configuration.host == "localhost")
+        assert(client.configuration.port == ConnectCommon.CONNECT_GRPC_BINDING_PORT)
+      }),
     TestPackURI("sc://host:123", isCorrect = true),
     TestPackURI(
       "sc://host:123/;user_id=a94",
@@ -177,6 +210,61 @@ class SparkConnectClientSuite extends ConnectFunSuite with BeforeAndAfterEach {
         checkTestPack(testPack)
       }
     }
+  }
+
+  private class DummyFn(val e: Throwable) {
+    var counter = 0
+    def fn(): Int = {
+      if (counter < 3) {
+        counter += 1
+        throw e
+      } else {
+        42
+      }
+    }
+  }
+
+  test("SPARK-44275: retry actually retries") {
+    val dummyFn = new DummyFn(new StatusRuntimeException(Status.UNAVAILABLE))
+    val retryPolicy = GrpcRetryHandler.RetryPolicy()
+    val retryHandler = new GrpcRetryHandler(retryPolicy)
+    val result = retryHandler.retry { dummyFn.fn() }
+
+    assert(result == 42)
+    assert(dummyFn.counter == 3)
+  }
+
+  test("SPARK-44275: default retryException retries only on UNAVAILABLE") {
+    val dummyFn = new DummyFn(new StatusRuntimeException(Status.ABORTED))
+    val retryPolicy = GrpcRetryHandler.RetryPolicy()
+    val retryHandler = new GrpcRetryHandler(retryPolicy)
+
+    assertThrows[StatusRuntimeException] {
+      retryHandler.retry { dummyFn.fn() }
+    }
+    assert(dummyFn.counter == 1)
+  }
+
+  test("SPARK-44275: retry uses canRetry to filter exceptions") {
+    val dummyFn = new DummyFn(new StatusRuntimeException(Status.UNAVAILABLE))
+    val retryPolicy = GrpcRetryHandler.RetryPolicy(canRetry = _ => false)
+    val retryHandler = new GrpcRetryHandler(retryPolicy)
+
+    assertThrows[StatusRuntimeException] {
+      retryHandler.retry { dummyFn.fn() }
+    }
+    assert(dummyFn.counter == 1)
+  }
+
+  test("SPARK-44275: retry does not exceed maxRetries") {
+    val dummyFn = new DummyFn(new StatusRuntimeException(Status.UNAVAILABLE))
+    val retryPolicy = GrpcRetryHandler.RetryPolicy(canRetry = _ => true, maxRetries = 1)
+    val retryHandler = new GrpcRetryHandler(retryPolicy)
+
+    assertThrows[StatusRuntimeException] {
+      retryHandler.retry { dummyFn.fn() }
+    }
+    assert(dummyFn.counter == 2)
   }
 }
 
@@ -250,5 +338,27 @@ class DummySparkConnectService() extends SparkConnectServiceGrpc.SparkConnectSer
       responseObserver.onNext(proto.AddArtifactsResponse.newBuilder().build())
       responseObserver.onCompleted()
     }
+  }
+
+  override def artifactStatus(
+      request: ArtifactStatusesRequest,
+      responseObserver: StreamObserver[ArtifactStatusesResponse]): Unit = {
+    val builder = proto.ArtifactStatusesResponse.newBuilder()
+    request.getNamesList().iterator().asScala.foreach { name =>
+      val status = proto.ArtifactStatusesResponse.ArtifactStatus.newBuilder()
+      val exists = if (name.startsWith("cache/")) {
+        inputArtifactRequests.exists { artifactReq =>
+          if (artifactReq.hasBatch) {
+            val batch = artifactReq.getBatch
+            batch.getArtifactsList.asScala.exists { singleArtifact =>
+              singleArtifact.getName == name
+            }
+          } else false
+        }
+      } else false
+      builder.putStatuses(name, status.setExists(exists).build())
+    }
+    responseObserver.onNext(builder.build())
+    responseObserver.onCompleted()
   }
 }

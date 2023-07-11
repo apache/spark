@@ -215,6 +215,7 @@ class SqlCommand(google.protobuf.message.Message):
 
     SQL_FIELD_NUMBER: builtins.int
     ARGS_FIELD_NUMBER: builtins.int
+    POS_ARGS_FIELD_NUMBER: builtins.int
     sql: builtins.str
     """(Required) SQL Query."""
     @property
@@ -224,6 +225,13 @@ class SqlCommand(google.protobuf.message.Message):
         builtins.str, pyspark.sql.connect.proto.expressions_pb2.Expression.Literal
     ]:
         """(Optional) A map of parameter names to literal expressions."""
+    @property
+    def pos_args(
+        self,
+    ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
+        pyspark.sql.connect.proto.expressions_pb2.Expression.Literal
+    ]:
+        """(Optional) A sequence of literal expressions for positional parameters in the SQL query text."""
     def __init__(
         self,
         *,
@@ -232,9 +240,16 @@ class SqlCommand(google.protobuf.message.Message):
             builtins.str, pyspark.sql.connect.proto.expressions_pb2.Expression.Literal
         ]
         | None = ...,
+        pos_args: collections.abc.Iterable[
+            pyspark.sql.connect.proto.expressions_pb2.Expression.Literal
+        ]
+        | None = ...,
     ) -> None: ...
     def ClearField(
-        self, field_name: typing_extensions.Literal["args", b"args", "sql", b"sql"]
+        self,
+        field_name: typing_extensions.Literal[
+            "args", b"args", "pos_args", b"pos_args", "sql", b"sql"
+        ],
     ) -> None: ...
 
 global___SqlCommand = SqlCommand
@@ -818,28 +833,32 @@ class StreamingForeachWriter(google.protobuf.message.Message):
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
     PYTHON_WRITER_FIELD_NUMBER: builtins.int
+    SCALA_WRITER_FIELD_NUMBER: builtins.int
     @property
     def python_writer(self) -> pyspark.sql.connect.proto.expressions_pb2.PythonUDF: ...
+    @property
+    def scala_writer(self) -> pyspark.sql.connect.proto.expressions_pb2.ScalarScalaUDF: ...
     def __init__(
         self,
         *,
         python_writer: pyspark.sql.connect.proto.expressions_pb2.PythonUDF | None = ...,
+        scala_writer: pyspark.sql.connect.proto.expressions_pb2.ScalarScalaUDF | None = ...,
     ) -> None: ...
     def HasField(
         self,
         field_name: typing_extensions.Literal[
-            "python_writer", b"python_writer", "writer", b"writer"
+            "python_writer", b"python_writer", "scala_writer", b"scala_writer", "writer", b"writer"
         ],
     ) -> builtins.bool: ...
     def ClearField(
         self,
         field_name: typing_extensions.Literal[
-            "python_writer", b"python_writer", "writer", b"writer"
+            "python_writer", b"python_writer", "scala_writer", b"scala_writer", "writer", b"writer"
         ],
     ) -> None: ...
     def WhichOneof(
         self, oneof_group: typing_extensions.Literal["writer", b"writer"]
-    ) -> typing_extensions.Literal["python_writer"] | None: ...
+    ) -> typing_extensions.Literal["python_writer", "scala_writer"] | None: ...
 
 global___StreamingForeachWriter = StreamingForeachWriter
 

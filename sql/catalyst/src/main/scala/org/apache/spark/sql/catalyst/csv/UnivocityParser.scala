@@ -318,7 +318,7 @@ class UnivocityParser(
     if (tokens == null) {
       throw BadRecordException(
         () => getCurrentInput,
-        () => None,
+        () => Array.empty,
         QueryExecutionErrors.malformedCSVRecordError(""))
     }
 
@@ -353,7 +353,7 @@ class UnivocityParser(
         case NonFatal(e) =>
           badRecordException = badRecordException.orElse(Some(e))
           // Use the corresponding DEFAULT value associated with the column, if any.
-          row.update(i, requiredSchema.existenceDefaultValues(i))
+          row.update(i, ResolveDefaultColumns.existenceDefaultValues(requiredSchema)(i))
       }
       i += 1
     }
@@ -362,7 +362,7 @@ class UnivocityParser(
     } else {
       if (badRecordException.isDefined) {
         throw BadRecordException(
-          () => currentInput, () => requiredRow.headOption, badRecordException.get)
+          () => currentInput, () => Array(requiredRow.get), badRecordException.get)
       } else {
         requiredRow
       }

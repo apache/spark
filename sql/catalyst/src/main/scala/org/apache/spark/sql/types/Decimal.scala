@@ -23,6 +23,7 @@ import scala.util.Try
 
 import org.apache.spark.annotation.Unstable
 import org.apache.spark.sql.catalyst.trees.SQLQueryContext
+import org.apache.spark.sql.errors.DataTypeErrors
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.unsafe.types.UTF8String
@@ -120,7 +121,7 @@ final class Decimal extends Ordered[Decimal] with Serializable {
     DecimalType.checkNegativeScale(scale)
     this.decimalVal = decimal.setScale(scale, ROUND_HALF_UP)
     if (decimalVal.precision > precision) {
-      throw QueryExecutionErrors.decimalPrecisionExceedsMaxPrecisionError(
+      throw DataTypeErrors.decimalPrecisionExceedsMaxPrecisionError(
         decimalVal.precision, precision)
     }
     this.longVal = 0L
@@ -382,7 +383,7 @@ final class Decimal extends Ordered[Decimal] with Serializable {
             case ROUND_FLOOR => if (lv < 0) -1L else 0L
             case ROUND_CEILING => if (lv > 0) 1L else 0L
             case ROUND_HALF_UP | ROUND_HALF_EVEN => 0L
-            case _ => throw QueryExecutionErrors.unsupportedRoundingMode(roundMode)
+            case _ => throw DataTypeErrors.unsupportedRoundingMode(roundMode)
           }
         } else {
           val pow10diff = POW_10(diff)
@@ -408,7 +409,7 @@ final class Decimal extends Ordered[Decimal] with Serializable {
                 lv += (if (droppedDigits < 0) -1L else 1L)
               }
             case _ =>
-              throw QueryExecutionErrors.unsupportedRoundingMode(roundMode)
+              throw DataTypeErrors.unsupportedRoundingMode(roundMode)
           }
         }
       } else if (scale > _scale) {
@@ -622,7 +623,7 @@ object Decimal {
       // For example: Decimal("6.0790316E+25569151")
       if (numDigitsInIntegralPart(bigDecimal) > DecimalType.MAX_PRECISION &&
           !SQLConf.get.allowNegativeScaleOfDecimalEnabled) {
-        throw QueryExecutionErrors.outOfDecimalTypeRangeError(str)
+        throw DataTypeErrors.outOfDecimalTypeRangeError(str)
       } else {
         Decimal(bigDecimal)
       }

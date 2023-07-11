@@ -18,7 +18,9 @@
 package org.apache.spark.sql.streaming
 
 import org.apache.spark.sql.execution.streaming._
+import org.apache.spark.tags.SlowSQLTest
 
+@SlowSQLTest
 class MemorySourceStressSuite extends StreamTest {
   import testImplicits._
 

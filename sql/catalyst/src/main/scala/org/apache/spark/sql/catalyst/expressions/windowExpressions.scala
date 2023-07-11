@@ -1164,19 +1164,19 @@ case class LastNonNull(input: Expression)
 
   override def dataType: DataType = input.dataType
 
-  private val last = AttributeReference("last", dataType, nullable = true)()
+  private lazy val last = AttributeReference("last", dataType, nullable = true)()
 
   override def aggBufferAttributes: Seq[AttributeReference] = last :: Nil
 
-  override val initialValues: Seq[Expression] = Seq(Literal.create(null, dataType))
+  override lazy val initialValues: Seq[Expression] = Seq(Literal.create(null, dataType))
 
-  override val updateExpressions: Seq[Expression] = {
+  override lazy val updateExpressions: Seq[Expression] = {
     Seq(
       /* last = */ If(IsNull(input), last, input)
     )
   }
 
-  override val evaluateExpression: Expression = last
+  override lazy val evaluateExpression: Expression = last
 
   override def prettyName: String = "last_non_null"
 

@@ -63,7 +63,7 @@ private[hive] case class HiveSimpleUDF(
 
   // TODO: Finish input output types.
   override def eval(input: InternalRow): Any = {
-    children.zipWithIndex.map {
+    children.zipWithIndex.foreach {
       case (child, idx) => evaluator.setArg(idx, child.eval(input))
     }
     evaluator.evaluate()
@@ -135,7 +135,7 @@ private[hive] case class HiveGenericUDF(
   private lazy val evaluator = new HiveGenericUDFEvaluator(funcWrapper, children)
 
   override def eval(input: InternalRow): Any = {
-    children.zipWithIndex.map {
+    children.zipWithIndex.foreach {
       case (child, idx) => evaluator.setArg(idx, child.eval(input))
     }
     evaluator.evaluate()

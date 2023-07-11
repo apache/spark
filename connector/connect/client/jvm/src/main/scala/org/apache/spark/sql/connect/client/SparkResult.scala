@@ -28,11 +28,11 @@ import org.apache.arrow.vector.ipc.ArrowStreamReader
 import org.apache.spark.connect.proto
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.encoders.{AgnosticEncoder, ExpressionEncoder, RowEncoder}
-import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.UnboundRowEncoder
+import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{ProductEncoder, UnboundRowEncoder}
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder.Deserializer
 import org.apache.spark.sql.connect.client.util.{AutoCloseables, Cleanable}
 import org.apache.spark.sql.connect.common.DataTypeProtoConverter
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.types.{DataType, StructType}
 import org.apache.spark.sql.util.ArrowUtils
 import org.apache.spark.sql.vectorized.{ArrowColumnVector, ColumnarBatch, ColumnVector}
 
@@ -46,16 +46,35 @@ private[sql] class SparkResult[T](
   private[this] var numRecords: Int = 0
   private[this] var structType: StructType = _
   private[this] var boundEncoder: ExpressionEncoder[T] = _
-  private[this] val batches = mutable.Buffer.empty[ColumnarBatch]
+  private[this] var nextBatchIndex: Int = 0
+  private val idxToBatches = mutable.Map.empty[Int, ColumnarBatch]
 
   private def createEncoder(schema: StructType): ExpressionEncoder[T] = {
-    val agnosticEncoder = if (encoder == UnboundRowEncoder) {
-      // Create a row encoder based on the schema.
-      RowEncoder.encoderFor(schema).asInstanceOf[AgnosticEncoder[T]]
-    } else {
-      encoder
-    }
+    val agnosticEncoder = createEncoder(encoder, schema).asInstanceOf[AgnosticEncoder[T]]
     ExpressionEncoder(agnosticEncoder)
+  }
+
+  /**
+   * Update RowEncoder and recursively update the fields of the ProductEncoder if found.
+   */
+  private def createEncoder[_](
+      enc: AgnosticEncoder[_],
+      dataType: DataType): AgnosticEncoder[_] = {
+    enc match {
+      case UnboundRowEncoder =>
+        // Replace the row encoder with the encoder inferred from the schema.
+        RowEncoder.encoderFor(dataType.asInstanceOf[StructType])
+      case ProductEncoder(clsTag, fields) if ProductEncoder.isTuple(clsTag) =>
+        // Recursively continue updating the tuple product encoder
+        val schema = dataType.asInstanceOf[StructType]
+        assert(fields.length <= schema.fields.length)
+        val updatedFields = fields.zipWithIndex.map { case (f, id) =>
+          f.copy(enc = createEncoder(f.enc, schema.fields(id).dataType))
+        }
+        ProductEncoder(clsTag, updatedFields)
+      case _ =>
+        enc
+    }
   }
 
   private def processResponses(stopOnFirstNonEmptyResponse: Boolean): Boolean = {
@@ -70,12 +89,12 @@ private[sql] class SparkResult[T](
         val reader = new ArrowStreamReader(ipcStreamBytes.newInput(), allocator)
         try {
           val root = reader.getVectorSchemaRoot
-          if (batches.isEmpty) {
-            if (structType == null) {
-              // If the schema is not available yet, fallback to the schema from Arrow.
-              structType = ArrowUtils.fromArrowSchema(root.getSchema)
-            }
-            // TODO: create encoders that directly operate on arrow vectors.
+          if (structType == null) {
+            // If the schema is not available yet, fallback to the schema from Arrow.
+            structType = ArrowUtils.fromArrowSchema(root.getSchema)
+          }
+          // TODO: create encoders that directly operate on arrow vectors.
+          if (boundEncoder == null) {
             boundEncoder = createEncoder(structType).resolveAndBind(structType.toAttributes)
           }
           while (reader.loadNextBatch()) {
@@ -85,7 +104,8 @@ private[sql] class SparkResult[T](
               val vectors = root.getFieldVectors.asScala
                 .map(v => new ArrowColumnVector(transferToNewVector(v)))
                 .toArray[ColumnVector]
-              batches += new ColumnarBatch(vectors, rowCount)
+              idxToBatches.put(nextBatchIndex, new ColumnarBatch(vectors, rowCount))
+              nextBatchIndex += 1
               numRecords += rowCount
               if (stopOnFirstNonEmptyResponse) {
                 return true
@@ -142,24 +162,39 @@ private[sql] class SparkResult[T](
   /**
    * Returns an iterator over the contents of the result.
    */
-  def iterator: java.util.Iterator[T] with AutoCloseable = {
+  def iterator: java.util.Iterator[T] with AutoCloseable =
+    buildIterator(destructive = false)
+
+  /**
+   * Returns an destructive iterator over the contents of the result.
+   */
+  def destructiveIterator: java.util.Iterator[T] with AutoCloseable =
+    buildIterator(destructive = true)
+
+  private def buildIterator(destructive: Boolean): java.util.Iterator[T] with AutoCloseable = {
     new java.util.Iterator[T] with AutoCloseable {
       private[this] var batchIndex: Int = -1
       private[this] var iterator: java.util.Iterator[InternalRow] = Collections.emptyIterator()
       private[this] var deserializer: Deserializer[T] = _
+
       override def hasNext: Boolean = {
         if (iterator.hasNext) {
           return true
         }
+
         val nextBatchIndex = batchIndex + 1
-        val hasNextBatch = if (nextBatchIndex == batches.size) {
+        if (destructive) {
+          idxToBatches.remove(batchIndex).foreach(_.close())
+        }
+
+        val hasNextBatch = if (!idxToBatches.contains(nextBatchIndex)) {
           processResponses(stopOnFirstNonEmptyResponse = true)
         } else {
           true
         }
         if (hasNextBatch) {
           batchIndex = nextBatchIndex
-          iterator = batches(nextBatchIndex).rowIterator()
+          iterator = idxToBatches(nextBatchIndex).rowIterator()
           if (deserializer == null) {
             deserializer = boundEncoder.createDeserializer()
           }
@@ -182,8 +217,8 @@ private[sql] class SparkResult[T](
    * Close this result, freeing any underlying resources.
    */
   override def close(): Unit = {
-    batches.foreach(_.close())
+    idxToBatches.values.foreach(_.close())
   }
 
-  override def cleaner: AutoCloseable = AutoCloseables(batches.toSeq)
+  override def cleaner: AutoCloseable = AutoCloseables(idxToBatches.values.toSeq)
 }

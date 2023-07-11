@@ -73,7 +73,7 @@ class HeartbeatReceiverSuite
       .setMaster("local[2]")
       .setAppName("test")
       .set(DYN_ALLOCATION_TESTING, true)
-    sc = spy(new SparkContext(conf))
+    sc = spy[SparkContext](new SparkContext(conf))
     scheduler = mock(classOf[TaskSchedulerImpl])
     when(sc.taskScheduler).thenReturn(scheduler)
     when(scheduler.excludedNodes).thenReturn(Predef.Set[String]())

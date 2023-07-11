@@ -56,6 +56,8 @@ private[spark] object PythonEvalType {
   val SQL_MAP_ARROW_ITER_UDF = 207
   val SQL_GROUPED_MAP_PANDAS_UDF_WITH_STATE = 208
 
+  val SQL_TABLE_UDF = 300
+
   def toString(pythonEvalType: Int): String = pythonEvalType match {
     case NON_UDF => "NON_UDF"
     case SQL_BATCHED_UDF => "SQL_BATCHED_UDF"
@@ -69,6 +71,7 @@ private[spark] object PythonEvalType {
     case SQL_COGROUPED_MAP_PANDAS_UDF => "SQL_COGROUPED_MAP_PANDAS_UDF"
     case SQL_MAP_ARROW_ITER_UDF => "SQL_MAP_ARROW_ITER_UDF"
     case SQL_GROUPED_MAP_PANDAS_UDF_WITH_STATE => "SQL_GROUPED_MAP_PANDAS_UDF_WITH_STATE"
+    case SQL_TABLE_UDF => "SQL_TABLE_UDF"
   }
 }
 
@@ -161,6 +164,9 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
     if (faultHandlerEnabled) {
       envVars.put("PYTHON_FAULTHANDLER_DIR", BasePythonRunner.faultHandlerLogDir.toString)
     }
+
+    val sessionUUID = JobArtifactSet.getCurrentClientSessionState.map(_.uuid).getOrElse("default")
+    envVars.put("SPARK_CONNECT_SESSION_UUID", sessionUUID)
 
     val (worker: Socket, pid: Option[Int]) = env.createPythonWorker(
       pythonExec, envVars.asScala.toMap)
@@ -704,7 +710,12 @@ private[spark] object PythonRunner {
   // already running worker monitor threads for worker and task attempts ID pairs
   val runningMonitorThreads = ConcurrentHashMap.newKeySet[(Socket, Long)]()
 
+  private var printPythonInfo: AtomicBoolean = new AtomicBoolean(true)
+
   def apply(func: PythonFunction): PythonRunner = {
+    if (printPythonInfo.compareAndSet(true, false)) {
+      PythonUtils.logPythonInfo(func.pythonExec)
+    }
     new PythonRunner(Seq(ChainedPythonFunctions(Seq(func))))
   }
 }

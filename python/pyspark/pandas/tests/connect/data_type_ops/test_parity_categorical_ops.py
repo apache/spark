@@ -34,27 +34,11 @@ class CategoricalOpsParityTests(
     def test_astype(self):
         super().test_astype()
 
-    @unittest.skip("TODO(SPARK-43670): Enable CategoricalOps.eq to work with Spark Connect.")
+    @unittest.skip("TODO(SPARK-43620): Support `Column` for SparkConnectColumn.__getitem__.")
     def test_eq(self):
         super().test_eq()
 
-    @unittest.skip("TODO(SPARK-43671): Enable CategoricalOps.ge to work with Spark Connect.")
-    def test_ge(self):
-        super().test_ge()
-
-    @unittest.skip("TODO(SPARK-43672): Enable CategoricalOps.gt to work with Spark Connect.")
-    def test_gt(self):
-        super().test_gt()
-
-    @unittest.skip("TODO(SPARK-43673): Enable CategoricalOps.le to work with Spark Connect.")
-    def test_le(self):
-        super().test_le()
-
-    @unittest.skip("TODO(SPARK-43674): Enable CategoricalOps.lt to work with Spark Connect.")
-    def test_lt(self):
-        super().test_lt()
-
-    @unittest.skip("TODO(SPARK-43675): Enable CategoricalOps.ne to work with Spark Connect.")
+    @unittest.skip("TODO(SPARK-43620): Support `Column` for SparkConnectColumn.__getitem__.")
     def test_ne(self):
         super().test_ne()
 

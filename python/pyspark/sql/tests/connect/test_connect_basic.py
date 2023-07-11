@@ -19,12 +19,15 @@ import array
 import datetime
 import os
 import unittest
+import random
 import shutil
+import string
 import tempfile
 from collections import defaultdict
 
 from pyspark.errors import (
     PySparkAttributeError,
+    PySparkNotImplementedError,
     PySparkTypeError,
     PySparkException,
     PySparkValueError,
@@ -649,6 +652,23 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
             self.assertEqual(sdf.schema, cdf.schema)
             self.assert_eq(sdf.toPandas(), cdf.toPandas())
 
+    def test_streaming_local_relation(self):
+        threshold_conf = "spark.sql.session.localRelationCacheThreshold"
+        old_threshold = self.connect.conf.get(threshold_conf)
+        threshold = 1024 * 1024
+        self.connect.conf.set(threshold_conf, threshold)
+        try:
+            suffix = "abcdef"
+            letters = string.ascii_lowercase
+            str = "".join(random.choice(letters) for i in range(threshold)) + suffix
+            data = [[0, str], [1, str]]
+            for i in range(0, 2):
+                cdf = self.connect.createDataFrame(data, ["a", "b"])
+                self.assert_eq(cdf.count(), len(data))
+                self.assert_eq(cdf.filter(f"endsWith(b, '{suffix}')").isEmpty(), False)
+        finally:
+            self.connect.conf.set(threshold_conf, old_threshold)
+
     def test_with_atom_type(self):
         for data in [[(1), (2), (3)], [1, 2, 3]]:
             for schema in ["long", "int", "short"]:
@@ -1203,9 +1223,14 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
         pdf = self.connect.sql("SELECT 1").toPandas()
         self.assertEqual(1, len(pdf.index))
 
-    def test_sql_with_args(self):
+    def test_sql_with_named_args(self):
         df = self.connect.sql("SELECT * FROM range(10) WHERE id > :minId", args={"minId": 7})
         df2 = self.spark.sql("SELECT * FROM range(10) WHERE id > :minId", args={"minId": 7})
+        self.assert_eq(df.toPandas(), df2.toPandas())
+
+    def test_sql_with_pos_args(self):
+        df = self.connect.sql("SELECT * FROM range(10) WHERE id > ?", args=[7])
+        df2 = self.spark.sql("SELECT * FROM range(10) WHERE id > ?", args=[7])
         self.assert_eq(df.toPandas(), df2.toPandas())
 
     def test_head(self):
@@ -3161,6 +3186,16 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
         rows = [cols] * row_count
         self.assertEqual(row_count, self.connect.createDataFrame(data=rows).count())
 
+    def test_unsupported_udtf(self):
+        with self.assertRaises(PySparkNotImplementedError) as e:
+            self.connect.udtf.register()
+
+        self.check_error(
+            exception=e.exception,
+            error_class="NOT_IMPLEMENTED",
+            message_parameters={"feature": "udtf()"},
+        )
+
     def test_unsupported_jvm_attribute(self):
         # Unsupported jvm attributes for Spark session.
         unsupported_attrs = ["_jsc", "_jconf", "_jvm", "_jsparkSession"]
@@ -3207,6 +3242,12 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
             error_class="JVM_ATTRIBUTE_NOT_SUPPORTED",
             message_parameters={"attr_name": "_jreader"},
         )
+
+    def test_df_caache(self):
+        df = self.connect.range(10)
+        df.cache()
+        self.assert_eq(10, df.count())
+        self.assertTrue(df.is_cached)
 
 
 class SparkConnectSessionTests(ReusedConnectTestCase):

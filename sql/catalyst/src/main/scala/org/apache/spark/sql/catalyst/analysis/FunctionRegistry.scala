@@ -531,6 +531,7 @@ object FunctionRegistry {
     expression[ToNumber]("to_number"),
     expression[TryToNumber]("try_to_number"),
     expression[ToCharacter]("to_char"),
+    expression[ToCharacter]("to_varchar", setAlias = true, Some("3.5.0")),
     expression[GetJsonObject]("get_json_object"),
     expression[InitCap]("initcap"),
     expression[StringInstr]("instr"),
@@ -790,6 +791,13 @@ object FunctionRegistry {
     expression[BitXorAgg]("bit_xor"),
     expression[BitwiseGet]("bit_get"),
     expression[BitwiseGet]("getbit", true),
+
+    // bitmap functions and aggregates
+    expression[BitmapBucketNumber]("bitmap_bucket_number"),
+    expression[BitmapBitPosition]("bitmap_bit_position"),
+    expression[BitmapConstructAgg]("bitmap_construct_agg"),
+    expression[BitmapCount]("bitmap_count"),
+    expression[BitmapOrAgg]("bitmap_or_agg"),
 
     // json
     expression[StructsToJson]("to_json"),

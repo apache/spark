@@ -46,6 +46,8 @@ import org.apache.spark.util.{DependencyUtils, Utils}
  * @param experimentalMethods Interface to add custom planning strategies and optimizers.
  * @param functionRegistry Internal catalog for managing functions registered by the user.
  * @param udfRegistration Interface exposed to the user for registering user-defined functions.
+ * @param udtfRegistration Interface exposed to the user for registering user-defined
+ *                         table functions.
  * @param catalogBuilder a function to create an internal catalog for managing table and database
  *                       states.
  * @param sqlParser Parser that extracts expressions, plans, table identifiers etc. from SQL texts.
@@ -69,6 +71,7 @@ private[sql] class SessionState(
     val functionRegistry: FunctionRegistry,
     val tableFunctionRegistry: TableFunctionRegistry,
     val udfRegistration: UDFRegistration,
+    val udtfRegistration: UDTFRegistration,
     catalogBuilder: () => SessionCatalog,
     val sqlParser: ParserInterface,
     analyzerBuilder: () => Analyzer,
@@ -173,7 +176,9 @@ class SessionResourceLoader(session: SparkSession) extends FunctionResourceLoade
    * to add the jar to its hive client for the current session. Hence, it still needs to be in
    * [[SessionState]].
    */
-  def addJar(path: String): Unit = {
+  def addJar(path: String): Unit = addJar(path: String, sessionId = "default")
+
+  private[spark] def addJar(path: String, sessionId: String): Unit = {
     val uri = Utils.resolveURI(path)
     resolveJars(uri).foreach { p =>
       session.sparkContext.addJar(p)

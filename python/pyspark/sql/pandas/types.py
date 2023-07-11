@@ -46,6 +46,7 @@ from pyspark.sql.types import (
     StructField,
     NullType,
     DataType,
+    UserDefinedType,
     Row,
     _create_row,
 )
@@ -119,6 +120,8 @@ def to_arrow_type(dt: DataType) -> "pa.DataType":
         arrow_type = pa.struct(fields)
     elif type(dt) == NullType:
         arrow_type = pa.null()
+    elif isinstance(dt, UserDefinedType):
+        arrow_type = to_arrow_type(dt.sqlType())
     else:
         raise PySparkTypeError(
             error_class="UNSUPPORTED_DATA_TYPE_FOR_ARROW_CONVERSION",
@@ -163,7 +166,11 @@ def from_arrow_type(at: "pa.DataType", prefer_timestamp_ntz: bool = False) -> Da
         spark_type = DecimalType(precision=at.precision, scale=at.scale)
     elif types.is_string(at):
         spark_type = StringType()
+    elif types.is_large_string(at):
+        spark_type = StringType()
     elif types.is_binary(at):
+        spark_type = BinaryType()
+    elif types.is_large_binary(at):
         spark_type = BinaryType()
     elif types.is_date32(at):
         spark_type = DateType()
@@ -487,6 +494,7 @@ def _create_converter_to_pandas(
     struct_in_pandas: Optional[str] = None,
     error_on_duplicated_field_names: bool = True,
     timestamp_utc_localized: bool = True,
+    ndarray_as_list: bool = False,
 ) -> Callable[["pd.Series"], "pd.Series"]:
     """
     Create a converter of pandas Series that is created from Spark's Python objects,
@@ -513,6 +521,8 @@ def _create_converter_to_pandas(
         Whether the timestamp values are localized to UTC or not.
         The timestamp values from Arrow are localized to UTC,
         whereas the ones from `df.collect()` are localized to the local timezone.
+    ndarray_as_list : bool, optional
+        Whether `np.ndarray` is converted to a list or not (default ``False``).
 
     Returns
     -------
@@ -561,29 +571,48 @@ def _create_converter_to_pandas(
 
         return correct_dtype
 
-    def _converter(dt: DataType) -> Optional[Callable[[Any], Any]]:
+    def _converter(
+        dt: DataType, _struct_in_pandas: Optional[str], _ndarray_as_list: bool
+    ) -> Optional[Callable[[Any], Any]]:
 
         if isinstance(dt, ArrayType):
-            _element_conv = _converter(dt.elementType)
-            if _element_conv is None:
-                return None
+            _element_conv = _converter(dt.elementType, _struct_in_pandas, _ndarray_as_list)
 
-            def convert_array(value: Any) -> Any:
-                if value is None:
+            if _ndarray_as_list:
+                if _element_conv is None:
+                    _element_conv = lambda x: x  # noqa: E731
+
+                def convert_array_ndarray_as_list(value: Any) -> Any:
+                    if value is None:
+                        return None
+                    else:
+                        # In Arrow Python UDF, ArrayType is converted to `np.ndarray`
+                        # whereas a list is expected.
+                        return [_element_conv(v) for v in value]  # type: ignore[misc]
+
+                return convert_array_ndarray_as_list
+            else:
+                if _element_conv is None:
                     return None
-                elif isinstance(value, np.ndarray):
-                    # `pyarrow.Table.to_pandas` uses `np.ndarray`.
-                    return np.array([_element_conv(v) for v in value])  # type: ignore[misc]
-                else:
-                    assert isinstance(value, list)
-                    # otherwise, `list` should be used.
-                    return [_element_conv(v) for v in value]  # type: ignore[misc]
 
-            return convert_array
+                def convert_array_ndarray_as_ndarray(value: Any) -> Any:
+                    if value is None:
+                        return None
+                    elif isinstance(value, np.ndarray):
+                        # `pyarrow.Table.to_pandas` uses `np.ndarray`.
+                        return np.array([_element_conv(v) for v in value])  # type: ignore[misc]
+                    else:
+                        assert isinstance(value, list)
+                        # otherwise, `list` should be used.
+                        return [_element_conv(v) for v in value]  # type: ignore[misc]
+
+                return convert_array_ndarray_as_ndarray
 
         elif isinstance(dt, MapType):
-            _key_conv = _converter(dt.keyType) or (lambda x: x)
-            _value_conv = _converter(dt.valueType) or (lambda x: x)
+            _key_conv = _converter(dt.keyType, _struct_in_pandas, _ndarray_as_list) or (lambda x: x)
+            _value_conv = _converter(dt.valueType, _struct_in_pandas, _ndarray_as_list) or (
+                lambda x: x
+            )
 
             def convert_map(value: Any) -> Any:
                 if value is None:
@@ -599,7 +628,7 @@ def _create_converter_to_pandas(
             return convert_map
 
         elif isinstance(dt, StructType):
-            assert struct_in_pandas is not None
+            assert _struct_in_pandas is not None
 
             field_names = dt.names
 
@@ -611,9 +640,12 @@ def _create_converter_to_pandas(
 
             dedup_field_names = _dedup_names(field_names)
 
-            field_convs = [_converter(f.dataType) or (lambda x: x) for f in dt.fields]
+            field_convs = [
+                _converter(f.dataType, _struct_in_pandas, _ndarray_as_list) or (lambda x: x)
+                for f in dt.fields
+            ]
 
-            if struct_in_pandas == "row":
+            if _struct_in_pandas == "row":
 
                 def convert_struct_as_row(value: Any) -> Any:
                     if value is None:
@@ -633,7 +665,7 @@ def _create_converter_to_pandas(
 
                 return convert_struct_as_row
 
-            elif struct_in_pandas == "dict":
+            elif _struct_in_pandas == "dict":
 
                 def convert_struct_as_dict(value: Any) -> Any:
                     if value is None:
@@ -654,7 +686,7 @@ def _create_converter_to_pandas(
                 return convert_struct_as_dict
 
             else:
-                raise ValueError(f"Unknown value for `struct_in_pandas`: {struct_in_pandas}")
+                raise ValueError(f"Unknown value for `struct_in_pandas`: {_struct_in_pandas}")
 
         elif isinstance(dt, TimestampType):
             assert timezone is not None
@@ -685,10 +717,28 @@ def _create_converter_to_pandas(
 
             return convert_timestamp_ntz
 
+        elif isinstance(dt, UserDefinedType):
+            udt: UserDefinedType = dt
+
+            conv = _converter(udt.sqlType(), _struct_in_pandas="row", _ndarray_as_list=True) or (
+                lambda x: x
+            )
+
+            def convert_udt(value: Any) -> Any:
+                if value is None:
+                    return None
+                elif hasattr(value, "__UDT__"):
+                    assert isinstance(value.__UDT__, type(udt))
+                    return value
+                else:
+                    return udt.deserialize(conv(value))
+
+            return convert_udt
+
         else:
             return None
 
-    conv = _converter(data_type)
+    conv = _converter(data_type, struct_in_pandas, ndarray_as_list)
     if conv is not None:
         return lambda pser: pser.apply(conv)  # type: ignore[return-value]
     else:
@@ -779,7 +829,7 @@ def _create_converter_from_pandas(
                         for i, key in enumerate(field_names)
                     }
                 else:
-                    assert isinstance(value, Row)
+                    assert isinstance(value, tuple)
                     return {dedup_field_names[i]: field_convs[i](v) for i, v in enumerate(value)}
 
             return convert_struct
@@ -798,6 +848,19 @@ def _create_converter_from_pandas(
                     return ts.to_pydatetime()
 
             return convert_timestamp
+
+        elif isinstance(dt, UserDefinedType):
+            udt: UserDefinedType = dt
+
+            conv = _converter(udt.sqlType()) or (lambda x: x)
+
+            def convert_udt(value: Any) -> Any:
+                if value is None:
+                    return None
+                else:
+                    return conv(udt.serialize(value))
+
+            return convert_udt
 
         return None
 

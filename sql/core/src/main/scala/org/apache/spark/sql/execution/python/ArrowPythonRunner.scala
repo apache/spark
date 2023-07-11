@@ -33,6 +33,7 @@ class ArrowPythonRunner(
     argOffsets: Array[Array[Int]],
     protected override val schema: StructType,
     protected override val timeZoneId: String,
+    protected override val largeVarTypes: Boolean,
     protected override val workerConf: Map[String, String],
     val pythonMetrics: Map[String, SQLMetric])
   extends BasePythonRunner[Iterator[InternalRow], ColumnarBatch](funcs, evalType, argOffsets)

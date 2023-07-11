@@ -29,6 +29,7 @@ import org.apache.spark.{SparkException, SparkRuntimeException}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Literal, StructsToJson}
 import org.apache.spark.sql.catalyst.expressions.Cast._
+import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.execution.WholeStageCodegenExec
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
@@ -541,7 +542,7 @@ class JsonFunctionsSuite extends QueryTest with SharedSparkSession {
     )
 
     checkError(
-      exception = intercept[AnalysisException] {
+      exception = intercept[ParseException] {
         df3.selectExpr("""from_json(value, 'time InvalidType')""")
       },
       errorClass = "PARSE_SYNTAX_ERROR",
@@ -838,7 +839,7 @@ class JsonFunctionsSuite extends QueryTest with SharedSparkSession {
       }.getCause
       checkError(
         exception = exception1.asInstanceOf[SparkException],
-        errorClass = "MALFORMED_RECORD_IN_PARSING",
+        errorClass = "MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION",
         parameters = Map(
           "badRecord" -> "[null,null,{\"a\" 1, \"b\": 11}]",
           "failFastMode" -> "FAILFAST")
@@ -873,7 +874,7 @@ class JsonFunctionsSuite extends QueryTest with SharedSparkSession {
 
       checkError(
         exception = exception.asInstanceOf[SparkException],
-        errorClass = "MALFORMED_RECORD_IN_PARSING",
+        errorClass = "MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION",
         parameters = Map(
           "badRecord" -> "[null,11,{\"a\": \"1\", \"b\": 11}]",
           "failFastMode" -> "FAILFAST")
@@ -1151,7 +1152,7 @@ class JsonFunctionsSuite extends QueryTest with SharedSparkSession {
     val invalidJsonSchema = """{"fields": [{"a":123}], "type": "struct"}"""
     val invalidJsonSchemaReason = "Failed to convert the JSON string '{\"a\":123}' to a field."
     checkError(
-      exception = intercept[AnalysisException] {
+      exception = intercept[SparkException] {
         df.select(from_json($"json", invalidJsonSchema, Map.empty[String, String])).collect()
       },
       errorClass = "INVALID_SCHEMA.PARSE_ERROR",
@@ -1166,7 +1167,7 @@ class JsonFunctionsSuite extends QueryTest with SharedSparkSession {
       "was expecting (JSON String, Number, Array, Object or token 'null', 'true' or 'false')\n " +
       "at [Source: (String)\"MAP<INT, cow>\"; line: 1, column: 4]"
     checkError(
-      exception = intercept[AnalysisException] {
+      exception = intercept[SparkException] {
         df.select(from_json($"json", invalidDataType, Map.empty[String, String])).collect()
       },
       errorClass = "INVALID_SCHEMA.PARSE_ERROR",
@@ -1181,7 +1182,7 @@ class JsonFunctionsSuite extends QueryTest with SharedSparkSession {
       "was expecting (JSON String, Number, Array, Object or token 'null', 'true' or 'false')\n" +
       " at [Source: (String)\"x INT, a cow\"; line: 1, column: 2]"
     checkError(
-      exception = intercept[AnalysisException] {
+      exception = intercept[SparkException] {
         df.select(from_json($"json", invalidTableSchema, Map.empty[String, String])).collect()
       },
       errorClass = "INVALID_SCHEMA.PARSE_ERROR",
@@ -1206,7 +1207,7 @@ class JsonFunctionsSuite extends QueryTest with SharedSparkSession {
         }.getCause
         checkError(
           exception = exception1.asInstanceOf[SparkException],
-          errorClass = "MALFORMED_RECORD_IN_PARSING",
+          errorClass = "MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION",
           parameters = Map(
             "badRecord" -> "[null,null]",
             "failFastMode" -> "FAILFAST")
@@ -1217,7 +1218,7 @@ class JsonFunctionsSuite extends QueryTest with SharedSparkSession {
         }.getCause
         checkError(
           exception = exception2.asInstanceOf[SparkException],
-          errorClass = "MALFORMED_RECORD_IN_PARSING",
+          errorClass = "MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION",
           parameters = Map(
             "badRecord" -> "[null,null]",
             "failFastMode" -> "FAILFAST")
@@ -1240,7 +1241,7 @@ class JsonFunctionsSuite extends QueryTest with SharedSparkSession {
         }.getCause
         checkError(
           exception = exception1.asInstanceOf[SparkException],
-          errorClass = "MALFORMED_RECORD_IN_PARSING",
+          errorClass = "MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION",
           parameters = Map(
             "badRecord" -> "[null]",
             "failFastMode" -> "FAILFAST")
@@ -1251,7 +1252,7 @@ class JsonFunctionsSuite extends QueryTest with SharedSparkSession {
         }.getCause
         checkError(
           exception = exception2.asInstanceOf[SparkException],
-          errorClass = "MALFORMED_RECORD_IN_PARSING",
+          errorClass = "MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION",
           parameters = Map(
             "badRecord" -> "[null]",
             "failFastMode" -> "FAILFAST")
@@ -1370,6 +1371,27 @@ class JsonFunctionsSuite extends QueryTest with SharedSparkSession {
         "type" -> "\"JAVA.LANG.INTEGER\""
       )
     )
+  }
+
+  test("json_array_length function") {
+    val df = Seq(null, "[]", "[1, 2, 3]", "{\"key\": 1}", "invalid json")
+      .toDF("a")
+
+    val expected = Seq(Row(null), Row(0), Row(3), Row(null), Row(null))
+
+    checkAnswer(df.selectExpr("json_array_length(a)"), expected)
+    checkAnswer(df.select(json_array_length($"a")), expected)
+  }
+
+  test("json_object_keys function") {
+    val df = Seq(null, "{}", "{\"key1\":1, \"key2\": 2}", "[1, 2, 3]", "invalid json")
+      .toDF("a")
+
+    val expected = Seq(Row(null), Row(Seq.empty),
+      Row(Seq("key1", "key2")), Row(null), Row(null))
+
+    checkAnswer(df.selectExpr("json_object_keys(a)"), expected)
+    checkAnswer(df.select(json_object_keys($"a")), expected)
   }
 
   test("GET_JSON_OBJECT Codegen Support") {

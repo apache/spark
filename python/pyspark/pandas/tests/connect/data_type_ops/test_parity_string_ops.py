@@ -34,34 +34,6 @@ class StringOpsParityTests(
     def test_astype(self):
         super().test_astype()
 
-    @unittest.skip("TODO(SPARK-43692): Fix StringOps.ge to work with Spark Connect.")
-    def test_ge(self):
-        super().test_ge()
-
-    @unittest.skip("TODO(SPARK-43693): Fix StringOps.gt to work with Spark Connect.")
-    def test_gt(self):
-        super().test_gt()
-
-    @unittest.skip("TODO(SPARK-43694): Fix StringOps.le to work with Spark Connect.")
-    def test_le(self):
-        super().test_le()
-
-    @unittest.skip("TODO(SPARK-43695): Fix StringOps.lt to work with Spark Connect.")
-    def test_lt(self):
-        super().test_lt()
-
-    @unittest.skip(
-        "TODO(SPARK-43621): Enable pyspark.pandas.spark.functions.repeat in Spark Connect."
-    )
-    def test_mul(self):
-        super().test_mul()
-
-    @unittest.skip(
-        "TODO(SPARK-43621): Enable pyspark.pandas.spark.functions.repeat in Spark Connect."
-    )
-    def test_rmul(self):
-        super().test_rmul()
-
 
 if __name__ == "__main__":
     from pyspark.pandas.tests.connect.data_type_ops.test_parity_string_ops import *  # noqa: F401
