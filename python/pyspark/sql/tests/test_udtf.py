@@ -23,7 +23,14 @@ from py4j.protocol import Py4JJavaError
 
 from pyspark.errors import PythonException, AnalysisException
 from pyspark.sql.functions import lit, udtf
-from pyspark.sql.types import Row
+from pyspark.sql.types import (
+    DataType,
+    IntegerType,
+    LongType,
+    Row,
+    StringType,
+    StructType,
+)
 from pyspark.testing.sqlutils import ReusedSQLTestCase
 
 
@@ -588,6 +595,96 @@ class UDTFTestsMixin:
                     Row(a=1, b=2),
                 ],
             )
+
+    def test_simple_udtf_with_analyze(self):
+        class TestUDTF:
+            @staticmethod
+            def analyze() -> StructType:
+                return StructType().add("c1", StringType()).add("c2", StringType())
+
+            def eval(self):
+                yield "hello", "world"
+
+        func = udtf(TestUDTF)
+        rows = func().collect()
+        self.assertEqual(rows, [Row(c1="hello", c2="world")])
+
+    def test_udtf_with_analyze(self):
+        class TestUDTF:
+            @staticmethod
+            def analyze(a) -> StructType:
+                assert isinstance(a, dict)
+                assert isinstance(a["data_type"], DataType)
+                assert a["literal"] is not None
+                assert a["is_table"] is False
+                return StructType().add("a", a["data_type"])
+
+            def eval(self, a):
+                yield a,
+
+        func = udtf(TestUDTF)
+
+        df1 = func(lit(1))
+        self.assertEquals(df1.schema, StructType().add("a", IntegerType()))
+        self.assertEqual(df1.collect(), [Row(a=1)])
+
+        df2 = func(lit("x"))
+        self.assertEquals(df2.schema, StructType().add("a", StringType()))
+        self.assertEqual(df2.collect(), [Row(a="x")])
+
+    def test_udtf_with_analyze_multiple_arguments(self):
+        class TestUDTF:
+            @staticmethod
+            def analyze(a, b) -> StructType:
+                return StructType().add("a", a["data_type"]).add("b", b["data_type"])
+
+            def eval(self, a, b):
+                yield a, b
+
+        func = udtf(TestUDTF)
+
+        df = func(lit(1), lit("x"))
+        self.assertEquals(df.schema, StructType().add("a", IntegerType()).add("b", StringType()))
+        self.assertEqual(df.collect(), [Row(a=1, b="x")])
+
+    def test_udtf_with_analyze_table_argument(self):
+        class TestUDTF:
+            @staticmethod
+            def analyze(a) -> StructType:
+                assert isinstance(a, dict)
+                assert isinstance(a["data_type"], StructType)
+                assert a["literal"] is None
+                assert a["is_table"] is True
+                return StructType().add("a", a["data_type"][0].dataType)
+
+            def eval(self, row: Row):
+                if row["id"] > 5:
+                    yield row["id"],
+
+        func = udtf(TestUDTF)
+        self.spark.udtf.register("test_udtf", func)
+
+        df = self.spark.sql("SELECT * FROM test_udtf(TABLE (SELECT id FROM range(0, 8)))")
+        self.assertEqual(df.schema, StructType().add("a", LongType()))
+        self.assertEqual(df.collect(), [Row(a=6), Row(a=7)])
+
+    def test_simple_udtf_with_non_static_analyze(self):
+        class TestUDTF:
+            def analyze(self) -> StructType:
+                return StructType().add("c1", StringType()).add("c2", StringType())
+
+            def eval(self):
+                yield "hello", "world"
+
+        func = udtf(TestUDTF)
+
+        with self.assertRaisesRegex(
+            AnalysisException,
+            "Failed to execute the user defined table function because it has not "
+            "implemented the 'analyze' static function. "
+            "Please add the 'analyze' static function and try the query again.",
+        ):
+            func().collect()
 
 
 class UDTFTests(UDTFTestsMixin, ReusedSQLTestCase):

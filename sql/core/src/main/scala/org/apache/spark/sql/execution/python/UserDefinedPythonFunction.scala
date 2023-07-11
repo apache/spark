@@ -17,10 +17,23 @@
 
 package org.apache.spark.sql.execution.python
 
-import org.apache.spark.api.python.{PythonEvalType, PythonFunction}
-import org.apache.spark.sql.{Column, DataFrame, Dataset, SparkSession}
-import org.apache.spark.sql.catalyst.expressions.{Expression, PythonUDAF, PythonUDF, PythonUDTF}
+import java.io.{BufferedInputStream, BufferedOutputStream, DataInputStream, DataOutputStream, EOFException}
+import java.net.Socket
+import java.nio.charset.StandardCharsets
+import java.util.HashMap
+
+import scala.collection.JavaConverters._
+
+import net.razorvine.pickle.Pickler
+
+import org.apache.spark.{SparkEnv, SparkException}
+import org.apache.spark.api.python.{PythonEvalType, PythonFunction, PythonRDD, SpecialLengths}
+import org.apache.spark.internal.config.BUFFER_SIZE
+import org.apache.spark.internal.config.Python._
+import org.apache.spark.sql.{AnalysisException, Column, DataFrame, Dataset, SparkSession}
+import org.apache.spark.sql.catalyst.expressions.{Expression, FunctionTableSubqueryArgumentExpression, PythonUDAF, PythonUDF, PythonUDTF}
 import org.apache.spark.sql.catalyst.plans.logical.{Generate, LogicalPlan, OneRowRelation}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DataType, StructType}
 
 /**
@@ -63,14 +76,29 @@ case class UserDefinedPythonFunction(
 case class UserDefinedPythonTableFunction(
     name: String,
     func: PythonFunction,
-    returnType: StructType,
+    returnType: Option[StructType],
     udfDeterministic: Boolean) {
+
+  def this(
+      name: String,
+      func: PythonFunction,
+      returnType: StructType,
+      udfDeterministic: Boolean) = {
+    this(name, func, Some(returnType), udfDeterministic)
+  }
+
+  def this(
+      name: String,
+      func: PythonFunction,
+      udfDeterministic: Boolean) = {
+    this(name, func, None, udfDeterministic)
+  }
 
   def builder(e: Seq[Expression]): LogicalPlan = {
     val udtf = PythonUDTF(
       name = name,
       func = func,
-      elementSchema = returnType,
+      elementSchema = returnType.getOrElse(UserDefinedPythonTableFunction.analyzeInPython(func, e)),
       children = e,
       udfDeterministic = udfDeterministic)
     Generate(
@@ -87,5 +115,94 @@ case class UserDefinedPythonTableFunction(
   def apply(session: SparkSession, exprs: Column*): DataFrame = {
     val udtf = builder(exprs.map(_.expr))
     Dataset.ofRows(session, udtf)
+  }
+}
+
+object UserDefinedPythonTableFunction {
+
+  private[this] val workerModule = "pyspark.sql.worker.analyze_udtf"
+
+  def analyzeInPython(func: PythonFunction, e: Seq[Expression]): StructType = {
+    val env = SparkEnv.get
+    val bufferSize: Int = env.conf.get(BUFFER_SIZE)
+    val authSocketTimeout = env.conf.get(PYTHON_AUTH_SOCKET_TIMEOUT)
+    val reuseWorker = env.conf.get(PYTHON_WORKER_REUSE)
+    val simplifiedTraceback: Boolean = SQLConf.get.pysparkSimplifiedTraceback
+
+    val envVars = new HashMap[String, String](func.envVars)
+    val pythonExec = func.pythonExec
+    val pythonVer = func.pythonVer
+
+    if (reuseWorker) {
+      envVars.put("SPARK_REUSE_WORKER", "1")
+    }
+    if (simplifiedTraceback) {
+      envVars.put("SPARK_SIMPLIFIED_TRACEBACK", "1")
+    }
+    envVars.put("SPARK_AUTH_SOCKET_TIMEOUT", authSocketTimeout.toString)
+    envVars.put("SPARK_BUFFER_SIZE", bufferSize.toString)
+
+    val pickler = new Pickler(/* useMemo = */ true,
+      /* valueCompare = */ false)
+
+    try {
+      val (worker: Socket, _) =
+        env.createPythonWorker(pythonExec, workerModule, envVars.asScala.toMap)
+
+      val dataOut =
+        new DataOutputStream(new BufferedOutputStream(worker.getOutputStream, bufferSize))
+      val dataIn = new DataInputStream(new BufferedInputStream(worker.getInputStream, bufferSize))
+
+      // Python version of driver
+      PythonRDD.writeUTF(pythonVer, dataOut)
+
+      // Send Python UDTF
+      dataOut.writeInt(func.command.length)
+      dataOut.write(func.command.toArray)
+
+      // Send arguments
+      dataOut.writeInt(e.length)
+      e.foreach { expr =>
+        PythonRDD.writeUTF(expr.dataType.json, dataOut)
+        if (expr.foldable) {
+          dataOut.writeBoolean(true)
+          val obj = pickler.dumps(EvaluatePython.toJava(expr.eval(), expr.dataType))
+          dataOut.writeInt(obj.length)
+          dataOut.write(obj)
+        } else {
+          dataOut.writeBoolean(false)
+        }
+        dataOut.writeBoolean(expr.isInstanceOf[FunctionTableSubqueryArgumentExpression])
+      }
+
+      dataOut.writeInt(SpecialLengths.END_OF_STREAM)
+      dataOut.flush()
+
+      // Receive the schema
+      val schema = dataIn.readInt() match {
+        case length if length >= 0 =>
+          val obj = new Array[Byte](length)
+          dataIn.readFully(obj)
+          DataType.fromJson(new String(obj, StandardCharsets.UTF_8)).asInstanceOf[StructType]
+
+        case SpecialLengths.PYTHON_EXCEPTION_THROWN =>
+          val exLength = dataIn.readInt()
+          val obj = new Array[Byte](exLength)
+          dataIn.readFully(obj)
+          throw new AnalysisException(new String(obj, StandardCharsets.UTF_8))
+      }
+
+      dataIn.readInt() match {
+        case SpecialLengths.END_OF_STREAM if reuseWorker =>
+          env.releasePythonWorker(pythonExec, workerModule, envVars.asScala.toMap, worker)
+        case _ =>
+          env.destroyPythonWorker(pythonExec, workerModule, envVars.asScala.toMap, worker)
+      }
+
+      schema
+    } catch {
+      case eof: EOFException =>
+        throw new SparkException("Python worker exited unexpectedly (crashed)", eof)
+    }
   }
 }

@@ -15513,7 +15513,7 @@ def udf(
 def udtf(
     cls: Optional[Type] = None,
     *,
-    returnType: Union[StructType, str],
+    returnType: Optional[Union[StructType, str]] = None,
 ) -> Union[UserDefinedTableFunction, functools.partial]:
     """Creates a user defined table function (UDTF).
 
@@ -15523,9 +15523,10 @@ def udtf(
     ----------
     cls : class
         the Python user-defined table function handler class.
-    returnType : :class:`pyspark.sql.types.StructType` or str
+    returnType : :class:`pyspark.sql.types.StructType` or str, optional
         the return type of the user-defined table function. The value can be either a
         :class:`pyspark.sql.types.StructType` object or a DDL-formatted struct type string.
+        If None, the handler class must provide `analyze` static function.
 
     Examples
     --------

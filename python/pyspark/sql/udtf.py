@@ -37,7 +37,7 @@ __all__ = ["UDTFRegistration"]
 
 def _create_udtf(
     cls: Type,
-    returnType: Union[StructType, str],
+    returnType: Optional[Union[StructType, str]],
     name: Optional[str] = None,
     deterministic: bool = True,
 ) -> "UserDefinedTableFunction":
@@ -65,7 +65,7 @@ class UserDefinedTableFunction:
     def __init__(
         self,
         func: Type,
-        returnType: Union[StructType, str],
+        returnType: Optional[Union[StructType, str]],
         name: Optional[str] = None,
         deterministic: bool = True,
     ):
@@ -87,7 +87,9 @@ class UserDefinedTableFunction:
         self.deterministic = deterministic
 
     @property
-    def returnType(self) -> StructType:
+    def returnType(self) -> Optional[StructType]:
+        if self._returnType is None:
+            return None
         # `_parse_datatype_string` accesses to JVM for parsing a DDL formatted string.
         # This makes sure this is called after SparkContext is initialized.
         if self._returnType_placeholder is None:
@@ -119,11 +121,16 @@ class UserDefinedTableFunction:
         sc = spark.sparkContext
 
         wrapped_func = _wrap_function(sc, func)
-        jdt = spark._jsparkSession.parseDataType(self.returnType.json())
         assert sc._jvm is not None
-        judtf = sc._jvm.org.apache.spark.sql.execution.python.UserDefinedPythonTableFunction(
-            self._name, wrapped_func, jdt, self.deterministic
-        )
+        if self.returnType is None:
+            judtf = sc._jvm.org.apache.spark.sql.execution.python.UserDefinedPythonTableFunction(
+                self._name, wrapped_func, self.deterministic
+            )
+        else:
+            jdt = spark._jsparkSession.parseDataType(self.returnType.json())
+            judtf = sc._jvm.org.apache.spark.sql.execution.python.UserDefinedPythonTableFunction(
+                self._name, wrapped_func, jdt, self.deterministic
+            )
         return judtf
 
     def __call__(self, *cols: "ColumnOrName") -> "DataFrame":
