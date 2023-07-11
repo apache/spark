@@ -65,9 +65,17 @@ Attach a comment to the namespace `<namespace>`.
 
 DESC TABLE COLUMN for a specific partition.
 
+## DROP_DATABASE
+
+Drop the default database `<database>`.
+
 ## DROP_NAMESPACE
 
 Drop the namespace `<namespace>`.
+
+## HIVE_TABLE_TYPE
+
+The `<tableName>` is hive `<tableType>`.
 
 ## HIVE_WITH_ANSI_INTERVALS
 

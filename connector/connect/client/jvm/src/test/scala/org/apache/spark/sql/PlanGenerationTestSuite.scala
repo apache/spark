@@ -2873,6 +2873,10 @@ class PlanGenerationTestSuite
     fn.random(lit(1))
   }
 
+  functionTest("call_function") {
+    fn.call_function("lower", fn.col("g"))
+  }
+
   test("hll_sketch_agg with column lgConfigK") {
     binary.select(fn.hll_sketch_agg(fn.col("bytes"), lit(0)))
   }

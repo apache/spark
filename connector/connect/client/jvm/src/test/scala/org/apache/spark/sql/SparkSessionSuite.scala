@@ -16,6 +16,8 @@
  */
 package org.apache.spark.sql
 
+import io.grpc.{CallOptions, Channel, ClientCall, ClientInterceptor, MethodDescriptor}
+
 import org.apache.spark.sql.connect.client.util.ConnectFunSuite
 
 /**
@@ -71,6 +73,24 @@ class SparkSessionSuite extends ConnectFunSuite {
     } finally {
       session1.close()
       session2.close()
+    }
+  }
+
+  test("Custom Interceptor") {
+    val session = SparkSession
+      .builder()
+      .interceptor(new ClientInterceptor {
+        override def interceptCall[ReqT, RespT](
+            methodDescriptor: MethodDescriptor[ReqT, RespT],
+            callOptions: CallOptions,
+            channel: Channel): ClientCall[ReqT, RespT] = {
+          throw new RuntimeException("Blocked")
+        }
+      })
+      .create()
+
+    assertThrows[RuntimeException] {
+      session.range(10).count()
     }
   }
 }
