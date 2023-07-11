@@ -2908,7 +2908,6 @@
               <arg>-deprecation</arg>
               <arg>-feature</arg>
               <arg>-explaintypes</arg>
-              <arg>-target:jvm-1.8</arg>
               <arg>-Xfatal-warnings</arg>
               <arg>-Ywarn-unused:imports</arg>
               <arg>-P:silencer:globalFilters=.*deprecated.*</arg>
@@ -3619,7 +3618,6 @@
                   <arg>-deprecation</arg>
                   <arg>-feature</arg>
                   <arg>-explaintypes</arg>
-                  <arg>-target:jvm-1.8</arg>
                   <arg>-Wconf:cat=deprecation:wv,any:e</arg>
                   <arg>-Wunused:imports</arg>
                   <!--
