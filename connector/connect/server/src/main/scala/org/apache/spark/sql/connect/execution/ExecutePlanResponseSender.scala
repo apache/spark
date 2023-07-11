@@ -31,25 +31,28 @@ import org.apache.spark.internal.Logging
  * @param responseObserver the GRPC request StreamObserver
  */
 private[connect] class ExecutePlanResponseSender(
-  executionObserver: ExecutePlanResponseObserver,
   grpcObserver: StreamObserver[ExecutePlanResponse]) extends Logging {
 
   private var detached = false
 
+  /** Detach this sender from executionObserver.
+   *  Called only from executionObserver that this sender is attached to.
+   *  executionObserver holds lock, and needs to notify after this call. */
   def detach(): Unit = {
-    executionObserver.synchronized {
-      this.detached = true
-      executionObserver.notifyAll()
+    if (detached == true) {
+      throw new IllegalStateException("ExecutePlanResponseSender already detached!")
     }
+    detached = true
   }
 
   /**
    * Receive responses from executionObserver and send them to grpcObserver.
    * @param lastSentIndex Start sending the stream from response after this.
-   * @return true if finished because stream completed
-   *         false if finished because stream was detached
+   * @return true if the execution was detached before stream completed.
+   *         The caller needs to finish the grpcObserver stream
+   *         false if stream was finished. In this case, grpcObserver stream is already completed.
    */
-  def run(lastSentIndex: Long): Boolean = {
+  def run(executionObserver: ExecutePlanResponseObserver, lastSentIndex: Long): Boolean = {
     // register to be notified about available responses.
     executionObserver.setExecutePlanResponseSender(this)
 
@@ -86,7 +89,6 @@ private[connect] class ExecutePlanResponseSender(
       if (detached) {
         // This sender got detached by the observer.
         logDebug(s"Detached from observer at index ${nextIndex - 1}. Complete stream.")
-        grpcObserver.onCompleted()
         finished = true
       } else if (response.isDefined) {
         // There is a response available to be sent.
@@ -106,6 +108,6 @@ private[connect] class ExecutePlanResponseSender(
       }
     }
     // Return true if stream finished, or false if was detached.
-    !detached
+    detached
   }
 }

@@ -49,10 +49,7 @@ class SparkConnectPlanExecution(executeHolder: ExecuteHolder) {
   private val session = executeHolder.session
 
   def handlePlan(responseObserver: ExecutePlanResponseObserver): Unit = {
-    val request = executeHolder.executePlanRequest.getOrElse {
-      throw new IllegalStateException(
-        s"Execution ${executeHolder.operationId} doesn't have an ExecutePlanRequest.")
-    }
+    val request = executeHolder.request
     if (request.getPlan.getOpTypeCase != proto.Plan.OpTypeCase.ROOT) {
       throw new IllegalStateException(
         s"Illegal operation type ${request.getPlan.getOpTypeCase} to be handled here.")

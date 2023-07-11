@@ -39,7 +39,6 @@ private[connect] class ExecutePlanResponseObserver()
   // Cached stream state.
   private val responses = new ListBuffer[CachedExecutePlanResponse]()
   private var error: Option[Throwable] = None
-  private var completed: Boolean = false
   private var lastIndex: Option[Long] = None // index of last response before completed.
   private var index: Long = 0 // first response will have index 1
 
@@ -77,7 +76,10 @@ private[connect] class ExecutePlanResponseObserver()
 
   /** Set a new response sender. */
   def setExecutePlanResponseSender(newSender: ExecutePlanResponseSender): Unit = synchronized {
-    responseSender.foreach(_.detach()) // detach the current sender before attaching new one
+    // detach the current sender before attaching new one
+    // this.synchronized() needs to be held while detaching a sender, and the detached sender
+    // needs to be notified with notifyAll() afterwards.
+    responseSender.foreach(_.detach())
     responseSender = Some(newSender)
     notifyAll()
   }
@@ -110,5 +112,9 @@ private[connect] class ExecutePlanResponseObserver()
   /** If the stream is finished, the index of the last response, otherwise unset. */
   def getLastIndex(): Option[Long] = synchronized {
     lastIndex
+  }
+
+  def completed(): Boolean = synchronized {
+    lastIndex.isDefined
   }
 }

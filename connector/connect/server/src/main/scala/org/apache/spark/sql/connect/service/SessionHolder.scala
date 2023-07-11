@@ -26,6 +26,7 @@ import scala.util.control.NonFatal
 
 import org.apache.spark.JobArtifactSet
 import org.apache.spark.SparkException
+import org.apache.spark.connect.proto.ExecutePlanRequest
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.SparkSession
@@ -46,10 +47,10 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
   // foreachBatch() in Streaming. Lazy since most sessions don't need it.
   private lazy val dataFrameCache: ConcurrentMap[String, DataFrame] = new ConcurrentHashMap()
 
-  private[connect] def createExecuteHolder(): ExecuteHolder = {
+  private[connect] def createExecuteHolder(request: ExecutePlanRequest): ExecuteHolder = {
 
     val operationId = UUID.randomUUID().toString
-    val executePlanHolder = ExecuteHolder(operationId, this)
+    val executePlanHolder = ExecuteHolder(request, operationId, this)
     assert(executions.putIfAbsent(operationId, executePlanHolder) == null)
     executePlanHolder
   }
@@ -63,7 +64,7 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
       // Eat exception while trying to interrupt a given execution and move forward.
       try {
         logDebug(s"Interrupting execution ${execute.operationId}")
-        execute.interrupt()
+        execute.runner.interrupt()
       } catch {
         case NonFatal(e) =>
           logWarning(s"Exception $e while trying to interrupt execution ${execute.operationId}")

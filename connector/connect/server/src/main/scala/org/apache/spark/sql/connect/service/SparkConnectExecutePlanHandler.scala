@@ -21,6 +21,7 @@ import io.grpc.stub.StreamObserver
 
 import org.apache.spark.connect.proto.{ExecutePlanRequest, ExecutePlanResponse}
 import org.apache.spark.internal.Logging
+import org.apache.spark.sql.connect.execution.ExecutePlanResponseSender
 
 class SparkConnectExecutePlanHandler(responseObserver: StreamObserver[ExecutePlanResponse])
     extends Logging {
@@ -28,10 +29,19 @@ class SparkConnectExecutePlanHandler(responseObserver: StreamObserver[ExecutePla
   def handle(v: ExecutePlanRequest): Unit = {
     val sessionHolder = SparkConnectService
       .getOrCreateIsolatedSession(v.getUserContext.getUserId, v.getSessionId)
-    val executeHolder = sessionHolder.createExecuteHolder()
+    val executeHolder = sessionHolder.createExecuteHolder(v)
+
     try {
-      executeHolder.run(v, responseObserver)
+      executeHolder.start()
+      val responseSender = new ExecutePlanResponseSender(responseObserver)
+      val detached = executeHolder.attachRpc(responseSender, 0)
+      if (detached) {
+        // Detached before execution finished.
+        // TODO this doesn't happen yet without reattachable execution.
+        responseObserver.onCompleted()
+      }
     } finally {
+      executeHolder.runner.join()
       sessionHolder.removeExecutePlanHolder(executeHolder.operationId)
     }
   }

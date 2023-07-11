@@ -17,198 +17,32 @@
 
 package org.apache.spark.sql.connect.service
 
-import scala.util.control.NonFatal
-
-import com.google.protobuf.Message
-import io.grpc.stub.StreamObserver
-import org.apache.commons.lang3.StringUtils
-
-import org.apache.spark.SparkSQLException
 import org.apache.spark.connect.proto
-import org.apache.spark.connect.proto.{ExecutePlanRequest, ExecutePlanResponse}
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.connect.common.ProtoUtils
-import org.apache.spark.sql.connect.execution.{ExecutePlanResponseObserver, ExecutePlanResponseSender, SparkConnectPlanExecution}
-import org.apache.spark.sql.connect.planner.SparkConnectPlanner
-import org.apache.spark.sql.connect.utils.ErrorUtils
-import org.apache.spark.util.Utils
+import org.apache.spark.sql.connect.execution.{ExecutePlanResponseObserver, ExecutePlanResponseSender, ExecuteRunner}
 
 /**
  * Object used to hold the Spark Connect execution state, and perform
  */
-case class ExecuteHolder(operationId: String, sessionHolder: SessionHolder) extends Logging {
+case class ExecuteHolder(
+    request: proto.ExecutePlanRequest,
+    operationId: String,
+    sessionHolder: SessionHolder) extends Logging {
 
   val jobTag =
     s"User_${sessionHolder.userId}_Session_${sessionHolder.sessionId}_Request_${operationId}"
 
   val session = sessionHolder.session
 
-  var executePlanRequest: Option[proto.ExecutePlanRequest] = None
+  var responseObserver: ExecutePlanResponseObserver = new ExecutePlanResponseObserver()
 
-  var executePlanResponseObserver: Option[ExecutePlanResponseObserver] = None
+  var runner: ExecuteRunner = new ExecuteRunner(this)
 
-  var executePlanResponseSender: Option[ExecutePlanResponseSender] = None
-
-  private var executionThread: Thread = null
-
-  private var executionError: Option[Throwable] = None
-
-  private var interrupted: Boolean = false
-
-  def run(
-      request: proto.ExecutePlanRequest,
-      responseObserver: StreamObserver[ExecutePlanResponse]): Unit = {
-    // Set the state of what needs to be run.
-    this.executePlanRequest = Some(request)
-    this.executePlanResponseObserver = Some(new ExecutePlanResponseObserver())
-    this.executePlanResponseSender = Some(new ExecutePlanResponseSender(
-      executionObserver = this.executePlanResponseObserver.get,
-      grpcObserver = responseObserver))
-
-    // And start the execution.
-    startExecute()
+  def start(): Unit = {
+    runner.start()
   }
 
-  protected def startExecute(): Unit = {
-    // synchronized in case of interrupt while starting.
-    synchronized {
-      // The newly created thread will inherit all InheritableThreadLocals used by Spark,
-      // e.g. SparkContext.localProperties./ If considering implementing a threadpool,
-      // forwarding of thread locals needs to be taken into account.
-      this.executionThread = new Thread() {
-        override def run(): Unit = {
-          try {
-            execute()
-          } catch {
-            ErrorUtils.handleError(
-              "execute",
-              executePlanResponseObserver.get,
-              sessionHolder.userId,
-              sessionHolder.sessionId)
-          }
-        }
-      }
-    }
-
-    try {
-      // Start execution thread..
-      this.executionThread.start()
-      // Send back the responses received.
-      this.executePlanResponseSender.foreach(_.run(0))
-      // TODO: Detach execution from RPC request. Then this can return early, and results
-      // are served to the client via additional RPCs.
-      this.executionThread.join()
-
-      executionError.foreach { error =>
-        logDebug(s"executionError: ${error}")
-        throw error
-      }
-    } catch {
-      case NonFatal(e) =>
-        // In case of exception happening on the handler thread, interrupt the underlying execution.
-        this.interrupt()
-        throw e
-    }
-  }
-
-  protected def execute() = {
-    try {
-      // synchronized - check if already got interrupted while starting.
-      synchronized {
-        if (interrupted) {
-          throw new InterruptedException()
-        }
-      }
-
-      // `withSession` ensures that session-specific artifacts (such as JARs and class files) are
-      // available during processing.
-      sessionHolder.withSession { session =>
-        val debugString = requestString(executePlanRequest.get)
-
-        // Set tag for query cancellation
-        session.sparkContext.addJobTag(jobTag)
-        session.sparkContext.setJobDescription(
-          s"Spark Connect - ${StringUtils.abbreviate(debugString, 128)}")
-        session.sparkContext.setInterruptOnCancel(true)
-
-        // Add debug information to the query execution so that the jobs are traceable.
-        session.sparkContext.setLocalProperty(
-          "callSite.short",
-          s"Spark Connect - ${StringUtils.abbreviate(debugString, 128)}")
-        session.sparkContext.setLocalProperty(
-          "callSite.long",
-          StringUtils.abbreviate(debugString, 2048))
-
-        executePlanRequest.foreach { request =>
-          request.getPlan.getOpTypeCase match {
-            case proto.Plan.OpTypeCase.COMMAND => handleCommand(request)
-            case proto.Plan.OpTypeCase.ROOT => handlePlan(request)
-            case _ =>
-              throw new UnsupportedOperationException(
-                s"${request.getPlan.getOpTypeCase} not supported.")
-          }
-        }
-      }
-    } catch {
-      // Actually do need to catch Throwable as some failures don't inherit from Exception and
-      // HiveServer will silently swallow them.
-      case e: Throwable =>
-        // scalastyle:off
-        logDebug(s"Exception in execute: $e")
-        // Always cancel all remaining execution after error.
-        sessionHolder.session.sparkContext.cancelJobsWithTag(jobTag)
-        if (interrupted) {
-          // Turn the interrupt into OPERATION_CANCELLED error.
-          throw new SparkSQLException("OPERATION_CANCELLED", Map.empty)
-        } else {
-          // Rethrown the original error.
-          throw e
-        }
-    } finally {
-      session.sparkContext.removeJobTag(jobTag)
-    }
-  }
-
-  def interrupt(): Unit = {
-    synchronized {
-      interrupted = true
-      if (executionThread != null) {
-        executionThread.interrupt()
-      }
-    }
-  }
-
-  private def handlePlan(request: ExecutePlanRequest): Unit = {
-    val request = executePlanRequest.get
-    val responseObserver = executePlanResponseObserver.get
-
-    val execution = new SparkConnectPlanExecution(this)
-    execution.handlePlan(responseObserver)
-  }
-
-  private def handleCommand(request: ExecutePlanRequest): Unit = {
-    val request = executePlanRequest.get
-    val responseObserver = executePlanResponseObserver.get
-
-    val command = request.getPlan.getCommand
-    val planner = new SparkConnectPlanner(sessionHolder)
-    planner.process(
-      command = command,
-      userId = request.getUserContext.getUserId,
-      sessionId = request.getSessionId,
-      responseObserver = responseObserver)
-    responseObserver.onCompleted()
-  }
-
-  private def requestString(request: Message) = {
-    try {
-      Utils.redact(
-        sessionHolder.session.sessionState.conf.stringRedactionPattern,
-        ProtoUtils.abbreviate(request).toString)
-    } catch {
-      case NonFatal(e) =>
-        logWarning("Fail to extract debug information", e)
-        "UNKNOWN"
-    }
+  def attachRpc(responseSender: ExecutePlanResponseSender, lastSeenIndex: Long): Boolean = {
+    responseSender.run(responseObserver, lastSeenIndex)
   }
 }
