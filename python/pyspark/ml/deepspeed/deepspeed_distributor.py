@@ -25,7 +25,6 @@ from typing import (
     Dict,
     Optional,
     Any,
-    Tuple,
 )
 
 from pyspark.ml.torch.distributor import TorchDistributor
@@ -44,8 +43,9 @@ class DeepspeedTorchDistributor(TorchDistributor):
         deepspeed_config: Optional[Union[str, Dict[str, Any]]] = None,
     ):
         """
-        This class is used to run deepspeed training workloads with spark clusters. The user has the option to
-        specify the number of gpus per node and the number of nodes (the same as if running from terminal),
+        This class is used to run deepspeed training workloads with spark clusters.
+        The user has the option to specify the number of gpus per node
+        and the number of nodes (the same as if running from terminal),
         as well as specify a deepspeed configuration file.
 
         Parameters
@@ -64,7 +64,7 @@ class DeepspeedTorchDistributor(TorchDistributor):
 
         deepspeed_config: Union[Dict[str,Any], str] or None:
             The configuration file to be used for launching the deepspeed application.
-            If it is a dictionary mapping parameters to values, then we will create the file.
+            If it's a dictionary containing the parameters, then we will create the file.
             If None, deepspeed will fall back to default parameters.
         """
         num_processes = num_gpus * nnodes
@@ -78,14 +78,14 @@ class DeepspeedTorchDistributor(TorchDistributor):
         self.cleanup_deepspeed_conf = False
 
     @staticmethod
-    def _get_deepspeed_config_path(deepspeed_config) -> str:
+    def _get_deepspeed_config_path(deepspeed_config: Union[str, Dict[str, Any]]) -> str:
         if isinstance(deepspeed_config, dict):
             with tempfile.NamedTemporaryFile(mode="w+", delete=False, suffix=".json") as file:
                 json.dump(deepspeed_config, file)
                 return file.name
         deepspeed_config_path = deepspeed_config
         # Empty value means the deepspeed will fall back to default settings.
-        if deepspeed_config == None:
+        if deepspeed_config is None:
             return ""
         return deepspeed_config_path
 
@@ -125,7 +125,7 @@ class DeepspeedTorchDistributor(TorchDistributor):
     ) -> None:
         if kwargs:
             raise ValueError(
-                "DeepspeedTorchDistributor with pytorch file doesn't support key-word type arguments"
+                "DeepspeedTorchDistributor with pytorch file doesn't support keyword arguments"
             )
 
         log_streaming_client = input_params.get("log_streaming_client", None)
@@ -137,18 +137,21 @@ class DeepspeedTorchDistributor(TorchDistributor):
         )
 
     def run(self, train_object: Union[Callable, str], *args: Any, **kwargs: Any) -> Optional[Any]:
-        # If the "train_object" is a string, then we assume it's a filepath. Otherwise, we assume it's a function.
+        # If the "train_object" is a string, then we assume it's a filepath.
+        # Otherwise, we assume it's a function.
         if isinstance(train_object, str):
-            if os.path.exists(train_object) == False:
+            if os.path.exists(train_object) is False:
                 raise FileNotFoundError(f"The path to training file {train_object} does not exist.")
             framework_wrapper_fn = DeepspeedTorchDistributor._run_training_on_pytorch_file
         else:
-            raise RuntimeError(
-                "The DeepspeedTorchDistributor doesn't support Python training functions as input at this time"
-            )
+            raise RuntimeError("Python training functions aren't supported as inputs at this time")
 
         if self.local_mode:
             return self._run_local_training(framework_wrapper_fn, train_object, *args, **kwargs)
         return self._run_distributed_training(
-            framework_wrapper_fn, train_object, spark_dataframe=None, *args, **kwargs
+            framework_wrapper_fn,
+            train_object,
+            spark_dataframe=None,
+            *args,
+            **kwargs,  # type:ignore[misc]
         )

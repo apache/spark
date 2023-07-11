@@ -358,7 +358,7 @@ class TorchDistributor(Distributor):
     _PICKLED_FUNC_FILE = "func.pickle"
     _TRAIN_FILE = "train.py"
     _PICKLED_OUTPUT_FILE = "output.pickle"
-    _TORCH_SSL_CONF = "pytorch.spark.distributor.ignoreSsl"  # type: ignore
+    _TORCH_SSL_CONF = "pytorch.spark.distributor.ignoreSsl"
 
     def __init__(
         self,
@@ -411,7 +411,8 @@ class TorchDistributor(Distributor):
         Returns
         ------
         Tuple[List[Any], int]
-            A tuple containing a list of arguments to pass as pytorch args , as well as the number of processes per node
+            A tuple containing a list of arguments to pass as pytorch args,
+            as well as the number of processes per node
         """
         if local_mode:
             torchrun_args = ["--standalone", "--nnodes=1"]

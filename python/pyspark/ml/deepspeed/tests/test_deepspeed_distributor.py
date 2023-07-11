@@ -16,7 +16,7 @@
 #
 import os
 import sys
-from typing import List, Any, Callable, Dict
+from typing import Any, Tuple, Dict
 import unittest
 
 from pyspark.ml.deepspeed.deepspeed_distributor import DeepspeedTorchDistributor
@@ -30,13 +30,13 @@ class DeepspeedTorchDistributorUnitTests(unittest.TestCase):
         os.environ[var_name] = str(default_value)
         return default_value
 
-    def _get_env_variables_distributed(self):
+    def _get_env_variables_distributed(self) -> Tuple[Any, Any, Any]:
         MASTER_ADDR = self._get_env_var("MASTER_ADDR", "127.0.0.1")
         MASTER_PORT = self._get_env_var("MASTER_PORT", 2000)
         RANK = self._get_env_var("RANK", 0)
         return MASTER_ADDR, MASTER_PORT, RANK
 
-    def test_get_torchrun_args_local(self):
+    def test_get_torchrun_args_local(self) -> None:
         number_of_processes = 5
         EXPECTED_TORCHRUN_ARGS_LOCAL = ["--standalone", "--nnodes=1"]
         EXPECTED_PROCESSES_PER_NODE_LOCAL = number_of_processes
@@ -47,7 +47,7 @@ class DeepspeedTorchDistributorUnitTests(unittest.TestCase):
         self.assertEqual(get_local_mode_torchrun_args, EXPECTED_TORCHRUN_ARGS_LOCAL)
         self.assertEqual(EXPECTED_PROCESSES_PER_NODE_LOCAL, process_per_node)
 
-    def test_get_torchrun_args_distributed(self):
+    def test_get_torchrun_args_distributed(self) -> None:
         number_of_processes = 5
         MASTER_ADDR, MASTER_PORT, RANK = self._get_env_variables_distributed()
         EXPECTED_TORCHRUN_ARGS_DISTRIBUTED = [
@@ -62,11 +62,11 @@ class DeepspeedTorchDistributorUnitTests(unittest.TestCase):
         self.assertEqual(torchrun_args_distributed, EXPECTED_TORCHRUN_ARGS_DISTRIBUTED)
         self.assertEqual(process_per_node, 1)
 
-    def test_create_torchrun_command_local(self):
+    def test_create_torchrun_command_local(self) -> None:
         DEEPSPEED_CONF = "path/to/deepspeed"
         TRAIN_FILE_PATH = "path/to/exec"
         NUM_PROCS = 10
-        input_params = {}
+        input_params: Dict[str, Any] = {}
         input_params["local_mode"] = True
         input_params["num_processes"] = NUM_PROCS
         input_params["deepspeed_config"] = DEEPSPEED_CONF
@@ -108,11 +108,11 @@ class DeepspeedTorchDistributorUnitTests(unittest.TestCase):
             )
             self.assertEqual(local_cmd_with_args, LOCAL_CMD_ARGS_EXPECTED)
 
-    def test_create_torchrun_command_distributed(self):
+    def test_create_torchrun_command_distributed(self) -> None:
         DEEPSPEED_CONF = "path/to/deepspeed"
         TRAIN_FILE_PATH = "path/to/exec"
         NUM_PROCS = 10
-        input_params = {}
+        input_params: Dict[str, Any] = {}
         input_params["local_mode"] = True
         input_params["num_processes"] = NUM_PROCS
         input_params["deepspeed_config"] = DEEPSPEED_CONF
