@@ -96,18 +96,28 @@ class KafkaSourceProviderSuite extends SparkFunSuite with SharedSparkSession {
   */
   test("test MSK IAM auth with streaming API and with kafka source") {
     val e = intercept[StreamingQueryException] {
-      spark.readStream.format("kafka").options(mskIAMTestKafkaOptions)
-        .option("kafka.bootstrap.servers", testUtils.brokerAddress).load()
-        .writeStream.format("console").start().processAllAvailable()
+      spark
+        .readStream.format("kafka")
+        .options(mskIAMTestKafkaOptions)
+        .option("kafka.bootstrap.servers", testUtils.brokerAddress)
+        .load()
+        .writeStream.format("console")
+        .start()
+        .processAllAvailable()
     }
     TestUtils.assertExceptionMsg(e, "Timed out waiting for a node assignment")
   }
 
   test("test MSK IAM auth with batch API and with kafka source") {
     val e = intercept[ExecutionException] {
-      spark.read.format("kafka").options(mskIAMTestKafkaOptions)
-      .option("kafka.bootstrap.servers", testUtils.brokerAddress).load()
-        .write.format("console").save()
+      spark
+        .read
+        .format("kafka")
+        .options(mskIAMTestKafkaOptions)
+        .option("kafka.bootstrap.servers", testUtils.brokerAddress)
+        .load()
+        .write.format("console")
+        .save()
     }
     TestUtils.assertExceptionMsg(e, "Timed out waiting for a node assignment")
   }
@@ -121,12 +131,20 @@ class KafkaSourceProviderSuite extends SparkFunSuite with SharedSparkSession {
     testUtils.createTopic(mskIAMTestKafkaOptions("subscribe"))
     withTempDir { checkpointDir =>
       val e = intercept[StreamingQueryException] {
-        spark.readStream.format("rate").option("rowsPerSecond", 10).load()
-          .withColumn("value", col("value").cast(StringType)).writeStream
-          .format("kafka").options(mskIAMTestKafkaOptions).option("kafka.bootstrap.servers",
-          testUtils.brokerAddress).option("checkpointLocation",
-          checkpointDir.getCanonicalPath()).option("topic", mskIAMTestKafkaOptions("subscribe"))
-          .start().processAllAvailable()
+        spark
+          .readStream
+          .format("rate")
+          .option("rowsPerSecond", 10)
+          .load()
+          .withColumn("value", col("value").cast(StringType))
+          .writeStream
+          .format("kafka")
+          .options(mskIAMTestKafkaOptions)
+          .option("kafka.bootstrap.servers", testUtils.brokerAddress)
+          .option("checkpointLocation", checkpointDir.getCanonicalPath())
+          .option("topic", mskIAMTestKafkaOptions("subscribe"))
+          .start()
+          .processAllAvailable()
       }
       TestUtils.assertExceptionMsg(e,
         s"TimeoutException: Topic ${mskIAMTestKafkaOptions("subscribe")} not present in metadata")
@@ -140,11 +158,16 @@ class KafkaSourceProviderSuite extends SparkFunSuite with SharedSparkSession {
     withTempDir { checkpointDir =>
       val schema = new StructType().add("value", "string")
       val e = intercept[SparkException] {
-        spark.createDataFrame(Seq(Row("test"), Row("test2")).asJava, schema)
-          .write.mode("append").format("kafka")
-          .options(mskIAMTestKafkaOptions).option("checkpointLocation",
-          checkpointDir.getCanonicalPath()).option("kafka.bootstrap.servers",
-          testUtils.brokerAddress).option("topic", mskIAMTestKafkaOptions("subscribe")).save()
+        spark
+          .createDataFrame(Seq(Row("test"), Row("test2")).asJava, schema)
+          .write
+          .mode("append")
+          .format("kafka")
+          .options(mskIAMTestKafkaOptions)
+          .option("checkpointLocation", checkpointDir.getCanonicalPath())
+          .option("kafka.bootstrap.servers", testUtils.brokerAddress)
+          .option("topic", mskIAMTestKafkaOptions("subscribe"))
+          .save()
       }
       TestUtils.assertExceptionMsg(e,
         s"TimeoutException: Topic ${mskIAMTestKafkaOptions("subscribe")} not present in metadata")
