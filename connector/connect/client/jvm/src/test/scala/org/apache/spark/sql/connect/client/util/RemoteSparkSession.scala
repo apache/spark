@@ -139,7 +139,18 @@ object SparkConnectServerUtils {
       .map(clientTestJar => Seq("--jars", clientTestJar.getCanonicalPath))
       .getOrElse(Seq.empty)
 
-    writerV2Configs ++ hiveTestConfigs ++ udfTestConfigs
+    // For test call_function with qualified function name
+    val persistFuncTestConfigs = tryFindJar(
+      "sql/core",
+      // SBT passes the client & test jars to the server process automatically.
+      // So we skip building or finding this jar for SBT.
+      "sbt-tests-do-not-need-this-jar",
+      "spark-sql",
+      test = true)
+      .map(clientTestJar => Seq("--jars", clientTestJar.getCanonicalPath))
+      .getOrElse(Seq.empty)
+
+    writerV2Configs ++ hiveTestConfigs ++ udfTestConfigs ++ persistFuncTestConfigs
   }
 
   def start(): Unit = {

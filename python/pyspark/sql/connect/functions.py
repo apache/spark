@@ -3909,8 +3909,8 @@ def udtf(
 udtf.__doc__ = pysparkfuncs.udtf.__doc__
 
 
-def call_function(udfName: str, *cols: "ColumnOrName") -> Column:
-    return _invoke_function(udfName, *[_to_col(c) for c in cols])
+def call_function(funcName: str, *cols: "ColumnOrName") -> Column:
+    return _invoke_function("call_function", lit(funcName), *[_to_col(c) for c in cols])
 
 
 call_function.__doc__ = pysparkfuncs.call_function.__doc__

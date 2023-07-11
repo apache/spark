@@ -1161,6 +1161,27 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper with PrivateM
     val joined = ds1.joinWith(ds2, $"a.value._1" === $"b.value._2", "inner")
     checkSameResult(Seq((Some((2, 3)), Some((1, 2)))), joined)
   }
+
+  test("call_function") {
+    val session: SparkSession = spark
+    import session.implicits._
+    val testData = spark.range(5).repartition(1)
+    try {
+      session.sql("CREATE FUNCTION custom_sum AS 'test.org.apache.spark.sql.MyDoubleSum'")
+      val result = testData
+        .select(
+          call_function("custom_sum", $"id"),
+          call_function("default.custom_sum", $"id"),
+          call_function("spark_catalog.default.custom_sum", $"id"))
+        .collect()
+      assert(result.length == 1)
+      assert(result(0) == Row(10.0, 10.0, 10.0))
+    } catch {
+      case cause: Throwable => throw cause
+    } finally {
+      session.sql("DROP FUNCTION IF EXISTS custom_sum")
+    }
+  }
 }
 
 private[sql] case class ClassData(a: String, b: Int)
