@@ -257,7 +257,7 @@ def assertDataFrameEqual(
     -----
     If the following equation is True for two float values a and b, then they are approximately
     equal.
-    .. math:: absolute(a - b) <= (atol + rtol * absolute(b))
+    :math: absolute(a - b) <= (atol + rtol * absolute(b))
 
     Examples
     --------
