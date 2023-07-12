@@ -50,12 +50,6 @@ import org.apache.spark.sql.types._
  */
 private[sql] object QueryCompilationErrors extends QueryErrorsBase {
 
-  def cannotObtainCompanionObjectInstance(functionName: String): Throwable = {
-    SparkException.internalError(s"Cannot obtain companion object for " +
-      s"function expression: $functionName. Please note that this companion must be" +
-      s" a top-level object.")
-  }
-
   def multipleFunctionSignatures(functionName: String,
       functionSignatures: Seq[FunctionSignature]): Throwable = {
     var errorMessage = s"Function $functionName cannot have multiple method signatures." +
@@ -73,10 +67,24 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
     )
   }
 
-  def duplicateRoutineParameterAssignment(
+  def positionalAndNamedArgumentDoubleReference(
       functionName: String, parameterName: String) : Throwable = {
+    val errorClass =
+      "DUPLICATE_ROUTINE_PARAMETER_ASSIGNMENT.POSITIONAL_AND_NAMED_ARGUMENT_DOUBLE_REFERENCE"
     new AnalysisException(
-      errorClass = "DUPLICATE_ROUTINE_PARAMETER_ASSIGNMENT",
+      errorClass = errorClass,
+      messageParameters = Map(
+        "functionName" -> toSQLId(functionName),
+        "parameterName" -> toSQLId(parameterName))
+    )
+  }
+
+  def doubleNamedArgumentReference(
+      functionName: String, parameterName: String): Throwable = {
+    val errorClass =
+      "DUPLICATE_ROUTINE_PARAMETER_ASSIGNMENT.DOUBLE_NAMED_ARGUMENT_REFERENCE"
+    new AnalysisException(
+      errorClass = errorClass,
       messageParameters = Map(
         "functionName" -> toSQLId(functionName),
         "parameterName" -> toSQLId(parameterName))

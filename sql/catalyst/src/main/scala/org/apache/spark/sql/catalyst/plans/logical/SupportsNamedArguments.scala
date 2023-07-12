@@ -37,20 +37,26 @@ object SupportsNamedArguments {
     // Performing some checking to ensure valid argument list
     val allParameterNames: Seq[String] = parameters.map(_.name)
     val parameterNamesSet: Set[String] = allParameterNames.toSet
-    val assignedParameterSet = collection.mutable.Set[String](
-      allParameterNames.take(positionalArgs.size): _*)
+    val positionalParametersSet = allParameterNames.take(positionalArgs.size).toSet
+    val namedParametersSet = collection.mutable.Set[String]()
+
     for (arg <- namedArgs) {
       arg match {
         case namedArg: NamedArgumentExpression =>
-          if (assignedParameterSet.contains(namedArg.key)) {
-            throw QueryCompilationErrors.duplicateRoutineParameterAssignment(
-              functionName, namedArg.key)
-          }
-          if (!parameterNamesSet.contains(namedArg.key)) {
+          val parameterName = namedArg.key
+          if (!parameterNamesSet.contains(parameterName)) {
             throw QueryCompilationErrors.unrecognizedParameterName(functionName, namedArg.key,
               parameterNamesSet.toSeq)
           }
-          assignedParameterSet.add(namedArg.key)
+          if (positionalParametersSet.contains(parameterName)) {
+            throw QueryCompilationErrors.positionalAndNamedArgumentDoubleReference(
+              functionName, namedArg.key)
+          }
+          if (namedParametersSet.contains(parameterName)) {
+            throw QueryCompilationErrors.doubleNamedArgumentReference(
+              functionName, namedArg.key)
+          }
+          namedParametersSet.add(namedArg.key)
         case _ =>
           throw QueryCompilationErrors.unexpectedPositionalArgument(functionName)
       }

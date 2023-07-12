@@ -678,6 +678,18 @@
     "message" : [
       "Call to function <functionName> is invalid because it includes multiple argument assignments to the same parameter name <parameterName>."
     ],
+    "subClass" : {
+       "POSITIONAL_AND_NAMED_ARGUMENT_DOUBLE_REFERENCE" : {
+         "message" : [
+           "A positional argument and named argument both referred to the same parameter."
+         ]
+       },
+      "DOUBLE_NAMED_ARGUMENT_REFERENCE" : {
+        "message" : [
+          "More than one named argument referred to the same parameter."
+        ]
+      }
+    },
     "sqlState" : "4274K"
   },
   "EMPTY_JSON_FIELD_VALUE" : {

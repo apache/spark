@@ -173,7 +173,7 @@ SELECT mask('AbCD123-@$#', lowerChar => 'q', upperChar => 'Q', otherChar => 'o',
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "DUPLICATE_ROUTINE_PARAMETER_ASSIGNMENT",
+  "errorClass" : "DUPLICATE_ROUTINE_PARAMETER_ASSIGNMENT.DOUBLE_NAMED_ARGUMENT_REFERENCE",
   "sqlState" : "4274K",
   "messageParameters" : {
     "functionName" : "`mask`",
@@ -194,7 +194,7 @@ SELECT mask('AbCD123-@$#', lowerChar => 'q', upperChar => 'Q', otherChar => 'o',
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "DUPLICATE_ROUTINE_PARAMETER_ASSIGNMENT",
+  "errorClass" : "DUPLICATE_ROUTINE_PARAMETER_ASSIGNMENT.POSITIONAL_AND_NAMED_ARGUMENT_DOUBLE_REFERENCE",
   "sqlState" : "4274K",
   "messageParameters" : {
     "functionName" : "`mask`",
