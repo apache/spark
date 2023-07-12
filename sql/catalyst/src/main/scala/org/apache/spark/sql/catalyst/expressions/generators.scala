@@ -21,11 +21,12 @@ import scala.collection.mutable
 
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
-import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
+import org.apache.spark.sql.catalyst.analysis.{GeneratorBuilder, TypeCheckResult}
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.expressions.Cast._
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
+import org.apache.spark.sql.catalyst.plans.logical.{FunctionSignature, NamedArgument}
 import org.apache.spark.sql.catalyst.trees.TreePattern.{GENERATOR, TreePattern}
 import org.apache.spark.sql.catalyst.util.{ArrayData, MapData}
 import org.apache.spark.sql.catalyst.util.SQLKeywordUtils._
@@ -430,6 +431,22 @@ case class Explode(child: Expression) extends ExplodeBase {
   override protected def withNewChildInternal(newChild: Expression): Explode =
     copy(child = newChild)
 }
+
+trait ExplodeGeneratorBuilderBase extends GeneratorBuilder {
+  override def functionSignatures: Option[Seq[FunctionSignature]] =
+    Some(Seq(FunctionSignature(Seq(NamedArgument("collection")))))
+  override def buildGenerator(funcName: String, expressions: Seq[Expression]): Generator =
+    Explode(expressions(0))
+}
+
+object ExplodeGeneratorBuilder extends ExplodeGeneratorBuilderBase {
+  override def isOuter: Boolean = false
+}
+
+object ExplodeOuterGeneratorBuilder extends ExplodeGeneratorBuilderBase {
+  override def isOuter: Boolean = true
+}
+
 
 /**
  * Given an input array produces a sequence of rows for each position and value in the array.

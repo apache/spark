@@ -327,13 +327,14 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
-  "sqlState" : "42605",
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
   "messageParameters" : {
-    "actualNum" : "2",
-    "docroot" : "https://spark.apache.org/docs/latest",
-    "expectedNum" : "1",
-    "functionName" : "`explode`"
+    "inputSql" : "\"1\"",
+    "inputType" : "\"INT\"",
+    "paramIndex" : "1",
+    "requiredType" : "(\"ARRAY\" or \"MAP\")",
+    "sqlExpr" : "\"explode(1)\""
   },
   "queryContext" : [ {
     "objectType" : "",

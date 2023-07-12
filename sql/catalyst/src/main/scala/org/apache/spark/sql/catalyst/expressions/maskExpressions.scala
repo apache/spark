@@ -22,8 +22,8 @@ import org.apache.spark.sql.catalyst.analysis.{ExpressionBuilder, TypeCheckResul
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
-import org.apache.spark.sql.catalyst.plans.logical.{FixedArgumentType, FunctionSignature, NamedArgument}
-import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryErrorsBase}
+import org.apache.spark.sql.catalyst.plans.logical.{FunctionSignature, NamedArgument}
+import org.apache.spark.sql.errors.QueryErrorsBase
 import org.apache.spark.sql.types.{AbstractDataType, DataType, StringType}
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -324,34 +324,18 @@ object Mask {
 }
 
 object MaskExpressionBuilder extends ExpressionBuilder {
-  override def functionSignatures: Seq[FunctionSignature] = {
-    val strArg = NamedArgument("str", FixedArgumentType(StringType))
-    val upperCharArg = NamedArgument(
-      "upperChar",
-      FixedArgumentType(StringType),
-      Some(Literal(Mask.MASKED_UPPERCASE)))
-    val lowerCharArg = NamedArgument(
-      "lowerChar",
-      FixedArgumentType(StringType),
-      Some(Literal(Mask.MASKED_LOWERCASE)))
-    val digitCharArg = NamedArgument(
-      "digitChar",
-      FixedArgumentType(StringType),
-      Some(Literal(Mask.MASKED_DIGIT)))
-    val otherCharArg = NamedArgument(
-      "otherChar",
-      FixedArgumentType(StringType),
-      Some(Literal(Mask.MASKED_IGNORE)))
+  override def functionSignatures: Option[Seq[FunctionSignature]] = {
+    val strArg = NamedArgument("str")
+    val upperCharArg = NamedArgument("upperChar", Some(Literal(Mask.MASKED_UPPERCASE)))
+    val lowerCharArg = NamedArgument("lowerChar", Some(Literal(Mask.MASKED_LOWERCASE)))
+    val digitCharArg = NamedArgument("digitChar", Some(Literal(Mask.MASKED_DIGIT)))
+    val otherCharArg = NamedArgument("otherChar", Some(Literal(Mask.MASKED_IGNORE)))
     val functionSignature: FunctionSignature = FunctionSignature(Seq(
       strArg, upperCharArg, lowerCharArg, digitCharArg, otherCharArg))
-    Seq(functionSignature)
+    Some(Seq(functionSignature))
   }
 
   override def build(funcName: String, expressions: Seq[Expression]): Expression = {
-    if (expressions.length < 1 || expressions.length > 5) {
-      throw QueryCompilationErrors.wrongNumArgsError(
-        funcName, Seq(1, 2, 3, 4, 5), expressions.length)
-    }
     new Mask(expressions(0), expressions(1), expressions(2), expressions(3), expressions(4))
   }
 }

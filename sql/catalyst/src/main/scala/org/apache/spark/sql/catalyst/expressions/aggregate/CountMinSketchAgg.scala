@@ -21,7 +21,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{ExpressionBuilder, TypeCheckResult}
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{DataTypeMismatch, TypeCheckSuccess}
 import org.apache.spark.sql.catalyst.expressions.{ExpectsInputTypes, Expression, ExpressionDescription, Literal}
-import org.apache.spark.sql.catalyst.plans.logical.{FixedArgumentType, FunctionSignature, NamedArgument}
+import org.apache.spark.sql.catalyst.plans.logical.{FunctionSignature, NamedArgument}
 import org.apache.spark.sql.catalyst.trees.QuaternaryLike
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryErrorsBase}
 import org.apache.spark.sql.types._
@@ -212,13 +212,12 @@ case class CountMinSketchAgg(
 
 object CountMinSketchAggExpressionBuilder extends ExpressionBuilder {
   final val functionSignature = FunctionSignature(Seq(
-    NamedArgument("column",
-                  FixedArgumentType(TypeCollection(IntegralType, StringType, BinaryType))),
-    NamedArgument("epsilon", FixedArgumentType(DoubleType)),
-    NamedArgument("confidence", FixedArgumentType(DoubleType)),
-    NamedArgument("seed", FixedArgumentType(IntegerType))
+    NamedArgument("column"),
+    NamedArgument("epsilon"),
+    NamedArgument("confidence"),
+    NamedArgument("seed")
   ))
-  override def functionSignatures: Seq[FunctionSignature] = Seq(functionSignature)
+  override def functionSignatures: Option[Seq[FunctionSignature]] = Some(Seq(functionSignature))
   override def build(funcName: String, expressions: Seq[Expression]): Expression = {
     if (expressions.length != 4) {
       throw QueryCompilationErrors.wrongNumArgsError(funcName, Seq(4), expressions.length)

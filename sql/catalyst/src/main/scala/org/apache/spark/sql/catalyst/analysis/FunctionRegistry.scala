@@ -896,12 +896,13 @@ object FunctionRegistry {
     val funcBuilder = (expressions: Seq[Expression]) => {
       assert(expressions.forall(_.resolved), "function arguments must be resolved.")
       val rearrangedExpressions =
-        if (builder.functionSignatures != Nil) {
-          if (builder.functionSignatures.length != 1) {
+        if (!builder.functionSignatures.isEmpty) {
+          val functionSignatures = builder.functionSignatures.get
+          if (functionSignatures.length != 1) {
             throw QueryCompilationErrors.multipleFunctionSignatures(
-              name, builder.functionSignatures)
+              name, functionSignatures)
           }
-          builder.rearrange(builder.functionSignatures.head, expressions, name)
+          builder.rearrange(functionSignatures.head, expressions, name)
         } else {
           expressions
         }
@@ -979,6 +980,32 @@ object EmptyTableFunctionRegistry extends EmptyFunctionRegistryBase[LogicalPlan]
 object TableFunctionRegistry {
 
   type TableFunctionBuilder = Seq[Expression] => LogicalPlan
+  private def generatorBuilder[T <: GeneratorBuilder : ClassTag](
+      name: String,
+      builder: T,
+      since: Option[String] = None): (String, (ExpressionInfo, TableFunctionBuilder)) = {
+    val info = FunctionRegistryBase.expressionInfo[T](name, since)
+    val funcBuilder = (expressions: Seq[Expression]) => {
+      assert(expressions.forall(_.resolved), "function arguments must be resolved.")
+      val rearrangedExpressions =
+        if (!builder.functionSignatures.isEmpty) {
+          val functionSignatures = builder.functionSignatures.get
+          if (functionSignatures.length != 1) {
+            throw QueryCompilationErrors.multipleFunctionSignatures(
+              name, functionSignatures)
+          }
+          builder.rearrange(functionSignatures.head, expressions, name)
+        } else {
+          expressions
+        }
+      if (rearrangedExpressions.exists(_.isInstanceOf[NamedArgumentExpression])) {
+        throw QueryCompilationErrors.namedArgumentsNotSupported(name)
+      }
+      val expr = builder.build(name, rearrangedExpressions)
+      expr
+    }
+    (name, (info, funcBuilder))
+  }
 
   private def logicalPlan[T <: LogicalPlan : ClassTag](name: String)
       : (String, (ExpressionInfo, TableFunctionBuilder)) = {
@@ -1005,8 +1032,8 @@ object TableFunctionRegistry {
 
   val logicalPlans: Map[String, (ExpressionInfo, TableFunctionBuilder)] = Map(
     logicalPlan[Range]("range"),
-    generator[Explode]("explode"),
-    generator[Explode]("explode_outer", outer = true),
+    generatorBuilder("explode", ExplodeGeneratorBuilder),
+    generatorBuilder("explode_outer", ExplodeOuterGeneratorBuilder),
     generator[Inline]("inline"),
     generator[Inline]("inline_outer", outer = true),
     generator[JsonTuple]("json_tuple"),
@@ -1028,8 +1055,8 @@ object TableFunctionRegistry {
   val functionSet: Set[FunctionIdentifier] = builtin.listFunction().toSet
 }
 
-trait ExpressionBuilder {
-  def functionSignatures: Seq[FunctionSignature] = Nil
+trait Builder[T] {
+  def functionSignatures: Option[Seq[FunctionSignature]] = None
 
   def rearrange(
       expectedSignature: FunctionSignature,
@@ -1038,5 +1065,20 @@ trait ExpressionBuilder {
     SupportsNamedArguments.defaultRearrange(expectedSignature, providedArguments, functionName)
   }
 
-  def build(funcName: String, expressions: Seq[Expression]): Expression
+  def build(funcName: String, expressions: Seq[Expression]): T
+}
+
+trait ExpressionBuilder extends Builder[Expression]
+trait GeneratorBuilder extends Builder[LogicalPlan] {
+  override final def build(funcName: String, expressions: Seq[Expression]) : LogicalPlan = {
+    Generate(
+      buildGenerator(funcName, expressions),
+      unrequiredChildIndex = Nil,
+      outer = isOuter,
+      qualifier = None,
+      generatorOutput = Nil,
+      child = OneRowRelation())
+  }
+  def isOuter: Boolean
+  def buildGenerator(funcName: String, expressions: Seq[Expression]) : Generator
 }

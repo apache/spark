@@ -20,54 +20,6 @@ import org.apache.spark.sql.catalyst.expressions.{Expression, NamedArgumentExpre
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.types.AbstractDataType
 
-/**
- * The class which companion objects of function expression may implement to
- * support named arguments for that function expression. Please note that variadic final
- * arguments are NOT supported for named arguments. Do not use for functions that
- * has variadic final arguments!
- *
- * Example:
- *  object CountMinSketchAgg extends SupportsNamedArguments {
- *    final val functionSignature = FunctionSignature(Seq(
- *      NamedArgument("column",
- *          FixedArgumentType(TypeCollection(IntegralType, StringType, BinaryType))),
- *      NamedArgument("epsilon", FixedArgumentType(DoubleType)),
- *      NamedArgument("confidence", FixedArgumentType(DoubleType)),
- *      NamedArgument("seed", FixedArgumentType(IntegerType))
- *    ))
- *    override def functionSignatures: Seq[FunctionSignature] = Seq(functionSignature)
- *  }
- */
-abstract class SupportsNamedArguments {
-  /**
-   * This is the method overridden by function expressions to define their method signatures.
-   * Currently, we don't support overloads, so we restrict each function expression to return
-   * only one FunctionSignature.
-   *
-   * @return the signature of the function expression
-   */
-  def functionSignatures: Seq[FunctionSignature]
-
-  /**
-   * This function rearranges the list of expressions according to the function signature
-   * It is recommended to use this provided implementation as it is consistent with
-   * the SQL standard. If absolutely necessary the developer can choose to override the default
-   * behavior for additional flexibility.
-   *
-   * @param expectedSignature Function signature that denotes positional order of arguments
-   * @param providedArguments The sequence of expressions from function invocation
-   * @param functionName The name of the function invoked for debugging purposes
-   * @return positional order of arguments according to FunctionSignature obtained
-   *         by changing the order of the above provided arguments
-   */
-  protected def rearrange(
-      expectedSignature: FunctionSignature,
-      providedArguments: Seq[Expression],
-      functionName: String): Seq[Expression] = {
-    SupportsNamedArguments.defaultRearrange(expectedSignature, providedArguments, functionName)
-  }
-}
-
 object SupportsNamedArguments {
   final def defaultRearrange(functionSignature: FunctionSignature,
       args: Seq[Expression],
@@ -140,16 +92,14 @@ case class FixedArgumentType(dataType: AbstractDataType) extends NamedArgumentTy
 
 /**
  * Represents a parameter of a function expression. Function expressions should use this class
- * to construct the argument lists returned in [[SupportsNamedArguments.functionSignatures]]
+ * to construct the argument lists returned in [[Builder]]
  *
  * @param name     The name of the string.
- * @param dataType The datatype of the argument.
  * @param default  The default value of the argument. If the default is none, then that means the
  *                 argument is required. If no argument is provided, an exception is thrown.
  */
 case class NamedArgument(
     name: String,
-    dataType: NamedArgumentType,
     default: Option[Expression] = None)
 
 /**

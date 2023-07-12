@@ -78,6 +78,58 @@ struct<hex(count_min_sketch(t2d, 0.5, 0.5, 1)):string>
 
 
 -- !query
+SELECT * FROM explode(collection => array(1, 2))
+-- !query schema
+struct<col:int>
+-- !query output
+1
+2
+
+
+-- !query
+SELECT * FROM explode_outer(collection => map('a', 1, 'b', 2))
+-- !query schema
+struct<key:string,value:int>
+-- !query output
+a	1
+b	2
+
+
+-- !query
+CREATE OR REPLACE TEMPORARY VIEW v AS SELECT id FROM range(0, 8)
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT * FROM explode(collection => TABLE v)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"outer(__auto_generated_subquery_name_0.c)\"",
+    "inputType" : "\"STRUCT<id: BIGINT>\"",
+    "paramIndex" : "1",
+    "requiredType" : "(\"ARRAY\" or \"MAP\")",
+    "sqlExpr" : "\"explode(outer(__auto_generated_subquery_name_0.c))\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 15,
+    "stopIndex" : 44,
+    "fragment" : "explode(collection => TABLE v)"
+  } ]
+}
+
+
+-- !query
 SELECT mask(lowerChar => 'q', 'AbCD123-@$#', upperChar => 'Q', otherChar => 'o', digitChar => 'd')
 -- !query schema
 struct<>
