@@ -171,6 +171,7 @@ ERROR_CLASSES_JSON = """
   },
   "DIFFERENT_SCHEMA" : {
     "message" : [
+      "Schemas do not match:",
       "<error_msg>"
     ]
   },

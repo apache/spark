@@ -694,9 +694,7 @@ class UtilsTestsMixin:
             schema=["id", "amount"],
         )
 
-        expected_error_msg = "Schemas do not match: \n"
-
-        expected_error_msg += (
+        expected_error_msg = (
             "[df]"
             + "\n"
             + str(df1.schema[0])
@@ -733,9 +731,7 @@ class UtilsTestsMixin:
             schema=["id", "amount", "letter"],
         )
 
-        expected_error_msg = "Schemas do not match: \n"
-
-        expected_error_msg += (
+        expected_error_msg = (
             "[df]" + "\n" + "None" + "\n\n" + "[expected]" + "\n" + str(df2.schema[2]) + "\n\n"
         )
 
@@ -782,9 +778,7 @@ class UtilsTestsMixin:
         s1 = StructType([StructField("names", ArrayType(IntegerType(), True), True)])
         s2 = StructType([StructField("names", ArrayType(DoubleType(), False), False)])
 
-        expected_error_msg = "Schemas do not match: \n"
-
-        expected_error_msg += (
+        expected_error_msg = (
             "[df]" + "\n" + str(s1[0]) + "\n\n" + "[expected]" + "\n" + str(s2[0]) + "\n\n"
         )
 
@@ -805,9 +799,7 @@ class UtilsTestsMixin:
             [StructField("names", StructType([StructField("age", IntegerType(), True)]), True)]
         )
 
-        expected_error_msg = "Schemas do not match: \n"
-
-        expected_error_msg += (
+        expected_error_msg = (
             "[df]" + "\n" + str(s1[0]) + "\n\n" + "[expected]" + "\n" + str(s2[0]) + "\n\n"
         )
 
@@ -818,6 +810,19 @@ class UtilsTestsMixin:
             exception=pe.exception,
             error_class="DIFFERENT_SCHEMA",
             message_parameters={"error_msg": expected_error_msg},
+        )
+
+    def test_schema_unsupported_type(self):
+        s1 = "names: int"
+        s2 = "names: int"
+
+        with self.assertRaises(PySparkAssertionError) as pe:
+            assertSchemaEqual(s1, s2)
+
+        self.check_error(
+            exception=pe.exception,
+            error_class="UNSUPPORTED_DATA_TYPE",
+            message_parameters={"data_type": type(s1)},
         )
 
     def test_assert_equal_maptype(self):

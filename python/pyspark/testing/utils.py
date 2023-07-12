@@ -258,6 +258,16 @@ def assertSchemaEqual(actual: StructType, expected: StructType, check_nullabilit
     StructField("names", ArrayType(DoubleType(), False), True)
 
     """
+    if not isinstance(actual, StructType):
+        raise PySparkAssertionError(
+            error_class="UNSUPPORTED_DATA_TYPE",
+            message_parameters={"data_type": type(actual)},
+        )
+    if not isinstance(expected, StructType):
+        raise PySparkAssertionError(
+            error_class="UNSUPPORTED_DATA_TYPE",
+            message_parameters={"data_type": type(expected)},
+        )
 
     def compare_schemas_ignore_nullable(s1, s2):
         if len(s1) != len(s2):
@@ -294,7 +304,7 @@ def assertSchemaEqual(actual: StructType, expected: StructType, check_nullabilit
             return False
 
     schemas_equal = True
-    error_msg = "Schemas do not match: \n"
+    error_msg = ""
 
     if not check_nullability:
         if not compare_schemas_ignore_nullable(actual, expected):
