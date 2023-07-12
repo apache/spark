@@ -510,11 +510,17 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
                     "INVALID_OBSERVED_METRICS.NESTED_AGGREGATES_UNSUPPORTED",
                     Map("expr" -> toSQLExpr(s)))
                 case a: AggregateExpression if a.isDistinct =>
-                  e.failAnalysis("_LEGACY_ERROR_TEMP_2320", Map("sqlExpr" -> s.sql))
+                  e.failAnalysis(
+                    "INVALID_OBSERVED_METRICS.AGGREGATE_EXPRESSION_WITH_DISTINCT_UNSUPPORTED",
+                    Map("expr" -> toSQLExpr(s)))
                 case a: AggregateExpression if a.filter.isDefined =>
-                  e.failAnalysis("_LEGACY_ERROR_TEMP_2321", Map("sqlExpr" -> s.sql))
+                  e.failAnalysis(
+                    "INVALID_OBSERVED_METRICS.AGGREGATE_EXPRESSION_WITH_FILTER_UNSUPPORTED",
+                    Map("expr" -> toSQLExpr(s)))
                 case _: Attribute if !seenAggregate =>
-                  e.failAnalysis("_LEGACY_ERROR_TEMP_2322", Map("sqlExpr" -> s.sql))
+                  e.failAnalysis(
+                    "INVALID_OBSERVED_METRICS.NON_AGGREGATE_FUNC_ARG_IS_ATTRIBUTE",
+                    Map("expr" -> toSQLExpr(s)))
                 case _: AggregateExpression =>
                   e.children.foreach(checkMetric (s, _, seenAggregate = true))
                 case _ =>
@@ -1394,11 +1400,11 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
       if (struct.findNestedField(
           fieldNames, includeCollections = true, alter.conf.resolver).isDefined) {
         alter.failAnalysis(
-          errorClass = "_LEGACY_ERROR_TEMP_2323",
+          errorClass = "FIELDS_ALREADY_EXISTS",
           messageParameters = Map(
             "op" -> op,
-            "fieldNames" -> fieldNames.quoted,
-            "struct" -> struct.treeString))
+            "fieldNames" -> toSQLId(fieldNames),
+            "struct" -> toSQLType(struct)))
       }
     }
 
@@ -1430,16 +1436,23 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
           val newDataType = a.dataType.get
           newDataType match {
             case _: StructType => alter.failAnalysis(
-              "_LEGACY_ERROR_TEMP_2324", Map("table" -> table.name, "fieldName" -> fieldName))
+              "CANNOT_UPDATE_FIELD.STRUCT_TYPE",
+              Map("table" -> toSQLId(table.name), "fieldName" -> toSQLId(fieldName)))
             case _: MapType => alter.failAnalysis(
-              "_LEGACY_ERROR_TEMP_2325", Map("table" -> table.name, "fieldName" -> fieldName))
+              "CANNOT_UPDATE_FIELD.MAP_TYPE",
+              Map("table" -> toSQLId(table.name), "fieldName" -> toSQLId(fieldName)))
             case _: ArrayType => alter.failAnalysis(
-              "_LEGACY_ERROR_TEMP_2326", Map("table" -> table.name, "fieldName" -> fieldName))
+              "CANNOT_UPDATE_FIELD.ARRAY_TYPE",
+              Map("table" -> toSQLId(table.name), "fieldName" -> toSQLId(fieldName)))
             case u: UserDefinedType[_] => alter.failAnalysis(
-              "_LEGACY_ERROR_TEMP_2327",
-              Map("table" -> table.name, "fieldName" -> fieldName, "udtSql" -> u.sql))
+              "CANNOT_UPDATE_FIELD.USER_DEFINED_TYPE",
+              Map(
+                "table" -> toSQLId(table.name),
+                "fieldName" -> toSQLId(fieldName),
+                "udtSql" -> toSQLType(u)))
             case _: CalendarIntervalType | _: AnsiIntervalType => alter.failAnalysis(
-              "_LEGACY_ERROR_TEMP_2328", Map("table" -> table.name, "fieldName" -> fieldName))
+              "CANNOT_UPDATE_FIELD.INTERVAL_TYPE",
+              Map("table" -> toSQLId(table.name), "fieldName" -> toSQLId(fieldName)))
             case _ => // update is okay
           }
 

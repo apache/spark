@@ -17,8 +17,9 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.SQLConfHelper
-import org.apache.spark.sql.catalyst.expressions.{AliasHelper, Attribute, Expression, LateralColumnAliasReference, NamedExpression}
+import org.apache.spark.sql.catalyst.expressions.{AliasHelper, Attribute, Expression, NamedExpression}
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, AppendColumns, LogicalPlan}
 import org.apache.spark.sql.catalyst.trees.TreePattern.{LATERAL_COLUMN_ALIAS_REFERENCE, UNRESOLVED_ATTRIBUTE}
@@ -73,6 +74,12 @@ object ResolveReferencesInAggregate extends SQLConfHelper
         resolvedAggExprsWithOuter,
         resolveGroupByAlias(resolvedAggExprsWithOuter, resolvedGroupExprsNoOuter)
       ).map(resolveOuterRef)
+      // TODO: currently we don't support LCA in `groupingExpressions` yet.
+      if (resolved.exists(_.containsPattern(LATERAL_COLUMN_ALIAS_REFERENCE))) {
+        throw new AnalysisException(
+          errorClass = "UNSUPPORTED_FEATURE.LATERAL_COLUMN_ALIAS_IN_GROUP_BY",
+          messageParameters = Map.empty)
+      }
       resolved
     } else {
       // Do not resolve columns in grouping expressions to outer references here, as the aggregate
@@ -105,11 +112,9 @@ object ResolveReferencesInAggregate extends SQLConfHelper
     assert(selectList.forall(_.resolved))
     if (conf.groupByAliases) {
       groupExprs.map { g =>
-        g.transformWithPruning(_.containsAnyPattern(UNRESOLVED_ATTRIBUTE,
-          LATERAL_COLUMN_ALIAS_REFERENCE)) {
-          case u @ (_: UnresolvedAttribute | _: LateralColumnAliasReference) =>
-            selectList.find(ne => conf.resolver(ne.name, u.asInstanceOf[NamedExpression].name))
-              .getOrElse(u)
+        g.transformWithPruning(_.containsPattern(UNRESOLVED_ATTRIBUTE)) {
+          case u: UnresolvedAttribute =>
+            selectList.find(ne => conf.resolver(ne.name, u.name)).getOrElse(u)
         }
       }
     } else {
@@ -128,9 +133,8 @@ object ResolveReferencesInAggregate extends SQLConfHelper
         // tell the user in checkAnalysis that we cannot resolve the all in group by.
         groupExprs
       } else {
-        // This is a valid GROUP BY ALL aggregate, resolve group by alias again to transform the
-        // LCA reference
-        resolveGroupByAlias(selectList, expandedGroupExprs.get)
+        // This is a valid GROUP BY ALL aggregate.
+        expandedGroupExprs.get
       }
     } else {
       groupExprs

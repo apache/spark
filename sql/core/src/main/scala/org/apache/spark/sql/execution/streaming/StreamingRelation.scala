@@ -24,6 +24,7 @@ import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
 import org.apache.spark.sql.catalyst.catalog.CatalogTable
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
 import org.apache.spark.sql.catalyst.plans.logical.{ExposesMetadataColumns, LeafNode, LogicalPlan, Statistics}
+import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.connector.read.streaming.SparkDataStream
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.LeafExecNode
@@ -32,7 +33,7 @@ import org.apache.spark.sql.execution.datasources.{DataSource, FileFormat}
 object StreamingRelation {
   def apply(dataSource: DataSource): StreamingRelation = {
     StreamingRelation(
-      dataSource, dataSource.sourceInfo.name, dataSource.sourceInfo.schema.toAttributes)
+      dataSource, dataSource.sourceInfo.name, toAttributes(dataSource.sourceInfo.schema))
   }
 }
 
@@ -119,13 +120,13 @@ case class StreamingRelationExec(
 
 object StreamingExecutionRelation {
   def apply(source: Source, session: SparkSession): StreamingExecutionRelation = {
-    StreamingExecutionRelation(source, source.schema.toAttributes, None)(session)
+    StreamingExecutionRelation(source, toAttributes(source.schema), None)(session)
   }
 
   def apply(
       source: Source,
       session: SparkSession,
       catalogTable: CatalogTable): StreamingExecutionRelation = {
-    StreamingExecutionRelation(source, source.schema.toAttributes, Some(catalogTable))(session)
+    StreamingExecutionRelation(source, toAttributes(source.schema), Some(catalogTable))(session)
   }
 }

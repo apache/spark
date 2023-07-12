@@ -26,6 +26,7 @@ from typing import (
     Generic,
     List,
     Optional,
+    Union,
 )
 
 import numpy as np
@@ -65,6 +66,8 @@ from pyspark.pandas.utils import (
     scol_for,
     verify_temp_column_name,
 )
+from pyspark.sql.utils import is_remote
+from pyspark.pandas.spark.functions import timestampdiff
 
 
 class Resampler(Generic[FrameLike], metaclass=ABCMeta):
@@ -131,8 +134,27 @@ class Resampler(Generic[FrameLike], metaclass=ABCMeta):
     def _agg_columns_scols(self) -> List[Column]:
         return [s.spark.column for s in self._agg_columns]
 
+    def get_make_interval(  # type: ignore[return]
+        self, unit: str, col: Union[Column, int, float]
+    ) -> Column:
+        if is_remote():
+            from pyspark.sql.connect.functions import lit, make_interval
+
+            col = col if not isinstance(col, (int, float)) else lit(col)  # type: ignore[assignment]
+            if unit == "MONTH":
+                return make_interval(months=col)  # type: ignore
+            if unit == "HOUR":
+                return make_interval(hours=col)  # type: ignore
+            if unit == "MINUTE":
+                return make_interval(mins=col)  # type: ignore
+            if unit == "SECOND":
+                return make_interval(secs=col)  # type: ignore
+        else:
+            sql_utils = SparkContext._active_spark_context._jvm.PythonSQLUtils
+            col = col._jc if isinstance(col, Column) else F.lit(col)._jc
+            return sql_utils.makeInterval(unit, col)
+
     def _bin_time_stamp(self, origin: pd.Timestamp, ts_scol: Column) -> Column:
-        sql_utils = SparkContext._active_spark_context._jvm.PythonSQLUtils
         origin_scol = F.lit(origin)
         (rule_code, n) = (self._offset.rule_code, getattr(self._offset, "n"))
         left_closed, right_closed = (self._closed == "left", self._closed == "right")
@@ -191,18 +213,18 @@ class Resampler(Generic[FrameLike], metaclass=ABCMeta):
             truncated_ts_scol = F.date_trunc("MONTH", ts_scol)
             edge_label = truncated_ts_scol
             if left_closed and right_labeled:
-                edge_label += sql_utils.makeInterval("MONTH", F.lit(n)._jc)
+                edge_label += self.get_make_interval("MONTH", n)
             elif right_closed and left_labeled:
-                edge_label -= sql_utils.makeInterval("MONTH", F.lit(n)._jc)
+                edge_label -= self.get_make_interval("MONTH", n)
 
             if left_labeled:
                 non_edge_label = F.when(
                     mod == 0,
-                    truncated_ts_scol - sql_utils.makeInterval("MONTH", F.lit(n)._jc),
-                ).otherwise(truncated_ts_scol - sql_utils.makeInterval("MONTH", mod._jc))
+                    truncated_ts_scol - self.get_make_interval("MONTH", n),
+                ).otherwise(truncated_ts_scol - self.get_make_interval("MONTH", mod))
             else:
                 non_edge_label = F.when(mod == 0, truncated_ts_scol).otherwise(
-                    truncated_ts_scol - sql_utils.makeInterval("MONTH", (mod - n)._jc)
+                    truncated_ts_scol - self.get_make_interval("MONTH", mod - n)
                 )
 
             return F.to_timestamp(
@@ -257,7 +279,7 @@ class Resampler(Generic[FrameLike], metaclass=ABCMeta):
             unit_str = unit_mapping[rule_code]
 
             truncated_ts_scol = F.date_trunc(unit_str, ts_scol)
-            diff = sql_utils.timestampDiff(unit_str, origin_scol._jc, truncated_ts_scol._jc)
+            diff = timestampdiff(unit_str, origin_scol, truncated_ts_scol)
             mod = F.lit(0) if n == 1 else (diff % F.lit(n))
 
             if rule_code == "H":
@@ -271,19 +293,19 @@ class Resampler(Generic[FrameLike], metaclass=ABCMeta):
 
             edge_label = truncated_ts_scol
             if left_closed and right_labeled:
-                edge_label += sql_utils.makeInterval(unit_str, F.lit(n)._jc)
+                edge_label += self.get_make_interval(unit_str, n)
             elif right_closed and left_labeled:
-                edge_label -= sql_utils.makeInterval(unit_str, F.lit(n)._jc)
+                edge_label -= self.get_make_interval(unit_str, n)
 
             if left_labeled:
                 non_edge_label = F.when(mod == 0, truncated_ts_scol).otherwise(
-                    truncated_ts_scol - sql_utils.makeInterval(unit_str, mod._jc)
+                    truncated_ts_scol - self.get_make_interval(unit_str, mod)
                 )
             else:
                 non_edge_label = F.when(
                     mod == 0,
-                    truncated_ts_scol + sql_utils.makeInterval(unit_str, F.lit(n)._jc),
-                ).otherwise(truncated_ts_scol - sql_utils.makeInterval(unit_str, (mod - n)._jc))
+                    truncated_ts_scol + self.get_make_interval(unit_str, n),
+                ).otherwise(truncated_ts_scol - self.get_make_interval(unit_str, mod - n))
 
             return F.when(edge_cond, edge_label).otherwise(non_edge_label)
 

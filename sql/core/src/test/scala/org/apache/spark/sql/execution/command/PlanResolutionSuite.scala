@@ -407,7 +407,7 @@ class PlanResolutionSuite extends AnalysisTest {
         |OPTIONS (path '/tmp/file')
         |LOCATION '/tmp/file'""".stripMargin
     checkError(
-      exception = intercept[AnalysisException] {
+      exception = intercept[ParseException] {
         parseAndResolve(v2)
       },
       errorClass = "_LEGACY_ERROR_TEMP_0032",
@@ -1395,7 +1395,7 @@ class PlanResolutionSuite extends AnalysisTest {
   test("alter table: alter column action is not specified") {
     val sql = "ALTER TABLE v1Table ALTER COLUMN i"
     checkError(
-      exception = intercept[AnalysisException] {
+      exception = intercept[ParseException] {
         parseAndResolve(sql)
       },
       errorClass = "_LEGACY_ERROR_TEMP_0035",
@@ -2746,7 +2746,7 @@ class PlanResolutionSuite extends AnalysisTest {
       """CREATE TABLE page_view
         |STORED BY 'storage.handler.class.name' AS SELECT * FROM src""".stripMargin
     checkError(
-      exception = intercept[AnalysisException] {
+      exception = intercept[ParseException] {
         extractTableDesc(s4)
       },
       errorClass = "_LEGACY_ERROR_TEMP_0035",

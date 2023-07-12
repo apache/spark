@@ -1225,10 +1225,27 @@ class HiveDDLSuite
           exception = intercept[AnalysisException] {
             sql("CREATE VIEW view1 (col1, col3) AS SELECT * FROM tab1")
           },
-          errorClass = "_LEGACY_ERROR_TEMP_1277",
+          errorClass = "CREATE_VIEW_COLUMN_ARITY_MISMATCH.NOT_ENOUGH_DATA_COLUMNS",
           parameters = Map(
-            "analyzedPlanLength" -> "1",
-            "userSpecifiedColumnsLength" -> "2"
+            "viewName" -> s"`$SESSION_CATALOG_NAME`.`default`.`view1`",
+            "viewColumns" -> "`col1`, `col3`",
+            "dataColumns" -> "`id`"
+          )
+        )
+      }
+    }
+    withTable("tab2") {
+      Seq((1, 2, 3)).toDF("col1", "col2", "col3").write.saveAsTable("tab2")
+      withView("view2") {
+        checkError(
+          exception = intercept[AnalysisException] {
+            sql("CREATE VIEW view2 (col1, col3) AS SELECT * FROM tab2")
+          },
+          errorClass = "CREATE_VIEW_COLUMN_ARITY_MISMATCH.TOO_MANY_DATA_COLUMNS",
+          parameters = Map(
+            "viewName" -> s"`$SESSION_CATALOG_NAME`.`default`.`view2`",
+            "viewColumns" -> "`col1`, `col3`",
+            "dataColumns" -> "`col1`, `col2`, `col3`"
           )
         )
       }
@@ -1407,8 +1424,8 @@ class HiveDDLSuite
           exception = intercept[AnalysisException] {
             sql("DROP DATABASE default")
           },
-          errorClass = "_LEGACY_ERROR_TEMP_1067",
-          parameters = Map.empty
+          errorClass = "UNSUPPORTED_FEATURE.DROP_DATABASE",
+          parameters = Map("database" -> "`default`")
         )
 
         // SQLConf.CASE_SENSITIVE does not affect the result
@@ -1418,10 +1435,13 @@ class HiveDDLSuite
             sql("DROP DATABASE DeFault")
           },
           errorClass = caseSensitive match {
-            case "false" => "_LEGACY_ERROR_TEMP_1067"
+            case "false" => "UNSUPPORTED_FEATURE.DROP_DATABASE"
             case _ => null
           },
-          parameters = Map.empty
+          parameters = caseSensitive match {
+            case "false" => Map("database" -> "`default`")
+            case _ => Map.empty
+          }
         )
       }
     }
@@ -1825,8 +1845,10 @@ class HiveDDLSuite
           exception = intercept[AnalysisException] {
             sql(s"DESCRIBE $indexTabName")
           },
-          errorClass = "_LEGACY_ERROR_TEMP_1220",
-          parameters = Map("tableType" -> "index table")
+          errorClass = "UNSUPPORTED_FEATURE.HIVE_TABLE_TYPE",
+          parameters = Map(
+            "tableName" -> s"`$indexTabName`",
+            "tableType" -> "index table")
         )
       } finally {
         client.runSqlHive(s"DROP INDEX IF EXISTS $indexName ON $tabName")
@@ -2601,10 +2623,10 @@ class HiveDDLSuite
         exception = intercept[AnalysisException] {
           sql("CREATE TABLE t1 USING PARQUET AS SELECT NULL AS null_col")
         },
-        errorClass = "_LEGACY_ERROR_TEMP_1150",
+        errorClass = "UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE",
         parameters = Map(
-          "field" -> "null_col",
-          "fieldType" -> "void",
+          "columnName" -> "`null_col`",
+          "columnType" -> "\"VOID\"",
           "format" -> "Parquet")
       )
 
@@ -2626,10 +2648,10 @@ class HiveDDLSuite
         exception = intercept[AnalysisException] {
           sql("CREATE TABLE t1 (v VOID) USING PARQUET")
         },
-        errorClass = "_LEGACY_ERROR_TEMP_1150",
+        errorClass = "UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE",
         parameters = Map(
-          "field" -> "v",
-          "fieldType" -> "void",
+          "columnName" -> "`v`",
+          "columnType" -> "\"VOID\"",
           "format" -> "Parquet"))
 
       checkError(
@@ -2843,7 +2865,7 @@ class HiveDDLSuite
         exception = intercept[AnalysisException] {
           sql("load data inpath '/doesnotexist.csv' into table tbl")
         },
-        errorClass = "_LEGACY_ERROR_TEMP_1265",
+        errorClass = "LOAD_DATA_PATH_NOT_EXISTS",
         parameters = Map("path" -> "/doesnotexist.csv")
       )
     }
@@ -3025,7 +3047,7 @@ class HiveDDLSuite
         """CREATE TABLE targetDsTable LIKE sourceHiveTable USING PARQUET
           |ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe'""".stripMargin
       checkError(
-        exception = intercept[AnalysisException] {
+        exception = intercept[ParseException] {
           sql(sql1)
         },
         errorClass = "_LEGACY_ERROR_TEMP_0035",
@@ -3041,7 +3063,7 @@ class HiveDDLSuite
           |ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe'
           |WITH SERDEPROPERTIES ('test' = 'test')""".stripMargin
       checkError(
-        exception = intercept[AnalysisException] {
+        exception = intercept[ParseException] {
           sql(sql2)
         },
         errorClass = "_LEGACY_ERROR_TEMP_0035",
@@ -3057,7 +3079,7 @@ class HiveDDLSuite
           |ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe'
           |WITH SERDEPROPERTIES ('test' = 'test')""".stripMargin
       checkError(
-        exception = intercept[AnalysisException] {
+        exception = intercept[ParseException] {
           sql(sql3)
         },
         errorClass = "_LEGACY_ERROR_TEMP_0047",
@@ -3071,7 +3093,7 @@ class HiveDDLSuite
           |STORED AS INPUTFORMAT 'inFormat' OUTPUTFORMAT 'outFormat'
           |ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe'""".stripMargin
       checkError(
-        exception = intercept[AnalysisException] {
+        exception = intercept[ParseException] {
           sql(sql4)
         },
         errorClass = "_LEGACY_ERROR_TEMP_0035",
@@ -3145,7 +3167,7 @@ class HiveDDLSuite
                  |ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe'
                  |STORED AS $format""".stripMargin
             checkError(
-              exception = intercept[AnalysisException] {
+              exception = intercept[ParseException] {
                 sql(sql1)
               },
               errorClass = "_LEGACY_ERROR_TEMP_0035",
@@ -3184,7 +3206,7 @@ class HiveDDLSuite
                |ROW FORMAT DELIMITED
                |STORED AS PARQUET""".stripMargin
           checkError(
-            exception = intercept[AnalysisException] {
+            exception = intercept[ParseException] {
               sql(sql1)
             },
             errorClass = "_LEGACY_ERROR_TEMP_0035",
@@ -3276,8 +3298,8 @@ class HiveDDLSuite
 
       val jarName = "TestUDTF.jar"
       val jar = spark.asInstanceOf[TestHiveSparkSession].getHiveFile(jarName).toURI.toString
-      spark.sparkContext.addedJars.keys.find(_.contains(jarName))
-        .foreach(spark.sparkContext.addedJars.remove)
+      spark.sparkContext.allAddedJars.keys.find(_.contains(jarName))
+        .foreach(spark.sparkContext.addedJars("default").remove)
       assert(!spark.sparkContext.listJars().exists(_.contains(jarName)))
       val e = intercept[AnalysisException] {
         sql("CREATE TEMPORARY FUNCTION f1 AS " +
@@ -3311,7 +3333,7 @@ class HiveDDLSuite
           exception = intercept[SparkUnsupportedOperationException] {
             sql(sqlCmd)
           },
-          errorClass = "_LEGACY_ERROR_TEMP_2276",
+          errorClass = "UNSUPPORTED_FEATURE.HIVE_WITH_ANSI_INTERVALS",
           parameters = Map("tableName" -> s"`$SESSION_CATALOG_NAME`.`default`.`$tbl`")
         )
       }

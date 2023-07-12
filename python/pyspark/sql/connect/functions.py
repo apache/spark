@@ -2496,6 +2496,13 @@ def to_char(col: "ColumnOrName", format: "ColumnOrName") -> Column:
 to_char.__doc__ = pysparkfuncs.to_char.__doc__
 
 
+def to_varchar(col: "ColumnOrName", format: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("to_varchar", col, format)
+
+
+to_varchar.__doc__ = pysparkfuncs.to_varchar.__doc__
+
+
 def to_number(col: "ColumnOrName", format: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("to_number", col, format)
 
@@ -3591,21 +3598,27 @@ def sha2(col: "ColumnOrName", numBits: int) -> Column:
 sha2.__doc__ = pysparkfuncs.sha2.__doc__
 
 
-def hll_sketch_agg(col: "ColumnOrName", lgConfigK: Optional[int] = None) -> Column:
-    if lgConfigK is not None:
-        return _invoke_function("hll_sketch_agg", _to_col(col), lit(lgConfigK))
+def hll_sketch_agg(col: "ColumnOrName", lgConfigK: Optional[Union[int, Column]] = None) -> Column:
+    if lgConfigK is None:
+        return _invoke_function_over_columns("hll_sketch_agg", col)
     else:
-        return _invoke_function("hll_sketch_agg", _to_col(col))
+        _lgConfigK = lit(lgConfigK) if isinstance(lgConfigK, int) else lgConfigK
+        return _invoke_function_over_columns("hll_sketch_agg", col, _lgConfigK)
 
 
 hll_sketch_agg.__doc__ = pysparkfuncs.hll_sketch_agg.__doc__
 
 
 def hll_union_agg(col: "ColumnOrName", allowDifferentLgConfigK: Optional[bool] = None) -> Column:
-    if allowDifferentLgConfigK is not None:
-        return _invoke_function("hll_union_agg", _to_col(col), lit(allowDifferentLgConfigK))
+    if allowDifferentLgConfigK is None:
+        return _invoke_function_over_columns("hll_union_agg", col)
     else:
-        return _invoke_function("hll_union_agg", _to_col(col))
+        _allowDifferentLgConfigK = (
+            lit(allowDifferentLgConfigK)
+            if isinstance(allowDifferentLgConfigK, bool)
+            else allowDifferentLgConfigK
+        )
+        return _invoke_function_over_columns("hll_union_agg", col, _allowDifferentLgConfigK)
 
 
 hll_union_agg.__doc__ = pysparkfuncs.hll_union_agg.__doc__
@@ -3720,6 +3733,23 @@ def aes_decrypt(
 aes_decrypt.__doc__ = pysparkfuncs.aes_decrypt.__doc__
 
 
+def try_aes_decrypt(
+    input: "ColumnOrName",
+    key: "ColumnOrName",
+    mode: Optional["ColumnOrName"] = None,
+    padding: Optional["ColumnOrName"] = None,
+    aad: Optional["ColumnOrName"] = None,
+) -> Column:
+    _mode = lit("GCM") if mode is None else _to_col(mode)
+    _padding = lit("DEFAULT") if padding is None else _to_col(padding)
+    _aad = lit("") if aad is None else _to_col(aad)
+
+    return _invoke_function_over_columns("try_aes_decrypt", input, key, _mode, _padding, _aad)
+
+
+try_aes_decrypt.__doc__ = pysparkfuncs.try_aes_decrypt.__doc__
+
+
 def sha(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("sha", col)
 
@@ -3788,7 +3818,42 @@ def random(
 random.__doc__ = pysparkfuncs.random.__doc__
 
 
-# User Defined Function
+def bitmap_bit_position(col: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("bitmap_bit_position", col)
+
+
+bitmap_bit_position.__doc__ = pysparkfuncs.bitmap_bit_position.__doc__
+
+
+def bitmap_bucket_number(col: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("bitmap_bucket_number", col)
+
+
+bitmap_bucket_number.__doc__ = pysparkfuncs.bitmap_bucket_number.__doc__
+
+
+def bitmap_construct_agg(col: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("bitmap_construct_agg", col)
+
+
+bitmap_construct_agg.__doc__ = pysparkfuncs.bitmap_construct_agg.__doc__
+
+
+def bitmap_count(col: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("bitmap_count", col)
+
+
+bitmap_count.__doc__ = pysparkfuncs.bitmap_count.__doc__
+
+
+def bitmap_or_agg(col: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("bitmap_or_agg", col)
+
+
+bitmap_or_agg.__doc__ = pysparkfuncs.bitmap_or_agg.__doc__
+
+
+# Call Functions
 
 
 def call_udf(udfName: str, *cols: "ColumnOrName") -> Column:
@@ -3824,6 +3889,13 @@ def udf(
 
 
 udf.__doc__ = pysparkfuncs.udf.__doc__
+
+
+def call_function(udfName: str, *cols: "ColumnOrName") -> Column:
+    return _invoke_function(udfName, *[_to_col(c) for c in cols])
+
+
+call_function.__doc__ = pysparkfuncs.call_function.__doc__
 
 
 def _test() -> None:

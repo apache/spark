@@ -19,9 +19,19 @@ license: |
   limitations under the License.
 ---
 
+SQLSTATE: none assigned
+
 Invalid observed metrics.
 
 This error class has the following derived error classes:
+
+## AGGREGATE_EXPRESSION_WITH_DISTINCT_UNSUPPORTED
+
+Aggregate expression with distinct are not allowed in observed metrics, but found: `<expr>`.
+
+## AGGREGATE_EXPRESSION_WITH_FILTER_UNSUPPORTED
+
+Aggregate expression with filter predicate are not allowed in observed metrics, but found: `<expr>`.
 
 ## MISSING_NAME
 
@@ -30,6 +40,10 @@ The observed metrics should be named: `<operator>`.
 ## NESTED_AGGREGATES_UNSUPPORTED
 
 Nested aggregates are not allowed in observed metrics, but found: `<expr>`.
+
+## NON_AGGREGATE_FUNC_ARG_IS_ATTRIBUTE
+
+Attribute `<expr>` can only be used as an argument to an aggregate function.
 
 ## NON_AGGREGATE_FUNC_ARG_IS_NON_DETERMINISTIC
 
