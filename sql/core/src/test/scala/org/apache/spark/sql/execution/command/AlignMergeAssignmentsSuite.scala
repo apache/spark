@@ -602,9 +602,9 @@ class AlignMergeAssignmentsSuite extends AlignAssignmentsSuiteBase {
               errorClass = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_SAFELY_CAST",
               parameters = Map(
                 "tableName" -> "``",
-                "colPath" -> "`s`.`n_s`",
-                "from" -> "\"VOID\"",
-                "to" -> "\"STRUCT<DN_I:INT,DN_L:BIGINT>\"")
+                "colName" -> "`s`.`n_s`",
+                "srcType" -> "\"VOID\"",
+                "targetType" -> "\"STRUCT<DN_I:INT,DN_L:BIGINT>\"")
             )
           }
 
@@ -702,7 +702,7 @@ class AlignMergeAssignmentsSuite extends AlignAssignmentsSuiteBase {
         checkError(
           exception = e,
           errorClass = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_FIND_DATA",
-          parameters = Map("tableName" -> "``", "colPath" -> "`s`.`n_s`.`dn_l`")
+          parameters = Map("tableName" -> "``", "colName" -> "`s`.`n_s`.`dn_l`")
         )
 
         // ANSI mode does NOT allow string to int casts
@@ -848,7 +848,7 @@ class AlignMergeAssignmentsSuite extends AlignAssignmentsSuiteBase {
         checkError(
           exception = e,
           errorClass = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_FIND_DATA",
-          parameters = Map("tableName" -> "``", "colPath" -> "`s`.`n_s`.`dn_l`")
+          parameters = Map("tableName" -> "``", "colName" -> "`s`.`n_s`.`dn_l`")
         )
 
         // strict mode does NOT allow string to int casts

@@ -389,9 +389,9 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSparkSession with 
           errorClass = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_SAFELY_CAST",
           parameters = Map(
             "tableName" -> "`spark_catalog`.`default`.`t`",
-            "colPath" -> "`i`",
-            "from" -> "\"BIGINT\"",
-            "to" -> "\"INT\"")
+            "colName" -> "`i`",
+            "srcType" -> "\"BIGINT\"",
+            "targetType" -> "\"INT\"")
         )
 
         // Insert into table successfully.
@@ -417,9 +417,9 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSparkSession with 
           errorClass = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_SAFELY_CAST",
           parameters = Map(
             "tableName" -> "`spark_catalog`.`default`.`t`",
-            "colPath" -> "`i`",
-            "from" -> "\"STRING\"",
-            "to" -> "\"INT\"")
+            "colName" -> "`i`",
+            "srcType" -> "\"STRING\"",
+            "targetType" -> "\"INT\"")
         )
 
         checkError(
@@ -429,9 +429,9 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSparkSession with 
           errorClass = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_SAFELY_CAST",
           parameters = Map(
             "tableName" -> "`spark_catalog`.`default`.`t`",
-            "colPath" -> "`i`",
-            "from" -> "\"BOOLEAN\"",
-            "to" -> "\"INT\"")
+            "colName" -> "`i`",
+            "srcType" -> "\"BOOLEAN\"",
+            "targetType" -> "\"INT\"")
         )
       }
     }

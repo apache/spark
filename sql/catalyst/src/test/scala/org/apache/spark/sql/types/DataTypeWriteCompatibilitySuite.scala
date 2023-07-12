@@ -44,9 +44,9 @@ class StrictDataTypeWriteCompatibilitySuite extends DataTypeWriteCompatibilityBa
       errorClass = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_SAFELY_CAST",
       parameters = Map(
         "tableName" -> "``",
-        "colPath" -> "`t`.`x`",
-        "from" -> "\"DOUBLE\"",
-        "to" -> "\"FLOAT\"")
+        "colName" -> "`t`.`x`",
+        "srcType" -> "\"DOUBLE\"",
+        "targetType" -> "\"FLOAT\"")
     )
   }
 
@@ -63,9 +63,9 @@ class StrictDataTypeWriteCompatibilitySuite extends DataTypeWriteCompatibilityBa
       errorClass = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_SAFELY_CAST",
       parameters = Map(
         "tableName" -> "``",
-        "colPath" -> "`arr`.`element`",
-        "from" -> "\"BIGINT\"",
-        "to" -> "\"INT\"")
+        "colName" -> "`arr`.`element`",
+        "srcType" -> "\"BIGINT\"",
+        "targetType" -> "\"INT\"")
     )
   }
 
@@ -82,9 +82,9 @@ class StrictDataTypeWriteCompatibilitySuite extends DataTypeWriteCompatibilityBa
       errorClass = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_SAFELY_CAST",
       parameters = Map(
         "tableName" -> "``",
-        "colPath" -> "`m`.`value`",
-        "from" -> "\"BIGINT\"",
-        "to" -> "\"INT\"")
+        "colName" -> "`m`.`value`",
+        "srcType" -> "\"BIGINT\"",
+        "targetType" -> "\"INT\"")
     )
   }
 
@@ -101,9 +101,9 @@ class StrictDataTypeWriteCompatibilitySuite extends DataTypeWriteCompatibilityBa
       errorClass = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_SAFELY_CAST",
       parameters = Map(
         "tableName" -> "``",
-        "colPath" -> "`m`.`key`",
-        "from" -> "\"BIGINT\"",
-        "to" -> "\"INT\"")
+        "colName" -> "`m`.`key`",
+        "srcType" -> "\"BIGINT\"",
+        "targetType" -> "\"INT\"")
     )
   }
 
@@ -119,9 +119,9 @@ class StrictDataTypeWriteCompatibilitySuite extends DataTypeWriteCompatibilityBa
         errorClass = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_SAFELY_CAST",
         parameters = Map(
           "tableName" -> "``",
-          "colPath" -> "`nulls`",
-          "from" -> "\"VOID\"",
-          "to" -> toSQLType(t.catalogString))
+          "colName" -> "`nulls`",
+          "srcType" -> "\"VOID\"",
+          "targetType" -> toSQLType(t.catalogString))
       )
     }
   }
@@ -146,9 +146,9 @@ class ANSIDataTypeWriteCompatibilitySuite extends DataTypeWriteCompatibilityBase
       errorClass = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_SAFELY_CAST",
       parameters = Map(
         "tableName" -> "``",
-        "colPath" -> "`m`.`value`",
-        "from" -> "\"STRING\"",
-        "to" -> "\"INT\"")
+        "colName" -> "`m`.`value`",
+        "srcType" -> "\"STRING\"",
+        "targetType" -> "\"INT\"")
     )
   }
 
@@ -166,9 +166,9 @@ class ANSIDataTypeWriteCompatibilitySuite extends DataTypeWriteCompatibilityBase
       errorClass = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_SAFELY_CAST",
       parameters = Map(
         "tableName" -> "``",
-        "colPath" -> "`t`.`x`",
-        "from" -> "\"STRING\"",
-        "to" -> "\"FLOAT\"")
+        "colName" -> "`t`.`x`",
+        "srcType" -> "\"STRING\"",
+        "targetType" -> "\"FLOAT\"")
     )
   }
 
@@ -185,9 +185,9 @@ class ANSIDataTypeWriteCompatibilitySuite extends DataTypeWriteCompatibilityBase
       errorClass = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_SAFELY_CAST",
       parameters = Map(
         "tableName" -> "``",
-        "colPath" -> "`arr`.`element`",
-        "from" -> "\"STRING\"",
-        "to" -> "\"INT\"")
+        "colName" -> "`arr`.`element`",
+        "srcType" -> "\"STRING\"",
+        "targetType" -> "\"INT\"")
     )
   }
 
@@ -204,9 +204,9 @@ class ANSIDataTypeWriteCompatibilitySuite extends DataTypeWriteCompatibilityBase
       errorClass = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_SAFELY_CAST",
       parameters = Map(
         "tableName" -> "``",
-        "colPath" -> "`arr`.`key`",
-        "from" -> "\"STRING\"",
-        "to" -> "\"INT\"")
+        "colName" -> "`arr`.`key`",
+        "srcType" -> "\"STRING\"",
+        "targetType" -> "\"INT\"")
     )
   }
 
@@ -221,9 +221,9 @@ class ANSIDataTypeWriteCompatibilitySuite extends DataTypeWriteCompatibilityBase
       errorClass = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_SAFELY_CAST",
       parameters = Map(
         "tableName" -> "``",
-        "colPath" -> "`longToTimestamp`",
-        "from" -> "\"BIGINT\"",
-        "to" -> "\"TIMESTAMP\"")
+        "colName" -> "`longToTimestamp`",
+        "srcType" -> "\"BIGINT\"",
+        "targetType" -> "\"TIMESTAMP\"")
     )
     checkError(
       exception = intercept[AnalysisException] (
@@ -234,9 +234,9 @@ class ANSIDataTypeWriteCompatibilitySuite extends DataTypeWriteCompatibilityBase
       errorClass = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_SAFELY_CAST",
       parameters = Map(
         "tableName" -> "``",
-        "colPath" -> "`timestampToLong`",
-        "from" -> "\"TIMESTAMP\"",
-        "to" -> "\"BIGINT\"")
+        "colName" -> "`timestampToLong`",
+        "srcType" -> "\"TIMESTAMP\"",
+        "targetType" -> "\"BIGINT\"")
     )
   }
 
@@ -309,9 +309,9 @@ abstract class DataTypeWriteCompatibilityBaseSuite extends SparkFunSuite {
             errorClass = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_SAFELY_CAST",
             parameters = Map(
               "tableName" -> "``",
-              "colPath" -> "`t`",
-              "from" -> toSQLType(w),
-              "to" -> toSQLType(r)
+              "colName" -> "`t`",
+              "srcType" -> toSQLType(w),
+              "targetType" -> toSQLType(r)
             ),
             matchPVals = true
           )
@@ -329,7 +329,7 @@ abstract class DataTypeWriteCompatibilityBaseSuite extends SparkFunSuite {
           analysis.caseSensitiveResolution, "t", storeAssignmentPolicy, errMsg => errs += errMsg)
       ),
       errorClass = "INCOMPATIBLE_DATA_FOR_TABLE.STRUCT_MISSING_FIELDS",
-      parameters = Map("tableName" -> "``", "colPath" -> "`t`", "missingFields" -> "`y`")
+      parameters = Map("tableName" -> "``", "colName" -> "`t`", "missingFields" -> "`y`")
     )
   }
 
@@ -346,7 +346,7 @@ abstract class DataTypeWriteCompatibilityBaseSuite extends SparkFunSuite {
         "expected" -> "`x`",
         "found" -> "`y`",
         "tableName" -> "``",
-        "colPath" -> "`t`",
+        "colName" -> "`t`",
         "order" -> "0")
     )
   }
@@ -374,7 +374,7 @@ abstract class DataTypeWriteCompatibilityBaseSuite extends SparkFunSuite {
         "expected" -> "`y`",
         "found" -> "`z`",
         "tableName" -> "``",
-        "colPath" -> "`t`",
+        "colName" -> "`t`",
         "order" -> "1")
     )
   }
@@ -407,7 +407,7 @@ abstract class DataTypeWriteCompatibilityBaseSuite extends SparkFunSuite {
           analysis.caseSensitiveResolution, "t", storeAssignmentPolicy, errMsg => errs += errMsg)
       ),
       errorClass = "INCOMPATIBLE_DATA_FOR_TABLE.NULLABLE_COLUMN",
-      parameters = Map("tableName" -> "``", "colPath" -> "`t`.`x`")
+      parameters = Map("tableName" -> "``", "colName" -> "`t`.`x`")
     )
   }
 
@@ -419,7 +419,7 @@ abstract class DataTypeWriteCompatibilityBaseSuite extends SparkFunSuite {
           analysis.caseSensitiveResolution, "t", storeAssignmentPolicy, errMsg => errs += errMsg)
       ),
       errorClass = "INCOMPATIBLE_DATA_FOR_TABLE.EXTRA_STRUCT_FIELDS",
-      parameters = Map("tableName" -> "``", "colPath" -> "`t`", "extraCols" -> "`z`")
+      parameters = Map("tableName" -> "``", "colName" -> "`t`", "extraFields" -> "`z`")
     )
   }
 
@@ -460,7 +460,7 @@ abstract class DataTypeWriteCompatibilityBaseSuite extends SparkFunSuite {
           analysis.caseSensitiveResolution, "arr", storeAssignmentPolicy, errMsg => errs += errMsg)
       ),
       errorClass = "INCOMPATIBLE_DATA_FOR_TABLE.NULLABLE_ARRAY_ELEMENTS",
-      parameters = Map("tableName" -> "``", "colPath" -> "`arr`")
+      parameters = Map("tableName" -> "``", "colName" -> "`arr`")
     )
   }
 
@@ -490,7 +490,7 @@ abstract class DataTypeWriteCompatibilityBaseSuite extends SparkFunSuite {
           analysis.caseSensitiveResolution, "m", storeAssignmentPolicy, errMsg => errs += errMsg)
       ),
       errorClass = "INCOMPATIBLE_DATA_FOR_TABLE.NULLABLE_MAP_VALUES",
-      parameters = Map("tableName" -> "``", "colPath" -> "`m`")
+      parameters = Map("tableName" -> "``", "colName" -> "`m`")
     )
   }
 
@@ -544,9 +544,9 @@ abstract class DataTypeWriteCompatibilityBaseSuite extends SparkFunSuite {
       errorClass = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_SAFELY_CAST",
       parameters = Map(
         "tableName" -> "``",
-        "colPath" -> "`t`.`a`.`element`",
-        "from" -> "\"STRING\"",
-        "to" -> "\"DOUBLE\""
+        "colName" -> "`t`.`a`.`element`",
+        "srcType" -> "\"STRING\"",
+        "targetType" -> "\"DOUBLE\""
       )
     )
   }

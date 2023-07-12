@@ -27,38 +27,38 @@ This error class has the following derived error classes:
 
 ## AMBIGUOUS_COLUMN_NAME
 
-Ambiguous column name in the input data: `<colPath>`.
+Ambiguous column name in the input data `<colName>`.
 
 ## CANNOT_FIND_DATA
 
-Cannot find data for output column `<colPath>`.
+Cannot find data for the output column `<colName>`.
 
 ## CANNOT_SAFELY_CAST
 
-Cannot safely cast `<colPath>`: `<from>` to `<to>`.
+Cannot safely cast `<colName>` `<srcType>` to `<targetType>`.
 
 ## EXTRA_STRUCT_FIELDS
 
-Cannot write extra fields to struct `<colPath>`: `<extraCols>`.
+Cannot write extra fields `<extraFields>` to the struct `<colName>`.
 
 ## NULLABLE_ARRAY_ELEMENTS
 
-Cannot write nullable elements to array of non-nulls: `<colPath>`.
+Cannot write nullable elements to array of non-nulls: `<colName>`.
 
 ## NULLABLE_COLUMN
 
-Cannot write nullable values to non-null column `<colPath>`.
+Cannot write nullable values to non-null column `<colName>`.
 
 ## NULLABLE_MAP_VALUES
 
-Cannot write nullable elements to array of non-nulls: `<colPath>`.
+Cannot write nullable values to map of non-nulls: `<colName>`.
 
 ## STRUCT_MISSING_FIELDS
 
-Struct `<colPath>` missing fields: `<missingFields>`.
+Struct `<colName>` missing fields: `<missingFields>`.
 
 ## UNEXPECTED_COLUMN_NAME
 
-Struct `<colPath>` `<order>`-th field name does not match (may be out of order): expected `<expected>`, found `<found>`.
+Struct `<colName>` `<order>`-th field name does not match (may be out of order): expected `<expected>`, found `<found>`.
 
 

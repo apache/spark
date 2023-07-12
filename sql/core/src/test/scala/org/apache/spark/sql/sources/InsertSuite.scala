@@ -660,9 +660,9 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
           errorClass = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_SAFELY_CAST",
           parameters = Map(
             "tableName" -> "`spark_catalog`.`default`.`t`",
-            "colPath" -> "`i`",
-            "from" -> "\"BIGINT\"",
-            "to" -> "\"INT\"")
+            "colName" -> "`i`",
+            "srcType" -> "\"BIGINT\"",
+            "targetType" -> "\"INT\"")
         )
 
         checkError(
@@ -672,9 +672,9 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
           errorClass = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_SAFELY_CAST",
           parameters = Map(
             "tableName" -> "`spark_catalog`.`default`.`t`",
-            "colPath" -> "`d`",
-            "from" -> "\"DECIMAL(2,1)\"",
-            "to" -> "\"DOUBLE\"")
+            "colName" -> "`d`",
+            "srcType" -> "\"DECIMAL(2,1)\"",
+            "targetType" -> "\"DOUBLE\"")
         )
 
         checkError(
@@ -707,9 +707,9 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
           errorClass = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_SAFELY_CAST",
           parameters = Map(
             "tableName" -> "`spark_catalog`.`default`.`t`",
-            "colPath" -> "`i`",
-            "from" -> "\"STRING\"",
-            "to" -> "\"INT\"")
+            "colName" -> "`i`",
+            "srcType" -> "\"STRING\"",
+            "targetType" -> "\"INT\"")
         )
         checkError(
           exception = intercept[AnalysisException] {
@@ -718,9 +718,9 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
           errorClass = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_SAFELY_CAST",
           parameters = Map(
             "tableName" -> "`spark_catalog`.`default`.`t`",
-            "colPath" -> "`i`",
-            "from" -> "\"TIMESTAMP\"",
-            "to" -> "\"INT\"")
+            "colName" -> "`i`",
+            "srcType" -> "\"TIMESTAMP\"",
+            "targetType" -> "\"INT\"")
         )
         checkError(
           exception = intercept[AnalysisException] {
@@ -729,9 +729,9 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
           errorClass = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_SAFELY_CAST",
           parameters = Map(
             "tableName" -> "`spark_catalog`.`default`.`t`",
-            "colPath" -> "`i`",
-            "from" -> "\"BOOLEAN\"",
-            "to" -> "\"INT\"")
+            "colName" -> "`i`",
+            "srcType" -> "\"BOOLEAN\"",
+            "targetType" -> "\"INT\"")
         )
       }
     }
@@ -852,9 +852,9 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
           errorClass = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_SAFELY_CAST",
           parameters = Map(
             "tableName" -> "`spark_catalog`.`default`.`t`",
-            "colPath" -> "`i`",
-            "from" -> "\"TIMESTAMP\"",
-            "to" -> "\"INT\"")
+            "colName" -> "`i`",
+            "srcType" -> "\"TIMESTAMP\"",
+            "targetType" -> "\"INT\"")
         )
       }
 
@@ -867,9 +867,9 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
           errorClass = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_SAFELY_CAST",
           parameters = Map(
             "tableName" -> "`spark_catalog`.`default`.`t`",
-            "colPath" -> "`i`",
-            "from" -> "\"DATE\"",
-            "to" -> "\"INT\"")
+            "colName" -> "`i`",
+            "srcType" -> "\"DATE\"",
+            "targetType" -> "\"INT\"")
         )
       }
 
@@ -882,9 +882,9 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
             errorClass = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_SAFELY_CAST",
             parameters = Map(
               "tableName" -> "`spark_catalog`.`default`.`t`",
-              "colPath" -> "`b`",
-              "from" -> "\"TIMESTAMP\"",
-              "to" -> "\"BOOLEAN\"")
+              "colName" -> "`b`",
+              "srcType" -> "\"TIMESTAMP\"",
+              "targetType" -> "\"BOOLEAN\"")
         )
       }
 
@@ -897,9 +897,9 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
             errorClass = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_SAFELY_CAST",
             parameters = Map(
               "tableName" -> "`spark_catalog`.`default`.`t`",
-              "colPath" -> "`b`",
-              "from" -> "\"DATE\"",
-              "to" -> "\"BOOLEAN\"")
+              "colName" -> "`b`",
+              "srcType" -> "\"DATE\"",
+              "targetType" -> "\"BOOLEAN\"")
         )
       }
     }
@@ -1391,7 +1391,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
           errorClass = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_FIND_DATA",
           parameters = Map(
             "tableName" -> "`spark_catalog`.`default`.`t`",
-            "colPath" -> "`s`"))
+            "colName" -> "`s`"))
       }
       withTable("t") {
         sql("create table t(i boolean default true, s bigint) using parquet")
@@ -1402,7 +1402,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
           errorClass = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_FIND_DATA",
           parameters = Map(
             "tableName" -> "`spark_catalog`.`default`.`t`",
-            "colPath" -> "`s`"))
+            "colName" -> "`s`"))
       }
       withTable("t") {
         sql("create table t(i boolean, s bigint default 42) using parquet")
@@ -1413,7 +1413,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
           errorClass = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_FIND_DATA",
           parameters = Map(
             "tableName" -> "`spark_catalog`.`default`.`t`",
-            "colPath" -> "`i`"))
+            "colName" -> "`i`"))
       }
       withTable("t") {
         sql("create table t(i boolean, s bigint, q int) using parquet partitioned by (i)")
@@ -1424,7 +1424,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
           errorClass = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_FIND_DATA",
           parameters = Map(
             "tableName" -> "`spark_catalog`.`default`.`t`",
-            "colPath" -> "`q`"))
+            "colName" -> "`q`"))
       }
       withTable("t") {
         sql("create table t(i boolean, s bigint, q int) using parquet partitioned by (i)")
@@ -1435,7 +1435,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
           errorClass = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_FIND_DATA",
           parameters = Map(
             "tableName" -> "`spark_catalog`.`default`.`t`",
-            "colPath" -> "`s`"))
+            "colName" -> "`s`"))
       }
       withTable("t") {
         sql("create table t(i boolean, s bigint, q int) using parquet partitioned by (i)")
@@ -1446,7 +1446,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
           errorClass = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_FIND_DATA",
           parameters = Map(
             "tableName" -> "`spark_catalog`.`default`.`t`",
-            "colPath" -> "`s`"))
+            "colName" -> "`s`"))
       }
     }
     // When the CASE_SENSITIVE configuration is enabled, then using different cases for the required

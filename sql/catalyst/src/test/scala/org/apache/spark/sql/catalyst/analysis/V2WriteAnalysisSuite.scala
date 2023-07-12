@@ -208,9 +208,9 @@ abstract class V2StrictWriteAnalysisSuiteBase extends V2WriteAnalysisSuiteBase {
       expectedErrorClass = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_SAFELY_CAST",
       expectedMessageParameters = Map(
         "tableName" -> "`table-name`",
-        "colPath" -> "`x`",
-        "from" -> "\"DOUBLE\"",
-        "to" -> "\"FLOAT\"")
+        "colName" -> "`x`",
+        "srcType" -> "\"DOUBLE\"",
+        "targetType" -> "\"FLOAT\"")
     )
   }
 
@@ -231,9 +231,9 @@ abstract class V2StrictWriteAnalysisSuiteBase extends V2WriteAnalysisSuiteBase {
       expectedErrorClass = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_SAFELY_CAST",
       expectedMessageParameters = Map(
         "tableName" -> "`table-name`",
-        "colPath" -> "`x`",
-        "from" -> "\"DOUBLE\"",
-        "to" -> "\"FLOAT\"")
+        "colName" -> "`x`",
+        "srcType" -> "\"DOUBLE\"",
+        "targetType" -> "\"FLOAT\"")
     )
   }
 
@@ -250,9 +250,9 @@ abstract class V2StrictWriteAnalysisSuiteBase extends V2WriteAnalysisSuiteBase {
       expectedErrorClass = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_SAFELY_CAST",
       expectedMessageParameters = Map(
         "tableName" -> "`table-name`",
-        "colPath" -> "`x`",
-        "from" -> "\"DOUBLE\"",
-        "to" -> "\"FLOAT\"")
+        "colName" -> "`x`",
+        "srcType" -> "\"DOUBLE\"",
+        "targetType" -> "\"FLOAT\"")
     )
   }
 
@@ -273,9 +273,9 @@ abstract class V2StrictWriteAnalysisSuiteBase extends V2WriteAnalysisSuiteBase {
       expectedErrorClass = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_SAFELY_CAST",
       expectedMessageParameters = Map(
         "tableName" -> "`table-name`",
-        "colPath" -> "`x`",
-        "from" -> "\"DOUBLE\"",
-        "to" -> "\"FLOAT\"")
+        "colName" -> "`x`",
+        "srcType" -> "\"DOUBLE\"",
+        "targetType" -> "\"FLOAT\"")
     )
   }
 }
@@ -385,7 +385,7 @@ abstract class V2WriteAnalysisSuiteBase extends AnalysisTest {
     assertAnalysisErrorClass(
       parsedPlan,
       expectedErrorClass = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_FIND_DATA",
-      expectedMessageParameters = Map("tableName" -> "`table-name`", "colPath" -> "`x`")
+      expectedMessageParameters = Map("tableName" -> "`table-name`", "colName" -> "`x`")
     )
   }
 
@@ -400,7 +400,7 @@ abstract class V2WriteAnalysisSuiteBase extends AnalysisTest {
     assertAnalysisErrorClass(
       parsedPlan,
       expectedErrorClass = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_FIND_DATA",
-      expectedMessageParameters = Map("tableName" -> "`table-name`", "colPath" -> "`x`")
+      expectedMessageParameters = Map("tableName" -> "`table-name`", "colName" -> "`x`")
     )
   }
 
@@ -463,7 +463,7 @@ abstract class V2WriteAnalysisSuiteBase extends AnalysisTest {
     assertAnalysisErrorClass(
       parsedPlan,
       expectedErrorClass = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_FIND_DATA",
-      expectedMessageParameters = Map("tableName" -> "`table-name`", "colPath" -> "`x`")
+      expectedMessageParameters = Map("tableName" -> "`table-name`", "colName" -> "`x`")
     )
   }
 
@@ -478,7 +478,7 @@ abstract class V2WriteAnalysisSuiteBase extends AnalysisTest {
     assertAnalysisErrorClass(
       parsedPlan,
       expectedErrorClass = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_FIND_DATA",
-      expectedMessageParameters = Map("tableName" -> "`table-name`", "colPath" -> "`x`")
+      expectedMessageParameters = Map("tableName" -> "`table-name`", "colName" -> "`x`")
     )
   }
 
@@ -527,8 +527,8 @@ abstract class V2WriteAnalysisSuiteBase extends AnalysisTest {
       expectedErrorClass = "INCOMPATIBLE_DATA_FOR_TABLE.EXTRA_STRUCT_FIELDS",
       expectedMessageParameters = Map(
         "tableName" -> "`table-name`",
-        "colPath" -> "`b`",
-        "extraCols" -> "`z`"
+        "colName" -> "`b`",
+        "extraFields" -> "`z`"
       )
     )
   }
@@ -704,7 +704,7 @@ abstract class V2WriteAnalysisSuiteBase extends AnalysisTest {
       assertAnalysisErrorClass(
         parsedPlan,
         expectedErrorClass = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_FIND_DATA",
-        expectedMessageParameters = Map("tableName" -> "`table-name`", "colPath" -> "`col`.`a`")
+        expectedMessageParameters = Map("tableName" -> "`table-name`", "colName" -> "`col`.`a`")
       )
     }
 
@@ -758,8 +758,8 @@ abstract class V2WriteAnalysisSuiteBase extends AnalysisTest {
       expectedErrorClass = "INCOMPATIBLE_DATA_FOR_TABLE.EXTRA_STRUCT_FIELDS",
       expectedMessageParameters = Map(
         "tableName" -> "`table-name`",
-        "colPath" -> "`b`.`n2`",
-        "extraCols" -> "`dn3`")
+        "colName" -> "`b`.`n2`",
+        "extraFields" -> "`dn3`")
     )
   }
 
@@ -787,8 +787,8 @@ abstract class V2WriteAnalysisSuiteBase extends AnalysisTest {
       expectedErrorClass = "INCOMPATIBLE_DATA_FOR_TABLE.EXTRA_STRUCT_FIELDS",
       expectedMessageParameters = Map(
         "tableName" -> "`table-name`",
-        "colPath" -> "`arr`.`element`",
-        "extraCols" -> "`z`")
+        "colName" -> "`arr`.`element`",
+        "extraFields" -> "`z`")
     )
   }
 
@@ -820,8 +820,8 @@ abstract class V2WriteAnalysisSuiteBase extends AnalysisTest {
       expectedErrorClass = "INCOMPATIBLE_DATA_FOR_TABLE.EXTRA_STRUCT_FIELDS",
       expectedMessageParameters = Map(
         "tableName" -> "`table-name`",
-        "colPath" -> "`m`.`key`",
-        "extraCols" -> "`z`")
+        "colName" -> "`m`.`key`",
+        "extraFields" -> "`z`")
     )
   }
 
@@ -853,8 +853,8 @@ abstract class V2WriteAnalysisSuiteBase extends AnalysisTest {
       expectedErrorClass = "INCOMPATIBLE_DATA_FOR_TABLE.EXTRA_STRUCT_FIELDS",
       expectedMessageParameters = Map(
         "tableName" -> "`table-name`",
-        "colPath" -> "`m`.`value`",
-        "extraCols" -> "`z`")
+        "colName" -> "`m`.`value`",
+        "extraFields" -> "`z`")
     )
   }
 
@@ -887,7 +887,7 @@ abstract class V2WriteAnalysisSuiteBase extends AnalysisTest {
         expectedErrorClass = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_FIND_DATA",
         expectedMessageParameters = Map(
           "tableName" -> "`table-name`",
-          "colPath" -> "`b`.`n2`.`dn3`")
+          "colName" -> "`b`.`n2`.`dn3`")
       )
     } else {
       assertAnalysisErrorClass(
@@ -895,7 +895,7 @@ abstract class V2WriteAnalysisSuiteBase extends AnalysisTest {
         expectedErrorClass = "INCOMPATIBLE_DATA_FOR_TABLE.STRUCT_MISSING_FIELDS",
         expectedMessageParameters = Map(
           "tableName" -> "`table-name`",
-          "colPath" -> "`b`.`n2`",
+          "colName" -> "`b`.`n2`",
           "missingFields" -> "`dn3`")
       )
     }
@@ -930,7 +930,7 @@ abstract class V2WriteAnalysisSuiteBase extends AnalysisTest {
         expectedErrorClass = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_FIND_DATA",
         expectedMessageParameters = Map(
           "tableName" -> "`table-name`",
-          "colPath" -> "`arr`.`element`.`y`")
+          "colName" -> "`arr`.`element`.`y`")
       )
     } else {
       assertAnalysisErrorClass(
@@ -938,7 +938,7 @@ abstract class V2WriteAnalysisSuiteBase extends AnalysisTest {
         expectedErrorClass = "INCOMPATIBLE_DATA_FOR_TABLE.STRUCT_MISSING_FIELDS",
         expectedMessageParameters = Map(
           "tableName" -> "`table-name`",
-          "colPath" -> "`arr`.`element`",
+          "colName" -> "`arr`.`element`",
           "missingFields" -> "`y`")
       )
     }
@@ -977,7 +977,7 @@ abstract class V2WriteAnalysisSuiteBase extends AnalysisTest {
         expectedErrorClass = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_FIND_DATA",
         expectedMessageParameters = Map(
           "tableName" -> "`table-name`",
-          "colPath" -> "`m`.`key`.`y`")
+          "colName" -> "`m`.`key`.`y`")
       )
     } else {
       assertAnalysisErrorClass(
@@ -985,7 +985,7 @@ abstract class V2WriteAnalysisSuiteBase extends AnalysisTest {
         expectedErrorClass = "INCOMPATIBLE_DATA_FOR_TABLE.STRUCT_MISSING_FIELDS",
         expectedMessageParameters = Map(
           "tableName" -> "`table-name`",
-          "colPath" -> "`m`.`key`",
+          "colName" -> "`m`.`key`",
           "missingFields" -> "`y`")
       )
     }
@@ -1024,7 +1024,7 @@ abstract class V2WriteAnalysisSuiteBase extends AnalysisTest {
         expectedErrorClass = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_FIND_DATA",
         expectedMessageParameters = Map(
           "tableName" -> "`table-name`",
-          "colPath" -> "`m`.`value`.`y`")
+          "colName" -> "`m`.`value`.`y`")
       )
     } else {
       assertAnalysisErrorClass(
@@ -1032,7 +1032,7 @@ abstract class V2WriteAnalysisSuiteBase extends AnalysisTest {
         expectedErrorClass = "INCOMPATIBLE_DATA_FOR_TABLE.STRUCT_MISSING_FIELDS",
         expectedMessageParameters = Map(
           "tableName" -> "`table-name`",
-          "colPath" -> "`m`.`value`",
+          "colName" -> "`m`.`value`",
           "missingFields" -> "`y`")
       )
     }
