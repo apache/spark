@@ -136,35 +136,53 @@ case class GetJsonObject(json: Expression, path: Expression)
   override def prettyName: String = "get_json_object"
 
   @transient
-  private lazy val evaluator = new GetJsonObjectEvaluator(right)
+  private lazy val evaluator = if (path.foldable) {
+    new GetJsonObjectEvaluator(path.eval().asInstanceOf[UTF8String].toString)
+  } else {
+    new GetJsonObjectEvaluator()
+  }
 
   override def eval(input: InternalRow): Any = {
     evaluator.setJson(json.eval(input).asInstanceOf[UTF8String])
-    evaluator.setPath(path.eval(input).asInstanceOf[UTF8String])
+    if (!path.foldable) {
+      evaluator.setPath(path.eval(input).asInstanceOf[UTF8String])
+    }
     evaluator.evaluate()
   }
 
   protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val refEvaluator = ctx.addReferenceObj("evaluator", evaluator)
+    val evaluatorClass = classOf[GetJsonObjectEvaluator].getName
+    val initEvaluator = if (path.foldable) {
+      val cachedPath = path.eval().asInstanceOf[UTF8String].toString
+      s"""new $evaluatorClass("$cachedPath")"""
+    } else {
+      s"new $evaluatorClass()"
+    }
+    val evaluator = ctx.addMutableState(evaluatorClass, "evaluator",
+      v => s"""$v = $initEvaluator;""", forceInline = true)
+
     val jsonEval = json.genCode(ctx)
     val pathEval = path.genCode(ctx)
 
     val setJson =
       s"""
          |if (${jsonEval.isNull}) {
-         |  $refEvaluator.setJson(null);
+         |  $evaluator.setJson(null);
          |} else {
-         |  $refEvaluator.setJson(${jsonEval.value});
+         |  $evaluator.setJson(${jsonEval.value});
          |}
          |""".stripMargin
-    val setPath =
+    val setPath = if (!path.foldable) {
       s"""
          |if (${pathEval.isNull}) {
-         |  $refEvaluator.setPath(null);
+         |  $evaluator.setPath(null);
          |} else {
-         |  $refEvaluator.setPath(${pathEval.value});
+         |  $evaluator.setPath(${pathEval.value});
          |}
          |""".stripMargin
+    } else {
+      ""
+    }
 
     val resultType = CodeGenerator.boxedType(dataType)
     val resultTerm = ctx.freshName("result")
@@ -174,7 +192,7 @@ case class GetJsonObject(json: Expression, path: Expression)
          |${pathEval.code}
          |$setJson
          |$setPath
-         |$resultType $resultTerm = ($resultType) $refEvaluator.evaluate();
+         |$resultType $resultTerm = ($resultType) $evaluator.evaluate();
          |boolean ${ev.isNull} = $resultTerm == null;
          |${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
          |if (!${ev.isNull}) {
@@ -189,14 +207,17 @@ case class GetJsonObject(json: Expression, path: Expression)
     copy(json = newLeft, path = newRight)
 }
 
-class GetJsonObjectEvaluator(path: Expression) extends Serializable {
+class GetJsonObjectEvaluator(cachedPath: String) {
   import com.fasterxml.jackson.core.JsonToken._
   import PathInstruction._
   import SharedFactory._
   import WriteStyle._
 
+  def this() = this(null)
+
   @transient
-  private lazy val parsedPath = parsePath(path.eval().asInstanceOf[UTF8String])
+  private lazy val parsedPath: Option[List[PathInstruction]] =
+    parsePath(cachedPath)
 
   @transient
   private var jsonStr: UTF8String = null
@@ -217,10 +238,10 @@ class GetJsonObjectEvaluator(path: Expression) extends Serializable {
       return null
     }
 
-    val parsed = if (path.foldable) {
+    val parsed = if (cachedPath != null) {
       parsedPath
     } else {
-      parsePath(pathStr)
+      parsePath(pathStr.toString)
     }
 
     if (parsed.isDefined) {
@@ -248,9 +269,9 @@ class GetJsonObjectEvaluator(path: Expression) extends Serializable {
     }
   }
 
-  private def parsePath(path: UTF8String): Option[List[PathInstruction]] = {
+  private def parsePath(path: String): Option[List[PathInstruction]] = {
     if (path != null) {
-      JsonPathParser.parse(path.toString)
+      JsonPathParser.parse(path)
     } else {
       None
     }
