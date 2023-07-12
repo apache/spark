@@ -39,6 +39,7 @@ import org.apache.spark.sql.catalyst.parser.CatalystSqlParser.parsePlan
 import org.apache.spark.sql.catalyst.plans.{Cross, FullOuter, Inner, UsingJoin}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, Partitioning, RangePartitioning, RoundRobinPartitioning}
+import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.connector.catalog.InMemoryTable
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
@@ -64,7 +65,11 @@ class AnalysisSuite extends AnalysisTest with Matchers {
       val table = new InMemoryTable("t", schema, Array.empty, Map.empty[String, String].asJava)
       intercept[IllegalStateException] {
         DataSourceV2Relation(
-          table, schema.toAttributes, None, None, CaseInsensitiveStringMap.empty()).analyze
+          table,
+          DataTypeUtils.toAttributes(schema),
+          None,
+          None,
+          CaseInsensitiveStringMap.empty()).analyze
       }
     }
   }
@@ -646,7 +651,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
       Seq.empty,
       PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF,
       true)
-    val output = pythonUdf.dataType.asInstanceOf[StructType].toAttributes
+    val output = DataTypeUtils.toAttributes(pythonUdf.dataType.asInstanceOf[StructType])
     val project = Project(Seq(UnresolvedAttribute("a")), testRelation)
     val flatMapGroupsInPandas = FlatMapGroupsInPandas(
       Seq(UnresolvedAttribute("a")), pythonUdf, output, project)
@@ -663,7 +668,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
       Seq.empty,
       PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF,
       true)
-    val output = pythonUdf.dataType.asInstanceOf[StructType].toAttributes
+    val output = DataTypeUtils.toAttributes(pythonUdf.dataType.asInstanceOf[StructType])
     val project1 = Project(Seq(UnresolvedAttribute("a")), testRelation)
     val project2 = Project(Seq(UnresolvedAttribute("a")), testRelation2)
     val flatMapGroupsInPandas = FlatMapCoGroupsInPandas(
@@ -686,7 +691,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
       Seq.empty,
       PythonEvalType.SQL_MAP_PANDAS_ITER_UDF,
       true)
-    val output = pythonUdf.dataType.asInstanceOf[StructType].toAttributes
+    val output = DataTypeUtils.toAttributes(pythonUdf.dataType.asInstanceOf[StructType])
     val project = Project(Seq(UnresolvedAttribute("a")), testRelation)
     val mapInPandas = MapInPandas(
       pythonUdf,
