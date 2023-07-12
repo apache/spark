@@ -19,10 +19,11 @@ package org.apache.spark.sql.connect.service
 
 import org.apache.spark.connect.proto
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.connect.execution.{ExecutePlanResponseObserver, ExecutePlanResponseSender, ExecuteRunner}
+import org.apache.spark.sql.connect.execution.{ExecuteGrpcResponseSender, ExecuteResponseObserver, ExecuteThreadRunner}
 
 /**
  * Object used to hold the Spark Connect execution state, and perform
+ * T - response type of the execution.
  */
 case class ExecuteHolder(
     request: proto.ExecutePlanRequest,
@@ -34,15 +35,33 @@ case class ExecuteHolder(
 
   val session = sessionHolder.session
 
-  var responseObserver: ExecutePlanResponseObserver = new ExecutePlanResponseObserver()
+  var responseObserver: ExecuteResponseObserver[proto.ExecutePlanResponse] =
+    new ExecuteResponseObserver[proto.ExecutePlanResponse]()
 
-  var runner: ExecuteRunner = new ExecuteRunner(this)
+  var runner: ExecuteThreadRunner = new ExecuteThreadRunner(this)
 
+  /** Start the execution.
+   *  The execution is started in a background thread in ExecuteThreadRunner.
+   *  Responses are produced and cached in ExecuteResponseObserver.
+   *  A GRPC thread consumes the responses by attaching an ExecuteGrpcResponseSender,
+   *  @see attachAndRunGrpcResponseSender.
+   */
   def start(): Unit = {
     runner.start()
   }
 
-  def attachRpc(responseSender: ExecutePlanResponseSender, lastSeenIndex: Long): Boolean = {
-    responseSender.run(responseObserver, lastSeenIndex)
+  /** Attach an ExecuteGrpcResponseSender that will consume responses from the query and
+   *  send them out on the Grpc response stream.
+   *  @param responseSender the ExecuteGrpcResponseSender
+   *  @param lastConsumedStreamIndex the last index that was already consumed.
+   *    The consumer will start from index after that.
+   *    0 means start from beginning (since first response has index 1)
+   *  @return true if the sender got detached without completing the stream.
+   *    false if the executing stream was completely sent out.
+   */
+  def attachAndRunGrpcResponseSender(
+      responseSender: ExecuteGrpcResponseSender[proto.ExecutePlanResponse],
+      lastConsumedStreamIndex: Long): Boolean = {
+    responseSender.run(responseObserver, lastConsumedStreamIndex)
   }
 }

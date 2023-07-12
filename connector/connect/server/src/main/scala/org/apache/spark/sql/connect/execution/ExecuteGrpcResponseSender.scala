@@ -19,19 +19,18 @@ package org.apache.spark.sql.connect.execution
 
 import io.grpc.stub.StreamObserver
 
-import org.apache.spark.connect.proto.ExecutePlanResponse
 import org.apache.spark.internal.Logging
 
 /**
- * ExecutePlanResponseSender sends responses to the GRPC stream.
- * It runs on the RPC thread, and gets notified by ExecutePlanResponseObserver about available
+ * ExecuteGrpcResponseSender sends responses to the GRPC stream.
+ * It runs on the RPC thread, and gets notified by ExecuteResponseObserver about available
  * responses.
- * It notifies the ExecutePlanResponseObserver back about cached responses that can be removed
+ * It notifies the ExecuteResponseObserver back about cached responses that can be removed
  * after being sent out.
  * @param responseObserver the GRPC request StreamObserver
  */
-private[connect] class ExecutePlanResponseSender(
-  grpcObserver: StreamObserver[ExecutePlanResponse]) extends Logging {
+private[connect] class ExecuteGrpcResponseSender[T](
+  grpcObserver: StreamObserver[T]) extends Logging {
 
   private var detached = false
 
@@ -40,27 +39,27 @@ private[connect] class ExecutePlanResponseSender(
    *  executionObserver holds lock, and needs to notify after this call. */
   def detach(): Unit = {
     if (detached == true) {
-      throw new IllegalStateException("ExecutePlanResponseSender already detached!")
+      throw new IllegalStateException("ExecuteGrpcResponseSender already detached!")
     }
     detached = true
   }
 
   /**
-   * Receive responses from executionObserver and send them to grpcObserver.
+   * Attach to the executionObserver, consume responses from it, and send them to grpcObserver.
    * @param lastSentIndex Start sending the stream from response after this.
    * @return true if the execution was detached before stream completed.
    *         The caller needs to finish the grpcObserver stream
    *         false if stream was finished. In this case, grpcObserver stream is already completed.
    */
-  def run(executionObserver: ExecutePlanResponseObserver, lastSentIndex: Long): Boolean = {
+  def run(executionObserver: ExecuteResponseObserver[T], lastSentIndex: Long): Boolean = {
     // register to be notified about available responses.
-    executionObserver.setExecutePlanResponseSender(this)
+    executionObserver.attachConsumer(this)
 
     var nextIndex = lastSentIndex + 1
     var finished = false
 
     while (!finished) {
-      var response: Option[CachedExecutePlanResponse] = None
+      var response: Option[CachedStreamResponse[T]] = None
       // Get next available response.
       // Wait until either this sender got detached or next response is ready,
       // or the stream is complete and it had already sent all responses.
@@ -92,10 +91,8 @@ private[connect] class ExecutePlanResponseSender(
         finished = true
       } else if (response.isDefined) {
         // There is a response available to be sent.
-        grpcObserver.onNext(response.get.r)
+        grpcObserver.onNext(response.get.response)
         logDebug(s"Sent response index=$nextIndex.")
-        // Remove after sending.
-        executionObserver.removeUntilIndex(nextIndex)
         nextIndex += 1
       } else if (executionObserver.getLastIndex().forall(nextIndex > _)) {
         // Stream is finished and all responses have been sent

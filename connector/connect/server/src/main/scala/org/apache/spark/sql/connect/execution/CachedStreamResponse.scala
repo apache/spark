@@ -17,9 +17,10 @@
 
 package org.apache.spark.sql.connect.execution
 
-import org.apache.spark.connect.proto.ExecutePlanResponse
-
-private[connect] case class CachedExecutePlanResponse(
-  r: ExecutePlanResponse, // the actual response
-  index: Long // index of the response in the response stream (starting from 1)
+private[connect] case class CachedStreamResponse[T](
+  // the actual cached response
+  response: T,
+  // index of the response in the response stream.
+  // responses produced in the stream are numbered consecutively starting from 1.
+  streamIndex: Long
 )

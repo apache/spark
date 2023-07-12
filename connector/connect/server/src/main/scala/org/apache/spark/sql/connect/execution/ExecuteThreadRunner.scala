@@ -31,7 +31,12 @@ import org.apache.spark.sql.connect.service.ExecuteHolder
 import org.apache.spark.sql.connect.utils.ErrorUtils
 import org.apache.spark.util.Utils
 
-private[connect] class ExecuteRunner(executeHolder: ExecuteHolder) extends Logging {
+/** This class launches the actual execution in an execution thread.
+ *  The execution pushes the responses to a ExecuteResponseObserver in executeHolder.
+ *  ExecuteResponseObserver holds the responses that can be consumed by the RPC thread.
+ */
+private[connect] class ExecuteThreadRunner(executeHolder: ExecuteHolder)
+  extends Logging {
 
   // The newly created thread will inherit all InheritableThreadLocals used by Spark,
   // e.g. SparkContext.localProperties. If considering implementing a threadpool,
@@ -40,8 +45,14 @@ private[connect] class ExecuteRunner(executeHolder: ExecuteHolder) extends Loggi
 
   private var interrupted: Boolean = false
 
+  /** Launches the execution in a background thread, returns immediately. */
   def start(): Unit = {
     this.executionThread.start()
+  }
+
+  /** Joins the background execution thread after it is finished. */
+  def join(): Unit = {
+    executionThread.join()
   }
 
   private def execute(): Unit = {
@@ -120,10 +131,6 @@ private[connect] class ExecuteRunner(executeHolder: ExecuteHolder) extends Loggi
       interrupted = true
       executionThread.interrupt()
     }
-  }
-
-  def join(): Unit = {
-    executionThread.join()
   }
 
   private def handlePlan(request: proto.ExecutePlanRequest): Unit = {
