@@ -36,20 +36,18 @@ object StreamingForeachBatchHelper extends Logging {
   def dataFrameCachingWrapper(fn: ForeachBatchFnType, sessionHolder: SessionHolder)
     : ForeachBatchFnType = {
     (df: DataFrame, batchId: Long) => {
+      val dfId = UUID.randomUUID().toString
+      log.info(s"Caching DataFrame with id $dfId") // TODO: Add query id to the log.
+
+      // TODO: Sanity check there is no other active DataFrame for this query. Need to include
+      //       query id available in the cache for this check.
+
+      sessionHolder.cacheDataFrameById(dfId, df)
       try {
-        val dfId = UUID.randomUUID().toString
-        log.info(s"Caching DataFrame with id $dfId") // TODO: Add query id to the log.
-
-        // TODO: Sanity check there is no other active DataFrame for this query. Need to include
-        //       query id available in the cache for this check.
-
-        sessionHolder.cacheDataFrameById(dfId, df)
-        try {
-          fn(df, batchId)
-        } finally {
-          log.info(s"Removing DataFrame with id $dfId from the cache")
-          sessionHolder.removeCachedDataFrame(dfId)
-        }
+        fn(df, batchId)
+      } finally {
+        log.info(s"Removing DataFrame with id $dfId from the cache")
+        sessionHolder.removeCachedDataFrame(dfId)
       }
     }
   }
