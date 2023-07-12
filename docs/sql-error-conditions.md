@@ -368,6 +368,14 @@ Not allowed to create the permanent view `<name>` without explicitly assigning a
 
 CREATE TABLE column `<columnName>` specifies descriptor "`<optionName>`" more than once, which is invalid.
 
+### [CREATE_VIEW_COLUMN_ARITY_MISMATCH](sql-error-conditions-create-view-column-arity-mismatch-error-class.html)
+
+[SQLSTATE: 21S01](sql-error-conditions-sqlstates.html#class-21-cardinality-violation)
+
+Cannot create view `<viewName>`, the reason is
+
+For more details see [CREATE_VIEW_COLUMN_ARITY_MISMATCH](sql-error-conditions-create-view-column-arity-mismatch-error-class.html)
+
 ### [DATATYPE_MISMATCH](sql-error-conditions-datatype-mismatch-error-class.html)
 
 [SQLSTATE: 42K09](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
@@ -742,6 +750,12 @@ For more details see [INSUFFICIENT_TABLE_PROPERTY](sql-error-conditions-insuffic
 
 `<message>`
 
+### INTERNAL_ERROR_STORAGE
+
+[SQLSTATE: XX000](sql-error-conditions-sqlstates.html#class-XX-internal-error)
+
+`<message>`
+
 ### INTERVAL_ARITHMETIC_OVERFLOW
 
 [SQLSTATE: 22015](sql-error-conditions-sqlstates.html#class-22-data-exception)
@@ -1108,6 +1122,12 @@ For more details see [INVALID_WRITE_DISTRIBUTION](sql-error-conditions-invalid-w
 SQLSTATE: none assigned
 
 The join condition `<joinCondition>` has the invalid type `<conditionType>`, expected "BOOLEAN".
+
+### LOAD_DATA_PATH_NOT_EXISTS
+
+SQLSTATE: none assigned
+
+LOAD DATA input path does not exist: `<path>`.
 
 ### LOCAL_MUST_WITH_SCHEMA_FILE
 
@@ -1817,6 +1837,12 @@ Unsupported data type `<typeName>`.
 SQLSTATE: none assigned
 
 The direct query on files does not support the data source type: `<className>`. Please try a different data source type or consider using a different query method.
+
+### UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE
+
+SQLSTATE: none assigned
+
+The `<format>` datasource doesn't support the column `<columnName>` of the type `<columnType>`.
 
 ### [UNSUPPORTED_DEFAULT_VALUE](sql-error-conditions-unsupported-default-value-error-class.html)
 

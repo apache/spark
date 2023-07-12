@@ -100,6 +100,34 @@ class Pipeline(Estimator["PipelineModel"], _PipelineReadWrite):
     identity transformer.
 
     .. versionadded:: 3.5.0
+
+    Examples
+    --------
+    >>> from pyspark.ml.connect import Pipeline
+    >>> from pyspark.ml.connect.classification import LogisticRegression
+    >>> from pyspark.ml.connect.feature import StandardScaler
+    >>> scaler = StandardScaler(inputCol='features', outputCol='scaled_features')
+    >>> lor = LogisticRegression(maxIter=20, learningRate=0.01)
+    >>> pipeline=Pipeline(stages=[scaler, lor])
+    >>> dataset = spark.createDataFrame([
+    ...     ([1.0, 2.0], 1),
+    ...     ([2.0, -1.0], 1),
+    ...     ([-3.0, -2.0], 0),
+    ...     ([-1.0, -2.0], 0),
+    ... ], schema=['features', 'label'])
+    >>> pipeline_model = pipeline.fit(dataset)
+    >>> transformed_dataset = pipeline_model.transform(dataset)
+    >>> transformed_dataset.show()
+    +------------+-----+--------------------+----------+--------------------+
+    |    features|label|     scaled_features|prediction|         probability|
+    +------------+-----+--------------------+----------+--------------------+
+    |  [1.0, 2.0]|    1|[0.56373452100212...|         1|[0.02423273026943...|
+    | [2.0, -1.0]|    1|[1.01472213780381...|         1|[0.09334788471460...|
+    |[-3.0, -2.0]|    0|[-1.2402159462046...|         0|[0.99808156490325...|
+    |[-1.0, -2.0]|    0|[-0.3382407126012...|         0|[0.96210002899169...|
+    +------------+-----+--------------------+----------+--------------------+
+    >>> pipeline_model.saveToLocal("/tmp/pipeline")
+    >>> loaded_pipeline_model = PipelineModel.loadFromLocal("/tmp/pipeline")
     """
 
     stages: Param[List[Params]] = Param(
