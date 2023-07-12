@@ -573,6 +573,7 @@ private[ui] class ExecutionDataSource(
       case "Job IDs" | "Succeeded Job IDs" => Ordering by (_.completedJobData.headOption)
       case "Running Job IDs" => Ordering.by(_.runningJobData.headOption)
       case "Failed Job IDs" => Ordering.by(_.failedJobData.headOption)
+      case "Error Message" => Ordering.by(_.executionUIData.errorMessage)
       case unknownColumn => throw QueryExecutionErrors.unknownColumnError(unknownColumn)
     }
     if (desc) {
