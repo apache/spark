@@ -24,7 +24,6 @@ import java.time.{Duration, Instant, LocalDate, LocalDateTime, Period}
 import java.util.{Map => JMap}
 
 import scala.collection.JavaConverters._
-import scala.collection.mutable
 
 import com.google.protobuf.ByteString
 import org.apache.arrow.memory.BufferAllocator
@@ -59,7 +58,7 @@ class ArrowSerializer[T](
     MessageSerializer.serialize(newChannel(bytes), root.getSchema)
     bytes.toByteArray
   }
-  private var i: Int = 0
+  private var rowCount: Int = 0
 
   private def newChannel(output: OutputStream): WriteChannel = {
     new WriteChannel(Channels.newChannel(output))
@@ -75,7 +74,7 @@ class ArrowSerializer[T](
    */
   def sizeInBytes: Long = {
     // We need to set the row count for getBufferSize to return the actual value.
-    root.setRowCount(i)
+    root.setRowCount(rowCount)
     schemaBytes.length + vectors.map(_.getBufferSize).sum
   }
 
@@ -83,8 +82,8 @@ class ArrowSerializer[T](
    * Append a record to the current batch.
    */
   def append(record: T): Unit = {
-    serializer.write(i, record)
-    i += 1
+    serializer.write(rowCount, record)
+    rowCount += 1
   }
 
   /**
@@ -92,7 +91,7 @@ class ArrowSerializer[T](
    */
   def writeIpcStream(output: OutputStream): Unit = {
     val channel = newChannel(output)
-    root.setRowCount(i)
+    root.setRowCount(rowCount)
     val batch = unloader.getRecordBatch
     try {
       channel.write(schemaBytes)
@@ -107,7 +106,7 @@ class ArrowSerializer[T](
    * Reset the serializer.
    */
   def reset(): Unit = {
-    i = 0
+    rowCount = 0
     vectors.foreach(_.reset())
   }
 
@@ -194,10 +193,8 @@ object ArrowSerializer {
       encoder: AgnosticEncoder[T],
       allocator: BufferAllocator,
       timeZoneId: String): (VectorSchemaRoot, Serializer) = {
-    val arrowSchema = ArrowUtils.toArrowSchema(
-      encoder.schema,
-      timeZoneId,
-      errorOnDuplicatedFieldNames = true)
+    val arrowSchema =
+      ArrowUtils.toArrowSchema(encoder.schema, timeZoneId, errorOnDuplicatedFieldNames = true)
     val root = VectorSchemaRoot.create(arrowSchema, allocator)
     val serializer = if (encoder.schema != encoder.dataType) {
       assert(root.getSchema.getFields.size() == 1)
@@ -357,7 +354,7 @@ object ArrowSerializer {
       case (ArrayEncoder(element, _), v: ListVector) =>
         val elementSerializer = serializerFor(element, v.getDataVector)
         val toIterator = { array: Any =>
-          mutable.WrappedArray.make(array.asInstanceOf[Array[_]]).iterator
+          array.asInstanceOf[Array[_]].iterator
         }
         new ArraySerializer(v, toIterator, elementSerializer)
 
@@ -365,13 +362,13 @@ object ArrowSerializer {
         val elementSerializer = serializerFor(element, v.getDataVector)
         val toIterator: Any => Iterator[_] = if (lenient) {
           {
-            case i: scala.collection.Iterable[_] => i.toIterator
+            case i: scala.collection.Iterable[_] => i.iterator
             case l: java.util.List[_] => l.iterator().asScala
             case a: Array[_] => a.iterator
             case o => unsupportedCollectionType(o.getClass)
           }
         } else if (isSubClass(Classes.ITERABLE, tag)) { v =>
-          v.asInstanceOf[scala.collection.Iterable[_]].toIterator
+          v.asInstanceOf[scala.collection.Iterable[_]].iterator
         } else if (isSubClass(Classes.JLIST, tag)) { v =>
           v.asInstanceOf[java.util.List[_]].iterator().asScala
         } else {
