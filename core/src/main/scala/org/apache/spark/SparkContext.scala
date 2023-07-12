@@ -1750,7 +1750,7 @@ class SparkContext(config: SparkConf) extends Logging {
 
     val hadoopPath = new Path(schemeCorrectedURI)
     val scheme = schemeCorrectedURI.getScheme
-    if (!Array("http", "https", "ftp").contains(scheme) && !isArchive) {
+    if (!Array("http", "https", "ftp", "spark").contains(scheme) && !isArchive) {
       val fs = hadoopPath.getFileSystem(hadoopConfiguration)
       val isDir = fs.getFileStatus(hadoopPath).isDirectory
       if (!isLocal && scheme == "file" && isDir) {
@@ -2115,7 +2115,7 @@ class SparkContext(config: SparkConf) extends Logging {
     def checkRemoteJarFile(path: String): Seq[String] = {
       val hadoopPath = new Path(path)
       val scheme = hadoopPath.toUri.getScheme
-      if (!Array("http", "https", "ftp").contains(scheme)) {
+      if (!Array("http", "https", "ftp", "spark").contains(scheme)) {
         try {
           val fs = hadoopPath.getFileSystem(hadoopConfiguration)
           if (!fs.exists(hadoopPath)) {

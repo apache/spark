@@ -159,7 +159,9 @@ private[spark] class PythonWorkerFactory(pythonExec: String, envVars: Map[String
       val pb = new ProcessBuilder(Arrays.asList(pythonExec, "-m", workerModule))
       val jobArtifactUUID = envVars.getOrElse("SPARK_JOB_ARTIFACT_UUID", "default")
       if (jobArtifactUUID != "default") {
-        pb.directory(new File(SparkFiles.getRootDirectory(), jobArtifactUUID))
+        val f = new File(SparkFiles.getRootDirectory(), jobArtifactUUID)
+        f.mkdir()
+        pb.directory(f)
       }
       val workerEnv = pb.environment()
       workerEnv.putAll(envVars.asJava)
@@ -216,7 +218,9 @@ private[spark] class PythonWorkerFactory(pythonExec: String, envVars: Map[String
         val pb = new ProcessBuilder(command)
         val jobArtifactUUID = envVars.getOrElse("SPARK_JOB_ARTIFACT_UUID", "default")
         if (jobArtifactUUID != "default") {
-          pb.directory(new File(SparkFiles.getRootDirectory(), jobArtifactUUID))
+          val f = new File(SparkFiles.getRootDirectory(), jobArtifactUUID)
+          f.mkdir()
+          pb.directory(f)
         }
         val workerEnv = pb.environment()
         workerEnv.putAll(envVars.asJava)

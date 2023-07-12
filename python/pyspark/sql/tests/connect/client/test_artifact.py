@@ -92,8 +92,9 @@ class ArtifactTestsMixin:
                 _ = f.write("hello world!")
             shutil.make_archive(archive_path, "zip", d, "my_archive")
 
-            # Executes a job to make sure the last seen UUID id set.
-            spark_session.range(1).first()
+            # Should addArtifact first to make sure state is set,
+            # and 'root' can be found properly.
+            spark_session.addArtifacts(f"{archive_path}.zip#my_files", archive=True)
 
             root = self.root()
 
@@ -105,7 +106,6 @@ class ArtifactTestsMixin:
                 ) as my_file:
                     return my_file.read().strip()
 
-            spark_session.addArtifacts(f"{archive_path}.zip#my_files", archive=True)
             self.assertEqual(spark_session.range(1).select(func("id")).first()[0], "hello world!")
 
     def test_add_archive(self):
@@ -123,8 +123,9 @@ class ArtifactTestsMixin:
             with open(file_path, "w") as f:
                 f.write("Hello world!!")
 
-            # Executes a job to make sure the last seen UUID id set.
-            spark_session.range(1).first()
+            # Should addArtifact first to make sure state is set,
+            # and 'root' can be found properly.
+            spark_session.addArtifacts(file_path, file=True)
 
             root = self.root()
 
@@ -133,7 +134,6 @@ class ArtifactTestsMixin:
                 with open(os.path.join(root, "my_file.txt"), "r") as my_file:
                     return my_file.read().strip()
 
-            spark_session.addArtifacts(file_path, file=True)
             self.assertEqual(spark_session.range(1).select(func("id")).first()[0], "Hello world!!")
 
     def test_add_file(self):
