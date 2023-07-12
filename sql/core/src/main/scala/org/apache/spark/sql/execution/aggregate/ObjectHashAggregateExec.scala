@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.execution.aggregate
 
-import java.util.concurrent.TimeUnit._
-
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
@@ -86,41 +84,16 @@ case class ObjectHashAggregateExec(
     val spillSize = longMetric("spillSize")
     val numTasksFallBacked = longMetric("numTasksFallBacked")
     val fallbackCountThreshold = conf.objectAggSortBasedFallbackThreshold
-
-    child.execute().mapPartitionsWithIndexInternal { (partIndex, iter) =>
-      val beforeAgg = System.nanoTime()
-      val hasInput = iter.hasNext
-      val res = if (!hasInput && groupingExpressions.nonEmpty) {
-        // This is a grouped aggregate and the input kvIterator is empty,
-        // so return an empty kvIterator.
-        Iterator.empty
-      } else {
-        val aggregationIterator =
-          new ObjectAggregationIterator(
-            partIndex,
-            child.output,
-            groupingExpressions,
-            aggregateExpressions,
-            aggregateAttributes,
-            initialInputBufferOffset,
-            resultExpressions,
-            (expressions, inputSchema) =>
-              MutableProjection.create(expressions, inputSchema),
-            inputAttributes,
-            iter,
-            fallbackCountThreshold,
-            numOutputRows,
-            spillSize,
-            numTasksFallBacked)
-        if (!hasInput && groupingExpressions.isEmpty) {
-          numOutputRows += 1
-          Iterator.single[UnsafeRow](aggregationIterator.outputForEmptyGroupingKeyWithoutInput())
-        } else {
-          aggregationIterator
-        }
+    val evaluatorFactory = new ObjectHashAggregateEvaluatorFactory(groupingExpressions,
+      aggregateExpressions, aggregateAttributes, initialInputBufferOffset, resultExpressions,
+      output, inputAttributes, numOutputRows, aggTime, spillSize, numTasksFallBacked,
+      fallbackCountThreshold)
+    if (conf.usePartitionEvaluator) {
+      child.execute().mapPartitionsWithEvaluator(evaluatorFactory)
+    } else {
+      child.execute().mapPartitionsWithIndexInternal { (partIndex, iter) =>
+        evaluatorFactory.createEvaluator().eval(partIndex, iter)
       }
-      aggTime += NANOSECONDS.toMillis(System.nanoTime() - beforeAgg)
-      res
     }
   }
 

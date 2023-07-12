@@ -30,6 +30,7 @@ import org.apache.spark.sql.execution.aggregate.{HashAggregateExec, ObjectHashAg
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.SQLConf.USE_PARTITION_EVALUATOR
 import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.types._
 import org.apache.spark.tags.SlowHiveTest
@@ -59,30 +60,39 @@ class ObjectHashAggregateSuite
 
   test("typed_count without grouping keys") {
     val df = Seq((1: Integer, 2), (null, 2), (3: Integer, 4)).toDF("a", "b")
-
-    checkAnswer(
-      df.coalesce(1).select(typed_count($"a")),
-      Seq(Row(2))
+    Seq(true, false).foreach(enable =>
+      withSQLConf(USE_PARTITION_EVALUATOR.key -> enable.toString) {
+        checkAnswer(
+          df.coalesce(1).select(typed_count($"a")),
+          Seq(Row(2))
+        )
+      }
     )
   }
 
   test("typed_count without grouping keys and empty input") {
     val df = Seq.empty[(Integer, Int)].toDF("a", "b")
-
-    checkAnswer(
-      df.coalesce(1).select(typed_count($"a")),
-      Seq(Row(0))
+    Seq(true, false).foreach(enable =>
+      withSQLConf(USE_PARTITION_EVALUATOR.key -> enable.toString) {
+        checkAnswer(
+          df.coalesce(1).select(typed_count($"a")),
+          Seq(Row(0))
+        )
+      }
     )
   }
 
   test("typed_count with grouping keys") {
     val df = Seq((1: Integer, 1), (null, 1), (2: Integer, 2)).toDF("a", "b")
-
-    checkAnswer(
-      df.coalesce(1).groupBy($"b").agg(typed_count($"a")),
-      Seq(
-        Row(1, 1),
-        Row(2, 1))
+    Seq(true, false).foreach(enable =>
+      withSQLConf(USE_PARTITION_EVALUATOR.key -> enable.toString) {
+        checkAnswer(
+          df.coalesce(1).groupBy($"b").agg(typed_count($"a")),
+          Seq(
+            Row(1, 1),
+            Row(2, 1))
+        )
+      }
     )
   }
 
@@ -96,10 +106,13 @@ class ObjectHashAggregateSuite
         (2: Integer, 2),
         (2: Integer, 2)
       ).toDF("a", "b")
-
-      checkAnswer(
-        df.coalesce(1).groupBy($"b").agg(typed_count($"a")),
-        Seq(Row(1, 1), Row(2, 3))
+      Seq(true, false).foreach(enable =>
+        withSQLConf(USE_PARTITION_EVALUATOR.key -> enable.toString) {
+          checkAnswer(
+            df.coalesce(1).groupBy($"b").agg(typed_count($"a")),
+            Seq(Row(1, 1), Row(2, 3))
+          )
+        }
       )
     }
   }
@@ -132,47 +145,47 @@ class ObjectHashAggregateSuite
       StringType,
       BinaryType, NullType, BooleanType
     )
+    Seq(true, false).foreach(enable =>
+      withSQLConf(USE_PARTITION_EVALUATOR.key -> enable.toString) {
+        dataTypes.sliding(2, 1).map(_.toSeq).foreach { dataTypes =>
+          // Schema used to generate random input data.
+          val schemaForGenerator = StructType(dataTypes.zipWithIndex.map {
+            case (fieldType, index) =>
+              StructField(s"col_$index", fieldType, nullable = true)
+          })
 
-    dataTypes.sliding(2, 1).map(_.toSeq).foreach { dataTypes =>
-      // Schema used to generate random input data.
-      val schemaForGenerator = StructType(dataTypes.zipWithIndex.map {
-        case (fieldType, index) =>
-          StructField(s"col_$index", fieldType, nullable = true)
-      })
+          // Schema of the DataFrame to be tested.
+          val schema = StructType(
+            StructField("id", IntegerType, nullable = false) +: schemaForGenerator.fields
+          )
 
-      // Schema of the DataFrame to be tested.
-      val schema = StructType(
-        StructField("id", IntegerType, nullable = false) +: schemaForGenerator.fields
-      )
+          logInfo(s"Testing schema:\n${schema.treeString}")
 
-      logInfo(s"Testing schema:\n${schema.treeString}")
+          // Creates a DataFrame for the schema with random data.
+          val data = generateRandomRows(schemaForGenerator)
+          val df = spark.createDataFrame(spark.sparkContext.parallelize(data, 1), schema)
+          val aggFunctions = schema.fieldNames.map(f => typed_count(col(f)))
 
-      // Creates a DataFrame for the schema with random data.
-      val data = generateRandomRows(schemaForGenerator)
-      val df = spark.createDataFrame(spark.sparkContext.parallelize(data, 1), schema)
-      val aggFunctions = schema.fieldNames.map(f => typed_count(col(f)))
+          checkAnswer(df.agg(aggFunctions.head, aggFunctions.tail: _*),
+            Row.fromSeq(data.map(_.toSeq).transpose.map(_.count(_ != null): Long)))
 
-      checkAnswer(
-        df.agg(aggFunctions.head, aggFunctions.tail: _*),
-        Row.fromSeq(data.map(_.toSeq).transpose.map(_.count(_ != null): Long))
-      )
+          checkAnswer(
+            df.groupBy($"id" % 4 as "mod").agg(aggFunctions.head, aggFunctions.tail: _*),
+            data.groupBy(_.getInt(0) % 4).map { case (key, value) =>
+              key -> Row.fromSeq(value.map(_.toSeq).transpose.map(_.count(_ != null): Long))
+            }.toSeq.map {
+              case (key, value) => Row.fromSeq(key +: value.toSeq)
+            }
+          )
 
-      checkAnswer(
-        df.groupBy($"id" % 4 as "mod").agg(aggFunctions.head, aggFunctions.tail: _*),
-        data.groupBy(_.getInt(0) % 4).map { case (key, value) =>
-          key -> Row.fromSeq(value.map(_.toSeq).transpose.map(_.count(_ != null): Long))
-        }.toSeq.map {
-          case (key, value) => Row.fromSeq(key +: value.toSeq)
+          withSQLConf(SQLConf.OBJECT_AGG_SORT_BASED_FALLBACK_THRESHOLD.key -> "5") {
+            checkAnswer(
+              df.agg(aggFunctions.head, aggFunctions.tail: _*),
+              Row.fromSeq(data.map(_.toSeq).transpose.map(_.count(_ != null): Long))
+            )
+          }
         }
-      )
-
-      withSQLConf(SQLConf.OBJECT_AGG_SORT_BASED_FALLBACK_THRESHOLD.key -> "5") {
-        checkAnswer(
-          df.agg(aggFunctions.head, aggFunctions.tail: _*),
-          Row.fromSeq(data.map(_.toSeq).transpose.map(_.count(_ != null): Long))
-        )
-      }
-    }
+      })
   }
 
   private def percentile_approx(
