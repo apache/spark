@@ -154,7 +154,8 @@ case class GetJsonObject(json: Expression, path: Expression)
     val evaluatorClass = classOf[GetJsonObjectEvaluator].getName
     val initEvaluator = if (path.foldable) {
       val cachedPath = path.eval().asInstanceOf[UTF8String].toString
-      s"""new $evaluatorClass("$cachedPath")"""
+      val refCachedPath = ctx.addReferenceObj("cachedPath", cachedPath)
+      s"new $evaluatorClass($refCachedPath)"
     } else {
       s"new $evaluatorClass()"
     }
