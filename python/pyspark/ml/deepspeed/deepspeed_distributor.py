@@ -52,16 +52,12 @@ class DeepspeedTorchDistributor(TorchDistributor):
         ----------
         num_gpus: int
             The number of GPUs to use per node (analagous to num_gpus in deepspeed command).
-
         nnodes: int
             The number of nodes that should be used for the run.
-
         local_mode: bool
             Whether or not to run the training in a distributed fashion or just locally.
-
         use_gpu: bool
             Boolean flag to determine whether to utilize gpus.
-
         deepspeed_config: Union[Dict[str,Any], str] or None:
             The configuration file to be used for launching the deepspeed application.
             If it's a dictionary containing the parameters, then we will create the file.
