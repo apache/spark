@@ -49,14 +49,15 @@ import org.apache.spark.util.Utils
 trait InvokeLike extends Expression with NonSQLExpression with ImplicitCastInputTypes {
 
   def arguments: Seq[Expression]
+  protected def argumentTypes: Seq[AbstractDataType] = inputTypes
 
   override def checkInputDataTypes(): TypeCheckResult = {
-    if (!inputTypes.isEmpty && inputTypes.length != arguments.length) {
+    if (!argumentTypes.isEmpty && argumentTypes.length != arguments.length) {
       TypeCheckResult.DataTypeMismatch(
-        errorSubClass = "WRONG_NUM_TYPES",
+        errorSubClass = "WRONG_NUM_ARG_TYPES",
         messageParameters = Map(
           "expectedNum" -> arguments.length.toString,
-          "actualNum" -> inputTypes.length.toString))
+          "actualNum" -> argumentTypes.length.toString))
     } else {
       super.checkInputDataTypes()
     }
@@ -397,6 +398,7 @@ case class Invoke(
     } else {
       Nil
     }
+  override protected def argumentTypes: Seq[AbstractDataType] = methodInputTypes
 
   private lazy val encodedFunctionName = ScalaReflection.encodeFieldNameToIdentifier(functionName)
 

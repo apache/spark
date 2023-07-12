@@ -234,12 +234,12 @@ The input of `<functionName>` can't be `<dataType>` type data.
 
 The `<exprName>` must be between `<valueRange>` (current value = `<currentValue>`).
 
+## WRONG_NUM_ARG_TYPES
+
+The expression requires `<expectedNum>` argument types but the actual number is `<actualNum>`.
+
 ## WRONG_NUM_ENDPOINTS
 
 The number of endpoints must be >= 2 to construct intervals but the actual number is `<actualNumber>`.
-
-## WRONG_NUM_TYPES
-
-The expression requires `<expectedNum>` input types but the actual number is `<actualNum>`.
 
 
