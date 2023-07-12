@@ -195,4 +195,15 @@ class ReplE2ESuite extends RemoteSparkSession with BeforeAndAfterEach {
     assertContains("Array[Int] = Array(2, 2, 2, 2, 2)", output)
     // scalastyle:on classforname line.size.limit
   }
+
+  test("UDF Registration") {
+    val input = """
+        |class A(x: Int) { def get = x * 100 }
+        |val myUdf = udf((x: Int) => new A(x).get)
+        |spark.udf.register("dummyUdf", myUdf)
+        |spark.sql("select dummyUdf(id) from range(5)").as[Long].collect()
+      """.stripMargin
+    val output = runCommandsInShell(input)
+    assertContains("Array[Long] = Array(0L, 100L, 200L, 300L, 400L)", output)
+  }
 }

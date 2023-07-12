@@ -133,6 +133,16 @@ case class ScalarUserDefinedFunction(
   override def asNonNullable(): ScalarUserDefinedFunction = copy(nullable = false)
 
   override def asNondeterministic(): ScalarUserDefinedFunction = copy(deterministic = false)
+
+  def toProto: proto.CommonInlineUserDefinedFunction = {
+    val builder = proto.CommonInlineUserDefinedFunction.newBuilder()
+    builder
+      .setDeterministic(deterministic)
+      .setScalarScalaUdf(udf)
+
+    name.foreach(builder.setFunctionName)
+    builder.build()
+  }
 }
 
 object ScalarUserDefinedFunction {
