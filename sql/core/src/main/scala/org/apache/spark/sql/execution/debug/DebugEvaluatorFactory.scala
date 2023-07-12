@@ -33,8 +33,8 @@ class DebugEvaluatorFactory(
 
   class DebugEvaluator extends PartitionEvaluator[InternalRow, InternalRow] {
     override def eval(
-                       partitionIndex: Int,
-                       inputs: Iterator[InternalRow]*): Iterator[InternalRow] = {
+        partitionIndex: Int,
+        inputs: Iterator[InternalRow]*): Iterator[InternalRow] = {
       new Iterator[InternalRow] {
         def hasNext: Boolean = inputs.head.hasNext
 
