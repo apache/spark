@@ -468,7 +468,6 @@ pyspark_sql = Module(
         "pyspark.sql.pandas.typehints",
         "pyspark.sql.pandas.utils",
         "pyspark.sql.observation",
-        "pyspark.testing.utils",
         # unittests
         "pyspark.sql.tests.test_arrow",
         "pyspark.sql.tests.test_arrow_python_udf",
@@ -505,6 +504,16 @@ pyspark_sql = Module(
         "pyspark.sql.tests.test_udf_profiler",
         "pyspark.sql.tests.test_udtf",
         "pyspark.sql.tests.test_utils",
+    ],
+)
+
+pyspark_testing = Module(
+    name="pyspark-testing",
+    dependencies=[pyspark_core, pyspark_sql],
+    source_file_regexes=["python/pyspark/testing"],
+    python_test_goals=[
+        # doctests
+        "pyspark.testing.utils",
     ],
 )
 
@@ -615,6 +624,7 @@ pyspark_ml = Module(
         "pyspark.ml.torch.tests.test_distributor",
         "pyspark.ml.torch.tests.test_log_communication",
         "pyspark.ml.torch.tests.test_data_loader",
+        "pyspark.ml.deepspeed.tests.test_deepspeed_distributor",
         "pyspark.ml.tests.connect.test_legacy_mode_summarizer",
         "pyspark.ml.tests.connect.test_legacy_mode_evaluation",
         "pyspark.ml.tests.connect.test_legacy_mode_feature",

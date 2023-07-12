@@ -51,7 +51,7 @@ The escape character is not allowed to precede `<char>`.
 
 ## MISMATCH_INPUT
 
-The input `<inputType>` '`<input>`' does not match the format.
+The input `<inputType>` `<input>` does not match the format.
 
 ## THOUSANDS_SEPS_MUST_BEFORE_DEC
 
