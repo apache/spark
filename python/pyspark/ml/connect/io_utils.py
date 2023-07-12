@@ -130,12 +130,7 @@ class ParamsReadWrite(Params):
         pass
 
     def _save_to_local(self, path: str) -> None:
-        metadata = self._get_metadata_to_save()
-        if isinstance(self, CoreModelReadWrite):
-            core_model_path = self._get_core_model_filename()
-            self._save_core_model(os.path.join(path, core_model_path))
-            metadata["core_model_path"] = core_model_path
-
+        metadata = self._save_to_node_path(path, [])
         with open(os.path.join(path, _META_DATA_FILE_NAME), "w") as fp:
             json.dump(metadata, fp)
 
@@ -158,7 +153,7 @@ class ParamsReadWrite(Params):
         self._save_to_local(path)
 
     @classmethod
-    def _load_from_metadata(cls, metadata: Dict[str, Any]) -> "Params":
+    def _load_metadata(cls, metadata: Dict[str, Any]) -> "Params":
         if "type" not in metadata or metadata["type"] != "spark_connect":
             raise RuntimeError(
                 "The saved data is not saved by ML algorithm implemented in 'pyspark.ml.connect' "
@@ -184,17 +179,24 @@ class ParamsReadWrite(Params):
         return instance
 
     @classmethod
-    def _load_from_local(cls, path: str) -> "Params":
-        with open(os.path.join(path, _META_DATA_FILE_NAME), "r") as fp:
-            metadata = json.load(fp)
-
-        instance = cls._load_from_metadata(metadata)
+    def _load_instance_from_metadata(cls, metadata: Dict[str, Any], path: str) -> Any:
+        instance = cls._load_metadata(metadata)
 
         if isinstance(instance, CoreModelReadWrite):
             core_model_path = metadata["core_model_path"]
             instance._load_core_model(os.path.join(path, core_model_path))
 
+        if isinstance(instance, MetaAlgorithmReadWrite):
+            instance._load_meta_algorithm(path, metadata)
+
         return instance
+
+    @classmethod
+    def _load_from_local(cls, path: str) -> "Params":
+        with open(os.path.join(path, _META_DATA_FILE_NAME), "r") as fp:
+            metadata = json.load(fp)
+
+        return cls._load_instance_from_metadata(metadata, path)
 
     @classmethod
     def loadFromLocal(cls, path: str) -> "Params":
@@ -204,6 +206,21 @@ class ParamsReadWrite(Params):
         .. versionadded:: 3.5.0
         """
         return cls._load_from_local(path)
+
+    def _save_to_node_path(self, root_path: str, node_path: List[str]) -> Any:
+        """
+        Save the instance to provided node path, and return the node metadata.
+        """
+        if isinstance(self, MetaAlgorithmReadWrite):
+            metadata = self._save_meta_algorithm(root_path, node_path)
+        else:
+            metadata = self._get_metadata_to_save()
+            if isinstance(self, CoreModelReadWrite):
+                core_model_path = ".".join(node_path + [self._get_core_model_filename()])
+                self._save_core_model(os.path.join(root_path, core_model_path))
+                metadata["core_model_path"] = core_model_path
+
+        return metadata
 
     def save(self, path: str, *, overwrite: bool = False) -> None:
         """
@@ -283,23 +300,36 @@ class MetaAlgorithmReadWrite(ParamsReadWrite):
     Meta-algorithm such as pipeline and cross validator must implement this interface.
     """
 
+    def _get_child_stages(self) -> List[Any]:
+        raise NotImplementedError()
+
     def _save_meta_algorithm(self, root_path: str, node_path: List[str]) -> Dict[str, Any]:
         raise NotImplementedError()
 
     def _load_meta_algorithm(self, root_path: str, node_metadata: Dict[str, Any]) -> None:
         raise NotImplementedError()
 
-    def _save_to_local(self, path: str) -> None:
-        metadata = self._save_meta_algorithm(path, [])
-        with open(os.path.join(path, _META_DATA_FILE_NAME), "w") as fp:
-            json.dump(metadata, fp)
+    @staticmethod
+    def _get_all_nested_stages(instance: Any) -> List[Any]:
+        if isinstance(instance, MetaAlgorithmReadWrite):
+            child_stages = instance._get_child_stages()
+        else:
+            child_stages = []
 
-    @classmethod
-    def _load_from_local(cls, path: str) -> Any:
-        with open(os.path.join(path, _META_DATA_FILE_NAME), "r") as fp:
-            metadata = json.load(fp)
+        nested_stages = []
+        for stage in child_stages:
+            nested_stages.extend(MetaAlgorithmReadWrite._get_all_nested_stages(stage))
 
-        instance = cls._load_from_metadata(metadata)
-        instance._load_meta_algorithm(path, metadata)  # type: ignore[attr-defined]
+        return [instance] + nested_stages
 
-        return instance
+    @staticmethod
+    def get_uid_map(instance: Any) -> Dict[str, Any]:
+        all_nested_stages = MetaAlgorithmReadWrite._get_all_nested_stages(instance)
+        uid_map = {stage.uid: stage for stage in all_nested_stages}
+        if len(all_nested_stages) != len(uid_map):
+            raise RuntimeError(
+                f"{instance.__class__.__module__}.{instance.__class__.__name__}"
+                f"is a compound estimator with stages with duplicate "
+                f"UIDs. List of UIDs: {list(uid_map.keys())}."
+            )
+        return uid_map

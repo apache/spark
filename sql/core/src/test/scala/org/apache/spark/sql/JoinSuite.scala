@@ -1691,4 +1691,22 @@ class JoinSuite extends QueryTest with SharedSparkSession with AdaptiveSparkPlan
       checkAnswer(sql(query), expected)
     }
   }
+
+  test("SPARK-44251: Full outer USING join with null key value") {
+    withTempView("v1", "v2") {
+      sql("create or replace temp view v1 as values (1, 2), (null, 7) as (c1, c2)")
+      sql("create or replace temp view v2 as values (2, 3) as (c1, c2)")
+
+      val query =
+        """select explode(array(c1)) as x
+          |from v1
+          |full outer join v2
+          |using (c1)
+          |""".stripMargin
+
+      val expected = Seq(Row(null), Row(1), Row(2))
+
+      checkAnswer(sql(query), expected)
+    }
+  }
 }

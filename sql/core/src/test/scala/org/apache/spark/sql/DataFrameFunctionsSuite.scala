@@ -72,7 +72,8 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       "countDistinct", "count_distinct", // equivalent to count(distinct foo)
       "sum_distinct", // equivalent to sum(distinct foo)
       "typedLit", "typedlit", // Scala only
-      "udaf", "udf" // create function statement in sql
+      "udaf", "udf", // create function statement in sql
+      "call_function" // moot in SQL as you just call the function directly
     )
 
     val excludedSqlFunctions = Set.empty[String]
@@ -5913,6 +5914,10 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       errorClass = "CANNOT_INVOKE_IN_TRANSFORMATIONS",
       parameters = Map.empty
     )
+  }
+
+  test("call_function") {
+    checkAnswer(testData2.select(call_function("avg", $"a")), testData2.selectExpr("avg(a)"))
   }
 }
 

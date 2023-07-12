@@ -194,7 +194,7 @@ class InsertSuite extends QueryTest with TestHiveSingleton with BeforeAndAfter
         """.stripMargin)
     checkAnswer(sql(selQuery), Row(5, 2, 3, 6))
 
-    val e = intercept[AnalysisException] {
+    val e = intercept[ParseException] {
       sql(
         s"""
            |INSERT OVERWRITE TABLE $tableName
@@ -394,7 +394,7 @@ class InsertSuite extends QueryTest with TestHiveSingleton with BeforeAndAfter
         sql(s"INSERT INTO TABLE $tableName PARTITION (c=15, b=16) SELECT 13")
 
         // c is defined twice. Analyzer will complain.
-        intercept[AnalysisException] {
+        intercept[ParseException] {
           sql(s"INSERT INTO TABLE $tableName PARTITION (b=14, c=15, c=16) SELECT 13")
         }
 
