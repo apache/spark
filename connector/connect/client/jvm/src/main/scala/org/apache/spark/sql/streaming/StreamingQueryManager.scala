@@ -147,6 +147,10 @@ class StreamingQueryManager private[sql] (sparkSession: SparkSession) extends Lo
    * @since 3.5.0
    */
   def addListener(listener: StreamingQueryListener): Unit = {
+    // TODO: [SPARK-44400] Improve the Listener to provide users a way to access the Spark session
+    //  and perform arbitrary actions inside the Listener. Right now users can use
+    //  `val spark = SparkSession.builder.getOrCreate()` to create a Spark session inside the
+    //  Listener, but this is a legacy session instead of a connect remote session.
     val id = UUID.randomUUID.toString
     cacheListenerById(id, listener)
     executeManagerCmd(
