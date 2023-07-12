@@ -385,7 +385,7 @@ def assertDataFrameEqual(
             )
 
     # convert df and expected to list
-    if isinstance(expected, DataFrame) or isinstance(expected, ConnectDataFrame):
+    if not isinstance(expected, List):
         # only compare schema if expected is not a List
         assert_schema_equal(df.schema, expected.schema)
         expected_list = expected.collect()
