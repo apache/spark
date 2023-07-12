@@ -340,19 +340,6 @@ class PandasUDFTestsMixin:
         self.assertEqual(df.schema[0].dataType.simpleString(), "interval day to second")
         self.assertEqual(df.first()[0], datetime.timedelta(microseconds=123))
 
-    def test_pandas_udf_with_wrong_struct_return_type(self):
-        import pandas as pd
-
-        @pandas_udf(returnType="a: int")
-        def foo(s: pd.Series) -> pd.DataFrame:
-            return s, s
-
-        df = self.spark.range(0, 10)
-        with self.assertRaisesRegex(
-            PythonException, "A field of type StructType expects a pandas.DataFrame"
-        ):
-            df.withColumn("x", foo("id")).collect()
-
 
 class PandasUDFTests(PandasUDFTestsMixin, ReusedSQLTestCase):
     pass

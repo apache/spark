@@ -697,6 +697,28 @@ class BaseUDTFTestsMixin:
                 ],
             )
 
+    def test_docstring(self):
+        class TestUDTF:
+            """A UDTF for test."""
+
+            def __init__(self):
+                """Initialize the UDTF"""
+                ...
+
+            def eval(self, x: int):
+                """Evaluate the input row."""
+                yield x + 1,
+
+            def terminate(self):
+                """Terminate the UDTF."""
+                ...
+
+        cls = udtf(TestUDTF, returnType="y: int").func
+        self.assertIn("A UDTF for test", cls.__doc__)
+        self.assertIn("Initialize the UDTF", cls.__init__.__doc__)
+        self.assertIn("Evaluate the input row", cls.eval.__doc__)
+        self.assertIn("Terminate the UDTF", cls.terminate.__doc__)
+
 
 class UDTFTests(BaseUDTFTestsMixin, ReusedSQLTestCase):
     @classmethod

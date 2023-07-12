@@ -56,6 +56,7 @@ from pyspark.serializers import (
 )
 from pyspark.sql.pandas.serializers import (
     ArrowStreamPandasUDFSerializer,
+    ArrowStreamPandasUDTFSerializer,
     CogroupUDFSerializer,
     ArrowStreamUDFSerializer,
     ApplyInPandasWithStateSerializer,
@@ -476,24 +477,10 @@ def read_udtf(pickleSer, infile, eval_type):
             runner_conf.get("spark.sql.execution.pandas.convertToArrowArraySafely", "false").lower()
             == "true"
         )
-        ser = ArrowStreamPandasUDFSerializer(
+        ser = ArrowStreamPandasUDTFSerializer(
             timezone,
             safecheck,
             assign_cols_by_name(runner_conf),
-            # Set to 'False' to avoid converting struct type inputs into a pandas DataFrame.
-            df_for_struct=False,
-            # Defines how struct type inputs are converted. If set to "row", struct type inputs
-            # are converted into Rows. Without this setting, a struct type input would be treated
-            # as a dictionary. For example, for named_struct('name', 'Alice', 'age', 1),
-            # if struct_in_pandas="dict", it becomes {"name": "Alice", "age": 1}
-            # if struct_in_pandas="row", it becomes Row(name="Alice", age=1)
-            struct_in_pandas="row",
-            # When dealing with array type inputs, Arrow converts them into numpy.ndarrays.
-            # To ensure consistency across regular and arrow-optimized UDTFs, we further
-            # convert these numpy.ndarrays into Python lists.
-            ndarray_as_list=True,
-            # Enables explicit casting for mismatched return types of Arrow Python UDTFs.
-            arrow_cast=True,
         )
     else:
         # Each row is a group so do not batch but send one by one.
@@ -533,8 +520,6 @@ def read_udtf(pickleSer, infile, eval_type):
         )
 
     if eval_type == PythonEvalType.SQL_ARROW_TABLE_UDF:
-        # For arrow-optimized UDTFs, the `eval` method has the following signatures:
-        # def eval(self, *args: pd.Series) -> Iterator[pd.DataFrame]
 
         def wrap_arrow_udtf(f, return_type):
             arrow_return_type = to_arrow_type(return_type)

@@ -103,7 +103,7 @@ def _create_arrow_udtf(regular_udtf: "UserDefinedTableFunction") -> "UserDefined
         def __init__(self) -> None:
             self.func = cls()
 
-        def eval(self, *args: pd.Series) -> Iterator[list[pd.Series]]:
+        def eval(self, *args: pd.Series) -> Iterator[pd.DataFrame]:
             if len(args) == 0:
                 yield pd.DataFrame(self.func.eval())
             else:
@@ -114,13 +114,14 @@ def _create_arrow_udtf(regular_udtf: "UserDefinedTableFunction") -> "UserDefined
                     yield pd.DataFrame(self.func.eval(*row))
 
         def terminate(self) -> Iterator[pd.DataFrame]:
-            if hasattr(cls, "terminate"):
+            if hasattr(self.func, "terminate"):
                 yield pd.DataFrame(self.func.terminate())
 
     vectorized_udtf = VectorizedUDTF
     vectorized_udtf.__name__ = cls.__name__
     vectorized_udtf.__module__ = cls.__module__
     vectorized_udtf.__doc__ = cls.__doc__
+    vectorized_udtf.__init__.__doc__ = cls.__init__.__doc__
     vectorized_udtf.eval.__doc__ = getattr(cls, "eval").__doc__
     if hasattr(cls, "terminate"):
         getattr(vectorized_udtf, "terminate").__doc__ = getattr(cls, "terminate").__doc__
@@ -128,7 +129,7 @@ def _create_arrow_udtf(regular_udtf: "UserDefinedTableFunction") -> "UserDefined
     return _create_udtf(
         cls=vectorized_udtf,
         returnType=regular_udtf.returnType,
-        name=regular_udtf.name,
+        name=regular_udtf._name,
         evalType=PythonEvalType.SQL_ARROW_TABLE_UDF,
         deterministic=regular_udtf.deterministic,
     )
@@ -170,13 +171,13 @@ class UserDefinedTableFunction:
         self._returnType_placeholder: Optional[StructType] = None
         self._inputTypes_placeholder = None
         self._judtf_placeholder = None
-        self.name = name or func.__name__
+        self._name = name or func.__name__
         self.evalType = evalType
         self.deterministic = deterministic
 
         if not hasattr(func, "eval"):
             raise PySparkAttributeError(
-                error_class="INVALID_UDTF_NO_EVAL", message_parameters={"name": self.name}
+                error_class="INVALID_UDTF_NO_EVAL", message_parameters={"name": self._name}
             )
 
     @property
@@ -192,7 +193,7 @@ class UserDefinedTableFunction:
                 if not isinstance(parsed, StructType):
                     raise PySparkTypeError(
                         f"Invalid return type for the user defined table function "
-                        f"'{self.name}': {self._returnType}. The return type of a "
+                        f"'{self._name}': {self._returnType}. The return type of a "
                         f"UDTF must be a 'StructType'. Please ensure the return "
                         "type is a correctly formatted 'StructType' string."
                     )
@@ -215,7 +216,7 @@ class UserDefinedTableFunction:
         jdt = spark._jsparkSession.parseDataType(self.returnType.json())
         assert sc._jvm is not None
         judtf = sc._jvm.org.apache.spark.sql.execution.python.UserDefinedPythonTableFunction(
-            self.name, wrapped_func, jdt, self.evalType, self.deterministic
+            self._name, wrapped_func, jdt, self.evalType, self.deterministic
         )
         return judtf
 
