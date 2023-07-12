@@ -887,6 +887,26 @@ object FunctionRegistry {
     (name, (expressionInfo, newBuilder))
   }
 
+  private[FunctionRegistry$] def rearrangeExpressions[T <: Builder[_]](
+      name: String,
+      builder: T,
+      expressions: Seq[Expression]) : Seq[Expression] = {
+    val rearrangedExpressions = if (!builder.functionSignatures.isEmpty) {
+      val functionSignatures = builder.functionSignatures.get
+      if (functionSignatures.length != 1) {
+        throw QueryCompilationErrors.multipleFunctionSignatures(
+          name, functionSignatures)
+      }
+      builder.rearrange(functionSignatures.head, expressions, name)
+    } else {
+      expressions
+    }
+    if (rearrangedExpressions.exists(_.isInstanceOf[NamedArgumentExpression])) {
+      throw QueryCompilationErrors.namedArgumentsNotSupported(name)
+    }
+    rearrangedExpressions
+  }
+
   private def expressionBuilder[T <: ExpressionBuilder : ClassTag](
       name: String,
       builder: T,
@@ -895,20 +915,7 @@ object FunctionRegistry {
     val info = FunctionRegistryBase.expressionInfo[T](name, since)
     val funcBuilder = (expressions: Seq[Expression]) => {
       assert(expressions.forall(_.resolved), "function arguments must be resolved.")
-      val rearrangedExpressions =
-        if (!builder.functionSignatures.isEmpty) {
-          val functionSignatures = builder.functionSignatures.get
-          if (functionSignatures.length != 1) {
-            throw QueryCompilationErrors.multipleFunctionSignatures(
-              name, functionSignatures)
-          }
-          builder.rearrange(functionSignatures.head, expressions, name)
-        } else {
-          expressions
-        }
-      if (rearrangedExpressions.exists(_.isInstanceOf[NamedArgumentExpression])) {
-        throw QueryCompilationErrors.namedArgumentsNotSupported(name)
-      }
+      val rearrangedExpressions = rearrangeExpressions(name, builder, expressions)
       val expr = builder.build(name, rearrangedExpressions)
       if (setAlias) expr.setTagValue(FUNC_ALIAS, name)
       expr
@@ -980,37 +987,25 @@ object EmptyTableFunctionRegistry extends EmptyFunctionRegistryBase[LogicalPlan]
 object TableFunctionRegistry {
 
   type TableFunctionBuilder = Seq[Expression] => LogicalPlan
-  private def generatorBuilder[T <: GeneratorBuilder : ClassTag](
+
+  private def logicalPlan[T <: LogicalPlan : ClassTag](name: String)
+      : (String, (ExpressionInfo, TableFunctionBuilder)) = {
+    val (info, builder) = FunctionRegistryBase.build[T](name, since = None)
+    (name, (info, (expressions: Seq[Expression]) => builder(expressions)))
+  }
+
+  def generatorBuilder[T <: GeneratorBuilder : ClassTag](
       name: String,
       builder: T,
       since: Option[String] = None): (String, (ExpressionInfo, TableFunctionBuilder)) = {
     val info = FunctionRegistryBase.expressionInfo[T](name, since)
     val funcBuilder = (expressions: Seq[Expression]) => {
       assert(expressions.forall(_.resolved), "function arguments must be resolved.")
-      val rearrangedExpressions =
-        if (!builder.functionSignatures.isEmpty) {
-          val functionSignatures = builder.functionSignatures.get
-          if (functionSignatures.length != 1) {
-            throw QueryCompilationErrors.multipleFunctionSignatures(
-              name, functionSignatures)
-          }
-          builder.rearrange(functionSignatures.head, expressions, name)
-        } else {
-          expressions
-        }
-      if (rearrangedExpressions.exists(_.isInstanceOf[NamedArgumentExpression])) {
-        throw QueryCompilationErrors.namedArgumentsNotSupported(name)
-      }
+      val rearrangedExpressions = FunctionRegistry.rearrangeExpressions(name, builder, expressions)
       val expr = builder.build(name, rearrangedExpressions)
       expr
     }
     (name, (info, funcBuilder))
-  }
-
-  private def logicalPlan[T <: LogicalPlan : ClassTag](name: String)
-      : (String, (ExpressionInfo, TableFunctionBuilder)) = {
-    val (info, builder) = FunctionRegistryBase.build[T](name, since = None)
-    (name, (info, (expressions: Seq[Expression]) => builder(expressions)))
   }
 
   def generator[T <: Generator : ClassTag](name: String, outer: Boolean = false)
@@ -1056,8 +1051,31 @@ object TableFunctionRegistry {
 }
 
 trait Builder[T] {
+  /**
+   * A method that returns the signatures of overloads that is associated with this function
+   *
+   * @return a list of function signatures
+   */
   def functionSignatures: Option[Seq[FunctionSignature]] = None
 
+  /**
+   * This function rearranges the arguments provided during function invocation in positional order
+   * according to the function signature. This method will fill in the default values if optional
+   * parmaeters do not have their values specified. Any function which supports named arguments
+   * will have this routine invoked, even if no named arguments are present in the argument list.
+   * This is done to eliminate constructor overloads in some methods which use them for default
+   * values prior to the implementation of the named argument framework. This function will also
+   * check if the number of arguments are correct. If that is not the case, then an error will be thrown.
+   *
+   * IMPORTANT: This method will be called before the [[Builder.build]] method is invoked. It is
+   * guaranteed that the expressions provided to the [[Builder.build]] functions forms a valid set
+   * of argument expressions that can be used in the construction of the function expression.
+   *
+   * @param expectedSignature The method signature which we rearrange our arguments according to
+   * @param providedArguments The list of arguments passed from function invocation
+   * @param functionName The name of the function
+   * @return The rearranged arugument list with arguments in positional order
+   */
   def rearrange(
       expectedSignature: FunctionSignature,
       providedArguments: Seq[Expression],
@@ -1068,7 +1086,16 @@ trait Builder[T] {
   def build(funcName: String, expressions: Seq[Expression]): T
 }
 
+/**
+ * A trait used for scalar valued functions that defines how their expression representations
+ * are constructed in [[FunctionRegistry]]
+ */
 trait ExpressionBuilder extends Builder[Expression]
+
+/**
+ * A trait used for table valued functions that defines how their expression representations
+ * are constructed in [[FunctionRegistry]]
+ */
 trait GeneratorBuilder extends Builder[LogicalPlan] {
   override final def build(funcName: String, expressions: Seq[Expression]) : LogicalPlan = {
     Generate(
