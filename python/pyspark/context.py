@@ -2193,6 +2193,8 @@ class SparkContext:
         """
         Add a tag to be assigned to all the jobs started by this thread.
 
+        .. versionadded:: 3.5.0
+
         Parameters
         ----------
         tag : str
@@ -2246,6 +2248,8 @@ class SparkContext:
         Remove a tag previously added to be assigned to all the jobs started by this thread.
         Noop if such a tag was not added earlier.
 
+        .. versionadded:: 3.5.0
+
         Parameters
         ----------
         tag : str
@@ -2276,6 +2280,8 @@ class SparkContext:
         """
         Get the tags that are currently set to be assigned to all the jobs started by this thread.
 
+        .. versionadded:: 3.5.0
+
         Returns
         -------
         set of str
@@ -2301,6 +2307,8 @@ class SparkContext:
     def clearJobTags(self) -> None:
         """
         Clear the current thread's job tags.
+
+        .. versionadded:: 3.5.0
 
         See Also
         --------
@@ -2405,6 +2413,8 @@ class SparkContext:
         """
         Cancel active jobs that have the specified tag. See
         :meth:`SparkContext.addJobTag`.
+
+        .. versionadded:: 3.5.0
 
         Parameters
         ----------

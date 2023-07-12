@@ -877,10 +877,10 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
       messageParameters = Map("database" -> database))
   }
 
-  def cannotDropDefaultDatabaseError(): Throwable = {
+  def cannotDropDefaultDatabaseError(database: String): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1067",
-      messageParameters = Map.empty)
+      errorClass = "UNSUPPORTED_FEATURE.DROP_DATABASE",
+      messageParameters = Map("database" -> toSQLId(database)))
   }
 
   def cannotUsePreservedDatabaseAsCurrentDatabaseError(database: String): Throwable = {
@@ -1567,12 +1567,12 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
       messageParameters = Map("filter" -> filter.toString))
   }
 
-  def dataTypeUnsupportedByDataSourceError(format: String, field: StructField): Throwable = {
+  def dataTypeUnsupportedByDataSourceError(format: String, column: StructField): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1150",
+      errorClass = "UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE",
       messageParameters = Map(
-        "field" -> field.name,
-        "fieldType" -> field.dataType.catalogString,
+        "columnName" -> toSQLId(column.name),
+        "columnType" -> toSQLType(column.dataType),
         "format" -> format))
   }
 
@@ -2229,10 +2229,12 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
       messageParameters = Map.empty)
   }
 
-  def hiveTableTypeUnsupportedError(tableType: String): Throwable = {
+  def hiveTableTypeUnsupportedError(tableName: String, tableType: String): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1220",
-      messageParameters = Map("tableType" -> tableType))
+      errorClass = "UNSUPPORTED_FEATURE.HIVE_TABLE_TYPE",
+      messageParameters = Map(
+        "tableName" -> toSQLId(tableName),
+        "tableType" -> tableType))
   }
 
   def hiveCreatePermanentFunctionsUnsupportedError(): Throwable = {
@@ -2541,7 +2543,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
 
   def loadDataInputPathNotExistError(path: String): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1265",
+      errorClass = "LOAD_DATA_PATH_NOT_EXISTS",
       messageParameters = Map("path" -> path))
   }
 
@@ -2647,14 +2649,28 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
       messageParameters = Map.empty)
   }
 
-  def createViewNumColumnsMismatchUserSpecifiedColumnLengthError(
-      analyzedPlanLength: Int,
-      userSpecifiedColumnsLength: Int): Throwable = {
+  def cannotCreateViewTooManyColumnsError(
+      viewIdent: TableIdentifier,
+      expected: Seq[String],
+      query: LogicalPlan): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1277",
+      errorClass = "CREATE_VIEW_COLUMN_ARITY_MISMATCH.TOO_MANY_DATA_COLUMNS",
       messageParameters = Map(
-        "analyzedPlanLength" -> analyzedPlanLength.toString,
-        "userSpecifiedColumnsLength" -> userSpecifiedColumnsLength.toString))
+        "viewName" -> toSQLId(viewIdent.nameParts),
+        "viewColumns" -> expected.map(c => toSQLId(c)).mkString(", "),
+        "dataColumns" -> query.output.map(c => toSQLId(c.name)).mkString(", ")))
+  }
+
+  def cannotCreateViewNotEnoughColumnsError(
+      viewIdent: TableIdentifier,
+      expected: Seq[String],
+      query: LogicalPlan): Throwable = {
+    new AnalysisException(
+      errorClass = "CREATE_VIEW_COLUMN_ARITY_MISMATCH.NOT_ENOUGH_DATA_COLUMNS",
+      messageParameters = Map(
+        "viewName" -> toSQLId(viewIdent.nameParts),
+        "viewColumns" -> expected.map(c => toSQLId(c)).mkString(", "),
+        "dataColumns" -> query.output.map(c => toSQLId(c.name)).mkString(", ")))
   }
 
   def tableIsNotViewError(name: TableIdentifier): Throwable = {

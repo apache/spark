@@ -121,11 +121,7 @@ private[spark] object Utils extends Logging with SparkClassUtils {
 
   /** Serialize an object using Java serialization */
   def serialize[T](o: T): Array[Byte] = {
-    val bos = new ByteArrayOutputStream()
-    val oos = new ObjectOutputStream(bos)
-    oos.writeObject(o)
-    oos.close()
-    bos.toByteArray
+    SparkSerDerseUtils.serialize(o)
   }
 
   /** Deserialize an object using Java serialization */

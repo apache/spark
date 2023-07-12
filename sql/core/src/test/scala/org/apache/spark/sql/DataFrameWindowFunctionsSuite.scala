@@ -1289,188 +1289,192 @@ class DataFrameWindowFunctionsSuite extends QueryTest
     val window2 = Window.partitionBy($"key").orderBy($"order".desc_nulls_first)
     val window3 = Window.orderBy($"order".asc_nulls_first)
 
-    Seq(-1, 100).foreach { threshold =>
-      withSQLConf(SQLConf.WINDOW_GROUP_LIMIT_THRESHOLD.key -> threshold.toString) {
-        Seq($"rn" === 0, $"rn" < 1, $"rn" <= 0).foreach { condition =>
-          checkAnswer(df.withColumn("rn", row_number().over(window)).where(condition),
-            Seq.empty[Row]
-          )
+    Seq(true, false).foreach { enableEvaluator =>
+      withSQLConf(SQLConf.USE_PARTITION_EVALUATOR.key -> enableEvaluator.toString) {
+        Seq(-1, 100).foreach { threshold =>
+          withSQLConf(SQLConf.WINDOW_GROUP_LIMIT_THRESHOLD.key -> threshold.toString) {
+            Seq($"rn" === 0, $"rn" < 1, $"rn" <= 0).foreach { condition =>
+              checkAnswer(df.withColumn("rn", row_number().over(window)).where(condition),
+                Seq.empty[Row]
+              )
+            }
+
+            Seq($"rn" === 1, $"rn" < 2, $"rn" <= 1).foreach { condition =>
+              checkAnswer(df.withColumn("rn", row_number().over(window)).where(condition),
+                Seq(
+                  Row("a", 4, "", 2.0, 1),
+                  Row("b", 1, "h", Double.NaN, 1),
+                  Row("c", 2, null, 5.0, 1)
+                )
+              )
+
+              checkAnswer(df.withColumn("rn", rank().over(window)).where(condition),
+                Seq(
+                  Row("a", 4, "", 2.0, 1),
+                  Row("a", 4, "", 2.0, 1),
+                  Row("b", 1, "h", Double.NaN, 1),
+                  Row("c", 2, null, 5.0, 1)
+                )
+              )
+
+              checkAnswer(df.withColumn("rn", dense_rank().over(window)).where(condition),
+                Seq(
+                  Row("a", 4, "", 2.0, 1),
+                  Row("a", 4, "", 2.0, 1),
+                  Row("b", 1, "h", Double.NaN, 1),
+                  Row("c", 2, null, 5.0, 1)
+                )
+              )
+
+              checkAnswer(df.withColumn("rn", row_number().over(window3)).where(condition),
+                Seq(
+                  Row("c", 2, null, 5.0, 1)
+                )
+              )
+
+              checkAnswer(df.withColumn("rn", rank().over(window3)).where(condition),
+                Seq(
+                  Row("c", 2, null, 5.0, 1)
+                )
+              )
+
+              checkAnswer(df.withColumn("rn", dense_rank().over(window3)).where(condition),
+                Seq(
+                  Row("c", 2, null, 5.0, 1)
+                )
+              )
+            }
+
+            Seq($"rn" < 3, $"rn" <= 2).foreach { condition =>
+              checkAnswer(df.withColumn("rn", row_number().over(window)).where(condition),
+                Seq(
+                  Row("a", 4, "", 2.0, 1),
+                  Row("a", 4, "", 2.0, 2),
+                  Row("b", 1, "h", Double.NaN, 1),
+                  Row("b", 1, "n", Double.PositiveInfinity, 2),
+                  Row("c", 1, "a", -4.0, 2),
+                  Row("c", 2, null, 5.0, 1)
+                )
+              )
+
+              checkAnswer(df.withColumn("rn", rank().over(window)).where(condition),
+                Seq(
+                  Row("a", 4, "", 2.0, 1),
+                  Row("a", 4, "", 2.0, 1),
+                  Row("b", 1, "h", Double.NaN, 1),
+                  Row("b", 1, "n", Double.PositiveInfinity, 2),
+                  Row("c", 1, "a", -4.0, 2),
+                  Row("c", 2, null, 5.0, 1)
+                )
+              )
+
+              checkAnswer(df.withColumn("rn", dense_rank().over(window)).where(condition),
+                Seq(
+                  Row("a", 0, "c", 1.0, 2),
+                  Row("a", 4, "", 2.0, 1),
+                  Row("a", 4, "", 2.0, 1),
+                  Row("b", 1, "h", Double.NaN, 1),
+                  Row("b", 1, "n", Double.PositiveInfinity, 2),
+                  Row("c", 1, "a", -4.0, 2),
+                  Row("c", 2, null, 5.0, 1)
+                )
+              )
+
+              checkAnswer(df.withColumn("rn", row_number().over(window3)).where(condition),
+                Seq(
+                  Row("a", 4, "", 2.0, 2),
+                  Row("c", 2, null, 5.0, 1)
+                )
+              )
+
+              checkAnswer(df.withColumn("rn", rank().over(window3)).where(condition),
+                Seq(
+                  Row("a", 4, "", 2.0, 2),
+                  Row("a", 4, "", 2.0, 2),
+                  Row("c", 2, null, 5.0, 1)
+                )
+              )
+
+              checkAnswer(df.withColumn("rn", dense_rank().over(window3)).where(condition),
+                Seq(
+                  Row("a", 4, "", 2.0, 2),
+                  Row("a", 4, "", 2.0, 2),
+                  Row("c", 2, null, 5.0, 1)
+                )
+              )
+            }
+
+            val condition = $"rn" === 2 && $"value2" > 0.5
+            checkAnswer(df.withColumn("rn", row_number().over(window)).where(condition),
+              Seq(
+                Row("a", 4, "", 2.0, 2),
+                Row("b", 1, "n", Double.PositiveInfinity, 2)
+              )
+            )
+
+            checkAnswer(df.withColumn("rn", rank().over(window)).where(condition),
+              Seq(
+                Row("b", 1, "n", Double.PositiveInfinity, 2)
+              )
+            )
+
+            checkAnswer(df.withColumn("rn", dense_rank().over(window)).where(condition),
+              Seq(
+                Row("a", 0, "c", 1.0, 2),
+                Row("b", 1, "n", Double.PositiveInfinity, 2)
+              )
+            )
+
+            val multipleRowNumbers = df
+              .withColumn("rn", row_number().over(window))
+              .withColumn("rn2", row_number().over(window))
+              .where('rn < 2 && 'rn2 < 3)
+            checkAnswer(multipleRowNumbers,
+              Seq(
+                Row("a", 4, "", 2.0, 1, 1),
+                Row("b", 1, "h", Double.NaN, 1, 1),
+                Row("c", 2, null, 5.0, 1, 1)
+              )
+            )
+
+            val multipleRanks = df
+              .withColumn("rn", rank().over(window))
+              .withColumn("rn2", rank().over(window))
+              .where('rn < 2 && 'rn2 < 3)
+            checkAnswer(multipleRanks,
+              Seq(
+                Row("a", 4, "", 2.0, 1, 1),
+                Row("a", 4, "", 2.0, 1, 1),
+                Row("b", 1, "h", Double.NaN, 1, 1),
+                Row("c", 2, null, 5.0, 1, 1)
+              )
+            )
+
+            val multipleDenseRanks = df
+              .withColumn("rn", dense_rank().over(window))
+              .withColumn("rn2", dense_rank().over(window))
+              .where('rn < 2 && 'rn2 < 3)
+            checkAnswer(multipleDenseRanks,
+              Seq(
+                Row("a", 4, "", 2.0, 1, 1),
+                Row("a", 4, "", 2.0, 1, 1),
+                Row("b", 1, "h", Double.NaN, 1, 1),
+                Row("c", 2, null, 5.0, 1, 1)
+              )
+            )
+
+            val multipleWindows = df
+              .withColumn("rn2", row_number().over(window2))
+              .withColumn("rn", row_number().over(window))
+              .where('rn < 2 && 'rn2 < 3)
+            checkAnswer(multipleWindows,
+              Seq(
+                Row("b", 1, "h", Double.NaN, 2, 1),
+                Row("c", 2, null, 5.0, 1, 1)
+              )
+            )
+          }
         }
-
-        Seq($"rn" === 1, $"rn" < 2, $"rn" <= 1).foreach { condition =>
-          checkAnswer(df.withColumn("rn", row_number().over(window)).where(condition),
-            Seq(
-              Row("a", 4, "", 2.0, 1),
-              Row("b", 1, "h", Double.NaN, 1),
-              Row("c", 2, null, 5.0, 1)
-            )
-          )
-
-          checkAnswer(df.withColumn("rn", rank().over(window)).where(condition),
-            Seq(
-              Row("a", 4, "", 2.0, 1),
-              Row("a", 4, "", 2.0, 1),
-              Row("b", 1, "h", Double.NaN, 1),
-              Row("c", 2, null, 5.0, 1)
-            )
-          )
-
-          checkAnswer(df.withColumn("rn", dense_rank().over(window)).where(condition),
-            Seq(
-              Row("a", 4, "", 2.0, 1),
-              Row("a", 4, "", 2.0, 1),
-              Row("b", 1, "h", Double.NaN, 1),
-              Row("c", 2, null, 5.0, 1)
-            )
-          )
-
-          checkAnswer(df.withColumn("rn", row_number().over(window3)).where(condition),
-            Seq(
-              Row("c", 2, null, 5.0, 1)
-            )
-          )
-
-          checkAnswer(df.withColumn("rn", rank().over(window3)).where(condition),
-            Seq(
-              Row("c", 2, null, 5.0, 1)
-            )
-          )
-
-          checkAnswer(df.withColumn("rn", dense_rank().over(window3)).where(condition),
-            Seq(
-              Row("c", 2, null, 5.0, 1)
-            )
-          )
-        }
-
-        Seq($"rn" < 3, $"rn" <= 2).foreach { condition =>
-          checkAnswer(df.withColumn("rn", row_number().over(window)).where(condition),
-            Seq(
-              Row("a", 4, "", 2.0, 1),
-              Row("a", 4, "", 2.0, 2),
-              Row("b", 1, "h", Double.NaN, 1),
-              Row("b", 1, "n", Double.PositiveInfinity, 2),
-              Row("c", 1, "a", -4.0, 2),
-              Row("c", 2, null, 5.0, 1)
-            )
-          )
-
-          checkAnswer(df.withColumn("rn", rank().over(window)).where(condition),
-            Seq(
-              Row("a", 4, "", 2.0, 1),
-              Row("a", 4, "", 2.0, 1),
-              Row("b", 1, "h", Double.NaN, 1),
-              Row("b", 1, "n", Double.PositiveInfinity, 2),
-              Row("c", 1, "a", -4.0, 2),
-              Row("c", 2, null, 5.0, 1)
-            )
-          )
-
-          checkAnswer(df.withColumn("rn", dense_rank().over(window)).where(condition),
-            Seq(
-              Row("a", 0, "c", 1.0, 2),
-              Row("a", 4, "", 2.0, 1),
-              Row("a", 4, "", 2.0, 1),
-              Row("b", 1, "h", Double.NaN, 1),
-              Row("b", 1, "n", Double.PositiveInfinity, 2),
-              Row("c", 1, "a", -4.0, 2),
-              Row("c", 2, null, 5.0, 1)
-            )
-          )
-
-          checkAnswer(df.withColumn("rn", row_number().over(window3)).where(condition),
-            Seq(
-              Row("a", 4, "", 2.0, 2),
-              Row("c", 2, null, 5.0, 1)
-            )
-          )
-
-          checkAnswer(df.withColumn("rn", rank().over(window3)).where(condition),
-            Seq(
-              Row("a", 4, "", 2.0, 2),
-              Row("a", 4, "", 2.0, 2),
-              Row("c", 2, null, 5.0, 1)
-            )
-          )
-
-          checkAnswer(df.withColumn("rn", dense_rank().over(window3)).where(condition),
-            Seq(
-              Row("a", 4, "", 2.0, 2),
-              Row("a", 4, "", 2.0, 2),
-              Row("c", 2, null, 5.0, 1)
-            )
-          )
-        }
-
-        val condition = $"rn" === 2 && $"value2" > 0.5
-        checkAnswer(df.withColumn("rn", row_number().over(window)).where(condition),
-          Seq(
-            Row("a", 4, "", 2.0, 2),
-            Row("b", 1, "n", Double.PositiveInfinity, 2)
-          )
-        )
-
-        checkAnswer(df.withColumn("rn", rank().over(window)).where(condition),
-          Seq(
-            Row("b", 1, "n", Double.PositiveInfinity, 2)
-          )
-        )
-
-        checkAnswer(df.withColumn("rn", dense_rank().over(window)).where(condition),
-          Seq(
-            Row("a", 0, "c", 1.0, 2),
-            Row("b", 1, "n", Double.PositiveInfinity, 2)
-          )
-        )
-
-        val multipleRowNumbers = df
-          .withColumn("rn", row_number().over(window))
-          .withColumn("rn2", row_number().over(window))
-          .where('rn < 2 && 'rn2 < 3)
-        checkAnswer(multipleRowNumbers,
-          Seq(
-            Row("a", 4, "", 2.0, 1, 1),
-            Row("b", 1, "h", Double.NaN, 1, 1),
-            Row("c", 2, null, 5.0, 1, 1)
-          )
-        )
-
-        val multipleRanks = df
-          .withColumn("rn", rank().over(window))
-          .withColumn("rn2", rank().over(window))
-          .where('rn < 2 && 'rn2 < 3)
-        checkAnswer(multipleRanks,
-          Seq(
-            Row("a", 4, "", 2.0, 1, 1),
-            Row("a", 4, "", 2.0, 1, 1),
-            Row("b", 1, "h", Double.NaN, 1, 1),
-            Row("c", 2, null, 5.0, 1, 1)
-          )
-        )
-
-        val multipleDenseRanks = df
-          .withColumn("rn", dense_rank().over(window))
-          .withColumn("rn2", dense_rank().over(window))
-          .where('rn < 2 && 'rn2 < 3)
-        checkAnswer(multipleDenseRanks,
-          Seq(
-            Row("a", 4, "", 2.0, 1, 1),
-            Row("a", 4, "", 2.0, 1, 1),
-            Row("b", 1, "h", Double.NaN, 1, 1),
-            Row("c", 2, null, 5.0, 1, 1)
-          )
-        )
-
-        val multipleWindows = df
-          .withColumn("rn2", row_number().over(window2))
-          .withColumn("rn", row_number().over(window))
-          .where('rn < 2 && 'rn2 < 3)
-        checkAnswer(multipleWindows,
-          Seq(
-            Row("b", 1, "h", Double.NaN, 2, 1),
-            Row("c", 2, null, 5.0, 1, 1)
-          )
-        )
       }
     }
   }

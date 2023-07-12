@@ -865,6 +865,18 @@ class StringFunctionsSuite extends QueryTest with SharedSparkSession {
     )
   }
 
+  test("to_varchar") {
+    val df = Seq(78.12).toDF("a")
+    checkAnswer(
+      df.selectExpr("to_varchar(a, '$99.99')"),
+      Seq(Row("$78.12"))
+    )
+    checkAnswer(
+      df.select(to_varchar(col("a"), lit("$99.99"))),
+      Seq(Row("$78.12"))
+    )
+  }
+
   test("to_number") {
     val df = Seq("$78.12").toDF("a")
     checkAnswer(

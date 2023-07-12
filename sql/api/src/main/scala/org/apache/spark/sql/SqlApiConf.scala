@@ -32,6 +32,10 @@ private[sql] trait SqlApiConf {
   def ansiEnabled: Boolean
   def caseSensitiveAnalysis: Boolean
   def maxToStringFields: Int
+  def setOpsPrecedenceEnforced: Boolean
+  def exponentLiteralAsDecimalEnabled: Boolean
+  def enforceReservedKeywords: Boolean
+  def doubleQuotedIdentifiers: Boolean
 }
 
 private[sql] object SqlApiConf {
@@ -60,4 +64,8 @@ private[sql] object DefaultSqlApiConf extends SqlApiConf {
   override def ansiEnabled: Boolean = false
   override def caseSensitiveAnalysis: Boolean = false
   override def maxToStringFields: Int = 50
+  override def setOpsPrecedenceEnforced: Boolean = false
+  override def exponentLiteralAsDecimalEnabled: Boolean = false
+  override def enforceReservedKeywords: Boolean = false
+  override def doubleQuotedIdentifiers: Boolean = false
 }

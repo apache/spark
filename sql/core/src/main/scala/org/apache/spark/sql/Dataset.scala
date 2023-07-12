@@ -1684,7 +1684,7 @@ class Dataset[T] private[sql](
    * @group typedrel
    * @since 1.6.0
    */
-  def filter(conditionExpr: String): Dataset[T] = {
+  def filter(conditionExpr: String): Dataset[T] = sparkSession.withActive {
     filter(Column(sparkSession.sessionState.sqlParser.parseExpression(conditionExpr)))
   }
 
@@ -1710,9 +1710,7 @@ class Dataset[T] private[sql](
    * @group typedrel
    * @since 1.6.0
    */
-  def where(conditionExpr: String): Dataset[T] = {
-    filter(Column(sparkSession.sessionState.sqlParser.parseExpression(conditionExpr)))
-  }
+  def where(conditionExpr: String): Dataset[T] = filter(conditionExpr)
 
   /**
    * Groups the Dataset using the specified columns, so we can run aggregation on them. See
@@ -3914,7 +3912,7 @@ class Dataset[T] private[sql](
   private def createTempViewCommand(
       viewName: String,
       replace: Boolean,
-      global: Boolean): CreateViewCommand = {
+      global: Boolean): CreateViewCommand = sparkSession.withActive {
     val viewType = if (global) GlobalTempView else LocalTempView
 
     val identifier = try {

@@ -882,6 +882,10 @@ object ColumnPruning extends Rule[LogicalPlan] {
     case e @ Expand(_, _, child) if !child.outputSet.subsetOf(e.references) =>
       e.copy(child = prunedChild(child, e.references))
 
+    // prune unused columns from child of MergeRows for row-level operations
+    case e @ MergeRows(_, _, _, _, _, _, _, child) if !child.outputSet.subsetOf(e.references) =>
+      e.copy(child = prunedChild(child, e.references))
+
     // prune unrequired references
     case p @ Project(_, g: Generate) if p.references != g.outputSet =>
       val requiredAttrs = p.references -- g.producedAttributes ++ g.generator.references
