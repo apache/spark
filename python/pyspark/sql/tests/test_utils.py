@@ -115,8 +115,8 @@ class UtilsTestsMixin:
 
         assertDataFrameEqual(df1, df2)
 
-    def test_assert_approx_equal_arraytype_float_custom_precision_fail(self):
-        # fails with default precision, 1e-5
+    def test_assert_approx_equal_arraytype_float_default_rtol_fail(self):
+        # fails with default rtol, 1e-5
         df1 = self.spark.createDataFrame(
             data=[
                 ("student1", [97.01, 89.23]),
@@ -168,8 +168,8 @@ class UtilsTestsMixin:
             message_parameters={"error_msg": expected_error_message},
         )
 
-    def test_assert_approx_equal_arraytype_float_custom_precision_pass(self):
-        # passes with custom precision, 1e-2
+    def test_assert_approx_equal_arraytype_float_custom_rtol_pass(self):
+        # passes with custom rtol, 1e-2
         df1 = self.spark.createDataFrame(
             data=[
                 ("student1", [97.01, 89.23]),
@@ -195,7 +195,7 @@ class UtilsTestsMixin:
             ),
         )
 
-        assertDataFrameEqual(df1, df2, precision=1e-2)
+        assertDataFrameEqual(df1, df2, rtol=1e-2)
 
     def test_assert_notequal_arraytype(self):
         df1 = self.spark.createDataFrame(
@@ -704,7 +704,7 @@ class UtilsTestsMixin:
 
         assertDataFrameEqual(df1, df2)
 
-    def test_assert_pyspark_approx_equal_custom_precision(self):
+    def test_assert_pyspark_approx_equal_custom_rtol(self):
         df1 = self.spark.createDataFrame(
             data=[
                 ("1", 1000.00),
@@ -720,7 +720,7 @@ class UtilsTestsMixin:
             schema=["id", "amount"],
         )
 
-        assertDataFrameEqual(df1, df2, precision=1e-2)
+        assertDataFrameEqual(df1, df2, rtol=1e-2)
 
     def test_assert_pyspark_df_not_equal(self):
         df1 = self.spark.createDataFrame(

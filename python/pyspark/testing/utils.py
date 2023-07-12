@@ -222,7 +222,11 @@ class PySparkErrorTestUtils:
 
 
 def assertDataFrameEqual(
-    df: DataFrame, expected: DataFrame, check_row_order: bool = False, precision: float = 1e-5
+    df: DataFrame,
+    expected: DataFrame,
+    check_row_order: bool = False,
+    rtol: float = 1e-5,
+    atol: float = 1e-8,
 ):
     """
     A util function to assert equality between DataFrames `df` and `expected`, with
@@ -242,9 +246,18 @@ def assertDataFrameEqual(
         A flag indicating whether the order of rows should be considered in the comparison.
         If set to `False` (default), the row order is not taken into account.
         If set to `True`, the order of rows is important and will be checked during comparison.
-    precision : float, optional
-        The level of precision when asserting approximate equality for float values in df
-        and expected. Set to 1e-5 by default.
+    rtol : float, optional
+        The relative tolerance, used in asserting approximate equality for float values in df
+        and expected. Set to 1e-5 by default. (See Notes)
+    atol : float, optional
+        The absolute tolerance, used in asserting approximate equality for float values in df
+        and expected. Set to 1e-8 by default. (See Notes)
+
+    Notes
+    -----
+    If the following equation is True for two float values a and b, then they are approximately
+    equal.
+    .. math:: absolute(a - b) <= (atol + rtol * absolute(b))
 
     Examples
     --------
@@ -258,7 +271,8 @@ def assertDataFrameEqual(
         schema=["id", "amount"])
     >>> df2 = spark.createDataFrame(data=[("1", 1001.00), ("2", 3000.00), ("3", 2003.00)], \
         schema=["id", "amount"])
-    >>> assertDataFrameEqual(df1, df2) # fail  # doctest: +IGNORE_EXCEPTION_DETAIL +NORMALIZE_WHITESPACE
+    >>> assertDataFrameEqual(df1, df2) # fail # doctest: +IGNORE_EXCEPTION_DETAIL\
+        +NORMALIZE_WHITESPACE
     Traceback (most recent call last):
     ...
     PySparkAssertionError: [DIFFERENT_ROWS] Results do not match: ( 66.667 % )
@@ -332,7 +346,7 @@ def assertDataFrameEqual(
                     and all(compare_vals(val1[k], val2[k]) for k in val1.keys())
                 )
             elif isinstance(val1, float) and isinstance(val2, float):
-                if abs(val1 - val2) > precision:
+                if abs(val1 - val2) > (atol + rtol * abs(val2)):
                     return False
             else:
                 if val1 != val2:
