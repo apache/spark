@@ -38,7 +38,7 @@ class MetaAlgorithmReadWriteTests(SparkSessionTestCase):
              uids = set(map(lambda x: x.uid, stages))
              expected_uids = set(map(lambda x: x.uid, expected_stages))
              self.assertEqual(uids, expected_uids)
- 
+
          df1 = self.spark.createDataFrame(
              [
                  (Vectors.dense([1.0, 2.0]), 1.0),
@@ -59,10 +59,10 @@ class MetaAlgorithmReadWriteTests(SparkSessionTestCase):
          pipelineModel = pipeline.fit(df2)
          ova = OneVsRest(classifier=lr)
          ovaModel = ova.fit(df1)
- 
+
          ova_pipeline = Pipeline(stages=[vs, ova])
          nested_pipeline = Pipeline(stages=[ova_pipeline])
- 
+
          _check_uid_set_equal(
              MetaAlgorithmReadWrite.getAllNestedStages(pipeline), [pipeline, vs, lr]
          )
