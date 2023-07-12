@@ -30,12 +30,6 @@ class SQLParityTests(SQLTestsMixin, PandasOnSparkTestUtils, ReusedConnectTestCas
     def test_sql_with_pandas_on_spark_objects(self):
         super().test_sql_with_pandas_on_spark_objects()
 
-    @unittest.skip(
-        "TODO(SPARK-43665): Enable PandasSQLStringFormatter.vformat to work with Spark Connect."
-    )
-    def test_sql_with_python_objects(self):
-        super().test_sql_with_python_objects()
-
 
 if __name__ == "__main__":
     from pyspark.pandas.tests.connect.test_parity_sql import *  # noqa: F401

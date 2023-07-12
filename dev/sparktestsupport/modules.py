@@ -624,6 +624,7 @@ pyspark_ml = Module(
         "pyspark.ml.torch.tests.test_distributor",
         "pyspark.ml.torch.tests.test_log_communication",
         "pyspark.ml.torch.tests.test_data_loader",
+        "pyspark.ml.deepspeed.tests.test_deepspeed_distributor",
         "pyspark.ml.tests.connect.test_legacy_mode_summarizer",
         "pyspark.ml.tests.connect.test_legacy_mode_evaluation",
         "pyspark.ml.tests.connect.test_legacy_mode_feature",

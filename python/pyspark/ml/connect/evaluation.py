@@ -93,6 +93,18 @@ class RegressionEvaluator(_TorchMetricEvaluator, HasLabelCol, HasPredictionCol, 
     Supported metrics are 'rmse', 'mse' and 'r2'.
 
     .. versionadded:: 3.5.0
+
+    Examples
+    --------
+    >>> from pyspark.ml.connect.evaluation import RegressionEvaluator
+    >>> eva = RegressionEvaluator(metricName='mse')
+    >>> dataset = spark.createDataFrame(
+    ...     [(1.0, 2.0), (-1.0, -1.5)], schema=['label', 'prediction']
+    ... )
+    >>> eva.evaluate(dataset)
+    0.625
+    >>> eva.isLargerBetter()
+    False
     """
 
     @keyword_only
@@ -148,6 +160,19 @@ class BinaryClassificationEvaluator(
     Supported metrics are 'areaUnderROC' and 'areaUnderPR'.
 
     .. versionadded:: 3.5.0
+
+    Examples
+    --------
+    >>> from pyspark.ml.connect.evaluation import BinaryClassificationEvaluator
+    >>> eva = BinaryClassificationEvaluator(metricName='areaUnderPR')
+    >>> dataset = spark.createDataFrame(
+    ...     [(1, 0.6), (0, 0.55), (0, 0.1), (1, 0.6), (1, 0.4)],
+    ...     schema=['label', 'probability']
+    ... )
+    >>> eva.evaluate(dataset)
+    0.9166666865348816
+    >>> eva.isLargerBetter()
+    True
     """
 
     @keyword_only
@@ -207,6 +232,19 @@ class MulticlassClassificationEvaluator(
     Supported metrics are 'accuracy'.
 
     .. versionadded:: 3.5.0
+
+    Examples
+    --------
+    >>> from pyspark.ml.connect.evaluation import MulticlassClassificationEvaluator
+    >>> eva = MulticlassClassificationEvaluator(metricName='accuracy')
+    >>> dataset = spark.createDataFrame(
+    ...     [(1, 1), (0, 0), (2, 2), (1, 0), (2, 1)],
+    ...     schema=['label', 'prediction']
+    ... )
+    >>> eva.evaluate(dataset)
+    0.6000000238418579
+    >>> eva.isLargerBetter()
+    True
     """
 
     def __init__(
