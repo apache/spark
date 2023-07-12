@@ -35,11 +35,12 @@ class DebugEvaluatorFactory(
     override def eval(
         partitionIndex: Int,
         inputs: Iterator[InternalRow]*): Iterator[InternalRow] = {
+      val input = inputs.head
       new Iterator[InternalRow] {
-        def hasNext: Boolean = inputs.head.hasNext
+        def hasNext: Boolean = input.hasNext
 
         def next(): InternalRow = {
-          val currentRow = inputs.head.next()
+          val currentRow = input.next()
           tupleCount.add(1)
           var i = 0
           while (i < numColumns) {
