@@ -351,6 +351,7 @@ Distributor
     :toctree: api/
 
     TorchDistributor
+    DeepspeedTorchDistributor
 
 
 Utilities
