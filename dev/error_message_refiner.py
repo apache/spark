@@ -21,21 +21,21 @@
 Utility for refining error messages based on LLM.
 
 Usage:
-    python error_message_refiner.py <error_class> [--gpt_version=<version>]
+    python error_message_refiner.py <error_class> [--model_name=<version>]
 
 Arguments:
     <error_class>           Required.
                             The name of the error class to refine the messages for.
                             The list of error classes is located in
-                            `core/src/main/resources/error/error-classes.json`.
+                            `common/utils/src/main/resources/error/error-classes.json`.
 
 Options:
-    --gpt_version=<version> Optional.
+    --model_name=<version> Optional.
                             The version of Chat GPT to use for refining the error messages.
                             If not provided, the default version("gpt-3.5-turbo") will be used.
 
 Example usage:
-    python error_message_refiner.py CANNOT_DECODE_URL --gpt_version=gpt-4
+    python error_message_refiner.py CANNOT_DECODE_URL --model_name=gpt-4
 
 Description:
     This script refines error messages using the LLM based approach.
@@ -43,7 +43,7 @@ Description:
     allows specifying the version of Chat GPT to use for refining the messages.
 
     Options:
-        --gpt_version: Specifies the version of Chat GPT.
+        --model_name: Specifies the version of Chat GPT.
                        If not provided, the default version("gpt-3.5-turbo") will be used.
 
     Note:
@@ -65,10 +65,10 @@ from typing import Tuple, Optional
 
 from sparktestsupport import SPARK_HOME
 
-PATH_TO_ERROR_CLASS = f"{SPARK_HOME}/core/src/main/resources/error/error-classes.json"
+PATH_TO_ERROR_CLASS = f"{SPARK_HOME}/common/utils/src/main/resources/error/error-classes.json"
 # Register your own open API key for the environment variable.
 # The API key can be obtained from https://platform.openai.com/account/api-keys.
-OPENAI_API_KEY = os.environ.get("OPEN_API_KEY")
+OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
 
 openai.api_key = OPENAI_API_KEY
 
@@ -172,7 +172,7 @@ def _get_error_message(error_class: str) -> str:
         return f"Error message not found for class: {error_class}"
 
 
-def ask_chat_gpt(error_class: str, gpt_version: str) -> Tuple[str, str]:
+def ask_chat_gpt(error_class: str, model_name: str) -> Tuple[str, str]:
     """
     Requests error message improvement from Chat GPT.
     Returns a tuple containing the old error message and the refined error message.
@@ -225,7 +225,7 @@ For more detail, the error message is triggered through a error function named "
 When improving the error, please also refer to the source code provided above to provide more detailed context to users."""
     try:
         response = openai.ChatCompletion.create(
-            model=gpt_version,
+            model=model_name,
             messages=[
                 {
                     "role": "system",
@@ -237,7 +237,7 @@ When improving the error, please also refer to the source code provided above to
         )
     except openai.error.AuthenticationError:
         raise openai.error.AuthenticationError(
-            "Please verify if the API key is entered correctly in `dev/api_key.txt`."
+            "Please verify if the API key is set correctly in `OPENAI_API_KEY`."
         )
     except openai.error.InvalidRequestError as e:
         if "gpt-4" in str(e):
@@ -257,9 +257,9 @@ When improving the error, please also refer to the source code provided above to
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("error_class", type=str)
-    parser.add_argument("--gpt_version", type=str, default="gpt-3.5-turbo")
+    parser.add_argument("--model_name", type=str, default="gpt-3.5-turbo")
 
     args = parser.parse_args()
 
-    old_error_message, new_error_message = ask_chat_gpt(args.error_class, args.gpt_version)
+    old_error_message, new_error_message = ask_chat_gpt(args.error_class, args.model_name)
     print(f"[{args.error_class}]\nBefore: {old_error_message}\nAfter: {new_error_message}")
