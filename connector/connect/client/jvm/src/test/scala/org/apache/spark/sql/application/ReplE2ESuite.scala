@@ -227,4 +227,14 @@ class ReplE2ESuite extends RemoteSparkSession with BeforeAndAfterEach {
     val output = runCommandsInShell(input)
     assertContains("Array[Long] = Array(0L, 15L, 30L, 45L, 60L)", output)
   }
+
+  test("call_udf") {
+    val input = """
+        |val df = Seq(("id1", 1), ("id2", 4), ("id3", 5)).toDF("id", "value")
+        |spark.udf.register("simpleUDF", (v: Int) => v * v)
+        |df.select($"id", call_udf("simpleUDF", $"value")).collect()
+      """.stripMargin
+    val output = runCommandsInShell(input)
+    assertContains("Array[org.apache.spark.sql.Row] = Array([id1,1], [id2,16], [id3,25])", output)
+  }
 }
