@@ -47,6 +47,7 @@ import org.apache.spark.sql.catalyst.parser.{ParseException, ParserUtils}
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.trees.TreeNodeTag
+import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.catalyst.util.IntervalUtils
 import org.apache.spark.sql.catalyst.util.TypeUtils.toSQLId
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
@@ -3407,7 +3408,7 @@ class Dataset[T] private[sql](
       sparkSession,
       MapInPandas(
         func,
-        func.dataType.asInstanceOf[StructType].toAttributes,
+        toAttributes(func.dataType.asInstanceOf[StructType]),
         logicalPlan,
         isBarrier))
   }
@@ -3422,7 +3423,7 @@ class Dataset[T] private[sql](
       sparkSession,
       PythonMapInArrow(
         func,
-        func.dataType.asInstanceOf[StructType].toAttributes,
+        toAttributes(func.dataType.asInstanceOf[StructType]),
         logicalPlan,
         isBarrier))
   }

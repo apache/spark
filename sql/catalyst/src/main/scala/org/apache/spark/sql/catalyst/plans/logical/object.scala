@@ -26,6 +26,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.objects.Invoke
 import org.apache.spark.sql.catalyst.plans.{InnerLike, LeftAnti, LeftSemi, ReferenceAllColumns}
 import org.apache.spark.sql.catalyst.trees.TreePattern._
+import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.{GroupStateTimeout, OutputMode}
@@ -137,7 +138,7 @@ object MapPartitionsInR {
         packageNames,
         broadcastVars,
         encoder.schema,
-        schema.toAttributes,
+        toAttributes(schema),
         child)
     } else {
       val deserialized = CatalystSerde.deserialize(child)(encoder)
@@ -481,7 +482,7 @@ object FlatMapGroupsWithState {
       groupingAttributes,
       dataAttributes,
       UnresolvedDeserializer(encoderFor[K].deserializer, groupingAttributes),
-      LocalRelation(stateEncoder.schema.toAttributes), // empty data set
+      LocalRelation(stateEncoder.schema), // empty data set
       child
     )
     CatalystSerde.serialize[U](mapped)
@@ -594,7 +595,7 @@ object FlatMapGroupsInR {
         packageNames,
         broadcastVars,
         inputSchema,
-        schema.toAttributes,
+        toAttributes(schema),
         UnresolvedDeserializer(keyDeserializer, groupingAttributes),
         groupingAttributes,
         child)
