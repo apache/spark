@@ -58,9 +58,7 @@ private[sql] class SparkResult[T](
   /**
    * Update RowEncoder and recursively update the fields of the ProductEncoder if found.
    */
-  private def createEncoder(
-      enc: AgnosticEncoder[_],
-      dataType: DataType): AgnosticEncoder[_] = {
+  private def createEncoder(enc: AgnosticEncoder[_], dataType: DataType): AgnosticEncoder[_] = {
     enc match {
       case UnboundRowEncoder =>
         // Replace the row encoder with the encoder inferred from the schema.
