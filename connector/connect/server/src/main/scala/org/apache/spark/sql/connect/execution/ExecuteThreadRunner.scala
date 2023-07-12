@@ -47,7 +47,7 @@ private[connect] class ExecuteThreadRunner(executeHolder: ExecuteHolder)
 
   /** Launches the execution in a background thread, returns immediately. */
   def start(): Unit = {
-    this.executionThread.start()
+    executionThread.start()
   }
 
   /** Joins the background execution thread after it is finished. */

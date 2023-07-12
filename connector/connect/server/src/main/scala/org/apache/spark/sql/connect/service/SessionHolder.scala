@@ -50,7 +50,7 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
   private[connect] def createExecuteHolder(request: ExecutePlanRequest): ExecuteHolder = {
 
     val operationId = UUID.randomUUID().toString
-    val executePlanHolder = ExecuteHolder(request, operationId, this)
+    val executePlanHolder = new ExecuteHolder(request, operationId, this)
     assert(executions.putIfAbsent(operationId, executePlanHolder) == null)
     executePlanHolder
   }

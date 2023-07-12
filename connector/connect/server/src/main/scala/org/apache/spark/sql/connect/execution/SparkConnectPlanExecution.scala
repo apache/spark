@@ -39,11 +39,11 @@ import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.ThreadUtils
 
 /**
- * Handle ExecutePlanRequest where the operatoin to handle is Plan execution of type
+ * Handle ExecutePlanRequest where the operation to handle is of `Plan` type.
  * proto.Plan.OpTypeCase.ROOT
  * @param executeHolder
  */
-class SparkConnectPlanExecution(executeHolder: ExecuteHolder) {
+private[execution] class SparkConnectPlanExecution(executeHolder: ExecuteHolder) {
 
   private val sessionHolder = executeHolder.sessionHolder
   private val session = executeHolder.session

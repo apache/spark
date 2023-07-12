@@ -22,13 +22,12 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.connect.execution.{ExecuteGrpcResponseSender, ExecuteResponseObserver, ExecuteThreadRunner}
 
 /**
- * Object used to hold the Spark Connect execution state, and perform
- * T - response type of the execution.
+ * Object used to hold the Spark Connect execution state.
  */
-case class ExecuteHolder(
-    request: proto.ExecutePlanRequest,
-    operationId: String,
-    sessionHolder: SessionHolder) extends Logging {
+private[connect] class ExecuteHolder(
+    val request: proto.ExecutePlanRequest,
+    val operationId: String,
+    val sessionHolder: SessionHolder) extends Logging {
 
   val jobTag =
     s"User_${sessionHolder.userId}_Session_${sessionHolder.sessionId}_Request_${operationId}"

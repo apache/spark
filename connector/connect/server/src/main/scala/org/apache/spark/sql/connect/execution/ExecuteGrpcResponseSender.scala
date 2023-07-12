@@ -46,16 +46,21 @@ private[connect] class ExecuteGrpcResponseSender[T](
 
   /**
    * Attach to the executionObserver, consume responses from it, and send them to grpcObserver.
-   * @param lastSentIndex Start sending the stream from response after this.
+   *  @param lastConsumedStreamIndex the last index that was already consumed and sent.
+   *    This sender will start from index after that.
+   *    0 means start from beginning (since first response has index 1)
+   *
    * @return true if the execution was detached before stream completed.
    *         The caller needs to finish the grpcObserver stream
    *         false if stream was finished. In this case, grpcObserver stream is already completed.
    */
-  def run(executionObserver: ExecuteResponseObserver[T], lastSentIndex: Long): Boolean = {
+  def run(
+      executionObserver: ExecuteResponseObserver[T],
+      lastConsumedStreamIndex: Long): Boolean = {
     // register to be notified about available responses.
     executionObserver.attachConsumer(this)
 
-    var nextIndex = lastSentIndex + 1
+    var nextIndex = lastConsumedStreamIndex + 1
     var finished = false
 
     while (!finished) {

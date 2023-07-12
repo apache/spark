@@ -63,7 +63,8 @@ private[connect] class ExecuteResponseObserver[T]()
    *  and to assert that all responses are consumed. */
   private var highestConsumedIndex: Long = 0
 
-  // sender to notify of available responses.
+  /** Consumer that waits for available responses.
+   *  There can be only one at a time, @see attachConsumer. */
   private var responseSender: Option[ExecuteGrpcResponseSender[T]] = None
 
   def onNext(r: T): Unit = synchronized {
