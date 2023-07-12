@@ -16,9 +16,11 @@
  */
 package org.apache.spark.sql.connect.client.arrow
 
+import java.math.BigInteger
 import java.util
 import java.util.{Collections, Objects}
 
+import scala.beans.BeanProperty
 import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.reflect.classTag
@@ -32,14 +34,14 @@ import org.scalatest.BeforeAndAfterAll
 import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.connect.proto
 import org.apache.spark.sql.Row
-import org.apache.spark.sql.catalyst.{DefinedByConstructorParams, DummyBean, FooEnum, JavaTypeInference, PrimitiveData, ScalaReflection}
-import org.apache.spark.sql.catalyst.FooEnum.FooEnum
-import org.apache.spark.sql.catalyst.encoders.{AgnosticEncoder, BoxedData, UDTForCaseClass}
+import org.apache.spark.sql.catalyst.{DefinedByConstructorParams, JavaTypeInference, ScalaReflection}
+import org.apache.spark.sql.catalyst.encoders.AgnosticEncoder
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{BoxedIntEncoder, CalendarIntervalEncoder, DateEncoder, EncoderField, InstantEncoder, IterableEncoder, JavaDecimalEncoder, LocalDateEncoder, PrimitiveDoubleEncoder, PrimitiveFloatEncoder, RowEncoder, StringEncoder, TimestampEncoder, UDTEncoder}
 import org.apache.spark.sql.catalyst.encoders.RowEncoder.{encoderFor => toRowEncoder}
 import org.apache.spark.sql.connect.client.SparkResult
+import org.apache.spark.sql.connect.client.arrow.FooEnum.FooEnum
 import org.apache.spark.sql.connect.client.util.ConnectFunSuite
-import org.apache.spark.sql.types.{ArrayType, Decimal, DecimalType, Metadata, StructType}
+import org.apache.spark.sql.types.{ArrayType, DataType, Decimal, DecimalType, IntegerType, Metadata, SQLUserDefinedType, StructType, UserDefinedType}
 
 /**
  * Tests for encoding external data to and from arrow.
@@ -683,7 +685,7 @@ class ArrowEncoderSuite extends ConnectFunSuite with BeforeAndAfterAll {
       ArrowSerializer.serializerFor(CalendarIntervalEncoder, data))
 
     // UDT
-    val udtEncoder = UDTEncoder(new UDTForCaseClass, classOf[UDTForCaseClass])
+    val udtEncoder = UDTEncoder(new UDTNotSupported, classOf[UDTNotSupported])
     intercept[SparkUnsupportedOperationException](ArrowSerializer.serializerFor(udtEncoder, data))
   }
 
@@ -842,4 +844,51 @@ class JavaMapData {
   }
 
   override def hashCode(): Int = Objects.hashCode(dummyToDoubleListMap)
+}
+
+class DummyBean {
+  @BeanProperty var bigInteger: BigInteger = _
+
+  override def hashCode(): Int = Objects.hashCode(bigInteger)
+
+  override def equals(obj: Any): Boolean = obj match {
+    case bean: DummyBean => Objects.equals(bigInteger, bean.bigInteger)
+    case _ => false
+  }
+}
+
+object FooEnum extends Enumeration {
+  type FooEnum = Value
+  val E1, E2 = Value
+}
+
+case class PrimitiveData(
+    intField: Int,
+    longField: Long,
+    doubleField: Double,
+    floatField: Float,
+    shortField: Short,
+    byteField: Byte,
+    booleanField: Boolean)
+
+case class BoxedData(
+    intField: java.lang.Integer,
+    longField: java.lang.Long,
+    doubleField: java.lang.Double,
+    floatField: java.lang.Float,
+    shortField: java.lang.Short,
+    byteField: java.lang.Byte,
+    booleanField: java.lang.Boolean)
+
+/** For testing UDT for a case class */
+@SQLUserDefinedType(udt = classOf[UDTNotSupported])
+case class UDTNotSupportedClass(i: Int)
+
+class UDTNotSupported extends UserDefinedType[UDTNotSupportedClass] {
+  override def sqlType: DataType = IntegerType
+  override def userClass: Class[UDTNotSupportedClass] = classOf[UDTNotSupportedClass]
+  override def serialize(obj: UDTNotSupportedClass): Int = obj.i
+  override def deserialize(datum: Any): UDTNotSupportedClass = datum match {
+    case i: Int => UDTNotSupportedClass(i)
+  }
 }

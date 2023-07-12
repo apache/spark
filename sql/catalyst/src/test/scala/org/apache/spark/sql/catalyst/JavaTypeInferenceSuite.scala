@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst
 
 import java.math.BigInteger
-import java.util.{LinkedList, List => JList, Map => JMap, Objects}
+import java.util.{LinkedList, List => JList, Map => JMap}
 
 import scala.beans.{BeanProperty, BooleanBeanProperty}
 import scala.reflect.{classTag, ClassTag}
@@ -30,13 +30,6 @@ import org.apache.spark.sql.types.{DecimalType, MapType, Metadata, StringType, S
 
 class DummyBean {
   @BeanProperty var bigInteger: BigInteger = _
-
-  override def hashCode(): Int = Objects.hashCode(bigInteger)
-
-  override def equals(obj: Any): Boolean = obj match {
-    case bean: DummyBean => Objects.equals(bigInteger, bean.bigInteger)
-    case _ => false
-  }
 }
 
 class GenericCollectionBean {
