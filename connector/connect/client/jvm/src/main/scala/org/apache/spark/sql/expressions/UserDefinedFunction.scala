@@ -93,29 +93,22 @@ sealed abstract class UserDefinedFunction {
  * Holder class for a scalar user-defined function and it's input/output encoder(s).
  */
 case class ScalarUserDefinedFunction private (
-    function: AnyRef,
-    inputEncoders: Seq[AgnosticEncoder[_]],
-    outputEncoder: AgnosticEncoder[_],
+    // SPARK-43198: Eagerly serialize to prevent the UDF from containing a reference to this class.
+    serializedUdfPacket: Array[Byte],
+    inputTypes: Seq[proto.DataType],
+    outputType: proto.DataType,
     name: Option[String],
     override val nullable: Boolean,
-    override val deterministic: Boolean,
-    // SPARK-44388: To avoid `udf` serialization during a copy of operation of the case class, we
-    // use this parameter to pass in the materialized udf. Through this, we avoid hitting a variant
-    // of the issue in SPARK-43198 which seems to cause protobuf cast issues in this case.
-    overrideUdf: Option[proto.ScalarScalaUDF])
+    override val deterministic: Boolean)
     extends UserDefinedFunction {
 
-  // SPARK-43198: Eagerly serialize to prevent the UDF from containing a reference to this class.
-  private val udf = overrideUdf.getOrElse {
-    val udfPacketBytes =
-      SparkSerDerseUtils.serialize(UdfPacket(function, inputEncoders, outputEncoder))
+  private lazy val udf = {
     val scalaUdfBuilder = proto.ScalarScalaUDF
       .newBuilder()
-      .setPayload(ByteString.copyFrom(udfPacketBytes))
+      .setPayload(ByteString.copyFrom(serializedUdfPacket))
       // Send the real inputs and return types to obtain the types without deser the udf bytes.
-      .addAllInputTypes(
-        inputEncoders.map(_.dataType).map(DataTypeProtoConverter.toConnectProtoType).asJava)
-      .setOutputType(DataTypeProtoConverter.toConnectProtoType(outputEncoder.dataType))
+      .addAllInputTypes(inputTypes.asJava)
+      .setOutputType(outputType)
       .setNullable(nullable)
 
     scalaUdfBuilder.build()
@@ -132,14 +125,11 @@ case class ScalarUserDefinedFunction private (
     name.foreach(udfBuilder.setFunctionName)
   }
 
-  override def withName(name: String): ScalarUserDefinedFunction =
-    copy(name = Option(name), overrideUdf = Some(udf))
+  override def withName(name: String): ScalarUserDefinedFunction = copy(name = Option(name))
 
-  override def asNonNullable(): ScalarUserDefinedFunction =
-    copy(nullable = false, overrideUdf = Some(udf))
+  override def asNonNullable(): ScalarUserDefinedFunction = copy(nullable = false)
 
-  override def asNondeterministic(): ScalarUserDefinedFunction =
-    copy(deterministic = false, overrideUdf = Some(udf))
+  override def asNondeterministic(): ScalarUserDefinedFunction = copy(deterministic = false)
 }
 
 object ScalarUserDefinedFunction {
@@ -161,13 +151,14 @@ object ScalarUserDefinedFunction {
       function: AnyRef,
       inputEncoders: Seq[AgnosticEncoder[_]],
       outputEncoder: AgnosticEncoder[_]): ScalarUserDefinedFunction = {
+    val udfPacketBytes =
+      SparkSerDerseUtils.serialize(UdfPacket(function, inputEncoders, outputEncoder))
     ScalarUserDefinedFunction(
-      function = function,
-      inputEncoders = inputEncoders,
-      outputEncoder = outputEncoder,
+      serializedUdfPacket = udfPacketBytes,
+      inputTypes = inputEncoders.map(_.dataType).map(DataTypeProtoConverter.toConnectProtoType),
+      outputType = DataTypeProtoConverter.toConnectProtoType(outputEncoder.dataType),
       name = None,
       nullable = true,
-      deterministic = true,
-      overrideUdf = None)
+      deterministic = true)
   }
 }
