@@ -673,7 +673,8 @@ private[sql] object QueryParsingErrors extends QueryErrorsBase {
   def invalidTableFunctionIdentifierArgumentMissingParentheses(
       ctx: ParserRuleContext, argumentName: String): Throwable = {
     new ParseException(
-      errorClass = "INVALID_TABLE_FUNCTION_IDENTIFIER_ARGUMENT_MISSING_PARENTHESES",
+      errorClass =
+        "INVALID_SQL_SYNTAX.INVALID_TABLE_FUNCTION_IDENTIFIER_ARGUMENT_MISSING_PARENTHESES",
       messageParameters = Map(
         "argumentName" -> toSQLId(argumentName)),
       ctx

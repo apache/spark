@@ -1052,12 +1052,6 @@ Invalid subquery:
 
 For more details see [INVALID_SUBQUERY_EXPRESSION](sql-error-conditions-invalid-subquery-expression-error-class.html)
 
-### INVALID_TABLE_FUNCTION_IDENTIFIER_ARGUMENT_MISSING_PARENTHESES
-
-SQLSTATE: none assigned
-
-Syntax error: call to table-valued function is invalid because parentheses are missing around the provided TABLE argument `<argumentName>`; please surround this with parentheses and try again.
-
 ### INVALID_TEMP_OBJ_REFERENCE
 
 SQLSTATE: none assigned
