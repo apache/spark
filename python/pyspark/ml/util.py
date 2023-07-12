@@ -767,8 +767,9 @@ def _get_active_session(is_remote: bool) -> SparkSession:
 class FunctionPickler:
     """ 
         This class provides a way to pickle a function and its arguments.
-        It also provides a way to create a pytorch script that can run a
-        function with arguments if they have pickled to a file.
+        It also provides a way to create a script that can run a
+        function with arguments if they have them pickled to a file.
+        It also provides a way of extracting the conents of a pickle file.
     """
     @staticmethod
     def pickle_fn_and_save(train_fn: Callable, file_path: str, save_dir: str, *args, **kwargs) -> str:
