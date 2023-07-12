@@ -197,6 +197,68 @@ class UtilsTestsMixin:
 
         assertDataFrameEqual(df1, df2, rtol=1e-2)
 
+    def test_assert_approx_equal_doubletype_custom_rtol_pass(self):
+        # passes with custom rtol, 1e-2
+        df1 = self.spark.createDataFrame(
+            data=[
+                ("student1", 97.01),
+                ("student2", 84.34),
+            ],
+            schema=StructType(
+                [
+                    StructField("student", StringType(), True),
+                    StructField("grade", DoubleType(), True),
+                ]
+            ),
+        )
+        df2 = self.spark.createDataFrame(
+            data=[
+                ("student1", 97.01),
+                ("student2", 84.341),
+            ],
+            schema=StructType(
+                [
+                    StructField("student", StringType(), True),
+                    StructField("grade", DoubleType(), True),
+                ]
+            ),
+        )
+
+        assertDataFrameEqual(df1, df2, rtol=1e-2)
+
+    def test_assert_approx_equal_decimaltype_custom_rtol_pass(self):
+        # passes with custom rtol, 1e-2
+        df1 = self.spark.createDataFrame(
+            data=[
+                ("student1", 83.14),
+                ("student2", 97.12),
+            ],
+            schema=StructType(
+                [
+                    StructField("student", StringType(), True),
+                    StructField("grade", DoubleType(), True),
+                ]
+            ),
+        )
+        df2 = self.spark.createDataFrame(
+            data=[
+                ("student1", 83.14),
+                ("student2", 97.111),
+            ],
+            schema=StructType(
+                [
+                    StructField("student", StringType(), True),
+                    StructField("grade", DoubleType(), True),
+                ]
+            ),
+        )
+
+        # cast to DecimalType
+        df1 = df1.withColumn("col_1", F.col("grade").cast("decimal(4,3)"))
+        df2 = df2.withColumn("col_1", F.col("grade").cast("decimal(4,3)"))
+
+        assertDataFrameEqual(df1, df2, rtol=1e-1)
+
     def test_assert_notequal_arraytype(self):
         df1 = self.spark.createDataFrame(
             data=[
