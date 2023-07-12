@@ -41,11 +41,13 @@ import org.apache.spark.util.Utils
 @Evolving
 class StreamingQueryManager private[sql] (sparkSession: SparkSession) extends Logging {
 
-  // Mapping from StreamingQueryListener to id. There's another mapping from id to
+  // Mapping from id to StreamingQueryListener. There's another mapping from id to
   // StreamingQueryListener on server side. This is used by removeListener() to find the id
   // of previously added StreamingQueryListener and pass it to server side to find the
-  // corresponding listener on server side.
-  private lazy val listenerCache: ConcurrentMap[StreamingQueryListener, String] =
+  // corresponding listener on server side. We use id to StreamingQueryListener mapping
+  // here to make sure there's no hash collision as well as handling the case that adds and
+  // removes the same listener instance multiple times properly.
+  private lazy val listenerCache: ConcurrentMap[String, StreamingQueryListener] =
     new ConcurrentHashMap()
 
   /**
@@ -146,7 +148,7 @@ class StreamingQueryManager private[sql] (sparkSession: SparkSession) extends Lo
    */
   def addListener(listener: StreamingQueryListener): Unit = {
     val id = UUID.randomUUID.toString
-    cacheIdByListener(listener, id)
+    cacheListenerById(id, listener)
     executeManagerCmd(
       _.getAddListenerBuilder
         .setListenerPayload(ByteString.copyFrom(Utils
@@ -164,7 +166,7 @@ class StreamingQueryManager private[sql] (sparkSession: SparkSession) extends Lo
       _.getRemoveListenerBuilder
         .setListenerPayload(ByteString.copyFrom(Utils
           .serialize(StreamingListenerPacket(id, listener)))))
-    removeCachedListenerId(listener)
+    removeCachedListener(id)
   }
 
   /**
@@ -204,17 +206,16 @@ class StreamingQueryManager private[sql] (sparkSession: SparkSession) extends Lo
     resp.getStreamingQueryManagerCommandResult
   }
 
-  private def cacheIdByListener(listener: StreamingQueryListener, id: String): Unit = {
-    listenerCache.putIfAbsent(listener, id)
+  private def cacheListenerById(id: String, listener: StreamingQueryListener): Unit = {
+    listenerCache.putIfAbsent(id, listener)
   }
 
   private def getIdByListener(listener: StreamingQueryListener): String = {
-    Option(listenerCache.get(listener)).getOrElse {
-      throw InvalidPlanInput(s"No id with listener $listener is found.")
-    }
+    listenerCache.forEach((k, v) => if (listener.equals(v)) return k)
+    throw InvalidPlanInput(s"No id with listener $listener is found.")
   }
 
-  private def removeCachedListenerId(listener: StreamingQueryListener): String = {
-    listenerCache.remove(listener)
+  private def removeCachedListener(id: String): StreamingQueryListener = {
+    listenerCache.remove(id)
   }
 }

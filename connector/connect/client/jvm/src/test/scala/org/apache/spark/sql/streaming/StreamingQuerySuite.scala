@@ -303,6 +303,20 @@ class StreamingQuerySuite extends QueryTest with SQLHelper {
     assert(q.runId.equals(currListener.terminationEvent.runId))
     assert(q.lastProgress.numInputRows == currListener.progressEvents.last.numInputRows)
 
+    // Add listener1 as another instance of EventCollector and validate
+    val listener1 = new EventCollector
+    spark.streams.addListener(listener1)
+    assert(spark.streams.listListeners().length == 3)
+    spark.streams.removeListener(listener1)
+    assert(spark.streams.listListeners().length == 2)
+
+    // Add the same listener again and validate, this aims to verify the listener cache
+    // is correctly stored and cleaned.
+    spark.streams.addListener(listener)
+    assert(spark.streams.listListeners().length == 3)
+    spark.streams.removeListener(listener)
+    assert(spark.streams.listListeners().length == 2)
+
     // Remove the listener, length should be 1.
     spark.streams.removeListener(listener)
     assert(spark.streams.listListeners().length == 1)
