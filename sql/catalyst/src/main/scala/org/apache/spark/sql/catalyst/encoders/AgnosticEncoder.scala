@@ -44,7 +44,7 @@ trait AgnosticEncoder[T] extends Encoder[T] {
   def dataType: DataType
   override def schema: StructType = StructType(StructField("value", dataType, nullable) :: Nil)
   def lenientSerialization: Boolean = false
-  def isStruct: Boolean = false // set to true if it is a struct encoder
+  def isStruct: Boolean = false
 }
 
 object AgnosticEncoders {
@@ -101,7 +101,7 @@ object AgnosticEncoders {
     def structField: StructField = StructField(name, enc.dataType, nullable, metadata)
   }
 
-  // Contains a sequence of fields. The fields can be flattened to columns in a row.
+  // Contains a sequence of fields.
   trait StructEncoder[K] extends AgnosticEncoder[K] {
     val fields: Seq[EncoderField]
     override def isPrimitive: Boolean = false
