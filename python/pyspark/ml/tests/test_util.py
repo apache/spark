@@ -167,7 +167,7 @@ class TestFunctionPickler(unittest.TestCase):
             contents_two = f.read()
         return contents_one == contents_two
 
-    def test_create_training_script_from_func(self):
+    def test_create_fn_run_script(self):
         arg1, arg2 = 3, 4
         pickled_fn_path = FunctionPickler.pickle_fn_and_save(test_function, "", "", arg1, arg2)
         fn_out_path = "output.pickled"
@@ -176,24 +176,24 @@ class TestFunctionPickler(unittest.TestCase):
         body_for_reference = self.create_code_snippet_body(pickled_fn_path, fn_out_path)
         with self.subTest(msg="Check if it creates the correct file with no prefix nor suffix"):
             with self.create_reference_file(body_for_reference, prefix="", suffix="", fname=reference_path) as _:
-                executable_file_path = FunctionPickler.create_training_script_from_func(fn_out_path, test_path, pickled_fn_path) 
+                executable_file_path = FunctionPickler.create_fn_run_script(pickled_fn_path, fn_out_path, test_path) 
                 self.assertTrue(self.are_two_files_identical(reference_path, executable_file_path))
                 os.remove(executable_file_path)
         prefix_test = "prefix_string = 'This is a prefix string'\n" 
         suffix_test = "suffix_string = 'this is a suffix string'\n"
         with self.subTest(msg="Check if it creates the correct file with only prefix + body"):
             with self.create_reference_file(body_for_reference, prefix=prefix_test, suffix="", fname=reference_path) as _:
-                executable_file_path = FunctionPickler.create_training_script_from_func(fn_out_path, test_path, pickled_fn_path, prefix_code=prefix_test) 
+                executable_file_path = FunctionPickler.create_fn_run_script(pickled_fn_path, fn_out_path, test_path, prefix_code=prefix_test) 
                 self.assertTrue(self.are_two_files_identical(reference_path, executable_file_path))
                 os.remove(executable_file_path)
         with self.subTest(msg="Check if it creates the correct file with only suffix + body"):
             with self.create_reference_file(body_for_reference, prefix="", suffix=suffix_test, fname=reference_path) as _:
-                executable_file_path = FunctionPickler.create_training_script_from_func(fn_out_path, test_path, pickled_fn_path, suffix_code=suffix_test) 
+                executable_file_path = FunctionPickler.create_fn_run_script(pickled_fn_path, fn_out_path, test_path, suffix_code=suffix_test) 
                 self.assertTrue(self.are_two_files_identical(reference_path, executable_file_path))
                 os.remove(executable_file_path)
         with self.subTest(msg="Check if it creates the correct file with prefix + suffix + body"):
             with self.create_reference_file(body_for_reference, prefix=prefix_test, suffix=suffix_test, fname=reference_path) as _:
-                executable_file_path = FunctionPickler.create_training_script_from_func(fn_out_path, test_path, pickled_fn_path, prefix_code=prefix_test, suffix_code=suffix_test) 
+                executable_file_path = FunctionPickler.create_fn_run_script(pickled_fn_path, fn_out_path, test_path, prefix_code=prefix_test, suffix_code=suffix_test) 
                 self.assertTrue(self.are_two_files_identical(reference_path, executable_file_path))
                 os.remove(executable_file_path)
         os.remove(pickled_fn_path)
