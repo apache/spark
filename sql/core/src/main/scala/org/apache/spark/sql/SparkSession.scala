@@ -39,6 +39,7 @@ import org.apache.spark.sql.catalyst.analysis.{NameParameterizedQuery, PosParame
 import org.apache.spark.sql.catalyst.encoders._
 import org.apache.spark.sql.catalyst.expressions.AttributeReference
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, Range}
+import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.connector.ExternalCommandRunner
 import org.apache.spark.sql.errors.QueryCompilationErrors
@@ -299,7 +300,7 @@ class SparkSession private(
    */
   def emptyDataset[T: Encoder]: Dataset[T] = {
     val encoder = implicitly[Encoder[T]]
-    new Dataset(self, LocalRelation(encoder.schema.toAttributes), encoder)
+    new Dataset(self, LocalRelation(encoder.schema), encoder)
   }
 
   /**
@@ -319,7 +320,7 @@ class SparkSession private(
    */
   def createDataFrame[A <: Product : TypeTag](data: Seq[A]): DataFrame = withActive {
     val schema = ScalaReflection.schemaFor[A].dataType.asInstanceOf[StructType]
-    val attributeSeq = schema.toAttributes
+    val attributeSeq = toAttributes(schema)
     Dataset.ofRows(self, LocalRelation.fromProduct(attributeSeq, data))
   }
 
@@ -390,7 +391,7 @@ class SparkSession private(
   @DeveloperApi
   def createDataFrame(rows: java.util.List[Row], schema: StructType): DataFrame = withActive {
     val replaced = CharVarcharUtils.failIfHasCharVarchar(schema).asInstanceOf[StructType]
-    Dataset.ofRows(self, LocalRelation.fromExternalRows(replaced.toAttributes, rows.asScala.toSeq))
+    Dataset.ofRows(self, LocalRelation.fromExternalRows(toAttributes(replaced), rows.asScala.toSeq))
   }
 
   /**
@@ -479,7 +480,7 @@ class SparkSession private(
   def createDataset[T : Encoder](data: Seq[T]): Dataset[T] = {
     val enc = encoderFor[T]
     val toRow = enc.createSerializer()
-    val attributes = enc.schema.toAttributes
+    val attributes = toAttributes(enc.schema)
     val encoded = data.map(d => toRow(d).copy())
     val plan = new LocalRelation(attributes, encoded)
     Dataset[T](self, plan)
@@ -565,7 +566,7 @@ class SparkSession private(
     // TODO: use MutableProjection when rowRDD is another DataFrame and the applied
     // schema differs from the existing schema on any field data type.
     val logicalPlan = LogicalRDD(
-      schema.toAttributes,
+      toAttributes(schema),
       catalystRows,
       isStreaming = isStreaming)(self)
     Dataset.ofRows(self, logicalPlan)
