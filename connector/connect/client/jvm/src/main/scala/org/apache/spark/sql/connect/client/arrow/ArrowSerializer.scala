@@ -21,7 +21,7 @@ import java.lang.invoke.{MethodHandles, MethodType}
 import java.math.{BigDecimal => JBigDecimal, BigInteger => JBigInteger}
 import java.nio.channels.Channels
 import java.time.{Duration, Instant, LocalDate, LocalDateTime, Period}
-import java.util.{Map => JMap}
+import java.util.{Map => JMap, Objects}
 
 import scala.collection.JavaConverters._
 
@@ -388,10 +388,10 @@ object ArrowSerializer {
         val structSerializer = new StructSerializer(
           structVector,
           new StructFieldSerializer(
-            (v: Any) => v.asInstanceOf[(Any, Any)]._1,
+            extractKey,
             serializerFor(key, structVector.getChild(MapVector.KEY_NAME))) ::
             new StructFieldSerializer(
-              (v: Any) => v.asInstanceOf[(Any, Any)]._2,
+              extractValue,
               serializerFor(value, structVector.getChild(MapVector.VALUE_NAME))) :: Nil)
         new ArraySerializer(v, extractor, structSerializer)
 
@@ -446,6 +446,16 @@ object ArrowSerializer {
       decimal
     }
     vector.setSafe(index, scaledDecimal)
+  }
+
+  private def extractKey(v: Any): Any = {
+    val key = v.asInstanceOf[(Any, Any)]._1
+    Objects.requireNonNull(key)
+    key
+  }
+
+  private def extractValue(v: Any): Any = {
+    v.asInstanceOf[(Any, Any)]._2
   }
 
   private def structSerializerFor(
