@@ -101,14 +101,14 @@ abstract class QueryPlanningTrackerCallback {
    * @param analyzedPlan The plan after analysis,
    *                     see @org.apache.spark.sql.catalyst.analysis.Analyzer
    */
-  private[sql] def analyzed(tracker: QueryPlanningTracker, analyzedPlan: LogicalPlan): Unit
+  def analyzed(tracker: QueryPlanningTracker, analyzedPlan: LogicalPlan): Unit
 
   /**
    * Called when query is ready for execution.
    * This is after analysis for eager commands and after planning for other queries.
    * @param tracker tracker that triggered the callback.
    */
-  private[sql] def readyForExecution(tracker: QueryPlanningTracker): Unit
+  def readyForExecution(tracker: QueryPlanningTracker): Unit
 }
 
 /**
