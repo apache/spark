@@ -114,7 +114,7 @@ case class ColumnarToRowExec(child: SparkPlan) extends ColumnarToRowTransition w
     } else {
       val newFilterCondn = pushedFilters.map(bcData => {
         val attribute = this.output.find(_.name == bcData.columnName).get
-        InWithBroadcastVar(attribute, bcData.bcVar, this.filterCountCorrectionTerm.get, "", "")
+        InWithBroadcastVar(attribute, bcData.bcVar, "", "", "")
       }).reduce[Expression](And(_, _))
       val boundExpr = BindReferences.bindReference(newFilterCondn, this.output)
       retVal.mapPartitionsWithIndexInternal { (index, iter) =>

@@ -516,6 +516,9 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
     filteredFiles ++ dirs.flatMap(listFilesRecursively)
   }
 
+  protected def saveAsTable(df: DataFrame, tableName: String, format: String): Unit =
+    df.write.format(format).saveAsTable(tableName)
+
   /** Load built-in test tables into the SparkSession. */
   private def createTestTables(session: SparkSession): Unit = {
     import session.implicits._
@@ -528,38 +531,39 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
       }
     }
 
-    (1 to 100).map(i => (i, i.toString)).toDF("key", "value")
-      .repartition(1)
-      .write
-      .format("parquet")
-      .saveAsTable("testdata")
+    saveAsTable(
+      (1 to 100).map(i => (i, i.toString)).toDF("key", "value")
+      .repartition(1),
+      "default.testdata", "parquet")
 
-    ((Seq(1, 2, 3), Seq(Seq(1, 2, 3))) :: (Seq(2, 3, 4), Seq(Seq(2, 3, 4))) :: Nil)
-      .toDF("arraycol", "nestedarraycol")
-      .write
-      .format("parquet")
-      .saveAsTable("arraydata")
 
-    (Tuple1(Map(1 -> "a1", 2 -> "b1", 3 -> "c1", 4 -> "d1", 5 -> "e1")) ::
+    saveAsTable(
+      ((Seq(1, 2, 3), Seq(Seq(1, 2, 3))) :: (Seq(2, 3, 4), Seq(Seq(2, 3, 4))) :: Nil)
+      .toDF("arraycol", "nestedarraycol"),
+      "default.arraydata", "parquet")
+
+
+    saveAsTable(
+      (Tuple1(Map(1 -> "a1", 2 -> "b1", 3 -> "c1", 4 -> "d1", 5 -> "e1")) ::
       Tuple1(Map(1 -> "a2", 2 -> "b2", 3 -> "c2", 4 -> "d2")) ::
       Tuple1(Map(1 -> "a3", 2 -> "b3", 3 -> "c3")) ::
       Tuple1(Map(1 -> "a4", 2 -> "b4")) ::
       Tuple1(Map(1 -> "a5")) :: Nil)
-      .toDF("mapcol")
-      .write
-      .format("parquet")
-      .saveAsTable("mapdata")
+      .toDF("mapcol"),
+      "default.mapdata", "parquet")
 
-    session
+
+    saveAsTable(
+      session
       .read
       .format("csv")
       .options(Map("delimiter" -> "\t", "header" -> "false"))
       .schema("a int, b float")
-      .load(testFile("test-data/postgresql/agg.data"))
-      .write
-      .format("parquet")
-      .saveAsTable("aggtest")
+      .load(testFile("test-data/postgresql/agg.data")),
+       "default.aggtest", "parquet")
 
+
+    saveAsTable(
     session
       .read
       .format("csv")
@@ -583,11 +587,10 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
           |stringu2 string,
           |string4 string
         """.stripMargin)
-      .load(testFile("test-data/postgresql/onek.data"))
-      .write
-      .format("parquet")
-      .saveAsTable("onek")
+      .load(testFile("test-data/postgresql/onek.data")),
+      "default.onek", "parquet")
 
+    saveAsTable(
     session
       .read
       .format("csv")
@@ -611,10 +614,8 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
           |stringu2 string,
           |string4 string
         """.stripMargin)
-      .load(testFile("test-data/postgresql/tenk.data"))
-      .write
-      .format("parquet")
-      .saveAsTable("tenk1")
+      .load(testFile("test-data/postgresql/tenk.data")),
+      "default.tenk1", "parquet")
   }
 
   private def removeTestTables(session: SparkSession): Unit = {
