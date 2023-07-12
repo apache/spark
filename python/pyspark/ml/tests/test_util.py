@@ -158,8 +158,8 @@ class TestFunctionPickler(unittest.TestCase):
 
                     if __name__ == "__main__":
                         with open("{pickled_fn_path}", "rb") as f:
-                            train_fn, args, kwargs = cloudpickle.load(f)
-                        output = train_fn(*args, **kwargs)
+                            fn, args, kwargs = cloudpickle.load(f)
+                        output = fn(*args, **kwargs)
                         with open("{fn_output_save_path}", "wb") as f:
                             cloudpickle.dump(output, f)
                     """

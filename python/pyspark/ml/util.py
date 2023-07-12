@@ -772,13 +772,13 @@ class FunctionPickler:
         It also provides a way of extracting the conents of a pickle file.
     """
     @staticmethod
-    def pickle_fn_and_save(train_fn: Callable, file_path: str, save_dir: str, *args, **kwargs) -> str:
+    def pickle_fn_and_save(fn: Callable, file_path: str, save_dir: str, *args, **kwargs) -> str:
         """
-            Given a training function and args, this function will pickle them to a file. 
+            Given a function and args, this function will pickle them to a file. 
 
             Parameters
             ----------
-            train_fn: Callable
+            fn: Callable
                 The picklable function that will be pickled to a file.
 
             file_path: str
@@ -792,10 +792,10 @@ class FunctionPickler:
                 name.
 
             *args: Any
-                Arguments of train_fn  that will be pickled.
+                Arguments of fn that will be pickled.
 
             **kwargs: Any
-                Key word arguments to train_fn that will be pickled.
+                Key word arguments to fn that will be pickled.
 
             Returns
             -------
@@ -804,14 +804,14 @@ class FunctionPickler:
         """
         if file_path != "":
             with open(file_path, "wb") as f:
-                cloudpickle.dump((train_fn, args, kwargs), f)
+                cloudpickle.dump((fn, args, kwargs), f)
                 return f.name
 
         if save_dir == "":
             save_dir = os.getcwd()
 
         with tempfile.NamedTemporaryFile(dir=save_dir, delete=False) as f:
-            cloudpickle.dump((train_fn, args, kwargs), f)
+            cloudpickle.dump((fn, args, kwargs), f)
             return f.name
 
     @staticmethod
@@ -855,8 +855,8 @@ class FunctionPickler:
 
                     if __name__ == "__main__":
                         with open("{pickled_fn_path}", "rb") as f:
-                            train_fn, args, kwargs = cloudpickle.load(f)
-                        output = train_fn(*args, **kwargs)
+                            fn, args, kwargs = cloudpickle.load(f)
+                        output = fn(*args, **kwargs)
                         with open("{fn_output_path}", "wb") as f:
                             cloudpickle.dump(output, f)
                     """
