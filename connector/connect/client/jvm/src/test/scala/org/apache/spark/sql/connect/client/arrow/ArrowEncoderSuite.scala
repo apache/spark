@@ -127,10 +127,10 @@ class ArrowEncoderSuite extends ConnectFunSuite with BeforeAndAfterAll {
     }
     val result = new SparkResult[E](responses.asJava, allocator, encoder)
     new CloseableIterator[E] {
-      private val iterator: java.util.Iterator[E] with AutoCloseable = result.iterator
-      override def close(): Unit = iterator.close()
-      override def hasNext: Boolean = iterator.hasNext
-      override def next(): E = iterator.next()
+      private val itr = result.iterator
+      override def close(): Unit = itr.close()
+      override def hasNext: Boolean = itr.hasNext
+      override def next(): E = itr.next()
     }
   }
 
