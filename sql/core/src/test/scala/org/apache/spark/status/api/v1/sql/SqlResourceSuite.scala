@@ -203,7 +203,7 @@ class SqlResourceSuite extends SparkFunSuite with PrivateMethodTester {
     assert(wholeStageCodegenId == Some(1))
   }
 
-  test("Status of execution w/ error and w/o jobs shall be FAILED not COMPLETED") {
+  test("SPARK-44334: Status of execution w/ error and w/o jobs shall be FAILED not COMPLETED") {
     val d = new SQLExecutionUIData(
       0,
       1,
