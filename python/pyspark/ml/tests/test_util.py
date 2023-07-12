@@ -32,7 +32,6 @@ from pyspark.ml.linalg import Vectors
 from pyspark.ml.util import MetaAlgorithmReadWrite, FunctionPickler
 from pyspark.testing.mlutils import SparkSessionTestCase
 
-
 class MetaAlgorithmReadWriteTests(SparkSessionTestCase):
      def test_getAllNestedStages(self):
          def _check_uid_set_equal(stages, expected_stages):
@@ -94,24 +93,24 @@ class TestFunctionPickler(unittest.TestCase):
         fn_output = fn(*args, **kwargs)
         self.assertEqual(fn_output, output_value)
 
-    def test_pickle_func_and_get_path(self):
+    def test_pickle_fn_and_save(self):
         x, y = 1, 3 # args of test_function
         tmp_dir = "silly_goose"
         os.mkdir(tmp_dir)
         file_path_to_save = "silly_bear"
         with self.subTest(msg="See if it pickles correctly if no file_path or save_dir are specified"):
-            pickled_fn_path = FunctionPickler.pickle_func_and_get_path(test_function, "", "", x, y)
+            pickled_fn_path = FunctionPickler.pickle_fn_and_save(test_function, "", "", x, y)
             with open(pickled_fn_path, "rb") as f:
                 self.check_if_test_function_pickled(f, test_function, 10, x, y)
             os.remove(pickled_fn_path)
         with self.subTest(msg="See if pickles correctly and uses file path given as argument"):
-            pickled_fn_path = FunctionPickler.pickle_func_and_get_path(test_function, file_path_to_save, "", x, y)
+            pickled_fn_path = FunctionPickler.pickle_fn_and_save(test_function, file_path_to_save, "", x, y)
             self.assertEqual(pickled_fn_path, file_path_to_save)
             with open(pickled_fn_path, "rb") as f:
                 self.check_if_test_function_pickled(f, test_function, 10, x, y)
             os.remove(pickled_fn_path)
         with self.subTest(msg="See if pickles correctly and uses file path despite save_dir being specified"):
-            pickled_fn_path = FunctionPickler.pickle_func_and_get_path(test_function, file_path_to_save, tmp_dir, x, y)
+            pickled_fn_path = FunctionPickler.pickle_fn_and_save(test_function, file_path_to_save, tmp_dir, x, y)
             self.assertEqual(pickled_fn_path, file_path_to_save)
             with open(pickled_fn_path, "rb") as f:
                 self.check_if_test_function_pickled(f, test_function, 10, x, y)
@@ -121,7 +120,7 @@ class TestFunctionPickler(unittest.TestCase):
 
     def test_getting_output_from_pickle_file(self):
         a, b = 2, 0
-        pickle_fn_file = FunctionPickler.pickle_func_and_get_path(test_function, "", "", a, b)
+        pickle_fn_file = FunctionPickler.pickle_fn_and_save(test_function, "", "", a, b)
         fn, args, kwargs = FunctionPickler.get_func_output(pickle_fn_file)
         self.assertEqual(fn, test_function)
         self.assertEqual(len(args), 2)
@@ -170,7 +169,7 @@ class TestFunctionPickler(unittest.TestCase):
 
     def test_create_training_script_from_func(self):
         arg1, arg2 = 3, 4
-        pickled_fn_path = FunctionPickler.pickle_func_and_get_path(test_function, "", "", arg1, arg2)
+        pickled_fn_path = FunctionPickler.pickle_fn_and_save(test_function, "", "", arg1, arg2)
         fn_out_path = "output.pickled"
         reference_path = "ref_result_file.py"
         test_path = "test_result.py"

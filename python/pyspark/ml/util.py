@@ -771,7 +771,7 @@ class FunctionPickler:
         function with arguments if they have pickled to a file.
     """
     @staticmethod
-    def pickle_func_and_get_path(train_fn: Callable, file_path: str, save_dir: str, *args, **kwargs) -> str:
+    def pickle_fn_and_save(train_fn: Callable, file_path: str, save_dir: str, *args, **kwargs) -> str:
         """
             Given a training function and args, this function will pickle them to a file. 
 
