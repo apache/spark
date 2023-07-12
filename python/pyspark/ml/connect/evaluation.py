@@ -242,7 +242,7 @@ class MulticlassClassificationEvaluator(
     ...     schema=['label', 'prediction']
     ... )
     >>> eva.evaluate(dataset)
-    0.6000000238418579                                                  (0 + 1) / 1]
+    0.6000000238418579
     >>> eva.isLargerBetter()
     True
     """
