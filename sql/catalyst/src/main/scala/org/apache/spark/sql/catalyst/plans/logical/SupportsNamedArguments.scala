@@ -18,13 +18,31 @@ package org.apache.spark.sql.catalyst.plans.logical
 
 import org.apache.spark.sql.catalyst.expressions.{Expression, NamedArgumentExpression}
 import org.apache.spark.sql.errors.QueryCompilationErrors
-import org.apache.spark.sql.types.AbstractDataType
 
 object SupportsNamedArguments {
-  final def defaultRearrange(functionSignature: FunctionSignature,
+  /**
+   * This method is the default routine which rearranges the arguments in positional order according
+   * to the function signature provided. This will also fill in any default values that exists for
+   * optional arguments. This method will also be invoked even if there are no named arguments in
+   * the argument list.
+   *
+   * @param functionSignature The function signature that defines the positional ordering
+   * @param args The argument list provided in function invocation
+   * @param functionName The name of the function
+   * @return A list of arguments rearranged in positional order defined by the provided signature
+   */
+  final def defaultRearrange(
+      functionSignature: FunctionSignature,
       args: Seq[Expression],
       functionName: String): Seq[Expression] = {
     val parameters: Seq[NamedArgument] = functionSignature.parameters
+    val firstOptionalParamIndex: Int = parameters.indexWhere(_.default.isDefined)
+    if (firstOptionalParamIndex != -1 &&
+        parameters.drop(firstOptionalParamIndex).exists(_.default.isEmpty)) {
+      throw QueryCompilationErrors.unexpectedRequiredParameterInFunctionSignature(
+        functionName, functionSignature)
+    }
+
     val firstNamedArgIdx: Int = args.indexWhere(_.isInstanceOf[NamedArgumentExpression])
     val (positionalArgs, namedArgs) =
       if (firstNamedArgIdx == -1) {
@@ -34,7 +52,9 @@ object SupportsNamedArguments {
       }
     val namedParameters: Seq[NamedArgument] = parameters.drop(positionalArgs.size)
 
-    // Performing some checking to ensure valid argument list
+    // The following loop checks for the following:
+    // 1. Unrecognized parameter names
+    // 2. Duplicate routine parameter assignments
     val allParameterNames: Seq[String] = parameters.map(_.name)
     val parameterNamesSet: Set[String] = allParameterNames.toSet
     val positionalParametersSet = allParameterNames.take(positionalArgs.size).toSet
@@ -62,13 +82,13 @@ object SupportsNamedArguments {
       }
     }
 
-    // Construct a map from argument name to value for argument rearrangement
+    // This constructs a map from argument name to value for argument rearrangement.
     val namedArgMap = namedArgs.map { arg =>
       val namedArg = arg.asInstanceOf[NamedArgumentExpression]
       namedArg.key -> namedArg.value
     }.toMap
 
-    // Rearrange named arguments to match their positional order
+    // We rearrange named arguments to match their positional order.
     val rearrangedNamedArgs: Seq[Expression] = namedParameters.map { param =>
       namedArgMap.getOrElse(
         param.name,
@@ -82,19 +102,6 @@ object SupportsNamedArguments {
     positionalArgs ++ rearrangedNamedArgs
   }
 }
-
-/**
- * Identifies which forms of provided argument values are expected for each call
- * to the associated SQL function
- */
-trait NamedArgumentType
-
-/**
- * Represents a named argument that expects a scalar value of one specific DataType
- *
- * @param dataType The data type of some argument
- */
-case class FixedArgumentType(dataType: AbstractDataType) extends NamedArgumentType
 
 /**
  * Represents a parameter of a function expression. Function expressions should use this class

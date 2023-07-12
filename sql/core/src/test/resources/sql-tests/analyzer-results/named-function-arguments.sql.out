@@ -256,5 +256,18 @@ org.apache.spark.sql.AnalysisException
 -- !query
 SELECT encode(str => 'a', charset => 'utf-8')
 -- !query analysis
-Project [encode(str => a, charset => utf-8) AS encode(namedargumentexpression(a), namedargumentexpression(utf-8))#x]
-+- OneRowRelation
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "NAMED_ARGUMENTS_NOT_SUPPORTED",
+  "sqlState" : "4274K",
+  "messageParameters" : {
+    "functionName" : "`encode`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 45,
+    "fragment" : "encode(str => 'a', charset => 'utf-8')"
+  } ]
+}

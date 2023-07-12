@@ -422,6 +422,9 @@ abstract class ExplodeBase extends UnaryExpression with CollectionGenerator with
       > SELECT _FUNC_(array(10, 20));
        10
        20
+      > SELECT _FUNC_(collection => array(10, 20));
+       10
+       20
   """,
   since = "1.0.0",
   group = "generator_funcs")

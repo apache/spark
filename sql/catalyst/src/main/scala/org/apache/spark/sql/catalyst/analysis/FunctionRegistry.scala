@@ -887,6 +887,9 @@ object FunctionRegistry {
       since: Option[String] = None): (String, (ExpressionInfo, FunctionBuilder)) = {
     val (expressionInfo, builder) = FunctionRegistryBase.build[T](name, since)
     val newBuilder = (expressions: Seq[Expression]) => {
+      if (expressions.exists(_.isInstanceOf[NamedArgumentExpression])) {
+        throw QueryCompilationErrors.namedArgumentsNotSupported(name)
+      }
       val expr = builder(expressions)
       if (setAlias) expr.setTagValue(FUNC_ALIAS, name)
       expr
@@ -894,7 +897,17 @@ object FunctionRegistry {
     (name, (expressionInfo, newBuilder))
   }
 
-  private[FunctionRegistry$] def rearrangeExpressions[T <: Builder[_]](
+  /**
+   * This method will be used to rearrange the arguments provided in function invocation
+   * in the order defined by the function signature given in the builder instance.
+   *
+   * @param name The name of the function
+   * @param builder The builder of the function expression
+   * @param expressions The argument list passed in function invocation
+   * @tparam T The class of the builder
+   * @return An argument list in positional order defined by the builder
+   */
+  def rearrangeExpressions[T <: Builder[_]](
       name: String,
       builder: T,
       expressions: Seq[Expression]) : Seq[Expression] = {
@@ -1009,8 +1022,8 @@ object TableFunctionRegistry {
     val funcBuilder = (expressions: Seq[Expression]) => {
       assert(expressions.forall(_.resolved), "function arguments must be resolved.")
       val rearrangedExpressions = FunctionRegistry.rearrangeExpressions(name, builder, expressions)
-      val expr = builder.build(name, rearrangedExpressions)
-      expr
+      val plan = builder.build(name, rearrangedExpressions)
+      plan
     }
     (name, (info, funcBuilder))
   }
@@ -1059,7 +1072,10 @@ object TableFunctionRegistry {
 
 trait Builder[T] {
   /**
-   * A method that returns the signatures of overloads that is associated with this function
+   * A method that returns the signatures of overloads that are associated with this function.
+   * Each function signature includes a list of parameters to which the analyzer can
+   * compare a function call with provided arguments to determine if that function
+   * call is a match for the function signature.
    *
    * @return a list of function signatures
    */
@@ -1068,11 +1084,12 @@ trait Builder[T] {
   /**
    * This function rearranges the arguments provided during function invocation in positional order
    * according to the function signature. This method will fill in the default values if optional
-   * parmaeters do not have their values specified. Any function which supports named arguments
+   * parameters do not have their values specified. Any function which supports named arguments
    * will have this routine invoked, even if no named arguments are present in the argument list.
    * This is done to eliminate constructor overloads in some methods which use them for default
    * values prior to the implementation of the named argument framework. This function will also
-   * check if the number of arguments are correct. If that is not the case, then an error will be thrown.
+   * check if the number of arguments are correct. If that is not the case, then an error will be
+   * thrown.
    *
    * IMPORTANT: This method will be called before the [[Builder.build]] method is invoked. It is
    * guaranteed that the expressions provided to the [[Builder.build]] functions forms a valid set
@@ -1101,7 +1118,7 @@ trait ExpressionBuilder extends Builder[Expression]
 
 /**
  * A trait used for table valued functions that defines how their expression representations
- * are constructed in [[FunctionRegistry]]
+ * are constructed in [[TableFunctionRegistry]]
  */
 trait GeneratorBuilder extends Builder[LogicalPlan] {
   override final def build(funcName: String, expressions: Seq[Expression]) : LogicalPlan = {
@@ -1113,6 +1130,8 @@ trait GeneratorBuilder extends Builder[LogicalPlan] {
       generatorOutput = Nil,
       child = OneRowRelation())
   }
+
   def isOuter: Boolean
+
   def buildGenerator(funcName: String, expressions: Seq[Expression]) : Generator
 }

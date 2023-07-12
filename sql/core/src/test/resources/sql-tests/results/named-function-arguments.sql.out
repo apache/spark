@@ -249,11 +249,18 @@ SELECT encode(str => 'a', charset => 'utf-8')
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.SparkException
+org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "INTERNAL_ERROR",
-  "sqlState" : "XX000",
+  "errorClass" : "NAMED_ARGUMENTS_NOT_SUPPORTED",
+  "sqlState" : "4274K",
   "messageParameters" : {
-    "message" : "Cannot generate code for expression: str => a"
-  }
+    "functionName" : "`encode`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 45,
+    "fragment" : "encode(str => 'a', charset => 'utf-8')"
+  } ]
 }

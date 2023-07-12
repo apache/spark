@@ -50,6 +50,14 @@ import org.apache.spark.sql.types._
  */
 private[sql] object QueryCompilationErrors extends QueryErrorsBase {
 
+  def unexpectedRequiredParameterInFunctionSignature(
+      functionName: String, functionSignature: FunctionSignature) : Throwable = {
+    val errorMessage = s"Function $functionName has an unexpected required argument for" +
+      s" the provided function signature $functionSignature. All required arguments should" +
+      s" come before optional arguments."
+    SparkException.internalError(errorMessage)
+  }
+
   def multipleFunctionSignatures(functionName: String,
       functionSignatures: Seq[FunctionSignature]): Throwable = {
     var errorMessage = s"Function $functionName cannot have multiple method signatures." +
