@@ -1189,7 +1189,11 @@ class DataSourceV2SQLSuiteV1Filter
           sql(s"INSERT OVERWRITE $t1 VALUES('a', 4)")
         },
         errorClass = "INSERT_COLUMN_ARITY_MISMATCH.NOT_ENOUGH_DATA_COLUMNS",
-        parameters = Map.empty
+        parameters = Map(
+          "tableName" -> "`default`.`tbl`",
+          "tableColumns" -> "`id`, `data`, `data2`",
+          "dataColumns" -> "`col1`, `col2`"
+        )
       )
       // Duplicate columns
       checkError(
