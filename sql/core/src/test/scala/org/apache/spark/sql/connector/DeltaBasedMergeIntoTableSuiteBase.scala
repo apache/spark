@@ -18,9 +18,6 @@
 package org.apache.spark.sql.connector
 
 import org.apache.spark.sql.Row
-import org.apache.spark.sql.catalyst.types.DataTypeUtils
-import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
-import org.apache.spark.sql.types.StructType
 
 abstract class DeltaBasedMergeIntoTableSuiteBase extends MergeIntoTableSuiteBase {
 
@@ -214,19 +211,5 @@ abstract class DeltaBasedMergeIntoTableSuiteBase extends MergeIntoTableSuiteBase
           Row(2, 200, "india", "finance"), // update
           Row(3, 300, "china", "software"))) // insert
     }
-  }
-
-  private def executeAndCheckScan(
-      query: String,
-      expectedScanSchema: String): Unit = {
-
-    val executedPlan = executeAndKeepPlan {
-      sql(query)
-    }
-
-    val scan = collect(executedPlan) {
-      case s: BatchScanExec => s
-    }.head
-    assert(DataTypeUtils.sameType(scan.schema, StructType.fromDDL(expectedScanSchema)))
   }
 }
