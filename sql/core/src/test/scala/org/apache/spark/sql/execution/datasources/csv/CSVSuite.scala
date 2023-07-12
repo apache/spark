@@ -3095,8 +3095,11 @@ abstract class CSVSuite
       }
       checkError(
         exception = exception,
-        errorClass = "_LEGACY_ERROR_TEMP_1150",
-        parameters = Map("field" -> colName, "fieldType" -> "binary", "format" -> "CSV")
+        errorClass = "UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE",
+        parameters = Map(
+          "columnName" -> s"`$colName`",
+          "columnType" -> "\"BINARY\"",
+          "format" -> "CSV")
       )
     }
   }

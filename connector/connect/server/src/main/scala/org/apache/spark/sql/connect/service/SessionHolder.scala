@@ -89,11 +89,6 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
   }
 
   /**
-   * A [[JobArtifactSet]] for this SparkConnect session.
-   */
-  def connectJobArtifactSet: JobArtifactSet = artifactManager.jobArtifactSet
-
-  /**
    * A [[ClassLoader]] for jar/class file resources specific to this SparkConnect session.
    */
   def classloader: ClassLoader = artifactManager.classloader
@@ -114,8 +109,7 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
   def withContextClassLoader[T](f: => T): T = {
     // Needed for deserializing and evaluating the UDF on the driver
     Utils.withContextClassLoader(classloader) {
-      // Needed for propagating the dependencies to the executors.
-      JobArtifactSet.withActive(connectJobArtifactSet) {
+      JobArtifactSet.withActiveJobArtifactState(artifactManager.state) {
         f
       }
     }

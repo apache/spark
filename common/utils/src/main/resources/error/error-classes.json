@@ -91,6 +91,11 @@
     ],
     "sqlState" : "22003"
   },
+  "CALL_ON_STREAMING_DATASET_UNSUPPORTED" : {
+    "message" : [
+      "The method <methodName> can not be called on streaming Dataset/DataFrame."
+    ]
+  },
   "CANNOT_CAST_DATATYPE" : {
     "message" : [
       "Cannot cast <sourceType> to <targetType>."
@@ -122,6 +127,11 @@
       "The provided URL cannot be decoded: <url>. Please ensure that the URL is properly formatted and try again."
     ],
     "sqlState" : "22546"
+  },
+  "CANNOT_INVOKE_IN_TRANSFORMATIONS" : {
+    "message" : [
+      "Dataset transformations and actions can only be invoked by the driver, not inside of other Dataset transformations; for example, dataset1.map(x => dataset2.values.count() * x) is invalid because the values transformation and count action cannot be performed inside of the dataset1.map transformation. For more information, see SPARK-28702."
+    ]
   },
   "CANNOT_LOAD_FUNCTION_CLASS" : {
     "message" : [
@@ -210,6 +220,38 @@
     "message" : [
       "Failed to set permissions on created path <path> back to <permission>."
     ]
+  },
+  "CANNOT_UPDATE_FIELD" : {
+    "message" : [
+      "Cannot update <table> field <fieldName> type:"
+    ],
+    "subClass" : {
+      "ARRAY_TYPE" : {
+        "message" : [
+          "Update the element by updating <fieldName>.element."
+        ]
+      },
+      "INTERVAL_TYPE" : {
+        "message" : [
+          "Update an interval by updating its fields."
+        ]
+      },
+      "MAP_TYPE" : {
+        "message" : [
+          "Update a map by updating <fieldName>.key or <fieldName>.value."
+        ]
+      },
+      "STRUCT_TYPE" : {
+        "message" : [
+          "Update a struct by updating its fields."
+        ]
+      },
+      "USER_DEFINED_TYPE" : {
+        "message" : [
+          "Update a UserDefinedType[<udtSql>] by updating its fields."
+        ]
+      }
+    }
   },
   "CANNOT_UP_CAST_DATATYPE" : {
     "message" : [
@@ -327,6 +369,28 @@
       "CREATE TABLE column <columnName> specifies descriptor \"<optionName>\" more than once, which is invalid."
     ],
     "sqlState" : "42710"
+  },
+  "CREATE_VIEW_COLUMN_ARITY_MISMATCH" : {
+    "message" : [
+      "Cannot create view <viewName>, the reason is"
+    ],
+    "subClass" : {
+      "NOT_ENOUGH_DATA_COLUMNS" : {
+        "message" : [
+          "not enough data columns:",
+          "View columns: <viewColumns>.",
+          "Data columns: <dataColumns>."
+        ]
+      },
+      "TOO_MANY_DATA_COLUMNS" : {
+        "message" : [
+          "too many data columns:",
+          "View columns: <viewColumns>.",
+          "Data columns: <dataColumns>."
+        ]
+      }
+    },
+    "sqlState" : "21S01"
   },
   "DATATYPE_MISMATCH" : {
     "message" : [
@@ -553,6 +617,11 @@
           "The data type of the column (<columnIndex>) do not have the same type: <leftType> (<leftParamIndex>) <> <rightType> (<rightParamIndex>)."
         ]
       },
+      "TYPE_CHECK_FAILURE_WITH_HINT" : {
+        "message" : [
+          "<msg><hint>."
+        ]
+      },
       "UNEXPECTED_CLASS_TYPE" : {
         "message" : [
           "class <className> not found."
@@ -713,6 +782,16 @@
       "Failed to rename <sourcePath> to <targetPath> as destination already exists."
     ],
     "sqlState" : "42K04"
+  },
+  "FAILED_RENAME_TEMP_FILE" : {
+    "message" : [
+      "Failed to rename temp file <srcPath> to <dstPath> as FileSystem.rename returned false."
+    ]
+  },
+  "FIELDS_ALREADY_EXISTS" : {
+    "message" : [
+      "Cannot <op> column, because <fieldNames> already exists in <struct>."
+    ]
   },
   "FIELD_NOT_FOUND" : {
     "message" : [
@@ -1004,6 +1083,18 @@
     ],
     "sqlState" : "XX000"
   },
+  "INTERNAL_ERROR_SHUFFLE" : {
+    "message" : [
+      "<message>"
+    ],
+    "sqlState" : "XX000"
+  },
+  "INTERNAL_ERROR_STORAGE" : {
+    "message" : [
+      "<message>"
+    ],
+    "sqlState" : "XX000"
+  },
   "INTERVAL_ARITHMETIC_OVERFLOW" : {
     "message" : [
       "<message>.<alternative>"
@@ -1025,6 +1116,12 @@
   "INVALID_ARRAY_INDEX_IN_ELEMENT_AT" : {
     "message" : [
       "The index <indexValue> is out of bounds. The array has <arraySize> elements. Use `try_element_at` to tolerate accessing element at invalid index and return NULL instead. If necessary set <ansiConfig> to \"false\" to bypass this error."
+    ],
+    "sqlState" : "22003"
+  },
+  "INVALID_BITMAP_POSITION" : {
+    "message" : [
+      "The 0-indexed bitmap position <bitPosition> is out of bounds. The bitmap has <bitmapNumBits> bits (<bitmapNumBytes> bytes)."
     ],
     "sqlState" : "22003"
   },
@@ -1176,6 +1273,11 @@
           "The escape character is not allowed to precede <char>."
         ]
       },
+      "MISMATCH_INPUT" : {
+        "message" : [
+          "The input <inputType> <input> does not match the format."
+        ]
+      },
       "THOUSANDS_SEPS_MUST_BEFORE_DEC" : {
         "message" : [
           "Thousands separators (, or G) may not appear after the decimal point in the number format."
@@ -1183,7 +1285,7 @@
       },
       "UNEXPECTED_TOKEN" : {
         "message" : [
-          "Found the unexpected <token> in the format string; the structure of the format string must match: [MI|S] [$] [0|9|G|,]* [.|D] [0|9]* [$] [PR|MI|S]."
+          "Found the unexpected <token> in the format string; the structure of the format string must match: `[MI|S]` `[$]` `[0|9|G|,]*` `[.|D]` `[0|9]*` `[$]` `[PR|MI|S]`."
         ]
       },
       "WRONG_NUM_DIGIT" : {
@@ -1325,6 +1427,48 @@
     "message" : [
       "Numeric literal <rawStrippedQualifier> is outside the valid range for <typeName> with minimum value of <minValue> and maximum value of <maxValue>. Please adjust the value accordingly."
     ]
+  },
+  "INVALID_OBSERVED_METRICS" : {
+    "message" : [
+      "Invalid observed metrics."
+    ],
+    "subClass" : {
+      "AGGREGATE_EXPRESSION_WITH_DISTINCT_UNSUPPORTED" : {
+        "message" : [
+          "Aggregate expression with distinct are not allowed in observed metrics, but found: <expr>."
+        ]
+      },
+      "AGGREGATE_EXPRESSION_WITH_FILTER_UNSUPPORTED" : {
+        "message" : [
+          "Aggregate expression with filter predicate are not allowed in observed metrics, but found: <expr>."
+        ]
+      },
+      "MISSING_NAME" : {
+        "message" : [
+          "The observed metrics should be named: <operator>."
+        ]
+      },
+      "NESTED_AGGREGATES_UNSUPPORTED" : {
+        "message" : [
+          "Nested aggregates are not allowed in observed metrics, but found: <expr>."
+        ]
+      },
+      "NON_AGGREGATE_FUNC_ARG_IS_ATTRIBUTE" : {
+        "message" : [
+          "Attribute <expr> can only be used as an argument to an aggregate function."
+        ]
+      },
+      "NON_AGGREGATE_FUNC_ARG_IS_NON_DETERMINISTIC" : {
+        "message" : [
+          "Non-deterministic expression <expr> can only be used as an argument to an aggregate function."
+        ]
+      },
+      "WINDOW_EXPRESSIONS_UNSUPPORTED" : {
+        "message" : [
+          "Window expressions are not allowed in observed metrics, but found: <expr>."
+        ]
+      }
+    }
   },
   "INVALID_OPTIONS" : {
     "message" : [
@@ -1654,6 +1798,11 @@
   "JOIN_CONDITION_IS_NOT_BOOLEAN_TYPE" : {
     "message" : [
       "The join condition <joinCondition> has the invalid type <conditionType>, expected \"BOOLEAN\"."
+    ]
+  },
+  "LOAD_DATA_PATH_NOT_EXISTS" : {
+    "message" : [
+      "LOAD DATA input path does not exist: <path>."
     ]
   },
   "LOCAL_MUST_WITH_SCHEMA_FILE" : {
@@ -2428,6 +2577,11 @@
       "The direct query on files does not support the data source type: <className>. Please try a different data source type or consider using a different query method."
     ]
   },
+  "UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE" : {
+    "message" : [
+      "The <format> datasource doesn't support the column <columnName> of the type <columnType>."
+    ]
+  },
   "UNSUPPORTED_DEFAULT_VALUE" : {
     "message" : [
       "DEFAULT column values is not supported."
@@ -2535,9 +2689,24 @@
           "DESC TABLE COLUMN for a specific partition."
         ]
       },
+      "DROP_DATABASE" : {
+        "message" : [
+          "Drop the default database <database>."
+        ]
+      },
       "DROP_NAMESPACE" : {
         "message" : [
           "Drop the namespace <namespace>."
+        ]
+      },
+      "HIVE_TABLE_TYPE" : {
+        "message" : [
+          "The <tableName> is hive <tableType>."
+        ]
+      },
+      "HIVE_WITH_ANSI_INTERVALS" : {
+        "message" : [
+          "Hive table <tableName> with ANSI intervals."
         ]
       },
       "INSERT_PARTITION_SPEC_IF_NOT_EXISTS" : {
@@ -2553,6 +2722,11 @@
       "LATERAL_COLUMN_ALIAS_IN_AGGREGATE_WITH_WINDOW_AND_HAVING" : {
         "message" : [
           "Referencing lateral column alias <lca> in the aggregate query both with window expressions and with having clause. Please rewrite the aggregate query by removing the having clause or removing lateral alias reference in the SELECT list."
+        ]
+      },
+      "LATERAL_COLUMN_ALIAS_IN_GROUP_BY" : {
+        "message" : [
+          "Referencing a lateral column alias via GROUP BY alias/ALL is not supported yet."
         ]
       },
       "LATERAL_COLUMN_ALIAS_IN_WINDOW" : {
@@ -2618,6 +2792,11 @@
       "REMOVE_NAMESPACE_COMMENT" : {
         "message" : [
           "Remove a comment from the namespace <namespace>."
+        ]
+      },
+      "REPLACE_NESTED_COLUMN" : {
+        "message" : [
+          "The replace function does not support nested column <colName>."
         ]
       },
       "SET_NAMESPACE_PROPERTY" : {
@@ -3361,11 +3540,6 @@
       "<database> is a system preserved database, you cannot create a database with this name."
     ]
   },
-  "_LEGACY_ERROR_TEMP_1067" : {
-    "message" : [
-      "Can not drop default database."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_1068" : {
     "message" : [
       "<database> is a system preserved database, you cannot use it as current database. To access global temporary views, you should use qualified name with the GLOBAL_TEMP_DATABASE, e.g. SELECT * FROM <database>.viewName."
@@ -3666,11 +3840,6 @@
       "Fail to rebuild expression: missing key <filter> in `translatedFilterToExpr`."
     ]
   },
-  "_LEGACY_ERROR_TEMP_1150" : {
-    "message" : [
-      "Column `<field>` has a data type of <fieldType>, which is not supported by <format>."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_1151" : {
     "message" : [
       "Fail to resolve data source for the table <table> since the table serde property has the duplicated key <key> with extra options specified for this scan operation. To fix this, you can rollback to the legacy behavior of ignoring the extra options by setting the config <config> to `false`, or address the conflicts of the same config."
@@ -3936,11 +4105,6 @@
       "Hive metastore does not support altering database location."
     ]
   },
-  "_LEGACY_ERROR_TEMP_1220" : {
-    "message" : [
-      "Hive <tableType> is not supported."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_1221" : {
     "message" : [
       "Hive 0.12 doesn't support creating permanent functions. Please use Hive 0.13 or higher."
@@ -4081,11 +4245,6 @@
       "LOAD DATA target table <tableIdentWithDB> is not partitioned, but a partition spec was provided."
     ]
   },
-  "_LEGACY_ERROR_TEMP_1265" : {
-    "message" : [
-      "LOAD DATA input path does not exist: <path>."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_1266" : {
     "message" : [
       "Operation not allowed: TRUNCATE TABLE on external tables: <tableIdentWithDB>."
@@ -4139,11 +4298,6 @@
   "_LEGACY_ERROR_TEMP_1276" : {
     "message" : [
       "The logical plan that represents the view is not analyzed."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1277" : {
-    "message" : [
-      "The number of columns produced by the SELECT clause (num: `<analyzedPlanLength>`) does not match the number of column names specified by CREATE VIEW (num: `<userSpecifiedColumnsLength>`)."
     ]
   },
   "_LEGACY_ERROR_TEMP_1278" : {
@@ -5207,11 +5361,6 @@
       "Failed to rename as <dstPath> already exists."
     ]
   },
-  "_LEGACY_ERROR_TEMP_2199" : {
-    "message" : [
-      "Failed to rename temp file <srcPath> to <dstPath> as rename returned false."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_2200" : {
     "message" : [
       "Error: we detected a possible problem with the location of your \"_spark_metadata\"",
@@ -5584,119 +5733,9 @@
       "<message>"
     ]
   },
-  "_LEGACY_ERROR_TEMP_2274" : {
-    "message" : [
-      "Nested field <colName> is not supported."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2275" : {
-    "message" : [
-      "Dataset transformations and actions can only be invoked by the driver, not inside of other Dataset transformations; for example, dataset1.map(x => dataset2.values.count() * x) is invalid because the values transformation and count action cannot be performed inside of the dataset1.map transformation. For more information, see SPARK-28702."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2276" : {
-    "message" : [
-      "Hive table <tableName> with ANSI intervals is not supported."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_2277" : {
     "message" : [
       "Number of dynamic partitions created is <numWrittenParts>, which is more than <maxDynamicPartitions>. To solve this try to set <maxDynamicPartitionsKey> to at least <numWrittenParts>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2278" : {
-    "message" : [
-      "The input <valueType> '<input>' does not match the given number format: '<format>'."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2311" : {
-    "message" : [
-      "'writeTo' can not be called on streaming Dataset/DataFrame."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2312" : {
-    "message" : [
-      "'write' can not be called on streaming Dataset/DataFrame."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2313" : {
-    "message" : [
-      "Hint not found: <name>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2314" : {
-    "message" : [
-      "cannot resolve '<sqlExpr>' due to argument data type mismatch: <msg>"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2315" : {
-    "message" : [
-      "cannot resolve '<sqlExpr>' due to data type mismatch: <msg><hint>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2316" : {
-    "message" : [
-      "observed metrics should be named: <operator>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2317" : {
-    "message" : [
-      "window expressions are not allowed in observed metrics, but found: <sqlExpr>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2318" : {
-    "message" : [
-      "non-deterministic expression <sqlExpr> can only be used as an argument to an aggregate function."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2319" : {
-    "message" : [
-      "nested aggregates are not allowed in observed metrics, but found: <sqlExpr>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2320" : {
-    "message" : [
-      "distinct aggregates are not allowed in observed metrics, but found: <sqlExpr>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2321" : {
-    "message" : [
-      "aggregates with filter predicate are not allowed in observed metrics, but found: <sqlExpr>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2322" : {
-    "message" : [
-      "attribute <sqlExpr> can only be used as an argument to an aggregate function."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2323" : {
-    "message" : [
-      "Cannot <op> column, because <fieldNames> already exists in <struct>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2324" : {
-    "message" : [
-      "Cannot update <table> field <fieldName> type: update a struct by updating its fields."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2325" : {
-    "message" : [
-      "Cannot update <table> field <fieldName> type: update a map by updating <fieldName>.key or <fieldName>.value."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2326" : {
-    "message" : [
-      "Cannot update <table> field <fieldName> type: update the element by updating <fieldName>.element."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2327" : {
-    "message" : [
-      "Cannot update <table> field <fieldName> type: update a UserDefinedType[<udtSql>] by updating its fields."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2328" : {
-    "message" : [
-      "Cannot update <table> field <fieldName> to interval type."
     ]
   },
   "_LEGACY_ERROR_TEMP_2330" : {

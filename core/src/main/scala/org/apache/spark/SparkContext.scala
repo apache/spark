@@ -26,6 +26,7 @@ import javax.ws.rs.core.UriBuilder
 
 import scala.collection.JavaConverters._
 import scala.collection.Map
+import scala.collection.concurrent.{Map => ScalaConcurrentMap}
 import scala.collection.immutable
 import scala.collection.mutable.HashMap
 import scala.language.implicitConversions
@@ -290,10 +291,18 @@ class SparkContext(config: SparkConf) extends Logging {
 
   private[spark] def env: SparkEnv = _env
 
-  // Used to store a URL for each static file/jar together with the file's local timestamp
-  private[spark] val addedFiles = new ConcurrentHashMap[String, Long]().asScala
-  private[spark] val addedArchives = new ConcurrentHashMap[String, Long]().asScala
-  private[spark] val addedJars = new ConcurrentHashMap[String, Long]().asScala
+  // Used to store session UUID with a URL for each static file/jar together and
+  // the file's local timestamp. It's session uuid -> (URL -> timestamp).
+  private[spark] val addedFiles = new ConcurrentHashMap[
+    String, ScalaConcurrentMap[String, Long]]().asScala
+  private[spark] val addedArchives = new ConcurrentHashMap[
+    String, ScalaConcurrentMap[String, Long]]().asScala
+  private[spark] val addedJars = new ConcurrentHashMap[
+    String, ScalaConcurrentMap[String, Long]]().asScala
+
+  private[spark] def allAddedFiles = addedFiles.values.flatten.toMap
+  private[spark] def allAddedArchives = addedArchives.values.flatten.toMap
+  private[spark] def allAddedJars = addedJars.values.flatten.toMap
 
   // Keeps track of all persisted RDDs
   private[spark] val persistentRdds = {
@@ -515,22 +524,22 @@ class SparkContext(config: SparkConf) extends Logging {
     // Add each JAR given through the constructor
     if (jars != null) {
       jars.foreach(jar => addJar(jar, true))
-      if (addedJars.nonEmpty) {
-        _conf.set("spark.app.initial.jar.urls", addedJars.keys.toSeq.mkString(","))
+      if (allAddedJars.nonEmpty) {
+        _conf.set("spark.app.initial.jar.urls", allAddedJars.keys.toSeq.mkString(","))
       }
     }
 
     if (files != null) {
       files.foreach(file => addFile(file, false, true))
-      if (addedFiles.nonEmpty) {
-        _conf.set("spark.app.initial.file.urls", addedFiles.keys.toSeq.mkString(","))
+      if (allAddedFiles.nonEmpty) {
+        _conf.set("spark.app.initial.file.urls", allAddedFiles.keys.toSeq.mkString(","))
       }
     }
 
     if (archives != null) {
       archives.foreach(file => addFile(file, false, true, isArchive = true))
-      if (addedArchives.nonEmpty) {
-        _conf.set("spark.app.initial.archive.urls", addedArchives.keys.toSeq.mkString(","))
+      if (allAddedArchives.nonEmpty) {
+        _conf.set("spark.app.initial.archive.urls", allAddedArchives.keys.toSeq.mkString(","))
       }
     }
 
@@ -1675,7 +1684,7 @@ class SparkContext(config: SparkConf) extends Logging {
   /**
    * Returns a list of file paths that are added to resources.
    */
-  def listFiles(): Seq[String] = addedFiles.keySet.toSeq
+  def listFiles(): Seq[String] = allAddedFiles.keySet.toSeq
 
   /**
    * :: Experimental ::
@@ -1705,7 +1714,7 @@ class SparkContext(config: SparkConf) extends Logging {
    * @since 3.1.0
    */
   @Experimental
-  def listArchives(): Seq[String] = addedArchives.keySet.toSeq
+  def listArchives(): Seq[String] = allAddedArchives.keySet.toSeq
 
   /**
    * Add a file to be downloaded with this Spark job on every node.
@@ -1724,8 +1733,12 @@ class SparkContext(config: SparkConf) extends Logging {
     addFile(path, recursive, false)
   }
 
-  private def addFile(
-      path: String, recursive: Boolean, addedOnSubmit: Boolean, isArchive: Boolean = false
+  private[spark] def addFile(
+      path: String,
+      recursive: Boolean,
+      addedOnSubmit: Boolean,
+      isArchive: Boolean = false,
+      sessionUUID: String = "default"
     ): Unit = {
     val uri = Utils.resolveURI(path)
     val schemeCorrectedURI = uri.getScheme match {
@@ -1762,7 +1775,11 @@ class SparkContext(config: SparkConf) extends Logging {
     }
 
     val timestamp = if (addedOnSubmit) startTime else System.currentTimeMillis
-    if (!isArchive && addedFiles.putIfAbsent(key, timestamp).isEmpty) {
+    if (
+      !isArchive &&
+        addedFiles
+          .getOrElseUpdate(sessionUUID, new ConcurrentHashMap[String, Long]().asScala)
+          .putIfAbsent(key, timestamp).isEmpty) {
       logInfo(s"Added file $path at $key with timestamp $timestamp")
       // Fetch the file locally so that closures which are run on the driver can still use the
       // SparkFiles API to access files.
@@ -1771,7 +1788,9 @@ class SparkContext(config: SparkConf) extends Logging {
       postEnvironmentUpdate()
     } else if (
       isArchive &&
-        addedArchives.putIfAbsent(
+        addedArchives
+          .getOrElseUpdate(sessionUUID, new ConcurrentHashMap[String, Long]().asScala)
+          .putIfAbsent(
           UriBuilder.fromUri(new URI(key)).fragment(uri.getFragment).build().toString,
           timestamp).isEmpty) {
       logInfo(s"Added archive $path at $key with timestamp $timestamp")
@@ -2064,7 +2083,8 @@ class SparkContext(config: SparkConf) extends Logging {
     addJar(path, false)
   }
 
-  private def addJar(path: String, addedOnSubmit: Boolean): Unit = {
+  private[spark] def addJar(
+      path: String, addedOnSubmit: Boolean, sessionUUID: String = "default"): Unit = {
     def addLocalJarFile(file: File): Seq[String] = {
       try {
         if (!file.exists()) {
@@ -2137,7 +2157,9 @@ class SparkContext(config: SparkConf) extends Logging {
       }
       if (keys.nonEmpty) {
         val timestamp = if (addedOnSubmit) startTime else System.currentTimeMillis
-        val (added, existed) = keys.partition(addedJars.putIfAbsent(_, timestamp).isEmpty)
+        val (added, existed) = keys.partition(addedJars
+          .getOrElseUpdate(sessionUUID, new ConcurrentHashMap[String, Long]().asScala)
+          .putIfAbsent(_, timestamp).isEmpty)
         if (added.nonEmpty) {
           val jarMessage = if (scheme != "ivy") "JAR" else "dependency jars of Ivy URI"
           logInfo(s"Added $jarMessage $path at ${added.mkString(",")} with timestamp $timestamp")
@@ -2155,7 +2177,7 @@ class SparkContext(config: SparkConf) extends Logging {
   /**
    * Returns a list of jar files that are added to resources.
    */
-  def listJars(): Seq[String] = addedJars.keySet.toSeq
+  def listJars(): Seq[String] = allAddedJars.keySet.toSeq
 
   /**
    * When stopping SparkContext inside Spark components, it's easy to cause dead-lock since Spark
@@ -2738,9 +2760,9 @@ class SparkContext(config: SparkConf) extends Logging {
   private def postEnvironmentUpdate(): Unit = {
     if (taskScheduler != null) {
       val schedulingMode = getSchedulingMode.toString
-      val addedJarPaths = addedJars.keys.toSeq
-      val addedFilePaths = addedFiles.keys.toSeq
-      val addedArchivePaths = addedArchives.keys.toSeq
+      val addedJarPaths = allAddedJars.keys.toSeq
+      val addedFilePaths = allAddedFiles.keys.toSeq
+      val addedArchivePaths = allAddedArchives.keys.toSeq
       val environmentDetails = SparkEnv.environmentDetails(conf, hadoopConfiguration,
         schedulingMode, addedJarPaths, addedFilePaths, addedArchivePaths,
         env.metricsSystem.metricsProperties.asScala.toMap)

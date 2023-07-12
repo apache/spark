@@ -500,7 +500,7 @@ class ObjectExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       val validateType = ValidateExternalType(
         GetExternalRowField(inputObject, index = 0, fieldName = "c0"),
         dt,
-        ScalaReflection.lenientExternalDataTypeFor(enc))
+        EncoderUtils.lenientExternalDataTypeFor(enc))
       checkObjectExprEvaluation(validateType, input, InternalRow.fromSeq(Seq(Row(input))))
     }
 
@@ -560,10 +560,10 @@ class ObjectExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
     ExternalMapToCatalyst(
       inputObject,
-      ScalaReflection.externalDataTypeFor(keyEnc),
+      EncoderUtils.externalDataTypeFor(keyEnc),
       kvSerializerFor(keyEnc),
       keyNullable = keyEnc.nullable,
-      ScalaReflection.externalDataTypeFor(valueEnc),
+      EncoderUtils.externalDataTypeFor(valueEnc),
       kvSerializerFor(valueEnc),
       valueNullable = valueEnc.nullable
     )

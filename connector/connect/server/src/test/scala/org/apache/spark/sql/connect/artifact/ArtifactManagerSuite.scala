@@ -51,20 +51,6 @@ class ArtifactManagerSuite extends SharedSparkSession with ResourceHelper {
     super.afterEach()
   }
 
-  test("Jar artifacts are added to spark session") {
-    val copyDir = Utils.createTempDir().toPath
-    FileUtils.copyDirectory(artifactPath.toFile, copyDir.toFile)
-    val stagingPath = copyDir.resolve("smallJar.jar")
-    val remotePath = Paths.get("jars/smallJar.jar")
-    artifactManager.addArtifact(remotePath, stagingPath, None)
-
-    val expectedPath = SparkConnectArtifactManager.artifactRootPath
-      .resolve(s"$sessionUUID/jars/smallJar.jar")
-    assert(expectedPath.toFile.exists())
-    val jars = artifactManager.jobArtifactSet.jars
-    assert(jars.exists(_._1.contains(remotePath.toString)))
-  }
-
   test("Class artifacts are added to the correct directory.") {
     val copyDir = Utils.createTempDir().toPath
     FileUtils.copyDirectory(artifactPath.toFile, copyDir.toFile)
@@ -273,6 +259,24 @@ class ArtifactManagerSuite extends SharedSparkSession with ResourceHelper {
       val result = session.range(10).select(udf3(col("id").cast("string"))).collect()
       assert(result.forall(_.getString(0).contains("Ahri")))
     }
+  }
+
+  test("SPARK-44300: Cleaning up resources only deletes session-specific resources") {
+    val copyDir = Utils.createTempDir().toPath
+    FileUtils.copyDirectory(artifactPath.toFile, copyDir.toFile)
+    val stagingPath = copyDir.resolve("Hello.class")
+    val remotePath = Paths.get("classes/Hello.class")
+
+    val sessionHolder = SparkConnectService.getOrCreateIsolatedSession("c1", "session")
+    sessionHolder.addArtifact(remotePath, stagingPath, None)
+
+    val sessionDirectory =
+      SparkConnectArtifactManager.getArtifactDirectoryAndUriForSession(sessionHolder)._1.toFile
+    assert(sessionDirectory.exists())
+
+    sessionHolder.artifactManager.cleanUpResources()
+    assert(!sessionDirectory.exists())
+    assert(SparkConnectArtifactManager.artifactRootPath.toFile.exists())
   }
 }
 

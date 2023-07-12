@@ -20,6 +20,7 @@ import tempfile
 import unittest
 import os
 
+from pyspark.sql import SparkSession
 from pyspark.testing.connectutils import ReusedConnectTestCase, should_test_connect
 from pyspark.testing.utils import SPARK_HOME
 from pyspark import SparkFiles
@@ -27,6 +28,7 @@ from pyspark.sql.functions import udf
 
 if should_test_connect:
     from pyspark.sql.connect.client.artifact import ArtifactManager
+    from pyspark.sql.connect.client import ChannelBuilder
 
 
 class ArtifactTests(ReusedConnectTestCase):
@@ -228,7 +230,7 @@ class ArtifactTests(ReusedConnectTestCase):
             self.assertEqual(artifact2.data.crc, crc)
             self.assertEqual(artifact2.data.data, data)
 
-    def test_add_pyfile(self):
+    def check_add_pyfile(self, spark_session):
         with tempfile.TemporaryDirectory() as d:
             pyfile_path = os.path.join(d, "my_pyfile.py")
             with open(pyfile_path, "w") as f:
@@ -240,10 +242,20 @@ class ArtifactTests(ReusedConnectTestCase):
 
                 return my_pyfile.my_func()
 
-            self.spark.addArtifacts(pyfile_path, pyfile=True)
-            self.assertEqual(self.spark.range(1).select(func("id")).first()[0], 10)
+            spark_session.addArtifacts(pyfile_path, pyfile=True)
+            self.assertEqual(spark_session.range(1).select(func("id")).first()[0], 10)
 
-    def test_add_zipped_package(self):
+    @unittest.skip("SPARK-44348: Reenable Session-based artifact test cases")
+    def test_add_pyfile(self):
+        self.check_add_pyfile(self.spark)
+
+        # Test multi sessions. Should be able to add the same
+        # file from different session.
+        self.check_add_pyfile(
+            SparkSession.builder.remote(f"sc://localhost:{ChannelBuilder.default_port()}").create()
+        )
+
+    def check_add_zipped_package(self, spark_session):
         with tempfile.TemporaryDirectory() as d:
             package_path = os.path.join(d, "my_zipfile")
             os.mkdir(package_path)
@@ -258,10 +270,20 @@ class ArtifactTests(ReusedConnectTestCase):
 
                 return my_zipfile.my_func()
 
-            self.spark.addArtifacts(f"{package_path}.zip", pyfile=True)
-            self.assertEqual(self.spark.range(1).select(func("id")).first()[0], 5)
+            spark_session.addArtifacts(f"{package_path}.zip", pyfile=True)
+            self.assertEqual(spark_session.range(1).select(func("id")).first()[0], 5)
 
-    def test_add_archive(self):
+    @unittest.skip("SPARK-44348: Reenable Session-based artifact test cases")
+    def test_add_zipped_package(self):
+        self.check_add_zipped_package(self.spark)
+
+        # Test multi sessions. Should be able to add the same
+        # file from different session.
+        self.check_add_zipped_package(
+            SparkSession.builder.remote(f"sc://localhost:{ChannelBuilder.default_port()}").create()
+        )
+
+    def check_add_archive(self, spark_session):
         with tempfile.TemporaryDirectory() as d:
             archive_path = os.path.join(d, "my_archive")
             os.mkdir(archive_path)
@@ -280,10 +302,20 @@ class ArtifactTests(ReusedConnectTestCase):
                 ) as my_file:
                     return my_file.read().strip()
 
-            self.spark.addArtifacts(f"{archive_path}.zip#my_files", archive=True)
-            self.assertEqual(self.spark.range(1).select(func("id")).first()[0], "hello world!")
+            spark_session.addArtifacts(f"{archive_path}.zip#my_files", archive=True)
+            self.assertEqual(spark_session.range(1).select(func("id")).first()[0], "hello world!")
 
-    def test_add_file(self):
+    @unittest.skip("SPARK-44348: Reenable Session-based artifact test cases")
+    def test_add_archive(self):
+        self.check_add_archive(self.spark)
+
+        # Test multi sessions. Should be able to add the same
+        # file from different session.
+        self.check_add_archive(
+            SparkSession.builder.remote(f"sc://localhost:{ChannelBuilder.default_port()}").create()
+        )
+
+    def check_add_file(self, spark_session):
         with tempfile.TemporaryDirectory() as d:
             file_path = os.path.join(d, "my_file.txt")
             with open(file_path, "w") as f:
@@ -296,8 +328,18 @@ class ArtifactTests(ReusedConnectTestCase):
                 ) as my_file:
                     return my_file.read().strip()
 
-            self.spark.addArtifacts(file_path, file=True)
-            self.assertEqual(self.spark.range(1).select(func("id")).first()[0], "Hello world!!")
+            spark_session.addArtifacts(file_path, file=True)
+            self.assertEqual(spark_session.range(1).select(func("id")).first()[0], "Hello world!!")
+
+    @unittest.skip("SPARK-44348: Reenable Session-based artifact test cases")
+    def test_add_file(self):
+        self.check_add_file(self.spark)
+
+        # Test multi sessions. Should be able to add the same
+        # file from different session.
+        self.check_add_file(
+            SparkSession.builder.remote(f"sc://localhost:{ChannelBuilder.default_port()}").create()
+        )
 
     def test_copy_from_local_to_fs(self):
         with tempfile.TemporaryDirectory() as d:

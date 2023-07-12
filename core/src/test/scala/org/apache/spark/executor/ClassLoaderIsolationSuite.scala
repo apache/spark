@@ -17,21 +17,31 @@
 
 package org.apache.spark.executor
 
-import org.apache.spark.{JobArtifactSet, LocalSparkContext, SparkConf, SparkContext, SparkFunSuite}
+import scala.util.Properties
+
+import org.apache.spark.{JobArtifactSet, JobArtifactState, LocalSparkContext, SparkConf, SparkContext, SparkFunSuite}
 import org.apache.spark.util.Utils
 
 class ClassLoaderIsolationSuite extends SparkFunSuite with LocalSparkContext  {
+
+  private val scalaVersion = Properties.versionNumberString
+    .split("\\.")
+    .take(2)
+    .mkString(".")
+
   val jar1 = Thread.currentThread().getContextClassLoader.getResource("TestUDTF.jar").toString
 
   // package com.example
   // object Hello { def test(): Int = 2 }
   // case class Hello(x: Int, y: Int)
-  val jar2 = Thread.currentThread().getContextClassLoader.getResource("TestHelloV2.jar").toString
+  val jar2 = Thread.currentThread().getContextClassLoader
+    .getResource(s"TestHelloV2_$scalaVersion.jar").toString
 
   // package com.example
   // object Hello { def test(): Int = 3 }
   // case class Hello(x: String)
-  val jar3 = Thread.currentThread().getContextClassLoader.getResource("TestHelloV3.jar").toString
+  val jar3 = Thread.currentThread().getContextClassLoader
+    .getResource(s"TestHelloV3_$scalaVersion.jar").toString
 
   test("Executor classloader isolation with JobArtifactSet") {
     sc = new SparkContext(new SparkConf().setAppName("test").setMaster("local"))
@@ -41,14 +51,14 @@ class ClassLoaderIsolationSuite extends SparkFunSuite with LocalSparkContext  {
 
     // TestHelloV2's test method returns '2'
     val artifactSetWithHelloV2 = new JobArtifactSet(
-      uuid = Some("hello2"),
-      replClassDirUri = None,
+      Some(JobArtifactState(uuid = "hello2", replClassDirUri = None)),
       jars = Map(jar2 -> 1L),
       files = Map.empty,
       archives = Map.empty
     )
+    sc.addJar(jar2, false, artifactSetWithHelloV2.state.get.uuid)
 
-    JobArtifactSet.withActive(artifactSetWithHelloV2) {
+    JobArtifactSet.withActiveJobArtifactState(artifactSetWithHelloV2.state.get) {
       sc.parallelize(1 to 1).foreach { i =>
         val cls = Utils.classForName("com.example.Hello$")
         val module = cls.getField("MODULE$").get(null)
@@ -61,14 +71,14 @@ class ClassLoaderIsolationSuite extends SparkFunSuite with LocalSparkContext  {
 
     // TestHelloV3's test method returns '3'
     val artifactSetWithHelloV3 = new JobArtifactSet(
-      uuid = Some("hello3"),
-      replClassDirUri = None,
+      Some(JobArtifactState(uuid = "hello3", replClassDirUri = None)),
       jars = Map(jar3 -> 1L),
       files = Map.empty,
       archives = Map.empty
     )
+    sc.addJar(jar3, false, artifactSetWithHelloV3.state.get.uuid)
 
-    JobArtifactSet.withActive(artifactSetWithHelloV3) {
+    JobArtifactSet.withActiveJobArtifactState(artifactSetWithHelloV3.state.get) {
       sc.parallelize(1 to 1).foreach { i =>
         val cls = Utils.classForName("com.example.Hello$")
         val module = cls.getField("MODULE$").get(null)
@@ -81,14 +91,14 @@ class ClassLoaderIsolationSuite extends SparkFunSuite with LocalSparkContext  {
 
     // Should not be able to see any "Hello" class if they're excluded from the artifact set
     val artifactSetWithoutHello = new JobArtifactSet(
-      uuid = Some("Jar 1"),
-      replClassDirUri = None,
+      Some(JobArtifactState(uuid = "Jar 1", replClassDirUri = None)),
       jars = Map(jar1 -> 1L),
       files = Map.empty,
       archives = Map.empty
     )
+    sc.addJar(jar1, false, artifactSetWithoutHello.state.get.uuid)
 
-    JobArtifactSet.withActive(artifactSetWithoutHello) {
+    JobArtifactSet.withActiveJobArtifactState(artifactSetWithoutHello.state.get) {
       sc.parallelize(1 to 1).foreach { i =>
         try {
           Utils.classForName("com.example.Hello$")

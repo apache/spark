@@ -121,11 +121,7 @@ private[spark] object Utils extends Logging with SparkClassUtils {
 
   /** Serialize an object using Java serialization */
   def serialize[T](o: T): Array[Byte] = {
-    val bos = new ByteArrayOutputStream()
-    val oos = new ObjectOutputStream(bos)
-    oos.writeObject(o)
-    oos.close()
-    bos.toByteArray
+    SparkSerDerseUtils.serialize(o)
   }
 
   /** Deserialize an object using Java serialization */
@@ -2085,22 +2081,7 @@ private[spark] object Utils extends Logging with SparkClassUtils {
    * converted into an absolute path with a file:// scheme.
    */
   def resolveURI(path: String): URI = {
-    try {
-      val uri = new URI(path)
-      if (uri.getScheme() != null) {
-        return uri
-      }
-      // make sure to handle if the path has a fragment (applies to yarn
-      // distributed cache)
-      if (uri.getFragment() != null) {
-        val absoluteURI = new File(uri.getPath()).getAbsoluteFile().toURI()
-        return new URI(absoluteURI.getScheme(), absoluteURI.getHost(), absoluteURI.getPath(),
-          uri.getFragment())
-      }
-    } catch {
-      case e: URISyntaxException =>
-    }
-    new File(path).getCanonicalFile().toURI()
+    SparkFileUtils.resolveURI(path)
   }
 
   /** Resolve a comma-separated list of paths. */

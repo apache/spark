@@ -964,11 +964,37 @@ class Join(google.protobuf.message.Message):
     JOIN_TYPE_LEFT_SEMI: Join.JoinType.ValueType  # 6
     JOIN_TYPE_CROSS: Join.JoinType.ValueType  # 7
 
+    class JoinDataType(google.protobuf.message.Message):
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+        IS_LEFT_FLATTENABLE_TO_ROW_FIELD_NUMBER: builtins.int
+        IS_RIGHT_FLATTENABLE_TO_ROW_FIELD_NUMBER: builtins.int
+        is_left_flattenable_to_row: builtins.bool
+        """If the left data type is a struct that can be flatten to a row."""
+        is_right_flattenable_to_row: builtins.bool
+        """If the right data type is a struct that can be flatten to a row."""
+        def __init__(
+            self,
+            *,
+            is_left_flattenable_to_row: builtins.bool = ...,
+            is_right_flattenable_to_row: builtins.bool = ...,
+        ) -> None: ...
+        def ClearField(
+            self,
+            field_name: typing_extensions.Literal[
+                "is_left_flattenable_to_row",
+                b"is_left_flattenable_to_row",
+                "is_right_flattenable_to_row",
+                b"is_right_flattenable_to_row",
+            ],
+        ) -> None: ...
+
     LEFT_FIELD_NUMBER: builtins.int
     RIGHT_FIELD_NUMBER: builtins.int
     JOIN_CONDITION_FIELD_NUMBER: builtins.int
     JOIN_TYPE_FIELD_NUMBER: builtins.int
     USING_COLUMNS_FIELD_NUMBER: builtins.int
+    JOIN_DATA_TYPE_FIELD_NUMBER: builtins.int
     @property
     def left(self) -> global___Relation:
         """(Required) Left input relation for a Join."""
@@ -993,6 +1019,9 @@ class Join(google.protobuf.message.Message):
 
         This field does not co-exist with join_condition.
         """
+    @property
+    def join_data_type(self) -> global___Join.JoinDataType:
+        """(Optional) Only used by joinWith. Set the left and right join data types."""
     def __init__(
         self,
         *,
@@ -1001,18 +1030,32 @@ class Join(google.protobuf.message.Message):
         join_condition: pyspark.sql.connect.proto.expressions_pb2.Expression | None = ...,
         join_type: global___Join.JoinType.ValueType = ...,
         using_columns: collections.abc.Iterable[builtins.str] | None = ...,
+        join_data_type: global___Join.JoinDataType | None = ...,
     ) -> None: ...
     def HasField(
         self,
         field_name: typing_extensions.Literal[
-            "join_condition", b"join_condition", "left", b"left", "right", b"right"
+            "_join_data_type",
+            b"_join_data_type",
+            "join_condition",
+            b"join_condition",
+            "join_data_type",
+            b"join_data_type",
+            "left",
+            b"left",
+            "right",
+            b"right",
         ],
     ) -> builtins.bool: ...
     def ClearField(
         self,
         field_name: typing_extensions.Literal[
+            "_join_data_type",
+            b"_join_data_type",
             "join_condition",
             b"join_condition",
+            "join_data_type",
+            b"join_data_type",
             "join_type",
             b"join_type",
             "left",
@@ -1023,6 +1066,9 @@ class Join(google.protobuf.message.Message):
             b"using_columns",
         ],
     ) -> None: ...
+    def WhichOneof(
+        self, oneof_group: typing_extensions.Literal["_join_data_type", b"_join_data_type"]
+    ) -> typing_extensions.Literal["join_data_type"] | None: ...
 
 global___Join = Join
 
