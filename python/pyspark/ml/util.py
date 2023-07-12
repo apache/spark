@@ -864,6 +864,8 @@ class FunctionPickler:
             if prefix_code != "":
                 f.write(prefix_code)
             f.write(code_snippet)
+            if suffix_code != "":
+                f.write(suffix_code)
         
         return training_script_save_path
     
