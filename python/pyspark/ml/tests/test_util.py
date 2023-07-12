@@ -121,7 +121,7 @@ class TestFunctionPickler(unittest.TestCase):
     def test_getting_output_from_pickle_file(self):
         a, b = 2, 0
         pickle_fn_file = FunctionPickler.pickle_fn_and_save(test_function, "", "", a, b)
-        fn, args, kwargs = FunctionPickler.get_func_output(pickle_fn_file)
+        fn, args, kwargs = FunctionPickler.get_fn_output(pickle_fn_file)
         self.assertEqual(fn, test_function)
         self.assertEqual(len(args), 2)
         self.assertEqual(len(kwargs), 0)
