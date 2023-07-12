@@ -146,7 +146,7 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSparkSession with Befo
         spark.table("source").withColumnRenamed("data", "d").writeTo("testcat.table_name").append()
       },
       errorClass = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_FIND_DATA",
-      parameters = Map("tableName" -> "`testcat`.`table_name`", "colPath" -> "`data`")
+      parameters = Map("tableName" -> "`testcat`.`table_name`", "colName" -> "`data`")
     )
 
     checkAnswer(
@@ -251,7 +251,7 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSparkSession with Befo
           .writeTo("testcat.table_name").overwrite(lit(true))
       },
       errorClass = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_FIND_DATA",
-      parameters = Map("tableName" -> "`testcat`.`table_name`", "colPath" -> "`data`")
+      parameters = Map("tableName" -> "`testcat`.`table_name`", "colName" -> "`data`")
     )
 
     checkAnswer(
@@ -356,7 +356,7 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSparkSession with Befo
           .writeTo("testcat.table_name").overwritePartitions()
       },
       errorClass = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_FIND_DATA",
-      parameters = Map("tableName" -> "`testcat`.`table_name`", "colPath" -> "`data`")
+      parameters = Map("tableName" -> "`testcat`.`table_name`", "colName" -> "`data`")
     )
 
     checkAnswer(
