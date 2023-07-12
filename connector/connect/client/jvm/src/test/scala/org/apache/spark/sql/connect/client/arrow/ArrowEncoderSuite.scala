@@ -289,6 +289,14 @@ class ArrowEncoderSuite extends ConnectFunSuite with BeforeAndAfterAll {
     assert(inspector2.sizeInBytesPerBatch < inspector1.sizeInBytesPerBatch)
   }
 
+  test("use after close") {
+    val iterator = serializeToArrow(Iterator.single(Row(0)), singleIntEncoder, allocator)
+    assert(iterator.hasNext)
+    iterator.close()
+    assert(!iterator.hasNext)
+    intercept[NoSuchElementException](iterator.next())
+  }
+
   /* ******************************************************************** *
    * Encoder specification tests
    * ******************************************************************** */

@@ -59,6 +59,7 @@ class ArrowSerializer[T](
     bytes.toByteArray
   }
   private var rowCount: Int = 0
+  private var closed: Boolean = false
 
   private def newChannel(output: OutputStream): WriteChannel = {
     new WriteChannel(Channels.newChannel(output))
@@ -113,7 +114,18 @@ class ArrowSerializer[T](
   /**
    * Close the serializer.
    */
-  def close(): Unit = root.close()
+  def close(): Unit = {
+    root.close()
+    closed = true
+  }
+
+  /**
+   * Check if the serializer has been closed.
+   *
+   * It is illegal to used the serializer after it has been closed. It will lead to errors and
+   * sorts of undefined behavior.
+   */
+  def isClosed: Boolean = closed
 }
 
 object ArrowSerializer {
@@ -149,7 +161,9 @@ object ArrowSerializer {
         true
       }
 
-      override def hasNext: Boolean = input.hasNext || !hasWrittenFirstBatch
+      override def hasNext: Boolean = {
+        (input.hasNext || !hasWrittenFirstBatch) && !serializer.isClosed
+      }
 
       override def next(): Array[Byte] = {
         if (!hasNext) {

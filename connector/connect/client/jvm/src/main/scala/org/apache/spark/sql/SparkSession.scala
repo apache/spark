@@ -127,7 +127,6 @@ class SparkSession private[sql] (
     newDataset(encoder) { builder =>
       if (data.nonEmpty) {
         val timeZoneId = conf.get("spark.sql.session.timeZone")
-        // TODO add errorOnDuplicatedFieldNames?
         val arrowData = ArrowSerializer.serialize(data, encoder, allocator, timeZoneId)
         if (arrowData.size() <= conf.get("spark.sql.session.localRelationCacheThreshold").toInt) {
           builder.getLocalRelationBuilder
