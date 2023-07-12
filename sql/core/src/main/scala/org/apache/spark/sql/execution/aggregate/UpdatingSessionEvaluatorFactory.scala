@@ -22,8 +22,8 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Attribute
 
 class UpdatingSessionEvaluatorFactory(
-    val inMemoryThreshold: Int,
-    val spillThreshold: Int,
+    inMemoryThreshold: Int,
+    spillThreshold: Int,
     groupingExpression: Seq[Attribute],
     sessionExpression: Attribute,
     output: Seq[Attribute]) extends PartitionEvaluatorFactory[InternalRow, InternalRow] {
