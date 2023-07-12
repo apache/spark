@@ -137,7 +137,7 @@ case class GetJsonObject(json: Expression, path: Expression)
 
   @transient
   private lazy val evaluator = if (path.foldable) {
-    new GetJsonObjectEvaluator(path.eval().asInstanceOf[UTF8String].toString)
+    new GetJsonObjectEvaluator(path.eval().asInstanceOf[UTF8String])
   } else {
     new GetJsonObjectEvaluator()
   }
@@ -152,12 +152,12 @@ case class GetJsonObject(json: Expression, path: Expression)
 
   protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val evaluatorClass = classOf[GetJsonObjectEvaluator].getName
-    val initEvaluator = if (path.foldable) {
-      val cachedPath = path.eval().asInstanceOf[UTF8String].toString
-      val refCachedPath = ctx.addReferenceObj("cachedPath", cachedPath)
-      s"new $evaluatorClass($refCachedPath)"
-    } else {
-      s"new $evaluatorClass()"
+    val initEvaluator = path.foldable match {
+      case true if path.eval() != null =>
+        val cachedPath = path.eval().asInstanceOf[UTF8String]
+        val refCachedPath = ctx.addReferenceObj("cachedPath", cachedPath)
+        s"new $evaluatorClass($refCachedPath)"
+      case _ => s"new $evaluatorClass()"
     }
     val evaluator = ctx.addMutableState(evaluatorClass, "evaluator",
       v => s"""$v = $initEvaluator;""", forceInline = true)
@@ -208,7 +208,7 @@ case class GetJsonObject(json: Expression, path: Expression)
     copy(json = newLeft, path = newRight)
 }
 
-class GetJsonObjectEvaluator(cachedPath: String) {
+class GetJsonObjectEvaluator(cachedPath: UTF8String) {
   import com.fasterxml.jackson.core.JsonToken._
   import PathInstruction._
   import SharedFactory._
@@ -242,7 +242,7 @@ class GetJsonObjectEvaluator(cachedPath: String) {
     val parsed = if (cachedPath != null) {
       parsedPath
     } else {
-      parsePath(pathStr.toString)
+      parsePath(pathStr)
     }
 
     if (parsed.isDefined) {
@@ -270,9 +270,9 @@ class GetJsonObjectEvaluator(cachedPath: String) {
     }
   }
 
-  private def parsePath(path: String): Option[List[PathInstruction]] = {
+  private def parsePath(path: UTF8String): Option[List[PathInstruction]] = {
     if (path != null) {
-      JsonPathParser.parse(path)
+      JsonPathParser.parse(path.toString)
     } else {
       None
     }

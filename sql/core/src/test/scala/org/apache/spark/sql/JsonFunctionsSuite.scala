@@ -1404,4 +1404,14 @@ class JsonFunctionsSuite extends QueryTest with SharedSparkSession {
       checkAnswer(df, Seq(Row("1", "value1")))
     }
   }
+
+  test("path is null") {
+    val df: DataFrame = Seq(("""{"name": "alice", "age": 5}""", "")).toDF("a", "b")
+    checkAnswer(df.selectExpr("get_json_object(a, null)"), Row(null))
+  }
+
+  test("json is null") {
+     val df: DataFrame = Seq(("""{"name": "alice", "age": 5}""", "")).toDF("a", "b")
+    checkAnswer(df.selectExpr("get_json_object(null, '$.name')"), Row(null))
+  }
 }
