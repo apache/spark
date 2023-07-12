@@ -33,51 +33,51 @@ from pyspark.ml.util import MetaAlgorithmReadWrite, FunctionPickler
 from pyspark.testing.mlutils import SparkSessionTestCase
 
 class MetaAlgorithmReadWriteTests(SparkSessionTestCase):
-     def test_getAllNestedStages(self):
-         def _check_uid_set_equal(stages, expected_stages):
-             uids = set(map(lambda x: x.uid, stages))
-             expected_uids = set(map(lambda x: x.uid, expected_stages))
-             self.assertEqual(uids, expected_uids)
+    def test_getAllNestedStages(self):
+        def _check_uid_set_equal(stages, expected_stages):
+            uids = set(map(lambda x: x.uid, stages))
+            expected_uids = set(map(lambda x: x.uid, expected_stages))
+            self.assertEqual(uids, expected_uids)
 
-         df1 = self.spark.createDataFrame(
-             [
-                 (Vectors.dense([1.0, 2.0]), 1.0),
-                 (Vectors.dense([-1.0, -2.0]), 0.0),
-             ],
-             ["features", "label"],
-         )
-         df2 = self.spark.createDataFrame(
-             [
-                 (1.0, 2.0, 1.0),
-                 (1.0, 2.0, 0.0),
-             ],
-             ["a", "b", "label"],
-         )
-         vs = VectorAssembler(inputCols=["a", "b"], outputCol="features")
-         lr = LogisticRegression()
-         pipeline = Pipeline(stages=[vs, lr])
-         pipelineModel = pipeline.fit(df2)
-         ova = OneVsRest(classifier=lr)
-         ovaModel = ova.fit(df1)
+        df1 = self.spark.createDataFrame(
+            [
+                (Vectors.dense([1.0, 2.0]), 1.0),
+                (Vectors.dense([-1.0, -2.0]), 0.0),
+            ],
+            ["features", "label"],
+        )
+        df2 = self.spark.createDataFrame(
+            [
+                (1.0, 2.0, 1.0),
+                (1.0, 2.0, 0.0),
+            ],
+            ["a", "b", "label"],
+        )
+        vs = VectorAssembler(inputCols=["a", "b"], outputCol="features")
+        lr = LogisticRegression()
+        pipeline = Pipeline(stages=[vs, lr])
+        pipelineModel = pipeline.fit(df2)
+        ova = OneVsRest(classifier=lr)
+        ovaModel = ova.fit(df1)
 
-         ova_pipeline = Pipeline(stages=[vs, ova])
-         nested_pipeline = Pipeline(stages=[ova_pipeline])
+        ova_pipeline = Pipeline(stages=[vs, ova])
+        nested_pipeline = Pipeline(stages=[ova_pipeline])
 
-         _check_uid_set_equal(
-             MetaAlgorithmReadWrite.getAllNestedStages(pipeline), [pipeline, vs, lr]
-         )
-         _check_uid_set_equal(
-             MetaAlgorithmReadWrite.getAllNestedStages(pipelineModel),
-             [pipelineModel] + pipelineModel.stages,
-         )
-         _check_uid_set_equal(MetaAlgorithmReadWrite.getAllNestedStages(ova), [ova, lr])
-         _check_uid_set_equal(
-             MetaAlgorithmReadWrite.getAllNestedStages(ovaModel), [ovaModel, lr] + ovaModel.models
-         )
-         _check_uid_set_equal(
-             MetaAlgorithmReadWrite.getAllNestedStages(nested_pipeline),
-             [nested_pipeline, ova_pipeline, vs, ova, lr],
-         )
+        _check_uid_set_equal(
+            MetaAlgorithmReadWrite.getAllNestedStages(pipeline), [pipeline, vs, lr]
+        )
+        _check_uid_set_equal(
+            MetaAlgorithmReadWrite.getAllNestedStages(pipelineModel),
+            [pipelineModel] + pipelineModel.stages,
+        )
+        _check_uid_set_equal(MetaAlgorithmReadWrite.getAllNestedStages(ova), [ova, lr])
+        _check_uid_set_equal(
+            MetaAlgorithmReadWrite.getAllNestedStages(ovaModel), [ovaModel, lr] + ovaModel.models
+        )
+        _check_uid_set_equal(
+            MetaAlgorithmReadWrite.getAllNestedStages(nested_pipeline),
+            [nested_pipeline, ova_pipeline, vs, ova, lr],
+        )
 
 
 class TestFunctionPickler(unittest.TestCase):
