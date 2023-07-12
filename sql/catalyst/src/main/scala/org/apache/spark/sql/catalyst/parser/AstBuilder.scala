@@ -1554,6 +1554,12 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
   override def visitFunctionTableSubqueryArgument(
       ctx: FunctionTableSubqueryArgumentContext): Expression = withOrigin(ctx) {
     val p = Option(ctx.identifierReference).map { r =>
+      // Make sure that the identifier after the TABLE keyword is surrounded by parentheses, as
+      // required by the SQL standard. If not, return an informative error message.
+      if (ctx.LEFT_PAREN() == null) {
+        throw QueryParsingErrors.invalidTableFunctionIdentifierArgumentMissingParentheses(
+          ctx, argumentName = ctx.identifierReference().getText)
+      }
       createUnresolvedRelation(r)
     }.getOrElse {
       plan(ctx.query)

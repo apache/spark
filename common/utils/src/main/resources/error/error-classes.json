@@ -1707,6 +1707,11 @@
     },
     "sqlState" : "42823"
   },
+  "INVALID_TABLE_FUNCTION_IDENTIFIER_ARGUMENT_MISSING_PARENTHESES" : {
+    "message" : [
+      "Syntax error: call to table-valued function is invalid because parentheses are missing around the provided TABLE argument <argumentName>; please surround this with parentheses and try again."
+    ]
+  },
   "INVALID_TEMP_OBJ_REFERENCE" : {
     "message" : [
       "Cannot create the persistent object <objName> of the type <obj> because it references to the temporary object <tempObjName> of the type <tempObj>. Please make the temporary object <tempObjName> persistent, or make the persistent object <objName> temporary."
