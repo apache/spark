@@ -288,7 +288,7 @@ class SessionCatalog(
   def dropDatabase(db: String, ignoreIfNotExists: Boolean, cascade: Boolean): Unit = {
     val dbName = format(db)
     if (dbName == DEFAULT_DATABASE) {
-      throw QueryCompilationErrors.cannotDropDefaultDatabaseError
+      throw QueryCompilationErrors.cannotDropDefaultDatabaseError(dbName)
     }
     if (!ignoreIfNotExists) {
       requireDbExists(dbName)

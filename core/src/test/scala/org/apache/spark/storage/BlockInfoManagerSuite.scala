@@ -309,7 +309,7 @@ class BlockInfoManagerSuite extends SparkFunSuite {
     withTaskId(0) {
       assert(blockInfoManager.lockNewBlockForWriting("block", newBlockInfo()))
       blockInfoManager.unlock("block")
-      intercept[IllegalStateException] {
+      intercept[SparkException] {
         blockInfoManager.removeBlock("block")
       }
     }
@@ -320,7 +320,7 @@ class BlockInfoManagerSuite extends SparkFunSuite {
       assert(blockInfoManager.lockNewBlockForWriting("block", newBlockInfo()))
       blockInfoManager.unlock("block")
       assert(blockInfoManager.lockForReading("block").isDefined)
-      intercept[IllegalStateException] {
+      intercept[SparkException] {
         blockInfoManager.removeBlock("block")
       }
     }

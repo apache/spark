@@ -187,6 +187,13 @@ object DataTypeUtils {
     AttributeReference(field.name, field.dataType, field.nullable, field.metadata)()
 
   /**
+   * Convert a [[StructType]] into a Seq of [[AttributeReference]].
+   */
+  def toAttributes(schema: StructType): Seq[AttributeReference] = {
+    schema.map(toAttribute)
+  }
+
+  /**
    * Convert a literal to a DecimalType.
    */
   def fromLiteral(literal: Literal): DecimalType = literal.value match {

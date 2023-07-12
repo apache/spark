@@ -30,6 +30,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.encoders.{AgnosticEncoder, ExpressionEncoder, RowEncoder}
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{ProductEncoder, UnboundRowEncoder}
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder.Deserializer
+import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.connect.client.util.{AutoCloseables, Cleanable}
 import org.apache.spark.sql.connect.common.DataTypeProtoConverter
 import org.apache.spark.sql.types.{DataType, StructType}
@@ -95,7 +96,8 @@ private[sql] class SparkResult[T](
           }
           // TODO: create encoders that directly operate on arrow vectors.
           if (boundEncoder == null) {
-            boundEncoder = createEncoder(structType).resolveAndBind(structType.toAttributes)
+            boundEncoder = createEncoder(structType)
+              .resolveAndBind(DataTypeUtils.toAttributes(structType))
           }
           while (reader.loadNextBatch()) {
             val rowCount = root.getRowCount
