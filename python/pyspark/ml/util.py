@@ -871,7 +871,7 @@ class FunctionPickler:
     
     
     @staticmethod
-    def get_pickled_output_from_training_func(func_output_path: str) -> Any:
+    def get_func_output(func_output_path: str) -> Any:
         """
             Given a path to a file with pickled output, this function
             will unpickle the output and return it to the user.
