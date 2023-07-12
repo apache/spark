@@ -21,7 +21,7 @@ import sys
 import traceback
 from typing import IO
 
-from pyspark.errors import PySparkRuntimeError
+from pyspark.errors import PySparkRuntimeError, PySparkValueError
 from pyspark.java_gateway import local_connect_and_auth
 from pyspark.serializers import (
     read_bool,
@@ -32,7 +32,7 @@ from pyspark.serializers import (
     SpecialLengths,
     UTF8Deserializer,
 )
-from pyspark.sql.types import _parse_datatype_json_string
+from pyspark.sql.types import StructType, _parse_datatype_json_string
 from pyspark.util import try_simplify_traceback
 from pyspark.worker import read_command
 
@@ -67,10 +67,11 @@ def main(infile: IO, outfile: IO) -> None:
             raise PySparkRuntimeError(
                 "Failed to execute the user defined table function because it has not "
                 "implemented the 'analyze' static function. "
-                "Please add the 'analyze' static function and try the query again."
+                "Please add the 'analyze' static function or specify the return type, "
+                "and try the query again."
             )
 
-        # receive arguments
+        # Receive arguments
         num_args = read_int(infile)
         args = []
         for _ in range(num_args):
@@ -85,6 +86,14 @@ def main(infile: IO, outfile: IO) -> None:
             args.append(dict(data_type=dt, literal=literal, is_table=is_table))
 
         schema = handler.analyze(*args)  # type: ignore[attr-defined]
+
+        if not isinstance(schema, StructType):
+            raise PySparkValueError(
+                "Output of `analyze` static function of Python UDTFs expects "
+                f"a StructType but got: {type(schema)}"
+            )
+
+        # Return the analyzed schema.
         write_with_length(schema.json().encode("utf-8"), outfile)
     except BaseException as e:
         try:

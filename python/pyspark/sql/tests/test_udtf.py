@@ -668,7 +668,23 @@ class UDTFTestsMixin:
         self.assertEqual(df.schema, StructType().add("a", LongType()))
         self.assertEqual(df.collect(), [Row(a=6), Row(a=7)])
 
-    def test_simple_udtf_with_non_static_analyze(self):
+    def test_udtf_with_neither_return_type_nor_analyze(self):
+        class TestUDTF:
+            def eval(self):
+                yield "hello", "world"
+
+        func = udtf(TestUDTF)
+
+        with self.assertRaisesRegex(
+            AnalysisException,
+            "Failed to execute the user defined table function because it has not "
+            "implemented the 'analyze' static function. "
+            "Please add the 'analyze' static function or specify the return type, "
+            "and try the query again.",
+        ):
+            func().collect()
+
+    def test_udtf_with_non_static_analyze(self):
         class TestUDTF:
             def analyze(self) -> StructType:
                 return StructType().add("c1", StringType()).add("c2", StringType())
@@ -682,9 +698,54 @@ class UDTFTestsMixin:
             AnalysisException,
             "Failed to execute the user defined table function because it has not "
             "implemented the 'analyze' static function. "
-            "Please add the 'analyze' static function and try the query again.",
+            "Please add the 'analyze' static function or specify the return type, "
+            "and try the query again.",
         ):
             func().collect()
+
+    def test_udtf_with_analyze_returning_non_struct(self):
+        class TestUDTF:
+            @staticmethod
+            def analyze():
+                return StringType()
+
+            def eval(self):
+                yield "hello", "world"
+
+        func = udtf(TestUDTF)
+
+        with self.assertRaisesRegex(
+            AnalysisException,
+            "Output of `analyze` static function of Python UDTFs expects a StructType "
+            "but got: <class 'pyspark.sql.types.StringType'>",
+        ):
+            func().collect()
+
+    def test_udtf_with_analyze_taking_wrong_number_of_arguments(self):
+        class TestUDTF:
+            @staticmethod
+            def analyze(a, b) -> StructType:
+                return StructType().add("a", a["data_type"]).add("b", b["data_type"])
+
+            def eval(self, a):
+                yield a, a + 1
+
+        func = udtf(TestUDTF)
+
+        with self.assertRaisesRegex(
+            AnalysisException, r"analyze\(\) missing 1 required positional argument: 'b'"
+        ):
+            func(lit(1)).collect()
+
+        with self.assertRaisesRegex(
+            AnalysisException, r"analyze\(\) takes 2 positional arguments but 3 were given"
+        ):
+            func(lit(1), lit(2), lit(3)).collect()
+
+        with self.assertRaisesRegex(
+            PythonException, r"eval\(\) takes 2 positional arguments but 3 were given"
+        ):
+            func(lit(1), lit(2)).collect()
 
 
 class UDTFTests(UDTFTestsMixin, ReusedSQLTestCase):

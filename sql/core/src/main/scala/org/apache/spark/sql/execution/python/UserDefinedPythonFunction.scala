@@ -122,7 +122,10 @@ object UserDefinedPythonTableFunction {
 
   private[this] val workerModule = "pyspark.sql.worker.analyze_udtf"
 
-  def analyzeInPython(func: PythonFunction, e: Seq[Expression]): StructType = {
+  /**
+   * Runs the Python UDTF's `analyze` static function.
+   */
+  def analyzeInPython(func: PythonFunction, exprs: Seq[Expression]): StructType = {
     val env = SparkEnv.get
     val bufferSize: Int = env.conf.get(BUFFER_SIZE)
     val authSocketTimeout = env.conf.get(PYTHON_AUTH_SOCKET_TIMEOUT)
@@ -142,6 +145,7 @@ object UserDefinedPythonTableFunction {
     envVars.put("SPARK_AUTH_SOCKET_TIMEOUT", authSocketTimeout.toString)
     envVars.put("SPARK_BUFFER_SIZE", bufferSize.toString)
 
+    EvaluatePython.registerPicklers()
     val pickler = new Pickler(/* useMemo = */ true,
       /* valueCompare = */ false)
 
@@ -161,8 +165,8 @@ object UserDefinedPythonTableFunction {
       dataOut.write(func.command.toArray)
 
       // Send arguments
-      dataOut.writeInt(e.length)
-      e.foreach { expr =>
+      dataOut.writeInt(exprs.length)
+      exprs.foreach { expr =>
         PythonRDD.writeUTF(expr.dataType.json, dataOut)
         if (expr.foldable) {
           dataOut.writeBoolean(true)
@@ -189,7 +193,9 @@ object UserDefinedPythonTableFunction {
           val exLength = dataIn.readInt()
           val obj = new Array[Byte](exLength)
           dataIn.readFully(obj)
-          throw new AnalysisException(new String(obj, StandardCharsets.UTF_8))
+          val msg = new String(obj, StandardCharsets.UTF_8)
+          env.destroyPythonWorker(pythonExec, workerModule, envVars.asScala.toMap, worker)
+          throw new AnalysisException(msg)
       }
 
       dataIn.readInt() match {
