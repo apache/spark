@@ -15,7 +15,13 @@
 # limitations under the License.
 #
 
+from collections.abc import Iterable
+from contextlib import contextmanager
 import os
+from re import A
+import textwrap
+from typing import Iterator
+
 import unittest
 
 from pyspark import cloudpickle
@@ -124,11 +130,74 @@ class TestFunctionPickler(unittest.TestCase):
         self.assertEqual(args[1], b)
         self.assertEqual(fn(*args, **kwargs), 4)
         os.remove(pickle_fn_file)
-        
-    def test_create_training_script_from_func(self):
-        pass
-        
+    
+    @contextmanager
+    def create_reference_file(self, body: str, prefix: str = "", suffix: str = "", fname: str = "reference.py") -> Iterator[None]:
+        try:
+            with open(fname, "w") as f:
+                if prefix != "":
+                    f.write(prefix)
+                f.write(body)
+                if suffix != "":
+                    f.write(suffix)
+            yield
+        finally:
+            os.remove(fname)
 
+        
+    def create_code_snippet_body(self, pickled_fn_path: str, fn_output_save_path: str) ->  str:
+        code_snippet =  textwrap.dedent(
+            f"""
+                    from pyspark import cloudpickle
+                    import os
+
+                    if __name__ == "__main__":
+                        with open("{pickled_fn_path}", "rb") as f:
+                            train_fn, args, kwargs = cloudpickle.load(f)
+                        output = train_fn(*args, **kwargs)
+                        with open("{fn_output_save_path}", "wb") as f:
+                            cloudpickle.dump(output, f)
+                    """
+        )
+        return code_snippet
+
+    def are_two_files_identical(self, fpath1: str, fpath2: str) -> bool:
+        with open(fpath1, "rb") as f:
+            contents_one = f.read()
+        with open(fpath2, "rb") as f:
+            contents_two = f.read()
+        return contents_one == contents_two
+
+    def test_create_training_script_from_func(self):
+        arg1, arg2 = 3, 4
+        pickled_fn_path = FunctionPickler.pickle_func_and_get_path(test_function, "", "", arg1, arg2)
+        fn_out_path = "output.pickled"
+        reference_path = "ref_result_file.py"
+        test_path = "test_result.py"
+        body_for_reference = self.create_code_snippet_body(pickled_fn_path, fn_out_path)
+        with self.subTest(msg="Check if it creates the correct file with no prefix nor suffix"):
+            with self.create_reference_file(body_for_reference, prefix="", suffix="", fname=reference_path) as _:
+                executable_file_path = FunctionPickler.create_training_script_from_func(fn_out_path, test_path, pickled_fn_path) 
+                self.assertTrue(self.are_two_files_identical(reference_path, executable_file_path))
+                os.remove(executable_file_path)
+        prefix_test = "prefix_string = 'This is a prefix string'\n" 
+        suffix_test = "suffix_string = 'this is a suffix string'\n"
+        with self.subTest(msg="Check if it creates the correct file with only prefix + body"):
+            with self.create_reference_file(body_for_reference, prefix=prefix_test, suffix="", fname=reference_path) as _:
+                executable_file_path = FunctionPickler.create_training_script_from_func(fn_out_path, test_path, pickled_fn_path, prefix_code=prefix_test) 
+                self.assertTrue(self.are_two_files_identical(reference_path, executable_file_path))
+                os.remove(executable_file_path)
+        with self.subTest(msg="Check if it creates the correct file with only suffix + body"):
+            with self.create_reference_file(body_for_reference, prefix="", suffix=suffix_test, fname=reference_path) as _:
+                executable_file_path = FunctionPickler.create_training_script_from_func(fn_out_path, test_path, pickled_fn_path, suffix_code=suffix_test) 
+                self.assertTrue(self.are_two_files_identical(reference_path, executable_file_path))
+                os.remove(executable_file_path)
+        with self.subTest(msg="Check if it creates the correct file with prefix + suffix + body"):
+            with self.create_reference_file(body_for_reference, prefix=prefix_test, suffix=suffix_test, fname=reference_path) as _:
+                executable_file_path = FunctionPickler.create_training_script_from_func(fn_out_path, test_path, pickled_fn_path, prefix_code=prefix_test, suffix_code=suffix_test) 
+                self.assertTrue(self.are_two_files_identical(reference_path, executable_file_path))
+                os.remove(executable_file_path)
+        os.remove(pickled_fn_path)
 
 if __name__ == "__main__":
     from pyspark.ml.tests.test_util import *  # noqa: F401
