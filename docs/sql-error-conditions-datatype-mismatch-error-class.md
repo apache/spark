@@ -238,4 +238,8 @@ The `<exprName>` must be between `<valueRange>` (current value = `<currentValue>
 
 The number of endpoints must be >= 2 to construct intervals but the actual number is `<actualNumber>`.
 
+## WRONG_NUM_TYPES
+
+The expression requires `<expectedNum>` input types but the actual number is `<actualNum>`.
+
 

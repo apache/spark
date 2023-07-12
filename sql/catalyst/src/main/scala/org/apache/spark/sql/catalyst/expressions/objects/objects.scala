@@ -31,6 +31,7 @@ import org.apache.spark.{SparkConf, SparkEnv}
 import org.apache.spark.serializer._
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.{InternalRow, ScalaReflection}
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.encoders.EncoderUtils
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen._
@@ -48,6 +49,18 @@ import org.apache.spark.util.Utils
 trait InvokeLike extends Expression with NonSQLExpression with ImplicitCastInputTypes {
 
   def arguments: Seq[Expression]
+
+  override def checkInputDataTypes(): TypeCheckResult = {
+    if (!inputTypes.isEmpty && inputTypes.length != arguments.length) {
+      TypeCheckResult.DataTypeMismatch(
+        errorSubClass = "WRONG_NUM_TYPES",
+        messageParameters = Map(
+          "expectedNum" -> arguments.length.toString,
+          "actualNum" -> inputTypes.length.toString))
+    } else {
+      super.checkInputDataTypes()
+    }
+  }
 
   def propagateNull: Boolean
 
