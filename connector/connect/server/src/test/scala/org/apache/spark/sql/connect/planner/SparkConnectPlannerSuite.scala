@@ -32,6 +32,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, UnsafeProjection}
 import org.apache.spark.sql.catalyst.plans.logical
+import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.connect.common.InvalidPlanInput
 import org.apache.spark.sql.connect.common.LiteralValueProtoConverter.toLiteralProto
 import org.apache.spark.sql.connect.service.SessionHolder
@@ -70,6 +71,20 @@ trait SparkConnectPlanTest extends SharedSparkSession {
           .setNamedTable(proto.Read.NamedTable.newBuilder().setUnparsedIdentifier("table"))
           .build())
       .build()
+
+  /**
+   * Creates a local relation for testing purposes. The local relation is mapped to it's
+   * equivalent in Catalyst and can be easily used for planner testing.
+   *
+   * @param schema
+   *   the schema of LocalRelation
+   * @param data
+   *   the data of LocalRelation
+   * @return
+   */
+  def createLocalRelationProto(schema: StructType, data: Seq[InternalRow]): proto.Relation = {
+    createLocalRelationProto(DataTypeUtils.toAttributes(schema), data)
+  }
 
   /**
    * Creates a local relation for testing purposes. The local relation is mapped to it's
@@ -456,7 +471,7 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
       proj(row).copy()
     }
 
-    val localRelation = createLocalRelationProto(schema.toAttributes, inputRows)
+    val localRelation = createLocalRelationProto(schema, inputRows)
     val df = Dataset.ofRows(spark, transform(localRelation))
     val array = df.collect()
     assertResult(10)(array.length)
@@ -599,7 +614,7 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
       proj(row).copy()
     }
 
-    val localRelation = createLocalRelationProto(schema.toAttributes, inputRows)
+    val localRelation = createLocalRelationProto(schema, inputRows)
 
     val project =
       proto.Project

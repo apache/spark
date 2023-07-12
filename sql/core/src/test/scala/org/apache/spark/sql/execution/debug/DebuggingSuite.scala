@@ -23,6 +23,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenContext
+import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.execution.{CodegenSupport, LeafExecNode, WholeStageCodegenExec}
 import org.apache.spark.sql.execution.adaptive.{DisableAdaptiveExecutionSuite, EnableAdaptiveExecutionSuite}
 import org.apache.spark.sql.functions._
@@ -61,7 +62,7 @@ abstract class DebuggingSuiteBase extends SharedSparkSession {
 
   case class DummyCodeGeneratorPlan(useInnerClass: Boolean)
       extends CodegenSupport with LeafExecNode {
-    override def output: Seq[Attribute] = StructType.fromDDL("d int").toAttributes
+    override def output: Seq[Attribute] = toAttributes(StructType.fromDDL("d int"))
     override def inputRDDs(): Seq[RDD[InternalRow]] = Seq(spark.sparkContext.emptyRDD[InternalRow])
     override protected def doExecute(): RDD[InternalRow] = sys.error("Not used")
     override protected def doProduce(ctx: CodegenContext): String = {

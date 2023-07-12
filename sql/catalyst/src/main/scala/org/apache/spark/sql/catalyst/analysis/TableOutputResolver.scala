@@ -23,6 +23,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.objects.AssertNotNull
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
+import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns.getDefaultValueExprOrNullLit
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
@@ -313,9 +314,9 @@ object TableOutputResolver {
       Alias(GetStructField(nullCheckedInput, i, Some(f.name)), f.name)()
     }
     val resolved = if (byName) {
-      reorderColumnsByName(fields, expectedType.toAttributes, conf, addError, colPath)
+      reorderColumnsByName(fields, toAttributes(expectedType), conf, addError, colPath)
     } else {
-      resolveColumnsByPosition(fields, expectedType.toAttributes, conf, addError, colPath)
+      resolveColumnsByPosition(fields, toAttributes(expectedType), conf, addError, colPath)
     }
     if (resolved.length == expectedType.length) {
       val struct = CreateStruct(resolved)

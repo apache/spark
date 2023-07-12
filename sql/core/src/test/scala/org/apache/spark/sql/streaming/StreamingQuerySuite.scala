@@ -41,6 +41,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Literal, Rand, Randn, Shuffle, Uuid}
 import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes.Complete
+import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.connector.read.InputPartition
 import org.apache.spark.sql.connector.read.streaming.{Offset => OffsetV2}
 import org.apache.spark.sql.execution.exchange.ReusedExchangeExec
@@ -1292,10 +1293,10 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
       override def getBatch(start: Option[Offset], end: Offset): DataFrame = {
         if (batchId == 0) {
           batchId += 1
-          Dataset.ofRows(spark, LocalRelation(schema.toAttributes, Nil, isStreaming = true))
+          Dataset.ofRows(spark, LocalRelation(toAttributes(schema), Nil, isStreaming = true))
         } else {
           Dataset.ofRows(spark,
-            LocalRelation(schema.toAttributes, InternalRow(10) :: Nil, isStreaming = true))
+            LocalRelation(toAttributes(schema), InternalRow(10) :: Nil, isStreaming = true))
         }
       }
       override def schema: StructType = MockSourceProvider.fakeSchema
