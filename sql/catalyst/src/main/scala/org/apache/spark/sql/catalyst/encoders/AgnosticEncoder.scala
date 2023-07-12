@@ -37,7 +37,6 @@ import org.apache.spark.util.Utils
  * [[java.sql.Date]] and [[java.time.LocalDate]] are allowed. Deserialization is never lenient; it
  * will always produce instance of the external type.
  *
- * An encoder is flattenable if it contains fields that can be fattened to a row.
  */
 trait AgnosticEncoder[T] extends Encoder[T] {
   def isPrimitive: Boolean
@@ -45,7 +44,7 @@ trait AgnosticEncoder[T] extends Encoder[T] {
   def dataType: DataType
   override def schema: StructType = StructType(StructField("value", dataType, nullable) :: Nil)
   def lenientSerialization: Boolean = false
-  def isFlattenable: Boolean = false
+  def isStruct: Boolean = false // set to true if it is a struct encoder
 }
 
 object AgnosticEncoders {
@@ -103,18 +102,18 @@ object AgnosticEncoders {
   }
 
   // Contains a sequence of fields. The fields can be flattened to columns in a row.
-  trait FieldsEncoder[K] extends AgnosticEncoder[K] {
+  trait StructEncoder[K] extends AgnosticEncoder[K] {
     val fields: Seq[EncoderField]
     override def isPrimitive: Boolean = false
     override def schema: StructType = StructType(fields.map(_.structField))
     override def dataType: DataType = schema
-    override val isFlattenable: Boolean = true
+    override val isStruct: Boolean = true
   }
 
   // This supports both Product and DefinedByConstructorParams
   case class ProductEncoder[K](
       override val clsTag: ClassTag[K],
-      override val fields: Seq[EncoderField]) extends FieldsEncoder[K]
+      override val fields: Seq[EncoderField]) extends StructEncoder[K]
 
   object ProductEncoder {
     val cachedCls = new ConcurrentHashMap[Int, Class[_]]
@@ -132,7 +131,7 @@ object AgnosticEncoders {
     }
   }
 
-  abstract class BaseRowEncoder extends FieldsEncoder[Row] {
+  abstract class BaseRowEncoder extends StructEncoder[Row] {
     override def clsTag: ClassTag[Row] = classTag[Row]
   }
 
@@ -146,7 +145,7 @@ object AgnosticEncoders {
   case class JavaBeanEncoder[K](
       override val clsTag: ClassTag[K],
       override val fields: Seq[EncoderField])
-    extends FieldsEncoder[K]
+    extends StructEncoder[K]
 
   // This will only work for encoding from/to Sparks' InternalRow format.
   // It is here for compatibility.
