@@ -703,6 +703,7 @@ class BaseUDTFTestsMixin:
                     Row(a=1, b=2),
                 ],
             )
+
     def test_docstring(self):
         class TestUDTF:
             """A UDTF for test."""
@@ -744,7 +745,7 @@ class BaseUDTFTestsMixin:
             def analyze(a) -> StructType:
                 assert isinstance(a, dict)
                 assert isinstance(a["data_type"], DataType)
-                assert a["literal"] is not None
+                assert a["value"] is not None
                 assert a["is_table"] is False
                 return StructType().add("a", a["data_type"])
 
@@ -782,7 +783,7 @@ class BaseUDTFTestsMixin:
             def analyze(a) -> StructType:
                 assert isinstance(a, dict)
                 assert isinstance(a["data_type"], StructType)
-                assert a["literal"] is None
+                assert a["value"] is None
                 assert a["is_table"] is True
                 return StructType().add("a", a["data_type"][0].dataType)
 

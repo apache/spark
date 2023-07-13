@@ -17,9 +17,10 @@
 """
 User-defined table function related classes and functions
 """
+import inspect
 import sys
 import warnings
-from typing import Iterator, Type, TYPE_CHECKING, Optional, Union
+from typing import Any, Dict, Iterator, Type, TYPE_CHECKING, Optional, Union
 
 from py4j.java_gateway import JavaObject
 
@@ -55,7 +56,7 @@ def _create_udtf(
 
 def _create_py_udtf(
     cls: Type,
-    returnType: Union[StructType, str],
+    returnType: Optional[Union[StructType, str]] = None,
     name: Optional[str] = None,
     deterministic: bool = True,
     useArrow: Optional[bool] = None,
@@ -102,6 +103,14 @@ def _create_arrow_udtf(regular_udtf: "UserDefinedTableFunction") -> "UserDefined
     class VectorizedUDTF:
         def __init__(self) -> None:
             self.func = cls()
+
+        if hasattr(cls, "analyze") and isinstance(
+            inspect.getattr_static(cls, "analyze"), staticmethod
+        ):
+
+            @staticmethod
+            def analyze(*args: Dict[str, Any]) -> StructType:
+                return cls.analyze(*args)
 
         def eval(self, *args: pd.Series) -> Iterator[pd.DataFrame]:
             if len(args) == 0:

@@ -77,13 +77,13 @@ def main(infile: IO, outfile: IO) -> None:
         for _ in range(num_args):
             dt = _parse_datatype_json_string(utf8_deserializer.loads(infile))
             if read_bool(infile):  # is foldable
-                literal = pickleSer._read_with_length(infile)
+                value = pickleSer._read_with_length(infile)
                 if dt.needConversion():
-                    literal = dt.fromInternal(literal)
+                    value = dt.fromInternal(value)
             else:
-                literal = None
+                value = None
             is_table = read_bool(infile)  # is table argument
-            args.append(dict(data_type=dt, literal=literal, is_table=is_table))
+            args.append(dict(data_type=dt, value=value, is_table=is_table))
 
         schema = handler.analyze(*args)  # type: ignore[attr-defined]
 
