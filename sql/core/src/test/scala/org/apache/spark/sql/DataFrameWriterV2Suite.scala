@@ -141,12 +141,13 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSparkSession with Befo
 
     checkAnswer(spark.table("testcat.table_name"), Seq.empty)
 
-    val exc = intercept[AnalysisException] {
-      spark.table("source").withColumnRenamed("data", "d").writeTo("testcat.table_name").append()
-    }
-
-    assert(exc.getMessage.contains("Cannot find data for output column"))
-    assert(exc.getMessage.contains("'data'"))
+    checkError(
+      exception = intercept[AnalysisException] {
+        spark.table("source").withColumnRenamed("data", "d").writeTo("testcat.table_name").append()
+      },
+      errorClass = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_FIND_DATA",
+      parameters = Map("tableName" -> "`testcat`.`table_name`", "colName" -> "`data`")
+    )
 
     checkAnswer(
       spark.table("testcat.table_name"),
@@ -244,13 +245,14 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSparkSession with Befo
 
     checkAnswer(spark.table("testcat.table_name"), Seq.empty)
 
-    val exc = intercept[AnalysisException] {
-      spark.table("source").withColumnRenamed("data", "d")
+    checkError(
+      exception = intercept[AnalysisException] {
+        spark.table("source").withColumnRenamed("data", "d")
           .writeTo("testcat.table_name").overwrite(lit(true))
-    }
-
-    assert(exc.getMessage.contains("Cannot find data for output column"))
-    assert(exc.getMessage.contains("'data'"))
+      },
+      errorClass = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_FIND_DATA",
+      parameters = Map("tableName" -> "`testcat`.`table_name`", "colName" -> "`data`")
+    )
 
     checkAnswer(
       spark.table("testcat.table_name"),
@@ -348,13 +350,14 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSparkSession with Befo
 
     checkAnswer(spark.table("testcat.table_name"), Seq.empty)
 
-    val exc = intercept[AnalysisException] {
-      spark.table("source").withColumnRenamed("data", "d")
+    checkError(
+      exception = intercept[AnalysisException] {
+        spark.table("source").withColumnRenamed("data", "d")
           .writeTo("testcat.table_name").overwritePartitions()
-    }
-
-    assert(exc.getMessage.contains("Cannot find data for output column"))
-    assert(exc.getMessage.contains("'data'"))
+      },
+      errorClass = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_FIND_DATA",
+      parameters = Map("tableName" -> "`testcat`.`table_name`", "colName" -> "`data`")
+    )
 
     checkAnswer(
       spark.table("testcat.table_name"),
