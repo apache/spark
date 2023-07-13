@@ -2095,8 +2095,8 @@ class SparkConnectPlanner(val sessionHolder: SessionHolder) extends Logging {
       joined,
       session.sqlContext.conf.dataFrameSelfJoinAutoResolveAmbiguity,
       session.sessionState.analyzer.resolver,
-      rel.getJoinDataType.getIsLeftFlattenableToRow,
-      rel.getJoinDataType.getIsRightFlattenableToRow)
+      rel.getJoinDataType.getIsLeftStruct,
+      rel.getJoinDataType.getIsRightStruct)
   }
 
   private def transformJoinOrJoinWith(rel: proto.Join): LogicalPlan = {

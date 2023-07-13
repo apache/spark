@@ -64,6 +64,7 @@ case class UserDefinedPythonTableFunction(
     name: String,
     func: PythonFunction,
     returnType: StructType,
+    pythonEvalType: Int,
     udfDeterministic: Boolean) {
 
   def builder(e: Seq[Expression]): LogicalPlan = {
@@ -72,6 +73,7 @@ case class UserDefinedPythonTableFunction(
       func = func,
       elementSchema = returnType,
       children = e,
+      evalType = pythonEvalType,
       udfDeterministic = udfDeterministic)
     Generate(
       udtf,

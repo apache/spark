@@ -20,48 +20,31 @@ package org.apache.spark.sql.execution.python
 import scala.collection.JavaConverters._
 
 import org.apache.spark.{JobArtifactSet, TaskContext}
-import org.apache.spark.api.python.ChainedPythonFunctions
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.ArrowUtils
+import org.apache.spark.sql.vectorized.{ArrowColumnVector, ColumnarBatch}
 
 /**
- * Grouped a iterator into batches.
- * This is similar to iter.grouped but returns Iterator[T] instead of Seq[T].
- * This is necessary because sometimes we cannot hold reference of input rows
- * because the some input rows are mutable and can be reused.
+ * A physical plan that evaluates a [[PythonUDTF]] using Apache Arrow.
+ * This is similar to [[ArrowEvalPythonExec]].
+ *
+ * @param udtf the user-defined Python function.
+ * @param requiredChildOutput the required output of the child plan. It's used for omitting data
+ *                            generation that will be discarded next by a projection.
+ * @param resultAttrs the output schema of the Python UDTF.
+ * @param child the child plan.
+ * @param evalType the Python eval type.
  */
-private[spark] class BatchIterator[T](iter: Iterator[T], batchSize: Int)
-  extends Iterator[Iterator[T]] {
-
-  override def hasNext: Boolean = iter.hasNext
-
-  override def next(): Iterator[T] = {
-    new Iterator[T] {
-      var count = 0
-
-      override def hasNext: Boolean = iter.hasNext && count < batchSize
-
-      override def next(): T = {
-        if (!hasNext) {
-          Iterator.empty.next()
-        } else {
-          count += 1
-          iter.next()
-        }
-      }
-    }
-  }
-}
-
-/**
- * A physical plan that evaluates a [[PythonUDF]].
- */
-case class ArrowEvalPythonExec(udfs: Seq[PythonUDF], resultAttrs: Seq[Attribute], child: SparkPlan,
+case class ArrowEvalPythonUDTFExec(
+    udtf: PythonUDTF,
+    requiredChildOutput: Seq[Attribute],
+    resultAttrs: Seq[Attribute],
+    child: SparkPlan,
     evalType: Int)
-  extends EvalPythonExec with PythonSQLMetrics {
+  extends EvalPythonUDTFExec with PythonSQLMetrics {
 
   private val batchSize = conf.arrowMaxRecordsPerBatch
   private val sessionLocalTimeZone = conf.sessionLocalTimeZone
@@ -69,20 +52,18 @@ case class ArrowEvalPythonExec(udfs: Seq[PythonUDF], resultAttrs: Seq[Attribute]
   private val pythonRunnerConf = ArrowUtils.getPythonRunnerConfMap(conf)
   private[this] val jobArtifactUUID = JobArtifactSet.getCurrentJobArtifactState.map(_.uuid)
 
-  protected override def evaluate(
-      funcs: Seq[ChainedPythonFunctions],
-      argOffsets: Array[Array[Int]],
+  override protected def evaluate(
+      argOffsets: Array[Int],
       iter: Iterator[InternalRow],
       schema: StructType,
-      context: TaskContext): Iterator[InternalRow] = {
+      context: TaskContext): Iterator[Iterator[InternalRow]] = {
 
-    val outputTypes = output.drop(child.output.length).map(_.dataType)
-
-    // DO NOT use iter.grouped(). See BatchIterator.
     val batchIter = if (batchSize > 0) new BatchIterator(iter, batchSize) else Iterator(iter)
 
-    val columnarBatchIter = new ArrowPythonRunner(
-      funcs,
+    val outputTypes = resultAttrs.map(_.dataType)
+
+    val columnarBatchIter = new ArrowPythonUDTFRunner(
+      udtf,
       evalType,
       argOffsets,
       schema,
@@ -92,11 +73,19 @@ case class ArrowEvalPythonExec(udfs: Seq[PythonUDF], resultAttrs: Seq[Attribute]
       pythonMetrics,
       jobArtifactUUID).compute(batchIter, context.partitionId(), context)
 
-    columnarBatchIter.flatMap { batch =>
-      val actualDataTypes = (0 until batch.numCols()).map(i => batch.column(i).dataType())
-      assert(outputTypes == actualDataTypes, "Invalid schema from pandas_udf: " +
+    columnarBatchIter.map { batch =>
+      // UDTF returns a StructType column in ColumnarBatch. Flatten the columnar batch here.
+      val columnVector = batch.column(0).asInstanceOf[ArrowColumnVector]
+      val outputVectors = resultAttrs.indices.map(columnVector.getChild)
+      val flattenedBatch = new ColumnarBatch(outputVectors.toArray)
+
+      val actualDataTypes = (0 until flattenedBatch.numCols()).map(
+        i => flattenedBatch.column(i).dataType())
+      assert(outputTypes == actualDataTypes, "Invalid schema from arrow-enabled Python UDTF: " +
         s"expected ${outputTypes.mkString(", ")}, got ${actualDataTypes.mkString(", ")}")
-      batch.rowIterator.asScala
+
+      flattenedBatch.setNumRows(batch.numRows())
+      flattenedBatch.rowIterator().asScala
     }
   }
 

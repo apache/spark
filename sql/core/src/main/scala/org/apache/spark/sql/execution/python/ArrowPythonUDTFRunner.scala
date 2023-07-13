@@ -17,20 +17,23 @@
 
 package org.apache.spark.sql.execution.python
 
+import java.io.DataOutputStream
+
 import org.apache.spark.api.python._
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.expressions.PythonUDTF
 import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.vectorized.ColumnarBatch
 
 /**
- * Similar to `PythonUDFRunner`, but exchange data with Python worker via Arrow stream.
+ * Similar to [[ArrowPythonRunner]], but for [[PythonUDTF]]s.
  */
-class ArrowPythonRunner(
-    funcs: Seq[ChainedPythonFunctions],
+class ArrowPythonUDTFRunner(
+    udtf: PythonUDTF,
     evalType: Int,
-    argOffsets: Array[Array[Int]],
+    offsets: Array[Int],
     protected override val schema: StructType,
     protected override val timeZoneId: String,
     protected override val largeVarTypes: Boolean,
@@ -38,9 +41,16 @@ class ArrowPythonRunner(
     val pythonMetrics: Map[String, SQLMetric],
     jobArtifactUUID: Option[String])
   extends BasePythonRunner[Iterator[InternalRow], ColumnarBatch](
-    funcs, evalType, argOffsets, jobArtifactUUID)
+      Seq(ChainedPythonFunctions(Seq(udtf.func))), evalType, Array(offsets), jobArtifactUUID)
   with BasicPythonArrowInput
   with BasicPythonArrowOutput {
+
+  override protected def writeUDF(
+      dataOut: DataOutputStream,
+      funcs: Seq[ChainedPythonFunctions],
+      argOffsets: Array[Array[Int]]): Unit = {
+    PythonUDTFRunner.writeUDTF(dataOut, udtf, offsets)
+  }
 
   override val pythonExec: String =
     SQLConf.get.pysparkWorkerPythonExecutable.getOrElse(
