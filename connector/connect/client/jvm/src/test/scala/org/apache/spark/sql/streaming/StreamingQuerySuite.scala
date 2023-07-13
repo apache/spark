@@ -27,14 +27,15 @@ import org.scalatest.concurrent.Eventually.eventually
 import org.scalatest.concurrent.Futures.timeout
 import org.scalatest.time.SpanSugar._
 
-import org.apache.spark.sql.{ForeachWriter, Row, SparkSession, SQLHelper}
+import org.apache.spark.internal.Logging
+import org.apache.spark.sql.{DataFrame, ForeachWriter, Row, SparkSession, SQLHelper}
 import org.apache.spark.sql.connect.client.util.QueryTest
 import org.apache.spark.sql.functions.col
 import org.apache.spark.sql.functions.window
 import org.apache.spark.sql.streaming.StreamingQueryListener.{QueryIdleEvent, QueryStartedEvent, QueryTerminatedEvent}
 import org.apache.spark.util.Utils
 
-class StreamingQuerySuite extends QueryTest with SQLHelper {
+class StreamingQuerySuite extends QueryTest with SQLHelper with Logging {
 
   test("Streaming API with windowed aggregate query") {
     // This verifies standard streaming API by starting a streaming query with windowed count.
@@ -116,7 +117,7 @@ class StreamingQuerySuite extends QueryTest with SQLHelper {
     withSQLConf(
       "spark.sql.shuffle.partitions" -> "1" // Avoid too many reducers.
     ) {
-      spark.sql("DROP TABLE IF EXISTS my_table")
+      spark.sql("DROP TABLE IF EXISTS my_table").collect()
 
       withTempPath { ckpt =>
         val q1 = spark.readStream
@@ -321,6 +322,42 @@ class StreamingQuerySuite extends QueryTest with SQLHelper {
     spark.streams.removeListener(listener)
     assert(spark.streams.listListeners().length == 1)
   }
+
+  test("foreachBatch") {
+    // Starts a streaming query with a foreachBatch function, which writes batchId and row count
+    // to a temp view. The test verifies that the view is populated with data.
+
+    val viewName = "test_view"
+    val tableName = s"global_temp.$viewName"
+
+    withTable(tableName) {
+      val q = spark.readStream
+        .format("rate")
+        .option("rowsPerSecond", "10")
+        .option("numPartitions", "1")
+        .load()
+        .writeStream
+        .foreachBatch(new ForeachBatchFn(viewName))
+        .start()
+
+      eventually(timeout(30.seconds)) { // Wait for first progress.
+        assert(q.lastProgress != null)
+        assert(q.lastProgress.numInputRows > 0)
+      }
+
+      eventually(timeout(30.seconds)) {
+        // There should be row(s) in temporary view created by foreachBatch.
+        val rows = spark
+          .sql(s"select * from $tableName")
+          .collect()
+          .toSeq
+        assert(rows.size > 0)
+        log.info(s"Rows in $tableName: $rows")
+      }
+
+      q.stop()
+    }
+  }
 }
 
 class TestForeachWriter[T] extends ForeachWriter[T] {
@@ -376,5 +413,14 @@ class EventCollector extends StreamingQueryListener {
 
   override def onQueryTerminated(event: StreamingQueryListener.QueryTerminatedEvent): Unit = {
     terminationEvent = event
+  }
+}
+
+class ForeachBatchFn(val viewName: String) extends ((DataFrame, Long) => Unit) with Serializable {
+  override def apply(df: DataFrame, batchId: Long): Unit = {
+    val count = df.count()
+    df.sparkSession
+      .createDataFrame(Seq((batchId, count)))
+      .createOrReplaceGlobalTempView(viewName)
   }
 }
