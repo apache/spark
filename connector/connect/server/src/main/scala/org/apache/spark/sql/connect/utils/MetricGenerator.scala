@@ -54,8 +54,8 @@ private[connect] object MetricGenerator extends AdaptiveSparkPlanHelper {
   }
 
   private def transformPlan(
-    p: SparkPlan,
-    parentId: Int): Seq[ExecutePlanResponse.Metrics.MetricObject] = {
+      p: SparkPlan,
+      parentId: Int): Seq[ExecutePlanResponse.Metrics.MetricObject] = {
     val mv = p.metrics.map(m =>
       m._1 -> ExecutePlanResponse.Metrics.MetricValue.newBuilder
         .setName(m._2.name.getOrElse(""))

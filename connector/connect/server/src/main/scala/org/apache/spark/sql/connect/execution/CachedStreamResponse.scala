@@ -18,9 +18,8 @@
 package org.apache.spark.sql.connect.execution
 
 private[connect] case class CachedStreamResponse[T](
-  // the actual cached response
-  response: T,
-  // index of the response in the response stream.
-  // responses produced in the stream are numbered consecutively starting from 1.
-  streamIndex: Long
-)
+    // the actual cached response
+    response: T,
+    // index of the response in the response stream.
+    // responses produced in the stream are numbered consecutively starting from 1.
+    streamIndex: Long)

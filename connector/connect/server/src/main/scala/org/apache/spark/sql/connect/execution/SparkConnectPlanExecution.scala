@@ -61,10 +61,10 @@ private[execution] class SparkConnectPlanExecution(executeHolder: ExecuteHolder)
       Dataset.ofRows(sessionHolder.session, planner.transformRelation(request.getPlan.getRoot))
     responseObserver.onNext(createSchemaResponse(request.getSessionId, dataframe.schema))
     processAsArrowBatches(request.getSessionId, dataframe, responseObserver)
-    responseObserver.onNext(MetricGenerator.createMetricsResponse(request.getSessionId, dataframe))
+    responseObserver.onNext(
+      MetricGenerator.createMetricsResponse(request.getSessionId, dataframe))
     if (dataframe.queryExecution.observedMetrics.nonEmpty) {
-      responseObserver.onNext(
-        createObservedMetricsResponse(request.getSessionId, dataframe))
+      responseObserver.onNext(createObservedMetricsResponse(request.getSessionId, dataframe))
     }
     responseObserver.onCompleted()
   }

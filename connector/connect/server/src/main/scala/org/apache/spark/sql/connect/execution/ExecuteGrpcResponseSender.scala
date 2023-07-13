@@ -22,21 +22,21 @@ import io.grpc.stub.StreamObserver
 import org.apache.spark.internal.Logging
 
 /**
- * ExecuteGrpcResponseSender sends responses to the GRPC stream.
- * It runs on the RPC thread, and gets notified by ExecuteResponseObserver about available
- * responses.
- * It notifies the ExecuteResponseObserver back about cached responses that can be removed
- * after being sent out.
- * @param responseObserver the GRPC request StreamObserver
+ * ExecuteGrpcResponseSender sends responses to the GRPC stream. It runs on the RPC thread, and
+ * gets notified by ExecuteResponseObserver about available responses. It notifies the
+ * ExecuteResponseObserver back about cached responses that can be removed after being sent out.
+ * @param responseObserver
+ *   the GRPC request StreamObserver
  */
-private[connect] class ExecuteGrpcResponseSender[T](
-  grpcObserver: StreamObserver[T]) extends Logging {
+private[connect] class ExecuteGrpcResponseSender[T](grpcObserver: StreamObserver[T])
+    extends Logging {
 
   private var detached = false
 
-  /** Detach this sender from executionObserver.
-   *  Called only from executionObserver that this sender is attached to.
-   *  executionObserver holds lock, and needs to notify after this call. */
+  /**
+   * Detach this sender from executionObserver. Called only from executionObserver that this
+   * sender is attached to. executionObserver holds lock, and needs to notify after this call.
+   */
   def detach(): Unit = {
     if (detached == true) {
       throw new IllegalStateException("ExecuteGrpcResponseSender already detached!")
@@ -46,13 +46,14 @@ private[connect] class ExecuteGrpcResponseSender[T](
 
   /**
    * Attach to the executionObserver, consume responses from it, and send them to grpcObserver.
-   *  @param lastConsumedStreamIndex the last index that was already consumed and sent.
-   *    This sender will start from index after that.
-   *    0 means start from beginning (since first response has index 1)
+   * @param lastConsumedStreamIndex
+   *   the last index that was already consumed and sent. This sender will start from index after
+   *   that. 0 means start from beginning (since first response has index 1)
    *
-   * @return true if the execution was detached before stream completed.
-   *         The caller needs to finish the grpcObserver stream
-   *         false if stream was finished. In this case, grpcObserver stream is already completed.
+   * @return
+   *   true if the execution was detached before stream completed. The caller needs to finish the
+   *   grpcObserver stream false if stream was finished. In this case, grpcObserver stream is
+   *   already completed.
    */
   def run(
       executionObserver: ExecuteResponseObserver[T],
@@ -72,7 +73,7 @@ private[connect] class ExecuteGrpcResponseSender[T](
       executionObserver.synchronized {
         logDebug(s"Acquired lock.")
         while (!detached && response.isEmpty &&
-            executionObserver.getLastIndex().forall(nextIndex <= _)) {
+          executionObserver.getLastIndex().forall(nextIndex <= _)) {
           logDebug(s"Try to get response with index=$nextIndex from observer.")
           response = executionObserver.getResponse(nextIndex)
           logDebug(s"Response index=$nextIndex from observer: ${response.isDefined}")
@@ -85,8 +86,9 @@ private[connect] class ExecuteGrpcResponseSender[T](
             logDebug(s"Reacquired lock after waiting.")
           }
         }
-        logDebug(s"Exiting loop: detached=$detached, response=$response," +
-          s"lastIndex=${executionObserver.getLastIndex()}")
+        logDebug(
+          s"Exiting loop: detached=$detached, response=$response," +
+            s"lastIndex=${executionObserver.getLastIndex()}")
       }
 
       // Send next available response.

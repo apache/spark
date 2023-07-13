@@ -27,7 +27,8 @@ import org.apache.spark.sql.connect.execution.{ExecuteGrpcResponseSender, Execut
 private[connect] class ExecuteHolder(
     val request: proto.ExecutePlanRequest,
     val operationId: String,
-    val sessionHolder: SessionHolder) extends Logging {
+    val sessionHolder: SessionHolder)
+    extends Logging {
 
   val jobTag =
     s"User_${sessionHolder.userId}_Session_${sessionHolder.sessionId}_Request_${operationId}"
@@ -39,24 +40,28 @@ private[connect] class ExecuteHolder(
 
   var runner: ExecuteThreadRunner = new ExecuteThreadRunner(this)
 
-  /** Start the execution.
-   *  The execution is started in a background thread in ExecuteThreadRunner.
-   *  Responses are produced and cached in ExecuteResponseObserver.
-   *  A GRPC thread consumes the responses by attaching an ExecuteGrpcResponseSender,
-   *  @see attachAndRunGrpcResponseSender.
+  /**
+   * Start the execution. The execution is started in a background thread in ExecuteThreadRunner.
+   * Responses are produced and cached in ExecuteResponseObserver. A GRPC thread consumes the
+   * responses by attaching an ExecuteGrpcResponseSender,
+   * @see
+   *   attachAndRunGrpcResponseSender.
    */
   def start(): Unit = {
     runner.start()
   }
 
-  /** Attach an ExecuteGrpcResponseSender that will consume responses from the query and
-   *  send them out on the Grpc response stream.
-   *  @param responseSender the ExecuteGrpcResponseSender
-   *  @param lastConsumedStreamIndex the last index that was already consumed.
-   *    The consumer will start from index after that.
-   *    0 means start from beginning (since first response has index 1)
-   *  @return true if the sender got detached without completing the stream.
-   *    false if the executing stream was completely sent out.
+  /**
+   * Attach an ExecuteGrpcResponseSender that will consume responses from the query and send them
+   * out on the Grpc response stream.
+   * @param responseSender
+   *   the ExecuteGrpcResponseSender
+   * @param lastConsumedStreamIndex
+   *   the last index that was already consumed. The consumer will start from index after that. 0
+   *   means start from beginning (since first response has index 1)
+   * @return
+   *   true if the sender got detached without completing the stream. false if the executing
+   *   stream was completely sent out.
    */
   def attachAndRunGrpcResponseSender(
       responseSender: ExecuteGrpcResponseSender[proto.ExecutePlanResponse],

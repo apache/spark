@@ -24,47 +24,52 @@ import io.grpc.stub.StreamObserver
 import org.apache.spark.internal.Logging
 
 /**
- * This StreamObserver is running on the execution thread. Execution pushes responses to it,
- * it caches them.
- * ExecuteResponseGRPCSender is the consumer of the responses ExecuteResponseObserver "produces".
- * It waits on the monitor of ExecuteResponseObserver. New produced responses notify the monitor.
- * The consumer must consume the responses consecutively,
- * @see getResponse.
+ * This StreamObserver is running on the execution thread. Execution pushes responses to it, it
+ * caches them. ExecuteResponseGRPCSender is the consumer of the responses ExecuteResponseObserver
+ * "produces". It waits on the monitor of ExecuteResponseObserver. New produced responses notify
+ * the monitor. The consumer must consume the responses consecutively,
+ * @see
+ *   getResponse.
  *
  * ExecuteResponseObserver controls how responses stay cached after being returned to consumer,
- * @see removeCachedResponses.
+ * @see
+ *   removeCachedResponses.
  *
- * A single ExecuteResponseGRPCSender can be attached to the ExecuteResponseObserver.
- * Attaching a new one will notify an existing one that it was detached.
+ * A single ExecuteResponseGRPCSender can be attached to the ExecuteResponseObserver. Attaching a
+ * new one will notify an existing one that it was detached.
  *
  * @param responseObserver
  */
-private[connect] class ExecuteResponseObserver[T]()
-  extends StreamObserver[T]
-  with Logging {
+private[connect] class ExecuteResponseObserver[T]() extends StreamObserver[T] with Logging {
 
-  /** Cached responses produced by the execution.
-   *  Map from response index -> response.
-   *  Response indexes are numbered consecutively starting from 1. */
+  /**
+   * Cached responses produced by the execution. Map from response index -> response. Response
+   * indexes are numbered consecutively starting from 1.
+   */
   private val responses: mutable.Map[Long, CachedStreamResponse[T]] =
     new mutable.HashMap[Long, CachedStreamResponse[T]]()
 
   /** Cached error of the execution, if an error was thrown. */
   private var error: Option[Throwable] = None
 
-  /** If execution stream is finished (completed or with error), the index of the final response. */
+  /**
+   * If execution stream is finished (completed or with error), the index of the final response.
+   */
   private var finalProducedIndex: Option[Long] = None // index of final response before completed.
 
   /** The index of the last response produced by execution. */
   private var lastProducedIndex: Long = 0 // first response will have index 1
 
-  /** Highest response index that was consumed.
-   *  Keeps track of it to decide which responses needs to be cached,
-   *  and to assert that all responses are consumed. */
+  /**
+   * Highest response index that was consumed. Keeps track of it to decide which responses needs
+   * to be cached, and to assert that all responses are consumed.
+   */
   private var highestConsumedIndex: Long = 0
 
-  /** Consumer that waits for available responses.
-   *  There can be only one at a time, @see attachConsumer. */
+  /**
+   * Consumer that waits for available responses. There can be only one at a time, @see
+   * attachConsumer.
+   */
   private var responseSender: Option[ExecuteGrpcResponseSender[T]] = None
 
   def onNext(r: T): Unit = synchronized {
@@ -97,8 +102,7 @@ private[connect] class ExecuteResponseObserver[T]()
   }
 
   /** Attach a new consumer (ExecuteResponseGRPCSender). */
-  def attachConsumer(
-      newSender: ExecuteGrpcResponseSender[T]): Unit = synchronized {
+  def attachConsumer(newSender: ExecuteGrpcResponseSender[T]): Unit = synchronized {
     // detach the current sender before attaching new one
     // this.synchronized() needs to be held while detaching a sender, and the detached sender
     // needs to be notified with notifyAll() afterwards.
@@ -121,7 +125,7 @@ private[connect] class ExecuteResponseObserver[T]()
     ret
   }
 
-  /** Get the stream error if there is one, otherwise None.  */
+  /** Get the stream error if there is one, otherwise None. */
   def getError(): Option[Throwable] = synchronized {
     error
   }
@@ -141,9 +145,11 @@ private[connect] class ExecuteResponseObserver[T]()
     notifyAll()
   }
 
-  /** Remove cached responses after response with lastReturnedIndex is returned from getResponse.
-   *  Remove according to caching policy:
-   *  - if query is not reattachable, remove all responses up to and including highestConsumedIndex.
+  /**
+   * Remove cached responses after response with lastReturnedIndex is returned from getResponse.
+   * Remove according to caching policy:
+   *   - if query is not reattachable, remove all responses up to and including
+   *     highestConsumedIndex.
    */
   private def removeCachedResponses() = {
     var i = highestConsumedIndex

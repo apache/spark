@@ -61,7 +61,8 @@ private[connect] object ErrorUtils extends Logging {
       .newBuilder()
       .setReason(st.getClass.getName)
       .setDomain("org.apache.spark")
-      .putMetadata("classes",
+      .putMetadata(
+        "classes",
         JsonMethods.compact(JsonMethods.render(allClasses(st.getClass).map(_.getName))))
 
     lazy val stackTrace = Option(ExceptionUtils.getStackTrace(st))
@@ -88,21 +89,21 @@ private[connect] object ErrorUtils extends Logging {
   }
 
   /**
-   * Common exception handling function for RPC methods.
-   * Closes the stream after the error has been sent.
+   * Common exception handling function for RPC methods. Closes the stream after the error has
+   * been sent.
    *
    * @param opType
-   * String value indicating the operation type (analysis, execution)
+   *   String value indicating the operation type (analysis, execution)
    * @param observer
-   * The GRPC response observer.
+   *   The GRPC response observer.
    * @tparam V
    * @return
    */
   def handleError[V](
-    opType: String,
-    observer: StreamObserver[V],
-    userId: String,
-    sessionId: String): PartialFunction[Throwable, Unit] = {
+      opType: String,
+      observer: StreamObserver[V],
+      userId: String,
+      sessionId: String): PartialFunction[Throwable, Unit] = {
     val session =
       SparkConnectService
         .getOrCreateIsolatedSession(userId, sessionId)
