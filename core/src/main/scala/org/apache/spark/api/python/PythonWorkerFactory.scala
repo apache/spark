@@ -137,9 +137,11 @@ private[spark] class PythonWorkerFactory(
 
       // Create and start the worker
       val pb = new ProcessBuilder(Arrays.asList(pythonExec, "-m", workerModule))
-      val sessionId = envVars.getOrElse("SPARK_CONNECT_SESSION_UUID", "default")
-      if (sessionId != "default") {
-        pb.directory(new File(SparkFiles.getRootDirectory(), sessionId))
+      val jobArtifactUUID = envVars.getOrElse("SPARK_JOB_ARTIFACT_UUID", "default")
+      if (jobArtifactUUID != "default") {
+        val f = new File(SparkFiles.getRootDirectory(), jobArtifactUUID)
+        f.mkdir()
+        pb.directory(f)
       }
       val workerEnv = pb.environment()
       workerEnv.putAll(envVars.asJava)
@@ -194,9 +196,11 @@ private[spark] class PythonWorkerFactory(
         // Create and start the daemon
         val command = Arrays.asList(pythonExec, "-m", daemonModule, workerModule)
         val pb = new ProcessBuilder(command)
-        val sessionId = envVars.getOrElse("SPARK_CONNECT_SESSION_UUID", "default")
-        if (sessionId != "default") {
-          pb.directory(new File(SparkFiles.getRootDirectory(), sessionId))
+        val jobArtifactUUID = envVars.getOrElse("SPARK_JOB_ARTIFACT_UUID", "default")
+        if (jobArtifactUUID != "default") {
+          val f = new File(SparkFiles.getRootDirectory(), jobArtifactUUID)
+          f.mkdir()
+          pb.directory(f)
         }
         val workerEnv = pb.environment()
         workerEnv.putAll(envVars.asJava)

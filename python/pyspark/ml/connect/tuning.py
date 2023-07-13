@@ -274,7 +274,6 @@ class CrossValidator(
     _CrossValidatorReadWrite,
 ):
     """
-
     K-fold cross validation performs model selection by splitting the dataset into a set of
     non-overlapping randomly partitioned folds which are used as separate training and test datasets
     e.g., with k=3 folds, K-fold cross validation will generate 3 (training, test) dataset pairs,
@@ -282,6 +281,29 @@ class CrossValidator(
     test set exactly once.
 
     .. versionadded:: 3.5.0
+
+    Examples
+    --------
+    >>> from pyspark.ml.connect.tuning import CrossValidator
+    >>> from pyspark.ml.connect.classification import LogisticRegression
+    >>> from pyspark.ml.connect.evaluation import BinaryClassificationEvaluator
+    >>> from pyspark.ml.tuning import ParamGridBuilder
+    >>> from sklearn.datasets import load_breast_cancer
+    >>> lor = LogisticRegression(maxIter=20, learningRate=0.01)
+    >>> ev = BinaryClassificationEvaluator()
+    >>> grid = ParamGridBuilder().addGrid(lor.maxIter, [2, 20]).build()
+    >>> cv = CrossValidator(estimator=lor, evaluator=ev, estimatorParamMaps=grid)
+    >>> sk_dataset = load_breast_cancer()
+    >>> train_dataset = spark.createDataFrame(
+    ...     zip(sk_dataset.data.tolist(), [int(t) for t in sk_dataset.target]),
+    ...     schema="features: array<double>, label: long",
+    ... )
+    >>> cv_model = cv.fit(train_dataset)
+    >>> transformed_dataset = cv_model.transform(train_dataset.limit(10))
+    >>> cv_model.avgMetrics
+    [0.5527792527167658, 0.8348714668615984]
+    >>> cv_model.stdMetrics
+    [0.04902833489813031, 0.05247132866444953]
     """
 
     _input_kwargs: Dict[str, Any]

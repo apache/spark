@@ -392,6 +392,7 @@ object IntegratedUDFTestUtils extends SQLHelper {
       name: String,
       pythonScript: String,
       returnType: StructType,
+      evalType: Int = PythonEvalType.SQL_TABLE_UDF,
       deterministic: Boolean = true): UserDefinedPythonTableFunction = {
     UserDefinedPythonTableFunction(
       name = name,
@@ -404,6 +405,7 @@ object IntegratedUDFTestUtils extends SQLHelper {
         broadcastVars = List.empty[Broadcast[PythonBroadcast]].asJava,
         accumulator = null),
       returnType = Some(returnType),
+      pythonEvalType = evalType,
       udfDeterministic = deterministic)
   }
 

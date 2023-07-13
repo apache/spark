@@ -18,7 +18,7 @@
 package org.apache.spark.sql.connect.artifact
 
 import java.io.File
-import java.net.{URL, URLClassLoader}
+import java.net.{URI, URL, URLClassLoader}
 import java.nio.file.{Files, Path, Paths, StandardCopyOption}
 import java.util.concurrent.CopyOnWriteArrayList
 import javax.ws.rs.core.UriBuilder
@@ -26,10 +26,10 @@ import javax.ws.rs.core.UriBuilder
 import scala.collection.JavaConverters._
 import scala.reflect.ClassTag
 
-import org.apache.commons.io.FileUtils
+import org.apache.commons.io.{FilenameUtils, FileUtils}
 import org.apache.hadoop.fs.{LocalFileSystem, Path => FSPath}
 
-import org.apache.spark.{JobArtifactState, SparkContext, SparkEnv}
+import org.apache.spark.{JobArtifactSet, JobArtifactState, SparkContext, SparkEnv}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.connect.artifact.util.ArtifactUtils
@@ -92,7 +92,7 @@ class SparkConnectArtifactManager(sessionHolder: SessionHolder) extends Logging 
   private[connect] def addArtifact(
       remoteRelativePath: Path,
       serverLocalStagingPath: Path,
-      fragment: Option[String]): Unit = {
+      fragment: Option[String]): Unit = JobArtifactSet.withActiveJobArtifactState(state) {
     require(!remoteRelativePath.isAbsolute)
     if (remoteRelativePath.startsWith(s"cache${File.separator}")) {
       val tmpFile = serverLocalStagingPath.toFile
@@ -131,17 +131,16 @@ class SparkConnectArtifactManager(sessionHolder: SessionHolder) extends Logging 
             "Artifacts cannot be overwritten.")
       }
       Files.move(serverLocalStagingPath, target)
+
+      // This URI is for Spark file server that starts with "spark://".
+      val uri = s"$artifactURI/${Utils.encodeRelativeUnixPathToURIRawPath(
+          FilenameUtils.separatorsToUnix(remoteRelativePath.toString))}"
+
       if (remoteRelativePath.startsWith(s"jars${File.separator}")) {
-        sessionHolder.session.sessionState.resourceLoader
-          .addJar(target.toString, state.uuid)
+        sessionHolder.session.sparkContext.addJar(uri)
         jarsList.add(target)
       } else if (remoteRelativePath.startsWith(s"pyfiles${File.separator}")) {
-        sessionHolder.session.sparkContext.addFile(
-          target.toString,
-          recursive = false,
-          addedOnSubmit = false,
-          isArchive = false,
-          sessionUUID = state.uuid)
+        sessionHolder.session.sparkContext.addFile(uri)
         val stringRemotePath = remoteRelativePath.toString
         if (stringRemotePath.endsWith(".zip") || stringRemotePath.endsWith(
             ".egg") || stringRemotePath.endsWith(".jar")) {
@@ -149,20 +148,10 @@ class SparkConnectArtifactManager(sessionHolder: SessionHolder) extends Logging 
         }
       } else if (remoteRelativePath.startsWith(s"archives${File.separator}")) {
         val canonicalUri =
-          fragment.map(UriBuilder.fromUri(target.toUri).fragment).getOrElse(target.toUri)
-        sessionHolder.session.sparkContext.addFile(
-          canonicalUri.toString,
-          recursive = false,
-          addedOnSubmit = false,
-          isArchive = true,
-          sessionUUID = state.uuid)
+          fragment.map(UriBuilder.fromUri(new URI(uri)).fragment).getOrElse(new URI(uri))
+        sessionHolder.session.sparkContext.addArchive(canonicalUri.toString)
       } else if (remoteRelativePath.startsWith(s"files${File.separator}")) {
-        sessionHolder.session.sparkContext.addFile(
-          target.toString,
-          recursive = false,
-          addedOnSubmit = false,
-          isArchive = false,
-          sessionUUID = state.uuid)
+        sessionHolder.session.sparkContext.addFile(uri)
       }
     }
   }

@@ -77,21 +77,24 @@ case class UserDefinedPythonTableFunction(
     name: String,
     func: PythonFunction,
     returnType: Option[StructType],
+    pythonEvalType: Int,
     udfDeterministic: Boolean) {
 
   def this(
       name: String,
       func: PythonFunction,
       returnType: StructType,
+      pythonEvalType: Int,
       udfDeterministic: Boolean) = {
-    this(name, func, Some(returnType), udfDeterministic)
+    this(name, func, Some(returnType), pythonEvalType, udfDeterministic)
   }
 
   def this(
       name: String,
       func: PythonFunction,
+      pythonEvalType: Int,
       udfDeterministic: Boolean) = {
-    this(name, func, None, udfDeterministic)
+    this(name, func, None, pythonEvalType, udfDeterministic)
   }
 
   def builder(e: Seq[Expression]): LogicalPlan = {
@@ -100,6 +103,7 @@ case class UserDefinedPythonTableFunction(
       func = func,
       elementSchema = returnType.getOrElse(UserDefinedPythonTableFunction.analyzeInPython(func, e)),
       children = e,
+      evalType = pythonEvalType,
       udfDeterministic = udfDeterministic)
     Generate(
       udtf,
