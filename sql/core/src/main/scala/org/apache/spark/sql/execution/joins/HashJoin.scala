@@ -39,6 +39,7 @@ private[joins] case class HashedRelationInfo(
     relationTerm: String,
     keyIsUnique: Boolean,
     isEmpty: Boolean)
+
 private[joins] case class HashJoinParams(
     streamedIter: Iterator[InternalRow],
     hashedRelation: HashedRelation,
@@ -51,6 +52,7 @@ private[joins] case class HashJoinParams(
     joinType: JoinType,
     buildSide: BuildSide,
     numOutputRows: SQLMetric)
+
 trait HashJoin extends JoinCodegenSupport {
   def buildSide: BuildSide
 
@@ -638,6 +640,7 @@ object HashJoin extends CastSupport with SQLConfHelper {
           output, (streamedPlanOutput ++ buildPlanOutput).map(_.withNullability(true)))
     }
   }
+
   def join(hashJoinParams: HashJoinParams): Iterator[InternalRow] = {
 
     val streamedIter: Iterator[InternalRow] = hashJoinParams.streamedIter
