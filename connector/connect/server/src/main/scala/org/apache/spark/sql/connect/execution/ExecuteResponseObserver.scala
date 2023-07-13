@@ -27,7 +27,7 @@ import org.apache.spark.internal.Logging
  * This StreamObserver is running on the execution thread. Execution pushes responses to it, it
  * caches them. ExecuteResponseGRPCSender is the consumer of the responses ExecuteResponseObserver
  * "produces". It waits on the monitor of ExecuteResponseObserver. New produced responses notify
- * the monitor. The consumer must consume the responses consecutively,
+ * the monitor.
  * @see
  *   getResponse.
  *
@@ -37,8 +37,8 @@ import org.apache.spark.internal.Logging
  *
  * A single ExecuteResponseGRPCSender can be attached to the ExecuteResponseObserver. Attaching a
  * new one will notify an existing one that it was detached.
- *
- * @param responseObserver
+ * @see
+ *   attachConsumer
  */
 private[connect] class ExecuteResponseObserver[T]() extends StreamObserver[T] with Logging {
 

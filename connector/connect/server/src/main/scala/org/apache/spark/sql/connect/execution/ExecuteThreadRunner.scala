@@ -33,8 +33,7 @@ import org.apache.spark.util.Utils
 
 /**
  * This class launches the actual execution in an execution thread. The execution pushes the
- * responses to a ExecuteResponseObserver in executeHolder. ExecuteResponseObserver holds the
- * responses that can be consumed by the RPC thread.
+ * responses to a ExecuteResponseObserver in executeHolder.
  */
 private[connect] class ExecuteThreadRunner(executeHolder: ExecuteHolder) extends Logging {
 
@@ -55,8 +54,17 @@ private[connect] class ExecuteThreadRunner(executeHolder: ExecuteHolder) extends
     executionThread.join()
   }
 
+  /** Interrupt the executing thread. */
+  def interrupt(): Unit = {
+    synchronized {
+      interrupted = true
+      executionThread.interrupt()
+    }
+  }
+
   private def execute(): Unit = {
     // Outer execute handles errors.
+    // Separate it from executeInternal to save on indent and improve readability.
     try {
       try {
         executeInternal()
@@ -123,13 +131,6 @@ private[connect] class ExecuteThreadRunner(executeHolder: ExecuteHolder) extends
           throw new UnsupportedOperationException(
             s"${executeHolder.request.getPlan.getOpTypeCase} not supported.")
       }
-    }
-  }
-
-  def interrupt(): Unit = {
-    synchronized {
-      interrupted = true
-      executionThread.interrupt()
     }
   }
 

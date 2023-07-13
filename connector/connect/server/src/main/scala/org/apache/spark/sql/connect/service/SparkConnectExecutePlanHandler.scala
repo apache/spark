@@ -43,8 +43,8 @@ class SparkConnectExecutePlanHandler(responseObserver: StreamObserver[proto.Exec
       }
     } finally {
       // TODO this will change with detachable execution.
-      executeHolder.runner.join()
-      sessionHolder.removeExecutePlanHolder(executeHolder.operationId)
+      executeHolder.join()
+      sessionHolder.removeExecuteHolder(executeHolder.operationId)
     }
   }
 }

@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.connect.execution
 
-private[connect] case class CachedStreamResponse[T](
+private[execution] case class CachedStreamResponse[T](
     // the actual cached response
     response: T,
     // index of the response in the response stream.

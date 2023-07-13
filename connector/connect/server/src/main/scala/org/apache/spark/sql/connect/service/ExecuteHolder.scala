@@ -38,10 +38,10 @@ private[connect] class ExecuteHolder(
 
   val session = sessionHolder.session
 
-  var responseObserver: ExecuteResponseObserver[proto.ExecutePlanResponse] =
+  val responseObserver: ExecuteResponseObserver[proto.ExecutePlanResponse] =
     new ExecuteResponseObserver[proto.ExecutePlanResponse]()
 
-  var runner: ExecuteThreadRunner = new ExecuteThreadRunner(this)
+  private val runner: ExecuteThreadRunner = new ExecuteThreadRunner(this)
 
   /**
    * Start the execution. The execution is started in a background thread in ExecuteThreadRunner.
@@ -52,6 +52,13 @@ private[connect] class ExecuteHolder(
    */
   def start(): Unit = {
     runner.start()
+  }
+
+  /**
+   * Wait for the execution thread to finish and join it.
+   */
+  def join(): Unit = {
+    runner.join()
   }
 
   /**
@@ -70,5 +77,13 @@ private[connect] class ExecuteHolder(
       responseSender: ExecuteGrpcResponseSender[proto.ExecutePlanResponse],
       lastConsumedStreamIndex: Long): Boolean = {
     responseSender.run(responseObserver, lastConsumedStreamIndex)
+  }
+
+  /**
+   * Interrupt the execution. Interrupts the running thread, which cancels all running Spark Jobs
+   * and makes the execution throw an OPERATION_CANCELLED error.
+   */
+  def interrupt(): Unit = {
+    runner.interrupt()
   }
 }
