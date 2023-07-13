@@ -24,6 +24,7 @@ import org.apache.spark.sql.catalyst.catalog.BucketSpec
 import org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.physical.HashPartitioning
+import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.execution.{FileSourceScanExec, SortExec, SparkPlan}
 import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanExec, AdaptiveSparkPlanHelper}
 import org.apache.spark.sql.execution.datasources.BucketingUtils
@@ -125,7 +126,7 @@ abstract class BucketedReadSuite extends QueryTest with SQLTestUtils with Adapti
       // Limit: bucket pruning only works when the bucket column has one and only one column
       assert(bucketColumnNames.length == 1)
       val bucketColumnIndex = bucketedDataFrame.schema.fieldIndex(bucketColumnNames.head)
-      val bucketColumn = bucketedDataFrame.schema.toAttributes(bucketColumnIndex)
+      val bucketColumn = DataTypeUtils.toAttribute(bucketedDataFrame.schema(bucketColumnIndex))
 
       // Filter could hide the bug in bucket pruning. Thus, skipping all the filters
       val plan = bucketedDataFrame.filter(filterCondition).queryExecution.executedPlan

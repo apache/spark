@@ -56,6 +56,7 @@ except ImportError:
     # No NumPy, but that's okay, we'll skip those tests
     pass
 
+__all__ = ["assertDataFrameEqual"]
 
 SPARK_HOME = _find_spark_home()
 
@@ -453,7 +454,7 @@ def assertDataFrameEqual(
                 diff_msg += "********************" + "\n\n"
 
         if not rows_equal:
-            percent_diff = diff_rows_cnt / len(zipped)
+            percent_diff = (diff_rows_cnt / len(zipped)) * 100
             error_msg += "( %.5f %% )" % percent_diff
             error_msg += "\n" + diff_msg
             raise PySparkAssertionError(

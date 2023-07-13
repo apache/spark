@@ -22,7 +22,7 @@ import java.io.File
 import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
 
-import org.apache.spark.{SparkEnv, TaskContext}
+import org.apache.spark.{JobArtifactSet, SparkEnv, TaskContext}
 import org.apache.spark.api.python.{ChainedPythonFunctions, PythonEvalType}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
@@ -255,6 +255,7 @@ case class WindowInPandasExec(
     val allInputs = windowBoundsInput ++ dataInputs
     val allInputTypes = allInputs.map(_.dataType)
     val spillSize = longMetric("spillSize")
+    val jobArtifactUUID = JobArtifactSet.getCurrentJobArtifactState.map(_.uuid)
 
     // Start processing.
     child.execute().mapPartitions { iter =>
@@ -388,7 +389,8 @@ case class WindowInPandasExec(
         sessionLocalTimeZone,
         largeVarTypes,
         pythonRunnerConf,
-        pythonMetrics).compute(pythonInput, context.partitionId(), context)
+        pythonMetrics,
+        jobArtifactUUID).compute(pythonInput, context.partitionId(), context)
 
       val joined = new JoinedRow
 

@@ -28,6 +28,7 @@ import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat
 import org.apache.spark.internal.io.FileCommitProtocol
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, DateTimeUtils}
 import org.apache.spark.sql.connector.write.{BatchWrite, LogicalWriteInfo, Write}
 import org.apache.spark.sql.errors.QueryCompilationErrors
@@ -119,7 +120,7 @@ trait FileWrite extends Write {
     // Note: prepareWrite has side effect. It sets "job".
     val outputWriterFactory =
       prepareWrite(sparkSession.sessionState.conf, job, caseInsensitiveOptions, schema)
-    val allColumns = schema.toAttributes
+    val allColumns = toAttributes(schema)
     val metrics: Map[String, SQLMetric] = BasicWriteJobStatsTracker.metrics
     val serializableHadoopConf = new SerializableConfiguration(hadoopConf)
     val statsTracker = new BasicWriteJobStatsTracker(serializableHadoopConf, metrics)
