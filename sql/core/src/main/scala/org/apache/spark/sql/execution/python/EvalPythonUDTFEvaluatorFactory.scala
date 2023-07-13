@@ -1,0 +1,120 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+package org.apache.spark.sql.execution.python
+
+import java.io.File
+
+import scala.collection.mutable.ArrayBuffer
+
+import org.apache.spark.{ContextAwareIterator, SparkEnv, TaskContext}
+import org.apache.spark.{PartitionEvaluator, PartitionEvaluatorFactory}
+import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.types.{DataType, StructField, StructType}
+import org.apache.spark.util.Utils
+
+class EvalPythonUDTFEvaluatorFactory(
+    childOutput: Seq[Attribute],
+    udtf: PythonUDTF,
+    childOutputSet: AttributeSet,
+    requiredChildOutput: Seq[Attribute],
+    output: Seq[Attribute],
+    pythonUDTFEvaluator: EvalPythonUDTFEvaluator)
+    extends PartitionEvaluatorFactory[InternalRow, InternalRow] {
+  override def createEvaluator(): PartitionEvaluator[InternalRow, InternalRow] =
+    new EvalPythonUDTFPartitionEvaluator
+
+  private class EvalPythonUDTFPartitionEvaluator
+      extends PartitionEvaluator[InternalRow, InternalRow] {
+    override def eval(
+        partitionIndex: Int,
+        inputs: Iterator[InternalRow]*): Iterator[InternalRow] = {
+      assert(inputs.length == 1)
+      val iter = inputs.head
+      val context = TaskContext.get()
+      val contextAwareIterator = new ContextAwareIterator(context, iter)
+
+      // The queue used to buffer input rows so we can drain it to
+      // combine input with output from Python.
+      val queue = HybridRowQueue(
+        context.taskMemoryManager(),
+        new File(Utils.getLocalDir(SparkEnv.get.conf)),
+        childOutput.length)
+      context.addTaskCompletionListener[Unit] { ctx =>
+        queue.close()
+      }
+
+      // flatten all the arguments
+      val allInputs = new ArrayBuffer[Expression]
+      val dataTypes = new ArrayBuffer[DataType]
+      val argOffsets = udtf.children.map { e =>
+        if (allInputs.exists(_.semanticEquals(e))) {
+          allInputs.indexWhere(_.semanticEquals(e))
+        } else {
+          allInputs += e
+          dataTypes += e.dataType
+          allInputs.length - 1
+        }
+      }.toArray
+      val projection = MutableProjection.create(allInputs.toSeq, childOutput)
+      projection.initialize(context.partitionId())
+      val schema = StructType(dataTypes.zipWithIndex.map { case (dt, i) =>
+        StructField(s"_$i", dt)
+      }.toArray)
+
+      // Add rows to the queue to join later with the result.
+      // Also keep track of the number rows added to the queue.
+      // This is needed to process extra output rows from the `terminate()` call of the UDTF.
+      var count = 0L
+      val projectedRowIter = contextAwareIterator.map { inputRow =>
+        queue.add(inputRow.asInstanceOf[UnsafeRow])
+        count += 1
+        projection(inputRow)
+      }
+
+      val outputRowIterator =
+        pythonUDTFEvaluator.evaluate(argOffsets, projectedRowIter, schema, context)
+
+      val pruneChildForResult: InternalRow => InternalRow =
+        if (childOutputSet == AttributeSet(requiredChildOutput)) {
+          identity
+        } else {
+          UnsafeProjection.create(requiredChildOutput, childOutput)
+        }
+
+      val joined = new JoinedRow
+      val resultProj = UnsafeProjection.create(output, output)
+
+      outputRowIterator.flatMap { outputRows =>
+        // If `count` is greater than zero, it means there are remaining input rows in the queue.
+        // In this case, the output rows of the UDTF are joined with the corresponding input row
+        // in the queue.
+        if (count > 0) {
+          val left = queue.remove()
+          count -= 1
+          joined.withLeft(pruneChildForResult(left))
+        }
+        // If `count` is zero, it means all input rows have been consumed. Any additional rows
+        // from the UDTF are from the `terminate()` call. We leave the left side as the last
+        // element of its child output to keep it consistent with the Generate implementation
+        // and Hive UDTFs.
+        outputRows.map(r => resultProj(joined.withRight(r)))
+      }
+    }
+  }
+}
