@@ -100,6 +100,7 @@ class SparkConnectClientSuite extends ConnectFunSuite with BeforeAndAfterEach {
     client = SparkConnectClient
       .builder()
       .connectionString(s"sc://localhost:${server.getPort}/;use_ssl=true")
+      .retryPolicy(GrpcRetryHandler.RetryPolicy(maxRetries = 0))
       .build()
 
     val request = AnalyzePlanRequest.newBuilder().setSessionId("abc123").build()
