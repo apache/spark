@@ -2685,8 +2685,7 @@ class SparkConnectPlanner(val sessionHolder: SessionHolder) extends Logging {
         case StreamingForeachFunction.FunctionCase.SCALA_FUNCTION =>
           val scalaFn = Utils.deserialize[StreamingForeachBatchHelper.ForeachBatchFnType](
             writeOp.getForeachBatch.getScalaFunction.getPayload.toByteArray,
-            Utils.getContextOrSparkClassLoader
-          )
+            Utils.getContextOrSparkClassLoader)
           StreamingForeachBatchHelper.scalaForeachBatchWrapper(scalaFn, sessionHolder)
 
         case StreamingForeachFunction.FunctionCase.FUNCTION_NOT_SET =>

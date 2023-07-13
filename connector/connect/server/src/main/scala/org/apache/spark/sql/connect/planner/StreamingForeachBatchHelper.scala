@@ -30,12 +30,13 @@ object StreamingForeachBatchHelper extends Logging {
   type ForeachBatchFnType = (DataFrame, Long) => Unit
 
   /**
-   * Return a new ForeachBatch function that wraps `fn`. It sets up DataFrame cache
-   * so that the user function can access it. The cache is cleared once ForeachBatch returns.
+   * Return a new ForeachBatch function that wraps `fn`. It sets up DataFrame cache so that the
+   * user function can access it. The cache is cleared once ForeachBatch returns.
    */
-  def dataFrameCachingWrapper(fn: ForeachBatchFnType, sessionHolder: SessionHolder)
-    : ForeachBatchFnType = {
-    (df: DataFrame, batchId: Long) => {
+  def dataFrameCachingWrapper(
+      fn: ForeachBatchFnType,
+      sessionHolder: SessionHolder): ForeachBatchFnType = { (df: DataFrame, batchId: Long) =>
+    {
       val dfId = UUID.randomUUID().toString
       log.info(s"Caching DataFrame with id $dfId") // TODO: Add query id to the log.
 
@@ -53,14 +54,15 @@ object StreamingForeachBatchHelper extends Logging {
   }
 
   /**
-   * Handles setting up Scala remote session and other Spark Connect environment and then
-   * runs the provided foreachBatch function `fn`.
+   * Handles setting up Scala remote session and other Spark Connect environment and then runs the
+   * provided foreachBatch function `fn`.
    *
-   * HACK ALERT: This version does not atually set up Spark connect. Directly passes the DataFrame,
-   * so the user code actually runs with legacy DataFrame.
+   * HACK ALERT: This version does not atually set up Spark connect. Directly passes the
+   * DataFrame, so the user code actually runs with legacy DataFrame.
    */
-  def scalaForeachBatchWrapper(fn: ForeachBatchFnType, sessionHolder: SessionHolder)
-    : ForeachBatchFnType = {
+  def scalaForeachBatchWrapper(
+      fn: ForeachBatchFnType,
+      sessionHolder: SessionHolder): ForeachBatchFnType = {
     // TODO: Set up Spark Connect session. Do we actually need this for the first version?
     dataFrameCachingWrapper(fn, sessionHolder)
   }

@@ -35,42 +35,6 @@ import org.apache.spark.util.Utils
 
 class StreamingQuerySuite extends RemoteSparkSession with SQLHelper with Logging {
 
-  // XXX Move to the bottom.
-  test("foreachBatch") {
-    // Starts a streaming query with a foreachBatch function, which writes batchId and row count
-    // to a temp view. The test verifies that the view is populated with data.
-
-    val viewName = "test_view"
-    val tableName = s"global_temp.$viewName"
-
-    withTable(tableName) {
-      val q = spark.readStream
-        .format("rate")
-        .option("rowsPerSecond", "10")
-        .option("numPartitions", "1")
-        .load()
-        .writeStream
-        .foreachBatch(new ForeachBatchFn(viewName))
-        .start()
-
-      eventually(timeout(30.seconds)) { // Wait for first progress.
-        assert(q.lastProgress != null)
-        assert(q.lastProgress.numInputRows > 0)
-      }
-
-      eventually(timeout(30.seconds)) {
-        // There should be row(s) in temporary view created by foreachBatch.
-        val rows = spark.sql(s"select * from $tableName")
-          .collect()
-          .toSeq
-        assert(rows.size > 0)
-        log.info(s"Rows in $tableName: $rows")
-      }
-
-      q.stop()
-    }
-  }
-
   test("Streaming API with windowed aggregate query") {
     // This verifies standard streaming API by starting a streaming query with windowed count.
     withSQLConf(
@@ -302,6 +266,42 @@ class StreamingQuerySuite extends RemoteSparkSession with SQLHelper with Logging
 
     q.stop()
     assert(!q1.isActive)
+  }
+
+  test("foreachBatch") {
+    // Starts a streaming query with a foreachBatch function, which writes batchId and row count
+    // to a temp view. The test verifies that the view is populated with data.
+
+    val viewName = "test_view"
+    val tableName = s"global_temp.$viewName"
+
+    withTable(tableName) {
+      val q = spark.readStream
+        .format("rate")
+        .option("rowsPerSecond", "10")
+        .option("numPartitions", "1")
+        .load()
+        .writeStream
+        .foreachBatch(new ForeachBatchFn(viewName))
+        .start()
+
+      eventually(timeout(30.seconds)) { // Wait for first progress.
+        assert(q.lastProgress != null)
+        assert(q.lastProgress.numInputRows > 0)
+      }
+
+      eventually(timeout(30.seconds)) {
+        // There should be row(s) in temporary view created by foreachBatch.
+        val rows = spark
+          .sql(s"select * from $tableName")
+          .collect()
+          .toSeq
+        assert(rows.size > 0)
+        log.info(s"Rows in $tableName: $rows")
+      }
+
+      q.stop()
+    }
   }
 }
 
