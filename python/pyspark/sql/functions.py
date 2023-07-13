@@ -15510,6 +15510,7 @@ def udf(
         return _create_py_udf(f=f, returnType=returnType, useArrow=useArrow)
 
 
+@try_remote_functions
 def udtf(
     cls: Optional[Type] = None,
     *,

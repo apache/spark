@@ -75,6 +75,10 @@ from pyspark.sql.connect.expressions import (
     CommonInlineUserDefinedFunction,
     JavaUDF,
 )
+from pyspark.sql.connect.plan import (
+    CommonInlineUserDefinedTableFunction,
+    PythonUDTF,
+)
 from pyspark.sql.pandas.types import _create_converter_to_pandas, from_arrow_schema
 from pyspark.sql.types import DataType, StructType, TimestampType, _has_type
 from pyspark.rdd import PythonEvalType
@@ -637,6 +641,43 @@ class SparkConnectClient(object):
         # construct the request
         req = self._execute_plan_request_with_metadata()
         req.plan.command.register_function.CopyFrom(fun)
+
+        self._execute(req)
+        return name
+
+    def register_udtf(
+        self,
+        function: Any,
+        return_type: Union[StructType, str],
+        name: Optional[str] = None,
+        eval_type: int = PythonEvalType.SQL_TABLE_UDF,
+        deterministic: bool = True,
+    ) -> str:
+        """
+        Create a temporary user-defined table function in the session catalog.
+        """
+
+        if name is None:
+            # Create a temporary name for the function?
+            # TODO: for UDTFs this should always be defined?
+            name = f"fun_{uuid.uuid4().hex}"
+
+        udtf = PythonUDTF(
+            func=function,
+            return_type=return_type,
+            eval_type=eval_type,
+            python_ver="%d.%d" % sys.version_info[:2],
+        )
+
+        func = CommonInlineUserDefinedTableFunction(
+            function_name=name,
+            function=udtf,
+            deterministic=deterministic,
+            arguments=[],
+        ).udtf_plan(self)
+
+        req = self._execute_plan_request_with_metadata()
+        req.plan.command.register_table_function.CopyFrom(func)
 
         self._execute(req)
         return name

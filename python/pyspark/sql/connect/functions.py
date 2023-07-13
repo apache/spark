@@ -31,6 +31,7 @@ from typing import (
     overload,
     Optional,
     Tuple,
+    Type,
     Callable,
     ValuesView,
     cast,
@@ -52,6 +53,7 @@ from pyspark.sql.connect.expressions import (
     UnresolvedNamedLambdaVariable,
 )
 from pyspark.sql.connect.udf import _create_py_udf
+from pyspark.sql.connect.udtf import UserDefinedTableFunction, _create_udtf
 from pyspark.sql import functions as pysparkfuncs
 from pyspark.sql.types import _from_numpy_type, DataType, StructType, ArrayType, StringType
 
@@ -3889,6 +3891,20 @@ def udf(
 
 
 udf.__doc__ = pysparkfuncs.udf.__doc__
+
+
+def udtf(
+    cls: Optional[Type] = None,
+    *,
+    returnType: Union[StructType, str],
+) -> Union[UserDefinedTableFunction, functools.partial]:
+    if cls is None:
+        return functools.partial(_create_udtf, returnType=returnType)
+    else:
+        return _create_udtf(cls=cls, returnType=returnType)
+
+
+udtf.__doc__ = pysparkfuncs.udtf.__doc__
 
 
 def call_function(udfName: str, *cols: "ColumnOrName") -> Column:
