@@ -320,7 +320,7 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
 
   test("error handling: fail if the temp view name contains the database prefix") {
     // Fully qualified table name like "database.table" is not allowed for temporary view
-    val e = intercept[AnalysisException] {
+    val e = intercept[ParseException] {
       sql("CREATE OR REPLACE TEMPORARY VIEW default.myabcdview AS SELECT * FROM jt")
     }
     assert(e.message.contains(
@@ -329,7 +329,7 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
 
   test("error handling: disallow IF NOT EXISTS for CREATE TEMPORARY VIEW") {
     withTempView("myabcdview") {
-      val e = intercept[AnalysisException] {
+      val e = intercept[ParseException] {
         sql("CREATE TEMPORARY VIEW IF NOT EXISTS myabcdview AS SELECT * FROM jt")
       }
       assert(e.message.contains("It is not allowed to define a TEMPORARY view with IF NOT EXISTS"))
@@ -483,7 +483,7 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
 
       sql("DROP VIEW testView")
 
-      val e = intercept[AnalysisException] {
+      val e = intercept[ParseException] {
         sql("CREATE OR REPLACE VIEW IF NOT EXISTS testView AS SELECT id FROM jt")
       }
       assert(e.message.contains(
@@ -713,11 +713,16 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
         checkAnswer(sql("SELECT * FROM testView ORDER BY x"), (1 to 9).map(i => Row(i, i + 1)))
 
         // Throw an AnalysisException if the number of columns don't match up.
-        val e = intercept[AnalysisException] {
-          sql("CREATE VIEW testView2(x, y, z) AS SELECT * FROM tab1")
-        }.getMessage
-        assert(e.contains("The number of columns produced by the SELECT clause (num: `2`) does " +
-          "not match the number of column names specified by CREATE VIEW (num: `3`)."))
+        checkError(
+          exception = intercept[AnalysisException] {
+            sql("CREATE VIEW testView2(x, y, z) AS SELECT * FROM tab1")
+          },
+          errorClass = "CREATE_VIEW_COLUMN_ARITY_MISMATCH.NOT_ENOUGH_DATA_COLUMNS",
+          parameters = Map(
+            "viewName" -> s"`$SESSION_CATALOG_NAME`.`default`.`testView2`",
+            "viewColumns" -> "`x`, `y`, `z`",
+            "dataColumns" -> "`id`, `id1`")
+        )
 
         // Correctly resolve a view when the referenced table schema changes.
         spark.range(1, 10).selectExpr("id", "id + id dummy", "id + 1 id1")
@@ -727,7 +732,17 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
         // Throw an AnalysisException if the column name is not found.
         spark.range(1, 10).selectExpr("id", "id + 1 dummy")
           .write.mode(SaveMode.Overwrite).saveAsTable("tab1")
-        intercept[AnalysisException](sql("SELECT * FROM testView"))
+        checkError(
+          exception = intercept[AnalysisException](sql("SELECT * FROM testView")),
+          errorClass = "INCOMPATIBLE_VIEW_SCHEMA_CHANGE",
+          parameters = Map(
+            "viewName" -> s"`$SESSION_CATALOG_NAME`.`default`.`testview`",
+            "actualCols" -> "[]",
+            "colName" -> "id1",
+            "suggestion" -> ("CREATE OR REPLACE VIEW " +
+              s"$SESSION_CATALOG_NAME.default.testview (x, y) AS SELECT * FROM tab1"),
+            "expectedNum" -> "1")
+        )
       }
     }
   }

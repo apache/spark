@@ -20,8 +20,10 @@ package org.apache.spark
 import java.io.File
 import java.nio.charset.StandardCharsets
 import java.nio.file.Files
+import java.util.Locale
 
 import scala.util.Properties.lineSeparator
+import scala.util.matching.Regex
 
 import com.fasterxml.jackson.annotation.JsonInclude.Include
 import com.fasterxml.jackson.core.JsonParser.Feature.STRICT_DUPLICATE_DETECTION
@@ -44,6 +46,12 @@ class SparkThrowableSuite extends SparkFunSuite {
    {{{
       SPARK_GENERATE_GOLDEN_FILES=1 build/sbt \
         "core/testOnly *SparkThrowableSuite -- -t \"Error classes are correctly formatted\""
+   }}}
+
+   To regenerate the error class document. Run:
+   {{{
+      SPARK_GENERATE_GOLDEN_FILES=1 build/sbt \
+        "core/testOnly *SparkThrowableSuite -- -t \"Error classes match with document\""
    }}}
    */
   private val errorJsonFilePath = getWorkspaceFilePath(
@@ -141,54 +149,179 @@ class SparkThrowableSuite extends SparkFunSuite {
     checkIfUnique(messageFormats)
   }
 
-  test("SPARK-44268: Error classes match with document") {
-    val sqlstateDoc = "sql-error-conditions-sqlstates.md"
+  test("Error classes match with document") {
     val errors = errorReader.errorInfoMap
-    val errorDocPaths = getWorkspaceFilePath("docs").toFile
-      .listFiles(_.getName.startsWith("sql-error-conditions-"))
-      .filter(!_.getName.equals(sqlstateDoc))
-      .map(f => IOUtils.toString(f.toURI, StandardCharsets.UTF_8)).map(_.split("\n"))
-    // check the error classes in document should be in error-classes.json
-    val linkInDocRegex = "\\[(.*)\\]\\((.*)\\)".r
-    val commonErrorsInDoc = IOUtils.toString(getWorkspaceFilePath("docs",
-      "sql-error-conditions.md").toUri, StandardCharsets.UTF_8).split("\n")
-      .filter(_.startsWith("###")).map(s => s.replace("###", "").trim)
-      .filter(linkInDocRegex.findFirstMatchIn(_).isEmpty)
 
-    commonErrorsInDoc.foreach(s => assert(errors.contains(s),
-      s"Error class: $s is not in error-classes.json"))
+    // the black list of error class name which should not add quote
+    val contentQuoteBlackList = Seq(
+      "INCOMPLETE_TYPE_DEFINITION.MAP",
+      "INCOMPLETE_TYPE_DEFINITION.STRUCT")
 
-    val titlePrefix = "title:"
-    val errorsInDoc = errorDocPaths.map(lines => {
-      val errorClass = lines.filter(_.startsWith(titlePrefix))
-        .map(s => s.replace("error class", "").replace(titlePrefix, "").trim).head
-      assert(errors.contains(errorClass), s"Error class: $errorClass is not in error-classes.json")
-      val subClasses = lines.filter(_.startsWith("##")).map(s => s.replace("##", "").trim)
-        .map { s =>
-          assert(errors(errorClass).subClass.get.contains(s),
-            s"Error class: $errorClass does not contain sub class: $s in error-classes.json")
-          s
-        }
-      errorClass -> subClasses
+    def quoteParameter(content: String, errorName: String): String = {
+      if (contentQuoteBlackList.contains(errorName)) {
+        content
+      } else {
+        "<(.*?)>".r.replaceAllIn(content, (m: Regex.Match) => {
+          val matchStr = m.group(1)
+          if (matchStr.nonEmpty) {
+            s"`<$matchStr>`"
+          } else {
+            m.matched
+          }
+        }).replaceAll("%(.*?)\\$", "`\\%$1\\$`")
+      }
+    }
+
+    val sqlStates = IOUtils.toString(getWorkspaceFilePath("docs",
+      "sql-error-conditions-sqlstates.md").toUri, StandardCharsets.UTF_8).split("\n")
+      .filter(_.startsWith("##")).map(s => {
+
+      val errorHeader = s.split("[`|:|#|\\s]+").filter(_.nonEmpty)
+      val sqlState = errorHeader(1)
+      (sqlState, errorHeader.head.toLowerCase(Locale.ROOT) + "-" + sqlState + "-" +
+        errorHeader.takeRight(errorHeader.length - 2).mkString("-").toLowerCase(Locale.ROOT))
     }).toMap
 
-    // check the error classes in error-classes.json should be in document
-    errors.foreach { e =>
-      val errorClass = e._1
-      val subClasses = e._2.subClass.getOrElse(Map.empty).keys.toSeq
-      if (subClasses.nonEmpty) {
-        assert(errorsInDoc.contains(errorClass),
-          s"Error class: $errorClass do not have sql-error-conditions sub doc, please create it")
-        val subClassesInDoc = errorsInDoc(errorClass)
-        subClasses.foreach { s =>
-          assert(subClassesInDoc.contains(s),
-            s"Error class: $errorClass contains sub class: $s which is not in " +
-              s"sql-error-conditions sub doc")
+    def getSqlState(sqlState: Option[String]): String = {
+      if (sqlState.isDefined) {
+        val prefix = sqlState.get.substring(0, 2)
+        if (sqlStates.contains(prefix)) {
+          s"[SQLSTATE: ${sqlState.get}](sql-error-conditions-sqlstates.html#${sqlStates(prefix)})"
+        } else {
+          "SQLSTATE: " + sqlState.get
         }
-      } else if (!errorClass.startsWith("_LEGACY_ERROR_TEMP_")) {
-        assert(commonErrorsInDoc.contains(errorClass),
-          s"Error class: $errorClass is not in sql-error-conditions.md")
+      } else {
+        "SQLSTATE: none assigned"
       }
+    }
+
+    def getErrorPath(error: String): String = {
+      s"sql-error-conditions-${error.toLowerCase(Locale.ROOT).replaceAll("_", "-")}-error-class"
+    }
+
+    def getHeader(title: String): String = {
+      s"""---
+         |layout: global
+         |title: $title
+         |displayTitle: $title
+         |license: |
+         |  Licensed to the Apache Software Foundation (ASF) under one or more
+         |  contributor license agreements.  See the NOTICE file distributed with
+         |  this work for additional information regarding copyright ownership.
+         |  The ASF licenses this file to You under the Apache License, Version 2.0
+         |  (the "License"); you may not use this file except in compliance with
+         |  the License.  You may obtain a copy of the License at
+         |
+         |     http://www.apache.org/licenses/LICENSE-2.0
+         |
+         |  Unless required by applicable law or agreed to in writing, software
+         |  distributed under the License is distributed on an "AS IS" BASIS,
+         |  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+         |  See the License for the specific language governing permissions and
+         |  limitations under the License.
+         |---""".stripMargin
+    }
+
+    val sqlErrorParentDocContent = errors.toSeq.filter(!_._1.startsWith("_LEGACY_ERROR_TEMP_"))
+      .sortBy(_._1).map(error => {
+      val name = error._1
+      val info = error._2
+      if (info.subClass.isDefined) {
+        val title = s"[$name](${getErrorPath(name)}.html)"
+        s"""|### $title
+            |
+            |${getSqlState(info.sqlState)}
+            |
+            |${quoteParameter(info.messageTemplate, name)}
+            |
+            |For more details see $title
+            |""".stripMargin
+      } else {
+        s"""|### $name
+            |
+            |${getSqlState(info.sqlState)}
+            |
+            |${quoteParameter(info.messageTemplate, name)}
+            |""".stripMargin
+      }
+    }).mkString("\n")
+
+    val sqlErrorParentDoc =
+      s"""${getHeader("Error Conditions")}
+         |
+         |This is a list of common, named error conditions returned by Spark SQL.
+         |
+         |Also see [SQLSTATE Codes](sql-error-conditions-sqlstates.html).
+         |
+         |$sqlErrorParentDocContent
+         |""".stripMargin
+
+    errors.filter(_._2.subClass.isDefined).foreach(error => {
+      val name = error._1
+      val info = error._2
+
+      val subErrorContent = info.subClass.get.toSeq.sortBy(_._1).map(subError => {
+        s"""|## ${subError._1}
+            |
+            |${quoteParameter(subError._2.messageTemplate, s"$name.${subError._1}")}
+            |""".stripMargin
+      }).mkString("\n")
+
+      val subErrorDoc =
+        s"""${getHeader(name + " error class")}
+           |
+           |${getSqlState(info.sqlState)}
+           |
+           |${quoteParameter(info.messageTemplate, name)}
+           |
+           |This error class has the following derived error classes:
+           |
+           |$subErrorContent
+           |""".stripMargin
+
+      val errorDocPath = getWorkspaceFilePath("docs", getErrorPath(name) + ".md")
+      val errorsInDoc = if (errorDocPath.toFile.exists()) {
+        IOUtils.toString(errorDocPath.toUri, StandardCharsets.UTF_8)
+      } else {
+        ""
+      }
+      if (regenerateGoldenFiles) {
+        if (subErrorDoc.trim != errorsInDoc.trim) {
+          logInfo(s"Regenerating sub error class document $errorDocPath")
+          if (errorDocPath.toFile.exists()) {
+            Files.delete(errorDocPath)
+          }
+          FileUtils.writeStringToFile(
+            errorDocPath.toFile,
+            subErrorDoc + lineSeparator,
+            StandardCharsets.UTF_8)
+        }
+      } else {
+        assert(subErrorDoc.trim == errorsInDoc.trim,
+          "The error class document is not up to date. Please regenerate it.")
+      }
+    })
+
+    val parentDocPath = getWorkspaceFilePath("docs", "sql-error-conditions.md")
+    val commonErrorsInDoc = if (parentDocPath.toFile.exists()) {
+      IOUtils.toString(parentDocPath.toUri, StandardCharsets.UTF_8)
+    } else {
+      ""
+    }
+    if (regenerateGoldenFiles) {
+      if (sqlErrorParentDoc.trim != commonErrorsInDoc.trim) {
+        logInfo(s"Regenerating error class document $parentDocPath")
+        if (parentDocPath.toFile.exists()) {
+          Files.delete(parentDocPath)
+        }
+        FileUtils.writeStringToFile(
+          parentDocPath.toFile,
+          sqlErrorParentDoc + lineSeparator,
+          StandardCharsets.UTF_8)
+      }
+    } else {
+      assert(sqlErrorParentDoc.trim == commonErrorsInDoc.trim,
+        "The error class document is not up to date. Please regenerate it.")
     }
   }
 

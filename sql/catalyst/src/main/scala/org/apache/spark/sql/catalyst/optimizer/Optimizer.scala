@@ -30,6 +30,7 @@ import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.catalyst.trees.AlwaysProcess
 import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
+import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
@@ -880,6 +881,10 @@ object ColumnPruning extends Rule[LogicalPlan] {
     case f @ FlatMapGroupsInPandas(_, _, _, child) if !child.outputSet.subsetOf(f.references) =>
       f.copy(child = prunedChild(child, f.references))
     case e @ Expand(_, _, child) if !child.outputSet.subsetOf(e.references) =>
+      e.copy(child = prunedChild(child, e.references))
+
+    // prune unused columns from child of MergeRows for row-level operations
+    case e @ MergeRows(_, _, _, _, _, _, _, child) if !child.outputSet.subsetOf(e.references) =>
       e.copy(child = prunedChild(child, e.references))
 
     // prune unrequired references
@@ -2418,7 +2423,7 @@ object GenerateOptimization extends Rule[LogicalPlan] {
             }
             // As we change the child of the generator, its output data type must be updated.
             val updatedGeneratorOutput = rewrittenG.generatorOutput
-              .zip(rewrittenG.generator.elementSchema.toAttributes)
+              .zip(toAttributes(rewrittenG.generator.elementSchema))
               .map { case (oldAttr, newAttr) =>
                 newAttr.withExprId(oldAttr.exprId).withName(oldAttr.name)
               }

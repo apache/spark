@@ -29,7 +29,7 @@ import scala.util.control.NonFatal
 
 import com.google.common.io.ByteStreams
 
-import org.apache.spark.{SparkConf, TaskContext}
+import org.apache.spark.{SparkConf, SparkException, TaskContext}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.{STORAGE_UNROLL_MEMORY_THRESHOLD, UNROLL_MEMORY_CHECK_PERIOD, UNROLL_MEMORY_GROWTH_FACTOR}
 import org.apache.spark.memory.{MemoryManager, MemoryMode}
@@ -371,7 +371,8 @@ private[spark] class MemoryStore(
     entry match {
       case null => None
       case _: DeserializedMemoryEntry[_] =>
-        throw new IllegalArgumentException("should only call getBytes on serialized blocks")
+        throw SparkException.internalError(
+          "should only call getBytes on serialized blocks", category = "STORAGE")
       case SerializedMemoryEntry(bytes, _, _) => Some(bytes)
     }
   }
@@ -381,7 +382,8 @@ private[spark] class MemoryStore(
     entry match {
       case null => None
       case e: SerializedMemoryEntry[_] =>
-        throw new IllegalArgumentException("should only call getValues on deserialized blocks")
+        throw SparkException.internalError(
+          "should only call getValues on deserialized blocks", category = "STORAGE")
       case DeserializedMemoryEntry(values, _, _, _) =>
         val x = Some(values)
         x.map(_.iterator)
@@ -862,11 +864,13 @@ private[storage] class PartiallySerializedBlock[T](
 
   private def verifyNotConsumedAndNotDiscarded(): Unit = {
     if (consumed) {
-      throw new IllegalStateException(
-        "Can only call one of finishWritingToStream() or valuesIterator() and can only call once.")
+      throw SparkException.internalError(
+        "Can only call one of finishWritingToStream() or valuesIterator() and can only call once.",
+        category = "STORAGE")
     }
     if (discarded) {
-      throw new IllegalStateException("Cannot call methods on a discarded PartiallySerializedBlock")
+      throw SparkException.internalError(
+        "Cannot call methods on a discarded PartiallySerializedBlock", category = "STORAGE")
     }
   }
 

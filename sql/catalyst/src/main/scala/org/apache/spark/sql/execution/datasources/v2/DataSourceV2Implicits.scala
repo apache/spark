@@ -21,6 +21,7 @@ import scala.collection.JavaConverters._
 
 import org.apache.spark.sql.catalyst.analysis.{PartitionSpec, ResolvedPartitionSpec, UnresolvedPartitionSpec}
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, MetadataAttribute}
+import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.connector.catalog.{MetadataColumn, SupportsAtomicPartitionManagement, SupportsDeleteV2, SupportsPartitionManagement, SupportsRead, SupportsWrite, Table, TableCapability, TruncatableTable}
 import org.apache.spark.sql.connector.write.RowLevelOperationTable
 import org.apache.spark.sql.errors.QueryCompilationErrors
@@ -109,7 +110,7 @@ object DataSourceV2Implicits {
       StructType(fields)
     }
 
-    def toAttributes: Seq[AttributeReference] = asStruct.toAttributes
+    def toAttributes: Seq[AttributeReference] = DataTypeUtils.toAttributes(asStruct)
   }
 
   implicit class OptionsHelper(options: Map[String, String]) {

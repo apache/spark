@@ -40,6 +40,7 @@ import org.apache.spark.sql.{DataFrame, SparkSession}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
+import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.catalyst.util.quietly
 import org.apache.spark.sql.connector.{CSVDataWriter, CSVDataWriterFactory, RangeInputPartition, SimpleScanBuilder, SimpleWritableDataSource, TestLocalScanTable}
 import org.apache.spark.sql.connector.catalog.Table
@@ -846,7 +847,7 @@ abstract class SQLAppStatusListenerSuite extends SharedSparkSession with JsonTes
     val oldCount = statusStore.executionsList().size
 
     val schema = new StructType().add("i", "int").add("j", "int")
-    val physicalPlan = BatchScanExec(schema.toAttributes, new CustomMetricScanBuilder(), Seq.empty,
+    val physicalPlan = BatchScanExec(toAttributes(schema), new CustomMetricScanBuilder(), Seq.empty,
       table = new TestLocalScanTable("fake"))
     val dummyQueryExecution = new QueryExecution(spark, LocalRelation()) {
       override lazy val sparkPlan = physicalPlan
@@ -885,7 +886,7 @@ abstract class SQLAppStatusListenerSuite extends SharedSparkSession with JsonTes
     val oldCount = statusStore.executionsList().size
 
     val schema = new StructType().add("i", "int").add("j", "int")
-    val physicalPlan = BatchScanExec(schema.toAttributes, new CustomDriverMetricScanBuilder(),
+    val physicalPlan = BatchScanExec(toAttributes(schema), new CustomDriverMetricScanBuilder(),
       Seq.empty, table = new TestLocalScanTable("fake"))
     val dummyQueryExecution = new QueryExecution(spark, LocalRelation()) {
       override lazy val sparkPlan = physicalPlan

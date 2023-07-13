@@ -524,7 +524,7 @@ private[hive] class HiveClientImpl(
         case HiveTableType.VIRTUAL_VIEW => CatalogTableType.VIEW
         case unsupportedType =>
           val tableTypeStr = unsupportedType.toString.toLowerCase(Locale.ROOT).replace("_", " ")
-          throw QueryCompilationErrors.hiveTableTypeUnsupportedError(tableTypeStr)
+          throw QueryCompilationErrors.hiveTableTypeUnsupportedError(h.getTableName, tableTypeStr)
       },
       schema = schema,
       partitionColumnNames = partCols.map(_.name).toSeq,
