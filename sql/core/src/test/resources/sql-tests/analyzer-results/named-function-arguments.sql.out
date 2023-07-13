@@ -241,7 +241,7 @@ org.apache.spark.sql.AnalysisException
   "messageParameters" : {
     "argumentName" : "`cellular`",
     "functionName" : "`mask`",
-    "proposal" : "`str` `upperChar` `otherChar` "
+    "proposal" : "`str` `upperChar` `otherChar`"
   },
   "queryContext" : [ {
     "objectType" : "",

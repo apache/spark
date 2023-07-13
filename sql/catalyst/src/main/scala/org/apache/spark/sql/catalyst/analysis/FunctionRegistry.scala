@@ -29,7 +29,7 @@ import org.apache.spark.sql.catalyst.FunctionIdentifier
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.expressions.xml._
-import org.apache.spark.sql.catalyst.plans.logical.{FunctionSignature, Generate, LogicalPlan, OneRowRelation, Range, SupportsNamedArguments}
+import org.apache.spark.sql.catalyst.plans.logical.{FunctionBuilderBase, Generate, LogicalPlan, OneRowRelation, Range}
 import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.types._
@@ -907,7 +907,7 @@ object FunctionRegistry {
    * @tparam T The class of the builder
    * @return An argument list in positional order defined by the builder
    */
-  def rearrangeExpressions[T <: Builder[_]](
+  def rearrangeExpressions[T <: FunctionBuilderBase[_]](
       name: String,
       builder: T,
       expressions: Seq[Expression]) : Seq[Expression] = {
@@ -969,9 +969,9 @@ object FunctionRegistry {
 
   private def expressionGeneratorOuter[T <: Generator : ClassTag](name: String)
     : (String, (ExpressionInfo, FunctionBuilder)) = {
-    val (_, (info, generatorBuilder)) = expression[T](name)
+    val (_, (info, builder)) = expression[T](name)
     val outerBuilder = (args: Seq[Expression]) => {
-      GeneratorOuter(generatorBuilder(args).asInstanceOf[Generator])
+      GeneratorOuter(builder(args).asInstanceOf[Generator])
     }
     (name, (info, outerBuilder))
   }
@@ -1070,57 +1070,17 @@ object TableFunctionRegistry {
   val functionSet: Set[FunctionIdentifier] = builtin.listFunction().toSet
 }
 
-trait Builder[T] {
-  /**
-   * A method that returns the signatures of overloads that are associated with this function.
-   * Each function signature includes a list of parameters to which the analyzer can
-   * compare a function call with provided arguments to determine if that function
-   * call is a match for the function signature.
-   *
-   * @return a list of function signatures
-   */
-  def functionSignatures: Option[Seq[FunctionSignature]] = None
-
-  /**
-   * This function rearranges the arguments provided during function invocation in positional order
-   * according to the function signature. This method will fill in the default values if optional
-   * parameters do not have their values specified. Any function which supports named arguments
-   * will have this routine invoked, even if no named arguments are present in the argument list.
-   * This is done to eliminate constructor overloads in some methods which use them for default
-   * values prior to the implementation of the named argument framework. This function will also
-   * check if the number of arguments are correct. If that is not the case, then an error will be
-   * thrown.
-   *
-   * IMPORTANT: This method will be called before the [[Builder.build]] method is invoked. It is
-   * guaranteed that the expressions provided to the [[Builder.build]] functions forms a valid set
-   * of argument expressions that can be used in the construction of the function expression.
-   *
-   * @param expectedSignature The method signature which we rearrange our arguments according to
-   * @param providedArguments The list of arguments passed from function invocation
-   * @param functionName The name of the function
-   * @return The rearranged arugument list with arguments in positional order
-   */
-  def rearrange(
-      expectedSignature: FunctionSignature,
-      providedArguments: Seq[Expression],
-      functionName: String) : Seq[Expression] = {
-    SupportsNamedArguments.defaultRearrange(expectedSignature, providedArguments, functionName)
-  }
-
-  def build(funcName: String, expressions: Seq[Expression]): T
-}
-
 /**
  * A trait used for scalar valued functions that defines how their expression representations
  * are constructed in [[FunctionRegistry]]
  */
-trait ExpressionBuilder extends Builder[Expression]
+trait ExpressionBuilder extends FunctionBuilderBase[Expression]
 
 /**
  * A trait used for table valued functions that defines how their expression representations
  * are constructed in [[TableFunctionRegistry]]
  */
-trait GeneratorBuilder extends Builder[LogicalPlan] {
+trait GeneratorBuilder extends FunctionBuilderBase[LogicalPlan] {
   override final def build(funcName: String, expressions: Seq[Expression]) : LogicalPlan = {
     Generate(
       buildGenerator(funcName, expressions),

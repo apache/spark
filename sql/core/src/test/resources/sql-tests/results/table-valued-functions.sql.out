@@ -330,9 +330,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
   "sqlState" : "42605",
   "messageParameters" : {
-    "actualNum" : "1",
+    "actualNum" : "2",
     "docroot" : "https://spark.apache.org/docs/latest",
-    "expectedNum" : "0",
+    "expectedNum" : "1",
     "functionName" : "`explode`"
   },
   "queryContext" : [ {

@@ -20,7 +20,7 @@ import org.apache.spark.SparkThrowable
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Expression, Literal, NamedArgumentExpression}
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
-import org.apache.spark.sql.catalyst.plans.logical.{FunctionSignature, NamedArgument, SupportsNamedArguments}
+import org.apache.spark.sql.catalyst.plans.logical.{FunctionBuilderBase, FunctionSignature, NamedArgument, NamedArgumentsSupport}
 import org.apache.spark.sql.catalyst.util.TypeUtils.toSQLId
 import org.apache.spark.sql.types.DataType
 
@@ -80,7 +80,7 @@ class NamedArgumentFunctionSuite extends AnalysisTest {
     NamedArgument("k1"), NamedArgument("k2", Option(Literal("v2"))), NamedArgument("k3")))
 
   test("Check rearrangement of expressions") {
-    val rearrangedArgs = SupportsNamedArguments.defaultRearrange(
+    val rearrangedArgs = NamedArgumentsSupport.defaultRearrange(
       signature, args, "function")
     for ((returnedArg, expectedArg) <- rearrangedArgs.zip(expectedSeq)) {
       assert(returnedArg == expectedArg)
@@ -96,10 +96,10 @@ class NamedArgumentFunctionSuite extends AnalysisTest {
                                       expressions: Seq[Expression],
                                       functionName: String = "function"): SparkThrowable = {
     intercept[SparkThrowable](
-      SupportsNamedArguments.defaultRearrange(functionSignature, expressions, functionName))
+      NamedArgumentsSupport.defaultRearrange(functionSignature, expressions, functionName))
   }
 
-  private def parseExternalException[T <: Builder[_]](
+  private def parseExternalException[T <: FunctionBuilderBase[_]](
       functionName: String,
       builder: T,
       expressions: Seq[Expression]) : SparkThrowable = {

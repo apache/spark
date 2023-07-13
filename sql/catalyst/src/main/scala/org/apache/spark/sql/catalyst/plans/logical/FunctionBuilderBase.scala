@@ -19,7 +19,48 @@ package org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.expressions.{Expression, NamedArgumentExpression}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 
-object SupportsNamedArguments {
+trait FunctionBuilderBase[T] {
+  /**
+   * A method that returns the signatures of overloads that are associated with this function.
+   * Each function signature includes a list of parameters to which the analyzer can
+   * compare a function call with provided arguments to determine if that function
+   * call is a match for the function signature.
+   *
+   * @return a list of function signatures
+   */
+  def functionSignatures: Option[Seq[FunctionSignature]] = None
+
+  /**
+   * This function rearranges the arguments provided during function invocation in positional order
+   * according to the function signature. This method will fill in the default values if optional
+   * parameters do not have their values specified. Any function which supports named arguments
+   * will have this routine invoked, even if no named arguments are present in the argument list.
+   * This is done to eliminate constructor overloads in some methods which use them for default
+   * values prior to the implementation of the named argument framework. This function will also
+   * check if the number of arguments are correct. If that is not the case, then an error will be
+   * thrown.
+   *
+   * IMPORTANT: This method will be called before the [[FunctionBuilderBase.build]] method is
+   * invoked. It is guaranteed that the expressions provided to the [[FunctionBuilderBase.build]]
+   * functions forms a valid set of argument expressions that can be used in the construction of
+   * the function expression.
+   *
+   * @param expectedSignature The method signature which we rearrange our arguments according to
+   * @param providedArguments The list of arguments passed from function invocation
+   * @param functionName The name of the function
+   * @return The rearranged argument list with arguments in positional order
+   */
+  def rearrange(
+                 expectedSignature: FunctionSignature,
+                 providedArguments: Seq[Expression],
+                 functionName: String) : Seq[Expression] = {
+    NamedArgumentsSupport.defaultRearrange(expectedSignature, providedArguments, functionName)
+  }
+
+  def build(funcName: String, expressions: Seq[Expression]): T
+}
+
+object NamedArgumentsSupport {
   /**
    * This method is the default routine which rearranges the arguments in positional order according
    * to the function signature provided. This will also fill in any default values that exists for
@@ -76,7 +117,10 @@ object SupportsNamedArguments {
 
     // Check argument list size against provided parameter list length
     if (parameters.size < args.length) {
-      throw QueryCompilationErrors.wrongNumArgsError(functionName, Seq(), parameters.size)
+      val validParameterSizes =
+        Array.range(parameters.count(_.default.isEmpty), parameters.size + 1).toSeq
+      throw QueryCompilationErrors.wrongNumArgsError(
+        functionName, validParameterSizes, args.length)
     }
 
     // This constructs a map from argument name to value for argument rearrangement.
