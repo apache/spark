@@ -47,7 +47,6 @@ trait BroadcastExchangeLike extends Exchange {
   /**
    * The broadcast run ID in job tag
    */
-  @transient
   val runId: UUID = UUID.randomUUID
 
   /**
