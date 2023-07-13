@@ -37,7 +37,11 @@ from pyspark.sql.types import (
     DoubleType,
     StructField,
     IntegerType,
+    BooleanType,
 )
+from pyspark.sql.utils import is_remote
+
+import difflib
 
 
 class UtilsTestsMixin:
@@ -694,16 +698,22 @@ class UtilsTestsMixin:
             schema=["id", "amount"],
         )
 
-        expected_error_msg = (
-            "[df]"
-            + "\n"
-            + str(df1.schema[0])
-            + "\n\n"
-            + "[expected]"
-            + "\n"
-            + str(df2.schema[0])
-            + "\n\n"
-        )
+        if is_remote():
+            # spark connect
+            actual_schema_tree = df1._tree_string()
+            expected_schema_tree = df2._tree_string()
+        else:
+            actual_schema_tree = df1._jdf.schema().treeString()
+            expected_schema_tree = df2._jdf.schema().treeString()
+
+        actual_schema_lst = actual_schema_tree.splitlines()
+        expected_schema_lst = expected_schema_tree.splitlines()
+
+        generated_diff = difflib.ndiff(actual_schema_lst, expected_schema_lst)
+
+        expected_error_msg = "--- actual\n+++ expected\n"
+
+        expected_error_msg += "\n".join(generated_diff)
 
         with self.assertRaises(PySparkAssertionError) as pe:
             assertDataFrameEqual(df1, df2)
@@ -731,9 +741,22 @@ class UtilsTestsMixin:
             schema=["id", "amount", "letter"],
         )
 
-        expected_error_msg = (
-            "[df]" + "\n" + "None" + "\n\n" + "[expected]" + "\n" + str(df2.schema[2]) + "\n\n"
-        )
+        if is_remote():
+            # spark connect
+            actual_schema_tree = df1._tree_string()
+            expected_schema_tree = df2._tree_string()
+        else:
+            actual_schema_tree = df1._jdf.schema().treeString()
+            expected_schema_tree = df2._jdf.schema().treeString()
+
+        actual_schema_lst = actual_schema_tree.splitlines()
+        expected_schema_lst = expected_schema_tree.splitlines()
+
+        generated_diff = difflib.ndiff(actual_schema_lst, expected_schema_lst)
+
+        expected_error_msg = "--- actual\n+++ expected\n"
+
+        expected_error_msg += "\n".join(generated_diff)
 
         with self.assertRaises(PySparkAssertionError) as pe:
             assertDataFrameEqual(df1, df2)
@@ -774,13 +797,26 @@ class UtilsTestsMixin:
         )
         assertSchemaEqual(s1, s2)
 
-    def test_schema_ignore_nullable_array_unequal(self):
+    def test_schema_array_unequal(self):
         s1 = StructType([StructField("names", ArrayType(IntegerType(), True), True)])
         s2 = StructType([StructField("names", ArrayType(DoubleType(), False), False)])
 
-        expected_error_msg = (
-            "[df]" + "\n" + str(s1[0]) + "\n\n" + "[expected]" + "\n" + str(s2[0]) + "\n\n"
-        )
+        if is_remote():
+            # spark connect
+            actual_schema_tree = self.spark.createDataFrame([], s1)._tree_string()
+            expected_schema_tree = self.spark.createDataFrame([], s2)._tree_string()
+        else:
+            actual_schema_tree = self.spark.createDataFrame([], s1)._jdf.schema().treeString()
+            expected_schema_tree = self.spark.createDataFrame([], s2)._jdf.schema().treeString()
+
+        actual_schema_lst = actual_schema_tree.splitlines()
+        expected_schema_lst = expected_schema_tree.splitlines()
+
+        generated_diff = difflib.ndiff(actual_schema_lst, expected_schema_lst)
+
+        expected_error_msg = "--- actual\n+++ expected\n"
+
+        expected_error_msg += "\n".join(generated_diff)
 
         with self.assertRaises(PySparkAssertionError) as pe:
             assertSchemaEqual(s1, s2)
@@ -791,7 +827,7 @@ class UtilsTestsMixin:
             message_parameters={"error_msg": expected_error_msg},
         )
 
-    def test_schema_ignore_nullable_struct_unequal(self):
+    def test_schema_struct_unequal(self):
         s1 = StructType(
             [StructField("names", StructType([StructField("age", DoubleType(), True)]), True)]
         )
@@ -799,9 +835,79 @@ class UtilsTestsMixin:
             [StructField("names", StructType([StructField("age", IntegerType(), True)]), True)]
         )
 
-        expected_error_msg = (
-            "[df]" + "\n" + str(s1[0]) + "\n\n" + "[expected]" + "\n" + str(s2[0]) + "\n\n"
+        if is_remote():
+            # spark connect
+            actual_schema_tree = self.spark.createDataFrame([], s1)._tree_string()
+            expected_schema_tree = self.spark.createDataFrame([], s2)._tree_string()
+        else:
+            actual_schema_tree = self.spark.createDataFrame([], s1)._jdf.schema().treeString()
+            expected_schema_tree = self.spark.createDataFrame([], s2)._jdf.schema().treeString()
+
+        actual_schema_lst = actual_schema_tree.splitlines()
+        expected_schema_lst = expected_schema_tree.splitlines()
+
+        generated_diff = difflib.ndiff(actual_schema_lst, expected_schema_lst)
+
+        expected_error_msg = "--- actual\n+++ expected\n"
+
+        expected_error_msg += "\n".join(generated_diff)
+
+        with self.assertRaises(PySparkAssertionError) as pe:
+            assertSchemaEqual(s1, s2)
+
+        self.check_error(
+            exception=pe.exception,
+            error_class="DIFFERENT_SCHEMA",
+            message_parameters={"error_msg": expected_error_msg},
         )
+
+    def test_schema_more_nested_struct_unequal(self):
+        s1 = StructType(
+            [
+                StructField(
+                    "name",
+                    StructType(
+                        [
+                            StructField("firstname", StringType(), True),
+                            StructField("middlename", StringType(), True),
+                            StructField("lastname", StringType(), True),
+                        ]
+                    ),
+                ),
+            ]
+        )
+
+        s2 = StructType(
+            [
+                StructField(
+                    "name",
+                    StructType(
+                        [
+                            StructField("firstname", StringType(), True),
+                            StructField("middlename", BooleanType(), True),
+                            StructField("lastname", StringType(), True),
+                        ]
+                    ),
+                ),
+            ]
+        )
+
+        if is_remote():
+            # spark connect
+            actual_schema_tree = self.spark.createDataFrame([], s1)._tree_string()
+            expected_schema_tree = self.spark.createDataFrame([], s2)._tree_string()
+        else:
+            actual_schema_tree = self.spark.createDataFrame([], s1)._jdf.schema().treeString()
+            expected_schema_tree = self.spark.createDataFrame([], s2)._jdf.schema().treeString()
+
+        actual_schema_lst = actual_schema_tree.splitlines()
+        expected_schema_lst = expected_schema_tree.splitlines()
+
+        generated_diff = difflib.ndiff(actual_schema_lst, expected_schema_lst)
+
+        expected_error_msg = "--- actual\n+++ expected\n"
+
+        expected_error_msg += "\n".join(generated_diff)
 
         with self.assertRaises(PySparkAssertionError) as pe:
             assertSchemaEqual(s1, s2)

@@ -30,6 +30,7 @@ from typing import (
     Tuple,
 )
 from itertools import zip_longest
+import difflib
 
 from pyspark import SparkContext, SparkConf
 from pyspark.errors import PySparkAssertionError, PySparkException
@@ -264,6 +265,10 @@ def assertSchemaEqual(actual: StructType, expected: StructType):
             message_parameters={"data_type": type(expected)},
         )
 
+    from pyspark.sql import SparkSession
+
+    spark = SparkSession.builder.appName("assertSchemaEqual").getOrCreate()
+
     def compare_schemas_ignore_nullable(s1, s2):
         if len(s1) != len(s2):
             return False
@@ -295,26 +300,18 @@ def assertSchemaEqual(actual: StructType, expected: StructType):
         else:
             return False
 
-    schemas_equal = True
-    error_msg = ""
-
     if not compare_schemas_ignore_nullable(actual, expected):
-        zipped = zip_longest(actual, expected)
-        for actualSF, expectedSF in zipped:
-            if not compare_structfields_ignore_nullable(actualSF, expectedSF):
-                schemas_equal = False
-                error_msg += (
-                    "[df]"
-                    + "\n"
-                    + str(actualSF)
-                    + "\n\n"
-                    + "[expected]"
-                    + "\n"
-                    + str(expectedSF)
-                    + "\n\n"
-                )
+        actual_schema_tree = spark.createDataFrame([], actual)._jdf.schema().treeString()
+        expected_schema_tree = spark.createDataFrame([], expected)._jdf.schema().treeString()
+        actual_schema_lst = actual_schema_tree.splitlines()
+        expected_schema_lst = expected_schema_tree.splitlines()
 
-    if not schemas_equal:
+        generated_diff = difflib.ndiff(actual_schema_lst, expected_schema_lst)
+
+        error_msg = "--- actual\n+++ expected\n"
+
+        error_msg += "\n".join(generated_diff)
+
         raise PySparkAssertionError(
             error_class="DIFFERENT_SCHEMA",
             message_parameters={"error_msg": error_msg},
