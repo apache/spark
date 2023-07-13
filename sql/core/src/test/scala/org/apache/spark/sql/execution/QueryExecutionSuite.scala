@@ -18,7 +18,8 @@ package org.apache.spark.sql.execution
 
 import scala.io.Source
 
-import org.apache.spark.sql.{AnalysisException, FastOperator}
+import org.apache.spark.sql.{AnalysisException, Dataset, FastOperator}
+import org.apache.spark.sql.catalyst.{QueryPlanningTracker, QueryPlanningTrackerCallback}
 import org.apache.spark.sql.catalyst.analysis.UnresolvedNamespace
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.catalyst.plans.QueryPlan
@@ -244,18 +245,27 @@ class QueryExecutionSuite extends SharedSparkSession {
   }
 
   test("SPARK-35378: Eagerly execute non-root Command") {
-    def qe(logicalPlan: LogicalPlan): QueryExecution = new QueryExecution(spark, logicalPlan)
+    val mockCallback1 = MockCallbackEagerCommand()
+    val mockCallback2 = MockCallbackEagerCommand()
+    def qe(logicalPlan: LogicalPlan, callback: QueryPlanningTrackerCallback): QueryExecution =
+      new QueryExecution(spark, logicalPlan, new QueryPlanningTracker(Some(callback)))
 
     val showTables = ShowTables(UnresolvedNamespace(Seq.empty[String]), None)
-    val showTablesQe = qe(showTables)
+    val showTablesQe = qe(showTables, mockCallback1)
+    showTablesQe.assertAnalyzed
+    mockCallback1.assertAnalyzed
     assert(showTablesQe.commandExecuted.isInstanceOf[CommandResult])
+    mockCallback1.assertCommandExecuted
     assert(showTablesQe.executedPlan.isInstanceOf[CommandResultExec])
     val showTablesResultExec = showTablesQe.executedPlan.asInstanceOf[CommandResultExec]
     assert(showTablesResultExec.commandPhysicalPlan.isInstanceOf[ShowTablesExec])
 
     val project = Project(showTables.output, SubqueryAlias("s", showTables))
-    val projectQe = qe(project)
+    val projectQe = qe(project, mockCallback2)
+    projectQe.assertAnalyzed
+    mockCallback2.assertAnalyzed
     assert(projectQe.commandExecuted.isInstanceOf[Project])
+    mockCallback2.assertCommandExecuted
     assert(projectQe.commandExecuted.children.length == 1)
     assert(projectQe.commandExecuted.children(0).isInstanceOf[SubqueryAlias])
     assert(projectQe.commandExecuted.children(0).children.length == 1)
@@ -263,6 +273,39 @@ class QueryExecutionSuite extends SharedSparkSession {
     assert(projectQe.executedPlan.isInstanceOf[CommandResultExec])
     val cmdResultExec = projectQe.executedPlan.asInstanceOf[CommandResultExec]
     assert(cmdResultExec.commandPhysicalPlan.isInstanceOf[ShowTablesExec])
+  }
+
+  test("SPARK-44145: non eagerly executed command setReadyForExecution") {
+    val mockCallback = MockCallback()
+
+    val showTables = ShowTables(UnresolvedNamespace(Seq.empty[String]), None)
+    val showTablesQe = new QueryExecution(
+      spark,
+      showTables,
+      new QueryPlanningTracker(Some(mockCallback)),
+      CommandExecutionMode.SKIP)
+    showTablesQe.assertAnalyzed
+    mockCallback.assertAnalyzed
+    showTablesQe.assertOptimized
+    mockCallback.assertOptimized
+    showTablesQe.assertSparkPlanPrepared
+    mockCallback.assertSparkPlanPrepared
+    showTablesQe.assertExecutedPlanPrepared
+    mockCallback.assertExecutedPlanPrepared
+  }
+
+  test("SPARK-44145: Plan setReadyForExecution") {
+    val mockCallback = MockCallback()
+    val plan: LogicalPlan = org.apache.spark.sql.catalyst.plans.logical.Range(0, 1, 1, 1)
+    val df = Dataset.ofRows(spark, plan, new QueryPlanningTracker(Some(mockCallback)))
+    df.queryExecution.assertAnalyzed
+    mockCallback.assertAnalyzed
+    df.queryExecution.assertOptimized
+    mockCallback.assertOptimized
+    df.queryExecution.assertSparkPlanPrepared
+    mockCallback.assertSparkPlanPrepared
+    df.queryExecution.assertExecutedPlanPrepared
+    mockCallback.assertExecutedPlanPrepared
   }
 
   test("SPARK-35378: Return UnsafeRow in CommandResultExecCheck execute methods") {
@@ -288,6 +331,83 @@ class QueryExecutionSuite extends SharedSparkSession {
             s"Specify maxFields = $maxFields doesn't take effect when explainMode is $modeName")
         }
       }
+    }
+  }
+
+  case class MockCallbackEagerCommand(
+      var trackerAnalyzed: QueryPlanningTracker = null,
+      var trackerReadyForExecution: QueryPlanningTracker = null)
+      extends QueryPlanningTrackerCallback {
+    def analyzed(trackerFromCallback: QueryPlanningTracker, plan: LogicalPlan): Unit = {
+      trackerAnalyzed = trackerFromCallback
+      assert(trackerAnalyzed.phases.keySet.contains(QueryPlanningTracker.ANALYSIS))
+      assert(!trackerAnalyzed.phases.keySet.contains(QueryPlanningTracker.OPTIMIZATION))
+      assert(!trackerAnalyzed.phases.keySet.contains(QueryPlanningTracker.PLANNING))
+      assert(plan != null)
+    }
+    def readyForExecution(trackerFromCallback: QueryPlanningTracker): Unit = {
+      trackerReadyForExecution = trackerFromCallback
+      assert(trackerReadyForExecution.phases.keySet.contains(QueryPlanningTracker.ANALYSIS))
+      assert(!trackerReadyForExecution.phases.keySet.contains(QueryPlanningTracker.OPTIMIZATION))
+      assert(!trackerReadyForExecution.phases.keySet.contains(QueryPlanningTracker.PLANNING))
+    }
+    def assertAnalyzed(): Unit = {
+      assert(trackerAnalyzed != null)
+      assert(trackerReadyForExecution == null)
+    }
+    def assertCommandExecuted(): Unit = {
+      assert(trackerAnalyzed != null)
+      assert(trackerReadyForExecution != null)
+    }
+    def assertOptimized(): Unit = {
+      assert(trackerAnalyzed != null)
+      assert(trackerReadyForExecution != null)
+    }
+    def assertSparkPlanPrepared(): Unit = {
+      assert(trackerAnalyzed != null)
+      assert(trackerReadyForExecution != null)
+    }
+    def assertExecutedPlanPrepared(): Unit = {
+      assert(trackerAnalyzed != null)
+      assert(trackerReadyForExecution != null)
+    }
+  }
+  case class MockCallback(
+      var trackerAnalyzed: QueryPlanningTracker = null,
+      var trackerReadyForExecution: QueryPlanningTracker = null)
+      extends QueryPlanningTrackerCallback {
+    def analyzed(trackerFromCallback: QueryPlanningTracker, plan: LogicalPlan): Unit = {
+      trackerAnalyzed = trackerFromCallback
+      assert(trackerAnalyzed.phases.keySet.contains(QueryPlanningTracker.ANALYSIS))
+      assert(!trackerAnalyzed.phases.keySet.contains(QueryPlanningTracker.OPTIMIZATION))
+      assert(!trackerAnalyzed.phases.keySet.contains(QueryPlanningTracker.PLANNING))
+      assert(plan != null)
+    }
+    def readyForExecution(trackerFromCallback: QueryPlanningTracker): Unit = {
+      trackerReadyForExecution = trackerFromCallback
+      assert(trackerReadyForExecution.phases.keySet.contains(QueryPlanningTracker.ANALYSIS))
+      assert(trackerReadyForExecution.phases.keySet.contains(QueryPlanningTracker.OPTIMIZATION))
+      assert(trackerReadyForExecution.phases.keySet.contains(QueryPlanningTracker.PLANNING))
+    }
+    def assertAnalyzed(): Unit = {
+      assert(trackerAnalyzed != null)
+      assert(trackerReadyForExecution == null)
+    }
+    def assertCommandExecuted(): Unit = {
+      assert(trackerAnalyzed != null)
+      assert(trackerReadyForExecution == null)
+    }
+    def assertOptimized(): Unit = {
+      assert(trackerAnalyzed != null)
+      assert(trackerReadyForExecution == null)
+    }
+    def assertSparkPlanPrepared(): Unit = {
+      assert(trackerAnalyzed != null)
+      assert(trackerReadyForExecution == null)
+    }
+    def assertExecutedPlanPrepared(): Unit = {
+      assert(trackerAnalyzed != null)
+      assert(trackerReadyForExecution != null)
     }
   }
 }

@@ -35,8 +35,10 @@ class ArrowPythonRunner(
     protected override val timeZoneId: String,
     protected override val largeVarTypes: Boolean,
     protected override val workerConf: Map[String, String],
-    val pythonMetrics: Map[String, SQLMetric])
-  extends BasePythonRunner[Iterator[InternalRow], ColumnarBatch](funcs, evalType, argOffsets)
+    val pythonMetrics: Map[String, SQLMetric],
+    jobArtifactUUID: Option[String])
+  extends BasePythonRunner[Iterator[InternalRow], ColumnarBatch](
+    funcs, evalType, argOffsets, jobArtifactUUID)
   with BasicPythonArrowInput
   with BasicPythonArrowOutput {
 

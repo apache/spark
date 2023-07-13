@@ -155,11 +155,15 @@ class ReusedConnectTestCase(unittest.TestCase, SQLTestUtils, PySparkErrorTestUti
         return conf
 
     @classmethod
+    def master(cls):
+        return "local[4]"
+
+    @classmethod
     def setUpClass(cls):
         cls.spark = (
             PySparkSession.builder.config(conf=cls.conf())
             .appName(cls.__name__)
-            .remote("local[4]")
+            .remote(cls.master())
             .getOrCreate()
         )
         cls.tempdir = tempfile.NamedTemporaryFile(delete=False)

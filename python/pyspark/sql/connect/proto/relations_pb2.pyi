@@ -967,25 +967,22 @@ class Join(google.protobuf.message.Message):
     class JoinDataType(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
-        IS_LEFT_FLATTENABLE_TO_ROW_FIELD_NUMBER: builtins.int
-        IS_RIGHT_FLATTENABLE_TO_ROW_FIELD_NUMBER: builtins.int
-        is_left_flattenable_to_row: builtins.bool
-        """If the left data type is a struct that can be flatten to a row."""
-        is_right_flattenable_to_row: builtins.bool
-        """If the right data type is a struct that can be flatten to a row."""
+        IS_LEFT_STRUCT_FIELD_NUMBER: builtins.int
+        IS_RIGHT_STRUCT_FIELD_NUMBER: builtins.int
+        is_left_struct: builtins.bool
+        """If the left data type is a struct."""
+        is_right_struct: builtins.bool
+        """If the right data type is a struct."""
         def __init__(
             self,
             *,
-            is_left_flattenable_to_row: builtins.bool = ...,
-            is_right_flattenable_to_row: builtins.bool = ...,
+            is_left_struct: builtins.bool = ...,
+            is_right_struct: builtins.bool = ...,
         ) -> None: ...
         def ClearField(
             self,
             field_name: typing_extensions.Literal[
-                "is_left_flattenable_to_row",
-                b"is_left_flattenable_to_row",
-                "is_right_flattenable_to_row",
-                b"is_right_flattenable_to_row",
+                "is_left_struct", b"is_left_struct", "is_right_struct", b"is_right_struct"
             ],
         ) -> None: ...
 

@@ -58,9 +58,7 @@ private[sql] class SparkResult[T](
   /**
    * Update RowEncoder and recursively update the fields of the ProductEncoder if found.
    */
-  private def createEncoder[_](
-      enc: AgnosticEncoder[_],
-      dataType: DataType): AgnosticEncoder[_] = {
+  private def createEncoder(enc: AgnosticEncoder[_], dataType: DataType): AgnosticEncoder[_] = {
     enc match {
       case UnboundRowEncoder =>
         // Replace the row encoder with the encoder inferred from the schema.
@@ -101,7 +99,6 @@ private[sql] class SparkResult[T](
           }
           while (reader.loadNextBatch()) {
             val rowCount = root.getRowCount
-            assert(root.getRowCount == response.getArrowBatch.getRowCount) // HUH!
             if (rowCount > 0) {
               val vectors = root.getFieldVectors.asScala
                 .map(v => new ArrowColumnVector(transferToNewVector(v)))

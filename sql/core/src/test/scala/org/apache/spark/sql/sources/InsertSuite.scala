@@ -657,18 +657,25 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
           exception = intercept[AnalysisException] {
             sql("insert into t select 1L, 2")
           },
-          errorClass = "_LEGACY_ERROR_TEMP_1204",
-          parameters = Map("tableName" -> "`spark_catalog`.`default`.`t`",
-            "errors" -> "Cannot safely cast 'i': bigint to int"))
+          errorClass = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_SAFELY_CAST",
+          parameters = Map(
+            "tableName" -> "`spark_catalog`.`default`.`t`",
+            "colName" -> "`i`",
+            "srcType" -> "\"BIGINT\"",
+            "targetType" -> "\"INT\"")
+        )
 
         checkError(
           exception = intercept[AnalysisException] {
             sql("insert into t select 1, 2.0")
           },
-          errorClass = "_LEGACY_ERROR_TEMP_1204",
+          errorClass = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_SAFELY_CAST",
           parameters = Map(
             "tableName" -> "`spark_catalog`.`default`.`t`",
-            "errors" -> "Cannot safely cast 'd': decimal(2,1) to double"))
+            "colName" -> "`d`",
+            "srcType" -> "\"DECIMAL(2,1)\"",
+            "targetType" -> "\"DOUBLE\"")
+        )
 
         checkError(
           exception = intercept[AnalysisException] {
@@ -697,31 +704,34 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
           exception = intercept[AnalysisException] {
             sql("insert into t values('a', 'b')")
           },
-          errorClass = "_LEGACY_ERROR_TEMP_1204",
+          errorClass = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_SAFELY_CAST",
           parameters = Map(
             "tableName" -> "`spark_catalog`.`default`.`t`",
-            "errors" -> ("Cannot safely cast 'i': string to int\n- " +
-              "Cannot safely cast 'd': string to double"))
+            "colName" -> "`i`",
+            "srcType" -> "\"STRING\"",
+            "targetType" -> "\"INT\"")
         )
         checkError(
           exception = intercept[AnalysisException] {
             sql("insert into t values(now(), now())")
           },
-          errorClass = "_LEGACY_ERROR_TEMP_1204",
+          errorClass = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_SAFELY_CAST",
           parameters = Map(
             "tableName" -> "`spark_catalog`.`default`.`t`",
-            "errors" -> ("Cannot safely cast 'i': timestamp to int\n- " +
-              "Cannot safely cast 'd': timestamp to double"))
+            "colName" -> "`i`",
+            "srcType" -> "\"TIMESTAMP\"",
+            "targetType" -> "\"INT\"")
         )
         checkError(
           exception = intercept[AnalysisException] {
             sql("insert into t values(true, false)")
           },
-          errorClass = "_LEGACY_ERROR_TEMP_1204",
+          errorClass = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_SAFELY_CAST",
           parameters = Map(
             "tableName" -> "`spark_catalog`.`default`.`t`",
-            "errors" -> ("Cannot safely cast 'i': boolean to int\n- " +
-              "Cannot safely cast 'd': boolean to double"))
+            "colName" -> "`i`",
+            "srcType" -> "\"BOOLEAN\"",
+            "targetType" -> "\"INT\"")
         )
       }
     }
@@ -839,11 +849,12 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
           exception = intercept[AnalysisException] {
             sql("INSERT INTO t VALUES (TIMESTAMP('2010-09-02 14:10:10'), 1)")
           },
-          errorClass = "_LEGACY_ERROR_TEMP_1204",
+          errorClass = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_SAFELY_CAST",
           parameters = Map(
             "tableName" -> "`spark_catalog`.`default`.`t`",
-            "errors" -> ("Cannot safely cast 'i': timestamp to int\n- " +
-              "Cannot safely cast 't': int to timestamp"))
+            "colName" -> "`i`",
+            "srcType" -> "\"TIMESTAMP\"",
+            "targetType" -> "\"INT\"")
         )
       }
 
@@ -853,11 +864,12 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
           exception = intercept[AnalysisException] {
             sql("INSERT INTO t VALUES (date('2010-09-02'), 1)")
           },
-          errorClass = "_LEGACY_ERROR_TEMP_1204",
+          errorClass = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_SAFELY_CAST",
           parameters = Map(
             "tableName" -> "`spark_catalog`.`default`.`t`",
-            "errors" -> ("Cannot safely cast 'i': date to int\n- " +
-              "Cannot safely cast 'd': int to date"))
+            "colName" -> "`i`",
+            "srcType" -> "\"DATE\"",
+            "targetType" -> "\"INT\"")
         )
       }
 
@@ -867,11 +879,12 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
           exception = intercept[AnalysisException] {
             sql("INSERT INTO t VALUES (TIMESTAMP('2010-09-02 14:10:10'), true)")
           },
-          errorClass = "_LEGACY_ERROR_TEMP_1204",
-          parameters = Map(
-            "tableName" -> "`spark_catalog`.`default`.`t`",
-            "errors" -> ("Cannot safely cast 'b': timestamp to boolean\n- " +
-              "Cannot safely cast 't': boolean to timestamp"))
+            errorClass = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_SAFELY_CAST",
+            parameters = Map(
+              "tableName" -> "`spark_catalog`.`default`.`t`",
+              "colName" -> "`b`",
+              "srcType" -> "\"TIMESTAMP\"",
+              "targetType" -> "\"BOOLEAN\"")
         )
       }
 
@@ -881,11 +894,12 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
           exception = intercept[AnalysisException] {
             sql("INSERT INTO t VALUES (date('2010-09-02'), true)")
           },
-          errorClass = "_LEGACY_ERROR_TEMP_1204",
-          parameters = Map(
-            "tableName" -> "`spark_catalog`.`default`.`t`",
-            "errors" -> ("Cannot safely cast 'b': date to boolean\n- " +
-              "Cannot safely cast 'd': boolean to date"))
+            errorClass = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_SAFELY_CAST",
+            parameters = Map(
+              "tableName" -> "`spark_catalog`.`default`.`t`",
+              "colName" -> "`b`",
+              "srcType" -> "\"DATE\"",
+              "targetType" -> "\"BOOLEAN\"")
         )
       }
     }
@@ -1374,10 +1388,10 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
           exception = intercept[AnalysisException] {
             sql("insert into t (i) values (true)")
           },
-          errorClass = "_LEGACY_ERROR_TEMP_1204",
+          errorClass = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_FIND_DATA",
           parameters = Map(
             "tableName" -> "`spark_catalog`.`default`.`t`",
-            "errors" -> "Cannot find data for output column 's'"))
+            "colName" -> "`s`"))
       }
       withTable("t") {
         sql("create table t(i boolean default true, s bigint) using parquet")
@@ -1385,10 +1399,10 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
           exception = intercept[AnalysisException] {
             sql("insert into t (i) values (default)")
           },
-          errorClass = "_LEGACY_ERROR_TEMP_1204",
+          errorClass = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_FIND_DATA",
           parameters = Map(
             "tableName" -> "`spark_catalog`.`default`.`t`",
-            "errors" -> "Cannot find data for output column 's'"))
+            "colName" -> "`s`"))
       }
       withTable("t") {
         sql("create table t(i boolean, s bigint default 42) using parquet")
@@ -1396,10 +1410,10 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
           exception = intercept[AnalysisException] {
             sql("insert into t (s) values (default)")
           },
-          errorClass = "_LEGACY_ERROR_TEMP_1204",
+          errorClass = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_FIND_DATA",
           parameters = Map(
             "tableName" -> "`spark_catalog`.`default`.`t`",
-            "errors" -> "Cannot find data for output column 'i'"))
+            "colName" -> "`i`"))
       }
       withTable("t") {
         sql("create table t(i boolean, s bigint, q int) using parquet partitioned by (i)")
@@ -1407,10 +1421,10 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
           exception = intercept[AnalysisException] {
             sql("insert into t partition(i='true') (s) values(5)")
           },
-          errorClass = "_LEGACY_ERROR_TEMP_1204",
+          errorClass = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_FIND_DATA",
           parameters = Map(
             "tableName" -> "`spark_catalog`.`default`.`t`",
-            "errors" -> "Cannot find data for output column 'q'"))
+            "colName" -> "`q`"))
       }
       withTable("t") {
         sql("create table t(i boolean, s bigint, q int) using parquet partitioned by (i)")
@@ -1418,10 +1432,10 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
           exception = intercept[AnalysisException] {
             sql("insert into t partition(i='false') (q) select 43")
           },
-          errorClass = "_LEGACY_ERROR_TEMP_1204",
+          errorClass = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_FIND_DATA",
           parameters = Map(
             "tableName" -> "`spark_catalog`.`default`.`t`",
-            "errors" -> "Cannot find data for output column 's'"))
+            "colName" -> "`s`"))
       }
       withTable("t") {
         sql("create table t(i boolean, s bigint, q int) using parquet partitioned by (i)")
@@ -1429,10 +1443,10 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
           exception = intercept[AnalysisException] {
             sql("insert into t partition(i='false') (q) select default")
           },
-          errorClass = "_LEGACY_ERROR_TEMP_1204",
+          errorClass = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_FIND_DATA",
           parameters = Map(
             "tableName" -> "`spark_catalog`.`default`.`t`",
-            "errors" -> "Cannot find data for output column 's'"))
+            "colName" -> "`s`"))
       }
     }
     // When the CASE_SENSITIVE configuration is enabled, then using different cases for the required

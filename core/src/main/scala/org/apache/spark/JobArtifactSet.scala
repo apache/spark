@@ -69,13 +69,15 @@ private[spark] object JobArtifactSet {
   // For testing.
   def defaultJobArtifactSet: JobArtifactSet = SparkContext.getActive.map(
     getActiveOrDefault).getOrElse(emptyJobArtifactSet)
+  // For testing
+  var lastSeenState: Option[JobArtifactState] = None
 
   private[this] val currentClientSessionState: ThreadLocal[Option[JobArtifactState]] =
     new ThreadLocal[Option[JobArtifactState]] {
       override def initialValue(): Option[JobArtifactState] = None
     }
 
-  def getCurrentClientSessionState: Option[JobArtifactState] = currentClientSessionState.get()
+  def getCurrentJobArtifactState: Option[JobArtifactState] = currentClientSessionState.get()
 
   /**
    * Set the Spark Connect specific information in the active client to the underlying
@@ -88,6 +90,7 @@ private[spark] object JobArtifactSet {
   def withActiveJobArtifactState[T](state: JobArtifactState)(block: => T): T = {
     val oldState = currentClientSessionState.get()
     currentClientSessionState.set(Option(state))
+    lastSeenState = Option(state)
     try block finally {
       currentClientSessionState.set(oldState)
     }
