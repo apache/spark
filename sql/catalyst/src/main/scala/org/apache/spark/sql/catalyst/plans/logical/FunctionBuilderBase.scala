@@ -19,16 +19,27 @@ package org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.expressions.{Expression, NamedArgumentExpression}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 
+/**
+ * This is a base trait that is used for implementing builder classes that can be used to construct
+ * expressions or logical plans depending on if it is a table-valued or scala-valued function.
+ *
+ * Two classes of builders currently exist for this trait: [[GeneratorBuilder]] and
+ * [[ExpressionBuilder]]. If a new class of functions are to be added, a new trait should also be
+ * created which extends this trait.
+ *
+ * @tparam T The type that is expected to be returned by the [[FunctionBuilderBase.build]] function
+ */
 trait FunctionBuilderBase[T] {
   /**
-   * A method that returns the signatures of overloads that are associated with this function.
+   * A method that returns the method signature for this function.
    * Each function signature includes a list of parameters to which the analyzer can
    * compare a function call with provided arguments to determine if that function
    * call is a match for the function signature.
    *
-   * @return a list of function signatures
+   * IMPORTANT: For now, each function expression builder should only one function signature.
+   * Also, for any function signature, required arguments must always come before optional ones.
    */
-  def functionSignatures: Option[Seq[FunctionSignature]] = None
+  def functionSignature: Option[FunctionSignature] = None
 
   /**
    * This function rearranges the arguments provided during function invocation in positional order
@@ -51,9 +62,9 @@ trait FunctionBuilderBase[T] {
    * @return The rearranged argument list with arguments in positional order
    */
   def rearrange(
-                 expectedSignature: FunctionSignature,
-                 providedArguments: Seq[Expression],
-                 functionName: String) : Seq[Expression] = {
+      expectedSignature: FunctionSignature,
+      providedArguments: Seq[Expression],
+      functionName: String) : Seq[Expression] = {
     NamedArgumentsSupport.defaultRearrange(expectedSignature, providedArguments, functionName)
   }
 
@@ -65,7 +76,7 @@ object NamedArgumentsSupport {
    * This method is the default routine which rearranges the arguments in positional order according
    * to the function signature provided. This will also fill in any default values that exists for
    * optional arguments. This method will also be invoked even if there are no named arguments in
-   * the argument list.
+   * the argument list. This method will keep all positional arguments in their original order.
    *
    * @param functionSignature The function signature that defines the positional ordering
    * @param args The argument list provided in function invocation
@@ -115,7 +126,7 @@ object NamedArgumentsSupport {
       }
     }
 
-    // Check argument list size against provided parameter list length
+    // Check the argument list size against the provided parameter list length.
     if (parameters.size < args.length) {
       val validParameterSizes =
         Array.range(parameters.count(_.default.isEmpty), parameters.size + 1).toSeq
@@ -140,7 +151,9 @@ object NamedArgumentsSupport {
         }
       )
     }
-    positionalArgs ++ rearrangedNamedArgs
+    val rearrangedArgs = positionalArgs ++ rearrangedNamedArgs
+    assert(rearrangedArgs.size == parameters.size)
+    rearrangedArgs
   }
 }
 

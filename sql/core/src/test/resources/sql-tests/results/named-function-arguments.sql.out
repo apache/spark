@@ -130,6 +130,28 @@ org.apache.spark.sql.AnalysisException
 
 
 -- !query
+SELECT * FROM explode(collection => explode(collection => array(1, 2)))
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "NAMED_ARGUMENTS_NOT_SUPPORTED",
+  "sqlState" : "4274K",
+  "messageParameters" : {
+    "functionName" : "`explode1`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 37,
+    "stopIndex" : 70,
+    "fragment" : "explode(collection => array(1, 2))"
+  } ]
+}
+
+
+-- !query
 SELECT mask(lowerChar => 'q', 'AbCD123-@$#', upperChar => 'Q', otherChar => 'o', digitChar => 'd')
 -- !query schema
 struct<>
@@ -254,7 +276,7 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "NAMED_ARGUMENTS_NOT_SUPPORTED",
   "sqlState" : "4274K",
   "messageParameters" : {
-    "functionName" : "`encode`"
+    "functionName" : "`encode1`"
   },
   "queryContext" : [ {
     "objectType" : "",

@@ -211,13 +211,13 @@ case class CountMinSketchAgg(
 }
 
 object CountMinSketchAggExpressionBuilder extends ExpressionBuilder {
-  final val functionSignature = FunctionSignature(Seq(
+  final val defaultFunctionSignature = FunctionSignature(Seq(
     NamedArgument("column"),
     NamedArgument("epsilon"),
     NamedArgument("confidence"),
     NamedArgument("seed")
   ))
-  override def functionSignatures: Option[Seq[FunctionSignature]] = Some(Seq(functionSignature))
+  override def functionSignature: Option[FunctionSignature] = Some(defaultFunctionSignature)
   override def build(funcName: String, expressions: Seq[Expression]): Expression = {
     new CountMinSketchAgg(expressions(0), expressions(1), expressions(2), expressions(3))
   }

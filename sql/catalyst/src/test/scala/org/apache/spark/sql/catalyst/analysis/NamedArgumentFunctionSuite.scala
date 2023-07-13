@@ -47,21 +47,8 @@ object DummyExpressionBuilder extends ExpressionBuilder  {
       NamedArgument("k4")))
   }
 
-  override def functionSignatures: Option[Seq[FunctionSignature]] =
-    Some(Seq(defaultFunctionSignature))
-  override def build(funcName: String, expressions: Seq[Expression]): Expression =
-    DummyExpression(expressions(0), expressions(1), expressions(2), expressions(3))
-}
-
-object IllegalExpressionBuilder extends ExpressionBuilder  {
-  def defaultFunctionSignature: FunctionSignature = {
-    FunctionSignature(Seq(NamedArgument("k1"),
-      NamedArgument("k2"),
-      NamedArgument("k3"),
-      NamedArgument("k4")))
-  }
-  override def functionSignatures: Option[Seq[FunctionSignature]] =
-    Some(Seq(defaultFunctionSignature, defaultFunctionSignature))
+  override def functionSignature: Option[FunctionSignature] =
+    Some(defaultFunctionSignature)
   override def build(funcName: String, expressions: Seq[Expression]): Expression =
     DummyExpression(expressions(0), expressions(1), expressions(2), expressions(3))
 }
@@ -109,7 +96,7 @@ class NamedArgumentFunctionSuite extends AnalysisTest {
 
   test("DUPLICATE_ROUTINE_PARAMETER_ASSIGNMENT") {
     val errorClass =
-      "DUPLICATE_ROUTINE_PARAMETER_ASSIGNMENT.POSITIONAL_AND_NAMED_ARGUMENT_DOUBLE_REFERENCE"
+      "DUPLICATE_ROUTINE_PARAMETER_ASSIGNMENT.BOTH_POSITIONAL_AND_NAMED"
     checkError(
       exception = parseRearrangeException(
         signature, Seq(k1Arg, k2Arg, k3Arg, k4Arg, namedK1Arg), "foo"),
@@ -157,16 +144,6 @@ class NamedArgumentFunctionSuite extends AnalysisTest {
       s" optional arguments."
     checkError(
       exception = parseRearrangeException(illegalSignature, args, "foo"),
-      errorClass = "INTERNAL_ERROR",
-      parameters = Map("message" -> errorMessage)
-    )
-  }
-
-  test("INTERNAL_ERROR: Multiple function signatures found for ExpressionBuilder") {
-    val errorMessage = "Function foo cannot have multiple method signatures. The function" +
-      s" signatures found were:\n$signature\n$signature"
-    checkError(
-      exception = parseExternalException("foo", IllegalExpressionBuilder, args),
       errorClass = "INTERNAL_ERROR",
       parameters = Map("message" -> errorMessage)
     )

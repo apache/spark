@@ -436,8 +436,8 @@ case class Explode(child: Expression) extends ExplodeBase {
 }
 
 trait ExplodeGeneratorBuilderBase extends GeneratorBuilder {
-  override def functionSignatures: Option[Seq[FunctionSignature]] =
-    Some(Seq(FunctionSignature(Seq(NamedArgument("collection")))))
+  override def functionSignature: Option[FunctionSignature] =
+    Some(FunctionSignature(Seq(NamedArgument("collection"))))
   override def buildGenerator(funcName: String, expressions: Seq[Expression]): Generator =
     Explode(expressions(0))
 }

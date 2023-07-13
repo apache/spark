@@ -324,7 +324,7 @@ object Mask {
 }
 
 object MaskExpressionBuilder extends ExpressionBuilder {
-  override def functionSignatures: Option[Seq[FunctionSignature]] = {
+  override def functionSignature: Option[FunctionSignature] = {
     val strArg = NamedArgument("str")
     val upperCharArg = NamedArgument("upperChar", Some(Literal(Mask.MASKED_UPPERCASE)))
     val lowerCharArg = NamedArgument("lowerChar", Some(Literal(Mask.MASKED_LOWERCASE)))
@@ -332,7 +332,7 @@ object MaskExpressionBuilder extends ExpressionBuilder {
     val otherCharArg = NamedArgument("otherChar", Some(Literal(Mask.MASKED_IGNORE)))
     val functionSignature: FunctionSignature = FunctionSignature(Seq(
       strArg, upperCharArg, lowerCharArg, digitCharArg, otherCharArg))
-    Some(Seq(functionSignature))
+    Some(functionSignature)
   }
 
   override def build(funcName: String, expressions: Seq[Expression]): Expression = {

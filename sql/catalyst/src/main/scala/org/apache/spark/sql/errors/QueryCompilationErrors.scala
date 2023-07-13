@@ -58,13 +58,6 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
     SparkException.internalError(errorMessage)
   }
 
-  def multipleFunctionSignatures(functionName: String,
-      functionSignatures: Seq[FunctionSignature]): Throwable = {
-    val errorMessage = s"Function $functionName cannot have multiple method signatures." +
-      " The function signatures found were:\n" + functionSignatures.mkString("\n")
-    SparkException.internalError(errorMessage)
-  }
-
   def namedArgumentsNotSupported(functionName: String) : Throwable = {
     new AnalysisException(
       errorClass = "NAMED_ARGUMENTS_NOT_SUPPORTED",
@@ -75,7 +68,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
   def positionalAndNamedArgumentDoubleReference(
       functionName: String, parameterName: String) : Throwable = {
     val errorClass =
-      "DUPLICATE_ROUTINE_PARAMETER_ASSIGNMENT.POSITIONAL_AND_NAMED_ARGUMENT_DOUBLE_REFERENCE"
+      "DUPLICATE_ROUTINE_PARAMETER_ASSIGNMENT.BOTH_POSITIONAL_AND_NAMED"
     new AnalysisException(
       errorClass = errorClass,
       messageParameters = Map(

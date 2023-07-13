@@ -911,13 +911,9 @@ object FunctionRegistry {
       name: String,
       builder: T,
       expressions: Seq[Expression]) : Seq[Expression] = {
-    val rearrangedExpressions = if (!builder.functionSignatures.isEmpty) {
-      val functionSignatures = builder.functionSignatures.get
-      if (functionSignatures.length != 1) {
-        throw QueryCompilationErrors.multipleFunctionSignatures(
-          name, functionSignatures)
-      }
-      builder.rearrange(functionSignatures.head, expressions, name)
+    val rearrangedExpressions = if (!builder.functionSignature.isEmpty) {
+      val functionSignature = builder.functionSignature.get
+      builder.rearrange(functionSignature, expressions, name)
     } else {
       expressions
     }
@@ -1014,6 +1010,17 @@ object TableFunctionRegistry {
     (name, (info, (expressions: Seq[Expression]) => builder(expressions)))
   }
 
+  /**
+   * A function used for table-valued functions to return a builder that
+   * when given input arguments, will return a function expression representing
+   * the table-valued functions.
+   *
+   * @param name Name of the function
+   * @param builder Object which will build the expression given input arguments
+   * @param since Time of implementation
+   * @tparam T Type of the builder
+   * @return A tuple of the function name, expression info, and function builder
+   */
   def generatorBuilder[T <: GeneratorBuilder : ClassTag](
       name: String,
       builder: T,
@@ -1022,8 +1029,7 @@ object TableFunctionRegistry {
     val funcBuilder = (expressions: Seq[Expression]) => {
       assert(expressions.forall(_.resolved), "function arguments must be resolved.")
       val rearrangedExpressions = FunctionRegistry.rearrangeExpressions(name, builder, expressions)
-      val plan = builder.build(name, rearrangedExpressions)
-      plan
+      builder.build(name, rearrangedExpressions)
     }
     (name, (info, funcBuilder))
   }
@@ -1071,14 +1077,14 @@ object TableFunctionRegistry {
 }
 
 /**
- * A trait used for scalar valued functions that defines how their expression representations
- * are constructed in [[FunctionRegistry]]
+ * This is a trait used for scalar valued functions that defines how their expression
+ * representations are constructed in [[FunctionRegistry]].
  */
 trait ExpressionBuilder extends FunctionBuilderBase[Expression]
 
 /**
- * A trait used for table valued functions that defines how their expression representations
- * are constructed in [[TableFunctionRegistry]]
+ * This is a trait used for table valued functions that defines how their expression
+ * representations are constructed in [[TableFunctionRegistry]].
  */
 trait GeneratorBuilder extends FunctionBuilderBase[LogicalPlan] {
   override final def build(funcName: String, expressions: Seq[Expression]) : LogicalPlan = {
