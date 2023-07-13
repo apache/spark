@@ -15,7 +15,6 @@
 # limitations under the License.
 #
 
-
 import unittest
 
 from pyspark.ml import Pipeline
@@ -72,6 +71,7 @@ class MetaAlgorithmReadWriteTests(SparkSessionTestCase):
             MetaAlgorithmReadWrite.getAllNestedStages(nested_pipeline),
             [nested_pipeline, ova_pipeline, vs, ova, lr],
         )
+
 
 if __name__ == "__main__":
     from pyspark.ml.tests.test_util import *  # noqa: F401
