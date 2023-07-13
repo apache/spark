@@ -711,9 +711,7 @@ class UtilsTestsMixin:
 
         generated_diff = difflib.ndiff(actual_schema_lst, expected_schema_lst)
 
-        expected_error_msg = "--- actual\n+++ expected\n"
-
-        expected_error_msg += "\n".join(generated_diff)
+        expected_error_msg = "\n".join(generated_diff)
 
         with self.assertRaises(PySparkAssertionError) as pe:
             assertDataFrameEqual(df1, df2)
@@ -754,9 +752,7 @@ class UtilsTestsMixin:
 
         generated_diff = difflib.ndiff(actual_schema_lst, expected_schema_lst)
 
-        expected_error_msg = "--- actual\n+++ expected\n"
-
-        expected_error_msg += "\n".join(generated_diff)
+        expected_error_msg = "\n".join(generated_diff)
 
         with self.assertRaises(PySparkAssertionError) as pe:
             assertDataFrameEqual(df1, df2)
@@ -814,9 +810,7 @@ class UtilsTestsMixin:
 
         generated_diff = difflib.ndiff(actual_schema_lst, expected_schema_lst)
 
-        expected_error_msg = "--- actual\n+++ expected\n"
-
-        expected_error_msg += "\n".join(generated_diff)
+        expected_error_msg = "\n".join(generated_diff)
 
         with self.assertRaises(PySparkAssertionError) as pe:
             assertSchemaEqual(s1, s2)
@@ -848,9 +842,7 @@ class UtilsTestsMixin:
 
         generated_diff = difflib.ndiff(actual_schema_lst, expected_schema_lst)
 
-        expected_error_msg = "--- actual\n+++ expected\n"
-
-        expected_error_msg += "\n".join(generated_diff)
+        expected_error_msg = "\n".join(generated_diff)
 
         with self.assertRaises(PySparkAssertionError) as pe:
             assertSchemaEqual(s1, s2)
@@ -905,9 +897,7 @@ class UtilsTestsMixin:
 
         generated_diff = difflib.ndiff(actual_schema_lst, expected_schema_lst)
 
-        expected_error_msg = "--- actual\n+++ expected\n"
-
-        expected_error_msg += "\n".join(generated_diff)
+        expected_error_msg = "\n".join(generated_diff)
 
         with self.assertRaises(PySparkAssertionError) as pe:
             assertSchemaEqual(s1, s2)

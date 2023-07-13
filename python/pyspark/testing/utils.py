@@ -310,9 +310,7 @@ def assertSchemaEqual(actual: StructType, expected: StructType):
 
         generated_diff = difflib.ndiff(actual_schema_lst, expected_schema_lst)
 
-        error_msg = "--- actual\n+++ expected\n"
-
-        error_msg += "\n".join(generated_diff)
+        error_msg = "\n".join(generated_diff)
 
         raise PySparkAssertionError(
             error_class="DIFFERENT_SCHEMA",

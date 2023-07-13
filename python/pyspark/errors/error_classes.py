@@ -171,7 +171,10 @@ ERROR_CLASSES_JSON = """
   },
   "DIFFERENT_SCHEMA" : {
     "message" : [
-      "Schemas do not match:",
+      "Schemas do not match.",
+      "The diff below overlays `actual` and `expected` schema tree strings.",
+      "- indicates a line that should be removed from `actual` to match `expected`.",
+      "+ indicates a line that should be added to `actual` to match `expected`.",
       "<error_msg>"
     ]
   },
