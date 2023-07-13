@@ -83,12 +83,12 @@ object DistributionAndOrderingUtils {
         queryWithDistribution
       }
 
-      ResolveTimezoneAndCastExecutor.execute(queryWithDistributionAndOrdering)
+      TypeCoercionExecutor.execute(queryWithDistributionAndOrdering)
     case _ =>
       query
   }
 
-  private object ResolveTimezoneAndCastExecutor extends RuleExecutor[LogicalPlan] {
+  private object TypeCoercionExecutor extends RuleExecutor[LogicalPlan] {
     override val batches =
       Batch("Resolve TypeCoercion", FixedPoint(1), typeCoercionRules: _*) ::
       Batch("Resolve TimeZone", FixedPoint(1), ResolveTimeZone) :: Nil
