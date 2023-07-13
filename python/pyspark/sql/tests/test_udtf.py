@@ -552,7 +552,7 @@ class BaseUDTFTestsMixin:
         with self.tempView("v"):
             self.spark.sql("CREATE OR REPLACE TEMPORARY VIEW v as SELECT id FROM range(0, 8)")
             self.assertEqual(
-                self.spark.sql("SELECT * FROM test_udtf(TABLE v)").collect(),
+                self.spark.sql("SELECT * FROM test_udtf(TABLE (v))").collect(),
                 [Row(a=6), Row(a=7)],
             )
 
@@ -568,7 +568,7 @@ class BaseUDTFTestsMixin:
         with self.tempView("v"):
             self.spark.sql("CREATE OR REPLACE TEMPORARY VIEW v as SELECT id FROM range(0, 8)")
             self.assertEqual(
-                self.spark.sql("SELECT * FROM test_udtf(5, TABLE v)").collect(),
+                self.spark.sql("SELECT * FROM test_udtf(5, TABLE (v))").collect(),
                 [Row(a=6), Row(a=7)],
             )
 
@@ -582,7 +582,7 @@ class BaseUDTFTestsMixin:
         self.spark.udtf.register("test_udtf", func)
 
         with self.assertRaisesRegex(AnalysisException, "TABLE_OR_VIEW_NOT_FOUND"):
-            self.spark.sql("SELECT * FROM test_udtf(TABLE v)").collect()
+            self.spark.sql("SELECT * FROM test_udtf(TABLE (v))").collect()
 
     def test_udtf_with_table_argument_malformed_query(self):
         class TestUDTF:
@@ -644,7 +644,7 @@ class BaseUDTFTestsMixin:
                 WITH t AS (
                   SELECT id FROM range(0, 8)
                 )
-                SELECT * FROM test_udtf(TABLE t)
+                SELECT * FROM test_udtf(TABLE (t))
                 """
             ).collect(),
             [Row(a=6), Row(a=7)],
@@ -665,7 +665,7 @@ class BaseUDTFTestsMixin:
                 """
                 SELECT * FROM
                   range(0, 8) AS t,
-                  LATERAL test_udtf(TABLE t)
+                  LATERAL test_udtf(TABLE (t))
                 """
             ).collect(),
             [Row(a=6), Row(a=7)],
