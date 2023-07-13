@@ -998,6 +998,7 @@ class TorchDistributor(Distributor):
         return self._run_distributed_training(
             TorchDistributor._run_training_on_pytorch_function,
             train_function,
+            TorchDistributor._run_training_on_pytorch_file,
             spark_dataframe,
             *args,
             **kwargs,
