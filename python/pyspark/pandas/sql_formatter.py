@@ -25,7 +25,6 @@ import pandas as pd
 
 from pyspark.pandas.internal import InternalFrame
 from pyspark.pandas.namespace import _get_index_map
-from pyspark.sql.functions import lit
 from pyspark import pandas as ps
 from pyspark.sql import SparkSession
 from pyspark.pandas.utils import default_session
@@ -265,7 +264,9 @@ class PandasSQLStringFormatter(string.Formatter):
             val._to_spark().createOrReplaceTempView(df_name)
             return df_name
         elif isinstance(val, str):
-            return lit(val)._jc.expr().sql()  # for escaped characters.
+            from pyspark.sql.utils import get_lit_sql_str
+
+            return get_lit_sql_str(val)
         else:
             return val
 

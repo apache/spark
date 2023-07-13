@@ -1443,7 +1443,7 @@ class PlanParserSuite extends AnalysisTest {
 
   test("table valued function with table arguments") {
     assertEqual(
-      "select * from my_tvf(table v1, table (select 1))",
+      "select * from my_tvf(table (v1), table (select 1))",
       UnresolvedTableValuedFunction("my_tvf",
         FunctionTableSubqueryArgumentExpression(UnresolvedRelation(Seq("v1"))) ::
           FunctionTableSubqueryArgumentExpression(
@@ -1451,7 +1451,7 @@ class PlanParserSuite extends AnalysisTest {
 
     // All named arguments
     assertEqual(
-      "select * from my_tvf(arg1 => table v1, arg2 => table (select 1))",
+      "select * from my_tvf(arg1 => table (v1), arg2 => table (select 1))",
       UnresolvedTableValuedFunction("my_tvf",
         NamedArgumentExpression("arg1",
           FunctionTableSubqueryArgumentExpression(UnresolvedRelation(Seq("v1")))) ::
@@ -1461,7 +1461,7 @@ class PlanParserSuite extends AnalysisTest {
 
     // Unnamed and named arguments
     assertEqual(
-      "select * from my_tvf(2, table v1, arg1 => table (select 1))",
+      "select * from my_tvf(2, table (v1), arg1 => table (select 1))",
       UnresolvedTableValuedFunction("my_tvf",
         Literal(2) ::
           FunctionTableSubqueryArgumentExpression(UnresolvedRelation(Seq("v1"))) ::
@@ -1471,12 +1471,25 @@ class PlanParserSuite extends AnalysisTest {
 
     // Mixed arguments
     assertEqual(
-      "select * from my_tvf(arg1 => table v1, 2, arg2 => true)",
+      "select * from my_tvf(arg1 => table (v1), 2, arg2 => true)",
       UnresolvedTableValuedFunction("my_tvf",
         NamedArgumentExpression("arg1",
           FunctionTableSubqueryArgumentExpression(UnresolvedRelation(Seq("v1")))) ::
           Literal(2) ::
           NamedArgumentExpression("arg2", Literal(true)) :: Nil).select(star()))
+
+    // Negative tests:
+    // Parentheses are missing from the table argument.
+    val sql1 = "select * from my_tvf(arg1 => table v1)"
+    checkError(
+      exception = parseException(sql1),
+      errorClass =
+        "INVALID_SQL_SYNTAX.INVALID_TABLE_FUNCTION_IDENTIFIER_ARGUMENT_MISSING_PARENTHESES",
+      parameters = Map("argumentName" -> "`v1`"),
+      context = ExpectedContext(
+        fragment = "table v1",
+        start = 29,
+        stop = sql1.length - 2))
   }
 
   test("SPARK-32106: TRANSFORM plan") {

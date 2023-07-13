@@ -25,6 +25,7 @@ import scala.collection.JavaConverters._
 import scala.reflect.runtime.universe.TypeTag
 
 import com.google.common.cache.{CacheBuilder, CacheLoader}
+import io.grpc.ClientInterceptor
 import org.apache.arrow.memory.RootAllocator
 
 import org.apache.spark.annotation.{DeveloperApi, Experimental}
@@ -37,7 +38,8 @@ import org.apache.spark.sql.catalyst.encoders.{AgnosticEncoder, RowEncoder}
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{BoxedLongEncoder, UnboundRowEncoder}
 import org.apache.spark.sql.connect.client.{ClassFinder, SparkConnectClient, SparkResult}
 import org.apache.spark.sql.connect.client.SparkConnectClient.Configuration
-import org.apache.spark.sql.connect.client.util.{Cleaner, ConvertToArrow}
+import org.apache.spark.sql.connect.client.arrow.ArrowSerializer
+import org.apache.spark.sql.connect.client.util.Cleaner
 import org.apache.spark.sql.connect.common.LiteralValueProtoConverter.toLiteralProto
 import org.apache.spark.sql.internal.CatalogImpl
 import org.apache.spark.sql.streaming.DataStreamReader
@@ -125,9 +127,8 @@ class SparkSession private[sql] (
     newDataset(encoder) { builder =>
       if (data.nonEmpty) {
         val timeZoneId = conf.get("spark.sql.session.timeZone")
-        val (arrowData, arrowDataSize) =
-          ConvertToArrow(encoder, data, timeZoneId, errorOnDuplicatedFieldNames = true, allocator)
-        if (arrowDataSize <= conf.get("spark.sql.session.localRelationCacheThreshold").toInt) {
+        val arrowData = ArrowSerializer.serialize(data, encoder, allocator, timeZoneId)
+        if (arrowData.size() <= conf.get("spark.sql.session.localRelationCacheThreshold").toInt) {
           builder.getLocalRelationBuilder
             .setSchema(encoder.schema.json)
             .setData(arrowData)
@@ -629,7 +630,7 @@ object SparkSession extends Logging {
    * Create a new [[SparkSession]] based on the connect client [[Configuration]].
    */
   private[sql] def create(configuration: Configuration): SparkSession = {
-    new SparkSession(new SparkConnectClient(configuration), cleaner, planIdGenerator)
+    new SparkSession(configuration.toSparkConnectClient, cleaner, planIdGenerator)
   }
 
   /**
@@ -653,6 +654,18 @@ object SparkSession extends Logging {
 
     def remote(connectionString: String): Builder = {
       builder.connectionString(connectionString)
+      this
+    }
+
+    /**
+     * Add an interceptor [[ClientInterceptor]] to be used during channel creation.
+     *
+     * Note that interceptors added last are executed first by gRPC.
+     *
+     * @since 3.5.0
+     */
+    def interceptor(interceptor: ClientInterceptor): Builder = {
+      builder.interceptor(interceptor)
       this
     }
 

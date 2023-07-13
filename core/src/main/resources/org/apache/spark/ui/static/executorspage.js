@@ -16,7 +16,7 @@
  */
 
 /* global $, Mustache, createRESTEndPointForExecutorsPage, createRESTEndPointForMiscellaneousProcess, */
-/* global createTemplateURI, formatBytes, formatDuration, formatLogsCells, getStandAloneAppId, */
+/* global createTemplateURI, formatBytes, formatDate, formatDuration, formatLogsCells, getStandAloneAppId, */
 /* global jQuery, setDataTableDefaults */
 
 var threadDumpEnabled = false;
@@ -93,6 +93,32 @@ jQuery.extend(jQuery.fn.dataTableExt.oSort, {
 
   "title-numeric-desc": function (a, b) {
     return ((a < b) ? 1 : ((a > b) ? -1 : 0));
+  }
+});
+
+jQuery.extend( jQuery.fn.dataTableExt.oSort, {
+  "executor-id-asc": function ( a, b ) {
+    if ($.isNumeric(a) && $.isNumeric(b)) {
+      return parseFloat(a) - parseFloat(b);
+    } else if (!$.isNumeric(a) && $.isNumeric(b)) {
+      return -1;
+    } else if ($.isNumeric(a) && !$.isNumeric(b)) {
+      return 1;
+    } else {
+      return a.localeCompare(b);
+    }
+  },
+
+  "executor-id-desc": function ( a, b ) {
+    if ($.isNumeric(a) && $.isNumeric(b)) {
+      return parseFloat(b) - parseFloat(a);
+    } else if (!$.isNumeric(a) && $.isNumeric(b)) {
+      return 1;
+    } else if ($.isNumeric(a) && !$.isNumeric(b)) {
+      return -1;
+    } else {
+      return b.localeCompare(a);
+    }
   }
 });
 
@@ -403,9 +429,8 @@ $(document).ready(function () {
           "data": response,
           "columns": [
             {
-              data: function (row, type) {
-                return type !== 'display' ? (isNaN(row.id) ? 0 : row.id ) : row.id;
-              }
+              data: "id",
+              type: "executor-id"
             },
             {data: 'hostPort'},
             {
@@ -568,6 +593,14 @@ $(document).ready(function () {
             {
               data: 'removeReason',
               render: formatLossReason
+            },
+            {
+              data: 'addTime',
+              render: formatDate
+            },
+            {
+              data: 'removeTime',
+              render: formatDate
             }
           ],
           "order": [[0, "asc"]],

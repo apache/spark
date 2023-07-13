@@ -140,9 +140,9 @@ case class BitmapCount(child: Expression)
   // scalastyle:off line.size.limit
   examples = """
     Examples:
-      > SELECT substring(hex(_FUNC_((bitmap_bit_position(col)))), 0, 6) FROM VALUES (1), (2), (3) AS tab(col);
+      > SELECT substring(hex(_FUNC_(bitmap_bit_position(col))), 0, 6) FROM VALUES (1), (2), (3) AS tab(col);
        070000
-      > SELECT substring(hex(_FUNC_((bitmap_bit_position(col)))), 0, 6) FROM VALUES (1), (1), (1) AS tab(col);
+      > SELECT substring(hex(_FUNC_(bitmap_bit_position(col))), 0, 6) FROM VALUES (1), (1), (1) AS tab(col);
        010000
   """,
   // scalastyle:on line.size.limit

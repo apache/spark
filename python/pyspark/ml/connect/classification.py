@@ -152,6 +152,31 @@ class LogisticRegression(
     Logistic regression estimator.
 
     .. versionadded:: 3.5.0
+
+    Examples
+    --------
+    >>> from pyspark.ml.connect.classification import LogisticRegression, LogisticRegressionModel
+    >>> lor = LogisticRegression(maxIter=20, learningRate=0.01)
+    >>> dataset = spark.createDataFrame([
+    ...     ([1.0, 2.0], 1),
+    ...     ([2.0, -1.0], 1),
+    ...     ([-3.0, -2.0], 0),
+    ...     ([-1.0, -2.0], 0),
+    ... ], schema=['features', 'label'])
+    >>> lor_model = lor.fit(dataset)
+    >>> transformed_dataset = lor_model.transform(dataset)
+    >>> transformed_dataset.show()
+    +------------+-----+----------+--------------------+
+    |    features|label|prediction|         probability|
+    +------------+-----+----------+--------------------+
+    |  [1.0, 2.0]|    1|         1|[0.02423273026943...|
+    | [2.0, -1.0]|    1|         1|[0.09334788471460...|
+    |[-3.0, -2.0]|    0|         0|[0.99808156490325...|
+    |[-1.0, -2.0]|    0|         0|[0.96210002899169...|
+    +------------+-----+----------+--------------------+
+    >>> lor_model.saveToLocal("/tmp/lor_model")
+    >>> LogisticRegressionModel.loadFromLocal("/tmp/lor_model")
+    LogisticRegression_...
     """
 
     _input_kwargs: Dict[str, Any]
