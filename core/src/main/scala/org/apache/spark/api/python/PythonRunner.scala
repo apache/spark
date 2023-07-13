@@ -57,6 +57,7 @@ private[spark] object PythonEvalType {
   val SQL_GROUPED_MAP_PANDAS_UDF_WITH_STATE = 208
 
   val SQL_TABLE_UDF = 300
+  val SQL_ARROW_TABLE_UDF = 301
 
   def toString(pythonEvalType: Int): String = pythonEvalType match {
     case NON_UDF => "NON_UDF"
@@ -72,6 +73,7 @@ private[spark] object PythonEvalType {
     case SQL_MAP_ARROW_ITER_UDF => "SQL_MAP_ARROW_ITER_UDF"
     case SQL_GROUPED_MAP_PANDAS_UDF_WITH_STATE => "SQL_GROUPED_MAP_PANDAS_UDF_WITH_STATE"
     case SQL_TABLE_UDF => "SQL_TABLE_UDF"
+    case SQL_ARROW_TABLE_UDF => "SQL_ARROW_TABLE_UDF"
   }
 }
 
