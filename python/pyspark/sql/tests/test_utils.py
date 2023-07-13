@@ -337,7 +337,7 @@ class UtilsTestsMixin:
             ),
         )
 
-        assertDataFrameEqual(df1, df2, check_row_order=True)
+        assertDataFrameEqual(df1, df2, checkRowOrder=True)
 
     def test_assert_approx_equal_maptype_double(self):
         df1 = self.spark.createDataFrame(
@@ -365,7 +365,7 @@ class UtilsTestsMixin:
             ),
         )
 
-        assertDataFrameEqual(df1, df2, check_row_order=True)
+        assertDataFrameEqual(df1, df2, checkRowOrder=True)
 
     def test_assert_approx_equal_maptype_double(self):
         df1 = self.spark.createDataFrame(
@@ -393,7 +393,7 @@ class UtilsTestsMixin:
             ),
         )
 
-        assertDataFrameEqual(df1, df2, check_row_order=True)
+        assertDataFrameEqual(df1, df2, checkRowOrder=True)
 
     def test_assert_approx_equal_nested_struct_double(self):
         df1 = self.spark.createDataFrame(
@@ -680,7 +680,7 @@ class UtilsTestsMixin:
         assertDataFrameEqual(df1, df2)
 
     def test_check_row_order_error(self):
-        # test check_row_order=True
+        # test checkRowOrder=True
         df1 = self.spark.createDataFrame(
             data=[
                 ("2", 3000.00),
@@ -726,7 +726,7 @@ class UtilsTestsMixin:
         expected_error_message += "\n" + diff_msg
 
         with self.assertRaises(PySparkAssertionError) as pe:
-            assertDataFrameEqual(df1, df2, check_row_order=True)
+            assertDataFrameEqual(df1, df2, checkRowOrder=True)
 
         self.check_error(
             exception=pe.exception,
