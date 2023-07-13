@@ -30,6 +30,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.encoders.{AgnosticEncoder, ExpressionEncoder, RowEncoder}
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{ProductEncoder, UnboundRowEncoder}
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder.Deserializer
+import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.connect.client.util.{AutoCloseables, Cleanable}
 import org.apache.spark.sql.connect.common.DataTypeProtoConverter
 import org.apache.spark.sql.types.{DataType, StructType}
@@ -57,9 +58,7 @@ private[sql] class SparkResult[T](
   /**
    * Update RowEncoder and recursively update the fields of the ProductEncoder if found.
    */
-  private def createEncoder[_](
-      enc: AgnosticEncoder[_],
-      dataType: DataType): AgnosticEncoder[_] = {
+  private def createEncoder(enc: AgnosticEncoder[_], dataType: DataType): AgnosticEncoder[_] = {
     enc match {
       case UnboundRowEncoder =>
         // Replace the row encoder with the encoder inferred from the schema.
@@ -95,11 +94,11 @@ private[sql] class SparkResult[T](
           }
           // TODO: create encoders that directly operate on arrow vectors.
           if (boundEncoder == null) {
-            boundEncoder = createEncoder(structType).resolveAndBind(structType.toAttributes)
+            boundEncoder = createEncoder(structType)
+              .resolveAndBind(DataTypeUtils.toAttributes(structType))
           }
           while (reader.loadNextBatch()) {
             val rowCount = root.getRowCount
-            assert(root.getRowCount == response.getArrowBatch.getRowCount) // HUH!
             if (rowCount > 0) {
               val vectors = root.getFieldVectors.asScala
                 .map(v => new ArrowColumnVector(transferToNewVector(v)))

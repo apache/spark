@@ -24,7 +24,6 @@ from py4j.java_gateway import is_instance_of
 
 if typing.TYPE_CHECKING:
     from pyspark.sql import SparkSession, DataFrame
-from pyspark.sql.functions import lit
 
 
 class SQLStringFormatter(string.Formatter):
@@ -74,7 +73,9 @@ class SQLStringFormatter(string.Formatter):
             val.createOrReplaceTempView(df_name)
             return df_name
         elif isinstance(val, str):
-            return lit(val)._jc.expr().sql()  # for escaped characters.
+            from pyspark.sql.utils import get_lit_sql_str
+
+            return get_lit_sql_str(val)
         else:
             return val
 
