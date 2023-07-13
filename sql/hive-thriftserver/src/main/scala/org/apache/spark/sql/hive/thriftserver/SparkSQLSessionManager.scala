@@ -67,6 +67,7 @@ private[hive] class SparkSQLSessionManager(hiveServer: HiveServer2, sqlContext: 
       val hiveSessionState = session.getSessionState
       setConfMap(ctx, hiveSessionState.getOverriddenConfigurations)
       setConfMap(ctx, hiveSessionState.getHiveVariables)
+      HiveThriftServer2.uiTab.foreach(uiTab => setConfMap(ctx, uiTab.updatedSQLConf))
       if (sessionConf != null && sessionConf.containsKey("use:database")) {
         ctx.sql(s"use ${sessionConf.get("use:database")}")
       }

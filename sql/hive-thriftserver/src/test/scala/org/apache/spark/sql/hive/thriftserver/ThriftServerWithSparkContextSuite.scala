@@ -254,6 +254,41 @@ trait ThriftServerWithSparkContextSuite extends SharedThriftServer {
       assertThrows[SQLException](rs1.beforeFirst())
     }
   }
+
+  test("Support updating Spark SQL config default value for new connections") {
+    def doGetRequest(url: String): String = {
+      Utils.tryWithResource(HttpClientBuilder.create().build()) { client =>
+        Utils.tryWithResource(client.execute(new HttpGet(url))) { response =>
+          IOUtils.toString(response.getEntity.getContent, StandardCharsets.UTF_8)
+        }
+      }
+    }
+
+    val uiWebUrl = spark.sparkContext.uiWebUrl
+    assert(uiWebUrl.nonEmpty)
+
+    withJdbcStatement { statement =>
+      val rs = statement.executeQuery(s"set ${SQLConf.CBO_ENABLED.key}")
+      rs.next()
+      assert(rs.getString("value").equals("false"))
+    }
+
+    assert(
+      doGetRequest(s"${uiWebUrl.get}/sqlserver/updatesqlconf/?" +
+        s"key=${SQLConf.CBO_ENABLED.key}&value=true")
+        .contains("<script>window.location.replace(document.referrer);</script>"))
+
+    withJdbcStatement { statement =>
+      val rs = statement.executeQuery(s"set ${SQLConf.CBO_ENABLED.key}")
+      rs.next()
+      assert(rs.getString("value").equals("true"))
+    }
+
+    assert(
+      doGetRequest(s"${uiWebUrl.get}/sqlserver/updatesqlconf/?" +
+        s"key=${SQLConf.CBO_ENABLED.key}&value=error")
+        .contains("Failed to update SQL configuration: spark.sql.cbo.enabled should be boolean"))
+  }
 }
 
 class ThriftServerWithSparkContextInBinarySuite extends ThriftServerWithSparkContextSuite {

@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.hive.thriftserver.ui
 
+import java.util.HashMap
 import javax.servlet.http.{HttpServlet, HttpServletRequest, HttpServletResponse}
 
 import org.apache.spark.SparkContext
@@ -37,6 +38,7 @@ private[thriftserver] class ThriftServerTab(
 
   val parent = sparkUI
   val startTime = sparkUI.store.applicationInfo().attempts.head.startTime
+  private[thriftserver] val updatedSQLConf = new HashMap[String, String]
 
   attachPage(new ThriftServerPage(this))
   attachPage(new ThriftServerSessionPage(this))
@@ -45,18 +47,15 @@ private[thriftserver] class ThriftServerTab(
     override def doPost(req: HttpServletRequest, resp: HttpServletResponse): Unit = {
       val key = req.getParameter("key")
       val value = req.getParameter("value")
+      resp.setContentType("text/html; charset=UTF-8");
       try {
         SQLConf.get.setConfString(key, value) // Used to check if the value is valid.
-        parent.conf.set(key, value)
-        logInfo(s"Successfully updated ${key} to ${value}.")
-        resp.setContentType("text/html; charset=UTF-8");
+        updatedSQLConf.put(key, value)
         // scalastyle:off println
-        resp.getWriter
-          .println("<script>window.location.replace(document.referrer);</script>")
+        resp.getWriter.println("<script>window.location.replace(document.referrer);</script>")
         // scalastyle:on println
       } catch {
         case e: Throwable =>
-          resp.setContentType("text/html; charset=UTF-8");
           val msg = s"Failed to update SQL configuration: ${e.getMessage}."
           logWarning(msg)
           // scalastyle:off println
