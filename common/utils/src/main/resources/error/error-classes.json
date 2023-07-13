@@ -370,6 +370,28 @@
     ],
     "sqlState" : "42710"
   },
+  "CREATE_VIEW_COLUMN_ARITY_MISMATCH" : {
+    "message" : [
+      "Cannot create view <viewName>, the reason is"
+    ],
+    "subClass" : {
+      "NOT_ENOUGH_DATA_COLUMNS" : {
+        "message" : [
+          "not enough data columns:",
+          "View columns: <viewColumns>.",
+          "Data columns: <dataColumns>."
+        ]
+      },
+      "TOO_MANY_DATA_COLUMNS" : {
+        "message" : [
+          "too many data columns:",
+          "View columns: <viewColumns>.",
+          "Data columns: <dataColumns>."
+        ]
+      }
+    },
+    "sqlState" : "21S01"
+  },
   "DATATYPE_MISMATCH" : {
     "message" : [
       "Cannot resolve <sqlExpr> due to data type mismatch:"
@@ -1067,6 +1089,12 @@
     ],
     "sqlState" : "XX000"
   },
+  "INTERNAL_ERROR_STORAGE" : {
+    "message" : [
+      "<message>"
+    ],
+    "sqlState" : "XX000"
+  },
   "INTERVAL_ARITHMETIC_OVERFLOW" : {
     "message" : [
       "<message>.<alternative>"
@@ -1247,7 +1275,7 @@
       },
       "MISMATCH_INPUT" : {
         "message" : [
-          "The input <inputType> '<input>' does not match the format."
+          "The input <inputType> <input> does not match the format."
         ]
       },
       "THOUSANDS_SEPS_MUST_BEFORE_DEC" : {
@@ -1770,6 +1798,11 @@
   "JOIN_CONDITION_IS_NOT_BOOLEAN_TYPE" : {
     "message" : [
       "The join condition <joinCondition> has the invalid type <conditionType>, expected \"BOOLEAN\"."
+    ]
+  },
+  "LOAD_DATA_PATH_NOT_EXISTS" : {
+    "message" : [
+      "LOAD DATA input path does not exist: <path>."
     ]
   },
   "LOCAL_MUST_WITH_SCHEMA_FILE" : {
@@ -2544,6 +2577,11 @@
       "The direct query on files does not support the data source type: <className>. Please try a different data source type or consider using a different query method."
     ]
   },
+  "UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE" : {
+    "message" : [
+      "The <format> datasource doesn't support the column <columnName> of the type <columnType>."
+    ]
+  },
   "UNSUPPORTED_DEFAULT_VALUE" : {
     "message" : [
       "DEFAULT column values is not supported."
@@ -2651,9 +2689,19 @@
           "DESC TABLE COLUMN for a specific partition."
         ]
       },
+      "DROP_DATABASE" : {
+        "message" : [
+          "Drop the default database <database>."
+        ]
+      },
       "DROP_NAMESPACE" : {
         "message" : [
           "Drop the namespace <namespace>."
+        ]
+      },
+      "HIVE_TABLE_TYPE" : {
+        "message" : [
+          "The <tableName> is hive <tableType>."
         ]
       },
       "HIVE_WITH_ANSI_INTERVALS" : {
@@ -3492,11 +3540,6 @@
       "<database> is a system preserved database, you cannot create a database with this name."
     ]
   },
-  "_LEGACY_ERROR_TEMP_1067" : {
-    "message" : [
-      "Can not drop default database."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_1068" : {
     "message" : [
       "<database> is a system preserved database, you cannot use it as current database. To access global temporary views, you should use qualified name with the GLOBAL_TEMP_DATABASE, e.g. SELECT * FROM <database>.viewName."
@@ -3797,11 +3840,6 @@
       "Fail to rebuild expression: missing key <filter> in `translatedFilterToExpr`."
     ]
   },
-  "_LEGACY_ERROR_TEMP_1150" : {
-    "message" : [
-      "Column `<field>` has a data type of <fieldType>, which is not supported by <format>."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_1151" : {
     "message" : [
       "Fail to resolve data source for the table <table> since the table serde property has the duplicated key <key> with extra options specified for this scan operation. To fix this, you can rollback to the legacy behavior of ignoring the extra options by setting the config <config> to `false`, or address the conflicts of the same config."
@@ -4067,11 +4105,6 @@
       "Hive metastore does not support altering database location."
     ]
   },
-  "_LEGACY_ERROR_TEMP_1220" : {
-    "message" : [
-      "Hive <tableType> is not supported."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_1221" : {
     "message" : [
       "Hive 0.12 doesn't support creating permanent functions. Please use Hive 0.13 or higher."
@@ -4212,11 +4245,6 @@
       "LOAD DATA target table <tableIdentWithDB> is not partitioned, but a partition spec was provided."
     ]
   },
-  "_LEGACY_ERROR_TEMP_1265" : {
-    "message" : [
-      "LOAD DATA input path does not exist: <path>."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_1266" : {
     "message" : [
       "Operation not allowed: TRUNCATE TABLE on external tables: <tableIdentWithDB>."
@@ -4270,11 +4298,6 @@
   "_LEGACY_ERROR_TEMP_1276" : {
     "message" : [
       "The logical plan that represents the view is not analyzed."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1277" : {
-    "message" : [
-      "The number of columns produced by the SELECT clause (num: `<analyzedPlanLength>`) does not match the number of column names specified by CREATE VIEW (num: `<userSpecifiedColumnsLength>`)."
     ]
   },
   "_LEGACY_ERROR_TEMP_1278" : {

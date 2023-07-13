@@ -442,7 +442,18 @@ private[spark] object Utils extends Logging with SparkClassUtils {
     // `file` and `localhost` are not used. Just to prevent URI from parsing `fileName` as
     // scheme or host. The prefix "/" is required because URI doesn't accept a relative path.
     // We should remove it after we get the raw path.
-    new URI("file", null, "localhost", -1, "/" + fileName, null, null).getRawPath.substring(1)
+    encodeRelativeUnixPathToURIRawPath(fileName).substring(1)
+  }
+
+  /**
+   * Same as [[encodeFileNameToURIRawPath]] but returns the relative UNIX path.
+   */
+  def encodeRelativeUnixPathToURIRawPath(path: String): String = {
+    require(!path.startsWith("/") && !path.contains("\\"))
+    // `file` and `localhost` are not used. Just to prevent URI from parsing `fileName` as
+    // scheme or host. The prefix "/" is required because URI doesn't accept a relative path.
+    // We should remove it after we get the raw path.
+    new URI("file", null, "localhost", -1, "/" + path, null, null).getRawPath
   }
 
   /**

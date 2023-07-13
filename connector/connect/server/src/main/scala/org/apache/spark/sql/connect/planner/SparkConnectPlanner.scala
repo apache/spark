@@ -51,6 +51,7 @@ import org.apache.spark.sql.catalyst.plans.{Cross, FullOuter, Inner, JoinType, L
 import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.plans.logical.{AppendColumns, CoGroup, CollectMetrics, CommandResult, Deduplicate, DeduplicateWithinWatermark, DeserializeToObject, Except, FlatMapGroupsWithState, Intersect, JoinWith, LocalRelation, LogicalGroupState, LogicalPlan, MapGroups, MapPartitions, Project, Sample, SerializeFromObject, Sort, SubqueryAlias, TypedFilter, Union, Unpivot, UnresolvedHint}
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes
+import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, CharVarcharUtils}
 import org.apache.spark.sql.connect.common.{DataTypeProtoConverter, ForeachWriterPacket, InvalidPlanInput, LiteralValueProtoConverter, StorageLevelProtoConverter, UdfPacket}
 import org.apache.spark.sql.connect.config.Connect.CONNECT_GRPC_ARROW_MAX_BATCH_SIZE
@@ -508,13 +509,13 @@ class SparkConnectPlanner(val sessionHolder: SessionHolder) extends Logging {
           case PythonEvalType.SQL_MAP_PANDAS_ITER_UDF =>
             logical.MapInPandas(
               pythonUdf,
-              pythonUdf.dataType.asInstanceOf[StructType].toAttributes,
+              DataTypeUtils.toAttributes(pythonUdf.dataType.asInstanceOf[StructType]),
               baseRel,
               isBarrier)
           case PythonEvalType.SQL_MAP_ARROW_ITER_UDF =>
             logical.PythonMapInArrow(
               pythonUdf,
-              pythonUdf.dataType.asInstanceOf[StructType].toAttributes,
+              DataTypeUtils.toAttributes(pythonUdf.dataType.asInstanceOf[StructType]),
               baseRel,
               isBarrier)
           case _ =>
@@ -638,7 +639,7 @@ class SparkConnectPlanner(val sessionHolder: SessionHolder) extends Logging {
           ds.groupingAttributes,
           ds.dataAttributes,
           udf.inputDeserializer(ds.groupingAttributes),
-          LocalRelation(initialDs.vEncoder.schema.toAttributes), // empty data set
+          LocalRelation(initialDs.vEncoder.schema), // empty data set
           ds.analyzed)
       }
       SerializeFromObject(udf.outputNamedExpression, flatMapGroupsWithState)
@@ -1106,7 +1107,7 @@ class SparkConnectPlanner(val sessionHolder: SessionHolder) extends Logging {
       if (structType == null) {
         throw InvalidPlanInput(s"Input data for LocalRelation does not produce a schema.")
       }
-      val attributes = structType.toAttributes
+      val attributes = DataTypeUtils.toAttributes(structType)
       val proj = UnsafeProjection.create(attributes, attributes)
       val data = rows.map(proj)
 
@@ -1133,22 +1134,23 @@ class SparkConnectPlanner(val sessionHolder: SessionHolder) extends Logging {
         val project = Dataset
           .ofRows(
             session,
-            logicalPlan =
-              logical.LocalRelation(normalize(structType).asInstanceOf[StructType].toAttributes))
+            logicalPlan = logical.LocalRelation(normalize(structType).asInstanceOf[StructType]))
           .toDF(normalized.names: _*)
           .to(normalized)
           .logicalPlan
           .asInstanceOf[Project]
 
         val proj = UnsafeProjection.create(project.projectList, project.child.output)
-        logical.LocalRelation(schema.toAttributes, data.map(proj).map(_.copy()).toSeq)
+        logical.LocalRelation(
+          DataTypeUtils.toAttributes(schema),
+          data.map(proj).map(_.copy()).toSeq)
       }
     } else {
       if (schema == null) {
         throw InvalidPlanInput(
           s"Schema for LocalRelation is required when the input data is not provided.")
       }
-      LocalRelation(schema.toAttributes, data = Seq.empty)
+      LocalRelation(schema)
     }
   }
 
