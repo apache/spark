@@ -259,6 +259,7 @@ def assertDataFrameEqual(
 
     For DataFrames with float values, assertDataFrame asserts approximate equality.
     Two float values a and b are approximately equal if the following equation is True:
+
     ``absolute(a - b) <= (atol + rtol * absolute(b))``.
 
     Examples
