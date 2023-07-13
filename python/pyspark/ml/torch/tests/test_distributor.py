@@ -383,7 +383,7 @@ class TorchDistributorLocalUnitTestsMixin:
                 )
                 self.assertEqual(
                     expected,
-                    dist._run_local_training(dist._run_training_on_pytorch_file, "train.py"),
+                    dist._run_local_training(dist._run_training_on_pytorch_file, "train.py", None),
                 )
                 # cleanup
                 if cuda_env_var:
@@ -463,7 +463,7 @@ class TorchDistributorDistributedUnitTestsMixin:
                 )
                 self.assertEqual(
                     expected,
-                    dist._run_distributed_training(dist._run_training_on_pytorch_file, "...", None),
+                    dist._run_distributed_training(dist._run_training_on_pytorch_file, "...", TorchDistributor._run_training_on_pytorch_file, None),
                 )
 
     def test_get_num_tasks_distributed(self) -> None:
@@ -542,8 +542,6 @@ class TorchWrapperUnitTestsMixin:
 @unittest.skipIf(not have_torch, "torch is required")
 class TorchWrapperUnitTests(TorchWrapperUnitTestsMixin, unittest.TestCase):
     pass
-
-
 if __name__ == "__main__":
     from pyspark.ml.torch.tests.test_distributor import *  # noqa: F401,F403
 
