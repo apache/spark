@@ -932,17 +932,20 @@ class TorchDistributor(Distributor):
             train_object is a Callable with an expected output. Returns None if train_object is
             a file.
         """
+        return self._run(train_object, TorchDistributor._run_training_on_pytorch_file, *args, **kwargs)
+
+    def _run(self, train_object: Union[Callable, str], run_training_on_pytorch_file_fn: Callable, *args: Any, **kwargs: Any) -> Optional[Any]:
         if isinstance(train_object, str):
-            framework_wrapper_fn = TorchDistributor._run_training_on_pytorch_file
+            framework_wrapper_fn = run_training_on_pytorch_file_fn
         else:
             framework_wrapper_fn = (
                 TorchDistributor._run_training_on_pytorch_function  # type: ignore
             )
         if self.local_mode:
-            output = self._run_local_training(framework_wrapper_fn, train_object, TorchDistributor._run_training_on_pytorch_file, *args, **kwargs)
+            output = self._run_local_training(framework_wrapper_fn, train_object, run_training_on_pytorch_file_fn, *args, **kwargs)
         else:
             output = self._run_distributed_training(
-                framework_wrapper_fn, train_object, TorchDistributor._run_training_on_pytorch_file, None, *args, **kwargs
+                framework_wrapper_fn, train_object, run_training_on_pytorch_file_fn, None, *args, **kwargs
             )
         return output
 
