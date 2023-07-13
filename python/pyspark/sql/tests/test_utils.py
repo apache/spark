@@ -757,13 +757,13 @@ class UtilsTestsMixin:
 
         df2 = self.spark.createDataFrame([(1, "jane"), (2, "john")], s2)
 
-        assertDataFrameEqual(df1, df2, check_nullability=False)
+        assertDataFrameEqual(df1, df2)
 
     def test_schema_ignore_nullable_array_equal(self):
         s1 = StructType([StructField("names", ArrayType(DoubleType(), True), True)])
         s2 = StructType([StructField("names", ArrayType(DoubleType(), False), False)])
 
-        assertSchemaEqual(s1, s2, check_nullability=False)
+        assertSchemaEqual(s1, s2)
 
     def test_schema_ignore_nullable_struct_equal(self):
         s1 = StructType(
@@ -772,7 +772,7 @@ class UtilsTestsMixin:
         s2 = StructType(
             [StructField("names", StructType([StructField("age", IntegerType(), False)]), False)]
         )
-        assertSchemaEqual(s1, s2, check_nullability=False)
+        assertSchemaEqual(s1, s2)
 
     def test_schema_ignore_nullable_array_unequal(self):
         s1 = StructType([StructField("names", ArrayType(IntegerType(), True), True)])

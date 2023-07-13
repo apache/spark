@@ -221,10 +221,9 @@ class PySparkErrorTestUtils:
         )
 
 
-def assertSchemaEqual(actual: StructType, expected: StructType, check_nullability: bool = True):
+def assertSchemaEqual(actual: StructType, expected: StructType):
     """
-    A util function to assert equality between DataFrame schemas `actual`
-    and `expected`, with optional parameter `check_nullability`.
+    A util function to assert equality between DataFrame schemas `actual` and `expected`.
 
     .. versionadded:: 3.5.0
 
@@ -234,10 +233,6 @@ def assertSchemaEqual(actual: StructType, expected: StructType, check_nullabilit
         The DataFrame schema that is being compared or tested.
     expected : StructType
         The expected schema, for comparison with the actual schema.
-    check_nullability : bool, optional
-        A flag indicating whether the nullable flag should be ignored in schema comparison.
-        If set to `False`, the nullable flag in the schemas is not taken into account.
-        If set to `True` (default), the nullable flag will be checked during schema comparison.
 
     Examples
     --------
@@ -279,17 +274,14 @@ def assertSchemaEqual(actual: StructType, expected: StructType, check_nullabilit
         return True
 
     def compare_structfields_ignore_nullable(actualSF, expectedSF):
-        if not check_nullability:
-            if actualSF is None and expectedSF is None:
-                return True
-            elif actualSF is None or expectedSF is None:
-                return False
-            if actualSF.name != expectedSF.name:
-                return False
-            else:
-                return compare_datatypes_ignore_nullable(actualSF.dataType, expectedSF.dataType)
+        if actualSF is None and expectedSF is None:
+            return True
+        elif actualSF is None or expectedSF is None:
+            return False
+        if actualSF.name != expectedSF.name:
+            return False
         else:
-            return actualSF == expectedSF
+            return compare_datatypes_ignore_nullable(actualSF.dataType, expectedSF.dataType)
 
     def compare_datatypes_ignore_nullable(dt1, dt2):
         # checks datatype equality, using recursion to ignore nullable
@@ -306,38 +298,21 @@ def assertSchemaEqual(actual: StructType, expected: StructType, check_nullabilit
     schemas_equal = True
     error_msg = ""
 
-    if not check_nullability:
-        if not compare_schemas_ignore_nullable(actual, expected):
-            zipped = zip_longest(actual, expected)
-            for actualSF, expectedSF in zipped:
-                if not compare_structfields_ignore_nullable(actualSF, expectedSF):
-                    schemas_equal = False
-                    error_msg += (
-                        "[df]"
-                        + "\n"
-                        + str(actualSF)
-                        + "\n\n"
-                        + "[expected]"
-                        + "\n"
-                        + str(expectedSF)
-                        + "\n\n"
-                    )
-    else:
-        if actual != expected:
-            schemas_equal = False
-            zipped = zip_longest(actual, expected)
-            for actualSF, expectedSF in zipped:
-                if actualSF != expectedSF:
-                    error_msg += (
-                        "[df]"
-                        + "\n"
-                        + str(actualSF)
-                        + "\n\n"
-                        + "[expected]"
-                        + "\n"
-                        + str(expectedSF)
-                        + "\n\n"
-                    )
+    if not compare_schemas_ignore_nullable(actual, expected):
+        zipped = zip_longest(actual, expected)
+        for actualSF, expectedSF in zipped:
+            if not compare_structfields_ignore_nullable(actualSF, expectedSF):
+                schemas_equal = False
+                error_msg += (
+                    "[df]"
+                    + "\n"
+                    + str(actualSF)
+                    + "\n\n"
+                    + "[expected]"
+                    + "\n"
+                    + str(expectedSF)
+                    + "\n\n"
+                )
 
     if not schemas_equal:
         raise PySparkAssertionError(
@@ -350,7 +325,6 @@ def assertDataFrameEqual(
     df: DataFrame,
     expected: DataFrame,
     check_row_order: bool = False,
-    check_nullability: bool = True,
 ):
     """
     A util function to assert equality between DataFrames `df` and `expected`, with
@@ -370,10 +344,6 @@ def assertDataFrameEqual(
         A flag indicating whether the order of rows should be considered in the comparison.
         If set to `False` (default), the row order is not taken into account.
         If set to `True`, the order of rows is important and will be checked during comparison.
-    check_nullability : bool, optional
-        A flag indicating whether the nullable flag should be ignored in schema comparison.
-        If set to `False`, the nullable flag in the schemas is not taken into account.
-        If set to `True` (default), the nullable flag will be checked during schema comparison.
 
     Examples
     --------
@@ -514,7 +484,7 @@ def assertDataFrameEqual(
                 message_parameters={},
             )
 
-    assertSchemaEqual(df.schema, expected.schema, check_nullability)
+    assertSchemaEqual(df.schema, expected.schema)
     assert_rows_equal(df.collect(), expected.collect())
 
 
