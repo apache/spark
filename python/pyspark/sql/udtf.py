@@ -93,11 +93,9 @@ def _create_py_udtf(
         return regular_udtf
 
 
-def _create_arrow_udtf(regular_udtf: "UserDefinedTableFunction") -> "UserDefinedTableFunction":
-    """Create an Arrow-optimized Python UDTF."""
+def _vectorize_udtf(cls: Type) -> Type:
+    """Vectorize a Python UDTF handler class."""
     import pandas as pd
-
-    cls = regular_udtf.func
 
     class VectorizedUDTF:
         def __init__(self) -> None:
@@ -126,6 +124,14 @@ def _create_arrow_udtf(regular_udtf: "UserDefinedTableFunction") -> "UserDefined
     if hasattr(cls, "terminate"):
         getattr(vectorized_udtf, "terminate").__doc__ = getattr(cls, "terminate").__doc__
 
+    return vectorized_udtf
+
+
+def _create_arrow_udtf(regular_udtf: "UserDefinedTableFunction") -> "UserDefinedTableFunction":
+    """Create an Arrow-optimized Python UDTF."""
+    cls = regular_udtf.func
+    vectorized_udtf = _vectorize_udtf(cls)
+
     return _create_udtf(
         cls=vectorized_udtf,
         returnType=regular_udtf.returnType,
@@ -133,6 +139,21 @@ def _create_arrow_udtf(regular_udtf: "UserDefinedTableFunction") -> "UserDefined
         evalType=PythonEvalType.SQL_ARROW_TABLE_UDF,
         deterministic=regular_udtf.deterministic,
     )
+
+
+def _validate_udtf(udtf: "UserDefinedTableFunction") -> None:
+    # TODO(SPARK-43968): add more compile time checks for UDTFs
+    if not isinstance(udtf.func, type):
+        raise PySparkTypeError(
+            f"Invalid user defined table function: the function handler "
+            f"must be a class, but got {type(udtf.func).__name__}. Please provide "
+            "a class as the handler."
+        )
+
+    if not hasattr(udtf.func, "eval"):
+        raise PySparkAttributeError(
+            error_class="INVALID_UDTF_NO_EVAL", message_parameters={"name": udtf._name}
+        )
 
 
 class UserDefinedTableFunction:
@@ -157,15 +178,6 @@ class UserDefinedTableFunction:
         evalType: int = PythonEvalType.SQL_TABLE_UDF,
         deterministic: bool = True,
     ):
-
-        if not isinstance(func, type):
-            raise PySparkTypeError(
-                f"Invalid user defined table function: the function handler "
-                f"must be a class, but got {type(func).__name__}. Please provide "
-                "a class as the handler."
-            )
-
-        # TODO(SPARK-43968): add more compile time checks for UDTFs
         self.func = func
         self._returnType = returnType
         self._returnType_placeholder: Optional[StructType] = None
@@ -175,29 +187,26 @@ class UserDefinedTableFunction:
         self.evalType = evalType
         self.deterministic = deterministic
 
-        if not hasattr(func, "eval"):
-            raise PySparkAttributeError(
-                error_class="INVALID_UDTF_NO_EVAL", message_parameters={"name": self._name}
-            )
+        _validate_udtf(self)
 
     @property
     def returnType(self) -> StructType:
         # `_parse_datatype_string` accesses to JVM for parsing a DDL formatted string.
         # This makes sure this is called after SparkContext is initialized.
         if self._returnType_placeholder is None:
-            if isinstance(self._returnType, StructType):
-                self._returnType_placeholder = self._returnType
-            else:
-                assert isinstance(self._returnType, str)
+            if isinstance(self._returnType, str):
                 parsed = _parse_datatype_string(self._returnType)
-                if not isinstance(parsed, StructType):
-                    raise PySparkTypeError(
-                        f"Invalid return type for the user defined table function "
-                        f"'{self._name}': {self._returnType}. The return type of a "
-                        f"UDTF must be a 'StructType'. Please ensure the return "
-                        "type is a correctly formatted 'StructType' string."
-                    )
-                self._returnType_placeholder = parsed
+            else:
+                parsed = self._returnType
+            if not isinstance(parsed, StructType):
+                raise PySparkTypeError(
+                    error_class="INVALID_UDTF_RETURN_TYPE",
+                    message_parameters={
+                        "name": self._name,
+                        "return_type": f"{parsed}",
+                    },
+                )
+            self._returnType_placeholder = parsed
         return self._returnType_placeholder
 
     @property

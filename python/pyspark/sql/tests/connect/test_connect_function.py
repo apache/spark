@@ -2352,16 +2352,13 @@ class SparkConnectFunctionTests(ReusedConnectTestCase, PandasOnSparkTestUtils, S
         sfunc = SF.udtf(TestUDTF, returnType="a: int, b: int")
         cfunc = CF.udtf(TestUDTF, returnType="a: int, b: int")
 
+        assertDataFrameEqual(sfunc(SF.lit(1), SF.lit(1)), cfunc(CF.lit(1), CF.lit(1)))
+
         self.spark.udtf.register("test_udtf", sfunc)
         self.connect.udtf.register("test_udtf", cfunc)
 
         query = "select * from test_udtf(1, 2)"
         assertDataFrameEqual(self.spark.sql(query), self.connect.sql(query))
-
-        # TODO: improve the error msg for using the wrong registry
-        # sql/udtf.py: assert isinstance(self._returnType, str) AssertionError
-        # self.spark.udtf.register("test_udtf1", cfunc)
-        # self.connect.udtf.register("test_udtf1", sfunc)
 
     def test_pandas_udf_import(self):
         self.assert_eq(getattr(CF, "pandas_udf"), getattr(SF, "pandas_udf"))

@@ -14,9 +14,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-
-import unittest
-
 from pyspark.testing.connectutils import should_test_connect
 
 if should_test_connect:
@@ -25,12 +22,100 @@ if should_test_connect:
 
     sql.udtf.UserDefinedTableFunction = UserDefinedTableFunction
 
-from pyspark.sql.tests.test_udtf import UDTFTestsMixin
+from pyspark.sql.connect.functions import lit, udtf
+from pyspark.sql.tests.test_udtf import BaseUDTFTestsMixin, UDTFArrowTestsMixin
 from pyspark.testing.connectutils import ReusedConnectTestCase
+from pyspark.errors.exceptions.connect import SparkConnectGrpcException
 
 
-class UDTFParityTests(UDTFTestsMixin, ReusedConnectTestCase):
-    ...
+class UDTFParityTests(BaseUDTFTestsMixin, ReusedConnectTestCase):
+    @classmethod
+    def setUpClass(cls):
+        super(UDTFParityTests, cls).setUpClass()
+        cls.spark.conf.set("spark.sql.execution.pythonUDTF.arrow.enabled", "false")
+
+    @classmethod
+    def tearDownClass(cls):
+        try:
+            cls.spark.conf.unset("spark.sql.execution.pythonUDTF.arrow.enabled")
+        finally:
+            super(UDTFParityTests, cls).tearDownClass()
+
+    # TODO: use PySpark error classes instead of throwing either
+    # Py4JJavaError or SparkConnectGrpcException.
+
+    def test_udtf_with_wrong_num_output(self):
+        err_msg = (
+            "java.lang.IllegalStateException: Input row doesn't have expected number of "
+            + "values required by the schema."
+        )
+
+        @udtf(returnType="a: int, b: int")
+        class TestUDTF:
+            def eval(self, a: int):
+                yield a,
+
+        with self.assertRaisesRegex(SparkConnectGrpcException, err_msg):
+            TestUDTF(lit(1)).collect()
+
+        @udtf(returnType="a: int")
+        class TestUDTF:
+            def eval(self, a: int):
+                yield a, a + 1
+
+        with self.assertRaisesRegex(SparkConnectGrpcException, err_msg):
+            TestUDTF(lit(1)).collect()
+
+    def test_udtf_terminate_with_wrong_num_output(self):
+        err_msg = (
+            "java.lang.IllegalStateException: Input row doesn't have expected number of "
+            "values required by the schema."
+        )
+
+        @udtf(returnType="a: int, b: int")
+        class TestUDTF:
+            def eval(self, a: int):
+                yield a, a + 1
+
+            def terminate(self):
+                yield 1, 2, 3
+
+        with self.assertRaisesRegex(SparkConnectGrpcException, err_msg):
+            TestUDTF(lit(1)).show()
+
+        @udtf(returnType="a: int, b: int")
+        class TestUDTF:
+            def eval(self, a: int):
+                yield a, a + 1
+
+            def terminate(self):
+                yield 1,
+
+        with self.assertRaisesRegex(SparkConnectGrpcException, err_msg):
+            TestUDTF(lit(1)).show()
+
+    def test_udtf_with_empty_yield(self):
+        @udtf(returnType="a: int")
+        class TestUDTF:
+            def eval(self, a: int):
+                yield
+
+        with self.assertRaisesRegex(SparkConnectGrpcException, "java.lang.NullPointerException"):
+            TestUDTF(lit(1)).collect()
+
+
+class ArrowUDTFParityTests(UDTFArrowTestsMixin, UDTFParityTests):
+    @classmethod
+    def setUpClass(cls):
+        super(ArrowUDTFParityTests, cls).setUpClass()
+        cls.spark.conf.set("spark.sql.execution.pythonUDTF.arrow.enabled", "true")
+
+    @classmethod
+    def tearDownClass(cls):
+        try:
+            cls.spark.conf.unset("spark.sql.execution.pythonUDTF.arrow.enabled")
+        finally:
+            super(ArrowUDTFParityTests, cls).tearDownClass()
 
 
 if __name__ == "__main__":

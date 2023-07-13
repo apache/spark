@@ -893,33 +893,15 @@ class SparkConnectPlanner(val sessionHolder: SessionHolder) extends Logging {
   }
 
   private def transformCommonInlineUserDefinedTableFunction(
-      func: proto.CommonInlineUserDefinedTableFunction): LogicalPlan = {
-    func.getFunctionCase match {
+      fun: proto.CommonInlineUserDefinedTableFunction): LogicalPlan = {
+    fun.getFunctionCase match {
       case proto.CommonInlineUserDefinedTableFunction.FunctionCase.PYTHON_UDTF =>
-        transformPythonUserDefinedTableFunction(func)
+        val function = createPythonUserDefinedTableFunction(fun)
+        function.builder(fun.getArgumentsList.asScala.map(transformExpression).toSeq)
       case _ =>
         throw InvalidPlanInput(
-          s"Function with ID: ${func.getFunctionCase.getNumber} is not supported")
+          s"Function with ID: ${fun.getFunctionCase.getNumber} is not supported")
     }
-  }
-
-  private def transformPythonUserDefinedTableFunction(
-      func: proto.CommonInlineUserDefinedTableFunction): LogicalPlan = {
-    val udtf = func.getPythonUdtf
-    val returnType = transformDataType(udtf.getReturnType)
-    if (!returnType.isInstanceOf[StructType]) {
-      throw InvalidPlanInput(
-        "Invalid Python user-defined table function return type. " +
-          s"Expect a StructType, but got ${returnType.typeName}.")
-    }
-    UserDefinedPythonTableFunction(
-      name = func.getFunctionName,
-      func = transformPythonTableFunction(udtf),
-      returnType = returnType.asInstanceOf[StructType],
-      // TODO: add eval type
-      // pythonEvalType = fun.getEvalType,
-      udfDeterministic = func.getDeterministic
-    ).builder(func.getArgumentsList.asScala.map(transformExpression).toSeq)
   }
 
   private def transformPythonTableFunction(fun: proto.PythonUDTF): SimplePythonFunction = {
@@ -2489,14 +2471,16 @@ class SparkConnectPlanner(val sessionHolder: SessionHolder) extends Logging {
       fun: proto.CommonInlineUserDefinedTableFunction): Unit = {
     fun.getFunctionCase match {
       case proto.CommonInlineUserDefinedTableFunction.FunctionCase.PYTHON_UDTF =>
-        handleRegisterPythonUDTF(fun)
+        val function = createPythonUserDefinedTableFunction(fun)
+        session.udtf.registerPython(fun.getFunctionName, function)
       case _ =>
         throw InvalidPlanInput(
           s"Function with ID: ${fun.getFunctionCase.getNumber} is not supported")
     }
   }
 
-  private def handleRegisterPythonUDTF(fun: proto.CommonInlineUserDefinedTableFunction): Unit = {
+  private def createPythonUserDefinedTableFunction(
+      fun: proto.CommonInlineUserDefinedTableFunction): UserDefinedPythonTableFunction = {
     val udtf = fun.getPythonUdtf
     val returnType = transformDataType(udtf.getReturnType)
     if (!returnType.isInstanceOf[StructType]) {
@@ -2505,16 +2489,14 @@ class SparkConnectPlanner(val sessionHolder: SessionHolder) extends Logging {
           s"Expect a StructType, but got ${returnType.typeName}.")
     }
 
-    val function = UserDefinedPythonTableFunction(
+    UserDefinedPythonTableFunction(
       name = fun.getFunctionName,
       func = transformPythonTableFunction(udtf),
       returnType = returnType.asInstanceOf[StructType],
-      // TODO: add eval type
-      // pythonEvalType = fun.getEvalType,
+      pythonEvalType = udtf.getEvalType,
       udfDeterministic = fun.getDeterministic
     )
-
-    session.udtf.registerPython(fun.getFunctionName, function)
+  }
 
   private def handleRegisterPythonUDF(fun: proto.CommonInlineUserDefinedFunction): Unit = {
     val udf = fun.getPythonUdf

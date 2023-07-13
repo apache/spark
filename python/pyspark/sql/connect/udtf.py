@@ -21,7 +21,7 @@ from pyspark.sql.connect.utils import check_dependencies
 
 check_dependencies(__name__)
 
-import sys
+import warnings
 from typing import Type, TYPE_CHECKING, Optional, Union
 
 from pyspark.rdd import PythonEvalType
@@ -32,8 +32,11 @@ from pyspark.sql.connect.plan import (
     PythonUDTF,
 )
 from pyspark.sql.connect.types import UnparsedDataType
+from pyspark.sql.connect.utils import get_python_ver
 from pyspark.sql.udtf import UDTFRegistration as PySparkUDTFRegistration
+from pyspark.sql.udtf import _validate_udtf
 from pyspark.sql.types import DataType, StructType
+from pyspark.errors import PySparkRuntimeError, PySparkTypeError
 
 
 if TYPE_CHECKING:
@@ -46,12 +49,61 @@ def _create_udtf(
     cls: Type,
     returnType: Union[StructType, str],
     name: Optional[str] = None,
+    evalType: int = PythonEvalType.SQL_TABLE_UDF,
     deterministic: bool = True,
 ) -> "UserDefinedTableFunction":
     udtf_obj = UserDefinedTableFunction(
-        cls, returnType=returnType, name=name, deterministic=deterministic
+        cls, returnType=returnType, name=name, evalType=evalType, deterministic=deterministic
     )
     return udtf_obj
+
+
+def _create_py_udtf(
+    cls: Type,
+    returnType: Union[StructType, str],
+    name: Optional[str] = None,
+    deterministic: bool = True,
+    useArrow: Optional[bool] = None,
+) -> "UserDefinedTableFunction":
+    if useArrow is not None:
+        arrow_enabled = useArrow
+    else:
+        from pyspark.sql.connect.session import _active_spark_session
+
+        arrow_enabled = (
+            _active_spark_session.conf.get("spark.sql.execution.pythonUDTF.arrow.enabled") == "true"
+            if _active_spark_session is not None
+            else True
+        )
+
+    # Create a regular Python UDTF and check for invalid handler class.
+    regular_udtf = _create_udtf(cls, returnType, name, PythonEvalType.SQL_TABLE_UDF, deterministic)
+
+    if not arrow_enabled:
+        return regular_udtf
+
+    from pyspark.sql.pandas.utils import (
+        require_minimum_pandas_version,
+        require_minimum_pyarrow_version,
+    )
+
+    try:
+        require_minimum_pandas_version()
+        require_minimum_pyarrow_version()
+    except ImportError as e:
+        warnings.warn(
+            f"Arrow optimization for Python UDTFs cannot be enabled: {str(e)}. "
+            f"Falling back to using regular Python UDTFs.",
+            UserWarning,
+        )
+        return regular_udtf
+
+    from pyspark.sql.udtf import _vectorize_udtf
+
+    vectorized_udtf = _vectorize_udtf(cls)
+    return _create_udtf(
+        vectorized_udtf, returnType, name, PythonEvalType.SQL_ARROW_TABLE_UDF, deterministic
+    )
 
 
 class UserDefinedTableFunction:
@@ -72,8 +124,6 @@ class UserDefinedTableFunction:
         evalType: int = PythonEvalType.SQL_TABLE_UDF,
         deterministic: bool = True,
     ) -> None:
-        # TODO: add checks here
-
         self.func = func
         self.returnType: DataType = (
             UnparsedDataType(returnType) if isinstance(returnType, str) else returnType
@@ -81,6 +131,8 @@ class UserDefinedTableFunction:
         self._name = name or func.__name__
         self.evalType = evalType
         self.deterministic = deterministic
+
+        _validate_udtf(self)
 
     def _build_common_inline_user_defined_table_function(
         self, *cols: "ColumnOrName"
@@ -92,9 +144,9 @@ class UserDefinedTableFunction:
 
         udtf = PythonUDTF(
             func=self.func,
-            return_type=self.returnType,  # TODO: handle this type
+            return_type=self.returnType,
             eval_type=self.evalType,
-            python_ver="%d.%d" % sys.version_info[:2],
+            python_ver=get_python_ver(),
         )
         return CommonInlineUserDefinedTableFunction(
             function_name=self._name,
@@ -108,8 +160,11 @@ class UserDefinedTableFunction:
         from pyspark.sql.connect.session import _active_spark_session
 
         if _active_spark_session is None:
-            # TODO: can we create this session?
-            raise Exception("No active spark session")
+            # TODO: can we create a Spark session here?
+            raise PySparkRuntimeError(
+                "An active SparkSession is required for "
+                "executing a Python user-defined table function."
+            )
 
         plan = self._build_common_inline_user_defined_table_function(*cols)
         return DataFrame.withPlan(plan, _active_spark_session)
@@ -132,9 +187,17 @@ class UDTFRegistration:
     def register(
         self,
         name: str,
-        f: UserDefinedTableFunction,
+        f: "UserDefinedTableFunction",
     ) -> "UserDefinedTableFunction":
-        # TODO: add eval type check
+        if f.evalType not in [PythonEvalType.SQL_TABLE_UDF, PythonEvalType.SQL_ARROW_TABLE_UDF]:
+            raise PySparkTypeError(
+                error_class="INVALID_UDTF_EVAL_TYPE",
+                message_parameters={
+                    "name": name,
+                    "eval_type": "SQL_TABLE_UDF, SQL_ARROW_TABLE_UDF",
+                },
+            )
+
         self.sparkSession._client.register_udtf(
             f.func, f.returnType, name, f.evalType, f.deterministic
         )

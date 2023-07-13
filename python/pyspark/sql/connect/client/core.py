@@ -79,6 +79,7 @@ from pyspark.sql.connect.plan import (
     CommonInlineUserDefinedTableFunction,
     PythonUDTF,
 )
+from pyspark.sql.connect.utils import get_python_ver
 from pyspark.sql.pandas.types import _create_converter_to_pandas, from_arrow_schema
 from pyspark.sql.types import DataType, StructType, TimestampType, _has_type
 from pyspark.rdd import PythonEvalType
@@ -648,25 +649,21 @@ class SparkConnectClient(object):
     def register_udtf(
         self,
         function: Any,
-        return_type: Union[StructType, str],
-        name: Optional[str] = None,
+        return_type: "DataTypeOrString",
+        name: str,
         eval_type: int = PythonEvalType.SQL_TABLE_UDF,
         deterministic: bool = True,
     ) -> str:
         """
         Create a temporary user-defined table function in the session catalog.
+        Note the return type of a UDTF must be a struct type. It will be checked
+        when building the proto message for PythonUDTF.
         """
-
-        if name is None:
-            # Create a temporary name for the function?
-            # TODO: for UDTFs this should always be defined?
-            name = f"fun_{uuid.uuid4().hex}"
-
         udtf = PythonUDTF(
             func=function,
             return_type=return_type,
             eval_type=eval_type,
-            python_ver="%d.%d" % sys.version_info[:2],
+            python_ver=get_python_ver(),
         )
 
         func = CommonInlineUserDefinedTableFunction(

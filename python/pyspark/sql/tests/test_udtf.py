@@ -30,6 +30,8 @@ from pyspark.errors import (
 from pyspark.rdd import PythonEvalType
 from pyspark.sql.functions import lit, udf, udtf
 from pyspark.sql.types import Row
+from pyspark.testing import assertDataFrameEqual
+from pyspark.sql.types import MapType, StringType, IntegerType
 from pyspark.testing.sqlutils import (
     have_pandas,
     have_pyarrow,
@@ -207,8 +209,8 @@ class BaseUDTFTestsMixin:
         self.assertEqual(TestUDTF(lit(1)).collect(), [Row(a=1), Row(a=None)])
         df = self.spark.createDataFrame([(0, 1), (1, 2)], schema=["a", "b"])
         self.assertEqual(TestUDTF(lit(1)).join(df, "a", "inner").collect(), [Row(a=1, b=2)])
-        self.assertEqual(
-            TestUDTF(lit(1)).join(df, "a", "left").collect(), [Row(a=None, b=None), Row(a=1, b=2)]
+        assertDataFrameEqual(
+            TestUDTF(lit(1)).join(df, "a", "left"), [Row(a=None, b=None), Row(a=1, b=2)]
         )
 
     def test_udtf_with_none_input(self):
@@ -380,6 +382,38 @@ class BaseUDTFTestsMixin:
             AnalysisException, " The operator expects a deterministic expression"
         ):
             TestUDTF(rand(0) * 100).collect()
+
+    def test_udtf_with_invalid_return_type(self):
+        @udtf(returnType="int")
+        class TestUDTF:
+            def eval(self, a: int):
+                yield a + 1,
+
+        with self.assertRaises(PySparkTypeError) as e:
+            TestUDTF(lit(1)).collect()
+
+        self.check_error(
+            exception=e.exception,
+            error_class="INVALID_UDTF_RETURN_TYPE",
+            message_parameters={"name": "TestUDTF", "return_type": "IntegerType()"},
+        )
+
+        @udtf(returnType=MapType(StringType(), IntegerType()))
+        class TestUDTF:
+            def eval(self, a: int):
+                yield a + 1,
+
+        with self.assertRaises(PySparkTypeError) as e:
+            TestUDTF(lit(1)).collect()
+
+        self.check_error(
+            exception=e.exception,
+            error_class="INVALID_UDTF_RETURN_TYPE",
+            message_parameters={
+                "name": "TestUDTF",
+                "return_type": "MapType(StringType(), IntegerType(), True)",
+            },
+        )
 
     def test_udtf_with_struct_input_type(self):
         @udtf(returnType="x: string")

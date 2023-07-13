@@ -53,7 +53,7 @@ from pyspark.sql.connect.expressions import (
     UnresolvedNamedLambdaVariable,
 )
 from pyspark.sql.connect.udf import _create_py_udf
-from pyspark.sql.connect.udtf import UserDefinedTableFunction, _create_udtf
+from pyspark.sql.connect.udtf import _create_py_udtf
 from pyspark.sql import functions as pysparkfuncs
 from pyspark.sql.types import _from_numpy_type, DataType, StructType, ArrayType, StringType
 
@@ -69,6 +69,7 @@ if TYPE_CHECKING:
         UserDefinedFunctionLike,
     )
     from pyspark.sql.connect.dataframe import DataFrame
+    from pyspark.sql.connect.udtf import UserDefinedTableFunction
 
 
 def _to_col_with_plan_id(col: str, plan_id: Optional[int]) -> Column:
@@ -3897,11 +3898,12 @@ def udtf(
     cls: Optional[Type] = None,
     *,
     returnType: Union[StructType, str],
-) -> Union[UserDefinedTableFunction, functools.partial]:
+    useArrow: Optional[bool] = None,
+) -> Union["UserDefinedTableFunction", functools.partial]:
     if cls is None:
-        return functools.partial(_create_udtf, returnType=returnType)
+        return functools.partial(_create_py_udtf, returnType=returnType, useArrow=useArrow)
     else:
-        return _create_udtf(cls=cls, returnType=returnType)
+        return _create_py_udtf(cls=cls, returnType=returnType, useArrow=useArrow)
 
 
 udtf.__doc__ = pysparkfuncs.udtf.__doc__

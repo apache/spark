@@ -2181,11 +2181,12 @@ class PythonUDTF:
     def __init__(
         self,
         func: Type,
-        return_type: Union[StructType, str],
+        return_type: Union[DataType, str],
         eval_type: int,
         python_ver: str,
     ) -> None:
         self._func = func
+        self._name = func.__name__
         self._return_type: DataType = (
             UnparsedDataType(return_type) if isinstance(return_type, str) else return_type
         )
@@ -2199,7 +2200,13 @@ class PythonUDTF:
             ).parsed
         else:
             parsed = self._return_type
-        assert isinstance(parsed, StructType)
+
+        if not isinstance(parsed, StructType):
+            raise PySparkTypeError(
+                error_class="INVALID_UDTF_RETURN_TYPE",
+                message_parameters={"name": self._name, "return_type": f"{parsed}"},
+            )
+
         return parsed
 
     def to_plan(self, session: "SparkConnectClient") -> proto.PythonUDTF:
@@ -2213,7 +2220,7 @@ class PythonUDTF:
 
     def __repr__(self) -> str:
         return (
-            f"PythonUDTF({self._func.__name__}, {self._return_type}, "
+            f"PythonUDTF({self._name}, {self._return_type}, "
             f"{self._eval_type}, {self._python_ver})"
         )
 
