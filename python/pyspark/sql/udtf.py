@@ -56,7 +56,7 @@ def _create_udtf(
 
 def _create_py_udtf(
     cls: Type,
-    returnType: Optional[Union[StructType, str]] = None,
+    returnType: Optional[Union[StructType, str]],
     name: Optional[str] = None,
     deterministic: bool = True,
     useArrow: Optional[bool] = None,
