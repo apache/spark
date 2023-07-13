@@ -57,8 +57,8 @@ object StreamingForeachBatchHelper extends Logging {
    * Handles setting up Scala remote session and other Spark Connect environment and then runs the
    * provided foreachBatch function `fn`.
    *
-   * HACK ALERT: This version does not atually set up Spark connect. Directly passes the
-   * DataFrame, so the user code actually runs with legacy DataFrame.
+   * HACK ALERT: This version does not actually set up Spark Connect session. Directly passes the
+   * DataFrame, so the user code actually runs with legacy DataFrame and session..
    */
   def scalaForeachBatchWrapper(
       fn: ForeachBatchFnType,
