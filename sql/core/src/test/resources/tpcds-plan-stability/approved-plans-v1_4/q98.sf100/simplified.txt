@@ -28,6 +28,16 @@ WholeStageCodegen (10)
                                                       Exchange [ss_item_sk] #4
                                                         WholeStageCodegen (1)
                                                           Filter [ss_item_sk]
+                                                            Subquery #2
+                                                              ObjectHashAggregate [buf] [bloom_filter_agg(xxhash64(i_item_sk, 42), 61200, 979099, 0, 0),bloomFilter,buf]
+                                                                Exchange #6
+                                                                  ObjectHashAggregate [i_item_sk] [buf,buf]
+                                                                    WholeStageCodegen (1)
+                                                                      Project [i_item_sk]
+                                                                        Filter [i_category,i_item_sk]
+                                                                          ColumnarToRow
+                                                                            InputAdapter
+                                                                              Scan parquet spark_catalog.default.item [i_item_sk,i_category]
                                                             ColumnarToRow
                                                               InputAdapter
                                                                 Scan parquet spark_catalog.default.store_sales [ss_item_sk,ss_ext_sales_price,ss_sold_date_sk]
@@ -43,7 +53,7 @@ WholeStageCodegen (10)
                                                 WholeStageCodegen (4)
                                                   Sort [i_item_sk]
                                                     InputAdapter
-                                                      Exchange [i_item_sk] #6
+                                                      Exchange [i_item_sk] #7
                                                         WholeStageCodegen (3)
                                                           Filter [i_category,i_item_sk]
                                                             ColumnarToRow

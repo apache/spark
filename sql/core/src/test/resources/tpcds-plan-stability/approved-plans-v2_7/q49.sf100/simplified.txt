@@ -38,6 +38,16 @@ TakeOrderedAndProject [channel,return_rank,currency_rank,item,return_ratio]
                                                                           BroadcastHashJoin [ws_sold_date_sk,d_date_sk]
                                                                             Project [ws_item_sk,ws_order_number,ws_quantity,ws_net_paid,ws_sold_date_sk]
                                                                               Filter [ws_net_profit,ws_net_paid,ws_quantity,ws_order_number,ws_item_sk]
+                                                                                Subquery #2
+                                                                                  ObjectHashAggregate [buf] [bloom_filter_agg(xxhash64(wr_item_sk, 42), 4449121, 32471646, 0, 0),bloomFilter,buf]
+                                                                                    Exchange #6
+                                                                                      ObjectHashAggregate [wr_item_sk] [buf,buf]
+                                                                                        WholeStageCodegen (1)
+                                                                                          Project [wr_item_sk]
+                                                                                            Filter [wr_return_amt,wr_order_number,wr_item_sk]
+                                                                                              ColumnarToRow
+                                                                                                InputAdapter
+                                                                                                  Scan parquet spark_catalog.default.web_returns [wr_item_sk,wr_order_number,wr_return_amt,wr_returned_date_sk]
                                                                                 ColumnarToRow
                                                                                   InputAdapter
                                                                                     Scan parquet spark_catalog.default.web_sales [ws_item_sk,ws_order_number,ws_quantity,ws_net_paid,ws_net_profit,ws_sold_date_sk]
@@ -55,7 +65,7 @@ TakeOrderedAndProject [channel,return_rank,currency_rank,item,return_ratio]
                                                               WholeStageCodegen (5)
                                                                 Sort [wr_order_number,wr_item_sk]
                                                                   InputAdapter
-                                                                    Exchange [wr_order_number,wr_item_sk] #6
+                                                                    Exchange [wr_order_number,wr_item_sk] #7
                                                                       WholeStageCodegen (4)
                                                                         Project [wr_item_sk,wr_order_number,wr_return_quantity,wr_return_amt]
                                                                           Filter [wr_return_amt,wr_order_number,wr_item_sk]
@@ -74,11 +84,11 @@ TakeOrderedAndProject [channel,return_rank,currency_rank,item,return_ratio]
                                     WholeStageCodegen (18)
                                       Sort [return_ratio]
                                         InputAdapter
-                                          Exchange #7
+                                          Exchange #8
                                             WholeStageCodegen (17)
                                               HashAggregate [cs_item_sk,sum,sum,sum,isEmpty,sum,isEmpty] [sum(coalesce(cr_return_quantity, 0)),sum(coalesce(cs_quantity, 0)),sum(coalesce(cast(cr_return_amount as decimal(12,2)), 0.00)),sum(coalesce(cast(cs_net_paid as decimal(12,2)), 0.00)),item,return_ratio,currency_ratio,sum,sum,sum,isEmpty,sum,isEmpty]
                                                 InputAdapter
-                                                  Exchange [cs_item_sk] #8
+                                                  Exchange [cs_item_sk] #9
                                                     WholeStageCodegen (16)
                                                       HashAggregate [cs_item_sk,cr_return_quantity,cs_quantity,cr_return_amount,cs_net_paid] [sum,sum,sum,isEmpty,sum,isEmpty,sum,sum,sum,isEmpty,sum,isEmpty]
                                                         Project [cs_item_sk,cs_quantity,cs_net_paid,cr_return_quantity,cr_return_amount]
@@ -87,12 +97,22 @@ TakeOrderedAndProject [channel,return_rank,currency_rank,item,return_ratio]
                                                               WholeStageCodegen (13)
                                                                 Sort [cs_order_number,cs_item_sk]
                                                                   InputAdapter
-                                                                    Exchange [cs_order_number,cs_item_sk] #9
+                                                                    Exchange [cs_order_number,cs_item_sk] #10
                                                                       WholeStageCodegen (12)
                                                                         Project [cs_item_sk,cs_order_number,cs_quantity,cs_net_paid]
                                                                           BroadcastHashJoin [cs_sold_date_sk,d_date_sk]
                                                                             Project [cs_item_sk,cs_order_number,cs_quantity,cs_net_paid,cs_sold_date_sk]
                                                                               Filter [cs_net_profit,cs_net_paid,cs_quantity,cs_order_number,cs_item_sk]
+                                                                                Subquery #3
+                                                                                  ObjectHashAggregate [buf] [bloom_filter_agg(xxhash64(cr_item_sk, 42), 9210895, 67108864, 0, 0),bloomFilter,buf]
+                                                                                    Exchange #11
+                                                                                      ObjectHashAggregate [cr_item_sk] [buf,buf]
+                                                                                        WholeStageCodegen (1)
+                                                                                          Project [cr_item_sk]
+                                                                                            Filter [cr_return_amount,cr_order_number,cr_item_sk]
+                                                                                              ColumnarToRow
+                                                                                                InputAdapter
+                                                                                                  Scan parquet spark_catalog.default.catalog_returns [cr_item_sk,cr_order_number,cr_return_amount,cr_returned_date_sk]
                                                                                 ColumnarToRow
                                                                                   InputAdapter
                                                                                     Scan parquet spark_catalog.default.catalog_sales [cs_item_sk,cs_order_number,cs_quantity,cs_net_paid,cs_net_profit,cs_sold_date_sk]
@@ -103,7 +123,7 @@ TakeOrderedAndProject [channel,return_rank,currency_rank,item,return_ratio]
                                                               WholeStageCodegen (15)
                                                                 Sort [cr_order_number,cr_item_sk]
                                                                   InputAdapter
-                                                                    Exchange [cr_order_number,cr_item_sk] #10
+                                                                    Exchange [cr_order_number,cr_item_sk] #12
                                                                       WholeStageCodegen (14)
                                                                         Project [cr_item_sk,cr_order_number,cr_return_quantity,cr_return_amount]
                                                                           Filter [cr_return_amount,cr_order_number,cr_item_sk]
@@ -122,11 +142,11 @@ TakeOrderedAndProject [channel,return_rank,currency_rank,item,return_ratio]
                                     WholeStageCodegen (28)
                                       Sort [return_ratio]
                                         InputAdapter
-                                          Exchange #11
+                                          Exchange #13
                                             WholeStageCodegen (27)
                                               HashAggregate [ss_item_sk,sum,sum,sum,isEmpty,sum,isEmpty] [sum(coalesce(sr_return_quantity, 0)),sum(coalesce(ss_quantity, 0)),sum(coalesce(cast(sr_return_amt as decimal(12,2)), 0.00)),sum(coalesce(cast(ss_net_paid as decimal(12,2)), 0.00)),item,return_ratio,currency_ratio,sum,sum,sum,isEmpty,sum,isEmpty]
                                                 InputAdapter
-                                                  Exchange [ss_item_sk] #12
+                                                  Exchange [ss_item_sk] #14
                                                     WholeStageCodegen (26)
                                                       HashAggregate [ss_item_sk,sr_return_quantity,ss_quantity,sr_return_amt,ss_net_paid] [sum,sum,sum,isEmpty,sum,isEmpty,sum,sum,sum,isEmpty,sum,isEmpty]
                                                         Project [ss_item_sk,ss_quantity,ss_net_paid,sr_return_quantity,sr_return_amt]
@@ -135,12 +155,22 @@ TakeOrderedAndProject [channel,return_rank,currency_rank,item,return_ratio]
                                                               WholeStageCodegen (23)
                                                                 Sort [ss_ticket_number,ss_item_sk]
                                                                   InputAdapter
-                                                                    Exchange [ss_ticket_number,ss_item_sk] #13
+                                                                    Exchange [ss_ticket_number,ss_item_sk] #15
                                                                       WholeStageCodegen (22)
                                                                         Project [ss_item_sk,ss_ticket_number,ss_quantity,ss_net_paid]
                                                                           BroadcastHashJoin [ss_sold_date_sk,d_date_sk]
                                                                             Project [ss_item_sk,ss_ticket_number,ss_quantity,ss_net_paid,ss_sold_date_sk]
                                                                               Filter [ss_net_profit,ss_net_paid,ss_quantity,ss_ticket_number,ss_item_sk]
+                                                                                Subquery #4
+                                                                                  ObjectHashAggregate [buf] [bloom_filter_agg(xxhash64(sr_item_sk, 42), 13141919, 67108864, 0, 0),bloomFilter,buf]
+                                                                                    Exchange #16
+                                                                                      ObjectHashAggregate [sr_item_sk] [buf,buf]
+                                                                                        WholeStageCodegen (1)
+                                                                                          Project [sr_item_sk]
+                                                                                            Filter [sr_return_amt,sr_ticket_number,sr_item_sk]
+                                                                                              ColumnarToRow
+                                                                                                InputAdapter
+                                                                                                  Scan parquet spark_catalog.default.store_returns [sr_item_sk,sr_ticket_number,sr_return_amt,sr_returned_date_sk]
                                                                                 ColumnarToRow
                                                                                   InputAdapter
                                                                                     Scan parquet spark_catalog.default.store_sales [ss_item_sk,ss_ticket_number,ss_quantity,ss_net_paid,ss_net_profit,ss_sold_date_sk]
@@ -151,7 +181,7 @@ TakeOrderedAndProject [channel,return_rank,currency_rank,item,return_ratio]
                                                               WholeStageCodegen (25)
                                                                 Sort [sr_ticket_number,sr_item_sk]
                                                                   InputAdapter
-                                                                    Exchange [sr_ticket_number,sr_item_sk] #14
+                                                                    Exchange [sr_ticket_number,sr_item_sk] #17
                                                                       WholeStageCodegen (24)
                                                                         Project [sr_item_sk,sr_ticket_number,sr_return_quantity,sr_return_amt]
                                                                           Filter [sr_return_amt,sr_ticket_number,sr_item_sk]
