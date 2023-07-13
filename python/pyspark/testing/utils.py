@@ -240,10 +240,13 @@ def assertSchemaEqual(actual: StructType, expected: StructType):
     >>> from pyspark.sql.types import StructType, StructField, ArrayType, IntegerType, DoubleType
     >>> s1 = StructType([StructField("names", ArrayType(DoubleType(), True), True)])
     >>> s2 = StructType([StructField("names", ArrayType(DoubleType(), True), True)])
-    >>> assertSchemaEqual(s1, s2) # pass
+    >>> assertSchemaEqual(s1, s2)
+
+    Pass, schemas are identical
+
     >>> s1 = StructType([StructField("names", ArrayType(IntegerType(), True), True)])
     >>> s2 = StructType([StructField("names", ArrayType(DoubleType(), False), True)])
-    >>> assertSchemaEqual(s1, s2) # fail  # doctest: +IGNORE_EXCEPTION_DETAIL +NORMALIZE_WHITESPACE
+    >>> assertSchemaEqual(s1, s2)  # fail  # doctest: +IGNORE_EXCEPTION_DETAIL
     Traceback (most recent call last):
     ...
     PySparkAssertionError: [DIFFERENT_SCHEMA] Schemas do not match:
@@ -350,11 +353,11 @@ def assertDataFrameEqual(
     >>> df1 = spark.createDataFrame(data=[("1", 1000), ("2", 3000)], schema=["id", "amount"])
     >>> df2 = spark.createDataFrame(data=[("1", 1000), ("2", 3000)], schema=["id", "amount"])
     >>> assertDataFrameEqual(df1, df2) # pass
-    >>> df1 = spark.createDataFrame(data=[("1", 1000.00), ("2", 3000.00), ("3", 2000.00)], \
-        schema=["id", "amount"])
-    >>> df2 = spark.createDataFrame(data=[("1", 1001.00), ("2", 3000.00), ("3", 2003.00)], \
-        schema=["id", "amount"])
-    >>> assertDataFrameEqual(df1, df2) # fail  # doctest: +IGNORE_EXCEPTION_DETAIL +NORMALIZE_WHITESPACE
+    >>> df1 = spark.createDataFrame(data=[("1", 1000.00), ("2", 3000.00), ("3", 2000.00)],
+    ... schema=["id", "amount"])
+    >>> df2 = spark.createDataFrame(data=[("1", 1001.00), ("2", 3000.00), ("3", 2003.00)],
+    ... schema=["id", "amount"])
+    >>> assertDataFrameEqual(df1, df2) # fail  # doctest: +IGNORE_EXCEPTION_DETAIL
     Traceback (most recent call last):
     ...
     PySparkAssertionError: [DIFFERENT_ROWS] Results do not match: ( 66.667 % )
