@@ -56,9 +56,9 @@ class ClassLoaderIsolationSuite extends SparkFunSuite with LocalSparkContext  {
       files = Map.empty,
       archives = Map.empty
     )
-    sc.addJar(jar2, false, artifactSetWithHelloV2.state.get.uuid)
 
     JobArtifactSet.withActiveJobArtifactState(artifactSetWithHelloV2.state.get) {
+      sc.addJar(jar2)
       sc.parallelize(1 to 1).foreach { i =>
         val cls = Utils.classForName("com.example.Hello$")
         val module = cls.getField("MODULE$").get(null)
@@ -76,9 +76,9 @@ class ClassLoaderIsolationSuite extends SparkFunSuite with LocalSparkContext  {
       files = Map.empty,
       archives = Map.empty
     )
-    sc.addJar(jar3, false, artifactSetWithHelloV3.state.get.uuid)
 
     JobArtifactSet.withActiveJobArtifactState(artifactSetWithHelloV3.state.get) {
+      sc.addJar(jar3)
       sc.parallelize(1 to 1).foreach { i =>
         val cls = Utils.classForName("com.example.Hello$")
         val module = cls.getField("MODULE$").get(null)
@@ -96,9 +96,9 @@ class ClassLoaderIsolationSuite extends SparkFunSuite with LocalSparkContext  {
       files = Map.empty,
       archives = Map.empty
     )
-    sc.addJar(jar1, false, artifactSetWithoutHello.state.get.uuid)
 
     JobArtifactSet.withActiveJobArtifactState(artifactSetWithoutHello.state.get) {
+      sc.addJar(jar1)
       sc.parallelize(1 to 1).foreach { i =>
         try {
           Utils.classForName("com.example.Hello$")

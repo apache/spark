@@ -56,16 +56,18 @@ def _create_py_udf(
     useArrow: Optional[bool] = None,
 ) -> "UserDefinedFunctionLike":
     from pyspark.sql.udf import _create_arrow_py_udf
-    from pyspark.sql.connect.session import _active_spark_session
 
-    if _active_spark_session is None:
-        is_arrow_enabled = False
-    else:
+    if useArrow is None:
+        from pyspark.sql.connect.session import _active_spark_session
+
         is_arrow_enabled = (
-            _active_spark_session.conf.get("spark.sql.execution.pythonUDF.arrow.enabled") == "true"
-            if useArrow is None
-            else useArrow
+            False
+            if _active_spark_session is None
+            else _active_spark_session.conf.get("spark.sql.execution.pythonUDF.arrow.enabled")
+            == "true"
         )
+    else:
+        is_arrow_enabled = useArrow
 
     regular_udf = _create_udf(f, returnType, PythonEvalType.SQL_BATCHED_UDF)
     return_type = regular_udf.returnType

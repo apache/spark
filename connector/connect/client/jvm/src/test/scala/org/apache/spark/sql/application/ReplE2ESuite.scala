@@ -158,6 +158,17 @@ class ReplE2ESuite extends RemoteSparkSession with BeforeAndAfterEach {
     assertContains("Array[Int] = Array(5, 47, 89, 131, 173)", output)
   }
 
+  test("Updating UDF properties") {
+    val input = """
+        |class A(x: Int) { def get = x * 7 }
+        |val myUdf = udf((x: Int) => new A(x).get)
+        |val modifiedUdf = myUdf.withName("myUdf").asNondeterministic()
+        |spark.range(5).select(modifiedUdf(col("id"))).as[Int].collect()
+      """.stripMargin
+    val output = runCommandsInShell(input)
+    assertContains("Array[Int] = Array(0, 7, 14, 21, 28)", output)
+  }
+
   test("SPARK-43198: Filter does not throw ammonite-related class initialization exception") {
     val input = """
         |spark.range(10).filter(n => n % 2 == 0).collect()

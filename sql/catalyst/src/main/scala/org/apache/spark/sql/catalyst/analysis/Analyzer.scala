@@ -41,6 +41,7 @@ import org.apache.spark.sql.catalyst.streaming.StreamingRelationV2
 import org.apache.spark.sql.catalyst.trees.AlwaysProcess
 import org.apache.spark.sql.catalyst.trees.CurrentOrigin.withOrigin
 import org.apache.spark.sql.catalyst.trees.TreePattern._
+import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.util.{toPrettySQL, AUTO_GENERATED_ALIAS, CharVarcharUtils}
 import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns._
 import org.apache.spark.sql.connector.catalog.{View => _, _}
@@ -2859,7 +2860,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
     private[analysis] def makeGeneratorOutput(
         generator: Generator,
         names: Seq[String]): Seq[Attribute] = {
-      val elementAttrs = generator.elementSchema.toAttributes
+      val elementAttrs = DataTypeUtils.toAttributes(generator.elementSchema)
 
       if (names.length == elementAttrs.length) {
         names.zip(elementAttrs).map {
@@ -3240,11 +3241,11 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
             val dataType = udf.children(i).dataType
             encOpt.map { enc =>
               val attrs = if (enc.isSerializedAsStructForTopLevel) {
-                dataType.asInstanceOf[StructType].toAttributes
+                DataTypeUtils.toAttributes(dataType.asInstanceOf[StructType])
               } else {
                 // the field name doesn't matter here, so we use
                 // a simple literal to avoid any overhead
-                new StructType().add("input", dataType).toAttributes
+                DataTypeUtils.toAttribute(StructField("input", dataType)) :: Nil
               }
               enc.resolveAndBind(attrs)
             }
