@@ -251,6 +251,9 @@ object CheckConnectJvmClientCompatibility {
       ProblemFilters.exclude[MissingClassProblem](
         "org.apache.spark.sql.streaming.DataStreamWriter$"),
       ProblemFilters.exclude[Problem](
+        "org.apache.spark.sql.streaming.DataStreamWriter.foreachBatch" // TODO(SPARK-42944)
+      ),
+      ProblemFilters.exclude[Problem](
         "org.apache.spark.sql.streaming.DataStreamWriter.SOURCE*" // These are constant vals.
       ),
 
@@ -279,10 +282,22 @@ object CheckConnectJvmClientCompatibility {
         "org.apache.spark.sql.streaming.PythonStreamingQueryListenerWrapper"),
 
       // Streaming UI
-      ProblemFilters.exclude[Problem]("org.apache.spark.sql.streaming.ui.StreamingQueryPage"),
-      ProblemFilters.exclude[Problem](
+      ProblemFilters.exclude[MissingClassProblem](
+        "org.apache.spark.sql.streaming.ui.StreamingQueryDataSource"),
+      ProblemFilters.exclude[MissingClassProblem](
+        "org.apache.spark.sql.streaming.ui.StreamingQueryPagedTable"),
+      ProblemFilters.exclude[MissingClassProblem](
+        "org.apache.spark.sql.streaming.ui.StructuredStreamingRow"),
+      ProblemFilters.exclude[MissingClassProblem](
+        "org.apache.spark.sql.streaming.ui.StructuredStreamingRow$"),
+      ProblemFilters.exclude[MissingClassProblem](
+        "org.apache.spark.sql.streaming.ui.StreamingQueryPage"),
+      ProblemFilters.exclude[MissingClassProblem](
         "org.apache.spark.sql.streaming.ui.StreamingQueryStatisticsPage"),
-      ProblemFilters.exclude[Problem]("org.apache.spark.sql.streaming.ui.StreamingQueryTab"),
+      ProblemFilters.exclude[MissingClassProblem](
+        "org.apache.spark.sql.streaming.ui.StreamingQueryTab"),
+      ProblemFilters.exclude[MissingClassProblem](
+        "org.apache.spark.sql.streaming.ui.StreamingQueryTab$"),
 
       // SQLImplicits
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.SQLImplicits.rddToDatasetHolder"),
