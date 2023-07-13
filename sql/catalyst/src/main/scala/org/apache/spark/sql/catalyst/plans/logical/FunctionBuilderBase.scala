@@ -36,7 +36,7 @@ trait FunctionBuilderBase[T] {
    * compare a function call with provided arguments to determine if that function
    * call is a match for the function signature.
    *
-   * IMPORTANT: For now, each function expression builder should only one function signature.
+   * IMPORTANT: For now, each function expression builder should have only one function signature.
    * Also, for any function signature, required arguments must always come before optional ones.
    */
   def functionSignature: Option[FunctionSignature] = None

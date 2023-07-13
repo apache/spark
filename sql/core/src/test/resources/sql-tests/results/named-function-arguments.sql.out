@@ -130,23 +130,23 @@ org.apache.spark.sql.AnalysisException
 
 
 -- !query
-SELECT * FROM explode(collection => explode(collection => array(1, 2)))
+SELECT * FROM explode(collection => explode(array(1)))
 -- !query schema
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "NAMED_ARGUMENTS_NOT_SUPPORTED",
-  "sqlState" : "4274K",
+  "errorClass" : "UNSUPPORTED_GENERATOR.NESTED_IN_EXPRESSIONS",
+  "sqlState" : "0A000",
   "messageParameters" : {
-    "functionName" : "`explode1`"
+    "expression" : "\"explode(explode(array(1)))\""
   },
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 37,
-    "stopIndex" : 70,
-    "fragment" : "explode(collection => array(1, 2))"
+    "startIndex" : 15,
+    "stopIndex" : 54,
+    "fragment" : "explode(collection => explode(array(1)))"
   } ]
 }
 
@@ -203,7 +203,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "DUPLICATE_ROUTINE_PARAMETER_ASSIGNMENT.POSITIONAL_AND_NAMED_ARGUMENT_DOUBLE_REFERENCE",
+  "errorClass" : "DUPLICATE_ROUTINE_PARAMETER_ASSIGNMENT.BOTH_POSITIONAL_AND_NAMED",
   "sqlState" : "4274K",
   "messageParameters" : {
     "functionName" : "`mask`",
@@ -276,7 +276,7 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "NAMED_ARGUMENTS_NOT_SUPPORTED",
   "sqlState" : "4274K",
   "messageParameters" : {
-    "functionName" : "`encode1`"
+    "functionName" : "`encode`"
   },
   "queryContext" : [ {
     "objectType" : "",
