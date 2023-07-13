@@ -2683,15 +2683,10 @@ class SparkConnectPlanner(val sessionHolder: SessionHolder) extends Logging {
           throw InvalidPlanInput("Python ForeachBatch is not supported yet. WIP.")
 
         case StreamingForeachFunction.FunctionCase.SCALA_FUNCTION =>
-          val serializedFn = writeOp
-            .getForeachBatch
-            .getScalaFunction
-            .getPayload
-            .toByteArray
-          val scalaFn = Utils
-            .deserialize(serializedFn)
-            .asInstanceOf[StreamingForeachBatchHelper.ForeachBatchFnType]
-
+          val scalaFn = Utils.deserialize[StreamingForeachBatchHelper.ForeachBatchFnType](
+            writeOp.getForeachBatch.getScalaFunction.getPayload.toByteArray,
+            Utils.getContextOrSparkClassLoader
+          )
           StreamingForeachBatchHelper.scalaForeachBatchWrapper(scalaFn, sessionHolder)
 
         case StreamingForeachFunction.FunctionCase.FUNCTION_NOT_SET =>
