@@ -255,7 +255,6 @@ def assertSchemaEqual(actual: StructType, expected: StructType):
 
     [expected]
     StructField("names", ArrayType(DoubleType(), False), True)
-
     """
     if not isinstance(actual, StructType):
         raise PySparkAssertionError(
@@ -367,17 +366,11 @@ def assertDataFrameEqual(
     [expected]
     Row(id='1', amount=1001.0)
 
-    ********************
-
     [df]
     Row(id='3', amount=2000.0)
 
     [expected]
     Row(id='3', amount=2003.0)
-
-    ********************
-
-
     """
     if df is None and expected is None:
         return True
