@@ -275,6 +275,28 @@ def cogrouped_apply_in_pandas_example(spark: SparkSession) -> None:
     # +--------+---+---+----+
 
 
+def arrow_python_udf_example(spark: SparkSession) -> None:
+    from pyspark.sql.functions import udf
+
+    @udf(returnType='int')  # A default, pickled Python UDF
+    def slen(s):
+        return len(s)
+
+    @udf(returnType='int', useArrow=True)  # An Arrow Python UDF
+    def add_one(x):
+        if x is not None:
+            return x + 1
+
+    df = spark.createDataFrame([(1, "John Doe", 21)], ("id", "name", "age"))
+
+    df.select(slen("name").alias("slen(name)"), add_one("age")).show()
+    # +----------+------------+
+    # |slen(name)|add_one(age)|
+    # +----------+------------+
+    # |         8|          22|
+    # +----------+------------+
+
+
 if __name__ == "__main__":
     spark = SparkSession \
         .builder \
