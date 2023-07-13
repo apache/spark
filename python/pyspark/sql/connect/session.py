@@ -489,13 +489,31 @@ class SparkSession:
 
     createDataFrame.__doc__ = PySparkSession.createDataFrame.__doc__
 
-    def sql(self, sqlQuery: str, args: Optional[Union[Dict[str, Any], List]] = None) -> "DataFrame":
-        cmd = SQL(sqlQuery, args)
-        data, properties = self.client.execute_command(cmd.command(self._client))
-        if "sql_command_result" in properties:
-            return DataFrame.withPlan(CachedRelation(properties["sql_command_result"]), self)
-        else:
-            return DataFrame.withPlan(SQL(sqlQuery, args), self)
+    def sql(
+        self,
+        sqlQuery: str,
+        args: Optional[Union[Dict[str, Any], List]] = None,
+        **kwargs: Any,
+    ) -> "DataFrame":
+
+        if len(kwargs) > 0:
+            from pyspark.sql.connect.sql_formatter import SQLStringFormatter
+
+            formatter = SQLStringFormatter(self)
+            sqlQuery = formatter.format(sqlQuery, **kwargs)
+
+        try:
+            cmd = SQL(sqlQuery, args)
+            data, properties = self.client.execute_command(cmd.command(self._client))
+            if "sql_command_result" in properties:
+                return DataFrame.withPlan(CachedRelation(properties["sql_command_result"]), self)
+            else:
+                return DataFrame.withPlan(SQL(sqlQuery, args), self)
+        finally:
+            if len(kwargs) > 0:
+                # TODO: should drop temp views after SPARK-44406 get resolved
+                # formatter.clear()
+                pass
 
     sql.__doc__ = PySparkSession.sql.__doc__
 
@@ -807,9 +825,6 @@ def _test() -> None:
     del pyspark.sql.connect.session.SparkSession.Builder.master.__doc__
     # RDD API is not supported in Spark Connect.
     del pyspark.sql.connect.session.SparkSession.createDataFrame.__doc__
-
-    # TODO(SPARK-41811): Implement SparkSession.sql's string formatter
-    del pyspark.sql.connect.session.SparkSession.sql.__doc__
 
     (failure_count, test_count) = doctest.testmod(
         pyspark.sql.connect.session,
