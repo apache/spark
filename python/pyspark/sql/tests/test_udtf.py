@@ -787,9 +787,9 @@ class BaseUDTFTestsMixin:
                 assert a["is_table"] is True
                 return StructType().add("a", a["data_type"][0].dataType)
 
-            def eval(self, row: Row):
-                if row["id"] > 5:
-                    yield row["id"],
+            def eval(self, a: Row):
+                if a["id"] > 5:
+                    yield a["id"],
 
         func = udtf(TestUDTF)
         self.spark.udtf.register("test_udtf", func)
