@@ -127,7 +127,7 @@ object UserDefinedPythonTableFunction {
   private[this] val workerModule = "pyspark.sql.worker.analyze_udtf"
 
   /**
-   * Runs the Python UDTF's `analyze` static function.
+   * Runs the Python UDTF's `analyze` static method.
    */
   def analyzeInPython(func: PythonFunction, exprs: Seq[Expression]): StructType = {
     val env = SparkEnv.get

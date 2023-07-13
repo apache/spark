@@ -15527,7 +15527,7 @@ def udtf(
     returnType : :class:`pyspark.sql.types.StructType` or str, optional
         the return type of the user-defined table function. The value can be either a
         :class:`pyspark.sql.types.StructType` object or a DDL-formatted struct type string.
-        If None, the handler class must provide `analyze` static function.
+        If None, the handler class must provide `analyze` static method.
     useArrow : bool or None, optional
         whether to use Arrow to optimize the (de)serializations. When it's set to None, the
         Spark config "spark.sql.execution.pythonUDTF.arrow.enabled" is used.

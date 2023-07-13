@@ -66,8 +66,8 @@ def main(infile: IO, outfile: IO) -> None:
         ):
             raise PySparkRuntimeError(
                 "Failed to execute the user defined table function because it has not "
-                "implemented the 'analyze' static function. "
-                "Please add the 'analyze' static function or specify the return type, "
+                "implemented the 'analyze' static method. "
+                "Please add the 'analyze' static method or specify the return type, "
                 "and try the query again."
             )
 
@@ -89,7 +89,7 @@ def main(infile: IO, outfile: IO) -> None:
 
         if not isinstance(schema, StructType):
             raise PySparkValueError(
-                "Output of `analyze` static function of Python UDTFs expects "
+                "Output of `analyze` static method of Python UDTFs expects "
                 f"a StructType but got: {type(schema)}"
             )
 

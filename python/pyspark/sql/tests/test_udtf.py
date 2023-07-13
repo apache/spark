@@ -842,7 +842,7 @@ class BaseUDTFTestsMixin:
 
         with self.assertRaisesRegex(
             AnalysisException,
-            "Output of `analyze` static function of Python UDTFs expects a StructType "
+            "Output of `analyze` static method of Python UDTFs expects a StructType "
             "but got: <class 'pyspark.sql.types.StringType'>",
         ):
             func().collect()
