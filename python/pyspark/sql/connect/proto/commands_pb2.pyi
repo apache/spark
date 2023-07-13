@@ -714,6 +714,7 @@ class WriteStreamOperationStart(google.protobuf.message.Message):
     PATH_FIELD_NUMBER: builtins.int
     TABLE_NAME_FIELD_NUMBER: builtins.int
     FOREACH_WRITER_FIELD_NUMBER: builtins.int
+    FOREACH_BATCH_FIELD_NUMBER: builtins.int
     @property
     def input(self) -> pyspark.sql.connect.proto.relations_pb2.Relation:
         """(Required) The output of the `input` streaming relation will be written."""
@@ -738,7 +739,9 @@ class WriteStreamOperationStart(google.protobuf.message.Message):
     path: builtins.str
     table_name: builtins.str
     @property
-    def foreach_writer(self) -> global___StreamingForeachWriter: ...
+    def foreach_writer(self) -> global___StreamingForeachFunction: ...
+    @property
+    def foreach_batch(self) -> global___StreamingForeachFunction: ...
     def __init__(
         self,
         *,
@@ -754,7 +757,8 @@ class WriteStreamOperationStart(google.protobuf.message.Message):
         query_name: builtins.str = ...,
         path: builtins.str = ...,
         table_name: builtins.str = ...,
-        foreach_writer: global___StreamingForeachWriter | None = ...,
+        foreach_writer: global___StreamingForeachFunction | None = ...,
+        foreach_batch: global___StreamingForeachFunction | None = ...,
     ) -> None: ...
     def HasField(
         self,
@@ -763,6 +767,8 @@ class WriteStreamOperationStart(google.protobuf.message.Message):
             b"available_now",
             "continuous_checkpoint_interval",
             b"continuous_checkpoint_interval",
+            "foreach_batch",
+            b"foreach_batch",
             "foreach_writer",
             b"foreach_writer",
             "input",
@@ -788,6 +794,8 @@ class WriteStreamOperationStart(google.protobuf.message.Message):
             b"available_now",
             "continuous_checkpoint_interval",
             b"continuous_checkpoint_interval",
+            "foreach_batch",
+            b"foreach_batch",
             "foreach_writer",
             b"foreach_writer",
             "format",
@@ -829,38 +837,48 @@ class WriteStreamOperationStart(google.protobuf.message.Message):
 
 global___WriteStreamOperationStart = WriteStreamOperationStart
 
-class StreamingForeachWriter(google.protobuf.message.Message):
+class StreamingForeachFunction(google.protobuf.message.Message):
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
-    PYTHON_WRITER_FIELD_NUMBER: builtins.int
-    SCALA_WRITER_FIELD_NUMBER: builtins.int
+    PYTHON_FUNCTION_FIELD_NUMBER: builtins.int
+    SCALA_FUNCTION_FIELD_NUMBER: builtins.int
     @property
-    def python_writer(self) -> pyspark.sql.connect.proto.expressions_pb2.PythonUDF: ...
+    def python_function(self) -> pyspark.sql.connect.proto.expressions_pb2.PythonUDF: ...
     @property
-    def scala_writer(self) -> pyspark.sql.connect.proto.expressions_pb2.ScalarScalaUDF: ...
+    def scala_function(self) -> pyspark.sql.connect.proto.expressions_pb2.ScalarScalaUDF: ...
     def __init__(
         self,
         *,
-        python_writer: pyspark.sql.connect.proto.expressions_pb2.PythonUDF | None = ...,
-        scala_writer: pyspark.sql.connect.proto.expressions_pb2.ScalarScalaUDF | None = ...,
+        python_function: pyspark.sql.connect.proto.expressions_pb2.PythonUDF | None = ...,
+        scala_function: pyspark.sql.connect.proto.expressions_pb2.ScalarScalaUDF | None = ...,
     ) -> None: ...
     def HasField(
         self,
         field_name: typing_extensions.Literal[
-            "python_writer", b"python_writer", "scala_writer", b"scala_writer", "writer", b"writer"
+            "function",
+            b"function",
+            "python_function",
+            b"python_function",
+            "scala_function",
+            b"scala_function",
         ],
     ) -> builtins.bool: ...
     def ClearField(
         self,
         field_name: typing_extensions.Literal[
-            "python_writer", b"python_writer", "scala_writer", b"scala_writer", "writer", b"writer"
+            "function",
+            b"function",
+            "python_function",
+            b"python_function",
+            "scala_function",
+            b"scala_function",
         ],
     ) -> None: ...
     def WhichOneof(
-        self, oneof_group: typing_extensions.Literal["writer", b"writer"]
-    ) -> typing_extensions.Literal["python_writer", "scala_writer"] | None: ...
+        self, oneof_group: typing_extensions.Literal["function", b"function"]
+    ) -> typing_extensions.Literal["python_function", "scala_function"] | None: ...
 
-global___StreamingForeachWriter = StreamingForeachWriter
+global___StreamingForeachFunction = StreamingForeachFunction
 
 class WriteStreamOperationStartResult(google.protobuf.message.Message):
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
