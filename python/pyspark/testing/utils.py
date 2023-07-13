@@ -224,14 +224,14 @@ class PySparkErrorTestUtils:
 
 def assertDataFrameEqual(
     df: DataFrame,
-    expected: DataFrame,
+    expected: Union[DataFrame, List[Row]],
     checkRowOrder: bool = False,
     rtol: float = 1e-5,
     atol: float = 1e-8,
 ):
     """
-    A util function to assert equality between DataFrames `df` and `expected`, with
-    optional parameter `checkRowOrder`.
+    A util function to assert equality between `df` (DataFrame) and `expected`
+    (either DataFrame or list of Rows), with optional parameter `checkRowOrder`.
 
     .. versionadded:: 3.5.0
 
@@ -239,7 +239,7 @@ def assertDataFrameEqual(
     ----------
     df : DataFrame
         The DataFrame that is being compared or tested.
-    expected : DataFrame
+    expected : DataFrame or list of Rows
         The expected result of the operation, for comparison with the actual result.
     checkRowOrder : bool, optional
         A flag indicating whether the order of rows should be considered in the comparison.
@@ -311,7 +311,11 @@ def assertDataFrameEqual(
                 error_class="UNSUPPORTED_DATA_TYPE",
                 message_parameters={"data_type": type(df)},
             )
-        elif not isinstance(expected, DataFrame) and not isinstance(expected, ConnectDataFrame):
+        elif (
+            not isinstance(expected, DataFrame)
+            and not isinstance(expected, ConnectDataFrame)
+            and not isinstance(expected, List)
+        ):
             raise PySparkAssertionError(
                 error_class="UNSUPPORTED_DATA_TYPE",
                 message_parameters={"data_type": type(expected)},
@@ -322,7 +326,7 @@ def assertDataFrameEqual(
                 error_class="UNSUPPORTED_DATA_TYPE",
                 message_parameters={"data_type": type(df)},
             )
-        elif not isinstance(expected, DataFrame):
+        elif not isinstance(expected, DataFrame) and not isinstance(expected, List):
             raise PySparkAssertionError(
                 error_class="UNSUPPORTED_DATA_TYPE",
                 message_parameters={"data_type": type(expected)},
@@ -398,22 +402,22 @@ def assertDataFrameEqual(
                 message_parameters={"error_msg": error_msg},
             )
 
+    # convert df and expected to list
+    if not isinstance(expected, List):
+        # only compare schema if expected is not a List
+        assert_schema_equal(df.schema, expected.schema)
+        expected_list = expected.collect()
+    else:
+        expected_list = expected
+
+    df_list = df.collect()
+
     if not checkRowOrder:
-        try:
-            # rename duplicate columns for sorting
-            renamed_df = df.toDF(*[f"_{i}" for i in range(len(df.columns))])
-            renamed_expected = expected.toDF(*[f"_{i}" for i in range(len(expected.columns))])
+        # rename duplicate columns for sorting
+        df_list = sorted(df_list, key=lambda x: str(x))
+        expected_list = sorted(expected_list, key=lambda x: str(x))
 
-            df = renamed_df.sort(renamed_df.columns).toDF(*df.columns)
-            expected = renamed_expected.sort(renamed_expected.columns).toDF(*expected.columns)
-        except Exception:
-            raise PySparkAssertionError(
-                error_class="UNSUPPORTED_DATA_TYPE_FOR_IGNORE_ROW_ORDER",
-                message_parameters={},
-            )
-
-    assert_schema_equal(df.schema, expected.schema)
-    assert_rows_equal(df.collect(), expected.collect())
+    assert_rows_equal(df_list, expected_list)
 
 
 def _test() -> None:
