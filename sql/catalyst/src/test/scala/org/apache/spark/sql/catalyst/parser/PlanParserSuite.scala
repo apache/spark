@@ -1483,7 +1483,8 @@ class PlanParserSuite extends AnalysisTest {
     val sql1 = "select * from my_tvf(arg1 => table v1)"
     checkError(
       exception = parseException(sql1),
-      errorClass = "INVALID_TABLE_FUNCTION_IDENTIFIER_ARGUMENT_MISSING_PARENTHESES",
+      errorClass =
+        "INVALID_SQL_SYNTAX.INVALID_TABLE_FUNCTION_IDENTIFIER_ARGUMENT_MISSING_PARENTHESES",
       parameters = Map("argumentName" -> "`v1`"),
       context = ExpectedContext(
         fragment = "table v1",
