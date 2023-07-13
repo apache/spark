@@ -1318,7 +1318,7 @@ Number of given aliases does not match number of output columns. Function name: 
 
 [SQLSTATE: HY008](sql-error-conditions-sqlstates.html#class-hy-cli-specific-condition)
 
-Operation has been cancelled.
+Operation has been canceled.
 
 ### ORDER_BY_POS_OUT_OF_RANGE
 
