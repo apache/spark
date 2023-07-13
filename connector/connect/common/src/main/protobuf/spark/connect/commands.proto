@@ -214,16 +214,8 @@ message WriteStreamOperationStart {
     string table_name = 12;
   }
 
-  StreamingForeachWriter foreach_writer = 13;
+  StreamingForeachFunction foreach_writer = 13;
   StreamingForeachFunction foreach_batch = 14;
-}
-
-message StreamingForeachWriter {
-  // TODO: Remove this in favor of StreamingForeachUDF below. May be now?
-  oneof writer {
-    PythonUDF python_writer = 1;
-    ScalarScalaUDF scala_writer = 2;
-  }
 }
 
 message StreamingForeachFunction {

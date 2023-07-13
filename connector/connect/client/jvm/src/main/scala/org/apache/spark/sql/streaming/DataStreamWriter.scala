@@ -221,7 +221,7 @@ final class DataStreamWriter[T] private[sql] (ds: Dataset[T]) extends Logging {
     val scalaWriterBuilder = proto.ScalarScalaUDF
       .newBuilder()
       .setPayload(ByteString.copyFrom(serialized))
-    sinkBuilder.getForeachWriterBuilder.setScalaWriter(scalaWriterBuilder)
+    sinkBuilder.getForeachWriterBuilder.setScalaFunction(scalaWriterBuilder)
     this
   }
 
