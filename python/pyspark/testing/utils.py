@@ -263,15 +263,18 @@ def assertDataFrameEqual(
 
     Examples
     --------
-    >>> from pyspark.sql import SparkSession
-    >>> spark = SparkSession.builder.appName("assertDataFrameEqual example")\
-        .config("spark.some.config.option", "some-value").getOrCreate()
     >>> df1 = spark.createDataFrame(data=[("1", 1000), ("2", 3000)], schema=["id", "amount"])
     >>> df2 = spark.createDataFrame(data=[("1", 1000), ("2", 3000)], schema=["id", "amount"])
-    >>> assertDataFrameEqual(df1, df2)  # DataFrames are equal
+    >>> assertDataFrameEqual(df1, df2)
+
+    Pass, DataFrames are identical
+
     >>> df1 = spark.createDataFrame(data=[("1", 0.1), ("2", 3.23)], schema=["id", "amount"])
     >>> df2 = spark.createDataFrame(data=[("1", 0.109), ("2", 3.23)], schema=["id", "amount"])
-    >>> assertDataFrameEqual(df1, df2, rtol=1e-1)  # DataFrames are approx equal by rtol
+    >>> assertDataFrameEqual(df1, df2, rtol=1e-1)
+
+    Pass, DataFrames are approx equal by rtol
+
     >>> df1 = spark.createDataFrame(data=[("1", 1000.00), ("2", 3000.00), ("3", 2000.00)],
     ... schema=["id", "amount"])
     >>> df2 = spark.createDataFrame(data=[("1", 1001.00), ("2", 3000.00), ("3", 2003.00)],
