@@ -31,7 +31,10 @@ private[connect] class ExecuteHolder(
     extends Logging {
 
   val jobTag =
-    s"User_${sessionHolder.userId}_Session_${sessionHolder.sessionId}_Request_${operationId}"
+    s"SparkConnect_Execute_" +
+      s"User_${sessionHolder.userId}_" +
+      s"Session_${sessionHolder.sessionId}_" +
+      s"Request_${operationId}"
 
   val session = sessionHolder.session
 
