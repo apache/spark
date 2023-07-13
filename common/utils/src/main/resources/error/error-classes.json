@@ -2027,9 +2027,9 @@
       "Number of given aliases does not match number of output columns. Function name: <funcName>; number of aliases: <aliasesNum>; number of output columns: <outColsNum>."
     ]
   },
-  "OPERATION_CANCELLED" : {
+  "OPERATION_CANCELED" : {
     "message" : [
-      "Operation has been cancelled."
+      "Operation has been canceled."
     ],
     "sqlState" : "HY008"
   },

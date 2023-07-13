@@ -1314,6 +1314,12 @@ SQLSTATE: none assigned
 
 Number of given aliases does not match number of output columns. Function name: `<funcName>`; number of aliases: `<aliasesNum>`; number of output columns: `<outColsNum>`.
 
+### OPERATION_CANCELED
+
+[SQLSTATE: HY008](sql-error-conditions-sqlstates.html#class-hy-cli-specific-condition)
+
+Operation has been cancelled.
+
 ### ORDER_BY_POS_OUT_OF_RANGE
 
 [SQLSTATE: 42805](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
