@@ -402,7 +402,6 @@ class SparkContext(config: SparkConf) extends Logging {
     }
     // Inform all executors about the change
     if (conf.get(EXECUTOR_ALLOW_SYNC_LOG_LEVEL) && _schedulerBackend != null) {
-      _conf.set(SPARK_LOG_LEVEL.key, upperCased)
       _schedulerBackend.updateLogLevel(upperCased)
     }
   }

@@ -479,7 +479,7 @@ private[spark] object CoarseGrainedExecutorBackend extends Logging {
 
       if (driverConf.get(EXECUTOR_ALLOW_SYNC_LOG_LEVEL)) {
         // Set the current log level of driver in Executor
-        driverConf.get(SPARK_LOG_LEVEL).foreach(l => updateLogLevel(l))
+        cfg.logLevel.foreach(l => updateLogLevel(l))
       }
       val env = SparkEnv.createExecutorEnv(driverConf, arguments.executorId, arguments.bindAddress,
         arguments.hostname, arguments.cores, cfg.ioEncryptionKey, isLocal = false)

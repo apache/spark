@@ -129,6 +129,9 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
   // The token manager used to create security tokens.
   private var delegationTokenManager: Option[HadoopDelegationTokenManager] = None
 
+  // Current log level of driver to send to executor
+  private var logLevel: Option[String] = None
+
   private val reviveThread =
     ThreadUtils.newDaemonSingleThreadScheduledExecutor("driver-revive-thread")
 
@@ -319,6 +322,9 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
         stop()
 
       case UpdateExecutorsLogLevel(logLevel) =>
+        // Remember the current log level of the application, so that it can be propagated to
+        // new executors on RetrieveSparkAppConfig event
+        CoarseGrainedSchedulerBackend.this.logLevel = Some(logLevel)
         logInfo(s"Asking each executor to refresh the log level to $logLevel")
         for ((_, executorData) <- executorDataMap) {
           executorData.executorEndpoint.send(UpdateExecutorLogLevel(logLevel))
@@ -352,7 +358,8 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
           getLatestSparkConfig,
           SparkEnv.get.securityManager.getIOEncryptionKey(),
           Option(delegationTokens.get()),
-          rp)
+          rp,
+          CoarseGrainedSchedulerBackend.this.logLevel)
         context.reply(reply)
 
       case IsExecutorAlive(executorId) => context.reply(isExecutorActive(executorId))
