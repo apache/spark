@@ -21,6 +21,7 @@ import java.io.{BufferedInputStream, BufferedOutputStream, DataInputStream, Data
 import java.net.Socket
 import java.nio.charset.StandardCharsets
 import java.util.HashMap
+import java.util.concurrent.atomic.AtomicBoolean
 
 import scala.collection.JavaConverters._
 
@@ -153,10 +154,10 @@ object UserDefinedPythonTableFunction {
     val pickler = new Pickler(/* useMemo = */ true,
       /* valueCompare = */ false)
 
+    val (worker: Socket, _) =
+      env.createPythonWorker(pythonExec, workerModule, envVars.asScala.toMap)
+    val releasedOrClosed = new AtomicBoolean(false)
     try {
-      val (worker: Socket, _) =
-        env.createPythonWorker(pythonExec, workerModule, envVars.asScala.toMap)
-
       val dataOut =
         new DataOutputStream(new BufferedOutputStream(worker.getOutputStream, bufferSize))
       val dataIn = new DataInputStream(new BufferedInputStream(worker.getInputStream, bufferSize))
@@ -208,11 +209,17 @@ object UserDefinedPythonTableFunction {
         case _ =>
           env.destroyPythonWorker(pythonExec, workerModule, envVars.asScala.toMap, worker)
       }
+      releasedOrClosed.set(true)
 
       schema
     } catch {
       case eof: EOFException =>
         throw new SparkException("Python worker exited unexpectedly (crashed)", eof)
+    } finally {
+      if (!releasedOrClosed.get()) {
+        // An unexpected error happened. Force to close the worker.
+        env.destroyPythonWorker(pythonExec, workerModule, envVars.asScala.toMap, worker)
+      }
     }
   }
 }
