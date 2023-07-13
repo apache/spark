@@ -1338,10 +1338,27 @@ class StreamingQueryManagerCommand(google.protobuf.message.Message):
             self, oneof_group: typing_extensions.Literal["_timeout_ms", b"_timeout_ms"]
         ) -> typing_extensions.Literal["timeout_ms"] | None: ...
 
+    class StreamingQueryListenerCommand(google.protobuf.message.Message):
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+        LISTENER_PAYLOAD_FIELD_NUMBER: builtins.int
+        listener_payload: builtins.bytes
+        def __init__(
+            self,
+            *,
+            listener_payload: builtins.bytes = ...,
+        ) -> None: ...
+        def ClearField(
+            self, field_name: typing_extensions.Literal["listener_payload", b"listener_payload"]
+        ) -> None: ...
+
     ACTIVE_FIELD_NUMBER: builtins.int
     GET_QUERY_FIELD_NUMBER: builtins.int
     AWAIT_ANY_TERMINATION_FIELD_NUMBER: builtins.int
     RESET_TERMINATED_FIELD_NUMBER: builtins.int
+    ADD_LISTENER_FIELD_NUMBER: builtins.int
+    REMOVE_LISTENER_FIELD_NUMBER: builtins.int
+    LIST_LISTENERS_FIELD_NUMBER: builtins.int
     active: builtins.bool
     """active() API, returns a list of active queries."""
     get_query: builtins.str
@@ -1353,6 +1370,16 @@ class StreamingQueryManagerCommand(google.protobuf.message.Message):
         """awaitAnyTermination() API, wait until any query terminates or timeout."""
     reset_terminated: builtins.bool
     """resetTerminated() API."""
+    @property
+    def add_listener(self) -> global___StreamingQueryManagerCommand.StreamingQueryListenerCommand:
+        """addListener API."""
+    @property
+    def remove_listener(
+        self,
+    ) -> global___StreamingQueryManagerCommand.StreamingQueryListenerCommand:
+        """removeListener API."""
+    list_listeners: builtins.bool
+    """listListeners() API, returns a list of streaming query listeners."""
     def __init__(
         self,
         *,
@@ -1361,18 +1388,29 @@ class StreamingQueryManagerCommand(google.protobuf.message.Message):
         await_any_termination: global___StreamingQueryManagerCommand.AwaitAnyTerminationCommand
         | None = ...,
         reset_terminated: builtins.bool = ...,
+        add_listener: global___StreamingQueryManagerCommand.StreamingQueryListenerCommand
+        | None = ...,
+        remove_listener: global___StreamingQueryManagerCommand.StreamingQueryListenerCommand
+        | None = ...,
+        list_listeners: builtins.bool = ...,
     ) -> None: ...
     def HasField(
         self,
         field_name: typing_extensions.Literal[
             "active",
             b"active",
+            "add_listener",
+            b"add_listener",
             "await_any_termination",
             b"await_any_termination",
             "command",
             b"command",
             "get_query",
             b"get_query",
+            "list_listeners",
+            b"list_listeners",
+            "remove_listener",
+            b"remove_listener",
             "reset_terminated",
             b"reset_terminated",
         ],
@@ -1382,12 +1420,18 @@ class StreamingQueryManagerCommand(google.protobuf.message.Message):
         field_name: typing_extensions.Literal[
             "active",
             b"active",
+            "add_listener",
+            b"add_listener",
             "await_any_termination",
             b"await_any_termination",
             "command",
             b"command",
             "get_query",
             b"get_query",
+            "list_listeners",
+            b"list_listeners",
+            "remove_listener",
+            b"remove_listener",
             "reset_terminated",
             b"reset_terminated",
         ],
@@ -1395,7 +1439,13 @@ class StreamingQueryManagerCommand(google.protobuf.message.Message):
     def WhichOneof(
         self, oneof_group: typing_extensions.Literal["command", b"command"]
     ) -> typing_extensions.Literal[
-        "active", "get_query", "await_any_termination", "reset_terminated"
+        "active",
+        "get_query",
+        "await_any_termination",
+        "reset_terminated",
+        "add_listener",
+        "remove_listener",
+        "list_listeners",
     ] | None: ...
 
 global___StreamingQueryManagerCommand = StreamingQueryManagerCommand
@@ -1469,10 +1519,49 @@ class StreamingQueryManagerCommandResult(google.protobuf.message.Message):
             self, field_name: typing_extensions.Literal["terminated", b"terminated"]
         ) -> None: ...
 
+    class StreamingQueryListenerInstance(google.protobuf.message.Message):
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+        LISTENER_PAYLOAD_FIELD_NUMBER: builtins.int
+        listener_payload: builtins.bytes
+        def __init__(
+            self,
+            *,
+            listener_payload: builtins.bytes = ...,
+        ) -> None: ...
+        def ClearField(
+            self, field_name: typing_extensions.Literal["listener_payload", b"listener_payload"]
+        ) -> None: ...
+
+    class ListStreamingQueryListenerResult(google.protobuf.message.Message):
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+        LISTENERS_FIELD_NUMBER: builtins.int
+        @property
+        def listeners(
+            self,
+        ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
+            global___StreamingQueryManagerCommandResult.StreamingQueryListenerInstance
+        ]: ...
+        def __init__(
+            self,
+            *,
+            listeners: collections.abc.Iterable[
+                global___StreamingQueryManagerCommandResult.StreamingQueryListenerInstance
+            ]
+            | None = ...,
+        ) -> None: ...
+        def ClearField(
+            self, field_name: typing_extensions.Literal["listeners", b"listeners"]
+        ) -> None: ...
+
     ACTIVE_FIELD_NUMBER: builtins.int
     QUERY_FIELD_NUMBER: builtins.int
     AWAIT_ANY_TERMINATION_FIELD_NUMBER: builtins.int
     RESET_TERMINATED_FIELD_NUMBER: builtins.int
+    ADD_LISTENER_FIELD_NUMBER: builtins.int
+    REMOVE_LISTENER_FIELD_NUMBER: builtins.int
+    LIST_LISTENERS_FIELD_NUMBER: builtins.int
     @property
     def active(self) -> global___StreamingQueryManagerCommandResult.ActiveResult: ...
     @property
@@ -1482,6 +1571,12 @@ class StreamingQueryManagerCommandResult(google.protobuf.message.Message):
         self,
     ) -> global___StreamingQueryManagerCommandResult.AwaitAnyTerminationResult: ...
     reset_terminated: builtins.bool
+    add_listener: builtins.bool
+    remove_listener: builtins.bool
+    @property
+    def list_listeners(
+        self,
+    ) -> global___StreamingQueryManagerCommandResult.ListStreamingQueryListenerResult: ...
     def __init__(
         self,
         *,
@@ -1490,16 +1585,26 @@ class StreamingQueryManagerCommandResult(google.protobuf.message.Message):
         await_any_termination: global___StreamingQueryManagerCommandResult.AwaitAnyTerminationResult
         | None = ...,
         reset_terminated: builtins.bool = ...,
+        add_listener: builtins.bool = ...,
+        remove_listener: builtins.bool = ...,
+        list_listeners: global___StreamingQueryManagerCommandResult.ListStreamingQueryListenerResult
+        | None = ...,
     ) -> None: ...
     def HasField(
         self,
         field_name: typing_extensions.Literal[
             "active",
             b"active",
+            "add_listener",
+            b"add_listener",
             "await_any_termination",
             b"await_any_termination",
+            "list_listeners",
+            b"list_listeners",
             "query",
             b"query",
+            "remove_listener",
+            b"remove_listener",
             "reset_terminated",
             b"reset_terminated",
             "result_type",
@@ -1511,10 +1616,16 @@ class StreamingQueryManagerCommandResult(google.protobuf.message.Message):
         field_name: typing_extensions.Literal[
             "active",
             b"active",
+            "add_listener",
+            b"add_listener",
             "await_any_termination",
             b"await_any_termination",
+            "list_listeners",
+            b"list_listeners",
             "query",
             b"query",
+            "remove_listener",
+            b"remove_listener",
             "reset_terminated",
             b"reset_terminated",
             "result_type",
@@ -1524,7 +1635,13 @@ class StreamingQueryManagerCommandResult(google.protobuf.message.Message):
     def WhichOneof(
         self, oneof_group: typing_extensions.Literal["result_type", b"result_type"]
     ) -> typing_extensions.Literal[
-        "active", "query", "await_any_termination", "reset_terminated"
+        "active",
+        "query",
+        "await_any_termination",
+        "reset_terminated",
+        "add_listener",
+        "remove_listener",
+        "list_listeners",
     ] | None: ...
 
 global___StreamingQueryManagerCommandResult = StreamingQueryManagerCommandResult
