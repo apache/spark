@@ -7906,8 +7906,7 @@ object functions {
   // scalastyle:off line.size.limit
 
   /**
-   * Call an user-defined function.
-   * Example:
+   * Call an user-defined function. Example:
    * {{{
    *  import org.apache.spark.sql._
    *
