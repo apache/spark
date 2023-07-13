@@ -116,8 +116,8 @@ object GeneratedColumn {
     val allowedBaseColumns = schema
       .filterNot(_.name == fieldName) // Can't reference itself
       .filterNot(isGeneratedColumn) // Can't reference other generated columns
-    val relation = new LocalRelation(CharVarcharUtils.replaceCharVarcharWithStringInSchema(
-      StructType(allowedBaseColumns)).toAttributes)
+    val relation = LocalRelation(
+      CharVarcharUtils.replaceCharVarcharWithStringInSchema(StructType(allowedBaseColumns)))
     val plan = try {
       val analyzer: Analyzer = GeneratedColumnAnalyzer
       val analyzed = analyzer.execute(Project(Seq(Alias(parsed, fieldName)()), relation))

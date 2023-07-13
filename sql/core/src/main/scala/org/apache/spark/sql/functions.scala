@@ -1936,9 +1936,7 @@ object functions {
    * @group math_funcs
    * @since 3.5.0
    */
-  def try_add(left: Column, right: Column): Column = withExpr {
-    UnresolvedFunction("try_add", Seq(left.expr, right.expr), isDistinct = false)
-  }
+  def try_add(left: Column, right: Column): Column = call_function("try_add", left, right)
 
   /**
    * Returns the mean calculated from values of a group and the result is null on overflow.
@@ -1957,9 +1955,8 @@ object functions {
    * @group math_funcs
    * @since 3.5.0
    */
-  def try_divide(dividend: Column, divisor: Column): Column = withExpr {
-    UnresolvedFunction("try_divide", Seq(dividend.expr, divisor.expr), isDistinct = false)
-  }
+  def try_divide(dividend: Column, divisor: Column): Column =
+    call_function("try_divide", dividend, divisor)
 
   /**
    * Returns `left``*``right` and the result is null on overflow. The acceptable input types are
@@ -1968,9 +1965,8 @@ object functions {
    * @group math_funcs
    * @since 3.5.0
    */
-  def try_multiply(left: Column, right: Column): Column = withExpr {
-    UnresolvedFunction("try_multiply", Seq(left.expr, right.expr), isDistinct = false)
-  }
+  def try_multiply(left: Column, right: Column): Column =
+    call_function("try_multiply", left, right)
 
   /**
    * Returns `left``-``right` and the result is null on overflow. The acceptable input types are
@@ -1979,9 +1975,8 @@ object functions {
    * @group math_funcs
    * @since 3.5.0
    */
-  def try_subtract(left: Column, right: Column): Column = withExpr {
-    UnresolvedFunction("try_subtract", Seq(left.expr, right.expr), isDistinct = false)
-  }
+  def try_subtract(left: Column, right: Column): Column =
+    call_function("try_subtract", left, right)
 
   /**
    * Returns the sum calculated from values of a group and the result is null on overflow.
@@ -2366,9 +2361,7 @@ object functions {
    * @group math_funcs
    * @since 3.3.0
    */
-  def ceil(e: Column, scale: Column): Column = withExpr {
-    UnresolvedFunction(Seq("ceil"), Seq(e.expr, scale.expr), isDistinct = false)
-  }
+  def ceil(e: Column, scale: Column): Column = call_function("ceil", e, scale)
 
   /**
    * Computes the ceiling of the given value of `e` to 0 decimal places.
@@ -2376,9 +2369,7 @@ object functions {
    * @group math_funcs
    * @since 1.4.0
    */
-  def ceil(e: Column): Column = withExpr {
-    UnresolvedFunction(Seq("ceil"), Seq(e.expr), isDistinct = false)
-  }
+  def ceil(e: Column): Column = call_function("ceil", e)
 
   /**
    * Computes the ceiling of the given value of `e` to 0 decimal places.
@@ -2522,9 +2513,7 @@ object functions {
    * @group math_funcs
    * @since 3.3.0
    */
-  def floor(e: Column, scale: Column): Column = withExpr {
-    UnresolvedFunction(Seq("floor"), Seq(e.expr, scale.expr), isDistinct = false)
-  }
+  def floor(e: Column, scale: Column): Column = call_function("floor", e, scale)
 
   /**
    * Computes the floor of the given value of `e` to 0 decimal places.
@@ -2532,9 +2521,7 @@ object functions {
    * @group math_funcs
    * @since 1.4.0
    */
-  def floor(e: Column): Column = withExpr {
-    UnresolvedFunction(Seq("floor"), Seq(e.expr), isDistinct = false)
-  }
+  def floor(e: Column): Column = call_function("floor", e)
 
   /**
    * Computes the floor of the given column value to 0 decimal places.
@@ -4007,9 +3994,8 @@ object functions {
    * @group string_funcs
    * @since 3.3.0
    */
-  def lpad(str: Column, len: Int, pad: Array[Byte]): Column = withExpr {
-    UnresolvedFunction("lpad", Seq(str.expr, lit(len).expr, lit(pad).expr), isDistinct = false)
-  }
+  def lpad(str: Column, len: Int, pad: Array[Byte]): Column =
+    call_function("lpad", str, lit(len), lit(pad))
 
   /**
    * Trim the spaces from left end for the specified string value.
@@ -4190,9 +4176,8 @@ object functions {
    * @group string_funcs
    * @since 3.3.0
    */
-  def rpad(str: Column, len: Int, pad: Array[Byte]): Column = withExpr {
-    UnresolvedFunction("rpad", Seq(str.expr, lit(len).expr, lit(pad).expr), isDistinct = false)
-  }
+  def rpad(str: Column, len: Int, pad: Array[Byte]): Column =
+    call_function("rpad", str, lit(len), lit(pad))
 
   /**
    * Repeats a string column n times, and returns it as a new string column.
@@ -4628,9 +4613,7 @@ object functions {
    * @group string_funcs
    * @since 3.5.0
    */
-  def endswith(str: Column, suffix: Column): Column = withExpr {
-    UnresolvedFunction(Seq("endswith"), Seq(str.expr, suffix.expr), isDistinct = false)
-  }
+  def endswith(str: Column, suffix: Column): Column = call_function("endswith", str, suffix)
 
   /**
    * Returns a boolean. The value is True if str starts with prefix.
@@ -4640,9 +4623,7 @@ object functions {
    * @group string_funcs
    * @since 3.5.0
    */
-  def startswith(str: Column, prefix: Column): Column = withExpr {
-    UnresolvedFunction(Seq("startswith"), Seq(str.expr, prefix.expr), isDistinct = false)
-  }
+  def startswith(str: Column, prefix: Column): Column = call_function("startswith", str, prefix)
 
   /**
    * Returns the ASCII character having the binary equivalent to `n`.
@@ -4752,9 +4733,7 @@ object functions {
    * @group string_funcs
    * @since 3.5.0
    */
-  def contains(left: Column, right: Column): Column = withExpr {
-    UnresolvedFunction(Seq("contains"), Seq(left.expr, right.expr), isDistinct = false)
-  }
+  def contains(left: Column, right: Column): Column = call_function("contains", left, right)
 
   /**
    * Returns the `n`-th input, e.g., returns `input2` when `n` is 2.
@@ -5167,9 +5146,7 @@ object functions {
    * @group datetime_funcs
    * @since 3.5.0
    */
-  def extract(field: Column, source: Column): Column = withExpr {
-    UnresolvedFunction("extract", Seq(field.expr, source.expr), isDistinct = false)
-  }
+  def extract(field: Column, source: Column): Column = call_function("extract", field, source)
 
   /**
    * Extracts a part of the date/timestamp or interval source.
@@ -5181,9 +5158,7 @@ object functions {
    * @group datetime_funcs
    * @since 3.5.0
    */
-  def date_part(field: Column, source: Column): Column = withExpr {
-    UnresolvedFunction("date_part", Seq(field.expr, source.expr), isDistinct = false)
-  }
+  def date_part(field: Column, source: Column): Column = call_function("date_part", field, source)
 
   /**
    * Extracts a part of the date/timestamp or interval source.
@@ -5195,9 +5170,7 @@ object functions {
    * @group datetime_funcs
    * @since 3.5.0
    */
-  def datepart(field: Column, source: Column): Column = withExpr {
-    UnresolvedFunction("datepart", Seq(field.expr, source.expr), isDistinct = false)
-  }
+  def datepart(field: Column, source: Column): Column = call_function("datepart", field, source)
 
   /**
    * Returns the last day of the month which the given date belongs to.
@@ -8365,7 +8338,7 @@ object functions {
   @scala.annotation.varargs
   @deprecated("Use call_udf")
   def callUDF(udfName: String, cols: Column*): Column =
-    call_udf(udfName, cols: _*)
+    call_function(udfName, cols: _*)
 
   /**
    * Call an user-defined function.
@@ -8383,9 +8356,19 @@ object functions {
    * @since 3.2.0
    */
   @scala.annotation.varargs
-  def call_udf(udfName: String, cols: Column*): Column = withExpr {
-    UnresolvedFunction(udfName, cols.map(_.expr), isDistinct = false)
-  }
+  def call_udf(udfName: String, cols: Column*): Column =
+    call_function(udfName, cols: _*)
+
+  /**
+   * Call a builtin or temp function.
+   *
+   * @param funcName function name
+   * @param cols the expression parameters of function
+   * @since 3.5.0
+   */
+  @scala.annotation.varargs
+  def call_function(funcName: String, cols: Column*): Column =
+    withExpr { UnresolvedFunction(funcName, cols.map(_.expr), false) }
 
   /**
    * Unwrap UDT data type column into its underlying type.
