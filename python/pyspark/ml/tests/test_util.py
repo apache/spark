@@ -25,6 +25,7 @@ from pyspark.ml.linalg import Vectors
 from pyspark.ml.util import MetaAlgorithmReadWrite
 from pyspark.testing.mlutils import SparkSessionTestCase
 
+
 class MetaAlgorithmReadWriteTests(SparkSessionTestCase):
     def test_getAllNestedStages(self):
         def _check_uid_set_equal(stages, expected_stages):

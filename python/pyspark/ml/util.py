@@ -760,4 +760,3 @@ def _get_active_session(is_remote: bool) -> SparkSession:
     if spark is None:
         raise RuntimeError("An active SparkSession is required for the distributor.")
     return spark
-
