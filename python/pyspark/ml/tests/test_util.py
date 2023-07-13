@@ -77,3 +77,13 @@ class MetaAlgorithmReadWriteTests(SparkSessionTestCase):
             [nested_pipeline, ova_pipeline, vs, ova, lr],
         )
 
+if __name__ == "__main__":
+    from pyspark.ml.tests.test_util import *  # noqa: F401
+
+    try:
+        import xmlrunner
+
+        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
+    except ImportError:
+        testRunner = None
+    unittest.main(testRunner=testRunner, verbosity=2)
