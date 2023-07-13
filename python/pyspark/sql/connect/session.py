@@ -754,6 +754,16 @@ class SparkSession:
                             pyutils = SparkContext._jvm.PythonSQLUtils  # type: ignore[union-attr]
                             pyutils.addJarToCurrentClassLoader(connect_jar)
 
+                            # Required for local-cluster testing as their executors need the jars
+                            # to load the Spark plugin for Spark Connect.
+                            if master.startswith("local-cluster"):
+                                if "spark.jars" in overwrite_conf:
+                                    overwrite_conf[
+                                        "spark.jars"
+                                    ] = f"{overwrite_conf['spark.jars']},{connect_jar}"
+                                else:
+                                    overwrite_conf["spark.jars"] = connect_jar
+
                     except ImportError:
                         pass
 

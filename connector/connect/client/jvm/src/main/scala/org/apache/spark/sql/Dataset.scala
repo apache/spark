@@ -889,8 +889,8 @@ class Dataset[T] private[sql] (
         .setJoinType(joinTypeValue)
         .setJoinCondition(condition.expr)
         .setJoinDataType(joinBuilder.getJoinDataTypeBuilder
-          .setIsLeftFlattenableToRow(this.encoder.isFlattenable)
-          .setIsRightFlattenableToRow(other.encoder.isFlattenable))
+          .setIsLeftStruct(this.encoder.isStruct)
+          .setIsRightStruct(other.encoder.isStruct))
     }
   }
 

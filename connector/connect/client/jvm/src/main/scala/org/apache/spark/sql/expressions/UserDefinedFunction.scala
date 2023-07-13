@@ -26,7 +26,7 @@ import org.apache.spark.sql.Column
 import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoder
 import org.apache.spark.sql.connect.common.{DataTypeProtoConverter, UdfPacket}
-import org.apache.spark.util.SparkSerDerseUtils
+import org.apache.spark.util.SparkSerDeUtils
 
 /**
  * A user-defined function. To create one, use the `udf` functions in `functions`.
@@ -104,7 +104,7 @@ case class ScalarUserDefinedFunction(
   // SPARK-43198: Eagerly serialize to prevent the UDF from containing a reference to this class.
   private[this] val udf = {
     val udfPacketBytes =
-      SparkSerDerseUtils.serialize(UdfPacket(function, inputEncoders, outputEncoder))
+      SparkSerDeUtils.serialize(UdfPacket(function, inputEncoders, outputEncoder))
     val scalaUdfBuilder = proto.ScalarScalaUDF
       .newBuilder()
       .setPayload(ByteString.copyFrom(udfPacketBytes))
