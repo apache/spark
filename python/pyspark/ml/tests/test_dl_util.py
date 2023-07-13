@@ -31,7 +31,7 @@ class TestFunctionPickler(unittest.TestCase):
         ("See if it pickles correctly with path specified", "silly_bear", ""),
         ("See if it pickles correctly with both path and save_dir specified", "silly_bear", "tmp_dir")
     ])
-    def test_pickle_fn_and_save(self, _: str, file_path_to_save: str, save_dir:str ):
+    def test_pickle_fn_and_save(self, _: str, file_path_to_save: str, save_dir: str ):
         x, y = 1, 3 # args of test_function
         if save_dir != "":
             os.makedirs(save_dir, exist_ok=True)
