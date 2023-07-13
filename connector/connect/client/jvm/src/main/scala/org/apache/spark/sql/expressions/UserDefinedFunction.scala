@@ -152,7 +152,7 @@ object ScalarUserDefinedFunction {
       inputEncoders: Seq[AgnosticEncoder[_]],
       outputEncoder: AgnosticEncoder[_]): ScalarUserDefinedFunction = {
     val udfPacketBytes =
-      SparkSerDerseUtils.serialize(UdfPacket(function, inputEncoders, outputEncoder))
+      SparkSerDeUtils.serialize(UdfPacket(function, inputEncoders, outputEncoder))
     ScalarUserDefinedFunction(
       serializedUdfPacket = udfPacketBytes,
       inputTypes = inputEncoders.map(_.dataType).map(DataTypeProtoConverter.toConnectProtoType),
