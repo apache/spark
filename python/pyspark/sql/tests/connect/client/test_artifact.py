@@ -397,7 +397,7 @@ class LocalClusterArtifactTests(ReusedConnectTestCase, ArtifactTestsMixin):
 
     @classmethod
     def master(cls):
-        return "local-cluster[2,2,1024]"
+        return "local-cluster[2,2,512]"
 
 
 if __name__ == "__main__":
