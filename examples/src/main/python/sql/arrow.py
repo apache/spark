@@ -279,11 +279,11 @@ def arrow_python_udf_example(spark: SparkSession) -> None:
     from pyspark.sql.functions import udf
 
     @udf(returnType='int')  # A default, pickled Python UDF
-    def slen(s):
+    def slen(s):  # type: ignore[no-untyped-def]
         return len(s)
 
     @udf(returnType='int', useArrow=True)  # An Arrow Python UDF
-    def add_one(x):
+    def add_one(x):  # type: ignore[no-untyped-def]
         if x is not None:
             return x + 1
 
