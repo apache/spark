@@ -73,7 +73,9 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
       filterCreationSideExp: Expression,
       filterCreationSidePlan: LogicalPlan): LogicalPlan = {
     // Skip if the filter creation side is too big
-    if (filterCreationSidePlan.stats.sizeInBytes > conf.runtimeFilterCreationSideThreshold) {
+    val sizeInBytes = Aggregate(Seq(filterCreationSideExp), Nil, filterCreationSidePlan)
+      .stats.sizeInBytes
+    if (sizeInBytes > conf.runtimeFilterCreationSideThreshold) {
       return filterApplicationSidePlan
     }
     val rowCount = filterCreationSidePlan.stats.rowCount
