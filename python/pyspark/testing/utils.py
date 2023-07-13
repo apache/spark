@@ -56,7 +56,7 @@ except ImportError:
     # No NumPy, but that's okay, we'll skip those tests
     pass
 
-__all__ = ["assertDataFrameEqual"]
+__all__ = ["assertDataFrameEqual", "assertSchemaEqual"]
 
 SPARK_HOME = _find_spark_home()
 
