@@ -20,10 +20,9 @@ import typing
 from typing import Any, Optional, List, Tuple, Sequence, Mapping
 import uuid
 
-from py4j.java_gateway import is_instance_of
-
 if typing.TYPE_CHECKING:
-    from pyspark.sql import SparkSession, DataFrame
+    from pyspark.sql.connect.session import SparkSession
+    from pyspark.sql.connect.dataframe import DataFrame
 
 
 class SQLStringFormatter(string.Formatter):
@@ -45,20 +44,14 @@ class SQLStringFormatter(string.Formatter):
         """
         Converts the given value into a SQL string.
         """
-        from pyspark import SparkContext
-        from pyspark.sql import Column, DataFrame
+        from pyspark.sql.connect.dataframe import DataFrame
+        from pyspark.sql.connect.column import Column
+        from pyspark.sql.connect.expressions import ColumnReference
 
         if isinstance(val, Column):
-            assert SparkContext._gateway is not None
-
-            gw = SparkContext._gateway
-            jexpr = val._jc.expr()
-            if is_instance_of(
-                gw, jexpr, "org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute"
-            ) or is_instance_of(
-                gw, jexpr, "org.apache.spark.sql.catalyst.expressions.AttributeReference"
-            ):
-                return jexpr.sql()
+            expr = val._expr
+            if isinstance(expr, ColumnReference):
+                return expr._unparsed_identifier
             else:
                 raise ValueError(
                     "%s in %s should be a plain column reference such as `df.col` "
@@ -68,7 +61,7 @@ class SQLStringFormatter(string.Formatter):
             for df, n in self._temp_views:
                 if df is val:
                     return n
-            df_name = "_pyspark_%s" % str(uuid.uuid4()).replace("-", "")
+            df_name = "_pyspark_connect_%s" % str(uuid.uuid4()).replace("-", "")
             self._temp_views.append((val, df_name))
             val.createOrReplaceTempView(df_name)
             return df_name
