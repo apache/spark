@@ -803,16 +803,14 @@ class BaseUDTFTestsMixin:
             def eval(self):
                 yield "hello", "world"
 
-        func = udtf(TestUDTF)
+        with self.assertRaises(PySparkAttributeError) as e:
+            udtf(TestUDTF)
 
-        with self.assertRaisesRegex(
-            AnalysisException,
-            "Failed to execute the user defined table function because it has not "
-            "implemented the 'analyze' static function. "
-            "Please add the 'analyze' static function or specify the return type, "
-            "and try the query again.",
-        ):
-            func().collect()
+        self.check_error(
+            exception=e.exception,
+            error_class="INVALID_UDTF_RETURN_TYPE",
+            message_parameters={"name": "TestUDTF"},
+        )
 
     def test_udtf_with_non_static_analyze(self):
         class TestUDTF:
@@ -822,16 +820,14 @@ class BaseUDTFTestsMixin:
             def eval(self):
                 yield "hello", "world"
 
-        func = udtf(TestUDTF)
+        with self.assertRaises(PySparkAttributeError) as e:
+            udtf(TestUDTF)
 
-        with self.assertRaisesRegex(
-            AnalysisException,
-            "Failed to execute the user defined table function because it has not "
-            "implemented the 'analyze' static function. "
-            "Please add the 'analyze' static function or specify the return type, "
-            "and try the query again.",
-        ):
-            func().collect()
+        self.check_error(
+            exception=e.exception,
+            error_class="INVALID_UDTF_RETURN_TYPE",
+            message_parameters={"name": "TestUDTF"},
+        )
 
     def test_udtf_with_analyze_returning_non_struct(self):
         class TestUDTF:
