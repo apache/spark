@@ -52,7 +52,7 @@ case class UpdatingSessionsExec(
     val inMemoryThreshold = conf.sessionWindowBufferInMemoryThreshold
     val spillThreshold = conf.sessionWindowBufferSpillThreshold
     val updatingSessionEvaluatorFactory = new UpdatingSessionEvaluatorFactory(inMemoryThreshold,
-      spillThreshold, groupingExpression, sessionExpression, output)
+      spillThreshold, groupingExpression, sessionExpression, child.output)
     if (conf.usePartitionEvaluator) {
       child.execute().mapPartitionsWithEvaluator(updatingSessionEvaluatorFactory)
     } else {

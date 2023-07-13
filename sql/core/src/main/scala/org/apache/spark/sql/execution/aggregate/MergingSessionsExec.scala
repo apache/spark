@@ -66,7 +66,7 @@ case class MergingSessionsExec(
   override protected def doExecute(): RDD[InternalRow] = {
     val numOutputRows = longMetric("numOutputRows")
     val mergingSessionEvaluatorFactory = new MergingSessionEvaluatorFactory(groupingExpressions,
-      sessionExpression, output, aggregateExpressions, aggregateAttributes,
+      sessionExpression, child.output, aggregateExpressions, aggregateAttributes,
       initialInputBufferOffset, resultExpressions, numOutputRows)
     if (conf.usePartitionEvaluator) {
       child.execute().mapPartitionsWithEvaluator(mergingSessionEvaluatorFactory)
