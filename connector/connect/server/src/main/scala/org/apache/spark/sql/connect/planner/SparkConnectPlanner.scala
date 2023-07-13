@@ -2385,15 +2385,13 @@ class SparkConnectPlanner(val sessionHolder: SessionHolder) extends Logging {
               .newBuilder()
               .setData(ByteString.copyFrom(bytes))))
     } else {
+      val relationId = s"${sessionId}_${sessionHolder.nextSQLId.getAndIncrement()}"
+      sessionHolder.cacheDataFrameById(relationId, df)
       result.setRelation(
         proto.Relation
           .newBuilder()
-          .setSql(
-            proto.SQL
-              .newBuilder()
-              .setQuery(getSqlCommand.getSql)
-              .putAllArgs(getSqlCommand.getArgsMap)
-              .addAllPosArgs(getSqlCommand.getPosArgsList)))
+          .setCachedRemoteRelation(
+            proto.CachedRemoteRelation.newBuilder().setRelationId(relationId).build()))
     }
     // Exactly one SQL Command Result Batch
     responseObserver.onNext(

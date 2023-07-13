@@ -1233,6 +1233,15 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
         df2 = self.spark.sql("SELECT * FROM range(10) WHERE id > ?", args=[7])
         self.assert_eq(df.toPandas(), df2.toPandas())
 
+    def test_sql_with_temp_view(self):
+        df = self.connect.range(0, 10)
+        df.createOrReplaceTempView("t1")
+
+        df2 = self.connect.sql("select * from t1")
+        self.connect.catalog.dropTempView("t1")
+
+        self.assert_eq(df2.count(), 10)
+
     def test_head(self):
         # SPARK-41002: test `head` API in Python Client
         df = self.connect.read.table(self.tbl_name)

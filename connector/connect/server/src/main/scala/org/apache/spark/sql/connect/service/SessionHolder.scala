@@ -20,6 +20,7 @@ package org.apache.spark.sql.connect.service
 import java.nio.file.Path
 import java.util.UUID
 import java.util.concurrent.{ConcurrentHashMap, ConcurrentMap}
+import java.util.concurrent.atomic.AtomicLong
 
 import scala.collection.JavaConverters._
 import scala.util.control.NonFatal
@@ -39,6 +40,9 @@ import org.apache.spark.util.Utils
  */
 case class SessionHolder(userId: String, sessionId: String, session: SparkSession)
     extends Logging {
+
+  // Counter to ensure SQL commands are unique
+  private[connect] val nextSQLId = new AtomicLong(0)
 
   val executePlanOperations: ConcurrentMap[String, ExecutePlanHolder] =
     new ConcurrentHashMap[String, ExecutePlanHolder]()
