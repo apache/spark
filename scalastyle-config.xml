@@ -450,4 +450,13 @@ This file is divided into 3 sections:
       and URIs to and from String. If possible, please use SparkPath.
     ]]></customMessage>
   </check>
+
+  <check customId="NamingUsingEnum" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
+    <parameters>
+      <parameter name="regex">((val|var|def) enum\s*[:=])|(def enum\()</parameter>
+    </parameters>
+    <customMessage><![CDATA[
+      Please don't use enum as a variable or function name, it will become a keyword in Scala 3.
+    ]]></customMessage>
+  </check>
 </scalastyle>

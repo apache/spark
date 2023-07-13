@@ -64,7 +64,7 @@ class LeafBean {
   @BeanProperty var localDateTime: java.time.LocalDateTime = _
   @BeanProperty var duration: java.time.Duration = _
   @BeanProperty var period: java.time.Period = _
-  @BeanProperty var enum: java.time.Month = _
+  @BeanProperty var enumMonth: java.time.Month = _
   @BeanProperty val readOnlyString = "read-only"
 
   var nonNullString: String = "value"
@@ -183,7 +183,7 @@ class JavaTypeInferenceSuite extends SparkFunSuite {
       encoderField("boxedShort", BoxedShortEncoder),
       encoderField("date", STRICT_DATE_ENCODER),
       encoderField("duration", DayTimeIntervalEncoder),
-      encoderField("enum", JavaEnumEncoder(classTag[java.time.Month])),
+      encoderField("enumMonth", JavaEnumEncoder(classTag[java.time.Month])),
       encoderField("instant", STRICT_INSTANT_ENCODER),
       encoderField("localDate", STRICT_LOCAL_DATE_ENCODER),
       encoderField("localDateTime", LocalDateTimeEncoder),
