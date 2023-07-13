@@ -36,20 +36,12 @@ object SupportsNamedArguments {
       args: Seq[Expression],
       functionName: String): Seq[Expression] = {
     val parameters: Seq[NamedArgument] = functionSignature.parameters
-    val firstOptionalParamIndex: Int = parameters.indexWhere(_.default.isDefined)
-    if (firstOptionalParamIndex != -1 &&
-        parameters.drop(firstOptionalParamIndex).exists(_.default.isEmpty)) {
+    if (parameters.dropWhile(_.default.isEmpty).exists(_.default.isEmpty)) {
       throw QueryCompilationErrors.unexpectedRequiredParameterInFunctionSignature(
         functionName, functionSignature)
     }
 
-    val firstNamedArgIdx: Int = args.indexWhere(_.isInstanceOf[NamedArgumentExpression])
-    val (positionalArgs, namedArgs) =
-      if (firstNamedArgIdx == -1) {
-        (args, Nil)
-      } else {
-        args.splitAt(firstNamedArgIdx)
-      }
+    val (positionalArgs, namedArgs) = args.span(!_.isInstanceOf[NamedArgumentExpression])
     val namedParameters: Seq[NamedArgument] = parameters.drop(positionalArgs.size)
 
     // The following loop checks for the following:
@@ -80,6 +72,11 @@ object SupportsNamedArguments {
         case _ =>
           throw QueryCompilationErrors.unexpectedPositionalArgument(functionName)
       }
+    }
+
+    // Check argument list size against provided parameter list length
+    if (parameters.size < args.length) {
+      throw QueryCompilationErrors.wrongNumArgsError(functionName, Seq(), parameters.size)
     }
 
     // This constructs a map from argument name to value for argument rearrangement.

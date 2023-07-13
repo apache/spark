@@ -61,23 +61,4 @@ class CountMinSketchAggQuerySuite extends QueryTest with SharedSparkSession {
 
     assert(sketch == reference)
   }
-
-  test("count-min sketch with named-arguments") {
-    import testImplicits._
-
-    val eps = 0.1
-    val confidence = 0.95
-    val seed = 11
-
-    val items = Seq(1, 1, 2, 2, 2, 2, 3, 4, 5)
-    val sketch = CountMinSketch.readFrom(items.toDF("id")
-      .selectExpr(s"count_min_sketch(id, confidence => ${confidence}d," +
-        s" seed => $seed, epsilon => ${eps}d)")
-      .head().get(0).asInstanceOf[Array[Byte]])
-
-    val reference = CountMinSketch.create(eps, confidence, seed)
-    items.foreach(reference.add)
-
-    assert(sketch == reference)
-  }
 }

@@ -282,14 +282,13 @@ select * from explode(1, 2)
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
-  "sqlState" : "42K09",
+  "errorClass" : "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
+  "sqlState" : "42605",
   "messageParameters" : {
-    "inputSql" : "\"1\"",
-    "inputType" : "\"INT\"",
-    "paramIndex" : "1",
-    "requiredType" : "(\"ARRAY\" or \"MAP\")",
-    "sqlExpr" : "\"explode(1)\""
+    "actualNum" : "1",
+    "docroot" : "https://spark.apache.org/docs/latest",
+    "expectedNum" : "0",
+    "functionName" : "`explode`"
   },
   "queryContext" : [ {
     "objectType" : "",

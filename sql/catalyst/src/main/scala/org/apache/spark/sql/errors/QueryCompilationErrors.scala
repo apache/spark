@@ -54,17 +54,14 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
       functionName: String, functionSignature: FunctionSignature) : Throwable = {
     val errorMessage = s"Function $functionName has an unexpected required argument for" +
       s" the provided function signature $functionSignature. All required arguments should" +
-      s" come before optional arguments."
+      " come before optional arguments."
     SparkException.internalError(errorMessage)
   }
 
   def multipleFunctionSignatures(functionName: String,
       functionSignatures: Seq[FunctionSignature]): Throwable = {
-    var errorMessage = s"Function $functionName cannot have multiple method signatures." +
-      s" The function signatures found were: \n"
-    for (functionSignature <- functionSignatures) {
-      errorMessage = errorMessage + s"${functionSignature}\n"
-    }
+    val errorMessage = s"Function $functionName cannot have multiple method signatures." +
+      " The function signatures found were:\n" + functionSignatures.mkString("\n")
     SparkException.internalError(errorMessage)
   }
 
@@ -116,14 +113,12 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
     val inputs = candidates.map(candidate => Seq(candidate)).toSeq
     val recommendations = orderSuggestedIdentifiersBySimilarity(argumentName, inputs)
       .take(3)
-    var candidatesString = ""
-    recommendations.foreach(candidatesString += _ + " ")
     new AnalysisException(
       errorClass = "UNRECOGNIZED_PARAMETER_NAME",
       messageParameters = Map(
         "functionName" -> toSQLId(functionName),
         "argumentName" -> toSQLId(argumentName),
-        "proposal" -> candidatesString)
+        "proposal" -> recommendations.mkString(" "))
     )
   }
 

@@ -53,6 +53,19 @@ object DummyExpressionBuilder extends ExpressionBuilder  {
     DummyExpression(expressions(0), expressions(1), expressions(2), expressions(3))
 }
 
+object IllegalExpressionBuilder extends ExpressionBuilder  {
+  def defaultFunctionSignature: FunctionSignature = {
+    FunctionSignature(Seq(NamedArgument("k1"),
+      NamedArgument("k2"),
+      NamedArgument("k3"),
+      NamedArgument("k4")))
+  }
+  override def functionSignatures: Option[Seq[FunctionSignature]] =
+    Some(Seq(defaultFunctionSignature, defaultFunctionSignature))
+  override def build(funcName: String, expressions: Seq[Expression]): Expression =
+    DummyExpression(expressions(0), expressions(1), expressions(2), expressions(3))
+}
+
 class NamedArgumentFunctionSuite extends AnalysisTest {
 
   final val k1Arg = Literal("v1")
@@ -63,11 +76,18 @@ class NamedArgumentFunctionSuite extends AnalysisTest {
   final val args = Seq(k1Arg, k4Arg, k2Arg, k3Arg)
   final val expectedSeq = Seq(Literal("v1"), Literal("v2"), Literal("v3"), Literal("v4"))
   final val signature = DummyExpressionBuilder.defaultFunctionSignature
+  final val illegalSignature = FunctionSignature(Seq(
+    NamedArgument("k1"), NamedArgument("k2", Option(Literal("v2"))), NamedArgument("k3")))
 
   test("Check rearrangement of expressions") {
     val rearrangedArgs = SupportsNamedArguments.defaultRearrange(
       signature, args, "function")
     for ((returnedArg, expectedArg) <- rearrangedArgs.zip(expectedSeq)) {
+      assert(returnedArg == expectedArg)
+    }
+    val rearrangedArgsWithBuilder =
+      FunctionRegistry.rearrangeExpressions("function", DummyExpressionBuilder, args)
+    for ((returnedArg, expectedArg) <- rearrangedArgsWithBuilder.zip(expectedSeq)) {
       assert(returnedArg == expectedArg)
     }
   }
@@ -77,6 +97,14 @@ class NamedArgumentFunctionSuite extends AnalysisTest {
                                       functionName: String = "function"): SparkThrowable = {
     intercept[SparkThrowable](
       SupportsNamedArguments.defaultRearrange(functionSignature, expressions, functionName))
+  }
+
+  private def parseExternalException[T <: Builder[_]](
+      functionName: String,
+      builder: T,
+      expressions: Seq[Expression]) : SparkThrowable = {
+    intercept[SparkThrowable](
+      FunctionRegistry.rearrangeExpressions[T](functionName, builder, expressions))
   }
 
   test("DUPLICATE_ROUTINE_PARAMETER_ASSIGNMENT") {
@@ -110,7 +138,7 @@ class NamedArgumentFunctionSuite extends AnalysisTest {
         Seq(k1Arg, k2Arg, k3Arg, k4Arg, NamedArgumentExpression("k5", Literal("k5"))), "foo"),
       errorClass = "UNRECOGNIZED_PARAMETER_NAME",
       parameters = Map("functionName" -> toSQLId("foo"), "argumentName" -> toSQLId("k5"),
-        "proposal" -> (toSQLId("k1") + " " + toSQLId("k2") + " " + toSQLId("k3") + " "))
+        "proposal" -> (toSQLId("k1") + " " + toSQLId("k2") + " " + toSQLId("k3")))
     )
   }
 
@@ -120,6 +148,27 @@ class NamedArgumentFunctionSuite extends AnalysisTest {
         Seq(k2Arg, k3Arg, k1Arg, k4Arg), "foo"),
       errorClass = "UNEXPECTED_POSITIONAL_ARGUMENT",
       parameters = Map("functionName" -> toSQLId("foo"))
+    )
+  }
+
+  test("INTERNAL_ERROR: Enforce optional arguments after required arguments") {
+    val errorMessage = s"Function foo has an unexpected required argument for the provided" +
+      s" function signature ${illegalSignature}. All required arguments should come before" +
+      s" optional arguments."
+    checkError(
+      exception = parseRearrangeException(illegalSignature, args, "foo"),
+      errorClass = "INTERNAL_ERROR",
+      parameters = Map("message" -> errorMessage)
+    )
+  }
+
+  test("INTERNAL_ERROR: Multiple function signatures found for ExpressionBuilder") {
+    val errorMessage = "Function foo cannot have multiple method signatures. The function" +
+      s" signatures found were:\n$signature\n$signature"
+    checkError(
+      exception = parseExternalException("foo", IllegalExpressionBuilder, args),
+      errorClass = "INTERNAL_ERROR",
+      parameters = Map("message" -> errorMessage)
     )
   }
 }
