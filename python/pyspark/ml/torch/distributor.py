@@ -515,18 +515,18 @@ class TorchDistributor(Distributor):
                 f"Command {cmd} failed with return code {task.returncode}. "
                 f"The {last_n_msg} included below: {task_output}"
             )
-    
-    def _get_output_from_framework_wrapper(self, framework_wrapper: Optional[Callable], train_object: Union[Callable, str], run_training_on_pytorch_file: Optional[Callable], *args, **kwargs) -> Optional[Any]:
+    @staticmethod  
+    def _get_output_from_framework_wrapper(framework_wrapper: Optional[Callable], input_params: Dict, train_object: Union[Callable, str], run_training_on_pytorch_file: Optional[Callable], *args, **kwargs) -> Optional[Any]:
         if not framework_wrapper:
             raise RuntimeError("In the _get_output_from_framework_wrapper function, found a framework wrapper that is none. I wonder why this is...")
         # The object to train is a file path, so framework_wrapper is some run_training_on_pytorch_file function.
         if type(train_object) is str:
-            return framework_wrapper(self.input_params, train_object, *args, **kwargs)
+            return framework_wrapper(input_params, train_object, *args, **kwargs)
         else:
             # We are doing training with a function, will call run_training_on_pytorch_function
             if not run_training_on_pytorch_file:
                 run_training_on_pytorch_file = TorchDistributor._run_training_on_pytorch_file
-            return framework_wrapper(self.input_params, train_object, run_training_on_pytorch_file, *args, **kwargs)
+            return framework_wrapper(input_params, train_object, run_training_on_pytorch_file, *args, **kwargs)
 
         
 
@@ -552,7 +552,7 @@ class TorchDistributor(Distributor):
                 os.environ[CUDA_VISIBLE_DEVICES] = ",".join(selected_gpus)
 
             self.logger.info(f"Started local training with {self.num_processes} processes")
-            output = self._get_output_from_framework_wrapper(framework_wrapper_fn, train_object, run_training_on_pytorch_file, *args, **kwargs)
+            output = TorchDistributor._get_output_from_framework_wrapper(framework_wrapper_fn, self.input_params, train_object, run_training_on_pytorch_file, *args, **kwargs)
             self.logger.info(f"Finished local training with {self.num_processes} processes")
 
         finally:
@@ -673,7 +673,7 @@ class TorchDistributor(Distributor):
             input_params["log_streaming_client"] = log_streaming_client
             try:
                 with TorchDistributor._setup_spark_partition_data(iterator, schema_json):
-                    output = self._get_output_from_framework_wrapper(framework_wrapper_fn, train_object, run_training_on_pytorch_file, *args, **kwargs)
+                    output = TorchDistributor._get_output_from_framework_wrapper(framework_wrapper_fn, input_params,train_object, run_training_on_pytorch_file, *args, **kwargs)
             finally:
                 try:
                     LogStreamingClient._destroy()
