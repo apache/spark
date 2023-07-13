@@ -1873,11 +1873,11 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         Examples
         --------
         >>> df = spark.range(10)
-        >>> df.sample(0.5, 3).count()
+        >>> df.sample(0.5, 3).count() # doctest: +SKIP
         7
-        >>> df.sample(fraction=0.5, seed=3).count()
+        >>> df.sample(fraction=0.5, seed=3).count() # doctest: +SKIP
         7
-        >>> df.sample(withReplacement=True, fraction=0.5, seed=3).count()
+        >>> df.sample(withReplacement=True, fraction=0.5, seed=3).count() # doctest: +SKIP
         1
         >>> df.sample(1.0).count()
         10

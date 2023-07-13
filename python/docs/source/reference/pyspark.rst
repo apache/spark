@@ -55,6 +55,7 @@ Spark Context APIs
     SparkContext.accumulator
     SparkContext.addArchive
     SparkContext.addFile
+    SparkContext.addJobTag
     SparkContext.addPyFile
     SparkContext.applicationId
     SparkContext.binaryFiles
@@ -62,12 +63,15 @@ Spark Context APIs
     SparkContext.broadcast
     SparkContext.cancelAllJobs
     SparkContext.cancelJobGroup
+    SparkContext.cancelJobsWithTag
+    SparkContext.clearJobTags
     SparkContext.defaultMinPartitions
     SparkContext.defaultParallelism
     SparkContext.dump_profiles
     SparkContext.emptyRDD
     SparkContext.getCheckpointDir
     SparkContext.getConf
+    SparkContext.getJobTags
     SparkContext.getLocalProperty
     SparkContext.getOrCreate
     SparkContext.hadoopFile
@@ -80,9 +84,11 @@ Spark Context APIs
     SparkContext.pickleFile
     SparkContext.range
     SparkContext.resources
+    SparkContext.removeJobTag
     SparkContext.runJob
     SparkContext.sequenceFile
     SparkContext.setCheckpointDir
+    SparkContext.setInterruptOnCancel
     SparkContext.setJobDescription
     SparkContext.setJobGroup
     SparkContext.setLocalProperty

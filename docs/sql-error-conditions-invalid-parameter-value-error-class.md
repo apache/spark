@@ -25,17 +25,29 @@ The value of parameter(s) `<parameter>` in `<functionName>` is invalid:
 
 This error class has the following derived error classes:
 
-## AES_KEY
+## AES_CRYPTO_ERROR
 
 detail message: `<detailMessage>`
+
+## AES_IV_LENGTH
+
+supports 16-byte CBC IVs and 12-byte GCM IVs, but got `<actualLength>` bytes for `<mode>`.
 
 ## AES_KEY_LENGTH
 
 expects a binary value with 16, 24 or 32 bytes, but got `<actualLength>` bytes.
 
+## DATETIME_UNIT
+
+expects one of the units without quotes YEAR, QUARTER, MONTH, WEEK, DAY, DAYOFYEAR, HOUR, MINUTE, SECOND, MILLISECOND, MICROSECOND, but got the string literal `<invalidValue>`.
+
 ## PATTERN
 
 `<value>`.
+
+## REGEX_GROUP_INDEX
+
+Expects group index between 0 and `<groupCount>`, but got `<groupIndex>`.
 
 ## ZERO_INDEX
 

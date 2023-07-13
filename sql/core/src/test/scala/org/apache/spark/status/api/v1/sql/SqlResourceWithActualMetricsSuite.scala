@@ -26,6 +26,7 @@ import org.json4s.jackson.JsonMethods
 import org.apache.spark.SparkConf
 import org.apache.spark.deploy.history.HistoryServerSuite.getContentAndCode
 import org.apache.spark.sql.DataFrame
+import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
 import org.apache.spark.sql.catalyst.plans.SQLHelper
 import org.apache.spark.sql.execution.metric.SQLMetricsTestUtils
 import org.apache.spark.sql.internal.SQLConf.ADAPTIVE_EXECUTION_ENABLED
@@ -127,6 +128,24 @@ class SqlResourceWithActualMetricsSuite
       .sort()
 
     ds.toDF
+  }
+
+  test("SPARK-44334: Status of a failed DDL/DML with no jobs should be FAILED") {
+    withTable("SPARK_44334") {
+      val sqlStr = "CREATE TABLE SPARK_44334 USING parquet AS SELECT 1 AS a"
+      sql(sqlStr)
+      intercept[TableAlreadyExistsException](sql(sqlStr))
+
+      val url = new URL(spark.sparkContext.ui.get.webUrl +
+        s"/api/v1/applications/${spark.sparkContext.applicationId}/sql")
+      val result = verifyAndGetSqlRestResult(url)
+      val executionDataList = JsonMethods.parse(result)
+        .extract[Seq[ExecutionData]]
+        .filter(_.planDescription.contains("SPARK_44334"))
+      assert(executionDataList.size == 2)
+      assert(executionDataList.head.status == "COMPLETED")
+      assert(executionDataList.last.status == "FAILED")
+    }
   }
 
 }

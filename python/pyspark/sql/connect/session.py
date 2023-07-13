@@ -573,6 +573,13 @@ class SparkSession:
 
     stop.__doc__ = PySparkSession.stop.__doc__
 
+    @property
+    def is_stopped(self) -> bool:
+        """
+        Returns if this session was stopped
+        """
+        return self.client.is_closed
+
     @classmethod
     def getActiveSession(cls) -> Any:
         raise PySparkNotImplementedError(
@@ -746,6 +753,16 @@ class SparkSession:
                         else:
                             pyutils = SparkContext._jvm.PythonSQLUtils  # type: ignore[union-attr]
                             pyutils.addJarToCurrentClassLoader(connect_jar)
+
+                            # Required for local-cluster testing as their executors need the jars
+                            # to load the Spark plugin for Spark Connect.
+                            if master.startswith("local-cluster"):
+                                if "spark.jars" in overwrite_conf:
+                                    overwrite_conf[
+                                        "spark.jars"
+                                    ] = f"{overwrite_conf['spark.jars']},{connect_jar}"
+                                else:
+                                    overwrite_conf["spark.jars"] = connect_jar
 
                     except ImportError:
                         pass

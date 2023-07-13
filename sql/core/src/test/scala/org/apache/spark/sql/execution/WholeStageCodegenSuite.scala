@@ -232,6 +232,95 @@ class WholeStageCodegenSuite extends QueryTest with SharedSparkSession
     }
   }
 
+
+  test("SPARK-44060 Code-gen for build side outer shuffled hash join") {
+    val df1 = spark.range(0, 5).select($"id".as("k1"))
+    val df2 = spark.range(1, 11).select($"id".as("k2"))
+    val df3 = spark.range(2, 5).select($"id".as("k3"))
+
+    withSQLConf(SQLConf.ENABLE_BUILD_SIDE_OUTER_SHUFFLED_HASH_JOIN_CODEGEN.key -> "true") {
+      Seq("SHUFFLE_HASH", "SHUFFLE_MERGE").foreach { hint =>
+        // test right join with unique key from build side
+        val rightJoinUniqueDf = df1.join(df2.hint(hint), $"k1" === $"k2", "right_outer")
+        assert(rightJoinUniqueDf.queryExecution.executedPlan.collect {
+          case WholeStageCodegenExec(_: ShuffledHashJoinExec) if hint == "SHUFFLE_HASH" => true
+          case WholeStageCodegenExec(_: SortMergeJoinExec) if hint == "SHUFFLE_MERGE" => true
+        }.size === 1)
+        checkAnswer(rightJoinUniqueDf, Seq(Row(1, 1), Row(2, 2), Row(3, 3), Row(4, 4),
+          Row(null, 5), Row(null, 6), Row(null, 7), Row(null, 8), Row(null, 9),
+          Row(null, 10)))
+        assert(rightJoinUniqueDf.count() === 10)
+
+        // test left join with unique key from build side
+        val leftJoinUniqueDf = df1.hint(hint).join(df2, $"k1" === $"k2", "left_outer")
+        assert(leftJoinUniqueDf.queryExecution.executedPlan.collect {
+          case WholeStageCodegenExec(_: ShuffledHashJoinExec) if hint == "SHUFFLE_HASH" => true
+          case WholeStageCodegenExec(_: SortMergeJoinExec) if hint == "SHUFFLE_MERGE" => true
+        }.size === 1)
+        checkAnswer(leftJoinUniqueDf, Seq(Row(0, null), Row(1, 1), Row(2, 2), Row(3, 3), Row(4, 4)))
+        assert(leftJoinUniqueDf.count() === 5)
+
+        // test right join with non-unique key from build side
+        val rightJoinNonUniqueDf = df1.join(df2.hint(hint), $"k1" === $"k2" % 3, "right_outer")
+        assert(rightJoinNonUniqueDf.queryExecution.executedPlan.collect {
+          case WholeStageCodegenExec(_: ShuffledHashJoinExec) if hint == "SHUFFLE_HASH" => true
+          case WholeStageCodegenExec(_: SortMergeJoinExec) if hint == "SHUFFLE_MERGE" => true
+        }.size === 1)
+        checkAnswer(rightJoinNonUniqueDf, Seq(Row(0, 3), Row(0, 6), Row(0, 9), Row(1, 1),
+          Row(1, 4), Row(1, 7), Row(1, 10), Row(2, 2), Row(2, 5), Row(2, 8)))
+
+        // test left join with non-unique key from build side
+        val leftJoinNonUniqueDf = df1.hint(hint).join(df2, $"k1" === $"k2" % 3, "left_outer")
+        assert(leftJoinNonUniqueDf.queryExecution.executedPlan.collect {
+          case WholeStageCodegenExec(_: ShuffledHashJoinExec) if hint == "SHUFFLE_HASH" => true
+          case WholeStageCodegenExec(_: SortMergeJoinExec) if hint == "SHUFFLE_MERGE" => true
+        }.size === 1)
+        checkAnswer(leftJoinNonUniqueDf, Seq(Row(0, 3), Row(0, 6), Row(0, 9), Row(1, 1),
+          Row(1, 4), Row(1, 7), Row(1, 10), Row(2, 2), Row(2, 5), Row(2, 8), Row(3, null),
+          Row(4, null)))
+
+        // test right join with non-equi condition
+        val rightJoinWithNonEquiDf = df1.join(df2.hint(hint),
+          $"k1" === $"k2" % 3 && $"k1" + 3 =!= $"k2", "right_outer")
+        assert(rightJoinWithNonEquiDf.queryExecution.executedPlan.collect {
+          case WholeStageCodegenExec(_: ShuffledHashJoinExec) if hint == "SHUFFLE_HASH" => true
+          case WholeStageCodegenExec(_: SortMergeJoinExec) if hint == "SHUFFLE_MERGE" => true
+        }.size === 1)
+        checkAnswer(rightJoinWithNonEquiDf, Seq(Row(0, 6), Row(0, 9), Row(1, 1), Row(1, 7),
+          Row(1, 10), Row(2, 2), Row(2, 8), Row(null, 3), Row(null, 4), Row(null, 5)))
+
+        // test left join with non-equi condition
+        val leftJoinWithNonEquiDf = df1.hint(hint).join(df2,
+          $"k1" === $"k2" % 3 && $"k1" + 3 =!= $"k2", "left_outer")
+        assert(leftJoinWithNonEquiDf.queryExecution.executedPlan.collect {
+          case WholeStageCodegenExec(_: ShuffledHashJoinExec) if hint == "SHUFFLE_HASH" => true
+          case WholeStageCodegenExec(_: SortMergeJoinExec) if hint == "SHUFFLE_MERGE" => true
+        }.size === 1)
+        checkAnswer(leftJoinWithNonEquiDf, Seq(Row(0, 6), Row(0, 9), Row(1, 1), Row(1, 7),
+          Row(1, 10), Row(2, 2), Row(2, 8), Row(3, null), Row(4, null)))
+
+        // test two right joins
+        val twoRightJoinsDf = df1.join(df2.hint(hint), $"k1" === $"k2", "right_outer")
+          .join(df3.hint(hint), $"k1" === $"k3" && $"k1" + $"k3" =!= 2, "right_outer")
+        assert(twoRightJoinsDf.queryExecution.executedPlan.collect {
+          case WholeStageCodegenExec(_: ShuffledHashJoinExec) if hint == "SHUFFLE_HASH" => true
+          case WholeStageCodegenExec(_: SortMergeJoinExec) if hint == "SHUFFLE_MERGE" => true
+        }.size === 2)
+        checkAnswer(twoRightJoinsDf, Seq(Row(2, 2, 2), Row(3, 3, 3), Row(4, 4, 4)))
+
+        // test two left joins
+        val twoLeftJoinsDf = df1.hint(hint).join(df2, $"k1" === $"k2", "left_outer").hint(hint)
+          .join(df3, $"k1" === $"k3" && $"k1" + $"k3" =!= 2, "left_outer")
+        assert(twoLeftJoinsDf.queryExecution.executedPlan.collect {
+          case WholeStageCodegenExec(_: ShuffledHashJoinExec) if hint == "SHUFFLE_HASH" => true
+          case WholeStageCodegenExec(_: SortMergeJoinExec) if hint == "SHUFFLE_MERGE" => true
+        }.size === 2)
+        checkAnswer(twoLeftJoinsDf,
+          Seq(Row(0, null, null), Row(1, 1, null), Row(2, 2, 2), Row(3, 3, 3), Row(4, 4, 4)))
+      }
+    }
+  }
+
   test("Left/Right Outer SortMergeJoin should be included in WholeStageCodegen") {
     val df1 = spark.range(10).select($"id".as("k1"))
     val df2 = spark.range(4).select($"id".as("k2"))

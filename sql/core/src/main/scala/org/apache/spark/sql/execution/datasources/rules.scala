@@ -25,6 +25,7 @@ import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.expressions.{Expression, InputFileBlockLength, InputFileBlockStart, InputFileName, RowOrdering}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.catalyst.util.TypeUtils._
 import org.apache.spark.sql.connector.expressions.{FieldReference, RewritableTransform}
 import org.apache.spark.sql.errors.QueryCompilationErrors
@@ -99,13 +100,15 @@ case class PreprocessTableCreation(catalog: SessionCatalog) extends Rule[Logical
     // we fail the query if the partitioning information is specified.
     case c @ CreateTableV1(tableDesc, _, None) if tableDesc.schema.isEmpty =>
       if (tableDesc.bucketSpec.isDefined) {
-        failAnalysis("Cannot specify bucketing information if the table schema is not specified " +
-          "when creating and will be inferred at runtime")
+        throw new AnalysisException(
+          errorClass = "SPECIFY_BUCKETING_IS_NOT_ALLOWED",
+          messageParameters = Map.empty
+        )
       }
       if (tableDesc.partitionColumnNames.nonEmpty) {
-        failAnalysis("It is not allowed to specify partition columns when the table schema is " +
-          "not defined. When the table schema is not provided, schema and partition columns " +
-          "will be inferred.")
+        throw new AnalysisException(
+          errorClass = "SPECIFY_PARTITION_IS_NOT_ALLOWED",
+          messageParameters = Map.empty)
       }
       c
 
@@ -193,7 +196,7 @@ case class PreprocessTableCreation(catalog: SessionCatalog) extends Rule[Logical
       c.copy(
         tableDesc = existingTable,
         query = Some(TableOutputResolver.resolveOutputColumns(
-          tableDesc.qualifiedName, existingTable.schema.toAttributes, newQuery,
+          tableDesc.qualifiedName, toAttributes(existingTable.schema), newQuery,
           byName = true, conf)))
 
     // Here we normalize partition, bucket and sort column names, w.r.t. the case sensitivity
@@ -316,7 +319,9 @@ case class PreprocessTableCreation(catalog: SessionCatalog) extends Rule[Logical
     SchemaUtils.checkColumnNameDuplication(normalizedPartitionCols, conf.resolver)
 
     if (schema.nonEmpty && normalizedPartitionCols.length == schema.length) {
-      failAnalysis("Cannot use all columns for partition columns")
+      throw new AnalysisException(
+        errorClass = "ALL_PARTITION_COLUMNS_NOT_ALLOWED",
+        messageParameters = Map.empty)
     }
 
     schema.filter(f => normalizedPartitionCols.contains(f.name)).map(_.dataType).foreach {
@@ -489,8 +494,8 @@ object PreReadCheck extends (LogicalPlan => Unit) {
         val numInputFileBlockSources = o.children.map(checkNumInputFileBlockSources(e, _)).sum
         if (numInputFileBlockSources > 1) {
           e.failAnalysis(
-            errorClass = "_LEGACY_ERROR_TEMP_2302",
-            messageParameters = Map("name" -> e.prettyName))
+            errorClass = "MULTI_SOURCES_UNSUPPORTED_FOR_EXPRESSION",
+            messageParameters = Map("expr" -> toSQLExpr(e)))
         } else {
           numInputFileBlockSources
         }
@@ -547,5 +552,27 @@ object PreWriteCheck extends (LogicalPlan => Unit) {
 
       case _ => // OK
     }
+  }
+}
+
+/**
+ * A rule to qualify relative locations with warehouse path before it breaks in catalog
+ * operation and data reading and writing.
+ *
+ * @param catalog the session catalog
+ */
+case class QualifyLocationWithWarehouse(catalog: SessionCatalog) extends Rule[LogicalPlan] {
+
+  override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperators {
+    case c @ CreateTableV1(tableDesc, _, _) if !c.locationQualifiedOrAbsent =>
+      val qualifiedTableIdent = catalog.qualifyIdentifier(tableDesc.identifier)
+      val loc = tableDesc.storage.locationUri.get
+      val db = qualifiedTableIdent.database.get
+      val newLocation = catalog.makeQualifiedTablePath(loc, db)
+      val newTable = tableDesc.copy(
+        identifier = qualifiedTableIdent,
+        storage = tableDesc.storage.copy(locationUri = Some(newLocation))
+      )
+      c.copy(tableDesc = newTable)
   }
 }

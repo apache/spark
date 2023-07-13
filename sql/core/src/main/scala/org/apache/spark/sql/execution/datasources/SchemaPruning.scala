@@ -21,6 +21,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning.ScanOperation
 import org.apache.spark.sql.catalyst.plans.logical.{Filter, LeafNode, LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.execution.datasources.orc.OrcFileFormat
 import org.apache.spark.sql.execution.datasources.parquet.ParquetFileFormat
 import org.apache.spark.sql.types.{ArrayType, DataType, MapType, StructType}
@@ -184,8 +185,7 @@ object SchemaPruning extends Rule[LogicalPlan] {
     // We need to update the data type of the output attributes to use the pruned ones.
     // so that references to the original relation's output are not broken
     val nameAttributeMap = output.map(att => (att.name, att)).toMap
-    requiredSchema
-      .toAttributes
+    toAttributes(requiredSchema)
       .map {
         case att if nameAttributeMap.contains(att.name) =>
           nameAttributeMap(att.name).withDataType(att.dataType)

@@ -19,9 +19,9 @@ package org.apache.spark.sql
 
 import java.util.Random
 
-import io.grpc.StatusRuntimeException
 import org.scalatest.matchers.must.Matchers._
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.connect.client.util.RemoteSparkSession
 
 class DataFrameStatSuite extends RemoteSparkSession {
@@ -87,7 +87,7 @@ class DataFrameStatSuite extends RemoteSparkSession {
 
     val results = df.stat.cov("singles", "doubles")
     assert(math.abs(results - 55.0 / 3) < 1e-12)
-    intercept[StatusRuntimeException] {
+    intercept[SparkException] {
       df.stat.cov("singles", "letters") // doesn't accept non-numerical dataTypes
     }
     val decimalData = Seq.tabulate(6)(i => (BigDecimal(i % 3), BigDecimal(i % 2))).toDF("a", "b")
@@ -230,7 +230,7 @@ class DataFrameStatSuite extends RemoteSparkSession {
     val session = spark
     import session.implicits._
     val data = Range(0, 1000).map(_.toDouble)
-    val message = intercept[StatusRuntimeException] {
+    val message = intercept[SparkException] {
       data.toDF("id").stat.bloomFilter("id", 1000, 0.03)
     }.getMessage
     assert(message.contains("DATATYPE_MISMATCH.BLOOM_FILTER_WRONG_TYPE"))
@@ -238,17 +238,17 @@ class DataFrameStatSuite extends RemoteSparkSession {
 
   test("Bloom filter test invalid inputs") {
     val df = spark.range(1000).toDF("id")
-    val message1 = intercept[StatusRuntimeException] {
+    val message1 = intercept[SparkException] {
       df.stat.bloomFilter("id", -1000, 100)
     }.getMessage
     assert(message1.contains("Expected insertions must be positive"))
 
-    val message2 = intercept[StatusRuntimeException] {
+    val message2 = intercept[SparkException] {
       df.stat.bloomFilter("id", 1000, -100)
     }.getMessage
     assert(message2.contains("Number of bits must be positive"))
 
-    val message3 = intercept[StatusRuntimeException] {
+    val message3 = intercept[SparkException] {
       df.stat.bloomFilter("id", 1000, -1.0)
     }.getMessage
     assert(message3.contains("False positive probability must be within range (0.0, 1.0)"))
