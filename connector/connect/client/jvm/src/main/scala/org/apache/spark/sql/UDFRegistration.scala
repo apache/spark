@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql
 
-import scala.reflect.runtime.universe.TypeTag
+import scala.reflect.runtime.universe.{typeTag, TypeTag}
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.expressions.{ScalarUserDefinedFunction, UserDefinedFunction}
@@ -94,7 +94,8 @@ class UDFRegistration(session: SparkSession) extends Logging {
    * @since 3.5.0
    */
   def register[RT: TypeTag](name: String, func: () => RT): UserDefinedFunction = {
-    register(name, functions.udf(func))
+    val udf = ScalarUserDefinedFunction(func, typeTag[RT])
+    register(name, udf)
   }
 
   /**
@@ -104,7 +105,8 @@ class UDFRegistration(session: SparkSession) extends Logging {
    * @since 3.5.0
    */
   def register[RT: TypeTag, A1: TypeTag](name: String, func: (A1) => RT): UserDefinedFunction = {
-    register(name, functions.udf(func))
+    val udf = ScalarUserDefinedFunction(func, typeTag[RT], typeTag[A1])
+    register(name, udf)
   }
 
   /**
@@ -116,7 +118,8 @@ class UDFRegistration(session: SparkSession) extends Logging {
   def register[RT: TypeTag, A1: TypeTag, A2: TypeTag](
       name: String,
       func: (A1, A2) => RT): UserDefinedFunction = {
-    register(name, functions.udf(func))
+    val udf = ScalarUserDefinedFunction(func, typeTag[RT], typeTag[A1], typeTag[A2])
+    register(name, udf)
   }
 
   /**
@@ -128,7 +131,8 @@ class UDFRegistration(session: SparkSession) extends Logging {
   def register[RT: TypeTag, A1: TypeTag, A2: TypeTag, A3: TypeTag](
       name: String,
       func: (A1, A2, A3) => RT): UserDefinedFunction = {
-    register(name, functions.udf(func))
+    val udf = ScalarUserDefinedFunction(func, typeTag[RT], typeTag[A1], typeTag[A2], typeTag[A3])
+    register(name, udf)
   }
 
   /**
@@ -140,7 +144,14 @@ class UDFRegistration(session: SparkSession) extends Logging {
   def register[RT: TypeTag, A1: TypeTag, A2: TypeTag, A3: TypeTag, A4: TypeTag](
       name: String,
       func: (A1, A2, A3, A4) => RT): UserDefinedFunction = {
-    register(name, functions.udf(func))
+    val udf = ScalarUserDefinedFunction(
+      func,
+      typeTag[RT],
+      typeTag[A1],
+      typeTag[A2],
+      typeTag[A3],
+      typeTag[A4])
+    register(name, udf)
   }
 
   /**
@@ -152,7 +163,15 @@ class UDFRegistration(session: SparkSession) extends Logging {
   def register[RT: TypeTag, A1: TypeTag, A2: TypeTag, A3: TypeTag, A4: TypeTag, A5: TypeTag](
       name: String,
       func: (A1, A2, A3, A4, A5) => RT): UserDefinedFunction = {
-    register(name, functions.udf(func))
+    val udf = ScalarUserDefinedFunction(
+      func,
+      typeTag[RT],
+      typeTag[A1],
+      typeTag[A2],
+      typeTag[A3],
+      typeTag[A4],
+      typeTag[A5])
+    register(name, udf)
   }
 
   /**
@@ -169,7 +188,16 @@ class UDFRegistration(session: SparkSession) extends Logging {
       A4: TypeTag,
       A5: TypeTag,
       A6: TypeTag](name: String, func: (A1, A2, A3, A4, A5, A6) => RT): UserDefinedFunction = {
-    register(name, functions.udf(func))
+    val udf = ScalarUserDefinedFunction(
+      func,
+      typeTag[RT],
+      typeTag[A1],
+      typeTag[A2],
+      typeTag[A3],
+      typeTag[A4],
+      typeTag[A5],
+      typeTag[A6])
+    register(name, udf)
   }
 
   /**
@@ -189,7 +217,17 @@ class UDFRegistration(session: SparkSession) extends Logging {
       A7: TypeTag](
       name: String,
       func: (A1, A2, A3, A4, A5, A6, A7) => RT): UserDefinedFunction = {
-    register(name, functions.udf(func))
+    val udf = ScalarUserDefinedFunction(
+      func,
+      typeTag[RT],
+      typeTag[A1],
+      typeTag[A2],
+      typeTag[A3],
+      typeTag[A4],
+      typeTag[A5],
+      typeTag[A6],
+      typeTag[A7])
+    register(name, udf)
   }
 
   /**
@@ -210,7 +248,18 @@ class UDFRegistration(session: SparkSession) extends Logging {
       A8: TypeTag](
       name: String,
       func: (A1, A2, A3, A4, A5, A6, A7, A8) => RT): UserDefinedFunction = {
-    register(name, functions.udf(func))
+    val udf = ScalarUserDefinedFunction(
+      func,
+      typeTag[RT],
+      typeTag[A1],
+      typeTag[A2],
+      typeTag[A3],
+      typeTag[A4],
+      typeTag[A5],
+      typeTag[A6],
+      typeTag[A7],
+      typeTag[A8])
+    register(name, udf)
   }
 
   /**
@@ -232,7 +281,19 @@ class UDFRegistration(session: SparkSession) extends Logging {
       A9: TypeTag](
       name: String,
       func: (A1, A2, A3, A4, A5, A6, A7, A8, A9) => RT): UserDefinedFunction = {
-    register(name, functions.udf(func))
+    val udf = ScalarUserDefinedFunction(
+      func,
+      typeTag[RT],
+      typeTag[A1],
+      typeTag[A2],
+      typeTag[A3],
+      typeTag[A4],
+      typeTag[A5],
+      typeTag[A6],
+      typeTag[A7],
+      typeTag[A8],
+      typeTag[A9])
+    register(name, udf)
   }
 
   /**
@@ -255,7 +316,20 @@ class UDFRegistration(session: SparkSession) extends Logging {
       A10: TypeTag](
       name: String,
       func: (A1, A2, A3, A4, A5, A6, A7, A8, A9, A10) => RT): UserDefinedFunction = {
-    register(name, functions.udf(func))
+    val udf = ScalarUserDefinedFunction(
+      func,
+      typeTag[RT],
+      typeTag[A1],
+      typeTag[A2],
+      typeTag[A3],
+      typeTag[A4],
+      typeTag[A5],
+      typeTag[A6],
+      typeTag[A7],
+      typeTag[A8],
+      typeTag[A9],
+      typeTag[A10])
+    register(name, udf)
   }
 
   /**
@@ -279,7 +353,21 @@ class UDFRegistration(session: SparkSession) extends Logging {
       A11: TypeTag](
       name: String,
       func: (A1, A2, A3, A4, A5, A6, A7, A8, A9, A10, A11) => RT): UserDefinedFunction = {
-    register(name, functions.udf(func))
+    val udf = ScalarUserDefinedFunction(
+      func,
+      typeTag[RT],
+      typeTag[A1],
+      typeTag[A2],
+      typeTag[A3],
+      typeTag[A4],
+      typeTag[A5],
+      typeTag[A6],
+      typeTag[A7],
+      typeTag[A8],
+      typeTag[A9],
+      typeTag[A10],
+      typeTag[A11])
+    register(name, udf)
   }
 
   /**
@@ -304,7 +392,22 @@ class UDFRegistration(session: SparkSession) extends Logging {
       A12: TypeTag](
       name: String,
       func: (A1, A2, A3, A4, A5, A6, A7, A8, A9, A10, A11, A12) => RT): UserDefinedFunction = {
-    register(name, functions.udf(func))
+    val udf = ScalarUserDefinedFunction(
+      func,
+      typeTag[RT],
+      typeTag[A1],
+      typeTag[A2],
+      typeTag[A3],
+      typeTag[A4],
+      typeTag[A5],
+      typeTag[A6],
+      typeTag[A7],
+      typeTag[A8],
+      typeTag[A9],
+      typeTag[A10],
+      typeTag[A11],
+      typeTag[A12])
+    register(name, udf)
   }
 
   /**
@@ -331,7 +434,23 @@ class UDFRegistration(session: SparkSession) extends Logging {
       name: String,
       func: (A1, A2, A3, A4, A5, A6, A7, A8, A9, A10, A11, A12, A13) => RT)
       : UserDefinedFunction = {
-    register(name, functions.udf(func))
+    val udf = ScalarUserDefinedFunction(
+      func,
+      typeTag[RT],
+      typeTag[A1],
+      typeTag[A2],
+      typeTag[A3],
+      typeTag[A4],
+      typeTag[A5],
+      typeTag[A6],
+      typeTag[A7],
+      typeTag[A8],
+      typeTag[A9],
+      typeTag[A10],
+      typeTag[A11],
+      typeTag[A12],
+      typeTag[A13])
+    register(name, udf)
   }
 
   /**
@@ -359,7 +478,24 @@ class UDFRegistration(session: SparkSession) extends Logging {
       name: String,
       func: (A1, A2, A3, A4, A5, A6, A7, A8, A9, A10, A11, A12, A13, A14) => RT)
       : UserDefinedFunction = {
-    register(name, functions.udf(func))
+    val udf = ScalarUserDefinedFunction(
+      func,
+      typeTag[RT],
+      typeTag[A1],
+      typeTag[A2],
+      typeTag[A3],
+      typeTag[A4],
+      typeTag[A5],
+      typeTag[A6],
+      typeTag[A7],
+      typeTag[A8],
+      typeTag[A9],
+      typeTag[A10],
+      typeTag[A11],
+      typeTag[A12],
+      typeTag[A13],
+      typeTag[A14])
+    register(name, udf)
   }
 
   /**
@@ -388,7 +524,25 @@ class UDFRegistration(session: SparkSession) extends Logging {
       name: String,
       func: (A1, A2, A3, A4, A5, A6, A7, A8, A9, A10, A11, A12, A13, A14, A15) => RT)
       : UserDefinedFunction = {
-    register(name, functions.udf(func))
+    val udf = ScalarUserDefinedFunction(
+      func,
+      typeTag[RT],
+      typeTag[A1],
+      typeTag[A2],
+      typeTag[A3],
+      typeTag[A4],
+      typeTag[A5],
+      typeTag[A6],
+      typeTag[A7],
+      typeTag[A8],
+      typeTag[A9],
+      typeTag[A10],
+      typeTag[A11],
+      typeTag[A12],
+      typeTag[A13],
+      typeTag[A14],
+      typeTag[A15])
+    register(name, udf)
   }
 
   /**
@@ -418,7 +572,26 @@ class UDFRegistration(session: SparkSession) extends Logging {
       name: String,
       func: (A1, A2, A3, A4, A5, A6, A7, A8, A9, A10, A11, A12, A13, A14, A15, A16) => RT)
       : UserDefinedFunction = {
-    register(name, functions.udf(func))
+    val udf = ScalarUserDefinedFunction(
+      func,
+      typeTag[RT],
+      typeTag[A1],
+      typeTag[A2],
+      typeTag[A3],
+      typeTag[A4],
+      typeTag[A5],
+      typeTag[A6],
+      typeTag[A7],
+      typeTag[A8],
+      typeTag[A9],
+      typeTag[A10],
+      typeTag[A11],
+      typeTag[A12],
+      typeTag[A13],
+      typeTag[A14],
+      typeTag[A15],
+      typeTag[A16])
+    register(name, udf)
   }
 
   /**
@@ -449,7 +622,27 @@ class UDFRegistration(session: SparkSession) extends Logging {
       name: String,
       func: (A1, A2, A3, A4, A5, A6, A7, A8, A9, A10, A11, A12, A13, A14, A15, A16, A17) => RT)
       : UserDefinedFunction = {
-    register(name, functions.udf(func))
+    val udf = ScalarUserDefinedFunction(
+      func,
+      typeTag[RT],
+      typeTag[A1],
+      typeTag[A2],
+      typeTag[A3],
+      typeTag[A4],
+      typeTag[A5],
+      typeTag[A6],
+      typeTag[A7],
+      typeTag[A8],
+      typeTag[A9],
+      typeTag[A10],
+      typeTag[A11],
+      typeTag[A12],
+      typeTag[A13],
+      typeTag[A14],
+      typeTag[A15],
+      typeTag[A16],
+      typeTag[A17])
+    register(name, udf)
   }
 
   /**
@@ -498,7 +691,28 @@ class UDFRegistration(session: SparkSession) extends Logging {
           A16,
           A17,
           A18) => RT): UserDefinedFunction = {
-    register(name, functions.udf(func))
+    val udf = ScalarUserDefinedFunction(
+      func,
+      typeTag[RT],
+      typeTag[A1],
+      typeTag[A2],
+      typeTag[A3],
+      typeTag[A4],
+      typeTag[A5],
+      typeTag[A6],
+      typeTag[A7],
+      typeTag[A8],
+      typeTag[A9],
+      typeTag[A10],
+      typeTag[A11],
+      typeTag[A12],
+      typeTag[A13],
+      typeTag[A14],
+      typeTag[A15],
+      typeTag[A16],
+      typeTag[A17],
+      typeTag[A18])
+    register(name, udf)
   }
 
   /**
@@ -549,7 +763,29 @@ class UDFRegistration(session: SparkSession) extends Logging {
           A17,
           A18,
           A19) => RT): UserDefinedFunction = {
-    register(name, functions.udf(func))
+    val udf = ScalarUserDefinedFunction(
+      func,
+      typeTag[RT],
+      typeTag[A1],
+      typeTag[A2],
+      typeTag[A3],
+      typeTag[A4],
+      typeTag[A5],
+      typeTag[A6],
+      typeTag[A7],
+      typeTag[A8],
+      typeTag[A9],
+      typeTag[A10],
+      typeTag[A11],
+      typeTag[A12],
+      typeTag[A13],
+      typeTag[A14],
+      typeTag[A15],
+      typeTag[A16],
+      typeTag[A17],
+      typeTag[A18],
+      typeTag[A19])
+    register(name, udf)
   }
 
   /**
@@ -602,7 +838,30 @@ class UDFRegistration(session: SparkSession) extends Logging {
           A18,
           A19,
           A20) => RT): UserDefinedFunction = {
-    register(name, functions.udf(func))
+    val udf = ScalarUserDefinedFunction(
+      func,
+      typeTag[RT],
+      typeTag[A1],
+      typeTag[A2],
+      typeTag[A3],
+      typeTag[A4],
+      typeTag[A5],
+      typeTag[A6],
+      typeTag[A7],
+      typeTag[A8],
+      typeTag[A9],
+      typeTag[A10],
+      typeTag[A11],
+      typeTag[A12],
+      typeTag[A13],
+      typeTag[A14],
+      typeTag[A15],
+      typeTag[A16],
+      typeTag[A17],
+      typeTag[A18],
+      typeTag[A19],
+      typeTag[A20])
+    register(name, udf)
   }
 
   /**
@@ -657,7 +916,31 @@ class UDFRegistration(session: SparkSession) extends Logging {
           A19,
           A20,
           A21) => RT): UserDefinedFunction = {
-    register(name, functions.udf(func))
+    val udf = ScalarUserDefinedFunction(
+      func,
+      typeTag[RT],
+      typeTag[A1],
+      typeTag[A2],
+      typeTag[A3],
+      typeTag[A4],
+      typeTag[A5],
+      typeTag[A6],
+      typeTag[A7],
+      typeTag[A8],
+      typeTag[A9],
+      typeTag[A10],
+      typeTag[A11],
+      typeTag[A12],
+      typeTag[A13],
+      typeTag[A14],
+      typeTag[A15],
+      typeTag[A16],
+      typeTag[A17],
+      typeTag[A18],
+      typeTag[A19],
+      typeTag[A20],
+      typeTag[A21])
+    register(name, udf)
   }
 
   /**
@@ -714,8 +997,32 @@ class UDFRegistration(session: SparkSession) extends Logging {
           A20,
           A21,
           A22) => RT): UserDefinedFunction = {
-    register(name, functions.udf(func))
+    val udf = ScalarUserDefinedFunction(
+      func,
+      typeTag[RT],
+      typeTag[A1],
+      typeTag[A2],
+      typeTag[A3],
+      typeTag[A4],
+      typeTag[A5],
+      typeTag[A6],
+      typeTag[A7],
+      typeTag[A8],
+      typeTag[A9],
+      typeTag[A10],
+      typeTag[A11],
+      typeTag[A12],
+      typeTag[A13],
+      typeTag[A14],
+      typeTag[A15],
+      typeTag[A16],
+      typeTag[A17],
+      typeTag[A18],
+      typeTag[A19],
+      typeTag[A20],
+      typeTag[A21],
+      typeTag[A22])
+    register(name, udf)
   }
-
   // scalastyle:on line.size.limit
 }
