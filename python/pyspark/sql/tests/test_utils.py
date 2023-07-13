@@ -57,8 +57,8 @@ class UtilsTestsMixin:
             schema=["id", "amount"],
         )
 
-        assertDataFrameEqual(df1, df2, check_row_order=False)
-        assertDataFrameEqual(df1, df2, check_row_order=True)
+        assertDataFrameEqual(df1, df2, checkRowOrder=False)
+        assertDataFrameEqual(df1, df2, checkRowOrder=True)
 
     def test_assert_equal_arraytype(self):
         df1 = self.spark.createDataFrame(
@@ -86,8 +86,8 @@ class UtilsTestsMixin:
             ),
         )
 
-        assertDataFrameEqual(df1, df2, check_row_order=False)
-        assertDataFrameEqual(df1, df2, check_row_order=True)
+        assertDataFrameEqual(df1, df2, checkRowOrder=False)
+        assertDataFrameEqual(df1, df2, checkRowOrder=True)
 
     def test_assert_approx_equal_arraytype_float(self):
         df1 = self.spark.createDataFrame(
@@ -115,8 +115,8 @@ class UtilsTestsMixin:
             ),
         )
 
-        assertDataFrameEqual(df1, df2, check_row_order=False)
-        assertDataFrameEqual(df1, df2, check_row_order=True)
+        assertDataFrameEqual(df1, df2, checkRowOrder=False)
+        assertDataFrameEqual(df1, df2, checkRowOrder=True)
 
     def test_assert_notequal_arraytype(self):
         df1 = self.spark.createDataFrame(
@@ -171,7 +171,7 @@ class UtilsTestsMixin:
         )
 
         with self.assertRaises(PySparkAssertionError) as pe:
-            assertDataFrameEqual(df1, df2, check_row_order=True)
+            assertDataFrameEqual(df1, df2, checkRowOrder=True)
 
         self.check_error(
             exception=pe.exception,
@@ -205,8 +205,8 @@ class UtilsTestsMixin:
             ),
         )
 
-        assertDataFrameEqual(df1, df2, check_row_order=False)
-        assertDataFrameEqual(df1, df2, check_row_order=True)
+        assertDataFrameEqual(df1, df2, checkRowOrder=False)
+        assertDataFrameEqual(df1, df2, checkRowOrder=True)
 
     def test_assert_approx_equal_maptype_double(self):
         df1 = self.spark.createDataFrame(
@@ -234,8 +234,8 @@ class UtilsTestsMixin:
             ),
         )
 
-        assertDataFrameEqual(df1, df2, check_row_order=False)
-        assertDataFrameEqual(df1, df2, check_row_order=True)
+        assertDataFrameEqual(df1, df2, checkRowOrder=False)
+        assertDataFrameEqual(df1, df2, checkRowOrder=True)
 
     def test_assert_approx_equal_nested_struct_double(self):
         df1 = self.spark.createDataFrame(
@@ -282,8 +282,8 @@ class UtilsTestsMixin:
             ),
         )
 
-        assertDataFrameEqual(df1, df2, check_row_order=False)
-        assertDataFrameEqual(df1, df2, check_row_order=True)
+        assertDataFrameEqual(df1, df2, checkRowOrder=False)
+        assertDataFrameEqual(df1, df2, checkRowOrder=True)
 
     def test_assert_equal_nested_struct_str(self):
         df1 = self.spark.createDataFrame(
@@ -330,8 +330,8 @@ class UtilsTestsMixin:
             ),
         )
 
-        assertDataFrameEqual(df1, df2, check_row_order=False)
-        assertDataFrameEqual(df1, df2, check_row_order=True)
+        assertDataFrameEqual(df1, df2, checkRowOrder=False)
+        assertDataFrameEqual(df1, df2, checkRowOrder=True)
 
     def test_assert_equal_nested_struct_str_duplicate(self):
         df1 = self.spark.createDataFrame(
@@ -376,8 +376,8 @@ class UtilsTestsMixin:
             ),
         )
 
-        assertDataFrameEqual(df1, df2, check_row_order=False)
-        assertDataFrameEqual(df1, df2, check_row_order=True)
+        assertDataFrameEqual(df1, df2, checkRowOrder=False)
+        assertDataFrameEqual(df1, df2, checkRowOrder=True)
 
     def test_assert_equal_duplicate_col(self):
         df1 = self.spark.createDataFrame(
@@ -395,8 +395,8 @@ class UtilsTestsMixin:
             schema=["number", "language", "number", "number"],
         )
 
-        assertDataFrameEqual(df1, df2, check_row_order=False)
-        assertDataFrameEqual(df1, df2, check_row_order=True)
+        assertDataFrameEqual(df1, df2, checkRowOrder=False)
+        assertDataFrameEqual(df1, df2, checkRowOrder=True)
 
     def test_assert_equal_timestamp(self):
         df1 = self.spark.createDataFrame(
@@ -410,8 +410,8 @@ class UtilsTestsMixin:
         df1 = df1.withColumn("timestamp", to_timestamp("timestamp"))
         df2 = df2.withColumn("timestamp", to_timestamp("timestamp"))
 
-        assertDataFrameEqual(df1, df2, check_row_order=False)
-        assertDataFrameEqual(df1, df2, check_row_order=True)
+        assertDataFrameEqual(df1, df2, checkRowOrder=False)
+        assertDataFrameEqual(df1, df2, checkRowOrder=True)
 
     def test_assert_equal_nullrow(self):
         df1 = self.spark.createDataFrame(
@@ -429,8 +429,8 @@ class UtilsTestsMixin:
             schema=["id", "amount"],
         )
 
-        assertDataFrameEqual(df1, df2, check_row_order=False)
-        assertDataFrameEqual(df1, df2, check_row_order=True)
+        assertDataFrameEqual(df1, df2, checkRowOrder=False)
+        assertDataFrameEqual(df1, df2, checkRowOrder=True)
 
     def test_assert_notequal_nullval(self):
         df1 = self.spark.createDataFrame(
@@ -475,7 +475,7 @@ class UtilsTestsMixin:
         )
 
         with self.assertRaises(PySparkAssertionError) as pe:
-            assertDataFrameEqual(df1, df2, check_row_order=True)
+            assertDataFrameEqual(df1, df2, checkRowOrder=True)
 
         self.check_error(
             exception=pe.exception,
@@ -487,8 +487,8 @@ class UtilsTestsMixin:
         df1 = None
         df2 = None
 
-        assertDataFrameEqual(df1, df2, check_row_order=False)
-        assertDataFrameEqual(df1, df2, check_row_order=True)
+        assertDataFrameEqual(df1, df2, checkRowOrder=False)
+        assertDataFrameEqual(df1, df2, checkRowOrder=True)
 
     def test_assert_error_pandas_df(self):
         import pandas as pd
@@ -506,7 +506,7 @@ class UtilsTestsMixin:
         )
 
         with self.assertRaises(PySparkAssertionError) as pe:
-            assertDataFrameEqual(df1, df2, check_row_order=True)
+            assertDataFrameEqual(df1, df2, checkRowOrder=True)
 
         self.check_error(
             exception=pe.exception,
@@ -528,7 +528,7 @@ class UtilsTestsMixin:
         )
 
         with self.assertRaises(PySparkAssertionError) as pe:
-            assertDataFrameEqual(dict1, dict2, check_row_order=True)
+            assertDataFrameEqual(dict1, dict2, checkRowOrder=True)
 
         self.check_error(
             exception=pe.exception,
@@ -556,7 +556,7 @@ class UtilsTestsMixin:
         assertDataFrameEqual(df1, df2)
 
     def test_check_row_order_error(self):
-        # test check_row_order=True
+        # test checkRowOrder=True
         df1 = self.spark.createDataFrame(
             data=[
                 ("2", 3000.00),
@@ -602,7 +602,7 @@ class UtilsTestsMixin:
         expected_error_message += "\n" + diff_msg
 
         with self.assertRaises(PySparkAssertionError) as pe:
-            assertDataFrameEqual(df1, df2, check_row_order=True)
+            assertDataFrameEqual(df1, df2, checkRowOrder=True)
 
         self.check_error(
             exception=pe.exception,
@@ -640,8 +640,8 @@ class UtilsTestsMixin:
             schema=["id", "amount"],
         )
 
-        assertDataFrameEqual(df1, df2, check_row_order=False)
-        assertDataFrameEqual(df1, df2, check_row_order=True)
+        assertDataFrameEqual(df1, df2, checkRowOrder=False)
+        assertDataFrameEqual(df1, df2, checkRowOrder=True)
 
     def test_assert_pyspark_df_not_equal(self):
         df1 = self.spark.createDataFrame(
@@ -700,7 +700,7 @@ class UtilsTestsMixin:
         )
 
         with self.assertRaises(PySparkAssertionError) as pe:
-            assertDataFrameEqual(df1, df2, check_row_order=True)
+            assertDataFrameEqual(df1, df2, checkRowOrder=True)
 
         self.check_error(
             exception=pe.exception,
@@ -734,7 +734,7 @@ class UtilsTestsMixin:
         )
 
         with self.assertRaises(PySparkAssertionError) as pe:
-            assertDataFrameEqual(df1, df2, check_row_order=True)
+            assertDataFrameEqual(df1, df2, checkRowOrder=True)
 
         self.check_error(
             exception=pe.exception,
@@ -769,7 +769,7 @@ class UtilsTestsMixin:
         )
 
         with self.assertRaises(PySparkAssertionError) as pe:
-            assertDataFrameEqual(df1, df2, check_row_order=True)
+            assertDataFrameEqual(df1, df2, checkRowOrder=True)
 
         self.check_error(
             exception=pe.exception,
@@ -782,7 +782,7 @@ class UtilsTestsMixin:
         assertDataFrameEqual(
             self.spark.sql("select 1 + 2 AS x"),
             self.spark.sql("select 3 AS x"),
-            check_row_order=True,
+            checkRowOrder=True,
         )
 
     def test_spark_sql_sort_rows(self):
@@ -812,7 +812,7 @@ class UtilsTestsMixin:
         assertDataFrameEqual(
             self.spark.sql("select * from df1 order by amount"),
             self.spark.sql("select * from df2"),
-            check_row_order=True,
+            checkRowOrder=True,
         )
 
     def test_empty_dataset(self):
@@ -820,24 +820,24 @@ class UtilsTestsMixin:
 
         df2 = self.spark.range(0, 10).limit(0)
 
-        assertDataFrameEqual(df1, df2, check_row_order=False)
-        assertDataFrameEqual(df1, df2, check_row_order=True)
+        assertDataFrameEqual(df1, df2, checkRowOrder=False)
+        assertDataFrameEqual(df1, df2, checkRowOrder=True)
 
     def test_no_column(self):
         df1 = self.spark.range(0, 10).drop("id")
 
         df2 = self.spark.range(0, 10).drop("id")
 
-        assertDataFrameEqual(df1, df2, check_row_order=False)
-        assertDataFrameEqual(df1, df2, check_row_order=True)
+        assertDataFrameEqual(df1, df2, checkRowOrder=False)
+        assertDataFrameEqual(df1, df2, checkRowOrder=True)
 
     def test_empty_no_column(self):
         df1 = self.spark.range(0, 10).drop("id").limit(0)
 
         df2 = self.spark.range(0, 10).drop("id").limit(0)
 
-        assertDataFrameEqual(df1, df2, check_row_order=False)
-        assertDataFrameEqual(df1, df2, check_row_order=True)
+        assertDataFrameEqual(df1, df2, checkRowOrder=False)
+        assertDataFrameEqual(df1, df2, checkRowOrder=True)
 
     def test_list_row_equal(self):
         from pyspark.sql import Row
@@ -852,8 +852,8 @@ class UtilsTestsMixin:
 
         list_of_rows = [Row(1, 3000), Row(2, 1000)]
 
-        assertDataFrameEqual(df1, list_of_rows, check_row_order=False)
-        assertDataFrameEqual(df1, list_of_rows, check_row_order=True)
+        assertDataFrameEqual(df1, list_of_rows, checkRowOrder=False)
+        assertDataFrameEqual(df1, list_of_rows, checkRowOrder=True)
 
     def test_list_row_unequal_schema(self):
         from pyspark.sql import Row
@@ -907,7 +907,7 @@ class UtilsTestsMixin:
         )
 
         with self.assertRaises(PySparkAssertionError) as pe:
-            assertDataFrameEqual(df1, list_of_rows, check_row_order=True)
+            assertDataFrameEqual(df1, list_of_rows, checkRowOrder=True)
 
         self.check_error(
             exception=pe.exception,

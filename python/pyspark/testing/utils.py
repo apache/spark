@@ -222,11 +222,11 @@ class PySparkErrorTestUtils:
 
 
 def assertDataFrameEqual(
-    df: DataFrame, expected: Union[DataFrame, List[Row]], check_row_order: bool = False
+    df: DataFrame, expected: Union[DataFrame, List[Row]], checkRowOrder: bool = False
 ):
     """
     A util function to assert equality between `df` (DataFrame) and `expected`
-    (either DataFrame or List[Row]), with optional parameter `check_row_order`.
+    (either DataFrame or list of Rows), with optional parameter `checkRowOrder`.
 
     .. versionadded:: 3.5.0
 
@@ -237,10 +237,10 @@ def assertDataFrameEqual(
     df : DataFrame
         The DataFrame that is being compared or tested.
 
-    expected : DataFrame or List[Row]
+    expected : DataFrame or list of Rows
         The expected result of the operation, for comparison with the actual result.
 
-    check_row_order : bool, optional
+    checkRowOrder : bool, optional
         A flag indicating whether the order of rows should be considered in the comparison.
         If set to `False` (default), the row order is not taken into account.
         If set to `True`, the order of rows is important and will be checked during comparison.
@@ -394,7 +394,7 @@ def assertDataFrameEqual(
 
     df_list = df.collect()
 
-    if not check_row_order:
+    if not checkRowOrder:
         # rename duplicate columns for sorting
         df_list = sorted(df_list, key=lambda x: str(x))
         expected_list = sorted(expected_list, key=lambda x: str(x))
