@@ -274,8 +274,8 @@ def assertDataFrameEqual(
         schema=["id", "amount"])
     >>> df2 = spark.createDataFrame(data=[("1", 1001.00), ("2", 3000.00), ("3", 2003.00)], \
         schema=["id", "amount"])
-    >>> assertDataFrameEqual(df1, df2) # fail # doctest: +IGNORE_EXCEPTION_DETAIL\
-        +NORMALIZE_WHITESPACE
+    >>> assertDataFrameEqual(df1, df2)
+    ... # doctest: +IGNORE_EXCEPTION_DETAIL, +NORMALIZE_WHITESPACE
     Traceback (most recent call last):
     ...
     PySparkAssertionError: [DIFFERENT_ROWS] Results do not match: ( 66.667 % )
