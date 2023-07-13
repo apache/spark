@@ -264,7 +264,6 @@ class CSVOptions(
     sep
   }
 
-
   val lineSeparatorInRead: Option[Array[Byte]] = lineSeparator.map { lineSep =>
     lineSep.getBytes(charset)
   }
