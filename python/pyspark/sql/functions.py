@@ -12770,7 +12770,7 @@ def arrays_zip(*cols: "ColumnOrName") -> Column:
     Examples
     --------
     >>> from pyspark.sql.functions import arrays_zip
-    >>> df = spark.createDataFrame([(([1, 2, 3], [2, 4, 6], [3, 6]))], ['vals1', 'vals2', 'vals3'])
+    >>> df = spark.createDataFrame([([1, 2, 3], [2, 4, 6], [3, 6])], ['vals1', 'vals2', 'vals3'])
     >>> df = df.select(arrays_zip(df.vals1, df.vals2, df.vals3).alias('zipped'))
     >>> df.show(truncate=False)
     +------------------------------------+
@@ -13041,7 +13041,7 @@ def _invoke_higher_order_function(
 
     :param name: Name of the expression
     :param cols: a list of columns
-    :param funs: a list of((*Column) -> Column functions.
+    :param funs: a list of (*Column) -> Column functions.
 
     :return: a Column
     """
