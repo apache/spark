@@ -15,14 +15,9 @@
 # limitations under the License.
 #
 
-from contextlib import contextmanager
-import os
-import textwrap
-from typing import Any, BinaryIO, Callable, Iterator
 
 import unittest
 
-from pyspark import cloudpickle
 from pyspark.ml import Pipeline
 from pyspark.ml.classification import LogisticRegression, OneVsRest
 from pyspark.ml.feature import VectorAssembler
