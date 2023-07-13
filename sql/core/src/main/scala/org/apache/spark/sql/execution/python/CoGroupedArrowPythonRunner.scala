@@ -47,9 +47,11 @@ class CoGroupedArrowPythonRunner(
     rightSchema: StructType,
     timeZoneId: String,
     conf: Map[String, String],
-    val pythonMetrics: Map[String, SQLMetric])
+    val pythonMetrics: Map[String, SQLMetric],
+    jobArtifactUUID: Option[String])
   extends BasePythonRunner[
-    (Iterator[InternalRow], Iterator[InternalRow]), ColumnarBatch](funcs, evalType, argOffsets)
+    (Iterator[InternalRow], Iterator[InternalRow]), ColumnarBatch](
+    funcs, evalType, argOffsets, jobArtifactUUID)
   with BasicPythonArrowOutput {
 
   override val pythonExec: String =

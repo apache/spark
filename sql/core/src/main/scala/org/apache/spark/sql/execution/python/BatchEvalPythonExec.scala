@@ -21,7 +21,7 @@ import scala.collection.JavaConverters._
 
 import net.razorvine.pickle.{Pickler, Unpickler}
 
-import org.apache.spark.TaskContext
+import org.apache.spark.{JobArtifactSet, TaskContext}
 import org.apache.spark.api.python.{ChainedPythonFunctions, PythonEvalType}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
@@ -33,6 +33,8 @@ import org.apache.spark.sql.types.{StructField, StructType}
  */
 case class BatchEvalPythonExec(udfs: Seq[PythonUDF], resultAttrs: Seq[Attribute], child: SparkPlan)
   extends EvalPythonExec with PythonSQLMetrics {
+
+  private[this] val jobArtifactUUID = JobArtifactSet.getCurrentJobArtifactState.map(_.uuid)
 
   protected override def evaluate(
       funcs: Seq[ChainedPythonFunctions],
@@ -47,7 +49,8 @@ case class BatchEvalPythonExec(udfs: Seq[PythonUDF], resultAttrs: Seq[Attribute]
 
     // Output iterator for results from Python.
     val outputIterator =
-      new PythonUDFRunner(funcs, PythonEvalType.SQL_BATCHED_UDF, argOffsets, pythonMetrics)
+      new PythonUDFRunner(
+        funcs, PythonEvalType.SQL_BATCHED_UDF, argOffsets, pythonMetrics, jobArtifactUUID)
       .compute(inputIterator, context.partitionId(), context)
 
     val unpickle = new Unpickler
