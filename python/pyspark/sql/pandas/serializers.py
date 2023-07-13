@@ -479,11 +479,12 @@ class ArrowStreamPandasUDTFSerializer(ArrowStreamPandasUDFSerializer):
     Serializer used by Python worker to evaluate Arrow-optimized Python UDTFs.
     """
 
-    def __init__(self, timezone, safecheck, assign_cols_by_name):
+    def __init__(self, timezone, safecheck):
         super(ArrowStreamPandasUDTFSerializer, self).__init__(
             timezone=timezone,
             safecheck=safecheck,
-            assign_cols_by_name=assign_cols_by_name,
+            # The output pandas DataFrame's columns are unnamed.
+            assign_cols_by_name=False,
             # Set to 'False' to avoid converting struct type inputs into a pandas DataFrame.
             df_for_struct=False,
             # Defines how struct type inputs are converted. If set to "row", struct type inputs

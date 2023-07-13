@@ -477,11 +477,7 @@ def read_udtf(pickleSer, infile, eval_type):
             runner_conf.get("spark.sql.execution.pandas.convertToArrowArraySafely", "false").lower()
             == "true"
         )
-        ser = ArrowStreamPandasUDTFSerializer(
-            timezone,
-            safecheck,
-            assign_cols_by_name(runner_conf),
-        )
+        ser = ArrowStreamPandasUDTFSerializer(timezone, safecheck)
     else:
         # Each row is a group so do not batch but send one by one.
         ser = BatchedSerializer(CPickleSerializer(), 1)

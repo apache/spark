@@ -457,7 +457,7 @@ class BaseUDTFTestsMixin:
             PythonException, "AttributeError: 'int' object has no attribute 'corr'"
         ):
             self.spark.sql(
-                "select * from values (1, 2), (2, 3) t(a, b), " "lateral test_udtf(a, b)"
+                "select * from values (1, 2), (2, 3) t(a, b), lateral test_udtf(a, b)"
             ).collect()
 
     def test_udtf_register_error(self):
