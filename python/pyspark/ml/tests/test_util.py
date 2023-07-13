@@ -20,7 +20,7 @@ from contextlib import contextmanager
 import os
 from re import A
 import textwrap
-from typing import Iterator
+from typing import Any, BinaryIO, Callable, Iterator
 
 import unittest
 
@@ -88,9 +88,9 @@ class TestFunctionPickler(unittest.TestCase):
     def _test_function(x: float, y: float) -> float:
         return x**2 + y**2
 
-    def _check_if_test_function_pickled(self, f, og_fn, output_value, *arguments, **key_word_args):
-        fn, args, kwargs = cloudpickle.load(f)
-        self.assertEqual(fn, og_fn)
+    def _check_if_test_function_pickled(self, file:BinaryIO, desired_function:Callable, output_value: Any, *arguments, **key_word_args):
+        fn, args, kwargs = cloudpickle.load(file)
+        self.assertEqual(fn, desired_function)
         self.assertEqual(args, arguments)
         self.assertEqual(kwargs, key_word_args)
         fn_output = fn(*args, **kwargs)
@@ -125,7 +125,7 @@ class TestFunctionPickler(unittest.TestCase):
         os.rmdir(tmp_dir)
 
     def test_getting_output_from_pickle_file(self):
-        a, b = 2, 0
+        a, b = 2, 0 # arguments for _test_function
         pickle_fn_file = FunctionPickler.pickle_fn_and_save(TestFunctionPickler._test_function, "", "", a, b)
         fn, args, kwargs = FunctionPickler.get_fn_output(pickle_fn_file)
         self.assertEqual(fn, TestFunctionPickler._test_function)
