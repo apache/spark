@@ -86,7 +86,7 @@ case class ObjectHashAggregateExec(
     val fallbackCountThreshold = conf.objectAggSortBasedFallbackThreshold
     val evaluatorFactory = new ObjectHashAggregateEvaluatorFactory(groupingExpressions,
       aggregateExpressions, aggregateAttributes, initialInputBufferOffset, resultExpressions,
-      output, inputAttributes, numOutputRows, aggTime, spillSize, numTasksFallBacked,
+      child.output, inputAttributes, numOutputRows, aggTime, spillSize, numTasksFallBacked,
       fallbackCountThreshold)
     if (conf.usePartitionEvaluator) {
       child.execute().mapPartitionsWithEvaluator(evaluatorFactory)
