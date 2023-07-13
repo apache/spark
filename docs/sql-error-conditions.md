@@ -1382,7 +1382,7 @@ Number of given aliases does not match number of output columns. Function name: 
 
 ### OPERATION_CANCELED
 
-[SQLSTATE: HY008](sql-error-conditions-sqlstates.html#class-hy-cli-specific-condition)
+[SQLSTATE: HY008](sql-error-conditions-sqlstates.html#class-HY-cli-specific-condition)
 
 Operation has been canceled.
 

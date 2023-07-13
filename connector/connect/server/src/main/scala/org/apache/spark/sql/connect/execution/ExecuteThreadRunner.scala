@@ -78,8 +78,8 @@ private[connect] class ExecuteThreadRunner(executeHolder: ExecuteHolder) extends
           // and different exceptions like InterruptedException, ClosedByInterruptException etc.
           // could be thrown.
           if (interrupted) {
-            // Turn the interrupt into OPERATION_CANCELLED error.
-            throw new SparkSQLException("OPERATION_CANCELLED", Map.empty)
+            // Turn the interrupt into OPERATION_CANCELED error.
+            throw new SparkSQLException("OPERATION_CANCELED", Map.empty)
           } else {
             // Rethrown the original error.
             throw e
