@@ -24,6 +24,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
 import org.apache.spark.sql.catalyst.plans.PlanTest
+import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.catalyst.util.{ArrayData, GenericArrayData}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
@@ -305,7 +306,7 @@ class EncoderResolutionSuite extends PlanTest {
     val to = ExpressionEncoder[U]
     val catalystType = from.schema.head.dataType.simpleString
     test(s"cast from $catalystType to ${implicitly[TypeTag[U]].tpe} should success") {
-      to.resolveAndBind(from.schema.toAttributes)
+      to.resolveAndBind(toAttributes(from.schema))
     }
   }
 
@@ -314,7 +315,7 @@ class EncoderResolutionSuite extends PlanTest {
     val to = ExpressionEncoder[U]
     val catalystType = from.schema.head.dataType.simpleString
     test(s"cast from $catalystType to ${implicitly[TypeTag[U]].tpe} should fail") {
-      intercept[AnalysisException](to.resolveAndBind(from.schema.toAttributes))
+      intercept[AnalysisException](to.resolveAndBind(toAttributes(from.schema)))
     }
   }
 }

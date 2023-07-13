@@ -29,7 +29,7 @@ import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.expressions.Projection
 import org.apache.spark.sql.catalyst.expressions.UnsafeProjection
 import org.apache.spark.sql.catalyst.expressions.codegen.GeneratePredicate
-import org.apache.spark.sql.catalyst.plans.logical.MergeRows.{Instruction, Keep, ROW_ID, Split}
+import org.apache.spark.sql.catalyst.plans.logical.MergeRows.{Discard, Instruction, Keep, ROW_ID, Split}
 import org.apache.spark.sql.catalyst.util.truncatedString
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.SparkPlan
@@ -49,7 +49,17 @@ case class MergeRowsExec(
     AttributeSet(output.filterNot(attr => inputSet.contains(attr)))
   }
 
-  @transient override lazy val references: AttributeSet = child.outputSet
+  @transient
+  override lazy val references: AttributeSet = {
+    val usedExprs = if (checkCardinality) {
+      val rowIdAttr = child.output.find(attr => conf.resolver(attr.name, ROW_ID))
+      assert(rowIdAttr.isDefined, "Cannot find row ID attr")
+      rowIdAttr.get +: expressions
+    } else {
+      expressions
+    }
+    AttributeSet.fromAttributeSets(usedExprs.map(_.references)) -- producedAttributes
+  }
 
   override def simpleString(maxFields: Int): String = {
     s"MergeRowsExec${truncatedString(output, "[", ", ", "]", maxFields)}"
@@ -100,6 +110,9 @@ case class MergeRowsExec(
       case Keep(cond, output) =>
         KeepExec(createPredicate(cond), createProjection(output))
 
+      case Discard(cond) =>
+        DiscardExec(createPredicate(cond))
+
       case Split(cond, output, otherOutput) =>
         SplitExec(createPredicate(cond), createProjection(output), createProjection(otherOutput))
 
@@ -115,6 +128,8 @@ case class MergeRowsExec(
   case class KeepExec(condition: BasePredicate, projection: Projection) extends InstructionExec {
     def apply(row: InternalRow): InternalRow = projection.apply(row)
   }
+
+  case class DiscardExec(condition: BasePredicate) extends InstructionExec
 
   case class SplitExec(
       condition: BasePredicate,
@@ -205,6 +220,9 @@ case class MergeRowsExec(
           instruction match {
             case keep: KeepExec =>
               return keep.apply(row)
+
+            case _: DiscardExec =>
+              return null
 
             case split: SplitExec =>
               cachedExtraRow = split.projectExtraRow(row)

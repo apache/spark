@@ -17,9 +17,9 @@
 
 package org.apache.spark.sql
 
-import org.apache.spark.SparkConf
-import org.apache.spark.SparkNumberFormatException
+import org.apache.spark.{SparkConf, SparkNumberFormatException, SparkThrowable}
 import org.apache.spark.sql.catalyst.expressions.Hex
+import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.connector.catalog.InMemoryPartitionTableCatalog
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.{SharedSparkSession, SQLTestUtils}
@@ -33,6 +33,13 @@ trait SQLInsertTestSuite extends QueryTest with SQLTestUtils {
   import testImplicits._
 
   def format: String
+
+  def checkV1AndV2Error(
+      exception: SparkThrowable,
+      v1ErrorClass: String,
+      v2ErrorClass: String,
+      v1Parameters: Map[String, String],
+      v2Parameters: Map[String, String]): Unit
 
   protected def createTable(
       table: String,
@@ -160,6 +167,75 @@ trait SQLInsertTestSuite extends QueryTest with SQLTestUtils {
     }
   }
 
+  test("insert overwrite with column list - by name") {
+    withTable("t1") {
+      val cols = Seq("c1", "c2", "c3")
+      val df = Seq((3, 2, 1)).toDF(cols.reverse: _*)
+      createTable("t1", cols, Seq("int", "int", "int"))
+      processInsert("t1", df, overwrite = false)
+      verifyTable("t1", df.selectExpr(cols.reverse: _*))
+      processInsert("t1", df, overwrite = true, byName = true)
+      verifyTable("t1", df.selectExpr(cols: _*))
+    }
+  }
+
+  test("insert overwrite with column list - by name + partitioned table") {
+    val cols = Seq("c1", "c2", "c3", "c4")
+    val df = Seq((4, 3, 2, 1)).toDF(cols.reverse: _*)
+    withTable("t1") {
+      createTable("t1", cols, Seq("int", "int", "int", "int"), cols.takeRight(2))
+      processInsert("t1", df.selectExpr("c2", "c1", "c4"),
+        partitionExprs = Seq("c3=3", "c4"), overwrite = false)
+      verifyTable("t1", df.selectExpr("c2", "c1", "c3", "c4"))
+      processInsert("t1", df.selectExpr("c2", "c1", "c4"),
+        partitionExprs = Seq("c3=3", "c4"), overwrite = true, byName = true)
+      verifyTable("t1", df.selectExpr(cols: _*))
+    }
+
+    withTable("t1") {
+      createTable("t1", cols, Seq("int", "int", "int", "int"), cols.takeRight(2))
+      processInsert("t1", df.selectExpr("c2", "c1"),
+        partitionExprs = Seq("c3=3", "c4=4"), overwrite = false)
+      verifyTable("t1", df.selectExpr("c2", "c1", "c3", "c4"))
+      processInsert("t1", df.selectExpr("c2", "c1"),
+        partitionExprs = Seq("c3=3", "c4=4"), overwrite = true, byName = true)
+      verifyTable("t1", df.selectExpr(cols: _*))
+    }
+  }
+
+  test("insert by name: mismatch column name") {
+    withTable("t1") {
+      val cols = Seq("c1", "c2", "c3")
+      val cols2 = Seq("x1", "c2", "c3")
+      val df = Seq((3, 2, 1)).toDF(cols2.reverse: _*)
+      createTable("t1", cols, Seq("int", "int", "int"))
+      checkV1AndV2Error(
+        exception = intercept[AnalysisException] {
+          processInsert("t1", df, overwrite = false, byName = true)
+        },
+        v1ErrorClass = "_LEGACY_ERROR_TEMP_1186",
+        v2ErrorClass = "_LEGACY_ERROR_TEMP_1204",
+        v1Parameters = Map.empty[String, String],
+        v2Parameters = Map("tableName" -> "testcat.t1",
+          "errors" -> "Cannot find data for output column 'c1'")
+      )
+      val df2 = Seq((3, 2, 1, 0)).toDF(Seq("c3", "c2", "c1", "c0"): _*)
+      checkV1AndV2Error(
+        exception = intercept[AnalysisException] {
+          processInsert("t1", df2, overwrite = false, byName = true)
+        },
+        v1ErrorClass = "INSERT_COLUMN_ARITY_MISMATCH.TOO_MANY_DATA_COLUMNS",
+        v2ErrorClass = "INSERT_COLUMN_ARITY_MISMATCH.TOO_MANY_DATA_COLUMNS",
+        v1Parameters = Map("tableName" -> "`spark_catalog`.`default`.`t1`",
+          "tableColumns" -> "`c1`, `c2`, `c3`",
+          "dataColumns" -> "`c3`, `c2`, `c1`, `c0`"),
+        v2Parameters = Map("tableName" -> "`testcat`.`t1`",
+          "tableColumns" -> "`c1`, `c2`, `c3`",
+          "dataColumns" -> "`c3`, `c2`, `c1`, `c0`")
+      )
+    }
+  }
+
   test("insert with column list - table output reorder + partitioned table") {
     val cols = Seq("c1", "c2", "c3", "c4")
     val df = Seq((1, 2, 3, 4)).toDF(cols: _*)
@@ -228,18 +304,24 @@ trait SQLInsertTestSuite extends QueryTest with SQLTestUtils {
             sql(s"INSERT INTO t1 (c1, c2) values(1, 2, 3)")
           },
           sqlState = None,
-          errorClass = "_LEGACY_ERROR_TEMP_1038",
-          parameters = Map("columnSize" -> "2", "outputSize" -> "3"),
-          context = ExpectedContext("values(1, 2, 3)", 24, 38)
+          errorClass = "INSERT_COLUMN_ARITY_MISMATCH.TOO_MANY_DATA_COLUMNS",
+          parameters = Map(
+            "tableName" -> ".*`t1`",
+            "tableColumns" -> "`c1`, `c2`",
+            "dataColumns" -> "`col1`, `col2`, `col3`"),
+          matchPVals = true
         )
         checkError(
           exception = intercept[AnalysisException] {
             sql(s"INSERT INTO t1 (c1, c2, c3) values(1, 2)")
           },
           sqlState = None,
-          errorClass = "_LEGACY_ERROR_TEMP_1038",
-          parameters = Map("columnSize" -> "3", "outputSize" -> "2"),
-          context = ExpectedContext("values(1, 2)", 28, 39)
+          errorClass = "INSERT_COLUMN_ARITY_MISMATCH.NOT_ENOUGH_DATA_COLUMNS",
+          parameters = Map(
+            "tableName" -> ".*`t1`",
+            "tableColumns" -> "`c1`, `c2`, `c3`",
+            "dataColumns" -> "`col1`, `col2`"),
+          matchPVals = true
         )
       }
     }
@@ -310,7 +392,7 @@ trait SQLInsertTestSuite extends QueryTest with SQLTestUtils {
     withTable("t") {
       sql(s"CREATE TABLE t(i STRING, c string) USING PARQUET PARTITIONED BY (c)")
       checkError(
-        exception = intercept[AnalysisException] {
+        exception = intercept[ParseException] {
           sql("INSERT OVERWRITE t PARTITION (c='2', C='3') VALUES (1)")
         },
         sqlState = None,
@@ -440,16 +522,38 @@ trait SQLInsertTestSuite extends QueryTest with SQLTestUtils {
 }
 
 class FileSourceSQLInsertTestSuite extends SQLInsertTestSuite with SharedSparkSession {
+
   override def format: String = "parquet"
+
+  override def checkV1AndV2Error(
+      exception: SparkThrowable,
+      v1ErrorClass: String,
+      v2ErrorClass: String,
+      v1Parameters: Map[String, String],
+      v2Parameters: Map[String, String]): Unit = {
+    checkError(exception = exception, sqlState = None, errorClass = v1ErrorClass,
+      parameters = v1Parameters)
+  }
+
   override protected def sparkConf: SparkConf = {
     super.sparkConf.set(SQLConf.USE_V1_SOURCE_LIST, format)
   }
+
 }
 
 class DSV2SQLInsertTestSuite extends SQLInsertTestSuite with SharedSparkSession {
 
   override def format: String = "foo"
 
+  override def checkV1AndV2Error(
+      exception: SparkThrowable,
+      v1ErrorClass: String,
+      v2ErrorClass: String,
+      v1Parameters: Map[String, String],
+      v2Parameters: Map[String, String]): Unit = {
+    checkError(exception = exception, sqlState = None, errorClass = v2ErrorClass,
+      parameters = v2Parameters)
+  }
   protected override def sparkConf: SparkConf = {
     super.sparkConf
       .set("spark.sql.catalog.testcat", classOf[InMemoryPartitionTableCatalog].getName)
@@ -467,4 +571,5 @@ class DSV2SQLInsertTestSuite extends SQLInsertTestSuite with SharedSparkSession 
         parameters = Map("staticName" -> "c"))
     }
   }
+
 }

@@ -22,6 +22,7 @@ import scala.collection.mutable
 import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.expressions.{Attribute, CreateNamedStruct, Expression, GetStructField, Literal}
 import org.apache.spark.sql.catalyst.plans.logical.Assignment
+import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns.getDefaultValueExprOrNullLit
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
@@ -104,7 +105,8 @@ object AssignmentUtils extends SQLConfHelper with CastSupport {
         case assignment if assignment.key.semanticEquals(attr) => assignment
       }
       val resolvedValue = if (matchingAssignments.isEmpty) {
-        val defaultExpr = getDefaultValueExprOrNullLit(attr, conf)
+        val defaultExpr = getDefaultValueExprOrNullLit(
+          attr, conf.useNullsForMissingDefaultColumnValues)
         if (defaultExpr.isEmpty) {
           errors += s"No assignment for '${attr.name}'"
         }
@@ -176,7 +178,7 @@ object AssignmentUtils extends SQLConfHelper with CastSupport {
 
     col.dataType match {
       case structType: StructType =>
-        val fieldAttrs = structType.toAttributes
+        val fieldAttrs = DataTypeUtils.toAttributes(structType)
         val fieldExprs = structType.fields.zipWithIndex.map { case (field, ordinal) =>
           GetStructField(colExpr, ordinal, Some(field.name))
         }

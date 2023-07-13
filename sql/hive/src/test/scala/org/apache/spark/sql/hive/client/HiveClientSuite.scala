@@ -671,8 +671,16 @@ class HiveClientSuite(version: String, allVersions: Seq[String])
       client.runSqlHive("CREATE TABLE materialized_view_tbl (c1 INT)")
       client.runSqlHive(
         s"CREATE MATERIALIZED VIEW mv1 $disableRewrite AS SELECT * FROM materialized_view_tbl")
-      val e = intercept[AnalysisException](versionSpark.table("mv1").collect()).getMessage
-      assert(e.contains("Hive materialized view is not supported"))
+      checkError(
+        exception = intercept[AnalysisException] {
+          versionSpark.table("mv1").collect()
+        },
+        errorClass = "UNSUPPORTED_FEATURE.HIVE_TABLE_TYPE",
+        parameters = Map(
+          "tableName" -> "`mv1`",
+          "tableType" -> "materialized view"
+        )
+      )
     }
   }
 
@@ -900,7 +908,7 @@ class HiveClientSuite(version: String, allVersions: Seq[String])
   test("Decimal support of Avro Hive serde") {
     val tableName = "tab1"
     // TODO: add the other logical types. For details, see the link:
-    // https://avro.apache.org/docs/1.11.1/specification/#logical-types
+    // https://avro.apache.org/docs/1.11.2/specification/#logical-types
     val avroSchema =
     """{
       |  "name": "test_record",

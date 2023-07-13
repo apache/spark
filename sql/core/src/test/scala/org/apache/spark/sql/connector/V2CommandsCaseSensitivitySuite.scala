@@ -18,8 +18,9 @@
 package org.apache.spark.sql.connector
 
 import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, CreateTablePartitioningValidationSuite, ResolvedTable, TestRelation2, TestTable2, UnresolvedFieldName, UnresolvedFieldPosition, UnresolvedIdentifier}
-import org.apache.spark.sql.catalyst.plans.logical.{AddColumns, AlterColumn, AlterTableCommand, CreateTableAsSelect, DropColumns, LogicalPlan, QualifiedColType, RenameColumn, ReplaceColumns, ReplaceTableAsSelect, UnresolvedTableSpec}
+import org.apache.spark.sql.catalyst.plans.logical.{AddColumns, AlterColumn, AlterTableCommand, CreateTableAsSelect, DropColumns, LogicalPlan, OptionList, QualifiedColType, RenameColumn, ReplaceColumns, ReplaceTableAsSelect, UnresolvedTableSpec}
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.connector.catalog.Identifier
 import org.apache.spark.sql.connector.catalog.TableChange.ColumnPosition
 import org.apache.spark.sql.connector.expressions.Expressions
@@ -41,7 +42,7 @@ class V2CommandsCaseSensitivitySuite
     catalog,
     Identifier.of(Array(), "table_name"),
     TestTable2,
-    schema.toAttributes)
+    toAttributes(schema))
 
   override protected def extendedAnalysisRules: Seq[Rule[LogicalPlan]] = {
     Seq(PreprocessTableCreation(spark.sessionState.catalog))
@@ -51,7 +52,8 @@ class V2CommandsCaseSensitivitySuite
     Seq(true, false).foreach { caseSensitive =>
       withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
         Seq("ID", "iD").foreach { ref =>
-          val tableSpec = UnresolvedTableSpec(Map.empty, None, None, None, None, false)
+          val tableSpec =
+            UnresolvedTableSpec(Map.empty, None, OptionList(Seq.empty), None, None, None, false)
           val plan = CreateTableAsSelect(
             UnresolvedIdentifier(Array("table_name")),
             Expressions.identity(ref) :: Nil,
@@ -74,7 +76,8 @@ class V2CommandsCaseSensitivitySuite
     Seq(true, false).foreach { caseSensitive =>
       withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
         Seq("POINT.X", "point.X", "poInt.x", "poInt.X").foreach { ref =>
-          val tableSpec = UnresolvedTableSpec(Map.empty, None, None, None, None, false)
+          val tableSpec =
+            UnresolvedTableSpec(Map.empty, None, OptionList(Seq.empty), None, None, None, false)
           val plan = CreateTableAsSelect(
             UnresolvedIdentifier(Array("table_name")),
             Expressions.bucket(4, ref) :: Nil,
@@ -98,7 +101,8 @@ class V2CommandsCaseSensitivitySuite
     Seq(true, false).foreach { caseSensitive =>
       withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
         Seq("ID", "iD").foreach { ref =>
-          val tableSpec = UnresolvedTableSpec(Map.empty, None, None, None, None, false)
+          val tableSpec =
+            UnresolvedTableSpec(Map.empty, None, OptionList(Seq.empty), None, None, None, false)
           val plan = ReplaceTableAsSelect(
             UnresolvedIdentifier(Array("table_name")),
             Expressions.identity(ref) :: Nil,
@@ -121,7 +125,8 @@ class V2CommandsCaseSensitivitySuite
     Seq(true, false).foreach { caseSensitive =>
       withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
         Seq("POINT.X", "point.X", "poInt.x", "poInt.X").foreach { ref =>
-          val tableSpec = UnresolvedTableSpec(Map.empty, None, None, None, None, false)
+          val tableSpec =
+            UnresolvedTableSpec(Map.empty, None, OptionList(Seq.empty), None, None, None, false)
           val plan = ReplaceTableAsSelect(
             UnresolvedIdentifier(Array("table_name")),
             Expressions.bucket(4, ref) :: Nil,
@@ -288,7 +293,7 @@ class V2CommandsCaseSensitivitySuite
   }
 
   test("SPARK-36381: Check column name exist case sensitive and insensitive when add column") {
-    alterTableTest(
+    alterTableErrorClass(
       AddColumns(
         table,
         Seq(QualifiedColType(
@@ -299,14 +304,22 @@ class V2CommandsCaseSensitivitySuite
           None,
           Some(UnresolvedFieldPosition(ColumnPosition.after("id"))),
           None))),
-      Seq("Cannot add column, because ID already exists in root"),
+      "FIELDS_ALREADY_EXISTS",
+      Map(
+        "op" -> "add",
+        "fieldNames" -> "`ID`",
+        "struct" -> "\"STRUCT<id: BIGINT, data: STRING, point: STRUCT<x: DOUBLE, y: DOUBLE>>\""),
       expectErrorOnCaseSensitive = false)
   }
 
   test("SPARK-36381: Check column name exist case sensitive and insensitive when rename column") {
-    alterTableTest(
+    alterTableErrorClass(
       RenameColumn(table, UnresolvedFieldName(Array("id")), "DATA"),
-      Seq("Cannot rename column, because DATA already exists in root"),
+      "FIELDS_ALREADY_EXISTS",
+      Map(
+        "op" -> "rename",
+        "fieldNames" -> "`DATA`",
+        "struct" -> "\"STRUCT<id: BIGINT, data: STRING, point: STRUCT<x: DOUBLE, y: DOUBLE>>\""),
       expectErrorOnCaseSensitive = false)
   }
 
@@ -386,6 +399,24 @@ class V2CommandsCaseSensitivitySuite
         val expectError = if (expectErrorOnCaseSensitive) caseSensitive else !caseSensitive
         if (expectError) {
           assertAnalysisError(alter, error, caseSensitive)
+        } else {
+          assertAnalysisSuccess(alter, caseSensitive)
+        }
+      }
+    }
+  }
+
+  private def alterTableErrorClass(
+      alter: => AlterTableCommand,
+      errorClass: String,
+      messageParameters: Map[String, String],
+      expectErrorOnCaseSensitive: Boolean = true): Unit = {
+    Seq(true, false).foreach { caseSensitive =>
+      withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
+        val expectError = if (expectErrorOnCaseSensitive) caseSensitive else !caseSensitive
+        if (expectError) {
+          assertAnalysisErrorClass(
+            alter, errorClass, messageParameters, caseSensitive = caseSensitive)
         } else {
           assertAnalysisSuccess(alter, caseSensitive)
         }

@@ -40,6 +40,7 @@ from typing import (
     Type,
     TYPE_CHECKING,
     TypeVar,
+    Set,
 )
 
 from py4j.java_collections import JavaMap
@@ -1802,6 +1803,7 @@ class SparkContext:
         >>> def f(x):
         ...     global acc
         ...     acc += 1
+        ...
         >>> rdd.foreach(f)
         >>> acc.value
         15
@@ -2140,6 +2142,7 @@ class SparkContext:
         >>> def map_func(x):
         ...     sleep(100)
         ...     raise RuntimeError("Task should have been cancelled")
+        ...
         >>> def start_job(x):
         ...     global result
         ...     try:
@@ -2148,9 +2151,11 @@ class SparkContext:
         ...     except Exception as e:
         ...         result = "Cancelled"
         ...     lock.release()
+        ...
         >>> def stop_job():
         ...     sleep(5)
         ...     sc.cancelJobGroup("job_to_cancel")
+        ...
         >>> suppress = lock.acquire()
         >>> suppress = InheritableThread(target=start_job, args=(10,)).start()
         >>> suppress = InheritableThread(target=stop_job).start()
@@ -2159,6 +2164,168 @@ class SparkContext:
         Cancelled
         """
         self._jsc.setJobGroup(groupId, description, interruptOnCancel)
+
+    def setInterruptOnCancel(self, interruptOnCancel: bool) -> None:
+        """
+        Set the behavior of job cancellation from jobs started in this thread.
+
+        .. versionadded:: 3.5.0
+
+        Parameters
+        ----------
+        interruptOnCancel : bool
+            If true, then job cancellation will result in ``Thread.interrupt()``
+            being called on the job's executor threads. This is useful to help ensure that
+            the tasks are actually stopped in a timely manner, but is off by default due to
+            HDFS-1208, where HDFS may respond to ``Thread.interrupt()`` by marking nodes as dead.
+
+        See Also
+        --------
+        :meth:`SparkContext.addJobTag`
+        :meth:`SparkContext.removeJobTag`
+        :meth:`SparkContext.cancelAllJobs`
+        :meth:`SparkContext.cancelJobGroup`
+        :meth:`SparkContext.cancelJobsWithTag`
+        """
+        self._jsc.setInterruptOnCancel(interruptOnCancel)
+
+    def addJobTag(self, tag: str) -> None:
+        """
+        Add a tag to be assigned to all the jobs started by this thread.
+
+        .. versionadded:: 3.5.0
+
+        Parameters
+        ----------
+        tag : str
+            The tag to be added. Cannot contain ',' (comma) character.
+
+        See Also
+        --------
+        :meth:`SparkContext.removeJobTag`
+        :meth:`SparkContext.getJobTags`
+        :meth:`SparkContext.clearJobTags`
+        :meth:`SparkContext.cancelJobsWithTag`
+        :meth:`SparkContext.setInterruptOnCancel`
+
+        Examples
+        --------
+        >>> import threading
+        >>> from time import sleep
+        >>> from pyspark import InheritableThread
+        >>> sc.setInterruptOnCancel(interruptOnCancel=True)
+        >>> result = "Not Set"
+        >>> lock = threading.Lock()
+        >>> def map_func(x):
+        ...     sleep(100)
+        ...     raise RuntimeError("Task should have been cancelled")
+        ...
+        >>> def start_job(x):
+        ...     global result
+        ...     try:
+        ...         sc.addJobTag("job_to_cancel")
+        ...         result = sc.parallelize(range(x)).map(map_func).collect()
+        ...     except Exception as e:
+        ...         result = "Cancelled"
+        ...     lock.release()
+        ...
+        >>> def stop_job():
+        ...     sleep(5)
+        ...     sc.cancelJobsWithTag("job_to_cancel")
+        ...
+        >>> suppress = lock.acquire()
+        >>> suppress = InheritableThread(target=start_job, args=(10,)).start()
+        >>> suppress = InheritableThread(target=stop_job).start()
+        >>> suppress = lock.acquire()
+        >>> print(result)
+        Cancelled
+        >>> sc.clearJobTags()
+        """
+        self._jsc.addJobTag(tag)
+
+    def removeJobTag(self, tag: str) -> None:
+        """
+        Remove a tag previously added to be assigned to all the jobs started by this thread.
+        Noop if such a tag was not added earlier.
+
+        .. versionadded:: 3.5.0
+
+        Parameters
+        ----------
+        tag : str
+            The tag to be removed. Cannot contain ',' (comma) character.
+
+        See Also
+        --------
+        :meth:`SparkContext.addJobTag`
+        :meth:`SparkContext.getJobTags`
+        :meth:`SparkContext.clearJobTags`
+        :meth:`SparkContext.cancelJobsWithTag`
+        :meth:`SparkContext.setInterruptOnCancel`
+
+        Examples
+        --------
+        >>> sc.addJobTag("job_to_cancel1")
+        >>> sc.addJobTag("job_to_cancel2")
+        >>> sc.getJobTags()
+        {'job_to_cancel1', 'job_to_cancel2'}
+        >>> sc.removeJobTag("job_to_cancel1")
+        >>> sc.getJobTags()
+        {'job_to_cancel2'}
+        >>> sc.clearJobTags()
+        """
+        self._jsc.removeJobTag(tag)
+
+    def getJobTags(self) -> Set[str]:
+        """
+        Get the tags that are currently set to be assigned to all the jobs started by this thread.
+
+        .. versionadded:: 3.5.0
+
+        Returns
+        -------
+        set of str
+            the tags that are currently set to be assigned to all the jobs started by this thread.
+
+        See Also
+        --------
+        :meth:`SparkContext.addJobTag`
+        :meth:`SparkContext.removeJobTag`
+        :meth:`SparkContext.clearJobTags`
+        :meth:`SparkContext.cancelJobsWithTag`
+        :meth:`SparkContext.setInterruptOnCancel`
+
+        Examples
+        --------
+        >>> sc.addJobTag("job_to_cancel")
+        >>> sc.getJobTags()
+        {'job_to_cancel'}
+        >>> sc.clearJobTags()
+        """
+        return self._jsc.getJobTags()
+
+    def clearJobTags(self) -> None:
+        """
+        Clear the current thread's job tags.
+
+        .. versionadded:: 3.5.0
+
+        See Also
+        --------
+        :meth:`SparkContext.addJobTag`
+        :meth:`SparkContext.removeJobTag`
+        :meth:`SparkContext.getJobTags`
+        :meth:`SparkContext.cancelJobsWithTag`
+        :meth:`SparkContext.setInterruptOnCancel`
+
+        Examples
+        --------
+        >>> sc.addJobTag("job_to_cancel")
+        >>> sc.clearJobTags()
+        >>> sc.getJobTags()
+        set()
+        """
+        self._jsc.clearJobTags()
 
     def setLocalProperty(self, key: str, value: str) -> None:
         """
@@ -2239,9 +2406,30 @@ class SparkContext:
         See Also
         --------
         :meth:`SparkContext.setJobGroup`
-        :meth:`SparkContext.cancelJobGroup`
         """
         self._jsc.sc().cancelJobGroup(groupId)
+
+    def cancelJobsWithTag(self, tag: str) -> None:
+        """
+        Cancel active jobs that have the specified tag. See
+        :meth:`SparkContext.addJobTag`.
+
+        .. versionadded:: 3.5.0
+
+        Parameters
+        ----------
+        tag : str
+            The tag to be cancelled. Cannot contain ',' (comma) character.
+
+        See Also
+        --------
+        :meth:`SparkContext.addJobTag`
+        :meth:`SparkContext.removeJobTag`
+        :meth:`SparkContext.getJobTags`
+        :meth:`SparkContext.clearJobTags`
+        :meth:`SparkContext.setInterruptOnCancel`
+        """
+        return self._jsc.cancelJobsWithTag(tag)
 
     def cancelAllJobs(self) -> None:
         """
@@ -2252,6 +2440,7 @@ class SparkContext:
         See Also
         --------
         :meth:`SparkContext.cancelJobGroup`
+        :meth:`SparkContext.cancelJobsWithTag`
         :meth:`SparkContext.runJob`
         """
         self._jsc.sc().cancelAllJobs()

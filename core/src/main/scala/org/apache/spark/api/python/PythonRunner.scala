@@ -93,7 +93,8 @@ private object BasePythonRunner {
 private[spark] abstract class BasePythonRunner[IN, OUT](
     protected val funcs: Seq[ChainedPythonFunctions],
     protected val evalType: Int,
-    protected val argOffsets: Array[Array[Int]])
+    protected val argOffsets: Array[Array[Int]],
+    protected val jobArtifactUUID: Option[String])
   extends Logging {
 
   require(funcs.length == argOffsets.length, "argOffsets should have the same length as funcs")
@@ -164,6 +165,8 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
     if (faultHandlerEnabled) {
       envVars.put("PYTHON_FAULTHANDLER_DIR", BasePythonRunner.faultHandlerLogDir.toString)
     }
+
+    envVars.put("SPARK_JOB_ARTIFACT_UUID", jobArtifactUUID.getOrElse("default"))
 
     val (worker: Socket, pid: Option[Int]) = env.createPythonWorker(
       pythonExec, envVars.asScala.toMap)
@@ -378,7 +381,10 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
         }
 
         // sparkFilesDir
-        PythonRDD.writeUTF(SparkFiles.getRootDirectory(), dataOut)
+        val root = jobArtifactUUID.map { uuid =>
+          new File(SparkFiles.getRootDirectory(), uuid).getAbsolutePath
+        }.getOrElse(SparkFiles.getRootDirectory())
+        PythonRDD.writeUTF(root, dataOut)
         // Python includes (*.zip and *.egg files)
         dataOut.writeInt(pythonIncludes.size)
         for (include <- pythonIncludes) {
@@ -707,17 +713,23 @@ private[spark] object PythonRunner {
   // already running worker monitor threads for worker and task attempts ID pairs
   val runningMonitorThreads = ConcurrentHashMap.newKeySet[(Socket, Long)]()
 
-  def apply(func: PythonFunction): PythonRunner = {
-    new PythonRunner(Seq(ChainedPythonFunctions(Seq(func))))
+  private var printPythonInfo: AtomicBoolean = new AtomicBoolean(true)
+
+  def apply(func: PythonFunction, jobArtifactUUID: Option[String]): PythonRunner = {
+    if (printPythonInfo.compareAndSet(true, false)) {
+      PythonUtils.logPythonInfo(func.pythonExec)
+    }
+    new PythonRunner(Seq(ChainedPythonFunctions(Seq(func))), jobArtifactUUID)
   }
 }
 
 /**
  * A helper class to run Python mapPartition in Spark.
  */
-private[spark] class PythonRunner(funcs: Seq[ChainedPythonFunctions])
+private[spark] class PythonRunner(
+    funcs: Seq[ChainedPythonFunctions], jobArtifactUUID: Option[String])
   extends BasePythonRunner[Array[Byte], Array[Byte]](
-    funcs, PythonEvalType.NON_UDF, Array(Array(0))) {
+    funcs, PythonEvalType.NON_UDF, Array(Array(0)), jobArtifactUUID) {
 
   protected override def newWriterThread(
       env: SparkEnv,

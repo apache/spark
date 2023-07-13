@@ -21,6 +21,7 @@ import org.scalactic.source.Position
 import org.scalatest.Tag
 
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, ExpressionSet}
+import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.logical.Aggregate
 import org.apache.spark.sql.catalyst.trees.TreePattern.OUTER_REFERENCE
 import org.apache.spark.sql.internal.SQLConf
@@ -939,7 +940,7 @@ class LateralColumnAliasSuite extends LateralColumnAliasSuiteBase {
       lca = "`jy`", windowExprRegex = "\"sum.*\"")
     // this is initially not supported
     checkError(
-      exception = intercept[AnalysisException] {
+      exception = intercept[ParseException] {
         sql("select name, dept, 1 as n, rank() over " +
           "(partition by dept order by salary rows between n preceding and current row) as rank " +
           s"from $testTable where dept in (1, 6)")

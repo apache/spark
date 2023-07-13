@@ -39,7 +39,7 @@ case class TestData(key: Int, value: String)
 case class ThreeColumnTable(key: Int, value: String, key1: String)
 
 class InsertSuite extends QueryTest with TestHiveSingleton with BeforeAndAfter
-    with SQLTestUtils  with PrivateMethodTester  {
+    with SQLTestUtils with PrivateMethodTester {
   import spark.implicits._
 
   override lazy val testData = spark.sparkContext.parallelize(
@@ -194,7 +194,7 @@ class InsertSuite extends QueryTest with TestHiveSingleton with BeforeAndAfter
         """.stripMargin)
     checkAnswer(sql(selQuery), Row(5, 2, 3, 6))
 
-    val e = intercept[AnalysisException] {
+    val e = intercept[ParseException] {
       sql(
         s"""
            |INSERT OVERWRITE TABLE $tableName
@@ -364,11 +364,10 @@ class InsertSuite extends QueryTest with TestHiveSingleton with BeforeAndAfter
         },
         errorClass = "INSERT_PARTITION_COLUMN_ARITY_MISMATCH",
         parameters = Map(
-          "staticPartCols" -> "'b', 'c'",
-          "tableColumns" -> "'a', 'd', 'b', 'c'",
-          "reason" -> "too many data columns",
-          "dataColumns" -> "'1', '2', '3'",
-          "tableName" -> s"`spark_catalog`.`default`.`$tableName`")
+          "staticPartCols" -> "`b`, `c`",
+          "tableColumns" -> "`a`, `d`, `b`, `c`",
+          "dataColumns" -> "`1`, `2`, `3`",
+          "tableName" -> s"`spark_catalog`.`default`.`${tableName}`")
       )
   }
 
@@ -395,7 +394,7 @@ class InsertSuite extends QueryTest with TestHiveSingleton with BeforeAndAfter
         sql(s"INSERT INTO TABLE $tableName PARTITION (c=15, b=16) SELECT 13")
 
         // c is defined twice. Analyzer will complain.
-        intercept[AnalysisException] {
+        intercept[ParseException] {
           sql(s"INSERT INTO TABLE $tableName PARTITION (b=14, c=15, c=16) SELECT 13")
         }
 

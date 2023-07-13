@@ -16,7 +16,7 @@
  */
 package org.apache.spark.sql.execution.python
 
-import org.apache.spark.TaskContext
+import org.apache.spark.{JobArtifactSet, TaskContext}
 import org.apache.spark.api.python.{ChainedPythonFunctions, PythonEvalType}
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.InternalRow
@@ -72,6 +72,7 @@ case class FlatMapGroupsInPandasWithStateExec(
   override protected val initialStateDataAttrs: Seq[Attribute] = null
   override protected val initialState: SparkPlan = null
   override protected val hasInitialState: Boolean = false
+  private[this] val jobArtifactUUID = JobArtifactSet.getCurrentJobArtifactState.map(_.uuid)
 
   override protected val stateEncoder: ExpressionEncoder[Any] =
     RowEncoder(stateType).resolveAndBind().asInstanceOf[ExpressionEncoder[Any]]
@@ -176,7 +177,8 @@ case class FlatMapGroupsInPandasWithStateExec(
         groupingAttributes.toStructType,
         outAttributes.toStructType,
         stateType,
-        pythonMetrics)
+        pythonMetrics,
+        jobArtifactUUID)
 
       val context = TaskContext.get()
 

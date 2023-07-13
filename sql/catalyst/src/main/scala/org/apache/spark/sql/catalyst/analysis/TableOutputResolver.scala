@@ -23,6 +23,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.objects.AssertNotNull
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
+import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns.getDefaultValueExprOrNullLit
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
@@ -47,7 +48,7 @@ object TableOutputResolver {
 
     if (actualExpectedCols.size < query.output.size) {
       throw QueryCompilationErrors.cannotWriteTooManyColumnsToTableError(
-        tableName, actualExpectedCols, query)
+        tableName, actualExpectedCols.map(_.name), query)
     }
 
     val errors = new mutable.ArrayBuffer[String]()
@@ -67,14 +68,14 @@ object TableOutputResolver {
       val fillDefaultValue = supportColDefaultValue && actualExpectedCols.size > query.output.size
       val queryOutputCols = if (fillDefaultValue) {
         query.output ++ actualExpectedCols.drop(query.output.size).flatMap { expectedCol =>
-          getDefaultValueExprOrNullLit(expectedCol, conf)
+          getDefaultValueExprOrNullLit(expectedCol, conf.useNullsForMissingDefaultColumnValues)
         }
       } else {
         query.output
       }
       if (actualExpectedCols.size > queryOutputCols.size) {
         throw QueryCompilationErrors.cannotWriteNotEnoughColumnsToTableError(
-          tableName, actualExpectedCols, query)
+          tableName, actualExpectedCols.map(_.name), query)
       }
 
       resolveColumnsByPosition(queryOutputCols, actualExpectedCols, conf, errors += _)
@@ -185,7 +186,7 @@ object TableOutputResolver {
       val newColPath = colPath :+ expectedCol.name
       if (matched.isEmpty) {
         val defaultExpr = if (fillDefaultValue) {
-          getDefaultValueExprOrNullLit(expectedCol, conf)
+          getDefaultValueExprOrNullLit(expectedCol, conf.useNullsForMissingDefaultColumnValues)
         } else {
           None
         }
@@ -313,9 +314,9 @@ object TableOutputResolver {
       Alias(GetStructField(nullCheckedInput, i, Some(f.name)), f.name)()
     }
     val resolved = if (byName) {
-      reorderColumnsByName(fields, expectedType.toAttributes, conf, addError, colPath)
+      reorderColumnsByName(fields, toAttributes(expectedType), conf, addError, colPath)
     } else {
-      resolveColumnsByPosition(fields, expectedType.toAttributes, conf, addError, colPath)
+      resolveColumnsByPosition(fields, toAttributes(expectedType), conf, addError, colPath)
     }
     if (resolved.length == expectedType.length) {
       val struct = CreateStruct(resolved)

@@ -81,12 +81,13 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_1245",
+  "errorClass" : "NOT_SUPPORTED_CHANGE_COLUMN",
   "messageParameters" : {
-    "newName" : "a",
-    "newType" : "StringType",
-    "originName" : "a",
-    "originType" : "IntegerType"
+    "newName" : "`a`",
+    "newType" : "\"STRING\"",
+    "originName" : "`a`",
+    "originType" : "\"INT\"",
+    "table" : "`spark_catalog`.`default`.`test_change`"
   }
 }
 

@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution.python
 
+import org.apache.spark.JobArtifactSet
 import org.apache.spark.api.python.{ChainedPythonFunctions, PythonEvalType}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
@@ -79,6 +80,7 @@ case class FlatMapCoGroupsInPandasExec(
   override protected def doExecute(): RDD[InternalRow] = {
     val (leftDedup, leftArgOffsets) = resolveArgOffsets(left.output, leftGroup)
     val (rightDedup, rightArgOffsets) = resolveArgOffsets(right.output, rightGroup)
+    val jobArtifactUUID = JobArtifactSet.getCurrentJobArtifactState.map(_.uuid)
 
     // Map cogrouped rows to ArrowPythonRunner results, Only execute if partition is not empty
     left.execute().zipPartitions(right.execute())  { (leftData, rightData) =>
@@ -97,7 +99,8 @@ case class FlatMapCoGroupsInPandasExec(
           StructType.fromAttributes(rightDedup),
           sessionLocalTimeZone,
           pythonRunnerConf,
-          pythonMetrics)
+          pythonMetrics,
+          jobArtifactUUID)
 
         executePython(data, output, runner)
       }

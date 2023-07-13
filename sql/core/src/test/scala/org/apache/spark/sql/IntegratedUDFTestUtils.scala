@@ -33,6 +33,7 @@ import org.apache.spark.sql.catalyst.plans.SQLHelper
 import org.apache.spark.sql.execution.python.{UserDefinedPythonFunction, UserDefinedPythonTableFunction}
 import org.apache.spark.sql.expressions.SparkUserDefinedFunction
 import org.apache.spark.sql.types.{DataType, IntegerType, NullType, StringType, StructType}
+import org.apache.spark.util.Utils
 
 /**
  * This object targets to integrate various UDF test cases so that Scalar UDF, Python UDF,
@@ -195,7 +196,7 @@ object IntegratedUDFTestUtils extends SQLHelper {
     if (!shouldTestPythonUDFs) {
       throw new RuntimeException(s"Python executable [$pythonExec] and/or pyspark are unavailable.")
     }
-    var binaryPandasFunc: Array[Byte] = null
+    var binaryPythonUDTF: Array[Byte] = null
     withTempPath { codePath =>
       Files.write(codePath.toPath, pythonScript.getBytes(StandardCharsets.UTF_8))
       withTempPath { path =>
@@ -207,14 +208,14 @@ object IntegratedUDFTestUtils extends SQLHelper {
               s"f = open('$path', 'wb');" +
               s"exec(open('$codePath', 'r').read());" +
               "f.write(CloudPickleSerializer().dumps(" +
-              s"($funcName, returnType)))"),
+              s"$funcName))"),
           None,
           "PYTHONPATH" -> s"$pysparkPythonPath:$pythonPath").!!
-        binaryPandasFunc = Files.readAllBytes(path.toPath)
+        binaryPythonUDTF = Files.readAllBytes(path.toPath)
       }
     }
-    assert(binaryPandasFunc != null)
-    binaryPandasFunc
+    assert(binaryPythonUDTF != null)
+    binaryPythonUDTF
   }
 
   private lazy val pandasFunc: Array[Byte] = if (shouldTestPandasUDFs) {
@@ -305,8 +306,9 @@ object IntegratedUDFTestUtils extends SQLHelper {
 
   lazy val shouldTestPythonUDFs: Boolean = isPythonAvailable && isPySparkAvailable
 
+  // TODO(SPARK-44097) Renable PandasUDF Tests in Java 21
   lazy val shouldTestPandasUDFs: Boolean =
-    isPythonAvailable && isPandasAvailable && isPyArrowAvailable
+    isPythonAvailable && isPandasAvailable && isPyArrowAvailable && !Utils.isJavaVersionAtLeast21
 
   /**
    * A base trait for various UDFs defined in this object.

@@ -1419,6 +1419,11 @@ class Frame(object, metaclass=ABCMeta):
         nan
         """
         axis = validate_axis(axis)
+        warnings.warn(
+            "Default value of `numeric_only` will be changed to `False` "
+            "instead of `None` in 4.0.0.",
+            FutureWarning,
+        )
 
         if numeric_only is None and axis == 0:
             numeric_only = True
