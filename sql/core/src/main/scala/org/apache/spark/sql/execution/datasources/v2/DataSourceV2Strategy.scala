@@ -549,7 +549,7 @@ private[sql] object DataSourceV2Strategy extends Logging {
    * @return a `Some[Filter]` if the input [[Expression]] is convertible, otherwise a `None`.
    */
   protected[sql] def translateFilterV2(predicate: Expression): Option[Predicate] = {
-    translateFilterV2WithMapping(predicate, None)
+    translateFilterV2WithMapping(predicate, None, supportToExtractPartialFilters = false)
   }
 
   /**
@@ -559,14 +559,16 @@ private[sql] object DataSourceV2Strategy extends Logging {
    * @param translatedFilterToExpr An optional map from leaf node filter expressions to its
    *                               translated [[Filter]]. The map is used for rebuilding
    *                               [[Expression]] from [[Filter]].
+   * @param supportToExtractPartialFilters Whether support to extract partial filters or not
    * @return a `Some[Filter]` if the input [[Expression]] is convertible, otherwise a `None`.
    */
   protected[sql] def translateFilterV2WithMapping(
       predicate: Expression,
-      translatedFilterToExpr: Option[mutable.HashMap[Predicate, Expression]])
+      translatedFilterToExpr: Option[mutable.HashMap[Predicate, Expression]],
+      supportToExtractPartialFilters: Boolean)
   : Option[Predicate] = {
     predicate match {
-      case And(left, right) =>
+      case And(left, right) if !supportToExtractPartialFilters =>
         // See SPARK-12218 for detailed discussion
         // It is not safe to just convert one side if we do not understand the
         // other side. Here is an example used to explain the reason.
@@ -577,18 +579,36 @@ private[sql] object DataSourceV2Strategy extends Logging {
         // Pushing one leg of AND down is only safe to do at the top level.
         // You can see ParquetFilters' createFilter for more details.
         for {
-          leftFilter <- translateFilterV2WithMapping(left, translatedFilterToExpr)
-          rightFilter <- translateFilterV2WithMapping(right, translatedFilterToExpr)
+          leftFilter <- translateFilterV2WithMapping(left, translatedFilterToExpr,
+            supportToExtractPartialFilters)
+          rightFilter <- translateFilterV2WithMapping(right, translatedFilterToExpr,
+            supportToExtractPartialFilters)
         } yield new V2And(leftFilter, rightFilter)
+
+      case And(left, right) if supportToExtractPartialFilters =>
+        val leftFilter = translateFilterV2WithMapping(left, translatedFilterToExpr,
+          supportToExtractPartialFilters)
+        val rightFilter = translateFilterV2WithMapping(right, translatedFilterToExpr,
+          supportToExtractPartialFilters)
+        (leftFilter, rightFilter) match {
+          case (Some(left), Some(right)) => Some(new V2And(left, right))
+          case (Some(left), None) => Some(left)
+          case (None, Some(right)) => Some(right)
+          case (None, None) => None
+        }
 
       case Or(left, right) =>
         for {
-          leftFilter <- translateFilterV2WithMapping(left, translatedFilterToExpr)
-          rightFilter <- translateFilterV2WithMapping(right, translatedFilterToExpr)
+          leftFilter <- translateFilterV2WithMapping(left, translatedFilterToExpr,
+            supportToExtractPartialFilters)
+          rightFilter <- translateFilterV2WithMapping(right, translatedFilterToExpr,
+            supportToExtractPartialFilters)
         } yield new V2Or(leftFilter, rightFilter)
 
       case Not(child) =>
-        translateFilterV2WithMapping(child, translatedFilterToExpr).map(new V2Not(_))
+        translateFilterV2WithMapping(child, translatedFilterToExpr,
+          supportToExtractPartialFilters = false)
+          .map(new V2Not(_))
 
       case other =>
         val filter = translateLeafNodeFilterV2(other)

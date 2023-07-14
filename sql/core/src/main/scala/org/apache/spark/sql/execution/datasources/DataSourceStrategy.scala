@@ -573,7 +573,8 @@ object DataSourceStrategy
    */
   protected[sql] def translateFilter(
       predicate: Expression, supportNestedPredicatePushdown: Boolean): Option[Filter] = {
-    translateFilterWithMapping(predicate, None, supportNestedPredicatePushdown)
+    translateFilterWithMapping(predicate, None, supportNestedPredicatePushdown,
+      supportToExtractPartialFilters = false)
   }
 
   /**
@@ -584,15 +585,17 @@ object DataSourceStrategy
    *                               translated [[Filter]]. The map is used for rebuilding
    *                               [[Expression]] from [[Filter]].
    * @param nestedPredicatePushdownEnabled Whether nested predicate pushdown is enabled.
+   * @param supportToExtractPartialFilters Whether support to extract partial filters or not
    * @return a `Some[Filter]` if the input [[Expression]] is convertible, otherwise a `None`.
    */
   protected[sql] def translateFilterWithMapping(
       predicate: Expression,
       translatedFilterToExpr: Option[mutable.HashMap[sources.Filter, Expression]],
-      nestedPredicatePushdownEnabled: Boolean)
+      nestedPredicatePushdownEnabled: Boolean,
+      supportToExtractPartialFilters: Boolean)
     : Option[Filter] = {
     predicate match {
-      case expressions.And(left, right) =>
+      case expressions.And(left, right) if !supportToExtractPartialFilters =>
         // See SPARK-12218 for detailed discussion
         // It is not safe to just convert one side if we do not understand the
         // other side. Here is an example used to explain the reason.
@@ -604,21 +607,40 @@ object DataSourceStrategy
         // You can see ParquetFilters' createFilter for more details.
         for {
           leftFilter <- translateFilterWithMapping(
-            left, translatedFilterToExpr, nestedPredicatePushdownEnabled)
+            left, translatedFilterToExpr, nestedPredicatePushdownEnabled,
+            supportToExtractPartialFilters)
           rightFilter <- translateFilterWithMapping(
-            right, translatedFilterToExpr, nestedPredicatePushdownEnabled)
+            right, translatedFilterToExpr, nestedPredicatePushdownEnabled,
+            supportToExtractPartialFilters)
         } yield sources.And(leftFilter, rightFilter)
+
+      case expressions.And(left, right) if supportToExtractPartialFilters =>
+        val leftFilter = translateFilterWithMapping(
+          left, translatedFilterToExpr, nestedPredicatePushdownEnabled,
+          supportToExtractPartialFilters)
+        val rightFilter = translateFilterWithMapping(
+          right, translatedFilterToExpr, nestedPredicatePushdownEnabled,
+          supportToExtractPartialFilters)
+        (leftFilter, rightFilter) match {
+          case (Some(left), Some(right)) => Some(sources.And(left, right))
+          case (Some(left), None) => Some(left)
+          case (None, Some(right)) => Some(right)
+          case (None, None) => None
+        }
 
       case expressions.Or(left, right) =>
         for {
           leftFilter <- translateFilterWithMapping(
-            left, translatedFilterToExpr, nestedPredicatePushdownEnabled)
+            left, translatedFilterToExpr, nestedPredicatePushdownEnabled,
+            supportToExtractPartialFilters)
           rightFilter <- translateFilterWithMapping(
-            right, translatedFilterToExpr, nestedPredicatePushdownEnabled)
+            right, translatedFilterToExpr, nestedPredicatePushdownEnabled,
+            supportToExtractPartialFilters)
         } yield sources.Or(leftFilter, rightFilter)
 
       case expressions.Not(child) =>
-        translateFilterWithMapping(child, translatedFilterToExpr, nestedPredicatePushdownEnabled)
+        translateFilterWithMapping(child, translatedFilterToExpr, nestedPredicatePushdownEnabled,
+          supportToExtractPartialFilters = false)
           .map(sources.Not)
 
       case other =>

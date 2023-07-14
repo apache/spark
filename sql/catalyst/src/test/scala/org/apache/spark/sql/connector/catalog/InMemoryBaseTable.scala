@@ -311,7 +311,8 @@ abstract class InMemoryBaseTable(
     private var _pushedFilters: Array[Filter] = Array.empty
 
     override def build: Scan = {
-      val scan = InMemoryBatchScan(data.map(_.asInstanceOf[InputPartition]), schema, tableSchema)
+      val scan = new AdvancedBatchScanWithFilter(data.map(_.asInstanceOf[InputPartition]),
+        schema, tableSchema, _pushedFilters)
       if (evaluableFilters.nonEmpty) {
         scan.filter(evaluableFilters)
       }
@@ -465,6 +466,17 @@ abstract class InMemoryBaseTable(
         }
       }
     }
+  }
+
+  class AdvancedBatchScanWithFilter(data: Array[InputPartition],
+                                readSchema: StructType,
+                                tableSchema: StructType,
+                                filters: Array[Filter])
+    extends InMemoryBatchScan(data: Array[InputPartition],
+      readSchema: StructType,
+      tableSchema: StructType) {
+
+    def pushedFilters(): Array[Filter] = filters
   }
 
   abstract class InMemoryWriterBuilder() extends SupportsTruncate with SupportsDynamicOverwrite

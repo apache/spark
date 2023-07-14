@@ -47,15 +47,24 @@ object PushDownUtils {
         // input filter, or a superset(partial push down filter) of the input filter.
         val translatedFilterToExpr = mutable.HashMap.empty[sources.Filter, Expression]
         val translatedFilters = mutable.ArrayBuffer.empty[sources.Filter]
+        // let's say we have an expression
+        // (a = 2 AND trim(b) = 'blah') OR (c > 0)
+        // and its sub expression (a = 2 OR c > 0) should support to push down.
+        val extraTranslatedFilters = mutable.ArrayBuffer.empty[sources.Filter]
         // Catalyst filter expression that can't be translated to data source filters.
         val untranslatableExprs = mutable.ArrayBuffer.empty[Expression]
 
         for (filterExpr <- filters) {
           val translated =
             DataSourceStrategy.translateFilterWithMapping(filterExpr, Some(translatedFilterToExpr),
-              nestedPredicatePushdownEnabled = true)
+              nestedPredicatePushdownEnabled = true, supportToExtractPartialFilters = true)
           if (translated.isEmpty) {
             untranslatableExprs += filterExpr
+          } else if (!filterExpr.semanticEquals(
+            DataSourceStrategy.rebuildExpressionFromFilter(
+              translated.get, translatedFilterToExpr))) {
+            untranslatableExprs += filterExpr
+            extraTranslatedFilters += translated.get
           } else {
             translatedFilters += translated.get
           }
@@ -67,6 +76,7 @@ object PushDownUtils {
         val postScanFilters = r.pushFilters(translatedFilters.toArray).map { filter =>
           DataSourceStrategy.rebuildExpressionFromFilter(filter, translatedFilterToExpr)
         }
+        r.pushFilters((translatedFilters ++ extraTranslatedFilters).toArray)
         // Normally translated filters (postScanFilters) are simple filters that can be evaluated
         // faster, while the untranslated filters are complicated filters that take more time to
         // evaluate, so we want to evaluate the postScanFilters filters first.
@@ -79,15 +89,24 @@ object PushDownUtils {
         // input filter, or a superset(partial push down filter) of the input filter.
         val translatedFilterToExpr = mutable.HashMap.empty[Predicate, Expression]
         val translatedFilters = mutable.ArrayBuffer.empty[Predicate]
+        // let's say we have an expression
+        // (a = 2 AND trim(b) = 'blah') OR (c > 0)
+        // and its sub expression (a = 2 OR c > 0) should support to push down.
+        val extraTranslatedFilters = mutable.ArrayBuffer.empty[Predicate]
         // Catalyst filter expression that can't be translated to data source filters.
         val untranslatableExprs = mutable.ArrayBuffer.empty[Expression]
 
         for (filterExpr <- filters) {
           val translated =
             DataSourceV2Strategy.translateFilterV2WithMapping(
-              filterExpr, Some(translatedFilterToExpr))
+              filterExpr, Some(translatedFilterToExpr), supportToExtractPartialFilters = true)
           if (translated.isEmpty) {
             untranslatableExprs += filterExpr
+          } else if (!filterExpr.semanticEquals(
+            DataSourceV2Strategy.rebuildExpressionFromFilter(
+              translated.get, translatedFilterToExpr))) {
+            untranslatableExprs += filterExpr
+            extraTranslatedFilters += translated.get
           } else {
             translatedFilters += translated.get
           }
@@ -99,6 +118,7 @@ object PushDownUtils {
         val postScanFilters = r.pushPredicates(translatedFilters.toArray).map { predicate =>
           DataSourceV2Strategy.rebuildExpressionFromFilter(predicate, translatedFilterToExpr)
         }
+        r.pushPredicates((translatedFilters ++ extraTranslatedFilters).toArray)
         // Normally translated filters (postScanFilters) are simple filters that can be evaluated
         // faster, while the untranslated filters are complicated filters that take more time to
         // evaluate, so we want to evaluate the postScanFilters filters first.
