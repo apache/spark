@@ -487,10 +487,10 @@ class DataStreamWriter:
         serializer = AutoBatchedSerializer(CPickleSerializer())
         command = (func, None, serializer, serializer)
         # Python ForeachWriter isn't really a PythonUDF. But we reuse it for simplicity.
-        self._write_proto.foreach_writer.python_writer.command = CloudPickleSerializer().dumps(
+        self._write_proto.foreach_writer.python_function.command = CloudPickleSerializer().dumps(
             command
         )
-        self._write_proto.foreach_writer.python_writer.python_ver = "%d.%d" % sys.version_info[:2]
+        self._write_proto.foreach_writer.python_function.python_ver = "%d.%d" % sys.version_info[:2]
         return self
 
     foreach.__doc__ = PySparkDataStreamWriter.foreach.__doc__

@@ -7906,6 +7906,23 @@ object functions {
   // scalastyle:off line.size.limit
 
   /**
+   * Call an user-defined function. Example:
+   * {{{
+   *  import org.apache.spark.sql._
+   *
+   *  val df = Seq(("id1", 1), ("id2", 4), ("id3", 5)).toDF("id", "value")
+   *  val spark = df.sparkSession
+   *  spark.udf.register("simpleUDF", (v: Int) => v * v)
+   *  df.select($"id", call_udf("simpleUDF", $"value"))
+   * }}}
+   *
+   * @group udf_funcs
+   * @since 3.5.0
+   */
+  @scala.annotation.varargs
+  def call_udf(udfName: String, cols: Column*): Column = call_function(udfName, cols: _*)
+
+  /**
    * Call a builtin or temp function.
    *
    * @param funcName

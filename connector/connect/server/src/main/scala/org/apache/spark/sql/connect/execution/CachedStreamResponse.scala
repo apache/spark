@@ -14,17 +14,12 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.util
 
-import java.io.{ByteArrayOutputStream, ObjectOutputStream}
+package org.apache.spark.sql.connect.execution
 
-object SparkSerDerseUtils {
-  /** Serialize an object using Java serialization */
-  def serialize[T](o: T): Array[Byte] = {
-    val bos = new ByteArrayOutputStream()
-    val oos = new ObjectOutputStream(bos)
-    oos.writeObject(o)
-    oos.close()
-    bos.toByteArray
-  }
-}
+private[execution] case class CachedStreamResponse[T](
+    // the actual cached response
+    response: T,
+    // index of the response in the response stream.
+    // responses produced in the stream are numbered consecutively starting from 1.
+    streamIndex: Long)
