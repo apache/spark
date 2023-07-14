@@ -516,7 +516,7 @@ class TorchDistributor(Distributor):
                 f"The {last_n_msg} included below: {task_output}"
             )
     @staticmethod  
-    def _get_output_from_framework_wrapper(framework_wrapper: Optional[Callable], input_params: Dict, train_object: Union[Callable, str], run_training_on_pytorch_file: Optional[Callable], *args, **kwargs) -> Optional[Any]:
+    def _get_output_from_framework_wrapper(framework_wrapper: Optional[Callable], input_params: Dict, train_object: Union[Callable, str], run_pytorch_file_fn: Optional[Callable], *args, **kwargs) -> Optional[Any]:
         if not framework_wrapper:
             raise RuntimeError("In the _get_output_from_framework_wrapper function, found a framework wrapper that is none. I wonder why this is...")
         # The object to train is a file path, so framework_wrapper is some run_training_on_pytorch_file function.
@@ -524,9 +524,9 @@ class TorchDistributor(Distributor):
             return framework_wrapper(input_params, train_object, *args, **kwargs)
         else:
             # We are doing training with a function, will call run_training_on_pytorch_function
-            if not run_training_on_pytorch_file:
-                run_training_on_pytorch_file = TorchDistributor._run_training_on_pytorch_file
-            return framework_wrapper(input_params, train_object, run_training_on_pytorch_file, *args, **kwargs)
+            if not run_pytorch_file_fn:
+                run_pytorch_file_fn = TorchDistributor._run_training_on_pytorch_file
+            return framework_wrapper(input_params, train_object, run_pytorch_file_fn, *args, **kwargs)
 
         
 
@@ -534,7 +534,7 @@ class TorchDistributor(Distributor):
         self,
         framework_wrapper_fn: Callable,
         train_object: Union[Callable, str],
-        run_training_on_pytorch_file: Optional[Callable],
+        run_pytorch_file_fn: Optional[Callable],
         *args: Any,
         **kwargs: Any,
     ) -> Optional[Any]:
@@ -552,7 +552,7 @@ class TorchDistributor(Distributor):
                 os.environ[CUDA_VISIBLE_DEVICES] = ",".join(selected_gpus)
 
             self.logger.info(f"Started local training with {self.num_processes} processes")
-            output = TorchDistributor._get_output_from_framework_wrapper(framework_wrapper_fn, self.input_params, train_object, run_training_on_pytorch_file, *args, **kwargs)
+            output = TorchDistributor._get_output_from_framework_wrapper(framework_wrapper_fn, self.input_params, train_object, run_pytorch_file_fn, *args, **kwargs)
             self.logger.info(f"Finished local training with {self.num_processes} processes")
 
         finally:
@@ -568,7 +568,7 @@ class TorchDistributor(Distributor):
         self,
         framework_wrapper_fn: Optional[Callable],
         train_object: Union[Callable, str],
-        run_training_on_pytorch_file: Optional[Callable],
+        run_pytorch_file_fn: Optional[Callable],
         input_dataframe: Optional["DataFrame"],
         *args: Any,
         **kwargs: Any,
@@ -673,7 +673,7 @@ class TorchDistributor(Distributor):
             input_params["log_streaming_client"] = log_streaming_client
             try:
                 with TorchDistributor._setup_spark_partition_data(iterator, schema_json):
-                    output = TorchDistributor._get_output_from_framework_wrapper(framework_wrapper_fn, input_params,train_object, run_training_on_pytorch_file, *args, **kwargs)
+                    output = TorchDistributor._get_output_from_framework_wrapper(framework_wrapper_fn, input_params,train_object, run_pytorch_file_fn, *args, **kwargs)
             finally:
                 try:
                     LogStreamingClient._destroy()
@@ -703,7 +703,7 @@ class TorchDistributor(Distributor):
         self,
         framework_wrapper_fn: Callable,
         train_object: Union[Callable, str],
-        run_training_on_pytorch_file: Optional[Callable],
+        run_pytorch_file_fn: Optional[Callable],
         spark_dataframe: Optional["DataFrame"],
         *args: Any,
         **kwargs: Any,
@@ -720,7 +720,7 @@ class TorchDistributor(Distributor):
 
         try:
             spark_task_function = self._get_spark_task_function(
-                framework_wrapper_fn, train_object, run_training_on_pytorch_file, spark_dataframe, *args, **kwargs
+                framework_wrapper_fn, train_object, run_pytorch_file_fn, spark_dataframe, *args, **kwargs
             )
             self._check_encryption()
             self.logger.info(
@@ -822,17 +822,17 @@ class TorchDistributor(Distributor):
 
     @staticmethod
     def _run_training_on_pytorch_function(
-            input_params: Dict[str, Any], train_fn: Callable, run_training_on_pytorch_file: Optional[Callable], *args: Any, **kwargs: Any
+            input_params: Dict[str, Any], train_fn: Callable, run_pytorch_file_fn: Optional[Callable], *args: Any, **kwargs: Any
     ) -> Any:
 
-        if not run_training_on_pytorch_file:
-            run_training_on_pytorch_file = TorchDistributor._run_training_on_pytorch_file
+        if not run_pytorch_file_fn:
+            run_pytorch_file_fn = TorchDistributor._run_training_on_pytorch_file
 
         with TorchDistributor._setup_files(train_fn, *args, **kwargs) as (
             train_file_path,
             output_file_path,
         ):
-            run_training_on_pytorch_file(input_params, train_file_path)
+            run_pytorch_file_fn(input_params, train_file_path)
             if not os.path.exists(output_file_path):
                 raise RuntimeError(
                     "TorchDistributor failed during training."
@@ -934,18 +934,18 @@ class TorchDistributor(Distributor):
         """
         return self._run(train_object, TorchDistributor._run_training_on_pytorch_file, *args, **kwargs)
 
-    def _run(self, train_object: Union[Callable, str], run_training_on_pytorch_file_fn: Callable, *args: Any, **kwargs: Any) -> Optional[Any]:
+    def _run(self, train_object: Union[Callable, str], run_pytorch_file_fn: Callable, *args: Any, **kwargs: Any) -> Optional[Any]:
         if isinstance(train_object, str):
-            framework_wrapper_fn = run_training_on_pytorch_file_fn
+            framework_wrapper_fn = run_pytorch_file_fn
         else:
             framework_wrapper_fn = (
                 TorchDistributor._run_training_on_pytorch_function  # type: ignore
             )
         if self.local_mode:
-            output = self._run_local_training(framework_wrapper_fn, train_object, run_training_on_pytorch_file_fn, *args, **kwargs)
+            output = self._run_local_training(framework_wrapper_fn, train_object, run_pytorch_file_fn, *args, **kwargs)
         else:
             output = self._run_distributed_training(
-                framework_wrapper_fn, train_object, run_training_on_pytorch_file_fn, None, *args, **kwargs
+                framework_wrapper_fn, train_object, run_pytorch_file_fn, None, *args, **kwargs
             )
         return output
 
