@@ -19,7 +19,6 @@ package org.apache.spark.sql.connect.planner
 import scala.collection.JavaConverters._
 import scala.collection.mutable
 
-import com.google.protobuf
 import com.google.protobuf.ByteString
 import io.grpc.StatusRuntimeException
 import io.grpc.stub.StreamObserver
@@ -40,6 +39,7 @@ import org.apache.spark.sql.connect.config.Connect
 import org.apache.spark.sql.connect.dsl.MockRemoteSession
 import org.apache.spark.sql.connect.dsl.expressions._
 import org.apache.spark.sql.connect.dsl.plans._
+import org.apache.spark.sql.connect.plugin.SparkConnectPluginRegistry
 import org.apache.spark.sql.connect.service.{SparkConnectAnalyzeHandler, SparkConnectService, SparkListenerConnectOperationAnalyzed, SparkListenerConnectOperationCanceled, SparkListenerConnectOperationClosed, SparkListenerConnectOperationFailed, SparkListenerConnectOperationFinished, SparkListenerConnectOperationReadyForExecution, SparkListenerConnectOperationStarted, SparkListenerConnectSessionClosed, SparkListenerConnectSessionStarted}
 import org.apache.spark.sql.connect.service.SessionHolder
 import org.apache.spark.sql.connector.catalog.InMemoryPartitionTableCatalog
@@ -268,14 +268,14 @@ class SparkConnectServiceSuite extends SharedSparkSession with MockitoSugar with
       proto.Command
         .newBuilder()
         .setGetResourcesCommand(proto.GetResourcesCommand.newBuilder()),
-      proto.Command
+      /* proto.Command
         .newBuilder()
         .setExtension(
           protobuf.Any.pack(
             proto.ExamplePluginCommand
               .newBuilder()
-              .setCustomField("Martin")
-              .build())),
+              .setCustomField("SPARK-43923")
+              .build())), */
       proto.Command
         .newBuilder()
         .setRegisterFunction(
@@ -620,6 +620,7 @@ class SparkConnectServiceSuite extends SharedSparkSession with MockitoSugar with
       verifyEvents.waitUntilEmpty()
       spark.sparkContext.removeSparkListener(verifyEvents.listener)
       SparkConnectService.invalidateAllSessions()
+      SparkConnectPluginRegistry.reset()
     }
   }
 

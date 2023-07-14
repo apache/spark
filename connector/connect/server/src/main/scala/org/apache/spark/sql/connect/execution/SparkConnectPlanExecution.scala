@@ -18,6 +18,7 @@
 package org.apache.spark.sql.connect.execution
 
 import scala.collection.JavaConverters._
+import scala.util.{Failure, Success}
 
 import com.google.protobuf.ByteString
 import io.grpc.stub.StreamObserver
@@ -160,16 +161,14 @@ private[execution] class SparkConnectPlanExecution(executeHolder: ExecuteHolder)
               resultFunc = () => ())
 
             // Collect errors and propagate them to the main thread.
-            future.onComplete { result =>
-              result.foreach { _ =>
+            future.onComplete {
+              case Success(_) =>
                 executePlan.executeEventsManager.postFinished()
-              }
-              result.failed.foreach { throwable =>
+              case Failure(throwable) =>
                 signal.synchronized {
                   error = Some(throwable)
                   signal.notify()
                 }
-              }
             }(ThreadUtils.sameThread)
 
             // The main thread will wait until 0-th partition is available,
