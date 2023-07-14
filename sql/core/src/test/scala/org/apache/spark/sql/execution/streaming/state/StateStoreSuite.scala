@@ -1314,7 +1314,7 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
     )
     // Make maintenance interval small so that maintenance task is called right after scheduling.
     sqlConf.setConf(SQLConf.STREAMING_MAINTENANCE_INTERVAL, 100L)
-    // Use the `FakeStateStoreProviderWithMaintenance` to run the test
+    // Use the `FakeStateStoreProviderWithMaintenanceError` to run the test
     sqlConf.setConf(SQLConf.STATE_STORE_PROVIDER_CLASS,
       classOf[FakeStateStoreProviderWithMaintenanceError].getName)
 

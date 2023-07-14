@@ -579,10 +579,12 @@ object StateStore extends Logging {
     loadedProviders.contains(storeProviderId)
   }
 
+  /** Check if maintenance thread is running and scheduled future is not done */
   def isMaintenanceRunning: Boolean = loadedProviders.synchronized {
     maintenanceTask != null && maintenanceTask.isRunning
   }
 
+  /** Stop maintenance thread and reset the maintenance task */
   def stopMaintenanceTask(): Unit = loadedProviders.synchronized {
     if (maintenanceTask != null) {
       maintenanceTask.stop()
