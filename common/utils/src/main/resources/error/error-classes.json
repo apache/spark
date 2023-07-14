@@ -2481,7 +2481,7 @@
     ],
     "sqlState" : "428C4"
   },
-  "UNRECOGNIZED_ARGUMENT_NAME" : {
+  "UNRECOGNIZED_PARAMETER_NAME" : {
     "message" : [
       "Cannot invoke function <functionName> because the function call included a named argument reference for the argument named <argumentName>, but this function does not include any signature containing an argument with this name. Did you mean one of the following? [<proposal>]."
     ],

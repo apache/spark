@@ -28,6 +28,9 @@ SELECT hex(count_min_sketch(t2d, 0.5d, seed => 1, confidence => 0.5d)) FROM t2;
 -- Test for tabled value functions explode and explode_outer
 SELECT * FROM explode(collection => array(1, 2));
 SELECT * FROM explode_outer(collection => map('a', 1, 'b', 2));
+SELECT * FROM explode(array(1, 2)), explode(array(3, 4));
+SELECT * FROM explode(array(1, 2)) AS t, LATERAL explode(array(3 * t.col, 4 * t.col));
+SELECT num, val, 'Spark' FROM explode(map(1, 'a', 2, 'b')) AS t(num, val);
 
 -- Test for wrapped EXPLODE call to check error preservation
 SELECT * FROM explode(collection => explode(array(1)));

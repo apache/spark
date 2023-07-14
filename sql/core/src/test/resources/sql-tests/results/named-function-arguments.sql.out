@@ -96,6 +96,37 @@ b	2
 
 
 -- !query
+SELECT * FROM explode(array(1, 2)), explode(array(3, 4))
+-- !query schema
+struct<col:int,col:int>
+-- !query output
+1	3
+1	4
+2	3
+2	4
+
+
+-- !query
+SELECT * FROM explode(array(1, 2)) AS t, LATERAL explode(array(3 * t.col, 4 * t.col))
+-- !query schema
+struct<col:int,col:int>
+-- !query output
+1	3
+1	4
+2	6
+2	8
+
+
+-- !query
+SELECT num, val, 'Spark' FROM explode(map(1, 'a', 2, 'b')) AS t(num, val)
+-- !query schema
+struct<num:int,val:string,Spark:string>
+-- !query output
+1	a	Spark
+2	b	Spark
+
+
+-- !query
 SELECT * FROM explode(collection => explode(array(1)))
 -- !query schema
 struct<>
@@ -271,7 +302,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "UNRECOGNIZED_ARGUMENT_NAME",
+  "errorClass" : "UNRECOGNIZED_PARAMETER_NAME",
   "sqlState" : "4274K",
   "messageParameters" : {
     "argumentName" : "`cellular`",

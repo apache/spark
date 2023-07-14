@@ -117,6 +117,39 @@ Project [key#x, value#x]
 
 
 -- !query
+SELECT * FROM explode(array(1, 2)), explode(array(3, 4))
+-- !query analysis
+Project [col#x, col#x]
++- Join Inner
+   :- Generate explode(array(1, 2)), false, [col#x]
+   :  +- OneRowRelation
+   +- Generate explode(array(3, 4)), false, [col#x]
+      +- OneRowRelation
+
+
+-- !query
+SELECT * FROM explode(array(1, 2)) AS t, LATERAL explode(array(3 * t.col, 4 * t.col))
+-- !query analysis
+Project [col#x, col#x]
++- LateralJoin lateral-subquery#x [col#x && col#x], Inner
+   :  +- Generate explode(array((3 * outer(col#x)), (4 * outer(col#x)))), false, [col#x]
+   :     +- OneRowRelation
+   +- SubqueryAlias t
+      +- Generate explode(array(1, 2)), false, [col#x]
+         +- OneRowRelation
+
+
+-- !query
+SELECT num, val, 'Spark' FROM explode(map(1, 'a', 2, 'b')) AS t(num, val)
+-- !query analysis
+Project [num#x, val#x, Spark AS Spark#x]
++- SubqueryAlias t
+   +- Project [key#x AS num#x, value#x AS val#x]
+      +- Generate explode(map(1, a, 2, b)), false, [key#x, value#x]
+         +- OneRowRelation
+
+
+-- !query
 SELECT * FROM explode(collection => explode(array(1)))
 -- !query analysis
 org.apache.spark.sql.AnalysisException
@@ -276,7 +309,7 @@ SELECT mask('AbCD123-@$#', lowerChar => 'q', upperChar => 'Q', otherChar => 'o',
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "UNRECOGNIZED_ARGUMENT_NAME",
+  "errorClass" : "UNRECOGNIZED_PARAMETER_NAME",
   "sqlState" : "4274K",
   "messageParameters" : {
     "argumentName" : "`cellular`",

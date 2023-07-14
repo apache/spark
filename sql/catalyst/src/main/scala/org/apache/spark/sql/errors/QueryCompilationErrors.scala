@@ -107,7 +107,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
     val recommendations = orderSuggestedIdentifiersBySimilarity(argumentName, inputs)
       .take(3)
     new AnalysisException(
-      errorClass = "UNRECOGNIZED_ARGUMENT_NAME",
+      errorClass = "UNRECOGNIZED_PARAMETER_NAME",
       messageParameters = Map(
         "functionName" -> toSQLId(functionName),
         "argumentName" -> toSQLId(argumentName),
