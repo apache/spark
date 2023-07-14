@@ -165,7 +165,9 @@ def wrap_pandas_batch_iter_udf(f, return_type):
                 },
             )
 
-        verify_pandas_result(elem, return_type, True, True)
+        verify_pandas_result(
+            elem, return_type, assign_cols_by_name=True, truncate_return_schema=True
+        )
 
         return elem
 
@@ -282,7 +284,9 @@ def wrap_cogrouped_map_pandas_udf(f, return_type, argspec, runner_conf):
             key_series = left_key_series if not left_df.empty else right_key_series
             key = tuple(s[0] for s in key_series)
             result = f(key, left_df, right_df)
-        verify_pandas_result(result, return_type, _assign_cols_by_name, False)
+        verify_pandas_result(
+            result, return_type, _assign_cols_by_name, truncate_return_schema=False
+        )
 
         return result
 
@@ -300,7 +304,9 @@ def wrap_grouped_map_pandas_udf(f, return_type, argspec, runner_conf):
         elif len(argspec.args) == 2:
             key = tuple(s[0] for s in key_series)
             result = f(key, pd.concat(value_series, axis=1))
-        verify_pandas_result(result, return_type, _assign_cols_by_name, False)
+        verify_pandas_result(
+            result, return_type, _assign_cols_by_name, truncate_return_schema=False
+        )
 
         return result
 
@@ -624,7 +630,9 @@ def read_udtf(pickleSer, infile, eval_type):
                         )
 
                 # Verify the type and the schema of the result.
-                verify_pandas_result(result, return_type, assign_cols_by_name=False)
+                verify_pandas_result(
+                    result, return_type, assign_cols_by_name=False, truncate_return_schema=False
+                )
                 return result
 
             return lambda *a: map(lambda res: (res, arrow_return_type), map(verify_result, f(*a)))
