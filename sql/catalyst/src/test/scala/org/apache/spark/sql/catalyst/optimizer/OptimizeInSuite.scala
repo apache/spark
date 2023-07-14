@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical.{Filter, LocalRelation, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
-import org.apache.spark.sql.internal.SQLConf.OPTIMIZER_INSET_CONVERSION_THRESHOLD
+import org.apache.spark.sql.internal.SQLConf.{LEGACY_NULL_IN_EMPTY_LIST_BEHAVIOR, OPTIMIZER_INSET_CONVERSION_THRESHOLD}
 import org.apache.spark.sql.types._
 
 class OptimizeInSuite extends PlanTest {
@@ -219,36 +219,108 @@ class OptimizeInSuite extends PlanTest {
     comparePlans(optimized, correctAnswer)
   }
 
-  test("OptimizedIn test: In empty list gets transformed to FalseLiteral " +
-    "when value is not nullable") {
-    val originalQuery =
-      testRelation
-        .where(In(Literal("a"), Nil))
-        .analyze
+  test("OptimizedIn test: expr IN (empty list) gets transformed to literal false") {
+    withSQLConf(LEGACY_NULL_IN_EMPTY_LIST_BEHAVIOR.key -> "false") {
+      val originalQuery =
+        testRelation
+          .where(In(UnresolvedAttribute("a"), Nil))
+          .analyze
 
-    val optimized = Optimize.execute(originalQuery)
-    val correctAnswer =
-      testRelation
-        .where(Literal(false))
-        .analyze
+      val optimized = Optimize.execute(originalQuery.analyze)
+      val correctAnswer =
+        testRelation
+          .where(Literal.create(false, BooleanType))
+          .analyze
 
-    comparePlans(optimized, correctAnswer)
+      comparePlans(optimized, correctAnswer)
+    }
   }
 
-  test("OptimizedIn test: In empty list gets transformed to `If` expression " +
-    "when value is nullable") {
-    val originalQuery =
-      testRelation
-        .where(In(UnresolvedAttribute("a"), Nil))
-        .analyze
+  test("OptimizedIn test: null IN (empty list) gets transformed to literal false") {
+    withSQLConf(LEGACY_NULL_IN_EMPTY_LIST_BEHAVIOR.key -> "false") {
+      val originalQuery =
+        testRelation
+          .where(In(Literal.create(null, NullType), Nil))
+          .analyze
 
-    val optimized = Optimize.execute(originalQuery)
-    val correctAnswer =
-      testRelation
-        .where(If(IsNotNull(UnresolvedAttribute("a")),
-          Literal(false), Literal.create(null, BooleanType)))
-        .analyze
+      val optimized = Optimize.execute(originalQuery.analyze)
+      val correctAnswer =
+        testRelation
+          .where(Literal.create(false, BooleanType))
+          .analyze
 
-    comparePlans(optimized, correctAnswer)
+      comparePlans(optimized, correctAnswer)
+    }
+  }
+
+  test("OptimizedIn test: expr IN (empty list) gets transformed to literal false in select") {
+    withSQLConf(LEGACY_NULL_IN_EMPTY_LIST_BEHAVIOR.key -> "false") {
+      val originalQuery =
+        testRelation
+          .select(In(UnresolvedAttribute("a"), Nil).as("x"))
+          .analyze
+
+      val optimized = Optimize.execute(originalQuery.analyze)
+      val correctAnswer =
+        testRelation
+          .select(Literal.create(false, BooleanType).as("x"))
+          .analyze
+
+      comparePlans(optimized, correctAnswer)
+    }
+  }
+
+  test("OptimizedIn test: null IN (empty list) gets transformed to literal false in select") {
+    withSQLConf(LEGACY_NULL_IN_EMPTY_LIST_BEHAVIOR.key -> "false") {
+      val originalQuery =
+        testRelation
+          .select(In(Literal.create(null, NullType), Nil).as("x"))
+          .analyze
+
+      val optimized = Optimize.execute(originalQuery.analyze)
+      val correctAnswer =
+        testRelation
+          .select(Literal.create(false, BooleanType).as("x"))
+          .analyze
+
+      comparePlans(optimized, correctAnswer)
+    }
+  }
+
+  test("OptimizedIn test: Legacy behavior: " +
+    "In empty list gets transformed to FalseLiteral when value is not nullable") {
+    withSQLConf(LEGACY_NULL_IN_EMPTY_LIST_BEHAVIOR.key -> "true") {
+      val originalQuery =
+        testRelation
+          .where(In(Literal("a"), Nil))
+          .analyze
+
+      val optimized = Optimize.execute(originalQuery)
+      val correctAnswer =
+        testRelation
+          .where(Literal(false))
+          .analyze
+
+      comparePlans(optimized, correctAnswer)
+    }
+  }
+
+  test("OptimizedIn test: Legacy behavior:  " +
+    "In empty list gets transformed to `If` expression when value is nullable") {
+    withSQLConf(LEGACY_NULL_IN_EMPTY_LIST_BEHAVIOR.key -> "true") {
+      val originalQuery =
+        testRelation
+          .where(In(UnresolvedAttribute("a"), Nil))
+          .analyze
+
+      val optimized = Optimize.execute(originalQuery)
+      val correctAnswer =
+        testRelation
+          .where(If(IsNotNull(UnresolvedAttribute("a")),
+            Literal(false), Literal.create(null, BooleanType)))
+          .analyze
+
+      comparePlans(optimized, correctAnswer)
+    }
   }
 }
