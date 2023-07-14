@@ -910,6 +910,14 @@ For more details see [INVALID_FORMAT](sql-error-conditions-invalid-format-error-
 
 The fraction of sec must be zero. Valid range is [0, 60]. If necessary set `<ansiConfig>` to "false" to bypass this error.
 
+### [INVALID_HANDLE](sql-error-conditions-invalid-handle-error-class.html)
+
+SQLSTATE: HY000
+
+The handle `<handle>` is invalid.
+
+For more details see [INVALID_HANDLE](sql-error-conditions-invalid-handle-error-class.html)
+
 ### INVALID_HIVE_COLUMN_NAME
 
 SQLSTATE: none assigned
