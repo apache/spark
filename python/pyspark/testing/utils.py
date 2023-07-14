@@ -224,7 +224,7 @@ class PySparkErrorTestUtils:
 
 
 def assertSchemaEqual(actual: StructType, expected: StructType):
-    """
+    r"""
     A util function to assert equality between DataFrame schemas `actual` and `expected`.
 
     .. versionadded:: 3.5.0
@@ -323,7 +323,7 @@ def assertDataFrameEqual(
     rtol: float = 1e-5,
     atol: float = 1e-8,
 ):
-    """
+    r"""
     A util function to assert equality between `actual` (DataFrame) and `expected`
     (either DataFrame or list of Rows), with optional parameter `checkRowOrder`.
 
@@ -381,13 +381,10 @@ def assertDataFrameEqual(
     PySparkAssertionError: [DIFFERENT_ROWS] Results do not match: ( 66.667 % )
     [actual]
     Row(id='1', amount=1000.0)
-
     [expected]
     Row(id='1', amount=1001.0)
-
     [actual]
     Row(id='3', amount=2000.0)
-
     [expected]
     Row(id='3', amount=2003.0)
     """
