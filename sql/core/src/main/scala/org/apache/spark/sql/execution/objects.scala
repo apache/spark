@@ -191,10 +191,14 @@ case class MapPartitionsExec(
   override def outputPartitioning: Partitioning = child.outputPartitioning
 
   override protected def doExecute(): RDD[InternalRow] = {
-    child.execute().mapPartitionsInternal { iter =>
-      val getObject = ObjectOperator.unwrapObjectFromRow(child.output.head.dataType)
-      val outputObject = ObjectOperator.wrapObjectToRow(outputObjectType)
-      func(iter.map(getObject)).map(outputObject)
+    val evaluatorFactory = new MapPartitionsEvaluatorFactory(func, child.output.head.dataType,
+      outputObjectType)
+    if (conf.usePartitionEvaluator) {
+      child.execute().mapPartitionsWithEvaluator(evaluatorFactory)
+    } else {
+      child.execute().mapPartitionsWithIndexInternal { (partIndex, iter) =>
+        evaluatorFactory.createEvaluator().eval(partIndex, iter)
+      }
     }
   }
 
@@ -301,11 +305,14 @@ case class MapElementsExec(
       case m: MapFunction[_, _] => i => m.asInstanceOf[MapFunction[Any, Any]].call(i)
       case _ => func.asInstanceOf[Any => Any]
     }
-
-    child.execute().mapPartitionsInternal { iter =>
-      val getObject = ObjectOperator.unwrapObjectFromRow(child.output.head.dataType)
-      val outputObject = ObjectOperator.wrapObjectToRow(outputObjectType)
-      iter.map(row => outputObject(callFunc(getObject(row))))
+    val evaluatorFactory = new MapElementsEvaluatorFactory(callFunc, child.output.head.dataType,
+      outputObjectType)
+    if (conf.usePartitionEvaluator) {
+      child.execute().mapPartitionsWithEvaluator(evaluatorFactory)
+    } else {
+      child.execute().mapPartitionsWithIndexInternal { (partIndex, iter) =>
+        evaluatorFactory.createEvaluator().eval(partIndex, iter)
+      }
     }
   }
 
@@ -409,18 +416,13 @@ case class MapGroupsExec(
     Seq(groupingAttributes.map(SortOrder(_, Ascending)) ++ dataOrder)
 
   override protected def doExecute(): RDD[InternalRow] = {
-    child.execute().mapPartitionsInternal { iter =>
-      val grouped = GroupedIterator(iter, groupingAttributes, child.output)
-
-      val getKey = ObjectOperator.deserializeRowToObject(keyDeserializer, groupingAttributes)
-      val getValue = ObjectOperator.deserializeRowToObject(valueDeserializer, dataAttributes)
-      val outputObject = ObjectOperator.wrapObjectToRow(outputObjectType)
-
-      grouped.flatMap { case (key, rowIter) =>
-        val result = func(
-          getKey(key),
-          rowIter.map(getValue))
-        result.map(outputObject)
+    val evaluatorFactory = new MapGroupsEvaluatorFactory(func, keyDeserializer, valueDeserializer,
+      groupingAttributes, dataAttributes, child.output, outputObjectType)
+    if (conf.usePartitionEvaluator) {
+      child.execute().mapPartitionsWithEvaluator(evaluatorFactory)
+    } else {
+      child.execute().mapPartitionsWithIndexInternal { (partIndex, iter) =>
+        evaluatorFactory.createEvaluator().eval(partIndex, iter)
       }
     }
   }
