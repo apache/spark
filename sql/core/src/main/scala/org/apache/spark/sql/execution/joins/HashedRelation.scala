@@ -1043,19 +1043,18 @@ class LongHashedRelation(
     }
   }
 
-  override def getValue(key: InternalRow, location: AnyRef): InternalRow = {
+  override def getValue(key: InternalRow): InternalRow = {
     if (key.isNullAt(0)) {
       null
     } else {
-      getValue(key.getLong(0), location)
+      getValue(key.getLong(0))
     }
   }
 
-  override def get(key: Long, location: AnyRef): Iterator[InternalRow] =
-    map.get(key, resultRow, location.asInstanceOf[LongLocationWrapper])
+  override def get(key: Long): Iterator[InternalRow] =
+    map.get(key, resultRow)
 
-  override def getValue(key: Long, location: AnyRef): InternalRow = map.getValue(key, resultRow,
-   location.asInstanceOf[LongLocationWrapper])
+  override def getValue(key: Long): InternalRow = map.getValue(key, resultRow)
 
   override def keyIsUnique: Boolean = map.keyIsUnique
 
@@ -1148,13 +1147,13 @@ private[joins] object LongHashedRelation {
  * empty LongHashedRelation or empty UnsafeHashedRelation does.
  */
 case object EmptyHashedRelation extends HashedRelation {
-  override def get(key: Long, location: AnyRef): Iterator[InternalRow] = null
+  override def get(key: Long): Iterator[InternalRow] = null
 
-  override def get(key: InternalRow, location: AnyRef): Iterator[InternalRow] = null
+  override def get(key: InternalRow): Iterator[InternalRow] = null
 
-  override def getValue(key: Long, location: AnyRef): InternalRow = null
+  override def getValue(key: Long): InternalRow = null
 
-  override def getValue(key: InternalRow, location: AnyRef): InternalRow = null
+  override def getValue(key: InternalRow): InternalRow = null
 
   override def asReadOnlyCopy(): EmptyHashedRelation.type = this
 
@@ -1174,11 +1173,11 @@ case object EmptyHashedRelation extends HashedRelation {
  * with all the keys to be null.
  */
 case object HashedRelationWithAllNullKeys extends HashedRelation {
-  override def get(key: InternalRow, location: AnyRef): Iterator[InternalRow] = {
+  override def get(key: InternalRow): Iterator[InternalRow] = {
     throw new UnsupportedOperationException
   }
 
-  override def getValue(key: InternalRow, location: AnyRef): InternalRow = {
+  override def getValue(key: InternalRow): InternalRow = {
     throw new UnsupportedOperationException
   }
 
