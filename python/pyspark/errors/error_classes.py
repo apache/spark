@@ -715,11 +715,6 @@ ERROR_CLASSES_JSON = """
       "<data_type> is only supported with pyarrow 2.0.0 and above."
     ]
   },
-  "UNSUPPORTED_DATA_TYPE_FOR_IGNORE_ROW_ORDER" : {
-    "message" : [
-      "Cannot ignore row order because undefined sorting for data type."
-    ]
-  },
   "UNSUPPORTED_JOIN_TYPE" : {
     "message" : [
       "Unsupported join type: <join_type>. Supported join types include: \\"inner\\", \\"outer\\", \\"full\\", \\"fullouter\\", \\"full_outer\\", \\"leftouter\\", \\"left\\", \\"left_outer\\", \\"rightouter\\", \\"right\\", \\"right_outer\\", \\"leftsemi\\", \\"left_semi\\", \\"semi\\", \\"leftanti\\", \\"left_anti\\", \\"anti\\", \\"cross\\"."
