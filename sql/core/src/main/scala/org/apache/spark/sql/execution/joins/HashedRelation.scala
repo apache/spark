@@ -1083,8 +1083,6 @@ class LongHashedRelation(
     map = in.readObject().asInstanceOf[LongToUnsafeRowMap]
   }
 
-  override def getReusableLocation: AnyRef = new LongLocationWrapper()
-
   /**
    * Returns an iterator for keys of InternalRow type.
    * @return
