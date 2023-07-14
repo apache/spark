@@ -1001,6 +1001,28 @@ class UtilsTestsMixin:
         assertDataFrameEqual(df1, df2, checkRowOrder=False)
         assertDataFrameEqual(df1, df2, checkRowOrder=True)
 
+    def test_special_vals(self):
+        df1 = self.spark.createDataFrame(
+            data=[
+                (1, float("nan")),
+                (2, float("inf")),
+                (2, float("-inf")),
+            ],
+            schema=["id", "amount"],
+        )
+
+        df2 = self.spark.createDataFrame(
+            data=[
+                (1, float("nan")),
+                (2, float("inf")),
+                (2, float("-inf")),
+            ],
+            schema=["id", "amount"],
+        )
+
+        assertDataFrameEqual(df1, df2, checkRowOrder=False)
+        assertDataFrameEqual(df1, df2, checkRowOrder=True)
+
     def test_list_row_equal(self):
         from pyspark.sql import Row
 
