@@ -1852,6 +1852,15 @@ object SQLConf {
       .createWithDefault(
         "org.apache.spark.sql.execution.streaming.state.HDFSBackedStateStoreProvider")
 
+  val STATE_STORE_MAINTENANCE_THREADS =
+    buildConf("spark.sql.streaming.stateStore.stateStoreMaintenanceThreads")
+      .internal()
+      .doc("Number of threads in the thread pool that perform clean up and snapshotting tasks " +
+        "for stateful streaming queries.")
+      .intConf
+      .checkValue(_ >= 0, "Must not be negative")
+        .createWithDefault(Math.max(Runtime.getRuntime.availableProcessors() / 4, 1))
+
   val STATE_SCHEMA_CHECK_ENABLED =
     buildConf("spark.sql.streaming.stateStore.stateSchemaCheck")
       .doc("When true, Spark will validate the state schema against schema on existing state and " +
@@ -4503,6 +4512,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def stateStoreProviderClass: String = getConf(STATE_STORE_PROVIDER_CLASS)
 
   def isStateSchemaCheckEnabled: Boolean = getConf(STATE_SCHEMA_CHECK_ENABLED)
+
+  def stateStoreMaintenanceThreads: Int = getConf(STATE_STORE_MAINTENANCE_THREADS)
 
   def stateStoreMinDeltasForSnapshot: Int = getConf(STATE_STORE_MIN_DELTAS_FOR_SNAPSHOT)
 
