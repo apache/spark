@@ -189,12 +189,17 @@ class UserDefinedTableFunction:
                 error_class="INVALID_UDTF_NO_EVAL", message_parameters={"name": self._name}
             )
 
-        if returnType is None and (
-            not hasattr(func, "analyze")
-            or not isinstance(inspect.getattr_static(func, "analyze"), staticmethod)
-        ):
+        has_analyze_staticmethod = hasattr(func, "analyze") and isinstance(
+            inspect.getattr_static(func, "analyze"), staticmethod
+        )
+        if returnType is None and not has_analyze_staticmethod:
             raise PySparkAttributeError(
                 error_class="INVALID_UDTF_RETURN_TYPE", message_parameters={"name": self._name}
+            )
+        if returnType is not None and has_analyze_staticmethod:
+            raise PySparkAttributeError(
+                error_class="INVALID_UDTF_BOTH_RETURN_TYPE_AND_ANALYZE_STATICMETHOD",
+                message_parameters={"name": self._name},
             )
 
     @property

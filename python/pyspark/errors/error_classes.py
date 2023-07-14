@@ -279,7 +279,12 @@ ERROR_CLASSES_JSON = """
   },
   "INVALID_UDTF_RETURN_TYPE" : {
     "message" : [
-      "The UDTF '<name>' is invalid. It does not specify its return type or implement the required 'analysis' static method. Please specify the return type or implement the 'analyze' static method in '<name>' and try again."
+      "The UDTF '<name>' is invalid. It does not specify its return type or implement the required 'analyze' static method. Please specify the return type or implement the 'analyze' static method in '<name>' and try again."
+    ]
+  },
+  "INVALID_UDTF_BOTH_RETURN_TYPE_AND_ANALYZE_STATICMETHOD" : {
+    "message" : [
+      "The UDTF '<name>' is invalid. It has both its return type and the required 'analyze' static method. Please make it have one of either the return type or the 'analyze' static method in '<name>' and try again."
     ]
   },
   "INVALID_WHEN_USAGE": {

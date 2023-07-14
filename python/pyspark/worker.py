@@ -871,6 +871,21 @@ def read_udfs(pickleSer, infile, eval_type):
     return func, None, ser, ser
 
 
+def check_python_version(infile):
+    """
+    Check the Python version between the running process and the one used to serialize the command.
+    """
+    version = utf8_deserializer.loads(infile)
+    if version != "%d.%d" % sys.version_info[:2]:
+        raise PySparkRuntimeError(
+            error_class="PYTHON_VERSION_MISMATCH",
+            message_parameters={
+                "worker_version": str(sys.version_info[:2]),
+                "driver_version": str(version),
+            },
+        )
+
+
 def main(infile, outfile):
     faulthandler_log_path = os.environ.get("PYTHON_FAULTHANDLER_DIR", None)
     try:
@@ -884,15 +899,7 @@ def main(infile, outfile):
         if split_index == -1:  # for unit tests
             sys.exit(-1)
 
-        version = utf8_deserializer.loads(infile)
-        if version != "%d.%d" % sys.version_info[:2]:
-            raise PySparkRuntimeError(
-                error_class="PYTHON_VERSION_MISMATCH",
-                message_parameters={
-                    "worker_version": str(sys.version_info[:2]),
-                    "driver_version": str(version),
-                },
-            )
+        check_python_version(infile)
 
         # read inputs only for a barrier task
         isBarrier = read_bool(infile)

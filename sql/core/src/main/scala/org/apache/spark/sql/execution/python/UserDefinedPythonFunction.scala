@@ -21,7 +21,6 @@ import java.io.{BufferedInputStream, BufferedOutputStream, DataInputStream, Data
 import java.net.Socket
 import java.nio.charset.StandardCharsets
 import java.util.HashMap
-import java.util.concurrent.atomic.AtomicBoolean
 
 import scala.collection.JavaConverters._
 
@@ -31,9 +30,10 @@ import org.apache.spark.{SparkEnv, SparkException}
 import org.apache.spark.api.python.{PythonEvalType, PythonFunction, PythonRDD, SpecialLengths}
 import org.apache.spark.internal.config.BUFFER_SIZE
 import org.apache.spark.internal.config.Python._
-import org.apache.spark.sql.{AnalysisException, Column, DataFrame, Dataset, SparkSession}
+import org.apache.spark.sql.{Column, DataFrame, Dataset, SparkSession}
 import org.apache.spark.sql.catalyst.expressions.{Expression, FunctionTableSubqueryArgumentExpression, PythonUDAF, PythonUDF, PythonUDTF}
 import org.apache.spark.sql.catalyst.plans.logical.{Generate, LogicalPlan, OneRowRelation}
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DataType, StructType}
 
@@ -129,6 +129,25 @@ object UserDefinedPythonTableFunction {
 
   /**
    * Runs the Python UDTF's `analyze` static method.
+   *
+   * When the Python UDTF is defined without a static return type,
+   * the analyze will call this while resolving table-valued functions.
+   *
+   * This expects the Python UDTF to have `analyze` static method that take arguments:
+   *
+   * - The number and order of arguments are the same as the UDTF inputs
+   * - Each argument is a dict, containing:
+   *   - data_type: DataType
+   *   - value: Any: if the argument is foldable; otherwise None
+   *   - is_table: bool: True if the argument is TABLE
+   *
+   * and that return a struct type.
+   *
+   * It serializes/deserializes the data types via JSON,
+   * and the values for the case the argument is foldable are pickled.
+   *
+   * `AnalysisException` with the error class "TABLE_VALUED_FUNCTION_FAILED_TO_ANALYZE_IN_PYTHON"
+   * will be thrown when an exception is raised in Python.
    */
   def analyzeInPython(func: PythonFunction, exprs: Seq[Expression]): StructType = {
     val env = SparkEnv.get
@@ -156,7 +175,7 @@ object UserDefinedPythonTableFunction {
 
     val (worker: Socket, _) =
       env.createPythonWorker(pythonExec, workerModule, envVars.asScala.toMap)
-    val releasedOrClosed = new AtomicBoolean(false)
+    var releasedOrClosed = false
     try {
       val dataOut =
         new DataOutputStream(new BufferedOutputStream(worker.getOutputStream, bufferSize))
@@ -199,8 +218,7 @@ object UserDefinedPythonTableFunction {
           val obj = new Array[Byte](exLength)
           dataIn.readFully(obj)
           val msg = new String(obj, StandardCharsets.UTF_8)
-          env.destroyPythonWorker(pythonExec, workerModule, envVars.asScala.toMap, worker)
-          throw new AnalysisException(msg)
+          throw QueryCompilationErrors.tableValuedFunctionFailedToAnalyseInPythonError(msg)
       }
 
       dataIn.readInt() match {
@@ -209,15 +227,15 @@ object UserDefinedPythonTableFunction {
         case _ =>
           env.destroyPythonWorker(pythonExec, workerModule, envVars.asScala.toMap, worker)
       }
-      releasedOrClosed.set(true)
+      releasedOrClosed = true
 
       schema
     } catch {
       case eof: EOFException =>
         throw new SparkException("Python worker exited unexpectedly (crashed)", eof)
     } finally {
-      if (!releasedOrClosed.get()) {
-        // An unexpected error happened. Force to close the worker.
+      if (!releasedOrClosed) {
+        // An error happened. Force to close the worker.
         env.destroyPythonWorker(pythonExec, workerModule, envVars.asScala.toMap, worker)
       }
     }

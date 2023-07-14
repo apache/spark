@@ -19,7 +19,7 @@ import inspect
 import os
 import sys
 import traceback
-from typing import IO
+from typing import Any, Dict, List, IO
 
 from pyspark.errors import PySparkRuntimeError, PySparkValueError
 from pyspark.java_gateway import local_connect_and_auth
@@ -28,62 +28,65 @@ from pyspark.serializers import (
     read_int,
     write_int,
     write_with_length,
-    CPickleSerializer,
     SpecialLengths,
-    UTF8Deserializer,
 )
 from pyspark.sql.types import StructType, _parse_datatype_json_string
 from pyspark.util import try_simplify_traceback
-from pyspark.worker import read_command
+from pyspark.worker import check_python_version, read_command, pickleSer, utf8_deserializer
 
-pickleSer = CPickleSerializer()
-utf8_deserializer = UTF8Deserializer()
+
+def read_udtf(infile: IO) -> type:
+    """Reads the Python UDTF and checks if its valid or not."""
+    # Receive Python UDTF
+    handler = read_command(pickleSer, infile)
+    if not isinstance(handler, type):
+        raise PySparkRuntimeError(
+            f"Invalid UDTF handler type. Expected a class (type 'type'), but "
+            f"got an instance of {type(handler).__name__}."
+        )
+
+    if not hasattr(handler, "analyze") or not isinstance(
+        inspect.getattr_static(handler, "analyze"), staticmethod
+    ):
+        raise PySparkRuntimeError(
+            "Failed to execute the user defined table function because it has not "
+            "implemented the 'analyze' static method. "
+            "Please add the 'analyze' static method or specify the return type, "
+            "and try the query again."
+        )
+    return handler
+
+
+def read_arguments(infile: IO) -> List[Dict[str, Any]]:
+    """Reads the arguments for `analyze` static method."""
+    # Receive arguments
+    num_args = read_int(infile)
+    args = []
+    for _ in range(num_args):
+        dt = _parse_datatype_json_string(utf8_deserializer.loads(infile))
+        if read_bool(infile):  # is foldable
+            value = pickleSer._read_with_length(infile)
+            if dt.needConversion():
+                value = dt.fromInternal(value)
+        else:
+            value = None
+        is_table = read_bool(infile)  # is table argument
+        args.append(dict(data_type=dt, value=value, is_table=is_table))
+    return args
 
 
 def main(infile: IO, outfile: IO) -> None:
+    """
+    Runs the Python UDTF's `analyze` static method.
+
+    This process will be invoked from `UserDefinedPythonTableFunction.analyzeInPython` in JVM
+    and receive the Python UDTF and its arguments for the `analyze` static method,
+    and call the `analyze` static method, and send back a struct type as a result of the method.
+    """
     try:
-        # Check Python version
-        version = utf8_deserializer.loads(infile)
-        if version != "%d.%d" % sys.version_info[:2]:
-            raise PySparkRuntimeError(
-                error_class="PYTHON_VERSION_MISMATCH",
-                message_parameters={
-                    "worker_version": str(sys.version_info[:2]),
-                    "driver_version": str(version),
-                },
-            )
-
-        # Receive Python UDTF
-        handler = read_command(pickleSer, infile)
-        if not isinstance(handler, type):
-            raise PySparkRuntimeError(
-                f"Invalid UDTF handler type. Expected a class (type 'type'), but "
-                f"got an instance of {type(handler).__name__}."
-            )
-
-        if not hasattr(handler, "analyze") or not isinstance(
-            inspect.getattr_static(handler, "analyze"), staticmethod
-        ):
-            raise PySparkRuntimeError(
-                "Failed to execute the user defined table function because it has not "
-                "implemented the 'analyze' static method. "
-                "Please add the 'analyze' static method or specify the return type, "
-                "and try the query again."
-            )
-
-        # Receive arguments
-        num_args = read_int(infile)
-        args = []
-        for _ in range(num_args):
-            dt = _parse_datatype_json_string(utf8_deserializer.loads(infile))
-            if read_bool(infile):  # is foldable
-                value = pickleSer._read_with_length(infile)
-                if dt.needConversion():
-                    value = dt.fromInternal(value)
-            else:
-                value = None
-            is_table = read_bool(infile)  # is table argument
-            args.append(dict(data_type=dt, value=value, is_table=is_table))
+        check_python_version(infile)
+        handler = read_udtf(infile)
+        args = read_arguments(infile)
 
         schema = handler.analyze(*args)  # type: ignore[attr-defined]
 

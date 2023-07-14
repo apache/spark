@@ -15564,6 +15564,34 @@ def udtf(
     |  1|  2|
     +---+---+
 
+    UDTF can also have `analyze` static method instead of a static return type:
+
+    The `analyze` static method should take arguments:
+
+    - The number and order of arguments are the same as the UDTF inputs
+    - Each argument is a dict, containing:
+      - data_type: DataType
+      - value: Any: if the argument is foldable; otherwise None
+      - is_table: bool: True if the argument is TABLE
+
+    and return a struct type.
+
+    >>> @udtf
+    ... class TestUDTFWithAnalyze:
+    ...     @staticmethod
+    ...     def analyze(a, b) -> StructType:
+    ...         return StructType().add("a", a["data_type"]).add("b", b["data_type"])
+    ...
+    ...     def eval(self, a, b):
+    ...         yield a, b
+    ...
+    >>> TestUDTFWithAnalyze(lit(1), lit("x")).show()
+    +---+---+
+    |  a|  b|
+    +---+---+
+    |  1|  x|
+    +---+---+
+
     Arrow optimization can be explicitly enabled when creating UDTFs:
 
     >>> @udtf(returnType="c1: int, c2: int", useArrow=True)
