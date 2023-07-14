@@ -288,8 +288,9 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
                 "srcType" -> c.child.dataType.catalogString,
                 "targetType" -> c.dataType.catalogString))
           case e: RuntimeReplaceable if !e.replacement.resolved =>
-            throw new IllegalStateException("Illegal RuntimeReplaceable: " + e +
-              "\nReplacement is unresolved: " + e.replacement)
+            throw SparkException.internalError(
+              s"Cannot resolve the runtime replaceable expression ${toSQLExpr(e)}. " +
+              s"The replacement is unresolved: ${toSQLExpr(e.replacement)}.")
 
           case g: Grouping =>
             g.failAnalysis(errorClass = "_LEGACY_ERROR_TEMP_2445", messageParameters = Map.empty)
