@@ -3296,7 +3296,7 @@ class DataSourceV2SQLSuiteV1Filter
     }
   }
 
-  test("Support to extract partial filters of datasource v2 table and push them down") {
+  test("SPARK-44419: Support to extract partial filters of datasource v2 table and push them down") {
     val t1 = s"${catalogAndNamespace}table"
     withUserDefinedFunction("udfStrLen" -> true) {
       withTable(t1) {
