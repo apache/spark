@@ -239,7 +239,7 @@ def assertSchemaEqual(actual: StructType, expected: StructType):
     Notes
     -----
     When assertSchemaEqual fails, the error message uses the Python `difflib` library to display
-    a diff log of the `actual` and `expected` schemas.
+        a diff log of the `actual` and `expected` schemas.
 
     Examples
     --------
