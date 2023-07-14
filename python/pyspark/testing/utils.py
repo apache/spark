@@ -256,7 +256,7 @@ def assertSchemaEqual(actual: StructType, expected: StructType):
     Traceback (most recent call last):
     ...
     PySparkAssertionError: [DIFFERENT_SCHEMA] Schemas do not match.
-    \-\-\- actual
+    --- actual
     +++ expected
     - StructType([StructField('id', LongType(), True), StructField('number', LongType(), True)])
     ?                               ^^                               ^^^^^
