@@ -25,7 +25,6 @@ from pyspark.errors import (
 )
 from pyspark.testing.utils import assertDataFrameEqual
 from pyspark.testing.sqlutils import ReusedSQLTestCase
-from pyspark.sql import Row
 import pyspark.sql.functions as F
 from pyspark.sql.functions import to_date, unix_timestamp, from_unixtime
 from pyspark.sql.types import (
