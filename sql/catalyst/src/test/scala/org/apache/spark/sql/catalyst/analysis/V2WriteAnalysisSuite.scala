@@ -744,6 +744,46 @@ abstract class V2WriteAnalysisSuiteBase extends AnalysisTest {
     }
   }
 
+  test ("SPARK-44414: Fixed matching check for CharType/VarcharType") {
+    // check varchar type
+    val json1 = "{\"__CHAR_VARCHAR_TYPE_STRING\":\"varchar(80)\"}"
+    val metadata1 = new MetadataBuilder().withMetadata(Metadata.fromJson(json1)).build()
+
+    val query1 = TestRelation(StructType(Seq(
+      StructField("x", StringType, metadata = metadata1),
+      StructField("y", StringType, metadata = metadata1))))
+
+    val table1 = TestRelation(StructType(Seq(
+      StructField("x", StringType, metadata = metadata1),
+      StructField("y", StringType, metadata = metadata1))))
+
+    val parsedPlanByName1 = byName(table1, query1)
+    val parsedPlanByPosition1 = byPosition(table1, query1)
+    checkAnalysis(parsedPlanByName1, parsedPlanByName1)
+    assertResolved(parsedPlanByName1)
+    checkAnalysis(parsedPlanByPosition1, parsedPlanByPosition1)
+    assertResolved(parsedPlanByPosition1)
+
+    // check char type
+    val json2 = "{\"__CHAR_VARCHAR_TYPE_STRING\":\"char(80)\"}"
+    val metadata2 = new MetadataBuilder().withMetadata(Metadata.fromJson(json2)).build()
+
+    val query2 = TestRelation(StructType(Seq(
+      StructField("x", StringType, metadata = metadata2),
+      StructField("y", StringType, metadata = metadata2))))
+
+    val table2 = TestRelation(StructType(Seq(
+      StructField("x", StringType, metadata = metadata2),
+      StructField("y", StringType, metadata = metadata2))))
+
+    val parsedPlanByName2 = byName(table2, query2)
+    val parsedPlanByPosition2 = byPosition(table2, query2)
+    checkAnalysis(parsedPlanByName2, parsedPlanByName2)
+    assertResolved(parsedPlanByName2)
+    checkAnalysis(parsedPlanByPosition2, parsedPlanByPosition2)
+    assertResolved(parsedPlanByPosition2)
+  }
+
   test("SPARK-42997: extra fields in nested struct (byName)") {
     checkExtraFieldsInNestedStruct(byNameResolution = true)
   }
