@@ -2494,8 +2494,7 @@ class SparkConnectPlanner(val sessionHolder: SessionHolder) extends Logging {
       func = transformPythonTableFunction(udtf),
       returnType = returnType.asInstanceOf[StructType],
       pythonEvalType = udtf.getEvalType,
-      udfDeterministic = fun.getDeterministic
-    )
+      udfDeterministic = fun.getDeterministic)
   }
 
   private def handleRegisterPythonUDF(fun: proto.CommonInlineUserDefinedFunction): Unit = {

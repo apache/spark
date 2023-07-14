@@ -279,7 +279,7 @@ ERROR_CLASSES_JSON = """
   },
   "INVALID_UDTF_RETURN_TYPE" : {
     "message" : [
-      "Invalid return type for the UDTF '<name>': <return_type>. The return type of a UDTF must be a 'StructType'. Please ensure the return type is a correctly formatted 'StructType' string."
+      "Invalid return type for the UDTF '<name>': <return_type>. The return type of a UDTF must be a StructType. Please ensure the return type is a correctly formatted StructType."
     ]
   },
   "INVALID_WHEN_USAGE": {

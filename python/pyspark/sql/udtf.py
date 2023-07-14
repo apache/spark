@@ -134,7 +134,7 @@ def _create_arrow_udtf(regular_udtf: "UserDefinedTableFunction") -> "UserDefined
 
     return _create_udtf(
         cls=vectorized_udtf,
-        returnType=regular_udtf.returnType,
+        returnType=regular_udtf._returnType,
         name=regular_udtf._name,
         evalType=PythonEvalType.SQL_ARROW_TABLE_UDF,
         deterministic=regular_udtf.deterministic,
