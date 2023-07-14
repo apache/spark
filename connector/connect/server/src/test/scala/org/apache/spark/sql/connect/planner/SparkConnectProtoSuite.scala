@@ -710,7 +710,7 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
         proj(row).copy()
       }
 
-      val localRelationV2 = createLocalRelationProto(schema.toAttributes, inputRows)
+      val localRelationV2 = createLocalRelationProto(schema, inputRows)
 
       val cmd = localRelationV2.writeV2(
         tableName = Some("testcat.table_name"),
@@ -740,7 +740,7 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
         proj(row).copy()
       }
 
-      val localRelationV2 = createLocalRelationProto(schema.toAttributes, inputRows)
+      val localRelationV2 = createLocalRelationProto(schema, inputRows)
 
       val cmd = localRelationV2.writeV2(
         tableName = Some("testcat.table_name"),
@@ -778,7 +778,7 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
         proj(row).copy()
       }
 
-      val localRelationV2 = createLocalRelationProto(schema.toAttributes, inputRows)
+      val localRelationV2 = createLocalRelationProto(schema, inputRows)
 
       spark.sql("CREATE TABLE testcat.table_name (id bigint, data string) USING foo")
 
@@ -817,8 +817,8 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
         proj(row).copy()
       }
 
-      val localRelation1V2 = createLocalRelationProto(schema.toAttributes, inputRows1)
-      val localRelation2V2 = createLocalRelationProto(schema.toAttributes, inputRows2)
+      val localRelation1V2 = createLocalRelationProto(schema, inputRows1)
+      val localRelation2V2 = createLocalRelationProto(schema, inputRows2)
 
       spark.sql(
         "CREATE TABLE testcat.table_name (id bigint, data string) USING foo PARTITIONED BY (id)")
@@ -865,7 +865,7 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
         proj(row).copy()
       }
 
-      val localRelationV2 = createLocalRelationProto(schema.toAttributes, inputRows)
+      val localRelationV2 = createLocalRelationProto(schema, inputRows)
 
       spark.sql(
         "CREATE TABLE testcat.table_name (id bigint, data string) USING foo PARTITIONED BY (id)")

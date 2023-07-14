@@ -33,9 +33,10 @@ import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.{ExecutePlanResponse, SqlCommand, StreamingQueryCommand, StreamingQueryCommandResult, StreamingQueryInstanceId, WriteStreamOperationStart, WriteStreamOperationStartResult}
 import org.apache.spark.connect.proto.ExecutePlanResponse.SqlCommandResult
 import org.apache.spark.connect.proto.Parse.ParseFormat
+import org.apache.spark.connect.proto.StreamingForeachFunction
 import org.apache.spark.connect.proto.StreamingQueryManagerCommand
 import org.apache.spark.connect.proto.StreamingQueryManagerCommandResult
-import org.apache.spark.connect.proto.StreamingQueryManagerCommandResult.StreamingQueryInstance
+import org.apache.spark.connect.proto.StreamingQueryManagerCommandResult.{StreamingQueryInstance, StreamingQueryListenerInstance}
 import org.apache.spark.connect.proto.WriteStreamOperationStart.TriggerCase
 import org.apache.spark.internal.Logging
 import org.apache.spark.ml.{functions => MLFunctions}
@@ -51,8 +52,9 @@ import org.apache.spark.sql.catalyst.plans.{Cross, FullOuter, Inner, JoinType, L
 import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.plans.logical.{AppendColumns, CoGroup, CollectMetrics, CommandResult, Deduplicate, DeduplicateWithinWatermark, DeserializeToObject, Except, FlatMapGroupsWithState, Intersect, JoinWith, LocalRelation, LogicalGroupState, LogicalPlan, MapGroups, MapPartitions, Project, Sample, SerializeFromObject, Sort, SubqueryAlias, TypedFilter, Union, Unpivot, UnresolvedHint}
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes
+import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, CharVarcharUtils}
-import org.apache.spark.sql.connect.common.{DataTypeProtoConverter, ForeachWriterPacket, InvalidPlanInput, LiteralValueProtoConverter, StorageLevelProtoConverter, UdfPacket}
+import org.apache.spark.sql.connect.common.{DataTypeProtoConverter, ForeachWriterPacket, InvalidPlanInput, LiteralValueProtoConverter, StorageLevelProtoConverter, StreamingListenerPacket, UdfPacket}
 import org.apache.spark.sql.connect.config.Connect.CONNECT_GRPC_ARROW_MAX_BATCH_SIZE
 import org.apache.spark.sql.connect.plugin.SparkConnectPluginRegistry
 import org.apache.spark.sql.connect.service.SessionHolder
@@ -71,7 +73,7 @@ import org.apache.spark.sql.execution.streaming.StreamingQueryWrapper
 import org.apache.spark.sql.expressions.ReduceAggregator
 import org.apache.spark.sql.internal.{CatalogImpl, TypedAggUtils}
 import org.apache.spark.sql.protobuf.{CatalystDataToProtobuf, ProtobufDataToCatalyst}
-import org.apache.spark.sql.streaming.{GroupStateTimeout, OutputMode, StreamingQuery, StreamingQueryProgress, Trigger}
+import org.apache.spark.sql.streaming.{GroupStateTimeout, OutputMode, StreamingQuery, StreamingQueryListener, StreamingQueryProgress, Trigger}
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.storage.CacheId
@@ -508,13 +510,13 @@ class SparkConnectPlanner(val sessionHolder: SessionHolder) extends Logging {
           case PythonEvalType.SQL_MAP_PANDAS_ITER_UDF =>
             logical.MapInPandas(
               pythonUdf,
-              pythonUdf.dataType.asInstanceOf[StructType].toAttributes,
+              DataTypeUtils.toAttributes(pythonUdf.dataType.asInstanceOf[StructType]),
               baseRel,
               isBarrier)
           case PythonEvalType.SQL_MAP_ARROW_ITER_UDF =>
             logical.PythonMapInArrow(
               pythonUdf,
-              pythonUdf.dataType.asInstanceOf[StructType].toAttributes,
+              DataTypeUtils.toAttributes(pythonUdf.dataType.asInstanceOf[StructType]),
               baseRel,
               isBarrier)
           case _ =>
@@ -638,7 +640,7 @@ class SparkConnectPlanner(val sessionHolder: SessionHolder) extends Logging {
           ds.groupingAttributes,
           ds.dataAttributes,
           udf.inputDeserializer(ds.groupingAttributes),
-          LocalRelation(initialDs.vEncoder.schema.toAttributes), // empty data set
+          LocalRelation(initialDs.vEncoder.schema), // empty data set
           ds.analyzed)
       }
       SerializeFromObject(udf.outputNamedExpression, flatMapGroupsWithState)
@@ -1106,7 +1108,7 @@ class SparkConnectPlanner(val sessionHolder: SessionHolder) extends Logging {
       if (structType == null) {
         throw InvalidPlanInput(s"Input data for LocalRelation does not produce a schema.")
       }
-      val attributes = structType.toAttributes
+      val attributes = DataTypeUtils.toAttributes(structType)
       val proj = UnsafeProjection.create(attributes, attributes)
       val data = rows.map(proj)
 
@@ -1133,22 +1135,23 @@ class SparkConnectPlanner(val sessionHolder: SessionHolder) extends Logging {
         val project = Dataset
           .ofRows(
             session,
-            logicalPlan =
-              logical.LocalRelation(normalize(structType).asInstanceOf[StructType].toAttributes))
+            logicalPlan = logical.LocalRelation(normalize(structType).asInstanceOf[StructType]))
           .toDF(normalized.names: _*)
           .to(normalized)
           .logicalPlan
           .asInstanceOf[Project]
 
         val proj = UnsafeProjection.create(project.projectList, project.child.output)
-        logical.LocalRelation(schema.toAttributes, data.map(proj).map(_.copy()).toSeq)
+        logical.LocalRelation(
+          DataTypeUtils.toAttributes(schema),
+          data.map(proj).map(_.copy()).toSeq)
       }
     } else {
       if (schema == null) {
         throw InvalidPlanInput(
           s"Schema for LocalRelation is required when the input data is not provided.")
       }
-      LocalRelation(schema.toAttributes, data = Seq.empty)
+      LocalRelation(schema)
     }
   }
 
@@ -2079,8 +2082,8 @@ class SparkConnectPlanner(val sessionHolder: SessionHolder) extends Logging {
       joined,
       session.sqlContext.conf.dataFrameSelfJoinAutoResolveAmbiguity,
       session.sessionState.analyzer.resolver,
-      rel.getJoinDataType.getIsLeftFlattenableToRow,
-      rel.getJoinDataType.getIsRightFlattenableToRow)
+      rel.getJoinDataType.getIsLeftStruct,
+      rel.getJoinDataType.getIsRightStruct)
   }
 
   private def transformJoinOrJoinWith(rel: proto.Join): LogicalPlan = {
@@ -2659,19 +2662,37 @@ class SparkConnectPlanner(val sessionHolder: SessionHolder) extends Logging {
     }
 
     if (writeOp.hasForeachWriter) {
-      if (writeOp.getForeachWriter.hasPythonWriter) {
-        val foreach = writeOp.getForeachWriter.getPythonWriter
+      if (writeOp.getForeachWriter.hasPythonFunction) {
+        val foreach = writeOp.getForeachWriter.getPythonFunction
         val pythonFcn = transformPythonFunction(foreach)
         writer.foreachImplementation(
           new PythonForeachWriter(pythonFcn, dataset.schema).asInstanceOf[ForeachWriter[Any]])
       } else {
-        val foreachWriterPkt = unpackForeachWriter(writeOp.getForeachWriter.getScalaWriter)
+        val foreachWriterPkt = unpackForeachWriter(writeOp.getForeachWriter.getScalaFunction)
         val clientWriter = foreachWriterPkt.foreachWriter
         val encoder: Option[ExpressionEncoder[Any]] = Try(
           ExpressionEncoder(
             foreachWriterPkt.datasetEncoder.asInstanceOf[AgnosticEncoder[Any]])).toOption
         writer.foreachImplementation(clientWriter.asInstanceOf[ForeachWriter[Any]], encoder)
       }
+    }
+
+    if (writeOp.hasForeachBatch) {
+      val foreachBatchFn = writeOp.getForeachBatch.getFunctionCase match {
+        case StreamingForeachFunction.FunctionCase.PYTHON_FUNCTION =>
+          throw InvalidPlanInput("Python ForeachBatch is not supported yet. WIP.")
+
+        case StreamingForeachFunction.FunctionCase.SCALA_FUNCTION =>
+          val scalaFn = Utils.deserialize[StreamingForeachBatchHelper.ForeachBatchFnType](
+            writeOp.getForeachBatch.getScalaFunction.getPayload.toByteArray,
+            Utils.getContextOrSparkClassLoader)
+          StreamingForeachBatchHelper.scalaForeachBatchWrapper(scalaFn, sessionHolder)
+
+        case StreamingForeachFunction.FunctionCase.FUNCTION_NOT_SET =>
+          throw InvalidPlanInput("Unexpected")
+      }
+
+      writer.foreachBatch(foreachBatchFn)
     }
 
     val query = writeOp.getPath match {
@@ -2875,6 +2896,15 @@ class SparkConnectPlanner(val sessionHolder: SessionHolder) extends Logging {
     builder.build()
   }
 
+  private def buildStreamingQueryListenerInstance(
+      listener: StreamingQueryListener): StreamingQueryListenerInstance = {
+    StreamingQueryListenerInstance
+      .newBuilder()
+      .setListenerPayload(ByteString
+        .copyFrom(Utils.serialize(StreamingListenerPacket("", listener))))
+      .build()
+  }
+
   def handleStreamingQueryManagerCommand(
       command: StreamingQueryManagerCommand,
       sessionId: String,
@@ -2908,6 +2938,37 @@ class SparkConnectPlanner(val sessionHolder: SessionHolder) extends Logging {
       case StreamingQueryManagerCommand.CommandCase.RESET_TERMINATED =>
         session.streams.resetTerminated()
         respBuilder.setResetTerminated(true)
+
+      case StreamingQueryManagerCommand.CommandCase.ADD_LISTENER =>
+        val listenerPacket = Utils
+          .deserialize[StreamingListenerPacket](
+            command.getAddListener.getListenerPayload.toByteArray,
+            Utils.getContextOrSparkClassLoader)
+        val listener: StreamingQueryListener = listenerPacket.listener
+          .asInstanceOf[StreamingQueryListener]
+        val id: String = listenerPacket.id
+        sessionHolder.cacheListenerById(id, listener)
+        session.streams.addListener(listener)
+        respBuilder.setAddListener(true)
+
+      case StreamingQueryManagerCommand.CommandCase.REMOVE_LISTENER =>
+        val listenerId = Utils
+          .deserialize[StreamingListenerPacket](
+            command.getRemoveListener.getListenerPayload.toByteArray,
+            Utils.getContextOrSparkClassLoader)
+          .id
+        val listener: StreamingQueryListener = sessionHolder.getListenerOrThrow(listenerId)
+        session.streams.removeListener(listener)
+        sessionHolder.removeCachedListener(listenerId)
+        respBuilder.setRemoveListener(true)
+
+      case StreamingQueryManagerCommand.CommandCase.LIST_LISTENERS =>
+        val listeners = session.streams.listListeners()
+        respBuilder.getListListenersBuilder.addAllListeners(
+          listeners
+            .map(listener => buildStreamingQueryListenerInstance(listener))
+            .toIterable
+            .asJava)
 
       case StreamingQueryManagerCommand.CommandCase.COMMAND_NOT_SET =>
         throw new IllegalArgumentException("Missing command in StreamingQueryManagerCommand")

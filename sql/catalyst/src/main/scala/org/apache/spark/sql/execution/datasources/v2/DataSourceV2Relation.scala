@@ -20,6 +20,7 @@ package org.apache.spark.sql.execution.datasources.v2
 import org.apache.spark.sql.catalyst.analysis.{MultiInstanceRelation, NamedRelation}
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, AttributeReference, Expression, SortOrder}
 import org.apache.spark.sql.catalyst.plans.logical.{ColumnStat, ExposesMetadataColumns, Histogram, HistogramBin, LeafNode, LogicalPlan, Statistics}
+import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.catalyst.util.{truncatedString, CharVarcharUtils}
 import org.apache.spark.sql.connector.catalog.{CatalogPlugin, FunctionCatalog, Identifier, SupportsMetadataColumns, Table, TableCapability}
 import org.apache.spark.sql.connector.read.{Scan, Statistics => V2Statistics, SupportsReportStatistics}
@@ -194,7 +195,7 @@ object DataSourceV2Relation {
     // The v2 source may return schema containing char/varchar type. We replace char/varchar
     // with "annotated" string type here as the query engine doesn't support char/varchar yet.
     val schema = CharVarcharUtils.replaceCharVarcharWithStringInSchema(table.columns.asSchema)
-    DataSourceV2Relation(table, schema.toAttributes, catalog, identifier, options)
+    DataSourceV2Relation(table, toAttributes(schema), catalog, identifier, options)
   }
 
   def create(

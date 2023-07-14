@@ -21,7 +21,7 @@ import java.io.File
 
 import scala.collection.mutable.ArrayBuffer
 
-import org.apache.spark.{SparkEnv, TaskContext}
+import org.apache.spark.{JobArtifactSet, SparkEnv, TaskContext}
 import org.apache.spark.api.python.{ChainedPythonFunctions, PythonEvalType}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
@@ -127,6 +127,9 @@ case class AggregateInPandasExec(
       StructField(s"_$i", dt)
     }.toArray)
 
+
+    val jobArtifactUUID = JobArtifactSet.getCurrentJobArtifactState.map(_.uuid)
+
     // Map grouped rows to ArrowPythonRunner results, Only execute if partition is not empty
     inputRDD.mapPartitionsInternal { iter => if (iter.isEmpty) iter else {
       // If we have session window expression in aggregation, we wrap iterator with
@@ -170,7 +173,8 @@ case class AggregateInPandasExec(
         sessionLocalTimeZone,
         largeVarTypes,
         pythonRunnerConf,
-        pythonMetrics).compute(projectedRowIter, context.partitionId(), context)
+        pythonMetrics,
+        jobArtifactUUID).compute(projectedRowIter, context.partitionId(), context)
 
       val joinedAttributes =
         groupingExpressions.map(_.toAttribute) ++ aggExpressions.map(_.resultAttribute)

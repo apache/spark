@@ -152,8 +152,7 @@ CREATE TABLE t (v INT);
 
 -- `spark.sql.storeAssignmentPolicy=ANSI`
 INSERT INTO t VALUES ('1');
-org.apache.spark.sql.AnalysisException: Cannot write incompatible data to table '`default`.`t`':
-- Cannot safely cast 'v': string to int;
+org.apache.spark.sql.AnalysisException: [INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_SAFELY_CAST] Cannot write incompatible data for table `spark_catalog`.`default`.`t`: Cannot safely cast `v`: "STRING" to "INT".
 
 -- `spark.sql.storeAssignmentPolicy=LEGACY` (This is a legacy behaviour until Spark 2.x)
 INSERT INTO t VALUES ('1');
