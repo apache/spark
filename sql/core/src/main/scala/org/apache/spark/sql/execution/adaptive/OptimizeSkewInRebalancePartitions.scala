@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.adaptive
 
-import org.apache.spark.sql.execution.{CoalescedPartitionSpec, ShufflePartitionSpec, SparkPlan}
+import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.exchange.{REBALANCE_PARTITIONS_BY_COL, REBALANCE_PARTITIONS_BY_NONE, ShuffleOrigin}
 import org.apache.spark.sql.internal.SQLConf
 
