@@ -264,9 +264,10 @@ class PandasSQLStringFormatter(string.Formatter):
             val._to_spark().createOrReplaceTempView(df_name)
             return df_name
         elif isinstance(val, str):
-            from pyspark.sql.utils import get_lit_sql_str
-
-            return get_lit_sql_str(val)
+            # This is matched to behavior from JVM implementation.
+            # See `sql` definition from `sql/catalyst/src/main/scala/org/apache/spark/
+            # sql/catalyst/expressions/literals.scala`
+            return "'" + val.replace("\\", "\\\\").replace("'", "\\'") + "'"
         else:
             return val
 
