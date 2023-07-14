@@ -169,7 +169,7 @@ trait HashJoin extends JoinCodegenSupport {
     } else if (hashedRelation.keyIsUnique) {
       streamIter.flatMap { srow =>
         joinRow.withLeft(srow)
-        val matched = hashedRelation.getValue(joinKeys(srow), null)
+        val matched = hashedRelation.getValue(joinKeys(srow))
         if (matched != null) {
           Some(joinRow.withRight(matched)).filter(boundCondition)
         } else {
@@ -179,7 +179,7 @@ trait HashJoin extends JoinCodegenSupport {
     } else {
       streamIter.flatMap { srow =>
         joinRow.withLeft(srow)
-        val matches = hashedRelation.get(joinKeys(srow), null)
+        val matches = hashedRelation.get(joinKeys(srow))
         if (matches != null) {
           matches.map(joinRow.withRight).filter(boundCondition)
         } else {
@@ -200,7 +200,7 @@ trait HashJoin extends JoinCodegenSupport {
       streamedIter.map { currentRow =>
         val rowKey = keyGenerator(currentRow)
         joinedRow.withLeft(currentRow)
-        val matched = hashedRelation.getValue(rowKey, null)
+        val matched = hashedRelation.getValue(rowKey)
         if (matched != null && boundCondition(joinedRow.withRight(matched))) {
           joinedRow
         } else {
@@ -211,7 +211,7 @@ trait HashJoin extends JoinCodegenSupport {
       streamedIter.flatMap { currentRow =>
         val rowKey = keyGenerator(currentRow)
         joinedRow.withLeft(currentRow)
-        val buildIter = hashedRelation.get(rowKey, null)
+        val buildIter = hashedRelation.get(rowKey)
         new RowIterator {
           private var found = false
           override def advanceNext(): Boolean = {
@@ -246,14 +246,14 @@ trait HashJoin extends JoinCodegenSupport {
     } else if (hashedRelation.keyIsUnique) {
       streamIter.filter { current =>
         val key = joinKeys(current)
-        lazy val matched = hashedRelation.getValue(key, null)
+        lazy val matched = hashedRelation.getValue(key)
         !key.anyNull && matched != null &&
           (condition.isEmpty || boundCondition(joinedRow(current, matched)))
       }
     } else {
       streamIter.filter { current =>
         val key = joinKeys(current)
-        lazy val buildIter = hashedRelation.get(key, null)
+        lazy val buildIter = hashedRelation.get(key)
         !key.anyNull && buildIter != null && (condition.isEmpty || buildIter.exists {
           (row: InternalRow) => boundCondition(joinedRow(current, row))
         })
@@ -271,7 +271,7 @@ trait HashJoin extends JoinCodegenSupport {
     if (hashedRelation.keyIsUnique) {
       streamIter.map { current =>
         val key = joinKeys(current)
-        lazy val matched = hashedRelation.getValue(key, null)
+        lazy val matched = hashedRelation.getValue(key)
         val exists = !key.anyNull && matched != null &&
           (condition.isEmpty || boundCondition(joinedRow(current, matched)))
         result.setBoolean(0, exists)
@@ -280,7 +280,7 @@ trait HashJoin extends JoinCodegenSupport {
     } else {
       streamIter.map { current =>
         val key = joinKeys(current)
-        lazy val buildIter = hashedRelation.get(key, null)
+        lazy val buildIter = hashedRelation.get(key)
         val exists = !key.anyNull && buildIter != null && (condition.isEmpty || buildIter.exists {
           (row: InternalRow) => boundCondition(joinedRow(current, row))
         })
@@ -304,14 +304,14 @@ trait HashJoin extends JoinCodegenSupport {
     if (hashedRelation.keyIsUnique) {
       streamIter.filter { current =>
         val key = joinKeys(current)
-        lazy val matched = hashedRelation.getValue(key, null)
+        lazy val matched = hashedRelation.getValue(key)
         key.anyNull || matched == null ||
           (condition.isDefined && !boundCondition(joinedRow(current, matched)))
       }
     } else {
       streamIter.filter { current =>
         val key = joinKeys(current)
-        lazy val buildIter = hashedRelation.get(key, null)
+        lazy val buildIter = hashedRelation.get(key)
         key.anyNull || buildIter == null || (condition.isDefined && !buildIter.exists {
           row => boundCondition(joinedRow(current, row))
         })
@@ -477,8 +477,7 @@ trait HashJoin extends JoinCodegenSupport {
          |// generate join key for stream side
          |${keyEv.code}
          |// find matches from HashedRelation
-         |UnsafeRow $matched = $anyNull ? null: (UnsafeRow)$relationTerm.getValue(${keyEv.value},
-         | null);
+         |UnsafeRow $matched = $anyNull ? null: (UnsafeRow)$relationTerm.getValue(${keyEv.value});
          |${checkCondition.trim}
          |if (!$conditionPassed) {
          |  $matched = null;
@@ -497,8 +496,7 @@ trait HashJoin extends JoinCodegenSupport {
          |// generate join key for stream side
          |${keyEv.code}
          |// find matches from HashRelation
-         |$iteratorCls $matches = $anyNull ? null : ($iteratorCls)$relationTerm.get(
-         |${keyEv.value}, null);
+         |$iteratorCls $matches = $anyNull ? null : ($iteratorCls)$relationTerm.get(${keyEv.value});
          |boolean $found = false;
          |// the last iteration of this loop is to emit an empty row if there is no matched rows.
          |while ($matches != null && $matches.hasNext() || !$found) {
@@ -593,7 +591,7 @@ trait HashJoin extends JoinCodegenSupport {
          |// Check if the key has nulls.
          |if (!($anyNull)) {
          |  // Check if the HashedRelation exists.
-         |  UnsafeRow $matched = (UnsafeRow)$relationTerm.getValue(${keyEv.value}, null);
+         |  UnsafeRow $matched = (UnsafeRow)$relationTerm.getValue(${keyEv.value});
          |  if ($matched != null) {
          |    // Evaluate the condition.
          |    $checkCondition {
@@ -672,8 +670,7 @@ trait HashJoin extends JoinCodegenSupport {
          |// generate join key for stream side
          |${keyEv.code}
          |// find matches from HashedRelation
-         |UnsafeRow $matched = $anyNull ? null: (UnsafeRow)$relationTerm.getValue(${keyEv.value},
-         | null);
+         |UnsafeRow $matched = $anyNull ? null: (UnsafeRow)$relationTerm.getValue(${keyEv.value});
          |boolean $existsVar = false;
          |if ($matched != null) {
          |  $checkCondition
@@ -688,8 +685,7 @@ trait HashJoin extends JoinCodegenSupport {
          |// generate join key for stream side
          |${keyEv.code}
          |// find matches from HashRelation
-         |$iteratorCls $matches = $anyNull ? null : ($iteratorCls)$relationTerm.get(
-         |${keyEv.value}, null);
+         |$iteratorCls $matches = $anyNull ? null : ($iteratorCls)$relationTerm.get(${keyEv.value});
          |boolean $existsVar = false;
          |if ($matches != null) {
          |  while (!$existsVar && $matches.hasNext()) {

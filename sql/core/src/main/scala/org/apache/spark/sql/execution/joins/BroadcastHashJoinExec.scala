@@ -200,7 +200,7 @@ case class BroadcastHashJoinExec(
               false
             } else {
               // Anti Join: Drop the row on the streamed side if it is a match on the build
-              hashed.get(lookupKey, null) == null
+              hashed.get(lookupKey) == null
             }
           })
         }
@@ -287,7 +287,7 @@ case class BroadcastHashJoinExec(
         s"""
            |// generate join key for stream side
            |${keyEv.code}
-           |if (!$anyNull && $relationTerm.getValue(${keyEv.value}, null) == null) {
+           |if (!$anyNull && $relationTerm.getValue(${keyEv.value}) == null) {
            |  $numOutput.add(1);
            |  ${consume(ctx, input)}
            |}

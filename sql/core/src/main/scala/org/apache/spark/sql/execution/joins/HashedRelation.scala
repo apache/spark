@@ -45,26 +45,26 @@ private[execution] sealed trait HashedRelation extends KnownSizeEstimation {
    *
    * Returns null if there is no matched rows.
    */
-  def get(key: InternalRow, location: AnyRef): Iterator[InternalRow]
+  def get(key: InternalRow): Iterator[InternalRow]
 
   /**
    * Returns matched rows for a key that has only one column with LongType.
    *
    * Returns null if there is no matched rows.
    */
-  def get(key: Long, location: AnyRef): Iterator[InternalRow] = {
+  def get(key: Long): Iterator[InternalRow] = {
     throw new UnsupportedOperationException
   }
 
   /**
    * Returns the matched single row.
    */
-  def getValue(key: InternalRow, location: AnyRef): InternalRow
+  def getValue(key: InternalRow): InternalRow
 
   /**
    * Returns the matched single row with key that have only one column of LongType.
    */
-  def getValue(key: Long, location: AnyRef): InternalRow = {
+  def getValue(key: Long): InternalRow = {
     throw new UnsupportedOperationException
   }
 
@@ -246,7 +246,7 @@ private[joins] class UnsafeHashedRelation(
   // re-used in getWithKeyIndex()/getValueWithKeyIndex()/valuesWithKeyIndex()
   val valueRowWithKeyIndex = new ValueRowWithKeyIndex
 
-  override def get(key: InternalRow, location: AnyRef): Iterator[InternalRow] = {
+  override def get(key: InternalRow): Iterator[InternalRow] = {
     val unsafeKey = key.asInstanceOf[UnsafeRow]
     val map = binaryMap  // avoid the compiler error
     val loc = new map.Location // this could be allocated in stack
@@ -267,7 +267,7 @@ private[joins] class UnsafeHashedRelation(
     }
   }
 
-  def getValue(key: InternalRow, location: AnyRef): InternalRow = {
+  def getValue(key: InternalRow): InternalRow = {
     val unsafeKey = key.asInstanceOf[UnsafeRow]
     val map = binaryMap  // avoid the compiler error
     val loc = new map.Location // this could be allocated in stack
@@ -677,13 +677,7 @@ private[execution] final class LongToUnsafeRowMap(val mm: TaskMemoryManager, cap
   /**
    * Returns the single UnsafeRow for given key, or null if not found.
    */
-  def getValue(key: Long, resultRow: UnsafeRow, locationWrapper: LongLocationWrapper): UnsafeRow = {
-    if (locationWrapper ne null) {
-      val loc = locationWrapper.getLocation
-      if (loc > 0) {
-        return getRow(loc, resultRow)
-      }
-    }
+  def getValue(key: Long, resultRow: UnsafeRow): UnsafeRow = {
     if (isDense) {
       if (key >= minKey && key <= maxKey) {
         val value = array((key - minKey).toInt)
@@ -741,7 +735,7 @@ private[execution] final class LongToUnsafeRowMap(val mm: TaskMemoryManager, cap
   /**
    * Returns an iterator for all the values for the given key, or null if no value found.
    */
-  def get(key: Long, resultRow: UnsafeRow, location: LongLocationWrapper): Iterator[UnsafeRow] = {
+  def get(key: Long, resultRow: UnsafeRow): Iterator[UnsafeRow] = {
     if (isDense) {
         if (key >= minKey && key <= maxKey) {
           val value = array((key - minKey).toInt)
@@ -1041,11 +1035,11 @@ class LongHashedRelation(
 
   override def estimatedSize: Long = map.getTotalMemoryConsumption
 
-  override def get(key: InternalRow, location: AnyRef): Iterator[InternalRow] = {
+  override def get(key: InternalRow): Iterator[InternalRow] = {
     if (key.isNullAt(0)) {
       null
     } else {
-      get(key.getLong(0), location)
+      get(key.getLong(0))
     }
   }
 
