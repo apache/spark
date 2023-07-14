@@ -912,7 +912,7 @@ The fraction of sec must be zero. Valid range is [0, 60]. If necessary set `<ans
 
 ### [INVALID_HANDLE](sql-error-conditions-invalid-handle-error-class.html)
 
-SQLSTATE: HY000
+[SQLSTATE: HY000](sql-error-conditions-sqlstates.html#class-HY-cli-specific-condition)
 
 The handle `<handle>` is invalid.
 
