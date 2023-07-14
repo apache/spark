@@ -3453,7 +3453,7 @@ class AdaptiveQueryExecSuite
     }
   }
 
-  test("SPARK-44065: Optimize BroadcastHashJoin skew when localShuffleReader is disabled") {
+  test("SPARK-44065: Optimize BroadcastHashJoin skew") {
     withSQLConf(
       SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
       SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
