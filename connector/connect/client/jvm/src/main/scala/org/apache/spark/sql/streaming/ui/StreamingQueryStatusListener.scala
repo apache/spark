@@ -34,12 +34,13 @@ import org.apache.spark.status.KVUtils.KVIndexParam
 import org.apache.spark.util.kvstore.KVIndex
 
 /**
- * A customized StreamingQueryListener used in structured streaming UI, which contains all
- * UI data for both active and inactive query.
+ * A customized StreamingQueryListener used in structured streaming UI, which contains all UI data
+ * for both active and inactive query.
  */
 private[sql] class StreamingQueryStatusListener(
     @transient val conf: SparkConf,
-    @transient val store: ElementTrackingStore) extends StreamingQueryListener {
+    @transient val store: ElementTrackingStore)
+    extends StreamingQueryListener {
 
   private val streamingProgressRetention =
     conf.get(StaticSQLConf.STREAMING_UI_RETAINED_PROGRESS_UPDATES)
@@ -60,7 +61,8 @@ private[sql] class StreamingQueryStatusListener(
     if (numInactiveQueries <= inactiveQueryStatusRetention) {
       return
     }
-    val toDelete = inactiveQueries.sortBy(_.endTimestamp.get)
+    val toDelete = inactiveQueries
+      .sortBy(_.endTimestamp.get)
       .take(numInactiveQueries - inactiveQueryStatusRetention)
     val runIds = toDelete.map { e =>
       store.delete(e.getClass, e.runId)
@@ -72,14 +74,15 @@ private[sql] class StreamingQueryStatusListener(
 
   override def onQueryStarted(event: StreamingQueryListener.QueryStartedEvent): Unit = {
     val startTimestamp = parseProgressTimestamp(event.timestamp)
-    store.write(new StreamingQueryData(
-      event.name,
-      event.id,
-      event.runId.toString,
-      isActive = true,
-      None,
-      startTimestamp
-    ), checkTriggers = true)
+    store.write(
+      new StreamingQueryData(
+        event.name,
+        event.id,
+        event.runId.toString,
+        isActive = true,
+        None,
+        startTimestamp),
+      checkTriggers = true)
   }
 
   override def onQueryProgress(event: StreamingQueryListener.QueryProgressEvent): Unit = {
@@ -100,19 +103,19 @@ private[sql] class StreamingQueryStatusListener(
 
   override def onQueryIdle(event: StreamingQueryListener.QueryIdleEvent): Unit = {}
 
-  override def onQueryTerminated(
-      event: StreamingQueryListener.QueryTerminatedEvent): Unit = {
+  override def onQueryTerminated(event: StreamingQueryListener.QueryTerminatedEvent): Unit = {
     val querySummary = store.read(classOf[StreamingQueryData], event.runId.toString)
     val curTime = System.currentTimeMillis()
-    store.write(new StreamingQueryData(
-      querySummary.name,
-      querySummary.id,
-      querySummary.runId,
-      isActive = false,
-      event.exception,
-      querySummary.startTimestamp,
-      Some(curTime)
-    ), checkTriggers = true)
+    store.write(
+      new StreamingQueryData(
+        querySummary.name,
+        querySummary.id,
+        querySummary.runId,
+        isActive = false,
+        event.exception,
+        querySummary.startTimestamp,
+        Some(curTime)),
+      checkTriggers = true)
     queryToProgress.remove(event.runId)
   }
 }
@@ -152,14 +155,12 @@ private[spark] class StreamingQueryProgressWrapper(val progress: StreamingQueryP
 }
 
 private[sql] object StreamingQueryProgressWrapper {
+
   /**
-   * Adding `timestamp` into unique id to support reporting `empty` query progress
-   * in which no data comes but with the same batchId.
+   * Adding `timestamp` into unique id to support reporting `empty` query progress in which no
+   * data comes but with the same batchId.
    */
-  def getUniqueId(
-      runId: UUID,
-      batchId: Long,
-      timestamp: String): String = {
+  def getUniqueId(runId: UUID, batchId: Long, timestamp: String): String = {
     s"${runId}_${batchId}_$timestamp"
   }
 }

@@ -32,6 +32,7 @@ import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.connect.artifact.SparkConnectArtifactManager
 import org.apache.spark.sql.connect.common.InvalidPlanInput
+import org.apache.spark.sql.streaming.StreamingQueryListener
 import org.apache.spark.util.Utils
 
 /**
@@ -46,6 +47,11 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
   // Mapping from relation ID (passed to client) to runtime dataframe. Used for callbacks like
   // foreachBatch() in Streaming. Lazy since most sessions don't need it.
   private lazy val dataFrameCache: ConcurrentMap[String, DataFrame] = new ConcurrentHashMap()
+
+  // Mapping from id to StreamingQueryListener. Used for methods like removeListener() in
+  // StreamingQueryManager.
+  private lazy val listenerCache: ConcurrentMap[String, StreamingQueryListener] =
+    new ConcurrentHashMap()
 
   private[connect] def createExecutePlanHolder(
       request: proto.ExecutePlanRequest): ExecutePlanHolder = {
@@ -151,6 +157,33 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
 
   private[connect] def removeCachedDataFrame(dfId: String): DataFrame = {
     dataFrameCache.remove(dfId)
+  }
+
+  /**
+   * Caches given StreamingQueryListener with the ID.
+   */
+  private[connect] def cacheListenerById(id: String, listener: StreamingQueryListener): Unit = {
+    if (listenerCache.putIfAbsent(id, listener) != null) {
+      SparkException.internalError(s"A listener is already associated with id $id")
+    }
+  }
+
+  /**
+   * Returns [[StreamingQueryListener]] cached for Listener ID `id`. If it is not found, throw
+   * [[InvalidPlanInput]].
+   */
+  private[connect] def getListenerOrThrow(id: String): StreamingQueryListener = {
+    Option(listenerCache.get(id))
+      .getOrElse {
+        throw InvalidPlanInput(s"No listener with id $id is found in the session $sessionId")
+      }
+  }
+
+  /**
+   * Removes corresponding StreamingQueryListener by ID.
+   */
+  private[connect] def removeCachedListener(id: String): StreamingQueryListener = {
+    listenerCache.remove(id)
   }
 }
 
