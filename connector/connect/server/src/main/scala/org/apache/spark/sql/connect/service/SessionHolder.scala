@@ -22,10 +22,9 @@ import java.util.UUID
 import java.util.concurrent.{ConcurrentHashMap, ConcurrentMap}
 
 import scala.collection.JavaConverters._
-import scala.util.control.NonFatal
+import scala.collection.mutable
 
-import org.apache.spark.JobArtifactSet
-import org.apache.spark.SparkException
+import org.apache.spark.{JobArtifactSet, SparkException, SparkSQLException}
 import org.apache.spark.connect.proto
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.DataFrame
@@ -56,10 +55,29 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
   private lazy val listenerCache: ConcurrentMap[String, StreamingQueryListener] =
     new ConcurrentHashMap()
 
-  private[connect] def createExecuteHolder(request: proto.ExecutePlanRequest): ExecuteHolder = {
-    val operationId = UUID.randomUUID().toString
-    val executePlanHolder = new ExecuteHolder(request, operationId, this)
-    assert(executions.putIfAbsent(operationId, executePlanHolder) == null)
+  private[connect] def createExecutePlanHolder(
+      request: proto.ExecutePlanRequest): ExecutePlanHolder = {
+    val operationId = if (request.hasOperationId) {
+      try {
+        UUID.fromString(request.getOperationId).toString
+      } catch {
+        case _: IllegalArgumentException =>
+          throw new SparkSQLException(
+            errorClass = "INVALID_HANDLE.FORMAT",
+            messageParameters = Map("handle" -> request.getOperationId)
+          )
+      }
+    } else {
+      UUID.randomUUID().toString
+    }
+    val executePlanHolder = ExecutePlanHolder(operationId, this, request)
+    val oldExecute = executePlanOperations.putIfAbsent(operationId, executePlanHolder)
+    if (oldExecute != null) {
+      throw new SparkSQLException(
+        errorClass = "INVALID_HANDLE.ALREADY_EXISTS",
+        messageParameters = Map("handle" -> operationId)
+      )
+    }
     executePlanHolder
   }
 
@@ -71,17 +89,39 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
     executions.remove(operationId)
   }
 
-  private[connect] def interruptAll(): Unit = {
-    executions.asScala.values.foreach { execute =>
-      // Eat exception while trying to interrupt a given execution and move forward.
-      try {
-        logDebug(s"Interrupting execution ${execute.operationId}")
+  /** Interrupt all executions in the session.
+   *  @return list of operationIds of interrupted executions */
+  private[connect] def interruptAll(): Seq[String] = {
+    val interruptedIds = new mutable.ArrayBuffer[String]()
+    executePlanOperations.asScala.values.foreach { execute =>
+      interruptedIds += execute.operationId
+      execute.interrupt()
+    }
+    interruptedIds.toSeq
+  }
+
+  /** Interrupt executions in the session with a given tag.
+   *  @return list of operationIds of interrupted executions */
+  private[connect] def interruptTag(tag: String): Seq[String] = {
+    val interruptedIds = new mutable.ArrayBuffer[String]()
+    executePlanOperations.asScala.values.foreach { execute =>
+      if (execute.userDefinedTags.contains(tag)) {
+        interruptedIds += execute.operationId
         execute.interrupt()
-      } catch {
-        case NonFatal(e) =>
-          logWarning(s"Exception $e while trying to interrupt execution ${execute.operationId}")
       }
     }
+    interruptedIds.toSeq
+  }
+
+  /** Interrupt the execution with the given operation_id
+   *  @return list of operationIds of interrupted executions (one element or empty) */
+  private[connect] def interruptOperation(operationId: String): Seq[String] = {
+    val interruptedIds = new mutable.ArrayBuffer[String]()
+    Option(executePlanOperations.get(operationId)).foreach { execute =>
+      interruptedIds += execute.operationId
+      execute.interrupt()
+    }
+    interruptedIds.toSeq
   }
 
   private[connect] lazy val artifactManager = new SparkConnectArtifactManager(this)

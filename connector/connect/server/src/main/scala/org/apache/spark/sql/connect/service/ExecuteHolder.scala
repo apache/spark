@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.connect.service
 
+import org.apache.spark.SparkContext
 import org.apache.spark.connect.proto
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.connect.execution.{ExecuteGrpcResponseSender, ExecuteResponseObserver, ExecuteThreadRunner}
@@ -36,6 +37,11 @@ private[connect] class ExecuteHolder(
       s"User_${sessionHolder.userId}_" +
       s"Session_${sessionHolder.sessionId}_" +
       s"Request_${operationId}"
+
+  val userDefinedTags: Seq[String] = request.getTagsList().asScala.map { tag =>
+    throwIfInvalidTag(tag)
+    tag
+  }
 
   val session = sessionHolder.session
 
@@ -88,5 +94,26 @@ private[connect] class ExecuteHolder(
    */
   def interrupt(): Unit = {
     runner.interrupt()
+  }
+
+  def tagToSparkJobTag(tag: String): String = {
+    "SparkConnectUserDefinedTag_" +
+      s"User_${sessionHolder.userId}_Session_${sessionHolder.sessionId}"
+  }
+
+  private def throwIfInvalidTag(tag: String) = {
+    // Same format rules apply to Spark Connect execution tags as to SparkContext job tags.
+    // see SparkContext.throwIfInvalidTag.
+    if (tag == null) {
+      throw new IllegalArgumentException("Spark Connect execution tag cannot be null.")
+    }
+    if (tag.contains(SparkContext.SPARK_JOB_TAGS_SEP)) {
+      throw new IllegalArgumentException(
+        s"Spark Connect execution tag cannot contain '${SparkContext.SPARK_JOB_TAGS_SEP}'.")
+    }
+    if (tag.isEmpty) {
+      throw new IllegalArgumentException(
+        "Spark Connect execution tag cannot be an empty string.")
+    }
   }
 }
