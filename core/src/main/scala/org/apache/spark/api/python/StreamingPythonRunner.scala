@@ -23,6 +23,7 @@ import java.net.Socket
 import scala.collection.JavaConverters._
 
 import org.apache.spark.SparkEnv
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.BUFFER_SIZE
 import org.apache.spark.internal.config.Python.{PYTHON_AUTH_SOCKET_TIMEOUT, PYTHON_USE_DAEMON}
 
@@ -33,7 +34,7 @@ private[spark] object StreamingPythonRunner {
   }
 }
 
-private[spark] class StreamingPythonRunner(func: PythonFunction) {
+private[spark] class StreamingPythonRunner(func: PythonFunction) extends Logging {
   private val conf = SparkEnv.get.conf
   protected val bufferSize: Int = conf.get(BUFFER_SIZE)
   protected val authSocketTimeout = conf.get(PYTHON_AUTH_SOCKET_TIMEOUT)
@@ -43,12 +44,8 @@ private[spark] class StreamingPythonRunner(func: PythonFunction) {
   protected val pythonVer: String = func.pythonVer
 
   def init(sessionId: String): (DataOutputStream, DataInputStream) = {
-    // scalastyle:off println
-    println(s"##### init python runner for sessionId=$sessionId")
-    println(s"##### init python runner pythonExec=$pythonExec")
-    // scalastyle:on println
+    log.info(s"Initializing Python runner (session: $sessionId ,pythonExec: $pythonExec")
 
-    val startTime = System.currentTimeMillis
     val env = SparkEnv.get
 
     val localdir = env.blockManager.diskBlockManager.localDirs.map(f => f.getPath()).mkString(",")
@@ -62,18 +59,15 @@ private[spark] class StreamingPythonRunner(func: PythonFunction) {
 
     // TODO: cache and reuse the pythonWorkerFactory
     val pythonWorkerFactory = new PythonWorkerFactory(pythonExec, envVars.asScala.toMap)
-    val (worker: Socket, pid: Option[Int]) = pythonWorkerFactory.createStreamingWorker()
+    val (worker: Socket, _) = pythonWorkerFactory.createStreamingWorker()
 
     val stream = new BufferedOutputStream(worker.getOutputStream, bufferSize)
     val dataOut = new DataOutputStream(stream)
 
     // TODO: verify python version
 
-    // send sessionID
+    // send sessionId
     PythonRDD.writeUTF(sessionId, dataOut)
-    // scalastyle:off println
-    println(s"##### sent sessionId to python")
-    // scalastyle:on println
 
     // send the user function to python process
     val command = func.command
@@ -81,18 +75,12 @@ private[spark] class StreamingPythonRunner(func: PythonFunction) {
     dataOut.write(command.toArray)
     dataOut.flush()
 
-    // scalastyle:off println
-    println(s"##### sent func to python")
-    // scalastyle:on println
-
     val dataIn = new DataInputStream(new BufferedInputStream(worker.getInputStream, bufferSize))
-    // scalastyle:off println
-    println(s"##### init dataIn")
-    // scalastyle:on println
 
     val resFromPython = dataIn.readInt()
+    log.info("Runner ")
     // scalastyle:off println
-    println(s"##### resFromPython = $resFromPython")
+    println(s"##")
     // scalastyle:on println
 
     (dataOut, dataIn)

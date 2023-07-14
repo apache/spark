@@ -495,18 +495,11 @@ class DataStreamWriter:
 
     foreach.__doc__ = PySparkDataStreamWriter.foreach.__doc__
 
-    # TODO (SPARK-42944): Implement and uncomment the doc
     def foreachBatch(self, func: Callable[["DataFrame", int], None]) -> "DataStreamWriter":
-        from pyspark.sql.connect.udf import UserDefinedFunction
-
-        udf_obj = UserDefinedFunction(
-            func,
-            returnType=StringType(),
-            evalType=PythonEvalType.SQL_BATCHED_UDF,
+        self._write_proto.foreach_batch.python_function.command = (
+            CloudPickleSerializer().dumps(func)
         )
-        udf_proto = udf_obj._build_common_inline_user_defined_function().to_plan_udf(self._session.client)
-        self._write_proto.for_each_batch.CopyFrom(udf_proto)
-
+        self._write_proto.foreach_batch.python_function.python_ver = "%d.%d" % sys.version_info[:2]
         return self
 
     foreachBatch.__doc__ = PySparkDataStreamWriter.foreachBatch.__doc__
