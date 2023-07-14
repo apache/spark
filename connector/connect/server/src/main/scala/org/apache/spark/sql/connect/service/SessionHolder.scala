@@ -45,7 +45,7 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
   val executions: ConcurrentMap[String, ExecuteHolder] =
     new ConcurrentHashMap[String, ExecuteHolder]()
 
-  val events: SessionEvents = SessionEvents(this, new SystemClock())
+  val eventManager: SessionEventsManager = SessionEventsManager(this, new SystemClock())
 
   // Mapping from relation ID (passed to client) to runtime dataframe. Used for callbacks like
   // foreachBatch() in Streaming. Lazy since most sessions don't need it.
@@ -102,7 +102,7 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
   def classloader: ClassLoader = artifactManager.classloader
 
   private[connect] def initializeSession(): Unit = {
-    events.postStarted()
+    eventManager.postStarted()
   }
 
   /**
@@ -111,7 +111,7 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
   private[connect] def expireSession(): Unit = {
     logDebug(s"Expiring session with userId: $userId and sessionId: $sessionId")
     artifactManager.cleanUpResources()
-    events.postClosed()
+    eventManager.postClosed()
   }
 
   /**

@@ -78,7 +78,7 @@ private[connect] class ExecuteThreadRunner(executeHolder: ExecuteHolder) extends
           // and different exceptions like InterruptedException, ClosedByInterruptException etc.
           // could be thrown.
           if (interrupted) {
-            executeHolder.events.postCanceled()
+            executeHolder.executeEventsManager.postCanceled()
             throw new SparkSQLException("OPERATION_CANCELED", Map.empty)
           } else {
             // Rethrown the original error.
@@ -93,14 +93,12 @@ private[connect] class ExecuteThreadRunner(executeHolder: ExecuteHolder) extends
         executeHolder.responseObserver,
         executeHolder.sessionHolder.userId,
         executeHolder.sessionHolder.sessionId,
-        Some(executeHolder.events))
+        Some(executeHolder.executeEventsManager).filter(_ => !interrupted))
     }
   }
 
   // Inner executeInternal is wrapped by execute() for error handling.
   private def executeInternal() = {
-    // start event must be received before a cancel event from interrupt
-    executeHolder.events.postStarted()
     // synchronized - check if already got interrupted while starting.
     synchronized {
       if (interrupted) {

@@ -35,7 +35,7 @@ import org.apache.spark.{SparkEnv, SparkException, SparkThrowable}
 import org.apache.spark.api.python.PythonException
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.connect.config.Connect
-import org.apache.spark.sql.connect.service.RequestEvents
+import org.apache.spark.sql.connect.service.ExecuteEventsManager
 import org.apache.spark.sql.connect.service.SparkConnectService
 import org.apache.spark.sql.internal.SQLConf
 
@@ -105,7 +105,7 @@ private[connect] object ErrorUtils extends Logging {
       observer: StreamObserver[V],
       userId: String,
       sessionId: String,
-      events: Option[RequestEvents] = None): PartialFunction[Throwable, Unit] = {
+      events: Option[ExecuteEventsManager] = None): PartialFunction[Throwable, Unit] = {
     val session =
       SparkConnectService
         .getOrCreateIsolatedSession(userId, sessionId)

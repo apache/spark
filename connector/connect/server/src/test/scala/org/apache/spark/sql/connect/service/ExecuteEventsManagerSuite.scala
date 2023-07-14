@@ -32,7 +32,10 @@ import org.apache.spark.sql.connect.planner.SparkConnectPlanTest
 import org.apache.spark.sql.internal.{SessionState, SQLConf}
 import org.apache.spark.util.ManualClock
 
-class RequestEventsSuite extends SparkFunSuite with MockitoSugar with SparkConnectPlanTest {
+class ExecuteEventsManagerSuite
+    extends SparkFunSuite
+    with MockitoSugar
+    with SparkConnectPlanTest {
 
   val DEFAULT_ERROR = "error"
   val DEFAULT_CLOCK = new ManualClock()
@@ -146,7 +149,7 @@ class RequestEventsSuite extends SparkFunSuite with MockitoSugar with SparkConne
           DEFAULT_CLOCK.getTimeMillis()))
   }
 
-  def setupEvents(): RequestEvents = {
+  def setupEvents(): ExecuteEventsManager = {
     val mockSession = mock[SparkSession]
     val sessionHolder = SessionHolder(DEFAULT_USER_ID, DEFAULT_SESSION_ID, mockSession)
     val mockContext = mock[SparkContext]
@@ -177,6 +180,6 @@ class RequestEventsSuite extends SparkFunSuite with MockitoSugar with SparkConne
 
     val executeHolder = new ExecuteHolder(executePlanRequest, DEFAULT_QUERY_ID, sessionHolder)
 
-    RequestEvents(executeHolder, DEFAULT_CLOCK)
+    ExecuteEventsManager(executeHolder, DEFAULT_CLOCK)
   }
 }

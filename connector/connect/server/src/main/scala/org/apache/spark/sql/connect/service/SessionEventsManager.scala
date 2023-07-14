@@ -28,7 +28,7 @@ import org.apache.spark.util.{Clock}
  * @param clock:
  *   Source of time for unit tests.
  */
-case class SessionEvents(sessionHolder: SessionHolder, clock: Clock) {
+case class SessionEventsManager(sessionHolder: SessionHolder, clock: Clock) {
 
   /**
    * Post @link org.apache.spark.sql.connect.service.SparkListenerConnectSessionStarted.

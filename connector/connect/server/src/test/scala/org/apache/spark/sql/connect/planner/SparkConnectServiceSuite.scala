@@ -357,6 +357,74 @@ class SparkConnectServiceSuite extends SharedSparkSession with MockitoSugar with
     }
   }
 
+  test("SPARK-43923: canceled request send events") {
+    withEvents { verifyEvents =>
+      val instance = new SparkConnectService(false)
+
+      // Add an always crashing UDF
+      val session = SparkConnectService.getOrCreateIsolatedSession("c1", "session").session
+      val sleep: Long => Long = { time =>
+        Thread.sleep(time)
+        time
+      }
+      session.udf.register("sleep", sleep)
+
+      val connect = new MockRemoteSession()
+      val context = proto.UserContext
+        .newBuilder()
+        .setUserId("c1")
+        .build()
+      val plan = proto.Plan
+        .newBuilder()
+        .setRoot(connect.sql("select sleep(10000)"))
+        .build()
+      val request = proto.ExecutePlanRequest
+        .newBuilder()
+        .setPlan(plan)
+        .setUserContext(context)
+        .setSessionId("session")
+        .build()
+
+      val thread = new Thread {
+        override def run {
+          Thread.sleep(1000)
+          instance.interrupt(
+            proto.InterruptRequest
+              .newBuilder()
+              .setSessionId("session")
+              .setUserContext(context)
+              .setInterruptType(proto.InterruptRequest.InterruptType.INTERRUPT_TYPE_ALL)
+              .build(),
+            new StreamObserver[proto.InterruptResponse] {
+              override def onNext(v: proto.InterruptResponse): Unit = {}
+
+              override def onError(throwable: Throwable): Unit = {}
+
+              override def onCompleted(): Unit = {}
+            })
+        }
+      }.start()
+      // The observer is executed inside this thread. So
+      // we can perform the checks inside the observer.
+      instance.executePlan(
+        request,
+        new StreamObserver[proto.ExecutePlanResponse] {
+          override def onNext(v: proto.ExecutePlanResponse): Unit = {
+            logInfo(s"$v")
+          }
+
+          override def onError(throwable: Throwable): Unit = {
+            verifyEvents.onCanceled
+          }
+
+          override def onCompleted(): Unit = {
+            fail("this should not complete")
+          }
+        })
+      verifyEvents.onCompleted()
+    }
+  }
+
   test("SPARK-41165: failures in the arrow collect path should not cause hangs") {
     withEvents { verifyEvents =>
       val instance = new SparkConnectService(false)
@@ -402,6 +470,7 @@ class SparkConnectServiceSuite extends SharedSparkSession with MockitoSugar with
             fail("this should not complete")
           }
         })
+      verifyEvents.onCompleted()
     }
   }
 
@@ -589,48 +658,55 @@ class SparkConnectServiceSuite extends SharedSparkSession with MockitoSugar with
         waitUntilEmpty()
         assert(listener.status == Status.Finished)
       }
-      assertNoErrors()
+      assertStatusExpected()
     }
     def onError(throwable: Throwable): Unit = {
       waitUntilEmpty()
-      assert(listener.status == Status.Failed)
-      assertNoErrors()
+      assert(listener.queryError.isDefined)
+      assertStatusExpected()
     }
     def onCompleted(): Unit = {
       waitUntilEmpty()
       assert(listener.status == Status.Closed)
-      assertNoErrors()
+      assertStatusExpected()
+    }
+    def onCanceled(): Unit = {
+      waitUntilEmpty()
+      assert(listener.canceled.contains(true))
+      assertStatusExpected()
     }
     def onSessionClosed(): Unit = {
       waitUntilEmpty()
       assert(listener.status == Status.SessionClosed)
-      assertNoErrors()
+      assertStatusExpected()
     }
     def onSessionStarted(): Unit = {
       waitUntilEmpty()
       assert(listener.status == Status.SessionStarted)
-      assertNoErrors()
+      assertStatusExpected()
     }
     def waitUntilEmpty(): Unit = {
       listenerBus.waitUntilEmpty(LISTENER_BUS_TIMEOUT)
     }
-    def assertNoErrors(): Unit = {
-      if (listener.error.isDefined) {
-        throw listener.error.get
+    def assertStatusExpected(): Unit = {
+      if (listener.statusError.isDefined) {
+        throw listener.statusError.get
       }
     }
   }
 
   class MockSparkListener() extends SparkListener {
     var status: Status = Status.Pending
-    var error: Option[Throwable] = None
+    var statusError: Option[Throwable] = None
+    var queryError: Option[String] = None
+    var canceled: Option[Boolean] = None
     override def onOtherEvent(event: SparkListenerEvent): Unit = {
       try {
         _onOtherEvent(event)
       } catch {
         case e: Throwable =>
           logError("Failed MockSparkListener assertion", e)
-          error = Some(e)
+          statusError = Some(e)
       }
     }
     def _onOtherEvent(event: SparkListenerEvent): Unit = {
@@ -667,6 +743,7 @@ class SparkConnectServiceSuite extends SharedSparkSession with MockitoSugar with
         case e: SparkListenerConnectOperationFailed =>
           logInfo(s"$e")
           status = Status.Failed
+          queryError = Some(e.errorMessage)
           assert(
             List(Status.Started, Status.Analyzed, Status.ReadyForExecution, Status.Finished)
               .find(s => s == prevStatus)
@@ -675,6 +752,7 @@ class SparkConnectServiceSuite extends SharedSparkSession with MockitoSugar with
         case e: SparkListenerConnectOperationCanceled =>
           logInfo(s"$e")
           status = Status.Canceled
+          canceled = Some(true)
           assert(
             List(
               Status.Started,
@@ -688,7 +766,11 @@ class SparkConnectServiceSuite extends SharedSparkSession with MockitoSugar with
         case e: SparkListenerConnectOperationClosed =>
           logInfo(s"$e")
           status = Status.Closed
-          assert(prevStatus == Status.Finished, s"$e")
+          assert(
+            List(Status.Finished, Status.Failed, Status.Canceled)
+              .find(s => s == prevStatus)
+              .isDefined,
+            s"$e")
         case e: SparkListenerConnectSessionClosed =>
           logInfo(s"$e")
           status = Status.SessionClosed

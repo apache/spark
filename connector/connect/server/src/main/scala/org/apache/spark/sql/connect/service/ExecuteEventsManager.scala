@@ -27,7 +27,7 @@ import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.connect.common.ProtoUtils
 import org.apache.spark.util.{Clock, Utils}
 
-object RequestEvents {
+object ExecuteEventsManager {
   // TODO: Make this configurable
   val MAX_STATEMENT_TEXT_SIZE = 65535
 }
@@ -40,7 +40,7 @@ object RequestEvents {
  * @param clock:
  *   Source of time for unit tests.
  */
-case class RequestEvents(executeHolder: ExecuteHolder, clock: Clock) {
+case class ExecuteEventsManager(executeHolder: ExecuteHolder, clock: Clock) {
 
   private def operationId = executeHolder.operationId
 
@@ -74,7 +74,7 @@ case class RequestEvents(executeHolder: ExecuteHolder, clock: Clock) {
         request.getUserContext.getUserName,
         Utils.redact(
           sessionHolder.session.sessionState.conf.stringRedactionPattern,
-          ProtoUtils.abbreviate(plan, RequestEvents.MAX_STATEMENT_TEXT_SIZE).toString),
+          ProtoUtils.abbreviate(plan, ExecuteEventsManager.MAX_STATEMENT_TEXT_SIZE).toString),
         Some(request)))
   }
 
