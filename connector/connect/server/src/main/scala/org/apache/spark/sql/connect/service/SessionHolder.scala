@@ -51,7 +51,7 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
   // Mapping from id to StreamingQueryListener. Used for methods like removeListener() in
   // StreamingQueryManager.
   private lazy val listenerCache: ConcurrentMap[String, StreamingQueryListener] =
-  new ConcurrentHashMap()
+    new ConcurrentHashMap()
 
   private[connect] def createExecuteHolder(request: proto.ExecutePlanRequest): ExecuteHolder = {
     val operationId = UUID.randomUUID().toString
