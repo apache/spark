@@ -34,7 +34,7 @@ from itertools import zip_longest
 from pyspark import SparkContext, SparkConf
 from pyspark.errors import PySparkAssertionError, PySparkException
 from pyspark.find_spark_home import _find_spark_home
-from pyspark.sql.dataframe import DataFrame as DataFrame
+from pyspark.sql.dataframe import DataFrame
 from pyspark.sql import Row
 from pyspark.sql.types import StructType, AtomicType
 
@@ -264,21 +264,17 @@ def assertDataFrameEqual(
     PySparkAssertionError: [DIFFERENT_ROWS] Results do not match: ( 66.667 % )
     [df]
     Row(id='1', amount=1000.0)
-    <BLANKLINE>
+
     [expected]
     Row(id='1', amount=1001.0)
-    <BLANKLINE>
-    ********************
-    <BLANKLINE>
+
+
     [df]
     Row(id='3', amount=2000.0)
     <BLANKLINE>
+
     [expected]
     Row(id='3', amount=2003.0)
-    <BLANKLINE>
-    ********************
-    <BLANKLINE>
-    <BLANKLINE>
     """
     if df is None and expected is None:
         return True
@@ -291,8 +287,12 @@ def assertDataFrameEqual(
 
         if not isinstance(df, DataFrame) and not isinstance(df, ConnectDataFrame):
             raise PySparkAssertionError(
-                error_class="UNSUPPORTED_DATA_TYPE",
-                message_parameters={"data_type": type(df)},
+                error_class="INVALID_TYPE_DF_EQUALITY_ARG",
+                message_parameters={
+                    "expected_type": DataFrame,
+                    "arg_name": "df",
+                    "actual_type": type(df),
+                },
             )
         elif (
             not isinstance(expected, DataFrame)
@@ -300,19 +300,31 @@ def assertDataFrameEqual(
             and not isinstance(expected, List)
         ):
             raise PySparkAssertionError(
-                error_class="UNSUPPORTED_DATA_TYPE",
-                message_parameters={"data_type": type(expected)},
+                error_class="INVALID_TYPE_DF_EQUALITY_ARG",
+                message_parameters={
+                    "expected_type": Union[DataFrame, List[Row]],
+                    "arg_name": "expected",
+                    "actual_type": type(expected),
+                },
             )
     except Exception:
         if not isinstance(df, DataFrame):
             raise PySparkAssertionError(
-                error_class="UNSUPPORTED_DATA_TYPE",
-                message_parameters={"data_type": type(df)},
+                error_class="INVALID_TYPE_DF_EQUALITY_ARG",
+                message_parameters={
+                    "expected_type": DataFrame,
+                    "arg_name": "df",
+                    "actual_type": type(df),
+                },
             )
         elif not isinstance(expected, DataFrame) and not isinstance(expected, List):
             raise PySparkAssertionError(
-                error_class="UNSUPPORTED_DATA_TYPE",
-                message_parameters={"data_type": type(expected)},
+                error_class="INVALID_TYPE_DF_EQUALITY_ARG",
+                message_parameters={
+                    "expected_type": Union[DataFrame, List[Row]],
+                    "arg_name": "expected",
+                    "actual_type": type(expected),
+                },
             )
 
     # special cases: empty datasets, datasets with 0 columns

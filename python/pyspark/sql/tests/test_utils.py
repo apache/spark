@@ -25,6 +25,7 @@ from pyspark.errors import (
 )
 from pyspark.testing.utils import assertDataFrameEqual
 from pyspark.testing.sqlutils import ReusedSQLTestCase
+from pyspark.sql import Row
 import pyspark.sql.functions as F
 from pyspark.sql.functions import to_date, unix_timestamp, from_unixtime
 from pyspark.sql.types import (
@@ -38,6 +39,7 @@ from pyspark.sql.types import (
     StructField,
     IntegerType,
 )
+from pyspark.sql.dataframe import DataFrame
 
 
 class UtilsTestsMixin:
@@ -501,8 +503,12 @@ class UtilsTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            error_class="UNSUPPORTED_DATA_TYPE",
-            message_parameters={"data_type": pd.DataFrame},
+            error_class="INVALID_TYPE_DF_EQUALITY_ARG",
+            message_parameters={
+                "expected_type": DataFrame,
+                "arg_name": "df",
+                "actual_type": pd.DataFrame,
+            },
         )
 
         with self.assertRaises(PySparkAssertionError) as pe:
@@ -510,8 +516,12 @@ class UtilsTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            error_class="UNSUPPORTED_DATA_TYPE",
-            message_parameters={"data_type": pd.DataFrame},
+            error_class="INVALID_TYPE_DF_EQUALITY_ARG",
+            message_parameters={
+                "expected_type": DataFrame,
+                "arg_name": "df",
+                "actual_type": pd.DataFrame,
+            },
         )
 
     def test_assert_error_non_pyspark_df(self):
@@ -523,8 +533,12 @@ class UtilsTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            error_class="UNSUPPORTED_DATA_TYPE",
-            message_parameters={"data_type": type(dict1)},
+            error_class="INVALID_TYPE_DF_EQUALITY_ARG",
+            message_parameters={
+                "expected_type": DataFrame,
+                "arg_name": "df",
+                "actual_type": type(dict1),
+            },
         )
 
         with self.assertRaises(PySparkAssertionError) as pe:
@@ -532,8 +546,12 @@ class UtilsTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            error_class="UNSUPPORTED_DATA_TYPE",
-            message_parameters={"data_type": type(dict1)},
+            error_class="INVALID_TYPE_DF_EQUALITY_ARG",
+            message_parameters={
+                "expected_type": DataFrame,
+                "arg_name": "df",
+                "actual_type": type(dict1),
+            },
         )
 
     def test_row_order_ignored(self):
