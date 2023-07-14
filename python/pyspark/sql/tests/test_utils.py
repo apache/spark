@@ -39,7 +39,6 @@ from pyspark.sql.types import (
     IntegerType,
     BooleanType,
 )
-from pyspark.sql.utils import is_remote
 
 import difflib
 
@@ -153,7 +152,7 @@ class UtilsTestsMixin:
         percent_diff = (1 / 2) * 100
         expected_error_message += "( %.5f %% )" % percent_diff
         diff_msg = (
-            "[df]"
+            "[actual]"
             + "\n"
             + str(df1.collect()[1])
             + "\n\n"
@@ -296,7 +295,7 @@ class UtilsTestsMixin:
         percent_diff = (1 / 2) * 100
         expected_error_message += "( %.5f %% )" % percent_diff
         diff_msg = (
-            "[df]"
+            "[actual]"
             + "\n"
             + str(df1.collect()[1])
             + "\n\n"
@@ -600,7 +599,7 @@ class UtilsTestsMixin:
         percent_diff = (1 / 2) * 100
         expected_error_message += "( %.5f %% )" % percent_diff
         diff_msg = (
-            "[df]"
+            "[actual]"
             + "\n"
             + str(df1.collect()[1])
             + "\n\n"
@@ -724,7 +723,7 @@ class UtilsTestsMixin:
         percent_diff = (2 / 2) * 100
         expected_error_message += "( %.5f %% )" % percent_diff
         diff_msg = (
-            "[df]"
+            "[actual]"
             + "\n"
             + str(df1.collect()[0])
             + "\n\n"
@@ -736,7 +735,7 @@ class UtilsTestsMixin:
             + "\n\n"
         )
         diff_msg += (
-            "[df]"
+            "[actual]"
             + "\n"
             + str(df1.collect()[1])
             + "\n\n"
@@ -831,7 +830,7 @@ class UtilsTestsMixin:
         percent_diff = (2 / 3) * 100
         expected_error_message += "( %.5f %% )" % percent_diff
         diff_msg = (
-            "[df]"
+            "[actual]"
             + "\n"
             + str(df1.collect()[0])
             + "\n\n"
@@ -843,7 +842,7 @@ class UtilsTestsMixin:
             + "\n\n"
         )
         diff_msg += (
-            "[df]"
+            "[actual]"
             + "\n"
             + str(df1.collect()[2])
             + "\n\n"
@@ -880,28 +879,17 @@ class UtilsTestsMixin:
                 (1, 1000),
                 (2, 3000),
             ],
-            schema=["id", "amount"],
+            schema=["id", "number"],
         )
         df2 = self.spark.createDataFrame(
             data=[
                 ("1", 1000),
-                ("2", 3000),
+                ("2", 5000),
             ],
             schema=["id", "amount"],
         )
 
-        if is_remote():
-            # spark connect
-            actual_schema_tree = df1._tree_string()
-            expected_schema_tree = df2._tree_string()
-        else:
-            actual_schema_tree = df1._jdf.schema().treeString()
-            expected_schema_tree = df2._jdf.schema().treeString()
-
-        actual_schema_lst = actual_schema_tree.splitlines()
-        expected_schema_lst = expected_schema_tree.splitlines()
-
-        generated_diff = difflib.ndiff(actual_schema_lst, expected_schema_lst)
+        generated_diff = difflib.ndiff(str(df1.schema).splitlines(), str(df2.schema).splitlines())
 
         expected_error_msg = "\n".join(generated_diff)
 
@@ -931,18 +919,7 @@ class UtilsTestsMixin:
             schema=["id", "amount", "letter"],
         )
 
-        if is_remote():
-            # spark connect
-            actual_schema_tree = df1._tree_string()
-            expected_schema_tree = df2._tree_string()
-        else:
-            actual_schema_tree = df1._jdf.schema().treeString()
-            expected_schema_tree = df2._jdf.schema().treeString()
-
-        actual_schema_lst = actual_schema_tree.splitlines()
-        expected_schema_lst = expected_schema_tree.splitlines()
-
-        generated_diff = difflib.ndiff(actual_schema_lst, expected_schema_lst)
+        generated_diff = difflib.ndiff(str(df1.schema).splitlines(), str(df2.schema).splitlines())
 
         expected_error_msg = "\n".join(generated_diff)
 
@@ -989,18 +966,7 @@ class UtilsTestsMixin:
         s1 = StructType([StructField("names", ArrayType(IntegerType(), True), True)])
         s2 = StructType([StructField("names", ArrayType(DoubleType(), False), False)])
 
-        if is_remote():
-            # spark connect
-            actual_schema_tree = self.spark.createDataFrame([], s1)._tree_string()
-            expected_schema_tree = self.spark.createDataFrame([], s2)._tree_string()
-        else:
-            actual_schema_tree = self.spark.createDataFrame([], s1)._jdf.schema().treeString()
-            expected_schema_tree = self.spark.createDataFrame([], s2)._jdf.schema().treeString()
-
-        actual_schema_lst = actual_schema_tree.splitlines()
-        expected_schema_lst = expected_schema_tree.splitlines()
-
-        generated_diff = difflib.ndiff(actual_schema_lst, expected_schema_lst)
+        generated_diff = difflib.ndiff(str(s1).splitlines(), str(s2).splitlines())
 
         expected_error_msg = "\n".join(generated_diff)
 
@@ -1021,18 +987,7 @@ class UtilsTestsMixin:
             [StructField("names", StructType([StructField("age", IntegerType(), True)]), True)]
         )
 
-        if is_remote():
-            # spark connect
-            actual_schema_tree = self.spark.createDataFrame([], s1)._tree_string()
-            expected_schema_tree = self.spark.createDataFrame([], s2)._tree_string()
-        else:
-            actual_schema_tree = self.spark.createDataFrame([], s1)._jdf.schema().treeString()
-            expected_schema_tree = self.spark.createDataFrame([], s2)._jdf.schema().treeString()
-
-        actual_schema_lst = actual_schema_tree.splitlines()
-        expected_schema_lst = expected_schema_tree.splitlines()
-
-        generated_diff = difflib.ndiff(actual_schema_lst, expected_schema_lst)
+        generated_diff = difflib.ndiff(str(s1).splitlines(), str(s2).splitlines())
 
         expected_error_msg = "\n".join(generated_diff)
 
@@ -1076,18 +1031,7 @@ class UtilsTestsMixin:
             ]
         )
 
-        if is_remote():
-            # spark connect
-            actual_schema_tree = self.spark.createDataFrame([], s1)._tree_string()
-            expected_schema_tree = self.spark.createDataFrame([], s2)._tree_string()
-        else:
-            actual_schema_tree = self.spark.createDataFrame([], s1)._jdf.schema().treeString()
-            expected_schema_tree = self.spark.createDataFrame([], s2)._jdf.schema().treeString()
-
-        actual_schema_lst = actual_schema_tree.splitlines()
-        expected_schema_lst = expected_schema_tree.splitlines()
-
-        generated_diff = difflib.ndiff(actual_schema_lst, expected_schema_lst)
+        generated_diff = difflib.ndiff(str(s1).splitlines(), str(s2).splitlines())
 
         expected_error_msg = "\n".join(generated_diff)
 
@@ -1230,7 +1174,7 @@ class UtilsTestsMixin:
         percent_diff = (2 / 2) * 100
         expected_error_message += "( %.5f %% )" % percent_diff
         diff_msg = (
-            "[df]"
+            "[actual]"
             + "\n"
             + str(df1.collect()[0])
             + "\n\n"
@@ -1242,7 +1186,7 @@ class UtilsTestsMixin:
             + "\n\n"
         )
         diff_msg += (
-            "[df]"
+            "[actual]"
             + "\n"
             + str(df1.collect()[1])
             + "\n\n"
