@@ -31,7 +31,141 @@ if should_test_connect:
     from pyspark.sql.connect.client import ChannelBuilder
 
 
-class ArtifactTests(ReusedConnectTestCase):
+class ArtifactTestsMixin:
+    def check_add_pyfile(self, spark_session):
+        with tempfile.TemporaryDirectory() as d:
+            pyfile_path = os.path.join(d, "my_pyfile.py")
+            with open(pyfile_path, "w") as f:
+                f.write("my_func = lambda: 10")
+
+            @udf("int")
+            def func(x):
+                import my_pyfile
+
+                return my_pyfile.my_func()
+
+            spark_session.addArtifacts(pyfile_path, pyfile=True)
+            self.assertEqual(spark_session.range(1).select(func("id")).first()[0], 10)
+
+    def test_add_pyfile(self):
+        self.check_add_pyfile(self.spark)
+
+        # Test multi sessions. Should be able to add the same
+        # file from different session.
+        self.check_add_pyfile(
+            SparkSession.builder.remote(f"sc://localhost:{ChannelBuilder.default_port()}").create()
+        )
+
+    def check_add_zipped_package(self, spark_session):
+        with tempfile.TemporaryDirectory() as d:
+            package_path = os.path.join(d, "my_zipfile")
+            os.mkdir(package_path)
+            pyfile_path = os.path.join(package_path, "__init__.py")
+            with open(pyfile_path, "w") as f:
+                _ = f.write("my_func = lambda: 5")
+            shutil.make_archive(package_path, "zip", d, "my_zipfile")
+
+            @udf("long")
+            def func(x):
+                import my_zipfile
+
+                return my_zipfile.my_func()
+
+            spark_session.addArtifacts(f"{package_path}.zip", pyfile=True)
+            self.assertEqual(spark_session.range(1).select(func("id")).first()[0], 5)
+
+    def test_add_zipped_package(self):
+        self.check_add_zipped_package(self.spark)
+
+        # Test multi sessions. Should be able to add the same
+        # file from different session.
+        self.check_add_zipped_package(
+            SparkSession.builder.remote(f"sc://localhost:{ChannelBuilder.default_port()}").create()
+        )
+
+    def check_add_archive(self, spark_session):
+        with tempfile.TemporaryDirectory() as d:
+            archive_path = os.path.join(d, "my_archive")
+            os.mkdir(archive_path)
+            pyfile_path = os.path.join(archive_path, "my_file.txt")
+            with open(pyfile_path, "w") as f:
+                _ = f.write("hello world!")
+            shutil.make_archive(archive_path, "zip", d, "my_archive")
+
+            # Should addArtifact first to make sure state is set,
+            # and 'root' can be found properly.
+            spark_session.addArtifacts(f"{archive_path}.zip#my_files", archive=True)
+
+            root = self.root()
+
+            @udf("string")
+            def func(x):
+                with open(
+                    os.path.join(root, "my_files", "my_archive", "my_file.txt"),
+                    "r",
+                ) as my_file:
+                    return my_file.read().strip()
+
+            self.assertEqual(spark_session.range(1).select(func("id")).first()[0], "hello world!")
+
+    def test_add_archive(self):
+        self.check_add_archive(self.spark)
+
+        # Test multi sessions. Should be able to add the same
+        # file from different session.
+        self.check_add_archive(
+            SparkSession.builder.remote(f"sc://localhost:{ChannelBuilder.default_port()}").create()
+        )
+
+    def check_add_file(self, spark_session):
+        with tempfile.TemporaryDirectory() as d:
+            file_path = os.path.join(d, "my_file.txt")
+            with open(file_path, "w") as f:
+                f.write("Hello world!!")
+
+            # Should addArtifact first to make sure state is set,
+            # and 'root' can be found properly.
+            spark_session.addArtifacts(file_path, file=True)
+
+            root = self.root()
+
+            @udf("string")
+            def func(x):
+                with open(os.path.join(root, "my_file.txt"), "r") as my_file:
+                    return my_file.read().strip()
+
+            self.assertEqual(spark_session.range(1).select(func("id")).first()[0], "Hello world!!")
+
+    def test_add_file(self):
+        self.check_add_file(self.spark)
+
+        # Test multi sessions. Should be able to add the same
+        # file from different session.
+        self.check_add_file(
+            SparkSession.builder.remote(f"sc://localhost:{ChannelBuilder.default_port()}").create()
+        )
+
+
+class ArtifactTests(ReusedConnectTestCase, ArtifactTestsMixin):
+    @classmethod
+    def root(cls):
+        # In local mode, the file location is the same as Driver
+        # The executors are running in a thread.
+        jvm = SparkSession._instantiatedSession._jvm
+        current_uuid = (
+            getattr(
+                getattr(
+                    jvm.org.apache.spark,  # type: ignore[union-attr]
+                    "JobArtifactSet$",
+                ),
+                "MODULE$",
+            )
+            .lastSeenState()
+            .get()
+            .uuid()
+        )
+        return os.path.join(SparkFiles.getRootDirectory(), current_uuid)
+
     @classmethod
     def setUpClass(cls):
         super(ArtifactTests, cls).setUpClass()
@@ -230,117 +364,6 @@ class ArtifactTests(ReusedConnectTestCase):
             self.assertEqual(artifact2.data.crc, crc)
             self.assertEqual(artifact2.data.data, data)
 
-    def check_add_pyfile(self, spark_session):
-        with tempfile.TemporaryDirectory() as d:
-            pyfile_path = os.path.join(d, "my_pyfile.py")
-            with open(pyfile_path, "w") as f:
-                f.write("my_func = lambda: 10")
-
-            @udf("long")
-            def func(x):
-                import my_pyfile
-
-                return my_pyfile.my_func()
-
-            spark_session.addArtifacts(pyfile_path, pyfile=True)
-            self.assertEqual(spark_session.range(1).select(func("id")).first()[0], 10)
-
-    @unittest.skip("SPARK-44348: Reenable Session-based artifact test cases")
-    def test_add_pyfile(self):
-        self.check_add_pyfile(self.spark)
-
-        # Test multi sessions. Should be able to add the same
-        # file from different session.
-        self.check_add_pyfile(
-            SparkSession.builder.remote(f"sc://localhost:{ChannelBuilder.default_port()}").create()
-        )
-
-    def check_add_zipped_package(self, spark_session):
-        with tempfile.TemporaryDirectory() as d:
-            package_path = os.path.join(d, "my_zipfile")
-            os.mkdir(package_path)
-            pyfile_path = os.path.join(package_path, "__init__.py")
-            with open(pyfile_path, "w") as f:
-                _ = f.write("my_func = lambda: 5")
-            shutil.make_archive(package_path, "zip", d, "my_zipfile")
-
-            @udf("long")
-            def func(x):
-                import my_zipfile
-
-                return my_zipfile.my_func()
-
-            spark_session.addArtifacts(f"{package_path}.zip", pyfile=True)
-            self.assertEqual(spark_session.range(1).select(func("id")).first()[0], 5)
-
-    @unittest.skip("SPARK-44348: Reenable Session-based artifact test cases")
-    def test_add_zipped_package(self):
-        self.check_add_zipped_package(self.spark)
-
-        # Test multi sessions. Should be able to add the same
-        # file from different session.
-        self.check_add_zipped_package(
-            SparkSession.builder.remote(f"sc://localhost:{ChannelBuilder.default_port()}").create()
-        )
-
-    def check_add_archive(self, spark_session):
-        with tempfile.TemporaryDirectory() as d:
-            archive_path = os.path.join(d, "my_archive")
-            os.mkdir(archive_path)
-            pyfile_path = os.path.join(archive_path, "my_file.txt")
-            with open(pyfile_path, "w") as f:
-                _ = f.write("hello world!")
-            shutil.make_archive(archive_path, "zip", d, "my_archive")
-
-            @udf("string")
-            def func(x):
-                with open(
-                    os.path.join(
-                        SparkFiles.getRootDirectory(), "my_files", "my_archive", "my_file.txt"
-                    ),
-                    "r",
-                ) as my_file:
-                    return my_file.read().strip()
-
-            spark_session.addArtifacts(f"{archive_path}.zip#my_files", archive=True)
-            self.assertEqual(spark_session.range(1).select(func("id")).first()[0], "hello world!")
-
-    @unittest.skip("SPARK-44348: Reenable Session-based artifact test cases")
-    def test_add_archive(self):
-        self.check_add_archive(self.spark)
-
-        # Test multi sessions. Should be able to add the same
-        # file from different session.
-        self.check_add_archive(
-            SparkSession.builder.remote(f"sc://localhost:{ChannelBuilder.default_port()}").create()
-        )
-
-    def check_add_file(self, spark_session):
-        with tempfile.TemporaryDirectory() as d:
-            file_path = os.path.join(d, "my_file.txt")
-            with open(file_path, "w") as f:
-                f.write("Hello world!!")
-
-            @udf("string")
-            def func(x):
-                with open(
-                    os.path.join(SparkFiles.getRootDirectory(), "my_file.txt"), "r"
-                ) as my_file:
-                    return my_file.read().strip()
-
-            spark_session.addArtifacts(file_path, file=True)
-            self.assertEqual(spark_session.range(1).select(func("id")).first()[0], "Hello world!!")
-
-    @unittest.skip("SPARK-44348: Reenable Session-based artifact test cases")
-    def test_add_file(self):
-        self.check_add_file(self.spark)
-
-        # Test multi sessions. Should be able to add the same
-        # file from different session.
-        self.check_add_file(
-            SparkSession.builder.remote(f"sc://localhost:{ChannelBuilder.default_port()}").create()
-        )
-
     def test_copy_from_local_to_fs(self):
         with tempfile.TemporaryDirectory() as d:
             with tempfile.TemporaryDirectory() as d2:
@@ -364,6 +387,23 @@ class ArtifactTests(ReusedConnectTestCase):
         actualHash = self.artifact_manager.cache_artifact(blob)
         self.assertEqual(actualHash, expected_hash)
         self.assertEqual(self.artifact_manager.is_cached_artifact(expected_hash), True)
+
+
+class LocalClusterArtifactTests(ReusedConnectTestCase, ArtifactTestsMixin):
+    @classmethod
+    def conf(cls):
+        return (
+            super().conf().set("spark.driver.memory", "512M").set("spark.executor.memory", "512M")
+        )
+
+    @classmethod
+    def root(cls):
+        # In local cluster, we can mimic the production usage.
+        return "."
+
+    @classmethod
+    def master(cls):
+        return "local-cluster[2,2,512]"
 
 
 if __name__ == "__main__":

@@ -195,7 +195,7 @@ def _invoke_higher_order_function(
 
     :param name: Name of the expression
     :param cols: a list of columns
-    :param funs: a list of((*Column) -> Column functions.
+    :param funs: a list of (*Column) -> Column functions.
 
     :return: a Column
     """

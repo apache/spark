@@ -55,6 +55,7 @@ except ImportError:
     # No NumPy, but that's okay, we'll skip those tests
     pass
 
+__all__ = ["assertDataFrameEqual"]
 
 SPARK_HOME = _find_spark_home()
 
@@ -221,61 +222,80 @@ class PySparkErrorTestUtils:
         )
 
 
-def assertDataFrameEqual(df: DataFrame, expected: DataFrame, check_row_order: bool = False):
+def assertDataFrameEqual(
+    df: DataFrame,
+    expected: Union[DataFrame, List[Row]],
+    checkRowOrder: bool = False,
+    rtol: float = 1e-5,
+    atol: float = 1e-8,
+):
     """
-    A util function to assert equality between DataFrames `df` and `expected`, with
-    optional parameter `check_row_order`.
+    A util function to assert equality between `df` (DataFrame) and `expected`
+    (either DataFrame or list of Rows), with optional parameter `checkRowOrder`.
 
     .. versionadded:: 3.5.0
-
-    For float values, assert approximate equality (1e-5 by default).
 
     Parameters
     ----------
     df : DataFrame
         The DataFrame that is being compared or tested.
-
-    expected : DataFrame
+    expected : DataFrame or list of Rows
         The expected result of the operation, for comparison with the actual result.
-
-    check_row_order : bool, optional
+    checkRowOrder : bool, optional
         A flag indicating whether the order of rows should be considered in the comparison.
         If set to `False` (default), the row order is not taken into account.
         If set to `True`, the order of rows is important and will be checked during comparison.
+        (See Notes)
+    rtol : float, optional
+        The relative tolerance, used in asserting approximate equality for float values in df
+        and expected. Set to 1e-5 by default. (See Notes)
+    atol : float, optional
+        The absolute tolerance, used in asserting approximate equality for float values in df
+        and expected. Set to 1e-8 by default. (See Notes)
+
+    Notes
+    -----
+    For checkRowOrder, note that PySpark DataFrame ordering is non-deterministic, unless
+    explicitly sorted.
+
+    For DataFrames with float values, assertDataFrame asserts approximate equality.
+    Two float values a and b are approximately equal if the following equation is True:
+
+    ``absolute(a - b) <= (atol + rtol * absolute(b))``.
 
     Examples
     --------
-    >>> from pyspark.sql import SparkSession
-    >>> spark = SparkSession.builder.appName("assertDataFrameEqual example")\
-        .config("spark.some.config.option", "some-value").getOrCreate()
     >>> df1 = spark.createDataFrame(data=[("1", 1000), ("2", 3000)], schema=["id", "amount"])
     >>> df2 = spark.createDataFrame(data=[("1", 1000), ("2", 3000)], schema=["id", "amount"])
-    >>> assertDataFrameEqual(df1, df2) # pass
-    >>> df1 = spark.createDataFrame(data=[("1", 1000.00), ("2", 3000.00), ("3", 2000.00)], \
-        schema=["id", "amount"])
-    >>> df2 = spark.createDataFrame(data=[("1", 1001.00), ("2", 3000.00), ("3", 2003.00)], \
-        schema=["id", "amount"])
-    >>> assertDataFrameEqual(df1, df2) # fail  # doctest: +IGNORE_EXCEPTION_DETAIL
+    >>> assertDataFrameEqual(df1, df2)
+
+    Pass, DataFrames are identical
+
+    >>> df1 = spark.createDataFrame(data=[("1", 0.1), ("2", 3.23)], schema=["id", "amount"])
+    >>> df2 = spark.createDataFrame(data=[("1", 0.109), ("2", 3.23)], schema=["id", "amount"])
+    >>> assertDataFrameEqual(df1, df2, rtol=1e-1)
+
+    Pass, DataFrames are approx equal by rtol
+
+    >>> df1 = spark.createDataFrame(data=[("1", 1000.00), ("2", 3000.00), ("3", 2000.00)],
+    ... schema=["id", "amount"])
+    >>> df2 = spark.createDataFrame(data=[("1", 1001.00), ("2", 3000.00), ("3", 2003.00)],
+    ... schema=["id", "amount"])
+    >>> assertDataFrameEqual(df1, df2)  # doctest: +IGNORE_EXCEPTION_DETAIL
     Traceback (most recent call last):
     ...
     PySparkAssertionError: [DIFFERENT_ROWS] Results do not match: ( 66.667 % )
     [df]
     Row(id='1', amount=1000.0)
-    <BLANKLINE>
+
     [expected]
     Row(id='1', amount=1001.0)
-    <BLANKLINE>
-    ********************
-    <BLANKLINE>
+
     [df]
     Row(id='3', amount=2000.0)
-    <BLANKLINE>
+
     [expected]
     Row(id='3', amount=2003.0)
-    <BLANKLINE>
-    ********************
-    <BLANKLINE>
-    <BLANKLINE>
     """
     if df is None and expected is None:
         return True
@@ -291,7 +311,11 @@ def assertDataFrameEqual(df: DataFrame, expected: DataFrame, check_row_order: bo
                 error_class="UNSUPPORTED_DATA_TYPE",
                 message_parameters={"data_type": type(df)},
             )
-        elif not isinstance(expected, DataFrame) and not isinstance(expected, ConnectDataFrame):
+        elif (
+            not isinstance(expected, DataFrame)
+            and not isinstance(expected, ConnectDataFrame)
+            and not isinstance(expected, List)
+        ):
             raise PySparkAssertionError(
                 error_class="UNSUPPORTED_DATA_TYPE",
                 message_parameters={"data_type": type(expected)},
@@ -302,7 +326,7 @@ def assertDataFrameEqual(df: DataFrame, expected: DataFrame, check_row_order: bo
                 error_class="UNSUPPORTED_DATA_TYPE",
                 message_parameters={"data_type": type(df)},
             )
-        elif not isinstance(expected, DataFrame):
+        elif not isinstance(expected, DataFrame) and not isinstance(expected, List):
             raise PySparkAssertionError(
                 error_class="UNSUPPORTED_DATA_TYPE",
                 message_parameters={"data_type": type(expected)},
@@ -329,7 +353,7 @@ def assertDataFrameEqual(df: DataFrame, expected: DataFrame, check_row_order: bo
                     and all(compare_vals(val1[k], val2[k]) for k in val1.keys())
                 )
             elif isinstance(val1, float) and isinstance(val2, float):
-                if abs(val1 - val2) > 1e-5:
+                if abs(val1 - val2) > (atol + rtol * abs(val2)):
                     return False
             else:
                 if val1 != val2:
@@ -378,22 +402,22 @@ def assertDataFrameEqual(df: DataFrame, expected: DataFrame, check_row_order: bo
                 message_parameters={"error_msg": error_msg},
             )
 
-    if not check_row_order:
-        try:
-            # rename duplicate columns for sorting
-            renamed_df = df.toDF(*[f"_{i}" for i in range(len(df.columns))])
-            renamed_expected = expected.toDF(*[f"_{i}" for i in range(len(expected.columns))])
+    # convert df and expected to list
+    if not isinstance(expected, List):
+        # only compare schema if expected is not a List
+        assert_schema_equal(df.schema, expected.schema)
+        expected_list = expected.collect()
+    else:
+        expected_list = expected
 
-            df = renamed_df.sort(renamed_df.columns).toDF(*df.columns)
-            expected = renamed_expected.sort(renamed_expected.columns).toDF(*expected.columns)
-        except Exception:
-            raise PySparkAssertionError(
-                error_class="UNSUPPORTED_DATA_TYPE_FOR_IGNORE_ROW_ORDER",
-                message_parameters={},
-            )
+    df_list = df.collect()
 
-    assert_schema_equal(df.schema, expected.schema)
-    assert_rows_equal(df.collect(), expected.collect())
+    if not checkRowOrder:
+        # rename duplicate columns for sorting
+        df_list = sorted(df_list, key=lambda x: str(x))
+        expected_list = sorted(expected_list, key=lambda x: str(x))
+
+    assert_rows_equal(df_list, expected_list)
 
 
 def _test() -> None:

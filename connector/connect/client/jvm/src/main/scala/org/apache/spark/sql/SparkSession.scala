@@ -38,7 +38,8 @@ import org.apache.spark.sql.catalyst.encoders.{AgnosticEncoder, RowEncoder}
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{BoxedLongEncoder, UnboundRowEncoder}
 import org.apache.spark.sql.connect.client.{ClassFinder, SparkConnectClient, SparkResult}
 import org.apache.spark.sql.connect.client.SparkConnectClient.Configuration
-import org.apache.spark.sql.connect.client.util.{Cleaner, ConvertToArrow}
+import org.apache.spark.sql.connect.client.arrow.ArrowSerializer
+import org.apache.spark.sql.connect.client.util.Cleaner
 import org.apache.spark.sql.connect.common.LiteralValueProtoConverter.toLiteralProto
 import org.apache.spark.sql.internal.CatalogImpl
 import org.apache.spark.sql.streaming.DataStreamReader
@@ -126,9 +127,8 @@ class SparkSession private[sql] (
     newDataset(encoder) { builder =>
       if (data.nonEmpty) {
         val timeZoneId = conf.get("spark.sql.session.timeZone")
-        val (arrowData, arrowDataSize) =
-          ConvertToArrow(encoder, data, timeZoneId, errorOnDuplicatedFieldNames = true, allocator)
-        if (arrowDataSize <= conf.get("spark.sql.session.localRelationCacheThreshold").toInt) {
+        val arrowData = ArrowSerializer.serialize(data, encoder, allocator, timeZoneId)
+        if (arrowData.size() <= conf.get("spark.sql.session.localRelationCacheThreshold").toInt) {
           builder.getLocalRelationBuilder
             .setSchema(encoder.schema.json)
             .setData(arrowData)
@@ -417,6 +417,30 @@ class SparkSession private[sql] (
     range(start, end, step, Option(numPartitions))
   }
 
+  /**
+   * A collection of methods for registering user-defined functions (UDF).
+   *
+   * The following example registers a Scala closure as UDF:
+   * {{{
+   *   sparkSession.udf.register("myUDF", (arg1: Int, arg2: String) => arg2 + arg1)
+   * }}}
+   *
+   * The following example registers a UDF in Java:
+   * {{{
+   *   sparkSession.udf().register("myUDF",
+   *       (Integer arg1, String arg2) -> arg2 + arg1,
+   *       DataTypes.StringType);
+   * }}}
+   *
+   * @note
+   *   The user-defined functions must be deterministic. Due to optimization, duplicate
+   *   invocations may be eliminated or the function may even be invoked more times than it is
+   *   present in the query.
+   *
+   * @since 3.5.0
+   */
+  lazy val udf: UDFRegistration = new UDFRegistration(this)
+
   // scalastyle:off
   // Disable style checker so "implicits" object can start with lowercase i
   /**
@@ -523,6 +547,13 @@ class SparkSession private[sql] (
   private[sql] def execute(command: proto.Command): Seq[ExecutePlanResponse] = {
     val plan = proto.Plan.newBuilder().setCommand(command).build()
     client.execute(plan).asScala.toSeq
+  }
+
+  private[sql] def registerUdf(udf: proto.CommonInlineUserDefinedFunction): Unit = {
+    val command = proto.Command.newBuilder().setRegisterFunction(udf).build()
+    val plan = proto.Plan.newBuilder().setCommand(command).build()
+
+    client.execute(plan)
   }
 
   @DeveloperApi

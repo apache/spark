@@ -636,6 +636,14 @@ SQLSTATE: none assigned
 
 Detected an incompatible DataSourceRegister. Please remove the incompatible library from classpath or upgrade it. Error: `<message>`
 
+### [INCOMPATIBLE_DATA_FOR_TABLE](sql-error-conditions-incompatible-data-for-table-error-class.html)
+
+SQLSTATE: KD000
+
+Cannot write incompatible data for the table `<tableName>`:
+
+For more details see [INCOMPATIBLE_DATA_FOR_TABLE](sql-error-conditions-incompatible-data-for-table-error-class.html)
+
 ### INCOMPATIBLE_JOIN_TYPES
 
 [SQLSTATE: 42613](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
