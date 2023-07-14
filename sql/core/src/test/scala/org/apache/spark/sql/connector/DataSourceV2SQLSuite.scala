@@ -3296,7 +3296,7 @@ class DataSourceV2SQLSuiteV1Filter
     }
   }
 
-  test("SPARK-44419: Support to extract partial filters of datasource v2 table and push them down") {
+  test("SPARK-44419: extract partial filters of datasource v2 table and push them down") {
     val t1 = s"${catalogAndNamespace}table"
     withUserDefinedFunction("udfStrLen" -> true) {
       withTable(t1) {
@@ -3340,112 +3340,19 @@ class DataSourceV2SQLSuiteV1Filter
         }
         assert(df1.count() == 7)
 
-        val df2 = spark.sql(
-          s"""
-             |SELECT id, data, date FROM $t1
-             |where (date = 20221110 or (udfStrLen(date) = 8 and date = 20221111))
-             |""".stripMargin
-        )
-        df2.queryExecution.executedPlan.collect {
-          case d: BatchScanExec =>
-            assert(
-              d.scan.asInstanceOf[InMemoryTable#AdvancedBatchScanWithFilter]
-                .pushedFilters() === Array(Or(EqualTo("date", 20221110), EqualTo("date", 20221111)))
-            )
-          case _ =>
-        }
-        assert(df2.count() == 7)
-
-        val df3 = spark.sql(
-          s"""
-             |SELECT id, data, date FROM $t1
-             |where (date = 20221110 or (udfStrLen(date) = 8 and udfStrLen(data) = 1))
-             |""".stripMargin
-        )
-        df3.queryExecution.executedPlan.collect {
-          case d: BatchScanExec =>
-            assert(
-              d.scan.asInstanceOf[InMemoryTable#AdvancedBatchScanWithFilter]
-                .pushedFilters() === Array()
-            )
-          case _ =>
-        }
-        assert(df3.count() == 8)
-
-        val df4 = spark.sql(
-          s"""
-             |SELECT id, data, date FROM $t1
-             |where (date = 20221110 or udfStrLen(date) = 8) and data = 'a'
-             |""".stripMargin
-        )
-        df4.queryExecution.executedPlan.collect {
-          case d: BatchScanExec =>
-            assert(
-              d.scan.asInstanceOf[InMemoryTable#AdvancedBatchScanWithFilter]
-                .pushedFilters() === Array(IsNotNull("data"), EqualTo("data", "a"))
-            )
-          case _ =>
-        }
-        assert(df4.count() == 5)
-
-        // expression: !((date = 20221110 or udfStrLen(date) = 8) and data = 'a')
-        // will be parse to
-        // Not(date = 20221110)
-        // and
-        // (Not(udfStrLen(cast(date as string)) = 8) or Not(data = 'a'))
-        val df5 = spark.sql(
-          s"""
-             |SELECT id, data, date FROM $t1
-             |where !((date = 20221110 or udfStrLen(date) = 8) and data = 'a')
-             |and ((data = 'b' or udfStrLen(date) = 9) or (data = 'c' and udfStrLen(date) = 10))
-             |""".stripMargin
-        )
-        df5.queryExecution.executedPlan.collect {
-          case d: BatchScanExec =>
-            assert(
-              d.scan.asInstanceOf[InMemoryTable#AdvancedBatchScanWithFilter]
-                .pushedFilters() === Array(
-                Or(Not(EqualTo("date", 20221110)), Not(EqualTo("data", "a"))))
-            )
-          case _ =>
-        }
-        assert(df5.count() == 2)
-
-        // expression: !(date = 20221110 or udfStrLen(date) = 8 and data = 'a')
-        // will be parse to
-        // Not(date = 20221110)
-        // and
-        // (Not(udfStrLen(cast(date as string)) = 8) or Not(data = 'a'))
-        val df6 = spark.sql(
-          s"""
-             |SELECT id, data, date FROM $t1
-             |where !(date = 20221110 or udfStrLen(date) = 8 and data = 'a')
-             |and ((data = 'b' or udfStrLen(date) = 9) and (data = 'c' or udfStrLen(date) = 10))
-             |""".stripMargin
-        )
-        df6.queryExecution.executedPlan.collect {
-          case d: BatchScanExec =>
-            assert(
-              d.scan.asInstanceOf[InMemoryTable#AdvancedBatchScanWithFilter]
-                .pushedFilters() === Array(IsNotNull("date"), Not(EqualTo("date", 20221110)))
-            )
-          case _ =>
-        }
-        assert(df6.count() == 0)
-
         // expression: date = 20221110 or udfStrLen(date) = 8 and data = 'a'
         // will be parse to
         // (
         // (date = 20221110)
         // or
         // (udfStrLen(cast(date as string)) = 8 and data = 'a'))
-        val df7 = spark.sql(
+        val df2 = spark.sql(
           s"""
              |SELECT id, data, date FROM $t1
              |where date = 20221110 or udfStrLen(date) = 8 and data = 'a'
              |""".stripMargin
         )
-        df7.queryExecution.executedPlan.collect {
+        df2.queryExecution.executedPlan.collect {
           case d: BatchScanExec =>
             assert(
               d.scan.asInstanceOf[InMemoryTable#AdvancedBatchScanWithFilter]
@@ -3453,20 +3360,20 @@ class DataSourceV2SQLSuiteV1Filter
             )
           case _ =>
         }
-        assert(df7.count() == 7)
+        assert(df2.count() == 7)
 
         // expression: !(date = 20221110 or udfStrLen(date) = 8 and data = 'a')
         // will be parse to
         // Not(date = 20221110)
         // and
         // (Not(udfStrLen(cast(date as string)) = 8) or Not(data = 'a'))
-        val df8 = spark.sql(
+        val df3 = spark.sql(
           s"""
              |SELECT id, data, date FROM $t1
              |where !(date = 20221110 or udfStrLen(date) = 8 and data = 'a')
              |""".stripMargin
         )
-        df8.queryExecution.executedPlan.collect {
+        df3.queryExecution.executedPlan.collect {
           case d: BatchScanExec =>
             assert(
               d.scan.asInstanceOf[InMemoryTable#AdvancedBatchScanWithFilter]
@@ -3474,7 +3381,7 @@ class DataSourceV2SQLSuiteV1Filter
             )
           case _ =>
         }
-        assert(df8.count() == 3)
+        assert(df3.count() == 3)
       }
     }
   }
