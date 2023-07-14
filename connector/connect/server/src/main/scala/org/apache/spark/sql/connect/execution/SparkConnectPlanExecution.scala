@@ -56,7 +56,7 @@ private[execution] class SparkConnectPlanExecution(executeHolder: ExecuteHolder)
         s"Illegal operation type ${request.getPlan.getOpTypeCase} to be handled here.")
     }
     val planner = new SparkConnectPlanner(sessionHolder)
-    val tracker = executeHolder.executeEventsManager.createQueryPlanningTracker
+    val tracker = executeHolder.eventsManager.createQueryPlanningTracker
     val dataframe =
       Dataset.ofRows(
         sessionHolder.session,
@@ -124,7 +124,7 @@ private[execution] class SparkConnectPlanExecution(executeHolder: ExecuteHolder)
 
     dataframe.queryExecution.executedPlan match {
       case LocalTableScanExec(_, rows) =>
-        executePlan.executeEventsManager.postFinished()
+        executePlan.eventsManager.postFinished()
         converter(rows.iterator).foreach { case (bytes, count) =>
           sendBatch(bytes, count)
         }
@@ -163,7 +163,7 @@ private[execution] class SparkConnectPlanExecution(executeHolder: ExecuteHolder)
             // Collect errors and propagate them to the main thread.
             future.onComplete {
               case Success(_) =>
-                executePlan.executeEventsManager.postFinished()
+                executePlan.eventsManager.postFinished()
               case Failure(throwable) =>
                 signal.synchronized {
                   error = Some(throwable)

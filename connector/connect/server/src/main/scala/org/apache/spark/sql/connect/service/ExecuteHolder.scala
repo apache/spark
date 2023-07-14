@@ -42,7 +42,7 @@ private[connect] class ExecuteHolder(
   val responseObserver: ExecuteResponseObserver[proto.ExecutePlanResponse] =
     new ExecuteResponseObserver[proto.ExecutePlanResponse]()
 
-  val executeEventsManager: ExecuteEventsManager = ExecuteEventsManager(this, new SystemClock())
+  val eventsManager: ExecuteEventsManager = ExecuteEventsManager(this, new SystemClock())
 
   private val runner: ExecuteThreadRunner = new ExecuteThreadRunner(this)
 

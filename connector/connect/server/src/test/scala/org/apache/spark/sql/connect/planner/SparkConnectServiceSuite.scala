@@ -19,6 +19,7 @@ package org.apache.spark.sql.connect.planner
 import scala.collection.JavaConverters._
 import scala.collection.mutable
 
+import com.google.protobuf
 import com.google.protobuf.ByteString
 import io.grpc.StatusRuntimeException
 import io.grpc.stub.StreamObserver
@@ -268,14 +269,14 @@ class SparkConnectServiceSuite extends SharedSparkSession with MockitoSugar with
       proto.Command
         .newBuilder()
         .setGetResourcesCommand(proto.GetResourcesCommand.newBuilder()),
-      /* proto.Command
+      proto.Command
         .newBuilder()
         .setExtension(
           protobuf.Any.pack(
             proto.ExamplePluginCommand
               .newBuilder()
               .setCustomField("SPARK-43923")
-              .build())), */
+              .build())),
       proto.Command
         .newBuilder()
         .setRegisterFunction(

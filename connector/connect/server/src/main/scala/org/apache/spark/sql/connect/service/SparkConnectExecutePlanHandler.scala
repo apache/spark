@@ -32,7 +32,7 @@ class SparkConnectExecutePlanHandler(responseObserver: StreamObserver[proto.Exec
     val executeHolder = sessionHolder.createExecuteHolder(v)
 
     try {
-      executeHolder.executeEventsManager.postStarted()
+      executeHolder.eventsManager.postStarted()
       executeHolder.start()
       val responseSender =
         new ExecuteGrpcResponseSender[proto.ExecutePlanResponse](responseObserver)
@@ -45,7 +45,7 @@ class SparkConnectExecutePlanHandler(responseObserver: StreamObserver[proto.Exec
     } finally {
       // TODO this will change with detachable execution.
       executeHolder.join()
-      executeHolder.executeEventsManager.postClosed()
+      executeHolder.eventsManager.postClosed()
       sessionHolder.removeExecuteHolder(executeHolder.operationId)
     }
   }
