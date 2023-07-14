@@ -73,13 +73,13 @@ class HashedRelationSuite extends SharedSparkSession {
     val hashed = UnsafeHashedRelation(unsafeData.iterator, buildKey, 1, mm)
     assert(hashed.isInstanceOf[UnsafeHashedRelation])
 
-    assert(hashed.get(unsafeData(0), null).toArray === Array(unsafeData(0)))
-    assert(hashed.get(unsafeData(1), null).toArray === Array(unsafeData(1)))
-    assert(hashed.get(toUnsafe(InternalRow(10)), null) === null)
+    assert(hashed.get(unsafeData(0)).toArray === Array(unsafeData(0)))
+    assert(hashed.get(unsafeData(1)).toArray === Array(unsafeData(1)))
+    assert(hashed.get(toUnsafe(InternalRow(10))) === null)
 
     val data2 = CompactBuffer[InternalRow](unsafeData(2).copy())
     data2 += unsafeData(2).copy()
-    assert(hashed.get(unsafeData(2), null).toArray === data2.toArray)
+    assert(hashed.get(unsafeData(2)).toArray === data2.toArray)
 
     val os = new ByteArrayOutputStream()
     val out = new ObjectOutputStream(os)
@@ -88,10 +88,10 @@ class HashedRelationSuite extends SharedSparkSession {
     val in = new ObjectInputStream(new ByteArrayInputStream(os.toByteArray))
     val hashed2 = new UnsafeHashedRelation()
     hashed2.readExternal(in)
-    assert(hashed2.get(unsafeData(0), null).toArray === Array(unsafeData(0)))
-    assert(hashed2.get(unsafeData(1), null).toArray === Array(unsafeData(1)))
-    assert(hashed2.get(toUnsafe(InternalRow(10)), null) === null)
-    assert(hashed2.get(unsafeData(2), null).toArray === data2)
+    assert(hashed2.get(unsafeData(0)).toArray === Array(unsafeData(0)))
+    assert(hashed2.get(unsafeData(1)).toArray === Array(unsafeData(1)))
+    assert(hashed2.get(toUnsafe(InternalRow(10))) === null)
+    assert(hashed2.get(unsafeData(2)).toArray === data2)
 
     // SPARK-38542: UnsafeHashedRelation should serialize numKeys out
     assert(hashed2.keys().map(_.copy()).forall(_.numFields == 1))
@@ -126,7 +126,7 @@ class HashedRelationSuite extends SharedSparkSession {
     val schema = StructType(StructField("a", IntegerType, true) :: Nil)
     val toUnsafe = UnsafeProjection.create(schema)
     val row = toUnsafe(InternalRow(0))
-    assert(hashed2.get(row, null) === null)
+    assert(hashed2.get(row) === null)
 
     val os2 = new ByteArrayOutputStream()
     val out2 = new ObjectOutputStream(os2)
@@ -143,7 +143,7 @@ class HashedRelationSuite extends SharedSparkSession {
     val longRelation = LongHashedRelation(rows.iterator, key, 10, mm)
     assert(longRelation.keyIsUnique)
     (0 until 100).foreach { i =>
-      val row = longRelation.getValue(i, null)
+      val row = longRelation.getValue(i)
       assert(row.getLong(0) === i)
       assert(row.getInt(1) === i + 1)
     }
@@ -152,7 +152,7 @@ class HashedRelationSuite extends SharedSparkSession {
         .asInstanceOf[LongHashedRelation]
     assert(!longRelation2.keyIsUnique)
     (0 until 100).foreach { i =>
-      val rows = longRelation2.get(i, null).toArray
+      val rows = longRelation2.get(i).toArray
       assert(rows.length === 2)
       assert(rows(0).getLong(0) === i)
       assert(rows(0).getInt(1) === i + 1)
@@ -169,7 +169,7 @@ class HashedRelationSuite extends SharedSparkSession {
     relation.readExternal(in)
     assert(!relation.keyIsUnique)
     (0 until 100).foreach { i =>
-      val rows = relation.get(i, null).toArray
+      val rows = relation.get(i).toArray
       assert(rows.length === 2)
       assert(rows(0).getLong(0) === i)
       assert(rows(0).getInt(1) === i + 1)
@@ -198,7 +198,7 @@ class HashedRelationSuite extends SharedSparkSession {
       map.optimize()
       val row = unsafeProj(InternalRow(0L)).copy()
       keys.foreach { k =>
-        assert(map.getValue(k, row, null) eq row)
+        assert(map.getValue(k, row) eq row)
         assert(row.getLong(0) === k)
       }
       map.free()
@@ -215,10 +215,10 @@ class HashedRelationSuite extends SharedSparkSession {
       map.optimize()
       val row = unsafeProj(InternalRow(0L)).copy()
       keys.foreach { k =>
-        assert(map.getValue(k, row, null) eq row)
+        assert(map.getValue(k, row) eq row)
         assert(row.getLong(0) === k)
       }
-      assert(map.getValue(Long.MinValue, row, null) eq null)
+      assert(map.getValue(Long.MinValue, row) eq null)
       map.free()
     }
   }
@@ -253,7 +253,7 @@ class HashedRelationSuite extends SharedSparkSession {
 
     val row = unsafeProj(InternalRow(0L)).copy()
     keys.foreach { k =>
-      val r = map2.get(k, row, null)
+      val r = map2.get(k, row)
       assert(r.hasNext)
       var c = 0
       while (r.hasNext) {
@@ -265,7 +265,7 @@ class HashedRelationSuite extends SharedSparkSession {
     var i = 0
     while (i < N * 10) {
       val k = rand.nextLong()
-      val r = map2.get(k, row, null)
+      val r = map2.get(k, row)
       if (r != null) {
         assert(r.hasNext)
         while (r.hasNext) {
@@ -297,7 +297,7 @@ class HashedRelationSuite extends SharedSparkSession {
     map.optimize()
 
     val resultRow = new UnsafeRow(1)
-    assert(map.getValue(key, resultRow, null).getUTF8String(0) === bigStr)
+    assert(map.getValue(key, resultRow).getUTF8String(0) === bigStr)
     map.free()
   }
 
@@ -322,8 +322,8 @@ class HashedRelationSuite extends SharedSparkSession {
       ser.deserialize[LongToUnsafeRowMap](ser.serialize(firstTimeSerialized))
 
     val resultRow = new UnsafeRow(1)
-    assert(secondTimeSerialized.getValue(key1, resultRow, null).getLong(0) === value1)
-    assert(secondTimeSerialized.getValue(key2, resultRow, null).getLong(0) === value2)
+    assert(secondTimeSerialized.getValue(key1, resultRow).getLong(0) === value1)
+    assert(secondTimeSerialized.getValue(key2, resultRow).getLong(0) === value2)
 
     originalMap.free()
     firstTimeSerialized.free()
@@ -342,7 +342,7 @@ class HashedRelationSuite extends SharedSparkSession {
     val longRelation = LongHashedRelation(rows.iterator ++ rows.iterator, key, 100, mm)
     val longRelation2 = ser.deserialize[LongHashedRelation](ser.serialize(longRelation))
     (0 until 100).foreach { i =>
-      val rows = longRelation2.get(i, null).toArray
+      val rows = longRelation2.get(i).toArray
       assert(rows.length === 2)
       assert(rows(0).getLong(0) === i)
       assert(rows(0).getInt(1) === i + 1)
@@ -636,10 +636,10 @@ class HashedRelationSuite extends SharedSparkSession {
     assert(hashed == EmptyHashedRelation)
 
     val key = InternalRow(1L)
-    assert(hashed.get(0L, null) == null)
-    assert(hashed.get(key, null) == null)
-    assert(hashed.getValue(0L, null) == null)
-    assert(hashed.getValue(key, null) == null)
+    assert(hashed.get(0L) == null)
+    assert(hashed.get(key) == null)
+    assert(hashed.getValue(0L) == null)
+    assert(hashed.getValue(key) == null)
 
     assert(hashed.keys().isEmpty)
     assert(hashed.keyIsUnique)
