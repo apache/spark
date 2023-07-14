@@ -250,7 +250,9 @@ def assertSchemaEqual(actual: StructType, expected: StructType):
     >>> s2 = StructType([StructField("first name", StructType([StructField(
     ...                                                      "age", IntegerType(), True)]), True)])
     >>> assertSchemaEqual(s1, s2)  # fail  # doctest: +IGNORE_EXCEPTION_DETAIL
-    [DIFFERENT_SCHEMA] Schemas do not match.
+    Traceback (most recent call last):
+    ...
+    PySparkAssertionError: [DIFFERENT_SCHEMA] Schemas do not match.
     The diff below overlays `actual` and `expected` schema tree strings.
     - indicates a line that should be removed from `actual` to match `expected`.
     + indicates a line that should be added to `actual` to match `expected`.
