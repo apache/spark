@@ -21,6 +21,7 @@ import java.net.URLEncoder
 import java.nio.charset.StandardCharsets.UTF_8
 import javax.servlet.http.HttpServletRequest
 
+import scala.collection.JavaConverters._
 import scala.xml.Node
 
 import org.apache.spark.internal.Logging
@@ -48,7 +49,7 @@ private[ui] class ThriftServerPage(parent: ThriftServerTab) extends WebUIPage(""
         </h4> ++
         generateSessionStatsTable(request) ++
         generateSQLStatsTable(request) ++
-        generateUpdateSQLConf()
+        generateOverrideSQLConfigurations()
     }
     UIUtils.headerSparkPage(request, "JDBC/ODBC Server", content, parent)
   }
@@ -161,28 +162,41 @@ private[ui] class ThriftServerPage(parent: ThriftServerTab) extends WebUIPage(""
     content
   }
 
-  private def generateUpdateSQLConf(): Seq[Node] = {
-    <h4>
-      <span class="collapse-table-arrow arrow-open"></span>
-      <a>Update Spark SQL configuration default values for new connections</a>
-    </h4>
-    <span>
-      <div style="width:50%">
-        <form action="updatesqlconf/" method="GET"> <!-- Use GET method to support YARN proxy -->
+  private def generateOverrideSQLConfigurations(): Seq[Node] = {
+    <span id="override-configutations" class="collapse-override-sql-configurations collapse-table"
+          onClick="collapseTable('collapse-override-sql-configurations',
+              'override-sql-configurations')">
+      <h4>
+        <span class="collapse-table-arrow arrow-open"></span>
+        <a>Override SQL configurations for new connections</a>
+      </h4>
+    </span> ++
+      <div class="override-sql-configurations collapsible-table">
+        <form action="overridesqlconf/" method="GET"> <!-- Use GET method to support YARN proxy -->
           <div class="form-group">
-            <label>SQL configuration key:</label>
-            <input type="text" class="form-control" id="key" name="key" required="true"
-                   maxlength="200" pattern="spark.sql.+" placeholder="Enter spark.sql.+"/>
+            <label>SQL configuration name:</label>
+            <input type="text" class="form-control" style="width:50%" id="key" name="key"
+                   required="true" maxlength="200" pattern="spark.sql.+"
+                   placeholder="Enter spark.sql.+"/>
           </div>
           <div class="form-group">
             <label>SQL configuration value:</label>
-            <input type="text" class="form-control" id="value" name="value" required="true"
-                   maxlength="200" placeholder="Enter boolean, number or string"/>
+            <input type="text" class="form-control" style="width:50%" id="value" name="value"
+                   required="true" maxlength="200" placeholder="Enter boolean, number or string"/>
           </div>
-          <button type="submit" class="btn btn-primary">Update</button>
+          <button type="submit" class="btn btn-primary">Override</button>
         </form>
+
+        <h5>Overridden SQL configurations</h5>
+        {
+        UIUtils.listingTable(
+          Seq("Name", "Value"),
+          (nv: (String, String)) => <tr><td>{nv._1}</td><td>{nv._2}</td></tr>,
+          parent.overriddenSQLConf.asScala.toSeq.sorted,
+          fixedWidth = true,
+          headerClasses = Seq("sorttable_alpha", "sorttable_alpha"))
+        }
       </div>
-    </span>
   }
 }
 

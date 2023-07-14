@@ -17,14 +17,19 @@
 
 package org.apache.spark.sql.hive.thriftserver
 
+import java.nio.charset.StandardCharsets
 import java.sql.{ResultSet, SQLException}
 import java.util.concurrent.atomic.AtomicBoolean
 
+import org.apache.commons.io.IOUtils
 import org.apache.hive.service.cli.{GetInfoType, HiveSQLException, OperationHandle}
+import org.apache.http.client.methods.HttpGet
+import org.apache.http.impl.client.HttpClientBuilder
 
 import org.apache.spark.{ErrorMessageFormat, TaskKilled}
 import org.apache.spark.scheduler.{SparkListener, SparkListenerTaskEnd}
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.util.Utils
 
 trait ThriftServerWithSparkContextSuite extends SharedThriftServer {
 
@@ -255,7 +260,7 @@ trait ThriftServerWithSparkContextSuite extends SharedThriftServer {
     }
   }
 
-  test("Support updating Spark SQL config default value for new connections") {
+  test("Support overriding SQL configurations for new connections") {
     def doGetRequest(url: String): String = {
       Utils.tryWithResource(HttpClientBuilder.create().build()) { client =>
         Utils.tryWithResource(client.execute(new HttpGet(url))) { response =>
@@ -264,30 +269,30 @@ trait ThriftServerWithSparkContextSuite extends SharedThriftServer {
       }
     }
 
-    val uiWebUrl = spark.sparkContext.uiWebUrl
-    assert(uiWebUrl.nonEmpty)
+    spark.sparkContext.uiWebUrl.foreach { uiWebUrl =>
+      withJdbcStatement() { statement =>
+        val rs = statement.executeQuery(s"set ${SQLConf.CBO_ENABLED.key}")
+        rs.next()
+        assert(rs.getString("value").equals("false"))
+      }
 
-    withJdbcStatement { statement =>
-      val rs = statement.executeQuery(s"set ${SQLConf.CBO_ENABLED.key}")
-      rs.next()
-      assert(rs.getString("value").equals("false"))
+      assert(
+        doGetRequest(s"${uiWebUrl}/sqlserver/overridesqlconf/?" +
+          s"key=${SQLConf.CBO_ENABLED.key}&value=true")
+          .contains("<script>window.location.replace(document.referrer);</script>"))
+
+      withJdbcStatement() { statement =>
+        val rs = statement.executeQuery(s"set ${SQLConf.CBO_ENABLED.key}")
+        rs.next()
+        assert(rs.getString("value").equals("true"))
+      }
+
+      assert(
+        doGetRequest(s"${uiWebUrl}/sqlserver/overridesqlconf/?" +
+          s"key=${SQLConf.CBO_ENABLED.key}&value=error")
+          .contains("Failed to override SQL configuration: " +
+            "spark.sql.cbo.enabled should be boolean"))
     }
-
-    assert(
-      doGetRequest(s"${uiWebUrl.get}/sqlserver/updatesqlconf/?" +
-        s"key=${SQLConf.CBO_ENABLED.key}&value=true")
-        .contains("<script>window.location.replace(document.referrer);</script>"))
-
-    withJdbcStatement { statement =>
-      val rs = statement.executeQuery(s"set ${SQLConf.CBO_ENABLED.key}")
-      rs.next()
-      assert(rs.getString("value").equals("true"))
-    }
-
-    assert(
-      doGetRequest(s"${uiWebUrl.get}/sqlserver/updatesqlconf/?" +
-        s"key=${SQLConf.CBO_ENABLED.key}&value=error")
-        .contains("Failed to update SQL configuration: spark.sql.cbo.enabled should be boolean"))
   }
 }
 

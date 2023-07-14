@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.hive.thriftserver.ui
 
-import java.util.HashMap
 import javax.servlet.http.{HttpServlet, HttpServletRequest, HttpServletResponse}
 
 import org.apache.spark.SparkContext
@@ -38,25 +37,25 @@ private[thriftserver] class ThriftServerTab(
 
   val parent = sparkUI
   val startTime = sparkUI.store.applicationInfo().attempts.head.startTime
-  private[thriftserver] val updatedSQLConf = new HashMap[String, String]
+  private[thriftserver] val overriddenSQLConf = new java.util.HashMap[String, String]
 
   attachPage(new ThriftServerPage(this))
   attachPage(new ThriftServerSessionPage(this))
   parent.attachTab(this)
-  parent.attachHandler(createServletHandler("/sqlserver/updatesqlconf", new HttpServlet {
+  parent.attachHandler(createServletHandler("/sqlserver/overridesqlconf", new HttpServlet {
     override def doPost(req: HttpServletRequest, resp: HttpServletResponse): Unit = {
+      resp.setContentType("text/html; charset=UTF-8");
       val key = req.getParameter("key")
       val value = req.getParameter("value")
-      resp.setContentType("text/html; charset=UTF-8");
       try {
         SQLConf.get.setConfString(key, value) // Used to check if the value is valid.
-        updatedSQLConf.put(key, value)
+        overriddenSQLConf.put(key, value)
         // scalastyle:off println
         resp.getWriter.println("<script>window.location.replace(document.referrer);</script>")
         // scalastyle:on println
       } catch {
         case e: Throwable =>
-          val msg = s"Failed to update SQL configuration: ${e.getMessage}."
+          val msg = s"Failed to override SQL configuration: ${e.getMessage}."
           logWarning(msg)
           // scalastyle:off println
           resp.getWriter

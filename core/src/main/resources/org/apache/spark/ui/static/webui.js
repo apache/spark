@@ -102,6 +102,7 @@ $(function() {
   collapseTablePageLoad('collapse-aggregated-sqlsessionstat','aggregated-sqlsessionstat');
   collapseTablePageLoad('collapse-aggregated-activeQueries','aggregated-activeQueries');
   collapseTablePageLoad('collapse-aggregated-completedQueries','aggregated-completedQueries');
+  collapseTablePageLoad('collapse-override-sql-configurations','override-sql-configurations');
 });
 
 $(function() {
