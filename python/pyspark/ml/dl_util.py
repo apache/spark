@@ -1,3 +1,19 @@
+#
+# Licensed to the Apache Software Foundation (ASF) under one or more
+# contributor license agreements.  See the NOTICE file distributed with
+# this work for additional information regarding copyright ownership.
+# The ASF licenses this file to You under the Apache License, Version 2.0
+# (the "License"); you may not use this file except in compliance with
+# the License.  You may obtain a copy of the License at
+#
+#    http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
 import os
 import tempfile
 import textwrap
@@ -44,7 +60,7 @@ class FunctionPickler:
 
         Returns
         -------
-        str:
+        str
             The path to the file where the function and arguments are pickled.
         """
         if file_path != "":
@@ -73,7 +89,7 @@ class FunctionPickler:
 
         Parameters
         ----------
-        pickled_fn_path:
+        pickled_fn_path: str
             This is the path of the file containing the pickled function, args, and kwargs.
 
         fn_output_path: str
@@ -96,7 +112,7 @@ class FunctionPickler:
 
         Returns
         -------
-        str:
+        str
             The path to the location of the newly created pytorch file.
         """
 
@@ -135,7 +151,7 @@ class FunctionPickler:
 
         Returns
         -------
-        Any:
+        Any
             The unpickled output stored in func_output_path
         """
         with open(fn_output_path, "rb") as f:
