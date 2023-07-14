@@ -114,8 +114,7 @@ private[connect] class ExecuteHolder(
         s"Spark Connect execution tag cannot contain '${SparkContext.SPARK_JOB_TAGS_SEP}'.")
     }
     if (tag.isEmpty) {
-      throw new IllegalArgumentException(
-        "Spark Connect execution tag cannot be an empty string.")
+      throw new IllegalArgumentException("Spark Connect execution tag cannot be an empty string.")
     }
   }
 }

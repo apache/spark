@@ -63,8 +63,7 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
         case _: IllegalArgumentException =>
           throw new SparkSQLException(
             errorClass = "INVALID_HANDLE.FORMAT",
-            messageParameters = Map("handle" -> request.getOperationId)
-          )
+            messageParameters = Map("handle" -> request.getOperationId))
       }
     } else {
       UUID.randomUUID().toString
@@ -74,8 +73,7 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
     if (oldExecute != null) {
       throw new SparkSQLException(
         errorClass = "INVALID_HANDLE.ALREADY_EXISTS",
-        messageParameters = Map("handle" -> operationId)
-      )
+        messageParameters = Map("handle" -> operationId))
     }
     executePlanHolder
   }
@@ -88,8 +86,11 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
     executions.remove(operationId)
   }
 
-  /** Interrupt all executions in the session.
-   *  @return list of operationIds of interrupted executions */
+  /**
+   * Interrupt all executions in the session.
+   * @return
+   *   list of operationIds of interrupted executions
+   */
   private[connect] def interruptAll(): Seq[String] = {
     val interruptedIds = new mutable.ArrayBuffer[String]()
     executions.asScala.values.foreach { execute =>
@@ -99,8 +100,11 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
     interruptedIds.toSeq
   }
 
-  /** Interrupt executions in the session with a given tag.
-   *  @return list of operationIds of interrupted executions */
+  /**
+   * Interrupt executions in the session with a given tag.
+   * @return
+   *   list of operationIds of interrupted executions
+   */
   private[connect] def interruptTag(tag: String): Seq[String] = {
     val interruptedIds = new mutable.ArrayBuffer[String]()
     executions.asScala.values.foreach { execute =>
@@ -112,8 +116,11 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
     interruptedIds.toSeq
   }
 
-  /** Interrupt the execution with the given operation_id
-   *  @return list of operationIds of interrupted executions (one element or empty) */
+  /**
+   * Interrupt the execution with the given operation_id
+   * @return
+   *   list of operationIds of interrupted executions (one element or empty)
+   */
   private[connect] def interruptOperation(operationId: String): Seq[String] = {
     val interruptedIds = new mutable.ArrayBuffer[String]()
     Option(executions.get(operationId)).foreach { execute =>

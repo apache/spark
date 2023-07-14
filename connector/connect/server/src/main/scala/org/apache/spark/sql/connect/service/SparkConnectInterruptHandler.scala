@@ -46,12 +46,13 @@ class SparkConnectInterruptHandler(responseObserver: StreamObserver[proto.Interr
           throw new IllegalArgumentException(
             s"INTERRUPT_TYPE_ID requested, but no operation_id provided.")
         }
-        sessionHolder.interruptTag(v.getOperationId)
+        sessionHolder.interruptOperation(v.getOperationId)
       case other =>
         throw new UnsupportedOperationException(s"Unknown InterruptType $other!")
     }
 
-    val response = proto.InterruptResponse.newBuilder()
+    val response = proto.InterruptResponse
+      .newBuilder()
       .setSessionId(v.getSessionId)
       .addAllInterruptedIds(interruptedIds.asJava)
       .build()
