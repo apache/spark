@@ -738,11 +738,11 @@
       "Call to function <functionName> is invalid because it includes multiple argument assignments to the same parameter name <parameterName>."
     ],
     "subClass" : {
-       "BOTH_POSITIONAL_AND_NAMED" : {
-         "message" : [
-           "A positional argument and named argument both referred to the same parameter."
-         ]
-       },
+      "BOTH_POSITIONAL_AND_NAMED" : {
+        "message" : [
+          "A positional argument and named argument both referred to the same parameter."
+        ]
+      },
       "DOUBLE_NAMED_ARGUMENT_REFERENCE" : {
         "message" : [
           "More than one named argument referred to the same parameter."
