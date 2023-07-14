@@ -17,12 +17,10 @@
 
 package org.apache.spark.sql.execution.python
 
-import org.apache.spark.TaskContext
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.execution.UnaryExecNode
-import org.apache.spark.sql.types.StructType
 
 /**
  * A physical plan that evaluates a [[PythonUDTF]], one partition of tuples at a time.
@@ -35,7 +33,7 @@ trait EvalPythonUDTFExec extends UnaryExecNode {
 
   def resultAttrs: Seq[Attribute]
 
-  protected def getPythonUDTFEvaluator: EvalPythonUDTFEvaluator
+  protected def evaluatorFactory: EvalPythonUDTFEvaluatorFactory
 
   override def output: Seq[Attribute] = requiredChildOutput ++ resultAttrs
 
@@ -43,29 +41,12 @@ trait EvalPythonUDTFExec extends UnaryExecNode {
 
   protected override def doExecute(): RDD[InternalRow] = {
     val inputRDD = child.execute().map(_.copy())
-    val evaluatorFactory =
-      new EvalPythonUDTFEvaluatorFactory(
-        child.output,
-        udtf,
-        child.outputSet,
-        requiredChildOutput: Seq[Attribute],
-        output: Seq[Attribute],
-        getPythonUDTFEvaluator)
     if (conf.usePartitionEvaluator) {
       inputRDD.mapPartitionsWithEvaluator(evaluatorFactory)
     } else {
       inputRDD.mapPartitions { iter =>
-        val evaluator = evaluatorFactory.createEvaluator()
-        evaluator.eval(0, iter)
+        evaluatorFactory.createEvaluator().eval(0, iter)
       }
     }
   }
-}
-
-abstract class EvalPythonUDTFEvaluator {
-  def evaluate(
-      argOffsets: Array[Int],
-      iter: Iterator[InternalRow],
-      schema: StructType,
-      context: TaskContext): Iterator[Iterator[InternalRow]]
 }

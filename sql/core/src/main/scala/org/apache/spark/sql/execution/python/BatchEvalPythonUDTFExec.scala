@@ -55,51 +55,73 @@ case class BatchEvalPythonUDTFExec(
   override protected def withNewChildInternal(newChild: SparkPlan): BatchEvalPythonUDTFExec =
     copy(child = newChild)
 
-  override protected def getPythonUDTFEvaluator: EvalPythonUDTFEvaluator =
-    new EvalPythonUDTFEvaluator {
+  override protected def evaluatorFactory: EvalPythonUDTFEvaluatorFactory =
+    new BatchEvalPythonUDTFEvaluatorFactory(
+      child.output,
+      udtf,
+      child.outputSet,
+      requiredChildOutput,
+      output,
+      pythonMetrics,
+      jobArtifactUUID)
+}
 
-      /**
-       * Evaluates a Python UDTF. It computes the results using the PythonUDFRunner, and returns
-       * an iterator of internal rows for every input row.
-       */
-      override def evaluate(
-          argOffsets: Array[Int],
-          iter: Iterator[InternalRow],
-          schema: StructType,
-          context: TaskContext): Iterator[Iterator[InternalRow]] = {
-        EvaluatePython.registerPicklers() // register pickler for Row
+class BatchEvalPythonUDTFEvaluatorFactory(
+    childOutput: Seq[Attribute],
+    udtf: PythonUDTF,
+    childOutputSet: AttributeSet,
+    requiredChildOutput: Seq[Attribute],
+    output: Seq[Attribute],
+    pythonMetrics: Map[String, SQLMetric],
+    jobArtifactUUID: Option[String])
+    extends EvalPythonUDTFEvaluatorFactory(
+      childOutput,
+      udtf,
+      childOutputSet: AttributeSet,
+      requiredChildOutput: Seq[Attribute],
+      output: Seq[Attribute]) {
 
-        // Input iterator to Python.
-        val inputIterator = BatchEvalPythonExec.getInputIterator(iter, schema)
+  /**
+   * Evaluates a Python UDTF. It computes the results using the PythonUDFRunner, and returns an
+   * iterator of internal rows for every input row.
+   */
+  override def evaluate(
+      argOffsets: Array[Int],
+      iter: Iterator[InternalRow],
+      schema: StructType,
+      context: TaskContext): Iterator[Iterator[InternalRow]] = {
+    EvaluatePython.registerPicklers() // register pickler for Row
 
-        // Output iterator for results from Python.
-        val outputIterator =
-          new PythonUDTFRunner(udtf, argOffsets, pythonMetrics, jobArtifactUUID)
-            .compute(inputIterator, context.partitionId(), context)
+    // Input iterator to Python.
+    val inputIterator = BatchEvalPythonExec.getInputIterator(iter, schema)
 
-        val unpickle = new Unpickler
+    // Output iterator for results from Python.
+    val outputIterator =
+      new PythonUDTFRunner(udtf, argOffsets, pythonMetrics, jobArtifactUUID)
+        .compute(inputIterator, context.partitionId(), context)
 
-        // The return type of a UDTF is an array of struct.
-        val resultType = udtf.dataType
-        val fromJava = EvaluatePython.makeFromJava(resultType)
+    val unpickle = new Unpickler
 
-        outputIterator
-          .flatMap { pickedResult =>
-            val unpickledBatch = unpickle.loads(pickedResult)
-            unpickledBatch.asInstanceOf[java.util.ArrayList[Any]].asScala
-          }
-          .map { results =>
-            assert(results.getClass.isArray)
-            val res = results.asInstanceOf[Array[_]]
-            pythonMetrics("pythonNumRowsReceived") += res.length
-            fromJava(results)
-              .asInstanceOf[GenericArrayData]
-              .array
-              .map(_.asInstanceOf[InternalRow])
-              .toIterator
-          }
+    // The return type of a UDTF is an array of struct.
+    val resultType = udtf.dataType
+    val fromJava = EvaluatePython.makeFromJava(resultType)
+
+    outputIterator
+      .flatMap { pickedResult =>
+        val unpickledBatch = unpickle.loads(pickedResult)
+        unpickledBatch.asInstanceOf[java.util.ArrayList[Any]].asScala
       }
-    }
+      .map { results =>
+        assert(results.getClass.isArray)
+        val res = results.asInstanceOf[Array[_]]
+        pythonMetrics("pythonNumRowsReceived") += res.length
+        fromJava(results)
+          .asInstanceOf[GenericArrayData]
+          .array
+          .map(_.asInstanceOf[InternalRow])
+          .toIterator
+      }
+  }
 }
 
 class PythonUDTFRunner(

@@ -28,14 +28,20 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.types.{DataType, StructField, StructType}
 import org.apache.spark.util.Utils
 
-class EvalPythonUDTFEvaluatorFactory(
+abstract class EvalPythonUDTFEvaluatorFactory(
     childOutput: Seq[Attribute],
     udtf: PythonUDTF,
     childOutputSet: AttributeSet,
     requiredChildOutput: Seq[Attribute],
-    output: Seq[Attribute],
-    pythonUDTFEvaluator: EvalPythonUDTFEvaluator)
+    output: Seq[Attribute])
     extends PartitionEvaluatorFactory[InternalRow, InternalRow] {
+
+  def evaluate(
+      argOffsets: Array[Int],
+      iter: Iterator[InternalRow],
+      schema: StructType,
+      context: TaskContext): Iterator[Iterator[InternalRow]]
+
   override def createEvaluator(): PartitionEvaluator[InternalRow, InternalRow] =
     new EvalPythonUDTFPartitionEvaluator
 
@@ -88,7 +94,7 @@ class EvalPythonUDTFEvaluatorFactory(
       }
 
       val outputRowIterator =
-        pythonUDTFEvaluator.evaluate(argOffsets, projectedRowIter, schema, context)
+        evaluate(argOffsets, projectedRowIter, schema, context)
 
       val pruneChildForResult: InternalRow => InternalRow =
         if (childOutputSet == AttributeSet(requiredChildOutput)) {
