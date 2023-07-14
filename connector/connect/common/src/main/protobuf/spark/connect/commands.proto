@@ -399,7 +399,7 @@ message StreamingQueryManagerCommandResult {
   }
 
   message ListStreamingQueryListenerResult {
-    repeated StreamingQueryListenerInstance listeners = 1;
+    repeated string listeners = 1;
   }
 }
 

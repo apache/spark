@@ -1558,16 +1558,11 @@ class StreamingQueryManagerCommandResult(google.protobuf.message.Message):
         @property
         def listeners(
             self,
-        ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
-            global___StreamingQueryManagerCommandResult.StreamingQueryListenerInstance
-        ]: ...
+        ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.str]: ...
         def __init__(
             self,
             *,
-            listeners: collections.abc.Iterable[
-                global___StreamingQueryManagerCommandResult.StreamingQueryListenerInstance
-            ]
-            | None = ...,
+            listeners: collections.abc.Iterable[builtins.str] | None = ...,
         ) -> None: ...
         def ClearField(
             self, field_name: typing_extensions.Literal["listeners", b"listeners"]

@@ -36,7 +36,7 @@ import org.apache.spark.connect.proto.Parse.ParseFormat
 import org.apache.spark.connect.proto.StreamingForeachFunction
 import org.apache.spark.connect.proto.StreamingQueryManagerCommand
 import org.apache.spark.connect.proto.StreamingQueryManagerCommandResult
-import org.apache.spark.connect.proto.StreamingQueryManagerCommandResult.{StreamingQueryInstance, StreamingQueryListenerInstance}
+import org.apache.spark.connect.proto.StreamingQueryManagerCommandResult.StreamingQueryInstance
 import org.apache.spark.connect.proto.WriteStreamOperationStart.TriggerCase
 import org.apache.spark.internal.Logging
 import org.apache.spark.ml.{functions => MLFunctions}
@@ -2917,15 +2917,6 @@ class SparkConnectPlanner(val sessionHolder: SessionHolder) extends Logging {
     builder.build()
   }
 
-  private def buildStreamingQueryListenerInstance(
-      listener: StreamingQueryListener): StreamingQueryListenerInstance = {
-    StreamingQueryListenerInstance
-      .newBuilder()
-      .setListenerPayload(ByteString
-        .copyFrom(Utils.serialize(StreamingListenerPacket("", listener))))
-      .build()
-  }
-
   def handleStreamingQueryManagerCommand(
       command: StreamingQueryManagerCommand,
       sessionId: String,
@@ -2985,11 +2976,7 @@ class SparkConnectPlanner(val sessionHolder: SessionHolder) extends Logging {
 
       case StreamingQueryManagerCommand.CommandCase.LIST_LISTENERS =>
         val listeners = session.streams.listListeners()
-        respBuilder.getListListenersBuilder.addAllListeners(
-          listeners
-            .map(listener => buildStreamingQueryListenerInstance(listener))
-            .toIterable
-            .asJava)
+        respBuilder.getListListenersBuilder.addAllListeners(sessionHolder.listListenerIds().asJava)
 
       case StreamingQueryManagerCommand.CommandCase.COMMAND_NOT_SET =>
         throw new IllegalArgumentException("Missing command in StreamingQueryManagerCommand")

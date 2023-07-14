@@ -184,6 +184,13 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
   private[connect] def removeCachedListener(id: String): StreamingQueryListener = {
     listenerCache.remove(id)
   }
+
+  /**
+   * List listener IDs that have been register on server side.
+   */
+  private[connect] def listListenerIds(): Seq[String] = {
+    listenerCache.keySet().asScala.toSeq
+  }
 }
 
 object SessionHolder {
