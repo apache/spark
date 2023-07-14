@@ -29,10 +29,13 @@ SELECT hex(count_min_sketch(t2d, 0.5d, seed => 1, confidence => 0.5d)) FROM t2;
 SELECT * FROM explode(collection => array(1, 2));
 SELECT * FROM explode_outer(collection => map('a', 1, 'b', 2));
 
+-- Test for wrapped EXPLODE call to check error preservation
+SELECT * FROM explode(collection => explode(array(1)));
+SELECT * FROM explode(collection => explode(collection => array(1)));
+
 -- Test with TABLE parser rule
 CREATE OR REPLACE TEMPORARY VIEW v AS SELECT id FROM range(0, 8);
 SELECT * FROM explode(collection => TABLE v);
-SELECT * FROM explode(collection => explode(array(1)));
 
 -- Unexpected positional argument
 SELECT mask(lowerChar => 'q', 'AbCD123-@$#', upperChar => 'Q', otherChar => 'o', digitChar => 'd');
@@ -49,3 +52,6 @@ SELECT mask('AbCD123-@$#', lowerChar => 'q', upperChar => 'Q', otherChar => 'o',
 
 -- Named arguments not supported
 SELECT encode(str => 'a', charset => 'utf-8');
+
+-- Wrong number of arguments
+SELECT mask('AbCD123-@$#', 'Q', 'q', 'd', 'o', 'k');

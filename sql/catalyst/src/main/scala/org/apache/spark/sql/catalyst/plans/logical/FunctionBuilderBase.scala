@@ -21,7 +21,7 @@ import org.apache.spark.sql.errors.QueryCompilationErrors
 
 /**
  * This is a base trait that is used for implementing builder classes that can be used to construct
- * expressions or logical plans depending on if it is a table-valued or scala-valued function.
+ * expressions or logical plans depending on if it is a table-valued or scalar-valued function.
  *
  * Two classes of builders currently exist for this trait: [[GeneratorBuilder]] and
  * [[ExpressionBuilder]]. If a new class of functions are to be added, a new trait should also be

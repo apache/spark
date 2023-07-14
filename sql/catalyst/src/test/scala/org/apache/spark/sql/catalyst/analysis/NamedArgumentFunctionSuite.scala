@@ -119,11 +119,11 @@ class NamedArgumentFunctionSuite extends AnalysisTest {
     )
   }
 
-  test("UNRECOGNIZED_PARAMETER_NAME") {
+  test("UNRECOGNIZED_ARGUMENT_NAME") {
     checkError(
       exception = parseRearrangeException(signature,
         Seq(k1Arg, k2Arg, k3Arg, k4Arg, NamedArgumentExpression("k5", Literal("k5"))), "foo"),
-      errorClass = "UNRECOGNIZED_PARAMETER_NAME",
+      errorClass = "UNRECOGNIZED_ARGUMENT_NAME",
       parameters = Map("functionName" -> toSQLId("foo"), "argumentName" -> toSQLId("k5"),
         "proposal" -> (toSQLId("k1") + " " + toSQLId("k2") + " " + toSQLId("k3")))
     )

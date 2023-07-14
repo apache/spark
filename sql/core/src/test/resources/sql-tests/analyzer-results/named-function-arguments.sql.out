@@ -117,6 +117,46 @@ Project [key#x, value#x]
 
 
 -- !query
+SELECT * FROM explode(collection => explode(array(1)))
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "UNSUPPORTED_GENERATOR.NESTED_IN_EXPRESSIONS",
+  "sqlState" : "0A000",
+  "messageParameters" : {
+    "expression" : "\"explode(explode(array(1)))\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 15,
+    "stopIndex" : 54,
+    "fragment" : "explode(collection => explode(array(1)))"
+  } ]
+}
+
+
+-- !query
+SELECT * FROM explode(collection => explode(collection => array(1)))
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "UNSUPPORTED_GENERATOR.NESTED_IN_EXPRESSIONS",
+  "sqlState" : "0A000",
+  "messageParameters" : {
+    "expression" : "\"explode(explode(array(1)))\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 15,
+    "stopIndex" : 68,
+    "fragment" : "explode(collection => explode(collection => array(1)))"
+  } ]
+}
+
+
+-- !query
 CREATE OR REPLACE TEMPORARY VIEW v AS SELECT id FROM range(0, 8)
 -- !query analysis
 CreateViewCommand `v`, SELECT id FROM range(0, 8), false, true, LocalTempView, true
@@ -144,26 +184,6 @@ org.apache.spark.sql.AnalysisException
     "startIndex" : 15,
     "stopIndex" : 44,
     "fragment" : "explode(collection => TABLE v)"
-  } ]
-}
-
-
--- !query
-SELECT * FROM explode(collection => explode(array(1)))
--- !query analysis
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "UNSUPPORTED_GENERATOR.NESTED_IN_EXPRESSIONS",
-  "sqlState" : "0A000",
-  "messageParameters" : {
-    "expression" : "\"explode(explode(array(1)))\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 15,
-    "stopIndex" : 54,
-    "fragment" : "explode(collection => explode(array(1)))"
   } ]
 }
 
@@ -256,7 +276,7 @@ SELECT mask('AbCD123-@$#', lowerChar => 'q', upperChar => 'Q', otherChar => 'o',
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "UNRECOGNIZED_PARAMETER_NAME",
+  "errorClass" : "UNRECOGNIZED_ARGUMENT_NAME",
   "sqlState" : "4274K",
   "messageParameters" : {
     "argumentName" : "`cellular`",
@@ -278,7 +298,7 @@ SELECT encode(str => 'a', charset => 'utf-8')
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "NAMED_ARGUMENTS_NOT_SUPPORTED",
+  "errorClass" : "NAMED_PARAMETERS_NOT_SUPPORTED",
   "sqlState" : "4274K",
   "messageParameters" : {
     "functionName" : "`encode`"
@@ -289,5 +309,28 @@ org.apache.spark.sql.AnalysisException
     "startIndex" : 8,
     "stopIndex" : 45,
     "fragment" : "encode(str => 'a', charset => 'utf-8')"
+  } ]
+}
+
+
+-- !query
+SELECT mask('AbCD123-@$#', 'Q', 'q', 'd', 'o', 'k')
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
+  "sqlState" : "42605",
+  "messageParameters" : {
+    "actualNum" : "6",
+    "docroot" : "https://spark.apache.org/docs/latest",
+    "expectedNum" : "[1, 2, 3, 4, 5]",
+    "functionName" : "`mask`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 51,
+    "fragment" : "mask('AbCD123-@$#', 'Q', 'q', 'd', 'o', 'k')"
   } ]
 }

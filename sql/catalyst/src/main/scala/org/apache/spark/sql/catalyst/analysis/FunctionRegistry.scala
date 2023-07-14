@@ -358,8 +358,8 @@ object FunctionRegistry {
     // misc non-aggregate functions
     expression[Abs]("abs"),
     expression[Coalesce]("coalesce"),
-    expression[Explode]("explode"),
-    expressionGeneratorOuter[Explode]("explode_outer"),
+    expressionBuilder("explode", ExplodeExpressionBuilder),
+    expressionGeneratorBuilderOuter("explode_outer", ExplodeExpressionBuilder),
     expression[Greatest]("greatest"),
     expression[If]("if"),
     expression[Inline]("inline"),
@@ -968,6 +968,19 @@ object FunctionRegistry {
     val (_, (info, builder)) = expression[T](name)
     val outerBuilder = (args: Seq[Expression]) => {
       GeneratorOuter(builder(args).asInstanceOf[Generator])
+    }
+    (name, (info, outerBuilder))
+  }
+
+  private def expressionGeneratorBuilderOuter[T <: ExpressionBuilder : ClassTag]
+    (name: String, builder: T) : (String, (ExpressionInfo, FunctionBuilder)) = {
+    val info = FunctionRegistryBase.expressionInfo[T](name, since = None)
+    val outerBuilder = (args: Seq[Expression]) => {
+      val rearrangedArgs =
+        FunctionRegistry.rearrangeExpressions(name, builder, args)
+      val generator = builder.build(name, rearrangedArgs)
+      assert(generator.isInstanceOf[Generator])
+      GeneratorOuter(generator.asInstanceOf[Generator])
     }
     (name, (info, outerBuilder))
   }

@@ -60,7 +60,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
 
   def namedArgumentsNotSupported(functionName: String) : Throwable = {
     new AnalysisException(
-      errorClass = "NAMED_ARGUMENTS_NOT_SUPPORTED",
+      errorClass = "NAMED_PARAMETERS_NOT_SUPPORTED",
       messageParameters = Map("functionName" -> toSQLId(functionName))
     )
   }
@@ -107,7 +107,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
     val recommendations = orderSuggestedIdentifiersBySimilarity(argumentName, inputs)
       .take(3)
     new AnalysisException(
-      errorClass = "UNRECOGNIZED_PARAMETER_NAME",
+      errorClass = "UNRECOGNIZED_ARGUMENT_NAME",
       messageParameters = Map(
         "functionName" -> toSQLId(functionName),
         "argumentName" -> toSQLId(argumentName),
@@ -267,7 +267,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
 
   def namedArgumentsNotEnabledError(functionName: String, argumentName: String): Throwable = {
     new AnalysisException(
-      errorClass = "NAMED_ARGUMENTS_SUPPORT_DISABLED",
+      errorClass = "NAMED_PARAMETER_SUPPORT_DISABLED",
       messageParameters = Map(
         "functionName" -> toSQLId(functionName),
         "argument" -> toSQLId(argumentName))
