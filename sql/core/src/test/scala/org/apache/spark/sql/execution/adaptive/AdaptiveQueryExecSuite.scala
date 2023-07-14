@@ -28,6 +28,7 @@ import org.apache.spark.SparkException
 import org.apache.spark.scheduler.{SparkListener, SparkListenerEvent, SparkListenerJobStart}
 import org.apache.spark.sql.{Dataset, QueryTest, Row, SparkSession, Strategy}
 import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight}
+import org.apache.spark.sql.catalyst.plans.ExistenceJoin
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LogicalPlan}
 import org.apache.spark.sql.execution.{CollectLimitExec, ColumnarToRowExec, LocalTableScanExec, PartialReducerPartitionSpec, QueryExecution, ReusedSubqueryExec, ShuffledRowRDD, SortExec, SparkPlan, SparkPlanInfo, UnionExec}
 import org.apache.spark.sql.execution.aggregate.BaseAggregateExec
@@ -870,6 +871,96 @@ class AdaptiveQueryExecSuite
           val rightJoin = getJoinNode(rightAdaptivePlan)
           checkSkewJoin(rightJoin, 0, 1)
         }
+      }
+    }
+  }
+
+  test("SPARK-44426: Optimize adaptive skew join for ExistenceJoin") {
+    withSQLConf(
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+      SQLConf.COALESCE_PARTITIONS_MIN_PARTITION_NUM.key -> "1",
+      SQLConf.SHUFFLE_PARTITIONS.key -> "100",
+      SQLConf.SKEW_JOIN_SKEWED_PARTITION_THRESHOLD.key -> "800",
+      SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES.key -> "800") {
+      withTempView("skewData1", "skewData2", "skewData3", "skewData4") {
+        spark
+          .range(0, 1000, 1, 10)
+          .select(
+            when('id < 250, 249)
+              .when('id >= 750, 1000)
+              .otherwise('id).as("key1"),
+            'id as "value1")
+          .createOrReplaceTempView("skewData1")
+        spark
+          .range(0, 1000, 1, 10)
+          .select(
+            when('id < 250, 249)
+              .otherwise('id).as("key2"),
+            'id as "value2")
+          .createOrReplaceTempView("skewData2")
+
+        spark
+          .range(0, 1000, 1, 10)
+          .select(
+            when('id < 5, 5)
+              .otherwise('id).as("key3"),
+            'id as "value3")
+          .createOrReplaceTempView("skewData3")
+        spark
+          .range(0, 5000, 1, 10)
+          .select(
+            when('id < 5, 5)
+              .when('id >= 10, 1000)
+              .otherwise('id).as("key4"),
+            'id as "value4")
+          .createOrReplaceTempView("skewData4")
+
+        def checkSkewJoin(
+                           joins: Seq[SortMergeJoinExec],
+                           leftSkewNum: Int,
+                           rightSkewNum: Int): Unit = {
+          assert(joins.size == 2 && joins.last.isSkewJoin)
+          assert(joins.last.left.collect {
+            case r: AQEShuffleReadExec => r
+          }.head.partitionSpecs.collect {
+            case p: PartialReducerPartitionSpec => p.reducerIndex
+          }.distinct.length == leftSkewNum)
+          assert(joins.last.right.collect {
+            case r: AQEShuffleReadExec => r
+          }.head.partitionSpecs.collect {
+            case p: PartialReducerPartitionSpec => p.reducerIndex
+          }.distinct.length == rightSkewNum)
+        }
+
+        // skewed ExistenceJoin optimization for left side
+        val (_, existenceAdaptivePlanForLeft) = runAdaptiveAndVerifyResult(
+          s"""
+             |SELECT * FROM skewData1
+             |where
+             |(key1 in (select key2 from skewData2)
+             |or value1 in (select value2 from skewData2)
+             |)""".stripMargin)
+        val existenceSmjForLeft = findTopLevelSortMergeJoin(existenceAdaptivePlanForLeft)
+        assert(existenceSmjForLeft.nonEmpty &&
+          existenceSmjForLeft.last.joinType.isInstanceOf[ExistenceJoin])
+        checkSkewJoin(existenceSmjForLeft, 2, 0)
+
+        // forbid skewed ExistenceJoin optimization for right side
+        val (_, existenceAdaptivePlanForRight) = runAdaptiveAndVerifyResult(
+          s"""
+             |SELECT * FROM skewData3
+             |where
+             |(key3 in (select key4 from skewData4)
+             |or value3 in (select value4 from skewData4)
+             |)""".stripMargin)
+        val existenceSmjForRight = findTopLevelSortMergeJoin(existenceAdaptivePlanForRight)
+        assert(existenceSmjForRight.nonEmpty &&
+          existenceSmjForRight.size == 2 &&
+          existenceSmjForRight.head.joinType.isInstanceOf[ExistenceJoin] &&
+          existenceSmjForRight.last.joinType.isInstanceOf[ExistenceJoin] &&
+          !existenceSmjForRight.head.isSkewJoin &&
+          !existenceSmjForRight.last.isSkewJoin
+        )
       }
     }
   }
