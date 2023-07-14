@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.connect.service
 
+import scala.collection.JavaConverters._
+
 import org.apache.spark.SparkContext
 import org.apache.spark.connect.proto
 import org.apache.spark.internal.Logging

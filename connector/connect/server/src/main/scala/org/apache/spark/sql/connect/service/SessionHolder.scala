@@ -55,8 +55,7 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
   private lazy val listenerCache: ConcurrentMap[String, StreamingQueryListener] =
     new ConcurrentHashMap()
 
-  private[connect] def createExecutePlanHolder(
-      request: proto.ExecutePlanRequest): ExecutePlanHolder = {
+  private[connect] def createExecuteHolder(request: proto.ExecutePlanRequest): ExecuteHolder = {
     val operationId = if (request.hasOperationId) {
       try {
         UUID.fromString(request.getOperationId).toString
@@ -70,8 +69,8 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
     } else {
       UUID.randomUUID().toString
     }
-    val executePlanHolder = ExecutePlanHolder(operationId, this, request)
-    val oldExecute = executePlanOperations.putIfAbsent(operationId, executePlanHolder)
+    val executePlanHolder = new ExecuteHolder(request, operationId, this)
+    val oldExecute = executions.putIfAbsent(operationId, executePlanHolder)
     if (oldExecute != null) {
       throw new SparkSQLException(
         errorClass = "INVALID_HANDLE.ALREADY_EXISTS",
@@ -93,7 +92,7 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
    *  @return list of operationIds of interrupted executions */
   private[connect] def interruptAll(): Seq[String] = {
     val interruptedIds = new mutable.ArrayBuffer[String]()
-    executePlanOperations.asScala.values.foreach { execute =>
+    executions.asScala.values.foreach { execute =>
       interruptedIds += execute.operationId
       execute.interrupt()
     }
@@ -104,7 +103,7 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
    *  @return list of operationIds of interrupted executions */
   private[connect] def interruptTag(tag: String): Seq[String] = {
     val interruptedIds = new mutable.ArrayBuffer[String]()
-    executePlanOperations.asScala.values.foreach { execute =>
+    executions.asScala.values.foreach { execute =>
       if (execute.userDefinedTags.contains(tag)) {
         interruptedIds += execute.operationId
         execute.interrupt()
@@ -117,7 +116,7 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
    *  @return list of operationIds of interrupted executions (one element or empty) */
   private[connect] def interruptOperation(operationId: String): Seq[String] = {
     val interruptedIds = new mutable.ArrayBuffer[String]()
-    Option(executePlanOperations.get(operationId)).foreach { execute =>
+    Option(executions.get(operationId)).foreach { execute =>
       interruptedIds += execute.operationId
       execute.interrupt()
     }
