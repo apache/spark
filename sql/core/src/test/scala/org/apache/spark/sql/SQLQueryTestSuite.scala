@@ -891,3 +891,18 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
     override def numSegments: Int = 2
   }
 }
+
+@ExtendedSQLTest
+class SQLQueryTestSuiteWithEvaluatorFactory extends SQLQueryTestSuite {
+  override def sparkConf: SparkConf = {
+    super.sparkConf.set(SQLConf.USE_PARTITION_EVALUATOR, true)
+  }
+
+  override def beforeAll(): Unit = {
+    super.beforeAll()
+    if (regenerateGoldenFiles) {
+      throw new IllegalArgumentException(
+        "SQLQueryTestSuiteWithEvaluatorFactory should not be used to regenerate golden files.")
+    }
+  }
+}
