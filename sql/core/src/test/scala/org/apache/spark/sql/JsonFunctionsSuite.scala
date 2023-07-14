@@ -1394,7 +1394,7 @@ class JsonFunctionsSuite extends QueryTest with SharedSparkSession {
     checkAnswer(df.select(json_object_keys($"a")), expected)
   }
 
-  test("GET_JSON_OBJECT Codegen Support") {
+  test("function get_json_object - Codegen Support") {
     withTempView("GetJsonObjectTable") {
       val data = Seq(("1", """{"f1": "value1", "f5": 5.23}""")).toDF("key", "jstring")
       data.createOrReplaceTempView("GetJsonObjectTable")
@@ -1405,13 +1405,19 @@ class JsonFunctionsSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  test("path is null") {
-    val df: DataFrame = Seq(("""{"name": "alice", "age": 5}""", "")).toDF("a", "b")
-    checkAnswer(df.selectExpr("get_json_object(a, null)"), Row(null))
+  test("function get_json_object - path is null") {
+    val data = Seq(("""{"name": "alice", "age": 5}""", "")).toDF("a", "b")
+    val df = data.selectExpr("get_json_object(a, null)")
+    val plan = df.queryExecution.executedPlan
+    assert(plan.isInstanceOf[WholeStageCodegenExec])
+    checkAnswer(df, Row(null))
   }
 
-  test("json is null") {
-     val df: DataFrame = Seq(("""{"name": "alice", "age": 5}""", "")).toDF("a", "b")
-    checkAnswer(df.selectExpr("get_json_object(null, '$.name')"), Row(null))
+  test("function get_json_object - json is null") {
+    val data = Seq(("""{"name": "alice", "age": 5}""", "")).toDF("a", "b")
+    val df = data.selectExpr("get_json_object(null, '$.name')")
+    val plan = df.queryExecution.executedPlan
+    assert(plan.isInstanceOf[WholeStageCodegenExec])
+    checkAnswer(df, Row(null))
   }
 }
