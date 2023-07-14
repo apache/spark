@@ -83,13 +83,12 @@ object StreamingForeachBatchHelper extends Logging {
 
     val runner = StreamingPythonRunner(pythonFn)
     val (dataOut, dataIn) = runner.init(sessionHolder.sessionId)
-    // Need to register this runner shutdown as part of query shutdown.
 
     val foreachBatchRunnerFn: FnArgsWithId => Unit = (args: FnArgsWithId) => {
 
       // TODO: Set userId
       // TODO: Auth credentials
-      // TODO: The current protocol is very basic. Improve this for SafeSpark.
+      // TODO: The current protocol is very basic. Improve this, especially for SafeSpark.
       PythonRDD.writeUTF(args.dfId, dataOut)
       dataOut.writeLong(args.batchId)
       dataOut.flush()
