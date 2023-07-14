@@ -93,6 +93,8 @@ private[connect] class ExecuteThreadRunner(executeHolder: ExecuteHolder) extends
         executeHolder.responseObserver,
         executeHolder.sessionHolder.userId,
         executeHolder.sessionHolder.sessionId,
+        // Filter interruption errors from eventsManager as they will appear as canceled instead
+        // See executeHolder.eventsManager.postCanceled above
         Some(executeHolder.eventsManager).filter(_ => !interrupted))
     }
   }

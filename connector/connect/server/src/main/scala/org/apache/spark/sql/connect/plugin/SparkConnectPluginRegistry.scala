@@ -20,7 +20,6 @@ package org.apache.spark.sql.connect.plugin
 import java.lang.reflect.InvocationTargetException
 
 import org.apache.spark.{SparkEnv, SparkException}
-import org.apache.spark.internal.Logging
 import org.apache.spark.sql.connect.config.Connect
 import org.apache.spark.util.Utils
 
@@ -28,7 +27,7 @@ import org.apache.spark.util.Utils
  * This object provides a global list of configured relation, expression and command plugins for
  * Spark Connect. The plugins are used to handle custom message types.
  */
-object SparkConnectPluginRegistry extends Logging {
+object SparkConnectPluginRegistry {
 
   // Contains the list of configured interceptors.
   private lazy val relationPluginChain: Seq[relationPluginBuilder] = Seq(
@@ -91,7 +90,6 @@ object SparkConnectPluginRegistry extends Logging {
    * Only visible for testing
    */
   private[connect] def loadRelationPlugins(): Seq[RelationPlugin] = {
-    logInfo(s"****** ${SparkEnv.get.conf.get(Connect.CONNECT_EXTENSIONS_RELATION_CLASSES)}")
     relationPluginChain.map(x => x()) ++ createConfiguredPlugins[RelationPlugin](
       SparkEnv.get.conf.get(Connect.CONNECT_EXTENSIONS_RELATION_CLASSES))
   }
