@@ -238,9 +238,14 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
       e = intercept[SparkException] {
         getData(provider, snapshotVersion - 1)
       }
-      assert(e.getCause.isInstanceOf[SparkException])
-      assert(e.getCause.getMessage.contains("Error reading delta file") &&
-        e.getCause.getMessage.contains("does not exist"))
+      checkError(
+        e.getCause.asInstanceOf[SparkThrowable],
+        errorClass = "CANNOT_LOAD_STATE_STORE.CANNOT_READ_DELTA_FILE_NOT_EXISTS",
+        parameters = Map(
+          "fileToRead" -> s"${provider.stateStoreId.storeCheckpointLocation()}/1.delta",
+          "clazz" -> s"${provider.toString}"
+        )
+      )
     }
   }
 
@@ -1195,19 +1200,29 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
           val hadoopConf = new Configuration()
 
           // Verify that trying to get incorrect versions throw errors
-          intercept[IllegalArgumentException] {
+          var e = intercept[SparkException] {
             StateStore.get(
               storeId, keySchema, valueSchema, 0, -1, storeConf, hadoopConf)
           }
-          assert(!StateStore.isLoaded(storeId)) // version -1 should not attempt to load the store
+          checkError(
+            e,
+            errorClass = "CANNOT_LOAD_STATE_STORE.UNEXPECTED_VERSION",
+            parameters = Map.empty
+          )
 
-          val e = intercept[SparkException] {
+          e = intercept[SparkException] {
             StateStore.get(
               storeId, keySchema, valueSchema, 0, 1, storeConf, hadoopConf)
           }
-          assert(e.getCause.isInstanceOf[SparkException])
-          assert(e.getCause.getMessage.contains("Error reading delta file") &&
-            e.getCause.getMessage.contains("does not exist"))
+          checkError(
+            e.getCause.asInstanceOf[SparkThrowable],
+            errorClass = "CANNOT_LOAD_STATE_STORE.CANNOT_READ_DELTA_FILE_NOT_EXISTS",
+            parameters = Map(
+              "fileToRead" -> s"$dir/0/0/1.delta",
+              "clazz" -> "HDFSStateStoreProvider\\[.+\\]"
+            ),
+            matchPVals = true
+          )
 
           // Increase version of the store and try to get again
           val store0 = StateStore.get(

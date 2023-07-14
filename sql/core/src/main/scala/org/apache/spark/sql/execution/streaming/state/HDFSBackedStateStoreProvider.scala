@@ -219,7 +219,9 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
 
   private def getLoadedMapForStore(version: Long): HDFSBackedStateStoreMap = synchronized {
     try {
-      require(version >= 0, "Version cannot be less than 0")
+      if (version < 0) {
+        throw QueryExecutionErrors.unexpectedStateStoreVersion()
+      }
       val newMap = HDFSBackedStateStoreMap.create(keySchema, numColsPrefixKey)
       if (version > 0) {
         newMap.putAll(loadMap(version))
@@ -461,10 +463,8 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
     val sourceStream = try {
       fm.open(fileToRead)
     } catch {
-      case _: FileNotFoundException =>
-        throw QueryExecutionErrors.failedToReadDeltaFileError(
-          fileToRead, toString(), s"$fileToRead does not exist"
-        )
+      case f: FileNotFoundException =>
+        throw QueryExecutionErrors.failedToReadDeltaFileNotExistsError(fileToRead, toString(), f)
     }
     try {
       input = decompressStream(sourceStream)
@@ -475,9 +475,8 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
         if (keySize == -1) {
           eof = true
         } else if (keySize < 0) {
-          throw QueryExecutionErrors.failedToReadDeltaFileError(
-            fileToRead, toString(), s"key size cannot be ${keySize}"
-          )
+          throw QueryExecutionErrors.failedToReadDeltaFileKeySizeError(
+            fileToRead, toString(), keySize)
         } else {
           val keyRowBuffer = new Array[Byte](keySize)
           ByteStreams.readFully(input, keyRowBuffer, 0, keySize)
@@ -580,8 +579,8 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
         if (keySize == -1) {
           eof = true
         } else if (keySize < 0) {
-          throw QueryExecutionErrors.failedToReadSnapshotFileError(
-            fileToRead, toString(), s"key size cannot be $keySize")
+          throw QueryExecutionErrors.failedToReadSnapshotFileKeySizeError(
+            fileToRead, toString(), keySize)
         } else {
           val keyRowBuffer = new Array[Byte](keySize)
           ByteStreams.readFully(input, keyRowBuffer, 0, keySize)
@@ -591,8 +590,8 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
 
           val valueSize = input.readInt()
           if (valueSize < 0) {
-            throw QueryExecutionErrors.failedToReadSnapshotFileError(
-              fileToRead, toString(), s"value size cannot be $valueSize")
+            throw QueryExecutionErrors.failedToReadSnapshotFileValueSizeError(
+              fileToRead, toString(), valueSize)
           } else {
             val valueRowBuffer = new Array[Byte](valueSize)
             ByteStreams.readFully(input, valueRowBuffer, 0, valueSize)

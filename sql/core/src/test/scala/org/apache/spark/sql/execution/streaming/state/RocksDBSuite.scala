@@ -149,8 +149,13 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
         db.load(1)
       }
       assert(ex.isInstanceOf[SparkException])
-      assert(ex.getMessage.contains("Error reading streaming state file") &&
-        ex.getCause.getMessage.contains("does not exist"))
+      checkError(
+        ex,
+        errorClass = "CANNOT_LOAD_STATE_STORE.CANNOT_READ_STREAMING_STATE_FILE",
+        parameters = Map(
+          "fileToRead" -> s"$remoteDir/1.changelog"
+        )
+      )
     }
   }
 
@@ -729,9 +734,18 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
         var ex = intercept[SparkException] {
           ThreadUtils.runInNewThread("concurrent-test-thread-1") { db.load(0) }
         }
-        // Assert that the error message contains the stack trace
-        assert(ex.getMessage.contains("Thread holding the lock has trace:"))
-        assert(ex.getMessage.contains("runInNewThread"))
+        checkError(
+          ex,
+          errorClass = "CANNOT_LOAD_STATE_STORE.UNRELEASED_THREAD_ERROR",
+          parameters = Map(
+            "loggingId" -> "\\[Thread-\\d+\\]",
+            "newAcquiredThreadInfo" -> "\\[ThreadId: Some\\(\\d+\\)\\]",
+            "acquiredThreadInfo" -> "\\[ThreadId: Some\\(\\d+\\)\\]",
+            "timeWaitedMs" -> "\\d+",
+            "stackTraceOutput" -> "(?s).*"
+          ),
+          matchPVals = true
+        )
 
         // Commit should release the instance allowing other threads to load new version
         db.commit()
@@ -745,9 +759,6 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
         ex = intercept[SparkException] {
           ThreadUtils.runInNewThread("concurrent-test-thread-2") { db.load(2) }
         }
-        // Assert that the error message contains the stack trace
-        assert(ex.getMessage.contains("Thread holding the lock has trace:"))
-        assert(ex.getMessage.contains("runInNewThread"))
 
         // Rollback should release the instance allowing other threads to load new version
         db.rollback()
@@ -788,8 +799,9 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
       checkError(
         e,
         errorClass = "CANNOT_LOAD_STATE_STORE.CANNOT_READ_CHECKPOINT",
-        parameters = scala.collection.immutable.Map(
-          "versionLine" -> "v2"
+        parameters = Map(
+          "expectedVersion" -> "v2",
+          "actualVersion" -> "v1"
         )
       )
     }

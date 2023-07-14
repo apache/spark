@@ -192,7 +192,9 @@ private[sql] class RocksDBStateStoreProvider
 
   override def getStore(version: Long): StateStore = {
     try {
-      require(version >= 0, "Version cannot be less than 0")
+      if (version < 0) {
+        throw QueryExecutionErrors.unexpectedStateStoreVersion()
+      }
       rocksDB.load(version)
       new RocksDBStateStore(version)
     }
@@ -203,7 +205,9 @@ private[sql] class RocksDBStateStoreProvider
 
   override def getReadStore(version: Long): StateStore = {
     try {
-      require(version >= 0, "Version cannot be less than 0")
+      if (version < 0) {
+        throw QueryExecutionErrors.unexpectedStateStoreVersion()
+      }
       rocksDB.load(version, true)
       new RocksDBStateStore(version)
     }

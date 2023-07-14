@@ -27,15 +27,23 @@ This error class has the following derived error classes:
 
 ## CANNOT_READ_CHECKPOINT
 
-Cannot read RocksDB checkpoint metadata of version `<versionLine>`
+Cannot read RocksDB checkpoint metadata. Expected `<expectedVersion>`, but found `<actualVersion>`.
 
-## CANNOT_READ_DELTA_FILE
+## CANNOT_READ_DELTA_FILE_KEY_SIZE
 
-Error reading delta file `<fileToRead>` of `<clazz>`: `<message>`
+Error reading delta file `<fileToRead>` of `<clazz>`: key size cannot be `<keySize>`.
 
-## CANNOT_READ_SNAPSHOT_FILE
+## CANNOT_READ_DELTA_FILE_NOT_EXISTS
 
-Error reading snapshot file `<fileToRead>` of `<clazz>`: `<message>`
+Error reading delta file `<fileToRead>` of `<clazz>`: `<fileToRead>` does not exist.
+
+## CANNOT_READ_SNAPSHOT_FILE_KEY_SIZE
+
+Error reading snapshot file `<fileToRead>` of `<clazz>`: key size cannot be `<keySize>`.
+
+## CANNOT_READ_SNAPSHOT_FILE_VALUE_SIZE
+
+Error reading snapshot file `<fileToRead>` of `<clazz>`: value size cannot be `<valueSize>`.
 
 ## CANNOT_READ_STREAMING_STATE_FILE
 
@@ -48,6 +56,10 @@ Error reading streaming state file of `<fileToRead>` does not exist. If the stre
 ## UNEXPECTED_FILE_SIZE
 
 Copied `<dfsFile>` to `<localFile>`, expected `<expectedSize>` bytes, found `<localFileSize>` bytes.
+
+## UNEXPECTED_VERSION
+
+Version cannot be less than 0.
 
 ## UNRELEASED_THREAD_ERROR
 

@@ -2461,31 +2461,61 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
         s"but it's ${endSeconds.toString} now.")
   }
 
-  def failedToReadDeltaFileError(fileToRead: Path, clazz: String, message: String): Throwable = {
+  def failedToReadDeltaFileKeySizeError(
+      fileToRead: Path,
+      clazz: String,
+      keySize: Int): Throwable = {
     new SparkException(
-      errorClass = "CANNOT_LOAD_STATE_STORE.CANNOT_READ_DELTA_FILE",
+      errorClass = "CANNOT_LOAD_STATE_STORE.CANNOT_READ_DELTA_FILE_KEY_SIZE",
       messageParameters = Map(
         "fileToRead" -> fileToRead.toString(),
         "clazz" -> clazz,
-        "message" -> message),
+        "keySize" -> keySize.toString),
       cause = null)
   }
 
-  def failedToReadSnapshotFileError(fileToRead: Path, clazz: String, message: String): Throwable = {
+  def failedToReadDeltaFileNotExistsError(
+      fileToRead: Path,
+      clazz: String,
+      f: Throwable): Throwable = {
     new SparkException(
-      errorClass = "CANNOT_LOAD_STATE_STORE.CANNOT_READ_SNAPSHOT_FILE",
+      errorClass = "CANNOT_LOAD_STATE_STORE.CANNOT_READ_DELTA_FILE_NOT_EXISTS",
+      messageParameters = Map(
+        "fileToRead" -> fileToRead.toString(),
+        "clazz" -> clazz),
+      cause = f)
+  }
+
+  def failedToReadSnapshotFileKeySizeError(
+      fileToRead: Path,
+      clazz: String,
+      keySize: Int): Throwable = {
+    new SparkException(
+      errorClass = "CANNOT_LOAD_STATE_STORE.CANNOT_READ_SNAPSHOT_FILE_KEY_SIZE",
       messageParameters = Map(
         "fileToRead" -> fileToRead.toString(),
         "clazz" -> clazz,
-        "message" -> message),
+        "keySize" -> keySize.toString),
+      cause = null)
+  }
+
+  def failedToReadSnapshotFileValueSizeError(
+      fileToRead: Path,
+      clazz: String,
+      valueSize: Int): Throwable = {
+    new SparkException(
+      errorClass = "CANNOT_LOAD_STATE_STORE.CANNOT_READ_SNAPSHOT_FILE_VALUE_SIZE",
+      messageParameters = Map(
+        "fileToRead" -> fileToRead.toString(),
+        "clazz" -> clazz,
+        "valueSize" -> valueSize.toString),
       cause = null)
   }
 
   def failedToReadStreamingStateFileError(fileToRead: Path, f: Throwable): Throwable = {
     new SparkException(
       errorClass = "CANNOT_LOAD_STATE_STORE.CANNOT_READ_STREAMING_STATE_FILE",
-      messageParameters = Map(
-        "fileToRead" -> fileToRead.toString()),
+      messageParameters = Map("fileToRead" -> fileToRead.toString()),
       cause = f)
   }
 
@@ -2863,9 +2893,12 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
         "enumString" -> enumString))
   }
 
-  def unreleasedThreadError(loggingId: String, newAcquiredThreadInfo: String,
-                            AcquiredThreadInfo: String, timeWaitedMs: Long,
-                            stackTraceOutput: String): Throwable = {
+  def unreleasedThreadError(
+      loggingId: String,
+      newAcquiredThreadInfo: String,
+      AcquiredThreadInfo: String,
+      timeWaitedMs: Long,
+      stackTraceOutput: String): Throwable = {
     new SparkException (
       errorClass = "CANNOT_LOAD_STATE_STORE.UNRELEASED_THREAD_ERROR",
       messageParameters = Map(
@@ -2873,22 +2906,24 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
         "newAcquiredThreadInfo" -> newAcquiredThreadInfo,
         "acquiredThreadInfo" -> AcquiredThreadInfo,
         "timeWaitedMs" -> timeWaitedMs.toString,
-        "stackTraceOutput" -> stackTraceOutput
-      ),
+        "stackTraceOutput" -> stackTraceOutput),
       cause = null)
   }
 
-  def cannotReadCheckpoint(versionLine: String): Throwable = {
+  def cannotReadCheckpoint(expectedVersion: String, actualVersion: String): Throwable = {
     new SparkException (
       errorClass = "CANNOT_LOAD_STATE_STORE.CANNOT_READ_CHECKPOINT",
       messageParameters = Map(
-        "versionLine" -> versionLine
-      ),
+        "expectedVersion" -> expectedVersion,
+        "actualVersion" -> actualVersion),
       cause = null)
   }
 
-  def unexpectedFileSize(dfsFile: Path, localFile: File, expectedSize: Long,
-                         localFileSize: Long): Throwable = {
+  def unexpectedFileSize(
+      dfsFile: Path,
+      localFile: File,
+      expectedSize: Long,
+      localFileSize: Long): Throwable = {
     new SparkException(
       errorClass = "CANNOT_LOAD_STATE_STORE.UNEXPECTED_FILE_SIZE",
       messageParameters = Map(
@@ -2897,6 +2932,13 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
         "expectedSize" -> expectedSize.toString,
         "localFileSize" -> localFileSize.toString
       ),
+      cause = null)
+  }
+
+  def unexpectedStateStoreVersion(): Throwable = {
+    new SparkException(
+      errorClass = "CANNOT_LOAD_STATE_STORE.UNEXPECTED_VERSION",
+      messageParameters = Map.empty,
       cause = null)
   }
 
