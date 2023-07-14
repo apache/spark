@@ -17,14 +17,17 @@
 
 package org.apache.spark.sql.connector
 
+
+import java.sql.Date
 import java.util.Collections
 
 import org.apache.spark.sql.{catalyst, AnalysisException, DataFrame, Row}
 import org.apache.spark.sql.catalyst.expressions.{ApplyFunctionExpression, Cast, Literal}
+import org.apache.spark.sql.catalyst.expressions.objects.Invoke
 import org.apache.spark.sql.catalyst.plans.physical
 import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, RangePartitioning, UnknownPartitioning}
 import org.apache.spark.sql.connector.catalog.Identifier
-import org.apache.spark.sql.connector.catalog.functions.{BucketFunction, StringSelfFunction, TruncateFunction, UnboundBucketFunction, UnboundStringSelfFunction, UnboundTruncateFunction}
+import org.apache.spark.sql.connector.catalog.functions._
 import org.apache.spark.sql.connector.distributions.{Distribution, Distributions}
 import org.apache.spark.sql.connector.expressions._
 import org.apache.spark.sql.connector.expressions.LogicalExpressions._
@@ -37,15 +40,18 @@ import org.apache.spark.sql.execution.streaming.sources.ContinuousMemoryStream
 import org.apache.spark.sql.functions.lit
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.{StreamingQueryException, Trigger}
-import org.apache.spark.sql.test.SQLTestData.TestData
-import org.apache.spark.sql.types.{IntegerType, LongType, StringType, StructType}
+import org.apache.spark.sql.types.{DateType, IntegerType, LongType, ObjectType, StringType, StructType, TimestampType}
 import org.apache.spark.sql.util.QueryExecutionListener
 
 class WriteDistributionAndOrderingSuite extends DistributionAndOrderingSuiteBase {
   import testImplicits._
 
   before {
-    Seq(UnboundBucketFunction, UnboundStringSelfFunction, UnboundTruncateFunction).foreach { f =>
+    Seq(
+      UnboundYearsFunction,
+      UnboundBucketFunction,
+      UnboundStringSelfFunction,
+      UnboundTruncateFunction).foreach { f =>
       catalog.createFunction(Identifier.of(Array.empty, f.name()), f)
     }
   }
@@ -64,6 +70,7 @@ class WriteDistributionAndOrderingSuite extends DistributionAndOrderingSuiteBase
   private val schema = new StructType()
     .add("id", IntegerType)
     .add("data", StringType)
+    .add("day", DateType)
 
   test("ordered distribution and sort with same exprs: append") {
     checkOrderedDistributionAndSortWithSameExprsInVariousCases("append")
@@ -951,8 +958,8 @@ class WriteDistributionAndOrderingSuite extends DistributionAndOrderingSuiteBase
     catalog.createTable(ident, schema, Array.empty, emptyProps, distribution, ordering, None)
 
     withTempDir { checkpointDir =>
-      val inputData = ContinuousMemoryStream[(Long, String)]
-      val inputDF = inputData.toDF().toDF("id", "data")
+      val inputData = ContinuousMemoryStream[(Long, String, Date)]
+      val inputDF = inputData.toDF().toDF("id", "data", "day")
 
       val writer = inputDF
         .writeStream
@@ -963,7 +970,9 @@ class WriteDistributionAndOrderingSuite extends DistributionAndOrderingSuiteBase
       val analysisException = intercept[AnalysisException] {
         val query = writer.toTable(tableNameAsString)
 
-        inputData.addData((1, "a"), (2, "b"))
+        inputData.addData(
+          (1, "a", Date.valueOf("2021-01-01")),
+          (2, "b", Date.valueOf("2022-02-02")))
 
         query.processAllAvailable()
         query.stop()
@@ -977,8 +986,8 @@ class WriteDistributionAndOrderingSuite extends DistributionAndOrderingSuiteBase
     catalog.createTable(ident, schema, Array.empty[Transform], emptyProps)
 
     withTempDir { checkpointDir =>
-      val inputData = ContinuousMemoryStream[(Long, String)]
-      val inputDF = inputData.toDF().toDF("id", "data")
+      val inputData = ContinuousMemoryStream[(Long, String, Date)]
+      val inputDF = inputData.toDF().toDF("id", "data", "day")
 
       val writer = inputDF
         .writeStream
@@ -988,12 +997,17 @@ class WriteDistributionAndOrderingSuite extends DistributionAndOrderingSuiteBase
 
       val query = writer.toTable(tableNameAsString)
 
-      inputData.addData((1, "a"), (2, "b"))
+      inputData.addData(
+        (1, "a", Date.valueOf("2021-01-01")),
+        (2, "b", Date.valueOf("2022-02-02")))
 
       query.processAllAvailable()
       query.stop()
 
-      checkAnswer(spark.table(tableNameAsString), Row(1, "a") :: Row(2, "b") :: Nil)
+      checkAnswer(
+        spark.table(tableNameAsString),
+        Row(1, "a", Date.valueOf("2021-01-01")) ::
+        Row(2, "b", Date.valueOf("2022-02-02")) :: Nil)
     }
   }
 
@@ -1048,6 +1062,9 @@ class WriteDistributionAndOrderingSuite extends DistributionAndOrderingSuiteBase
     val truncateTransform = ApplyTransform(
       "truncate",
       Seq(stringSelfTransform, LiteralValue(2, IntegerType)))
+    val yearsTransform = ApplyTransform(
+      "years",
+      Seq(FieldReference("day")))
 
     val tableOrdering = Array[SortOrder](
       sort(
@@ -1056,6 +1073,10 @@ class WriteDistributionAndOrderingSuite extends DistributionAndOrderingSuiteBase
         NullOrdering.NULLS_FIRST),
       sort(
         BucketTransform(LiteralValue(10, IntegerType), Seq(FieldReference("id"))),
+        SortDirection.DESCENDING,
+        NullOrdering.NULLS_FIRST),
+      sort(
+        yearsTransform,
         SortDirection.DESCENDING,
         NullOrdering.NULLS_FIRST)
     )
@@ -1077,6 +1098,18 @@ class WriteDistributionAndOrderingSuite extends DistributionAndOrderingSuiteBase
       ),
       catalyst.expressions.SortOrder(
         ApplyFunctionExpression(BucketFunction, Seq(Literal(10), Cast(attr("id"), LongType))),
+        catalyst.expressions.Descending,
+        catalyst.expressions.NullsFirst,
+        Seq.empty
+      ),
+      catalyst.expressions.SortOrder(
+        Invoke(
+          Literal.create(YearsFunction, ObjectType(YearsFunction.getClass)),
+          "invoke",
+          LongType,
+          Seq(Cast(attr("day"), TimestampType, Some("America/Los_Angeles"))),
+          Seq(TimestampType),
+          propagateNull = false),
         catalyst.expressions.Descending,
         catalyst.expressions.NullsFirst,
         Seq.empty
@@ -1161,11 +1194,17 @@ class WriteDistributionAndOrderingSuite extends DistributionAndOrderingSuiteBase
       tableOrdering, tableNumPartitions, distributionStrictlyRequired)
 
     val df = if (!dataSkewed) {
-      spark.createDataFrame(Seq((1, "a"), (2, "b"), (3, "c"))).toDF("id", "data")
+      spark.createDataFrame(Seq(
+        (1, "a", Date.valueOf("2021-01-01")),
+        (2, "b", Date.valueOf("2022-02-02")),
+        (3, "c", Date.valueOf("2023-03-03")))
+      ).toDF("id", "data", "day")
     } else {
       spark.sparkContext.parallelize(
-        (1 to 10).map(i => TestData(if (i > 4) 5 else i, i.toString)), 3)
-        .toDF("id", "data")
+        (1 to 10).map {
+          i => (if (i > 4) 5 else i, i.toString, Date.valueOf(s"${2020 + i}-$i-$i"))
+        }, 3)
+        .toDF("id", "data", "day")
     }
     val writer = writeTransform(df).writeTo(tableNameAsString)
 
@@ -1241,8 +1280,8 @@ class WriteDistributionAndOrderingSuite extends DistributionAndOrderingSuiteBase
       tableOrdering, tableNumPartitions)
 
     withTempDir { checkpointDir =>
-      val inputData = MemoryStream[(Long, String)]
-      val inputDF = inputData.toDF().toDF("id", "data")
+      val inputData = MemoryStream[(Long, String, Date)]
+      val inputDF = inputData.toDF().toDF("id", "data", "day")
 
       val queryDF = outputMode match {
         case "append" | "update" =>
@@ -1251,8 +1290,11 @@ class WriteDistributionAndOrderingSuite extends DistributionAndOrderingSuiteBase
           // add an aggregate for complete mode
           inputDF
             .groupBy("id")
-            .agg(Map("data" -> "count"))
-            .select($"id", $"count(data)".cast("string").as("data"))
+            .agg(Map("data" -> "count", "day" -> "max"))
+            .select(
+              $"id",
+              $"count(data)".cast("string").as("data"),
+              $"max(day)".cast("date").as("day"))
       }
 
       val writer = writeTransform(queryDF)
@@ -1263,7 +1305,9 @@ class WriteDistributionAndOrderingSuite extends DistributionAndOrderingSuiteBase
       def executeCommand(): SparkPlan = execute {
         val query = writer.toTable(tableNameAsString)
 
-        inputData.addData((1, "a"), (2, "b"))
+        inputData.addData(
+          (1, "a", Date.valueOf("2021-01-01")),
+          (2, "b", Date.valueOf("2022-02-02")))
 
         query.processAllAvailable()
         query.stop()
@@ -1287,8 +1331,12 @@ class WriteDistributionAndOrderingSuite extends DistributionAndOrderingSuiteBase
           maxNumShuffles = if (outputMode != "complete") 1 else 2)
 
         val expectedRows = outputMode match {
-          case "append" | "update" => Row(1, "a") :: Row(2, "b") :: Nil
-          case "complete" => Row(1, "1") :: Row(2, "1") :: Nil
+          case "append" | "update" =>
+            Row(1, "a", Date.valueOf("2021-01-01")) ::
+            Row(2, "b", Date.valueOf("2022-02-02")) :: Nil
+          case "complete" =>
+            Row(1, "1", Date.valueOf("2021-01-01")) ::
+            Row(2, "1", Date.valueOf("2022-02-02")) :: Nil
         }
         checkAnswer(spark.table(tableNameAsString), expectedRows)
       }
