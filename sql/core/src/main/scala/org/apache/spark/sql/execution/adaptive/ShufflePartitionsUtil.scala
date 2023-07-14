@@ -406,4 +406,33 @@ object ShufflePartitionsUtil extends Logging {
       None
     }
   }
+
+  /**
+   * Splits the skewed partition based on the map size and the target partition size
+   * after split. Create a list of `PartialReducerPartitionSpec` for skewed partition and
+   * create `CoalescedPartition` for normal partition.
+   */
+  def optimizeSkewedPartitions(
+      shuffleId: Int,
+      bytesByPartitionId: Array[Long],
+      skewThreshold: Long,
+      targetSize: Long,
+      smallPartitionFactor: Double = SMALL_PARTITION_FACTOR): Seq[ShufflePartitionSpec] = {
+    bytesByPartitionId.indices.flatMap { reduceIndex =>
+      val bytes = bytesByPartitionId(reduceIndex)
+      if (bytes > skewThreshold) {
+        val newPartitionSpec = createSkewPartitionSpecs(
+          shuffleId, reduceIndex, targetSize, smallPartitionFactor)
+        if (newPartitionSpec.isEmpty) {
+          CoalescedPartitionSpec(reduceIndex, reduceIndex + 1, bytes) :: Nil
+        } else {
+          logDebug(s"For shuffle $shuffleId, partition $reduceIndex is skew, " +
+            s"split it into ${newPartitionSpec.get.size} parts.")
+          newPartitionSpec.get
+        }
+      } else {
+        CoalescedPartitionSpec(reduceIndex, reduceIndex + 1, bytes) :: Nil
+      }
+    }
+  }
 }

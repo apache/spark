@@ -210,23 +210,8 @@ case class OptimizeSkewedJoin(ensureRequirements: EnsureRequirements)
     val skewThreshold = getSkewThreshold(medSize)
     val streamedPlanTargetSize = targetSize(bytesByPartitionId, skewThreshold)
 
-    val newPartitionsSpec = bytesByPartitionId.indices.flatMap { reduceIndex =>
-      val bytes = bytesByPartitionId(reduceIndex)
-      val shuffleId = mapStats.shuffleId
-      if (bytes > skewThreshold) {
-        val newPartitionSpec = ShufflePartitionsUtil.createSkewPartitionSpecs(
-          shuffleId, reduceIndex, streamedPlanTargetSize)
-        if (newPartitionSpec.isEmpty) {
-          CoalescedPartitionSpec(reduceIndex, reduceIndex + 1, bytes) :: Nil
-        } else {
-          logDebug(s"For shuffle $shuffleId, partition $reduceIndex is skew, " +
-            s"split it into ${newPartitionSpec.get.size} parts.")
-          newPartitionSpec.get
-        }
-      } else {
-        CoalescedPartitionSpec(reduceIndex, reduceIndex + 1, bytes) :: Nil
-      }
-    }
+    val newPartitionsSpec = ShufflePartitionsUtil.optimizeSkewedPartitions(mapStats.shuffleId,
+      bytesByPartitionId, skewThreshold, streamedPlanTargetSize)
     // return origin plan if we can not optimize partitions
     if (newPartitionsSpec.length == bytesByPartitionId.length) {
       None
@@ -254,13 +239,13 @@ case class OptimizeSkewedJoin(ensureRequirements: EnsureRequirements)
       }.getOrElse(shj)
 
     case bhj @ BroadcastHashJoinExec(_, _, _, BuildRight, _,
-        ShuffleStage(left: ShuffleQueryStageExec), _, _, _) =>
+        ShuffleStage(left: ShuffleQueryStageExec), _, _, false) =>
       tryOptimizeBroadcastHashJoinStreamedPlan(left).map {
         case newLeft => bhj.copy(left = newLeft, isSkewJoin = true)
       }.getOrElse(bhj)
 
     case bhj @ BroadcastHashJoinExec(_, _, _, BuildLeft, _, _,
-        ShuffleStage(right: ShuffleQueryStageExec), _, _) =>
+        ShuffleStage(right: ShuffleQueryStageExec), _, false) =>
       tryOptimizeBroadcastHashJoinStreamedPlan(right).map {
         case newRight => bhj.copy(right = newRight, isSkewJoin = true)
       }.getOrElse(bhj)

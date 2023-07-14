@@ -39,34 +39,6 @@ object OptimizeSkewInRebalancePartitions extends AQEShuffleReadRule {
   override val supportedShuffleOrigins: Seq[ShuffleOrigin] =
     Seq(REBALANCE_PARTITIONS_BY_NONE, REBALANCE_PARTITIONS_BY_COL)
 
-  /**
-   * Splits the skewed partition based on the map size and the target partition size
-   * after split. Create a list of `PartialReducerPartitionSpec` for skewed partition and
-   * create `CoalescedPartition` for normal partition.
-   */
-  private def optimizeSkewedPartitions(
-      shuffleId: Int,
-      bytesByPartitionId: Array[Long],
-      targetSize: Long): Seq[ShufflePartitionSpec] = {
-    val smallPartitionFactor =
-      conf.getConf(SQLConf.ADAPTIVE_REBALANCE_PARTITIONS_SMALL_PARTITION_FACTOR)
-    bytesByPartitionId.indices.flatMap { reduceIndex =>
-      val bytes = bytesByPartitionId(reduceIndex)
-      if (bytes > targetSize) {
-        val newPartitionSpec = ShufflePartitionsUtil.createSkewPartitionSpecs(
-          shuffleId, reduceIndex, targetSize, smallPartitionFactor)
-        if (newPartitionSpec.isEmpty) {
-          CoalescedPartitionSpec(reduceIndex, reduceIndex + 1, bytes) :: Nil
-        } else {
-          logDebug(s"For shuffle $shuffleId, partition $reduceIndex is skew, " +
-            s"split it into ${newPartitionSpec.get.size} parts.")
-          newPartitionSpec.get
-        }
-      } else {
-        CoalescedPartitionSpec(reduceIndex, reduceIndex + 1, bytes) :: Nil
-      }
-    }
-  }
 
   private def tryOptimizeSkewedPartitions(shuffle: ShuffleQueryStageExec): SparkPlan = {
     val defaultAdvisorySize = conf.getConf(SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES)
@@ -77,8 +49,10 @@ object OptimizeSkewInRebalancePartitions extends AQEShuffleReadRule {
       return shuffle
     }
 
-    val newPartitionsSpec = optimizeSkewedPartitions(
-      mapStats.get.shuffleId, mapStats.get.bytesByPartitionId, advisorySize)
+    val smallPartitionFactor =
+      conf.getConf(SQLConf.ADAPTIVE_REBALANCE_PARTITIONS_SMALL_PARTITION_FACTOR)
+    val newPartitionsSpec = ShufflePartitionsUtil.optimizeSkewedPartitions(mapStats.get.shuffleId,
+      mapStats.get.bytesByPartitionId, advisorySize, advisorySize, smallPartitionFactor)
     // return origin plan if we can not optimize partitions
     if (newPartitionsSpec.length == mapStats.get.bytesByPartitionId.length) {
       shuffle
