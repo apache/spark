@@ -583,15 +583,19 @@ object StateStore extends Logging {
     maintenanceTask != null && maintenanceTask.isRunning
   }
 
+  def stopMaintenanceTask(): Unit = loadedProviders.synchronized {
+    if (maintenanceTask != null) {
+      maintenanceTask.stop()
+      maintenanceTask = null
+    }
+  }
+
   /** Unload and stop all state store providers */
   def stop(): Unit = loadedProviders.synchronized {
     loadedProviders.keySet.foreach { key => unload(key) }
     loadedProviders.clear()
     _coordRef = null
-    if (maintenanceTask != null) {
-      maintenanceTask.stop()
-      maintenanceTask = null
-    }
+    stopMaintenanceTask()
     logInfo("StateStore stopped")
   }
 
@@ -602,7 +606,12 @@ object StateStore extends Logging {
         maintenanceTask = new MaintenanceTask(
           storeConf.maintenanceInterval,
           task = { doMaintenance() },
-          onError = { loadedProviders.synchronized { loadedProviders.clear() } }
+          onError = { loadedProviders.synchronized {
+              logInfo("Stopping maintenance task since an error was encountered.")
+              stopMaintenanceTask()
+              loadedProviders.clear()
+            }
+          }
         )
         logInfo("State Store maintenance task started")
       }

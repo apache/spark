@@ -47,6 +47,30 @@ import org.apache.spark.tags.ExtendedSQLTest
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.Utils
 
+class FakeStateStoreProviderWithMaintenanceError extends StateStoreProvider {
+  private var id: StateStoreId = null
+
+  override def init(
+      stateStoreId: StateStoreId,
+      keySchema: StructType,
+      valueSchema: StructType,
+      numColsPrefixKey: Int,
+      storeConfs: StateStoreConf,
+      hadoopConf: Configuration): Unit = {
+    id = stateStoreId
+  }
+
+  override def stateStoreId: StateStoreId = id
+
+  override def close(): Unit = {}
+
+  override def getStore(version: Long): StateStore = null
+
+  override def doMaintenance(): Unit = {
+    throw new RuntimeException("Intentional maintenance failure")
+  }
+}
+
 @ExtendedSQLTest
 class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
   with BeforeAndAfter {
@@ -1277,6 +1301,38 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
       val sqlMetric = metric.createSQLMetric(sc)
       assert(sqlMetric != null)
       assert(sqlMetric.name === Some("desc1"))
+    }
+  }
+
+  test("SPARK-44438: maintenance task should be shutdown on error") {
+    val conf = new SparkConf()
+      .setMaster("local")
+      .setAppName("test")
+    val sqlConf = getDefaultSQLConf(
+      SQLConf.STATE_STORE_MIN_DELTAS_FOR_SNAPSHOT.defaultValue.get,
+      SQLConf.MAX_BATCHES_TO_RETAIN_IN_MEMORY.defaultValue.get
+    )
+    // Make maintenance interval small so that maintenance task is called right after scheduling.
+    sqlConf.setConf(SQLConf.STREAMING_MAINTENANCE_INTERVAL, 100L)
+    // Use the `FakeStateStoreProviderWithMaintenance` to run the test
+    sqlConf.setConf(SQLConf.STATE_STORE_PROVIDER_CLASS,
+      classOf[FakeStateStoreProviderWithMaintenanceError].getName)
+
+    quietly {
+      withSpark(new SparkContext(conf)) { sc =>
+        withCoordinatorRef(sc) { _ =>
+          val storeId = StateStoreProviderId(StateStoreId("firstDir", 0, 1), UUID.randomUUID)
+          val storeConf = StateStoreConf(sqlConf)
+
+          // get the state store and kick off the maintenance task
+          StateStore.get(storeId, null, null, 0, 0, storeConf, sc.hadoopConfiguration)
+
+          eventually(timeout(30.seconds)) {
+            assert(!StateStore.isMaintenanceRunning)
+          }
+          StateStore.stop()
+        }
+      }
     }
   }
 
