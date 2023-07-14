@@ -16,7 +16,7 @@
  */
 package org.apache.spark.sql.connect.client.arrow
 
-import java.io.IOException
+import java.io.{ByteArrayInputStream, IOException}
 import java.lang.invoke.{MethodHandles, MethodType}
 import java.lang.reflect.Modifier
 import java.math.{BigDecimal => JBigDecimal, BigInteger => JBigInteger}
@@ -32,57 +32,39 @@ import scala.reflect.ClassTag
 import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.vector.{BigIntVector, BitVector, DateDayVector, DecimalVector, DurationVector, FieldVector, Float4Vector, Float8Vector, IntervalYearVector, IntVector, NullVector, SmallIntVector, TimeStampMicroTZVector, TimeStampMicroVector, TinyIntVector, VarBinaryVector, VarCharVector, VectorSchemaRoot}
 import org.apache.arrow.vector.complex.{ListVector, MapVector, StructVector}
+import org.apache.arrow.vector.ipc.ArrowReader
 import org.apache.arrow.vector.util.Text
 
-import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoder
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders._
 import org.apache.spark.sql.catalyst.expressions.GenericRowWithSchema
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.types.{Decimal, StructType}
-import org.apache.spark.sql.util.ArrowUtils
 
 /**
  * Helper class for converting arrow batches into user objects.
  */
 object ArrowDeserializers {
   import ArrowEncoderUtils._
+
   /**
-   * Create an Iterator of `T`. This iterator takes an Iterator of Arrow IPC Streams,
-   * and deserializes these streams into one or more instances of `T`
+   * Create an Iterator of `T`. This iterator takes an Iterator of Arrow IPC Streams, and
+   * deserializes these streams into one or more instances of `T`
    */
   def deserializeFromArrow[T](
       input: Iterator[Array[Byte]],
       encoder: AgnosticEncoder[T],
       allocator: BufferAllocator): TypedDeserializingIterator[T] = {
     try {
-      val reader = new ConcatenatingArrowStreamReader(allocator, input)
+      val reader = new ConcatenatingArrowStreamReader(
+        allocator,
+        input.map(bytes => new MessageIterator(new ByteArrayInputStream(bytes), allocator)),
+        destructive = true)
       new ArrowDeserializingIterator(encoder, reader)
     } catch {
       case _: IOException =>
         new EmptyDeserializingIterator(encoder)
-    }
-  }
-
-  /**
-   * Create an Iterator of [[Row]]. This iterator takes an Iterator of Arrow IPC Streams,
-   * and deserializes these streams into one or more instances of [[T]].
-   *
-   * The schema of the contained in the first IPC stream is used to construct the Row encoder.
-   * All subsequent streams must have the same schema.
-   */
-  def deserializeFromArrow(
-      input: Iterator[Array[Byte]],
-      allocator: BufferAllocator): TypedDeserializingIterator[Row] = {
-    try {
-      val reader = new ConcatenatingArrowStreamReader(allocator, input)
-      val schema = ArrowUtils.fromArrowSchema(reader.getVectorSchemaRoot.getSchema)
-      val encoder = org.apache.spark.sql.catalyst.encoders.RowEncoder.encoderFor(schema)
-      new ArrowDeserializingIterator(encoder, reader)
-    } catch {
-      case e: IOException =>
-        new EmptyDeserializingIterator(RowEncoder(Nil))
     }
   }
 
@@ -143,7 +125,7 @@ object ArrowDeserializers {
           def value(i: Int): String = getString(vector, i)
         }
       case (JavaEnumEncoder(tag), v: VarCharVector) =>
-        // TODO  see if we can get Enum.valueOf working...
+        // It would be nice if we can get Enum.valueOf working...
         val valueOf = methodLookup.findStatic(
           tag.runtimeClass,
           "valueOf",
@@ -266,7 +248,8 @@ object ArrowDeserializers {
       case (MapEncoder(tag, key, value, _), v: MapVector) =>
         val structVector = v.getDataVector.asInstanceOf[StructVector]
         val keyDeserializer = deserializerFor(key, structVector.getChild(MapVector.KEY_NAME))
-        val valueDeserializer = deserializerFor(value, structVector.getChild(MapVector.VALUE_NAME))
+        val valueDeserializer =
+          deserializerFor(value, structVector.getChild(MapVector.VALUE_NAME))
         if (isSubClass(Classes.MAP, tag)) {
           val companion = resolveCompanion[GenMapFactory[Map]](tag)
           new FieldDeserializer[Map[Any, Any], MapVector](v) {
@@ -301,15 +284,14 @@ object ArrowDeserializers {
         }
 
       case (ProductEncoder(tag, fields), StructVectors(struct, vectors)) =>
-        val methodType = MethodType.methodType(
-          classOf[Unit],
-          fields.map(_.enc.clsTag.runtimeClass).asJava)
-        val constructor = methodLookup.findConstructor(tag.runtimeClass, methodType)
+        val methodType =
+          MethodType.methodType(classOf[Unit], fields.map(_.enc.clsTag.runtimeClass).asJava)
+        val constructor = methodLookup
+          .findConstructor(tag.runtimeClass, methodType)
           .asSpreader(0, classOf[Array[Any]], fields.size)
         val deserializers = if (isTuple(tag.runtimeClass)) {
-          fields.zip(vectors).map {
-            case (field, vector) =>
-              deserializerFor(field.enc, vector)
+          fields.zip(vectors).toArray.map { case (field, vector) =>
+            deserializerFor(field.enc, vector)
           }
         } else {
           val lookup = createFieldLookup(vectors)
@@ -337,9 +319,8 @@ object ArrowDeserializers {
         }
 
       case (JavaBeanEncoder(tag, fields), StructVectors(struct, vectors)) =>
-        val constructor = methodLookup.findConstructor(
-          tag.runtimeClass,
-          MethodType.methodType(classOf[Unit]))
+        val constructor =
+          methodLookup.findConstructor(tag.runtimeClass, MethodType.methodType(classOf[Unit]))
         val lookup = createFieldLookup(vectors)
         val setters = fields.map { field =>
           val vector = lookup(field.name)
@@ -384,8 +365,8 @@ object ArrowDeserializers {
    *
    * If the [[ClassTag]] `tag` points to an interface instead of a concrete class we try to use
    * [[util.ArrayList]]. For concrete classes we try to use a constructor that takes a single
-   * [[Int]] argument, it is assumed this is a size hint. If no such constructor exists we fallback
-   * to a no-args constructor.
+   * [[Int]] argument, it is assumed this is a size hint. If no such constructor exists we
+   * fallback to a no-args constructor.
    */
   private def resolveJavaListCreator(tag: ClassTag[_]): Int => JList[Any] = {
     val cls = tag.runtimeClass
@@ -406,9 +387,8 @@ object ArrowDeserializers {
       } catch {
         case _: java.lang.NoSuchMethodException =>
           // Use a no-args constructor.
-          val ctor = methodLookup.findConstructor(
-            tag.runtimeClass,
-            MethodType.methodType(classOf[Unit]))
+          val ctor =
+            methodLookup.findConstructor(tag.runtimeClass, MethodType.methodType(classOf[Unit]))
           _ => ctor.invoke().asInstanceOf[JList[Any]]
       }
     }
@@ -431,16 +411,15 @@ object ArrowDeserializers {
       () => new util.HashMap[Any, Any]()
     } else {
       // Use a no-args constructor.
-      val ctor = methodLookup.findConstructor(
-        tag.runtimeClass,
-        MethodType.methodType(classOf[Unit]))
+      val ctor =
+        methodLookup.findConstructor(tag.runtimeClass, MethodType.methodType(classOf[Unit]))
       () => ctor.invoke().asInstanceOf[JMap[Any, Any]]
     }
   }
 
   /**
-   * Create a function that can lookup one [[FieldVector vectors]] in `fields` by name.
-   * This lookup is case insensitive. If the schema contains fields with duplicate (with
+   * Create a function that can lookup one [[FieldVector vectors]] in `fields` by name. This
+   * lookup is case insensitive. If the schema contains fields with duplicate (with
    * case-insensitive resolution) names an exception is thrown. The returned function will throw
    * an exception when no column can be found for a name.
    *
@@ -478,10 +457,10 @@ object ArrowDeserializers {
   }
 
   private def loadListIntoBuilder(
-                                   v: ListVector,
-                                   i: Int,
-                                   deserializer: Deserializer[Any],
-                                   builder: mutable.Builder[Any, _]): Unit = {
+      v: ListVector,
+      i: Int,
+      deserializer: Deserializer[Any],
+      builder: mutable.Builder[Any, _]): Unit = {
     var index = v.getElementStartIndex(i)
     val end = v.getElementEndIndex(i)
     builder.sizeHint(end - index)
@@ -491,11 +470,8 @@ object ArrowDeserializers {
     }
   }
 
-  private def getArray(
-                        v: ListVector,
-                        i: Int,
-                        deserializer: Deserializer[Any])(
-                        implicit tag: ClassTag[Any]): AnyRef = {
+  private def getArray(v: ListVector, i: Int, deserializer: Deserializer[Any])(implicit
+      tag: ClassTag[Any]): AnyRef = {
     val builder = mutable.ArrayBuilder.make[Any]
     loadListIntoBuilder(v, i, deserializer, builder)
     builder.result()
@@ -518,7 +494,7 @@ object ArrowDeserializers {
   }
 
   abstract class StructFieldSerializer[E](v: StructVector)
-    extends FieldDeserializer[E, StructVector](v) {
+      extends FieldDeserializer[E, StructVector](v) {
     override def isNull(i: Int): Boolean = vector != null && vector.isNull(i)
   }
 }
@@ -529,24 +505,25 @@ trait TypedDeserializingIterator[E] extends CloseableIterator[E] {
 }
 
 class EmptyDeserializingIterator[E](override val encoder: AgnosticEncoder[E])
-  extends TypedDeserializingIterator[E] {
+    extends TypedDeserializingIterator[E] {
   override def close(): Unit = ()
   override def hasNext: Boolean = false
   override def next(): E = throw new NoSuchElementException()
 }
 
 class ArrowDeserializingIterator[E](
-    override val encoder: AgnosticEncoder[E],
-    private[this] val reader: ConcatenatingArrowStreamReader)
-  extends TypedDeserializingIterator[E] {
+    val encoder: AgnosticEncoder[E],
+    private[this] val reader: ArrowReader)
+    extends TypedDeserializingIterator[E] {
   private[this] var index = 0
   private[this] val root = reader.getVectorSchemaRoot
   private[this] val deserializer = ArrowDeserializers.deserializerFor(encoder, root)
 
   override def hasNext: Boolean = {
     if (index >= root.getRowCount) {
-      reader.loadNextBatch()
-      index = 0
+      if (reader.loadNextBatch()) {
+        index = 0
+      }
     }
     index < root.getRowCount
   }
@@ -562,4 +539,3 @@ class ArrowDeserializingIterator[E](
 
   override def close(): Unit = reader.close()
 }
-

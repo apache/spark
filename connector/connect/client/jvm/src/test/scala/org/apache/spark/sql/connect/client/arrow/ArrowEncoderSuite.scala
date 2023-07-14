@@ -21,24 +21,19 @@ import java.util
 import java.util.{Collections, Objects}
 
 import scala.beans.BeanProperty
-import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.reflect.classTag
-import scala.util.control.NonFatal
 
-import com.google.protobuf.ByteString
 import org.apache.arrow.memory.{BufferAllocator, RootAllocator}
 import org.apache.arrow.vector.VarBinaryVector
 import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.SparkUnsupportedOperationException
-import org.apache.spark.connect.proto
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.{DefinedByConstructorParams, JavaTypeInference, ScalaReflection}
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoder
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{BoxedIntEncoder, CalendarIntervalEncoder, DateEncoder, EncoderField, InstantEncoder, IterableEncoder, JavaDecimalEncoder, LocalDateEncoder, PrimitiveDoubleEncoder, PrimitiveFloatEncoder, RowEncoder, StringEncoder, TimestampEncoder, UDTEncoder}
 import org.apache.spark.sql.catalyst.encoders.RowEncoder.{encoderFor => toRowEncoder}
-import org.apache.spark.sql.connect.client.SparkResult
 import org.apache.spark.sql.connect.client.arrow.FooEnum.FooEnum
 import org.apache.spark.sql.connect.client.util.ConnectFunSuite
 import org.apache.spark.sql.types.{ArrayType, DataType, Decimal, DecimalType, IntegerType, Metadata, SQLUserDefinedType, StructType, UserDefinedType}
@@ -96,15 +91,7 @@ class ArrowEncoderSuite extends ConnectFunSuite with BeforeAndAfterAll {
     }
 
     val resultIterator =
-      try {
-        deserializeFromArrow(inspectedIterator, encoder, deserializerAllocator)
-      } catch {
-        case NonFatal(e) =>
-          arrowIterator.close()
-          serializerAllocator.close()
-          deserializerAllocator.close()
-          throw e
-      }
+      ArrowDeserializers.deserializeFromArrow(inspectedIterator, encoder, deserializerAllocator)
     new CloseableIterator[T] {
       override def close(): Unit = {
         arrowIterator.close()
@@ -114,25 +101,6 @@ class ArrowEncoderSuite extends ConnectFunSuite with BeforeAndAfterAll {
       }
       override def hasNext: Boolean = resultIterator.hasNext
       override def next(): T = resultIterator.next()
-    }
-  }
-
-  // Temporary hack until we merge the deserializer.
-  private def deserializeFromArrow[E](
-      batches: Iterator[Array[Byte]],
-      encoder: AgnosticEncoder[E],
-      allocator: BufferAllocator): CloseableIterator[E] = {
-    val responses = batches.map { batch =>
-      val builder = proto.ExecutePlanResponse.newBuilder()
-      builder.getArrowBatchBuilder.setData(ByteString.copyFrom(batch))
-      builder.build()
-    }
-    val result = new SparkResult[E](responses.asJava, allocator, encoder)
-    new CloseableIterator[E] {
-      private val itr = result.iterator
-      override def close(): Unit = itr.close()
-      override def hasNext: Boolean = itr.hasNext
-      override def next(): E = itr.next()
     }
   }
 
