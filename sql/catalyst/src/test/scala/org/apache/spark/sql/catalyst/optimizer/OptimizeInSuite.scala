@@ -22,7 +22,7 @@ import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.PlanTest
-import org.apache.spark.sql.catalyst.plans.logical.{Filter, LocalRelation, LogicalPlan}
+import org.apache.spark.sql.catalyst.plans.logical.{Filter, LocalRelation, LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.internal.SQLConf.{LEGACY_NULL_IN_EMPTY_LIST_BEHAVIOR, OPTIMIZER_INSET_CONVERSION_THRESHOLD}
 import org.apache.spark.sql.types._
@@ -121,19 +121,43 @@ class OptimizeInSuite extends PlanTest {
     comparePlans(optimized, correctAnswer)
   }
 
-  test("OptimizedIn test: NULL IN (subquery) gets transformed to Filter(null)") {
-    val subquery = ListQuery(testRelation.select(UnresolvedAttribute("a")))
-    val originalQuery =
-      testRelation
-        .where(InSubquery(Seq(Literal.create(null, NullType)), subquery))
-        .analyze
+  test("OptimizedIn test: Legacy behavior: " +
+    "NULL IN (subquery) gets transformed to Filter(null)") {
+    withSQLConf(LEGACY_NULL_IN_EMPTY_LIST_BEHAVIOR.key -> "true") {
+      val subquery = ListQuery(testRelation.select(UnresolvedAttribute("a")))
+      val originalQuery =
+        testRelation
+          .where(InSubquery(Seq(Literal.create(null, NullType)), subquery))
+          .analyze
 
-    val optimized = Optimize.execute(originalQuery.analyze)
-    val correctAnswer =
-      testRelation
-        .where(Literal.create(null, BooleanType))
-        .analyze
-    comparePlans(optimized, correctAnswer)
+      val optimized = Optimize.execute(originalQuery.analyze)
+      val correctAnswer =
+        testRelation
+          .where(Literal.create(null, BooleanType))
+          .analyze
+      comparePlans(optimized, correctAnswer)
+    }
+  }
+
+  test("OptimizedIn test: NULL IN (subquery) gets transformed to " +
+    "If(Exists(subquery), null, false)") {
+    withSQLConf(LEGACY_NULL_IN_EMPTY_LIST_BEHAVIOR.key -> "false") {
+      val subquery = testRelation.select(UnresolvedAttribute("a"))
+      val originalQuery =
+        testRelation
+          .where(InSubquery(Seq(Literal.create(null, NullType)), ListQuery(subquery)))
+          .analyze
+
+      val optimized = Optimize.execute(originalQuery.analyze)
+      // Our simplified Optimize results in an extra redundant Project. This gets collapsed in
+      // the full optimizer.
+      val correctAnswer =
+        testRelation
+          .where(If(Exists(Project(Seq(UnresolvedAttribute("a")), subquery)),
+            Literal.create(null, BooleanType), Literal(false)))
+          .analyze
+      comparePlans(optimized, correctAnswer)
+    }
   }
 
   test("OptimizedIn test: Inset optimization disabled as " +
