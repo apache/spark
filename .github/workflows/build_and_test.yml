@@ -256,7 +256,7 @@ jobs:
     - name: Install Python packages (Python 3.8)
       if: (contains(matrix.modules, 'sql') && !contains(matrix.modules, 'sql-'))
       run: |
-        python3.8 -m pip install 'numpy>=1.20.0' pyarrow pandas scipy unittest-xml-reporting 'grpcio==1.56.0' 'protobuf==3.19.5'
+        python3.8 -m pip install 'numpy>=1.20.0' pyarrow pandas scipy unittest-xml-reporting 'grpcio==1.56.0' 'protobuf==3.20.3'
         python3.8 -m pip list
     # Run the tests.
     - name: Run tests
@@ -634,7 +634,7 @@ jobs:
         curl -LO https://github.com/bufbuild/buf/releases/download/v1.23.1/buf-Linux-x86_64.tar.gz
         mkdir -p $HOME/buf
         tar -xvzf buf-Linux-x86_64.tar.gz -C $HOME/buf --strip-components 1
-        python3.9 -m pip install 'protobuf==3.19.5' 'mypy-protobuf==3.3.0'
+        python3.9 -m pip install 'protobuf==3.20.3' 'mypy-protobuf==3.3.0'
     - name: Python code generation check
       run: if test -f ./dev/connect-check-protos.py; then PATH=$PATH:$HOME/buf/bin PYTHON_EXECUTABLE=python3.9 ./dev/connect-check-protos.py; fi
     - name: Install JavaScript linter dependencies
