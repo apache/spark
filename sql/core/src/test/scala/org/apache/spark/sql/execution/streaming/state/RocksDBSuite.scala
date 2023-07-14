@@ -148,7 +148,6 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
       ex = intercept[SparkException] {
         db.load(1)
       }
-      assert(ex.isInstanceOf[SparkException])
       checkError(
         ex,
         errorClass = "CANNOT_LOAD_STATE_STORE.CANNOT_READ_STREAMING_STATE_FILE",
