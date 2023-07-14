@@ -40,11 +40,11 @@ class WindowInPandasEvaluatorFactory(
     val windowExpression: Seq[NamedExpression],
     val partitionSpec: Seq[Expression],
     val orderSpec: Seq[SortOrder],
-    val conf: SQLConf,
     val childOutput: Seq[Attribute],
     val spillSize: SQLMetric,
     pythonMetrics: Map[String, SQLMetric])
   extends PartitionEvaluatorFactory[InternalRow, InternalRow] with WindowEvaluatorFactoryBase {
+  val conf: SQLConf = SQLConf.get
 
   /**
    * Helper functions and data structures for window bounds

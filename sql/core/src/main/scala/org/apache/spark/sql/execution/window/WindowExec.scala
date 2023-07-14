@@ -102,7 +102,6 @@ case class WindowExec(
         windowExpression,
         partitionSpec,
         orderSpec,
-        conf,
         child.output,
         spillSize)
 

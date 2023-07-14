@@ -87,7 +87,6 @@ case class WindowInPandasExec(
         windowExpression,
         partitionSpec,
         orderSpec,
-        conf,
         child.output,
         spillSize,
         pythonMetrics)

@@ -41,7 +41,6 @@ from pyspark.testing.sqlutils import (
     pyarrow_requirement_message,
 )
 from pyspark.testing.utils import QuietTest
-from pyspark.pandas.utils import USE_PARTITION_EVALUATOR, sql_conf
 
 if have_pandas:
     from pandas.testing import assert_frame_equal
@@ -179,9 +178,6 @@ class WindowPandasUDFTestsMixin:
             .withColumn("min_w", min(df["w"]).over(w))
         )
 
-        with sql_conf({USE_PARTITION_EVALUATOR: True}):
-            assert_frame_equal(expected1.toPandas(), result1.toPandas())
-
         assert_frame_equal(expected1.toPandas(), result1.toPandas())
 
     def test_replace_existing(self):
@@ -263,12 +259,6 @@ class WindowPandasUDFTestsMixin:
         )
         expected4 = df.withColumn("max_v", max(df["v"]).over(w)).withColumn("rank", rank().over(ow))
 
-        with sql_conf({USE_PARTITION_EVALUATOR: True}):
-            assert_frame_equal(expected1.toPandas(), result1.toPandas())
-            assert_frame_equal(expected2.toPandas(), result2.toPandas())
-            assert_frame_equal(expected3.toPandas(), result3.toPandas())
-            assert_frame_equal(expected4.toPandas(), result4.toPandas())
-
         assert_frame_equal(expected1.toPandas(), result1.toPandas())
         assert_frame_equal(expected2.toPandas(), result2.toPandas())
         assert_frame_equal(expected3.toPandas(), result3.toPandas())
@@ -321,9 +311,6 @@ class WindowPandasUDFTestsMixin:
             .withColumn("min_v", min(df["v"]).over(w1))
         )
 
-        with sql_conf({USE_PARTITION_EVALUATOR: True}):
-            assert_frame_equal(expected1.toPandas(), result1.toPandas())
-
         assert_frame_equal(expected1.toPandas(), result1.toPandas())
 
     def test_growing_window(self):
@@ -342,9 +329,6 @@ class WindowPandasUDFTestsMixin:
         expected1 = df.withColumn("m1", mean(df["v"]).over(w1)).withColumn(
             "m2", mean(df["v"]).over(w2)
         )
-
-        with sql_conf({USE_PARTITION_EVALUATOR: True}):
-            assert_frame_equal(expected1.toPandas(), result1.toPandas())
 
         assert_frame_equal(expected1.toPandas(), result1.toPandas())
 
@@ -365,9 +349,6 @@ class WindowPandasUDFTestsMixin:
             "m2", mean(df["v"]).over(w2)
         )
 
-        with sql_conf({USE_PARTITION_EVALUATOR: True}):
-            assert_frame_equal(expected1.toPandas(), result1.toPandas())
-
         assert_frame_equal(expected1.toPandas(), result1.toPandas())
 
     def test_shrinking_window(self):
@@ -386,9 +367,6 @@ class WindowPandasUDFTestsMixin:
         expected1 = df.withColumn("m1", mean(df["v"]).over(w1)).withColumn(
             "m2", mean(df["v"]).over(w2)
         )
-
-        with sql_conf({USE_PARTITION_EVALUATOR: True}):
-            assert_frame_equal(expected1.toPandas(), result1.toPandas())
 
         assert_frame_equal(expected1.toPandas(), result1.toPandas())
 
@@ -413,9 +391,6 @@ class WindowPandasUDFTestsMixin:
             .withColumn("max_v", max(df["v"]).over(w2))
             .withColumn("mean_unbounded_v", mean(df["v"]).over(w1))
         )
-
-        with sql_conf({USE_PARTITION_EVALUATOR: True}):
-            assert_frame_equal(expected1.toPandas(), result1.toPandas())
 
         assert_frame_equal(expected1.toPandas(), result1.toPandas())
 

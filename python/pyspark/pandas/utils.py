@@ -70,7 +70,6 @@ ERROR_MESSAGE_CANNOT_COMBINE = (
 
 
 SPARK_CONF_ARROW_ENABLED = "spark.sql.execution.arrow.pyspark.enabled"
-USE_PARTITION_EVALUATOR = "spark.sql.execution.usePartitionEvaluator"
 
 
 class PandasAPIOnSparkAdviceWarning(Warning):

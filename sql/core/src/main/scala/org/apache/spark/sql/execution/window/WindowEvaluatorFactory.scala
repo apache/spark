@@ -295,10 +295,11 @@ class WindowEvaluatorFactory(
     val windowExpression: Seq[NamedExpression],
     val partitionSpec: Seq[Expression],
     val orderSpec: Seq[SortOrder],
-    val conf: SQLConf,
     val childOutput: Seq[Attribute],
     val spillSize: SQLMetric)
   extends PartitionEvaluatorFactory[InternalRow, InternalRow] with WindowEvaluatorFactoryBase {
+  val conf: SQLConf = SQLConf.get
+
   // Unwrap the window expressions and window frame factories from the map.
   val expressions = windowFrameExpressionFactoryPairs.flatMap(_._1)
   val factories = windowFrameExpressionFactoryPairs.map(_._2).toArray
