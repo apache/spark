@@ -245,17 +245,27 @@ def assertSchemaEqual(actual: StructType, expected: StructType):
 
     Pass, schemas are identical
 
-    >>> s1 = StructType([StructField("names", ArrayType(IntegerType(), True), True)])
-    >>> s2 = StructType([StructField("names", ArrayType(DoubleType(), False), True)])
+    >>> s1 = StructType([StructField("names", StructType(
+    ...                                         [StructField("age", DoubleType(), True)]), True)])
+    >>> s2 = StructType([StructField("first name", StructType([StructField(
+    ...                                                      "age", IntegerType(), True)]), True)])
     >>> assertSchemaEqual(s1, s2)  # fail  # doctest: +IGNORE_EXCEPTION_DETAIL
-    Traceback (most recent call last):
-    ...
-    PySparkAssertionError: [DIFFERENT_SCHEMA] Schemas do not match:
-    [df]
-    StructField("names", ArrayType(IntegerType(), True), True)
+    [DIFFERENT_SCHEMA] Schemas do not match.
+    The diff below overlays `actual` and `expected` schema tree strings.
+    - indicates a line that should be removed from `actual` to match `expected`.
+    + indicates a line that should be added to `actual` to match `expected`.
+      root
+    -  |-- names: struct (nullable = true)
+    ?          -
 
-    [expected]
-    StructField("names", ArrayType(DoubleType(), False), True)
+    +  |-- first name: struct (nullable = true)
+    ?     ++++++
+
+    -  |    |-- age: double (nullable = true)
+    ?                ^^^^^
+
+    +  |    |-- age: integer (nullable = true)
+    ?                ^^^ +++
     """
     if not isinstance(actual, StructType):
         raise PySparkAssertionError(
