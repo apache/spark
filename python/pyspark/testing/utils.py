@@ -223,7 +223,11 @@ class PySparkErrorTestUtils:
 
 
 def assertDataFrameEqual(
-    df: DataFrame, expected: Union[DataFrame, List[Row]], checkRowOrder: bool = False
+    df: DataFrame,
+    expected: Union[DataFrame, List[Row]],
+    checkRowOrder: bool = False,
+    rtol: float = 1e-5,
+    atol: float = 1e-8,
 ):
     """
     A util function to assert equality between `df` (DataFrame) and `expected`
@@ -231,34 +235,53 @@ def assertDataFrameEqual(
 
     .. versionadded:: 3.5.0
 
-    For float values, assert approximate equality (1e-5 by default).
-
     Parameters
     ----------
     df : DataFrame
         The DataFrame that is being compared or tested.
-
     expected : DataFrame or list of Rows
         The expected result of the operation, for comparison with the actual result.
-
     checkRowOrder : bool, optional
         A flag indicating whether the order of rows should be considered in the comparison.
         If set to `False` (default), the row order is not taken into account.
         If set to `True`, the order of rows is important and will be checked during comparison.
+        (See Notes)
+    rtol : float, optional
+        The relative tolerance, used in asserting approximate equality for float values in df
+        and expected. Set to 1e-5 by default. (See Notes)
+    atol : float, optional
+        The absolute tolerance, used in asserting approximate equality for float values in df
+        and expected. Set to 1e-8 by default. (See Notes)
+
+    Notes
+    -----
+    For checkRowOrder, note that PySpark DataFrame ordering is non-deterministic, unless
+    explicitly sorted.
+
+    For DataFrames with float values, assertDataFrame asserts approximate equality.
+    Two float values a and b are approximately equal if the following equation is True:
+
+    ``absolute(a - b) <= (atol + rtol * absolute(b))``.
 
     Examples
     --------
-    >>> from pyspark.sql import SparkSession
-    >>> spark = SparkSession.builder.appName("assertDataFrameEqual example")\
-        .config("spark.some.config.option", "some-value").getOrCreate()
     >>> df1 = spark.createDataFrame(data=[("1", 1000), ("2", 3000)], schema=["id", "amount"])
     >>> df2 = spark.createDataFrame(data=[("1", 1000), ("2", 3000)], schema=["id", "amount"])
-    >>> assertDataFrameEqual(df1, df2) # pass
-    >>> df1 = spark.createDataFrame(data=[("1", 1000.00), ("2", 3000.00), ("3", 2000.00)], \
-        schema=["id", "amount"])
-    >>> df2 = spark.createDataFrame(data=[("1", 1001.00), ("2", 3000.00), ("3", 2003.00)], \
-        schema=["id", "amount"])
-    >>> assertDataFrameEqual(df1, df2) # fail  # doctest: +IGNORE_EXCEPTION_DETAIL
+    >>> assertDataFrameEqual(df1, df2)
+
+    Pass, DataFrames are identical
+
+    >>> df1 = spark.createDataFrame(data=[("1", 0.1), ("2", 3.23)], schema=["id", "amount"])
+    >>> df2 = spark.createDataFrame(data=[("1", 0.109), ("2", 3.23)], schema=["id", "amount"])
+    >>> assertDataFrameEqual(df1, df2, rtol=1e-1)
+
+    Pass, DataFrames are approx equal by rtol
+
+    >>> df1 = spark.createDataFrame(data=[("1", 1000.00), ("2", 3000.00), ("3", 2000.00)],
+    ... schema=["id", "amount"])
+    >>> df2 = spark.createDataFrame(data=[("1", 1001.00), ("2", 3000.00), ("3", 2003.00)],
+    ... schema=["id", "amount"])
+    >>> assertDataFrameEqual(df1, df2)  # doctest: +IGNORE_EXCEPTION_DETAIL
     Traceback (most recent call last):
     ...
     PySparkAssertionError: [DIFFERENT_ROWS] Results do not match: ( 66.667 % )
@@ -268,10 +291,8 @@ def assertDataFrameEqual(
     [expected]
     Row(id='1', amount=1001.0)
 
-
     [df]
     Row(id='3', amount=2000.0)
-    <BLANKLINE>
 
     [expected]
     Row(id='3', amount=2003.0)
@@ -348,7 +369,7 @@ def assertDataFrameEqual(
                     and all(compare_vals(val1[k], val2[k]) for k in val1.keys())
                 )
             elif isinstance(val1, float) and isinstance(val2, float):
-                if abs(val1 - val2) > 1e-5:
+                if abs(val1 - val2) > (atol + rtol * abs(val2)):
                     return False
             else:
                 if val1 != val2:
