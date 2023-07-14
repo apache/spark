@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution.debug
 
 import java.io.ByteArrayOutputStream
 
+import org.apache.spark.SparkConf
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Attribute
@@ -27,7 +28,7 @@ import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.execution.{CodegenSupport, LeafExecNode, WholeStageCodegenExec}
 import org.apache.spark.sql.execution.adaptive.{DisableAdaptiveExecutionSuite, EnableAdaptiveExecutionSuite}
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.internal.SQLConf.USE_PARTITION_EVALUATOR
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.test.SQLTestData.TestData
 import org.apache.spark.sql.types.StructType
@@ -35,20 +36,12 @@ import org.apache.spark.sql.types.StructType
 abstract class DebuggingSuiteBase extends SharedSparkSession {
 
   test("DataFrame.debug()") {
-    Seq(true, false).foreach(enable =>
-      withSQLConf(USE_PARTITION_EVALUATOR.key -> enable.toString) {
-        testData.debug()
-      }
-    )
+    testData.debug()
   }
 
   test("Dataset.debug()") {
     import testImplicits._
-    Seq(true, false).foreach(enable =>
-      withSQLConf(USE_PARTITION_EVALUATOR.key -> enable.toString) {
-        testData.as[TestData].debug()
-      }
-    )
+    testData.as[TestData].debug()
   }
 
   test("debugCodegen") {
@@ -115,27 +108,23 @@ class DebuggingSuite extends DebuggingSuiteBase with DisableAdaptiveExecutionSui
     val leftDF = spark.range(10)
     val joinedDF = leftDF.join(rightDF, leftDF("id") === rightDF("id"))
 
-    Seq(true, false).foreach(enable =>
-      withSQLConf(USE_PARTITION_EVALUATOR.key -> enable.toString) {
-        val captured = new ByteArrayOutputStream()
-        Console.withOut(captured) {
-          joinedDF.debug()
-        }
+    val captured = new ByteArrayOutputStream()
+    Console.withOut(captured) {
+      joinedDF.debug()
+    }
 
-        val output = captured.toString()
-        val hashedModeString = "HashedRelationBroadcastMode(List(input[0, bigint, false]),false)"
-        assert(output.replaceAll("\\[plan_id=\\d+\\]", "[plan_id=x]").contains(
-          s"""== BroadcastExchange $hashedModeString, [plan_id=x] ==
-             |Tuples output: 0
-             | id LongType: {}
-             |== WholeStageCodegen (1) ==
-             |Tuples output: 10
-             | id LongType: {java.lang.Long}
-             |== Range (0, 10, step=1, splits=2) ==
-             |Tuples output: 0
-             | id LongType: {}""".stripMargin))
-      }
-    )
+    val output = captured.toString()
+    val hashedModeString = "HashedRelationBroadcastMode(List(input[0, bigint, false]),false)"
+    assert(output.replaceAll("\\[plan_id=\\d+\\]", "[plan_id=x]").contains(
+      s"""== BroadcastExchange $hashedModeString, [plan_id=x] ==
+         |Tuples output: 0
+         | id LongType: {}
+         |== WholeStageCodegen (1) ==
+         |Tuples output: 10
+         | id LongType: {java.lang.Long}
+         |== Range (0, 10, step=1, splits=2) ==
+         |Tuples output: 0
+         | id LongType: {}""".stripMargin))
   }
 
   test("SPARK-28537: DebugExec cannot debug columnar related queries") {
@@ -145,24 +134,25 @@ class DebuggingSuite extends DebuggingSuiteBase with DisableAdaptiveExecutionSui
       input.write.parquet(workDirPath)
       val df = spark.read.parquet(workDirPath)
 
-      Seq(true, false).foreach(enable =>
-        withSQLConf(USE_PARTITION_EVALUATOR.key -> enable.toString) {
-          val captured = new ByteArrayOutputStream()
-          Console.withOut(captured) {
-            df.debug()
-          }
+      val captured = new ByteArrayOutputStream()
+      Console.withOut(captured) {
+        df.debug()
+      }
 
-          val output = captured.toString()
-            .replaceAll("== FileScan parquet \\[id#\\d+L] .* ==", "== FileScan parquet [id#xL] ==")
-          assert(output.contains(
-            """== FileScan parquet [id#xL] ==
-              |Tuples output: 0
-              | id LongType: {}
-              |""".stripMargin))
-        }
-      )
+      val output = captured.toString()
+        .replaceAll("== FileScan parquet \\[id#\\d+L] .* ==", "== FileScan parquet [id#xL] ==")
+      assert(output.contains(
+        """== FileScan parquet [id#xL] ==
+          |Tuples output: 0
+          | id LongType: {}
+          |""".stripMargin))
     }
   }
 }
 
 class DebuggingSuiteAE extends DebuggingSuiteBase with EnableAdaptiveExecutionSuite
+
+class DebuggingSuiteWithPartitionEvaluator extends DebuggingSuiteBase {
+  override protected def sparkConf: SparkConf =
+    super.sparkConf.set(SQLConf.USE_PARTITION_EVALUATOR, true)
+}
