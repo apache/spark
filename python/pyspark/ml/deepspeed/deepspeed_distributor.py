@@ -107,7 +107,7 @@ class DeepspeedTorchDistributor(TorchDistributor):
             f"--nproc_per_node={processes_per_node}",
             train_path,
             *args_string,
-            "-deepspeed",
+            "--deepspeed",
         ]
 
         # Don't have the deepspeed_config argument if no path is provided or no parameters set
