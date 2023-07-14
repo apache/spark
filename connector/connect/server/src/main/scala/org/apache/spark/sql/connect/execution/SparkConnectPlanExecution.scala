@@ -15,115 +15,60 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.connect.service
+package org.apache.spark.sql.connect.execution
 
 import scala.collection.JavaConverters._
-import scala.util.control.NonFatal
 
 import com.google.protobuf.ByteString
 import io.grpc.stub.StreamObserver
-import org.apache.commons.lang3.StringUtils
 
 import org.apache.spark.SparkEnv
 import org.apache.spark.connect.proto
-import org.apache.spark.connect.proto.{ExecutePlanRequest, ExecutePlanResponse}
-import org.apache.spark.internal.Logging
+import org.apache.spark.connect.proto.ExecutePlanResponse
 import org.apache.spark.sql.{DataFrame, Dataset}
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.connect.common.{DataTypeProtoConverter, ProtoUtils}
+import org.apache.spark.sql.connect.common.DataTypeProtoConverter
 import org.apache.spark.sql.connect.common.LiteralValueProtoConverter.toLiteralProto
 import org.apache.spark.sql.connect.config.Connect.CONNECT_GRPC_ARROW_MAX_BATCH_SIZE
 import org.apache.spark.sql.connect.planner.SparkConnectPlanner
-import org.apache.spark.sql.connect.service.SparkConnectStreamHandler.processAsArrowBatches
-import org.apache.spark.sql.execution.{LocalTableScanExec, SparkPlan, SQLExecution}
-import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanExec, AdaptiveSparkPlanHelper, QueryStageExec}
+import org.apache.spark.sql.connect.service.ExecuteHolder
+import org.apache.spark.sql.connect.utils.MetricGenerator
+import org.apache.spark.sql.execution.{LocalTableScanExec, SQLExecution}
 import org.apache.spark.sql.execution.arrow.ArrowConverters
 import org.apache.spark.sql.types.StructType
-import org.apache.spark.util.{ThreadUtils, Utils}
+import org.apache.spark.util.ThreadUtils
 
-class SparkConnectStreamHandler(responseObserver: StreamObserver[ExecutePlanResponse])
-    extends Logging {
+/**
+ * Handle ExecutePlanRequest where the operation to handle is of `Plan` type.
+ * proto.Plan.OpTypeCase.ROOT
+ * @param executeHolder
+ */
+private[execution] class SparkConnectPlanExecution(executeHolder: ExecuteHolder) {
 
-  def handle(v: ExecutePlanRequest): Unit = {
-    val sessionHolder =
-      SparkConnectService
-        .getOrCreateIsolatedSession(v.getUserContext.getUserId, v.getSessionId)
-    // `withSession` ensures that session-specific artifacts (such as JARs and class files) are
-    // available during processing.
-    sessionHolder.withSession { session =>
-      // Add debug information to the query execution so that the jobs are traceable.
-      val debugString =
-        try {
-          Utils.redact(
-            session.sessionState.conf.stringRedactionPattern,
-            ProtoUtils.abbreviate(v).toString)
-        } catch {
-          case NonFatal(e) =>
-            logWarning("Fail to extract debug information", e)
-            "UNKNOWN"
-        }
+  private val sessionHolder = executeHolder.sessionHolder
+  private val session = executeHolder.session
 
-      val executeHolder = sessionHolder.createExecutePlanHolder(v)
-      session.sparkContext.addJobTag(executeHolder.jobTag)
-      session.sparkContext.setInterruptOnCancel(true)
-
-      try {
-        // Add debug information to the query execution so that the jobs are traceable.
-        session.sparkContext.setLocalProperty(
-          "callSite.short",
-          s"Spark Connect - ${StringUtils.abbreviate(debugString, 128)}")
-        session.sparkContext.setLocalProperty(
-          "callSite.long",
-          StringUtils.abbreviate(debugString, 2048))
-      } catch {
-        case NonFatal(e) =>
-          logWarning("Fail to attach the debug information", e)
-      }
-
-      try {
-        v.getPlan.getOpTypeCase match {
-          case proto.Plan.OpTypeCase.COMMAND => handleCommand(sessionHolder, v)
-          case proto.Plan.OpTypeCase.ROOT => handlePlan(sessionHolder, v)
-          case _ =>
-            throw new UnsupportedOperationException(s"${v.getPlan.getOpTypeCase} not supported.")
-        }
-      } finally {
-        session.sparkContext.removeJobTag(executeHolder.jobTag)
-        sessionHolder.removeExecutePlanHolder(executeHolder.operationId)
-      }
+  def handlePlan(responseObserver: ExecuteResponseObserver[proto.ExecutePlanResponse]): Unit = {
+    val request = executeHolder.request
+    if (request.getPlan.getOpTypeCase != proto.Plan.OpTypeCase.ROOT) {
+      throw new IllegalStateException(
+        s"Illegal operation type ${request.getPlan.getOpTypeCase} to be handled here.")
     }
-  }
 
-  private def handlePlan(sessionHolder: SessionHolder, request: ExecutePlanRequest): Unit = {
     // Extract the plan from the request and convert it to a logical plan
     val planner = new SparkConnectPlanner(sessionHolder)
     val dataframe =
       Dataset.ofRows(sessionHolder.session, planner.transformRelation(request.getPlan.getRoot))
-    responseObserver.onNext(
-      SparkConnectStreamHandler.sendSchemaToResponse(request.getSessionId, dataframe.schema))
+    responseObserver.onNext(createSchemaResponse(request.getSessionId, dataframe.schema))
     processAsArrowBatches(request.getSessionId, dataframe, responseObserver)
     responseObserver.onNext(
-      SparkConnectStreamHandler.createMetricsResponse(request.getSessionId, dataframe))
+      MetricGenerator.createMetricsResponse(request.getSessionId, dataframe))
     if (dataframe.queryExecution.observedMetrics.nonEmpty) {
-      responseObserver.onNext(
-        SparkConnectStreamHandler.sendObservedMetricsToResponse(request.getSessionId, dataframe))
+      responseObserver.onNext(createObservedMetricsResponse(request.getSessionId, dataframe))
     }
     responseObserver.onCompleted()
   }
 
-  private def handleCommand(sessionHolder: SessionHolder, request: ExecutePlanRequest): Unit = {
-    val command = request.getPlan.getCommand
-    val planner = new SparkConnectPlanner(sessionHolder)
-    planner.process(
-      command = command,
-      userId = request.getUserContext.getUserId,
-      sessionId = request.getSessionId,
-      responseObserver = responseObserver)
-    responseObserver.onCompleted()
-  }
-}
-
-object SparkConnectStreamHandler {
   type Batch = (Array[Byte], Long)
 
   def rowToArrowConverter(
@@ -142,7 +87,7 @@ object SparkConnectStreamHandler {
     batches.map(b => b -> batches.rowCountInLastBatch)
   }
 
-  def processAsArrowBatches(
+  private def processAsArrowBatches(
       sessionId: String,
       dataframe: DataFrame,
       responseObserver: StreamObserver[ExecutePlanResponse]): Unit = {
@@ -153,7 +98,7 @@ object SparkConnectStreamHandler {
     // Conservatively sets it 70% because the size is not accurate but estimated.
     val maxBatchSize = (SparkEnv.get.conf.get(CONNECT_GRPC_ARROW_MAX_BATCH_SIZE) * 0.7).toLong
 
-    val rowToArrowConverter = SparkConnectStreamHandler.rowToArrowConverter(
+    val converter = rowToArrowConverter(
       schema,
       maxRecordsPerBatch,
       maxBatchSize,
@@ -175,7 +120,7 @@ object SparkConnectStreamHandler {
 
     dataframe.queryExecution.executedPlan match {
       case LocalTableScanExec(_, rows) =>
-        rowToArrowConverter(rows.iterator).foreach { case (bytes, count) =>
+        converter(rows.iterator).foreach { case (bytes, count) =>
           sendBatch(bytes, count)
         }
       case _ =>
@@ -186,7 +131,7 @@ object SparkConnectStreamHandler {
           if (numPartitions > 0) {
             type Batch = (Array[Byte], Long)
 
-            val batches = rows.mapPartitionsInternal(rowToArrowConverter)
+            val batches = rows.mapPartitionsInternal(converter)
 
             val signal = new Object
             val partitions = new Array[Array[Batch]](numPartitions)
@@ -263,7 +208,7 @@ object SparkConnectStreamHandler {
     }
   }
 
-  def sendSchemaToResponse(sessionId: String, schema: StructType): ExecutePlanResponse = {
+  private def createSchemaResponse(sessionId: String, schema: StructType): ExecutePlanResponse = {
     // Send the Spark data type
     ExecutePlanResponse
       .newBuilder()
@@ -272,16 +217,7 @@ object SparkConnectStreamHandler {
       .build()
   }
 
-  def createMetricsResponse(sessionId: String, rows: DataFrame): ExecutePlanResponse = {
-    // Send a last batch with the metrics
-    ExecutePlanResponse
-      .newBuilder()
-      .setSessionId(sessionId)
-      .setMetrics(MetricGenerator.buildMetrics(rows.queryExecution.executedPlan))
-      .build()
-  }
-
-  def sendObservedMetricsToResponse(
+  private def createObservedMetricsResponse(
       sessionId: String,
       dataframe: DataFrame): ExecutePlanResponse = {
     val observedMetrics = dataframe.queryExecution.observedMetrics.map { case (name, row) =>
@@ -298,41 +234,5 @@ object SparkConnectStreamHandler {
       .setSessionId(sessionId)
       .addAllObservedMetrics(observedMetrics.asJava)
       .build()
-  }
-}
-
-object MetricGenerator extends AdaptiveSparkPlanHelper {
-  def buildMetrics(p: SparkPlan): ExecutePlanResponse.Metrics = {
-    val b = ExecutePlanResponse.Metrics.newBuilder
-    b.addAllMetrics(transformPlan(p, p.id).asJava)
-    b.build()
-  }
-
-  private def transformChildren(p: SparkPlan): Seq[ExecutePlanResponse.Metrics.MetricObject] = {
-    allChildren(p).flatMap(c => transformPlan(c, p.id))
-  }
-
-  private def allChildren(p: SparkPlan): Seq[SparkPlan] = p match {
-    case a: AdaptiveSparkPlanExec => Seq(a.executedPlan)
-    case s: QueryStageExec => Seq(s.plan)
-    case _ => p.children
-  }
-
-  private def transformPlan(
-      p: SparkPlan,
-      parentId: Int): Seq[ExecutePlanResponse.Metrics.MetricObject] = {
-    val mv = p.metrics.map(m =>
-      m._1 -> ExecutePlanResponse.Metrics.MetricValue.newBuilder
-        .setName(m._2.name.getOrElse(""))
-        .setValue(m._2.value)
-        .setMetricType(m._2.metricType)
-        .build())
-    val mo = ExecutePlanResponse.Metrics.MetricObject
-      .newBuilder()
-      .setName(p.nodeName)
-      .setPlanId(p.id)
-      .putAllExecutionMetrics(mv.asJava)
-      .build()
-    Seq(mo) ++ transformChildren(p)
   }
 }
