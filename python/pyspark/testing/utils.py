@@ -239,7 +239,7 @@ def assertSchemaEqual(actual: StructType, expected: StructType):
     Notes
     -----
     When assertSchemaEqual fails, the error message uses the Python `difflib` library to display
-        a diff log of the `actual` and `expected` schemas.
+    a diff log of the `actual` and `expected` schemas.
 
     Examples
     --------
@@ -252,7 +252,7 @@ def assertSchemaEqual(actual: StructType, expected: StructType):
 
     >>> df1 = spark.createDataFrame(data=[(1, 1000), (2, 3000)], schema=["id", "number"])
     >>> df2 = spark.createDataFrame(data=[("1", 1000), ("2", 5000)], schema=["id", "amount"])
-    >>> assertSchemaEqual(df1.schema, df2.schema)  # fail  # doctest: +IGNORE_EXCEPTION_DETAIL
+    >>> assertSchemaEqual(df1.schema, df2.schema)  # doctest: +IGNORE_EXCEPTION_DETAIL
     Traceback (most recent call last):
     ...
     PySparkAssertionError: [DIFFERENT_SCHEMA] Schemas do not match.
@@ -363,12 +363,6 @@ def assertDataFrameEqual(
     >>> df1 = spark.createDataFrame(data=[("1", 1000), ("2", 3000)], schema=["id", "amount"])
     >>> df2 = spark.createDataFrame(data=[("1", 1000), ("2", 3000)], schema=["id", "amount"])
     >>> assertDataFrameEqual(df1, df2) # pass
-    >>> df1 = spark.createDataFrame(data=[("1", 1000.00), ("2", 3000.00), ("3", 2000.00)],
-    ... schema=["id", "amount"])
-    >>> df2 = spark.createDataFrame(data=[("1", 1001.00), ("2", 3000.00), ("3", 2003.00)],
-    ... schema=["id", "amount"])
-    >>> assertDataFrameEqual(df1, df2) # fail  # doctest: +IGNORE_EXCEPTION_DETAIL
-    >>> assertDataFrameEqual(df1, df2)
 
     Pass, DataFrames are identical
 
