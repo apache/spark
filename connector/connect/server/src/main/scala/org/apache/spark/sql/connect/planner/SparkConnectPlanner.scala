@@ -70,7 +70,7 @@ import org.apache.spark.sql.execution.python.{PythonForeachWriter, UserDefinedPy
 import org.apache.spark.sql.execution.stat.StatFunctions
 import org.apache.spark.sql.execution.streaming.GroupStateImpl.groupStateTimeoutFromString
 import org.apache.spark.sql.execution.streaming.StreamingQueryWrapper
-import org.apache.spark.sql.expressions.ReduceAggregator
+import org.apache.spark.sql.expressions.{ReduceAggregator, SparkUserDefinedFunction}
 import org.apache.spark.sql.internal.{CatalogImpl, TypedAggUtils}
 import org.apache.spark.sql.protobuf.{CatalystDataToProtobuf, ProtobufDataToCatalyst}
 import org.apache.spark.sql.streaming.{GroupStateTimeout, OutputMode, StreamingQuery, StreamingQueryListener, StreamingQueryProgress, Trigger}
@@ -1487,6 +1487,20 @@ class SparkConnectPlanner(val sessionHolder: SessionHolder) extends Logging {
       udfDeterministic = fun.getDeterministic)
   }
 
+  private def transformScalarScalaFunction(
+      fun: proto.CommonInlineUserDefinedFunction): SparkUserDefinedFunction = {
+    val udf = fun.getScalarScalaUdf
+    val udfPacket = unpackUdf(fun)
+    SparkUserDefinedFunction(
+      f = udfPacket.function,
+      dataType = transformDataType(udf.getOutputType),
+      inputEncoders = udfPacket.inputEncoders.map(e => Try(ExpressionEncoder(e)).toOption),
+      outputEncoder = Option(ExpressionEncoder(udfPacket.outputEncoder)),
+      name = Option(fun.getFunctionName),
+      nullable = udf.getNullable,
+      deterministic = fun.getDeterministic)
+  }
+
   /**
    * Translates a Python user-defined function from proto to the Catalyst expression.
    *
@@ -2415,6 +2429,8 @@ class SparkConnectPlanner(val sessionHolder: SessionHolder) extends Logging {
         handleRegisterPythonUDF(fun)
       case proto.CommonInlineUserDefinedFunction.FunctionCase.JAVA_UDF =>
         handleRegisterJavaUDF(fun)
+      case proto.CommonInlineUserDefinedFunction.FunctionCase.SCALAR_SCALA_UDF =>
+        handleRegisterScalarScalaUDF(fun)
       case _ =>
         throw InvalidPlanInput(
           s"Function with ID: ${fun.getFunctionCase.getNumber} is not supported")
@@ -2446,6 +2462,11 @@ class SparkConnectPlanner(val sessionHolder: SessionHolder) extends Logging {
     } else {
       session.udf.registerJava(fun.getFunctionName, udf.getClassName, dataType)
     }
+  }
+
+  private def handleRegisterScalarScalaUDF(fun: proto.CommonInlineUserDefinedFunction): Unit = {
+    val udf = transformScalarScalaFunction(fun)
+    session.udf.register(fun.getFunctionName, udf)
   }
 
   private def handleCommandPlugin(extension: ProtoAny): Unit = {
