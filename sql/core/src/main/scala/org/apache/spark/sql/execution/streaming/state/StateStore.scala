@@ -579,8 +579,17 @@ object StateStore extends Logging {
     loadedProviders.contains(storeProviderId)
   }
 
+  /** Check if maintenance thread is running and scheduled future is not done */
   def isMaintenanceRunning: Boolean = loadedProviders.synchronized {
     maintenanceTask != null && maintenanceTask.isRunning
+  }
+
+  /** Stop maintenance thread and reset the maintenance task */
+  def stopMaintenanceTask(): Unit = loadedProviders.synchronized {
+    if (maintenanceTask != null) {
+      maintenanceTask.stop()
+      maintenanceTask = null
+    }
   }
 
   /** Unload and stop all state store providers */
@@ -588,10 +597,7 @@ object StateStore extends Logging {
     loadedProviders.keySet.foreach { key => unload(key) }
     loadedProviders.clear()
     _coordRef = null
-    if (maintenanceTask != null) {
-      maintenanceTask.stop()
-      maintenanceTask = null
-    }
+    stopMaintenanceTask()
     logInfo("StateStore stopped")
   }
 
@@ -602,7 +608,12 @@ object StateStore extends Logging {
         maintenanceTask = new MaintenanceTask(
           storeConf.maintenanceInterval,
           task = { doMaintenance() },
-          onError = { loadedProviders.synchronized { loadedProviders.clear() } }
+          onError = { loadedProviders.synchronized {
+              logInfo("Stopping maintenance task since an error was encountered.")
+              stopMaintenanceTask()
+              loadedProviders.clear()
+            }
+          }
         )
         logInfo("State Store maintenance task started")
       }
