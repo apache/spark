@@ -2975,8 +2975,8 @@ class SparkConnectPlanner(val sessionHolder: SessionHolder) extends Logging {
         respBuilder.setRemoveListener(true)
 
       case StreamingQueryManagerCommand.CommandCase.LIST_LISTENERS =>
-        val listeners = session.streams.listListeners()
-        respBuilder.getListListenersBuilder.addAllListeners(sessionHolder.listListenerIds().asJava)
+        respBuilder.getListListenersBuilder
+          .addAllListenerIds(sessionHolder.listListenerIds().asJava)
 
       case StreamingQueryManagerCommand.CommandCase.COMMAND_NOT_SET =>
         throw new IllegalArgumentException("Missing command in StreamingQueryManagerCommand")

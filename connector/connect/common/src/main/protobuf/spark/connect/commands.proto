@@ -399,7 +399,8 @@ message StreamingQueryManagerCommandResult {
   }
 
   message ListStreamingQueryListenerResult {
-    repeated string listeners = 1;
+    // (Required) Reference IDs of listener instances.
+    repeated string listener_ids = 1;
   }
 }
 

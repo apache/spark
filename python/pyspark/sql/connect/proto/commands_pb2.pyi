@@ -1554,18 +1554,19 @@ class StreamingQueryManagerCommandResult(google.protobuf.message.Message):
     class ListStreamingQueryListenerResult(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
-        LISTENERS_FIELD_NUMBER: builtins.int
+        LISTENER_IDS_FIELD_NUMBER: builtins.int
         @property
-        def listeners(
+        def listener_ids(
             self,
-        ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.str]: ...
+        ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.str]:
+            """(Required) Reference IDs of listener instances."""
         def __init__(
             self,
             *,
-            listeners: collections.abc.Iterable[builtins.str] | None = ...,
+            listener_ids: collections.abc.Iterable[builtins.str] | None = ...,
         ) -> None: ...
         def ClearField(
-            self, field_name: typing_extensions.Literal["listeners", b"listeners"]
+            self, field_name: typing_extensions.Literal["listener_ids", b"listener_ids"]
         ) -> None: ...
 
     ACTIVE_FIELD_NUMBER: builtins.int

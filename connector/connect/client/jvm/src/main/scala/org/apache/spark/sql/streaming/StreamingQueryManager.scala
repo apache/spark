@@ -179,8 +179,10 @@ class StreamingQueryManager private[sql] (sparkSession: SparkSession) extends Lo
    * @since 3.5.0
    */
   def listListeners(): Array[StreamingQueryListener] = {
-    executeManagerCmd(_.setListListeners(true)).getListListeners.getListenersList.asScala
-      .filter(listenerCache.containsKey(_)).map(listenerCache.get(_)).toArray
+    executeManagerCmd(_.setListListeners(true)).getListListeners.getListenerIdsList.asScala
+      .filter(listenerCache.containsKey(_))
+      .map(listenerCache.get(_))
+      .toArray
   }
 
   private def executeManagerCmd(
