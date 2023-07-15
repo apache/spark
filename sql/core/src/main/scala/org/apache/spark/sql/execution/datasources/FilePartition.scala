@@ -89,16 +89,16 @@ object FilePartition extends Logging {
       partitionedFiles: Seq[PartitionedFile],
       maxSplitBytes: Long): Seq[FilePartition] = {
     val openCostBytes = sparkSession.sessionState.conf.filesOpenCostInBytes
-    val maxPartitionNum = sparkSession.sessionState.conf.filesMaxPartitionNum
+    val maxPartNum = sparkSession.sessionState.conf.filesMaxPartitionNum
     val partitions = getFilePartitions(partitionedFiles, maxSplitBytes, openCostBytes)
-    if (maxPartitionNum.exists(partitions.size > _)) {
+    if (maxPartNum.exists(partitions.size > _)) {
       val totalSizeInBytes =
         partitionedFiles.map(_.length + openCostBytes).map(BigDecimal(_)).sum[BigDecimal]
       val desiredSplitBytes =
-        (totalSizeInBytes / BigDecimal(maxPartitionNum.get)).setScale(0, RoundingMode.UP).longValue
+        (totalSizeInBytes / BigDecimal(maxPartNum.get)).setScale(0, RoundingMode.UP).longValue
       val desiredPartitions = getFilePartitions(partitionedFiles, desiredSplitBytes, openCostBytes)
       logWarning(s"The number of partitions is ${partitions.size}, which exceeds the maximum " +
-        s"number configured: $maxPartitionNum. Spark rescales it to ${desiredPartitions.size} " +
+        s"number configured: ${maxPartNum.get}. Spark rescales it to ${desiredPartitions.size} " +
         s"by ignoring the configuration of ${SQLConf.FILES_MAX_PARTITION_BYTES.key}.")
       desiredPartitions
     } else {
