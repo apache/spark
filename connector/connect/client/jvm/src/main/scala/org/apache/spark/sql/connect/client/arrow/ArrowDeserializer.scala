@@ -288,7 +288,7 @@ object ArrowDeserializers {
           MethodType.methodType(classOf[Unit], fields.map(_.enc.clsTag.runtimeClass).asJava)
         val constructor = methodLookup
           .findConstructor(tag.runtimeClass, methodType)
-          .asSpreader(0, classOf[Array[Any]], fields.size)
+          .asSpreader(classOf[Array[Any]], fields.size)
         val deserializers = if (isTuple(tag.runtimeClass)) {
           fields.zip(vectors).toArray.map { case (field, vector) =>
             deserializerFor(field.enc, vector)
