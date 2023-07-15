@@ -17,6 +17,7 @@
 
 package org.apache.spark.internal.io.cloud
 
+// Java Input Output Exception handler is imported to handle IO Exceptions
 import java.io.IOException
 
 import org.apache.hadoop.fs.{Path, StreamCapabilities}
@@ -104,8 +105,9 @@ class BindingParquetOutputCommitter(
       committer.abortJob(jobContext, state)
     } catch {
       case e: IOException =>
-        // swallow exception to avoid problems when called within exception
-        // handlers
+        /** 
+        * swallow exception to avoid problems when called within 
+        * exception handlers **/ 
         logWarning("Abort job failed", e)
     }
   }
