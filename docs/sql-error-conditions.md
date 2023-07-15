@@ -636,6 +636,14 @@ SQLSTATE: none assigned
 
 Detected an incompatible DataSourceRegister. Please remove the incompatible library from classpath or upgrade it. Error: `<message>`
 
+### [INCOMPATIBLE_DATA_FOR_TABLE](sql-error-conditions-incompatible-data-for-table-error-class.html)
+
+SQLSTATE: KD000
+
+Cannot write incompatible data for the table `<tableName>`:
+
+For more details see [INCOMPATIBLE_DATA_FOR_TABLE](sql-error-conditions-incompatible-data-for-table-error-class.html)
+
 ### INCOMPATIBLE_JOIN_TYPES
 
 [SQLSTATE: 42613](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
@@ -1371,6 +1379,12 @@ The value `<value>` cannot be interpreted as a numeric since it has more than 38
 SQLSTATE: none assigned
 
 Number of given aliases does not match number of output columns. Function name: `<funcName>`; number of aliases: `<aliasesNum>`; number of output columns: `<outColsNum>`.
+
+### OPERATION_CANCELED
+
+[SQLSTATE: HY008](sql-error-conditions-sqlstates.html#class-HY-cli-specific-condition)
+
+Operation has been canceled.
 
 ### ORDER_BY_POS_OUT_OF_RANGE
 

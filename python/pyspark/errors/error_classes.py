@@ -202,6 +202,11 @@ ERROR_CLASSES_JSON = """
       " must be set to `true` to enable Python profile."
     ]
   },
+  "INVALID_ARROW_UDTF_RETURN_TYPE" : {
+    "message" : [
+      "The return type of the arrow-optimized Python UDTF should be of type 'pandas.DataFrame', but the function returned a value of type <type_name> with value: <value>."
+    ]
+  },
   "INVALID_BROADCAST_OPERATION": {
     "message": [
       "Broadcast can only be <operation> in driver."
@@ -260,6 +265,16 @@ ERROR_CLASSES_JSON = """
   "INVALID_UDF_EVAL_TYPE" : {
     "message" : [
       "Eval type for UDF must be <eval_type>."
+    ]
+  },
+  "INVALID_UDTF_EVAL_TYPE" : {
+    "message" : [
+      "The eval type for the UDTF '<name>' is invalid. It must be one of <eval_type>."
+    ]
+  },
+  "INVALID_UDTF_NO_EVAL" : {
+    "message" : [
+      "The UDTF '<name>' is invalid. It does not implement the required 'eval' method. Please implement the 'eval' method in '<name>' and try again."
     ]
   },
   "INVALID_WHEN_USAGE": {
@@ -643,6 +658,16 @@ ERROR_CLASSES_JSON = """
       "Expected <expected> values for `<item>`, got <actual>."
     ]
   },
+  "UDTF_EXEC_ERROR" : {
+    "message" : [
+      "User defined table function encountered an error in the '<method_name>' method: <error>"
+    ]
+  },
+  "UDTF_RETURN_SCHEMA_MISMATCH" : {
+    "message" : [
+      "The number of columns in the result does not match the specified schema. Expected column count: <expected>, Actual column count: <actual>. Please make sure the values returned by the function have the same number of columns as specified in the output schema."
+    ]
+  },
   "UNEXPECTED_RESPONSE_FROM_SERVER" : {
     "message" : [
       "Unexpected response from iterator server."
@@ -686,11 +711,6 @@ ERROR_CLASSES_JSON = """
   "UNSUPPORTED_DATA_TYPE_FOR_ARROW_VERSION" : {
     "message" : [
       "<data_type> is only supported with pyarrow 2.0.0 and above."
-    ]
-  },
-  "UNSUPPORTED_DATA_TYPE_FOR_IGNORE_ROW_ORDER" : {
-    "message" : [
-      "Cannot ignore row order because undefined sorting for data type."
     ]
   },
   "UNSUPPORTED_JOIN_TYPE" : {

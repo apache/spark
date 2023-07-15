@@ -421,19 +421,31 @@ class DataSourceV2Suite extends QueryTest with SharedSparkSession with AdaptiveS
           spark.read.format(cls.getName).option("path", path).load(),
           spark.range(5).select($"id", -$"id"))
 
-        val e = intercept[AnalysisException] {
-          spark.range(5).select($"id" as Symbol("i"), -$"id" as Symbol("j"))
-            .write.format(cls.getName)
-            .option("path", path).mode("ignore").save()
-        }
-        assert(e.message.contains("please use Append or Overwrite modes instead"))
+        checkError(
+          exception = intercept[AnalysisException] {
+            spark.range(5).select($"id" as Symbol("i"), -$"id" as Symbol("j"))
+              .write.format(cls.getName)
+              .option("path", path).mode("ignore").save()
+          },
+          errorClass = "_LEGACY_ERROR_TEMP_1308",
+          parameters = Map(
+            "source" -> cls.getName,
+            "createMode" -> "Ignore"
+          )
+        )
 
-        val e2 = intercept[AnalysisException] {
-          spark.range(5).select($"id" as Symbol("i"), -$"id" as Symbol("j"))
-            .write.format(cls.getName)
-            .option("path", path).mode("error").save()
-        }
-        assert(e2.getMessage.contains("please use Append or Overwrite modes instead"))
+        checkError(
+          exception = intercept[AnalysisException] {
+            spark.range(5).select($"id" as Symbol("i"), -$"id" as Symbol("j"))
+              .write.format(cls.getName)
+              .option("path", path).mode("error").save()
+          },
+          errorClass = "_LEGACY_ERROR_TEMP_1308",
+          parameters = Map(
+            "source" -> cls.getName,
+            "createMode" -> "ErrorIfExists"
+          )
+        )
       }
     }
   }

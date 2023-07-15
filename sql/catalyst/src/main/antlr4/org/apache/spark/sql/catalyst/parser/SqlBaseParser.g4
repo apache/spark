@@ -790,6 +790,7 @@ inlineTable
 
 functionTableSubqueryArgument
     : TABLE identifierReference
+    | TABLE LEFT_PAREN identifierReference RIGHT_PAREN
     | TABLE LEFT_PAREN query RIGHT_PAREN
     ;
 
@@ -803,8 +804,8 @@ functionTableReferenceArgument
     ;
 
 functionTableArgument
-    : functionArgument
-    | functionTableReferenceArgument
+    : functionTableReferenceArgument
+    | functionArgument
     ;
 
 functionTable

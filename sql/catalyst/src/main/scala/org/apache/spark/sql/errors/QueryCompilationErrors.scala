@@ -2074,12 +2074,114 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
         "dataColumns" -> query.output.map(c => toSQLId(c.name)).mkString(", ")))
   }
 
-  def cannotWriteIncompatibleDataToTableError(tableName: String, errors: Seq[String]): Throwable = {
+  def incompatibleDataToTableCannotFindDataError(
+      tableName: String, colName: String): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1204",
+      errorClass = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_FIND_DATA",
       messageParameters = Map(
-        "tableName" -> tableName,
-        "errors" -> errors.mkString("\n- ")))
+        "tableName" -> toSQLId(tableName),
+        "colName" -> toSQLId(colName)
+      )
+    )
+  }
+
+  def incompatibleDataToTableAmbiguousColumnNameError(
+      tableName: String, colName: String): Throwable = {
+    new AnalysisException(
+      errorClass = "INCOMPATIBLE_DATA_FOR_TABLE.AMBIGUOUS_COLUMN_NAME",
+      messageParameters = Map(
+        "tableName" -> toSQLId(tableName),
+        "colName" -> toSQLId(colName)
+      )
+    )
+  }
+
+  def incompatibleDataToTableExtraStructFieldsError(
+      tableName: String, colName: String, extraFields: String): Throwable = {
+    new AnalysisException(
+      errorClass = "INCOMPATIBLE_DATA_FOR_TABLE.EXTRA_STRUCT_FIELDS",
+      messageParameters = Map(
+        "tableName" -> toSQLId(tableName),
+        "colName" -> toSQLId(colName),
+        "extraFields" -> extraFields
+      )
+    )
+  }
+
+  def incompatibleDataToTableNullableColumnError(
+      tableName: String, colName: String): Throwable = {
+    new AnalysisException(
+      errorClass = "INCOMPATIBLE_DATA_FOR_TABLE.NULLABLE_COLUMN",
+      messageParameters = Map(
+        "tableName" -> toSQLId(tableName),
+        "colName" -> toSQLId(colName)
+      )
+    )
+  }
+
+  def incompatibleDataToTableNullableArrayElementsError(
+      tableName: String, colName: String): Throwable = {
+    new AnalysisException(
+      errorClass = "INCOMPATIBLE_DATA_FOR_TABLE.NULLABLE_ARRAY_ELEMENTS",
+      messageParameters = Map(
+        "tableName" -> toSQLId(tableName),
+        "colName" -> toSQLId(colName)
+      )
+    )
+  }
+
+  def incompatibleDataToTableNullableMapValuesError(
+      tableName: String, colName: String): Throwable = {
+    new AnalysisException(
+      errorClass = "INCOMPATIBLE_DATA_FOR_TABLE.NULLABLE_MAP_VALUES",
+      messageParameters = Map(
+        "tableName" -> toSQLId(tableName),
+        "colName" -> toSQLId(colName)
+      )
+    )
+  }
+
+  def incompatibleDataToTableCannotSafelyCastError(
+      tableName: String, colName: String, srcType: String, targetType: String): Throwable = {
+    new AnalysisException(
+      errorClass = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_SAFELY_CAST",
+      messageParameters = Map(
+        "tableName" -> toSQLId(tableName),
+        "colName" -> toSQLId(colName),
+        "srcType" -> toSQLType(srcType),
+        "targetType" -> toSQLType(targetType)
+      )
+    )
+  }
+
+  def incompatibleDataToTableStructMissingFieldsError(
+      tableName: String, colName: String, missingFields: String): Throwable = {
+    new AnalysisException(
+      errorClass = "INCOMPATIBLE_DATA_FOR_TABLE.STRUCT_MISSING_FIELDS",
+      messageParameters = Map(
+        "tableName" -> toSQLId(tableName),
+        "colName" -> toSQLId(colName),
+        "missingFields" -> missingFields
+      )
+    )
+  }
+
+  def incompatibleDataToTableUnexpectedColumnNameError(
+     tableName: String,
+     colName: String,
+     order: Int,
+     expected: String,
+     found: String): Throwable = {
+    new AnalysisException(
+      errorClass = "INCOMPATIBLE_DATA_FOR_TABLE.UNEXPECTED_COLUMN_NAME",
+      messageParameters = Map(
+        "tableName" -> toSQLId(tableName),
+        "colName" -> toSQLId(colName),
+        "order" -> order.toString,
+        "expected" -> toSQLId(expected),
+        "found" -> toSQLId(found)
+      )
+    )
   }
 
   def invalidRowLevelOperationAssignments(
