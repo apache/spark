@@ -71,11 +71,12 @@ case class ExternalRDDScanExec[T](
 
   protected override def doExecute(): RDD[InternalRow] = {
     val numOutputRows = longMetric("numOutputRows")
-    rdd.mapPartitionsInternal { iter =>
-      val outputObject = ObjectOperator.wrapObjectToRow(outputObjectType)
-      iter.map { value =>
-        numOutputRows += 1
-        outputObject(value)
+    val evaluatorFactory = new ExternalRDDScanEvaluatorFactory[T](numOutputRows, outputObjectType)
+    if (conf.usePartitionEvaluator) {
+      rdd.mapPartitionsWithEvaluator(evaluatorFactory)
+    } else {
+      rdd.mapPartitionsWithIndexInternal { (index, iter) =>
+        evaluatorFactory.createEvaluator().eval(index, iter)
       }
     }
   }

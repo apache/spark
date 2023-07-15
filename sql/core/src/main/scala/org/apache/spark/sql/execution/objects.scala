@@ -89,10 +89,13 @@ case class DeserializeToObjectExec(
   }
 
   override protected def doExecute(): RDD[InternalRow] = {
-    child.execute().mapPartitionsWithIndexInternal { (index, iter) =>
-      val projection = GenerateSafeProjection.generate(deserializer :: Nil, child.output)
-      projection.initialize(index)
-      iter.map(projection)
+    val evaluatorFactory = new DeserializeToObjectEvaluatorFactory(deserializer, child.output)
+    if (conf.usePartitionEvaluator) {
+      child.execute().mapPartitionsWithEvaluator(evaluatorFactory)
+    } else {
+      child.execute().mapPartitionsWithIndexInternal { (index, iter) =>
+        evaluatorFactory.createEvaluator().eval(index, iter)
+      }
     }
   }
 
@@ -637,22 +640,19 @@ case class CoGroupExec(
       Nil
 
   override protected def doExecute(): RDD[InternalRow] = {
-    left.execute().zipPartitions(right.execute()) { (leftData, rightData) =>
-      val leftGrouped = GroupedIterator(leftData, leftGroup, left.output)
-      val rightGrouped = GroupedIterator(rightData, rightGroup, right.output)
-
-      val getKey = ObjectOperator.deserializeRowToObject(keyDeserializer, leftGroup)
-      val getLeft = ObjectOperator.deserializeRowToObject(leftDeserializer, leftAttr)
-      val getRight = ObjectOperator.deserializeRowToObject(rightDeserializer, rightAttr)
-      val outputObject = ObjectOperator.wrapObjectToRow(outputObjectType)
-
-      new CoGroupedIterator(leftGrouped, rightGrouped, leftGroup).flatMap {
-        case (key, leftResult, rightResult) =>
-          val result = func(
-            getKey(key),
-            leftResult.map(getLeft),
-            rightResult.map(getRight))
-          result.map(outputObject)
+    val evaluatorFactory = new CoGroupEvaluatorFactory(func, keyDeserializer, leftDeserializer,
+      rightDeserializer, leftGroup, rightGroup, leftAttr, rightAttr, left.output, right.output,
+      outputObjectType)
+    if (conf.usePartitionEvaluator) {
+      left.execute().zipPartitionsWithEvaluator(right.execute(), evaluatorFactory)
+    } else {
+      left.execute().zipPartitions(right.execute()) { (leftIter, rightIter) =>
+        Iterator((leftIter, rightIter))
+        // a small hack to obtain the correct partition index
+      }.mapPartitionsWithIndex { (index, zippedIter) =>
+        val (leftIter, rightIter) = zippedIter.next()
+        val evaluator = evaluatorFactory.createEvaluator()
+        evaluator.eval(index, leftIter, rightIter)
       }
     }
   }
