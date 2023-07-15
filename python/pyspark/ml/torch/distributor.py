@@ -538,7 +538,11 @@ class TorchDistributor(Distributor):
             Extra arguments to be used by framework wrapper.
         **kwargs: Any
             Extra keyword args to be used. Not currently supported but kept for future improvement.
-
+        
+        Returns
+        -------
+        Optional[Any]
+            Returns the result of the framework_wrapper
         """
         if not framework_wrapper:
             raise RuntimeError("In the _get_output_from_framework_wrapper function, found a framework wrapper that is not set. framework_wrapper must always be a valid function pointer!")
