@@ -421,7 +421,7 @@ class SparkConnectServiceSuite extends SharedSparkSession with MockitoSugar with
         .build()
 
       val thread = new Thread {
-        override def run {
+        override def run: Unit = {
           Thread.sleep(1000)
           instance.interrupt(
             proto.InterruptRequest
