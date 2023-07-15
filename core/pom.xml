@@ -375,12 +375,12 @@
     </dependency>
     <!-- Coerce sbt into honoring these dependency updates: -->
     <dependency>
-      <groupId>net.sourceforge.htmlunit</groupId>
+      <groupId>org.htmlunit</groupId>
       <artifactId>htmlunit</artifactId>
       <scope>test</scope>
     </dependency>
     <dependency>
-      <groupId>net.sourceforge.htmlunit</groupId>
+      <groupId>org.htmlunit</groupId>
       <artifactId>htmlunit-core-js</artifactId>
       <scope>test</scope>
     </dependency>
