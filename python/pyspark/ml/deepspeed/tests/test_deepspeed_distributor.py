@@ -80,7 +80,7 @@ class DeepspeedTorchDistributorUnitTests(unittest.TestCase):
                 *torchrun_local_args_expected,
                 f"--nproc_per_node={num_procs}",
                 train_file_path,
-                "-deepspeed",
+                "--deepspeed",
                 "--deepspeed_config",
                 deepspeed_conf,
             ]
@@ -98,7 +98,7 @@ class DeepspeedTorchDistributorUnitTests(unittest.TestCase):
                 f"--nproc_per_node={num_procs}",
                 train_file_path,
                 *local_mode_version_args,
-                "-deepspeed",
+                "--deepspeed",
                 "--deepspeed_config",
                 deepspeed_conf,
             ]
@@ -135,7 +135,7 @@ class DeepspeedTorchDistributorUnitTests(unittest.TestCase):
                 *distributed_torchrun_args,
                 "--nproc_per_node=1",
                 train_file_path,
-                "-deepspeed",
+                "--deepspeed",
                 "--deepspeed_config",
                 deepspeed_conf,
             ]
@@ -154,7 +154,7 @@ class DeepspeedTorchDistributorUnitTests(unittest.TestCase):
                 "--nproc_per_node=1",
                 train_file_path,
                 *distributed_extra_args,
-                "-deepspeed",
+                "--deepspeed",
                 "--deepspeed_config",
                 deepspeed_conf,
             ]
