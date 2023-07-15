@@ -19,7 +19,7 @@ User-defined table function related classes and functions
 """
 import sys
 import warnings
-from typing import Iterator, Type, TYPE_CHECKING, Optional, Union
+from typing import Any, Iterator, Type, TYPE_CHECKING, Optional, Union
 
 from py4j.java_gateway import JavaObject
 
@@ -77,20 +77,30 @@ def _create_py_udtf(
     # Create a regular Python UDTF and check for invalid handler class.
     regular_udtf = _create_udtf(cls, returnType, name, PythonEvalType.SQL_TABLE_UDF, deterministic)
 
-    if arrow_enabled:
-        try:
-            require_minimum_pandas_version()
-            require_minimum_pyarrow_version()
-        except ImportError as e:
-            warnings.warn(
-                f"Arrow optimization for Python UDTFs cannot be enabled: {str(e)}. "
-                f"Falling back to using regular Python UDTFs.",
-                UserWarning,
-            )
-            return regular_udtf
-        return _create_arrow_udtf(regular_udtf)
-    else:
+    if not arrow_enabled:
         return regular_udtf
+
+    # Return the regular UDTF if the required dependencies are not satisfied.
+    try:
+        require_minimum_pandas_version()
+        require_minimum_pyarrow_version()
+    except ImportError as e:
+        warnings.warn(
+            f"Arrow optimization for Python UDTFs cannot be enabled: {str(e)}. "
+            f"Falling back to using regular Python UDTFs.",
+            UserWarning,
+        )
+        return regular_udtf
+
+    # Return the vectorized UDTF.
+    vectorized_udtf = _vectorize_udtf(cls)
+    return _create_udtf(
+        cls=vectorized_udtf,
+        returnType=returnType,
+        name=name,
+        evalType=PythonEvalType.SQL_ARROW_TABLE_UDF,
+        deterministic=regular_udtf.deterministic,
+    )
 
 
 def _vectorize_udtf(cls: Type) -> Type:
@@ -127,32 +137,20 @@ def _vectorize_udtf(cls: Type) -> Type:
     return vectorized_udtf
 
 
-def _create_arrow_udtf(regular_udtf: "UserDefinedTableFunction") -> "UserDefinedTableFunction":
-    """Create an Arrow-optimized Python UDTF."""
-    cls = regular_udtf.func
-    vectorized_udtf = _vectorize_udtf(cls)
-
-    return _create_udtf(
-        cls=vectorized_udtf,
-        returnType=regular_udtf._returnType,
-        name=regular_udtf._name,
-        evalType=PythonEvalType.SQL_ARROW_TABLE_UDF,
-        deterministic=regular_udtf.deterministic,
-    )
-
-
-def _validate_udtf(udtf: "UserDefinedTableFunction") -> None:
+def _validate_udtf_handler(cls: Any) -> None:
+    """Validate the handler class of a UDTF."""
     # TODO(SPARK-43968): add more compile time checks for UDTFs
-    if not isinstance(udtf.func, type):
+
+    if not isinstance(cls, type):
         raise PySparkTypeError(
             f"Invalid user defined table function: the function handler "
-            f"must be a class, but got {type(udtf.func).__name__}. Please provide "
+            f"must be a class, but got {type(cls).__name__}. Please provide "
             "a class as the handler."
         )
 
-    if not hasattr(udtf.func, "eval"):
+    if not hasattr(cls, "eval"):
         raise PySparkAttributeError(
-            error_class="INVALID_UDTF_NO_EVAL", message_parameters={"name": udtf._name}
+            error_class="INVALID_UDTF_NO_EVAL", message_parameters={"name": cls.__name__}
         )
 
 
@@ -187,7 +185,7 @@ class UserDefinedTableFunction:
         self.evalType = evalType
         self.deterministic = deterministic
 
-        _validate_udtf(self)
+        _validate_udtf_handler(func)
 
     @property
     def returnType(self) -> StructType:
@@ -263,8 +261,8 @@ class UDTFRegistration:
     def register(
         self,
         name: str,
-        f: UserDefinedTableFunction,
-    ) -> UserDefinedTableFunction:
+        f: "UserDefinedTableFunction",
+    ) -> "UserDefinedTableFunction":
         """Register a Python user-defined table function as a SQL table function.
 
         .. versionadded:: 3.5.0

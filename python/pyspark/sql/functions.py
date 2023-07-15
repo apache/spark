@@ -15516,7 +15516,7 @@ def udtf(
     *,
     returnType: Union[StructType, str],
     useArrow: Optional[bool] = None,
-) -> Union[UserDefinedTableFunction, functools.partial]:
+) -> Union["UserDefinedTableFunction", Callable[[Type], "UserDefinedTableFunction"]]:
     """Creates a user defined table function (UDTF).
 
     .. versionadded:: 3.5.0

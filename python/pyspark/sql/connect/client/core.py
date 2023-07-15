@@ -655,9 +655,10 @@ class SparkConnectClient(object):
         deterministic: bool = True,
     ) -> str:
         """
-        Create a temporary user-defined table function in the session catalog.
-        Note the return type of a UDTF must be a struct type. It will be checked
-        when building the proto message for PythonUDTF.
+        Register a user-defined table function (UDTF) in the session catalog
+        as a temporary function. The return type, if specified, must be a
+        struct type and it's validated when building the proto message
+        for the PythonUDTF.
         """
         udtf = PythonUDTF(
             func=function,

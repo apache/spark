@@ -959,8 +959,8 @@ message CommonInlineUserDefinedTableFunction {
 }
 
 message PythonUDTF {
-  // (Required) Return type of the Python UDTF.
-  DataType return_type = 1;
+  // (Optional) Return type of the Python UDTF.
+  optional DataType return_type = 1;
 
   // (Required) EvalType of the Python UDTF.
   int32 eval_type = 2;

@@ -3899,7 +3899,7 @@ def udtf(
     *,
     returnType: Union[StructType, str],
     useArrow: Optional[bool] = None,
-) -> Union["UserDefinedTableFunction", functools.partial]:
+) -> Union["UserDefinedTableFunction", Callable[[Type], "UserDefinedTableFunction"]]:
     if cls is None:
         return functools.partial(_create_py_udtf, returnType=returnType, useArrow=useArrow)
     else:

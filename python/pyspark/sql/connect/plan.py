@@ -2193,26 +2193,12 @@ class PythonUDTF:
         self._eval_type = eval_type
         self._python_ver = python_ver
 
-    def _parse_return_type(self, session: "SparkConnectClient") -> StructType:
-        if isinstance(self._return_type, UnparsedDataType):
-            parsed = session._analyze(
-                method="ddl_parse", ddl_string=self._return_type.data_type_string
-            ).parsed
-        else:
-            parsed = self._return_type
-
-        if not isinstance(parsed, StructType):
-            raise PySparkTypeError(
-                error_class="INVALID_UDTF_RETURN_TYPE",
-                message_parameters={"name": self._name, "return_type": f"{parsed}"},
-            )
-
-        return parsed
-
     def to_plan(self, session: "SparkConnectClient") -> proto.PythonUDTF:
         udtf = proto.PythonUDTF()
-        return_type = self._parse_return_type(session)
-        udtf.return_type.CopyFrom(pyspark_types_to_proto_types(return_type))
+        # Currently the return type cannot be None.
+        # TODO(SPARK-44380): support `analyze` in Python UDTFs
+        assert self._return_type is not None
+        udtf.return_type.CopyFrom(pyspark_types_to_proto_types(self._return_type))
         udtf.eval_type = self._eval_type
         udtf.command = CloudPickleSerializer().dumps(self._func)
         udtf.python_ver = self._python_ver

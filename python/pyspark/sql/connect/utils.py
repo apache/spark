@@ -54,5 +54,5 @@ def require_minimum_grpc_version() -> None:
         )
 
 
-def get_python_ver():
+def get_python_ver() -> str:
     return "%d.%d" % sys.version_info[:2]

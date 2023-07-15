@@ -41,8 +41,18 @@ class UDTFParityTests(BaseUDTFTestsMixin, ReusedConnectTestCase):
         finally:
             super(UDTFParityTests, cls).tearDownClass()
 
-    # TODO: use PySpark error classes instead of throwing either
-    # Py4JJavaError or SparkConnectGrpcException.
+    # TODO: use PySpark error classes instead of SparkConnectGrpcException
+
+    def test_udtf_with_invalid_return_type(self):
+        @udtf(returnType="int")
+        class TestUDTF:
+            def eval(self, a: int):
+                yield a + 1,
+
+        with self.assertRaisesRegex(
+            SparkConnectGrpcException, "Invalid Python user-defined table function return type."
+        ):
+            TestUDTF(lit(1)).collect()
 
     def test_udtf_with_wrong_num_output(self):
         err_msg = (

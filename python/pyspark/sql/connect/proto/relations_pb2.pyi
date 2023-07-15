@@ -3455,7 +3455,7 @@ class PythonUDTF(google.protobuf.message.Message):
     PYTHON_VER_FIELD_NUMBER: builtins.int
     @property
     def return_type(self) -> pyspark.sql.connect.proto.types_pb2.DataType:
-        """(Required) Return type of the Python UDTF."""
+        """(Optional) Return type of the Python UDTF."""
     eval_type: builtins.int
     """(Required) EvalType of the Python UDTF."""
     command: builtins.bytes
@@ -3471,11 +3471,16 @@ class PythonUDTF(google.protobuf.message.Message):
         python_ver: builtins.str = ...,
     ) -> None: ...
     def HasField(
-        self, field_name: typing_extensions.Literal["return_type", b"return_type"]
+        self,
+        field_name: typing_extensions.Literal[
+            "_return_type", b"_return_type", "return_type", b"return_type"
+        ],
     ) -> builtins.bool: ...
     def ClearField(
         self,
         field_name: typing_extensions.Literal[
+            "_return_type",
+            b"_return_type",
             "command",
             b"command",
             "eval_type",
@@ -3486,6 +3491,9 @@ class PythonUDTF(google.protobuf.message.Message):
             b"return_type",
         ],
     ) -> None: ...
+    def WhichOneof(
+        self, oneof_group: typing_extensions.Literal["_return_type", b"_return_type"]
+    ) -> typing_extensions.Literal["return_type"] | None: ...
 
 global___PythonUDTF = PythonUDTF
 

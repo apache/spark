@@ -34,7 +34,7 @@ from pyspark.sql.connect.plan import (
 from pyspark.sql.connect.types import UnparsedDataType
 from pyspark.sql.connect.utils import get_python_ver
 from pyspark.sql.udtf import UDTFRegistration as PySparkUDTFRegistration
-from pyspark.sql.udtf import _validate_udtf
+from pyspark.sql.udtf import _validate_udtf_handler
 from pyspark.sql.types import DataType, StructType
 from pyspark.errors import PySparkRuntimeError, PySparkTypeError
 
@@ -132,7 +132,7 @@ class UserDefinedTableFunction:
         self.evalType = evalType
         self.deterministic = deterministic
 
-        _validate_udtf(self)
+        _validate_udtf_handler(func)
 
     def _build_common_inline_user_defined_table_function(
         self, *cols: "ColumnOrName"
@@ -160,7 +160,6 @@ class UserDefinedTableFunction:
         from pyspark.sql.connect.session import _active_spark_session
 
         if _active_spark_session is None:
-            # TODO: can we create a Spark session here?
             raise PySparkRuntimeError(
                 "An active SparkSession is required for "
                 "executing a Python user-defined table function."
