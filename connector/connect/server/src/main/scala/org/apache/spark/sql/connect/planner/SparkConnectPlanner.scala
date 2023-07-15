@@ -2738,6 +2738,8 @@ class SparkConnectPlanner(val sessionHolder: SessionHolder) extends Logging {
     val plan = transformRelation(writeOp.getInput)
     val tracker = executeHolder.eventsManager.createQueryPlanningTracker
     val dataset = Dataset.ofRows(session, plan, tracker)
+    // Call manually as writeStream does not trigger ReadyForExecution
+    tracker.setReadyForExecution()
 
     val writer = dataset.writeStream
 

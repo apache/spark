@@ -16,6 +16,8 @@
  */
 package org.apache.spark.sql.connect.planner
 
+import java.util.UUID
+
 import scala.collection.JavaConverters._
 import scala.collection.mutable
 
@@ -27,6 +29,7 @@ import org.apache.arrow.memory.RootAllocator
 import org.apache.arrow.vector.{BigIntVector, Float8Vector}
 import org.apache.arrow.vector.ipc.ArrowStreamReader
 import org.apache.commons.lang3.{JavaVersion, SystemUtils}
+import org.mockito.Mockito.when
 import org.scalatest.Tag
 import org.scalatestplus.mockito.MockitoSugar
 
@@ -44,6 +47,7 @@ import org.apache.spark.sql.connect.plugin.SparkConnectPluginRegistry
 import org.apache.spark.sql.connect.service.{SparkConnectAnalyzeHandler, SparkConnectService, SparkListenerConnectOperationAnalyzed, SparkListenerConnectOperationCanceled, SparkListenerConnectOperationClosed, SparkListenerConnectOperationFailed, SparkListenerConnectOperationFinished, SparkListenerConnectOperationReadyForExecution, SparkListenerConnectOperationStarted, SparkListenerConnectSessionClosed, SparkListenerConnectSessionStarted}
 import org.apache.spark.sql.connect.service.SessionHolder
 import org.apache.spark.sql.connector.catalog.InMemoryPartitionTableCatalog
+import org.apache.spark.sql.streaming.StreamingQuery
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.IntegerType
 import org.apache.spark.util.Utils
@@ -54,6 +58,7 @@ import org.apache.spark.util.Utils
 class SparkConnectServiceSuite extends SharedSparkSession with MockitoSugar with Logging {
 
   private def sparkSessionHolder = SessionHolder.forTesting(spark)
+  private def DEFAULT_UUID = UUID.fromString("89ea6117-1f45-4c03-ae27-f47c6aded093")
 
   test("Test schema in analyze response") {
     withTable("test") {
@@ -279,6 +284,44 @@ class SparkConnectServiceSuite extends SharedSparkSession with MockitoSugar with
               .build())),
       proto.Command
         .newBuilder()
+        .setWriteStreamOperationStart(
+          proto.WriteStreamOperationStart
+            .newBuilder()
+            .setInput(
+              proto.Relation
+                .newBuilder()
+                .setRead(proto.Read
+                  .newBuilder()
+                  .setIsStreaming(true)
+                  .setDataSource(proto.Read.DataSource.newBuilder().setFormat("rate").build())
+                  .build())
+                .build())
+            .setOutputMode("Append")
+            .setAvailableNow(true)
+            .setQueryName("test")
+            .setFormat("memory")
+            .putOptions("checkpointLocation", s"${UUID.randomUUID}")
+            .setPath("test-path")
+            .build()),
+      proto.Command
+        .newBuilder()
+        .setStreamingQueryCommand(
+          proto.StreamingQueryCommand
+            .newBuilder()
+            .setQueryId(
+              proto.StreamingQueryInstanceId
+                .newBuilder()
+                .setId(DEFAULT_UUID.toString)
+                .setRunId(DEFAULT_UUID.toString)
+                .build())
+            .setStop(true)),
+      proto.Command
+        .newBuilder()
+        .setStreamingQueryManagerCommand(proto.StreamingQueryManagerCommand
+          .newBuilder()
+          .setListListeners(true)),
+      proto.Command
+        .newBuilder()
         .setRegisterFunction(
           proto.CommonInlineUserDefinedFunction
             .newBuilder()
@@ -291,69 +334,60 @@ class SparkConnectServiceSuite extends SharedSparkSession with MockitoSugar with
                 .setCommand(ByteString.copyFrom("command".getBytes()))
                 .setPythonVer("3.10")
                 .build())))) { command =>
-    withView("testview") {
-      withTable("testcat.testtable") {
-        withSparkConf(
-          "spark.sql.catalog.testcat" -> classOf[InMemoryPartitionTableCatalog].getName,
-          Connect.CONNECT_EXTENSIONS_COMMAND_CLASSES.key ->
-            "org.apache.spark.sql.connect.plugin.ExampleCommandPlugin") {
-          withEvents { verifyEvents =>
-            val instance = new SparkConnectService(false)
-            val context = proto.UserContext
-              .newBuilder()
-              .setUserId("c1")
-              .build()
-            val plan = proto.Plan
-              .newBuilder()
-              .setCommand(command)
-              .build()
+    withCommandTest { verifyEvents =>
+      val instance = new SparkConnectService(false)
+      val context = proto.UserContext
+        .newBuilder()
+        .setUserId("c1")
+        .build()
+      val plan = proto.Plan
+        .newBuilder()
+        .setCommand(command)
+        .build()
 
-            val request = proto.ExecutePlanRequest
-              .newBuilder()
-              .setPlan(plan)
-              .setSessionId("s1")
-              .setUserContext(context)
-              .build()
+      val request = proto.ExecutePlanRequest
+        .newBuilder()
+        .setPlan(plan)
+        .setSessionId("s1")
+        .setUserContext(context)
+        .build()
 
-            // Execute plan.
-            @volatile var done = false
-            val responses = mutable.Buffer.empty[proto.ExecutePlanResponse]
-            instance.executePlan(
-              request,
-              new StreamObserver[proto.ExecutePlanResponse] {
-                override def onNext(v: proto.ExecutePlanResponse): Unit = {
-                  responses += v
-                  verifyEvents.onNext(v)
-                }
-
-                override def onError(throwable: Throwable): Unit = {
-                  verifyEvents.onError(throwable)
-                  throw throwable
-                }
-
-                override def onCompleted(): Unit = {
-                  done = true
-                }
-              })
-            verifyEvents.onCompleted()
-            // The current implementation is expected to be blocking.
-            // This is here to make sure it is.
-            assert(done)
-
-            // Result + Metrics
-            if (responses.size > 1) {
-              assert(responses.size == 2)
-
-              // Make sure the first response result only
-              val head = responses.head
-              assert(head.hasSqlCommandResult && !head.hasMetrics)
-
-              // Make sure the last response is metrics only
-              val last = responses.last
-              assert(last.hasMetrics && !last.hasSqlCommandResult)
-            }
+      // Execute plan.
+      @volatile var done = false
+      val responses = mutable.Buffer.empty[proto.ExecutePlanResponse]
+      instance.executePlan(
+        request,
+        new StreamObserver[proto.ExecutePlanResponse] {
+          override def onNext(v: proto.ExecutePlanResponse): Unit = {
+            responses += v
+            verifyEvents.onNext(v)
           }
-        }
+
+          override def onError(throwable: Throwable): Unit = {
+            verifyEvents.onError(throwable)
+            throw throwable
+          }
+
+          override def onCompleted(): Unit = {
+            done = true
+          }
+        })
+      verifyEvents.onCompleted()
+      // The current implementation is expected to be blocking.
+      // This is here to make sure it is.
+      assert(done)
+
+      // Result + Metrics
+      if (responses.size > 1) {
+        assert(responses.size == 2)
+
+        // Make sure the first response result only
+        val head = responses.head
+        assert(head.hasSqlCommandResult && !head.hasMetrics)
+
+        // Make sure the last response is metrics only
+        val last = responses.last
+        assert(last.hasMetrics && !last.hasSqlCommandResult)
       }
     }
   }
@@ -598,6 +632,27 @@ class SparkConnectServiceSuite extends SharedSparkSession with MockitoSugar with
       val valuesList = observedMetric.getValuesList.asScala
       assert(valuesList.head.hasLong && valuesList.head.getLong == 0)
       assert(valuesList.last.hasLong && valuesList.last.getLong == 99)
+    }
+  }
+
+  protected def withCommandTest(f: VerifyEvents => Unit): Unit = {
+    withView("testview") {
+      withTable("testcat.testtable") {
+        withSparkConf(
+          "spark.sql.catalog.testcat" -> classOf[InMemoryPartitionTableCatalog].getName,
+          Connect.CONNECT_EXTENSIONS_COMMAND_CLASSES.key ->
+            "org.apache.spark.sql.connect.plugin.ExampleCommandPlugin") {
+          withEvents { verifyEvents =>
+            val restartedQuery = mock[StreamingQuery]
+            when(restartedQuery.id).thenReturn(DEFAULT_UUID)
+            when(restartedQuery.runId).thenReturn(DEFAULT_UUID)
+            SparkConnectService.streamingSessionManager.registerNewStreamingQuery(
+              SparkConnectService.getOrCreateIsolatedSession("c1", "s1"),
+              restartedQuery)
+            f(verifyEvents)
+          }
+        }
+      }
     }
   }
 
