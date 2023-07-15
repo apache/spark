@@ -529,8 +529,9 @@ class TorchDistributor(Distributor):
         input_params: Dict
             A dictionary that maps parameter to arguments for the command to be created.
         train_object: Union[Callable, str]
-            Either a function to be used for distributed training, or a string representing the path of a 
-            file to be run in a distributed fashion.
+            This input comes from the user. If the user inputs a string, then this means it's a filepath.
+            Otherwise, if the input is a function, then this means that the user wants to run this 
+            function in a distributed manner. 
         run_pytorch_file_fn: Optional[Callable]
             The function that will be used to run distributed training of a file; mainly used for the 
             distributed training using a function.
