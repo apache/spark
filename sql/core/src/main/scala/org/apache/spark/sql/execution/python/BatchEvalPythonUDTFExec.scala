@@ -82,8 +82,8 @@ class BatchEvalPythonUDTFEvaluatorFactory(
       output: Seq[Attribute]) {
 
   /**
-   * Evaluates a Python UDTF. It computes the results using the PythonUDFRunner, and returns an
-   * iterator of internal rows for every input row.
+   * Evaluates a Python UDTF. It computes the results using the PythonUDFRunner, and returns
+   * an iterator of internal rows for every input row.
    */
   override def evaluate(
       argOffsets: Array[Int],
@@ -106,20 +106,15 @@ class BatchEvalPythonUDTFEvaluatorFactory(
     val resultType = udtf.dataType
     val fromJava = EvaluatePython.makeFromJava(resultType)
 
-    outputIterator
-      .flatMap { pickedResult =>
-        val unpickledBatch = unpickle.loads(pickedResult)
-        unpickledBatch.asInstanceOf[java.util.ArrayList[Any]].asScala
-      }
-      .map { results =>
-        assert(results.getClass.isArray)
-        val res = results.asInstanceOf[Array[_]]
-        pythonMetrics("pythonNumRowsReceived") += res.length
-        fromJava(results)
-          .asInstanceOf[GenericArrayData]
-          .array
-          .map(_.asInstanceOf[InternalRow])
-          .toIterator
+    outputIterator.flatMap { pickedResult =>
+      val unpickledBatch = unpickle.loads(pickedResult)
+      unpickledBatch.asInstanceOf[java.util.ArrayList[Any]].asScala
+    }.map { results =>
+      assert(results.getClass.isArray)
+      val res = results.asInstanceOf[Array[_]]
+      pythonMetrics("pythonNumRowsReceived") += res.length
+      fromJava(results).asInstanceOf[GenericArrayData]
+        .array.map(_.asInstanceOf[InternalRow]).toIterator
       }
   }
 }

@@ -51,6 +51,7 @@ case class ArrowEvalPythonUDTFExec(
 
   override protected def withNewChildInternal(newChild: SparkPlan): SparkPlan =
     copy(child = newChild)
+
   override protected def evaluatorFactory: EvalPythonUDTFEvaluatorFactory =
     new ArrowEvalPythonUDTFEvaluatorFactory(
       child.output,
