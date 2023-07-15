@@ -1900,6 +1900,11 @@
           "Parsing JSON arrays as structs is forbidden."
         ]
       },
+      "CANNOT_PARSE_STRING_AS_DATATYPE" : {
+        "message" : [
+          "Cannot parse field name <fieldName>, field value <fieldValue>, [<token>] as target spark data type [<dataType>]."
+        ]
+      },
       "WITHOUT_SUGGESTION" : {
         "message" : [
           ""
@@ -5133,11 +5138,6 @@
   "_LEGACY_ERROR_TEMP_2131" : {
     "message" : [
       "Exception when registering StreamingQueryListener."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2133" : {
-    "message" : [
-      "Cannot parse field name <fieldName>, field value <fieldValue>, [<token>] as target spark data type [<dataType>]."
     ]
   },
   "_LEGACY_ERROR_TEMP_2134" : {

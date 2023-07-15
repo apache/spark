@@ -30,6 +30,10 @@ This error class has the following derived error classes:
 
 Parsing JSON arrays as structs is forbidden.
 
+## CANNOT_PARSE_STRING_AS_DATATYPE
+
+Cannot parse field name `<fieldName>`, field value `<fieldValue>`, [`<token>`] as target spark data type [`<dataType>`].
+
 ## WITHOUT_SUGGESTION
 
 

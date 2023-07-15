@@ -75,6 +75,9 @@ class FailureSafeParser[IN](
               // SPARK-42298 we recreate the exception here to make sure the error message
               // have the record content.
               throw QueryExecutionErrors.cannotParseJsonArraysAsStructsError(e.record().toString)
+            case StringAsDataTypeException(fieldName, fieldValue, token, dataType) =>
+              throw QueryExecutionErrors.cannotParseStringAsDataTypeError(e.record().toString,
+                fieldName, fieldValue, token, dataType)
             case _ => throw QueryExecutionErrors.malformedRecordsDetectedInRecordParsingError(
               toResultRow(e.partialResults().headOption, e.record).toString, e)
           }

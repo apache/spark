@@ -1432,15 +1432,21 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
         "failFastMode" -> FailFastMode.name))
   }
 
-  def cannotParseStringAsDataTypeError(parser: JsonParser, token: JsonToken, dataType: DataType)
-  : SparkRuntimeException = {
+  def cannotParseStringAsDataTypeError(
+      recordStr: String,
+      fieldName: String,
+      fieldValue: String,
+      token: JsonToken,
+      dataType: DataType): SparkRuntimeException = {
     new SparkRuntimeException(
-      errorClass = "_LEGACY_ERROR_TEMP_2133",
+      errorClass = "MALFORMED_RECORD_IN_PARSING.CANNOT_PARSE_STRING_AS_DATATYPE",
       messageParameters = Map(
-        "fieldName" -> parser.getCurrentName,
-        "fieldValue" -> parser.getText,
-        "token" -> token.toString(),
-        "dataType" -> dataType.toString()))
+        "badRecord" -> recordStr,
+        "failFastMode" -> FailFastMode.name,
+        "fieldName" -> fieldName,
+        "fieldValue" -> fieldValue,
+        "token" -> token.toString,
+        "dataType" -> dataType.toString))
   }
 
   def cannotParseStringAsDataTypeError(pattern: String, value: String, dataType: DataType)

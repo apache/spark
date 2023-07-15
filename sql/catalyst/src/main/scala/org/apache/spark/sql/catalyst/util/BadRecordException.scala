@@ -17,7 +17,10 @@
 
 package org.apache.spark.sql.catalyst.util
 
+import com.fasterxml.jackson.core.JsonToken
+
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.types.DataType
 import org.apache.spark.unsafe.types.UTF8String
 
 /**
@@ -56,3 +59,12 @@ case class BadRecordException(
  * Exception thrown when the underlying parser parses a JSON array as a struct.
  */
 case class JsonArraysAsStructsException() extends RuntimeException()
+
+/**
+ * Exception thrown when the underlying parser can not parses a String as a datatype.
+ */
+case class StringAsDataTypeException(
+    fieldName: String,
+    fieldValue: String,
+    token: JsonToken,
+    dataType: DataType) extends RuntimeException()
