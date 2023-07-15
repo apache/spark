@@ -40,7 +40,6 @@ import org.apache.hadoop.io.{ArrayWritable, BooleanWritable, BytesWritable, Doub
 import org.apache.hadoop.mapred.{FileInputFormat, InputFormat, JobConf, SequenceFileInputFormat, TextInputFormat}
 import org.apache.hadoop.mapreduce.{InputFormat => NewInputFormat, Job => NewHadoopJob}
 import org.apache.hadoop.mapreduce.lib.input.{FileInputFormat => NewFileInputFormat}
-import org.apache.logging.log4j.Level
 
 import org.apache.spark.annotation.{DeveloperApi, Experimental}
 import org.apache.spark.broadcast.Broadcast
@@ -396,10 +395,7 @@ class SparkContext(config: SparkConf) extends Logging {
     require(SparkContext.VALID_LOG_LEVELS.contains(upperCased),
       s"Supplied level $logLevel did not match one of:" +
         s" ${SparkContext.VALID_LOG_LEVELS.mkString(",")}")
-    // Update only if new log level is not same as current log level
-    if (upperCased != Utils.getLogLevel) {
-      Utils.setLogLevel(Level.toLevel(upperCased))
-    }
+    Utils.setLogLevelIfNeeded(upperCased)
     // Inform all executors about the change
     if (conf.get(EXECUTOR_ALLOW_SYNC_LOG_LEVEL) && _schedulerBackend != null) {
       _schedulerBackend.updateLogLevel(upperCased)

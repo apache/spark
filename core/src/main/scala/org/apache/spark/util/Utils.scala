@@ -2445,6 +2445,14 @@ private[spark] object Utils extends Logging with SparkClassUtils {
     Logging.sparkShellThresholdLevel = null
   }
 
+
+  def setLogLevelIfNeeded(newLogLevel: String): Unit = {
+    // Update only if new log level is not same as current log level
+    if (newLogLevel != Utils.getLogLevel) {
+      Utils.setLogLevel(Level.toLevel(newLogLevel))
+    }
+  }
+
   private lazy val getLogContext: (LoggerContext, LoggerConfig) = {
     val ctx = LogManager.getContext(false).asInstanceOf[LoggerContext]
     (ctx, ctx.getConfiguration().getLoggerConfig(LogManager.ROOT_LOGGER_NAME))

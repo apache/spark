@@ -123,14 +123,14 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
   // The num of current max ExecutorId used to re-register appMaster
   @volatile protected var currentExecutorIdCounter = 0
 
+  // Current log level of driver to send to executor
+  @volatile private var logLevel: Option[String] = None
+
   // Current set of delegation tokens to send to executors.
   private val delegationTokens = new AtomicReference[Array[Byte]]()
 
   // The token manager used to create security tokens.
   private var delegationTokenManager: Option[HadoopDelegationTokenManager] = None
-
-  // Current log level of driver to send to executor
-  private var logLevel: Option[String] = None
 
   private val reviveThread =
     ThreadUtils.newDaemonSingleThreadScheduledExecutor("driver-revive-thread")
@@ -355,7 +355,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
       case RetrieveSparkAppConfig(resourceProfileId) =>
         val rp = scheduler.sc.resourceProfileManager.resourceProfileFromId(resourceProfileId)
         val reply = SparkAppConfig(
-          getLatestSparkConfig,
+          sparkProperties,
           SparkEnv.get.securityManager.getIOEncryptionKey(),
           Option(delegationTokens.get()),
           rp,
@@ -366,16 +366,6 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
 
       case e =>
         logError(s"Received unexpected ask ${e}")
-    }
-
-    private def getLatestSparkConfig: Seq[(String, String)] = {
-      val conf = scheduler.sc.conf
-      if (conf.get(EXECUTOR_ALLOW_SYNC_LOG_LEVEL)) {
-        conf.get(SPARK_LOG_LEVEL).map(sparkProperties :+ (SPARK_LOG_LEVEL.key, _))
-          .getOrElse(sparkProperties)
-      } else {
-        sparkProperties
-      }
     }
 
     // Make fake resource offers on all executors
