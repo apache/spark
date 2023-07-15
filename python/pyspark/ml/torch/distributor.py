@@ -541,7 +541,7 @@ class TorchDistributor(Distributor):
 
         """
         if not framework_wrapper:
-            raise RuntimeError("In the _get_output_from_framework_wrapper function, found a framework wrapper that is none. I wonder why this is...")
+            raise RuntimeError("In the _get_output_from_framework_wrapper function, found a framework wrapper that is not set. framework_wrapper must always be a valid function pointer!")
         # The object to train is a file path, so framework_wrapper is some run_training_on_pytorch_file function.
         if type(train_object) is str:
             return framework_wrapper(input_params, train_object, *args, **kwargs)
