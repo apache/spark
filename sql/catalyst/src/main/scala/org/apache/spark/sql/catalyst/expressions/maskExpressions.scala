@@ -18,63 +18,15 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
+import org.apache.spark.sql.catalyst.analysis.{ExpressionBuilder, TypeCheckResult}
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
+import org.apache.spark.sql.catalyst.plans.logical.{FunctionSignature, NamedArgument}
 import org.apache.spark.sql.errors.QueryErrorsBase
 import org.apache.spark.sql.types.{AbstractDataType, DataType, StringType}
 import org.apache.spark.unsafe.types.UTF8String
 
-// scalastyle:off line.size.limit
-@ExpressionDescription(
-  usage =
-    """_FUNC_(input[, upperChar, lowerChar, digitChar, otherChar]) - masks the given string value.
-       The function replaces characters with 'X' or 'x', and numbers with 'n'.
-       This can be useful for creating copies of tables with sensitive information removed.
-      """,
-  arguments = """
-    Arguments:
-      * input      - string value to mask. Supported types: STRING, VARCHAR, CHAR
-      * upperChar  - character to replace upper-case characters with. Specify NULL to retain original character. Default value: 'X'
-      * lowerChar  - character to replace lower-case characters with. Specify NULL to retain original character. Default value: 'x'
-      * digitChar  - character to replace digit characters with. Specify NULL to retain original character. Default value: 'n'
-      * otherChar  - character to replace all other characters with. Specify NULL to retain original character. Default value: NULL
-  """,
-  examples = """
-    Examples:
-      > SELECT _FUNC_('abcd-EFGH-8765-4321');
-        xxxx-XXXX-nnnn-nnnn
-      > SELECT _FUNC_('abcd-EFGH-8765-4321', 'Q');
-        xxxx-QQQQ-nnnn-nnnn
-      > SELECT _FUNC_('AbCD123-@$#', 'Q', 'q');
-        QqQQnnn-@$#
-      > SELECT _FUNC_('AbCD123-@$#');
-        XxXXnnn-@$#
-      > SELECT _FUNC_('AbCD123-@$#', 'Q');
-        QxQQnnn-@$#
-      > SELECT _FUNC_('AbCD123-@$#', 'Q', 'q');
-        QqQQnnn-@$#
-      > SELECT _FUNC_('AbCD123-@$#', 'Q', 'q', 'd');
-        QqQQddd-@$#
-      > SELECT _FUNC_('AbCD123-@$#', 'Q', 'q', 'd', 'o');
-        QqQQdddoooo
-      > SELECT _FUNC_('AbCD123-@$#', NULL, 'q', 'd', 'o');
-        AqCDdddoooo
-      > SELECT _FUNC_('AbCD123-@$#', NULL, NULL, 'd', 'o');
-        AbCDdddoooo
-      > SELECT _FUNC_('AbCD123-@$#', NULL, NULL, NULL, 'o');
-        AbCD123oooo
-      > SELECT _FUNC_(NULL, NULL, NULL, NULL, 'o');
-        NULL
-      > SELECT _FUNC_(NULL);
-        NULL
-      > SELECT _FUNC_('AbCD123-@$#', NULL, NULL, NULL, NULL);
-        AbCD123-@$#
-  """,
-  since = "3.4.0",
-  group = "string_funcs")
-// scalastyle:on line.size.limit
 case class Mask(
     input: Expression,
     upperChar: Expression,
@@ -277,13 +229,13 @@ case class MaskArgument(maskChar: Char, ignore: Boolean)
 
 object Mask {
   // Default character to replace upper-case characters
-  private val MASKED_UPPERCASE = 'X'
+  val MASKED_UPPERCASE = 'X'
   // Default character to replace lower-case characters
-  private val MASKED_LOWERCASE = 'x'
+  val MASKED_LOWERCASE = 'x'
   // Default character to replace digits
-  private val MASKED_DIGIT = 'n'
+  val MASKED_DIGIT = 'n'
   // This value helps to retain original value in the input by ignoring the replacement rules
-  private val MASKED_IGNORE = null
+  val MASKED_IGNORE = null
 
   def transformInput(
       input: Any,
@@ -321,3 +273,72 @@ object Mask {
     }
   }
 }
+
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage =
+    """_FUNC_(input[, upperChar, lowerChar, digitChar, otherChar]) - masks the given string value.
+       The function replaces characters with 'X' or 'x', and numbers with 'n'.
+       This can be useful for creating copies of tables with sensitive information removed.
+      """,
+  arguments = """
+    Arguments:
+      * input      - string value to mask. Supported types: STRING, VARCHAR, CHAR
+      * upperChar  - character to replace upper-case characters with. Specify NULL to retain original character. Default value: 'X'
+      * lowerChar  - character to replace lower-case characters with. Specify NULL to retain original character. Default value: 'x'
+      * digitChar  - character to replace digit characters with. Specify NULL to retain original character. Default value: 'n'
+      * otherChar  - character to replace all other characters with. Specify NULL to retain original character. Default value: NULL
+  """,
+  examples = """
+    Examples:
+      > SELECT _FUNC_('abcd-EFGH-8765-4321');
+        xxxx-XXXX-nnnn-nnnn
+      > SELECT _FUNC_('abcd-EFGH-8765-4321', 'Q');
+        xxxx-QQQQ-nnnn-nnnn
+      > SELECT _FUNC_('AbCD123-@$#', 'Q', 'q');
+        QqQQnnn-@$#
+      > SELECT _FUNC_('AbCD123-@$#');
+        XxXXnnn-@$#
+      > SELECT _FUNC_('AbCD123-@$#', 'Q');
+        QxQQnnn-@$#
+      > SELECT _FUNC_('AbCD123-@$#', 'Q', 'q');
+        QqQQnnn-@$#
+      > SELECT _FUNC_('AbCD123-@$#', 'Q', 'q', 'd');
+        QqQQddd-@$#
+      > SELECT _FUNC_('AbCD123-@$#', 'Q', 'q', 'd', 'o');
+        QqQQdddoooo
+      > SELECT _FUNC_('AbCD123-@$#', NULL, 'q', 'd', 'o');
+        AqCDdddoooo
+      > SELECT _FUNC_('AbCD123-@$#', NULL, NULL, 'd', 'o');
+        AbCDdddoooo
+      > SELECT _FUNC_('AbCD123-@$#', NULL, NULL, NULL, 'o');
+        AbCD123oooo
+      > SELECT _FUNC_(NULL, NULL, NULL, NULL, 'o');
+        NULL
+      > SELECT _FUNC_(NULL);
+        NULL
+      > SELECT _FUNC_('AbCD123-@$#', NULL, NULL, NULL, NULL);
+        AbCD123-@$#
+  """,
+  since = "3.4.0",
+  group = "string_funcs")
+// scalastyle:on line.size.limit
+object MaskExpressionBuilder extends ExpressionBuilder {
+  override def functionSignature: Option[FunctionSignature] = {
+    val strArg = NamedArgument("str")
+    val upperCharArg = NamedArgument("upperChar", Some(Literal(Mask.MASKED_UPPERCASE)))
+    val lowerCharArg = NamedArgument("lowerChar", Some(Literal(Mask.MASKED_LOWERCASE)))
+    val digitCharArg = NamedArgument("digitChar", Some(Literal(Mask.MASKED_DIGIT)))
+    val otherCharArg = NamedArgument(
+        "otherChar",
+        Some(Literal(Mask.MASKED_IGNORE, StringType)))
+    val functionSignature: FunctionSignature = FunctionSignature(Seq(
+      strArg, upperCharArg, lowerCharArg, digitCharArg, otherCharArg))
+    Some(functionSignature)
+  }
+
+  override def build(funcName: String, expressions: Seq[Expression]): Expression = {
+    new Mask(expressions(0), expressions(1), expressions(2), expressions(3), expressions(4))
+  }
+}
+

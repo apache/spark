@@ -29,7 +29,7 @@ import org.apache.spark.sql.catalyst.FunctionIdentifier
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.expressions.xml._
-import org.apache.spark.sql.catalyst.plans.logical.{Generate, LogicalPlan, OneRowRelation, Range}
+import org.apache.spark.sql.catalyst.plans.logical.{FunctionBuilderBase, Generate, LogicalPlan, OneRowRelation, Range}
 import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.types._
@@ -358,8 +358,8 @@ object FunctionRegistry {
     // misc non-aggregate functions
     expression[Abs]("abs"),
     expression[Coalesce]("coalesce"),
-    expression[Explode]("explode"),
-    expressionGeneratorOuter[Explode]("explode_outer"),
+    expressionBuilder("explode", ExplodeExpressionBuilder),
+    expressionGeneratorBuilderOuter("explode_outer", ExplodeExpressionBuilder),
     expression[Greatest]("greatest"),
     expression[If]("if"),
     expression[Inline]("inline"),
@@ -491,7 +491,7 @@ object FunctionRegistry {
     expression[CollectList]("collect_list"),
     expression[CollectList]("array_agg", true, Some("3.3.0")),
     expression[CollectSet]("collect_set"),
-    expression[CountMinSketchAgg]("count_min_sketch"),
+    expressionBuilder("count_min_sketch", CountMinSketchAggExpressionBuilder),
     expression[BoolAnd]("every", true),
     expression[BoolAnd]("bool_and"),
     expression[BoolOr]("any", true),
@@ -823,7 +823,7 @@ object FunctionRegistry {
     castAlias("string", StringType),
 
     // mask functions
-    expression[Mask]("mask"),
+    expressionBuilder("mask", MaskExpressionBuilder),
 
     // csv
     expression[CsvToStructs]("from_csv"),
@@ -887,11 +887,40 @@ object FunctionRegistry {
       since: Option[String] = None): (String, (ExpressionInfo, FunctionBuilder)) = {
     val (expressionInfo, builder) = FunctionRegistryBase.build[T](name, since)
     val newBuilder = (expressions: Seq[Expression]) => {
+      if (expressions.exists(_.isInstanceOf[NamedArgumentExpression])) {
+        throw QueryCompilationErrors.namedArgumentsNotSupported(name)
+      }
       val expr = builder(expressions)
       if (setAlias) expr.setTagValue(FUNC_ALIAS, name)
       expr
     }
     (name, (expressionInfo, newBuilder))
+  }
+
+  /**
+   * This method will be used to rearrange the arguments provided in function invocation
+   * in the order defined by the function signature given in the builder instance.
+   *
+   * @param name The name of the function
+   * @param builder The builder of the function expression
+   * @param expressions The argument list passed in function invocation
+   * @tparam T The class of the builder
+   * @return An argument list in positional order defined by the builder
+   */
+  def rearrangeExpressions[T <: FunctionBuilderBase[_]](
+      name: String,
+      builder: T,
+      expressions: Seq[Expression]) : Seq[Expression] = {
+    val rearrangedExpressions = if (!builder.functionSignature.isEmpty) {
+      val functionSignature = builder.functionSignature.get
+      builder.rearrange(functionSignature, expressions, name)
+    } else {
+      expressions
+    }
+    if (rearrangedExpressions.exists(_.isInstanceOf[NamedArgumentExpression])) {
+      throw QueryCompilationErrors.namedArgumentsNotSupported(name)
+    }
+    rearrangedExpressions
   }
 
   private def expressionBuilder[T <: ExpressionBuilder : ClassTag](
@@ -902,7 +931,8 @@ object FunctionRegistry {
     val info = FunctionRegistryBase.expressionInfo[T](name, since)
     val funcBuilder = (expressions: Seq[Expression]) => {
       assert(expressions.forall(_.resolved), "function arguments must be resolved.")
-      val expr = builder.build(name, expressions)
+      val rearrangedExpressions = rearrangeExpressions(name, builder, expressions)
+      val expr = builder.build(name, rearrangedExpressions)
       if (setAlias) expr.setTagValue(FUNC_ALIAS, name)
       expr
     }
@@ -935,9 +965,22 @@ object FunctionRegistry {
 
   private def expressionGeneratorOuter[T <: Generator : ClassTag](name: String)
     : (String, (ExpressionInfo, FunctionBuilder)) = {
-    val (_, (info, generatorBuilder)) = expression[T](name)
+    val (_, (info, builder)) = expression[T](name)
     val outerBuilder = (args: Seq[Expression]) => {
-      GeneratorOuter(generatorBuilder(args).asInstanceOf[Generator])
+      GeneratorOuter(builder(args).asInstanceOf[Generator])
+    }
+    (name, (info, outerBuilder))
+  }
+
+  private def expressionGeneratorBuilderOuter[T <: ExpressionBuilder : ClassTag]
+    (name: String, builder: T) : (String, (ExpressionInfo, FunctionBuilder)) = {
+    val info = FunctionRegistryBase.expressionInfo[T](name, since = None)
+    val outerBuilder = (args: Seq[Expression]) => {
+      val rearrangedArgs =
+        FunctionRegistry.rearrangeExpressions(name, builder, args)
+      val generator = builder.build(name, rearrangedArgs)
+      assert(generator.isInstanceOf[Generator])
+      GeneratorOuter(generator.asInstanceOf[Generator])
     }
     (name, (info, outerBuilder))
   }
@@ -980,6 +1023,30 @@ object TableFunctionRegistry {
     (name, (info, (expressions: Seq[Expression]) => builder(expressions)))
   }
 
+  /**
+   * A function used for table-valued functions to return a builder that
+   * when given input arguments, will return a function expression representing
+   * the table-valued functions.
+   *
+   * @param name Name of the function
+   * @param builder Object which will build the expression given input arguments
+   * @param since Time of implementation
+   * @tparam T Type of the builder
+   * @return A tuple of the function name, expression info, and function builder
+   */
+  def generatorBuilder[T <: GeneratorBuilder : ClassTag](
+      name: String,
+      builder: T,
+      since: Option[String] = None): (String, (ExpressionInfo, TableFunctionBuilder)) = {
+    val info = FunctionRegistryBase.expressionInfo[T](name, since)
+    val funcBuilder = (expressions: Seq[Expression]) => {
+      assert(expressions.forall(_.resolved), "function arguments must be resolved.")
+      val rearrangedExpressions = FunctionRegistry.rearrangeExpressions(name, builder, expressions)
+      builder.build(name, rearrangedExpressions)
+    }
+    (name, (info, funcBuilder))
+  }
+
   def generator[T <: Generator : ClassTag](name: String, outer: Boolean = false)
       : (String, (ExpressionInfo, TableFunctionBuilder)) = {
     val (info, builder) = FunctionRegistryBase.build[T](name, since = None)
@@ -999,8 +1066,8 @@ object TableFunctionRegistry {
 
   val logicalPlans: Map[String, (ExpressionInfo, TableFunctionBuilder)] = Map(
     logicalPlan[Range]("range"),
-    generator[Explode]("explode"),
-    generator[Explode]("explode_outer", outer = true),
+    generatorBuilder("explode", ExplodeGeneratorBuilder),
+    generatorBuilder("explode_outer", ExplodeOuterGeneratorBuilder),
     generator[Inline]("inline"),
     generator[Inline]("inline_outer", outer = true),
     generator[JsonTuple]("json_tuple"),
@@ -1022,6 +1089,28 @@ object TableFunctionRegistry {
   val functionSet: Set[FunctionIdentifier] = builtin.listFunction().toSet
 }
 
-trait ExpressionBuilder {
-  def build(funcName: String, expressions: Seq[Expression]): Expression
+/**
+ * This is a trait used for scalar valued functions that defines how their expression
+ * representations are constructed in [[FunctionRegistry]].
+ */
+trait ExpressionBuilder extends FunctionBuilderBase[Expression]
+
+/**
+ * This is a trait used for table valued functions that defines how their expression
+ * representations are constructed in [[TableFunctionRegistry]].
+ */
+trait GeneratorBuilder extends FunctionBuilderBase[LogicalPlan] {
+  override final def build(funcName: String, expressions: Seq[Expression]) : LogicalPlan = {
+    Generate(
+      buildGenerator(funcName, expressions),
+      unrequiredChildIndex = Nil,
+      outer = isOuter,
+      qualifier = None,
+      generatorOutput = Nil,
+      child = OneRowRelation())
+  }
+
+  def isOuter: Boolean
+
+  def buildGenerator(funcName: String, expressions: Seq[Expression]) : Generator
 }
