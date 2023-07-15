@@ -516,6 +516,30 @@ class TorchDistributor(Distributor):
             )
     @staticmethod  
     def _get_output_from_framework_wrapper(framework_wrapper: Optional[Callable], input_params: Dict, train_object: Union[Callable, str], run_pytorch_file_fn: Optional[Callable], *args, **kwargs) -> Optional[Any]:
+        """
+        This function is meant to get the output from framework wrapper function by passing in the correct arguments,
+        depending on the type of train_object.
+
+        Parameters
+        ----------
+        framework_wrapper: Optional[Callable]
+            Function pointer that will be invoked. Can either be the function that runs distributed training on
+            files if train_object is a string. Otherwise, it will be the function that runs distributed training
+            for functions if the train_object is a Callable
+        input_params: Dict
+            A dictionary that maps parameter to arguments for the command to be created.
+        train_object: Union[Callable, str]
+            Either a function to be used for distributed training, or a string representing the path of a 
+            file to be run in a distributed fashion.
+        run_pytorch_file_fn: Optional[Callable]
+            The function that will be used to run distributed training of a file; mainly used for the 
+            distributed training using a function.
+        *args: Any
+            Extra arguments to be used by framework wrapper.
+        **kwargs: Any
+            Extra keyword args to be used. Not currently supported but kept for future improvement.
+
+        """
         if not framework_wrapper:
             raise RuntimeError("In the _get_output_from_framework_wrapper function, found a framework wrapper that is none. I wonder why this is...")
         # The object to train is a file path, so framework_wrapper is some run_training_on_pytorch_file function.
