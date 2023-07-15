@@ -49,9 +49,6 @@ case class ArrowEvalPythonUDTFExec(
 
   private[this] val jobArtifactUUID = JobArtifactSet.getCurrentJobArtifactState.map(_.uuid)
 
-  override protected def withNewChildInternal(newChild: SparkPlan): SparkPlan =
-    copy(child = newChild)
-
   override protected def evaluatorFactory: EvalPythonUDTFEvaluatorFactory =
     new ArrowEvalPythonUDTFEvaluatorFactory(
       child.output,
@@ -67,6 +64,9 @@ case class ArrowEvalPythonUDTFExec(
       ArrowUtils.getPythonRunnerConfMap(conf),
       pythonMetrics,
       jobArtifactUUID)
+
+  override protected def withNewChildInternal(newChild: SparkPlan): SparkPlan =
+    copy(child = newChild)
 }
 class ArrowEvalPythonUDTFEvaluatorFactory(
     childOutput: Seq[Attribute],

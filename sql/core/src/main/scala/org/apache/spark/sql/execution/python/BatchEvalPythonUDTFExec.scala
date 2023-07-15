@@ -52,9 +52,6 @@ case class BatchEvalPythonUDTFExec(
 
   private[this] val jobArtifactUUID = JobArtifactSet.getCurrentJobArtifactState.map(_.uuid)
 
-  override protected def withNewChildInternal(newChild: SparkPlan): BatchEvalPythonUDTFExec =
-    copy(child = newChild)
-
   override protected def evaluatorFactory: EvalPythonUDTFEvaluatorFactory =
     new BatchEvalPythonUDTFEvaluatorFactory(
       child.output,
@@ -64,6 +61,9 @@ case class BatchEvalPythonUDTFExec(
       output,
       pythonMetrics,
       jobArtifactUUID)
+
+  override protected def withNewChildInternal(newChild: SparkPlan): BatchEvalPythonUDTFExec =
+    copy(child = newChild)
 }
 
 class BatchEvalPythonUDTFEvaluatorFactory(
@@ -115,7 +115,7 @@ class BatchEvalPythonUDTFEvaluatorFactory(
       pythonMetrics("pythonNumRowsReceived") += res.length
       fromJava(results).asInstanceOf[GenericArrayData]
         .array.map(_.asInstanceOf[InternalRow]).toIterator
-      }
+    }
   }
 }
 
