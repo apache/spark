@@ -37,23 +37,19 @@ case class BatchScanExec(
     output: Seq[AttributeReference],
     @transient scan: Scan,
     runtimeFilters: Seq[Expression],
-    keyGroupedPartitioning: Option[Seq[Expression]] = None,
     ordering: Option[Seq[SortOrder]] = None,
     @transient table: Table,
-    commonPartitionValues: Option[Seq[(InternalRow, Int)]] = None,
-    applyPartialClustering: Boolean = false,
-    replicatePartitions: Boolean = false) extends DataSourceV2ScanExecBase {
+    spjParams: StoragePartitionJoinParams = StoragePartitionJoinParams()
+  ) extends DataSourceV2ScanExecBase {
 
-  @transient lazy val batch = if (scan == null) null else scan.toBatch
+  @transient lazy val batch: Batch = if (scan == null) null else scan.toBatch
 
   // TODO: unify the equal/hashCode implementation for all data source v2 query plans.
   override def equals(other: Any): Boolean = other match {
     case other: BatchScanExec =>
       this.batch != null && this.batch == other.batch &&
           this.runtimeFilters == other.runtimeFilters &&
-          this.commonPartitionValues == other.commonPartitionValues &&
-          this.replicatePartitions == other.replicatePartitions &&
-          this.applyPartialClustering == other.applyPartialClustering
+          this.spjParams == other.spjParams
     case _ =>
       false
   }
@@ -119,11 +115,11 @@ case class BatchScanExec(
 
   override def outputPartitioning: Partitioning = {
     super.outputPartitioning match {
-      case k: KeyGroupedPartitioning if commonPartitionValues.isDefined =>
+      case k: KeyGroupedPartitioning if spjParams.commonPartitionValues.isDefined =>
         // We allow duplicated partition values if
         // `spark.sql.sources.v2.bucketing.partiallyClusteredDistribution.enabled` is true
-        val newPartValues = commonPartitionValues.get.flatMap { case (partValue, numSplits) =>
-          Seq.fill(numSplits)(partValue)
+        val newPartValues = spjParams.commonPartitionValues.get.flatMap {
+          case (partValue, numSplits) => Seq.fill(numSplits)(partValue)
         }
         k.copy(numPartitions = newPartValues.length, partitionValues = newPartValues)
       case p => p
@@ -148,15 +144,17 @@ case class BatchScanExec(
                   s"${SQLConf.V2_BUCKETING_PARTIALLY_CLUSTERED_DISTRIBUTION_ENABLED.key} " +
                   "is enabled")
 
-            val groupedPartitions = groupPartitions(finalPartitions.map(_.head), true).get
+            val groupedPartitions = groupPartitions(finalPartitions.map(_.head),
+              groupSplits = true).get
 
             // This means the input partitions are not grouped by partition values. We'll need to
             // check `groupByPartitionValues` and decide whether to group and replicate splits
             // within a partition.
-            if (commonPartitionValues.isDefined && applyPartialClustering) {
+            if (spjParams.commonPartitionValues.isDefined &&
+              spjParams.applyPartialClustering) {
               // A mapping from the common partition values to how many splits the partition
               // should contain. Note this no longer maintain the partition key ordering.
-              val commonPartValuesMap = commonPartitionValues
+              val commonPartValuesMap = spjParams.commonPartitionValues
                 .get
                 .map(t => (InternalRowComparableWrapper(t._1, p.expressions), t._2))
                 .toMap
@@ -168,7 +166,7 @@ case class BatchScanExec(
                   assert(numSplits.isDefined, s"Partition value $partValue does not exist in " +
                       "common partition values from Spark plan")
 
-                  val newSplits = if (replicatePartitions) {
+                  val newSplits = if (spjParams.replicatePartitions) {
                     // We need to also replicate partitions according to the other side of join
                     Seq.fill(numSplits.get)(splits)
                   } else {
@@ -184,11 +182,12 @@ case class BatchScanExec(
 
               // Now fill missing partition keys with empty partitions
               val partitionMapping = nestGroupedPartitions.toMap
-              finalPartitions = commonPartitionValues.get.flatMap { case (partValue, numSplits) =>
-                // Use empty partition for those partition values that are not present.
-                partitionMapping.getOrElse(
-                  InternalRowComparableWrapper(partValue, p.expressions),
-                  Seq.fill(numSplits)(Seq.empty))
+              finalPartitions = spjParams.commonPartitionValues.get.flatMap {
+                case (partValue, numSplits) =>
+                  // Use empty partition for those partition values that are not present.
+                  partitionMapping.getOrElse(
+                    InternalRowComparableWrapper(partValue, p.expressions),
+                    Seq.fill(numSplits)(Seq.empty))
               }
             } else {
               val partitionMapping = groupedPartitions.map { case (row, parts) =>
@@ -222,6 +221,9 @@ case class BatchScanExec(
     rdd
   }
 
+  override def keyGroupedPartitioning: Option[Seq[Expression]] =
+    spjParams.keyGroupedPartitioning
+
   override def doCanonicalize(): BatchScanExec = {
     this.copy(
       output = output.map(QueryPlan.normalizeExpressions(_, output)),
@@ -241,3 +243,24 @@ case class BatchScanExec(
     s"BatchScan ${table.name()}".trim
   }
 }
+
+case class StoragePartitionJoinParams(
+    keyGroupedPartitioning: Option[Seq[Expression]] = None,
+    commonPartitionValues: Option[Seq[(InternalRow, Int)]] = None,
+    applyPartialClustering: Boolean = false,
+    replicatePartitions: Boolean = false) {
+  override def equals(other: Any): Boolean = other match {
+    case other: StoragePartitionJoinParams =>
+      this.commonPartitionValues == other.commonPartitionValues &&
+      this.replicatePartitions == other.replicatePartitions &&
+      this.applyPartialClustering == other.applyPartialClustering
+    case _ =>
+      false
+  }
+
+  override def hashCode(): Int = Objects.hashCode(
+    commonPartitionValues: Option[Seq[(InternalRow, Int)]],
+    applyPartialClustering: java.lang.Boolean,
+    replicatePartitions: java.lang.Boolean)
+}
+
