@@ -394,7 +394,7 @@ class BaseUDTFTestsMixin:
 
         self.check_error(
             exception=e.exception,
-            error_class="INVALID_UDTF_RETURN_TYPE",
+            error_class="UDTF_RETURN_TYPE_MISMATCH",
             message_parameters={"name": "TestUDTF", "return_type": "IntegerType()"},
         )
 
@@ -408,7 +408,7 @@ class BaseUDTFTestsMixin:
 
         self.check_error(
             exception=e.exception,
-            error_class="INVALID_UDTF_RETURN_TYPE",
+            error_class="UDTF_RETURN_TYPE_MISMATCH",
             message_parameters={
                 "name": "TestUDTF",
                 "return_type": "MapType(StringType(), IntegerType(), True)",

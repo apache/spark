@@ -668,6 +668,11 @@ ERROR_CLASSES_JSON = """
       "The number of columns in the result does not match the specified schema. Expected column count: <expected>, Actual column count: <actual>. Please make sure the values returned by the function have the same number of columns as specified in the output schema."
     ]
   },
+  "UDTF_RETURN_TYPE_MISMATCH" : {
+    "message" : [
+      "Mismatch in return type for the UDTF '<name>'. Expected a 'StructType', but got '<return_type>'. Please ensure the return type is a correctly formatted StructType."
+    ]
+  },
   "UNEXPECTED_RESPONSE_FROM_SERVER" : {
     "message" : [
       "Unexpected response from iterator server."

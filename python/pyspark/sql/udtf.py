@@ -198,7 +198,7 @@ class UserDefinedTableFunction:
                 parsed = self._returnType
             if not isinstance(parsed, StructType):
                 raise PySparkTypeError(
-                    error_class="INVALID_UDTF_RETURN_TYPE",
+                    error_class="UDTF_RETURN_TYPE_MISMATCH",
                     message_parameters={
                         "name": self._name,
                         "return_type": f"{parsed}",

@@ -28,7 +28,7 @@ import pyarrow as pa
 
 from pyspark.serializers import CloudPickleSerializer
 from pyspark.storagelevel import StorageLevel
-from pyspark.sql.types import DataType, StructType
+from pyspark.sql.types import DataType
 
 import pyspark.sql.connect.proto as proto
 from pyspark.sql.connect.conversion import storage_level_to_proto
