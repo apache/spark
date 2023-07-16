@@ -21,8 +21,8 @@ import java.net.URI
 
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.catalog._
-import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, WithCTE, CTEInChildren}
-import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, removeInternalMetadata}
+import org.apache.spark.sql.catalyst.plans.logical.{CTEInChildren, LogicalPlan, WithCTE}
+import org.apache.spark.sql.catalyst.util.{removeInternalMetadata, CharVarcharUtils}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.CommandExecutionMode
 import org.apache.spark.sql.execution.datasources._
