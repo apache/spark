@@ -68,18 +68,20 @@ trait MapInBatchExec extends UnaryExecNode with PythonSQLMetrics {
       jobArtifactUUID)
 
     if (isBarrier) {
+      val rddBarrier = child.execute().barrier()
       if (conf.usePartitionEvaluator) {
-        child.execute().barrier().mapPartitionsWithEvaluator(evaluatorFactory)
+        rddBarrier.mapPartitionsWithEvaluator(evaluatorFactory)
       } else {
-        child.execute().barrier().mapPartitions { iter =>
+        rddBarrier.mapPartitions { iter =>
           evaluatorFactory.createEvaluator().eval(0, iter)
         }
       }
     } else {
+      val inputRdd = child.execute()
       if (conf.usePartitionEvaluator) {
-        child.execute().mapPartitionsWithEvaluator(evaluatorFactory)
+        inputRdd.mapPartitionsWithEvaluator(evaluatorFactory)
       } else {
-        child.execute().mapPartitionsInternal { iter =>
+        inputRdd.mapPartitionsInternal { iter =>
           evaluatorFactory.createEvaluator().eval(0, iter)
         }
       }
