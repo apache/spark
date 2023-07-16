@@ -52,17 +52,16 @@ object CTESubstitution extends Rule[LogicalPlan] {
     if (!plan.containsPattern(UNRESOLVED_WITH)) {
       return plan
     }
-    val isCommand = false
     val cteDefs = ArrayBuffer.empty[CTERelationDef]
     val (substituted, firstSubstituted) =
       LegacyBehaviorPolicy.withName(conf.getConf(LEGACY_CTE_PRECEDENCE_POLICY)) match {
         case LegacyBehaviorPolicy.EXCEPTION =>
           assertNoNameConflictsInCTE(plan)
-          traverseAndSubstituteCTE(plan, isCommand, Seq.empty, cteDefs)
+          traverseAndSubstituteCTE(plan, Seq.empty, cteDefs)
         case LegacyBehaviorPolicy.LEGACY =>
           (legacyTraverseAndSubstituteCTE(plan, cteDefs), None)
         case LegacyBehaviorPolicy.CORRECTED =>
-          traverseAndSubstituteCTE(plan, isCommand, Seq.empty, cteDefs)
+          traverseAndSubstituteCTE(plan, Seq.empty, cteDefs)
     }
     if (cteDefs.isEmpty) {
       substituted
@@ -128,7 +127,7 @@ object CTESubstitution extends Rule[LogicalPlan] {
     plan.resolveOperatorsUp {
       case UnresolvedWith(child, relations) =>
         val resolvedCTERelations =
-          resolveCTERelations(relations, isLegacy = true, isCommand = false, Seq.empty, cteDefs)
+          resolveCTERelations(relations, isLegacy = true, Seq.empty, cteDefs)
         substituteCTE(child, alwaysInline = true, resolvedCTERelations)
     }
   }
@@ -165,7 +164,6 @@ object CTESubstitution extends Rule[LogicalPlan] {
    *     SELECT * FROM t
    *   )
    * @param plan the plan to be traversed
-   * @param isCommand if this is a command
    * @param outerCTEDefs already resolved outer CTE definitions with names
    * @param cteDefs all accumulated CTE definitions
    * @return the plan where CTE substitution is applied and optionally the last substituted `With`
@@ -173,7 +171,6 @@ object CTESubstitution extends Rule[LogicalPlan] {
    */
   private def traverseAndSubstituteCTE(
       plan: LogicalPlan,
-      isCommand: Boolean,
       outerCTEDefs: Seq[(String, CTERelationDef)],
       cteDefs: ArrayBuffer[CTERelationDef]): (LogicalPlan, Option[LogicalPlan]) = {
     var firstSubstituted: Option[LogicalPlan] = None
@@ -181,11 +178,11 @@ object CTESubstitution extends Rule[LogicalPlan] {
         _.containsAnyPattern(UNRESOLVED_WITH, PLAN_EXPRESSION)) {
       case UnresolvedWith(child: LogicalPlan, relations) =>
         val resolvedCTERelations =
-          resolveCTERelations(relations, isLegacy = false, isCommand, outerCTEDefs, cteDefs) ++
+          resolveCTERelations(relations, isLegacy = false, outerCTEDefs, cteDefs) ++
             outerCTEDefs
         val substituted = substituteCTE(
-          traverseAndSubstituteCTE(child, isCommand, resolvedCTERelations, cteDefs)._1,
-          isCommand,
+          traverseAndSubstituteCTE(child, resolvedCTERelations, cteDefs)._1,
+          false,
           resolvedCTERelations)
         if (firstSubstituted.isEmpty) {
           firstSubstituted = Some(substituted)
@@ -203,10 +200,9 @@ object CTESubstitution extends Rule[LogicalPlan] {
   private def resolveCTERelations(
       relations: Seq[(String, SubqueryAlias)],
       isLegacy: Boolean,
-      isCommand: Boolean,
       outerCTEDefs: Seq[(String, CTERelationDef)],
       cteDefs: ArrayBuffer[CTERelationDef]): Seq[(String, CTERelationDef)] = {
-    var resolvedCTERelations = if (isLegacy || isCommand) {
+    var resolvedCTERelations = if (isLegacy) {
       Seq.empty
     } else {
       outerCTEDefs
@@ -229,12 +225,12 @@ object CTESubstitution extends Rule[LogicalPlan] {
         //   WITH t3 AS (SELECT * FROM t1)
         // )
         // t3 should resolve the t1 to `SELECT 2` instead of `SELECT 1`.
-        traverseAndSubstituteCTE(relation, isCommand, resolvedCTERelations, cteDefs)._1
+        traverseAndSubstituteCTE(relation, resolvedCTERelations, cteDefs)._1
       }
       // CTE definition can reference a previous one
-      val substituted = substituteCTE(innerCTEResolved, isLegacy || isCommand, resolvedCTERelations)
+      val substituted = substituteCTE(innerCTEResolved, isLegacy, resolvedCTERelations)
       val cteRelation = CTERelationDef(substituted)
-      if (!(isLegacy || isCommand)) {
+      if (!(isLegacy)) {
         cteDefs += cteRelation
       }
       // Prepending new CTEs makes sure that those have higher priority over outer ones.
