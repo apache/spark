@@ -79,12 +79,13 @@ class RDDBarrier[T: ClassTag] private[spark] (rdd: RDD[T]) {
   /**
    * Return a new RDD by applying an evaluator to each partition of the wrapped RDD. The given
    * evaluator factory will be serialized and sent to executors, and each task will create an
-   * evaluator with the factory, and use the evaluator to transform the data of the input partition.
+   * evaluator with the factory, and use the evaluator to transform the data of the input
+   * partition.
    */
   @DeveloperApi
   @Since("3.5.0")
   def mapPartitionsWithEvaluator[U: ClassTag](
-         evaluatorFactory: PartitionEvaluatorFactory[T, U]): RDD[U] = rdd.withScope {
+      evaluatorFactory: PartitionEvaluatorFactory[T, U]): RDD[U] = rdd.withScope {
     new MapPartitionsWithEvaluatorRDD(rdd, evaluatorFactory)
   }
   // TODO: [SPARK-25247] add extra conf to RDDBarrier, e.g., timeout.
