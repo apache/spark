@@ -677,7 +677,7 @@ case class InsertIntoDir(
     provider: Option[String],
     child: LogicalPlan,
     overwrite: Boolean = true)
-  extends UnaryNode {
+  extends UnaryNode with WithCTEInChildren {
 
   override def output: Seq[Attribute] = Seq.empty
   override def metadataOutput: Seq[Attribute] = Nil

@@ -21,8 +21,8 @@ import java.net.URI
 
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.catalog._
-import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-import org.apache.spark.sql.catalyst.util.{removeInternalMetadata, CharVarcharUtils}
+import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, WithCTE, WithCTEInChildren}
+import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, removeInternalMetadata}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.CommandExecutionMode
 import org.apache.spark.sql.execution.datasources._
@@ -141,7 +141,7 @@ case class CreateDataSourceTableAsSelectCommand(
     mode: SaveMode,
     query: LogicalPlan,
     outputColumnNames: Seq[String])
-  extends LeafRunnableCommand {
+  extends LeafRunnableCommand with WithCTEInChildren {
   assert(query.resolved)
   override def innerChildren: Seq[LogicalPlan] = query :: Nil
 
@@ -232,5 +232,9 @@ case class CreateDataSourceTableAsSelectCommand(
         logError(s"Failed to write to table ${table.identifier.unquotedString}", ex)
         throw ex
     }
+  }
+
+  override def withCTE(withCTE: WithCTE): LogicalPlan = {
+    copy(query = withCTE.copy(plan = this.query))
   }
 }

@@ -25,7 +25,7 @@ import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogTable, CatalogT
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.catalog.ExternalCatalogUtils._
 import org.apache.spark.sql.catalyst.expressions.{Attribute, SortOrder}
-import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, WithCTE, WithCTEInChildren}
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution.SparkPlan
@@ -57,7 +57,7 @@ case class InsertIntoHadoopFsRelationCommand(
     catalogTable: Option[CatalogTable],
     fileIndex: Option[FileIndex],
     outputColumnNames: Seq[String])
-  extends V1WriteCommand {
+  extends V1WriteCommand with WithCTEInChildren {
 
   private lazy val parameters = CaseInsensitiveMap(options)
 
@@ -277,4 +277,8 @@ case class InsertIntoHadoopFsRelationCommand(
 
   override protected def withNewChildInternal(
     newChild: LogicalPlan): InsertIntoHadoopFsRelationCommand = copy(query = newChild)
+
+  override def withCTE(withCTE: WithCTE): LogicalPlan = {
+    withNewChildInternal(withCTE.copy(plan = this.query))
+  }
 }

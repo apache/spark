@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.datasources
 
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.plans.QueryPlan
-import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, WithCTE, WithCTEInChildren}
 import org.apache.spark.sql.execution.command.LeafRunnableCommand
 import org.apache.spark.sql.sources.InsertableRelation
 
@@ -31,7 +31,7 @@ case class InsertIntoDataSourceCommand(
     logicalRelation: LogicalRelation,
     query: LogicalPlan,
     overwrite: Boolean)
-  extends LeafRunnableCommand {
+  extends LeafRunnableCommand with WithCTEInChildren {
 
   override def innerChildren: Seq[QueryPlan[_]] = Seq(query)
 
@@ -46,5 +46,9 @@ case class InsertIntoDataSourceCommand(
     sparkSession.sharedState.cacheManager.recacheByPlan(sparkSession, logicalRelation)
 
     Seq.empty[Row]
+  }
+
+  override def withCTE(withCTE: WithCTE): LogicalPlan = {
+    copy(query = withCTE.copy(plan = this.query))
   }
 }

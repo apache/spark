@@ -46,7 +46,7 @@ trait KeepAnalyzedQuery extends Command {
 /**
  * Base trait for DataSourceV2 write commands
  */
-trait V2WriteCommand extends UnaryCommand with KeepAnalyzedQuery {
+trait V2WriteCommand extends UnaryCommand with KeepAnalyzedQuery with WithCTEInChildren {
   def table: NamedRelation
   def query: LogicalPlan
   def isByName: Boolean
@@ -392,8 +392,17 @@ case class WriteDelta(
   }
 }
 
-trait V2CreateTableAsSelectPlan extends V2CreateTablePlan with AnalysisOnlyCommand {
+trait V2CreateTableAsSelectPlan
+    extends V2CreateTablePlan
+    with AnalysisOnlyCommand
+    with WithCTEInChildren {
   def query: LogicalPlan
+
+  override def withCTE(withCTE: WithCTE): LogicalPlan = {
+    withNameAndQuery(
+      newName = this.name,
+      newQuery = withCTE.copy(plan = this.query))
+  }
 
   override lazy val resolved: Boolean = childrenResolved && {
     // the table schema is created from the query schema, so the only resolution needed is to check
@@ -1234,12 +1243,18 @@ case class RepairTable(
 case class AlterViewAs(
     child: LogicalPlan,
     originalText: String,
-    query: LogicalPlan) extends BinaryCommand {
+    query: LogicalPlan) extends BinaryCommand with WithCTEInChildren {
   override def left: LogicalPlan = child
   override def right: LogicalPlan = query
   override protected def withNewChildrenInternal(
       newLeft: LogicalPlan, newRight: LogicalPlan): LogicalPlan =
     copy(child = newLeft, query = newRight)
+
+  override def withCTE(withCTE: WithCTE): LogicalPlan = {
+    withNewChildrenInternal(
+      newLeft = this.left,
+      newRight = withCTE.copy(plan = this.right))
+  }
 }
 
 /**
@@ -1253,12 +1268,18 @@ case class CreateView(
     originalText: Option[String],
     query: LogicalPlan,
     allowExisting: Boolean,
-    replace: Boolean) extends BinaryCommand {
+    replace: Boolean) extends BinaryCommand with WithCTEInChildren {
   override def left: LogicalPlan = child
   override def right: LogicalPlan = query
   override protected def withNewChildrenInternal(
       newLeft: LogicalPlan, newRight: LogicalPlan): LogicalPlan =
     copy(child = newLeft, query = newRight)
+
+  override def withCTE(withCTE: WithCTE): LogicalPlan = {
+    withNewChildrenInternal(
+      newLeft = this.left,
+      newRight = withCTE.copy(plan = this.right))
+  }
 }
 
 /**

@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.command
 
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.catalog._
-import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, WithCTE, WithCTEInChildren}
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.datasources._
 
@@ -42,7 +42,7 @@ case class InsertIntoDataSourceDirCommand(
     storage: CatalogStorageFormat,
     provider: String,
     query: LogicalPlan,
-    overwrite: Boolean) extends LeafRunnableCommand {
+    overwrite: Boolean) extends LeafRunnableCommand with WithCTEInChildren {
 
   override def innerChildren: Seq[LogicalPlan] = query :: Nil
 
@@ -75,5 +75,9 @@ case class InsertIntoDataSourceDirCommand(
     }
 
     Seq.empty[Row]
+  }
+
+  override def withCTE(withCTE: WithCTE): LogicalPlan = {
+    copy(query = withCTE.copy(plan = this.query))
   }
 }
