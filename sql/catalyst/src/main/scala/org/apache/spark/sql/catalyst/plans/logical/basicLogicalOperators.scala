@@ -897,6 +897,15 @@ case class WithWindowDefinition(
 }
 
 /**
+ * The logical node is able to insert the given `WithCTE` into its children.
+ */
+trait WithCTEInChildren extends LogicalPlan {
+  def withCTE(withCTE: WithCTE): LogicalPlan = {
+    withNewChildren(children.map(withCTE.withNewPlan))
+  }
+}
+
+/**
  * @param order  The ordering expressions
  * @param global True means global sorting apply for entire data set,
  *               False means sorting only apply within the partition.
