@@ -3323,9 +3323,9 @@ class SparkConnectSessionTests(ReusedConnectTestCase):
         other = PySparkSession.builder.remote("sc://other.remote:114/").create()
         self.assertNotEquals(self.spark, other)
 
-        # Reuses an active session that was previously created.
+        # Gets currently active session.
         same = PySparkSession.builder.remote("sc://other.remote.host:114/").getOrCreate()
-        self.assertEquals(self.spark, same)
+        self.assertEquals(other, same)
         same.stop()
 
         # Make sure the environment is clean.
