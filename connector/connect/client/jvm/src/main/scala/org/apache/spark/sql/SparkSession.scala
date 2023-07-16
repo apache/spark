@@ -718,7 +718,6 @@ object SparkSession extends Logging {
      *
      * This will always return a newly created session.
      */
-    @deprecated(message = "Please use create() instead.", since = "3.5.0")
     def build(): SparkSession = create()
 
     /**
