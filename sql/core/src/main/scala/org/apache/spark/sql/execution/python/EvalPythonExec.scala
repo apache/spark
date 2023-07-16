@@ -63,8 +63,8 @@ trait EvalPythonExec extends UnaryExecNode {
     if (conf.usePartitionEvaluator) {
       inputRDD.mapPartitionsWithEvaluator(evaluatorFactory)
     } else {
-      inputRDD.mapPartitions { iter =>
-        evaluatorFactory.createEvaluator().eval(0, iter)
+      inputRDD.mapPartitionsWithIndexInternal { (index, iter) =>
+        evaluatorFactory.createEvaluator().eval(index, iter)
       }
     }
   }
