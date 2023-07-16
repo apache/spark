@@ -93,6 +93,8 @@ if TYPE_CHECKING:
 
 # `_active_spark_session` stores the active spark connect session created by
 # `SparkSession.builder.getOrCreate`. It is used by ML code.
+#  If sessions are created with `SparkSession.builder.create`, it stores
+#  The last created session
 _active_spark_session = None
 
 
@@ -172,6 +174,8 @@ class SparkSession:
             )
 
         def create(self) -> "SparkSession":
+            global _active_spark_session
+
             has_channel_builder = self._channel_builder is not None
             has_spark_remote = "spark.remote" in self._options
 
@@ -188,11 +192,14 @@ class SparkSession:
 
             if has_channel_builder:
                 assert self._channel_builder is not None
-                return SparkSession(connection=self._channel_builder)
+                session = SparkSession(connection=self._channel_builder)
             else:
                 spark_remote = to_str(self._options.get("spark.remote"))
                 assert spark_remote is not None
-                return SparkSession(connection=spark_remote)
+                session = SparkSession(connection=spark_remote)
+
+            _active_spark_session = session
+            return session
 
         def getOrCreate(self) -> "SparkSession":
             global _active_spark_session
