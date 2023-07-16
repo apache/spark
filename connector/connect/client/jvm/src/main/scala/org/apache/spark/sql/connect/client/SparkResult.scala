@@ -106,8 +106,6 @@ private[sql] class SparkResult[T](
         if (stopOnFirstNonEmptyResponse && numRecordsInBatch > 0) {
           return true
         }
-      } else {
-        throw new UnsupportedOperationException(s"Unsupported response: $response")
       }
     }
     false

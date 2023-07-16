@@ -24,7 +24,6 @@ import java.time._
 import java.util
 import java.util.{List => JList, Locale, Map => JMap}
 
-import scala.collection.JavaConverters._
 import scala.collection.generic.{GenericCompanion, GenMapFactory}
 import scala.collection.mutable
 import scala.reflect.ClassTag
@@ -35,6 +34,7 @@ import org.apache.arrow.vector.complex.{ListVector, MapVector, StructVector}
 import org.apache.arrow.vector.ipc.ArrowReader
 import org.apache.arrow.vector.util.Text
 
+import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoder
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders._
 import org.apache.spark.sql.catalyst.expressions.GenericRowWithSchema
@@ -284,25 +284,23 @@ object ArrowDeserializers {
         }
 
       case (ProductEncoder(tag, fields), StructVectors(struct, vectors)) =>
-        val methodType =
-          MethodType.methodType(classOf[Unit], fields.map(_.enc.clsTag.runtimeClass).asJava)
-        val constructor = methodLookup
-          .findConstructor(tag.runtimeClass, methodType)
-          .asSpreader(classOf[Array[Any]], fields.size)
+        // We should try to make this work with MethodHandles.
+        val Some(constructor) = ScalaReflection.findConstructor(
+          tag.runtimeClass,
+          fields.map(_.enc.clsTag.runtimeClass))
         val deserializers = if (isTuple(tag.runtimeClass)) {
-          fields.zip(vectors).toArray.map { case (field, vector) =>
+          fields.zip(vectors).map { case (field, vector) =>
             deserializerFor(field.enc, vector)
           }
         } else {
           val lookup = createFieldLookup(vectors)
-          fields.toArray.map { field =>
+          fields.map { field =>
             deserializerFor(field.enc, lookup(field.name))
           }
         }
         new StructFieldSerializer[Any](struct) {
           def value(i: Int): Any = {
-            val parameters = deserializers.map(_.get(i))
-            constructor.invoke(parameters) // See if we can get invokeExact to work here.
+            constructor(deserializers.map(_.get(i).asInstanceOf[AnyRef]))
           }
         }
 
