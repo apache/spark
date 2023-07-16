@@ -27,7 +27,6 @@ import net.razorvine.pickle.Unpickler
 
 import org.apache.spark.{JobArtifactSet, SparkEnv, TaskContext}
 import org.apache.spark.api.python.{ChainedPythonFunctions, PythonEvalType}
-import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.util.GenericArrayData
@@ -65,17 +64,6 @@ case class BatchEvalPythonUDTFExec(
 
   override protected def withNewChildInternal(newChild: SparkPlan): BatchEvalPythonUDTFExec =
     copy(child = newChild)
-
-  protected override def doExecute(): RDD[InternalRow] = {
-    val inputRDD = child.execute().map(_.copy())
-    if (conf.usePartitionEvaluator) {
-      inputRDD.mapPartitionsWithEvaluator(evaluatorFactory)
-    } else {
-      inputRDD.mapPartitions { iter =>
-        evaluatorFactory.createEvaluator().eval(0, iter)
-      }
-    }
-  }
 }
 
 class BatchEvalPythonUDTFEvaluatorFactory(

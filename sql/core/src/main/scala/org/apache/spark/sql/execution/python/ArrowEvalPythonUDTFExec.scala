@@ -20,7 +20,6 @@ package org.apache.spark.sql.execution.python
 import scala.collection.JavaConverters._
 
 import org.apache.spark.{JobArtifactSet, TaskContext}
-import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.execution.SparkPlan
@@ -50,7 +49,6 @@ case class ArrowEvalPythonUDTFExec(
 
   private[this] val jobArtifactUUID = JobArtifactSet.getCurrentJobArtifactState.map(_.uuid)
 
-
   override protected def evaluatorFactory: EvalPythonUDTFEvaluatorFactory =
     new ArrowEvalPythonUDTFEvaluatorFactory(
       child.output,
@@ -69,17 +67,6 @@ case class ArrowEvalPythonUDTFExec(
 
   override protected def withNewChildInternal(newChild: SparkPlan): SparkPlan =
     copy(child = newChild)
-
-  protected override def doExecute(): RDD[InternalRow] = {
-    val inputRDD = child.execute().map(_.copy())
-    if (conf.usePartitionEvaluator) {
-      inputRDD.mapPartitionsWithEvaluator(evaluatorFactory)
-    } else {
-      inputRDD.mapPartitions { iter =>
-        evaluatorFactory.createEvaluator().eval(0, iter)
-      }
-    }
-  }
 }
 
 class ArrowEvalPythonUDTFEvaluatorFactory(
