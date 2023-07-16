@@ -1283,7 +1283,13 @@ class DataFrameWindowFunctionsSuite extends QueryTest
       ("b", 1, "n", Double.PositiveInfinity),
       ("c", 1, "z", -2.0),
       ("c", 1, "a", -4.0),
-      ("c", 2, nullStr, 5.0)).toDF("key", "value", "order", "value2")
+      ("c", 2, nullStr, 5.0),
+      ("d", 0, "1", 1.0),
+      ("d", 1, "1", 2.0),
+      ("d", 2, "2", 3.0),
+      ("d", 3, "2", -1.0),
+      ("d", 4, "2", 2.0),
+      ("d", 4, "3", 2.0)).toDF("key", "value", "order", "value2")
 
     val window = Window.partitionBy($"key").orderBy($"order".asc_nulls_first)
     val window2 = Window.partitionBy($"key").orderBy($"order".desc_nulls_first)
@@ -1304,7 +1310,8 @@ class DataFrameWindowFunctionsSuite extends QueryTest
                 Seq(
                   Row("a", 4, "", 2.0, 1),
                   Row("b", 1, "h", Double.NaN, 1),
-                  Row("c", 2, null, 5.0, 1)
+                  Row("c", 2, null, 5.0, 1),
+                  Row("d", 0, "1", 1.0, 1)
                 )
               )
 
@@ -1313,7 +1320,9 @@ class DataFrameWindowFunctionsSuite extends QueryTest
                   Row("a", 4, "", 2.0, 1),
                   Row("a", 4, "", 2.0, 1),
                   Row("b", 1, "h", Double.NaN, 1),
-                  Row("c", 2, null, 5.0, 1)
+                  Row("c", 2, null, 5.0, 1),
+                  Row("d", 0, "1", 1.0, 1),
+                  Row("d", 1, "1", 2.0, 1)
                 )
               )
 
@@ -1322,7 +1331,9 @@ class DataFrameWindowFunctionsSuite extends QueryTest
                   Row("a", 4, "", 2.0, 1),
                   Row("a", 4, "", 2.0, 1),
                   Row("b", 1, "h", Double.NaN, 1),
-                  Row("c", 2, null, 5.0, 1)
+                  Row("c", 2, null, 5.0, 1),
+                  Row("d", 0, "1", 1.0, 1),
+                  Row("d", 1, "1", 2.0, 1)
                 )
               )
 
@@ -1353,7 +1364,9 @@ class DataFrameWindowFunctionsSuite extends QueryTest
                   Row("b", 1, "h", Double.NaN, 1),
                   Row("b", 1, "n", Double.PositiveInfinity, 2),
                   Row("c", 1, "a", -4.0, 2),
-                  Row("c", 2, null, 5.0, 1)
+                  Row("c", 2, null, 5.0, 1),
+                  Row("d", 0, "1", 1.0, 1),
+                  Row("d", 1, "1", 2.0, 2)
                 )
               )
 
@@ -1364,7 +1377,9 @@ class DataFrameWindowFunctionsSuite extends QueryTest
                   Row("b", 1, "h", Double.NaN, 1),
                   Row("b", 1, "n", Double.PositiveInfinity, 2),
                   Row("c", 1, "a", -4.0, 2),
-                  Row("c", 2, null, 5.0, 1)
+                  Row("c", 2, null, 5.0, 1),
+                  Row("d", 0, "1", 1.0, 1),
+                  Row("d", 1, "1", 2.0, 1)
                 )
               )
 
@@ -1376,7 +1391,12 @@ class DataFrameWindowFunctionsSuite extends QueryTest
                   Row("b", 1, "h", Double.NaN, 1),
                   Row("b", 1, "n", Double.PositiveInfinity, 2),
                   Row("c", 1, "a", -4.0, 2),
-                  Row("c", 2, null, 5.0, 1)
+                  Row("c", 2, null, 5.0, 1),
+                  Row("d", 0, "1", 1.0, 1),
+                  Row("d", 1, "1", 2.0, 1),
+                  Row("d", 2, "2", 3.0, 2),
+                  Row("d", 3, "2", -1.0, 2),
+                  Row("d", 4, "2", 2.0, 2)
                 )
               )
 
@@ -1408,7 +1428,8 @@ class DataFrameWindowFunctionsSuite extends QueryTest
             checkAnswer(df.withColumn("rn", row_number().over(window)).where(condition),
               Seq(
                 Row("a", 4, "", 2.0, 2),
-                Row("b", 1, "n", Double.PositiveInfinity, 2)
+                Row("b", 1, "n", Double.PositiveInfinity, 2),
+                Row("d", 1, "1", 2.0, 2)
               )
             )
 
@@ -1421,7 +1442,9 @@ class DataFrameWindowFunctionsSuite extends QueryTest
             checkAnswer(df.withColumn("rn", dense_rank().over(window)).where(condition),
               Seq(
                 Row("a", 0, "c", 1.0, 2),
-                Row("b", 1, "n", Double.PositiveInfinity, 2)
+                Row("b", 1, "n", Double.PositiveInfinity, 2),
+                Row("d", 2, "2", 3.0, 2),
+                Row("d", 4, "2", 2.0, 2)
               )
             )
 
@@ -1433,7 +1456,8 @@ class DataFrameWindowFunctionsSuite extends QueryTest
               Seq(
                 Row("a", 4, "", 2.0, 1, 1),
                 Row("b", 1, "h", Double.NaN, 1, 1),
-                Row("c", 2, null, 5.0, 1, 1)
+                Row("c", 2, null, 5.0, 1, 1),
+                Row("d", 0, "1", 1.0, 1, 1)
               )
             )
 
@@ -1446,7 +1470,9 @@ class DataFrameWindowFunctionsSuite extends QueryTest
                 Row("a", 4, "", 2.0, 1, 1),
                 Row("a", 4, "", 2.0, 1, 1),
                 Row("b", 1, "h", Double.NaN, 1, 1),
-                Row("c", 2, null, 5.0, 1, 1)
+                Row("c", 2, null, 5.0, 1, 1),
+                Row("d", 0, "1", 1.0, 1, 1),
+                Row("d", 1, "1", 2.0, 1, 1)
               )
             )
 
@@ -1459,7 +1485,9 @@ class DataFrameWindowFunctionsSuite extends QueryTest
                 Row("a", 4, "", 2.0, 1, 1),
                 Row("a", 4, "", 2.0, 1, 1),
                 Row("b", 1, "h", Double.NaN, 1, 1),
-                Row("c", 2, null, 5.0, 1, 1)
+                Row("c", 2, null, 5.0, 1, 1),
+                Row("d", 0, "1", 1.0, 1, 1),
+                Row("d", 1, "1", 2.0, 1, 1)
               )
             )
 
