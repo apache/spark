@@ -88,6 +88,7 @@ if TYPE_CHECKING:
     from pyspark.sql.connect._typing import OptionalPrimitiveType
     from pyspark.sql.connect.catalog import Catalog
     from pyspark.sql.connect.udf import UDFRegistration
+    from pyspark.sql.connect.udtf import UDTFRegistration
 
 
 # `_active_spark_session` stores the active spark connect session created by
@@ -599,7 +600,7 @@ class SparkSession:
             raise PySparkAttributeError(
                 error_class="JVM_ATTRIBUTE_NOT_SUPPORTED", message_parameters={"attr_name": name}
             )
-        elif name in ["newSession", "sparkContext", "udtf"]:
+        elif name in ["newSession", "sparkContext"]:
             raise PySparkNotImplementedError(
                 error_class="NOT_IMPLEMENTED", message_parameters={"feature": f"{name}()"}
             )
@@ -612,6 +613,14 @@ class SparkSession:
         return UDFRegistration(self)
 
     udf.__doc__ = PySparkSession.udf.__doc__
+
+    @property
+    def udtf(self) -> "UDTFRegistration":
+        from pyspark.sql.connect.udtf import UDTFRegistration
+
+        return UDTFRegistration(self)
+
+    udtf.__doc__ = PySparkSession.udtf.__doc__
 
     @property
     def version(self) -> str:
