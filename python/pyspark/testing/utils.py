@@ -226,6 +226,7 @@ def assertDataFrameEqual(
     df: DataFrame,
     expected: Union[DataFrame, List[Row]],
     checkRowOrder: bool = False,
+    checkSchema: bool = True,
     rtol: float = 1e-5,
     atol: float = 1e-8,
 ):
@@ -258,6 +259,8 @@ def assertDataFrameEqual(
     For checkRowOrder, note that PySpark DataFrame ordering is non-deterministic, unless
     explicitly sorted.
 
+    Note that schema equality is checked only when `expected` is a DataFrame (not a list of Rows).
+
     For DataFrames with float values, assertDataFrame asserts approximate equality.
     Two float values a and b are approximately equal if the following equation is True:
 
@@ -267,16 +270,13 @@ def assertDataFrameEqual(
     --------
     >>> df1 = spark.createDataFrame(data=[("1", 1000), ("2", 3000)], schema=["id", "amount"])
     >>> df2 = spark.createDataFrame(data=[("1", 1000), ("2", 3000)], schema=["id", "amount"])
-    >>> assertDataFrameEqual(df1, df2)
-
-    Pass, DataFrames are identical
-
+    >>> assertDataFrameEqual(df1, df2)  # pass, DataFrames are identical
     >>> df1 = spark.createDataFrame(data=[("1", 0.1), ("2", 3.23)], schema=["id", "amount"])
     >>> df2 = spark.createDataFrame(data=[("1", 0.109), ("2", 3.23)], schema=["id", "amount"])
-    >>> assertDataFrameEqual(df1, df2, rtol=1e-1)
-
-    Pass, DataFrames are approx equal by rtol
-
+    >>> assertDataFrameEqual(df1, df2, rtol=1e-1)  # pass, DataFrames are approx equal by rtol
+    >>> df1 = spark.createDataFrame(data=[("1", 1000), ("2", 3000)], schema=["id", "amount"])
+    >>> list_of_rows = [Row(1, 1000), Row(2, 3000)]
+    >>> assertDataFrameEqual(df1, list_of_rows)  # pass, DataFrames are equal
     >>> df1 = spark.createDataFrame(data=[("1", 1000.00), ("2", 3000.00), ("3", 2000.00)],
     ... schema=["id", "amount"])
     >>> df2 = spark.createDataFrame(data=[("1", 1001.00), ("2", 3000.00), ("3", 2003.00)],
@@ -333,9 +333,11 @@ def assertDataFrameEqual(
             )
 
     # special cases: empty datasets, datasets with 0 columns
-    if (df.first() is None and expected.first() is None) or (
-        len(df.columns) == 0 and len(expected.columns) == 0
-    ):
+    if isinstance(expected, DataFrame) and (
+            (df.first() is None and expected.first() is None)
+            or (len(df.columns) == 0 and len(expected.columns) == 0))\
+    or isinstance(expected, list) and (
+            (df.first() is None) or (len(df.columns) == 0)) and len(expected) == 0:
         return True
 
     def compare_rows(r1: Row, r2: Row):
@@ -404,7 +406,7 @@ def assertDataFrameEqual(
 
     # convert df and expected to list
     if not isinstance(expected, List):
-        # only compare schema if expected is not a List
+        # only compare schema if expected is not a list
         assert_schema_equal(df.schema, expected.schema)
         expected_list = expected.collect()
     else:
