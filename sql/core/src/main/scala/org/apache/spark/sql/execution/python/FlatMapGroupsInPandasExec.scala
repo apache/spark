@@ -18,14 +18,13 @@
 package org.apache.spark.sql.execution.python
 
 import org.apache.spark.JobArtifactSet
-import org.apache.spark.api.python.{ChainedPythonFunctions, PythonEvalType}
+import org.apache.spark.api.python.ChainedPythonFunctions
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.physical.{AllTuples, ClusteredDistribution, Distribution, Partitioning}
 import org.apache.spark.sql.execution.{SparkPlan, UnaryExecNode}
 import org.apache.spark.sql.execution.python.PandasGroupUtils._
-import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.ArrowUtils
 
 
@@ -53,11 +52,6 @@ case class FlatMapGroupsInPandasExec(
     child: SparkPlan)
   extends SparkPlan with UnaryExecNode with PythonSQLMetrics {
 
-  private val sessionLocalTimeZone = conf.sessionLocalTimeZone
-  private val largeVarTypes = conf.arrowUseLargeVarTypes
-  private val pythonRunnerConf = ArrowUtils.getPythonRunnerConfMap(conf)
-  private val pandasFunction = func.asInstanceOf[PythonUDF].func
-  private val chainedFunc = Seq(ChainedPythonFunctions(Seq(pandasFunction)))
   private[this] val jobArtifactUUID = JobArtifactSet.getCurrentJobArtifactState.map(_.uuid)
 
   override def producedAttributes: AttributeSet = AttributeSet(output)
@@ -77,28 +71,29 @@ case class FlatMapGroupsInPandasExec(
 
   override protected def doExecute(): RDD[InternalRow] = {
     val inputRDD = child.execute()
-
     val (dedupAttributes, argOffsets) = resolveArgOffsets(child.output, groupingAttributes)
+    val pandasFunction = func.asInstanceOf[PythonUDF].func
+    val chainedFunc = Seq(ChainedPythonFunctions(Seq(pandasFunction)))
 
-    // Map grouped rows to ArrowPythonRunner results, Only execute if partition is not empty
-    inputRDD.mapPartitionsInternal { iter => if (iter.isEmpty) iter else {
-
-      val data = groupAndProject(iter, groupingAttributes, child.output, dedupAttributes)
-        .map { case (_, x) => x }
-
-      val runner = new ArrowPythonRunner(
-        chainedFunc,
-        PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF,
-        Array(argOffsets),
-        StructType.fromAttributes(dedupAttributes),
-        sessionLocalTimeZone,
-        largeVarTypes,
-        pythonRunnerConf,
-        pythonMetrics,
-        jobArtifactUUID)
-
-      executePython(data, output, runner)
-    }}
+    val evaluatorFactory = new FlatMapGroupsInPandasEvaluatorFactory(
+      child.output,
+      output,
+      groupingAttributes,
+      dedupAttributes,
+      argOffsets,
+      chainedFunc,
+      conf.sessionLocalTimeZone,
+      conf.arrowUseLargeVarTypes,
+      ArrowUtils.getPythonRunnerConfMap(conf),
+      pythonMetrics,
+      jobArtifactUUID)
+    if (conf.usePartitionEvaluator) {
+      inputRDD.mapPartitionsWithEvaluator(evaluatorFactory)
+    } else {
+      inputRDD.mapPartitionsInternal { iter =>
+        evaluatorFactory.createEvaluator().eval(0, iter)
+      }
+    }
   }
 
   override protected def withNewChildInternal(newChild: SparkPlan): FlatMapGroupsInPandasExec =
