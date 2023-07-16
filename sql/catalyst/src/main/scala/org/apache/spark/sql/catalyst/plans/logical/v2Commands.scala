@@ -46,7 +46,7 @@ trait KeepAnalyzedQuery extends Command {
 /**
  * Base trait for DataSourceV2 write commands
  */
-trait V2WriteCommand extends UnaryCommand with KeepAnalyzedQuery with WithCTEInChildren {
+trait V2WriteCommand extends UnaryCommand with KeepAnalyzedQuery with CTEInChildren {
   def table: NamedRelation
   def query: LogicalPlan
   def isByName: Boolean
@@ -395,7 +395,7 @@ case class WriteDelta(
 trait V2CreateTableAsSelectPlan
     extends V2CreateTablePlan
     with AnalysisOnlyCommand
-    with WithCTEInChildren {
+    with CTEInChildren {
   def query: LogicalPlan
 
   override def withCTE(withCTE: WithCTE): LogicalPlan = {
@@ -1243,7 +1243,7 @@ case class RepairTable(
 case class AlterViewAs(
     child: LogicalPlan,
     originalText: String,
-    query: LogicalPlan) extends BinaryCommand with WithCTEInChildren {
+    query: LogicalPlan) extends BinaryCommand with CTEInChildren {
   override def left: LogicalPlan = child
   override def right: LogicalPlan = query
   override protected def withNewChildrenInternal(
@@ -1268,7 +1268,7 @@ case class CreateView(
     originalText: Option[String],
     query: LogicalPlan,
     allowExisting: Boolean,
-    replace: Boolean) extends BinaryCommand with WithCTEInChildren {
+    replace: Boolean) extends BinaryCommand with CTEInChildren {
   override def left: LogicalPlan = child
   override def right: LogicalPlan = query
   override protected def withNewChildrenInternal(
