@@ -685,12 +685,12 @@ jobs:
           if [ `./dev/is-changed.py -m sparkr` = false ]; then export SKIP_RDOC=1; fi
         fi
     - name: Tar documentation
-      run: cd $HOME && tar cjf docs.tar.bz2 docs
+      run: cd $HOME && tar cjf site.tar.bz2 docs/_site
     - name: Upload documentation
       uses: actions/upload-artifact@v3
       with:
-        name: docs
-        path: "docs.tar.bz2"
+        name: site
+        path: "site.tar.bz2"
 
   java-11-17:
     needs: precondition
