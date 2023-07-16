@@ -684,8 +684,11 @@ jobs:
           if [ `./dev/is-changed.py -m $pyspark_modules` = false ]; then export SKIP_PYTHONDOC=1; fi
           if [ `./dev/is-changed.py -m sparkr` = false ]; then export SKIP_RDOC=1; fi
         fi
+        cd docs
+        bundle exec jekyll build
+        cd ..
     - name: Tar documentation
-      run: cd $HOME && tar cjf site.tar.bz2 docs/_site
+      run: tar cjf site.tar.bz2 docs/_site
     - name: Upload documentation
       uses: actions/upload-artifact@v3
       with:
