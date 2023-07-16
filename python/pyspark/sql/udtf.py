@@ -19,7 +19,7 @@ User-defined table function related classes and functions
 """
 import sys
 import warnings
-from typing import Iterator, Type, TYPE_CHECKING, Optional, Union
+from typing import Any, Iterator, Type, TYPE_CHECKING, Optional, Union
 
 from py4j.java_gateway import JavaObject
 
@@ -77,27 +77,35 @@ def _create_py_udtf(
     # Create a regular Python UDTF and check for invalid handler class.
     regular_udtf = _create_udtf(cls, returnType, name, PythonEvalType.SQL_TABLE_UDF, deterministic)
 
-    if arrow_enabled:
-        try:
-            require_minimum_pandas_version()
-            require_minimum_pyarrow_version()
-        except ImportError as e:
-            warnings.warn(
-                f"Arrow optimization for Python UDTFs cannot be enabled: {str(e)}. "
-                f"Falling back to using regular Python UDTFs.",
-                UserWarning,
-            )
-            return regular_udtf
-        return _create_arrow_udtf(regular_udtf)
-    else:
+    if not arrow_enabled:
         return regular_udtf
 
+    # Return the regular UDTF if the required dependencies are not satisfied.
+    try:
+        require_minimum_pandas_version()
+        require_minimum_pyarrow_version()
+    except ImportError as e:
+        warnings.warn(
+            f"Arrow optimization for Python UDTFs cannot be enabled: {str(e)}. "
+            f"Falling back to using regular Python UDTFs.",
+            UserWarning,
+        )
+        return regular_udtf
 
-def _create_arrow_udtf(regular_udtf: "UserDefinedTableFunction") -> "UserDefinedTableFunction":
-    """Create an Arrow-optimized Python UDTF."""
+    # Return the vectorized UDTF.
+    vectorized_udtf = _vectorize_udtf(cls)
+    return _create_udtf(
+        cls=vectorized_udtf,
+        returnType=returnType,
+        name=name,
+        evalType=PythonEvalType.SQL_ARROW_TABLE_UDF,
+        deterministic=regular_udtf.deterministic,
+    )
+
+
+def _vectorize_udtf(cls: Type) -> Type:
+    """Vectorize a Python UDTF handler class."""
     import pandas as pd
-
-    cls = regular_udtf.func
 
     class VectorizedUDTF:
         def __init__(self) -> None:
@@ -126,13 +134,24 @@ def _create_arrow_udtf(regular_udtf: "UserDefinedTableFunction") -> "UserDefined
     if hasattr(cls, "terminate"):
         getattr(vectorized_udtf, "terminate").__doc__ = getattr(cls, "terminate").__doc__
 
-    return _create_udtf(
-        cls=vectorized_udtf,
-        returnType=regular_udtf.returnType,
-        name=regular_udtf._name,
-        evalType=PythonEvalType.SQL_ARROW_TABLE_UDF,
-        deterministic=regular_udtf.deterministic,
-    )
+    return vectorized_udtf
+
+
+def _validate_udtf_handler(cls: Any) -> None:
+    """Validate the handler class of a UDTF."""
+    # TODO(SPARK-43968): add more compile time checks for UDTFs
+
+    if not isinstance(cls, type):
+        raise PySparkTypeError(
+            f"Invalid user defined table function: the function handler "
+            f"must be a class, but got {type(cls).__name__}. Please provide "
+            "a class as the handler."
+        )
+
+    if not hasattr(cls, "eval"):
+        raise PySparkAttributeError(
+            error_class="INVALID_UDTF_NO_EVAL", message_parameters={"name": cls.__name__}
+        )
 
 
 class UserDefinedTableFunction:
@@ -157,15 +176,6 @@ class UserDefinedTableFunction:
         evalType: int = PythonEvalType.SQL_TABLE_UDF,
         deterministic: bool = True,
     ):
-
-        if not isinstance(func, type):
-            raise PySparkTypeError(
-                f"Invalid user defined table function: the function handler "
-                f"must be a class, but got {type(func).__name__}. Please provide "
-                "a class as the handler."
-            )
-
-        # TODO(SPARK-43968): add more compile time checks for UDTFs
         self.func = func
         self._returnType = returnType
         self._returnType_placeholder: Optional[StructType] = None
@@ -175,29 +185,26 @@ class UserDefinedTableFunction:
         self.evalType = evalType
         self.deterministic = deterministic
 
-        if not hasattr(func, "eval"):
-            raise PySparkAttributeError(
-                error_class="INVALID_UDTF_NO_EVAL", message_parameters={"name": self._name}
-            )
+        _validate_udtf_handler(func)
 
     @property
     def returnType(self) -> StructType:
         # `_parse_datatype_string` accesses to JVM for parsing a DDL formatted string.
         # This makes sure this is called after SparkContext is initialized.
         if self._returnType_placeholder is None:
-            if isinstance(self._returnType, StructType):
-                self._returnType_placeholder = self._returnType
-            else:
-                assert isinstance(self._returnType, str)
+            if isinstance(self._returnType, str):
                 parsed = _parse_datatype_string(self._returnType)
-                if not isinstance(parsed, StructType):
-                    raise PySparkTypeError(
-                        f"Invalid return type for the user defined table function "
-                        f"'{self._name}': {self._returnType}. The return type of a "
-                        f"UDTF must be a 'StructType'. Please ensure the return "
-                        "type is a correctly formatted 'StructType' string."
-                    )
-                self._returnType_placeholder = parsed
+            else:
+                parsed = self._returnType
+            if not isinstance(parsed, StructType):
+                raise PySparkTypeError(
+                    error_class="UDTF_RETURN_TYPE_MISMATCH",
+                    message_parameters={
+                        "name": self._name,
+                        "return_type": f"{parsed}",
+                    },
+                )
+            self._returnType_placeholder = parsed
         return self._returnType_placeholder
 
     @property
@@ -254,8 +261,8 @@ class UDTFRegistration:
     def register(
         self,
         name: str,
-        f: UserDefinedTableFunction,
-    ) -> UserDefinedTableFunction:
+        f: "UserDefinedTableFunction",
+    ) -> "UserDefinedTableFunction":
         """Register a Python user-defined table function as a SQL table function.
 
         .. versionadded:: 3.5.0
