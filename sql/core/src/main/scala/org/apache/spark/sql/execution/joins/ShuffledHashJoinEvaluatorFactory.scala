@@ -99,6 +99,7 @@ class ShuffledHashJoinEvaluatorFactory(
 
     private def streamSideKeyGenerator(): UnsafeProjection =
       UnsafeProjection.create(streamedBoundKeys)
+
     private def buildHashedRelation(iter: Iterator[InternalRow]): HashedRelation = {
       val start = System.nanoTime()
       val context = TaskContext.get()
