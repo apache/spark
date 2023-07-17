@@ -42,7 +42,7 @@ case class ShowCreateTableExec(
     Seq(InternalRow(UTF8String.fromString(builder.toString)))
   }
 
-  private def showCreateTable(table: Table, builder: StringBuilder): Unit = {
+  private def showCreateTable(table: Table, builder: StringBuilder, quotedName: String): Unit = {
     builder ++= s"CREATE TABLE ${quotedName} "
 
     showTableDataColumns(table, builder)
