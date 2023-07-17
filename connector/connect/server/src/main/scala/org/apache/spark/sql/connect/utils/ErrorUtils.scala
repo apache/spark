@@ -105,7 +105,8 @@ private[connect] object ErrorUtils extends Logging {
       observer: StreamObserver[V],
       userId: String,
       sessionId: String,
-      events: Option[ExecuteEventsManager] = None): PartialFunction[Throwable, Unit] = {
+      events: Option[ExecuteEventsManager] = None,
+      isInterrupted: Boolean = false): PartialFunction[Throwable, Unit] = {
     val session =
       SparkConnectService
         .getOrCreateIsolatedSession(userId, sessionId)
@@ -133,7 +134,11 @@ private[connect] object ErrorUtils extends Logging {
     partial
       .andThen { case (original, wrapped) =>
         logError(s"Error during: $opType. UserId: $userId. SessionId: $sessionId.", original)
-        events.foreach(_.postFailed(wrapped.getMessage))
+        if (isInterrupted) {
+          events.foreach(_.postCanceled)
+        } else {
+          events.foreach(_.postFailed(wrapped.getMessage))
+        }
         observer.onError(wrapped)
       }
   }
