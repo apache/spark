@@ -45,8 +45,7 @@ class StreamingTestsForeachBatchMixin(ReusedSQLTestCase):
             # it should use the spark session within given DataFrame, as microbatch execution will
             # clone the session which is no longer same with the session used to start the
             # streaming query
-            self.assertTrue(
-                len(batch_df.sparkSession.sql("SELECT * FROM updates").collect()), 2)
+            self.assertTrue(len(batch_df.sparkSession.sql("SELECT * FROM updates").collect()), 2)
             # Write to a global view verify on the repl/client side.
             batch_df.createOrReplaceGlobalTempView("temp_view")
 
@@ -96,7 +95,9 @@ class StreamingTestsForeachBatch(StreamingTestsForeachBatchMixin, ReusedSQLTestC
 
 if __name__ == "__main__":
     import unittest
-    from pyspark.sql.tests.streaming.test_streaming_foreachBatch import StreamingTestsForeachBatch  # noqa: F401
+    from pyspark.sql.tests.streaming.test_streaming_foreachBatch import (
+        StreamingTestsForeachBatch,
+    )  # noqa: F401
 
     try:
         import xmlrunner

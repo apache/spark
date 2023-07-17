@@ -496,8 +496,8 @@ class DataStreamWriter:
     foreach.__doc__ = PySparkDataStreamWriter.foreach.__doc__
 
     def foreachBatch(self, func: Callable[["DataFrame", int], None]) -> "DataStreamWriter":
-        self._write_proto.foreach_batch.python_function.command = (
-            CloudPickleSerializer().dumps(func)
+        self._write_proto.foreach_batch.python_function.command = CloudPickleSerializer().dumps(
+            func
         )
         self._write_proto.foreach_batch.python_function.python_ver = "%d.%d" % sys.version_info[:2]
         return self

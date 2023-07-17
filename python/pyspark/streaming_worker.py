@@ -61,7 +61,7 @@ def main(infile, outfile):
     # TODO: Enable Process Isolation
 
     func = worker.read_command(pickleSer, infile)
-    write_int(0, outfile) # Indicate successful initialization
+    write_int(0, outfile)  # Indicate successful initialization
 
     outfile.flush()
 

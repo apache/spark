@@ -79,8 +79,8 @@ object StreamingForeachBatchHelper extends Logging {
   }
 
   def pythonForeachBatchWrapper(
-    pythonFn: SimplePythonFunction,
-    sessionHolder: SessionHolder): ForeachBatchFnType = {
+      pythonFn: SimplePythonFunction,
+      sessionHolder: SessionHolder): ForeachBatchFnType = {
 
     val port = SparkConnectService.localPort
     val connectUrl = s"sc://localhost:$port/;user_id=${sessionHolder.userId}"
