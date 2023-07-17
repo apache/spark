@@ -353,8 +353,8 @@ class ArrowEncoderSuite extends ConnectFunSuite with BeforeAndAfterAll {
 
   test("nullable fields") {
     val encoder = ScalaReflection.encoderFor[NullableData]
-    val instant = java.time.Instant.now()
-    val now = java.time.LocalDateTime.now()
+    val instant = instantNow()
+    val now = localDateTimeNow()
     val today = java.time.LocalDate.now()
     roundTripAndCheckIdentical(encoder) { () =>
       val maybeNull = MaybeNull(3)
@@ -587,7 +587,7 @@ class ArrowEncoderSuite extends ConnectFunSuite with BeforeAndAfterAll {
   }
 
   test("lenient field serialization - timestamp/instant") {
-    val base = java.time.Instant.now()
+    val base = instantNow()
     val instants = () => Iterator.tabulate(10)(i => base.plusSeconds(i * i * 60))
     val timestamps = () => instants().map(java.sql.Timestamp.from)
     val combo = () => instants() ++ timestamps()

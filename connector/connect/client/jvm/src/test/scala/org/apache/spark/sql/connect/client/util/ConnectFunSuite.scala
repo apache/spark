@@ -17,7 +17,10 @@
 package org.apache.spark.sql.connect.client.util
 
 import java.nio.file.Path
+import java.time.{Instant, LocalDateTime}
+import java.time.temporal.ChronoUnit
 
+import org.apache.commons.lang3.{JavaVersion, SystemUtils}
 import org.scalatest.funsuite.AnyFunSuite // scalastyle:ignore funsuite
 
 /**
@@ -54,4 +57,26 @@ trait ConnectFunSuite extends AnyFunSuite { // scalastyle:ignore funsuite
       "test",
       "resources").toAbsolutePath
   }
+
+  // SPARK-42770&SPARK-44457: Run `LocalDateTime.now()` and `Instant.now()` with Java 8 & 11 always
+  // get microseconds on both Linux and MacOS, but there are some differences when
+  // using Java 17, it will get accurate nanoseconds on Linux, but still get the microseconds
+  // on MacOS. At present, Spark always converts them to microseconds, this will cause the
+  // test fail when using Java 17 on Linux, so add `truncatedTo(ChronoUnit.MICROS)` when
+  // testing on Linux using Java 17 to ensure the accuracy of input data is microseconds.
+  private val needTruncatedJavaTimeToMicros: Boolean =
+    SystemUtils.isJavaVersionAtLeast(JavaVersion.JAVA_17) && SystemUtils.IS_OS_LINUX
+  def instantNow(): Instant =
+    if (needTruncatedJavaTimeToMicros) {
+      Instant.now().truncatedTo(ChronoUnit.MICROS)
+    } else {
+      Instant.now()
+    }
+
+  def localDateTimeNow(): LocalDateTime =
+    if (needTruncatedJavaTimeToMicros) {
+      LocalDateTime.now().truncatedTo(ChronoUnit.MICROS)
+    } else {
+      LocalDateTime.now()
+    }
 }
