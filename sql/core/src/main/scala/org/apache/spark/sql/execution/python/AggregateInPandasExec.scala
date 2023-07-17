@@ -17,22 +17,18 @@
 
 package org.apache.spark.sql.execution.python
 
-import java.io.File
-
 import scala.collection.mutable.ArrayBuffer
 
-import org.apache.spark.{JobArtifactSet, SparkEnv, TaskContext}
-import org.apache.spark.api.python.{ChainedPythonFunctions, PythonEvalType}
+import org.apache.spark.JobArtifactSet
+import org.apache.spark.api.python.{ChainedPythonFunctions}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans.physical.{AllTuples, ClusteredDistribution, Distribution, Partitioning}
-import org.apache.spark.sql.execution.{GroupedIterator, SparkPlan, UnaryExecNode}
-import org.apache.spark.sql.execution.aggregate.UpdatingSessionsIterator
+import org.apache.spark.sql.execution.{SparkPlan, UnaryExecNode}
 import org.apache.spark.sql.types.{DataType, StructField, StructType}
 import org.apache.spark.sql.util.ArrowUtils
-import org.apache.spark.util.Utils
 
 /**
  * Physical node for aggregation with group aggregate Pandas UDF.
@@ -100,8 +96,6 @@ case class AggregateInPandasExec(
   override protected def doExecute(): RDD[InternalRow] = {
     val inputRDD = child.execute()
 
-    val sessionLocalTimeZone = conf.sessionLocalTimeZone
-    val largeVarTypes = conf.arrowUseLargeVarTypes
     val pythonRunnerConf = ArrowUtils.getPythonRunnerConfMap(conf)
 
     val (pyFuncs, inputs) = udfExpressions.map(collectFunctions).unzip
@@ -130,82 +124,34 @@ case class AggregateInPandasExec(
 
     val jobArtifactUUID = JobArtifactSet.getCurrentJobArtifactState.map(_.uuid)
 
-    // Map grouped rows to ArrowPythonRunner results, Only execute if partition is not empty
-    inputRDD.mapPartitionsInternal { iter => if (iter.isEmpty) iter else {
-      // If we have session window expression in aggregation, we wrap iterator with
-      // UpdatingSessionIterator to calculate sessions for input rows and update
-      // rows' session column, so that further aggregations can aggregate input rows
-      // for the same session.
-      val newIter: Iterator[InternalRow] = mayAppendUpdatingSessionIterator(iter)
-      val prunedProj = UnsafeProjection.create(allInputs.toSeq, child.output)
+    val evaluatorFactory = new AggregateInPandasEvaluatorFactory(
+      child.output,
+      aggExpressions,
+      resultExpressions,
+      conf.windowExecBufferInMemoryThreshold,
+      conf.windowExecBufferSpillThreshold,
+      sessionWindowOption,
+      groupingWithoutSessionExpressions,
+      allInputs,
+      groupingExpressions,
+      pyFuncs,
+      argOffsets,
+      aggInputSchema,
+      conf.sessionLocalTimeZone,
+      conf.arrowUseLargeVarTypes,
+      pythonRunnerConf,
+      pythonMetrics,
+      jobArtifactUUID)
 
-      val groupedItr = if (groupingExpressions.isEmpty) {
-        // Use an empty unsafe row as a place holder for the grouping key
-        Iterator((new UnsafeRow(), newIter))
-      } else {
-        GroupedIterator(newIter, groupingExpressions, child.output)
+    if (conf.usePartitionEvaluator) {
+      inputRDD.mapPartitionsWithEvaluator(evaluatorFactory)
+    } else {
+      inputRDD.mapPartitionsWithIndexInternal { (index, iter) =>
+        evaluatorFactory.createEvaluator().eval(index, iter)
       }
-      val grouped = groupedItr.map { case (key, rows) =>
-        (key, rows.map(prunedProj))
-      }
-
-      val context = TaskContext.get()
-
-      // The queue used to buffer input rows so we can drain it to
-      // combine input with output from Python.
-      val queue = HybridRowQueue(context.taskMemoryManager(),
-        new File(Utils.getLocalDir(SparkEnv.get.conf)), groupingExpressions.length)
-      context.addTaskCompletionListener[Unit] { _ =>
-        queue.close()
-      }
-
-      // Add rows to queue to join later with the result.
-      val projectedRowIter = grouped.map { case (groupingKey, rows) =>
-        queue.add(groupingKey.asInstanceOf[UnsafeRow])
-        rows
-      }
-
-      val columnarBatchIter = new ArrowPythonRunner(
-        pyFuncs,
-        PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF,
-        argOffsets,
-        aggInputSchema,
-        sessionLocalTimeZone,
-        largeVarTypes,
-        pythonRunnerConf,
-        pythonMetrics,
-        jobArtifactUUID).compute(projectedRowIter, context.partitionId(), context)
-
-      val joinedAttributes =
-        groupingExpressions.map(_.toAttribute) ++ aggExpressions.map(_.resultAttribute)
-      val joined = new JoinedRow
-      val resultProj = UnsafeProjection.create(resultExpressions, joinedAttributes)
-
-      columnarBatchIter.map(_.rowIterator.next()).map { aggOutputRow =>
-        val leftRow = queue.remove()
-        val joinedRow = joined(leftRow, aggOutputRow)
-        resultProj(joinedRow)
-      }
-    }}
+    }
   }
 
   override protected def withNewChildInternal(newChild: SparkPlan): SparkPlan =
     copy(child = newChild)
-
-
-  private def mayAppendUpdatingSessionIterator(
-      iter: Iterator[InternalRow]): Iterator[InternalRow] = {
-    val newIter = sessionWindowOption match {
-      case Some(sessionExpression) =>
-        val inMemoryThreshold = conf.windowExecBufferInMemoryThreshold
-        val spillThreshold = conf.windowExecBufferSpillThreshold
-
-        new UpdatingSessionsIterator(iter, groupingWithoutSessionExpressions, sessionExpression,
-          child.output, inMemoryThreshold, spillThreshold)
-
-      case None => iter
-    }
-
-    newIter
-  }
 }

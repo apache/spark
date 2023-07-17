@@ -89,19 +89,14 @@ case class AttachDistributedSequenceExec(
           .setName(s"Temporary RDD cached in AttachDistributedSequenceExec($id)")
         cached
     }
-
-    cachedRDD.zipWithIndex().mapPartitions { iter =>
-      val unsafeProj = UnsafeProjection.create(output, output)
-      val joinedRow = new JoinedRow
-      val unsafeRowWriter =
-        new org.apache.spark.sql.catalyst.expressions.codegen.UnsafeRowWriter(1)
-
-      iter.map { case (row, id) =>
-        // Writes to an UnsafeRow directly
-        unsafeRowWriter.reset()
-        unsafeRowWriter.write(0, id)
-        joinedRow(unsafeRowWriter.getRow, row)
-      }.map(unsafeProj)
+    val evaluatorFactory = new AttachDistributedSequenceEvaluatorFactory(output)
+    val inputRdd = cachedRDD.zipWithIndex()
+    if (conf.usePartitionEvaluator) {
+      inputRdd.mapPartitionsWithEvaluator(evaluatorFactory)
+    } else {
+      inputRdd.mapPartitionsWithIndex { (index, iter) =>
+        evaluatorFactory.createEvaluator().eval(index, iter)
+      }
     }
   }
 
