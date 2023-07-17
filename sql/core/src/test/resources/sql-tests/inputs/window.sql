@@ -2,6 +2,8 @@
 --CONFIG_DIM1 spark.sql.codegen.wholeStage=true
 --CONFIG_DIM1 spark.sql.codegen.wholeStage=false,spark.sql.codegen.factoryMode=CODEGEN_ONLY
 --CONFIG_DIM1 spark.sql.codegen.wholeStage=false,spark.sql.codegen.factoryMode=NO_CODEGEN
+--CONFIG_DIM2 spark.sql.optimizer.windowGroupLimitThreshold=-1
+--CONFIG_DIM2 spark.sql.optimizer.windowGroupLimitThreshold=1000
 
 -- Test data.
 CREATE OR REPLACE TEMPORARY VIEW testData AS SELECT * FROM VALUES
