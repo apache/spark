@@ -439,13 +439,16 @@ object StateStore extends Logging {
   @GuardedBy("loadedProviders")
   private val schemaValidated = new mutable.HashMap[StateStoreProviderId, Option[Throwable]]()
 
-  private val threadPoolLock = new Object
+  private val maintenanceThreadPoolLock = new Object
 
-  @GuardedBy("threadPoolLock")
+  @GuardedBy("maintenanceThreadPoolLock")
   private var threadPoolException: Throwable = null
 
-  @GuardedBy("threadPoolLock")
-  private val partitions = new mutable.HashSet[StateStoreProviderId]
+  // This set is to keep track of the partitions that are queued
+  // for maintenance or currently have maintenance running on them
+  // to prevent the same partition from being processed concurrently.
+  @GuardedBy("maintenanceThreadPoolLock")
+  private val maintenancePartitions = new mutable.HashSet[StateStoreProviderId]
 
   /**
    * Runs the `task` periodically and automatically cancels it if there is an exception. `onError`
@@ -500,18 +503,17 @@ object StateStore extends Logging {
     }
   }
 
-  private def addPartition(providerId: StateStoreProviderId): Unit = {
-    partitions.add(providerId)
+  private def addPartitionForMaintenance(providerId: StateStoreProviderId): Unit = {
+    maintenancePartitions.add(providerId)
   }
 
-  private def partitionIsQueued(providerId: StateStoreProviderId): Boolean = {
-    partitions.contains(providerId)
+  private def partitionIsQueuedForMaintenance(providerId: StateStoreProviderId): Boolean = {
+    maintenancePartitions.contains(providerId)
   }
 
-  private def removePartition(providerId: StateStoreProviderId): Unit = {
-    partitions.remove(providerId)
+  private def removePartitionFromMaintenanceSet(providerId: StateStoreProviderId): Unit = {
+    maintenancePartitions.remove(providerId)
   }
-
 
   @GuardedBy("loadedProviders")
   private var maintenanceTask: MaintenanceTask = null
@@ -672,9 +674,9 @@ object StateStore extends Logging {
   }
 
   private def processThisPartition(id: StateStoreProviderId): Boolean = {
-    threadPoolLock.synchronized {
-      if (!partitionIsQueued(id)) {
-        addPartition(id)
+    maintenanceThreadPoolLock.synchronized {
+      if (!partitionIsQueuedForMaintenance(id)) {
+        addPartitionForMaintenance(id)
         true
       } else {
         false
@@ -692,7 +694,7 @@ object StateStore extends Logging {
       throw new IllegalStateException("SparkEnv not active, cannot do maintenance on StateStores")
     }
     loadedProviders.synchronized { loadedProviders.toSeq }.foreach { case (id, provider) =>
-      threadPoolLock.synchronized {
+      maintenanceThreadPoolLock.synchronized {
         if (threadPoolException != null) {
           val exception = threadPoolException
           logWarning("Error in maintenanceThreadPool", threadPoolException)
@@ -712,7 +714,7 @@ object StateStore extends Logging {
           } catch {
             case NonFatal(e) =>
               logWarning(s"Error managing $provider, stopping management thread", e)
-              threadPoolLock.synchronized {
+              maintenanceThreadPoolLock.synchronized {
                 threadPoolException = e
               }
               throw e
@@ -726,8 +728,8 @@ object StateStore extends Logging {
             } else {
               logDebug(logMsg)
             }
-            threadPoolLock.synchronized {
-              removePartition(id)
+            maintenanceThreadPoolLock.synchronized {
+              removePartitionFromMaintenanceSet(id)
             }
           }
         })
