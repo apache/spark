@@ -49,7 +49,7 @@ utf8_deserializer = UTF8Deserializer()
 
 def main(infile, outfile):
     log_name = "Streaming ForeachBatch worker"
-    connect_url = os.environ["SPARK_CONNECT_LOCAL_URLX"]
+    connect_url = os.environ["SPARK_CONNECT_LOCAL_URL"]
     sessionId = utf8_deserializer.loads(infile)
 
     print(f"{log_name} is starting with url {connect_url} and sessionId {sessionId}.")

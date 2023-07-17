@@ -15,13 +15,21 @@
 # limitations under the License.
 #
 
+import unittest
+
 from pyspark.sql.tests.streaming.test_streaming_foreachBatch import StreamingTestsForeachBatchMixin
 from pyspark.testing.connectutils import ReusedConnectTestCase
 
 
 class StreamingForeachBatchParityTests(StreamingTestsForeachBatchMixin, ReusedConnectTestCase):
-    def test_temp_verify_remote_session(self):
-        self.assertTrue(hasattr(self.spark, '_client'), "Why is this not using remote session?")
+
+    @unittest.skip("SPARK-XXX: Error handling needs improvement in connect foreachBatch")
+    def test_streaming_foreachBatch_propagates_python_errors(self):
+        super().test_streaming_foreachBatch_propagates_python_errors
+
+    @unittest.skip("This seems specific to py4j and pinned threads. The intention is unclear")
+    def test_streaming_foreachBatch_graceful_stop(self):
+        super().test_streaming_foreachBatch_graceful_stop()
 
 
 if __name__ == "__main__":

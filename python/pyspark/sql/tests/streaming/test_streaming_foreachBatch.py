@@ -20,7 +20,7 @@ import time
 from pyspark.testing.sqlutils import ReusedSQLTestCase
 
 
-class StreamingTestsForeachBatchMixin(ReusedSQLTestCase):
+class StreamingTestsForeachBatchMixin:
     def test_streaming_foreachBatch(self):
         q = None
 
@@ -95,9 +95,7 @@ class StreamingTestsForeachBatch(StreamingTestsForeachBatchMixin, ReusedSQLTestC
 
 if __name__ == "__main__":
     import unittest
-    from pyspark.sql.tests.streaming.test_streaming_foreachBatch import (
-        StreamingTestsForeachBatch,
-    )  # noqa: F401
+    from pyspark.sql.tests.streaming.test_streaming_foreachBatch import *  # noqa: F401
 
     try:
         import xmlrunner
