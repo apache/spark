@@ -19,7 +19,7 @@ import inspect
 import os
 import sys
 import traceback
-from typing import Any, Dict, List, IO
+from typing import List, IO
 
 from pyspark.errors import PySparkRuntimeError, PySparkValueError
 from pyspark.java_gateway import local_connect_and_auth
@@ -30,7 +30,8 @@ from pyspark.serializers import (
     write_with_length,
     SpecialLengths,
 )
-from pyspark.sql.types import StructType, _parse_datatype_json_string
+from pyspark.sql.types import _parse_datatype_json_string
+from pyspark.sql.udtf import AnalyzeArgument, AnalyzeResult
 from pyspark.util import try_simplify_traceback
 from pyspark.worker import check_python_version, read_command, pickleSer, utf8_deserializer
 
@@ -57,11 +58,11 @@ def read_udtf(infile: IO) -> type:
     return handler
 
 
-def read_arguments(infile: IO) -> List[Dict[str, Any]]:
+def read_arguments(infile: IO) -> List[AnalyzeArgument]:
     """Reads the arguments for `analyze` static method."""
     # Receive arguments
     num_args = read_int(infile)
-    args = []
+    args: List[AnalyzeArgument] = []
     for _ in range(num_args):
         dt = _parse_datatype_json_string(utf8_deserializer.loads(infile))
         if read_bool(infile):  # is foldable
@@ -71,7 +72,7 @@ def read_arguments(infile: IO) -> List[Dict[str, Any]]:
         else:
             value = None
         is_table = read_bool(infile)  # is table argument
-        args.append(dict(data_type=dt, value=value, is_table=is_table))
+        args.append(AnalyzeArgument(data_type=dt, value=value, is_table=is_table))
     return args
 
 
@@ -81,23 +82,23 @@ def main(infile: IO, outfile: IO) -> None:
 
     This process will be invoked from `UserDefinedPythonTableFunction.analyzeInPython` in JVM
     and receive the Python UDTF and its arguments for the `analyze` static method,
-    and call the `analyze` static method, and send back a struct type as a result of the method.
+    and call the `analyze` static method, and send back a AnalyzeResult as a result of the method.
     """
     try:
         check_python_version(infile)
         handler = read_udtf(infile)
         args = read_arguments(infile)
 
-        schema = handler.analyze(*args)  # type: ignore[attr-defined]
+        result = handler.analyze(*args)  # type: ignore[attr-defined]
 
-        if not isinstance(schema, StructType):
+        if not isinstance(result, AnalyzeResult):
             raise PySparkValueError(
                 "Output of `analyze` static method of Python UDTFs expects "
-                f"a StructType but got: {type(schema)}"
+                f"a pyspark.sql.udtf.AnalyzeResult but got: {type(result)}"
             )
 
         # Return the analyzed schema.
-        write_with_length(schema.json().encode("utf-8"), outfile)
+        write_with_length(result.schema.json().encode("utf-8"), outfile)
     except BaseException as e:
         try:
             exc_info = None

@@ -50,6 +50,7 @@ from pyspark.sql.types import ArrayType, DataType, StringType, StructType, _from
 # Keep UserDefinedFunction import for backwards compatible import; moved in SPARK-22409
 from pyspark.sql.udf import UserDefinedFunction, _create_py_udf  # noqa: F401
 from pyspark.sql.udtf import UserDefinedTableFunction, _create_py_udtf
+from pyspark.sql.udtf import AnalyzeArgument, AnalyzeResult  # noqa: F401
 
 # Keep pandas_udf and PandasUDFType import for backwards compatible import; moved in SPARK-28264
 from pyspark.sql.pandas.functions import pandas_udf, PandasUDFType  # noqa: F401
@@ -15570,18 +15571,18 @@ def udtf(
     The `analyze` static method should take arguments:
 
     - The number and order of arguments are the same as the UDTF inputs
-    - Each argument is a dict, containing:
+    - Each argument is a :class:`pyspark.sql.udtf.UDTFArgumentType`, containing:
       - data_type: DataType
       - value: Any: if the argument is foldable; otherwise None
       - is_table: bool: True if the argument is TABLE
 
-    and return a struct type.
+    and return a :class:`pyspark.sql.udtf.AnalyzeResult`.
 
     >>> @udtf
     ... class TestUDTFWithAnalyze:
     ...     @staticmethod
-    ...     def analyze(a, b) -> StructType:
-    ...         return StructType().add("a", a["data_type"]).add("b", b["data_type"])
+    ...     def analyze(a: UDTFArgumentType, b: UDTFArgumentType) -> AnalyzeResult:
+    ...         return AnalyzeResult(StructType().add("a", a.data_type).add("b", b.data_type))
     ...
     ...     def eval(self, a, b):
     ...         yield a, b

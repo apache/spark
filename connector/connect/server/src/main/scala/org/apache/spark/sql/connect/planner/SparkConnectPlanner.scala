@@ -2482,20 +2482,24 @@ class SparkConnectPlanner(val sessionHolder: SessionHolder) extends Logging {
   private def createPythonUserDefinedTableFunction(
       fun: proto.CommonInlineUserDefinedTableFunction): UserDefinedPythonTableFunction = {
     val udtf = fun.getPythonUdtf
-    // Currently return type is required for Python UDTFs.
-    // TODO(SPARK-44380): support `analyze` in Python UDTFs
-    assert(udtf.hasReturnType)
-    val returnType = transformDataType(udtf.getReturnType)
-    if (!returnType.isInstanceOf[StructType]) {
-      throw InvalidPlanInput(
-        "Invalid Python user-defined table function return type. " +
-          s"Expect a struct type, but got ${returnType.typeName}.")
+    val returnType = if (udtf.hasReturnType) {
+      val returnType = transformDataType(udtf.getReturnType)
+
+      if (!returnType.isInstanceOf[StructType]) {
+        throw InvalidPlanInput(
+          "Invalid Python user-defined table function return type. " +
+            s"Expect a struct type, but got ${returnType.typeName}.")
+      }
+
+      Some(returnType.asInstanceOf[StructType])
+    } else {
+      None
     }
 
     UserDefinedPythonTableFunction(
       name = fun.getFunctionName,
       func = transformPythonTableFunction(udtf),
-      returnType = returnType.asInstanceOf[StructType],
+      returnType = returnType,
       pythonEvalType = udtf.getEvalType,
       udfDeterministic = fun.getDeterministic)
   }

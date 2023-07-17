@@ -17,6 +17,7 @@
 """
 User-defined table function related classes and functions
 """
+from dataclasses import dataclass
 import inspect
 import sys
 import warnings
@@ -28,7 +29,7 @@ from pyspark.errors import PySparkAttributeError, PySparkTypeError
 from pyspark.rdd import PythonEvalType
 from pyspark.sql.column import _to_java_column, _to_seq
 from pyspark.sql.pandas.utils import require_minimum_pandas_version, require_minimum_pyarrow_version
-from pyspark.sql.types import StructType, _parse_datatype_string
+from pyspark.sql.types import DataType, StructType, _parse_datatype_string
 from pyspark.sql.udf import _wrap_function
 
 if TYPE_CHECKING:
@@ -36,7 +37,19 @@ if TYPE_CHECKING:
     from pyspark.sql.dataframe import DataFrame
     from pyspark.sql.session import SparkSession
 
-__all__ = ["UDTFRegistration"]
+__all__ = ["AnalyzeArgument", "AnalyzeResult", "UDTFRegistration"]
+
+
+@dataclass(frozen=True)
+class AnalyzeArgument:
+    data_type: DataType
+    value: Optional[Any]
+    is_table: bool
+
+
+@dataclass(frozen=True)
+class AnalyzeResult:
+    schema: StructType
 
 
 def _create_udtf(
@@ -117,7 +130,7 @@ def _vectorize_udtf(cls: Type) -> Type:
         ):
 
             @staticmethod
-            def analyze(*args: Dict[str, Any]) -> StructType:
+            def analyze(*args: Dict[str, Any]) -> AnalyzeResult:
                 return cls.analyze(*args)
 
         def eval(self, *args: pd.Series) -> Iterator[pd.DataFrame]:
@@ -146,7 +159,7 @@ def _vectorize_udtf(cls: Type) -> Type:
     return vectorized_udtf
 
 
-def _validate_udtf_handler(cls: Any) -> None:
+def _validate_udtf_handler(cls: Any, returnType: Optional[Union[StructType, str]]) -> None:
     """Validate the handler class of a UDTF."""
     # TODO(SPARK-43968): add more compile time checks for UDTFs
 
@@ -160,6 +173,19 @@ def _validate_udtf_handler(cls: Any) -> None:
     if not hasattr(cls, "eval"):
         raise PySparkAttributeError(
             error_class="INVALID_UDTF_NO_EVAL", message_parameters={"name": cls.__name__}
+        )
+
+    has_analyze_staticmethod = hasattr(cls, "analyze") and isinstance(
+        inspect.getattr_static(cls, "analyze"), staticmethod
+    )
+    if returnType is None and not has_analyze_staticmethod:
+        raise PySparkAttributeError(
+            error_class="INVALID_UDTF_RETURN_TYPE", message_parameters={"name": cls.__name__}
+        )
+    if returnType is not None and has_analyze_staticmethod:
+        raise PySparkAttributeError(
+            error_class="INVALID_UDTF_BOTH_RETURN_TYPE_AND_ANALYZE_STATICMETHOD",
+            message_parameters={"name": cls.__name__},
         )
 
 
@@ -194,20 +220,7 @@ class UserDefinedTableFunction:
         self.evalType = evalType
         self.deterministic = deterministic
 
-        _validate_udtf_handler(func)
-
-        has_analyze_staticmethod = hasattr(func, "analyze") and isinstance(
-            inspect.getattr_static(func, "analyze"), staticmethod
-        )
-        if returnType is None and not has_analyze_staticmethod:
-            raise PySparkAttributeError(
-                error_class="INVALID_UDTF_RETURN_TYPE", message_parameters={"name": self._name}
-            )
-        if returnType is not None and has_analyze_staticmethod:
-            raise PySparkAttributeError(
-                error_class="INVALID_UDTF_BOTH_RETURN_TYPE_AND_ANALYZE_STATICMETHOD",
-                message_parameters={"name": self._name},
-            )
+        _validate_udtf_handler(func, returnType)
 
     @property
     def returnType(self) -> Optional[StructType]:

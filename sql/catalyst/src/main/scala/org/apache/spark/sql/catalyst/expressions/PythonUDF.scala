@@ -20,6 +20,7 @@ package org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.SparkException.internalError
 import org.apache.spark.api.python.{PythonEvalType, PythonFunction}
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.analysis.UnresolvedException
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateFunction
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
 import org.apache.spark.sql.catalyst.trees.TreePattern.{PYTHON_UDF, TreePattern}
@@ -173,6 +174,28 @@ case class PythonUDTF(
   }
 
   override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): PythonUDTF =
+    copy(children = newChildren)
+}
+
+/**
+ * A place holder of a Polymorphic Python table-valued function.
+ */
+case class UnresolvedPolymorphicPythonUDTF(
+    name: String,
+    func: PythonFunction,
+    children: Seq[Expression],
+    evalType: Int,
+    udfDeterministic: Boolean,
+    resolveElementSchema: (PythonFunction, Seq[Expression]) => StructType,
+    resultId: ExprId = NamedExpression.newExprId)
+  extends UnevaluableGenerator with PythonFuncExpression {
+
+  override lazy val resolved = false
+
+  override def elementSchema: StructType = throw new UnresolvedException("elementSchema")
+
+  override protected def withNewChildrenInternal(
+      newChildren: IndexedSeq[Expression]): UnresolvedPolymorphicPythonUDTF =
     copy(children = newChildren)
 }
 

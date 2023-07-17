@@ -31,7 +31,7 @@ import org.apache.spark.api.python.{PythonEvalType, PythonFunction, PythonRDD, S
 import org.apache.spark.internal.config.BUFFER_SIZE
 import org.apache.spark.internal.config.Python._
 import org.apache.spark.sql.{Column, DataFrame, Dataset, SparkSession}
-import org.apache.spark.sql.catalyst.expressions.{Expression, FunctionTableSubqueryArgumentExpression, PythonUDAF, PythonUDF, PythonUDTF}
+import org.apache.spark.sql.catalyst.expressions.{Expression, FunctionTableSubqueryArgumentExpression, PythonUDAF, PythonUDF, PythonUDTF, UnresolvedPolymorphicPythonUDTF}
 import org.apache.spark.sql.catalyst.plans.logical.{Generate, LogicalPlan, OneRowRelation}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
@@ -99,13 +99,26 @@ case class UserDefinedPythonTableFunction(
   }
 
   def builder(e: Seq[Expression]): LogicalPlan = {
-    val udtf = PythonUDTF(
-      name = name,
-      func = func,
-      elementSchema = returnType.getOrElse(UserDefinedPythonTableFunction.analyzeInPython(func, e)),
-      children = e,
-      evalType = pythonEvalType,
-      udfDeterministic = udfDeterministic)
+    val udtf = returnType match {
+      case Some(rt) =>
+        PythonUDTF(
+          name = name,
+          func = func,
+          elementSchema = rt,
+          children = e,
+          evalType = pythonEvalType,
+          udfDeterministic = udfDeterministic)
+      case _ =>
+        UnresolvedPolymorphicPythonUDTF(
+          name = name,
+          func = func,
+          children = e,
+          evalType = pythonEvalType,
+          udfDeterministic = udfDeterministic,
+          resolveElementSchema = UserDefinedPythonTableFunction.analyzeInPython(
+            e.map(_.isInstanceOf[FunctionTableSubqueryArgumentExpression])
+          ))
+    }
     Generate(
       udtf,
       unrequiredChildIndex = Nil,
@@ -136,12 +149,12 @@ object UserDefinedPythonTableFunction {
    * This expects the Python UDTF to have `analyze` static method that take arguments:
    *
    * - The number and order of arguments are the same as the UDTF inputs
-   * - Each argument is a dict, containing:
+   * - Each argument is an `AnalyzeArgument`, containing:
    *   - data_type: DataType
    *   - value: Any: if the argument is foldable; otherwise None
    *   - is_table: bool: True if the argument is TABLE
    *
-   * and that return a struct type.
+   * and that return an `AnalyzeResult`.
    *
    * It serializes/deserializes the data types via JSON,
    * and the values for the case the argument is foldable are pickled.
@@ -149,7 +162,9 @@ object UserDefinedPythonTableFunction {
    * `AnalysisException` with the error class "TABLE_VALUED_FUNCTION_FAILED_TO_ANALYZE_IN_PYTHON"
    * will be thrown when an exception is raised in Python.
    */
-  def analyzeInPython(func: PythonFunction, exprs: Seq[Expression]): StructType = {
+  def analyzeInPython(
+      tableArgs: Seq[Boolean])(func: PythonFunction, exprs: Seq[Expression]): StructType = {
+    print(exprs)
     val env = SparkEnv.get
     val bufferSize: Int = env.conf.get(BUFFER_SIZE)
     val authSocketTimeout = env.conf.get(PYTHON_AUTH_SOCKET_TIMEOUT)
@@ -190,7 +205,7 @@ object UserDefinedPythonTableFunction {
 
       // Send arguments
       dataOut.writeInt(exprs.length)
-      exprs.foreach { expr =>
+      exprs.zip(tableArgs).foreach { case (expr, is_table) =>
         PythonRDD.writeUTF(expr.dataType.json, dataOut)
         if (expr.foldable) {
           dataOut.writeBoolean(true)
@@ -200,7 +215,7 @@ object UserDefinedPythonTableFunction {
         } else {
           dataOut.writeBoolean(false)
         }
-        dataOut.writeBoolean(expr.isInstanceOf[FunctionTableSubqueryArgumentExpression])
+        dataOut.writeBoolean(is_table)
       }
 
       dataOut.writeInt(SpecialLengths.END_OF_STREAM)

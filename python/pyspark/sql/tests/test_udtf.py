@@ -28,7 +28,17 @@ from pyspark.errors import (
     AnalysisException,
 )
 from pyspark.rdd import PythonEvalType
-from pyspark.sql.functions import array, create_map, array, lit, named_struct, udf, udtf
+from pyspark.sql.functions import (
+    array,
+    create_map,
+    array,
+    lit,
+    named_struct,
+    udf,
+    udtf,
+    AnalyzeArgument,
+    AnalyzeResult,
+)
 from pyspark.sql.types import (
     ArrayType,
     BooleanType,
@@ -766,8 +776,8 @@ class BaseUDTFTestsMixin:
     def test_simple_udtf_with_analyze(self):
         class TestUDTF:
             @staticmethod
-            def analyze() -> StructType:
-                return StructType().add("c1", StringType()).add("c2", StringType())
+            def analyze() -> AnalyzeResult:
+                return AnalyzeResult(StructType().add("c1", StringType()).add("c2", StringType()))
 
             def eval(self):
                 yield "hello", "world"
@@ -783,12 +793,12 @@ class BaseUDTFTestsMixin:
     def test_udtf_with_analyze(self):
         class TestUDTF:
             @staticmethod
-            def analyze(a) -> StructType:
-                assert isinstance(a, dict)
-                assert isinstance(a["data_type"], DataType)
-                assert a["value"] is not None
-                assert a["is_table"] is False
-                return StructType().add("a", a["data_type"])
+            def analyze(a: AnalyzeArgument) -> AnalyzeResult:
+                assert isinstance(a, AnalyzeArgument)
+                assert isinstance(a.data_type, DataType)
+                assert a.value is not None
+                assert a.is_table is False
+                return AnalyzeResult(StructType().add("a", a.data_type))
 
             def eval(self, a):
                 yield a,
@@ -842,8 +852,8 @@ class BaseUDTFTestsMixin:
         @udtf
         class TestUDTF:
             @staticmethod
-            def analyze() -> StructType:
-                return StructType().add("c1", StringType()).add("c2", StringType())
+            def analyze() -> AnalyzeResult:
+                return AnalyzeResult(StructType().add("c1", StringType()).add("c2", StringType()))
 
             def eval(self):
                 yield "hello", "world"
@@ -859,8 +869,8 @@ class BaseUDTFTestsMixin:
         @udtf()
         class TestUDTF:
             @staticmethod
-            def analyze() -> StructType:
-                return StructType().add("c1", StringType()).add("c2", StringType())
+            def analyze() -> AnalyzeResult:
+                return AnalyzeResult(StructType().add("c1", StringType()).add("c2", StringType()))
 
             def eval(self):
                 yield "hello", "world"
@@ -875,8 +885,8 @@ class BaseUDTFTestsMixin:
     def test_udtf_with_analyze_multiple_arguments(self):
         class TestUDTF:
             @staticmethod
-            def analyze(a, b) -> StructType:
-                return StructType().add("a", a["data_type"]).add("b", b["data_type"])
+            def analyze(a: AnalyzeArgument, b: AnalyzeArgument) -> AnalyzeResult:
+                return AnalyzeResult(StructType().add("a", a.data_type).add("b", b.data_type))
 
             def eval(self, a, b):
                 yield a, b
@@ -905,12 +915,12 @@ class BaseUDTFTestsMixin:
     def test_udtf_with_analyze_table_argument(self):
         class TestUDTF:
             @staticmethod
-            def analyze(a) -> StructType:
-                assert isinstance(a, dict)
-                assert isinstance(a["data_type"], StructType)
-                assert a["value"] is None
-                assert a["is_table"] is True
-                return StructType().add("a", a["data_type"][0].dataType)
+            def analyze(a: AnalyzeArgument) -> AnalyzeResult:
+                assert isinstance(a, AnalyzeArgument)
+                assert isinstance(a.data_type, StructType)
+                assert a.value is None
+                assert a.is_table is True
+                return AnalyzeResult(StructType().add("a", a.data_type[0].dataType))
 
             def eval(self, a: Row):
                 if a["id"] > 5:
@@ -926,10 +936,10 @@ class BaseUDTFTestsMixin:
     def test_udtf_with_analyze_table_argument_adding_columns(self):
         class TestUDTF:
             @staticmethod
-            def analyze(a) -> StructType:
-                assert isinstance(a["data_type"], StructType)
-                assert a["is_table"] is True
-                return a["data_type"].add("is_even", BooleanType())
+            def analyze(a: AnalyzeArgument) -> AnalyzeResult:
+                assert isinstance(a.data_type, StructType)
+                assert a.is_table is True
+                return AnalyzeResult(a.data_type.add("is_even", BooleanType()))
 
             def eval(self, a: Row):
                 yield a["id"], a["id"] % 2 == 0
@@ -955,19 +965,15 @@ class BaseUDTFTestsMixin:
     def test_udtf_with_analyze_table_argument_repeating_rows(self):
         class TestUDTF:
             @staticmethod
-            def analyze(n, row) -> StructType:
-                if (
-                    n["value"] is None
-                    or not isinstance(n["value"], int)
-                    or (n["value"] < 1 or n["value"] > 10)
-                ):
+            def analyze(n, row) -> AnalyzeResult:
+                if n.value is None or not isinstance(n.value, int) or (n.value < 1 or n.value > 10):
                     raise Exception("The first argument must be a scalar integer between 1 and 10")
 
-                if row["is_table"] is False:
+                if row.is_table is False:
                     raise Exception("The second argument must be a table argument")
 
-                assert isinstance(row["data_type"], StructType)
-                return row["data_type"]
+                assert isinstance(row.data_type, StructType)
+                return AnalyzeResult(row.data_type)
 
             def eval(self, n: int, row: Row):
                 for _ in range(n):
@@ -1018,8 +1024,8 @@ class BaseUDTFTestsMixin:
     def test_udtf_with_both_return_type_and_analyze(self):
         class TestUDTF:
             @staticmethod
-            def analyze() -> StructType:
-                return StructType().add("c1", StringType()).add("c2", StringType())
+            def analyze() -> AnalyzeResult:
+                return AnalyzeResult(StructType().add("c1", StringType()).add("c2", StringType()))
 
             def eval(self):
                 yield "hello", "world"
@@ -1049,8 +1055,8 @@ class BaseUDTFTestsMixin:
 
     def test_udtf_with_analyze_non_staticmethod(self):
         class TestUDTF:
-            def analyze(self) -> StructType:
-                return StructType().add("c1", StringType()).add("c2", StringType())
+            def analyze(self) -> AnalyzeResult:
+                return AnalyzeResult(StructType().add("c1", StringType()).add("c2", StringType()))
 
             def eval(self):
                 yield "hello", "world"
@@ -1077,15 +1083,15 @@ class BaseUDTFTestsMixin:
 
         with self.assertRaisesRegex(
             AnalysisException,
-            "Output of `analyze` static method of Python UDTFs expects a StructType "
-            "but got: <class 'pyspark.sql.types.StringType'>",
+            "Output of `analyze` static method of Python UDTFs expects "
+            "a pyspark.sql.udtf.AnalyzeResult but got: <class 'pyspark.sql.types.StringType'>",
         ):
             func().collect()
 
     def test_udtf_with_analyze_raising_an_exception(self):
         class TestUDTF:
             @staticmethod
-            def analyze():
+            def analyze() -> AnalyzeResult:
                 raise Exception("Failed to analyze.")
 
             def eval(self):
@@ -1099,8 +1105,8 @@ class BaseUDTFTestsMixin:
     def test_udtf_with_analyze_null_literal(self):
         class TestUDTF:
             @staticmethod
-            def analyze(a) -> StructType:
-                return StructType().add("a", a["data_type"])
+            def analyze(a: AnalyzeArgument) -> AnalyzeResult:
+                return AnalyzeResult(StructType().add("a", a.data_type))
 
             def eval(self, a):
                 yield a,
@@ -1111,25 +1117,11 @@ class BaseUDTFTestsMixin:
         self.assertEqual(df.schema, StructType().add("a", NullType()))
         self.assertEqual(df.collect(), [Row(a=None)])
 
-    def test_udtf_with_analyze_unknown_key(self):
-        class TestUDTF:
-            @staticmethod
-            def analyze(a) -> StructType:
-                return StructType().add("a", a["unknown"])
-
-            def eval(self, a):
-                yield a,
-
-        func = udtf(TestUDTF)
-
-        with self.assertRaisesRegex(AnalysisException, "KeyError: 'unknown'"):
-            func(lit(1)).collect()
-
     def test_udtf_with_analyze_taking_wrong_number_of_arguments(self):
         class TestUDTF:
             @staticmethod
-            def analyze(a, b) -> StructType:
-                return StructType().add("a", a["data_type"]).add("b", b["data_type"])
+            def analyze(a: AnalyzeArgument, b: AnalyzeArgument) -> AnalyzeResult:
+                return AnalyzeResult(StructType().add("a", a.data_type).add("b", b.data_type))
 
             def eval(self, a):
                 yield a, a + 1

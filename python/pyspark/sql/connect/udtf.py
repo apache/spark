@@ -33,8 +33,8 @@ from pyspark.sql.connect.plan import (
 )
 from pyspark.sql.connect.types import UnparsedDataType
 from pyspark.sql.connect.utils import get_python_ver
-from pyspark.sql.udtf import UDTFRegistration as PySparkUDTFRegistration
-from pyspark.sql.udtf import _validate_udtf_handler
+from pyspark.sql.udtf import UDTFRegistration as PySparkUDTFRegistration, _validate_udtf_handler
+from pyspark.sql.udtf import AnalyzeArgument, AnalyzeResult  # noqa: F401
 from pyspark.sql.types import DataType, StructType
 from pyspark.errors import PySparkRuntimeError, PySparkTypeError
 
@@ -47,7 +47,7 @@ if TYPE_CHECKING:
 
 def _create_udtf(
     cls: Type,
-    returnType: Union[StructType, str],
+    returnType: Optional[Union[StructType, str]],
     name: Optional[str] = None,
     evalType: int = PythonEvalType.SQL_TABLE_UDF,
     deterministic: bool = True,
@@ -60,7 +60,7 @@ def _create_udtf(
 
 def _create_py_udtf(
     cls: Type,
-    returnType: Union[StructType, str],
+    returnType: Optional[Union[StructType, str]],
     name: Optional[str] = None,
     deterministic: bool = True,
     useArrow: Optional[bool] = None,
@@ -119,20 +119,24 @@ class UserDefinedTableFunction:
     def __init__(
         self,
         func: Type,
-        returnType: Union[StructType, str],
+        returnType: Optional[Union[StructType, str]],
         name: Optional[str] = None,
         evalType: int = PythonEvalType.SQL_TABLE_UDF,
         deterministic: bool = True,
     ) -> None:
         self.func = func
-        self.returnType: DataType = (
-            UnparsedDataType(returnType) if isinstance(returnType, str) else returnType
+        self.returnType: Optional[DataType] = (
+            None
+            if returnType is None
+            else UnparsedDataType(returnType)
+            if isinstance(returnType, str)
+            else returnType
         )
         self._name = name or func.__name__
         self.evalType = evalType
         self.deterministic = deterministic
 
-        _validate_udtf_handler(func)
+        _validate_udtf_handler(func, returnType)
 
     def _build_common_inline_user_defined_table_function(
         self, *cols: "ColumnOrName"
