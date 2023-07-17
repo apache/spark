@@ -335,9 +335,9 @@ def assertDataFrameEqual(
     # special cases: empty datasets, datasets with 0 columns
     if isinstance(expected, DataFrame) and (
             (df.first() is None and expected.first() is None)
-            or (len(df.columns) == 0 and len(expected.columns) == 0))\
-    or isinstance(expected, list) and (
-            (df.first() is None) or (len(df.columns) == 0)) and len(expected) == 0:
+                or (len(df.columns) == 0 and len(expected.columns) == 0))\
+        or isinstance(expected, list) and (
+                (df.first() is None or len(df.columns) == 0) and len(expected) == 0):
         return True
 
     def compare_rows(r1: Row, r2: Row):
