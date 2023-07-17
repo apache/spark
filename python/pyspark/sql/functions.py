@@ -15510,12 +15510,13 @@ def udf(
         return _create_py_udf(f=f, returnType=returnType, useArrow=useArrow)
 
 
+@try_remote_functions
 def udtf(
     cls: Optional[Type] = None,
     *,
     returnType: Optional[Union[StructType, str]] = None,
     useArrow: Optional[bool] = None,
-) -> Union[UserDefinedTableFunction, functools.partial]:
+) -> Union["UserDefinedTableFunction", Callable[[Type], "UserDefinedTableFunction"]]:
     """Creates a user defined table function (UDTF).
 
     .. versionadded:: 3.5.0

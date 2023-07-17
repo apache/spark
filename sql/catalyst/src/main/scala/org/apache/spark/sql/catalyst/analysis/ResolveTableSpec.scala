@@ -71,8 +71,8 @@ object ResolveTableSpec extends Rule[LogicalPlan] {
                 Literal(result, dt).toString
             }
           } catch {
-            case _: SparkThrowable | _: java.lang.RuntimeException =>
-              throw QueryCompilationErrors.optionMustBeConstant(key)
+            case e @ (_: SparkThrowable | _: java.lang.RuntimeException) =>
+              throw QueryCompilationErrors.optionMustBeConstant(key, Some(e))
           }
           (key, newValue)
       }

@@ -140,6 +140,7 @@ object CheckConnectJvmClientCompatibility {
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.internal.*"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.jdbc.*"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.sources.*"),
+      ProblemFilters.exclude[Problem]("org.apache.spark.sql.streaming.ui.*"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.test.*"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.util.*"),
 
@@ -279,24 +280,6 @@ object CheckConnectJvmClientCompatibility {
         "org.apache.spark.sql.streaming.PythonStreamingQueryListener"),
       ProblemFilters.exclude[MissingClassProblem](
         "org.apache.spark.sql.streaming.PythonStreamingQueryListenerWrapper"),
-
-      // Streaming UI
-      ProblemFilters.exclude[MissingClassProblem](
-        "org.apache.spark.sql.streaming.ui.StreamingQueryDataSource"),
-      ProblemFilters.exclude[MissingClassProblem](
-        "org.apache.spark.sql.streaming.ui.StreamingQueryPagedTable"),
-      ProblemFilters.exclude[MissingClassProblem](
-        "org.apache.spark.sql.streaming.ui.StructuredStreamingRow"),
-      ProblemFilters.exclude[MissingClassProblem](
-        "org.apache.spark.sql.streaming.ui.StructuredStreamingRow$"),
-      ProblemFilters.exclude[MissingClassProblem](
-        "org.apache.spark.sql.streaming.ui.StreamingQueryPage"),
-      ProblemFilters.exclude[MissingClassProblem](
-        "org.apache.spark.sql.streaming.ui.StreamingQueryStatisticsPage"),
-      ProblemFilters.exclude[MissingClassProblem](
-        "org.apache.spark.sql.streaming.ui.StreamingQueryTab"),
-      ProblemFilters.exclude[MissingClassProblem](
-        "org.apache.spark.sql.streaming.ui.StreamingQueryTab$"),
 
       // SQLImplicits
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.SQLImplicits.rddToDatasetHolder"),

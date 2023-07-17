@@ -271,8 +271,7 @@ class StreamingQuerySuite extends QueryTest with SQLHelper with Logging {
   }
 
   test("streaming query listener") {
-    // There's a default StreamingQueryStatusListener.
-    assert(spark.streams.listListeners().length == 1)
+    assert(spark.streams.listListeners().length == 0)
 
     val listener = new EventCollector
     spark.streams.addListener(listener)
@@ -297,30 +296,25 @@ class StreamingQuerySuite extends QueryTest with SQLHelper with Logging {
 
     // List listeners after adding a new listener, length should be 2.
     val listeners = spark.streams.listListeners()
-    assert(listeners.length == 2)
-
-    val currListener = listeners(1).asInstanceOf[EventCollector]
-    assert(q.id.equals(currListener.startEvent.id))
-    assert(q.runId.equals(currListener.terminationEvent.runId))
-    assert(q.lastProgress.numInputRows == currListener.progressEvents.last.numInputRows)
+    assert(listeners.length == 1)
 
     // Add listener1 as another instance of EventCollector and validate
     val listener1 = new EventCollector
     spark.streams.addListener(listener1)
-    assert(spark.streams.listListeners().length == 3)
-    spark.streams.removeListener(listener1)
     assert(spark.streams.listListeners().length == 2)
+    spark.streams.removeListener(listener1)
+    assert(spark.streams.listListeners().length == 1)
 
     // Add the same listener again and validate, this aims to verify the listener cache
     // is correctly stored and cleaned.
     spark.streams.addListener(listener)
-    assert(spark.streams.listListeners().length == 3)
-    spark.streams.removeListener(listener)
     assert(spark.streams.listListeners().length == 2)
+    spark.streams.removeListener(listener)
+    assert(spark.streams.listListeners().length == 1)
 
     // Remove the listener, length should be 1.
     spark.streams.removeListener(listener)
-    assert(spark.streams.listListeners().length == 1)
+    assert(spark.streams.listListeners().length == 0)
   }
 
   test("foreachBatch") {
