@@ -652,7 +652,7 @@ object StateStore extends Logging {
 
   /** Start the periodic maintenance task if not already started and if Spark active */
   private def startMaintenanceIfNeeded(storeConf: StateStoreConf): Unit = {
-    val numMaintenanceThreads = storeConf.maintenanceThreadPoolSizeForStateStore
+    val numMaintenanceThreads = storeConf.numStateStoreMaintenanceThreads
     loadedProviders.synchronized {
       if (SparkEnv.get != null && !isMaintenanceRunning) {
         maintenanceTask = new MaintenanceTask(
