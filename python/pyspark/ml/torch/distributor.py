@@ -48,6 +48,7 @@ from pyspark.ml.torch.log_communication import (  # type: ignore
     LogStreamingClient,
     LogStreamingServer,
 )
+from pyspark.ml.dl_util import FunctionPickler
 from pyspark.ml.util import _get_active_session
 
 
@@ -746,12 +747,12 @@ class TorchDistributor(Distributor):
         train_fn: Callable, *args: Any, **kwargs: Any
     ) -> Generator[Tuple[str, str], None, None]:
         save_dir = TorchDistributor._create_save_dir()
-        pickle_file_path = TorchDistributor._save_pickled_function(
-            save_dir, train_fn, *args, **kwargs
+        pickle_file_path = FunctionPickler.pickle_fn_and_save(
+            train_fn, "", save_dir, *args, **kwargs
         )
         output_file_path = os.path.join(save_dir, TorchDistributor._PICKLED_OUTPUT_FILE)
-        train_file_path = TorchDistributor._create_torchrun_train_file(
-            save_dir, pickle_file_path, output_file_path
+        train_file_path = FunctionPickler.create_fn_run_script(
+            pickle_file_path, output_file_path, TorchDistributor._TRAIN_FILE
         )
         try:
             yield (train_file_path, output_file_path)
@@ -817,7 +818,7 @@ class TorchDistributor(Distributor):
                     "View stdout logs for detailed error message."
                 )
             try:
-                output = TorchDistributor._get_pickled_output(output_file_path)
+                output = FunctionPickler.get_fn_output(output_file_path)
             except Exception as e:
                 raise RuntimeError(
                     "TorchDistributor failed due to a pickling error. "
