@@ -174,6 +174,12 @@ class SparkConnectPlanner(val sessionHolder: SessionHolder) extends Logging {
 
     if (rel.hasCommon && rel.getCommon.hasPlanId) {
       plan.setTagValue(LogicalPlan.PLAN_ID_TAG, rel.getCommon.getPlanId)
+      // scalastyle:off println
+
+      println()
+      println("Planner get a plan:")
+      println(s"$plan")
+      println()
     }
     plan
   }

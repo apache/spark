@@ -3151,9 +3151,16 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
         // Add Window operators.
         val withWindow = addWindow(windowExpressions, withProject)
 
+        val planId = p.getTagValue(LogicalPlan.PLAN_ID_TAG)
+
         // Finally, generate output columns according to the original projectList.
         val finalProjectList = projectList.map(_.toAttribute)
-        Project(finalProjectList, withWindow)
+        val newProject = Project(finalProjectList, withWindow)
+
+        // retain the plan id used in Spark Connect
+        planId.foreach(newProject.setTagValue(LogicalPlan.PLAN_ID_TAG, _))
+
+        newProject
     }
   }
 
