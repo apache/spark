@@ -1001,6 +1001,22 @@ class UtilsTestsMixin:
         assertDataFrameEqual(df1, df2, checkRowOrder=False)
         assertDataFrameEqual(df1, df2, checkRowOrder=True)
 
+    def test_empty_expected_list(self):
+        df1 = self.spark.range(0, 10).drop("id")
+
+        df2 = []
+
+        assertDataFrameEqual(df1, df2, checkRowOrder=False)
+        assertDataFrameEqual(df1, df2, checkRowOrder=True)
+
+    def test_no_column_expected_list(self):
+        df1 = self.spark.range(0, 10).limit(0)
+
+        df2 = []
+
+        assertDataFrameEqual(df1, df2, checkRowOrder=False)
+        assertDataFrameEqual(df1, df2, checkRowOrder=True)
+
     def test_empty_no_column_expected_list(self):
         df1 = self.spark.range(0, 10).drop("id").limit(0)
 
