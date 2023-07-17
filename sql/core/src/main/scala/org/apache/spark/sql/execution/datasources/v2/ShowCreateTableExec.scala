@@ -34,15 +34,16 @@ import org.apache.spark.unsafe.types.UTF8String
  */
 case class ShowCreateTableExec(
     output: Seq[Attribute],
-    table: Table) extends V2CommandExec with LeafExecNode {
+    table: Table,
+    quotedName: String) extends V2CommandExec with LeafExecNode {
   override protected def run(): Seq[InternalRow] = {
     val builder = new StringBuilder
-    showCreateTable(table, builder)
+    showCreateTable(table, builder, quotedName)
     Seq(InternalRow(UTF8String.fromString(builder.toString)))
   }
 
   private def showCreateTable(table: Table, builder: StringBuilder): Unit = {
-    builder ++= s"CREATE TABLE ${table.name()} "
+    builder ++= s"CREATE TABLE ${quotedName} "
 
     showTableDataColumns(table, builder)
     showTableUsing(table, builder)

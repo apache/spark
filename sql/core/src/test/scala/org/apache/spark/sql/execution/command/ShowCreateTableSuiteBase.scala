@@ -183,6 +183,22 @@ trait ShowCreateTableSuiteBase extends QueryTest with DDLCommandTestUtils {
     }
   }
 
+  test("should quote identifiers with special characters") {
+    withNamespaceAndTable("`a_schema-with+special^chars`", "`a_table-with+special^chars`") { t =>
+      sql(s"""
+           |CREATE TABLE $t (
+           |  a bigint NOT NULL,
+           |  b bigint
+           |)
+           |USING ${classOf[SimpleInsertSource].getName}
+        """.stripMargin)
+      val showDDL = getShowCreateDDL(t)
+      assert(
+        showDDL(0) == s"CREATE TABLE test_catalog.`a_schema-with+special^chars`.`a_table-with+special^chars` ("
+      )
+    }
+  }
+
   def getShowCreateDDL(table: String, serde: Boolean = false): Array[String] = {
     val result = if (serde) {
       sql(s"SHOW CREATE TABLE $table AS SERDE")
