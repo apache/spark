@@ -1858,7 +1858,7 @@ object SQLConf {
       .doc("Number of threads in the thread pool that perform clean up and snapshotting tasks " +
         "for stateful streaming queries.")
       .intConf
-      .checkValue(_ >= 0, "Must not be negative")
+      .checkValue(_ > 0, "Must be greater than 0")
         .createWithDefault(Math.max(Runtime.getRuntime.availableProcessors() / 4, 1))
 
   val STATE_SCHEMA_CHECK_ENABLED =
