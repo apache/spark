@@ -31,84 +31,61 @@ try:
     import resource
 except ImportError:
     has_resource_module = False
-import traceback
-import warnings
-import faulthandler
 
-from pyspark.accumulators import _accumulatorRegistry
-from pyspark.broadcast import Broadcast, _broadcastRegistry
 from pyspark.java_gateway import local_connect_and_auth
-from pyspark.taskcontext import BarrierTaskContext, TaskContext
-from pyspark.files import SparkFiles
-from pyspark.resource import ResourceInformation
-from pyspark.rdd import PythonEvalType
 from pyspark.serializers import (
-    write_with_length,
     write_int,
     read_long,
-    read_bool,
-    write_long,
-    read_int,
     SpecialLengths,
     UTF8Deserializer,
     CPickleSerializer,
-    BatchedSerializer,
 )
-from pyspark.sql.pandas.serializers import (
-    ArrowStreamPandasUDFSerializer,
-    CogroupUDFSerializer,
-    ArrowStreamUDFSerializer,
-    ApplyInPandasWithStateSerializer,
-)
-from pyspark.sql.pandas.types import to_arrow_type
-from pyspark.sql.types import StructType
-from pyspark.util import fail_on_stopiteration, try_simplify_traceback
-from pyspark import shuffle
 from pyspark import worker
 from pyspark.sql import SparkSession
 
 pickleSer = CPickleSerializer()
 utf8_deserializer = UTF8Deserializer()
 
+
 def main(infile, outfile):
+    log_name = "Streaming ForeachBatch worker"
+    connect_url = os.environ["SPARK_CONNECT_LOCAL_URLX"]
     sessionId = utf8_deserializer.loads(infile)
-    print("##### sessionId in python process is", sessionId)
-    sparkConnectSession = SparkSession.builder.remote("sc://localhost:15002").getOrCreate()
+
+    print(f"{log_name} is starting with url {connect_url} and sessionId {sessionId}.")
+
+    sparkConnectSession = SparkSession.builder.remote(connect_url).getOrCreate()
     sparkConnectSession._client._session_id = sessionId
 
-    # XXX Need to pass in user id. Any other credentials?
+    # TODO: Pass credentials.
+    # TODO: Enable Process Isolation
 
-    func, _ = worker.read_command(pickleSer, infile)
-    print("##### func test test in python process is", func)
-
-    write_int(9999, outfile)
-    print("##### write data 9999 to server", func)
+    func = worker.read_command(pickleSer, infile)
+    write_int(0, outfile) # Indicate successful initialization
 
     outfile.flush()
 
-    def process(dfRefId, batchId):
-        print('##### start processing dfRefId', dfRefId)
-        batchDf = sparkConnectSession.createRefDataFrame(dfRefId) # Use new id.
+    def process(dfId, batchId):
+        print(f"{log_name} Started batch {batchId} with DF id {dfId}")
+        batchDf = sparkConnectSession._createRemoteDataFrame(dfId)
         func(batchDf, batchId)
+        print(f"{log_name} Completed batch {batchId} with DF id {dfId}")
 
     while True:
         dfRefId = utf8_deserializer.loads(infile)
-        print("##### dfRefId received from python process is", dfRefId)
         batchId = read_long(infile)
-        print("##### batchId received from python process is", batchId)
-        process(dfRefId, int(batchId)) # Handle errors.
-        write_int(SpecialLengths.END_OF_MICRO_BATCH, outfile)
+        process(dfRefId, int(batchId))  # TODO:     Propagate error better to the user.
+        write_int(0, outfile)
         outfile.flush()
 
 
 if __name__ == "__main__":
-    print("##### start streaming worker.py")
+    print("Starting streaming worker")
 
     # Read information about how to connect back to the JVM from the environment.
     java_port = int(os.environ["PYTHON_WORKER_FACTORY_PORT"])
     auth_secret = os.environ["PYTHON_WORKER_FACTORY_SECRET"]
     (sock_file, _) = local_connect_and_auth(java_port, auth_secret)
-    # TODO: Remove the following two lines and use `Process.pid()` when we drop JDK 8.
     write_int(os.getpid(), sock_file)
     sock_file.flush()
     main(sock_file, sock_file)

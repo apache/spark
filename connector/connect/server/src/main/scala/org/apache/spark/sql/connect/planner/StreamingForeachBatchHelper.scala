@@ -24,6 +24,7 @@ import org.apache.spark.api.python.StreamingPythonRunner
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.connect.service.SessionHolder
+import org.apache.spark.sql.connect.service.SparkConnectService
 
 /**
  * A helper class for handling ForeachBatch related functionality in Spark Connect servers
@@ -81,7 +82,9 @@ object StreamingForeachBatchHelper extends Logging {
     pythonFn: SimplePythonFunction,
     sessionHolder: SessionHolder): ForeachBatchFnType = {
 
-    val runner = StreamingPythonRunner(pythonFn)
+    val port = SparkConnectService.localPort
+    val connectUrl = s"sc://localhost:$port/;user_id=${sessionHolder.userId}"
+    val runner = StreamingPythonRunner(pythonFn, connectUrl)
     val (dataOut, dataIn) = runner.init(sessionHolder.sessionId)
 
     val foreachBatchRunnerFn: FnArgsWithId => Unit = (args: FnArgsWithId) => {
@@ -89,6 +92,12 @@ object StreamingForeachBatchHelper extends Logging {
       // TODO: Set userId
       // TODO: Auth credentials
       // TODO: The current protocol is very basic. Improve this, especially for SafeSpark.
+
+      // TODO: A new session id pointing to args.df.sparKSEssion needs to be created.
+      //     This is because MicroBatch execution clones the session during start.
+      //     The session attached to the foreachBatch dataframe is different from the one the one
+      //     the query was started with.
+
       PythonRDD.writeUTF(args.dfId, dataOut)
       dataOut.writeLong(args.batchId)
       dataOut.flush()
@@ -96,13 +105,21 @@ object StreamingForeachBatchHelper extends Logging {
       val ret = dataIn.readInt()
       log.info(s"Python foreach batch for dfId ${args.dfId} completed (ret: $ret)")
 
-      // TODO: Decide on when to close the python process. Should be part of query shutdown.
-      //     : We could register a query listener.
-      //     : Need the caller to call back with queryId once it is registered.
-      //     : Do this as a follow up PR
+      // When to terminate the runner: See comment below.
       // TODO: What does daemon process mean in this context? Do we need it?
     }
 
     dataFrameCachingWrapper(foreachBatchRunnerFn, sessionHolder)
   }
+
+  // TODO(SPARK-44433): Improve termination of Processes
+  //   The goal is that when a query is terminated, the python process asociated with foreachBatch
+  //   should be terminated. One way to do that is by registering stremaing query listener:
+  //   After pythonForeachBatchWrapper() is invoked by the SparkConnectPlanner.
+  //   At that time, we don't have the streaming queries yet.
+  //   Planner should call back into this helper with the query id when it starts it immediately
+  //   after. Save the query id to StreamingPythonRunner mapping. This mapping should be
+  //   part of the SessionHolder.
+  //   When a query is terminated, check the mapping and terminate any associated runner.
+  //   These runners should be terminated when a session is deleted (due to timeout, etc).
 }

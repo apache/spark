@@ -2709,6 +2709,9 @@ class SparkConnectPlanner(val sessionHolder: SessionHolder) extends Logging {
             writeOp.getForeachBatch.getScalaFunction.getPayload.toByteArray,
             Utils.getContextOrSparkClassLoader)
           StreamingForeachBatchHelper.scalaForeachBatchWrapper(scalaFn, sessionHolder)
+
+        case StreamingForeachFunction.FunctionCase.FUNCTION_NOT_SET =>
+          throw InvalidPlanInput("Unexpected") // Unreachable
       }
 
       writer.foreachBatch(foreachBatchFn)

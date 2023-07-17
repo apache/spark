@@ -29,12 +29,13 @@ import org.apache.spark.internal.config.Python.{PYTHON_AUTH_SOCKET_TIMEOUT, PYTH
 
 
 private[spark] object StreamingPythonRunner {
-  def apply(func: PythonFunction): StreamingPythonRunner = {
-    new StreamingPythonRunner(func)
+  def apply(func: PythonFunction, connectUrl: String): StreamingPythonRunner = {
+    new StreamingPythonRunner(func, connectUrl)
   }
 }
 
-private[spark] class StreamingPythonRunner(func: PythonFunction) extends Logging {
+private[spark] class StreamingPythonRunner(func: PythonFunction, connectUrl: String)
+  extends Logging {
   private val conf = SparkEnv.get.conf
   protected val bufferSize: Int = conf.get(BUFFER_SIZE)
   protected val authSocketTimeout = conf.get(PYTHON_AUTH_SOCKET_TIMEOUT)
@@ -53,9 +54,8 @@ private[spark] class StreamingPythonRunner(func: PythonFunction) extends Logging
 
     envVars.put("SPARK_AUTH_SOCKET_TIMEOUT", authSocketTimeout.toString)
     envVars.put("SPARK_BUFFER_SIZE", bufferSize.toString)
-
-    // For now, not use daemon : XXX What does it mean?
     conf.set(PYTHON_USE_DAEMON, false)
+    envVars.put("SPARK_CONNECT_LOCAL_URL", connectUrl)
 
     // TODO: cache and reuse the pythonWorkerFactory
     val pythonWorkerFactory = new PythonWorkerFactory(pythonExec, envVars.asScala.toMap)
@@ -66,7 +66,7 @@ private[spark] class StreamingPythonRunner(func: PythonFunction) extends Logging
 
     // TODO: verify python version
 
-    // send sessionId
+    // Send sessionId
     PythonRDD.writeUTF(sessionId, dataOut)
 
     // send the user function to python process
@@ -78,10 +78,7 @@ private[spark] class StreamingPythonRunner(func: PythonFunction) extends Logging
     val dataIn = new DataInputStream(new BufferedInputStream(worker.getInputStream, bufferSize))
 
     val resFromPython = dataIn.readInt()
-    log.info("Runner ")
-    // scalastyle:off println
-    println(s"##")
-    // scalastyle:on println
+    log.info(s"Runner initialization returned $resFromPython")
 
     (dataOut, dataIn)
   }
