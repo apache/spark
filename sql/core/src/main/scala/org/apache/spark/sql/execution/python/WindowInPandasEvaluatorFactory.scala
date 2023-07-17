@@ -44,7 +44,6 @@ class WindowInPandasEvaluatorFactory(
     val spillSize: SQLMetric,
     pythonMetrics: Map[String, SQLMetric])
   extends PartitionEvaluatorFactory[InternalRow, InternalRow] with WindowEvaluatorFactoryBase {
-  val conf: SQLConf = SQLConf.get
 
   /**
    * Helper functions and data structures for window bounds
@@ -121,102 +120,103 @@ class WindowInPandasEvaluatorFactory(
     (requiredIndices.sum, lowerBoundIndex, upperBoundIndex, windowBoundTypes)
   }
 
-  // Unwrap the expressions and factories from the map.
-  private val expressionsWithFrameIndex =
-    windowFrameExpressionFactoryPairs.map(_._1).zipWithIndex.flatMap {
-      case (buffer, frameIndex) => buffer.map(expr => (expr, frameIndex))
-    }
-
-  private val expressions = expressionsWithFrameIndex.map(_._1)
-  private val expressionIndexToFrameIndex =
-    expressionsWithFrameIndex.map(_._2).zipWithIndex.map(_.swap).toMap
-
-  private val factories = windowFrameExpressionFactoryPairs.map(_._2).toArray
-
-  private val (numBoundIndices, lowerBoundIndex, upperBoundIndex, frameWindowBoundTypes) =
-    computeWindowBoundHelpers(factories)
-  private val isBounded = { frameIndex: Int => lowerBoundIndex(frameIndex) >= 0 }
-  private val numFrames = factories.length
-
-  private val inMemoryThreshold = conf.windowExecBufferInMemoryThreshold
-  private val spillThreshold = conf.windowExecBufferSpillThreshold
-  private val sessionLocalTimeZone = conf.sessionLocalTimeZone
-  private val largeVarTypes = conf.arrowUseLargeVarTypes
-
-  // Extract window expressions and window functions
-  private val windowExpressions = expressions.flatMap(_.collect { case e: WindowExpression => e })
-  private val udfExpressions = windowExpressions.map { e =>
-    e.windowFunction.asInstanceOf[AggregateExpression].aggregateFunction.asInstanceOf[PythonUDAF]
-  }
-
-  // We shouldn't be chaining anything here.
-  // All chained python functions should only contain one function.
-  private val (pyFuncs, inputs) = udfExpressions.map(collectFunctions).unzip
-  require(pyFuncs.length == expressions.length)
-
-  private val udfWindowBoundTypes = pyFuncs.indices.map(i =>
-    frameWindowBoundTypes(expressionIndexToFrameIndex(i)))
-  private val pythonRunnerConf: Map[String, String] = (ArrowUtils.getPythonRunnerConfMap(conf)
-    + (windowBoundTypeConf -> udfWindowBoundTypes.map(_.value).mkString(",")))
-
-  // Filter child output attributes down to only those that are UDF inputs.
-  // Also eliminate duplicate UDF inputs. This is similar to how other Python UDF node
-  // handles UDF inputs.
-  private val dataInputs = new ArrayBuffer[Expression]
-  private val dataInputTypes = new ArrayBuffer[DataType]
-  private val argOffsets = inputs.map { input =>
-    input.map { e =>
-      if (dataInputs.exists(_.semanticEquals(e))) {
-        dataInputs.indexWhere(_.semanticEquals(e))
-      } else {
-        dataInputs += e
-        dataInputTypes += e.dataType
-        dataInputs.length - 1
-      }
-    }.toArray
-  }.toArray
-
-  // In addition to UDF inputs, we will prepend window bounds for each UDFs.
-  // For bounded windows, we prepend lower bound and upper bound. For unbounded windows,
-  // we no not add window bounds. (strictly speaking, we only need to lower or upper bound
-  // if the window is bounded only on one side, this can be improved in the future)
-
-  // Setting window bounds for each window frames. Each window frame has different bounds so
-  // each has its own window bound columns.
-  private val windowBoundsInput = factories.indices.flatMap { frameIndex =>
-    if (isBounded(frameIndex)) {
-      Seq(
-        BoundReference(lowerBoundIndex(frameIndex), IntegerType, nullable = false),
-        BoundReference(upperBoundIndex(frameIndex), IntegerType, nullable = false)
-      )
-    } else {
-      Seq.empty
-    }
-  }
-
-  // Setting the window bounds argOffset for each UDF. For UDFs with bounded window, argOffset
-  // for the UDF is (lowerBoundOffset, upperBoundOffset, inputOffset1, inputOffset2, ...)
-  // For UDFs with unbounded window, argOffset is (inputOffset1, inputOffset2, ...)
-  pyFuncs.indices.foreach { exprIndex =>
-    val frameIndex = expressionIndexToFrameIndex(exprIndex)
-    if (isBounded(frameIndex)) {
-      argOffsets(exprIndex) =
-        Array(lowerBoundIndex(frameIndex), upperBoundIndex(frameIndex)) ++
-          argOffsets(exprIndex).map(_ + windowBoundsInput.length)
-    } else {
-      argOffsets(exprIndex) = argOffsets(exprIndex).map(_ + windowBoundsInput.length)
-    }
-  }
-
-  private val allInputs = windowBoundsInput ++ dataInputs
-  private val allInputTypes = allInputs.map(_.dataType)
-  private val jobArtifactUUID = JobArtifactSet.getCurrentJobArtifactState.map(_.uuid)
-
   override def createEvaluator(): PartitionEvaluator[InternalRow, InternalRow] = {
     new WindowInPandasPartitionEvaluator()
   }
 
   class WindowInPandasPartitionEvaluator extends PartitionEvaluator[InternalRow, InternalRow] {
+    val conf: SQLConf = SQLConf.get
+
+    // Unwrap the expressions and factories from the map.
+    private val expressionsWithFrameIndex =
+      windowFrameExpressionFactoryPairs.map(_._1).zipWithIndex.flatMap {
+        case (buffer, frameIndex) => buffer.map(expr => (expr, frameIndex))
+      }
+
+    private val expressions = expressionsWithFrameIndex.map(_._1)
+    private val expressionIndexToFrameIndex =
+      expressionsWithFrameIndex.map(_._2).zipWithIndex.map(_.swap).toMap
+
+    private val factories = windowFrameExpressionFactoryPairs.map(_._2).toArray
+
+    private val (numBoundIndices, lowerBoundIndex, upperBoundIndex, frameWindowBoundTypes) =
+      computeWindowBoundHelpers(factories)
+    private val isBounded = { frameIndex: Int => lowerBoundIndex(frameIndex) >= 0 }
+    private val numFrames = factories.length
+
+    private val inMemoryThreshold = conf.windowExecBufferInMemoryThreshold
+    private val spillThreshold = conf.windowExecBufferSpillThreshold
+    private val sessionLocalTimeZone = conf.sessionLocalTimeZone
+    private val largeVarTypes = conf.arrowUseLargeVarTypes
+
+    // Extract window expressions and window functions
+    private val windowExpressions = expressions.flatMap(_.collect { case e: WindowExpression => e })
+    private val udfExpressions = windowExpressions.map { e =>
+      e.windowFunction.asInstanceOf[AggregateExpression].aggregateFunction.asInstanceOf[PythonUDAF]
+    }
+
+    // We shouldn't be chaining anything here.
+    // All chained python functions should only contain one function.
+    private val (pyFuncs, inputs) = udfExpressions.map(collectFunctions).unzip
+    require(pyFuncs.length == expressions.length)
+
+    private val udfWindowBoundTypes = pyFuncs.indices.map(i =>
+      frameWindowBoundTypes(expressionIndexToFrameIndex(i)))
+    private val pythonRunnerConf: Map[String, String] = (ArrowUtils.getPythonRunnerConfMap(conf)
+      + (windowBoundTypeConf -> udfWindowBoundTypes.map(_.value).mkString(",")))
+
+    // Filter child output attributes down to only those that are UDF inputs.
+    // Also eliminate duplicate UDF inputs. This is similar to how other Python UDF node
+    // handles UDF inputs.
+    private val dataInputs = new ArrayBuffer[Expression]
+    private val dataInputTypes = new ArrayBuffer[DataType]
+    private val argOffsets = inputs.map { input =>
+      input.map { e =>
+        if (dataInputs.exists(_.semanticEquals(e))) {
+          dataInputs.indexWhere(_.semanticEquals(e))
+        } else {
+          dataInputs += e
+          dataInputTypes += e.dataType
+          dataInputs.length - 1
+        }
+      }.toArray
+    }.toArray
+
+    // In addition to UDF inputs, we will prepend window bounds for each UDFs.
+    // For bounded windows, we prepend lower bound and upper bound. For unbounded windows,
+    // we no not add window bounds. (strictly speaking, we only need to lower or upper bound
+    // if the window is bounded only on one side, this can be improved in the future)
+
+    // Setting window bounds for each window frames. Each window frame has different bounds so
+    // each has its own window bound columns.
+    private val windowBoundsInput = factories.indices.flatMap { frameIndex =>
+      if (isBounded(frameIndex)) {
+        Seq(
+          BoundReference(lowerBoundIndex(frameIndex), IntegerType, nullable = false),
+          BoundReference(upperBoundIndex(frameIndex), IntegerType, nullable = false)
+        )
+      } else {
+        Seq.empty
+      }
+    }
+
+    // Setting the window bounds argOffset for each UDF. For UDFs with bounded window, argOffset
+    // for the UDF is (lowerBoundOffset, upperBoundOffset, inputOffset1, inputOffset2, ...)
+    // For UDFs with unbounded window, argOffset is (inputOffset1, inputOffset2, ...)
+    pyFuncs.indices.foreach { exprIndex =>
+      val frameIndex = expressionIndexToFrameIndex(exprIndex)
+      if (isBounded(frameIndex)) {
+        argOffsets(exprIndex) =
+          Array(lowerBoundIndex(frameIndex), upperBoundIndex(frameIndex)) ++
+            argOffsets(exprIndex).map(_ + windowBoundsInput.length)
+      } else {
+        argOffsets(exprIndex) = argOffsets(exprIndex).map(_ + windowBoundsInput.length)
+      }
+    }
+
+    private val allInputs = windowBoundsInput ++ dataInputs
+    private val allInputTypes = allInputs.map(_.dataType)
+    private val jobArtifactUUID = JobArtifactSet.getCurrentJobArtifactState.map(_.uuid)
 
     override def eval(
         partitionIndex: Int,

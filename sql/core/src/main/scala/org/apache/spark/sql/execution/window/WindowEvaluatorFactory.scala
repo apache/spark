@@ -34,7 +34,6 @@ trait WindowEvaluatorFactoryBase {
   def windowExpression: Seq[NamedExpression]
   def partitionSpec: Seq[Expression]
   def orderSpec: Seq[SortOrder]
-  def conf: SQLConf
   def childOutput: Seq[Attribute]
   def spillSize: SQLMetric
 
@@ -298,19 +297,19 @@ class WindowEvaluatorFactory(
     val childOutput: Seq[Attribute],
     val spillSize: SQLMetric)
   extends PartitionEvaluatorFactory[InternalRow, InternalRow] with WindowEvaluatorFactoryBase {
-  val conf: SQLConf = SQLConf.get
-
-  // Unwrap the window expressions and window frame factories from the map.
-  val expressions = windowFrameExpressionFactoryPairs.flatMap(_._1)
-  val factories = windowFrameExpressionFactoryPairs.map(_._2).toArray
-  val inMemoryThreshold = conf.windowExecBufferInMemoryThreshold
-  val spillThreshold = conf.windowExecBufferSpillThreshold
 
   override def createEvaluator(): PartitionEvaluator[InternalRow, InternalRow] = {
     new WindowPartitionEvaluator()
   }
 
   class WindowPartitionEvaluator extends PartitionEvaluator[InternalRow, InternalRow] {
+    val conf: SQLConf = SQLConf.get
+
+    // Unwrap the window expressions and window frame factories from the map.
+    val expressions = windowFrameExpressionFactoryPairs.flatMap(_._1)
+    val factories = windowFrameExpressionFactoryPairs.map(_._2).toArray
+    val inMemoryThreshold = conf.windowExecBufferInMemoryThreshold
+    val spillThreshold = conf.windowExecBufferSpillThreshold
 
     override def eval(
         partitionIndex: Int,
