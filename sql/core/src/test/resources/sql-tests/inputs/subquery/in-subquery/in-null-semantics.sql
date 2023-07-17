@@ -2,11 +2,11 @@ create temp view v (c) as values (1), (null);
 create temp view v_empty (e) as select 1 where false;
 
 -- Note: tables and temp views hit different optimization/execution codepaths
-create table t(c int) using parquet;
+create table t(c int) using json;
 insert into t values (1), (null);
-create table t2(d int) using parquet;
+create table t2(d int) using json;
 insert into t2 values (2);
-create table t_empty(e int) using parquet;
+create table t_empty(e int) using json;
 
 
 

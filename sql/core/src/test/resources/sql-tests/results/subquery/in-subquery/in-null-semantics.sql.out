@@ -16,7 +16,7 @@ struct<>
 
 
 -- !query
-create table t(c int) using parquet
+create table t(c int) using json
 -- !query schema
 struct<>
 -- !query output
@@ -32,7 +32,7 @@ struct<>
 
 
 -- !query
-create table t2(d int) using parquet
+create table t2(d int) using json
 -- !query schema
 struct<>
 -- !query output
@@ -48,7 +48,7 @@ struct<>
 
 
 -- !query
-create table t_empty(e int) using parquet
+create table t_empty(e int) using json
 -- !query schema
 struct<>
 -- !query output

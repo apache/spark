@@ -16,7 +16,7 @@ CreateViewCommand `v_empty`, [(e,None)], select 1 where false, false, false, Loc
 
 
 -- !query
-create table t(c int) using parquet
+create table t(c int) using json
 -- !query analysis
 CreateDataSourceTableCommand `spark_catalog`.`default`.`t`, false
 
@@ -24,13 +24,13 @@ CreateDataSourceTableCommand `spark_catalog`.`default`.`t`, false
 -- !query
 insert into t values (1), (null)
 -- !query analysis
-InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/t, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/t], Append, `spark_catalog`.`default`.`t`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/t), [c]
+InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/t, false, JSON, [path=file:[not included in comparison]/{warehouse_dir}/t], Append, `spark_catalog`.`default`.`t`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/t), [c]
 +- Project [cast(col1#x as int) AS c#x]
    +- LocalRelation [col1#x]
 
 
 -- !query
-create table t2(d int) using parquet
+create table t2(d int) using json
 -- !query analysis
 CreateDataSourceTableCommand `spark_catalog`.`default`.`t2`, false
 
@@ -38,13 +38,13 @@ CreateDataSourceTableCommand `spark_catalog`.`default`.`t2`, false
 -- !query
 insert into t2 values (2)
 -- !query analysis
-InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/t2, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/t2], Append, `spark_catalog`.`default`.`t2`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/t2), [d]
+InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/t2, false, JSON, [path=file:[not included in comparison]/{warehouse_dir}/t2], Append, `spark_catalog`.`default`.`t2`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/t2), [d]
 +- Project [cast(col1#x as int) AS d#x]
    +- LocalRelation [col1#x]
 
 
 -- !query
-create table t_empty(e int) using parquet
+create table t_empty(e int) using json
 -- !query analysis
 CreateDataSourceTableCommand `spark_catalog`.`default`.`t_empty`, false
 
@@ -61,9 +61,9 @@ select c, c in (select e from t_empty) from t
 Project [c#x, c#x IN (list#x []) AS (c IN (listquery()))#x]
 :  +- Project [e#x]
 :     +- SubqueryAlias spark_catalog.default.t_empty
-:        +- Relation spark_catalog.default.t_empty[e#x] parquet
+:        +- Relation spark_catalog.default.t_empty[e#x] json
 +- SubqueryAlias spark_catalog.default.t
-   +- Relation spark_catalog.default.t[c#x] parquet
+   +- Relation spark_catalog.default.t[c#x] json
 
 
 -- !query
@@ -89,9 +89,9 @@ select c, c not in (select e from t_empty) from t
 Project [c#x, NOT c#x IN (list#x []) AS (NOT (c IN (listquery())))#x]
 :  +- Project [e#x]
 :     +- SubqueryAlias spark_catalog.default.t_empty
-:        +- Relation spark_catalog.default.t_empty[e#x] parquet
+:        +- Relation spark_catalog.default.t_empty[e#x] json
 +- SubqueryAlias spark_catalog.default.t
-   +- Relation spark_catalog.default.t[c#x] parquet
+   +- Relation spark_catalog.default.t[c#x] json
 
 
 -- !query
@@ -118,7 +118,7 @@ Project [cast(null as int) IN (list#x []) AS (NULL IN (listquery()))#x]
 :  +- Project [e#x]
 :     +- Project [e#x]
 :        +- SubqueryAlias spark_catalog.default.t_empty
-:           +- Relation spark_catalog.default.t_empty[e#x] parquet
+:           +- Relation spark_catalog.default.t_empty[e#x] json
 +- OneRowRelation
 
 
@@ -144,7 +144,7 @@ Project [NOT cast(null as int) IN (list#x []) AS (NOT (NULL IN (listquery())))#x
 :  +- Project [e#x]
 :     +- Project [e#x]
 :        +- SubqueryAlias spark_catalog.default.t_empty
-:           +- Relation spark_catalog.default.t_empty[e#x] parquet
+:           +- Relation spark_catalog.default.t_empty[e#x] json
 +- OneRowRelation
 
 
@@ -170,11 +170,11 @@ Project [c#x, d#x]
 +- Join LeftOuter, isnull(c#x IN (list#x []))
    :  +- Project [e#x]
    :     +- SubqueryAlias spark_catalog.default.t_empty
-   :        +- Relation spark_catalog.default.t_empty[e#x] parquet
+   :        +- Relation spark_catalog.default.t_empty[e#x] json
    :- SubqueryAlias spark_catalog.default.t
-   :  +- Relation spark_catalog.default.t[c#x] parquet
+   :  +- Relation spark_catalog.default.t[c#x] json
    +- SubqueryAlias spark_catalog.default.t2
-      +- Relation spark_catalog.default.t2[d#x] parquet
+      +- Relation spark_catalog.default.t2[d#x] json
 
 
 -- !query
@@ -184,11 +184,11 @@ Project [c#x, d#x]
 +- Join LeftOuter, isnull(NOT c#x IN (list#x []))
    :  +- Project [e#x]
    :     +- SubqueryAlias spark_catalog.default.t_empty
-   :        +- Relation spark_catalog.default.t_empty[e#x] parquet
+   :        +- Relation spark_catalog.default.t_empty[e#x] json
    :- SubqueryAlias spark_catalog.default.t
-   :  +- Relation spark_catalog.default.t[c#x] parquet
+   :  +- Relation spark_catalog.default.t[c#x] json
    +- SubqueryAlias spark_catalog.default.t2
-      +- Relation spark_catalog.default.t2[d#x] parquet
+      +- Relation spark_catalog.default.t2[d#x] json
 
 
 -- !query
@@ -204,7 +204,7 @@ Project [cast(null as int) IN (list#x []) AS (NULL IN (listquery()))#x]
 :  +- Project [e#x]
 :     +- Project [e#x]
 :        +- SubqueryAlias spark_catalog.default.t_empty
-:           +- Relation spark_catalog.default.t_empty[e#x] parquet
+:           +- Relation spark_catalog.default.t_empty[e#x] json
 +- OneRowRelation
 
 
@@ -230,7 +230,7 @@ Project [NOT cast(null as int) IN (list#x []) AS (NOT (NULL IN (listquery())))#x
 :  +- Project [e#x]
 :     +- Project [e#x]
 :        +- SubqueryAlias spark_catalog.default.t_empty
-:           +- Relation spark_catalog.default.t_empty[e#x] parquet
+:           +- Relation spark_catalog.default.t_empty[e#x] json
 +- OneRowRelation
 
 
@@ -256,11 +256,11 @@ Project [c#x, d#x]
 +- Join LeftOuter, isnull(c#x IN (list#x []))
    :  +- Project [e#x]
    :     +- SubqueryAlias spark_catalog.default.t_empty
-   :        +- Relation spark_catalog.default.t_empty[e#x] parquet
+   :        +- Relation spark_catalog.default.t_empty[e#x] json
    :- SubqueryAlias spark_catalog.default.t
-   :  +- Relation spark_catalog.default.t[c#x] parquet
+   :  +- Relation spark_catalog.default.t[c#x] json
    +- SubqueryAlias spark_catalog.default.t2
-      +- Relation spark_catalog.default.t2[d#x] parquet
+      +- Relation spark_catalog.default.t2[d#x] json
 
 
 -- !query
@@ -270,11 +270,11 @@ Project [c#x, d#x]
 +- Join LeftOuter, isnull(NOT c#x IN (list#x []))
    :  +- Project [e#x]
    :     +- SubqueryAlias spark_catalog.default.t_empty
-   :        +- Relation spark_catalog.default.t_empty[e#x] parquet
+   :        +- Relation spark_catalog.default.t_empty[e#x] json
    :- SubqueryAlias spark_catalog.default.t
-   :  +- Relation spark_catalog.default.t[c#x] parquet
+   :  +- Relation spark_catalog.default.t[c#x] json
    +- SubqueryAlias spark_catalog.default.t2
-      +- Relation spark_catalog.default.t2[d#x] parquet
+      +- Relation spark_catalog.default.t2[d#x] json
 
 
 -- !query
