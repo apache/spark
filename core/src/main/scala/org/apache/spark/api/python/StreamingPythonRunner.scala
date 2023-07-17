@@ -44,6 +44,10 @@ private[spark] class StreamingPythonRunner(func: PythonFunction, connectUrl: Str
   private val pythonExec: String = func.pythonExec
   protected val pythonVer: String = func.pythonVer
 
+  /**
+   * Initializes the Python worker for streaming functions. Sets up Spark Connect session
+   * to be used with the functions.
+   */
   def init(sessionId: String): (DataOutputStream, DataInputStream) = {
     log.info(s"Initializing Python runner (session: $sessionId ,pythonExec: $pythonExec")
 
@@ -57,7 +61,6 @@ private[spark] class StreamingPythonRunner(func: PythonFunction, connectUrl: Str
     conf.set(PYTHON_USE_DAEMON, false)
     envVars.put("SPARK_CONNECT_LOCAL_URL", connectUrl)
 
-    // TODO: cache and reuse the pythonWorkerFactory
     val pythonWorkerFactory = new PythonWorkerFactory(pythonExec, envVars.asScala.toMap)
     val (worker: Socket, _) = pythonWorkerFactory.createStreamingWorker()
 
@@ -82,5 +85,4 @@ private[spark] class StreamingPythonRunner(func: PythonFunction, connectUrl: Str
 
     (dataOut, dataIn)
   }
-
 }

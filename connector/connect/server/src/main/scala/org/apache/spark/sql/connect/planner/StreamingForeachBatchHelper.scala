@@ -77,6 +77,11 @@ object StreamingForeachBatchHelper extends Logging {
       sessionHolder)
   }
 
+  /**
+   * Starts up Python worker and initializes it with Python function.
+   * Returns a foreachBatch function that sets up the session and Dataframe cache and
+   * and interacts with the Python worker to execute user's function.
+   */
   def pythonForeachBatchWrapper(
       pythonFn: SimplePythonFunction,
       sessionHolder: SessionHolder): ForeachBatchFnType = {
@@ -88,13 +93,11 @@ object StreamingForeachBatchHelper extends Logging {
 
     val foreachBatchRunnerFn: FnArgsWithId => Unit = (args: FnArgsWithId) => {
 
-      // TODO: Auth credentials
-      // TODO: The current protocol is very basic. Improve this, especially for SafeSpark.
-
-      // TODO: A new session id pointing to args.df.sparKSEssion needs to be created.
+      // TODO(SPARK-44460): Support Auth credentials
+      // TODO(SPARK-44462): A new session id pointing to args.df.sparkSession needs to be created.
       //     This is because MicroBatch execution clones the session during start.
       //     The session attached to the foreachBatch dataframe is different from the one the one
-      //     the query was started with.
+      //     the query was started with. `sessionHolder` here contains the latter.
 
       PythonRDD.writeUTF(args.dfId, dataOut)
       dataOut.writeLong(args.batchId)
@@ -102,7 +105,6 @@ object StreamingForeachBatchHelper extends Logging {
 
       val ret = dataIn.readInt()
       log.info(s"Python foreach batch for dfId ${args.dfId} completed (ret: $ret)")
-
     }
 
     dataFrameCachingWrapper(foreachBatchRunnerFn, sessionHolder)

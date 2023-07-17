@@ -57,8 +57,8 @@ def main(infile, outfile):
     sparkConnectSession = SparkSession.builder.remote(connect_url).getOrCreate()
     sparkConnectSession._client._session_id = sessionId
 
-    # TODO: Pass credentials.
-    # TODO: Enable Process Isolation
+    # TODO(SPARK-44460): Pass credentials.
+    # TODO(SPARK-44461): Enable Process Isolation
 
     func = worker.read_command(pickleSer, infile)
     write_int(0, outfile)  # Indicate successful initialization
