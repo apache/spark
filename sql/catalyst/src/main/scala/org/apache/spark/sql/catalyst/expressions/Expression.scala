@@ -26,6 +26,7 @@ import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateFunction
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
+import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.trees.{BinaryLike, CurrentOrigin, LeafLike, QuaternaryLike, SQLQueryContext, TernaryLike, TreeNode, UnaryLike}
 import org.apache.spark.sql.catalyst.trees.TreePattern.{RUNTIME_REPLACEABLE, TreePattern}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
@@ -343,8 +344,14 @@ abstract class Expression extends TreeNode[Expression] {
 
   override def simpleString(maxFields: Int): String = toString
 
-  override def toString: String = prettyName + truncatedString(
-    flatArguments.toSeq, "(", ", ", ")", SQLConf.get.maxToStringFields)
+  override def toString: String = {
+    val str = prettyName + truncatedString(
+      flatArguments.toSeq, "(", ", ", ")", SQLConf.get.maxToStringFields)
+    this.getTagValue(LogicalPlan.PLAN_ID_TAG) match {
+      case Some(planId) => s"$str {planId=$planId}"
+      case _ => str
+    }
+  }
 
   /**
    * Returns SQL representation of this expression.  For expressions extending [[NonSQLExpression]],

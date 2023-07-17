@@ -823,6 +823,7 @@ class SparkConnectClient(object):
         Return schema for given plan.
         """
         logger.info(f"Schema for plan: {self._proto_to_string(plan)}")
+        print(f"Schema for plan: {self._proto_to_string(plan)}")
         schema = self._analyze(method="schema", plan=plan).schema
         assert schema is not None
         # Server side should populate the struct field which is the schema.

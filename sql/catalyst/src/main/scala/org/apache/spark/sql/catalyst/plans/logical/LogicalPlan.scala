@@ -125,6 +125,15 @@ abstract class LogicalPlan
     }
   }
 
+  override def simpleString(maxFields: Int): String = {
+    val str = super.simpleString(maxFields)
+    this.getTagValue(LogicalPlan.PLAN_ID_TAG) match {
+      case Some(planId) => s"$str {planId=$planId}"
+      case _ => str
+    }
+  }
+
+
   private[this] lazy val childAttributes = AttributeSeq.fromNormalOutput(children.flatMap(_.output))
 
   private[this] lazy val childMetadataAttributes = AttributeSeq(children.flatMap(_.metadataOutput))

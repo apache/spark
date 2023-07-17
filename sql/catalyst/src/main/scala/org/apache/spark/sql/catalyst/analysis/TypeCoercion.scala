@@ -256,7 +256,9 @@ abstract class TypeCoercionBase {
   object WidenSetOperationTypes extends Rule[LogicalPlan] {
 
     override def apply(plan: LogicalPlan): LogicalPlan = {
-      plan resolveOperatorsUpWithNewOutput {
+      val planId = plan.getTagValue(LogicalPlan.PLAN_ID_TAG)
+
+      val newPlan = plan resolveOperatorsUpWithNewOutput {
         case s @ Except(left, right, isAll) if s.childrenResolved &&
           left.output.length == right.output.length && !s.resolved =>
           val newChildren: Seq[LogicalPlan] = buildNewChildrenWithWiderTypes(left :: right :: Nil)
@@ -290,6 +292,11 @@ abstract class TypeCoercionBase {
             s.copy(children = newChildren) -> attrMapping
           }
       }
+
+      // retain the plan id used in Spark Connect
+      planId.foreach(newPlan.setTagValue(LogicalPlan.PLAN_ID_TAG, _))
+
+      newPlan
     }
 
     /** Build new children with the widest types for each attribute among all the children */
