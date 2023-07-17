@@ -89,7 +89,6 @@ object StreamingForeachBatchHelper extends Logging {
 
     val foreachBatchRunnerFn: FnArgsWithId => Unit = (args: FnArgsWithId) => {
 
-      // TODO: Set userId
       // TODO: Auth credentials
       // TODO: The current protocol is very basic. Improve this, especially for SafeSpark.
 
@@ -105,8 +104,6 @@ object StreamingForeachBatchHelper extends Logging {
       val ret = dataIn.readInt()
       log.info(s"Python foreach batch for dfId ${args.dfId} completed (ret: $ret)")
 
-      // When to terminate the runner: See comment below.
-      // TODO: What does daemon process mean in this context? Do we need it?
     }
 
     dataFrameCachingWrapper(foreachBatchRunnerFn, sessionHolder)
