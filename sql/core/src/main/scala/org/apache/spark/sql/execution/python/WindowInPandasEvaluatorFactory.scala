@@ -125,7 +125,7 @@ class WindowInPandasEvaluatorFactory(
   }
 
   class WindowInPandasPartitionEvaluator extends PartitionEvaluator[InternalRow, InternalRow] {
-    val conf: SQLConf = SQLConf.get
+    private val conf: SQLConf = SQLConf.get
 
     // Unwrap the expressions and factories from the map.
     private val expressionsWithFrameIndex =

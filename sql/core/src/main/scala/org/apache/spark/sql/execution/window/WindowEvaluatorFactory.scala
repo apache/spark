@@ -178,7 +178,7 @@ trait WindowEvaluatorFactoryBase {
 
     // Map the groups to a (unbound) expression and frame factory pair.
     var numExpressions = 0
-    val timeZone = conf.sessionLocalTimeZone
+    val timeZone = SQLConf.get.sessionLocalTimeZone
     framedFunctions.toSeq.map {
       case (key, (expressions, functionSeq)) =>
         val ordinal = numExpressions
@@ -303,13 +303,13 @@ class WindowEvaluatorFactory(
   }
 
   class WindowPartitionEvaluator extends PartitionEvaluator[InternalRow, InternalRow] {
-    val conf: SQLConf = SQLConf.get
+    private val conf: SQLConf = SQLConf.get
 
     // Unwrap the window expressions and window frame factories from the map.
-    val expressions = windowFrameExpressionFactoryPairs.flatMap(_._1)
-    val factories = windowFrameExpressionFactoryPairs.map(_._2).toArray
-    val inMemoryThreshold = conf.windowExecBufferInMemoryThreshold
-    val spillThreshold = conf.windowExecBufferSpillThreshold
+    private val expressions = windowFrameExpressionFactoryPairs.flatMap(_._1)
+    private val factories = windowFrameExpressionFactoryPairs.map(_._2).toArray
+    private val inMemoryThreshold = conf.windowExecBufferInMemoryThreshold
+    private val spillThreshold = conf.windowExecBufferSpillThreshold
 
     override def eval(
         partitionIndex: Int,
