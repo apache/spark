@@ -887,6 +887,16 @@ case class WithCTE(plan: LogicalPlan, cteDefs: Seq[CTERelationDef]) extends Logi
   }
 }
 
+/**
+ * The logical node which is able to place the `WithCTE` node on its children.
+ */
+trait CTEInChildren extends LogicalPlan {
+  def withCTEDefs(cteDefs: Seq[CTERelationDef]): LogicalPlan = {
+    withNewChildren(children.map(WithCTE(_, cteDefs)))
+  }
+}
+
+
 case class WithWindowDefinition(
     windowDefinitions: Map[String, WindowSpecDefinition],
     child: LogicalPlan) extends UnaryNode {
@@ -894,15 +904,6 @@ case class WithWindowDefinition(
   final override val nodePatterns: Seq[TreePattern] = Seq(WITH_WINDOW_DEFINITION)
   override protected def withNewChildInternal(newChild: LogicalPlan): WithWindowDefinition =
     copy(child = newChild)
-}
-
-/**
- * The logical node is able to insert the given `WithCTE` into its children.
- */
-trait CTEInChildren extends LogicalPlan {
-  def withCTE(withCTE: WithCTE): LogicalPlan = {
-    withNewChildren(children.map(withCTE.withNewPlan))
-  }
 }
 
 /**

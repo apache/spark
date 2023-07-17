@@ -21,7 +21,7 @@ import java.net.URI
 
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.catalog._
-import org.apache.spark.sql.catalyst.plans.logical.{CTEInChildren, LogicalPlan, WithCTE}
+import org.apache.spark.sql.catalyst.plans.logical.{CTEInChildren, CTERelationDef, LogicalPlan, WithCTE}
 import org.apache.spark.sql.catalyst.util.{removeInternalMetadata, CharVarcharUtils}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.CommandExecutionMode
@@ -234,7 +234,7 @@ case class CreateDataSourceTableAsSelectCommand(
     }
   }
 
-  override def withCTE(withCTE: WithCTE): LogicalPlan = {
-    copy(query = withCTE.copy(plan = this.query))
+  override def withCTEDefs(cteDefs: Seq[CTERelationDef]): LogicalPlan = {
+    copy(query = WithCTE(query, cteDefs))
   }
 }

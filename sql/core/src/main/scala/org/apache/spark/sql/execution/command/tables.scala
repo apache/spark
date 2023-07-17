@@ -748,8 +748,8 @@ case class DescribeQueryCommand(queryText: String, plan: LogicalPlan)
     result.toSeq
   }
 
-  override def withCTE(withCTE: WithCTE): LogicalPlan = {
-    copy(plan = withCTE.copy(plan = this.plan))
+  override def withCTEDefs(cteDefs: Seq[CTERelationDef]): LogicalPlan = {
+    copy(plan = WithCTE(plan, cteDefs))
   }
 }
 

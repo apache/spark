@@ -393,15 +393,13 @@ case class WriteDelta(
 }
 
 trait V2CreateTableAsSelectPlan
-    extends V2CreateTablePlan
+  extends V2CreateTablePlan
     with AnalysisOnlyCommand
     with CTEInChildren {
   def query: LogicalPlan
 
-  override def withCTE(withCTE: WithCTE): LogicalPlan = {
-    withNameAndQuery(
-      newName = this.name,
-      newQuery = withCTE.copy(plan = this.query))
+  override def withCTEDefs(cteDefs: Seq[CTERelationDef]): LogicalPlan = {
+    withNameAndQuery(newName = name, newQuery = WithCTE(query, cteDefs))
   }
 
   override lazy val resolved: Boolean = childrenResolved && {
@@ -1250,10 +1248,8 @@ case class AlterViewAs(
       newLeft: LogicalPlan, newRight: LogicalPlan): LogicalPlan =
     copy(child = newLeft, query = newRight)
 
-  override def withCTE(withCTE: WithCTE): LogicalPlan = {
-    withNewChildrenInternal(
-      newLeft = this.left,
-      newRight = withCTE.copy(plan = this.right))
+  override def withCTEDefs(cteDefs: Seq[CTERelationDef]): LogicalPlan = {
+    withNewChildren(Seq(child, WithCTE(query, cteDefs)))
   }
 }
 
@@ -1275,10 +1271,8 @@ case class CreateView(
       newLeft: LogicalPlan, newRight: LogicalPlan): LogicalPlan =
     copy(child = newLeft, query = newRight)
 
-  override def withCTE(withCTE: WithCTE): LogicalPlan = {
-    withNewChildrenInternal(
-      newLeft = this.left,
-      newRight = withCTE.copy(plan = this.right))
+  override def withCTEDefs(cteDefs: Seq[CTERelationDef]): LogicalPlan = {
+    withNewChildren(Seq(child, WithCTE(query, cteDefs)))
   }
 }
 
