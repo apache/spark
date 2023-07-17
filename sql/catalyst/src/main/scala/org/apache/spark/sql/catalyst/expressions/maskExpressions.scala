@@ -91,6 +91,7 @@ object MaskExpressionBuilder extends ExpressionBuilder {
   }
 
   override def build(funcName: String, expressions: Seq[Expression]): Expression = {
+    assert(expressions.size == 5)
     new Mask(expressions(0), expressions(1), expressions(2), expressions(3), expressions(4))
   }
 }

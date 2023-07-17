@@ -423,8 +423,10 @@ case class Explode(child: Expression) extends ExplodeBase {
 trait ExplodeGeneratorBuilderBase extends GeneratorBuilder {
   override def functionSignature: Option[FunctionSignature] =
     Some(FunctionSignature(Seq(NamedArgument("collection"))))
-  override def buildGenerator(funcName: String, expressions: Seq[Expression]): Generator =
+  override def buildGenerator(funcName: String, expressions: Seq[Expression]): Generator = {
+    assert(expressions.size == 1)
     Explode(expressions(0))
+  }
 }
 
 // scalastyle:off line.size.limit
@@ -510,6 +512,9 @@ object ExplodeOuterGeneratorBuilder extends ExplodeGeneratorBuilderBase {
   examples = """
     Examples:
       > SELECT _FUNC_(array(10,20));
+       0	10
+       1	20
+      > SELECT * FROM _FUNC_(array(10,20));
        0	10
        1	20
   """,

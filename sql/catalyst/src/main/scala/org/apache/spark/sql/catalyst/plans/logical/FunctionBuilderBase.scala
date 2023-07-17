@@ -165,9 +165,7 @@ object NamedArgumentsSupport {
  * @param default  The default value of the argument. If the default is none, then that means the
  *                 argument is required. If no argument is provided, an exception is thrown.
  */
-case class NamedArgument(
-    name: String,
-    default: Option[Expression] = None)
+case class NamedArgument(name: String, default: Option[Expression] = None)
 
 /**
  * Represents a method signature and the list of arguments it receives as input.
