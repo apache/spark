@@ -346,6 +346,9 @@ def assertDataFrameEqual(
 
     Notes
     -----
+    When assertDataFrameEqual fails, the error message uses the Python `difflib` library to display
+    a diff log of each row that differs in `actual` and `expected`.
+
     For checkRowOrder, note that PySpark DataFrame ordering is non-deterministic, unless
     explicitly sorted.
 
@@ -353,9 +356,6 @@ def assertDataFrameEqual(
     Two float values a and b are approximately equal if the following equation is True:
 
     ``absolute(a - b) <= (atol + rtol * absolute(b))``.
-
-    When assertDataFrameEqual fails, the error message uses the Python `difflib` library to display
-    a diff log of each row that differs in `actual` and `expected`.
 
     Examples
     --------
@@ -375,16 +375,15 @@ def assertDataFrameEqual(
     PySparkAssertionError: [DIFFERENT_ROWS] Results do not match: ( 66.66667 % )
     --- actual
     +++ expected
-
     - Row(id='1', amount=1000.0)
     ?                       ^
     + Row(id='1', amount=1001.0)
     ?                       ^
-
     - Row(id='3', amount=2000.0)
     ?                       ^
     + Row(id='3', amount=2003.0)
     ?                       ^
+
     """
     if actual is None and expected is None:
         return True
