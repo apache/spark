@@ -22,8 +22,7 @@ import java.util.concurrent.TimeUnit
 import scala.io.Source
 
 import org.apache.commons.lang3.{JavaVersion, SystemUtils}
-import org.scalactic.source.Position
-import org.scalatest.{BeforeAndAfterAll, Tag}
+import org.scalatest.BeforeAndAfterAll
 import sys.process._
 
 import org.apache.spark.sql.SparkSession
@@ -224,15 +223,9 @@ trait RemoteSparkSession extends ConnectFunSuite with BeforeAndAfterAll {
   }
 
   /**
-   * SPARK-44259: override test function to skip `RemoteSparkSession-based` tests as default, we
-   * should delete this function after SPARK-44121 is completed.
+   * TODO(SPARK-44121): SPARK-44259: skip all `RemoteSparkSession-based` tests when test using
+   * Java 17+, we should delete this condition after SPARK-44121 is completed.
    */
-  override protected def test(testName: String, testTags: Tag*)(testFun: => Any)(implicit
-      pos: Position): Unit = {
-    super.test(testName, testTags: _*) {
-      // TODO(SPARK-44121) Re-enable Arrow-based connect tests in Java 21
-      assume(SystemUtils.isJavaVersionAtMost(JavaVersion.JAVA_17))
-      testFun
-    }
-  }
+  override protected val runtTestCondition: Boolean =
+    SystemUtils.isJavaVersionAtMost(JavaVersion.JAVA_17)
 }

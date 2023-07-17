@@ -18,6 +18,8 @@ package org.apache.spark.sql.connect.client.util
 
 import java.nio.file.Path
 
+import org.scalactic.source.Position
+import org.scalatest.Tag
 import org.scalatest.funsuite.AnyFunSuite // scalastyle:ignore funsuite
 
 /**
@@ -53,5 +55,22 @@ trait ConnectFunSuite extends AnyFunSuite { // scalastyle:ignore funsuite
       "src",
       "test",
       "resources").toAbsolutePath
+  }
+
+  /**
+   * Override this condition in subclasses when there are execution conditions for the test suite.
+   */
+  protected val runtTestCondition: Boolean = true
+
+  /**
+   * SPARK-44452: override test function to skip all test cases in a TestSuite when
+   * `runtTestCondition` is false.
+   */
+  override protected def test(testName: String, testTags: Tag*)(testFun: => Any)(implicit
+      pos: Position): Unit = {
+    super.test(testName, testTags: _*) {
+      assume(runtTestCondition)
+      testFun
+    }
   }
 }

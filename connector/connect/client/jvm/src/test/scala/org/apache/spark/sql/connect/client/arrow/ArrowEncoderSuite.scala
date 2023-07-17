@@ -29,6 +29,7 @@ import scala.util.control.NonFatal
 import com.google.protobuf.ByteString
 import org.apache.arrow.memory.{BufferAllocator, RootAllocator}
 import org.apache.arrow.vector.VarBinaryVector
+import org.apache.commons.lang3.{JavaVersion, SystemUtils}
 import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.SparkUnsupportedOperationException
@@ -57,6 +58,13 @@ class ArrowEncoderSuite extends ConnectFunSuite with BeforeAndAfterAll {
     super.afterAll()
     allocator.close()
   }
+
+  /**
+   * TODO(SPARK-44121): SPARK-44452: skip `ArrowEncoderSuite` when test using Java 17+, we should
+   * delete this condition after SPARK-44121 is completed.
+   */
+  override protected val runtTestCondition: Boolean =
+    SystemUtils.isJavaVersionAtMost(JavaVersion.JAVA_17)
 
   private def withAllocator[T](f: BufferAllocator => T): T = {
     val allocator = newAllocator("allocator")
