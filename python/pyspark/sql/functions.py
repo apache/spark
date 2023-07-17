@@ -15571,17 +15571,19 @@ def udtf(
     The `analyze` static method should take arguments:
 
     - The number and order of arguments are the same as the UDTF inputs
-    - Each argument is a :class:`pyspark.sql.udtf.UDTFArgumentType`, containing:
+    - Each argument is a :class:`pyspark.sql.udtf.AnalyzeArgument`, containing:
       - data_type: DataType
       - value: Any: if the argument is foldable; otherwise None
       - is_table: bool: True if the argument is TABLE
 
-    and return a :class:`pyspark.sql.udtf.AnalyzeResult`.
+    and return a :class:`pyspark.sql.udtf.AnalyzeResult`, containing.
+
+    - schema: StructType
 
     >>> @udtf
     ... class TestUDTFWithAnalyze:
     ...     @staticmethod
-    ...     def analyze(a: UDTFArgumentType, b: UDTFArgumentType) -> AnalyzeResult:
+    ...     def analyze(a: AnalyzeArgument, b: AnalyzeArgument) -> AnalyzeResult:
     ...         return AnalyzeResult(StructType().add("a", a.data_type).add("b", b.data_type))
     ...
     ...     def eval(self, a, b):
