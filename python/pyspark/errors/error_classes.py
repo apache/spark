@@ -258,14 +258,14 @@ ERROR_CLASSES_JSON = """
       "Argument `<arg_name>` should not be a <data_type>."
     ]
   },
-  "INVALID_TYPE_DF_EQUALITY_ARG" : {
-    "message" : [
-      "Expected type <expected_type> for `<arg_name>` but got type <actual_type>."
-    ]
-  },
   "INVALID_TYPENAME_CALL" : {
     "message" : [
       "StructField does not have typeName. Use typeName on its type explicitly instead."
+    ]
+  },
+  "INVALID_TYPE_DF_EQUALITY_ARG" : {
+    "message" : [
+      "Expected type <expected_type> for `<arg_name>` but got type <actual_type>."
     ]
   },
   "INVALID_UDF_EVAL_TYPE" : {
