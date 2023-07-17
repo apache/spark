@@ -17,6 +17,7 @@
 package org.apache.spark.sql.connect.planner
 
 import java.util.UUID
+import java.util.concurrent.Semaphore
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable
@@ -420,9 +421,9 @@ class SparkConnectServiceSuite extends SharedSparkSession with MockitoSugar with
         .setSessionId("session")
         .build()
 
-      val thread = new Thread {
+      new Thread {
         override def run: Unit = {
-          Thread.sleep(1000)
+          verifyEvents.listener.semaphoreStarted.acquire()
           instance.interrupt(
             proto.InterruptRequest
               .newBuilder()
@@ -719,6 +720,7 @@ class SparkConnectServiceSuite extends SharedSparkSession with MockitoSugar with
     }
     def onError(throwable: Throwable): Unit = {
       waitUntilEmpty()
+      assert(listener.canceled.isEmpty)
       assert(listener.queryError.isDefined)
       assertStatusExpected()
     }
@@ -730,6 +732,7 @@ class SparkConnectServiceSuite extends SharedSparkSession with MockitoSugar with
     def onCanceled(): Unit = {
       waitUntilEmpty()
       assert(listener.canceled.contains(true))
+      assert(listener.queryError.isEmpty)
       assertStatusExpected()
     }
     def onSessionClosed(): Unit = {
@@ -757,6 +760,7 @@ class SparkConnectServiceSuite extends SharedSparkSession with MockitoSugar with
     var statusError: Option[Throwable] = None
     var queryError: Option[String] = None
     var canceled: Option[Boolean] = None
+    val semaphoreStarted = new Semaphore(0)
     override def onOtherEvent(event: SparkListenerEvent): Unit = {
       try {
         _onOtherEvent(event)
@@ -772,6 +776,7 @@ class SparkConnectServiceSuite extends SharedSparkSession with MockitoSugar with
         case e: SparkListenerConnectSessionStarted =>
           logInfo(s"$e")
           status = Status.SessionStarted
+          semaphoreStarted.release()
           assert(prevStatus == Status.Pending, s"$e")
         case e: SparkListenerConnectOperationStarted =>
           logInfo(s"$e")

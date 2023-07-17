@@ -2489,7 +2489,7 @@ class SparkConnectPlanner(val sessionHolder: SessionHolder) extends Logging {
         throw InvalidPlanInput(
           s"Function with ID: ${fun.getFunctionCase.getNumber} is not supported")
     }
-    executeHolder.events.postFinished()
+    executeHolder.eventsManager.postFinished()
   }
 
   private def createPythonUserDefinedTableFunction(
