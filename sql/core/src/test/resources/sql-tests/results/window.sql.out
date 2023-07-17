@@ -1342,3 +1342,91 @@ org.apache.spark.sql.AnalysisException
     "windowName" : "w"
   }
 }
+
+
+-- !query
+create or replace temp view t1 (p, o) as values (1, 1), (1, 1), (1, 2), (2, 1), (2, 1), (2, 2)
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+select * from (select *, dense_rank() over (partition by p order by o) as rnk from t1) where rnk = 1
+-- !query schema
+struct<p:int,o:int,rnk:int>
+-- !query output
+1	1	1
+1	1	1
+2	1	1
+
+
+-- !query
+SELECT * FROM (SELECT cate, val, rank() OVER(PARTITION BY cate ORDER BY val) as r FROM testData) where r = 1
+-- !query schema
+struct<cate:string,val:int,r:int>
+-- !query output
+NULL	NULL	1
+a	NULL	1
+b	1	1
+
+
+-- !query
+SELECT * FROM (SELECT cate, val, rank() OVER(PARTITION BY cate ORDER BY val) as r FROM testData) where r <= 2
+-- !query schema
+struct<cate:string,val:int,r:int>
+-- !query output
+NULL	3	2
+NULL	NULL	1
+a	1	2
+a	1	2
+a	NULL	1
+b	1	1
+b	2	2
+
+
+-- !query
+SELECT * FROM (SELECT cate, val, dense_rank() OVER(PARTITION BY cate ORDER BY val) as r FROM testData) where r = 1
+-- !query schema
+struct<cate:string,val:int,r:int>
+-- !query output
+NULL	NULL	1
+a	NULL	1
+b	1	1
+
+
+-- !query
+SELECT * FROM (SELECT cate, val, dense_rank() OVER(PARTITION BY cate ORDER BY val) as r FROM testData) where r <= 2
+-- !query schema
+struct<cate:string,val:int,r:int>
+-- !query output
+NULL	3	2
+NULL	NULL	1
+a	1	2
+a	NULL	1
+b	1	1
+b	2	2
+
+
+-- !query
+SELECT * FROM (SELECT cate, val, row_number() OVER(PARTITION BY cate ORDER BY val) as r FROM testData) where r = 1
+-- !query schema
+struct<cate:string,val:int,r:int>
+-- !query output
+NULL	NULL	1
+a	NULL	1
+b	1	1
+
+
+-- !query
+SELECT * FROM (SELECT cate, val, row_number() OVER(PARTITION BY cate ORDER BY val) as r FROM testData) where r <= 2
+-- !query schema
+struct<cate:string,val:int,r:int>
+-- !query output
+NULL	3	2
+NULL	NULL	1
+a	1	2
+a	NULL	1
+b	1	1
+b	2	2
