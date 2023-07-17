@@ -60,8 +60,8 @@ class ArrowEncoderSuite extends ConnectFunSuite with BeforeAndAfterAll {
   }
 
   /**
-   * TODO(SPARK-44121): SPARK-44452: skip `ArrowEncoderSuite` when test using Java 17+, we should
-   * delete this condition after SPARK-44121 is completed.
+   * SPARK-44452: skip `ArrowEncoderSuite` when test using Java 17+. TODO(SPARK-44121): delete
+   * this condition after SPARK-44121 is completed.
    */
   override protected val runtTestCondition: Boolean =
     SystemUtils.isJavaVersionAtMost(JavaVersion.JAVA_17)
