@@ -44,7 +44,7 @@ except ImportError:
 
 # Location of your Spark git development area
 SPARK_HOME = os.environ.get("SPARK_HOME", os.getcwd())
-# Remote name which points to the Github site
+# Remote name which points to the Gihub site
 PR_REMOTE_NAME = os.environ.get("PR_REMOTE_NAME", "apache-github")
 # Remote name which points to Apache git
 PUSH_REMOTE_NAME = os.environ.get("PUSH_REMOTE_NAME", "apache")
