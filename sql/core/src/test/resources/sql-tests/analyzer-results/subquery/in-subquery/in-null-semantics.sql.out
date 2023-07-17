@@ -286,16 +286,19 @@ ResetCommand spark.sql.legacy.nullInEmptyListBehavior
 -- !query
 drop table t
 -- !query analysis
-DropTableCommand `spark_catalog`.`default`.`t`, false, false, false
+DropTable false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.t
 
 
 -- !query
 drop table t2
 -- !query analysis
-DropTableCommand `spark_catalog`.`default`.`t2`, false, false, false
+DropTable false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.t2
 
 
 -- !query
 drop table t_empty
 -- !query analysis
-DropTableCommand `spark_catalog`.`default`.`t_empty`, false, false, false
+DropTable false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.t_empty
