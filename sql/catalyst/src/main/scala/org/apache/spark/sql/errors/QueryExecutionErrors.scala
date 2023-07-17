@@ -1443,8 +1443,8 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
       messageParameters = Map(
         "badRecord" -> recordStr,
         "failFastMode" -> FailFastMode.name,
-        "fieldName" -> fieldName,
-        "fieldValue" -> fieldValue,
+        "fieldName" -> toSQLId(fieldName),
+        "fieldValue" -> toSQLValue(fieldValue, StringType),
         "token" -> token.toString,
         "dataType" -> dataType.toString))
   }

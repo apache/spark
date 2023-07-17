@@ -724,8 +724,8 @@ class QueryExecutionErrorsSuite
       parameters = Map(
         "badRecord" -> jsonStr,
         "failFastMode" -> "FAILFAST",
-        "fieldName" -> "a",
-        "fieldValue" -> "str",
+        "fieldName" -> "`a`",
+        "fieldValue" -> "'str'",
         "token" -> "VALUE_STRING",
         "dataType" -> "FloatType"),
       sqlState = "22023")
