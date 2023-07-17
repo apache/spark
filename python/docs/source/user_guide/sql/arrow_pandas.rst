@@ -352,9 +352,9 @@ Here's an example that demonstrates the usage of both a default, pickled Python 
     :lines: 279-297
     :dedent: 4
 
-Compared to the default, pickled Python UDF, Arrow Python UDF provides a more coherent type coercion mechanism. UDF
+Compared to the default, pickled Python UDFs, Arrow Python UDFs provide a more coherent type coercion mechanism. UDF
 type coercion poses challenges when the Python instances returned by UDFs do not align with the user-specified
-return type. The default, pickled Python UDF's type coercion has certain limitations, such as relying on None as a
+return type. The default, pickled Python UDFs' type coercion has certain limitations, such as relying on None as a
 fallback for type mismatches, leading to potential ambiguity and data loss. Additionally, converting date, datetime,
 and tuples to strings can yield ambiguous results. Arrow Python UDFs, on the other hand, leverage Arrow's
 capabilities to standardize type coercion and address these issues effectively.
