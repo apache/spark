@@ -21,6 +21,7 @@ import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.analysis.ResolvedTable
 import org.apache.spark.sql.catalyst.catalog.BucketSpec
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.util.{escapeSingleQuotedString, CharVarcharUtils}
@@ -34,15 +35,16 @@ import org.apache.spark.unsafe.types.UTF8String
  */
 case class ShowCreateTableExec(
     output: Seq[Attribute],
-    table: Table,
-    quotedName: String) extends V2CommandExec with LeafExecNode {
+    resolvedTable: ResolvedTable) extends V2CommandExec with LeafExecNode {
   override protected def run(): Seq[InternalRow] = {
     val builder = new StringBuilder
     showCreateTable(table, builder, quotedName)
     Seq(InternalRow(UTF8String.fromString(builder.toString)))
   }
 
-  private def showCreateTable(table: Table, builder: StringBuilder, quotedName: String): Unit = {
+  private def showCreateTable(resolvedTable: ResolvedTable, builder: StringBuilder): Unit = {
+    val table = resolvedTable.table
+    val quotedName = resolvedTable.name
     builder ++= s"CREATE TABLE ${quotedName} "
 
     showTableDataColumns(table, builder)
