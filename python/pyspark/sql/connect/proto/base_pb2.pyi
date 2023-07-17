@@ -2250,20 +2250,20 @@ class InterruptRequest(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.EnumDescriptor
         INTERRUPT_TYPE_UNSPECIFIED: InterruptRequest._InterruptType.ValueType  # 0
         INTERRUPT_TYPE_ALL: InterruptRequest._InterruptType.ValueType  # 1
-        """Interrupt all running executions within the session with provided the session_id."""
+        """Interrupt all running executions within the session with the provided session_id."""
         INTERRUPT_TYPE_TAG: InterruptRequest._InterruptType.ValueType  # 2
-        """Interrupt all running executions within the session with the provided tag."""
+        """Interrupt all running executions within the session with the provided operation_tag."""
         INTERRUPT_TYPE_ID: InterruptRequest._InterruptType.ValueType  # 3
-        """Interrupt the running execution within the session with the provided id."""
+        """Interrupt the running execution within the session with the provided operation_id."""
 
     class InterruptType(_InterruptType, metaclass=_InterruptTypeEnumTypeWrapper): ...
     INTERRUPT_TYPE_UNSPECIFIED: InterruptRequest.InterruptType.ValueType  # 0
     INTERRUPT_TYPE_ALL: InterruptRequest.InterruptType.ValueType  # 1
-    """Interrupt all running executions within the session with provided the session_id."""
+    """Interrupt all running executions within the session with the provided session_id."""
     INTERRUPT_TYPE_TAG: InterruptRequest.InterruptType.ValueType  # 2
-    """Interrupt all running executions within the session with the provided tag."""
+    """Interrupt all running executions within the session with the provided operation_tag."""
     INTERRUPT_TYPE_ID: InterruptRequest.InterruptType.ValueType  # 3
-    """Interrupt the running execution within the session with the provided id."""
+    """Interrupt the running execution within the session with the provided operation_id."""
 
     SESSION_ID_FIELD_NUMBER: builtins.int
     USER_CONTEXT_FIELD_NUMBER: builtins.int

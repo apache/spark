@@ -40,7 +40,7 @@ private[connect] class ExecuteHolder(
       s"Session_${sessionHolder.sessionId}_" +
       s"Request_${operationId}"
 
-  val userDefinedTags: Seq[String] = request.getTagsList().asScala.map { tag =>
+  val userDefinedTags: Seq[String] = request.getTagsList().asScala.toSeq.map { tag =>
     throwIfInvalidTag(tag)
     tag
   }
