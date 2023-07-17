@@ -21,7 +21,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{ExpressionBuilder, TypeCheckResult}
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{DataTypeMismatch, TypeCheckSuccess}
 import org.apache.spark.sql.catalyst.expressions.{ExpectsInputTypes, Expression, ExpressionDescription, Literal}
-import org.apache.spark.sql.catalyst.plans.logical.{FunctionSignature, NamedArgument}
+import org.apache.spark.sql.catalyst.plans.logical.{FunctionSignature, InputParameter}
 import org.apache.spark.sql.catalyst.trees.QuaternaryLike
 import org.apache.spark.sql.errors.QueryErrorsBase
 import org.apache.spark.sql.types._
@@ -212,10 +212,10 @@ case class CountMinSketchAgg(
 // scalastyle:on line.size.limit
 object CountMinSketchAggExpressionBuilder extends ExpressionBuilder {
   final val defaultFunctionSignature = FunctionSignature(Seq(
-    NamedArgument("column"),
-    NamedArgument("epsilon"),
-    NamedArgument("confidence"),
-    NamedArgument("seed")
+    InputParameter("column"),
+    InputParameter("epsilon"),
+    InputParameter("confidence"),
+    InputParameter("seed")
   ))
   override def functionSignature: Option[FunctionSignature] = Some(defaultFunctionSignature)
   override def build(funcName: String, expressions: Seq[Expression]): Expression = {

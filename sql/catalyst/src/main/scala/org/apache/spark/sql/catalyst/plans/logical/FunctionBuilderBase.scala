@@ -65,13 +65,13 @@ trait FunctionBuilderBase[T] {
       expectedSignature: FunctionSignature,
       providedArguments: Seq[Expression],
       functionName: String) : Seq[Expression] = {
-    NamedArgumentsSupport.defaultRearrange(expectedSignature, providedArguments, functionName)
+    NamedParametersSupport.defaultRearrange(expectedSignature, providedArguments, functionName)
   }
 
   def build(funcName: String, expressions: Seq[Expression]): T
 }
 
-object NamedArgumentsSupport {
+object NamedParametersSupport {
   /**
    * This method is the default routine which rearranges the arguments in positional order according
    * to the function signature provided. This will also fill in any default values that exists for
@@ -87,14 +87,14 @@ object NamedArgumentsSupport {
       functionSignature: FunctionSignature,
       args: Seq[Expression],
       functionName: String): Seq[Expression] = {
-    val parameters: Seq[NamedArgument] = functionSignature.parameters
+    val parameters: Seq[InputParameter] = functionSignature.parameters
     if (parameters.dropWhile(_.default.isEmpty).exists(_.default.isEmpty)) {
       throw QueryCompilationErrors.unexpectedRequiredParameterInFunctionSignature(
         functionName, functionSignature)
     }
 
     val (positionalArgs, namedArgs) = args.span(!_.isInstanceOf[NamedArgumentExpression])
-    val namedParameters: Seq[NamedArgument] = parameters.drop(positionalArgs.size)
+    val namedParameters: Seq[InputParameter] = parameters.drop(positionalArgs.size)
 
     // The following loop checks for the following:
     // 1. Unrecognized parameter names
@@ -165,7 +165,7 @@ object NamedArgumentsSupport {
  * @param default  The default value of the argument. If the default is none, then that means the
  *                 argument is required. If no argument is provided, an exception is thrown.
  */
-case class NamedArgument(name: String, default: Option[Expression] = None)
+case class InputParameter(name: String, default: Option[Expression] = None)
 
 /**
  * Represents a method signature and the list of arguments it receives as input.
@@ -174,4 +174,4 @@ case class NamedArgument(name: String, default: Option[Expression] = None)
  *
  * @param parameters The list of arguments which the function takes
  */
-case class FunctionSignature(parameters: Seq[NamedArgument])
+case class FunctionSignature(parameters: Seq[InputParameter])

@@ -20,7 +20,7 @@ import org.apache.spark.SparkThrowable
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Expression, Literal, NamedArgumentExpression}
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
-import org.apache.spark.sql.catalyst.plans.logical.{FunctionBuilderBase, FunctionSignature, NamedArgument, NamedArgumentsSupport}
+import org.apache.spark.sql.catalyst.plans.logical.{FunctionBuilderBase, FunctionSignature, InputParameter, NamedParametersSupport}
 import org.apache.spark.sql.catalyst.util.TypeUtils.toSQLId
 import org.apache.spark.sql.types.DataType
 
@@ -41,10 +41,10 @@ case class DummyExpression(
 
 object DummyExpressionBuilder extends ExpressionBuilder  {
   def defaultFunctionSignature: FunctionSignature = {
-    FunctionSignature(Seq(NamedArgument("k1"),
-      NamedArgument("k2"),
-      NamedArgument("k3"),
-      NamedArgument("k4")))
+    FunctionSignature(Seq(InputParameter("k1"),
+      InputParameter("k2"),
+      InputParameter("k3"),
+      InputParameter("k4")))
   }
 
   override def functionSignature: Option[FunctionSignature] =
@@ -64,10 +64,10 @@ class NamedArgumentFunctionSuite extends AnalysisTest {
   final val expectedSeq = Seq(Literal("v1"), Literal("v2"), Literal("v3"), Literal("v4"))
   final val signature = DummyExpressionBuilder.defaultFunctionSignature
   final val illegalSignature = FunctionSignature(Seq(
-    NamedArgument("k1"), NamedArgument("k2", Option(Literal("v2"))), NamedArgument("k3")))
+    InputParameter("k1"), InputParameter("k2", Option(Literal("v2"))), InputParameter("k3")))
 
   test("Check rearrangement of expressions") {
-    val rearrangedArgs = NamedArgumentsSupport.defaultRearrange(
+    val rearrangedArgs = NamedParametersSupport.defaultRearrange(
       signature, args, "function")
     for ((returnedArg, expectedArg) <- rearrangedArgs.zip(expectedSeq)) {
       assert(returnedArg == expectedArg)
@@ -83,7 +83,7 @@ class NamedArgumentFunctionSuite extends AnalysisTest {
                                       expressions: Seq[Expression],
                                       functionName: String = "function"): SparkThrowable = {
     intercept[SparkThrowable](
-      NamedArgumentsSupport.defaultRearrange(functionSignature, expressions, functionName))
+      NamedParametersSupport.defaultRearrange(functionSignature, expressions, functionName))
   }
 
   private def parseExternalException[T <: FunctionBuilderBase[_]](

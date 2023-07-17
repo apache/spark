@@ -22,7 +22,7 @@ import org.apache.spark.sql.catalyst.analysis.{ExpressionBuilder, TypeCheckResul
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
-import org.apache.spark.sql.catalyst.plans.logical.{FunctionSignature, NamedArgument}
+import org.apache.spark.sql.catalyst.plans.logical.{FunctionSignature, InputParameter}
 import org.apache.spark.sql.errors.QueryErrorsBase
 import org.apache.spark.sql.types.{AbstractDataType, DataType, StringType}
 import org.apache.spark.unsafe.types.UTF8String
@@ -78,11 +78,11 @@ import org.apache.spark.unsafe.types.UTF8String
 // scalastyle:on line.size.limit
 object MaskExpressionBuilder extends ExpressionBuilder {
   override def functionSignature: Option[FunctionSignature] = {
-    val strArg = NamedArgument("str")
-    val upperCharArg = NamedArgument("upperChar", Some(Literal(Mask.MASKED_UPPERCASE)))
-    val lowerCharArg = NamedArgument("lowerChar", Some(Literal(Mask.MASKED_LOWERCASE)))
-    val digitCharArg = NamedArgument("digitChar", Some(Literal(Mask.MASKED_DIGIT)))
-    val otherCharArg = NamedArgument(
+    val strArg = InputParameter("str")
+    val upperCharArg = InputParameter("upperChar", Some(Literal(Mask.MASKED_UPPERCASE)))
+    val lowerCharArg = InputParameter("lowerChar", Some(Literal(Mask.MASKED_LOWERCASE)))
+    val digitCharArg = InputParameter("digitChar", Some(Literal(Mask.MASKED_DIGIT)))
+    val otherCharArg = InputParameter(
       "otherChar",
       Some(Literal(Mask.MASKED_IGNORE, StringType)))
     val functionSignature: FunctionSignature = FunctionSignature(Seq(

@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.expressions.Cast._
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
-import org.apache.spark.sql.catalyst.plans.logical.{FunctionSignature, NamedArgument}
+import org.apache.spark.sql.catalyst.plans.logical.{FunctionSignature, InputParameter}
 import org.apache.spark.sql.catalyst.trees.TreePattern.{GENERATOR, TreePattern}
 import org.apache.spark.sql.catalyst.util.{ArrayData, MapData}
 import org.apache.spark.sql.catalyst.util.SQLKeywordUtils._
@@ -422,7 +422,7 @@ case class Explode(child: Expression) extends ExplodeBase {
 
 trait ExplodeGeneratorBuilderBase extends GeneratorBuilder {
   override def functionSignature: Option[FunctionSignature] =
-    Some(FunctionSignature(Seq(NamedArgument("collection"))))
+    Some(FunctionSignature(Seq(InputParameter("collection"))))
   override def buildGenerator(funcName: String, expressions: Seq[Expression]): Generator = {
     assert(expressions.size == 1)
     Explode(expressions(0))
@@ -449,7 +449,7 @@ trait ExplodeGeneratorBuilderBase extends GeneratorBuilder {
 // scalastyle:on line.size.limit
 object ExplodeExpressionBuilder extends ExpressionBuilder {
   override def functionSignature: Option[FunctionSignature] =
-    Some(FunctionSignature(Seq(NamedArgument("collection"))))
+    Some(FunctionSignature(Seq(InputParameter("collection"))))
 
   override def build(funcName: String, expressions: Seq[Expression]) : Expression =
     Explode(expressions(0))
