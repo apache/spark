@@ -194,7 +194,8 @@ trait ShowCreateTableSuiteBase extends QueryTest with DDLCommandTestUtils {
         """.stripMargin)
       val showDDL = getShowCreateDDL(t)
       assert(
-        showDDL(0) == s"CREATE TABLE test_catalog.`a_schema-with+special^chars`.`a_table-with+special^chars` ("
+        showDDL(0) == s"CREATE TABLE test_catalog.`a_schema-with+special^chars`." +
+        s"`a_table-with+special^chars` ("
       )
     }
   }
