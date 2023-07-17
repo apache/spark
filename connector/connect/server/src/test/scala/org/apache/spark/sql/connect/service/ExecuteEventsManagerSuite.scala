@@ -51,8 +51,7 @@ class ExecuteEventsManagerSuite
   val DEFAULT_CLIENT_TYPE = "clientType"
 
   test("SPARK-43923: post started") {
-    val events = setupEvents()
-
+    val events = setupEvents(ExecuteStatus.Pending)
     events.postStarted()
 
     verify(events.executeHolder.sessionHolder.session.sparkContext.listenerBus, times(1))
@@ -69,7 +68,8 @@ class ExecuteEventsManagerSuite
   }
 
   test("SPARK-43923: post analyzed with plan") {
-    val events = setupEvents()
+    val events = setupEvents(ExecuteStatus.Started)
+
     val mockPlan = mock[LogicalPlan]
     events.postAnalyzed(Some(mockPlan))
     val event = SparkListenerConnectOperationAnalyzed(
@@ -82,7 +82,7 @@ class ExecuteEventsManagerSuite
   }
 
   test("SPARK-43923: post analyzed with empty plan") {
-    val events = setupEvents()
+    val events = setupEvents(ExecuteStatus.Started)
     events.postAnalyzed()
     verify(events.executeHolder.sessionHolder.session.sparkContext.listenerBus, times(1))
       .post(
@@ -93,7 +93,7 @@ class ExecuteEventsManagerSuite
   }
 
   test("SPARK-43923: post readyForExecution") {
-    val events = setupEvents()
+    val events = setupEvents(ExecuteStatus.Analyzed)
     events.postReadyForExecution()
     val event = SparkListenerConnectOperationReadyForExecution(
       events.executeHolder.jobTag,
@@ -104,7 +104,7 @@ class ExecuteEventsManagerSuite
   }
 
   test("SPARK-43923: post canceled") {
-    val events = setupEvents()
+    val events = setupEvents(ExecuteStatus.Started)
     events.postCanceled()
     verify(events.executeHolder.sessionHolder.session.sparkContext.listenerBus, times(1))
       .post(
@@ -115,7 +115,7 @@ class ExecuteEventsManagerSuite
   }
 
   test("SPARK-43923: post failed") {
-    val events = setupEvents()
+    val events = setupEvents(ExecuteStatus.Started)
     events.postFailed(DEFAULT_ERROR)
     verify(events.executeHolder.sessionHolder.session.sparkContext.listenerBus, times(1))
       .post(
@@ -128,7 +128,7 @@ class ExecuteEventsManagerSuite
   }
 
   test("SPARK-43923: post finished") {
-    val events = setupEvents()
+    val events = setupEvents(ExecuteStatus.Started)
     events.postFinished()
     verify(events.executeHolder.sessionHolder.session.sparkContext.listenerBus, times(1))
       .post(
@@ -139,7 +139,7 @@ class ExecuteEventsManagerSuite
   }
 
   test("SPARK-43923: post closed") {
-    val events = setupEvents()
+    val events = setupEvents(ExecuteStatus.Finished)
     events.postClosed()
     verify(events.executeHolder.sessionHolder.session.sparkContext.listenerBus, times(1))
       .post(
@@ -149,7 +149,128 @@ class ExecuteEventsManagerSuite
           DEFAULT_CLOCK.getTimeMillis()))
   }
 
-  def setupEvents(): ExecuteEventsManager = {
+  test("SPARK-43923: Closed wrong order throws exception") {
+    val events = setupEvents(ExecuteStatus.Closed)
+    assertThrows[IllegalStateException] {
+      events.postStarted()
+    }
+    assertThrows[IllegalStateException] {
+      events.postAnalyzed()
+    }
+    assertThrows[IllegalStateException] {
+      events.postReadyForExecution()
+    }
+    assertThrows[IllegalStateException] {
+      events.postFinished()
+    }
+    assertThrows[IllegalStateException] {
+      events.postCanceled()
+    }
+    assertThrows[IllegalStateException] {
+      events.postClosed()
+    }
+  }
+
+  test("SPARK-43923: Finished wrong order throws exception") {
+    val events = setupEvents(ExecuteStatus.Finished)
+    assertThrows[IllegalStateException] {
+      events.postStarted()
+    }
+    assertThrows[IllegalStateException] {
+      events.postAnalyzed()
+    }
+    assertThrows[IllegalStateException] {
+      events.postReadyForExecution()
+    }
+    assertThrows[IllegalStateException] {
+      events.postFinished()
+    }
+  }
+
+  test("SPARK-43923: Failed wrong order throws exception") {
+    val events = setupEvents(ExecuteStatus.Finished)
+    assertThrows[IllegalStateException] {
+      events.postStarted()
+    }
+    assertThrows[IllegalStateException] {
+      events.postAnalyzed()
+    }
+    assertThrows[IllegalStateException] {
+      events.postReadyForExecution()
+    }
+    assertThrows[IllegalStateException] {
+      events.postFinished()
+    }
+    assertThrows[IllegalStateException] {
+      events.postFinished()
+    }
+  }
+
+  test("SPARK-43923: Canceled wrong order throws exception") {
+    val events = setupEvents(ExecuteStatus.Canceled)
+    assertThrows[IllegalStateException] {
+      events.postStarted()
+    }
+    assertThrows[IllegalStateException] {
+      events.postAnalyzed()
+    }
+    assertThrows[IllegalStateException] {
+      events.postReadyForExecution()
+    }
+    assertThrows[IllegalStateException] {
+      events.postCanceled()
+    }
+    assertThrows[IllegalStateException] {
+      events.postFinished()
+    }
+    assertThrows[IllegalStateException] {
+      events.postFailed(DEFAULT_ERROR)
+    }
+  }
+
+  test("SPARK-43923: ReadyForExecution wrong order throws exception") {
+    val events = setupEvents(ExecuteStatus.ReadyForExecution)
+    assertThrows[IllegalStateException] {
+      events.postStarted()
+    }
+    assertThrows[IllegalStateException] {
+      events.postAnalyzed()
+    }
+    assertThrows[IllegalStateException] {
+      events.postReadyForExecution()
+    }
+    assertThrows[IllegalStateException] {
+      events.postClosed()
+    }
+  }
+
+  test("SPARK-43923: Analyzed wrong order throws exception") {
+    val events = setupEvents(ExecuteStatus.Analyzed)
+    assertThrows[IllegalStateException] {
+      events.postStarted()
+    }
+    assertThrows[IllegalStateException] {
+      events.postFinished()
+    }
+    assertThrows[IllegalStateException] {
+      events.postClosed()
+    }
+  }
+
+  test("SPARK-43923: Started wrong order throws exception") {
+    val events = setupEvents(ExecuteStatus.Started)
+    assertThrows[IllegalStateException] {
+      events.postStarted()
+    }
+    assertThrows[IllegalStateException] {
+      events.postReadyForExecution()
+    }
+    assertThrows[IllegalStateException] {
+      events.postClosed()
+    }
+  }
+
+  def setupEvents(executeStatus: ExecuteStatus): ExecuteEventsManager = {
     val mockSession = mock[SparkSession]
     val sessionHolder = SessionHolder(DEFAULT_USER_ID, DEFAULT_SESSION_ID, mockSession)
     val mockContext = mock[SparkContext]
@@ -180,6 +301,8 @@ class ExecuteEventsManagerSuite
 
     val executeHolder = new ExecuteHolder(executePlanRequest, DEFAULT_QUERY_ID, sessionHolder)
 
-    ExecuteEventsManager(executeHolder, DEFAULT_CLOCK)
+    val eventsManager = ExecuteEventsManager(executeHolder, DEFAULT_CLOCK)
+    eventsManager.status_(executeStatus)
+    eventsManager
   }
 }

@@ -63,6 +63,10 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
     executePlanHolder
   }
 
+  private[connect] def executeHolder(operationId: String): Option[ExecuteHolder] = {
+    Option(executions.get(operationId))
+  }
+
   private[connect] def removeExecuteHolder(operationId: String): Unit = {
     executions.remove(operationId)
   }

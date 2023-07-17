@@ -20,6 +20,14 @@ package org.apache.spark.sql.connect.service
 import org.apache.spark.scheduler.SparkListenerEvent
 import org.apache.spark.util.{Clock}
 
+sealed abstract class SessionStatus(value: Int)
+
+object SessionStatus {
+  case object Pending extends SessionStatus(0)
+  case object Started extends SessionStatus(1)
+  case object Closed extends SessionStatus(2)
+}
+
 /**
  * Post session Connect events to @link org.apache.spark.scheduler.LiveListenerBus.
  *
@@ -30,10 +38,25 @@ import org.apache.spark.util.{Clock}
  */
 case class SessionEventsManager(sessionHolder: SessionHolder, clock: Clock) {
 
+  private def sessionId = sessionHolder.sessionId
+
+  private var _status: SessionStatus = SessionStatus.Pending
+
+  private[connect] def status_(sessionStatus: SessionStatus): Unit = {
+    _status = sessionStatus
+  }
+
+  /**
+   * @return
+   *   Last event posted by the Connect session
+   */
+  def status: SessionStatus = _status
+
   /**
    * Post @link org.apache.spark.sql.connect.service.SparkListenerConnectSessionStarted.
    */
   def postStarted(): Unit = {
+    assertStatus(List(SessionStatus.Pending), SessionStatus.Started)
     sessionHolder.session.sparkContext.listenerBus
       .post(
         SparkListenerConnectSessionStarted(
@@ -46,12 +69,27 @@ case class SessionEventsManager(sessionHolder: SessionHolder, clock: Clock) {
    * Post @link org.apache.spark.sql.connect.service.SparkListenerConnectSessionClosed.
    */
   def postClosed(): Unit = {
+    assertStatus(List(SessionStatus.Started), SessionStatus.Closed)
     sessionHolder.session.sparkContext.listenerBus
       .post(
         SparkListenerConnectSessionClosed(
           sessionHolder.sessionId,
           sessionHolder.userId,
           clock.getTimeMillis()))
+  }
+
+  private def assertStatus(
+      validStatuses: List[SessionStatus],
+      eventStatus: SessionStatus): Unit = {
+    if (!validStatuses
+        .find(s => s == status)
+        .isDefined) {
+      throw new IllegalStateException(s"""
+        sessionId: $sessionId with status ${status}
+        is not within statuses $validStatuses for event $eventStatus
+        """)
+    }
+    _status = eventStatus
   }
 }
 

@@ -45,8 +45,7 @@ import org.apache.spark.sql.connect.dsl.MockRemoteSession
 import org.apache.spark.sql.connect.dsl.expressions._
 import org.apache.spark.sql.connect.dsl.plans._
 import org.apache.spark.sql.connect.plugin.SparkConnectPluginRegistry
-import org.apache.spark.sql.connect.service.{SparkConnectAnalyzeHandler, SparkConnectService, SparkListenerConnectOperationAnalyzed, SparkListenerConnectOperationCanceled, SparkListenerConnectOperationClosed, SparkListenerConnectOperationFailed, SparkListenerConnectOperationFinished, SparkListenerConnectOperationReadyForExecution, SparkListenerConnectOperationStarted, SparkListenerConnectSessionClosed, SparkListenerConnectSessionStarted}
-import org.apache.spark.sql.connect.service.SessionHolder
+import org.apache.spark.sql.connect.service.{ExecuteHolder, ExecuteStatus, SessionHolder, SessionStatus, SparkConnectAnalyzeHandler, SparkConnectService, SparkListenerConnectOperationStarted}
 import org.apache.spark.sql.connector.catalog.InMemoryPartitionTableCatalog
 import org.apache.spark.sql.streaming.StreamingQuery
 import org.apache.spark.sql.test.SharedSparkSession
@@ -421,7 +420,7 @@ class SparkConnectServiceSuite extends SharedSparkSession with MockitoSugar with
         .setSessionId("session")
         .build()
 
-      new Thread {
+      val thread = new Thread {
         override def run: Unit = {
           verifyEvents.listener.semaphoreStarted.acquire()
           instance.interrupt(
@@ -439,7 +438,8 @@ class SparkConnectServiceSuite extends SharedSparkSession with MockitoSugar with
               override def onCompleted(): Unit = {}
             })
         }
-      }.start()
+      }
+      thread.start()
       // The observer is executed inside this thread. So
       // we can perform the checks inside the observer.
       instance.executePlan(
@@ -457,6 +457,7 @@ class SparkConnectServiceSuite extends SharedSparkSession with MockitoSugar with
             fail("this should not complete")
           }
         })
+      thread.join()
       verifyEvents.onCompleted()
     }
   }
@@ -688,159 +689,53 @@ class SparkConnectServiceSuite extends SharedSparkSession with MockitoSugar with
     }
   }
 
-  sealed abstract class Status(value: Int)
-
-  object Status {
-    case object Pending extends Status(0)
-    case object SessionStarted extends Status(1)
-    case object Started extends Status(2)
-    case object Analyzed extends Status(3)
-    case object ReadyForExecution extends Status(4)
-    case object Finished extends Status(5)
-    case object Failed extends Status(6)
-    case object Canceled extends Status(7)
-    case object Closed extends Status(8)
-    case object SessionClosed extends Status(9)
-  }
-
   class VerifyEvents(val sparkContext: SparkContext) {
     val listener: MockSparkListener = new MockSparkListener()
     val listenerBus = sparkContext.listenerBus
     val LISTENER_BUS_TIMEOUT = 30000
+    def executeHolder: ExecuteHolder = {
+      assert(listener.executeHolder.isDefined)
+      listener.executeHolder.get
+    }
     def onNext(v: proto.ExecutePlanResponse): Unit = {
       if (v.hasSchema) {
-        waitUntilEmpty()
-        assert(listener.status == Status.Analyzed)
+        assert(executeHolder.eventsManager.status == ExecuteStatus.Analyzed)
       }
       if (v.hasMetrics) {
-        waitUntilEmpty()
-        assert(listener.status == Status.Finished)
+        assert(executeHolder.eventsManager.status == ExecuteStatus.Finished)
       }
-      assertStatusExpected()
     }
     def onError(throwable: Throwable): Unit = {
-      waitUntilEmpty()
-      assert(listener.canceled.isEmpty)
-      assert(listener.queryError.isDefined)
-      assertStatusExpected()
+      assert(executeHolder.eventsManager.hasCanceled.isEmpty)
+      assert(executeHolder.eventsManager.hasError.isDefined)
     }
     def onCompleted(): Unit = {
-      waitUntilEmpty()
-      assert(listener.status == Status.Closed)
-      assertStatusExpected()
+      assert(executeHolder.eventsManager.status == ExecuteStatus.Closed)
     }
     def onCanceled(): Unit = {
-      waitUntilEmpty()
-      assert(listener.canceled.contains(true))
-      assert(listener.queryError.isEmpty)
-      assertStatusExpected()
+      assert(executeHolder.eventsManager.hasCanceled.contains(true))
+      assert(executeHolder.eventsManager.hasError.isEmpty)
     }
     def onSessionClosed(): Unit = {
-      waitUntilEmpty()
-      assert(listener.status == Status.SessionClosed)
-      assertStatusExpected()
+      assert(executeHolder.sessionHolder.eventManager.status == SessionStatus.Closed)
     }
     def onSessionStarted(): Unit = {
-      waitUntilEmpty()
-      assert(listener.status == Status.SessionStarted)
-      assertStatusExpected()
+      assert(executeHolder.sessionHolder.eventManager.status == SessionStatus.Started)
     }
     def waitUntilEmpty(): Unit = {
       listenerBus.waitUntilEmpty(LISTENER_BUS_TIMEOUT)
     }
-    def assertStatusExpected(): Unit = {
-      if (listener.statusError.isDefined) {
-        throw listener.statusError.get
-      }
-    }
   }
-
   class MockSparkListener() extends SparkListener {
-    var status: Status = Status.Pending
-    var statusError: Option[Throwable] = None
-    var queryError: Option[String] = None
-    var canceled: Option[Boolean] = None
     val semaphoreStarted = new Semaphore(0)
+    var executeHolder = Option.empty[ExecuteHolder]
     override def onOtherEvent(event: SparkListenerEvent): Unit = {
-      try {
-        _onOtherEvent(event)
-      } catch {
-        case e: Throwable =>
-          logError("Failed MockSparkListener assertion", e)
-          statusError = Some(e)
-      }
-    }
-    def _onOtherEvent(event: SparkListenerEvent): Unit = {
-      val prevStatus = status
       event match {
-        case e: SparkListenerConnectSessionStarted =>
-          logInfo(s"$e")
-          status = Status.SessionStarted
-          semaphoreStarted.release()
-          assert(prevStatus == Status.Pending, s"$e")
         case e: SparkListenerConnectOperationStarted =>
-          logInfo(s"$e")
-          status = Status.Started
-          assert(prevStatus == Status.SessionStarted, s"$e")
-        case e: SparkListenerConnectOperationAnalyzed =>
-          logInfo(s"$e")
-          status = Status.Analyzed
-          assert(
-            List(Status.Started, Status.Analyzed)
-              .find(s => s == prevStatus)
-              .isDefined,
-            s"$e")
-        case e: SparkListenerConnectOperationReadyForExecution =>
-          logInfo(s"$e")
-          status = Status.ReadyForExecution
-          assert(prevStatus == Status.Analyzed, s"$e")
-        case e: SparkListenerConnectOperationFinished =>
-          logInfo(s"$e")
-          status = Status.Finished
-          assert(
-            List(Status.Started, Status.ReadyForExecution)
-              .find(s => s == prevStatus)
-              .isDefined,
-            s"$e")
-        case e: SparkListenerConnectOperationFailed =>
-          logInfo(s"$e")
-          status = Status.Failed
-          queryError = Some(e.errorMessage)
-          assert(
-            List(Status.Started, Status.Analyzed, Status.ReadyForExecution, Status.Finished)
-              .find(s => s == prevStatus)
-              .isDefined,
-            s"$e")
-        case e: SparkListenerConnectOperationCanceled =>
-          logInfo(s"$e")
-          status = Status.Canceled
-          canceled = Some(true)
-          assert(
-            List(
-              Status.Started,
-              Status.Analyzed,
-              Status.ReadyForExecution,
-              Status.Finished,
-              Status.Failed)
-              .find(s => s == prevStatus)
-              .isDefined,
-            s"$e")
-        case e: SparkListenerConnectOperationClosed =>
-          logInfo(s"$e")
-          status = Status.Closed
-          assert(
-            List(Status.Finished, Status.Failed, Status.Canceled)
-              .find(s => s == prevStatus)
-              .isDefined,
-            s"$e")
-        case e: SparkListenerConnectSessionClosed =>
-          logInfo(s"$e")
-          status = Status.SessionClosed
-          assert(
-            List(Status.Failed, Status.Canceled, Status.Closed)
-              .find(s => s == prevStatus)
-              .isDefined,
-            s"$e")
+          semaphoreStarted.release()
+          val sessionHolder =
+            SparkConnectService.getOrCreateIsolatedSession(e.userId, e.sessionId)
+          executeHolder = sessionHolder.executeHolder(e.operationId)
         case _ =>
       }
     }

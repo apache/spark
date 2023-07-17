@@ -93,8 +93,7 @@ private[connect] class ExecuteThreadRunner(executeHolder: ExecuteHolder) extends
         executeHolder.sessionHolder.userId,
         executeHolder.sessionHolder.sessionId,
         Some(executeHolder.eventsManager),
-        interrupted
-      )
+        interrupted)
     }
   }
 

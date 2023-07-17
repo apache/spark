@@ -32,6 +32,19 @@ object ExecuteEventsManager {
   val MAX_STATEMENT_TEXT_SIZE = 65535
 }
 
+sealed abstract class ExecuteStatus(value: Int)
+
+object ExecuteStatus {
+  case object Pending extends ExecuteStatus(0)
+  case object Started extends ExecuteStatus(1)
+  case object Analyzed extends ExecuteStatus(2)
+  case object ReadyForExecution extends ExecuteStatus(3)
+  case object Finished extends ExecuteStatus(4)
+  case object Failed extends ExecuteStatus(5)
+  case object Canceled extends ExecuteStatus(6)
+  case object Closed extends ExecuteStatus(7)
+}
+
 /**
  * Post request Connect events to @link org.apache.spark.scheduler.LiveListenerBus.
  *
@@ -50,10 +63,37 @@ case class ExecuteEventsManager(executeHolder: ExecuteHolder, clock: Clock) {
 
   private def sessionHolder = executeHolder.sessionHolder
 
+  private var _status: ExecuteStatus = ExecuteStatus.Pending
+
+  private var error = Option.empty[Boolean]
+
+  private var canceled = Option.empty[Boolean]
+
+  /**
+   * @return
+   *   Last event posted by the Connect request
+   */
+  private[connect] def status: ExecuteStatus = _status
+
+  /**
+   * @return
+   *   True when the Connect request has posted @link
+   *   org.apache.spark.sql.connect.service.SparkListenerConnectOperationCanceled
+   */
+  private[connect] def hasCanceled: Option[Boolean] = canceled
+
+  /**
+   * @return
+   *   True when the Connect request has posted @link
+   *   org.apache.spark.sql.connect.service.SparkListenerConnectOperationFailed
+   */
+  private[connect] def hasError: Option[Boolean] = error
+
   /**
    * Post @link org.apache.spark.sql.connect.service.SparkListenerConnectOperationStarted.
    */
   def postStarted(): Unit = {
+    assertStatus(List(ExecuteStatus.Pending), ExecuteStatus.Started)
     val request = executeHolder.request
     val plan: Message =
       request.getPlan.getOpTypeCase match {
@@ -86,6 +126,7 @@ case class ExecuteEventsManager(executeHolder: ExecuteHolder, clock: Clock) {
    *   generate a plan.
    */
   def postAnalyzed(analyzedPlan: Option[LogicalPlan] = None): Unit = {
+    assertStatus(List(ExecuteStatus.Started, ExecuteStatus.Analyzed), ExecuteStatus.Analyzed)
     val event =
       SparkListenerConnectOperationAnalyzed(jobTag, operationId, clock.getTimeMillis())
     event.analyzedPlan = analyzedPlan
@@ -97,6 +138,7 @@ case class ExecuteEventsManager(executeHolder: ExecuteHolder, clock: Clock) {
    * org.apache.spark.sql.connect.service.SparkListenerConnectOperationReadyForExecution.
    */
   def postReadyForExecution(): Unit = {
+    assertStatus(List(ExecuteStatus.Analyzed), ExecuteStatus.ReadyForExecution)
     listenerBus.post(
       SparkListenerConnectOperationReadyForExecution(jobTag, operationId, clock.getTimeMillis()))
   }
@@ -105,6 +147,15 @@ case class ExecuteEventsManager(executeHolder: ExecuteHolder, clock: Clock) {
    * Post @link org.apache.spark.sql.connect.service.SparkListenerConnectOperationCanceled.
    */
   def postCanceled(): Unit = {
+    assertStatus(
+      List(
+        ExecuteStatus.Started,
+        ExecuteStatus.Analyzed,
+        ExecuteStatus.ReadyForExecution,
+        ExecuteStatus.Finished,
+        ExecuteStatus.Failed),
+      ExecuteStatus.Canceled)
+    canceled = Some(true)
     listenerBus
       .post(SparkListenerConnectOperationCanceled(jobTag, operationId, clock.getTimeMillis()))
   }
@@ -116,6 +167,14 @@ case class ExecuteEventsManager(executeHolder: ExecuteHolder, clock: Clock) {
    *   The message of the error thrown during the request.
    */
   def postFailed(errorMessage: String): Unit = {
+    assertStatus(
+      List(
+        ExecuteStatus.Started,
+        ExecuteStatus.Analyzed,
+        ExecuteStatus.ReadyForExecution,
+        ExecuteStatus.Finished),
+      ExecuteStatus.Failed)
+    error = Some(true)
     listenerBus.post(
       SparkListenerConnectOperationFailed(
         jobTag,
@@ -128,6 +187,9 @@ case class ExecuteEventsManager(executeHolder: ExecuteHolder, clock: Clock) {
    * Post @link org.apache.spark.sql.connect.service.SparkListenerConnectOperationFinished.
    */
   def postFinished(): Unit = {
+    assertStatus(
+      List(ExecuteStatus.Started, ExecuteStatus.ReadyForExecution),
+      ExecuteStatus.Finished)
     listenerBus
       .post(SparkListenerConnectOperationFinished(jobTag, operationId, clock.getTimeMillis()))
   }
@@ -136,6 +198,9 @@ case class ExecuteEventsManager(executeHolder: ExecuteHolder, clock: Clock) {
    * Post @link org.apache.spark.sql.connect.service.SparkListenerConnectOperationClosed.
    */
   def postClosed(): Unit = {
+    assertStatus(
+      List(ExecuteStatus.Finished, ExecuteStatus.Failed, ExecuteStatus.Canceled),
+      ExecuteStatus.Closed)
     listenerBus
       .post(SparkListenerConnectOperationClosed(jobTag, operationId, clock.getTimeMillis()))
   }
@@ -153,6 +218,24 @@ case class ExecuteEventsManager(executeHolder: ExecuteHolder, clock: Clock) {
 
       def readyForExecution(tracker: QueryPlanningTracker): Unit = postReadyForExecution
     }))
+  }
+
+  private[connect] def status_(executeStatus: ExecuteStatus): Unit = {
+    _status = executeStatus
+  }
+
+  private def assertStatus(
+      validStatuses: List[ExecuteStatus],
+      eventStatus: ExecuteStatus): Unit = {
+    if (!validStatuses
+        .find(s => s == status)
+        .isDefined) {
+      throw new IllegalStateException(s"""
+        operationId: $operationId with status ${status}
+        is not within statuses $validStatuses for event $eventStatus
+        """)
+    }
+    _status = eventStatus
   }
 }
 
