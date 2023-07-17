@@ -364,11 +364,6 @@ def assertDataFrameEqual(
     >>> df1 = spark.createDataFrame(data=[("1", 0.1), ("2", 3.23)], schema=["id", "amount"])
     >>> df2 = spark.createDataFrame(data=[("1", 0.109), ("2", 3.23)], schema=["id", "amount"])
     >>> assertDataFrameEqual(df1, df2, rtol=1e-1)  # pass, DataFrames are approx equal by rtol
-    >>> df1 = spark.createDataFrame(
-    ...     data=[("1", 1000.00), ("2", 3000.00), ("3", 2000.00)], schema=["id", "amount"])
-    >>> df2 = spark.createDataFrame(
-    ...     data=[("1", 1001.00), ("2", 3000.00), ("3", 2003.00)], schema=["id", "amount"])
-    >>> assertDataFrameEqual(df1, df2, rtol=1e-1)  # pass, DataFrames are approx equal by rtol
     >>> df1 = spark.createDataFrame(data=[(1, 1000), (2, 3000)], schema=["id", "amount"])
     >>> list_of_rows = [Row(1, 1000), Row(2, 3000)]
     >>> assertDataFrameEqual(df1, list_of_rows)  # pass, DataFrames are equal
@@ -425,11 +420,15 @@ def assertDataFrameEqual(
             )
 
     # special cases: empty datasets, datasets with 0 columns
-    if isinstance(expected, DataFrame) and (
+    if (
+        isinstance(expected, DataFrame)
+        and (
             (actual.first() is None and expected.first() is None)
-                or (len(actual.columns) == 0 and len(expected.columns) == 0))\
-        or isinstance(expected, list) and (
-                (actual.first() is None or len(actual.columns) == 0) and len(expected) == 0):
+            or (len(actual.columns) == 0 and len(expected.columns) == 0)
+        )
+        or isinstance(expected, list)
+        and ((actual.first() is None or len(actual.columns) == 0) and len(expected) == 0)
+    ):
         return True
 
     def compare_rows(r1: Row, r2: Row):
