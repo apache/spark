@@ -45,7 +45,7 @@ class StreamingTestsForeachBatchMixin:
             # it should use the spark session within given DataFrame, as microbatch execution will
             # clone the session which is no longer same with the session used to start the
             # streaming query
-            self.assertTrue(len(batch_df.sparkSession.sql("SELECT * FROM updates").collect()), 2)
+            assert len(batch_df.sparkSession.sql("SELECT * FROM updates").collect()) == 2
             # Write to a global view verify on the repl/client side.
             batch_df.createOrReplaceGlobalTempView("temp_view")
 
