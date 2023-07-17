@@ -95,6 +95,14 @@ trait FileFormat {
   }
 
   /**
+   * Returns whether Hadoop configuration needs to be broadcasted.
+   */
+  def isBroadcastHadoopConf(
+      options: Map[String, String]): Boolean = {
+    true
+  }
+
+  /**
    * Returns a function that can be used to read a single file in as an Iterator of InternalRow.
    *
    * @param dataSchema The global data schema. It can be either specified by the user, or

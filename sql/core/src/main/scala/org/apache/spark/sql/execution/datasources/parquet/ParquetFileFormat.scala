@@ -32,6 +32,7 @@ import org.apache.parquet.format.converter.ParquetMetadataConverter.SKIP_ROW_GRO
 import org.apache.parquet.hadoop._
 
 import org.apache.spark.TaskContext
+import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.InternalRow
@@ -107,6 +108,10 @@ class ParquetFileFormat
     true
   }
 
+  override def isBroadcastHadoopConf(options: Map[String, String]): Boolean = {
+    options.isEmpty
+  }
+
   /**
    * Build the reader.
    *
@@ -127,46 +132,21 @@ class ParquetFileFormat
       filters: Seq[Filter],
       options: Map[String, String],
       hadoopConf: Configuration): (PartitionedFile) => Iterator[InternalRow] = {
-    hadoopConf.set(ParquetInputFormat.READ_SUPPORT_CLASS, classOf[ParquetReadSupport].getName)
-    hadoopConf.set(
-      ParquetReadSupport.SPARK_ROW_REQUESTED_SCHEMA,
-      requiredSchema.json)
-    hadoopConf.set(
-      ParquetWriteSupport.SPARK_ROW_SCHEMA,
-      requiredSchema.json)
-    hadoopConf.set(
-      SQLConf.SESSION_LOCAL_TIMEZONE.key,
-      sparkSession.sessionState.conf.sessionLocalTimeZone)
-    hadoopConf.setBoolean(
-      SQLConf.NESTED_SCHEMA_PRUNING_ENABLED.key,
-      sparkSession.sessionState.conf.nestedSchemaPruningEnabled)
-    hadoopConf.setBoolean(
-      SQLConf.CASE_SENSITIVE.key,
-      sparkSession.sessionState.conf.caseSensitiveAnalysis)
-
-    // Sets flags for `ParquetToSparkSchemaConverter`
-    hadoopConf.setBoolean(
-      SQLConf.PARQUET_BINARY_AS_STRING.key,
-      sparkSession.sessionState.conf.isParquetBinaryAsString)
-    hadoopConf.setBoolean(
-      SQLConf.PARQUET_INT96_AS_TIMESTAMP.key,
-      sparkSession.sessionState.conf.isParquetINT96AsTimestamp)
-    hadoopConf.setBoolean(
-      SQLConf.PARQUET_INFER_TIMESTAMP_NTZ_ENABLED.key,
-      sparkSession.sessionState.conf.parquetInferTimestampNTZEnabled)
-    hadoopConf.setBoolean(
-      SQLConf.LEGACY_PARQUET_NANOS_AS_LONG.key,
-      sparkSession.sessionState.conf.legacyParquetNanosAsLong)
-
-
-    val broadcastedHadoopConf =
-      sparkSession.sparkContext.broadcast(new SerializableConfiguration(hadoopConf))
 
     // TODO: if you move this into the closure it reverts to the default values.
     // If true, enable using the custom RecordReader for parquet. This only works for
     // a subset of the types (no complex types).
     val resultSchema = StructType(partitionSchema.fields ++ requiredSchema.fields)
     val sqlConf = sparkSession.sessionState.conf
+    val readSupportClass = classOf[ParquetReadSupport].getName
+    val rowWithSchema = requiredSchema.json
+    val localTimezone = sqlConf.sessionLocalTimeZone
+    val nestedSchemaPruningEnabled = sqlConf.nestedSchemaPruningEnabled
+    val isParquetBinaryAsString = sqlConf.isParquetBinaryAsString
+    val isParquetINT96AsTimestamp = sqlConf.isParquetINT96AsTimestamp
+    val parquetInferTimestampNTZEnabled = sqlConf.parquetInferTimestampNTZEnabled
+    val legacyParquetNanosAsLong = sqlConf.legacyParquetNanosAsLong
+
     val enableOffHeapColumnVector = sqlConf.offHeapColumnVectorEnabled
     val enableVectorizedReader: Boolean =
       ParquetUtils.isBatchReadSupportedForSchema(sqlConf, resultSchema)
@@ -184,6 +164,43 @@ class ParquetFileFormat
     val datetimeRebaseModeInRead = parquetOptions.datetimeRebaseModeInRead
     val int96RebaseModeInRead = parquetOptions.int96RebaseModeInRead
 
+    hadoopConf.set(ParquetInputFormat.READ_SUPPORT_CLASS, readSupportClass)
+    hadoopConf.set(
+      ParquetReadSupport.SPARK_ROW_REQUESTED_SCHEMA,
+      rowWithSchema)
+    hadoopConf.set(
+      ParquetWriteSupport.SPARK_ROW_SCHEMA,
+      rowWithSchema)
+    hadoopConf.set(
+      SQLConf.SESSION_LOCAL_TIMEZONE.key,
+      localTimezone)
+    hadoopConf.setBoolean(
+      SQLConf.NESTED_SCHEMA_PRUNING_ENABLED.key,
+      nestedSchemaPruningEnabled)
+    hadoopConf.setBoolean(
+      SQLConf.CASE_SENSITIVE.key,
+      sparkSession.sessionState.conf.caseSensitiveAnalysis)
+
+    // Sets flags for `ParquetToSparkSchemaConverter`
+    hadoopConf.setBoolean(
+      SQLConf.PARQUET_BINARY_AS_STRING.key,
+      isParquetBinaryAsString)
+    hadoopConf.setBoolean(
+      SQLConf.PARQUET_INT96_AS_TIMESTAMP.key,
+      isParquetINT96AsTimestamp)
+    hadoopConf.setBoolean(
+      SQLConf.PARQUET_INFER_TIMESTAMP_NTZ_ENABLED.key,
+      parquetInferTimestampNTZEnabled)
+    hadoopConf.setBoolean(
+      SQLConf.LEGACY_PARQUET_NANOS_AS_LONG.key,
+      legacyParquetNanosAsLong)
+
+    val broadcastedHadoopConf = if (isBroadcastHadoopConf(options)) {
+      Option.empty
+    } else {
+      Option(sparkSession.sparkContext.broadcast(new SerializableConfiguration(hadoopConf)))
+    }
+
     // Should always be set by FileSourceScanExec creating this.
     // Check conf before checking option, to allow working around an issue by changing conf.
     val returningBatch = sparkSession.sessionState.conf.parquetVectorizedReaderEnabled &&
@@ -198,13 +215,50 @@ class ParquetFileFormat
       assert(supportBatch(sparkSession, resultSchema))
     }
 
+    val sparkConf = sparkSession.sparkContext.conf
+
     (file: PartitionedFile) => {
       assert(file.partitionValues.numFields == partitionSchema.size)
 
       val filePath = file.toPath
       val split = new FileSplit(filePath, file.start, file.length, Array.empty[String])
 
-      val sharedConf = broadcastedHadoopConf.value.value
+      val sharedConf = if (broadcastedHadoopConf.isDefined) {
+        broadcastedHadoopConf.get.value.value
+      } else {
+        val conf = SparkHadoopUtil.get.newConfiguration(sparkConf)
+        conf.set(ParquetInputFormat.READ_SUPPORT_CLASS, readSupportClass)
+        conf.set(
+          ParquetReadSupport.SPARK_ROW_REQUESTED_SCHEMA,
+          rowWithSchema)
+        conf.set(
+          ParquetWriteSupport.SPARK_ROW_SCHEMA,
+          rowWithSchema)
+        conf.set(
+          SQLConf.SESSION_LOCAL_TIMEZONE.key,
+          localTimezone)
+        conf.setBoolean(
+          SQLConf.NESTED_SCHEMA_PRUNING_ENABLED.key,
+          nestedSchemaPruningEnabled)
+        conf.setBoolean(
+          SQLConf.CASE_SENSITIVE.key,
+          isCaseSensitive)
+
+        // Sets flags for `ParquetToSparkSchemaConverter`
+        conf.setBoolean(
+          SQLConf.PARQUET_BINARY_AS_STRING.key,
+          isParquetBinaryAsString)
+        conf.setBoolean(
+          SQLConf.PARQUET_INT96_AS_TIMESTAMP.key,
+          isParquetINT96AsTimestamp)
+        conf.setBoolean(
+          SQLConf.PARQUET_INFER_TIMESTAMP_NTZ_ENABLED.key,
+          parquetInferTimestampNTZEnabled)
+        conf.setBoolean(
+          SQLConf.LEGACY_PARQUET_NANOS_AS_LONG.key,
+          legacyParquetNanosAsLong)
+        new SerializableConfiguration(conf).value
+      }
 
       val fileFooter = if (enableVectorizedReader) {
         // When there are vectorized reads, we can avoid reading the footer twice by reading
@@ -262,7 +316,7 @@ class ParquetFileFormat
 
       val attemptId = new TaskAttemptID(new TaskID(new JobID(), TaskType.MAP, 0), 0)
       val hadoopAttemptContext =
-        new TaskAttemptContextImpl(broadcastedHadoopConf.value.value, attemptId)
+        new TaskAttemptContextImpl(sharedConf, attemptId)
 
       // Try to push down filters when filter push-down is enabled.
       // Notice: This push-down is RowGroups level, not individual records.

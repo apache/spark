@@ -41,6 +41,7 @@ import org.apache.orc.OrcConf
 import org.apache.orc.OrcConf.COMPRESS
 
 import org.apache.spark.TaskContext
+import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.InternalRow
@@ -136,7 +137,8 @@ class OrcFileFormat extends FileFormat with DataSourceRegister with Serializable
       options: Map[String, String],
       hadoopConf: Configuration): (PartitionedFile) => Iterator[InternalRow] = {
 
-    if (sparkSession.sessionState.conf.orcFilterPushDown) {
+    val orcFilterPushDown = sparkSession.sessionState.conf.orcFilterPushDown
+    if (orcFilterPushDown) {
       // Sets pushed predicates
       OrcFilters.createFilter(requiredSchema, filters).foreach { f =>
         hadoopConf.set(OrcFileFormat.SARG_PUSHDOWN, toKryo(f))
@@ -144,12 +146,28 @@ class OrcFileFormat extends FileFormat with DataSourceRegister with Serializable
       }
     }
 
-    val broadcastedHadoopConf =
-      sparkSession.sparkContext.broadcast(new SerializableConfiguration(hadoopConf))
+    val broadcastedHadoopConf = if (options.isEmpty) {
+      Option.empty
+    } else {
+      Option(sparkSession.sparkContext.broadcast(new SerializableConfiguration(hadoopConf)))
+    }
     val ignoreCorruptFiles = sparkSession.sessionState.conf.ignoreCorruptFiles
+    val sparkConf = sparkSession.sparkContext.conf
 
     (file: PartitionedFile) => {
-      val conf = broadcastedHadoopConf.value.value
+      val conf = if (broadcastedHadoopConf.isDefined) {
+        broadcastedHadoopConf.get.value.value
+      } else {
+        val conf = SparkHadoopUtil.newConfiguration(sparkConf)
+        if (orcFilterPushDown) {
+          // Sets pushed predicates
+          OrcFilters.createFilter(requiredSchema, filters).foreach { f =>
+            conf.set(OrcFileFormat.SARG_PUSHDOWN, toKryo(f))
+            conf.setBoolean(ConfVars.HIVEOPTINDEXFILTER.varname, true)
+          }
+        }
+        new SerializableConfiguration(conf).value
+      }
 
       val filePath = file.toPath
 
