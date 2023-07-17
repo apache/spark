@@ -72,7 +72,6 @@ object StreamingForeachBatchHelper extends Logging {
     // TODO: Set up Spark Connect session. Do we actually need this for the first version?
     dataFrameCachingWrapper(
       (args: FnArgsWithId) => {
-        assert(sessionHolder.session == args.df.sparkSession) // XXX
         fn(args.df, args.batchId) // dfId is not used, see hack comment above.
       },
       sessionHolder)

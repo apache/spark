@@ -20,14 +20,13 @@ from pyspark.testing.connectutils import ReusedConnectTestCase
 
 
 class StreamingForeachBatchParityTests(StreamingTestsForeachBatchMixin, ReusedConnectTestCase):
-    pass
+    def test_temp_verify_remote_session(self):
+        self.assertTrue(hasattr(self.spark, '_client'), "Why is this not using remote session?")
 
 
 if __name__ == "__main__":
     import unittest
-    from pyspark.sql.tests.connect.streaming.test_parity_streaming_foreachBatch import (
-        StreamingForeachBatchParityTests,
-    )  # noqa: F401
+    from pyspark.sql.tests.connect.streaming.test_parity_streaming_foreachBatch import *
 
     try:
         import xmlrunner  # type: ignore[import]
