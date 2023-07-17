@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution.streaming.state
 
 import java.util.UUID
 import java.util.concurrent.{ScheduledFuture, TimeUnit}
+import java.util.concurrent.atomic.AtomicReference
 import javax.annotation.concurrent.GuardedBy
 
 import scala.collection.mutable
@@ -441,8 +442,7 @@ object StateStore extends Logging {
 
   private val maintenanceThreadPoolLock = new Object
 
-  @GuardedBy("maintenanceThreadPoolLock")
-  private var threadPoolException: Throwable = null
+  private val threadPoolException = new AtomicReference[Throwable](null)
 
   // This set is to keep track of the partitions that are queued
   // for maintenance or currently have maintenance running on them
@@ -694,19 +694,16 @@ object StateStore extends Logging {
       throw new IllegalStateException("SparkEnv not active, cannot do maintenance on StateStores")
     }
     loadedProviders.synchronized { loadedProviders.toSeq }.foreach { case (id, provider) =>
-      maintenanceThreadPoolLock.synchronized {
-        if (threadPoolException != null) {
-          val exception = threadPoolException
-          logWarning("Error in maintenanceThreadPool", threadPoolException)
-          threadPoolException = null
-          throw exception
-        }
+      if (threadPoolException.get() != null) {
+        val exception = threadPoolException.getAndSet(null)
+        logWarning("Error in maintenanceThreadPool", exception)
+        throw exception
       }
       if (processThisPartition(id)) {
         maintenanceThreadPool.execute(() => {
           val startTime = System.currentTimeMillis()
-          provider.doMaintenance()
           try {
+            provider.doMaintenance()
             if (!verifyIfStoreInstanceActive(id)) {
               unload(id)
               logInfo(s"Unloaded $provider")
@@ -714,9 +711,7 @@ object StateStore extends Logging {
           } catch {
             case NonFatal(e) =>
               logWarning(s"Error managing $provider, stopping management thread", e)
-              maintenanceThreadPoolLock.synchronized {
-                threadPoolException = e
-              }
+              threadPoolException.set(e)
               throw e
           } finally {
             val endTime = System.currentTimeMillis()
