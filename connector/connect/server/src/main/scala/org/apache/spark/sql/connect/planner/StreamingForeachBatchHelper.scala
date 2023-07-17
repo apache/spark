@@ -78,9 +78,9 @@ object StreamingForeachBatchHelper extends Logging {
   }
 
   /**
-   * Starts up Python worker and initializes it with Python function.
-   * Returns a foreachBatch function that sets up the session and Dataframe cache and
-   * and interacts with the Python worker to execute user's function.
+   * Starts up Python worker and initializes it with Python function. Returns a foreachBatch
+   * function that sets up the session and Dataframe cache and and interacts with the Python
+   * worker to execute user's function.
    */
   def pythonForeachBatchWrapper(
       pythonFn: SimplePythonFunction,
