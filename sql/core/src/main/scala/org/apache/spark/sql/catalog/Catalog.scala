@@ -632,8 +632,9 @@ abstract class Catalog {
 
   /**
    * Invalidates and refreshes all the cached data (and the associated metadata) for any `Dataset`
-   * that contains the given data source path. Path matching is by prefix, i.e. "/" would invalidate
-   * everything that is cached.
+   * that contains the given data source path. Path matching is by checking for sub-directories,
+   * i.e. "/" would invalidate everything that is cached and "/test/parent" would invalidate
+   * everything that is a subdirectory of "/test/parent".
    *
    * @since 2.0.0
    */

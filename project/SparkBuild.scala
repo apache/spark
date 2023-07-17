@@ -89,9 +89,9 @@ object BuildCommons {
 
   // Google Protobuf version used for generating the protobuf.
   // SPARK-41247: needs to be consistent with `protobuf.version` in `pom.xml`.
-  val protoVersion = "3.23.2"
+  val protoVersion = "3.23.4"
   // GRPC version used for Spark Connect.
-  val gprcVersion = "1.47.0"
+  val gprcVersion = "1.56.0"
 }
 
 object SparkBuild extends PomBuild {
@@ -226,12 +226,12 @@ object SparkBuild extends PomBuild {
   // Silencer: Scala compiler plugin for warning suppression
   // Aim: enable fatal warnings, but suppress ones related to using of deprecated APIs
   // depends on scala version:
-  // <2.13.2 - silencer 1.7.12 and compiler settings to enable fatal warnings
+  // <2.13.2 - silencer 1.7.13 and compiler settings to enable fatal warnings
   // 2.13.2+ - no silencer and configured warnings to achieve the same
   lazy val compilerWarningSettings: Seq[sbt.Def.Setting[_]] = Seq(
     libraryDependencies ++= {
       if (VersionNumber(scalaVersion.value).matchesSemVer(SemanticSelector("<2.13.2"))) {
-        val silencerVersion = "1.7.12"
+        val silencerVersion = "1.7.13"
         Seq(
           "org.scala-lang.modules" %% "scala-collection-compat" % "2.2.0",
           compilerPlugin("com.github.ghik" % "silencer-plugin" % silencerVersion cross CrossVersion.full),
@@ -286,7 +286,9 @@ object SparkBuild extends PomBuild {
           // TODO(SPARK-43850): Remove the following suppression rules and remove `import scala.language.higherKinds`
           // from the corresponding files when Scala 2.12 is no longer supported.
           "-Wconf:cat=unused-imports&src=org\\/apache\\/spark\\/graphx\\/impl\\/VertexPartitionBase.scala:s",
-          "-Wconf:cat=unused-imports&src=org\\/apache\\/spark\\/graphx\\/impl\\/VertexPartitionBaseOps.scala:s"
+          "-Wconf:cat=unused-imports&src=org\\/apache\\/spark\\/graphx\\/impl\\/VertexPartitionBaseOps.scala:s",
+          // SPARK-40497 Upgrade Scala to 2.13.11 and suppress `Implicit definition should have explicit type`
+          "-Wconf:msg=Implicit definition should have explicit type:s"
         )
       }
     }
@@ -331,7 +333,13 @@ object SparkBuild extends PomBuild {
     javaOptions ++= {
       val versionParts = System.getProperty("java.version").split("[+.\\-]+", 3)
       var major = versionParts(0).toInt
-      if (major >= 16) Seq("--add-modules=jdk.incubator.vector,jdk.incubator.foreign", "-Dforeign.restricted=warn") else Seq.empty
+      if (major >= 21) {
+        Seq("--add-modules=jdk.incubator.vector", "-Dforeign.restricted=warn")
+      } else if (major >= 16) {
+        Seq("--add-modules=jdk.incubator.vector,jdk.incubator.foreign", "-Dforeign.restricted=warn")
+      } else {
+        Seq.empty
+      }
     },
 
     (Compile / doc / javacOptions) ++= {
@@ -407,7 +415,7 @@ object SparkBuild extends PomBuild {
   val mimaProjects = allProjects.filterNot { x =>
     Seq(
       spark, hive, hiveThriftServer, repl, networkCommon, networkShuffle, networkYarn,
-      unsafe, tags, tokenProviderKafka010, sqlKafka010, connectCommon, connect, connectClient, protobuf,
+      unsafe, tags, tokenProviderKafka010, sqlKafka010, connectCommon, connect, connectClient,
       commonUtils, sqlApi
     ).contains(x)
   }
@@ -674,7 +682,8 @@ object SparkConnectCommon {
     // of these dependendencies that we need to shade later on.
     libraryDependencies ++= {
       val guavaVersion =
-        SbtPomKeys.effectivePom.value.getProperties.get("guava.version").asInstanceOf[String]
+        SbtPomKeys.effectivePom.value.getProperties.get(
+          "connect.guava.version").asInstanceOf[String]
       val guavaFailureaccessVersion =
         SbtPomKeys.effectivePom.value.getProperties.get(
           "guava.failureaccess.version").asInstanceOf[String]
@@ -688,7 +697,8 @@ object SparkConnectCommon {
 
     dependencyOverrides ++= {
       val guavaVersion =
-        SbtPomKeys.effectivePom.value.getProperties.get("guava.version").asInstanceOf[String]
+        SbtPomKeys.effectivePom.value.getProperties.get(
+          "connect.guava.version").asInstanceOf[String]
       val guavaFailureaccessVersion =
         SbtPomKeys.effectivePom.value.getProperties.get(
           "guava.failureaccess.version").asInstanceOf[String]
@@ -753,7 +763,8 @@ object SparkConnect {
     // of these dependendencies that we need to shade later on.
     libraryDependencies ++= {
       val guavaVersion =
-        SbtPomKeys.effectivePom.value.getProperties.get("guava.version").asInstanceOf[String]
+        SbtPomKeys.effectivePom.value.getProperties.get(
+          "connect.guava.version").asInstanceOf[String]
       val guavaFailureaccessVersion =
         SbtPomKeys.effectivePom.value.getProperties.get(
           "guava.failureaccess.version").asInstanceOf[String]
@@ -767,7 +778,8 @@ object SparkConnect {
 
     dependencyOverrides ++= {
       val guavaVersion =
-        SbtPomKeys.effectivePom.value.getProperties.get("guava.version").asInstanceOf[String]
+        SbtPomKeys.effectivePom.value.getProperties.get(
+          "connect.guava.version").asInstanceOf[String]
       val guavaFailureaccessVersion =
         SbtPomKeys.effectivePom.value.getProperties.get(
           "guava.failureaccess.version").asInstanceOf[String]
@@ -842,7 +854,8 @@ object SparkConnectClient {
     // of these dependendencies that we need to shade later on.
     libraryDependencies ++= {
       val guavaVersion =
-        SbtPomKeys.effectivePom.value.getProperties.get("guava.version").asInstanceOf[String]
+        SbtPomKeys.effectivePom.value.getProperties.get(
+          "connect.guava.version").asInstanceOf[String]
       Seq(
         "com.google.guava" % "guava" % guavaVersion,
         "com.google.protobuf" % "protobuf-java" % protoVersion % "protobuf"
@@ -851,7 +864,8 @@ object SparkConnectClient {
 
     dependencyOverrides ++= {
       val guavaVersion =
-        SbtPomKeys.effectivePom.value.getProperties.get("guava.version").asInstanceOf[String]
+        SbtPomKeys.effectivePom.value.getProperties.get(
+          "connect.guava.version").asInstanceOf[String]
       Seq(
         "com.google.guava" % "guava" % guavaVersion,
         "com.google.protobuf" % "protobuf-java" % protoVersion
@@ -1096,7 +1110,7 @@ object DependencyOverrides {
     dependencyOverrides += "com.google.guava" % "guava" % guavaVersion,
     dependencyOverrides += "xerces" % "xercesImpl" % "2.12.2",
     dependencyOverrides += "jline" % "jline" % "2.14.6",
-    dependencyOverrides += "org.apache.avro" % "avro" % "1.11.1")
+    dependencyOverrides += "org.apache.avro" % "avro" % "1.11.2")
 }
 
 /**
@@ -1566,6 +1580,19 @@ object TestSettings {
       "SPARK_TESTING" -> "1",
       "JAVA_HOME" -> sys.env.get("JAVA_HOME").getOrElse(sys.props("java.home")),
       "SPARK_BEELINE_OPTS" -> "-DmyKey=yourValue"),
+
+    // Copy system properties to forked JVMs so that tests know proxy settings
+    (Test / javaOptions) ++= {
+      val q = "\""
+      sys.props.toList
+        .filter {
+          case (key, value) => key.startsWith("http.") || key.startsWith("https.")
+        }
+        .map {
+          case (key, value) => s"-D$key=$q$value$q"
+        }
+    },
+
     (Test / javaOptions) += s"-Djava.io.tmpdir=$testTempDir",
     (Test / javaOptions) += "-Dspark.test.home=" + sparkHome,
     (Test / javaOptions) += "-Dspark.testing=1",

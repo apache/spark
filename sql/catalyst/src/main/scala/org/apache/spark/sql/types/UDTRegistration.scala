@@ -21,7 +21,7 @@ import scala.collection.mutable
 
 import org.apache.spark.annotation.{DeveloperApi, Since}
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.errors.QueryExecutionErrors
+import org.apache.spark.sql.errors.DataTypeErrors
 import org.apache.spark.util.Utils
 
 /**
@@ -78,10 +78,10 @@ object UDTRegistration extends Serializable with Logging {
         if (classOf[UserDefinedType[_]].isAssignableFrom(udtClass)) {
           udtClass
         } else {
-          throw QueryExecutionErrors.notUserDefinedTypeError(udtClass.getName, userClass)
+          throw DataTypeErrors.notUserDefinedTypeError(udtClass.getName, userClass)
         }
       } else {
-        throw QueryExecutionErrors.cannotLoadUserDefinedTypeError(udtClassName, userClass)
+        throw DataTypeErrors.cannotLoadUserDefinedTypeError(udtClassName, userClass)
       }
     }
   }

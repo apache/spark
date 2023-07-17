@@ -30,6 +30,7 @@ import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.{AddArtifactsRequest, AddArtifactsResponse}
 import org.apache.spark.connect.proto.AddArtifactsResponse.ArtifactSummary
 import org.apache.spark.sql.connect.artifact.SparkConnectArtifactManager
+import org.apache.spark.sql.connect.artifact.util.ArtifactUtils
 import org.apache.spark.util.Utils
 
 /**
@@ -48,8 +49,6 @@ class SparkConnectAddArtifactsHandler(val responseObserver: StreamObserver[AddAr
   // several [[AddArtifactsRequest]]s.
   private var chunkedArtifact: StagedChunkedArtifact = _
   private var holder: SessionHolder = _
-  private def artifactManager: SparkConnectArtifactManager =
-    SparkConnectArtifactManager.getOrCreateArtifactManager
 
   override def onNext(req: AddArtifactsRequest): Unit = {
     if (this.holder == null) {
@@ -86,7 +85,8 @@ class SparkConnectAddArtifactsHandler(val responseObserver: StreamObserver[AddAr
   }
 
   protected def addStagedArtifactToArtifactManager(artifact: StagedArtifact): Unit = {
-    artifactManager.addArtifact(holder, artifact.path, artifact.stagedPath, artifact.fragment)
+    require(holder != null)
+    holder.addArtifact(artifact.path, artifact.stagedPath, artifact.fragment)
   }
 
   /**
@@ -102,7 +102,7 @@ class SparkConnectAddArtifactsHandler(val responseObserver: StreamObserver[AddAr
       if (artifact.getCrcStatus.contains(true)) {
         if (artifact.path.startsWith(
             SparkConnectArtifactManager.forwardToFSPrefix + File.separator)) {
-          artifactManager.uploadArtifactToFs(holder, artifact.path, artifact.stagedPath)
+          holder.artifactManager.uploadArtifactToFs(artifact.path, artifact.stagedPath)
         } else {
           addStagedArtifactToArtifactManager(artifact)
         }
@@ -169,7 +169,16 @@ class SparkConnectAddArtifactsHandler(val responseObserver: StreamObserver[AddAr
       }
 
     val path: Path = Paths.get(canonicalFileName)
-    val stagedPath: Path = stagingDir.resolve(path)
+    val stagedPath: Path =
+      try {
+        ArtifactUtils.concatenatePaths(stagingDir, path)
+      } catch {
+        case _: IllegalArgumentException =>
+          throw new IllegalArgumentException(
+            s"Artifact with name: $name is invalid. The `name` " +
+              s"must be a relative path and cannot reference parent/sibling/nephew directories.")
+        case NonFatal(e) => throw e
+      }
 
     Files.createDirectories(stagedPath.getParent)
 

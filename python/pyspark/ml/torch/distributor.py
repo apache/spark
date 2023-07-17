@@ -48,19 +48,7 @@ from pyspark.ml.torch.log_communication import (  # type: ignore
     LogStreamingClient,
     LogStreamingServer,
 )
-
-
-def _get_active_session(is_remote: bool) -> SparkSession:
-    if not is_remote:
-        spark = SparkSession.getActiveSession()
-    else:
-        import pyspark.sql.connect.session
-
-        spark = pyspark.sql.connect.session._active_spark_session  # type: ignore[assignment]
-
-    if spark is None:
-        raise RuntimeError("An active SparkSession is required for the distributor.")
-    return spark
+from pyspark.ml.util import _get_active_session
 
 
 def _get_resources(session: SparkSession) -> Dict[str, ResourceInformation]:
@@ -171,6 +159,7 @@ class Distributor:
         num_processes: int = 1,
         local_mode: bool = True,
         use_gpu: bool = True,
+        ssl_conf: Optional[str] = None,
     ):
         from pyspark.sql.utils import is_remote
 
@@ -189,7 +178,7 @@ class Distributor:
         self.local_mode = local_mode
         self.use_gpu = use_gpu
         self.num_tasks = self._get_num_tasks()
-        self.ssl_conf = None
+        self.ssl_conf = ssl_conf
 
     def _create_input_params(self) -> Dict[str, Any]:
         input_params = self.__dict__.copy()
@@ -331,6 +320,7 @@ class TorchDistributor(Distributor):
     ...     # ...
     ...     torch.destroy_process_group()
     ...     return model # or anything else
+    ...
     >>> distributor = TorchDistributor(
     ...     num_processes=2,
     ...     local_mode=True,
@@ -357,6 +347,7 @@ class TorchDistributor(Distributor):
     ...     trainer.fit()
     ...     # ...
     ...     return trainer
+    ...
     >>> distributor = TorchDistributor(
     ...     num_processes=num_proc,
     ...     local_mode=True,
@@ -367,12 +358,14 @@ class TorchDistributor(Distributor):
     _PICKLED_FUNC_FILE = "func.pickle"
     _TRAIN_FILE = "train.py"
     _PICKLED_OUTPUT_FILE = "output.pickle"
+    _TORCH_SSL_CONF = "pytorch.spark.distributor.ignoreSsl"
 
     def __init__(
         self,
         num_processes: int = 1,
         local_mode: bool = True,
         use_gpu: bool = True,
+        _ssl_conf: str = _TORCH_SSL_CONF,
     ):
         """Initializes the distributor.
 
@@ -398,10 +391,45 @@ class TorchDistributor(Distributor):
         RuntimeError
             If an active SparkSession is unavailable.
         """
-        super().__init__(num_processes, local_mode, use_gpu)
-        self.ssl_conf = "pytorch.spark.distributor.ignoreSsl"  # type: ignore
+        super().__init__(num_processes, local_mode, use_gpu, ssl_conf=_ssl_conf)
         self._validate_input_params()
         self.input_params = self._create_input_params()
+
+    @staticmethod
+    def _get_torchrun_args(local_mode: bool, num_processes: int) -> Tuple[List[Any], int]:
+        """
+        Given the mode and the number of processes, create the arguments to be given to for torch
+
+        Parameters
+        ---------
+        local_mode: bool
+            Whether or not we are running training locally or in a distributed fashion
+
+        num_processes: int
+            The number of processes that we are going to use
+
+        Returns
+        ------
+        Tuple[List[Any], int]
+            A tuple containing a list of arguments to pass as pytorch args,
+            as well as the number of processes per node
+        """
+        if local_mode:
+            torchrun_args = ["--standalone", "--nnodes=1"]
+            processes_per_node = num_processes
+            return torchrun_args, processes_per_node
+
+        master_addr = os.environ["MASTER_ADDR"]
+        master_port = os.environ["MASTER_PORT"]
+        node_rank = os.environ["RANK"]
+        torchrun_args = [
+            f"--nnodes={num_processes}",
+            f"--node_rank={node_rank}",
+            f"--rdzv_endpoint={master_addr}:{master_port}",
+            "--rdzv_id=0",  # TODO: setup random ID that is gleaned from env variables
+        ]
+        processes_per_node = 1
+        return torchrun_args, processes_per_node
 
     @staticmethod
     def _create_torchrun_command(
@@ -410,23 +438,9 @@ class TorchDistributor(Distributor):
         local_mode = input_params["local_mode"]
         num_processes = input_params["num_processes"]
 
-        if local_mode:
-            torchrun_args = ["--standalone", "--nnodes=1"]
-            processes_per_node = num_processes
-        else:
-            master_addr, master_port = (
-                os.environ["MASTER_ADDR"],
-                os.environ["MASTER_PORT"],
-            )
-            node_rank = os.environ["RANK"]
-            torchrun_args = [
-                f"--nnodes={num_processes}",
-                f"--node_rank={node_rank}",
-                f"--rdzv_endpoint={master_addr}:{master_port}",
-                "--rdzv_id=0",
-            ]  # TODO: setup random ID that is gleaned from env variables
-            processes_per_node = 1
-
+        torchrun_args, processes_per_node = TorchDistributor._get_torchrun_args(
+            local_mode=local_mode, num_processes=num_processes
+        )
         args_string = list(map(str, args))  # converting all args to strings
 
         return [
@@ -777,8 +791,8 @@ class TorchDistributor(Distributor):
             schema_file_path = os.path.join(save_dir, "schema.json")
             schema_json_string = json.dumps(input_schema_json)
 
-            with open(schema_file_path, "w") as f:  # type:ignore
-                f.write(schema_json_string)  # type:ignore
+            with open(schema_file_path, "w") as f:
+                f.write(schema_json_string)
 
             os.environ[SPARK_PARTITION_ARROW_DATA_FILE] = arrow_file_path
             os.environ[SPARK_DATAFRAME_SCHEMA_FILE] = schema_file_path
@@ -969,7 +983,7 @@ class TorchDistributor(Distributor):
 
 
 def _get_spark_partition_data_loader(
-    num_samples: int, batch_size: int, num_workers: int = 1, prefetch_factor: Optional[int] = 2
+    num_samples: int, batch_size: int, num_workers: int = 1, prefetch_factor: int = 2
 ) -> Any:
     """
     This function must be called inside the `train_function` where `train_function`
@@ -1005,4 +1019,11 @@ def _get_spark_partition_data_loader(
 
     dataset = _SparkPartitionTorchDataset(arrow_file, schema, num_samples)
 
-    return DataLoader(dataset, batch_size, num_workers=num_workers, prefetch_factor=prefetch_factor)
+    if num_workers > 0:
+        return DataLoader(
+            dataset, batch_size, num_workers=num_workers, prefetch_factor=prefetch_factor
+        )
+    else:
+        # if num_workers is zero, we cannot set `prefetch_factor` otherwise
+        # torch will raise error.
+        return DataLoader(dataset, batch_size, num_workers=num_workers)

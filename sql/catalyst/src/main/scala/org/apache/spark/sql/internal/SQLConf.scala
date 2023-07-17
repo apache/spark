@@ -36,6 +36,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.{IGNORE_MISSING_FILES => SPARK_IGNORE_MISSING_FILES}
 import org.apache.spark.network.util.ByteUnit
+import org.apache.spark.sql.SqlApiConf
 import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.catalyst.analysis.{HintErrorLogger, Resolver}
 import org.apache.spark.sql.catalyst.expressions.CodegenObjectFactoryMode
@@ -179,6 +180,10 @@ object SQLConf {
     confGetter.set(getter)
   }
 
+  // Make sure SqlApiConf is always in sync with SQLConf. SqlApiConf will always try to
+  // load SqlConf to make sure both classes are in sync from the get go.
+  SqlApiConf.setConfGetter(() => SQLConf.get)
+
   /**
    * Returns the active config object within the current scope. If there is an active SparkSession,
    * the proper SQLConf associated with the thread's active session is used. If it's called from
@@ -320,6 +325,13 @@ object SQLConf {
     .version("3.4.0")
     .booleanConf
     .createWithDefault(false)
+
+  val ALLOW_NAMED_FUNCTION_ARGUMENTS = buildConf("spark.sql.allowNamedFunctionArguments")
+    .doc("If true, Spark will turn on support for named parameters for all functions that has" +
+      " it implemented.")
+    .version("3.5.0")
+    .booleanConf
+    .createWithDefault(true)
 
   val DYNAMIC_PARTITION_PRUNING_ENABLED =
     buildConf("spark.sql.optimizer.dynamicPartitionPruning.enabled")
@@ -1749,6 +1761,16 @@ object SQLConf {
     .checkValue(v => v > 0, "The min partition number must be a positive integer.")
     .createOptional
 
+  val FILES_MAX_PARTITION_NUM = buildConf("spark.sql.files.maxPartitionNum")
+    .doc("The suggested (not guaranteed) maximum number of split file partitions. If it is set, " +
+      "Spark will rescale each partition to make the number of partitions is close to this " +
+      "value if the initial number of partitions exceeds this value. This configuration is " +
+      "effective only when using file-based sources such as Parquet, JSON and ORC.")
+    .version("3.5.0")
+    .intConf
+    .checkValue(v => v > 0, "The maximum number of partitions must be a positive integer.")
+    .createOptional
+
   val IGNORE_CORRUPT_FILES = buildConf("spark.sql.files.ignoreCorruptFiles")
     .doc("Whether to ignore corrupt files. If true, the Spark jobs will continue to run when " +
       "encountering corrupted files and the contents that have been read will still be returned. " +
@@ -2162,6 +2184,15 @@ object SQLConf {
       .internal()
       .doc("When true, enable code-gen for FULL OUTER shuffled hash join.")
       .version("3.3.0")
+      .booleanConf
+      .createWithDefault(true)
+
+  val ENABLE_BUILD_SIDE_OUTER_SHUFFLED_HASH_JOIN_CODEGEN =
+    buildConf("spark.sql.codegen.join.buildSideOuterShuffledHashJoin.enabled")
+      .internal()
+      .doc("When true, enable code-gen for an OUTER shuffled hash join where outer side" +
+        " is the build side.")
+      .version("3.5.0")
       .booleanConf
       .createWithDefault(true)
 
@@ -2727,6 +2758,14 @@ object SQLConf {
     .booleanConf
     .createWithDefault(false)
 
+  val TVF_ALLOW_MULTIPLE_TABLE_ARGUMENTS_ENABLED =
+    buildConf("spark.sql.tvf.allowMultipleTableArguments.enabled")
+      .doc("When true, allows multiple table arguments for table-valued functions, " +
+        "receiving the cartesian product of all the rows of these tables.")
+      .version("3.5.0")
+      .booleanConf
+      .createWithDefault(false)
+
   val RANGE_EXCHANGE_SAMPLE_SIZE_PER_PARTITION =
     buildConf("spark.sql.execution.rangeExchange.sampleSizePerPartition")
       .internal()
@@ -2831,8 +2870,9 @@ object SQLConf {
       .doc("When using Apache Arrow, use large variable width vectors for string and binary " +
         "types. Regular string and binary types have a 2GiB limit for a column in a single " +
         "record batch. Large variable types remove this limitation at the cost of higher memory " +
-        "usage per value.")
+        "usage per value. Note that this only works for DataFrame.mapInArrow.")
       .version("3.5.0")
+      .internal()
       .booleanConf
       .createWithDefault(false)
 
@@ -2882,6 +2922,13 @@ object SQLConf {
       .version("3.4.0")
       .booleanConf
       .createWithDefault(false)
+
+  val PYTHON_TABLE_UDF_ARROW_ENABLED =
+    buildConf("spark.sql.execution.pythonUDTF.arrow.enabled")
+      .doc("Enable Arrow optimization for Python UDTFs.")
+      .version("3.5.0")
+      .booleanConf
+      .createWithDefault(true)
 
   val PANDAS_GROUPED_MAP_ASSIGN_COLUMNS_BY_NAME =
     buildConf("spark.sql.legacy.execution.pandas.groupedMap.assignColumnsByName")
@@ -4415,7 +4462,7 @@ object SQLConf {
  *
  * SQLConf is thread-safe (internally synchronized, so safe to be used in multiple threads).
  */
-class SQLConf extends Serializable with Logging {
+class SQLConf extends Serializable with Logging with SqlApiConf {
   import SQLConf._
 
   /** Only low degree of contention is expected for conf, thus NOT using ConcurrentHashMap. */
@@ -4519,6 +4566,8 @@ class SQLConf extends Serializable with Logging {
   def filesOpenCostInBytes: Long = getConf(FILES_OPEN_COST_IN_BYTES)
 
   def filesMinPartitionNum: Option[Int] = getConf(FILES_MIN_PARTITION_NUM)
+
+  def filesMaxPartitionNum: Option[Int] = getConf(FILES_MAX_PARTITION_NUM)
 
   def ignoreCorruptFiles: Boolean = getConf(IGNORE_CORRUPT_FILES)
 
@@ -4659,7 +4708,7 @@ class SQLConf extends Serializable with Logging {
 
   def subqueryReuseEnabled: Boolean = getConf(SUBQUERY_REUSE_ENABLED)
 
-  def caseSensitiveAnalysis: Boolean = getConf(SQLConf.CASE_SENSITIVE)
+  override def caseSensitiveAnalysis: Boolean = getConf(SQLConf.CASE_SENSITIVE)
 
   def constraintPropagationEnabled: Boolean = getConf(CONSTRAINT_PROPAGATION_ENABLED)
 
@@ -4908,6 +4957,8 @@ class SQLConf extends Serializable with Logging {
 
   def supportQuotedRegexColumnName: Boolean = getConf(SUPPORT_QUOTED_REGEX_COLUMN_NAME)
 
+  def tvfAllowMultipleTableArguments: Boolean = getConf(TVF_ALLOW_MULTIPLE_TABLE_ARGUMENTS_ENABLED)
+
   def rangeExchangeSampleSizePerPartition: Int = getConf(RANGE_EXCHANGE_SAMPLE_SIZE_PER_PARTITION)
 
   def arrowPySparkEnabled: Boolean = getConf(ARROW_PYSPARK_EXECUTION_ENABLED)
@@ -4973,7 +5024,7 @@ class SQLConf extends Serializable with Logging {
   def storeAssignmentPolicy: StoreAssignmentPolicy.Value =
     StoreAssignmentPolicy.withName(getConf(STORE_ASSIGNMENT_POLICY))
 
-  def ansiEnabled: Boolean = getConf(ANSI_ENABLED)
+  override def ansiEnabled: Boolean = getConf(ANSI_ENABLED)
 
   def enableDefaultColumns: Boolean = getConf(SQLConf.ENABLE_DEFAULT_COLUMNS)
 
@@ -4985,9 +5036,9 @@ class SQLConf extends Serializable with Logging {
   def useNullsForMissingDefaultColumnValues: Boolean =
     getConf(SQLConf.USE_NULLS_FOR_MISSING_DEFAULT_COLUMN_VALUES)
 
-  def enforceReservedKeywords: Boolean = ansiEnabled && getConf(ENFORCE_RESERVED_KEYWORDS)
+  override def enforceReservedKeywords: Boolean = ansiEnabled && getConf(ENFORCE_RESERVED_KEYWORDS)
 
-  def doubleQuotedIdentifiers: Boolean = ansiEnabled && getConf(DOUBLE_QUOTED_IDENTIFIERS)
+  override def doubleQuotedIdentifiers: Boolean = ansiEnabled && getConf(DOUBLE_QUOTED_IDENTIFIERS)
 
   def ansiRelationPrecedence: Boolean = ansiEnabled && getConf(ANSI_RELATION_PRECEDENCE)
 
@@ -5027,9 +5078,10 @@ class SQLConf extends Serializable with Logging {
   def replaceDatabricksSparkAvroEnabled: Boolean =
     getConf(SQLConf.LEGACY_REPLACE_DATABRICKS_SPARK_AVRO_ENABLED)
 
-  def setOpsPrecedenceEnforced: Boolean = getConf(SQLConf.LEGACY_SETOPS_PRECEDENCE_ENABLED)
+  override def setOpsPrecedenceEnforced: Boolean =
+    getConf(SQLConf.LEGACY_SETOPS_PRECEDENCE_ENABLED)
 
-  def exponentLiteralAsDecimalEnabled: Boolean =
+  override def exponentLiteralAsDecimalEnabled: Boolean =
     getConf(SQLConf.LEGACY_EXPONENT_LITERAL_AS_DECIMAL_ENABLED)
 
   def allowNegativeScaleOfDecimalEnabled: Boolean =
@@ -5043,7 +5095,7 @@ class SQLConf extends Serializable with Logging {
   def nameNonStructGroupingKeyAsValue: Boolean =
     getConf(SQLConf.NAME_NON_STRUCT_GROUPING_KEY_AS_VALUE)
 
-  def maxToStringFields: Int = getConf(SQLConf.MAX_TO_STRING_FIELDS)
+  override def maxToStringFields: Int = getConf(SQLConf.MAX_TO_STRING_FIELDS)
 
   def maxPlanStringLength: Int = getConf(SQLConf.MAX_PLAN_STRING_LENGTH).toInt
 

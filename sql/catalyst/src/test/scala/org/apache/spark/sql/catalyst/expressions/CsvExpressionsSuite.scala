@@ -246,4 +246,11 @@ class CsvExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper with P
       CsvToStructs(schema, Map.empty, Literal.create("1 day")),
       InternalRow(new CalendarInterval(0, 1, 0)))
   }
+
+  test("StructsToCsv should not generate codes beyond 64KB") {
+    val range = Range.inclusive(1, 5000)
+    val struct = CreateStruct.create(range.map(Literal.apply))
+    val expected = range.mkString(",")
+    checkEvaluation(StructsToCsv(Map.empty, struct), expected)
+  }
 }

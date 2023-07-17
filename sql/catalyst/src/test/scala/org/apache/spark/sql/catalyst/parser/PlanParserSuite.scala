@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.parser
 
 import org.apache.spark.SparkThrowable
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
-import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, Parameter, RelationTimeTravel, UnresolvedAlias, UnresolvedAttribute, UnresolvedFunction, UnresolvedGenerator, UnresolvedInlineTable, UnresolvedRelation, UnresolvedStar, UnresolvedSubqueryColumnAliases, UnresolvedTableValuedFunction, UnresolvedTVFAliases}
+import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, NamedParameter, PosParameter, RelationTimeTravel, UnresolvedAlias, UnresolvedAttribute, UnresolvedFunction, UnresolvedGenerator, UnresolvedInlineTable, UnresolvedRelation, UnresolvedStar, UnresolvedSubqueryColumnAliases, UnresolvedTableValuedFunction, UnresolvedTVFAliases}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.{PercentileCont, PercentileDisc}
 import org.apache.spark.sql.catalyst.plans._
@@ -1412,6 +1412,86 @@ class PlanParserSuite extends AnalysisTest {
     assertEqual("select a, b from db.c; ;;  ;", table("db", "c").select($"a", $"b"))
   }
 
+  test("table valued function with named arguments") {
+    // All named arguments
+    assertEqual(
+      "select * from my_tvf(arg1 => 'value1', arg2 => true)",
+      UnresolvedTableValuedFunction("my_tvf",
+        NamedArgumentExpression("arg1", Literal("value1")) ::
+          NamedArgumentExpression("arg2", Literal(true)) :: Nil).select(star()))
+
+    // Unnamed and named arguments
+    assertEqual(
+      "select * from my_tvf(2, arg1 => 'value1', arg2 => true)",
+      UnresolvedTableValuedFunction("my_tvf",
+        Literal(2) ::
+          NamedArgumentExpression("arg1", Literal("value1")) ::
+          NamedArgumentExpression("arg2", Literal(true)) :: Nil).select(star()))
+
+    // Mixed arguments
+    assertEqual(
+      "select * from my_tvf(arg1 => 'value1', 2, arg2 => true)",
+      UnresolvedTableValuedFunction("my_tvf",
+        NamedArgumentExpression("arg1", Literal("value1")) ::
+          Literal(2) ::
+          NamedArgumentExpression("arg2", Literal(true)) :: Nil).select(star()))
+    assertEqual(
+      "select * from my_tvf(group => 'abc')",
+      UnresolvedTableValuedFunction("my_tvf",
+        NamedArgumentExpression("group", Literal("abc")) :: Nil).select(star()))
+  }
+
+  test("table valued function with table arguments") {
+    assertEqual(
+      "select * from my_tvf(table (v1), table (select 1))",
+      UnresolvedTableValuedFunction("my_tvf",
+        FunctionTableSubqueryArgumentExpression(UnresolvedRelation(Seq("v1"))) ::
+          FunctionTableSubqueryArgumentExpression(
+            Project(Seq(UnresolvedAlias(Literal(1))), OneRowRelation())) :: Nil).select(star()))
+
+    // All named arguments
+    assertEqual(
+      "select * from my_tvf(arg1 => table (v1), arg2 => table (select 1))",
+      UnresolvedTableValuedFunction("my_tvf",
+        NamedArgumentExpression("arg1",
+          FunctionTableSubqueryArgumentExpression(UnresolvedRelation(Seq("v1")))) ::
+          NamedArgumentExpression("arg2",
+            FunctionTableSubqueryArgumentExpression(
+              Project(Seq(UnresolvedAlias(Literal(1))), OneRowRelation()))) :: Nil).select(star()))
+
+    // Unnamed and named arguments
+    assertEqual(
+      "select * from my_tvf(2, table (v1), arg1 => table (select 1))",
+      UnresolvedTableValuedFunction("my_tvf",
+        Literal(2) ::
+          FunctionTableSubqueryArgumentExpression(UnresolvedRelation(Seq("v1"))) ::
+          NamedArgumentExpression("arg1",
+            FunctionTableSubqueryArgumentExpression(
+              Project(Seq(UnresolvedAlias(Literal(1))), OneRowRelation()))) :: Nil).select(star()))
+
+    // Mixed arguments
+    assertEqual(
+      "select * from my_tvf(arg1 => table (v1), 2, arg2 => true)",
+      UnresolvedTableValuedFunction("my_tvf",
+        NamedArgumentExpression("arg1",
+          FunctionTableSubqueryArgumentExpression(UnresolvedRelation(Seq("v1")))) ::
+          Literal(2) ::
+          NamedArgumentExpression("arg2", Literal(true)) :: Nil).select(star()))
+
+    // Negative tests:
+    // Parentheses are missing from the table argument.
+    val sql1 = "select * from my_tvf(arg1 => table v1)"
+    checkError(
+      exception = parseException(sql1),
+      errorClass =
+        "INVALID_SQL_SYNTAX.INVALID_TABLE_FUNCTION_IDENTIFIER_ARGUMENT_MISSING_PARENTHESES",
+      parameters = Map("argumentName" -> "`v1`"),
+      context = ExpectedContext(
+        fragment = "table v1",
+        start = 29,
+        stop = sql1.length - 2))
+  }
+
   test("SPARK-32106: TRANSFORM plan") {
     // verify schema less
     assertEqual(
@@ -1630,18 +1710,18 @@ class PlanParserSuite extends AnalysisTest {
   test("SPARK-41271: parsing of named parameters") {
     comparePlans(
       parsePlan("SELECT :param_1"),
-      Project(UnresolvedAlias(Parameter("param_1"), None) :: Nil, OneRowRelation()))
+      Project(UnresolvedAlias(NamedParameter("param_1"), None) :: Nil, OneRowRelation()))
     comparePlans(
       parsePlan("SELECT abs(:1Abc)"),
       Project(UnresolvedAlias(
         UnresolvedFunction(
           "abs" :: Nil,
-          Parameter("1Abc") :: Nil,
+          NamedParameter("1Abc") :: Nil,
           isDistinct = false), None) :: Nil,
         OneRowRelation()))
     comparePlans(
       parsePlan("SELECT * FROM a LIMIT :limitA"),
-      table("a").select(star()).limit(Parameter("limitA")))
+      table("a").select(star()).limit(NamedParameter("limitA")))
     // Invalid empty name and invalid symbol in a name
     checkError(
       exception = parseException(s"SELECT :-"),
@@ -1660,5 +1740,22 @@ class PlanParserSuite extends AnalysisTest {
         Seq("interval"),
         Seq(Literal("abc")) :: Nil).as("tbl").select($"interval")
     )
+  }
+
+  test("SPARK-44066: parsing of positional parameters") {
+    comparePlans(
+      parsePlan("SELECT ?"),
+      Project(UnresolvedAlias(PosParameter(7), None) :: Nil, OneRowRelation()))
+    comparePlans(
+      parsePlan("SELECT abs(?)"),
+      Project(UnresolvedAlias(
+        UnresolvedFunction(
+          "abs" :: Nil,
+          PosParameter(11) :: Nil,
+          isDistinct = false), None) :: Nil,
+        OneRowRelation()))
+    comparePlans(
+      parsePlan("SELECT * FROM a LIMIT ?"),
+      table("a").select(star()).limit(PosParameter(22)))
   }
 }

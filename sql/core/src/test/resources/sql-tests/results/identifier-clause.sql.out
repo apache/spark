@@ -72,7 +72,7 @@ struct<>
 
 
 -- !query
-CREATE TABLE s.tab(c1 INT) USING PARQUET
+CREATE TABLE s.tab(c1 INT) USING CSV
 -- !query schema
 struct<>
 -- !query output
@@ -127,17 +127,15 @@ org.apache.spark.SparkUnsupportedOperationException
 
 -- !query
 MERGE INTO IDENTIFIER('ta' || 'b') AS t USING IDENTIFIER('ta' || 'b') AS s ON s.c1 = t.c1
-  WHEN MATCHED UPDATE SET c1 = 3
+  WHEN MATCHED THEN UPDATE SET c1 = 3
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.catalyst.parser.ParseException
+org.apache.spark.SparkUnsupportedOperationException
 {
-  "errorClass" : "PARSE_SYNTAX_ERROR",
-  "sqlState" : "42601",
+  "errorClass" : "_LEGACY_ERROR_TEMP_2096",
   "messageParameters" : {
-    "error" : "'UPDATE'",
-    "hint" : ""
+    "ddl" : "MERGE INTO TABLE"
   }
 }
 
@@ -223,7 +221,7 @@ struct<id:bigint>
 
 
 -- !query
-CREATE TABLE IDENTIFIER('tab')(c1 INT) USING parquet
+CREATE TABLE IDENTIFIER('tab')(c1 INT) USING CSV
 -- !query schema
 struct<>
 -- !query output
@@ -255,7 +253,7 @@ struct<>
 
 
 -- !query
-CREATE TABLE IDENTIFIER('ta' || 'b')(c1 INT) USING parquet
+CREATE TABLE IDENTIFIER('ta' || 'b')(c1 INT) USING CSV
 -- !query schema
 struct<>
 -- !query output
@@ -271,7 +269,7 @@ struct<>
 
 
 -- !query
-CREATE TABLE IDENTIFIER('identifier_clauses.' || 'tab')(c1 INT) USING parquet
+CREATE TABLE IDENTIFIER('identifier_clauses.' || 'tab')(c1 INT) USING CSV
 -- !query schema
 struct<>
 -- !query output
@@ -279,7 +277,7 @@ struct<>
 
 
 -- !query
-REPLACE TABLE IDENTIFIER('identifier_clauses.' || 'tab')(c1 INT) USING parquet
+REPLACE TABLE IDENTIFIER('identifier_clauses.' || 'tab')(c1 INT) USING CSV
 -- !query schema
 struct<>
 -- !query output
@@ -335,7 +333,7 @@ struct<>
 
 
 -- !query
-CREATE TABLE tab(c1 INT) USING parquet
+CREATE TABLE tab(c1 INT) USING CSV
 -- !query schema
 struct<>
 -- !query output
@@ -1211,7 +1209,7 @@ org.apache.spark.sql.catalyst.parser.ParseException
 
 
 -- !query
-CREATE TABLE tab(IDENTIFIER('c1') INT) USING parquet
+CREATE TABLE tab(IDENTIFIER('c1') INT) USING CSV
 -- !query schema
 struct<>
 -- !query output

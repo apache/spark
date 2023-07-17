@@ -51,7 +51,14 @@ from pyspark import SparkContext, SparkConf, __version__
 from pyspark.sql.connect.client import SparkConnectClient, ChannelBuilder
 from pyspark.sql.connect.conf import RuntimeConf
 from pyspark.sql.connect.dataframe import DataFrame
-from pyspark.sql.connect.plan import SQL, Range, LocalRelation, CachedRelation
+from pyspark.sql.connect.plan import (
+    SQL,
+    Range,
+    LocalRelation,
+    LogicalPlan,
+    CachedLocalRelation,
+    CachedRelation,
+)
 from pyspark.sql.connect.readwriter import DataFrameReader
 from pyspark.sql.connect.streaming import DataStreamReader, StreamingQueryManager
 from pyspark.sql.pandas.serializers import ArrowStreamPandasSerializer
@@ -81,10 +88,13 @@ if TYPE_CHECKING:
     from pyspark.sql.connect._typing import OptionalPrimitiveType
     from pyspark.sql.connect.catalog import Catalog
     from pyspark.sql.connect.udf import UDFRegistration
+    from pyspark.sql.connect.udtf import UDTFRegistration
 
 
 # `_active_spark_session` stores the active spark connect session created by
 # `SparkSession.builder.getOrCreate`. It is used by ML code.
+#  If sessions are created with `SparkSession.builder.create`, it stores
+#  The last created session
 _active_spark_session = None
 
 
@@ -164,6 +174,8 @@ class SparkSession:
             )
 
         def create(self) -> "SparkSession":
+            global _active_spark_session
+
             has_channel_builder = self._channel_builder is not None
             has_spark_remote = "spark.remote" in self._options
 
@@ -180,11 +192,14 @@ class SparkSession:
 
             if has_channel_builder:
                 assert self._channel_builder is not None
-                return SparkSession(connection=self._channel_builder)
+                session = SparkSession(connection=self._channel_builder)
             else:
                 spark_remote = to_str(self._options.get("spark.remote"))
                 assert spark_remote is not None
-                return SparkSession(connection=spark_remote)
+                session = SparkSession(connection=spark_remote)
+
+            _active_spark_session = session
+            return session
 
         def getOrCreate(self) -> "SparkSession":
             global _active_spark_session
@@ -466,17 +481,23 @@ class SparkSession:
             )
 
         if _schema is not None:
-            df = DataFrame.withPlan(LocalRelation(_table, schema=_schema.json()), self)
+            local_relation = LocalRelation(_table, schema=_schema.json())
         else:
-            df = DataFrame.withPlan(LocalRelation(_table), self)
+            local_relation = LocalRelation(_table)
 
+        cache_threshold = self._client.get_configs("spark.sql.session.localRelationCacheThreshold")
+        plan: LogicalPlan = local_relation
+        if cache_threshold[0] is not None and int(cache_threshold[0]) <= _table.nbytes:
+            plan = CachedLocalRelation(self._cache_local_relation(local_relation))
+
+        df = DataFrame.withPlan(plan, self)
         if _cols is not None and len(_cols) > 0:
             df = df.toDF(*_cols)
         return df
 
     createDataFrame.__doc__ = PySparkSession.createDataFrame.__doc__
 
-    def sql(self, sqlQuery: str, args: Optional[Dict[str, Any]] = None) -> "DataFrame":
+    def sql(self, sqlQuery: str, args: Optional[Union[Dict[str, Any], List]] = None) -> "DataFrame":
         cmd = SQL(sqlQuery, args)
         data, properties = self.client.execute_command(cmd.command(self._client))
         if "sql_command_result" in properties:
@@ -560,6 +581,13 @@ class SparkSession:
 
     stop.__doc__ = PySparkSession.stop.__doc__
 
+    @property
+    def is_stopped(self) -> bool:
+        """
+        Returns if this session was stopped
+        """
+        return self.client.is_closed
+
     @classmethod
     def getActiveSession(cls) -> Any:
         raise PySparkNotImplementedError(
@@ -594,75 +622,44 @@ class SparkSession:
     udf.__doc__ = PySparkSession.udf.__doc__
 
     @property
+    def udtf(self) -> "UDTFRegistration":
+        from pyspark.sql.connect.udtf import UDTFRegistration
+
+        return UDTFRegistration(self)
+
+    udtf.__doc__ = PySparkSession.udtf.__doc__
+
+    @property
     def version(self) -> str:
         result = self._client._analyze(method="spark_version").spark_version
         assert result is not None
         return result
 
-    # SparkConnect-specific API
     @property
     def client(self) -> "SparkConnectClient":
-        """
-        Gives access to the Spark Connect client. In normal cases this is not necessary to be used
-        and only relevant for testing.
-
-        .. versionadded:: 3.4.0
-
-        Returns
-        -------
-        :class:`SparkConnectClient`
-        """
         return self._client
+
+    client.__doc__ = PySparkSession.client.__doc__
 
     def addArtifacts(
         self, *path: str, pyfile: bool = False, archive: bool = False, file: bool = False
     ) -> None:
-        """
-        Add artifact(s) to the client session. Currently only local files are supported.
-
-        .. versionadded:: 3.5.0
-
-        Parameters
-        ----------
-        *path : tuple of str
-            Artifact's URIs to add.
-        pyfile : bool
-            Whether to add them as Python dependencies such as .py, .egg, .zip or .jar files.
-            The pyfiles are directly inserted into the path when executing Python functions
-            in executors.
-        archive : bool
-            Whether to add them as archives such as .zip, .jar, .tar.gz, .tgz, or .tar files.
-            The archives are unpacked on the executor side automatically.
-        file : bool
-            Add a file to be downloaded with this Spark job on every node.
-            The ``path`` passed can only be a local file for now.
-        """
         if sum([file, pyfile, archive]) > 1:
             raise ValueError("'pyfile', 'archive' and/or 'file' cannot be True together.")
         self._client.add_artifacts(*path, pyfile=pyfile, archive=archive, file=file)
 
+    addArtifacts.__doc__ = PySparkSession.addArtifacts.__doc__
+
     addArtifact = addArtifacts
 
+    def _cache_local_relation(self, local_relation: LocalRelation) -> str:
+        """
+        Cache the local relation at the server side if it has not been cached yet.
+        """
+        serialized = local_relation.serialize(self._client)
+        return self._client.cache_artifact(serialized)
+
     def copyFromLocalToFs(self, local_path: str, dest_path: str) -> None:
-        """
-        Copy file from local to cloud storage file system.
-        If the file already exits in destination path, old file is overwritten.
-
-        Parameters
-        ----------
-        local_path: str
-            Path to a local file. Directories are not supported.
-            The path can be either an absolute path or a relative path.
-
-        dest_path: str
-            The cloud storage path to the destination the file will
-            be copied to.
-            The path must be an an absolute path.
-
-        Notes
-        -----
-        This API is a developer API.
-        """
         if urllib.parse.urlparse(dest_path).scheme:
             raise ValueError(
                 "`spark_session.copyFromLocalToFs` API only allows `dest_path` to be a path "
@@ -670,6 +667,8 @@ class SparkSession:
                 "determine the destination file system."
             )
         self._client.copy_from_local_to_fs(local_path, dest_path)
+
+    copyFromLocalToFs.__doc__ = PySparkSession.copyFromLocalToFs.__doc__
 
     @staticmethod
     def _start_connect_server(master: str, opts: Dict[str, Any]) -> None:
@@ -770,6 +769,16 @@ class SparkSession:
                         else:
                             pyutils = SparkContext._jvm.PythonSQLUtils  # type: ignore[union-attr]
                             pyutils.addJarToCurrentClassLoader(connect_jar)
+
+                            # Required for local-cluster testing as their executors need the jars
+                            # to load the Spark plugin for Spark Connect.
+                            if master.startswith("local-cluster"):
+                                if "spark.jars" in overwrite_conf:
+                                    overwrite_conf[
+                                        "spark.jars"
+                                    ] = f"{overwrite_conf['spark.jars']},{connect_jar}"
+                                else:
+                                    overwrite_conf["spark.jars"] = connect_jar
 
                     except ImportError:
                         pass

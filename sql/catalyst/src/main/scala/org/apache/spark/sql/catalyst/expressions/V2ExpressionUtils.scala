@@ -21,8 +21,9 @@ import java.lang.reflect.{Method, Modifier}
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.{InternalRow, ScalaReflection, SQLConfHelper}
+import org.apache.spark.sql.catalyst.{InternalRow, SQLConfHelper}
 import org.apache.spark.sql.catalyst.analysis.NoSuchFunctionException
+import org.apache.spark.sql.catalyst.encoders.EncoderUtils
 import org.apache.spark.sql.catalyst.expressions.objects.{Invoke, StaticInvoke}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.connector.catalog.{FunctionCatalog, Identifier}
@@ -152,7 +153,7 @@ object V2ExpressionUtils extends SQLConfHelper with Logging {
       scalarFunc: ScalarFunction[_],
       arguments: Seq[Expression]): Expression = {
     val declaredInputTypes = scalarFunc.inputTypes().toSeq
-    val argClasses = declaredInputTypes.map(ScalaReflection.dataTypeJavaClass)
+    val argClasses = declaredInputTypes.map(EncoderUtils.dataTypeJavaClass)
     findMethod(scalarFunc, MAGIC_METHOD_NAME, argClasses) match {
       case Some(m) if Modifier.isStatic(m.getModifiers) =>
         StaticInvoke(scalarFunc.getClass, scalarFunc.resultType(),

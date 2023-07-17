@@ -18,7 +18,7 @@ from pyspark.sql.connect.utils import check_dependencies
 
 check_dependencies(__name__)
 
-from typing import Any, List, Optional, Sequence, Union, cast, TYPE_CHECKING, Mapping, Dict
+from typing import Any, List, Optional, Type, Sequence, Union, cast, TYPE_CHECKING, Mapping, Dict
 import functools
 import json
 from threading import Lock
@@ -26,6 +26,7 @@ from inspect import signature, isclass
 
 import pyarrow as pa
 
+from pyspark.serializers import CloudPickleSerializer
 from pyspark.storagelevel import StorageLevel
 from pyspark.sql.types import DataType
 
@@ -33,11 +34,12 @@ import pyspark.sql.connect.proto as proto
 from pyspark.sql.connect.conversion import storage_level_to_proto
 from pyspark.sql.connect.column import Column
 from pyspark.sql.connect.expressions import (
+    Expression,
     SortOrder,
     ColumnReference,
     LiteralExpression,
 )
-from pyspark.sql.connect.types import pyspark_types_to_proto_types
+from pyspark.sql.connect.types import pyspark_types_to_proto_types, UnparsedDataType
 from pyspark.errors import PySparkTypeError, PySparkNotImplementedError
 
 if TYPE_CHECKING:
@@ -363,6 +365,10 @@ class LocalRelation(LogicalPlan):
             plan.local_relation.schema = self._schema
         return plan
 
+    def serialize(self, session: "SparkConnectClient") -> bytes:
+        p = self.plan(session)
+        return bytes(p.local_relation.SerializeToString())
+
     def print(self, indent: int = 0) -> str:
         return f"{' ' * indent}<LocalRelation>\n"
 
@@ -370,6 +376,36 @@ class LocalRelation(LogicalPlan):
         return """
         <ul>
             <li><b>LocalRelation</b></li>
+        </ul>
+        """
+
+
+class CachedLocalRelation(LogicalPlan):
+    """Creates a CachedLocalRelation plan object based on a hash of a LocalRelation."""
+
+    def __init__(self, hash: str) -> None:
+        super().__init__(None)
+
+        self._hash = hash
+
+    def plan(self, session: "SparkConnectClient") -> proto.Relation:
+        plan = self._create_proto_relation()
+        clr = plan.cached_local_relation
+
+        if session._user_id:
+            clr.userId = session._user_id
+        clr.sessionId = session._session_id
+        clr.hash = self._hash
+
+        return plan
+
+    def print(self, indent: int = 0) -> str:
+        return f"{' ' * indent}<CachedLocalRelation>\n"
+
+    def _repr_html_(self) -> str:
+        return """
+        <ul>
+            <li><b>CachedLocalRelation</b></li>
         </ul>
         """
 
@@ -514,6 +550,20 @@ class WithWatermark(LogicalPlan):
         plan.with_watermark.input.CopyFrom(self._child.plan(session))
         plan.with_watermark.event_time = self._event_time
         plan.with_watermark.delay_threshold = self._delay_threshold
+        return plan
+
+
+class CachedRemoteRelation(LogicalPlan):
+    """Logical plan object for a DataFrame reference which represents a DataFrame that's been
+    cached on the server with a given id."""
+
+    def __init__(self, relationId: str):
+        super().__init__(None)
+        self._relationId = relationId
+
+    def plan(self, session: "SparkConnectClient") -> proto.Relation:
+        plan = self._create_proto_relation()
+        plan.cached_remote_relation.relation_id = self._relationId
         return plan
 
 
@@ -985,12 +1035,15 @@ class SubqueryAlias(LogicalPlan):
 
 
 class SQL(LogicalPlan):
-    def __init__(self, query: str, args: Optional[Dict[str, Any]] = None) -> None:
+    def __init__(self, query: str, args: Optional[Union[Dict[str, Any], List]] = None) -> None:
         super().__init__(None)
 
         if args is not None:
-            for k, v in args.items():
-                assert isinstance(k, str)
+            if isinstance(args, Dict):
+                for k, v in args.items():
+                    assert isinstance(k, str)
+            else:
+                assert isinstance(args, List)
 
         self._query = query
         self._args = args
@@ -1000,8 +1053,16 @@ class SQL(LogicalPlan):
         plan.sql.query = self._query
 
         if self._args is not None and len(self._args) > 0:
-            for k, v in self._args.items():
-                plan.sql.args[k].CopyFrom(LiteralExpression._from_value(v).to_plan(session).literal)
+            if isinstance(self._args, Dict):
+                for k, v in self._args.items():
+                    plan.sql.args[k].CopyFrom(
+                        LiteralExpression._from_value(v).to_plan(session).literal
+                    )
+            else:
+                for v in self._args:
+                    plan.sql.pos_args.append(
+                        LiteralExpression._from_value(v).to_plan(session).literal
+                    )
 
         return plan
 
@@ -1009,10 +1070,17 @@ class SQL(LogicalPlan):
         cmd = proto.Command()
         cmd.sql_command.sql = self._query
         if self._args is not None and len(self._args) > 0:
-            for k, v in self._args.items():
-                cmd.sql_command.args[k].CopyFrom(
-                    LiteralExpression._from_value(v).to_plan(session).literal
-                )
+            if isinstance(self._args, Dict):
+                for k, v in self._args.items():
+                    cmd.sql_command.args[k].CopyFrom(
+                        LiteralExpression._from_value(v).to_plan(session).literal
+                    )
+            else:
+                for v in self._args:
+                    cmd.sql_command.pos_args.append(
+                        LiteralExpression._from_value(v).to_plan(session).literal
+                    )
+
         return cmd
 
 
@@ -2105,6 +2173,93 @@ class ApplyInPandasWithState(LogicalPlan):
         plan.apply_in_pandas_with_state.output_mode = self._output_mode
         plan.apply_in_pandas_with_state.timeout_conf = self._timeout_conf
         return plan
+
+
+class PythonUDTF:
+    """Represents a Python user-defined table function."""
+
+    def __init__(
+        self,
+        func: Type,
+        return_type: Union[DataType, str],
+        eval_type: int,
+        python_ver: str,
+    ) -> None:
+        self._func = func
+        self._name = func.__name__
+        self._return_type: DataType = (
+            UnparsedDataType(return_type) if isinstance(return_type, str) else return_type
+        )
+        self._eval_type = eval_type
+        self._python_ver = python_ver
+
+    def to_plan(self, session: "SparkConnectClient") -> proto.PythonUDTF:
+        udtf = proto.PythonUDTF()
+        # Currently the return type cannot be None.
+        # TODO(SPARK-44380): support `analyze` in Python UDTFs
+        assert self._return_type is not None
+        udtf.return_type.CopyFrom(pyspark_types_to_proto_types(self._return_type))
+        udtf.eval_type = self._eval_type
+        udtf.command = CloudPickleSerializer().dumps(self._func)
+        udtf.python_ver = self._python_ver
+        return udtf
+
+    def __repr__(self) -> str:
+        return (
+            f"PythonUDTF({self._name}, {self._return_type}, "
+            f"{self._eval_type}, {self._python_ver})"
+        )
+
+
+class CommonInlineUserDefinedTableFunction(LogicalPlan):
+    """
+    Logical plan object for a user-defined table function with
+    an inlined defined function body.
+    """
+
+    def __init__(
+        self,
+        function_name: str,
+        function: PythonUDTF,
+        deterministic: bool,
+        arguments: Sequence[Expression],
+    ) -> None:
+        super().__init__(None)
+        self._function_name = function_name
+        self._deterministic = deterministic
+        self._arguments = arguments
+        self._function = function
+
+    def plan(self, session: "SparkConnectClient") -> proto.Relation:
+        plan = self._create_proto_relation()
+        plan.common_inline_user_defined_table_function.function_name = self._function_name
+        plan.common_inline_user_defined_table_function.deterministic = self._deterministic
+        if len(self._arguments) > 0:
+            plan.common_inline_user_defined_table_function.arguments.extend(
+                [arg.to_plan(session) for arg in self._arguments]
+            )
+        plan.common_inline_user_defined_table_function.python_udtf.CopyFrom(
+            self._function.to_plan(session)
+        )
+        return plan
+
+    def udtf_plan(
+        self, session: "SparkConnectClient"
+    ) -> "proto.CommonInlineUserDefinedTableFunction":
+        """
+        Compared to `plan`, it returns a `proto.CommonInlineUserDefinedTableFunction`
+        instead of a `proto.Relation`.
+        """
+        plan = proto.CommonInlineUserDefinedTableFunction()
+        plan.function_name = self._function_name
+        plan.deterministic = self._deterministic
+        if len(self._arguments) > 0:
+            plan.arguments.extend([arg.to_plan(session) for arg in self._arguments])
+        plan.python_udtf.CopyFrom(cast(proto.PythonUDF, self._function.to_plan(session)))
+        return plan
+
+    def __repr__(self) -> str:
+        return f"{self._function_name}({', '.join([str(arg) for arg in self._arguments])})"
 
 
 class CachedRelation(LogicalPlan):

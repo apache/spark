@@ -21,13 +21,14 @@ import scala.reflect.ClassTag
 import scala.reflect.runtime.universe.TypeTag
 
 import org.apache.spark.sql.Encoder
-import org.apache.spark.sql.catalyst.{InternalRow, JavaTypeInference, ScalaReflection}
+import org.apache.spark.sql.catalyst.{DeserializerBuildHelper, InternalRow, JavaTypeInference, ScalaReflection, SerializerBuildHelper}
 import org.apache.spark.sql.catalyst.analysis.{Analyzer, GetColumnByOrdinal, SimpleAnalyzer, UnresolvedAttribute, UnresolvedExtractValue}
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder.{Deserializer, Serializer}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.objects.{AssertNotNull, InitializeJavaBean, Invoke, NewInstance}
 import org.apache.spark.sql.catalyst.optimizer.{ReassignLambdaVariableID, SimplifyCasts}
 import org.apache.spark.sql.catalyst.plans.logical.{CatalystSerde, DeserializeToObject, LeafNode, LocalRelation}
+import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.types.{ObjectType, StringType, StructField, StructType}
 import org.apache.spark.unsafe.types.UTF8String
@@ -52,8 +53,8 @@ object ExpressionEncoder {
 
   def apply[T](enc: AgnosticEncoder[T]): ExpressionEncoder[T] = {
     new ExpressionEncoder[T](
-      ScalaReflection.serializerFor(enc),
-      ScalaReflection.deserializerFor(enc),
+      SerializerBuildHelper.createSerializer(enc),
+      DeserializerBuildHelper.createDeserializer(enc),
       enc.clsTag)
   }
 
@@ -333,7 +334,7 @@ case class ExpressionEncoder[T](
    * this method to do resolution and binding outside of query framework.
    */
   def resolveAndBind(
-      attrs: Seq[Attribute] = schema.toAttributes,
+      attrs: Seq[Attribute] = DataTypeUtils.toAttributes(schema),
       analyzer: Analyzer = SimpleAnalyzer): ExpressionEncoder[T] = {
     val dummyPlan = CatalystSerde.deserialize(LocalRelation(attrs))(this)
     val analyzedPlan = analyzer.execute(dummyPlan)

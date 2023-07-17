@@ -25,6 +25,7 @@ import scala.collection.JavaConverters._
 import scala.reflect.runtime.universe.TypeTag
 
 import com.google.common.cache.{CacheBuilder, CacheLoader}
+import io.grpc.ClientInterceptor
 import org.apache.arrow.memory.RootAllocator
 
 import org.apache.spark.annotation.{DeveloperApi, Experimental}
@@ -37,7 +38,8 @@ import org.apache.spark.sql.catalyst.encoders.{AgnosticEncoder, RowEncoder}
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{BoxedLongEncoder, UnboundRowEncoder}
 import org.apache.spark.sql.connect.client.{ClassFinder, SparkConnectClient, SparkResult}
 import org.apache.spark.sql.connect.client.SparkConnectClient.Configuration
-import org.apache.spark.sql.connect.client.util.{Cleaner, ConvertToArrow}
+import org.apache.spark.sql.connect.client.arrow.ArrowSerializer
+import org.apache.spark.sql.connect.client.util.Cleaner
 import org.apache.spark.sql.connect.common.LiteralValueProtoConverter.toLiteralProto
 import org.apache.spark.sql.internal.CatalogImpl
 import org.apache.spark.sql.streaming.DataStreamReader
@@ -125,9 +127,8 @@ class SparkSession private[sql] (
     newDataset(encoder) { builder =>
       if (data.nonEmpty) {
         val timeZoneId = conf.get("spark.sql.session.timeZone")
-        val (arrowData, arrowDataSize) =
-          ConvertToArrow(encoder, data, timeZoneId, errorOnDuplicatedFieldNames = true, allocator)
-        if (arrowDataSize <= conf.get("spark.sql.session.localRelationCacheThreshold").toInt) {
+        val arrowData = ArrowSerializer.serialize(data, encoder, allocator, timeZoneId)
+        if (arrowData.size() <= conf.get("spark.sql.session.localRelationCacheThreshold").toInt) {
           builder.getLocalRelationBuilder
             .setSchema(encoder.schema.json)
             .setData(arrowData)
@@ -228,6 +229,41 @@ class SparkSession private[sql] (
   }
 
   /**
+   * Executes a SQL query substituting positional parameters by the given arguments, returning the
+   * result as a `DataFrame`. This API eagerly runs DDL/DML commands, but not for SELECT queries.
+   *
+   * @param sqlText
+   *   A SQL statement with positional parameters to execute.
+   * @param args
+   *   An array of Java/Scala objects that can be converted to SQL literal expressions. See <a
+   *   href="https://spark.apache.org/docs/latest/sql-ref-datatypes.html"> Supported Data
+   *   Types</a> for supported value types in Scala/Java. For example: 1, "Steven",
+   *   LocalDate.of(2023, 4, 2). A value can be also a `Column` of literal expression, in that
+   *   case it is taken as is.
+   *
+   * @since 3.5.0
+   */
+  @Experimental
+  def sql(sqlText: String, args: Array[_]): DataFrame = newDataFrame { builder =>
+    // Send the SQL once to the server and then check the output.
+    val cmd = newCommand(b =>
+      b.setSqlCommand(
+        proto.SqlCommand
+          .newBuilder()
+          .setSql(sqlText)
+          .addAllPosArgs(args.map(toLiteralProto).toIterable.asJava)))
+    val plan = proto.Plan.newBuilder().setCommand(cmd)
+    val responseIter = client.execute(plan.build())
+
+    val response = responseIter.asScala
+      .find(_.hasSqlCommandResult)
+      .getOrElse(throw new RuntimeException("SQLCommandResult must be present"))
+
+    // Update the builder with the values from the result.
+    builder.mergeFrom(response.getSqlCommandResult.getRelation)
+  }
+
+  /**
    * Executes a SQL query substituting named parameters by the given arguments, returning the
    * result as a `DataFrame`. This API eagerly runs DDL/DML commands, but not for SELECT queries.
    *
@@ -290,7 +326,7 @@ class SparkSession private[sql] (
    * @since 3.4.0
    */
   def sql(query: String): DataFrame = {
-    sql(query, Map.empty[String, String])
+    sql(query, Array.empty)
   }
 
   /**
@@ -381,6 +417,30 @@ class SparkSession private[sql] (
     range(start, end, step, Option(numPartitions))
   }
 
+  /**
+   * A collection of methods for registering user-defined functions (UDF).
+   *
+   * The following example registers a Scala closure as UDF:
+   * {{{
+   *   sparkSession.udf.register("myUDF", (arg1: Int, arg2: String) => arg2 + arg1)
+   * }}}
+   *
+   * The following example registers a UDF in Java:
+   * {{{
+   *   sparkSession.udf().register("myUDF",
+   *       (Integer arg1, String arg2) -> arg2 + arg1,
+   *       DataTypes.StringType);
+   * }}}
+   *
+   * @note
+   *   The user-defined functions must be deterministic. Due to optimization, duplicate
+   *   invocations may be eliminated or the function may even be invoked more times than it is
+   *   present in the query.
+   *
+   * @since 3.5.0
+   */
+  lazy val udf: UDFRegistration = new UDFRegistration(this)
+
   // scalastyle:off
   // Disable style checker so "implicits" object can start with lowercase i
   /**
@@ -394,7 +454,7 @@ class SparkSession private[sql] (
    *
    * @since 3.4.0
    */
-  object implicits extends SQLImplicits(this)
+  object implicits extends SQLImplicits(this) with Serializable
   // scalastyle:on
 
   def newSession(): SparkSession = {
@@ -487,6 +547,13 @@ class SparkSession private[sql] (
   private[sql] def execute(command: proto.Command): Seq[ExecutePlanResponse] = {
     val plan = proto.Plan.newBuilder().setCommand(command).build()
     client.execute(plan).asScala.toSeq
+  }
+
+  private[sql] def registerUdf(udf: proto.CommonInlineUserDefinedFunction): Unit = {
+    val command = proto.Command.newBuilder().setRegisterFunction(udf).build()
+    val plan = proto.Plan.newBuilder().setCommand(command).build()
+
+    client.execute(plan)
   }
 
   @DeveloperApi
@@ -594,7 +661,7 @@ object SparkSession extends Logging {
    * Create a new [[SparkSession]] based on the connect client [[Configuration]].
    */
   private[sql] def create(configuration: Configuration): SparkSession = {
-    new SparkSession(new SparkConnectClient(configuration), cleaner, planIdGenerator)
+    new SparkSession(configuration.toSparkConnectClient, cleaner, planIdGenerator)
   }
 
   /**
@@ -618,6 +685,18 @@ object SparkSession extends Logging {
 
     def remote(connectionString: String): Builder = {
       builder.connectionString(connectionString)
+      this
+    }
+
+    /**
+     * Add an interceptor [[ClientInterceptor]] to be used during channel creation.
+     *
+     * Note that interceptors added last are executed first by gRPC.
+     *
+     * @since 3.5.0
+     */
+    def interceptor(interceptor: ClientInterceptor): Builder = {
+      builder.interceptor(interceptor)
       this
     }
 

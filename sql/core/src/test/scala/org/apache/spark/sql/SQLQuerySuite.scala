@@ -34,6 +34,7 @@ import org.apache.spark.sql.catalyst.expressions.{GenericRow, Hex}
 import org.apache.spark.sql.catalyst.expressions.Cast._
 import org.apache.spark.sql.catalyst.expressions.aggregate.{Complete, Partial}
 import org.apache.spark.sql.catalyst.optimizer.{ConvertToLocalRelation, NestedColumnAliasingSuite}
+import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.logical.{LocalLimit, Project, RepartitionByExpression, Sort}
 import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
 import org.apache.spark.sql.execution.{CommandResultExec, UnionExec}
@@ -593,7 +594,7 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
   }
 
   test("Allow only a single WITH clause per query") {
-    intercept[AnalysisException] {
+    intercept[ParseException] {
       sql(
         "with q1 as (select * from testData) with q2 as (select * from q1) select * from q2")
     }
@@ -1535,7 +1536,7 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
           .save(path)
 
         // We don't support creating a temporary table while specifying a database
-        intercept[AnalysisException] {
+        intercept[ParseException] {
           spark.sql(
             s"""
               |CREATE TEMPORARY VIEW db.t
@@ -1822,8 +1823,8 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
           exception = intercept[AnalysisException]{
             sql("SELECT abc.* FROM nestedStructTable")
           },
-          errorClass = "_LEGACY_ERROR_TEMP_1051",
-          parameters = Map("targetString" -> "abc", "columns" -> "record"),
+          errorClass = "CANNOT_RESOLVE_STAR_EXPAND",
+          parameters = Map("targetString" -> "`abc`", "columns" -> "`record`"),
           context = ExpectedContext(fragment = "abc.*", start = 7, stop = 11))
       }
 
@@ -1911,16 +1912,16 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
         exception = intercept[AnalysisException] {
           sql("SELECT a.* FROM temp_table_no_cols a")
         },
-        errorClass = "_LEGACY_ERROR_TEMP_1051",
-        parameters = Map("targetString" -> "a", "columns" -> ""),
+        errorClass = "CANNOT_RESOLVE_STAR_EXPAND",
+        parameters = Map("targetString" -> "`a`", "columns" -> ""),
         context = ExpectedContext(fragment = "a.*", start = 7, stop = 9))
 
       checkError(
         exception = intercept[AnalysisException] {
           dfNoCols.select($"b.*")
         },
-        errorClass = "_LEGACY_ERROR_TEMP_1051",
-        parameters = Map("targetString" -> "b", "columns" -> ""))
+        errorClass = "CANNOT_RESOLVE_STAR_EXPAND",
+        parameters = Map("targetString" -> "`b`", "columns" -> ""))
     }
   }
 
@@ -4682,6 +4683,22 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
       """
     ).observe("my_event", count("*"))
     df1.crossJoin(df1)
+
+    val df2 = spark.sql(
+      """
+      WITH t1 AS (
+      SELECT customer_id, age, row_number() OVER(PARTITION BY customer_id ORDER BY age ASC) rn
+      FROM tmp_view)
+      SELECT customer_id, age FROM t1 WHERE rn = 1
+     """.stripMargin
+    ).observe("my_event2", count("*")).as("df2")
+
+    val df3 = spark.range(1, 5).toDF("id").withColumn("zaak_id", lit(1))
+      .withColumn("targetid", lit(2)).as("df3")
+    val df4 = spark.range(1, 5).toDF("id").withColumn("zaak_id", lit(2)).as("df4")
+    val df5 = df4.join(df2, col("df4.id") === col("df2.customer_id"), "inner")
+    val df6 = df3.join(df2, col("df3.zaak_id") === col("df2.customer_id"), "outer")
+    df5.crossJoin(df6)
   }
 }
 

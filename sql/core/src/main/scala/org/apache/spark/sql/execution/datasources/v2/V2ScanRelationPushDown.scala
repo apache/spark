@@ -25,6 +25,7 @@ import org.apache.spark.sql.catalyst.optimizer.CollapseProject
 import org.apache.spark.sql.catalyst.planning.{PhysicalOperation, ScanOperation}
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, LeafNode, Limit, LimitAndOffset, LocalLimit, LogicalPlan, Offset, OffsetAndLimit, Project, Sample, Sort}
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.connector.expressions.{SortOrder => V2SortOrder}
 import org.apache.spark.sql.connector.expressions.aggregate.{Aggregation, Avg, Count, CountStar, Max, Min, Sum}
 import org.apache.spark.sql.connector.expressions.filter.Predicate
@@ -192,11 +193,11 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
       val groupOutputMap = normalizedGroupingExpr.zipWithIndex.map { case (e, i) =>
         AttributeReference(s"group_col_$i", e.dataType)() -> e
       }
-      val groupOutput = groupOutputMap.unzip._1
+      val groupOutput = groupOutputMap.map(_._1)
       val aggOutputMap = finalAggExprs.zipWithIndex.map { case (e, i) =>
         AttributeReference(s"agg_func_$i", e.dataType)() -> e
       }
-      val aggOutput = aggOutputMap.unzip._1
+      val aggOutput = aggOutputMap.map(_._1)
       val newOutput = groupOutput ++ aggOutput
       val groupByExprToOutputOrdinal = mutable.HashMap.empty[Expression, Int]
       normalizedGroupingExpr.zipWithIndex.foreach { case (expr, ordinal) =>
@@ -330,7 +331,7 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
       // DataSourceV2ScanRelation output columns. All the other columns are not
       // included in the output.
       val scan = holder.builder.build()
-      val realOutput = scan.readSchema().toAttributes
+      val realOutput = toAttributes(scan.readSchema())
       assert(realOutput.length == holder.output.length,
         "The data source returns unexpected number of columns")
       val wrappedScan = getWrappedScan(scan, holder)

@@ -229,7 +229,7 @@ private[sql] object QueryParsingErrors extends QueryErrorsBase {
   def invalidNumericLiteralRangeError(rawStrippedQualifier: String, minValue: BigDecimal,
       maxValue: BigDecimal, typeName: String, ctx: NumberContext): Throwable = {
     new ParseException(
-      errorClass = "_LEGACY_ERROR_TEMP_0023",
+      errorClass = "INVALID_NUMERIC_LITERAL_RANGE",
       messageParameters = Map(
         "rawStrippedQualifier" -> rawStrippedQualifier,
         "minValue" -> minValue.toString(),
@@ -530,6 +530,15 @@ private[sql] object QueryParsingErrors extends QueryErrorsBase {
     new ParseException(errorClass = "_LEGACY_ERROR_TEMP_0052", ctx)
   }
 
+  def parameterMarkerNotAllowed(statement: String, origin: Origin): Throwable = {
+    new ParseException(
+      command = origin.sqlText,
+      start = origin,
+      stop = origin,
+      errorClass = "UNSUPPORTED_FEATURE.PARAMETER_MARKER_IN_UNEXPECTED_STATEMENT",
+      messageParameters = Map("statement" -> statement))
+  }
+
   def defineTempViewWithIfNotExistsError(ctx: CreateViewContext): Throwable = {
     new ParseException(errorClass = "_LEGACY_ERROR_TEMP_0053", ctx)
   }
@@ -657,6 +666,17 @@ private[sql] object QueryParsingErrors extends QueryErrorsBase {
         "functionName" -> toSQLId(functionName),
         "parameter" -> toSQLId("unit"),
         "invalidValue" -> invalidValue),
+      ctx
+    )
+  }
+
+  def invalidTableFunctionIdentifierArgumentMissingParentheses(
+      ctx: ParserRuleContext, argumentName: String): Throwable = {
+    new ParseException(
+      errorClass =
+        "INVALID_SQL_SYNTAX.INVALID_TABLE_FUNCTION_IDENTIFIER_ARGUMENT_MISSING_PARENTHESES",
+      messageParameters = Map(
+        "argumentName" -> toSQLId(argumentName)),
       ctx
     )
   }

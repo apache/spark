@@ -19,15 +19,12 @@ package org.apache.spark.sql.catalyst.util
 
 import java.util.regex.{Pattern, PatternSyntaxException}
 
-import scala.collection.mutable.ArrayBuffer
-
 import org.apache.commons.text.similarity.LevenshteinDistance
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.unsafe.array.ByteArrayMethods
 import org.apache.spark.unsafe.types.UTF8String
 
 object StringUtils extends Logging {
@@ -129,50 +126,6 @@ object StringUtils extends Logging {
       }
     }
     funcNames.toSeq
-  }
-
-  /**
-   * Concatenation of sequence of strings to final string with cheap append method
-   * and one memory allocation for the final string.  Can also bound the final size of
-   * the string.
-   */
-  class StringConcat(val maxLength: Int = ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH) {
-    protected val strings = new ArrayBuffer[String]
-    protected var length: Int = 0
-
-    def atLimit: Boolean = length >= maxLength
-
-    /**
-     * Appends a string and accumulates its length to allocate a string buffer for all
-     * appended strings once in the toString method.  Returns true if the string still
-     * has room for further appends before it hits its max limit.
-     */
-    def append(s: String): Unit = {
-      if (s != null) {
-        val sLen = s.length
-        if (!atLimit) {
-          val available = maxLength - length
-          val stringToAppend = if (available >= sLen) s else s.substring(0, available)
-          strings.append(stringToAppend)
-        }
-
-        // Keeps the total length of appended strings. Note that we need to cap the length at
-        // `ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH`; otherwise, we will overflow
-        // length causing StringIndexOutOfBoundsException in the substring call above.
-        length = Math.min(length.toLong + sLen, ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH).toInt
-      }
-    }
-
-    /**
-     * The method allocates memory for all appended strings, writes them to the memory and
-     * returns concatenated string.
-     */
-    override def toString: String = {
-      val finalLength = if (atLimit) maxLength else length
-      val result = new java.lang.StringBuilder(finalLength)
-      strings.foreach(result.append)
-      result.toString
-    }
   }
 
   /**

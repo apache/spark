@@ -20,7 +20,7 @@ select upper(x -> x) as v
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2306",
+  "errorClass" : "INVALID_LAMBDA_FUNCTION_CALL.NON_HIGHER_ORDER_FUNCTION",
   "messageParameters" : {
     "class" : "org.apache.spark.sql.catalyst.expressions.Upper"
   },

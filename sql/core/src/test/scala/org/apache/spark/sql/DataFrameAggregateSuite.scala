@@ -23,7 +23,7 @@ import scala.util.Random
 
 import org.scalatest.matchers.must.Matchers.the
 
-import org.apache.spark.SparkException
+import org.apache.spark.{SparkException, SparkThrowable}
 import org.apache.spark.sql.execution.WholeStageCodegenExec
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.aggregate.{HashAggregateExec, ObjectHashAggregateExec, SortAggregateExec}
@@ -476,6 +476,20 @@ class DataFrameAggregateSuite extends QueryTest
     checkAnswer(testData2.agg(regr_syy($"a", $"b")), testData2.selectExpr("regr_syy(a, b)"))
   }
 
+  test("every | bool_and | some | any | bool_or") {
+    checkAnswer(complexData.agg(every($"b")), complexData.selectExpr("every(b)"))
+    checkAnswer(complexData.agg(bool_and($"b")), complexData.selectExpr("bool_and(b)"))
+    checkAnswer(complexData.agg(some($"b")), complexData.selectExpr("some(b)"))
+    checkAnswer(complexData.agg(any($"b")), complexData.selectExpr("any(b)"))
+    checkAnswer(complexData.agg(bool_or($"b")), complexData.selectExpr("bool_or(b)"))
+  }
+
+  test("bit aggregate") {
+    checkAnswer(testData2.agg(bit_and($"b")), testData2.selectExpr("bit_and(b)"))
+    checkAnswer(testData2.agg(bit_or($"b")), testData2.selectExpr("bit_or(b)"))
+    checkAnswer(testData2.agg(bit_xor($"b")), testData2.selectExpr("bit_xor(b)"))
+  }
+
   test("zero moments") {
     withSQLConf(SQLConf.LEGACY_STATISTICAL_AGGREGATE.key -> "true") {
       val input = Seq((1, 2)).toDF("a", "b")
@@ -560,6 +574,18 @@ class DataFrameAggregateSuite extends QueryTest
     checkDataset(
       df.select(collect_set($"a"), collect_set($"b")).as[(Set[Int], Set[Int])],
       Seq(Set(1, 2, 3) -> Set(2, 4)): _*)
+  }
+
+  test("array_agg function") {
+    val df = Seq((1, 2), (2, 2), (3, 4)).toDF("a", "b")
+    checkAnswer(
+      df.selectExpr("array_agg(a)", "array_agg(b)"),
+      Seq(Row(Seq(1, 2, 3), Seq(2, 2, 4)))
+    )
+    checkAnswer(
+      df.select(array_agg($"a"), array_agg($"b")),
+      Seq(Row(Seq(1, 2, 3), Seq(2, 2, 4)))
+    )
   }
 
   test("collect functions structs") {
@@ -1042,6 +1068,29 @@ class DataFrameAggregateSuite extends QueryTest
     )
   }
 
+  test("any_value") {
+    checkAnswer(
+      courseSales.groupBy("course").agg(
+        any_value(col("year")),
+        any_value(col("year"), lit(true))
+      ),
+      Row("Java", 2012, 2012) :: Row("dotNET", 2012, 2012) :: Nil
+    )
+  }
+
+  test("approx_percentile") {
+    checkAnswer(
+      courseSales.groupBy("course").agg(
+        approx_percentile(col("earnings"), lit(0.3), lit(10000)),
+        approx_percentile(col("earnings"), array(lit(0.3), lit(0.6)), lit(10000)),
+        approx_percentile(col("earnings"), lit(0.3), lit(1)),
+        approx_percentile(col("earnings"), array(lit(0.3), lit(0.6)), lit(1))
+      ),
+      Row("Java", 20000.0, Seq(20000.0, 30000.0), 20000.0, Seq(20000.0, 20000.0)) ::
+        Row("dotNET", 5000.0, Seq(5000.0, 10000.0), 5000.0, Seq(5000.0, 5000.0)) :: Nil
+    )
+  }
+
   test("count_if") {
     withTempView("tempView") {
       Seq(("a", None), ("a", Some(1)), ("a", Some(2)), ("a", Some(3)),
@@ -1093,6 +1142,44 @@ class DataFrameAggregateSuite extends QueryTest
           context = ExpectedContext(fragment = "COUNT_IF(x)", start = 7, stop = 17))
       }
     }
+
+    checkAnswer(
+      courseSales.groupBy("course").agg(
+        count_if((col("earnings").gt(10000))),
+        count_if(col("course").equalTo("Java").and(col("earnings").gt(10000)))
+      ),
+      Row("Java", 2, 2) :: Row("dotNET", 1, 0) :: Nil
+    )
+  }
+
+  test("first_value") {
+    checkAnswer(
+      nullStrings.orderBy(col("n").desc).agg(
+        first_value(col("s")),
+        first_value(col("s"), lit(true))
+      ),
+      Row(null, "ABC") :: Nil
+    )
+  }
+
+  test("last_value") {
+    checkAnswer(
+      nullStrings.agg(
+        last_value(col("s")),
+        last_value(col("s"), lit(true))
+      ),
+      Row(null, "ABC") :: Nil
+    )
+  }
+
+  test("histogram_numeric") {
+    checkAnswer(
+      courseSales.groupBy("course").agg(
+        histogram_numeric(col("earnings"), lit(5))
+      ),
+      Row("Java", Seq(Row(20000.0, 1.0), Row(30000.0, 1.0))) ::
+        Row("dotNET", Seq(Row(5000.0, 1.0), Row(10000.0, 1.0), Row(48000.0, 1.0))) :: Nil
+    )
   }
 
   Seq(true, false).foreach { value =>
@@ -1769,149 +1856,251 @@ class DataFrameAggregateSuite extends QueryTest
     df2.createOrReplaceTempView("df2")
 
     // validate that the functions error out when lgConfigK < 4 or > 24
-    val error0 = intercept[SparkException] {
-      val res = df1.groupBy("id")
-        .agg(
-          hll_sketch_agg("value", 1).as("hllsketch")
-        )
-      checkAnswer(res, Nil)
-    }
-    assert(error0.toString contains "SketchesArgumentException")
+    checkError(
+      exception = intercept[SparkException] {
+        val res = df1.groupBy("id")
+          .agg(
+            hll_sketch_agg("value", 1).as("hllsketch")
+          )
+        checkAnswer(res, Nil)
+      }.getCause.asInstanceOf[SparkThrowable],
+      errorClass = "HLL_INVALID_LG_K",
+      parameters = Map(
+        "function" -> "`hll_sketch_agg`",
+        "min" -> "4",
+        "max" -> "21",
+        "value" -> "1"
+      ))
 
-    val error1 = intercept[SparkException] {
-      val res = df1.groupBy("id")
-        .agg(
-          hll_sketch_agg("value", 25).as("hllsketch")
-        )
-      checkAnswer(res, Nil)
-    }
-    assert(error1.toString contains "SketchesArgumentException")
+    checkError(
+      exception = intercept[SparkException] {
+        val res = df1.groupBy("id")
+          .agg(
+            hll_sketch_agg("value", 25).as("hllsketch")
+          )
+        checkAnswer(res, Nil)
+      }.getCause.asInstanceOf[SparkThrowable],
+      errorClass = "HLL_INVALID_LG_K",
+      parameters = Map(
+        "function" -> "`hll_sketch_agg`",
+        "min" -> "4",
+        "max" -> "21",
+        "value" -> "25"
+      ))
 
     // validate that unions error out by default for different lgConfigK sketches
-    val error2 = intercept[SparkException] {
-      val i1 = df1.groupBy("id")
-        .agg(
-          hll_sketch_agg("value").as("hllsketch_left")
-        )
-      val i2 = df2.groupBy("id")
-        .agg(
-          hll_sketch_agg("value", 20).as("hllsketch_right")
-        )
-      val res = i1.join(i2).withColumn("union", hll_union("hllsketch_left", "hllsketch_right"))
-      checkAnswer(res, Nil)
-    }
-    assert(error2.toString contains "UnsupportedOperationException")
+    checkError(
+      exception = intercept[SparkException] {
+        val i1 = df1.groupBy("id")
+          .agg(
+            hll_sketch_agg("value").as("hllsketch_left")
+          )
+        val i2 = df2.groupBy("id")
+          .agg(
+            hll_sketch_agg("value", 20).as("hllsketch_right")
+          )
+        val res = i1.join(i2).withColumn("union", hll_union("hllsketch_left", "hllsketch_right"))
+        checkAnswer(res, Nil)
+      }.getCause.asInstanceOf[SparkThrowable],
+      errorClass = "HLL_UNION_DIFFERENT_LG_K",
+      parameters = Map(
+        "left" -> "12",
+        "right" -> "20",
+        "function" -> "`hll_union`"
+      ))
 
-    val error3 = intercept[SparkException] {
-      val i1 = df1.groupBy("id")
-        .agg(
-          hll_sketch_agg("value").as("hllsketch")
-        )
-      val i2 = df2.groupBy("id")
-        .agg(
-          hll_sketch_agg("value", 20).as("hllsketch")
-        )
-      val res = i1.union(i2).groupBy("id")
-        .agg(
-          hll_union_agg("hllsketch")
-        )
-      checkAnswer(res, Nil)
-    }
-    assert(error3.toString contains "UnsupportedOperationException")
+    checkError(
+      exception = intercept[SparkException] {
+        val i1 = df1.groupBy("id")
+          .agg(
+            hll_sketch_agg("value").as("hllsketch")
+          )
+        val i2 = df2.groupBy("id")
+          .agg(
+            hll_sketch_agg("value", 20).as("hllsketch")
+          )
+        val res = i1.union(i2).groupBy("id")
+          .agg(
+            hll_union_agg("hllsketch")
+          )
+        checkAnswer(res, Nil)
+      }.getCause.asInstanceOf[SparkThrowable],
+      errorClass = "HLL_UNION_DIFFERENT_LG_K",
+      parameters = Map(
+        "left" -> "12",
+        "right" -> "20",
+        "function" -> "`hll_union_agg`"
+      ))
 
     // validate that the functions error out when provided unexpected types
-    val error4 = intercept[AnalysisException] {
-      val res = sql(
-        """
-          |select
-          | id,
-          | hll_sketch_agg(value, 'text')
-          |from
-          | df1
-          |group by 1
-          |""".stripMargin)
-      checkAnswer(res, Nil)
-    }
-    assert(error4.toString contains "UNEXPECTED_INPUT_TYPE")
+    checkError(
+      exception = intercept[AnalysisException] {
+        val res = sql(
+          """
+            |select
+            | id,
+            | hll_sketch_agg(value, 'text')
+            |from
+            | df1
+            |group by 1
+            |""".stripMargin)
+        checkAnswer(res, Nil)
+      },
+      errorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+      parameters = Map(
+        "sqlExpr" -> "\"hll_sketch_agg(value, text)\"",
+        "paramIndex" -> "2",
+        "inputSql" -> "\"text\"",
+        "inputType" -> "\"STRING\"",
+        "requiredType" -> "\"INT\""
+      ),
+      context = ExpectedContext(
+        fragment = "hll_sketch_agg(value, 'text')",
+        start = 14,
+        stop = 42))
 
-    val error5 = intercept[AnalysisException] {
-      val res = sql(
-        """with sketch_cte as (
-          |select
-          | id,
-          | hll_sketch_agg(value) as sketch
-          |from
-          | df1
-          |group by 1
-          |)
-          |
-          |select hll_union_agg(sketch, 'Hll_4') from sketch_cte
-          |""".stripMargin)
-      checkAnswer(res, Nil)
-    }
-    assert(error5.toString contains "UNEXPECTED_INPUT_TYPE")
+    checkError(
+      exception = intercept[AnalysisException] {
+        val res = sql(
+          """with sketch_cte as (
+            |select
+            | id,
+            | hll_sketch_agg(value) as sketch
+            |from
+            | df1
+            |group by 1
+            |)
+            |
+            |select hll_union_agg(sketch, 'Hll_4') from sketch_cte
+            |""".stripMargin)
+        checkAnswer(res, Nil)
+      },
+      errorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+      parameters = Map(
+        "sqlExpr" -> "\"hll_union_agg(sketch, Hll_4)\"",
+        "paramIndex" -> "2",
+        "inputSql" -> "\"Hll_4\"",
+        "inputType" -> "\"STRING\"",
+        "requiredType" -> "\"BOOLEAN\""
+      ),
+      context = ExpectedContext(
+        fragment = "hll_union_agg(sketch, 'Hll_4')",
+        start = 97,
+        stop = 126))
 
     // validate that unions error out by default for different lgConfigK sketches
-    val error6 = intercept[SparkException] {
-      val res = sql(
-        """with cte1 as (
-          |select
-          | id,
-          | hll_sketch_agg(value) as sketch
-          |from
-          | df1
-          |group by 1
-          |),
-          |
-          |cte2 as (
-          |select
-          | id,
-          | hll_sketch_agg(value, 20) as sketch
-          |from
-          | df2
-          |group by 1
-          |)
-          |
-          |select
-          | cte1.id,
-          | hll_union(cte1.sketch, cte2.sketch) as sketch
-          |from
-          | cte1 join cte2 on cte1.id = cte2.id
-          |""".stripMargin)
-      checkAnswer(res, Nil)
-    }
-    assert(error6.toString contains "UnsupportedOperationException")
+    checkError(
+      exception = intercept[SparkException] {
+        val res = sql(
+          """with cte1 as (
+            |select
+            | id,
+            | hll_sketch_agg(value) as sketch
+            |from
+            | df1
+            |group by 1
+            |),
+            |
+            |cte2 as (
+            |select
+            | id,
+            | hll_sketch_agg(value, 20) as sketch
+            |from
+            | df2
+            |group by 1
+            |)
+            |
+            |select
+            | cte1.id,
+            | hll_union(cte1.sketch, cte2.sketch) as sketch
+            |from
+            | cte1 join cte2 on cte1.id = cte2.id
+            |""".stripMargin)
+        checkAnswer(res, Nil)
+      }.getCause.asInstanceOf[SparkThrowable],
+      errorClass = "HLL_UNION_DIFFERENT_LG_K",
+      parameters = Map(
+        "left" -> "12",
+        "right" -> "20",
+        "function" -> "`hll_union`"
+      ))
 
-    val error7 = intercept[SparkException] {
-      val res = sql(
-        """with cte1 as (
-          |select
-          | id,
-          | hll_sketch_agg(value) as sketch
-          |from
-          | df1
-          |group by 1
-          |),
-          |
-          |cte2 as (
-          |select
-          | id,
-          | hll_sketch_agg(value, 20) as sketch
-          |from
-          | df2
-          |group by 1
-          |)
-          |
-          |select
-          | id,
-          | hll_union_agg(sketch) as sketch
-          |from
-          | (select * from cte1 union all select * from cte2)
-          |group by 1
-          |""".stripMargin)
-      checkAnswer(res, Nil)
+    checkError(
+      exception = intercept[SparkException] {
+        val res = sql(
+          """with cte1 as (
+            |select
+            | id,
+            | hll_sketch_agg(value) as sketch
+            |from
+            | df1
+            |group by 1
+            |),
+            |
+            |cte2 as (
+            |select
+            | id,
+            | hll_sketch_agg(value, 20) as sketch
+            |from
+            | df2
+            |group by 1
+            |)
+            |
+            |select
+            | id,
+            | hll_union_agg(sketch) as sketch
+            |from
+            | (select * from cte1 union all select * from cte2)
+            |group by 1
+            |""".stripMargin)
+        checkAnswer(res, Nil)
+      }.getCause.asInstanceOf[SparkThrowable],
+      errorClass = "HLL_UNION_DIFFERENT_LG_K",
+      parameters = Map(
+        "left" -> "12",
+        "right" -> "20",
+        "function" -> "`hll_union_agg`"
+      ))
+  }
+
+  test("SPARK-43876: Enable fast hashmap for distinct queries") {
+    withSQLConf(SQLConf.ENABLE_TWOLEVEL_AGG_MAP.key -> "true") {
+      val df = testData2.distinct()
+      checkAnswer(df, testData2)
+      val output = new java.io.ByteArrayOutputStream()
+      Console.withOut(output) {
+        df.explain("codegen")
+      }
+      assert(output.toString().contains("public class hashAgg_FastHashMap_0"))
     }
-    assert(error7.toString contains "UnsupportedOperationException")
+  }
+
+  test("hll_sketch_agg") {
+    val df = Seq(1, 1, 2, 2, 3).toDF("col")
+    checkAnswer(
+      df.selectExpr("hll_sketch_estimate(hll_sketch_agg(col, 12))"),
+      Seq(Row(3))
+    )
+    checkAnswer(
+      df.select(hll_sketch_estimate(hll_sketch_agg(col("col"), lit(12)))),
+      Seq(Row(3))
+    )
+  }
+
+  test("hll_union_agg") {
+    val df = Seq(1).toDF("col")
+    checkAnswer(
+      df.selectExpr("hll_sketch_agg(col) as sketch").unionAll(
+        df.selectExpr("hll_sketch_agg(col, 20) as sketch")).
+        selectExpr("hll_sketch_estimate(hll_union_agg(sketch, true))"),
+      Seq(Row(1))
+    )
+    checkAnswer(
+      df.select(hll_sketch_agg(col("col")).as("sketch")).unionAll(
+        df.select(hll_sketch_agg(col("col"), lit(20)).as("sketch"))).
+        select(hll_sketch_estimate(hll_union_agg(col("sketch"), lit(true)))),
+      Seq(Row(1))
+    )
   }
 }
 

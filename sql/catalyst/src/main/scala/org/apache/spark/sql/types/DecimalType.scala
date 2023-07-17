@@ -22,8 +22,7 @@ import java.util.Locale
 import scala.annotation.tailrec
 
 import org.apache.spark.annotation.Stable
-import org.apache.spark.sql.catalyst.expressions.{Expression, Literal}
-import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
+import org.apache.spark.sql.errors.DataTypeErrors
 import org.apache.spark.sql.internal.SQLConf
 
 /**
@@ -45,11 +44,11 @@ case class DecimalType(precision: Int, scale: Int) extends FractionalType {
   DecimalType.checkNegativeScale(scale)
 
   if (scale > precision) {
-    throw QueryCompilationErrors.decimalCannotGreaterThanPrecisionError(scale, precision)
+    throw DataTypeErrors.decimalCannotGreaterThanPrecisionError(scale, precision)
   }
 
   if (precision > DecimalType.MAX_PRECISION) {
-    throw QueryExecutionErrors.decimalPrecisionExceedsMaxPrecisionError(
+    throw DataTypeErrors.decimalPrecisionExceedsMaxPrecisionError(
       precision, DecimalType.MAX_PRECISION)
   }
 
@@ -141,13 +140,6 @@ object DecimalType extends AbstractDataType {
     case DoubleType => DoubleDecimal
   }
 
-  private[sql] def fromLiteral(literal: Literal): DecimalType = literal.value match {
-    case v: Short => fromDecimal(Decimal(BigDecimal(v)))
-    case v: Int => fromDecimal(Decimal(BigDecimal(v)))
-    case v: Long => fromDecimal(Decimal(BigDecimal(v)))
-    case _ => forType(literal.dataType)
-  }
-
   private[sql] def fromDecimal(d: Decimal): DecimalType = DecimalType(d.precision, d.scale)
 
   private[sql] def bounded(precision: Int, scale: Int): DecimalType = {
@@ -156,7 +148,7 @@ object DecimalType extends AbstractDataType {
 
   private[sql] def checkNegativeScale(scale: Int): Unit = {
     if (scale < 0 && !SQLConf.get.allowNegativeScaleOfDecimalEnabled) {
-      throw QueryCompilationErrors.negativeScaleNotAllowedError(scale)
+      throw DataTypeErrors.negativeScaleNotAllowedError(scale)
     }
   }
 
@@ -208,13 +200,6 @@ object DecimalType extends AbstractDataType {
     def unapply(t: DecimalType): Option[(Int, Int)] = Some((t.precision, t.scale))
   }
 
-  private[sql] object Expression {
-    def unapply(e: Expression): Option[(Int, Int)] = e.dataType match {
-      case t: DecimalType => Some((t.precision, t.scale))
-      case _ => None
-    }
-  }
-
   /**
    * Returns if dt is a DecimalType that fits inside an int
    */
@@ -249,6 +234,4 @@ object DecimalType extends AbstractDataType {
   }
 
   def unapply(t: DataType): Boolean = t.isInstanceOf[DecimalType]
-
-  def unapply(e: Expression): Boolean = e.dataType.isInstanceOf[DecimalType]
 }

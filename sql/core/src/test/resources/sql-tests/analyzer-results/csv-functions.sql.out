@@ -36,7 +36,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 select from_csv('1', 'a InvalidType')
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.parser.ParseException
 {
   "errorClass" : "PARSE_SYNTAX_ERROR",
   "sqlState" : "42601",
