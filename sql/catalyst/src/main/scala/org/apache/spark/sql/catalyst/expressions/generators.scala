@@ -438,6 +438,9 @@ trait ExplodeGeneratorBuilderBase extends GeneratorBuilder {
       > SELECT _FUNC_(collection => array(10, 20));
        10
        20
+      > SELECT * FROM _FUNC_(collection => array(10, 20));
+       10
+       20
   """,
   since = "1.0.0",
   group = "generator_funcs")
@@ -459,6 +462,9 @@ object ExplodeExpressionBuilder extends ExpressionBuilder {
        10
        20
       > SELECT _FUNC_(collection => array(10, 20));
+       10
+       20
+      > SELECT * FROM _FUNC_(collection => array(10, 20));
        10
        20
   """,
