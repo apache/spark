@@ -27,12 +27,6 @@ class FrameParityReshapingTests(FrameReshapingMixin, PandasOnSparkTestUtils, Reu
     def psdf(self):
         return ps.from_pandas(self.pdf)
 
-    @unittest.skip(
-        "TODO(SPARK-43611): Fix unexpected `AnalysisException` from Spark Connect client."
-    )
-    def test_transpose(self):
-        super().test_transpose()
-
 
 if __name__ == "__main__":
     from pyspark.pandas.tests.connect.frame.test_parity_reshaping import *  # noqa: F401

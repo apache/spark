@@ -27,18 +27,6 @@ class FrameParityPivotTests(FramePivotMixin, PandasOnSparkTestUtils, ReusedConne
     def psdf(self):
         return ps.from_pandas(self.pdf)
 
-    @unittest.skip(
-        "TODO(SPARK-43611): Fix unexpected `AnalysisException` from Spark Connect client."
-    )
-    def test_pivot_table(self):
-        super().test_pivot_table()
-
-    @unittest.skip(
-        "TODO(SPARK-43611): Fix unexpected `AnalysisException` from Spark Connect client."
-    )
-    def test_pivot_table_dtypes(self):
-        super().test_pivot_table_dtypes()
-
 
 if __name__ == "__main__":
     from pyspark.pandas.tests.connect.computation.test_parity_pivot import *  # noqa: F401

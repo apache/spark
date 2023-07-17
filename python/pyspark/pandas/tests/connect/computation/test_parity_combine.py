@@ -27,12 +27,6 @@ class FrameParityCombineTests(FrameCombineMixin, PandasOnSparkTestUtils, ReusedC
     def psdf(self):
         return ps.from_pandas(self.pdf)
 
-    @unittest.skip(
-        "TODO(SPARK-43611): Fix unexpected `AnalysisException` from Spark Connect client."
-    )
-    def test_append(self):
-        super().test_append()
-
 
 if __name__ == "__main__":
     from pyspark.pandas.tests.connect.computation.test_parity_combine import *  # noqa: F401
