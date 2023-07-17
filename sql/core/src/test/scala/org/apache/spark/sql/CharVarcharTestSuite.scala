@@ -17,13 +17,16 @@
 
 package org.apache.spark.sql
 
+import java.util.Collections
+
 import org.apache.spark.{SparkConf, SparkException, SparkRuntimeException}
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.plans.logical.Project
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.connector.SchemaRequiredDataSource
-import org.apache.spark.sql.connector.catalog.InMemoryPartitionTableCatalog
+import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Identifier, InMemoryPartitionTableCatalog}
+import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.CatalogHelper
 import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.internal.SQLConf
@@ -1052,10 +1055,12 @@ class FileSourceCharVarcharTestSuite extends CharVarcharTestSuite with SharedSpa
 class DSV2CharVarcharTestSuite extends CharVarcharTestSuite
   with SharedSparkSession {
   override def format: String = "foo"
+  val default_catalog_name = "testcat"
   protected override def sparkConf = {
     super.sparkConf
-      .set("spark.sql.catalog.testcat", classOf[InMemoryPartitionTableCatalog].getName)
-      .set(SQLConf.DEFAULT_CATALOG.key, "testcat")
+      .set(s"spark.sql.catalog.$default_catalog_name",
+        classOf[InMemoryPartitionTableCatalog].getName)
+      .set(SQLConf.DEFAULT_CATALOG.key, default_catalog_name)
   }
 
   test("char/varchar type values length check: partitioned columns of other types") {
@@ -1166,5 +1171,32 @@ class DSV2CharVarcharTestSuite extends CharVarcharTestSuite
         )
       }
     }
+  }
+
+  test("SPARK-44414: Fixed matching check for CharType/VarcharType") {
+    Seq("{\"__CHAR_VARCHAR_TYPE_STRING\":\"varchar(80)\"}",
+      "{\"__CHAR_VARCHAR_TYPE_STRING\":\"char(80)\"}").foreach(json => {
+
+      // query
+      val rows = Seq(Row("1", "2"))
+      val metadata = new MetadataBuilder().withMetadata(Metadata.fromJson(json)).build()
+      val schema = StructType(Seq(
+        StructField("x", StringType, metadata = metadata),
+        StructField("y", StringType, metadata = metadata)))
+
+      val df = spark.createDataFrame(spark.sparkContext.makeRDD(rows), schema)
+
+      withTable("t") {
+        // dest table
+        val testCatalog = spark.sessionState.catalogManager.catalog(default_catalog_name).asTableCatalog
+
+        val table = testCatalog.createTable(
+          Identifier.of(Array(), "t"),
+          CatalogV2Util.structTypeToV2Columns(schema),
+          Array.empty,
+          Collections.emptyMap[String, String])
+        df.writeTo(table.name()).append()
+      }
+    })
   }
 }
