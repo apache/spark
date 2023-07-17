@@ -23,7 +23,7 @@ from pyspark.testing.connectutils import ReusedConnectTestCase
 
 class StreamingForeachBatchParityTests(StreamingTestsForeachBatchMixin, ReusedConnectTestCase):
 
-    @unittest.skip("SPARK-XXX: Error handling needs improvement in connect foreachBatch")
+    @unittest.skip("SPARK-44463: Error handling needs improvement in connect foreachBatch")
     def test_streaming_foreachBatch_propagates_python_errors(self):
         super().test_streaming_foreachBatch_propagates_python_errors
 

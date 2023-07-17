@@ -74,7 +74,7 @@ def main(infile, outfile):
     while True:
         dfRefId = utf8_deserializer.loads(infile)
         batchId = read_long(infile)
-        process(dfRefId, int(batchId))  # TODO:     Propagate error better to the user.
+        process(dfRefId, int(batchId))  # TODO(SPARK-44463): Propagate error to the user.
         write_int(0, outfile)
         outfile.flush()
 
