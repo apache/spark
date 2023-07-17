@@ -283,18 +283,17 @@ def arrow_python_udf_example(spark: SparkSession) -> None:
         return len(s)
 
     @udf(returnType='int', useArrow=True)  # An Arrow Python UDF
-    def add_one(x):  # type: ignore[no-untyped-def]
-        if x is not None:
-            return x + 1
+    def arrow_slen(s):  # type: ignore[no-untyped-def]
+        return len(s)
 
     df = spark.createDataFrame([(1, "John Doe", 21)], ("id", "name", "age"))
 
-    df.select(slen("name").alias("slen(name)"), add_one("age")).show()
-    # +----------+------------+
-    # |slen(name)|add_one(age)|
-    # +----------+------------+
-    # |         8|          22|
-    # +----------+------------+
+    df.select(slen("name"), arrow_slen("name")).show()
+    # +----------+----------------+
+    # |slen(name)|arrow_slen(name)|
+    # +----------+----------------+
+    # |         8|               8|
+    # +----------+----------------+
 
 
 if __name__ == "__main__":
