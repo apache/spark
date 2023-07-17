@@ -69,6 +69,7 @@ class Command(google.protobuf.message.Message):
     STREAMING_QUERY_COMMAND_FIELD_NUMBER: builtins.int
     GET_RESOURCES_COMMAND_FIELD_NUMBER: builtins.int
     STREAMING_QUERY_MANAGER_COMMAND_FIELD_NUMBER: builtins.int
+    REGISTER_TABLE_FUNCTION_FIELD_NUMBER: builtins.int
     EXTENSION_FIELD_NUMBER: builtins.int
     @property
     def register_function(
@@ -91,6 +92,10 @@ class Command(google.protobuf.message.Message):
     @property
     def streaming_query_manager_command(self) -> global___StreamingQueryManagerCommand: ...
     @property
+    def register_table_function(
+        self,
+    ) -> pyspark.sql.connect.proto.relations_pb2.CommonInlineUserDefinedTableFunction: ...
+    @property
     def extension(self) -> google.protobuf.any_pb2.Any:
         """This field is used to mark extensions to the protocol. When plugins generate arbitrary
         Commands they can add them here. During the planning the correct resolution is done.
@@ -108,6 +113,8 @@ class Command(google.protobuf.message.Message):
         streaming_query_command: global___StreamingQueryCommand | None = ...,
         get_resources_command: global___GetResourcesCommand | None = ...,
         streaming_query_manager_command: global___StreamingQueryManagerCommand | None = ...,
+        register_table_function: pyspark.sql.connect.proto.relations_pb2.CommonInlineUserDefinedTableFunction
+        | None = ...,
         extension: google.protobuf.any_pb2.Any | None = ...,
     ) -> None: ...
     def HasField(
@@ -123,6 +130,8 @@ class Command(google.protobuf.message.Message):
             b"get_resources_command",
             "register_function",
             b"register_function",
+            "register_table_function",
+            b"register_table_function",
             "sql_command",
             b"sql_command",
             "streaming_query_command",
@@ -150,6 +159,8 @@ class Command(google.protobuf.message.Message):
             b"get_resources_command",
             "register_function",
             b"register_function",
+            "register_table_function",
+            b"register_table_function",
             "sql_command",
             b"sql_command",
             "streaming_query_command",
@@ -176,6 +187,7 @@ class Command(google.protobuf.message.Message):
         "streaming_query_command",
         "get_resources_command",
         "streaming_query_manager_command",
+        "register_table_function",
         "extension",
     ] | None: ...
 

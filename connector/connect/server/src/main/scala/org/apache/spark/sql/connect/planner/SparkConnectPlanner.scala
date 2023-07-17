@@ -66,7 +66,7 @@ import org.apache.spark.sql.execution.arrow.ArrowConverters
 import org.apache.spark.sql.execution.command.CreateViewCommand
 import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JDBCPartition, JDBCRelation}
-import org.apache.spark.sql.execution.python.{PythonForeachWriter, UserDefinedPythonFunction}
+import org.apache.spark.sql.execution.python.{PythonForeachWriter, UserDefinedPythonFunction, UserDefinedPythonTableFunction}
 import org.apache.spark.sql.execution.stat.StatFunctions
 import org.apache.spark.sql.execution.streaming.GroupStateImpl.groupStateTimeoutFromString
 import org.apache.spark.sql.execution.streaming.StreamingQueryWrapper
@@ -153,6 +153,8 @@ class SparkConnectPlanner(val sessionHolder: SessionHolder) extends Logging {
         transformCoGroupMap(rel.getCoGroupMap)
       case proto.Relation.RelTypeCase.APPLY_IN_PANDAS_WITH_STATE =>
         transformApplyInPandasWithState(rel.getApplyInPandasWithState)
+      case proto.Relation.RelTypeCase.COMMON_INLINE_USER_DEFINED_TABLE_FUNCTION =>
+        transformCommonInlineUserDefinedTableFunction(rel.getCommonInlineUserDefinedTableFunction)
       case proto.Relation.RelTypeCase.CACHED_REMOTE_RELATION =>
         transformCachedRemoteRelation(rel.getCachedRemoteRelation)
       case proto.Relation.RelTypeCase.COLLECT_METRICS =>
@@ -888,6 +890,32 @@ class SparkConnectPlanner(val sessionHolder: SessionHolder) extends Logging {
         rel.getOutputMode,
         rel.getTimeoutConf)
       .logicalPlan
+  }
+
+  private def transformCommonInlineUserDefinedTableFunction(
+      fun: proto.CommonInlineUserDefinedTableFunction): LogicalPlan = {
+    fun.getFunctionCase match {
+      case proto.CommonInlineUserDefinedTableFunction.FunctionCase.PYTHON_UDTF =>
+        val function = createPythonUserDefinedTableFunction(fun)
+        function.builder(fun.getArgumentsList.asScala.map(transformExpression).toSeq)
+      case _ =>
+        throw InvalidPlanInput(
+          s"Function with ID: ${fun.getFunctionCase.getNumber} is not supported")
+    }
+  }
+
+  private def transformPythonTableFunction(fun: proto.PythonUDTF): SimplePythonFunction = {
+    SimplePythonFunction(
+      command = fun.getCommand.toByteArray,
+      // Empty environment variables
+      envVars = Maps.newHashMap(),
+      pythonIncludes = sessionHolder.artifactManager.getSparkConnectPythonIncludes.asJava,
+      pythonExec = pythonExec,
+      pythonVer = fun.getPythonVer,
+      // Empty broadcast variables
+      broadcastVars = Lists.newArrayList(),
+      // Null accumulator
+      accumulator = null)
   }
 
   private def transformCachedRemoteRelation(rel: proto.CachedRemoteRelation): LogicalPlan = {
@@ -2311,6 +2339,8 @@ class SparkConnectPlanner(val sessionHolder: SessionHolder) extends Logging {
     command.getCommandTypeCase match {
       case proto.Command.CommandTypeCase.REGISTER_FUNCTION =>
         handleRegisterUserDefinedFunction(command.getRegisterFunction)
+      case proto.Command.CommandTypeCase.REGISTER_TABLE_FUNCTION =>
+        handleRegisterUserDefinedTableFunction(command.getRegisterTableFunction)
       case proto.Command.CommandTypeCase.WRITE_OPERATION =>
         handleWriteOperation(command.getWriteOperation)
       case proto.Command.CommandTypeCase.CREATE_DATAFRAME_VIEW =>
@@ -2435,6 +2465,39 @@ class SparkConnectPlanner(val sessionHolder: SessionHolder) extends Logging {
         throw InvalidPlanInput(
           s"Function with ID: ${fun.getFunctionCase.getNumber} is not supported")
     }
+  }
+
+  private def handleRegisterUserDefinedTableFunction(
+      fun: proto.CommonInlineUserDefinedTableFunction): Unit = {
+    fun.getFunctionCase match {
+      case proto.CommonInlineUserDefinedTableFunction.FunctionCase.PYTHON_UDTF =>
+        val function = createPythonUserDefinedTableFunction(fun)
+        session.udtf.registerPython(fun.getFunctionName, function)
+      case _ =>
+        throw InvalidPlanInput(
+          s"Function with ID: ${fun.getFunctionCase.getNumber} is not supported")
+    }
+  }
+
+  private def createPythonUserDefinedTableFunction(
+      fun: proto.CommonInlineUserDefinedTableFunction): UserDefinedPythonTableFunction = {
+    val udtf = fun.getPythonUdtf
+    // Currently return type is required for Python UDTFs.
+    // TODO(SPARK-44380): support `analyze` in Python UDTFs
+    assert(udtf.hasReturnType)
+    val returnType = transformDataType(udtf.getReturnType)
+    if (!returnType.isInstanceOf[StructType]) {
+      throw InvalidPlanInput(
+        "Invalid Python user-defined table function return type. " +
+          s"Expect a struct type, but got ${returnType.typeName}.")
+    }
+
+    UserDefinedPythonTableFunction(
+      name = fun.getFunctionName,
+      func = transformPythonTableFunction(udtf),
+      returnType = returnType.asInstanceOf[StructType],
+      pythonEvalType = udtf.getEvalType,
+      udfDeterministic = fun.getDeterministic)
   }
 
   private def handleRegisterPythonUDF(fun: proto.CommonInlineUserDefinedFunction): Unit = {
