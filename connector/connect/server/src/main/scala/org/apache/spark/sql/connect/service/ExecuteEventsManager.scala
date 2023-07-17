@@ -63,6 +63,10 @@ case class ExecuteEventsManager(executeHolder: ExecuteHolder, clock: Clock) {
 
   private def sessionHolder = executeHolder.sessionHolder
 
+  private def sessionId = executeHolder.request.getSessionId
+
+  private def sessionStatus = sessionHolder.eventManager.status
+
   private var _status: ExecuteStatus = ExecuteStatus.Pending
 
   private var error = Option.empty[Boolean]
@@ -109,7 +113,7 @@ case class ExecuteEventsManager(executeHolder: ExecuteHolder, clock: Clock) {
         jobTag,
         operationId,
         clock.getTimeMillis(),
-        request.getSessionId,
+        sessionId,
         request.getUserContext.getUserId,
         request.getUserContext.getUserName,
         Utils.redact(
@@ -233,6 +237,12 @@ case class ExecuteEventsManager(executeHolder: ExecuteHolder, clock: Clock) {
       throw new IllegalStateException(s"""
         operationId: $operationId with status ${status}
         is not within statuses $validStatuses for event $eventStatus
+        """)
+    }
+    if (sessionHolder.eventManager.status != SessionStatus.Started) {
+      throw new IllegalStateException(s"""
+        sessionId: $sessionId with status $sessionStatus
+        is not Started for event $eventStatus
         """)
     }
     _status = eventStatus

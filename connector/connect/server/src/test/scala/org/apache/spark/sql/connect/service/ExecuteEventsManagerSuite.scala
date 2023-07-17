@@ -270,9 +270,19 @@ class ExecuteEventsManagerSuite
     }
   }
 
-  def setupEvents(executeStatus: ExecuteStatus): ExecuteEventsManager = {
+  test("SPARK-43923: Started wrong session status") {
+    val events = setupEvents(ExecuteStatus.Started, SessionStatus.Pending)
+    assertThrows[IllegalStateException] {
+      events.postStarted()
+    }
+  }
+
+  def setupEvents(
+      executeStatus: ExecuteStatus,
+      sessionStatus: SessionStatus = SessionStatus.Started): ExecuteEventsManager = {
     val mockSession = mock[SparkSession]
     val sessionHolder = SessionHolder(DEFAULT_USER_ID, DEFAULT_SESSION_ID, mockSession)
+    sessionHolder.eventManager.status_(sessionStatus)
     val mockContext = mock[SparkContext]
     val mockListenerBus = mock[LiveListenerBus]
     val mockSessionState = mock[SessionState]

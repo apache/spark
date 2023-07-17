@@ -35,7 +35,7 @@ import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.connect.common.InvalidPlanInput
 import org.apache.spark.sql.connect.common.LiteralValueProtoConverter.toLiteralProto
-import org.apache.spark.sql.connect.service.{ExecuteHolder, SessionHolder}
+import org.apache.spark.sql.connect.service.{ExecuteHolder, ExecuteStatus, SessionHolder, SessionStatus}
 import org.apache.spark.sql.execution.arrow.ArrowConverters
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructType}
@@ -118,6 +118,7 @@ trait SparkConnectPlanTest extends SharedSparkSession {
 
   def buildExecutePlanHolder(command: proto.Command): ExecuteHolder = {
     val sessionHolder = SessionHolder.forTesting(spark)
+    sessionHolder.eventManager.status_(SessionStatus.Started)
 
     val context = proto.UserContext
       .newBuilder()
@@ -132,7 +133,9 @@ trait SparkConnectPlanTest extends SharedSparkSession {
       .setPlan(plan)
       .setUserContext(context)
       .build()
-    sessionHolder.createExecuteHolder(request)
+    val executeHolder = sessionHolder.createExecuteHolder(request)
+    executeHolder.eventsManager.status_(ExecuteStatus.Started)
+    executeHolder
   }
 }
 
