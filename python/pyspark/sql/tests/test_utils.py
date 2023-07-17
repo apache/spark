@@ -39,6 +39,7 @@ from pyspark.sql.types import (
     IntegerType,
     BooleanType,
 )
+from pyspark.sql.dataframe import DataFrame
 
 import difflib
 
@@ -633,8 +634,12 @@ class UtilsTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            error_class="UNSUPPORTED_DATA_TYPE",
-            message_parameters={"data_type": pd.DataFrame},
+            error_class="INVALID_TYPE_DF_EQUALITY_ARG",
+            message_parameters={
+                "expected_type": DataFrame,
+                "arg_name": "df",
+                "actual_type": pd.DataFrame,
+            },
         )
 
         with self.assertRaises(PySparkAssertionError) as pe:
@@ -642,8 +647,12 @@ class UtilsTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            error_class="UNSUPPORTED_DATA_TYPE",
-            message_parameters={"data_type": pd.DataFrame},
+            error_class="INVALID_TYPE_DF_EQUALITY_ARG",
+            message_parameters={
+                "expected_type": DataFrame,
+                "arg_name": "df",
+                "actual_type": pd.DataFrame,
+            },
         )
 
     def test_assert_error_non_pyspark_df(self):
@@ -655,8 +664,12 @@ class UtilsTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            error_class="UNSUPPORTED_DATA_TYPE",
-            message_parameters={"data_type": type(dict1)},
+            error_class="INVALID_TYPE_DF_EQUALITY_ARG",
+            message_parameters={
+                "expected_type": DataFrame,
+                "arg_name": "df",
+                "actual_type": type(dict1),
+            },
         )
 
         with self.assertRaises(PySparkAssertionError) as pe:
@@ -664,8 +677,12 @@ class UtilsTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            error_class="UNSUPPORTED_DATA_TYPE",
-            message_parameters={"data_type": type(dict1)},
+            error_class="INVALID_TYPE_DF_EQUALITY_ARG",
+            message_parameters={
+                "expected_type": DataFrame,
+                "arg_name": "df",
+                "actual_type": type(dict1),
+            },
         )
 
     def test_row_order_ignored(self):
