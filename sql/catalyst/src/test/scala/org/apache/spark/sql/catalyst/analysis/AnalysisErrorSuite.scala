@@ -94,7 +94,7 @@ case class TestFunction(
     copy(children = newChildren)
 }
 
-case class TestFunctionWithInputTypeCheck(
+case class TestFunctionWithTypeCheckFailure(
     children: Seq[Expression],
     inputTypes: Seq[AbstractDataType])
   extends Expression with Unevaluable {
@@ -191,12 +191,12 @@ class AnalysisErrorSuite extends AnalysisTest {
       "requiredType" -> "\"INT\""))
 
   errorClassTest(
-    "checkAnalysis no cast type check",
+    "type check failure",
     testRelation.select(
-      TestFunctionWithInputTypeCheck(dateLit :: Nil, BinaryType :: Nil).as("a")),
+      TestFunctionWithTypeCheckFailure(dateLit :: Nil, BinaryType :: Nil).as("a")),
     errorClass = "DATATYPE_MISMATCH.TYPE_CHECK_FAILURE_WITH_HINT",
     messageParameters = Map(
-      "sqlExpr" -> "\"testfunctionwithinputtypecheck(NULL)\"",
+      "sqlExpr" -> "\"testfunctionwithtypecheckfailure(NULL)\"",
       "msg" -> "Expression must be a binary",
       "hint" -> ""))
 
