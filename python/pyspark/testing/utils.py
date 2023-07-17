@@ -322,7 +322,7 @@ def assertDataFrameEqual(
 ):
     r"""
     A util function to assert equality between `actual` (DataFrame) and `expected`
-    (either DataFrame or list of Rows), with optional parameter `checkRowOrder`.
+    (DataFrame or list of Rows), with optional parameters `checkRowOrder`, `rtol`, and `atol`.
 
     .. versionadded:: 3.5.0
 
