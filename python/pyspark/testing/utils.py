@@ -20,6 +20,7 @@ import os
 import struct
 import sys
 import unittest
+import difflib
 from time import time, sleep
 from typing import (
     Any,
@@ -36,7 +37,7 @@ from pyspark.errors import PySparkAssertionError, PySparkException
 from pyspark.find_spark_home import _find_spark_home
 from pyspark.sql.dataframe import DataFrame as DataFrame
 from pyspark.sql import Row
-from pyspark.sql.types import StructType, AtomicType
+from pyspark.sql.types import StructType, AtomicType, StructField
 
 have_scipy = False
 have_numpy = False
@@ -55,7 +56,7 @@ except ImportError:
     # No NumPy, but that's okay, we'll skip those tests
     pass
 
-__all__ = ["assertDataFrameEqual"]
+__all__ = ["assertDataFrameEqual", "assertSchemaEqual"]
 
 SPARK_HOME = _find_spark_home()
 
@@ -222,23 +223,112 @@ class PySparkErrorTestUtils:
         )
 
 
+def assertSchemaEqual(actual: StructType, expected: StructType):
+    r"""
+    A util function to assert equality between DataFrame schemas `actual` and `expected`.
+
+    .. versionadded:: 3.5.0
+
+    Parameters
+    ----------
+    actual : StructType
+        The DataFrame schema that is being compared or tested.
+    expected : StructType
+        The expected schema, for comparison with the actual schema.
+
+    Notes
+    -----
+    When assertSchemaEqual fails, the error message uses the Python `difflib` library to display
+    a diff log of the `actual` and `expected` schemas.
+
+    Examples
+    --------
+    >>> from pyspark.sql.types import StructType, StructField, ArrayType, IntegerType, DoubleType
+    >>> s1 = StructType([StructField("names", ArrayType(DoubleType(), True), True)])
+    >>> s2 = StructType([StructField("names", ArrayType(DoubleType(), True), True)])
+    >>> assertSchemaEqual(s1, s2)  # pass, schemas are identical
+    >>> df1 = spark.createDataFrame(data=[(1, 1000), (2, 3000)], schema=["id", "number"])
+    >>> df2 = spark.createDataFrame(data=[("1", 1000), ("2", 5000)], schema=["id", "amount"])
+    >>> assertSchemaEqual(df1.schema, df2.schema)  # doctest: +IGNORE_EXCEPTION_DETAIL
+    Traceback (most recent call last):
+    ...
+    PySparkAssertionError: [DIFFERENT_SCHEMA] Schemas do not match.
+    --- actual
+    +++ expected
+    - StructType([StructField('id', LongType(), True), StructField('number', LongType(), True)])
+    ?                               ^^                               ^^^^^
+    + StructType([StructField('id', StringType(), True), StructField('amount', LongType(), True)])
+    ?                               ^^^^                              ++++ ^
+    """
+    if not isinstance(actual, StructType):
+        raise PySparkAssertionError(
+            error_class="UNSUPPORTED_DATA_TYPE",
+            message_parameters={"data_type": type(actual)},
+        )
+    if not isinstance(expected, StructType):
+        raise PySparkAssertionError(
+            error_class="UNSUPPORTED_DATA_TYPE",
+            message_parameters={"data_type": type(expected)},
+        )
+
+    def compare_schemas_ignore_nullable(s1: StructType, s2: StructType):
+        if len(s1) != len(s2):
+            return False
+        zipped = zip_longest(s1, s2)
+        for sf1, sf2 in zipped:
+            if not compare_structfields_ignore_nullable(sf1, sf2):
+                return False
+        return True
+
+    def compare_structfields_ignore_nullable(actualSF: StructField, expectedSF: StructField):
+        if actualSF is None and expectedSF is None:
+            return True
+        elif actualSF is None or expectedSF is None:
+            return False
+        if actualSF.name != expectedSF.name:
+            return False
+        else:
+            return compare_datatypes_ignore_nullable(actualSF.dataType, expectedSF.dataType)
+
+    def compare_datatypes_ignore_nullable(dt1: Any, dt2: Any):
+        # checks datatype equality, using recursion to ignore nullable
+        if dt1.typeName() == dt2.typeName():
+            if dt1.typeName() == "array":
+                return compare_datatypes_ignore_nullable(dt1.elementType, dt2.elementType)
+            elif dt1.typeName() == "struct":
+                return compare_schemas_ignore_nullable(dt1, dt2)
+            else:
+                return True
+        else:
+            return False
+
+    if not compare_schemas_ignore_nullable(actual, expected):
+        generated_diff = difflib.ndiff(str(actual).splitlines(), str(expected).splitlines())
+
+        error_msg = "\n".join(generated_diff)
+
+        raise PySparkAssertionError(
+            error_class="DIFFERENT_SCHEMA",
+            message_parameters={"error_msg": error_msg},
+        )
+
+
 def assertDataFrameEqual(
-    df: DataFrame,
+    actual: DataFrame,
     expected: Union[DataFrame, List[Row]],
     checkRowOrder: bool = False,
-    checkSchema: bool = True,
     rtol: float = 1e-5,
     atol: float = 1e-8,
 ):
-    """
-    A util function to assert equality between `df` (DataFrame) and `expected`
+    r"""
+    A util function to assert equality between `actual` (DataFrame) and `expected`
     (either DataFrame or list of Rows), with optional parameter `checkRowOrder`.
 
     .. versionadded:: 3.5.0
 
     Parameters
     ----------
-    df : DataFrame
+    actual : DataFrame
         The DataFrame that is being compared or tested.
     expected : DataFrame or list of Rows
         The expected result of the operation, for comparison with the actual result.
@@ -248,10 +338,10 @@ def assertDataFrameEqual(
         If set to `True`, the order of rows is important and will be checked during comparison.
         (See Notes)
     rtol : float, optional
-        The relative tolerance, used in asserting approximate equality for float values in df
+        The relative tolerance, used in asserting approximate equality for float values in actual
         and expected. Set to 1e-5 by default. (See Notes)
     atol : float, optional
-        The absolute tolerance, used in asserting approximate equality for float values in df
+        The absolute tolerance, used in asserting approximate equality for float values in actual
         and expected. Set to 1e-8 by default. (See Notes)
 
     Notes
@@ -274,6 +364,11 @@ def assertDataFrameEqual(
     >>> df1 = spark.createDataFrame(data=[("1", 0.1), ("2", 3.23)], schema=["id", "amount"])
     >>> df2 = spark.createDataFrame(data=[("1", 0.109), ("2", 3.23)], schema=["id", "amount"])
     >>> assertDataFrameEqual(df1, df2, rtol=1e-1)  # pass, DataFrames are approx equal by rtol
+    >>> df1 = spark.createDataFrame(
+    ...     data=[("1", 1000.00), ("2", 3000.00), ("3", 2000.00)], schema=["id", "amount"])
+    >>> df2 = spark.createDataFrame(
+    ...     data=[("1", 1001.00), ("2", 3000.00), ("3", 2003.00)], schema=["id", "amount"])
+    >>> assertDataFrameEqual(df1, df2, rtol=1e-1)  # pass, DataFrames are approx equal by rtol
     >>> df1 = spark.createDataFrame(data=[(1, 1000), (2, 3000)], schema=["id", "amount"])
     >>> list_of_rows = [Row(1, 1000), Row(2, 3000)]
     >>> assertDataFrameEqual(df1, list_of_rows)  # pass, DataFrames are equal
@@ -285,31 +380,28 @@ def assertDataFrameEqual(
     Traceback (most recent call last):
     ...
     PySparkAssertionError: [DIFFERENT_ROWS] Results do not match: ( 66.667 % )
-    [df]
+    [actual]
     Row(id='1', amount=1000.0)
-
     [expected]
     Row(id='1', amount=1001.0)
-
-    [df]
+    [actual]
     Row(id='3', amount=2000.0)
-
     [expected]
     Row(id='3', amount=2003.0)
     """
-    if df is None and expected is None:
+    if actual is None and expected is None:
         return True
-    elif df is None or expected is None:
+    elif actual is None or expected is None:
         return False
 
     try:
         # If Spark Connect dependencies are available, allow Spark Connect DataFrame
         from pyspark.sql.connect.dataframe import DataFrame as ConnectDataFrame
 
-        if not isinstance(df, DataFrame) and not isinstance(df, ConnectDataFrame):
+        if not isinstance(actual, DataFrame) and not isinstance(actual, ConnectDataFrame):
             raise PySparkAssertionError(
                 error_class="UNSUPPORTED_DATA_TYPE",
-                message_parameters={"data_type": type(df)},
+                message_parameters={"data_type": type(actual)},
             )
         elif (
             not isinstance(expected, DataFrame)
@@ -321,10 +413,10 @@ def assertDataFrameEqual(
                 message_parameters={"data_type": type(expected)},
             )
     except Exception:
-        if not isinstance(df, DataFrame):
+        if not isinstance(actual, DataFrame):
             raise PySparkAssertionError(
                 error_class="UNSUPPORTED_DATA_TYPE",
-                message_parameters={"data_type": type(df)},
+                message_parameters={"data_type": type(actual)},
             )
         elif not isinstance(expected, DataFrame) and not isinstance(expected, List):
             raise PySparkAssertionError(
@@ -334,10 +426,10 @@ def assertDataFrameEqual(
 
     # special cases: empty datasets, datasets with 0 columns
     if isinstance(expected, DataFrame) and (
-            (df.first() is None and expected.first() is None)
-                or (len(df.columns) == 0 and len(expected.columns) == 0))\
+            (actual.first() is None and expected.first() is None)
+                or (len(actual.columns) == 0 and len(expected.columns) == 0))\
         or isinstance(expected, list) and (
-                (df.first() is None or len(df.columns) == 0) and len(expected) == 0):
+                (actual.first() is None or len(actual.columns) == 0) and len(expected) == 0):
         return True
 
     def compare_rows(r1: Row, r2: Row):
@@ -369,16 +461,6 @@ def assertDataFrameEqual(
 
         return compare_vals(r1, r2)
 
-    def assert_schema_equal(
-        df_schema: StructType,
-        expected_schema: StructType,
-    ):
-        if df_schema != expected_schema:
-            raise PySparkAssertionError(
-                error_class="DIFFERENT_SCHEMA",
-                message_parameters={"df_schema": df_schema, "expected_schema": expected_schema},
-            )
-
     def assert_rows_equal(rows1: List[Row], rows2: List[Row]):
         zipped = list(zip_longest(rows1, rows2))
         rows_equal = True
@@ -391,7 +473,7 @@ def assertDataFrameEqual(
                 rows_equal = False
                 diff_rows_cnt += 1
                 diff_msg += (
-                    "[df]" + "\n" + str(r1) + "\n\n" + "[expected]" + "\n" + str(r2) + "\n\n"
+                    "[actual]" + "\n" + str(r1) + "\n\n" + "[expected]" + "\n" + str(r2) + "\n\n"
                 )
                 diff_msg += "********************" + "\n\n"
 
@@ -404,15 +486,15 @@ def assertDataFrameEqual(
                 message_parameters={"error_msg": error_msg},
             )
 
-    # convert df and expected to list
+    # convert actual and expected to list
     if not isinstance(expected, List):
-        # only compare schema if expected is not a list
-        assert_schema_equal(df.schema, expected.schema)
+        # only compare schema if expected is not a List
+        assertSchemaEqual(actual.schema, expected.schema)
         expected_list = expected.collect()
     else:
         expected_list = expected
 
-    df_list = df.collect()
+    df_list = actual.collect()
 
     if not checkRowOrder:
         # rename duplicate columns for sorting
