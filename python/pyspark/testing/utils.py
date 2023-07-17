@@ -354,6 +354,9 @@ def assertDataFrameEqual(
 
     ``absolute(a - b) <= (atol + rtol * absolute(b))``.
 
+    When assertDataFrameEqual fails, the error message uses the Python `difflib` library to display
+    a diff log of each row that differs in `actual` and `expected`.
+
     Examples
     --------
     >>> df1 = spark.createDataFrame(data=[("1", 1000), ("2", 3000)], schema=["id", "amount"])
@@ -369,15 +372,19 @@ def assertDataFrameEqual(
     >>> assertDataFrameEqual(df1, df2)  # doctest: +IGNORE_EXCEPTION_DETAIL
     Traceback (most recent call last):
     ...
-    PySparkAssertionError: [DIFFERENT_ROWS] Results do not match: ( 66.667 % )
-    [actual]
-    Row(id='1', amount=1000.0)
-    [expected]
-    Row(id='1', amount=1001.0)
-    [actual]
-    Row(id='3', amount=2000.0)
-    [expected]
-    Row(id='3', amount=2003.0)
+    PySparkAssertionError: [DIFFERENT_ROWS] Results do not match: ( 66.66667 % )
+    --- actual
+    +++ expected
+
+    - Row(id='1', amount=1000.0)
+    ?                       ^
+    + Row(id='1', amount=1001.0)
+    ?                       ^
+
+    - Row(id='3', amount=2000.0)
+    ?                       ^
+    + Row(id='3', amount=2003.0)
+    ?                       ^
     """
     if actual is None and expected is None:
         return True
@@ -460,15 +467,14 @@ def assertDataFrameEqual(
             if not compare_rows(r1, r2):
                 rows_equal = False
                 diff_rows_cnt += 1
-                diff_msg += (
-                    "[actual]" + "\n" + str(r1) + "\n\n" + "[expected]" + "\n" + str(r2) + "\n\n"
-                )
-                diff_msg += "********************" + "\n\n"
+                generated_diff = difflib.ndiff(str(r1).splitlines(), str(r2).splitlines())
+                diff_msg += "\n" + "\n".join(generated_diff) + "\n"
+                diff_msg += "********************" + "\n"
 
         if not rows_equal:
             percent_diff = (diff_rows_cnt / len(zipped)) * 100
             error_msg += "( %.5f %% )" % percent_diff
-            error_msg += "\n" + diff_msg
+            error_msg += "\n" + "--- actual\n+++ expected\n" + diff_msg
             raise PySparkAssertionError(
                 error_class="DIFFERENT_ROWS",
                 message_parameters={"error_msg": error_msg},
