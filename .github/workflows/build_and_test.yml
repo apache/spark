@@ -687,8 +687,10 @@ jobs:
         cd docs
         bundle exec jekyll build
     - name: Tar documentation
+      if: github.repository != 'apache/spark'
       run: tar cjf site.tar.bz2 docs/_site
     - name: Upload documentation
+      if: github.repository != 'apache/spark'
       uses: actions/upload-artifact@v3
       with:
         name: site
