@@ -47,12 +47,6 @@ private[connect] object MetricGenerator extends AdaptiveSparkPlanHelper {
     allChildren(p).flatMap(c => transformPlan(c, p.id))
   }
 
-  private def allChildren(p: SparkPlan): Seq[SparkPlan] = p match {
-    case a: AdaptiveSparkPlanExec => Seq(a.executedPlan)
-    case s: QueryStageExec => Seq(s.plan)
-    case _ => p.children
-  }
-
   private def transformPlan(
       p: SparkPlan,
       parentId: Int): Seq[ExecutePlanResponse.Metrics.MetricObject] = {
