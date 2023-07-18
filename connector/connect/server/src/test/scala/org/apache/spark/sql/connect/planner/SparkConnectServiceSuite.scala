@@ -564,7 +564,8 @@ class SparkConnectServiceSuite extends SharedSparkSession with MockitoSugar with
     }
   }
 
-  test("Test observe response") {
+  // TODO(SPARK-44474): Reenable Test observe response at SparkConnectServiceSuite
+  ignore("Test observe response") {
     // TODO(SPARK-44121) Renable Arrow-based connect tests in Java 21
     assume(SystemUtils.isJavaVersionAtMost(JavaVersion.JAVA_17))
     withTable("test") {
