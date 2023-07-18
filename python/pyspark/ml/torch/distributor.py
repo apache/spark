@@ -836,43 +836,6 @@ class TorchDistributor(Distributor):
     def _cleanup_files(save_dir: str) -> None:
         shutil.rmtree(save_dir, ignore_errors=True)
 
-    @staticmethod
-    def _save_pickled_function(
-        save_dir: str, train_fn: Union[str, Callable], *args: Any, **kwargs: Any
-    ) -> str:
-        saved_pickle_path = os.path.join(save_dir, TorchDistributor._PICKLED_FUNC_FILE)
-        with open(saved_pickle_path, "wb") as f:
-            cloudpickle.dump((train_fn, args, kwargs), f)
-        return saved_pickle_path
-
-    @staticmethod
-    def _create_torchrun_train_file(
-        save_dir_path: str, pickle_file_path: str, output_file_path: str
-    ) -> str:
-        code = textwrap.dedent(
-            f"""
-                    from pyspark import cloudpickle
-                    import os
-
-                    if __name__ == "__main__":
-                        with open("{pickle_file_path}", "rb") as f:
-                            train_fn, args, kwargs = cloudpickle.load(f)
-                        output = train_fn(*args, **kwargs)
-                        with open("{output_file_path}", "wb") as f:
-                            cloudpickle.dump(output, f)
-                    """
-        )
-        saved_file_path = os.path.join(save_dir_path, TorchDistributor._TRAIN_FILE)
-        with open(saved_file_path, "w") as f:
-            f.write(code)
-        return saved_file_path
-
-    @staticmethod
-    def _get_pickled_output(output_file_path: str) -> Any:
-        with open(output_file_path, "rb") as f:
-            output = cloudpickle.load(f)
-        return output
-
     def run(self, train_object: Union[Callable, str], *args: Any, **kwargs: Any) -> Optional[Any]:
         """Runs distributed training.
 
