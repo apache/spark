@@ -2496,15 +2496,13 @@ class SparkConnectPlanner(val sessionHolder: SessionHolder) extends Logging {
       fun: proto.CommonInlineUserDefinedTableFunction): UserDefinedPythonTableFunction = {
     val udtf = fun.getPythonUdtf
     val returnType = if (udtf.hasReturnType) {
-      val returnType = transformDataType(udtf.getReturnType)
-
-      if (!returnType.isInstanceOf[StructType]) {
-        throw InvalidPlanInput(
-          "Invalid Python user-defined table function return type. " +
-            s"Expect a struct type, but got ${returnType.typeName}.")
+      transformDataType(udtf.getReturnType) match {
+        case s: StructType => Some(s)
+        case dt =>
+          throw InvalidPlanInput(
+            "Invalid Python user-defined table function return type. " +
+              s"Expect a struct type, but got ${dt.typeName}.")
       }
-
-      Some(returnType.asInstanceOf[StructType])
     } else {
       None
     }

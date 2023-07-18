@@ -33,8 +33,8 @@ from pyspark.sql.connect.plan import (
 )
 from pyspark.sql.connect.types import UnparsedDataType
 from pyspark.sql.connect.utils import get_python_ver
-from pyspark.sql.udtf import UDTFRegistration as PySparkUDTFRegistration, _validate_udtf_handler
 from pyspark.sql.udtf import AnalyzeArgument, AnalyzeResult  # noqa: F401
+from pyspark.sql.udtf import UDTFRegistration as PySparkUDTFRegistration, _validate_udtf_handler
 from pyspark.sql.types import DataType, StructType
 from pyspark.errors import PySparkRuntimeError, PySparkTypeError
 

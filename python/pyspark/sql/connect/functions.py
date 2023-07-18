@@ -53,8 +53,8 @@ from pyspark.sql.connect.expressions import (
     UnresolvedNamedLambdaVariable,
 )
 from pyspark.sql.connect.udf import _create_py_udf
-from pyspark.sql.connect.udtf import _create_py_udtf
 from pyspark.sql.connect.udtf import AnalyzeArgument, AnalyzeResult  # noqa: F401
+from pyspark.sql.connect.udtf import _create_py_udtf
 from pyspark.sql import functions as pysparkfuncs
 from pyspark.sql.types import _from_numpy_type, DataType, StructType, ArrayType, StringType
 

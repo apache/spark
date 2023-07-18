@@ -51,7 +51,8 @@ def read_udtf(infile: IO) -> type:
     ):
         raise PySparkRuntimeError(
             "Failed to execute the user defined table function because it has not "
-            "implemented the 'analyze' static method. "
+            "implemented the 'analyze' static method or specified a fixed "
+            "return type during registration time. "
             "Please add the 'analyze' static method or specify the return type, "
             "and try the query again."
         )

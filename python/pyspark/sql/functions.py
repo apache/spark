@@ -49,8 +49,8 @@ from pyspark.sql.types import ArrayType, DataType, StringType, StructType, _from
 
 # Keep UserDefinedFunction import for backwards compatible import; moved in SPARK-22409
 from pyspark.sql.udf import UserDefinedFunction, _create_py_udf  # noqa: F401
-from pyspark.sql.udtf import UserDefinedTableFunction, _create_py_udtf
 from pyspark.sql.udtf import AnalyzeArgument, AnalyzeResult  # noqa: F401
+from pyspark.sql.udtf import UserDefinedTableFunction, _create_py_udtf
 
 # Keep pandas_udf and PandasUDFType import for backwards compatible import; moved in SPARK-28264
 from pyspark.sql.pandas.functions import pandas_udf, PandasUDFType  # noqa: F401
@@ -15580,6 +15580,8 @@ def udtf(
 
     - schema: StructType
 
+    >>> from pyspark.sql.udtf import AnalyzeArgument, AnalyzeResult
+    >>> # or from pyspark.sql.functions import AnalyzeArgument, AnalyzeResult
     >>> @udtf
     ... class TestUDTFWithAnalyze:
     ...     @staticmethod

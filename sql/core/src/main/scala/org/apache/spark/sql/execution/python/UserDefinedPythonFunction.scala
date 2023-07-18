@@ -147,7 +147,7 @@ object UserDefinedPythonTableFunction {
    * Runs the Python UDTF's `analyze` static method.
    *
    * When the Python UDTF is defined without a static return type,
-   * the analyze will call this while resolving table-valued functions.
+   * the analyzer will call this while resolving table-valued functions.
    *
    * This expects the Python UDTF to have `analyze` static method that take arguments:
    *

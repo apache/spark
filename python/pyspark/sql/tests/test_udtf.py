@@ -49,6 +49,7 @@ from pyspark.sql.types import (
     NullType,
     Row,
     StringType,
+    StructField,
     StructType,
 )
 from pyspark.testing import assertDataFrameEqual
@@ -780,10 +781,9 @@ class BaseUDTFTestsMixin:
         func = udtf(TestUDTF)
         self.spark.udtf.register("test_udtf", func)
 
-        self.assertEqual(func().collect(), [Row(c1="hello", c2="world")])
-        self.assertEqual(
-            self.spark.sql("SELECT * FROM test_udtf()").collect(), [Row(c1="hello", c2="world")]
-        )
+        expected = [Row(c1="hello", c2="world")]
+        self.assertEqual(func().collect(), expected)
+        self.assertEqual(self.spark.sql("SELECT * FROM test_udtf()").collect(), expected)
 
     def test_udtf_with_analyze(self):
         class TestUDTF:
@@ -855,10 +855,9 @@ class BaseUDTFTestsMixin:
 
         self.spark.udtf.register("test_udtf", TestUDTF)
 
-        self.assertEqual(TestUDTF().collect(), [Row(c1="hello", c2="world")])
-        self.assertEqual(
-            self.spark.sql("SELECT * FROM test_udtf()").collect(), [Row(c1="hello", c2="world")]
-        )
+        expected = [Row(c1="hello", c2="world")]
+        self.assertEqual(TestUDTF().collect(), expected)
+        self.assertEqual(self.spark.sql("SELECT * FROM test_udtf()").collect(), expected)
 
     def test_udtf_with_analyze_decorator_parens(self):
         @udtf()
@@ -872,10 +871,9 @@ class BaseUDTFTestsMixin:
 
         self.spark.udtf.register("test_udtf", TestUDTF)
 
-        self.assertEqual(TestUDTF().collect(), [Row(c1="hello", c2="world")])
-        self.assertEqual(
-            self.spark.sql("SELECT * FROM test_udtf()").collect(), [Row(c1="hello", c2="world")]
-        )
+        expected = [Row(c1="hello", c2="world")]
+        self.assertEqual(TestUDTF().collect(), expected)
+        self.assertEqual(self.spark.sql("SELECT * FROM test_udtf()").collect(), expected)
 
     def test_udtf_with_analyze_multiple_arguments(self):
         class TestUDTF:
@@ -901,6 +899,40 @@ class BaseUDTFTestsMixin:
                     StructType().add("a", IntegerType()).add("b", StringType()),
                     [Row(a=1, b="x")],
                 ),
+            ]
+        ):
+            with self.subTest(query_no=i):
+                self.assertEqual(df.schema, expected_schema)
+                self.assertEqual(df.collect(), expected_results)
+
+    def test_udtf_with_analyze_arbitary_number_arguments(self):
+        class TestUDTF:
+            @staticmethod
+            def analyze(*args: AnalyzeArgument) -> AnalyzeResult:
+                return AnalyzeResult(
+                    StructType([StructField(f"col{i}", a.data_type) for i, a in enumerate(args)])
+                )
+
+            def eval(self, *args):
+                yield args
+
+        func = udtf(TestUDTF)
+        self.spark.udtf.register("test_udtf", func)
+
+        for i, (df, expected_schema, expected_results) in enumerate(
+            [
+                (
+                    func(lit(1)),
+                    StructType().add("col0", IntegerType()),
+                    [Row(a=1)],
+                ),
+                (
+                    self.spark.sql("SELECT * FROM test_udtf(1, 'x')"),
+                    StructType().add("col0", IntegerType()).add("col1", StringType()),
+                    [Row(a=1, b="x")],
+                ),
+                # TODO(SPARK-44479): Support Python UDTFs with empty schema
+                # (func(), StructType(), [Row()]),
             ]
         ):
             with self.subTest(query_no=i):
@@ -977,19 +1009,28 @@ class BaseUDTFTestsMixin:
         func = udtf(TestUDTF)
         self.spark.udtf.register("test_udtf", func)
 
-        df1 = self.spark.sql("SELECT * FROM test_udtf(2, TABLE (SELECT id FROM range(0, 4)))")
-        self.assertEqual(df1.schema, StructType().add("id", LongType(), nullable=False))
-        self.assertEqual(
-            df1.collect(),
-            [Row(a=0), Row(a=0), Row(a=1), Row(a=1), Row(a=2), Row(a=2), Row(a=3), Row(a=3)],
-        )
-
-        df2 = self.spark.sql("SELECT * FROM test_udtf(1 + 1, TABLE (SELECT id FROM range(0, 4)))")
-        self.assertEqual(df2.schema, StructType().add("id", LongType(), nullable=False))
-        self.assertEqual(
-            df2.collect(),
-            [Row(a=0), Row(a=0), Row(a=1), Row(a=1), Row(a=2), Row(a=2), Row(a=3), Row(a=3)],
-        )
+        expected_schema = StructType().add("id", LongType(), nullable=False)
+        expected_results = [
+            Row(a=0),
+            Row(a=0),
+            Row(a=1),
+            Row(a=1),
+            Row(a=2),
+            Row(a=2),
+            Row(a=3),
+            Row(a=3),
+        ]
+        for i, df in enumerate(
+            [
+                self.spark.sql("SELECT * FROM test_udtf(2, TABLE (SELECT id FROM range(0, 4)))"),
+                self.spark.sql(
+                    "SELECT * FROM test_udtf(1 + 1, TABLE (SELECT id FROM range(0, 4)))"
+                ),
+            ]
+        ):
+            with self.subTest(query_no=i):
+                self.assertEqual(df.schema, expected_schema)
+                self.assertEqual(df.collect(), expected_results)
 
         with self.assertRaisesRegex(
             AnalysisException, "The first argument must be a scalar integer between 1 and 10"
@@ -1137,6 +1178,32 @@ class BaseUDTFTestsMixin:
             PythonException, r"eval\(\) takes 2 positional arguments but 3 were given"
         ):
             func(lit(1), lit(2)).collect()
+
+    def test_udtf_with_analyze_taking_keyword_arguments(self):
+        @udtf
+        class TestUDTF:
+            @staticmethod
+            def analyze(**kwargs) -> AnalyzeResult:
+                return AnalyzeResult(StructType().add("a", StringType()).add("b", StringType()))
+
+            def eval(self, **kwargs):
+                yield "hello", "world"
+
+        self.spark.udtf.register("test_udtf", TestUDTF)
+
+        expected = [Row(c1="hello", c2="world")]
+        self.assertEqual(TestUDTF().collect(), expected)
+        self.assertEqual(self.spark.sql("SELECT * FROM test_udtf()").collect(), expected)
+
+        with self.assertRaisesRegex(
+            AnalysisException, r"analyze\(\) takes 0 positional arguments but 1 was given"
+        ):
+            TestUDTF(lit(1)).collect()
+
+        with self.assertRaisesRegex(
+            AnalysisException, r"analyze\(\) takes 0 positional arguments but 2 were given"
+        ):
+            self.spark.sql("SELECT * FROM test_udtf(1, 'x')").collect()
 
 
 class UDTFTests(BaseUDTFTestsMixin, ReusedSQLTestCase):
