@@ -16,27 +16,14 @@
 #
 
 """
-Worker that receives input from Piped RDD.
+A worker for streaming foreachBatch and query listener in Spark Connect.
 """
 import os
-import sys
-import time
-from inspect import currentframe, getframeinfo, getfullargspec
-import importlib
-import json
-
-# 'resource' is a Unix specific module.
-has_resource_module = True
-try:
-    import resource
-except ImportError:
-    has_resource_module = False
 
 from pyspark.java_gateway import local_connect_and_auth
 from pyspark.serializers import (
     write_int,
     read_long,
-    SpecialLengths,
     UTF8Deserializer,
     CPickleSerializer,
 )
@@ -47,7 +34,7 @@ pickleSer = CPickleSerializer()
 utf8_deserializer = UTF8Deserializer()
 
 
-def main(infile, outfile):
+def main(infile, outfile) -> None:
     log_name = "Streaming ForeachBatch worker"
     connect_url = os.environ["SPARK_CONNECT_LOCAL_URL"]
     sessionId = utf8_deserializer.loads(infile)
@@ -65,7 +52,7 @@ def main(infile, outfile):
 
     outfile.flush()
 
-    def process(dfId, batchId):
+    def process(dfId, batchId) -> None:
         print(f"{log_name} Started batch {batchId} with DF id {dfId}")
         batchDf = sparkConnectSession._createRemoteDataFrame(dfId)
         func(batchDf, batchId)

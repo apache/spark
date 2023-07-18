@@ -31,8 +31,8 @@ from pyspark.sql.streaming.readwriter import (
     DataStreamReader as PySparkDataStreamReader,
     DataStreamWriter as PySparkDataStreamWriter,
 )
-from pyspark.sql.types import Row, StructType, StringType
-from pyspark.errors import PySparkTypeError, PySparkValueError, PySparkNotImplementedError
+from pyspark.sql.types import Row, StructType
+from pyspark.errors import PySparkTypeError, PySparkValueError
 
 if TYPE_CHECKING:
     from pyspark.sql.connect.session import SparkSession
