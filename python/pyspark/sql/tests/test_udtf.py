@@ -184,17 +184,14 @@ class BaseUDTFTestsMixin:
             def eval(self, a: int):
                 ...
 
-        # TODO(SPARK-43967): Support Python UDTFs with empty return values
-        with self.assertRaisesRegex(PythonException, "TypeError"):
-            TestUDTF(lit(1)).collect()
+        self.assertEqual(TestUDTF(lit(1)).collect(), [])
 
         @udtf(returnType="a: int")
         class TestUDTF:
             def eval(self, a: int):
                 return
 
-        with self.assertRaisesRegex(PythonException, "TypeError"):
-            TestUDTF(lit(1)).collect()
+        self.assertEqual(TestUDTF(lit(1)).collect(), [])
 
     def test_udtf_with_conditional_return(self):
         class TestUDTF:
@@ -215,9 +212,7 @@ class BaseUDTFTestsMixin:
             def eval(self, a: int):
                 yield
 
-        # TODO(SPARK-43967): Support Python UDTFs with empty return values
-        with self.assertRaisesRegex(Py4JJavaError, "java.lang.NullPointerException"):
-            TestUDTF(lit(1)).collect()
+        assertDataFrameEqual(TestUDTF(lit(1)), [Row(a=None)])
 
     def test_udtf_with_none_output(self):
         @udtf(returnType="a: int")
@@ -1197,21 +1192,6 @@ class UDTFArrowTestsMixin(BaseUDTFTestsMixin):
         func = udtf(TestUDTF, returnType="a: int")
         self.assertEqual(func(lit(1)).collect(), [Row(a=1)])
 
-    def test_udtf_eval_with_no_return(self):
-        @udtf(returnType="a: int")
-        class TestUDTF:
-            def eval(self, a: int):
-                ...
-
-        self.assertEqual(TestUDTF(lit(1)).collect(), [])
-
-        @udtf(returnType="a: int")
-        class TestUDTF:
-            def eval(self, a: int):
-                return
-
-        self.assertEqual(TestUDTF(lit(1)).collect(), [])
-
     def test_udtf_terminate_with_wrong_num_output(self):
         # The error message for arrow-optimized UDTF is different from regular UDTF.
         err_msg = "The number of columns in the result does not match the specified schema."
@@ -1237,15 +1217,6 @@ class UDTFArrowTestsMixin(BaseUDTFTestsMixin):
 
         with self.assertRaisesRegex(PythonException, err_msg):
             TestUDTF(lit(1)).show()
-
-    def test_udtf_with_empty_yield(self):
-        @udtf(returnType="a: int")
-        class TestUDTF:
-            def eval(self, a: int):
-                yield
-
-        # Arrow-optimized UDTF can support this.
-        self.assertEqual(TestUDTF(lit(1)).collect(), [Row(a=None)])
 
     def test_udtf_with_wrong_num_output(self):
         # The error message for arrow-optimized UDTF is different.

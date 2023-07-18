@@ -263,6 +263,11 @@ ERROR_CLASSES_JSON = """
       "StructField does not have typeName. Use typeName on its type explicitly instead."
     ]
   },
+  "INVALID_TYPE_DF_EQUALITY_ARG" : {
+    "message" : [
+      "Expected type <expected_type> for `<arg_name>` but got type <actual_type>."
+    ]
+  },
   "INVALID_UDF_EVAL_TYPE" : {
     "message" : [
       "Eval type for UDF must be <eval_type>."
@@ -667,6 +672,11 @@ ERROR_CLASSES_JSON = """
   "TOO_MANY_VALUES" : {
     "message" : [
       "Expected <expected> values for `<item>`, got <actual>."
+    ]
+  },
+  "UDF_RETURN_TYPE" : {
+    "message" : [
+      "Return type of the user-defined function should be <expected>, but is <actual>."
     ]
   },
   "UDTF_EXEC_ERROR" : {
