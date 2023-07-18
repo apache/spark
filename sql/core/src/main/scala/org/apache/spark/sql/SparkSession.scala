@@ -1104,7 +1104,7 @@ object SparkSession extends Logging {
         applyExtensions(sparkContext, extensions)
 
         // Some config might supplemented. For example: spark.driver.extraJavaOptions.
-        val supplementedOptions = options.map { case (k, _) => k -> sparkContext.conf.get(k) }
+        val supplementedOptions = options.map { case (k, v) => k -> sparkContext.conf.get(k, v) }
         session = new SparkSession(sparkContext, None, None, extensions, supplementedOptions.toMap)
         setDefaultSession(session)
         setActiveSession(session)
