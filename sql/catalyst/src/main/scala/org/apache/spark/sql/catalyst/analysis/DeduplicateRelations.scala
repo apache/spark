@@ -112,23 +112,22 @@ object DeduplicateRelations extends Rule[LogicalPlan] {
         (m, false)
       }
 
-    case p @ Project(_, child) if p.resolved =>
-      val (renewed, changed) = renewDuplicatedRelations(existingRelations, child)
-      val (newPlan, planChanged) = getNewPlanWithNewChildren(existingRelations, Array(renewed),
-        p, changed)
+    case p: Project =>
+      val (newPlan, planChanged) = deduplicate(existingRelations, p)
       var newProject = newPlan.asInstanceOf[Project]
-      val aliaesAttr = findAliases(newProject.projectList)
-      if (aliaesAttr.nonEmpty) {
-        val planWrapper = RelationWrapper(p.getClass, aliaesAttr.map(_.exprId.id).toSeq)
-        if (existDuplicatedExprId(existingRelations, planWrapper)) {
-          newProject = newProject.copy(newProject.projectList.map {
-            case a: Alias => a.newInstance()
-            case other => other
-          })
-          newProject.copyTagsFrom(p)
-          (newProject, true)
+      if (newProject.resolved) {
+        val aliasAttrs = findAliases(newProject.projectList)
+        if (aliasAttrs.nonEmpty) {
+          val planWrapper = RelationWrapper(p.getClass, aliasAttrs.map(_.exprId.id).toSeq)
+          if (existDuplicatedExprId(existingRelations, planWrapper)) {
+            newProject = newProject.copy(newAliases(newProject.projectList))
+            newProject.copyTagsFrom(p)
+            (newProject, true)
+          } else {
+            existingRelations.add(planWrapper)
+            (newProject, planChanged)
+          }
         } else {
-          existingRelations.add(planWrapper)
           (newProject, planChanged)
         }
       } else {
@@ -300,25 +299,54 @@ object DeduplicateRelations extends Rule[LogicalPlan] {
       }
 
     case plan: LogicalPlan =>
-      var planChanged = false
-      val newPlan = if (plan.children.nonEmpty) {
-        val newChildren = mutable.ArrayBuffer.empty[LogicalPlan]
-        for (c <- plan.children) {
-          val (renewed, changed) = renewDuplicatedRelations(existingRelations, c)
-          newChildren += renewed
-          if (changed) {
-            planChanged = true
-          }
-        }
+      deduplicate(existingRelations, plan)
+  }
 
-        val (newPlan, changed) = getNewPlanWithNewChildren(existingRelations, newChildren.toArray,
-          plan, planChanged)
-        planChanged |= changed
-        newPlan
+  private def deduplicate(
+      existingRelations: mutable.HashSet[RelationWrapper],
+      plan: LogicalPlan): (LogicalPlan, Boolean) = {
+    var planChanged = false
+    val newPlan = if (plan.children.nonEmpty) {
+      val newChildren = mutable.ArrayBuffer.empty[LogicalPlan]
+      for (c <- plan.children) {
+        val (renewed, changed) = renewDuplicatedRelations(existingRelations, c)
+        newChildren += renewed
+        if (changed) {
+          planChanged = true
+        }
+      }
+
+      val planWithNewSubquery = plan.transformExpressions {
+        case subquery: SubqueryExpression =>
+          val (renewed, changed) = renewDuplicatedRelations(existingRelations, subquery.plan)
+          if (changed) planChanged = true
+          subquery.withNewPlan(renewed)
+      }
+
+      if (planChanged) {
+        if (planWithNewSubquery.childrenResolved) {
+          val planWithNewChildren = planWithNewSubquery.withNewChildren(newChildren.toSeq)
+          val attrMap = AttributeMap(
+            plan
+              .children
+              .flatMap(_.output).zip(newChildren.flatMap(_.output))
+              .filter { case (a1, a2) => a1.exprId != a2.exprId }
+          )
+          if (attrMap.isEmpty) {
+            planWithNewChildren
+          } else {
+            planWithNewChildren.rewriteAttrs(attrMap)
+          }
+        } else {
+          planWithNewSubquery.withNewChildren(newChildren.toSeq)
+        }
       } else {
         plan
       }
-      (newPlan, planChanged)
+    } else {
+      plan
+    }
+    (newPlan, planChanged)
   }
 
   private def getNewPlanWithNewChildren(
