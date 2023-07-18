@@ -30,7 +30,7 @@ on:
         description: Branch to run the build against
         required: false
         type: string
-        # Change 'master' to 'branch-3.5' in branch-3.5 branch after cutting it.
+        # Change 'master' to 'branch-4.0' in branch-4.0 branch after cutting it.
         default: master
       hadoop:
         description: Hadoop version to run with. HADOOP_PROFILE environment variable should accept it.
@@ -517,8 +517,8 @@ jobs:
   breaking-changes-buf:
     needs: [precondition]
     if: always() && fromJson(needs.precondition.outputs.required).breaking-changes-buf == 'true'
-    # Change 'branch-3.4' to 'branch-3.5' in master branch after cutting branch-3.5 branch.
-    name: Breaking change detection with Buf (branch-3.4)
+    # Change 'branch-3.5' to 'branch-4.0' in master branch after cutting branch-4.0 branch.
+    name: Breaking change detection with Buf (branch-3.5)
     runs-on: ubuntu-22.04
     steps:
     - name: Checkout Spark repository
@@ -541,7 +541,7 @@ jobs:
       uses: bufbuild/buf-breaking-action@v1
       with:
         input: connector/connect/common/src/main
-        against: 'https://github.com/apache/spark.git#branch=branch-3.4,subdir=connector/connect/common/src/main'
+        against: 'https://github.com/apache/spark.git#branch=branch-3.5,subdir=connector/connect/common/src/main'
 
 
   # Static analysis, and documentation build
