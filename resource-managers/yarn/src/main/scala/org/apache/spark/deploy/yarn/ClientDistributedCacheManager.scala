@@ -68,10 +68,10 @@ private[spark] class ClientDistributedCacheManager() extends Logging {
       link: String,
       statCache: Map[URI, FileStatus],
       appMasterOnly: Boolean = false): Unit = {
-    val destStatus = statCache.getOrElseUpdate(destPath.toUri(), fs.getFileStatus(destPath))
+    val destStatus = getFileStatus(fs, destPath.toUri, statCache)
     val amJarRsrc = Records.newRecord(classOf[LocalResource])
     amJarRsrc.setType(resourceType)
-    val visibility = getVisibility(fs, destPath.toUri(), statCache)
+    val visibility = getVisibility(conf, destPath.toUri(), statCache)
     amJarRsrc.setVisibility(visibility)
     amJarRsrc.setResource(URL.fromPath(destPath))
     amJarRsrc.setTimestamp(destStatus.getModificationTime())
@@ -103,10 +103,10 @@ private[spark] class ClientDistributedCacheManager() extends Logging {
    * @return LocalResourceVisibility
    */
   private[yarn] def getVisibility(
-      fs: FileSystem,
+      conf: Configuration,
       uri: URI,
       statCache: Map[URI, FileStatus]): LocalResourceVisibility = {
-    if (isPublic(fs, uri, statCache)) {
+    if (isPublic(conf, uri, statCache)) {
       LocalResourceVisibility.PUBLIC
     } else {
       LocalResourceVisibility.PRIVATE
@@ -117,7 +117,8 @@ private[spark] class ClientDistributedCacheManager() extends Logging {
    * Returns a boolean to denote whether a cache file is visible to all (public)
    * @return true if the path in the uri is visible to all, false otherwise
    */
-  private def isPublic(fs: FileSystem, uri: URI, statCache: Map[URI, FileStatus]): Boolean = {
+  private def isPublic(conf: Configuration, uri: URI, statCache: Map[URI, FileStatus]): Boolean = {
+    val fs = FileSystem.get(uri, conf)
     // the leaf level file should be readable by others
     if (!checkPermissionOfOther(fs, uri, FsAction.READ, statCache)) {
       return false

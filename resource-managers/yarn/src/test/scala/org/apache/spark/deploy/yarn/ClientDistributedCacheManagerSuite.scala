@@ -19,6 +19,7 @@ package org.apache.spark.deploy.yarn
 
 import java.net.URI
 
+import scala.collection.mutable
 import scala.collection.mutable.HashMap
 import scala.collection.mutable.Map
 
@@ -29,7 +30,7 @@ import org.apache.hadoop.fs.Path
 import org.apache.hadoop.yarn.api.records.LocalResource
 import org.apache.hadoop.yarn.api.records.LocalResourceType
 import org.apache.hadoop.yarn.api.records.LocalResourceVisibility
-import org.mockito.Mockito.{times, verify, when}
+import org.mockito.Mockito.when
 import org.scalatestplus.mockito.MockitoSugar
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
@@ -38,25 +39,53 @@ import org.apache.spark.deploy.yarn.config._
 class ClientDistributedCacheManagerSuite extends SparkFunSuite with MockitoSugar {
 
   class MockClientDistributedCacheManager extends ClientDistributedCacheManager {
-    override def getVisibility(fs: FileSystem, uri: URI, statCache: Map[URI, FileStatus]):
+    override def getVisibility(conf: Configuration, uri: URI, statCache: Map[URI, FileStatus]):
         LocalResourceVisibility = {
       LocalResourceVisibility.PRIVATE
     }
   }
 
+  class CustomizedClientDistributedCacheManager extends ClientDistributedCacheManager {
+    override private[yarn] def getFileStatus(fs: FileSystem, uri: URI,
+      statCache: mutable.Map[URI, FileStatus]): FileStatus = {
+      val stat = statCache.get(uri) match {
+        case Some(existstat) => existstat
+        case None =>
+          val newStat = new FileStatus()
+          statCache.put(uri, newStat)
+          newStat
+      }
+      new FileStatus()
+    }
+  }
+
+
   test("SPARK-44272: test addResource added FileStatus to statCache and getVisibility can read" +
     " from statCache") {
-    val distMgr = new ClientDistributedCacheManager()
+    val distMgr = new CustomizedClientDistributedCacheManager()
     val fs = mock[FileSystem]
     val conf = new Configuration()
-    val destPath = new Path("file:///foo.invalid.com:8080/tmp/testing")
+    val destPathA = new Path("file:///foo.invalid.com:8080/tmp/A")
     val localResources = HashMap[String, LocalResource]()
     val statCache: Map[URI, FileStatus] = HashMap[URI, FileStatus]()
-    when(fs.getFileStatus(destPath.getParent)).thenReturn(new FileStatus())
-    when(fs.getFileStatus(destPath)).thenReturn(new FileStatus())
-    distMgr.addResource(fs, conf, destPath, localResources, LocalResourceType.FILE, "link",
+    distMgr.addResource(fs, conf, destPathA, localResources, LocalResourceType.FILE, "link",
       statCache, false)
-    verify(fs, times(1)).getFileStatus(destPath)
+    assert(statCache.size === 2)
+    assert(statCache.contains(destPathA.toUri))
+    assert(statCache.contains(destPathA.getParent.toUri))
+
+    val destPathB = new Path("file:///foo.invalid.com:8080/tmp/B")
+    distMgr.addResource(fs, conf, destPathB, localResources, LocalResourceType.FILE, "link",
+      statCache, false)
+    assert(statCache.size === 3)
+    assert(statCache.contains(destPathB.toUri))
+
+    val destPathC = new Path("file:///foo.invalid.com:8080/root/C")
+    distMgr.addResource(fs, conf, destPathC, localResources, LocalResourceType.FILE, "link",
+      statCache, false)
+    assert(statCache.size === 5)
+    assert(statCache.contains(destPathC.toUri))
+    assert(statCache.contains(destPathC.getParent.toUri))
   }
 
   test("SPARK-44272: test getParentURI") {
