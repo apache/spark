@@ -456,11 +456,3 @@ class ObjectHashAggregateSuite
     }
   }
 }
-
-class ObjectHashAggregateSuiteWithPartitionEvaluator extends ObjectHashAggregateSuite {
-
-  protected override def beforeAll(): Unit = {
-    super.beforeAll()
-    conf.setConf(SQLConf.USE_PARTITION_EVALUATOR, true)
-  }
-}
