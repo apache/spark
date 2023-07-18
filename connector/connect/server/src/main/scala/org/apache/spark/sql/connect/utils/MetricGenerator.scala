@@ -22,7 +22,7 @@ import scala.collection.JavaConverters._
 import org.apache.spark.connect.proto.ExecutePlanResponse
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.execution.SparkPlan
-import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanExec, AdaptiveSparkPlanHelper, QueryStageExec}
+import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 
 /**
  * Helper object for generating responses with metrics from queries.
