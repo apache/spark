@@ -751,8 +751,9 @@ class TorchDistributor(Distributor):
             train_fn, "", save_dir, *args, **kwargs
         )
         output_file_path = os.path.join(save_dir, TorchDistributor._PICKLED_OUTPUT_FILE)
+        script_path = os.path.join(save_dir, TorchDistributor._TRAIN_FILE)
         train_file_path = FunctionPickler.create_fn_run_script(
-            pickle_file_path, output_file_path, TorchDistributor._TRAIN_FILE
+            pickle_file_path, output_file_path, script_path
         )
         try:
             yield (train_file_path, output_file_path)
