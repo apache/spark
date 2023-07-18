@@ -21,8 +21,7 @@ Serializers for PyArrow and pandas conversions. See `pyspark.serializers` for mo
 
 from pyspark.serializers import Serializer, read_int, write_int, UTF8Deserializer, CPickleSerializer
 from pyspark.sql.pandas.types import to_arrow_type
-from pyspark.sql.types import StringType, StructType, BinaryType, StructField, LongType
-
+from pyspark.sql.types import StringType, StructType, BinaryType, StructField, LongType, IntegerType
 
 class SpecialLengths:
     END_OF_DATA_SECTION = -1
@@ -408,6 +407,15 @@ class ApplyInPandasWithStateSerializer(ArrowStreamPandasUDFSerializer):
         self.utf8_deserializer = UTF8Deserializer()
         self.state_object_schema = state_object_schema
 
+        self.result_count_df_type = StructType(
+            [
+                StructField("dataCount", IntegerType()),
+                StructField("stateCount", IntegerType()),
+            ]
+        )
+
+        self.result_count_pdf_arrow_type = to_arrow_type(self.result_count_df_type)
+
         self.result_state_df_type = StructType(
             [
                 StructField("properties", StringType()),
@@ -604,16 +612,26 @@ class ApplyInPandasWithStateSerializer(ArrowStreamPandasUDFSerializer):
         def construct_record_batch(pdfs, pdf_data_cnt, pdf_schema, state_pdfs, state_data_cnt):
             """
             Construct a new Arrow RecordBatch based on output pandas DataFrames and states. Each
-            one matches to the single struct field for Arrow schema, hence the return value of
-            Arrow RecordBatch will have schema with two fields, in `data`, `state` order.
+            one matches to the single struct field for Arrow schema. We also need an extra one to
+            indicate array length for data and state, so the return value of Arrow RecordBatch will
+            have schema with three fields, in `count`, `data`, `state` order.
             (Readers are expected to access the field via position rather than the name. We do
             not guarantee the name of the field.)
 
             Note that Arrow RecordBatch requires all columns to have all same number of rows,
-            hence this function inserts empty data for state/data with less elements to compensate.
+            hence this function inserts empty data for count/state/data with less elements to
+            compensate.
             """
 
-            max_data_cnt = max(pdf_data_cnt, state_data_cnt)
+            max_data_cnt = max(1, max(pdf_data_cnt, state_data_cnt))
+
+            # We only use the first row in the count column, and fill other rows to be the same
+            # value, hoping it is more friendly for compression, in case it is needed.
+            count_dict = {
+                "dataCount": [pdf_data_cnt] * max_data_cnt,
+                "stateCount": [state_data_cnt] * max_data_cnt,
+            }
+            count_pdf = pd.DataFrame.from_dict(count_dict)
 
             empty_row_cnt_in_data = max_data_cnt - pdf_data_cnt
             empty_row_cnt_in_state = max_data_cnt - state_data_cnt
@@ -634,7 +652,11 @@ class ApplyInPandasWithStateSerializer(ArrowStreamPandasUDFSerializer):
             merged_state_pdf = pd.concat(state_pdfs, ignore_index=True)
 
             return self._create_batch(
-                [(merged_pdf, pdf_schema), (merged_state_pdf, self.result_state_pdf_arrow_type)]
+                [
+                    (count_pdf, self.result_count_pdf_arrow_type),
+                    (merged_pdf, pdf_schema),
+                    (merged_state_pdf, self.result_state_pdf_arrow_type),
+                ]
             )
 
         def serialize_batches():
