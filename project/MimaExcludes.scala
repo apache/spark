@@ -33,6 +33,9 @@ import com.typesafe.tools.mima.core.ProblemFilters._
  * For a new Spark version, please update MimaBuild.scala to reflect the previous version.
  */
 object MimaExcludes {
+  // Exclude rules for 4.0.x
+  lazy val v40excludes = v35excludes ++ Seq(
+  )
 
   // Exclude rules for 3.5.x from 3.4.0
   lazy val v35excludes = defaultExcludes ++ Seq(
@@ -113,6 +116,7 @@ object MimaExcludes {
   )
 
   def excludes(version: String) = version match {
+    case v if v.startsWith("4.0") => v40excludes
     case v if v.startsWith("3.5") => v35excludes
     case _ => Seq()
   }
