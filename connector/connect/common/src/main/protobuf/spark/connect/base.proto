@@ -639,14 +639,14 @@ message InterruptRequest {
     INTERRUPT_TYPE_TAG = 2;
 
     // Interrupt the running execution within the session with the provided operation_id.
-    INTERRUPT_TYPE_ID = 3;
+    INTERRUPT_TYPE_OPERATION_ID = 3;
   }
 
   oneof interrupt {
     // if interrupt_tag == INTERRUPT_TYPE_TAG, interrupt operation with this tag.
     string operation_tag = 5;
 
-    // if interrupt_tag == INTERRUPT_TYPE_ID, interrupt operation with this operation_id.
+    // if interrupt_tag == INTERRUPT_TYPE_OPERATION_ID, interrupt operation with this operation_id.
     string operation_id = 6;
   }
 }

@@ -2253,7 +2253,7 @@ class InterruptRequest(google.protobuf.message.Message):
         """Interrupt all running executions within the session with the provided session_id."""
         INTERRUPT_TYPE_TAG: InterruptRequest._InterruptType.ValueType  # 2
         """Interrupt all running executions within the session with the provided operation_tag."""
-        INTERRUPT_TYPE_ID: InterruptRequest._InterruptType.ValueType  # 3
+        INTERRUPT_TYPE_OPERATION_ID: InterruptRequest._InterruptType.ValueType  # 3
         """Interrupt the running execution within the session with the provided operation_id."""
 
     class InterruptType(_InterruptType, metaclass=_InterruptTypeEnumTypeWrapper): ...
@@ -2262,7 +2262,7 @@ class InterruptRequest(google.protobuf.message.Message):
     """Interrupt all running executions within the session with the provided session_id."""
     INTERRUPT_TYPE_TAG: InterruptRequest.InterruptType.ValueType  # 2
     """Interrupt all running executions within the session with the provided operation_tag."""
-    INTERRUPT_TYPE_ID: InterruptRequest.InterruptType.ValueType  # 3
+    INTERRUPT_TYPE_OPERATION_ID: InterruptRequest.InterruptType.ValueType  # 3
     """Interrupt the running execution within the session with the provided operation_id."""
 
     SESSION_ID_FIELD_NUMBER: builtins.int
@@ -2291,7 +2291,7 @@ class InterruptRequest(google.protobuf.message.Message):
     operation_tag: builtins.str
     """if interrupt_tag == INTERRUPT_TYPE_TAG, interrupt operation with this tag."""
     operation_id: builtins.str
-    """if interrupt_tag == INTERRUPT_TYPE_ID, interrupt operation with this operation_id."""
+    """if interrupt_tag == INTERRUPT_TYPE_OPERATION_ID, interrupt operation with this operation_id."""
     def __init__(
         self,
         *,

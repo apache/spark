@@ -41,10 +41,10 @@ class SparkConnectInterruptHandler(responseObserver: StreamObserver[proto.Interr
             s"INTERRUPT_TYPE_TAG requested, but no operation_tag provided.")
         }
         sessionHolder.interruptTag(v.getOperationTag)
-      case proto.InterruptRequest.InterruptType.INTERRUPT_TYPE_ID =>
+      case proto.InterruptRequest.InterruptType.INTERRUPT_TYPE_OPERATION_ID =>
         if (!v.hasOperationId) {
           throw new IllegalArgumentException(
-            s"INTERRUPT_TYPE_ID requested, but no operation_id provided.")
+            s"INTERRUPT_TYPE_OPERATION_ID requested, but no operation_id provided.")
         }
         sessionHolder.interruptOperation(v.getOperationId)
       case other =>
