@@ -481,7 +481,7 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper with PrivateM
         assert(result === Seq(Row(false, 5), Row(true, 10)))
       } finally {
         // clean up
-        assertThrows[StatusRuntimeException] {
+        assertThrows[SparkException] {
           spark.read.jdbc(url = s"$url;drop=true", table, new Properties()).collect()
         }
       }
