@@ -34,7 +34,7 @@ pickleSer = CPickleSerializer()
 utf8_deserializer = UTF8Deserializer()
 
 
-def main(infile, outfile) -> None:
+def main(infile, outfile):  # type: ignore[no-untyped-def]
     log_name = "Streaming ForeachBatch worker"
     connect_url = os.environ["SPARK_CONNECT_LOCAL_URL"]
     sessionId = utf8_deserializer.loads(infile)
@@ -42,7 +42,7 @@ def main(infile, outfile) -> None:
     print(f"{log_name} is starting with url {connect_url} and sessionId {sessionId}.")
 
     sparkConnectSession = SparkSession.builder.remote(connect_url).getOrCreate()
-    sparkConnectSession._client._session_id = sessionId
+    sparkConnectSession._client._session_id = sessionId  # type: ignore[attr-defined]
 
     # TODO(SPARK-44460): Pass credentials.
     # TODO(SPARK-44461): Enable Process Isolation
@@ -52,9 +52,9 @@ def main(infile, outfile) -> None:
 
     outfile.flush()
 
-    def process(dfId, batchId) -> None:
+    def process(dfId, batchId):  # type: ignore[no-untyped-def]
         print(f"{log_name} Started batch {batchId} with DF id {dfId}")
-        batchDf = sparkConnectSession._createRemoteDataFrame(dfId)
+        batchDf = sparkConnectSession._createRemoteDataFrame(dfId)  # type: ignore[attr-defined]
         func(batchDf, batchId)
         print(f"{log_name} Completed batch {batchId} with DF id {dfId}")
 
