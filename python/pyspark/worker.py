@@ -579,7 +579,21 @@ def read_udtf(pickleSer, infile, eval_type):
         def wrap_udtf(f, return_type):
             assert return_type.needConversion()
             toInternal = return_type.toInternal
-            return lambda *a: map(toInternal, f(*a))
+
+            # Evaluate the function and return a tuple back to the executor.
+            def evaluate(*a) -> tuple:
+                res = f(*a)
+                if res is None:
+                    # If the function returns None or does not have an explicit return statement,
+                    # an empty tuple is returned to the executor.
+                    # This is because directly constructing tuple(None) results in an exception.
+                    return tuple()
+                else:
+                    # If the function returns a result, we map it to the internal representation and
+                    # returns the results as a tuple.
+                    return tuple(map(toInternal, res))
+
+            return evaluate
 
         eval = wrap_udtf(getattr(udtf, "eval"), return_type)
 
@@ -592,11 +606,11 @@ def read_udtf(pickleSer, infile, eval_type):
         def mapper(_, it):
             try:
                 for a in it:
-                    yield tuple(eval(*[a[o] for o in arg_offsets]))
+                    yield eval(*[a[o] for o in arg_offsets])
             finally:
                 if terminate is not None:
                     try:
-                        yield tuple(terminate())
+                        yield terminate()
                     except BaseException as e:
                         raise PySparkRuntimeError(
                             error_class="UDTF_EXEC_ERROR",
