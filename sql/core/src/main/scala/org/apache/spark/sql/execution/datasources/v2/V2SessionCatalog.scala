@@ -115,10 +115,6 @@ class V2SessionCatalog(catalog: SessionCatalog)
     createTable(ident, CatalogV2Util.v2ColumnsToStructType(columns), partitions, properties)
   }
 
-  override def purgeTable(ident: Identifier): Boolean = {
-    dropTableInternal(ident, purge = true)
-  }
-
   // TODO: remove it when no tests calling this deprecated method.
   override def createTable(
       ident: Identifier,
@@ -202,6 +198,10 @@ class V2SessionCatalog(catalog: SessionCatalog)
     loadTable(ident)
   }
 
+  override def purgeTable(ident: Identifier): Boolean = {
+    dropTableInternal(ident, purge = true)
+  }
+
   override def dropTable(ident: Identifier): Boolean = {
     dropTableInternal(ident)
   }
@@ -218,14 +218,16 @@ class V2SessionCatalog(catalog: SessionCatalog)
             foundType = v1Table.tableType.name,
             alternative = "DROP VIEW"
           )
+        case null =>
+          false
         case _ =>
+          catalog.invalidateCachedTable(ident.asTableIdentifier)
+          catalog.dropTable(
+            ident.asTableIdentifier,
+            ignoreIfNotExists = true,
+            purge = purge)
+          true
       }
-      catalog.invalidateCachedTable(ident.asTableIdentifier)
-      catalog.dropTable(
-        ident.asTableIdentifier,
-        ignoreIfNotExists = true,
-        purge = purge)
-      true
     } catch {
       case _: NoSuchTableException =>
         false
