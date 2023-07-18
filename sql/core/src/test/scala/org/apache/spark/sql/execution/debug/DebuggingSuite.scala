@@ -151,8 +151,3 @@ class DebuggingSuite extends DebuggingSuiteBase with DisableAdaptiveExecutionSui
 }
 
 class DebuggingSuiteAE extends DebuggingSuiteBase with EnableAdaptiveExecutionSuite
-
-class DebuggingSuiteWithPartitionEvaluator extends DebuggingSuiteBase {
-  override protected def sparkConf: SparkConf =
-    super.sparkConf.set(SQLConf.USE_PARTITION_EVALUATOR, true)
-}
