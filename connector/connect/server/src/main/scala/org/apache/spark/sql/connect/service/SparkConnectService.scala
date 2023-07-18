@@ -223,8 +223,17 @@ object SparkConnectService {
     userSessionMapping.get(
       (userId, sessionId),
       () => {
-        SessionHolder(userId, sessionId, newIsolatedSession())
+        val holder = SessionHolder(userId, sessionId, newIsolatedSession())
+        holder.initializeSession()
+        holder
       })
+  }
+
+  /**
+   * Used for testing
+   */
+  private[connect] def invalidateAllSessions(): Unit = {
+    userSessionMapping.invalidateAll()
   }
 
   private def newIsolatedSession(): SparkSession = {
