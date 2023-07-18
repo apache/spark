@@ -21,7 +21,7 @@ from dataclasses import dataclass
 import inspect
 import sys
 import warnings
-from typing import Any, Dict, Iterator, Type, TYPE_CHECKING, Optional, Union
+from typing import Any, Iterator, Type, TYPE_CHECKING, Optional, Union
 
 from py4j.java_gateway import JavaObject
 
@@ -130,7 +130,7 @@ def _vectorize_udtf(cls: Type) -> Type:
         ):
 
             @staticmethod
-            def analyze(*args: Dict[str, Any]) -> AnalyzeResult:
+            def analyze(*args: AnalyzeArgument) -> AnalyzeResult:
                 return cls.analyze(*args)
 
         def eval(self, *args: pd.Series) -> Iterator[pd.DataFrame]:
