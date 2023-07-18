@@ -494,7 +494,7 @@ class ClientE2ETestSuite
         assert(result === Seq(Row(false, 5), Row(true, 10)))
       } finally {
         // clean up
-        assertThrows[StatusRuntimeException] {
+        assertThrows[SparkException] {
           spark.read.jdbc(url = s"$url;drop=true", table, new Properties()).collect()
         }
       }
