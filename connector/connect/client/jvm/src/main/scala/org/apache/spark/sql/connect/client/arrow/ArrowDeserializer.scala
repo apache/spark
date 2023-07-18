@@ -39,7 +39,7 @@ import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders._
 import org.apache.spark.sql.catalyst.expressions.GenericRowWithSchema
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
-import org.apache.spark.sql.types.{Decimal, StructType}
+import org.apache.spark.sql.types.Decimal
 
 /**
  * Helper class for converting arrow batches into user objects.
@@ -54,7 +54,7 @@ object ArrowDeserializers {
   def deserializeFromArrow[T](
       input: Iterator[Array[Byte]],
       encoder: AgnosticEncoder[T],
-      allocator: BufferAllocator): TypedDeserializingIterator[T] = {
+      allocator: BufferAllocator): CloseableIterator[T] = {
     try {
       val reader = new ConcatenatingArrowStreamReader(
         allocator,
@@ -496,13 +496,8 @@ object ArrowDeserializers {
   }
 }
 
-trait TypedDeserializingIterator[E] extends CloseableIterator[E] {
-  def encoder: AgnosticEncoder[E]
-  def schema: StructType = encoder.schema
-}
-
-class EmptyDeserializingIterator[E](override val encoder: AgnosticEncoder[E])
-    extends TypedDeserializingIterator[E] {
+class EmptyDeserializingIterator[E](val encoder: AgnosticEncoder[E])
+    extends CloseableIterator[E] {
   override def close(): Unit = ()
   override def hasNext: Boolean = false
   override def next(): E = throw new NoSuchElementException()
@@ -511,7 +506,7 @@ class EmptyDeserializingIterator[E](override val encoder: AgnosticEncoder[E])
 class ArrowDeserializingIterator[E](
     val encoder: AgnosticEncoder[E],
     private[this] val reader: ArrowReader)
-    extends TypedDeserializingIterator[E] {
+    extends CloseableIterator[E] {
   private[this] var index = 0
   private[this] val root = reader.getVectorSchemaRoot
   private[this] val deserializer = ArrowDeserializers.deserializerFor(encoder, root)

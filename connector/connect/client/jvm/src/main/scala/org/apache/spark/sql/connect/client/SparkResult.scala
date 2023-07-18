@@ -92,7 +92,13 @@ private[sql] class SparkResult[T](
           arrowSchema = reader.schema
           stop |= stopOnArrowSchema
         } else if (arrowSchema != reader.schema) {
-          // Uh oh...
+          throw new IllegalStateException(
+            s"""Schema Mismatch between expected and received schema:
+               |=== Expected Schema ===
+               |$arrowSchema
+               |=== Received Schema ===
+               |${reader.schema}
+               |""".stripMargin)
         }
         if (structType == null) {
           // If the schema is not available yet, fallback to the arrow schema.

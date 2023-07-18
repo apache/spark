@@ -29,7 +29,7 @@ import org.apache.arrow.vector.VarBinaryVector
 import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.SparkUnsupportedOperationException
-import org.apache.spark.sql.Row
+import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.catalyst.{DefinedByConstructorParams, JavaTypeInference, ScalaReflection}
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoder
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{BoxedIntEncoder, CalendarIntervalEncoder, DateEncoder, EncoderField, InstantEncoder, IterableEncoder, JavaDecimalEncoder, LocalDateEncoder, PrimitiveDoubleEncoder, PrimitiveFloatEncoder, RowEncoder, StringEncoder, TimestampEncoder, UDTEncoder}
@@ -212,6 +212,17 @@ class ArrowEncoderSuite extends ConnectFunSuite with BeforeAndAfterAll {
     // We always write a batch with a schema.
     assert(inspector.numBatches == 1)
     assert(inspector.sizeInBytes > 0)
+  }
+
+  test("deserializing empty iterator") {
+    withAllocator { allocator =>
+      val iterator = ArrowDeserializers.deserializeFromArrow(
+        Iterator.empty,
+        singleIntEncoder,
+        allocator)
+      assert(iterator.isEmpty)
+      assert(allocator.getAllocatedMemory == 0)
+    }
   }
 
   test("single batch") {
@@ -501,15 +512,22 @@ class ArrowEncoderSuite extends ConnectFunSuite with BeforeAndAfterAll {
       val maybeNull = MaybeNull(11)
       Iterator.tabulate(100) { i =>
         val bean = new JavaMapData
-        bean.setDummyToDoubleListMap(maybeNull {
-          val map = new util.HashMap[DummyBean, java.util.List[java.lang.Double]]
-          (0 until (i % 5)).foreach { j =>
-            val dummy = new DummyBean
-            dummy.setBigInteger(maybeNull(java.math.BigInteger.valueOf(i * j)))
+        bean.setMetricMap(maybeNull {
+          val map = new util.HashMap[String, util.List[java.lang.Double]]
+          (0 until (i % 20)).foreach { i =>
             val values = Array.tabulate(i % 40) { j =>
               Double.box(j.toDouble)
             }
-            map.put(dummy, maybeNull(util.Arrays.asList(values: _*)))
+            map.put("k" + i, maybeNull(util.Arrays.asList(values: _*)))
+          }
+          map
+        })
+        bean.setDummyToStringMap(maybeNull {
+          val map = new util.HashMap[DummyBean, String]
+          (0 until (i % 5)).foreach { j =>
+            val dummy = new DummyBean
+            dummy.setBigInteger(maybeNull(java.math.BigInteger.valueOf(i * j)))
+            map.put(dummy, maybeNull("s" + i + "v" + j))
           }
           map
         })
@@ -642,6 +660,63 @@ class ArrowEncoderSuite extends ConnectFunSuite with BeforeAndAfterAll {
         new StructType()
           .add("Ca", "array<int>")
           .add("Cb", "binary")))
+
+  test("bind to schema") {
+    // Binds to a wider schema. The narrow schema has fewer (nested) fields, has a slightly
+    // different field order, and uses different cased names in a couple of places.
+    withAllocator { allocator =>
+      val input = Row(
+        887,
+        "foo",
+        Row(Seq(1, 7, 5), Array[Byte](8.toByte, 756.toByte), 5f),
+        Seq(Row(null, "a", false), Row(javaBigDecimal(57853, 10), "b", false)))
+      val expected = Row(
+        "foo",
+        Seq(Row(null, false), Row(javaBigDecimal(57853, 10), false)),
+        Row(Seq(1, 7, 5), Array[Byte](8.toByte, 756.toByte)))
+      val arrowBatches = serializeToArrow(Iterator.single(input), wideSchemaEncoder, allocator)
+      val result = ArrowDeserializers.deserializeFromArrow(
+        arrowBatches,
+        narrowSchemaEncoder,
+        allocator)
+      val actual = result.next()
+      assert(result.isEmpty)
+      assert(expected === actual)
+      result.close()
+      arrowBatches.close()
+    }
+  }
+
+  test("unknown field") {
+    withAllocator { allocator =>
+      val arrowBatches = serializeToArrow(Iterator.empty, narrowSchemaEncoder, allocator)
+      intercept[AnalysisException] {
+        ArrowDeserializers.deserializeFromArrow(
+          arrowBatches,
+          wideSchemaEncoder,
+          allocator)
+      }
+      arrowBatches.close()
+    }
+  }
+
+  test("duplicate fields") {
+    val duplicateSchemaEncoder = toRowEncoder(new StructType()
+      .add("foO", "string")
+      .add("Foo", "string"))
+    val fooSchemaEncoder = toRowEncoder(new StructType()
+      .add("foo", "string"))
+    withAllocator { allocator =>
+      val arrowBatches = serializeToArrow(Iterator.empty, duplicateSchemaEncoder, allocator)
+      intercept[AnalysisException] {
+        ArrowDeserializers.deserializeFromArrow(
+          arrowBatches,
+          fooSchemaEncoder,
+          allocator)
+      }
+      arrowBatches.close()
+    }
+  }
 
   /* ******************************************************************** *
    * Arrow serialization/deserialization specific errors
@@ -801,17 +876,23 @@ case class MapData(intStringMap: Map[Int, String], metricMap: Map[String, Array[
 
 class JavaMapData {
   @scala.beans.BeanProperty
-  var dummyToDoubleListMap: java.util.Map[DummyBean, java.util.List[java.lang.Double]] = _
+  var dummyToStringMap: java.util.Map[DummyBean, String] = _
+
+  @scala.beans.BeanProperty
+  var metricMap: java.util.HashMap[String, java.util.List[java.lang.Double]] = _
 
   def canEqual(other: Any): Boolean = other.isInstanceOf[JavaMapData]
 
   override def equals(other: Any): Boolean = other match {
     case that: JavaMapData if that canEqual this =>
-      dummyToDoubleListMap == that.dummyToDoubleListMap
+      dummyToStringMap == that.dummyToStringMap &&
+        metricMap == that.metricMap
     case _ => false
   }
 
-  override def hashCode(): Int = Objects.hashCode(dummyToDoubleListMap)
+  override def hashCode(): Int = {
+    java.util.Arrays.deepHashCode(Array(dummyToStringMap, metricMap))
+  }
 }
 
 class DummyBean {
