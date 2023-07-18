@@ -27,7 +27,15 @@ from pyspark.sql.pandas.types import (
     _create_converter_from_pandas,
     _create_converter_to_pandas,
 )
-from pyspark.sql.types import DataType, StringType, StructType, BinaryType, StructField, LongType
+from pyspark.sql.types import (
+    DataType,
+    StringType,
+    StructType,
+    BinaryType,
+    StructField,
+    LongType,
+    IntegerType,
+)
 
 
 class SpecialLengths:
