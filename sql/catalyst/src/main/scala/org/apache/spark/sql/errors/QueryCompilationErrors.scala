@@ -1471,44 +1471,40 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       messageParameters = Map("changes" -> changes.toString()))
   }
 
-  private def tableDoesNotSupportError(cmd: String, table: Table): Throwable = {
+  private def tableDoesNotSupportError(cmd: String, tableName: String): Throwable = {
     new AnalysisException(
       errorClass = "_LEGACY_ERROR_TEMP_1121",
       messageParameters = Map(
         "cmd" -> cmd,
-        "table" -> table.name))
+        "table" -> tableName))
   }
 
   def tableDoesNotSupportReadsError(table: Table): Throwable = {
-    tableDoesNotSupportError("reads", table)
+    tableDoesNotSupportError("reads", table.name)
   }
 
   def tableDoesNotSupportWritesError(table: Table): Throwable = {
-    tableDoesNotSupportError("writes", table)
+    tableDoesNotSupportError("writes", table.name)
   }
 
   def tableDoesNotSupportDeletesError(table: Table): Throwable = {
-    tableDoesNotSupportError("deletes", table)
+    tableDoesNotSupportError("deletes", table.name)
   }
 
   def tableDoesNotSupportTruncatesError(table: Table): Throwable = {
-    tableDoesNotSupportError("truncates", table)
+    tableDoesNotSupportError("truncates", table.name)
   }
 
-  def tableDoesNotSupportUpsertsError(table: String): Throwable = {
-    new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1121",
-      messageParameters = Map(
-        "cmd" -> "upserts",
-        "table" -> table))
+  def tableDoesNotSupportUpsertsError(tableName: String): Throwable = {
+    tableDoesNotSupportError("upserts", tableName)
   }
 
   def tableDoesNotSupportPartitionManagementError(table: Table): Throwable = {
-    tableDoesNotSupportError("partition management", table)
+    tableDoesNotSupportError("partition management", table.name)
   }
 
   def tableDoesNotSupportAtomicPartitionManagementError(table: Table): Throwable = {
-    tableDoesNotSupportError("atomic partition management", table)
+    tableDoesNotSupportError("atomic partition management", table.name)
   }
 
   def tableIsNotRowLevelOperationTableError(table: Table): Throwable = {
