@@ -20,6 +20,7 @@ package org.apache.spark.sql.connect.service
 import org.apache.spark.connect.proto
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.connect.execution.{ExecuteGrpcResponseSender, ExecuteResponseObserver, ExecuteThreadRunner}
+import org.apache.spark.util.SystemClock
 
 /**
  * Object used to hold the Spark Connect execution state.
@@ -40,6 +41,8 @@ private[connect] class ExecuteHolder(
 
   val responseObserver: ExecuteResponseObserver[proto.ExecutePlanResponse] =
     new ExecuteResponseObserver[proto.ExecutePlanResponse]()
+
+  val eventsManager: ExecuteEventsManager = ExecuteEventsManager(this, new SystemClock())
 
   private val runner: ExecuteThreadRunner = new ExecuteThreadRunner(this)
 
