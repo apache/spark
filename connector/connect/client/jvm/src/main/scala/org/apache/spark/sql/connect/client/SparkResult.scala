@@ -212,7 +212,7 @@ private[sql] class SparkResult[T](
   private class ResultMessageIterator(destructive: Boolean) extends AbstractMessageIterator {
     private[this] var totalBytesRead = 0L
     private[this] var nextResultIndex = 0
-    private[this] var iterator: Iterator[ArrowMessage] = Iterator.empty
+    private[this] var current: Iterator[ArrowMessage] = Iterator.empty
 
     override def bytesRead: Long = totalBytesRead
 
@@ -227,7 +227,7 @@ private[sql] class SparkResult[T](
     }
 
     override def hasNext: Boolean = {
-      if (iterator.hasNext) {
+      if (current.hasNext) {
         return true
       }
       val hasNextResult = if (!resultMap.contains(nextResultIndex)) {
@@ -242,7 +242,7 @@ private[sql] class SparkResult[T](
           resultMap.get(nextResultIndex)
         }
         totalBytesRead += sizeInBytes
-        iterator = messages.iterator
+        current = messages.iterator
         nextResultIndex += 1
       }
       hasNextResult
@@ -252,7 +252,7 @@ private[sql] class SparkResult[T](
       if (!hasNext) {
         throw new NoSuchElementException()
       }
-      iterator.next()
+      current.next()
     }
   }
 }

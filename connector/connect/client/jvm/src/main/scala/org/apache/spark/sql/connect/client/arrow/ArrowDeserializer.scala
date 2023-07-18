@@ -24,7 +24,6 @@ import java.time._
 import java.util
 import java.util.{List => JList, Locale, Map => JMap}
 
-import scala.collection.generic.{GenericCompanion, GenMapFactory}
 import scala.collection.mutable
 import scala.reflect.ClassTag
 
@@ -215,11 +214,11 @@ object ArrowDeserializers {
           new FieldDeserializer[mutable.WrappedArray[Any], ListVector](v) {
             def value(i: Int): mutable.WrappedArray[Any] = {
               val array = getArray(vector, i, deserializer)(element.clsTag)
-              mutable.WrappedArray.make(array)
+              ScalaCollectionUtils.wrap(array)
             }
           }
         } else if (isSubClass(Classes.ITERABLE, tag)) {
-          val companion = resolveCompanion[GenericCompanion[Iterable]](tag)
+          val companion = ScalaCollectionUtils.getIterableCompanion(tag)
           new FieldDeserializer[Iterable[Any], ListVector](v) {
             def value(i: Int): Iterable[Any] = {
               val builder = companion.newBuilder[Any]
@@ -251,7 +250,7 @@ object ArrowDeserializers {
         val valueDeserializer =
           deserializerFor(value, structVector.getChild(MapVector.VALUE_NAME))
         if (isSubClass(Classes.MAP, tag)) {
-          val companion = resolveCompanion[GenMapFactory[Map]](tag)
+          val companion = ScalaCollectionUtils.getMapCompanion(tag)
           new FieldDeserializer[Map[Any, Any], MapVector](v) {
             def value(i: Int): Map[Any, Any] = {
               val builder = companion.newBuilder[Any, Any]
@@ -351,7 +350,7 @@ object ArrowDeserializers {
    * Resolve the companion object for a scala class. In our particular case the class we pass in
    * is a Scala collection. We use the companion to create a builder for that collection.
    */
-  private def resolveCompanion[T](tag: ClassTag[_]): T = {
+  private[arrow] def resolveCompanion[T](tag: ClassTag[_]): T = {
     val mirror = scala.reflect.runtime.currentMirror
     val module = mirror.classSymbol(tag.runtimeClass).companion.asModule
     mirror.reflectModule(module).instance.asInstanceOf[T]
