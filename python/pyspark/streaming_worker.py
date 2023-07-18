@@ -42,7 +42,7 @@ def main(infile, outfile):  # type: ignore[no-untyped-def]
     print(f"{log_name} is starting with url {connect_url} and sessionId {sessionId}.")
 
     sparkConnectSession = SparkSession.builder.remote(connect_url).getOrCreate()
-    sparkConnectSession._client._session_id = sessionId  # type: ignore[attr-defined]
+    sparkConnectSession._client._session_id = sessionId
 
     # TODO(SPARK-44460): Pass credentials.
     # TODO(SPARK-44461): Enable Process Isolation
@@ -54,7 +54,7 @@ def main(infile, outfile):  # type: ignore[no-untyped-def]
 
     def process(dfId, batchId):  # type: ignore[no-untyped-def]
         print(f"{log_name} Started batch {batchId} with DF id {dfId}")
-        batchDf = sparkConnectSession._createRemoteDataFrame(dfId)  # type: ignore[attr-defined]
+        batchDf = sparkConnectSession._createRemoteDataFrame(dfId)
         func(batchDf, batchId)
         print(f"{log_name} Completed batch {batchId} with DF id {dfId}")
 
