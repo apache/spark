@@ -31,7 +31,7 @@ import org.apache.spark.api.python.{PythonEvalType, PythonFunction, PythonRDD, S
 import org.apache.spark.internal.config.BUFFER_SIZE
 import org.apache.spark.internal.config.Python._
 import org.apache.spark.sql.{Column, DataFrame, Dataset, SparkSession}
-import org.apache.spark.sql.catalyst.expressions.{Expression, FunctionTableSubqueryArgumentExpression, PythonUDAF, PythonUDF, PythonUDTF, UnresolvedPolymorphicPythonUDTF}
+import org.apache.spark.sql.catalyst.expressions.{Expression, FunctionTableSubqueryArgumentExpression, NamedArgumentExpression, PythonUDAF, PythonUDF, PythonUDTF, UnresolvedPolymorphicPythonUDTF}
 import org.apache.spark.sql.catalyst.plans.logical.{Generate, LogicalPlan, OneRowRelation}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
@@ -98,26 +98,29 @@ case class UserDefinedPythonTableFunction(
     this(name, func, None, pythonEvalType, udfDeterministic)
   }
 
-  def builder(e: Seq[Expression]): LogicalPlan = {
+  def builder(exprs: Seq[Expression]): LogicalPlan = {
     val udtf = returnType match {
       case Some(rt) =>
         PythonUDTF(
           name = name,
           func = func,
           elementSchema = rt,
-          children = e,
+          children = exprs,
           evalType = pythonEvalType,
           udfDeterministic = udfDeterministic)
       case _ =>
         UnresolvedPolymorphicPythonUDTF(
           name = name,
           func = func,
-          children = e,
+          children = exprs,
           evalType = pythonEvalType,
           udfDeterministic = udfDeterministic,
           resolveElementSchema = UserDefinedPythonTableFunction.analyzeInPython(
-            e.map(_.isInstanceOf[FunctionTableSubqueryArgumentExpression])
-          ))
+            exprs.map {
+              case _: FunctionTableSubqueryArgumentExpression => true
+              case NamedArgumentExpression(_, _: FunctionTableSubqueryArgumentExpression) => true
+              case _ => false
+            }))
     }
     Generate(
       udtf,
@@ -164,7 +167,6 @@ object UserDefinedPythonTableFunction {
    */
   def analyzeInPython(
       tableArgs: Seq[Boolean])(func: PythonFunction, exprs: Seq[Expression]): StructType = {
-    print(exprs)
     val env = SparkEnv.get
     val bufferSize: Int = env.conf.get(BUFFER_SIZE)
     val authSocketTimeout = env.conf.get(PYTHON_AUTH_SOCKET_TIMEOUT)
