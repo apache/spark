@@ -27,15 +27,15 @@ private[connect] object ProtoUtils {
   private val MAX_BYTES_SIZE = 8
   private val MAX_STRING_SIZE = 1024
 
-  def abbreviate(message: Message): Message = {
+  def abbreviate(message: Message, maxStringSize: Int = MAX_STRING_SIZE): Message = {
     val builder = message.toBuilder
 
     message.getAllFields.asScala.iterator.foreach {
       case (field: FieldDescriptor, string: String)
           if field.getJavaType == FieldDescriptor.JavaType.STRING && string != null =>
         val size = string.size
-        if (size > MAX_STRING_SIZE) {
-          builder.setField(field, createString(string.take(MAX_STRING_SIZE), size))
+        if (size > maxStringSize) {
+          builder.setField(field, createString(string.take(maxStringSize), size))
         } else {
           builder.setField(field, string)
         }
@@ -43,8 +43,8 @@ private[connect] object ProtoUtils {
       case (field: FieldDescriptor, byteString: ByteString)
           if field.getJavaType == FieldDescriptor.JavaType.BYTE_STRING && byteString != null =>
         val size = byteString.size
-        if (size > MAX_BYTES_SIZE) {
-          val prefix = Array.tabulate(MAX_BYTES_SIZE)(byteString.byteAt)
+        if (size > maxStringSize) {
+          val prefix = Array.tabulate(maxStringSize)(byteString.byteAt)
           builder.setField(field, createByteString(prefix, size))
         } else {
           builder.setField(field, byteString)
