@@ -191,7 +191,7 @@ class AnalysisErrorSuite extends AnalysisTest {
       "requiredType" -> "\"INT\""))
 
   errorClassTest(
-    "type check failure",
+    "SPARK-44477: type check failure",
     testRelation.select(
       TestFunctionWithTypeCheckFailure(dateLit :: Nil, BinaryType :: Nil).as("a")),
     errorClass = "DATATYPE_MISMATCH.TYPE_CHECK_FAILURE_WITH_HINT",
