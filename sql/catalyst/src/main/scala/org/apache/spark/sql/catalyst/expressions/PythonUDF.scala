@@ -161,11 +161,10 @@ case class PythonUDTF(
     func: PythonFunction,
     elementSchema: StructType,
     children: Seq[Expression],
+    evalType: Int,
     udfDeterministic: Boolean,
     resultId: ExprId = NamedExpression.newExprId)
   extends UnevaluableGenerator with PythonFuncExpression {
-
-  override def evalType: Int = PythonEvalType.SQL_TABLE_UDF
 
   override lazy val canonicalized: Expression = {
     val canonicalizedChildren = children.map(_.canonicalized)

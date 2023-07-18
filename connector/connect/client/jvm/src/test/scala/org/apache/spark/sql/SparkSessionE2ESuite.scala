@@ -22,6 +22,7 @@ import scala.util.{Failure, Success}
 
 import org.scalatest.concurrent.Eventually._
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.connect.client.util.RemoteSparkSession
 import org.apache.spark.util.ThreadUtils
 
@@ -48,7 +49,7 @@ class SparkSessionE2ESuite extends RemoteSparkSession {
     q1.onComplete {
       case Success(_) =>
         error = Some("q1 shouldn't have finished!")
-      case Failure(t) if t.getMessage.contains("cancelled") =>
+      case Failure(t) if t.getMessage.contains("OPERATION_CANCELED") =>
         q1Interrupted = true
       case Failure(t) =>
         error = Some("unexpected failure in q1: " + t.toString)
@@ -56,7 +57,7 @@ class SparkSessionE2ESuite extends RemoteSparkSession {
     q2.onComplete {
       case Success(_) =>
         error = Some("q2 shouldn't have finished!")
-      case Failure(t) if t.getMessage.contains("cancelled") =>
+      case Failure(t) if t.getMessage.contains("OPERATION_CANCELED") =>
         q2Interrupted = true
       case Failure(t) =>
         error = Some("unexpected failure in q2: " + t.toString)
@@ -85,14 +86,14 @@ class SparkSessionE2ESuite extends RemoteSparkSession {
       }
       finished
     }
-    val e1 = intercept[io.grpc.StatusRuntimeException] {
+    val e1 = intercept[SparkException] {
       spark.range(10).map(n => { Thread.sleep(30.seconds.toMillis); n }).collect()
     }
-    assert(e1.getMessage.contains("cancelled"), s"Unexpected exception: $e1")
-    val e2 = intercept[io.grpc.StatusRuntimeException] {
+    assert(e1.getMessage.contains("OPERATION_CANCELED"), s"Unexpected exception: $e1")
+    val e2 = intercept[SparkException] {
       spark.range(10).map(n => { Thread.sleep(30.seconds.toMillis); n }).collect()
     }
-    assert(e2.getMessage.contains("cancelled"), s"Unexpected exception: $e2")
+    assert(e2.getMessage.contains("OPERATION_CANCELED"), s"Unexpected exception: $e2")
     finished = true
     assert(ThreadUtils.awaitResult(interruptor, 10.seconds))
   }

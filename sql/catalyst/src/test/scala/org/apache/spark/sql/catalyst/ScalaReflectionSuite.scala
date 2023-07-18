@@ -183,13 +183,13 @@ class ScalaReflectionSuite extends SparkFunSuite {
   // A helper method used to test `ScalaReflection.serializerForType`.
   private def serializerFor[T: TypeTag]: Expression = {
     val enc = ScalaReflection.encoderFor[T]
-    ScalaReflection.serializerFor(enc)
+    SerializerBuildHelper.createSerializer(enc)
   }
 
   // A helper method used to test `ScalaReflection.deserializerForType`.
   private def deserializerFor[T: TypeTag]: Expression = {
     val enc = ScalaReflection.encoderFor[T]
-    ScalaReflection.deserializerFor(enc)
+    DeserializerBuildHelper.createDeserializer(enc)
   }
 
   test("isSubtype") {

@@ -32,9 +32,10 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, UnsafeProjection}
 import org.apache.spark.sql.catalyst.plans.logical
+import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.connect.common.InvalidPlanInput
 import org.apache.spark.sql.connect.common.LiteralValueProtoConverter.toLiteralProto
-import org.apache.spark.sql.connect.service.SessionHolder
+import org.apache.spark.sql.connect.service.{ExecuteHolder, ExecuteStatus, SessionHolder, SessionStatus}
 import org.apache.spark.sql.execution.arrow.ArrowConverters
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructType}
@@ -57,8 +58,9 @@ trait SparkConnectPlanTest extends SharedSparkSession {
   }
 
   def transform(cmd: proto.Command): Unit = {
-    new SparkConnectPlanner(SessionHolder.forTesting(spark))
-      .process(cmd, "clientId", "sessionId", new MockObserver())
+    val executeHolder = buildExecutePlanHolder(cmd)
+    new SparkConnectPlanner(executeHolder.sessionHolder)
+      .process(cmd, new MockObserver(), executeHolder)
   }
 
   def readRel: proto.Relation =
@@ -70,6 +72,20 @@ trait SparkConnectPlanTest extends SharedSparkSession {
           .setNamedTable(proto.Read.NamedTable.newBuilder().setUnparsedIdentifier("table"))
           .build())
       .build()
+
+  /**
+   * Creates a local relation for testing purposes. The local relation is mapped to it's
+   * equivalent in Catalyst and can be easily used for planner testing.
+   *
+   * @param schema
+   *   the schema of LocalRelation
+   * @param data
+   *   the data of LocalRelation
+   * @return
+   */
+  def createLocalRelationProto(schema: StructType, data: Seq[InternalRow]): proto.Relation = {
+    createLocalRelationProto(DataTypeUtils.toAttributes(schema), data)
+  }
 
   /**
    * Creates a local relation for testing purposes. The local relation is mapped to it's
@@ -98,6 +114,28 @@ trait SparkConnectPlanTest extends SharedSparkSession {
 
     localRelationBuilder.setData(ByteString.copyFrom(bytes))
     proto.Relation.newBuilder().setLocalRelation(localRelationBuilder.build()).build()
+  }
+
+  def buildExecutePlanHolder(command: proto.Command): ExecuteHolder = {
+    val sessionHolder = SessionHolder.forTesting(spark)
+    sessionHolder.eventManager.status_(SessionStatus.Started)
+
+    val context = proto.UserContext
+      .newBuilder()
+      .setUserId(sessionHolder.userId)
+      .build()
+    val plan = proto.Plan
+      .newBuilder()
+      .setCommand(command)
+      .build()
+    val request = proto.ExecutePlanRequest
+      .newBuilder()
+      .setPlan(plan)
+      .setUserContext(context)
+      .build()
+    val executeHolder = sessionHolder.createExecuteHolder(request)
+    executeHolder.eventsManager.status_(ExecuteStatus.Started)
+    executeHolder
   }
 }
 
@@ -456,7 +494,7 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
       proj(row).copy()
     }
 
-    val localRelation = createLocalRelationProto(schema.toAttributes, inputRows)
+    val localRelation = createLocalRelationProto(schema, inputRows)
     val df = Dataset.ofRows(spark, transform(localRelation))
     val array = df.collect()
     assertResult(10)(array.length)
@@ -599,7 +637,7 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
       proj(row).copy()
     }
 
-    val localRelation = createLocalRelationProto(schema.toAttributes, inputRows)
+    val localRelation = createLocalRelationProto(schema, inputRows)
 
     val project =
       proto.Project

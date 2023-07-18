@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.python
 
 import scala.collection.JavaConverters._
 
-import org.apache.spark.{ContextAwareIterator, TaskContext}
+import org.apache.spark.{ContextAwareIterator, JobArtifactSet, TaskContext}
 import org.apache.spark.api.python.ChainedPythonFunctions
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
@@ -51,6 +51,8 @@ trait MapInBatchExec extends UnaryExecNode with PythonSQLMetrics {
 
   private val largeVarTypes = conf.arrowUseLargeVarTypes
 
+  private[this] val jobArtifactUUID = JobArtifactSet.getCurrentJobArtifactState.map(_.uuid)
+
   override def outputPartitioning: Partitioning = child.outputPartitioning
 
   override protected def doExecute(): RDD[InternalRow] = {
@@ -81,7 +83,8 @@ trait MapInBatchExec extends UnaryExecNode with PythonSQLMetrics {
         sessionLocalTimeZone,
         largeVarTypes,
         pythonRunnerConf,
-        pythonMetrics).compute(batchIter, context.partitionId(), context)
+        pythonMetrics,
+        jobArtifactUUID).compute(batchIter, context.partitionId(), context)
 
       val unsafeProj = UnsafeProjection.create(output, output)
 

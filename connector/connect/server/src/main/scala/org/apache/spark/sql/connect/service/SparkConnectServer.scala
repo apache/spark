@@ -17,6 +17,10 @@
 
 package org.apache.spark.sql.connect.service
 
+import java.net.InetSocketAddress
+
+import scala.collection.convert.ImplicitConversions._
+
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SparkSession
 
@@ -31,7 +35,12 @@ object SparkConnectServer extends Logging {
     try {
       try {
         SparkConnectService.start()
-        logInfo("Spark Connect server started.")
+        SparkConnectService.server.getListenSockets.foreach { sa =>
+          val isa = sa.asInstanceOf[InetSocketAddress]
+          logInfo(
+            s"Spark Connect server started at: " +
+              s"${isa.getAddress.getHostAddress}:${isa.getPort}")
+        }
       } catch {
         case e: Exception =>
           logError("Error starting Spark Connect server", e)

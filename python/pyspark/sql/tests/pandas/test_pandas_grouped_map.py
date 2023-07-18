@@ -79,7 +79,6 @@ class GroupedApplyInPandasTestsMixin:
     def data(self):
         return (
             self.spark.range(10)
-            .toDF("id")
             .withColumn("vs", array([lit(i) for i in range(20, 30)]))
             .withColumn("v", explode(col("vs")))
             .drop("vs")
@@ -287,8 +286,7 @@ class GroupedApplyInPandasTestsMixin:
     def check_apply_in_pandas_not_returning_pandas_dataframe(self):
         with self.assertRaisesRegex(
             PythonException,
-            "Return type of the user-defined function should be pandas.DataFrame, "
-            "but is <class 'tuple'>",
+            "Return type of the user-defined function should be pandas.DataFrame, but is tuple.",
         ):
             self._test_apply_in_pandas(lambda key, pdf: key)
 

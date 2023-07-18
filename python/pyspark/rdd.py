@@ -114,6 +114,7 @@ if TYPE_CHECKING:
         AtomicValue,
         RowLike,
         SQLArrowBatchedUDFType,
+        SQLArrowTableUDFType,
         SQLBatchedUDFType,
         SQLTableUDFType,
     )
@@ -159,6 +160,7 @@ class PythonEvalType:
     SQL_GROUPED_MAP_PANDAS_UDF_WITH_STATE: "PandasGroupedMapUDFWithStateType" = 208
 
     SQL_TABLE_UDF: "SQLTableUDFType" = 300
+    SQL_ARROW_TABLE_UDF: "SQLArrowTableUDFType" = 301
 
 
 def portable_hash(x: Hashable) -> int:

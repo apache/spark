@@ -18,7 +18,7 @@
 package org.apache.spark.sql.connect.artifact
 
 import java.io.File
-import java.net.{URL, URLClassLoader}
+import java.net.{URI, URL, URLClassLoader}
 import java.nio.file.{Files, Path, Paths, StandardCopyOption}
 import java.util.concurrent.CopyOnWriteArrayList
 import javax.ws.rs.core.UriBuilder
@@ -26,10 +26,10 @@ import javax.ws.rs.core.UriBuilder
 import scala.collection.JavaConverters._
 import scala.reflect.ClassTag
 
-import org.apache.commons.io.FileUtils
+import org.apache.commons.io.{FilenameUtils, FileUtils}
 import org.apache.hadoop.fs.{LocalFileSystem, Path => FSPath}
 
-import org.apache.spark.{JobArtifactSet, SparkContext, SparkEnv}
+import org.apache.spark.{JobArtifactSet, JobArtifactState, SparkContext, SparkEnv}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.connect.artifact.util.ArtifactUtils
@@ -56,15 +56,15 @@ import org.apache.spark.util.Utils
 class SparkConnectArtifactManager(sessionHolder: SessionHolder) extends Logging {
   import SparkConnectArtifactManager._
 
-  private val sessionUUID = sessionHolder.session.sessionUUID
   // The base directory/URI where all artifacts are stored for this `sessionUUID`.
   val (artifactPath, artifactURI): (Path, String) =
     getArtifactDirectoryAndUriForSession(sessionHolder)
   // The base directory/URI where all class file artifacts are stored for this `sessionUUID`.
   val (classDir, classURI): (Path, String) = getClassfileDirectoryAndUriForSession(sessionHolder)
+  val state: JobArtifactState =
+    JobArtifactState(sessionHolder.session.sessionUUID, Option(classURI))
 
   private val jarsList = new CopyOnWriteArrayList[Path]
-  private val jarsURI = new CopyOnWriteArrayList[String]
   private val pythonIncludeList = new CopyOnWriteArrayList[String]
 
   /**
@@ -92,7 +92,7 @@ class SparkConnectArtifactManager(sessionHolder: SessionHolder) extends Logging 
   private[connect] def addArtifact(
       remoteRelativePath: Path,
       serverLocalStagingPath: Path,
-      fragment: Option[String]): Unit = {
+      fragment: Option[String]): Unit = JobArtifactSet.withActiveJobArtifactState(state) {
     require(!remoteRelativePath.isAbsolute)
     if (remoteRelativePath.startsWith(s"cache${File.separator}")) {
       val tmpFile = serverLocalStagingPath.toFile
@@ -131,11 +131,16 @@ class SparkConnectArtifactManager(sessionHolder: SessionHolder) extends Logging 
             "Artifacts cannot be overwritten.")
       }
       Files.move(serverLocalStagingPath, target)
+
+      // This URI is for Spark file server that starts with "spark://".
+      val uri = s"$artifactURI/${Utils.encodeRelativeUnixPathToURIRawPath(
+          FilenameUtils.separatorsToUnix(remoteRelativePath.toString))}"
+
       if (remoteRelativePath.startsWith(s"jars${File.separator}")) {
+        sessionHolder.session.sparkContext.addJar(uri)
         jarsList.add(target)
-        jarsURI.add(artifactURI + "/" + target.toString)
       } else if (remoteRelativePath.startsWith(s"pyfiles${File.separator}")) {
-        sessionHolder.session.sparkContext.addFile(target.toString)
+        sessionHolder.session.sparkContext.addFile(uri)
         val stringRemotePath = remoteRelativePath.toString
         if (stringRemotePath.endsWith(".zip") || stringRemotePath.endsWith(
             ".egg") || stringRemotePath.endsWith(".jar")) {
@@ -143,36 +148,19 @@ class SparkConnectArtifactManager(sessionHolder: SessionHolder) extends Logging 
         }
       } else if (remoteRelativePath.startsWith(s"archives${File.separator}")) {
         val canonicalUri =
-          fragment.map(UriBuilder.fromUri(target.toUri).fragment).getOrElse(target.toUri)
+          fragment.map(UriBuilder.fromUri(new URI(uri)).fragment).getOrElse(new URI(uri))
         sessionHolder.session.sparkContext.addArchive(canonicalUri.toString)
       } else if (remoteRelativePath.startsWith(s"files${File.separator}")) {
-        sessionHolder.session.sparkContext.addFile(target.toString)
+        sessionHolder.session.sparkContext.addFile(uri)
       }
     }
-  }
-
-  /**
-   * Returns a [[JobArtifactSet]] pointing towards the session-specific jars and class files.
-   */
-  def jobArtifactSet: JobArtifactSet = {
-    val builder = Map.newBuilder[String, Long]
-    jarsURI.forEach { jar =>
-      builder += jar -> 0
-    }
-
-    new JobArtifactSet(
-      uuid = Option(sessionUUID),
-      replClassDirUri = Option(classURI),
-      jars = builder.result(),
-      files = Map.empty,
-      archives = Map.empty)
   }
 
   /**
    * Returns a [[ClassLoader]] for session-specific jar/class file resources.
    */
   def classloader: ClassLoader = {
-    val urls = jarsList.asScala.map(_.toUri.toURL) :+ classDir.toUri.toURL
+    val urls = getSparkConnectAddedJars :+ classDir.toUri.toURL
     new URLClassLoader(urls.toArray, Utils.getContextOrSparkClassLoader)
   }
 
@@ -183,12 +171,18 @@ class SparkConnectArtifactManager(sessionHolder: SessionHolder) extends Logging 
     logDebug(
       s"Cleaning up resources for session with userId: ${sessionHolder.userId} and " +
         s"sessionId: ${sessionHolder.sessionId}")
+
+    // Clean up added files
+    sessionHolder.session.sparkContext.addedFiles.remove(state.uuid)
+    sessionHolder.session.sparkContext.addedArchives.remove(state.uuid)
+    sessionHolder.session.sparkContext.addedJars.remove(state.uuid)
+
     // Clean up cached relations
     val blockManager = sessionHolder.session.sparkContext.env.blockManager
     blockManager.removeCache(sessionHolder.userId, sessionHolder.sessionId)
 
     // Clean up artifacts folder
-    FileUtils.deleteDirectory(artifactRootPath.toFile)
+    FileUtils.deleteDirectory(artifactPath.toFile)
   }
 
   private[connect] def uploadArtifactToFs(

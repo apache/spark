@@ -22,6 +22,7 @@ import scala.util.control.NonFatal
 import org.apache.spark.sql.{Dataset, Row, SaveMode, SparkSession}
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.execution.command.LeafRunnableCommand
 import org.apache.spark.sql.sources.CreatableRelationProvider
 
@@ -47,7 +48,7 @@ case class SaveIntoDataSourceCommand(
       sparkSession.sqlContext, mode, options, Dataset.ofRows(sparkSession, query))
 
     try {
-      val logicalRelation = LogicalRelation(relation, relation.schema.toAttributes, None, false)
+      val logicalRelation = LogicalRelation(relation, toAttributes(relation.schema), None, false)
       sparkSession.sharedState.cacheManager.recacheByPlan(sparkSession, logicalRelation)
     } catch {
       case NonFatal(_) =>
