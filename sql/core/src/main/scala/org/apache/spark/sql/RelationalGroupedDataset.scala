@@ -595,7 +595,7 @@ class RelationalGroupedDataset protected[sql](
     val project = df.sparkSession.sessionState.executePlan(
       Project(groupingNamedExpressions ++ child.output, child)).analyzed
     val groupingAttributes = project.output.take(groupingNamedExpressions.length)
-    val output = expr.dataType.asInstanceOf[StructType].toAttributes
+    val output = toAttributes(expr.dataType.asInstanceOf[StructType])
     val plan = FlatMapGroupsInArrow(groupingAttributes, expr, output, project)
 
     Dataset.ofRows(df.sparkSession, plan)
@@ -686,7 +686,7 @@ class RelationalGroupedDataset protected[sql](
     val right = r.df.sparkSession.sessionState.executePlan(
       Project(rightGroupingNamedExpressions ++ rightChild.output, rightChild)).analyzed
 
-    val output = expr.dataType.asInstanceOf[StructType].toAttributes
+    val output = toAttributes(expr.dataType.asInstanceOf[StructType])
     val plan = FlatMapCoGroupsInArrow(
       leftGroupingNamedExpressions.length, rightGroupingNamedExpressions.length,
       expr, output, left, right)
