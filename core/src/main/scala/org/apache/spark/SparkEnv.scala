@@ -73,8 +73,10 @@ class SparkEnv (
     val conf: SparkConf) extends Logging {
 
   @volatile private[spark] var isStopped = false
-  private val pythonWorkers =
-    mutable.HashMap[(String, String, String, Map[String, String]), PythonWorkerFactory]()
+
+  private case class PythonWorkersKey(
+      pythonExec: String, workerModule: String, daemonModule: String, envVars: Map[String, String])
+  private val pythonWorkers = mutable.HashMap[PythonWorkersKey, PythonWorkerFactory]()
 
   // A general, soft-reference map for metadata needed during HadoopRDD split computation
   // (e.g., HadoopFileRDD uses this to cache JobConfs and InputFormats).
@@ -122,7 +124,7 @@ class SparkEnv (
       daemonModule: String,
       envVars: Map[String, String]): (java.net.Socket, Option[Int]) = {
     synchronized {
-      val key = (pythonExec, workerModule, daemonModule, envVars)
+      val key = PythonWorkersKey(pythonExec, workerModule, daemonModule, envVars)
       pythonWorkers.getOrElseUpdate(key,
         new PythonWorkerFactory(pythonExec, workerModule, daemonModule, envVars)).create()
     }
@@ -142,7 +144,7 @@ class SparkEnv (
       envVars: Map[String, String],
       worker: Socket): Unit = {
     synchronized {
-      val key = (pythonExec, workerModule, daemonModule, envVars)
+      val key = PythonWorkersKey(pythonExec, workerModule, daemonModule, envVars)
       pythonWorkers.get(key).foreach(_.stopWorker(worker))
     }
   }
@@ -162,7 +164,7 @@ class SparkEnv (
       envVars: Map[String, String],
       worker: Socket): Unit = {
     synchronized {
-      val key = (pythonExec, workerModule, daemonModule, envVars)
+      val key = PythonWorkersKey(pythonExec, workerModule, daemonModule, envVars)
       pythonWorkers.get(key).foreach(_.releaseWorker(worker))
     }
   }
