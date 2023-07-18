@@ -16,6 +16,8 @@
  */
 package org.apache.spark.sql.connect.client
 
+import java.util.Objects
+
 import scala.collection.mutable
 
 import org.apache.arrow.memory.BufferAllocator
@@ -25,7 +27,7 @@ import org.apache.arrow.vector.types.pojo
 import org.apache.spark.connect.proto
 import org.apache.spark.sql.catalyst.encoders.{AgnosticEncoder, RowEncoder}
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{ProductEncoder, UnboundRowEncoder}
-import org.apache.spark.sql.connect.client.arrow.{AbstractMessageIterator, ArrowDeserializingIterator, ConcatenatingArrowStreamReader, MessageIterator}
+import org.apache.spark.sql.connect.client.arrow.{AbstractMessageIterator, ArrowDeserializingIterator, CloseableIterator, ConcatenatingArrowStreamReader, MessageIterator}
 import org.apache.spark.sql.connect.client.util.Cleanable
 import org.apache.spark.sql.connect.common.DataTypeProtoConverter
 import org.apache.spark.sql.types.{DataType, StructType}
@@ -69,19 +71,26 @@ private[sql] class SparkResult[T](
     }
   }
 
-  private def processResponses(stopOnFirstNonEmptyResponse: Boolean): Boolean = {
-    while (responses.hasNext) {
+  private def processResponses(
+      stopOnSchema: Boolean = false,
+      stopOnArrowSchema: Boolean = false,
+      stopOnFirstNonEmptyResponse: Boolean = false): Boolean = {
+    var nonEmpty = false
+    var stop = false
+    while (!stop && responses.hasNext) {
       val response = responses.next()
       if (response.hasSchema) {
         // The original schema should arrive before ArrowBatches.
         structType =
           DataTypeProtoConverter.toCatalystType(response.getSchema).asInstanceOf[StructType]
+        stop |= stopOnSchema
       }
       if (response.hasArrowBatch) {
         val ipcStreamBytes = response.getArrowBatch.getData
         val reader = new MessageIterator(ipcStreamBytes.newInput(), allocator)
         if (arrowSchema == null) {
           arrowSchema = reader.schema
+          stop |= stopOnArrowSchema
         } else if (arrowSchema != reader.schema) {
           // Uh oh...
         }
@@ -100,15 +109,17 @@ private[sql] class SparkResult[T](
           }
           messages += message
         }
-        numRecords += numRecordsInBatch
-        resultMap.put(nextResultIndex, (reader.bytesRead, messages.result()))
-        nextResultIndex += 1
-        if (stopOnFirstNonEmptyResponse && numRecordsInBatch > 0) {
-          return true
+        // Skip the entire result if it is empty.
+        if (numRecordsInBatch > 0) {
+          numRecords += numRecordsInBatch
+          resultMap.put(nextResultIndex, (reader.bytesRead, messages.result()))
+          nextResultIndex += 1
+          nonEmpty |= true
+          stop |= stopOnFirstNonEmptyResponse
         }
       }
     }
-    false
+    nonEmpty
   }
 
   /**
@@ -116,7 +127,7 @@ private[sql] class SparkResult[T](
    */
   def length: Int = {
     // We need to process all responses to make sure numRecords is correct.
-    processResponses(stopOnFirstNonEmptyResponse = false)
+    processResponses()
     numRecords
   }
 
@@ -125,7 +136,9 @@ private[sql] class SparkResult[T](
    *   the schema of the result.
    */
   def schema: StructType = {
-    processResponses(stopOnFirstNonEmptyResponse = true)
+    if (structType == null) {
+      processResponses(stopOnSchema = true)
+    }
     structType
   }
 
@@ -157,19 +170,35 @@ private[sql] class SparkResult[T](
     buildIterator(destructive = true)
 
   private def buildIterator(destructive: Boolean): java.util.Iterator[T] with AutoCloseable = {
-    if (schema == null) {
-      processResponses(true)
-    }
-    val iterator = new ArrowDeserializingIterator(
-      createEncoder(encoder, structType),
-      new ConcatenatingArrowStreamReader(
-        allocator,
-        Iterator.single(new ResultMessageIterator(destructive)),
-        destructive))
     new java.util.Iterator[T] with AutoCloseable {
-      override def hasNext: Boolean = iterator.hasNext
-      override def next(): T = iterator.next()
-      override def close(): Unit = iterator.close()
+      private[this] var iterator: CloseableIterator[T] = _
+
+      private def initialize(): Unit = {
+        if (iterator == null) {
+          iterator = new ArrowDeserializingIterator(
+            createEncoder(encoder, schema),
+            new ConcatenatingArrowStreamReader(
+              allocator,
+              Iterator.single(new ResultMessageIterator(destructive)),
+              destructive))
+        }
+      }
+
+      override def hasNext: Boolean = {
+        initialize()
+        iterator.hasNext
+      }
+
+      override def next(): T = {
+        initialize()
+        iterator.next()
+      }
+
+      override def close(): Unit = {
+        if (iterator != null) {
+          iterator.close()
+        }
+      }
     }
   }
 
@@ -185,14 +214,24 @@ private[sql] class SparkResult[T](
     private[this] var nextResultIndex = 0
     private[this] var iterator: Iterator[ArrowMessage] = Iterator.empty
 
-    override def schema: pojo.Schema = arrowSchema
     override def bytesRead: Long = totalBytesRead
+
+    override def schema: pojo.Schema = {
+      if (arrowSchema == null) {
+        // We need a schema to proceed. Spark Connect will always
+        // return a result (with a schema) even if the result is empty.
+        processResponses(stopOnArrowSchema = true)
+        Objects.requireNonNull(arrowSchema)
+      }
+      arrowSchema
+    }
+
     override def hasNext: Boolean = {
       if (iterator.hasNext) {
         return true
       }
       val hasNextResult = if (!resultMap.contains(nextResultIndex)) {
-        self.processResponses(true)
+        self.processResponses(stopOnFirstNonEmptyResponse = true)
       } else {
         true
       }

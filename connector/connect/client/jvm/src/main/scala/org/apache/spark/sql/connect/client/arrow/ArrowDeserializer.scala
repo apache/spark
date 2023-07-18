@@ -74,7 +74,7 @@ object ArrowDeserializers {
   private[arrow] def deserializerFor[T](
       encoder: AgnosticEncoder[T],
       root: VectorSchemaRoot): Deserializer[T] = {
-    val data: AnyRef = if (encoder.schema == encoder.dataType) {
+    val data: AnyRef = if (encoder.isStruct) {
       root
     } else {
       // The input schema is allowed to have multiple columns,
@@ -285,9 +285,8 @@ object ArrowDeserializers {
 
       case (ProductEncoder(tag, fields), StructVectors(struct, vectors)) =>
         // We should try to make this work with MethodHandles.
-        val Some(constructor) = ScalaReflection.findConstructor(
-          tag.runtimeClass,
-          fields.map(_.enc.clsTag.runtimeClass))
+        val Some(constructor) =
+          ScalaReflection.findConstructor(tag.runtimeClass, fields.map(_.enc.clsTag.runtimeClass))
         val deserializers = if (isTuple(tag.runtimeClass)) {
           fields.zip(vectors).map { case (field, vector) =>
             deserializerFor(field.enc, vector)
@@ -341,7 +340,8 @@ object ArrowDeserializers {
         throw QueryExecutionErrors.unsupportedDataTypeError(encoder.dataType)
 
       case _ =>
-        throw new RuntimeException(s"Unsupported Encoder($encoder)/Vector($data) combination.")
+        throw new RuntimeException(
+          s"Unsupported Encoder($encoder)/Vector(${data.getClass}) combination.")
     }
   }
 

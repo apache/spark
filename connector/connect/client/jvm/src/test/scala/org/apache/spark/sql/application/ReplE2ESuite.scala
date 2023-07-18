@@ -208,8 +208,9 @@ class ReplE2ESuite extends RemoteSparkSession with BeforeAndAfterEach {
   }
 
   test("UDF Registration") {
+    // TODO SPARK-44449 make this long again when upcasting is in.
     val input = """
-        |class A(x: Int) { def get = x * 100 }
+        |class A(x: Int) { def get: Long = x * 100 }
         |val myUdf = udf((x: Int) => new A(x).get)
         |spark.udf.register("dummyUdf", myUdf)
         |spark.sql("select dummyUdf(id) from range(5)").as[Long].collect()
@@ -219,8 +220,9 @@ class ReplE2ESuite extends RemoteSparkSession with BeforeAndAfterEach {
   }
 
   test("UDF closure registration") {
+    // TODO SPARK-44449 make this int again when upcasting is in.
     val input = """
-        |class A(x: Int) { def get = x * 15 }
+        |class A(x: Int) { def get: Long = x * 15 }
         |spark.udf.register("directUdf", (x: Int) => new A(x).get)
         |spark.sql("select directUdf(id) from range(5)").as[Long].collect()
       """.stripMargin
