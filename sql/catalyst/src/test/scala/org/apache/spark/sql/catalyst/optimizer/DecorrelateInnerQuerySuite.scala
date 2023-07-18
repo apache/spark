@@ -519,6 +519,27 @@ class DecorrelateInnerQuerySuite extends PlanTest {
     check(innerPlan, outerPlan, correctAnswer, Seq(y === a))
   }
 
+  test("SPARK-43780: aggregation in subquery with correlated left join, " +
+    "correlation over right side") {
+    // Same as above, but the join predicate connects the outer reference and the column from the
+    // right (optional) side of the left join. Domain join is still not needed.
+    val outerPlan = testRelation
+    val innerPlan =
+      Aggregate(
+        Seq.empty[Expression], Seq(Alias(count(Literal(1)), "a")()),
+        Project(Seq(x, y, a3, b3),
+          Join(testRelation2, testRelation3, LeftOuter,
+            Some(And(x === a3, b3 === OuterReference(b))), JoinHint.NONE)))
+
+    val correctAnswer =
+      Aggregate(
+        Seq(b3), Seq(Alias(count(Literal(1)), "a")(), b3),
+        Project(Seq(x, y, a3, b3),
+          Join(testRelation2, testRelation3, LeftOuter,
+            Some(And(b3 === b3, x === a3)), JoinHint.NONE)))
+    check(innerPlan, outerPlan, correctAnswer, Seq(b === b3))
+  }
+
   test("SPARK-43780: union all in subquery with correlated join") {
     val outerPlan = testRelation
     val innerPlan =

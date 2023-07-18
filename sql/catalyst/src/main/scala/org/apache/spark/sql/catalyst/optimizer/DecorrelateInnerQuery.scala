@@ -804,6 +804,12 @@ object DecorrelateInnerQuery extends PredicateHelper {
             (d.copy(child = newChild), joinCond, outerReferenceMap)
 
           case j @ Join(left, right, joinType, condition, _) =>
+            // Given 'condition', computes the tuple of
+            // (correlated, uncorrelated, equalityCond, predicates, equivalences).
+            // 'correlated' and 'uncorrelated' are the conjuncts with (resp. without)
+            // outer (correlated) references. Furthermore, correlated conjuncts are split
+            // into 'equalityCond' (those that are equalities) and all rest ('predicates').
+            // 'equivalences' track equivalent attributes given 'equalityCond'.
             def splitCorrelatedPredicate(condition: Option[Expression],
                                          isInnerJoin: Boolean,
                                          shouldDecorrelatePredicates: Boolean):
@@ -825,7 +831,7 @@ object DecorrelateInnerQuery extends PredicateHelper {
                   else correlated.partition(canPullUpOverAgg)
                 // Fully preserve the join predicate for non-inner joins.
                 if (!isInnerJoin) {
-                  predicates = predicates ++ equalityCond
+                  predicates = correlated
                 }
                 (correlated, uncorrelated, equalityCond, predicates, equivalences)
               } else {
@@ -859,9 +865,10 @@ object DecorrelateInnerQuery extends PredicateHelper {
               case _ => hasOuterReferences(right)
             }
             if (shouldDecorrelatePredicates && !shouldPushToLeft && !shouldPushToRight
-              && !correlated.isEmpty) {
+              && !predicates.isEmpty) {
               // Neither left nor right children of the join have correlations, but the join
-              // predicate does. Introduce a domain join on the left side of the join
+              // predicate does, and the correlations can not be replaced via equivalences.
+              // Introduce a domain join on the left side of the join
               // (chosen arbitrarily) to provide values for the correlated attribute reference.
               shouldPushToLeft = true;
             }
