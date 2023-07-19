@@ -1852,6 +1852,13 @@ object SQLConf {
       .createWithDefault(
         "org.apache.spark.sql.execution.streaming.state.HDFSBackedStateStoreProvider")
 
+  val ENABLE_STATE_STORE_MAINTENANCE_THREAD_POOL =
+    buildConf("spark.sql.streaming.stateStore.enableStateStoreMaintenanceThreadPool")
+      .internal()
+      .doc("Whether background maintenance tasks are executed by single thread or thread pool")
+      .booleanConf
+      .createWithDefault(false)
+
   val NUM_STATE_STORE_MAINTENANCE_THREADS =
     buildConf("spark.sql.streaming.stateStore.numStateStoreMaintenanceThreads")
       .internal()
@@ -4514,6 +4521,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def isStateSchemaCheckEnabled: Boolean = getConf(STATE_SCHEMA_CHECK_ENABLED)
 
   def numStateStoreMaintenanceThreads: Int = getConf(NUM_STATE_STORE_MAINTENANCE_THREADS)
+
+  def enableStateStoreMaintenanceThreadPool: Boolean = getConf(ENABLE_STATE_STORE_MAINTENANCE_THREAD_POOL)
 
   def stateStoreMinDeltasForSnapshot: Int = getConf(STATE_STORE_MIN_DELTAS_FOR_SNAPSHOT)
 
