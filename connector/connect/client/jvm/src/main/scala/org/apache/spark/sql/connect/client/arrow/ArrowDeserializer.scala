@@ -497,7 +497,7 @@ object ArrowDeserializers {
 
   abstract class LeafFieldDeserializer[E](val reader: ArrowVectorReader)
       extends FieldDeserializer[E] {
-    def this(encoder: AgnosticEncoder[_], vector: FieldVector, timeZoneId: String) {
+    def this(encoder: AgnosticEncoder[_], vector: FieldVector, timeZoneId: String) = {
       this(ArrowVectorReader(encoder.dataType, vector, timeZoneId))
     }
     def value(i: Int): E
