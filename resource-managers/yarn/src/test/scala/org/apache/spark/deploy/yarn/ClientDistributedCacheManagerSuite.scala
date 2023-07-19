@@ -48,14 +48,7 @@ class ClientDistributedCacheManagerSuite extends SparkFunSuite with MockitoSugar
   class CustomizedClientDistributedCacheManager extends ClientDistributedCacheManager {
     override private[yarn] def getFileStatus(fs: FileSystem, uri: URI,
       statCache: mutable.Map[URI, FileStatus]): FileStatus = {
-      val stat = statCache.get(uri) match {
-        case Some(existstat) => existstat
-        case None =>
-          val newStat = new FileStatus()
-          statCache.put(uri, newStat)
-          newStat
-      }
-      new FileStatus()
+      statCache.getOrElseUpdate(uri, new FileStatus())
     }
   }
 
