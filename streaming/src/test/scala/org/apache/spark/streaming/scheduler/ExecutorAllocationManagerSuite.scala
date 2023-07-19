@@ -56,6 +56,7 @@ class ExecutorAllocationManagerSuite extends TestSuiteBase
     // Test that adding batch processing time info to allocation manager
     // causes executors to be requested and killed accordingly
     conf.set(DECOMMISSION_ENABLED, decommissioning)
+    conf.set(STREAMING_DYN_ALLOCATION_MIN_EXECUTORS, 1)
 
     // There is 1 receiver, and exec 1 has been allocated to it
     withAllocationManager(numReceivers = 1, conf = conf) {
@@ -78,6 +79,23 @@ class ExecutorAllocationManagerSuite extends TestSuiteBase
         }
         body
       }
+
+      /** When all executors are down, there will be no task complete, thus addBatchProcTime
+       *  function will never be called */
+      def addBatchProcTimeNeverCalledAndVerifyAllocation()(body: => Unit): Unit = {
+        // 0 active executors
+        reset(allocationClient)
+        when(allocationClient.getExecutorIds()).thenReturn(Seq.empty)
+        val advancedTime = STREAMING_DYN_ALLOCATION_SCALING_INTERVAL.defaultValue.get * 1000 + 1
+        val expectedWaitTime = clock.getTimeMillis() + advancedTime
+        clock.advance(advancedTime)
+        // Make sure ExecutorAllocationManager.manageAllocation is called
+        eventually(timeout(10.seconds)) {
+          assert(clock.isStreamWaitingAt(expectedWaitTime))
+        }
+        body
+      }
+
 
       /** Verify that the expected number of total executor were requested */
       def verifyTotalRequestedExecs(expectedRequestedTotalExecs: Option[Int]): Unit = {
@@ -156,6 +174,13 @@ class ExecutorAllocationManagerSuite extends TestSuiteBase
         batchDurationMillis * STREAMING_DYN_ALLOCATION_SCALING_DOWN_RATIO.defaultValue.get - 1) {
         verifyTotalRequestedExecs(None)
         verifyScaledDownExec(Some("2"))
+      }
+
+      // Batch will never be completed, should increase allocation by 1 which is the default
+      // value of spark.streaming.dynamicAllocation.minExecutors
+      addBatchProcTimeNeverCalledAndVerifyAllocation() {
+        verifyTotalRequestedExecs(Some(1))
+        verifyScaledDownExec(None)
       }
     }
   }
