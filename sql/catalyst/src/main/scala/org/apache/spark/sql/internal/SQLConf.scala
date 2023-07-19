@@ -1863,10 +1863,12 @@ object SQLConf {
     buildConf("spark.sql.streaming.stateStore.numStateStoreMaintenanceThreads")
       .internal()
       .doc("Number of threads in the thread pool that perform clean up and snapshotting tasks " +
-        "for stateful streaming queries.")
+        "for stateful streaming queries. The default value is 2 so that this thread pool " +
+        "doesn't take too many resources away from the query and affect performance. " +
+        "With larger cluster sizes, this number can be increased.")
       .intConf
       .checkValue(_ > 0, "Must be greater than 0")
-        .createWithDefault(Math.max(Runtime.getRuntime.availableProcessors() / 4, 1))
+        .createWithDefault(2)
 
   val STATE_SCHEMA_CHECK_ENABLED =
     buildConf("spark.sql.streaming.stateStore.stateSchemaCheck")
