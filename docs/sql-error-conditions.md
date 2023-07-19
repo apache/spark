@@ -1675,7 +1675,7 @@ To tolerate the error on drop use DROP VIEW IF EXISTS or DROP TABLE IF EXISTS.
 
 SQLSTATE: none assigned
 
-The user defined Python table function failed to analyze in Python, `<msg>`
+Failed to analyze the Python user defined table function: `<msg>`
 
 ### TABLE_VALUED_FUNCTION_TOO_MANY_TABLE_ARGUMENTS
 

@@ -109,18 +109,20 @@ case class UserDefinedPythonTableFunction(
           evalType = pythonEvalType,
           udfDeterministic = udfDeterministic)
       case _ =>
+        // Check which argument is a table argument here since it will be replaced with
+        // `UnresolvedAttribute` to construct lateral join.
+        val tableArgs = exprs.map {
+          case _: FunctionTableSubqueryArgumentExpression => true
+          case NamedArgumentExpression(_, _: FunctionTableSubqueryArgumentExpression) => true
+          case _ => false
+        }
         UnresolvedPolymorphicPythonUDTF(
           name = name,
           func = func,
           children = exprs,
           evalType = pythonEvalType,
           udfDeterministic = udfDeterministic,
-          resolveElementSchema = UserDefinedPythonTableFunction.analyzeInPython(
-            exprs.map {
-              case _: FunctionTableSubqueryArgumentExpression => true
-              case NamedArgumentExpression(_, _: FunctionTableSubqueryArgumentExpression) => true
-              case _ => false
-            }))
+          resolveElementSchema = UserDefinedPythonTableFunction.analyzeInPython(_, _, tableArgs))
     }
     Generate(
       udtf,
@@ -166,7 +168,7 @@ object UserDefinedPythonTableFunction {
    * will be thrown when an exception is raised in Python.
    */
   def analyzeInPython(
-      tableArgs: Seq[Boolean])(func: PythonFunction, exprs: Seq[Expression]): StructType = {
+      func: PythonFunction, exprs: Seq[Expression], tableArgs: Seq[Boolean]): StructType = {
     val env = SparkEnv.get
     val bufferSize: Int = env.conf.get(BUFFER_SIZE)
     val authSocketTimeout = env.conf.get(PYTHON_AUTH_SOCKET_TIMEOUT)

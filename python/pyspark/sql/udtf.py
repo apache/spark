@@ -42,6 +42,18 @@ __all__ = ["AnalyzeArgument", "AnalyzeResult", "UDTFRegistration"]
 
 @dataclass(frozen=True)
 class AnalyzeArgument:
+    """
+    The argument for Python UDTF's analyze static method.
+
+    Parameters
+    ----------
+    data_type : :class:`DataType`
+        The argument's data type
+    value : Optional[Any]
+        The calculated value if the argument is foldable; otherwise None
+    is_table : bool
+        If True, the argument is a table argument.
+    """
     data_type: DataType
     value: Optional[Any]
     is_table: bool
@@ -49,6 +61,14 @@ class AnalyzeArgument:
 
 @dataclass(frozen=True)
 class AnalyzeResult:
+    """
+    The return of Python UDTF's analyze static method.
+
+    Parameters
+    ----------
+    schema : :class:`StructType`
+        The schema that the Python UDTF will return.
+    """
     schema: StructType
 
 

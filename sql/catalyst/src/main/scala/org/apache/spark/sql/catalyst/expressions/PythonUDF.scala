@@ -178,7 +178,7 @@ case class PythonUDTF(
 }
 
 /**
- * A place holder of a Polymorphic Python table-valued function.
+ * A placeholder of a polymorphic Python table-valued function.
  */
 case class UnresolvedPolymorphicPythonUDTF(
     name: String,

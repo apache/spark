@@ -15573,8 +15573,8 @@ def udtf(
     - The number and order of arguments are the same as the UDTF inputs
     - Each argument is a :class:`pyspark.sql.udtf.AnalyzeArgument`, containing:
       - data_type: DataType
-      - value: Any: if the argument is foldable; otherwise None
-      - is_table: bool: True if the argument is TABLE
+      - value: Any: the calculated value if the argument is foldable; otherwise None
+      - is_table: bool: True if the argument is a table argument
 
     and return a :class:`pyspark.sql.udtf.AnalyzeResult`, containing.
 

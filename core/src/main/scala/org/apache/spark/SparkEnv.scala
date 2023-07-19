@@ -74,6 +74,13 @@ class SparkEnv (
 
   @volatile private[spark] var isStopped = false
 
+  /**
+   * A key for PythonWorkerFactory cache.
+   * @param pythonExec The python executable to run the Python worker.
+   * @param workerModule The worker module to be called in the worker, e.g., "pyspark.worker".
+   * @param daemonModule The daemon module name to reuse the worker, e.g., "pyspark.daemon".
+   * @param envVars The environment variables for the worker.
+   */
   private case class PythonWorkersKey(
       pythonExec: String, workerModule: String, daemonModule: String, envVars: Map[String, String])
   private val pythonWorkers = mutable.HashMap[PythonWorkersKey, PythonWorkerFactory]()

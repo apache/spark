@@ -52,7 +52,7 @@ from pyspark.sql.types import (
     StructField,
     StructType,
 )
-from pyspark.testing import assertDataFrameEqual
+from pyspark.testing import assertDataFrameEqual, assertSchemaEqual
 from pyspark.testing.sqlutils import (
     have_pandas,
     have_pyarrow,
@@ -782,8 +782,8 @@ class BaseUDTFTestsMixin:
         self.spark.udtf.register("test_udtf", func)
 
         expected = [Row(c1="hello", c2="world")]
-        self.assertEqual(func().collect(), expected)
-        self.assertEqual(self.spark.sql("SELECT * FROM test_udtf()").collect(), expected)
+        assertDataFrameEqual(func(), expected)
+        assertDataFrameEqual(self.spark.sql("SELECT * FROM test_udtf()"), expected)
 
     def test_udtf_with_analyze(self):
         class TestUDTF:
@@ -840,8 +840,8 @@ class BaseUDTFTestsMixin:
             ]
         ):
             with self.subTest(query_no=i):
-                self.assertEqual(df.schema, expected_schema)
-                self.assertEqual(df.collect(), expected_results)
+                assertSchemaEqual(df.schema, expected_schema)
+                assertDataFrameEqual(df, expected_results)
 
     def test_udtf_with_analyze_decorator(self):
         @udtf
@@ -856,8 +856,8 @@ class BaseUDTFTestsMixin:
         self.spark.udtf.register("test_udtf", TestUDTF)
 
         expected = [Row(c1="hello", c2="world")]
-        self.assertEqual(TestUDTF().collect(), expected)
-        self.assertEqual(self.spark.sql("SELECT * FROM test_udtf()").collect(), expected)
+        assertDataFrameEqual(TestUDTF(), expected)
+        assertDataFrameEqual(self.spark.sql("SELECT * FROM test_udtf()"), expected)
 
     def test_udtf_with_analyze_decorator_parens(self):
         @udtf()
@@ -872,8 +872,8 @@ class BaseUDTFTestsMixin:
         self.spark.udtf.register("test_udtf", TestUDTF)
 
         expected = [Row(c1="hello", c2="world")]
-        self.assertEqual(TestUDTF().collect(), expected)
-        self.assertEqual(self.spark.sql("SELECT * FROM test_udtf()").collect(), expected)
+        assertDataFrameEqual(TestUDTF(), expected)
+        assertDataFrameEqual(self.spark.sql("SELECT * FROM test_udtf()"), expected)
 
     def test_udtf_with_analyze_multiple_arguments(self):
         class TestUDTF:
@@ -902,8 +902,8 @@ class BaseUDTFTestsMixin:
             ]
         ):
             with self.subTest(query_no=i):
-                self.assertEqual(df.schema, expected_schema)
-                self.assertEqual(df.collect(), expected_results)
+                assertSchemaEqual(df.schema, expected_schema)
+                assertDataFrameEqual(df, expected_results)
 
     def test_udtf_with_analyze_arbitary_number_arguments(self):
         class TestUDTF:
@@ -936,8 +936,8 @@ class BaseUDTFTestsMixin:
             ]
         ):
             with self.subTest(query_no=i):
-                self.assertEqual(df.schema, expected_schema)
-                self.assertEqual(df.collect(), expected_results)
+                assertSchemaEqual(df.schema, expected_schema)
+                assertDataFrameEqual(df, expected_results)
 
     def test_udtf_with_analyze_table_argument(self):
         class TestUDTF:
@@ -957,8 +957,8 @@ class BaseUDTFTestsMixin:
         self.spark.udtf.register("test_udtf", func)
 
         df = self.spark.sql("SELECT * FROM test_udtf(TABLE (SELECT id FROM range(0, 8)))")
-        self.assertEqual(df.schema, StructType().add("a", LongType()))
-        self.assertEqual(df.collect(), [Row(a=6), Row(a=7)])
+        assertSchemaEqual(df.schema, StructType().add("a", LongType()))
+        assertDataFrameEqual(df, [Row(a=6), Row(a=7)])
 
     def test_udtf_with_analyze_table_argument_adding_columns(self):
         class TestUDTF:
@@ -975,12 +975,12 @@ class BaseUDTFTestsMixin:
         self.spark.udtf.register("test_udtf", func)
 
         df = self.spark.sql("SELECT * FROM test_udtf(TABLE (SELECT id FROM range(0, 4)))")
-        self.assertEqual(
+        assertSchemaEqual(
             df.schema,
             StructType().add("id", LongType(), nullable=False).add("is_even", BooleanType()),
         )
-        self.assertEqual(
-            df.collect(),
+        assertDataFrameEqual(
+            df,
             [
                 Row(a=0, is_even=True),
                 Row(a=1, is_even=False),
@@ -1029,8 +1029,8 @@ class BaseUDTFTestsMixin:
             ]
         ):
             with self.subTest(query_no=i):
-                self.assertEqual(df.schema, expected_schema)
-                self.assertEqual(df.collect(), expected_results)
+                assertSchemaEqual(df.schema, expected_schema)
+                assertDataFrameEqual(df, expected_results)
 
         with self.assertRaisesRegex(
             AnalysisException, "The first argument must be a scalar integer between 1 and 10"
@@ -1150,8 +1150,8 @@ class BaseUDTFTestsMixin:
         func = udtf(TestUDTF)
 
         df = func(lit(None))
-        self.assertEqual(df.schema, StructType().add("a", NullType()))
-        self.assertEqual(df.collect(), [Row(a=None)])
+        assertSchemaEqual(df.schema, StructType().add("a", NullType()))
+        assertDataFrameEqual(df, [Row(a=None)])
 
     def test_udtf_with_analyze_taking_wrong_number_of_arguments(self):
         class TestUDTF:
@@ -1192,8 +1192,8 @@ class BaseUDTFTestsMixin:
         self.spark.udtf.register("test_udtf", TestUDTF)
 
         expected = [Row(c1="hello", c2="world")]
-        self.assertEqual(TestUDTF().collect(), expected)
-        self.assertEqual(self.spark.sql("SELECT * FROM test_udtf()").collect(), expected)
+        assertDataFrameEqual(TestUDTF(), expected)
+        assertDataFrameEqual(self.spark.sql("SELECT * FROM test_udtf()"), expected)
 
         with self.assertRaisesRegex(
             AnalysisException, r"analyze\(\) takes 0 positional arguments but 1 was given"
