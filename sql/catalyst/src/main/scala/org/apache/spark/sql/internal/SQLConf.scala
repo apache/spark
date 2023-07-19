@@ -4522,7 +4522,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def numStateStoreMaintenanceThreads: Int = getConf(NUM_STATE_STORE_MAINTENANCE_THREADS)
 
-  def enableStateStoreMaintenanceThreadPool: Boolean = getConf(ENABLE_STATE_STORE_MAINTENANCE_THREAD_POOL)
+  def enableStateStoreMaintenanceThreadPool: Boolean =
+    getConf(ENABLE_STATE_STORE_MAINTENANCE_THREAD_POOL)
 
   def stateStoreMinDeltasForSnapshot: Int = getConf(STATE_STORE_MIN_DELTAS_FOR_SNAPSHOT)
 
