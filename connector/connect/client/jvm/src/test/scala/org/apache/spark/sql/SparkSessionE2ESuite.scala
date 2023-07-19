@@ -18,6 +18,7 @@ package org.apache.spark.sql
 
 import scala.concurrent.{ExecutionContext, ExecutionContextExecutor, Future}
 import scala.concurrent.duration._
+import scala.mutable
 import scala.util.{Failure, Success}
 
 import org.scalatest.concurrent.Eventually._
@@ -64,13 +65,16 @@ class SparkSessionE2ESuite extends RemoteSparkSession {
     }
     // 20 seconds is < 30 seconds the queries should be running,
     // because it should be interrupted sooner
+    val interrupted = mutable.ListBuffer[String]()
     eventually(timeout(20.seconds), interval(1.seconds)) {
       // keep interrupting every second, until both queries get interrupted.
-      spark.interruptAll()
+      val ids = spark.interruptAll()
+      interrupted ++= ids
       assert(error.isEmpty, s"Error not empty: $error")
       assert(q1Interrupted)
       assert(q2Interrupted)
     }
+    assert(interrupted.length == 2, s"Interrupted operations: $interrupted.")
   }
 
   test("interrupt all - foreground queries, background interrupt") {
@@ -79,9 +83,12 @@ class SparkSessionE2ESuite extends RemoteSparkSession {
     implicit val ec: ExecutionContextExecutor = ExecutionContext.global
 
     @volatile var finished = false
+    val interrupted = mutable.ListBuffer[String]()
+
     val interruptor = Future {
       eventually(timeout(20.seconds), interval(1.seconds)) {
-        spark.interruptAll()
+        val ids = spark.interruptAll()
+        interrupted ++= ids
         assert(finished)
       }
       finished
@@ -96,5 +103,6 @@ class SparkSessionE2ESuite extends RemoteSparkSession {
     assert(e2.getMessage.contains("OPERATION_CANCELED"), s"Unexpected exception: $e2")
     finished = true
     assert(ThreadUtils.awaitResult(interruptor, 10.seconds))
+    assert(interrupted.length == 2, s"Interrupted operations: $interrupted.")
   }
 }

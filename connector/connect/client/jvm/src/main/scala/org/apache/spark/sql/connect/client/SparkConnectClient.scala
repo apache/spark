@@ -227,7 +227,7 @@ private[sql] class SparkConnectClient(
   private[this] val tags = new InheritableThreadLocal[mutable.Set[String]] {
     override def childValue(parent: mutable.Set[String]): mutable.Set[String] = {
       // Note: make a clone such that changes in the parent tags aren't reflected in
-      // the those of the children threads.
+      // those of the children threads.
       parent.clone()
     }
     override protected def initialValue(): mutable.Set[String] = new mutable.HashSet[String]()

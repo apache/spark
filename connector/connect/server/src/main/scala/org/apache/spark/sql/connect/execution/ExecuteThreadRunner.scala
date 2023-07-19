@@ -85,6 +85,9 @@ private[connect] class ExecuteThreadRunner(executeHolder: ExecuteHolder) extends
           }
       } finally {
         executeHolder.sessionHolder.session.sparkContext.removeJobTag(executeHolder.jobTag)
+        executeHolder.userDefinedTags.foreach { tag =>
+          session.sparkContext.removeJobTag(executeHolder.tagToSparkJobTag(tag))
+        }
       }
     } catch {
       ErrorUtils.handleError(
@@ -113,6 +116,10 @@ private[connect] class ExecuteThreadRunner(executeHolder: ExecuteHolder) extends
 
       // Set tag for query cancellation
       session.sparkContext.addJobTag(executeHolder.jobTag)
+      // Also set all user defined tags as Spark Job tags.
+      executeHolder.userDefinedTags.foreach { tag =>
+        session.sparkContext.addJobTag(executeHolder.tagToSparkJobTag(tag))
+      }
       session.sparkContext.setJobDescription(
         s"Spark Connect - ${StringUtils.abbreviate(debugString, 128)}")
       session.sparkContext.setInterruptOnCancel(true)
