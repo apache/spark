@@ -368,6 +368,14 @@ Not allowed to create the permanent view `<name>` without explicitly assigning a
 
 CREATE TABLE column `<columnName>` specifies descriptor "`<optionName>`" more than once, which is invalid.
 
+### [CREATE_VIEW_COLUMN_ARITY_MISMATCH](sql-error-conditions-create-view-column-arity-mismatch-error-class.html)
+
+[SQLSTATE: 21S01](sql-error-conditions-sqlstates.html#class-21-cardinality-violation)
+
+Cannot create view `<viewName>`, the reason is
+
+For more details see [CREATE_VIEW_COLUMN_ARITY_MISMATCH](sql-error-conditions-create-view-column-arity-mismatch-error-class.html)
+
 ### [DATATYPE_MISMATCH](sql-error-conditions-datatype-mismatch-error-class.html)
 
 [SQLSTATE: 42K09](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
@@ -447,6 +455,14 @@ Found duplicate clauses: `<clauseName>`. Please, remove one of them.
 [SQLSTATE: 23505](sql-error-conditions-sqlstates.html#class-23-integrity-constraint-violation)
 
 Found duplicate keys `<keyColumn>`.
+
+### [DUPLICATE_ROUTINE_PARAMETER_ASSIGNMENT](sql-error-conditions-duplicate-routine-parameter-assignment-error-class.html)
+
+[SQLSTATE: 4274K](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+Call to function `<functionName>` is invalid because it includes multiple argument assignments to the same parameter name `<parameterName>`.
+
+For more details see [DUPLICATE_ROUTINE_PARAMETER_ASSIGNMENT](sql-error-conditions-duplicate-routine-parameter-assignment-error-class.html)
 
 ### EMPTY_JSON_FIELD_VALUE
 
@@ -628,6 +644,14 @@ SQLSTATE: none assigned
 
 Detected an incompatible DataSourceRegister. Please remove the incompatible library from classpath or upgrade it. Error: `<message>`
 
+### [INCOMPATIBLE_DATA_FOR_TABLE](sql-error-conditions-incompatible-data-for-table-error-class.html)
+
+SQLSTATE: KD000
+
+Cannot write incompatible data for the table `<tableName>`:
+
+For more details see [INCOMPATIBLE_DATA_FOR_TABLE](sql-error-conditions-incompatible-data-for-table-error-class.html)
+
 ### INCOMPATIBLE_JOIN_TYPES
 
 [SQLSTATE: 42613](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
@@ -737,6 +761,12 @@ For more details see [INSUFFICIENT_TABLE_PROPERTY](sql-error-conditions-insuffic
 `<message>`
 
 ### INTERNAL_ERROR_SHUFFLE
+
+[SQLSTATE: XX000](sql-error-conditions-sqlstates.html#class-XX-internal-error)
+
+`<message>`
+
+### INTERNAL_ERROR_STORAGE
 
 [SQLSTATE: XX000](sql-error-conditions-sqlstates.html#class-XX-internal-error)
 
@@ -1109,6 +1139,12 @@ SQLSTATE: none assigned
 
 The join condition `<joinCondition>` has the invalid type `<conditionType>`, expected "BOOLEAN".
 
+### LOAD_DATA_PATH_NOT_EXISTS
+
+SQLSTATE: none assigned
+
+LOAD DATA input path does not exist: `<path>`.
+
 ### LOCAL_MUST_WITH_SCHEMA_FILE
 
 SQLSTATE: none assigned
@@ -1182,7 +1218,13 @@ SQLSTATE: none assigned
 
 Not allowed to implement multiple UDF interfaces, UDF class `<className>`.
 
-### NAMED_ARGUMENTS_SUPPORT_DISABLED
+### NAMED_PARAMETERS_NOT_SUPPORTED
+
+[SQLSTATE: 4274K](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+Named parameters are not supported for function `<functionName>`; please retry the query with positional arguments to the function call instead.
+
+### NAMED_PARAMETER_SUPPORT_DISABLED
 
 SQLSTATE: none assigned
 
@@ -1352,6 +1394,12 @@ SQLSTATE: none assigned
 
 Number of given aliases does not match number of output columns. Function name: `<funcName>`; number of aliases: `<aliasesNum>`; number of output columns: `<outColsNum>`.
 
+### OPERATION_CANCELED
+
+[SQLSTATE: HY008](sql-error-conditions-sqlstates.html#class-HY-cli-specific-condition)
+
+Operation has been canceled.
+
 ### ORDER_BY_POS_OUT_OF_RANGE
 
 [SQLSTATE: 42805](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
@@ -1486,6 +1534,12 @@ Failed to rename as `<sourcePath>` was not found.
 [SQLSTATE: 42614](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
 
 The `<clause>` clause may be used at most once per `<operation>` operation.
+
+### REQUIRED_PARAMETER_NOT_FOUND
+
+[SQLSTATE: 4274K](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+Cannot invoke function `<functionName>` because the parameter named `<parameterName>` is required, but the function call did not supply a value. Please update the function call to supply an argument value (either positionally or by name) and retry the query again.
 
 ### REQUIRES_SINGLE_PART_NAMESPACE
 
@@ -1690,6 +1744,12 @@ Found an unclosed bracketed comment. Please, append */ at the end of the comment
 
 Parameter `<paramIndex>` of function `<functionName>` requires the `<requiredType>` type, however `<inputSql>` has the type `<inputType>`.
 
+### UNEXPECTED_POSITIONAL_ARGUMENT
+
+[SQLSTATE: 4274K](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+Cannot invoke function `<functionName>` because it contains positional argument(s) following named argument(s); please rearrange them so the positional arguments come first and then retry the query again.
+
 ### UNKNOWN_PROTOBUF_MESSAGE_TYPE
 
 SQLSTATE: none assigned
@@ -1719,6 +1779,12 @@ Unpivot value columns must share a least common type, some types do not: [`<type
 [SQLSTATE: 428C4](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
 
 All unpivot value columns must have the same size as there are value column names (`<names>`).
+
+### UNRECOGNIZED_PARAMETER_NAME
+
+[SQLSTATE: 4274K](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+Cannot invoke function `<functionName>` because the function call included a named argument reference for the argument named `<argumentName>`, but this function does not include any signature containing an argument with this name. Did you mean one of the following? [`<proposal>`].
 
 ### UNRECOGNIZED_SQL_TYPE
 
@@ -1817,6 +1883,12 @@ Unsupported data type `<typeName>`.
 SQLSTATE: none assigned
 
 The direct query on files does not support the data source type: `<className>`. Please try a different data source type or consider using a different query method.
+
+### UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE
+
+SQLSTATE: none assigned
+
+The `<format>` datasource doesn't support the column `<columnName>` of the type `<columnType>`.
 
 ### [UNSUPPORTED_DEFAULT_VALUE](sql-error-conditions-unsupported-default-value-error-class.html)
 

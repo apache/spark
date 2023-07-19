@@ -106,8 +106,13 @@ private[spark] class PythonWorkerFactory(pythonExec: String, envVars: Map[String
       }
       createThroughDaemon()
     } else {
-      createSimpleWorker()
+      createSimpleWorker(workerModule)
     }
+  }
+
+  /** Creates a Python worker with `pyspark.streaming_worker` module. */
+  def createStreamingWorker(): (Socket, Option[Int]) = {
+    createSimpleWorker("pyspark.streaming_worker")
   }
 
   /**
@@ -150,16 +155,18 @@ private[spark] class PythonWorkerFactory(pythonExec: String, envVars: Map[String
   /**
    * Launch a worker by executing worker.py (by default) directly and telling it to connect to us.
    */
-  private def createSimpleWorker(): (Socket, Option[Int]) = {
+  private def createSimpleWorker(workerModule: String): (Socket, Option[Int]) = {
     var serverSocket: ServerSocket = null
     try {
       serverSocket = new ServerSocket(0, 1, InetAddress.getLoopbackAddress())
 
       // Create and start the worker
       val pb = new ProcessBuilder(Arrays.asList(pythonExec, "-m", workerModule))
-      val sessionId = envVars.getOrElse("SPARK_CONNECT_SESSION_UUID", "default")
-      if (sessionId != "default") {
-        pb.directory(new File(SparkFiles.getRootDirectory(), sessionId))
+      val jobArtifactUUID = envVars.getOrElse("SPARK_JOB_ARTIFACT_UUID", "default")
+      if (jobArtifactUUID != "default") {
+        val f = new File(SparkFiles.getRootDirectory(), jobArtifactUUID)
+        f.mkdir()
+        pb.directory(f)
       }
       val workerEnv = pb.environment()
       workerEnv.putAll(envVars.asJava)
@@ -214,9 +221,11 @@ private[spark] class PythonWorkerFactory(pythonExec: String, envVars: Map[String
         // Create and start the daemon
         val command = Arrays.asList(pythonExec, "-m", daemonModule)
         val pb = new ProcessBuilder(command)
-        val sessionId = envVars.getOrElse("SPARK_CONNECT_SESSION_UUID", "default")
-        if (sessionId != "default") {
-          pb.directory(new File(SparkFiles.getRootDirectory(), sessionId))
+        val jobArtifactUUID = envVars.getOrElse("SPARK_JOB_ARTIFACT_UUID", "default")
+        if (jobArtifactUUID != "default") {
+          val f = new File(SparkFiles.getRootDirectory(), jobArtifactUUID)
+          f.mkdir()
+          pb.directory(f)
         }
         val workerEnv = pb.environment()
         workerEnv.putAll(envVars.asJava)

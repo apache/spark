@@ -8336,7 +8336,7 @@ object functions {
    * @since 1.5.0
    */
   @scala.annotation.varargs
-  @deprecated("Use call_function")
+  @deprecated("Use call_udf")
   def callUDF(udfName: String, cols: Column*): Column =
     call_function(udfName, cols: _*)
 
@@ -8356,7 +8356,6 @@ object functions {
    * @since 3.2.0
    */
   @scala.annotation.varargs
-  @deprecated("Use call_function")
   def call_udf(udfName: String, cols: Column*): Column =
     call_function(udfName, cols: _*)
 

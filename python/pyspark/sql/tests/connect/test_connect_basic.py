@@ -27,7 +27,6 @@ from collections import defaultdict
 
 from pyspark.errors import (
     PySparkAttributeError,
-    PySparkNotImplementedError,
     PySparkTypeError,
     PySparkException,
     PySparkValueError,
@@ -3186,16 +3185,6 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
         rows = [cols] * row_count
         self.assertEqual(row_count, self.connect.createDataFrame(data=rows).count())
 
-    def test_unsupported_udtf(self):
-        with self.assertRaises(PySparkNotImplementedError) as e:
-            self.connect.udtf.register()
-
-        self.check_error(
-            exception=e.exception,
-            error_class="NOT_IMPLEMENTED",
-            message_parameters={"feature": "udtf()"},
-        )
-
     def test_unsupported_jvm_attribute(self):
         # Unsupported jvm attributes for Spark session.
         unsupported_attrs = ["_jsc", "_jconf", "_jvm", "_jsparkSession"]
@@ -3334,9 +3323,9 @@ class SparkConnectSessionTests(ReusedConnectTestCase):
         other = PySparkSession.builder.remote("sc://other.remote:114/").create()
         self.assertNotEquals(self.spark, other)
 
-        # Reuses an active session that was previously created.
+        # Gets currently active session.
         same = PySparkSession.builder.remote("sc://other.remote.host:114/").getOrCreate()
-        self.assertEquals(self.spark, same)
+        self.assertEquals(other, same)
         same.stop()
 
         # Make sure the environment is clean.
