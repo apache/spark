@@ -15,7 +15,6 @@
 # limitations under the License.
 #
 import json
-import os
 import sys
 import tempfile
 from typing import (
@@ -135,4 +134,6 @@ class DeepspeedTorchDistributor(TorchDistributor):
     def run(self, train_object: Union[Callable, str], *args: Any, **kwargs: Any) -> Optional[Any]:
         # If the "train_object" is a string, then we assume it's a filepath.
         # Otherwise, we assume it's a function.
-        return self._run(train_object, DeepspeedTorchDistributor._run_training_on_pytorch_file, *args, **kwargs)
+        return self._run(
+            train_object, DeepspeedTorchDistributor._run_training_on_pytorch_file, *args, **kwargs
+        )
