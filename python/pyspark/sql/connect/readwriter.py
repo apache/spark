@@ -30,7 +30,7 @@ from pyspark.sql.readwriter import (
     DataFrameReader as PySparkDataFrameReader,
     DataFrameWriterV2 as PySparkDataFrameWriterV2,
 )
-from pyspark.errors import PySparkAttributeError, PySparkTypeError
+from pyspark.errors import PySparkAttributeError, PySparkTypeError, PySparkValueError
 
 if TYPE_CHECKING:
     from pyspark.sql.connect.dataframe import DataFrame
@@ -497,17 +497,21 @@ class DataFrameWriter(OptionUtils):
         self, numBuckets: int, col: Union[str, TupleOrListOfString], *cols: Optional[str]
     ) -> "DataFrameWriter":
         if not isinstance(numBuckets, int):
-            raise PySparkTypeError(
-                error_class="NOT_INT",
+            raise PySparkValueError(
+                error_class="CANNOT_SET_TOGETHER",
                 message_parameters={
-                    "arg_name": "numBuckets",
-                    "arg_type": type(numBuckets).__name__,
+                    "arg_list": f"`col` of type {type(col).__name__} and `cols`",
                 },
             )
 
         if isinstance(col, (list, tuple)):
             if cols:
-                raise ValueError("col is a {0} but cols are not empty".format(type(col)))
+                raise PySparkValueError(
+                    error_class="NOT_INT",
+                    message_parameters={
+                        "arg_list": "numBuckets",
+                    },
+                )
 
             col, cols = col[0], col[1:]  # type: ignore[assignment]
 
@@ -548,7 +552,12 @@ class DataFrameWriter(OptionUtils):
     ) -> "DataFrameWriter":
         if isinstance(col, (list, tuple)):
             if cols:
-                raise ValueError("col is a {0} but cols are not empty".format(type(col)))
+                raise PySparkValueError(
+                    error_class="CANNOT_SET_TOGETHER",
+                    message_parameters={
+                        "arg_list": f"`col` of type {type(col).__name__} and `cols`",
+                    },
+                )
 
             col, cols = col[0], col[1:]  # type: ignore[assignment]
 

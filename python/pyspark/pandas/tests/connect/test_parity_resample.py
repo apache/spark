@@ -24,13 +24,7 @@ from pyspark.testing.pandasutils import PandasOnSparkTestUtils, TestUtils
 class ResampleTestsParityMixin(
     ResampleTestsMixin, PandasOnSparkTestUtils, TestUtils, ReusedConnectTestCase
 ):
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_dataframe_resample(self):
-        super().test_dataframe_resample()
-
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_series_resample(self):
-        super().test_series_resample()
+    pass
 
 
 if __name__ == "__main__":

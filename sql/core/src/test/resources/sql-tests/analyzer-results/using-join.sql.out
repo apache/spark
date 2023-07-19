@@ -806,3 +806,33 @@ Project [k#x, k#x]
                +- Project [k#x, v2#x]
                   +- SubqueryAlias nt2
                      +- LocalRelation [k#x, v2#x]
+
+
+-- !query
+WITH
+  t1 AS (select key from values ('a') t(key)),
+  t2 AS (select key from values ('a') t(key))
+SELECT t1.key
+FROM t1 FULL OUTER JOIN t2 USING (key)
+WHERE t1.key NOT LIKE 'bb.%'
+-- !query analysis
+WithCTE
+:- CTERelationDef xxxx, false
+:  +- SubqueryAlias t1
+:     +- Project [key#x]
+:        +- SubqueryAlias t
+:           +- LocalRelation [key#x]
+:- CTERelationDef xxxx, false
+:  +- SubqueryAlias t2
+:     +- Project [key#x]
+:        +- SubqueryAlias t
+:           +- LocalRelation [key#x]
++- Project [key#x]
+   +- Project [key#x, key#x, key#x]
+      +- Filter NOT key#x LIKE bb.%
+         +- Project [coalesce(key#x, key#x) AS key#x, key#x, key#x, key#x]
+            +- Join FullOuter, (key#x = key#x)
+               :- SubqueryAlias t1
+               :  +- CTERelationRef xxxx, true, [key#x]
+               +- SubqueryAlias t2
+                  +- CTERelationRef xxxx, true, [key#x]

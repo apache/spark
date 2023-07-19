@@ -26,14 +26,13 @@ import scala.collection.JavaConverters._
 import org.apache.spark.TaskContext
 import org.apache.spark.api.java.function._
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{PrimitiveIntEncoder, PrimitiveLongEncoder}
-import org.apache.spark.sql.connect.client.util.RemoteSparkSession
-import org.apache.spark.sql.functions.{col, udf}
+import org.apache.spark.sql.connect.client.util.QueryTest
+import org.apache.spark.sql.functions.{col, struct, udf}
 
 /**
- * All tests in this class requires client UDF artifacts synced with the server. TODO: It means
- * these tests only works with SBT for now.
+ * All tests in this class requires client UDF defined in this test class synced with the server.
  */
-class UserDefinedFunctionE2ETestSuite extends RemoteSparkSession {
+class UserDefinedFunctionE2ETestSuite extends QueryTest {
   test("Dataset typed filter") {
     val rows = spark.range(10).filter(n => n % 2 == 0).collectAsList()
     assert(rows == Arrays.asList[Long](0, 2, 4, 6, 8))
@@ -197,5 +196,65 @@ class UserDefinedFunctionE2ETestSuite extends RemoteSparkSession {
     }
     spark.range(10).repartition(1).foreachPartition(func)
     assert(sum.get() == 0) // The value is not 45
+  }
+
+  test("Dataset reduce without null partition inputs") {
+    val session: SparkSession = spark
+    import session.implicits._
+    assert(spark.range(0, 10, 1, 5).map(_ + 1).reduce(_ + _) == 55)
+  }
+
+  test("Dataset reduce with null partition inputs") {
+    val session: SparkSession = spark
+    import session.implicits._
+    assert(spark.range(0, 10, 1, 16).map(_ + 1).reduce(_ + _) == 55)
+  }
+
+  test("Dataset reduce with null partition inputs - java to scala long type") {
+    val session: SparkSession = spark
+    import session.implicits._
+    assert(spark.range(0, 5, 1, 10).as[Long].reduce(_ + _) == 10)
+  }
+
+  test("Dataset reduce with null partition inputs - java") {
+    val session: SparkSession = spark
+    import session.implicits._
+    assert(
+      spark
+        .range(0, 10, 1, 16)
+        .map(_ + 1)
+        .reduce(new ReduceFunction[Long] {
+          override def call(v1: Long, v2: Long): Long = v1 + v2
+        }) == 55)
+  }
+
+  test("udf with row input encoder") {
+    val session: SparkSession = spark
+    import session.implicits._
+    val df = Seq((1, 2, 3)).toDF("a", "b", "c")
+    val f = udf((row: Row) => row.schema.fieldNames)
+    checkDataset(df.select(f(struct(df.columns map col: _*))), Row(Seq("a", "b", "c")))
+  }
+
+  test("Filter with row input encoder") {
+    val session: SparkSession = spark
+    import session.implicits._
+    val df = Seq(("a", 10), ("a", 20), ("b", 1), ("b", 2), ("c", 1)).toDF("c1", "c2")
+
+    checkDataset(df.filter(r => r.getInt(1) > 5), Row("a", 10), Row("a", 20))
+  }
+
+  test("mapPartitions with row input encoder") {
+    val session: SparkSession = spark
+    import session.implicits._
+    val df = Seq(("a", 10), ("a", 20), ("b", 1), ("b", 2), ("c", 1)).toDF("c1", "c2")
+
+    checkDataset(
+      df.mapPartitions(it => it.map(r => r.getAs[String]("c1"))),
+      "a",
+      "a",
+      "b",
+      "b",
+      "c")
   }
 }

@@ -102,19 +102,19 @@ abstract class PartitioningAwareFileIndex(
       })
     }
 
-    def matchFileMetadataPredicate(f: FileStatus): Boolean = {
+    def matchFileMetadataPredicate(partitionValues: InternalRow, f: FileStatus): Boolean = {
       // use option.forall, so if there is no filter no metadata struct, return true
       boundedFilterMetadataStructOpt.forall { boundedFilter =>
         val row =
-          createMetadataInternalRow(requiredMetadataColumnNames.toSeq,
-            f.getPath, f.getLen, f.getModificationTime)
+          createMetadataInternalRow(partitionValues, requiredMetadataColumnNames.toSeq,
+            SparkPath.fromFileStatus(f), f.getLen, f.getModificationTime)
         boundedFilter.eval(row)
       }
     }
 
     val selectedPartitions = if (partitionSpec().partitionColumns.isEmpty) {
       PartitionDirectory(InternalRow.empty, allFiles().toArray
-        .filter(f => isNonEmptyFile(f) && matchFileMetadataPredicate(f))) :: Nil
+        .filter(f => isNonEmptyFile(f) && matchFileMetadataPredicate(InternalRow.empty, f))) :: Nil
     } else {
       if (recursiveFileLookup) {
         throw new IllegalArgumentException(
@@ -126,7 +126,7 @@ abstract class PartitioningAwareFileIndex(
             case Some(existingDir) =>
               // Directory has children files in it, return them
               existingDir.filter(f => matchPathPattern(f) && isNonEmptyFile(f) &&
-                matchFileMetadataPredicate(f))
+                matchFileMetadataPredicate(values, f))
 
             case None =>
               // Directory does not exist, or has no children files

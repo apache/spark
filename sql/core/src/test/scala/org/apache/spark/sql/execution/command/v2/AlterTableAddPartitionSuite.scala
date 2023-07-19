@@ -19,7 +19,8 @@ package org.apache.spark.sql.execution.command.v2
 
 import org.apache.spark.SparkNumberFormatException
 import org.apache.spark.sql.{AnalysisException, Row}
-import org.apache.spark.sql.catalyst.analysis.PartitionsAlreadyExistException
+import org.apache.spark.sql.catalyst.analysis.{PartitionsAlreadyExistException, UnresolvedAttribute}
+import org.apache.spark.sql.catalyst.util.quoteIdentifier
 import org.apache.spark.sql.execution.command
 import org.apache.spark.sql.internal.SQLConf
 
@@ -35,10 +36,19 @@ class AlterTableAddPartitionSuite
   test("SPARK-33650: add partition into a table which doesn't support partition management") {
     withNamespaceAndTable("ns", "tbl", s"non_part_$catalog") { t =>
       sql(s"CREATE TABLE $t (id bigint, data string) $defaultUsing")
-      val errMsg = intercept[AnalysisException] {
-        sql(s"ALTER TABLE $t ADD PARTITION (id=1)")
-      }.getMessage
-      assert(errMsg.contains(s"Table $t does not support partition management"))
+      val tableName = UnresolvedAttribute.parseAttributeName(t).map(quoteIdentifier).mkString(".")
+      val sqlText = s"ALTER TABLE $t ADD PARTITION (id=1)"
+
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(sqlText)
+        },
+        errorClass = "INVALID_PARTITION_OPERATION.PARTITION_MANAGEMENT_IS_UNSUPPORTED",
+        parameters = Map("name" -> tableName),
+        context = ExpectedContext(
+          fragment = t,
+          start = 12,
+          stop = 39))
     }
   }
 

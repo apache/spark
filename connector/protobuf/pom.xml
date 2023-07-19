@@ -21,7 +21,7 @@
   <parent>
     <groupId>org.apache.spark</groupId>
     <artifactId>spark-parent_2.12</artifactId>
-    <version>3.5.0-SNAPSHOT</version>
+    <version>4.0.0-SNAPSHOT</version>
     <relativePath>../../pom.xml</relativePath>
   </parent>
 
@@ -79,7 +79,11 @@
     <dependency>
       <groupId>com.google.protobuf</groupId>
       <artifactId>protobuf-java</artifactId>
-      <version>${protobuf.version}</version>
+      <scope>compile</scope>
+    </dependency>
+    <dependency>
+      <groupId>com.google.protobuf</groupId>
+      <artifactId>protobuf-java-util</artifactId>
       <scope>compile</scope>
     </dependency>
   </dependencies>
@@ -131,7 +135,7 @@
             <groupId>com.github.os72</groupId>
             <artifactId>protoc-jar-maven-plugin</artifactId>
             <version>${protoc-jar-maven-plugin.version}</version>
-            <!-- Generates Java classes for tests. TODO(Raghu): Generate descriptor files too. -->
+            <!-- Generates Java classes and descriptor files from Protobuf files. -->
             <executions>
               <execution>
                 <phase>generate-test-sources</phase>
@@ -144,7 +148,17 @@
                   <inputDirectories>
                     <include>src/test/resources/protobuf</include>
                   </inputDirectories>
-                  <addSources>test</addSources>
+                  <includeStdTypes>true</includeStdTypes>
+                  <outputTargets>
+                    <outputTarget>
+                      <type>java</type>
+                      <addSources>test</addSources>
+                    </outputTarget>
+                    <outputTarget>
+                      <type>descriptor</type>
+                      <addSources>test</addSources>
+                    </outputTarget>
+                  </outputTargets>
                 </configuration>
               </execution>
             </executions>
@@ -163,7 +177,7 @@
             <groupId>com.github.os72</groupId>
             <artifactId>protoc-jar-maven-plugin</artifactId>
             <version>${protoc-jar-maven-plugin.version}</version>
-            <!-- Generates Java classes for tests. TODO(Raghu): Generate descriptor files too. -->
+            <!-- Generates Java classes and descriptor files from Protobuf files. -->
             <executions>
               <execution>
                 <phase>generate-test-sources</phase>
@@ -177,7 +191,17 @@
                   <inputDirectories>
                     <include>src/test/resources/protobuf</include>
                   </inputDirectories>
-                  <addSources>test</addSources>
+                  <includeStdTypes>true</includeStdTypes>
+                  <outputTargets>
+                    <outputTarget>
+                      <type>java</type>
+                      <addSources>test</addSources>
+                    </outputTarget>
+                    <outputTarget>
+                      <type>descriptor</type>
+                      <addSources>test</addSources>
+                    </outputTarget>
+                  </outputTargets>
                 </configuration>
               </execution>
             </executions>

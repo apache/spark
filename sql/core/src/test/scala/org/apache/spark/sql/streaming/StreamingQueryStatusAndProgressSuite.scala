@@ -171,6 +171,64 @@ class StreamingQueryStatusAndProgressSuite extends StreamTest with Eventually {
     assert(testProgress2.toString === testProgress2.prettyJson)
   }
 
+  test("StreamingQueryProgress - jsonString and fromJson") {
+    Seq(testProgress1, testProgress2).foreach { input =>
+      val jsonString = StreamingQueryProgress.jsonString(input)
+      val result = StreamingQueryProgress.fromJson(jsonString)
+      assert(input.id == result.id)
+      assert(input.runId == result.runId)
+      assert(input.name == result.name)
+      assert(input.timestamp == result.timestamp)
+      assert(input.batchId == result.batchId)
+      assert(input.batchDuration == result.batchDuration)
+      assert(input.durationMs == result.durationMs)
+      assert(input.eventTime == result.eventTime)
+
+      input.stateOperators.zip(result.stateOperators).foreach { case (o1, o2) =>
+        assert(o1.operatorName == o2.operatorName)
+        assert(o1.numRowsTotal == o2.numRowsTotal)
+        assert(o1.numRowsUpdated == o2.numRowsUpdated)
+        assert(o1.allUpdatesTimeMs == o2.allUpdatesTimeMs)
+        assert(o1.numRowsRemoved == o2.numRowsRemoved)
+        assert(o1.allRemovalsTimeMs == o2.allRemovalsTimeMs)
+        assert(o1.commitTimeMs == o2.commitTimeMs)
+        assert(o1.memoryUsedBytes == o2.memoryUsedBytes)
+        assert(o1.numRowsDroppedByWatermark == o2.numRowsDroppedByWatermark)
+        assert(o1.numShufflePartitions == o2.numShufflePartitions)
+        assert(o1.numStateStoreInstances == o2.numStateStoreInstances)
+        assert(o1.customMetrics == o2.customMetrics)
+      }
+
+      input.sources.zip(result.sources).foreach { case (s1, s2) =>
+        assert(s1.description == s2.description)
+        assert(s1.startOffset == s2.startOffset)
+        assert(s1.endOffset == s2.endOffset)
+        assert(s1.latestOffset == s2.latestOffset)
+        assert(s1.numInputRows == s2.numInputRows)
+        if (s1.inputRowsPerSecond.isNaN) {
+          assert(s2.inputRowsPerSecond.isNaN)
+        } else {
+          assert(s1.inputRowsPerSecond == s2.inputRowsPerSecond)
+        }
+        assert(s1.processedRowsPerSecond == s2.processedRowsPerSecond)
+        assert(s1.metrics == s2.metrics)
+      }
+
+      Seq(input.sink).zip(Seq(result.sink)).foreach { case (s1, s2) =>
+        assert(s1.description == s2.description)
+        assert(s1.numOutputRows == s2.numOutputRows)
+        assert(s1.metrics == s2.metrics)
+      }
+
+      val resultObservedMetrics = result.observedMetrics
+      assert(input.observedMetrics.size() == resultObservedMetrics.size())
+      assert(input.observedMetrics.keySet() == resultObservedMetrics.keySet())
+      input.observedMetrics.entrySet().forEach { e =>
+        assert(e.getValue == resultObservedMetrics.get(e.getKey))
+      }
+    }
+  }
+
   test("StreamingQueryStatus - prettyJson") {
     val json = testStatus.prettyJson
     assertJson(

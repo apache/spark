@@ -20,6 +20,7 @@ import typing
 import os
 import functools
 import unittest
+import uuid
 
 from pyspark import Row, SparkConf
 from pyspark.testing.utils import PySparkErrorTestUtils
@@ -73,6 +74,7 @@ if should_test_connect:
 class MockRemoteSession:
     def __init__(self):
         self.hooks = {}
+        self.session_id = str(uuid.uuid4())
 
     def set_hook(self, name, hook):
         self.hooks[name] = hook
@@ -153,11 +155,15 @@ class ReusedConnectTestCase(unittest.TestCase, SQLTestUtils, PySparkErrorTestUti
         return conf
 
     @classmethod
+    def master(cls):
+        return "local[4]"
+
+    @classmethod
     def setUpClass(cls):
         cls.spark = (
             PySparkSession.builder.config(conf=cls.conf())
             .appName(cls.__name__)
-            .remote("local[4]")
+            .remote(cls.master())
             .getOrCreate()
         )
         cls.tempdir = tempfile.NamedTemporaryFile(delete=False)

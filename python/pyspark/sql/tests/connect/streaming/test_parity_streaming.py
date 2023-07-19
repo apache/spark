@@ -15,39 +15,12 @@
 # limitations under the License.
 #
 
-import unittest
-
 from pyspark.sql.tests.streaming.test_streaming import StreamingTestsMixin
 from pyspark.testing.connectutils import ReusedConnectTestCase
 
 
 class StreamingParityTests(StreamingTestsMixin, ReusedConnectTestCase):
-    @unittest.skip("Query manager API will be supported later with SPARK-43032.")
-    def test_stream_await_termination(self):
-        super().test_stream_await_termination()
-
-    @unittest.skip(
-        "Query immediately quits after throw, "
-        + "allowing access to supported queries will be added in SPARK-42962."
-    )
-    def test_stream_exception(self):
-        super().test_stream_exception()
-
-    @unittest.skip("Query manager API will be supported later with SPARK-43032.")
-    def test_stream_status_and_progress(self):
-        super().test_stream_status_and_progress()
-
-    @unittest.skip("Query manager API will be supported later with SPARK-43032.")
-    def test_query_manager_await_termination(self):
-        super().test_query_manager_await_termination()
-
-    @unittest.skip("Query manager API will be supported later with SPARK-43032.")
-    def test_stream_save_options(self):
-        super().test_stream_save_options()
-
-    @unittest.skip("Query manager API will be supported later with SPARK-43032.")
-    def test_stream_save_options_overwrite(self):
-        super().test_stream_save_options_overwrite()
+    pass
 
 
 if __name__ == "__main__":

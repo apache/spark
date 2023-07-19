@@ -81,6 +81,14 @@ class SQLTestsMixin:
             ps.sql("SELECT id FROM range(10) WHERE id IN {pred}", col="lit", pred=(1, 2, 3)),
             ps.DataFrame({"id": [1, 2, 3]}),
         )
+        self.assert_eq(
+            ps.sql("SELECT {col} as a FROM range(1)", col="a'''c''d"),
+            ps.DataFrame({"a": ["a'''c''d"]}),
+        )
+        self.assert_eq(
+            ps.sql("SELECT id FROM range(10) WHERE id IN {pred}", col="a'''c''d", pred=(1, 2, 3)),
+            ps.DataFrame({"id": [1, 2, 3]}),
+        )
 
     def test_sql_with_pandas_on_spark_objects(self):
         psdf = ps.DataFrame({"a": [1, 2, 3, 4]})

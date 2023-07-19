@@ -14,6 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+from pyspark.errors.exceptions.base import SessionNotSameException
 from pyspark.sql.connect.utils import check_dependencies
 
 check_dependencies(__name__)
@@ -52,7 +53,12 @@ from pyspark.sql.dataframe import (
     DataFrameStatFunctions as PySparkDataFrameStatFunctions,
 )
 
-from pyspark.errors import PySparkTypeError, PySparkAttributeError, PySparkValueError
+from pyspark.errors import (
+    PySparkTypeError,
+    PySparkAttributeError,
+    PySparkValueError,
+    PySparkNotImplementedError,
+)
 from pyspark.errors.exceptions.connect import SparkConnectException
 from pyspark.rdd import PythonEvalType
 from pyspark.storagelevel import StorageLevel
@@ -70,7 +76,7 @@ from pyspark.sql.connect.functions import (
     lit,
     expr as sql_expression,
 )
-from pyspark.sql.connect.types import from_arrow_schema
+from pyspark.sql.pandas.types import from_arrow_schema
 
 
 if TYPE_CHECKING:
@@ -106,7 +112,7 @@ class DataFrame:
                 repl_eager_eval_enabled,
                 repl_eager_eval_max_num_rows,
                 repl_eager_eval_truncate,
-            ) = self._session._get_configs(
+            ) = self._session._client.get_configs(
                 "spark.sql.repl.eagerEval.enabled",
                 "spark.sql.repl.eagerEval.maxNumRows",
                 "spark.sql.repl.eagerEval.truncate",
@@ -126,7 +132,7 @@ class DataFrame:
             repl_eager_eval_enabled,
             repl_eager_eval_max_num_rows,
             repl_eager_eval_truncate,
-        ) = self._session._get_configs(
+        ) = self._session._client.get_configs(
             "spark.sql.repl.eagerEval.enabled",
             "spark.sql.repl.eagerEval.maxNumRows",
             "spark.sql.repl.eagerEval.truncate",
@@ -249,13 +255,20 @@ class DataFrame:
             raise Exception("Cannot cartesian join when self._plan is empty.")
         if other._plan is None:
             raise Exception("Cannot cartesian join when other._plan is empty.")
-
+        self.checkSameSparkSession(other)
         return DataFrame.withPlan(
             plan.Join(left=self._plan, right=other._plan, on=None, how="cross"),
             session=self._session,
         )
 
     crossJoin.__doc__ = PySparkDataFrame.crossJoin.__doc__
+
+    def checkSameSparkSession(self, other: "DataFrame") -> None:
+        if self._session.session_id != other._session.session_id:
+            raise SessionNotSameException(
+                error_class="SESSION_NOT_SAME",
+                message_parameters={},
+            )
 
     def coalesce(self, numPartitions: int) -> "DataFrame":
         if not numPartitions > 0:
@@ -435,11 +448,6 @@ class DataFrame:
                 error_class="NOT_COLUMN_OR_STR",
                 message_parameters={"arg_name": "cols", "arg_type": type(cols).__name__},
             )
-        if len(_cols) == 0:
-            raise PySparkValueError(
-                error_class="CANNOT_BE_EMPTY",
-                message_parameters={"item": "cols"},
-            )
 
         return DataFrame.withPlan(
             plan.Drop(
@@ -555,7 +563,7 @@ class DataFrame:
             raise Exception("Cannot join when other._plan is empty.")
         if how is not None and isinstance(how, str):
             how = how.lower().replace("_", "")
-
+        self.checkSameSparkSession(other)
         return DataFrame.withPlan(
             plan.Join(left=self._plan, right=other._plan, on=on, how=how),
             session=self._session,
@@ -1000,6 +1008,7 @@ class DataFrame:
                 error_class="MISSING_VALID_PLAN",
                 message_parameters={"operator": "Union"},
             )
+        self.checkSameSparkSession(other)
         return DataFrame.withPlan(
             plan.SetOperation(self._plan, other._plan, "union", is_all=True), session=self._session
         )
@@ -1012,6 +1021,7 @@ class DataFrame:
                 error_class="MISSING_VALID_PLAN",
                 message_parameters={"operator": "UnionByName"},
             )
+        self.checkSameSparkSession(other)
         return DataFrame.withPlan(
             plan.SetOperation(
                 self._plan,
@@ -1562,6 +1572,18 @@ class DataFrame:
             raise PySparkAttributeError(
                 error_class="JVM_ATTRIBUTE_NOT_SUPPORTED", message_parameters={"attr_name": name}
             )
+        elif name in [
+            "rdd",
+            "toJSON",
+            "foreach",
+            "foreachPartition",
+            "checkpoint",
+            "localCheckpoint",
+        ]:
+            raise PySparkNotImplementedError(
+                error_class="NOT_IMPLEMENTED",
+                message_parameters={"feature": f"{name}()"},
+            )
         return self[name]
 
     @overload
@@ -1594,6 +1616,13 @@ class DataFrame:
                 message_parameters={"arg_name": "item", "arg_type": type(item).__name__},
             )
 
+    def __dir__(self) -> List[str]:
+        attrs = set(super().__dir__())
+        attrs.update(self.columns)
+        return sorted(attrs)
+
+    __dir__.__doc__ = PySparkDataFrame.__dir__.__doc__
+
     def _print_plan(self) -> str:
         if self._plan:
             return self._plan.print()
@@ -1607,7 +1636,7 @@ class DataFrame:
         query = self._plan.to_proto(self._session.client)
         table, schema = self._session.client.to_table(query)
 
-        schema = schema or from_arrow_schema(table.schema)
+        schema = schema or from_arrow_schema(table.schema, prefer_timestamp_ntz=True)
 
         assert schema is not None and isinstance(schema, StructType)
 
@@ -1660,16 +1689,18 @@ class DataFrame:
 
     isStreaming.__doc__ = PySparkDataFrame.isStreaming.__doc__
 
-    def _tree_string(self) -> str:
+    def _tree_string(self, level: Optional[int] = None) -> str:
         if self._plan is None:
             raise Exception("Cannot analyze on empty plan.")
         query = self._plan.to_proto(self._session.client)
-        result = self._session.client._analyze(method="tree_string", plan=query).tree_string
+        result = self._session.client._analyze(
+            method="tree_string", plan=query, level=level
+        ).tree_string
         assert result is not None
         return result
 
-    def printSchema(self) -> None:
-        print(self._tree_string())
+    def printSchema(self, level: Optional[int] = None) -> None:
+        print(self._tree_string(level))
 
     printSchema.__doc__ = PySparkDataFrame.printSchema.__doc__
 
@@ -1798,15 +1829,10 @@ class DataFrame:
 
     createOrReplaceGlobalTempView.__doc__ = PySparkDataFrame.createOrReplaceGlobalTempView.__doc__
 
-    def rdd(self, *args: Any, **kwargs: Any) -> None:
-        raise NotImplementedError("RDD Support for Spark Connect is not implemented.")
-
     def cache(self) -> "DataFrame":
         if self._plan is None:
             raise Exception("Cannot cache on empty plan.")
-        relation = self._plan.plan(self._session.client)
-        self._session.client._analyze(method="persist", relation=relation)
-        return self
+        return self.persist()
 
     cache.__doc__ = PySparkDataFrame.cache.__doc__
 
@@ -1850,12 +1876,6 @@ class DataFrame:
     def is_cached(self) -> bool:
         return self.storageLevel != StorageLevel.NONE
 
-    def foreach(self, *args: Any, **kwargs: Any) -> None:
-        raise NotImplementedError("foreach() is not implemented.")
-
-    def foreachPartition(self, *args: Any, **kwargs: Any) -> None:
-        raise NotImplementedError("foreachPartition() is not implemented.")
-
     def toLocalIterator(self, prefetchPartitions: bool = False) -> Iterator[Row]:
         from pyspark.sql.connect.conversion import ArrowTableToRowsConversion
 
@@ -1874,16 +1894,10 @@ class DataFrame:
                 assert isinstance(schema_or_table, pa.Table)
                 table = schema_or_table
                 if schema is None:
-                    schema = from_arrow_schema(table.schema)
+                    schema = from_arrow_schema(table.schema, prefer_timestamp_ntz=True)
                 yield from ArrowTableToRowsConversion.convert(table, schema)
 
     toLocalIterator.__doc__ = PySparkDataFrame.toLocalIterator.__doc__
-
-    def checkpoint(self, *args: Any, **kwargs: Any) -> None:
-        raise NotImplementedError("checkpoint() is not implemented.")
-
-    def localCheckpoint(self, *args: Any, **kwargs: Any) -> None:
-        raise NotImplementedError("localCheckpoint() is not implemented.")
 
     def to_pandas_on_spark(
         self, index_col: Optional[Union[str, List[str]]] = None
@@ -1901,9 +1915,9 @@ class DataFrame:
         from pyspark.pandas.frame import DataFrame as PandasOnSparkDataFrame
         from pyspark.pandas.internal import InternalFrame
 
-        index_spark_columns, index_names = _get_index_map(self, index_col)
+        index_spark_columns, index_names = _get_index_map(self, index_col)  # type: ignore[arg-type]
         internal = InternalFrame(
-            spark_frame=self,
+            spark_frame=self,  # type: ignore[arg-type]
             index_spark_columns=index_spark_columns,
             index_names=index_names,  # type: ignore[arg-type]
         )
@@ -1968,9 +1982,6 @@ class DataFrame:
         return DataStreamWriter(plan=self._plan, session=self._session)
 
     writeStream.__doc__ = PySparkDataFrame.writeStream.__doc__
-
-    def toJSON(self, *args: Any, **kwargs: Any) -> None:
-        raise NotImplementedError("toJSON() is not implemented.")
 
     def sameSemantics(self, other: "DataFrame") -> bool:
         assert self._plan is not None
@@ -2131,6 +2142,9 @@ def _test() -> None:
 
     # TODO(SPARK-41888): Support StreamingQueryListener for DataFrame.observe
     del pyspark.sql.connect.dataframe.DataFrame.observe.__doc__
+
+    # TODO(SPARK-43435): should reenable this test
+    del pyspark.sql.connect.dataframe.DataFrame.writeStream.__doc__
 
     globs["spark"] = (
         PySparkSession.builder.appName("sql.connect.dataframe tests")

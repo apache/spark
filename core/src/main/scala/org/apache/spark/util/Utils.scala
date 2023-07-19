@@ -91,7 +91,7 @@ private[spark] object CallSite {
 /**
  * Various utility methods used by Spark.
  */
-private[spark] object Utils extends Logging {
+private[spark] object Utils extends Logging with SparkClassUtils {
   val random = new Random()
 
   private val sparkUncaughtExceptionHandler = new SparkUncaughtExceptionHandler
@@ -121,11 +121,7 @@ private[spark] object Utils extends Logging {
 
   /** Serialize an object using Java serialization */
   def serialize[T](o: T): Array[Byte] = {
-    val bos = new ByteArrayOutputStream()
-    val oos = new ObjectOutputStream(bos)
-    oos.writeObject(o)
-    oos.close()
-    bos.toByteArray
+    SparkSerDeUtils.serialize(o)
   }
 
   /** Deserialize an object using Java serialization */
@@ -194,42 +190,9 @@ private[spark] object Utils extends Logging {
     weakStringInterner.intern(s)
   }
 
-  /**
-   * Get the ClassLoader which loaded Spark.
-   */
-  def getSparkClassLoader: ClassLoader = getClass.getClassLoader
-
-  /**
-   * Get the Context ClassLoader on this thread or, if not present, the ClassLoader that
-   * loaded Spark.
-   *
-   * This should be used whenever passing a ClassLoader to Class.ForName or finding the currently
-   * active loader when setting up ClassLoader delegation chains.
-   */
-  def getContextOrSparkClassLoader: ClassLoader =
-    Option(Thread.currentThread().getContextClassLoader).getOrElse(getSparkClassLoader)
-
   /** Determines whether the provided class is loadable in the current thread. */
   def classIsLoadable(clazz: String): Boolean = {
     Try { classForName(clazz, initialize = false) }.isSuccess
-  }
-
-  // scalastyle:off classforname
-  /**
-   * Preferred alternative to Class.forName(className), as well as
-   * Class.forName(className, initialize, loader) with current thread's ContextClassLoader.
-   */
-  def classForName[C](
-      className: String,
-      initialize: Boolean = true,
-      noSparkClassLoader: Boolean = false): Class[C] = {
-    if (!noSparkClassLoader) {
-      Class.forName(className, initialize, getContextOrSparkClassLoader).asInstanceOf[Class[C]]
-    } else {
-      Class.forName(className, initialize, Thread.currentThread().getContextClassLoader).
-        asInstanceOf[Class[C]]
-    }
-    // scalastyle:on classforname
   }
 
   /**
@@ -479,7 +442,18 @@ private[spark] object Utils extends Logging {
     // `file` and `localhost` are not used. Just to prevent URI from parsing `fileName` as
     // scheme or host. The prefix "/" is required because URI doesn't accept a relative path.
     // We should remove it after we get the raw path.
-    new URI("file", null, "localhost", -1, "/" + fileName, null, null).getRawPath.substring(1)
+    encodeRelativeUnixPathToURIRawPath(fileName)
+  }
+
+  /**
+   * Same as [[encodeFileNameToURIRawPath]] but returns the relative UNIX path.
+   */
+  def encodeRelativeUnixPathToURIRawPath(path: String): String = {
+    require(!path.startsWith("/") && !path.contains("\\"))
+    // `file` and `localhost` are not used. Just to prevent URI from parsing `fileName` as
+    // scheme or host. The prefix "/" is required because URI doesn't accept a relative path.
+    // We should remove it after we get the raw path.
+    new URI("file", null, "localhost", -1, "/" + path, null, null).getRawPath.substring(1)
   }
 
   /**
@@ -1482,16 +1456,7 @@ private[spark] object Utils extends Logging {
    * see SPARK-4080 for more context.
    */
   def tryOrIOException[T](block: => T): T = {
-    try {
-      block
-    } catch {
-      case e: IOException =>
-        logError("Exception encountered", e)
-        throw e
-      case NonFatal(e) =>
-        logError("Exception encountered", e)
-        throw new IOException(e)
-    }
+    SparkErrorUtils.tryOrIOException(block)
   }
 
   /** Executes the given block. Log non-fatal errors if any, and only throw fatal errors */
@@ -2006,6 +1971,12 @@ private[spark] object Utils extends Logging {
   val isMac = SystemUtils.IS_OS_MAC_OSX
 
   /**
+   * Whether the underlying Java version is at least 21.
+   */
+  val isJavaVersionAtLeast21 =
+    System.getProperty("java.version").split("[+.\\-]+", 3)(0).toInt >= 21
+
+  /**
    * Whether the underlying operating system is Mac OS X and processor is Apple Silicon.
    */
   val isMacOnAppleSilicon = SystemUtils.IS_OS_MAC_OSX && SystemUtils.OS_ARCH.equals("aarch64")
@@ -2121,22 +2092,7 @@ private[spark] object Utils extends Logging {
    * converted into an absolute path with a file:// scheme.
    */
   def resolveURI(path: String): URI = {
-    try {
-      val uri = new URI(path)
-      if (uri.getScheme() != null) {
-        return uri
-      }
-      // make sure to handle if the path has a fragment (applies to yarn
-      // distributed cache)
-      if (uri.getFragment() != null) {
-        val absoluteURI = new File(uri.getPath()).getAbsoluteFile().toURI()
-        return new URI(absoluteURI.getScheme(), absoluteURI.getHost(), absoluteURI.getPath(),
-          uri.getFragment())
-      }
-    } catch {
-      case e: URISyntaxException =>
-    }
-    new File(path).getCanonicalFile().toURI()
+    SparkFileUtils.resolveURI(path)
   }
 
   /** Resolve a comma-separated list of paths. */
@@ -2312,6 +2268,24 @@ private[spark] object Utils extends Logging {
           v1 > v2
         }
     }.map(threadInfoToThreadStackTrace)
+  }
+
+  /** Return a heap dump. Used to capture dumps for the web UI */
+  def getHeapHistogram(): Array[String] = {
+    // From Java 9+, we can use 'ProcessHandle.current().pid()'
+    val pid = getProcessName().split("@").head
+    val jmap = System.getProperty("java.home") + "/bin/jmap"
+    val builder = new ProcessBuilder(jmap, "-histo:live", pid)
+    val p = builder.start()
+    val rows = ArrayBuffer.empty[String]
+    Utils.tryWithResource(new BufferedReader(new InputStreamReader(p.getInputStream()))) { r =>
+      var line = ""
+      while (line != null) {
+        if (line.nonEmpty) rows += line
+        line = r.readLine()
+      }
+    }
+    rows.toArray
   }
 
   def getThreadDumpForThread(threadId: Long): Option[ThreadStackTrace] = {

@@ -282,7 +282,7 @@ class LiteralExpression(Expression):
                 return LongType()
             else:
                 raise PySparkValueError(
-                    error_class="VALUE_OUT_OF_BOUND",
+                    error_class="VALUE_NOT_BETWEEN",
                     message_parameters={
                         "arg_name": "value",
                         "min": str(JVM_LONG_MIN),
@@ -968,7 +968,7 @@ class WindowExpression(Expression):
                     expr.window.frame_spec.lower.value.literal.integer = start
                 else:
                     raise PySparkValueError(
-                        error_class="VALUE_OUT_OF_BOUND",
+                        error_class="VALUE_NOT_BETWEEN",
                         message_parameters={
                             "arg_name": "start",
                             "min": str(JVM_INT_MIN),
@@ -985,7 +985,7 @@ class WindowExpression(Expression):
                     expr.window.frame_spec.upper.value.literal.integer = end
                 else:
                     raise PySparkValueError(
-                        error_class="VALUE_OUT_OF_BOUND",
+                        error_class="VALUE_NOT_BETWEEN",
                         message_parameters={
                             "arg_name": "end",
                             "min": str(JVM_INT_MIN),

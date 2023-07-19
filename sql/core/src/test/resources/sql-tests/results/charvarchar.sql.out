@@ -260,12 +260,13 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_1245",
+  "errorClass" : "NOT_SUPPORTED_CHANGE_COLUMN",
   "messageParameters" : {
-    "newName" : "c",
-    "newType" : "CharType(6)",
-    "originName" : "c",
-    "originType" : "CharType(5)"
+    "newName" : "`c`",
+    "newType" : "\"CHAR(6)\"",
+    "originName" : "`c`",
+    "originType" : "\"CHAR(5)\"",
+    "table" : "`spark_catalog`.`default`.`char_tbl1`"
   }
 }
 
@@ -1200,3 +1201,27 @@ select chr(167), chr(247), chr(215)
 struct<chr(167):string,chr(247):string,chr(215):string>
 -- !query output
 §	÷	×
+
+
+-- !query
+SELECT to_varchar(78.12, '$99.99')
+-- !query schema
+struct<to_char(78.12, $99.99):string>
+-- !query output
+$78.12
+
+
+-- !query
+SELECT to_varchar(111.11, '99.9')
+-- !query schema
+struct<to_char(111.11, 99.9):string>
+-- !query output
+##.#
+
+
+-- !query
+SELECT to_varchar(12454.8, '99,999.9S')
+-- !query schema
+struct<to_char(12454.8, 99,999.9S):string>
+-- !query output
+12,454.8+

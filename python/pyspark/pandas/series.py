@@ -21,7 +21,6 @@ A wrapper class for Spark Column to behave like pandas Series.
 import datetime
 import re
 import inspect
-import sys
 import warnings
 from collections.abc import Mapping
 from functools import partial, reduce
@@ -54,8 +53,7 @@ from pandas.api.types import (  # type: ignore[attr-defined]
     CategoricalDtype,
 )
 from pandas.tseries.frequencies import DateOffset
-from pyspark import SparkContext
-from pyspark.sql import functions as F, Column, DataFrame as SparkDataFrame
+from pyspark.sql import functions as F, Column as PySparkColumn, DataFrame as SparkDataFrame
 from pyspark.sql.types import (
     ArrayType,
     BooleanType,
@@ -71,9 +69,10 @@ from pyspark.sql.types import (
     TimestampType,
 )
 from pyspark.sql.window import Window
+from pyspark.sql.utils import get_column_class, get_window_class
 
 from pyspark import pandas as ps  # For running doctests and reference resolution in PyCharm.
-from pyspark.pandas._typing import Axis, Dtype, Label, Name, Scalar, T, GenericColumn
+from pyspark.pandas._typing import Axis, Dtype, Label, Name, Scalar, T
 from pyspark.pandas.accessors import PandasOnSparkSeriesMethods
 from pyspark.pandas.categorical import CategoricalAccessor
 from pyspark.pandas.config import get_option
@@ -453,7 +452,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         object.__setattr__(psdf, "_psseries", {self._column_label: self})
 
     def _with_new_scol(
-        self, scol: GenericColumn, *, field: Optional[InternalField] = None
+        self, scol: PySparkColumn, *, field: Optional[InternalField] = None
     ) -> "Series":
         """
         Copy pandas-on-Spark Series with the new Spark Column.
@@ -463,7 +462,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         """
         name = name_like_string(self._column_label)
         internal = self._internal.copy(
-            data_spark_columns=[scol.alias(name)],  # type: ignore[list-item]
+            data_spark_columns=[scol.alias(name)],
             data_fields=[
                 field if field is None or field.struct_field is None else field.copy(name=name)
             ],
@@ -493,7 +492,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         --------
 
         >>> psser = ps.Series([1, 2, 3])
-        >>> psser.axes
+        >>> psser.axes  # doctest: +SKIP
         [Int64Index([0, 1, 2], dtype='int64')]
         """
         return [self.index]
@@ -1682,6 +1681,10 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         multicolumn_format: Optional[str] = None,
         multirow: Optional[bool] = None,
     ) -> Optional[str]:
+        warnings.warn(
+            "Argument `col_space` will be removed in 4.0.0.",
+            FutureWarning,
+        )
 
         args = locals()
         psseries = self
@@ -2253,10 +2256,10 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
             return self._psdf.copy()._psser_for(self._column_label)
 
         scol = self.spark.column
-        sql_utils = SparkContext._active_spark_context._jvm.PythonSQLUtils
-        last_non_null = Column(sql_utils.lastNonNull(scol._jc))
-        null_index = Column(sql_utils.nullIndex(scol._jc))
+        last_non_null = SF.last_non_null(scol)
+        null_index = SF.null_index(scol)
 
+        Window = get_window_class()
         window_forward = Window.orderBy(NATURAL_ORDER_COLUMN_NAME).rowsBetween(
             Window.unboundedPreceding, Window.currentRow
         )
@@ -3607,7 +3610,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         >>> s2 = ps.Series([4, 5, 6])
         >>> s3 = ps.Series([4, 5, 6], index=[3,4,5])
 
-        >>> s1.append(s2)
+        >>> s1.append(s2)  # doctest: +SKIP
         0    1
         1    2
         2    3
@@ -3616,7 +3619,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         2    6
         dtype: int64
 
-        >>> s1.append(s3)
+        >>> s1.append(s3)  # doctest: +SKIP
         0    1
         1    2
         2    3
@@ -3627,7 +3630,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
 
         With ignore_index set to True:
 
-        >>> s1.append(s2, ignore_index=True)
+        >>> s1.append(s2, ignore_index=True)  # doctest: +SKIP
         0    1
         1    2
         2    3
@@ -3638,7 +3641,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         """
         warnings.warn(
             "The Series.append method is deprecated "
-            "and will be removed in a future version. "
+            "and will be removed in 4.0.0. "
             "Use pyspark.pandas.concat instead.",
             FutureWarning,
         )
@@ -4083,7 +4086,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
             if q_float < 0.0 or q_float > 1.0:
                 raise ValueError("percentiles should all be in the interval [0, 1].")
 
-            def quantile(psser: Series) -> Column:
+            def quantile(psser: Series) -> PySparkColumn:
                 spark_type = psser.spark.data_type
                 spark_column = psser.spark.column
                 if isinstance(spark_type, (BooleanType, NumericType)):
@@ -4193,6 +4196,11 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         >>> s.rank(numeric_only=True)
         Series([], Name: A, dtype: float64)
         """
+        warnings.warn(
+            "Default value of `numeric_only` will be changed to `False` "
+            "instead of `None` in 4.0.0.",
+            FutureWarning,
+        )
         is_numeric = isinstance(self.spark.data_type, (NumericType, BooleanType))
         if numeric_only and not is_numeric:
             return ps.Series([], dtype="float64", name=self.name)
@@ -4213,6 +4221,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         if self._internal.index_level > 1:
             raise NotImplementedError("rank do not support MultiIndex now")
 
+        Column = get_column_class()
         if ascending:
             asc_func = Column.asc
         else:
@@ -5950,7 +5959,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         1.0
         """
         warnings.warn(
-            "The 'mad' method is deprecated and will be removed in a future version. "
+            "The 'mad' method is deprecated and will be removed in 4.0.0. "
             "To compute the same result, you may do `(series - series.mean()).abs().mean()`.",
             FutureWarning,
         )
@@ -6122,7 +6131,10 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
             iteritems is deprecated and will be removed in a future version.
             Use .items instead.
         """
-        warnings.warn("Deprecated in 3.4, Use Series.items instead.", FutureWarning)
+        warnings.warn(
+            "Deprecated in 3.4, and will be removed in 4.0.0. Use Series.items instead.",
+            FutureWarning,
+        )
         return self.items()
 
     def droplevel(self, level: Union[int, Name, List[Union[int, Name]]]) -> "Series":
@@ -6311,10 +6323,8 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         sdf_for_index = notnull._internal.spark_frame.select(notnull._internal.index_spark_columns)
 
         tmp_join_key = verify_temp_column_name(sdf_for_index, "__tmp_join_key__")
-        sdf_for_index = (
-            InternalFrame.attach_distributed_sequence_column(  # type: ignore[assignment]
-                sdf_for_index, tmp_join_key
-            )
+        sdf_for_index = InternalFrame.attach_distributed_sequence_column(
+            sdf_for_index, tmp_join_key
         )
         # sdf_for_index:
         # +----------------+-----------------+
@@ -6330,7 +6340,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         sdf_for_data = notnull._internal.spark_frame.select(
             notnull.spark.column.alias("values"), NATURAL_ORDER_COLUMN_NAME
         )
-        sdf_for_data = InternalFrame.attach_distributed_sequence_column(  # type: ignore[assignment]
+        sdf_for_data = InternalFrame.attach_distributed_sequence_column(
             sdf_for_data, SPARK_DEFAULT_SERIES_NAME
         )
         # sdf_for_data:
@@ -6349,9 +6359,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         ).drop("values", NATURAL_ORDER_COLUMN_NAME)
 
         tmp_join_key = verify_temp_column_name(sdf_for_data, "__tmp_join_key__")
-        sdf_for_data = InternalFrame.attach_distributed_sequence_column(
-            sdf_for_data, tmp_join_key
-        )  # type: ignore[assignment]
+        sdf_for_data = InternalFrame.attach_distributed_sequence_column(sdf_for_data, tmp_join_key)
         # sdf_for_index:                         sdf_for_data:
         # +----------------+-----------------+   +----------------+---+
         # |__tmp_join_key__|__index_level_0__|   |__tmp_join_key__|  0|
@@ -6424,7 +6432,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
             raise ValueError("axis can only be 0 or 'index'")
         sdf = self._internal.spark_frame.select(self.spark.column, NATURAL_ORDER_COLUMN_NAME)
         seq_col_name = verify_temp_column_name(sdf, "__distributed_sequence_column__")
-        sdf = InternalFrame.attach_distributed_sequence_column(  # type: ignore[assignment]
+        sdf = InternalFrame.attach_distributed_sequence_column(
             sdf,
             seq_col_name,
         )
@@ -6484,7 +6492,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
             raise ValueError("axis can only be 0 or 'index'")
         sdf = self._internal.spark_frame.select(self.spark.column, NATURAL_ORDER_COLUMN_NAME)
         seq_col_name = verify_temp_column_name(sdf, "__distributed_sequence_column__")
-        sdf = InternalFrame.attach_distributed_sequence_column(  # type: ignore[assignment]
+        sdf = InternalFrame.attach_distributed_sequence_column(
             sdf,
             seq_col_name,
         )
@@ -6706,7 +6714,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         sdf = self._internal.spark_frame
         index_col_name = verify_temp_column_name(sdf, "__search_sorted_index_col__")
         value_col_name = verify_temp_column_name(sdf, "__search_sorted_value_col__")
-        sdf = InternalFrame.attach_distributed_sequence_column(  # type: ignore[assignment]
+        sdf = InternalFrame.attach_distributed_sequence_column(
             sdf.select(self.spark.column.alias(value_col_name)), index_col_name
         )
 
@@ -6883,7 +6891,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         2018-04-12 01:00:00    4
         dtype: int64
 
-        >>> psser.between_time('0:15', '0:45')
+        >>> psser.between_time('0:15', '0:45')  # doctest: +SKIP
         2018-04-10 00:20:00    2
         2018-04-11 00:40:00    3
         dtype: int64
@@ -6938,7 +6946,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
 
     def _cum(
         self,
-        func: Callable[[Column], Column],
+        func: Callable[[PySparkColumn], PySparkColumn],
         skipna: bool,
         part_cols: Sequence["ColumnOrName"] = (),
         ascending: bool = True,
@@ -7085,7 +7093,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
     # ----------------------------------------------------------------------
 
     def _apply_series_op(
-        self, op: Callable[["Series"], Union["Series", Column]], should_resolve: bool = False
+        self, op: Callable[["Series"], Union["Series", PySparkColumn]], should_resolve: bool = False
     ) -> "Series":
         psser_or_scol = op(self)
         if isinstance(psser_or_scol, Series):
@@ -7100,7 +7108,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
 
     def _reduce_for_stat_function(
         self,
-        sfun: Callable[["Series"], Column],
+        sfun: Callable[["Series"], PySparkColumn],
         name: str_type,
         axis: Optional[Axis] = None,
         numeric_only: bool = True,
@@ -7365,15 +7373,9 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
     def __iter__(self) -> None:
         return MissingPandasLikeSeries.__iter__(self)
 
-    if sys.version_info >= (3, 7):
-        # In order to support the type hints such as Series[...]. See DataFrame.__class_getitem__.
-        def __class_getitem__(cls, params: Any) -> Type[SeriesType]:
-            return create_type_for_series_type(params)
-
-    elif (3, 5) <= sys.version_info < (3, 7):
-        # The implementation is in its metaclass so this flag is needed to distinguish
-        # pandas-on-Spark Series.
-        is_series = None
+    # In order to support the type hints such as Series[...]. See DataFrame.__class_getitem__.
+    def __class_getitem__(cls, params: Any) -> Type[SeriesType]:
+        return create_type_for_series_type(params)
 
 
 def unpack_scalar(sdf: SparkDataFrame) -> Any:

@@ -37,6 +37,7 @@ class InMemoryRowLevelOperationTable(
 
   private final val PARTITION_COLUMN_REF = FieldReference(PartitionKeyColumn.name)
   private final val SUPPORTS_DELTAS = "supports-deltas"
+  private final val SPLIT_UPDATES = "split-updates"
 
   // used in row-level operation tests to verify replaced partitions
   var replacedPartitions: Seq[Seq[Any]] = Seq.empty
@@ -137,6 +138,10 @@ class InMemoryRowLevelOperationTable(
           override def toBatch: DeltaBatchWrite = TestDeltaBatchWrite
         }
       }
+
+    override def representUpdateAsDeleteAndInsert(): Boolean = {
+      properties.getOrDefault(SPLIT_UPDATES, "false").toBoolean
+    }
   }
 
   private object TestDeltaBatchWrite extends DeltaBatchWrite {

@@ -23,7 +23,6 @@ import scala.util.matching.Regex
 
 import org.apache.hadoop.yarn.api.ApplicationConstants
 import org.apache.hadoop.yarn.api.records.{ApplicationAccessType, ContainerId, Priority}
-import org.apache.hadoop.yarn.util.ConverterUtils
 
 import org.apache.spark.{SecurityManager, SparkConf}
 import org.apache.spark.launcher.YarnCommandBuilderUtils
@@ -199,7 +198,7 @@ object YarnSparkHadoopUtil {
 
   def getContainerId: ContainerId = {
     val containerIdString = System.getenv(ApplicationConstants.Environment.CONTAINER_ID.name())
-    ConverterUtils.toContainerId(containerIdString)
+    ContainerId.fromString(containerIdString)
   }
 
   /**

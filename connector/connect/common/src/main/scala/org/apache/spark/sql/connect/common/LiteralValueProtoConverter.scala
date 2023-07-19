@@ -22,16 +22,21 @@ import java.math.{BigDecimal => JBigDecimal}
 import java.sql.{Date, Timestamp}
 import java.time._
 
+import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.reflect.ClassTag
+import scala.reflect.runtime.universe.TypeTag
+import scala.util.Try
 
 import com.google.protobuf.ByteString
 
 import org.apache.spark.connect.proto
+import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.catalyst.util.{DateTimeUtils, IntervalUtils}
 import org.apache.spark.sql.connect.common.DataTypeProtoConverter._
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.CalendarInterval
+import org.apache.spark.util.Utils
 
 object LiteralValueProtoConverter {
 
@@ -97,6 +102,92 @@ object LiteralValueProtoConverter {
     }
   }
 
+  @scala.annotation.tailrec
+  def toLiteralProtoBuilder(
+      literal: Any,
+      dataType: DataType): proto.Expression.Literal.Builder = {
+    val builder = proto.Expression.Literal.newBuilder()
+
+    def arrayBuilder(scalaValue: Any, elementType: DataType) = {
+      val ab = builder.getArrayBuilder.setElementType(toConnectProtoType(elementType))
+
+      scalaValue match {
+        case a: Array[_] =>
+          a.foreach(item => ab.addElements(toLiteralProto(item, elementType)))
+        case s: scala.collection.Seq[_] =>
+          s.foreach(item => ab.addElements(toLiteralProto(item, elementType)))
+        case other =>
+          throw new IllegalArgumentException(s"literal $other not supported (yet).")
+      }
+
+      ab
+    }
+
+    def mapBuilder(scalaValue: Any, keyType: DataType, valueType: DataType) = {
+      val mb = builder.getMapBuilder
+        .setKeyType(toConnectProtoType(keyType))
+        .setValueType(toConnectProtoType(valueType))
+
+      scalaValue match {
+        case map: scala.collection.Map[_, _] =>
+          map.foreach { case (k, v) =>
+            mb.addKeys(toLiteralProto(k, keyType))
+            mb.addValues(toLiteralProto(v, valueType))
+          }
+        case other =>
+          throw new IllegalArgumentException(s"literal $other not supported (yet).")
+      }
+
+      mb
+    }
+
+    def structBuilder(scalaValue: Any, structType: StructType) = {
+      val sb = builder.getStructBuilder.setStructType(toConnectProtoType(structType))
+      val dataTypes = structType.fields.map(_.dataType)
+
+      scalaValue match {
+        case p: Product =>
+          val iter = p.productIterator
+          var idx = 0
+          while (idx < structType.size) {
+            sb.addElements(toLiteralProto(iter.next(), dataTypes(idx)))
+            idx += 1
+          }
+        case other =>
+          throw new IllegalArgumentException(s"literal $other not supported (yet).")
+      }
+
+      sb
+    }
+
+    (literal, dataType) match {
+      case (v: collection.mutable.WrappedArray[_], ArrayType(_, _)) =>
+        toLiteralProtoBuilder(v.array, dataType)
+      case (v: Array[Byte], ArrayType(_, _)) =>
+        toLiteralProtoBuilder(v)
+      case (v, ArrayType(elementType, _)) =>
+        builder.setArray(arrayBuilder(v, elementType))
+      case (v, MapType(keyType, valueType, _)) =>
+        builder.setMap(mapBuilder(v, keyType, valueType))
+      case (v, structType: StructType) =>
+        builder.setStruct(structBuilder(v, structType))
+      case (v: Option[_], _: DataType) =>
+        if (v.isDefined) {
+          toLiteralProtoBuilder(v.get)
+        } else {
+          builder.setNull(toConnectProtoType(dataType))
+        }
+      case _ => toLiteralProtoBuilder(literal)
+    }
+  }
+
+  def create[T: TypeTag](v: T): proto.Expression.Literal.Builder = Try {
+    val ScalaReflection.Schema(dataType, _) = ScalaReflection.schemaFor[T]
+    toLiteralProtoBuilder(v, dataType)
+  }.getOrElse {
+    toLiteralProtoBuilder(v)
+  }
+
   /**
    * Transforms literal value to the `proto.Expression.Literal`.
    *
@@ -105,6 +196,9 @@ object LiteralValueProtoConverter {
    */
   def toLiteralProto(literal: Any): proto.Expression.Literal =
     toLiteralProtoBuilder(literal).build()
+
+  def toLiteralProto(literal: Any, dataType: DataType): proto.Expression.Literal =
+    toLiteralProtoBuilder(literal, dataType).build()
 
   private def toDataType(clz: Class[_]): DataType = clz match {
     // primitive types
@@ -198,6 +292,51 @@ object LiteralValueProtoConverter {
     }
   }
 
+  private def getConverter(dataType: proto.DataType): proto.Expression.Literal => Any = {
+    if (dataType.hasShort) { v =>
+      v.getShort.toShort
+    } else if (dataType.hasInteger) { v =>
+      v.getInteger
+    } else if (dataType.hasLong) { v =>
+      v.getLong
+    } else if (dataType.hasDouble) { v =>
+      v.getDouble
+    } else if (dataType.hasByte) { v =>
+      v.getByte.toByte
+    } else if (dataType.hasFloat) { v =>
+      v.getFloat
+    } else if (dataType.hasBoolean) { v =>
+      v.getBoolean
+    } else if (dataType.hasString) { v =>
+      v.getString
+    } else if (dataType.hasBinary) { v =>
+      v.getBinary.toByteArray
+    } else if (dataType.hasDate) { v =>
+      v.getDate
+    } else if (dataType.hasTimestamp) { v =>
+      v.getTimestamp
+    } else if (dataType.hasTimestampNtz) { v =>
+      v.getTimestampNtz
+    } else if (dataType.hasDayTimeInterval) { v =>
+      v.getDayTimeInterval
+    } else if (dataType.hasYearMonthInterval) { v =>
+      v.getYearMonthInterval
+    } else if (dataType.hasDecimal) { v =>
+      Decimal(v.getDecimal.getValue)
+    } else if (dataType.hasCalendarInterval) { v =>
+      val interval = v.getCalendarInterval
+      new CalendarInterval(interval.getMonths, interval.getDays, interval.getMicroseconds)
+    } else if (dataType.hasArray) { v =>
+      toCatalystArray(v.getArray)
+    } else if (dataType.hasMap) { v =>
+      toCatalystMap(v.getMap)
+    } else if (dataType.hasStruct) { v =>
+      toCatalystStruct(v.getStruct)
+    } else {
+      throw InvalidPlanInput(s"Unsupported Literal Type: $dataType)")
+    }
+  }
+
   def toCatalystArray(array: proto.Expression.Literal.Array): Array[_] = {
     def makeArrayData[T](converter: proto.Expression.Literal => T)(implicit
         tag: ClassTag[T]): Array[T] = {
@@ -211,46 +350,49 @@ object LiteralValueProtoConverter {
       builder.result()
     }
 
-    val elementType = array.getElementType
-    if (elementType.hasShort) {
-      makeArrayData(v => v.getShort.toShort)
-    } else if (elementType.hasInteger) {
-      makeArrayData(v => v.getInteger)
-    } else if (elementType.hasLong) {
-      makeArrayData(v => v.getLong)
-    } else if (elementType.hasDouble) {
-      makeArrayData(v => v.getDouble)
-    } else if (elementType.hasByte) {
-      makeArrayData(v => v.getByte.toByte)
-    } else if (elementType.hasFloat) {
-      makeArrayData(v => v.getFloat)
-    } else if (elementType.hasBoolean) {
-      makeArrayData(v => v.getBoolean)
-    } else if (elementType.hasString) {
-      makeArrayData(v => v.getString)
-    } else if (elementType.hasBinary) {
-      makeArrayData(v => v.getBinary.toByteArray)
-    } else if (elementType.hasDate) {
-      makeArrayData(v => DateTimeUtils.toJavaDate(v.getDate))
-    } else if (elementType.hasTimestamp) {
-      makeArrayData(v => DateTimeUtils.toJavaTimestamp(v.getTimestamp))
-    } else if (elementType.hasTimestampNtz) {
-      makeArrayData(v => DateTimeUtils.microsToLocalDateTime(v.getTimestampNtz))
-    } else if (elementType.hasDayTimeInterval) {
-      makeArrayData(v => IntervalUtils.microsToDuration(v.getDayTimeInterval))
-    } else if (elementType.hasYearMonthInterval) {
-      makeArrayData(v => IntervalUtils.monthsToPeriod(v.getYearMonthInterval))
-    } else if (elementType.hasDecimal) {
-      makeArrayData(v => Decimal(v.getDecimal.getValue))
-    } else if (elementType.hasCalendarInterval) {
-      makeArrayData(v => {
-        val interval = v.getCalendarInterval
-        new CalendarInterval(interval.getMonths, interval.getDays, interval.getMicroseconds)
-      })
-    } else if (elementType.hasArray) {
-      makeArrayData(v => toCatalystArray(v.getArray))
-    } else {
-      throw new UnsupportedOperationException(s"Unsupported Literal Type: $elementType)")
+    makeArrayData(getConverter(array.getElementType))
+  }
+
+  def toCatalystMap(map: proto.Expression.Literal.Map): mutable.Map[_, _] = {
+    def makeMapData[K, V](
+        keyConverter: proto.Expression.Literal => K,
+        valueConverter: proto.Expression.Literal => V)(implicit
+        tagK: ClassTag[K],
+        tagV: ClassTag[V]): mutable.Map[K, V] = {
+      val builder = mutable.HashMap.empty[K, V]
+      val keys = map.getKeysList.asScala
+      val values = map.getValuesList.asScala
+      builder.sizeHint(keys.size)
+      keys.zip(values).foreach { case (key, value) =>
+        builder += ((keyConverter(key), valueConverter(value)))
+      }
+      builder
     }
+
+    makeMapData(getConverter(map.getKeyType), getConverter(map.getValueType))
+  }
+
+  def toCatalystStruct(struct: proto.Expression.Literal.Struct): Any = {
+    def toTuple[A <: Object](data: Seq[A]): Product = {
+      try {
+        val tupleClass = Utils.classForName(s"scala.Tuple${data.length}")
+        tupleClass.getConstructors.head.newInstance(data: _*).asInstanceOf[Product]
+      } catch {
+        case _: Exception =>
+          throw InvalidPlanInput(s"Unsupported Literal: ${data.mkString("Array(", ", ", ")")})")
+      }
+    }
+
+    val elements = struct.getElementsList.asScala
+    val dataTypes = struct.getStructType.getStruct.getFieldsList.asScala.map(_.getDataType)
+    val structData = elements
+      .zip(dataTypes)
+      .map { case (element, dataType) =>
+        getConverter(dataType)(element)
+      }
+      .asInstanceOf[scala.collection.Seq[Object]]
+      .toSeq
+
+    toTuple(structData)
   }
 }

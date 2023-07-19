@@ -519,7 +519,7 @@ class SparkConnectColumnTests(SparkConnectSQLTestCase):
 
         self.check_error(
             exception=pe.exception,
-            error_class="VALUE_OUT_OF_BOUND",
+            error_class="VALUE_NOT_BETWEEN",
             message_parameters={"arg_name": "value", "min": "-9223372036854775808", "max": "32767"},
         )
 
@@ -528,7 +528,7 @@ class SparkConnectColumnTests(SparkConnectSQLTestCase):
 
         self.check_error(
             exception=pe.exception,
-            error_class="VALUE_OUT_OF_BOUND",
+            error_class="VALUE_NOT_BETWEEN",
             message_parameters={"arg_name": "value", "min": "-9223372036854775808", "max": "32767"},
         )
 

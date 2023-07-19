@@ -17,26 +17,13 @@
 
 package org.apache.spark.sql
 
-import java.sql.{Date, Timestamp}
-import java.time.{Instant, LocalDate}
-import java.util.Base64
-
 import scala.collection.JavaConverters._
-import scala.collection.mutable
 import scala.util.hashing.MurmurHash3
 
-import org.json4s._
-import org.json4s.JsonAST.JValue
-import org.json4s.jackson.JsonMethods._
-
-import org.apache.spark.annotation.{Stable, Unstable}
-import org.apache.spark.sql.catalyst.CatalystTypeConverters
+import org.apache.spark.annotation.Stable
 import org.apache.spark.sql.catalyst.expressions.GenericRow
-import org.apache.spark.sql.catalyst.util.{DateFormatter, DateTimeUtils, TimestampFormatter}
 import org.apache.spark.sql.errors.QueryExecutionErrors
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.types.CalendarInterval
 
 /**
  * @since 1.3.0
@@ -526,95 +513,4 @@ trait Row extends Serializable {
   private def getAnyValAs[T <: AnyVal](i: Int): T =
     if (isNullAt(i)) throw QueryExecutionErrors.valueIsNullError(i)
     else getAs[T](i)
-
-  /**
-   * The compact JSON representation of this row.
-   * @since 3.0
-   */
-  @Unstable
-  def json: String = compact(jsonValue)
-
-  /**
-   * The pretty (i.e. indented) JSON representation of this row.
-   * @since 3.0
-   */
-  @Unstable
-  def prettyJson: String = pretty(render(jsonValue))
-
-  /**
-   * JSON representation of the row.
-   *
-   * Note that this only supports the data types that are also supported by
-   * [[org.apache.spark.sql.catalyst.encoders.RowEncoder]].
-   *
-   * @return the JSON representation of the row.
-   */
-  private[sql] def jsonValue: JValue = {
-    require(schema != null, "JSON serialization requires a non-null schema.")
-
-    lazy val zoneId = DateTimeUtils.getZoneId(SQLConf.get.sessionLocalTimeZone)
-    lazy val dateFormatter = DateFormatter()
-    lazy val timestampFormatter = TimestampFormatter(zoneId)
-
-    // Convert an iterator of values to a json array
-    def iteratorToJsonArray(iterator: Iterator[_], elementType: DataType): JArray = {
-      JArray(iterator.map(toJson(_, elementType)).toList)
-    }
-
-    // Convert a value to json.
-    def toJson(value: Any, dataType: DataType): JValue = (value, dataType) match {
-      case (null, _) => JNull
-      case (b: Boolean, _) => JBool(b)
-      case (b: Byte, _) => JLong(b)
-      case (s: Short, _) => JLong(s)
-      case (i: Int, _) => JLong(i)
-      case (l: Long, _) => JLong(l)
-      case (f: Float, _) => JDouble(f)
-      case (d: Double, _) => JDouble(d)
-      case (d: BigDecimal, _) => JDecimal(d)
-      case (d: java.math.BigDecimal, _) => JDecimal(d)
-      case (d: Decimal, _) => JDecimal(d.toBigDecimal)
-      case (s: String, _) => JString(s)
-      case (b: Array[Byte], BinaryType) =>
-        JString(Base64.getEncoder.encodeToString(b))
-      case (d: LocalDate, _) => JString(dateFormatter.format(d))
-      case (d: Date, _) => JString(dateFormatter.format(d))
-      case (i: Instant, _) => JString(timestampFormatter.format(i))
-      case (t: Timestamp, _) => JString(timestampFormatter.format(t))
-      case (i: CalendarInterval, _) => JString(i.toString)
-      case (a: Array[_], ArrayType(elementType, _)) =>
-        iteratorToJsonArray(a.iterator, elementType)
-      case (a: mutable.ArraySeq[_], ArrayType(elementType, _)) =>
-        iteratorToJsonArray(a.iterator, elementType)
-      case (s: Seq[_], ArrayType(elementType, _)) =>
-        iteratorToJsonArray(s.iterator, elementType)
-      case (m: Map[String @unchecked, _], MapType(StringType, valueType, _)) =>
-        new JObject(m.toList.sortBy(_._1).map {
-          case (k, v) => k -> toJson(v, valueType)
-        })
-      case (m: Map[_, _], MapType(keyType, valueType, _)) =>
-        new JArray(m.iterator.map {
-          case (k, v) =>
-            new JObject("key" -> toJson(k, keyType) :: "value" -> toJson(v, valueType) :: Nil)
-        }.toList)
-      case (r: Row, _) => r.jsonValue
-      case (v: Any, udt: UserDefinedType[Any @unchecked]) =>
-        val dataType = udt.sqlType
-        toJson(CatalystTypeConverters.convertToScala(udt.serialize(v), dataType), dataType)
-      case _ =>
-        throw new IllegalArgumentException(s"Failed to convert value $value " +
-          s"(class of ${value.getClass}}) with the type of $dataType to JSON.")
-    }
-
-    // Convert the row fields to json
-    var n = 0
-    val elements = new mutable.ListBuffer[JField]
-    val len = length
-    while (n < len) {
-      val field = schema(n)
-      elements += (field.name -> toJson(apply(n), field.dataType))
-      n += 1
-    }
-    new JObject(elements.toList)
-  }
 }

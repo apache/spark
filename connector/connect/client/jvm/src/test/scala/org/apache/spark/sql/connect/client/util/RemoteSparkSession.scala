@@ -21,7 +21,9 @@ import java.util.concurrent.TimeUnit
 
 import scala.io.Source
 
-import org.scalatest.BeforeAndAfterAll
+import org.apache.commons.lang3.{JavaVersion, SystemUtils}
+import org.scalactic.source.Position
+import org.scalatest.{BeforeAndAfterAll, Tag}
 import sys.process._
 
 import org.apache.spark.sql.SparkSession
@@ -48,7 +50,8 @@ import org.apache.spark.sql.connect.common.config.ConnectCommon
 object SparkConnectServerUtils {
 
   // Server port
-  private[connect] val port = ConnectCommon.CONNECT_GRPC_BINDING_PORT + util.Random.nextInt(1000)
+  private[spark] val port: Int =
+    ConnectCommon.CONNECT_GRPC_BINDING_PORT + util.Random.nextInt(1000)
 
   @volatile private var stopped = false
 
@@ -61,31 +64,14 @@ object SparkConnectServerUtils {
       "connector/connect/server",
       "spark-connect-assembly",
       "spark-connect").getCanonicalPath
-    val driverClassPath = connectJar + ":" +
-      findJar("sql/catalyst", "spark-catalyst", "spark-catalyst", test = true).getCanonicalPath
-    val catalogImplementation = if (IntegrationTestUtils.isSparkHiveJarAvailable) {
-      "hive"
-    } else {
-      // scalastyle:off println
-      println(
-        "Will start Spark Connect server with `spark.sql.catalogImplementation=in-memory`, " +
-          "some tests that rely on Hive will be ignored. If you don't want to skip them:\n" +
-          "1. Test with maven: run `build/mvn install -DskipTests -Phive` before testing\n" +
-          "2. Test with sbt: run test with `-Phive` profile")
-      // scalastyle:on println
-      "in-memory"
-    }
+
     val builder = Process(
       Seq(
         "bin/spark-submit",
         "--driver-class-path",
-        driverClassPath,
+        connectJar,
         "--conf",
-        s"spark.connect.grpc.binding.port=$port",
-        "--conf",
-        "spark.sql.catalog.testcat=org.apache.spark.sql.connector.catalog.InMemoryTableCatalog",
-        "--conf",
-        s"spark.sql.catalogImplementation=$catalogImplementation") ++ debugConfig ++ Seq(
+        s"spark.connect.grpc.binding.port=$port") ++ testConfigs ++ debugConfigs ++ Seq(
         "--class",
         "org.apache.spark.sql.connect.SimpleSparkConnectService",
         connectJar),
@@ -100,6 +86,60 @@ object SparkConnectServerUtils {
     // Adding JVM shutdown hook
     sys.addShutdownHook(stop())
     process
+  }
+
+  /**
+   * As one shared spark will be started for all E2E tests, for tests that needs some special
+   * configs, we add them here
+   */
+  private def testConfigs: Seq[String] = {
+    // Use InMemoryTableCatalog for V2 writer tests
+    val writerV2Configs = {
+      val catalystTestJar = findJar( // To find InMemoryTableCatalog for V2 writer tests
+        "sql/catalyst",
+        "spark-catalyst",
+        "spark-catalyst",
+        test = true).getCanonicalPath
+      Seq(
+        "--jars",
+        catalystTestJar,
+        "--conf",
+        "spark.sql.catalog.testcat=org.apache.spark.sql.connector.catalog.InMemoryTableCatalog")
+    }
+
+    // Run tests using hive
+    val hiveTestConfigs = {
+      val catalogImplementation = if (IntegrationTestUtils.isSparkHiveJarAvailable) {
+        "hive"
+      } else {
+        // scalastyle:off println
+        println(
+          "Will start Spark Connect server with `spark.sql.catalogImplementation=in-memory`, " +
+            "some tests that rely on Hive will be ignored. If you don't want to skip them:\n" +
+            "1. Test with maven: run `build/mvn install -DskipTests -Phive` before testing\n" +
+            "2. Test with sbt: run test with `-Phive` profile")
+        // scalastyle:on println
+        // SPARK-43647: Proactively cleaning the `classes` and `test-classes` dir of hive
+        // module to avoid unexpected loading of `DataSourceRegister` in hive module during
+        // testing without `-Phive` profile.
+        IntegrationTestUtils.cleanUpHiveClassesDirIfNeeded()
+        "in-memory"
+      }
+      Seq("--conf", s"spark.sql.catalogImplementation=$catalogImplementation")
+    }
+
+    // For UDF maven E2E tests, the server needs the client code to find the UDFs defined in tests.
+    val udfTestConfigs = tryFindJar(
+      "connector/connect/client/jvm",
+      // SBT passes the client & test jars to the server process automatically.
+      // So we skip building or finding this jar for SBT.
+      "sbt-tests-do-not-need-this-jar",
+      "spark-connect-client-jvm",
+      test = true)
+      .map(clientTestJar => Seq("--jars", clientTestJar.getCanonicalPath))
+      .getOrElse(Seq.empty)
+
+    writerV2Configs ++ hiveTestConfigs ++ udfTestConfigs
   }
 
   def start(): Unit = {
@@ -132,39 +172,44 @@ trait RemoteSparkSession extends ConnectFunSuite with BeforeAndAfterAll {
   protected lazy val serverPort: Int = port
 
   override def beforeAll(): Unit = {
-    super.beforeAll()
-    SparkConnectServerUtils.start()
-    spark =
-      SparkSession.builder().client(SparkConnectClient.builder().port(serverPort).build()).build()
+    // TODO(SPARK-44121) Remove this check condition
+    if (SystemUtils.isJavaVersionAtMost(JavaVersion.JAVA_17)) {
+      super.beforeAll()
+      SparkConnectServerUtils.start()
+      spark = SparkSession
+        .builder()
+        .client(SparkConnectClient.builder().port(serverPort).build())
+        .create()
 
-    // Retry and wait for the server to start
-    val stop = System.nanoTime() + TimeUnit.MINUTES.toNanos(1) // ~1 min
-    var sleepInternalMs = TimeUnit.SECONDS.toMillis(1) // 1s with * 2 backoff
-    var success = false
-    val error = new RuntimeException(s"Failed to start the test server on port $serverPort.")
+      // Retry and wait for the server to start
+      val stop = System.nanoTime() + TimeUnit.MINUTES.toNanos(1) // ~1 min
+      var sleepInternalMs = TimeUnit.SECONDS.toMillis(1) // 1s with * 2 backoff
+      var success = false
+      val error = new RuntimeException(s"Failed to start the test server on port $serverPort.")
 
-    while (!success && System.nanoTime() < stop) {
-      try {
-        // Run a simple query to verify the server is really up and ready
-        val result = spark
-          .sql("select val from (values ('Hello'), ('World')) as t(val)")
-          .collect()
-        assert(result.length == 2)
-        success = true
-        debug("Spark Connect Server is up.")
-      } catch {
-        // ignored the error
-        case e: Throwable =>
-          error.addSuppressed(e)
-          Thread.sleep(sleepInternalMs)
-          sleepInternalMs *= 2
+      while (!success && System.nanoTime() < stop) {
+        try {
+          // Run a simple query to verify the server is really up and ready
+          val result = spark
+            .sql("select val from (values ('Hello'), ('World')) as t(val)")
+            .collect()
+          assert(result.length == 2)
+          success = true
+          debug("Spark Connect Server is up.")
+        } catch {
+          // ignored the error
+          case e: Throwable =>
+            error.addSuppressed(e)
+            Thread.sleep(sleepInternalMs)
+            sleepInternalMs *= 2
+        }
       }
-    }
 
-    // Throw error if failed
-    if (!success) {
-      debug(error)
-      throw error
+      // Throw error if failed
+      if (!success) {
+        debug(error)
+        throw error
+      }
     }
   }
 
@@ -176,5 +221,18 @@ trait RemoteSparkSession extends ConnectFunSuite with BeforeAndAfterAll {
     }
     spark = null
     super.afterAll()
+  }
+
+  /**
+   * SPARK-44259: override test function to skip `RemoteSparkSession-based` tests as default, we
+   * should delete this function after SPARK-44121 is completed.
+   */
+  override protected def test(testName: String, testTags: Tag*)(testFun: => Any)(implicit
+      pos: Position): Unit = {
+    super.test(testName, testTags: _*) {
+      // TODO(SPARK-44121) Re-enable Arrow-based connect tests in Java 21
+      assume(SystemUtils.isJavaVersionAtMost(JavaVersion.JAVA_17))
+      testFun
+    }
   }
 }

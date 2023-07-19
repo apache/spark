@@ -24,13 +24,7 @@ from pyspark.testing.pandasutils import PandasOnSparkTestUtils, TestUtils
 class DatetimeIndexParityTests(
     DatetimeIndexTestsMixin, PandasOnSparkTestUtils, TestUtils, ReusedConnectTestCase
 ):
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_indexer_at_time(self):
-        super().test_indexer_at_time()
-
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_indexer_between_time(self):
-        super().test_indexer_between_time()
+    pass
 
 
 if __name__ == "__main__":

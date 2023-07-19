@@ -55,6 +55,7 @@ object Utils extends Logging {
     val pod = kubernetesTestComponents
       .kubernetesClient
       .pods()
+      .inNamespace(kubernetesTestComponents.namespace)
       .withName(podName)
     // Avoid timing issues by looking for open/close
     class ReadyListener extends ExecListener {

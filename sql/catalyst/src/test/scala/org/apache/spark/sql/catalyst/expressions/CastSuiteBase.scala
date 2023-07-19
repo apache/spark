@@ -784,7 +784,7 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
     Seq(false, true).foreach { omitNull =>
       withSQLConf(SQLConf.LEGACY_COMPLEX_TYPES_TO_STRING.key -> omitNull.toString) {
         val ret3 = cast(Literal.create(Array("ab", null, "c")), StringType)
-        checkEvaluation(ret3, s"[ab,${if (omitNull) "" else " NULL"}, c]")
+        checkEvaluation(ret3, s"[ab,${if (omitNull) "" else " null"}, c]")
       }
     }
     val ret4 =
@@ -813,7 +813,7 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
         val ret1 = cast(Literal.create(Array(null, null)), StringType)
         checkEvaluation(
           ret1,
-          s"[${if (omitNull) "" else "NULL"},${if (omitNull) "" else " NULL"}]")
+          s"[${if (omitNull) "" else "null"},${if (omitNull) "" else " null"}]")
       }
     }
   }
@@ -828,7 +828,7 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
         val ret2 = cast(
           Literal.create(Map("1" -> "a".getBytes, "2" -> null, "3" -> "c".getBytes)),
           StringType)
-        checkEvaluation(ret2, s"${lb}1 -> a, 2 ->${if (legacyCast) "" else " NULL"}, 3 -> c$rb")
+        checkEvaluation(ret2, s"${lb}1 -> a, 2 ->${if (legacyCast) "" else " null"}, 3 -> c$rb")
         val ret3 = cast(
           Literal.create(Map(
             1 -> Date.valueOf("2014-12-03"),
@@ -860,7 +860,7 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
         val ret1 = cast(Literal.create((1, "a", 0.1)), StringType)
         checkEvaluation(ret1, s"${lb}1, a, 0.1$rb")
         val ret2 = cast(Literal.create(Tuple3[Int, String, String](1, null, "a")), StringType)
-        checkEvaluation(ret2, s"${lb}1,${if (legacyCast) "" else " NULL"}, a$rb")
+        checkEvaluation(ret2, s"${lb}1,${if (legacyCast) "" else " null"}, a$rb")
         val ret3 = cast(Literal.create(
           (Date.valueOf("2014-12-03"), Timestamp.valueOf("2014-12-03 15:05:00"))), StringType)
         checkEvaluation(ret3, s"${lb}2014-12-03, 2014-12-03 15:05:00$rb")
@@ -882,7 +882,7 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
         val ret1 = cast(Literal.create(Tuple2[String, String](null, null)), StringType)
         checkEvaluation(
           ret1,
-          s"$lb${if (legacyCast) "" else "NULL"},${if (legacyCast) "" else " NULL"}$rb")
+          s"$lb${if (legacyCast) "" else "null"},${if (legacyCast) "" else " null"}$rb")
       }
     }
   }
@@ -1390,5 +1390,12 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
     val expr = CheckOverflowInTableInsert(cast, "column_1")
     assert(expr.sql == cast.sql)
     assert(expr.toString == cast.toString)
+  }
+
+  test("SPARK-43336: Casting between Timestamp and TimestampNTZ requires timezone") {
+    val timestampLiteral = Literal.create(1L, TimestampType)
+    val timestampNTZLiteral = Literal.create(1L, TimestampNTZType)
+    assert(!Cast(timestampLiteral, TimestampNTZType).resolved)
+    assert(!Cast(timestampNTZLiteral, TimestampType).resolved)
   }
 }

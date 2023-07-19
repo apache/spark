@@ -19,7 +19,6 @@ from pyspark.sql.connect.utils import check_dependencies
 check_dependencies(__name__)
 
 import array
-import itertools
 import datetime
 import decimal
 
@@ -43,8 +42,8 @@ from pyspark.sql.types import (
 )
 
 from pyspark.storagelevel import StorageLevel
-from pyspark.sql.connect.types import to_arrow_schema
 import pyspark.sql.connect.proto as pb2
+from pyspark.sql.pandas.types import to_arrow_schema, _dedup_names, _deduplicate_field_names
 
 from typing import (
     Any,
@@ -246,7 +245,7 @@ class LocalDataToArrowConversion:
         elif isinstance(dataType, UserDefinedType):
             udt: UserDefinedType = dataType
 
-            conv = LocalDataToArrowConversion._create_converter(dataType.sqlType())
+            conv = LocalDataToArrowConversion._create_converter(udt.sqlType())
 
             def convert_udt(value: Any) -> Any:
                 if value is None:
@@ -428,7 +427,7 @@ class ArrowTableToRowsConversion:
         elif isinstance(dataType, UserDefinedType):
             udt: UserDefinedType = dataType
 
-            conv = ArrowTableToRowsConversion._create_converter(dataType.sqlType())
+            conv = ArrowTableToRowsConversion._create_converter(udt.sqlType())
 
             def convert_udt(value: Any) -> Any:
                 if value is None:
@@ -481,48 +480,3 @@ def proto_to_storage_level(storage_level: pb2.StorageLevel) -> StorageLevel:
         deserialized=storage_level.deserialized,
         replication=storage_level.replication,
     )
-
-
-def _deduplicate_field_names(dt: DataType) -> DataType:
-    if isinstance(dt, StructType):
-        dedup_field_names = _dedup_names(dt.names)
-
-        return StructType(
-            [
-                StructField(
-                    dedup_field_names[i],
-                    _deduplicate_field_names(field.dataType),
-                    nullable=field.nullable,
-                )
-                for i, field in enumerate(dt.fields)
-            ]
-        )
-    elif isinstance(dt, ArrayType):
-        return ArrayType(_deduplicate_field_names(dt.elementType), containsNull=dt.containsNull)
-    elif isinstance(dt, MapType):
-        return MapType(
-            _deduplicate_field_names(dt.keyType),
-            _deduplicate_field_names(dt.valueType),
-            valueContainsNull=dt.valueContainsNull,
-        )
-    else:
-        return dt
-
-
-def _dedup_names(names: List[str]) -> List[str]:
-    if len(set(names)) == len(names):
-        return names
-    else:
-
-        def _gen_dedup(_name: str) -> Callable[[], str]:
-            _i = itertools.count()
-            return lambda: f"{_name}_{next(_i)}"
-
-        def _gen_identity(_name: str) -> Callable[[], str]:
-            return lambda: _name
-
-        gen_new_name = {
-            name: _gen_dedup(name) if len(list(group)) > 1 else _gen_identity(name)
-            for name, group in itertools.groupby(sorted(names))
-        }
-        return [gen_new_name[name]() for name in names]

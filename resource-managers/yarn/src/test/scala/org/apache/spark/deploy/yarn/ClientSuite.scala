@@ -39,6 +39,7 @@ import org.apache.hadoop.yarn.server.resourcemanager.{ClientRMService, RMAppMana
 import org.apache.hadoop.yarn.server.resourcemanager.ahs.RMApplicationHistoryWriter
 import org.apache.hadoop.yarn.server.resourcemanager.metrics.SystemMetricsPublisher
 import org.apache.hadoop.yarn.server.resourcemanager.rmapp.RMApp
+import org.apache.hadoop.yarn.server.resourcemanager.scheduler.YarnScheduler
 import org.apache.hadoop.yarn.server.security.ApplicationACLsManager
 import org.apache.hadoop.yarn.util.Records
 import org.mockito.ArgumentMatchers.{any, anyBoolean, eq => meq}
@@ -215,8 +216,7 @@ class ClientSuite extends SparkFunSuite with Matchers {
     appContext.getPriority.getPriority should be (1)
   }
 
-  // TODO (SPARK-31733) Make this test case pass with hadoop-3
-  ignore("specify a more specific type for the application") {
+  test("specify a more specific type for the application") {
     // When the type exceeds 20 characters will be truncated by yarn
     val appTypes = Map(
       1 -> ("", ""),
@@ -228,7 +228,8 @@ class ClientSuite extends SparkFunSuite with Matchers {
       val sparkConf = new SparkConf().set("spark.yarn.applicationType", sourceType)
       val args = new ClientArguments(Array())
 
-      val appContext = spy(Records.newRecord(classOf[ApplicationSubmissionContext]))
+      val appContext = spy[ApplicationSubmissionContext](
+        Records.newRecord(classOf[ApplicationSubmissionContext]))
       val appId = ApplicationId.newInstance(123456, id)
       appContext.setApplicationId(appId)
       val getNewApplicationResponse = Records.newRecord(classOf[GetNewApplicationResponse])
@@ -243,11 +244,12 @@ class ClientSuite extends SparkFunSuite with Matchers {
       when(yarnClient.submitApplication(any())).thenAnswer((invocationOnMock: InvocationOnMock) => {
         val subContext = invocationOnMock.getArguments()(0)
           .asInstanceOf[ApplicationSubmissionContext]
+        when(subContext.getApplicationTags).thenReturn(Set.empty[String].asJava)
         val request = Records.newRecord(classOf[SubmitApplicationRequest])
         request.setApplicationSubmissionContext(subContext)
 
         val rmContext = mock(classOf[RMContext])
-        val conf = mock(classOf[Configuration])
+        val conf = spy[Configuration](classOf[Configuration])
         val map = new ConcurrentHashMap[ApplicationId, RMApp]()
         when(rmContext.getRMApps).thenReturn(map)
         val dispatcher = mock(classOf[Dispatcher])
@@ -262,18 +264,22 @@ class ClientSuite extends SparkFunSuite with Matchers {
         val publisher = mock(classOf[SystemMetricsPublisher])
         when(rmContext.getSystemMetricsPublisher).thenReturn(publisher)
         when(appContext.getUnmanagedAM).thenReturn(true)
+        val yarnConfiguration = mock(classOf[YarnConfiguration])
+        when(rmContext.getYarnConfiguration).thenReturn(yarnConfiguration)
+        val yarnScheduler = mock(classOf[YarnScheduler])
 
         val rmAppManager = new RMAppManager(rmContext,
-          null,
+          yarnScheduler,
           null,
           mock(classOf[ApplicationACLsManager]),
           conf)
         val clientRMService = new ClientRMService(rmContext,
-          null,
+          yarnScheduler,
           rmAppManager,
           null,
           null,
           null)
+        clientRMService.init(conf)
         clientRMService.submitApplication(request)
 
         assert(map.get(subContext.getApplicationId).getApplicationType === targetType)
@@ -727,7 +733,7 @@ class ClientSuite extends SparkFunSuite with Matchers {
       sparkConf: SparkConf,
       args: Array[String] = Array()): Client = {
     val clientArgs = new ClientArguments(args)
-    spy(new Client(clientArgs, sparkConf, null))
+    spy[Client](new Client(clientArgs, sparkConf, null))
   }
 
   private def classpath(client: Client): Array[String] = {

@@ -153,7 +153,9 @@ writeToFileInArrow <- function(fileName, rdf, numPartitions) {
     numPartitions <- if (!is.null(numPartitions)) {
       numToInt(numPartitions)
     } else {
-      1
+      # If numPartitions is not set, chunk the R DataFrame based on the batch size.
+      ceiling(
+        nrow(rdf) / as.numeric(sparkR.conf("spark.sql.execution.arrow.maxRecordsPerBatch")[[1]]))
     }
 
     rdf_slices <- if (numPartitions > 1) {

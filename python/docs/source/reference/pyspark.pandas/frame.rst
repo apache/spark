@@ -37,6 +37,7 @@ Attributes and underlying data
    :toctree: api/
 
    DataFrame.index
+   DataFrame.info
    DataFrame.columns
    DataFrame.empty
 
@@ -62,7 +63,6 @@ Conversion
    DataFrame.isnull
    DataFrame.notna
    DataFrame.notnull
-   DataFrame.pad
    DataFrame.bool
 
 Indexing, iteration
@@ -77,6 +77,7 @@ Indexing, iteration
    DataFrame.idxmin
    DataFrame.loc
    DataFrame.iloc
+   DataFrame.insert
    DataFrame.items
    DataFrame.iteritems
    DataFrame.iterrows
@@ -164,6 +165,7 @@ Computations / Descriptive Stats
    DataFrame.prod
    DataFrame.product
    DataFrame.quantile
+   DataFrame.rank
    DataFrame.nunique
    DataFrame.sem
    DataFrame.skew
@@ -197,6 +199,8 @@ Reindexing / Selection / Label manipulation
    DataFrame.first
    DataFrame.head
    DataFrame.last
+   DataFrame.reindex
+   DataFrame.reindex_like
    DataFrame.rename
    DataFrame.rename_axis
    DataFrame.reset_index
@@ -222,6 +226,7 @@ Missing data handling
    DataFrame.bfill
    DataFrame.ffill
    DataFrame.interpolate
+   DataFrame.pad
 
 Reshaping, sorting, transposing
 -------------------------------
@@ -241,9 +246,6 @@ Reshaping, sorting, transposing
    DataFrame.squeeze
    DataFrame.T
    DataFrame.transpose
-   DataFrame.reindex
-   DataFrame.reindex_like
-   DataFrame.rank
 
 Combining / joining / merging
 -----------------------------
@@ -255,7 +257,6 @@ Combining / joining / merging
    DataFrame.merge
    DataFrame.join
    DataFrame.update
-   DataFrame.insert
 
 Time series-related
 -------------------
@@ -272,13 +273,14 @@ Serialization / IO / Conversion
 .. autosummary::
    :toctree: api/
 
+   DataFrame.from_dict
    DataFrame.from_records
-   DataFrame.info
    DataFrame.to_table
    DataFrame.to_delta
    DataFrame.to_parquet
    DataFrame.to_spark_io
    DataFrame.to_csv
+   DataFrame.to_orc
    DataFrame.to_pandas
    DataFrame.to_html
    DataFrame.to_numpy

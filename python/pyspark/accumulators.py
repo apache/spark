@@ -23,6 +23,7 @@ import threading
 from typing import Callable, Dict, Generic, Tuple, Type, TYPE_CHECKING, TypeVar, Union
 
 from pyspark.serializers import read_int, CPickleSerializer
+from pyspark.errors import PySparkRuntimeError
 
 if TYPE_CHECKING:
     from pyspark._typing import SupportsIAdd  # noqa: F401
@@ -87,12 +88,14 @@ class Accumulator(Generic[T]):
     >>> def f(x):
     ...     global a
     ...     a += x
+    ...
     >>> rdd.foreach(f)
     >>> a.value
     13
     >>> b = sc.accumulator(0)
     >>> def g(x):
     ...     b.add(x)
+    ...
     >>> rdd.foreach(g)
     >>> b.value
     6
@@ -105,6 +108,7 @@ class Accumulator(Generic[T]):
     >>> def h(x):
     ...     global a
     ...     a.value = 7
+    ...
     >>> rdd.foreach(h) # doctest: +IGNORE_EXCEPTION_DETAIL
     Traceback (most recent call last):
         ...
@@ -140,14 +144,24 @@ class Accumulator(Generic[T]):
     def value(self) -> T:
         """Get the accumulator's value; only usable in driver program"""
         if self._deserialized:
-            raise RuntimeError("Accumulator.value cannot be accessed inside tasks")
+            raise PySparkRuntimeError(
+                error_class="VALUE_NOT_ACCESSIBLE",
+                message_parameters={
+                    "value": "Accumulator.value",
+                },
+            )
         return self._value
 
     @value.setter
     def value(self, value: T) -> None:
         """Sets the accumulator's value; only usable in driver program"""
         if self._deserialized:
-            raise RuntimeError("Accumulator.value cannot be accessed inside tasks")
+            raise PySparkRuntimeError(
+                error_class="VALUE_NOT_ACCESSIBLE",
+                message_parameters={
+                    "value": "Accumulator.value",
+                },
+            )
         self._value = value
 
     def add(self, term: T) -> None:
@@ -187,6 +201,7 @@ class AccumulatorParam(Generic[T]):
     >>> def g(x):
     ...     global va
     ...     va += [x] * 3
+    ...
     >>> rdd = sc.parallelize([1,2,3])
     >>> rdd.foreach(g)
     >>> va.value

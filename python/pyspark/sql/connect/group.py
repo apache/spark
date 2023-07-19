@@ -41,6 +41,7 @@ from pyspark.sql.types import StructType
 import pyspark.sql.connect.plan as plan
 from pyspark.sql.connect.column import Column
 from pyspark.sql.connect.functions import _invoke_function, col, lit
+from pyspark.errors import PySparkNotImplementedError, PySparkTypeError
 
 if TYPE_CHECKING:
     from pyspark.sql.connect._typing import (
@@ -81,6 +82,25 @@ class GroupedData:
             assert pivot_values is None or isinstance(pivot_values, list)
             self._pivot_col = pivot_col
             self._pivot_values = pivot_values
+
+    def __repr__(self) -> str:
+        # the expressions are not resolved here,
+        # so the string representation can be different from vanilla PySpark.
+        grouping_str = ", ".join(str(e._expr) for e in self._grouping_cols)
+        grouping_str = f"grouping expressions: [{grouping_str}]"
+
+        value_str = ", ".join("%s: %s" % c for c in self._df.dtypes)
+
+        if self._group_type == "groupby":
+            type_str = "GroupBy"
+        elif self._group_type == "rollup":
+            type_str = "RollUp"
+        elif self._group_type == "cube":
+            type_str = "Cube"
+        else:
+            type_str = "Pivot"
+
+        return f"GroupedData[{grouping_str}, value: [{value_str}], type: {type_str}]"
 
     @overload
     def agg(self, *exprs: Column) -> "DataFrame":
@@ -134,9 +154,9 @@ class GroupedData:
         if len(cols) > 0:
             invalid_cols = [c for c in cols if c not in numerical_cols]
             if len(invalid_cols) > 0:
-                raise TypeError(
-                    f"{invalid_cols} are not numeric columns. "
-                    f"Numeric aggregation function can only be applied on numeric columns."
+                raise PySparkTypeError(
+                    error_class="NOT_NUMERIC_COLUMNS",
+                    message_parameters={"invalid_columns": str(invalid_cols)},
                 )
             agg_cols = cols
         else:
@@ -185,24 +205,33 @@ class GroupedData:
     def pivot(self, pivot_col: str, values: Optional[List["LiteralType"]] = None) -> "GroupedData":
         if self._group_type != "groupby":
             if self._group_type == "pivot":
-                raise Exception("Repeated PIVOT operation is not supported!")
+                raise PySparkNotImplementedError(
+                    error_class="UNSUPPORTED_OPERATION",
+                    message_parameters={"operation": "Repeated PIVOT operation"},
+                )
             else:
-                raise Exception(f"PIVOT after {self._group_type.upper()} is not supported!")
+                raise PySparkNotImplementedError(
+                    error_class="UNSUPPORTED_OPERATION",
+                    message_parameters={"operation": f"PIVOT after {self._group_type.upper()}"},
+                )
 
         if not isinstance(pivot_col, str):
-            raise TypeError(
-                f"pivot_col should be a str, but got {type(pivot_col).__name__} {pivot_col}"
+            raise PySparkTypeError(
+                error_class="NOT_STR",
+                message_parameters={"arg_name": "pivot_col", "arg_type": type(pivot_col).__name__},
             )
 
         if values is not None:
             if not isinstance(values, list):
-                raise TypeError(
-                    f"values should be a list, but got {type(values).__name__} {values}"
+                raise PySparkTypeError(
+                    error_class="NOT_LIST",
+                    message_parameters={"arg_name": "values", "arg_type": type(values).__name__},
                 )
             for v in values:
                 if not isinstance(v, (bool, float, int, str)):
-                    raise TypeError(
-                        f"value should be a bool, float, int or str, but got {type(v).__name__} {v}"
+                    raise PySparkTypeError(
+                        error_class="NOT_BOOL_OR_FLOAT_OR_INT_OR_STR",
+                        message_parameters={"arg_name": "value", "arg_type": type(v).__name__},
                     )
 
         return GroupedData(
@@ -225,8 +254,9 @@ class GroupedData:
                 != PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF
             )
         ):
-            raise ValueError(
-                "Invalid udf: the udf argument must be a pandas_udf of type " "GROUPED_MAP."
+            raise PySparkTypeError(
+                error_class="INVALID_UDF_EVAL_TYPE",
+                message_parameters={"eval_type": "SQL_GROUPED_MAP_PANDAS_UDF"},
             )
 
         warnings.warn(

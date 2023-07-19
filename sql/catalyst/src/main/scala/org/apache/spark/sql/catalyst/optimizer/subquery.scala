@@ -393,7 +393,9 @@ object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] with AliasHelpe
     val newExpression = expression.transformWithPruning(_.containsPattern(SCALAR_SUBQUERY)) {
       case s: ScalarSubquery if s.children.nonEmpty =>
         subqueries += s
-        s.plan.output.head
+        // Results of scalar subqueries are nullable (as they get connected to the rest of the
+        // query via left outer join)
+        s.plan.output.head.withNullability(true)
     }
     newExpression.asInstanceOf[E]
   }
@@ -459,7 +461,11 @@ object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] with AliasHelpe
       case alias @ Alias(_: AttributeReference, _) =>
         (alias.exprId, Literal.create(null, alias.dataType))
       case alias @ Alias(l: Literal, _) =>
-        (alias.exprId, l.copy(value = null))
+        // SPARK-43156: return literal real value, count bug does not apply to the count
+        // function only, but all expressions in Aggregate that return non-null value for
+        // empty input. So we return the real value of the literal here, then the literal
+        // can be used for aggregate query result.
+        (alias.exprId, l)
       case ne => (ne.exprId, evalAggExprOnZeroTups(ne))
     }.toMap
   }
