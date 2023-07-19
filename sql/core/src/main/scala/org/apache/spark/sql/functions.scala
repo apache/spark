@@ -8362,7 +8362,8 @@ object functions {
   /**
    * Call a SQL function.
    *
-   * @param funcName function name that can be qualified using the SQL syntax
+   * @param funcName function name that follows the SQL identifier syntax
+   *                 (can be quoted, can be qualified)
    * @param cols the expression parameters of function
    * @since 3.5.0
    */

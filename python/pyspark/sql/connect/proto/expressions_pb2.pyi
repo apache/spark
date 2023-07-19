@@ -1485,7 +1485,7 @@ class CallFunction(google.protobuf.message.Message):
     FUNCTION_NAME_FIELD_NUMBER: builtins.int
     ARGUMENTS_FIELD_NUMBER: builtins.int
     function_name: builtins.str
-    """(Required) Name of the SQL function."""
+    """(Required) Unparsed name of the SQL function."""
     @property
     def arguments(
         self,

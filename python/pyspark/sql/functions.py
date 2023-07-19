@@ -14397,14 +14397,14 @@ def call_udf(udfName: str, *cols: "ColumnOrName") -> Column:
 @try_remote_functions
 def call_function(funcName: str, *cols: "ColumnOrName") -> Column:
     """
-    Call a builtin or temp function.
+    Call a SQL function.
 
     .. versionadded:: 3.5.0
 
     Parameters
     ----------
     funcName : str
-        name of the function
+        function name that follows the SQL identifier syntax (can be quoted, can be qualified)
     cols : :class:`~pyspark.sql.Column` or str
         column names or :class:`~pyspark.sql.Column`\\s to be used in the function
 

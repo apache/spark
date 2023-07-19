@@ -51,6 +51,7 @@ from pyspark.sql.connect.expressions import (
     SQLExpression,
     LambdaFunction,
     UnresolvedNamedLambdaVariable,
+    CallFunction,
 )
 from pyspark.sql.connect.udf import _create_py_udf
 from pyspark.sql.connect.udtf import _create_py_udtf
@@ -3910,7 +3911,8 @@ udtf.__doc__ = pysparkfuncs.udtf.__doc__
 
 
 def call_function(funcName: str, *cols: "ColumnOrName") -> Column:
-    return _invoke_function("call_function", lit(funcName), *[_to_col(c) for c in cols])
+    expressions = [_to_col(c)._expr for c in cols]
+    return Column(CallFunction(funcName, expressions))
 
 
 call_function.__doc__ = pysparkfuncs.call_function.__doc__
