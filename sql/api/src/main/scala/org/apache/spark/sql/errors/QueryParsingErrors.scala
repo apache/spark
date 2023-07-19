@@ -25,13 +25,12 @@ import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.parser.SqlBaseParser._
 import org.apache.spark.sql.catalyst.trees.Origin
-import org.apache.spark.sql.types.StringType
 
 /**
  * Object for grouping all error messages of the query parsing.
  * Currently it includes all ParseException.
  */
-private[sql] object QueryParsingErrors extends QueryErrorsBase {
+private[sql] object QueryParsingErrors extends DataTypeErrorsBase {
 
   def invalidInsertIntoError(ctx: InsertIntoContext): Throwable = {
     new ParseException(errorClass = "_LEGACY_ERROR_TEMP_0001", ctx)
@@ -185,7 +184,7 @@ private[sql] object QueryParsingErrors extends QueryErrorsBase {
   def invalidEscapeStringError(invalidEscape: String, ctx: PredicateContext): Throwable = {
     new ParseException(
       errorClass = "INVALID_ESC",
-      messageParameters = Map("invalidEscape" -> toSQLValue(invalidEscape, StringType)),
+      messageParameters = Map("invalidEscape" -> dataTypeToSQLValue(invalidEscape)),
       ctx)
   }
 
@@ -209,7 +208,7 @@ private[sql] object QueryParsingErrors extends QueryErrorsBase {
       errorClass = "INVALID_TYPED_LITERAL",
       messageParameters = Map(
         "valueType" -> toSQLType(valueType),
-        "value" -> toSQLValue(value, StringType)
+        "value" -> dataTypeToSQLValue(value)
       ),
       ctx)
   }

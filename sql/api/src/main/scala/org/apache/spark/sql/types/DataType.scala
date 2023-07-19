@@ -30,14 +30,14 @@ import org.json4s.jackson.JsonMethods._
 import org.apache.spark.SparkThrowable
 import org.apache.spark.annotation.Stable
 import org.apache.spark.sql.SqlApiConf
-import org.apache.spark.sql.catalyst.analysis.Resolver
+import org.apache.spark.sql.catalyst.analysis.SqlApiAnalysis
 import org.apache.spark.sql.catalyst.parser.DataTypeParser
 import org.apache.spark.sql.catalyst.util.DataTypeJsonUtils.{DataTypeJsonDeserializer, DataTypeJsonSerializer}
 import org.apache.spark.sql.catalyst.util.StringConcat
 import org.apache.spark.sql.errors.DataTypeErrors
 import org.apache.spark.sql.types.DayTimeIntervalType._
 import org.apache.spark.sql.types.YearMonthIntervalType._
-import org.apache.spark.util.Utils
+import org.apache.spark.util.SparkClassUtils
 
 /**
  * The base type of all Spark SQL data types.
@@ -230,7 +230,7 @@ object DataType {
     ("pyClass", _),
     ("sqlType", _),
     ("type", JString("udt"))) =>
-      Utils.classForName[UserDefinedType[_]](udtClass).getConstructor().newInstance()
+      SparkClassUtils.classForName[UserDefinedType[_]](udtClass).getConstructor().newInstance()
 
     // Python UDT
     case JSortedObject(
@@ -381,7 +381,7 @@ object DataType {
   def equalsStructurallyByName(
       from: DataType,
       to: DataType,
-      resolver: Resolver): Boolean = {
+      resolver: SqlApiAnalysis.Resolver): Boolean = {
     (from, to) match {
       case (left: ArrayType, right: ArrayType) =>
         equalsStructurallyByName(left.elementType, right.elementType, resolver)

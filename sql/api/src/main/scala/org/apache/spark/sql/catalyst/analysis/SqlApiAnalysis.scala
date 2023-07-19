@@ -14,37 +14,12 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.sql.catalyst.util
+package org.apache.spark.sql.catalyst.analysis
 
-object QuotingUtils {
-  private def quoteByDefault(elem: String): String = {
-    "\"" + elem + "\""
-  }
-
-  def toSQLConf(conf: String): String = {
-    quoteByDefault(conf)
-  }
-
-  def toSQLSchema(schema: String): String = {
-    quoteByDefault(schema)
-  }
-
-  def quoteIfNeeded(part: String): String = {
-    if (part.matches("[a-zA-Z0-9_]+") && !part.matches("\\d+")) {
-      part
-    } else {
-      s"`${part.replace("`", "``")}`"
-    }
-  }
-
-  def escapeSingleQuotedString(str: String): String = {
-    val builder = new StringBuilder
-
-    str.foreach {
-      case '\'' => builder ++= s"\\\'"
-      case ch => builder += ch
-    }
-
-    builder.toString()
-  }
+object SqlApiAnalysis {
+  /**
+   * Resolver should return true if the first string refers to the same entity as the second string.
+   * For example, by using case insensitive equality.
+   */
+  type Resolver = (String, String) => Boolean
 }

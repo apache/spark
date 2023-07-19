@@ -39,10 +39,6 @@
       <groupId>org.scala-lang</groupId>
       <artifactId>scala-reflect</artifactId>
     </dependency>
-    <dependency>
-      <groupId>org.scala-lang.modules</groupId>
-      <artifactId>scala-parser-combinators_${scala.binary.version}</artifactId>
-    </dependency>
 
     <dependency>
       <groupId>org.apache.spark</groupId>
@@ -110,10 +106,6 @@
     <dependency>
       <groupId>org.codehaus.janino</groupId>
       <artifactId>commons-compiler</artifactId>
-    </dependency>
-    <dependency>
-      <groupId>org.antlr</groupId>
-      <artifactId>antlr4-runtime</artifactId>
     </dependency>
     <dependency>
       <groupId>commons-codec</groupId>
