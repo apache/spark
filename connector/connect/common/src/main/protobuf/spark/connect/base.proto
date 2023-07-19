@@ -307,6 +307,7 @@ message ExecutePlanRequest {
   }
 
   // Tags to tag the given execution with.
+  // Tags cannot contain ',' character and cannot be empty strings.
   // Used by Interrupt with interrupt.tag.
   repeated string tags = 7;
 }

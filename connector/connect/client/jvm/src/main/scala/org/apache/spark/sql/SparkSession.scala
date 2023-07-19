@@ -613,14 +613,28 @@ class SparkSession private[sql] (
   /**
    * Interrupt all operations of this session currently running on the connected server.
    *
-   * TODO/WIP: Currently it will interrupt the Spark Jobs running on the server, triggered from
-   * ExecutePlan requests. If an operation is not running a Spark Job, it becomes an noop and the
-   * operation will continue afterwards, possibly with more Spark Jobs.
-   *
    * @since 3.5.0
    */
   def interruptAll(): Unit = {
     client.interruptAll()
+  }
+
+  /**
+   * Interrupt all operations of this session with the given operation tag.
+   *
+   * @since 3.5.0
+   */
+  def interruptTag(tag: String): Unit = {
+    client.interruptTag(tag)
+  }
+
+  /**
+   * Interrupt an operation of this session with the given operationId.
+   *
+   * @since 3.5.0
+   */
+  def interruptOperation(operationId: String): Unit = {
+    client.interruptOperation(operationId)
   }
 
   /**
@@ -640,6 +654,50 @@ class SparkSession private[sql] (
     client.shutdown()
     allocator.close()
     SparkSession.onSessionClose(this)
+  }
+
+  /**
+   * Add a tag to be assigned to all the operations started by this thread in this session.
+   *
+   * @param tag
+   *   The tag to be added. Cannot contain ',' (comma) character or be an empty string.
+   *
+   * @since 3.5.0
+   */
+  def addTag(tag: String): Unit = {
+    client.addTag(tag)
+  }
+
+  /**
+   * Remove a tag previously added to be assigned to all the operations started by this thread in
+   * this session. Noop if such a tag was not added earlier.
+   *
+   * @param tag
+   *   The tag to be removed. Cannot contain ',' (comma) character or be an empty string.
+   *
+   * @since 3.5.0
+   */
+  def removeTag(tag: String): Unit = {
+    client.removeTag(tag)
+  }
+
+  /**
+   * Get the tags that are currently set to be assigned to all the operations started by this
+   * thread.
+   *
+   * @since 3.5.0
+   */
+  def getTags(): Set[String] = {
+    client.getTags()
+  }
+
+  /**
+   * Clear the current thread's operation tags.
+   *
+   * @since 3.5.0
+   */
+  def clearTags(): Unit = {
+    client.clearTags()
   }
 }
 

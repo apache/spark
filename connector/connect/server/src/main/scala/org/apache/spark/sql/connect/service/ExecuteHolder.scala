@@ -19,9 +19,9 @@ package org.apache.spark.sql.connect.service
 
 import scala.collection.JavaConverters._
 
-import org.apache.spark.SparkContext
 import org.apache.spark.connect.proto
 import org.apache.spark.internal.Logging
+import org.apache.spark.sql.connect.common.ProtoUtils
 import org.apache.spark.sql.connect.execution.{ExecuteGrpcResponseSender, ExecuteResponseObserver, ExecuteThreadRunner}
 import org.apache.spark.util.SystemClock
 
@@ -40,15 +40,20 @@ private[connect] class ExecuteHolder(
       s"Session_${sessionHolder.sessionId}_" +
       s"Request_${operationId}"
 
-  val userDefinedTags: Seq[String] = request.getTagsList().asScala.toSeq.map { tag =>
-    throwIfInvalidTag(tag)
-    tag
-  }
+  val userDefinedTags: Set[String] = request
+    .getTagsList()
+    .asScala
+    .toSeq
+    .map { tag =>
+      ProtoUtils.throwIfInvalidTag(tag)
+      tag
+    }
+    .toSet
 
   val session = sessionHolder.session
 
   val responseObserver: ExecuteResponseObserver[proto.ExecutePlanResponse] =
-    new ExecuteResponseObserver[proto.ExecutePlanResponse]()
+    new ExecuteResponseObserver[proto.ExecutePlanResponse](this)
 
   val eventsManager: ExecuteEventsManager = ExecuteEventsManager(this, new SystemClock())
 
@@ -98,23 +103,12 @@ private[connect] class ExecuteHolder(
     runner.interrupt()
   }
 
+  /**
+   * Spark Connect tags are also added as SparkContext job tags, but to make the tag unique, they
+   * need to be combined with userId and sessionId.
+   */
   def tagToSparkJobTag(tag: String): String = {
     "SparkConnectUserDefinedTag_" +
       s"User_${sessionHolder.userId}_Session_${sessionHolder.sessionId}"
-  }
-
-  private def throwIfInvalidTag(tag: String) = {
-    // Same format rules apply to Spark Connect execution tags as to SparkContext job tags.
-    // see SparkContext.throwIfInvalidTag.
-    if (tag == null) {
-      throw new IllegalArgumentException("Spark Connect execution tag cannot be null.")
-    }
-    if (tag.contains(SparkContext.SPARK_JOB_TAGS_SEP)) {
-      throw new IllegalArgumentException(
-        s"Spark Connect execution tag cannot contain '${SparkContext.SPARK_JOB_TAGS_SEP}'.")
-    }
-    if (tag.isEmpty) {
-      throw new IllegalArgumentException("Spark Connect execution tag cannot be an empty string.")
-    }
   }
 }

@@ -40,6 +40,7 @@ private[sql] class SparkResult[T](
     extends AutoCloseable
     with Cleanable { self =>
 
+  private[this] var opId: String = null
   private[this] var numRecords: Int = 0
   private[this] var structType: StructType = _
   private[this] var arrowSchema: pojo.Schema = _
@@ -79,6 +80,19 @@ private[sql] class SparkResult[T](
     var stop = false
     while (!stop && responses.hasNext) {
       val response = responses.next()
+
+      // Save and validate operationId
+      if (opId == null) {
+        opId = response.getOperationId
+      }
+      if (opId != response.getOperationId) {
+        // backwards compatibility:
+        // response from an old server without operationId field would have getOperationId == "".
+        throw new IllegalStateException(
+          "Received response with wrong operationId. " +
+            s"Expected '$opId' but received '${response.getOperationId}'.")
+      }
+
       if (response.hasSchema) {
         // The original schema should arrive before ArrowBatches.
         structType =
@@ -146,6 +160,15 @@ private[sql] class SparkResult[T](
       processResponses(stopOnSchema = true)
     }
     structType
+  }
+
+  /**
+   * @return
+   *   the operationId of the result.
+   */
+  def operationId: String = {
+    processResponses(stopOnFirstNonEmptyResponse = true)
+    opId
   }
 
   /**
