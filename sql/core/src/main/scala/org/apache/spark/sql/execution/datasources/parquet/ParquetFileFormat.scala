@@ -108,7 +108,7 @@ class ParquetFileFormat
     true
   }
 
-  override def isBroadcastHadoopConf(options: Map[String, String]): Boolean = {
+  override def shouldBroadcastHadoopConf(options: Map[String, String]): Boolean = {
     options.isEmpty
   }
 
@@ -195,7 +195,7 @@ class ParquetFileFormat
       SQLConf.LEGACY_PARQUET_NANOS_AS_LONG.key,
       legacyParquetNanosAsLong)
 
-    val broadcastedHadoopConf = if (isBroadcastHadoopConf(options)) {
+    val broadcastedHadoopConf = if (shouldBroadcastHadoopConf(options)) {
       Option.empty
     } else {
       Option(sparkSession.sparkContext.broadcast(new SerializableConfiguration(hadoopConf)))
@@ -257,7 +257,7 @@ class ParquetFileFormat
         conf.setBoolean(
           SQLConf.LEGACY_PARQUET_NANOS_AS_LONG.key,
           legacyParquetNanosAsLong)
-        new SerializableConfiguration(conf).value
+        conf
       }
 
       val fileFooter = if (enableVectorizedReader) {

@@ -128,6 +128,10 @@ class OrcFileFormat extends FileFormat with DataSourceRegister with Serializable
     true
   }
 
+  override def shouldBroadcastHadoopConf(options: Map[String, String]): Boolean = {
+    options.isEmpty
+  }
+
   override def buildReader(
       sparkSession: SparkSession,
       dataSchema: StructType,
@@ -146,7 +150,7 @@ class OrcFileFormat extends FileFormat with DataSourceRegister with Serializable
       }
     }
 
-    val broadcastedHadoopConf = if (options.isEmpty) {
+    val broadcastedHadoopConf = if (shouldBroadcastHadoopConf(options)) {
       Option.empty
     } else {
       Option(sparkSession.sparkContext.broadcast(new SerializableConfiguration(hadoopConf)))
@@ -166,7 +170,7 @@ class OrcFileFormat extends FileFormat with DataSourceRegister with Serializable
             conf.setBoolean(ConfVars.HIVEOPTINDEXFILTER.varname, true)
           }
         }
-        new SerializableConfiguration(conf).value
+        conf
       }
 
       val filePath = file.toPath

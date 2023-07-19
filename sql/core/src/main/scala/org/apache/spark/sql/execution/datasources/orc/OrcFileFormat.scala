@@ -170,7 +170,7 @@ class OrcFileFormat
       } else {
         val conf = SparkHadoopUtil.newConfiguration(sparkConf)
         OrcConf.IS_SCHEMA_EVOLUTION_CASE_SENSITIVE.setBoolean(conf, isCaseSensitive)
-        new SerializableConfiguration(conf).value
+        conf
       }
 
       val filePath = file.toPath

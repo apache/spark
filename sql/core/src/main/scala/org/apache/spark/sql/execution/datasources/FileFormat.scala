@@ -97,7 +97,7 @@ trait FileFormat {
   /**
    * Returns whether Hadoop configuration needs to be broadcasted.
    */
-  def isBroadcastHadoopConf(
+  def shouldBroadcastHadoopConf(
       options: Map[String, String]): Boolean = {
     true
   }
