@@ -122,7 +122,7 @@ trait AdaptiveSparkPlanHelper {
     subqueries ++ subqueries.flatMap(subqueriesAll)
   }
 
-  private def allChildren(p: SparkPlan): Seq[SparkPlan] = p match {
+  protected def allChildren(p: SparkPlan): Seq[SparkPlan] = p match {
     case a: AdaptiveSparkPlanExec => Seq(a.executedPlan)
     case s: QueryStageExec => Seq(s.plan)
     case _ => p.children

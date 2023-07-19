@@ -22,7 +22,8 @@ from pyspark.testing.connectutils import ReusedConnectTestCase
 
 
 class ArrowMapParityTests(MapInArrowTestsMixin, ReusedConnectTestCase):
-    pass
+    def test_other_than_recordbatch_iter(self):
+        self.check_other_than_recordbatch_iter()
 
 
 if __name__ == "__main__":

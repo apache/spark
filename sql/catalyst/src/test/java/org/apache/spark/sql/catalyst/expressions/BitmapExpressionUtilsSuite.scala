@@ -22,23 +22,27 @@ import org.apache.spark.SparkFunSuite
 class BitmapExpressionUtilsSuite extends SparkFunSuite {
 
   test("bitmap_bucket_number with positive inputs") {
-    Seq((0L, 0L), (1L, 1L), (2L, 1L), (3L, 1L),
-      (32768L, 1L), (32769L, 2L), (32770L, 2L)).foreach {
+    Seq((0L, 0L), (1L, 1L), (2L, 1L), (3L, 1L), (65537L, 3L), (65536L, 2L), (3232423L, 99L),
+      (4538345L, 139L), (845894934L, 25815L), (2147483647L, 65536L),
+      (Long.MaxValue, 281474976710656L), (32768L, 1L), (32769L, 2L), (32770L, 2L)).foreach {
       case (input, expected) =>
         assert(BitmapExpressionUtils.bitmapBucketNumber(input) == expected)
     }
   }
 
   test("bitmap_bucket_number with negative inputs") {
-    Seq((-1L, 0L), (-2L, 0L), (-3L, 0L),
-      (-32767L, 0L), (-32768L, -1L), (-32769L, -1L)).foreach {
+    Seq((-1L, 0L), (-2L, 0L), (-3L, 0L), (-65536L, -2L), (65537L, 3L), (-65535L, -1L),
+      (-3843485L, -117L), (-2147483647L, -65535L), (-2147483648L, -65536L),
+      (Long.MinValue, -281474976710656L), (Long.MinValue + 1, -281474976710655L), (-32767L, 0L),
+      (-32768L, -1L), (-32769L, -1L)).foreach {
       case (input, expected) =>
         assert(BitmapExpressionUtils.bitmapBucketNumber(input) == expected)
     }
   }
 
   test("bitmap_bit_position with positive inputs") {
-    Seq((0L, 0L), (1L, 0L), (2L, 1L), (3L, 2L),
+    Seq((0L, 0L), (1L, 0L), (2L, 1L), (3L, 2L), (65537L, 0L), (65536L, 32767L), (3232423L, 21158L),
+      (4538345L, 16360L), (845894934L, 21781L), (2147483647L, 32766L), (Long.MaxValue, 32766L),
       (32768L, 32767L), (32769L, 0L), (32770L, 1L)).foreach {
       case (input, expected) =>
         assert(BitmapExpressionUtils.bitmapBitPosition(input) == expected)
@@ -46,7 +50,8 @@ class BitmapExpressionUtilsSuite extends SparkFunSuite {
   }
 
   test("bitmap_bit_position with negative inputs") {
-    Seq((-1L, 1L), (-2L, 2L), (-3L, 3L),
+    Seq((-1L, 1L), (-2L, 2L), (-3L, 3L), (-65536L, 0L), (-65535L, 32767L), (-3843485L, 9629L),
+      (-2147483647L, 32767L), (-2147483648L, 0L), (Long.MinValue, 0L), (Long.MinValue + 1, 32767L),
       (-32767L, 32767L), (-32768L, 0L), (-32769L, 1L)).foreach {
       case (input, expected) =>
         assert(BitmapExpressionUtils.bitmapBitPosition(input) == expected)

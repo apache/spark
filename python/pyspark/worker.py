@@ -24,6 +24,7 @@ import time
 from inspect import currentframe, getframeinfo, getfullargspec
 import importlib
 import json
+from typing import Iterator
 
 # 'resource' is a Unix specific module.
 has_resource_module = True
@@ -110,10 +111,13 @@ def wrap_scalar_pandas_udf(f, return_type):
 
     def verify_result_type(result):
         if not hasattr(result, "__len__"):
-            pd_type = "Pandas.DataFrame" if type(return_type) == StructType else "Pandas.Series"
-            raise TypeError(
-                "Return type of the user-defined function should be "
-                "{}, but is {}".format(pd_type, type(result))
+            pd_type = "pandas.DataFrame" if type(return_type) == StructType else "pandas.Series"
+            raise PySparkTypeError(
+                error_class="UDF_RETURN_TYPE",
+                message_parameters={
+                    "expected": pd_type,
+                    "actual": type(result).__name__,
+                },
             )
         return result
 
@@ -134,66 +138,135 @@ def wrap_scalar_pandas_udf(f, return_type):
     )
 
 
-def wrap_batch_iter_udf(f, return_type):
+def wrap_pandas_batch_iter_udf(f, return_type):
     arrow_return_type = to_arrow_type(return_type)
+    iter_type_label = "pandas.DataFrame" if type(return_type) == StructType else "pandas.Series"
 
-    def verify_result_type(result):
-        if not hasattr(result, "__len__"):
-            pd_type = "Pandas.DataFrame" if type(return_type) == StructType else "Pandas.Series"
-            raise TypeError(
-                "Return type of the user-defined function should be "
-                "{}, but is {}".format(pd_type, type(result))
+    def verify_result(result):
+        if not isinstance(result, Iterator) and not hasattr(result, "__iter__"):
+            raise PySparkTypeError(
+                error_class="UDF_RETURN_TYPE",
+                message_parameters={
+                    "expected": "iterator of {}".format(iter_type_label),
+                    "actual": type(result).__name__,
+                },
             )
         return result
 
+    def verify_element(elem):
+        import pandas as pd
+
+        if not isinstance(elem, pd.DataFrame if type(return_type) == StructType else pd.Series):
+            raise PySparkTypeError(
+                error_class="UDF_RETURN_TYPE",
+                message_parameters={
+                    "expected": "iterator of {}".format(iter_type_label),
+                    "actual": "iterator of {}".format(type(elem).__name__),
+                },
+            )
+
+        verify_pandas_result(
+            elem, return_type, assign_cols_by_name=True, truncate_return_schema=True
+        )
+
+        return elem
+
     return lambda *iterator: map(
-        lambda res: (res, arrow_return_type), map(verify_result_type, f(*iterator))
+        lambda res: (res, arrow_return_type), map(verify_element, verify_result(f(*iterator)))
     )
 
 
-def verify_pandas_result(result, return_type, assign_cols_by_name):
+def verify_pandas_result(result, return_type, assign_cols_by_name, truncate_return_schema):
     import pandas as pd
 
-    if not isinstance(result, pd.DataFrame):
-        raise TypeError(
-            "Return type of the user-defined function should be "
-            "pandas.DataFrame, but is {}".format(type(result))
-        )
-
-    # check the schema of the result only if it is not empty or has columns
-    if not result.empty or len(result.columns) != 0:
-        # if any column name of the result is a string
-        # the column names of the result have to match the return type
-        #   see create_array in pyspark.sql.pandas.serializers.ArrowStreamPandasSerializer
-        field_names = set([field.name for field in return_type.fields])
-        column_names = set(result.columns)
-        if (
-            assign_cols_by_name
-            and any(isinstance(name, str) for name in result.columns)
-            and column_names != field_names
-        ):
-            missing = sorted(list(field_names.difference(column_names)))
-            missing = f" Missing: {', '.join(missing)}." if missing else ""
-
-            extra = sorted(list(column_names.difference(field_names)))
-            extra = f" Unexpected: {', '.join(extra)}." if extra else ""
-
-            raise PySparkRuntimeError(
-                error_class="RESULT_COLUMNS_MISMATCH_FOR_PANDAS_UDF",
+    if type(return_type) == StructType:
+        if not isinstance(result, pd.DataFrame):
+            raise PySparkTypeError(
+                error_class="UDF_RETURN_TYPE",
                 message_parameters={
-                    "missing": missing,
-                    "extra": extra,
+                    "expected": "pandas.DataFrame",
+                    "actual": type(result).__name__,
                 },
             )
-        # otherwise the number of columns of result have to match the return type
-        elif len(result.columns) != len(return_type):
-            raise PySparkRuntimeError(
-                error_class="RESULT_LENGTH_MISMATCH_FOR_PANDAS_UDF",
+
+        # check the schema of the result only if it is not empty or has columns
+        if not result.empty or len(result.columns) != 0:
+            # if any column name of the result is a string
+            # the column names of the result have to match the return type
+            #   see create_array in pyspark.sql.pandas.serializers.ArrowStreamPandasSerializer
+            field_names = set([field.name for field in return_type.fields])
+            # only the first len(field_names) result columns are considered
+            # when truncating the return schema
+            result_columns = (
+                result.columns[: len(field_names)] if truncate_return_schema else result.columns
+            )
+            column_names = set(result_columns)
+            if (
+                assign_cols_by_name
+                and any(isinstance(name, str) for name in result.columns)
+                and column_names != field_names
+            ):
+                missing = sorted(list(field_names.difference(column_names)))
+                missing = f" Missing: {', '.join(missing)}." if missing else ""
+
+                extra = sorted(list(column_names.difference(field_names)))
+                extra = f" Unexpected: {', '.join(extra)}." if extra else ""
+
+                raise PySparkRuntimeError(
+                    error_class="RESULT_COLUMNS_MISMATCH_FOR_PANDAS_UDF",
+                    message_parameters={
+                        "missing": missing,
+                        "extra": extra,
+                    },
+                )
+            # otherwise the number of columns of result have to match the return type
+            elif len(result_columns) != len(return_type):
+                raise PySparkRuntimeError(
+                    error_class="RESULT_LENGTH_MISMATCH_FOR_PANDAS_UDF",
+                    message_parameters={
+                        "expected": str(len(return_type)),
+                        "actual": str(len(result.columns)),
+                    },
+                )
+    else:
+        if not isinstance(result, pd.Series):
+            raise PySparkTypeError(
+                error_class="UDF_RETURN_TYPE",
+                message_parameters={"expected": "pandas.Series", "actual": type(result).__name__},
+            )
+
+
+def wrap_arrow_batch_iter_udf(f, return_type):
+    arrow_return_type = to_arrow_type(return_type)
+
+    def verify_result(result):
+        if not isinstance(result, Iterator) and not hasattr(result, "__iter__"):
+            raise PySparkTypeError(
+                error_class="UDF_RETURN_TYPE",
                 message_parameters={
-                    "expected": str(len(return_type)),
-                    "actual": str(len(result.columns)),
+                    "expected": "iterator of pyarrow.RecordBatch",
+                    "actual": type(result).__name__,
                 },
             )
+        return result
+
+    def verify_element(elem):
+        import pyarrow as pa
+
+        if not isinstance(elem, pa.RecordBatch):
+            raise PySparkTypeError(
+                error_class="UDF_RETURN_TYPE",
+                message_parameters={
+                    "expected": "iterator of pyarrow.RecordBatch",
+                    "actual": "iterator of {}".format(type(elem).__name__),
+                },
+            )
+
+        return elem
+
+    return lambda *iterator: map(
+        lambda res: (res, arrow_return_type), map(verify_element, verify_result(f(*iterator)))
+    )
 
 
 def wrap_cogrouped_map_pandas_udf(f, return_type, argspec, runner_conf):
@@ -211,7 +284,9 @@ def wrap_cogrouped_map_pandas_udf(f, return_type, argspec, runner_conf):
             key_series = left_key_series if not left_df.empty else right_key_series
             key = tuple(s[0] for s in key_series)
             result = f(key, left_df, right_df)
-        verify_pandas_result(result, return_type, _assign_cols_by_name)
+        verify_pandas_result(
+            result, return_type, _assign_cols_by_name, truncate_return_schema=False
+        )
 
         return result
 
@@ -229,7 +304,9 @@ def wrap_grouped_map_pandas_udf(f, return_type, argspec, runner_conf):
         elif len(argspec.args) == 2:
             key = tuple(s[0] for s in key_series)
             result = f(key, pd.concat(value_series, axis=1))
-        verify_pandas_result(result, return_type, _assign_cols_by_name)
+        verify_pandas_result(
+            result, return_type, _assign_cols_by_name, truncate_return_schema=False
+        )
 
         return result
 
@@ -278,9 +355,12 @@ def wrap_grouped_map_pandas_udf_with_state(f, return_type):
 
         def verify_element(result):
             if not isinstance(result, pd.DataFrame):
-                raise TypeError(
-                    "The type of element in return iterator of the user-defined function "
-                    "should be pandas.DataFrame, but is {}".format(type(result))
+                raise PySparkTypeError(
+                    error_class="UDF_RETURN_TYPE",
+                    message_parameters={
+                        "expected": "iterator of pandas.DataFrame",
+                        "actual": "iterator of {}".format(type(result).__name__),
+                    },
                 )
             # the number of columns of result have to match the return type
             # but it is fine for result to have no columns at all if it is empty
@@ -299,17 +379,20 @@ def wrap_grouped_map_pandas_udf_with_state(f, return_type):
             return result
 
         if isinstance(result_iter, pd.DataFrame):
-            raise TypeError(
-                "Return type of the user-defined function should be "
-                "iterable of pandas.DataFrame, but is {}".format(type(result_iter))
+            raise PySparkTypeError(
+                error_class="UDF_RETURN_TYPE",
+                message_parameters={
+                    "expected": "iterable of pandas.DataFrame",
+                    "actual": type(result_iter).__name__,
+                },
             )
 
         try:
             iter(result_iter)
         except TypeError:
-            raise TypeError(
-                "Return type of the user-defined function should be "
-                "iterable, but is {}".format(type(result_iter))
+            raise PySparkTypeError(
+                error_class="UDF_RETURN_TYPE",
+                message_parameters={"expected": "iterable", "actual": type(result_iter).__name__},
             )
 
         result_iter_with_validation = (verify_element(x) for x in result_iter)
@@ -423,11 +506,11 @@ def read_single_udf(pickleSer, infile, eval_type, runner_conf, udf_index):
     if eval_type in (PythonEvalType.SQL_SCALAR_PANDAS_UDF, PythonEvalType.SQL_ARROW_BATCHED_UDF):
         return arg_offsets, wrap_scalar_pandas_udf(func, return_type)
     elif eval_type == PythonEvalType.SQL_SCALAR_PANDAS_ITER_UDF:
-        return arg_offsets, wrap_batch_iter_udf(func, return_type)
+        return arg_offsets, wrap_pandas_batch_iter_udf(func, return_type)
     elif eval_type == PythonEvalType.SQL_MAP_PANDAS_ITER_UDF:
-        return arg_offsets, wrap_batch_iter_udf(func, return_type)
+        return arg_offsets, wrap_pandas_batch_iter_udf(func, return_type)
     elif eval_type == PythonEvalType.SQL_MAP_ARROW_ITER_UDF:
-        return arg_offsets, wrap_batch_iter_udf(func, return_type)
+        return arg_offsets, wrap_arrow_batch_iter_udf(func, return_type)
     elif eval_type == PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF:
         argspec = getfullargspec(chained_func)  # signature was lost when wrapping it
         return arg_offsets, wrap_grouped_map_pandas_udf(func, return_type, argspec, runner_conf)
@@ -544,7 +627,9 @@ def read_udtf(pickleSer, infile, eval_type):
                         )
 
                 # Verify the type and the schema of the result.
-                verify_pandas_result(result, return_type, assign_cols_by_name=False)
+                verify_pandas_result(
+                    result, return_type, assign_cols_by_name=False, truncate_return_schema=False
+                )
                 return result
 
             return lambda *a: map(lambda res: (res, arrow_return_type), map(verify_result, f(*a)))
@@ -579,7 +664,21 @@ def read_udtf(pickleSer, infile, eval_type):
         def wrap_udtf(f, return_type):
             assert return_type.needConversion()
             toInternal = return_type.toInternal
-            return lambda *a: map(toInternal, f(*a))
+
+            # Evaluate the function and return a tuple back to the executor.
+            def evaluate(*a) -> tuple:
+                res = f(*a)
+                if res is None:
+                    # If the function returns None or does not have an explicit return statement,
+                    # an empty tuple is returned to the executor.
+                    # This is because directly constructing tuple(None) results in an exception.
+                    return tuple()
+                else:
+                    # If the function returns a result, we map it to the internal representation and
+                    # returns the results as a tuple.
+                    return tuple(map(toInternal, res))
+
+            return evaluate
 
         eval = wrap_udtf(getattr(udtf, "eval"), return_type)
 
@@ -592,11 +691,11 @@ def read_udtf(pickleSer, infile, eval_type):
         def mapper(_, it):
             try:
                 for a in it:
-                    yield tuple(eval(*[a[o] for o in arg_offsets]))
+                    yield eval(*[a[o] for o in arg_offsets])
             finally:
                 if terminate is not None:
                     try:
-                        yield tuple(terminate())
+                        yield terminate()
                     except BaseException as e:
                         raise PySparkRuntimeError(
                             error_class="UDTF_EXEC_ERROR",

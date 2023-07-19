@@ -26,3 +26,4 @@ Testing
     :toctree: api/
 
     assertDataFrameEqual
+    assertSchemaEqual

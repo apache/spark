@@ -56,7 +56,6 @@ class CogroupedApplyInPandasTestsMixin:
     def data1(self):
         return (
             self.spark.range(10)
-            .toDF("id")
             .withColumn("ks", array([lit(i) for i in range(20, 30)]))
             .withColumn("k", explode(col("ks")))
             .withColumn("v", col("k") * 10)
@@ -67,7 +66,6 @@ class CogroupedApplyInPandasTestsMixin:
     def data2(self):
         return (
             self.spark.range(10)
-            .toDF("id")
             .withColumn("ks", array([lit(i) for i in range(20, 30)]))
             .withColumn("k", explode(col("ks")))
             .withColumn("v2", col("k") * 100)
@@ -168,7 +166,7 @@ class CogroupedApplyInPandasTestsMixin:
             fn=lambda lft, rgt: lft.size + rgt.size,
             error_class=PythonException,
             error_message_regex="Return type of the user-defined function "
-            "should be pandas.DataFrame, but is <class 'numpy.int64'>",
+            "should be pandas.DataFrame, but is int64.",
         )
 
     def test_apply_in_pandas_returning_column_names(self):

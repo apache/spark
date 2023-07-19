@@ -171,9 +171,10 @@ ERROR_CLASSES_JSON = """
   },
   "DIFFERENT_SCHEMA" : {
     "message" : [
-      "Schemas do not match:",
-      "df schema: <df_schema>",
-      "expected schema: <expected_schema>"
+      "Schemas do not match.",
+      "--- actual",
+      "+++ expected",
+      "<error_msg>"
     ]
   },
   "DISALLOWED_TYPE_FOR_CONTAINER" : {
@@ -260,6 +261,11 @@ ERROR_CLASSES_JSON = """
   "INVALID_TYPENAME_CALL" : {
     "message" : [
       "StructField does not have typeName. Use typeName on its type explicitly instead."
+    ]
+  },
+  "INVALID_TYPE_DF_EQUALITY_ARG" : {
+    "message" : [
+      "Expected type <expected_type> for `<arg_name>` but got type <actual_type>."
     ]
   },
   "INVALID_UDF_EVAL_TYPE" : {
@@ -656,6 +662,11 @@ ERROR_CLASSES_JSON = """
   "TOO_MANY_VALUES" : {
     "message" : [
       "Expected <expected> values for `<item>`, got <actual>."
+    ]
+  },
+  "UDF_RETURN_TYPE" : {
+    "message" : [
+      "Return type of the user-defined function should be <expected>, but is <actual>."
     ]
   },
   "UDTF_EXEC_ERROR" : {
