@@ -268,7 +268,7 @@ case class BitmapOrAgg(child: Expression,
         )
       )
     } else {
-      TypeCheckResult.TypeCheckSuccess
+      TypeCheckSuccess
     }
   }
 
