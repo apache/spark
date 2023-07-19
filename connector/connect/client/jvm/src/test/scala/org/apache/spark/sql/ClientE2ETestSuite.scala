@@ -570,8 +570,7 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper with PrivateM
     (col("id") / lit(10.0d)).as("b"),
     col("id"),
     lit("world").as("d"),
-    // TODO SPARK-44449 make this int again when upcasting is in.
-    (col("id") % 2).cast("double").as("a"))
+    (col("id") % 2).as("a"))
 
   private def validateMyTypeResult(result: Array[MyType]): Unit = {
     result.zipWithIndex.foreach { case (MyType(id, a, b), i) =>
@@ -818,11 +817,10 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper with PrivateM
   }
 
   test("toJSON") {
-    // TODO SPARK-44449 make this int again when upcasting is in.
     val expected = Array(
-      """{"b":0.0,"id":0,"d":"world","a":0.0}""",
-      """{"b":0.1,"id":1,"d":"world","a":1.0}""",
-      """{"b":0.2,"id":2,"d":"world","a":0.0}""")
+      """{"b":0.0,"id":0,"d":"world","a":0}""",
+      """{"b":0.1,"id":1,"d":"world","a":1}""",
+      """{"b":0.2,"id":2,"d":"world","a":0}""")
     val result = spark
       .range(3)
       .select(generateMyTypeColumns: _*)

@@ -91,7 +91,11 @@ class ArrowEncoderSuite extends ConnectFunSuite with BeforeAndAfterAll {
     }
 
     val resultIterator =
-      ArrowDeserializers.deserializeFromArrow(inspectedIterator, encoder, deserializerAllocator)
+      ArrowDeserializers.deserializeFromArrow(
+        inspectedIterator,
+        encoder,
+        deserializerAllocator,
+        timeZoneId = "UTC")
     new CloseableIterator[T] {
       override def close(): Unit = {
         arrowIterator.close()
@@ -216,8 +220,11 @@ class ArrowEncoderSuite extends ConnectFunSuite with BeforeAndAfterAll {
 
   test("deserializing empty iterator") {
     withAllocator { allocator =>
-      val iterator =
-        ArrowDeserializers.deserializeFromArrow(Iterator.empty, singleIntEncoder, allocator)
+      val iterator = ArrowDeserializers.deserializeFromArrow(
+        Iterator.empty,
+        singleIntEncoder,
+        allocator,
+        timeZoneId = "UTC")
       assert(iterator.isEmpty)
       assert(allocator.getAllocatedMemory == 0)
     }
@@ -674,7 +681,11 @@ class ArrowEncoderSuite extends ConnectFunSuite with BeforeAndAfterAll {
         Row(Seq(1, 7, 5), Array[Byte](8.toByte, 756.toByte)))
       val arrowBatches = serializeToArrow(Iterator.single(input), wideSchemaEncoder, allocator)
       val result =
-        ArrowDeserializers.deserializeFromArrow(arrowBatches, narrowSchemaEncoder, allocator)
+        ArrowDeserializers.deserializeFromArrow(
+          arrowBatches,
+          narrowSchemaEncoder,
+          allocator,
+          timeZoneId = "UTC")
       val actual = result.next()
       assert(result.isEmpty)
       assert(expected === actual)
@@ -687,7 +698,11 @@ class ArrowEncoderSuite extends ConnectFunSuite with BeforeAndAfterAll {
     withAllocator { allocator =>
       val arrowBatches = serializeToArrow(Iterator.empty, narrowSchemaEncoder, allocator)
       intercept[AnalysisException] {
-        ArrowDeserializers.deserializeFromArrow(arrowBatches, wideSchemaEncoder, allocator)
+        ArrowDeserializers.deserializeFromArrow(
+          arrowBatches,
+          wideSchemaEncoder,
+          allocator,
+          timeZoneId = "UTC")
       }
       arrowBatches.close()
     }
@@ -704,7 +719,11 @@ class ArrowEncoderSuite extends ConnectFunSuite with BeforeAndAfterAll {
     withAllocator { allocator =>
       val arrowBatches = serializeToArrow(Iterator.empty, duplicateSchemaEncoder, allocator)
       intercept[AnalysisException] {
-        ArrowDeserializers.deserializeFromArrow(arrowBatches, fooSchemaEncoder, allocator)
+        ArrowDeserializers.deserializeFromArrow(
+          arrowBatches,
+          fooSchemaEncoder,
+          allocator,
+          timeZoneId = "UTC")
       }
       arrowBatches.close()
     }

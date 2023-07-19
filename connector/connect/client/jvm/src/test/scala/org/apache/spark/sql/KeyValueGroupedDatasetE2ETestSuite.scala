@@ -68,11 +68,10 @@ class KeyValueGroupedDatasetE2ETestSuite extends QueryTest with SQLHelper {
   }
 
   test("keyAs - keys") {
-    // TODO SPARK-44449 make this long again when upcasting is in.
     // It is okay to cast from Long to Double, but not Long to Int.
     val values = spark
       .range(10)
-      .groupByKey(v => (v % 2).toDouble)
+      .groupByKey(v => v % 2)
       .keyAs[Double]
       .keys
       .collectAsList()
@@ -233,10 +232,9 @@ class KeyValueGroupedDatasetE2ETestSuite extends QueryTest with SQLHelper {
   }
 
   test("agg, keyAs") {
-    // TODO SPARK-44449 make this long again when upcasting is in.
     val ds = spark
       .range(10)
-      .groupByKey(v => (v % 2).toDouble)
+      .groupByKey(v => v % 2)
       .keyAs[Double]
       .agg(count("*"))
 
@@ -246,8 +244,7 @@ class KeyValueGroupedDatasetE2ETestSuite extends QueryTest with SQLHelper {
   test("typed aggregation: expr") {
     val session: SparkSession = spark
     import session.implicits._
-    // TODO SPARK-44449 make this int again when upcasting is in.
-    val ds = Seq(("a", 10L), ("a", 20L), ("b", 1L), ("b", 2L), ("c", 1L)).toDS()
+    val ds = Seq(("a", 10), ("a", 20), ("b", 1), ("b", 2), ("c", 1)).toDS()
 
     checkDatasetUnorderly(
       ds.groupByKey(_._1).agg(sum("_2").as[Long]),
@@ -257,8 +254,7 @@ class KeyValueGroupedDatasetE2ETestSuite extends QueryTest with SQLHelper {
   }
 
   test("typed aggregation: expr, expr") {
-    // TODO SPARK-44449 make this int again when upcasting is in.
-    val ds = Seq(("a", 10L), ("a", 20L), ("b", 1L), ("b", 2L), ("c", 1L)).toDS()
+    val ds = Seq(("a", 10), ("a", 20), ("b", 1), ("b", 2), ("c", 1)).toDS()
 
     checkDatasetUnorderly(
       ds.groupByKey(_._1).agg(sum("_2").as[Long], sum($"_2" + 1).as[Long]),
@@ -268,8 +264,7 @@ class KeyValueGroupedDatasetE2ETestSuite extends QueryTest with SQLHelper {
   }
 
   test("typed aggregation: expr, expr, expr") {
-    // TODO SPARK-44449 make this int again when upcasting is in.
-    val ds = Seq(("a", 10L), ("a", 20L), ("b", 1L), ("b", 2L), ("c", 1L)).toDS()
+    val ds = Seq(("a", 10), ("a", 20), ("b", 1), ("b", 2), ("c", 1)).toDS()
 
     checkDatasetUnorderly(
       ds.groupByKey(_._1).agg(sum("_2").as[Long], sum($"_2" + 1).as[Long], count("*")),
@@ -279,8 +274,7 @@ class KeyValueGroupedDatasetE2ETestSuite extends QueryTest with SQLHelper {
   }
 
   test("typed aggregation: expr, expr, expr, expr") {
-    // TODO SPARK-44449 make this int again when upcasting is in.
-    val ds = Seq(("a", 10L), ("a", 20L), ("b", 1L), ("b", 2L), ("c", 1L)).toDS()
+    val ds = Seq(("a", 10), ("a", 20), ("b", 1), ("b", 2), ("c", 1)).toDS()
 
     checkDatasetUnorderly(
       ds.groupByKey(_._1)
@@ -295,8 +289,7 @@ class KeyValueGroupedDatasetE2ETestSuite extends QueryTest with SQLHelper {
   }
 
   test("typed aggregation: expr, expr, expr, expr, expr") {
-    // TODO SPARK-44449 make this int again when upcasting is in.
-    val ds = Seq(("a", 10L), ("a", 20L), ("b", 1L), ("b", 2L), ("c", 1L)).toDS()
+    val ds = Seq(("a", 10), ("a", 20), ("b", 1), ("b", 2), ("c", 1)).toDS()
 
     checkDatasetUnorderly(
       ds.groupByKey(_._1)
@@ -312,8 +305,7 @@ class KeyValueGroupedDatasetE2ETestSuite extends QueryTest with SQLHelper {
   }
 
   test("typed aggregation: expr, expr, expr, expr, expr, expr") {
-    // TODO SPARK-44449 make this int again when upcasting is in.
-    val ds = Seq(("a", 10L), ("a", 20L), ("b", 1L), ("b", 2L), ("c", 1L)).toDS()
+    val ds = Seq(("a", 10), ("a", 20), ("b", 1), ("b", 2), ("c", 1)).toDS()
 
     checkDatasetUnorderly(
       ds.groupByKey(_._1)
@@ -330,8 +322,7 @@ class KeyValueGroupedDatasetE2ETestSuite extends QueryTest with SQLHelper {
   }
 
   test("typed aggregation: expr, expr, expr, expr, expr, expr, expr") {
-    // TODO SPARK-44449 make this int again when upcasting is in.
-    val ds = Seq(("a", 10L), ("a", 20L), ("b", 1L), ("b", 2L), ("c", 1L)).toDS()
+    val ds = Seq(("a", 10), ("a", 20), ("b", 1), ("b", 2), ("c", 1)).toDS()
 
     checkDatasetUnorderly(
       ds.groupByKey(_._1)
@@ -349,8 +340,7 @@ class KeyValueGroupedDatasetE2ETestSuite extends QueryTest with SQLHelper {
   }
 
   test("typed aggregation: expr, expr, expr, expr, expr, expr, expr, expr") {
-    // TODO SPARK-44449 make this int again when upcasting is in.
-    val ds = Seq(("a", 10L), ("a", 20L), ("b", 1L), ("b", 2L), ("c", 1L)).toDS()
+    val ds = Seq(("a", 10), ("a", 20), ("b", 1), ("b", 2), ("c", 1)).toDS()
 
     checkDatasetUnorderly(
       ds.groupByKey(_._1)
@@ -483,9 +473,8 @@ class KeyValueGroupedDatasetE2ETestSuite extends QueryTest with SQLHelper {
     val ds = Seq(("a", 1, 10), ("a", 2, 20), ("b", 2, 1), ("b", 1, 2), ("c", 1, 1))
       .toDF("key", "seq", "value")
     val grouped = ds.groupBy($"value").as[String, (String, Int, Int)]
-    // TODO SPARK-44449 make this string again when upcasting is in.
-    val keys = grouped.keyAs[Int].keys.sort($"value")
-    checkDataset(keys, 1, 2, 10, 20)
+    val keys = grouped.keyAs[String].keys.sort($"value")
+    checkDataset(keys, "1", "2", "10", "20")
   }
 
   test("flatMapGroupsWithState") {
