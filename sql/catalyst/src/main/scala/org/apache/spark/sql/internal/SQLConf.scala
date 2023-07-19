@@ -1855,7 +1855,10 @@ object SQLConf {
   val ENABLE_STATE_STORE_MAINTENANCE_THREAD_POOL =
     buildConf("spark.sql.streaming.stateStore.enableStateStoreMaintenanceThreadPool")
       .internal()
-      .doc("Whether background maintenance tasks are executed by single thread or thread pool")
+      .doc("Whether background maintenance tasks are executed by single thread or thread pool. " +
+        "the thread pool is consuming more resource than single thread, which might " +
+        "affect the performance of the query. " +
+        "Enable this if you observe the issue with the maintenance task.")
       .booleanConf
       .createWithDefault(false)
 
