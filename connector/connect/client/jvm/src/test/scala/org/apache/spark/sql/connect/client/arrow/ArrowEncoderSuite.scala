@@ -216,10 +216,8 @@ class ArrowEncoderSuite extends ConnectFunSuite with BeforeAndAfterAll {
 
   test("deserializing empty iterator") {
     withAllocator { allocator =>
-      val iterator = ArrowDeserializers.deserializeFromArrow(
-        Iterator.empty,
-        singleIntEncoder,
-        allocator)
+      val iterator =
+        ArrowDeserializers.deserializeFromArrow(Iterator.empty, singleIntEncoder, allocator)
       assert(iterator.isEmpty)
       assert(allocator.getAllocatedMemory == 0)
     }
@@ -675,10 +673,8 @@ class ArrowEncoderSuite extends ConnectFunSuite with BeforeAndAfterAll {
         Seq(Row(null, false), Row(javaBigDecimal(57853, 10), false)),
         Row(Seq(1, 7, 5), Array[Byte](8.toByte, 756.toByte)))
       val arrowBatches = serializeToArrow(Iterator.single(input), wideSchemaEncoder, allocator)
-      val result = ArrowDeserializers.deserializeFromArrow(
-        arrowBatches,
-        narrowSchemaEncoder,
-        allocator)
+      val result =
+        ArrowDeserializers.deserializeFromArrow(arrowBatches, narrowSchemaEncoder, allocator)
       val actual = result.next()
       assert(result.isEmpty)
       assert(expected === actual)
@@ -691,28 +687,24 @@ class ArrowEncoderSuite extends ConnectFunSuite with BeforeAndAfterAll {
     withAllocator { allocator =>
       val arrowBatches = serializeToArrow(Iterator.empty, narrowSchemaEncoder, allocator)
       intercept[AnalysisException] {
-        ArrowDeserializers.deserializeFromArrow(
-          arrowBatches,
-          wideSchemaEncoder,
-          allocator)
+        ArrowDeserializers.deserializeFromArrow(arrowBatches, wideSchemaEncoder, allocator)
       }
       arrowBatches.close()
     }
   }
 
   test("duplicate fields") {
-    val duplicateSchemaEncoder = toRowEncoder(new StructType()
-      .add("foO", "string")
-      .add("Foo", "string"))
-    val fooSchemaEncoder = toRowEncoder(new StructType()
-      .add("foo", "string"))
+    val duplicateSchemaEncoder = toRowEncoder(
+      new StructType()
+        .add("foO", "string")
+        .add("Foo", "string"))
+    val fooSchemaEncoder = toRowEncoder(
+      new StructType()
+        .add("foo", "string"))
     withAllocator { allocator =>
       val arrowBatches = serializeToArrow(Iterator.empty, duplicateSchemaEncoder, allocator)
       intercept[AnalysisException] {
-        ArrowDeserializers.deserializeFromArrow(
-          arrowBatches,
-          fooSchemaEncoder,
-          allocator)
+        ArrowDeserializers.deserializeFromArrow(arrowBatches, fooSchemaEncoder, allocator)
       }
       arrowBatches.close()
     }
@@ -886,7 +878,7 @@ class JavaMapData {
   override def equals(other: Any): Boolean = other match {
     case that: JavaMapData if that canEqual this =>
       dummyToStringMap == that.dummyToStringMap &&
-        metricMap == that.metricMap
+      metricMap == that.metricMap
     case _ => false
   }
 
