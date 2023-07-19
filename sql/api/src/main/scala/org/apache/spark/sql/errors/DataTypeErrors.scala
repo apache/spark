@@ -265,6 +265,6 @@ private[sql] object DataTypeErrors extends DataTypeErrorsBase {
   def failedParsingStructTypeError(raw: String): SparkRuntimeException = {
     new SparkRuntimeException(
       errorClass = "FAILED_PARSE_STRUCT_TYPE",
-      messageParameters = Map("raw" -> raw))
+      messageParameters = Map("raw" -> s"'$raw'"))
   }
 }

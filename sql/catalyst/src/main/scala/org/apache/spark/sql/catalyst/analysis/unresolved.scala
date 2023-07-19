@@ -237,7 +237,7 @@ case class UnresolvedAttribute(nameParts: Seq[String]) extends Attribute with Un
   }
 }
 
-object UnresolvedAttribute extends SparkAnalysisUtils {
+object UnresolvedAttribute extends AttributeNameParser {
   /**
    * Creates an [[UnresolvedAttribute]], parsing segments separated by dots ('.').
    */

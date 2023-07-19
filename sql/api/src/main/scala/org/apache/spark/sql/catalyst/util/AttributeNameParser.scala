@@ -18,7 +18,7 @@ package org.apache.spark.sql.catalyst.util
 
 import org.apache.spark.sql.errors.DataTypeErrors
 
-trait SparkAnalysisUtils {
+trait AttributeNameParser {
   /**
    * Used to split attribute name by dot with backticks rule.
    * Backticks must appear in pairs, and the quoted string must be a complete name part,
@@ -65,4 +65,4 @@ trait SparkAnalysisUtils {
   }
 }
 
-object SparkAnalysisUtils extends SparkAnalysisUtils
+object AttributeNameParser extends AttributeNameParser

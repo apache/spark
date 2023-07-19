@@ -20,12 +20,12 @@ import java.util.Locale
 
 import org.apache.spark.QueryContext
 import org.apache.spark.sql.catalyst.trees.SQLQueryContext
-import org.apache.spark.sql.catalyst.util.{QuotingUtils, SparkAnalysisUtils, SparkStringUtils}
+import org.apache.spark.sql.catalyst.util.{QuotingUtils, AttributeNameParser, SparkStringUtils}
 import org.apache.spark.sql.types.{AbstractDataType, DataType, TypeCollection}
 
 private[sql] trait DataTypeErrorsBase {
   def toSQLId(parts: String): String = {
-    toSQLId(SparkAnalysisUtils.parseAttributeName(parts))
+    toSQLId(AttributeNameParser.parseAttributeName(parts))
   }
 
   def toSQLId(parts: Seq[String]): String = {
