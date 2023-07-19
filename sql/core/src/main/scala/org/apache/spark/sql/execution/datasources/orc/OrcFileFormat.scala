@@ -165,22 +165,22 @@ class OrcFileFormat
     val sparkConf = sparkSession.sparkContext.conf
 
     (file: PartitionedFile) => {
-      val sharedConf = if (broadcastedHadoopConf.isDefined) {
+      val conf = if (broadcastedHadoopConf.isDefined) {
         broadcastedHadoopConf.get.value.value
       } else {
-        val conf = SparkHadoopUtil.newConfiguration(sparkConf)
-        OrcConf.IS_SCHEMA_EVOLUTION_CASE_SENSITIVE.setBoolean(conf, isCaseSensitive)
-        conf
+        val initConf = SparkHadoopUtil.newConfiguration(sparkConf)
+        OrcConf.IS_SCHEMA_EVOLUTION_CASE_SENSITIVE.setBoolean(initConf, isCaseSensitive)
+        initConf
       }
 
       val filePath = file.toPath
 
-      val fs = filePath.getFileSystem(sharedConf)
-      val readerOptions = OrcFile.readerOptions(sharedConf).filesystem(fs)
+      val fs = filePath.getFileSystem(conf)
+      val readerOptions = OrcFile.readerOptions(conf).filesystem(fs)
       val orcSchema =
         Utils.tryWithResource(OrcFile.createReader(filePath, readerOptions))(_.getSchema)
       val resultedColPruneInfo = OrcUtils.requestedColumnIds(
-        isCaseSensitive, dataSchema, requiredSchema, orcSchema, sharedConf)
+        isCaseSensitive, dataSchema, requiredSchema, orcSchema, conf)
 
       if (resultedColPruneInfo.isEmpty) {
         Iterator.empty
@@ -189,16 +189,16 @@ class OrcFileFormat
         if (orcFilterPushDown && filters.nonEmpty) {
           val fileSchema = OrcUtils.toCatalystSchema(orcSchema)
           OrcFilters.createFilter(fileSchema, filters).foreach { f =>
-            OrcInputFormat.setSearchArgument(sharedConf, f, fileSchema.fieldNames)
+            OrcInputFormat.setSearchArgument(conf, f, fileSchema.fieldNames)
           }
         }
 
         val (requestedColIds, canPruneCols) = resultedColPruneInfo.get
         val resultSchemaString = OrcUtils.orcResultSchemaString(canPruneCols,
-          dataSchema, resultSchema, partitionSchema, sharedConf)
+          dataSchema, resultSchema, partitionSchema, conf)
         assert(requestedColIds.length == requiredSchema.length,
           "[BUG] requested column IDs do not match required schema")
-        val taskConf = new Configuration(sharedConf)
+        val taskConf = new Configuration(conf)
 
         val includeColumns = requestedColIds.filter(_ != -1).sorted.mkString(",")
         taskConf.set(OrcConf.INCLUDE_COLUMNS.getAttribute, includeColumns)
