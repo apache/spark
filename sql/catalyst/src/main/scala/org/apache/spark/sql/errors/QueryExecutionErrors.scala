@@ -2896,7 +2896,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
   def unreleasedThreadError(
       loggingId: String,
       newAcquiredThreadInfo: String,
-      AcquiredThreadInfo: String,
+      acquiredThreadInfo: String,
       timeWaitedMs: Long,
       stackTraceOutput: String): Throwable = {
     new SparkException (
@@ -2904,7 +2904,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
       messageParameters = Map(
         "loggingId" -> loggingId,
         "newAcquiredThreadInfo" -> newAcquiredThreadInfo,
-        "acquiredThreadInfo" -> AcquiredThreadInfo,
+        "acquiredThreadInfo" -> acquiredThreadInfo,
         "timeWaitedMs" -> timeWaitedMs.toString,
         "stackTraceOutput" -> stackTraceOutput),
       cause = null)
@@ -2930,15 +2930,14 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
         "dfsFile" -> dfsFile.toString,
         "localFile" -> localFile.toString,
         "expectedSize" -> expectedSize.toString,
-        "localFileSize" -> localFileSize.toString
-      ),
+        "localFileSize" -> localFileSize.toString),
       cause = null)
   }
 
-  def unexpectedStateStoreVersion(): Throwable = {
+  def unexpectedStateStoreVersion(version: Long): Throwable = {
     new SparkException(
       errorClass = "CANNOT_LOAD_STATE_STORE.UNEXPECTED_VERSION",
-      messageParameters = Map.empty,
+      messageParameters = Map("version" -> version.toString),
       cause = null)
   }
 

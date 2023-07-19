@@ -488,7 +488,7 @@ object StateStore extends Logging {
       storeConf: StateStoreConf,
       hadoopConf: Configuration): ReadStateStore = {
     if (version < 0) {
-      throw QueryExecutionErrors.unexpectedStateStoreVersion()
+      throw QueryExecutionErrors.unexpectedStateStoreVersion(version)
     }
     val storeProvider = getStateStoreProvider(storeProviderId, keySchema, valueSchema,
       numColsPrefixKey, storeConf, hadoopConf)
@@ -505,7 +505,7 @@ object StateStore extends Logging {
       storeConf: StateStoreConf,
       hadoopConf: Configuration): StateStore = {
     if (version < 0) {
-      throw QueryExecutionErrors.unexpectedStateStoreVersion()
+      throw QueryExecutionErrors.unexpectedStateStoreVersion(version)
     }
     val storeProvider = getStateStoreProvider(storeProviderId, keySchema, valueSchema,
       numColsPrefixKey, storeConf, hadoopConf)

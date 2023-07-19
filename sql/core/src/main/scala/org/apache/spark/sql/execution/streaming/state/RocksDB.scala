@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.streaming.state
 
-import java.io.{File}
+import java.io.File
 import java.util.Locale
 import javax.annotation.concurrent.GuardedBy
 

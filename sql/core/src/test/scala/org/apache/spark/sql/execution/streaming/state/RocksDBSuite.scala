@@ -758,6 +758,18 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
         ex = intercept[SparkException] {
           ThreadUtils.runInNewThread("concurrent-test-thread-2") { db.load(2) }
         }
+        checkError(
+          ex,
+          errorClass = "CANNOT_LOAD_STATE_STORE.UNRELEASED_THREAD_ERROR",
+          parameters = Map(
+            "loggingId" -> "\\[Thread-\\d+\\]",
+            "newAcquiredThreadInfo" -> "\\[ThreadId: Some\\(\\d+\\)\\]",
+            "acquiredThreadInfo" -> "\\[ThreadId: Some\\(\\d+\\)\\]",
+            "timeWaitedMs" -> "\\d+",
+            "stackTraceOutput" -> "(?s).*"
+          ),
+          matchPVals = true
+        )
 
         // Rollback should release the instance allowing other threads to load new version
         db.rollback()

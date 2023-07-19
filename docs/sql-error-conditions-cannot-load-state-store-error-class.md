@@ -59,7 +59,7 @@ Copied `<dfsFile>` to `<localFile>`, expected `<expectedSize>` bytes, found `<lo
 
 ## UNEXPECTED_VERSION
 
-Version cannot be less than 0.
+Version cannot be `<version>` because it is less than 0.
 
 ## UNRELEASED_THREAD_ERROR
 

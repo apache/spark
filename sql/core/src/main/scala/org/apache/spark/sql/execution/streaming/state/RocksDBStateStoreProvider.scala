@@ -193,7 +193,7 @@ private[sql] class RocksDBStateStoreProvider
   override def getStore(version: Long): StateStore = {
     try {
       if (version < 0) {
-        throw QueryExecutionErrors.unexpectedStateStoreVersion()
+        throw QueryExecutionErrors.unexpectedStateStoreVersion(version)
       }
       rocksDB.load(version)
       new RocksDBStateStore(version)
@@ -206,7 +206,7 @@ private[sql] class RocksDBStateStoreProvider
   override def getReadStore(version: Long): StateStore = {
     try {
       if (version < 0) {
-        throw QueryExecutionErrors.unexpectedStateStoreVersion()
+        throw QueryExecutionErrors.unexpectedStateStoreVersion(version)
       }
       rocksDB.load(version, true)
       new RocksDBStateStore(version)

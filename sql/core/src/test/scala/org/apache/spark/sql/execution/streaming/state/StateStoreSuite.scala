@@ -1207,7 +1207,9 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
           checkError(
             e,
             errorClass = "CANNOT_LOAD_STATE_STORE.UNEXPECTED_VERSION",
-            parameters = Map.empty
+            parameters = Map(
+              "version" -> "-1"
+            )
           )
 
           e = intercept[SparkException] {
