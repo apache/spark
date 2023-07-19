@@ -655,17 +655,19 @@ object StateStore extends Logging {
     val enableMaintenanceThreadPool = storeConf.enableStateStoreMaintenanceThreadPool
     loadedProviders.synchronized {
       if (SparkEnv.get != null && !isMaintenanceRunning) {
-        var maintenanceFunc = { () => doMaintenance() }
         if (enableMaintenanceThreadPool) {
           val numMaintenanceThreads = storeConf.numStateStoreMaintenanceThreads
           maintenanceThreadPool = new MaintenanceThreadPool(
             numThreads = numMaintenanceThreads
           )
-          maintenanceFunc = { () => doMaintenanceWithThreadPool() }
         }
         maintenanceTask = new MaintenanceTask(
           storeConf.maintenanceInterval,
-          task = { maintenanceFunc },
+          task = if (enableMaintenanceThreadPool) {
+            doMaintenanceWithThreadPool()
+          } else {
+            doMaintenance()
+          },
           onError = { loadedProviders.synchronized {
               logInfo("Stopping maintenance task since an error was encountered.")
               stopMaintenanceTask()
