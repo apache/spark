@@ -54,6 +54,7 @@ class AnalyzeArgument:
     is_table : bool
         If True, the argument is a table argument.
     """
+
     data_type: DataType
     value: Optional[Any]
     is_table: bool
@@ -69,6 +70,7 @@ class AnalyzeResult:
     schema : :class:`StructType`
         The schema that the Python UDTF will return.
     """
+
     schema: StructType
 
 
