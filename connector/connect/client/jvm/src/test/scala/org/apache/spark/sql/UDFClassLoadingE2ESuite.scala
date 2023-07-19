@@ -29,7 +29,31 @@ class UDFClassLoadingE2ESuite extends RemoteSparkSession {
     assert(rows == Arrays.asList[Long](0, 2, 4, 6, 8))
   }
 
-  test("update class loader after stubbing") {
+  test("update class loader after stubbing: new session") {
+    // Session1 uses Stub SparkResult class
+    val session1 = spark.newSession()
+    addClientTestArtifactInServerClasspath(session1)
+    val ds = session1.range(10).filter(n => n % 2 == 0)
+
+    val rows = ds.collectAsList()
+    assert(rows == Arrays.asList[Long](0, 2, 4, 6, 8))
+
+    // Session2 uses the real SparkResult class
+    val session2 = spark.newSession()
+    addClientTestArtifactInServerClasspath(session2)
+    addClientTestArtifactInServerClasspath(session2, testJar = false)
+    val rows2 = session2
+      .range(10)
+      .filter(n => {
+        // Try to use spark result
+        new SparkResult[Int](null, null, null)
+        n > 5
+      })
+      .collectAsList()
+    assert(rows2 == Arrays.asList[Long](6, 7, 8, 9))
+  }
+
+  test("update class loader after stubbing: same session") {
     val session = spark.newSession()
     addClientTestArtifactInServerClasspath(session)
     val ds = session.range(10).filter(n => n % 2 == 0)
@@ -45,7 +69,7 @@ class UDFClassLoadingE2ESuite extends RemoteSparkSession {
       new SparkResult[Int](null, null, null)
       n > 5
     }).collectAsList()
-    assert(rows2 == Arrays.asList[Long](6, 8))
+    assert(rows2 == Arrays.asList[Long](6, 7, 8, 9))
   }
 
   // This dummy method generates a lambda in the test class with SparkResult in its signature.

@@ -222,7 +222,7 @@
         <artifactId>maven-jar-plugin</artifactId>
         <executions>
           <execution>
-            <id>prepare-client-jar</id>
+            <id>default-jar</id>
             <phase>compile</phase>
             <goals>
               <goal>jar</goal>

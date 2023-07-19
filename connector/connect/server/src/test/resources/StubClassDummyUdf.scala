@@ -28,8 +28,8 @@ class StubClassDummyUdf {
 
 case class A(x: Int) { def get: Int = x + 5 }
 
+// The code to generate the udf file
 object StubClassDummyUdf {
-  // The code to generate the udf file
   import java.io.{BufferedOutputStream, File, FileOutputStream}
   import org.apache.spark.sql.connect.common.UdfPacket
   import org.apache.spark.util.Utils
