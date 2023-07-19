@@ -46,6 +46,7 @@ object TreePattern extends Enumeration  {
   val EXISTS_SUBQUERY = Value
   val EXPRESSION_WITH_RANDOM_SEED: Value = Value
   val EXTRACT_VALUE: Value = Value
+  val FUNCTION_TABLE_RELATION_ARGUMENT_EXPRESSION: Value = Value
   val GENERATE: Value = Value
   val GENERATOR: Value = Value
   val HIGH_ORDER_FUNCTION: Value = Value
@@ -106,6 +107,7 @@ object TreePattern extends Enumeration  {
   val CTE: Value = Value
   val DISTINCT_LIKE: Value = Value
   val EVAL_PYTHON_UDF: Value = Value
+  val EVAL_PYTHON_UDTF: Value = Value
   val EVENT_TIME_WATERMARK: Value = Value
   val EXCEPT: Value = Value
   val FILTER: Value = Value

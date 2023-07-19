@@ -24,7 +24,7 @@ import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.sql.{AnalysisException, DataFrame}
 import org.apache.spark.sql.catalog.{Column, Database, Function, Table}
-import org.apache.spark.sql.catalyst.{FunctionIdentifier, ScalaReflection, TableIdentifier}
+import org.apache.spark.sql.catalyst.{DefinedByConstructorParams, FunctionIdentifier, ScalaReflection, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.AnalysisTest
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.expressions.Expression
@@ -179,11 +179,17 @@ class CatalogSuite extends SharedSparkSession with AnalysisTest with BeforeAndAf
     createTempTable("my_temp_table")
     assert(spark.catalog.listTables().collect().map(_.name).toSet ==
       Set("my_table1", "my_table2", "my_temp_table"))
+    assert(spark.catalog.listTables(spark.catalog.currentDatabase, "my_table*").collect()
+      .map(_.name).toSet == Set("my_table1", "my_table2"))
     dropTable("my_table1")
     assert(spark.catalog.listTables().collect().map(_.name).toSet ==
       Set("my_table2", "my_temp_table"))
+    assert(spark.catalog.listTables(spark.catalog.currentDatabase, "my_table*").collect()
+      .map(_.name).toSet == Set("my_table2"))
     dropTable("my_temp_table")
     assert(spark.catalog.listTables().collect().map(_.name).toSet == Set("my_table2"))
+    assert(spark.catalog.listTables(spark.catalog.currentDatabase, "my_table*").collect()
+      .map(_.name).toSet == Set("my_table2"))
   }
 
   test("SPARK-39828: Catalog.listTables() should respect currentCatalog") {
@@ -224,14 +230,17 @@ class CatalogSuite extends SharedSparkSession with AnalysisTest with BeforeAndAf
       Set("my_table1", "my_temp_table"))
     assert(spark.catalog.listTables("my_db2").collect().map(_.name).toSet ==
       Set("my_table2", "my_temp_table"))
+    assert(spark.catalog.listTables("my_db2", "my_table*").collect().map(_.name).toSet ==
+      Set("my_table2"))
     dropTable("my_table1", Some("my_db1"))
     assert(spark.catalog.listTables("my_db1").collect().map(_.name).toSet ==
       Set("my_temp_table"))
+    assert(spark.catalog.listTables("my_db1", "my_table*").collect().isEmpty)
     assert(spark.catalog.listTables("my_db2").collect().map(_.name).toSet ==
       Set("my_table2", "my_temp_table"))
     dropTable("my_temp_table")
-    assert(spark.catalog.listTables("default").collect().map(_.name).isEmpty)
-    assert(spark.catalog.listTables("my_db1").collect().map(_.name).isEmpty)
+    assert(spark.catalog.listTables("default").collect().isEmpty)
+    assert(spark.catalog.listTables("my_db1").collect().isEmpty)
     assert(spark.catalog.listTables("my_db2").collect().map(_.name).toSet ==
       Set("my_table2"))
     val e = intercept[AnalysisException] {
@@ -250,12 +259,25 @@ class CatalogSuite extends SharedSparkSession with AnalysisTest with BeforeAndAf
     assert(funcNames1.contains("my_func1"))
     assert(funcNames1.contains("my_func2"))
     assert(funcNames1.contains("my_temp_func"))
+    val funcNamesWithPattern1 =
+      spark.catalog.listFunctions("default", "my_func*").collect().map(_.name).toSet
+    assert(funcNamesWithPattern1.contains("my_func1"))
+    assert(funcNamesWithPattern1.contains("my_func2"))
+    assert(!funcNamesWithPattern1.contains("my_temp_func"))
     dropFunction("my_func1")
     dropTempFunction("my_temp_func")
     val funcNames2 = spark.catalog.listFunctions().collect().map(_.name).toSet
     assert(!funcNames2.contains("my_func1"))
     assert(funcNames2.contains("my_func2"))
     assert(!funcNames2.contains("my_temp_func"))
+    val funcNamesWithPattern2 =
+      spark.catalog.listFunctions("default", "my_func*").collect().map(_.name).toSet
+    assert(!funcNamesWithPattern2.contains("my_func1"))
+    assert(funcNamesWithPattern2.contains("my_func2"))
+    assert(!funcNamesWithPattern2.contains("my_temp_func"))
+    val funcNamesWithPattern3 =
+      spark.catalog.listFunctions("default", "*not_existing_func*").collect().map(_.name).toSet
+    assert(funcNamesWithPattern3.isEmpty)
   }
 
   test("SPARK-39828: Catalog.listFunctions() should respect currentCatalog") {
@@ -427,10 +449,10 @@ class CatalogSuite extends SharedSparkSession with AnalysisTest with BeforeAndAf
     val function = new Function("nama", "cataloa", Array("databasa"), "descripta", "classa", false)
     val column = new Column(
       "nama", "descripta", "typa", nullable = false, isPartition = true, isBucket = true)
-    val dbFields = ScalaReflection.getConstructorParameterValues(db)
-    val tableFields = ScalaReflection.getConstructorParameterValues(table)
-    val functionFields = ScalaReflection.getConstructorParameterValues(function)
-    val columnFields = ScalaReflection.getConstructorParameterValues(column)
+    val dbFields = getConstructorParameterValues(db)
+    val tableFields = getConstructorParameterValues(table)
+    val functionFields = getConstructorParameterValues(function)
+    val columnFields = getConstructorParameterValues(column)
     assert(dbFields == Seq("nama", "cataloa", "descripta", "locata"))
     assert(Seq(tableFields(0), tableFields(1), tableFields(3), tableFields(4), tableFields(5)) ==
       Seq("nama", "cataloa", "descripta", "typa", false))
@@ -1021,5 +1043,11 @@ class CatalogSuite extends SharedSparkSession with AnalysisTest with BeforeAndAf
       func2.catalog === "testcat" && func2.description === "hello" &&
       func2.isTemporary === false &&
       func2.className.startsWith("org.apache.spark.sql.internal.CatalogSuite"))
+  }
+
+  private def getConstructorParameterValues(obj: DefinedByConstructorParams): Seq[AnyRef] = {
+    ScalaReflection.getConstructorParameterNames(obj.getClass).map { name =>
+      obj.getClass.getMethod(name).invoke(obj)
+    }
   }
 }

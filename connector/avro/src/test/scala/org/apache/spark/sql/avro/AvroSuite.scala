@@ -21,7 +21,7 @@ import java.io._
 import java.net.URL
 import java.nio.file.{Files, Paths, StandardCopyOption}
 import java.sql.{Date, Timestamp}
-import java.util.{Locale, UUID}
+import java.util.UUID
 
 import scala.collection.JavaConverters._
 
@@ -946,6 +946,35 @@ abstract class AvroSuite
     }
   }
 
+  Seq(
+    "time-millis",
+    "time-micros",
+    "timestamp-micros",
+    "timestamp-millis",
+    "local-timestamp-millis",
+    "local-timestamp-micros"
+  ).foreach { timeLogicalType =>
+    test(s"converting $timeLogicalType type to long in avro") {
+      withTempPath { path =>
+        val df = Seq(100L)
+          .toDF("dt")
+        val avroSchema =
+          s"""
+             |{
+             |  "type" : "record",
+             |  "name" : "test_schema",
+             |  "fields" : [
+             |    {"name": "dt", "type": {"type": "long", "logicalType": "$timeLogicalType"}}
+             |  ]
+             |}""".stripMargin
+        df.write.format("avro").option("avroSchema", avroSchema).save(path.getCanonicalPath)
+        checkAnswer(
+          spark.read.schema(s"dt long").format("avro").load(path.toString),
+          Row(100L))
+      }
+    }
+  }
+
   test("converting some specific sparkSQL types to avro") {
     withTempPath { tempDir =>
       val testSchema = StructType(Seq(
@@ -1556,20 +1585,24 @@ abstract class AvroSuite
     withSQLConf(SQLConf.LEGACY_INTERVAL_ENABLED.key -> "true") {
       withTempDir { dir =>
         val tempDir = new File(dir, "files").getCanonicalPath
-        var msg = intercept[AnalysisException] {
-          sql("select interval 1 days").write.format("avro").mode("overwrite").save(tempDir)
-        }.getMessage
-        assert(msg.contains("Cannot save interval data type into external storage.") ||
-          msg.contains("Column `INTERVAL '1' DAY` has a data type of interval day, " +
-            "which is not supported by Avro."))
-
-        msg = intercept[AnalysisException] {
-          spark.udf.register("testType", () => new IntervalData())
-          sql("select testType()").write.format("avro").mode("overwrite").save(tempDir)
-        }.getMessage
-        assert(msg.toLowerCase(Locale.ROOT)
-          .contains("column `testtype()` has a data type of interval, " +
-            "which is not supported by avro."))
+        checkError(
+          exception = intercept[AnalysisException] {
+            sql("select interval 1 days").write.format("avro").mode("overwrite").save(tempDir)
+          },
+          errorClass = "_LEGACY_ERROR_TEMP_1136",
+          parameters = Map.empty
+        )
+        checkError(
+          exception = intercept[AnalysisException] {
+            spark.udf.register("testType", () => new IntervalData())
+            sql("select testType()").write.format("avro").mode("overwrite").save(tempDir)
+          },
+          errorClass = "UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE",
+          parameters = Map(
+            "columnName" -> "`testType()`",
+            "columnType" -> "\"INTERVAL\"",
+            "format" -> "Avro")
+        )
       }
     }
   }
@@ -2745,7 +2778,7 @@ class AvroV2Suite extends AvroSuite with ExplainSuiteHelper {
       })
 
       val fileScan = df.queryExecution.executedPlan collectFirst {
-        case BatchScanExec(_, f: AvroScan, _, _, _, _, _, _, _) => f
+        case BatchScanExec(_, f: AvroScan, _, _, _, _) => f
       }
       assert(fileScan.nonEmpty)
       assert(fileScan.get.partitionFilters.nonEmpty)
@@ -2779,7 +2812,7 @@ class AvroV2Suite extends AvroSuite with ExplainSuiteHelper {
       assert(filterCondition.isDefined)
 
       val fileScan = df.queryExecution.executedPlan collectFirst {
-        case BatchScanExec(_, f: AvroScan, _, _, _, _, _, _, _) => f
+        case BatchScanExec(_, f: AvroScan, _, _, _, _) => f
       }
       assert(fileScan.nonEmpty)
       assert(fileScan.get.partitionFilters.isEmpty)
@@ -2860,7 +2893,7 @@ class AvroV2Suite extends AvroSuite with ExplainSuiteHelper {
             .where("value = 'a'")
 
           val fileScan = df.queryExecution.executedPlan collectFirst {
-            case BatchScanExec(_, f: AvroScan, _, _, _, _, _, _, _) => f
+            case BatchScanExec(_, f: AvroScan, _, _, _, _) => f
           }
           assert(fileScan.nonEmpty)
           if (filtersPushdown) {

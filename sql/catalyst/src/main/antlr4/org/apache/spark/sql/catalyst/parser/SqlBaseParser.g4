@@ -317,7 +317,7 @@ query
     ;
 
 insertInto
-    : INSERT OVERWRITE TABLE? identifierReference (partitionSpec (IF NOT EXISTS)?)?  identifierList?         #insertOverwriteTable
+    : INSERT OVERWRITE TABLE? identifierReference (partitionSpec (IF NOT EXISTS)?)?  ((BY NAME) | identifierList)? #insertOverwriteTable
     | INSERT INTO TABLE? identifierReference partitionSpec? (IF NOT EXISTS)? ((BY NAME) | identifierList)?   #insertIntoTable
     | INSERT INTO TABLE? identifierReference REPLACE whereClause                                             #insertIntoReplaceWhere
     | INSERT OVERWRITE LOCAL? DIRECTORY path=stringLit rowFormat? createFileFormat?                     #insertOverwriteHiveDir
@@ -374,7 +374,7 @@ tableProvider
     ;
 
 createTableClauses
-    :((OPTIONS options=propertyList) |
+    :((OPTIONS options=expressionPropertyList) |
      (PARTITIONED BY partitioning=partitionFieldList) |
      skewSpec |
      bucketSpec |
@@ -403,6 +403,14 @@ propertyValue
     | DECIMAL_VALUE
     | booleanValue
     | stringLit
+    ;
+
+expressionPropertyList
+    : LEFT_PAREN expressionProperty (COMMA expressionProperty)* RIGHT_PAREN
+    ;
+
+expressionProperty
+    : key=propertyKey (EQ? value=expression)?
     ;
 
 constantList
@@ -780,8 +788,30 @@ inlineTable
     : VALUES expression (COMMA expression)* tableAlias
     ;
 
+functionTableSubqueryArgument
+    : TABLE identifierReference
+    | TABLE LEFT_PAREN identifierReference RIGHT_PAREN
+    | TABLE LEFT_PAREN query RIGHT_PAREN
+    ;
+
+functionTableNamedArgumentExpression
+    : key=identifier FAT_ARROW table=functionTableSubqueryArgument
+    ;
+
+functionTableReferenceArgument
+    : functionTableSubqueryArgument
+    | functionTableNamedArgumentExpression
+    ;
+
+functionTableArgument
+    : functionTableReferenceArgument
+    | functionArgument
+    ;
+
 functionTable
-    : funcName=functionName LEFT_PAREN (expression (COMMA expression)*)? RIGHT_PAREN tableAlias
+    : funcName=functionName LEFT_PAREN
+      (functionTableArgument (COMMA functionTableArgument)*)?
+      RIGHT_PAREN tableAlias
     ;
 
 tableAlias
@@ -854,6 +884,15 @@ expression
     : booleanExpression
     ;
 
+namedArgumentExpression
+    : key=identifier FAT_ARROW value=expression
+    ;
+
+functionArgument
+    : expression
+    | namedArgumentExpression
+    ;
+
 expressionSeq
     : expression (COMMA expression)*
     ;
@@ -913,7 +952,8 @@ primaryExpression
     | LEFT_PAREN namedExpression (COMMA namedExpression)+ RIGHT_PAREN                          #rowConstructor
     | LEFT_PAREN query RIGHT_PAREN                                                             #subqueryExpression
     | IDENTIFIER_KW LEFT_PAREN expression RIGHT_PAREN                                          #identifierClause
-    | functionName LEFT_PAREN (setQuantifier? argument+=expression (COMMA argument+=expression)*)? RIGHT_PAREN
+    | functionName LEFT_PAREN (setQuantifier? argument+=functionArgument
+       (COMMA argument+=functionArgument)*)? RIGHT_PAREN
        (FILTER LEFT_PAREN WHERE where=booleanExpression RIGHT_PAREN)?
        (nullsOption=(IGNORE | RESPECT) NULLS)? ( OVER windowSpec)?                             #functionCall
     | identifier ARROW expression                                                              #lambda
@@ -944,9 +984,10 @@ literalType
 
 constant
     : NULL                                                                                     #nullLiteral
-    | COLON identifier                                                                         #parameterLiteral
+    | QUESTION                                                                                 #posParameterLiteral
+    | COLON identifier                                                                         #namedParameterLiteral
     | interval                                                                                 #intervalLiteral
-    | literalType stringLit                                                                     #typeConstructor
+    | literalType stringLit                                                                    #typeConstructor
     | number                                                                                   #numericLiteral
     | booleanValue                                                                             #booleanLiteral
     | stringLit+                                                                               #stringLiteral

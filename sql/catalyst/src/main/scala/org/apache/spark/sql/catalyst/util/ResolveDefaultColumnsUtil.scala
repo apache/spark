@@ -32,7 +32,7 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.trees.TreePattern.PLAN_EXPRESSION
 import org.apache.spark.sql.connector.catalog.{CatalogManager, FunctionCatalog, Identifier, TableCatalog, TableCatalogCapability}
 import org.apache.spark.sql.connector.catalog.functions.UnboundFunction
-import org.apache.spark.sql.errors.QueryCompilationErrors
+import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryErrorsBase}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.connector.V1Function
 import org.apache.spark.sql.types._
@@ -41,7 +41,7 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap
 /**
  * This object contains fields to help process DEFAULT columns.
  */
-object ResolveDefaultColumns {
+object ResolveDefaultColumns extends QueryErrorsBase {
   // This column metadata indicates the default value associated with a particular table column that
   // is in effect at any given time. Its value begins at the time of the initial CREATE/REPLACE
   // TABLE statement with DEFAULT column definition(s), if any. It then changes whenever an ALTER
@@ -210,15 +210,23 @@ object ResolveDefaultColumns {
 
   /**
    * Generates the expression of the default value for the given field. If there is no
-   * user-specified default value for this field, returns null literal.
+   * user-specified default value for this field and the field is nullable, returns null
+   * literal, otherwise an exception is thrown.
    */
   def getDefaultValueExprOrNullLit(field: StructField): Expression = {
-    getDefaultValueExprOpt(field).getOrElse(Literal(null, field.dataType))
+    val defaultValue = getDefaultValueExprOrNullLit(field, useNullAsDefault = true)
+    if (defaultValue.isEmpty) {
+      throw new AnalysisException(
+        errorClass = "NO_DEFAULT_COLUMN_VALUE_AVAILABLE",
+        messageParameters = Map("colName" -> toSQLId(Seq(field.name))))
+    }
+    defaultValue.get
   }
 
   /**
-   * Generates the expression of the default value for the given column. If there is no
-   * user-specified default value for this field, returns null literal.
+   * Generates the expression of the default value for the given attribute. If there is no
+   * user-specified default value for this attribute and the attribute is nullable, returns null
+   * literal, otherwise an exception is thrown.
    */
   def getDefaultValueExprOrNullLit(attr: Attribute): Expression = {
     val field = StructField(attr.name, attr.dataType, attr.nullable, attr.metadata)
@@ -226,19 +234,30 @@ object ResolveDefaultColumns {
   }
 
   /**
-   * Generates the aliased expression of the default value for the given column. If there is no
-   * user-specified default value for this column, returns a null literal or None w.r.t. the config
-   * `USE_NULLS_FOR_MISSING_DEFAULT_COLUMN_VALUES`.
+   * Generates the expression of the default value for the given field. If there is no
+   * user-specified default value for this field, returns null literal if `useNullAsDefault` is
+   * true and the field is nullable.
    */
-  def getDefaultValueExprOrNullLit(attr: Attribute, conf: SQLConf): Option[NamedExpression] = {
-    val field = StructField(attr.name, attr.dataType, attr.nullable, attr.metadata)
+  def getDefaultValueExprOrNullLit(
+      field: StructField, useNullAsDefault: Boolean): Option[NamedExpression] = {
     getDefaultValueExprOpt(field).orElse {
-      if (conf.useNullsForMissingDefaultColumnValues) {
-        Some(Literal(null, attr.dataType))
+      if (useNullAsDefault && field.nullable) {
+        Some(Literal(null, field.dataType))
       } else {
         None
       }
-    }.map(expr => Alias(expr, attr.name)())
+    }.map(expr => Alias(expr, field.name)())
+  }
+
+  /**
+   * Generates the expression of the default value for the given attribute. If there is no
+   * user-specified default value for this attribute, returns null literal if `useNullAsDefault` is
+   * true and the attribute is nullable.
+   */
+  def getDefaultValueExprOrNullLit(
+      attr: Attribute, useNullAsDefault: Boolean): Option[NamedExpression] = {
+    val field = StructField(attr.name, attr.dataType, attr.nullable, attr.metadata)
+    getDefaultValueExprOrNullLit(field, useNullAsDefault)
   }
 
   /**
@@ -377,27 +396,30 @@ object ResolveDefaultColumns {
    * above, for convenience.
    */
   def getExistenceDefaultsBitmask(schema: StructType): Array[Boolean] = {
-    Array.fill[Boolean](schema.existenceDefaultValues.size)(true)
+    Array.fill[Boolean](existenceDefaultValues(schema).size)(true)
   }
 
   /**
    * Resets the elements of the array initially returned from [[getExistenceDefaultsBitmask]] above.
    * Afterwards, set element(s) to false before calling [[applyExistenceDefaultValuesToRow]] below.
    */
-  def resetExistenceDefaultsBitmask(schema: StructType): Unit = {
-    for (i <- 0 until schema.existenceDefaultValues.size) {
-      schema.existenceDefaultsBitmask(i) = (schema.existenceDefaultValues(i) != null)
+  def resetExistenceDefaultsBitmask(schema: StructType, bitmask: Array[Boolean]): Unit = {
+    val defaultValues = existenceDefaultValues(schema)
+    for (i <- 0 until defaultValues.size) {
+      bitmask(i) = (defaultValues(i) != null)
     }
   }
 
   /**
    * Updates a subset of columns in the row with default values from the metadata in the schema.
    */
-  def applyExistenceDefaultValuesToRow(schema: StructType, row: InternalRow): Unit = {
-    if (schema.hasExistenceDefaultValues) {
-      for (i <- 0 until schema.existenceDefaultValues.size) {
-        if (schema.existenceDefaultsBitmask(i)) {
-          row.update(i, schema.existenceDefaultValues(i))
+  def applyExistenceDefaultValuesToRow(schema: StructType, row: InternalRow,
+      bitmask: Array[Boolean]): Unit = {
+    val existingValues = existenceDefaultValues(schema)
+    if (hasExistenceDefaultValues(schema)) {
+      for (i <- 0 until existingValues.size) {
+        if (bitmask(i)) {
+          row.update(i, existingValues(i))
         }
       }
     }
@@ -417,6 +439,17 @@ object ResolveDefaultColumns {
     }
     rows.toSeq
   }
+
+  /**
+   * These define existence default values for the struct fields for efficiency purposes.
+   * The caller should avoid using such methods in a loop for efficiency.
+   */
+  def existenceDefaultValues(schema: StructType): Array[Any] =
+    getExistenceDefaultValues(schema)
+  def existenceDefaultsBitmask(schema: StructType): Array[Boolean] =
+    getExistenceDefaultsBitmask(schema)
+  def hasExistenceDefaultValues(schema: StructType): Boolean =
+    existenceDefaultValues(schema).exists(_ != null)
 
   /**
    * This is an Analyzer for processing default column values using built-in functions only.

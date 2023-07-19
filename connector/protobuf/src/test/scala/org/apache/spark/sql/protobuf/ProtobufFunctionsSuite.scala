@@ -40,11 +40,11 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Prot
 
   import testImplicits._
 
-  val testFileDescFile = testFile("functions_suite.desc", "protobuf/functions_suite.desc")
+  val testFileDescFile = protobufDescriptorFile("functions_suite.desc")
   private val testFileDesc = ProtobufUtils.readDescriptorFileContent(testFileDescFile)
   private val javaClassNamePrefix = "org.apache.spark.sql.protobuf.protos.SimpleMessageProtos$"
 
-  val proto2FileDescFile = testFile("proto2_messages.desc", "protobuf/proto2_messages.desc")
+  val proto2FileDescFile = protobufDescriptorFile("proto2_messages.desc")
   val proto2FileDesc = ProtobufUtils.readDescriptorFileContent(proto2FileDescFile)
   private val proto2JavaClassNamePrefix = "org.apache.spark.sql.protobuf.protos.Proto2Messages$"
 
@@ -467,7 +467,7 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Prot
   }
 
   test("Handle extra fields : oldProducer -> newConsumer") {
-    val catalystTypesFile = testFile("catalyst_types.desc", "protobuf/catalyst_types.desc")
+    val catalystTypesFile = protobufDescriptorFile("catalyst_types.desc")
     val descBytes = ProtobufUtils.readDescriptorFileContent(catalystTypesFile)
 
     val oldProducer = ProtobufUtils.buildDescriptor(descBytes, "oldProducer")
@@ -509,7 +509,7 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Prot
   }
 
   test("Handle extra fields : newProducer -> oldConsumer") {
-    val catalystTypesFile = testFile("catalyst_types.desc", "protobuf/catalyst_types.desc")
+    val catalystTypesFile = protobufDescriptorFile("catalyst_types.desc")
     val descBytes = ProtobufUtils.readDescriptorFileContent(catalystTypesFile)
 
     val newProducer = ProtobufUtils.buildDescriptor(descBytes, "newProducer")
@@ -691,13 +691,12 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Prot
     }
   }
 
-  test("raise cannot construct protobuf descriptor error") {
+  test("raise protobuf descriptor error") {
     val df = Seq(ByteString.empty().toByteArray).toDF("value")
-    val testFileDescriptor =
-      testFile("basicmessage_noimports.desc", "protobuf/basicmessage_noimports.desc")
+    val descWithoutImports = descriptorSetWithoutImports(testFileDesc, "BasicMessage")
 
     val e = intercept[AnalysisException] {
-      df.select(functions.from_protobuf($"value", "BasicMessage", testFileDescriptor) as 'sample)
+      df.select(functions.from_protobuf($"value", "BasicMessage", descWithoutImports) as 'sample)
         .where("sample.string_value == \"slam\"").show()
     }
     checkError(
@@ -1215,9 +1214,10 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Prot
 
     checkWithFileAndClassName("ProtoWithAnyArray") { case (name, descFilePathOpt) =>
 
-      // proto: message { string description = 1; repeated google.protobuf.Any items = 2;
+      // proto: message { string description = 1; repeated google.protobuf.Any items = 2 };
 
-      // Use two different types of protos for 'items'. One with an Any field, and one without.
+      // Use 3 different types of protos for 'items'. One with an Any field, and one without,
+      // and one with default instance of Any. The last one triggers JsonFormat bug.
 
       val simpleProto = SimpleMessage.newBuilder() // Json: {"id":10,"string_value":"galaxy"}
         .setId(10)
@@ -1233,6 +1233,7 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Prot
         .setDescription("nested any demo")
         .addItems(AnyProto.pack(simpleProto)) // A simple proto
         .addItems(AnyProto.pack(protoWithAny)) // A proto with any field inside it.
+        .addItems(AnyProto.getDefaultInstance) // An Any field initialized to default instance.
         .build()
         .toByteArray
 
@@ -1246,6 +1247,9 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Prot
       assert(df.schema.toDDL == "proto STRUCT<description: STRING, " +
         "items: ARRAY<STRUCT<type_url: STRING, value: BINARY>>>"
       )
+
+      // Print df to see how the Any fields look like without json conversion.
+      log.info(s"Input row without json conversion: ${df.collect()(0)}")
 
       // String for items with 'convert.to.json' option enabled.
       val options = Map(ProtobufOptions.CONVERT_ANY_FIELDS_TO_JSON_CONFIG -> "true")
@@ -1277,6 +1281,7 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Prot
           |     "string_value":"galaxy"
           |   }
           | }""".stripMargin))
+      assert(items.get(2) == "{}") // 3rd field is empty (Any.getDefaultInstance)
     }
   }
 

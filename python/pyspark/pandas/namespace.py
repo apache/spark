@@ -96,7 +96,7 @@ from pyspark.pandas.indexes import Index, DatetimeIndex, TimedeltaIndex
 from pyspark.pandas.indexes.multi import MultiIndex
 
 # For Supporting Spark Connect
-from pyspark.sql.utils import is_remote
+from pyspark.sql.utils import get_column_class
 
 __all__ = [
     "from_pandas",
@@ -1900,6 +1900,11 @@ def date_range(
     """
     assert freq not in ["N", "ns"], "nanoseconds is not supported"
     assert tz is None, "Localized DatetimeIndex is not supported"
+    if closed is not None:
+        warnings.warn(
+            "Argument `closed` is deprecated in 3.4.0 and will be removed in 4.0.0.",
+            FutureWarning,
+        )
 
     return cast(
         DatetimeIndex,
@@ -3429,12 +3434,7 @@ def merge_asof(
     else:
         on = None
 
-    if is_remote():
-        from pyspark.sql.connect.column import Column as ConnectColumn
-
-        Column = ConnectColumn
-    else:
-        Column = PySparkColumn  # type: ignore[assignment]
+    Column = get_column_class()
     if tolerance is not None and not isinstance(tolerance, Column):
         tolerance = F.lit(tolerance)
 

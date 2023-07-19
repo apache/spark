@@ -373,22 +373,51 @@ class ListTables(google.protobuf.message.Message):
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
     DB_NAME_FIELD_NUMBER: builtins.int
+    PATTERN_FIELD_NUMBER: builtins.int
     db_name: builtins.str
     """(Optional)"""
+    pattern: builtins.str
+    """(Optional) The pattern that the table name needs to match"""
     def __init__(
         self,
         *,
         db_name: builtins.str | None = ...,
+        pattern: builtins.str | None = ...,
     ) -> None: ...
     def HasField(
-        self, field_name: typing_extensions.Literal["_db_name", b"_db_name", "db_name", b"db_name"]
+        self,
+        field_name: typing_extensions.Literal[
+            "_db_name",
+            b"_db_name",
+            "_pattern",
+            b"_pattern",
+            "db_name",
+            b"db_name",
+            "pattern",
+            b"pattern",
+        ],
     ) -> builtins.bool: ...
     def ClearField(
-        self, field_name: typing_extensions.Literal["_db_name", b"_db_name", "db_name", b"db_name"]
+        self,
+        field_name: typing_extensions.Literal[
+            "_db_name",
+            b"_db_name",
+            "_pattern",
+            b"_pattern",
+            "db_name",
+            b"db_name",
+            "pattern",
+            b"pattern",
+        ],
     ) -> None: ...
+    @typing.overload
     def WhichOneof(
         self, oneof_group: typing_extensions.Literal["_db_name", b"_db_name"]
     ) -> typing_extensions.Literal["db_name"] | None: ...
+    @typing.overload
+    def WhichOneof(
+        self, oneof_group: typing_extensions.Literal["_pattern", b"_pattern"]
+    ) -> typing_extensions.Literal["pattern"] | None: ...
 
 global___ListTables = ListTables
 
@@ -398,22 +427,51 @@ class ListFunctions(google.protobuf.message.Message):
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
     DB_NAME_FIELD_NUMBER: builtins.int
+    PATTERN_FIELD_NUMBER: builtins.int
     db_name: builtins.str
     """(Optional)"""
+    pattern: builtins.str
+    """(Optional) The pattern that the function name needs to match"""
     def __init__(
         self,
         *,
         db_name: builtins.str | None = ...,
+        pattern: builtins.str | None = ...,
     ) -> None: ...
     def HasField(
-        self, field_name: typing_extensions.Literal["_db_name", b"_db_name", "db_name", b"db_name"]
+        self,
+        field_name: typing_extensions.Literal[
+            "_db_name",
+            b"_db_name",
+            "_pattern",
+            b"_pattern",
+            "db_name",
+            b"db_name",
+            "pattern",
+            b"pattern",
+        ],
     ) -> builtins.bool: ...
     def ClearField(
-        self, field_name: typing_extensions.Literal["_db_name", b"_db_name", "db_name", b"db_name"]
+        self,
+        field_name: typing_extensions.Literal[
+            "_db_name",
+            b"_db_name",
+            "_pattern",
+            b"_pattern",
+            "db_name",
+            b"db_name",
+            "pattern",
+            b"pattern",
+        ],
     ) -> None: ...
+    @typing.overload
     def WhichOneof(
         self, oneof_group: typing_extensions.Literal["_db_name", b"_db_name"]
     ) -> typing_extensions.Literal["db_name"] | None: ...
+    @typing.overload
+    def WhichOneof(
+        self, oneof_group: typing_extensions.Literal["_pattern", b"_pattern"]
+    ) -> typing_extensions.Literal["pattern"] | None: ...
 
 global___ListFunctions = ListFunctions
 

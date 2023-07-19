@@ -58,6 +58,8 @@ RowLike = TypeVar("RowLike", List[Any], Tuple[Any, ...], pyspark.sql.types.Row)
 
 SQLBatchedUDFType = Literal[100]
 SQLArrowBatchedUDFType = Literal[101]
+SQLTableUDFType = Literal[300]
+SQLArrowTableUDFType = Literal[301]
 
 class SupportsOpen(Protocol):
     def open(self, partition_id: int, epoch_id: int) -> bool: ...

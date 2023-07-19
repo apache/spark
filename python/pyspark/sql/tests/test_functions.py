@@ -59,8 +59,9 @@ class FunctionsTestsMixin:
             "typedlit",  # Scala only
             "typedLit",  # Scala only
             "monotonicallyIncreasingId",  # depreciated, use monotonically_increasing_id
-            "negate",  # equivalent to python -expression
             "not",  # equivalent to python ~expression
+            "any",  # equivalent to python ~some
+            "len",  # equivalent to python ~length
             "udaf",  # used for creating UDAF's which are not supported in PySpark
         ]
 
@@ -708,6 +709,52 @@ class FunctionsTestsMixin:
             error_class="NOT_COLUMN_OR_INT_OR_STR",
             message_parameters={"arg_name": "len", "arg_type": "float"},
         )
+
+    def test_percentile(self):
+        actual = list(
+            chain.from_iterable(
+                [
+                    re.findall("(percentile\\(.*\\))", str(x))
+                    for x in [
+                        F.percentile(F.col("foo"), F.lit(0.5)),
+                        F.percentile(F.col("bar"), 0.25, 2),
+                        F.percentile(F.col("bar"), [0.25, 0.5, 0.75]),
+                        F.percentile(F.col("foo"), (0.05, 0.95), 100),
+                        F.percentile("foo", 0.5),
+                        F.percentile("bar", [0.1, 0.9], F.lit(10)),
+                    ]
+                ]
+            )
+        )
+
+        expected = [
+            "percentile(foo, 0.5, 1)",
+            "percentile(bar, 0.25, 2)",
+            "percentile(bar, array(0.25, 0.5, 0.75), 1)",
+            "percentile(foo, array(0.05, 0.95), 100)",
+            "percentile(foo, 0.5, 1)",
+            "percentile(bar, array(0.1, 0.9), 10)",
+        ]
+
+        self.assertListEqual(actual, expected)
+
+    def test_median(self):
+        actual = list(
+            chain.from_iterable(
+                [
+                    re.findall("(median\\(.*\\))", str(x))
+                    for x in [
+                        F.median(F.col("foo")),
+                    ]
+                ]
+            )
+        )
+
+        expected = [
+            "median(foo)",
+        ]
+
+        self.assertListEqual(actual, expected)
 
     def test_percentile_approx(self):
         actual = list(

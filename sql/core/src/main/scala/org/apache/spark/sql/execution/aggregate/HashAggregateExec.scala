@@ -31,6 +31,7 @@ import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.plans.logical.Aggregate
+import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.catalyst.util.DateTimeConstants.NANOS_PER_MILLIS
 import org.apache.spark.sql.catalyst.util.truncatedString
 import org.apache.spark.sql.execution._
@@ -383,8 +384,7 @@ case class HashAggregateExec(
     val isSupported =
       (groupingKeySchema ++ bufferSchema).forall(f => CodeGenerator.isPrimitiveType(f.dataType) ||
         f.dataType.isInstanceOf[DecimalType] || f.dataType.isInstanceOf[StringType] ||
-        f.dataType.isInstanceOf[CalendarIntervalType]) &&
-        bufferSchema.nonEmpty
+        f.dataType.isInstanceOf[CalendarIntervalType])
 
     // For vectorized hash map, We do not support byte array based decimal type for aggregate values
     // as ColumnVector.putDecimal for high-precision decimals doesn't currently support in-place
@@ -567,11 +567,11 @@ case class HashAggregateExec(
       ctx.currentVars = null
       ctx.INPUT_ROW = row
       val generateKeyRow = GenerateUnsafeProjection.createCode(ctx,
-        groupingKeySchema.toAttributes.zipWithIndex
+        toAttributes(groupingKeySchema).zipWithIndex
           .map { case (attr, i) => BoundReference(i, attr.dataType, attr.nullable) }
       )
       val generateBufferRow = GenerateUnsafeProjection.createCode(ctx,
-        bufferSchema.toAttributes.zipWithIndex.map { case (attr, i) =>
+        toAttributes(bufferSchema).zipWithIndex.map { case (attr, i) =>
           BoundReference(groupingKeySchema.length + i, attr.dataType, attr.nullable)
         })
       s"""

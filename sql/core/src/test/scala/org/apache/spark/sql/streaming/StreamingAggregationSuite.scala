@@ -43,12 +43,14 @@ import org.apache.spark.sql.streaming.OutputMode._
 import org.apache.spark.sql.streaming.util.{MockSourceProvider, StreamManualClock}
 import org.apache.spark.sql.types.{StructType, TimestampType}
 import org.apache.spark.storage.{BlockId, StorageLevel, TestBlockId}
+import org.apache.spark.tags.SlowSQLTest
 import org.apache.spark.util.Utils
 
 object FailureSingleton {
   var firstTime = true
 }
 
+@SlowSQLTest
 class StreamingAggregationSuite extends StateStoreMetricsTest with Assertions {
 
   import testImplicits._
@@ -957,5 +959,6 @@ class StreamingAggregationSuite extends StateStoreMetricsTest with Assertions {
   }
 }
 
+@SlowSQLTest
 class RocksDBStateStoreStreamingAggregationSuite
   extends StreamingAggregationSuite with RocksDBStateStoreTest
