@@ -273,9 +273,9 @@ ERROR_CLASSES_JSON = """
       "Eval type for UDF must be <eval_type>."
     ]
   },
-  "INVALID_UDTF_BOTH_RETURN_TYPE_AND_ANALYZE_STATICMETHOD" : {
+  "INVALID_UDTF_BOTH_RETURN_TYPE_AND_ANALYZE" : {
     "message" : [
-      "The UDTF '<name>' is invalid. It has both its return type and the required 'analyze' static method. Please make it have one of either the return type or the 'analyze' static method in '<name>' and try again."
+      "The UDTF '<name>' is invalid. It has both its return type and an 'analyze' attribute. Please make it have one of either the return type or the 'analyze' static method in '<name>' and try again."
     ]
   },
   "INVALID_UDTF_EVAL_TYPE" : {

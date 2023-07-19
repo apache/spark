@@ -197,16 +197,17 @@ def _validate_udtf_handler(cls: Any, returnType: Optional[Union[StructType, str]
             error_class="INVALID_UDTF_NO_EVAL", message_parameters={"name": cls.__name__}
         )
 
-    has_analyze_staticmethod = hasattr(cls, "analyze") and isinstance(
+    has_analyze = hasattr(cls, "analyze")
+    has_analyze_staticmethod = has_analyze and isinstance(
         inspect.getattr_static(cls, "analyze"), staticmethod
     )
     if returnType is None and not has_analyze_staticmethod:
         raise PySparkAttributeError(
             error_class="INVALID_UDTF_RETURN_TYPE", message_parameters={"name": cls.__name__}
         )
-    if returnType is not None and has_analyze_staticmethod:
+    if returnType is not None and has_analyze:
         raise PySparkAttributeError(
-            error_class="INVALID_UDTF_BOTH_RETURN_TYPE_AND_ANALYZE_STATICMETHOD",
+            error_class="INVALID_UDTF_BOTH_RETURN_TYPE_AND_ANALYZE",
             message_parameters={"name": cls.__name__},
         )
 

@@ -1071,7 +1071,7 @@ class BaseUDTFTestsMixin:
 
         self.check_error(
             exception=e.exception,
-            error_class="INVALID_UDTF_BOTH_RETURN_TYPE_AND_ANALYZE_STATICMETHOD",
+            error_class="INVALID_UDTF_BOTH_RETURN_TYPE_AND_ANALYZE",
             message_parameters={"name": "TestUDTF"},
         )
 
@@ -1103,6 +1103,15 @@ class BaseUDTFTestsMixin:
         self.check_error(
             exception=e.exception,
             error_class="INVALID_UDTF_RETURN_TYPE",
+            message_parameters={"name": "TestUDTF"},
+        )
+
+        with self.assertRaises(PySparkAttributeError) as e:
+            udtf(TestUDTF, returnType="c1: string, c2: string")
+
+        self.check_error(
+            exception=e.exception,
+            error_class="INVALID_UDTF_BOTH_RETURN_TYPE_AND_ANALYZE",
             message_parameters={"name": "TestUDTF"},
         )
 
