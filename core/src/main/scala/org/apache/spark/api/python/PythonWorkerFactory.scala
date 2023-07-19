@@ -40,6 +40,12 @@ private[spark] class PythonWorkerFactory(
     envVars: Map[String, String])
   extends Logging { self =>
 
+  def this(
+      pythonExec: String,
+      workerModule: String,
+      envVars: Map[String, String]) =
+    this(pythonExec, workerModule, PythonWorkerFactory.defaultDaemonModule, envVars)
+
   import PythonWorkerFactory._
 
   // Because forking processes from Java is expensive, we prefer to launch a single Python daemon,
@@ -86,13 +92,8 @@ private[spark] class PythonWorkerFactory(
       }
       createThroughDaemon()
     } else {
-      createSimpleWorker(workerModule)
+      createSimpleWorker()
     }
-  }
-
-  /** Creates a Python worker with `pyspark.streaming_worker` module. */
-  def createStreamingWorker(): (Socket, Option[Int]) = {
-    createSimpleWorker("pyspark.streaming_worker")
   }
 
   /**
@@ -135,7 +136,7 @@ private[spark] class PythonWorkerFactory(
   /**
    * Launch a worker by executing worker.py (by default) directly and telling it to connect to us.
    */
-  private def createSimpleWorker(workerModule: String): (Socket, Option[Int]) = {
+  private[spark] def createSimpleWorker(): (Socket, Option[Int]) = {
     var serverSocket: ServerSocket = null
     try {
       serverSocket = new ServerSocket(0, 1, InetAddress.getLoopbackAddress())
@@ -387,7 +388,9 @@ private[spark] class PythonWorkerFactory(
   }
 }
 
-private object PythonWorkerFactory {
+private[spark] object PythonWorkerFactory {
   val PROCESS_WAIT_TIMEOUT_MS = 10000
   val IDLE_WORKER_TIMEOUT_NS = TimeUnit.MINUTES.toNanos(1)  // kill idle workers after 1 minute
+
+  private[spark] val defaultDaemonModule = "pyspark.daemon"
 }

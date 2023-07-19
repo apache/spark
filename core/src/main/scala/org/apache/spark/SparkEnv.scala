@@ -134,7 +134,8 @@ class SparkEnv (
       pythonExec: String,
       workerModule: String,
       envVars: Map[String, String]): (java.net.Socket, Option[Int]) = {
-    createPythonWorker(pythonExec, workerModule, SparkEnv.defaultDaemonModule, envVars)
+    createPythonWorker(
+      pythonExec, workerModule, PythonWorkerFactory.defaultDaemonModule, envVars)
   }
 
   private[spark] def destroyPythonWorker(
@@ -154,7 +155,8 @@ class SparkEnv (
       workerModule: String,
       envVars: Map[String, String],
       worker: Socket): Unit = {
-    destroyPythonWorker(pythonExec, workerModule, SparkEnv.defaultDaemonModule, envVars, worker)
+    destroyPythonWorker(
+      pythonExec, workerModule, PythonWorkerFactory.defaultDaemonModule, envVars, worker)
   }
 
   private[spark] def releasePythonWorker(
@@ -174,7 +176,8 @@ class SparkEnv (
       workerModule: String,
       envVars: Map[String, String],
       worker: Socket): Unit = {
-    releasePythonWorker(pythonExec, workerModule, SparkEnv.defaultDaemonModule, envVars, worker)
+    releasePythonWorker(
+      pythonExec, workerModule, PythonWorkerFactory.defaultDaemonModule, envVars, worker)
   }
 }
 
@@ -183,8 +186,6 @@ object SparkEnv extends Logging {
 
   private[spark] val driverSystemName = "sparkDriver"
   private[spark] val executorSystemName = "sparkExecutor"
-
-  private[spark] val defaultDaemonModule = "pyspark.daemon"
 
   def set(e: SparkEnv): Unit = {
     env = e
