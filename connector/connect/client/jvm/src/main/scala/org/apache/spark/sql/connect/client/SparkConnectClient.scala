@@ -234,11 +234,13 @@ private[sql] class SparkConnectClient(
   }
 
   private[sql] def addTag(tag: String): Unit = {
+    // validation is also done server side, but this will give error earlier.
     ProtoUtils.throwIfInvalidTag(tag)
     tags.get += tag
   }
 
   private[sql] def removeTag(tag: String): Unit = {
+    // validation is also done server side, but this will give error earlier.
     ProtoUtils.throwIfInvalidTag(tag)
     tags.get.remove(tag)
   }

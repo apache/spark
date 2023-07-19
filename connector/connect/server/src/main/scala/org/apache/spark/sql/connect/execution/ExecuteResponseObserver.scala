@@ -166,7 +166,7 @@ private[connect] class ExecuteResponseObserver[T](val executeHolder: ExecuteHold
   }
 
   /**
-   * Make sure that response fields that common should be set in every response are populated.
+   * Populate response fields that are common and should be set in every response.
    */
   private def setCommonResponseFields(response: T): T = {
     response match {

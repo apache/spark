@@ -95,14 +95,14 @@ private[connect] object ProtoUtils {
     // because the Spark Connect job tag is also used as part of SparkContext job tag.
     // See SparkContext.throwIfInvalidTag and ExecuteHolder.tagToSparkJobTag
     if (tag == null) {
-      throw new IllegalArgumentException("Spark Connect execution tag cannot be null.")
+      throw new IllegalArgumentException("Spark Connect tag cannot be null.")
     }
     if (tag.contains(SPARK_JOB_TAGS_SEP)) {
       throw new IllegalArgumentException(
-        s"Spark Connect execution tag cannot contain '$SPARK_JOB_TAGS_SEP'.")
+        s"Spark Connect tag cannot contain '$SPARK_JOB_TAGS_SEP'.")
     }
     if (tag.isEmpty) {
-      throw new IllegalArgumentException("Spark Connect execution tag cannot be an empty string.")
+      throw new IllegalArgumentException("Spark Connect tag cannot be an empty string.")
     }
   }
 }
