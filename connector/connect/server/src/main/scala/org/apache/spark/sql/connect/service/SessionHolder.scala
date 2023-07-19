@@ -108,7 +108,7 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
   private[connect] def interruptTag(tag: String): Seq[String] = {
     val interruptedIds = new mutable.ArrayBuffer[String]()
     executions.asScala.values.foreach { execute =>
-      if (execute.userDefinedTags.contains(tag)) {
+      if (execute.sparkSessionTags.contains(tag)) {
         interruptedIds += execute.operationId
         execute.interrupt()
       }

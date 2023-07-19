@@ -59,7 +59,7 @@ case class ExecuteEventsManager(executeHolder: ExecuteHolder, clock: Clock) {
 
   private def jobTag = executeHolder.jobTag
 
-  private def userDefinedTags = executeHolder.userDefinedTags
+  private def sparkSessionTags = executeHolder.sparkSessionTags
 
   private def listenerBus = sessionHolder.session.sparkContext.listenerBus
 
@@ -122,7 +122,7 @@ case class ExecuteEventsManager(executeHolder: ExecuteHolder, clock: Clock) {
           sessionHolder.session.sessionState.conf.stringRedactionPattern,
           ProtoUtils.abbreviate(plan, ExecuteEventsManager.MAX_STATEMENT_TEXT_SIZE).toString),
         Some(request),
-        userDefinedTags))
+        sparkSessionTags))
   }
 
   /**
@@ -273,7 +273,7 @@ case class ExecuteEventsManager(executeHolder: ExecuteHolder, clock: Clock) {
  *   The connect request plan converted to text.
  * @param planRequest:
  *   The Connect request. None if the operation is not of type @link proto.ExecutePlanRequest
- * @param userDefinedTags:
+ * @param sparkSessionTags:
  *   Extra tags set by the user (via SparkSession.addTag).
  * @param extraTags:
  *   Additional metadata during the request.
@@ -287,7 +287,7 @@ case class SparkListenerConnectOperationStarted(
     userName: String,
     statementText: String,
     planRequest: Option[proto.ExecutePlanRequest],
-    userDefinedTags: Set[String],
+    sparkSessionTags: Set[String],
     extraTags: Map[String, String] = Map.empty)
     extends SparkListenerEvent
 

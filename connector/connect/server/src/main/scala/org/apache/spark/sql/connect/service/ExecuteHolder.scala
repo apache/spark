@@ -34,13 +34,21 @@ private[connect] class ExecuteHolder(
     val sessionHolder: SessionHolder)
     extends Logging {
 
+  /**
+   * Tag that is set for this execution on SparkContext, via SparkContext.addJobTag. Used
+   * (internally) for cancallation of the Spark Jobs ran by this execution.
+   */
   val jobTag =
     s"SparkConnect_Execute_" +
       s"User_${sessionHolder.userId}_" +
       s"Session_${sessionHolder.sessionId}_" +
       s"Request_${operationId}"
 
-  val userDefinedTags: Set[String] = request
+  /**
+   * Tags set by Spark Connect client users via SparkSession.addTag. Used to identify and group
+   * executions, and for user cancellation using SparkSession.interruptTag.
+   */
+  val sparkSessionTags: Set[String] = request
     .getTagsList()
     .asScala
     .toSeq

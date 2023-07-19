@@ -85,7 +85,7 @@ private[connect] class ExecuteThreadRunner(executeHolder: ExecuteHolder) extends
           }
       } finally {
         executeHolder.sessionHolder.session.sparkContext.removeJobTag(executeHolder.jobTag)
-        executeHolder.userDefinedTags.foreach { tag =>
+        executeHolder.sparkSessionTags.foreach { tag =>
           executeHolder.sessionHolder.session.sparkContext
             .removeJobTag(executeHolder.tagToSparkJobTag(tag))
         }
@@ -118,7 +118,7 @@ private[connect] class ExecuteThreadRunner(executeHolder: ExecuteHolder) extends
       // Set tag for query cancellation
       session.sparkContext.addJobTag(executeHolder.jobTag)
       // Also set all user defined tags as Spark Job tags.
-      executeHolder.userDefinedTags.foreach { tag =>
+      executeHolder.sparkSessionTags.foreach { tag =>
         session.sparkContext.addJobTag(executeHolder.tagToSparkJobTag(tag))
       }
       session.sparkContext.setJobDescription(
