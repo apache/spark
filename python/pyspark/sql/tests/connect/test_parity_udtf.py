@@ -104,15 +104,6 @@ class UDTFParityTests(BaseUDTFTestsMixin, ReusedConnectTestCase):
         with self.assertRaisesRegex(SparkConnectGrpcException, err_msg):
             TestUDTF(lit(1)).show()
 
-    def test_udtf_with_empty_yield(self):
-        @udtf(returnType="a: int")
-        class TestUDTF:
-            def eval(self, a: int):
-                yield
-
-        with self.assertRaisesRegex(SparkConnectGrpcException, "java.lang.NullPointerException"):
-            TestUDTF(lit(1)).collect()
-
 
 class ArrowUDTFParityTests(UDTFArrowTestsMixin, UDTFParityTests):
     @classmethod
