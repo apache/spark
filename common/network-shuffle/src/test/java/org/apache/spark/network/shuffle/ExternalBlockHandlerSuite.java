@@ -77,7 +77,7 @@ public class ExternalBlockHandlerSuite {
     streamManager = mock(OneForOneStreamManager.class);
     blockResolver = mock(ExternalShuffleBlockResolver.class);
     mergedShuffleManager = mock(MergedShuffleFileManager.class);
-    handler = new ExternalBlockHandler(streamManager, blockResolver, mergedShuffleManager);
+    handler = new ExternalBlockHandler(streamManager, blockResolver, mergedShuffleManager, -1);
   }
 
   @Test

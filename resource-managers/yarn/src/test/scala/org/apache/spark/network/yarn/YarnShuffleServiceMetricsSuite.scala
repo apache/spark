@@ -39,11 +39,20 @@ class YarnShuffleServiceMetricsSuite extends SparkFunSuite with Matchers {
 
   test("metrics named as expected") {
     val allMetrics = Seq(
-      "openBlockRequestLatencyMillis", "registerExecutorRequestLatencyMillis",
-      "blockTransferRate", "blockTransferMessageRate", "blockTransferAvgSize_1min",
-      "blockTransferRateBytes", "registeredExecutorsSize", "numActiveConnections",
-      "numCaughtExceptions", "finalizeShuffleMergeLatencyMillis",
-      "fetchMergedBlocksMetaLatencyMillis")
+      "openBlockRequestLatencyMillis",
+      "registerExecutorRequestLatencyMillis",
+      "blockTransferRate",
+      "blockTransferMessageRate",
+      "blockTransferAvgSize_1min",
+      "blockTransferRateBytes",
+      "registeredExecutorsSize",
+      "numActiveConnections",
+      "numCaughtExceptions",
+      "finalizeShuffleMergeLatencyMillis",
+      "fetchMergedBlocksMetaLatencyMillis",
+      "totalShuffleDataBytes",
+      "numAppsWithShuffleData",
+      "lastNodeShuffleMetricRefreshEpochMillis")
 
     // Use sorted Seq instead of Set for easier comparison when there is a mismatch
     metrics.getMetrics.keySet().asScala.toSeq.sorted should be (allMetrics.sorted)

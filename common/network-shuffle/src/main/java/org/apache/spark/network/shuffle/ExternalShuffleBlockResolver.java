@@ -19,7 +19,9 @@ package org.apache.spark.network.shuffle;
 
 import java.io.*;
 import java.nio.charset.StandardCharsets;
+import java.time.Clock;
 import java.util.*;
+import java.util.Map.Entry;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executor;
@@ -90,6 +92,8 @@ public class ExternalShuffleBlockResolver {
 
   private final boolean rddFetchEnabled;
 
+  private final Clock clock;
+
   @VisibleForTesting
   final File registeredExecutorFile;
   @VisibleForTesting
@@ -102,12 +106,20 @@ public class ExternalShuffleBlockResolver {
         NettyUtils.createThreadFactory("spark-shuffle-directory-cleaner")));
   }
 
+  ExternalShuffleBlockResolver(
+      TransportConf conf,
+      File registeredExecutorFile,
+      Executor directoryCleaner) throws IOException {
+    this(conf, registeredExecutorFile, directoryCleaner, Clock.systemUTC());
+  }
+
   // Allows tests to have more control over when directories are cleaned up.
   @VisibleForTesting
   ExternalShuffleBlockResolver(
       TransportConf conf,
       File registeredExecutorFile,
-      Executor directoryCleaner) throws IOException {
+      Executor directoryCleaner,
+      Clock clock) throws IOException {
     this.conf = conf;
     this.rddFetchEnabled =
       Boolean.parseBoolean(conf.get(Constants.SHUFFLE_SERVICE_FETCH_RDD_ENABLED, "false"));
@@ -137,6 +149,7 @@ public class ExternalShuffleBlockResolver {
       executors = Maps.newConcurrentMap();
     }
     this.directoryCleaner = directoryCleaner;
+    this.clock = clock;
   }
 
   public int getRegisteredExecutorsSize() {
@@ -240,6 +253,44 @@ public class ExternalShuffleBlockResolver {
         }
       }
     }
+  }
+
+  /**
+   * Computes total shuffle data and number of apps with shuffle available on the node
+   * This is an estimate because files can be cleaned up
+   *
+   * @return NodeShuffleMetrics
+   */
+  @VisibleForTesting
+  NodeShuffleMetrics computeNodeShuffleMetrics() {
+    FileFilter filter = (file) -> {
+      // Count shuffle data or cached RDD files.
+      return file.isDirectory() || file.getName().endsWith(".data") || (rddFetchEnabled && file.getName().startsWith("rdd_"));
+    };
+
+    long totalShuffleDataBytes = 0;
+    Set<String> appsWithShuffleData = new HashSet<>();
+    for (Entry<AppExecId, ExecutorShuffleInfo> entry : executors.entrySet()) {
+      for (String localDir : entry.getValue().localDirs) {
+        long shuffleDataOfExecutor = totalSizeInDirectory(new File(localDir), filter);
+        if (shuffleDataOfExecutor > 0) {
+          appsWithShuffleData.add(entry.getKey().appId);
+        }
+        totalShuffleDataBytes += shuffleDataOfExecutor;
+      }
+    }
+    NodeShuffleMetrics nodeShuffleMetrics =
+        new NodeShuffleMetrics(totalShuffleDataBytes, appsWithShuffleData.size(), clock.millis());
+    logger.debug("NodeShuffleMetrics {}", nodeShuffleMetrics);
+    return nodeShuffleMetrics;
+  }
+
+  private static long totalSizeInDirectory(File file, FileFilter filter) {
+    if (!file.exists()) {
+      return 0;
+    } else if (file.isFile()) {
+      return file.length();
+    } else return Arrays.stream(Objects.requireNonNull(file.listFiles(filter))).mapToLong(f -> totalSizeInDirectory(f, filter)).sum();
   }
 
   /**

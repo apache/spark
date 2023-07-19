@@ -1091,7 +1091,10 @@ abstract class YarnShuffleServiceSuite extends SparkFunSuite with Matchers {
       "finalizeShuffleMergeLatencyMillis",
       "shuffle-server.usedDirectMemory",
       "shuffle-server.usedHeapMemory",
-      "fetchMergedBlocksMetaLatencyMillis"
+      "fetchMergedBlocksMetaLatencyMillis",
+      "totalShuffleDataBytes",
+      "numAppsWithShuffleData",
+      "lastNodeShuffleMetricRefreshEpochMillis"
     ).sorted)
   }
 
