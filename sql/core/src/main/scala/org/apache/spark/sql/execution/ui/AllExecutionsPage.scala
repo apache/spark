@@ -396,9 +396,7 @@ private[ui] class ExecutionPagedTable(
           </td>
         }}
         {if (showErrorMessage) {
-          <td>
-            {executionUIData.errorMessage.getOrElse("")}
-          </td>
+          UIUtils.errorMessageCell(executionUIData.errorMessage.getOrElse(""))
         }}
         {if (showSubExecutions) {
           <td>
