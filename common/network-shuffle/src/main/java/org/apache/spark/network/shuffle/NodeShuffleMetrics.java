@@ -28,7 +28,8 @@ class NodeShuffleMetrics {
     private final int numAppsWithShuffleData;
     private final long lastRefreshEpochMillis;
 
-    NodeShuffleMetrics(long totalShuffleDataBytes, int numAppsWithShuffleData, long lastRefreshEpochMillis) {
+    NodeShuffleMetrics(long totalShuffleDataBytes, int numAppsWithShuffleData,
+        long lastRefreshEpochMillis) {
       this.totalShuffleDataBytes = totalShuffleDataBytes;
       this.numAppsWithShuffleData = numAppsWithShuffleData;
       this.lastRefreshEpochMillis = lastRefreshEpochMillis;

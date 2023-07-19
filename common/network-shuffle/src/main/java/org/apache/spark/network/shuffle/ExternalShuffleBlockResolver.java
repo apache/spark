@@ -265,7 +265,9 @@ public class ExternalShuffleBlockResolver {
   NodeShuffleMetrics computeNodeShuffleMetrics() {
     FileFilter filter = (file) -> {
       // Count shuffle data or cached RDD files.
-      return file.isDirectory() || file.getName().endsWith(".data") || (rddFetchEnabled && file.getName().startsWith("rdd_"));
+      return file.isDirectory()
+          || file.getName().endsWith(".data")
+          || (rddFetchEnabled && file.getName().startsWith("rdd_"));
     };
 
     long totalShuffleDataBytes = 0;
@@ -290,7 +292,9 @@ public class ExternalShuffleBlockResolver {
       return 0;
     } else if (file.isFile()) {
       return file.length();
-    } else return Arrays.stream(Objects.requireNonNull(file.listFiles(filter))).mapToLong(f -> totalSizeInDirectory(f, filter)).sum();
+    } else return Arrays.stream(Objects.requireNonNull(file.listFiles(filter)))
+        .mapToLong(f -> totalSizeInDirectory(f, filter))
+        .sum();
   }
 
   /**
@@ -387,7 +391,9 @@ public class ExternalShuffleBlockResolver {
       ExecutorShuffleInfo executor, int rddId, int splitIndex) {
     File file = new File(
       ExecutorDiskUtils.getFilePath(
-        executor.localDirs, executor.subDirsPerLocalDir, "rdd_" + rddId + "_" + splitIndex));
+          executor.localDirs,
+          executor.subDirsPerLocalDir,
+          "rdd_" + rddId + "_" + splitIndex));
     long fileLength = file.length();
     ManagedBuffer res = null;
     if (file.exists()) {

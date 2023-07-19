@@ -88,7 +88,9 @@ public class ExternalBlockHandler extends RpcHandler
     throws IOException {
     this(new OneForOneStreamManager(),
         new ExternalShuffleBlockResolver(conf, registeredExecutorFile),
-        new NoOpMergedShuffleFileManager(conf, null), conf.getInt(SHUFFLE_DATA_METRIC_REFRESH_INTERVAL_KEY, SHUFFLE_DATA_METRIC_REFRESH_INTERVAL_DEFAULT));
+        new NoOpMergedShuffleFileManager(conf, null),
+        conf.getInt(SHUFFLE_DATA_METRIC_REFRESH_INTERVAL_KEY,
+            SHUFFLE_DATA_METRIC_REFRESH_INTERVAL_DEFAULT));
   }
 
   public ExternalBlockHandler(
@@ -97,7 +99,8 @@ public class ExternalBlockHandler extends RpcHandler
       MergedShuffleFileManager mergeManager) throws IOException {
     this(new OneForOneStreamManager(),
         new ExternalShuffleBlockResolver(conf, registeredExecutorFile), mergeManager,
-        conf.getInt(SHUFFLE_DATA_METRIC_REFRESH_INTERVAL_KEY, SHUFFLE_DATA_METRIC_REFRESH_INTERVAL_DEFAULT));
+        conf.getInt(SHUFFLE_DATA_METRIC_REFRESH_INTERVAL_KEY,
+            SHUFFLE_DATA_METRIC_REFRESH_INTERVAL_DEFAULT));
   }
 
   @VisibleForTesting
@@ -128,11 +131,13 @@ public class ExternalBlockHandler extends RpcHandler
     if (shuffleDataMetricRefreshPeriodSeconds > 0) {
       // We need daemon thread for shutdown hooks to be called properly
       // This is also the reason we are not using ScheduledExecutorService
+      Runnable metricRefresherDaemon = () -> regularlyUpdateTotalShuffleDataMetric(
+          shuffleDataMetricRefreshPeriodSeconds);
       new ThreadFactoryBuilder().setDaemon(true)
           .setPriority(Thread.MIN_PRIORITY)
           .setNameFormat("shuffle-data-metrics-refresher")
           .build()
-          .newThread(() -> regularlyUpdateTotalShuffleDataMetric(shuffleDataMetricRefreshPeriodSeconds))
+          .newThread(metricRefresherDaemon)
           .start();
     }
   }
@@ -140,7 +145,8 @@ public class ExternalBlockHandler extends RpcHandler
   private void regularlyUpdateTotalShuffleDataMetric(int refreshPeriod) {
     while (true) {
       try {
-        metrics.nodeShuffleMetrics = new AtomicReference<>(blockManager.computeNodeShuffleMetrics());
+        metrics.nodeShuffleMetrics =
+            new AtomicReference<>(blockManager.computeNodeShuffleMetrics());
         Thread.sleep(1000L * refreshPeriod);
       } catch (Exception e) {
         // Catching exceptions so that subsequent executions are not suppressed
@@ -404,9 +410,12 @@ public class ExternalBlockHandler extends RpcHandler
                      (Gauge<Integer>) () -> blockManager.getRegisteredExecutorsSize());
       allMetrics.put("numActiveConnections", activeConnections);
       allMetrics.put("numCaughtExceptions", caughtExceptions);
-      allMetrics.put("totalShuffleDataBytes", (Gauge<Long>) () -> nodeShuffleMetrics.get().getTotalShuffleDataBytes());
-      allMetrics.put("numAppsWithShuffleData", (Gauge<Integer>) () -> nodeShuffleMetrics.get().getNumAppsWithShuffleData());
-      allMetrics.put("lastNodeShuffleMetricRefreshEpochMillis", (Gauge<Long>) () -> nodeShuffleMetrics.get().getLastRefreshEpochMillis());
+      allMetrics.put("totalShuffleDataBytes",
+          (Gauge<Long>) () -> nodeShuffleMetrics.get().getTotalShuffleDataBytes());
+      allMetrics.put("numAppsWithShuffleData",
+          (Gauge<Integer>) () -> nodeShuffleMetrics.get().getNumAppsWithShuffleData());
+      allMetrics.put("lastNodeShuffleMetricRefreshEpochMillis",
+          (Gauge<Long>) () -> nodeShuffleMetrics.get().getLastRefreshEpochMillis());
     }
 
     @Override

@@ -24,6 +24,7 @@ import java.nio.charset.StandardCharsets;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
+import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -42,12 +43,15 @@ import static org.apache.spark.network.shuffle.Constants.SHUFFLE_SERVICE_FETCH_R
 import static org.junit.Assert.*;
 
 public class ExternalShuffleBlockResolverSuite {
+
   private static final String sortBlock0 = "Hello!";
   private static final String sortBlock1 = "World!";
   private static final String SORT_MANAGER = "org.apache.spark.shuffle.sort.SortShuffleManager";
 
   private static final Clock FIXED_CLOCK = Clock.fixed(
       Instant.parse("2018-08-22T10:00:00Z"), ZoneOffset.UTC);
+  private static final ExecutorService DIRECTORY_CLEANER = Executors.newSingleThreadExecutor(
+      NettyUtils.createThreadFactory("spark-shuffle-directory-cleaner"));
 
   private static TestShuffleDataContext dataContext;
   private static TestShuffleDataContext cachedRDDContext;
@@ -125,40 +129,45 @@ public class ExternalShuffleBlockResolverSuite {
     TransportConf fetchRddEnabled =
         new TransportConf("shuffle", new MapConfigProvider(
             ImmutableMap.of(SHUFFLE_SERVICE_FETCH_RDD_ENABLED, "true")));
-    ExternalShuffleBlockResolver resolver = new ExternalShuffleBlockResolver(fetchRddEnabled, null, Executors.newSingleThreadExecutor(
-        NettyUtils.createThreadFactory("spark-shuffle-directory-cleaner")), FIXED_CLOCK);
+    ExternalShuffleBlockResolver resolver = new ExternalShuffleBlockResolver(fetchRddEnabled,
+        null,
+        DIRECTORY_CLEANER, FIXED_CLOCK);
     resolver.registerExecutor("app1", "exec0",
         cachedRDDContext.createExecutorInfo(SORT_MANAGER));
 
-    assertEquals(new NodeShuffleMetrics(6, 1, FIXED_CLOCK.millis()), resolver.computeNodeShuffleMetrics());
+    NodeShuffleMetrics expected = new NodeShuffleMetrics(6, 1, FIXED_CLOCK.millis());
+    assertEquals(expected, resolver.computeNodeShuffleMetrics());
   }
 
   @Test
   public void testMetricsFetchRddDisabled() throws IOException {
-    ExternalShuffleBlockResolver resolver = new ExternalShuffleBlockResolver(conf, null, Executors.newSingleThreadExecutor(
-        NettyUtils.createThreadFactory("spark-shuffle-directory-cleaner")), FIXED_CLOCK);
+    ExternalShuffleBlockResolver resolver = new ExternalShuffleBlockResolver(conf, null,
+        DIRECTORY_CLEANER, FIXED_CLOCK);
     resolver.registerExecutor("app2", "exec0",
         cachedRDDContext.createExecutorInfo(SORT_MANAGER));
 
-    assertEquals(new NodeShuffleMetrics(0, 0, FIXED_CLOCK.millis()), resolver.computeNodeShuffleMetrics());
+    NodeShuffleMetrics expected = new NodeShuffleMetrics(0, 0, FIXED_CLOCK.millis());
+    assertEquals(expected, resolver.computeNodeShuffleMetrics());
   }
 
   @Test
   public void testMetricsShuffleDataFiles() throws IOException {
-    ExternalShuffleBlockResolver resolver = new ExternalShuffleBlockResolver(conf, null, Executors.newSingleThreadExecutor(
-        NettyUtils.createThreadFactory("spark-shuffle-directory-cleaner")), FIXED_CLOCK);
+    ExternalShuffleBlockResolver resolver = new ExternalShuffleBlockResolver(conf, null,
+        DIRECTORY_CLEANER, FIXED_CLOCK);
     resolver.registerExecutor("app1", "exec0",
         dataContext.createExecutorInfo(SORT_MANAGER));
 
-    assertEquals(new NodeShuffleMetrics(12, 1, FIXED_CLOCK.millis()), resolver.computeNodeShuffleMetrics());
+    NodeShuffleMetrics expected = new NodeShuffleMetrics(12, 1, FIXED_CLOCK.millis());
+    assertEquals(expected, resolver.computeNodeShuffleMetrics());
   }
 
   @Test
   public void testMetricsMultipleApps() throws IOException {
     TransportConf fetchRddEnabled =
-        new TransportConf("shuffle", new MapConfigProvider(ImmutableMap.of(SHUFFLE_SERVICE_FETCH_RDD_ENABLED, "true")));
-    ExternalShuffleBlockResolver resolver = new ExternalShuffleBlockResolver(fetchRddEnabled, null, Executors.newSingleThreadExecutor(
-        NettyUtils.createThreadFactory("spark-shuffle-directory-cleaner")), FIXED_CLOCK);
+        new TransportConf("shuffle",
+            new MapConfigProvider(ImmutableMap.of(SHUFFLE_SERVICE_FETCH_RDD_ENABLED, "true")));
+    ExternalShuffleBlockResolver resolver = new ExternalShuffleBlockResolver(fetchRddEnabled, null,
+        DIRECTORY_CLEANER, FIXED_CLOCK);
     resolver.registerExecutor("app3", "exec0",
         cachedRDDContext.createExecutorInfo(SORT_MANAGER));
     resolver.registerExecutor("app3", "exec1",
@@ -166,7 +175,8 @@ public class ExternalShuffleBlockResolverSuite {
     resolver.registerExecutor("app4", "exec0",
         cachedRDDContext.createExecutorInfo(SORT_MANAGER));
 
-    assertEquals(new NodeShuffleMetrics(18, 2, FIXED_CLOCK.millis()), resolver.computeNodeShuffleMetrics());
+    NodeShuffleMetrics expected = new NodeShuffleMetrics(18, 2, FIXED_CLOCK.millis());
+    assertEquals(expected, resolver.computeNodeShuffleMetrics());
   }
 
 
