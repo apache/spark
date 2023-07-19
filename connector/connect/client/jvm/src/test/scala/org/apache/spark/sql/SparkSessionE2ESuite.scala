@@ -125,9 +125,12 @@ class SparkSessionE2ESuite extends RemoteSparkSession {
       spark.addTag("one")
       assert(spark.getTags() == Set("one"))
       try {
-        spark.range(10).map(n => {
-          Thread.sleep(30000); n
-        }).collect()
+        spark
+          .range(10)
+          .map(n => {
+            Thread.sleep(30000); n
+          })
+          .collect()
       } finally {
         spark.clearTags() // clear for the case of thread reuse by another Future
       }
@@ -139,9 +142,12 @@ class SparkSessionE2ESuite extends RemoteSparkSession {
       spark.addTag("one")
       spark.addTag("two") // duplicates shouldn't matter
       try {
-        spark.range(10).map(n => {
-          Thread.sleep(30000); n
-        }).collect()
+        spark
+          .range(10)
+          .map(n => {
+            Thread.sleep(30000); n
+          })
+          .collect()
       } finally {
         spark.clearTags() // clear for the case of thread reuse by another Future
       }
@@ -154,9 +160,12 @@ class SparkSessionE2ESuite extends RemoteSparkSession {
       spark.addTag("two")
       assert(spark.getTags() == Set("two"))
       try {
-        spark.range(10).map(n => {
-          Thread.sleep(30000); n
-        }).collect()
+        spark
+          .range(10)
+          .map(n => {
+            Thread.sleep(30000); n
+          })
+          .collect()
       } finally {
         spark.clearTags() // clear for the case of thread reuse by another Future
       }
@@ -170,9 +179,12 @@ class SparkSessionE2ESuite extends RemoteSparkSession {
       spark.removeTag("two") // check that remove works, despite duplicate add
       assert(spark.getTags() == Set("one"))
       try {
-        spark.range(10).map(n => {
-          Thread.sleep(30000); n
-        }).collect()
+        spark
+          .range(10)
+          .map(n => {
+            Thread.sleep(30000); n
+          })
+          .collect()
       } finally {
         spark.clearTags() // clear for the case of thread reuse by another Future
       }
@@ -184,7 +196,9 @@ class SparkSessionE2ESuite extends RemoteSparkSession {
     eventually(timeout(20.seconds), interval(1.seconds)) {
       val ids = spark.interruptTag("two")
       interrupted ++= ids
-      assert(interrupted.distinct.length == 2, s"Interrupted operations: ${interrupted.distinct}.")
+      assert(
+        interrupted.distinct.length == 2,
+        s"Interrupted operations: ${interrupted.distinct}.")
     }
     val e2 = intercept[SparkException] {
       ThreadUtils.awaitResult(q2, 1.minute)
@@ -201,7 +215,9 @@ class SparkSessionE2ESuite extends RemoteSparkSession {
     eventually(timeout(20.seconds), interval(1.seconds)) {
       val ids = spark.interruptTag("one")
       interrupted ++= ids
-      assert(interrupted.distinct.length == 2, s"Interrupted operations: ${interrupted.distinct}.")
+      assert(
+        interrupted.distinct.length == 2,
+        s"Interrupted operations: ${interrupted.distinct}.")
     }
     val e1 = intercept[SparkException] {
       ThreadUtils.awaitResult(q1, 1.minute)
@@ -218,9 +234,12 @@ class SparkSessionE2ESuite extends RemoteSparkSession {
     val session = spark
     import session.implicits._
 
-    val result = spark.range(10).map(n => {
-      Thread.sleep(5000); n
-    }).collectResult()
+    val result = spark
+      .range(10)
+      .map(n => {
+        Thread.sleep(5000); n
+      })
+      .collectResult()
     // cancel
     val operationId = result.operationId
     val canceledId = spark.interruptOperation(operationId)
