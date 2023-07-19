@@ -15,7 +15,6 @@
 # limitations under the License.
 #
 import json
-import os
 import sys
 import tempfile
 from typing import (
@@ -135,19 +134,6 @@ class DeepspeedTorchDistributor(TorchDistributor):
     def run(self, train_object: Union[Callable, str], *args: Any, **kwargs: Any) -> Optional[Any]:
         # If the "train_object" is a string, then we assume it's a filepath.
         # Otherwise, we assume it's a function.
-        if isinstance(train_object, str):
-            if os.path.exists(train_object) is False:
-                raise FileNotFoundError(f"The path to training file {train_object} does not exist.")
-            framework_wrapper_fn = DeepspeedTorchDistributor._run_training_on_pytorch_file
-        else:
-            raise RuntimeError("Python training functions aren't supported as inputs at this time")
-
-        if self.local_mode:
-            return self._run_local_training(framework_wrapper_fn, train_object, *args, **kwargs)
-        return self._run_distributed_training(
-            framework_wrapper_fn,
-            train_object,
-            spark_dataframe=None,
-            *args,
-            **kwargs,  # type:ignore[misc]
+        return self._run(
+            train_object, DeepspeedTorchDistributor._run_training_on_pytorch_file, *args, **kwargs
         )
