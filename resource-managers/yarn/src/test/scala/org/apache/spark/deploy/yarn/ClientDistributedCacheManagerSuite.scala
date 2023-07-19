@@ -45,17 +45,14 @@ class ClientDistributedCacheManagerSuite extends SparkFunSuite with MockitoSugar
     }
   }
 
-  class CustomizedClientDistributedCacheManager extends ClientDistributedCacheManager {
-    override private[yarn] def getFileStatus(fs: FileSystem, uri: URI,
-      statCache: mutable.Map[URI, FileStatus]): FileStatus = {
-      statCache.getOrElseUpdate(uri, new FileStatus())
-    }
-  }
-
-
   test("SPARK-44272: test addResource added FileStatus to statCache and getVisibility can read" +
     " from statCache") {
-    val distMgr = new CustomizedClientDistributedCacheManager()
+    val distMgr = new ClientDistributedCacheManager() {
+      override private[yarn] def getFileStatus(fs: FileSystem, uri: URI,
+        statCache: mutable.Map[URI, FileStatus]): FileStatus = {
+        statCache.getOrElseUpdate(uri, new FileStatus())
+      }
+    }
     val fs = mock[FileSystem]
     val conf = new Configuration()
     val destPathA = new Path("file:///foo.invalid.com:8080/tmp/A")
