@@ -39,13 +39,7 @@ trait MapInBatchExec extends UnaryExecNode with PythonSQLMetrics {
 
   protected val isBarrier: Boolean
 
-  private val pythonFunction = func.asInstanceOf[PythonUDF].func
-
   override def producedAttributes: AttributeSet = AttributeSet(output)
-
-  private val batchSize = conf.arrowMaxRecordsPerBatch
-
-  private val largeVarTypes = conf.arrowUseLargeVarTypes
 
   private[this] val jobArtifactUUID = JobArtifactSet.getCurrentJobArtifactState.map(_.uuid)
 
