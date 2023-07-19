@@ -20,7 +20,7 @@ import java.util.Locale
 
 import org.apache.spark.QueryContext
 import org.apache.spark.sql.catalyst.trees.SQLQueryContext
-import org.apache.spark.sql.catalyst.util.{QuotingUtils, AttributeNameParser, SparkStringUtils}
+import org.apache.spark.sql.catalyst.util.{AttributeNameParser, QuotingUtils, SparkStringUtils}
 import org.apache.spark.sql.types.{AbstractDataType, DataType, TypeCollection}
 
 private[sql] trait DataTypeErrorsBase {
