@@ -19,9 +19,8 @@ package org.apache.spark.sql.execution.python
 
 import scala.collection.JavaConverters._
 
-import org.apache.spark.{ContextAwareIterator, TaskContext}
-import org.apache.spark.{PartitionEvaluator, PartitionEvaluatorFactory}
-import org.apache.spark.api.python.{ChainedPythonFunctions}
+import org.apache.spark.{ContextAwareIterator, PartitionEvaluator, PartitionEvaluatorFactory, TaskContext}
+import org.apache.spark.api.python.ChainedPythonFunctions
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.execution.metric.SQLMetric
@@ -76,17 +75,15 @@ class MapInBatchEvaluatorFactory(
 
       val unsafeProj = UnsafeProjection.create(output, output)
 
-      columnarBatchIter
-        .flatMap { batch =>
-          // Scalar Iterator UDF returns a StructType column in ColumnarBatch, select
-          // the children here
-          val structVector = batch.column(0).asInstanceOf[ArrowColumnVector]
-          val outputVectors = output.indices.map(structVector.getChild)
-          val flattenedBatch = new ColumnarBatch(outputVectors.toArray)
-          flattenedBatch.setNumRows(batch.numRows())
-          flattenedBatch.rowIterator.asScala
-        }
-        .map(unsafeProj)
+      columnarBatchIter.flatMap { batch =>
+        // Scalar Iterator UDF returns a StructType column in ColumnarBatch, select
+        // the children here
+        val structVector = batch.column(0).asInstanceOf[ArrowColumnVector]
+        val outputVectors = output.indices.map(structVector.getChild)
+        val flattenedBatch = new ColumnarBatch(outputVectors.toArray)
+        flattenedBatch.setNumRows(batch.numRows())
+        flattenedBatch.rowIterator.asScala
+      }.map(unsafeProj)
     }
   }
 }
