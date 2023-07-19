@@ -86,7 +86,8 @@ private[connect] class ExecuteThreadRunner(executeHolder: ExecuteHolder) extends
       } finally {
         executeHolder.sessionHolder.session.sparkContext.removeJobTag(executeHolder.jobTag)
         executeHolder.userDefinedTags.foreach { tag =>
-          session.sparkContext.removeJobTag(executeHolder.tagToSparkJobTag(tag))
+          executeHolder.sessionHolder.session.sparkContext.removeJobTag(
+            executeHolder.tagToSparkJobTag(tag))
         }
       }
     } catch {

@@ -16,9 +16,9 @@
  */
 package org.apache.spark.sql
 
+import scala.collection.mutable
 import scala.concurrent.{ExecutionContext, ExecutionContextExecutor, Future}
 import scala.concurrent.duration._
-import scala.mutable
 import scala.util.{Failure, Success}
 
 import org.scalatest.concurrent.Eventually._
@@ -74,7 +74,7 @@ class SparkSessionE2ESuite extends RemoteSparkSession {
       assert(q1Interrupted)
       assert(q2Interrupted)
     }
-    assert(interrupted.length == 2, s"Interrupted operations: $interrupted.")
+    assert(interrupted.distinct.length == 2, s"Interrupted operations: ${interrupted.distinct}.")
   }
 
   test("interrupt all - foreground queries, background interrupt") {
@@ -103,6 +103,114 @@ class SparkSessionE2ESuite extends RemoteSparkSession {
     assert(e2.getMessage.contains("OPERATION_CANCELED"), s"Unexpected exception: $e2")
     finished = true
     assert(ThreadUtils.awaitResult(interruptor, 10.seconds))
-    assert(interrupted.length == 2, s"Interrupted operations: $interrupted.")
+    assert(interrupted.distinct.length == 2, s"Interrupted operations: ${interrupted.distinct}.")
+  }
+
+  test("interrupt tag") {
+    val session = spark
+    import session.implicits._
+
+    // global ExecutionContext has only 2 threads in Apache Spark CI
+    // create own thread pool for four Futures used in this test
+    val numThreads = 4
+    val fpool = ThreadUtils.newForkJoinPool("job-tags-test-thread-pool", numThreads)
+    val executionContext = ExecutionContext.fromExecutorService(fpool)
+
+    val q1 = Future {
+      assert(spark.getTags() == Set())
+      spark.addTag("two")
+      assert(spark.getTags() == Set("two"))
+      spark.clearTags() // check that clearing all tags works
+      assert(spark.getTags() == Set())
+      spark.addTag("one")
+      assert(spark.getTags() == Set("one"))
+      try {
+        spark.range(10).map(n => {
+          Thread.sleep(30000); n
+        }).collect()
+      } finally {
+        spark.clearTags() // clear for the case of thread reuse by another Future
+      }
+    }(executionContext)
+    val q2 = Future {
+      assert(spark.getTags() == Set())
+      spark.addTag("one")
+      spark.addTag("two")
+      spark.addTag("one")
+      spark.addTag("two") // duplicates shouldn't matter
+      try {
+        spark.range(10).map(n => {
+          Thread.sleep(30000); n
+        }).collect()
+      } finally {
+        spark.clearTags() // clear for the case of thread reuse by another Future
+      }
+    }(executionContext)
+    val q3 = Future {
+      assert(spark.getTags() == Set())
+      spark.addTag("foo")
+      spark.removeTag("foo")
+      assert(spark.getTags() == Set()) // check that remove works removing the last tag
+      spark.addTag("two")
+      assert(spark.getTags() == Set("two"))
+      try {
+        spark.range(10).map(n => {
+          Thread.sleep(30000); n
+        }).collect()
+      } finally {
+        spark.clearTags() // clear for the case of thread reuse by another Future
+      }
+    }(executionContext)
+    val q4 = Future {
+      assert(spark.getTags() == Set())
+      spark.addTag("one")
+      spark.addTag("two")
+      spark.addTag("two")
+      assert(spark.getTags() == Set("one", "two"))
+      spark.removeTag("two") // check that remove works, despite duplicate add
+      assert(spark.getTags() == Set("one"))
+      try {
+        spark.range(10).map(n => {
+          Thread.sleep(30000); n
+        }).collect()
+      } finally {
+        spark.clearTags() // clear for the case of thread reuse by another Future
+      }
+    }(executionContext)
+    val interrupted = mutable.ListBuffer[String]()
+
+    // q2 and q3 should be cancelled
+    interrupted.clear()
+    eventually(timeout(20.seconds), interval(1.seconds)) {
+      val ids = spark.interruptTag("two")
+      interrupted ++= ids
+      assert(interrupted.distinct.length == 2, s"Interrupted operations: ${interrupted.distinct}.")
+    }
+    val e2 = intercept[SparkException] {
+      ThreadUtils.awaitResult(q2, 1.minute)
+    }.getCause
+    assert(e2.getMessage contains "OPERATION_CANCELED")
+    val e3 = intercept[SparkException] {
+      ThreadUtils.awaitResult(q3, 1.minute)
+    }.getCause
+    assert(e3.getMessage contains "OPERATION_CANCELED")
+    assert(interrupted.distinct.length == 2, s"Interrupted operations: ${interrupted.distinct}.")
+
+    // q1 and q4 should be cancelled
+    interrupted.clear()
+    eventually(timeout(20.seconds), interval(1.seconds)) {
+      val ids = spark.interruptTag("one")
+      interrupted ++= ids
+      assert(interrupted.distinct.length == 2, s"Interrupted operations: ${interrupted.distinct}.")
+    }
+    val e1 = intercept[SparkException] {
+      ThreadUtils.awaitResult(q1, 1.minute)
+    }.getCause
+    assert(e1.getMessage contains "OPERATION_CANCELED")
+    val e4 = intercept[SparkException] {
+      ThreadUtils.awaitResult(q4, 1.minute)
+    }.getCause
+    assert(e4.getMessage contains "OPERATION_CANCELED")
+    assert(interrupted.distinct.length == 2, s"Interrupted operations: ${interrupted.distinct}.")
   }
 }

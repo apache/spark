@@ -108,7 +108,7 @@ private[connect] class ExecuteHolder(
    * need to be combined with userId and sessionId.
    */
   def tagToSparkJobTag(tag: String): String = {
-    "SparkConnectUserDefinedTag_" +
+    "SparkConnect_Tag_" +
       s"User_${sessionHolder.userId}_Session_${sessionHolder.sessionId}"
   }
 }
