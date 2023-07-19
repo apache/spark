@@ -188,12 +188,12 @@ class SparkSessionE2ESuite extends RemoteSparkSession {
     }
     val e2 = intercept[SparkException] {
       ThreadUtils.awaitResult(q2, 1.minute)
-    }.getCause
-    assert(e2.getMessage contains "OPERATION_CANCELED")
+    }
+    assert(e2.getCause.getMessage contains "OPERATION_CANCELED")
     val e3 = intercept[SparkException] {
       ThreadUtils.awaitResult(q3, 1.minute)
-    }.getCause
-    assert(e3.getMessage contains "OPERATION_CANCELED")
+    }
+    assert(e3.getCause.getMessage contains "OPERATION_CANCELED")
     assert(interrupted.distinct.length == 2, s"Interrupted operations: ${interrupted.distinct}.")
 
     // q1 and q4 should be cancelled
@@ -205,12 +205,30 @@ class SparkSessionE2ESuite extends RemoteSparkSession {
     }
     val e1 = intercept[SparkException] {
       ThreadUtils.awaitResult(q1, 1.minute)
-    }.getCause
-    assert(e1.getMessage contains "OPERATION_CANCELED")
+    }
+    assert(e1.getCause.getMessage contains "OPERATION_CANCELED")
     val e4 = intercept[SparkException] {
       ThreadUtils.awaitResult(q4, 1.minute)
-    }.getCause
-    assert(e4.getMessage contains "OPERATION_CANCELED")
+    }
+    assert(e4.getCause.getMessage contains "OPERATION_CANCELED")
     assert(interrupted.distinct.length == 2, s"Interrupted operations: ${interrupted.distinct}.")
+  }
+
+  test("interrupt operation") {
+    val session = spark
+    import session.implicits._
+
+    val result = spark.range(10).map(n => {
+      Thread.sleep(5000); n
+    }).collectResult()
+    // cancel
+    val operationId = result.operationId
+    val canceledId = spark.interruptOperation(operationId)
+    assert(canceledId == Seq(operationId))
+    // and check that it got canceled
+    val e = intercept[SparkException] {
+      result.toArray
+    }
+    assert(e.getMessage contains "OPERATION_CANCELED")
   }
 }

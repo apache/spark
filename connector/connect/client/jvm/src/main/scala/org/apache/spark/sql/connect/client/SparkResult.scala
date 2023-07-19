@@ -73,6 +73,7 @@ private[sql] class SparkResult[T](
   }
 
   private def processResponses(
+      stopOnOperationId: Boolean = false,
       stopOnSchema: Boolean = false,
       stopOnArrowSchema: Boolean = false,
       stopOnFirstNonEmptyResponse: Boolean = false): Boolean = {
@@ -92,6 +93,7 @@ private[sql] class SparkResult[T](
           "Received response with wrong operationId. " +
             s"Expected '$opId' but received '${response.getOperationId}'.")
       }
+      stop |= stopOnOperationId
 
       if (response.hasSchema) {
         // The original schema should arrive before ArrowBatches.
@@ -167,7 +169,9 @@ private[sql] class SparkResult[T](
    *   the operationId of the result.
    */
   def operationId: String = {
-    processResponses(stopOnFirstNonEmptyResponse = true)
+    if (opId == null) {
+      processResponses(stopOnOperationId = true)
+    }
     opId
   }
 
