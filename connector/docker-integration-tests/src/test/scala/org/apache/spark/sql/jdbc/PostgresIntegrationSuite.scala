@@ -152,7 +152,7 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationSuite {
       "(id SERIAL PRIMARY KEY, timestamp_column TIMESTAMP);").executeUpdate()
     conn.prepareStatement("INSERT INTO infinity_timestamp (timestamp_column)" +
       " VALUES ('infinity'), ('-infinity');").executeUpdate()
-    
+
     conn.prepareStatement("CREATE DOMAIN not_null_text AS TEXT DEFAULT ''").executeUpdate()
     conn.prepareStatement("create table custom_type(type_array not_null_text[]," +
       "type not_null_text)").executeUpdate()
