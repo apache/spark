@@ -40,7 +40,7 @@ private[sql] class SparkResult[T](
     extends AutoCloseable
     with Cleanable { self =>
 
-  private[this] var opId: String = null
+  private[this] var opId: String = _
   private[this] var numRecords: Int = 0
   private[this] var structType: StructType = _
   private[this] var arrowSchema: pojo.Schema = _
