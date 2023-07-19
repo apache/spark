@@ -106,8 +106,13 @@ private[spark] class PythonWorkerFactory(pythonExec: String, envVars: Map[String
       }
       createThroughDaemon()
     } else {
-      createSimpleWorker()
+      createSimpleWorker(workerModule)
     }
+  }
+
+  /** Creates a Python worker with `pyspark.streaming_worker` module. */
+  def createStreamingWorker(): (Socket, Option[Int]) = {
+    createSimpleWorker("pyspark.streaming_worker")
   }
 
   /**
@@ -150,7 +155,7 @@ private[spark] class PythonWorkerFactory(pythonExec: String, envVars: Map[String
   /**
    * Launch a worker by executing worker.py (by default) directly and telling it to connect to us.
    */
-  private def createSimpleWorker(): (Socket, Option[Int]) = {
+  private def createSimpleWorker(workerModule: String): (Socket, Option[Int]) = {
     var serverSocket: ServerSocket = null
     try {
       serverSocket = new ServerSocket(0, 1, InetAddress.getLoopbackAddress())
