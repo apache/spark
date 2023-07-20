@@ -501,7 +501,8 @@ object StateStore extends Logging {
     }
 
     def stop(): Unit = {
-      threadPool.shutdown()
+      threadPool.purge()
+      threadPool.shutdownNow()
       maintenanceThreadPoolShutdownLock.synchronized {
         while (threadPool.getActiveCount != 0) {
           Thread.sleep(100)
