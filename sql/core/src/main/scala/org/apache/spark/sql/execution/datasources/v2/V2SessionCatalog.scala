@@ -88,19 +88,11 @@ class V2SessionCatalog(catalog: SessionCatalog)
   }
 
   private def failTimeTravel(ident: Identifier, t: Table): Table = {
-    t match {
-      case V1Table(catalogTable) =>
-        if (catalogTable.tableType == CatalogTableType.VIEW) {
-          throw QueryCompilationErrors.timeTravelUnsupportedError(
-            toSQLId(catalogTable.identifier.nameParts))
-        } else {
-          throw QueryCompilationErrors.timeTravelUnsupportedError(
-            toSQLId(catalogTable.identifier.nameParts))
-        }
-
-      case _ => throw QueryCompilationErrors.timeTravelUnsupportedError(
-        toSQLId(ident.asTableIdentifier.nameParts))
+    val nameParts = t match {
+      case V1Table(catalogTable) => catalogTable.identifier.nameParts
+      case _ => ident.asTableIdentifier.nameParts
     }
+    throw QueryCompilationErrors.timeTravelUnsupportedError(toSQLId(nameParts))
   }
 
   override def invalidateTable(ident: Identifier): Unit = {
