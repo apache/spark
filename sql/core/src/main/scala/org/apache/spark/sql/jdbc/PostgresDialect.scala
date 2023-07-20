@@ -19,7 +19,6 @@ package org.apache.spark.sql.jdbc
 
 import java.sql.{Connection, SQLException, Timestamp, Types}
 import java.time.{LocalDateTime, ZoneOffset}
-import java.time.ZoneOffset.UTC
 import java.util
 import java.util.Locale
 
