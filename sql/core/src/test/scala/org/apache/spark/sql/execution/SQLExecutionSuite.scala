@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.execution
 
-
-
 import java.util.Locale
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicInteger
