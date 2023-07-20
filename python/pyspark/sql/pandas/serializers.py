@@ -23,6 +23,7 @@ from pyspark.serializers import Serializer, read_int, write_int, UTF8Deserialize
 from pyspark.sql.pandas.types import to_arrow_type
 from pyspark.sql.types import StringType, StructType, BinaryType, StructField, LongType, IntegerType
 
+
 class SpecialLengths:
     END_OF_DATA_SECTION = -1
     PYTHON_EXCEPTION_THROWN = -2
