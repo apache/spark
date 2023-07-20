@@ -170,7 +170,7 @@ trait DataSourceV2ScanExecBase extends LeafExecNode {
   }
 
   override def supportsColumnar: Boolean = {
-    scan.columnarSupported() match {
+    scan.supportsColumnar() match {
       case Scan.ColumnarSupportType.PARTITION_DEFINED =>
         require(
           inputPartitions.forall(readerFactory.supportColumnarReads) ||

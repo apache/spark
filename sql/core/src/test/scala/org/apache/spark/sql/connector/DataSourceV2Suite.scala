@@ -711,7 +711,7 @@ class ScanDefinedColumnarSupport extends TestingV2Source {
       throw new IllegalArgumentException("Should not happen")
     }
 
-    override def columnarSupported()
+    override def supportsColumnar()
         : Scan.ColumnarSupportType = st
 
   }
