@@ -1179,6 +1179,7 @@ class SparkConnectClient(object):
                 # Ensure only the table has a reference to the batches, so that
                 # self_destruct (if enabled) is effective
                 del results
+                del batches
             else:
                 table = pa.Table.from_batches(batches=batches)
             return table, schema, metrics, observed_metrics, properties
