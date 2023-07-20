@@ -611,6 +611,9 @@ object StateStore extends Logging {
           onError = { loadedProviders.synchronized {
               logInfo("Stopping maintenance task since an error was encountered.")
               stopMaintenanceTask()
+              // SPARK-44504 - Unload explicitly to force closing underlying DB instance
+              // and releasing allocated resources, especially for RocksDBStateStoreProvider.
+              loadedProviders.keySet.foreach { key => unload(key) }
               loadedProviders.clear()
             }
           }
