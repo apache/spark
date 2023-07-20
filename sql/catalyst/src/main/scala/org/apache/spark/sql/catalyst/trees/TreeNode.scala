@@ -23,6 +23,7 @@ import scala.collection.{mutable, Map}
 import scala.collection.JavaConverters._
 import scala.reflect.ClassTag
 
+import java.util
 import org.apache.commons.lang3.ClassUtils
 import org.json4s.JsonAST._
 import org.json4s.JsonDSL._
@@ -936,7 +937,8 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]]
       addSuffix: Boolean,
       maxFields: Int,
       printOperatorId: Boolean): Unit = {
-    generateTreeString(0, Nil, append, verbose, "", addSuffix, maxFields, printOperatorId, 0)
+    generateTreeString(0, new util.LinkedList(), append, verbose, "", addSuffix, maxFields,
+      printOperatorId, 0)
   }
 
   /**
@@ -998,7 +1000,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]]
    */
   def generateTreeString(
       depth: Int,
-      lastChildren: Seq[Boolean],
+      lastChildren: java.util.LinkedList[Boolean],
       append: String => Unit,
       verbose: Boolean,
       prefix: String = "",
@@ -1006,12 +1008,14 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]]
       maxFields: Int,
       printNodeId: Boolean,
       indent: Int = 0): Unit = {
-    append("   " * indent)
+    (0 until indent).foreach(_ => append(" "))
     if (depth > 0) {
-      lastChildren.init.foreach { isLast =>
+      val iter = lastChildren.iterator
+      (0 until lastChildren.size - 1).foreach { i =>
+        val isLast = iter.next
         append(if (isLast) "   " else ":  ")
       }
-      append(if (lastChildren.last) "+- " else ":- ")
+      append(if (lastChildren.getLast) "+- " else ":- ")
     }
 
     val str = if (verbose) {
@@ -1028,22 +1032,36 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]]
     append("\n")
 
     if (innerChildren.nonEmpty) {
+      lastChildren.addLast(children.isEmpty)
+      lastChildren.addLast(false)
       innerChildren.init.foreach(_.generateTreeString(
-        depth + 2, lastChildren :+ children.isEmpty :+ false, append, verbose,
+        depth + 2, lastChildren, append, verbose,
         addSuffix = addSuffix, maxFields = maxFields, printNodeId = printNodeId, indent = indent))
+      lastChildren.removeLast()
+      lastChildren.removeLast()
+
+      lastChildren.addLast(children.isEmpty)
+      lastChildren.addLast(true)
       innerChildren.last.generateTreeString(
-        depth + 2, lastChildren :+ children.isEmpty :+ true, append, verbose,
+        depth + 2, lastChildren, append, verbose,
         addSuffix = addSuffix, maxFields = maxFields, printNodeId = printNodeId, indent = indent)
+      lastChildren.removeLast()
+      lastChildren.removeLast()
     }
 
     if (children.nonEmpty) {
+      lastChildren.addLast(false)
       children.init.foreach(_.generateTreeString(
-        depth + 1, lastChildren :+ false, append, verbose, prefix, addSuffix,
+        depth + 1, lastChildren, append, verbose, prefix, addSuffix,
         maxFields, printNodeId = printNodeId, indent = indent)
       )
+      lastChildren.removeLast()
+
+      lastChildren.addLast(true)
       children.last.generateTreeString(
-        depth + 1, lastChildren :+ true, append, verbose, prefix,
+        depth + 1, lastChildren, append, verbose, prefix,
         addSuffix, maxFields, printNodeId = printNodeId, indent = indent)
+      lastChildren.removeLast()
     }
   }
 

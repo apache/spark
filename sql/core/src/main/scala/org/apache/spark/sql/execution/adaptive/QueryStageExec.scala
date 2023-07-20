@@ -110,7 +110,7 @@ abstract class QueryStageExec extends LeafExecNode {
 
   override def generateTreeString(
       depth: Int,
-      lastChildren: Seq[Boolean],
+      lastChildren: java.util.LinkedList[Boolean],
       append: String => Unit,
       verbose: Boolean,
       prefix: String = "",
@@ -118,6 +118,7 @@ abstract class QueryStageExec extends LeafExecNode {
       maxFields: Int,
       printNodeId: Boolean,
       indent: Int = 0): Unit = {
+    lastChildren.addLast(true)
     super.generateTreeString(depth,
       lastChildren,
       append,
@@ -128,7 +129,8 @@ abstract class QueryStageExec extends LeafExecNode {
       printNodeId,
       indent)
     plan.generateTreeString(
-      depth + 1, lastChildren :+ true, append, verbose, "", false, maxFields, printNodeId, indent)
+      depth + 1, lastChildren, append, verbose, "", false, maxFields, printNodeId, indent)
+    lastChildren.removeLast()
   }
 
   override protected[sql] def cleanupResources(): Unit = {

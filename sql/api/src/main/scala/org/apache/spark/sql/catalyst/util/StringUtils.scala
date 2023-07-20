@@ -29,7 +29,7 @@ import org.apache.spark.unsafe.array.ByteArrayUtils
  * the string.
  */
 class StringConcat(val maxLength: Int = ByteArrayUtils.MAX_ROUNDED_ARRAY_LENGTH) {
-  protected val strings = new ArrayBuffer[String]
+  protected val strings = new java.util.LinkedList[String]
   protected var length: Int = 0
 
   def atLimit: Boolean = length >= maxLength
@@ -45,7 +45,7 @@ class StringConcat(val maxLength: Int = ByteArrayUtils.MAX_ROUNDED_ARRAY_LENGTH)
       if (!atLimit) {
         val available = maxLength - length
         val stringToAppend = if (available >= sLen) s else s.substring(0, available)
-        strings.append(stringToAppend)
+        strings.addLast(stringToAppend)
       }
 
       // Keeps the total length of appended strings. Note that we need to cap the length at
@@ -62,7 +62,7 @@ class StringConcat(val maxLength: Int = ByteArrayUtils.MAX_ROUNDED_ARRAY_LENGTH)
   override def toString: String = {
     val finalLength = if (atLimit) maxLength else length
     val result = new java.lang.StringBuilder(finalLength)
-    strings.foreach(result.append)
+    strings.forEach(s => result.append(s))
     result.toString
   }
 }
