@@ -18,14 +18,13 @@
 package org.apache.spark.sql.jdbc
 
 import java.sql.{Connection, SQLException, Timestamp, Types}
-import java.time.LocalDateTime
+import java.time.{LocalDateTime, ZoneOffset}
 import java.util
 import java.util.Locale
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.analysis.{IndexAlreadyExistsException, NonEmptyNamespaceException, NoSuchIndexException}
-import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.connector.catalog.Identifier
 import org.apache.spark.sql.connector.expressions.NamedReference
 import org.apache.spark.sql.errors.QueryCompilationErrors
@@ -290,7 +289,7 @@ private object PostgresDialect extends JdbcDialect with SQLConfHelper {
    * big constants), we need clamp them to avoid overflow. If it is not one of the infinity
    * values, fall back to default behavior.
    */
-  override def convertJavaTimestampToTimestamp(t: Timestamp): Long = {
+  override def convertJavaTimestampToTimestamp(t: Timestamp): Timestamp = {
     // Variable names come from PostgreSQL "constant field docs":
     // https://jdbc.postgresql.org/documentation/publicapi/index.html?constant-values.html
     val POSTGRESQL_DATE_NEGATIVE_INFINITY = -9223372036832400000L
@@ -298,16 +297,18 @@ private object PostgresDialect extends JdbcDialect with SQLConfHelper {
     val POSTGRESQL_DATE_POSITIVE_INFINITY = 9223372036825200000L
     val POSTGRESQL_DATE_DATE_POSITIVE_SMALLER_INFINITY = 185543533774800000L
 
-    val time = t.getTime
+    val minTimeStamp = LocalDateTime.of(1, 1, 1, 0, 0, 0).toEpochSecond(ZoneOffset.UTC)
+    val maxTimestamp = LocalDateTime.of(9999, 12, 31, 23, 59, 59).toEpochSecond(ZoneOffset.UTC)
 
+    val time = t.getTime
     if (time == POSTGRESQL_DATE_POSITIVE_INFINITY ||
       time == POSTGRESQL_DATE_DATE_POSITIVE_SMALLER_INFINITY) {
-      Long.MaxValue
+      new Timestamp(maxTimestamp)
     } else if (time == POSTGRESQL_DATE_NEGATIVE_INFINITY ||
       time == POSTGRESQL_DATE_NEGATIVE_SMALLER_INFINITY) {
-      Long.MinValue
+      new Timestamp(minTimeStamp)
     } else {
-      DateTimeUtils.fromJavaTimestamp(t)
+      t
     }
   }
 }

@@ -120,9 +120,11 @@ abstract class JdbcDialect extends Serializable with Logging {
    * @return The number of micros since epoch from `java.sql.Timestamp`.
    * @throws IllegalArgumentException if t is null
    */
-  def convertJavaTimestampToTimestamp(t: Timestamp): Long = {
-    DateTimeUtils.fromJavaTimestamp(t)
-  }
+//  def convertJavaTimestampToTimestamp(t: Timestamp): Long = {
+//    DateTimeUtils.fromJavaTimestamp(t)
+//  }
+
+  def convertJavaTimestampToTimestamp(t: Timestamp): Timestamp = t
 
   /**
    * Convert java.sql.Timestamp to a LocalDateTime representing the same wall-clock time as the
