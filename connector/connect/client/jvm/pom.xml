@@ -35,12 +35,10 @@
   </properties>
 
   <dependencies>
-    <!--TODO: fix the dependency once the catalyst refactoring is done-->
     <dependency>
       <groupId>org.apache.spark</groupId>
-      <artifactId>spark-catalyst_${scala.binary.version}</artifactId>
+      <artifactId>spark-connect-common_${scala.binary.version}</artifactId>
       <version>${project.version}</version>
-      <scope>provided</scope>
       <exclusions>
         <exclusion>
           <groupId>com.google.guava</groupId>
@@ -49,10 +47,12 @@
       </exclusions>
     </dependency>
 
+    <!--TODO: fix the dependency once the catalyst refactoring is done-->
     <dependency>
       <groupId>org.apache.spark</groupId>
-      <artifactId>spark-connect-common_${scala.binary.version}</artifactId>
+      <artifactId>spark-catalyst_${scala.binary.version}</artifactId>
       <version>${project.version}</version>
+      <scope>provided</scope>
       <exclusions>
         <exclusion>
           <groupId>com.google.guava</groupId>
@@ -101,14 +101,6 @@
       <groupId>io.netty</groupId>
       <artifactId>netty-transport-native-unix-common</artifactId>
       <version>${netty.version}</version>
-    </dependency>
-    <dependency>
-      <groupId>org.apache.arrow</groupId>
-      <artifactId>arrow-vector</artifactId>
-    </dependency>
-    <dependency>
-      <groupId>org.apache.arrow</groupId>
-      <artifactId>arrow-memory-netty</artifactId>
     </dependency>
     <dependency>
       <groupId>com.lihaoyi</groupId>
