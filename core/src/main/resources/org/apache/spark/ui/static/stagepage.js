@@ -853,6 +853,7 @@ $(document).ready(function () {
               name: "Index"
             },
             {data : "taskId", name: "ID"},
+            {data : "partitionId", name: "Partition ID"},
             {data : "attempt", name: "Attempt"},
             {data : "status", name: "Status"},
             {data : "taskLocality", name: "Locality Level"},
