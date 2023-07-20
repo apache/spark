@@ -1078,6 +1078,7 @@ class ExecutePlanRequest(google.protobuf.message.Message):
         self,
     ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.str]:
         """Tags to tag the given execution with.
+        Tags cannot contain ',' character and cannot be empty strings.
         Used by Interrupt with interrupt.tag.
         """
     def __init__(
