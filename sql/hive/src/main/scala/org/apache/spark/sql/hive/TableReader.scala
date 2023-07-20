@@ -79,8 +79,9 @@ class HadoopTableReader(
   private val _minSplitsPerRDD = if (sparkSession.sparkContext.isLocal) {
     0 // will splitted based on block by default.
   } else {
-    math.max(hadoopConf.getInt("mapreduce.job.maps", 1),
-      sparkSession.sparkContext.defaultMinPartitions)
+    val defaultMinPartitions = sparkSession.sparkContext.defaultMinPartitions
+    val value = sparkSession.conf.get(SQLConf.HIVE_MIN_PARTITION_NUM, defaultMinPartitions)
+    math.max(hadoopConf.getInt("mapreduce.job.maps", 1), value)
   }
 
   SparkHadoopUtil.get.appendS3AndSparkHadoopHiveConfigurations(

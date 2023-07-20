@@ -1761,6 +1761,15 @@ object SQLConf {
     .checkValue(v => v > 0, "The min partition number must be a positive integer.")
     .createOptional
 
+  val HIVE_MIN_PARTITION_NUM = buildConf("spark.sql.hive.file.minPartitionNum")
+    .doc("Suggested (non guaranteed) minimum number of split hive table files. " +
+      "If not set, the default value is `spark.default.palelism`. This configuration is" +
+      "Only valid when using file based sources such as Parquet, JSON, and ORC.")
+    .version("3.5.0")
+    .intConf
+    .checkValue(v => v > 0, "The min partition number must be a positive integer.")
+    .createOptional
+
   val FILES_MAX_PARTITION_NUM = buildConf("spark.sql.files.maxPartitionNum")
     .doc("The suggested (not guaranteed) maximum number of split file partitions. If it is set, " +
       "Spark will rescale each partition to make the number of partitions is close to this " +
