@@ -442,6 +442,8 @@ object StateStore extends Logging {
 
   private val maintenanceThreadPoolLock = new Object
 
+  private val maintenanceThreadPoolShutdownLock = new Object
+
   private val threadPoolException = new AtomicReference[Throwable](null)
 
   // This set is to keep track of the partitions that are queued
@@ -500,6 +502,11 @@ object StateStore extends Logging {
 
     def stop(): Unit = {
       threadPool.shutdown()
+      maintenanceThreadPoolShutdownLock.synchronized {
+        while (threadPool.getActiveCount != 0) {
+          Thread.sleep(100)
+        }
+      }
     }
   }
 
@@ -637,9 +644,11 @@ object StateStore extends Logging {
       maintenanceThreadPool.stop()
       maintenanceThreadPool = null
     }
-    if (maintenanceTask != null) {
-      maintenanceTask.stop()
-      maintenanceTask = null
+    maintenanceThreadPoolShutdownLock.synchronized {
+      if (maintenanceTask != null) {
+        maintenanceTask.stop()
+        maintenanceTask = null
+      }
     }
   }
 
