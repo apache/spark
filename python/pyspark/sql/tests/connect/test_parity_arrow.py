@@ -60,7 +60,7 @@ class ArrowParityTests(ArrowTestsMixin, ReusedConnectTestCase, PandasOnSparkTest
         super().test_no_partition_toPandas()
 
     def test_pandas_self_destruct(self):
-        df = self.spark.range(100).select('id', 'id', 'id')
+        df = self.spark.range(100).select("id", "id", "id")
 
         with self.sql_conf({"spark.sql.execution.arrow.pyspark.selfDestruct.enabled": True}):
             self_destruct_pdf = df.toPandas()
