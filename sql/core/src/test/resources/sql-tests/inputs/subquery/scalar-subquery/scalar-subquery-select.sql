@@ -255,3 +255,6 @@ select * from (
   where t1.id = t2.id  ) c2
  from range (1, 3) t1 ) t
 where t.c2 is not null;
+
+-- SPARK-43838: Subquery on single table with having clause
+SELECT c1, c2, (SELECT count(*) cnt FROM t1 t2 WHERE t1.c1 = t2.c1 HAVING cnt = 0) FROM t1

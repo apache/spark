@@ -649,7 +649,7 @@ class SparkConnectClient(object):
     def register_udtf(
         self,
         function: Any,
-        return_type: "DataTypeOrString",
+        return_type: Optional["DataTypeOrString"],
         name: str,
         eval_type: int = PythonEvalType.SQL_TABLE_UDF,
         deterministic: bool = True,

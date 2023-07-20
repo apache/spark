@@ -22,6 +22,7 @@ import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions.aggregate.ImperativeAggregate
 import org.apache.spark.sql.catalyst.expressions.objects.StaticInvoke
 import org.apache.spark.sql.catalyst.trees.UnaryLike
+import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.types.{AbstractDataType, BinaryType, DataType, LongType, StructType}
 
@@ -175,7 +176,7 @@ case class BitmapConstructAgg(child: Expression,
 
   override def nullable: Boolean = false
 
-  override def aggBufferSchema: StructType = StructType.fromAttributes(aggBufferAttributes)
+  override def aggBufferSchema: StructType = DataTypeUtils.fromAttributes(aggBufferAttributes)
 
   // The aggregation buffer is a fixed size binary.
   private val bitmapAttr = AttributeReference("bitmap", BinaryType, nullable = false)()
@@ -268,7 +269,7 @@ case class BitmapOrAgg(child: Expression,
 
   override def nullable: Boolean = false
 
-  override def aggBufferSchema: StructType = StructType.fromAttributes(aggBufferAttributes)
+  override def aggBufferSchema: StructType = DataTypeUtils.fromAttributes(aggBufferAttributes)
 
   // The aggregation buffer is a fixed size binary.
   private val bitmapAttr = AttributeReference("bitmap", BinaryType, false)()
