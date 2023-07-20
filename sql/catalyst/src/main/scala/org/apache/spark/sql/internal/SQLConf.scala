@@ -1860,7 +1860,7 @@ object SQLConf {
         "affect the performance of the query. " +
         "Enable this if you observe the issue with the maintenance task.")
       .booleanConf
-      .createWithDefault(false)
+      .createWithDefault(true)
 
   val NUM_STATE_STORE_MAINTENANCE_THREADS =
     buildConf("spark.sql.streaming.stateStore.numStateStoreMaintenanceThreads")
