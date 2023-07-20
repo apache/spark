@@ -4565,6 +4565,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def filesMinPartitionNum: Option[Int] = getConf(FILES_MIN_PARTITION_NUM)
 
+  def hiveMinPartitionNum: Option[Int] = getConf(HIVE_MIN_PARTITION_NUM)
+
   def filesMaxPartitionNum: Option[Int] = getConf(FILES_MAX_PARTITION_NUM)
 
   def ignoreCorruptFiles: Boolean = getConf(IGNORE_CORRUPT_FILES)
