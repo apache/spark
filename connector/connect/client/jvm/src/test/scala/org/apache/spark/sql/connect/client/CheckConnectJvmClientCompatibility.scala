@@ -311,6 +311,12 @@ object CheckConnectJvmClientCompatibility {
         "org.apache.spark.sql.SQLImplicits._sqlContext" // protected
       ),
 
+      // Catalyst Refactoring
+      ProblemFilters.exclude[Problem](
+        "org.apache.spark.sql.catalyst.util.SparkCollectionUtils"),
+      ProblemFilters.exclude[Problem](
+        "org.apache.spark.sql.catalyst.util.SparkCollectionUtils$"),
+
       // New public APIs added in the client
       // ScalarUserDefinedFunction
       ProblemFilters
@@ -385,6 +391,7 @@ object CheckConnectJvmClientCompatibility {
         "org.apache.spark.sql.streaming.RemoteStreamingQuery"),
       ProblemFilters.exclude[MissingClassProblem](
         "org.apache.spark.sql.streaming.RemoteStreamingQuery$"))
+
 
     checkMiMaCompatibility(sqlJar, clientJar, includedRules, excludeRules)
   }
