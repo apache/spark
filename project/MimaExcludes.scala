@@ -174,6 +174,13 @@ object MimaExcludes {
     ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.types.ObjectType"),
     ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.types.ObjectType$"),
 
+    // SPARK-44496: Move Interfaces needed by SCSC to sql/api.
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.Encoder"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.Row"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.Row$"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.api.java.function.package"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.api.java.function.package$"),
+
     (problem: Problem) => problem match {
       case MissingClassProblem(cls) => !cls.fullName.startsWith("org.sparkproject.jpmml") &&
           !cls.fullName.startsWith("org.sparkproject.dmg.pmml")
