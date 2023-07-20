@@ -170,11 +170,16 @@ trait DataSourceV2ScanExecBase extends LeafExecNode {
   }
 
   override def supportsColumnar: Boolean = {
-    require(inputPartitions.forall(readerFactory.supportColumnarReads) ||
-      !inputPartitions.exists(readerFactory.supportColumnarReads),
-      "Cannot mix row-based and columnar input partitions.")
-
-    inputPartitions.exists(readerFactory.supportColumnarReads)
+    scan.columnarSupported() match {
+      case Scan.ColumnarSupportType.PARTITION_DEFINED =>
+        require(
+          inputPartitions.forall(readerFactory.supportColumnarReads) ||
+            !inputPartitions.exists(readerFactory.supportColumnarReads),
+          "Cannot mix row-based and columnar input partitions.")
+        inputPartitions.exists(readerFactory.supportColumnarReads)
+      case Scan.ColumnarSupportType.SUPPORTED => true
+      case Scan.ColumnarSupportType.UNSUPPORTED => false
+    }
   }
 
   def inputRDD: RDD[InternalRow]

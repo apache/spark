@@ -388,6 +388,24 @@ class DataSourceV2Suite extends QueryTest with SharedSparkSession with AdaptiveS
     assert(df.queryExecution.executedPlan.collect { case e: Exchange => e }.isEmpty)
   }
 
+  test("SPARK-44505: should not call planInputPartitions() on explain") {
+    val df = spark.read.format(classOf[ScanDefinedColumnarSupport].getName)
+      .option("columnar", "PARTITION_DEFINED").load()
+    // Default mode will throw an exception on explain.
+    intercept[IllegalArgumentException](df.explain())
+    val df_scan = spark.read.format(classOf[ScanDefinedColumnarSupport].getName)
+      .option("columnar", "SUPPORTED").load()
+    df_scan.explain()
+    // Will fail during regular exeuction
+    intercept[IllegalArgumentException](df_scan.count())
+
+    val df_scan_unsupported = spark.read.format(classOf[ScanDefinedColumnarSupport].getName)
+      .option("columnar", "SUPPORTED").load()
+    df_scan_unsupported.explain()
+    // Will fail during regular exeuction
+    intercept[IllegalArgumentException](df_scan_unsupported.count())
+  }
+
   test("simple writable data source") {
     Seq(classOf[SimpleWritableDataSource], classOf[JavaSimpleWritableDataSource]).foreach { cls =>
       withTempPath { file =>
@@ -684,6 +702,26 @@ class SimpleSinglePartitionSource extends TestingV2Source {
       new MyScanBuilder()
     }
   }
+}
+
+class ScanDefinedColumnarSupport extends TestingV2Source {
+
+  class MyScanBuilder(st: Scan.ColumnarSupportType) extends SimpleScanBuilder {
+    override def planInputPartitions(): Array[InputPartition] = {
+      throw new IllegalArgumentException("Should not happen")
+    }
+
+    override def columnarSupported()
+        : Scan.ColumnarSupportType = st
+
+  }
+
+  override def getTable(options: CaseInsensitiveStringMap): Table = new SimpleBatchTable {
+    override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = {
+      new MyScanBuilder(Scan.ColumnarSupportType.valueOf(options.get("columnar")))
+    }
+  }
+
 }
 
 
