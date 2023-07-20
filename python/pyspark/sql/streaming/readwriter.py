@@ -1350,8 +1350,8 @@ class DataStreamWriter:
         Notes
         -----
         This API is evolving.
-        This function behaves differently in Spark Connect mode.
-        In Connect, the provided function doesn't have access to variables defined outside of it. See examples.
+        This function behaves differently in Spark Connect mode. See examples.
+        In Connect, the provided function doesn't have access to variables defined outside of it.
 
         Examples
         --------
