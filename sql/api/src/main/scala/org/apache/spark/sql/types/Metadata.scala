@@ -137,6 +137,8 @@ object Metadata {
     jObj.obj.foreach {
       case (key, JInt(value)) =>
         builder.putLong(key, value.toLong)
+      case (key, JLong(value)) =>
+        builder.putLong(key, value.toLong)
       case (key, JDouble(value)) =>
         builder.putDouble(key, value)
       case (key, JBool(value)) =>
