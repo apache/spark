@@ -1671,6 +1671,12 @@ The table or view `<relationName>` cannot be found. Verify the spelling and corr
 If you did not qualify the name with a schema, verify the current_schema() output, or qualify the name with the correct schema and catalog.
 To tolerate the error on drop use DROP VIEW IF EXISTS or DROP TABLE IF EXISTS.
 
+### TABLE_VALUED_FUNCTION_FAILED_TO_ANALYZE_IN_PYTHON
+
+SQLSTATE: none assigned
+
+Failed to analyze the Python user defined table function: `<msg>`
+
 ### TABLE_VALUED_FUNCTION_TOO_MANY_TABLE_ARGUMENTS
 
 SQLSTATE: none assigned

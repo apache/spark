@@ -1976,6 +1976,13 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
     )
   }
 
+  def tableValuedFunctionFailedToAnalyseInPythonError(msg: String): Throwable = {
+    new AnalysisException(
+      errorClass = "TABLE_VALUED_FUNCTION_FAILED_TO_ANALYZE_IN_PYTHON",
+      messageParameters = Map("msg" -> msg)
+    )
+  }
+
   def identifierTooManyNamePartsError(originalIdentifier: String): Throwable = {
     new AnalysisException(
       errorClass = "IDENTIFIER_TOO_MANY_NAME_PARTS",
