@@ -16,35 +16,22 @@
  */
 package org.apache.spark.sql.catalyst.util
 
-object QuotingUtils {
-  private def quoteByDefault(elem: String): String = {
-    "\"" + elem + "\""
-  }
+import scala.collection.immutable
 
-  def toSQLConf(conf: String): String = {
-    quoteByDefault(conf)
-  }
-
-  def toSQLSchema(schema: String): String = {
-    quoteByDefault(schema)
-  }
-
-  def quoteIfNeeded(part: String): String = {
-    if (part.matches("[a-zA-Z0-9_]+") && !part.matches("\\d+")) {
-      part
-    } else {
-      s"`${part.replace("`", "``")}`"
+trait SparkCollectionUtils {
+  /**
+   * Same function as `keys.zipWithIndex.toMap`, but has perf gain.
+   */
+  def toMapWithIndex[K](keys: Iterable[K]): Map[K, Int] = {
+    val builder = immutable.Map.newBuilder[K, Int]
+    val keyIter = keys.iterator
+    var idx = 0
+    while (keyIter.hasNext) {
+      builder += (keyIter.next(), idx).asInstanceOf[(K, Int)]
+      idx = idx + 1
     }
-  }
-
-  def escapeSingleQuotedString(str: String): String = {
-    val builder = new StringBuilder
-
-    str.foreach {
-      case '\'' => builder ++= s"\\\'"
-      case ch => builder += ch
-    }
-
-    builder.toString()
+    builder.result()
   }
 }
+
+object SparkCollectionUtils extends SparkCollectionUtils
