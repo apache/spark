@@ -267,4 +267,32 @@ private[sql] object DataTypeErrors extends DataTypeErrorsBase {
       errorClass = "FAILED_PARSE_STRUCT_TYPE",
       messageParameters = Map("raw" -> s"'$raw'"))
   }
+
+  def fieldIndexOnRowWithoutSchemaError(): SparkUnsupportedOperationException = {
+    new SparkUnsupportedOperationException(
+      errorClass = "_LEGACY_ERROR_TEMP_2231",
+      messageParameters = Map.empty)
+  }
+
+  def valueIsNullError(index: Int): Throwable = {
+    new SparkException(
+      errorClass = "_LEGACY_ERROR_TEMP_2232",
+      messageParameters = Map(
+        "index" -> index.toString),
+      cause = null)
+  }
+
+  def charOrVarcharTypeAsStringUnsupportedError(): Throwable = {
+    new SparkException(
+      errorClass = "UNSUPPORTED_CHAR_OR_VARCHAR_AS_STRING",
+      messageParameters = Map.empty,
+      cause = null)
+  }
+
+  def userSpecifiedSchemaUnsupportedError(operation: String): Throwable = {
+    new SparkException(
+      errorClass = "_LEGACY_ERROR_TEMP_1189",
+      messageParameters = Map("operation" -> operation),
+      cause = null)
+  }
 }
