@@ -760,7 +760,7 @@ class SparkConnectClient(object):
         (self_destruct,) = self.get_config_with_defaults(
             ("spark.sql.execution.arrow.pyspark.selfDestruct.enabled", "false"),
         )
-        self_destruct = (self_destruct is True) or (self_destruct.lower() == "true")
+        self_destruct = self_destruct.lower() == "true"
         table, schema, metrics, observed_metrics, _ = self._execute_and_fetch(
             req, self_destruct=self_destruct
         )
