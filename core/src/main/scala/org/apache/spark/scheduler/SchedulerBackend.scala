@@ -31,7 +31,7 @@ private[spark] trait SchedulerBackend {
   def start(): Unit
   def stop(): Unit
   def stop(exitCode: Int): Unit = stop()
-  def updateLogLevel(logLevel: String): Unit = {}
+  def updateExecutorsLogLevel(logLevel: String): Unit = {}
   /**
    * Update the current offers and schedule tasks
    */

@@ -396,9 +396,8 @@ class SparkContext(config: SparkConf) extends Logging {
       s"Supplied level $logLevel did not match one of:" +
         s" ${SparkContext.VALID_LOG_LEVELS.mkString(",")}")
     Utils.setLogLevelIfNeeded(upperCased)
-    // Inform all executors about the change
     if (conf.get(EXECUTOR_ALLOW_SYNC_LOG_LEVEL) && _schedulerBackend != null) {
-      _schedulerBackend.updateLogLevel(upperCased)
+      _schedulerBackend.updateExecutorsLogLevel(upperCased)
     }
   }
 
@@ -588,10 +587,9 @@ class SparkContext(config: SparkConf) extends Logging {
     _dagScheduler = new DAGScheduler(this)
     _heartbeatReceiver.ask[Boolean](TaskSchedulerIsSet)
 
-    // After initialisation of  _schedulerBackend, if EXECUTOR_ALLOW_SYNC_LOG_LEVEL is true and
-    // SPARK_LOG_LEVEL is already set, sync the new log level with all the current executors.
     if (_conf.get(EXECUTOR_ALLOW_SYNC_LOG_LEVEL)) {
-      _conf.get(SPARK_LOG_LEVEL).foreach(logLevel => _schedulerBackend.updateLogLevel(logLevel))
+      _conf.get(SPARK_LOG_LEVEL)
+        .foreach(logLevel => _schedulerBackend.updateExecutorsLogLevel(logLevel))
     }
 
     val _executorMetricsSource =

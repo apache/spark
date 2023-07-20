@@ -124,7 +124,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
   @volatile protected var currentExecutorIdCounter = 0
 
   // Current log level of driver to send to executor
-  @volatile private var logLevel: Option[String] = None
+  @volatile private var currentLogLevel: Option[String] = None
 
   // Current set of delegation tokens to send to executors.
   private val delegationTokens = new AtomicReference[Array[Byte]]()
@@ -322,9 +322,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
         stop()
 
       case UpdateExecutorsLogLevel(logLevel) =>
-        // Remember the current log level of the application, so that it can be propagated to
-        // new executors on RetrieveSparkAppConfig event
-        CoarseGrainedSchedulerBackend.this.logLevel = Some(logLevel)
+        currentLogLevel = Some(logLevel)
         logInfo(s"Asking each executor to refresh the log level to $logLevel")
         for ((_, executorData) <- executorDataMap) {
           executorData.executorEndpoint.send(UpdateExecutorLogLevel(logLevel))
@@ -359,7 +357,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
           SparkEnv.get.securityManager.getIOEncryptionKey(),
           Option(delegationTokens.get()),
           rp,
-          CoarseGrainedSchedulerBackend.this.logLevel)
+          currentLogLevel)
         context.reply(reply)
 
       case IsExecutorAlive(executorId) => context.reply(isExecutorActive(executorId))
@@ -667,7 +665,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
     }
   }
 
-  override def updateLogLevel(logLevel: String): Unit = {
+  override def updateExecutorsLogLevel(logLevel: String): Unit = {
     if (driverEndpoint != null) {
       driverEndpoint.ask[Boolean](UpdateExecutorsLogLevel(logLevel))
     }

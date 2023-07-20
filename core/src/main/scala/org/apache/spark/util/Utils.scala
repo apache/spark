@@ -2447,7 +2447,6 @@ private[spark] object Utils extends Logging with SparkClassUtils {
 
 
   def setLogLevelIfNeeded(newLogLevel: String): Unit = {
-    // Update only if new log level is not same as current log level
     if (newLogLevel != Utils.getLogLevel) {
       Utils.setLogLevel(Level.toLevel(newLogLevel))
     }
