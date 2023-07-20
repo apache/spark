@@ -1,4 +1,4 @@
-/*
+ /*
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with
  * this work for additional information regarding copyright ownership.
@@ -1765,7 +1765,7 @@ object SQLConf {
     .doc("Suggested (non guaranteed) minimum number of split hive table files. " +
       "If not set, the default value is `spark.default.palelism`. This configuration is" +
       "Only valid when using file based sources such as Parquet, JSON, and ORC.")
-    .version("3.5.0")
+    .version("3.4.1")
     .intConf
     .checkValue(v => v > 0, "The min partition number must be a positive integer.")
     .createOptional
