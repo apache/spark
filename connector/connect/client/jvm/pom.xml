@@ -46,7 +46,6 @@
         </exclusion>
       </exclusions>
     </dependency>
-
     <!--TODO: fix the dependency once the catalyst refactoring is done-->
     <dependency>
       <groupId>org.apache.spark</groupId>
