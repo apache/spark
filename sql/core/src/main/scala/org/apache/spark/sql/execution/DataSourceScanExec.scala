@@ -115,13 +115,14 @@ case class RowDataSourceScanExec(
   protected override def doExecute(): RDD[InternalRow] = {
     val numOutputRows = longMetric("numOutputRows")
 
-    rdd.mapPartitionsWithIndexInternal { (index, iter) =>
-      val proj = UnsafeProjection.create(schema)
-      proj.initialize(index)
-      iter.map( r => {
-        numOutputRows += 1
-        proj(r)
-      })
+    val evaluatorFactory = new RowDataSourceScanEvaluatorFactory(schema, numOutputRows)
+
+    if (conf.usePartitionEvaluator) {
+      rdd.mapPartitionsWithEvaluator(evaluatorFactory)
+    } else {
+      rdd.mapPartitionsWithIndexInternal { (index, iter) =>
+        evaluatorFactory.createEvaluator().eval(index, iter)
+      }
     }
   }
 
@@ -562,21 +563,14 @@ case class FileSourceScanExec(
 
   protected override def doExecute(): RDD[InternalRow] = {
     val numOutputRows = longMetric("numOutputRows")
-    if (needsUnsafeRowConversion) {
-      inputRDD.mapPartitionsWithIndexInternal { (index, iter) =>
-        val toUnsafe = UnsafeProjection.create(schema)
-        toUnsafe.initialize(index)
-        iter.map { row =>
-          numOutputRows += 1
-          toUnsafe(row)
-        }
-      }
+    val evaluatorFactory =
+      new FileSourceScanEvaluatorFactory(schema, numOutputRows, needsUnsafeRowConversion)
+
+    if (conf.usePartitionEvaluator) {
+      inputRDD.mapPartitionsWithEvaluator(evaluatorFactory)
     } else {
-      inputRDD.mapPartitionsInternal { iter =>
-        iter.map { row =>
-          numOutputRows += 1
-          row
-        }
+      inputRDD.mapPartitionsWithIndexInternal { (index, iter) =>
+        evaluatorFactory.createEvaluator().eval(index, iter)
       }
     }
   }
@@ -584,22 +578,14 @@ case class FileSourceScanExec(
   protected override def doExecuteColumnar(): RDD[ColumnarBatch] = {
     val numOutputRows = longMetric("numOutputRows")
     val scanTime = longMetric("scanTime")
-    inputRDD.asInstanceOf[RDD[ColumnarBatch]].mapPartitionsInternal { batches =>
-      new Iterator[ColumnarBatch] {
+    val evaluatorFactory = new FileSourceColumnarScanEvaluatorFactory(numOutputRows, scanTime)
+    val columnarBatchRDD = inputRDD.asInstanceOf[RDD[ColumnarBatch]]
 
-        override def hasNext: Boolean = {
-          // The `FileScanRDD` returns an iterator which scans the file during the `hasNext` call.
-          val startNs = System.nanoTime()
-          val res = batches.hasNext
-          scanTime += NANOSECONDS.toMillis(System.nanoTime() - startNs)
-          res
-        }
-
-        override def next(): ColumnarBatch = {
-          val batch = batches.next()
-          numOutputRows += batch.numRows()
-          batch
-        }
+    if (conf.usePartitionEvaluator) {
+      columnarBatchRDD.mapPartitionsWithEvaluator(evaluatorFactory)
+    } else {
+      columnarBatchRDD.mapPartitionsWithIndexInternal { (index, iter) =>
+        evaluatorFactory.createEvaluator().eval(index, iter)
       }
     }
   }
