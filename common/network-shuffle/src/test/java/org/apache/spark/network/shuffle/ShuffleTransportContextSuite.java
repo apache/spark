@@ -63,7 +63,7 @@ public class ShuffleTransportContextSuite {
   ShuffleTransportContext createShuffleTransportContext(boolean separateFinalizeThread)
       throws IOException {
     Map<String, String> configs = new HashMap<>();
-    configs.put("spark.shuffle.server.finalizeShuffleMergeThreads",
+    configs.put("spark.shuffle.server.finalizeShuffleMergeThreadsPercent",
         separateFinalizeThread ? "1" : "0");
     TransportConf transportConf = new TransportConf("shuffle",
         new MapConfigProvider(configs));
