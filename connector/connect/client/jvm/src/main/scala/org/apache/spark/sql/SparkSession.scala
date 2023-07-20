@@ -620,7 +620,7 @@ class SparkSession private[sql] (
    * @since 3.5.0
    */
   def interruptAll(): Seq[String] = {
-    client.interruptAll().getInterruptedIdsList.asScala
+    client.interruptAll().getInterruptedIdsList.asScala.toSeq
   }
 
   /**
@@ -633,7 +633,7 @@ class SparkSession private[sql] (
    * @since 3.5.0
    */
   def interruptTag(tag: String): Seq[String] = {
-    client.interruptTag(tag).getInterruptedIdsList.asScala
+    client.interruptTag(tag).getInterruptedIdsList.asScala.toSeq
   }
 
   /**
@@ -646,7 +646,7 @@ class SparkSession private[sql] (
    * @since 3.5.0
    */
   def interruptOperation(operationId: String): Seq[String] = {
-    client.interruptOperation(operationId).getInterruptedIdsList.asScala
+    client.interruptOperation(operationId).getInterruptedIdsList.asScala.toSeq
   }
 
   /**
