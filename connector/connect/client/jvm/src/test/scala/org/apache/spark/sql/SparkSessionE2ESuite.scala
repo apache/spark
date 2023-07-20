@@ -74,7 +74,7 @@ class SparkSessionE2ESuite extends RemoteSparkSession {
       assert(q1Interrupted)
       assert(q2Interrupted)
     }
-    assert(interrupted.distinct.length == 2, s"Interrupted operations: ${interrupted.distinct}.")
+    assert(interrupted.length == 2, s"Interrupted operations: $interrupted.")
   }
 
   test("interrupt all - foreground queries, background interrupt") {
@@ -103,7 +103,7 @@ class SparkSessionE2ESuite extends RemoteSparkSession {
     assert(e2.getMessage.contains("OPERATION_CANCELED"), s"Unexpected exception: $e2")
     finished = true
     assert(ThreadUtils.awaitResult(interruptor, 10.seconds))
-    assert(interrupted.distinct.length == 2, s"Interrupted operations: ${interrupted.distinct}.")
+    assert(interrupted.length == 2, s"Interrupted operations: $interrupted.")
   }
 
   test("interrupt tag") {
@@ -141,6 +141,7 @@ class SparkSessionE2ESuite extends RemoteSparkSession {
       spark.addTag("two")
       spark.addTag("one")
       spark.addTag("two") // duplicates shouldn't matter
+      assert(spark.getTags() == Set("one", "two"))
       try {
         spark
           .range(10)
@@ -196,9 +197,7 @@ class SparkSessionE2ESuite extends RemoteSparkSession {
     eventually(timeout(20.seconds), interval(1.seconds)) {
       val ids = spark.interruptTag("two")
       interrupted ++= ids
-      assert(
-        interrupted.distinct.length == 2,
-        s"Interrupted operations: ${interrupted.distinct}.")
+      assert(interrupted.length == 2, s"Interrupted operations: $interrupted.")
     }
     val e2 = intercept[SparkException] {
       ThreadUtils.awaitResult(q2, 1.minute)
@@ -208,16 +207,14 @@ class SparkSessionE2ESuite extends RemoteSparkSession {
       ThreadUtils.awaitResult(q3, 1.minute)
     }
     assert(e3.getCause.getMessage contains "OPERATION_CANCELED")
-    assert(interrupted.distinct.length == 2, s"Interrupted operations: ${interrupted.distinct}.")
+    assert(interrupted.length == 2, s"Interrupted operations: $interrupted.")
 
     // q1 and q4 should be cancelled
     interrupted.clear()
     eventually(timeout(20.seconds), interval(1.seconds)) {
       val ids = spark.interruptTag("one")
       interrupted ++= ids
-      assert(
-        interrupted.distinct.length == 2,
-        s"Interrupted operations: ${interrupted.distinct}.")
+      assert(interrupted.length == 2, s"Interrupted operations: $interrupted.")
     }
     val e1 = intercept[SparkException] {
       ThreadUtils.awaitResult(q1, 1.minute)
@@ -227,7 +224,7 @@ class SparkSessionE2ESuite extends RemoteSparkSession {
       ThreadUtils.awaitResult(q4, 1.minute)
     }
     assert(e4.getCause.getMessage contains "OPERATION_CANCELED")
-    assert(interrupted.distinct.length == 2, s"Interrupted operations: ${interrupted.distinct}.")
+    assert(interrupted.length == 2, s"Interrupted operations: $interrupted.")
   }
 
   test("interrupt operation") {

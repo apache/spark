@@ -106,8 +106,10 @@ private[connect] class ExecuteHolder(
   /**
    * Interrupt the execution. Interrupts the running thread, which cancels all running Spark Jobs
    * and makes the execution throw an OPERATION_CANCELED error.
+   * @return
+   *   true if it was not interrupted before, false if it was already interrupted.
    */
-  def interrupt(): Unit = {
+  def interrupt(): Boolean = {
     runner.interrupt()
   }
 

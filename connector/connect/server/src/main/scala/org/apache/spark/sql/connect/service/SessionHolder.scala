@@ -94,8 +94,9 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
   private[connect] def interruptAll(): Seq[String] = {
     val interruptedIds = new mutable.ArrayBuffer[String]()
     executions.asScala.values.foreach { execute =>
-      interruptedIds += execute.operationId
-      execute.interrupt()
+      if (execute.interrupt()) {
+        interruptedIds += execute.operationId
+      }
     }
     interruptedIds.toSeq
   }
@@ -109,8 +110,9 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
     val interruptedIds = new mutable.ArrayBuffer[String]()
     executions.asScala.values.foreach { execute =>
       if (execute.sparkSessionTags.contains(tag)) {
-        interruptedIds += execute.operationId
-        execute.interrupt()
+        if (execute.interrupt()) {
+          interruptedIds += execute.operationId
+        }
       }
     }
     interruptedIds.toSeq
@@ -124,8 +126,9 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
   private[connect] def interruptOperation(operationId: String): Seq[String] = {
     val interruptedIds = new mutable.ArrayBuffer[String]()
     Option(executions.get(operationId)).foreach { execute =>
-      interruptedIds += execute.operationId
-      execute.interrupt()
+      if (execute.interrupt()) {
+        interruptedIds += execute.operationId
+      }
     }
     interruptedIds.toSeq
   }

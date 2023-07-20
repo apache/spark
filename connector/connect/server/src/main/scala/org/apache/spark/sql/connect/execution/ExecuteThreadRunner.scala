@@ -54,11 +54,20 @@ private[connect] class ExecuteThreadRunner(executeHolder: ExecuteHolder) extends
     executionThread.join()
   }
 
-  /** Interrupt the executing thread. */
-  def interrupt(): Unit = {
+  /**
+   * Interrupt the executing thread.
+   * @return
+   *   true if it was not interrupted before, false if it was already interrupted.
+   */
+  def interrupt(): Boolean = {
     synchronized {
-      interrupted = true
-      executionThread.interrupt()
+      if (!interrupted) {
+        interrupted = true
+        executionThread.interrupt()
+        true
+      } else {
+        false
+      }
     }
   }
 
