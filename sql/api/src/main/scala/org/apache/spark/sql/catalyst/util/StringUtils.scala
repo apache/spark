@@ -18,8 +18,6 @@ package org.apache.spark.sql.catalyst.util
 
 import java.util.concurrent.atomic.AtomicBoolean
 
-import scala.collection.mutable.ArrayBuffer
-
 import org.apache.spark.internal.Logging
 import org.apache.spark.unsafe.array.ByteArrayUtils
 

@@ -23,7 +23,6 @@ import scala.collection.{mutable, Map}
 import scala.collection.JavaConverters._
 import scala.reflect.ClassTag
 
-import java.util
 import org.apache.commons.lang3.ClassUtils
 import org.json4s.JsonAST._
 import org.json4s.JsonDSL._
@@ -937,7 +936,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]]
       addSuffix: Boolean,
       maxFields: Int,
       printOperatorId: Boolean): Unit = {
-    generateTreeString(0, new util.LinkedList(), append, verbose, "", addSuffix, maxFields,
+    generateTreeString(0, new java.util.LinkedList(), append, verbose, "", addSuffix, maxFields,
       printOperatorId, 0)
   }
 

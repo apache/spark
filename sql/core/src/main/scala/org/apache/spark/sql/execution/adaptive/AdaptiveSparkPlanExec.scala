@@ -472,7 +472,7 @@ case class AdaptiveSparkPlanExec(
     append(s"+- == $header ==\n")
     plan.generateTreeString(
       0,
-      Nil,
+      new java.util.LinkedList(),
       append,
       verbose,
       prefix = "",
