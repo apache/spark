@@ -202,9 +202,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
   }
 
   def dataTypeUnsupportedError(dataType: String, failure: String): Throwable = {
-    new SparkIllegalArgumentException(
-      errorClass = "UNSUPPORTED_DATATYPE",
-      messageParameters = Map("typeName" -> (dataType + failure)))
+    DataTypeErrors.dataTypeUnsupportedError(dataType, failure)
   }
 
   def failedExecuteUserDefinedFunctionError(functionName: String, inputTypes: String,
@@ -1278,15 +1276,8 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
       decimalPrecision: Int,
       decimalScale: Int,
       context: SQLQueryContext = null): ArithmeticException = {
-    new SparkArithmeticException(
-      errorClass = "NUMERIC_VALUE_OUT_OF_RANGE",
-      messageParameters = Map(
-        "value" -> value.toPlainString,
-        "precision" -> decimalPrecision.toString,
-        "scale" -> decimalScale.toString,
-        "config" -> toSQLConf(SQLConf.ANSI_ENABLED.key)),
-      context = getQueryContext(context),
-      summary = getSummary(context))
+    DataTypeErrors.unscaledValueTooLargeForPrecisionError(
+      value, decimalPrecision, decimalScale, context)
   }
 
   def decimalPrecisionExceedsMaxPrecisionError(
@@ -1319,21 +1310,11 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
 
   def cannotMergeDecimalTypesWithIncompatibleScaleError(
       leftScale: Int, rightScale: Int): Throwable = {
-    new SparkException(
-      errorClass = "_LEGACY_ERROR_TEMP_2124",
-      messageParameters = Map(
-        "leftScale" -> leftScale.toString(),
-        "rightScale" -> rightScale.toString()),
-      cause = null)
+    DataTypeErrors.cannotMergeDecimalTypesWithIncompatibleScaleError(leftScale, rightScale)
   }
 
   def cannotMergeIncompatibleDataTypesError(left: DataType, right: DataType): Throwable = {
-    new SparkException(
-      errorClass = "CANNOT_MERGE_INCOMPATIBLE_DATA_TYPE",
-      messageParameters = Map(
-        "left" -> toSQLType(left),
-        "right" -> toSQLType(right)),
-      cause = null)
+    DataTypeErrors.cannotMergeIncompatibleDataTypesError(left, right)
   }
 
   def exceedMapSizeLimitError(size: Int): SparkRuntimeException = {

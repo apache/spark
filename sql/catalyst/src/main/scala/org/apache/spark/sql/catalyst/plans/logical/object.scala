@@ -26,6 +26,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.objects.Invoke
 import org.apache.spark.sql.catalyst.plans.{InnerLike, LeftAnti, LeftSemi, ReferenceAllColumns}
 import org.apache.spark.sql.catalyst.trees.TreePattern._
+import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
@@ -193,7 +194,7 @@ case class MapPartitionsInRWithArrow(
   override lazy val references: AttributeSet = child.outputSet
 
   override protected def stringArgs: Iterator[Any] = Iterator(
-    inputSchema, StructType.fromAttributes(output), child)
+    inputSchema, DataTypeUtils.fromAttributes(output), child)
 
   override val producedAttributes = AttributeSet(output)
 
@@ -658,7 +659,7 @@ case class FlatMapGroupsInRWithArrow(
   override lazy val references: AttributeSet = child.outputSet
 
   override protected def stringArgs: Iterator[Any] = Iterator(
-    inputSchema, StructType.fromAttributes(output), keyDeserializer, groupingAttributes, child)
+    inputSchema, DataTypeUtils.fromAttributes(output), keyDeserializer, groupingAttributes, child)
 
   override val producedAttributes = AttributeSet(output)
 
@@ -678,7 +679,7 @@ object CoGroup {
       rightOrder: Seq[SortOrder],
       left: LogicalPlan,
       right: LogicalPlan): LogicalPlan = {
-    require(StructType.fromAttributes(leftGroup) == StructType.fromAttributes(rightGroup))
+    require(DataTypeUtils.fromAttributes(leftGroup) == DataTypeUtils.fromAttributes(rightGroup))
 
     val cogrouped = CoGroup(
       func.asInstanceOf[(Any, Iterator[Any], Iterator[Any]) => TraversableOnce[Any]],

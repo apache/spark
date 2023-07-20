@@ -794,9 +794,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
   }
 
   def attributeNameSyntaxError(name: String): Throwable = {
-    new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1049",
-      messageParameters = Map("name" -> name))
+    DataTypeErrors.attributeNameSyntaxError(name)
   }
 
   def starExpandDataTypeNotSupportedError(attributes: Seq[String]): Throwable = {

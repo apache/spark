@@ -23,14 +23,13 @@ import scala.collection.JavaConverters._
 import org.antlr.v4.runtime.Token
 import org.antlr.v4.runtime.tree.ParseTree
 
-import org.apache.spark.sql.catalyst.SQLConfHelper
-import org.apache.spark.sql.catalyst.parser.ParserUtils.{string, withOrigin}
+import org.apache.spark.sql.SqlApiConf
 import org.apache.spark.sql.catalyst.parser.SqlBaseParser._
+import org.apache.spark.sql.catalyst.util.SparkParserUtils.{string, withOrigin}
 import org.apache.spark.sql.errors.QueryParsingErrors
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{ArrayType, BinaryType, BooleanType, ByteType, CalendarIntervalType, CharType, DataType, DateType, DayTimeIntervalType, DecimalType, DoubleType, FloatType, IntegerType, LongType, MapType, MetadataBuilder, NullType, ShortType, StringType, StructField, StructType, TimestampNTZType, TimestampType, VarcharType, YearMonthIntervalType}
 
-class DataTypeAstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper {
+class DataTypeAstBuilder extends SqlBaseParserBaseVisitor[AnyRef] {
   protected def typedVisit[T](ctx: ParseTree): T = {
     ctx.accept(this).asInstanceOf[T]
   }
@@ -69,7 +68,7 @@ class DataTypeAstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHe
       case (FLOAT | REAL, Nil) => FloatType
       case (DOUBLE, Nil) => DoubleType
       case (DATE, Nil) => DateType
-      case (TIMESTAMP, Nil) => SQLConf.get.timestampType
+      case (TIMESTAMP, Nil) => SqlApiConf.get.timestampType
       case (TIMESTAMP_NTZ, Nil) => TimestampNTZType
       case (TIMESTAMP_LTZ, Nil) => TimestampType
       case (STRING, Nil) => StringType

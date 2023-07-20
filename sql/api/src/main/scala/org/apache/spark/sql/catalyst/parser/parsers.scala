@@ -27,6 +27,7 @@ import org.apache.spark.{QueryContext, SparkException, SparkThrowable, SparkThro
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SqlApiConf
 import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, Origin, WithOrigin}
+import org.apache.spark.sql.catalyst.util.SparkParserUtils
 import org.apache.spark.sql.errors.QueryParsingErrors
 import org.apache.spark.sql.types.{DataType, StructType}
 
@@ -197,10 +198,10 @@ class ParseException(
     queryContext) {
 
   def this(errorClass: String, messageParameters: Map[String, String], ctx: ParserRuleContext) =
-    this(Option(ParserUtils.command(ctx)),
+    this(Option(SparkParserUtils.command(ctx)),
       SparkThrowableHelper.getMessage(errorClass, messageParameters),
-      ParserUtils.position(ctx.getStart),
-      ParserUtils.position(ctx.getStop),
+      SparkParserUtils.position(ctx.getStart),
+      SparkParserUtils.position(ctx.getStop),
       Some(errorClass),
       messageParameters)
 
