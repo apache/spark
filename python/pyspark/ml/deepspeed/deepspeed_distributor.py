@@ -61,6 +61,30 @@ class DeepspeedTorchDistributor(TorchDistributor):
             The configuration file to be used for launching the deepspeed application.
             If it's a dictionary containing the parameters, then we will create the file.
             If None, deepspeed will fall back to default parameters.
+
+        Examples
+        --------
+        Run Deepspeed training function on a single node
+
+        >>> def train(learning_rate):
+            import deepspeed
+            # rest of training function
+            return model
+        >>> distributor = DeepspeedTorchDistributor(num_gpus=4,
+                                                    nnodes=1,
+                                                    use_gpu=True,
+                                                    local_mode=True,
+                                                    deepspeed_config="path/to/config.json")
+        >>> output = distributor.run(train, 0.01)
+
+        Run Deepspeed training function on multiple nodes
+
+        >>> distributor = DeepspeedTorchDistributor(num_gpus=4,
+                                                    nnodes=3,
+                                                    use_gpu=True,
+                                                    local_mode=False,
+                                                    deepspeed_config="path/to/config.json")
+        >>> output = distributor.run(train, 0.01)
         """
         num_processes = num_gpus * nnodes
         self.deepspeed_config = deepspeed_config
