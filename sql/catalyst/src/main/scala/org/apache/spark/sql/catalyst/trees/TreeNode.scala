@@ -151,6 +151,12 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]]
     }
   }
 
+  def copyTagFrom[T](other: BaseType, tag: TreeNodeTag[T]): Unit = {
+    // copy a specified tag if exists
+    other.getTagValue(tag)
+      .foreach(this.setTagValue(tag, _))
+  }
+
   def setTagValue[T](tag: TreeNodeTag[T], value: T): Unit = {
     tags(tag) = value
   }
