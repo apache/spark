@@ -22,8 +22,8 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.encoders.RowEncoder
 import org.apache.spark.sql.catalyst.expressions.{AttributeSet, GenericRowWithSchema}
 import org.apache.spark.sql.catalyst.trees.LeafLike
+import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.execution.SparkPlan
-import org.apache.spark.sql.types.StructType
 
 /**
  * A physical operator that executes run() and saves the result to prevent multiple executions.
@@ -65,7 +65,7 @@ abstract class V2CommandExec extends SparkPlan {
   }
 
   private lazy val rowSerializer = {
-    RowEncoder(StructType.fromAttributes(output)).resolveAndBind().createSerializer()
+    RowEncoder(DataTypeUtils.fromAttributes(output)).resolveAndBind().createSerializer()
   }
 }
 

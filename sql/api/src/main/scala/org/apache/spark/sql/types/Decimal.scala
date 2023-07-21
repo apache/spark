@@ -22,10 +22,9 @@ import java.math.{BigDecimal => JavaBigDecimal, BigInteger, MathContext, Roundin
 import scala.util.Try
 
 import org.apache.spark.annotation.Unstable
+import org.apache.spark.sql.SqlApiConf
 import org.apache.spark.sql.catalyst.trees.SQLQueryContext
 import org.apache.spark.sql.errors.DataTypeErrors
-import org.apache.spark.sql.errors.QueryExecutionErrors
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.unsafe.types.UTF8String
 
 /**
@@ -83,7 +82,7 @@ final class Decimal extends Ordered[Decimal] with Serializable {
    */
   def set(unscaled: Long, precision: Int, scale: Int): Decimal = {
     if (setOrNull(unscaled, precision, scale) == null) {
-      throw QueryExecutionErrors.unscaledValueTooLargeForPrecisionError(this, precision, scale)
+      throw DataTypeErrors.unscaledValueTooLargeForPrecisionError(this, precision, scale)
     }
     this
   }
@@ -143,7 +142,7 @@ final class Decimal extends Ordered[Decimal] with Serializable {
       // the scale is 2. The expected precision should be 2.
       this._precision = decimal.scale
       this._scale = decimal.scale
-    } else if (decimal.scale < 0 && !SQLConf.get.allowNegativeScaleOfDecimalEnabled) {
+    } else if (decimal.scale < 0 && !SqlApiConf.get.allowNegativeScaleOfDecimalEnabled) {
       this._precision = decimal.precision - decimal.scale
       this._scale = 0
       // set scale to 0 to correct unscaled value
@@ -278,6 +277,8 @@ final class Decimal extends Ordered[Decimal] with Serializable {
   private[sql] def roundToInt(): Int =
     roundToNumeric[Int](IntegerType, Int.MaxValue, Int.MinValue) (_.toInt) (_.toInt)
 
+  private def toSqlValue: String = this + "BD"
+
   private def roundToNumeric[T <: AnyVal](integralType: IntegralType, maxValue: Int, minValue: Int)
       (f1: Long => T) (f2: Double => T): T = {
     if (decimalVal.eq(null)) {
@@ -285,16 +286,16 @@ final class Decimal extends Ordered[Decimal] with Serializable {
       if (actualLongVal == numericVal) {
         numericVal
       } else {
-        throw QueryExecutionErrors.castingCauseOverflowError(
-          this, DecimalType(this.precision, this.scale), integralType)
+        throw DataTypeErrors.castingCauseOverflowError(
+          toSqlValue, DecimalType(this.precision, this.scale), integralType)
       }
     } else {
       val doubleVal = decimalVal.toDouble
       if (Math.floor(doubleVal) <= maxValue && Math.ceil(doubleVal) >= minValue) {
         f2(doubleVal)
       } else {
-        throw QueryExecutionErrors.castingCauseOverflowError(
-          this, DecimalType(this.precision, this.scale), integralType)
+        throw DataTypeErrors.castingCauseOverflowError(
+          toSqlValue, DecimalType(this.precision, this.scale), integralType)
       }
     }
   }
@@ -314,8 +315,8 @@ final class Decimal extends Ordered[Decimal] with Serializable {
         decimalVal.bigDecimal.toBigInteger.longValueExact()
       } catch {
         case _: ArithmeticException =>
-          throw QueryExecutionErrors.castingCauseOverflowError(
-            this, DecimalType(this.precision, this.scale), LongType)
+          throw DataTypeErrors.castingCauseOverflowError(
+            toSqlValue, DecimalType(this.precision, this.scale), LongType)
       }
     }
   }
@@ -348,7 +349,7 @@ final class Decimal extends Ordered[Decimal] with Serializable {
       if (nullOnOverflow) {
         null
       } else {
-        throw QueryExecutionErrors.cannotChangeDecimalPrecisionError(
+        throw DataTypeErrors.cannotChangeDecimalPrecisionError(
           this, precision, scale, context)
       }
     }
@@ -602,7 +603,7 @@ object Decimal {
       // We fast fail because constructing a very large JavaBigDecimal to Decimal is very slow.
       // For example: Decimal("6.0790316E+25569151")
       if (numDigitsInIntegralPart(bigDecimal) > DecimalType.MAX_PRECISION &&
-          !SQLConf.get.allowNegativeScaleOfDecimalEnabled) {
+          !SqlApiConf.get.allowNegativeScaleOfDecimalEnabled) {
         null
       } else {
         Decimal(bigDecimal)
@@ -622,14 +623,14 @@ object Decimal {
       // We fast fail because constructing a very large JavaBigDecimal to Decimal is very slow.
       // For example: Decimal("6.0790316E+25569151")
       if (numDigitsInIntegralPart(bigDecimal) > DecimalType.MAX_PRECISION &&
-          !SQLConf.get.allowNegativeScaleOfDecimalEnabled) {
+          !SqlApiConf.get.allowNegativeScaleOfDecimalEnabled) {
         throw DataTypeErrors.outOfDecimalTypeRangeError(str)
       } else {
         Decimal(bigDecimal)
       }
     } catch {
       case _: NumberFormatException =>
-        throw QueryExecutionErrors.invalidInputInCastToNumberError(to, str, context)
+        throw DataTypeErrors.invalidInputInCastToNumberError(to, str, context)
     }
   }
 

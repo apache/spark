@@ -16,6 +16,8 @@
  */
 package org.apache.spark.util
 
+import scala.util.Try
+
 trait SparkClassUtils {
   def getSparkClassLoader: ClassLoader = getClass.getClassLoader
 
@@ -38,6 +40,11 @@ trait SparkClassUtils {
         asInstanceOf[Class[C]]
     }
     // scalastyle:on classforname
+  }
+
+  /** Determines whether the provided class is loadable in the current thread. */
+  def classIsLoadable(clazz: String): Boolean = {
+    Try { classForName(clazz, initialize = false) }.isSuccess
   }
 }
 
