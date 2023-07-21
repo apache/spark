@@ -757,10 +757,10 @@ class SparkConnectClient(object):
         logger.info(f"Executing plan {self._proto_to_string(plan)}")
         req = self._execute_plan_request_with_metadata()
         req.plan.CopyFrom(plan)
-        (self_destruct,) = self.get_config_with_defaults(
+        (self_destruct_conf,) = self.get_config_with_defaults(
             ("spark.sql.execution.arrow.pyspark.selfDestruct.enabled", "false"),
         )
-        self_destruct = cast(str, self_destruct).lower() == "true"
+        self_destruct = cast(str, self_destruct_conf).lower() == "true"
         table, schema, metrics, observed_metrics, _ = self._execute_and_fetch(
             req, self_destruct=self_destruct
         )
