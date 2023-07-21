@@ -1007,7 +1007,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]]
       maxFields: Int,
       printNodeId: Boolean,
       indent: Int = 0): Unit = {
-    (0 until indent).foreach(_ => append(" "))
+    (0 until indent).foreach(_ => append("   "))
     if (depth > 0) {
       val iter = lastChildren.iterator
       (0 until lastChildren.size - 1).foreach { i =>
