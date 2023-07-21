@@ -462,6 +462,8 @@ class RocksDB(
   /** Release all resources */
   def close(): Unit = {
     try {
+      // Acquire DB instance lock and release at the end to allow for synchronized access
+      acquire()
       closeDB()
 
       readOptions.close()
@@ -476,6 +478,8 @@ class RocksDB(
     } catch {
       case e: Exception =>
         logWarning("Error closing RocksDB", e)
+    } finally {
+      release()
     }
   }
 
