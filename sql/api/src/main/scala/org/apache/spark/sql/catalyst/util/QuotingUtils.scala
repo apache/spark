@@ -28,4 +28,23 @@ object QuotingUtils {
   def toSQLSchema(schema: String): String = {
     quoteByDefault(schema)
   }
+
+  def quoteIfNeeded(part: String): String = {
+    if (part.matches("[a-zA-Z0-9_]+") && !part.matches("\\d+")) {
+      part
+    } else {
+      s"`${part.replace("`", "``")}`"
+    }
+  }
+
+  def escapeSingleQuotedString(str: String): String = {
+    val builder = new StringBuilder
+
+    str.foreach {
+      case '\'' => builder ++= s"\\\'"
+      case ch => builder += ch
+    }
+
+    builder.toString()
+  }
 }

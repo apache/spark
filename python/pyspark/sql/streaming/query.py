@@ -58,6 +58,9 @@ class StreamingQuery:
 
         .. versionadded:: 2.0.0
 
+        .. versionchanged:: 3.5.0
+            Supports Spark Connect.
+
         Returns
         -------
         str
@@ -84,6 +87,9 @@ class StreamingQuery:
         query that is started (or restarted from checkpoint) will have a different runId.
 
         .. versionadded:: 2.1.0
+
+        .. versionchanged:: 3.5.0
+            Supports Spark Connect.
 
         Returns
         -------
@@ -114,6 +120,9 @@ class StreamingQuery:
 
         .. versionadded:: 2.0.0
 
+        .. versionchanged:: 3.5.0
+            Supports Spark Connect.
+
         Returns
         -------
         str
@@ -139,6 +148,9 @@ class StreamingQuery:
         Whether this streaming query is currently active or not.
 
         .. versionadded:: 2.0.0
+
+        .. versionchanged:: 3.5.0
+            Supports Spark Connect.
 
         Returns
         -------
@@ -170,6 +182,9 @@ class StreamingQuery:
         throws :class:`StreamingQueryException`, if `this` query has terminated with an exception
 
         .. versionadded:: 2.0.0
+
+        .. versionchanged:: 3.5.0
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -212,6 +227,9 @@ class StreamingQuery:
 
         .. versionadded:: 2.1.0
 
+        .. versionchanged:: 3.5.0
+            Supports Spark Connect.
+
         Returns
         -------
         dict
@@ -240,6 +258,9 @@ class StreamingQuery:
 
         .. versionadded:: 2.1.0
 
+        .. versionchanged:: 3.5.0
+            Supports Spark Connect.
+
         Returns
         -------
         list
@@ -267,6 +288,9 @@ class StreamingQuery:
         None if there were no progress updates
 
         .. versionadded:: 2.1.0
+
+        .. versionchanged:: 3.5.0
+            Supports Spark Connect.
 
         Returns
         -------
@@ -297,6 +321,9 @@ class StreamingQuery:
 
         .. versionadded:: 2.0.0
 
+        .. versionchanged:: 3.5.0
+            Supports Spark Connect.
+
         Notes
         -----
         In the case of continually arriving data, this method may block forever.
@@ -325,6 +352,9 @@ class StreamingQuery:
 
         .. versionadded:: 2.0.0
 
+        .. versionchanged:: 3.5.0
+            Supports Spark Connect.
+
         Examples
         --------
         >>> sdf = spark.readStream.format("rate").load()
@@ -346,6 +376,9 @@ class StreamingQuery:
         Prints the (logical and physical) plans to the console for debugging purpose.
 
         .. versionadded:: 2.1.0
+
+        .. versionchanged:: 3.5.0
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -387,6 +420,9 @@ class StreamingQuery:
         """
         .. versionadded:: 2.1.0
 
+        .. versionchanged:: 3.5.0
+            Supports Spark Connect.
+
         Returns
         -------
         :class:`StreamingQueryException`
@@ -406,6 +442,9 @@ class StreamingQueryManager:
 
     .. versionadded:: 2.0.0
 
+    .. versionchanged:: 3.5.0
+        Supports Spark Connect.
+
     Notes
     -----
     This API is evolving.
@@ -420,6 +459,9 @@ class StreamingQueryManager:
         Returns a list of active queries associated with this SparkSession
 
         .. versionadded:: 2.0.0
+
+        .. versionchanged:: 3.5.0
+            Supports Spark Connect.
 
         Returns
         -------
@@ -450,6 +492,9 @@ class StreamingQueryManager:
         Returns an active query from this :class:`SparkSession`.
 
         .. versionadded:: 2.0.0
+
+        .. versionchanged:: 3.5.0
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -513,6 +558,9 @@ class StreamingQueryManager:
 
         .. versionadded:: 2.0.0
 
+        .. versionchanged:: 3.5.0
+            Supports Spark Connect.
+
         Parameters
         ----------
         timeout : int, optional
@@ -553,6 +601,9 @@ class StreamingQueryManager:
         again to wait for new terminations.
 
         .. versionadded:: 2.0.0
+
+        .. versionchanged:: 3.5.0
+            Supports Spark Connect.
 
         Examples
         --------

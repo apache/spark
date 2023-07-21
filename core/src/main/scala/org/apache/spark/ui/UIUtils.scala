@@ -31,6 +31,7 @@ import scala.util.control.NonFatal
 import scala.xml._
 import scala.xml.transform.{RewriteRule, RuleTransformer}
 
+import org.apache.commons.text.StringEscapeUtils
 import org.glassfish.jersey.internal.util.collection.MultivaluedStringMap
 
 import org.apache.spark.internal.Logging
@@ -707,5 +708,32 @@ private[spark] object UIUtils extends Logging {
     } else {
       Seq.empty[Node]
     }
+  }
+
+  private final val ERROR_CLASS_REGEX = """\[(?<errorClass>[A-Z][A-Z_.]+[A-Z])]""".r
+
+  private def errorSummary(errorMessage: String): (String, Boolean) = {
+    var isMultiline = true
+    val maybeErrorClass =
+      ERROR_CLASS_REGEX.findFirstMatchIn(errorMessage).map(_.group("errorClass"))
+    val errorClassOrBrief = if (maybeErrorClass.nonEmpty && maybeErrorClass.get.nonEmpty) {
+      maybeErrorClass.get
+    } else if (errorMessage.indexOf('\n') >= 0) {
+      errorMessage.substring(0, errorMessage.indexOf('\n'))
+    } else if (errorMessage.indexOf(":") >= 0) {
+      errorMessage.substring(0, errorMessage.indexOf(":"))
+    } else {
+      isMultiline = false
+      errorMessage
+    }
+
+    val errorSummary = StringEscapeUtils.escapeHtml4(errorClassOrBrief)
+    (errorSummary, isMultiline)
+  }
+
+  def errorMessageCell(errorMessage: String): Seq[Node] = {
+    val (summary, isMultiline) = errorSummary(errorMessage)
+    val details = detailsUINode(isMultiline, errorMessage)
+    <td>{summary}{details}</td>
   }
 }

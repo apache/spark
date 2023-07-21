@@ -794,9 +794,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
   }
 
   def attributeNameSyntaxError(name: String): Throwable = {
-    new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1049",
-      messageParameters = Map("name" -> name))
+    DataTypeErrors.attributeNameSyntaxError(name)
   }
 
   def starExpandDataTypeNotSupportedError(attributes: Seq[String]): Throwable = {
@@ -1973,6 +1971,13 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
     new AnalysisException(
       errorClass = "TABLE_VALUED_FUNCTION_TOO_MANY_TABLE_ARGUMENTS",
       messageParameters = Map("num" -> num.toString)
+    )
+  }
+
+  def tableValuedFunctionFailedToAnalyseInPythonError(msg: String): Throwable = {
+    new AnalysisException(
+      errorClass = "TABLE_VALUED_FUNCTION_FAILED_TO_ANALYZE_IN_PYTHON",
+      messageParameters = Map("msg" -> msg)
     )
   }
 

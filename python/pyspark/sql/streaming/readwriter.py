@@ -87,6 +87,9 @@ class DataStreamReader(OptionUtils):
 
         .. versionadded:: 2.0.0
 
+        .. versionchanged:: 3.5.0
+            Supports Spark Connect.
+
         Parameters
         ----------
         source : str
@@ -127,6 +130,9 @@ class DataStreamReader(OptionUtils):
         inference step, and thus speed up data loading.
 
         .. versionadded:: 2.0.0
+
+        .. versionchanged:: 3.5.0
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -177,6 +183,9 @@ class DataStreamReader(OptionUtils):
 
         .. versionadded:: 2.0.0
 
+        .. versionchanged:: 3.5.0
+            Supports Spark Connect.
+
         Notes
         -----
         This API is evolving.
@@ -202,6 +211,9 @@ class DataStreamReader(OptionUtils):
         """Adds input options for the underlying data source.
 
         .. versionadded:: 2.0.0
+
+        .. versionchanged:: 3.5.0
+            Supports Spark Connect.
 
         Notes
         -----
@@ -237,6 +249,9 @@ class DataStreamReader(OptionUtils):
         :class:`DataFrame <pyspark.sql.DataFrame>`.
 
         .. versionadded:: 2.0.0
+
+        .. versionchanged:: 3.5.0
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -324,6 +339,9 @@ class DataStreamReader(OptionUtils):
 
         .. versionadded:: 2.0.0
 
+        .. versionchanged:: 3.5.0
+            Supports Spark Connect.
+
         Parameters
         ----------
         path : str
@@ -407,6 +425,9 @@ class DataStreamReader(OptionUtils):
 
         .. versionadded:: 2.3.0
 
+        .. versionchanged:: 3.5.0
+            Supports Spark Connect.
+
         Other Parameters
         ----------------
         Extra options
@@ -457,6 +478,9 @@ class DataStreamReader(OptionUtils):
         Loads a Parquet file stream, returning the result as a :class:`DataFrame`.
 
         .. versionadded:: 2.0.0
+
+        .. versionchanged:: 3.5.0
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -520,6 +544,9 @@ class DataStreamReader(OptionUtils):
         By default, each line in the text file is a new row in the resulting DataFrame.
 
         .. versionadded:: 2.0.0
+
+        .. versionchanged:: 3.5.0
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -619,6 +646,9 @@ class DataStreamReader(OptionUtils):
 
         .. versionadded:: 2.0.0
 
+        .. versionchanged:: 3.5.0
+            Supports Spark Connect.
+
         Other Parameters
         ----------------
         Extra options
@@ -695,6 +725,9 @@ class DataStreamReader(OptionUtils):
 
         .. versionadded:: 3.1.0
 
+        .. versionchanged:: 3.5.0
+            Supports Spark Connect.
+
         Parameters
         ----------
         tableName : str
@@ -745,6 +778,9 @@ class DataStreamWriter:
 
     .. versionadded:: 2.0.0
 
+    .. versionchanged:: 3.5.0
+        Supports Spark Connect.
+
     Notes
     -----
     This API is evolving.
@@ -775,6 +811,9 @@ class DataStreamWriter:
         """Specifies how data of a streaming DataFrame/Dataset is written to a streaming sink.
 
         .. versionadded:: 2.0.0
+
+        .. versionchanged:: 3.5.0
+            Supports Spark Connect.
 
         Options include:
 
@@ -818,6 +857,9 @@ class DataStreamWriter:
 
         .. versionadded:: 2.0.0
 
+        .. versionchanged:: 3.5.0
+            Supports Spark Connect.
+
         Parameters
         ----------
         source : str
@@ -857,6 +899,9 @@ class DataStreamWriter:
 
         .. versionadded:: 2.0.0
 
+        .. versionchanged:: 3.5.0
+            Supports Spark Connect.
+
         Notes
         -----
         This API is evolving.
@@ -884,6 +929,9 @@ class DataStreamWriter:
         """Adds output options for the underlying data source.
 
         .. versionadded:: 2.0.0
+
+        .. versionchanged:: 3.5.0
+            Supports Spark Connect.
 
         Notes
         -----
@@ -924,6 +972,9 @@ class DataStreamWriter:
         to Hive's partitioning scheme.
 
         .. versionadded:: 2.0.0
+
+        .. versionchanged:: 3.5.0
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -967,6 +1018,9 @@ class DataStreamWriter:
         in the associated SparkSession.
 
         .. versionadded:: 2.0.0
+
+        .. versionchanged:: 3.5.0
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -1022,6 +1076,9 @@ class DataStreamWriter:
         as possible, which is equivalent to setting the trigger to ``processingTime='0 seconds'``.
 
         .. versionadded:: 2.0.0
+
+        .. versionchanged:: 3.5.0
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -1280,6 +1337,9 @@ class DataStreamWriter:
 
         .. versionadded:: 2.4.0
 
+        .. versionchanged:: 3.5.0
+            Supports Spark Connect.
+
         Notes
         -----
         This API is evolving.
@@ -1388,6 +1448,9 @@ class DataStreamWriter:
 
         .. versionadded:: 2.0.0
 
+        .. versionchanged:: 3.5.0
+            Supports Spark Connect.
+
         Parameters
         ----------
         path : str, optional
@@ -1472,6 +1535,9 @@ class DataStreamWriter:
         The returned :class:`StreamingQuery` object can be used to interact with the stream.
 
         .. versionadded:: 3.1.0
+
+        .. versionchanged:: 3.5.0
+            Supports Spark Connect.
 
         Parameters
         ----------

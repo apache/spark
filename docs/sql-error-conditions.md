@@ -171,6 +171,14 @@ SQLSTATE: none assigned
 
 Could not load Protobuf class with name `<protobufClassName>`. `<explanation>`.
 
+### [CANNOT_LOAD_STATE_STORE](sql-error-conditions-cannot-load-state-store-error-class.html)
+
+SQLSTATE: 58030
+
+An error occurred during loading state.
+
+For more details see [CANNOT_LOAD_STATE_STORE](sql-error-conditions-cannot-load-state-store-error-class.html)
+
 ### CANNOT_MERGE_INCOMPATIBLE_DATA_TYPE
 
 [SQLSTATE: 42825](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
@@ -1670,6 +1678,12 @@ Choose a different name, drop or replace the existing object, or add the IF NOT 
 The table or view `<relationName>` cannot be found. Verify the spelling and correctness of the schema and catalog.
 If you did not qualify the name with a schema, verify the current_schema() output, or qualify the name with the correct schema and catalog.
 To tolerate the error on drop use DROP VIEW IF EXISTS or DROP TABLE IF EXISTS.
+
+### TABLE_VALUED_FUNCTION_FAILED_TO_ANALYZE_IN_PYTHON
+
+SQLSTATE: none assigned
+
+Failed to analyze the Python user defined table function: `<msg>`
 
 ### TABLE_VALUED_FUNCTION_TOO_MANY_TABLE_ARGUMENTS
 
