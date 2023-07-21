@@ -23,9 +23,9 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.physical.{AllTuples, ClusteredDistribution, Distribution, Partitioning}
+import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.execution.{BinaryExecNode, CoGroupedIterator, SparkPlan}
 import org.apache.spark.sql.execution.python.PandasGroupUtils._
-import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.ArrowUtils
 
 
@@ -95,8 +95,8 @@ case class FlatMapCoGroupsInPandasExec(
           chainedFunc,
           PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF,
           Array(leftArgOffsets ++ rightArgOffsets),
-          StructType.fromAttributes(leftDedup),
-          StructType.fromAttributes(rightDedup),
+          DataTypeUtils.fromAttributes(leftDedup),
+          DataTypeUtils.fromAttributes(rightDedup),
           sessionLocalTimeZone,
           pythonRunnerConf,
           pythonMetrics,

@@ -404,7 +404,7 @@ object IntegratedUDFTestUtils extends SQLHelper {
         pythonVer = pythonVer,
         broadcastVars = List.empty[Broadcast[PythonBroadcast]].asJava,
         accumulator = null),
-      returnType = returnType,
+      returnType = Some(returnType),
       pythonEvalType = evalType,
       udfDeterministic = deterministic)
   }

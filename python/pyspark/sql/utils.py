@@ -146,6 +146,25 @@ def is_timestamp_ntz_preferred() -> bool:
 def is_remote() -> bool:
     """
     Returns if the current running environment is for Spark Connect.
+
+    .. versionadded:: 4.0.0
+
+    Notes
+    -----
+    This will only return ``True`` if there is a remote session running.
+    Otherwise, it returns ``False``.
+
+    This API is unstable, and for developers.
+
+    Returns
+    -------
+    bool
+
+    Examples
+    --------
+    >>> from pyspark.sql import is_remote
+    >>> is_remote()
+    False
     """
     return "SPARK_CONNECT_MODE_ENABLED" in os.environ
 

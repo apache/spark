@@ -25,13 +25,11 @@ import org.json4s.JsonDSL._
 
 import org.apache.spark.annotation.Stable
 import org.apache.spark.sql.SqlApiConf
-import org.apache.spark.sql.catalyst.analysis.Resolver
-import org.apache.spark.sql.catalyst.expressions.Attribute
+import org.apache.spark.sql.catalyst.analysis.SqlApiAnalysis
 import org.apache.spark.sql.catalyst.parser.{DataTypeParser, LegacyTypeStringParser}
 import org.apache.spark.sql.catalyst.trees.Origin
-import org.apache.spark.sql.catalyst.util.{SparkStringUtils, StringConcat}
-import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
-import org.apache.spark.util.collection.Utils
+import org.apache.spark.sql.catalyst.util.{SparkCollectionUtils, SparkStringUtils, StringConcat}
+import org.apache.spark.sql.errors.DataTypeErrors
 
 /**
  * A [[StructType]] object can be constructed by
@@ -116,7 +114,7 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
 
   private lazy val fieldNamesSet: Set[String] = fieldNames.toSet
   private lazy val nameToField: Map[String, StructField] = fields.map(f => f.name -> f).toMap
-  private lazy val nameToIndex: Map[String, Int] = Utils.toMapWithIndex(fieldNames)
+  private lazy val nameToIndex: Map[String, Int] = SparkCollectionUtils.toMapWithIndex(fieldNames)
 
   override def equals(that: Any): Boolean = {
     that match {
@@ -322,7 +320,7 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
   private[sql] def findNestedField(
       fieldNames: Seq[String],
       includeCollections: Boolean = false,
-      resolver: Resolver = _ == _,
+      resolver: SqlApiAnalysis.Resolver = _ == _,
       context: Origin = Origin()): Option[(Seq[String], StructField)] = {
 
     def findFieldInStruct(
@@ -333,7 +331,7 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
       val searchName = searchPath.head
       val found = struct.fields.filter(f => resolver(searchName, f.name))
       if (found.length > 1) {
-        throw QueryCompilationErrors.ambiguousColumnOrFieldError(fieldNames, found.length, context)
+        throw DataTypeErrors.ambiguousColumnOrFieldError(fieldNames, found.length, context)
       } else if (found.isEmpty) {
         None
       } else {
@@ -358,7 +356,7 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
             findFieldInStruct(s, searchPath, currentPath)
 
           case _ if !includeCollections =>
-            throw QueryCompilationErrors.invalidFieldName(fieldNames, currentPath, context)
+            throw DataTypeErrors.invalidFieldName(fieldNames, currentPath, context)
 
           case (Seq("key", rest @ _*), MapType(keyType, _, _)) =>
             findField(StructField("key", keyType, nullable = false), rest, currentPath)
@@ -370,7 +368,7 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
             findField(StructField("element", elementType, isNullable), rest, currentPath)
 
           case _ =>
-            throw QueryCompilationErrors.invalidFieldName(fieldNames, currentPath, context)
+            throw DataTypeErrors.invalidFieldName(fieldNames, currentPath, context)
         }
       }
     }
@@ -512,7 +510,7 @@ object StructType extends AbstractDataType {
   private[sql] def fromString(raw: String): StructType = {
     Try(DataType.fromJson(raw)).getOrElse(LegacyTypeStringParser.parseString(raw)) match {
       case t: StructType => t
-      case _ => throw QueryExecutionErrors.failedParsingStructTypeError(raw)
+      case _ => throw DataTypeErrors.failedParsingStructTypeError(raw)
     }
   }
 
@@ -530,9 +528,6 @@ object StructType extends AbstractDataType {
     import scala.collection.JavaConverters._
     StructType(fields.asScala.toArray)
   }
-
-  private[sql] def fromAttributes(attributes: Seq[Attribute]): StructType =
-    StructType(attributes.map(a => StructField(a.name, a.dataType, a.nullable, a.metadata)))
 
   private[sql] def removeMetadata(key: String, dt: DataType): DataType =
     dt match {
@@ -583,7 +578,7 @@ object StructType extends AbstractDataType {
                   nullable = leftNullable || rightNullable)
               } catch {
                 case NonFatal(e) =>
-                  throw QueryExecutionErrors.cannotMergeIncompatibleDataTypesError(
+                  throw DataTypeErrors.cannotMergeIncompatibleDataTypesError(
                     leftType, rightType)
               }
             }
@@ -628,7 +623,7 @@ object StructType extends AbstractDataType {
         if (leftScale == rightScale) {
           DecimalType(leftPrecision.max(rightPrecision), leftScale)
         } else {
-          throw QueryExecutionErrors.cannotMergeDecimalTypesWithIncompatibleScaleError(
+          throw DataTypeErrors.cannotMergeDecimalTypesWithIncompatibleScaleError(
             leftScale, rightScale)
         }
 
@@ -645,7 +640,7 @@ object StructType extends AbstractDataType {
         leftType
 
       case _ =>
-        throw QueryExecutionErrors.cannotMergeIncompatibleDataTypesError(left, right)
+        throw DataTypeErrors.cannotMergeIncompatibleDataTypesError(left, right)
     }
 
   private[sql] def fieldsMap(fields: Array[StructField]): Map[String, StructField] = {
@@ -663,7 +658,7 @@ object StructType extends AbstractDataType {
   def findMissingFields(
       source: StructType,
       target: StructType,
-      resolver: Resolver): Option[StructType] = {
+      resolver: SqlApiAnalysis.Resolver): Option[StructType] = {
     def bothStructType(dt1: DataType, dt2: DataType): Boolean =
       dt1.isInstanceOf[StructType] && dt2.isInstanceOf[StructType]
 
