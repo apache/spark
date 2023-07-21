@@ -936,7 +936,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]]
       addSuffix: Boolean,
       maxFields: Int,
       printOperatorId: Boolean): Unit = {
-    generateTreeString(0, new java.util.LinkedList(), append, verbose, "", addSuffix, maxFields,
+    generateTreeString(0, new java.util.ArrayList(), append, verbose, "", addSuffix, maxFields,
       printOperatorId, 0)
   }
 
@@ -999,7 +999,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]]
    */
   def generateTreeString(
       depth: Int,
-      lastChildren: java.util.LinkedList[Boolean],
+      lastChildren: java.util.ArrayList[Boolean],
       append: String => Unit,
       verbose: Boolean,
       prefix: String = "",
@@ -1014,7 +1014,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]]
         val isLast = iter.next
         append(if (isLast) "   " else ":  ")
       }
-      append(if (lastChildren.getLast) "+- " else ":- ")
+      append(if (lastChildren.get(lastChildren.size() - 1)) "+- " else ":- ")
     }
 
     val str = if (verbose) {
@@ -1031,36 +1031,36 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]]
     append("\n")
 
     if (innerChildren.nonEmpty) {
-      lastChildren.addLast(children.isEmpty)
-      lastChildren.addLast(false)
+      lastChildren.add(children.isEmpty)
+      lastChildren.add(false)
       innerChildren.init.foreach(_.generateTreeString(
         depth + 2, lastChildren, append, verbose,
         addSuffix = addSuffix, maxFields = maxFields, printNodeId = printNodeId, indent = indent))
-      lastChildren.removeLast()
-      lastChildren.removeLast()
+      lastChildren.remove(lastChildren.size() - 1)
+      lastChildren.remove(lastChildren.size() - 1)
 
-      lastChildren.addLast(children.isEmpty)
-      lastChildren.addLast(true)
+      lastChildren.add(children.isEmpty)
+      lastChildren.add(true)
       innerChildren.last.generateTreeString(
         depth + 2, lastChildren, append, verbose,
         addSuffix = addSuffix, maxFields = maxFields, printNodeId = printNodeId, indent = indent)
-      lastChildren.removeLast()
-      lastChildren.removeLast()
+      lastChildren.remove(lastChildren.size() - 1)
+      lastChildren.remove(lastChildren.size() - 1)
     }
 
     if (children.nonEmpty) {
-      lastChildren.addLast(false)
+      lastChildren.add(false)
       children.init.foreach(_.generateTreeString(
         depth + 1, lastChildren, append, verbose, prefix, addSuffix,
         maxFields, printNodeId = printNodeId, indent = indent)
       )
-      lastChildren.removeLast()
+      lastChildren.remove(lastChildren.size() - 1)
 
-      lastChildren.addLast(true)
+      lastChildren.add(true)
       children.last.generateTreeString(
         depth + 1, lastChildren, append, verbose, prefix,
         addSuffix, maxFields, printNodeId = printNodeId, indent = indent)
-      lastChildren.removeLast()
+      lastChildren.remove(lastChildren.size() - 1)
     }
   }
 
