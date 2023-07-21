@@ -940,6 +940,10 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       case WriteFiles(child, fileFormat, partitionColumns, bucket, options, staticPartitions) =>
         WriteFilesExec(planLater(child), fileFormat, partitionColumns, bucket, options,
           staticPartitions) :: Nil
+      case r: RepartitionForTableFunctionCall =>
+        Seq(RepartitionForTableFunctionCallExec(
+          child = planLater(r.child),
+          repartitioning = r.repartitioning))
       case _ => Nil
     }
   }

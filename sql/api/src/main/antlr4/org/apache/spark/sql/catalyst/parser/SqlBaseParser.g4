@@ -795,7 +795,8 @@ functionTableSubqueryArgument
     ;
 
 tableArgumentPartitioning
-    : (PARTITION | DISTRIBUTE) BY expressionSeq
+    : (WITH SINGLE PARTITION) |
+      ((PARTITION | DISTRIBUTE) BY partition+=expression (COMMA partition+=expression)*)
       ((ORDER | SORT) BY sortItem (COMMA sortItem)*)?
     ;
 
@@ -1472,6 +1473,7 @@ ansiNonReserved
     | SETS
     | SHORT
     | SHOW
+    | SINGLE
     | SKEWED
     | SMALLINT
     | SORT
@@ -1806,6 +1808,7 @@ nonReserved
     | SETS
     | SHORT
     | SHOW
+    | SINGLE
     | SKEWED
     | SMALLINT
     | SOME

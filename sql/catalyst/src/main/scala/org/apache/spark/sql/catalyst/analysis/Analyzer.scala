@@ -2075,7 +2075,21 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
               _.containsPattern(FUNCTION_TABLE_RELATION_ARGUMENT_EXPRESSION), ruleId)  {
               case t: FunctionTableSubqueryArgumentExpression =>
                 val alias = SubqueryAlias.generateSubqueryName(s"_${tableArgs.size}")
-                tableArgs.append(SubqueryAlias(alias, t.evaluable))
+                val child = resolvedFunc match {
+                  case Generate(_: PythonUDTF, _, _, _, _, _) if t.repartitioning.nonEmpty =>
+                    // If the TABLE argument includes the WITH SINGLE PARTITION or PARTITION BY or
+                    // ORDER BY clause(s), add a corresponding logical operator to represent the
+                    // repartitioning operation in the query plan.
+                    RepartitionForTableFunctionCall(
+                      child = t.evaluable,
+                      repartitioning = t.repartitioning)
+                  case _ if t.repartitioning.nonEmpty =>
+                    throw QueryCompilationErrors.tableValuedFunctionPartitionByClauseNotSupported(
+                      reason = ", but only Python table functions support this clause")
+                  case _ =>
+                    t.evaluable
+                }
+                tableArgs.append(SubqueryAlias(alias, child))
                 UnresolvedAttribute(Seq(alias, "c"))
             }
             if (tableArgs.nonEmpty) {
@@ -2447,7 +2461,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
           InSubquery(values, expr.asInstanceOf[ListQuery])
         case s @ LateralSubquery(sub, _, exprId, _, _) if !sub.resolved =>
           resolveSubQuery(s, outer)(LateralSubquery(_, _, exprId))
-        case a @ FunctionTableSubqueryArgumentExpression(sub, _, exprId) if !sub.resolved =>
+        case a @ FunctionTableSubqueryArgumentExpression(sub, _, exprId, _) if !sub.resolved =>
           resolveSubQuery(a, outer)(FunctionTableSubqueryArgumentExpression(_, _, exprId))
       }
     }

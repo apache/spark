@@ -1564,14 +1564,27 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
     }.getOrElse {
       plan(ctx.query)
     }
-    val partitioning = Option(ctx.tableArgumentPartitioning)
-    if (partitioning.isDefined) {
-      // The PARTITION BY clause is not implemented yet for TABLE arguments to table valued function
-      // calls.
-      operationNotAllowed(
-        "Specifying the PARTITION BY clause for TABLE arguments is not implemented yet", ctx)
+    val repartitioning = ArrayBuffer.empty[DistributionForTableFunctionCall]
+    if (ctx.tableArgumentPartitioning.SINGLE != null) {
+      repartitioning.append(WithSinglePartition)
     }
-    FunctionTableSubqueryArgumentExpression(p)
+    Option(ctx.tableArgumentPartitioning)
+      .map(_.partition.asScala.map(expression))
+      .map { expressions =>
+        if (expressions.nonEmpty) {
+          repartitioning.append(RepartitionBy(expressions))
+        }
+      }
+    Option(ctx.tableArgumentPartitioning)
+      .map(_.sortItem.asScala.map(visitSortItem))
+      .map { expressions =>
+        if (expressions.nonEmpty) {
+          repartitioning.append(OrderBy(expressions))
+        }
+      }
+    FunctionTableSubqueryArgumentExpression(
+      plan = p,
+      repartitioning = repartitioning)
   }
 
   private def extractFunctionTableNamedArgument(

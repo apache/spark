@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import org.apache.spark.sql.catalyst.plans.logical.{HintInfo, LogicalPlan, Project}
+import org.apache.spark.sql.catalyst.plans.logical.{HintInfo, LogicalPlan, OrderPreservingUnaryNode, Project}
 import org.apache.spark.sql.catalyst.trees.TreePattern.{FUNCTION_TABLE_RELATION_ARGUMENT_EXPRESSION, TreePattern}
 import org.apache.spark.sql.types.DataType
 
@@ -32,11 +32,20 @@ import org.apache.spark.sql.types.DataType
  * table in the catalog. In the latter case, the relation argument comprises
  * a table subquery that may itself refer to one or more tables in its own
  * FROM clause.
+ *
+ * Each TABLE argument may also optionally include a PARTITION BY clause. If present, these indicate
+ * how to logically split up the input relation such that the table-valued function evaluates
+ * exactly once for each partition, and returns the union of all results. If no partitioning list is
+ * present, this splitting of the input relation is undefined. Furthermore, if the PARTITION BY
+ * clause includes a following ORDER BY clause, Catalyst will sort the rows in each partition such
+ * that the table-valued function receives them one-by-one in the requested order. Otherwise, if no
+ * such ordering is specified, the ordering of rows within each partition is undefined.
  */
 case class FunctionTableSubqueryArgumentExpression(
     plan: LogicalPlan,
     outerAttrs: Seq[Expression] = Seq.empty,
-    exprId: ExprId = NamedExpression.newExprId)
+    exprId: ExprId = NamedExpression.newExprId,
+    repartitioning: Seq[DistributionForTableFunctionCall] = Seq.empty)
   extends SubqueryExpression(plan, outerAttrs, exprId, Seq.empty, None) with Unevaluable {
 
   override def dataType: DataType = plan.schema
@@ -62,4 +71,26 @@ case class FunctionTableSubqueryArgumentExpression(
     Seq(FUNCTION_TABLE_RELATION_ARGUMENT_EXPRESSION)
 
   lazy val evaluable: LogicalPlan = Project(Seq(Alias(CreateStruct(plan.output), "c")()), plan)
+}
+
+/**
+ * This represents an expression distribution property for the rows of a TVF input table as
+ * indicated by the query.
+ */
+sealed trait DistributionForTableFunctionCall
+object WithSinglePartition extends DistributionForTableFunctionCall
+case class RepartitionBy(expressions: Seq[Expression]) extends DistributionForTableFunctionCall
+case class OrderBy(expressions: Seq[SortOrder]) extends DistributionForTableFunctionCall
+
+/**
+ * If a table-valued function call includes a TABLE argument with the PARTITION BY clause, we add
+ * this logical operator to represent the repartitioning operation in the query plan.
+ */
+case class RepartitionForTableFunctionCall(
+    child: LogicalPlan,
+    repartitioning: Seq[DistributionForTableFunctionCall]) extends OrderPreservingUnaryNode {
+  override def output: Seq[Attribute] = child.output
+
+  override protected def withNewChildInternal(
+      newChild: LogicalPlan): RepartitionForTableFunctionCall = copy(child = newChild)
 }
