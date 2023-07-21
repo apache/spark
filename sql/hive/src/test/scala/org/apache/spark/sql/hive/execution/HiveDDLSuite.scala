@@ -896,11 +896,11 @@ class HiveDDLSuite
           exception = intercept[AnalysisException] {
             sql(s"ALTER VIEW $tabName SET TBLPROPERTIES ('p' = 'an')")
           },
-          errorClass = "_LEGACY_ERROR_TEMP_1015",
+          errorClass = "UNSUPPORTED_TABLE_OPERATION.WITH_SUGGESTION",
           parameters = Map(
-            "identifier" -> s"default.$tabName",
-            "cmd" -> "ALTER VIEW ... SET TBLPROPERTIES",
-            "hintStr" -> " Please use ALTER TABLE instead."),
+            "tableName" -> s"`default`.`$tabName`",
+            "operation" -> "ALTER VIEW ... SET TBLPROPERTIES",
+            "suggestion" -> " Please use ALTER TABLE instead."),
           context = ExpectedContext(fragment = tabName, start = 11, stop = 14)
         )
 
@@ -908,12 +908,11 @@ class HiveDDLSuite
           exception = intercept[AnalysisException] {
             sql(s"ALTER TABLE $oldViewName SET TBLPROPERTIES ('p' = 'an')")
           },
-          errorClass = "_LEGACY_ERROR_TEMP_1013",
+          errorClass = "UNSUPPORTED_VIEW_OPERATION.WITH_SUGGESTION",
           parameters = Map(
-            "nameParts" -> s"$SESSION_CATALOG_NAME.default.$oldViewName",
-            "viewStr" -> "view",
-            "cmd" -> "ALTER TABLE ... SET TBLPROPERTIES",
-            "hintStr" -> " Please use ALTER VIEW instead."),
+            "viewName" -> s"`$SESSION_CATALOG_NAME`.`default`.`$oldViewName`",
+            "operation" -> "ALTER TABLE ... SET TBLPROPERTIES",
+            "suggestion" -> " Please use ALTER VIEW instead."),
           context = ExpectedContext(fragment = oldViewName, start = 12, stop = 16)
         )
 
@@ -921,11 +920,11 @@ class HiveDDLSuite
           exception = intercept[AnalysisException] {
             sql(s"ALTER VIEW $tabName UNSET TBLPROPERTIES ('p')")
           },
-          errorClass = "_LEGACY_ERROR_TEMP_1015",
+          errorClass = "UNSUPPORTED_TABLE_OPERATION.WITH_SUGGESTION",
           parameters = Map(
-            "identifier" -> s"default.$tabName",
-            "cmd" -> "ALTER VIEW ... UNSET TBLPROPERTIES",
-            "hintStr" -> " Please use ALTER TABLE instead."),
+            "tableName" -> s"`default`.`$tabName`",
+            "operation" -> "ALTER VIEW ... UNSET TBLPROPERTIES",
+            "suggestion" -> " Please use ALTER TABLE instead."),
           context = ExpectedContext(fragment = tabName, start = 11, stop = 14)
         )
 
@@ -933,12 +932,11 @@ class HiveDDLSuite
           exception = intercept[AnalysisException] {
             sql(s"ALTER TABLE $oldViewName UNSET TBLPROPERTIES ('p')")
           },
-          errorClass = "_LEGACY_ERROR_TEMP_1013",
+          errorClass = "UNSUPPORTED_VIEW_OPERATION.WITH_SUGGESTION",
           parameters = Map(
-            "nameParts" -> s"$SESSION_CATALOG_NAME.default.$oldViewName",
-            "viewStr" -> "view",
-            "cmd" -> "ALTER TABLE ... UNSET TBLPROPERTIES",
-            "hintStr" -> " Please use ALTER VIEW instead."),
+            "viewName" -> s"`$SESSION_CATALOG_NAME`.`default`.`$oldViewName`",
+            "operation" -> "ALTER TABLE ... UNSET TBLPROPERTIES",
+            "suggestion" -> " Please use ALTER VIEW instead."),
           context = ExpectedContext(fragment = oldViewName, start = 12, stop = 16)
         )
 
@@ -946,12 +944,11 @@ class HiveDDLSuite
           exception = intercept[AnalysisException] {
             sql(s"ALTER TABLE $oldViewName SET LOCATION '/path/to/home'")
           },
-          errorClass = "_LEGACY_ERROR_TEMP_1013",
+          errorClass = "UNSUPPORTED_VIEW_OPERATION.WITH_SUGGESTION",
           parameters = Map(
-            "nameParts" -> s"$SESSION_CATALOG_NAME.default.$oldViewName",
-            "viewStr" -> "view",
-            "cmd" -> "ALTER TABLE ... SET LOCATION ...",
-            "hintStr" -> " Please use ALTER VIEW instead."),
+            "viewName" -> s"`$SESSION_CATALOG_NAME`.`default`.`$oldViewName`",
+            "operation" -> "ALTER TABLE ... SET LOCATION ...",
+            "suggestion" -> " Please use ALTER VIEW instead."),
           context = ExpectedContext(fragment = oldViewName, start = 12, stop = 16)
         )
 
@@ -959,12 +956,11 @@ class HiveDDLSuite
           exception = intercept[AnalysisException] {
             sql(s"ALTER TABLE $oldViewName SET SERDE 'whatever'")
           },
-          errorClass = "_LEGACY_ERROR_TEMP_1013",
+          errorClass = "UNSUPPORTED_VIEW_OPERATION.WITH_SUGGESTION",
           parameters = Map(
-            "nameParts" -> s"$SESSION_CATALOG_NAME.default.$oldViewName",
-            "viewStr" -> "view",
-            "cmd" -> "ALTER TABLE ... SET [SERDE|SERDEPROPERTIES]",
-            "hintStr" -> " Please use ALTER VIEW instead."),
+            "viewName" -> s"`$SESSION_CATALOG_NAME`.`default`.`$oldViewName`",
+            "operation" -> "ALTER TABLE ... SET [SERDE|SERDEPROPERTIES]",
+            "suggestion" -> " Please use ALTER VIEW instead."),
           context = ExpectedContext(fragment = oldViewName, start = 12, stop = 16)
         )
 
@@ -972,12 +968,11 @@ class HiveDDLSuite
           exception = intercept[AnalysisException] {
             sql(s"ALTER TABLE $oldViewName SET SERDEPROPERTIES ('x' = 'y')")
           },
-          errorClass = "_LEGACY_ERROR_TEMP_1013",
+          errorClass = "UNSUPPORTED_VIEW_OPERATION.WITH_SUGGESTION",
           parameters = Map(
-            "nameParts" -> s"$SESSION_CATALOG_NAME.default.$oldViewName",
-            "viewStr" -> "view",
-            "cmd" -> "ALTER TABLE ... SET [SERDE|SERDEPROPERTIES]",
-            "hintStr" -> " Please use ALTER VIEW instead."),
+            "viewName" -> s"`$SESSION_CATALOG_NAME`.`default`.`$oldViewName`",
+            "operation" -> "ALTER TABLE ... SET [SERDE|SERDEPROPERTIES]",
+            "suggestion" -> " Please use ALTER VIEW instead."),
           context = ExpectedContext(fragment = oldViewName, start = 12, stop = 16)
         )
 
@@ -985,12 +980,11 @@ class HiveDDLSuite
           exception = intercept[AnalysisException] {
             sql(s"ALTER TABLE $oldViewName PARTITION (a=1, b=2) SET SERDEPROPERTIES ('x' = 'y')")
           },
-          errorClass = "_LEGACY_ERROR_TEMP_1013",
+          errorClass = "UNSUPPORTED_VIEW_OPERATION.WITH_SUGGESTION",
           parameters = Map(
-            "nameParts" -> s"$SESSION_CATALOG_NAME.default.$oldViewName",
-            "viewStr" -> "view",
-            "cmd" -> "ALTER TABLE ... SET [SERDE|SERDEPROPERTIES]",
-            "hintStr" -> " Please use ALTER VIEW instead."),
+            "viewName" -> s"`$SESSION_CATALOG_NAME`.`default`.`$oldViewName`",
+            "operation" -> "ALTER TABLE ... SET [SERDE|SERDEPROPERTIES]",
+            "suggestion" -> " Please use ALTER VIEW instead."),
           context = ExpectedContext(fragment = oldViewName, start = 12, stop = 16)
         )
 
@@ -998,12 +992,11 @@ class HiveDDLSuite
           exception = intercept[AnalysisException] {
             sql(s"ALTER TABLE $oldViewName RECOVER PARTITIONS")
           },
-          errorClass = "_LEGACY_ERROR_TEMP_1013",
+          errorClass = "UNSUPPORTED_VIEW_OPERATION.WITH_SUGGESTION",
           parameters = Map(
-            "nameParts" -> s"$SESSION_CATALOG_NAME.default.$oldViewName",
-            "viewStr" -> "view",
-            "cmd" -> "ALTER TABLE ... RECOVER PARTITIONS",
-            "hintStr" -> " Please use ALTER VIEW instead."),
+            "viewName" -> s"`$SESSION_CATALOG_NAME`.`default`.`$oldViewName`",
+            "operation" -> "ALTER TABLE ... RECOVER PARTITIONS",
+            "suggestion" -> " Please use ALTER VIEW instead."),
           context = ExpectedContext(fragment = oldViewName, start = 12, stop = 16)
         )
 
@@ -1011,12 +1004,11 @@ class HiveDDLSuite
           exception = intercept[AnalysisException] {
             sql(s"ALTER TABLE $oldViewName PARTITION (a='1') RENAME TO PARTITION (a='100')")
           },
-          errorClass = "_LEGACY_ERROR_TEMP_1013",
+          errorClass = "UNSUPPORTED_VIEW_OPERATION.WITH_SUGGESTION",
           parameters = Map(
-            "nameParts" -> s"$SESSION_CATALOG_NAME.default.$oldViewName",
-            "viewStr" -> "view",
-            "cmd" -> "ALTER TABLE ... RENAME TO PARTITION",
-            "hintStr" -> " Please use ALTER VIEW instead."),
+            "viewName" -> s"`$SESSION_CATALOG_NAME`.`default`.`$oldViewName`",
+            "operation" -> "ALTER TABLE ... RENAME TO PARTITION",
+            "suggestion" -> " Please use ALTER VIEW instead."),
           context = ExpectedContext(fragment = oldViewName, start = 12, stop = 16)
         )
 
@@ -1024,12 +1016,11 @@ class HiveDDLSuite
           exception = intercept[AnalysisException] {
             sql(s"ALTER TABLE $oldViewName ADD IF NOT EXISTS PARTITION (a='4', b='8')")
           },
-          errorClass = "_LEGACY_ERROR_TEMP_1013",
+          errorClass = "UNSUPPORTED_VIEW_OPERATION.WITH_SUGGESTION",
           parameters = Map(
-            "nameParts" -> s"$SESSION_CATALOG_NAME.default.$oldViewName",
-            "viewStr" -> "view",
-            "cmd" -> "ALTER TABLE ... ADD PARTITION ...",
-            "hintStr" -> " Please use ALTER VIEW instead."),
+            "viewName" -> s"`$SESSION_CATALOG_NAME`.`default`.`$oldViewName`",
+            "operation" -> "ALTER TABLE ... ADD PARTITION ...",
+            "suggestion" -> " Please use ALTER VIEW instead."),
           context = ExpectedContext(fragment = oldViewName, start = 12, stop = 16)
         )
 
@@ -1037,12 +1028,11 @@ class HiveDDLSuite
           exception = intercept[AnalysisException] {
             sql(s"ALTER TABLE $oldViewName DROP IF EXISTS PARTITION (a='2')")
           },
-          errorClass = "_LEGACY_ERROR_TEMP_1013",
+          errorClass = "UNSUPPORTED_VIEW_OPERATION.WITH_SUGGESTION",
           parameters = Map(
-            "nameParts" -> s"$SESSION_CATALOG_NAME.default.$oldViewName",
-            "viewStr" -> "view",
-            "cmd" -> "ALTER TABLE ... DROP PARTITION ...",
-            "hintStr" -> " Please use ALTER VIEW instead."),
+            "viewName" -> s"`$SESSION_CATALOG_NAME`.`default`.`$oldViewName`",
+            "operation" -> "ALTER TABLE ... DROP PARTITION ...",
+            "suggestion" -> " Please use ALTER VIEW instead."),
           context = ExpectedContext(fragment = oldViewName, start = 12, stop = 16)
         )
 

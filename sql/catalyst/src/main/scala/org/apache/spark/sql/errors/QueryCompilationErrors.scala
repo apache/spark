@@ -427,20 +427,21 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
   }
 
   def viewDepthExceedsMaxResolutionDepthError(
-      identifier: TableIdentifier, maxNestedViewDepth: Int, t: TreeNode[_]): Throwable = {
+      identifier: TableIdentifier, maxNestedDepth: Int, t: TreeNode[_]): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1009",
+      errorClass = "VIEW_EXCEED_MAX_NESTED_DEPTH",
       messageParameters = Map(
-        "identifier" -> identifier.toString,
-        "maxNestedViewDepth" -> maxNestedViewDepth.toString,
-        "config" -> SQLConf.MAX_NESTED_VIEW_DEPTH.key),
+        "viewName" -> toSQLId(identifier.nameParts),
+        "maxNestedDepth" -> maxNestedDepth.toString),
       origin = t.origin)
   }
 
   def insertIntoViewNotAllowedError(identifier: TableIdentifier, t: TreeNode[_]): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1010",
-      messageParameters = Map("identifier" -> identifier.toString),
+      errorClass = "UNSUPPORTED_VIEW_OPERATION.WITHOUT_SUGGESTION",
+      messageParameters = Map(
+        "viewName" -> toSQLId(identifier.nameParts),
+        "operation" -> "INSERT"),
       origin = t.origin)
   }
 
@@ -464,16 +465,24 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
       cmd: String,
       mismatchHint: Option[String],
       t: TreeNode[_]): Throwable = {
-    val viewStr = if (isTemp) "temp view" else "view"
-    val hintStr = mismatchHint.map(" " + _).getOrElse("")
-    new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1013",
-      messageParameters = Map(
-        "nameParts" -> nameParts.quoted,
-        "viewStr" -> viewStr,
-        "cmd" -> cmd,
-        "hintStr" -> hintStr),
-      origin = t.origin)
+    val suggestion = mismatchHint.map(" " + _).getOrElse("")
+    if (isTemp) {
+      new AnalysisException(
+        errorClass = "UNSUPPORTED_TEMP_VIEW_OPERATION.WITH_SUGGESTION",
+        messageParameters = Map(
+          "tempViewName" -> toSQLId(nameParts),
+          "operation" -> cmd,
+          "suggestion" -> suggestion),
+        origin = t.origin)
+    } else {
+      new AnalysisException(
+        errorClass = "UNSUPPORTED_VIEW_OPERATION.WITH_SUGGESTION",
+        messageParameters = Map(
+          "viewName" -> toSQLId(nameParts),
+          "operation" -> cmd,
+          "suggestion" -> suggestion),
+        origin = t.origin)
+    }
   }
 
   def expectViewNotTempViewError(
@@ -481,32 +490,32 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
       cmd: String,
       t: TreeNode[_]): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1014",
+      errorClass = "UNSUPPORTED_TEMP_VIEW_OPERATION.WITHOUT_SUGGESTION",
       messageParameters = Map(
-        "nameParts" -> nameParts.quoted,
-        "cmd" -> cmd),
+        "tempViewName" -> toSQLId(nameParts),
+        "operation" -> cmd),
       origin = t.origin)
   }
 
   def expectViewNotTableError(
       v: ResolvedTable, cmd: String, mismatchHint: Option[String], t: TreeNode[_]): Throwable = {
-    val hintStr = mismatchHint.map(" " + _).getOrElse("")
+    val suggestion = mismatchHint.map(" " + _).getOrElse("")
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1015",
+      errorClass = "UNSUPPORTED_TABLE_OPERATION.WITH_SUGGESTION",
       messageParameters = Map(
-        "identifier" -> v.identifier.quoted,
-        "cmd" -> cmd,
-        "hintStr" -> hintStr),
+        "tableName" -> toSQLId(v.identifier.quoted),
+        "operation" -> cmd,
+        "suggestion" -> suggestion),
       origin = t.origin)
   }
 
   def expectTableOrPermanentViewNotTempViewError(
       nameParts: Seq[String], cmd: String, t: TreeNode[_]): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1016",
+      errorClass = "UNSUPPORTED_TEMP_VIEW_OPERATION.WITHOUT_SUGGESTION",
       messageParameters = Map(
-        "nameParts" -> nameParts.quoted,
-        "cmd" -> cmd),
+        "tempViewName" -> toSQLId(nameParts),
+        "operation" -> cmd),
       origin = t.origin)
   }
 
@@ -2860,10 +2869,15 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
         "dataColumns" -> query.output.map(c => toSQLId(c.name)).mkString(", ")))
   }
 
-  def tableIsNotViewError(name: TableIdentifier): Throwable = {
+  def tableIsNotViewError(name: TableIdentifier, replace: Boolean): Throwable = {
+    val operation = if (replace) "CREATE OR REPLACE VIEW" else "CREATE VIEW"
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1278",
-      messageParameters = Map("name" -> name.toString))
+      errorClass = "UNSUPPORTED_TABLE_OPERATION.WITHOUT_SUGGESTION",
+      messageParameters = Map(
+        "tableName" -> toSQLId(name.nameParts),
+        "operation" -> operation
+      )
+    )
   }
 
   def viewAlreadyExistsError(name: TableIdentifier): Throwable = {
