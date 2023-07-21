@@ -155,6 +155,8 @@ object Metadata {
           value.head match {
             case _: JInt =>
               builder.putLongArray(key, value.asInstanceOf[List[JInt]].map(_.num.toLong).toArray)
+            case _: JLong =>
+              builder.putLongArray(key, value.asInstanceOf[List[JLong]].map(_.num.toLong).toArray)
             case _: JDouble =>
               builder.putDoubleArray(key, value.asInstanceOf[List[JDouble]].map(_.num).toArray)
             case _: JBool =>
