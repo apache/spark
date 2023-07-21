@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution.command.v1
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.execution.command
+import org.apache.spark.sql.execution.command.DDLCommandTestUtils.V1_COMMAND_VERSION
 
 /**
  * This base suite contains unified tests for the `SHOW CREATE TABLE` command that checks V1
@@ -193,4 +194,8 @@ trait ShowCreateTableSuiteBase extends command.ShowCreateTableSuiteBase
  */
 class ShowCreateTableSuite extends ShowCreateTableSuiteBase with CommandSuiteBase {
   override def commandVersion: String = super[ShowCreateTableSuiteBase].commandVersion
+  override def fullName: String = commandVersion match {
+    case V1_COMMAND_VERSION => s"$ns.$table"
+    case _ => s"$catalog.$ns.$table"
+  }
 }
