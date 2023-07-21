@@ -56,7 +56,7 @@ private object PostgresDialect extends JdbcDialect with SQLConfHelper {
     } else if (sqlType == Types.BIT && typeName == "bit" && size != 1) {
       Some(BinaryType)
     } else if (sqlType == Types.DOUBLE && typeName == "money") {
-      // money type seems to be broken but one workaround is to handle it as string.
+      // money type seems to be broken but one workaround is to handle it as strig.
       // See SPARK-34333 and https://github.com/pgjdbc/pgjdbc/issues/100
       Some(StringType)
     } else if (sqlType == Types.OTHER) {
