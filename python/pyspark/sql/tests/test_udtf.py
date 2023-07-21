@@ -355,14 +355,12 @@ class BaseUDTFTestsMixin:
 
         class RandomUDTF:
             def eval(self, a: int):
-                yield a * int(random.random() * 100),
+                yield a + int(random.random()),
 
         random_udtf = udtf(RandomUDTF, returnType="x: int").asNondeterministic()
-        # TODO(SPARK-43966): support non-deterministic UDTFs
-        with self.assertRaisesRegex(
-            AnalysisException, "The operator expects a deterministic expression"
-        ):
-            random_udtf(lit(1)).collect()
+        assertDataFrameEqual(random_udtf(lit(1)), [Row(x=1)])
+        self.spark.udtf.register("random_udtf", random_udtf)
+        assertDataFrameEqual(self.spark.sql("select * from random_udtf(1)"), [Row(x=1)])
 
     def test_udtf_with_nondeterministic_input(self):
         from pyspark.sql.functions import rand
@@ -370,13 +368,9 @@ class BaseUDTFTestsMixin:
         @udtf(returnType="x: int")
         class TestUDTF:
             def eval(self, a: int):
-                yield a + 1,
+                yield 1 if a > 100 else 0,
 
-        # TODO(SPARK-43966): support non-deterministic UDTFs
-        with self.assertRaisesRegex(
-            AnalysisException, " The operator expects a deterministic expression"
-        ):
-            TestUDTF(rand(0) * 100).collect()
+        assertDataFrameEqual(TestUDTF(rand(0) * 100), [Row(x=0)])
 
     def test_udtf_with_invalid_return_type(self):
         @udtf(returnType="int")
