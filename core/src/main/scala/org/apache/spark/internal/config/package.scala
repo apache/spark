@@ -2248,7 +2248,7 @@ package object config {
     ConfigBuilder("spark.executor.sync.log.level")
       .doc("If set to true, log level applied through SparkContext.setLogLevel() method " +
         "will be propagated to all executors.")
-      .version("3.5.0")
+      .version("4.0.0")
       .booleanConf
       .createWithDefault(false)
 
