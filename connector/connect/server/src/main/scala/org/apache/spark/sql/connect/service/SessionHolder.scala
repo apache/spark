@@ -33,6 +33,7 @@ import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.connect.artifact.SparkConnectArtifactManager
 import org.apache.spark.sql.connect.common.InvalidPlanInput
 import org.apache.spark.sql.streaming.StreamingQueryListener
+import org.apache.spark.util.{SystemClock}
 import org.apache.spark.util.Utils
 
 /**
@@ -41,8 +42,10 @@ import org.apache.spark.util.Utils
 case class SessionHolder(userId: String, sessionId: String, session: SparkSession)
     extends Logging {
 
-  val executePlanOperations: ConcurrentMap[String, ExecutePlanHolder] =
-    new ConcurrentHashMap[String, ExecutePlanHolder]()
+  val executions: ConcurrentMap[String, ExecuteHolder] =
+    new ConcurrentHashMap[String, ExecuteHolder]()
+
+  val eventManager: SessionEventsManager = SessionEventsManager(this, new SystemClock())
 
   // Mapping from relation ID (passed to client) to runtime dataframe. Used for callbacks like
   // foreachBatch() in Streaming. Lazy since most sessions don't need it.
@@ -53,23 +56,26 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
   private lazy val listenerCache: ConcurrentMap[String, StreamingQueryListener] =
     new ConcurrentHashMap()
 
-  private[connect] def createExecutePlanHolder(
-      request: proto.ExecutePlanRequest): ExecutePlanHolder = {
-
+  private[connect] def createExecuteHolder(request: proto.ExecutePlanRequest): ExecuteHolder = {
     val operationId = UUID.randomUUID().toString
-    val executePlanHolder = ExecutePlanHolder(operationId, this, request)
-    assert(executePlanOperations.putIfAbsent(operationId, executePlanHolder) == null)
+    val executePlanHolder = new ExecuteHolder(request, operationId, this)
+    assert(executions.putIfAbsent(operationId, executePlanHolder) == null)
     executePlanHolder
   }
 
-  private[connect] def removeExecutePlanHolder(operationId: String): Unit = {
-    executePlanOperations.remove(operationId)
+  private[connect] def executeHolder(operationId: String): Option[ExecuteHolder] = {
+    Option(executions.get(operationId))
+  }
+
+  private[connect] def removeExecuteHolder(operationId: String): Unit = {
+    executions.remove(operationId)
   }
 
   private[connect] def interruptAll(): Unit = {
-    executePlanOperations.asScala.values.foreach { execute =>
+    executions.asScala.values.foreach { execute =>
       // Eat exception while trying to interrupt a given execution and move forward.
       try {
+        logDebug(s"Interrupting execution ${execute.operationId}")
         execute.interrupt()
       } catch {
         case NonFatal(e) =>
@@ -99,12 +105,17 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
    */
   def classloader: ClassLoader = artifactManager.classloader
 
+  private[connect] def initializeSession(): Unit = {
+    eventManager.postStarted()
+  }
+
   /**
    * Expire this session and trigger state cleanup mechanisms.
    */
   private[connect] def expireSession(): Unit = {
     logDebug(s"Expiring session with userId: $userId and sessionId: $sessionId")
     artifactManager.cleanUpResources()
+    eventManager.postClosed()
   }
 
   /**
@@ -184,6 +195,13 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
    */
   private[connect] def removeCachedListener(id: String): StreamingQueryListener = {
     listenerCache.remove(id)
+  }
+
+  /**
+   * List listener IDs that have been register on server side.
+   */
+  private[connect] def listListenerIds(): Seq[String] = {
+    listenerCache.keySet().asScala.toSeq
   }
 }
 

@@ -58,6 +58,7 @@ from pyspark.sql.connect.plan import (
     LogicalPlan,
     CachedLocalRelation,
     CachedRelation,
+    CachedRemoteRelation,
 )
 from pyspark.sql.connect.readwriter import DataFrameReader
 from pyspark.sql.connect.streaming import DataStreamReader, StreamingQueryManager
@@ -88,10 +89,13 @@ if TYPE_CHECKING:
     from pyspark.sql.connect._typing import OptionalPrimitiveType
     from pyspark.sql.connect.catalog import Catalog
     from pyspark.sql.connect.udf import UDFRegistration
+    from pyspark.sql.connect.udtf import UDTFRegistration
 
 
 # `_active_spark_session` stores the active spark connect session created by
 # `SparkSession.builder.getOrCreate`. It is used by ML code.
+#  If sessions are created with `SparkSession.builder.create`, it stores
+#  The last created session
 _active_spark_session = None
 
 
@@ -171,6 +175,8 @@ class SparkSession:
             )
 
         def create(self) -> "SparkSession":
+            global _active_spark_session
+
             has_channel_builder = self._channel_builder is not None
             has_spark_remote = "spark.remote" in self._options
 
@@ -187,11 +193,14 @@ class SparkSession:
 
             if has_channel_builder:
                 assert self._channel_builder is not None
-                return SparkSession(connection=self._channel_builder)
+                session = SparkSession(connection=self._channel_builder)
             else:
                 spark_remote = to_str(self._options.get("spark.remote"))
                 assert spark_remote is not None
-                return SparkSession(connection=spark_remote)
+                session = SparkSession(connection=spark_remote)
+
+            _active_spark_session = session
+            return session
 
         def getOrCreate(self) -> "SparkSession":
             global _active_spark_session
@@ -599,7 +608,7 @@ class SparkSession:
             raise PySparkAttributeError(
                 error_class="JVM_ATTRIBUTE_NOT_SUPPORTED", message_parameters={"attr_name": name}
             )
-        elif name in ["newSession", "sparkContext", "udtf"]:
+        elif name in ["newSession", "sparkContext"]:
             raise PySparkNotImplementedError(
                 error_class="NOT_IMPLEMENTED", message_parameters={"feature": f"{name}()"}
             )
@@ -612,6 +621,14 @@ class SparkSession:
         return UDFRegistration(self)
 
     udf.__doc__ = PySparkSession.udf.__doc__
+
+    @property
+    def udtf(self) -> "UDTFRegistration":
+        from pyspark.sql.connect.udtf import UDTFRegistration
+
+        return UDTFRegistration(self)
+
+    udtf.__doc__ = PySparkSession.udtf.__doc__
 
     @property
     def version(self) -> str:
@@ -653,6 +670,14 @@ class SparkSession:
         self._client.copy_from_local_to_fs(local_path, dest_path)
 
     copyFromLocalToFs.__doc__ = PySparkSession.copyFromLocalToFs.__doc__
+
+    def _createRemoteDataFrame(self, remote_id: str) -> "DataFrame":
+        """
+        In internal API to reference a runtime DataFrame on the server side.
+        This is used in ForeachBatch() runner, where the remote DataFrame refers to the
+        output of a micro batch.
+        """
+        return DataFrame.withPlan(CachedRemoteRelation(remote_id), self)
 
     @staticmethod
     def _start_connect_server(master: str, opts: Dict[str, Any]) -> None:

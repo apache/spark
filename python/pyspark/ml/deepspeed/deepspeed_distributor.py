@@ -15,7 +15,6 @@
 # limitations under the License.
 #
 import json
-import os
 import sys
 import tempfile
 from typing import (
@@ -52,16 +51,12 @@ class DeepspeedTorchDistributor(TorchDistributor):
         ----------
         num_gpus: int
             The number of GPUs to use per node (analagous to num_gpus in deepspeed command).
-
         nnodes: int
             The number of nodes that should be used for the run.
-
         local_mode: bool
             Whether or not to run the training in a distributed fashion or just locally.
-
         use_gpu: bool
             Boolean flag to determine whether to utilize gpus.
-
         deepspeed_config: Union[Dict[str,Any], str] or None:
             The configuration file to be used for launching the deepspeed application.
             If it's a dictionary containing the parameters, then we will create the file.
@@ -111,7 +106,7 @@ class DeepspeedTorchDistributor(TorchDistributor):
             f"--nproc_per_node={processes_per_node}",
             train_path,
             *args_string,
-            "-deepspeed",
+            "--deepspeed",
         ]
 
         # Don't have the deepspeed_config argument if no path is provided or no parameters set
@@ -139,19 +134,6 @@ class DeepspeedTorchDistributor(TorchDistributor):
     def run(self, train_object: Union[Callable, str], *args: Any, **kwargs: Any) -> Optional[Any]:
         # If the "train_object" is a string, then we assume it's a filepath.
         # Otherwise, we assume it's a function.
-        if isinstance(train_object, str):
-            if os.path.exists(train_object) is False:
-                raise FileNotFoundError(f"The path to training file {train_object} does not exist.")
-            framework_wrapper_fn = DeepspeedTorchDistributor._run_training_on_pytorch_file
-        else:
-            raise RuntimeError("Python training functions aren't supported as inputs at this time")
-
-        if self.local_mode:
-            return self._run_local_training(framework_wrapper_fn, train_object, *args, **kwargs)
-        return self._run_distributed_training(
-            framework_wrapper_fn,
-            train_object,
-            spark_dataframe=None,
-            *args,
-            **kwargs,  # type:ignore[misc]
+        return self._run(
+            train_object, DeepspeedTorchDistributor._run_training_on_pytorch_file, *args, **kwargs
         )

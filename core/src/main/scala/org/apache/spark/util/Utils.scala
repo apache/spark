@@ -190,11 +190,6 @@ private[spark] object Utils extends Logging with SparkClassUtils {
     weakStringInterner.intern(s)
   }
 
-  /** Determines whether the provided class is loadable in the current thread. */
-  def classIsLoadable(clazz: String): Boolean = {
-    Try { classForName(clazz, initialize = false) }.isSuccess
-  }
-
   /**
    * Run a segment of code using a different context class loader in the current thread
    */
@@ -442,7 +437,7 @@ private[spark] object Utils extends Logging with SparkClassUtils {
     // `file` and `localhost` are not used. Just to prevent URI from parsing `fileName` as
     // scheme or host. The prefix "/" is required because URI doesn't accept a relative path.
     // We should remove it after we get the raw path.
-    encodeRelativeUnixPathToURIRawPath(fileName).substring(1)
+    encodeRelativeUnixPathToURIRawPath(fileName)
   }
 
   /**
@@ -453,7 +448,7 @@ private[spark] object Utils extends Logging with SparkClassUtils {
     // `file` and `localhost` are not used. Just to prevent URI from parsing `fileName` as
     // scheme or host. The prefix "/" is required because URI doesn't accept a relative path.
     // We should remove it after we get the raw path.
-    new URI("file", null, "localhost", -1, "/" + path, null, null).getRawPath
+    new URI("file", null, "localhost", -1, "/" + path, null, null).getRawPath.substring(1)
   }
 
   /**

@@ -26,6 +26,7 @@ import org.apache.spark.api.python.{ChainedPythonFunctions, PythonEvalType}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.execution.SparkPlan
+import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.types.{StructField, StructType}
 
 /**
@@ -36,13 +37,34 @@ case class BatchEvalPythonExec(udfs: Seq[PythonUDF], resultAttrs: Seq[Attribute]
 
   private[this] val jobArtifactUUID = JobArtifactSet.getCurrentJobArtifactState.map(_.uuid)
 
-  protected override def evaluate(
+  override protected def evaluatorFactory: EvalPythonEvaluatorFactory = {
+    new BatchEvalPythonEvaluatorFactory(
+      child.output,
+      udfs,
+      output,
+      pythonMetrics,
+      jobArtifactUUID)
+  }
+
+  override protected def withNewChildInternal(newChild: SparkPlan): BatchEvalPythonExec =
+    copy(child = newChild)
+}
+
+class BatchEvalPythonEvaluatorFactory(
+    childOutput: Seq[Attribute],
+    udfs: Seq[PythonUDF],
+    output: Seq[Attribute],
+    pythonMetrics: Map[String, SQLMetric],
+    jobArtifactUUID: Option[String])
+    extends EvalPythonEvaluatorFactory(childOutput, udfs, output) {
+
+  override def evaluate(
       funcs: Seq[ChainedPythonFunctions],
       argOffsets: Array[Array[Int]],
       iter: Iterator[InternalRow],
       schema: StructType,
       context: TaskContext): Iterator[InternalRow] = {
-    EvaluatePython.registerPicklers()  // register pickler for Row
+    EvaluatePython.registerPicklers() // register pickler for Row
 
     // Input iterator to Python.
     val inputIterator = BatchEvalPythonExec.getInputIterator(iter, schema)
@@ -77,9 +99,6 @@ case class BatchEvalPythonExec(udfs: Seq[PythonUDF], resultAttrs: Seq[Attribute]
       }
     }
   }
-
-  override protected def withNewChildInternal(newChild: SparkPlan): BatchEvalPythonExec =
-    copy(child = newChild)
 }
 
 object BatchEvalPythonExec {

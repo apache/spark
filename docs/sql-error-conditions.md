@@ -171,6 +171,14 @@ SQLSTATE: none assigned
 
 Could not load Protobuf class with name `<protobufClassName>`. `<explanation>`.
 
+### [CANNOT_LOAD_STATE_STORE](sql-error-conditions-cannot-load-state-store-error-class.html)
+
+SQLSTATE: 58030
+
+An error occurred during loading state.
+
+For more details see [CANNOT_LOAD_STATE_STORE](sql-error-conditions-cannot-load-state-store-error-class.html)
+
 ### CANNOT_MERGE_INCOMPATIBLE_DATA_TYPE
 
 [SQLSTATE: 42825](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
@@ -455,6 +463,14 @@ Found duplicate clauses: `<clauseName>`. Please, remove one of them.
 [SQLSTATE: 23505](sql-error-conditions-sqlstates.html#class-23-integrity-constraint-violation)
 
 Found duplicate keys `<keyColumn>`.
+
+### [DUPLICATE_ROUTINE_PARAMETER_ASSIGNMENT](sql-error-conditions-duplicate-routine-parameter-assignment-error-class.html)
+
+[SQLSTATE: 4274K](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+Call to function `<functionName>` is invalid because it includes multiple argument assignments to the same parameter name `<parameterName>`.
+
+For more details see [DUPLICATE_ROUTINE_PARAMETER_ASSIGNMENT](sql-error-conditions-duplicate-routine-parameter-assignment-error-class.html)
 
 ### EMPTY_JSON_FIELD_VALUE
 
@@ -1210,7 +1226,13 @@ SQLSTATE: none assigned
 
 Not allowed to implement multiple UDF interfaces, UDF class `<className>`.
 
-### NAMED_ARGUMENTS_SUPPORT_DISABLED
+### NAMED_PARAMETERS_NOT_SUPPORTED
+
+[SQLSTATE: 4274K](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+Named parameters are not supported for function `<functionName>`; please retry the query with positional arguments to the function call instead.
+
+### NAMED_PARAMETER_SUPPORT_DISABLED
 
 SQLSTATE: none assigned
 
@@ -1380,6 +1402,12 @@ SQLSTATE: none assigned
 
 Number of given aliases does not match number of output columns. Function name: `<funcName>`; number of aliases: `<aliasesNum>`; number of output columns: `<outColsNum>`.
 
+### OPERATION_CANCELED
+
+[SQLSTATE: HY008](sql-error-conditions-sqlstates.html#class-HY-cli-specific-condition)
+
+Operation has been canceled.
+
 ### ORDER_BY_POS_OUT_OF_RANGE
 
 [SQLSTATE: 42805](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
@@ -1515,6 +1543,12 @@ Failed to rename as `<sourcePath>` was not found.
 
 The `<clause>` clause may be used at most once per `<operation>` operation.
 
+### REQUIRED_PARAMETER_NOT_FOUND
+
+[SQLSTATE: 4274K](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+Cannot invoke function `<functionName>` because the parameter named `<parameterName>` is required, but the function call did not supply a value. Please update the function call to supply an argument value (either positionally or by name) and retry the query again.
+
 ### REQUIRES_SINGLE_PART_NAMESPACE
 
 [SQLSTATE: 42K05](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
@@ -1645,6 +1679,12 @@ The table or view `<relationName>` cannot be found. Verify the spelling and corr
 If you did not qualify the name with a schema, verify the current_schema() output, or qualify the name with the correct schema and catalog.
 To tolerate the error on drop use DROP VIEW IF EXISTS or DROP TABLE IF EXISTS.
 
+### TABLE_VALUED_FUNCTION_FAILED_TO_ANALYZE_IN_PYTHON
+
+SQLSTATE: none assigned
+
+Failed to analyze the Python user defined table function: `<msg>`
+
 ### TABLE_VALUED_FUNCTION_TOO_MANY_TABLE_ARGUMENTS
 
 SQLSTATE: none assigned
@@ -1718,6 +1758,12 @@ Found an unclosed bracketed comment. Please, append */ at the end of the comment
 
 Parameter `<paramIndex>` of function `<functionName>` requires the `<requiredType>` type, however `<inputSql>` has the type `<inputType>`.
 
+### UNEXPECTED_POSITIONAL_ARGUMENT
+
+[SQLSTATE: 4274K](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+Cannot invoke function `<functionName>` because it contains positional argument(s) following named argument(s); please rearrange them so the positional arguments come first and then retry the query again.
+
 ### UNKNOWN_PROTOBUF_MESSAGE_TYPE
 
 SQLSTATE: none assigned
@@ -1747,6 +1793,12 @@ Unpivot value columns must share a least common type, some types do not: [`<type
 [SQLSTATE: 428C4](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
 
 All unpivot value columns must have the same size as there are value column names (`<names>`).
+
+### UNRECOGNIZED_PARAMETER_NAME
+
+[SQLSTATE: 4274K](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+Cannot invoke function `<functionName>` because the function call included a named argument reference for the argument named `<argumentName>`, but this function does not include any signature containing an argument with this name. Did you mean one of the following? [`<proposal>`].
 
 ### UNRECOGNIZED_SQL_TYPE
 

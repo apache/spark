@@ -143,6 +143,65 @@
       "Could not load Protobuf class with name <protobufClassName>. <explanation>."
     ]
   },
+  "CANNOT_LOAD_STATE_STORE" : {
+    "message" : [
+      "An error occurred during loading state."
+    ],
+    "subClass" : {
+      "CANNOT_READ_CHECKPOINT" : {
+        "message" : [
+          "Cannot read RocksDB checkpoint metadata. Expected <expectedVersion>, but found <actualVersion>."
+        ]
+      },
+      "CANNOT_READ_DELTA_FILE_KEY_SIZE" : {
+        "message" : [
+          "Error reading delta file <fileToRead> of <clazz>: key size cannot be <keySize>."
+        ]
+      },
+      "CANNOT_READ_DELTA_FILE_NOT_EXISTS" : {
+        "message" : [
+          "Error reading delta file <fileToRead> of <clazz>: <fileToRead> does not exist."
+        ]
+      },
+      "CANNOT_READ_SNAPSHOT_FILE_KEY_SIZE" : {
+        "message" : [
+          "Error reading snapshot file <fileToRead> of <clazz>: key size cannot be <keySize>."
+        ]
+      },
+      "CANNOT_READ_SNAPSHOT_FILE_VALUE_SIZE" : {
+        "message" : [
+          "Error reading snapshot file <fileToRead> of <clazz>: value size cannot be <valueSize>."
+        ]
+      },
+      "CANNOT_READ_STREAMING_STATE_FILE" : {
+        "message" : [
+          "Error reading streaming state file of <fileToRead> does not exist. If the stream job is restarted with a new or updated state operation, please create a new checkpoint location or clear the existing checkpoint location."
+        ]
+      },
+      "UNCATEGORIZED" : {
+        "message" : [
+          ""
+        ]
+      },
+      "UNEXPECTED_FILE_SIZE" : {
+        "message" : [
+          "Copied <dfsFile> to <localFile>, expected <expectedSize> bytes, found <localFileSize> bytes."
+        ]
+      },
+      "UNEXPECTED_VERSION" : {
+        "message" : [
+          "Version cannot be <version> because it is less than 0."
+        ]
+      },
+      "UNRELEASED_THREAD_ERROR" : {
+        "message" : [
+          "<loggingId>: RocksDB instance could not be acquired by <newAcquiredThreadInfo> as it was not released by <acquiredThreadInfo> after <timeWaitedMs> ms.",
+          "Thread holding the lock has trace: <stackTraceOutput>"
+        ]
+      }
+    },
+    "sqlState" : "58030"
+  },
   "CANNOT_MERGE_INCOMPATIBLE_DATA_TYPE" : {
     "message" : [
       "Failed to merge incompatible data types <left> and <right>. Please check the data types of the columns being merged and ensure that they are compatible. If necessary, consider casting the columns to compatible data types before attempting the merge."
@@ -737,6 +796,24 @@
       "Found duplicate keys <keyColumn>."
     ],
     "sqlState" : "23505"
+  },
+  "DUPLICATE_ROUTINE_PARAMETER_ASSIGNMENT" : {
+    "message" : [
+      "Call to function <functionName> is invalid because it includes multiple argument assignments to the same parameter name <parameterName>."
+    ],
+    "subClass" : {
+      "BOTH_POSITIONAL_AND_NAMED" : {
+        "message" : [
+          "A positional argument and named argument both referred to the same parameter."
+        ]
+      },
+      "DOUBLE_NAMED_ARGUMENT_REFERENCE" : {
+        "message" : [
+          "More than one named argument referred to the same parameter."
+        ]
+      }
+    },
+    "sqlState" : "4274K"
   },
   "EMPTY_JSON_FIELD_VALUE" : {
     "message" : [
@@ -1956,7 +2033,13 @@
       "Not allowed to implement multiple UDF interfaces, UDF class <className>."
     ]
   },
-  "NAMED_ARGUMENTS_SUPPORT_DISABLED" : {
+  "NAMED_PARAMETERS_NOT_SUPPORTED" : {
+    "message" : [
+      "Named parameters are not supported for function <functionName>; please retry the query with positional arguments to the function call instead."
+    ],
+    "sqlState" : "4274K"
+  },
+  "NAMED_PARAMETER_SUPPORT_DISABLED" : {
     "message" : [
       "Cannot call function <functionName> because named argument references are not enabled here. In this case, the named argument reference was <argument>. Set \"spark.sql.allowNamedFunctionArguments\" to \"true\" to turn on feature."
     ]
@@ -2166,6 +2249,12 @@
       "Number of given aliases does not match number of output columns. Function name: <funcName>; number of aliases: <aliasesNum>; number of output columns: <outColsNum>."
     ]
   },
+  "OPERATION_CANCELED" : {
+    "message" : [
+      "Operation has been canceled."
+    ],
+    "sqlState" : "HY008"
+  },
   "ORDER_BY_POS_OUT_OF_RANGE" : {
     "message" : [
       "ORDER BY position <index> is not in select list (valid range is [1, <size>])."
@@ -2289,6 +2378,12 @@
     ],
     "sqlState" : "42614"
   },
+  "REQUIRED_PARAMETER_NOT_FOUND" : {
+    "message" : [
+      "Cannot invoke function <functionName> because the parameter named <parameterName> is required, but the function call did not supply a value. Please update the function call to supply an argument value (either positionally or by name) and retry the query again."
+    ],
+    "sqlState" : "4274K"
+  },
   "REQUIRES_SINGLE_PART_NAMESPACE" : {
     "message" : [
       "<sessionCatalog> requires a single-part namespace, but got <namespace>."
@@ -2410,6 +2505,11 @@
     ],
     "sqlState" : "42P01"
   },
+  "TABLE_VALUED_FUNCTION_FAILED_TO_ANALYZE_IN_PYTHON" : {
+    "message" : [
+      "Failed to analyze the Python user defined table function: <msg>"
+    ]
+  },
   "TABLE_VALUED_FUNCTION_TOO_MANY_TABLE_ARGUMENTS" : {
     "message" : [
       "There are too many table arguments for table-valued function. It allows one table argument, but got: <num>. If you want to allow it, please set \"spark.sql.allowMultipleTableArguments.enabled\" to \"true\""
@@ -2479,6 +2579,12 @@
     ],
     "sqlState" : "42K09"
   },
+  "UNEXPECTED_POSITIONAL_ARGUMENT" : {
+    "message" : [
+      "Cannot invoke function <functionName> because it contains positional argument(s) following named argument(s); please rearrange them so the positional arguments come first and then retry the query again."
+    ],
+    "sqlState" : "4274K"
+  },
   "UNKNOWN_PROTOBUF_MESSAGE_TYPE" : {
     "message" : [
       "Attempting to treat <descriptorName> as a Message, but it was <containingType>."
@@ -2507,6 +2613,12 @@
       "All unpivot value columns must have the same size as there are value column names (<names>)."
     ],
     "sqlState" : "428C4"
+  },
+  "UNRECOGNIZED_PARAMETER_NAME" : {
+    "message" : [
+      "Cannot invoke function <functionName> because the function call included a named argument reference for the argument named <argumentName>, but this function does not include any signature containing an argument with this name. Did you mean one of the following? [<proposal>]."
+    ],
+    "sqlState" : "4274K"
   },
   "UNRECOGNIZED_SQL_TYPE" : {
     "message" : [
@@ -5699,16 +5811,6 @@
   "_LEGACY_ERROR_TEMP_2256" : {
     "message" : [
       "Foreach writer has been aborted due to a task failure."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2258" : {
-    "message" : [
-      "Error reading delta file <fileToRead> of <clazz>: key size cannot be <keySize>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2259" : {
-    "message" : [
-      "Error reading snapshot file <fileToRead> of <clazz>: <message>"
     ]
   },
   "_LEGACY_ERROR_TEMP_2260" : {

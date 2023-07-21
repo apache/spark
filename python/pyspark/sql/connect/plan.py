@@ -18,7 +18,7 @@ from pyspark.sql.connect.utils import check_dependencies
 
 check_dependencies(__name__)
 
-from typing import Any, List, Optional, Sequence, Union, cast, TYPE_CHECKING, Mapping, Dict
+from typing import Any, List, Optional, Type, Sequence, Union, cast, TYPE_CHECKING, Mapping, Dict
 import functools
 import json
 from threading import Lock
@@ -26,6 +26,7 @@ from inspect import signature, isclass
 
 import pyarrow as pa
 
+from pyspark.serializers import CloudPickleSerializer
 from pyspark.storagelevel import StorageLevel
 from pyspark.sql.types import DataType
 
@@ -33,11 +34,12 @@ import pyspark.sql.connect.proto as proto
 from pyspark.sql.connect.conversion import storage_level_to_proto
 from pyspark.sql.connect.column import Column
 from pyspark.sql.connect.expressions import (
+    Expression,
     SortOrder,
     ColumnReference,
     LiteralExpression,
 )
-from pyspark.sql.connect.types import pyspark_types_to_proto_types
+from pyspark.sql.connect.types import pyspark_types_to_proto_types, UnparsedDataType
 from pyspark.errors import PySparkTypeError, PySparkNotImplementedError
 
 if TYPE_CHECKING:
@@ -2171,6 +2173,95 @@ class ApplyInPandasWithState(LogicalPlan):
         plan.apply_in_pandas_with_state.output_mode = self._output_mode
         plan.apply_in_pandas_with_state.timeout_conf = self._timeout_conf
         return plan
+
+
+class PythonUDTF:
+    """Represents a Python user-defined table function."""
+
+    def __init__(
+        self,
+        func: Type,
+        return_type: Optional[Union[DataType, str]],
+        eval_type: int,
+        python_ver: str,
+    ) -> None:
+        self._func = func
+        self._name = func.__name__
+        self._return_type: Optional[DataType] = (
+            None
+            if return_type is None
+            else UnparsedDataType(return_type)
+            if isinstance(return_type, str)
+            else return_type
+        )
+        self._eval_type = eval_type
+        self._python_ver = python_ver
+
+    def to_plan(self, session: "SparkConnectClient") -> proto.PythonUDTF:
+        udtf = proto.PythonUDTF()
+        if self._return_type is not None:
+            udtf.return_type.CopyFrom(pyspark_types_to_proto_types(self._return_type))
+        udtf.eval_type = self._eval_type
+        udtf.command = CloudPickleSerializer().dumps(self._func)
+        udtf.python_ver = self._python_ver
+        return udtf
+
+    def __repr__(self) -> str:
+        return (
+            f"PythonUDTF({self._name}, {self._return_type}, "
+            f"{self._eval_type}, {self._python_ver})"
+        )
+
+
+class CommonInlineUserDefinedTableFunction(LogicalPlan):
+    """
+    Logical plan object for a user-defined table function with
+    an inlined defined function body.
+    """
+
+    def __init__(
+        self,
+        function_name: str,
+        function: PythonUDTF,
+        deterministic: bool,
+        arguments: Sequence[Expression],
+    ) -> None:
+        super().__init__(None)
+        self._function_name = function_name
+        self._deterministic = deterministic
+        self._arguments = arguments
+        self._function = function
+
+    def plan(self, session: "SparkConnectClient") -> proto.Relation:
+        plan = self._create_proto_relation()
+        plan.common_inline_user_defined_table_function.function_name = self._function_name
+        plan.common_inline_user_defined_table_function.deterministic = self._deterministic
+        if len(self._arguments) > 0:
+            plan.common_inline_user_defined_table_function.arguments.extend(
+                [arg.to_plan(session) for arg in self._arguments]
+            )
+        plan.common_inline_user_defined_table_function.python_udtf.CopyFrom(
+            self._function.to_plan(session)
+        )
+        return plan
+
+    def udtf_plan(
+        self, session: "SparkConnectClient"
+    ) -> "proto.CommonInlineUserDefinedTableFunction":
+        """
+        Compared to `plan`, it returns a `proto.CommonInlineUserDefinedTableFunction`
+        instead of a `proto.Relation`.
+        """
+        plan = proto.CommonInlineUserDefinedTableFunction()
+        plan.function_name = self._function_name
+        plan.deterministic = self._deterministic
+        if len(self._arguments) > 0:
+            plan.arguments.extend([arg.to_plan(session) for arg in self._arguments])
+        plan.python_udtf.CopyFrom(cast(proto.PythonUDF, self._function.to_plan(session)))
+        return plan
+
+    def __repr__(self) -> str:
+        return f"{self._function_name}({', '.join([str(arg) for arg in self._arguments])})"
 
 
 class CachedRelation(LogicalPlan):

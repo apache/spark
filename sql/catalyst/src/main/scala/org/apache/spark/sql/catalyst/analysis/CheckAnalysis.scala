@@ -279,9 +279,9 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
                 e.setTagValue(DATA_TYPE_MISMATCH_ERROR, true)
                 val extraHint = extraHintForAnsiTypeCoercionExpression(operator)
                 e.failAnalysis(
-                  errorClass = "TYPE_CHECK_FAILURE_WITH_HINT",
+                  errorClass = "DATATYPE_MISMATCH.TYPE_CHECK_FAILURE_WITH_HINT",
                   messageParameters = Map(
-                    "expr" -> toSQLExpr(e),
+                    "sqlExpr" -> toSQLExpr(e),
                     "msg" -> message,
                     "hint" -> extraHint))
               case checkRes: TypeCheckResult.InvalidFormat =>
@@ -979,10 +979,8 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
       case ScalarSubquery(query, outerAttrs, _, _, _, _) =>
         // Scalar subquery must return one column as output.
         if (query.output.size != 1) {
-          expr.failAnalysis(
-            errorClass = "INVALID_SUBQUERY_EXPRESSION." +
-              "SCALAR_SUBQUERY_RETURN_MORE_THAN_ONE_OUTPUT_COLUMN",
-            messageParameters = Map("number" -> query.output.size.toString))
+          throw QueryCompilationErrors.subqueryReturnMoreThanOneColumn(query.output.size,
+            expr.origin)
         }
 
         if (outerAttrs.nonEmpty) {

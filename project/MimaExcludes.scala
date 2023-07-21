@@ -34,6 +34,10 @@ import com.typesafe.tools.mima.core.ProblemFilters._
  */
 object MimaExcludes {
 
+  // Exclude rules for 4.0.x
+  lazy val v40excludes = v35excludes ++ Seq(
+  )
+
   // Exclude rules for 3.5.x from 3.4.0
   lazy val v35excludes = defaultExcludes ++ Seq(
     // [SPARK-43165][SQL] Move canWrite to DataTypeUtils
@@ -105,6 +109,71 @@ object MimaExcludes {
     ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.storage.StorageLevel"),
     ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.storage.StorageLevel$"),
 
+    // SPARK-44475: Relocate DataType and Parser to sql/api
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.types.ArrayType"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.types.ArrayType$"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.types.BinaryType"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.types.BinaryType$"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.types.BooleanType"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.types.BooleanType$"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.types.ByteType"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.types.ByteType$"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.types.CalendarIntervalType"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.types.CalendarIntervalType$"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.types.CharType"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.types.CharType$"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.types.DataType"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.types.DataType$"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.types.DateType"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.types.DateType$"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.types.DayTimeIntervalType"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.types.DayTimeIntervalType$"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.types.Decimal"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.types.Decimal$"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.types.ShortType"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.types.ShortType$"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.types.StringType"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.types.StringType$"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.types.StructField"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.types.StructField$"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.types.StructType"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.types.StructType$"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.types.TimestampNTZType"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.types.TimestampNTZType$"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.types.TimestampType"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.types.TimestampType$"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.types.UDTRegistration"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.types.UDTRegistration$"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.types.VarcharType"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.types.VarcharType$"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.types.YearMonthIntervalType"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.types.YearMonthIntervalType$"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.types.DecimalType"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.types.DecimalType$"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.types.DoubleType"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.types.DoubleType$"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.types.DoubleType$DoubleAsIfIntegral"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.types.DoubleType$DoubleAsIfIntegral$"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.types.DoubleType$DoubleIsConflicted"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.types.FloatType"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.types.FloatType$"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.types.FloatType$FloatAsIfIntegral"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.types.FloatType$FloatAsIfIntegral$"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.types.FloatType$FloatIsConflicted"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.types.IntegerType"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.types.IntegerType$"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.types.LongType"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.types.LongType$"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.types.MapType"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.types.MapType$"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.types.Metadata"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.types.Metadata$"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.types.MetadataBuilder"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.types.NullType"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.types.NullType$"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.types.ObjectType"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.types.ObjectType$"),
+
     (problem: Problem) => problem match {
       case MissingClassProblem(cls) => !cls.fullName.startsWith("org.sparkproject.jpmml") &&
           !cls.fullName.startsWith("org.sparkproject.dmg.pmml")
@@ -113,6 +182,7 @@ object MimaExcludes {
   )
 
   def excludes(version: String) = version match {
+    case v if v.startsWith("4.0") => v40excludes
     case v if v.startsWith("3.5") => v35excludes
     case _ => Seq()
   }
