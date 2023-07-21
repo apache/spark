@@ -392,18 +392,22 @@ class DataSourceV2Suite extends QueryTest with SharedSparkSession with AdaptiveS
     val df = spark.read.format(classOf[ScanDefinedColumnarSupport].getName)
       .option("columnar", "PARTITION_DEFINED").load()
     // Default mode will throw an exception on explain.
-    intercept[IllegalArgumentException](df.explain())
-    val df_scan = spark.read.format(classOf[ScanDefinedColumnarSupport].getName)
-      .option("columnar", "SUPPORTED").load()
-    df_scan.explain()
-    // Will fail during regular exeuction
-    intercept[IllegalArgumentException](df_scan.count())
+    var ex = intercept[IllegalArgumentException](df.explain())
+    assert(ex.getMessage == "planInputPartitions must not be called")
 
-    val df_scan_unsupported = spark.read.format(classOf[ScanDefinedColumnarSupport].getName)
+    val dfScan = spark.read.format(classOf[ScanDefinedColumnarSupport].getName)
       .option("columnar", "SUPPORTED").load()
-    df_scan_unsupported.explain()
-    // Will fail during regular exeuction
-    intercept[IllegalArgumentException](df_scan_unsupported.count())
+    dfScan.explain()
+    // Will fail during regular execution.
+    ex = intercept[IllegalArgumentException](dfScan.count())
+    assert(ex.getMessage == "planInputPartitions must not be called")
+
+    val dfScanUnsupported = spark.read.format(classOf[ScanDefinedColumnarSupport].getName)
+      .option("columnar", "SUPPORTED").load()
+    dfScanUnsupported.explain()
+    // Will fail during regular execution.
+    ex = intercept[IllegalArgumentException](dfScanUnsupported.count())
+    assert(ex.getMessage == "planInputPartitions must not be called")
   }
 
   test("simple writable data source") {
@@ -708,7 +712,7 @@ class ScanDefinedColumnarSupport extends TestingV2Source {
 
   class MyScanBuilder(st: Scan.ColumnarSupportType) extends SimpleScanBuilder {
     override def planInputPartitions(): Array[InputPartition] = {
-      throw new IllegalArgumentException("Should not happen")
+      throw new IllegalArgumentException("planInputPartitions must not be called")
     }
 
     override def supportsColumnar()
