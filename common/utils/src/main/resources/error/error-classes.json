@@ -1383,6 +1383,24 @@
     ],
     "sqlState" : "22023"
   },
+  "INVALID_HANDLE" : {
+    "message" : [
+      "The handle <handle> is invalid."
+    ],
+    "subClass" : {
+      "ALREADY_EXISTS" : {
+        "message" : [
+          "Handle already exists."
+        ]
+      },
+      "FORMAT" : {
+        "message" : [
+          "Handle has invalid format. Handle must an UUID string of the format '00112233-4455-6677-8899-aabbccddeeff'"
+        ]
+      }
+    },
+    "sqlState" : "HY000"
+  },
   "INVALID_HIVE_COLUMN_NAME" : {
     "message" : [
       "Cannot create the table <tableName> having the nested column <columnName> whose name contains invalid characters <invalidChars> in Hive metastore."
