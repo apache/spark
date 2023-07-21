@@ -41,6 +41,7 @@ message Command {
     StreamingQueryCommand streaming_query_command = 7;
     GetResourcesCommand get_resources_command = 8;
     StreamingQueryManagerCommand streaming_query_manager_command = 9;
+    CommonInlineUserDefinedTableFunction register_table_function = 10;
 
     // This field is used to mark extensions to the protocol. When plugins generate arbitrary
     // Commands they can add them here. During the planning the correct resolution is done.
@@ -214,13 +215,14 @@ message WriteStreamOperationStart {
     string table_name = 12;
   }
 
-  StreamingForeachWriter foreach_writer = 13;
+  StreamingForeachFunction foreach_writer = 13;
+  StreamingForeachFunction foreach_batch = 14;
 }
 
-message StreamingForeachWriter {
-  oneof writer {
-    PythonUDF python_writer = 1;
-    ScalarScalaUDF scala_writer = 2;
+message StreamingForeachFunction {
+  oneof function {
+    PythonUDF python_function = 1;
+    ScalarScalaUDF scala_function = 2;
   }
 }
 
@@ -348,11 +350,21 @@ message StreamingQueryManagerCommand {
     AwaitAnyTerminationCommand await_any_termination = 3;
     // resetTerminated() API.
     bool reset_terminated = 4;
+    // addListener API.
+    StreamingQueryListenerCommand add_listener = 5;
+    // removeListener API.
+    StreamingQueryListenerCommand remove_listener = 6;
+    // listListeners() API, returns a list of streaming query listeners.
+    bool list_listeners = 7;
   }
 
   message AwaitAnyTerminationCommand {
     // (Optional) The waiting time in milliseconds to wait for any query to terminate.
     optional int64 timeout_ms = 1;
+  }
+
+  message StreamingQueryListenerCommand {
+    bytes listener_payload = 1;
   }
 }
 
@@ -363,6 +375,9 @@ message StreamingQueryManagerCommandResult {
     StreamingQueryInstance query = 2;
     AwaitAnyTerminationResult await_any_termination = 3;
     bool reset_terminated = 4;
+    bool add_listener = 5;
+    bool remove_listener = 6;
+    ListStreamingQueryListenerResult list_listeners = 7;
   }
 
   message ActiveResult {
@@ -378,6 +393,15 @@ message StreamingQueryManagerCommandResult {
 
   message AwaitAnyTerminationResult {
     bool terminated = 1;
+  }
+
+  message StreamingQueryListenerInstance {
+    bytes listener_payload = 1;
+  }
+
+  message ListStreamingQueryListenerResult {
+    // (Required) Reference IDs of listener instances.
+    repeated string listener_ids = 1;
   }
 }
 

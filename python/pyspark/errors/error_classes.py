@@ -171,9 +171,10 @@ ERROR_CLASSES_JSON = """
   },
   "DIFFERENT_SCHEMA" : {
     "message" : [
-      "Schemas do not match:",
-      "df schema: <df_schema>",
-      "expected schema: <expected_schema>"
+      "Schemas do not match.",
+      "--- actual",
+      "+++ expected",
+      "<error_msg>"
     ]
   },
   "DISALLOWED_TYPE_FOR_CONTAINER" : {
@@ -262,9 +263,19 @@ ERROR_CLASSES_JSON = """
       "StructField does not have typeName. Use typeName on its type explicitly instead."
     ]
   },
+  "INVALID_TYPE_DF_EQUALITY_ARG" : {
+    "message" : [
+      "Expected type <expected_type> for `<arg_name>` but got type <actual_type>."
+    ]
+  },
   "INVALID_UDF_EVAL_TYPE" : {
     "message" : [
       "Eval type for UDF must be <eval_type>."
+    ]
+  },
+  "INVALID_UDTF_BOTH_RETURN_TYPE_AND_ANALYZE" : {
+    "message" : [
+      "The UDTF '<name>' is invalid. It has both its return type and an 'analyze' attribute. Please make it have one of either the return type or the 'analyze' static method in '<name>' and try again."
     ]
   },
   "INVALID_UDTF_EVAL_TYPE" : {
@@ -275,6 +286,11 @@ ERROR_CLASSES_JSON = """
   "INVALID_UDTF_NO_EVAL" : {
     "message" : [
       "The UDTF '<name>' is invalid. It does not implement the required 'eval' method. Please implement the 'eval' method in '<name>' and try again."
+    ]
+  },
+  "INVALID_UDTF_RETURN_TYPE" : {
+    "message" : [
+      "The UDTF '<name>' is invalid. It does not specify its return type or implement the required 'analyze' static method. Please specify the return type or implement the 'analyze' static method in '<name>' and try again."
     ]
   },
   "INVALID_WHEN_USAGE": {
@@ -658,6 +674,11 @@ ERROR_CLASSES_JSON = """
       "Expected <expected> values for `<item>`, got <actual>."
     ]
   },
+  "UDF_RETURN_TYPE" : {
+    "message" : [
+      "Return type of the user-defined function should be <expected>, but is <actual>."
+    ]
+  },
   "UDTF_EXEC_ERROR" : {
     "message" : [
       "User defined table function encountered an error in the '<method_name>' method: <error>"
@@ -666,6 +687,11 @@ ERROR_CLASSES_JSON = """
   "UDTF_RETURN_SCHEMA_MISMATCH" : {
     "message" : [
       "The number of columns in the result does not match the specified schema. Expected column count: <expected>, Actual column count: <actual>. Please make sure the values returned by the function have the same number of columns as specified in the output schema."
+    ]
+  },
+  "UDTF_RETURN_TYPE_MISMATCH" : {
+    "message" : [
+      "Mismatch in return type for the UDTF '<name>'. Expected a 'StructType', but got '<return_type>'. Please ensure the return type is a correctly formatted StructType."
     ]
   },
   "UNEXPECTED_RESPONSE_FROM_SERVER" : {
@@ -711,11 +737,6 @@ ERROR_CLASSES_JSON = """
   "UNSUPPORTED_DATA_TYPE_FOR_ARROW_VERSION" : {
     "message" : [
       "<data_type> is only supported with pyarrow 2.0.0 and above."
-    ]
-  },
-  "UNSUPPORTED_DATA_TYPE_FOR_IGNORE_ROW_ORDER" : {
-    "message" : [
-      "Cannot ignore row order because undefined sorting for data type."
     ]
   },
   "UNSUPPORTED_JOIN_TYPE" : {

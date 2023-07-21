@@ -417,7 +417,7 @@ org.apache.spark.sql.AnalysisException
     "actualCols" : "[]",
     "colName" : "i1",
     "expectedNum" : "1",
-    "suggestion" : "CREATE OR REPLACE VIEW spark_catalog.mydb1.v1  AS SELECT * FROM t1",
+    "suggestion" : "CREATE OR REPLACE VIEW spark_catalog.mydb1.v1 AS SELECT * FROM t1",
     "viewName" : "`spark_catalog`.`mydb1`.`v1`"
   }
 }

@@ -89,7 +89,7 @@ object BuildCommons {
 
   // Google Protobuf version used for generating the protobuf.
   // SPARK-41247: needs to be consistent with `protobuf.version` in `pom.xml`.
-  val protoVersion = "3.23.2"
+  val protoVersion = "3.23.4"
   // GRPC version used for Spark Connect.
   val gprcVersion = "1.56.0"
 }
@@ -448,8 +448,8 @@ object SparkBuild extends PomBuild {
   /* Enable unidoc only for the root spark project */
   enable(Unidoc.settings)(spark)
 
-  /* Catalyst ANTLR generation settings */
-  enable(Catalyst.settings)(catalyst)
+  /* Sql-api ANTLR generation settings */
+  enable(Catalyst.settings)(sqlApi)
 
   /* Spark SQL Core console settings */
   enable(SQL.settings)(sql)

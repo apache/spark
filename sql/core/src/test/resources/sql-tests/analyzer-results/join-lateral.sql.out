@@ -1977,17 +1977,16 @@ Union false, false
 :        +- View (`spark_catalog`.`default`.`t1`, [c1#x,c2#x])
 :           +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as int) AS c2#x]
 :              +- LocalRelation [col1#x, col2#x]
-+- Project [c1#x AS c1#x, c2#x AS c2#x, c1#x AS c1#x, c2#x AS c2#x]
-   +- Project [c1#x, c2#x, c1#x, c2#x]
-      +- Join Inner
-         :- SubqueryAlias spark_catalog.default.t1
-         :  +- View (`spark_catalog`.`default`.`t1`, [c1#x,c2#x])
-         :     +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as int) AS c2#x]
-         :        +- LocalRelation [col1#x, col2#x]
-         +- SubqueryAlias spark_catalog.default.t4
-            +- View (`spark_catalog`.`default`.`t4`, [c1#x,c2#x])
-               +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as int) AS c2#x]
-                  +- LocalRelation [col1#x, col2#x]
++- Project [c1#x, c2#x, c1#x, c2#x]
+   +- Join Inner
+      :- SubqueryAlias spark_catalog.default.t1
+      :  +- View (`spark_catalog`.`default`.`t1`, [c1#x,c2#x])
+      :     +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as int) AS c2#x]
+      :        +- LocalRelation [col1#x, col2#x]
+      +- SubqueryAlias spark_catalog.default.t4
+         +- View (`spark_catalog`.`default`.`t4`, [c1#x,c2#x])
+            +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as int) AS c2#x]
+               +- LocalRelation [col1#x, col2#x]
 
 
 -- !query
@@ -2030,27 +2029,26 @@ Union false, false
 :        +- View (`spark_catalog`.`default`.`t1`, [c1#x,c2#x])
 :           +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as int) AS c2#x]
 :              +- LocalRelation [col1#x, col2#x]
-+- Project [c1#x AS c1#x, c2#x AS c2#x, c2#x AS c2#x]
-   +- Project [c1#x, c2#x, c2#x]
-      +- LateralJoin lateral-subquery#x [c1#x && c1#x], Inner
-         :  +- SubqueryAlias __auto_generated_subquery_name
-         :     +- Union false, false
-         :        :- Project [c2#x]
-         :        :  +- Filter (outer(c1#x) <= c1#x)
-         :        :     +- SubqueryAlias spark_catalog.default.t1
-         :        :        +- View (`spark_catalog`.`default`.`t1`, [c1#x,c2#x])
-         :        :           +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as int) AS c2#x]
-         :        :              +- LocalRelation [col1#x, col2#x]
-         :        +- Project [c2#x]
-         :           +- Filter (c1#x < outer(c1#x))
-         :              +- SubqueryAlias spark_catalog.default.t4
-         :                 +- View (`spark_catalog`.`default`.`t4`, [c1#x,c2#x])
-         :                    +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as int) AS c2#x]
-         :                       +- LocalRelation [col1#x, col2#x]
-         +- SubqueryAlias spark_catalog.default.t2
-            +- View (`spark_catalog`.`default`.`t2`, [c1#x,c2#x])
-               +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as int) AS c2#x]
-                  +- LocalRelation [col1#x, col2#x]
++- Project [c1#x, c2#x, c2#x]
+   +- LateralJoin lateral-subquery#x [c1#x && c1#x], Inner
+      :  +- SubqueryAlias __auto_generated_subquery_name
+      :     +- Union false, false
+      :        :- Project [c2#x]
+      :        :  +- Filter (outer(c1#x) <= c1#x)
+      :        :     +- SubqueryAlias spark_catalog.default.t1
+      :        :        +- View (`spark_catalog`.`default`.`t1`, [c1#x,c2#x])
+      :        :           +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as int) AS c2#x]
+      :        :              +- LocalRelation [col1#x, col2#x]
+      :        +- Project [c2#x]
+      :           +- Filter (c1#x < outer(c1#x))
+      :              +- SubqueryAlias spark_catalog.default.t4
+      :                 +- View (`spark_catalog`.`default`.`t4`, [c1#x,c2#x])
+      :                    +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as int) AS c2#x]
+      :                       +- LocalRelation [col1#x, col2#x]
+      +- SubqueryAlias spark_catalog.default.t2
+         +- View (`spark_catalog`.`default`.`t2`, [c1#x,c2#x])
+            +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as int) AS c2#x]
+               +- LocalRelation [col1#x, col2#x]
 
 
 -- !query
