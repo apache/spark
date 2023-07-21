@@ -59,7 +59,7 @@ class StreamingQuery:
         .. versionadded:: 2.0.0
 
         .. versionchanged:: 3.5.0
-        Supports Spark Connect.
+            Supports Spark Connect.
 
         Returns
         -------
@@ -89,7 +89,7 @@ class StreamingQuery:
         .. versionadded:: 2.1.0
 
         .. versionchanged:: 3.5.0
-        Supports Spark Connect.
+            Supports Spark Connect.
 
         Returns
         -------
@@ -121,7 +121,7 @@ class StreamingQuery:
         .. versionadded:: 2.0.0
 
         .. versionchanged:: 3.5.0
-        Supports Spark Connect.
+            Supports Spark Connect.
 
         Returns
         -------
@@ -150,7 +150,7 @@ class StreamingQuery:
         .. versionadded:: 2.0.0
 
         .. versionchanged:: 3.5.0
-        Supports Spark Connect.
+            Supports Spark Connect.
 
         Returns
         -------
@@ -184,7 +184,7 @@ class StreamingQuery:
         .. versionadded:: 2.0.0
 
         .. versionchanged:: 3.5.0
-        Supports Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -228,7 +228,7 @@ class StreamingQuery:
         .. versionadded:: 2.1.0
 
         .. versionchanged:: 3.5.0
-        Supports Spark Connect.
+            Supports Spark Connect.
 
         Returns
         -------
@@ -259,7 +259,7 @@ class StreamingQuery:
         .. versionadded:: 2.1.0
 
         .. versionchanged:: 3.5.0
-        Supports Spark Connect.
+            Supports Spark Connect.
 
         Returns
         -------
@@ -290,7 +290,7 @@ class StreamingQuery:
         .. versionadded:: 2.1.0
 
         .. versionchanged:: 3.5.0
-        Supports Spark Connect.
+            Supports Spark Connect.
 
         Returns
         -------
@@ -322,7 +322,7 @@ class StreamingQuery:
         .. versionadded:: 2.0.0
 
         .. versionchanged:: 3.5.0
-        Supports Spark Connect.
+            Supports Spark Connect.
 
         Notes
         -----
@@ -353,7 +353,7 @@ class StreamingQuery:
         .. versionadded:: 2.0.0
 
         .. versionchanged:: 3.5.0
-        Supports Spark Connect.
+            Supports Spark Connect.
 
         Examples
         --------
@@ -378,7 +378,7 @@ class StreamingQuery:
         .. versionadded:: 2.1.0
 
         .. versionchanged:: 3.5.0
-        Supports Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -421,7 +421,7 @@ class StreamingQuery:
         .. versionadded:: 2.1.0
 
         .. versionchanged:: 3.5.0
-        Supports Spark Connect.
+            Supports Spark Connect.
 
         Returns
         -------
@@ -461,7 +461,7 @@ class StreamingQueryManager:
         .. versionadded:: 2.0.0
 
         .. versionchanged:: 3.5.0
-        Supports Spark Connect.
+            Supports Spark Connect.
 
         Returns
         -------
@@ -494,7 +494,7 @@ class StreamingQueryManager:
         .. versionadded:: 2.0.0
 
         .. versionchanged:: 3.5.0
-        Supports Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -559,7 +559,7 @@ class StreamingQueryManager:
         .. versionadded:: 2.0.0
 
         .. versionchanged:: 3.5.0
-        Supports Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -603,7 +603,7 @@ class StreamingQueryManager:
         .. versionadded:: 2.0.0
 
         .. versionchanged:: 3.5.0
-        Supports Spark Connect.
+            Supports Spark Connect.
 
         Examples
         --------

@@ -88,7 +88,7 @@ class DataStreamReader(OptionUtils):
         .. versionadded:: 2.0.0
 
         .. versionchanged:: 3.5.0
-        Supports Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -132,7 +132,7 @@ class DataStreamReader(OptionUtils):
         .. versionadded:: 2.0.0
 
         .. versionchanged:: 3.5.0
-        Supports Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -184,7 +184,7 @@ class DataStreamReader(OptionUtils):
         .. versionadded:: 2.0.0
 
         .. versionchanged:: 3.5.0
-        Supports Spark Connect.
+            Supports Spark Connect.
 
         Notes
         -----
@@ -213,7 +213,7 @@ class DataStreamReader(OptionUtils):
         .. versionadded:: 2.0.0
 
         .. versionchanged:: 3.5.0
-        Supports Spark Connect.
+            Supports Spark Connect.
 
         Notes
         -----
@@ -251,7 +251,7 @@ class DataStreamReader(OptionUtils):
         .. versionadded:: 2.0.0
 
         .. versionchanged:: 3.5.0
-        Supports Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -340,7 +340,7 @@ class DataStreamReader(OptionUtils):
         .. versionadded:: 2.0.0
 
         .. versionchanged:: 3.5.0
-        Supports Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -426,7 +426,7 @@ class DataStreamReader(OptionUtils):
         .. versionadded:: 2.3.0
 
         .. versionchanged:: 3.5.0
-        Supports Spark Connect.
+            Supports Spark Connect.
 
         Other Parameters
         ----------------
@@ -480,7 +480,7 @@ class DataStreamReader(OptionUtils):
         .. versionadded:: 2.0.0
 
         .. versionchanged:: 3.5.0
-        Supports Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -546,7 +546,7 @@ class DataStreamReader(OptionUtils):
         .. versionadded:: 2.0.0
 
         .. versionchanged:: 3.5.0
-        Supports Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -647,7 +647,7 @@ class DataStreamReader(OptionUtils):
         .. versionadded:: 2.0.0
 
         .. versionchanged:: 3.5.0
-        Supports Spark Connect.
+            Supports Spark Connect.
 
         Other Parameters
         ----------------
@@ -726,7 +726,7 @@ class DataStreamReader(OptionUtils):
         .. versionadded:: 3.1.0
 
         .. versionchanged:: 3.5.0
-        Supports Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -813,7 +813,7 @@ class DataStreamWriter:
         .. versionadded:: 2.0.0
 
         .. versionchanged:: 3.5.0
-        Supports Spark Connect.
+            Supports Spark Connect.
 
         Options include:
 
@@ -858,7 +858,7 @@ class DataStreamWriter:
         .. versionadded:: 2.0.0
 
         .. versionchanged:: 3.5.0
-        Supports Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -900,7 +900,7 @@ class DataStreamWriter:
         .. versionadded:: 2.0.0
 
         .. versionchanged:: 3.5.0
-        Supports Spark Connect.
+            Supports Spark Connect.
 
         Notes
         -----
@@ -931,7 +931,7 @@ class DataStreamWriter:
         .. versionadded:: 2.0.0
 
         .. versionchanged:: 3.5.0
-        Supports Spark Connect.
+            Supports Spark Connect.
 
         Notes
         -----
@@ -974,7 +974,7 @@ class DataStreamWriter:
         .. versionadded:: 2.0.0
 
         .. versionchanged:: 3.5.0
-        Supports Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -1020,7 +1020,7 @@ class DataStreamWriter:
         .. versionadded:: 2.0.0
 
         .. versionchanged:: 3.5.0
-        Supports Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -1078,7 +1078,7 @@ class DataStreamWriter:
         .. versionadded:: 2.0.0
 
         .. versionchanged:: 3.5.0
-        Supports Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -1338,7 +1338,7 @@ class DataStreamWriter:
         .. versionadded:: 2.4.0
 
         .. versionchanged:: 3.5.0
-        Supports Spark Connect.
+            Supports Spark Connect.
 
         Notes
         -----
@@ -1449,7 +1449,7 @@ class DataStreamWriter:
         .. versionadded:: 2.0.0
 
         .. versionchanged:: 3.5.0
-        Supports Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -1537,7 +1537,7 @@ class DataStreamWriter:
         .. versionadded:: 3.1.0
 
         .. versionchanged:: 3.5.0
-        Supports Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------

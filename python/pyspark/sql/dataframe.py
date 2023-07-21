@@ -1053,7 +1053,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         .. versionadded:: 2.1.0
 
         .. versionchanged:: 3.5.0
-        Supports Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------
