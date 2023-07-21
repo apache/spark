@@ -279,7 +279,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
                 e.setTagValue(DATA_TYPE_MISMATCH_ERROR, true)
                 val extraHint = extraHintForAnsiTypeCoercionExpression(operator)
                 e.failAnalysis(
-                  errorClass = "TYPE_CHECK_FAILURE_WITH_HINT",
+                  errorClass = "DATATYPE_MISMATCH.TYPE_CHECK_FAILURE_WITH_HINT",
                   messageParameters = Map(
                     "expr" -> toSQLExpr(e),
                     "msg" -> message,
