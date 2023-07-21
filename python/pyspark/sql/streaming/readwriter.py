@@ -1345,7 +1345,7 @@ class DataStreamWriter:
         .. versionadded:: 2.4.0
 
         .. versionchanged:: 3.5.0
-        Supports Spark Connect.
+            Supports Spark Connect.
 
         Notes
         -----
