@@ -2191,7 +2191,7 @@ class Dataset[T] private[sql] (
    *
    * `colsMap` is a map of existing column name and new column name.
    *
-   * @throws AnalysisException
+   * @throws SparkException
    *   if there are duplicate names in resulting projection
    *
    * @group untypedrel
