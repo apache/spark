@@ -131,24 +131,13 @@ package object util extends Logging {
   }
 
   def quoteIfNeeded(part: String): String = {
-    if (part.matches("[a-zA-Z0-9_]+") && !part.matches("\\d+")) {
-      part
-    } else {
-      s"`${part.replace("`", "``")}`"
-    }
+    QuotingUtils.quoteIfNeeded(part)
   }
 
   def toPrettySQL(e: Expression): String = usePrettyExpression(e).sql
 
   def escapeSingleQuotedString(str: String): String = {
-    val builder = new StringBuilder
-
-    str.foreach {
-      case '\'' => builder ++= s"\\\'"
-      case ch => builder += ch
-    }
-
-    builder.toString()
+    QuotingUtils.escapeSingleQuotedString(str)
   }
 
   /**

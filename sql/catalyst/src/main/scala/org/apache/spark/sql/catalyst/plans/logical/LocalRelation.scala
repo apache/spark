@@ -39,13 +39,13 @@ object LocalRelation {
   }
 
   def fromExternalRows(output: Seq[Attribute], data: Seq[Row]): LocalRelation = {
-    val schema = StructType.fromAttributes(output)
+    val schema = DataTypeUtils.fromAttributes(output)
     val converter = CatalystTypeConverters.createToCatalystConverter(schema)
     LocalRelation(output, data.map(converter(_).asInstanceOf[InternalRow]))
   }
 
   def fromProduct(output: Seq[Attribute], data: Seq[Product]): LocalRelation = {
-    val schema = StructType.fromAttributes(output)
+    val schema = DataTypeUtils.fromAttributes(output)
     val converter = CatalystTypeConverters.createToCatalystConverter(schema)
     LocalRelation(output, data.map(converter(_).asInstanceOf[InternalRow]))
   }

@@ -49,6 +49,7 @@ from pyspark.sql.types import ArrayType, DataType, StringType, StructType, _from
 
 # Keep UserDefinedFunction import for backwards compatible import; moved in SPARK-22409
 from pyspark.sql.udf import UserDefinedFunction, _create_py_udf  # noqa: F401
+from pyspark.sql.udtf import AnalyzeArgument, AnalyzeResult  # noqa: F401
 from pyspark.sql.udtf import UserDefinedTableFunction, _create_py_udtf
 
 # Keep pandas_udf and PandasUDFType import for backwards compatible import; moved in SPARK-28264
@@ -15514,7 +15515,7 @@ def udf(
 def udtf(
     cls: Optional[Type] = None,
     *,
-    returnType: Union[StructType, str],
+    returnType: Optional[Union[StructType, str]] = None,
     useArrow: Optional[bool] = None,
 ) -> Union["UserDefinedTableFunction", Callable[[Type], "UserDefinedTableFunction"]]:
     """Creates a user defined table function (UDTF).
@@ -15525,9 +15526,10 @@ def udtf(
     ----------
     cls : class
         the Python user-defined table function handler class.
-    returnType : :class:`pyspark.sql.types.StructType` or str
+    returnType : :class:`pyspark.sql.types.StructType` or str, optional
         the return type of the user-defined table function. The value can be either a
         :class:`pyspark.sql.types.StructType` object or a DDL-formatted struct type string.
+        If None, the handler class must provide `analyze` static method.
     useArrow : bool or None, optional
         whether to use Arrow to optimize the (de)serializations. When it's set to None, the
         Spark config "spark.sql.execution.pythonUDTF.arrow.enabled" is used.
@@ -15562,6 +15564,38 @@ def udtf(
     | c1| c2|
     +---+---+
     |  1|  2|
+    +---+---+
+
+    UDTF can also have `analyze` static method instead of a static return type:
+
+    The `analyze` static method should take arguments:
+
+    - The number and order of arguments are the same as the UDTF inputs
+    - Each argument is a :class:`pyspark.sql.udtf.AnalyzeArgument`, containing:
+      - data_type: DataType
+      - value: Any: the calculated value if the argument is foldable; otherwise None
+      - is_table: bool: True if the argument is a table argument
+
+    and return a :class:`pyspark.sql.udtf.AnalyzeResult`, containing.
+
+    - schema: StructType
+
+    >>> from pyspark.sql.udtf import AnalyzeArgument, AnalyzeResult
+    >>> # or from pyspark.sql.functions import AnalyzeArgument, AnalyzeResult
+    >>> @udtf
+    ... class TestUDTFWithAnalyze:
+    ...     @staticmethod
+    ...     def analyze(a: AnalyzeArgument, b: AnalyzeArgument) -> AnalyzeResult:
+    ...         return AnalyzeResult(StructType().add("a", a.data_type).add("b", b.data_type))
+    ...
+    ...     def eval(self, a, b):
+    ...         yield a, b
+    ...
+    >>> TestUDTFWithAnalyze(lit(1), lit("x")).show()
+    +---+---+
+    |  a|  b|
+    +---+---+
+    |  1|  x|
     +---+---+
 
     Arrow optimization can be explicitly enabled when creating UDTFs:

@@ -50,7 +50,7 @@ See also :class:`SparkSession`.
     SparkSession.udf
     SparkSession.udtf
     SparkSession.version
-
+    is_remote
 
 Spark Connect Only
 ------------------

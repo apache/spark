@@ -22,8 +22,8 @@ import java.util.Locale
 import scala.annotation.tailrec
 
 import org.apache.spark.annotation.Stable
+import org.apache.spark.sql.SqlApiConf
 import org.apache.spark.sql.errors.DataTypeErrors
-import org.apache.spark.sql.internal.SQLConf
 
 /**
  * The data type representing `java.math.BigDecimal` values.
@@ -147,7 +147,7 @@ object DecimalType extends AbstractDataType {
   }
 
   private[sql] def checkNegativeScale(scale: Int): Unit = {
-    if (scale < 0 && !SQLConf.get.allowNegativeScaleOfDecimalEnabled) {
+    if (scale < 0 && !SqlApiConf.get.allowNegativeScaleOfDecimalEnabled) {
       throw DataTypeErrors.negativeScaleNotAllowedError(scale)
     }
   }
