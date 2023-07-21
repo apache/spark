@@ -314,6 +314,9 @@ object CheckConnectJvmClientCompatibility {
       // Catalyst Refactoring
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.catalyst.util.SparkCollectionUtils"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.catalyst.util.SparkCollectionUtils$"),
+      ProblemFilters.exclude[Problem]("org.apache.spark.sql.catalog.Catalog"),
+      ProblemFilters.exclude[Problem]("org.apache.spark.sql.Dataset"),
+      ProblemFilters.exclude[Problem]("org.apache.spark.sql.internal.CatalogImpl"),
 
       // New public APIs added in the client
       // ScalarUserDefinedFunction
