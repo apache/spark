@@ -28,6 +28,7 @@ import org.apache.spark.sql.connector.catalog.{PartitionInternalRow, SupportsRea
 import org.apache.spark.sql.connector.catalog.TableCapability._
 import org.apache.spark.sql.connector.expressions.{Expression, FieldReference, Literal, NamedReference, NullOrdering, SortDirection, SortOrder, Transform}
 import org.apache.spark.sql.connector.expressions.filter.Predicate
+import org.apache.spark.sql.connector.read.Scan.ColumnarSupportMode
 import org.apache.spark.sql.connector.read._
 import org.apache.spark.sql.connector.read.partitioning.{KeyGroupedPartitioning, Partitioning, UnknownPartitioning}
 import org.apache.spark.sql.execution.SortExec
@@ -395,19 +396,14 @@ class DataSourceV2Suite extends QueryTest with SharedSparkSession with AdaptiveS
     var ex = intercept[IllegalArgumentException](df.explain())
     assert(ex.getMessage == "planInputPartitions must not be called")
 
-    val dfScan = spark.read.format(classOf[ScanDefinedColumnarSupport].getName)
-      .option("columnar", "SUPPORTED").load()
-    dfScan.explain()
-    // Will fail during regular execution.
-    ex = intercept[IllegalArgumentException](dfScan.count())
-    assert(ex.getMessage == "planInputPartitions must not be called")
-
-    val dfScanUnsupported = spark.read.format(classOf[ScanDefinedColumnarSupport].getName)
-      .option("columnar", "SUPPORTED").load()
-    dfScanUnsupported.explain()
-    // Will fail during regular execution.
-    ex = intercept[IllegalArgumentException](dfScanUnsupported.count())
-    assert(ex.getMessage == "planInputPartitions must not be called")
+    Seq("SUPPORTED", "UNSUPPORTED").foreach {o =>
+      val dfScan = spark.read.format(classOf[ScanDefinedColumnarSupport].getName)
+        .option("columnar", o).load()
+      dfScan.explain()
+      // Will fail during regular execution.
+      ex = intercept[IllegalArgumentException](dfScan.count())
+      assert(ex.getMessage == "planInputPartitions must not be called")
+    }
   }
 
   test("simple writable data source") {
@@ -710,19 +706,18 @@ class SimpleSinglePartitionSource extends TestingV2Source {
 
 class ScanDefinedColumnarSupport extends TestingV2Source {
 
-  class MyScanBuilder(st: Scan.ColumnarSupportType) extends SimpleScanBuilder {
+  class MyScanBuilder(st: ColumnarSupportMode) extends SimpleScanBuilder {
     override def planInputPartitions(): Array[InputPartition] = {
       throw new IllegalArgumentException("planInputPartitions must not be called")
     }
 
-    override def supportsColumnar()
-        : Scan.ColumnarSupportType = st
+    override def columnarSupportMode() : ColumnarSupportMode = st
 
   }
 
   override def getTable(options: CaseInsensitiveStringMap): Table = new SimpleBatchTable {
     override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = {
-      new MyScanBuilder(Scan.ColumnarSupportType.valueOf(options.get("columnar")))
+      new MyScanBuilder(Scan.ColumnarSupportMode.valueOf(options.get("columnar")))
     }
   }
 

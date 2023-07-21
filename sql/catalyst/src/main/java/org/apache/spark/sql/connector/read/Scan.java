@@ -129,12 +129,12 @@ public interface Scan {
   /**
    * This enum defines how the columnar support for the partitions of the data source
    * should be determined. The default value is `PARTITION_DEFINED` which indicates that each
-   * partition can deterine if it should be columnar or not. SUPPORTED and UNSUPPORTED provide
+   * partition can determine if it should be columnar or not. SUPPORTED and UNSUPPORTED provide
    * default shortcuts to indicate support for columnar data or not.
    *
    * @since 3.5.0
    */
-  enum ColumnarSupportType {
+  enum ColumnarSupportMode {
     PARTITION_DEFINED,
     SUPPORTED,
     UNSUPPORTED
@@ -146,5 +146,5 @@ public interface Scan {
    *
    * @since 3.5.0
    */
-  default ColumnarSupportType supportsColumnar() { return ColumnarSupportType.PARTITION_DEFINED; }
+  default ColumnarSupportMode columnarSupportMode() { return ColumnarSupportMode.PARTITION_DEFINED; }
 }
