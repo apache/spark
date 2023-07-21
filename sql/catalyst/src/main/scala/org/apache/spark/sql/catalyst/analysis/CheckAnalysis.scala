@@ -281,7 +281,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
                 e.failAnalysis(
                   errorClass = "DATATYPE_MISMATCH.TYPE_CHECK_FAILURE_WITH_HINT",
                   messageParameters = Map(
-                    "expr" -> toSQLExpr(e),
+                    "sqlExpr" -> toSQLExpr(e),
                     "msg" -> message,
                     "hint" -> extraHint))
               case checkRes: TypeCheckResult.InvalidFormat =>
