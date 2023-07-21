@@ -17,7 +17,8 @@
 
 package org.apache.spark.sql.internal
 
-import org.apache.spark.sql.{AnalysisException, DataFrame, Dataset, SparkSession}
+import org.apache.spark.SparkException
+import org.apache.spark.sql.{DataFrame, Dataset, SparkSession}
 import org.apache.spark.sql.catalog.{Catalog, CatalogMetadata, Column, Database, Function, Table}
 import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoder
@@ -45,7 +46,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
    *
    * @since 3.5.0
    */
-  @throws[AnalysisException]("database does not exist")
+  @throws[SparkException]("database does not exist")
   override def setCurrentDatabase(dbName: String): Unit = {
     // we assume `dbName` will not include the catalog name. e.g. if you call
     // `setCurrentDatabase("catalog.db")`, it will search for a database 'catalog.db' in the current
@@ -94,7 +95,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
    *
    * @since 3.5.0
    */
-  @throws[AnalysisException]("database does not exist")
+  @throws[SparkException]("database does not exist")
   override def listTables(dbName: String): Dataset[Table] = {
     sparkSession.newDataset(CatalogImpl.tableEncoder) { builder =>
       builder.getCatalogBuilder.getListTablesBuilder.setDbName(dbName)
@@ -107,7 +108,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
    *
    * @since 3.5.0
    */
-  @throws[AnalysisException]("database does not exist")
+  @throws[SparkException]("database does not exist")
   def listTables(dbName: String, pattern: String): Dataset[Table] = {
     sparkSession.newDataset(CatalogImpl.tableEncoder) { builder =>
       builder.getCatalogBuilder.getListTablesBuilder.setDbName(dbName).setPattern(pattern)
@@ -130,7 +131,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
    *
    * @since 3.5.0
    */
-  @throws[AnalysisException]("database does not exist")
+  @throws[SparkException]("database does not exist")
   override def listFunctions(dbName: String): Dataset[Function] = {
     sparkSession.newDataset(CatalogImpl.functionEncoder) { builder =>
       builder.getCatalogBuilder.getListFunctionsBuilder.setDbName(dbName)
@@ -144,7 +145,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
    *
    * @since 3.5.0
    */
-  @throws[AnalysisException]("database does not exist")
+  @throws[SparkException]("database does not exist")
   def listFunctions(dbName: String, pattern: String): Dataset[Function] = {
     sparkSession.newDataset(CatalogImpl.functionEncoder) { builder =>
       builder.getCatalogBuilder.getListFunctionsBuilder.setDbName(dbName).setPattern(pattern)
@@ -160,7 +161,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
    *   database (namespace).
    * @since 3.5.0
    */
-  @throws[AnalysisException]("database or table does not exist")
+  @throws[SparkException]("database or table does not exist")
   override def listColumns(tableName: String): Dataset[Column] = {
     sparkSession.newDataset(CatalogImpl.columnEncoder) { builder =>
       builder.getCatalogBuilder.getListColumnsBuilder.setTableName(tableName)
@@ -180,7 +181,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
    *   is an unqualified name that designates a table/view.
    * @since 3.5.0
    */
-  @throws[AnalysisException]("database does not exist")
+  @throws[SparkException]("database does not exist")
   override def listColumns(dbName: String, tableName: String): Dataset[Column] = {
     sparkSession.newDataset(CatalogImpl.columnEncoder) { builder =>
       builder.getCatalogBuilder.getListColumnsBuilder
@@ -191,7 +192,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
 
   /**
    * Get the database (namespace) with the specified name (can be qualified with catalog). This
-   * throws an AnalysisException when the database (namespace) cannot be found.
+   * throws an SparkException when the database (namespace) cannot be found.
    *
    * @since 3.5.0
    */
@@ -205,7 +206,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
 
   /**
    * Get the table or view with the specified name. This table can be a temporary view or a
-   * table/view. This throws an AnalysisException when no Table can be found.
+   * table/view. This throws an SparkException when no Table can be found.
    *
    * @param tableName
    *   is either a qualified or unqualified name that designates a table/view. It follows the same
@@ -223,7 +224,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
 
   /**
    * Get the table or view with the specified name in the specified database under the Hive
-   * Metastore. This throws an AnalysisException when no Table can be found.
+   * Metastore. This throws an SparkException when no Table can be found.
    *
    * To get table/view in other catalogs, please use `getTable(tableName)` with qualified
    * table/view name instead.
@@ -242,7 +243,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
 
   /**
    * Get the function with the specified name. This function can be a temporary function or a
-   * function. This throws an AnalysisException when the function cannot be found.
+   * function. This throws an SparkException when the function cannot be found.
    *
    * @param functionName
    *   is either a qualified or unqualified name that designates a function. It follows the same
@@ -260,7 +261,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
 
   /**
    * Get the function with the specified name in the specified database under the Hive Metastore.
-   * This throws an AnalysisException when the function cannot be found.
+   * This throws an SparkException when the function cannot be found.
    *
    * To get functions in other catalogs, please use `getFunction(functionName)` with qualified
    * function name instead.

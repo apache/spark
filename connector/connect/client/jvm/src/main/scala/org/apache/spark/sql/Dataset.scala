@@ -2197,7 +2197,7 @@ class Dataset[T] private[sql] (
    * @group untypedrel
    * @since 3.4.0
    */
-  @throws[AnalysisException]
+  @throws[SparkException]
   def withColumnsRenamed(colsMap: Map[String, String]): DataFrame = {
     withColumnsRenamed(colsMap.asJava)
   }
@@ -2258,13 +2258,13 @@ class Dataset[T] private[sql] (
    * created it, i.e. it will be automatically dropped when the session terminates. It's not tied
    * to any databases, i.e. we can't use `db1.view1` to reference a local temporary view.
    *
-   * @throws AnalysisException
+   * @throws SparkException
    *   if the view name is invalid or already exists
    *
    * @group basic
    * @since 3.4.0
    */
-  @throws[AnalysisException]
+  @throws[SparkException]
   def createTempView(viewName: String): Unit = {
     buildAndExecuteTempView(viewName, replace = false, global = false)
   }
@@ -2289,13 +2289,13 @@ class Dataset[T] private[sql] (
    * to a system preserved database `global_temp`, and we must use the qualified name to refer a
    * global temp view, e.g. `SELECT * FROM global_temp.view1`.
    *
-   * @throws AnalysisException
+   * @throws SparkException
    *   if the view name is invalid or already exists
    *
    * @group basic
    * @since 3.4.0
    */
-  @throws[AnalysisException]
+  @throws[SparkException]
   def createGlobalTempView(viewName: String): Unit = {
     buildAndExecuteTempView(viewName, replace = false, global = true)
   }

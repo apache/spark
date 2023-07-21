@@ -19,7 +19,8 @@ package org.apache.spark.sql.catalog
 
 import scala.collection.JavaConverters._
 
-import org.apache.spark.sql.{AnalysisException, DataFrame, Dataset}
+import org.apache.spark.SparkException
+import org.apache.spark.sql.{DataFrame, Dataset}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.storage.StorageLevel
 
@@ -73,7 +74,7 @@ abstract class Catalog {
    *
    * @since 3.5.0
    */
-  @throws[AnalysisException]("database does not exist")
+  @throws[SparkException]("database does not exist")
   def listTables(dbName: String): Dataset[Table]
 
   /**
@@ -82,7 +83,7 @@ abstract class Catalog {
    *
    * @since 3.5.0
    */
-  @throws[AnalysisException]("database does not exist")
+  @throws[SparkException]("database does not exist")
   def listTables(dbName: String, pattern: String): Dataset[Table]
 
   /**
@@ -99,7 +100,7 @@ abstract class Catalog {
    *
    * @since 3.5.0
    */
-  @throws[AnalysisException]("database does not exist")
+  @throws[SparkException]("database does not exist")
   def listFunctions(dbName: String): Dataset[Function]
 
   /**
@@ -109,7 +110,7 @@ abstract class Catalog {
    *
    * @since 3.5.0
    */
-  @throws[AnalysisException]("database does not exist")
+  @throws[SparkException]("database does not exist")
   def listFunctions(dbName: String, pattern: String): Dataset[Function]
 
   /**
@@ -121,7 +122,7 @@ abstract class Catalog {
    *   database (namespace).
    * @since 3.5.0
    */
-  @throws[AnalysisException]("table does not exist")
+  @throws[SparkException]("table does not exist")
   def listColumns(tableName: String): Dataset[Column]
 
   /**
@@ -137,21 +138,21 @@ abstract class Catalog {
    *   is an unqualified name that designates a table/view.
    * @since 3.5.0
    */
-  @throws[AnalysisException]("database or table does not exist")
+  @throws[SparkException]("database or table does not exist")
   def listColumns(dbName: String, tableName: String): Dataset[Column]
 
   /**
    * Get the database (namespace) with the specified name (can be qualified with catalog). This
-   * throws an AnalysisException when the database (namespace) cannot be found.
+   * throws an SparkException when the database (namespace) cannot be found.
    *
    * @since 3.5.0
    */
-  @throws[AnalysisException]("database does not exist")
+  @throws[SparkException]("database does not exist")
   def getDatabase(dbName: String): Database
 
   /**
    * Get the table or view with the specified name. This table can be a temporary view or a
-   * table/view. This throws an AnalysisException when no Table can be found.
+   * table/view. This throws an SparkException when no Table can be found.
    *
    * @param tableName
    *   is either a qualified or unqualified name that designates a table/view. It follows the same
@@ -159,24 +160,24 @@ abstract class Catalog {
    *   database (namespace).
    * @since 3.5.0
    */
-  @throws[AnalysisException]("table does not exist")
+  @throws[SparkException]("table does not exist")
   def getTable(tableName: String): Table
 
   /**
    * Get the table or view with the specified name in the specified database under the Hive
-   * Metastore. This throws an AnalysisException when no Table can be found.
+   * Metastore. This throws an SparkException when no Table can be found.
    *
    * To get table/view in other catalogs, please use `getTable(tableName)` with qualified
    * table/view name instead.
    *
    * @since 3.5.0
    */
-  @throws[AnalysisException]("database or table does not exist")
+  @throws[SparkException]("database or table does not exist")
   def getTable(dbName: String, tableName: String): Table
 
   /**
    * Get the function with the specified name. This function can be a temporary function or a
-   * function. This throws an AnalysisException when the function cannot be found.
+   * function. This throws an SparkException when the function cannot be found.
    *
    * @param functionName
    *   is either a qualified or unqualified name that designates a function. It follows the same
@@ -184,12 +185,12 @@ abstract class Catalog {
    *   current database (namespace).
    * @since 3.5.0
    */
-  @throws[AnalysisException]("function does not exist")
+  @throws[SparkException]("function does not exist")
   def getFunction(functionName: String): Function
 
   /**
    * Get the function with the specified name in the specified database under the Hive Metastore.
-   * This throws an AnalysisException when the function cannot be found.
+   * This throws an SparkException when the function cannot be found.
    *
    * To get functions in other catalogs, please use `getFunction(functionName)` with qualified
    * function name instead.
@@ -200,7 +201,7 @@ abstract class Catalog {
    *   is an unqualified name that designates a function in the specified database
    * @since 3.5.0
    */
-  @throws[AnalysisException]("database or function does not exist")
+  @throws[SparkException]("database or function does not exist")
   def getFunction(dbName: String, functionName: String): Function
 
   /**
