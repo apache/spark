@@ -1166,6 +1166,8 @@ class SparkConnectClient(object):
             if self_destruct:
                 results = []
                 for batch in batches:
+                    # self_destruct frees memory column-wise, but Arrow record batches are
+                    # oriented row-wise, so copies each column into its own allocation
                     batch = pa.RecordBatch.from_arrays(
                         [
                             # This call actually reallocates the array
