@@ -279,9 +279,9 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
                 e.setTagValue(DATA_TYPE_MISMATCH_ERROR, true)
                 val extraHint = extraHintForAnsiTypeCoercionExpression(operator)
                 e.failAnalysis(
-                  errorClass = "TYPE_CHECK_FAILURE_WITH_HINT",
+                  errorClass = "DATATYPE_MISMATCH.TYPE_CHECK_FAILURE_WITH_HINT",
                   messageParameters = Map(
-                    "expr" -> toSQLExpr(e),
+                    "sqlExpr" -> toSQLExpr(e),
                     "msg" -> message,
                     "hint" -> extraHint))
               case checkRes: TypeCheckResult.InvalidFormat =>
@@ -752,6 +752,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
             !o.isInstanceOf[Project] && !o.isInstanceOf[Filter] &&
             !o.isInstanceOf[Aggregate] && !o.isInstanceOf[Window] &&
             !o.isInstanceOf[Expand] &&
+            !o.isInstanceOf[Generate] &&
             // Lateral join is checked in checkSubqueryExpression.
             !o.isInstanceOf[LateralJoin] =>
             // The rule above is used to check Aggregate operator.

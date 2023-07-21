@@ -43,6 +43,9 @@ select * from explode(map());
 select * from explode(array(1, 2)) t(c1);
 select * from explode(map('a', 1, 'b', 2)) t(k, v);
 
+-- explode with non-deterministic values
+select * from explode(array(rand(0)));
+
 -- explode with erroneous input
 select * from explode(null);
 select * from explode(null) t(c1);

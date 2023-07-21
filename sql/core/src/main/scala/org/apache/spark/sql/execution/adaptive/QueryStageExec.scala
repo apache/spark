@@ -250,7 +250,7 @@ case class BroadcastQueryStageExec(
 
   override def cancel(): Unit = {
     if (!broadcast.relationFuture.isDone) {
-      sparkContext.cancelJobGroup(broadcast.runId.toString)
+      sparkContext.cancelJobsWithTag(broadcast.jobTag)
       broadcast.relationFuture.cancel(true)
     }
   }

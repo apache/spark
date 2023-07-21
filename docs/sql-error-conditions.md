@@ -171,6 +171,14 @@ SQLSTATE: none assigned
 
 Could not load Protobuf class with name `<protobufClassName>`. `<explanation>`.
 
+### [CANNOT_LOAD_STATE_STORE](sql-error-conditions-cannot-load-state-store-error-class.html)
+
+SQLSTATE: 58030
+
+An error occurred during loading state.
+
+For more details see [CANNOT_LOAD_STATE_STORE](sql-error-conditions-cannot-load-state-store-error-class.html)
+
 ### CANNOT_MERGE_INCOMPATIBLE_DATA_TYPE
 
 [SQLSTATE: 42825](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
@@ -909,6 +917,14 @@ For more details see [INVALID_FORMAT](sql-error-conditions-invalid-format-error-
 [SQLSTATE: 22023](sql-error-conditions-sqlstates.html#class-22-data-exception)
 
 The fraction of sec must be zero. Valid range is [0, 60]. If necessary set `<ansiConfig>` to "false" to bypass this error.
+
+### [INVALID_HANDLE](sql-error-conditions-invalid-handle-error-class.html)
+
+[SQLSTATE: HY000](sql-error-conditions-sqlstates.html#class-HY-cli-specific-condition)
+
+The handle `<handle>` is invalid.
+
+For more details see [INVALID_HANDLE](sql-error-conditions-invalid-handle-error-class.html)
 
 ### INVALID_HIVE_COLUMN_NAME
 
