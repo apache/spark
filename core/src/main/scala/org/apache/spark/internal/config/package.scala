@@ -2245,7 +2245,7 @@ package object config {
       .createWithDefault(false)
 
   private[spark] val EXECUTOR_ALLOW_SYNC_LOG_LEVEL =
-    ConfigBuilder("spark.executor.sync.log.level")
+    ConfigBuilder("spark.executor.syncLogLevel.enabled")
       .doc("If set to true, log level applied through SparkContext.setLogLevel() method " +
         "will be propagated to all executors.")
       .version("4.0.0")
