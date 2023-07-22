@@ -32,7 +32,10 @@ import org.apache.spark.sql.execution.command.DDLCommandTestUtils.V1_COMMAND_VER
  */
 trait ShowCreateTableSuiteBase extends command.ShowCreateTableSuiteBase
     with command.TestsV1AndV2Commands {
-  override def fullName: String = s"$ns.$table"
+  override def fullName: String = commandVersion match {
+    case V1_COMMAND_VERSION => s"$ns.$table"
+    case _ => s"$catalog.$ns.$table"
+  }
 
   test("show create table[simple]") {
     // todo After SPARK-37517 unify the testcase both v1 and v2
@@ -194,8 +197,4 @@ trait ShowCreateTableSuiteBase extends command.ShowCreateTableSuiteBase
  */
 class ShowCreateTableSuite extends ShowCreateTableSuiteBase with CommandSuiteBase {
   override def commandVersion: String = super[ShowCreateTableSuiteBase].commandVersion
-  override def fullName: String = commandVersion match {
-    case V1_COMMAND_VERSION => s"$ns.$table"
-    case _ => s"$catalog.$ns.$table"
-  }
 }
