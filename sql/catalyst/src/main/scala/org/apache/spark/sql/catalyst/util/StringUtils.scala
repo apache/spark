@@ -145,7 +145,7 @@ object StringUtils extends Logging {
           s"... ${length - maxLength} more characters"
         }
         val result = new java.lang.StringBuilder(maxLength + truncateMsg.length)
-        strings.foreach(result.append)
+        strings.forEach(s => result.append(s))
         result.append(truncateMsg)
         result.toString
       } else {
