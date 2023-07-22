@@ -56,27 +56,24 @@ object CTESubstitution extends Rule[LogicalPlan] {
       return plan
     }
 
-    val forceInline = if (conf.getConf(SQLConf.LEGACY_INLINE_CTE_IN_COMMANDS)) {
-      // The legacy behavior always inlines the CTE relations for queries in commands.
-      plan.exists {
-        case _: Command | _: ParsedStatement | _: InsertIntoDir => true
-        case _ => false
-      }
-    } else {
-      val commands = plan.collect {
-        case c @ (_: Command | _: ParsedStatement | _: InsertIntoDir) => c
-      }
-      if (commands.length == 1) {
+    val commands = plan.collect {
+      case c @ (_: Command | _: ParsedStatement | _: InsertIntoDir) => c
+    }
+    val forceInline = if (commands.length == 1) {
+      if (conf.getConf(SQLConf.LEGACY_INLINE_CTE_IN_COMMANDS)) {
+        // The legacy behavior always inlines the CTE relations for queries in commands.
+        true
+      } else {
         // If there is only one command and it's `CTEInChildren`, we can resolve
         // CTE normally and don't need to force inline.
         !commands.head.isInstanceOf[CTEInChildren]
-      } else if (commands.length > 1) {
-        // This can happen with the multi-insert statement. We should fall back to
-        // the legacy behavior.
-        true
-      } else {
-        false
       }
+    } else if (commands.length > 1) {
+      // This can happen with the multi-insert statement. We should fall back to
+      // the legacy behavior.
+      true
+    } else {
+      false
     }
 
     val cteDefs = ArrayBuffer.empty[CTERelationDef]
@@ -304,9 +301,10 @@ object CTESubstitution extends Rule[LogicalPlan] {
    * children. There are two reasons:
    *  1. Some rules will pattern match the root command nodes, and we should keep command
    *     as the root node to not break them.
-   *  2. `Dataset` eagerly executes the commands inside a query plan. However, the CTE
-   *     references inside commands will be invalid if we execute the command alone, as
-   *     the CTE definitions are outside of the command.
+   *  2. `Dataset` eagerly executes the commands inside a query plan. For example,
+   *     sql("WITH v ... CREATE TABLE t AS SELECT * FROM v") will create the table instead of just
+   *     analyzing the command. However, the CTE references inside commands will be invalid if we
+   *     execute the command alone, as the CTE definitions are outside of the command.
    */
   private def withCTEDefs(p: LogicalPlan, cteDefs: Seq[CTERelationDef]): LogicalPlan = {
     p match {
