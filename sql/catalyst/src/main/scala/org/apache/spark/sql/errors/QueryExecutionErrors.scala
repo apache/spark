@@ -2194,17 +2194,11 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
   }
 
   def fieldIndexOnRowWithoutSchemaError(): SparkUnsupportedOperationException = {
-    new SparkUnsupportedOperationException(
-      errorClass = "_LEGACY_ERROR_TEMP_2231",
-      messageParameters = Map.empty)
+    DataTypeErrors.fieldIndexOnRowWithoutSchemaError()
   }
 
   def valueIsNullError(index: Int): Throwable = {
-    new SparkException(
-      errorClass = "_LEGACY_ERROR_TEMP_2232",
-      messageParameters = Map(
-        "index" -> toSQLValue(index, IntegerType)),
-      cause = null)
+    DataTypeErrors.valueIsNullError(index)
   }
 
   def onlySupportDataSourcesProvidingFileFormatError(providingClass: String): Throwable = {

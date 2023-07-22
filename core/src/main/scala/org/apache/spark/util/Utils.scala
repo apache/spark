@@ -92,7 +92,6 @@ private[spark] object CallSite {
  * Various utility methods used by Spark.
  */
 private[spark] object Utils extends Logging with SparkClassUtils {
-  val random = new Random()
 
   private val sparkUncaughtExceptionHandler = new SparkUncaughtExceptionHandler
   @volatile private var cachedLocalDir: String = ""
