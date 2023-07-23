@@ -92,7 +92,6 @@ private[spark] object CallSite {
  * Various utility methods used by Spark.
  */
 private[spark] object Utils extends Logging with SparkClassUtils {
-  val random = new Random()
 
   private val sparkUncaughtExceptionHandler = new SparkUncaughtExceptionHandler
   @volatile private var cachedLocalDir: String = ""
@@ -188,11 +187,6 @@ private[spark] object Utils extends Logging with SparkClassUtils {
   /** String interning to reduce the memory usage. */
   def weakIntern(s: String): String = {
     weakStringInterner.intern(s)
-  }
-
-  /** Determines whether the provided class is loadable in the current thread. */
-  def classIsLoadable(clazz: String): Boolean = {
-    Try { classForName(clazz, initialize = false) }.isSuccess
   }
 
   /**
