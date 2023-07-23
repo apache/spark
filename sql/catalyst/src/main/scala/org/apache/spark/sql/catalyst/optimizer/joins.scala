@@ -235,6 +235,85 @@ object EliminateOuterJoin extends Rule[LogicalPlan] with PredicateHelper {
 }
 
 /**
+ * 1. Rewrite join to filter if one side max row number is 1
+ *
+ * {{{
+ *   SELECT t1.* FROM t1 INNER JOIN (SELECT max(c1) AS c1 FROM t) t2 ON t1.c1 = t2.c1  ==>
+ *   SELECT t1.* FROM t1 WHERE t1.c = (SELECT max(c1) AS c1 FROM t)
+ * }}}
+ *
+ * 2. Removes outer join if streamed side max row number is 1
+ * {{{
+ *   SELECT t1.* FROM t1 LEFT JOIN (SELECT max(c1) AS c1 FROM t) t2 ON t1.c1 = t2.c1  ==>
+ *   SELECT t1.* FROM t1
+ * }}}
+ *
+ * {{{
+ *   SELECT t1.* FROM t1 FULL JOIN (SELECT max(c1) AS c1 FROM t) t2  ==>
+ *   SELECT t1.* FROM t1
+ * }}}
+ */
+object EliminateJoin extends Rule[LogicalPlan] with PredicateHelper with JoinSelectionHelper {
+  private def eliminateRightSide(j: Join): Option[LogicalPlan] = {
+    j.joinType match {
+      case  _: InnerLike | LeftSemi if j.condition.nonEmpty =>
+        ExtractEquiJoinKeys.unapply(j) match {
+          case Some((_, leftKeys, rightKeys, None, _, left, right, _)) =>
+            val conditions = leftKeys.zipWithIndex.map { case (exp, index) =>
+              val projectList = Seq(Alias(rightKeys(index), "_joinkey")())
+              EqualTo(exp, ScalarSubquery(Project(projectList, right)))
+            }
+            Some(Filter(conditions.reduceLeft(And), left))
+          case _ =>
+            None
+        }
+      case LeftOuter =>
+        Some(j.left)
+      case FullOuter if j.condition.isEmpty =>
+        Some(j.left)
+      case _ =>
+        None
+    }
+  }
+
+  private def eliminateLeftSide(j: Join): Option[LogicalPlan] = {
+    j.joinType match {
+      case _: InnerLike if j.condition.nonEmpty =>
+        ExtractEquiJoinKeys.unapply(j) match {
+          case Some((_, leftKeys, rightKeys, None, _, left, right, _)) =>
+            val conditions = rightKeys.zipWithIndex.map { case (exp, index) =>
+              val projectList = Seq(Alias(leftKeys(index), "_joinkey")())
+              EqualTo(exp, ScalarSubquery(Project(projectList, left)))
+            }
+            Some(Filter(conditions.reduceLeft(And), right))
+          case _ =>
+            None
+        }
+      case RightOuter =>
+        Some(j.right)
+      case FullOuter if j.condition.isEmpty =>
+        Some(j.right)
+      case _ =>
+        None
+    }
+  }
+
+  def apply(plan: LogicalPlan): LogicalPlan = plan.transformWithPruning(
+    _.containsPattern(JOIN), ruleId) {
+    case p @ Project(_, j: Join) if j.right.maxRows.contains(1) &&
+        p.references.subsetOf(j.left.outputSet) =>
+      eliminateRightSide(j).map(c => p.copy(child = c)).getOrElse(p)
+
+    case p @ Project(_, j: Join) if j.left.maxRows.contains(1) &&
+      p.references.subsetOf(j.right.outputSet) =>
+      eliminateLeftSide(j).map(c => p.copy(child = c)).getOrElse(p)
+
+    case j: Join if j.right.maxRows.contains(1) && j.joinType == LeftSemi =>
+      eliminateRightSide(j).getOrElse(j)
+  }
+}
+
+/**
  * PythonUDF in join condition can't be evaluated if it refers to attributes from both join sides.
  * See `ExtractPythonUDFs` for details. This rule will detect un-evaluable PythonUDF and pull them
  * out from join condition.

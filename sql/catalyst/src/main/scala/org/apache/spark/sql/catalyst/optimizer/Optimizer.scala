@@ -77,6 +77,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
         PushProjectionThroughLimit,
         ReorderJoin,
         EliminateOuterJoin,
+        EliminateJoin,
         PushDownPredicates,
         PushDownLeftSemiAntiJoin,
         PushLeftSemiLeftAntiThroughJoin,
