@@ -34,6 +34,7 @@ import org.apache.spark.sql.catalyst.expressions.{Grouping, Literal, RowNumber}
 import org.apache.spark.sql.catalyst.expressions.CodegenObjectFactoryMode._
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenContext
 import org.apache.spark.sql.catalyst.expressions.objects.InitializeJavaBean
+import org.apache.spark.sql.catalyst.rules.RuleIdCollection
 import org.apache.spark.sql.catalyst.util.BadRecordException
 import org.apache.spark.sql.execution.datasources.jdbc.{DriverRegistry, JDBCOptions}
 import org.apache.spark.sql.execution.datasources.jdbc.connection.ConnectionProvider
@@ -497,6 +498,16 @@ class QueryExecutionErrorsSuite
         errorClass = "UNSUPPORTED_SAVE_MODE.EXISTENT_PATH",
         parameters = Map("saveMode" -> "NULL"))
     }
+  }
+
+  test("SPARK-42330: rule id not found") {
+    checkError(
+      exception = intercept[SparkException] {
+          RuleIdCollection.getRuleId("incorrect")
+      },
+      errorClass = "RULE_ID_NOT_FOUND",
+      parameters = Map("ruleName" -> "incorrect")
+    )
   }
 
   test("CANNOT_RESTORE_PERMISSIONS_FOR_PATH: can't set permission") {
