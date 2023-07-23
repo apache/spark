@@ -1076,7 +1076,7 @@ abstract class JsonSuite
     }.getCause
     checkError(
       exception = exceptionTwo.asInstanceOf[SparkException],
-      errorClass = "MALFORMED_RECORD_IN_PARSING",
+      errorClass = "MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION",
       parameters = Map(
         "badRecord" -> "[null]",
         "failFastMode" -> "FAILFAST")
@@ -1997,7 +1997,7 @@ abstract class JsonSuite
       }.getCause
       checkError(
         exception = exceptionTwo.asInstanceOf[SparkException],
-        errorClass = "MALFORMED_RECORD_IN_PARSING",
+        errorClass = "MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION",
         parameters = Map(
           "badRecord" -> "[null]",
           "failFastMode" -> "FAILFAST")
@@ -3223,6 +3223,21 @@ abstract class JsonSuite
       spark.read.option("mode", "permissive")
         .json(Seq("""[{"a": "str"}, null, {"a": "str"}]""").toDS),
       Row(null) :: Nil)
+  }
+
+  test("SPARK-44079: fix incorrect result when parse array as struct " +
+    "using PERMISSIVE mode with corrupt record") {
+    val data = """[{"a": "incorrect", "b": "correct"}, {"a": "incorrect", "b": "correct"}]"""
+    val schema = new StructType(Array(StructField("a", IntegerType),
+      StructField("b", StringType), StructField("_corrupt_record", StringType)))
+
+    val result = spark.read
+      .option("mode", "PERMISSIVE")
+      .option("multiline", "true")
+      .schema(schema)
+      .json(Seq(data).toDS())
+
+    checkAnswer(result, Seq(Row(null, "correct", data), Row(null, "correct", data)))
   }
 
   test("SPARK-36536: use casting when datetime pattern is not set") {

@@ -225,16 +225,21 @@ abstract class UDAQuerySuite extends QueryTest with SQLTestUtils with TestHiveSi
   }
 
   test("non-deterministic children expressions of aggregator") {
-    val e = intercept[AnalysisException] {
-      spark.sql(
-        """
-          |SELECT mydoublesum(value + 1.5 * key + rand())
-          |FROM agg1
-          |GROUP BY key
-        """.stripMargin)
-    }.getMessage
-    assert(Seq("nondeterministic expression",
-      "should not appear in the arguments of an aggregate function").forall(e.contains))
+    checkError(
+      exception = intercept[AnalysisException] {
+        spark.sql(
+          """
+            |SELECT mydoublesum(value + 1.5 * key + rand())
+            |FROM agg1
+            |GROUP BY key
+          """.stripMargin)
+      },
+      errorClass = "AGGREGATE_FUNCTION_WITH_NONDETERMINISTIC_EXPRESSION",
+      parameters = Map("sqlExpr" -> "\"mydoublesum(((value + (1.5 * key)) + rand()))\""),
+      context = ExpectedContext(
+        fragment = "value + 1.5 * key + rand()",
+        start = 20,
+        stop = 45))
   }
 
   test("interpreted aggregate function") {

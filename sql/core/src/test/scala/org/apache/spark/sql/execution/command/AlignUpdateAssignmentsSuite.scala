@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution.command
 
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.expressions.{ArrayTransform, AttributeReference, BooleanLiteral, Cast, CheckOverflowInTableInsert, CreateNamedStruct, EvalMode, GetStructField, IntegerLiteral, LambdaFunction, LongLiteral, MapFromArrays, StringLiteral}
 import org.apache.spark.sql.catalyst.expressions.objects.StaticInvoke
 import org.apache.spark.sql.catalyst.plans.logical.{Assignment, UpdateTable}
@@ -24,7 +25,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.StoreAssignmentPolicy
 import org.apache.spark.sql.types.IntegerType
 
-class AlignUpdateAssignmentsSuite extends AlignAssignmentsSuite {
+class AlignUpdateAssignmentsSuite extends AlignAssignmentsSuiteBase {
 
   test("align assignments (primitive types)") {
     val sql1 = "UPDATE primitive_table AS t SET t.txt = 'new', t.i = 1"
@@ -469,9 +470,30 @@ class AlignUpdateAssignmentsSuite extends AlignAssignmentsSuite {
           "Multiple assignments for 'i': 1, -1")
 
         // two updates to a nested column
-        assertAnalysisException(
-          "UPDATE nested_struct_table SET s.n_i = 1, s.n_s = null, s.n_i = -1",
-          "Multiple assignments for 's.n_i': 1, -1")
+        val e = intercept[AnalysisException] {
+          parseAndResolve(
+            "UPDATE nested_struct_table SET s.n_i = 1, s.n_s = null, s.n_i = -1"
+          )
+        }
+        if (policy == StoreAssignmentPolicy.ANSI) {
+          checkError(
+            exception = e,
+            errorClass = "DATATYPE_MISMATCH.INVALID_ROW_LEVEL_OPERATION_ASSIGNMENTS",
+            parameters = Map(
+              "sqlExpr" -> "\"s.n_i = 1\", \"s.n_s = NULL\", \"s.n_i = -1\"",
+              "errors" -> "\n- Multiple assignments for 's.n_i': 1, -1")
+          )
+        } else {
+          checkError(
+            exception = e,
+            errorClass = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_SAFELY_CAST",
+            parameters = Map(
+              "tableName" -> "``",
+              "colName" -> "`s`.`n_s`",
+              "srcType" -> "\"VOID\"",
+              "targetType" -> "\"STRUCT<DN_I:INT,DN_L:BIGINT>\"")
+          )
+        }
 
         // conflicting updates to a nested struct and its fields
         assertAnalysisException(
@@ -509,9 +531,16 @@ class AlignUpdateAssignmentsSuite extends AlignAssignmentsSuite {
         "UPDATE nested_struct_table SET s.n_s = named_struct('dn_i', NULL, 'dn_l', 1L)")
       assertNullCheckExists(plan4, Seq("s", "n_s", "dn_i"))
 
-      assertAnalysisException(
-        "UPDATE nested_struct_table SET s.n_s = named_struct('dn_i', 1)",
-        "Cannot find data for output column 's.n_s.dn_l'")
+      val e = intercept[AnalysisException] {
+        parseAndResolve(
+          "UPDATE nested_struct_table SET s.n_s = named_struct('dn_i', 1)"
+        )
+      }
+      checkError(
+        exception = e,
+        errorClass = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_FIND_DATA",
+        parameters = Map("tableName" -> "``", "colName" -> "`s`.`n_s`.`dn_l`")
+      )
 
       // ANSI mode does NOT allow string to int casts
       assertAnalysisException(
@@ -555,9 +584,16 @@ class AlignUpdateAssignmentsSuite extends AlignAssignmentsSuite {
           |SET s.n_s = named_struct('dn_i', CAST (NULL AS INT), 'dn_l', 1L)""".stripMargin)
       assertNullCheckExists(plan4, Seq("s", "n_s", "dn_i"))
 
-      assertAnalysisException(
-        "UPDATE nested_struct_table SET s.n_s = named_struct('dn_i', 1)",
-        "Cannot find data for output column 's.n_s.dn_l'")
+      val e = intercept[AnalysisException] {
+        parseAndResolve(
+          "UPDATE nested_struct_table SET s.n_s = named_struct('dn_i', 1)"
+        )
+      }
+      checkError(
+        exception = e,
+        errorClass = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_FIND_DATA",
+        parameters = Map("tableName" -> "``", "colName" -> "`s`.`n_s`.`dn_l`")
+      )
 
       // strict mode does NOT allow string to int casts
       assertAnalysisException(

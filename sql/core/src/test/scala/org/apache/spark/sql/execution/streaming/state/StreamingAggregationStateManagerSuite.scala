@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution.streaming.state
 
 import org.apache.spark.sql.catalyst.expressions.{Attribute, SpecificInternalRow, UnsafeProjection, UnsafeRow}
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
+import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.streaming.StreamTest
 import org.apache.spark.sql.types.{IntegerType, StructField, StructType}
 
@@ -31,7 +32,7 @@ class StreamingAggregationStateManagerSuite extends StreamTest {
   val testOutputSchema: StructType = StructType(
     testKeys.map(createIntegerField) ++ testValues.map(createIntegerField))
 
-  val testOutputAttributes: Seq[Attribute] = testOutputSchema.toAttributes
+  val testOutputAttributes: Seq[Attribute] = toAttributes(testOutputSchema)
   val testKeyAttributes: Seq[Attribute] = testOutputAttributes.filter { p =>
     testKeys.contains(p.name)
   }

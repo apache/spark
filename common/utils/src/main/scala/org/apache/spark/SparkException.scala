@@ -58,6 +58,15 @@ class SparkException(
       errorClass = Some(errorClass),
       messageParameters = messageParameters)
 
+  def this(errorClass: String, messageParameters: Map[String, String], cause: Throwable,
+      context: Array[QueryContext]) =
+    this(
+      message = SparkThrowableHelper.getMessage(errorClass, messageParameters),
+      cause = cause,
+      errorClass = Some(errorClass),
+      messageParameters = messageParameters,
+      context = context)
+
   override def getMessageParameters: java.util.Map[String, String] = messageParameters.asJava
 
   override def getErrorClass: String = errorClass.orNull
@@ -118,7 +127,8 @@ private[spark] case class SparkUserAppException(exitCode: Int)
  * Exception thrown when the relative executor to access is dead.
  */
 private[spark] case class ExecutorDeadException(message: String)
-  extends SparkException(message)
+  extends SparkException(errorClass = "INTERNAL_ERROR_NETWORK",
+    messageParameters = Map("message" -> message), cause = null)
 
 /**
  * Exception thrown when Spark returns different result after upgrading to a new version.

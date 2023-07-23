@@ -39,6 +39,11 @@ ERROR_CLASSES_JSON = """
       "Attribute `<attr_name>` is not supported."
     ]
   },
+  "AXIS_LENGTH_MISMATCH" : {
+    "message" : [
+      "Length mismatch: Expected axis has <expected_length> element, new values have <actual_length> elements."
+    ]
+  },
   "BROADCAST_VARIABLE_NOT_LOADED": {
     "message": [
       "Broadcast variable `<variable>` not loaded."
@@ -84,9 +89,24 @@ ERROR_CLASSES_JSON = """
       "Cannot convert <from_type> into <to_type>."
     ]
   },
+  "CANNOT_DETERMINE_TYPE": {
+    "message": [
+      "Some of types cannot be determined after inferring."
+    ]
+  },
+  "CANNOT_GET_BATCH_ID": {
+    "message": [
+      "Could not get batch id from <obj_name>."
+    ]
+  },
   "CANNOT_INFER_ARRAY_TYPE": {
     "message": [
       "Can not infer Array Type from an list with None as the first element."
+    ]
+  },
+  "CANNOT_INFER_EMPTY_SCHEMA": {
+    "message": [
+      "Can not infer schema from empty dataset."
     ]
   },
   "CANNOT_INFER_SCHEMA_FOR_TYPE": {
@@ -144,6 +164,19 @@ ERROR_CLASSES_JSON = """
       "Remote client cannot create a SparkContext. Create SparkSession instead."
     ]
   },
+  "DIFFERENT_ROWS" : {
+    "message" : [
+      "<error_msg>"
+    ]
+  },
+  "DIFFERENT_SCHEMA" : {
+    "message" : [
+      "Schemas do not match.",
+      "--- actual",
+      "+++ expected",
+      "<error_msg>"
+    ]
+  },
   "DISALLOWED_TYPE_FOR_CONTAINER" : {
     "message" : [
       "Argument `<arg_name>`(type: <arg_type>) should only contain a type in [<allowed_types>], got <return_type>"
@@ -170,6 +203,11 @@ ERROR_CLASSES_JSON = """
       " must be set to `true` to enable Python profile."
     ]
   },
+  "INVALID_ARROW_UDTF_RETURN_TYPE" : {
+    "message" : [
+      "The return type of the arrow-optimized Python UDTF should be of type 'pandas.DataFrame', but the function returned a value of type <type_name> with value: <value>."
+    ]
+  },
   "INVALID_BROADCAST_OPERATION": {
     "message": [
       "Broadcast can only be <operation> in driver."
@@ -188,6 +226,11 @@ ERROR_CLASSES_JSON = """
   "INVALID_ITEM_FOR_CONTAINER": {
     "message": [
       "All items in `<arg_name>` should be in <allowed_types>, got <item_type>."
+    ]
+  },
+  "INVALID_NDARRAY_DIMENSION": {
+    "message": [
+      "NumPy array input should be of <dimensions> dimensions."
     ]
   },
   "INVALID_PANDAS_UDF" : {
@@ -210,14 +253,44 @@ ERROR_CLASSES_JSON = """
       "Timeout timestamp (<timestamp>) cannot be earlier than the current watermark (<watermark>)."
     ]
   },
+  "INVALID_TYPE" : {
+    "message" : [
+      "Argument `<arg_name>` should not be a <data_type>."
+    ]
+  },
   "INVALID_TYPENAME_CALL" : {
     "message" : [
       "StructField does not have typeName. Use typeName on its type explicitly instead."
     ]
   },
+  "INVALID_TYPE_DF_EQUALITY_ARG" : {
+    "message" : [
+      "Expected type <expected_type> for `<arg_name>` but got type <actual_type>."
+    ]
+  },
   "INVALID_UDF_EVAL_TYPE" : {
     "message" : [
       "Eval type for UDF must be <eval_type>."
+    ]
+  },
+  "INVALID_UDTF_BOTH_RETURN_TYPE_AND_ANALYZE" : {
+    "message" : [
+      "The UDTF '<name>' is invalid. It has both its return type and an 'analyze' attribute. Please make it have one of either the return type or the 'analyze' static method in '<name>' and try again."
+    ]
+  },
+  "INVALID_UDTF_EVAL_TYPE" : {
+    "message" : [
+      "The eval type for the UDTF '<name>' is invalid. It must be one of <eval_type>."
+    ]
+  },
+  "INVALID_UDTF_NO_EVAL" : {
+    "message" : [
+      "The UDTF '<name>' is invalid. It does not implement the required 'eval' method. Please implement the 'eval' method in '<name>' and try again."
+    ]
+  },
+  "INVALID_UDTF_RETURN_TYPE" : {
+    "message" : [
+      "The UDTF '<name>' is invalid. It does not specify its return type or implement the required 'analyze' static method. Please specify the return type or implement the 'analyze' static method in '<name>' and try again."
     ]
   },
   "INVALID_WHEN_USAGE": {
@@ -445,6 +518,11 @@ ERROR_CLASSES_JSON = """
       "Argument `<arg_name>` should be a list[str], got <arg_type>."
     ]
   },
+  "NOT_LIST_OR_NONE_OR_STRUCT" : {
+    "message" : [
+      "Argument `<arg_name>` should be a list, None or StructType, got <arg_type>."
+    ]
+  },
   "NOT_LIST_OR_STR_OR_TUPLE" : {
     "message" : [
       "Argument `<arg_name>` should be a list, str or tuple, got <arg_type>."
@@ -551,6 +629,26 @@ ERROR_CLASSES_JSON = """
       "Result vector from pandas_udf was not the required length: expected <expected>, got <actual>."
     ]
   },
+  "SESSION_ALREADY_EXIST" : {
+    "message" : [
+      "Cannot start a remote Spark session because there is a regular Spark session already running."
+    ]
+  },
+  "SESSION_NOT_SAME" : {
+    "message" : [
+      "Both Datasets must belong to the same SparkSession."
+    ]
+  },
+  "SESSION_OR_CONTEXT_EXISTS" : {
+    "message" : [
+      "There should not be an existing Spark Session or Spark Context."
+    ]
+  },
+  "SHOULD_NOT_DATAFRAME": {
+    "message": [
+      "Argument `<arg_name>` should not be a DataFrame."
+    ]
+  },
   "SLICE_WITH_STEP" : {
     "message" : [
       "Slice with step is not supported."
@@ -574,6 +672,26 @@ ERROR_CLASSES_JSON = """
   "TOO_MANY_VALUES" : {
     "message" : [
       "Expected <expected> values for `<item>`, got <actual>."
+    ]
+  },
+  "UDF_RETURN_TYPE" : {
+    "message" : [
+      "Return type of the user-defined function should be <expected>, but is <actual>."
+    ]
+  },
+  "UDTF_EXEC_ERROR" : {
+    "message" : [
+      "User defined table function encountered an error in the '<method_name>' method: <error>"
+    ]
+  },
+  "UDTF_RETURN_SCHEMA_MISMATCH" : {
+    "message" : [
+      "The number of columns in the result does not match the specified schema. Expected column count: <expected>, Actual column count: <actual>. Please make sure the values returned by the function have the same number of columns as specified in the output schema."
+    ]
+  },
+  "UDTF_RETURN_TYPE_MISMATCH" : {
+    "message" : [
+      "Mismatch in return type for the UDTF '<name>'. Expected a 'StructType', but got '<return_type>'. Please ensure the return type is a correctly formatted StructType."
     ]
   },
   "UNEXPECTED_RESPONSE_FROM_SERVER" : {
@@ -604,6 +722,11 @@ ERROR_CLASSES_JSON = """
   "UNSUPPORTED_DATA_TYPE" : {
     "message" : [
       "Unsupported DataType `<data_type>`."
+    ]
+  },
+  "UNSUPPORTED_DATA_TYPE_FOR_ARROW" : {
+    "message" : [
+      "Single data type <data_type> is not supported with Arrow."
     ]
   },
   "UNSUPPORTED_DATA_TYPE_FOR_ARROW_CONVERSION" : {

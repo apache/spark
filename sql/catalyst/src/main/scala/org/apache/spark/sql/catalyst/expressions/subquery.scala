@@ -24,6 +24,7 @@ import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.logical.{Filter, HintInfo, LogicalPlan}
 import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.errors.QueryCompilationErrors
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.util.collection.BitSet
 
@@ -270,7 +271,10 @@ case class ScalarSubquery(
     mayHaveCountBug: Option[Boolean] = None)
   extends SubqueryExpression(plan, outerAttrs, exprId, joinCond, hint) with Unevaluable {
   override def dataType: DataType = {
-    assert(plan.schema.fields.nonEmpty, "Scalar subquery should have only one column")
+    if (!plan.schema.fields.nonEmpty) {
+      throw QueryCompilationErrors.subqueryReturnMoreThanOneColumn(plan.schema.fields.length,
+        origin)
+    }
     plan.schema.fields.head.dataType
   }
   override def nullable: Boolean = true
@@ -367,7 +371,15 @@ case class ListQuery(
     plan.output.head.dataType
   }
   override lazy val resolved: Boolean = childrenResolved && plan.resolved && numCols != -1
-  override def nullable: Boolean = false
+  override def nullable: Boolean = {
+    // ListQuery can't be executed alone so its nullability is not defined.
+    // Consider using ListQuery.childOutputs.exists(_.nullable)
+    if (!SQLConf.get.getConf(SQLConf.LEGACY_IN_SUBQUERY_NULLABILITY)) {
+      assert(false, "ListQuery nullability is not defined. To restore the legacy behavior before " +
+        s"Spark 3.5.0, set ${SQLConf.LEGACY_IN_SUBQUERY_NULLABILITY.key}=true")
+    }
+    false
+  }
   override def withNewPlan(plan: LogicalPlan): ListQuery = copy(plan = plan)
   override def withNewHint(hint: Option[HintInfo]): ListQuery = copy(hint = hint)
   override def toString: String = s"list#${exprId.id} $conditionString"

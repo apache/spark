@@ -333,6 +333,32 @@ The following example shows how to use ``DataFrame.groupby().cogroup().applyInPa
 
 For detailed usage, please see :meth:`PandasCogroupedOps.applyInPandas`
 
+Arrow Python UDFs
+-----------------
+
+Arrow Python UDFs are user defined functions that are executed row-by-row, utilizing Arrow for efficient batch data
+transfer and serialization. To define an Arrow Python UDF, you can use the :meth:`udf` decorator or wrap the function
+with the :meth:`udf` method, ensuring the ``useArrow`` parameter is set to True. Additionally, you can enable Arrow
+optimization for Python UDFs throughout the entire SparkSession by setting the Spark configuration ``spark.sql
+.execution.pythonUDF.arrow.enabled`` to true. It's important to note that the Spark configuration takes effect only
+when ``useArrow`` is either not set or set to None.
+
+The type hints for Arrow Python UDFs should be specified in the same way as for default, pickled Python UDFs.
+
+Here's an example that demonstrates the usage of both a default, pickled Python UDF and an Arrow Python UDF:
+
+.. literalinclude:: ../../../../../examples/src/main/python/sql/arrow.py
+    :language: python
+    :lines: 279-297
+    :dedent: 4
+
+Compared to the default, pickled Python UDFs, Arrow Python UDFs provide a more coherent type coercion mechanism. UDF
+type coercion poses challenges when the Python instances returned by UDFs do not align with the user-specified
+return type. The default, pickled Python UDFs' type coercion has certain limitations, such as relying on None as a
+fallback for type mismatches, leading to potential ambiguity and data loss. Additionally, converting date, datetime,
+and tuples to strings can yield ambiguous results. Arrow Python UDFs, on the other hand, leverage Arrow's
+capabilities to standardize type coercion and address these issues effectively.
+
 Usage Notes
 -----------
 
@@ -388,28 +414,9 @@ working with timestamps in ``pandas_udf``\s to get the best performance, see
 Recommended Pandas and PyArrow Versions
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-For usage with pyspark.sql, the minimum supported versions of Pandas is 1.0.5 and PyArrow is 1.0.0.
+For usage with pyspark.sql, the minimum supported versions of Pandas is 1.0.5 and PyArrow is 4.0.0.
 Higher versions may be used, however, compatibility and data correctness can not be guaranteed and should
 be verified by the user.
-
-Compatibility Setting for PyArrow >= 0.15.0 and Spark 2.3.x, 2.4.x
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-Since Arrow 0.15.0, a change in the binary IPC format requires an environment variable to be
-compatible with previous versions of Arrow <= 0.14.1. This is only necessary to do for PySpark
-users with versions 2.3.x and 2.4.x that have manually upgraded PyArrow to 0.15.0. The following
-can be added to ``conf/spark-env.sh`` to use the legacy Arrow IPC format:
-
-.. code-block:: bash
-
-    ARROW_PRE_0_15_IPC_FORMAT=1
-
-
-This will instruct PyArrow >= 0.15.0 to use the legacy IPC format with the older Arrow Java that
-is in Spark 2.3.x and 2.4.x. Not setting this environment variable will lead to a similar error as
-described in `SPARK-29367 <https://issues.apache.org/jira/browse/SPARK-29367>`_ when running
-``pandas_udf``\s or :meth:`DataFrame.toPandas` with Arrow enabled. More information about the Arrow IPC change can
-be read on the Arrow 0.15.0 release `blog <https://arrow.apache.org/blog/2019/10/06/0.15.0-release/#columnar-streaming-protocol-change-since-0140>`_.
 
 Setting Arrow ``self_destruct`` for memory savings
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

@@ -24,6 +24,7 @@ import pickle
 from typing import (
     overload,
     Any,
+    BinaryIO,
     Callable,
     Dict,
     Generic,
@@ -35,7 +36,6 @@ from typing import (
     TYPE_CHECKING,
     Union,
 )
-from typing.io import BinaryIO  # type: ignore[import]
 
 from pyspark.java_gateway import local_connect_and_auth
 from pyspark.serializers import ChunkedStream, pickle_protocol
@@ -103,7 +103,7 @@ class Broadcast(Generic[T]):
     def __init__(self: "Broadcast[Any]", *, sock_file: str):
         ...
 
-    def __init__(
+    def __init__(  # type: ignore[misc]
         self,
         sc: Optional["SparkContext"] = None,
         value: Optional[T] = None,

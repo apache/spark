@@ -20,10 +20,12 @@ import java.io.InputStream
 import java.nio.file.{Files, Path, Paths}
 import java.util.concurrent.TimeUnit
 
-import collection.JavaConverters._
+import scala.collection.JavaConverters._
+
 import com.google.protobuf.ByteString
 import io.grpc.{ManagedChannel, Server}
 import io.grpc.inprocess.{InProcessChannelBuilder, InProcessServerBuilder}
+import org.apache.commons.codec.digest.DigestUtils.sha256Hex
 import org.scalatest.BeforeAndAfterEach
 
 import org.apache.spark.connect.proto
@@ -37,6 +39,9 @@ class ArtifactSuite extends ConnectFunSuite with BeforeAndAfterEach {
   private var server: Server = _
   private var artifactManager: ArtifactManager = _
   private var channel: ManagedChannel = _
+  private var retryPolicy: GrpcRetryHandler.RetryPolicy = _
+  private var bstub: CustomSparkConnectBlockingStub = _
+  private var stub: CustomSparkConnectStub = _
 
   private def startDummyServer(): Unit = {
     service = new DummySparkConnectService()
@@ -49,7 +54,10 @@ class ArtifactSuite extends ConnectFunSuite with BeforeAndAfterEach {
 
   private def createArtifactManager(): Unit = {
     channel = InProcessChannelBuilder.forName(getClass.getName).directExecutor().build()
-    artifactManager = new ArtifactManager(proto.UserContext.newBuilder().build(), "", channel)
+    retryPolicy = GrpcRetryHandler.RetryPolicy()
+    bstub = new CustomSparkConnectBlockingStub(channel, retryPolicy)
+    stub = new CustomSparkConnectStub(channel, retryPolicy)
+    artifactManager = new ArtifactManager(proto.UserContext.newBuilder().build(), "", bstub, stub)
   }
 
   override def beforeEach(): Unit = {
@@ -246,5 +254,18 @@ class ArtifactSuite extends ConnectFunSuite with BeforeAndAfterEach {
 
     assertFileDataEquality(remainingArtifacts.get(0).getData, Paths.get(file3))
     assertFileDataEquality(remainingArtifacts.get(1).getData, Paths.get(file4))
+  }
+
+  test("cache an artifact and check its presence") {
+    val s = "Hello, World!"
+    val blob = s.getBytes("UTF-8")
+    val expectedHash = sha256Hex(blob)
+    assert(artifactManager.isCachedArtifact(expectedHash) === false)
+    val actualHash = artifactManager.cacheArtifact(blob)
+    assert(actualHash === expectedHash)
+    assert(artifactManager.isCachedArtifact(expectedHash) === true)
+
+    val receivedRequests = service.getAndClearLatestAddArtifactRequests()
+    assert(receivedRequests.size == 1)
   }
 }

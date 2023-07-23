@@ -461,8 +461,8 @@ abstract class TypeCoercionBase {
         m.copy(newKeys.zip(newValues).flatMap { case (k, v) => Seq(k, v) })
 
       // Hive lets you do aggregation of timestamps... for some reason
-      case Sum(e @ TimestampType(), _) => Sum(Cast(e, DoubleType))
-      case Average(e @ TimestampType(), _) => Average(Cast(e, DoubleType))
+      case Sum(e @ TimestampTypeExpression(), _) => Sum(Cast(e, DoubleType))
+      case Average(e @ TimestampTypeExpression(), _) => Average(Cast(e, DoubleType))
 
       // Coalesce should return the first non-null value, which could be any column
       // from the list. So we need to make sure the return type is deterministic and
@@ -1105,18 +1105,18 @@ object TypeCoercion extends TypeCoercionBase {
       // Skip nodes who's children have not been resolved yet.
       case e if !e.childrenResolved => e
 
-      case a @ BinaryArithmetic(left @ StringType(), right)
+      case a @ BinaryArithmetic(left @ StringTypeExpression(), right)
         if right.dataType != CalendarIntervalType =>
         a.makeCopy(Array(Cast(left, DoubleType), right))
-      case a @ BinaryArithmetic(left, right @ StringType())
+      case a @ BinaryArithmetic(left, right @ StringTypeExpression())
         if left.dataType != CalendarIntervalType =>
         a.makeCopy(Array(left, Cast(right, DoubleType)))
 
       // For equality between string and timestamp we cast the string to a timestamp
       // so that things like rounding of subsecond precision does not affect the comparison.
-      case p @ Equality(left @ StringType(), right @ TimestampType()) =>
+      case p @ Equality(left @ StringTypeExpression(), right @ TimestampTypeExpression()) =>
         p.makeCopy(Array(Cast(left, TimestampType), right))
-      case p @ Equality(left @ TimestampType(), right @ StringType()) =>
+      case p @ Equality(left @ TimestampTypeExpression(), right @ StringTypeExpression()) =>
         p.makeCopy(Array(left, Cast(right, TimestampType)))
 
       case p @ BinaryComparison(left, right)
@@ -1142,30 +1142,30 @@ object TypeCoercion extends TypeCoercionBase {
 
       // We may simplify the expression if one side is literal numeric values
       // TODO: Maybe these rules should go into the optimizer.
-      case EqualTo(bool @ BooleanType(), Literal(value, _: NumericType))
+      case EqualTo(bool @ BooleanTypeExpression(), Literal(value, _: NumericType))
         if trueValues.contains(value) => bool
-      case EqualTo(bool @ BooleanType(), Literal(value, _: NumericType))
+      case EqualTo(bool @ BooleanTypeExpression(), Literal(value, _: NumericType))
         if falseValues.contains(value) => Not(bool)
-      case EqualTo(Literal(value, _: NumericType), bool @ BooleanType())
+      case EqualTo(Literal(value, _: NumericType), bool @ BooleanTypeExpression())
         if trueValues.contains(value) => bool
-      case EqualTo(Literal(value, _: NumericType), bool @ BooleanType())
+      case EqualTo(Literal(value, _: NumericType), bool @ BooleanTypeExpression())
         if falseValues.contains(value) => Not(bool)
-      case EqualNullSafe(bool @ BooleanType(), Literal(value, _: NumericType))
+      case EqualNullSafe(bool @ BooleanTypeExpression(), Literal(value, _: NumericType))
         if trueValues.contains(value) => And(IsNotNull(bool), bool)
-      case EqualNullSafe(bool @ BooleanType(), Literal(value, _: NumericType))
+      case EqualNullSafe(bool @ BooleanTypeExpression(), Literal(value, _: NumericType))
         if falseValues.contains(value) => And(IsNotNull(bool), Not(bool))
-      case EqualNullSafe(Literal(value, _: NumericType), bool @ BooleanType())
+      case EqualNullSafe(Literal(value, _: NumericType), bool @ BooleanTypeExpression())
         if trueValues.contains(value) => And(IsNotNull(bool), bool)
-      case EqualNullSafe(Literal(value, _: NumericType), bool @ BooleanType())
+      case EqualNullSafe(Literal(value, _: NumericType), bool @ BooleanTypeExpression())
         if falseValues.contains(value) => And(IsNotNull(bool), Not(bool))
 
-      case EqualTo(left @ BooleanType(), right @ NumericType()) =>
+      case EqualTo(left @ BooleanTypeExpression(), right @ NumericTypeExpression()) =>
         EqualTo(Cast(left, right.dataType), right)
-      case EqualTo(left @ NumericType(), right @ BooleanType()) =>
+      case EqualTo(left @ NumericTypeExpression(), right @ BooleanTypeExpression()) =>
         EqualTo(left, Cast(right, left.dataType))
-      case EqualNullSafe(left @ BooleanType(), right @ NumericType()) =>
+      case EqualNullSafe(left @ BooleanTypeExpression(), right @ NumericTypeExpression()) =>
         EqualNullSafe(Cast(left, right.dataType), right)
-      case EqualNullSafe(left @ NumericType(), right @ BooleanType()) =>
+      case EqualNullSafe(left @ NumericTypeExpression(), right @ BooleanTypeExpression()) =>
         EqualNullSafe(left, Cast(right, left.dataType))
     }
   }
@@ -1174,22 +1174,24 @@ object TypeCoercion extends TypeCoercionBase {
     override val transform: PartialFunction[Expression, Expression] = {
       // Skip nodes who's children have not been resolved yet.
       case e if !e.childrenResolved => e
-      case d @ DateAdd(AnyTimestampType(), _) => d.copy(startDate = Cast(d.startDate, DateType))
-      case d @ DateAdd(StringType(), _) => d.copy(startDate = Cast(d.startDate, DateType))
-      case d @ DateSub(AnyTimestampType(), _) => d.copy(startDate = Cast(d.startDate, DateType))
-      case d @ DateSub(StringType(), _) => d.copy(startDate = Cast(d.startDate, DateType))
+      case d @ DateAdd(AnyTimestampTypeExpression(), _) =>
+        d.copy(startDate = Cast(d.startDate, DateType))
+      case d @ DateAdd(StringTypeExpression(), _) => d.copy(startDate = Cast(d.startDate, DateType))
+      case d @ DateSub(AnyTimestampTypeExpression(), _) =>
+        d.copy(startDate = Cast(d.startDate, DateType))
+      case d @ DateSub(StringTypeExpression(), _) => d.copy(startDate = Cast(d.startDate, DateType))
 
-      case s @ SubtractTimestamps(DateType(), AnyTimestampType(), _, _) =>
+      case s @ SubtractTimestamps(DateTypeExpression(), AnyTimestampTypeExpression(), _, _) =>
         s.copy(left = Cast(s.left, s.right.dataType))
-      case s @ SubtractTimestamps(AnyTimestampType(), DateType(), _, _) =>
+      case s @ SubtractTimestamps(AnyTimestampTypeExpression(), DateTypeExpression(), _, _) =>
         s.copy(right = Cast(s.right, s.left.dataType))
-      case s @ SubtractTimestamps(AnyTimestampType(), AnyTimestampType(), _, _)
+      case s @ SubtractTimestamps(AnyTimestampTypeExpression(), AnyTimestampTypeExpression(), _, _)
         if s.left.dataType != s.right.dataType =>
         val newLeft = castIfNotSameType(s.left, TimestampNTZType)
         val newRight = castIfNotSameType(s.right, TimestampNTZType)
         s.copy(left = newLeft, right = newRight)
 
-      case t @ TimeAdd(StringType(), _, _) => t.copy(start = Cast(t.start, TimestampType))
+      case t @ TimeAdd(StringTypeExpression(), _, _) => t.copy(start = Cast(t.start, TimestampType))
     }
   }
 

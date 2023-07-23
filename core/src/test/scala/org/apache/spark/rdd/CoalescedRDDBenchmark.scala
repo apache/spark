@@ -46,7 +46,7 @@ object CoalescedRDDBenchmark extends BenchmarkBase {
     for (numPartitions <- Seq(100, 500, 1000, 5000, 10000)) {
       for (numHosts <- Seq(1, 5, 10, 20, 40, 80)) {
 
-        import collection.mutable
+        import scala.collection.mutable
         val hosts = mutable.ArrayBuffer[String]()
         (1 to numHosts).foreach(hosts += "m" + _)
         hosts.length

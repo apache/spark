@@ -47,9 +47,9 @@ class TruncateTableParserSuite extends AnalysisTest {
   test("empty values in non-optional partition specs") {
     checkError(
       exception = parseException(parsePlan)("TRUNCATE TABLE dbx.tab1 PARTITION (a='1', b)"),
-      errorClass = "INVALID_SQL_SYNTAX",
+      errorClass = "INVALID_SQL_SYNTAX.EMPTY_PARTITION_VALUE",
       sqlState = "42000",
-      parameters = Map("inputString" -> "Partition key `b` must set value (can't be empty)."),
+      parameters = Map("partKey" -> "`b`"),
       context = ExpectedContext(
         fragment = "PARTITION (a='1', b)",
         start = 24,

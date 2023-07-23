@@ -21,7 +21,9 @@ import java.util.concurrent.TimeUnit
 
 import scala.io.Source
 
-import org.scalatest.BeforeAndAfterAll
+import org.apache.commons.lang3.{JavaVersion, SystemUtils}
+import org.scalactic.source.Position
+import org.scalatest.{BeforeAndAfterAll, Tag}
 import sys.process._
 
 import org.apache.spark.sql.SparkSession
@@ -48,7 +50,8 @@ import org.apache.spark.sql.connect.common.config.ConnectCommon
 object SparkConnectServerUtils {
 
   // Server port
-  private[connect] val port = ConnectCommon.CONNECT_GRPC_BINDING_PORT + util.Random.nextInt(1000)
+  private[spark] val port: Int =
+    ConnectCommon.CONNECT_GRPC_BINDING_PORT + util.Random.nextInt(1000)
 
   @volatile private var stopped = false
 
@@ -116,6 +119,10 @@ object SparkConnectServerUtils {
             "1. Test with maven: run `build/mvn install -DskipTests -Phive` before testing\n" +
             "2. Test with sbt: run test with `-Phive` profile")
         // scalastyle:on println
+        // SPARK-43647: Proactively cleaning the `classes` and `test-classes` dir of hive
+        // module to avoid unexpected loading of `DataSourceRegister` in hive module during
+        // testing without `-Phive` profile.
+        IntegrationTestUtils.cleanUpHiveClassesDirIfNeeded()
         "in-memory"
       }
       Seq("--conf", s"spark.sql.catalogImplementation=$catalogImplementation")
@@ -165,39 +172,44 @@ trait RemoteSparkSession extends ConnectFunSuite with BeforeAndAfterAll {
   protected lazy val serverPort: Int = port
 
   override def beforeAll(): Unit = {
-    super.beforeAll()
-    SparkConnectServerUtils.start()
-    spark =
-      SparkSession.builder().client(SparkConnectClient.builder().port(serverPort).build()).build()
+    // TODO(SPARK-44121) Remove this check condition
+    if (SystemUtils.isJavaVersionAtMost(JavaVersion.JAVA_17)) {
+      super.beforeAll()
+      SparkConnectServerUtils.start()
+      spark = SparkSession
+        .builder()
+        .client(SparkConnectClient.builder().port(serverPort).build())
+        .create()
 
-    // Retry and wait for the server to start
-    val stop = System.nanoTime() + TimeUnit.MINUTES.toNanos(1) // ~1 min
-    var sleepInternalMs = TimeUnit.SECONDS.toMillis(1) // 1s with * 2 backoff
-    var success = false
-    val error = new RuntimeException(s"Failed to start the test server on port $serverPort.")
+      // Retry and wait for the server to start
+      val stop = System.nanoTime() + TimeUnit.MINUTES.toNanos(1) // ~1 min
+      var sleepInternalMs = TimeUnit.SECONDS.toMillis(1) // 1s with * 2 backoff
+      var success = false
+      val error = new RuntimeException(s"Failed to start the test server on port $serverPort.")
 
-    while (!success && System.nanoTime() < stop) {
-      try {
-        // Run a simple query to verify the server is really up and ready
-        val result = spark
-          .sql("select val from (values ('Hello'), ('World')) as t(val)")
-          .collect()
-        assert(result.length == 2)
-        success = true
-        debug("Spark Connect Server is up.")
-      } catch {
-        // ignored the error
-        case e: Throwable =>
-          error.addSuppressed(e)
-          Thread.sleep(sleepInternalMs)
-          sleepInternalMs *= 2
+      while (!success && System.nanoTime() < stop) {
+        try {
+          // Run a simple query to verify the server is really up and ready
+          val result = spark
+            .sql("select val from (values ('Hello'), ('World')) as t(val)")
+            .collect()
+          assert(result.length == 2)
+          success = true
+          debug("Spark Connect Server is up.")
+        } catch {
+          // ignored the error
+          case e: Throwable =>
+            error.addSuppressed(e)
+            Thread.sleep(sleepInternalMs)
+            sleepInternalMs *= 2
+        }
       }
-    }
 
-    // Throw error if failed
-    if (!success) {
-      debug(error)
-      throw error
+      // Throw error if failed
+      if (!success) {
+        debug(error)
+        throw error
+      }
     }
   }
 
@@ -209,5 +221,18 @@ trait RemoteSparkSession extends ConnectFunSuite with BeforeAndAfterAll {
     }
     spark = null
     super.afterAll()
+  }
+
+  /**
+   * SPARK-44259: override test function to skip `RemoteSparkSession-based` tests as default, we
+   * should delete this function after SPARK-44121 is completed.
+   */
+  override protected def test(testName: String, testTags: Tag*)(testFun: => Any)(implicit
+      pos: Position): Unit = {
+    super.test(testName, testTags: _*) {
+      // TODO(SPARK-44121) Re-enable Arrow-based connect tests in Java 21
+      assume(SystemUtils.isJavaVersionAtMost(JavaVersion.JAVA_17))
+      testFun
+    }
   }
 }

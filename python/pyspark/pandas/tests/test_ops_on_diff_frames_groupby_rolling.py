@@ -14,6 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+import unittest
 from distutils.version import LooseVersion
 
 import pandas as pd
@@ -71,6 +72,10 @@ class OpsOnDiffFramesGroupByRollingTestsMixin:
             getattr(pdf.groupby(pkey)[["b"]].rolling(2), f)().sort_index(),
         )
 
+    @unittest.skipIf(
+        LooseVersion(pd.__version__) >= LooseVersion("2.0.0"),
+        "TODO(SPARK-43452): Enable RollingTests.test_groupby_rolling_count for pandas 2.0.0.",
+    )
     def test_groupby_rolling_count(self):
         self._test_groupby_rolling_func("count")
 

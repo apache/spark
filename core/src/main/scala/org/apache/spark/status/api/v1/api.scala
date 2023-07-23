@@ -31,6 +31,7 @@ import org.apache.spark.JobExecutionStatus
 import org.apache.spark.executor.ExecutorMetrics
 import org.apache.spark.metrics.ExecutorMetricType
 import org.apache.spark.resource.{ExecutorResourceRequest, ResourceInformation, TaskResourceRequest}
+import org.apache.spark.status.AppStatusUtils.getQuantilesValue
 
 case class ApplicationInfo private[spark](
     id: String,
@@ -198,6 +199,7 @@ class JobData private[spark](
     val completionTime: Option[Date],
     val stageIds: collection.Seq[Int],
     val jobGroup: Option[String],
+    val jobTags: collection.Seq[String],
     val status: JobExecutionStatus,
     val numTasks: Int,
     val numActiveTasks: Int,
@@ -454,13 +456,11 @@ class ExecutorMetricsDistributions private[spark](
 class ExecutorPeakMetricsDistributions private[spark](
   val quantiles: IndexedSeq[Double],
   val executorMetrics: IndexedSeq[ExecutorMetrics]) {
-  private lazy val count = executorMetrics.length
-  private lazy val indices = quantiles.map { q => math.min((q * count).toLong, count - 1) }
 
   /** Returns the distributions for the specified metric. */
   def getMetricDistribution(metricName: String): IndexedSeq[Double] = {
-    val sorted = executorMetrics.map(_.getMetricValue(metricName)).sorted
-    indices.map(i => sorted(i.toInt).toDouble)
+    val sorted = executorMetrics.map(_.getMetricValue(metricName).toDouble).sorted
+    getQuantilesValue(sorted, quantiles.toArray)
   }
 }
 

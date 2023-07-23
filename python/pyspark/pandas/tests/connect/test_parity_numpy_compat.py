@@ -35,11 +35,15 @@ class NumPyCompatParityTests(NumPyCompatTestsMixin, PandasOnSparkTestUtils, Reus
     def psdf(self):
         return ps.from_pandas(self.pdf)
 
-    @unittest.skip("Fails in Spark Connect, should enable.")
+    @unittest.skip(
+        "TODO(SPARK-43656): Fix pyspark.sql.column._to_java_column to accept Connect Column."
+    )
     def test_np_spark_compat_frame(self):
         super().test_np_spark_compat_frame()
 
-    @unittest.skip("Fails in Spark Connect, should enable.")
+    @unittest.skip(
+        "TODO(SPARK-43656): Fix pyspark.sql.column._to_java_column to accept Connect Column."
+    )
     def test_np_spark_compat_series(self):
         super().test_np_spark_compat_series()
 

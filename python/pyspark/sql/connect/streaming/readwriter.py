@@ -14,13 +14,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-from pyspark.rdd import PythonEvalType
+
 from pyspark.sql.connect.utils import check_dependencies
 
 check_dependencies(__name__)
 
-from typing import cast, overload, Callable, Dict, List, Optional, TYPE_CHECKING, Union, Any
+import sys
+from typing import cast, overload, Callable, Dict, List, Optional, TYPE_CHECKING, Union
 
+from pyspark.serializers import CloudPickleSerializer
 from pyspark.sql.connect.plan import DataSource, LogicalPlan, Read, WriteStreamOperation
 import pyspark.sql.connect.proto as pb2
 from pyspark.sql.connect.readwriter import OptionUtils, to_str
@@ -29,8 +31,8 @@ from pyspark.sql.streaming.readwriter import (
     DataStreamReader as PySparkDataStreamReader,
     DataStreamWriter as PySparkDataStreamWriter,
 )
-from pyspark.sql.types import Row, StructType, StringType
-from pyspark.errors import PySparkTypeError, PySparkValueError, PySparkNotImplementedError
+from pyspark.sql.types import Row, StructType
+from pyspark.errors import PySparkTypeError, PySparkValueError
 
 if TYPE_CHECKING:
     from pyspark.sql.connect.session import SparkSession
@@ -470,7 +472,6 @@ class DataStreamWriter:
 
     trigger.__doc__ = PySparkDataStreamWriter.trigger.__doc__
 
-    # TODO (SPARK-43054): Implement and uncomment the doc
     @overload
     def foreach(self, f: Callable[[Row], None]) -> "DataStreamWriter":
         ...
@@ -480,27 +481,25 @@ class DataStreamWriter:
         ...
 
     def foreach(self, f: Union[Callable[[Row], None], "SupportsProcess"]) -> "DataStreamWriter":
-        raise PySparkNotImplementedError(
-            error_class="NOT_IMPLEMENTED",
-            message_parameters={"feature": "foreach()"},
+        from pyspark.serializers import CPickleSerializer, AutoBatchedSerializer
+
+        func = PySparkDataStreamWriter._construct_foreach_function(f)
+        serializer = AutoBatchedSerializer(CPickleSerializer())
+        command = (func, None, serializer, serializer)
+        # Python ForeachWriter isn't really a PythonUDF. But we reuse it for simplicity.
+        self._write_proto.foreach_writer.python_function.command = CloudPickleSerializer().dumps(
+            command
         )
+        self._write_proto.foreach_writer.python_function.python_ver = "%d.%d" % sys.version_info[:2]
+        return self
 
-    # foreach.__doc__ = PySparkDataStreamWriter.foreach.__doc__
+    foreach.__doc__ = PySparkDataStreamWriter.foreach.__doc__
 
-    # TODO (SPARK-42944): Implement and uncomment the doc
     def foreachBatch(self, func: Callable[["DataFrame", int], None]) -> "DataStreamWriter":
-        from pyspark.sql.connect.udf import UserDefinedFunction
-
-        udf_obj = UserDefinedFunction(
-            func,
-            returnType=StringType(),
-            evalType=PythonEvalType.SQL_BATCHED_UDF,
+        self._write_proto.foreach_batch.python_function.command = CloudPickleSerializer().dumps(
+            func
         )
-        udf_proto = udf_obj._build_common_inline_user_defined_function().to_plan_udf(
-            self._session.client
-        )
-        self._write_proto.for_each_batch.CopyFrom(udf_proto)
-
+        self._write_proto.foreach_batch.python_function.python_ver = "%d.%d" % sys.version_info[:2]
         return self
 
     foreachBatch.__doc__ = PySparkDataStreamWriter.foreachBatch.__doc__

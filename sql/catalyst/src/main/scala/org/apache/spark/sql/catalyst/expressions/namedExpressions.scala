@@ -459,6 +459,7 @@ case class LateralColumnAliasReference(ne: NamedExpression, nameParts: Seq[Strin
   override def dataType: DataType = ne.dataType
   override def prettyName: String = "lateralAliasReference"
   override def sql: String = s"$prettyName($name)"
+  override def toString: String = sql
 
   final override val nodePatterns: Seq[TreePattern] = Seq(LATERAL_COLUMN_ALIAS_REFERENCE)
 }
@@ -508,7 +509,7 @@ object MetadataAttributeWithLogicalName {
 
 object MetadataStructFieldWithLogicalName {
   def unapply(field: StructField): Option[(StructField, String)] = MetadataAttributeWithLogicalName
-    .unapply(field.toAttribute)
+    .unapply(DataTypeUtils.toAttribute(field))
     .map { case (_, name) => field -> name }
 }
 

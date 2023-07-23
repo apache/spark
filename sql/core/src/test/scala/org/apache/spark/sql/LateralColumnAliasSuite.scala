@@ -21,6 +21,7 @@ import org.scalactic.source.Position
 import org.scalatest.Tag
 
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, ExpressionSet}
+import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.logical.Aggregate
 import org.apache.spark.sql.catalyst.trees.TreePattern.OUTER_REFERENCE
 import org.apache.spark.sql.internal.SQLConf
@@ -829,15 +830,29 @@ class LateralColumnAliasSuite extends LateralColumnAliasSuiteBase {
       s"SELECT avg(salary) AS a, a           + dept + 10 FROM $testTable GROUP BY dept + 10",
       "\"dept\""
     )
-    Seq(
-      s"SELECT dept AS a, dept, " +
-      s"(SELECT count(col) FROM VALUES (1), (2) AS data(col) WHERE col = dept) $groupBySeg",
-      s"SELECT dept AS a, a, " +
-      s"(SELECT count(col) FROM VALUES (1), (2) AS data(col) WHERE col = dept) $groupBySeg"
-    ).foreach { query =>
-      val e = intercept[AnalysisException] { sql(query) }
-      assert(e.getErrorClass == "_LEGACY_ERROR_TEMP_2423")
-    }
+    checkError(
+      exception = intercept[AnalysisException] { sql(
+        "SELECT dept AS a, dept, " +
+          s"(SELECT count(col) FROM VALUES (1), (2) AS data(col) WHERE col = dept) $groupBySeg") },
+      errorClass = "SCALAR_SUBQUERY_IS_IN_GROUP_BY_OR_AGGREGATE_FUNCTION",
+      parameters = Map("sqlExpr" -> "\"scalarsubquery(dept)\""),
+      context = ExpectedContext(
+        fragment = "(SELECT count(col) FROM VALUES (1), (2) AS data(col) WHERE col = dept)",
+        start = 24,
+        stop = 93)
+    )
+    checkError(
+      exception = intercept[AnalysisException] { sql(
+        "SELECT dept AS a, a, " +
+          s"(SELECT count(col) FROM VALUES (1), (2) AS data(col) WHERE col = dept) $groupBySeg"
+      ) },
+      errorClass = "SCALAR_SUBQUERY_IS_IN_GROUP_BY_OR_AGGREGATE_FUNCTION",
+      parameters = Map("sqlExpr" -> "\"scalarsubquery(dept)\""),
+      context = ExpectedContext(
+        fragment = "(SELECT count(col) FROM VALUES (1), (2) AS data(col) WHERE col = dept)",
+        start = 21,
+        stop = 90)
+    )
 
     // one exception: no longer throws NESTED_AGGREGATE_FUNCTION but UNSUPPORTED_FEATURE
     Seq("", windowSeg).foreach { windowExpr =>
@@ -925,7 +940,7 @@ class LateralColumnAliasSuite extends LateralColumnAliasSuiteBase {
       lca = "`jy`", windowExprRegex = "\"sum.*\"")
     // this is initially not supported
     checkError(
-      exception = intercept[AnalysisException] {
+      exception = intercept[ParseException] {
         sql("select name, dept, 1 as n, rank() over " +
           "(partition by dept order by salary rows between n preceding and current row) as rank " +
           s"from $testTable where dept in (1, 6)")

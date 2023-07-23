@@ -44,6 +44,7 @@ private[spark] object PythonEvalType {
   val NON_UDF = 0
 
   val SQL_BATCHED_UDF = 100
+  val SQL_ARROW_BATCHED_UDF = 101
 
   val SQL_SCALAR_PANDAS_UDF = 200
   val SQL_GROUPED_MAP_PANDAS_UDF = 201
@@ -55,9 +56,13 @@ private[spark] object PythonEvalType {
   val SQL_MAP_ARROW_ITER_UDF = 207
   val SQL_GROUPED_MAP_PANDAS_UDF_WITH_STATE = 208
 
+  val SQL_TABLE_UDF = 300
+  val SQL_ARROW_TABLE_UDF = 301
+
   def toString(pythonEvalType: Int): String = pythonEvalType match {
     case NON_UDF => "NON_UDF"
     case SQL_BATCHED_UDF => "SQL_BATCHED_UDF"
+    case SQL_ARROW_BATCHED_UDF => "SQL_ARROW_BATCHED_UDF"
     case SQL_SCALAR_PANDAS_UDF => "SQL_SCALAR_PANDAS_UDF"
     case SQL_GROUPED_MAP_PANDAS_UDF => "SQL_GROUPED_MAP_PANDAS_UDF"
     case SQL_GROUPED_AGG_PANDAS_UDF => "SQL_GROUPED_AGG_PANDAS_UDF"
@@ -67,6 +72,8 @@ private[spark] object PythonEvalType {
     case SQL_COGROUPED_MAP_PANDAS_UDF => "SQL_COGROUPED_MAP_PANDAS_UDF"
     case SQL_MAP_ARROW_ITER_UDF => "SQL_MAP_ARROW_ITER_UDF"
     case SQL_GROUPED_MAP_PANDAS_UDF_WITH_STATE => "SQL_GROUPED_MAP_PANDAS_UDF_WITH_STATE"
+    case SQL_TABLE_UDF => "SQL_TABLE_UDF"
+    case SQL_ARROW_TABLE_UDF => "SQL_ARROW_TABLE_UDF"
   }
 }
 
@@ -88,7 +95,8 @@ private object BasePythonRunner {
 private[spark] abstract class BasePythonRunner[IN, OUT](
     protected val funcs: Seq[ChainedPythonFunctions],
     protected val evalType: Int,
-    protected val argOffsets: Array[Array[Int]])
+    protected val argOffsets: Array[Array[Int]],
+    protected val jobArtifactUUID: Option[String])
   extends Logging {
 
   require(funcs.length == argOffsets.length, "argOffsets should have the same length as funcs")
@@ -104,6 +112,30 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
   protected val envVars: java.util.Map[String, String] = funcs.head.funcs.head.envVars
   protected val pythonExec: String = funcs.head.funcs.head.pythonExec
   protected val pythonVer: String = funcs.head.funcs.head.pythonVer
+
+  // WARN: Both configurations, 'spark.python.daemon.module' and 'spark.python.worker.module' are
+  // for very advanced users and they are experimental. This should be considered
+  // as expert-only option, and shouldn't be used before knowing what it means exactly.
+
+  // This configuration indicates the module to run the daemon to execute its Python workers.
+  private val daemonModule =
+    conf.get(PYTHON_DAEMON_MODULE).map { value =>
+      logInfo(
+        s"Python daemon module in PySpark is set to [$value] in '${PYTHON_DAEMON_MODULE.key}', " +
+        "using this to start the daemon up. Note that this configuration only has an effect when " +
+        s"'${PYTHON_USE_DAEMON.key}' is enabled and the platform is not Windows.")
+      value
+    }.getOrElse("pyspark.daemon")
+
+  // This configuration indicates the module to run each Python worker.
+  private val workerModule =
+    conf.get(PYTHON_WORKER_MODULE).map { value =>
+      logInfo(
+        s"Python worker module in PySpark is set to [$value] in '${PYTHON_WORKER_MODULE.key}', " +
+        "using this to start the worker up. Note that this configuration only has an effect when " +
+        s"'${PYTHON_USE_DAEMON.key}' is disabled or the platform is Windows.")
+      value
+    }.getOrElse("pyspark.worker")
 
   // TODO: support accumulator in multiple UDF
   protected val accumulator: PythonAccumulatorV2 = funcs.head.funcs.head.accumulator
@@ -160,8 +192,10 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
       envVars.put("PYTHON_FAULTHANDLER_DIR", BasePythonRunner.faultHandlerLogDir.toString)
     }
 
+    envVars.put("SPARK_JOB_ARTIFACT_UUID", jobArtifactUUID.getOrElse("default"))
+
     val (worker: Socket, pid: Option[Int]) = env.createPythonWorker(
-      pythonExec, envVars.asScala.toMap)
+      pythonExec, workerModule, daemonModule, envVars.asScala.toMap)
     // Whether is the worker released into idle pool or closed. When any codes try to release or
     // close a worker, they should use `releasedOrClosed.compareAndSet` to flip the state to make
     // sure there is only one winner that is going to release or close the worker.
@@ -373,7 +407,10 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
         }
 
         // sparkFilesDir
-        PythonRDD.writeUTF(SparkFiles.getRootDirectory(), dataOut)
+        val root = jobArtifactUUID.map { uuid =>
+          new File(SparkFiles.getRootDirectory(), uuid).getAbsolutePath
+        }.getOrElse(SparkFiles.getRootDirectory())
+        PythonRDD.writeUTF(root, dataOut)
         // Python includes (*.zip and *.egg files)
         dataOut.writeInt(pythonIncludes.size)
         for (include <- pythonIncludes) {
@@ -572,7 +609,8 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
       // Check whether the worker is ready to be re-used.
       if (stream.readInt() == SpecialLengths.END_OF_STREAM) {
         if (reuseWorker && releasedOrClosed.compareAndSet(false, true)) {
-          env.releasePythonWorker(pythonExec, envVars.asScala.toMap, worker)
+          env.releasePythonWorker(
+            pythonExec, workerModule, daemonModule, envVars.asScala.toMap, worker)
         }
       }
       eos = true
@@ -627,7 +665,8 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
             val taskName = s"${context.partitionId}.${context.attemptNumber} " +
               s"in stage ${context.stageId} (TID ${context.taskAttemptId})"
             logWarning(s"Incomplete task $taskName interrupted: Attempting to kill Python Worker")
-            env.destroyPythonWorker(pythonExec, envVars.asScala.toMap, worker)
+            env.destroyPythonWorker(
+              pythonExec, workerModule, daemonModule, envVars.asScala.toMap, worker)
           } catch {
             case e: Exception =>
               logError("Exception when trying to kill worker", e)
@@ -686,7 +725,8 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
             logWarning(
               s"Detected deadlock while completing task $taskName: " +
                 "Attempting to kill Python Worker")
-            env.destroyPythonWorker(pythonExec, envVars.asScala.toMap, worker)
+            env.destroyPythonWorker(
+              pythonExec, workerModule, daemonModule, envVars.asScala.toMap, worker)
           } catch {
             case e: Exception =>
               logError("Exception when trying to kill worker", e)
@@ -702,17 +742,23 @@ private[spark] object PythonRunner {
   // already running worker monitor threads for worker and task attempts ID pairs
   val runningMonitorThreads = ConcurrentHashMap.newKeySet[(Socket, Long)]()
 
-  def apply(func: PythonFunction): PythonRunner = {
-    new PythonRunner(Seq(ChainedPythonFunctions(Seq(func))))
+  private var printPythonInfo: AtomicBoolean = new AtomicBoolean(true)
+
+  def apply(func: PythonFunction, jobArtifactUUID: Option[String]): PythonRunner = {
+    if (printPythonInfo.compareAndSet(true, false)) {
+      PythonUtils.logPythonInfo(func.pythonExec)
+    }
+    new PythonRunner(Seq(ChainedPythonFunctions(Seq(func))), jobArtifactUUID)
   }
 }
 
 /**
  * A helper class to run Python mapPartition in Spark.
  */
-private[spark] class PythonRunner(funcs: Seq[ChainedPythonFunctions])
+private[spark] class PythonRunner(
+    funcs: Seq[ChainedPythonFunctions], jobArtifactUUID: Option[String])
   extends BasePythonRunner[Array[Byte], Array[Byte]](
-    funcs, PythonEvalType.NON_UDF, Array(Array(0))) {
+    funcs, PythonEvalType.NON_UDF, Array(Array(0)), jobArtifactUUID) {
 
   protected override def newWriterThread(
       env: SparkEnv,

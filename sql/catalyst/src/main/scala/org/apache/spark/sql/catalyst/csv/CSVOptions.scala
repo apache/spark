@@ -254,6 +254,7 @@ class CSVOptions(
    * A string between two consecutive JSON records.
    */
   val lineSeparator: Option[String] = parameters.get(LINE_SEP).map { sep =>
+    require(sep != null, "'lineSep' cannot be a null value.")
     require(sep.nonEmpty, "'lineSep' cannot be an empty string.")
     // Intentionally allow it up to 2 for Window's CRLF although multiple
     // characters have an issue with quotes. This is intentionally undocumented.

@@ -352,6 +352,13 @@ Distributor
 
     TorchDistributor
 
+.. currentmodule:: pyspark.ml.deepspeed.deepspeed_distributor
+.. autosummary::
+    :template: autosummary/class_with_docs.rst
+    :toctree: api/
+
+    DeepspeedTorchDistributor
+
 
 Utilities
 ---------

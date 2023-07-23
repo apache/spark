@@ -15,6 +15,7 @@
 # limitations under the License.
 #
 import datetime
+import warnings
 from functools import partial
 from typing import Any, Optional, Union, cast, no_type_check
 
@@ -163,6 +164,10 @@ class DatetimeIndex(Index):
         """
         The days of the datetime.
         """
+        warnings.warn(
+            "`day` will return int32 index instead of int 64 index in 4.0.0.",
+            FutureWarning,
+        )
         return Index(self.to_series().dt.day)
 
     @property
@@ -170,6 +175,10 @@ class DatetimeIndex(Index):
         """
         The hours of the datetime.
         """
+        warnings.warn(
+            "`hour` will return int32 index instead of int 64 index in 4.0.0.",
+            FutureWarning,
+        )
         return Index(self.to_series().dt.hour)
 
     @property
@@ -177,6 +186,10 @@ class DatetimeIndex(Index):
         """
         The minutes of the datetime.
         """
+        warnings.warn(
+            "`minute` will return int32 index instead of int 64 index in 4.0.0.",
+            FutureWarning,
+        )
         return Index(self.to_series().dt.minute)
 
     @property
@@ -184,6 +197,10 @@ class DatetimeIndex(Index):
         """
         The seconds of the datetime.
         """
+        warnings.warn(
+            "`second` will return int32 index instead of int 64 index in 4.0.0.",
+            FutureWarning,
+        )
         return Index(self.to_series().dt.second)
 
     @property
@@ -191,17 +208,31 @@ class DatetimeIndex(Index):
         """
         The microseconds of the datetime.
         """
+        warnings.warn(
+            "`microsecond` will return int32 index instead of int 64 index in 4.0.0.",
+            FutureWarning,
+        )
         return Index(self.to_series().dt.microsecond)
 
     @property
     def week(self) -> Index:
         """
         The week ordinal of the year.
+
+        .. deprecated:: 3.5.0
         """
+        warnings.warn(
+            "`week` is deprecated in 3.5.0 and will be removed in 4.0.0.",
+            FutureWarning,
+        )
         return Index(self.to_series().dt.week)
 
     @property
     def weekofyear(self) -> Index:
+        warnings.warn(
+            "`weekofyear` is deprecated in 3.5.0 and will be removed in 4.0.0.",
+            FutureWarning,
+        )
         return Index(self.to_series().dt.weekofyear)
 
     weekofyear.__doc__ = week.__doc__
@@ -228,20 +259,32 @@ class DatetimeIndex(Index):
 
         Examples
         --------
-        >>> idx = ps.date_range('2016-12-31', '2017-01-08', freq='D')
-        >>> idx.dayofweek
+        >>> idx = ps.date_range('2016-12-31', '2017-01-08', freq='D')  # doctest: +SKIP
+        >>> idx.dayofweek  # doctest: +SKIP
         Int64Index([5, 6, 0, 1, 2, 3, 4, 5, 6], dtype='int64')
         """
+        warnings.warn(
+            "`dayofweek` will return int32 index instead of int 64 index in 4.0.0.",
+            FutureWarning,
+        )
         return Index(self.to_series().dt.dayofweek)
 
     @property
     def day_of_week(self) -> Index:
+        warnings.warn(
+            "`day_of_week` will return int32 index instead of int 64 index in 4.0.0.",
+            FutureWarning,
+        )
         return self.dayofweek
 
     day_of_week.__doc__ = dayofweek.__doc__
 
     @property
     def weekday(self) -> Index:
+        warnings.warn(
+            "`weekday` will return int32 index instead of int 64 index in 4.0.0.",
+            FutureWarning,
+        )
         return Index(self.to_series().dt.weekday)
 
     weekday.__doc__ = dayofweek.__doc__
@@ -251,10 +294,18 @@ class DatetimeIndex(Index):
         """
         The ordinal day of the year.
         """
+        warnings.warn(
+            "`dayofyear` will return int32 index instead of int 64 index in 4.0.0.",
+            FutureWarning,
+        )
         return Index(self.to_series().dt.dayofyear)
 
     @property
     def day_of_year(self) -> Index:
+        warnings.warn(
+            "`day_of_year` will return int32 index instead of int 64 index in 4.0.0.",
+            FutureWarning,
+        )
         return self.dayofyear
 
     day_of_year.__doc__ = dayofyear.__doc__
@@ -264,6 +315,10 @@ class DatetimeIndex(Index):
         """
         The quarter of the date.
         """
+        warnings.warn(
+            "`quarter` will return int32 index instead of int 64 index in 4.0.0.",
+            FutureWarning,
+        )
         return Index(self.to_series().dt.quarter)
 
     @property
@@ -283,7 +338,7 @@ class DatetimeIndex(Index):
 
         Examples
         --------
-        >>> idx = ps.date_range("2018-02-27", periods=3)
+        >>> idx = ps.date_range("2018-02-27", periods=3)  # doctest: +SKIP
         >>> idx.is_month_start  # doctest: +SKIP
         Index([False, False, True], dtype='bool')
         """
@@ -306,7 +361,7 @@ class DatetimeIndex(Index):
 
         Examples
         --------
-        >>> idx = ps.date_range("2018-02-27", periods=3)
+        >>> idx = ps.date_range("2018-02-27", periods=3)  # doctest: +SKIP
         >>> idx.is_month_end  # doctest: +SKIP
         Index([False, True, False], dtype='bool')
         """
@@ -329,7 +384,7 @@ class DatetimeIndex(Index):
 
         Examples
         --------
-        >>> idx = ps.date_range('2017-03-30', periods=4)
+        >>> idx = ps.date_range('2017-03-30', periods=4)  # doctest: +SKIP
         >>> idx.is_quarter_start  # doctest: +SKIP
         Index([False, False, True, False], dtype='bool')
         """
@@ -352,7 +407,7 @@ class DatetimeIndex(Index):
 
         Examples
         --------
-        >>> idx = ps.date_range('2017-03-30', periods=4)
+        >>> idx = ps.date_range('2017-03-30', periods=4)  # doctest: +SKIP
         >>> idx.is_quarter_end  # doctest: +SKIP
         Index([False, True, False, False], dtype='bool')
         """
@@ -374,7 +429,7 @@ class DatetimeIndex(Index):
 
         Examples
         --------
-        >>> idx = ps.date_range("2017-12-30", periods=3)
+        >>> idx = ps.date_range("2017-12-30", periods=3)  # doctest: +SKIP
         >>> idx.is_year_start  # doctest: +SKIP
         Index([False, False, True], dtype='bool')
         """
@@ -396,7 +451,7 @@ class DatetimeIndex(Index):
 
         Examples
         --------
-        >>> idx = ps.date_range("2017-12-30", periods=3)
+        >>> idx = ps.date_range("2017-12-30", periods=3)  # doctest: +SKIP
         >>> idx.is_year_end  # doctest: +SKIP
         Index([False, True, False], dtype='bool')
         """
@@ -419,7 +474,7 @@ class DatetimeIndex(Index):
 
         Examples
         --------
-        >>> idx = ps.date_range("2012-01-01", "2015-01-01", freq="Y")
+        >>> idx = ps.date_range("2012-01-01", "2015-01-01", freq="Y")  # doctest: +SKIP
         >>> idx.is_leap_year  # doctest: +SKIP
         Index([True, False, False], dtype='bool')
         """
@@ -430,10 +485,18 @@ class DatetimeIndex(Index):
         """
         The number of days in the month.
         """
+        warnings.warn(
+            "`daysinmonth` will return int32 index instead of int 64 index in 4.0.0.",
+            FutureWarning,
+        )
         return Index(self.to_series().dt.daysinmonth)
 
     @property
     def days_in_month(self) -> Index:
+        warnings.warn(
+            "`days_in_month` will return int32 index instead of int 64 index in 4.0.0.",
+            FutureWarning,
+        )
         return Index(self.to_series().dt.days_in_month)
 
     days_in_month.__doc__ = daysinmonth.__doc__
@@ -459,8 +522,8 @@ class DatetimeIndex(Index):
 
         Examples
         --------
-        >>> rng = ps.date_range('1/1/2018 11:59:00', periods=3, freq='min')
-        >>> rng.ceil('H')  # doctest: +NORMALIZE_WHITESPACE
+        >>> rng = ps.date_range('1/1/2018 11:59:00', periods=3, freq='min')  # doctest: +SKIP
+        >>> rng.ceil('H')  # doctest: +SKIP
         DatetimeIndex(['2018-01-01 12:00:00', '2018-01-01 12:00:00',
                        '2018-01-01 13:00:00'],
                       dtype='datetime64[ns]', freq=None)
@@ -489,8 +552,8 @@ class DatetimeIndex(Index):
 
         Examples
         --------
-        >>> rng = ps.date_range('1/1/2018 11:59:00', periods=3, freq='min')
-        >>> rng.floor("H")  # doctest: +NORMALIZE_WHITESPACE
+        >>> rng = ps.date_range('1/1/2018 11:59:00', periods=3, freq='min')  # doctest: +SKIP
+        >>> rng.floor("H")  # doctest: +SKIP
         DatetimeIndex(['2018-01-01 11:00:00', '2018-01-01 12:00:00',
                        '2018-01-01 12:00:00'],
                       dtype='datetime64[ns]', freq=None)
@@ -519,8 +582,8 @@ class DatetimeIndex(Index):
 
         Examples
         --------
-        >>> rng = ps.date_range('1/1/2018 11:59:00', periods=3, freq='min')
-        >>> rng.round("H")  # doctest: +NORMALIZE_WHITESPACE
+        >>> rng = ps.date_range('1/1/2018 11:59:00', periods=3, freq='min')  # doctest: +SKIP
+        >>> rng.round("H")  # doctest: +SKIP
         DatetimeIndex(['2018-01-01 12:00:00', '2018-01-01 12:00:00',
                        '2018-01-01 12:00:00'],
                       dtype='datetime64[ns]', freq=None)
@@ -546,8 +609,8 @@ class DatetimeIndex(Index):
 
         Examples
         --------
-        >>> idx = ps.date_range(start='2018-01', freq='M', periods=3)
-        >>> idx.month_name()
+        >>> idx = ps.date_range(start='2018-01', freq='M', periods=3)  # doctest: +SKIP
+        >>> idx.month_name()  # doctest: +SKIP
         Index(['January', 'February', 'March'], dtype='object')
         """
         return Index(self.to_series().dt.month_name(locale))
@@ -569,8 +632,8 @@ class DatetimeIndex(Index):
 
         Examples
         --------
-        >>> idx = ps.date_range(start='2018-01-01', freq='D', periods=3)
-        >>> idx.day_name()
+        >>> idx = ps.date_range(start='2018-01-01', freq='D', periods=3)  # doctest: +SKIP
+        >>> idx.day_name()  # doctest: +SKIP
         Index(['Monday', 'Tuesday', 'Wednesday'], dtype='object')
         """
         return Index(self.to_series().dt.day_name(locale))
@@ -599,8 +662,8 @@ class DatetimeIndex(Index):
 
         Examples
         --------
-        >>> idx = ps.date_range(start='2014-08-01 10:00', freq='H', periods=3)
-        >>> idx.normalize()
+        >>> idx = ps.date_range(start='2014-08-01 10:00', freq='H', periods=3)  # doctest: +SKIP
+        >>> idx.normalize()  # doctest: +SKIP
         DatetimeIndex(['2014-08-01', '2014-08-01', '2014-08-01'], dtype='datetime64[ns]', freq=None)
         """
         return DatetimeIndex(self.to_series().dt.normalize())
@@ -633,7 +696,8 @@ class DatetimeIndex(Index):
         Examples
         --------
         >>> idx = ps.date_range(pd.Timestamp("2018-03-10 09:00"), periods=3, freq='s')
-        >>> idx.strftime('%B %d, %Y, %r')  # doctest: +NORMALIZE_WHITESPACE
+        ... # doctest: +SKIP
+        >>> idx.strftime('%B %d, %Y, %r')  # doctest: +SKIP
         Index(['March 10, 2018, 09:00:00 AM', 'March 10, 2018, 09:00:01 AM',
                'March 10, 2018, 09:00:02 AM'],
               dtype='object')
@@ -666,19 +730,19 @@ class DatetimeIndex(Index):
 
         Examples
         --------
-        >>> psidx = ps.date_range("2000-01-01", periods=3, freq="T")
-        >>> psidx  # doctest: +NORMALIZE_WHITESPACE
+        >>> psidx = ps.date_range("2000-01-01", periods=3, freq="T")  # doctest: +SKIP
+        >>> psidx  # doctest: +SKIP
         DatetimeIndex(['2000-01-01 00:00:00', '2000-01-01 00:01:00',
                        '2000-01-01 00:02:00'],
                       dtype='datetime64[ns]', freq=None)
 
-        >>> psidx.indexer_between_time("00:01", "00:02").sort_values()
+        >>> psidx.indexer_between_time("00:01", "00:02").sort_values()  # doctest: +SKIP
         Int64Index([1, 2], dtype='int64')
 
-        >>> psidx.indexer_between_time("00:01", "00:02", include_end=False)
+        >>> psidx.indexer_between_time("00:01", "00:02", include_end=False)  # doctest: +SKIP
         Int64Index([1], dtype='int64')
 
-        >>> psidx.indexer_between_time("00:01", "00:02", include_start=False)
+        >>> psidx.indexer_between_time("00:01", "00:02", include_start=False)  # doctest: +SKIP
         Int64Index([2], dtype='int64')
         """
 
@@ -712,16 +776,16 @@ class DatetimeIndex(Index):
 
         Examples
         --------
-        >>> psidx = ps.date_range("2000-01-01", periods=3, freq="T")
-        >>> psidx  # doctest: +NORMALIZE_WHITESPACE
+        >>> psidx = ps.date_range("2000-01-01", periods=3, freq="T")  # doctest: +SKIP
+        >>> psidx  # doctest: +SKIP
         DatetimeIndex(['2000-01-01 00:00:00', '2000-01-01 00:01:00',
                        '2000-01-01 00:02:00'],
                       dtype='datetime64[ns]', freq=None)
 
-        >>> psidx.indexer_at_time("00:00")
+        >>> psidx.indexer_at_time("00:00")  # doctest: +SKIP
         Int64Index([0], dtype='int64')
 
-        >>> psidx.indexer_at_time("00:01")
+        >>> psidx.indexer_at_time("00:01")  # doctest: +SKIP
         Int64Index([1], dtype='int64')
         """
         if asof:

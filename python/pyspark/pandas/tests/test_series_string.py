@@ -18,6 +18,8 @@
 import pandas as pd
 import numpy as np
 import re
+import unittest
+from distutils.version import LooseVersion
 
 from pyspark import pandas as ps
 from pyspark.testing.pandasutils import PandasOnSparkTestCase
@@ -244,6 +246,10 @@ class SeriesStringTestsMixin:
         with self.assertRaises(TypeError):
             self.check_func(lambda x: x.str.repeat(repeats=[0, 1, 2, 3, 4, 5, 6, 7, 8, 9]))
 
+    @unittest.skipIf(
+        LooseVersion(pd.__version__) >= LooseVersion("2.0.0"),
+        "TODO(SPARK-43476): Enable SeriesStringTests.test_string_replace for pandas 2.0.0.",
+    )
     def test_string_replace(self):
         self.check_func(lambda x: x.str.replace("a.", "xx", regex=True))
         self.check_func(lambda x: x.str.replace("a.", "xx", regex=False))
@@ -291,6 +297,10 @@ class SeriesStringTestsMixin:
         self.check_func(lambda x: x.str.slice_replace(stop=2, repl="X"))
         self.check_func(lambda x: x.str.slice_replace(start=1, stop=3, repl="X"))
 
+    @unittest.skipIf(
+        LooseVersion(pd.__version__) >= LooseVersion("2.0.0"),
+        "TODO(SPARK-43478): Enable SeriesStringTests.test_string_split for pandas 2.0.0.",
+    )
     def test_string_split(self):
         self.check_func_on_series(lambda x: repr(x.str.split()), self.pser[:-1])
         self.check_func_on_series(lambda x: repr(x.str.split(r"p*")), self.pser[:-1])
@@ -301,6 +311,10 @@ class SeriesStringTestsMixin:
         with self.assertRaises(NotImplementedError):
             self.check_func(lambda x: x.str.split(expand=True))
 
+    @unittest.skipIf(
+        LooseVersion(pd.__version__) >= LooseVersion("2.0.0"),
+        "TODO(SPARK-43477): Enable SeriesStringTests.test_string_rsplit for pandas 2.0.0.",
+    )
     def test_string_rsplit(self):
         self.check_func_on_series(lambda x: repr(x.str.rsplit()), self.pser[:-1])
         self.check_func_on_series(lambda x: repr(x.str.rsplit(r"p*")), self.pser[:-1])

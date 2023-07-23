@@ -16,94 +16,132 @@
  */
 package org.apache.spark.sql.connect.client
 
-import java.util.Collections
+import java.util.Objects
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable
 
 import org.apache.arrow.memory.BufferAllocator
-import org.apache.arrow.vector.FieldVector
-import org.apache.arrow.vector.ipc.ArrowStreamReader
+import org.apache.arrow.vector.ipc.message.{ArrowMessage, ArrowRecordBatch}
+import org.apache.arrow.vector.types.pojo
 
 import org.apache.spark.connect.proto
-import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.encoders.{AgnosticEncoder, ExpressionEncoder, RowEncoder}
-import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.UnboundRowEncoder
-import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder.Deserializer
-import org.apache.spark.sql.connect.client.util.{AutoCloseables, Cleanable}
+import org.apache.spark.sql.catalyst.encoders.{AgnosticEncoder, RowEncoder}
+import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{ProductEncoder, UnboundRowEncoder}
+import org.apache.spark.sql.connect.client.arrow.{AbstractMessageIterator, ArrowDeserializingIterator, CloseableIterator, ConcatenatingArrowStreamReader, MessageIterator}
+import org.apache.spark.sql.connect.client.util.Cleanable
 import org.apache.spark.sql.connect.common.DataTypeProtoConverter
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.types.{DataType, StructType}
 import org.apache.spark.sql.util.ArrowUtils
-import org.apache.spark.sql.vectorized.{ArrowColumnVector, ColumnarBatch, ColumnVector}
 
 private[sql] class SparkResult[T](
     responses: java.util.Iterator[proto.ExecutePlanResponse],
     allocator: BufferAllocator,
     encoder: AgnosticEncoder[T])
     extends AutoCloseable
-    with Cleanable {
+    with Cleanable { self =>
 
+  private[this] var opId: String = _
   private[this] var numRecords: Int = 0
   private[this] var structType: StructType = _
-  private[this] var boundEncoder: ExpressionEncoder[T] = _
-  private[this] val batches = mutable.Buffer.empty[ColumnarBatch]
+  private[this] var arrowSchema: pojo.Schema = _
+  private[this] var nextResultIndex: Int = 0
+  private val resultMap = mutable.Map.empty[Int, (Long, Seq[ArrowMessage])]
 
-  private def createEncoder(schema: StructType): ExpressionEncoder[T] = {
-    val agnosticEncoder = if (encoder == UnboundRowEncoder) {
-      // Create a row encoder based on the schema.
-      RowEncoder.encoderFor(schema).asInstanceOf[AgnosticEncoder[T]]
-    } else {
-      encoder
+  /**
+   * Update RowEncoder and recursively update the fields of the ProductEncoder if found.
+   */
+  private def createEncoder[E](
+      enc: AgnosticEncoder[E],
+      dataType: DataType): AgnosticEncoder[E] = {
+    enc match {
+      case UnboundRowEncoder =>
+        // Replace the row encoder with the encoder inferred from the schema.
+        RowEncoder
+          .encoderFor(dataType.asInstanceOf[StructType])
+          .asInstanceOf[AgnosticEncoder[E]]
+      case ProductEncoder(clsTag, fields) if ProductEncoder.isTuple(clsTag) =>
+        // Recursively continue updating the tuple product encoder
+        val schema = dataType.asInstanceOf[StructType]
+        assert(fields.length <= schema.fields.length)
+        val updatedFields = fields.zipWithIndex.map { case (f, id) =>
+          f.copy(enc = createEncoder(f.enc, schema.fields(id).dataType))
+        }
+        ProductEncoder(clsTag, updatedFields)
+      case _ =>
+        enc
     }
-    ExpressionEncoder(agnosticEncoder)
   }
 
-  private def processResponses(stopOnFirstNonEmptyResponse: Boolean): Boolean = {
-    while (responses.hasNext) {
+  private def processResponses(
+      stopOnOperationId: Boolean = false,
+      stopOnSchema: Boolean = false,
+      stopOnArrowSchema: Boolean = false,
+      stopOnFirstNonEmptyResponse: Boolean = false): Boolean = {
+    var nonEmpty = false
+    var stop = false
+    while (!stop && responses.hasNext) {
       val response = responses.next()
+
+      // Save and validate operationId
+      if (opId == null) {
+        opId = response.getOperationId
+      }
+      if (opId != response.getOperationId) {
+        // backwards compatibility:
+        // response from an old server without operationId field would have getOperationId == "".
+        throw new IllegalStateException(
+          "Received response with wrong operationId. " +
+            s"Expected '$opId' but received '${response.getOperationId}'.")
+      }
+      stop |= stopOnOperationId
+
       if (response.hasSchema) {
         // The original schema should arrive before ArrowBatches.
         structType =
           DataTypeProtoConverter.toCatalystType(response.getSchema).asInstanceOf[StructType]
-      } else if (response.hasArrowBatch) {
+        stop |= stopOnSchema
+      }
+      if (response.hasArrowBatch) {
         val ipcStreamBytes = response.getArrowBatch.getData
-        val reader = new ArrowStreamReader(ipcStreamBytes.newInput(), allocator)
-        try {
-          val root = reader.getVectorSchemaRoot
-          if (batches.isEmpty) {
-            if (structType == null) {
-              // If the schema is not available yet, fallback to the schema from Arrow.
-              structType = ArrowUtils.fromArrowSchema(root.getSchema)
-            }
-            // TODO: create encoders that directly operate on arrow vectors.
-            boundEncoder = createEncoder(structType).resolveAndBind(structType.toAttributes)
+        val reader = new MessageIterator(ipcStreamBytes.newInput(), allocator)
+        if (arrowSchema == null) {
+          arrowSchema = reader.schema
+          stop |= stopOnArrowSchema
+        } else if (arrowSchema != reader.schema) {
+          throw new IllegalStateException(
+            s"""Schema Mismatch between expected and received schema:
+               |=== Expected Schema ===
+               |$arrowSchema
+               |=== Received Schema ===
+               |${reader.schema}
+               |""".stripMargin)
+        }
+        if (structType == null) {
+          // If the schema is not available yet, fallback to the arrow schema.
+          structType = ArrowUtils.fromArrowSchema(reader.schema)
+        }
+        var numRecordsInBatch = 0
+        val messages = Seq.newBuilder[ArrowMessage]
+        while (reader.hasNext) {
+          val message = reader.next()
+          message match {
+            case batch: ArrowRecordBatch =>
+              numRecordsInBatch += batch.getLength
+            case _ =>
           }
-          while (reader.loadNextBatch()) {
-            val rowCount = root.getRowCount
-            assert(root.getRowCount == response.getArrowBatch.getRowCount) // HUH!
-            if (rowCount > 0) {
-              val vectors = root.getFieldVectors.asScala
-                .map(v => new ArrowColumnVector(transferToNewVector(v)))
-                .toArray[ColumnVector]
-              batches += new ColumnarBatch(vectors, rowCount)
-              numRecords += rowCount
-              if (stopOnFirstNonEmptyResponse) {
-                return true
-              }
-            }
-          }
-        } finally {
-          reader.close()
+          messages += message
+        }
+        // Skip the entire result if it is empty.
+        if (numRecordsInBatch > 0) {
+          numRecords += numRecordsInBatch
+          resultMap.put(nextResultIndex, (reader.bytesRead, messages.result()))
+          nextResultIndex += 1
+          nonEmpty |= true
+          stop |= stopOnFirstNonEmptyResponse
         }
       }
     }
-    false
-  }
-
-  private def transferToNewVector(in: FieldVector): FieldVector = {
-    val pair = in.getTransferPair(allocator)
-    pair.transfer()
-    pair.getTo.asInstanceOf[FieldVector]
+    nonEmpty
   }
 
   /**
@@ -111,7 +149,7 @@ private[sql] class SparkResult[T](
    */
   def length: Int = {
     // We need to process all responses to make sure numRecords is correct.
-    processResponses(stopOnFirstNonEmptyResponse = false)
+    processResponses()
     numRecords
   }
 
@@ -120,8 +158,21 @@ private[sql] class SparkResult[T](
    *   the schema of the result.
    */
   def schema: StructType = {
-    processResponses(stopOnFirstNonEmptyResponse = true)
+    if (structType == null) {
+      processResponses(stopOnSchema = true)
+    }
     structType
+  }
+
+  /**
+   * @return
+   *   the operationId of the result.
+   */
+  def operationId: String = {
+    if (opId == null) {
+      processResponses(stopOnOperationId = true)
+    }
+    opId
   }
 
   /**
@@ -142,48 +193,104 @@ private[sql] class SparkResult[T](
   /**
    * Returns an iterator over the contents of the result.
    */
-  def iterator: java.util.Iterator[T] with AutoCloseable = {
+  def iterator: java.util.Iterator[T] with AutoCloseable =
+    buildIterator(destructive = false)
+
+  /**
+   * Returns an destructive iterator over the contents of the result.
+   */
+  def destructiveIterator: java.util.Iterator[T] with AutoCloseable =
+    buildIterator(destructive = true)
+
+  private def buildIterator(destructive: Boolean): java.util.Iterator[T] with AutoCloseable = {
     new java.util.Iterator[T] with AutoCloseable {
-      private[this] var batchIndex: Int = -1
-      private[this] var iterator: java.util.Iterator[InternalRow] = Collections.emptyIterator()
-      private[this] var deserializer: Deserializer[T] = _
+      private[this] var iterator: CloseableIterator[T] = _
+
+      private def initialize(): Unit = {
+        if (iterator == null) {
+          iterator = new ArrowDeserializingIterator(
+            createEncoder(encoder, schema),
+            new ConcatenatingArrowStreamReader(
+              allocator,
+              Iterator.single(new ResultMessageIterator(destructive)),
+              destructive))
+        }
+      }
+
       override def hasNext: Boolean = {
-        if (iterator.hasNext) {
-          return true
-        }
-        val nextBatchIndex = batchIndex + 1
-        val hasNextBatch = if (nextBatchIndex == batches.size) {
-          processResponses(stopOnFirstNonEmptyResponse = true)
-        } else {
-          true
-        }
-        if (hasNextBatch) {
-          batchIndex = nextBatchIndex
-          iterator = batches(nextBatchIndex).rowIterator()
-          if (deserializer == null) {
-            deserializer = boundEncoder.createDeserializer()
-          }
-        }
-        hasNextBatch
+        initialize()
+        iterator.hasNext
       }
 
       override def next(): T = {
-        if (!hasNext) {
-          throw new NoSuchElementException
-        }
-        deserializer(iterator.next())
+        initialize()
+        iterator.next()
       }
 
-      override def close(): Unit = SparkResult.this.close()
+      override def close(): Unit = {
+        if (iterator != null) {
+          iterator.close()
+        }
+      }
     }
   }
 
   /**
    * Close this result, freeing any underlying resources.
    */
-  override def close(): Unit = {
-    batches.foreach(_.close())
-  }
+  override def close(): Unit = cleaner.close()
 
-  override def cleaner: AutoCloseable = AutoCloseables(batches.toSeq)
+  override val cleaner: AutoCloseable = new SparkResultCloseable(resultMap)
+
+  private class ResultMessageIterator(destructive: Boolean) extends AbstractMessageIterator {
+    private[this] var totalBytesRead = 0L
+    private[this] var nextResultIndex = 0
+    private[this] var current: Iterator[ArrowMessage] = Iterator.empty
+
+    override def bytesRead: Long = totalBytesRead
+
+    override def schema: pojo.Schema = {
+      if (arrowSchema == null) {
+        // We need a schema to proceed. Spark Connect will always
+        // return a result (with a schema) even if the result is empty.
+        processResponses(stopOnArrowSchema = true)
+        Objects.requireNonNull(arrowSchema)
+      }
+      arrowSchema
+    }
+
+    override def hasNext: Boolean = {
+      if (current.hasNext) {
+        return true
+      }
+      val hasNextResult = if (!resultMap.contains(nextResultIndex)) {
+        self.processResponses(stopOnFirstNonEmptyResponse = true)
+      } else {
+        true
+      }
+      if (hasNextResult) {
+        val Some((sizeInBytes, messages)) = if (destructive) {
+          resultMap.remove(nextResultIndex)
+        } else {
+          resultMap.get(nextResultIndex)
+        }
+        totalBytesRead += sizeInBytes
+        current = messages.iterator
+        nextResultIndex += 1
+      }
+      hasNextResult
+    }
+
+    override def next(): ArrowMessage = {
+      if (!hasNext) {
+        throw new NoSuchElementException()
+      }
+      current.next()
+    }
+  }
+}
+
+private[client] class SparkResultCloseable(resultMap: mutable.Map[Int, (Long, Seq[ArrowMessage])])
+    extends AutoCloseable {
+  override def close(): Unit = resultMap.values.foreach(_._2.foreach(_.close()))
 }

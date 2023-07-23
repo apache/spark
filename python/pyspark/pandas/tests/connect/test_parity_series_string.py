@@ -24,9 +24,7 @@ from pyspark.testing.pandasutils import PandasOnSparkTestUtils
 class SeriesStringParityTests(
     SeriesStringTestsMixin, PandasOnSparkTestUtils, ReusedConnectTestCase
 ):
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_string_repeat(self):
-        super().test_string_repeat()
+    pass
 
 
 if __name__ == "__main__":

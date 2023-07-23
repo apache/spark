@@ -208,4 +208,5 @@ Filter (one#x < 2)
 -- !query
 DROP TABLE test_having
 -- !query analysis
-DropTableCommand `spark_catalog`.`default`.`test_having`, false, false, false
+DropTable false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.test_having

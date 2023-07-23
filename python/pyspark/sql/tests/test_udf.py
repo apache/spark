@@ -174,9 +174,9 @@ class BaseUDFTestsMixin(object):
         udf_random_col = udf(lambda: int(100 * random.random()), "int").asNondeterministic()
         df = self.spark.range(10)
 
-        with self.assertRaisesRegex(AnalysisException, "nondeterministic"):
+        with self.assertRaisesRegex(AnalysisException, "Non-deterministic"):
             df.groupby("id").agg(sum(udf_random_col())).collect()
-        with self.assertRaisesRegex(AnalysisException, "nondeterministic"):
+        with self.assertRaisesRegex(AnalysisException, "Non-deterministic"):
             df.agg(sum(udf_random_col())).collect()
 
     def test_chained_udf(self):
@@ -836,6 +836,51 @@ class BaseUDFTestsMixin(object):
         self.assertEqual(
             len(self.spark.range(10).select(udf(lambda x: x, DoubleType())(rand())).collect()), 10
         )
+
+    def test_nested_struct(self):
+        df = self.spark.range(1).selectExpr(
+            "struct(1, struct('John', 30, ('value', 10))) as nested_struct"
+        )
+        # Input
+        row = df.select(udf(lambda x: str(x))("nested_struct")).first()
+        self.assertEquals(
+            row[0], "Row(col1=1, col2=Row(col1='John', col2=30, col3=Row(col1='value', col2=10)))"
+        )
+        # Output
+        row = df.select(udf(lambda x: x, returnType=df.dtypes[0][1])("nested_struct")).first()
+        self.assertEquals(
+            row[0], Row(col1=1, col2=Row(col1="John", col2=30, col3=Row(col1="value", col2=10)))
+        )
+
+    def test_nested_map(self):
+        df = self.spark.range(1).selectExpr("map('a', map('b', 'c')) as nested_map")
+        # Input
+        row = df.select(udf(lambda x: str(x))("nested_map")).first()
+        self.assertEquals(row[0], "{'a': {'b': 'c'}}")
+        # Output
+
+        @udf(returnType=df.dtypes[0][1])
+        def f(x):
+            x["a"]["b"] = "d"
+            return x
+
+        row = df.select(f("nested_map")).first()
+        self.assertEquals(row[0], {"a": {"b": "d"}})
+
+    def test_nested_array(self):
+        df = self.spark.range(1).selectExpr("array(array(1, 2), array(3, 4)) as nested_array")
+        # Input
+        row = df.select(udf(lambda x: str(x))("nested_array")).first()
+        self.assertEquals(row[0], "[[1, 2], [3, 4]]")
+        # Output
+
+        @udf(returnType=df.dtypes[0][1])
+        def f(x):
+            x.append([4, 5])
+            return x
+
+        row = df.select(f("nested_array")).first()
+        self.assertEquals(row[0], [[1, 2], [3, 4], [4, 5]])
 
 
 class UDFTests(BaseUDFTestsMixin, ReusedSQLTestCase):

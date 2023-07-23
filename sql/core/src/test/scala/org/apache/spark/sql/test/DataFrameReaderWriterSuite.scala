@@ -40,6 +40,7 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.plans.logical.{AppendData, LogicalPlan, OverwriteByExpression}
 import org.apache.spark.sql.execution.QueryExecution
+import org.apache.spark.sql.execution.command.DataWritingCommandExec
 import org.apache.spark.sql.execution.datasources.{DataSourceUtils, HadoopFsRelation, LogicalRelation}
 import org.apache.spark.sql.execution.datasources.noop.NoopDataSource
 import org.apache.spark.sql.internal.SQLConf
@@ -381,10 +382,17 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSparkSession with 
       withTable("t") {
         sql("create table t(i int, d double) using parquet")
         // Calling `saveAsTable` to an existing table with append mode results in table insertion.
-        val msg = intercept[AnalysisException] {
-          Seq((1L, 2.0)).toDF("i", "d").write.mode("append").saveAsTable("t")
-        }.getMessage
-        assert(msg.contains("Cannot safely cast 'i': bigint to int"))
+        checkError(
+          exception = intercept[AnalysisException] {
+            Seq((1L, 2.0)).toDF("i", "d").write.mode("append").saveAsTable("t")
+          },
+          errorClass = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_SAFELY_CAST",
+          parameters = Map(
+            "tableName" -> "`spark_catalog`.`default`.`t`",
+            "colName" -> "`i`",
+            "srcType" -> "\"BIGINT\"",
+            "targetType" -> "\"INT\"")
+        )
 
         // Insert into table successfully.
         Seq((1, 2.0)).toDF("i", "d").write.mode("append").saveAsTable("t")
@@ -402,17 +410,29 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSparkSession with 
       withTable("t") {
         sql("create table t(i int, d double) using parquet")
         // Calling `saveAsTable` to an existing table with append mode results in table insertion.
-        var msg = intercept[AnalysisException] {
-          Seq(("a", "b")).toDF("i", "d").write.mode("append").saveAsTable("t")
-        }.getMessage
-        assert(msg.contains("Cannot safely cast 'i': string to int") &&
-          msg.contains("Cannot safely cast 'd': string to double"))
+        checkError(
+          exception = intercept[AnalysisException] {
+            Seq(("a", "b")).toDF("i", "d").write.mode("append").saveAsTable("t")
+          },
+          errorClass = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_SAFELY_CAST",
+          parameters = Map(
+            "tableName" -> "`spark_catalog`.`default`.`t`",
+            "colName" -> "`i`",
+            "srcType" -> "\"STRING\"",
+            "targetType" -> "\"INT\"")
+        )
 
-        msg = intercept[AnalysisException] {
-          Seq((true, false)).toDF("i", "d").write.mode("append").saveAsTable("t")
-        }.getMessage
-        assert(msg.contains("Cannot safely cast 'i': boolean to int") &&
-          msg.contains("Cannot safely cast 'd': boolean to double"))
+        checkError(
+          exception = intercept[AnalysisException] {
+            Seq((true, false)).toDF("i", "d").write.mode("append").saveAsTable("t")
+          },
+          errorClass = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_SAFELY_CAST",
+          parameters = Map(
+            "tableName" -> "`spark_catalog`.`default`.`t`",
+            "colName" -> "`i`",
+            "srcType" -> "\"BOOLEAN\"",
+            "targetType" -> "\"INT\"")
+        )
       }
     }
   }
@@ -1287,6 +1307,58 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSparkSession with 
             checkAnswer(spark.table("t2").orderBy("k1"),
               spark.table("t1").orderBy("k1"))
           }
+        }
+      }
+    }
+  }
+
+  test("SPARK-43281: Fix concurrent writer does not update file metrics") {
+    withTable("t") {
+      withSQLConf(SQLConf.MAX_CONCURRENT_OUTPUT_FILE_WRITERS.key -> "3",
+          SQLConf.LEAF_NODE_DEFAULT_PARALLELISM.key -> "1") {
+        spark.sql("CREATE TABLE t(c int) USING parquet PARTITIONED BY (p String)")
+        var dataWriting: DataWritingCommandExec = null
+        val listener = new QueryExecutionListener {
+          override def onFailure(f: String, qe: QueryExecution, e: Exception): Unit = {}
+          override def onSuccess(funcName: String, qe: QueryExecution, duration: Long): Unit = {
+            qe.executedPlan match {
+              case dataWritingCommandExec: DataWritingCommandExec =>
+                dataWriting = dataWritingCommandExec
+              case _ =>
+            }
+          }
+        }
+        spark.listenerManager.register(listener)
+
+        def checkMetrics(sqlStr: String, numFiles: Int, numOutputRows: Long): Unit = {
+          sql(sqlStr)
+          sparkContext.listenerBus.waitUntilEmpty()
+          assert(dataWriting != null)
+          val metrics = dataWriting.cmd.metrics
+          assert(metrics.contains("numFiles"))
+          assert(metrics("numFiles").value == numFiles)
+          assert(metrics.contains("numOutputBytes"))
+          assert(metrics("numOutputBytes").value > 0)
+          assert(metrics.contains("numOutputRows"))
+          assert(metrics("numOutputRows").value == numOutputRows)
+        }
+
+        try {
+          // without fallback
+          checkMetrics(
+            "INSERT INTO TABLE t PARTITION(p) SELECT * FROM VALUES(1, 'a'),(2, 'a'),(1, 'b')",
+            numFiles = 2,
+            numOutputRows = 3)
+
+          // with fallback
+          checkMetrics(
+            """
+              |INSERT INTO TABLE t PARTITION(p)
+              |SELECT * FROM VALUES(1, 'a'),(2, 'b'),(1, 'c'),(2, 'd')""".stripMargin,
+            numFiles = 4,
+            numOutputRows = 4)
+        } finally {
+          spark.listenerManager.unregister(listener)
         }
       }
     }
