@@ -117,6 +117,8 @@ if TYPE_CHECKING:
         SQLArrowTableUDFType,
         SQLBatchedUDFType,
         SQLTableUDFType,
+        SQLStreamingForeachBatchType,
+        SQLStreamingListenerType,
     )
 
     from py4j.java_gateway import JavaObject
@@ -161,6 +163,9 @@ class PythonEvalType:
 
     SQL_TABLE_UDF: "SQLTableUDFType" = 300
     SQL_ARROW_TABLE_UDF: "SQLArrowTableUDFType" = 301
+
+    SQL_STREAMING_FOREACH_BATCH: "SQLStreamingForeachBatchType" = 400
+    SQL_STREAMING_LISTENER: "SQLStreamingListenerType" = 401
 
 
 def portable_hash(x: Hashable) -> int:

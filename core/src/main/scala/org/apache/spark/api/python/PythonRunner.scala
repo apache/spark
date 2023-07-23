@@ -59,6 +59,9 @@ private[spark] object PythonEvalType {
   val SQL_TABLE_UDF = 300
   val SQL_ARROW_TABLE_UDF = 301
 
+  val SQL_STREAMING_FOREACH_BATCH = 400
+  val SQL_STREAMING_LISTENER = 401
+
   def toString(pythonEvalType: Int): String = pythonEvalType match {
     case NON_UDF => "NON_UDF"
     case SQL_BATCHED_UDF => "SQL_BATCHED_UDF"
@@ -74,6 +77,8 @@ private[spark] object PythonEvalType {
     case SQL_GROUPED_MAP_PANDAS_UDF_WITH_STATE => "SQL_GROUPED_MAP_PANDAS_UDF_WITH_STATE"
     case SQL_TABLE_UDF => "SQL_TABLE_UDF"
     case SQL_ARROW_TABLE_UDF => "SQL_ARROW_TABLE_UDF"
+    case SQL_STREAMING_FOREACH_BATCH => "SQL_STREAMING_FOREACH_BATCH"
+    case SQL_STREAMING_LISTENER => "SQL_STREAMING_LISTENER"
   }
 }
 
