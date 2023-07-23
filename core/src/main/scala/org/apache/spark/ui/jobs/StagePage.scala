@@ -442,7 +442,6 @@ private[spark] object ApiHelper {
 
   val HEADER_ID = "ID"
   val HEADER_TASK_INDEX = "Index"
-  val HEADER_PARTITION_ID = "Partition ID"
   val HEADER_ATTEMPT = "Attempt"
   val HEADER_STATUS = "Status"
   val HEADER_LOCALITY = "Locality Level"
@@ -470,8 +469,7 @@ private[spark] object ApiHelper {
 
   private[ui] val COLUMN_TO_INDEX = Map(
     HEADER_ID -> null.asInstanceOf[String],
-    HEADER_TASK_INDEX -> TaskIndexNames.TASK_INDEX,
-    HEADER_PARTITION_ID -> TaskIndexNames.TASK_PARTITION_ID,
+    HEADER_TASK_INDEX -> TaskIndexNames.TASK_PARTITION_ID,
     HEADER_ATTEMPT -> TaskIndexNames.ATTEMPT,
     HEADER_STATUS -> TaskIndexNames.STATUS,
     HEADER_LOCALITY -> TaskIndexNames.LOCALITY,
