@@ -28,8 +28,8 @@ import org.apache.spark.sql.connector.catalog.{PartitionInternalRow, SupportsRea
 import org.apache.spark.sql.connector.catalog.TableCapability._
 import org.apache.spark.sql.connector.expressions.{Expression, FieldReference, Literal, NamedReference, NullOrdering, SortDirection, SortOrder, Transform}
 import org.apache.spark.sql.connector.expressions.filter.Predicate
-import org.apache.spark.sql.connector.read.Scan.ColumnarSupportMode
 import org.apache.spark.sql.connector.read._
+import org.apache.spark.sql.connector.read.Scan.ColumnarSupportMode
 import org.apache.spark.sql.connector.read.partitioning.{KeyGroupedPartitioning, Partitioning, UnknownPartitioning}
 import org.apache.spark.sql.execution.SortExec
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
@@ -396,11 +396,13 @@ class DataSourceV2Suite extends QueryTest with SharedSparkSession with AdaptiveS
     var ex = intercept[IllegalArgumentException](df.explain())
     assert(ex.getMessage == "planInputPartitions must not be called")
 
-    Seq("SUPPORTED", "UNSUPPORTED").foreach {o =>
+    spark.sparkContext.setLogLevel("WARN")
+    spark.conf.set("spark.sql.planChangeLog.level", "WARN")
+    Seq("SUPPORTED", "UNSUPPORTED").foreach { o =>
       val dfScan = spark.read.format(classOf[ScanDefinedColumnarSupport].getName)
         .option("columnar", o).load()
       dfScan.explain()
-      // Will fail during regular execution.
+      //  Will fail during regular execution.
       ex = intercept[IllegalArgumentException](dfScan.count())
       assert(ex.getMessage == "planInputPartitions must not be called")
     }
