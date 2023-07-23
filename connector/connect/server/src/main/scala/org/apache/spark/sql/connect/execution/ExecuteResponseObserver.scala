@@ -21,7 +21,9 @@ import scala.collection.mutable
 
 import io.grpc.stub.StreamObserver
 
+import org.apache.spark.connect.proto
 import org.apache.spark.internal.Logging
+import org.apache.spark.sql.connect.service.ExecuteHolder
 
 /**
  * This StreamObserver is running on the execution thread. Execution pushes responses to it, it
@@ -40,7 +42,9 @@ import org.apache.spark.internal.Logging
  * @see
  *   attachConsumer
  */
-private[connect] class ExecuteResponseObserver[T]() extends StreamObserver[T] with Logging {
+private[connect] class ExecuteResponseObserver[T](val executeHolder: ExecuteHolder)
+    extends StreamObserver[T]
+    with Logging {
 
   /**
    * Cached responses produced by the execution. Map from response index -> response. Response
@@ -77,7 +81,9 @@ private[connect] class ExecuteResponseObserver[T]() extends StreamObserver[T] wi
       throw new IllegalStateException("Stream onNext can't be called after stream completed")
     }
     lastProducedIndex += 1
-    responses += ((lastProducedIndex, CachedStreamResponse[T](r, lastProducedIndex)))
+    val processedResponse = setCommonResponseFields(r)
+    responses +=
+      ((lastProducedIndex, CachedStreamResponse[T](processedResponse, lastProducedIndex)))
     logDebug(s"Saved response with index=$lastProducedIndex")
     notifyAll()
   }
@@ -156,6 +162,21 @@ private[connect] class ExecuteResponseObserver[T]() extends StreamObserver[T] wi
     while (i >= 1 && responses.get(i).isDefined) {
       responses.remove(i)
       i -= 1
+    }
+  }
+
+  /**
+   * Populate response fields that are common and should be set in every response.
+   */
+  private def setCommonResponseFields(response: T): T = {
+    response match {
+      case executePlanResponse: proto.ExecutePlanResponse =>
+        executePlanResponse
+          .toBuilder()
+          .setSessionId(executeHolder.sessionHolder.sessionId)
+          .setOperationId(executeHolder.operationId)
+          .build()
+          .asInstanceOf[T]
     }
   }
 }

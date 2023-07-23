@@ -206,6 +206,12 @@ Project [k#x, v#x]
 
 
 -- !query
+select * from explode(array(rand(0)))
+-- !query analysis
+[Analyzer test output redacted due to nondeterminism]
+
+
+-- !query
 select * from explode(null)
 -- !query analysis
 org.apache.spark.sql.AnalysisException
