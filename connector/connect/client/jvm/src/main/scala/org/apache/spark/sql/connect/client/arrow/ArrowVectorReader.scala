@@ -17,7 +17,6 @@
 package org.apache.spark.sql.connect.client.arrow
 
 import java.math.{BigDecimal => JBigDecimal}
-import java.nio.charset.StandardCharsets
 import java.sql.{Date, Timestamp}
 import java.time.{Duration, Instant, LocalDate, LocalDateTime, Period, ZoneOffset}
 
@@ -25,7 +24,8 @@ import org.apache.arrow.vector.{BigIntVector, BitVector, DateDayVector, DecimalV
 import org.apache.arrow.vector.util.Text
 
 import org.apache.spark.sql.catalyst.expressions.Cast
-import org.apache.spark.sql.catalyst.util.{DateFormatter, IntervalUtils, TimestampFormatter}
+import org.apache.spark.sql.catalyst.util.{DateFormatter, IntervalUtils, StringUtils, TimestampFormatter}
+import org.apache.spark.sql.catalyst.util.DateTimeConstants.MICROS_PER_SECOND
 import org.apache.spark.sql.catalyst.util.DateTimeUtils._
 import org.apache.spark.sql.catalyst.util.IntervalStringStyles.ANSI_STYLE
 import org.apache.spark.sql.types.{DataType, DayTimeIntervalType, Decimal, YearMonthIntervalType}
@@ -145,7 +145,7 @@ private[arrow] class BigIntVectorReader(v: BigIntVector)
   override def getDouble(i: Int): Double = getLong(i)
   override def getString(i: Int): String = String.valueOf(getLong(i))
   override def getJavaDecimal(i: Int): JBigDecimal = JBigDecimal.valueOf(getLong(i))
-  override def getTimestamp(i: Int): Timestamp = toJavaTimestamp(getLong(i))
+  override def getTimestamp(i: Int): Timestamp = toJavaTimestamp(getLong(i) * MICROS_PER_SECOND)
   override def getInstant(i: Int): Instant = microsToInstant(getLong(i))
 }
 
@@ -190,7 +190,7 @@ private[arrow] class VarCharVectorReader(v: VarCharVector)
 private[arrow] class VarBinaryVectorReader(v: VarBinaryVector)
     extends TypedArrowVectorReader[VarBinaryVector](v) {
   override def getBytes(i: Int): Array[Byte] = vector.get(i)
-  override def getString(i: Int): String = new String(getBytes(i), StandardCharsets.UTF_8)
+  override def getString(i: Int): String = StringUtils.getHexString(getBytes(i))
 }
 
 private[arrow] class DurationVectorReader(v: DurationVector)
@@ -236,7 +236,7 @@ private[arrow] class TimeStampMicroTZVectorReader(v: TimeStampMicroTZVector)
   private val zone = getZoneId(v.getTimeZone)
   private lazy val formatter = TimestampFormatter.getFractionFormatter(zone)
   private def utcMicros(i: Int): Long = convertTz(getLong(i), zone, ZoneOffset.UTC)
-  override def getLong(i: Int): Long = vector.get(i) // TODO
+  override def getLong(i: Int): Long = Math.floorDiv(vector.get(i), MICROS_PER_SECOND)
   override def getTimestamp(i: Int): Timestamp = toJavaTimestamp(getLong(i))
   override def getInstant(i: Int): Instant = microsToInstant(getLong(i))
   override def getLocalDateTime(i: Int): LocalDateTime = microsToLocalDateTime(utcMicros(i))
