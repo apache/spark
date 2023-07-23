@@ -236,7 +236,7 @@ private[arrow] class TimeStampMicroTZVectorReader(v: TimeStampMicroTZVector)
   private val zone = getZoneId(v.getTimeZone)
   private lazy val formatter = TimestampFormatter.getFractionFormatter(zone)
   private def utcMicros(i: Int): Long = convertTz(getLong(i), zone, ZoneOffset.UTC)
-  override def getLong(i: Int): Long = vector.get(i)
+  override def getLong(i: Int): Long = vector.get(i) // TODO
   override def getTimestamp(i: Int): Timestamp = toJavaTimestamp(getLong(i))
   override def getInstant(i: Int): Instant = microsToInstant(getLong(i))
   override def getLocalDateTime(i: Int): LocalDateTime = microsToLocalDateTime(utcMicros(i))
