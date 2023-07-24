@@ -18,7 +18,7 @@
 package org.apache.spark.sql
 
 import org.apache.spark.metrics.source.CodegenMetrics
-import org.apache.spark.sql.catalyst.encoders.RowEncoder
+import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions.{CreateNamedStruct, Expression}
 import org.apache.spark.sql.catalyst.plans.logical.SerializeFromObject
 import org.apache.spark.sql.functions._
