@@ -993,6 +993,16 @@ pyspark_pandas_slow_connect = Module(
         "pyspark.pandas.tests.connect.frame.test_parity_time_series",
         "pyspark.pandas.tests.connect.frame.test_parity_truncate",
         "pyspark.pandas.tests.connect.io.test_parity_io",
+        "pyspark.pandas.tests.connect.groupby.test_parity_aggregate",
+        "pyspark.pandas.tests.connect.groupby.test_parity_apply_func",
+        "pyspark.pandas.tests.connect.groupby.test_parity_cumulative",
+        "pyspark.pandas.tests.connect.groupby.test_parity_describe",
+        "pyspark.pandas.tests.connect.groupby.test_parity_groupby",
+        "pyspark.pandas.tests.connect.groupby.test_parity_head_tail",
+        "pyspark.pandas.tests.connect.groupby.test_parity_index",
+        "pyspark.pandas.tests.connect.groupby.test_parity_missing_data",
+        "pyspark.pandas.tests.connect.groupby.test_parity_split_apply",
+        "pyspark.pandas.tests.connect.groupby.test_parity_stat",
     ],
     excluded_python_implementations=[
         "PyPy"  # Skip these tests under PyPy since they require numpy, pandas, and pyarrow and
@@ -1009,16 +1019,6 @@ pyspark_pandas_slow_connect_other = Module(
     ],
     python_test_goals=[
         # pandas-on-Spark unittests
-        "pyspark.pandas.tests.connect.groupby.test_parity_aggregate",
-        "pyspark.pandas.tests.connect.groupby.test_parity_apply_func",
-        "pyspark.pandas.tests.connect.groupby.test_parity_cumulative",
-        "pyspark.pandas.tests.connect.groupby.test_parity_describe",
-        "pyspark.pandas.tests.connect.groupby.test_parity_groupby",
-        "pyspark.pandas.tests.connect.groupby.test_parity_head_tail",
-        "pyspark.pandas.tests.connect.groupby.test_parity_index",
-        "pyspark.pandas.tests.connect.groupby.test_parity_missing_data",
-        "pyspark.pandas.tests.connect.groupby.test_parity_split_apply",
-        "pyspark.pandas.tests.connect.groupby.test_parity_stat",
         "pyspark.pandas.tests.connect.test_parity_indexing",
         "pyspark.pandas.tests.connect.test_parity_ops_on_diff_frames",
         "pyspark.pandas.tests.connect.test_parity_ops_on_diff_frames_groupby",
