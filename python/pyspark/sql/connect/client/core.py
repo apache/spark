@@ -1127,7 +1127,7 @@ class SparkConnectClient(object):
             self._handle_error(error)
 
     def _execute_and_fetch(
-        self, req: pb2.ExecutePlanRequest, self_destruct=False
+        self, req: pb2.ExecutePlanRequest, self_destruct: bool = False
     ) -> Tuple[
         Optional["pa.Table"],
         Optional[StructType],
