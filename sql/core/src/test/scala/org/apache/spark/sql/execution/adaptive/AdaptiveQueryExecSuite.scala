@@ -882,7 +882,7 @@ class AdaptiveQueryExecSuite
       SQLConf.SHUFFLE_PARTITIONS.key -> "100",
       SQLConf.SKEW_JOIN_SKEWED_PARTITION_THRESHOLD.key -> "800",
       SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES.key -> "800") {
-      withTempView("skewData1", "skewData2") {
+      withTempView("skewed", "noSkewed") {
         // skewData1
         spark
           .range(0, 1000, 1, 10)
@@ -891,14 +891,14 @@ class AdaptiveQueryExecSuite
               .when('id >= 750, 1000)
               .otherwise('id).as("key1"),
             'id as "value1")
-          .createOrReplaceTempView("skewData1")
+          .createOrReplaceTempView("skewed")
         // skewData2
         spark
           .range(0, 1000, 1, 10)
           .select(
             'id as "key2",
             'id as "value2")
-          .createOrReplaceTempView("skewData2")
+          .createOrReplaceTempView("noSkewed")
 
         def checkSkewJoin(
             joins: Seq[SortMergeJoinExec],
@@ -920,10 +920,10 @@ class AdaptiveQueryExecSuite
         // skewed ExistenceJoin optimization for left side
         val (_, existenceAdaptivePlanForLeft) = runAdaptiveAndVerifyResult(
           s"""
-             |SELECT * FROM skewData1
+             |SELECT * FROM skewed
              |where
-             |(key1 in (select key2 from skewData2)
-             |or value1 in (select value2 from skewData2)
+             |(key1 in (select key2 from noSkewed)
+             |or value1 in (select value2 from noSkewed)
              |)""".stripMargin)
         val existenceSmjForLeft = findTopLevelSortMergeJoin(existenceAdaptivePlanForLeft)
         assert(existenceSmjForLeft.nonEmpty &&
@@ -933,10 +933,10 @@ class AdaptiveQueryExecSuite
         // forbid skewed ExistenceJoin optimization for right side
         val (_, existenceAdaptivePlanForRight) = runAdaptiveAndVerifyResult(
           s"""
-             |SELECT * FROM skewData2
+             |SELECT * FROM noSkewed
              |where
-             |(key2 in (select key1 from skewData1)
-             |or value2 in (select value1 from skewData1)
+             |(key2 in (select key1 from skewed)
+             |or value2 in (select value1 from skewed)
              |)""".stripMargin)
         val existenceSmjForRight = findTopLevelSortMergeJoin(existenceAdaptivePlanForRight)
         assert(existenceSmjForRight.nonEmpty &&
