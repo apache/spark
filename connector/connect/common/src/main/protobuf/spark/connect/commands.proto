@@ -366,6 +366,7 @@ message StreamingQueryManagerCommand {
   message StreamingQueryListenerCommand {
     optional bytes listener_payload = 1;
     optional PythonUDF python_listener_payload = 2;
+    string id = 3;
   }
 }
 

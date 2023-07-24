@@ -3052,31 +3052,27 @@ class SparkConnectPlanner(val sessionHolder: SessionHolder) extends Logging {
             .deserialize[StreamingListenerPacket](
               command.getAddListener.getListenerPayload.toByteArray,
               Utils.getContextOrSparkClassLoader)
-          val listener: StreamingQueryListener = listenerPacket.listener
-            .asInstanceOf[StreamingQueryListener]
-          val id: String = listenerPacket.id
-          sessionHolder.cacheListenerById(id, listener)
-          listener
+
+          listenerPacket.listener.asInstanceOf[StreamingQueryListener]
         } else {
-          val listener = new PythonStreamingQueryListener(
+          new PythonStreamingQueryListener(
             transformPythonFunction(command.getAddListener.getPythonListenerPayload),
             sessionHolder,
             pythonExec)
-          listener
         }
 
+        val id = command.getAddListener.getId
+        sessionHolder.cacheListenerById(id, listener)
         session.streams.addListener(listener)
         respBuilder.setAddListener(true)
 
       case StreamingQueryManagerCommand.CommandCase.REMOVE_LISTENER =>
-        // TODO (SPARK-44516): remove listener for python client
-        val listenerId = Utils
-          .deserialize[StreamingListenerPacket](
-            command.getRemoveListener.getListenerPayload.toByteArray,
-            Utils.getContextOrSparkClassLoader)
-          .id
+        val listenerId = command.getRemoveListener.getId
         val listener: StreamingQueryListener = sessionHolder.getListenerOrThrow(listenerId)
         session.streams.removeListener(listener)
+        // scalastyle:off println
+        println("======exit called")
+        // scalastyle:on println
         sessionHolder.removeCachedListener(listenerId)
         respBuilder.setRemoveListener(true)
 

@@ -234,23 +234,25 @@ class StreamingQueryManager:
     resetTerminated.__doc__ = PySparkStreamingQueryManager.resetTerminated.__doc__
 
     def addListener(self, listener: StreamingQueryListener) -> None:
+        listener._init_listener_id()
         cmd = pb2.StreamingQueryManagerCommand()
         expr = proto.PythonUDF()
         expr.command = CloudPickleSerializer().dumps(listener)
         expr.python_ver = "%d.%d" % sys.version_info[:2]
         cmd.add_listener.python_listener_payload.CopyFrom(expr)
+        cmd.add_listener.id = listener._id
         self._execute_streaming_query_manager_cmd(cmd)
         return None
 
-    # TODO (SPARK-44516): remove listener for python client and uncomment below
-    # addListener.__doc__ = PySparkStreamingQueryManager.addListener.__doc__
+    addListener.__doc__ = PySparkStreamingQueryManager.addListener.__doc__
 
-    def removeListener(self, listener: Any) -> None:
-        # TODO (SPARK-44516): remove listener for python client
-        raise NotImplementedError("removeListener() is not implemented.")
+    def removeListener(self, listener: StreamingQueryListener) -> None:
+        cmd = pb2.StreamingQueryManagerCommand()
+        cmd.remove_listener.id = listener._id
+        self._execute_streaming_query_manager_cmd(cmd)
+        return None
 
-    # TODO (SPARK-44516): uncomment below
-    # removeListener.__doc__ = PySparkStreamingQueryManager.removeListener.__doc__
+    removeListener.__doc__ = PySparkStreamingQueryManager.removeListener.__doc__
 
     def _execute_streaming_query_manager_cmd(
         self, cmd: pb2.StreamingQueryManagerCommand

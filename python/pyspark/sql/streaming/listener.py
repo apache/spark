@@ -73,6 +73,9 @@ class StreamingQueryListener(ABC):
         else:
             return None
 
+    def _init_listener_id(self):
+        self._id = str(uuid.uuid4())
+
     @abstractmethod
     def onQueryStarted(self, event: "QueryStartedEvent") -> None:
         """
