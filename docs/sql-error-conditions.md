@@ -1578,6 +1578,12 @@ The function `<routineName>` cannot be found. Verify the spelling and correctnes
 If you did not qualify the name with a schema and catalog, verify the current_schema() output, or qualify the name with the correct schema and catalog.
 To tolerate the error on drop use DROP FUNCTION IF EXISTS.
 
+### RULE_ID_NOT_FOUND
+
+[SQLSTATE: 22023](sql-error-conditions-sqlstates.html#class-22-data-exception)
+
+Rule id not found for `<ruleName>`. Please modify RuleIdCollection.scala if you are adding a new rule.
+
 ### SCALAR_SUBQUERY_IS_IN_GROUP_BY_OR_AGGREGATE_FUNCTION
 
 SQLSTATE: none assigned
