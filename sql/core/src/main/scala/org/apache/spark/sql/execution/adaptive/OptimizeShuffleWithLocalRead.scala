@@ -139,7 +139,7 @@ object OptimizeShuffleWithLocalRead extends AQEShuffleReadRule {
   def canUseLocalShuffleRead(plan: SparkPlan): Boolean = plan match {
     case s: ShuffleQueryStageExec =>
       s.mapStats.isDefined && isSupported(s.shuffle)
-    case AQEShuffleReadExec(s: ShuffleQueryStageExec, _) =>
+    case a @ AQEShuffleReadExec(s: ShuffleQueryStageExec, _) if !a.hasSkewedPartition =>
       s.mapStats.isDefined && isSupported(s.shuffle) &&
         s.shuffle.shuffleOrigin == ENSURE_REQUIREMENTS
     case _ => false
