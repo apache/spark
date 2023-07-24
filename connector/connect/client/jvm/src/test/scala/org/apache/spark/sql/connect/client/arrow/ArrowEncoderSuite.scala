@@ -14,6 +14,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+// scalastyle:off
 package org.apache.spark.sql.connect.client.arrow
 
 import java.math.BigInteger
@@ -186,11 +187,11 @@ class ArrowEncoderSuite extends ConnectFunSuite with BeforeAndAfterAll {
   }
 
   private def compareIterators[T](expected: Iterator[T], actual: Iterator[T]): Unit = {
-    expected.zipAll(actual, null, null).foreach { case (expected, actual) =>
-      assert(expected != null)
-      assert(actual != null)
-      assert(actual == expected)
+    while (expected.hasNext && actual.hasNext) {
+      assert(expected.next() == actual.next())
     }
+    assert(!expected.hasNext, "Less results produced than expected.")
+    assert(!actual.hasNext, "More results produced than expected.")
   }
 
   private class CountingBatchInspector extends (Array[Byte] => Unit) {
@@ -760,47 +761,23 @@ class ArrowEncoderSuite extends ConnectFunSuite with BeforeAndAfterAll {
    * ******************************************************************** */
   // Not supported: UDT, CalendarInterval
   // Not tested: Char/Varchar.
-  /*
-    case (from: NumericType, to: DecimalType) if to.isWiderThan(from) => true
-    case (from: DecimalType, to: NumericType) if from.isTighterThan(to) => true
-   */
-
-  // Datagen + conversion
-  // Input + Datagen => output + f
-  private case class UpCastTarget[I, O](output: AgnosticEncoder[O], check: (I, O) => Unit) {
-    def build(input: AgnosticEncoder[I], generator: Int => I): Unit = {
-      test("upcast: " + input.dataType.catalogString + " -> " + output.dataType.catalogString) {
-        def data = Iterator.tabulate(5)(generator)
+  private case class UpCastTestCase[I](input: AgnosticEncoder[I], generator: Int => I) {
+    def test[O](output: AgnosticEncoder[O], convert: I => O): this.type = {
+      val name = "upcast: " + input.dataType.catalogString + " -> " + output.dataType.catalogString
+      ArrowEncoderSuite.this.test(name) {
+        def data: Iterator[I] = Iterator.tabulate(5)(generator)
         val result = roundTripWithDifferentIOEncoders(input, output, data)
         try {
-          data.zipAll(result, null.asInstanceOf[I], null.asInstanceOf[O]).foreach {
-            case (in, out) =>
-              assert(in != null)
-              assert(out != null)
-              check(in, out)
-          }
+          compareIterators(data.map(convert), result)
         } finally {
           result.close()
         }
       }
-    }
-  }
-
-  private case class UpCastTestCase[I](input: AgnosticEncoder[I], generator: Int => I) {
-    private val targets = mutable.Buffer.empty[UpCastTarget[I, _]]
-    def target[O](e: AgnosticEncoder[O], check: (I, O) => Unit): this.type = {
-      targets += UpCastTarget(e, check)
       this
     }
-    def target[O](e: AgnosticEncoder[O], conv: I => O): this.type = {
-      target(e, (i: I, o: O) => assert(conv(i) == o))
-    }
-    def nullTarget[O](e: AgnosticEncoder[O]): this.type = {
-      target(e, _.asInstanceOf[O])
-    }
 
-    def build(): Unit = targets.foreach { target =>
-      target.build(input, generator)
+    def nullTest[O](e: AgnosticEncoder[O]): this.type = {
+      test(e, _.asInstanceOf[O])
     }
   }
 
@@ -811,92 +788,77 @@ class ArrowEncoderSuite extends ConnectFunSuite with BeforeAndAfterAll {
   //   case (from: NumericType, to: DecimalType) if to.isWiderThan(from) => true
   //   case (from: DecimalType, to: NumericType) if from.isTighterThan(to) => true
   UpCastTestCase(NullEncoder, _ => null)
-    .nullTarget(BoxedBooleanEncoder)
-    .nullTarget(BoxedByteEncoder)
-    .nullTarget(BoxedShortEncoder)
-    .nullTarget(BoxedIntEncoder)
-    .nullTarget(BoxedLongEncoder)
-    .nullTarget(BoxedFloatEncoder)
-    .nullTarget(BoxedDoubleEncoder)
-    .nullTarget(StringEncoder)
-    .nullTarget(DateEncoder(false))
-    .nullTarget(TimestampEncoder(false))
-    .build()
+    .nullTest(BoxedBooleanEncoder)
+    .nullTest(BoxedByteEncoder)
+    .nullTest(BoxedShortEncoder)
+    .nullTest(BoxedIntEncoder)
+    .nullTest(BoxedLongEncoder)
+    .nullTest(BoxedFloatEncoder)
+    .nullTest(BoxedDoubleEncoder)
+    .nullTest(StringEncoder)
+    .nullTest(DateEncoder(false))
+    .nullTest(TimestampEncoder(false))
   UpCastTestCase(PrimitiveBooleanEncoder, _ % 2 == 0)
-    .target(StringEncoder, _.toString)
-    .build()
+    .test(StringEncoder, _.toString)
   UpCastTestCase(PrimitiveByteEncoder, i => i.toByte)
-    .target(PrimitiveShortEncoder, _.toShort)
-    .target(PrimitiveIntEncoder, _.toInt)
-    .target(PrimitiveLongEncoder, _.toLong)
-    .target(PrimitiveFloatEncoder, _.toFloat)
-    .target(PrimitiveDoubleEncoder, _.toDouble)
-    .target(StringEncoder, _.toString)
-    .build()
+    .test(PrimitiveShortEncoder, _.toShort)
+    .test(PrimitiveIntEncoder, _.toInt)
+    .test(PrimitiveLongEncoder, _.toLong)
+    .test(PrimitiveFloatEncoder, _.toFloat)
+    .test(PrimitiveDoubleEncoder, _.toDouble)
+    .test(StringEncoder, _.toString)
   UpCastTestCase(PrimitiveShortEncoder, i => i.toShort)
-    .target(PrimitiveIntEncoder, _.toInt)
-    .target(PrimitiveLongEncoder, _.toLong)
-    .target(PrimitiveFloatEncoder, _.toFloat)
-    .target(PrimitiveDoubleEncoder, _.toDouble)
-    .target(StringEncoder, _.toString)
-    .build()
+    .test(PrimitiveIntEncoder, _.toInt)
+    .test(PrimitiveLongEncoder, _.toLong)
+    .test(PrimitiveFloatEncoder, _.toFloat)
+    .test(PrimitiveDoubleEncoder, _.toDouble)
+    .test(StringEncoder, _.toString)
   UpCastTestCase(PrimitiveIntEncoder, i => i)
-    .target(PrimitiveLongEncoder, _.toLong)
-    .target(PrimitiveFloatEncoder, _.toFloat)
-    .target(PrimitiveDoubleEncoder, _.toDouble)
-    .target(StringEncoder, _.toString)
-    .build()
+    .test(PrimitiveLongEncoder, _.toLong)
+    .test(PrimitiveFloatEncoder, _.toFloat)
+    .test(PrimitiveDoubleEncoder, _.toDouble)
+    .test(StringEncoder, _.toString)
   UpCastTestCase(PrimitiveLongEncoder, i => i.toLong)
-    .target(PrimitiveFloatEncoder, _.toFloat)
-    .target(PrimitiveDoubleEncoder, _.toDouble)
-    .target(TimestampEncoder(false), s => toJavaTimestamp(s * MICROS_PER_SECOND))
-    .target(StringEncoder, _.toString)
-    .build()
+    .test(PrimitiveFloatEncoder, _.toFloat)
+    .test(PrimitiveDoubleEncoder, _.toDouble)
+    .test(TimestampEncoder(false), s => toJavaTimestamp(s * MICROS_PER_SECOND))
+    .test(StringEncoder, _.toString)
   UpCastTestCase(PrimitiveFloatEncoder, i => i.toFloat)
-    .target(PrimitiveDoubleEncoder, _.toDouble)
-    .target(StringEncoder, _.toString)
-    .build()
+    .test(PrimitiveDoubleEncoder, _.toDouble)
+    .test(StringEncoder, _.toString)
   UpCastTestCase(PrimitiveDoubleEncoder, i => i.toDouble)
-    .target(StringEncoder, _.toString)
-    .build()
+    .test(StringEncoder, _.toString)
   UpCastTestCase(DateEncoder(false), i => toJavaDate(i))
-    .target(TimestampEncoder(false),
+    .test(TimestampEncoder(false),
       date => toJavaTimestamp(daysToMicros(fromJavaDate(date), ZoneOffset.UTC)))
-    .target(LocalDateTimeEncoder,
+    .test(LocalDateTimeEncoder,
       date => microsToLocalDateTime(daysToMicros(fromJavaDate(date), ZoneOffset.UTC)))
-    .target(StringEncoder, date => dateFormatter.format(date))
-    .build()
+    .test(StringEncoder, date => dateFormatter.format(date))
   UpCastTestCase(TimestampEncoder(false), i => toJavaTimestamp(i))
-    .target(PrimitiveLongEncoder, ts => Math.floorDiv(fromJavaTimestamp(ts), MICROS_PER_SECOND))
-    .target(LocalDateTimeEncoder, ts => microsToLocalDateTime(fromJavaTimestamp(ts)))
-    .target(StringEncoder, ts => timestampFormatter.format(ts))
-    .build()
+    .test(PrimitiveLongEncoder, ts => Math.floorDiv(fromJavaTimestamp(ts), MICROS_PER_SECOND))
+    .test(LocalDateTimeEncoder, ts => microsToLocalDateTime(fromJavaTimestamp(ts)))
+    .test(StringEncoder, ts => timestampFormatter.format(ts))
   UpCastTestCase(LocalDateTimeEncoder, i => microsToLocalDateTime(i))
-    .target(TimestampEncoder(false), ldt => toJavaTimestamp(localDateTimeToMicros(ldt)))
-    .target(StringEncoder, ldt => timestampFormatter.format(ldt))
-    .build()
+    .test(TimestampEncoder(false), ldt => toJavaTimestamp(localDateTimeToMicros(ldt)))
+    .test(StringEncoder, ldt => timestampFormatter.format(ldt))
   UpCastTestCase(DayTimeIntervalEncoder, i => Duration.ofDays(i))
-    .target(StringEncoder, { i =>
+    .test(StringEncoder, { i =>
       toDayTimeIntervalString(
         durationToMicros(i),
         ANSI_STYLE,
         DayTimeIntervalType.DEFAULT.startField,
         DayTimeIntervalType.DEFAULT.endField)
     })
-    .build()
   UpCastTestCase(YearMonthIntervalEncoder, i => Period.ofMonths(i))
-    .target(StringEncoder, { i =>
-      toDayTimeIntervalString(
+    .test(StringEncoder, { i =>
+      toYearMonthIntervalString(
         periodToMonths(i),
         ANSI_STYLE,
         YearMonthIntervalType.DEFAULT.startField,
         YearMonthIntervalType.DEFAULT.endField)
     })
-    .build()
   UpCastTestCase(BinaryEncoder, i => Array.tabulate(10)(j => (64 + j + i).toByte))
-    .target(StringEncoder, bytes => StringUtils.getHexString(bytes))
-    .build()
-
+    .test(StringEncoder, bytes => StringUtils.getHexString(bytes))
 
   /* ******************************************************************** *
    * Arrow serialization/deserialization specific errors

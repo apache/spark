@@ -20,7 +20,7 @@ import java.math.{BigDecimal => JBigDecimal}
 import java.sql.{Date, Timestamp}
 import java.time.{Duration, Instant, LocalDate, LocalDateTime, Period, ZoneOffset}
 
-import org.apache.arrow.vector.{BigIntVector, BitVector, DateDayVector, DecimalVector, DurationVector, FieldVector, Float4Vector, Float8Vector, IntervalYearVector, IntVector, SmallIntVector, TimeStampMicroTZVector, TimeStampMicroVector, TinyIntVector, VarBinaryVector, VarCharVector}
+import org.apache.arrow.vector.{BigIntVector, BitVector, DateDayVector, DecimalVector, DurationVector, FieldVector, Float4Vector, Float8Vector, IntervalYearVector, IntVector, NullVector, SmallIntVector, TimeStampMicroTZVector, TimeStampMicroVector, TinyIntVector, VarBinaryVector, VarCharVector}
 import org.apache.arrow.vector.util.Text
 
 import org.apache.spark.sql.catalyst.expressions.Cast
@@ -86,14 +86,17 @@ object ArrowVectorReader {
       case v: VarBinaryVector => new VarBinaryVectorReader(v)
       case v: DurationVector => new DurationVectorReader(v)
       case v: IntervalYearVector => new IntervalYearVectorReader(v)
-      case v: DateDayVector =>
-        v.getField.getFieldType.getType
-        new DateDayVectorReader(v, timeZoneId)
+      case v: DateDayVector => new DateDayVectorReader(v, timeZoneId)
       case v: TimeStampMicroTZVector => new TimeStampMicroTZVectorReader(v)
       case v: TimeStampMicroVector => new TimeStampMicroVectorReader(v, timeZoneId)
+      case _: NullVector => NullVectorReader
       case _ => throw new RuntimeException("Unsupported Vector Type: " + vector.getClass)
     }
   }
+}
+
+private[arrow] object NullVectorReader extends ArrowVectorReader {
+  override def isNull(i: Int): Boolean = true
 }
 
 private[arrow] abstract class TypedArrowVectorReader[E <: FieldVector](val vector: E)
