@@ -143,7 +143,7 @@ class DeepspeedTorchDistributor(TorchDistributor):
     @staticmethod
     def _run_training_on_pytorch_file(
         input_params: Dict[str, Any], train_path: str, *args: Any, **kwargs: Any
-    ) -> None:
+    ) -> Optional[List[Any]]:
         if kwargs:
             raise ValueError(
                 "DeepspeedTorchDistributor with pytorch file doesn't support keyword arguments"
@@ -153,6 +153,10 @@ class DeepspeedTorchDistributor(TorchDistributor):
         training_command = DeepspeedTorchDistributor._create_torchrun_command(
             input_params, train_path, *args
         )
+        # Spark CI doesn't have GPUs (primary use case for deepspeed); 
+        # Just make sure everything else would work
+        if TorchDistributor._E2E_MOCK:
+            return training_command
         DeepspeedTorchDistributor._execute_command(
             training_command, log_streaming_client=log_streaming_client
         )
