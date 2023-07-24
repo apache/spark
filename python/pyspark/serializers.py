@@ -86,7 +86,6 @@ class SpecialLengths:
     END_OF_STREAM = -4
     NULL = -5
     START_ARROW_STREAM = -6
-    END_OF_MICRO_BATCH = -7
 
 
 class Serializer:
