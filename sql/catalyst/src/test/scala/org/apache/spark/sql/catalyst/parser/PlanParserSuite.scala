@@ -1492,6 +1492,57 @@ class PlanParserSuite extends AnalysisTest {
         stop = sql1.length - 2))
   }
 
+  test("SPARK-44503: Support PARTITION BY and ORDER BY clause for TVF TABLE arguments") {
+    Seq("partition", "distribute").foreach { partition =>
+      Seq("order", "sort").foreach { order =>
+        val sql1suffix = s"table(v1) $partition by col1"
+        val sql1 = s"select * from my_tvf(arg1 => $sql1suffix)"
+        val startIndex = 29
+        val message =
+          "Specifying the PARTITION BY clause for TABLE arguments is not implemented yet"
+        checkError(
+          exception = parseException(sql1),
+          errorClass = "_LEGACY_ERROR_TEMP_0035",
+          parameters = Map("message" -> message),
+          context = ExpectedContext(
+            fragment = sql1suffix,
+            start = startIndex,
+            stop = sql1.length - 2))
+        val sql2suffix = s"table(v1) $partition by col1 $order by col2 asc"
+        val sql2 = s"select * from my_tvf(arg1 => $sql2suffix)"
+        checkError(
+          exception = parseException(sql2),
+          errorClass = "_LEGACY_ERROR_TEMP_0035",
+          parameters = Map("message" -> message),
+          context = ExpectedContext(
+            fragment = sql2suffix,
+            start = startIndex,
+            stop = sql2.length - 2))
+        val sql3suffix = s"table(v1) $partition by col1, col2 $order by col2 asc, col3 desc"
+        val sql3 = s"select * from my_tvf(arg1 => $sql3suffix)"
+        checkError(
+          exception = parseException(sql3),
+          errorClass = "_LEGACY_ERROR_TEMP_0035",
+          parameters = Map("message" -> message),
+          context = ExpectedContext(
+            fragment = sql3suffix,
+            start = startIndex,
+            stop = sql3.length - 2))
+        val sql4Suffix = s"table(select col1, col2, col3 from v2) $partition by col1, col2 " +
+            s"$order by col2 asc, col3 desc"
+        val sql4 = s"select * from my_tvf(arg1 => $sql4Suffix)"
+        checkError(
+          exception = parseException(sql4),
+          errorClass = "_LEGACY_ERROR_TEMP_0035",
+          parameters = Map("message" -> message),
+          context = ExpectedContext(
+            fragment = sql4Suffix,
+            start = startIndex,
+            stop = sql4.length - 2))
+      }
+    }
+  }
+
   test("SPARK-32106: TRANSFORM plan") {
     // verify schema less
     assertEqual(
