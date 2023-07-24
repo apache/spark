@@ -357,7 +357,11 @@ jobs:
           - >-
             pyspark-pandas-connect
           - >-
-            pyspark-pandas-slow-connect
+            pyspark-pandas-slow-connect-1
+          - >-
+            pyspark-pandas-slow-connect-2
+          - >-
+            pyspark-pandas-slow-connect-3
     env:
       MODULES_TO_TEST: ${{ matrix.modules }}
       HADOOP_PROFILE: ${{ inputs.hadoop }}
@@ -404,8 +408,6 @@ jobs:
         key: pyspark-coursier-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
         restore-keys: |
           pyspark-coursier-
-    - name: Free Disk Space
-      run: ./dev/free-disk-space.sh
     - name: Install Java ${{ matrix.java }}
       uses: actions/setup-java@v3
       with:
