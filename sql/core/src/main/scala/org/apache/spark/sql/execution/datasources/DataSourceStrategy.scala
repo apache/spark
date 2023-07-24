@@ -574,7 +574,30 @@ object DataSourceStrategy
    */
   protected[sql] def translateFilter(
       predicate: Expression, supportNestedPredicatePushdown: Boolean): Option[Filter] = {
-    translateFilterWithMapping(predicate, None, supportNestedPredicatePushdown)
+    if (predicate.isInstanceOf[expressions.Or]) {
+      translateFilterWithMapping(predicate, None, supportNestedPredicatePushdown).orElse {
+        // Extract pushable predicates from disjunctive predicates. For example:
+        // We will extract a = 1 OR a = 2 from ((a = 1 AND b + 1 > 1) OR (a = 2 AND c + 2 > 2)).
+        val predicates = splitDisjunctivePredicates(predicate).map(splitConjunctivePredicates)
+        val references = predicates.map(_.map(_.references)).map(_.filter(_.nonEmpty))
+        val intersectedRefs = references.foldLeft(references.head) { (intersected, currentRefs) =>
+          intersected intersect currentRefs
+        }
+        intersectedRefs.flatMap { ref =>
+          val sameAttrPredicates = predicates.map(_.filter(_.references.equals(ref)))
+          val translatedFilters = sameAttrPredicates.map(_.map(
+            translateFilterWithMapping(_, None, supportNestedPredicatePushdown)))
+          // Only make pushable predicate if all predicates can be translated to filters.
+          if (translatedFilters.forall(_.forall(_.nonEmpty))) {
+            translatedFilters.map(_.flatten.reduceLeft(sources.And)).reduceLeftOption(sources.Or)
+          } else {
+            None
+          }
+        }.reduceLeftOption(sources.And)
+      }
+    } else {
+      translateFilterWithMapping(predicate, None, supportNestedPredicatePushdown)
+    }
   }
 
   /**

@@ -279,6 +279,100 @@ class DataSourceStrategySuite extends PlanTest with SharedSparkSession {
         IsNotNull(attrInt))), None)
   }}
 
+  test("Extract pushable predicates from disjunctive predicates") {
+    val intColName = "cint"
+    val longColName = "clong"
+    val stringColName = "cstring"
+    val attrInt = $"$intColName".int
+    val attrLong = $"$longColName".long
+    val attrString = $"$stringColName".string
+
+    // (longColName in (1, 2) AND stringColName rlike '[a-z]+a') OR
+    //   (longColName in (3, 4) AND stringColName rlike '[a-z]+b')
+    testTranslateFilter(
+      Or(
+        And(attrLong.in(1, 2), attrString.rlike("[a-z]+a")),
+        And(attrLong.in(3, 4), attrString.rlike("[a-z]+b"))),
+      Some(
+        sources.Or(sources.In(longColName, Array(1, 2)),
+          sources.In(longColName, Array(3, 4)))))
+
+    // ((longColName = 1 OR longColName = 2) AND stringColName rlike '[a-z]+a') OR
+    //   (longColName in (3, 4) AND stringColName rlike '[a-z]+b') OR
+    //   (longColName > 1 AND longColName < 9 AND stringColName rlike '[a-z]+c') OR
+    testTranslateFilter(
+      Or(Or(
+        And(Or(attrLong === 1, attrLong === 2), attrString.rlike("[a-z]+a")),
+        And(attrLong.in(3, 4), attrString.rlike("[a-z]+b"))),
+        And(And(attrLong > 1, attrLong < 9), attrString.rlike("[a-z]+c"))),
+      Some(
+        sources.Or(
+          sources.Or(sources.Or(sources.EqualTo(longColName, 1), sources.EqualTo(longColName, 2)),
+            sources.In(longColName, Array(3, 4))),
+          sources.And(sources.GreaterThan(longColName, 1), sources.LessThan(longColName, 9)))))
+
+    // (intColName > 1 AND longColName = 2 AND stringColName rlike '[a-z]+a') OR
+    //    (intColName > 2 AND longColName = 3 AND stringColName rlike '[a-z]+a')
+    testTranslateFilter(
+      Or(
+        And(And(attrInt > 1, attrLong > 2), attrString.rlike("[a-z]+a")),
+        And(And(attrInt > 2, attrLong > 3), attrString.rlike("[a-z]+b"))),
+      Some(
+        sources.And(sources.Or(sources.GreaterThan(intColName, 1),
+          sources.GreaterThan(intColName, 2)),
+          sources.Or(sources.GreaterThan(longColName, 2),
+            sources.GreaterThan(longColName, 3)))))
+
+    // (intColName > 1 AND longColName = 2 AND stringColName rlike '[a-z]+a') OR
+    //    (intColName > 2 AND longColName + 1 = 3 AND stringColName rlike '[a-z]+a')
+    testTranslateFilter(
+      Or(
+        And(And(attrInt > 1, attrLong > 2), attrString.rlike("[a-z]+a")),
+        And(And(attrInt > 2, attrLong + 1 > 3), attrString.rlike("[a-z]+b"))),
+      Some(
+        sources.Or(sources.GreaterThan(intColName, 1),
+          sources.GreaterThan(intColName, 2))))
+
+    // (longColName + 2 > 1 AND stringColName rlike '[a-z]+a') OR
+    //   (longColName > 3 AND stringColName rlike '[a-z]+b')
+    testTranslateFilter(
+      Or(
+        And(attrLong + 2 > 1, attrString.rlike("[a-z]+a")),
+        And(attrLong > 3, attrString.rlike("[a-z]+b"))),
+      None)
+
+    // (intColName > 1 AND stringColName rlike '[a-z]+a') OR
+    //   (longColName > 2 AND stringColName rlike '[a-z]+b')
+    testTranslateFilter(
+      Or(
+        And(attrInt > 1, attrString.rlike("[a-z]+a")),
+        And(attrLong > 2, attrString.rlike("[a-z]+b"))),
+      None)
+
+    // intColName > 1 AND ((intColName > 1 AND stringColName rlike '[a-z]+a') OR
+    //   (longColName > 2 AND stringColName rlike '[a-z]+b'))
+    testTranslateFilter(
+      And(
+        GreaterThan(attrInt, 1),
+        Or(And(attrInt > 1, attrString.rlike("[a-z]+a")),
+          And(attrLong > 2, attrString.rlike("[a-z]+b")))),
+      None)
+
+    // (intColName > 1 AND stringColName rlike '[a-z]+a') OR
+    //   (intColName + 1 < 9 AND stringColName rlike '[a-z]+b')
+    testTranslateFilter(
+      Or(
+        And(attrInt > 1, attrString.rlike("[a-z]+a")),
+        And(attrInt + 1 < 9, attrString.rlike("[a-z]+b"))),
+      None)
+
+    // (1 > 1 AND stringColName rlike '[a-z]+a') OR (2 > 2 AND stringColName rlike '[a-z]+b')
+    testTranslateFilter(
+        Or(And(1 > 1, attrString.rlike("[a-z]+b")),
+          And(2 > 2, attrString.rlike("[a-z]+c"))),
+      None)
+  }
+
   test("SPARK-26865 DataSourceV2Strategy should push normalized filters") {
     val attrInt = $"cint".int
     assertResult(Seq(IsNotNull(attrInt))) {
