@@ -860,9 +860,11 @@ class ArrowEncoderSuite extends ConnectFunSuite with BeforeAndAfterAll {
     .test(scalaDecimalEncoder(9, 5), identity)
     .test(scalaDecimalEncoder(23, 3), identity)
   UpCastTestCase(DateEncoder(false), i => toJavaDate(i))
-    .test(TimestampEncoder(false),
+    .test(
+      TimestampEncoder(false),
       date => toJavaTimestamp(daysToMicros(fromJavaDate(date), ZoneOffset.UTC)))
-    .test(LocalDateTimeEncoder,
+    .test(
+      LocalDateTimeEncoder,
       date => microsToLocalDateTime(daysToMicros(fromJavaDate(date), ZoneOffset.UTC)))
     .test(StringEncoder, date => dateFormatter.format(date))
   UpCastTestCase(TimestampEncoder(false), i => toJavaTimestamp(i))
@@ -873,21 +875,25 @@ class ArrowEncoderSuite extends ConnectFunSuite with BeforeAndAfterAll {
     .test(TimestampEncoder(false), ldt => toJavaTimestamp(localDateTimeToMicros(ldt)))
     .test(StringEncoder, ldt => timestampFormatter.format(ldt))
   UpCastTestCase(DayTimeIntervalEncoder, i => Duration.ofDays(i))
-    .test(StringEncoder, { i =>
-      toDayTimeIntervalString(
-        durationToMicros(i),
-        ANSI_STYLE,
-        DayTimeIntervalType.DEFAULT.startField,
-        DayTimeIntervalType.DEFAULT.endField)
-    })
+    .test(
+      StringEncoder,
+      { i =>
+        toDayTimeIntervalString(
+          durationToMicros(i),
+          ANSI_STYLE,
+          DayTimeIntervalType.DEFAULT.startField,
+          DayTimeIntervalType.DEFAULT.endField)
+      })
   UpCastTestCase(YearMonthIntervalEncoder, i => Period.ofMonths(i))
-    .test(StringEncoder, { i =>
-      toYearMonthIntervalString(
-        periodToMonths(i),
-        ANSI_STYLE,
-        YearMonthIntervalType.DEFAULT.startField,
-        YearMonthIntervalType.DEFAULT.endField)
-    })
+    .test(
+      StringEncoder,
+      { i =>
+        toYearMonthIntervalString(
+          periodToMonths(i),
+          ANSI_STYLE,
+          YearMonthIntervalType.DEFAULT.startField,
+          YearMonthIntervalType.DEFAULT.endField)
+      })
   UpCastTestCase(BinaryEncoder, i => Array.tabulate(10)(j => (64 + j + i).toByte))
     .test(StringEncoder, bytes => StringUtils.getHexString(bytes))
 
