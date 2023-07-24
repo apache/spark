@@ -169,10 +169,10 @@ class DeepspeedTorchDistributorUnitTests(unittest.TestCase):
             self.assertEqual(distributed_cmd_args_expected, distributed_command_with_args)
 
 def _create_basic_function():
-    def pythagoras(leg1: float, leg2: float):
-        import deepspeed
-        return (leg1 * leg1 + leg2 * leg2)**0.5
-    return pythagoras 
+   def pythagoras(leg1: float, leg2: float):
+       import deepspeed
+       return (leg1 * leg1 + leg2 * leg2)**0.5
+   return pythagoras 
 
 class DeepspeedDistributorLocalEndToEndTests(unittest.TestCase):
     
@@ -225,6 +225,39 @@ class DeepspeedDistributorLocalEndToEndTests(unittest.TestCase):
                                 "5", 
                                 "--deepspeed"]
             self.assertEqual(command, expected_command)
+
+from pyspark.ml.torch.tests.test_distributor import get_distributed_mode_conf
+
+class DeepspeedTorchDistributorDistributedEndToEnd(unittest.TestCase):
+
+    @classmethod
+    def setUpClass(cls):
+        (cls.gpu_discovery_script_file_name, cls.mnist_dir_path) = set_up_test_dirs()
+        conf = SparkConf()
+        for k, v in get_distributed_mode_conf().items():
+            conf = conf.set(k, v)
+        conf = conf.set(
+            "spark.worker.resource.gpu.discoveryScript", cls.gpu_discovery_script_file_name
+        )
+
+        sc = SparkContext("local-cluster[2,2,512]","ROFL",conf=conf)
+        cls.spark = SparkSession(sc)
+
+    @classmethod
+    def tearDownClass(cls):
+        shutil.rmtree(cls.mnist_dir_path)
+        os.unlink(cls.gpu_discovery_script_file_name)
+        cls.spark.stop()
+
+    def test_simple_function_e2e(self):
+       train_fn = _create_basic_function()
+       # Arguments for the pythagoras function train_fn
+       x = 3
+       y = 4
+       dist = DeepspeedTorchDistributor(num_gpus=2, use_gpu=False, local_mode=False)
+       output = dist.run(train_fn, x, y)
+       self.assertEqual(output, 5)
+
 
 if __name__ == "__main__":
     from pyspark.ml.deepspeed.tests.test_deepspeed_distributor import *  # noqa: F401,F403
