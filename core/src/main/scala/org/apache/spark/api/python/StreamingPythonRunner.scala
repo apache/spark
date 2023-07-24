@@ -49,7 +49,7 @@ private[spark] class StreamingPythonRunner(func: PythonFunction, connectUrl: Str
    * to be used with the functions.
    */
   def init(sessionId: String): (DataOutputStream, DataInputStream) = {
-    log.info(s"Initializing Python runner (session: $sessionId ,pythonExec: $pythonExec")
+    logInfo(s"Initializing Python runner (session: $sessionId ,pythonExec: $pythonExec")
 
     val env = SparkEnv.get
 
@@ -67,12 +67,12 @@ private[spark] class StreamingPythonRunner(func: PythonFunction, connectUrl: Str
     val stream = new BufferedOutputStream(worker.getOutputStream, bufferSize)
     val dataOut = new DataOutputStream(stream)
 
-    // TODO: verify python version
+    // TODO(SPARK-44461): verify python version
 
     // Send sessionId
     PythonRDD.writeUTF(sessionId, dataOut)
 
-    // send the user function to python process
+    // Send the user function to python process
     val command = func.command
     dataOut.writeInt(command.length)
     dataOut.write(command.toArray)
@@ -81,7 +81,7 @@ private[spark] class StreamingPythonRunner(func: PythonFunction, connectUrl: Str
     val dataIn = new DataInputStream(new BufferedInputStream(worker.getInputStream, bufferSize))
 
     val resFromPython = dataIn.readInt()
-    log.info(s"Runner initialization returned $resFromPython")
+    logInfo(s"Runner initialization returned $resFromPython")
 
     (dataOut, dataIn)
   }
