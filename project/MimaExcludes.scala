@@ -64,7 +64,9 @@ object MimaExcludes {
     // [SPARK-43952][CORE][CONNECT][SQL] Add SparkContext APIs for query cancellation by tag
     ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.status.api.v1.JobData.this"),
     // [SPARK-44205][SQL] Extract Catalyst Code from DecimalType
-    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.sql.types.DecimalType.unapply")
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.sql.types.DecimalType.unapply"),
+    // [SPARK-44507][SQL][CONNECT] Move AnalysisException to sql/api.
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.AnalysisException")
   )
 
   // Defulat exclude rules
