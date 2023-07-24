@@ -901,10 +901,10 @@ class AdaptiveQueryExecSuite
           .createOrReplaceTempView("nonSkewed")
 
         def checkSkewJoin(
-            joins: Seq[SortMergeJoinExec],
-            leftSkewNum: Int,
-            rightSkewNum: Int): Unit = {
-          assert(joins.size == 2 && joins.last.isSkewJoin)
+                           joins: Seq[SortMergeJoinExec],
+                           leftSkewNum: Int,
+                           rightSkewNum: Int): Unit = {
+          assert(joins.size == 1 && joins.last.isSkewJoin)
           assert(joins.last.left.collect {
             case r: AQEShuffleReadExec => r
           }.head.partitionSpecs.collect {
@@ -917,33 +917,21 @@ class AdaptiveQueryExecSuite
           }.distinct.length == rightSkewNum)
         }
 
-        // skewed ExistenceJoin optimization for left side
+        // skewed existence join optimization for left side
         val (_, existenceAdaptivePlanForLeft) = runAdaptiveAndVerifyResult(
-          s"""
-             |SELECT * FROM skewed
-             |where
-             |(key1 in (select key2 from nonSkewed)
-             |or value1 in (select value2 from nonSkewed)
-             |)""".stripMargin)
+          "SELECT * FROM skewed WHERE key1 IN (SELECT key2 FROM nonSkewed) OR key1 > 1")
         val existenceSmjForLeft = findTopLevelSortMergeJoin(existenceAdaptivePlanForLeft)
         assert(existenceSmjForLeft.nonEmpty &&
           existenceSmjForLeft.last.joinType.isInstanceOf[ExistenceJoin])
         checkSkewJoin(existenceSmjForLeft, 2, 0)
 
-        // forbid skewed ExistenceJoin optimization for right side
+        // forbid skewed existence join optimization for right side
         val (_, existenceAdaptivePlanForRight) = runAdaptiveAndVerifyResult(
-          s"""
-             |SELECT * FROM nonSkewed
-             |where
-             |(key2 in (select key1 from skewed)
-             |or value2 in (select value1 from skewed)
-             |)""".stripMargin)
+          "SELECT * FROM nonSkewed WHERE key2 IN (SELECT key1 FROM skewed) OR key2 > 1")
         val existenceSmjForRight = findTopLevelSortMergeJoin(existenceAdaptivePlanForRight)
         assert(existenceSmjForRight.nonEmpty &&
-          existenceSmjForRight.size == 2 &&
-          existenceSmjForRight.head.joinType.isInstanceOf[ExistenceJoin] &&
+          existenceSmjForRight.size == 1 &&
           existenceSmjForRight.last.joinType.isInstanceOf[ExistenceJoin] &&
-          !existenceSmjForRight.head.isSkewJoin &&
           !existenceSmjForRight.last.isSkewJoin
         )
       }
