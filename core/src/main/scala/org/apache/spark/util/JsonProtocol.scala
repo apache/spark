@@ -1246,7 +1246,7 @@ private[spark] object JsonProtocol extends JsonUtils {
         jsonOption(readJson.get("Total Records Read")).map(_.extractLong).getOrElse(0L))
       readMetrics.incRemoteReqsDuration(jsonOption(readJson.get("Remote Requests Duration"))
         .map(_.extractLong).getOrElse(0L))
-      jsonOption(readJson.get("Shuffle Push Read Metrics")).foreach { shufflePushReadJson =>
+      jsonOption(readJson.get("Push Based Shuffle")).foreach { shufflePushReadJson =>
         readMetrics.incCorruptMergedBlockChunks(jsonOption(
           shufflePushReadJson.get("Corrupt Merged Block Chunks"))
             .map(_.extractLong).getOrElse(0L))
