@@ -65,7 +65,10 @@ class StreamingQueryListener(ABC):
 
     @property
     def spark(self) -> Optional["SparkSession"]:
-        return None
+        if hasattr(self, "_sparkSession"):
+            return self._sparkSession
+        else:
+            return None
 
     @abstractmethod
     def onQueryStarted(self, event: "QueryStartedEvent") -> None:
@@ -136,11 +139,11 @@ class ConnectStreamingQueryListener(StreamingQueryListener):
         return self._sparkSession
 
     def __init__(self, listener: StreamingQueryListener) -> None:
-        self._sparkSession = None
         self.listener = listener
 
     def onQueryStarted(self, event: "QueryStartedEvent") -> None:
         self.listener.onQueryStarted(event)
+
 
     def onQueryProgress(self, event: "QueryProgressEvent") -> None:
         self.listener.onQueryProgress(event)
