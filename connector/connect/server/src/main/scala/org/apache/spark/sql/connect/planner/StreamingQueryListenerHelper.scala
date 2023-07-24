@@ -21,6 +21,11 @@ import org.apache.spark.api.python.{PythonEvalType, PythonRDD, SimplePythonFunct
 import org.apache.spark.sql.connect.service.{SessionHolder, SparkConnectService}
 import org.apache.spark.sql.streaming.StreamingQueryListener
 
+/**
+ * A helper class for handling StreamingQueryListener related functionality in Spark Connect.
+ * Each instance of this class starts a python process, inside which has the python handling logic.
+ * When new a event is received, it is serialized to json, and passed to the python process.
+ */
 class PythonStreamingQueryListener(
     listener: SimplePythonFunction,
     sessionHolder: SessionHolder,
