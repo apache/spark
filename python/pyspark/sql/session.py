@@ -1871,7 +1871,7 @@ class SparkSession(SparkConversionMixin):
             List of operationIds of interrupted operations.
 
         Notes
-        ----
+        -----
         There is still a possibility of operation finishing just as it is interrupted.
         """
         raise RuntimeError(
@@ -1891,7 +1891,7 @@ class SparkSession(SparkConversionMixin):
             List of operationIds of interrupted operations.
 
         Notes
-        ----
+        -----
         There is still a possibility of operation finishing just as it is interrupted.
         """
         raise RuntimeError(
@@ -1911,7 +1911,7 @@ class SparkSession(SparkConversionMixin):
             List of operationIds of interrupted operations.
 
         Notes
-        ----
+        -----
         There is still a possibility of operation finishing just as it is interrupted.
         """
         raise RuntimeError(
