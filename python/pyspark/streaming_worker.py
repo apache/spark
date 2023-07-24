@@ -98,11 +98,11 @@ def streaming_listener_fcn(infile, outfile, spark_connect_session, listener):
 def foreach_batch_fcn(infile, outfile, spark_connect_session, func):
     log_name = "Streaming ForeachBatch worker"
 
-    def process(dfId, batchId):  # type: ignore[no-untyped-def]
-        print(f"{log_name} Started batch {batchId} with DF id {dfId}")
-        batch_df = spark_connect_session._createRemoteDataFrame(dfId)
-        func(batch_df, batchId)
-        print(f"{log_name} Completed batch {batchId} with DF id {dfId}")
+    def process(df_id, batch_id):  # type: ignore[no-untyped-def]
+        print(f"{log_name} Started batch {batch_id} with DF id {df_id}")
+        batch_df = spark_connect_session._createRemoteDataFrame(df_id)
+        func(batch_df, batch_id)
+        print(f"{log_name} Completed batch {batch_id} with DF id {df_id}")
 
     while True:
         df_ref_id = utf8_deserializer.loads(infile)
