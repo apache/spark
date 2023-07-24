@@ -149,8 +149,8 @@ object MapPartitionsInR {
         broadcastVars,
         encoder.schema,
         schema,
-        CatalystSerde.generateObjAttr(RowEncoder(schema)),
-        deserialized))(RowEncoder(schema))
+        CatalystSerde.generateObjAttr(ExpressionEncoder(schema)),
+        deserialized))(ExpressionEncoder(schema))
     }
   }
 }
@@ -611,8 +611,8 @@ object FlatMapGroupsInR {
         UnresolvedDeserializer(valueDeserializer, dataAttributes),
         groupingAttributes,
         dataAttributes,
-        CatalystSerde.generateObjAttr(RowEncoder(schema)),
-        child))(RowEncoder(schema))
+        CatalystSerde.generateObjAttr(ExpressionEncoder(schema)),
+        child))(ExpressionEncoder(schema))
     }
   }
 }
