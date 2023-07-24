@@ -3048,13 +3048,13 @@ class SparkConnectPlanner(val sessionHolder: SessionHolder) extends Logging {
         respBuilder.setResetTerminated(true)
 
       case StreamingQueryManagerCommand.CommandCase.ADD_LISTENER =>
-        val (id, listener) = command.getAddListener.getPayloadCase match {
+        val listener = command.getAddListener.getPayloadCase match {
           case StreamingQueryListenerCommand.PayloadCase.PYTHON_LISTENER_PAYLOAD =>
             val listener = new PythonStreamingQueryListener(
               transformPythonFunction(command.getAddListener.getPythonListenerPayload),
               sessionHolder,
               pythonExec)
-            ("0", listener)
+            listener
 
           case StreamingQueryListenerCommand.PayloadCase.LISTENER_PAYLOAD =>
             val listenerPacket = Utils
@@ -3064,16 +3064,17 @@ class SparkConnectPlanner(val sessionHolder: SessionHolder) extends Logging {
             val listener: StreamingQueryListener = listenerPacket.listener
               .asInstanceOf[StreamingQueryListener]
             val id: String = listenerPacket.id
-            (id, listener)
+            sessionHolder.cacheListenerById(id, listener)
+            listener
 
           case StreamingQueryListenerCommand.PayloadCase.PAYLOAD_NOT_SET =>
             throw InvalidPlanInput("Unexpected listener payload") // Unreachable
         }
-        sessionHolder.cacheListenerById(id, listener)
         session.streams.addListener(listener)
         respBuilder.setAddListener(true)
 
       case StreamingQueryManagerCommand.CommandCase.REMOVE_LISTENER =>
+        // TODO (SPARK-44516): remove listener for python client
         val listenerId = Utils
           .deserialize[StreamingListenerPacket](
             command.getRemoveListener.getListenerPayload.toByteArray,

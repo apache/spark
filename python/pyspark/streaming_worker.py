@@ -88,9 +88,7 @@ def streaming_listener_fcn(infile, outfile, spark_connect_session, listener):
 
     while True:
         event = utf8_deserializer.loads(infile)
-        print("##### event received from python process is", event)
         event_type = read_int(infile)
-        print("##### event_type received from python process is", event_type)
         process(event, int(event_type))
         outfile.flush()
 

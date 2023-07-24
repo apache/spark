@@ -241,15 +241,14 @@ class StreamingQueryManager:
         cmd.add_listener.python_listener_payload.CopyFrom(expr)
         self._execute_streaming_query_manager_cmd(cmd)
         return None
-    # TODO(SPARK-42941): uncomment below
-    # addListener.__doc__ = PySparkStreamingQueryManager.addListener.__doc__
+
+    addListener.__doc__ = PySparkStreamingQueryManager.addListener.__doc__
 
     def removeListener(self, listener: Any) -> None:
-        # TODO(SPARK-42941): Change listener type to Connect StreamingQueryListener
-        # and implement below
+        # TODO (SPARK-44516): remove listener for python client
         raise NotImplementedError("removeListener() is not implemented.")
 
-    # TODO(SPARK-42941): uncomment below
+    # TODO (SPARK-44516): uncomment below
     # removeListener.__doc__ = PySparkStreamingQueryManager.removeListener.__doc__
 
     def _execute_streaming_query_manager_cmd(
