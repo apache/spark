@@ -728,11 +728,6 @@ class BaseUDTFTestsMixin:
                 """Initialize the UDTF"""
                 ...
 
-            @staticmethod
-            def analyze(x: AnalyzeArgument) -> AnalyzeResult:
-                """Analyze the argument."""
-                ...
-
             def eval(self, x: int):
                 """Evaluate the input row."""
                 yield x + 1,
@@ -741,10 +736,9 @@ class BaseUDTFTestsMixin:
                 """Terminate the UDTF."""
                 ...
 
-        cls = udtf(TestUDTF).func
+        cls = udtf(TestUDTF, returnType="y: int").func
         self.assertIn("A UDTF for test", cls.__doc__)
         self.assertIn("Initialize the UDTF", cls.__init__.__doc__)
-        self.assertIn("Analyze the argument", cls.analyze.__doc__)
         self.assertIn("Evaluate the input row", cls.eval.__doc__)
         self.assertIn("Terminate the UDTF", cls.terminate.__doc__)
 

@@ -134,9 +134,6 @@ def _vectorize_udtf(cls: Type) -> Type:
     if hasattr(cls, "terminate"):
         getattr(vectorized_udtf, "terminate").__doc__ = getattr(cls, "terminate").__doc__
 
-    if hasattr(vectorized_udtf, "analyze"):
-        getattr(vectorized_udtf, "analyze").__doc__ = getattr(cls, "analyze").__doc__
-
     return vectorized_udtf
 
 
