@@ -66,10 +66,11 @@ object MimaExcludes {
     // [SPARK-44205][SQL] Extract Catalyst Code from DecimalType
     ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.sql.types.DecimalType.unapply"),
     // [SPARK-44507][SQL][CONNECT] Move AnalysisException to sql/api.
-    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.AnalysisException")
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.AnalysisException"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.AnalysisException$")
   )
 
-  // Defulat exclude rules
+  // Default exclude rules
   lazy val defaultExcludes = Seq(
     // Spark Internals
     ProblemFilters.exclude[Problem]("org.apache.spark.rpc.*"),
