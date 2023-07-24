@@ -30,7 +30,6 @@ import scala.util.control.NonFatal
 import com.google.protobuf.ByteString
 import org.apache.arrow.memory.{BufferAllocator, RootAllocator}
 import org.apache.arrow.vector.VarBinaryVector
-import org.apache.commons.lang3.{JavaVersion, SystemUtils}
 import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.SparkUnsupportedOperationException
@@ -356,19 +355,9 @@ class ArrowEncoderSuite extends ConnectFunSuite with BeforeAndAfterAll {
   test("nullable fields") {
     val encoder = ScalaReflection.encoderFor[NullableData]
     // SPARK-44457: Similar to SPARK-42770, calling `truncatedTo(ChronoUnit.MICROS)`
-    // for `java.time.Instant` and `java.time.LocalDateTime` when testing with Java 17 on Linux.
-    val needTruncate =
-      SystemUtils.isJavaVersionAtLeast(JavaVersion.JAVA_17) && SystemUtils.IS_OS_LINUX
-    val instant = if (needTruncate) {
-      java.time.Instant.now().truncatedTo(ChronoUnit.MICROS)
-    } else {
-      java.time.Instant.now()
-    }
-    val now = if (needTruncate) {
-      java.time.LocalDateTime.now().truncatedTo(ChronoUnit.MICROS)
-    } else {
-      java.time.LocalDateTime.now()
-    }
+    // on `Instant.now()` and `LocalDateTime.now()` to ensure microsecond accuracy is used.
+    val instant = java.time.Instant.now().truncatedTo(ChronoUnit.MICROS)
+    val now = java.time.LocalDateTime.now().truncatedTo(ChronoUnit.MICROS)
     val today = java.time.LocalDate.now()
     roundTripAndCheckIdentical(encoder) { () =>
       val maybeNull = MaybeNull(3)
@@ -602,13 +591,8 @@ class ArrowEncoderSuite extends ConnectFunSuite with BeforeAndAfterAll {
 
   test("lenient field serialization - timestamp/instant") {
     // SPARK-44457: Similar to SPARK-42770, calling `truncatedTo(ChronoUnit.MICROS)`
-    // for `java.time.Instant`when testing with Java 17 on Linux.
-    val base =
-      if (SystemUtils.isJavaVersionAtLeast(JavaVersion.JAVA_17) && SystemUtils.IS_OS_LINUX) {
-        java.time.Instant.now().truncatedTo(ChronoUnit.MICROS)
-      } else {
-        java.time.Instant.now()
-      }
+    // on `Instant.now()` to ensure microsecond accuracy is used.
+    val base = java.time.Instant.now().truncatedTo(ChronoUnit.MICROS)
     val instants = () => Iterator.tabulate(10)(i => base.plusSeconds(i * i * 60))
     val timestamps = () => instants().map(java.sql.Timestamp.from)
     val combo = () => instants() ++ timestamps()
