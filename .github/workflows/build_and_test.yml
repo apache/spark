@@ -368,8 +368,6 @@ jobs:
       SKIP_MIMA: true
       METASPACE_SIZE: 1g
     steps:
-    - name: Free Disk Space
-      run: ./dev/free-disk-space.sh
     - name: Checkout Spark repository
       uses: actions/checkout@v3
       # In order to fetch changed files
@@ -406,6 +404,8 @@ jobs:
         key: pyspark-coursier-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
         restore-keys: |
           pyspark-coursier-
+    - name: Free Disk Space
+      run: ./dev/free-disk-space.sh
     - name: Install Java ${{ matrix.java }}
       uses: actions/setup-java@v3
       with:
