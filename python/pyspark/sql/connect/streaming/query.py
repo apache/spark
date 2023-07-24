@@ -242,7 +242,8 @@ class StreamingQueryManager:
         self._execute_streaming_query_manager_cmd(cmd)
         return None
 
-    addListener.__doc__ = PySparkStreamingQueryManager.addListener.__doc__
+    # TODO (SPARK-44516): remove listener for python client and uncomment below
+    # addListener.__doc__ = PySparkStreamingQueryManager.addListener.__doc__
 
     def removeListener(self, listener: Any) -> None:
         # TODO (SPARK-44516): remove listener for python client
