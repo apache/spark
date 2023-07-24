@@ -35,6 +35,7 @@ import org.apache.spark.connect.proto.ExecutePlanResponse.SqlCommandResult
 import org.apache.spark.connect.proto.Parse.ParseFormat
 import org.apache.spark.connect.proto.StreamingForeachFunction
 import org.apache.spark.connect.proto.StreamingQueryManagerCommand
+import org.apache.spark.connect.proto.StreamingQueryManagerCommand.StreamingQueryListenerCommand
 import org.apache.spark.connect.proto.StreamingQueryManagerCommandResult
 import org.apache.spark.connect.proto.StreamingQueryManagerCommandResult.StreamingQueryInstance
 import org.apache.spark.connect.proto.WriteStreamOperationStart.TriggerCase
@@ -2804,7 +2805,7 @@ class SparkConnectPlanner(val sessionHolder: SessionHolder) extends Logging {
           StreamingForeachBatchHelper.scalaForeachBatchWrapper(scalaFn, sessionHolder)
 
         case StreamingForeachFunction.FunctionCase.FUNCTION_NOT_SET =>
-          throw InvalidPlanInput("Unexpected") // Unreachable
+          throw InvalidPlanInput("Unexpected foreachBatch function") // Unreachable
       }
 
       writer.foreachBatch(foreachBatchFn)
@@ -3046,17 +3047,28 @@ class SparkConnectPlanner(val sessionHolder: SessionHolder) extends Logging {
         session.streams.resetTerminated()
         respBuilder.setResetTerminated(true)
 
-//        val listener = new PythonStreamingQueryListener(
-//          transformPythonFunction(command.getAddListener), sessionId, pythonExec)
-//        session.streams.addListener(listener)
       case StreamingQueryManagerCommand.CommandCase.ADD_LISTENER =>
-        val listenerPacket = Utils
-          .deserialize[StreamingListenerPacket](
-            command.getAddListener.getListenerPayload.toByteArray,
-            Utils.getContextOrSparkClassLoader)
-        val listener: StreamingQueryListener = listenerPacket.listener
-          .asInstanceOf[StreamingQueryListener]
-        val id: String = listenerPacket.id
+        val (id, listener) = command.getAddListener.getPayloadCase match {
+          case StreamingQueryListenerCommand.PayloadCase.PYTHON_LISTENER_PAYLOAD =>
+            val listener = new PythonStreamingQueryListener(
+              transformPythonFunction(command.getAddListener.getPythonListenerPayload),
+              sessionHolder,
+              pythonExec)
+            ("0", listener)
+
+          case StreamingQueryListenerCommand.PayloadCase.LISTENER_PAYLOAD =>
+            val listenerPacket = Utils
+              .deserialize[StreamingListenerPacket](
+                command.getAddListener.getListenerPayload.toByteArray,
+                Utils.getContextOrSparkClassLoader)
+            val listener: StreamingQueryListener = listenerPacket.listener
+              .asInstanceOf[StreamingQueryListener]
+            val id: String = listenerPacket.id
+            (id, listener)
+
+          case StreamingQueryListenerCommand.PayloadCase.PAYLOAD_NOT_SET =>
+            throw InvalidPlanInput("Unexpected listener payload") // Unreachable
+        }
         sessionHolder.cacheListenerById(id, listener)
         session.streams.addListener(listener)
         respBuilder.setAddListener(true)

@@ -63,6 +63,10 @@ class StreamingQueryListener(ABC):
     >>> spark.streams.addListener(MyListener())
     """
 
+    @property
+    def spark(self) -> Optional["SparkSession"]:
+        return None
+
     @abstractmethod
     def onQueryStarted(self, event: "QueryStartedEvent") -> None:
         """
@@ -124,31 +128,28 @@ class StreamingQueryListener(ABC):
 
 class ConnectStreamingQueryListener(StreamingQueryListener):
 
-    def set_spark_session(self, spark):
+    def _set_spark_session(self, spark):
         self._sparkSession = spark
 
     @property
     def spark(self) -> Optional["SparkSession"]:
         return self._sparkSession
 
-    def __init__(self) -> None:
+    def __init__(self, listener: StreamingQueryListener) -> None:
         self._sparkSession = None
+        self.listener = listener
 
-    @abstractmethod
     def onQueryStarted(self, event: "QueryStartedEvent") -> None:
-        pass
+        self.listener.onQueryStarted(event)
 
-    @abstractmethod
     def onQueryProgress(self, event: "QueryProgressEvent") -> None:
-        pass
+        self.listener.onQueryProgress(event)
 
-    @abstractmethod
     def onQueryIdle(self, event: "QueryIdleEvent") -> None:
-        pass
+        self.listener.onQueryIdle(event)
 
-    @abstractmethod
     def onQueryTerminated(self, event: "QueryTerminatedEvent") -> None:
-        pass
+        self.listener.onQueryTerminated(event)
 
 class JStreamingQueryListener:
     """

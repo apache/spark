@@ -364,7 +364,10 @@ message StreamingQueryManagerCommand {
   }
 
   message StreamingQueryListenerCommand {
-    bytes listener_payload = 1;
+    oneof payload {
+      bytes listener_payload = 1;
+      PythonUDF python_listener_payload = 2;
+    }
   }
 }
 

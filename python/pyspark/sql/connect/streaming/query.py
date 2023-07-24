@@ -236,9 +236,10 @@ class StreamingQueryManager:
     def addListener(self, listener: StreamingQueryListener) -> None:
         cmd = pb2.StreamingQueryManagerCommand()
         expr = proto.PythonUDF()
-        expr.command = CloudPickleSerializer().dumps(listener)
+        connect_listener = ConnectStreamingQueryListener(listener)
+        expr.command = CloudPickleSerializer().dumps(connect_listener)
         expr.python_ver = "%d.%d" % sys.version_info[:2]
-        cmd.add_listener.CopyFrom(expr)
+        cmd.add_listener.python_listener_payload.CopyFrom(expr)
         self._execute_streaming_query_manager_cmd(cmd)
         return None
     # TODO(SPARK-42941): uncomment below

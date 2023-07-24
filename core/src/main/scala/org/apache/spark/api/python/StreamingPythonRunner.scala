@@ -48,7 +48,7 @@ private[spark] class StreamingPythonRunner(func: PythonFunction, connectUrl: Str
    * Initializes the Python worker for streaming functions. Sets up Spark Connect session
    * to be used with the functions.
    */
-  def init(sessionId: String): (DataOutputStream, DataInputStream) = {
+  def init(sessionId: String, evalType: Int): (DataOutputStream, DataInputStream) = {
     log.info(s"Initializing Python runner (session: $sessionId ,pythonExec: $pythonExec")
 
     val env = SparkEnv.get
@@ -72,6 +72,9 @@ private[spark] class StreamingPythonRunner(func: PythonFunction, connectUrl: Str
 
     // Send sessionId
     PythonRDD.writeUTF(sessionId, dataOut)
+
+    // Send evalType
+    dataOut.writeInt(evalType)
 
     // send the user function to python process
     val command = func.command
