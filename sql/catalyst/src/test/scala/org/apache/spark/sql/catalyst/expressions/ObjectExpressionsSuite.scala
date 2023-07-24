@@ -73,6 +73,36 @@ class ObjectExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluationWithMutableProjection(invoke, null, inputRow)
   }
 
+  test("SPARK-44525: Invoke could not find method") {
+    val inputRow = InternalRow(new Object)
+    val inputObject = BoundReference(0, ObjectType(classOf[Object]), nullable = false)
+
+    checkError(
+      exception = intercept[SparkRuntimeException] {
+        Invoke(inputObject, "zeroArgNotExistMethod", IntegerType).eval(inputRow)
+      },
+      errorClass = "METHOD_NOT_FOUND",
+      parameters = Map(
+        "method" -> "zeroArgNotExistMethod",
+        "args" -> "()",
+        "cls" -> "class java.lang.Object"))
+
+    checkError(
+      exception = intercept[SparkRuntimeException] {
+        Invoke(
+          inputObject,
+          "oneArgNotExistMethod",
+          IntegerType,
+          Seq(Literal.fromObject(UTF8String.fromString("dummyInputString"))),
+          Seq(StringType)).eval(inputRow)
+      },
+      errorClass = "METHOD_NOT_FOUND",
+      parameters = Map(
+        "method" -> "oneArgNotExistMethod",
+        "args" -> "(class org.apache.spark.unsafe.types.UTF8String)",
+        "cls" -> "class java.lang.Object"))
+  }
+
   test("MapObjects should make copies of unsafe-backed data") {
     // test UnsafeRow-backed data
     val structEncoder = ExpressionEncoder[Array[Tuple2[java.lang.Integer, java.lang.Integer]]]

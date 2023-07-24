@@ -2010,6 +2010,11 @@
     ],
     "sqlState" : "23K01"
   },
+  "METHOD_NOT_FOUND" : {
+    "message" : [
+      "Couldn't find method <method> with arguments <args> on <cls>."
+    ]
+  },
   "MISSING_AGGREGATION" : {
     "message" : [
       "The non-aggregating expression <expression> is based on columns which are not participating in the GROUP BY clause.",

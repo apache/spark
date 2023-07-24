@@ -465,6 +465,20 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
       s"""A method named "$name" is not declared in any enclosing class nor any supertype""")
   }
 
+  def methodNotFoundError(
+      cls: Class[_],
+      functionName: String,
+      argClasses: Seq[Class[_]]): Throwable = {
+    new SparkRuntimeException(
+      errorClass = "METHOD_NOT_FOUND",
+      messageParameters = Map(
+        "method" -> functionName,
+        "args" -> argClasses.mkString("(", ", ", ")"),
+        "cls" -> cls.toString
+      )
+    )
+  }
+
   def constructorNotFoundError(cls: String): SparkRuntimeException = {
     new SparkRuntimeException(
       errorClass = "_LEGACY_ERROR_TEMP_2020",

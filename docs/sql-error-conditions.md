@@ -1201,6 +1201,12 @@ For more details see [MALFORMED_RECORD_IN_PARSING](sql-error-conditions-malforme
 The ON search condition of the MERGE statement matched a single row from the target table with multiple rows of the source table.
 This could result in the target row being operated on more than once with an update or delete operation and is not allowed.
 
+### METHOD_NOT_FOUND
+
+SQLSTATE: none assigned
+
+Couldn't find method `<method>` with arguments `<args>` on `<cls>`.
+
 ### MISSING_AGGREGATION
 
 [SQLSTATE: 42803](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
