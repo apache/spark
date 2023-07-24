@@ -248,6 +248,7 @@ try:
             "pyspark.sql.pandas",
             "pyspark.sql.protobuf",
             "pyspark.sql.streaming",
+            "pyspark.sql.worker",
             "pyspark.streaming",
             "pyspark.bin",
             "pyspark.sbin",

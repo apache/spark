@@ -696,7 +696,7 @@ private[ui] class TaskPagedTable(
         <td>{formatBytes(task.taskMetrics.map(_.memoryBytesSpilled))}</td>
         <td>{formatBytes(task.taskMetrics.map(_.diskBytesSpilled))}</td>
       }}
-      {errorMessageCell(task.errorMessage.getOrElse(""))}
+      {UIUtils.errorMessageCell(task.errorMessage.getOrElse(""))}
     </tr>
   }
 
@@ -712,19 +712,6 @@ private[ui] class TaskPagedTable(
 
   private def metricInfo(task: TaskData)(fn: TaskMetrics => Seq[Node]): Seq[Node] = {
     task.taskMetrics.map(fn).getOrElse(Nil)
-  }
-
-  private def errorMessageCell(error: String): Seq[Node] = {
-    val isMultiline = error.indexOf('\n') >= 0
-    // Display the first line by default
-    val errorSummary = StringEscapeUtils.escapeHtml4(
-      if (isMultiline) {
-        error.substring(0, error.indexOf('\n'))
-      } else {
-        error
-      })
-    val details = UIUtils.detailsUINode(isMultiline, error)
-    <td>{errorSummary}{details}</td>
   }
 }
 

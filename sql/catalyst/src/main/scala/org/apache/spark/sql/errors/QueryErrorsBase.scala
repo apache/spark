@@ -17,14 +17,9 @@
 
 package org.apache.spark.sql.errors
 
-import java.util.Locale
-
-import org.apache.spark.QueryContext
-import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.expressions.{Expression, Literal}
-import org.apache.spark.sql.catalyst.trees.SQLQueryContext
 import org.apache.spark.sql.catalyst.util.{toPrettySQL, QuotingUtils}
-import org.apache.spark.sql.types.{AbstractDataType, DataType, DoubleType, FloatType, TypeCollection}
+import org.apache.spark.sql.types.{DataType, DoubleType, FloatType}
 
 /**
  * The trait exposes util methods for preparing error messages such as quoting of error elements.
@@ -47,6 +42,23 @@ import org.apache.spark.sql.types.{AbstractDataType, DataType, DoubleType, Float
  *   For example: "earnings + 1".
  */
 private[sql] trait QueryErrorsBase extends DataTypeErrorsBase {
+
+  def toSQLConfVal(conf: String): String = {
+    quoteByDefault(conf)
+  }
+
+  def toDSOption(option: String): String = {
+    quoteByDefault(option)
+  }
+
+  def toSQLExpr(e: Expression): String = {
+    quoteByDefault(toPrettySQL(e))
+  }
+
+  def toSQLSchema(schema: String): String = {
+    QuotingUtils.toSQLSchema(schema)
+  }
+
   // Converts an error class parameter to its SQL representation
   def toSQLValue(v: Any, t: DataType): String = Literal.create(v, t) match {
     case Literal(null, _) => "NULL"
@@ -61,56 +73,6 @@ private[sql] trait QueryErrorsBase extends DataTypeErrorsBase {
       else if (v.isNegInfinity) "-Infinity"
       else l.sql
     case l => l.sql
-  }
-
-  private def quoteByDefault(elem: String): String = {
-    "\"" + elem + "\""
-  }
-
-  def toSQLStmt(text: String): String = {
-    text.toUpperCase(Locale.ROOT)
-  }
-
-  def toSQLId(parts: String): String = {
-    toSQLId(UnresolvedAttribute.parseAttributeName(parts))
-  }
-
-  def toSQLType(t: AbstractDataType): String = t match {
-    case TypeCollection(types) => types.map(toSQLType).mkString("(", " or ", ")")
-    case dt: DataType => quoteByDefault(dt.sql)
-    case at => quoteByDefault(at.simpleString.toUpperCase(Locale.ROOT))
-  }
-
-  def toSQLType(text: String): String = {
-    quoteByDefault(text.toUpperCase(Locale.ROOT))
-  }
-
-  def toSQLConfVal(conf: String): String = {
-    quoteByDefault(conf)
-  }
-
-  def toDSOption(option: String): String = {
-    quoteByDefault(option)
-  }
-
-  def toSQLConf(conf: String): String = {
-    QuotingUtils.toSQLConf(conf)
-  }
-
-  def toSQLExpr(e: Expression): String = {
-    quoteByDefault(toPrettySQL(e))
-  }
-
-  def getSummary(sqlContext: SQLQueryContext): String = {
-    if (sqlContext == null) "" else sqlContext.summary
-  }
-
-  def getQueryContext(sqlContext: SQLQueryContext): Array[QueryContext] = {
-    if (sqlContext == null) Array.empty else Array(sqlContext.asInstanceOf[QueryContext])
-  }
-
-  def toSQLSchema(schema: String): String = {
-    QuotingUtils.toSQLSchema(schema)
   }
 }
 
