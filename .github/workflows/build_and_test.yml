@@ -50,6 +50,25 @@ on:
         type: string
         default: ''
 jobs:
+  free-disk-space:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Free Disk Space (Ubuntu)
+        uses: jlumbroso/free-disk-space@main
+        with:
+          # this might remove tools that are actually needed,
+          # if set to "true" but frees about 6 GB
+          tool-cache: false
+
+          # all of these default to true, but feel free to set to
+          # "false" if necessary for your workflow
+          android: true
+          dotnet: true
+          haskell: true
+          large-packages: true
+          docker-images: true
+          swap-storage: true
+
   precondition:
     name: Check changes
     runs-on: ubuntu-22.04
@@ -404,8 +423,6 @@ jobs:
         key: pyspark-coursier-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
         restore-keys: |
           pyspark-coursier-
-    - name: Free Disk Space
-      run: ./dev/free-disk-space.sh
     - name: Install Java ${{ matrix.java }}
       uses: actions/setup-java@v3
       with:
