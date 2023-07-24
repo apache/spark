@@ -882,7 +882,7 @@ class AdaptiveQueryExecSuite
       SQLConf.SHUFFLE_PARTITIONS.key -> "100",
       SQLConf.SKEW_JOIN_SKEWED_PARTITION_THRESHOLD.key -> "800",
       SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES.key -> "800") {
-      withTempView("skewed", "noSkewed") {
+      withTempView("skewed", "nonSkewed") {
         // skewData1
         spark
           .range(0, 1000, 1, 10)
@@ -898,7 +898,7 @@ class AdaptiveQueryExecSuite
           .select(
             'id as "key2",
             'id as "value2")
-          .createOrReplaceTempView("noSkewed")
+          .createOrReplaceTempView("nonSkewed")
 
         def checkSkewJoin(
             joins: Seq[SortMergeJoinExec],
@@ -922,8 +922,8 @@ class AdaptiveQueryExecSuite
           s"""
              |SELECT * FROM skewed
              |where
-             |(key1 in (select key2 from noSkewed)
-             |or value1 in (select value2 from noSkewed)
+             |(key1 in (select key2 from nonSkewed)
+             |or value1 in (select value2 from nonSkewed)
              |)""".stripMargin)
         val existenceSmjForLeft = findTopLevelSortMergeJoin(existenceAdaptivePlanForLeft)
         assert(existenceSmjForLeft.nonEmpty &&
@@ -933,7 +933,7 @@ class AdaptiveQueryExecSuite
         // forbid skewed ExistenceJoin optimization for right side
         val (_, existenceAdaptivePlanForRight) = runAdaptiveAndVerifyResult(
           s"""
-             |SELECT * FROM noSkewed
+             |SELECT * FROM nonSkewed
              |where
              |(key2 in (select key1 from skewed)
              |or value2 in (select value1 from skewed)
