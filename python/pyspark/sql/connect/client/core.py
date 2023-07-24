@@ -23,6 +23,7 @@ from pyspark.sql.connect.utils import check_dependencies
 
 check_dependencies(__name__)
 
+import threading
 import logging
 import os
 import platform
@@ -41,6 +42,7 @@ from typing import (
     List,
     Tuple,
     Dict,
+    Set,
     NoReturn,
     cast,
     Callable,
@@ -574,6 +576,8 @@ class SparkConnectClient(object):
             the $USER environment. Defining the user ID as part of the connection string
             takes precedence.
         """
+        self.thread_local = threading.local()
+
         # Parse the connection string.
         self._builder = (
             connection
@@ -903,9 +907,11 @@ class SparkConnectClient(object):
         return self._builder._token
 
     def _execute_plan_request_with_metadata(self) -> pb2.ExecutePlanRequest:
-        req = pb2.ExecutePlanRequest()
-        req.session_id = self._session_id
-        req.client_type = self._builder.userAgent
+        req = pb2.ExecutePlanRequest(
+            session_id=self._session_id,
+            client_type=self._builder.userAgent,
+            tags=list(self.get_tags()),
+        )
         if self._user_id:
             req.user_context.user_id = self._user_id
         return req
@@ -1204,12 +1210,20 @@ class SparkConnectClient(object):
         except Exception as error:
             self._handle_error(error)
 
-    def _interrupt_request(self, interrupt_type: str) -> pb2.InterruptRequest:
+    def _interrupt_request(
+        self, interrupt_type: str, id_or_tag: Optional[str] = None
+    ) -> pb2.InterruptRequest:
         req = pb2.InterruptRequest()
         req.session_id = self._session_id
         req.client_type = self._builder.userAgent
         if interrupt_type == "all":
             req.interrupt_type = pb2.InterruptRequest.InterruptType.INTERRUPT_TYPE_ALL
+        elif interrupt_type == "tag":
+            req.interrupt_type = pb2.InterruptRequest.InterruptType.INTERRUPT_TYPE_TAG
+            req.operation_tag = id_or_tag
+        elif interrupt_type == "operation":
+            req.interrupt_type = pb2.InterruptRequest.InterruptType.INTERRUPT_TYPE_OPERATION_ID
+            req.operation_id = id_or_tag
         else:
             raise PySparkValueError(
                 error_class="UNKNOWN_INTERRUPT_TYPE",
@@ -1221,14 +1235,7 @@ class SparkConnectClient(object):
             req.user_context.user_id = self._user_id
         return req
 
-    def interrupt_all(self) -> None:
-        """
-        Call the interrupt RPC of Spark Connect to interrupt all executions in this session.
-
-        Returns
-        -------
-        None
-        """
+    def interrupt_all(self) -> Optional[List[str]]:
         req = self._interrupt_request("all")
         try:
             for attempt in Retrying(
@@ -1241,10 +1248,79 @@ class SparkConnectClient(object):
                             "Received incorrect session identifier for request:"
                             f"{resp.session_id} != {self._session_id}"
                         )
-                    return
+                    return list(resp.interrupted_ids)
             raise SparkConnectException("Invalid state during retry exception handling.")
         except Exception as error:
             self._handle_error(error)
+
+    def interrupt_tag(self, tag: str) -> Optional[List[str]]:
+        req = self._interrupt_request("tag", tag)
+        try:
+            for attempt in Retrying(
+                can_retry=SparkConnectClient.retry_exception, **self._retry_policy
+            ):
+                with attempt:
+                    resp = self._stub.Interrupt(req, metadata=self._builder.metadata())
+                    if resp.session_id != self._session_id:
+                        raise SparkConnectException(
+                            "Received incorrect session identifier for request:"
+                            f"{resp.session_id} != {self._session_id}"
+                        )
+                    return list(resp.interrupted_ids)
+            raise SparkConnectException("Invalid state during retry exception handling.")
+        except Exception as error:
+            self._handle_error(error)
+
+    def interrupt_operation(self, op_id: str) -> Optional[List[str]]:
+        req = self._interrupt_request("operation", op_id)
+        try:
+            for attempt in Retrying(
+                can_retry=SparkConnectClient.retry_exception, **self._retry_policy
+            ):
+                with attempt:
+                    resp = self._stub.Interrupt(req, metadata=self._builder.metadata())
+                    if resp.session_id != self._session_id:
+                        raise SparkConnectException(
+                            "Received incorrect session identifier for request:"
+                            f"{resp.session_id} != {self._session_id}"
+                        )
+                    return list(resp.interrupted_ids)
+            raise SparkConnectException("Invalid state during retry exception handling.")
+        except Exception as error:
+            self._handle_error(error)
+
+    def add_tag(self, tag: str) -> None:
+        self._throw_if_invalid_tag(tag)
+        if not hasattr(self.thread_local, "tags"):
+            self.thread_local.tags = set()
+        self.thread_local.tags.add(tag)
+
+    def remove_tag(self, tag) -> None:
+        self._throw_if_invalid_tag(tag)
+        if not hasattr(self.thread_local, "tags"):
+            self.thread_local.tags = set()
+        self.thread_local.tags.remove(tag)
+
+    def get_tags(self) -> Set[str]:
+        if not hasattr(self.thread_local, "tags"):
+            self.thread_local.tags = set()
+        return self.thread_local.tags
+
+    def clear_tags(self) -> None:
+        self.thread_local.tags = set()
+
+    def _throw_if_invalid_tag(self, tag: str) -> None:
+        """
+        Validate if a tag for ExecutePlanRequest.tags is valid. Throw ``ValueError`` if
+        not.
+        """
+        spark_job_tags_sep = ","
+        if tag is None:
+            raise ValueError("Spark Connect tag cannot be null.")
+        if spark_job_tags_sep in tag:
+            raise ValueError(f"Spark Connect tag cannot contain '{spark_job_tags_sep}'.")
+        if len(tag) == 0:
+            raise ValueError("Spark Connect tag cannot be an empty string.")
 
     def _handle_error(self, error: Exception) -> NoReturn:
         """
