@@ -238,12 +238,12 @@ private[arrow] class TimeStampMicroTZVectorReader(v: TimeStampMicroTZVector)
     extends TypedArrowVectorReader[TimeStampMicroTZVector](v) {
   private val zone = getZoneId(v.getTimeZone)
   private lazy val formatter = TimestampFormatter.getFractionFormatter(zone)
-  private def utcMicros(i: Int): Long = convertTz(getLong(i), zone, ZoneOffset.UTC)
+  private def utcMicros(i: Int): Long = convertTz(vector.get(i), zone, ZoneOffset.UTC)
   override def getLong(i: Int): Long = Math.floorDiv(vector.get(i), MICROS_PER_SECOND)
-  override def getTimestamp(i: Int): Timestamp = toJavaTimestamp(getLong(i))
-  override def getInstant(i: Int): Instant = microsToInstant(getLong(i))
+  override def getTimestamp(i: Int): Timestamp = toJavaTimestamp(vector.get(i))
+  override def getInstant(i: Int): Instant = microsToInstant(vector.get(i))
   override def getLocalDateTime(i: Int): LocalDateTime = microsToLocalDateTime(utcMicros(i))
-  override def getString(i: Int): String = formatter.format(getLong(i))
+  override def getString(i: Int): String = formatter.format(vector.get(i))
 }
 
 private[arrow] class TimeStampMicroVectorReader(v: TimeStampMicroVector, timeZoneId: String)

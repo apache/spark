@@ -14,7 +14,6 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-// scalastyle:off
 package org.apache.spark.sql.connect.client.arrow
 
 import java.math.BigInteger
