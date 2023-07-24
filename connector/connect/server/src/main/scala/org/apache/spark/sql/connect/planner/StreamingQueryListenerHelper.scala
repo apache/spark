@@ -31,7 +31,6 @@ class PythonStreamingQueryListener(
   val connectUrl = s"sc://localhost:$port/;user_id=${sessionHolder.userId}"
   val runner = StreamingPythonRunner(listener, connectUrl)
 
-  println("##### start runner init")
   val (dataOut, _) = runner.init(
     sessionHolder.sessionId, PythonEvalType.SQL_STREAMING_LISTENER)
 
@@ -39,35 +38,23 @@ class PythonStreamingQueryListener(
     PythonRDD.writeUTF(event.json, dataOut)
     dataOut.writeInt(0)
     dataOut.flush()
-    // scalastyle:off println
-    println(s"sent queryStarted event json to worker process")
-    // scalastyle:on println
   }
 
   override def onQueryProgress(event: StreamingQueryListener.QueryProgressEvent): Unit = {
     PythonRDD.writeUTF(event.json, dataOut)
     dataOut.writeInt(1)
     dataOut.flush()
-    // scalastyle:off println
-    println(s"sent QueryProgressEvent event json to worker process")
-    // scalastyle:on println
   }
 
   override def onQueryIdle(event: StreamingQueryListener.QueryIdleEvent): Unit = {
     PythonRDD.writeUTF(event.json, dataOut)
     dataOut.writeInt(2)
     dataOut.flush()
-    // scalastyle:off println
-    println(s"sent QueryIdleEvent event json to worker process")
-    // scalastyle:on println
   }
 
   override def onQueryTerminated(event: StreamingQueryListener.QueryTerminatedEvent): Unit = {
     PythonRDD.writeUTF(event.json, dataOut)
     dataOut.writeInt(3)
     dataOut.flush()
-    // scalastyle:off println
-    println(s"sent QueryTerminatedEvent event json to worker process")
-    // scalastyle:on println
   }
 }
