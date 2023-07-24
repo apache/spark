@@ -1690,10 +1690,10 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
         "tableSchema" -> tableSchema.toString))
   }
 
-  def unsupportedDataSourceTypeForDirectQueryOnFilesError(className: String): Throwable = {
+  def unsupportedDataSourceTypeForDirectQueryOnFilesError(dataSourceType: String): Throwable = {
     new AnalysisException(
-      errorClass = "UNSUPPORTED_DATA_SOURCE_FOR_DIRECT_QUERY",
-      messageParameters = Map("className" -> className))
+      errorClass = "UNSUPPORTED_DATASOURCE_FOR_DIRECT_QUERY",
+      messageParameters = Map("dataSourceType" -> dataSourceType))
   }
 
   def saveDataIntoViewNotAllowedError(): Throwable = {

@@ -53,7 +53,7 @@ class ResolveSQLOnFile(sparkSession: SparkSession) extends Rule[LogicalPlan] {
     if (!isFileFormat ||
       dataSource.className.toLowerCase(Locale.ROOT) == DDLUtils.HIVE_PROVIDER) {
       throw QueryCompilationErrors.unsupportedDataSourceTypeForDirectQueryOnFilesError(
-        dataSource.className)
+        ident.head)
     }
     dataSource
   }
@@ -77,7 +77,7 @@ class ResolveSQLOnFile(sparkSession: SparkSession) extends Rule[LogicalPlan] {
         LogicalRelation(ds.resolveRelation())
       } catch {
         case _: ClassNotFoundException => u
-        case e: Exception =>
+        case e: Exception if !e.isInstanceOf[AnalysisException] =>
           // the provider is valid, but failed to create a logical plan
           u.failAnalysis(
             errorClass = "UNSUPPORTED_DATASOURCE_FOR_DIRECT_QUERY",
