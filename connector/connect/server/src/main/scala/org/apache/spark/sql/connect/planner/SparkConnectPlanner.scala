@@ -3070,9 +3070,6 @@ class SparkConnectPlanner(val sessionHolder: SessionHolder) extends Logging {
         val listenerId = command.getRemoveListener.getId
         val listener: StreamingQueryListener = sessionHolder.getListenerOrThrow(listenerId)
         session.streams.removeListener(listener)
-        // scalastyle:off println
-        println("======exit called")
-        // scalastyle:on println
         sessionHolder.removeCachedListener(listenerId)
         respBuilder.setRemoveListener(true)
 
