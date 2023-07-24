@@ -37,7 +37,7 @@ class DefaultExtractor(Extractor):
     def base(self, dist: "Distribution", product: "ApiDescription"):
         assert dist
         subres = subprocess.run(
-            f"{getPythonExe()} -m aexpy.extracting.main.base",
+            [getPythonExe(), "-m", "aexpy.extracting.main.base"],
             cwd=getAppDirectory().parent,
             text=True,
             capture_output=True,
