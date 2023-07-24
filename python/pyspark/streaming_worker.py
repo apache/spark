@@ -33,7 +33,6 @@ from pyspark.serializers import (
 from pyspark import worker
 from pyspark.sql import SparkSession
 
-<<<<<<< HEAD
 from pyspark.sql.streaming.listener import (
     QueryStartedEvent,
     QueryProgressEvent,
@@ -41,10 +40,7 @@ from pyspark.sql.streaming.listener import (
     QueryIdleEvent,
 )
 
-pickleSer = CPickleSerializer()
-=======
 pickle_ser = CPickleSerializer()
->>>>>>> spark/master
 utf8_deserializer = UTF8Deserializer()
 
 
@@ -52,11 +48,7 @@ def main(infile, outfile):  # type: ignore[no-untyped-def]
     connect_url = os.environ["SPARK_CONNECT_LOCAL_URL"]
     session_id = utf8_deserializer.loads(infile)
 
-<<<<<<< HEAD
     print(f"Streaming worker is starting with url {connect_url} and sessionId {session_id}.")
-=======
-    print(f"{log_name} is starting with url {connect_url} and sessionId {session_id}.")
->>>>>>> spark/master
 
     spark_connect_session = SparkSession.builder.remote(connect_url).getOrCreate()
     spark_connect_session._client._session_id = session_id
@@ -64,18 +56,14 @@ def main(infile, outfile):  # type: ignore[no-untyped-def]
     # TODO(SPARK-44460): Pass credentials.
     # TODO(SPARK-44461): Enable Process Isolation
 
-<<<<<<< HEAD
     eval_type = read_int(infile)
 
-    func = worker.read_command(pickleSer, infile)
-=======
     func = worker.read_command(pickle_ser, infile)
->>>>>>> spark/master
+
     write_int(0, outfile)  # Indicate successful initialization
 
     outfile.flush()
 
-<<<<<<< HEAD
     if eval_type == PythonEvalType.SQL_STREAMING_FOREACH_BATCH:
         foreach_batch_fcn(infile, outfile, spark_connect_session, func)
     elif eval_type == PythonEvalType.SQL_STREAMING_LISTENER:
@@ -111,20 +99,11 @@ def foreach_batch_fcn(infile, outfile, spark_connect_session, func):
 
     def process(df_id, batch_id):  # type: ignore[no-untyped-def]
         print(f"{log_name} Started batch {batch_id} with DF id {df_id}")
-        batch_df = spark_connect_session._createRemoteDataFrame(df_id)
-        func(batch_df, batch_id)
-        print(f"{log_name} Completed batch {batch_id} with DF id {df_id}")
-
-    while True:
-=======
-    def process(df_id, batch_id):  # type: ignore[no-untyped-def]
-        print(f"{log_name} Started batch {batch_id} with DF id {df_id}")
         batch_df = spark_connect_session._create_remote_dataframe(df_id)
         func(batch_df, batch_id)
         print(f"{log_name} Completed batch {batch_id} with DF id {df_id}")
 
     while True:
->>>>>>> spark/master
         df_ref_id = utf8_deserializer.loads(infile)
         batch_id = read_long(infile)
         process(df_ref_id, int(batch_id))  # TODO(SPARK-44463): Propagate error to the user.
