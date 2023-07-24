@@ -1219,9 +1219,11 @@ class SparkConnectClient(object):
         if interrupt_type == "all":
             req.interrupt_type = pb2.InterruptRequest.InterruptType.INTERRUPT_TYPE_ALL
         elif interrupt_type == "tag":
+            assert id_or_tag is not None
             req.interrupt_type = pb2.InterruptRequest.InterruptType.INTERRUPT_TYPE_TAG
             req.operation_tag = id_or_tag
         elif interrupt_type == "operation":
+            assert id_or_tag is not None
             req.interrupt_type = pb2.InterruptRequest.InterruptType.INTERRUPT_TYPE_OPERATION_ID
             req.operation_id = id_or_tag
         else:
@@ -1295,7 +1297,7 @@ class SparkConnectClient(object):
             self.thread_local.tags = set()
         self.thread_local.tags.add(tag)
 
-    def remove_tag(self, tag) -> None:
+    def remove_tag(self, tag: str) -> None:
         self._throw_if_invalid_tag(tag)
         if not hasattr(self.thread_local, "tags"):
             self.thread_local.tags = set()

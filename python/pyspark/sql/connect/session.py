@@ -565,7 +565,7 @@ class SparkSession:
 
     interruptTag.__doc__ = PySparkSession.interruptTag.__doc__
 
-    def interruptOperation(self, op_id) -> List[str]:
+    def interruptOperation(self, op_id: str) -> List[str]:
         op_ids = self.client.interrupt_operation(op_id)
         assert op_ids is not None
         return op_ids

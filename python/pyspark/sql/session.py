@@ -1899,7 +1899,7 @@ class SparkSession(SparkConversionMixin):
             "however, the current Spark session does not use Spark Connect."
         )
 
-    def interruptOperation(self, op_id) -> List[str]:
+    def interruptOperation(self, op_id: str) -> List[str]:
         """
         Interrupt an operation of this session with the given operationId.
 
