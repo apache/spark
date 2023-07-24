@@ -42,16 +42,16 @@ object StreamingForeachBatchHelper extends Logging {
       sessionHolder: SessionHolder): ForeachBatchFnType = { (df: DataFrame, batchId: Long) =>
     {
       val dfId = UUID.randomUUID().toString
-      log.info(s"Caching DataFrame with id $dfId") // TODO: Add query id to the log.
+      logInfo(s"Caching DataFrame with id $dfId") // TODO: Add query id to the log.
 
-      // TODO: Sanity check there is no other active DataFrame for this query. The query id
-      //       needs to be saved in the cache for this check.
+      // TODO(SPARK-44462): Sanity check there is no other active DataFrame for this query.
+      //  The query id needs to be saved in the cache for this check.
 
       sessionHolder.cacheDataFrameById(dfId, df)
       try {
         fn(FnArgsWithId(dfId, df, batchId))
       } finally {
-        log.info(s"Removing DataFrame with id $dfId from the cache")
+        logInfo(s"Removing DataFrame with id $dfId from the cache")
         sessionHolder.removeCachedDataFrame(dfId)
       }
     }
@@ -67,7 +67,8 @@ object StreamingForeachBatchHelper extends Logging {
   def scalaForeachBatchWrapper(
       fn: ForeachBatchFnType,
       sessionHolder: SessionHolder): ForeachBatchFnType = {
-    // TODO: Set up Spark Connect session. Do we actually need this for the first version?
+    // TODO(SPARK-44462): Set up Spark Connect session.
+    // Do we actually need this for the first version?
     dataFrameCachingWrapper(
       (args: FnArgsWithId) => {
         fn(args.df, args.batchId) // dfId is not used, see hack comment above.
@@ -103,7 +104,7 @@ object StreamingForeachBatchHelper extends Logging {
       dataOut.flush()
 
       val ret = dataIn.readInt()
-      log.info(s"Python foreach batch for dfId ${args.dfId} completed (ret: $ret)")
+      logInfo(s"Python foreach batch for dfId ${args.dfId} completed (ret: $ret)")
     }
 
     dataFrameCachingWrapper(foreachBatchRunnerFn, sessionHolder)
