@@ -482,6 +482,7 @@ object BooleanSimplification extends Rule[LogicalPlan] with PredicateHelper {
  * 2) Replace '=', '<=', and '>=' with 'true' literal if both operands are non-nullable.
  * 3) Replace '<' and '>' with 'false' literal if both operands are non-nullable.
  * 4) Unwrap '=', '<=>' if one side is a boolean literal
+ * 5) Simplify BinaryComparison if its children contain ScalarSubquery with empty output
  */
 object SimplifyBinaryComparison
   extends Rule[LogicalPlan] with PredicateHelper with ConstraintHelper {
@@ -529,6 +530,15 @@ object SimplifyBinaryComparison
         case TrueLiteral EqualNullSafe b if !b.nullable => b
         case a EqualNullSafe FalseLiteral if !a.nullable => Not(a)
         case FalseLiteral EqualNullSafe b if !b.nullable => Not(b)
+
+        case EqualNullSafe(a: ScalarSubquery, b: ScalarSubquery)
+            if PropagateEmptyRelation.isEmpty(a.plan) && PropagateEmptyRelation.isEmpty(b.plan) =>
+          TrueLiteral
+        case e: EqualNullSafe => e
+        case BinaryComparison(a: ScalarSubquery, _) if PropagateEmptyRelation.isEmpty(a.plan) =>
+          Literal(null, BooleanType)
+        case BinaryComparison(_, b: ScalarSubquery) if PropagateEmptyRelation.isEmpty(b.plan) =>
+          Literal(null, BooleanType)
       }
   }
 }
