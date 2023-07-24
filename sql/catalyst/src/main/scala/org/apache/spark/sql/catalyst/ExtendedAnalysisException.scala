@@ -42,7 +42,7 @@ class ExtendedAnalysisException(
     messageParameters,
     context) {
 
-  def this(e: AnalysisException, plan: LogicalPlan) {
+  def this(e: AnalysisException, plan: LogicalPlan) = {
     this(
       e.message,
       e.line,
