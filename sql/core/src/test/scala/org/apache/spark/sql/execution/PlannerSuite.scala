@@ -116,7 +116,7 @@ class PlannerSuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
         val planned = sql(
           """
             |SELECT l.a, l.b
-            |FROM testData2 l JOIN (SELECT * FROM testLimit LIMIT 1) r ON (l.a = r.key)
+            |FROM testData2 l JOIN (SELECT * FROM testLimit LIMIT 2) r ON (l.a = r.key)
           """.stripMargin).queryExecution.sparkPlan
 
         val broadcastHashJoins = planned.collect { case join: BroadcastHashJoinExec => join }
@@ -1283,8 +1283,8 @@ class PlannerSuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
 
   test("SPARK-39397: Relax AliasAwareOutputExpression to support alias with expression") {
     withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
-      val df1 = Seq("a").toDF("c1")
-      val df2 = Seq("A").toDF("c2")
+      val df1 = Seq("a", "b").toDF("c1")
+      val df2 = Seq("A", "B").toDF("c2")
       val df = df1.join(df2, upper($"c1") === $"c2").groupBy(upper($"c1")).agg(max($"c1"))
       val numShuffles = collect(df.queryExecution.executedPlan) {
         case e: ShuffleExchangeExec => e

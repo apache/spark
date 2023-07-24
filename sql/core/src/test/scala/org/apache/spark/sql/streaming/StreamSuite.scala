@@ -1111,7 +1111,8 @@ class StreamSuite extends StreamTest {
       )
       require(execPlan != null)
 
-      val localLimits = execPlan.collect {
+      // Use collectWithSubqueries because EliminateJoin may rewrite inner joins to filter
+      val localLimits = execPlan.collectWithSubqueries {
         case l: LocalLimitExec => l
         case l: StreamingLocalLimitExec => l
       }
