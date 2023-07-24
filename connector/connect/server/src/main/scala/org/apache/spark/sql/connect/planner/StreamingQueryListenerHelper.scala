@@ -58,7 +58,7 @@ class PythonStreamingQueryListener(
     dataOut.flush()
   }
 
-  // TODO(SPARK-44433): Improve termination of Processes. Similar to foreachBatch when we need
-  // to exit the process when the query ends. In listener semantics, we need to exit the process
-  // when removeListener is called.
+  // TODO(SPARK-44433)(SPARK-44516): Improve termination of Processes.
+  // Similar to foreachBatch when we need to exit the process when the query ends.
+  // In listener semantics, we need to exit the process when removeListener is called.
 }
