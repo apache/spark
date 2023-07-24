@@ -21,8 +21,8 @@ import sys
 import traceback
 from typing import List, IO
 
+from pyspark.accumulators import _accumulatorRegistry
 from pyspark.errors import PySparkRuntimeError, PySparkValueError
-from pyspark.java_gateway import local_connect_and_auth
 from pyspark.serializers import (
     read_bool,
     read_int,
@@ -33,7 +33,16 @@ from pyspark.serializers import (
 from pyspark.sql.types import _parse_datatype_json_string
 from pyspark.sql.udtf import AnalyzeArgument, AnalyzeResult
 from pyspark.util import try_simplify_traceback
-from pyspark.worker import check_python_version, read_command, pickleSer, utf8_deserializer
+from pyspark.worker_util import (
+    check_python_version,
+    read_command,
+    pickleSer,
+    send_accumulator_updates,
+    setup_broadcasts,
+    setup_spark_files,
+    utf8_deserializer,
+    worker_main,
+)
 
 
 def read_udtf(infile: IO) -> type:
@@ -87,6 +96,11 @@ def main(infile: IO, outfile: IO) -> None:
     """
     try:
         check_python_version(infile)
+        setup_spark_files(infile)
+        setup_broadcasts(infile)
+
+        _accumulatorRegistry.clear()
+
         handler = read_udtf(infile)
         args = read_arguments(infile)
 
@@ -122,6 +136,8 @@ def main(infile: IO, outfile: IO) -> None:
             print(traceback.format_exc(), file=sys.stderr)
         sys.exit(-1)
 
+    send_accumulator_updates(outfile)
+
     # check end of stream
     if read_int(infile) == SpecialLengths.END_OF_STREAM:
         write_int(SpecialLengths.END_OF_STREAM, outfile)
@@ -132,11 +148,4 @@ def main(infile: IO, outfile: IO) -> None:
 
 
 if __name__ == "__main__":
-    # Read information about how to connect back to the JVM from the environment.
-    java_port = int(os.environ["PYTHON_WORKER_FACTORY_PORT"])
-    auth_secret = os.environ["PYTHON_WORKER_FACTORY_SECRET"]
-    (sock_file, _) = local_connect_and_auth(java_port, auth_secret)
-    # TODO: Remove the following two lines and use `Process.pid()` when we drop JDK 8.
-    write_int(os.getpid(), sock_file)
-    sock_file.flush()
-    main(sock_file, sock_file)
+    worker_main(main)

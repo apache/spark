@@ -14,7 +14,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-
+import os
+import shutil
+import tempfile
 import unittest
 
 from typing import Iterator
@@ -27,6 +29,7 @@ from pyspark.errors import (
     PySparkTypeError,
     AnalysisException,
 )
+from pyspark.files import SparkFiles
 from pyspark.rdd import PythonEvalType
 from pyspark.sql.functions import (
     array,
@@ -1213,6 +1216,153 @@ class BaseUDTFTestsMixin:
             AnalysisException, r"analyze\(\) takes 0 positional arguments but 2 were given"
         ):
             self.spark.sql("SELECT * FROM test_udtf(1, 'x')").collect()
+
+    def test_udtf_with_analyze_using_broadcast(self):
+        colname = self.sc.broadcast("col1")
+
+        @udtf
+        class TestUDTF:
+            @staticmethod
+            def analyze(a: AnalyzeArgument) -> AnalyzeResult:
+                return AnalyzeResult(StructType().add(colname.value, a.data_type))
+
+            def eval(self, a):
+                yield a,
+
+        df = TestUDTF(lit(10))
+        assertSchemaEqual(df.schema, StructType().add("col1", IntegerType()))
+        assertDataFrameEqual(df, [Row(col=10)])
+
+    def test_udtf_with_analyze_using_accumulator(self):
+        test_accum = self.sc.accumulator(0)
+
+        @udtf
+        class TestUDTF:
+            @staticmethod
+            def analyze(a: AnalyzeArgument) -> AnalyzeResult:
+                test_accum.add(1)
+                return AnalyzeResult(StructType().add("col1", a.data_type))
+
+            def eval(self, a):
+                test_accum.add(1)
+                yield a,
+
+        df = TestUDTF(lit(10))
+        assertSchemaEqual(df.schema, StructType().add("col1", IntegerType()))
+        assertDataFrameEqual(df, [Row(col=10)])
+        self.assertEqual(test_accum.value, 2)
+
+    def _add_pyfile(self, path):
+        self.sc.addPyFile(path)
+
+    def test_udtf_with_analyze_using_pyfile(self):
+        with tempfile.TemporaryDirectory() as d:
+            pyfile_path = os.path.join(d, "my_pyfile.py")
+            with open(pyfile_path, "w") as f:
+                f.write("my_func = lambda: 'col1'")
+
+            self._add_pyfile(pyfile_path)
+
+            @udtf
+            class TestUDTF:
+                @staticmethod
+                def analyze(a: AnalyzeArgument) -> AnalyzeResult:
+                    import my_pyfile
+
+                    return AnalyzeResult(StructType().add(my_pyfile.my_func(), a.data_type))
+
+                def eval(self, a):
+                    yield a,
+
+            df = TestUDTF(lit(10))
+            assertSchemaEqual(df.schema, StructType().add("col1", IntegerType()))
+            assertDataFrameEqual(df, [Row(col=10)])
+
+    def test_udtf_with_analyze_using_zipped_package(self):
+        with tempfile.TemporaryDirectory() as d:
+            package_path = os.path.join(d, "my_zipfile")
+            os.mkdir(package_path)
+            pyfile_path = os.path.join(package_path, "__init__.py")
+            with open(pyfile_path, "w") as f:
+                f.write("my_func = lambda: 'col1'")
+            shutil.make_archive(package_path, "zip", d, "my_zipfile")
+
+            self._add_pyfile(f"{package_path}.zip")
+
+            @udtf
+            class TestUDTF:
+                @staticmethod
+                def analyze(a: AnalyzeArgument) -> AnalyzeResult:
+                    import my_zipfile
+
+                    return AnalyzeResult(StructType().add(my_zipfile.my_func(), a.data_type))
+
+                def eval(self, a):
+                    yield a,
+
+            df = TestUDTF(lit(10))
+            assertSchemaEqual(df.schema, StructType().add("col1", IntegerType()))
+            assertDataFrameEqual(df, [Row(col=10)])
+
+    def _add_archive(self, path):
+        self.sc.addArchive(path)
+
+    def test_udtf_with_analyze_using_archive(self):
+        with tempfile.TemporaryDirectory() as d:
+            archive_path = os.path.join(d, "my_archive")
+            os.mkdir(archive_path)
+            pyfile_path = os.path.join(archive_path, "my_file.txt")
+            with open(pyfile_path, "w") as f:
+                f.write("col1")
+            shutil.make_archive(archive_path, "zip", d, "my_archive")
+
+            self._add_archive(f"{archive_path}.zip#my_files")
+
+            @udtf
+            class TestUDTF:
+                @staticmethod
+                def analyze(a: AnalyzeArgument) -> AnalyzeResult:
+                    with open(
+                        os.path.join(
+                            SparkFiles.getRootDirectory(), "my_files", "my_archive", "my_file.txt"
+                        ),
+                        "r",
+                    ) as my_file:
+                        return AnalyzeResult(StructType().add(my_file.read().strip(), a.data_type))
+
+                def eval(self, a):
+                    yield a,
+
+            df = TestUDTF(lit(10))
+            assertSchemaEqual(df.schema, StructType().add("col1", IntegerType()))
+            assertDataFrameEqual(df, [Row(col=10)])
+
+    def _add_file(self, path):
+        self.sc.addFile(path)
+
+    def test_udtf_with_analyze_using_file(self):
+        with tempfile.TemporaryDirectory() as d:
+            file_path = os.path.join(d, "my_file.txt")
+            with open(file_path, "w") as f:
+                f.write("col1")
+
+            self._add_file(file_path)
+
+            @udtf
+            class TestUDTF:
+                @staticmethod
+                def analyze(a: AnalyzeArgument) -> AnalyzeResult:
+                    with open(
+                        os.path.join(SparkFiles.getRootDirectory(), "my_file.txt"), "r"
+                    ) as my_file:
+                        return AnalyzeResult(StructType().add(my_file.read().strip(), a.data_type))
+
+                def eval(self, a):
+                    yield a,
+
+            df = TestUDTF(lit(10))
+            assertSchemaEqual(df.schema, StructType().add("col1", IntegerType()))
+            assertDataFrameEqual(df, [Row(col=10)])
 
 
 class UDTFTests(BaseUDTFTestsMixin, ReusedSQLTestCase):
