@@ -57,7 +57,7 @@ case class InsertIntoHadoopFsRelationCommand(
     catalogTable: Option[CatalogTable],
     fileIndex: Option[FileIndex],
     outputColumnNames: Seq[String])
-    extends V1WriteCommand {
+  extends V1WriteCommand {
 
   private lazy val parameters = CaseInsensitiveMap(options)
 
@@ -126,7 +126,7 @@ case class InsertIntoHadoopFsRelationCommand(
           committer = committer,
           outputSpec = FileFormatWriter.OutputSpec(
             committerOutputPath.toString,
-            customPartitionLocations,
+            Map.empty,
             outputColumns),
           hadoopConf = hadoopConf,
           partitionColumns = partitionColumns,
@@ -332,5 +332,5 @@ case class InsertIntoHadoopFsRelationCommand(
   }
 
   override protected def withNewChildInternal(
-      newChild: LogicalPlan): InsertIntoHadoopFsRelationCommand = copy(query = newChild)
+    newChild: LogicalPlan): InsertIntoHadoopFsRelationCommand = copy(query = newChild)
 }
