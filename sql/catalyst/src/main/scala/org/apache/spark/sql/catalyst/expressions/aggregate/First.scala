@@ -60,7 +60,13 @@ case class First(child: Expression, ignoreNulls: Boolean)
     this(child, FirstLast.validateIgnoreNullExpr(ignoreNullsExpr, "first"))
   }
 
-  override def nullable: Boolean = true
+  override def nullable: Boolean = {
+    if (ignoreNulls) {
+      false
+    } else {
+      child.nullable
+    }
+  }
 
   // Return data type.
   override def dataType: DataType = child.dataType
