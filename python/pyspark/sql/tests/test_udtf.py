@@ -259,11 +259,38 @@ class BaseUDTFTestsMixin:
         ):
             TestUDTF(lit(1), lit(2)).collect()
 
+    def test_udtf_init_with_additional_args(self):
+        @udtf(returnType="x int")
+        class TestUDTF:
+            def __init__(self, a: int):
+                ...
+
+            def eval(self, a: int):
+                yield a,
+
+        with self.assertRaisesRegex(
+            PythonException, "__init__\(\) missing 1 required positional argument: 'a'"
+        ):
+            TestUDTF(lit(1)).show()
+
+    def test_udtf_terminate_with_additional_args(self):
+        @udtf(returnType="x int")
+        class TestUDTF:
+            def eval(self, a: int):
+                yield a,
+
+            def terminate(self, a: int):
+                ...
+
+        with self.assertRaisesRegex(
+            PythonException, "terminate\(\) missing 1 required positional argument: 'a'"
+        ):
+            TestUDTF(lit(1)).show()
+
     def test_udtf_with_wrong_num_output(self):
-        # TODO(SPARK-43968): check this during compile time instead of runtime
         err_msg = (
-            "java.lang.IllegalStateException: Input row doesn't have expected number of "
-            + "values required by the schema."
+            "\[UDTF_RETURN_SCHEMA_MISMATCH\] The number of columns in the "
+            "result does not match the specified schema."
         )
 
         @udtf(returnType="a: int, b: int")
@@ -271,7 +298,7 @@ class BaseUDTFTestsMixin:
             def eval(self, a: int):
                 yield a,
 
-        with self.assertRaisesRegex(Py4JJavaError, err_msg):
+        with self.assertRaisesRegex(PythonException, err_msg):
             TestUDTF(lit(1)).collect()
 
         @udtf(returnType="a: int")
@@ -279,7 +306,7 @@ class BaseUDTFTestsMixin:
             def eval(self, a: int):
                 yield a, a + 1
 
-        with self.assertRaisesRegex(Py4JJavaError, err_msg):
+        with self.assertRaisesRegex(PythonException, err_msg):
             TestUDTF(lit(1)).collect()
 
     def test_udtf_init(self):
@@ -348,8 +375,8 @@ class BaseUDTFTestsMixin:
 
     def test_udtf_terminate_with_wrong_num_output(self):
         err_msg = (
-            "java.lang.IllegalStateException: Input row doesn't have expected number of "
-            "values required by the schema."
+            "\[UDTF_RETURN_SCHEMA_MISMATCH\] The number of columns in the result "
+            "does not match the specified schema."
         )
 
         @udtf(returnType="a: int, b: int")
@@ -360,7 +387,7 @@ class BaseUDTFTestsMixin:
             def terminate(self):
                 yield 1, 2, 3
 
-        with self.assertRaisesRegex(Py4JJavaError, err_msg):
+        with self.assertRaisesRegex(PythonException, err_msg):
             TestUDTF(lit(1)).show()
 
         @udtf(returnType="a: int, b: int")
@@ -371,7 +398,7 @@ class BaseUDTFTestsMixin:
             def terminate(self):
                 yield 1,
 
-        with self.assertRaisesRegex(Py4JJavaError, err_msg):
+        with self.assertRaisesRegex(PythonException, err_msg):
             TestUDTF(lit(1)).show()
 
     def test_nondeterministic_udtf(self):
@@ -548,18 +575,25 @@ class BaseUDTFTestsMixin:
         )
 
     def test_udtf_with_no_handler_class(self):
-        err_msg = "the function handler must be a class"
-        with self.assertRaisesRegex(TypeError, err_msg):
-
+        with self.assertRaises(PySparkTypeError) as e:
             @udtf(returnType="a: int")
             def test_udtf(a: int):
                 yield a,
 
-        def test_udtf(a: int):
-            yield a
+        self.check_error(
+            exception=e.exception,
+            error_class="INVALID_UDTF_HANDLER_TYPE",
+            message_parameters={"type": "function"},
+        )
 
-        with self.assertRaisesRegex(TypeError, err_msg):
-            udtf(test_udtf, returnType="a: int")
+        with self.assertRaises(PySparkTypeError) as e:
+            func = udtf(1, returnType="a: int")
+
+        self.check_error(
+            exception=e.exception,
+            error_class="INVALID_UDTF_HANDLER_TYPE",
+            message_parameters={"type": "int"},
+        )
 
     def test_udtf_with_table_argument_query(self):
         class TestUDTF:
@@ -1497,52 +1531,6 @@ class UDTFArrowTestsMixin(BaseUDTFTestsMixin):
 
         func = udtf(TestUDTF, returnType="a: int")
         self.assertEqual(func(lit(1)).collect(), [Row(a=1)])
-
-    def test_udtf_terminate_with_wrong_num_output(self):
-        # The error message for arrow-optimized UDTF is different from regular UDTF.
-        err_msg = "The number of columns in the result does not match the specified schema."
-
-        @udtf(returnType="a: int, b: int")
-        class TestUDTF:
-            def eval(self, a: int):
-                yield a, a + 1
-
-            def terminate(self):
-                yield 1, 2, 3
-
-        with self.assertRaisesRegex(PythonException, err_msg):
-            TestUDTF(lit(1)).show()
-
-        @udtf(returnType="a: int, b: int")
-        class TestUDTF:
-            def eval(self, a: int):
-                yield a, a + 1
-
-            def terminate(self):
-                yield 1,
-
-        with self.assertRaisesRegex(PythonException, err_msg):
-            TestUDTF(lit(1)).show()
-
-    def test_udtf_with_wrong_num_output(self):
-        # The error message for arrow-optimized UDTF is different.
-        err_msg = "The number of columns in the result does not match the specified schema."
-
-        @udtf(returnType="a: int, b: int")
-        class TestUDTF:
-            def eval(self, a: int):
-                yield a,
-
-        with self.assertRaisesRegex(PythonException, err_msg):
-            TestUDTF(lit(1)).collect()
-
-        @udtf(returnType="a: int")
-        class TestUDTF:
-            def eval(self, a: int):
-                yield a, a + 1
-
-        with self.assertRaisesRegex(PythonException, err_msg):
-            TestUDTF(lit(1)).collect()
 
 
 class UDTFArrowTests(UDTFArrowTestsMixin, ReusedSQLTestCase):

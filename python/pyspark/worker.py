@@ -654,6 +654,19 @@ def read_udtf(pickleSer, infile, eval_type):
             assert return_type.needConversion()
             toInternal = return_type.toInternal
 
+            def verify_and_convert_result(result):
+                # TODO(SPARK-44005): support returning non-tuple values
+                if result and hasattr(result, "__len__"):
+                    if len(result) != len(return_type):
+                        raise PySparkRuntimeError(
+                            error_class="UDTF_RETURN_SCHEMA_MISMATCH",
+                            message_parameters={
+                                "expected": str(len(return_type)),
+                                "actual": str(len(result)),
+                            },
+                        )
+                return toInternal(result)
+
             # Evaluate the function and return a tuple back to the executor.
             def evaluate(*a) -> tuple:
                 res = f(*a)
@@ -665,7 +678,7 @@ def read_udtf(pickleSer, infile, eval_type):
                 else:
                     # If the function returns a result, we map it to the internal representation and
                     # returns the results as a tuple.
-                    return tuple(map(toInternal, res))
+                    return tuple(map(verify_and_convert_result, res))
 
             return evaluate
 
