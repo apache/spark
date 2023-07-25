@@ -329,7 +329,7 @@ def inheritable_thread_target(f: Optional[Union[Callable, "SparkSession"]] = Non
 
     If you're using Spark Connect, you should explicitly provide Spark session as follows:
 
-    >>> @inheritable_thread_target(session)
+    >>> @inheritable_thread_target(session)  # doctest: +SKIP
     ... def target_func():
     ...     pass  # your codes.
 
