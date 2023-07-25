@@ -205,6 +205,7 @@ jobs:
       HIVE_PROFILE: ${{ matrix.hive }}
       GITHUB_PREV_SHA: ${{ github.event.before }}
       SPARK_LOCAL_IP: localhost
+      SKIP_PACKAGING: true
     steps:
     - name: Checkout Spark repository
       uses: actions/checkout@v3
@@ -268,6 +269,7 @@ jobs:
         # Hive "other tests" test needs larger metaspace size based on experiment.
         if [[ "$MODULES_TO_TEST" == "hive" ]] && [[ "$EXCLUDED_TAGS" == "org.apache.spark.tags.SlowHiveTest" ]]; then export METASPACE_SIZE=2g; fi
         export SERIAL_SBT_TESTS=1
+        export SKIP_PACKAGING=True
         ./dev/run-tests --parallelism 1 --modules "$MODULES_TO_TEST" --included-tags "$INCLUDED_TAGS" --excluded-tags "$EXCLUDED_TAGS"
     - name: Upload test results to report
       if: always()
@@ -366,6 +368,7 @@ jobs:
       SPARK_LOCAL_IP: localhost
       SKIP_UNIDOC: true
       SKIP_MIMA: true
+      SKIP_PACKAGING: true
       METASPACE_SIZE: 1g
     steps:
     - name: Checkout Spark repository
@@ -417,6 +420,7 @@ jobs:
     - name: Run tests
       env: ${{ fromJSON(inputs.envs) }}
       run: |
+        export SKIP_PACKAGING=True
         ./dev/run-tests --parallelism 1 --modules "$MODULES_TO_TEST"
     - name: Upload coverage to Codecov
       if: fromJSON(inputs.envs).PYSPARK_CODECOV == 'true'
@@ -438,6 +442,82 @@ jobs:
         name: unit-tests-log-${{ matrix.modules }}--8-${{ inputs.hadoop }}-hive2.3
         path: "**/target/unit-tests.log"
 
+  pyspark-packaging:
+    needs: [precondition, infra-image]
+    # always run if pyspark == 'true', even infra-image is skip (such as non-master job)
+    if: (!cancelled()) && fromJson(needs.precondition.outputs.required).pyspark == 'true'
+    name: "Build modules: pyspark-packaging"
+    runs-on: ubuntu-22.04
+    container:
+      image: ${{ needs.precondition.outputs.image_url }}
+    env:
+      HADOOP_PROFILE: ${{ inputs.hadoop }}
+      HIVE_PROFILE: hive2.3
+      GITHUB_PREV_SHA: ${{ github.event.before }}
+      SPARK_LOCAL_IP: localhost
+      SKIP_UNIDOC: true
+      SKIP_MIMA: true
+      METASPACE_SIZE: 1g
+    steps:
+      - name: Checkout Spark repository
+        uses: actions/checkout@v3
+        # In order to fetch changed files
+        with:
+          fetch-depth: 0
+          repository: apache/spark
+          ref: ${{ inputs.branch }}
+      - name: Add GITHUB_WORKSPACE to git trust safe.directory
+        run: |
+          git config --global --add safe.directory ${GITHUB_WORKSPACE}
+      - name: Sync the current branch with the latest in Apache Spark
+        if: github.repository != 'apache/spark'
+        run: |
+          echo "APACHE_SPARK_REF=$(git rev-parse HEAD)" >> $GITHUB_ENV
+          git fetch https://github.com/$GITHUB_REPOSITORY.git ${GITHUB_REF#refs/heads/}
+          git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' merge --no-commit --progress --squash FETCH_HEAD
+          git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' commit -m "Merged commit" --allow-empty
+      # Cache local repositories. Note that GitHub Actions cache has a 2G limit.
+      - name: Cache Scala, SBT and Maven
+        uses: actions/cache@v3
+        with:
+          path: |
+            build/apache-maven-*
+            build/scala-*
+            build/*.jar
+            ~/.sbt
+          key: build-${{ hashFiles('**/pom.xml', 'project/build.properties', 'build/mvn', 'build/sbt', 'build/sbt-launch-lib.bash', 'build/spark-build-info') }}
+          restore-keys: |
+            build-
+      - name: Cache Coursier local repository
+        uses: actions/cache@v3
+        with:
+          path: ~/.cache/coursier
+          key: pyspark-coursier-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
+          restore-keys: |
+            pyspark-coursier-
+      - name: Install Java 8
+        uses: actions/setup-java@v3
+        with:
+          distribution: temurin
+          java-version: 8
+      - name: Install Conda for pip packaging test
+        run: |
+          curl -s https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh > miniconda.sh
+          bash miniconda.sh -b -p $HOME/miniconda
+      # Run the tests.
+      - name: Run tests
+        env: ${{ fromJSON(inputs.envs) }}
+        run: |
+          export PATH=$PATH:$HOME/miniconda/bin
+          export SKIP_MIMA=True
+          ./dev/run-tests --parallelism 1
+      - name: Upload test results to report
+        if: always()
+        uses: actions/upload-artifact@v3
+        with:
+          name: test-results-pyspark-packaging--8-${{ inputs.hadoop }}-hive2.3
+          path: "**/target/test-reports/*.xml"
+
   sparkr:
     needs: [precondition, infra-image]
     # always run if sparkr == 'true', even infra-image is skip (such as non-master job)
@@ -452,6 +532,7 @@ jobs:
       GITHUB_PREV_SHA: ${{ github.event.before }}
       SPARK_LOCAL_IP: localhost
       SKIP_MIMA: true
+      SKIP_PACKAGING: true
     steps:
     - name: Checkout Spark repository
       uses: actions/checkout@v3
@@ -501,6 +582,7 @@ jobs:
         # R issues at docker environment
         export TZ=UTC
         export _R_CHECK_SYSTEM_CLOCK_=FALSE
+        export SKIP_PACKAGING=True
         ./dev/run-tests --parallelism 1 --modules sparkr
     - name: Upload test results to report
       if: always()
@@ -906,6 +988,7 @@ jobs:
       SPARK_LOCAL_IP: localhost
       ORACLE_DOCKER_IMAGE_NAME: gvenzl/oracle-xe:21.3.0
       SKIP_MIMA: true
+      SKIP_PACKAGING: true
     steps:
     - name: Checkout Spark repository
       uses: actions/checkout@v3
@@ -945,6 +1028,7 @@ jobs:
         java-version: 8
     - name: Run tests
       run: |
+        export SKIP_PACKAGING=True
         ./dev/run-tests --parallelism 1 --modules docker-integration-tests --included-tags org.apache.spark.tags.DockerTest
     - name: Upload test results to report
       if: always()
