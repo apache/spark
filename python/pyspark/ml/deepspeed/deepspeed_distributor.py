@@ -67,9 +67,9 @@ class DeepspeedTorchDistributor(TorchDistributor):
         Run Deepspeed training function on a single node
 
         >>> def train(learning_rate):
-            import deepspeed
-            # rest of training function
-            return model
+                import deepspeed
+                # rest of training function
+                return model
         >>> distributor = DeepspeedTorchDistributor(num_gpus=4,
                                                     nnodes=1,
                                                     use_gpu=True,
