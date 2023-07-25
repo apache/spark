@@ -59,7 +59,6 @@ def main(infile, outfile):  # type: ignore[no-untyped-def]
     eval_type = read_int(infile)
 
     func = worker.read_command(pickle_ser, infile)
-
     write_int(0, outfile)  # Indicate successful initialization
 
     outfile.flush()
