@@ -409,7 +409,6 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
 
         PythonWorkerUtils.writeSparkFiles(jobArtifactUUID, pythonIncludes, dataOut)
         PythonWorkerUtils.writeBroadcasts(broadcastVars, worker, env, dataOut)
-        dataOut.flush()
 
         dataOut.writeInt(evalType)
         writeCommand(dataOut)

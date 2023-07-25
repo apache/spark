@@ -131,6 +131,7 @@ private[spark] object PythonWorkerUtils extends Logging {
         }
       }
     }
+    dataOut.flush()
   }
 
   /**
