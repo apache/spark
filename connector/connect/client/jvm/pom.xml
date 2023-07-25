@@ -222,13 +222,6 @@
         <artifactId>maven-jar-plugin</artifactId>
         <executions>
           <execution>
-            <id>default-jar</id>
-            <phase>compile</phase>
-            <goals>
-              <goal>jar</goal>
-            </goals>
-          </execution>
-          <execution>
             <id>prepare-test-jar</id>
             <phase>test-compile</phase>
             <goals>

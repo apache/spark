@@ -42,7 +42,7 @@ public class ChildFirstURLClassLoader extends MutableURLClassLoader {
 
   /**
    * Specify the grandparent if there is a need to load in the order of
-   * `grandparent -> urls (child) -> parent`.
+   * `grandparent -&gt; urls (child) -&gt; parent`.
    */
   public ChildFirstURLClassLoader(URL[] urls, ClassLoader parent, ClassLoader grandparent) {
     super(urls, grandparent);

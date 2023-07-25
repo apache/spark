@@ -33,6 +33,8 @@ class StubClassLoader(parent: ClassLoader, shouldStub: String => Boolean)
       throw new ClassNotFoundException(name)
     }
     val bytes = StubClassLoader.generateStub(name)
+    // scalastyle:off println
+    println("###stub class: " + name)
     defineClass(name, bytes, 0, bytes.length)
   }
 }

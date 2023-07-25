@@ -46,7 +46,7 @@ class UDFClassLoadingE2ESuite extends RemoteSparkSession {
       .range(10)
       .filter(n => {
         // Try to use spark result
-        new SparkResult[Int](null, null, null)
+        new SparkResult[Int](null, null, null, "")
         n > 5
       })
       .collectAsList()
@@ -58,17 +58,20 @@ class UDFClassLoadingE2ESuite extends RemoteSparkSession {
     addClientTestArtifactInServerClasspath(session)
     val ds = session.range(10).filter(n => n % 2 == 0)
 
-    // load SparkResult as a stubbed class
+    // Load SparkResult as a stubbed class
     val rows = ds.collectAsList()
     assert(rows == Arrays.asList[Long](0, 2, 4, 6, 8))
 
     // Upload SparkResult and then SparkResult can be used in the udf
     addClientTestArtifactInServerClasspath(session, testJar = false)
-    val rows2 = session.range(10).filter(n => {
-      // Try to use spark result
-      new SparkResult[Int](null, null, null)
-      n > 5
-    }).collectAsList()
+    val rows2 = session
+      .range(10)
+      .filter(n => {
+        // Try to use spark result
+        new SparkResult[Int](null, null, null, "")
+        n > 5
+      })
+      .collectAsList()
     assert(rows2 == Arrays.asList[Long](6, 7, 8, 9))
   }
 

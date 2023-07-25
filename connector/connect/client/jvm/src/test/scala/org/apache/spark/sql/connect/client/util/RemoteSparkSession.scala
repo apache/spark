@@ -96,10 +96,8 @@ object SparkConnectServerUtils {
     // To find InMemoryTableCatalog for V2 writer tests
     val catalystTestJar =
       tryFindJar("sql/catalyst", "spark-catalyst", "spark-catalyst", test = true)
-        .map(clientTestJar => Seq("--jars", clientTestJar.getCanonicalPath))
+        .map(jar => Seq("--jars", jar.getCanonicalPath))
         .getOrElse(Seq.empty)
-
-    val jarsConfigs = Seq("--jars", catalystTestJar.mkString(","))
 
     // Use InMemoryTableCatalog for V2 writer tests
     val writerV2Configs = Seq(
@@ -127,7 +125,7 @@ object SparkConnectServerUtils {
       Seq("--conf", s"spark.sql.catalogImplementation=$catalogImplementation")
     }
 
-    jarsConfigs ++ writerV2Configs ++ hiveTestConfigs
+    catalystTestJar ++ writerV2Configs ++ hiveTestConfigs
   }
 
   def start(): Unit = {
@@ -198,9 +196,10 @@ trait RemoteSparkSession extends ConnectFunSuite with BeforeAndAfterAll {
         debug(error)
         throw error
       }
-    }
 
-    addClientTestArtifactInServerClasspath(spark)
+      // Add client test jar into the spark session classpath
+      addClientTestArtifactInServerClasspath(spark)
+    }
   }
 
   // For UDF maven E2E tests, the server needs the client test code to find the UDFs defined in
@@ -214,8 +213,8 @@ trait RemoteSparkSession extends ConnectFunSuite with BeforeAndAfterAll {
       // So we skip building or finding this jar for SBT.
       "sbt-tests-do-not-need-this-jar",
       "spark-connect-client-jvm",
-      test = testJar
-    ).foreach(clientTestJar => session.addArtifact(clientTestJar.getCanonicalPath))
+      test = testJar).foreach(clientTestJar =>
+      session.addArtifact(clientTestJar.getCanonicalPath))
   }
 
   override def afterAll(): Unit = {

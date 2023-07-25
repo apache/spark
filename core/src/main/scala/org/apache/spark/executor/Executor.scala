@@ -554,7 +554,8 @@ private[spark] class Executor(
           taskDescription.artifacts.jars,
           taskDescription.artifacts.archives,
           isolatedSession)
-        // Always reset the thread class loader
+        // Always reset the thread class loader to ensure if any updates, all threads (not only
+        // the thread that updated the dependencies) can update to the new class loader.
         Thread.currentThread.setContextClassLoader(isolatedSession.replClassLoader)
         task = ser.deserialize[Task[Any]](
           taskDescription.serializedTask, Thread.currentThread.getContextClassLoader)
@@ -1076,7 +1077,7 @@ private[spark] class Executor(
     } else {
       parent
     }
-    logInfo(s"Created or updated repl class loader for $sessionUUID.")
+    logInfo(s"Created or updated repl class loader $classLoader for $sessionUUID.")
     classLoader
   }
 
@@ -1155,7 +1156,8 @@ private[spark] class Executor(
         }
       }
       if (updated) {
-        // TODO: only update the class loader if the stub class should be unloaded.
+        // When a new url is added for non-default class loader, recreate the class loader
+        // to ensure all classes are updated.
         state.urlClassLoader = createClassLoader(state.urlClassLoader.getURLs, useStub = true)
         state.replClassLoader =
           addReplClassLoaderIfNeeded(state.urlClassLoader, state.replClassDirUri, state.sessionUUID)

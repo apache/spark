@@ -164,7 +164,10 @@ class SparkConnectArtifactManager(sessionHolder: SessionHolder) extends Logging 
     val urls = getSparkConnectAddedJars :+ classDir.toUri.toURL
     val stubClassLoader =
       StubClassLoader(null, SparkEnv.get.conf.get(CONNECT_SCALA_UDF_STUB_CLASSES))
-    new ChildFirstURLClassLoader(urls.toArray, stubClassLoader, Utils.getContextOrSparkClassLoader)
+    new ChildFirstURLClassLoader(
+      urls.toArray,
+      stubClassLoader,
+      Utils.getContextOrSparkClassLoader)
   }
 
   /**

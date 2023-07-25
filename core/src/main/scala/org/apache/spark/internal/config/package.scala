@@ -2552,10 +2552,10 @@ package object config {
     ConfigBuilder("spark.connect.scalaUdf.stubClasses")
       .internal()
       .doc("""
-          |Comma separated list of binary names of classes/packages that should be stub during the
-          |Scala UDF serdeser and execution if not found on the server classpath.
+          |Comma-separated list of binary names of classes/packages that should be stubbed during
+          |the Scala UDF serde and execution if not found on the server classpath.
           |An empty list effectively disables stubbing for all missing classes.
-          |By default the server stubs classes from the Scala client package.
+          |By default, the server stubs classes from the Scala client package.
           |""".stripMargin)
       .version("3.5.0")
       .stringConf

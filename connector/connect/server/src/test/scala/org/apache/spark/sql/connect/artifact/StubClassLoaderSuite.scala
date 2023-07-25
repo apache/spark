@@ -61,11 +61,8 @@ class StubClassLoaderSuite extends SparkFunSuite {
     val stubClassLoader = new RecordedStubClassLoader(null, _ => true)
 
     // Install artifact without class A.
-    val sessionClassLoader = new ChildFirstURLClassLoader(
-      Array(udfNoAJar),
-      stubClassLoader,
-      sysClassLoader
-    )
+    val sessionClassLoader =
+      new ChildFirstURLClassLoader(Array(udfNoAJar), stubClassLoader, sysClassLoader)
     // Load udf with A used in the same class.
     deserializeUdf(sessionClassLoader)
     // Class A should be stubbed.
@@ -77,25 +74,22 @@ class StubClassLoaderSuite extends SparkFunSuite {
     val sysClassLoader = getClass.getClassLoader()
     val stubClassLoader = new RecordedStubClassLoader(null, _ => true)
 
-    val cl1 = new ChildFirstURLClassLoader(
-      Array.empty,
-      stubClassLoader,
-      sysClassLoader)
+    val cl1 = new ChildFirstURLClassLoader(Array.empty, stubClassLoader, sysClassLoader)
 
     // Failed to load dummy udf
-    intercept[Exception]{
+    intercept[Exception] {
       deserializeUdf(cl1)
     }
     // Successfully stubbed the missing class.
-    assert(stubClassLoader.lastStubbed ===
-      "org.apache.spark.sql.connect.artifact.StubClassDummyUdf")
+    assert(
+      stubClassLoader.lastStubbed ===
+        "org.apache.spark.sql.connect.artifact.StubClassDummyUdf")
 
     // Creating a new class loader will unpack the udf correctly.
     val cl2 = new ChildFirstURLClassLoader(
       Array(udfNoAJar),
       stubClassLoader, // even with the same stub class loader.
-      sysClassLoader
-    )
+      sysClassLoader)
     // Should be able to load after the artifact is added
     deserializeUdf(cl2)
   }
@@ -105,37 +99,32 @@ class StubClassLoaderSuite extends SparkFunSuite {
     val sysClassLoader = getClass.getClassLoader()
     val stubClassLoader = new RecordedStubClassLoader(null, _ => true)
 
-    val sessionClassLoader = new ChildFirstURLClassLoader(
-      Array.empty,
-      stubClassLoader,
-      sysClassLoader)
+    val sessionClassLoader =
+      new ChildFirstURLClassLoader(Array.empty, stubClassLoader, sysClassLoader)
 
     // Failed to load dummy udf
-    val exception = intercept[Exception]{
+    val exception = intercept[Exception] {
       deserializeUdf(sessionClassLoader)
     }
     // Successfully stubbed the missing class.
-    assert(stubClassLoader.lastStubbed ===
-      "org.apache.spark.sql.connect.artifact.StubClassDummyUdf")
+    assert(
+      stubClassLoader.lastStubbed ===
+        "org.apache.spark.sql.connect.artifact.StubClassDummyUdf")
     // But failed to find the method on the stub class.
     val cause = exception.getCause
     assert(cause.isInstanceOf[NoSuchMethodException])
     assert(
       cause.getMessage.contains("org.apache.spark.sql.connect.artifact.StubClassDummyUdf"),
-      cause.getMessage
-    )
+      cause.getMessage)
   }
 
   private def deserializeUdf(sessionClassLoader: ClassLoader): UdfPacket = {
-    Utils.deserialize[UdfPacket](
-      udfByteArray,
-      sessionClassLoader
-    )
+    Utils.deserialize[UdfPacket](udfByteArray, sessionClassLoader)
   }
 }
 
 class RecordedStubClassLoader(parent: ClassLoader, shouldStub: String => Boolean)
-  extends StubClassLoader(parent, shouldStub) {
+    extends StubClassLoader(parent, shouldStub) {
   var lastStubbed: String = _
 
   override def findClass(name: String): Class[_] = {
