@@ -1253,11 +1253,11 @@ class BaseUDTFTestsMixin:
                 return AnalyzeResult(StructType().add("col1", a.data_type))
 
             def eval(self, a):
-                test_accum.add(1)
+                test_accum.add(10)
                 yield a,
 
             def terminate(self):
-                test_accum.add(1)
+                test_accum.add(100)
                 yield 100,
 
         self.spark.udtf.register("test_udtf", TestUDTF)
@@ -1267,7 +1267,7 @@ class BaseUDTFTestsMixin:
                 assertSchemaEqual(df.schema, StructType().add("col1", IntegerType()))
                 assertDataFrameEqual(df, [Row(col1=10), Row(col1=100)])
 
-        self.assertEqual(test_accum.value, 6)
+        self.assertEqual(test_accum.value, 222)
 
     def _add_pyfile(self, path):
         self.sc.addPyFile(path)
