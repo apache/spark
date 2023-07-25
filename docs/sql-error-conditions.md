@@ -1886,12 +1886,6 @@ Unsupported data source type for direct query on files: `<dataSourceType>`
 
 Unsupported data type `<typeName>`.
 
-### UNSUPPORTED_DATA_SOURCE_FOR_DIRECT_QUERY
-
-SQLSTATE: none assigned
-
-The direct query on files does not support the data source type: `<className>`. Please try a different data source type or consider using a different query method.
-
 ### UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE
 
 SQLSTATE: none assigned
