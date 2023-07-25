@@ -21,15 +21,14 @@ import java.time._
 import java.time.chrono.IsoChronology
 import java.time.format.{DateTimeFormatter, DateTimeFormatterBuilder, ResolverStyle}
 import java.time.temporal.{ChronoField, TemporalAccessor, TemporalQueries}
-import java.util.{Date, Locale}
-
-import com.google.common.cache.CacheBuilder
+import java.util
+import java.util.{Collections, Date, Locale}
 
 import org.apache.spark.SPARK_DOC_ROOT
 import org.apache.spark.sql.catalyst.util.DateTimeFormatterHelper._
 import org.apache.spark.sql.errors.QueryExecutionErrors
-import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.internal.SQLConf.LegacyBehaviorPolicy._
+import org.apache.spark.sql.internal.LegacyBehaviorPolicy._
+import org.apache.spark.sql.internal.SqlApiConf
 
 trait DateTimeFormatterHelper {
   private def getOrDefault(accessor: TemporalAccessor, field: ChronoField, default: Int): Int = {
@@ -122,16 +121,11 @@ trait DateTimeFormatterHelper {
     val newPattern = convertIncompatiblePattern(pattern, isParsing)
     val useVarLen = isParsing && newPattern.contains('S')
     val key = (newPattern, locale, useVarLen)
-    var formatter = cache.getIfPresent(key)
-    if (formatter == null) {
-      formatter = buildFormatter(newPattern, locale, useVarLen)
-      cache.put(key, formatter)
-    }
-    formatter
+    cache.computeIfAbsent(key, _ => buildFormatter(newPattern, locale, useVarLen))
   }
 
   private def needConvertToSparkUpgradeException(e: Throwable): Boolean = e match {
-    case _: DateTimeException if SQLConf.get.legacyTimeParserPolicy == EXCEPTION => true
+    case _: DateTimeException if SqlApiConf.get.legacyTimeParserPolicy == EXCEPTION => true
     case _ => false
   }
   // When legacy time parser policy set to EXCEPTION, check whether we will get different results
@@ -196,9 +190,14 @@ trait DateTimeFormatterHelper {
 }
 
 private object DateTimeFormatterHelper {
-  val cache = CacheBuilder.newBuilder()
-    .maximumSize(128)
-    .build[(String, Locale, Boolean), DateTimeFormatter]()
+
+  private val cache: util.Map[(String, Locale, Boolean), DateTimeFormatter] =
+    Collections.synchronizedMap(new util.LinkedHashMap {
+      override def removeEldestEntry(
+          eldest: util.Map.Entry[(String, Locale, Boolean), DateTimeFormatter]): Boolean = {
+        size() > 128
+      }
+    })
 
   final val extractor = "^([^S]*)(S*)(.*)$".r
 

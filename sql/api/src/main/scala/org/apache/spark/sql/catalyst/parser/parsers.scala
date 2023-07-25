@@ -25,10 +25,10 @@ import org.antlr.v4.runtime.tree.TerminalNodeImpl
 
 import org.apache.spark.{QueryContext, SparkException, SparkThrowable, SparkThrowableHelper}
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.SqlApiConf
 import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, Origin, WithOrigin}
 import org.apache.spark.sql.catalyst.util.SparkParserUtils
 import org.apache.spark.sql.errors.QueryParsingErrors
+import org.apache.spark.sql.internal.SqlApiConf
 import org.apache.spark.sql.types.{DataType, StructType}
 
 /**

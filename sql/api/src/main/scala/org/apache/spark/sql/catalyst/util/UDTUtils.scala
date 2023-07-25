@@ -1,0 +1,59 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+package org.apache.spark.sql.catalyst.util
+
+import scala.util.control.NonFatal
+
+import org.json4s.JsonAST.JValue
+
+import org.apache.spark.sql.types.UserDefinedType
+import org.apache.spark.util.SparkClassUtils
+
+/**
+ * Utilities for working with [[UserDefinedType]]s from within the `sql/api` project. UDTs are not
+ * not fully supported in `sql/api` (and connect), they can currently only be used in conjunction
+ * with catalyst because they (amongst others) require access to Spark SQLs internal data
+ * representation.
+ *
+ * This interface and its companion object provide an escape hatch for working with UDTs from within
+ * the api project (e.g. Row.toJSON). The companion will try to bind to an implementation of the
+ * interface in catalyst, if none is found it will bind to [[DefaultUDTUtils]].
+ */
+trait UDTUtils {
+  /**
+   * Convert a UDT to a JSON.
+   */
+  def toJson(value: Any, udt: UserDefinedType[_]): JValue
+}
+
+object UDTUtils extends UDTUtils {
+  private val delegate = try {
+    val cls = SparkClassUtils.classForName("org.apache.spark.sql.catalyst.util.UDTUtilsImpl")
+    cls.getConstructor().newInstance().asInstanceOf[UDTUtils]
+  } catch {
+    case NonFatal(_) =>
+      DefaultUDTUtils
+  }
+
+  override def toJson(value: Any, udt: UserDefinedType[_]): JValue = delegate.toJson(value, udt)
+}
+
+object DefaultUDTUtils extends UDTUtils {
+  override def toJson(value: Any, udt: UserDefinedType[_]): JValue = {
+    throw new UnsupportedOperationException()
+  }
+}

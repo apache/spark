@@ -34,8 +34,8 @@ import org.apache.spark.sql.catalyst.util.DateTimeUtils._
 import org.apache.spark.sql.catalyst.util.LegacyDateFormats.{LegacyDateFormat, LENIENT_SIMPLE_DATE_FORMAT}
 import org.apache.spark.sql.catalyst.util.RebaseDateTime._
 import org.apache.spark.sql.errors.QueryExecutionErrors
-import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.internal.SQLConf.LegacyBehaviorPolicy._
+import org.apache.spark.sql.internal.LegacyBehaviorPolicy._
+import org.apache.spark.sql.internal.SqlApiConf
 import org.apache.spark.sql.types.{Decimal, TimestampNTZType}
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -507,7 +507,7 @@ object TimestampFormatter {
       legacyFormat: LegacyDateFormat = LENIENT_SIMPLE_DATE_FORMAT,
       isParsing: Boolean,
       forTimestampNTZ: Boolean = false): TimestampFormatter = {
-    val formatter = if (SQLConf.get.legacyTimeParserPolicy == LEGACY && !forTimestampNTZ) {
+    val formatter = if (SqlApiConf.get.legacyTimeParserPolicy == LEGACY && !forTimestampNTZ) {
       getLegacyFormatter(format.getOrElse(defaultPattern), zoneId, locale, legacyFormat)
     } else {
       format

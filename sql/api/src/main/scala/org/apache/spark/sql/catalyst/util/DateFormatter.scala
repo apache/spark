@@ -24,8 +24,8 @@ import java.util.{Date, Locale}
 import org.apache.commons.lang3.time.FastDateFormat
 
 import org.apache.spark.sql.catalyst.util.DateTimeUtils._
-import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.internal.SQLConf.LegacyBehaviorPolicy._
+import org.apache.spark.sql.internal.LegacyBehaviorPolicy._
+import org.apache.spark.sql.internal.SqlApiConf
 import org.apache.spark.unsafe.types.UTF8String
 
 sealed trait DateFormatter extends Serializable {
@@ -176,7 +176,7 @@ object DateFormatter {
       locale: Locale = defaultLocale,
       legacyFormat: LegacyDateFormat = LENIENT_SIMPLE_DATE_FORMAT,
       isParsing: Boolean): DateFormatter = {
-    if (SQLConf.get.legacyTimeParserPolicy == LEGACY) {
+    if (SqlApiConf.get.legacyTimeParserPolicy == LEGACY) {
       getLegacyFormatter(format.getOrElse(defaultPattern), locale, legacyFormat)
     } else {
       val df = format

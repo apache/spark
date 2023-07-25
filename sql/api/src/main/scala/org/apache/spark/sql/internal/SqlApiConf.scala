@@ -14,9 +14,9 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.sql
+package org.apache.spark.sql.internal
 
-
+import java.util.TimeZone
 import java.util.concurrent.atomic.AtomicReference
 
 import scala.util.Try
@@ -41,6 +41,8 @@ private[sql] trait SqlApiConf {
   def timestampType: AtomicType
   def allowNegativeScaleOfDecimalEnabled: Boolean
   def charVarcharAsString: Boolean
+  def sessionLocalTimeZone: String
+  def legacyTimeParserPolicy: LegacyBehaviorPolicy.Value
 }
 
 private[sql] object SqlApiConf {
@@ -76,4 +78,6 @@ private[sql] object DefaultSqlApiConf extends SqlApiConf {
   override def timestampType: AtomicType = TimestampType
   override def allowNegativeScaleOfDecimalEnabled: Boolean = false
   override def charVarcharAsString: Boolean = false
+  override def sessionLocalTimeZone: String = TimeZone.getDefault.getID
+  override def legacyTimeParserPolicy: LegacyBehaviorPolicy.Value = LegacyBehaviorPolicy.EXCEPTION
 }
