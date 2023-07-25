@@ -174,6 +174,35 @@ object MimaExcludes {
     ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.types.ObjectType"),
     ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.types.ObjectType$"),
 
+    // SPARK-44496: Move Interfaces needed by SCSC to sql/api.
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.Encoder"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.Row"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.Row$"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.api.java.function.package"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.api.java.function.package$"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.api.java.function.CoGroupFunction"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.api.java.function.DoubleFlatMapFunction"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.api.java.function.DoubleFunction"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.api.java.function.FilterFunction"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.api.java.function.FlatMapFunction"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.api.java.function.FlatMapFunction2"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.api.java.function.FlatMapGroupsFunction"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.api.java.function.ForeachFunction"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.api.java.function.ForeachPartitionFunction"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.api.java.function.Function"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.api.java.function.Function0"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.api.java.function.Function2"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.api.java.function.Function3"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.api.java.function.Function4"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.api.java.function.MapFunction"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.api.java.function.MapGroupsFunction"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.api.java.function.MapPartitionsFunction"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.api.java.function.PairFlatMapFunction"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.api.java.function.PairFunction"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.api.java.function.ReduceFunction"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.api.java.function.VoidFunction"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.api.java.function.VoidFunction2"),
+
     (problem: Problem) => problem match {
       case MissingClassProblem(cls) => !cls.fullName.startsWith("org.sparkproject.jpmml") &&
           !cls.fullName.startsWith("org.sparkproject.dmg.pmml")
