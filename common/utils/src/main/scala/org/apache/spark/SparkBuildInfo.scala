@@ -18,7 +18,7 @@ package org.apache.spark
 
 import java.util.Properties
 
-private[spark] object SparkBuildInfo {
+object SparkBuildInfo {
 
   val (
     spark_version: String,
