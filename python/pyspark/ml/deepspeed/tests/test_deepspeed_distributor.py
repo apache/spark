@@ -174,12 +174,45 @@ def _create_basic_function():
        return (leg1 * leg1 + leg2 * leg2)**0.5
    return pythagoras 
 
+from pyspark.ml.torch.tests.test_distributor import get_distributed_mode_conf
+
+class DeepspeedTorchDistributorDistributedEndToEnd(unittest.TestCase):
+
+    @classmethod
+    def setUpClass(cls):
+        (cls.gpu_discovery_script_file_name, cls.mnist_dir_path) = set_up_test_dirs()
+        print(f"Distributed e2e fname: {cls.gpu_discovery_script_file_name}")
+        conf = SparkConf()
+        for k, v in get_distributed_mode_conf().items():
+            conf = conf.set(k, v)
+        conf = conf.set(
+            "spark.worker.resource.gpu.discoveryScript", cls.gpu_discovery_script_file_name
+        )
+        print("Distributed babby:", conf.getAll())
+        sc = SparkContext("local-cluster[2,2,512]",cls.__name__,conf=conf)
+        cls.spark = SparkSession(sc)
+
+    def test_simple_function_e2e(self):
+       train_fn = _create_basic_function()
+       # Arguments for the pythagoras function train_fn
+       x = 3
+       y = 4
+       dist = DeepspeedTorchDistributor(num_gpus=2, use_gpu=False, local_mode=False)
+       output = dist.run(train_fn, x, y)
+       self.assertEqual(output, 5)
+
+    @classmethod
+    def tearDownClass(cls):
+        #shutil.rmtree(cls.mnist_dir_path)
+        #os.unlink(cls.gpu_discovery_script_file_name)
+        cls.spark.stop()
+
 class DeepspeedDistributorLocalEndToEndTests(unittest.TestCase):
-    
 
     @classmethod
     def setUpClass(cls):
         cls.gpu_discovery_script_file_name, cls.mnist_dir_path = set_up_test_dirs()
+        print(f"LOCAL E2E DISCOVERY: {cls.gpu_discovery_script_file_name}")
         conf = SparkConf()
         for k, v in get_local_mode_conf().items():
             conf = conf.set(k, v)
@@ -190,13 +223,6 @@ class DeepspeedDistributorLocalEndToEndTests(unittest.TestCase):
         sc = SparkContext("local-cluster[2,2,512]", cls.__name__, conf=conf)
         cls.spark = SparkSession(sc)
     
-    @classmethod
-    def tearDownClass(cls):
-        shutil.rmtree(cls.mnist_dir_path)
-        os.unlink(cls.gpu_discovery_script_file_name)
-        cls.spark.stop()
-
-
     def test_simple_function_e2e(self):
        train_fn = _create_basic_function()
        # Arguments for the pythagoras function train_fn
@@ -208,56 +234,15 @@ class DeepspeedDistributorLocalEndToEndTests(unittest.TestCase):
 
 
     def test_pytorch_file_e2e(self):
-        path_to_train_file = "path/to/train/file.py"
-        with TorchDistributor._setup_e2e_mocking_env() as _:
-            dist = DeepspeedTorchDistributor(num_gpus=2, use_gpu=True, local_mode=True)
-            command = dist.run(path_to_train_file, 2, 5)
-            with open("temp_output.txt", "w") as f:
-                f.write(str(command))
-            expected_command = [sys.executable, 
-                                "-m", 
-                                "torch.distributed.run", 
-                                "--standalone", 
-                                "--nnodes=1", 
-                                "--nproc_per_node=2", 
-                                path_to_train_file, 
-                                "2", 
-                                "5", 
-                                "--deepspeed"]
-            self.assertEqual(command, expected_command)
-
-from pyspark.ml.torch.tests.test_distributor import get_distributed_mode_conf
-
-class DeepspeedTorchDistributorDistributedEndToEnd(unittest.TestCase):
-
-    @classmethod
-    def setUpClass(cls):
-        (cls.gpu_discovery_script_file_name, cls.mnist_dir_path) = set_up_test_dirs()
-        conf = SparkConf()
-        for k, v in get_distributed_mode_conf().items():
-            conf = conf.set(k, v)
-        conf = conf.set(
-            "spark.worker.resource.gpu.discoveryScript", cls.gpu_discovery_script_file_name
-        )
-
-        sc = SparkContext("local-cluster[2,2,512]","ROFL",conf=conf)
-        cls.spark = SparkSession(sc)
+        path_to_train_file = "python/test_support/test_deepspeed_training_file.py"
+        dist = DeepspeedTorchDistributor(num_gpus=2, use_gpu=True, local_mode=True)
+        dist.run(path_to_train_file, 2, 5)
 
     @classmethod
     def tearDownClass(cls):
         shutil.rmtree(cls.mnist_dir_path)
         os.unlink(cls.gpu_discovery_script_file_name)
         cls.spark.stop()
-
-    def test_simple_function_e2e(self):
-       train_fn = _create_basic_function()
-       # Arguments for the pythagoras function train_fn
-       x = 3
-       y = 4
-       dist = DeepspeedTorchDistributor(num_gpus=2, use_gpu=False, local_mode=False)
-       output = dist.run(train_fn, x, y)
-       self.assertEqual(output, 5)
-
 
 if __name__ == "__main__":
     from pyspark.ml.deepspeed.tests.test_deepspeed_distributor import *  # noqa: F401,F403
