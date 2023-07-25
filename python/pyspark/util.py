@@ -24,6 +24,7 @@ import re
 import sys
 import threading
 import traceback
+import typing
 from types import TracebackType
 from typing import Any, Callable, Iterator, List, Optional, TextIO, Tuple
 
@@ -34,6 +35,9 @@ from py4j.clientserver import ClientServer
 __all__: List[str] = []
 
 from py4j.java_gateway import JavaObject
+
+if typing.TYPE_CHECKING:
+    from pyspark.sql import SparkSession
 
 
 def print_exec(stream: TextIO) -> None:
@@ -279,51 +283,72 @@ def _parse_memory(s: str) -> int:
     return int(float(s[:-1]) * units[s[-1].lower()])
 
 
-def inheritable_thread_target(f: Callable) -> Callable:
+def inheritable_thread_target(f: Callable, session: Optional["SparkSession"] = None) -> Callable:
     """
     Return thread target wrapper which is recommended to be used in PySpark when the
     pinned thread mode is enabled. The wrapper function, before calling original
     thread target, it inherits the inheritable properties specific
-    to JVM thread such as ``InheritableThreadLocal``.
-
-    Also, note that pinned thread mode does not close the connection from Python
-    to JVM when the thread is finished in the Python side. With this wrapper, Python
-    garbage-collects the Python thread instance and also closes the connection
-    which finishes JVM thread correctly.
+    to JVM thread such as ``InheritableThreadLocal``, or thread local such as tags
+    with Spark Connect.
 
     When the pinned thread mode is off, it return the original ``f``.
 
     .. versionadded:: 3.2.0
 
+    .. versionchanged:: 3.5.0
+        Supports Spark Connect.
+
     Parameters
     ----------
     f : function
         the original thread target.
+    session : SparkSession, optional
+        Spark Connect session.
 
     Notes
     -----
     This API is experimental.
 
-    It is important to know that it captures the local properties when you decorate it
-    whereas :class:`InheritableThread` captures when the thread is started.
+    It is important to know that it captures the local properties or tags when you
+    decorate it whereas :class:`InheritableThread` captures when the thread is started.
     Therefore, it is encouraged to decorate it when you want to capture the local
     properties.
 
-    For example, the local properties from the current Spark context is captured
-    when you define a function here instead of the invocation:
+    For example, the local properties or tags from the current Spark context or Spark
+    session is captured when you define a function here instead of the invocation:
 
     >>> @inheritable_thread_target
     ... def target_func():
     ...     pass  # your codes.
 
-    If you have any updates on local properties afterwards, it would not be reflected to
-    the Spark context in ``target_func()``.
+    If you have any updates on local properties or tags afterwards, it would not be
+    reflected to the Spark context in ``target_func()``.
 
     The example below mimics the behavior of JVM threads as close as possible:
 
     >>> Thread(target=inheritable_thread_target(target_func)).start()  # doctest: +SKIP
     """
+    from pyspark.sql import is_remote
+
+    # Spark Connect
+    if is_remote():
+        assert session is not None, "Spark Connect must be provided."
+        if not hasattr(session.client.thread_local, "tags"):
+            session.client.thread_local.tags = set()
+        tags = set(session.client.thread_local.tags)
+
+        @functools.wraps(f)
+        def wrapped(*args: Any, **kwargs: Any) -> Any:
+            # Set tags in child thread.
+            session.client.thread_local.tags = tags
+            return f(*args, **kwargs)
+
+        return wrapped
+
+    # Non Spark Connect
     from pyspark import SparkContext
+
+    assert session is None, "Regular Spark session cannot pass."
 
     if isinstance(SparkContext._gateway, ClientServer):
         # Here's when the pinned-thread mode (PYSPARK_PIN_THREAD) is on.
@@ -348,19 +373,18 @@ def inheritable_thread_target(f: Callable) -> Callable:
 
 class InheritableThread(threading.Thread):
     """
-    Thread that is recommended to be used in PySpark instead of :class:`threading.Thread`
-    when the pinned thread mode is enabled. The usage of this class is exactly same as
-    :class:`threading.Thread` but correctly inherits the inheritable properties specific
-    to JVM thread such as ``InheritableThreadLocal``.
-
-    Also, note that pinned thread mode does not close the connection from Python
-    to JVM when the thread is finished in the Python side. With this class, Python
-    garbage-collects the Python thread instance and also closes the connection
-    which finishes JVM thread correctly.
+    Thread that is recommended to be used in PySpark when the pinned thread mode is
+    enabled. The wrapper function, before calling original thread target, it
+    inherits the inheritable properties specific to JVM thread such as
+    ``InheritableThreadLocal``, or thread local such as tags
+    with Spark Connect.
 
     When the pinned thread mode is off, this works as :class:`threading.Thread`.
 
     .. versionadded:: 3.1.0
+
+    .. versionchanged:: 3.5.0
+        Supports Spark Connect.
 
     Notes
     -----
@@ -369,35 +393,67 @@ class InheritableThread(threading.Thread):
 
     _props: JavaObject
 
-    def __init__(self, target: Callable, *args: Any, **kwargs: Any):
-        from pyspark import SparkContext
+    def __init__(
+        self, target: Callable, *args: Any, session: Optional["SparkSession"] = None, **kwargs: Any
+    ):
+        from pyspark.sql import is_remote
 
-        if isinstance(SparkContext._gateway, ClientServer):
-            # Here's when the pinned-thread mode (PYSPARK_PIN_THREAD) is on.
+        # Spark Connect
+        if is_remote():
+            assert session is not None, "Spark Connect must be provided."
+            self._session = session
+
             def copy_local_properties(*a: Any, **k: Any) -> Any:
-                # self._props is set before starting the thread to match the behavior with JVM.
-                assert hasattr(self, "_props")
-                assert SparkContext._active_spark_context is not None
-                SparkContext._active_spark_context._jsc.sc().setLocalProperties(self._props)
+                # Set tags in child thread.
+                assert hasattr(self, "_tags")
+                session.client.thread_local.tags = self._tags
                 return target(*a, **k)
 
             super(InheritableThread, self).__init__(
                 target=copy_local_properties, *args, **kwargs  # type: ignore[misc]
             )
         else:
-            super(InheritableThread, self).__init__(
-                target=target, *args, **kwargs  # type: ignore[misc]
-            )
+            # Non Spark Connect
+            from pyspark import SparkContext
+
+            if isinstance(SparkContext._gateway, ClientServer):
+                # Here's when the pinned-thread mode (PYSPARK_PIN_THREAD) is on.
+                def copy_local_properties(*a: Any, **k: Any) -> Any:
+                    # self._props is set before starting the thread to match the behavior with JVM.
+                    assert hasattr(self, "_props")
+                    assert SparkContext._active_spark_context is not None
+                    SparkContext._active_spark_context._jsc.sc().setLocalProperties(self._props)
+                    return target(*a, **k)
+
+                super(InheritableThread, self).__init__(
+                    target=copy_local_properties, *args, **kwargs  # type: ignore[misc]
+                )
+            else:
+                super(InheritableThread, self).__init__(
+                    target=target, *args, **kwargs  # type: ignore[misc]
+                )
 
     def start(self) -> None:
-        from pyspark import SparkContext
+        from pyspark.sql import is_remote
 
-        if isinstance(SparkContext._gateway, ClientServer):
-            # Here's when the pinned-thread mode (PYSPARK_PIN_THREAD) is on.
+        if is_remote():
+            # Spark Connect
+            assert hasattr(self, "_session")
+            if not hasattr(self._session.client.thread_local, "tags"):
+                self._session.client.thread_local.tags = set()
+            self._tags = set(self._session.client.thread_local.tags)
+        else:
+            # Non Spark Connect
+            from pyspark import SparkContext
 
-            # Local property copy should happen in Thread.start to mimic JVM's behavior.
-            assert SparkContext._active_spark_context is not None
-            self._props = SparkContext._active_spark_context._jsc.sc().getLocalProperties().clone()
+            if isinstance(SparkContext._gateway, ClientServer):
+                # Here's when the pinned-thread mode (PYSPARK_PIN_THREAD) is on.
+
+                # Local property copy should happen in Thread.start to mimic JVM's behavior.
+                assert SparkContext._active_spark_context is not None
+                self._props = (
+                    SparkContext._active_spark_context._jsc.sc().getLocalProperties().clone()
+                )
         return super(InheritableThread, self).start()
 
 
