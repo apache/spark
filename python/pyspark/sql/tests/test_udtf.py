@@ -487,7 +487,6 @@ class BaseUDTFTestsMixin:
 
         self.assertEqual(TestUDTF(lit(1)).collect(), [Row(x={1: "1"})])
 
-    """
     def test_udtf_with_pandas_input_type(self):
         import pandas as pd
 
@@ -504,7 +503,6 @@ class BaseUDTFTestsMixin:
             self.spark.sql(
                 "select * from values (1, 2), (2, 3) t(a, b), lateral test_udtf(a, b)"
             ).collect()
-    """
 
     def test_udtf_register_error(self):
         @udf
