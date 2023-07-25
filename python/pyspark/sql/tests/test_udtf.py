@@ -21,8 +21,6 @@ import unittest
 
 from typing import Iterator
 
-from py4j.protocol import Py4JJavaError
-
 from pyspark.errors import (
     PySparkAttributeError,
     PythonException,
@@ -269,7 +267,7 @@ class BaseUDTFTestsMixin:
                 yield a,
 
         with self.assertRaisesRegex(
-            PythonException, "__init__\(\) missing 1 required positional argument: 'a'"
+            PythonException, r"__init__\(\) missing 1 required positional argument: 'a'"
         ):
             TestUDTF(lit(1)).show()
 
@@ -283,13 +281,13 @@ class BaseUDTFTestsMixin:
                 ...
 
         with self.assertRaisesRegex(
-            PythonException, "terminate\(\) missing 1 required positional argument: 'a'"
+            PythonException, r"terminate\(\) missing 1 required positional argument: 'a'"
         ):
             TestUDTF(lit(1)).show()
 
     def test_udtf_with_wrong_num_output(self):
         err_msg = (
-            "\[UDTF_RETURN_SCHEMA_MISMATCH\] The number of columns in the "
+            r"\[UDTF_RETURN_SCHEMA_MISMATCH\] The number of columns in the "
             "result does not match the specified schema."
         )
 
@@ -375,7 +373,7 @@ class BaseUDTFTestsMixin:
 
     def test_udtf_terminate_with_wrong_num_output(self):
         err_msg = (
-            "\[UDTF_RETURN_SCHEMA_MISMATCH\] The number of columns in the result "
+            r"\[UDTF_RETURN_SCHEMA_MISMATCH\] The number of columns in the result "
             "does not match the specified schema."
         )
 
@@ -576,6 +574,7 @@ class BaseUDTFTestsMixin:
 
     def test_udtf_with_no_handler_class(self):
         with self.assertRaises(PySparkTypeError) as e:
+
             @udtf(returnType="a: int")
             def test_udtf(a: int):
                 yield a,
@@ -587,7 +586,7 @@ class BaseUDTFTestsMixin:
         )
 
         with self.assertRaises(PySparkTypeError) as e:
-            func = udtf(1, returnType="a: int")
+            udtf(1, returnType="a: int")
 
         self.check_error(
             exception=e.exception,
