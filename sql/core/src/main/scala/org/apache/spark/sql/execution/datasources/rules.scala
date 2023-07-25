@@ -45,15 +45,17 @@ class ResolveSQLOnFile(sparkSession: SparkSession) extends Rule[LogicalPlan] {
     conf.runSQLonFile && u.multipartIdentifier.size == 2
   }
 
-  private def resolveDataSource(ident: Seq[String]): DataSource = {
+  private def resolveDataSource(unresolved: UnresolvedRelation): DataSource = {
+    val ident = unresolved.multipartIdentifier
     val dataSource = DataSource(sparkSession, paths = Seq(ident.last), className = ident.head)
     // `dataSource.providingClass` may throw ClassNotFoundException, the caller side will try-catch
     // it and return the original plan, so that the analyzer can report table not found later.
     val isFileFormat = classOf[FileFormat].isAssignableFrom(dataSource.providingClass)
     if (!isFileFormat ||
       dataSource.className.toLowerCase(Locale.ROOT) == DDLUtils.HIVE_PROVIDER) {
-      throw QueryCompilationErrors.unsupportedDataSourceTypeForDirectQueryOnFilesError(
-        dataSource.className)
+      unresolved.failAnalysis(
+        errorClass = "UNSUPPORTED_DATASOURCE_FOR_DIRECT_QUERY",
+        messageParameters = Map("dataSourceType" -> ident.head))
     }
     dataSource
   }
@@ -65,7 +67,7 @@ class ResolveSQLOnFile(sparkSession: SparkSession) extends Rule[LogicalPlan] {
       // fail to time travel. Otherwise, this is some other catalog table that isn't resolved yet,
       // so we should leave it be for now.
       try {
-        resolveDataSource(u.multipartIdentifier)
+        resolveDataSource(u)
         throw QueryCompilationErrors.timeTravelUnsupportedError(toSQLId(u.multipartIdentifier))
       } catch {
         case _: ClassNotFoundException => r
@@ -73,11 +75,11 @@ class ResolveSQLOnFile(sparkSession: SparkSession) extends Rule[LogicalPlan] {
 
     case u: UnresolvedRelation if maybeSQLFile(u) =>
       try {
-        val ds = resolveDataSource(u.multipartIdentifier)
+        val ds = resolveDataSource(u)
         LogicalRelation(ds.resolveRelation())
       } catch {
         case _: ClassNotFoundException => u
-        case e: Exception =>
+        case e: Exception if !e.isInstanceOf[AnalysisException] =>
           // the provider is valid, but failed to create a logical plan
           u.failAnalysis(
             errorClass = "UNSUPPORTED_DATASOURCE_FOR_DIRECT_QUERY",
