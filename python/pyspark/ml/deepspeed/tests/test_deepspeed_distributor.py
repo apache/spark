@@ -182,8 +182,11 @@ class DeepspeedTorchDistributorDistributedEndToEnd(unittest.TestCase):
     def setUpClass(cls):
         (cls.gpu_discovery_script_file_name, cls.mnist_dir_path) = set_up_test_dirs()
         print(f"Distributed e2e fname: {cls.gpu_discovery_script_file_name}")
-        conf = SparkConf()
+        conf = SparkConf(loadDefaults=False)
+        print("BEFORE setting anything: ", conf.getAll(), " |||||||||||\n")
         for k, v in get_distributed_mode_conf().items():
+            if k is "spark.driver.resource.gpu.discoveryScript":
+                raise RuntimeError("Found trying to set the driver discovery script")
             conf = conf.set(k, v)
         conf = conf.set(
             "spark.worker.resource.gpu.discoveryScript", cls.gpu_discovery_script_file_name
@@ -201,10 +204,19 @@ class DeepspeedTorchDistributorDistributedEndToEnd(unittest.TestCase):
        output = dist.run(train_fn, x, y)
        self.assertEqual(output, 5)
 
+    def test_pytorch_file_e2e(self):
+        path_to_train_file = "python/test_support/test_deepspeed_training_file.py"
+        cp_path = f"/tmp/test_deepspeed_training_file.py"
+        shutil.copyfile(path_to_train_file, cp_path)
+        os.system("echo BREH; ls /tmp/ | grep test_deepspeed")
+        dist = DeepspeedTorchDistributor(num_gpus=True, use_gpu=False, local_mode=False)
+        dist.run(cp_path, 2, 5)
+        os.remove(cp_path)
+
     @classmethod
     def tearDownClass(cls):
-        #shutil.rmtree(cls.mnist_dir_path)
-        #os.unlink(cls.gpu_discovery_script_file_name)
+        shutil.rmtree(cls.mnist_dir_path)
+        os.unlink(cls.gpu_discovery_script_file_name)
         cls.spark.stop()
 
 class DeepspeedDistributorLocalEndToEndTests(unittest.TestCase):
@@ -219,8 +231,8 @@ class DeepspeedDistributorLocalEndToEndTests(unittest.TestCase):
         conf = conf.set(
             "spark.driver.resource.gpu.discoveryScript", cls.gpu_discovery_script_file_name
         )
-
-        sc = SparkContext("local-cluster[2,2,512]", cls.__name__, conf=conf)
+        print("Local babby:", conf.getAll())
+        sc = SparkContext("local-cluster[2,2,512]",cls.__name__,conf=conf)
         cls.spark = SparkSession(sc)
     
     def test_simple_function_e2e(self):
@@ -235,7 +247,7 @@ class DeepspeedDistributorLocalEndToEndTests(unittest.TestCase):
 
     def test_pytorch_file_e2e(self):
         path_to_train_file = "python/test_support/test_deepspeed_training_file.py"
-        dist = DeepspeedTorchDistributor(num_gpus=2, use_gpu=True, local_mode=True)
+        dist = DeepspeedTorchDistributor(num_gpus=2, use_gpu=False, local_mode=True)
         dist.run(path_to_train_file, 2, 5)
 
     @classmethod
