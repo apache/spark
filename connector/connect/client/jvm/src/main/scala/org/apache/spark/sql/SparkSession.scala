@@ -126,7 +126,6 @@ class SparkSession private[sql] (
   private def createDataset[T](encoder: AgnosticEncoder[T], data: Iterator[T]): Dataset[T] = {
     newDataset(encoder) { builder =>
       if (data.nonEmpty) {
-        val timeZoneId = conf.get("spark.sql.session.timeZone")
         val arrowData = ArrowSerializer.serialize(data, encoder, allocator, timeZoneId)
         if (arrowData.size() <= conf.get("spark.sql.session.localRelationCacheThreshold").toInt) {
           builder.getLocalRelationBuilder
@@ -529,9 +528,11 @@ class SparkSession private[sql] (
     client.semanticHash(plan).getSemanticHash.getResult
   }
 
+  private[sql] def timeZoneId: String = conf.get("spark.sql.session.timeZone")
+
   private[sql] def execute[T](plan: proto.Plan, encoder: AgnosticEncoder[T]): SparkResult[T] = {
     val value = client.execute(plan)
-    val result = new SparkResult(value, allocator, encoder)
+    val result = new SparkResult(value, allocator, encoder, timeZoneId)
     cleaner.register(result)
     result
   }
@@ -614,7 +615,7 @@ class SparkSession private[sql] (
    * Interrupt all operations of this session currently running on the connected server.
    *
    * @return
-   *   sequence of operationIds of interrupted operations. Note: there is still a possiblility of
+   *   sequence of operationIds of interrupted operations. Note: there is still a possibility of
    *   operation finishing just as it is interrupted.
    *
    * @since 3.5.0
@@ -627,7 +628,7 @@ class SparkSession private[sql] (
    * Interrupt all operations of this session with the given operation tag.
    *
    * @return
-   *   sequence of operationIds of interrupted operations. Note: there is still a possiblility of
+   *   sequence of operationIds of interrupted operations. Note: there is still a possibility of
    *   operation finishing just as it is interrupted.
    *
    * @since 3.5.0
@@ -640,7 +641,7 @@ class SparkSession private[sql] (
    * Interrupt an operation of this session with the given operationId.
    *
    * @return
-   *   sequence of operationIds of interrupted operations. Note: there is still a possiblility of
+   *   sequence of operationIds of interrupted operations. Note: there is still a possibility of
    *   operation finishing just as it is interrupted.
    *
    * @since 3.5.0

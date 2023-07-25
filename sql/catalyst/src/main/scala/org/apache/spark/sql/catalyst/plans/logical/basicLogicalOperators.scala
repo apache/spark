@@ -303,8 +303,15 @@ case class Filter(condition: Expression, child: LogicalPlan)
   extends OrderPreservingUnaryNode with PredicateHelper {
   override def output: Seq[Attribute] = child.output
 
-  override def maxRows: Option[Long] = child.maxRows
-  override def maxRowsPerPartition: Option[Long] = child.maxRowsPerPartition
+  override def maxRows: Option[Long] = condition match {
+    case Literal.FalseLiteral => Some(0L)
+    case _ => child.maxRows
+  }
+
+  override def maxRowsPerPartition: Option[Long] = condition match {
+    case Literal.FalseLiteral => Some(0L)
+    case _ => child.maxRowsPerPartition
+  }
 
   final override val nodePatterns: Seq[TreePattern] = Seq(FILTER)
 
