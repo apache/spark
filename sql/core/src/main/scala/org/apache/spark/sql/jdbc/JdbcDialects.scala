@@ -110,8 +110,10 @@ abstract class JdbcDialect extends Serializable with Logging {
    * @param t represents a specific instant in time based on
    *          the hybrid calendar which combines Julian and
    *          Gregorian calendars.
+   * @return the timestamp value to convert to
    * @throws IllegalArgumentException if t is null
    */
+  @Since("3.5.0")
   def convertJavaTimestampToTimestamp(t: Timestamp): Timestamp = t
 
   /**
