@@ -410,11 +410,15 @@ CREATE TEMPORARY VIEW "myview"("c1") AS
   WITH "v"("a") AS (SELECT 1) SELECT "a" FROM "v"
 -- !query analysis
 CreateViewCommand `myview`, [(c1,None)], WITH "v"("a") AS (SELECT 1) SELECT "a" FROM "v", false, false, LocalTempView, true
-   +- Project [a#x]
-      +- SubqueryAlias v
-         +- Project [1#x AS a#x]
-            +- Project [1 AS 1#x]
-               +- OneRowRelation
+   +- WithCTE
+      :- CTERelationDef xxxx, false
+      :  +- SubqueryAlias v
+      :     +- Project [1#x AS a#x]
+      :        +- Project [1 AS 1#x]
+      :           +- OneRowRelation
+      +- Project [a#x]
+         +- SubqueryAlias v
+            +- CTERelationRef xxxx, true, [a#x]
 
 
 -- !query

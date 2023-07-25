@@ -684,7 +684,7 @@ case class InsertIntoDir(
     provider: Option[String],
     child: LogicalPlan,
     overwrite: Boolean = true)
-  extends UnaryNode {
+  extends UnaryNode with CTEInChildren {
 
   override def output: Seq[Attribute] = Seq.empty
   override def metadataOutput: Seq[Attribute] = Nil
@@ -893,6 +893,16 @@ case class WithCTE(plan: LogicalPlan, cteDefs: Seq[CTERelationDef]) extends Logi
     withNewChildren(children.init :+ newPlan).asInstanceOf[WithCTE]
   }
 }
+
+/**
+ * The logical node which is able to place the `WithCTE` node on its children.
+ */
+trait CTEInChildren extends LogicalPlan {
+  def withCTEDefs(cteDefs: Seq[CTERelationDef]): LogicalPlan = {
+    withNewChildren(children.map(WithCTE(_, cteDefs)))
+  }
+}
+
 
 case class WithWindowDefinition(
     windowDefinitions: Map[String, WindowSpecDefinition],
