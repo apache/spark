@@ -46,6 +46,7 @@ message Expression {
     UpdateFields update_fields = 13;
     UnresolvedNamedLambdaVariable unresolved_named_lambda_variable = 14;
     CommonInlineUserDefinedFunction common_inline_user_defined_function = 15;
+    CallFunction call_function = 16;
 
     // This field is used to mark extensions to the protocol. When plugins generate arbitrary
     // relations they can add them here. During the planning the correct resolution is done.
@@ -370,4 +371,12 @@ message JavaUDF {
 
   // (Required) Indicate if the Java user-defined function is an aggregate function
   bool aggregate = 3;
+}
+
+message CallFunction {
+  // (Required) Unparsed name of the SQL function.
+  string function_name = 1;
+
+  // (Optional) Function arguments. Empty arguments are allowed.
+  repeated Expression arguments = 2;
 }
