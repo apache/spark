@@ -34,19 +34,22 @@ from pyspark.testing.connectutils import ReusedConnectTestCase
 
 
 def get_start_event_schema():
-    return StructType([
-        StructField("id", StringType(), True),
-        StructField("runId", StringType(), True),
-        StructField("name", StringType(), True),
-        StructField("timestamp", StringType(), True)
-])
+    return StructType(
+        [
+            StructField("id", StringType(), True),
+            StructField("runId", StringType(), True),
+            StructField("name", StringType(), True),
+            StructField("timestamp", StringType(), True),
+        ]
+    )
 
 
 class TestListener(StreamingQueryListener):
     def onQueryStarted(self, event):
-        df = self.spark.createDataFrame(data=[
-            (str(event.id), str(event.runId), event.name, event.timestamp)
-        ], schema=get_start_event_schema())
+        df = self.spark.createDataFrame(
+            data=[(str(event.id), str(event.runId), event.name, event.timestamp)],
+            schema=get_start_event_schema(),
+        )
         df.write.saveAsTable("listener_start_events")
 
     def onQueryProgress(self, event):
@@ -60,7 +63,6 @@ class TestListener(StreamingQueryListener):
 
 
 class StreamingListenerParityTests(StreamingListenerTestsMixin, ReusedConnectTestCase):
-
     def test_listener_events(self):
         test_listener = TestListener()
 
@@ -75,7 +77,8 @@ class StreamingListenerParityTests(StreamingListenerTestsMixin, ReusedConnectTes
             q.stop()
 
             start_event = QueryStartedEvent.fromJson(
-                self.spark.read.table("listener_start_events").collect()[0].asDict())
+                self.spark.read.table("listener_start_events").collect()[0].asDict()
+            )
 
             self.check_start_event(start_event)
 

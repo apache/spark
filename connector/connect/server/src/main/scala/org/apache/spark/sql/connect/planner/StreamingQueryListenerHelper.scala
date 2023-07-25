@@ -22,8 +22,8 @@ import org.apache.spark.sql.connect.service.{SessionHolder, SparkConnectService}
 import org.apache.spark.sql.streaming.StreamingQueryListener
 
 /**
- * A helper class for handling StreamingQueryListener related functionality in Spark Connect.
- * Each instance of this class starts a python process, inside which has the python handling logic.
+ * A helper class for handling StreamingQueryListener related functionality in Spark Connect. Each
+ * instance of this class starts a python process, inside which has the python handling logic.
  * When new a event is received, it is serialized to json, and passed to the python process.
  */
 class PythonStreamingQueryListener(
@@ -36,8 +36,7 @@ class PythonStreamingQueryListener(
   val connectUrl = s"sc://localhost:$port/;user_id=${sessionHolder.userId}"
   val runner = StreamingPythonRunner(listener, connectUrl)
 
-  val (dataOut, _) = runner.init(
-    sessionHolder.sessionId, PythonEvalType.SQL_STREAMING_LISTENER)
+  val (dataOut, _) = runner.init(sessionHolder.sessionId, PythonEvalType.SQL_STREAMING_LISTENER)
 
   override def onQueryStarted(event: StreamingQueryListener.QueryStartedEvent): Unit = {
     PythonRDD.writeUTF(event.json, dataOut)

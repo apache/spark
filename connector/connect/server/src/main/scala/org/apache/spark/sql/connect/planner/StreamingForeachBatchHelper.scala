@@ -88,8 +88,8 @@ object StreamingForeachBatchHelper extends Logging {
     val port = SparkConnectService.localPort
     val connectUrl = s"sc://localhost:$port/;user_id=${sessionHolder.userId}"
     val runner = StreamingPythonRunner(pythonFn, connectUrl)
-    val (dataOut, dataIn) = runner.init(
-      sessionHolder.sessionId, PythonEvalType.SQL_STREAMING_FOREACH_BATCH)
+    val (dataOut, dataIn) =
+      runner.init(sessionHolder.sessionId, PythonEvalType.SQL_STREAMING_FOREACH_BATCH)
 
     val foreachBatchRunnerFn: FnArgsWithId => Unit = (args: FnArgsWithId) => {
 
