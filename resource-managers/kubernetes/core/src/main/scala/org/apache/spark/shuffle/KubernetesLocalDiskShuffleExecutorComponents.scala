@@ -102,6 +102,8 @@ object KubernetesLocalDiskShuffleExecutorComponents extends Logging {
         if (id.isShuffle) {
           val decryptedSize = f.length()
           bm.TempFileBasedBlockStoreUpdater(id, level, classTag, f, decryptedSize).save()
+        } else {
+          logInfo("Ignore a non-shuffle block file.")
         }
       } catch {
         case _: UnrecognizedBlockId =>
