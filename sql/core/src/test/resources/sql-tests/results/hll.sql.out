@@ -12,37 +12,15 @@ CREATE TABLE t1 USING JSON AS VALUES (0), (1), (2), (2), (2), (3), (4) as tab(co
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.SparkRuntimeException
-{
-  "errorClass" : "LOCATION_ALREADY_EXISTS",
-  "sqlState" : "42710",
-  "messageParameters" : {
-    "identifier" : "`spark_catalog`.`default`.`t1`",
-    "location" : "'file:/Users/herman/Engineering/spark-dev/sql/core/spark-warehouse/org.apache.spark.sql.SQLQueryTestSuite/t1'"
-  }
-}
+
 
 
 -- !query
 SELECT hll_sketch_estimate(hll_sketch_agg(col)) AS result FROM t1
 -- !query schema
-struct<>
+struct<result:bigint>
 -- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
-  "sqlState" : "42P01",
-  "messageParameters" : {
-    "relationName" : "`t1`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 64,
-    "stopIndex" : 65,
-    "fragment" : "t1"
-  } ]
-}
+5
 
 
 -- !query

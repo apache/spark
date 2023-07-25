@@ -655,15 +655,7 @@ Project [ AS xxx#x, i#x, j#x, t#x, k#x]
 -- !query
 CREATE TABLE t1 (name STRING, n INTEGER) USING parquet
 -- !query analysis
-org.apache.spark.SparkRuntimeException
-{
-  "errorClass" : "LOCATION_ALREADY_EXISTS",
-  "sqlState" : "42710",
-  "messageParameters" : {
-    "identifier" : "`spark_catalog`.`default`.`t1`",
-    "location" : "'file:/Users/herman/Engineering/spark-dev/sql/core/spark-warehouse/org.apache.spark.sql.SQLQueryTestSuite/t1'"
-  }
-}
+CreateDataSourceTableCommand `spark_catalog`.`default`.`t1`, false
 
 
 -- !query
@@ -681,21 +673,9 @@ CreateDataSourceTableCommand `spark_catalog`.`default`.`t3`, false
 -- !query
 INSERT INTO t1 VALUES ( 'bb', 11 )
 -- !query analysis
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
-  "sqlState" : "42P01",
-  "messageParameters" : {
-    "relationName" : "`t1`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 13,
-    "stopIndex" : 14,
-    "fragment" : "t1"
-  } ]
-}
+InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/t1, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/t1], Append, `spark_catalog`.`default`.`t1`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/t1), [name, n]
++- Project [cast(col1#x as string) AS name#x, cast(col2#x as int) AS n#x]
+   +- LocalRelation [col1#x, col2#x]
 
 
 -- !query
@@ -749,21 +729,17 @@ InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_d
 -- !query
 SELECT * FROM t1 FULL JOIN t2 USING (name) FULL JOIN t3 USING (name)
 -- !query analysis
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
-  "sqlState" : "42P01",
-  "messageParameters" : {
-    "relationName" : "`t1`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 15,
-    "stopIndex" : 16,
-    "fragment" : "t1"
-  } ]
-}
+Project [name#x, n#x, n#x, n#x]
++- Project [coalesce(name#x, name#x) AS name#x, n#x, n#x, n#x]
+   +- Join FullOuter, (name#x = name#x)
+      :- Project [coalesce(name#x, name#x) AS name#x, n#x, n#x]
+      :  +- Join FullOuter, (name#x = name#x)
+      :     :- SubqueryAlias spark_catalog.default.t1
+      :     :  +- Relation spark_catalog.default.t1[name#x,n#x] parquet
+      :     +- SubqueryAlias spark_catalog.default.t2
+      :        +- Relation spark_catalog.default.t2[name#x,n#x] parquet
+      +- SubqueryAlias spark_catalog.default.t3
+         +- Relation spark_catalog.default.t3[name#x,n#x] parquet
 
 
 -- !query
@@ -891,21 +867,23 @@ NATURAL INNER JOIN
 NATURAL INNER JOIN
 (SELECT name, n as s3_n, 3 as s3_2 FROM t3) s3
 -- !query analysis
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
-  "sqlState" : "42P01",
-  "messageParameters" : {
-    "relationName" : "`t1`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 55,
-    "stopIndex" : 56,
-    "fragment" : "t1"
-  } ]
-}
+Project [name#x, s1_n#x, s1_1#x, s2_n#x, s2_2#x, s3_n#x, s3_2#x]
++- Project [name#x, s1_n#x, s1_1#x, s2_n#x, s2_2#x, s3_n#x, s3_2#x]
+   +- Join Inner, (name#x = name#x)
+      :- Project [name#x, s1_n#x, s1_1#x, s2_n#x, s2_2#x]
+      :  +- Join Inner, (name#x = name#x)
+      :     :- SubqueryAlias s1
+      :     :  +- Project [name#x, n#x AS s1_n#x, 1 AS s1_1#x]
+      :     :     +- SubqueryAlias spark_catalog.default.t1
+      :     :        +- Relation spark_catalog.default.t1[name#x,n#x] parquet
+      :     +- SubqueryAlias s2
+      :        +- Project [name#x, n#x AS s2_n#x, 2 AS s2_2#x]
+      :           +- SubqueryAlias spark_catalog.default.t2
+      :              +- Relation spark_catalog.default.t2[name#x,n#x] parquet
+      +- SubqueryAlias s3
+         +- Project [name#x, n#x AS s3_n#x, 3 AS s3_2#x]
+            +- SubqueryAlias spark_catalog.default.t3
+               +- Relation spark_catalog.default.t3[name#x,n#x] parquet
 
 
 -- !query
@@ -916,21 +894,23 @@ NATURAL FULL JOIN
 NATURAL FULL JOIN
 (SELECT name, n as s3_n, 3 as s3_2 FROM t3) s3
 -- !query analysis
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
-  "sqlState" : "42P01",
-  "messageParameters" : {
-    "relationName" : "`t1`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 55,
-    "stopIndex" : 56,
-    "fragment" : "t1"
-  } ]
-}
+Project [name#x, s1_n#x, s1_1#x, s2_n#x, s2_2#x, s3_n#x, s3_2#x]
++- Project [coalesce(name#x, name#x) AS name#x, s1_n#x, s1_1#x, s2_n#x, s2_2#x, s3_n#x, s3_2#x]
+   +- Join FullOuter, (name#x = name#x)
+      :- Project [coalesce(name#x, name#x) AS name#x, s1_n#x, s1_1#x, s2_n#x, s2_2#x]
+      :  +- Join FullOuter, (name#x = name#x)
+      :     :- SubqueryAlias s1
+      :     :  +- Project [name#x, n#x AS s1_n#x, 1 AS s1_1#x]
+      :     :     +- SubqueryAlias spark_catalog.default.t1
+      :     :        +- Relation spark_catalog.default.t1[name#x,n#x] parquet
+      :     +- SubqueryAlias s2
+      :        +- Project [name#x, n#x AS s2_n#x, 2 AS s2_2#x]
+      :           +- SubqueryAlias spark_catalog.default.t2
+      :              +- Relation spark_catalog.default.t2[name#x,n#x] parquet
+      +- SubqueryAlias s3
+         +- Project [name#x, n#x AS s3_n#x, 3 AS s3_2#x]
+            +- SubqueryAlias spark_catalog.default.t3
+               +- Relation spark_catalog.default.t3[name#x,n#x] parquet
 
 
 -- !query
@@ -943,21 +923,25 @@ NATURAL FULL JOIN
     (SELECT name, n as s3_n FROM t3) as s3
   ) ss2
 -- !query analysis
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
-  "sqlState" : "42P01",
-  "messageParameters" : {
-    "relationName" : "`t1`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 44,
-    "stopIndex" : 45,
-    "fragment" : "t1"
-  } ]
-}
+Project [name#x, s1_n#x, s2_n#x, s3_n#x]
++- Project [coalesce(name#x, name#x) AS name#x, s1_n#x, s2_n#x, s3_n#x]
+   +- Join FullOuter, (name#x = name#x)
+      :- SubqueryAlias s1
+      :  +- Project [name#x, n#x AS s1_n#x]
+      :     +- SubqueryAlias spark_catalog.default.t1
+      :        +- Relation spark_catalog.default.t1[name#x,n#x] parquet
+      +- SubqueryAlias ss2
+         +- Project [name#x, s2_n#x, s3_n#x]
+            +- Project [coalesce(name#x, name#x) AS name#x, s2_n#x, s3_n#x]
+               +- Join FullOuter, (name#x = name#x)
+                  :- SubqueryAlias s2
+                  :  +- Project [name#x, n#x AS s2_n#x]
+                  :     +- SubqueryAlias spark_catalog.default.t2
+                  :        +- Relation spark_catalog.default.t2[name#x,n#x] parquet
+                  +- SubqueryAlias s3
+                     +- Project [name#x, n#x AS s3_n#x]
+                        +- SubqueryAlias spark_catalog.default.t3
+                           +- Relation spark_catalog.default.t3[name#x,n#x] parquet
 
 
 -- !query
@@ -970,21 +954,25 @@ NATURAL FULL JOIN
     (SELECT name, n as s3_n FROM t3) as s3
   ) ss2
 -- !query analysis
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
-  "sqlState" : "42P01",
-  "messageParameters" : {
-    "relationName" : "`t1`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 44,
-    "stopIndex" : 45,
-    "fragment" : "t1"
-  } ]
-}
+Project [name#x, s1_n#x, s2_n#x, s2_2#x, s3_n#x]
++- Project [coalesce(name#x, name#x) AS name#x, s1_n#x, s2_n#x, s2_2#x, s3_n#x]
+   +- Join FullOuter, (name#x = name#x)
+      :- SubqueryAlias s1
+      :  +- Project [name#x, n#x AS s1_n#x]
+      :     +- SubqueryAlias spark_catalog.default.t1
+      :        +- Relation spark_catalog.default.t1[name#x,n#x] parquet
+      +- SubqueryAlias ss2
+         +- Project [name#x, s2_n#x, s2_2#x, s3_n#x]
+            +- Project [coalesce(name#x, name#x) AS name#x, s2_n#x, s2_2#x, s3_n#x]
+               +- Join FullOuter, (name#x = name#x)
+                  :- SubqueryAlias s2
+                  :  +- Project [name#x, n#x AS s2_n#x, 2 AS s2_2#x]
+                  :     +- SubqueryAlias spark_catalog.default.t2
+                  :        +- Relation spark_catalog.default.t2[name#x,n#x] parquet
+                  +- SubqueryAlias s3
+                     +- Project [name#x, n#x AS s3_n#x]
+                        +- SubqueryAlias spark_catalog.default.t3
+                           +- Relation spark_catalog.default.t3[name#x,n#x] parquet
 
 
 -- !query
@@ -994,21 +982,16 @@ FULL JOIN
   (SELECT name, 2 as s2_n FROM t2) as s2
 ON (s1_n = s2_n)
 -- !query analysis
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
-  "sqlState" : "42P01",
-  "messageParameters" : {
-    "relationName" : "`t1`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 46,
-    "stopIndex" : 47,
-    "fragment" : "t1"
-  } ]
-}
+Project [name#x, s1_n#x, name#x, s2_n#x]
++- Join FullOuter, (s1_n#x = s2_n#x)
+   :- SubqueryAlias s1
+   :  +- Project [name#x, n#x AS s1_n#x]
+   :     +- SubqueryAlias spark_catalog.default.t1
+   :        +- Relation spark_catalog.default.t1[name#x,n#x] parquet
+   +- SubqueryAlias s2
+      +- Project [name#x, 2 AS s2_n#x]
+         +- SubqueryAlias spark_catalog.default.t2
+            +- Relation spark_catalog.default.t2[name#x,n#x] parquet
 
 
 -- !query
@@ -1603,14 +1586,8 @@ Aggregate [count(1) AS count(1)#xL]
 -- !query
 DROP TABLE t1
 -- !query analysis
-org.apache.spark.sql.catalyst.analysis.NoSuchTableException
-{
-  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
-  "sqlState" : "42P01",
-  "messageParameters" : {
-    "relationName" : "`spark_catalog`.`default`.`t1`"
-  }
-}
+DropTable false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.t1
 
 
 -- !query
