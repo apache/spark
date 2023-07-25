@@ -24,7 +24,6 @@ from py4j.java_gateway import JavaObject
 from pyspark.sql import Row
 from pyspark import cloudpickle
 
-
 __all__ = ["StreamingQueryListener"]
 
 
