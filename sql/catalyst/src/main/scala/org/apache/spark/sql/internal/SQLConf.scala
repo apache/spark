@@ -3764,6 +3764,7 @@ object SQLConf {
     .doc("If true, always inline the CTE relations for the queries in commands. This is the " +
       "legacy behavior which may produce incorrect results because Spark may evaluate a CTE " +
       "relation more than once, even if it's nondeterministic.")
+    .version("4.0.0")
     .booleanConf
     .createWithDefault(false)
 
