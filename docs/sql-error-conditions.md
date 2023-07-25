@@ -918,6 +918,14 @@ For more details see [INVALID_FORMAT](sql-error-conditions-invalid-format-error-
 
 The fraction of sec must be zero. Valid range is [0, 60]. If necessary set `<ansiConfig>` to "false" to bypass this error.
 
+### [INVALID_HANDLE](sql-error-conditions-invalid-handle-error-class.html)
+
+[SQLSTATE: HY000](sql-error-conditions-sqlstates.html#class-HY-cli-specific-condition)
+
+The handle `<handle>` is invalid.
+
+For more details see [INVALID_HANDLE](sql-error-conditions-invalid-handle-error-class.html)
+
 ### INVALID_HIVE_COLUMN_NAME
 
 SQLSTATE: none assigned
@@ -1891,12 +1899,6 @@ Unsupported data source type for direct query on files: `<dataSourceType>`
 [SQLSTATE: 0A000](sql-error-conditions-sqlstates.html#class-0A-feature-not-supported)
 
 Unsupported data type `<typeName>`.
-
-### UNSUPPORTED_DATA_SOURCE_FOR_DIRECT_QUERY
-
-SQLSTATE: none assigned
-
-The direct query on files does not support the data source type: `<className>`. Please try a different data source type or consider using a different query method.
 
 ### UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE
 

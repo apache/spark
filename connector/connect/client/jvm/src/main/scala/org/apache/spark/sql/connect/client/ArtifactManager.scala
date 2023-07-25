@@ -219,7 +219,7 @@ class ArtifactManager(
       .setUserContext(userContext)
       .setSessionId(sessionId)
     artifacts.foreach { artifact =>
-      val in = new CheckedInputStream(artifact.storage.asInstanceOf[LocalData].stream, new CRC32)
+      val in = new CheckedInputStream(artifact.storage.stream, new CRC32)
       try {
         val data = proto.AddArtifactsRequest.ArtifactChunk
           .newBuilder()
@@ -274,7 +274,7 @@ class ArtifactManager(
       .setUserContext(userContext)
       .setSessionId(sessionId)
 
-    val in = new CheckedInputStream(artifact.storage.asInstanceOf[LocalData].stream, new CRC32)
+    val in = new CheckedInputStream(artifact.storage.stream, new CRC32)
     try {
       // First RPC contains the `BeginChunkedArtifact` payload (`begin_chunk`).
       // Subsequent RPCs contains the `ArtifactChunk` payload (`chunk`).

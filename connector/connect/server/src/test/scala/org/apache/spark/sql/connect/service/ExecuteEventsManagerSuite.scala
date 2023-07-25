@@ -64,6 +64,7 @@ class ExecuteEventsManagerSuite
         DEFAULT_USER_NAME,
         DEFAULT_TEXT,
         Some(events.executeHolder.request),
+        Set.empty,
         Map.empty))
   }
 

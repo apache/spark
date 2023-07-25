@@ -37,7 +37,7 @@ import org.apache.spark.{SparkException, SparkFiles, TestUtils}
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
 import org.apache.spark.sql.catalyst.plans.logical.Project
 import org.apache.spark.sql.execution.WholeStageCodegenExec
-import org.apache.spark.sql.functions.max
+import org.apache.spark.sql.functions.{call_function, max}
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SQLTestUtils
@@ -549,6 +549,19 @@ class HiveUDFSuite extends QueryTest with TestHiveSingleton with SQLTestUtils {
       // Expected Max(s) is 1, as stateless UDF is deterministic and foldable and replaced
       // by constant 1 by ConstantFolding optimizer.
       checkAnswer(testData.selectExpr("statelessUDF() as s").agg(max($"s")), Row(1))
+    }
+  }
+
+  test("Invoke a persist hive function with call_function") {
+    val testData = spark.range(5).repartition(1)
+    withUserDefinedFunction("custom_avg" -> false) {
+      sql(s"CREATE FUNCTION custom_avg AS '${classOf[GenericUDAFAverage].getName}'")
+      checkAnswer(
+        testData.select(
+          call_function("custom_avg", $"id"),
+          call_function("default.custom_avg", $"id"),
+          call_function("spark_catalog.default.custom_avg", $"id")),
+        Row(2.0, 2.0, 2.0))
     }
   }
 

@@ -182,7 +182,7 @@
     <codehaus.jackson.version>1.9.13</codehaus.jackson.version>
     <fasterxml.jackson.version>2.15.2</fasterxml.jackson.version>
     <fasterxml.jackson.databind.version>2.15.2</fasterxml.jackson.databind.version>
-    <snappy.version>1.1.10.2</snappy.version>
+    <snappy.version>1.1.10.3</snappy.version>
     <netlib.ludovic.dev.version>3.0.3</netlib.ludovic.dev.version>
     <commons-codec.version>1.16.0</commons-codec.version>
     <commons-compress.version>1.23.0</commons-compress.version>
@@ -289,7 +289,7 @@
     <connect.guava.version>32.0.1-jre</connect.guava.version>
     <guava.failureaccess.version>1.0.1</guava.failureaccess.version>
     <io.grpc.version>1.56.0</io.grpc.version>
-    <mima.version>1.1.2</mima.version>
+    <mima.version>1.1.3</mima.version>
     <tomcat.annotations.api.version>6.0.53</tomcat.annotations.api.version>
 
     <CodeCacheSize>128m</CodeCacheSize>
