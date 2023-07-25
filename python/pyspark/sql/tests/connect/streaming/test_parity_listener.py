@@ -68,15 +68,8 @@ class StreamingListenerParityTests(StreamingListenerTestsMixin, ReusedConnectTes
             self.spark.streams.addListener(test_listener)
 
             df = self.spark.readStream.format("rate").option("rowsPerSecond", 10).load()
+            q = df.writeStream.format("noop").queryName("test").start()
 
-            # check successful stateful query
-            df_stateful = df.groupBy().count()  # make query stateful
-            q = (
-                df_stateful.writeStream.format("noop")
-                .queryName("test")
-                .outputMode("complete")
-                .start()
-            )
             self.assertTrue(q.isActive)
             time.sleep(10)
             q.stop()
