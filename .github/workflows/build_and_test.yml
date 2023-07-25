@@ -413,15 +413,10 @@ jobs:
       run: |
         python3.9 -m pip list
         pypy3 -m pip list
-    - name: Install Conda for pip packaging test
-      run: |
-        curl -s https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh > miniconda.sh
-        bash miniconda.sh -b -p $HOME/miniconda
     # Run the tests.
     - name: Run tests
       env: ${{ fromJSON(inputs.envs) }}
       run: |
-        export PATH=$PATH:$HOME/miniconda/bin
         ./dev/run-tests --parallelism 1 --modules "$MODULES_TO_TEST"
     - name: Upload coverage to Codecov
       if: fromJSON(inputs.envs).PYSPARK_CODECOV == 'true'
