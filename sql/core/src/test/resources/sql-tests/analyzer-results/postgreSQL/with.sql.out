@@ -240,7 +240,7 @@ WITH outermost(x) AS (
 )
 SELECT * FROM outermost ORDER BY 1
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
   "sqlState" : "42P01",
@@ -424,7 +424,7 @@ WithCTE
 -- !query
 WITH test AS (SELECT 42) INSERT INTO test VALUES (1)
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
   "sqlState" : "42P01",

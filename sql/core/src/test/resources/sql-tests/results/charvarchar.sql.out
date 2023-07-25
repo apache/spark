@@ -513,83 +513,13 @@ create table char_part(c1 char(5), c2 char(2), v1 varchar(6), v2 varchar(2)) usi
 -- !query schema
 struct<>
 -- !query output
-
-
-
--- !query
-desc formatted char_part
--- !query schema
-struct<col_name:string,data_type:string,comment:string>
--- !query output
-c1                  	char(5)             	                    
-v1                  	varchar(6)          	                    
-v2                  	varchar(2)          	                    
-c2                  	char(2)             	                    
-# Partition Information	                    	                    
-# col_name          	data_type           	comment             
-v2                  	varchar(2)          	                    
-c2                  	char(2)             	                    
-                    	                    	                    
-# Detailed Table Information	                    	                    
-Catalog             	spark_catalog       	                    
-Database            	default             	                    
-Table               	char_part           	                    
-Created Time [not included in comparison]
-Last Access [not included in comparison]
-Created By [not included in comparison]
-Type                	MANAGED             	                    
-Provider            	parquet             	                    
-Location [not included in comparison]/{warehouse_dir}/char_part	                    
-Partition Provider  	Catalog
-
-
--- !query
-alter table char_part add partition (v2='ke', c2='nt') location 'loc1'
--- !query schema
-struct<>
--- !query output
-
-
-
--- !query
-desc formatted char_part
--- !query schema
-struct<col_name:string,data_type:string,comment:string>
--- !query output
-c1                  	char(5)             	                    
-v1                  	varchar(6)          	                    
-v2                  	varchar(2)          	                    
-c2                  	char(2)             	                    
-# Partition Information	                    	                    
-# col_name          	data_type           	comment             
-v2                  	varchar(2)          	                    
-c2                  	char(2)             	                    
-                    	                    	                    
-# Detailed Table Information	                    	                    
-Catalog             	spark_catalog       	                    
-Database            	default             	                    
-Table               	char_part           	                    
-Created Time [not included in comparison]
-Last Access [not included in comparison]
-Created By [not included in comparison]
-Type                	MANAGED             	                    
-Provider            	parquet             	                    
-Location [not included in comparison]/{warehouse_dir}/char_part	                    
-Partition Provider  	Catalog
-
-
--- !query
-alter table char_part partition (v2='ke') rename to partition (v2='nt')
--- !query schema
-struct<>
--- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.SparkRuntimeException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_1232",
+  "errorClass" : "LOCATION_ALREADY_EXISTS",
+  "sqlState" : "42710",
   "messageParameters" : {
-    "partitionColumnNames" : "v2, c2",
-    "specKeys" : "v2",
-    "tableName" : "`spark_catalog`.`default`.`char_part`"
+    "identifier" : "`spark_catalog`.`default`.`char_part`",
+    "location" : "'file:/Users/herman/Engineering/spark-dev/sql/core/spark-warehouse/org.apache.spark.sql.SQLQueryTestSuite/char_part'"
   }
 }
 
@@ -597,28 +527,111 @@ org.apache.spark.sql.AnalysisException
 -- !query
 desc formatted char_part
 -- !query schema
-struct<col_name:string,data_type:string,comment:string>
+struct<>
 -- !query output
-c1                  	char(5)             	                    
-v1                  	varchar(6)          	                    
-v2                  	varchar(2)          	                    
-c2                  	char(2)             	                    
-# Partition Information	                    	                    
-# col_name          	data_type           	comment             
-v2                  	varchar(2)          	                    
-c2                  	char(2)             	                    
-                    	                    	                    
-# Detailed Table Information	                    	                    
-Catalog             	spark_catalog       	                    
-Database            	default             	                    
-Table               	char_part           	                    
-Created Time [not included in comparison]
-Last Access [not included in comparison]
-Created By [not included in comparison]
-Type                	MANAGED             	                    
-Provider            	parquet             	                    
-Location [not included in comparison]/{warehouse_dir}/char_part	                    
-Partition Provider  	Catalog
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "sqlState" : "42P01",
+  "messageParameters" : {
+    "relationName" : "`char_part`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 16,
+    "stopIndex" : 24,
+    "fragment" : "char_part"
+  } ]
+}
+
+
+-- !query
+alter table char_part add partition (v2='ke', c2='nt') location 'loc1'
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "sqlState" : "42P01",
+  "messageParameters" : {
+    "relationName" : "`char_part`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 13,
+    "stopIndex" : 21,
+    "fragment" : "char_part"
+  } ]
+}
+
+
+-- !query
+desc formatted char_part
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "sqlState" : "42P01",
+  "messageParameters" : {
+    "relationName" : "`char_part`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 16,
+    "stopIndex" : 24,
+    "fragment" : "char_part"
+  } ]
+}
+
+
+-- !query
+alter table char_part partition (v2='ke') rename to partition (v2='nt')
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "sqlState" : "42P01",
+  "messageParameters" : {
+    "relationName" : "`char_part`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 13,
+    "stopIndex" : 21,
+    "fragment" : "char_part"
+  } ]
+}
+
+
+-- !query
+desc formatted char_part
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "sqlState" : "42P01",
+  "messageParameters" : {
+    "relationName" : "`char_part`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 16,
+    "stopIndex" : 24,
+    "fragment" : "char_part"
+  } ]
+}
 
 
 -- !query
@@ -626,34 +639,43 @@ alter table char_part partition (v2='ke', c2='nt') set location 'loc2'
 -- !query schema
 struct<>
 -- !query output
-
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "sqlState" : "42P01",
+  "messageParameters" : {
+    "relationName" : "`char_part`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 13,
+    "stopIndex" : 21,
+    "fragment" : "char_part"
+  } ]
+}
 
 
 -- !query
 desc formatted char_part
 -- !query schema
-struct<col_name:string,data_type:string,comment:string>
+struct<>
 -- !query output
-c1                  	char(5)             	                    
-v1                  	varchar(6)          	                    
-v2                  	varchar(2)          	                    
-c2                  	char(2)             	                    
-# Partition Information	                    	                    
-# col_name          	data_type           	comment             
-v2                  	varchar(2)          	                    
-c2                  	char(2)             	                    
-                    	                    	                    
-# Detailed Table Information	                    	                    
-Catalog             	spark_catalog       	                    
-Database            	default             	                    
-Table               	char_part           	                    
-Created Time [not included in comparison]
-Last Access [not included in comparison]
-Created By [not included in comparison]
-Type                	MANAGED             	                    
-Provider            	parquet             	                    
-Location [not included in comparison]/{warehouse_dir}/char_part	                    
-Partition Provider  	Catalog
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "sqlState" : "42P01",
+  "messageParameters" : {
+    "relationName" : "`char_part`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 16,
+    "stopIndex" : 24,
+    "fragment" : "char_part"
+  } ]
+}
 
 
 -- !query
@@ -661,34 +683,43 @@ MSCK REPAIR TABLE char_part
 -- !query schema
 struct<>
 -- !query output
-
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "sqlState" : "42P01",
+  "messageParameters" : {
+    "relationName" : "`char_part`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 19,
+    "stopIndex" : 27,
+    "fragment" : "char_part"
+  } ]
+}
 
 
 -- !query
 desc formatted char_part
 -- !query schema
-struct<col_name:string,data_type:string,comment:string>
+struct<>
 -- !query output
-c1                  	char(5)             	                    
-v1                  	varchar(6)          	                    
-v2                  	varchar(2)          	                    
-c2                  	char(2)             	                    
-# Partition Information	                    	                    
-# col_name          	data_type           	comment             
-v2                  	varchar(2)          	                    
-c2                  	char(2)             	                    
-                    	                    	                    
-# Detailed Table Information	                    	                    
-Catalog             	spark_catalog       	                    
-Database            	default             	                    
-Table               	char_part           	                    
-Created Time [not included in comparison]
-Last Access [not included in comparison]
-Created By [not included in comparison]
-Type                	MANAGED             	                    
-Provider            	parquet             	                    
-Location [not included in comparison]/{warehouse_dir}/char_part	                    
-Partition Provider  	Catalog
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "sqlState" : "42P01",
+  "messageParameters" : {
+    "relationName" : "`char_part`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 16,
+    "stopIndex" : 24,
+    "fragment" : "char_part"
+  } ]
+}
 
 
 -- !query

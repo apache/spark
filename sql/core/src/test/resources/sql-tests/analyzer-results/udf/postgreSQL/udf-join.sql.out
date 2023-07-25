@@ -659,7 +659,15 @@ Project [cast(udf(cast( as string)) as string) AS xxx#x, cast(udf(cast(i#x as st
 -- !query
 CREATE TABLE t1 (name STRING, n INTEGER) USING parquet
 -- !query analysis
-CreateDataSourceTableCommand `spark_catalog`.`default`.`t1`, false
+org.apache.spark.SparkRuntimeException
+{
+  "errorClass" : "LOCATION_ALREADY_EXISTS",
+  "sqlState" : "42710",
+  "messageParameters" : {
+    "identifier" : "`spark_catalog`.`default`.`t1`",
+    "location" : "'file:/Users/herman/Engineering/spark-dev/sql/core/spark-warehouse/org.apache.spark.sql.SQLQueryTestSuite/t1'"
+  }
+}
 
 
 -- !query
@@ -677,9 +685,21 @@ CreateDataSourceTableCommand `spark_catalog`.`default`.`t3`, false
 -- !query
 INSERT INTO t1 VALUES ( 'bb', 11 )
 -- !query analysis
-InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/t1, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/t1], Append, `spark_catalog`.`default`.`t1`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/t1), [name, n]
-+- Project [cast(col1#x as string) AS name#x, cast(col2#x as int) AS n#x]
-   +- LocalRelation [col1#x, col2#x]
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "sqlState" : "42P01",
+  "messageParameters" : {
+    "relationName" : "`t1`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 13,
+    "stopIndex" : 14,
+    "fragment" : "t1"
+  } ]
+}
 
 
 -- !query
@@ -733,17 +753,21 @@ InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_d
 -- !query
 SELECT * FROM t1 FULL JOIN t2 USING (name) FULL JOIN t3 USING (name)
 -- !query analysis
-Project [name#x, n#x, n#x, n#x]
-+- Project [coalesce(name#x, name#x) AS name#x, n#x, n#x, n#x]
-   +- Join FullOuter, (name#x = name#x)
-      :- Project [coalesce(name#x, name#x) AS name#x, n#x, n#x]
-      :  +- Join FullOuter, (name#x = name#x)
-      :     :- SubqueryAlias spark_catalog.default.t1
-      :     :  +- Relation spark_catalog.default.t1[name#x,n#x] parquet
-      :     +- SubqueryAlias spark_catalog.default.t2
-      :        +- Relation spark_catalog.default.t2[name#x,n#x] parquet
-      +- SubqueryAlias spark_catalog.default.t3
-         +- Relation spark_catalog.default.t3[name#x,n#x] parquet
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "sqlState" : "42P01",
+  "messageParameters" : {
+    "relationName" : "`t1`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 15,
+    "stopIndex" : 16,
+    "fragment" : "t1"
+  } ]
+}
 
 
 -- !query
@@ -871,23 +895,21 @@ NATURAL INNER JOIN
 NATURAL INNER JOIN
 (SELECT udf(udf(udf(name))) as name, udf(n) as s3_n, 3 as s3_2 FROM t3) s3
 -- !query analysis
-Project [name#x, s1_n#x, s1_1#x, s2_n#x, s2_2#x, s3_n#x, s3_2#x]
-+- Project [name#x, s1_n#x, s1_1#x, s2_n#x, s2_2#x, s3_n#x, s3_2#x]
-   +- Join Inner, (name#x = name#x)
-      :- Project [name#x, s1_n#x, s1_1#x, s2_n#x, s2_2#x]
-      :  +- Join Inner, (name#x = name#x)
-      :     :- SubqueryAlias s1
-      :     :  +- Project [cast(udf(cast(cast(udf(cast(name#x as string)) as string) as string)) as string) AS name#x, cast(udf(cast(n#x as string)) as int) AS s1_n#x, 1 AS s1_1#x]
-      :     :     +- SubqueryAlias spark_catalog.default.t1
-      :     :        +- Relation spark_catalog.default.t1[name#x,n#x] parquet
-      :     +- SubqueryAlias s2
-      :        +- Project [cast(udf(cast(name#x as string)) as string) AS name#x, cast(udf(cast(n#x as string)) as int) AS s2_n#x, 2 AS s2_2#x]
-      :           +- SubqueryAlias spark_catalog.default.t2
-      :              +- Relation spark_catalog.default.t2[name#x,n#x] parquet
-      +- SubqueryAlias s3
-         +- Project [cast(udf(cast(cast(udf(cast(cast(udf(cast(name#x as string)) as string) as string)) as string) as string)) as string) AS name#x, cast(udf(cast(n#x as string)) as int) AS s3_n#x, 3 AS s3_2#x]
-            +- SubqueryAlias spark_catalog.default.t3
-               +- Relation spark_catalog.default.t3[name#x,n#x] parquet
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "sqlState" : "42P01",
+  "messageParameters" : {
+    "relationName" : "`t1`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 78,
+    "stopIndex" : 79,
+    "fragment" : "t1"
+  } ]
+}
 
 
 -- !query
@@ -898,23 +920,21 @@ NATURAL FULL JOIN
 NATURAL FULL JOIN
 (SELECT udf(udf(name)) as name, udf(n) as s3_n, udf(3) as s3_2 FROM t3) s3
 -- !query analysis
-Project [name#x, s1_n#x, s1_1#x, s2_n#x, s2_2#x, s3_n#x, s3_2#x]
-+- Project [coalesce(name#x, name#x) AS name#x, s1_n#x, s1_1#x, s2_n#x, s2_2#x, s3_n#x, s3_2#x]
-   +- Join FullOuter, (name#x = name#x)
-      :- Project [coalesce(name#x, name#x) AS name#x, s1_n#x, s1_1#x, s2_n#x, s2_2#x]
-      :  +- Join FullOuter, (name#x = name#x)
-      :     :- SubqueryAlias s1
-      :     :  +- Project [cast(udf(cast(name#x as string)) as string) AS name#x, cast(udf(cast(n#x as string)) as int) AS s1_n#x, cast(udf(cast(cast(udf(cast(1 as string)) as int) as string)) as int) AS s1_1#x]
-      :     :     +- SubqueryAlias spark_catalog.default.t1
-      :     :        +- Relation spark_catalog.default.t1[name#x,n#x] parquet
-      :     +- SubqueryAlias s2
-      :        +- Project [cast(udf(cast(name#x as string)) as string) AS name#x, cast(udf(cast(cast(udf(cast(n#x as string)) as int) as string)) as int) AS s2_n#x, cast(udf(cast(2 as string)) as int) AS s2_2#x]
-      :           +- SubqueryAlias spark_catalog.default.t2
-      :              +- Relation spark_catalog.default.t2[name#x,n#x] parquet
-      +- SubqueryAlias s3
-         +- Project [cast(udf(cast(cast(udf(cast(name#x as string)) as string) as string)) as string) AS name#x, cast(udf(cast(n#x as string)) as int) AS s3_n#x, cast(udf(cast(3 as string)) as int) AS s3_2#x]
-            +- SubqueryAlias spark_catalog.default.t3
-               +- Relation spark_catalog.default.t3[name#x,n#x] parquet
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "sqlState" : "42P01",
+  "messageParameters" : {
+    "relationName" : "`t1`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 83,
+    "stopIndex" : 84,
+    "fragment" : "t1"
+  } ]
+}
 
 
 -- !query
@@ -927,25 +947,21 @@ NATURAL FULL JOIN
     (SELECT name, udf(udf(n)) as s3_n FROM t3) as s3
   ) ss2
 -- !query analysis
-Project [name#x, cast(udf(cast(cast(udf(cast(s1_n#x as string)) as int) as string)) as int) AS udf(udf(s1_n))#x, cast(udf(cast(s2_n#x as string)) as int) AS udf(s2_n)#x, cast(udf(cast(s3_n#x as string)) as int) AS udf(s3_n)#x]
-+- Project [coalesce(name#x, name#x) AS name#x, s1_n#x, s2_n#x, s3_n#x]
-   +- Join FullOuter, (name#x = name#x)
-      :- SubqueryAlias s1
-      :  +- Project [name#x, cast(udf(cast(cast(udf(cast(n#x as string)) as int) as string)) as int) AS s1_n#x]
-      :     +- SubqueryAlias spark_catalog.default.t1
-      :        +- Relation spark_catalog.default.t1[name#x,n#x] parquet
-      +- SubqueryAlias ss2
-         +- Project [name#x, s2_n#x, s3_n#x]
-            +- Project [coalesce(name#x, name#x) AS name#x, s2_n#x, s3_n#x]
-               +- Join FullOuter, (name#x = name#x)
-                  :- SubqueryAlias s2
-                  :  +- Project [name#x, cast(udf(cast(n#x as string)) as int) AS s2_n#x]
-                  :     +- SubqueryAlias spark_catalog.default.t2
-                  :        +- Relation spark_catalog.default.t2[name#x,n#x] parquet
-                  +- SubqueryAlias s3
-                     +- Project [name#x, cast(udf(cast(cast(udf(cast(n#x as string)) as int) as string)) as int) AS s3_n#x]
-                        +- SubqueryAlias spark_catalog.default.t3
-                           +- Relation spark_catalog.default.t3[name#x,n#x] parquet
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "sqlState" : "42P01",
+  "messageParameters" : {
+    "relationName" : "`t1`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 95,
+    "stopIndex" : 96,
+    "fragment" : "t1"
+  } ]
+}
 
 
 -- !query
@@ -958,25 +974,21 @@ NATURAL FULL JOIN
     (SELECT name, udf(n) as s3_n FROM t3) as s3
   ) ss2
 -- !query analysis
-Project [name#x, s1_n#x, s2_n#x, s2_2#x, s3_n#x]
-+- Project [coalesce(name#x, name#x) AS name#x, s1_n#x, s2_n#x, s2_2#x, s3_n#x]
-   +- Join FullOuter, (name#x = name#x)
-      :- SubqueryAlias s1
-      :  +- Project [name#x, n#x AS s1_n#x]
-      :     +- SubqueryAlias spark_catalog.default.t1
-      :        +- Relation spark_catalog.default.t1[name#x,n#x] parquet
-      +- SubqueryAlias ss2
-         +- Project [name#x, s2_n#x, s2_2#x, s3_n#x]
-            +- Project [coalesce(name#x, name#x) AS name#x, s2_n#x, s2_2#x, s3_n#x]
-               +- Join FullOuter, (name#x = name#x)
-                  :- SubqueryAlias s2
-                  :  +- Project [name#x, cast(udf(cast(cast(udf(cast(n#x as string)) as int) as string)) as int) AS s2_n#x, 2 AS s2_2#x]
-                  :     +- SubqueryAlias spark_catalog.default.t2
-                  :        +- Relation spark_catalog.default.t2[name#x,n#x] parquet
-                  +- SubqueryAlias s3
-                     +- Project [name#x, cast(udf(cast(n#x as string)) as int) AS s3_n#x]
-                        +- SubqueryAlias spark_catalog.default.t3
-                           +- Relation spark_catalog.default.t3[name#x,n#x] parquet
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "sqlState" : "42P01",
+  "messageParameters" : {
+    "relationName" : "`t1`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 44,
+    "stopIndex" : 45,
+    "fragment" : "t1"
+  } ]
+}
 
 
 -- !query
@@ -986,16 +998,21 @@ FULL JOIN
   (SELECT name, 2 as s2_n FROM t2) as s2
 ON (udf(udf(s1_n)) = udf(s2_n))
 -- !query analysis
-Project [name#x, cast(udf(cast(s1_n#x as string)) as int) AS udf(s1_n)#x, name#x, cast(udf(cast(cast(udf(cast(s2_n#x as string)) as int) as string)) as int) AS udf(udf(s2_n))#x]
-+- Join FullOuter, (cast(udf(cast(cast(udf(cast(s1_n#x as string)) as int) as string)) as int) = cast(udf(cast(s2_n#x as string)) as int))
-   :- SubqueryAlias s1
-   :  +- Project [name#x, cast(udf(cast(n#x as string)) as int) AS s1_n#x]
-   :     +- SubqueryAlias spark_catalog.default.t1
-   :        +- Relation spark_catalog.default.t1[name#x,n#x] parquet
-   +- SubqueryAlias s2
-      +- Project [name#x, 2 AS s2_n#x]
-         +- SubqueryAlias spark_catalog.default.t2
-            +- Relation spark_catalog.default.t2[name#x,n#x] parquet
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "sqlState" : "42P01",
+  "messageParameters" : {
+    "relationName" : "`t1`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 93,
+    "stopIndex" : 94,
+    "fragment" : "t1"
+  } ]
+}
 
 
 -- !query
@@ -1590,8 +1607,14 @@ Aggregate [cast(udf(cast(count(1) as string)) as bigint) AS udf(count(1))#xL]
 -- !query
 DROP TABLE t1
 -- !query analysis
-DropTable false, false
-+- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.t1
+org.apache.spark.sql.catalyst.analysis.NoSuchTableException
+{
+  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "sqlState" : "42P01",
+  "messageParameters" : {
+    "relationName" : "`spark_catalog`.`default`.`t1`"
+  }
+}
 
 
 -- !query
@@ -3008,7 +3031,7 @@ org.apache.spark.sql.AnalysisException
 select * from
   int8_tbl x join (int4_tbl x cross join int4_tbl y) j on udf(q1) = udf(y.f1)
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
   "sqlState" : "42703",
@@ -3065,7 +3088,7 @@ Project [q1#xL, q2#xL, f1#x, ff#x]
 select udf(t1.uunique1) from
   tenk1 t1 join tenk2 t2 on t1.two = udf(t2.two)
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
   "sqlState" : "42703",
@@ -3087,7 +3110,7 @@ org.apache.spark.sql.AnalysisException
 select udf(udf(t2.uunique1)) from
   tenk1 t1 join tenk2 t2 on udf(t1.two) = t2.two
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
   "sqlState" : "42703",
@@ -3109,7 +3132,7 @@ org.apache.spark.sql.AnalysisException
 select udf(uunique1) from
   tenk1 t1 join tenk2 t2 on udf(t1.two) = udf(t2.two)
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
   "sqlState" : "42703",
@@ -3433,7 +3456,7 @@ Project [q1#xL, q2#xL, bq1#xL, cq1#xL, least(outer(a.q1), q1, q1)#xL]
 -- !query
 select udf(udf(f1,g)) from int4_tbl a, (select udf(udf(f1)) as g) ss
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
   "sqlState" : "42703",
@@ -3453,7 +3476,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 select udf(f1,g) from int4_tbl a, (select a.f1 as g) ss
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
   "sqlState" : "42703",
@@ -3473,7 +3496,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 select udf(udf(f1,g)) from int4_tbl a cross join (select udf(f1) as g) ss
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
   "sqlState" : "42703",
@@ -3493,7 +3516,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 select udf(f1,g) from int4_tbl a cross join (select udf(udf(a.f1)) as g) ss
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
   "sqlState" : "42703",

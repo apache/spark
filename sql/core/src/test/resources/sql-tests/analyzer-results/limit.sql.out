@@ -52,7 +52,7 @@ GlobalLimit cast(1 as int)
 -- !query
 SELECT * FROM testdata LIMIT -1
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "INVALID_LIMIT_LIKE_EXPRESSION.IS_NEGATIVE",
   "messageParameters" : {
@@ -73,7 +73,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 SELECT * FROM testData TABLESAMPLE (-1 ROWS)
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "INVALID_LIMIT_LIKE_EXPRESSION.IS_NEGATIVE",
   "messageParameters" : {
@@ -104,7 +104,7 @@ GlobalLimit cast(1 as int)
 -- !query
 SELECT * FROM testdata LIMIT CAST(NULL AS INT)
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "INVALID_LIMIT_LIKE_EXPRESSION.IS_NULL",
   "messageParameters" : {
@@ -124,7 +124,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 SELECT * FROM testdata LIMIT key > 3
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "INVALID_LIMIT_LIKE_EXPRESSION.IS_UNFOLDABLE",
   "messageParameters" : {
@@ -144,7 +144,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 SELECT * FROM testdata LIMIT true
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "INVALID_LIMIT_LIKE_EXPRESSION.DATA_TYPE",
   "messageParameters" : {
@@ -158,7 +158,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 SELECT * FROM testdata LIMIT 'a'
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "INVALID_LIMIT_LIKE_EXPRESSION.DATA_TYPE",
   "messageParameters" : {

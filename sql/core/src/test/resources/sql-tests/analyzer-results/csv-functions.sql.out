@@ -36,7 +36,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 select from_csv('1', 'a InvalidType')
 -- !query analysis
-org.apache.spark.sql.catalyst.parser.ParseException
+org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "PARSE_SYNTAX_ERROR",
   "sqlState" : "42601",
@@ -152,7 +152,7 @@ Project [schema_of_csv(1|abc, (delimiter,|)) AS schema_of_csv(1|abc)#x]
 -- !query
 select schema_of_csv(null)
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_NULL",
   "sqlState" : "42K09",
@@ -181,7 +181,7 @@ CreateViewCommand `csvTable`, [(csvField,None), (a,None)], SELECT * FROM VALUES 
 -- !query
 SELECT schema_of_csv(csvField) FROM csvTable
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.NON_FOLDABLE_INPUT",
   "sqlState" : "42K09",

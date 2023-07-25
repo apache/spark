@@ -1956,7 +1956,15 @@ CREATE TABLE t1 (name STRING, n INTEGER) USING parquet
 -- !query schema
 struct<>
 -- !query output
-
+org.apache.spark.SparkRuntimeException
+{
+  "errorClass" : "LOCATION_ALREADY_EXISTS",
+  "sqlState" : "42710",
+  "messageParameters" : {
+    "identifier" : "`spark_catalog`.`default`.`t1`",
+    "location" : "'file:/Users/herman/Engineering/spark-dev/sql/core/spark-warehouse/org.apache.spark.sql.SQLQueryTestSuite/t1'"
+  }
+}
 
 
 -- !query
@@ -1980,7 +1988,21 @@ INSERT INTO t1 VALUES ( 'bb', 11 )
 -- !query schema
 struct<>
 -- !query output
-
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "sqlState" : "42P01",
+  "messageParameters" : {
+    "relationName" : "`t1`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 13,
+    "stopIndex" : 14,
+    "fragment" : "t1"
+  } ]
+}
 
 
 -- !query
@@ -2034,12 +2056,23 @@ struct<>
 -- !query
 SELECT * FROM t1 FULL JOIN t2 USING (name) FULL JOIN t3 USING (name)
 -- !query schema
-struct<name:string,n:int,n:int,n:int>
+struct<>
 -- !query output
-bb	11	12	13
-cc	NULL	22	23
-dd	NULL	NULL	33
-ee	NULL	42	NULL
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "sqlState" : "42P01",
+  "messageParameters" : {
+    "relationName" : "`t1`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 15,
+    "stopIndex" : 16,
+    "fragment" : "t1"
+  } ]
+}
 
 
 -- !query
@@ -2131,9 +2164,23 @@ NATURAL INNER JOIN
 NATURAL INNER JOIN
 (SELECT name, n as s3_n, 3 as s3_2 FROM t3) s3
 -- !query schema
-struct<name:string,s1_n:int,s1_1:int,s2_n:int,s2_2:int,s3_n:int,s3_2:int>
+struct<>
 -- !query output
-bb	11	1	12	2	13	3
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "sqlState" : "42P01",
+  "messageParameters" : {
+    "relationName" : "`t1`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 55,
+    "stopIndex" : 56,
+    "fragment" : "t1"
+  } ]
+}
 
 
 -- !query
@@ -2144,12 +2191,23 @@ NATURAL FULL JOIN
 NATURAL FULL JOIN
 (SELECT name, n as s3_n, 3 as s3_2 FROM t3) s3
 -- !query schema
-struct<name:string,s1_n:int,s1_1:int,s2_n:int,s2_2:int,s3_n:int,s3_2:int>
+struct<>
 -- !query output
-bb	11	1	12	2	13	3
-cc	NULL	NULL	22	2	23	3
-dd	NULL	NULL	NULL	NULL	33	3
-ee	NULL	NULL	42	2	NULL	NULL
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "sqlState" : "42P01",
+  "messageParameters" : {
+    "relationName" : "`t1`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 55,
+    "stopIndex" : 56,
+    "fragment" : "t1"
+  } ]
+}
 
 
 -- !query
@@ -2162,12 +2220,23 @@ NATURAL FULL JOIN
     (SELECT name, n as s3_n FROM t3) as s3
   ) ss2
 -- !query schema
-struct<name:string,s1_n:int,s2_n:int,s3_n:int>
+struct<>
 -- !query output
-bb	11	12	13
-cc	NULL	22	23
-dd	NULL	NULL	33
-ee	NULL	42	NULL
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "sqlState" : "42P01",
+  "messageParameters" : {
+    "relationName" : "`t1`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 44,
+    "stopIndex" : 45,
+    "fragment" : "t1"
+  } ]
+}
 
 
 -- !query
@@ -2180,12 +2249,23 @@ NATURAL FULL JOIN
     (SELECT name, n as s3_n FROM t3) as s3
   ) ss2
 -- !query schema
-struct<name:string,s1_n:int,s2_n:int,s2_2:int,s3_n:int>
+struct<>
 -- !query output
-bb	11	12	2	13
-cc	NULL	22	2	23
-dd	NULL	NULL	NULL	33
-ee	NULL	42	2	NULL
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "sqlState" : "42P01",
+  "messageParameters" : {
+    "relationName" : "`t1`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 44,
+    "stopIndex" : 45,
+    "fragment" : "t1"
+  } ]
+}
 
 
 -- !query
@@ -2195,12 +2275,23 @@ FULL JOIN
   (SELECT name, 2 as s2_n FROM t2) as s2
 ON (s1_n = s2_n)
 -- !query schema
-struct<name:string,s1_n:int,name:string,s2_n:int>
+struct<>
 -- !query output
-NULL	NULL	bb	2
-NULL	NULL	cc	2
-NULL	NULL	ee	2
-bb	11	NULL	NULL
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "sqlState" : "42P01",
+  "messageParameters" : {
+    "relationName" : "`t1`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 46,
+    "stopIndex" : 47,
+    "fragment" : "t1"
+  } ]
+}
 
 
 -- !query
@@ -2475,7 +2566,14 @@ DROP TABLE t1
 -- !query schema
 struct<>
 -- !query output
-
+org.apache.spark.sql.catalyst.analysis.NoSuchTableException
+{
+  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "sqlState" : "42P01",
+  "messageParameters" : {
+    "relationName" : "`spark_catalog`.`default`.`t1`"
+  }
+}
 
 
 -- !query
@@ -3272,7 +3370,7 @@ select * from
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
   "sqlState" : "42703",
@@ -3305,7 +3403,7 @@ select t1.uunique1 from
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
   "sqlState" : "42703",
@@ -3329,7 +3427,7 @@ select t2.uunique1 from
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
   "sqlState" : "42703",
@@ -3353,7 +3451,7 @@ select uunique1 from
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
   "sqlState" : "42703",
@@ -3567,7 +3665,7 @@ select f1,g from int4_tbl a, (select f1 as g) ss
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
   "sqlState" : "42703",
@@ -3589,7 +3687,7 @@ select f1,g from int4_tbl a, (select a.f1 as g) ss
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
   "sqlState" : "42703",
@@ -3611,7 +3709,7 @@ select f1,g from int4_tbl a cross join (select f1 as g) ss
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
   "sqlState" : "42703",
@@ -3633,7 +3731,7 @@ select f1,g from int4_tbl a cross join (select a.f1 as g) ss
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
   "sqlState" : "42703",

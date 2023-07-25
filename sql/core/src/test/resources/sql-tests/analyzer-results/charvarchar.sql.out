@@ -239,12 +239,13 @@ DescribeTableCommand `spark_catalog`.`default`.`char_tbl1`, true, [col_name#x, d
 -- !query
 create table char_part(c1 char(5), c2 char(2), v1 varchar(6), v2 varchar(2)) using parquet partitioned by (v2, c2)
 -- !query analysis
-org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
+org.apache.spark.SparkRuntimeException
 {
-  "errorClass" : "TABLE_OR_VIEW_ALREADY_EXISTS",
-  "sqlState" : "42P07",
+  "errorClass" : "LOCATION_ALREADY_EXISTS",
+  "sqlState" : "42710",
   "messageParameters" : {
-    "relationName" : "`spark_catalog`.`default`.`char_part`"
+    "identifier" : "`spark_catalog`.`default`.`char_part`",
+    "location" : "'file:/Users/herman/Engineering/spark-dev/sql/core/spark-warehouse/org.apache.spark.sql.SQLQueryTestSuite/char_part'"
   }
 }
 
@@ -252,71 +253,181 @@ org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
 -- !query
 desc formatted char_part
 -- !query analysis
-DescribeTableCommand `spark_catalog`.`default`.`char_part`, true, [col_name#x, data_type#x, comment#x]
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "sqlState" : "42P01",
+  "messageParameters" : {
+    "relationName" : "`char_part`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 16,
+    "stopIndex" : 24,
+    "fragment" : "char_part"
+  } ]
+}
 
 
 -- !query
 alter table char_part add partition (v2='ke', c2='nt') location 'loc1'
 -- !query analysis
-org.apache.spark.sql.catalyst.analysis.PartitionsAlreadyExistException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "PARTITIONS_ALREADY_EXIST",
-  "sqlState" : "428FT",
+  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "sqlState" : "42P01",
   "messageParameters" : {
-    "partitionList" : "PARTITION (`v2` = ke, `c2` = nt)",
-    "tableName" : "`default`.`char_part`"
-  }
+    "relationName" : "`char_part`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 13,
+    "stopIndex" : 21,
+    "fragment" : "char_part"
+  } ]
 }
 
 
 -- !query
 desc formatted char_part
 -- !query analysis
-DescribeTableCommand `spark_catalog`.`default`.`char_part`, true, [col_name#x, data_type#x, comment#x]
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "sqlState" : "42P01",
+  "messageParameters" : {
+    "relationName" : "`char_part`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 16,
+    "stopIndex" : 24,
+    "fragment" : "char_part"
+  } ]
+}
 
 
 -- !query
 alter table char_part partition (v2='ke') rename to partition (v2='nt')
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_1232",
+  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "sqlState" : "42P01",
   "messageParameters" : {
-    "partitionColumnNames" : "v2, c2",
-    "specKeys" : "v2",
-    "tableName" : "`spark_catalog`.`default`.`char_part`"
-  }
+    "relationName" : "`char_part`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 13,
+    "stopIndex" : 21,
+    "fragment" : "char_part"
+  } ]
 }
 
 
 -- !query
 desc formatted char_part
 -- !query analysis
-DescribeTableCommand `spark_catalog`.`default`.`char_part`, true, [col_name#x, data_type#x, comment#x]
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "sqlState" : "42P01",
+  "messageParameters" : {
+    "relationName" : "`char_part`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 16,
+    "stopIndex" : 24,
+    "fragment" : "char_part"
+  } ]
+}
 
 
 -- !query
 alter table char_part partition (v2='ke', c2='nt') set location 'loc2'
 -- !query analysis
-AlterTableSetLocationCommand `spark_catalog`.`default`.`char_part`, Map(v2 -> ke, c2 -> nt), loc2
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "sqlState" : "42P01",
+  "messageParameters" : {
+    "relationName" : "`char_part`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 13,
+    "stopIndex" : 21,
+    "fragment" : "char_part"
+  } ]
+}
 
 
 -- !query
 desc formatted char_part
 -- !query analysis
-DescribeTableCommand `spark_catalog`.`default`.`char_part`, true, [col_name#x, data_type#x, comment#x]
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "sqlState" : "42P01",
+  "messageParameters" : {
+    "relationName" : "`char_part`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 16,
+    "stopIndex" : 24,
+    "fragment" : "char_part"
+  } ]
+}
 
 
 -- !query
 MSCK REPAIR TABLE char_part
 -- !query analysis
-RepairTableCommand `spark_catalog`.`default`.`char_part`, true, false, MSCK REPAIR TABLE
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "sqlState" : "42P01",
+  "messageParameters" : {
+    "relationName" : "`char_part`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 19,
+    "stopIndex" : 27,
+    "fragment" : "char_part"
+  } ]
+}
 
 
 -- !query
 desc formatted char_part
 -- !query analysis
-DescribeTableCommand `spark_catalog`.`default`.`char_part`, true, [col_name#x, data_type#x, comment#x]
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "sqlState" : "42P01",
+  "messageParameters" : {
+    "relationName" : "`char_part`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 16,
+    "stopIndex" : 24,
+    "fragment" : "char_part"
+  } ]
+}
 
 
 -- !query

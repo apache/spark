@@ -235,7 +235,15 @@ create table t1 (f1 int, f2 int) using parquet
 -- !query schema
 struct<>
 -- !query output
-
+org.apache.spark.SparkRuntimeException
+{
+  "errorClass" : "LOCATION_ALREADY_EXISTS",
+  "sqlState" : "42710",
+  "messageParameters" : {
+    "identifier" : "`spark_catalog`.`default`.`t1`",
+    "location" : "'file:/Users/herman/Engineering/spark-dev/sql/core/spark-warehouse/org.apache.spark.sql.SQLQueryTestSuite/t1'"
+  }
+}
 
 
 -- !query
@@ -243,7 +251,21 @@ insert into t1 values (1,1),(1,2),(2,2)
 -- !query schema
 struct<>
 -- !query output
-
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "sqlState" : "42P01",
+  "messageParameters" : {
+    "relationName" : "`t1`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 13,
+    "stopIndex" : 14,
+    "fragment" : "t1"
+  } ]
+}
 
 
 -- !query
@@ -253,19 +275,19 @@ from t1 where f1 = f2
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.RANGE_FRAME_WITHOUT_ORDER",
-  "sqlState" : "42K09",
+  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "sqlState" : "42P01",
   "messageParameters" : {
-    "sqlExpr" : "\"(PARTITION BY f1 RANGE BETWEEN 1 PRECEDING AND 1 FOLLOWING)\""
+    "relationName" : "`t1`"
   },
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 25,
-    "stopIndex" : 108,
-    "fragment" : "(partition by f1\n                         range between 1 preceding and 1 following)"
+    "startIndex" : 115,
+    "stopIndex" : 116,
+    "fragment" : "t1"
   } ]
 }
 
@@ -275,10 +297,23 @@ select f1, sum(f1) over (partition by f1 order by f2
 range between 1 preceding and 1 following)
 from t1 where f1 = f2
 -- !query schema
-struct<f1:int,sum(f1) OVER (PARTITION BY f1 ORDER BY f2 ASC NULLS FIRST RANGE BETWEEN 1 PRECEDING AND 1 FOLLOWING):bigint>
+struct<>
 -- !query output
-1	1
-2	2
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "sqlState" : "42P01",
+  "messageParameters" : {
+    "relationName" : "`t1`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 102,
+    "stopIndex" : 103,
+    "fragment" : "t1"
+  } ]
+}
 
 
 -- !query
@@ -286,10 +321,23 @@ select f1, sum(f1) over (partition by f1, f1 order by f2
 range between 2 preceding and 1 preceding)
 from t1 where f1 = f2
 -- !query schema
-struct<f1:int,sum(f1) OVER (PARTITION BY f1, f1 ORDER BY f2 ASC NULLS FIRST RANGE BETWEEN 2 PRECEDING AND 1 PRECEDING):bigint>
+struct<>
 -- !query output
-1	NULL
-2	NULL
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "sqlState" : "42P01",
+  "messageParameters" : {
+    "relationName" : "`t1`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 106,
+    "stopIndex" : 107,
+    "fragment" : "t1"
+  } ]
+}
 
 
 -- !query
@@ -297,10 +345,23 @@ select f1, sum(f1) over (partition by f1, f2 order by f2
 range between 1 following and 2 following)
 from t1 where f1 = f2
 -- !query schema
-struct<f1:int,sum(f1) OVER (PARTITION BY f1, f2 ORDER BY f2 ASC NULLS FIRST RANGE BETWEEN 1 FOLLOWING AND 2 FOLLOWING):bigint>
+struct<>
 -- !query output
-1	NULL
-2	NULL
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "sqlState" : "42P01",
+  "messageParameters" : {
+    "relationName" : "`t1`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 106,
+    "stopIndex" : 107,
+    "fragment" : "t1"
+  } ]
+}
 
 
 -- !query
@@ -330,7 +391,7 @@ SELECT * FROM empsalary INNER JOIN tenk1 ON row_number() OVER (ORDER BY salary) 
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "UNSUPPORTED_EXPR_FOR_OPERATOR",
   "messageParameters" : {
@@ -351,7 +412,7 @@ SELECT rank() OVER (ORDER BY 1), count(*) FROM empsalary GROUP BY 1
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "UNSUPPORTED_EXPR_FOR_OPERATOR",
   "messageParameters" : {
@@ -455,7 +516,7 @@ SELECT ntile(0) OVER (ORDER BY ten), ten, four FROM tenk1
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.VALUE_OUT_OF_RANGE",
   "sqlState" : "42K09",
@@ -480,7 +541,7 @@ SELECT nth_value(four, 0) OVER (ORDER BY ten), ten, four FROM tenk1
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.VALUE_OUT_OF_RANGE",
   "sqlState" : "42K09",
@@ -521,4 +582,11 @@ DROP TABLE t1
 -- !query schema
 struct<>
 -- !query output
-
+org.apache.spark.sql.catalyst.analysis.NoSuchTableException
+{
+  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "sqlState" : "42P01",
+  "messageParameters" : {
+    "relationName" : "`spark_catalog`.`default`.`t1`"
+  }
+}

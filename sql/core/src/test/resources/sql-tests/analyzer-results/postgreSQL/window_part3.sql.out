@@ -215,15 +215,35 @@ GlobalLimit 0
 -- !query
 create table t1 (f1 int, f2 int) using parquet
 -- !query analysis
-CreateDataSourceTableCommand `spark_catalog`.`default`.`t1`, false
+org.apache.spark.SparkRuntimeException
+{
+  "errorClass" : "LOCATION_ALREADY_EXISTS",
+  "sqlState" : "42710",
+  "messageParameters" : {
+    "identifier" : "`spark_catalog`.`default`.`t1`",
+    "location" : "'file:/Users/herman/Engineering/spark-dev/sql/core/spark-warehouse/org.apache.spark.sql.SQLQueryTestSuite/t1'"
+  }
+}
 
 
 -- !query
 insert into t1 values (1,1),(1,2),(2,2)
 -- !query analysis
-InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/t1, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/t1], Append, `spark_catalog`.`default`.`t1`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/t1), [f1, f2]
-+- Project [cast(col1#x as int) AS f1#x, cast(col2#x as int) AS f2#x]
-   +- LocalRelation [col1#x, col2#x]
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "sqlState" : "42P01",
+  "messageParameters" : {
+    "relationName" : "`t1`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 13,
+    "stopIndex" : 14,
+    "fragment" : "t1"
+  } ]
+}
 
 
 -- !query
@@ -231,19 +251,19 @@ select f1, sum(f1) over (partition by f1
                          range between 1 preceding and 1 following)
 from t1 where f1 = f2
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.RANGE_FRAME_WITHOUT_ORDER",
-  "sqlState" : "42K09",
+  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "sqlState" : "42P01",
   "messageParameters" : {
-    "sqlExpr" : "\"(PARTITION BY f1 RANGE BETWEEN 1 PRECEDING AND 1 FOLLOWING)\""
+    "relationName" : "`t1`"
   },
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 25,
-    "stopIndex" : 108,
-    "fragment" : "(partition by f1\n                         range between 1 preceding and 1 following)"
+    "startIndex" : 115,
+    "stopIndex" : 116,
+    "fragment" : "t1"
   } ]
 }
 
@@ -253,13 +273,21 @@ select f1, sum(f1) over (partition by f1 order by f2
 range between 1 preceding and 1 following)
 from t1 where f1 = f2
 -- !query analysis
-Project [f1#x, sum(f1) OVER (PARTITION BY f1 ORDER BY f2 ASC NULLS FIRST RANGE BETWEEN 1 PRECEDING AND 1 FOLLOWING)#xL]
-+- Project [f1#x, f2#x, sum(f1) OVER (PARTITION BY f1 ORDER BY f2 ASC NULLS FIRST RANGE BETWEEN 1 PRECEDING AND 1 FOLLOWING)#xL, sum(f1) OVER (PARTITION BY f1 ORDER BY f2 ASC NULLS FIRST RANGE BETWEEN 1 PRECEDING AND 1 FOLLOWING)#xL]
-   +- Window [sum(f1#x) windowspecdefinition(f1#x, f2#x ASC NULLS FIRST, specifiedwindowframe(RangeFrame, -1, 1)) AS sum(f1) OVER (PARTITION BY f1 ORDER BY f2 ASC NULLS FIRST RANGE BETWEEN 1 PRECEDING AND 1 FOLLOWING)#xL], [f1#x], [f2#x ASC NULLS FIRST]
-      +- Project [f1#x, f2#x]
-         +- Filter (f1#x = f2#x)
-            +- SubqueryAlias spark_catalog.default.t1
-               +- Relation spark_catalog.default.t1[f1#x,f2#x] parquet
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "sqlState" : "42P01",
+  "messageParameters" : {
+    "relationName" : "`t1`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 102,
+    "stopIndex" : 103,
+    "fragment" : "t1"
+  } ]
+}
 
 
 -- !query
@@ -267,13 +295,21 @@ select f1, sum(f1) over (partition by f1, f1 order by f2
 range between 2 preceding and 1 preceding)
 from t1 where f1 = f2
 -- !query analysis
-Project [f1#x, sum(f1) OVER (PARTITION BY f1, f1 ORDER BY f2 ASC NULLS FIRST RANGE BETWEEN 2 PRECEDING AND 1 PRECEDING)#xL]
-+- Project [f1#x, f2#x, sum(f1) OVER (PARTITION BY f1, f1 ORDER BY f2 ASC NULLS FIRST RANGE BETWEEN 2 PRECEDING AND 1 PRECEDING)#xL, sum(f1) OVER (PARTITION BY f1, f1 ORDER BY f2 ASC NULLS FIRST RANGE BETWEEN 2 PRECEDING AND 1 PRECEDING)#xL]
-   +- Window [sum(f1#x) windowspecdefinition(f1#x, f1#x, f2#x ASC NULLS FIRST, specifiedwindowframe(RangeFrame, -2, -1)) AS sum(f1) OVER (PARTITION BY f1, f1 ORDER BY f2 ASC NULLS FIRST RANGE BETWEEN 2 PRECEDING AND 1 PRECEDING)#xL], [f1#x, f1#x], [f2#x ASC NULLS FIRST]
-      +- Project [f1#x, f2#x]
-         +- Filter (f1#x = f2#x)
-            +- SubqueryAlias spark_catalog.default.t1
-               +- Relation spark_catalog.default.t1[f1#x,f2#x] parquet
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "sqlState" : "42P01",
+  "messageParameters" : {
+    "relationName" : "`t1`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 106,
+    "stopIndex" : 107,
+    "fragment" : "t1"
+  } ]
+}
 
 
 -- !query
@@ -281,13 +317,21 @@ select f1, sum(f1) over (partition by f1, f2 order by f2
 range between 1 following and 2 following)
 from t1 where f1 = f2
 -- !query analysis
-Project [f1#x, sum(f1) OVER (PARTITION BY f1, f2 ORDER BY f2 ASC NULLS FIRST RANGE BETWEEN 1 FOLLOWING AND 2 FOLLOWING)#xL]
-+- Project [f1#x, f2#x, sum(f1) OVER (PARTITION BY f1, f2 ORDER BY f2 ASC NULLS FIRST RANGE BETWEEN 1 FOLLOWING AND 2 FOLLOWING)#xL, sum(f1) OVER (PARTITION BY f1, f2 ORDER BY f2 ASC NULLS FIRST RANGE BETWEEN 1 FOLLOWING AND 2 FOLLOWING)#xL]
-   +- Window [sum(f1#x) windowspecdefinition(f1#x, f2#x, f2#x ASC NULLS FIRST, specifiedwindowframe(RangeFrame, 1, 2)) AS sum(f1) OVER (PARTITION BY f1, f2 ORDER BY f2 ASC NULLS FIRST RANGE BETWEEN 1 FOLLOWING AND 2 FOLLOWING)#xL], [f1#x, f2#x], [f2#x ASC NULLS FIRST]
-      +- Project [f1#x, f2#x]
-         +- Filter (f1#x = f2#x)
-            +- SubqueryAlias spark_catalog.default.t1
-               +- Relation spark_catalog.default.t1[f1#x,f2#x] parquet
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "sqlState" : "42P01",
+  "messageParameters" : {
+    "relationName" : "`t1`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 106,
+    "stopIndex" : 107,
+    "fragment" : "t1"
+  } ]
+}
 
 
 -- !query
@@ -315,7 +359,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 SELECT * FROM empsalary INNER JOIN tenk1 ON row_number() OVER (ORDER BY salary) < 10
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "UNSUPPORTED_EXPR_FOR_OPERATOR",
   "messageParameters" : {
@@ -334,7 +378,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 SELECT rank() OVER (ORDER BY 1), count(*) FROM empsalary GROUP BY 1
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "UNSUPPORTED_EXPR_FOR_OPERATOR",
   "messageParameters" : {
@@ -426,7 +470,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 SELECT ntile(0) OVER (ORDER BY ten), ten, four FROM tenk1
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.VALUE_OUT_OF_RANGE",
   "sqlState" : "42K09",
@@ -449,7 +493,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 SELECT nth_value(four, 0) OVER (ORDER BY ten), ten, four FROM tenk1
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.VALUE_OUT_OF_RANGE",
   "sqlState" : "42K09",
@@ -486,5 +530,11 @@ DropTable false, false
 -- !query
 DROP TABLE t1
 -- !query analysis
-DropTable false, false
-+- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.t1
+org.apache.spark.sql.catalyst.analysis.NoSuchTableException
+{
+  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "sqlState" : "42P01",
+  "messageParameters" : {
+    "relationName" : "`spark_catalog`.`default`.`t1`"
+  }
+}
