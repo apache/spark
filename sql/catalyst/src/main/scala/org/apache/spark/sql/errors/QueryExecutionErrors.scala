@@ -469,14 +469,9 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
       cls: Class[_],
       functionName: String,
       argClasses: Seq[Class[_]]): Throwable = {
-    new SparkRuntimeException(
-      errorClass = "METHOD_NOT_FOUND",
-      messageParameters = Map(
-        "method" -> functionName,
-        "args" -> argClasses.mkString("(", ", ", ")"),
-        "cls" -> cls.toString
-      )
-    )
+    SparkException.internalError(
+      s"Couldn't find method $functionName with arguments " +
+        s"${argClasses.mkString("(", ", ", ")")} on $cls.")
   }
 
   def constructorNotFoundError(cls: String): SparkRuntimeException = {

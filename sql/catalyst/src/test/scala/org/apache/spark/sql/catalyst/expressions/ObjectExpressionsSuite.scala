@@ -25,7 +25,7 @@ import scala.reflect.ClassTag
 import scala.reflect.runtime.universe.TypeTag
 import scala.util.Random
 
-import org.apache.spark.{SparkConf, SparkFunSuite, SparkRuntimeException}
+import org.apache.spark.{SparkConf, SparkException, SparkFunSuite, SparkRuntimeException}
 import org.apache.spark.serializer.{JavaSerializer, KryoSerializer}
 import org.apache.spark.sql.{RandomDataGenerator, Row}
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow, ScalaReflection, ScroogeLikeExample}
@@ -77,30 +77,26 @@ class ObjectExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     val inputRow = InternalRow(new Object)
     val inputObject = BoundReference(0, ObjectType(classOf[Object]), nullable = false)
 
-    checkError(
-      exception = intercept[SparkRuntimeException] {
-        Invoke(inputObject, "zeroArgNotExistMethod", IntegerType).eval(inputRow)
-      },
-      errorClass = "METHOD_NOT_FOUND",
-      parameters = Map(
-        "method" -> "zeroArgNotExistMethod",
-        "args" -> "()",
-        "cls" -> "class java.lang.Object"))
+    val e1 = intercept[SparkException] {
+      Invoke(inputObject, "zeroArgNotExistMethod", IntegerType).eval(inputRow)
+    }
 
-    checkError(
-      exception = intercept[SparkRuntimeException] {
-        Invoke(
-          inputObject,
-          "oneArgNotExistMethod",
-          IntegerType,
-          Seq(Literal.fromObject(UTF8String.fromString("dummyInputString"))),
-          Seq(StringType)).eval(inputRow)
-      },
-      errorClass = "METHOD_NOT_FOUND",
-      parameters = Map(
-        "method" -> "oneArgNotExistMethod",
-        "args" -> "(class org.apache.spark.unsafe.types.UTF8String)",
-        "cls" -> "class java.lang.Object"))
+    assert(e1.getErrorClass == "INTERNAL_ERROR")
+    assert(e1.getMessage == "[INTERNAL_ERROR] Couldn't find method zeroArgNotExistMethod " +
+      "with arguments () on class java.lang.Object.")
+
+    val e2 = intercept[SparkException] {
+      Invoke(
+        inputObject,
+        "oneArgNotExistMethod",
+        IntegerType,
+        Seq(Literal.fromObject(UTF8String.fromString("dummyInputString"))),
+        Seq(StringType)).eval(inputRow)
+    }
+
+    assert(e2.getErrorClass == "INTERNAL_ERROR")
+    assert(e2.getMessage == "[INTERNAL_ERROR] Couldn't find method oneArgNotExistMethod " +
+      "with arguments (class org.apache.spark.unsafe.types.UTF8String) on class java.lang.Object.")
   }
 
   test("MapObjects should make copies of unsafe-backed data") {
