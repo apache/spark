@@ -8338,7 +8338,7 @@ object functions {
   @scala.annotation.varargs
   @deprecated("Use call_udf")
   def callUDF(udfName: String, cols: Column*): Column =
-    call_function(udfName, cols: _*)
+    call_function(Seq(udfName), cols: _*)
 
   /**
    * Call an user-defined function.
@@ -8357,18 +8357,28 @@ object functions {
    */
   @scala.annotation.varargs
   def call_udf(udfName: String, cols: Column*): Column =
-    call_function(udfName, cols: _*)
+    call_function(Seq(udfName), cols: _*)
 
   /**
-   * Call a builtin or temp function.
+   * Call a SQL function.
    *
-   * @param funcName function name
+   * @param funcName function name that follows the SQL identifier syntax
+   *                 (can be quoted, can be qualified)
    * @param cols the expression parameters of function
    * @since 3.5.0
    */
   @scala.annotation.varargs
-  def call_function(funcName: String, cols: Column*): Column =
-    withExpr { UnresolvedFunction(funcName, cols.map(_.expr), false) }
+  def call_function(funcName: String, cols: Column*): Column = {
+    val parser = SparkSession.getActiveSession.map(_.sessionState.sqlParser).getOrElse {
+      new SparkSqlParser()
+    }
+    val nameParts = parser.parseMultipartIdentifier(funcName)
+    call_function(nameParts, cols: _*)
+  }
+
+  private def call_function(nameParts: Seq[String], cols: Column*): Column = withExpr {
+    UnresolvedFunction(nameParts, cols.map(_.expr), false)
+  }
 
   /**
    * Unwrap UDT data type column into its underlying type.

@@ -28,7 +28,7 @@ import org.apache.spark.sql.catalyst.{SQLConfHelper, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.{AnalysisContext, GlobalTempView, LocalTempView, ViewType}
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTableType, TemporaryViewRelation}
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, SubqueryExpression}
-import org.apache.spark.sql.catalyst.plans.logical.{AnalysisOnlyCommand, LogicalPlan, Project, View}
+import org.apache.spark.sql.catalyst.plans.logical.{AnalysisOnlyCommand, CTEInChildren, CTERelationDef, LogicalPlan, Project, View, WithCTE}
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.NamespaceHelper
 import org.apache.spark.sql.errors.QueryCompilationErrors
@@ -69,7 +69,7 @@ case class CreateViewCommand(
     viewType: ViewType,
     isAnalyzed: Boolean = false,
     referredTempFunctions: Seq[String] = Seq.empty)
-  extends RunnableCommand with AnalysisOnlyCommand {
+  extends RunnableCommand with AnalysisOnlyCommand with CTEInChildren {
 
   import ViewHelper._
 
@@ -215,6 +215,10 @@ case class CreateViewCommand(
       comment = comment
     )
   }
+
+  override def withCTEDefs(cteDefs: Seq[CTERelationDef]): LogicalPlan = {
+    copy(plan = WithCTE(plan, cteDefs))
+  }
 }
 
 /**
@@ -235,7 +239,7 @@ case class AlterViewAsCommand(
     query: LogicalPlan,
     isAnalyzed: Boolean = false,
     referredTempFunctions: Seq[String] = Seq.empty)
-  extends RunnableCommand with AnalysisOnlyCommand {
+  extends RunnableCommand with AnalysisOnlyCommand with CTEInChildren {
 
   import ViewHelper._
 
@@ -306,6 +310,10 @@ case class AlterViewAsCommand(
       viewText = Some(originalText))
 
     session.sessionState.catalog.alterTable(updatedViewMeta)
+  }
+
+  override def withCTEDefs(cteDefs: Seq[CTERelationDef]): LogicalPlan = {
+    copy(query = WithCTE(query, cteDefs))
   }
 }
 

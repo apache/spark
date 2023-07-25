@@ -33,7 +33,6 @@ import org.apache.spark.sql.execution.streaming.state.FlatMapGroupsWithStateExec
 import org.apache.spark.sql.execution.streaming.state.StateStore
 import org.apache.spark.sql.streaming.{GroupStateTimeout, OutputMode}
 import org.apache.spark.sql.types.StructType
-import org.apache.spark.sql.util.ArrowUtils
 import org.apache.spark.util.CompletionIterator
 
 /**
@@ -81,7 +80,7 @@ case class FlatMapGroupsInPandasWithStateExec(
   override def output: Seq[Attribute] = outAttributes
 
   private val sessionLocalTimeZone = conf.sessionLocalTimeZone
-  private val pythonRunnerConf = ArrowUtils.getPythonRunnerConfMap(conf)
+  private val pythonRunnerConf = ArrowPythonRunner.getPythonRunnerConfMap(conf)
 
   private val pythonFunction = functionExpr.asInstanceOf[PythonUDF].func
   private val chainedFunc = Seq(ChainedPythonFunctions(Seq(pythonFunction)))
