@@ -671,7 +671,7 @@ class SparkSession:
 
     copyFromLocalToFs.__doc__ = PySparkSession.copyFromLocalToFs.__doc__
 
-    def _createRemoteDataFrame(self, remote_id: str) -> "DataFrame":
+    def _create_remote_dataframe(self, remote_id: str) -> "DataFrame":
         """
         In internal API to reference a runtime DataFrame on the server side.
         This is used in ForeachBatch() runner, where the remote DataFrame refers to the

@@ -36,7 +36,8 @@ import org.apache.spark.sql.util.ArrowUtils
 private[sql] class SparkResult[T](
     responses: java.util.Iterator[proto.ExecutePlanResponse],
     allocator: BufferAllocator,
-    encoder: AgnosticEncoder[T])
+    encoder: AgnosticEncoder[T],
+    timeZoneId: String)
     extends AutoCloseable
     with Cleanable { self =>
 
@@ -213,7 +214,8 @@ private[sql] class SparkResult[T](
             new ConcatenatingArrowStreamReader(
               allocator,
               Iterator.single(new ResultMessageIterator(destructive)),
-              destructive))
+              destructive),
+            timeZoneId)
         }
       }
 
