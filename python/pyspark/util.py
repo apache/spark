@@ -332,7 +332,7 @@ def inheritable_thread_target(f: Callable, session: Optional["SparkSession"] = N
 
     # Spark Connect
     if is_remote():
-        assert session is not None, "Spark Connect must be provided."
+        assert session is not None, "Spark Connect session must be provided."
         if not hasattr(session.client.thread_local, "tags"):
             session.client.thread_local.tags = set()
         tags = set(session.client.thread_local.tags)
@@ -340,7 +340,7 @@ def inheritable_thread_target(f: Callable, session: Optional["SparkSession"] = N
         @functools.wraps(f)
         def wrapped(*args: Any, **kwargs: Any) -> Any:
             # Set tags in child thread.
-            session.client.thread_local.tags = tags
+            session.client.thread_local.tags = tags  # type: ignore[union-attr]
             return f(*args, **kwargs)
 
         return wrapped
@@ -406,7 +406,7 @@ class InheritableThread(threading.Thread):
             def copy_local_properties(*a: Any, **k: Any) -> Any:
                 # Set tags in child thread.
                 assert hasattr(self, "_tags")
-                session.client.thread_local.tags = self._tags
+                session.client.thread_local.tags = self._tags  # type: ignore[union-attr, has-type]
                 return target(*a, **k)
 
             super(InheritableThread, self).__init__(
