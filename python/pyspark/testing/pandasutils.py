@@ -54,6 +54,85 @@ except ImportError as e:
 have_plotly = plotly_requirement_message is None
 
 
+def assertPandasDataFrameEqual(left, right, check_exact=True):
+    import pandas as pd
+    from pandas.core.dtypes.common import is_numeric_dtype
+    from pandas.testing import assert_frame_equal, assert_index_equal, assert_series_equal
+
+    if isinstance(left, pd.DataFrame) and isinstance(right, pd.DataFrame):
+        try:
+            if LooseVersion(pd.__version__) >= LooseVersion("1.1"):
+                kwargs = dict(check_freq=False)
+            else:
+                kwargs = dict()
+
+            if LooseVersion(pd.__version__) < LooseVersion("1.1.1"):
+                # Due to https://github.com/pandas-dev/pandas/issues/35446
+                check_exact = (
+                    check_exact
+                    and all([is_numeric_dtype(dtype) for dtype in left.dtypes])
+                    and all([is_numeric_dtype(dtype) for dtype in right.dtypes])
+                )
+
+            assert_frame_equal(
+                left,
+                right,
+                check_index_type=("equiv" if len(left.index) > 0 else False),
+                check_column_type=("equiv" if len(left.columns) > 0 else False),
+                check_exact=check_exact,
+                **kwargs,
+            )
+        except AssertionError as e:
+            msg = (
+                str(e)
+                + "\n\nLeft:\n%s\n%s" % (left, left.dtypes)
+                + "\n\nRight:\n%s\n%s" % (right, right.dtypes)
+            )
+            raise AssertionError(msg) from e
+    elif isinstance(left, pd.Series) and isinstance(right, pd.Series):
+        try:
+            if LooseVersion(pd.__version__) >= LooseVersion("1.1"):
+                kwargs = dict(check_freq=False)
+            else:
+                kwargs = dict()
+            if LooseVersion(pd.__version__) < LooseVersion("1.1.1"):
+                # Due to https://github.com/pandas-dev/pandas/issues/35446
+                check_exact = (
+                    check_exact and is_numeric_dtype(left.dtype) and is_numeric_dtype(right.dtype)
+                )
+            assert_series_equal(
+                left,
+                right,
+                check_index_type=("equiv" if len(left.index) > 0 else False),
+                check_exact=check_exact,
+                **kwargs,
+            )
+        except AssertionError as e:
+            msg = (
+                str(e)
+                + "\n\nLeft:\n%s\n%s" % (left, left.dtype)
+                + "\n\nRight:\n%s\n%s" % (right, right.dtype)
+            )
+            raise AssertionError(msg) from e
+    elif isinstance(left, pd.Index) and isinstance(right, pd.Index):
+        try:
+            if LooseVersion(pd.__version__) < LooseVersion("1.1.1"):
+                # Due to https://github.com/pandas-dev/pandas/issues/35446
+                check_exact = (
+                    check_exact and is_numeric_dtype(left.dtype) and is_numeric_dtype(right.dtype)
+                )
+            assert_index_equal(left, right, check_exact=check_exact)
+        except AssertionError as e:
+            msg = (
+                str(e)
+                + "\n\nLeft:\n%s\n%s" % (left, left.dtype)
+                + "\n\nRight:\n%s\n%s" % (right, right.dtype)
+            )
+            raise AssertionError(msg) from e
+    else:
+        raise ValueError("Unexpected values: (%s, %s)" % (left, right))
+
+
 class PandasOnSparkTestUtils:
     def convert_str_to_lambda(self, func):
         """
@@ -61,87 +140,8 @@ class PandasOnSparkTestUtils:
         """
         return lambda x: getattr(x, func)()
 
-    def assertPandasEqual(self, left, right, check_exact=True):
-        import pandas as pd
-        from pandas.core.dtypes.common import is_numeric_dtype
-        from pandas.testing import assert_frame_equal, assert_index_equal, assert_series_equal
-
-        if isinstance(left, pd.DataFrame) and isinstance(right, pd.DataFrame):
-            try:
-                if LooseVersion(pd.__version__) >= LooseVersion("1.1"):
-                    kwargs = dict(check_freq=False)
-                else:
-                    kwargs = dict()
-
-                if LooseVersion(pd.__version__) < LooseVersion("1.1.1"):
-                    # Due to https://github.com/pandas-dev/pandas/issues/35446
-                    check_exact = (
-                        check_exact
-                        and all([is_numeric_dtype(dtype) for dtype in left.dtypes])
-                        and all([is_numeric_dtype(dtype) for dtype in right.dtypes])
-                    )
-
-                assert_frame_equal(
-                    left,
-                    right,
-                    check_index_type=("equiv" if len(left.index) > 0 else False),
-                    check_column_type=("equiv" if len(left.columns) > 0 else False),
-                    check_exact=check_exact,
-                    **kwargs,
-                )
-            except AssertionError as e:
-                msg = (
-                    str(e)
-                    + "\n\nLeft:\n%s\n%s" % (left, left.dtypes)
-                    + "\n\nRight:\n%s\n%s" % (right, right.dtypes)
-                )
-                raise AssertionError(msg) from e
-        elif isinstance(left, pd.Series) and isinstance(right, pd.Series):
-            try:
-                if LooseVersion(pd.__version__) >= LooseVersion("1.1"):
-                    kwargs = dict(check_freq=False)
-                else:
-                    kwargs = dict()
-                if LooseVersion(pd.__version__) < LooseVersion("1.1.1"):
-                    # Due to https://github.com/pandas-dev/pandas/issues/35446
-                    check_exact = (
-                        check_exact
-                        and is_numeric_dtype(left.dtype)
-                        and is_numeric_dtype(right.dtype)
-                    )
-                assert_series_equal(
-                    left,
-                    right,
-                    check_index_type=("equiv" if len(left.index) > 0 else False),
-                    check_exact=check_exact,
-                    **kwargs,
-                )
-            except AssertionError as e:
-                msg = (
-                    str(e)
-                    + "\n\nLeft:\n%s\n%s" % (left, left.dtype)
-                    + "\n\nRight:\n%s\n%s" % (right, right.dtype)
-                )
-                raise AssertionError(msg) from e
-        elif isinstance(left, pd.Index) and isinstance(right, pd.Index):
-            try:
-                if LooseVersion(pd.__version__) < LooseVersion("1.1.1"):
-                    # Due to https://github.com/pandas-dev/pandas/issues/35446
-                    check_exact = (
-                        check_exact
-                        and is_numeric_dtype(left.dtype)
-                        and is_numeric_dtype(right.dtype)
-                    )
-                assert_index_equal(left, right, check_exact=check_exact)
-            except AssertionError as e:
-                msg = (
-                    str(e)
-                    + "\n\nLeft:\n%s\n%s" % (left, left.dtype)
-                    + "\n\nRight:\n%s\n%s" % (right, right.dtype)
-                )
-                raise AssertionError(msg) from e
-        else:
-            raise ValueError("Unexpected values: (%s, %s)" % (left, right))
+    def assertPandasEqual(self, left, right, check_exact):
+        assertPandasDataFrameEqual(left, right, check_exact)
 
     def assertPandasAlmostEqual(self, left, right):
         """
