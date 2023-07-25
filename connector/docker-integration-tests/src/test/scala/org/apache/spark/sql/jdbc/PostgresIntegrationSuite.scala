@@ -441,8 +441,8 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationSuite {
   test("SPARK-44280: infinity timestamp test") {
     val df = sqlContext.read.jdbc(jdbcUrl, "infinity_timestamp", new Properties)
     val row = df.collect()
-    assert(row.length == 2)
 
+    assert(row.length == 2)
     val infinity = row(0).getAs[Timestamp]("timestamp_column")
     val negativeInfinity = row(1).getAs[Timestamp]("timestamp_column")
     val minTimeStamp = LocalDateTime.of(1, 1, 1, 0, 0, 0).toEpochSecond(ZoneOffset.UTC)
