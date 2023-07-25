@@ -39,7 +39,6 @@ object OptimizeSkewInRebalancePartitions extends AQEShuffleReadRule {
   override val supportedShuffleOrigins: Seq[ShuffleOrigin] =
     Seq(REBALANCE_PARTITIONS_BY_NONE, REBALANCE_PARTITIONS_BY_COL)
 
-
   private def tryOptimizeSkewedPartitions(shuffle: ShuffleQueryStageExec): SparkPlan = {
     val defaultAdvisorySize = conf.getConf(SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES)
     val advisorySize = shuffle.advisoryPartitionSize.getOrElse(defaultAdvisorySize)
