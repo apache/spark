@@ -3125,7 +3125,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
         // Finally, generate output columns according to the original projectList.
         val finalProjectList = aggregateExprs.map(_.toAttribute)
         val newProject = Project(finalProjectList, withWindow)
-        newProject.copyTagFrom(f, LogicalPlan.PLAN_ID_TAG)
+        newProject.copyTagsFrom(f)
         newProject
 
       case p: LogicalPlan if !p.childrenResolved => p
@@ -3145,7 +3145,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
         // Finally, generate output columns according to the original projectList.
         val finalProjectList = aggregateExprs.map(_.toAttribute)
         val newProject = Project(finalProjectList, withWindow)
-        newProject.copyTagFrom(a, LogicalPlan.PLAN_ID_TAG)
+        newProject.copyTagsFrom(a)
         newProject
 
       // We only extract Window Expressions after all expressions of the Project
@@ -3164,7 +3164,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
         // Finally, generate output columns according to the original projectList.
         val finalProjectList = projectList.map(_.toAttribute)
         val newProject = Project(finalProjectList, withWindow)
-        newProject.copyTagFrom(p, LogicalPlan.PLAN_ID_TAG)
+        newProject.copyTagsFrom(p)
         newProject
     }
   }
