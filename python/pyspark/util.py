@@ -26,7 +26,7 @@ import threading
 import traceback
 import typing
 from types import TracebackType
-from typing import Any, Callable, Iterator, List, Optional, TextIO, Tuple
+from typing import Any, Callable, Iterator, List, Optional, TextIO, Tuple, Union
 
 from pyspark.errors import PySparkRuntimeError
 
@@ -283,7 +283,7 @@ def _parse_memory(s: str) -> int:
     return int(float(s[:-1]) * units[s[-1].lower()])
 
 
-def inheritable_thread_target(f: Callable, session: Optional["SparkSession"] = None) -> Callable:
+def inheritable_thread_target(f: Optional[Union[Callable, "SparkSession"]] = None) -> Callable:
     """
     Return thread target wrapper which is recommended to be used in PySpark when the
     pinned thread mode is enabled. The wrapper function, before calling original
@@ -300,10 +300,9 @@ def inheritable_thread_target(f: Callable, session: Optional["SparkSession"] = N
 
     Parameters
     ----------
-    f : function
-        the original thread target.
-    session : SparkSession, optional
-        Spark Connect session.
+    f : function, or :class:`SparkSession`
+        the original thread target, or :class:`SparkSession` if Spark Connect is being used.
+        See the examples below.
 
     Notes
     -----
@@ -327,28 +326,39 @@ def inheritable_thread_target(f: Callable, session: Optional["SparkSession"] = N
     The example below mimics the behavior of JVM threads as close as possible:
 
     >>> Thread(target=inheritable_thread_target(target_func)).start()  # doctest: +SKIP
+
+    If you're using Spark Connect, you should explicitly provide Spark session as follows:
+
+    >>> @inheritable_thread_target(session)
+    ... def target_func():
+    ...     pass  # your codes.
+
+    >>> Thread(target=inheritable_thread_target(session)(target_func)).start()  # doctest: +SKIP
     """
     from pyspark.sql import is_remote
 
     # Spark Connect
     if is_remote():
+        session = f
         assert session is not None, "Spark Connect session must be provided."
-        if not hasattr(session.client.thread_local, "tags"):
-            session.client.thread_local.tags = set()
-        tags = set(session.client.thread_local.tags)
 
-        @functools.wraps(f)
-        def wrapped(*args: Any, **kwargs: Any) -> Any:
-            # Set tags in child thread.
-            session.client.thread_local.tags = tags  # type: ignore[union-attr]
-            return f(*args, **kwargs)
+        def outer(ff: Callable) -> Callable:
+            if not hasattr(session.client.thread_local, "tags"):  # type: ignore[union-attr]
+                session.client.thread_local.tags = set()  # type: ignore[union-attr]
+            tags = set(session.client.thread_local.tags)  # type: ignore[union-attr]
 
-        return wrapped
+            @functools.wraps(ff)
+            def inner(*args: Any, **kwargs: Any) -> Any:
+                # Set tags in child thread.
+                session.client.thread_local.tags = tags  # type: ignore[union-attr]
+                return ff(*args, **kwargs)
+
+            return inner
+
+        return outer
 
     # Non Spark Connect
     from pyspark import SparkContext
-
-    assert session is None, "Regular Spark session cannot pass."
 
     if isinstance(SparkContext._gateway, ClientServer):
         # Here's when the pinned-thread mode (PYSPARK_PIN_THREAD) is on.
@@ -358,17 +368,18 @@ def inheritable_thread_target(f: Callable, session: Optional["SparkSession"] = N
         # copies when the function is wrapped.
         assert SparkContext._active_spark_context is not None
         properties = SparkContext._active_spark_context._jsc.sc().getLocalProperties().clone()
+        assert callable(f)
 
         @functools.wraps(f)
         def wrapped(*args: Any, **kwargs: Any) -> Any:
             # Set local properties in child thread.
             assert SparkContext._active_spark_context is not None
             SparkContext._active_spark_context._jsc.sc().setLocalProperties(properties)
-            return f(*args, **kwargs)
+            return f(*args, **kwargs)  # type: ignore[misc, operator]
 
         return wrapped
     else:
-        return f
+        return f  # type: ignore[return-value]
 
 
 class InheritableThread(threading.Thread):

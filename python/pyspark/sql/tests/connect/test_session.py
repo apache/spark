@@ -187,8 +187,17 @@ class ArrowParityTests(ReusedConnectTestCase):
         )
         self.check_inheritable_tags(
             create_thread=lambda target, session: threading.Thread(
-                target=inheritable_thread_target(target, session=session)
+                target=inheritable_thread_target(session)(target)
             )
+        )
+
+        # Test decorator usage
+        @inheritable_thread_target(self.spark)
+        def func(target):
+            return target()
+
+        self.check_inheritable_tags(
+            create_thread=lambda target, session: threading.Thread(target=func, args=(target,))
         )
 
     def check_inheritable_tags(self, create_thread):
