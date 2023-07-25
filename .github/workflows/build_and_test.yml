@@ -507,7 +507,7 @@ jobs:
         env: ${{ fromJSON(inputs.envs) }}
         run: |
           export PATH=$PATH:$HOME/miniconda/bin
-          ./dev/run-tests --parallelism 1
+          ./dev/run-pip-tests
       - name: Upload test results to report
         if: always()
         uses: actions/upload-artifact@v3
