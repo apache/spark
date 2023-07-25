@@ -29,7 +29,6 @@ select null not in (select e from v_empty);
 
 -- IN subquery which is not rewritten to join - here we use IN in the ON condition because that is a case that doesn't get rewritten to join in RewritePredicateSubquery, so we can observe the execution behavior of InSubquery directly
 -- Correct results: column t2.d should be NULL because the ON condition is always false
--- This will be fixed by the execution fixes.
 select * from t left join t2 on (t.c in (select e from t_empty)) is null;
 select * from t left join t2 on (t.c not in (select e from t_empty)) is null;
 
