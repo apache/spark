@@ -221,6 +221,7 @@ object SparkConnectService {
    * Based on the `key` find or create a new SparkSession.
    */
   def getOrCreateIsolatedSession(userId: String, sessionId: String): SessionHolder = {
+    // Validate that sessionId is formatted like UUID before creating session.
     try {
       UUID.fromString(sessionId).toString
     } catch {
