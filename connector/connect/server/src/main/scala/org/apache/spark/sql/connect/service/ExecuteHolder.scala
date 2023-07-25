@@ -42,7 +42,7 @@ private[connect] class ExecuteHolder(
     s"SparkConnect_Execute_" +
       s"User_${sessionHolder.userId}_" +
       s"Session_${sessionHolder.sessionId}_" +
-      s"Request_${operationId}"
+      s"Operation_${operationId}"
 
   /**
    * Tags set by Spark Connect client users via SparkSession.addTag. Used to identify and group
@@ -118,7 +118,7 @@ private[connect] class ExecuteHolder(
    * need to be combined with userId and sessionId.
    */
   def tagToSparkJobTag(tag: String): String = {
-    "SparkConnect_Tag_" +
-      s"User_${sessionHolder.userId}_Session_${sessionHolder.sessionId}"
+    "SparkConnect_Execute_" +
+      s"User_${sessionHolder.userId}_Session_${sessionHolder.sessionId}_Tag_${tag}"
   }
 }
