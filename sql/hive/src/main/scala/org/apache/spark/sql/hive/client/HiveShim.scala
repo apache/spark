@@ -1643,6 +1643,9 @@ private[client] class Shim_v2_3 extends Shim_v2_1 {
         if (cause != null && cause.isInstanceOf[MetaException] &&
           cause.getMessage != null &&
           cause.getMessage.contains("Invalid method name: 'get_tables_by_type'")) {
+          // SparkUnsupportedOperationException (inherited from UnsupportedOperationException)
+          // is thrown when the Shim_v2_3#getTablesByType call returns no get_tables_by_type method.
+          // HiveClientImpl#listTablesByType will have fallback processing.
           throw QueryExecutionErrors.getTablesByTypeUnsupportedByHiveVersionError()
         }
         else {
