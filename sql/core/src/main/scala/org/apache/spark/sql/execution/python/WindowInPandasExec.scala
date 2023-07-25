@@ -33,7 +33,6 @@ import org.apache.spark.sql.execution.{ExternalAppendOnlyUnsafeRowArray, SparkPl
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
 import org.apache.spark.sql.execution.window._
 import org.apache.spark.sql.types._
-import org.apache.spark.sql.util.ArrowUtils
 import org.apache.spark.util.Utils
 
 /**
@@ -200,7 +199,7 @@ case class WindowInPandasExec(
 
     val udfWindowBoundTypes = pyFuncs.indices.map(i =>
       frameWindowBoundTypes(expressionIndexToFrameIndex(i)))
-    val pythonRunnerConf: Map[String, String] = (ArrowUtils.getPythonRunnerConfMap(conf)
+    val pythonRunnerConf: Map[String, String] = (ArrowPythonRunner.getPythonRunnerConfMap(conf)
       + (windowBoundTypeConf -> udfWindowBoundTypes.map(_.value).mkString(",")))
 
     // Filter child output attributes down to only those that are UDF inputs.
