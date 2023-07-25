@@ -71,4 +71,17 @@ class ExtendedAnalysisException(
     val planAnnotation = Option(plan).flatten.map(p => s";\n$p").getOrElse("")
     getSimpleMessage + planAnnotation
   }
+
+  override def toString: String = {
+    val message = getLocalizedMessage
+    if (message != null) {
+      ExtendedAnalysisException.name + ": " + message
+    } else {
+      ExtendedAnalysisException.name
+    }
+  }
+}
+
+object ExtendedAnalysisException {
+  private val name = classOf[AnalysisException].getName
 }
