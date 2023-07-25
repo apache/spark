@@ -615,7 +615,7 @@ class SparkSession private[sql] (
    * Interrupt all operations of this session currently running on the connected server.
    *
    * @return
-   *   sequence of operationIds of interrupted operations. Note: there is still a possiblility of
+   *   sequence of operationIds of interrupted operations. Note: there is still a possibility of
    *   operation finishing just as it is interrupted.
    *
    * @since 3.5.0
@@ -628,7 +628,7 @@ class SparkSession private[sql] (
    * Interrupt all operations of this session with the given operation tag.
    *
    * @return
-   *   sequence of operationIds of interrupted operations. Note: there is still a possiblility of
+   *   sequence of operationIds of interrupted operations. Note: there is still a possibility of
    *   operation finishing just as it is interrupted.
    *
    * @since 3.5.0
@@ -641,7 +641,7 @@ class SparkSession private[sql] (
    * Interrupt an operation of this session with the given operationId.
    *
    * @return
-   *   sequence of operationIds of interrupted operations. Note: there is still a possiblility of
+   *   sequence of operationIds of interrupted operations. Note: there is still a possibility of
    *   operation finishing just as it is interrupted.
    *
    * @since 3.5.0
