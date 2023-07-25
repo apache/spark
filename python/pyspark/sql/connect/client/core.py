@@ -757,14 +757,33 @@ class SparkConnectClient(object):
         logger.info(f"Executing plan {self._proto_to_string(plan)}")
         req = self._execute_plan_request_with_metadata()
         req.plan.CopyFrom(plan)
-        table, schema, metrics, observed_metrics, _ = self._execute_and_fetch(req)
+        (self_destruct_conf,) = self.get_config_with_defaults(
+            ("spark.sql.execution.arrow.pyspark.selfDestruct.enabled", "false"),
+        )
+        self_destruct = cast(str, self_destruct_conf).lower() == "true"
+        table, schema, metrics, observed_metrics, _ = self._execute_and_fetch(
+            req, self_destruct=self_destruct
+        )
         assert table is not None
 
         schema = schema or from_arrow_schema(table.schema, prefer_timestamp_ntz=True)
         assert schema is not None and isinstance(schema, StructType)
 
         # Rename columns to avoid duplicated column names.
-        pdf = table.rename_columns([f"col_{i}" for i in range(table.num_columns)]).to_pandas()
+        renamed_table = table.rename_columns([f"col_{i}" for i in range(table.num_columns)])
+        if self_destruct:
+            # Configure PyArrow to use as little memory as possible:
+            # self_destruct - free columns as they are converted
+            # split_blocks - create a separate Pandas block for each column
+            # use_threads - convert one column at a time
+            pandas_options = {
+                "self_destruct": True,
+                "split_blocks": True,
+                "use_threads": False,
+            }
+            pdf = renamed_table.to_pandas(**pandas_options)
+        else:
+            pdf = renamed_table.to_pandas()
         pdf.columns = schema.names
 
         if len(pdf.columns) > 0:
@@ -1108,7 +1127,7 @@ class SparkConnectClient(object):
             self._handle_error(error)
 
     def _execute_and_fetch(
-        self, req: pb2.ExecutePlanRequest
+        self, req: pb2.ExecutePlanRequest, self_destruct: bool = False
     ) -> Tuple[
         Optional["pa.Table"],
         Optional[StructType],
@@ -1144,7 +1163,27 @@ class SparkConnectClient(object):
                 )
 
         if len(batches) > 0:
-            table = pa.Table.from_batches(batches=batches)
+            if self_destruct:
+                results = []
+                for batch in batches:
+                    # self_destruct frees memory column-wise, but Arrow record batches are
+                    # oriented row-wise, so copies each column into its own allocation
+                    batch = pa.RecordBatch.from_arrays(
+                        [
+                            # This call actually reallocates the array
+                            pa.concat_arrays([array])
+                            for array in batch
+                        ],
+                        schema=batch.schema,
+                    )
+                    results.append(batch)
+                table = pa.Table.from_batches(batches=results)
+                # Ensure only the table has a reference to the batches, so that
+                # self_destruct (if enabled) is effective
+                del results
+                del batches
+            else:
+                table = pa.Table.from_batches(batches=batches)
             return table, schema, metrics, observed_metrics, properties
         else:
             return None, schema, metrics, observed_metrics, properties
