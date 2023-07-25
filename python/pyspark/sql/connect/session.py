@@ -58,6 +58,7 @@ from pyspark.sql.connect.plan import (
     LogicalPlan,
     CachedLocalRelation,
     CachedRelation,
+    CachedRemoteRelation,
 )
 from pyspark.sql.connect.readwriter import DataFrameReader
 from pyspark.sql.connect.streaming import DataStreamReader, StreamingQueryManager
@@ -669,6 +670,14 @@ class SparkSession:
         self._client.copy_from_local_to_fs(local_path, dest_path)
 
     copyFromLocalToFs.__doc__ = PySparkSession.copyFromLocalToFs.__doc__
+
+    def _create_remote_dataframe(self, remote_id: str) -> "DataFrame":
+        """
+        In internal API to reference a runtime DataFrame on the server side.
+        This is used in ForeachBatch() runner, where the remote DataFrame refers to the
+        output of a micro batch.
+        """
+        return DataFrame.withPlan(CachedRemoteRelation(remote_id), self)
 
     @staticmethod
     def _start_connect_server(master: str, opts: Dict[str, Any]) -> None:

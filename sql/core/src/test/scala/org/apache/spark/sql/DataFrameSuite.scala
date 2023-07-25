@@ -1721,7 +1721,7 @@ class DataFrameSuite extends QueryTest
 
       def checkSyntaxError(name: String): Unit = {
         checkError(
-          exception = intercept[org.apache.spark.sql.AnalysisException] {
+          exception = intercept[SparkException] {
             df(name)
           },
           errorClass = "_LEGACY_ERROR_TEMP_1049",

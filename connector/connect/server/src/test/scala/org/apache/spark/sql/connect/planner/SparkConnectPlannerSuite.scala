@@ -105,7 +105,7 @@ trait SparkConnectPlanTest extends SharedSparkSession {
     val bytes = ArrowConverters
       .toBatchWithSchemaIterator(
         data.iterator,
-        StructType.fromAttributes(attrs.map(_.toAttribute)),
+        DataTypeUtils.fromAttributes(attrs.map(_.toAttribute)),
         Long.MaxValue,
         Long.MaxValue,
         null,

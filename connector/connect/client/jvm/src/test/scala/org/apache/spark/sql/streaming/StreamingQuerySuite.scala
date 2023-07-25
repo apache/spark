@@ -335,7 +335,7 @@ class StreamingQuerySuite extends QueryTest with SQLHelper with Logging {
         .start()
 
       eventually(timeout(30.seconds)) { // Wait for first progress.
-        assert(q.lastProgress != null)
+        assert(q.lastProgress != null, "Failed to make progress")
         assert(q.lastProgress.numInputRows > 0)
       }
 
@@ -346,7 +346,7 @@ class StreamingQuerySuite extends QueryTest with SQLHelper with Logging {
           .collect()
           .toSeq
         assert(rows.size > 0)
-        log.info(s"Rows in $tableName: $rows")
+        logInfo(s"Rows in $tableName: $rows")
       }
 
       q.stop()

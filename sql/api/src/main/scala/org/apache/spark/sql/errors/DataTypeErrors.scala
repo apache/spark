@@ -16,8 +16,10 @@
  */
 package org.apache.spark.sql.errors
 
-import org.apache.spark.{SparkArithmeticException, SparkException, SparkRuntimeException, SparkUnsupportedOperationException}
+import org.apache.spark.{SparkArithmeticException, SparkException, SparkIllegalArgumentException, SparkNumberFormatException, SparkRuntimeException, SparkUnsupportedOperationException}
+import org.apache.spark.sql.catalyst.trees.{Origin, SQLQueryContext}
 import org.apache.spark.sql.catalyst.util.QuotingUtils
+import org.apache.spark.sql.types.{DataType, Decimal, StringType}
 import org.apache.spark.unsafe.types.UTF8String
 
 /**
@@ -145,5 +147,152 @@ private[sql] object DataTypeErrors extends DataTypeErrorsBase {
     SparkException.internalError(s"Negative scale is not allowed: ${scale.toString}." +
       s" Set the config ${sqlConf}" +
       " to \"true\" to allow it.")
+  }
+
+  def attributeNameSyntaxError(name: String): Throwable = {
+    new SparkException(
+      errorClass = "_LEGACY_ERROR_TEMP_1049",
+      messageParameters = Map("name" -> name),
+      cause = null)
+  }
+
+  def cannotMergeIncompatibleDataTypesError(left: DataType, right: DataType): Throwable = {
+    new SparkException(
+      errorClass = "CANNOT_MERGE_INCOMPATIBLE_DATA_TYPE",
+      messageParameters = Map(
+        "left" -> toSQLType(left),
+        "right" -> toSQLType(right)),
+      cause = null)
+  }
+
+  def cannotMergeDecimalTypesWithIncompatibleScaleError(
+      leftScale: Int, rightScale: Int): Throwable = {
+    new SparkException(
+      errorClass = "_LEGACY_ERROR_TEMP_2124",
+      messageParameters = Map(
+        "leftScale" -> leftScale.toString(),
+        "rightScale" -> rightScale.toString()),
+      cause = null)
+  }
+
+  def dataTypeUnsupportedError(dataType: String, failure: String): Throwable = {
+    new SparkIllegalArgumentException(
+      errorClass = "UNSUPPORTED_DATATYPE",
+      messageParameters = Map("typeName" -> (dataType + failure)))
+  }
+
+  def invalidFieldName(fieldName: Seq[String], path: Seq[String], context: Origin): Throwable = {
+    new SparkException(
+      errorClass = "INVALID_FIELD_NAME",
+      messageParameters = Map(
+        "fieldName" -> toSQLId(fieldName),
+        "path" -> toSQLId(path)),
+      cause = null,
+      context = context.getQueryContext)
+  }
+
+  def unscaledValueTooLargeForPrecisionError(
+      value: Decimal,
+      decimalPrecision: Int,
+      decimalScale: Int,
+      context: SQLQueryContext = null): ArithmeticException = {
+    new SparkArithmeticException(
+      errorClass = "NUMERIC_VALUE_OUT_OF_RANGE",
+      messageParameters = Map(
+        "value" -> value.toPlainString,
+        "precision" -> decimalPrecision.toString,
+        "scale" -> decimalScale.toString,
+        "config" -> toSQLConf("spark.sql.ansi.enabled")),
+      context = getQueryContext(context),
+      summary = getSummary(context))
+  }
+
+  def cannotChangeDecimalPrecisionError(
+      value: Decimal,
+      decimalPrecision: Int,
+      decimalScale: Int,
+      context: SQLQueryContext = null): ArithmeticException = {
+    new SparkArithmeticException(
+      errorClass = "NUMERIC_VALUE_OUT_OF_RANGE",
+      messageParameters = Map(
+        "value" -> value.toPlainString,
+        "precision" -> decimalPrecision.toString,
+        "scale" -> decimalScale.toString,
+        "config" -> toSQLConf("spark.sql.ansi.enabled")),
+      context = getQueryContext(context),
+      summary = getSummary(context))
+  }
+
+  def invalidInputInCastToNumberError(
+      to: DataType,
+      s: UTF8String,
+      context: SQLQueryContext): SparkNumberFormatException = {
+    val convertedValueStr = "'" + s.toString.replace("\\", "\\\\").replace("'", "\\'") + "'"
+    new SparkNumberFormatException(
+      errorClass = "CAST_INVALID_INPUT",
+      messageParameters = Map(
+        "expression" -> convertedValueStr,
+        "sourceType" -> toSQLType(StringType),
+        "targetType" -> toSQLType(to),
+        "ansiConfig" -> toSQLConf("spark.sql.ansi.enabled")),
+      context = getQueryContext(context),
+      summary = getSummary(context))
+  }
+
+  def ambiguousColumnOrFieldError(
+      name: Seq[String], numMatches: Int, context: Origin): Throwable = {
+    new SparkException(
+      errorClass = "AMBIGUOUS_COLUMN_OR_FIELD",
+      messageParameters = Map(
+        "name" -> toSQLId(name),
+        "n" -> numMatches.toString),
+      cause = null,
+      context = context.getQueryContext)
+  }
+
+  def castingCauseOverflowError(t: String, from: DataType, to: DataType): ArithmeticException = {
+    new SparkArithmeticException(
+      errorClass = "CAST_OVERFLOW",
+      messageParameters = Map(
+        "value" -> t,
+        "sourceType" -> toSQLType(from),
+        "targetType" -> toSQLType(to),
+        "ansiConfig" -> toSQLConf("spark.sql.ansi.enabled")),
+      context = Array.empty,
+      summary = "")
+  }
+
+  def failedParsingStructTypeError(raw: String): SparkRuntimeException = {
+    new SparkRuntimeException(
+      errorClass = "FAILED_PARSE_STRUCT_TYPE",
+      messageParameters = Map("raw" -> s"'$raw'"))
+  }
+
+  def fieldIndexOnRowWithoutSchemaError(): SparkUnsupportedOperationException = {
+    new SparkUnsupportedOperationException(
+      errorClass = "_LEGACY_ERROR_TEMP_2231",
+      messageParameters = Map.empty)
+  }
+
+  def valueIsNullError(index: Int): Throwable = {
+    new SparkException(
+      errorClass = "_LEGACY_ERROR_TEMP_2232",
+      messageParameters = Map(
+        "index" -> index.toString),
+      cause = null)
+  }
+
+  def charOrVarcharTypeAsStringUnsupportedError(): Throwable = {
+    new SparkException(
+      errorClass = "UNSUPPORTED_CHAR_OR_VARCHAR_AS_STRING",
+      messageParameters = Map.empty,
+      cause = null)
+  }
+
+  def userSpecifiedSchemaUnsupportedError(operation: String): Throwable = {
+    new SparkException(
+      errorClass = "_LEGACY_ERROR_TEMP_1189",
+      messageParameters = Map("operation" -> operation),
+      cause = null)
   }
 }

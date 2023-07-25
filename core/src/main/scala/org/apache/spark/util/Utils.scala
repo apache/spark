@@ -92,7 +92,6 @@ private[spark] object CallSite {
  * Various utility methods used by Spark.
  */
 private[spark] object Utils extends Logging with SparkClassUtils {
-  val random = new Random()
 
   private val sparkUncaughtExceptionHandler = new SparkUncaughtExceptionHandler
   @volatile private var cachedLocalDir: String = ""
@@ -188,11 +187,6 @@ private[spark] object Utils extends Logging with SparkClassUtils {
   /** String interning to reduce the memory usage. */
   def weakIntern(s: String): String = {
     weakStringInterner.intern(s)
-  }
-
-  /** Determines whether the provided class is loadable in the current thread. */
-  def classIsLoadable(clazz: String): Boolean = {
-    Try { classForName(clazz, initialize = false) }.isSuccess
   }
 
   /**
@@ -442,7 +436,7 @@ private[spark] object Utils extends Logging with SparkClassUtils {
     // `file` and `localhost` are not used. Just to prevent URI from parsing `fileName` as
     // scheme or host. The prefix "/" is required because URI doesn't accept a relative path.
     // We should remove it after we get the raw path.
-    encodeRelativeUnixPathToURIRawPath(fileName).substring(1)
+    encodeRelativeUnixPathToURIRawPath(fileName)
   }
 
   /**
@@ -453,7 +447,7 @@ private[spark] object Utils extends Logging with SparkClassUtils {
     // `file` and `localhost` are not used. Just to prevent URI from parsing `fileName` as
     // scheme or host. The prefix "/" is required because URI doesn't accept a relative path.
     // We should remove it after we get the raw path.
-    new URI("file", null, "localhost", -1, "/" + path, null, null).getRawPath
+    new URI("file", null, "localhost", -1, "/" + path, null, null).getRawPath.substring(1)
   }
 
   /**

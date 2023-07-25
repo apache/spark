@@ -16,10 +16,12 @@
  */
 package org.apache.spark.sql
 
+
 import java.util.concurrent.atomic.AtomicReference
 
 import scala.util.Try
 
+import org.apache.spark.sql.types.{AtomicType, TimestampType}
 import org.apache.spark.util.SparkClassUtils
 
 /**
@@ -36,6 +38,9 @@ private[sql] trait SqlApiConf {
   def exponentLiteralAsDecimalEnabled: Boolean
   def enforceReservedKeywords: Boolean
   def doubleQuotedIdentifiers: Boolean
+  def timestampType: AtomicType
+  def allowNegativeScaleOfDecimalEnabled: Boolean
+  def charVarcharAsString: Boolean
 }
 
 private[sql] object SqlApiConf {
@@ -68,4 +73,7 @@ private[sql] object DefaultSqlApiConf extends SqlApiConf {
   override def exponentLiteralAsDecimalEnabled: Boolean = false
   override def enforceReservedKeywords: Boolean = false
   override def doubleQuotedIdentifiers: Boolean = false
+  override def timestampType: AtomicType = TimestampType
+  override def allowNegativeScaleOfDecimalEnabled: Boolean = false
+  override def charVarcharAsString: Boolean = false
 }
