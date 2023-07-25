@@ -14396,16 +14396,16 @@ def call_udf(udfName: str, *cols: "ColumnOrName") -> Column:
 
 
 @try_remote_functions
-def call_function(udfName: str, *cols: "ColumnOrName") -> Column:
+def call_function(funcName: str, *cols: "ColumnOrName") -> Column:
     """
-    Call a builtin or temp function.
+    Call a SQL function.
 
     .. versionadded:: 3.5.0
 
     Parameters
     ----------
-    udfName : str
-        name of the function
+    funcName : str
+        function name that follows the SQL identifier syntax (can be quoted, can be qualified)
     cols : :class:`~pyspark.sql.Column` or str
         column names or :class:`~pyspark.sql.Column`\\s to be used in the function
 
@@ -14443,9 +14443,22 @@ def call_function(udfName: str, *cols: "ColumnOrName") -> Column:
     +-------+
     |    2.0|
     +-------+
+    >>> _ = spark.sql("CREATE FUNCTION custom_avg AS 'test.org.apache.spark.sql.MyDoubleAvg'")
+    >>> df.select(call_function("custom_avg", col("id"))).show()
+    +------------------------------------+
+    |spark_catalog.default.custom_avg(id)|
+    +------------------------------------+
+    |                               102.0|
+    +------------------------------------+
+    >>> df.select(call_function("spark_catalog.default.custom_avg", col("id"))).show()
+    +------------------------------------+
+    |spark_catalog.default.custom_avg(id)|
+    +------------------------------------+
+    |                               102.0|
+    +------------------------------------+
     """
     sc = get_active_spark_context()
-    return _invoke_function("call_function", udfName, _to_seq(sc, cols, _to_java_column))
+    return _invoke_function("call_function", funcName, _to_seq(sc, cols, _to_java_column))
 
 
 @try_remote_functions
