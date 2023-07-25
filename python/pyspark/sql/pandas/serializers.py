@@ -385,37 +385,28 @@ class ArrowStreamPandasUDFSerializer(ArrowStreamPandasSerializer):
         """
         import pyarrow as pa
 
-        # Input partition and result pandas.DataFrame empty, make empty Arrays with struct
-        if len(df) == 0 and len(df.columns) == 0:
-            arrs_names = [
-                (pa.array([], type=field.type), field.name) for field in arrow_struct_type
-            ]
+        if len(df.columns) == 0:
+            return pa.array([{}] * len(df), arrow_struct_type)
         # Assign result columns by schema name if user labeled with strings
         elif self._assign_cols_by_name and any(isinstance(name, str) for name in df.columns):
-            arrs_names = [
-                (
-                    self._create_array(df[field.name], field.type, arrow_cast=self._arrow_cast),
-                    field.name,
-                )
+            struct_arrs = [
+                self._create_array(df[field.name], field.type, arrow_cast=self._arrow_cast)
                 for field in arrow_struct_type
             ]
         # Assign result columns by position
         else:
-            arrs_names = [
+            struct_arrs = [
                 # the selected series has name '1', so we rename it to field.name
                 # as the name is used by _create_array to provide a meaningful error message
-                (
-                    self._create_array(
-                        df[df.columns[i]].rename(field.name),
-                        field.type,
-                        arrow_cast=self._arrow_cast,
-                    ),
-                    field.name,
+                self._create_array(
+                    df[df.columns[i]].rename(field.name),
+                    field.type,
+                    arrow_cast=self._arrow_cast,
                 )
                 for i, field in enumerate(arrow_struct_type)
             ]
 
-        struct_arrs, struct_names = zip(*arrs_names)
+        struct_names = [field.name for field in arrow_struct_type]
         return pa.StructArray.from_arrays(struct_arrs, struct_names)
 
     def _create_batch(self, series):
