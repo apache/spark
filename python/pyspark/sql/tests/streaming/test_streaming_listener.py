@@ -329,20 +329,20 @@ class StreamingListenerTests(StreamingListenerTestsMixin, ReusedSQLTestCase):
         self.spark.streams.removeListener(test_listener)
         self.assertEqual(num_listeners, len(self.spark.streams._jsqm.listListeners()))
 
-        def test_query_started_event_fromJson(self):
-            start_event = """
-                {
-                    "id" : "78923ec2-8f4d-4266-876e-1f50cf3c283b",
-                    "runId" : "55a95d45-e932-4e08-9caa-0a8ecd9391e8",
-                    "name" : null,
-                    "timestamp" : "2023-06-09T18:13:29.741Z"
-                }
-            """
-            start_event = QueryStartedEvent.fromJson(json.loads(start_event))
-            self.check_start_event(start_event)
-            self.assertEqual(start_event.id, uuid.UUID("78923ec2-8f4d-4266-876e-1f50cf3c283b"))
-            self.assertEqual(start_event.runId, uuid.UUID("55a95d45-e932-4e08-9caa-0a8ecd9391e8"))
-            self.assertIsNone(start_event.name)
+    def test_query_started_event_fromJson(self):
+        start_event = """
+            {
+                "id" : "78923ec2-8f4d-4266-876e-1f50cf3c283b",
+                "runId" : "55a95d45-e932-4e08-9caa-0a8ecd9391e8",
+                "name" : null,
+                "timestamp" : "2023-06-09T18:13:29.741Z"
+            }
+        """
+        start_event = QueryStartedEvent.fromJson(json.loads(start_event))
+        self.check_start_event(start_event)
+        self.assertEqual(start_event.id, uuid.UUID("78923ec2-8f4d-4266-876e-1f50cf3c283b"))
+        self.assertEqual(start_event.runId, uuid.UUID("55a95d45-e932-4e08-9caa-0a8ecd9391e8"))
+        self.assertIsNone(start_event.name)
         self.assertEqual(start_event.timestamp, "2023-06-09T18:13:29.741Z")
 
     def test_query_terminated_event_fromJson(self):
