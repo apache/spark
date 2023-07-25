@@ -357,9 +357,11 @@ jobs:
           - >-
             pyspark-pandas-connect
           - >-
-            pyspark-pandas-slow-connect
+            pyspark-pandas-connect-part-1
           - >-
-            pyspark-pandas-slow-connect-other
+            pyspark-pandas-connect-part-2
+          - >-
+            pyspark-pandas-connect-part-3
     env:
       MODULES_TO_TEST: ${{ matrix.modules }}
       HADOOP_PROFILE: ${{ inputs.hadoop }}
