@@ -182,7 +182,7 @@ object UserDefinedPythonTableFunction {
     val pythonExec = func.pythonExec
     val pythonVer = func.pythonVer
     val pythonIncludes = func.pythonIncludes.asScala.toSet
-    val broadcastVars = func.broadcastVars.asScala
+    val broadcastVars = func.broadcastVars.asScala.toSeq
     val maybeAccumulator = Option(func.accumulator).map(_.copyAndReset())
 
     envVars.put("SPARK_LOCAL_DIRS", localdir)
