@@ -528,6 +528,27 @@ class ScalarPandasUDFTestsMixin:
                 self.assertEqual(pd.Timestamp(i).to_pydatetime(), f[0])
                 self.assertListEqual([i, i + 1], f[1])
 
+    def test_vectorized_udf_struct_empty(self):
+        df = self.spark.range(10)
+        return_type = StructType()
+
+        def _scalar_f(id):
+            return pd.DataFrame(index=id)
+
+        scalar_f = pandas_udf(_scalar_f, returnType=return_type)
+
+        @pandas_udf(returnType=return_type, functionType=PandasUDFType.SCALAR_ITER)
+        def iter_f(it):
+            for id in it:
+                yield _scalar_f(id)
+
+        for f, udf_type in [(scalar_f, PandasUDFType.SCALAR), (iter_f, PandasUDFType.SCALAR_ITER)]:
+            actual = df.withColumn("f", f(col("id"))).collect()
+            for i, row in enumerate(actual):
+                id, f = row
+                self.assertEqual(i, id)
+                self.assertEqual(Row(), f)
+
     def test_vectorized_udf_nested_struct(self):
         with QuietTest(self.sc):
             self.check_vectorized_udf_nested_struct()

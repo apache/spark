@@ -29,9 +29,8 @@ from pyspark.errors import (
 )
 from pyspark.rdd import PythonEvalType
 from pyspark.sql.functions import lit, udf, udtf
-from pyspark.sql.types import Row
+from pyspark.sql.types import IntegerType, MapType, Row, StringType, StructType
 from pyspark.testing import assertDataFrameEqual
-from pyspark.sql.types import MapType, StringType, IntegerType
 from pyspark.testing.sqlutils import (
     have_pandas,
     have_pyarrow,
@@ -465,6 +464,14 @@ class BaseUDTFTestsMixin:
                 yield {x: str(x)},
 
         self.assertEqual(TestUDTF(lit(1)).collect(), [Row(x={1: "1"})])
+
+    def test_udtf_with_empty_output_types(self):
+        @udtf(returnType=StructType())
+        class TestUDTF:
+            def eval(self):
+                yield tuple()
+
+        self.assertEqual(TestUDTF().collect(), [Row()])
 
     @unittest.skipIf(not have_pandas, pandas_requirement_message)
     def test_udtf_with_pandas_input_type(self):
