@@ -310,9 +310,8 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase {
 
   test("partitioned join: only one side reports partitioning") {
     val customers_partitions = Array(bucket(4, "customer_id"))
-    val orders_partitions = Array(bucket(2, "customer_id"))
 
-    testWithCustomersAndOrders(customers_partitions, orders_partitions, 2)
+    testWithCustomersAndOrders(customers_partitions, Array.empty, 2)
   }
 
   private val items: String = "items"
