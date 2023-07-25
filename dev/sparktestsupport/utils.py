@@ -121,7 +121,7 @@ def determine_modules_to_test(changed_modules, deduplicated=True):
     ... # doctest: +NORMALIZE_WHITESPACE
     ['avro', 'connect', 'docker-integration-tests', 'examples', 'hive', 'hive-thriftserver',
      'mllib', 'protobuf', 'pyspark-connect', 'pyspark-ml', 'pyspark-mllib', 'pyspark-pandas',
-     'pyspark-pandas-connect', 'pyspark-pandas-connect-part-1', pyspark-pandas-connect-part-2',
+     'pyspark-pandas-connect', 'pyspark-pandas-connect-part-1', 'pyspark-pandas-connect-part-2',
      'pyspark-pandas-connect-part-3', 'pyspark-pandas-slow', 'pyspark-sql', 'pyspark-testing',
      'repl', 'sparkr', 'sql', 'sql-kafka-0-10']
     >>> sorted([x.name for x in determine_modules_to_test(
