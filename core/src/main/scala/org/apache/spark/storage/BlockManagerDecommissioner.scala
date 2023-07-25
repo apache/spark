@@ -207,7 +207,7 @@ private[storage] class BlockManagerDecommissioner(
       logInfo("Attempting to migrate all RDD blocks")
       while (!stopped && !stoppedRDD) {
         // Validate if we have peers to migrate to. Otherwise, give up migration.
-        if (bm.getPeers(false).isEmpty) {
+        if (!bm.getPeers(false).exists(x => x != FallbackStorage.FALLBACK_BLOCK_MANAGER_ID)) {
           logWarning("No available peers to receive RDD blocks, stop migration.")
           stoppedRDD = true
         } else {
