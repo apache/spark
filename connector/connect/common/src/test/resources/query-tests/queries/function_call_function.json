@@ -12,7 +12,7 @@
       }
     },
     "expressions": [{
-      "unresolvedFunction": {
+      "callFunction": {
         "functionName": "lower",
         "arguments": [{
           "unresolvedAttribute": {
