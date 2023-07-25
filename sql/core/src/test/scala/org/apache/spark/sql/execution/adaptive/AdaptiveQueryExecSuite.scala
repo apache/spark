@@ -2881,10 +2881,17 @@ class AdaptiveQueryExecSuite
             val bhjs = findTopLevelBroadcastHashJoin(plan)
             assert(bhjs.nonEmpty)
 
-            val skewedShuffleReaders = collect(plan) {
-              case c: AQEShuffleReadExec if c.hasSkewedPartition => c
+            if (localShuffleReader) {
+              val localShuffleReaders = collect(plan) {
+                case c: AQEShuffleReadExec if c.isLocalRead => c
+              }
+              assert(localShuffleReaders.nonEmpty)
+            } else {
+              val skewedShuffleReaders = collect(plan) {
+                case c: AQEShuffleReadExec if c.hasSkewedPartition => c
+              }
+              assert(skewedShuffleReaders.nonEmpty)
             }
-            assert(skewedShuffleReaders.nonEmpty)
           }
         }
 
