@@ -1647,8 +1647,7 @@ private[client] class Shim_v2_3 extends Shim_v2_1 {
           // is thrown when the Shim_v2_3#getTablesByType call returns no get_tables_by_type method.
           // HiveClientImpl#listTablesByType will have fallback processing.
           throw QueryExecutionErrors.getTablesByTypeUnsupportedByHiveVersionError()
-        }
-        else {
+        } else {
           throw ex
         }
     }
