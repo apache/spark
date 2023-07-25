@@ -498,11 +498,6 @@ object SimplifyBinaryComparison
     }
   }
 
-  private[catalyst] def isEmpty(plan: LogicalPlan): Boolean = plan match {
-    case p: LocalRelation => p.data.isEmpty
-    case _ => false
-  }
-
   def apply(plan: LogicalPlan): LogicalPlan = plan.transformWithPruning(
     _.containsPattern(BINARY_COMPARISON), ruleId) {
     case l: LogicalPlan =>
@@ -537,10 +532,13 @@ object SimplifyBinaryComparison
         case FalseLiteral EqualNullSafe b if !b.nullable => Not(b)
 
         case EqualNullSafe(a: ScalarSubquery, b: ScalarSubquery)
-            if isEmpty(a.plan) && isEmpty(b.plan) => TrueLiteral
+            if a.plan.maxRows.contains(0) && b.plan.maxRows.contains(0) =>
+          TrueLiteral
         case e: EqualNullSafe => e
-        case BinaryComparison(a: ScalarSubquery, _) if isEmpty(a.plan) => Literal(null, BooleanType)
-        case BinaryComparison(_, b: ScalarSubquery) if isEmpty(b.plan) => Literal(null, BooleanType)
+        case BinaryComparison(a: ScalarSubquery, _) if a.plan.maxRows.contains(0) =>
+          Literal(null, BooleanType)
+        case BinaryComparison(_, b: ScalarSubquery) if b.plan.maxRows.contains(0) =>
+          Literal(null, BooleanType)
       }
   }
 }
