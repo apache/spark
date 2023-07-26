@@ -396,8 +396,6 @@ class DataSourceV2Suite extends QueryTest with SharedSparkSession with AdaptiveS
     var ex = intercept[IllegalArgumentException](df.explain())
     assert(ex.getMessage == "planInputPartitions must not be called")
 
-    spark.sparkContext.setLogLevel("WARN")
-    spark.conf.set("spark.sql.planChangeLog.level", "WARN")
     Seq("SUPPORTED", "UNSUPPORTED").foreach { o =>
       val dfScan = spark.read.format(classOf[ScanDefinedColumnarSupport].getName)
         .option("columnar", o).load()

@@ -91,22 +91,25 @@ trait DataSourceV2ScanExecBase extends LeafExecNode {
   }
 
   override def outputPartitioning: physical.Partitioning = {
-//    if (partitions.length == 1) {
-//      SinglePartition
-//    } else {
-      keyGroupedPartitioning match {
-        case Some(exprs) if KeyGroupedPartitioning.supportsExpressions(exprs) =>
-          groupedPartitions.map { partitionValues =>
+    keyGroupedPartitioning match {
+      case Some(exprs) if KeyGroupedPartitioning.supportsExpressions(exprs) =>
+        groupedPartitions
+          .map { partitionValues =>
             KeyGroupedPartitioning(exprs, partitionValues.size, partitionValues.map(_._1))
-          }.getOrElse(super.outputPartitioning)
-        case _ =>
-          super.outputPartitioning
-      }
-    // }
+          }
+          .getOrElse(super.outputPartitioning)
+      case _ =>
+        super.outputPartitioning
+    }
   }
 
-  @transient lazy val groupedPartitions: Option[Seq[(InternalRow, Seq[InputPartition])]] =
-    groupPartitions(inputPartitions)
+  @transient lazy val groupedPartitions: Option[Seq[(InternalRow, Seq[InputPartition])]] = {
+    // Early check if we actually need to materialize the input partitions.
+    keyGroupedPartitioning match {
+      case Some(_) => groupPartitions(inputPartitions)
+      case _ => None
+    }
+  }
 
   /**
    * Group partition values for all the input partitions. This returns `Some` iff:
