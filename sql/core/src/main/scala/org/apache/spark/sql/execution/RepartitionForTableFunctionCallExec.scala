@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution
 
+import org.apache.spark.SparkException
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
@@ -31,13 +32,16 @@ import org.apache.spark.sql.catalyst.plans.physical.{AllTuples, ClusteredDistrib
  */
 case class RepartitionForTableFunctionCallExec(
     override val child: SparkPlan,
-    repartitioning: Seq[DistributionForTableFunctionCall])
+    withSinglePartition: Boolean = false,
+    partitionByExpressions: Seq[Expression] = Seq.empty,
+    orderByExpressions: Seq[SortOrder] = Seq.empty)
   extends UnaryExecNode
     with CodegenSupport
     with PartitioningPreservingUnaryExecNode
     with OrderPreservingUnaryExecNode {
 
-  // These methods of this operator by simply delegate by passing through tuples from its child.
+  // These methods of this operator by simply delegate to the child operator by passing through
+  // tuples unmodified.
   override def output: Seq[Attribute] = child.output
   override protected def outputExpressions: Seq[NamedExpression] = child.output
   override protected def orderingExpressions: Seq[SortOrder] = child.outputOrdering
@@ -49,24 +53,25 @@ case class RepartitionForTableFunctionCallExec(
     copy(child = newChild)
   override def doConsume(ctx: CodegenContext, input: Seq[ExprCode], row: ExprCode): String =
     child.asInstanceOf[CodegenSupport].doConsume(ctx, input, row)
-  protected override def doExecute(): RDD[InternalRow] = child.execute()
+  protected override def doExecute(): RDD[InternalRow] = throw executionNotImplementedYetError()
+  private def executionNotImplementedYetError(): Throwable = {
+    SparkException.internalError("query execution for table function calls with repartitioning")
+  }
 
   override def requiredChildDistribution: Seq[Distribution] = {
-    repartitioning.collectFirst {
-      case WithSinglePartition =>
-        Seq(AllTuples)
-      case r: RepartitionBy =>
-        Seq(ClusteredDistribution(r.expressions))
-    }.getOrElse {
+    if (withSinglePartition) {
+      Seq(AllTuples)
+    } else if (partitionByExpressions.nonEmpty) {
+      Seq(ClusteredDistribution(partitionByExpressions))
+    } else {
       super.requiredChildDistribution
     }
   }
 
   override def requiredChildOrdering: Seq[Seq[SortOrder]] = {
-    repartitioning.collectFirst {
-      case b: OrderBy =>
-        Seq(b.expressions)
-    }.getOrElse {
+    if (orderByExpressions.nonEmpty) {
+      Seq(orderByExpressions)
+    } else {
       super.requiredChildOrdering
     }
   }

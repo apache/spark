@@ -45,7 +45,9 @@ case class FunctionTableSubqueryArgumentExpression(
     plan: LogicalPlan,
     outerAttrs: Seq[Expression] = Seq.empty,
     exprId: ExprId = NamedExpression.newExprId,
-    repartitioning: Seq[DistributionForTableFunctionCall] = Seq.empty)
+    withSinglePartition: Boolean = false,
+    partitionByExpressions: Seq[Expression] = Seq.empty,
+    orderByExpressions: Seq[SortOrder] = Seq.empty)
   extends SubqueryExpression(plan, outerAttrs, exprId, Seq.empty, None) with Unevaluable {
 
   override def dataType: DataType = plan.schema
@@ -60,7 +62,10 @@ case class FunctionTableSubqueryArgumentExpression(
     FunctionTableSubqueryArgumentExpression(
       plan.canonicalized,
       outerAttrs.map(_.canonicalized),
-      ExprId(0))
+      ExprId(0),
+      withSinglePartition,
+      partitionByExpressions,
+      orderByExpressions)
   }
 
   override protected def withNewChildrenInternal(
@@ -70,17 +75,24 @@ case class FunctionTableSubqueryArgumentExpression(
   final override def nodePatternsInternal: Seq[TreePattern] =
     Seq(FUNCTION_TABLE_RELATION_ARGUMENT_EXPRESSION)
 
-  lazy val evaluable: LogicalPlan = Project(Seq(Alias(CreateStruct(plan.output), "c")()), plan)
-}
+  def hasRepartitioning: Boolean = withSinglePartition || partitionByExpressions.nonEmpty
 
-/**
- * This represents an expression distribution property for the rows of a TVF input table as
- * indicated by the query.
- */
-sealed trait DistributionForTableFunctionCall
-object WithSinglePartition extends DistributionForTableFunctionCall
-case class RepartitionBy(expressions: Seq[Expression]) extends DistributionForTableFunctionCall
-case class OrderBy(expressions: Seq[SortOrder]) extends DistributionForTableFunctionCall
+  lazy val evaluable: LogicalPlan = {
+    val subquery = if (hasRepartitioning) {
+      // If the TABLE argument includes the WITH SINGLE PARTITION or PARTITION BY or ORDER BY
+      // clause(s), add a corresponding logical operator to represent the repartitioning operation
+      // in the query plan.
+      RepartitionForTableFunctionCall(
+        child = plan,
+        withSinglePartition = withSinglePartition,
+        partitionByExpressions = partitionByExpressions,
+        orderByExpressions = orderByExpressions)
+    } else {
+      plan
+    }
+    Project(Seq(Alias(CreateStruct(subquery.output), "c")()), subquery)
+  }
+}
 
 /**
  * If a table-valued function call includes a TABLE argument with the PARTITION BY clause, we add
@@ -88,7 +100,9 @@ case class OrderBy(expressions: Seq[SortOrder]) extends DistributionForTableFunc
  */
 case class RepartitionForTableFunctionCall(
     child: LogicalPlan,
-    repartitioning: Seq[DistributionForTableFunctionCall]) extends OrderPreservingUnaryNode {
+    withSinglePartition: Boolean,
+    partitionByExpressions: Seq[Expression],
+    orderByExpressions: Seq[SortOrder]) extends OrderPreservingUnaryNode {
   override def output: Seq[Attribute] = child.output
 
   override protected def withNewChildInternal(

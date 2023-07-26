@@ -1495,6 +1495,7 @@ class PlanParserSuite extends AnalysisTest {
   test("SPARK-44503: Support PARTITION BY and ORDER BY clause for TVF TABLE arguments") {
     Seq("partition", "distribute").foreach { partition =>
       Seq("order", "sort").foreach { order =>
+        // Positive tests.
         val sql1 = s"select * from my_tvf(arg1 => table(v1) $partition by col1)"
         assertEqual(
           sql1,
@@ -1506,7 +1507,7 @@ class PlanParserSuite extends AnalysisTest {
                 key = "arg1",
                 value = FunctionTableSubqueryArgumentExpression(
                   plan = UnresolvedRelation(multipartIdentifier = Seq("v1")),
-                  repartitioning = Seq(RepartitionBy(Seq(UnresolvedAttribute("col1"))))
+                  partitionByExpressions = Seq(UnresolvedAttribute("col1"))
                 ))))))
         val sql2 = s"select * from my_tvf(arg1 => table(v1) $partition by col1 $order by col2 asc)"
         assertEqual(
@@ -1519,14 +1520,13 @@ class PlanParserSuite extends AnalysisTest {
                 key = "arg1",
                 value = FunctionTableSubqueryArgumentExpression(
                   plan = UnresolvedRelation(multipartIdentifier = Seq("v1")),
-                  repartitioning = Seq(
-                    RepartitionBy(Seq(
-                      UnresolvedAttribute("col1"))),
-                    OrderBy(Seq(SortOrder(
-                      child = UnresolvedAttribute("col2"),
-                      direction = Ascending,
-                      nullOrdering = NullsFirst,
-                      sameOrderExpressions = Seq.empty))))
+                  partitionByExpressions = Seq(
+                    UnresolvedAttribute("col1")),
+                  orderByExpressions = Seq(SortOrder(
+                    child = UnresolvedAttribute("col2"),
+                    direction = Ascending,
+                    nullOrdering = NullsFirst,
+                    sameOrderExpressions = Seq.empty))
                 ))))))
         val sql3 = s"select * from my_tvf(arg1 => table(v1) " +
           s"$partition by col1, col2 $order by col2 asc, col3 desc)"
@@ -1540,21 +1540,20 @@ class PlanParserSuite extends AnalysisTest {
                 key = "arg1",
                 value = FunctionTableSubqueryArgumentExpression(
                   plan = UnresolvedRelation(multipartIdentifier = Seq("v1")),
-                  repartitioning = Seq(
-                    RepartitionBy(Seq(
-                      UnresolvedAttribute("col1"),
-                      UnresolvedAttribute("col2"))),
-                    OrderBy(Seq(
-                      SortOrder(
-                        child = UnresolvedAttribute("col2"),
-                        direction = Ascending,
-                        nullOrdering = NullsFirst,
-                        sameOrderExpressions = Seq.empty),
-                      SortOrder(
-                        child = UnresolvedAttribute("col3"),
-                        direction = Descending,
-                        nullOrdering = NullsLast,
-                        sameOrderExpressions = Seq.empty))))
+                  partitionByExpressions = Seq(
+                    UnresolvedAttribute("col1"),
+                    UnresolvedAttribute("col2")),
+                  orderByExpressions = Seq(
+                    SortOrder(
+                      child = UnresolvedAttribute("col2"),
+                      direction = Ascending,
+                      nullOrdering = NullsFirst,
+                      sameOrderExpressions = Seq.empty),
+                    SortOrder(
+                      child = UnresolvedAttribute("col3"),
+                      direction = Descending,
+                      nullOrdering = NullsLast,
+                      sameOrderExpressions = Seq.empty))
                 ))))))
         val sql4 = s"select * from my_tvf(arg1 => table(select col1, col2, col3 from v2) " +
           s"$partition by col1, col2 order by col2 asc, col3 desc)"
@@ -1573,21 +1572,20 @@ class PlanParserSuite extends AnalysisTest {
                       UnresolvedAttribute("col2"),
                       UnresolvedAttribute("col3")),
                     child = UnresolvedRelation(multipartIdentifier = Seq("v2"))),
-                  repartitioning = Seq(
-                    RepartitionBy(Seq(
-                      UnresolvedAttribute("col1"),
-                      UnresolvedAttribute("col2"))),
-                    OrderBy(Seq(
-                      SortOrder(
-                        child = UnresolvedAttribute("col2"),
-                        direction = Ascending,
-                        nullOrdering = NullsFirst,
-                        sameOrderExpressions = Seq.empty),
-                      SortOrder(
-                        child = UnresolvedAttribute("col3"),
-                        direction = Descending,
-                        nullOrdering = NullsLast,
-                        sameOrderExpressions = Seq.empty))))
+                  partitionByExpressions = Seq(
+                    UnresolvedAttribute("col1"),
+                    UnresolvedAttribute("col2")),
+                  orderByExpressions = Seq(
+                    SortOrder(
+                      child = UnresolvedAttribute("col2"),
+                      direction = Ascending,
+                      nullOrdering = NullsFirst,
+                      sameOrderExpressions = Seq.empty),
+                    SortOrder(
+                      child = UnresolvedAttribute("col3"),
+                      direction = Descending,
+                      nullOrdering = NullsLast,
+                      sameOrderExpressions = Seq.empty))
                 ))))))
         val sql5 = s"select * from my_tvf(arg1 => table(v1) with single partition)"
         assertEqual(
@@ -1600,8 +1598,23 @@ class PlanParserSuite extends AnalysisTest {
                 key = "arg1",
                 value = FunctionTableSubqueryArgumentExpression(
                   plan = UnresolvedRelation(multipartIdentifier = Seq("v1")),
-                  repartitioning = Seq(WithSinglePartition)
+                  withSinglePartition = true
                 ))))))
+        // Negative tests.
+        val sql6 = "select * from my_tvf(arg1 => table(1) partition by col1 with single partition)"
+        checkError(
+          exception = parseException(sql6),
+          errorClass = "PARSE_SYNTAX_ERROR",
+          parameters = Map(
+            "error" -> "'partition'",
+            "hint" -> ""))
+        val sql7 = "select * from my_tvf(arg1 => table(1) order by col1)"
+        checkError(
+          exception = parseException(sql7),
+          errorClass = "PARSE_SYNTAX_ERROR",
+          parameters = Map(
+            "error" -> "'order'",
+            "hint" -> ""))
       }
     }
   }

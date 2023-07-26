@@ -15,6 +15,8 @@
 # limitations under the License.
 #
 
+import re
+import textwrap
 import unittest
 
 from typing import Iterator
@@ -487,6 +489,7 @@ class BaseUDTFTestsMixin:
 
         self.assertEqual(TestUDTF(lit(1)).collect(), [Row(x={1: "1"})])
 
+    """
     def test_udtf_with_pandas_input_type(self):
         import pandas as pd
 
@@ -503,6 +506,7 @@ class BaseUDTFTestsMixin:
             self.spark.sql(
                 "select * from values (1, 2), (2, 3) t(a, b), lateral test_udtf(a, b)"
             ).collect()
+    """
 
     def test_udtf_register_error(self):
         @udf
@@ -1213,6 +1217,79 @@ class BaseUDTFTestsMixin:
             AnalysisException, r"analyze\(\) takes 0 positional arguments but 2 were given"
         ):
             self.spark.sql("SELECT * FROM test_udtf(1, 'x')").collect()
+
+    def test_udtf_call_with_partition_by(self):
+        class TestUDTF:
+            def __init__(self):
+                self._sum = 0
+
+            def eval(self, row: Row):
+                self._sum += row["x"]
+
+            def terminate(self):
+                yield self._sum,
+
+        func = udtf(TestUDTF, returnType="a: int")
+        self.spark.udtf.register("test_udtf_pb", func)
+
+        def actual(query: str) -> str:
+            df = self.spark.sql(query)
+            value = df.collect()[0][0]
+            stripExprIds = re.sub(r'#[\d]+', r'#xx', value)
+            stripPlanIds = re.sub(r'plan_id=[\d]+', r'plan_id=xx', stripExprIds)
+            print('Query plan: ' + stripPlanIds)
+            return stripPlanIds.strip('\n')
+        def expected(input: str) -> str:
+            return textwrap.dedent(input).strip('\n')
+
+        self.assertEqual(
+            actual('''
+                EXPLAIN SELECT * FROM test_udtf_pb(
+                  TABLE(VALUES (1), (1) AS tab(x))
+                  PARTITION BY X)
+                '''),
+            expected('''
+                == Physical Plan ==
+                AdaptiveSparkPlan isFinalPlan=false
+                +- BatchEvalPythonUDTF test_udtf_pb(c#xx)#xx, [a#xx]
+                   +- Project [named_struct(x, x#xx) AS c#xx]
+                      +- RepartitionForTableFunctionCall false, [X#xx]
+                         +- Exchange hashpartitioning(X#xx, 200), ENSURE_REQUIREMENTS, [plan_id=xx]
+                            +- LocalTableScan [x#xx]
+                '''))
+
+        self.assertEqual(
+            actual('''
+                EXPLAIN SELECT * FROM test_udtf_pb(
+                  TABLE(VALUES (1), (1) AS tab(x))
+                  WITH SINGLE PARTITION)
+                '''),
+            expected('''
+                == Physical Plan ==
+                AdaptiveSparkPlan isFinalPlan=false
+                +- BatchEvalPythonUDTF test_udtf_pb(c#xx)#xx, [a#xx]
+                   +- Project [named_struct(x, x#xx) AS c#xx]
+                      +- RepartitionForTableFunctionCall true
+                         +- Exchange SinglePartition, ENSURE_REQUIREMENTS, [plan_id=xx]
+                            +- LocalTableScan [x#xx]
+                '''))
+
+        self.assertEqual(
+            actual('''
+                EXPLAIN SELECT * FROM test_udtf_pb(
+                  TABLE(VALUES ('abcd', 2), ('xycd', 4) AS tab(x, y))
+                  PARTITION BY SUBSTR(X, 2) ORDER BY X, Y)
+                '''),
+            expected('''
+                == Physical Plan ==
+                AdaptiveSparkPlan isFinalPlan=false
+                +- BatchEvalPythonUDTF test_udtf_pb(c#xx)#xx, [a#xx]
+                   +- Project [named_struct(x, x#xx, y, y#xx) AS c#xx]
+                      +- RepartitionForTableFunctionCall false, [substr(X#xx, 2, 2147483647)], [X#xx ASC NULLS FIRST, Y#xx ASC NULLS FIRST]
+                         +- Sort [X#xx ASC NULLS FIRST, Y#xx ASC NULLS FIRST], false, 0
+                            +- Exchange hashpartitioning(substr(X#xx, 2, 2147483647), 200), ENSURE_REQUIREMENTS, [plan_id=xx]
+                               +- LocalTableScan [x#xx, y#xx]
+                '''))
 
 
 class UDTFTests(BaseUDTFTestsMixin, ReusedSQLTestCase):

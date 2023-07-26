@@ -1564,27 +1564,43 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
     }.getOrElse {
       plan(ctx.query)
     }
-    val repartitioning = ArrayBuffer.empty[DistributionForTableFunctionCall]
-    if (ctx.tableArgumentPartitioning.SINGLE != null) {
-      repartitioning.append(WithSinglePartition)
-    }
+    var withSinglePartition = false
+    var partitionByExpressions = Seq.empty[Expression]
+    var orderByExpressions = Seq.empty[SortOrder]
+    Option(ctx.tableArgumentPartitioning)
+      .foreach { p =>
+        if (p.SINGLE != null) {
+          withSinglePartition = true
+        }
+      }
     Option(ctx.tableArgumentPartitioning)
       .map(_.partition.asScala.map(expression))
-      .map { expressions =>
+      .foreach { expressions =>
         if (expressions.nonEmpty) {
-          repartitioning.append(RepartitionBy(expressions))
+          partitionByExpressions = expressions
         }
       }
     Option(ctx.tableArgumentPartitioning)
       .map(_.sortItem.asScala.map(visitSortItem))
-      .map { expressions =>
+      .foreach { expressions =>
         if (expressions.nonEmpty) {
-          repartitioning.append(OrderBy(expressions))
+          orderByExpressions = expressions
         }
       }
+    validate(
+      !(withSinglePartition && partitionByExpressions.nonEmpty),
+      message = "WITH SINGLE PARTITION cannot be specified if PARTITION BY is also present",
+      ctx = ctx.tableArgumentPartitioning)
+    validate(
+      !(orderByExpressions.nonEmpty && partitionByExpressions.isEmpty && !withSinglePartition),
+      message = "ORDER BY cannot be specified unless either " +
+        "PARTITION BY or WITH SINGLE PARTITION is also present",
+      ctx = ctx.tableArgumentPartitioning)
     FunctionTableSubqueryArgumentExpression(
       plan = p,
-      repartitioning = repartitioning)
+      withSinglePartition = withSinglePartition,
+      partitionByExpressions = partitionByExpressions,
+      orderByExpressions = orderByExpressions)
   }
 
   private def extractFunctionTableNamedArgument(

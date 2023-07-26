@@ -943,7 +943,9 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       case r: RepartitionForTableFunctionCall =>
         Seq(RepartitionForTableFunctionCallExec(
           child = planLater(r.child),
-          repartitioning = r.repartitioning))
+          withSinglePartition = r.withSinglePartition,
+          partitionByExpressions = r.partitionByExpressions,
+          orderByExpressions = r.orderByExpressions))
       case _ => Nil
     }
   }
