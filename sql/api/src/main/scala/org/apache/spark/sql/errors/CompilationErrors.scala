@@ -40,6 +40,20 @@ private[sql] trait CompilationErrors extends DataTypeErrorsBase {
         "caseSensitiveConfig" -> toSQLConf(SqlApiConf.CASE_SENSITIVE_KEY)),
       cause = null)
   }
+
+  def descriptorParseError(cause: Throwable): Throwable = {
+    new SparkException(
+      errorClass = "CANNOT_PARSE_PROTOBUF_DESCRIPTOR",
+      messageParameters = Map.empty,
+      cause = cause)
+  }
+
+  def cannotFindDescriptorFileError(filePath: String, cause: Throwable): Throwable = {
+    new SparkException(
+      errorClass = "PROTOBUF_DESCRIPTOR_FILE_NOT_FOUND",
+      messageParameters = Map("filePath" -> filePath),
+      cause = cause)
+  }
 }
 
 object CompilationErrors extends CompilationErrors
