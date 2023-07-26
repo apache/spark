@@ -426,7 +426,7 @@ jobs:
     - name: Run tests
       env: ${{ fromJSON(inputs.envs) }}
       run: |
-        if [[ "$MODULES_TO_TEST" == "pyspark-errors" ]]; then export PATH=$PATH:$HOME/miniconda/bin && export SKIP_PACKAGING=false; fi
+        if [ "$MODULES_TO_TEST" == "pyspark-errors" ]; then export PATH=$PATH:$HOME/miniconda/bin && export SKIP_PACKAGING=false; fi
         ./dev/run-tests --parallelism 1 --modules "$MODULES_TO_TEST"
     - name: Upload coverage to Codecov
       if: fromJSON(inputs.envs).PYSPARK_CODECOV == 'true'
