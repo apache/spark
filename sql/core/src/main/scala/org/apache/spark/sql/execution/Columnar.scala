@@ -30,7 +30,7 @@ import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.connector.read.{PushedBroadcastFilterData, SupportsRuntimeFiltering}
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
-import org.apache.spark.sql.execution.joins.{BroadcastedJoinKeysWrapperImpl, BroadcastHashJoinUtil, HashedRelation}
+import org.apache.spark.sql.execution.joins.{BroadcastedJoinKeysWrapperImpl, BroadcastHashJoinExec, BroadcastHashJoinUtil, HashedRelation}
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
 import org.apache.spark.sql.execution.vectorized.{OffHeapColumnVector, OnHeapColumnVector, WritableColumnVector}
 import org.apache.spark.sql.types._
@@ -164,10 +164,17 @@ case class ColumnarToRowExec(child: SparkPlan) extends ColumnarToRowTransition w
   override protected def doProduce(ctx: CodegenContext): String = {
     if (!processedBCVar) {
       processedBCVar = true
-      val (batchScanOpt, pushedBroadcastFilters) = getPushedBroadcastVarFilters
-
-      if (pushedBroadcastFilters.isEmpty) {
+      val ignoreBroadcastVar = this.parent match {
+        case bhj: BroadcastHashJoinExec => bhj.getBroadcastID
+        case _ => None
+      }
+      val (batchScanOpt, pushedBroadcastFiltersTemp) = getPushedBroadcastVarFilters
+      if (pushedBroadcastFiltersTemp.isEmpty) {
         checkForWarning(batchScanOpt)
+      }
+      val pushedBroadcastFilters = ignoreBroadcastVar.fold(pushedBroadcastFiltersTemp)(
+        id => pushedBroadcastFiltersTemp.filterNot(_.bcVar.getBroadcastVarId == id))
+      if (pushedBroadcastFilters.isEmpty) {
         this.doProduceNoBroadcastVarFilterInsert(ctx)
       } else {
         this.filterCountCorrectionTerm = Option(ctx.freshName("filterCountCorrection"))
