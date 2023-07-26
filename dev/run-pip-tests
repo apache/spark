@@ -26,10 +26,12 @@ FWDIR="$(cd "$(dirname "$0")"/..; pwd)"
 cd "$FWDIR"
 
 du -hs *
+du -hs tools/*
+du -hs tools/*/*
 
 echo "============================="
 
-sudo du -hs /*
+du -hs /*
 
 echo "Constructing virtual env for testing"
 VIRTUALENV_BASE=$(mktemp -d)
