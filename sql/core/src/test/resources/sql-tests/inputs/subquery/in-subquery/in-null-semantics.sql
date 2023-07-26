@@ -1,7 +1,7 @@
 create temp view v (c) as values (1), (null);
 create temp view v_empty (e) as select 1 where false;
 
--- Note: tables and temp views hit different optimization/execution codepaths
+-- Note: tables and temp views hit different optimization/execution codepaths: expressions over temp views are evaled at query compilation time by ConvertToLocalRelation
 create table t(c int) using json;
 insert into t values (1), (null);
 create table t2(d int) using json;

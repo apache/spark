@@ -284,11 +284,11 @@ object OptimizeIn extends Rule[LogicalPlan] {
     _.containsPattern(IN), ruleId) {
     case q: LogicalPlan => q.transformExpressionsDownWithPruning(_.containsPattern(IN), ruleId) {
       case In(v, list) if list.isEmpty =>
+        // IN (empty list) is always false under current behavior.
+        // Under legacy behavior it's null if the left side is null, otherwise false (SPARK-44550).
         if (!SQLConf.get.getConf(SQLConf.LEGACY_NULL_IN_EMPTY_LIST_BEHAVIOR)) {
           FalseLiteral
         } else {
-          // Incorrect legacy behavior optimizes to null if the left side is null, and otherwise
-          // to false.
           If(IsNotNull(v), FalseLiteral, Literal(null, BooleanType))
         }
       case expr @ In(v, list) if expr.inSetConvertible =>
