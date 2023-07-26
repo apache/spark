@@ -252,7 +252,7 @@ class SparkConnectServiceSuite extends SharedSparkSession with MockitoSugar with
             .newBuilder()
             .setInput(
               proto.Relation.newBuilder().setSql(proto.SQL.newBuilder().setQuery("select 1")))
-            .setPath("my/test/path")
+            .setPath(Utils.createTempDir().getAbsolutePath)
             .setMode(proto.WriteOperation.SaveMode.SAVE_MODE_OVERWRITE)),
       proto.Command
         .newBuilder()
@@ -300,7 +300,7 @@ class SparkConnectServiceSuite extends SharedSparkSession with MockitoSugar with
             .setAvailableNow(true)
             .setQueryName("test")
             .setFormat("memory")
-            .putOptions("checkpointLocation", s"${UUID.randomUUID}")
+            .putOptions("checkpointLocation", Utils.createTempDir().getAbsolutePath)
             .setPath("test-path")
             .build()),
       proto.Command
