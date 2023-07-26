@@ -171,7 +171,7 @@ class DatetimeMethods:
         2017-01-06    4
         2017-01-07    5
         2017-01-08    6
-        dtype: int64
+        dtype: int32
         """
 
         def pandas_dayofweek(s) -> ps.Series[np.int32]:  # type: ignore[no-untyped-def]
@@ -320,7 +320,7 @@ class DatetimeMethods:
         1    1
         2    2
         3    2
-        Name: dates, dtype: int64
+        Name: dates, dtype: int32
 
         >>> df.dates.dt.is_quarter_start
         0    False
@@ -370,7 +370,7 @@ class DatetimeMethods:
         1    1
         2    2
         3    2
-        Name: dates, dtype: int64
+        Name: dates, dtype: int32
 
         >>> df.dates.dt.is_quarter_start
         0    False
