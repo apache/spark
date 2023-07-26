@@ -209,7 +209,7 @@ class DeepspeedTorchDistributorDistributedEndToEnd(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         (cls.gpu_discovery_script_file_name, cls.mnist_dir_path) = set_up_test_dirs()
-        # This is set to False because if not, the SparkConf will 
+        # "loadDefaults" is set to False because if not, the SparkConf will 
         # use contain configurations from the LocalEndToEnd test,
         # which causes the test to break.
         conf = SparkConf(loadDefaults=False)
@@ -232,7 +232,7 @@ class DeepspeedTorchDistributorDistributedEndToEnd(unittest.TestCase):
        # Arguments for the pythagoras function train_fn
        x = 3
        y = 4
-       dist = DeepspeedTorchDistributor(num_gpus=2, use_gpu=False, local_mode=False)
+       dist = DeepspeedTorchDistributor(numGpus=2, useGpu=False, localMode=False)
        output = dist.run(train_fn, x, y)
        self.assertEqual(output, 5)
 
@@ -240,7 +240,7 @@ class DeepspeedTorchDistributorDistributedEndToEnd(unittest.TestCase):
         # TODO: change to better test script
         # once Deepspeed CPU support is better
         with _create_pytorch_training_test_file() as cp_path:
-            dist = DeepspeedTorchDistributor(num_gpus=True, use_gpu=False, local_mode=False)
+            dist = DeepspeedTorchDistributor(numGpus=True, useGpu=False, localMode=False)
             dist.run(cp_path, 2, 5)
 
 
@@ -269,13 +269,13 @@ class DeepspeedDistributorLocalEndToEndTests(unittest.TestCase):
        # Arguments for the pythagoras function train_fn
        x = 3
        y = 4
-       dist = DeepspeedTorchDistributor(num_gpus=2, use_gpu=False, local_mode=True)
+       dist = DeepspeedTorchDistributor(numGpus=2, useGpu=False, localMode=True)
        output = dist.run(train_fn, x, y)
        self.assertEqual(output, 5)
 
     def test_pytorch_file_e2e(self):
         with _create_pytorch_training_test_file() as  path_to_train_file:
-            dist = DeepspeedTorchDistributor(num_gpus=2, use_gpu=False, local_mode=True)
+            dist = DeepspeedTorchDistributor(numGpus=2, useGpu=False, localMode=True)
             dist.run(path_to_train_file, 2, 5)
 
 
