@@ -14,8 +14,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+from contextlib import contextmanager
 import os
 import sys
+import textwrap
 from typing import Any, Tuple, Dict
 
 import shutil
@@ -177,6 +179,24 @@ def _create_basic_function():
        return (leg1 * leg1 + leg2 * leg2)**0.5
    return pythagoras 
 
+
+@contextmanager
+def _create_pytorch_training_test_file():
+        str_to_write = textwrap.dedent(""" 
+import sys
+def pythagorean_thm(x : int, y: int):
+    import deepspeed
+    return (x*x + y*y)**0.5
+print(pythagorean_thm(int(sys.argv[1]), int(sys.argv[2])))
+""")
+        cp_path = f"/tmp/test_deepspeed_training_file.py"
+        with open(cp_path, "w") as f:
+            f.write(str_to_write)
+        yield cp_path 
+        os.remove(cp_path)
+
+
+
 # The program and function that we use in the end-to-end tests
 # is very simple because in the Spark CI we only have access
 # to CPUs and at this point in time, CPU support is limited
@@ -201,6 +221,12 @@ class DeepspeedTorchDistributorDistributedEndToEnd(unittest.TestCase):
         sc = SparkContext("local-cluster[2,2,512]",cls.__name__,conf=conf)
         cls.spark = SparkSession(sc)
 
+    @classmethod
+    def tearDownClass(cls):
+        shutil.rmtree(cls.mnist_dir_path)
+        os.unlink(cls.gpu_discovery_script_file_name)
+        cls.spark.stop()
+
     def test_simple_function_e2e(self):
        train_fn = _create_basic_function()
        # Arguments for the pythagoras function train_fn
@@ -211,28 +237,12 @@ class DeepspeedTorchDistributorDistributedEndToEnd(unittest.TestCase):
        self.assertEqual(output, 5)
 
     def test_pytorch_file_e2e(self):
-        import textwrap
         # TODO: change to better test script
         # once Deepspeed CPU support is better
-        str_to_write = textwrap.dedent(""" 
-import sys
-def pythagorean_thm(x : int, y: int):
-    import deepspeed
-    return (x*x + y*y)**0.5
-print(pythagorean_thm(int(sys.argv[1]), int(sys.argv[2])))
-""")
-        cp_path = f"/tmp/test_deepspeed_training_file.py"
-        with open(cp_path, "w") as f:
-            f.write(str_to_write)
-        dist = DeepspeedTorchDistributor(num_gpus=True, use_gpu=False, local_mode=False)
-        dist.run(cp_path, 2, 5)
-        os.remove(cp_path)
+        with _create_pytorch_training_test_file() as cp_path:
+            dist = DeepspeedTorchDistributor(num_gpus=True, use_gpu=False, local_mode=False)
+            dist.run(cp_path, 2, 5)
 
-    @classmethod
-    def tearDownClass(cls):
-        shutil.rmtree(cls.mnist_dir_path)
-        os.unlink(cls.gpu_discovery_script_file_name)
-        cls.spark.stop()
 
 class DeepspeedDistributorLocalEndToEndTests(unittest.TestCase):
 
@@ -248,6 +258,12 @@ class DeepspeedDistributorLocalEndToEndTests(unittest.TestCase):
         sc = SparkContext("local-cluster[2,2,512]",cls.__name__,conf=conf)
         cls.spark = SparkSession(sc)
     
+    @classmethod
+    def tearDownClass(cls):
+        shutil.rmtree(cls.mnist_dir_path)
+        os.unlink(cls.gpu_discovery_script_file_name)
+        cls.spark.stop()
+
     def test_simple_function_e2e(self):
        train_fn = _create_basic_function()
        # Arguments for the pythagoras function train_fn
@@ -257,17 +273,11 @@ class DeepspeedDistributorLocalEndToEndTests(unittest.TestCase):
        output = dist.run(train_fn, x, y)
        self.assertEqual(output, 5)
 
-
     def test_pytorch_file_e2e(self):
-        path_to_train_file = "python/test_support/test_deepspeed_training_file.py"
-        dist = DeepspeedTorchDistributor(num_gpus=2, use_gpu=False, local_mode=True)
-        dist.run(path_to_train_file, 2, 5)
+        with _create_pytorch_training_test_file() as  path_to_train_file:
+            dist = DeepspeedTorchDistributor(num_gpus=2, use_gpu=False, local_mode=True)
+            dist.run(path_to_train_file, 2, 5)
 
-    @classmethod
-    def tearDownClass(cls):
-        shutil.rmtree(cls.mnist_dir_path)
-        os.unlink(cls.gpu_discovery_script_file_name)
-        cls.spark.stop()
 
 if __name__ == "__main__":
     from pyspark.ml.deepspeed.tests.test_deepspeed_distributor import *  # noqa: F401,F403
