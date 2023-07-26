@@ -146,5 +146,7 @@ public interface Scan {
    *
    * @since 3.5.0
    */
-  default ColumnarSupportMode columnarSupportMode() { return ColumnarSupportMode.PARTITION_DEFINED; }
+  default ColumnarSupportMode columnarSupportMode() {
+    return ColumnarSupportMode.PARTITION_DEFINED;
+  }
 }
