@@ -559,6 +559,10 @@ def main():
 
         changed_modules = test_modules
         if len(changed_modules) == 0:
+            # If SKIP_PACKAGING is explicitly set (no matter true or false),
+            # let run_python_packaging_tests to determine whether it should be run.
+            if not os.environ.get("SKIP_PYTHON") and os.environ.get("SKIP_PACKAGING") is not None:
+                run_python_packaging_tests()
             print("[info] There are no modules to test, exiting without testing.")
             return
 
