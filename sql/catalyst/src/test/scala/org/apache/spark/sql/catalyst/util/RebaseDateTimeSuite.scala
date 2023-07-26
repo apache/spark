@@ -186,8 +186,8 @@ class RebaseDateTimeSuite extends SparkFunSuite with Matchers with SQLHelper {
 
   test("validate rebase records in JSON files") {
     Seq(
-      "gregorian-julian-rebase-micros.json",
-      "julian-gregorian-rebase-micros.json").foreach { json =>
+      "src/resources/gregorian-julian-rebase-micros.json",
+      "src/resources/julian-gregorian-rebase-micros.json").foreach { json =>
       withClue(s"JSON file = $json") {
         val rebaseRecords = loadRebaseRecords(json)
         rebaseRecords.foreach { case (_, rebaseRecord) =>
@@ -311,7 +311,7 @@ class RebaseDateTimeSuite extends SparkFunSuite with Matchers with SQLHelper {
       adjustFunc = (_: TimeZone, micros: Long) => micros,
       rebaseFunc = rebaseGregorianToJulianMicros,
       dir = "/Users/maximgekk/tmp",
-      fileName = "gregorian-julian-rebase-micros.json")
+      fileName = "src/resources/gregorian-julian-rebase-micros.json")
   }
 
   ignore("generate 'julian-gregorian-rebase-micros.json'") {
@@ -319,7 +319,7 @@ class RebaseDateTimeSuite extends SparkFunSuite with Matchers with SQLHelper {
       adjustFunc = rebaseGregorianToJulianMicros,
       rebaseFunc = rebaseJulianToGregorianMicros,
       dir = "/Users/maximgekk/tmp",
-      fileName = "julian-gregorian-rebase-micros.json")
+      fileName = "src/resources/julian-gregorian-rebase-micros.json")
   }
 
   test("rebase gregorian to/from julian days - BCE era") {

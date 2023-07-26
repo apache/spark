@@ -191,11 +191,14 @@ object ArrowSerializer {
       allocator: BufferAllocator,
       timeZoneId: String): ByteString = {
     val serializer = new ArrowSerializer[T](enc, allocator, timeZoneId)
-    serializer.reset()
-    input.foreach(serializer.append)
-    val output = ByteString.newOutput()
-    serializer.writeIpcStream(output)
-    output.toByteString
+    try {
+      input.foreach(serializer.append)
+      val output = ByteString.newOutput()
+      serializer.writeIpcStream(output)
+      output.toByteString
+    } finally {
+      serializer.close()
+    }
   }
 
   /**

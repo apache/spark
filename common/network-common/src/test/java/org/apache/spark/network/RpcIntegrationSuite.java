@@ -38,8 +38,8 @@ import org.apache.spark.network.buffer.ManagedBuffer;
 import org.apache.spark.network.buffer.NioManagedBuffer;
 import org.apache.spark.network.client.*;
 import org.apache.spark.network.server.*;
-import org.apache.spark.network.util.JavaUtils;
 import org.apache.spark.network.util.MapConfigProvider;
+import org.apache.spark.network.util.NettyUtils;
 import org.apache.spark.network.util.TransportConf;
 
 public class RpcIntegrationSuite {
@@ -64,11 +64,11 @@ public class RpcIntegrationSuite {
           TransportClient client,
           ByteBuffer message,
           RpcResponseCallback callback) {
-        String msg = JavaUtils.bytesToString(message);
+        String msg = NettyUtils.bytesToString(message);
         String[] parts = msg.split("/");
         switch (parts[0]) {
           case "hello":
-            callback.onSuccess(JavaUtils.stringToBytes("Hello, " + parts[1] + "!"));
+            callback.onSuccess(NettyUtils.stringToBytes("Hello, " + parts[1] + "!"));
             break;
           case "return error":
             callback.onFailure(new RuntimeException("Returned: " + parts[1]));
@@ -83,12 +83,12 @@ public class RpcIntegrationSuite {
           TransportClient client,
           ByteBuffer messageHeader,
           RpcResponseCallback callback) {
-        return receiveStreamHelper(JavaUtils.bytesToString(messageHeader));
+        return receiveStreamHelper(NettyUtils.bytesToString(messageHeader));
       }
 
       @Override
       public void receive(TransportClient client, ByteBuffer message) {
-        oneWayMsgs.add(JavaUtils.bytesToString(message));
+        oneWayMsgs.add(NettyUtils.bytesToString(message));
       }
 
       @Override
@@ -184,7 +184,7 @@ public class RpcIntegrationSuite {
     RpcResponseCallback callback = new RpcResponseCallback() {
       @Override
       public void onSuccess(ByteBuffer message) {
-        String response = JavaUtils.bytesToString(message);
+        String response = NettyUtils.bytesToString(message);
         res.successMessages.add(response);
         sem.release();
       }
@@ -197,7 +197,7 @@ public class RpcIntegrationSuite {
     };
 
     for (String command : commands) {
-      client.sendRpc(JavaUtils.stringToBytes(command), callback);
+      client.sendRpc(NettyUtils.stringToBytes(command), callback);
     }
 
     if (!sem.tryAcquire(commands.length, 5, TimeUnit.SECONDS)) {
@@ -216,7 +216,7 @@ public class RpcIntegrationSuite {
 
     for (String stream : streams) {
       int idx = stream.lastIndexOf('/');
-      ManagedBuffer meta = new NioManagedBuffer(JavaUtils.stringToBytes(stream));
+      ManagedBuffer meta = new NioManagedBuffer(NettyUtils.stringToBytes(stream));
       String streamName = (idx == -1) ? stream : stream.substring(idx + 1);
       ManagedBuffer data = testData.openStream(conf, streamName);
       client.uploadStream(meta, data, new RpcStreamCallback(stream, res, sem));
@@ -307,7 +307,7 @@ public class RpcIntegrationSuite {
     final String message = "no reply";
     try (TransportClient client =
         clientFactory.createClient(TestUtils.getLocalHost(), server.getPort())) {
-      client.send(JavaUtils.stringToBytes(message));
+      client.send(NettyUtils.stringToBytes(message));
       assertEquals(0, client.getHandler().numOutstandingRequests());
 
       // Make sure the message arrives.

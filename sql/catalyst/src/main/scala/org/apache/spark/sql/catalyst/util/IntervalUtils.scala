@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.catalyst.util
 
-import java.time.{Duration, Period}
-import java.time.temporal.ChronoUnit
 import java.util.Locale
 import java.util.concurrent.TimeUnit
 
@@ -781,30 +779,6 @@ object IntervalUtils extends SparkIntervalUtils {
     micros = Math.addExact(micros, Math.multiplyExact(mins, MICROS_PER_MINUTE))
     micros
   }
-
-  /**
-   * Obtains a [[Duration]] representing a number of microseconds.
-   *
-   * @param micros The number of microseconds, positive or negative
-   * @return A [[Duration]], not null
-   */
-  def microsToDuration(micros: Long): Duration = Duration.of(micros, ChronoUnit.MICROS)
-
-  /**
-   * Obtains a [[Period]] representing a number of months. The days unit will be zero, and the years
-   * and months units will be normalized.
-   *
-   * <p>
-   * The months unit is adjusted to have an absolute value < 12, with the years unit being adjusted
-   * to compensate. For example, the method returns "2 years and 3 months" for the 27 input months.
-   * <p>
-   * The sign of the years and months units will be the same after normalization.
-   * For example, -13 months will be converted to "-1 year and -1 month".
-   *
-   * @param months The number of months, positive or negative
-   * @return The period of months, not null
-   */
-  def monthsToPeriod(months: Int): Period = Period.ofMonths(months).normalized()
 
   def intToYearMonthInterval(v: Int, startField: Byte, endField: Byte): Int = {
     endField match {

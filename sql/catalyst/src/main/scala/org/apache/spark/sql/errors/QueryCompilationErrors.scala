@@ -48,7 +48,7 @@ import org.apache.spark.sql.types._
  * As commands are executed eagerly, this also includes errors thrown during the execution of
  * commands, which users can see immediately.
  */
-private[sql] object QueryCompilationErrors extends QueryErrorsBase {
+private[sql] object QueryCompilationErrors extends QueryErrorsBase with CompilationErrors {
 
   def unexpectedRequiredParameterInFunctionSignature(
       functionName: String, functionSignature: FunctionSignature) : Throwable = {
@@ -1929,7 +1929,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
       origin = context)
   }
 
-  def ambiguousColumnOrFieldError(
+  override def ambiguousColumnOrFieldError(
       name: Seq[String], numMatches: Int): Throwable = {
     new AnalysisException(
       errorClass = "AMBIGUOUS_COLUMN_OR_FIELD",
@@ -2464,7 +2464,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
       messageParameters = Map("columnName" -> toSQLId(columnName)))
   }
 
-  def columnNotFoundError(colName: String): Throwable = {
+  override def columnNotFoundError(colName: String): Throwable = {
     new AnalysisException(
       errorClass = "COLUMN_NOT_FOUND",
       messageParameters = Map(
@@ -3566,7 +3566,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
       messageParameters = Map("messageName" -> messageName))
   }
 
-  def cannotFindDescriptorFileError(filePath: String, cause: Throwable): Throwable = {
+  override def cannotFindDescriptorFileError(filePath: String, cause: Throwable): Throwable = {
     new AnalysisException(
       errorClass = "PROTOBUF_DESCRIPTOR_FILE_NOT_FOUND",
       messageParameters = Map("filePath" -> filePath),

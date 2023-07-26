@@ -17,9 +17,12 @@
 
 package org.apache.spark.network.util;
 
+import java.nio.ByteBuffer;
+import java.nio.charset.StandardCharsets;
 import java.util.concurrent.ThreadFactory;
 
 import io.netty.buffer.PooledByteBufAllocator;
+import io.netty.buffer.Unpooled;
 import io.netty.channel.Channel;
 import io.netty.channel.EventLoopGroup;
 import io.netty.channel.ServerChannel;
@@ -192,5 +195,21 @@ public class NettyUtils {
       allowDirectBufs = conf.preferDirectBufs();
     }
     return allowDirectBufs && PlatformDependent.directBufferPreferred();
+  }
+
+  /**
+   * Convert the given string to a byte buffer. The resulting buffer can be
+   * converted back to the same string through {@link #bytesToString(ByteBuffer)}.
+   */
+  public static ByteBuffer stringToBytes(String s) {
+    return Unpooled.wrappedBuffer(s.getBytes(StandardCharsets.UTF_8)).nioBuffer();
+  }
+
+  /**
+   * Convert the given byte buffer to a string. The resulting string can be
+   * converted back to the same byte buffer through {@link #stringToBytes(String)}.
+   */
+  public static String bytesToString(ByteBuffer b) {
+    return Unpooled.wrappedBuffer(b).toString(StandardCharsets.UTF_8);
   }
 }

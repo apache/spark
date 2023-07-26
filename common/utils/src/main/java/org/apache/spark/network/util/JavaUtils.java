@@ -20,18 +20,13 @@ package org.apache.spark.network.util;
 import java.io.*;
 import java.nio.ByteBuffer;
 import java.nio.channels.ReadableByteChannel;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.attribute.BasicFileAttributes;
-import java.util.Locale;
-import java.util.UUID;
+import java.util.*;
 import java.util.concurrent.TimeUnit;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-import com.google.common.base.Preconditions;
-import com.google.common.collect.ImmutableMap;
-import io.netty.buffer.Unpooled;
 import org.apache.commons.lang3.SystemUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -65,22 +60,6 @@ public class JavaUtils {
     if (obj == null) { return 0; }
     int hash = obj.hashCode();
     return hash != Integer.MIN_VALUE ? Math.abs(hash) : 0;
-  }
-
-  /**
-   * Convert the given string to a byte buffer. The resulting buffer can be
-   * converted back to the same string through {@link #bytesToString(ByteBuffer)}.
-   */
-  public static ByteBuffer stringToBytes(String s) {
-    return Unpooled.wrappedBuffer(s.getBytes(StandardCharsets.UTF_8)).nioBuffer();
-  }
-
-  /**
-   * Convert the given byte buffer to a string. The resulting string can be
-   * converted back to the same byte buffer through {@link #stringToBytes(String)}.
-   */
-  public static String bytesToString(ByteBuffer b) {
-    return Unpooled.wrappedBuffer(b).toString(StandardCharsets.UTF_8);
   }
 
   /**
@@ -191,7 +170,7 @@ public class JavaUtils {
   }
 
   private static boolean isSymlink(File file) throws IOException {
-    Preconditions.checkNotNull(file);
+    Objects.requireNonNull(file);
     File fileInCanonicalDir = null;
     if (file.getParent() == null) {
       fileInCanonicalDir = file;
@@ -201,31 +180,35 @@ public class JavaUtils {
     return !fileInCanonicalDir.getCanonicalFile().equals(fileInCanonicalDir.getAbsoluteFile());
   }
 
-  private static final ImmutableMap<String, TimeUnit> timeSuffixes =
-    ImmutableMap.<String, TimeUnit>builder()
-      .put("us", TimeUnit.MICROSECONDS)
-      .put("ms", TimeUnit.MILLISECONDS)
-      .put("s", TimeUnit.SECONDS)
-      .put("m", TimeUnit.MINUTES)
-      .put("min", TimeUnit.MINUTES)
-      .put("h", TimeUnit.HOURS)
-      .put("d", TimeUnit.DAYS)
-      .build();
+  private static final Map<String, TimeUnit> timeSuffixes;
 
-  private static final ImmutableMap<String, ByteUnit> byteSuffixes =
-    ImmutableMap.<String, ByteUnit>builder()
-      .put("b", ByteUnit.BYTE)
-      .put("k", ByteUnit.KiB)
-      .put("kb", ByteUnit.KiB)
-      .put("m", ByteUnit.MiB)
-      .put("mb", ByteUnit.MiB)
-      .put("g", ByteUnit.GiB)
-      .put("gb", ByteUnit.GiB)
-      .put("t", ByteUnit.TiB)
-      .put("tb", ByteUnit.TiB)
-      .put("p", ByteUnit.PiB)
-      .put("pb", ByteUnit.PiB)
-      .build();
+  private static final Map<String, ByteUnit> byteSuffixes;
+
+  static {
+    final Map<String, TimeUnit> timeSuffixesBuilder = new HashMap<>();
+    timeSuffixesBuilder.put("us", TimeUnit.MICROSECONDS);
+    timeSuffixesBuilder.put("ms", TimeUnit.MILLISECONDS);
+    timeSuffixesBuilder.put("s", TimeUnit.SECONDS);
+    timeSuffixesBuilder.put("m", TimeUnit.MINUTES);
+    timeSuffixesBuilder.put("min", TimeUnit.MINUTES);
+    timeSuffixesBuilder.put("h", TimeUnit.HOURS);
+    timeSuffixesBuilder.put("d", TimeUnit.DAYS);
+    timeSuffixes = Collections.unmodifiableMap(timeSuffixesBuilder);
+
+    final Map<String, ByteUnit> byteSuffixesBuilder = new HashMap<>();
+    byteSuffixesBuilder.put("b", ByteUnit.BYTE);
+    byteSuffixesBuilder.put("k", ByteUnit.KiB);
+    byteSuffixesBuilder.put("kb", ByteUnit.KiB);
+    byteSuffixesBuilder.put("m", ByteUnit.MiB);
+    byteSuffixesBuilder.put("mb", ByteUnit.MiB);
+    byteSuffixesBuilder.put("g", ByteUnit.GiB);
+    byteSuffixesBuilder.put("gb", ByteUnit.GiB);
+    byteSuffixesBuilder.put("t", ByteUnit.TiB);
+    byteSuffixesBuilder.put("tb", ByteUnit.TiB);
+    byteSuffixesBuilder.put("p", ByteUnit.PiB);
+    byteSuffixesBuilder.put("pb", ByteUnit.PiB);
+    byteSuffixes = Collections.unmodifiableMap(byteSuffixesBuilder);
+  }
 
   /**
    * Convert a passed time string (e.g. 50s, 100ms, or 250us) to a time count in the given unit.

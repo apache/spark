@@ -40,8 +40,8 @@ import org.apache.spark.network.server.RpcHandler;
 import org.apache.spark.network.server.StreamManager;
 import org.apache.spark.network.server.TransportServer;
 import org.apache.spark.network.server.TransportServerBootstrap;
-import org.apache.spark.network.util.JavaUtils;
 import org.apache.spark.network.util.MapConfigProvider;
+import org.apache.spark.network.util.NettyUtils;
 import org.apache.spark.network.util.TransportConf;
 
 public class SaslIntegrationSuite {
@@ -96,8 +96,8 @@ public class SaslIntegrationSuite {
 
     TransportClient client = clientFactory.createClient(TestUtils.getLocalHost(), server.getPort());
     String msg = "Hello, World!";
-    ByteBuffer resp = client.sendRpcSync(JavaUtils.stringToBytes(msg), TIMEOUT_MS);
-    assertEquals(msg, JavaUtils.bytesToString(resp));
+    ByteBuffer resp = client.sendRpcSync(NettyUtils.stringToBytes(msg), TIMEOUT_MS);
+    assertEquals(msg, NettyUtils.bytesToString(resp));
   }
 
   @Test
