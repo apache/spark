@@ -14,26 +14,26 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.sql.catalyst.expressions
+package org.apache.spark.sql.errors
 
-import org.apache.spark.sql.Row
+import org.apache.arrow.vector.types.pojo.ArrowType
 
-/**
- * A row implementation that uses an array of objects as the underlying storage.  Note that, while
- * the array is not copied, and thus could technically be mutated after creation, this is not
- * allowed.
- */
-class GenericRow(protected[sql] val values: Array[Any]) extends Row {
-  /** No-arg constructor for serialization. */
-  protected def this() = this(null)
+import org.apache.spark.SparkUnsupportedOperationException
 
-  def this(size: Int) = this(new Array[Any](size))
+trait ArrowErrors {
 
-  override def length: Int = values.length
+  def unsupportedArrowTypeError(typeName: ArrowType): SparkUnsupportedOperationException = {
+    new SparkUnsupportedOperationException(
+      errorClass = "UNSUPPORTED_ARROWTYPE",
+      messageParameters = Map("typeName" -> typeName.toString))
+  }
 
-  override def get(i: Int): Any = values(i)
-
-  override def toSeq: Seq[Any] = values.clone()
-
-  override def copy(): GenericRow = this
+  def duplicatedFieldNameInArrowStructError(
+      fieldNames: Seq[String]): SparkUnsupportedOperationException = {
+    new SparkUnsupportedOperationException(
+      errorClass = "DUPLICATED_FIELD_NAME_IN_ARROW_STRUCT",
+      messageParameters = Map("fieldNames" -> fieldNames.mkString("[", ", ", "]")))
+  }
 }
+
+object ArrowErrors extends ArrowErrors
