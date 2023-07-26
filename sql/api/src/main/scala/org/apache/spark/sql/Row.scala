@@ -27,8 +27,9 @@ import scala.util.hashing.MurmurHash3
 
 import org.json4s.{JArray, JBool, JDecimal, JDouble, JField, JLong, JNull, JObject, JString}
 import org.json4s.JsonAST.JValue
+import org.json4s.jackson.JsonMethods.{compact, pretty, render}
 
-import org.apache.spark.annotation.Stable
+import org.apache.spark.annotation.{Stable, Unstable}
 import org.apache.spark.sql.catalyst.expressions.GenericRow
 import org.apache.spark.sql.catalyst.util.{DateFormatter, DateTimeUtils, TimestampFormatter, UDTUtils}
 import org.apache.spark.sql.errors.DataTypeErrors
@@ -526,6 +527,20 @@ trait Row extends Serializable {
     else getAs[T](i)
 
   /**
+   * The compact JSON representation of this row.
+   * @since 3.0
+   */
+  @Unstable
+  def json: String = compact(jsonValue)
+
+  /**
+   * The pretty (i.e. indented) JSON representation of this row.
+   * @since 3.0
+   */
+  @Unstable
+  def prettyJson: String = pretty(render(jsonValue))
+
+  /**
    * JSON representation of the row.
    *
    * Note that this only supports the data types that are also supported by
@@ -533,8 +548,8 @@ trait Row extends Serializable {
    *
    * @return the JSON representation of the row.
    */
-  private[sql] def jsonValue(row: Row): JValue = {
-    require(row.schema != null, "JSON serialization requires a non-null schema.")
+  private[sql] def jsonValue: JValue = {
+    require(schema != null, "JSON serialization requires a non-null schema.")
 
     lazy val zoneId = DateTimeUtils.getZoneId(SqlApiConf.get.sessionLocalTimeZone)
     lazy val dateFormatter = DateFormatter()
@@ -581,7 +596,7 @@ trait Row extends Serializable {
           case (k, v) =>
             new JObject("key" -> toJson(k, keyType) :: "value" -> toJson(v, valueType) :: Nil)
         }.toList)
-      case (r: Row, _) => jsonValue(r)
+      case (r: Row, _) => r.jsonValue
       case (v: Any, udt: UserDefinedType[Any @unchecked]) =>
         UDTUtils.toJson(v, udt)
       case _ =>
@@ -592,10 +607,10 @@ trait Row extends Serializable {
     // Convert the row fields to json
     var n = 0
     val elements = new mutable.ListBuffer[JField]
-    val len = row.length
+    val len = length
     while (n < len) {
-      val field = row.schema(n)
-      elements += (field.name -> toJson(row.apply(n), field.dataType))
+      val field = schema(n)
+      elements += (field.name -> toJson(apply(n), field.dataType))
       n += 1
     }
     new JObject(elements.toList)
