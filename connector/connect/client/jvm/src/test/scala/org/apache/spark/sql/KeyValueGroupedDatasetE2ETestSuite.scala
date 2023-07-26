@@ -483,9 +483,8 @@ class KeyValueGroupedDatasetE2ETestSuite extends QueryTest with SQLHelper {
     val ds = Seq(("a", 1, 10), ("a", 2, 20), ("b", 2, 1), ("b", 1, 2), ("c", 1, 1))
       .toDF("key", "seq", "value")
     val grouped = ds.groupBy($"value").as[String, (String, Int, Int)]
-    // TODO SPARK-44449 make this string again when upcasting is in.
-    val keys = grouped.keyAs[Int].keys.sort($"value")
-    checkDataset(keys, 1, 2, 10, 20)
+    val keys = grouped.keyAs[String].keys.sort($"value")
+    checkDataset(keys, "1", "2", "10", "20")
   }
 
   test("flatMapGroupsWithState") {
