@@ -21,11 +21,12 @@ import java.time.temporal.ChronoField
 
 import org.apache.arrow.vector.types.pojo.ArrowType
 
-import org.apache.spark.{SparkArithmeticException, SparkDateTimeException, SparkIllegalArgumentException, SparkRuntimeException, SparkUnsupportedOperationException, SparkUpgradeException}
+import org.apache.spark.{SparkArithmeticException, SparkBuildInfo, SparkDateTimeException, SparkException, SparkIllegalArgumentException, SparkRuntimeException, SparkUnsupportedOperationException, SparkUpgradeException}
+import org.apache.spark.sql.catalyst.WalkedTypePath
 import org.apache.spark.sql.catalyst.trees.SQLQueryContext
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.internal.SqlApiConf
-import org.apache.spark.sql.types.{DataType, DoubleType, FloatType, LongType, StringType}
+import org.apache.spark.sql.types.{DataType, DoubleType, FloatType, LongType, StringType, UserDefinedType}
 import org.apache.spark.unsafe.types.UTF8String
 
 private[sql] trait ExecutionErrors extends DataTypeErrorsBase {
@@ -45,7 +46,7 @@ private[sql] trait ExecutionErrors extends DataTypeErrorsBase {
       summary = "")
   }
 
-  def failToParseDateTimeInNewParserError(s: String, e: Throwable): Throwable = {
+  def failToParseDateTimeInNewParserError(s: String, e: Throwable): SparkUpgradeException = {
     new SparkUpgradeException(
       errorClass = "INCONSISTENT_BEHAVIOR_CROSS_VERSION.PARSE_DATETIME_BY_NEW_PARSER",
       messageParameters = Map(
@@ -55,23 +56,22 @@ private[sql] trait ExecutionErrors extends DataTypeErrorsBase {
   }
 
   def failToRecognizePatternAfterUpgradeError(
-      pattern: String, e: Throwable, docroot: String): Throwable = {
+      pattern: String, e: Throwable): SparkUpgradeException = {
     new SparkUpgradeException(
       errorClass = "INCONSISTENT_BEHAVIOR_CROSS_VERSION.DATETIME_PATTERN_RECOGNITION",
       messageParameters = Map(
         "pattern" -> toSQLValue(pattern),
         "config" -> toSQLConf(SqlApiConf.LEGACY_TIME_PARSER_POLICY_KEY),
-        "docroot" -> docroot),
+        "docroot" -> SparkBuildInfo.spark_doc_root),
       e)
   }
 
-  def failToRecognizePatternError(
-      pattern: String, e: Throwable, docroot: String): SparkRuntimeException = {
+  def failToRecognizePatternError(pattern: String, e: Throwable): SparkRuntimeException = {
     new SparkRuntimeException(
       errorClass = "_LEGACY_ERROR_TEMP_2130",
       messageParameters = Map(
         "pattern" -> toSQLValue(pattern),
-        "docroot" -> docroot),
+        "docroot" -> SparkBuildInfo.spark_doc_root),
       cause = e)
   }
 
@@ -218,6 +218,57 @@ private[sql] trait ExecutionErrors extends DataTypeErrorsBase {
     new SparkUnsupportedOperationException(
       errorClass = "UNSUPPORTED_DATATYPE",
       messageParameters = Map("typeName" -> toSQLType(typeName)))
+  }
+
+  def userDefinedTypeNotAnnotatedAndRegisteredError(udt: UserDefinedType[_]): Throwable = {
+    new SparkException(
+      errorClass = "_LEGACY_ERROR_TEMP_2155",
+      messageParameters = Map(
+        "userClass" -> udt.userClass.getName),
+      cause = null)
+  }
+
+  def cannotFindEncoderForTypeError(typeName: String): SparkUnsupportedOperationException = {
+    new SparkUnsupportedOperationException(
+      errorClass = "ENCODER_NOT_FOUND",
+      messageParameters = Map(
+        "typeName" -> typeName,
+        "docroot" -> SparkBuildInfo.spark_doc_root))
+  }
+
+  def cannotHaveCircularReferencesInBeanClassError(
+      clazz: Class[_]): SparkUnsupportedOperationException = {
+    new SparkUnsupportedOperationException(
+      errorClass = "_LEGACY_ERROR_TEMP_2138",
+      messageParameters = Map("clazz" -> clazz.toString))
+  }
+
+  def cannotFindConstructorForTypeError(tpe: String): SparkUnsupportedOperationException = {
+    new SparkUnsupportedOperationException(
+      errorClass = "_LEGACY_ERROR_TEMP_2144",
+      messageParameters = Map(
+        "tpe" -> tpe))
+  }
+
+  def cannotHaveCircularReferencesInClassError(t: String): SparkUnsupportedOperationException = {
+    new SparkUnsupportedOperationException(
+      errorClass = "_LEGACY_ERROR_TEMP_2139",
+      messageParameters = Map("t" -> t))
+  }
+
+  def cannotUseInvalidJavaIdentifierAsFieldNameError(
+      fieldName: String, walkedTypePath: WalkedTypePath): SparkUnsupportedOperationException = {
+    new SparkUnsupportedOperationException(
+      errorClass = "_LEGACY_ERROR_TEMP_2140",
+      messageParameters = Map(
+        "fieldName" -> fieldName,
+        "walkedTypePath" -> walkedTypePath.toString))
+  }
+
+  def primaryConstructorNotFoundError(cls: Class[_]): SparkRuntimeException = {
+    new SparkRuntimeException(
+      errorClass = "_LEGACY_ERROR_TEMP_2021",
+      messageParameters = Map("cls" -> cls.toString))
   }
 }
 

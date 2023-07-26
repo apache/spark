@@ -24,7 +24,6 @@ import java.time.temporal.{ChronoField, TemporalAccessor, TemporalQueries}
 import java.util
 import java.util.{Collections, Date, Locale}
 
-import org.apache.spark.SparkBuildInfo.{spark_doc_root => SPARK_DOC_ROOT}
 import org.apache.spark.sql.catalyst.util.DateTimeFormatterHelper._
 import org.apache.spark.sql.errors.ExecutionErrors
 import org.apache.spark.sql.internal.LegacyBehaviorPolicy._
@@ -179,13 +178,12 @@ trait DateTimeFormatterHelper {
       } catch {
         case _: Throwable => throw e
       }
-      throw ExecutionErrors.failToRecognizePatternAfterUpgradeError(
-        pattern, e, SPARK_DOC_ROOT)
+      throw ExecutionErrors.failToRecognizePatternAfterUpgradeError(pattern, e)
   }
 
   protected def checkInvalidPattern(pattern: String): PartialFunction[Throwable, Nothing] = {
     case e: IllegalArgumentException =>
-      throw ExecutionErrors.failToRecognizePatternError(pattern, e, SPARK_DOC_ROOT)
+      throw ExecutionErrors.failToRecognizePatternError(pattern, e)
   }
 }
 
