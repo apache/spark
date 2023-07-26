@@ -604,16 +604,14 @@ def read_udtf(pickleSer, infile, eval_type):
                         },
                     )
 
-                # Check when the dataframe has both rows and columns.
-                if not result.empty or len(result.columns) != 0:
-                    if len(result.columns) != len(return_type):
-                        raise PySparkRuntimeError(
-                            error_class="UDTF_RETURN_SCHEMA_MISMATCH",
-                            message_parameters={
-                                "expected": str(len(return_type)),
-                                "actual": str(len(result.columns)),
-                            },
-                        )
+                if len(result.columns) != len(return_type):
+                    raise PySparkRuntimeError(
+                        error_class="UDTF_RETURN_SCHEMA_MISMATCH",
+                        message_parameters={
+                            "expected": str(len(return_type)),
+                            "actual": str(len(result.columns)),
+                        },
+                    )
 
                 # Verify the type and the schema of the result.
                 verify_pandas_result(
@@ -656,7 +654,7 @@ def read_udtf(pickleSer, infile, eval_type):
 
             def verify_and_convert_result(result):
                 # TODO(SPARK-44005): support returning non-tuple values
-                if result and hasattr(result, "__len__"):
+                if result is not None and hasattr(result, "__len__"):
                     if len(result) != len(return_type):
                         raise PySparkRuntimeError(
                             error_class="UDTF_RETURN_SCHEMA_MISMATCH",

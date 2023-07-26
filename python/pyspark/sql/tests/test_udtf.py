@@ -291,6 +291,7 @@ class BaseUDTFTestsMixin:
             "result does not match the specified schema."
         )
 
+        # Output less columns than specified return schema
         @udtf(returnType="a: int, b: int")
         class TestUDTF:
             def eval(self, a: int):
@@ -299,6 +300,7 @@ class BaseUDTFTestsMixin:
         with self.assertRaisesRegex(PythonException, err_msg):
             TestUDTF(lit(1)).collect()
 
+        # Output more columns than specified return schema
         @udtf(returnType="a: int")
         class TestUDTF:
             def eval(self, a: int):
@@ -306,6 +308,24 @@ class BaseUDTFTestsMixin:
 
         with self.assertRaisesRegex(PythonException, err_msg):
             TestUDTF(lit(1)).collect()
+
+        # Empty output schema with non-empty output
+        @udtf(returnType=StructType())
+        class TestUDTF:
+            def eval(self):
+                yield 1,
+
+        with self.assertRaisesRegex(PythonException, err_msg):
+            TestUDTF().collect()
+
+        # Non-empty output schema with empty output
+        @udtf(returnType="a: int")
+        class TestUDTF:
+            def eval(self):
+                yield tuple()
+
+        with self.assertRaisesRegex(PythonException, err_msg):
+            TestUDTF().collect()
 
     def test_udtf_init(self):
         @udtf(returnType="a: int, b: int, c: string")
