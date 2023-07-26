@@ -33,13 +33,10 @@ class StubClassLoader(parent: ClassLoader, shouldStub: String => Boolean)
       throw new ClassNotFoundException(name)
     }
     val bytes = StubClassLoader.generateStub(name)
-    // scalastyle:off println
-    println("###stub class: " + name)
     defineClass(name, bytes, 0, bytes.length)
   }
 }
 
-// TODO: provide helpful error message for method not found exception.
 object StubClassLoader {
   def apply(parent: ClassLoader, binaryName: Seq[String]): StubClassLoader = {
     new StubClassLoader(parent, name => binaryName.exists(p => name.startsWith(p)))

@@ -18,7 +18,7 @@
 package org.apache.spark.sql.connect.artifact
 
 import java.io.File
-import java.net.{URI, URL}
+import java.net.{URI, URL, URLClassLoader}
 import java.nio.file.{Files, Path, Paths, StandardCopyOption}
 import java.util.concurrent.CopyOnWriteArrayList
 import javax.ws.rs.core.UriBuilder
@@ -162,12 +162,19 @@ class SparkConnectArtifactManager(sessionHolder: SessionHolder) extends Logging 
    */
   def classloader: ClassLoader = {
     val urls = getSparkConnectAddedJars :+ classDir.toUri.toURL
-    val stubClassLoader =
-      StubClassLoader(null, SparkEnv.get.conf.get(CONNECT_SCALA_UDF_STUB_CLASSES))
-    new ChildFirstURLClassLoader(
-      urls.toArray,
-      stubClassLoader,
-      Utils.getContextOrSparkClassLoader)
+    val loader = if (SparkEnv.get.conf.get(CONNECT_SCALA_UDF_STUB_CLASSES).nonEmpty) {
+      val stubClassLoader =
+        StubClassLoader(null, SparkEnv.get.conf.get(CONNECT_SCALA_UDF_STUB_CLASSES))
+      new ChildFirstURLClassLoader(
+        urls.toArray,
+        stubClassLoader,
+        Utils.getContextOrSparkClassLoader)
+    } else {
+      new URLClassLoader(urls.toArray, Utils.getContextOrSparkClassLoader)
+    }
+
+    logDebug(s"Using class loader: $loader, containing urls: $urls")
+    loader
   }
 
   /**
