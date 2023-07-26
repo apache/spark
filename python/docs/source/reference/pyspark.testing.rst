@@ -27,3 +27,4 @@ Testing
 
     assertDataFrameEqual
     assertSchemaEqual
+    assertPandasOnSparkEqual

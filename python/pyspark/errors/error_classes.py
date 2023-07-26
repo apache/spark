@@ -164,6 +164,11 @@ ERROR_CLASSES_JSON = """
       "Remote client cannot create a SparkContext. Create SparkSession instead."
     ]
   },
+  "DIFFERENT_PANDAS_DATAFRAME" : {
+    "message" : [
+      "<msg>"
+    ]
+  },
   "DIFFERENT_ROWS" : {
     "message" : [
       "<error_msg>"
