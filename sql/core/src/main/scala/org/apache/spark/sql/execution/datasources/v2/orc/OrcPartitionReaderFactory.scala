@@ -127,9 +127,11 @@ case class OrcPartitionReaderFactory(
       return buildColumnarReaderWithAggregates(file, conf)
     }
     val filePath = file.toPath
-
-    val (orcSchema, readerOptions) = Utils.tryWithResource(
-      createORCReaderAndOptions(filePath, conf))(orc => (orc._1.getSchema, orc._2))
+    val fs = filePath.getFileSystem(conf)
+    OrcConf.IS_SCHEMA_EVOLUTION_CASE_SENSITIVE.setBoolean(conf, isCaseSensitive)
+    val readerOptions = OrcFile.readerOptions(conf).filesystem(fs)
+    val orcSchema = Utils.tryWithResource(createORCReaderWithOptions(
+      filePath, conf, readerOptions))(_.getSchema)
     val resultedColPruneInfo = OrcUtils.requestedColumnIds(
       isCaseSensitive, dataSchema, readDataSchema, orcSchema, conf)
 
@@ -164,12 +166,6 @@ case class OrcPartitionReaderFactory(
   }
 
   private def createORCReader(filePath: Path, conf: Configuration): Reader = {
-    createORCReaderAndOptions(filePath, conf)._1
-  }
-
-  private def createORCReaderAndOptions(
-      filePath: Path,
-      conf: Configuration): (Reader, OrcFile.ReaderOptions) = {
     OrcConf.IS_SCHEMA_EVOLUTION_CASE_SENSITIVE.setBoolean(conf, isCaseSensitive)
 
     val fs = filePath.getFileSystem(conf)
@@ -178,7 +174,16 @@ case class OrcPartitionReaderFactory(
 
     pushDownPredicates(reader.getSchema, conf)
 
-    (reader, readerOptions)
+    createORCReaderWithOptions(filePath, conf, readerOptions)
+  }
+
+  private def createORCReaderWithOptions(
+      filePath: Path,
+      conf: Configuration,
+      readerOptions: OrcFile.ReaderOptions): Reader = {
+    val reader = OrcFile.createReader(filePath, readerOptions)
+    pushDownPredicates(reader.getSchema, conf)
+    reader
   }
 
   /**
