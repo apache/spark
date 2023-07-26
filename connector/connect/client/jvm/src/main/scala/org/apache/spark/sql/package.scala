@@ -20,6 +20,8 @@ package org.apache.spark
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoder
 
 package object sql {
+  type AnalysisException = Exception
+
   type DataFrame = Dataset[Row]
 
   private[sql] def encoderFor[E: Encoder]: AgnosticEncoder[E] = {
