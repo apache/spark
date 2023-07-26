@@ -23,6 +23,7 @@ from typing import List, IO
 
 from pyspark.accumulators import _accumulatorRegistry
 from pyspark.errors import PySparkRuntimeError, PySparkValueError
+from pyspark.java_gateway import local_connect_and_auth
 from pyspark.serializers import (
     read_bool,
     read_int,
@@ -41,7 +42,6 @@ from pyspark.worker_util import (
     setup_broadcasts,
     setup_spark_files,
     utf8_deserializer,
-    worker_main,
 )
 
 
@@ -148,4 +148,11 @@ def main(infile: IO, outfile: IO) -> None:
 
 
 if __name__ == "__main__":
-    worker_main(main)
+    # Read information about how to connect back to the JVM from the environment.
+    java_port = int(os.environ["PYTHON_WORKER_FACTORY_PORT"])
+    auth_secret = os.environ["PYTHON_WORKER_FACTORY_SECRET"]
+    (sock_file, _) = local_connect_and_auth(java_port, auth_secret)
+    # TODO: Remove the following two lines and use `Process.pid()` when we drop JDK 8.
+    write_int(os.getpid(), sock_file)
+    sock_file.flush()
+    main(sock_file, sock_file)

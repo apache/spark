@@ -21,7 +21,7 @@ Util functions for workers.
 import importlib
 import os
 import sys
-from typing import Any, Callable, IO
+from typing import Any, IO
 
 from pyspark.accumulators import _accumulatorRegistry
 from pyspark.broadcast import Broadcast, _broadcastRegistry
@@ -130,17 +130,3 @@ def send_accumulator_updates(outfile: IO) -> None:
     write_int(len(_accumulatorRegistry), outfile)
     for (aid, accum) in _accumulatorRegistry.items():
         pickleSer._write_with_length((aid, accum._value), outfile)
-
-
-def worker_main(main: Callable[[IO, IO], None]) -> None:
-    """
-    Set up the connection with JVM and call the main function.
-    """
-    # Read information about how to connect back to the JVM from the environment.
-    java_port = int(os.environ["PYTHON_WORKER_FACTORY_PORT"])
-    auth_secret = os.environ["PYTHON_WORKER_FACTORY_SECRET"]
-    (sock_file, _) = local_connect_and_auth(java_port, auth_secret)
-    # TODO: Remove the following two lines and use `Process.pid()` when we drop JDK 8.
-    write_int(os.getpid(), sock_file)
-    sock_file.flush()
-    main(sock_file, sock_file)
