@@ -885,7 +885,7 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
-  val CASE_SENSITIVE = buildConf("spark.sql.caseSensitive")
+  val CASE_SENSITIVE = buildConf(SqlApiConf.CASE_SENSITIVE_KEY)
     .internal()
     .doc("Whether the query analyzer should be case sensitive or not. " +
       "Default to case insensitive. It is highly discouraged to turn on case sensitive mode.")
