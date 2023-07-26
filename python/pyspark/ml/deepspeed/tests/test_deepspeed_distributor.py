@@ -25,9 +25,7 @@ import unittest
 
 from pyspark import SparkConf, SparkContext
 from pyspark.ml.deepspeed.deepspeed_distributor import DeepspeedTorchDistributor
-from pyspark.ml.torch.distributor import TorchDistributor
 from pyspark.sql import SparkSession
-from pyspark.testing.utils import SPARK_HOME
 from pyspark.ml.torch.tests.test_distributor import get_local_mode_conf, set_up_test_dirs, get_distributed_mode_conf
 
 class DeepspeedTorchDistributorUnitTests(unittest.TestCase):
