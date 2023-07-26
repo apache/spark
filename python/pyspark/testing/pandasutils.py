@@ -22,6 +22,7 @@ import warnings
 import pandas as pd
 from contextlib import contextmanager
 from distutils.version import LooseVersion
+import decimal
 from typing import Union
 
 from pyspark import pandas as ps
@@ -179,13 +180,16 @@ def assertPandasDFAlmostEqual(left, right):
                         },
                     )
             for lval, rval in zip(left[lcol].dropna(), right[rcol].dropna()):
-                if abs(lval - rval) > (atol + rtol * abs(rval)):
-                    raise PySparkAssertionError(
-                        error_class="DIFFERENT_PANDAS_DATAFRAME",
-                        message_parameters={
-                            "msg": msg,
-                        },
-                    )
+                if (isinstance(lval, float) or isinstance(lval, decimal.Decimal)) and (
+                    isinstance(rval, float) or isinstance(rval, decimal.Decimal)
+                ):
+                    if abs(float(lval) - float(rval)) > (atol + rtol * abs(float(rval))):
+                        raise PySparkAssertionError(
+                            error_class="DIFFERENT_PANDAS_DATAFRAME",
+                            message_parameters={
+                                "msg": msg,
+                            },
+                        )
         if left.columns.names != right.columns.names:
             raise PySparkAssertionError(
                 error_class="DIFFERENT_PANDAS_DATAFRAME",
@@ -215,13 +219,16 @@ def assertPandasDFAlmostEqual(left, right):
                     },
                 )
         for lval, rval in zip(left.dropna(), right.dropna()):
-            if abs(lval - rval) > (atol + rtol * abs(rval)):
-                raise PySparkAssertionError(
-                    error_class="DIFFERENT_PANDAS_DATAFRAME",
-                    message_parameters={
-                        "msg": msg,
-                    },
-                )
+            if (isinstance(lval, float) or isinstance(lval, decimal.Decimal)) and (
+                isinstance(rval, float) or isinstance(rval, decimal.Decimal)
+            ):
+                if abs(float(lval) - float(rval)) > (atol + rtol * abs(float(rval))):
+                    raise PySparkAssertionError(
+                        error_class="DIFFERENT_PANDAS_DATAFRAME",
+                        message_parameters={
+                            "msg": msg,
+                        },
+                    )
     elif isinstance(left, pd.MultiIndex) and isinstance(right, pd.MultiIndex):
         msg = (
             "MultiIndices are not almost equal: "
@@ -236,13 +243,16 @@ def assertPandasDFAlmostEqual(left, right):
                 },
             )
         for lval, rval in zip(left, right):
-            if abs(lval - rval) > (atol + rtol * abs(rval)):
-                raise PySparkAssertionError(
-                    error_class="DIFFERENT_PANDAS_DATAFRAME",
-                    message_parameters={
-                        "msg": msg,
-                    },
-                )
+            if (isinstance(lval, float) or isinstance(lval, decimal.Decimal)) and (
+                isinstance(rval, float) or isinstance(rval, decimal.Decimal)
+            ):
+                if abs(float(lval) - float(rval)) > (atol + rtol * abs(float(rval))):
+                    raise PySparkAssertionError(
+                        error_class="DIFFERENT_PANDAS_DATAFRAME",
+                        message_parameters={
+                            "msg": msg,
+                        },
+                    )
     elif isinstance(left, pd.Index) and isinstance(right, pd.Index):
         msg = (
             "Indices are not almost equal: "
@@ -265,13 +275,16 @@ def assertPandasDFAlmostEqual(left, right):
                     },
                 )
         for lval, rval in zip(left.dropna(), right.dropna()):
-            if abs(lval - rval) > (atol + rtol * abs(rval)):
-                raise PySparkAssertionError(
-                    error_class="DIFFERENT_PANDAS_DATAFRAME",
-                    message_parameters={
-                        "msg": msg,
-                    },
-                )
+            if (isinstance(lval, float) or isinstance(lval, decimal.Decimal)) and (
+                isinstance(rval, float) or isinstance(rval, decimal.Decimal)
+            ):
+                if abs(float(lval) - float(rval)) > (atol + rtol * abs(float(rval))):
+                    raise PySparkAssertionError(
+                        error_class="DIFFERENT_PANDAS_DATAFRAME",
+                        message_parameters={
+                            "msg": msg,
+                        },
+                    )
     else:
         raise ValueError("Unexpected values: (%s, %s)" % (left, right))
 
@@ -339,7 +352,7 @@ class PandasOnSparkTestUtils:
         """
         return lambda x: getattr(x, func)()
 
-    def assertPandasEqual(self, left, right, check_exact):
+    def assertPandasEqual(self, left, right, check_exact=True):
         assertPandasDFEqual(left, right, check_exact)
 
     def assertPandasAlmostEqual(self, left, right):
