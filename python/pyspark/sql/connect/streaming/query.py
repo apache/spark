@@ -229,7 +229,6 @@ class StreamingQueryManager:
         cmd = pb2.StreamingQueryManagerCommand()
         cmd.reset_terminated = True
         self._execute_streaming_query_manager_cmd(cmd)
-        return None
 
     resetTerminated.__doc__ = PySparkStreamingQueryManager.resetTerminated.__doc__
 
@@ -242,7 +241,6 @@ class StreamingQueryManager:
         cmd.add_listener.python_listener_payload.CopyFrom(expr)
         cmd.add_listener.id = listener._id
         self._execute_streaming_query_manager_cmd(cmd)
-        return None
 
     addListener.__doc__ = PySparkStreamingQueryManager.addListener.__doc__
 
@@ -250,7 +248,6 @@ class StreamingQueryManager:
         cmd = pb2.StreamingQueryManagerCommand()
         cmd.remove_listener.id = listener._id
         self._execute_streaming_query_manager_cmd(cmd)
-        return None
 
     removeListener.__doc__ = PySparkStreamingQueryManager.removeListener.__doc__
 
