@@ -18,7 +18,7 @@ package org.apache.spark.sql.errors
 
 import java.util.Locale
 
-import org.apache.spark.QueryContext
+import org.apache.spark.{QueryContext, SparkRuntimeException}
 import org.apache.spark.sql.catalyst.trees.SQLQueryContext
 import org.apache.spark.sql.catalyst.util.{AttributeNameParser, QuotingUtils, SparkStringUtils}
 import org.apache.spark.sql.types.{AbstractDataType, DataType, TypeCollection}
@@ -95,5 +95,11 @@ private[sql] trait DataTypeErrorsBase {
 
   def getQueryContext(sqlContext: SQLQueryContext): Array[QueryContext] = {
     if (sqlContext == null) Array.empty else Array(sqlContext.asInstanceOf[QueryContext])
+  }
+
+  def unreachableError(err: String = ""): SparkRuntimeException = {
+    new SparkRuntimeException(
+      errorClass = "_LEGACY_ERROR_TEMP_2028",
+      messageParameters = Map("err" -> err))
   }
 }

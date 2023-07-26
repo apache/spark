@@ -19,6 +19,7 @@ import time
 import unittest
 from typing import Optional
 
+from pyspark import InheritableThread, inheritable_thread_target
 from pyspark.sql.connect.client import ChannelBuilder
 from pyspark.sql.connect.session import SparkSession as RemoteSparkSession
 from pyspark.testing.connectutils import should_test_connect
@@ -179,3 +180,47 @@ class ArrowParityTests(ReusedConnectTestCase):
             self.assertFalse(
                 is_job_cancelled[i], "Thread {i}: Job in group B did not succeeded.".format(i=i)
             )
+
+    def test_inheritable_tags(self):
+        self.check_inheritable_tags(
+            create_thread=lambda target, session: InheritableThread(target, session=session)
+        )
+        self.check_inheritable_tags(
+            create_thread=lambda target, session: threading.Thread(
+                target=inheritable_thread_target(session)(target)
+            )
+        )
+
+        # Test decorator usage
+        @inheritable_thread_target(self.spark)
+        def func(target):
+            return target()
+
+        self.check_inheritable_tags(
+            create_thread=lambda target, session: threading.Thread(target=func, args=(target,))
+        )
+
+    def check_inheritable_tags(self, create_thread):
+        spark = self.spark
+        spark.addTag("a")
+        first = set()
+        second = set()
+
+        def get_inner_local_prop():
+            spark.addTag("c")
+            second.update(spark.getTags())
+
+        def get_outer_local_prop():
+            spark.addTag("b")
+            first.update(spark.getTags())
+            t2 = create_thread(target=get_inner_local_prop, session=spark)
+            t2.start()
+            t2.join()
+
+        t1 = create_thread(target=get_outer_local_prop, session=spark)
+        t1.start()
+        t1.join()
+
+        self.assertEqual(spark.getTags(), {"a"})
+        self.assertEqual(first, {"a", "b"})
+        self.assertEqual(second, {"a", "b", "c"})

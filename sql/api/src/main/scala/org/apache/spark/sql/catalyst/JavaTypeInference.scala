@@ -24,10 +24,9 @@ import javax.annotation.Nonnull
 import scala.annotation.tailrec
 import scala.reflect.ClassTag
 
-import org.apache.spark.SPARK_DOC_ROOT
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoder
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{ArrayEncoder, BinaryEncoder, BoxedBooleanEncoder, BoxedByteEncoder, BoxedDoubleEncoder, BoxedFloatEncoder, BoxedIntEncoder, BoxedLongEncoder, BoxedShortEncoder, DayTimeIntervalEncoder, DEFAULT_JAVA_DECIMAL_ENCODER, EncoderField, IterableEncoder, JavaBeanEncoder, JavaBigIntEncoder, JavaEnumEncoder, LocalDateTimeEncoder, MapEncoder, PrimitiveBooleanEncoder, PrimitiveByteEncoder, PrimitiveDoubleEncoder, PrimitiveFloatEncoder, PrimitiveIntEncoder, PrimitiveLongEncoder, PrimitiveShortEncoder, STRICT_DATE_ENCODER, STRICT_INSTANT_ENCODER, STRICT_LOCAL_DATE_ENCODER, STRICT_TIMESTAMP_ENCODER, StringEncoder, UDTEncoder, YearMonthIntervalEncoder}
-import org.apache.spark.sql.errors.QueryExecutionErrors
+import org.apache.spark.sql.errors.EncoderErrors
 import org.apache.spark.sql.types._
 
 /**
@@ -116,7 +115,7 @@ object JavaTypeInference {
 
     case c: Class[_] =>
       if (seenTypeSet.contains(c)) {
-        throw QueryExecutionErrors.cannotHaveCircularReferencesInBeanClassError(c)
+        throw EncoderErrors.cannotHaveCircularReferencesInBeanClassError(c)
       }
 
       // TODO: we should only collect properties that have getter and setter. However, some tests
@@ -139,7 +138,7 @@ object JavaTypeInference {
       JavaBeanEncoder(ClassTag(c), fields)
 
     case _ =>
-      throw QueryExecutionErrors.cannotFindEncoderForTypeError(t.toString, SPARK_DOC_ROOT)
+      throw EncoderErrors.cannotFindEncoderForTypeError(t.toString)
   }
 
   def getJavaBeanReadableProperties(beanClass: Class[_]): Array[PropertyDescriptor] = {
@@ -197,7 +196,7 @@ object JavaTypeInference {
             }
         }
       }
-      throw QueryExecutionErrors.unreachableError()
+      throw EncoderErrors.unreachableError()
     }
   }
 

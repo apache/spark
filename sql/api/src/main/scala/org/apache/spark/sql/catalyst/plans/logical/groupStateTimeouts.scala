@@ -14,26 +14,11 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.sql.catalyst.expressions
+package org.apache.spark.sql.catalyst.plans.logical
 
-import org.apache.spark.sql.Row
+import org.apache.spark.sql.streaming.GroupStateTimeout
 
-/**
- * A row implementation that uses an array of objects as the underlying storage.  Note that, while
- * the array is not copied, and thus could technically be mutated after creation, this is not
- * allowed.
- */
-class GenericRow(protected[sql] val values: Array[Any]) extends Row {
-  /** No-arg constructor for serialization. */
-  protected def this() = this(null)
-
-  def this(size: Int) = this(new Array[Any](size))
-
-  override def length: Int = values.length
-
-  override def get(i: Int): Any = values(i)
-
-  override def toSeq: Seq[Any] = values.clone()
-
-  override def copy(): GenericRow = this
-}
+/** Types of timeouts used in FlatMapGroupsWithState */
+case object NoTimeout extends GroupStateTimeout
+case object ProcessingTimeTimeout extends GroupStateTimeout
+case object EventTimeTimeout extends GroupStateTimeout
