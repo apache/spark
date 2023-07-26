@@ -78,6 +78,10 @@ public class OrcColumnarBatchReader extends RecordReader<Void, ColumnarBatch> {
   // The wrapped ORC column vectors.
   private org.apache.spark.sql.vectorized.ColumnVector[] orcVectorWrappers;
 
+  public OrcColumnarBatchReader(int capacity) {
+    this(capacity, null);
+  }
+
   public OrcColumnarBatchReader(int capacity, OrcTail orcTail) {
     this.capacity = capacity;
     this.orcTail = orcTail;
