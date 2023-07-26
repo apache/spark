@@ -864,6 +864,8 @@ object OptimizeOneRowRelationSubquery extends Rule[LogicalPlan] {
  *   SELECT t1.* FROM t1 FULL JOIN (SELECT max(c1) AS c1 FROM t) t2  ==>
  *   SELECT t1.* FROM t1
  * }}}
+ *
+ * This rule should be executed before OptimizeSubqueries
  */
 object OptimizeOneRowJoin extends Rule[LogicalPlan] with PredicateHelper with JoinSelectionHelper {
   private def eliminateRightSide(j: Join): Option[LogicalPlan] = {
