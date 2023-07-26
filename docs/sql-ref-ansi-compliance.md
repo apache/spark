@@ -348,336 +348,337 @@ By default, both `spark.sql.ansi.enabled` and `spark.sql.ansi.enforceReservedKey
 
 Below is a list of all the keywords in Spark SQL.
 
-|Keyword|Spark SQL<br/>ANSI Mode|Spark SQL<br/>Default Mode|SQL-2016|
-|------|----------------------|-------------------------|--------|
-|ADD|non-reserved|non-reserved|non-reserved|
-|AFTER|non-reserved|non-reserved|non-reserved|
-|ALL|reserved|non-reserved|reserved|
-|ALTER|non-reserved|non-reserved|reserved|
-|ALWAYS|non-reserved|non-reserved|non-reserved|
-|ANALYZE|non-reserved|non-reserved|non-reserved|
-|AND|reserved|non-reserved|reserved|
-|ANTI|non-reserved|strict-non-reserved|non-reserved|
-|ANY|reserved|non-reserved|reserved|
-|ANY_VALUE|non-reserved|non-reserved|non-reserved|
-|ARCHIVE|non-reserved|non-reserved|non-reserved|
-|ARRAY|non-reserved|non-reserved|reserved|
-|AS|reserved|non-reserved|reserved|
-|ASC|non-reserved|non-reserved|non-reserved|
-|AT|non-reserved|non-reserved|reserved|
-|AUTHORIZATION|reserved|non-reserved|reserved|
-|BETWEEN|non-reserved|non-reserved|reserved|
-|BIGINT|non-reserved|non-reserved|reserved|
-|BINARY|non-reserved|non-reserved|reserved|
-|BOOLEAN|non-reserved|non-reserved|reserved|
-|BOTH|reserved|non-reserved|reserved|
-|BUCKET|non-reserved|non-reserved|non-reserved|
-|BUCKETS|non-reserved|non-reserved|non-reserved|
-|BY|non-reserved|non-reserved|reserved|
-|BYTE|non-reserved|non-reserved|non-reserved|
-|CACHE|non-reserved|non-reserved|non-reserved|
-|CASCADE|non-reserved|non-reserved|non-reserved|
-|CASE|reserved|non-reserved|reserved|
-|CAST|reserved|non-reserved|reserved|
-|CATALOG|non-reserved|non-reserved|non-reserved|
-|CATALOGS|non-reserved|non-reserved|non-reserved|
-|CHANGE|non-reserved|non-reserved|non-reserved|
-|CHAR|non-reserved|non-reserved|reserved|
-|CHARACTER|non-reserved|non-reserved|reserved|
-|CHECK|reserved|non-reserved|reserved|
-|CLEAR|non-reserved|non-reserved|non-reserved|
-|CLUSTER|non-reserved|non-reserved|non-reserved|
-|CLUSTERED|non-reserved|non-reserved|non-reserved|
-|CODEGEN|non-reserved|non-reserved|non-reserved|
-|COLLATE|reserved|non-reserved|reserved|
-|COLLECTION|non-reserved|non-reserved|non-reserved|
-|COLUMN|reserved|non-reserved|reserved|
-|COLUMNS|non-reserved|non-reserved|non-reserved|
-|COMMENT|non-reserved|non-reserved|non-reserved|
-|COMMIT|non-reserved|non-reserved|reserved|
-|COMPACT|non-reserved|non-reserved|non-reserved|
-|COMPACTIONS|non-reserved|non-reserved|non-reserved|
-|COMPUTE|non-reserved|non-reserved|non-reserved|
-|CONCATENATE|non-reserved|non-reserved|non-reserved|
-|CONSTRAINT|reserved|non-reserved|reserved|
-|COST|non-reserved|non-reserved|non-reserved|
-|CREATE|reserved|non-reserved|reserved|
-|CROSS|reserved|strict-non-reserved|reserved|
-|CUBE|non-reserved|non-reserved|reserved|
-|CURRENT|non-reserved|non-reserved|reserved|
-|CURRENT_DATE|reserved|non-reserved|reserved|
-|CURRENT_TIME|reserved|non-reserved|reserved|
-|CURRENT_TIMESTAMP|reserved|non-reserved|reserved|
-|CURRENT_USER|reserved|non-reserved|reserved|
-|DATA|non-reserved|non-reserved|non-reserved|
-|DATE|non-reserved|non-reserved|reserved|
-|DATABASE|non-reserved|non-reserved|non-reserved|
-|DATABASES|non-reserved|non-reserved|non-reserved|
-|DATEADD|non-reserved|non-reserved|non-reserved|
-|DATE_ADD|non-reserved|non-reserved|non-reserved|
-|DATEDIFF|non-reserved|non-reserved|non-reserved|
-|DATE_DIFF|non-reserved|non-reserved|non-reserved|
-|DAY|non-reserved|non-reserved|non-reserved|
-|DAYS|non-reserved|non-reserved|non-reserved|
-|DAYOFYEAR|non-reserved|non-reserved|non-reserved|
-|DBPROPERTIES|non-reserved|non-reserved|non-reserved|
-|DEC|non-reserved|non-reserved|reserved|
-|DECIMAL|non-reserved|non-reserved|reserved|
-|DEFAULT|non-reserved|non-reserved|non-reserved|
-|DEFINED|non-reserved|non-reserved|non-reserved|
-|DELETE|non-reserved|non-reserved|reserved|
-|DELIMITED|non-reserved|non-reserved|non-reserved|
-|DESC|non-reserved|non-reserved|non-reserved|
-|DESCRIBE|non-reserved|non-reserved|reserved|
-|DFS|non-reserved|non-reserved|non-reserved|
-|DIRECTORIES|non-reserved|non-reserved|non-reserved|
-|DIRECTORY|non-reserved|non-reserved|non-reserved|
-|DISTINCT|reserved|non-reserved|reserved|
-|DISTRIBUTE|non-reserved|non-reserved|non-reserved|
-|DIV|non-reserved|non-reserved|not a keyword|
-|DOUBLE|non-reserved|non-reserved|reserved|
-|DROP|non-reserved|non-reserved|reserved|
-|ELSE|reserved|non-reserved|reserved|
-|END|reserved|non-reserved|reserved|
-|ESCAPE|reserved|non-reserved|reserved|
-|ESCAPED|non-reserved|non-reserved|non-reserved|
-|EXCEPT|reserved|strict-non-reserved|reserved|
-|EXCHANGE|non-reserved|non-reserved|non-reserved|
-|EXCLUDE|non-reserved|non-reserved|non-reserved|
-|EXISTS|non-reserved|non-reserved|reserved|
-|EXPLAIN|non-reserved|non-reserved|non-reserved|
-|EXPORT|non-reserved|non-reserved|non-reserved|
-|EXTENDED|non-reserved|non-reserved|non-reserved|
-|EXTERNAL|non-reserved|non-reserved|reserved|
-|EXTRACT|non-reserved|non-reserved|reserved|
-|FALSE|reserved|non-reserved|reserved|
-|FETCH|reserved|non-reserved|reserved|
-|FIELDS|non-reserved|non-reserved|non-reserved|
-|FILTER|reserved|non-reserved|reserved|
-|FILEFORMAT|non-reserved|non-reserved|non-reserved|
-|FIRST|non-reserved|non-reserved|non-reserved|
-|FLOAT|non-reserved|non-reserved|reserved|
-|FOLLOWING|non-reserved|non-reserved|non-reserved|
-|FOR|reserved|non-reserved|reserved|
-|FOREIGN|reserved|non-reserved|reserved|
-|FORMAT|non-reserved|non-reserved|non-reserved|
-|FORMATTED|non-reserved|non-reserved|non-reserved|
-|FROM|reserved|non-reserved|reserved|
-|FULL|reserved|strict-non-reserved|reserved|
-|FUNCTION|non-reserved|non-reserved|reserved|
-|FUNCTIONS|non-reserved|non-reserved|non-reserved|
-|GENERATED|non-reserved|non-reserved|non-reserved|
-|GLOBAL|non-reserved|non-reserved|reserved|
-|GRANT|reserved|non-reserved|reserved|
-|GROUP|reserved|non-reserved|reserved|
-|GROUPING|non-reserved|non-reserved|reserved|
-|HAVING|reserved|non-reserved|reserved|
-|HOUR|non-reserved|non-reserved|non-reserved|
-|HOURS|non-reserved|non-reserved|non-reserved|
-|IDENTIFIER|non-reserved|non-reserved|non-reserved|
-|IF|non-reserved|non-reserved|not a keyword|
-|IGNORE|non-reserved|non-reserved|non-reserved|
-|IMPORT|non-reserved|non-reserved|non-reserved|
-|IN|reserved|non-reserved|reserved|
-|INCLUDE|non-reserved|non-reserved|non-reserved|
-|INDEX|non-reserved|non-reserved|non-reserved|
-|INDEXES|non-reserved|non-reserved|non-reserved|
-|INNER|reserved|strict-non-reserved|reserved|
-|INPATH|non-reserved|non-reserved|non-reserved|
-|INPUTFORMAT|non-reserved|non-reserved|non-reserved|
-|INSERT|non-reserved|non-reserved|reserved|
-|INT|non-reserved|non-reserved|reserved|
-|INTEGER|non-reserved|non-reserved|reserved|
-|INTERSECT|reserved|strict-non-reserved|reserved|
-|INTERVAL|non-reserved|non-reserved|reserved|
-|INTO|reserved|non-reserved|reserved|
-|IS|reserved|non-reserved|reserved|
-|ITEMS|non-reserved|non-reserved|non-reserved|
-|JOIN|reserved|strict-non-reserved|reserved|
-|KEYS|non-reserved|non-reserved|non-reserved|
-|LAST|non-reserved|non-reserved|non-reserved|
-|LATERAL|reserved|strict-non-reserved|reserved|
-|LAZY|non-reserved|non-reserved|non-reserved|
-|LEADING|reserved|non-reserved|reserved|
-|LEFT|reserved|strict-non-reserved|reserved|
-|LIKE|non-reserved|non-reserved|reserved|
-|ILIKE|non-reserved|non-reserved|non-reserved|
-|LIMIT|non-reserved|non-reserved|non-reserved|
-|LINES|non-reserved|non-reserved|non-reserved|
-|LIST|non-reserved|non-reserved|non-reserved|
-|LOAD|non-reserved|non-reserved|non-reserved|
-|LOCAL|non-reserved|non-reserved|reserved|
-|LOCATION|non-reserved|non-reserved|non-reserved|
-|LOCK|non-reserved|non-reserved|non-reserved|
-|LOCKS|non-reserved|non-reserved|non-reserved|
-|LOGICAL|non-reserved|non-reserved|non-reserved|
-|LONG|non-reserved|non-reserved|non-reserved|
-|MACRO|non-reserved|non-reserved|non-reserved|
-|MAP|non-reserved|non-reserved|non-reserved|
-|MATCHED|non-reserved|non-reserved|non-reserved|
-|MERGE|non-reserved|non-reserved|non-reserved|
-|MICROSECOND|non-reserved|non-reserved|non-reserved|
-|MICROSECONDS|non-reserved|non-reserved|non-reserved|
-|MILLISECOND|non-reserved|non-reserved|non-reserved|
-|MILLISECONDS|non-reserved|non-reserved|non-reserved|
-|MINUTE|non-reserved|non-reserved|non-reserved|
-|MINUTES|non-reserved|non-reserved|non-reserved|
-|MINUS|non-reserved|strict-non-reserved|non-reserved|
-|MONTH|non-reserved|non-reserved|non-reserved|
-|MONTHS|non-reserved|non-reserved|non-reserved|
-|MSCK|non-reserved|non-reserved|non-reserved|
-|NAME|non-reserved|non-reserved|non-reserved|
-|NAMESPACE|non-reserved|non-reserved|non-reserved|
-|NAMESPACES|non-reserved|non-reserved|non-reserved|
-|NANOSECOND|non-reserved|non-reserved|non-reserved|
-|NANOSECONDS|non-reserved|non-reserved|non-reserved|
-|NATURAL|reserved|strict-non-reserved|reserved|
-|NO|non-reserved|non-reserved|reserved|
-|NOT|reserved|non-reserved|reserved|
-|NULL|reserved|non-reserved|reserved|
-|NULLS|non-reserved|non-reserved|non-reserved|
-|NUMERIC|non-reserved|non-reserved|non-reserved|
-|OF|non-reserved|non-reserved|reserved|
-|OFFSET|reserved|non-reserved|reserved|
-|ON|reserved|strict-non-reserved|reserved|
-|ONLY|reserved|non-reserved|reserved|
-|OPTION|non-reserved|non-reserved|non-reserved|
-|OPTIONS|non-reserved|non-reserved|non-reserved|
-|OR|reserved|non-reserved|reserved|
-|ORDER|reserved|non-reserved|reserved|
-|OUT|non-reserved|non-reserved|reserved|
-|OUTER|reserved|non-reserved|reserved|
-|OUTPUTFORMAT|non-reserved|non-reserved|non-reserved|
-|OVER|non-reserved|non-reserved|non-reserved|
-|OVERLAPS|reserved|non-reserved|reserved|
-|OVERLAY|non-reserved|non-reserved|non-reserved|
-|OVERWRITE|non-reserved|non-reserved|non-reserved|
-|PARTITION|non-reserved|non-reserved|reserved|
-|PARTITIONED|non-reserved|non-reserved|non-reserved|
-|PARTITIONS|non-reserved|non-reserved|non-reserved|
-|PERCENT|non-reserved|non-reserved|non-reserved|
-|PERCENTILE_CONT|reserved|non-reserved|non-reserved|
-|PERCENTILE_DISC|reserved|non-reserved|non-reserved|
-|PIVOT|non-reserved|non-reserved|non-reserved|
-|PLACING|non-reserved|non-reserved|non-reserved|
-|POSITION|non-reserved|non-reserved|reserved|
-|PRECEDING|non-reserved|non-reserved|non-reserved|
-|PRIMARY|reserved|non-reserved|reserved|
-|PRINCIPALS|non-reserved|non-reserved|non-reserved|
-|PROPERTIES|non-reserved|non-reserved|non-reserved|
-|PURGE|non-reserved|non-reserved|non-reserved|
-|QUARTER|non-reserved|non-reserved|non-reserved|
-|QUERY|non-reserved|non-reserved|non-reserved|
-|RANGE|non-reserved|non-reserved|reserved|
-|REAL|non-reserved|non-reserved|reserved|
-|RECORDREADER|non-reserved|non-reserved|non-reserved|
-|RECORDWRITER|non-reserved|non-reserved|non-reserved|
-|RECOVER|non-reserved|non-reserved|non-reserved|
-|REDUCE|non-reserved|non-reserved|non-reserved|
-|REFERENCES|reserved|non-reserved|reserved|
-|REFRESH|non-reserved|non-reserved|non-reserved|
-|REGEXP|non-reserved|non-reserved|not a keyword|
-|RENAME|non-reserved|non-reserved|non-reserved|
-|REPAIR|non-reserved|non-reserved|non-reserved|
-|REPEATABLE|non-reserved|non-reserved|non-reserved|
-|REPLACE|non-reserved|non-reserved|non-reserved|
-|RESET|non-reserved|non-reserved|non-reserved|
-|RESPECT|non-reserved|non-reserved|non-reserved|
-|RESTRICT|non-reserved|non-reserved|non-reserved|
-|REVOKE|non-reserved|non-reserved|reserved|
-|RIGHT|reserved|strict-non-reserved|reserved|
-|RLIKE|non-reserved|non-reserved|non-reserved|
-|ROLE|non-reserved|non-reserved|non-reserved|
-|ROLES|non-reserved|non-reserved|non-reserved|
-|ROLLBACK|non-reserved|non-reserved|reserved|
-|ROLLUP|non-reserved|non-reserved|reserved|
-|ROW|non-reserved|non-reserved|reserved|
-|ROWS|non-reserved|non-reserved|reserved|
-|SCHEMA|non-reserved|non-reserved|non-reserved|
-|SCHEMAS|non-reserved|non-reserved|non-reserved|
-|SECOND|non-reserved|non-reserved|non-reserved|
-|SECONDS|non-reserved|non-reserved|non-reserved|
-|SELECT|reserved|non-reserved|reserved|
-|SEMI|non-reserved|strict-non-reserved|non-reserved|
-|SEPARATED|non-reserved|non-reserved|non-reserved|
-|SERDE|non-reserved|non-reserved|non-reserved|
-|SERDEPROPERTIES|non-reserved|non-reserved|non-reserved|
-|SESSION_USER|reserved|non-reserved|reserved|
-|SET|non-reserved|non-reserved|reserved|
-|SETS|non-reserved|non-reserved|non-reserved|
-|SHORT|non-reserved|non-reserved|non-reserved|
-|SHOW|non-reserved|non-reserved|non-reserved|
-|SKEWED|non-reserved|non-reserved|non-reserved|
-|SMALLINT|non-reserved|non-reserved|reserved|
-|SOME|reserved|non-reserved|reserved|
-|SORT|non-reserved|non-reserved|non-reserved|
-|SORTED|non-reserved|non-reserved|non-reserved|
-|SOURCE|non-reserved|non-reserved|non-reserved|
-|START|non-reserved|non-reserved|reserved|
-|STATISTICS|non-reserved|non-reserved|non-reserved|
-|STORED|non-reserved|non-reserved|non-reserved|
-|STRATIFY|non-reserved|non-reserved|non-reserved|
-|STRING|non-reserved|non-reserved|non-reserved|
-|STRUCT|non-reserved|non-reserved|non-reserved|
-|SUBSTR|non-reserved|non-reserved|non-reserved|
-|SUBSTRING|non-reserved|non-reserved|non-reserved|
-|SYNC|non-reserved|non-reserved|non-reserved|
-|SYSTEM_TIME|non-reserved|non-reserved|non-reserved|
-|SYSTEM_VERSION|non-reserved|non-reserved|non-reserved|
-|TABLE|reserved|non-reserved|reserved|
-|TABLES|non-reserved|non-reserved|non-reserved|
-|TABLESAMPLE|non-reserved|non-reserved|reserved|
-|TARGET|non-reserved|non-reserved|non-reserved|
-|TBLPROPERTIES|non-reserved|non-reserved|non-reserved|
-|TEMP|non-reserved|non-reserved|not a keyword|
-|TEMPORARY|non-reserved|non-reserved|non-reserved|
-|TERMINATED|non-reserved|non-reserved|non-reserved|
-|THEN|reserved|non-reserved|reserved|
-|TIME|reserved|non-reserved|reserved|
-|TIMESTAMP|non-reserved|non-reserved|non-reserved|
-|TIMESTAMP_LTZ|non-reserved|non-reserved|non-reserved|
-|TIMESTAMP_NTZ|non-reserved|non-reserved|non-reserved|
-|TIMESTAMPADD|non-reserved|non-reserved|non-reserved|
-|TIMESTAMPDIFF|non-reserved|non-reserved|non-reserved|
-|TINYINT|non-reserved|non-reserved|non-reserved|
-|TO|reserved|non-reserved|reserved|
-|TOUCH|non-reserved|non-reserved|non-reserved|
-|TRAILING|reserved|non-reserved|reserved|
-|TRANSACTION|non-reserved|non-reserved|non-reserved|
-|TRANSACTIONS|non-reserved|non-reserved|non-reserved|
-|TRANSFORM|non-reserved|non-reserved|non-reserved|
-|TRIM|non-reserved|non-reserved|non-reserved|
-|TRUE|non-reserved|non-reserved|reserved|
-|TRUNCATE|non-reserved|non-reserved|reserved|
-|TRY_CAST|non-reserved|non-reserved|non-reserved|
-|TYPE|non-reserved|non-reserved|non-reserved|
-|UNARCHIVE|non-reserved|non-reserved|non-reserved|
-|UNBOUNDED|non-reserved|non-reserved|non-reserved|
-|UNCACHE|non-reserved|non-reserved|non-reserved|
-|UNION|reserved|strict-non-reserved|reserved|
-|UNIQUE|reserved|non-reserved|reserved|
-|UNKNOWN|reserved|non-reserved|reserved|
-|UNLOCK|non-reserved|non-reserved|non-reserved|
-|UNPIVOT|non-reserved|non-reserved|non-reserved|
-|UNSET|non-reserved|non-reserved|non-reserved|
-|UPDATE|non-reserved|non-reserved|reserved|
-|USE|non-reserved|non-reserved|non-reserved|
-|USER|reserved|non-reserved|reserved|
-|USING|reserved|strict-non-reserved|reserved|
-|VALUES|non-reserved|non-reserved|reserved|
-|VARCHAR|non-reserved|non-reserved|reserved|
-|VERSION|non-reserved|non-reserved|non-reserved|
-|VIEW|non-reserved|non-reserved|non-reserved|
-|VIEWS|non-reserved|non-reserved|non-reserved|
-|VOID|non-reserved|non-reserved|non-reserved|
-|WEEK|non-reserved|non-reserved|non-reserved|
-|WEEKS|non-reserved|non-reserved|non-reserved|
-|WHEN|reserved|non-reserved|reserved|
-|WHERE|reserved|non-reserved|reserved|
-|WINDOW|non-reserved|non-reserved|reserved|
-|WITH|reserved|non-reserved|reserved|
-|WITHIN|reserved|non-reserved|reserved|
-|X|non-reserved|non-reserved|non-reserved|
-|YEAR|non-reserved|non-reserved|non-reserved|
-|YEARS|non-reserved|non-reserved|non-reserved|
-|ZONE|non-reserved|non-reserved|non-reserved|
+| Keyword           |Spark SQL<br/>ANSI Mode|Spark SQL<br/>Default Mode|SQL-2016|
+|-------------------|----------------------|-------------------------|--------|
+| ADD               |non-reserved|non-reserved|non-reserved|
+| AFTER             |non-reserved|non-reserved|non-reserved|
+| ALL               |reserved|non-reserved|reserved|
+| ALTER             |non-reserved|non-reserved|reserved|
+| ALWAYS            |non-reserved|non-reserved|non-reserved|
+| ANALYZE           |non-reserved|non-reserved|non-reserved|
+| AND               |reserved|non-reserved|reserved|
+| ANTI              |non-reserved|strict-non-reserved|non-reserved|
+| ANY               |reserved|non-reserved|reserved|
+| ANY_VALUE         |non-reserved|non-reserved|non-reserved|
+| ARCHIVE           |non-reserved|non-reserved|non-reserved|
+| ARRAY             |non-reserved|non-reserved|reserved|
+| AS                |reserved|non-reserved|reserved|
+| ASC               |non-reserved|non-reserved|non-reserved|
+| AT                |non-reserved|non-reserved|reserved|
+| AUTHORIZATION     |reserved|non-reserved|reserved|
+| BETWEEN           |non-reserved|non-reserved|reserved|
+| BIGINT            |non-reserved|non-reserved|reserved|
+| BINARY            |non-reserved|non-reserved|reserved|
+| BOOLEAN           |non-reserved|non-reserved|reserved|
+| BOTH              |reserved|non-reserved|reserved|
+| BUCKET            |non-reserved|non-reserved|non-reserved|
+| BUCKETS           |non-reserved|non-reserved|non-reserved|
+| BY                |non-reserved|non-reserved|reserved|
+| BYTE              |non-reserved|non-reserved|non-reserved|
+| CACHE             |non-reserved|non-reserved|non-reserved|
+| CASCADE           |non-reserved|non-reserved|non-reserved|
+| CASE              |reserved|non-reserved|reserved|
+| CAST              |reserved|non-reserved|reserved|
+| CATALOG           |non-reserved|non-reserved|non-reserved|
+| CATALOGS          |non-reserved|non-reserved|non-reserved|
+| CHANGE            |non-reserved|non-reserved|non-reserved|
+| CHAR              |non-reserved|non-reserved|reserved|
+| CHARACTER         |non-reserved|non-reserved|reserved|
+| CHECK             |reserved|non-reserved|reserved|
+| CLEAR             |non-reserved|non-reserved|non-reserved|
+| CLUSTER           |non-reserved|non-reserved|non-reserved|
+| CLUSTERED         |non-reserved|non-reserved|non-reserved|
+| CODEGEN           |non-reserved|non-reserved|non-reserved|
+| COLLATE           |reserved|non-reserved|reserved|
+| COLLECTION        |non-reserved|non-reserved|non-reserved|
+| COLUMN            |reserved|non-reserved|reserved|
+| COLUMNS           |non-reserved|non-reserved|non-reserved|
+| COMMENT           |non-reserved|non-reserved|non-reserved|
+| COMMIT            |non-reserved|non-reserved|reserved|
+| COMPACT           |non-reserved|non-reserved|non-reserved|
+| COMPACTIONS       |non-reserved|non-reserved|non-reserved|
+| COMPUTE           |non-reserved|non-reserved|non-reserved|
+| CONCATENATE       |non-reserved|non-reserved|non-reserved|
+| CONSTRAINT        |reserved|non-reserved|reserved|
+| COST              |non-reserved|non-reserved|non-reserved|
+| CREATE            |reserved|non-reserved|reserved|
+| CROSS             |reserved|strict-non-reserved|reserved|
+| CUBE              |non-reserved|non-reserved|reserved|
+| CURRENT           |non-reserved|non-reserved|reserved|
+| CURRENT_DATE      |reserved|non-reserved|reserved|
+| CURRENT_TIME      |reserved|non-reserved|reserved|
+| CURRENT_TIMESTAMP |reserved|non-reserved|reserved|
+| CURRENT_USER      |reserved|non-reserved|reserved|
+| DATA              |non-reserved|non-reserved|non-reserved|
+| DATE              |non-reserved|non-reserved|reserved|
+| DATABASE          |non-reserved|non-reserved|non-reserved|
+| DATABASES         |non-reserved|non-reserved|non-reserved|
+| DATEADD           |non-reserved|non-reserved|non-reserved|
+| DATE_ADD          |non-reserved|non-reserved|non-reserved|
+| DATEDIFF          |non-reserved|non-reserved|non-reserved|
+| DATE_DIFF         |non-reserved|non-reserved|non-reserved|
+| DAY               |non-reserved|non-reserved|non-reserved|
+| DAYS              |non-reserved|non-reserved|non-reserved|
+| DAYOFYEAR         |non-reserved|non-reserved|non-reserved|
+| DBPROPERTIES      |non-reserved|non-reserved|non-reserved|
+| DEC               |non-reserved|non-reserved|reserved|
+| DECIMAL           |non-reserved|non-reserved|reserved|
+| DEFAULT           |non-reserved|non-reserved|non-reserved|
+| DEFINED           |non-reserved|non-reserved|non-reserved|
+| DELETE            |non-reserved|non-reserved|reserved|
+| DELIMITED         |non-reserved|non-reserved|non-reserved|
+| DESC              |non-reserved|non-reserved|non-reserved|
+| DESCRIBE          |non-reserved|non-reserved|reserved|
+| DFS               |non-reserved|non-reserved|non-reserved|
+| DIRECTORIES       |non-reserved|non-reserved|non-reserved|
+| DIRECTORY         |non-reserved|non-reserved|non-reserved|
+| DISTINCT          |reserved|non-reserved|reserved|
+| DISTRIBUTE        |non-reserved|non-reserved|non-reserved|
+| DIV               |non-reserved|non-reserved|not a keyword|
+| DOUBLE            |non-reserved|non-reserved|reserved|
+| DROP              |non-reserved|non-reserved|reserved|
+| ELSE              |reserved|non-reserved|reserved|
+| END               |reserved|non-reserved|reserved|
+| ESCAPE            |reserved|non-reserved|reserved|
+| ESCAPED           |non-reserved|non-reserved|non-reserved|
+| EXCEPT            |reserved|strict-non-reserved|reserved|
+| EXCHANGE          |non-reserved|non-reserved|non-reserved|
+| EXCLUDE           |non-reserved|non-reserved|non-reserved|
+| EXISTS            |non-reserved|non-reserved|reserved|
+| EXPLAIN           |non-reserved|non-reserved|non-reserved|
+| EXPORT            |non-reserved|non-reserved|non-reserved|
+| EXTENDED          |non-reserved|non-reserved|non-reserved|
+| EXTERNAL          |non-reserved|non-reserved|reserved|
+| EXTRACT           |non-reserved|non-reserved|reserved|
+| FALSE             |reserved|non-reserved|reserved|
+| FETCH             |reserved|non-reserved|reserved|
+| FIELDS            |non-reserved|non-reserved|non-reserved|
+| FILTER            |reserved|non-reserved|reserved|
+| FILEFORMAT        |non-reserved|non-reserved|non-reserved|
+| FIRST             |non-reserved|non-reserved|non-reserved|
+| FLOAT             |non-reserved|non-reserved|reserved|
+| FOLLOWING         |non-reserved|non-reserved|non-reserved|
+| FOR               |reserved|non-reserved|reserved|
+| FOREIGN           |reserved|non-reserved|reserved|
+| FORMAT            |non-reserved|non-reserved|non-reserved|
+| FORMATTED         |non-reserved|non-reserved|non-reserved|
+| FROM              |reserved|non-reserved|reserved|
+| FULL              |reserved|strict-non-reserved|reserved|
+| FUNCTION          |non-reserved|non-reserved|reserved|
+| FUNCTIONS         |non-reserved|non-reserved|non-reserved|
+| GENERATED         |non-reserved|non-reserved|non-reserved|
+| GLOBAL            |non-reserved|non-reserved|reserved|
+| GRANT             |reserved|non-reserved|reserved|
+| GROUP             |reserved|non-reserved|reserved|
+| GROUPING          |non-reserved|non-reserved|reserved|
+| HAVING            |reserved|non-reserved|reserved|
+| HOUR              |non-reserved|non-reserved|non-reserved|
+| HOURS             |non-reserved|non-reserved|non-reserved|
+| IDENTIFIER        |non-reserved|non-reserved|non-reserved|
+| IF                |non-reserved|non-reserved|not a keyword|
+| IGNORE            |non-reserved|non-reserved|non-reserved|
+| IMPORT            |non-reserved|non-reserved|non-reserved|
+| IN                |reserved|non-reserved|reserved|
+| INCLUDE           |non-reserved|non-reserved|non-reserved|
+| INDEX             |non-reserved|non-reserved|non-reserved|
+| INDEXES           |non-reserved|non-reserved|non-reserved|
+| INNER             |reserved|strict-non-reserved|reserved|
+| INPATH            |non-reserved|non-reserved|non-reserved|
+| INPUTFORMAT       |non-reserved|non-reserved|non-reserved|
+| INSERT            |non-reserved|non-reserved|reserved|
+| INT               |non-reserved|non-reserved|reserved|
+| INTEGER           |non-reserved|non-reserved|reserved|
+| INTERSECT         |reserved|strict-non-reserved|reserved|
+| INTERVAL          |non-reserved|non-reserved|reserved|
+| INTO              |reserved|non-reserved|reserved|
+| IS                |reserved|non-reserved|reserved|
+| ITEMS             |non-reserved|non-reserved|non-reserved|
+| JOIN              |reserved|strict-non-reserved|reserved|
+| KEYS              |non-reserved|non-reserved|non-reserved|
+| LAST              |non-reserved|non-reserved|non-reserved|
+| LATERAL           |reserved|strict-non-reserved|reserved|
+| LAZY              |non-reserved|non-reserved|non-reserved|
+| LEADING           |reserved|non-reserved|reserved|
+| LEFT              |reserved|strict-non-reserved|reserved|
+| LIKE              |non-reserved|non-reserved|reserved|
+| ILIKE             |non-reserved|non-reserved|non-reserved|
+| LIMIT             |non-reserved|non-reserved|non-reserved|
+| LINES             |non-reserved|non-reserved|non-reserved|
+| LIST              |non-reserved|non-reserved|non-reserved|
+| LOAD              |non-reserved|non-reserved|non-reserved|
+| LOCAL             |non-reserved|non-reserved|reserved|
+| LOCATION          |non-reserved|non-reserved|non-reserved|
+| LOCK              |non-reserved|non-reserved|non-reserved|
+| LOCKS             |non-reserved|non-reserved|non-reserved|
+| LOGICAL           |non-reserved|non-reserved|non-reserved|
+| LONG              |non-reserved|non-reserved|non-reserved|
+| MACRO             |non-reserved|non-reserved|non-reserved|
+| MAP               |non-reserved|non-reserved|non-reserved|
+| MATCHED           |non-reserved|non-reserved|non-reserved|
+| MERGE             |non-reserved|non-reserved|non-reserved|
+| MICROSECOND       |non-reserved|non-reserved|non-reserved|
+| MICROSECONDS      |non-reserved|non-reserved|non-reserved|
+| MILLISECOND       |non-reserved|non-reserved|non-reserved|
+| MILLISECONDS      |non-reserved|non-reserved|non-reserved|
+| MINUTE            |non-reserved|non-reserved|non-reserved|
+| MINUTES           |non-reserved|non-reserved|non-reserved|
+| MINUS             |non-reserved|strict-non-reserved|non-reserved|
+| MONTH             |non-reserved|non-reserved|non-reserved|
+| MONTHS            |non-reserved|non-reserved|non-reserved|
+| MSCK              |non-reserved|non-reserved|non-reserved|
+| NAME              |non-reserved|non-reserved|non-reserved|
+| NAMESPACE         |non-reserved|non-reserved|non-reserved|
+| NAMESPACES        |non-reserved|non-reserved|non-reserved|
+| NANOSECOND        |non-reserved|non-reserved|non-reserved|
+| NANOSECONDS       |non-reserved|non-reserved|non-reserved|
+| NATURAL           |reserved|strict-non-reserved|reserved|
+| NO                |non-reserved|non-reserved|reserved|
+| NOT               |reserved|non-reserved|reserved|
+| NULL              |reserved|non-reserved|reserved|
+| NULLS             |non-reserved|non-reserved|non-reserved|
+| NUMERIC           |non-reserved|non-reserved|non-reserved|
+| OF                |non-reserved|non-reserved|reserved|
+| OFFSET            |reserved|non-reserved|reserved|
+| ON                |reserved|strict-non-reserved|reserved|
+| ONLY              |reserved|non-reserved|reserved|
+| OPTION            |non-reserved|non-reserved|non-reserved|
+| OPTIONS           |non-reserved|non-reserved|non-reserved|
+| OR                |reserved|non-reserved|reserved|
+| ORDER             |reserved|non-reserved|reserved|
+| OUT               |non-reserved|non-reserved|reserved|
+| OUTER             |reserved|non-reserved|reserved|
+| OUTPUTFORMAT      |non-reserved|non-reserved|non-reserved|
+| OVER              |non-reserved|non-reserved|non-reserved|
+| OVERLAPS          |reserved|non-reserved|reserved|
+| OVERLAY           |non-reserved|non-reserved|non-reserved|
+| OVERWRITE         |non-reserved|non-reserved|non-reserved|
+| PARTITION         |non-reserved|non-reserved|reserved|
+| PARTITIONED       |non-reserved|non-reserved|non-reserved|
+| PARTITIONS        |non-reserved|non-reserved|non-reserved|
+| PERCENT           |non-reserved|non-reserved|non-reserved|
+| PERCENTILE_CONT   |reserved|non-reserved|non-reserved|
+| PERCENTILE_DISC   |reserved|non-reserved|non-reserved|
+| PIVOT             |non-reserved|non-reserved|non-reserved|
+| PLACING           |non-reserved|non-reserved|non-reserved|
+| POSITION          |non-reserved|non-reserved|reserved|
+| PRECEDING         |non-reserved|non-reserved|non-reserved|
+| PRIMARY           |reserved|non-reserved|reserved|
+| PRINCIPALS        |non-reserved|non-reserved|non-reserved|
+| PROPERTIES        |non-reserved|non-reserved|non-reserved|
+| PURGE             |non-reserved|non-reserved|non-reserved|
+| QUARTER           |non-reserved|non-reserved|non-reserved|
+| QUERY             |non-reserved|non-reserved|non-reserved|
+| RANGE             |non-reserved|non-reserved|reserved|
+| REAL              |non-reserved|non-reserved|reserved|
+| RECORDREADER      |non-reserved|non-reserved|non-reserved|
+| RECORDWRITER      |non-reserved|non-reserved|non-reserved|
+| RECOVER           |non-reserved|non-reserved|non-reserved|
+| REDUCE            |non-reserved|non-reserved|non-reserved|
+| REFERENCES        |reserved|non-reserved|reserved|
+| REFRESH           |non-reserved|non-reserved|non-reserved|
+| REGEXP            |non-reserved|non-reserved|not a keyword|
+| RENAME            |non-reserved|non-reserved|non-reserved|
+| REPAIR            |non-reserved|non-reserved|non-reserved|
+| REPEATABLE        |non-reserved|non-reserved|non-reserved|
+| REPLACE           |non-reserved|non-reserved|non-reserved|
+| RESET             |non-reserved|non-reserved|non-reserved|
+| RESPECT           |non-reserved|non-reserved|non-reserved|
+| RESTRICT          |non-reserved|non-reserved|non-reserved|
+| REVOKE            |non-reserved|non-reserved|reserved|
+| RIGHT             |reserved|strict-non-reserved|reserved|
+| RLIKE             |non-reserved|non-reserved|non-reserved|
+| ROLE              |non-reserved|non-reserved|non-reserved|
+| ROLES             |non-reserved|non-reserved|non-reserved|
+| ROLLBACK          |non-reserved|non-reserved|reserved|
+| ROLLUP            |non-reserved|non-reserved|reserved|
+| ROW               |non-reserved|non-reserved|reserved|
+| ROWS              |non-reserved|non-reserved|reserved|
+| SCHEMA            |non-reserved|non-reserved|non-reserved|
+| SCHEMAS           |non-reserved|non-reserved|non-reserved|
+| SECOND            |non-reserved|non-reserved|non-reserved|
+| SECONDS           |non-reserved|non-reserved|non-reserved|
+| SELECT            |reserved|non-reserved|reserved|
+| SEMI              |non-reserved|strict-non-reserved|non-reserved|
+| SEPARATED         |non-reserved|non-reserved|non-reserved|
+| SERDE             |non-reserved|non-reserved|non-reserved|
+| SERDEPROPERTIES   |non-reserved|non-reserved|non-reserved|
+| SESSION_USER      |reserved|non-reserved|reserved|
+| SET               |non-reserved|non-reserved|reserved|
+| SETS              |non-reserved|non-reserved|non-reserved|
+| SHORT             |non-reserved|non-reserved|non-reserved|
+| SHOW              |non-reserved|non-reserved|non-reserved|
+| SINGLE            |non-reserved|non-reserved|non-reserved|
+| SKEWED            |non-reserved|non-reserved|non-reserved|
+| SMALLINT          |non-reserved|non-reserved|reserved|
+| SOME              |reserved|non-reserved|reserved|
+| SORT              |non-reserved|non-reserved|non-reserved|
+| SORTED            |non-reserved|non-reserved|non-reserved|
+| SOURCE            |non-reserved|non-reserved|non-reserved|
+| START             |non-reserved|non-reserved|reserved|
+| STATISTICS        |non-reserved|non-reserved|non-reserved|
+| STORED            |non-reserved|non-reserved|non-reserved|
+| STRATIFY          |non-reserved|non-reserved|non-reserved|
+| STRING            |non-reserved|non-reserved|non-reserved|
+| STRUCT            |non-reserved|non-reserved|non-reserved|
+| SUBSTR            |non-reserved|non-reserved|non-reserved|
+| SUBSTRING         |non-reserved|non-reserved|non-reserved|
+| SYNC              |non-reserved|non-reserved|non-reserved|
+| SYSTEM_TIME       |non-reserved|non-reserved|non-reserved|
+| SYSTEM_VERSION    |non-reserved|non-reserved|non-reserved|
+| TABLE             |reserved|non-reserved|reserved|
+| TABLES            |non-reserved|non-reserved|non-reserved|
+| TABLESAMPLE       |non-reserved|non-reserved|reserved|
+| TARGET            |non-reserved|non-reserved|non-reserved|
+| TBLPROPERTIES     |non-reserved|non-reserved|non-reserved|
+| TEMP              |non-reserved|non-reserved|not a keyword|
+| TEMPORARY         |non-reserved|non-reserved|non-reserved|
+| TERMINATED        |non-reserved|non-reserved|non-reserved|
+| THEN              |reserved|non-reserved|reserved|
+| TIME              |reserved|non-reserved|reserved|
+| TIMESTAMP         |non-reserved|non-reserved|non-reserved|
+| TIMESTAMP_LTZ     |non-reserved|non-reserved|non-reserved|
+| TIMESTAMP_NTZ     |non-reserved|non-reserved|non-reserved|
+| TIMESTAMPADD      |non-reserved|non-reserved|non-reserved|
+| TIMESTAMPDIFF     |non-reserved|non-reserved|non-reserved|
+| TINYINT           |non-reserved|non-reserved|non-reserved|
+| TO                |reserved|non-reserved|reserved|
+| TOUCH             |non-reserved|non-reserved|non-reserved|
+| TRAILING          |reserved|non-reserved|reserved|
+| TRANSACTION       |non-reserved|non-reserved|non-reserved|
+| TRANSACTIONS      |non-reserved|non-reserved|non-reserved|
+| TRANSFORM         |non-reserved|non-reserved|non-reserved|
+| TRIM              |non-reserved|non-reserved|non-reserved|
+| TRUE              |non-reserved|non-reserved|reserved|
+| TRUNCATE          |non-reserved|non-reserved|reserved|
+| TRY_CAST          |non-reserved|non-reserved|non-reserved|
+| TYPE              |non-reserved|non-reserved|non-reserved|
+| UNARCHIVE         |non-reserved|non-reserved|non-reserved|
+| UNBOUNDED         |non-reserved|non-reserved|non-reserved|
+| UNCACHE           |non-reserved|non-reserved|non-reserved|
+| UNION             |reserved|strict-non-reserved|reserved|
+| UNIQUE            |reserved|non-reserved|reserved|
+| UNKNOWN           |reserved|non-reserved|reserved|
+| UNLOCK            |non-reserved|non-reserved|non-reserved|
+| UNPIVOT           |non-reserved|non-reserved|non-reserved|
+| UNSET             |non-reserved|non-reserved|non-reserved|
+| UPDATE            |non-reserved|non-reserved|reserved|
+| USE               |non-reserved|non-reserved|non-reserved|
+| USER              |reserved|non-reserved|reserved|
+| USING             |reserved|strict-non-reserved|reserved|
+| VALUES            |non-reserved|non-reserved|reserved|
+| VARCHAR           |non-reserved|non-reserved|reserved|
+| VERSION           |non-reserved|non-reserved|non-reserved|
+| VIEW              |non-reserved|non-reserved|non-reserved|
+| VIEWS             |non-reserved|non-reserved|non-reserved|
+| VOID              |non-reserved|non-reserved|non-reserved|
+| WEEK              |non-reserved|non-reserved|non-reserved|
+| WEEKS             |non-reserved|non-reserved|non-reserved|
+| WHEN              |reserved|non-reserved|reserved|
+| WHERE             |reserved|non-reserved|reserved|
+| WINDOW            |non-reserved|non-reserved|reserved|
+| WITH              |reserved|non-reserved|reserved|
+| WITHIN            |reserved|non-reserved|reserved|
+| X                 |non-reserved|non-reserved|non-reserved|
+| YEAR              |non-reserved|non-reserved|non-reserved|
+| YEARS             |non-reserved|non-reserved|non-reserved|
+| ZONE              |non-reserved|non-reserved|non-reserved|

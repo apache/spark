@@ -1235,7 +1235,11 @@ class BaseUDTFTestsMixin:
             df = self.spark.sql(query)
             value = df.collect()[0][0]
             stripExprIds = re.sub(r'#[\d]+', r'#xx', value)
-            stripPlanIds = re.sub(r'plan_id=[\d]+', r'plan_id=xx', stripExprIds)
+            stripPlanIds = re.sub(
+                r'plan_id=[\d]+', r'plan_id=xx', stripExprIds)
+            stripEvalType = re.sub(
+                r'\+- .....EvalPythonUDTF', r'+- BatchEvalPythonUDTF',
+                stripPlanIds)
             print('Query plan: ' + stripPlanIds)
             return stripPlanIds.strip('\n')
         def expected(input: str) -> str:
