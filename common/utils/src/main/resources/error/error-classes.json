@@ -2972,6 +2972,16 @@
           "Pivoting by the value '<value>' of the column data type <type>."
         ]
       },
+      "PURGE_PARTITION" : {
+        "message" : [
+          "Partition purge."
+        ]
+      },
+      "PURGE_TABLE" : {
+        "message" : [
+          "Purge table."
+        ]
+      },
       "PYTHON_UDF_IN_ON_CLAUSE" : {
         "message" : [
           "Python UDF in the ON clause of a <joinType> JOIN. In case of an INNNER JOIN consider rewriting to a CROSS JOIN with a WHERE clause."
