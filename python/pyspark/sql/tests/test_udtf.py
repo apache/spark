@@ -471,7 +471,7 @@ class BaseUDTFTestsMixin:
             def eval(self):
                 yield tuple()
 
-        self.assertEqual(TestUDTF().collect(), [Row()])
+        assertDataFrameEqual(TestUDTF(), [Row()])
 
     @unittest.skipIf(not have_pandas, pandas_requirement_message)
     def test_udtf_with_pandas_input_type(self):

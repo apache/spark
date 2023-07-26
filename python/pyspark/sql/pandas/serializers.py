@@ -388,7 +388,7 @@ class ArrowStreamPandasUDFSerializer(ArrowStreamPandasSerializer):
         if len(df.columns) == 0:
             return pa.array([{}] * len(df), arrow_struct_type)
         # Assign result columns by schema name if user labeled with strings
-        elif self._assign_cols_by_name and any(isinstance(name, str) for name in df.columns):
+        if self._assign_cols_by_name and any(isinstance(name, str) for name in df.columns):
             struct_arrs = [
                 self._create_array(df[field.name], field.type, arrow_cast=self._arrow_cast)
                 for field in arrow_struct_type
