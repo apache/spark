@@ -183,6 +183,12 @@ private[connect] class SparkConnectStreamingQueryCache(
               val expiresAtMs = nowMs + stoppedQueryInactivityTimeout.toMillis
               queryCache.put(k, v.copy(expiresAtMs = Some(expiresAtMs)))
             }
+
+            if (!SparkConnectService.isSessionAlive(v.userId, v.sessionId)) {
+              log.info(s"Terminating the query $id in session ${v.sessionId} since the" +
+                s" session mapping is removed.")
+              v.query.stop()
+            }
         }
       }
     }
