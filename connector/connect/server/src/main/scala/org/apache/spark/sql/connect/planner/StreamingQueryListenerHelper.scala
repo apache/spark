@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.connect.planner
 
-import org.apache.spark.api.python.{PythonEvalType, PythonRDD, SimplePythonFunction, StreamingPythonRunner}
+import org.apache.spark.api.python.{PythonRDD, SimplePythonFunction, StreamingPythonEvalType, StreamingPythonRunner}
 import org.apache.spark.sql.connect.service.{SessionHolder, SparkConnectService}
 import org.apache.spark.sql.streaming.StreamingQueryListener
 
@@ -36,7 +36,8 @@ class PythonStreamingQueryListener(
   val connectUrl = s"sc://localhost:$port/;user_id=${sessionHolder.userId}"
   val runner = StreamingPythonRunner(listener, connectUrl)
 
-  val (dataOut, _) = runner.init(sessionHolder.sessionId, PythonEvalType.SQL_STREAMING_LISTENER)
+  val (dataOut, _) = runner.init(
+    sessionHolder.sessionId, StreamingPythonEvalType.SQL_STREAMING_LISTENER)
 
   override def onQueryStarted(event: StreamingQueryListener.QueryStartedEvent): Unit = {
     PythonRDD.writeUTF(event.json, dataOut)

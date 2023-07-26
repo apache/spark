@@ -27,6 +27,18 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.BUFFER_SIZE
 import org.apache.spark.internal.config.Python.{PYTHON_AUTH_SOCKET_TIMEOUT, PYTHON_USE_DAEMON}
 
+/**
+ * Enumerate the type of command that will be sent to the Streaming Python worker on driver
+ */
+private[spark] object StreamingPythonEvalType {
+  val SQL_STREAMING_FOREACH_BATCH = 100
+  val SQL_STREAMING_LISTENER = 101
+
+  def toString(pythonEvalType: Int): String = pythonEvalType match {
+    case SQL_STREAMING_FOREACH_BATCH => "SQL_STREAMING_FOREACH_BATCH"
+    case SQL_STREAMING_LISTENER => "SQL_STREAMING_LISTENER"
+  }
+}
 
 private[spark] object StreamingPythonRunner {
   def apply(func: PythonFunction, connectUrl: String): StreamingPythonRunner = {

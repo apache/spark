@@ -22,7 +22,7 @@ import os
 import json
 
 from pyspark.java_gateway import local_connect_and_auth
-from pyspark.rdd import PythonEvalType
+from pyspark.rdd import StreamingPythonEvalType
 from pyspark.serializers import (
     read_int,
     write_int,
@@ -63,9 +63,9 @@ def main(infile, outfile):  # type: ignore[no-untyped-def]
 
     outfile.flush()
 
-    if eval_type == PythonEvalType.SQL_STREAMING_FOREACH_BATCH:
+    if eval_type == StreamingPythonEvalType.SQL_STREAMING_FOREACH_BATCH:
         foreach_batch_fcn(infile, outfile, spark_connect_session, func)
-    elif eval_type == PythonEvalType.SQL_STREAMING_LISTENER:
+    elif eval_type == StreamingPythonEvalType.SQL_STREAMING_LISTENER:
         streaming_listener_fcn(infile, outfile, spark_connect_session, func)
     else:  # unreachable
         raise ValueError("Unrecognized streaming function type")
