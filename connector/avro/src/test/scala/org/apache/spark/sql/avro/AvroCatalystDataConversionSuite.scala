@@ -30,7 +30,7 @@ import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow, NoopF
 import org.apache.spark.sql.catalyst.expressions.{ExpressionEvalHelper, GenericInternalRow, Literal}
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, GenericArrayData, MapData}
 import org.apache.spark.sql.catalyst.util.RebaseDateTime.RebaseSpec
-import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.LegacyBehaviorPolicy
 import org.apache.spark.sql.sources.{EqualTo, Not}
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
@@ -286,7 +286,7 @@ class AvroCatalystDataConversionSuite extends SparkFunSuite
       schema,
       dataType,
       false,
-      RebaseSpec(SQLConf.LegacyBehaviorPolicy.CORRECTED),
+      RebaseSpec(LegacyBehaviorPolicy.CORRECTED),
       filters)
     val deserialized = deserializer.deserialize(data)
     expected match {
