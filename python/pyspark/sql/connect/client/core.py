@@ -17,6 +17,7 @@
 __all__ = [
     "ChannelBuilder",
     "SparkConnectClient",
+    "spark_connect_log_level",
 ]
 
 from pyspark.sql.connect.utils import check_dependencies
@@ -104,7 +105,7 @@ def _configure_logging() -> logging.Logger:
 
     # Check the environment variables for log levels:
     if "SPARK_CONNECT_LOG_LEVEL" in os.environ:
-        logger.setLevel(os.getenv("SPARK_CONNECT_LOG_LEVEL", "error").upper())
+        logger.setLevel(os.environ["SPARK_CONNECT_LOG_LEVEL"].upper())
     else:
         logger.disabled = True
     return logger
@@ -112,6 +113,19 @@ def _configure_logging() -> logging.Logger:
 
 # Instantiate the logger based on the environment configuration.
 logger = _configure_logging()
+
+
+def spark_connect_log_level() -> Optional[int]:
+    """
+    This returns this log level as integer, or none (if no logging is enabled).
+
+    Spark Connect logging can be configured with environment variable 'SPARK_CONNECT_LOG_LEVEL'
+    .. versionadded:: 3.5.0
+    """
+
+    if logger.disabled:
+        return None
+    return logger.level
 
 
 class ChannelBuilder:
