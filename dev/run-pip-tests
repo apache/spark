@@ -25,7 +25,7 @@ shopt -s nullglob
 FWDIR="$(cd "$(dirname "$0")"/..; pwd)"
 cd "$FWDIR"
 
-du -hs /usr/local/*
+du -sch .[!.]* * |sort -h
 
 echo "Constructing virtual env for testing"
 VIRTUALENV_BASE=$(mktemp -d)
