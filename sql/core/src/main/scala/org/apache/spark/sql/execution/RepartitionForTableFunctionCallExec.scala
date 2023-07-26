@@ -42,22 +42,35 @@ case class RepartitionForTableFunctionCallExec(
 
   // These methods of this operator by simply delegate to the child operator by passing through
   // tuples unmodified.
-  override def output: Seq[Attribute] = child.output
-  override protected def outputExpressions: Seq[NamedExpression] = child.output
-  override protected def orderingExpressions: Seq[SortOrder] = child.outputOrdering
-  override def inputRDDs(): Seq[RDD[InternalRow]] =
+  override def output: Seq[Attribute] = {
+    child.output
+  }
+  override protected def outputExpressions: Seq[NamedExpression] = {
+    child.output
+  }
+  override protected def orderingExpressions: Seq[SortOrder] = {
+    child.outputOrdering
+  }
+  override def inputRDDs(): Seq[RDD[InternalRow]] = {
     child.asInstanceOf[CodegenSupport].inputRDDs()
-  protected override def doProduce(ctx: CodegenContext): String =
-    child.asInstanceOf[CodegenSupport].produce(ctx, this)
-  override protected def withNewChildInternal(newChild: SparkPlan): SparkPlan =
+  }
+  override protected def withNewChildInternal(newChild: SparkPlan): SparkPlan = {
     copy(child = newChild)
-  override def doConsume(ctx: CodegenContext, input: Seq[ExprCode], row: ExprCode): String =
-    child.asInstanceOf[CodegenSupport].doConsume(ctx, input, row)
-  protected override def doExecute(): RDD[InternalRow] = throw executionNotImplementedYetError()
+  }
+  protected override def doProduce(ctx: CodegenContext): String = {
+    throw executionNotImplementedYetError()
+  }
+  override def doConsume(ctx: CodegenContext, input: Seq[ExprCode], row: ExprCode): String = {
+    throw executionNotImplementedYetError()
+  }
+  protected override def doExecute(): RDD[InternalRow] = {
+    throw executionNotImplementedYetError()
+  }
   private def executionNotImplementedYetError(): Throwable = {
     SparkException.internalError("query execution for table function calls with repartitioning")
   }
 
+  // These methods forward the desired repartitioning and ordering properties to the optimizer.
   override def requiredChildDistribution: Seq[Distribution] = {
     if (withSinglePartition) {
       Seq(AllTuples)
@@ -67,7 +80,6 @@ case class RepartitionForTableFunctionCallExec(
       super.requiredChildDistribution
     }
   }
-
   override def requiredChildOrdering: Seq[Seq[SortOrder]] = {
     if (orderByExpressions.nonEmpty) {
       Seq(orderByExpressions)
