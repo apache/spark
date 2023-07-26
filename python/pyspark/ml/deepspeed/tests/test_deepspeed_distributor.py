@@ -17,9 +17,9 @@
 from contextlib import contextmanager
 import os
 import sys
+import shutil
 import textwrap
 from typing import Any,Dict, Tuple
-import shutil
 import unittest
 
 from pyspark import SparkConf, SparkContext
