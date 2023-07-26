@@ -451,11 +451,6 @@ case class MapGroups(
 /** Internal class representing State */
 trait LogicalGroupState[S]
 
-/** Types of timeouts used in FlatMapGroupsWithState */
-case object NoTimeout extends GroupStateTimeout
-case object ProcessingTimeTimeout extends GroupStateTimeout
-case object EventTimeTimeout extends GroupStateTimeout
-
 /** Factory for constructing new `MapGroupsWithState` nodes. */
 object FlatMapGroupsWithState {
   def apply[K: Encoder, V: Encoder, S: Encoder, U: Encoder](
