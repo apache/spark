@@ -655,7 +655,7 @@ def main():
             opts.parallelism,
             with_coverage=os.environ.get("PYSPARK_CODECOV", "false") == "true",
         )
-        # run_python_packaging_tests()
+        run_python_packaging_tests()
     if any(m.should_run_r_tests for m in test_modules) and not os.environ.get("SKIP_R"):
         run_sparkr_tests()
 
