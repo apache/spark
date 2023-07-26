@@ -464,7 +464,7 @@ jobs:
       with:
         fetch-depth: 0
         repository: apache/spark
-        ref: branch-3.3
+        ref: ${{ inputs.branch }}
     - name: Sync the current branch with the latest in Apache Spark
       if: github.repository != 'apache/spark'
       run: |
