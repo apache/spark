@@ -25,7 +25,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.plans.physical.Partitioning
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.errors.QueryExecutionErrors
+import org.apache.spark.sql.errors.DataTypeErrors
 import org.apache.spark.sql.execution.command.DataWritingCommandExec
 import org.apache.spark.sql.execution.datasources.V1WriteCommand
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
@@ -277,7 +277,7 @@ private object RowToColumnConverter {
       case dt: DecimalType => new DecimalConverter(dt)
       case mt: MapType => MapConverter(getConverterForType(mt.keyType, nullable = false),
         getConverterForType(mt.valueType, mt.valueContainsNull))
-      case unknown => throw QueryExecutionErrors.unsupportedDataTypeError(unknown)
+      case unknown => throw DataTypeErrors.unsupportedDataTypeError(unknown)
     }
 
     if (nullable) {

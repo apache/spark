@@ -296,6 +296,7 @@ private[sql] object DataTypeErrors extends DataTypeErrorsBase {
       cause = null)
   }
 
+  /*
   def invalidInputInCastToDatetimeError(
        value: Any,
        from: DataType,
@@ -310,5 +311,12 @@ private[sql] object DataTypeErrors extends DataTypeErrorsBase {
         "ansiConfig" -> toSQLConf(Sql.ANSI_ENABLED.key)),
       context = getQueryContext(context),
       summary = getSummary(context))
+  }
+  */
+
+  def unsupportedDataTypeError(typeName: DataType): SparkUnsupportedOperationException = {
+    new SparkUnsupportedOperationException(
+      errorClass = "UNSUPPORTED_DATATYPE",
+      messageParameters = Map("typeName" -> toSQLType(typeName)))
   }
 }
