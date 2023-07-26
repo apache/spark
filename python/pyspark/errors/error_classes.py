@@ -164,11 +164,6 @@ ERROR_CLASSES_JSON = """
       "Remote client cannot create a SparkContext. Create SparkSession instead."
     ]
   },
-  "DIFFERENT_OBJECTS" : {
-    "message" : [
-      "<left> does not equal <right>."
-    ]
-  },
   "DIFFERENT_ROWS" : {
     "message" : [
       "<error_msg>"
