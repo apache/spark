@@ -25,6 +25,7 @@ shopt -s nullglob
 FWDIR="$(cd "$(dirname "$0")"/..; pwd)"
 cd "$FWDIR"
 
+du -hs /__t/*
 du -hs /__w/*
 du -hs /usr/*
 du -hs /root/*
