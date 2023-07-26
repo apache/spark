@@ -36,6 +36,9 @@ object MimaExcludes {
 
   // Exclude rules for 3.5.x from 3.4.0
   lazy val v35excludes = defaultExcludes ++ Seq(
+    // [SPARK-44531][CONNECT][SQL] Move encoder inference to sql/api
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.types.DataTypes"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.types.SQLUserDefinedType"),
     // [SPARK-43165][SQL] Move canWrite to DataTypeUtils
     ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.sql.types.DataType.canWrite"),
     // [SPARK-43195][CORE] Remove unnecessary serializable wrapper in HadoopFSUtils
