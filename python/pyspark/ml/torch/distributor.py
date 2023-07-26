@@ -360,6 +360,7 @@ class TorchDistributor(Distributor):
     _TRAIN_FILE = "train.py"
     _PICKLED_OUTPUT_FILE = "output.pickle"
     _TORCH_SSL_CONF = "pytorch.spark.distributor.ignoreSsl"
+
     def __init__(
         self,
         num_processes: int = 1,
@@ -608,7 +609,7 @@ class TorchDistributor(Distributor):
                     del os.environ[CUDA_VISIBLE_DEVICES]
 
         return output
-    
+
     def _get_spark_task_function(
         self,
         framework_wrapper_fn: Optional[Callable],
@@ -647,7 +648,7 @@ class TorchDistributor(Distributor):
             schema_json = input_dataframe.schema.jsonValue()
         else:
             schema_json = None
-        
+
         # Spark task program
         def wrapped_train_fn(iterator):  # type: ignore[no-untyped-def]
             import os
