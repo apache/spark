@@ -170,12 +170,20 @@ class DeepspeedTorchDistributorUnitTests(unittest.TestCase):
             self.assertEqual(distributed_cmd_args_expected, distributed_command_with_args)
 
 def _create_basic_function():
+    # TODO: swap out with better test function
+    # once Deepspeed better supports CPU
    def pythagoras(leg1: float, leg2: float):
        import deepspeed
        return (leg1 * leg1 + leg2 * leg2)**0.5
    return pythagoras 
 
-
+# The program and function that we use in the end-to-end tests
+# is very simple because in the Spark CI we only have access
+# to CPUs and at this point in time, CPU support is limited
+# in Deepspeed. Once Deepspeed better supports CPU training
+# and inference, the hope is to switch out the training 
+# and file for the tests with more realistic testing 
+# that use Deepspeed constructs. 
 class DeepspeedTorchDistributorDistributedEndToEnd(unittest.TestCase):
 
     @classmethod
@@ -204,6 +212,8 @@ class DeepspeedTorchDistributorDistributedEndToEnd(unittest.TestCase):
 
     def test_pytorch_file_e2e(self):
         import textwrap
+        # TODO: change to better test script
+        # once Deepspeed CPU support is better
         str_to_write = textwrap.dedent(""" 
 import sys
 def pythagorean_thm(x : int, y: int):
