@@ -223,6 +223,12 @@ ERROR_CLASSES_JSON = """
       "Invalid call to `<func_name>` on unresolved object."
     ]
   },
+  "INVALID_PANDAS_ON_SPARK_COMPARISON" : {
+    "message" : [
+      "Expected two pandas-on-Spark DataFrames",
+      "but got actual: <actual_type> and expected: <expected_type>"
+    ]
+  },
   "INVALID_CONNECT_URL" : {
     "message" : [
       "Invalid URL for Spark Connect: <detail>"

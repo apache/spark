@@ -16,6 +16,7 @@
 #
 
 import pandas as pd
+from typing import Union
 
 from pyspark.pandas.indexes.base import Index
 from pyspark.pandas.utils import (
@@ -25,8 +26,9 @@ from pyspark.pandas.utils import (
     validate_index_loc,
     validate_mode,
 )
-from pyspark.testing.pandasutils import PandasOnSparkTestCase
+from pyspark.testing.pandasutils import PandasOnSparkTestCase, assertPandasOnSparkEqual
 from pyspark.testing.sqlutils import SQLTestUtils
+from pyspark.errors import PySparkAssertionError
 
 some_global_variable = 0
 
@@ -104,6 +106,72 @@ class UtilsTestsMixin:
         err_msg = "index -4 is out of bounds for axis 0 with size 3"
         with self.assertRaisesRegex(IndexError, err_msg):
             validate_index_loc(psidx, -4)
+
+    def test_assert_df_assertPandasOnSparkEqual(self):
+        import pyspark.pandas as ps
+
+        psdf1 = ps.DataFrame({"a": [1, 2, 3], "b": [4, 5, 6], "c": [7, 8, 9]})
+        psdf2 = ps.DataFrame({"a": [1, 2, 3], "b": [4, 5, 6], "c": [7, 8, 9]})
+
+        assertPandasOnSparkEqual(psdf1, psdf2)
+        assertPandasOnSparkEqual(psdf1, psdf2, checkRowOrder=True)
+
+    def test_assertPandasOnSparkEqual_ignoreOrder(self):
+        import pyspark.pandas as ps
+
+        psdf1 = ps.DataFrame({"a": [1, 2, 3], "b": [4, 5, 6], "c": [7, 8, 9]})
+        psdf2 = ps.DataFrame({"a": [2, 1, 3], "b": [5, 4, 6], "c": [8, 7, 9]})
+
+        assertPandasOnSparkEqual(psdf1, psdf2)
+
+    def test_assert_series_assertPandasOnSparkEqual(self):
+        import pyspark.pandas as ps
+
+        s1 = ps.Series([212.32, 100.0001])
+        s2 = ps.Series([212.32, 100.0001])
+
+        assertPandasOnSparkEqual(s1, s2, checkExact=False)
+
+    def test_assert_index_assertPandasOnSparkEqual(self):
+        import pyspark.pandas as ps
+
+        s1 = ps.Index([212.300001, 100.000])
+        s2 = ps.Index([212.3, 100.0001])
+
+        assertPandasOnSparkEqual(s1, s2, almost=True)
+
+    def test_assert_error_assertPandasOnSparkEqual(self):
+        import pyspark.pandas as ps
+
+        list1 = [10, 20, 30]
+        list2 = [10, 20, 30]
+
+        with self.assertRaises(PySparkAssertionError) as pe:
+            assertPandasOnSparkEqual(list1, list2)
+
+        self.check_error(
+            exception=pe.exception,
+            error_class="INVALID_TYPE_DF_EQUALITY_ARG",
+            message_parameters={
+                "expected_type": Union[ps.DataFrame, ps.Series, ps.Index],
+                "arg_name": "actual",
+                "actual_type": type(list1),
+            },
+        )
+
+    def test_assert_None_assertPandasOnSparkEqual(self):
+        psdf1 = None
+        psdf2 = None
+
+        assertPandasOnSparkEqual(psdf1, psdf2)
+
+    def test_assert_empty_assertPandasOnSparkEqual(self):
+        import pyspark.pandas as ps
+
+        psdf1 = ps.DataFrame()
+        psdf2 = ps.DataFrame()
+
+        assertPandasOnSparkEqual(psdf1, psdf2)
 
 
 class TestClassForLazyProp:
