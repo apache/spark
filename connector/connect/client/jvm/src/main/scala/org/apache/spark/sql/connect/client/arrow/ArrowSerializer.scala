@@ -38,7 +38,7 @@ import org.apache.spark.sql.catalyst.DefinedByConstructorParams
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoder
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders._
 import org.apache.spark.sql.catalyst.util.{DateTimeUtils, IntervalUtils}
-import org.apache.spark.sql.errors.QueryExecutionErrors
+import org.apache.spark.sql.errors.DataTypeErrors
 import org.apache.spark.sql.types.Decimal
 import org.apache.spark.sql.util.ArrowUtils
 
@@ -439,7 +439,7 @@ object ArrowSerializer {
         }
 
       case (CalendarIntervalEncoder | _: UDTEncoder[_], _) =>
-        throw QueryExecutionErrors.unsupportedDataTypeError(encoder.dataType)
+        throw DataTypeErrors.unsupportedDataTypeError(encoder.dataType)
 
       case _ =>
         throw new RuntimeException(s"Unsupported Encoder($encoder)/Vector($v) combination.")
