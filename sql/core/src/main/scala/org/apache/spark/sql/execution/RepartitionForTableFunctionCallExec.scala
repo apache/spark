@@ -45,16 +45,16 @@ case class RepartitionForTableFunctionCallExec(
   override def output: Seq[Attribute] = {
     child.output
   }
-  override protected def outputExpressions: Seq[NamedExpression] = {
+  protected override def outputExpressions: Seq[NamedExpression] = {
     child.output
   }
-  override protected def orderingExpressions: Seq[SortOrder] = {
+  protected override def orderingExpressions: Seq[SortOrder] = {
     child.outputOrdering
   }
   override def inputRDDs(): Seq[RDD[InternalRow]] = {
     child.asInstanceOf[CodegenSupport].inputRDDs()
   }
-  override protected def withNewChildInternal(newChild: SparkPlan): SparkPlan = {
+  protected override def withNewChildInternal(newChild: SparkPlan): SparkPlan = {
     copy(child = newChild)
   }
   protected override def doProduce(ctx: CodegenContext): String = {
