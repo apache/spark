@@ -31,7 +31,7 @@ import org.apache.spark.connect.proto.StreamingQueryManagerCommandResult
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.connect.common.{InvalidPlanInput, StreamingListenerPacket}
-import org.apache.spark.util.Utils
+import org.apache.spark.util.SparkSerDeUtils
 
 /**
  * A class to manage all the [[StreamingQuery]] active in a `SparkSession`.
