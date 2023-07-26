@@ -1383,7 +1383,7 @@ class StreamingQueryManagerCommand(google.protobuf.message.Message):
         def __init__(
             self,
             *,
-            listener_payload: builtins.bytes | None = ...,
+            listener_payload: builtins.bytes = ...,
             python_listener_payload: pyspark.sql.connect.proto.expressions_pb2.PythonUDF
             | None = ...,
             id: builtins.str = ...,
@@ -1391,12 +1391,8 @@ class StreamingQueryManagerCommand(google.protobuf.message.Message):
         def HasField(
             self,
             field_name: typing_extensions.Literal[
-                "_listener_payload",
-                b"_listener_payload",
                 "_python_listener_payload",
                 b"_python_listener_payload",
-                "listener_payload",
-                b"listener_payload",
                 "python_listener_payload",
                 b"python_listener_payload",
             ],
@@ -1404,8 +1400,6 @@ class StreamingQueryManagerCommand(google.protobuf.message.Message):
         def ClearField(
             self,
             field_name: typing_extensions.Literal[
-                "_listener_payload",
-                b"_listener_payload",
                 "_python_listener_payload",
                 b"_python_listener_payload",
                 "id",
@@ -1416,11 +1410,6 @@ class StreamingQueryManagerCommand(google.protobuf.message.Message):
                 b"python_listener_payload",
             ],
         ) -> None: ...
-        @typing.overload
-        def WhichOneof(
-            self, oneof_group: typing_extensions.Literal["_listener_payload", b"_listener_payload"]
-        ) -> typing_extensions.Literal["listener_payload"] | None: ...
-        @typing.overload
         def WhichOneof(
             self,
             oneof_group: typing_extensions.Literal[

@@ -3047,18 +3047,18 @@ class SparkConnectPlanner(val sessionHolder: SessionHolder) extends Logging {
         respBuilder.setResetTerminated(true)
 
       case StreamingQueryManagerCommand.CommandCase.ADD_LISTENER =>
-        val listener = if (command.getAddListener.hasListenerPayload) {
+        val listener = if (command.getAddListener.hasPythonListenerPayload) {
+          new PythonStreamingQueryListener(
+            transformPythonFunction(command.getAddListener.getPythonListenerPayload),
+            sessionHolder,
+            pythonExec)
+        } else {
           val listenerPacket = Utils
             .deserialize[StreamingListenerPacket](
               command.getAddListener.getListenerPayload.toByteArray,
               Utils.getContextOrSparkClassLoader)
 
           listenerPacket.listener.asInstanceOf[StreamingQueryListener]
-        } else {
-          new PythonStreamingQueryListener(
-            transformPythonFunction(command.getAddListener.getPythonListenerPayload),
-            sessionHolder,
-            pythonExec)
         }
 
         val id = command.getAddListener.getId
