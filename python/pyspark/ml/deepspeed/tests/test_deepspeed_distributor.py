@@ -181,6 +181,9 @@ class DeepspeedTorchDistributorDistributedEndToEnd(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         (cls.gpu_discovery_script_file_name, cls.mnist_dir_path) = set_up_test_dirs()
+        # This is set to False because if not, the SparkConf will 
+        # use contain configurations from the LocalEndToEnd test,
+        # which causes the test to break.
         conf = SparkConf(loadDefaults=False)
         for k, v in get_distributed_mode_conf().items():
             conf = conf.set(k, v)
@@ -200,9 +203,17 @@ class DeepspeedTorchDistributorDistributedEndToEnd(unittest.TestCase):
        self.assertEqual(output, 5)
 
     def test_pytorch_file_e2e(self):
-        path_to_train_file = "python/test_support/test_deepspeed_training_file.py"
+        import textwrap
+        str_to_write = textwrap.dedent(""" 
+import sys
+def pythagorean_thm(x : int, y: int):
+    import deepspeed
+    return (x*x + y*y)**0.5
+print(pythagorean_thm(int(sys.argv[1]), int(sys.argv[2])))
+""")
         cp_path = f"/tmp/test_deepspeed_training_file.py"
-        shutil.copyfile(path_to_train_file, cp_path)
+        with open(cp_path, "w") as f:
+            f.write(str_to_write)
         dist = DeepspeedTorchDistributor(num_gpus=True, use_gpu=False, local_mode=False)
         dist.run(cp_path, 2, 5)
         os.remove(cp_path)
