@@ -594,6 +594,7 @@ jobs:
     - name: Python linter
       run: PYTHON_EXECUTABLE=python3.9 ./dev/lint-python
     - name: Install dependencies for Python code generation check
+      if: inputs.branch != 'branch-3.3' && inputs.branch != 'branch-3.4'
       run: |
         # See more in "Installation" https://docs.buf.build/installation#tarball
         curl -LO https://github.com/bufbuild/buf/releases/download/v1.15.1/buf-Linux-x86_64.tar.gz
@@ -601,6 +602,7 @@ jobs:
         tar -xvzf buf-Linux-x86_64.tar.gz -C $HOME/buf --strip-components 1
         python3.9 -m pip install 'protobuf==3.19.5' 'mypy-protobuf==3.3.0'
     - name: Python code generation check
+      if: inputs.branch != 'branch-3.3' && inputs.branch != 'branch-3.4'
       run: if test -f ./dev/connect-check-protos.py; then PATH=$PATH:$HOME/buf/bin PYTHON_EXECUTABLE=python3.9 ./dev/connect-check-protos.py; fi
     - name: Install JavaScript linter dependencies
       run: |
