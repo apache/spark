@@ -24,9 +24,9 @@ import java.time.temporal.{ChronoField, TemporalAccessor, TemporalQueries}
 import java.util
 import java.util.{Collections, Date, Locale}
 
-import org.apache.spark.SPARK_DOC_ROOT
+import org.apache.spark.SparkBuildInfo.{spark_doc_root => SPARK_DOC_ROOT}
 import org.apache.spark.sql.catalyst.util.DateTimeFormatterHelper._
-import org.apache.spark.sql.errors.QueryExecutionErrors
+import org.apache.spark.sql.errors.ExecutionErrors
 import org.apache.spark.sql.internal.LegacyBehaviorPolicy._
 import org.apache.spark.sql.internal.SqlApiConf
 
@@ -45,7 +45,7 @@ trait DateTimeFormatterHelper {
       val actual = accessor.get(field)
       val expected = candidate.get(field)
       if (actual != expected) {
-        throw QueryExecutionErrors.fieldDiffersFromDerivedLocalDateError(
+        throw ExecutionErrors.fieldDiffersFromDerivedLocalDateError(
           field, actual, expected, candidate)
       }
     }
@@ -140,7 +140,7 @@ trait DateTimeFormatterHelper {
       } catch {
         case _: Throwable => throw e
       }
-      throw QueryExecutionErrors.failToParseDateTimeInNewParserError(s, e)
+      throw ExecutionErrors.failToParseDateTimeInNewParserError(s, e)
   }
 
   // When legacy time parser policy set to EXCEPTION, check whether we will get different results
@@ -156,7 +156,7 @@ trait DateTimeFormatterHelper {
       } catch {
         case _: Throwable => throw e
       }
-      throw QueryExecutionErrors.failToParseDateTimeInNewParserError(resultCandidate, e)
+      throw ExecutionErrors.failToParseDateTimeInNewParserError(resultCandidate, e)
   }
 
   /**
@@ -179,22 +179,22 @@ trait DateTimeFormatterHelper {
       } catch {
         case _: Throwable => throw e
       }
-      throw QueryExecutionErrors.failToRecognizePatternAfterUpgradeError(
+      throw ExecutionErrors.failToRecognizePatternAfterUpgradeError(
         pattern, e, SPARK_DOC_ROOT)
   }
 
   protected def checkInvalidPattern(pattern: String): PartialFunction[Throwable, Nothing] = {
     case e: IllegalArgumentException =>
-      throw QueryExecutionErrors.failToRecognizePatternError(pattern, e, SPARK_DOC_ROOT)
+      throw ExecutionErrors.failToRecognizePatternError(pattern, e, SPARK_DOC_ROOT)
   }
 }
 
 private object DateTimeFormatterHelper {
-
-  private val cache: util.Map[(String, Locale, Boolean), DateTimeFormatter] =
-    Collections.synchronizedMap(new util.LinkedHashMap {
+  private type CacheKey = (String, Locale, Boolean)
+  private val cache: util.Map[CacheKey, DateTimeFormatter] =
+    Collections.synchronizedMap(new util.LinkedHashMap[CacheKey, DateTimeFormatter] {
       override def removeEldestEntry(
-          eldest: util.Map.Entry[(String, Locale, Boolean), DateTimeFormatter]): Boolean = {
+          eldest: util.Map.Entry[CacheKey, DateTimeFormatter]): Boolean = {
         size() > 128
       }
     })

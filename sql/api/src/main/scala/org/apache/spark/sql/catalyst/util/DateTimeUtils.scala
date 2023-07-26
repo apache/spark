@@ -30,8 +30,8 @@ import sun.util.calendar.ZoneInfo
 import org.apache.spark.sql.catalyst.trees.SQLQueryContext
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.catalyst.util.RebaseDateTime._
-import org.apache.spark.sql.errors.QueryExecutionErrors
-import org.apache.spark.sql.types.{DateType, Decimal, DoubleExactNumeric, DoubleType, StringType, TimestampNTZType, TimestampType}
+import org.apache.spark.sql.errors.ExecutionErrors
+import org.apache.spark.sql.types.{DateType, Decimal, DoubleExactNumeric, TimestampNTZType, TimestampType}
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 
 /**
@@ -471,15 +471,13 @@ object DateTimeUtils {
       timeZoneId: ZoneId,
       context: SQLQueryContext = null): Long = {
     stringToTimestamp(s, timeZoneId).getOrElse {
-      throw QueryExecutionErrors.invalidInputInCastToDatetimeError(
-        s, StringType, TimestampType, context)
+      throw ExecutionErrors.invalidInputInCastToDatetimeError(s, TimestampType, context)
     }
   }
 
   def doubleToTimestampAnsi(d: Double, context: SQLQueryContext): Long = {
     if (d.isNaN || d.isInfinite) {
-      throw QueryExecutionErrors.invalidInputInCastToDatetimeError(
-        d, DoubleType, TimestampType, context)
+      throw ExecutionErrors.invalidInputInCastToDatetimeError(d, TimestampType, context)
     } else {
       DoubleExactNumeric.toLong(d * MICROS_PER_SECOND)
     }
@@ -530,8 +528,7 @@ object DateTimeUtils {
       s: UTF8String,
       context: SQLQueryContext): Long = {
     stringToTimestampWithoutTimeZone(s, true).getOrElse {
-      throw QueryExecutionErrors.invalidInputInCastToDatetimeError(
-        s, StringType, TimestampNTZType, context)
+      throw ExecutionErrors.invalidInputInCastToDatetimeError(s, TimestampNTZType, context)
     }
   }
 
@@ -651,8 +648,7 @@ object DateTimeUtils {
       s: UTF8String,
       context: SQLQueryContext = null): Int = {
     stringToDate(s).getOrElse {
-      throw QueryExecutionErrors.invalidInputInCastToDatetimeError(
-        s, StringType, DateType, context)
+      throw ExecutionErrors.invalidInputInCastToDatetimeError(s, DateType, context)
     }
   }
 
@@ -846,7 +842,7 @@ object DateTimeUtils {
      start: Int,
      interval: CalendarInterval): Int = {
     if (interval.microseconds != 0) {
-      throw QueryExecutionErrors.ansiIllegalArgumentError(
+      throw ExecutionErrors.ansiIllegalArgumentError(
         "Cannot add hours, minutes or seconds, milliseconds, microseconds to a date")
     }
     val ld = daysToLocalDate(start).plusMonths(interval.months).plusDays(interval.days)
@@ -980,7 +976,7 @@ object DateTimeUtils {
       case TRUNC_TO_YEAR => days - getDayInYear(days) + 1
       case _ =>
         // caller make sure that this should never be reached
-        throw QueryExecutionErrors.unreachableError(s": Invalid trunc level: $level")
+        throw ExecutionErrors.unreachableError(s": Invalid trunc level: $level")
     }
   }
 
@@ -1256,7 +1252,7 @@ object DateTimeUtils {
       case _: scala.MatchError =>
         throw new IllegalStateException(s"Got the unexpected unit '$unit'.")
       case _: ArithmeticException | _: DateTimeException =>
-        throw QueryExecutionErrors.timestampAddOverflowError(micros, quantity, unit)
+        throw ExecutionErrors.timestampAddOverflowError(micros, quantity, unit)
       case e: Throwable =>
         throw new IllegalStateException(s"Failure of 'timestampAdd': ${e.getMessage}")
     }

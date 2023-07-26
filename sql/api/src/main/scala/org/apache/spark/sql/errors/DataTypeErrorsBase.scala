@@ -22,6 +22,7 @@ import org.apache.spark.QueryContext
 import org.apache.spark.sql.catalyst.trees.SQLQueryContext
 import org.apache.spark.sql.catalyst.util.{AttributeNameParser, QuotingUtils, SparkStringUtils}
 import org.apache.spark.sql.types.{AbstractDataType, DataType, TypeCollection}
+import org.apache.spark.unsafe.types.UTF8String
 
 private[sql] trait DataTypeErrorsBase {
   def toSQLId(parts: String): String = {
@@ -54,12 +55,34 @@ private[sql] trait DataTypeErrorsBase {
     case at => quoteByDefault(at.simpleString.toUpperCase(Locale.ROOT))
   }
 
-  def dataTypeToSQLValue(value: String): String = {
+  def toSQLValue(value: String): String = {
     if (value == null) {
       "NULL"
     } else {
       "'" + value.replace("\\", "\\\\").replace("'", "\\'") + "'"
     }
+  }
+
+  def toSQLValue(value: UTF8String): String = toSQLValue(value.toString)
+
+  def toSQLValue(value: Short): String = String.valueOf(value) + "S"
+
+  def toSQLValue(value: Int): String = String.valueOf(value)
+
+  def toSQLValue(value: Long): String = String.valueOf(value) + "L"
+
+  def toSQLValue(value: Float): String = {
+    if (value.isNaN) "NaN"
+    else if (value.isPosInfinity) "Infinity"
+    else if (value.isNegInfinity) "-Infinity"
+    else value.toString
+  }
+
+  def toSQLValue(value: Double): String = {
+    if (value.isNaN) "NaN"
+    else if (value.isPosInfinity) "Infinity"
+    else if (value.isNegInfinity) "-Infinity"
+    else value.toString
   }
 
   protected def quoteByDefault(elem: String): String = {

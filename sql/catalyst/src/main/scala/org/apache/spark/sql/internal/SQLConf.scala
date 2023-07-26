@@ -3162,7 +3162,7 @@ object SQLConf {
       .checkValues(StoreAssignmentPolicy.values.map(_.toString))
       .createWithDefault(StoreAssignmentPolicy.ANSI.toString)
 
-  val ANSI_ENABLED = buildConf("spark.sql.ansi.enabled")
+  val ANSI_ENABLED = buildConf(SqlApiConf.ANSI_ENABLED_KEY)
     .doc("When true, Spark SQL uses an ANSI compliant dialect instead of being Hive compliant. " +
       "For example, Spark will throw an exception at runtime instead of returning null results " +
       "when the inputs to a SQL operator/function are invalid." +
@@ -3770,7 +3770,7 @@ object SQLConf {
     .booleanConf
     .createWithDefault(false)
 
-  val LEGACY_TIME_PARSER_POLICY = buildConf("spark.sql.legacy.timeParserPolicy")
+  val LEGACY_TIME_PARSER_POLICY = buildConf(SqlApiConf.LEGACY_TIME_PARSER_POLICY_KEY)
     .internal()
     .doc("When LEGACY, java.text.SimpleDateFormat is used for formatting and parsing " +
       "dates/timestamps in a locale-sensitive manner, which is the approach before Spark 3.0. " +

@@ -33,7 +33,7 @@ import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils._
 import org.apache.spark.sql.catalyst.util.LegacyDateFormats.{LegacyDateFormat, LENIENT_SIMPLE_DATE_FORMAT}
 import org.apache.spark.sql.catalyst.util.RebaseDateTime._
-import org.apache.spark.sql.errors.QueryExecutionErrors
+import org.apache.spark.sql.errors.ExecutionErrors
 import org.apache.spark.sql.internal.LegacyBehaviorPolicy._
 import org.apache.spark.sql.internal.SqlApiConf
 import org.apache.spark.sql.types.{Decimal, TimestampNTZType}
@@ -212,7 +212,7 @@ class Iso8601TimestampFormatter(
       parsed: TemporalAccessor,
       allowTimeZone: Boolean): Long = {
     if (!allowTimeZone && parsed.query(TemporalQueries.zone()) != null) {
-      throw QueryExecutionErrors.cannotParseStringAsDataTypeError(pattern, s, TimestampNTZType)
+      throw ExecutionErrors.cannotParseStringAsDataTypeError(pattern, s, TimestampNTZType)
     }
     val localDate = toLocalDate(parsed)
     val localTime = toLocalTime(parsed)
@@ -292,7 +292,7 @@ class DefaultTimestampFormatter(
     try {
       val utf8Value = UTF8String.fromString(s)
       DateTimeUtils.stringToTimestampWithoutTimeZone(utf8Value, allowTimeZone).getOrElse {
-        throw QueryExecutionErrors.cannotParseStringAsDataTypeError(
+        throw ExecutionErrors.cannotParseStringAsDataTypeError(
           TimestampFormatter.defaultPattern(), s, TimestampNTZType)
       }
     } catch checkParsedDiff(s, legacyFormatter.parse)

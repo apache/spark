@@ -46,6 +46,10 @@ private[sql] trait SqlApiConf {
 }
 
 private[sql] object SqlApiConf {
+  // Shared keys.
+  val ANSI_ENABLED_KEY: String = "spark.sql.ansi.enabled"
+  val LEGACY_TIME_PARSER_POLICY_KEY: String = "spark.sql.legacy.timeParserPolicy"
+
   /**
    * Defines a getter that returns the [[SqlApiConf]] within scope.
    */

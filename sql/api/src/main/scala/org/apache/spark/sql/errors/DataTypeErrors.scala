@@ -16,7 +16,7 @@
  */
 package org.apache.spark.sql.errors
 
-import org.apache.spark.{SparkArithmeticException, SparkDateTimeException, SparkException, SparkIllegalArgumentException, SparkNumberFormatException, SparkRuntimeException, SparkUnsupportedOperationException}
+import org.apache.spark.{SparkArithmeticException, SparkException, SparkIllegalArgumentException, SparkNumberFormatException, SparkRuntimeException, SparkUnsupportedOperationException}
 import org.apache.spark.sql.catalyst.trees.{Origin, SQLQueryContext}
 import org.apache.spark.sql.catalyst.util.QuotingUtils
 import org.apache.spark.sql.types.{DataType, Decimal, StringType}
@@ -294,29 +294,5 @@ private[sql] object DataTypeErrors extends DataTypeErrorsBase {
       errorClass = "_LEGACY_ERROR_TEMP_1189",
       messageParameters = Map("operation" -> operation),
       cause = null)
-  }
-
-  /*
-  def invalidInputInCastToDatetimeError(
-       value: Any,
-       from: DataType,
-       to: DataType,
-       context: SQLQueryContext): Throwable = {
-    new SparkDateTimeException(
-      errorClass = "CAST_INVALID_INPUT",
-      messageParameters = Map(
-        "expression" -> toSQLValue(value, from),
-        "sourceType" -> toSQLType(from),
-        "targetType" -> toSQLType(to),
-        "ansiConfig" -> toSQLConf(Sql.ANSI_ENABLED.key)),
-      context = getQueryContext(context),
-      summary = getSummary(context))
-  }
-  */
-
-  def unsupportedDataTypeError(typeName: DataType): SparkUnsupportedOperationException = {
-    new SparkUnsupportedOperationException(
-      errorClass = "UNSUPPORTED_DATATYPE",
-      messageParameters = Map("typeName" -> toSQLType(typeName)))
   }
 }
