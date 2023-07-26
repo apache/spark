@@ -3053,6 +3053,9 @@ class SparkConnectPlanner(val sessionHolder: SessionHolder) extends Logging {
             sessionHolder,
             pythonExec)
         } else {
+          // scalastyle:off println
+          println("===scala side listener")
+          // scalastyle:on println
           val listenerPacket = Utils
             .deserialize[StreamingListenerPacket](
               command.getAddListener.getListenerPayload.toByteArray,
@@ -3062,6 +3065,9 @@ class SparkConnectPlanner(val sessionHolder: SessionHolder) extends Logging {
         }
 
         val id = command.getAddListener.getId
+        // scalastyle:off println
+        println("===id: " + id)
+        // scalastyle:on println
         sessionHolder.cacheListenerById(id, listener)
         session.streams.addListener(listener)
         respBuilder.setAddListener(true)
