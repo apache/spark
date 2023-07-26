@@ -16,7 +16,7 @@
  */
 package org.apache.spark.sql.catalyst.util
 
-import java.time.Duration
+import java.time.{Duration, Period}
 
 import scala.collection.mutable
 
@@ -71,6 +71,30 @@ trait SparkIntervalUtils {
       case DT.HOUR => micros - micros % MICROS_PER_HOUR
       case DT.MINUTE => micros - micros % MICROS_PER_MINUTE
       case DT.SECOND => micros
+    }
+  }
+
+  /**
+   * Gets the total number of months in this period.
+   * <p>
+   * This returns the total number of months in the period by multiplying the
+   * number of years by 12 and adding the number of months.
+   * <p>
+   *
+   * @return The total number of months in the period, may be negative
+   * @throws ArithmeticException If numeric overflow occurs
+   */
+  def periodToMonths(period: Period): Int = {
+    periodToMonths(period, YM.MONTH)
+  }
+
+  def periodToMonths(period: Period, endField: Byte): Int = {
+    val monthsInYears = Math.multiplyExact(period.getYears, MONTHS_PER_YEAR)
+    val months = Math.addExact(monthsInYears, period.getMonths)
+    if (endField == YM.YEAR) {
+      months - months % MONTHS_PER_YEAR
+    } else {
+      months
     }
   }
 

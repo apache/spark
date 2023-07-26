@@ -23,7 +23,7 @@ import java.time.{Duration, Instant, LocalDate, LocalDateTime, Period, ZoneOffse
 import org.apache.arrow.vector.{BigIntVector, BitVector, DateDayVector, DecimalVector, DurationVector, FieldVector, Float4Vector, Float8Vector, IntervalYearVector, IntVector, NullVector, SmallIntVector, TimeStampMicroTZVector, TimeStampMicroVector, TinyIntVector, VarBinaryVector, VarCharVector}
 import org.apache.arrow.vector.util.Text
 
-import org.apache.spark.sql.catalyst.util.{DateFormatter, SparkIntervalUtils, StringUtils, TimestampFormatter}
+import org.apache.spark.sql.catalyst.util.{DateFormatter, SparkIntervalUtils, SparkStringUtils, TimestampFormatter}
 import org.apache.spark.sql.catalyst.util.DateTimeConstants.MICROS_PER_SECOND
 import org.apache.spark.sql.catalyst.util.DateTimeUtils._
 import org.apache.spark.sql.catalyst.util.IntervalStringStyles.ANSI_STYLE
@@ -192,7 +192,7 @@ private[arrow] class VarCharVectorReader(v: VarCharVector)
 private[arrow] class VarBinaryVectorReader(v: VarBinaryVector)
     extends TypedArrowVectorReader[VarBinaryVector](v) {
   override def getBytes(i: Int): Array[Byte] = vector.get(i)
-  override def getString(i: Int): String = StringUtils.getHexString(getBytes(i))
+  override def getString(i: Int): String = SparkStringUtils.getHexString(getBytes(i))
 }
 
 private[arrow] class DurationVectorReader(v: DurationVector)

@@ -37,7 +37,7 @@ import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.DefinedByConstructorParams
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoder
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders._
-import org.apache.spark.sql.catalyst.util.{DateTimeUtils, IntervalUtils}
+import org.apache.spark.sql.catalyst.util.{DateTimeUtils, SparkIntervalUtils}
 import org.apache.spark.sql.errors.ExecutionErrors
 import org.apache.spark.sql.types.Decimal
 import org.apache.spark.sql.util.ArrowUtils
@@ -313,12 +313,12 @@ object ArrowSerializer {
       case (DayTimeIntervalEncoder, v: DurationVector) =>
         new FieldSerializer[Duration, DurationVector](v) {
           override def set(index: Int, value: Duration): Unit =
-            vector.setSafe(index, IntervalUtils.durationToMicros(value))
+            vector.setSafe(index, SparkIntervalUtils.durationToMicros(value))
         }
       case (YearMonthIntervalEncoder, v: IntervalYearVector) =>
         new FieldSerializer[Period, IntervalYearVector](v) {
           override def set(index: Int, value: Period): Unit =
-            vector.setSafe(index, IntervalUtils.periodToMonths(value))
+            vector.setSafe(index, SparkIntervalUtils.periodToMonths(value))
         }
       case (DateEncoder(true) | LocalDateEncoder(true), v: DateDayVector) =>
         new FieldSerializer[Any, DateDayVector](v) {

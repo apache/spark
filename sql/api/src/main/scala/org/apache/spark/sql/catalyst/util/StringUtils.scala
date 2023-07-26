@@ -105,4 +105,10 @@ object SparkStringUtils extends Logging {
     // identifier with back-ticks.
     "`" + name.replace("`", "``") + "`"
   }
+
+  /**
+   * Returns a pretty string of the byte array which prints each byte as a hex digit and add spaces
+   * between them. For example, [1A C0].
+   */
+  def getHexString(bytes: Array[Byte]): String = bytes.map("%02X".format(_)).mkString("[", " ", "]")
 }

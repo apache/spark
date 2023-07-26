@@ -791,30 +791,6 @@ object IntervalUtils extends SparkIntervalUtils {
   def microsToDuration(micros: Long): Duration = Duration.of(micros, ChronoUnit.MICROS)
 
   /**
-   * Gets the total number of months in this period.
-   * <p>
-   * This returns the total number of months in the period by multiplying the
-   * number of years by 12 and adding the number of months.
-   * <p>
-   *
-   * @return The total number of months in the period, may be negative
-   * @throws ArithmeticException If numeric overflow occurs
-   */
-  def periodToMonths(period: Period): Int = {
-    periodToMonths(period, YM.MONTH)
-  }
-
-  def periodToMonths(period: Period, endField: Byte): Int = {
-    val monthsInYears = Math.multiplyExact(period.getYears, MONTHS_PER_YEAR)
-    val months = Math.addExact(monthsInYears, period.getMonths)
-    if (endField == YM.YEAR) {
-      months - months % MONTHS_PER_YEAR
-    } else {
-      months
-    }
-  }
-
-  /**
    * Obtains a [[Period]] representing a number of months. The days unit will be zero, and the years
    * and months units will be normalized.
    *
