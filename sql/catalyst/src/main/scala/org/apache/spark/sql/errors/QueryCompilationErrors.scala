@@ -3566,13 +3566,6 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
       messageParameters = Map("messageName" -> messageName))
   }
 
-  def descriptorParseError(cause: Throwable): Throwable = {
-    new AnalysisException(
-      errorClass = "CANNOT_PARSE_PROTOBUF_DESCRIPTOR",
-      messageParameters = Map.empty,
-      cause = Option(cause))
-  }
-
   def cannotFindDescriptorFileError(filePath: String, cause: Throwable): Throwable = {
     new AnalysisException(
       errorClass = "PROTOBUF_DESCRIPTOR_FILE_NOT_FOUND",

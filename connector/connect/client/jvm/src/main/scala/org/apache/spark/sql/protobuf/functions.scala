@@ -25,7 +25,7 @@ import scala.util.control.NonFatal
 
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.sql.Column
-import org.apache.spark.sql.errors.{CompilationErrors, QueryCompilationErrors}
+import org.apache.spark.sql.errors.CompilationErrors
 import org.apache.spark.sql.functions.{fnWithOptions, lit}
 
 // scalastyle:off: object.name
@@ -312,7 +312,7 @@ object functions {
         throw CompilationErrors.cannotFindDescriptorFileError(filePath, ex)
       case ex: NoSuchFileException =>
         throw CompilationErrors.cannotFindDescriptorFileError(filePath, ex)
-      case NonFatal(ex) => throw QueryCompilationErrors.descriptorParseError(ex)
+      case NonFatal(ex) => throw CompilationErrors.descriptorParseError(ex)
     }
   }
 }
