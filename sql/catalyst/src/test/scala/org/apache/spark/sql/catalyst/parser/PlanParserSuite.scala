@@ -1492,6 +1492,37 @@ class PlanParserSuite extends AnalysisTest {
         stop = sql1.length - 2))
   }
 
+  test("SPARK-44503: Support PARTITION BY and ORDER BY clause for TVF TABLE arguments") {
+    val message = "Specifying the PARTITION BY clause for TABLE arguments is not implemented yet"
+    val startIndex = 29
+
+    def check(sqlSuffix: String): Unit = {
+      val sql = s"select * from my_tvf(arg1 => $sqlSuffix)"
+      checkError(
+        exception = parseException(sql),
+        errorClass = "_LEGACY_ERROR_TEMP_0035",
+        parameters = Map("message" -> message),
+        context = ExpectedContext(
+          fragment = sqlSuffix,
+          start = startIndex,
+          stop = sql.length - 2))
+    }
+
+    Seq("partition", "distribute").foreach { partition =>
+      val sqlSuffix = s"table(v1) $partition by col1"
+      check(sqlSuffix)
+
+      Seq("order", "sort").foreach { order =>
+        Seq(
+          s"table(v1) $partition by col1 $order by col2 asc",
+          s"table(v1) $partition by col1, col2 $order by col2 asc, col3 desc",
+          s"table(select col1, col2, col3 from v2) $partition by col1, col2 " +
+            s"$order by col2 asc, col3 desc"
+        ).foreach(check)
+      }
+    }
+  }
+
   test("SPARK-32106: TRANSFORM plan") {
     // verify schema less
     assertEqual(

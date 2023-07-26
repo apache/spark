@@ -21,11 +21,15 @@ import java.net.URI
 import java.util.UUID
 import java.util.concurrent.Executor
 
+import scala.collection.JavaConverters._
+import scala.collection.mutable
+
 import com.google.protobuf.ByteString
 import io.grpc._
 
 import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.UserContext
+import org.apache.spark.sql.connect.common.ProtoUtils
 import org.apache.spark.sql.connect.common.config.ConnectCommon
 
 /**
@@ -76,6 +80,7 @@ private[sql] class SparkConnectClient(
       .setUserContext(userContext)
       .setSessionId(sessionId)
       .setClientType(userAgent)
+      .addAllTags(tags.get.toSeq.asJava)
       .build()
     bstub.executePlan(request)
   }
@@ -193,6 +198,59 @@ private[sql] class SparkConnectClient(
       .setInterruptType(proto.InterruptRequest.InterruptType.INTERRUPT_TYPE_ALL)
       .build()
     bstub.interrupt(request)
+  }
+
+  private[sql] def interruptTag(tag: String): proto.InterruptResponse = {
+    val builder = proto.InterruptRequest.newBuilder()
+    val request = builder
+      .setUserContext(userContext)
+      .setSessionId(sessionId)
+      .setClientType(userAgent)
+      .setInterruptType(proto.InterruptRequest.InterruptType.INTERRUPT_TYPE_TAG)
+      .setOperationTag(tag)
+      .build()
+    bstub.interrupt(request)
+  }
+
+  private[sql] def interruptOperation(id: String): proto.InterruptResponse = {
+    val builder = proto.InterruptRequest.newBuilder()
+    val request = builder
+      .setUserContext(userContext)
+      .setSessionId(sessionId)
+      .setClientType(userAgent)
+      .setInterruptType(proto.InterruptRequest.InterruptType.INTERRUPT_TYPE_OPERATION_ID)
+      .setOperationId(id)
+      .build()
+    bstub.interrupt(request)
+  }
+
+  private[this] val tags = new InheritableThreadLocal[mutable.Set[String]] {
+    override def childValue(parent: mutable.Set[String]): mutable.Set[String] = {
+      // Note: make a clone such that changes in the parent tags aren't reflected in
+      // those of the children threads.
+      parent.clone()
+    }
+    override protected def initialValue(): mutable.Set[String] = new mutable.HashSet[String]()
+  }
+
+  private[sql] def addTag(tag: String): Unit = {
+    // validation is also done server side, but this will give error earlier.
+    ProtoUtils.throwIfInvalidTag(tag)
+    tags.get += tag
+  }
+
+  private[sql] def removeTag(tag: String): Unit = {
+    // validation is also done server side, but this will give error earlier.
+    ProtoUtils.throwIfInvalidTag(tag)
+    tags.get.remove(tag)
+  }
+
+  private[sql] def getTags(): Set[String] = {
+    tags.get.toSet
+  }
+
+  private[sql] def clearTags(): Unit = {
+    tags.get.clear()
   }
 
   def copy(): SparkConnectClient = configuration.toSparkConnectClient

@@ -39,7 +39,6 @@ import org.apache.spark.sql.connect.client.util.SparkConnectServerUtils.port
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
-import org.apache.spark.sql.vectorized.ColumnarBatch
 
 class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper with PrivateMethodTester {
 
@@ -571,7 +570,7 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper with PrivateM
     (col("id") / lit(10.0d)).as("b"),
     col("id"),
     lit("world").as("d"),
-    (col("id") % 2).cast("int").as("a"))
+    (col("id") % 2).as("a"))
 
   private def validateMyTypeResult(result: Array[MyType]): Unit = {
     result.zipWithIndex.foreach { case (MyType(id, a, b), i) =>
@@ -893,14 +892,12 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper with PrivateM
 
   test("Dataset result destructive iterator") {
     // Helper methods for accessing private field `idxToBatches` from SparkResult
-    val _idxToBatches =
-      PrivateMethod[mutable.Map[Int, ColumnarBatch]](Symbol("idxToBatches"))
+    val getResultMap =
+      PrivateMethod[mutable.Map[Int, Any]](Symbol("resultMap"))
 
-    def getColumnarBatches(result: SparkResult[_]): Seq[ColumnarBatch] = {
-      val idxToBatches = result invokePrivate _idxToBatches()
-
-      // Sort by key to get stable results.
-      idxToBatches.toSeq.sortBy(_._1).map(_._2)
+    def assertResultsMapEmpty(result: SparkResult[_]): Unit = {
+      val resultMap = result invokePrivate getResultMap()
+      assert(resultMap.isEmpty)
     }
 
     val df = spark
@@ -911,25 +908,19 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper with PrivateM
       try {
         // build and verify the destructive iterator
         val iterator = result.destructiveIterator
-        // batches is empty before traversing the result iterator
-        assert(getColumnarBatches(result).isEmpty)
-        var previousBatch: ColumnarBatch = null
-        val buffer = mutable.Buffer.empty[Long]
+        // resultMap Map is empty before traversing the result iterator
+        assertResultsMapEmpty(result)
+        val buffer = mutable.Set.empty[Long]
         while (iterator.hasNext) {
-          // always having 1 batch, since a columnar batch will be removed and closed after
-          // its data got consumed.
-          val batches = getColumnarBatches(result)
-          assert(batches.size === 1)
-          assert(batches.head != previousBatch)
-          previousBatch = batches.head
-
-          buffer.append(iterator.next())
+          // resultMap is empty during iteration because results get removed immediately on access.
+          assertResultsMapEmpty(result)
+          buffer += iterator.next()
         }
-        // Batches should be closed and removed after traversing all the records.
-        assert(getColumnarBatches(result).isEmpty)
+        // resultMap Map is empty afterward because all results have been removed.
+        assertResultsMapEmpty(result)
 
-        val expectedResult = Seq(6L, 7L, 8L)
-        assert(buffer.size === 3 && expectedResult.forall(buffer.contains))
+        val expectedResult = Set(6L, 7L, 8L)
+        assert(buffer.size === 3 && expectedResult == buffer)
       } finally {
         result.close()
       }

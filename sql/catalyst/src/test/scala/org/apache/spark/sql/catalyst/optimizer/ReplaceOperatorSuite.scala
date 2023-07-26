@@ -25,6 +25,7 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.First
 import org.apache.spark.sql.catalyst.plans.{LeftAnti, LeftSemi, PlanTest}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
+import org.apache.spark.sql.internal.SQLConf.LEGACY_NULL_IN_EMPTY_LIST_BEHAVIOR
 import org.apache.spark.sql.types.BooleanType
 
 class ReplaceOperatorSuite extends PlanTest {
@@ -233,13 +234,24 @@ class ReplaceOperatorSuite extends PlanTest {
     val basePlan = LocalRelation(Seq($"a".int, $"b".int))
     val otherPlan = basePlan.where($"a".in(1, 2) || $"b".in())
     val except = Except(basePlan, otherPlan, false)
-    val result = OptimizeIn(Optimize.execute(except.analyze))
-    val correctAnswer = Aggregate(basePlan.output, basePlan.output,
-      Filter(!Coalesce(Seq(
-        $"a".in(1, 2) || If($"b".isNotNull, Literal.FalseLiteral, Literal(null, BooleanType)),
-        Literal.FalseLiteral)),
-        basePlan)).analyze
-    comparePlans(result, correctAnswer)
+    withSQLConf(LEGACY_NULL_IN_EMPTY_LIST_BEHAVIOR.key -> "false") {
+      val result = OptimizeIn(Optimize.execute(except.analyze))
+      val correctAnswer = Aggregate(basePlan.output, basePlan.output,
+        Filter(!Coalesce(Seq(
+          $"a".in(1, 2) || Literal.FalseLiteral,
+          Literal.FalseLiteral)),
+          basePlan)).analyze
+      comparePlans(result, correctAnswer)
+    }
+    withSQLConf(LEGACY_NULL_IN_EMPTY_LIST_BEHAVIOR.key -> "true") {
+      val result = OptimizeIn(Optimize.execute(except.analyze))
+      val correctAnswer = Aggregate(basePlan.output, basePlan.output,
+        Filter(!Coalesce(Seq(
+          $"a".in(1, 2) || If($"b".isNotNull, Literal.FalseLiteral, Literal(null, BooleanType)),
+          Literal.FalseLiteral)),
+          basePlan)).analyze
+      comparePlans(result, correctAnswer)
+    }
   }
 
   test("SPARK-26366: ReplaceExceptWithFilter should not transform non-deterministic") {

@@ -54,11 +54,20 @@ private[connect] class ExecuteThreadRunner(executeHolder: ExecuteHolder) extends
     executionThread.join()
   }
 
-  /** Interrupt the executing thread. */
-  def interrupt(): Unit = {
+  /**
+   * Interrupt the executing thread.
+   * @return
+   *   true if it was not interrupted before, false if it was already interrupted.
+   */
+  def interrupt(): Boolean = {
     synchronized {
-      interrupted = true
-      executionThread.interrupt()
+      if (!interrupted) {
+        interrupted = true
+        executionThread.interrupt()
+        true
+      } else {
+        false
+      }
     }
   }
 
@@ -78,7 +87,6 @@ private[connect] class ExecuteThreadRunner(executeHolder: ExecuteHolder) extends
           // and different exceptions like InterruptedException, ClosedByInterruptException etc.
           // could be thrown.
           if (interrupted) {
-            // Turn the interrupt into OPERATION_CANCELED error.
             throw new SparkSQLException("OPERATION_CANCELED", Map.empty)
           } else {
             // Rethrown the original error.
@@ -86,13 +94,19 @@ private[connect] class ExecuteThreadRunner(executeHolder: ExecuteHolder) extends
           }
       } finally {
         executeHolder.sessionHolder.session.sparkContext.removeJobTag(executeHolder.jobTag)
+        executeHolder.sparkSessionTags.foreach { tag =>
+          executeHolder.sessionHolder.session.sparkContext
+            .removeJobTag(executeHolder.tagToSparkJobTag(tag))
+        }
       }
     } catch {
       ErrorUtils.handleError(
         "execute",
         executeHolder.responseObserver,
         executeHolder.sessionHolder.userId,
-        executeHolder.sessionHolder.sessionId)
+        executeHolder.sessionHolder.sessionId,
+        Some(executeHolder.eventsManager),
+        interrupted)
     }
   }
 
@@ -112,6 +126,10 @@ private[connect] class ExecuteThreadRunner(executeHolder: ExecuteHolder) extends
 
       // Set tag for query cancellation
       session.sparkContext.addJobTag(executeHolder.jobTag)
+      // Also set all user defined tags as Spark Job tags.
+      executeHolder.sparkSessionTags.foreach { tag =>
+        session.sparkContext.addJobTag(executeHolder.tagToSparkJobTag(tag))
+      }
       session.sparkContext.setJobDescription(
         s"Spark Connect - ${StringUtils.abbreviate(debugString, 128)}")
       session.sparkContext.setInterruptOnCancel(true)
@@ -148,9 +166,8 @@ private[connect] class ExecuteThreadRunner(executeHolder: ExecuteHolder) extends
     val planner = new SparkConnectPlanner(executeHolder.sessionHolder)
     planner.process(
       command = command,
-      userId = request.getUserContext.getUserId,
-      sessionId = request.getSessionId,
-      responseObserver = responseObserver)
+      responseObserver = responseObserver,
+      executeHolder = executeHolder)
     responseObserver.onCompleted()
   }
 

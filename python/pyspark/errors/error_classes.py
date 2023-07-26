@@ -263,9 +263,19 @@ ERROR_CLASSES_JSON = """
       "StructField does not have typeName. Use typeName on its type explicitly instead."
     ]
   },
+  "INVALID_TYPE_DF_EQUALITY_ARG" : {
+    "message" : [
+      "Expected type <expected_type> for `<arg_name>` but got type <actual_type>."
+    ]
+  },
   "INVALID_UDF_EVAL_TYPE" : {
     "message" : [
       "Eval type for UDF must be <eval_type>."
+    ]
+  },
+  "INVALID_UDTF_BOTH_RETURN_TYPE_AND_ANALYZE" : {
+    "message" : [
+      "The UDTF '<name>' is invalid. It has both its return type and an 'analyze' attribute. Please make it have one of either the return type or the 'analyze' static method in '<name>' and try again."
     ]
   },
   "INVALID_UDTF_EVAL_TYPE" : {
@@ -276,6 +286,11 @@ ERROR_CLASSES_JSON = """
   "INVALID_UDTF_NO_EVAL" : {
     "message" : [
       "The UDTF '<name>' is invalid. It does not implement the required 'eval' method. Please implement the 'eval' method in '<name>' and try again."
+    ]
+  },
+  "INVALID_UDTF_RETURN_TYPE" : {
+    "message" : [
+      "The UDTF '<name>' is invalid. It does not specify its return type or implement the required 'analyze' static method. Please specify the return type or implement the 'analyze' static method in '<name>' and try again."
     ]
   },
   "INVALID_WHEN_USAGE": {
@@ -657,6 +672,11 @@ ERROR_CLASSES_JSON = """
   "TOO_MANY_VALUES" : {
     "message" : [
       "Expected <expected> values for `<item>`, got <actual>."
+    ]
+  },
+  "UDF_RETURN_TYPE" : {
+    "message" : [
+      "Return type of the user-defined function should be <expected>, but is <actual>."
     ]
   },
   "UDTF_EXEC_ERROR" : {

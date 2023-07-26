@@ -1647,18 +1647,16 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
       exception = intercept[AnalysisException] {
         sql("select * from json.invalid_file")
       },
-      errorClass = "UNSUPPORTED_DATASOURCE_FOR_DIRECT_QUERY",
-      parameters = Map("dataSourceType" -> "json"),
-      context = ExpectedContext("json.invalid_file", 14, 30)
+      errorClass = "PATH_NOT_FOUND",
+      parameters = Map("path" -> "file:/.*invalid_file"),
+      matchPVals = true
     )
 
     checkError(
       exception = intercept[AnalysisException] {
         sql(s"select id from `org.apache.spark.sql.hive.orc`.`file_path`")
       },
-      errorClass = "UNSUPPORTED_DATASOURCE_FOR_DIRECT_QUERY",
-      parameters = Map("dataSourceType" -> "org.apache.spark.sql.hive.orc"),
-      context = ExpectedContext("`org.apache.spark.sql.hive.orc`.`file_path`", 15, 57)
+      errorClass = "_LEGACY_ERROR_TEMP_1138"
     )
 
     e = intercept[AnalysisException] {

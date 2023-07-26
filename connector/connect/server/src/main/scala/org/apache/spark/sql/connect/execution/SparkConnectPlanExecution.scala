@@ -18,6 +18,8 @@
 package org.apache.spark.sql.connect.execution
 
 import scala.collection.JavaConverters._
+import scala.concurrent.duration.Duration
+import scala.util.{Failure, Success}
 
 import com.google.protobuf.ByteString
 import io.grpc.stub.StreamObserver
@@ -54,13 +56,15 @@ private[execution] class SparkConnectPlanExecution(executeHolder: ExecuteHolder)
       throw new IllegalStateException(
         s"Illegal operation type ${request.getPlan.getOpTypeCase} to be handled here.")
     }
-
-    // Extract the plan from the request and convert it to a logical plan
     val planner = new SparkConnectPlanner(sessionHolder)
+    val tracker = executeHolder.eventsManager.createQueryPlanningTracker
     val dataframe =
-      Dataset.ofRows(sessionHolder.session, planner.transformRelation(request.getPlan.getRoot))
+      Dataset.ofRows(
+        sessionHolder.session,
+        planner.transformRelation(request.getPlan.getRoot),
+        tracker)
     responseObserver.onNext(createSchemaResponse(request.getSessionId, dataframe.schema))
-    processAsArrowBatches(request.getSessionId, dataframe, responseObserver)
+    processAsArrowBatches(dataframe, responseObserver, executeHolder)
     responseObserver.onNext(
       MetricGenerator.createMetricsResponse(request.getSessionId, dataframe))
     if (dataframe.queryExecution.observedMetrics.nonEmpty) {
@@ -87,10 +91,11 @@ private[execution] class SparkConnectPlanExecution(executeHolder: ExecuteHolder)
     batches.map(b => b -> batches.rowCountInLastBatch)
   }
 
-  private def processAsArrowBatches(
-      sessionId: String,
+  def processAsArrowBatches(
       dataframe: DataFrame,
-      responseObserver: StreamObserver[ExecutePlanResponse]): Unit = {
+      responseObserver: StreamObserver[ExecutePlanResponse],
+      executePlan: ExecuteHolder): Unit = {
+    val sessionId = executePlan.sessionHolder.sessionId
     val spark = dataframe.sparkSession
     val schema = dataframe.schema
     val maxRecordsPerBatch = spark.sessionState.conf.arrowMaxRecordsPerBatch
@@ -120,6 +125,7 @@ private[execution] class SparkConnectPlanExecution(executeHolder: ExecuteHolder)
 
     dataframe.queryExecution.executedPlan match {
       case LocalTableScanExec(_, rows) =>
+        executePlan.eventsManager.postFinished()
         converter(rows.iterator).foreach { case (bytes, count) =>
           sendBatch(bytes, count)
         }
@@ -148,22 +154,23 @@ private[execution] class SparkConnectPlanExecution(executeHolder: ExecuteHolder)
               ()
             }
 
-            val future = spark.sparkContext.submitJob(
-              rdd = batches,
-              processPartition = (iter: Iterator[Batch]) => iter.toArray,
-              partitions = Seq.range(0, numPartitions),
-              resultHandler = resultHandler,
-              resultFunc = () => ())
-
-            // Collect errors and propagate them to the main thread.
-            future.onComplete { result =>
-              result.failed.foreach { throwable =>
-                signal.synchronized {
-                  error = Some(throwable)
-                  signal.notify()
-                }
-              }
-            }(ThreadUtils.sameThread)
+            val future = spark.sparkContext
+              .submitJob(
+                rdd = batches,
+                processPartition = (iter: Iterator[Batch]) => iter.toArray,
+                partitions = Seq.range(0, numPartitions),
+                resultHandler = resultHandler,
+                resultFunc = () => ())
+              // Collect errors and propagate them to the main thread.
+              .andThen {
+                case Success(_) =>
+                  executePlan.eventsManager.postFinished()
+                case Failure(throwable) =>
+                  signal.synchronized {
+                    error = Some(throwable)
+                    signal.notify()
+                  }
+              }(ThreadUtils.sameThread)
 
             // The main thread will wait until 0-th partition is available,
             // then send it to client and wait for the next partition.
@@ -193,6 +200,9 @@ private[execution] class SparkConnectPlanExecution(executeHolder: ExecuteHolder)
 
               currentPartitionId += 1
             }
+            ThreadUtils.awaitReady(future, Duration.Inf)
+          } else {
+            executePlan.eventsManager.postFinished()
           }
         }
     }

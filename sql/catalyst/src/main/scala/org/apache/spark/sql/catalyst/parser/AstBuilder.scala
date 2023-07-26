@@ -1564,6 +1564,13 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
     }.getOrElse {
       plan(ctx.query)
     }
+    val partitioning = Option(ctx.tableArgumentPartitioning)
+    if (partitioning.isDefined) {
+      // The PARTITION BY clause is not implemented yet for TABLE arguments to table valued function
+      // calls.
+      operationNotAllowed(
+        "Specifying the PARTITION BY clause for TABLE arguments is not implemented yet", ctx)
+    }
     FunctionTableSubqueryArgumentExpression(p)
   }
 
