@@ -483,7 +483,7 @@ class ObjectExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     testTypes.foreach { dt =>
       genSchema(dt).map { schema =>
         val row = RandomDataGenerator.randomRow(random, schema)
-        val toRow = RowEncoder(schema).createSerializer()
+        val toRow = ExpressionEncoder(schema).createSerializer()
         val internalRow = toRow(row)
         val lambda = LambdaVariable("dummy", schema(0).dataType, schema(0).nullable, id = 0)
         checkEvaluationWithoutCodegen(lambda, internalRow.get(0, schema(0).dataType), internalRow)
