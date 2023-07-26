@@ -90,12 +90,13 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
   }
 
   def requiredParameterNotFound(
-      functionName: String, parameterName: String) : Throwable = {
+      functionName: String, parameterName: String, index: Int) : Throwable = {
     new AnalysisException(
       errorClass = "REQUIRED_PARAMETER_NOT_FOUND",
       messageParameters = Map(
         "functionName" -> toSQLId(functionName),
-        "parameterName" -> toSQLId(parameterName))
+        "parameterName" -> toSQLId(parameterName),
+        "index" -> index.toString)
     )
   }
 
@@ -115,10 +116,11 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
     )
   }
 
-  def unexpectedPositionalArgument(functionName: String): Throwable = {
+  def unexpectedPositionalArgument(functionName: String, parameterName: String): Throwable = {
     new AnalysisException(
       errorClass = "UNEXPECTED_POSITIONAL_ARGUMENT",
-      messageParameters = Map("functionName" -> toSQLId(functionName))
+      messageParameters = Map(
+        "functionName" -> toSQLId(functionName), "parameterName" -> toSQLId(parameterName))
     )
   }
 

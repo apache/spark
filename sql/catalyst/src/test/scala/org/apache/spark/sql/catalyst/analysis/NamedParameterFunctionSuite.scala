@@ -53,7 +53,7 @@ object DummyExpressionBuilder extends ExpressionBuilder  {
     DummyExpression(expressions(0), expressions(1), expressions(2), expressions(3))
 }
 
-class NamedArgumentFunctionSuite extends AnalysisTest {
+class NamedParameterFunctionSuite extends AnalysisTest {
 
   final val k1Arg = Literal("v1")
   final val k2Arg = NamedArgumentExpression("k2", Literal("v2"))
@@ -115,8 +115,8 @@ class NamedArgumentFunctionSuite extends AnalysisTest {
     checkError(
       exception = parseRearrangeException(signature, Seq(k1Arg, k2Arg, k3Arg), "foo"),
       errorClass = "REQUIRED_PARAMETER_NOT_FOUND",
-      parameters = Map("functionName" -> toSQLId("foo"), "parameterName" -> toSQLId("k4"))
-    )
+      parameters = Map(
+        "functionName" -> toSQLId("foo"), "parameterName" -> toSQLId("k4"), "index" -> "2"))
   }
 
   test("UNRECOGNIZED_PARAMETER_NAME") {
@@ -134,7 +134,7 @@ class NamedArgumentFunctionSuite extends AnalysisTest {
       exception = parseRearrangeException(signature,
         Seq(k2Arg, k3Arg, k1Arg, k4Arg), "foo"),
       errorClass = "UNEXPECTED_POSITIONAL_ARGUMENT",
-      parameters = Map("functionName" -> toSQLId("foo"))
+      parameters = Map("functionName" -> toSQLId("foo"), "parameterName" -> toSQLId("k3"))
     )
   }
 

@@ -804,12 +804,12 @@
     "subClass" : {
       "BOTH_POSITIONAL_AND_NAMED" : {
         "message" : [
-          "A positional argument and named argument both referred to the same parameter."
+          "A positional argument and named argument both referred to the same parameter. Please remove the named argument referring to this parameter."
         ]
       },
       "DOUBLE_NAMED_ARGUMENT_REFERENCE" : {
         "message" : [
-          "More than one named argument referred to the same parameter."
+          "More than one named argument referred to the same parameter. Please assign a value only once."
         ]
       }
     },
@@ -2398,7 +2398,7 @@
   },
   "REQUIRED_PARAMETER_NOT_FOUND" : {
     "message" : [
-      "Cannot invoke function <functionName> because the parameter named <parameterName> is required, but the function call did not supply a value. Please update the function call to supply an argument value (either positionally or by name) and retry the query again."
+      "Cannot invoke function <functionName> because the parameter named <parameterName> is required at index <index>, but the function call did not supply a value. Please update the function call to supply an argument value (either positionally or by name) and retry the query again."
     ],
     "sqlState" : "4274K"
   },
@@ -2599,7 +2599,7 @@
   },
   "UNEXPECTED_POSITIONAL_ARGUMENT" : {
     "message" : [
-      "Cannot invoke function <functionName> because it contains positional argument(s) following named argument(s); please rearrange them so the positional arguments come first and then retry the query again."
+      "Cannot invoke function <functionName> because it contains positional argument(s) following the named argument assigned to <parameterName>; please rearrange them so the positional arguments come first and then retry the query again."
     ],
     "sqlState" : "4274K"
   },

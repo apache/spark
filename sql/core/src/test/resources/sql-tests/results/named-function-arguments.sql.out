@@ -214,7 +214,8 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "UNEXPECTED_POSITIONAL_ARGUMENT",
   "sqlState" : "4274K",
   "messageParameters" : {
-    "functionName" : "`mask`"
+    "functionName" : "`mask`",
+    "parameterName" : "`lowerChar`"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -283,6 +284,7 @@ org.apache.spark.sql.AnalysisException
   "sqlState" : "4274K",
   "messageParameters" : {
     "functionName" : "`mask`",
+    "index" : "0",
     "parameterName" : "`str`"
   },
   "queryContext" : [ {
