@@ -67,7 +67,10 @@ object MimaExcludes {
     ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.sql.types.DecimalType.unapply"),
     // [SPARK-44507][SQL][CONNECT] Move AnalysisException to sql/api.
     ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.AnalysisException"),
-    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.AnalysisException$")
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.AnalysisException$"),
+    // [SPARK-44535][CONNECT][SQL] Move required Streaming API to sql/api
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.streaming.GroupStateTimeout"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.streaming.OutputMode")
   )
 
   // Default exclude rules
