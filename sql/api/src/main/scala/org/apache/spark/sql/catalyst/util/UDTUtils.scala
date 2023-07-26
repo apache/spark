@@ -31,7 +31,7 @@ import org.apache.spark.util.SparkClassUtils
  * the api project (e.g. Row.toJSON). The companion will try to bind to an implementation of the
  * interface in catalyst, if none is found it will bind to [[DefaultUDTUtils]].
  */
-trait UDTUtils {
+private[sql] trait UDTUtils {
   /**
    * Convert the UDT instance to something that is compatible with [[org.apache.spark.sql.Row]].
    * The returned value must conform to the schema of the UDT.
@@ -39,7 +39,7 @@ trait UDTUtils {
   def toRow(value: Any, udt: UserDefinedType[Any]): Any
 }
 
-object UDTUtils extends UDTUtils {
+private[sql] object UDTUtils extends UDTUtils {
   private val delegate = try {
     val cls = SparkClassUtils.classForName("org.apache.spark.sql.catalyst.util.UDTUtilsImpl")
     cls.getConstructor().newInstance().asInstanceOf[UDTUtils]
@@ -51,7 +51,7 @@ object UDTUtils extends UDTUtils {
   override def toRow(value: Any, udt: UserDefinedType[Any]): Any = delegate.toRow(value, udt)
 }
 
-object DefaultUDTUtils extends UDTUtils {
+private[sql] object DefaultUDTUtils extends UDTUtils {
   override def toRow(value: Any, udt: UserDefinedType[Any]): Any = {
     throw new UnsupportedOperationException()
   }

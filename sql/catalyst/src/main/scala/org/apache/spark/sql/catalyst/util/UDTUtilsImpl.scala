@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.util
 import org.apache.spark.sql.catalyst.CatalystTypeConverters
 import org.apache.spark.sql.types.UserDefinedType
 
-class UDTUtilsImpl extends UDTUtils {
+private[sql] class UDTUtilsImpl extends UDTUtils {
   override def toRow(value: Any, udt: UserDefinedType[Any]): Any = {
     CatalystTypeConverters.convertToScala(udt.serialize(value), udt.sqlType)
   }
