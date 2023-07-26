@@ -88,6 +88,10 @@ object ConstantFolding extends Rule[LogicalPlan] {
           e
       }
 
+    // Replace ScalarSubquery with null if its maxRows is 0
+    case s: ScalarSubquery if s.plan.maxRows.contains(0) =>
+      Literal(null, s.dataType)
+
     case other => other.mapChildren(constantFolding(_, isConditionalBranch))
   }
 
@@ -482,7 +486,6 @@ object BooleanSimplification extends Rule[LogicalPlan] with PredicateHelper {
  * 2) Replace '=', '<=', and '>=' with 'true' literal if both operands are non-nullable.
  * 3) Replace '<' and '>' with 'false' literal if both operands are non-nullable.
  * 4) Unwrap '=', '<=>' if one side is a boolean literal
- * 5) Simplify BinaryComparison if its children contain ScalarSubquery with empty output
  */
 object SimplifyBinaryComparison
   extends Rule[LogicalPlan] with PredicateHelper with ConstraintHelper {
@@ -530,15 +533,6 @@ object SimplifyBinaryComparison
         case TrueLiteral EqualNullSafe b if !b.nullable => b
         case a EqualNullSafe FalseLiteral if !a.nullable => Not(a)
         case FalseLiteral EqualNullSafe b if !b.nullable => Not(b)
-
-        case EqualNullSafe(a: ScalarSubquery, b: ScalarSubquery)
-            if a.plan.maxRows.contains(0) && b.plan.maxRows.contains(0) =>
-          TrueLiteral
-        case e: EqualNullSafe => e
-        case BinaryComparison(a: ScalarSubquery, _) if a.plan.maxRows.contains(0) =>
-          Literal(null, BooleanType)
-        case BinaryComparison(_, b: ScalarSubquery) if b.plan.maxRows.contains(0) =>
-          Literal(null, BooleanType)
       }
   }
 }

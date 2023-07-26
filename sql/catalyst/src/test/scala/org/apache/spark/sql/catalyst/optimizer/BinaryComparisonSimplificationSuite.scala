@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
-import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
@@ -260,32 +259,5 @@ class BinaryComparisonSimplificationSuite extends PlanTest {
 
     val inExpr2 = InSubquery(Seq($"a"), ListQuery(nonNullableRelation.select($"a")))
     checkCondition(nonNullableRelation, inExpr2 <=> TrueLiteral, inExpr2)
-  }
-
-  test("SPARK-44527: Simplify predicate if its children contain ScalarSubquery with empty output") {
-    val emptyRelation = LocalRelation($"a".int)
-    val oneRowRelation = LocalRelation.fromExternalRows(Seq($"a".int), Seq(Row(1)))
-
-    comparePlans(
-      Optimize.execute(nullableRelation.as("x")
-        .select((ScalarSubquery(LocalRelation($"b".int)) <=>
-          ScalarSubquery(emptyRelation)).as("o")).analyze),
-      nullableRelation.as("x").select(Literal.TrueLiteral.as("o")).analyze)
-
-    Seq(EqualTo, LessThan, GreaterThan).foreach { comparison =>
-      Seq(comparison($"x.a", ScalarSubquery(emptyRelation)),
-        comparison(ScalarSubquery(emptyRelation), $"x.a")).foreach { input =>
-        comparePlans(
-          Optimize.execute(nullableRelation.as("x").select(input.as("o")).analyze),
-          nullableRelation.as("x").select(Literal(null, BooleanType).as("o")).analyze)
-      }
-    }
-
-    Seq($"x.a" <=> ScalarSubquery(emptyRelation),
-      $"x.a" <=> ScalarSubquery(oneRowRelation),
-      $"x.a" === ScalarSubquery(oneRowRelation)).foreach { input =>
-      val plan = nullableRelation.as("x").select(input.as("o")).analyze
-      comparePlans(Optimize.execute(plan), plan)
-    }
   }
 }
