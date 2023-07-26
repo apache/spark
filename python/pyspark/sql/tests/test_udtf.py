@@ -309,22 +309,22 @@ class BaseUDTFTestsMixin:
         with self.assertRaisesRegex(PythonException, err_msg):
             TestUDTF(lit(1)).collect()
 
-        # Empty output schema with non-empty output
+    def test_udtf_with_empty_output_schema_and_non_empty_output(self):
         @udtf(returnType=StructType())
         class TestUDTF:
             def eval(self):
                 yield 1,
 
-        with self.assertRaisesRegex(PythonException, err_msg):
+        with self.assertRaisesRegex(PythonException, "UDTF_RETURN_SCHEMA_MISMATCH"):
             TestUDTF().collect()
 
-        # Non-empty output schema with empty output
+    def test_udtf_with_non_empty_output_schema_and_empty_output(self):
         @udtf(returnType="a: int")
         class TestUDTF:
             def eval(self):
                 yield tuple()
 
-        with self.assertRaisesRegex(PythonException, err_msg):
+        with self.assertRaisesRegex(PythonException, "UDTF_RETURN_SCHEMA_MISMATCH"):
             TestUDTF().collect()
 
     def test_udtf_init(self):

@@ -604,14 +604,19 @@ def read_udtf(pickleSer, infile, eval_type):
                         },
                     )
 
-                if len(result.columns) != len(return_type):
-                    raise PySparkRuntimeError(
-                        error_class="UDTF_RETURN_SCHEMA_MISMATCH",
-                        message_parameters={
-                            "expected": str(len(return_type)),
-                            "actual": str(len(result.columns)),
-                        },
-                    )
+                # Validate the output schema when the result dataframe has either output
+                # rows or columns. Note that we avoid using `df.empty` here because the
+                # result dataframe may contain an empty row. For example, when a UDTF is
+                # defined as follows: def eval(self): yield tuple().
+                if len(result) > 0 or len(result.columns) > 0:
+                    if len(result.columns) != len(return_type):
+                        raise PySparkRuntimeError(
+                            error_class="UDTF_RETURN_SCHEMA_MISMATCH",
+                            message_parameters={
+                                "expected": str(len(return_type)),
+                                "actual": str(len(result.columns)),
+                            },
+                        )
 
                 # Verify the type and the schema of the result.
                 verify_pandas_result(
