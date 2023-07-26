@@ -31,9 +31,6 @@ cd "$FWDIR"
 if [[ -z "${GITHUB_ACTION}" ]]; then
   git clean -d -f -x -e assembly
 fi
-
-du -sch .[!.]* * |sort -h
-
 echo "Constructing virtual env for testing"
 VIRTUALENV_BASE=$(mktemp -d)
 
