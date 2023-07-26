@@ -157,6 +157,19 @@ class SparkConnectSQLTestCase(ReusedConnectTestCase, SQLTestUtils, PandasOnSpark
 
 
 class SparkConnectBasicTests(SparkConnectSQLTestCase):
+    def test_df_getattr_behavior(self):
+        cdf = self.connect.range(10)
+        sdf = self.spark.range(10)
+
+        sdf._simple_extension = 10
+        cdf._simple_extension = 10
+
+        self.assertEqual(sdf._simple_extension, cdf._simple_extension)
+        self.assertEqual(type(sdf._simple_extension), type(cdf._simple_extension))
+
+        self.assertTrue(hasattr(cdf, "_simple_extension"))
+        self.assertFalse(hasattr(cdf, "_simple_extension_does_not_exsit"))
+
     def test_df_get_item(self):
         # SPARK-41779: test __getitem__
 
@@ -1296,8 +1309,8 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
             sdf.drop("a", "x").toPandas(),
         )
         self.assert_eq(
-            cdf.drop(cdf.a, cdf.x).toPandas(),
-            sdf.drop("a", "x").toPandas(),
+            cdf.drop(cdf.a, "x").toPandas(),
+            sdf.drop(sdf.a, "x").toPandas(),
         )
 
     def test_subquery_alias(self) -> None:
