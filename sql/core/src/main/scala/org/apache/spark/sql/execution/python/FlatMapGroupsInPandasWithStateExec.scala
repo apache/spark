@@ -20,7 +20,7 @@ import org.apache.spark.{JobArtifactSet, TaskContext}
 import org.apache.spark.api.python.{ChainedPythonFunctions, PythonEvalType}
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.encoders.{ExpressionEncoder, RowEncoder}
+import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical.{EventTimeTimeout, ProcessingTimeTimeout}
 import org.apache.spark.sql.catalyst.plans.physical.Distribution
@@ -75,7 +75,7 @@ case class FlatMapGroupsInPandasWithStateExec(
   private[this] val jobArtifactUUID = JobArtifactSet.getCurrentJobArtifactState.map(_.uuid)
 
   override protected val stateEncoder: ExpressionEncoder[Any] =
-    RowEncoder(stateType).resolveAndBind().asInstanceOf[ExpressionEncoder[Any]]
+    ExpressionEncoder(stateType).resolveAndBind().asInstanceOf[ExpressionEncoder[Any]]
 
   override def output: Seq[Attribute] = outAttributes
 
