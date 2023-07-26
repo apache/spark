@@ -40,8 +40,8 @@ case class RepartitionForTableFunctionCallExec(
     with PartitioningPreservingUnaryExecNode
     with OrderPreservingUnaryExecNode {
 
-  // These methods of this operator by simply delegate to the child operator by passing through
-  // tuples unmodified.
+  // These methods of this operator simply delegate to the child operator by passing through tuples
+  // unmodified.
   override def output: Seq[Attribute] = {
     child.output
   }
