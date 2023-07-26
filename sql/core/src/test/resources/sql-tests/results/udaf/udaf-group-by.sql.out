@@ -52,7 +52,7 @@ SELECT a, udaf(b) FROM testData GROUP BY b
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "MISSING_AGGREGATION",
   "sqlState" : "42803",
@@ -115,7 +115,7 @@ SELECT a + 2, udaf(b) FROM testData GROUP BY a + 1
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "MISSING_AGGREGATION",
   "sqlState" : "42803",
@@ -143,7 +143,7 @@ FROM testData
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "INVALID_PANDAS_UDF_PLACEMENT",
   "sqlState" : "0A000",
@@ -158,7 +158,7 @@ SELECT udaf(DISTINCT b), udaf(DISTINCT b, c) FROM (SELECT 1 AS a, 2 AS b, 3 AS c
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "_LEGACY_ERROR_TEMP_1023",
   "messageParameters" : {
@@ -200,7 +200,7 @@ SELECT a AS k, udaf(non_existing) FROM testData GROUP BY k
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
   "sqlState" : "42703",
@@ -232,7 +232,7 @@ SELECT k AS a, udaf(v) FROM testDataHasSameNameWithAlias GROUP BY a
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "MISSING_AGGREGATION",
   "sqlState" : "42803",
@@ -256,7 +256,7 @@ SELECT a AS k, udaf(b) FROM testData GROUP BY k
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
   "sqlState" : "42703",
@@ -338,7 +338,7 @@ SELECT udaf(v), some(v), any(v), bool_and(v), bool_or(v) FROM test_agg WHERE 1 =
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "INVALID_PANDAS_UDF_PLACEMENT",
   "sqlState" : "0A000",
@@ -353,7 +353,7 @@ SELECT udaf(v), some(v), any(v), bool_and(v), bool_or(v) FROM test_agg WHERE k =
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "INVALID_PANDAS_UDF_PLACEMENT",
   "sqlState" : "0A000",
@@ -368,7 +368,7 @@ SELECT udaf(v), some(v), any(v), bool_and(v), bool_or(v) FROM test_agg WHERE k =
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "INVALID_PANDAS_UDF_PLACEMENT",
   "sqlState" : "0A000",
@@ -383,7 +383,7 @@ SELECT k, udaf(v), some(v), any(v), bool_and(v), bool_or(v) FROM test_agg GROUP 
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "INVALID_PANDAS_UDF_PLACEMENT",
   "sqlState" : "0A000",
