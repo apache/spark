@@ -578,13 +578,6 @@ jobs:
         python3.9 -m pip install 'pandas-stubs==1.2.0.53' ipython 'grpcio==1.48.1' 'grpc-stubs==1.24.11' 'googleapis-common-protos-stubs==2.2.0'
     - name: Python linter
       run: PYTHON_EXECUTABLE=python3.9 ./dev/lint-python
-    - name: Install dependencies for Python code generation check
-      run: |
-        # See more in "Installation" https://docs.buf.build/installation#tarball
-        curl -LO https://github.com/bufbuild/buf/releases/download/v1.15.1/buf-Linux-x86_64.tar.gz
-        mkdir -p $HOME/buf
-        tar -xvzf buf-Linux-x86_64.tar.gz -C $HOME/buf --strip-components 1
-        python3.9 -m pip install 'protobuf==3.19.5' 'mypy-protobuf==3.3.0'
     - name: Install JavaScript linter dependencies
       run: |
         apt update
