@@ -1309,8 +1309,8 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
             sdf.drop("a", "x").toPandas(),
         )
         self.assert_eq(
-            cdf.drop(cdf.a, cdf.x).toPandas(),
-            sdf.drop("a", "x").toPandas(),
+            cdf.drop(cdf.a, "x").toPandas(),
+            sdf.drop(sdf.a, "x").toPandas(),
         )
 
     def test_subquery_alias(self) -> None:
