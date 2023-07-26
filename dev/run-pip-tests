@@ -29,7 +29,7 @@ du -hs *
 
 echo "============================="
 
-du -hs /*
+sudo du -hs /*
 
 echo "Constructing virtual env for testing"
 VIRTUALENV_BASE=$(mktemp -d)
