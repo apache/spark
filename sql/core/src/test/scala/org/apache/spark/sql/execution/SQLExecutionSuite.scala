@@ -26,6 +26,7 @@ import scala.concurrent.{ExecutionContext, Future}
 import scala.concurrent.duration._
 
 import org.apache.spark.{SparkConf, SparkContext, SparkFunSuite}
+import org.apache.spark.launcher.SparkLauncher
 import org.apache.spark.scheduler.{SparkListener, SparkListenerEvent, SparkListenerJobStart}
 import org.apache.spark.sql.{Row, SparkSession}
 import org.apache.spark.sql.execution.ui.SparkListenerSQLExecutionStart
@@ -167,6 +168,7 @@ class SQLExecutionSuite extends SparkFunSuite {
       .master("local[*]")
       .appName("test")
       .config("k1", "v1")
+      .config(SparkLauncher.DRIVER_EXTRA_JAVA_OPTIONS, "-Dkey=value")
       .getOrCreate()
 
     try {
@@ -182,6 +184,7 @@ class SQLExecutionSuite extends SparkFunSuite {
               assert(start.modifiedConfigs("k2") == "v2")
               assert(start.modifiedConfigs.contains("redaction.password"))
               assert(start.modifiedConfigs("redaction.password") == REDACTION_REPLACEMENT_TEXT)
+              assert(!start.modifiedConfigs.contains(SparkLauncher.DRIVER_EXTRA_JAVA_OPTIONS))
               index.incrementAndGet()
             }
           case _ =>
