@@ -596,23 +596,22 @@ trait Row extends Serializable {
           case (k, v) =>
             new JObject("key" -> toJson(k, keyType) :: "value" -> toJson(v, valueType) :: Nil)
         }.toList)
-      case (r: Row, _) => r.jsonValue
+      case (row: Row, schema: StructType) =>
+        var n = 0
+        val elements = new mutable.ListBuffer[JField]
+        val len = row.length
+        while (n < len) {
+          val field = schema(n)
+          elements += (field.name -> toJson(row(n), field.dataType))
+          n += 1
+        }
+        new JObject(elements.toList)
       case (v: Any, udt: UserDefinedType[Any @unchecked]) =>
-        UDTUtils.toJson(v, udt)
+        toJson(UDTUtils.toRow(v, udt), udt.sqlType)
       case _ =>
         throw new IllegalArgumentException(s"Failed to convert value $value " +
           s"(class of ${value.getClass}}) with the type of $dataType to JSON.")
     }
-
-    // Convert the row fields to json
-    var n = 0
-    val elements = new mutable.ListBuffer[JField]
-    val len = length
-    while (n < len) {
-      val field = schema(n)
-      elements += (field.name -> toJson(apply(n), field.dataType))
-      n += 1
-    }
-    new JObject(elements.toList)
+    toJson(this, schema)
   }
 }

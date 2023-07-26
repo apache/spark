@@ -18,8 +18,6 @@ package org.apache.spark.sql.catalyst.util
 
 import scala.util.control.NonFatal
 
-import org.json4s.JsonAST.JValue
-
 import org.apache.spark.sql.types.UserDefinedType
 import org.apache.spark.util.SparkClassUtils
 
@@ -35,9 +33,10 @@ import org.apache.spark.util.SparkClassUtils
  */
 trait UDTUtils {
   /**
-   * Convert a UDT to a JSON.
+   * Convert the UDT instance to something that is compatible with [[org.apache.spark.sql.Row]].
+   * The returned value must conform to the schema of the UDT.
    */
-  def toJson(value: Any, udt: UserDefinedType[_]): JValue
+  def toRow(value: Any, udt: UserDefinedType[Any]): Any
 }
 
 object UDTUtils extends UDTUtils {
@@ -49,11 +48,11 @@ object UDTUtils extends UDTUtils {
       DefaultUDTUtils
   }
 
-  override def toJson(value: Any, udt: UserDefinedType[_]): JValue = delegate.toJson(value, udt)
+  override def toRow(value: Any, udt: UserDefinedType[Any]): Any = delegate.toRow(value, udt)
 }
 
 object DefaultUDTUtils extends UDTUtils {
-  override def toJson(value: Any, udt: UserDefinedType[_]): JValue = {
+  override def toRow(value: Any, udt: UserDefinedType[Any]): Any = {
     throw new UnsupportedOperationException()
   }
 }
