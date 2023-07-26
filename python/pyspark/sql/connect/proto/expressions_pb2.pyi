@@ -1101,6 +1101,7 @@ class Expression(google.protobuf.message.Message):
     UPDATE_FIELDS_FIELD_NUMBER: builtins.int
     UNRESOLVED_NAMED_LAMBDA_VARIABLE_FIELD_NUMBER: builtins.int
     COMMON_INLINE_USER_DEFINED_FUNCTION_FIELD_NUMBER: builtins.int
+    CALL_FUNCTION_FIELD_NUMBER: builtins.int
     EXTENSION_FIELD_NUMBER: builtins.int
     @property
     def literal(self) -> global___Expression.Literal: ...
@@ -1135,6 +1136,8 @@ class Expression(google.protobuf.message.Message):
     @property
     def common_inline_user_defined_function(self) -> global___CommonInlineUserDefinedFunction: ...
     @property
+    def call_function(self) -> global___CallFunction: ...
+    @property
     def extension(self) -> google.protobuf.any_pb2.Any:
         """This field is used to mark extensions to the protocol. When plugins generate arbitrary
         relations they can add them here. During the planning the correct resolution is done.
@@ -1158,6 +1161,7 @@ class Expression(google.protobuf.message.Message):
         unresolved_named_lambda_variable: global___Expression.UnresolvedNamedLambdaVariable
         | None = ...,
         common_inline_user_defined_function: global___CommonInlineUserDefinedFunction | None = ...,
+        call_function: global___CallFunction | None = ...,
         extension: google.protobuf.any_pb2.Any | None = ...,
     ) -> None: ...
     def HasField(
@@ -1165,6 +1169,8 @@ class Expression(google.protobuf.message.Message):
         field_name: typing_extensions.Literal[
             "alias",
             b"alias",
+            "call_function",
+            b"call_function",
             "cast",
             b"cast",
             "common_inline_user_defined_function",
@@ -1204,6 +1210,8 @@ class Expression(google.protobuf.message.Message):
         field_name: typing_extensions.Literal[
             "alias",
             b"alias",
+            "call_function",
+            b"call_function",
             "cast",
             b"cast",
             "common_inline_user_defined_function",
@@ -1256,6 +1264,7 @@ class Expression(google.protobuf.message.Message):
         "update_fields",
         "unresolved_named_lambda_variable",
         "common_inline_user_defined_function",
+        "call_function",
         "extension",
     ] | None: ...
 
@@ -1469,3 +1478,30 @@ class JavaUDF(google.protobuf.message.Message):
     ) -> typing_extensions.Literal["output_type"] | None: ...
 
 global___JavaUDF = JavaUDF
+
+class CallFunction(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    FUNCTION_NAME_FIELD_NUMBER: builtins.int
+    ARGUMENTS_FIELD_NUMBER: builtins.int
+    function_name: builtins.str
+    """(Required) Unparsed name of the SQL function."""
+    @property
+    def arguments(
+        self,
+    ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___Expression]:
+        """(Optional) Function arguments. Empty arguments are allowed."""
+    def __init__(
+        self,
+        *,
+        function_name: builtins.str = ...,
+        arguments: collections.abc.Iterable[global___Expression] | None = ...,
+    ) -> None: ...
+    def ClearField(
+        self,
+        field_name: typing_extensions.Literal[
+            "arguments", b"arguments", "function_name", b"function_name"
+        ],
+    ) -> None: ...
+
+global___CallFunction = CallFunction

@@ -346,7 +346,7 @@ class StreamingQuerySuite extends QueryTest with SQLHelper with Logging {
           .collect()
           .toSeq
         assert(rows.size > 0)
-        log.info(s"Rows in $tableName: $rows")
+        logInfo(s"Rows in $tableName: $rows")
       }
 
       q.stop()
