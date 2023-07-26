@@ -25,6 +25,12 @@ shopt -s nullglob
 FWDIR="$(cd "$(dirname "$0")"/..; pwd)"
 cd "$FWDIR"
 
+du -hs *
+
+echo "============================="
+
+du -hs /*
+
 echo "Constructing virtual env for testing"
 VIRTUALENV_BASE=$(mktemp -d)
 
