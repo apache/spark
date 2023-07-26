@@ -360,7 +360,6 @@ class TorchDistributor(Distributor):
     _TRAIN_FILE = "train.py"
     _PICKLED_OUTPUT_FILE = "output.pickle"
     _TORCH_SSL_CONF = "pytorch.spark.distributor.ignoreSsl"
-    _E2E_MOCK = False
     def __init__(
         self,
         num_processes: int = 1,
@@ -648,7 +647,7 @@ class TorchDistributor(Distributor):
             schema_json = input_dataframe.schema.jsonValue()
         else:
             schema_json = None
-
+        
         # Spark task program
         def wrapped_train_fn(iterator):  # type: ignore[no-untyped-def]
             import os
@@ -918,13 +917,6 @@ class TorchDistributor(Distributor):
     @staticmethod
     def _cleanup_files(save_dir: str) -> None:
         shutil.rmtree(save_dir, ignore_errors=True)
-    
-    @staticmethod
-    @contextmanager
-    def _setup_e2e_mocking_env():
-        TorchDistributor._E2E_MOCK = True
-        yield
-        TorchDistributor._E2E_MOCK = False
 
     def run(self, train_object: Union[Callable, str], *args: Any, **kwargs: Any) -> Optional[Any]:
         """Runs distributed training.
