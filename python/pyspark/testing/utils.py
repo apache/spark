@@ -400,7 +400,7 @@ def assertDataFrameEqual(
         return False
 
     import pandas as pd
-    from pyspark.testing.pandasutils import assertPandasDataFrameEqual
+    from pyspark.testing.pandasutils import assertPandasOnSparkEqual
 
     try:
         # If Spark Connect dependencies are available, allow Spark Connect DataFrame
@@ -409,7 +409,7 @@ def assertDataFrameEqual(
         if isinstance(actual, pd.DataFrame) and isinstance(expected, pd.DataFrame):
             # handle pandas DataFrames
             # assert approximate equality for float data
-            return assertPandasDataFrameEqual(actual, expected, check_exact=False)
+            return assertPandasOnSparkEqual(actual, expected, check_exact=False)
         elif not isinstance(actual, DataFrame) and not isinstance(actual, ConnectDataFrame):
             raise PySparkAssertionError(
                 error_class="INVALID_TYPE_DF_EQUALITY_ARG",
@@ -436,7 +436,7 @@ def assertDataFrameEqual(
         if isinstance(actual, pd.DataFrame) and isinstance(expected, pd.DataFrame):
             # handle pandas DataFrames
             # assert approximate equality for float data
-            return assertPandasDataFrameEqual(actual, expected, check_exact=False)
+            return assertPandasOnSparkEqual(actual, expected, check_exact=False)
         elif not isinstance(actual, DataFrame):
             raise PySparkAssertionError(
                 error_class="INVALID_TYPE_DF_EQUALITY_ARG",

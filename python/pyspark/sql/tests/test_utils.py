@@ -24,6 +24,7 @@ from pyspark.errors import (
     SparkUpgradeException,
 )
 from pyspark.testing.utils import assertDataFrameEqual, assertSchemaEqual
+from pyspark.testing.pandasutils import assertPandasOnSparkEqual
 from pyspark.testing.sqlutils import ReusedSQLTestCase
 import pyspark.sql.functions as F
 from pyspark.sql.functions import to_date, unix_timestamp, from_unixtime
@@ -42,6 +43,7 @@ from pyspark.sql.types import (
 from pyspark.sql.dataframe import DataFrame
 
 import difflib
+from typing import Union
 
 
 class UtilsTestsMixin:
@@ -670,6 +672,25 @@ class UtilsTestsMixin:
                 "expected_type": DataFrame,
                 "arg_name": "df",
                 "actual_type": pd.DataFrame,
+            },
+        )
+
+    def test_assert_error_assertPandasOnSparkEqual(self):
+        import pandas as pd
+
+        list1 = [10, 20, 30]
+        list2 = [10, 20, 30]
+
+        with self.assertRaises(PySparkAssertionError) as pe:
+            assertPandasOnSparkEqual(list1, list2)
+
+        self.check_error(
+            exception=pe.exception,
+            error_class="INVALID_TYPE_DF_EQUALITY_ARG",
+            message_parameters={
+                "expected_type": Union[pd.DataFrame, pd.Series, pd.Index],
+                "arg_name": "left",
+                "actual_type": type(list1),
             },
         )
 
