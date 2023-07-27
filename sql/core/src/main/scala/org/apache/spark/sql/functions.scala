@@ -3821,7 +3821,7 @@ object functions {
   /**
    * Concatenates multiple input string columns together into a single string column,
    * using the given separator.
-   * 
+   *
    * @note Input strings which are null are skipped.
    *
    * @group string_funcs
