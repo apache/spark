@@ -126,6 +126,7 @@ def getLogLevel() -> Optional[int]:
 
     if not logger.disabled:
         return logger.level
+    return None
 
 
 class ChannelBuilder:
