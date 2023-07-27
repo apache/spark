@@ -30,26 +30,35 @@ import org.apache.spark.util.Utils
 private[ui] class SparkConnectServerSessionPage(parent: SparkConnectServerTab)
     extends WebUIPage("session")
     with Logging {
+
   val store = parent.store
   private val startTime = parent.startTime
 
   /** Render the page */
   def render(request: HttpServletRequest): Seq[Node] = {
-    val parameterId = request.getParameter("id")
-    require(parameterId != null && parameterId.nonEmpty, "Missing id parameter")
+    val sessionId = request.getParameter("id")
+    require(sessionId != null && sessionId.nonEmpty, "Missing id parameter")
 
     val content = store.synchronized { // make sure all parts in this page are consistent
-      val sessionStat = store.getSession(parameterId).orNull
-      require(sessionStat != null, "Invalid sessionID[" + parameterId + "]")
-
-      generateBasicStats() ++
-        <br/> ++
-        <h4>
-          User {sessionStat.userId},
-          Session created at {formatDate(sessionStat.startTimestamp)},
-          Total run {sessionStat.totalExecution} Request(s)
-        </h4> ++
-        generateSQLStatsTable(request, sessionStat.sessionId)
+      store
+        .getSession(sessionId)
+        .map { sessionStat =>
+          generateBasicStats() ++
+            <br/> ++
+            <h4>
+            User
+            {sessionStat.userId}
+            ,
+            Session created at
+            {formatDate(sessionStat.startTimestamp)}
+            ,
+            Total run
+            {sessionStat.totalExecution}
+            Request(s)
+          </h4> ++
+            generateSQLStatsTable(request, sessionStat.sessionId)
+        }
+        .getOrElse(<div>No information to display for session {sessionId}</div>)
     }
     UIUtils.headerSparkPage(request, "Spark Connect Session", content, parent)
   }

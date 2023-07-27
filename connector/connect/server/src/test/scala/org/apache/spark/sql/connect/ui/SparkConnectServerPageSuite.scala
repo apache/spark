@@ -29,7 +29,10 @@ import org.apache.spark.sql.connect.service._
 import org.apache.spark.status.ElementTrackingStore
 import org.apache.spark.util.kvstore.InMemoryStore
 
-class SparkConnectPageSuite extends SparkFunSuite with BeforeAndAfter with SharedSparkContext {
+class SparkConnectServerPageSuite
+    extends SparkFunSuite
+    with BeforeAndAfter
+    with SharedSparkContext {
 
   private var kvstore: ElementTrackingStore = _
 
@@ -62,7 +65,8 @@ class SparkConnectPageSuite extends SparkFunSuite with BeforeAndAfter with Share
         "userId",
         "userName",
         "dummy query",
-        None))
+        None,
+        Set()))
     listener.onOtherEvent(
       SparkListenerConnectOperationAnalyzed("jobTag", "dummy plan", System.currentTimeMillis()))
     listener.onOtherEvent(SparkListenerJobStart(0, System.currentTimeMillis(), Seq()))

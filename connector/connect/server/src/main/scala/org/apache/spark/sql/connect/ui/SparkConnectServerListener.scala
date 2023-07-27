@@ -102,7 +102,9 @@ private[connect] class SparkConnectServerListener(
           exec.statement,
           exec.sessionId,
           exec.startTimestamp,
-          exec.userId)
+          exec.userId,
+          exec.operationId,
+          exec.sparkSessionTags)
         liveExec.jobId += jobStart.jobId.toString
         executionIdOpt.foreach { execId => exec.sqlExecId += execId }
         updateStoreWithTriggerEnabled(liveExec)
@@ -133,7 +135,8 @@ private[connect] class SparkConnectServerListener(
       e.sessionId,
       e.eventTime,
       e.userId,
-      e.extraTags)
+      e.operationId,
+      e.sparkSessionTags)
     executionData.state = ExecutionState.STARTED
     executionList.put(e.jobTag, executionData)
     updateLiveStore(executionData)
@@ -213,7 +216,7 @@ private[connect] class SparkConnectServerListener(
   }
 
   private def onSessionStarted(e: SparkListenerConnectSessionStarted) = synchronized {
-    val session = getOrCreateSession(e.sessionId, e.userId, e.eventTime, e.extraTags)
+    val session = getOrCreateSession(e.sessionId, e.userId, e.eventTime)
     sessionList.put(e.sessionId, session)
     updateLiveStore(session)
   }
@@ -247,11 +250,8 @@ private[connect] class SparkConnectServerListener(
   private def getOrCreateSession(
       sessionId: String,
       userName: String,
-      startTime: Long,
-      extraTags: Map[String, String] = Map.empty): LiveSessionData = synchronized {
-    sessionList.getOrElseUpdate(
-      sessionId,
-      new LiveSessionData(sessionId, startTime, userName, extraTags))
+      startTime: Long): LiveSessionData = synchronized {
+    sessionList.getOrElseUpdate(sessionId, new LiveSessionData(sessionId, startTime, userName))
   }
 
   private def getOrCreateExecution(
@@ -260,10 +260,18 @@ private[connect] class SparkConnectServerListener(
       sessionId: String,
       startTimestamp: Long,
       userId: String,
-      extraTags: Map[String, String] = Map.empty): LiveExecutionData = synchronized {
+      operationId: String,
+      sparkSessionTags: Set[String]): LiveExecutionData = synchronized {
     executionList.getOrElseUpdate(
       jobTag,
-      new LiveExecutionData(jobTag, statement, sessionId, startTimestamp, userId, extraTags))
+      new LiveExecutionData(
+        jobTag,
+        statement,
+        sessionId,
+        startTimestamp,
+        userId,
+        operationId,
+        sparkSessionTags))
   }
 
   private def cleanupExecutions(count: Long): Unit = {
@@ -310,16 +318,16 @@ private[connect] class LiveExecutionData(
     val sessionId: String,
     val startTimestamp: Long,
     val userId: String,
-    val extraTags: Map[String, String] = Map.empty)
+    val operationId: String,
+    val sparkSessionTags: Set[String])
     extends LiveEntity {
 
   var finishTimestamp: Long = 0L
   var closeTimestamp: Long = 0L
-  var executePlan: String = ""
   var detail: String = ""
   var state: ExecutionState.Value = ExecutionState.STARTED
   val jobId: ArrayBuffer[String] = ArrayBuffer[String]()
-  var sqlExecId: ArrayBuffer[String] = ArrayBuffer[String]()
+  var sqlExecId: mutable.Set[String] = mutable.Set[String]()
 
   override protected def doUpdate(): Any = {
     new ExecutionInfo(
@@ -328,9 +336,10 @@ private[connect] class LiveExecutionData(
       sessionId,
       startTimestamp,
       userId,
+      operationId,
+      sparkSessionTags,
       finishTimestamp,
       closeTimestamp,
-      executePlan,
       detail,
       state,
       jobId,
@@ -349,8 +358,7 @@ private[connect] class LiveExecutionData(
 private[connect] class LiveSessionData(
     val sessionId: String,
     val startTimestamp: Long,
-    val userName: String,
-    val extraTags: Map[String, String] = Map.empty)
+    val userName: String)
     extends LiveEntity {
 
   var finishTimestamp: Long = 0L

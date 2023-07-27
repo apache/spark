@@ -52,25 +52,32 @@ class SparkConnectServerListenerSuite
         SparkListenerConnectSessionStarted("sessionId", "user", System.currentTimeMillis()))
       listener.onOtherEvent(
         SparkListenerConnectOperationStarted(
-          "jobTag",
+          ExecuteJobTag("sessionId", "userId", "operationId"),
           "operationId",
           System.currentTimeMillis(),
           "sessionId",
           "userId",
           "userName",
           "dummy query",
-          None))
+          None,
+          Set()))
       listener.onOtherEvent(
         SparkListenerConnectOperationAnalyzed(
-          "jobTag",
+          ExecuteJobTag("sessionId", "userId", "operationId"),
           "operationId",
           System.currentTimeMillis()))
       listener.onJobStart(
         SparkListenerJobStart(0, System.currentTimeMillis(), Nil, createProperties))
       listener.onOtherEvent(
-        SparkListenerConnectOperationFinished("jobTag", "sessionId", System.currentTimeMillis()))
+        SparkListenerConnectOperationFinished(
+          ExecuteJobTag("sessionId", "userId", "operationId"),
+          "sessionId",
+          System.currentTimeMillis()))
       listener.onOtherEvent(
-        SparkListenerConnectOperationClosed("jobTag", "sessionId", System.currentTimeMillis()))
+        SparkListenerConnectOperationClosed(
+          ExecuteJobTag("sessionId", "userId", "operationId"),
+          "sessionId",
+          System.currentTimeMillis()))
 
       if (live) {
         assert(statusStore.getOnlineSessionNum === 1)
@@ -88,7 +95,7 @@ class SparkConnectServerListenerSuite
 
       val storeExecData = statusStore.getExecutionList.head
 
-      assert(storeExecData.jobTag === "jobTag")
+      assert(storeExecData.jobTag === ExecuteJobTag("sessionId", "userId", "operationId"))
       assert(storeExecData.sessionId === "sessionId")
       assert(storeExecData.statement === "dummy query")
       assert(storeExecData.jobId === Seq("0"))
@@ -133,26 +140,36 @@ class SparkConnectServerListenerSuite
       SparkListenerConnectSessionStarted("sessionId", "userId", System.currentTimeMillis()))
     listener.onOtherEvent(
       SparkListenerConnectOperationStarted(
-        "jobTag",
+        ExecuteJobTag("sessionId", "userId", "operationId"),
         "operationId",
         System.currentTimeMillis(),
         "sessionId",
         "userId",
         "userName",
         "dummy query",
-        None))
+        None,
+        Set()))
     listener.onOtherEvent(
-      SparkListenerConnectOperationAnalyzed("jobTag", "operationId", System.currentTimeMillis()))
+      SparkListenerConnectOperationAnalyzed(
+        ExecuteJobTag("sessionId", "userId", "operationId"),
+        "operationId",
+        System.currentTimeMillis()))
     listener.onOtherEvent(
-      SparkListenerConnectOperationFinished("jobTag", "operationId", System.currentTimeMillis()))
+      SparkListenerConnectOperationFinished(
+        ExecuteJobTag("sessionId", "userId", "operationId"),
+        "operationId",
+        System.currentTimeMillis()))
     listener.onOtherEvent(
-      SparkListenerConnectOperationClosed("jobTag", "operationId", System.currentTimeMillis()))
+      SparkListenerConnectOperationClosed(
+        ExecuteJobTag("sessionId", "userId", "operationId"),
+        "operationId",
+        System.currentTimeMillis()))
 
     listener.onJobStart(
       SparkListenerJobStart(0, System.currentTimeMillis(), Nil, createProperties))
     listener.onOtherEvent(
       SparkListenerConnectSessionClosed("sessionId", "userId", System.currentTimeMillis()))
-    val exec = statusStore.getExecution("jobTag")
+    val exec = statusStore.getExecution(ExecuteJobTag("sessionId", "userId", "operationId"))
     assert(exec.isDefined)
     assert(exec.get.jobId === Seq("0"))
     assert(listener.noLiveData())
@@ -167,14 +184,15 @@ class SparkConnectServerListenerSuite
     listener.onOtherEvent(SparkListenerConnectSessionClosed(unknownSession, "userId", 0))
     listener.onOtherEvent(
       SparkListenerConnectOperationStarted(
-        "jobTag",
+        ExecuteJobTag("sessionId", "userId", "operationId"),
         "operationId",
         System.currentTimeMillis(),
         unknownSession,
         "userId",
         "userName",
         "dummy query",
-        None))
+        None,
+        Set()))
     listener.onOtherEvent(
       SparkListenerConnectOperationAnalyzed(
         unknownJob,
@@ -189,7 +207,9 @@ class SparkConnectServerListenerSuite
 
   private def createProperties: Properties = {
     val properties = new Properties()
-    properties.setProperty(SparkContext.SPARK_JOB_TAGS, "jobTag")
+    properties.setProperty(
+      SparkContext.SPARK_JOB_TAGS,
+      ExecuteJobTag("sessionId", "userId", "operationId"))
     properties
   }
 

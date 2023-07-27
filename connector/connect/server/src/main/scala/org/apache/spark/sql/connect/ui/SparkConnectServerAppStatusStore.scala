@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.connect.ui
 
+import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 
 import com.fasterxml.jackson.annotation.JsonIgnore
@@ -95,13 +96,14 @@ private[connect] class ExecutionInfo(
     val sessionId: String,
     val startTimestamp: Long,
     val userId: String,
+    val operationId: String,
+    val sparkSessionTags: Set[String],
     val finishTimestamp: Long,
     val closeTimestamp: Long,
-    val executePlan: String,
     val detail: String,
     val state: ExecutionState.Value,
     val jobId: ArrayBuffer[String],
-    val sqlExecId: ArrayBuffer[String]) {
+    val sqlExecId: mutable.Set[String]) {
   @JsonIgnore @KVIndex("finishTime")
   private def finishTimeIndex: Long = if (finishTimestamp > 0L && !isExecutionActive) {
     finishTimestamp
@@ -109,10 +111,9 @@ private[connect] class ExecutionInfo(
 
   @JsonIgnore @KVIndex("isExecutionActive")
   def isExecutionActive: Boolean = {
-    !(state == ExecutionState.FAILED ||
-      state == ExecutionState.CANCELED ||
-      state == ExecutionState.TIMEDOUT ||
-      state == ExecutionState.CLOSED)
+    state == ExecutionState.STARTED ||
+    state == ExecutionState.COMPILED ||
+    state == ExecutionState.READY
   }
 
   def totalTime(endTime: Long): Long = {
@@ -125,6 +126,6 @@ private[connect] class ExecutionInfo(
 }
 
 private[connect] object ExecutionState extends Enumeration {
-  val STARTED, COMPILED, READY, CANCELED, TIMEDOUT, FAILED, FINISHED, CLOSED = Value
+  val STARTED, COMPILED, READY, CANCELED, FAILED, FINISHED, CLOSED = Value
   type ExecutionState = Value
 }

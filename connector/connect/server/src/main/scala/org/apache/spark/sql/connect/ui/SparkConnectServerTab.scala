@@ -29,6 +29,7 @@ private[connect] class SparkConnectServerTab(
     sparkUI: SparkUI)
     extends SparkUITab(sparkUI, "connect")
     with Logging {
+
   override val name = "Connect"
 
   val parent = sparkUI

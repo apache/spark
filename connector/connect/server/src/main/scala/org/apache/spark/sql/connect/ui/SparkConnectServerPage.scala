@@ -35,6 +35,7 @@ import org.apache.spark.util.Utils
 private[ui] class SparkConnectServerPage(parent: SparkConnectServerTab)
     extends WebUIPage("")
     with Logging {
+
   private val store = parent.store
   private val startTime = parent.startTime
 
@@ -176,6 +177,7 @@ private[ui] class SqlStatsPagedTable(
     sqlStatsTableTag: String,
     showSessionLink: Boolean)
     extends PagedTable[SqlStatsTableRow] {
+
   private val (sortColumn, desc, pageSize) =
     getTableParameters(request, sqlStatsTableTag, "Start Time")
 
@@ -213,7 +215,6 @@ private[ui] class SqlStatsPagedTable(
       if (showSessionLink) {
         Seq(
           ("User", true, None),
-          ("Job Tag", true, None),
           ("Job ID", true, None),
           ("SQL Query ID", true, None),
           ("Session ID", true, None),
@@ -224,11 +225,13 @@ private[ui] class SqlStatsPagedTable(
           ("Duration", true, Some(SPARK_CONNECT_SERVER_DURATION)),
           ("Statement", true, None),
           ("State", true, None),
+          ("Operation ID", true, None),
+          ("Job Tag", true, None),
+          ("Spark Session Tags", true, None),
           ("Detail", true, None))
       } else {
         Seq(
           ("User", true, None),
-          ("Job Tag", true, None),
           ("Job ID", true, None),
           ("SQL Query ID", true, None),
           ("Start Time", true, None),
@@ -238,6 +241,9 @@ private[ui] class SqlStatsPagedTable(
           ("Duration", true, Some(SPARK_CONNECT_SERVER_DURATION)),
           ("Statement", true, None),
           ("State", true, None),
+          ("Operation ID", true, None),
+          ("Job Tag", true, None),
+          ("Spark Session Tags", true, None),
           ("Detail", true, None))
       }
 
@@ -279,13 +285,10 @@ private[ui] class SqlStatsPagedTable(
         {info.userId}
       </td>
       <td>
-        {info.jobTag}
-      </td>
-      <td>
         {jobLinks(sqlStatsTableRow.jobId)}
       </td>
       <td>
-        {sqlLinks({ info.sqlExecId })}
+        {sqlLinks(sqlStatsTableRow.sqlExecId)}
       </td>
       {
       if (showSessionLink) {
@@ -318,7 +321,16 @@ private[ui] class SqlStatsPagedTable(
       <td>
         {info.state}
       </td>
-      {errorMessageCell(Option(sqlStatsTableRow.detail))}
+      <td>
+        {info.operationId}
+      </td>
+      <td>
+        {info.jobTag}
+      </td>
+      <td>
+        {sqlStatsTableRow.sparkSessionTags.mkString(", ")}
+      </td>
+      {errorMessageCell(Option(info.detail))}
     </tr>
   }
 
@@ -428,8 +440,8 @@ private[ui] class SqlStatsTableRow(
     val sqlExecId: Seq[String],
     val duration: Long,
     val executionTime: Long,
-    val executionInfo: ExecutionInfo,
-    val detail: String)
+    val sparkSessionTags: Seq[String],
+    val executionInfo: ExecutionInfo)
 
 private[ui] class SqlStatsTableDataSource(
     info: Seq[ExecutionInfo],
@@ -449,11 +461,9 @@ private[ui] class SqlStatsTableDataSource(
   private def sqlStatsTableRow(executionInfo: ExecutionInfo): SqlStatsTableRow = {
     val duration = executionInfo.totalTime(executionInfo.closeTimestamp)
     val executionTime = executionInfo.totalTime(executionInfo.finishTimestamp)
-    val detail = Option(executionInfo.detail)
-      .filter(!_.isEmpty)
-      .getOrElse(executionInfo.executePlan)
     val jobId = executionInfo.jobId.toSeq.sorted
     val sqlExecId = executionInfo.sqlExecId.toSeq.sorted
+    val sparkSessionTags = executionInfo.sparkSessionTags.toSeq.sorted
 
     new SqlStatsTableRow(
       executionInfo.jobTag,
@@ -461,8 +471,8 @@ private[ui] class SqlStatsTableDataSource(
       sqlExecId,
       duration,
       executionTime,
-      executionInfo,
-      detail)
+      sparkSessionTags,
+      executionInfo)
   }
 
   /**
@@ -471,9 +481,9 @@ private[ui] class SqlStatsTableDataSource(
   private def ordering(sortColumn: String, desc: Boolean): Ordering[SqlStatsTableRow] = {
     val ordering: Ordering[SqlStatsTableRow] = sortColumn match {
       case "User" => Ordering.by(_.executionInfo.userId)
-      case "Job Tag" => Ordering.by(_.executionInfo.jobTag)
-      case "Job ID" => Ordering by (_.jobId.headOption)
-      case "SQL Query ID" => Ordering by (_.sqlExecId.headOption)
+      case "Operation ID" => Ordering.by(_.executionInfo.operationId)
+      case "Job ID" => Ordering.by(_.jobId.headOption)
+      case "SQL Query ID" => Ordering.by(_.sqlExecId.headOption)
       case "Session ID" => Ordering.by(_.executionInfo.sessionId)
       case "Start Time" => Ordering.by(_.executionInfo.startTimestamp)
       case "Finish Time" => Ordering.by(_.executionInfo.finishTimestamp)
@@ -482,7 +492,9 @@ private[ui] class SqlStatsTableDataSource(
       case "Duration" => Ordering.by(_.duration)
       case "Statement" => Ordering.by(_.executionInfo.statement)
       case "State" => Ordering.by(_.executionInfo.state)
-      case "Detail" => Ordering.by(_.detail)
+      case "Detail" => Ordering.by(_.executionInfo.detail)
+      case "Job Tag" => Ordering.by(_.executionInfo.jobTag)
+      case "Spark Session Tags" => Ordering.by(_.sparkSessionTags.headOption)
       case unknownColumn => throw new IllegalArgumentException(s"Unknown column: $unknownColumn")
     }
     if (desc) {
@@ -514,7 +526,7 @@ private[ui] class SessionStatsTableDataSource(
     val ordering: Ordering[SessionInfo] = sortColumn match {
       case "User" => Ordering.by(_.userId)
       case "Session ID" => Ordering.by(_.sessionId)
-      case "Start Time" => Ordering by (_.startTimestamp)
+      case "Start Time" => Ordering.by(_.startTimestamp)
       case "Finish Time" => Ordering.by(_.finishTimestamp)
       case "Duration" => Ordering.by(_.totalTime)
       case "Total Execute" => Ordering.by(_.totalExecution)
