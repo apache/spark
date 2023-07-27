@@ -26,7 +26,7 @@ import scala.collection.mutable
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{LocalFileSystem, Path}
 
-import org.apache.spark.SparkException
+import org.apache.spark.{SparkException, SparkFileNotFoundException, SparkRuntimeException}
 import org.apache.spark.scheduler.{SparkListener, SparkListenerTaskEnd}
 import org.apache.spark.sql.TestingUDT.{IntervalUDT, NullData, NullUDT}
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, GreaterThan, Literal}
@@ -129,11 +129,13 @@ class FileBasedDataSourceSuite extends QueryTest
   allFileBasedDataSources.foreach { format =>
     test(s"SPARK-23372 error while writing empty schema files using $format") {
       withTempPath { outputPath =>
-        val errMsg = intercept[AnalysisException] {
-          spark.emptyDataFrame.write.format(format).save(outputPath.toString)
-        }
-        assert(errMsg.getMessage.contains(
-          "Datasource does not support writing empty or nested empty schemas"))
+        checkError(
+          exception = intercept[AnalysisException] {
+            spark.emptyDataFrame.write.format(format).save(outputPath.toString)
+          },
+          errorClass = "_LEGACY_ERROR_TEMP_1142",
+          parameters = Map.empty
+        )
       }
 
       // Nested empty schema
@@ -144,11 +146,13 @@ class FileBasedDataSourceSuite extends QueryTest
           StructField("c", IntegerType)
         ))
         val df = spark.createDataFrame(sparkContext.emptyRDD[Row], schema)
-        val errMsg = intercept[AnalysisException] {
-          df.write.format(format).save(outputPath.toString)
-        }
-        assert(errMsg.getMessage.contains(
-          "Datasource does not support writing empty or nested empty schemas"))
+        checkError(
+          exception = intercept[AnalysisException] {
+            df.write.format(format).save(outputPath.toString)
+          },
+          errorClass = "_LEGACY_ERROR_TEMP_1142",
+          parameters = Map.empty
+        )
       }
     }
   }
@@ -242,10 +246,17 @@ class FileBasedDataSourceSuite extends QueryTest
           if (ignore.toBoolean) {
             testIgnoreMissingFiles(options)
           } else {
-            val exception = intercept[SparkException] {
-              testIgnoreMissingFiles(options)
+            val errorClass = sources match {
+              case "" => "_LEGACY_ERROR_TEMP_2062"
+              case _ => "_LEGACY_ERROR_TEMP_2055"
             }
-            assert(exception.getMessage().contains("does not exist"))
+            checkErrorMatchPVals(
+              exception = intercept[SparkException] {
+                testIgnoreMissingFiles(options)
+              }.getCause.asInstanceOf[SparkFileNotFoundException],
+              errorClass = errorClass,
+              parameters = Map("message" -> ".*does not exist")
+            )
           }
         }
       }
@@ -646,20 +657,20 @@ class FileBasedDataSourceSuite extends QueryTest
 
             // RuntimeException is triggered at executor side, which is then wrapped as
             // SparkException at driver side
-            val e1 = intercept[SparkException] {
-              sql(s"select b from $tableName").collect()
-            }
-            assert(
-              e1.getCause.isInstanceOf[RuntimeException] &&
-                e1.getCause.getMessage.contains(
-                  """Found duplicate field(s) "b": [b, B] in case-insensitive mode"""))
-            val e2 = intercept[SparkException] {
-              sql(s"select B from $tableName").collect()
-            }
-            assert(
-              e2.getCause.isInstanceOf[RuntimeException] &&
-                e2.getCause.getMessage.contains(
-                  """Found duplicate field(s) "b": [b, B] in case-insensitive mode"""))
+            checkError(
+              exception = intercept[SparkException] {
+                sql(s"select b from $tableName").collect()
+              }.getCause.asInstanceOf[SparkRuntimeException],
+              errorClass = "_LEGACY_ERROR_TEMP_2093",
+              parameters = Map("requiredFieldName" -> "b", "matchedOrcFields" -> "[b, B]")
+            )
+            checkError(
+              exception = intercept[SparkException] {
+                sql(s"select B from $tableName").collect()
+              }.getCause.asInstanceOf[SparkRuntimeException],
+              errorClass = "_LEGACY_ERROR_TEMP_2093",
+              parameters = Map("requiredFieldName" -> "b", "matchedOrcFields" -> "[b, B]")
+            )
           }
 
           withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
@@ -1003,7 +1014,7 @@ class FileBasedDataSourceSuite extends QueryTest
           })
 
           val fileScan = df.queryExecution.executedPlan collectFirst {
-            case BatchScanExec(_, f: FileScan, _, _, _, _, _, _, _) => f
+            case BatchScanExec(_, f: FileScan, _, _, _, _) => f
           }
           assert(fileScan.nonEmpty)
           assert(fileScan.get.partitionFilters.nonEmpty)
@@ -1044,7 +1055,7 @@ class FileBasedDataSourceSuite extends QueryTest
           assert(filterCondition.isDefined)
 
           val fileScan = df.queryExecution.executedPlan collectFirst {
-            case BatchScanExec(_, f: FileScan, _, _, _, _, _, _, _) => f
+            case BatchScanExec(_, f: FileScan, _, _, _, _) => f
           }
           assert(fileScan.nonEmpty)
           assert(fileScan.get.partitionFilters.isEmpty)

@@ -838,7 +838,7 @@ trait AlterTableTests extends SharedSparkSession with QueryErrorsBase {
       assert(e2.getMessage.contains("Missing field point.non_exist"))
 
       // `AlterTable.resolved` checks column existence.
-      intercept[AnalysisException](
+      intercept[SparkException](
         sql(s"ALTER TABLE $t ALTER COLUMN a.y AFTER x"))
     }
   }

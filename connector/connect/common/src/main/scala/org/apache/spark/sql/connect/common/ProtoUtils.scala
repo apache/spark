@@ -27,15 +27,15 @@ private[connect] object ProtoUtils {
   private val MAX_BYTES_SIZE = 8
   private val MAX_STRING_SIZE = 1024
 
-  def abbreviate(message: Message): Message = {
+  def abbreviate(message: Message, maxStringSize: Int = MAX_STRING_SIZE): Message = {
     val builder = message.toBuilder
 
     message.getAllFields.asScala.iterator.foreach {
       case (field: FieldDescriptor, string: String)
           if field.getJavaType == FieldDescriptor.JavaType.STRING && string != null =>
         val size = string.size
-        if (size > MAX_STRING_SIZE) {
-          builder.setField(field, createString(string.take(MAX_STRING_SIZE), size))
+        if (size > maxStringSize) {
+          builder.setField(field, createString(string.take(maxStringSize), size))
         } else {
           builder.setField(field, string)
         }
@@ -43,8 +43,8 @@ private[connect] object ProtoUtils {
       case (field: FieldDescriptor, byteString: ByteString)
           if field.getJavaType == FieldDescriptor.JavaType.BYTE_STRING && byteString != null =>
         val size = byteString.size
-        if (size > MAX_BYTES_SIZE) {
-          val prefix = Array.tabulate(MAX_BYTES_SIZE)(byteString.byteAt)
+        if (size > maxStringSize) {
+          val prefix = Array.tabulate(maxStringSize)(byteString.byteAt)
           builder.setField(field, createByteString(prefix, size))
         } else {
           builder.setField(field, byteString)
@@ -80,5 +80,29 @@ private[connect] object ProtoUtils {
 
   private def createString(prefix: String, size: Int): String = {
     s"$prefix[truncated(size=${format.format(size)})]"
+  }
+
+  // Because Spark Connect operation tags are also set as SparkContext Job tags, they cannot contain
+  // SparkContext.SPARK_JOB_TAGS_SEP
+  private var SPARK_JOB_TAGS_SEP = ',' // SparkContext.SPARK_JOB_TAGS_SEP
+
+  /**
+   * Validate if a tag for ExecutePlanRequest.tags is valid. Throw IllegalArgumentException if
+   * not.
+   */
+  def throwIfInvalidTag(tag: String): Unit = {
+    // Same format rules apply to Spark Connect execution tags as to SparkContext job tags,
+    // because the Spark Connect job tag is also used as part of SparkContext job tag.
+    // See SparkContext.throwIfInvalidTag and ExecuteHolder.tagToSparkJobTag
+    if (tag == null) {
+      throw new IllegalArgumentException("Spark Connect tag cannot be null.")
+    }
+    if (tag.contains(SPARK_JOB_TAGS_SEP)) {
+      throw new IllegalArgumentException(
+        s"Spark Connect tag cannot contain '$SPARK_JOB_TAGS_SEP'.")
+    }
+    if (tag.isEmpty) {
+      throw new IllegalArgumentException("Spark Connect tag cannot be an empty string.")
+    }
   }
 }

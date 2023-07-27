@@ -1443,7 +1443,7 @@ class PlanParserSuite extends AnalysisTest {
 
   test("table valued function with table arguments") {
     assertEqual(
-      "select * from my_tvf(table v1, table (select 1))",
+      "select * from my_tvf(table (v1), table (select 1))",
       UnresolvedTableValuedFunction("my_tvf",
         FunctionTableSubqueryArgumentExpression(UnresolvedRelation(Seq("v1"))) ::
           FunctionTableSubqueryArgumentExpression(
@@ -1451,7 +1451,7 @@ class PlanParserSuite extends AnalysisTest {
 
     // All named arguments
     assertEqual(
-      "select * from my_tvf(arg1 => table v1, arg2 => table (select 1))",
+      "select * from my_tvf(arg1 => table (v1), arg2 => table (select 1))",
       UnresolvedTableValuedFunction("my_tvf",
         NamedArgumentExpression("arg1",
           FunctionTableSubqueryArgumentExpression(UnresolvedRelation(Seq("v1")))) ::
@@ -1461,7 +1461,7 @@ class PlanParserSuite extends AnalysisTest {
 
     // Unnamed and named arguments
     assertEqual(
-      "select * from my_tvf(2, table v1, arg1 => table (select 1))",
+      "select * from my_tvf(2, table (v1), arg1 => table (select 1))",
       UnresolvedTableValuedFunction("my_tvf",
         Literal(2) ::
           FunctionTableSubqueryArgumentExpression(UnresolvedRelation(Seq("v1"))) ::
@@ -1471,12 +1471,56 @@ class PlanParserSuite extends AnalysisTest {
 
     // Mixed arguments
     assertEqual(
-      "select * from my_tvf(arg1 => table v1, 2, arg2 => true)",
+      "select * from my_tvf(arg1 => table (v1), 2, arg2 => true)",
       UnresolvedTableValuedFunction("my_tvf",
         NamedArgumentExpression("arg1",
           FunctionTableSubqueryArgumentExpression(UnresolvedRelation(Seq("v1")))) ::
           Literal(2) ::
           NamedArgumentExpression("arg2", Literal(true)) :: Nil).select(star()))
+
+    // Negative tests:
+    // Parentheses are missing from the table argument.
+    val sql1 = "select * from my_tvf(arg1 => table v1)"
+    checkError(
+      exception = parseException(sql1),
+      errorClass =
+        "INVALID_SQL_SYNTAX.INVALID_TABLE_FUNCTION_IDENTIFIER_ARGUMENT_MISSING_PARENTHESES",
+      parameters = Map("argumentName" -> "`v1`"),
+      context = ExpectedContext(
+        fragment = "table v1",
+        start = 29,
+        stop = sql1.length - 2))
+  }
+
+  test("SPARK-44503: Support PARTITION BY and ORDER BY clause for TVF TABLE arguments") {
+    val message = "Specifying the PARTITION BY clause for TABLE arguments is not implemented yet"
+    val startIndex = 29
+
+    def check(sqlSuffix: String): Unit = {
+      val sql = s"select * from my_tvf(arg1 => $sqlSuffix)"
+      checkError(
+        exception = parseException(sql),
+        errorClass = "_LEGACY_ERROR_TEMP_0035",
+        parameters = Map("message" -> message),
+        context = ExpectedContext(
+          fragment = sqlSuffix,
+          start = startIndex,
+          stop = sql.length - 2))
+    }
+
+    Seq("partition", "distribute").foreach { partition =>
+      val sqlSuffix = s"table(v1) $partition by col1"
+      check(sqlSuffix)
+
+      Seq("order", "sort").foreach { order =>
+        Seq(
+          s"table(v1) $partition by col1 $order by col2 asc",
+          s"table(v1) $partition by col1, col2 $order by col2 asc, col3 desc",
+          s"table(select col1, col2, col3 from v2) $partition by col1, col2 " +
+            s"$order by col2 asc, col3 desc"
+        ).foreach(check)
+      }
+    }
   }
 
   test("SPARK-32106: TRANSFORM plan") {

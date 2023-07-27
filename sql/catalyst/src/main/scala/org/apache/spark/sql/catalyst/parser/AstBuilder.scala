@@ -1554,9 +1554,22 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
   override def visitFunctionTableSubqueryArgument(
       ctx: FunctionTableSubqueryArgumentContext): Expression = withOrigin(ctx) {
     val p = Option(ctx.identifierReference).map { r =>
+      // Make sure that the identifier after the TABLE keyword is surrounded by parentheses, as
+      // required by the SQL standard. If not, return an informative error message.
+      if (ctx.LEFT_PAREN() == null) {
+        throw QueryParsingErrors.invalidTableFunctionIdentifierArgumentMissingParentheses(
+          ctx, argumentName = ctx.identifierReference().getText)
+      }
       createUnresolvedRelation(r)
     }.getOrElse {
       plan(ctx.query)
+    }
+    val partitioning = Option(ctx.tableArgumentPartitioning)
+    if (partitioning.isDefined) {
+      // The PARTITION BY clause is not implemented yet for TABLE arguments to table valued function
+      // calls.
+      operationNotAllowed(
+        "Specifying the PARTITION BY clause for TABLE arguments is not implemented yet", ctx)
     }
     FunctionTableSubqueryArgumentExpression(p)
   }

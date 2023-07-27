@@ -30,6 +30,7 @@ import org.apache.spark.sql.internal.HiveSerDe
  */
 class ShowCreateTableSuite extends v1.ShowCreateTableSuiteBase with CommandSuiteBase {
   override def commandVersion: String = super[ShowCreateTableSuiteBase].commandVersion
+  def nsTable: String = s"$ns.$table"
 
   override def getShowCreateDDL(table: String, serde: Boolean = false): Array[String] = {
     super.getShowCreateDDL(table, serde).filter(!_.startsWith("'transient_lastDdlTime'"))
@@ -48,7 +49,7 @@ class ShowCreateTableSuite extends v1.ShowCreateTableSuiteBase with CommandSuite
            |)
          """.stripMargin
       )
-      val expected = s"CREATE TABLE $fullName ( c1 INT COMMENT 'bla', c2 STRING)" +
+      val expected = s"CREATE TABLE $nsTable ( c1 INT COMMENT 'bla', c2 STRING)" +
         " ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe'" +
         " WITH SERDEPROPERTIES ( 'serialization.format' = '1')" +
         " STORED AS INPUTFORMAT 'org.apache.hadoop.mapred.TextInputFormat'" +
@@ -73,7 +74,7 @@ class ShowCreateTableSuite extends v1.ShowCreateTableSuiteBase with CommandSuite
              |)
            """.stripMargin
         )
-        val expected = s"CREATE EXTERNAL TABLE $fullName ( c1 INT COMMENT 'bla', c2 STRING)" +
+        val expected = s"CREATE EXTERNAL TABLE $nsTable ( c1 INT COMMENT 'bla', c2 STRING)" +
           s" ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe'" +
           s" WITH SERDEPROPERTIES ( 'serialization.format' = '1')" +
           s" STORED AS INPUTFORMAT 'org.apache.hadoop.mapred.TextInputFormat'" +
@@ -100,7 +101,7 @@ class ShowCreateTableSuite extends v1.ShowCreateTableSuiteBase with CommandSuite
            |)
          """.stripMargin
       )
-      val expected = s"CREATE TABLE $fullName ( c1 INT COMMENT 'bla', c2 STRING)" +
+      val expected = s"CREATE TABLE $nsTable ( c1 INT COMMENT 'bla', c2 STRING)" +
         " COMMENT 'bla' PARTITIONED BY (p1 BIGINT COMMENT 'bla', p2 STRING)" +
         " ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe'" +
         " WITH SERDEPROPERTIES ( 'serialization.format' = '1')" +
@@ -124,7 +125,7 @@ class ShowCreateTableSuite extends v1.ShowCreateTableSuiteBase with CommandSuite
            |NULL DEFINED AS 'NaN'
          """.stripMargin
       )
-      val expected = s"CREATE TABLE $fullName ( c1 INT COMMENT 'bla', c2 STRING)" +
+      val expected = s"CREATE TABLE $nsTable ( c1 INT COMMENT 'bla', c2 STRING)" +
         " ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe'" +
         " WITH SERDEPROPERTIES (" +
         " 'colelction.delim' = '@'," +
@@ -148,7 +149,7 @@ class ShowCreateTableSuite extends v1.ShowCreateTableSuiteBase with CommandSuite
            |STORED AS PARQUET
          """.stripMargin
       )
-      val expected = s"CREATE TABLE $fullName ( c1 INT COMMENT 'bla', c2 STRING)" +
+      val expected = s"CREATE TABLE $nsTable ( c1 INT COMMENT 'bla', c2 STRING)" +
         " ROW FORMAT SERDE 'org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe'" +
         " WITH SERDEPROPERTIES ( 'serialization.format' = '1')" +
         " STORED AS INPUTFORMAT 'org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat'" +
@@ -175,7 +176,7 @@ class ShowCreateTableSuite extends v1.ShowCreateTableSuiteBase with CommandSuite
            |  OUTPUTFORMAT 'org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat'
          """.stripMargin
       )
-      val expected = s"CREATE TABLE $fullName ( c1 INT COMMENT 'bla', c2 STRING)" +
+      val expected = s"CREATE TABLE $nsTable ( c1 INT COMMENT 'bla', c2 STRING)" +
         " ROW FORMAT SERDE 'org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe'" +
         " WITH SERDEPROPERTIES (" +
         " 'field.delim' = ','," +
@@ -197,7 +198,7 @@ class ShowCreateTableSuite extends v1.ShowCreateTableSuiteBase with CommandSuite
            |INTO 2 BUCKETS
          """.stripMargin
       )
-      val expected = s"CREATE TABLE $fullName ( a INT, b STRING)" +
+      val expected = s"CREATE TABLE $nsTable ( a INT, b STRING)" +
         " CLUSTERED BY (a) SORTED BY (b ASC) INTO 2 BUCKETS" +
         " ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe'" +
         " WITH SERDEPROPERTIES ( 'serialization.format' = '1')" +

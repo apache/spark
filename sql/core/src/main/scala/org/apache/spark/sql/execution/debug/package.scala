@@ -206,24 +206,31 @@ package object debug {
     }
   }
 
+
+  class SetAccumulator[T] extends AccumulatorV2[T, java.util.Set[T]] {
+    private val _set = Collections.synchronizedSet(new java.util.HashSet[T]())
+
+    override def isZero: Boolean = _set.isEmpty
+
+    override def copy(): AccumulatorV2[T, java.util.Set[T]] = {
+      val newAcc = new SetAccumulator[T]()
+      newAcc._set.addAll(_set)
+      newAcc
+    }
+
+    override def reset(): Unit = _set.clear()
+
+    override def add(v: T): Unit = _set.add(v)
+
+    override def merge(other: AccumulatorV2[T, java.util.Set[T]]): Unit = {
+      _set.addAll(other.value)
+    }
+
+    override def value: java.util.Set[T] = _set
+  }
+
   case class DebugExec(child: SparkPlan) extends UnaryExecNode with CodegenSupport {
     def output: Seq[Attribute] = child.output
-
-    class SetAccumulator[T] extends AccumulatorV2[T, java.util.Set[T]] {
-      private val _set = Collections.synchronizedSet(new java.util.HashSet[T]())
-      override def isZero: Boolean = _set.isEmpty
-      override def copy(): AccumulatorV2[T, java.util.Set[T]] = {
-        val newAcc = new SetAccumulator[T]()
-        newAcc._set.addAll(_set)
-        newAcc
-      }
-      override def reset(): Unit = _set.clear()
-      override def add(v: T): Unit = _set.add(v)
-      override def merge(other: AccumulatorV2[T, java.util.Set[T]]): Unit = {
-        _set.addAll(other.value)
-      }
-      override def value: java.util.Set[T] = _set
-    }
 
     /**
      * A collection of metrics for each column of output.
@@ -250,23 +257,13 @@ package object debug {
     }
 
     protected override def doExecute(): RDD[InternalRow] = {
-      child.execute().mapPartitions { iter =>
-        new Iterator[InternalRow] {
-          def hasNext: Boolean = iter.hasNext
-
-          def next(): InternalRow = {
-            val currentRow = iter.next()
-            tupleCount.add(1)
-            var i = 0
-            while (i < numColumns) {
-              val value = currentRow.get(i, output(i).dataType)
-              if (value != null) {
-                columnStats(i).elementTypes.add(value.getClass.getName)
-              }
-              i += 1
-            }
-            currentRow
-          }
+      val evaluatorFactory = new DebugEvaluatorFactory(tupleCount, numColumns,
+        columnStats.map(_.elementTypes), output)
+      if (conf.usePartitionEvaluator) {
+        child.execute().mapPartitionsWithEvaluator(evaluatorFactory)
+      } else {
+        child.execute().mapPartitionsWithIndex { (index, iter) =>
+          evaluatorFactory.createEvaluator().eval(index, iter)
         }
       }
     }

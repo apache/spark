@@ -34,6 +34,7 @@ import org.rocksdb.TickerType._
 import org.apache.spark.TaskContext
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.util.{NextIterator, Utils}
 
 /**
@@ -462,6 +463,8 @@ class RocksDB(
   /** Release all resources */
   def close(): Unit = {
     try {
+      // Acquire DB instance lock and release at the end to allow for synchronized access
+      acquire()
       closeDB()
 
       readOptions.close()
@@ -476,6 +479,8 @@ class RocksDB(
     } catch {
       case e: Exception =>
         logWarning("Error closing RocksDB", e)
+    } finally {
+      release()
     }
   }
 
@@ -553,11 +558,8 @@ class RocksDB(
     }
     if (isAcquiredByDifferentThread) {
       val stackTraceOutput = acquiredThreadInfo.threadRef.get.get.getStackTrace.mkString("\n")
-      val msg = s"RocksDB instance could not be acquired by $newAcquiredThreadInfo as it " +
-        s"was not released by $acquiredThreadInfo after $timeWaitedMs ms.\n" +
-        s"Thread holding the lock has trace: $stackTraceOutput"
-      logError(msg)
-      throw new IllegalStateException(s"$loggingId: $msg")
+      throw QueryExecutionErrors.unreleasedThreadError(loggingId, newAcquiredThreadInfo.toString,
+        acquiredThreadInfo.toString, timeWaitedMs, stackTraceOutput)
     } else {
       acquiredThreadInfo = newAcquiredThreadInfo
       // Add a listener to always release the lock when the task (if active) completes

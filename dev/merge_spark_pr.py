@@ -44,7 +44,7 @@ except ImportError:
 
 # Location of your Spark git development area
 SPARK_HOME = os.environ.get("SPARK_HOME", os.getcwd())
-# Remote name which points to the Gihub site
+# Remote name which points to the Github site
 PR_REMOTE_NAME = os.environ.get("PR_REMOTE_NAME", "apache-github")
 # Remote name which points to Apache git
 PUSH_REMOTE_NAME = os.environ.get("PUSH_REMOTE_NAME", "apache")
@@ -240,8 +240,7 @@ def cherry_pick(pr_num, merge_hash, default_branch):
 def fix_version_from_branch(branch, versions):
     # Note: Assumes this is a sorted (newest->oldest) list of un-released versions
     if branch == "master":
-        # TODO(SPARK-44130) Revert SPARK-44129 after creating branch-3.5
-        return [v for v in versions if v.name == "3.5.0"][0]
+        return versions[0]
     else:
         branch_ver = branch.replace("branch-", "")
         return list(filter(lambda x: x.name.startswith(branch_ver), versions))[-1]

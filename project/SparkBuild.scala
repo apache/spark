@@ -89,7 +89,7 @@ object BuildCommons {
 
   // Google Protobuf version used for generating the protobuf.
   // SPARK-41247: needs to be consistent with `protobuf.version` in `pom.xml`.
-  val protoVersion = "3.23.2"
+  val protoVersion = "3.23.4"
   // GRPC version used for Spark Connect.
   val gprcVersion = "1.56.0"
 }
@@ -425,6 +425,8 @@ object SparkBuild extends PomBuild {
   }
 
   /* Generate and pick the spark build info from extra-resources */
+  enable(CommonUtils.settings)(commonUtils)
+
   enable(Core.settings)(core)
 
   /* Unsafe settings */
@@ -448,8 +450,8 @@ object SparkBuild extends PomBuild {
   /* Enable unidoc only for the root spark project */
   enable(Unidoc.settings)(spark)
 
-  /* Catalyst ANTLR generation settings */
-  enable(Catalyst.settings)(catalyst)
+  /* Sql-api ANTLR generation settings */
+  enable(Catalyst.settings)(sqlApi)
 
   /* Spark SQL Core console settings */
   enable(SQL.settings)(sql)
@@ -626,11 +628,29 @@ object SparkParallelTestGrouping {
   )
 }
 
-object Core {
+object CommonUtils {
   import scala.sys.process.Process
-  import BuildCommons.protoVersion
   def buildenv = Process(Seq("uname")).!!.trim.replaceFirst("[^A-Za-z0-9].*", "").toLowerCase
   def bashpath = Process(Seq("where", "bash")).!!.split("[\r\n]+").head.replace('\\', '/')
+  lazy val settings = Seq(
+    (Compile / resourceGenerators) += Def.task {
+      val buildScript = baseDirectory.value + "/../../build/spark-build-info"
+      val targetDir = baseDirectory.value + "/target/extra-resources/"
+      // support Windows build under cygwin/mingw64, etc
+      val bash = buildenv match {
+        case "cygwin" | "msys2" | "mingw64" | "clang64" => bashpath
+        case _ => "bash"
+      }
+      val command = Seq(bash, buildScript, targetDir, version.value)
+      Process(command).!!
+      val propsFile = baseDirectory.value / "target" / "extra-resources" / "spark-version-info.properties"
+      Seq(propsFile)
+    }.taskValue
+  )
+}
+
+object Core {
+  import BuildCommons.protoVersion
   lazy val settings = Seq(
     // Setting version for the protobuf compiler. This has to be propagated to every sub-project
     // even if the project is not using it.
@@ -644,20 +664,7 @@ object Core {
     },
     (Compile / PB.targets) := Seq(
       PB.gens.java -> (Compile / sourceManaged).value
-    ),
-    (Compile / resourceGenerators) += Def.task {
-      val buildScript = baseDirectory.value + "/../build/spark-build-info"
-      val targetDir = baseDirectory.value + "/target/extra-resources/"
-      // support Windows build under cygwin/mingw64, etc
-      val bash = buildenv match {
-        case "cygwin" | "msys2" | "mingw64" | "clang64" => bashpath
-        case _ => "bash"
-      }
-      val command = Seq(bash, buildScript, targetDir, version.value)
-      Process(command).!!
-      val propsFile = baseDirectory.value / "target" / "extra-resources" / "spark-version-info.properties"
-      Seq(propsFile)
-    }.taskValue
+    )
   ) ++ {
     val sparkProtocExecPath = sys.props.get("spark.protoc.executable.path")
     if (sparkProtocExecPath.isDefined) {
