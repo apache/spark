@@ -38,7 +38,7 @@ def determine_modules_for_files(filenames):
     and `README.md` is always ignored too.
 
     >>> sorted(x.name for x in determine_modules_for_files(["python/pyspark/a.py", "sql/core/foo"]))
-    ['pyspark-core', 'sql']
+    ['pyspark-core', 'pyspark-errors', 'sql']
     >>> [x.name for x in determine_modules_for_files(["file_not_matched_by_any_subproject"])]
     ['root']
     >>> [x.name for x in determine_modules_for_files(["appveyor.yml", "sql/README.md"])]
