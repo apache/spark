@@ -414,25 +414,27 @@ class PandasOnSparkTestUtils:
         :param almost: if this is enabled, the comparison is delegated to `unittest`'s
                        `assertAlmostEqual`. See its documentation for more details.
         """
-        if isinstance(left, (DataFrame, Series, Index)):
-            assertPandasOnSparkEqual(left, right, check_exact, almost)
-        else:
-            from pandas.api.types import is_list_like
+        import pandas as pd
+        from pandas.api.types import is_list_like
 
-            lobj = self._to_pandas(left)
-            robj = self._to_pandas(right)
-
-            if is_list_like(lobj) and is_list_like(robj):
-                self.assertTrue(len(left) == len(right))
-                for litem, ritem in zip(left, right):
-                    self.assert_eq(litem, ritem, check_exact=check_exact, almost=almost)
-            elif (lobj is not None and pd.isna(lobj)) and (robj is not None and pd.isna(robj)):
-                pass
+        lobj = self._to_pandas(left)
+        robj = self._to_pandas(right)
+        if isinstance(lobj, (pd.DataFrame, pd.Series, pd.Index)):
+            if almost:
+                assertPandasDFAlmostEqual(lobj, robj)
             else:
-                if almost:
-                    self.assertAlmostEqual(lobj, robj)
-                else:
-                    self.assertEqual(lobj, robj)
+                assertPandasDFEqual(lobj, robj, checkExact=check_exact)
+        elif is_list_like(lobj) and is_list_like(robj):
+            self.assertTrue(len(left) == len(right))
+            for litem, ritem in zip(left, right):
+                self.assert_eq(litem, ritem, check_exact=check_exact, almost=almost)
+        elif (lobj is not None and pd.isna(lobj)) and (robj is not None and pd.isna(robj)):
+            pass
+        else:
+            if almost:
+                self.assertAlmostEqual(lobj, robj)
+            else:
+                self.assertEqual(lobj, robj)
 
     @staticmethod
     def _to_pandas(obj):
