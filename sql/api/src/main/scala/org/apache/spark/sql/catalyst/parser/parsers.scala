@@ -23,8 +23,9 @@ import org.antlr.v4.runtime.atn.PredictionMode
 import org.antlr.v4.runtime.misc.{Interval, ParseCancellationException}
 import org.antlr.v4.runtime.tree.TerminalNodeImpl
 
-import org.apache.spark.{QueryContext, SparkException, SparkThrowable, SparkThrowableHelper}
+import org.apache.spark.{QueryContext, SparkThrowable, SparkThrowableHelper}
 import org.apache.spark.internal.Logging
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, Origin, WithOrigin}
 import org.apache.spark.sql.catalyst.util.SparkParserUtils
 import org.apache.spark.sql.errors.QueryParsingErrors
@@ -184,15 +185,17 @@ case object ParseErrorListener extends BaseErrorListener {
  */
 class ParseException(
     val command: Option[String],
-    val message: String,
+    message: String,
     val start: Origin,
     val stop: Origin,
-    val errorClass: Option[String] = None,
-    val messageParameters: Map[String, String] = Map.empty,
-    val queryContext: Array[QueryContext] = ParseException.getQueryContext())
-  extends SparkException(
+    errorClass: Option[String] = None,
+    messageParameters: Map[String, String] = Map.empty,
+    queryContext: Array[QueryContext] = ParseException.getQueryContext())
+  extends AnalysisException(
     message,
-    cause = null,
+    start.line,
+    start.startPosition,
+    None,
     errorClass,
     messageParameters,
     queryContext) {
@@ -221,14 +224,6 @@ class ParseException(
       stop,
       Some(errorClass),
       messageParameters)
-
-  // Methods added to retain compatibility with AnalysisException.
-  @deprecated("Use start.line instead.")
-  def line: Option[Int] = start.line
-  @deprecated("Use start.startPosition instead.")
-  def startPosition: Option[Int] = start.startPosition
-  @deprecated("ParseException is never caused by another exception.")
-  def cause: Option[Throwable] = None
 
   override def getMessage: String = {
     val builder = new StringBuilder
