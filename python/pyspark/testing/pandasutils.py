@@ -61,7 +61,7 @@ have_plotly = plotly_requirement_message is None
 __all__ = ["assertPandasOnSparkEqual"]
 
 
-def assertPandasDFEqual(
+def _assert_pandas_equal(
     left: Union[pd.DataFrame, pd.Series, pd.Index],
     right: Union[pd.DataFrame, pd.Series, pd.Index],
     checkExact: bool,
@@ -131,7 +131,7 @@ def assertPandasDFEqual(
                 checkExact = (
                     checkExact and is_numeric_dtype(left.dtype) and is_numeric_dtype(right.dtype)
                 )
-            assert_index_equal(left, right, checkExact=checkExact)
+            assert_index_equal(left, right, check_exact=checkExact)
         except AssertionError as e:
             msg = (
                 str(e)
@@ -143,7 +143,7 @@ def assertPandasDFEqual(
         raise ValueError("Unexpected values: (%s, %s)" % (left, right))
 
 
-def assertPandasDFAlmostEqual(
+def _assert_pandas_almost_equal(
     left: Union[pd.DataFrame, pd.Series, pd.Index], right: Union[pd.DataFrame, pd.Series, pd.Index]
 ):
     """
@@ -385,9 +385,9 @@ def assertPandasOnSparkEqual(
                 expected = expected.sort_values(by=expected.columns[0], ignore_index=True)
 
         if almost:
-            assertPandasDFAlmostEqual(actual, expected)
+            _assert_pandas_almost_equal(actual, expected)
         else:
-            assertPandasDFEqual(actual, expected, checkExact=checkExact)
+            _assert_pandas_equal(actual, expected, checkExact=checkExact)
 
 
 class PandasOnSparkTestUtils:
@@ -398,10 +398,10 @@ class PandasOnSparkTestUtils:
         return lambda x: getattr(x, func)()
 
     def assertPandasEqual(self, left, right, check_exact=True):
-        assertPandasDFEqual(left, right, check_exact)
+        _assert_pandas_equal(left, right, check_exact)
 
     def assertPandasAlmostEqual(self, left, right):
-        assertPandasDFAlmostEqual(left, right)
+        _assert_pandas_almost_equal(left, right)
 
     def assert_eq(self, left, right, check_exact=True, almost=False):
         """
@@ -421,9 +421,9 @@ class PandasOnSparkTestUtils:
         robj = self._to_pandas(right)
         if isinstance(lobj, (pd.DataFrame, pd.Series, pd.Index)):
             if almost:
-                assertPandasDFAlmostEqual(lobj, robj)
+                _assert_pandas_almost_equal(lobj, robj)
             else:
-                assertPandasDFEqual(lobj, robj, checkExact=check_exact)
+                _assert_pandas_equal(lobj, robj, checkExact=check_exact)
         elif is_list_like(lobj) and is_list_like(robj):
             self.assertTrue(len(left) == len(right))
             for litem, ritem in zip(left, right):
