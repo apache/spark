@@ -30,6 +30,7 @@ from pyspark.serializers import (
 )
 from pyspark import worker
 from pyspark.sql import SparkSession
+from typing import IO
 
 from pyspark.sql.streaming.listener import (
     QueryStartedEvent,
@@ -42,7 +43,7 @@ pickle_ser = CPickleSerializer()
 utf8_deserializer = UTF8Deserializer()
 
 
-def main(infile, outfile):  # type: ignore[no-untyped-def]
+def main(infile: IO, outfile: IO) -> None:
     connect_url = os.environ["SPARK_CONNECT_LOCAL_URL"]
     session_id = utf8_deserializer.loads(infile)
 
@@ -65,7 +66,7 @@ def main(infile, outfile):  # type: ignore[no-untyped-def]
     listener._set_spark_session(spark_connect_session)
     assert listener.spark == spark_connect_session
 
-    def process(listener_event_str, listener_event_type):
+    def process(listener_event_str, listener_event_type):  # type: ignore[no-untyped-def]
         listener_event = json.loads(listener_event_str)
         if listener_event_type == 0:
             listener.onQueryStarted(QueryStartedEvent.fromJson(listener_event))
