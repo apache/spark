@@ -31,6 +31,12 @@ from pyspark.ml.torch.tests.test_distributor import (
     get_distributed_mode_conf,
 )
 
+have_deepspeed = True
+try:
+    import deepspeed  # noqa: F401
+except ImportError:
+    have_deepspeed = False
+
 
 class DeepspeedTorchDistributorUnitTests(unittest.TestCase):
     def _get_env_var(self, var_name: str, default_value: Any) -> Any:
@@ -213,6 +219,7 @@ def _create_pytorch_training_test_file():
 # and inference, the hope is to switch out the training
 # and file for the tests with more realistic testing
 # that use Deepspeed constructs.
+@unittest.skipIf(not have_deepspeed, "deepspeed is required for these tests")
 class DeepspeedTorchDistributorDistributedEndToEnd(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
@@ -252,6 +259,7 @@ class DeepspeedTorchDistributorDistributedEndToEnd(unittest.TestCase):
             dist.run(cp_path, 2, 5)
 
 
+@unittest.skipIf(not have_deepspeed, "deepspeed is required for these tests")
 class DeepspeedDistributorLocalEndToEndTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
