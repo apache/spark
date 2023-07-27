@@ -22,7 +22,7 @@ import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions.Cast._
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
-import org.apache.spark.sql.catalyst.trees.TreePattern.{COALESCE, NULL_CHECK, TreePattern}
+import org.apache.spark.sql.catalyst.trees.TreePattern.{AT_LEAST_N_NON_NULLS, COALESCE, NULL_CHECK, TreePattern}
 import org.apache.spark.sql.catalyst.util.TypeUtils
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
@@ -428,6 +428,8 @@ case class IsNotNull(child: Expression) extends UnaryExpression with Predicate {
 case class AtLeastNNonNulls(n: Int, children: Seq[Expression]) extends Predicate {
   override def nullable: Boolean = false
   override def foldable: Boolean = children.forall(_.foldable)
+
+  final override val nodePatterns: Seq[TreePattern] = Seq(AT_LEAST_N_NON_NULLS)
 
   private[this] val childrenArray = children.toArray
 

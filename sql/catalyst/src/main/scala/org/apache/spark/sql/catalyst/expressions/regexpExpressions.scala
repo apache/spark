@@ -466,6 +466,8 @@ case class RLike(left: Expression, right: Expression) extends StringRegexExpress
   override def toString: String = s"RLIKE($left, $right)"
   override def sql: String = s"${prettyName.toUpperCase(Locale.ROOT)}(${left.sql}, ${right.sql})"
 
+  final override val nodePatterns: Seq[TreePattern] = Seq(LIKE_FAMLIY)
+
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val patternClass = classOf[Pattern].getName
 

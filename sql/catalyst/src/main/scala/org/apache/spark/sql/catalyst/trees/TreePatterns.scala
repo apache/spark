@@ -26,13 +26,17 @@ object TreePattern extends Enumeration  {
   val AGGREGATE_EXPRESSION = Value(0)
   val ALIAS: Value = Value
   val AND: Value = Value
+  val ARRAY_CONTAINS: Value = Value
+  val ARRAYS_OVERLAP: Value = Value
   val ARRAYS_ZIP: Value = Value
   val ATTRIBUTE_REFERENCE: Value = Value
   val APPEND_COLUMNS: Value = Value
   val AVERAGE: Value = Value
+  val AT_LEAST_N_NON_NULLS = Value
   val GROUPING_ANALYTICS: Value = Value
   val BINARY_ARITHMETIC: Value = Value
   val BINARY_COMPARISON: Value = Value
+  val BLOOM_FILTER: Value = Value
   val CASE_WHEN: Value = Value
   val CAST: Value = Value
   val COALESCE: Value = Value
@@ -88,6 +92,7 @@ object TreePattern extends Enumeration  {
   val SCALA_UDF: Value = Value
   val SESSION_WINDOW: Value = Value
   val SORT: Value = Value
+  val STRING_PREDICATE: Value = Value
   val SUBQUERY_ALIAS: Value = Value
   val SUM: Value = Value
   val TIME_WINDOW: Value = Value

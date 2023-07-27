@@ -97,6 +97,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
         EliminateOffsets,
         EliminateLimits,
         CombineUnions,
+        CombineJoinedAggregates,
         // Constant folding and strength reduction
         OptimizeRepartition,
         EliminateWindowPartitions,
