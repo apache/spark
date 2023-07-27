@@ -40,6 +40,7 @@ case class DummyExpression(
 }
 
 object DummyExpressionBuilder extends ExpressionBuilder  {
+
   def defaultFunctionSignature: FunctionSignature = {
     FunctionSignature(Seq(InputParameter("k1"),
       InputParameter("k2"),
@@ -49,6 +50,7 @@ object DummyExpressionBuilder extends ExpressionBuilder  {
 
   override def functionSignature: Option[FunctionSignature] =
     Some(defaultFunctionSignature)
+
   override def build(funcName: String, expressions: Seq[Expression]): Expression =
     DummyExpression(expressions(0), expressions(1), expressions(2), expressions(3))
 }
