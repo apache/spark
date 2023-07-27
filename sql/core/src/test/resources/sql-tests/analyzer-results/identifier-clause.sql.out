@@ -890,7 +890,7 @@ org.apache.spark.sql.catalyst.parser.ParseException
 -- !query
 SELECT IDENTIFIER('t').c1 FROM VALUES(1) AS T(c1)
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
   "sqlState" : "42703",
