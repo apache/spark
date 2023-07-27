@@ -21,12 +21,11 @@ import java.time.temporal.ChronoField
 
 import org.apache.arrow.vector.types.pojo.ArrowType
 
-import org.apache.spark.{SparkArithmeticException, SparkBuildInfo, SparkDateTimeException, SparkException, SparkIllegalArgumentException, SparkRuntimeException, SparkUnsupportedOperationException, SparkUpgradeException}
+import org.apache.spark.{SparkArithmeticException, SparkBuildInfo, SparkDateTimeException, SparkException, SparkRuntimeException, SparkUnsupportedOperationException, SparkUpgradeException}
 import org.apache.spark.sql.catalyst.WalkedTypePath
 import org.apache.spark.sql.catalyst.trees.SQLQueryContext
-import org.apache.spark.sql.catalyst.util.{DateTimeUtils, TimestampFormatter}
 import org.apache.spark.sql.internal.SqlApiConf
-import org.apache.spark.sql.types.{DataType, DoubleType, FloatType, LongType, StringType, UserDefinedType}
+import org.apache.spark.sql.types.{DataType, DoubleType, StringType, UserDefinedType}
 import org.apache.spark.unsafe.types.UTF8String
 
 private[sql] trait ExecutionErrors extends DataTypeErrorsBase {
@@ -111,25 +110,6 @@ private[sql] trait ExecutionErrors extends DataTypeErrorsBase {
       summary = getSummary(context))
   }
 
-  def ansiIllegalArgumentError(message: String): SparkIllegalArgumentException = {
-    new SparkIllegalArgumentException(
-      errorClass = "_LEGACY_ERROR_TEMP_2000",
-      messageParameters = Map(
-        "message" -> message,
-        "ansiConfig" -> toSQLConf(SqlApiConf.ANSI_ENABLED_KEY)))
-  }
-
-  def timestampAddOverflowError(micros: Long, amount: Int, unit: String): ArithmeticException = {
-    val timeZoneId = DateTimeUtils.getZoneId(SqlApiConf.get.sessionLocalTimeZone)
-    val str = TimestampFormatter.getFractionFormatter(timeZoneId).format(micros)
-    new SparkArithmeticException(
-      errorClass = "DATETIME_OVERFLOW",
-      messageParameters = Map(
-        "operation" -> (s"add ${toSQLValue(amount)} $unit to TIMESTAMP '$str'")),
-      context = Array.empty,
-      summary = "")
-  }
-
   def arithmeticOverflowError(
       message: String,
       hint: String = "",
@@ -155,51 +135,6 @@ private[sql] trait ExecutionErrors extends DataTypeErrorsBase {
         "value" -> toSQLValue(value),
         "pattern" -> toSQLValue(pattern),
         "dataType" -> dataType.toString))
-  }
-
-  def binaryArithmeticCauseOverflowError(
-      eval1: Short, symbol: String, eval2: Short): SparkArithmeticException = {
-    new SparkArithmeticException(
-      errorClass = "BINARY_ARITHMETIC_OVERFLOW",
-      messageParameters = Map(
-        "value1" -> toSQLValue(eval1),
-        "symbol" -> symbol,
-        "value2" -> toSQLValue(eval2)),
-      context = Array.empty,
-      summary = "")
-  }
-
-  def unaryMinusCauseOverflowError(originValue: Int): SparkArithmeticException = {
-    new SparkArithmeticException(
-      errorClass = "_LEGACY_ERROR_TEMP_2043",
-      messageParameters = Map("sqlValue" -> toSQLValue(originValue)),
-      context = Array.empty,
-      summary = "")
-  }
-
-  def castingCauseOverflowError(t: Long, to: DataType): ArithmeticException = {
-    castingCauseOverflowErrorInternal(toSQLValue(t), LongType, to)
-  }
-
-  def castingCauseOverflowError(t: Float, to: DataType): ArithmeticException = {
-    castingCauseOverflowErrorInternal(toSQLValue(t), FloatType, to)
-  }
-
-  def castingCauseOverflowError(t: Double, to: DataType): ArithmeticException = {
-    castingCauseOverflowErrorInternal(toSQLValue(t), DoubleType, to)
-  }
-
-  protected def castingCauseOverflowErrorInternal(
-      t: String, from: DataType, to: DataType): ArithmeticException = {
-    new SparkArithmeticException(
-      errorClass = "CAST_OVERFLOW",
-      messageParameters = Map(
-        "value" -> t,
-        "sourceType" -> toSQLType(from),
-        "targetType" -> toSQLType(to),
-        "ansiConfig" -> toSQLConf(SqlApiConf.ANSI_ENABLED_KEY)),
-      context = Array.empty,
-      summary = "")
   }
 
   def unsupportedArrowTypeError(typeName: ArrowType): SparkUnsupportedOperationException = {

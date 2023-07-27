@@ -30,9 +30,9 @@ import scala.util.control.NonFatal
 import org.apache.commons.lang3.time.FastDateFormat
 
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
-import org.apache.spark.sql.catalyst.util.DateTimeUtils._
 import org.apache.spark.sql.catalyst.util.LegacyDateFormats.{LegacyDateFormat, LENIENT_SIMPLE_DATE_FORMAT}
 import org.apache.spark.sql.catalyst.util.RebaseDateTime._
+import org.apache.spark.sql.catalyst.util.SparkDateTimeUtils._
 import org.apache.spark.sql.errors.ExecutionErrors
 import org.apache.spark.sql.internal.LegacyBehaviorPolicy._
 import org.apache.spark.sql.internal.SqlApiConf
@@ -216,7 +216,7 @@ class Iso8601TimestampFormatter(
     }
     val localDate = toLocalDate(parsed)
     val localTime = toLocalTime(parsed)
-    DateTimeUtils.localDateTimeToMicros(LocalDateTime.of(localDate, localTime))
+    SparkDateTimeUtils.localDateTimeToMicros(LocalDateTime.of(localDate, localTime))
   }
 
   override def parseWithoutTimeZone(s: String, allowTimeZone: Boolean): Long = {
@@ -234,7 +234,7 @@ class Iso8601TimestampFormatter(
   }
 
   override def format(us: Long): String = {
-    val instant = DateTimeUtils.microsToInstant(us)
+    val instant = SparkDateTimeUtils.microsToInstant(us)
     format(instant)
   }
 
@@ -281,17 +281,17 @@ class DefaultTimestampFormatter(
 
   override def parse(s: String): Long = {
     try {
-      DateTimeUtils.stringToTimestampAnsi(UTF8String.fromString(s), zoneId)
+      SparkDateTimeUtils.stringToTimestampAnsi(UTF8String.fromString(s), zoneId)
     } catch checkParsedDiff(s, legacyFormatter.parse)
   }
 
   override def parseOptional(s: String): Option[Long] =
-    DateTimeUtils.stringToTimestamp(UTF8String.fromString(s), zoneId)
+    SparkDateTimeUtils.stringToTimestamp(UTF8String.fromString(s), zoneId)
 
   override def parseWithoutTimeZone(s: String, allowTimeZone: Boolean): Long = {
     try {
       val utf8Value = UTF8String.fromString(s)
-      DateTimeUtils.stringToTimestampWithoutTimeZone(utf8Value, allowTimeZone).getOrElse {
+      SparkDateTimeUtils.stringToTimestampWithoutTimeZone(utf8Value, allowTimeZone).getOrElse {
         throw ExecutionErrors.cannotParseStringAsDataTypeError(
           TimestampFormatter.defaultPattern(), s, TimestampNTZType)
       }
@@ -300,7 +300,7 @@ class DefaultTimestampFormatter(
 
   override def parseWithoutTimeZoneOptional(s: String, allowTimeZone: Boolean): Option[Long] = {
     val utf8Value = UTF8String.fromString(s)
-    DateTimeUtils.stringToTimestampWithoutTimeZone(utf8Value, allowTimeZone)
+    SparkDateTimeUtils.stringToTimestampWithoutTimeZone(utf8Value, allowTimeZone)
   }
 }
 

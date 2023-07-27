@@ -42,7 +42,7 @@ import org.apache.spark.sql.catalyst.plans.JoinType
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.ValueInterval
 import org.apache.spark.sql.catalyst.trees.{Origin, SQLQueryContext, TreeNode}
-import org.apache.spark.sql.catalyst.util.{sideBySide, BadRecordException, FailFastMode}
+import org.apache.spark.sql.catalyst.util.{sideBySide, BadRecordException, DateTimeUtils, FailFastMode}
 import org.apache.spark.sql.connector.catalog.{CatalogNotFoundException, Table, TableProvider}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 import org.apache.spark.sql.connector.expressions.Transform
@@ -74,7 +74,15 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
   }
 
   def castingCauseOverflowError(t: Any, from: DataType, to: DataType): ArithmeticException = {
-    castingCauseOverflowErrorInternal(toSQLValue(t, from), from, to)
+    new SparkArithmeticException(
+      errorClass = "CAST_OVERFLOW",
+      messageParameters = Map(
+        "value" -> toSQLValue(t, from),
+        "sourceType" -> toSQLType(from),
+        "targetType" -> toSQLType(to),
+        "ansiConfig" -> toSQLConf(SQLConf.ANSI_ENABLED.key)),
+      context = Array.empty,
+      summary = "")
   }
 
   def castingCauseOverflowErrorInTableInsert(
@@ -274,6 +282,14 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
         "ansiConfig" -> toSQLConf(SQLConf.ANSI_ENABLED.key)),
       context = Array.empty,
       summary = "")
+  }
+
+  def ansiIllegalArgumentError(message: String): SparkIllegalArgumentException = {
+    new SparkIllegalArgumentException(
+      errorClass = "_LEGACY_ERROR_TEMP_2000",
+      messageParameters = Map(
+        "message" -> message,
+        "ansiConfig" -> toSQLConf(SQLConf.ANSI_ENABLED.key)))
   }
 
   def ansiIllegalArgumentError(e: IllegalArgumentException): IllegalArgumentException = {
@@ -595,6 +611,26 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       messageParameters = Map(
         "message" -> e.getMessage,
         "ansiConfig" -> toSQLConf(SQLConf.ANSI_ENABLED.key)),
+      context = Array.empty,
+      summary = "")
+  }
+
+  def unaryMinusCauseOverflowError(originValue: Int): SparkArithmeticException = {
+    new SparkArithmeticException(
+      errorClass = "_LEGACY_ERROR_TEMP_2043",
+      messageParameters = Map("sqlValue" -> toSQLValue(originValue, IntegerType)),
+      context = Array.empty,
+      summary = "")
+  }
+
+  def binaryArithmeticCauseOverflowError(
+      eval1: Short, symbol: String, eval2: Short): SparkArithmeticException = {
+    new SparkArithmeticException(
+      errorClass = "BINARY_ARITHMETIC_OVERFLOW",
+      messageParameters = Map(
+        "value1" -> toSQLValue(eval1, ShortType),
+        "symbol" -> symbol,
+        "value2" -> toSQLValue(eval2, ShortType)),
       context = Array.empty,
       summary = "")
   }
@@ -2579,6 +2615,16 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       errorClass = "EXCEED_LIMIT_LENGTH",
       messageParameters = Map("limit" -> limit.toString)
     )
+  }
+
+  def timestampAddOverflowError(micros: Long, amount: Int, unit: String): ArithmeticException = {
+    new SparkArithmeticException(
+      errorClass = "DATETIME_OVERFLOW",
+      messageParameters = Map(
+        "operation" -> (s"add ${toSQLValue(amount, IntegerType)} $unit to " +
+          s"${toSQLValue(DateTimeUtils.microsToInstant(micros), TimestampType)}")),
+      context = Array.empty,
+      summary = "")
   }
 
   def invalidBucketFile(path: String): Throwable = {

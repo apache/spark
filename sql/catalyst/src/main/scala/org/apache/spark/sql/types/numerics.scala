@@ -20,13 +20,13 @@ package org.apache.spark.sql.types
 import scala.math.Numeric._
 
 import org.apache.spark.sql.catalyst.util.{MathUtils, SQLOrderingUtil}
-import org.apache.spark.sql.errors.ExecutionErrors
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.types.Decimal.DecimalIsConflicted
 
 private[sql] object ByteExactNumeric extends ByteIsIntegral with Ordering.ByteOrdering {
   private def checkOverflow(res: Int, x: Byte, y: Byte, op: String): Unit = {
     if (res > Byte.MaxValue || res < Byte.MinValue) {
-      throw ExecutionErrors.binaryArithmeticCauseOverflowError(x, op, y)
+      throw QueryExecutionErrors.binaryArithmeticCauseOverflowError(x, op, y)
     }
   }
 
@@ -50,7 +50,7 @@ private[sql] object ByteExactNumeric extends ByteIsIntegral with Ordering.ByteOr
 
   override def negate(x: Byte): Byte = {
     if (x == Byte.MinValue) { // if and only if x is Byte.MinValue, overflow can happen
-      throw ExecutionErrors.unaryMinusCauseOverflowError(x)
+      throw QueryExecutionErrors.unaryMinusCauseOverflowError(x)
     }
     (-x).toByte
   }
@@ -60,7 +60,7 @@ private[sql] object ByteExactNumeric extends ByteIsIntegral with Ordering.ByteOr
 private[sql] object ShortExactNumeric extends ShortIsIntegral with Ordering.ShortOrdering {
   private def checkOverflow(res: Int, x: Short, y: Short, op: String): Unit = {
     if (res > Short.MaxValue || res < Short.MinValue) {
-      throw ExecutionErrors.binaryArithmeticCauseOverflowError(x, op, y)
+      throw QueryExecutionErrors.binaryArithmeticCauseOverflowError(x, op, y)
     }
   }
 
@@ -84,7 +84,7 @@ private[sql] object ShortExactNumeric extends ShortIsIntegral with Ordering.Shor
 
   override def negate(x: Short): Short = {
     if (x == Short.MinValue) { // if and only if x is Byte.MinValue, overflow can happen
-      throw ExecutionErrors.unaryMinusCauseOverflowError(x)
+      throw QueryExecutionErrors.unaryMinusCauseOverflowError(x)
     }
     (-x).toShort
   }
@@ -114,7 +114,8 @@ private[sql] object LongExactNumeric extends LongIsIntegral with Ordering.LongOr
     if (x == x.toInt) {
       x.toInt
     } else {
-      throw ExecutionErrors.castingCauseOverflowError(x, IntegerType)
+      throw QueryExecutionErrors.castingCauseOverflowError(
+        x, LongType, IntegerType)
     }
 }
 
@@ -134,7 +135,8 @@ private[sql] object FloatExactNumeric extends FloatIsFractional {
     if (Math.floor(x) <= intUpperBound && Math.ceil(x) >= intLowerBound) {
       x.toInt
     } else {
-      throw ExecutionErrors.castingCauseOverflowError(x, IntegerType)
+      throw QueryExecutionErrors.castingCauseOverflowError(
+        x, FloatType, IntegerType)
     }
   }
 
@@ -142,7 +144,8 @@ private[sql] object FloatExactNumeric extends FloatIsFractional {
     if (Math.floor(x) <= longUpperBound && Math.ceil(x) >= longLowerBound) {
       x.toLong
     } else {
-      throw ExecutionErrors.castingCauseOverflowError(x, LongType)
+      throw QueryExecutionErrors.castingCauseOverflowError(
+        x, FloatType, LongType)
     }
   }
 
@@ -159,7 +162,8 @@ private[sql] object DoubleExactNumeric extends DoubleIsFractional {
     if (Math.floor(x) <= intUpperBound && Math.ceil(x) >= intLowerBound) {
       x.toInt
     } else {
-      throw ExecutionErrors.castingCauseOverflowError(x, IntegerType)
+      throw QueryExecutionErrors.castingCauseOverflowError(
+        x, DoubleType, IntegerType)
     }
   }
 
@@ -167,7 +171,8 @@ private[sql] object DoubleExactNumeric extends DoubleIsFractional {
     if (Math.floor(x) <= longUpperBound && Math.ceil(x) >= longLowerBound) {
       x.toLong
     } else {
-      throw ExecutionErrors.castingCauseOverflowError(x, LongType)
+      throw QueryExecutionErrors.castingCauseOverflowError(
+        x, DoubleType, LongType)
     }
   }
 
