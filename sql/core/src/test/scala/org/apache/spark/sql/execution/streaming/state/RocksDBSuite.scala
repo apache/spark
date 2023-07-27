@@ -27,6 +27,7 @@ import org.apache.hadoop.conf.Configuration
 import org.scalactic.source.Position
 import org.scalatest.Tag
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.util.quietly
 import org.apache.spark.sql.execution.streaming.CreateAtomicTestManager
 import org.apache.spark.sql.internal.SQLConf
@@ -123,12 +124,37 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
   }
 
   test("RocksDB: load version that doesn't exist") {
+    val provider = new RocksDBStateStoreProvider()
+    var ex = intercept[SparkException] {
+      provider.getStore(-1)
+    }
+    checkError(
+      ex,
+      errorClass = "CANNOT_LOAD_STATE_STORE.UNCATEGORIZED",
+      parameters = Map.empty
+    )
+    ex = intercept[SparkException] {
+      provider.getReadStore(-1)
+    }
+    checkError(
+      ex,
+      errorClass = "CANNOT_LOAD_STATE_STORE.UNCATEGORIZED",
+      parameters = Map.empty
+    )
+
     val remoteDir = Utils.createTempDir().toString
     new File(remoteDir).delete()  // to make sure that the directory gets created
     withDB(remoteDir) { db =>
-      intercept[IllegalStateException] {
+      ex = intercept[SparkException] {
         db.load(1)
       }
+      checkError(
+        ex,
+        errorClass = "CANNOT_LOAD_STATE_STORE.CANNOT_READ_STREAMING_STATE_FILE",
+        parameters = Map(
+          "fileToRead" -> s"$remoteDir/1.changelog"
+        )
+      )
     }
   }
 
@@ -704,12 +730,21 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
         db.load(0)  // Current thread should be able to load again
 
         // Another thread should not be able to load while current thread is using it
-        val ex = intercept[IllegalStateException] {
+        var ex = intercept[SparkException] {
           ThreadUtils.runInNewThread("concurrent-test-thread-1") { db.load(0) }
         }
-        // Assert that the error message contains the stack trace
-        assert(ex.getMessage.contains("Thread holding the lock has trace:"))
-        assert(ex.getMessage.contains("runInNewThread"))
+        checkError(
+          ex,
+          errorClass = "CANNOT_LOAD_STATE_STORE.UNRELEASED_THREAD_ERROR",
+          parameters = Map(
+            "loggingId" -> "\\[Thread-\\d+\\]",
+            "newAcquiredThreadInfo" -> "\\[ThreadId: Some\\(\\d+\\)\\]",
+            "acquiredThreadInfo" -> "\\[ThreadId: Some\\(\\d+\\)\\]",
+            "timeWaitedMs" -> "\\d+",
+            "stackTraceOutput" -> "(?s).*"
+          ),
+          matchPVals = true
+        )
 
         // Commit should release the instance allowing other threads to load new version
         db.commit()
@@ -720,9 +755,21 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
 
         // Another thread should not be able to load while current thread is using it
         db.load(2)
-        intercept[IllegalStateException] {
+        ex = intercept[SparkException] {
           ThreadUtils.runInNewThread("concurrent-test-thread-2") { db.load(2) }
         }
+        checkError(
+          ex,
+          errorClass = "CANNOT_LOAD_STATE_STORE.UNRELEASED_THREAD_ERROR",
+          parameters = Map(
+            "loggingId" -> "\\[Thread-\\d+\\]",
+            "newAcquiredThreadInfo" -> "\\[ThreadId: Some\\(\\d+\\)\\]",
+            "acquiredThreadInfo" -> "\\[ThreadId: Some\\(\\d+\\)\\]",
+            "timeWaitedMs" -> "\\d+",
+            "stackTraceOutput" -> "(?s).*"
+          ),
+          matchPVals = true
+        )
 
         // Rollback should release the instance allowing other threads to load new version
         db.rollback()
@@ -752,6 +799,24 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
   }
 
   test("checkpoint metadata serde roundtrip") {
+    // expect read metadata error when metadata uses unsupported version
+    withTempDir { dir =>
+      val file2 = new File(dir, "json")
+      val json2 = """{"sstFiles":[],"numKeys":0}"""
+      FileUtils.write(file2, s"v2\n$json2")
+      val e = intercept[SparkException] {
+        RocksDBCheckpointMetadata.readFromFile(file2)
+      }
+      checkError(
+        e,
+        errorClass = "CANNOT_LOAD_STATE_STORE.CANNOT_READ_CHECKPOINT",
+        parameters = Map(
+          "expectedVersion" -> "v2",
+          "actualVersion" -> "v1"
+        )
+      )
+    }
+
     def checkJsonRoundtrip(metadata: RocksDBCheckpointMetadata, json: String): Unit = {
       assert(metadata.json == json)
       withTempDir { dir =>

@@ -531,9 +531,11 @@ case class EnsureRequirements(
       replicatePartitions: Boolean): SparkPlan = plan match {
     case scan: BatchScanExec =>
       scan.copy(
-        commonPartitionValues = Some(values),
-        applyPartialClustering = applyPartialClustering,
-        replicatePartitions = replicatePartitions
+        spjParams = scan.spjParams.copy(
+          commonPartitionValues = Some(values),
+          applyPartialClustering = applyPartialClustering,
+          replicatePartitions = replicatePartitions
+        )
       )
     case node =>
       node.mapChildren(child => populatePartitionValues(

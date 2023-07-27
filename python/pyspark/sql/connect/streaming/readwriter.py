@@ -32,7 +32,7 @@ from pyspark.sql.streaming.readwriter import (
     DataStreamWriter as PySparkDataStreamWriter,
 )
 from pyspark.sql.types import Row, StructType
-from pyspark.errors import PySparkTypeError, PySparkValueError, PySparkNotImplementedError
+from pyspark.errors import PySparkTypeError, PySparkValueError
 
 if TYPE_CHECKING:
     from pyspark.sql.connect.session import SparkSession
@@ -495,14 +495,14 @@ class DataStreamWriter:
 
     foreach.__doc__ = PySparkDataStreamWriter.foreach.__doc__
 
-    # TODO (SPARK-42944): Implement and uncomment the doc
     def foreachBatch(self, func: Callable[["DataFrame", int], None]) -> "DataStreamWriter":
-        raise PySparkNotImplementedError(
-            error_class="NOT_IMPLEMENTED",
-            message_parameters={"feature": "foreachBatch()"},
+        self._write_proto.foreach_batch.python_function.command = CloudPickleSerializer().dumps(
+            func
         )
+        self._write_proto.foreach_batch.python_function.python_ver = "%d.%d" % sys.version_info[:2]
+        return self
 
-    # foreachBatch.__doc__ = PySparkDataStreamWriter.foreachBatch.__doc__
+    foreachBatch.__doc__ = PySparkDataStreamWriter.foreachBatch.__doc__
 
     def _start_internal(
         self,

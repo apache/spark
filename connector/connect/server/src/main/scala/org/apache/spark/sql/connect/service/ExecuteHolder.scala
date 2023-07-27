@@ -17,9 +17,13 @@
 
 package org.apache.spark.sql.connect.service
 
+import scala.collection.JavaConverters._
+
 import org.apache.spark.connect.proto
 import org.apache.spark.internal.Logging
+import org.apache.spark.sql.connect.common.ProtoUtils
 import org.apache.spark.sql.connect.execution.{ExecuteGrpcResponseSender, ExecuteResponseObserver, ExecuteThreadRunner}
+import org.apache.spark.util.SystemClock
 
 /**
  * Object used to hold the Spark Connect execution state.
@@ -30,16 +34,36 @@ private[connect] class ExecuteHolder(
     val sessionHolder: SessionHolder)
     extends Logging {
 
+  /**
+   * Tag that is set for this execution on SparkContext, via SparkContext.addJobTag. Used
+   * (internally) for cancallation of the Spark Jobs ran by this execution.
+   */
   val jobTag =
     s"SparkConnect_Execute_" +
       s"User_${sessionHolder.userId}_" +
       s"Session_${sessionHolder.sessionId}_" +
-      s"Request_${operationId}"
+      s"Operation_${operationId}"
+
+  /**
+   * Tags set by Spark Connect client users via SparkSession.addTag. Used to identify and group
+   * executions, and for user cancellation using SparkSession.interruptTag.
+   */
+  val sparkSessionTags: Set[String] = request
+    .getTagsList()
+    .asScala
+    .toSeq
+    .map { tag =>
+      ProtoUtils.throwIfInvalidTag(tag)
+      tag
+    }
+    .toSet
 
   val session = sessionHolder.session
 
   val responseObserver: ExecuteResponseObserver[proto.ExecutePlanResponse] =
-    new ExecuteResponseObserver[proto.ExecutePlanResponse]()
+    new ExecuteResponseObserver[proto.ExecutePlanResponse](this)
+
+  val eventsManager: ExecuteEventsManager = ExecuteEventsManager(this, new SystemClock())
 
   private val runner: ExecuteThreadRunner = new ExecuteThreadRunner(this)
 
@@ -82,8 +106,19 @@ private[connect] class ExecuteHolder(
   /**
    * Interrupt the execution. Interrupts the running thread, which cancels all running Spark Jobs
    * and makes the execution throw an OPERATION_CANCELED error.
+   * @return
+   *   true if it was not interrupted before, false if it was already interrupted.
    */
-  def interrupt(): Unit = {
+  def interrupt(): Boolean = {
     runner.interrupt()
+  }
+
+  /**
+   * Spark Connect tags are also added as SparkContext job tags, but to make the tag unique, they
+   * need to be combined with userId and sessionId.
+   */
+  def tagToSparkJobTag(tag: String): String = {
+    "SparkConnect_Execute_" +
+      s"User_${sessionHolder.userId}_Session_${sessionHolder.sessionId}_Tag_${tag}"
   }
 }

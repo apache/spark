@@ -57,10 +57,8 @@ abstract class EvalPythonUDTFEvaluatorFactory(
 
       // The queue used to buffer input rows so we can drain it to
       // combine input with output from Python.
-      val queue = HybridRowQueue(
-        context.taskMemoryManager(),
-        new File(Utils.getLocalDir(SparkEnv.get.conf)),
-        childOutput.length)
+      val queue = HybridRowQueue(context.taskMemoryManager(),
+        new File(Utils.getLocalDir(SparkEnv.get.conf)), childOutput.length)
       context.addTaskCompletionListener[Unit] { ctx =>
         queue.close()
       }
@@ -93,8 +91,7 @@ abstract class EvalPythonUDTFEvaluatorFactory(
         projection(inputRow)
       }
 
-      val outputRowIterator =
-        evaluate(argOffsets, projectedRowIter, schema, context)
+      val outputRowIterator = evaluate(argOffsets, projectedRowIter, schema, context)
 
       val pruneChildForResult: InternalRow => InternalRow =
         if (childOutputSet == AttributeSet(requiredChildOutput)) {
@@ -104,6 +101,7 @@ abstract class EvalPythonUDTFEvaluatorFactory(
         }
 
       val joined = new JoinedRow
+      val nullRow = new GenericInternalRow(udtf.elementSchema.length)
       val resultProj = UnsafeProjection.create(output, output)
 
       outputRowIterator.flatMap { outputRows =>
@@ -119,7 +117,15 @@ abstract class EvalPythonUDTFEvaluatorFactory(
         // from the UDTF are from the `terminate()` call. We leave the left side as the last
         // element of its child output to keep it consistent with the Generate implementation
         // and Hive UDTFs.
-        outputRows.map(r => resultProj(joined.withRight(r)))
+        outputRows.map { r =>
+          // When the UDTF's result is None, such as `def eval(): yield`,
+          // we join it with a null row to avoid NullPointerException.
+          if (r == null) {
+            resultProj(joined.withRight(nullRow))
+          } else {
+            resultProj(joined.withRight(r))
+          }
+        }
       }
     }
   }

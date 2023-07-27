@@ -27,7 +27,15 @@ from pyspark.sql.pandas.types import (
     _create_converter_from_pandas,
     _create_converter_to_pandas,
 )
-from pyspark.sql.types import DataType, StringType, StructType, BinaryType, StructField, LongType
+from pyspark.sql.types import (
+    DataType,
+    StringType,
+    StructType,
+    BinaryType,
+    StructField,
+    LongType,
+    IntegerType,
+)
 
 
 class SpecialLengths:
@@ -155,7 +163,7 @@ class ArrowStreamUDFSerializer(ArrowStreamSerializer):
 
 class ArrowStreamPandasSerializer(ArrowStreamSerializer):
     """
-    Serializes Pandas.Series as Arrow data with Arrow streaming format.
+    Serializes pandas.Series as Arrow data with Arrow streaming format.
 
     Parameters
     ----------
@@ -377,37 +385,28 @@ class ArrowStreamPandasUDFSerializer(ArrowStreamPandasSerializer):
         """
         import pyarrow as pa
 
-        # Input partition and result pandas.DataFrame empty, make empty Arrays with struct
-        if len(df) == 0 and len(df.columns) == 0:
-            arrs_names = [
-                (pa.array([], type=field.type), field.name) for field in arrow_struct_type
-            ]
+        if len(df.columns) == 0:
+            return pa.array([{}] * len(df), arrow_struct_type)
         # Assign result columns by schema name if user labeled with strings
-        elif self._assign_cols_by_name and any(isinstance(name, str) for name in df.columns):
-            arrs_names = [
-                (
-                    self._create_array(df[field.name], field.type, arrow_cast=self._arrow_cast),
-                    field.name,
-                )
+        if self._assign_cols_by_name and any(isinstance(name, str) for name in df.columns):
+            struct_arrs = [
+                self._create_array(df[field.name], field.type, arrow_cast=self._arrow_cast)
                 for field in arrow_struct_type
             ]
         # Assign result columns by position
         else:
-            arrs_names = [
+            struct_arrs = [
                 # the selected series has name '1', so we rename it to field.name
                 # as the name is used by _create_array to provide a meaningful error message
-                (
-                    self._create_array(
-                        df[df.columns[i]].rename(field.name),
-                        field.type,
-                        arrow_cast=self._arrow_cast,
-                    ),
-                    field.name,
+                self._create_array(
+                    df[df.columns[i]].rename(field.name),
+                    field.type,
+                    arrow_cast=self._arrow_cast,
                 )
                 for i, field in enumerate(arrow_struct_type)
             ]
 
-        struct_arrs, struct_names = zip(*arrs_names)
+        struct_names = [field.name for field in arrow_struct_type]
         return pa.StructArray.from_arrays(struct_arrs, struct_names)
 
     def _create_batch(self, series):
@@ -602,6 +601,15 @@ class ApplyInPandasWithStateSerializer(ArrowStreamPandasUDFSerializer):
         self.pickleSer = CPickleSerializer()
         self.utf8_deserializer = UTF8Deserializer()
         self.state_object_schema = state_object_schema
+
+        self.result_count_df_type = StructType(
+            [
+                StructField("dataCount", IntegerType()),
+                StructField("stateCount", IntegerType()),
+            ]
+        )
+
+        self.result_count_pdf_arrow_type = to_arrow_type(self.result_count_df_type)
 
         self.result_state_df_type = StructType(
             [
@@ -799,16 +807,26 @@ class ApplyInPandasWithStateSerializer(ArrowStreamPandasUDFSerializer):
         def construct_record_batch(pdfs, pdf_data_cnt, pdf_schema, state_pdfs, state_data_cnt):
             """
             Construct a new Arrow RecordBatch based on output pandas DataFrames and states. Each
-            one matches to the single struct field for Arrow schema, hence the return value of
-            Arrow RecordBatch will have schema with two fields, in `data`, `state` order.
+            one matches to the single struct field for Arrow schema. We also need an extra one to
+            indicate array length for data and state, so the return value of Arrow RecordBatch will
+            have schema with three fields, in `count`, `data`, `state` order.
             (Readers are expected to access the field via position rather than the name. We do
             not guarantee the name of the field.)
 
             Note that Arrow RecordBatch requires all columns to have all same number of rows,
-            hence this function inserts empty data for state/data with less elements to compensate.
+            hence this function inserts empty data for count/state/data with less elements to
+            compensate.
             """
 
-            max_data_cnt = max(pdf_data_cnt, state_data_cnt)
+            max_data_cnt = max(1, max(pdf_data_cnt, state_data_cnt))
+
+            # We only use the first row in the count column, and fill other rows to be the same
+            # value, hoping it is more friendly for compression, in case it is needed.
+            count_dict = {
+                "dataCount": [pdf_data_cnt] * max_data_cnt,
+                "stateCount": [state_data_cnt] * max_data_cnt,
+            }
+            count_pdf = pd.DataFrame.from_dict(count_dict)
 
             empty_row_cnt_in_data = max_data_cnt - pdf_data_cnt
             empty_row_cnt_in_state = max_data_cnt - state_data_cnt
@@ -829,7 +847,11 @@ class ApplyInPandasWithStateSerializer(ArrowStreamPandasUDFSerializer):
             merged_state_pdf = pd.concat(state_pdfs, ignore_index=True)
 
             return self._create_batch(
-                [(merged_pdf, pdf_schema), (merged_state_pdf, self.result_state_pdf_arrow_type)]
+                [
+                    (count_pdf, self.result_count_pdf_arrow_type),
+                    (merged_pdf, pdf_schema),
+                    (merged_state_pdf, self.result_state_pdf_arrow_type),
+                ]
             )
 
         def serialize_batches():

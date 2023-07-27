@@ -35,15 +35,13 @@ vis-timeline-graph2d.min.js
 vis-timeline-graph2d.min.js.map
 vis-timeline-graph2d.min.css
 vis-timeline-graph2d.min.css.map
-dataTables.bootstrap4.1.13.2.min.css
-dataTables.bootstrap4.1.13.2.min.js
+dataTables.bootstrap4.*.min.css
+dataTables.bootstrap4.*.min.js
 dataTables.rowsGroup.js
 jquery.blockUI.min.js
 jquery.cookies.2.2.0.min.js
-jquery.dataTables.1.13.2.min.js
+jquery.dataTables.*.min.js
 jquery.mustache.js
-jsonFormatter.min.css
-jsonFormatter.min.js
 .*\.avsc
 .*\.txt
 .*\.json
@@ -139,6 +137,7 @@ exported_table/*
 ansible-for-test-node/*
 node_modules
 spark-events-broken/*
+SqlBaseLexer.tokens
 # Spark Connect related files with custom licence
 any.proto
 empty.proto

@@ -25,7 +25,6 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.types.StructType
-import org.apache.spark.sql.util.ArrowUtils
 import org.apache.spark.sql.vectorized.{ArrowColumnVector, ColumnarBatch}
 
 /**
@@ -61,7 +60,7 @@ case class ArrowEvalPythonUDTFExec(
       evalType,
       conf.sessionLocalTimeZone,
       conf.arrowUseLargeVarTypes,
-      ArrowUtils.getPythonRunnerConfMap(conf),
+      ArrowPythonRunner.getPythonRunnerConfMap(conf),
       pythonMetrics,
       jobArtifactUUID)
 

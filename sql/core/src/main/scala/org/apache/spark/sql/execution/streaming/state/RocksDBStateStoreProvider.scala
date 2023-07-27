@@ -24,6 +24,7 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.spark.{SparkConf, SparkEnv}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.Utils
 
@@ -190,15 +191,29 @@ private[sql] class RocksDBStateStoreProvider
   override def stateStoreId: StateStoreId = stateStoreId_
 
   override def getStore(version: Long): StateStore = {
-    require(version >= 0, "Version cannot be less than 0")
-    rocksDB.load(version)
-    new RocksDBStateStore(version)
+    try {
+      if (version < 0) {
+        throw QueryExecutionErrors.unexpectedStateStoreVersion(version)
+      }
+      rocksDB.load(version)
+      new RocksDBStateStore(version)
+    }
+    catch {
+      case e: Throwable => throw QueryExecutionErrors.cannotLoadStore(e)
+    }
   }
 
   override def getReadStore(version: Long): StateStore = {
-    require(version >= 0, "Version cannot be less than 0")
-    rocksDB.load(version, true)
-    new RocksDBStateStore(version)
+    try {
+      if (version < 0) {
+        throw QueryExecutionErrors.unexpectedStateStoreVersion(version)
+      }
+      rocksDB.load(version, true)
+      new RocksDBStateStore(version)
+    }
+    catch {
+      case e: Throwable => throw QueryExecutionErrors.cannotLoadStore(e)
+    }
   }
 
   override def doMaintenance(): Unit = {

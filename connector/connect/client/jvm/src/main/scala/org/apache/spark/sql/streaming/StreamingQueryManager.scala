@@ -31,7 +31,7 @@ import org.apache.spark.connect.proto.StreamingQueryManagerCommandResult
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.connect.common.{InvalidPlanInput, StreamingListenerPacket}
-import org.apache.spark.util.Utils
+import org.apache.spark.util.SparkSerDeUtils
 
 /**
  * A class to manage all the [[StreamingQuery]] active in a `SparkSession`.
@@ -155,7 +155,7 @@ class StreamingQueryManager private[sql] (sparkSession: SparkSession) extends Lo
     cacheListenerById(id, listener)
     executeManagerCmd(
       _.getAddListenerBuilder
-        .setListenerPayload(ByteString.copyFrom(Utils
+        .setListenerPayload(ByteString.copyFrom(SparkSerDeUtils
           .serialize(StreamingListenerPacket(id, listener)))))
   }
 
@@ -168,7 +168,7 @@ class StreamingQueryManager private[sql] (sparkSession: SparkSession) extends Lo
     val id = getIdByListener(listener)
     executeManagerCmd(
       _.getRemoveListenerBuilder
-        .setListenerPayload(ByteString.copyFrom(Utils
+        .setListenerPayload(ByteString.copyFrom(SparkSerDeUtils
           .serialize(StreamingListenerPacket(id, listener)))))
     removeCachedListener(id)
   }
@@ -179,15 +179,10 @@ class StreamingQueryManager private[sql] (sparkSession: SparkSession) extends Lo
    * @since 3.5.0
    */
   def listListeners(): Array[StreamingQueryListener] = {
-    executeManagerCmd(_.setListListeners(true)).getListListeners.getListenersList.asScala.map {
-      listener =>
-        Utils
-          .deserialize[StreamingListenerPacket](
-            listener.getListenerPayload.toByteArray,
-            Utils.getContextOrSparkClassLoader)
-          .listener
-          .asInstanceOf[StreamingQueryListener]
-    }.toArray
+    executeManagerCmd(_.setListListeners(true)).getListListeners.getListenerIdsList.asScala
+      .filter(listenerCache.containsKey(_))
+      .map(listenerCache.get(_))
+      .toArray
   }
 
   private def executeManagerCmd(
