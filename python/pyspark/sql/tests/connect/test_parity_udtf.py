@@ -14,6 +14,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+import unittest
+
 from pyspark.testing.connectutils import should_test_connect
 
 if should_test_connect:
@@ -103,6 +105,23 @@ class UDTFParityTests(BaseUDTFTestsMixin, ReusedConnectTestCase):
 
         with self.assertRaisesRegex(SparkConnectGrpcException, err_msg):
             TestUDTF(lit(1)).show()
+
+    @unittest.skip("Spark Connect does not support broadcast but the test depends on it.")
+    def test_udtf_with_analyze_using_broadcast(self):
+        super().test_udtf_with_analyze_using_broadcast()
+
+    @unittest.skip("Spark Connect does not support accumulator but the test depends on it.")
+    def test_udtf_with_analyze_using_accumulator(self):
+        super().test_udtf_with_analyze_using_accumulator()
+
+    def _add_pyfile(self, path):
+        self.spark.addArtifacts(path, pyfile=True)
+
+    def _add_archive(self, path):
+        self.spark.addArtifacts(path, archive=True)
+
+    def _add_file(self, path):
+        self.spark.addArtifacts(path, file=True)
 
 
 class ArrowUDTFParityTests(UDTFArrowTestsMixin, UDTFParityTests):
