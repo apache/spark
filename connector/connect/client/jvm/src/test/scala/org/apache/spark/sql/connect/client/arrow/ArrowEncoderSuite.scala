@@ -17,6 +17,8 @@
 package org.apache.spark.sql.connect.client.arrow
 
 import java.math.BigInteger
+import java.time.{Duration, Period, ZoneOffset}
+import java.time.temporal.ChronoUnit
 import java.util
 import java.util.{Collections, Objects}
 
@@ -32,11 +34,16 @@ import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.catalyst.{DefinedByConstructorParams, JavaTypeInference, ScalaReflection}
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoder
-import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{BoxedIntEncoder, CalendarIntervalEncoder, DateEncoder, EncoderField, InstantEncoder, IterableEncoder, JavaDecimalEncoder, LocalDateEncoder, PrimitiveDoubleEncoder, PrimitiveFloatEncoder, RowEncoder, StringEncoder, TimestampEncoder, UDTEncoder}
+import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{BinaryEncoder, BoxedBooleanEncoder, BoxedByteEncoder, BoxedDoubleEncoder, BoxedFloatEncoder, BoxedIntEncoder, BoxedLongEncoder, BoxedShortEncoder, CalendarIntervalEncoder, DateEncoder, DayTimeIntervalEncoder, EncoderField, InstantEncoder, IterableEncoder, JavaDecimalEncoder, LocalDateEncoder, LocalDateTimeEncoder, NullEncoder, PrimitiveBooleanEncoder, PrimitiveByteEncoder, PrimitiveDoubleEncoder, PrimitiveFloatEncoder, PrimitiveIntEncoder, PrimitiveLongEncoder, PrimitiveShortEncoder, RowEncoder, ScalaDecimalEncoder, StringEncoder, TimestampEncoder, UDTEncoder, YearMonthIntervalEncoder}
 import org.apache.spark.sql.catalyst.encoders.RowEncoder.{encoderFor => toRowEncoder}
+import org.apache.spark.sql.catalyst.util.{DateFormatter, StringUtils, TimestampFormatter}
+import org.apache.spark.sql.catalyst.util.DateTimeConstants.MICROS_PER_SECOND
+import org.apache.spark.sql.catalyst.util.DateTimeUtils._
+import org.apache.spark.sql.catalyst.util.IntervalStringStyles.ANSI_STYLE
+import org.apache.spark.sql.catalyst.util.IntervalUtils._
 import org.apache.spark.sql.connect.client.arrow.FooEnum.FooEnum
 import org.apache.spark.sql.connect.client.util.ConnectFunSuite
-import org.apache.spark.sql.types.{ArrayType, DataType, Decimal, DecimalType, IntegerType, Metadata, SQLUserDefinedType, StructType, UserDefinedType}
+import org.apache.spark.sql.types.{ArrayType, DataType, DayTimeIntervalType, Decimal, DecimalType, IntegerType, Metadata, SQLUserDefinedType, StructType, UserDefinedType, YearMonthIntervalType}
 
 /**
  * Tests for encoding external data to and from arrow.
@@ -68,13 +75,31 @@ class ArrowEncoderSuite extends ConnectFunSuite with BeforeAndAfterAll {
       maxBatchSize: Long = 16 * 1024,
       batchSizeCheckInterval: Int = 128,
       inspectBatch: Array[Byte] => Unit = null): CloseableIterator[T] = {
+    roundTripWithDifferentIOEncoders(
+      encoder,
+      encoder,
+      iterator,
+      maxRecordsPerBatch,
+      maxBatchSize,
+      batchSizeCheckInterval,
+      inspectBatch)
+  }
+
+  private def roundTripWithDifferentIOEncoders[I, O](
+      inputEncoder: AgnosticEncoder[I],
+      outputEncoder: AgnosticEncoder[O],
+      iterator: Iterator[I],
+      maxRecordsPerBatch: Int = 4 * 1024,
+      maxBatchSize: Long = 16 * 1024,
+      batchSizeCheckInterval: Int = 128,
+      inspectBatch: Array[Byte] => Unit = null): CloseableIterator[O] = {
     // Use different allocators so we can pinpoint memory leaks better.
     val serializerAllocator = newAllocator("serialization")
     val deserializerAllocator = newAllocator("deserialization")
 
     val arrowIterator = ArrowSerializer.serialize(
       input = iterator,
-      enc = encoder,
+      enc = inputEncoder,
       allocator = serializerAllocator,
       maxRecordsPerBatch = maxRecordsPerBatch,
       maxBatchSize = maxBatchSize,
@@ -91,8 +116,12 @@ class ArrowEncoderSuite extends ConnectFunSuite with BeforeAndAfterAll {
     }
 
     val resultIterator =
-      ArrowDeserializers.deserializeFromArrow(inspectedIterator, encoder, deserializerAllocator)
-    new CloseableIterator[T] {
+      ArrowDeserializers.deserializeFromArrow(
+        inspectedIterator,
+        outputEncoder,
+        deserializerAllocator,
+        timeZoneId = "UTC")
+    new CloseableIterator[O] {
       override def close(): Unit = {
         arrowIterator.close()
         resultIterator.close()
@@ -100,7 +129,7 @@ class ArrowEncoderSuite extends ConnectFunSuite with BeforeAndAfterAll {
         deserializerAllocator.close()
       }
       override def hasNext: Boolean = resultIterator.hasNext
-      override def next(): T = resultIterator.next()
+      override def next(): O = resultIterator.next()
     }
   }
 
@@ -156,11 +185,11 @@ class ArrowEncoderSuite extends ConnectFunSuite with BeforeAndAfterAll {
   }
 
   private def compareIterators[T](expected: Iterator[T], actual: Iterator[T]): Unit = {
-    expected.zipAll(actual, null, null).foreach { case (expected, actual) =>
-      assert(expected != null)
-      assert(actual != null)
-      assert(actual == expected)
+    while (expected.hasNext && actual.hasNext) {
+      assert(expected.next() == actual.next())
     }
+    assert(!expected.hasNext, "Less results produced than expected.")
+    assert(!actual.hasNext, "More results produced than expected.")
   }
 
   private class CountingBatchInspector extends (Array[Byte] => Unit) {
@@ -216,8 +245,11 @@ class ArrowEncoderSuite extends ConnectFunSuite with BeforeAndAfterAll {
 
   test("deserializing empty iterator") {
     withAllocator { allocator =>
-      val iterator =
-        ArrowDeserializers.deserializeFromArrow(Iterator.empty, singleIntEncoder, allocator)
+      val iterator = ArrowDeserializers.deserializeFromArrow(
+        Iterator.empty,
+        singleIntEncoder,
+        allocator,
+        timeZoneId = "UTC")
       assert(iterator.isEmpty)
       assert(allocator.getAllocatedMemory == 0)
     }
@@ -330,8 +362,10 @@ class ArrowEncoderSuite extends ConnectFunSuite with BeforeAndAfterAll {
 
   test("nullable fields") {
     val encoder = ScalaReflection.encoderFor[NullableData]
-    val instant = java.time.Instant.now()
-    val now = java.time.LocalDateTime.now()
+    // SPARK-44457: Similar to SPARK-42770, calling `truncatedTo(ChronoUnit.MICROS)`
+    // on `Instant.now()` and `LocalDateTime.now()` to ensure microsecond accuracy is used.
+    val instant = java.time.Instant.now().truncatedTo(ChronoUnit.MICROS)
+    val now = java.time.LocalDateTime.now().truncatedTo(ChronoUnit.MICROS)
     val today = java.time.LocalDate.now()
     roundTripAndCheckIdentical(encoder) { () =>
       val maybeNull = MaybeNull(3)
@@ -571,7 +605,9 @@ class ArrowEncoderSuite extends ConnectFunSuite with BeforeAndAfterAll {
   }
 
   test("lenient field serialization - timestamp/instant") {
-    val base = java.time.Instant.now()
+    // SPARK-44457: Similar to SPARK-42770, calling `truncatedTo(ChronoUnit.MICROS)`
+    // on `Instant.now()` to ensure microsecond accuracy is used.
+    val base = java.time.Instant.now().truncatedTo(ChronoUnit.MICROS)
     val instants = () => Iterator.tabulate(10)(i => base.plusSeconds(i * i * 60))
     val timestamps = () => instants().map(java.sql.Timestamp.from)
     val combo = () => instants() ++ timestamps()
@@ -674,7 +710,11 @@ class ArrowEncoderSuite extends ConnectFunSuite with BeforeAndAfterAll {
         Row(Seq(1, 7, 5), Array[Byte](8.toByte, 756.toByte)))
       val arrowBatches = serializeToArrow(Iterator.single(input), wideSchemaEncoder, allocator)
       val result =
-        ArrowDeserializers.deserializeFromArrow(arrowBatches, narrowSchemaEncoder, allocator)
+        ArrowDeserializers.deserializeFromArrow(
+          arrowBatches,
+          narrowSchemaEncoder,
+          allocator,
+          timeZoneId = "UTC")
       val actual = result.next()
       assert(result.isEmpty)
       assert(expected === actual)
@@ -687,7 +727,11 @@ class ArrowEncoderSuite extends ConnectFunSuite with BeforeAndAfterAll {
     withAllocator { allocator =>
       val arrowBatches = serializeToArrow(Iterator.empty, narrowSchemaEncoder, allocator)
       intercept[AnalysisException] {
-        ArrowDeserializers.deserializeFromArrow(arrowBatches, wideSchemaEncoder, allocator)
+        ArrowDeserializers.deserializeFromArrow(
+          arrowBatches,
+          wideSchemaEncoder,
+          allocator,
+          timeZoneId = "UTC")
       }
       arrowBatches.close()
     }
@@ -704,11 +748,159 @@ class ArrowEncoderSuite extends ConnectFunSuite with BeforeAndAfterAll {
     withAllocator { allocator =>
       val arrowBatches = serializeToArrow(Iterator.empty, duplicateSchemaEncoder, allocator)
       intercept[AnalysisException] {
-        ArrowDeserializers.deserializeFromArrow(arrowBatches, fooSchemaEncoder, allocator)
+        ArrowDeserializers.deserializeFromArrow(
+          arrowBatches,
+          fooSchemaEncoder,
+          allocator,
+          timeZoneId = "UTC")
       }
       arrowBatches.close()
     }
   }
+
+  /* ******************************************************************** *
+   * Arrow deserialization upcasting
+   * ******************************************************************** */
+  // Not supported: UDT, CalendarInterval
+  // Not tested: Char/Varchar.
+  private case class UpCastTestCase[I](input: AgnosticEncoder[I], generator: Int => I) {
+    def test[O](output: AgnosticEncoder[O], convert: I => O): this.type = {
+      val name = "upcast " + input.dataType.catalogString + " to " + output.dataType.catalogString
+      ArrowEncoderSuite.this.test(name) {
+        def data: Iterator[I] = Iterator.tabulate(5)(generator)
+        val result = roundTripWithDifferentIOEncoders(input, output, data)
+        try {
+          compareIterators(data.map(convert), result)
+        } finally {
+          result.close()
+        }
+      }
+      this
+    }
+
+    def nullTest[O](e: AgnosticEncoder[O]): this.type = {
+      test(e, _.asInstanceOf[O])
+    }
+  }
+
+  private val timestampFormatter = TimestampFormatter.getFractionFormatter(ZoneOffset.UTC)
+  private val dateFormatter = DateFormatter()
+
+  private def scalaDecimalEncoder(precision: Int, scale: Int = 0): ScalaDecimalEncoder = {
+    ScalaDecimalEncoder(DecimalType(precision, scale))
+  }
+
+  UpCastTestCase(NullEncoder, _ => null)
+    .nullTest(BoxedBooleanEncoder)
+    .nullTest(BoxedByteEncoder)
+    .nullTest(BoxedShortEncoder)
+    .nullTest(BoxedIntEncoder)
+    .nullTest(BoxedLongEncoder)
+    .nullTest(BoxedFloatEncoder)
+    .nullTest(BoxedDoubleEncoder)
+    .nullTest(StringEncoder)
+    .nullTest(DateEncoder(false))
+    .nullTest(TimestampEncoder(false))
+  UpCastTestCase(PrimitiveBooleanEncoder, _ % 2 == 0)
+    .test(StringEncoder, _.toString)
+  UpCastTestCase(PrimitiveByteEncoder, i => i.toByte)
+    .test(PrimitiveShortEncoder, _.toShort)
+    .test(PrimitiveIntEncoder, _.toInt)
+    .test(PrimitiveLongEncoder, _.toLong)
+    .test(PrimitiveFloatEncoder, _.toFloat)
+    .test(PrimitiveDoubleEncoder, _.toDouble)
+    .test(scalaDecimalEncoder(3), BigDecimal(_))
+    .test(scalaDecimalEncoder(5, 2), BigDecimal(_))
+    .test(StringEncoder, _.toString)
+  UpCastTestCase(PrimitiveShortEncoder, i => i.toShort)
+    .test(PrimitiveIntEncoder, _.toInt)
+    .test(PrimitiveLongEncoder, _.toLong)
+    .test(PrimitiveFloatEncoder, _.toFloat)
+    .test(PrimitiveDoubleEncoder, _.toDouble)
+    .test(scalaDecimalEncoder(5), BigDecimal(_))
+    .test(scalaDecimalEncoder(10, 5), BigDecimal(_))
+    .test(StringEncoder, _.toString)
+  UpCastTestCase(PrimitiveIntEncoder, i => i)
+    .test(PrimitiveLongEncoder, _.toLong)
+    .test(PrimitiveFloatEncoder, _.toFloat)
+    .test(PrimitiveDoubleEncoder, _.toDouble)
+    .test(scalaDecimalEncoder(10), BigDecimal(_))
+    .test(scalaDecimalEncoder(13, 3), BigDecimal(_))
+    .test(StringEncoder, _.toString)
+  UpCastTestCase(PrimitiveLongEncoder, i => i.toLong)
+    .test(PrimitiveFloatEncoder, _.toFloat)
+    .test(PrimitiveDoubleEncoder, _.toDouble)
+    .test(scalaDecimalEncoder(20), BigDecimal(_))
+    .test(scalaDecimalEncoder(25, 5), BigDecimal(_))
+    .test(TimestampEncoder(false), s => toJavaTimestamp(s * MICROS_PER_SECOND))
+    .test(StringEncoder, _.toString)
+  UpCastTestCase(PrimitiveFloatEncoder, i => i.toFloat)
+    .test(PrimitiveDoubleEncoder, _.toDouble)
+    .test(StringEncoder, _.toString)
+  UpCastTestCase(PrimitiveDoubleEncoder, i => i.toDouble)
+    .test(StringEncoder, _.toString)
+  UpCastTestCase(scalaDecimalEncoder(2), BigDecimal(_))
+    .test(PrimitiveByteEncoder, _.toByte)
+    .test(PrimitiveShortEncoder, _.toShort)
+    .test(PrimitiveIntEncoder, _.toInt)
+    .test(PrimitiveLongEncoder, _.toLong)
+    .test(scalaDecimalEncoder(7, 5), identity)
+    .test(StringEncoder, _.toString())
+  UpCastTestCase(scalaDecimalEncoder(4), BigDecimal(_))
+    .test(PrimitiveShortEncoder, _.toShort)
+    .test(PrimitiveIntEncoder, _.toInt)
+    .test(PrimitiveLongEncoder, _.toLong)
+    .test(scalaDecimalEncoder(10, 1), identity)
+    .test(StringEncoder, _.toString())
+  UpCastTestCase(scalaDecimalEncoder(9), BigDecimal(_))
+    .test(PrimitiveIntEncoder, _.toInt)
+    .test(PrimitiveLongEncoder, _.toLong)
+    .test(scalaDecimalEncoder(13, 4), identity)
+    .test(StringEncoder, _.toString())
+  UpCastTestCase(scalaDecimalEncoder(19), BigDecimal(_))
+    .test(PrimitiveLongEncoder, _.toLong)
+    .test(scalaDecimalEncoder(23, 1), identity)
+    .test(StringEncoder, _.toString())
+  UpCastTestCase(scalaDecimalEncoder(7, 3), BigDecimal(_))
+    .test(scalaDecimalEncoder(9, 5), identity)
+    .test(scalaDecimalEncoder(23, 3), identity)
+  UpCastTestCase(DateEncoder(false), i => toJavaDate(i))
+    .test(
+      TimestampEncoder(false),
+      date => toJavaTimestamp(daysToMicros(fromJavaDate(date), ZoneOffset.UTC)))
+    .test(
+      LocalDateTimeEncoder,
+      date => microsToLocalDateTime(daysToMicros(fromJavaDate(date), ZoneOffset.UTC)))
+    .test(StringEncoder, date => dateFormatter.format(date))
+  UpCastTestCase(TimestampEncoder(false), i => toJavaTimestamp(i))
+    .test(PrimitiveLongEncoder, ts => Math.floorDiv(fromJavaTimestamp(ts), MICROS_PER_SECOND))
+    .test(LocalDateTimeEncoder, ts => microsToLocalDateTime(fromJavaTimestamp(ts)))
+    .test(StringEncoder, ts => timestampFormatter.format(ts))
+  UpCastTestCase(LocalDateTimeEncoder, i => microsToLocalDateTime(i))
+    .test(TimestampEncoder(false), ldt => toJavaTimestamp(localDateTimeToMicros(ldt)))
+    .test(StringEncoder, ldt => timestampFormatter.format(ldt))
+  UpCastTestCase(DayTimeIntervalEncoder, i => Duration.ofDays(i))
+    .test(
+      StringEncoder,
+      { i =>
+        toDayTimeIntervalString(
+          durationToMicros(i),
+          ANSI_STYLE,
+          DayTimeIntervalType.DEFAULT.startField,
+          DayTimeIntervalType.DEFAULT.endField)
+      })
+  UpCastTestCase(YearMonthIntervalEncoder, i => Period.ofMonths(i))
+    .test(
+      StringEncoder,
+      { i =>
+        toYearMonthIntervalString(
+          periodToMonths(i),
+          ANSI_STYLE,
+          YearMonthIntervalType.DEFAULT.startField,
+          YearMonthIntervalType.DEFAULT.endField)
+      })
+  UpCastTestCase(BinaryEncoder, i => Array.tabulate(10)(j => (64 + j + i).toByte))
+    .test(StringEncoder, bytes => StringUtils.getHexString(bytes))
 
   /* ******************************************************************** *
    * Arrow serialization/deserialization specific errors

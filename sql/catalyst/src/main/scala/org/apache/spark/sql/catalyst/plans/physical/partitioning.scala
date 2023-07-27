@@ -310,17 +310,17 @@ case class HashPartitioning(expressions: Seq[Expression], numPartitions: Int)
 
 /**
  * Represents a partitioning where rows are split across partitions based on transforms defined
- * by `expressions`. `partitionValuesOpt`, if defined, should contain value of partition key(s) in
+ * by `expressions`. `partitionValues`, if defined, should contain value of partition key(s) in
  * ascending order, after evaluated by the transforms in `expressions`, for each input partition.
  * In addition, its length must be the same as the number of input partitions (and thus is a 1-1
- * mapping), and each row in `partitionValuesOpt` must be unique.
+ * mapping), and each row in `partitionValues` must be unique.
  *
- * For example, if `expressions` is `[years(ts_col)]`, then a valid value of `partitionValuesOpt` is
+ * For example, if `expressions` is `[years(ts_col)]`, then a valid value of `partitionValues` is
  * `[0, 1, 2]`, which represents 3 input partitions with distinct partition values. All rows
  * in each partition have the same value for column `ts_col` (which is of timestamp type), after
  * being applied by the `years` transform.
  *
- * On the other hand, `[0, 0, 1]` is not a valid value for `partitionValuesOpt` since `0` is
+ * On the other hand, `[0, 0, 1]` is not a valid value for `partitionValues` since `0` is
  * duplicated twice.
  *
  * @param expressions partition expressions for the partitioning.

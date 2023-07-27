@@ -243,6 +243,14 @@ b	2
 
 
 -- !query
+select * from explode(array(rand(0)))
+-- !query schema
+struct<col:double>
+-- !query output
+0.7604953758285915
+
+
+-- !query
 select * from explode(null)
 -- !query schema
 struct<>

@@ -126,10 +126,6 @@ object ParquetRowIndexUtil {
     }
   }
 
-  def isNeededForSchema(sparkSchema: StructType): Boolean = {
-    findRowIndexColumnIndexInSchema(sparkSchema) >= 0
-  }
-
   def isRowIndexColumn(column: ParquetColumn): Boolean = {
     column.path.length == 1 && column.path.last == ParquetFileFormat.ROW_INDEX_TEMPORARY_COLUMN_NAME
   }

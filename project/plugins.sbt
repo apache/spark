@@ -31,7 +31,7 @@ addSbtPlugin("com.github.sbt" % "sbt-eclipse" % "6.0.0")
 
 addSbtPlugin("org.scalastyle" %% "scalastyle-sbt-plugin" % "1.0.0")
 
-addSbtPlugin("com.typesafe" % "sbt-mima-plugin" % "1.1.2")
+addSbtPlugin("com.typesafe" % "sbt-mima-plugin" % "1.1.3")
 
 addSbtPlugin("com.github.sbt" % "sbt-unidoc" % "0.5.0")
 
