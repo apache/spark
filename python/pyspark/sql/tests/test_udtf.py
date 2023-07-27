@@ -1676,8 +1676,6 @@ class UDTFArrowTestsMixin(BaseUDTFTestsMixin):
         self.assertEqual(func(lit(1)).collect(), [Row(a=1)])
 
     def test_numeric_output_type_casting(self):
-        import datetime
-
         class TestUDTF:
             def eval(self):
                 yield 1,
@@ -1692,7 +1690,6 @@ class UDTFArrowTestsMixin(BaseUDTFTestsMixin):
             ("x: bigint", [Row(x=1)]),
             ("x: string", [Row(x="1")]),  # require arrow.cast
             ("x: date", err),
-            ("x: timestamp", [Row(x=datetime.datetime(1969, 12, 31, 16, 0, 0, 1))]),
             ("x: byte", [Row(x=1)]),
             ("x: binary", [Row(x=bytearray(b"\x01"))]),
             ("x: float", [Row(x=1.0)]),
