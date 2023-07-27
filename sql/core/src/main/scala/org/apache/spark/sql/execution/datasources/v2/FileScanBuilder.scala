@@ -76,8 +76,11 @@ abstract class FileScanBuilder(
     this.partitionFilters = partitionFilters
     this.dataFilters = dataFilters
     val translatedFilters = mutable.ArrayBuffer.empty[sources.Filter]
+    // It is safe to push down partial predicate because it will keep the predicate in filter
+    // node. Please see the test in JsonV2Suite.
+    val canPartialPushDown = true
     for (filterExpr <- dataFilters) {
-      val translated = DataSourceStrategy.translateFilter(filterExpr, true)
+      val translated = DataSourceStrategy.translateFilter(filterExpr, true, canPartialPushDown)
       if (translated.nonEmpty) {
         translatedFilters += translated.get
       }

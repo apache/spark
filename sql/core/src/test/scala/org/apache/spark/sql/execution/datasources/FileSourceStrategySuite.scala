@@ -30,11 +30,9 @@ import org.apache.spark.paths.SparkPath.{fromUrlString => sp}
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.catalog.BucketSpec
-import org.apache.spark.sql.catalyst.expressions.{Expression, ExpressionSet}
 import org.apache.spark.sql.catalyst.util
 import org.apache.spark.sql.execution.{DataSourceScanExec, FileSourceScanExec, SparkPlan}
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2ScanRelation
-import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.test.SharedSparkSession
@@ -625,6 +623,31 @@ class FileSourceStrategySuite extends QueryTest with SharedSparkSession {
     }
   }
 
+  test("SPARK-44493: Extract pushable predicates from disjunctive predicates") {
+    def getPushedFilters(df: DataFrame): Option[String] = {
+      df.queryExecution.executedPlan.collectFirst {
+        case f: FileSourceScanExec => f.metadata.get("PushedFilters")
+      }.flatten
+    }
+    val table =
+      createTable(
+        files = Seq(
+          "p1=1/file1" -> 10,
+          "p1=2/file2" -> 10))
+
+    val df = table.where("(c1 > 0 AND TRIM(cast(c2 AS string)) = '1') OR (c2 > 1)")
+    assert(getPhysicalFilters(df) contains resolve(df,
+      "(c1 > 0 AND TRIM(cast(c2 AS string)) = '1') OR (c2 > 1)"))
+    assert(getPushedFilters(df).contains("[Or(GreaterThan(c1,0),GreaterThan(c2,1))]"))
+
+    assert(getPushedFilters(
+      table.where("Not(c1 <=> 0 AND TRIM(cast(c2 AS string)) = '1') OR (c2 > 1)")).contains("[]"))
+
+    assert(getPushedFilters(
+      table.where("Not((c1 > 0) OR (c2 > 1))"))
+      .contains("[IsNotNull(c1), IsNotNull(c2), LessThanOrEqual(c1,0), LessThanOrEqual(c2,1)]"))
+  }
+
   // Helpers for checking the arguments passed to the FileFormat.
 
   protected val checkPartitionSchema =
@@ -644,19 +667,6 @@ class FileSourceStrategySuite extends QueryTest with SharedSparkSession {
            |actual: ${arg(LastArguments)}
          """.stripMargin)
     }
-  }
-
-  /** Returns a resolved expression for `str` in the context of `df`. */
-  def resolve(df: DataFrame, str: String): Expression = {
-    df.select(expr(str)).queryExecution.analyzed.expressions.head.children.head
-  }
-
-  /** Returns a set with all the filters present in the physical plan. */
-  def getPhysicalFilters(df: DataFrame): ExpressionSet = {
-    ExpressionSet(
-      df.queryExecution.executedPlan.collect {
-        case execution.FilterExec(f, _) => splitConjunctivePredicates(f)
-      }.flatten)
   }
 
   /** Plans the query and calls the provided validation function with the planned partitioning. */

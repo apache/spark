@@ -24,10 +24,12 @@ import scala.collection.JavaConverters._
 import org.scalatest.Assertions
 
 import org.apache.spark.sql.catalyst.ExtendedAnalysisException
+import org.apache.spark.sql.catalyst.expressions.{Expression, ExpressionSet}
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.execution.SQLExecution
 import org.apache.spark.sql.execution.columnar.InMemoryRelation
+import org.apache.spark.sql.functions.expr
 import org.apache.spark.storage.StorageLevel
 
 
@@ -228,6 +230,23 @@ abstract class QueryTest extends PlanTest {
       s"The optimized logical plan has missing inputs:\n${query.queryExecution.optimizedPlan}")
     assert(query.queryExecution.executedPlan.missingInput.isEmpty,
       s"The physical plan has missing inputs:\n${query.queryExecution.executedPlan}")
+  }
+
+  /**
+   * Returns a set with all the filters present in the physical plan.
+   */
+  def getPhysicalFilters(df: DataFrame): ExpressionSet = {
+    ExpressionSet(
+      df.queryExecution.executedPlan.collect {
+        case execution.FilterExec(f, _) => splitConjunctivePredicates(f)
+      }.flatten)
+  }
+
+  /**
+   * Returns a resolved expression for `str` in the context of `df`.
+   */
+  def resolve(df: DataFrame, str: String): Expression = {
+    df.select(expr(str)).queryExecution.analyzed.expressions.head.children.head
   }
 }
 

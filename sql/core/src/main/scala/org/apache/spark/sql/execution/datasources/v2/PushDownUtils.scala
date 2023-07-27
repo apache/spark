@@ -49,11 +49,13 @@ object PushDownUtils {
         val translatedFilters = mutable.ArrayBuffer.empty[sources.Filter]
         // Catalyst filter expression that can't be translated to data source filters.
         val untranslatableExprs = mutable.ArrayBuffer.empty[Expression]
+        // It is not safe to push partial predicate. Please see test in DataSourceV2SQLSuiteV1Filter
+        val canPartialPushDown = false
 
         for (filterExpr <- filters) {
           val translated =
             DataSourceStrategy.translateFilterWithMapping(filterExpr, Some(translatedFilterToExpr),
-              nestedPredicatePushdownEnabled = true)
+              supportNestedPushDown = true, canPartialPushDown)
           if (translated.isEmpty) {
             untranslatableExprs += filterExpr
           } else {

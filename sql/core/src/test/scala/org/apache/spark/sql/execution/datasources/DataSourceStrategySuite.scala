@@ -21,6 +21,7 @@ import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.sources
+import org.apache.spark.sql.sources.AlwaysFalse
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructType}
 
@@ -311,27 +312,58 @@ class DataSourceStrategySuite extends PlanTest with SharedSparkSession {
             sources.In(longColName, Array(3, 4))),
           sources.And(sources.GreaterThan(longColName, 1), sources.LessThan(longColName, 9)))))
 
-    // (intColName > 1 AND longColName = 2 AND stringColName rlike '[a-z]+a') OR
-    //    (intColName > 2 AND longColName = 3 AND stringColName rlike '[a-z]+a')
+    // (intColName > 1 AND longColName > 2 AND stringColName rlike '[a-z]+a') OR
+    //    (intColName > 2 AND longColName > 3 AND stringColName rlike '[a-z]+a')
     testTranslateFilter(
       Or(
         And(And(attrInt > 1, attrLong > 2), attrString.rlike("[a-z]+a")),
         And(And(attrInt > 2, attrLong > 3), attrString.rlike("[a-z]+b"))),
       Some(
-        sources.And(sources.Or(sources.GreaterThan(intColName, 1),
-          sources.GreaterThan(intColName, 2)),
-          sources.Or(sources.GreaterThan(longColName, 2),
-            sources.GreaterThan(longColName, 3)))))
+        sources.Or(
+          sources.And(sources.GreaterThan(intColName, 1), sources.GreaterThan(longColName, 2)),
+          sources.And(sources.GreaterThan(intColName, 2), sources.GreaterThan(longColName, 3)))))
 
-    // (intColName > 1 AND longColName = 2 AND stringColName rlike '[a-z]+a') OR
-    //    (intColName > 2 AND longColName + 1 = 3 AND stringColName rlike '[a-z]+a')
+    // (intColName > 1 AND longColName > 2 AND stringColName rlike '[a-z]+a') OR
+    //    (intColName > 2 AND longColName + 1 > 3 AND stringColName rlike '[a-z]+b')
     testTranslateFilter(
       Or(
         And(And(attrInt > 1, attrLong > 2), attrString.rlike("[a-z]+a")),
         And(And(attrInt > 2, attrLong + 1 > 3), attrString.rlike("[a-z]+b"))),
       Some(
-        sources.Or(sources.GreaterThan(intColName, 1),
+        sources.Or(
+          sources.And(sources.GreaterThan(intColName, 1), sources.GreaterThan(longColName, 2)),
           sources.GreaterThan(intColName, 2))))
+
+    // (intColName > 1 AND stringColName rlike '[a-z]+a') OR
+    //   (longColName > 2 AND stringColName rlike '[a-z]+b')
+    testTranslateFilter(
+      Or(
+        And(attrInt > 1, attrString.rlike("[a-z]+a")),
+        And(attrLong > 2, attrString.rlike("[a-z]+b"))),
+      Some(sources.Or(sources.GreaterThan(intColName, 1), sources.GreaterThan(longColName, 2))))
+
+    // intColName > 1 AND ((intColName > 1 AND stringColName rlike '[a-z]+a') OR
+    //   (longColName > 2 AND stringColName rlike '[a-z]+b'))
+    testTranslateFilter(
+      And(
+        GreaterThan(attrInt, 1),
+        Or(And(attrInt > 1, attrString.rlike("[a-z]+a")),
+          And(attrLong > 2, attrString.rlike("[a-z]+b")))),
+      Some(sources.And(sources.GreaterThan(intColName, 1),
+        sources.Or(sources.GreaterThan(intColName, 1), sources.GreaterThan(longColName, 2)))))
+
+    // Not(intColName > 1 OR (longColName > 3 AND stringColName rlike '[a-z]+a'))
+    testTranslateFilter(
+      Not(Or(
+        GreaterThan(attrInt, 1),
+        And(attrLong > 2, attrString.rlike("[a-z]+a")))),
+      None)
+
+    // (1 > 1 AND stringColName rlike '[a-z]+a') OR (2 > 2 AND stringColName rlike '[a-z]+b')
+    testTranslateFilter(
+        Or(And(1 > 1, attrString.rlike("[a-z]+b")),
+          And(2 > 2, attrString.rlike("[a-z]+c"))),
+      Some(sources.Or(AlwaysFalse, AlwaysFalse)))
 
     // (longColName + 2 > 1 AND stringColName rlike '[a-z]+a') OR
     //   (longColName > 3 AND stringColName rlike '[a-z]+b')
@@ -342,34 +374,11 @@ class DataSourceStrategySuite extends PlanTest with SharedSparkSession {
       None)
 
     // (intColName > 1 AND stringColName rlike '[a-z]+a') OR
-    //   (longColName > 2 AND stringColName rlike '[a-z]+b')
-    testTranslateFilter(
-      Or(
-        And(attrInt > 1, attrString.rlike("[a-z]+a")),
-        And(attrLong > 2, attrString.rlike("[a-z]+b"))),
-      None)
-
-    // intColName > 1 AND ((intColName > 1 AND stringColName rlike '[a-z]+a') OR
-    //   (longColName > 2 AND stringColName rlike '[a-z]+b'))
-    testTranslateFilter(
-      And(
-        GreaterThan(attrInt, 1),
-        Or(And(attrInt > 1, attrString.rlike("[a-z]+a")),
-          And(attrLong > 2, attrString.rlike("[a-z]+b")))),
-      None)
-
-    // (intColName > 1 AND stringColName rlike '[a-z]+a') OR
     //   (intColName + 1 < 9 AND stringColName rlike '[a-z]+b')
     testTranslateFilter(
       Or(
         And(attrInt > 1, attrString.rlike("[a-z]+a")),
         And(attrInt + 1 < 9, attrString.rlike("[a-z]+b"))),
-      None)
-
-    // (1 > 1 AND stringColName rlike '[a-z]+a') OR (2 > 2 AND stringColName rlike '[a-z]+b')
-    testTranslateFilter(
-        Or(And(1 > 1, attrString.rlike("[a-z]+b")),
-          And(2 > 2, attrString.rlike("[a-z]+c"))),
       None)
   }
 
@@ -415,7 +424,7 @@ class DataSourceStrategySuite extends PlanTest with SharedSparkSession {
    */
   def testTranslateFilter(catalystFilter: Expression, result: Option[sources.Filter]): Unit = {
     assertResult(result) {
-      DataSourceStrategy.translateFilter(catalystFilter, true)
+      DataSourceStrategy.translateFilter(catalystFilter, true, true)
     }
   }
 }

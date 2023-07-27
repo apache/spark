@@ -3295,6 +3295,18 @@ class DataSourceV2SQLSuiteV1Filter
     }
   }
 
+  test("SPARK-44493: Should not extract pushable predicates from disjunctive predicates") {
+    val t1 = "testcat.ns1.ns2.tbl"
+    withTable(t1) {
+      sql(
+        s"CREATE TABLE $t1 USING foo AS SELECT cast(id AS int) AS THEID, data AS NAME FROM source")
+      val df = sql(s"SELECT * FROM $t1 WHERE (THEID > 0 AND TRIM(NAME) = 'mary') OR (THEID > 10)")
+
+      assert(getPhysicalFilters(df) contains resolve(df,
+        "(THEID > 0 AND TRIM(NAME) = 'mary') OR (THEID > 10)"))
+    }
+  }
+
   private def testNotSupportedV2Command(
       sqlCommand: String,
       sqlParams: String,

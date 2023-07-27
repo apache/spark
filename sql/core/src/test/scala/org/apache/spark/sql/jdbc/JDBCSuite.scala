@@ -34,7 +34,7 @@ import org.apache.spark.sql.catalyst.{analysis, TableIdentifier}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.plans.logical.ShowCreateTable
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, CharVarcharUtils, DateTimeTestUtils}
-import org.apache.spark.sql.execution.{DataSourceScanExec, ExtendedMode, ProjectExec}
+import org.apache.spark.sql.execution.{DataSourceScanExec, ExtendedMode, ProjectExec, RowDataSourceScanExec}
 import org.apache.spark.sql.execution.command.{ExplainCommand, ShowCreateTableCommand}
 import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JDBCPartition, JDBCRelation, JdbcUtils}
@@ -2056,5 +2056,17 @@ class JDBCSuite extends QueryTest with SharedSparkSession {
   test("SPARK-41990: Filter with composite name") {
     val df = sql("SELECT * FROM composite_name WHERE `last name` = 'smith'")
     assert(df.collect.toSet === Set(Row("smith", 1)))
+  }
+
+  test("SPARK-44493: Should not extract pushable predicates from disjunctive predicates") {
+    val df = sql("SELECT * FROM foobar WHERE (THEID > 0 AND TRIM(NAME) = 'mary') OR (THEID > 10)")
+
+    assert(getPhysicalFilters(df) contains resolve(df,
+      "(THEID > 0 AND TRIM(NAME) = 'mary') OR (THEID > 10)"))
+
+    val pushedFilters = df.queryExecution.executedPlan.collect {
+      case r: RowDataSourceScanExec => r.metadata.get("PushedFilters")
+    }
+    assert(pushedFilters.contains(Some("[]")))
   }
 }

@@ -573,31 +573,10 @@ object DataSourceStrategy
    * @return a `Some[Filter]` if the input [[Expression]] is convertible, otherwise a `None`.
    */
   protected[sql] def translateFilter(
-      predicate: Expression, supportNestedPredicatePushdown: Boolean): Option[Filter] = {
-    if (predicate.isInstanceOf[expressions.Or]) {
-      translateFilterWithMapping(predicate, None, supportNestedPredicatePushdown).orElse {
-        // Extract pushable predicates from disjunctive predicates. For example:
-        // We will extract a = 1 OR a = 2 from ((a = 1 AND b + 1 > 1) OR (a = 2 AND c + 2 > 2)).
-        val predicates = splitDisjunctivePredicates(predicate).map(splitConjunctivePredicates)
-        val references = predicates.map(_.map(_.references)).map(_.filter(_.nonEmpty))
-        val intersectedRefs = references.foldLeft(references.head) { (intersected, currentRefs) =>
-          intersected intersect currentRefs
-        }
-        intersectedRefs.flatMap { ref =>
-          val sameAttrPredicates = predicates.map(_.filter(_.references.equals(ref)))
-          val translatedFilters = sameAttrPredicates.map(_.map(
-            translateFilterWithMapping(_, None, supportNestedPredicatePushdown)))
-          // Only make pushable predicate if all predicates can be translated to filters.
-          if (translatedFilters.forall(_.forall(_.nonEmpty))) {
-            translatedFilters.map(_.flatten.reduceLeft(sources.And)).reduceLeftOption(sources.Or)
-          } else {
-            None
-          }
-        }.reduceLeftOption(sources.And)
-      }
-    } else {
-      translateFilterWithMapping(predicate, None, supportNestedPredicatePushdown)
-    }
+      predicate: Expression,
+      supportNestedPushDown: Boolean,
+      canPartialPushDown: Boolean): Option[Filter] = {
+    translateFilterWithMapping(predicate, None, supportNestedPushDown, canPartialPushDown)
   }
 
   /**
@@ -607,46 +586,45 @@ object DataSourceStrategy
    * @param translatedFilterToExpr An optional map from leaf node filter expressions to its
    *                               translated [[Filter]]. The map is used for rebuilding
    *                               [[Expression]] from [[Filter]].
-   * @param nestedPredicatePushdownEnabled Whether nested predicate pushdown is enabled.
+   * @param supportNestedPushDown Whether nested predicate pushdown is enabled.
    * @return a `Some[Filter]` if the input [[Expression]] is convertible, otherwise a `None`.
    */
   protected[sql] def translateFilterWithMapping(
       predicate: Expression,
       translatedFilterToExpr: Option[mutable.HashMap[sources.Filter, Expression]],
-      nestedPredicatePushdownEnabled: Boolean)
+      supportNestedPushDown: Boolean,
+      canPartialPushDown: Boolean)
     : Option[Filter] = {
     predicate match {
       case expressions.And(left, right) =>
-        // See SPARK-12218 for detailed discussion
-        // It is not safe to just convert one side if we do not understand the
-        // other side. Here is an example used to explain the reason.
-        // Let's say we have (a = 2 AND trim(b) = 'blah') OR (c > 0)
-        // and we do not understand how to convert trim(b) = 'blah'.
-        // If we only convert a = 2, we will end up with
-        // (a = 2) OR (c > 0), which will generate wrong results.
-        // Pushing one leg of AND down is only safe to do at the top level.
-        // You can see ParquetFilters' createFilter for more details.
-        for {
-          leftFilter <- translateFilterWithMapping(
-            left, translatedFilterToExpr, nestedPredicatePushdownEnabled)
-          rightFilter <- translateFilterWithMapping(
-            right, translatedFilterToExpr, nestedPredicatePushdownEnabled)
-        } yield sources.And(leftFilter, rightFilter)
+        val translatedLeft = translateFilterWithMapping(
+          left, translatedFilterToExpr, supportNestedPushDown, canPartialPushDown)
+        val translatedRight = translateFilterWithMapping(
+          right, translatedFilterToExpr, supportNestedPushDown, canPartialPushDown)
+
+        if (canPartialPushDown) {
+          (translatedLeft ++ translatedRight).reduceOption(sources.And)
+        } else {
+          for {
+            leftFilter <- translatedLeft
+            rightFilter <- translatedRight
+          } yield sources.And(leftFilter, rightFilter)
+        }
 
       case expressions.Or(left, right) =>
         for {
           leftFilter <- translateFilterWithMapping(
-            left, translatedFilterToExpr, nestedPredicatePushdownEnabled)
+            left, translatedFilterToExpr, supportNestedPushDown, canPartialPushDown)
           rightFilter <- translateFilterWithMapping(
-            right, translatedFilterToExpr, nestedPredicatePushdownEnabled)
+            right, translatedFilterToExpr, supportNestedPushDown, canPartialPushDown)
         } yield sources.Or(leftFilter, rightFilter)
 
       case expressions.Not(child) =>
-        translateFilterWithMapping(child, translatedFilterToExpr, nestedPredicatePushdownEnabled)
+        translateFilterWithMapping(child, translatedFilterToExpr, supportNestedPushDown, false)
           .map(sources.Not)
 
       case other =>
-        val filter = translateLeafNodeFilter(other, PushableColumn(nestedPredicatePushdownEnabled))
+        val filter = translateLeafNodeFilter(other, PushableColumn(supportNestedPushDown))
         if (filter.isDefined && translatedFilterToExpr.isDefined) {
           translatedFilterToExpr.get(filter.get) = predicate
         }
@@ -690,11 +668,21 @@ object DataSourceStrategy
     // called `predicate`s, while all data source filters of type `sources.Filter` are simply called
     // `filter`s.
 
+    val supportNestedPredicatePushdown = DataSourceUtils.supportNestedPredicatePushdown(relation)
+    // It is not safe to push down partial predicate because it will mark the partial pushed
+    // predicate as handledFilters and will remove this predicate in filter node.
+    // Here is an example used to explain the reason.  Let's say we have
+    // SELECT * FROM foobar WHERE (THEID > 0 AND TRIM(NAME) = 'mary') OR (NAME = 'fred') and we do
+    // not understand how to convert TRIM(NAME) = 'mary'. If we only convert THEID > 2, we will
+    // end up with (THEID > 2) OR (NAME = 'fred'), which the physical plan becomes to:
+    // == Physical Plan ==
+    // *(1) Scan JDBCRelation(TEST.PEOPLE) [numPartitions=1] [NAME#0,THEID#1]
+    //   PushedFilters: [*Or(GreaterThan(THEID,0),EqualTo(NAME,fred))]
+    val canPartialPushDown = false
     // A map from original Catalyst expressions to corresponding translated data source filters.
     // If a predicate is not in this map, it means it cannot be pushed down.
-    val supportNestedPredicatePushdown = DataSourceUtils.supportNestedPredicatePushdown(relation)
     val translatedMap: Map[Expression, Filter] = predicates.flatMap { p =>
-      translateFilter(p, supportNestedPredicatePushdown).map(f => p -> f)
+      translateFilter(p, supportNestedPredicatePushdown, canPartialPushDown).map(f => p -> f)
     }.toMap
 
     val pushedFilters: Seq[Filter] = translatedMap.values.toSeq
