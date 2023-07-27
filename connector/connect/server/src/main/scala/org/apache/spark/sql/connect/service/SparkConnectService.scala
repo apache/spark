@@ -230,13 +230,6 @@ object SparkConnectService {
   }
 
   /**
-   * Check if the session is alive with the given userId and sessionId.
-   */
-  def isSessionAlive(userId: String, sessionId: String): Boolean = {
-    userSessionMapping.getIfPresent() != null
-  }
-
-  /**
    * Used for testing
    */
   private[connect] def invalidateAllSessions(): Unit = {

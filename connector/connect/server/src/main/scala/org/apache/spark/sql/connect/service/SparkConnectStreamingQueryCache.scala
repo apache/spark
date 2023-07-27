@@ -107,6 +107,18 @@ private[connect] class SparkConnectStreamingQueryCache(
     }
   }
 
+  /**
+   * Terminate all the running queries attached to the given sessionHolder. This is used when
+   * session is expired and we need to cleanup resources of that session.
+   */
+  def cleanupRunningQueries(sessionHolder: SessionHolder): Unit = {
+    for ((k, v) <- queryCache) {
+      if (v.userId.equals(sessionHolder.userId) && v.sessionId.equals(sessionHolder.sessionId)) {
+        v.query.stop()
+      }
+    }
+  }
+
   // Visible for testing
   private[service] def getCachedValue(queryId: String, runId: String): Option[QueryCacheValue] =
     queryCache.get(QueryCacheKey(queryId, runId))
@@ -182,12 +194,6 @@ private[connect] class SparkConnectStreamingQueryCache(
               log.info(s"Marking query $id in session ${v.sessionId} inactive.")
               val expiresAtMs = nowMs + stoppedQueryInactivityTimeout.toMillis
               queryCache.put(k, v.copy(expiresAtMs = Some(expiresAtMs)))
-            }
-
-            if (!SparkConnectService.isSessionAlive(v.userId, v.sessionId)) {
-              log.info(s"Terminating the query $id in session ${v.sessionId} since the" +
-                s" session mapping is removed.")
-              v.query.stop()
             }
         }
       }
