@@ -631,11 +631,9 @@ object StateStore extends Logging {
 
   /** Stop maintenance thread and reset the maintenance task */
   def stopMaintenanceTask(): Unit = loadedProviders.synchronized {
-    if (maintenanceThreadPool != null) {
+    if (maintenanceTask != null) {
       maintenanceThreadPool.stop()
       maintenanceThreadPool = null
-    }
-    if (maintenanceTask != null) {
       maintenanceTask.stop()
       maintenanceTask = null
     }
@@ -652,28 +650,27 @@ object StateStore extends Logging {
 
   /** Start the periodic maintenance task if not already started and if Spark active */
   private def startMaintenanceIfNeeded(storeConf: StateStoreConf): Unit = {
-    val enableMaintenanceThreadPool = storeConf.enableStateStoreMaintenanceThreadPool
+    val numMaintenanceThreads = storeConf.numStateStoreMaintenanceThreads
     loadedProviders.synchronized {
       if (SparkEnv.get != null && !isMaintenanceRunning) {
-        if (enableMaintenanceThreadPool) {
-          val numMaintenanceThreads = storeConf.numStateStoreMaintenanceThreads
-          maintenanceThreadPool = new MaintenanceThreadPool(
-            numThreads = numMaintenanceThreads
-          )
-        }
         maintenanceTask = new MaintenanceTask(
           storeConf.maintenanceInterval,
-          task = if (enableMaintenanceThreadPool) {
-            doMaintenanceWithThreadPool()
-          } else {
+          task = {
             doMaintenance()
           },
-          onError = { loadedProviders.synchronized {
+          onError = {
+            loadedProviders.synchronized {
               logInfo("Stopping maintenance task since an error was encountered.")
               stopMaintenanceTask()
+              // SPARK-44504 - Unload explicitly to force closing underlying DB instance
+              // and releasing allocated resources, especially for RocksDBStateStoreProvider.
+              loadedProviders.keySet.foreach { key => unload(key) }
               loadedProviders.clear()
             }
           }
+        )
+        maintenanceThreadPool = new MaintenanceThreadPool(
+          numThreads = numMaintenanceThreads
         )
         logInfo("State Store maintenance task started")
       }
@@ -691,7 +688,11 @@ object StateStore extends Logging {
     }
   }
 
-  private def doMaintenanceWithThreadPool(): Unit = {
+  /**
+   * Execute background maintenance task in all the loaded store providers if they are still
+   * the active instances according to the coordinator.
+   */
+  private def doMaintenance(): Unit = {
     logDebug("Doing maintenance")
     if (SparkEnv.get == null) {
       throw new IllegalStateException("SparkEnv not active, cannot do maintenance on StateStores")
@@ -699,6 +700,7 @@ object StateStore extends Logging {
     loadedProviders.synchronized {
       loadedProviders.toSeq
     }.foreach { case (id, provider) =>
+      // check exception
       if (threadPoolException.get() != null) {
         val exception = threadPoolException.getAndSet(null)
         logWarning("Error in maintenanceThreadPool", exception)
@@ -733,30 +735,6 @@ object StateStore extends Logging {
             }
           }
         })
-      }
-    }
-  }
-
-  /**
-   * Execute background maintenance task in all the loaded store providers if they are still
-   * the active instances according to the coordinator.
-   */
-  private def doMaintenance(): Unit = {
-    logDebug("Doing maintenance")
-    if (SparkEnv.get == null) {
-      throw new IllegalStateException("SparkEnv not active, cannot do maintenance on StateStores")
-    }
-    loadedProviders.synchronized { loadedProviders.toSeq }.foreach { case (id, provider) =>
-      try {
-        provider.doMaintenance()
-        if (!verifyIfStoreInstanceActive(id)) {
-          unload(id)
-          logInfo(s"Unloaded $provider")
-        }
-      } catch {
-        case NonFatal(e) =>
-          logWarning(s"Error managing $provider, stopping management thread")
-          throw e
       }
     }
   }
