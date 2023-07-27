@@ -144,4 +144,20 @@ class ShowCreateTableSuite extends command.ShowCreateTableSuiteBase with Command
       ))
     }
   }
+
+  test("should quote identifiers with special characters") {
+    withNamespaceAndTable("`a_schema-with+special^chars`", "`a_table-with+special^chars`") { t =>
+      sql(s"""
+           |CREATE TABLE $t (
+           |  a bigint NOT NULL,
+           |  b bigint
+           |) $defaultUsing
+        """.stripMargin)
+      val showDDL = getShowCreateDDL(t)
+      assert(
+        showDDL(0) == s"CREATE TABLE test_catalog.`a_schema-with+special^chars`." +
+        s"`a_table-with+special^chars` ("
+      )
+    }
+  }
 }

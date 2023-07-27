@@ -26,12 +26,11 @@ import scala.util.{Failure, Success}
 
 import org.apache.commons.lang3.reflect.ConstructorUtils
 
-import org.apache.spark.SPARK_DOC_ROOT
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoder
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders._
-import org.apache.spark.sql.errors.QueryExecutionErrors
+import org.apache.spark.sql.errors.EncoderErrors
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.CalendarInterval
 
@@ -378,13 +377,13 @@ object ScalaReflection extends ScalaReflection {
 
       case t if definedByConstructorParams(t) =>
         if (seenTypeSet.contains(t)) {
-          throw QueryExecutionErrors.cannotHaveCircularReferencesInClassError(t.toString)
+          throw EncoderErrors.cannotHaveCircularReferencesInClassError(t.toString)
         }
         val params = getConstructorParameters(t).map {
           case (fieldName, fieldType) =>
             if (SourceVersion.isKeyword(fieldName) ||
               !SourceVersion.isIdentifier(encodeFieldNameToIdentifier(fieldName))) {
-              throw QueryExecutionErrors.cannotUseInvalidJavaIdentifierAsFieldNameError(
+              throw EncoderErrors.cannotUseInvalidJavaIdentifierAsFieldNameError(
                 fieldName,
                 path)
             }
@@ -397,7 +396,7 @@ object ScalaReflection extends ScalaReflection {
         }
         ProductEncoder(ClassTag(getClassFromType(t)), params)
       case _ =>
-        throw QueryExecutionErrors.cannotFindEncoderForTypeError(tpe.toString, SPARK_DOC_ROOT)
+        throw EncoderErrors.cannotFindEncoderForTypeError(tpe.toString)
     }
   }
 }
@@ -478,7 +477,7 @@ trait ScalaReflection extends Logging {
    */
   private def getCompanionConstructor(tpe: Type): Symbol = {
     def throwUnsupportedOperation = {
-      throw QueryExecutionErrors.cannotFindConstructorForTypeError(tpe.toString)
+      throw EncoderErrors.cannotFindConstructorForTypeError(tpe.toString)
     }
     tpe.typeSymbol.asClass.companion match {
       case NoSymbol => throwUnsupportedOperation
@@ -501,7 +500,7 @@ trait ScalaReflection extends Logging {
       val primaryConstructorSymbol: Option[Symbol] = constructorSymbol.asTerm.alternatives.find(
         s => s.isMethod && s.asMethod.isPrimaryConstructor)
       if (primaryConstructorSymbol.isEmpty) {
-        throw QueryExecutionErrors.primaryConstructorNotFoundError(tpe.getClass)
+        throw EncoderErrors.primaryConstructorNotFoundError(tpe.getClass)
       } else {
         primaryConstructorSymbol.get.asMethod.paramLists
       }

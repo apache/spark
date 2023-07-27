@@ -31,6 +31,7 @@ from typing import (
     Tuple,
     Type,
     Union,
+    Set,
     cast,
     no_type_check,
     overload,
@@ -1855,6 +1856,127 @@ class SparkSession(SparkConversionMixin):
         """
         raise RuntimeError(
             "SparkSession.copyFromLocalToFs is only supported with Spark Connect; "
+            "however, the current Spark session does not use Spark Connect."
+        )
+
+    def interruptAll(self) -> List[str]:
+        """
+        Interrupt all operations of this session currently running on the connected server.
+
+        .. versionadded:: 3.5.0
+
+        Returns
+        -------
+        list of str
+            List of operationIds of interrupted operations.
+
+        Notes
+        -----
+        There is still a possibility of operation finishing just as it is interrupted.
+        """
+        raise RuntimeError(
+            "SparkSession.interruptAll is only supported with Spark Connect; "
+            "however, the current Spark session does not use Spark Connect."
+        )
+
+    def interruptTag(self, tag: str) -> List[str]:
+        """
+        Interrupt all operations of this session with the given operation tag.
+
+        .. versionadded:: 3.5.0
+
+        Returns
+        -------
+        list of str
+            List of operationIds of interrupted operations.
+
+        Notes
+        -----
+        There is still a possibility of operation finishing just as it is interrupted.
+        """
+        raise RuntimeError(
+            "SparkSession.interruptTag is only supported with Spark Connect; "
+            "however, the current Spark session does not use Spark Connect."
+        )
+
+    def interruptOperation(self, op_id: str) -> List[str]:
+        """
+        Interrupt an operation of this session with the given operationId.
+
+        .. versionadded:: 3.5.0
+
+        Returns
+        -------
+        list of str
+            List of operationIds of interrupted operations.
+
+        Notes
+        -----
+        There is still a possibility of operation finishing just as it is interrupted.
+        """
+        raise RuntimeError(
+            "SparkSession.interruptOperation is only supported with Spark Connect; "
+            "however, the current Spark session does not use Spark Connect."
+        )
+
+    def addTag(self, tag: str) -> None:
+        """
+        Add a tag to be assigned to all the operations started by this thread in this session.
+
+        .. versionadded:: 3.5.0
+
+        Parameters
+        ----------
+        tag : list of str
+            The tag to be added. Cannot contain ',' (comma) character or be an empty string.
+        """
+        raise RuntimeError(
+            "SparkSession.addTag is only supported with Spark Connect; "
+            "however, the current Spark session does not use Spark Connect."
+        )
+
+    def removeTag(self, tag: str) -> None:
+        """
+        Remove a tag previously added to be assigned to all the operations started by this thread in
+        this session. Noop if such a tag was not added earlier.
+
+        .. versionadded:: 3.5.0
+
+        Parameters
+        ----------
+        tag : list of str
+            The tag to be removed. Cannot contain ',' (comma) character or be an empty string.
+        """
+        raise RuntimeError(
+            "SparkSession.removeTag is only supported with Spark Connect; "
+            "however, the current Spark session does not use Spark Connect."
+        )
+
+    def getTags(self) -> Set[str]:
+        """
+        Get the tags that are currently set to be assigned to all the operations started by this
+        thread.
+
+        .. versionadded:: 3.5.0
+
+        Returns
+        -------
+        set of str
+            Set of tags of interrupted operations.
+        """
+        raise RuntimeError(
+            "SparkSession.getTags is only supported with Spark Connect; "
+            "however, the current Spark session does not use Spark Connect."
+        )
+
+    def clearTags(self) -> None:
+        """
+        Clear the current thread's operation tags.
+
+        .. versionadded:: 3.5.0
+        """
+        raise RuntimeError(
+            "SparkSession.clearTags is only supported with Spark Connect; "
             "however, the current Spark session does not use Spark Connect."
         )
 

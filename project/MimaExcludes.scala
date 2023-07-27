@@ -40,6 +40,9 @@ object MimaExcludes {
 
   // Exclude rules for 3.5.x from 3.4.0
   lazy val v35excludes = defaultExcludes ++ Seq(
+    // [SPARK-44531][CONNECT][SQL] Move encoder inference to sql/api
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.types.DataTypes"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.types.SQLUserDefinedType"),
     // [SPARK-43165][SQL] Move canWrite to DataTypeUtils
     ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.sql.types.DataType.canWrite"),
     // [SPARK-43195][CORE] Remove unnecessary serializable wrapper in HadoopFSUtils
@@ -64,7 +67,10 @@ object MimaExcludes {
     // [SPARK-43952][CORE][CONNECT][SQL] Add SparkContext APIs for query cancellation by tag
     ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.status.api.v1.JobData.this"),
     // [SPARK-44205][SQL] Extract Catalyst Code from DecimalType
-    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.sql.types.DecimalType.unapply")
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.sql.types.DecimalType.unapply"),
+    // [SPARK-44535][CONNECT][SQL] Move required Streaming API to sql/api
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.streaming.GroupStateTimeout"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.streaming.OutputMode")
   )
 
   // Defulat exclude rules
