@@ -80,7 +80,7 @@ Aggregate [hll_sketch_estimate(hll_union_agg(sketch#x, true, 0, 0)) AS hll_sketc
 SELECT hll_sketch_agg(col)
 FROM VALUES (ARRAY(1, 2)), (ARRAY(3, 4)) tab(col)
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
   "sqlState" : "42K09",
@@ -163,7 +163,7 @@ SELECT hll_union(1, 2)
     (2, 5),
     (3, 6) AS tab(col1, col2)
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
   "sqlState" : "42K09",
