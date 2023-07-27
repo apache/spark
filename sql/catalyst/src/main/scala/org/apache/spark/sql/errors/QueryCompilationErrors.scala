@@ -1921,12 +1921,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
 
   def ambiguousColumnOrFieldError(
       name: Seq[String], numMatches: Int, context: Origin): Throwable = {
-    new AnalysisException(
-      errorClass = "AMBIGUOUS_COLUMN_OR_FIELD",
-      messageParameters = Map(
-        "name" -> toSQLId(name),
-        "n" -> numMatches.toString),
-      origin = context)
+    DataTypeErrors.ambiguousColumnOrFieldError(name, numMatches, context)
   }
 
   def ambiguousColumnOrFieldError(
