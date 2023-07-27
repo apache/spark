@@ -26,8 +26,8 @@ import scala.collection.JavaConverters._
 
 import net.razorvine.pickle.Pickler
 
-import org.apache.spark.{SparkEnv, SparkException}
-import org.apache.spark.api.python.{PythonEvalType, PythonFunction, PythonRDD, SpecialLengths}
+import org.apache.spark.{JobArtifactSet, SparkEnv, SparkException}
+import org.apache.spark.api.python.{PythonEvalType, PythonFunction, PythonWorkerUtils, SpecialLengths}
 import org.apache.spark.internal.config.BUFFER_SIZE
 import org.apache.spark.internal.config.Python._
 import org.apache.spark.sql.{Column, DataFrame, Dataset, SparkSession}
@@ -173,12 +173,19 @@ object UserDefinedPythonTableFunction {
     val bufferSize: Int = env.conf.get(BUFFER_SIZE)
     val authSocketTimeout = env.conf.get(PYTHON_AUTH_SOCKET_TIMEOUT)
     val reuseWorker = env.conf.get(PYTHON_WORKER_REUSE)
+    val localdir = env.blockManager.diskBlockManager.localDirs.map(f => f.getPath()).mkString(",")
     val simplifiedTraceback: Boolean = SQLConf.get.pysparkSimplifiedTraceback
+
+    val jobArtifactUUID = JobArtifactSet.getCurrentJobArtifactState.map(_.uuid)
 
     val envVars = new HashMap[String, String](func.envVars)
     val pythonExec = func.pythonExec
     val pythonVer = func.pythonVer
+    val pythonIncludes = func.pythonIncludes.asScala.toSet
+    val broadcastVars = func.broadcastVars.asScala.toSeq
+    val maybeAccumulator = Option(func.accumulator).map(_.copyAndReset())
 
+    envVars.put("SPARK_LOCAL_DIRS", localdir)
     if (reuseWorker) {
       envVars.put("SPARK_REUSE_WORKER", "1")
     }
@@ -187,6 +194,8 @@ object UserDefinedPythonTableFunction {
     }
     envVars.put("SPARK_AUTH_SOCKET_TIMEOUT", authSocketTimeout.toString)
     envVars.put("SPARK_BUFFER_SIZE", bufferSize.toString)
+
+    envVars.put("SPARK_JOB_ARTIFACT_UUID", jobArtifactUUID.getOrElse("default"))
 
     EvaluatePython.registerPicklers()
     val pickler = new Pickler(/* useMemo = */ true,
@@ -200,8 +209,9 @@ object UserDefinedPythonTableFunction {
         new DataOutputStream(new BufferedOutputStream(worker.getOutputStream, bufferSize))
       val dataIn = new DataInputStream(new BufferedInputStream(worker.getInputStream, bufferSize))
 
-      // Python version of driver
-      PythonRDD.writeUTF(pythonVer, dataOut)
+      PythonWorkerUtils.writePythonVersion(pythonVer, dataOut)
+      PythonWorkerUtils.writeSparkFiles(jobArtifactUUID, pythonIncludes, dataOut)
+      PythonWorkerUtils.writeBroadcasts(broadcastVars, worker, env, dataOut)
 
       // Send Python UDTF
       dataOut.writeInt(func.command.length)
@@ -210,7 +220,7 @@ object UserDefinedPythonTableFunction {
       // Send arguments
       dataOut.writeInt(exprs.length)
       exprs.zip(tableArgs).foreach { case (expr, is_table) =>
-        PythonRDD.writeUTF(expr.dataType.json, dataOut)
+        PythonWorkerUtils.writeUTF(expr.dataType.json, dataOut)
         if (expr.foldable) {
           dataOut.writeBoolean(true)
           val obj = pickler.dumps(EvaluatePython.toJava(expr.eval(), expr.dataType))
@@ -239,6 +249,9 @@ object UserDefinedPythonTableFunction {
           val msg = new String(obj, StandardCharsets.UTF_8)
           throw QueryCompilationErrors.tableValuedFunctionFailedToAnalyseInPythonError(msg)
       }
+
+      PythonWorkerUtils.receiveAccumulatorUpdates(maybeAccumulator, dataIn)
+      Option(func.accumulator).foreach(_.merge(maybeAccumulator.get))
 
       dataIn.readInt() match {
         case SpecialLengths.END_OF_STREAM if reuseWorker =>
