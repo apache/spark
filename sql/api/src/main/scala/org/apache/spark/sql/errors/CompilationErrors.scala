@@ -16,43 +16,38 @@
  */
 package org.apache.spark.sql.errors
 
-import org.apache.spark.SparkException
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.internal.SqlApiConf
 
-// TODO integrate this with QueryCompilationErrors.
-//  For this we need the AnalysisException work to land.
 private[sql] trait CompilationErrors extends DataTypeErrorsBase {
-  def ambiguousColumnOrFieldError(
-      name: Seq[String], numMatches: Int): Throwable = {
-    new SparkException(
+  def ambiguousColumnOrFieldError(name: Seq[String], numMatches: Int): AnalysisException = {
+    new AnalysisException(
       errorClass = "AMBIGUOUS_COLUMN_OR_FIELD",
       messageParameters = Map(
         "name" -> toSQLId(name),
-        "n" -> numMatches.toString),
-      cause = null)
+        "n" -> numMatches.toString))
   }
 
-  def columnNotFoundError(colName: String): Throwable = {
-    new SparkException(
+  def columnNotFoundError(colName: String): AnalysisException = {
+    new AnalysisException(
       errorClass = "COLUMN_NOT_FOUND",
       messageParameters = Map(
         "colName" -> toSQLId(colName),
-        "caseSensitiveConfig" -> toSQLConf(SqlApiConf.CASE_SENSITIVE_KEY)),
-      cause = null)
+        "caseSensitiveConfig" -> toSQLConf(SqlApiConf.CASE_SENSITIVE_KEY)))
   }
 
-  def descriptorParseError(cause: Throwable): Throwable = {
-    new SparkException(
+  def descriptorParseError(cause: Throwable): AnalysisException = {
+    new AnalysisException(
       errorClass = "CANNOT_PARSE_PROTOBUF_DESCRIPTOR",
       messageParameters = Map.empty,
-      cause = cause)
+      cause = Option(cause))
   }
 
-  def cannotFindDescriptorFileError(filePath: String, cause: Throwable): Throwable = {
-    new SparkException(
+  def cannotFindDescriptorFileError(filePath: String, cause: Throwable): AnalysisException = {
+    new AnalysisException(
       errorClass = "PROTOBUF_DESCRIPTOR_FILE_NOT_FOUND",
       messageParameters = Map("filePath" -> filePath),
-      cause = cause)
+      cause = Option(cause))
   }
 }
 

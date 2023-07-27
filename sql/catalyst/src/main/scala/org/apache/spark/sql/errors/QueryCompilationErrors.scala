@@ -1929,15 +1929,6 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       origin = context)
   }
 
-  override def ambiguousColumnOrFieldError(
-      name: Seq[String], numMatches: Int): Throwable = {
-    new AnalysisException(
-      errorClass = "AMBIGUOUS_COLUMN_OR_FIELD",
-      messageParameters = Map(
-        "name" -> toSQLId(name),
-        "n" -> numMatches.toString))
-  }
-
   def ambiguousReferenceError(name: String, ambiguousReferences: Seq[Attribute]): Throwable = {
     new AnalysisException(
       errorClass = "AMBIGUOUS_REFERENCE",
@@ -2462,14 +2453,6 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
     new AnalysisException(
       errorClass = "COLUMN_ALREADY_EXISTS",
       messageParameters = Map("columnName" -> toSQLId(columnName)))
-  }
-
-  override def columnNotFoundError(colName: String): Throwable = {
-    new AnalysisException(
-      errorClass = "COLUMN_NOT_FOUND",
-      messageParameters = Map(
-        "colName" -> toSQLId(colName),
-        "caseSensitiveConfig" -> toSQLConf(SQLConf.CASE_SENSITIVE.key)))
   }
 
   def noSuchTableError(db: String, table: String): Throwable = {
@@ -3564,13 +3547,6 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
     new AnalysisException(
       errorClass = "PROTOBUF_MESSAGE_NOT_FOUND",
       messageParameters = Map("messageName" -> messageName))
-  }
-
-  override def cannotFindDescriptorFileError(filePath: String, cause: Throwable): Throwable = {
-    new AnalysisException(
-      errorClass = "PROTOBUF_DESCRIPTOR_FILE_NOT_FOUND",
-      messageParameters = Map("filePath" -> filePath),
-      cause = Option(cause))
   }
 
   def foundRecursionInProtobufSchema(fieldDescriptor: String): Throwable = {
