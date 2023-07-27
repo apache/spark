@@ -926,19 +926,19 @@ class DatasetSuite extends QueryTest
     inputRows.add(Row(1L, "bar"))
     inputRows.add(Row(2L, "foo"))
     val input = spark.createDataFrame(inputRows, inputType)
-    val fooGroups = input.filter("type = 'foo'").groupBy("id").as(RowEncoder(keyType),
-      RowEncoder(inputType))
-    val barGroups = input.filter("type = 'bar'").groupBy("id").as(RowEncoder(keyType),
-      RowEncoder(inputType))
+    val fooGroups = input.filter("type = 'foo'").groupBy("id").as(ExpressionEncoder(keyType),
+      ExpressionEncoder(inputType))
+    val barGroups = input.filter("type = 'bar'").groupBy("id").as(ExpressionEncoder(keyType),
+      ExpressionEncoder(inputType))
 
     val result = fooGroups.cogroup(barGroups) { case (row, iterator, iterator1) =>
       iterator.toSeq ++ iterator1.toSeq
-    }(RowEncoder(inputType)).collect()
+    }(ExpressionEncoder(inputType)).collect()
     assert(result.length == 3)
 
     val result2 = fooGroups.cogroupSorted(barGroups)($"id")($"id") {
       case (row, iterator, iterator1) => iterator.toSeq ++ iterator1.toSeq
-    }(RowEncoder(inputType)).collect()
+    }(ExpressionEncoder(inputType)).collect()
     assert(result2.length == 3)
   }
 
