@@ -72,7 +72,7 @@ private[spark] class StreamingPythonRunner(func: PythonFunction, connectUrl: Str
     // Send sessionId
     PythonRDD.writeUTF(sessionId, dataOut)
 
-    // send the user function to python process
+    // Send the user function to python process
     val command = func.command
     dataOut.writeInt(command.length)
     dataOut.write(command.toArray)
