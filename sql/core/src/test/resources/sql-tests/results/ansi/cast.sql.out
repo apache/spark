@@ -610,7 +610,7 @@ SELECT HEX(CAST(CAST(123 AS byte) AS binary))
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.CAST_WITH_CONF_SUGGESTION",
   "sqlState" : "42K09",
@@ -636,7 +636,7 @@ SELECT HEX(CAST(CAST(-123 AS byte) AS binary))
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.CAST_WITH_CONF_SUGGESTION",
   "sqlState" : "42K09",
@@ -662,7 +662,7 @@ SELECT HEX(CAST(123S AS binary))
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.CAST_WITH_CONF_SUGGESTION",
   "sqlState" : "42K09",
@@ -688,7 +688,7 @@ SELECT HEX(CAST(-123S AS binary))
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.CAST_WITH_CONF_SUGGESTION",
   "sqlState" : "42K09",
@@ -714,7 +714,7 @@ SELECT HEX(CAST(123 AS binary))
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.CAST_WITH_CONF_SUGGESTION",
   "sqlState" : "42K09",
@@ -740,7 +740,7 @@ SELECT HEX(CAST(-123 AS binary))
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.CAST_WITH_CONF_SUGGESTION",
   "sqlState" : "42K09",
@@ -766,7 +766,7 @@ SELECT HEX(CAST(123L AS binary))
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.CAST_WITH_CONF_SUGGESTION",
   "sqlState" : "42K09",
@@ -792,7 +792,7 @@ SELECT HEX(CAST(-123L AS binary))
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.CAST_WITH_CONF_SUGGESTION",
   "sqlState" : "42K09",

@@ -21,7 +21,6 @@ import scala.collection.JavaConverters._
 
 import org.apache.spark.{QueryContext, SparkThrowable, SparkThrowableHelper}
 import org.apache.spark.annotation.Stable
-import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.trees.{Origin, WithOrigin}
 
 /**
@@ -34,8 +33,6 @@ class AnalysisException protected[sql] (
     val message: String,
     val line: Option[Int] = None,
     val startPosition: Option[Int] = None,
-    // Some plans fail to serialize due to bugs in scala collections.
-    @transient val plan: Option[LogicalPlan] = None,
     val cause: Option[Throwable] = None,
     val errorClass: Option[String] = None,
     val messageParameters: Map[String, String] = Map.empty,
@@ -102,12 +99,11 @@ class AnalysisException protected[sql] (
       message: String = this.message,
       line: Option[Int] = this.line,
       startPosition: Option[Int] = this.startPosition,
-      plan: Option[LogicalPlan] = this.plan,
       cause: Option[Throwable] = this.cause,
       errorClass: Option[String] = this.errorClass,
       messageParameters: Map[String, String] = this.messageParameters,
       context: Array[QueryContext] = this.context): AnalysisException =
-    new AnalysisException(message, line, startPosition, plan, cause, errorClass,
+    new AnalysisException(message, line, startPosition, cause, errorClass,
       messageParameters, context)
 
   def withPosition(origin: Origin): AnalysisException = {
@@ -119,10 +115,7 @@ class AnalysisException protected[sql] (
     newException
   }
 
-  override def getMessage: String = {
-    val planAnnotation = Option(plan).flatten.map(p => s";\n$p").getOrElse("")
-    getSimpleMessage + planAnnotation
-  }
+  override def getMessage: String = getSimpleMessage
 
   // Outputs an exception without the logical plan.
   // For testing only
