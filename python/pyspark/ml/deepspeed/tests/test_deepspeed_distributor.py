@@ -188,69 +188,9 @@ def _create_basic_function() -> Callable:
 
 @contextmanager
 def _create_pytorch_training_test_file():
-    # TODO: swap with better training file like below:
-    # import deepspeed
-    # import torch
-    # import torch.nn as nn
-    # from torch.utils.data import DataLoader, Dataset
-    #
-    # Simple model class
-    # class SimpleModel(nn.Module):
-    #    def __init__(self):
-    #        super(SimpleModel, self).__init__()
-    #        self.fc = nn.Linear(10, 5)
-    #
-    #    def forward(self, x):
-    #        return self.fc(x)
-    #
-    # Dummy dataset class
-    # class DummyDataset(Dataset):
-    #    def __init__(self, num_samples=1000, input_dim=10, num_classes=5):
-    #        self.num_samples = num_samples
-    #        self.input_dim = input_dim
-    #        self.num_classes = num_classes
-    #        self.data = torch.randn(num_samples, input_dim)
-    #        self.labels = torch.randint(0, num_classes, (num_samples,))
-    #
-    #    def __len__(self):
-    #        return self.num_samples
-    #
-    #    def __getitem__(self, idx):
-    #        return self.data[idx], self.labels[idx]
-    #
-    # Instantiate the model and the data loader
-    # model = SimpleModel()
-    # dataset = DummyDataset()
-    # data_loader = DataLoader(dataset, batch_size=8, shuffle=True)
-    #
-    # deepspeed_config = {
-    #    "train_batch_size_per_gpu": 8,
-    #    "optimizer": {
-    #        "type": "Adam",
-    #        "params": {
-    #            "lr": 1e-4,
-    #        },
-    #    },
-    #    "fp16": {
-    #        "enabled": False,  # Set to True for mixed-precision training on supported hardware.
-    #    },
-    # }
-    # model, _, _, _ = deepspeed.initialize(
-    #        model=model,
-    #        model_parameters=model.parameters(),
-    #        config_params=deepspeed_config)
-    # criterion = torch.nn.CrossEntropyLoss()
-    # optimizer = model.optimizer
-    # Training loop
-    # for epoch in range(num_epochs):
-    #    model.train()
-    #    for inputs, targets in data_loader:
-    #        optimizer.zero_grad()
-    #        outputs = model(inputs)
-    #        loss = criterion(outputs, targets)
-    #        loss.backward()
-    #        optimizer.step()
-    # torch.save(model.state_dict(), "cpu_trained_model.pt")
+    # Note: when Deepspeed CPU support becomes better,
+    # switch in more realistic training files using Deepspeed
+    # optimizations + constructs
     str_to_write = textwrap.dedent(
         """ 
             import sys
