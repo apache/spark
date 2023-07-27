@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import org.apache.spark.sql.catalyst.trees.TreePattern.{SESSION_WINDOW, TreePattern}
 import org.apache.spark.sql.catalyst.util.IntervalUtils
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
@@ -74,8 +73,6 @@ case class SessionWindow(timeColumn: Expression, gapDuration: Expression) extend
   override def dataType: DataType = new StructType()
     .add(StructField("start", TimestampType))
     .add(StructField("end", TimestampType))
-  final override val nodePatterns: Seq[TreePattern] = Seq(SESSION_WINDOW)
-
 
   // This expression is replaced in the analyzer.
   override lazy val resolved = false
