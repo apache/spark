@@ -30,38 +30,38 @@ from pyspark.serializers import (
 from pyspark import worker
 from pyspark.sql import SparkSession
 
-pickleSer = CPickleSerializer()
+pickle_ser = CPickleSerializer()
 utf8_deserializer = UTF8Deserializer()
 
 
 def main(infile, outfile):  # type: ignore[no-untyped-def]
     log_name = "Streaming ForeachBatch worker"
     connect_url = os.environ["SPARK_CONNECT_LOCAL_URL"]
-    sessionId = utf8_deserializer.loads(infile)
+    session_id = utf8_deserializer.loads(infile)
 
-    print(f"{log_name} is starting with url {connect_url} and sessionId {sessionId}.")
+    print(f"{log_name} is starting with url {connect_url} and sessionId {session_id}.")
 
-    sparkConnectSession = SparkSession.builder.remote(connect_url).getOrCreate()
-    sparkConnectSession._client._session_id = sessionId
+    spark_connect_session = SparkSession.builder.remote(connect_url).getOrCreate()
+    spark_connect_session._client._session_id = session_id
 
     # TODO(SPARK-44460): Pass credentials.
     # TODO(SPARK-44461): Enable Process Isolation
 
-    func = worker.read_command(pickleSer, infile)
+    func = worker.read_command(pickle_ser, infile)
     write_int(0, outfile)  # Indicate successful initialization
 
     outfile.flush()
 
-    def process(dfId, batchId):  # type: ignore[no-untyped-def]
-        print(f"{log_name} Started batch {batchId} with DF id {dfId}")
-        batchDf = sparkConnectSession._createRemoteDataFrame(dfId)
-        func(batchDf, batchId)
-        print(f"{log_name} Completed batch {batchId} with DF id {dfId}")
+    def process(df_id, batch_id):  # type: ignore[no-untyped-def]
+        print(f"{log_name} Started batch {batch_id} with DF id {df_id}")
+        batch_df = spark_connect_session._create_remote_dataframe(df_id)
+        func(batch_df, batch_id)
+        print(f"{log_name} Completed batch {batch_id} with DF id {df_id}")
 
     while True:
-        dfRefId = utf8_deserializer.loads(infile)
-        batchId = read_long(infile)
-        process(dfRefId, int(batchId))  # TODO(SPARK-44463): Propagate error to the user.
+        df_ref_id = utf8_deserializer.loads(infile)
+        batch_id = read_long(infile)
+        process(df_ref_id, int(batch_id))  # TODO(SPARK-44463): Propagate error to the user.
         write_int(0, outfile)
         outfile.flush()
 

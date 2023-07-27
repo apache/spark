@@ -1688,12 +1688,6 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
         "tableSchema" -> tableSchema.toString))
   }
 
-  def unsupportedDataSourceTypeForDirectQueryOnFilesError(className: String): Throwable = {
-    new AnalysisException(
-      errorClass = "UNSUPPORTED_DATA_SOURCE_FOR_DIRECT_QUERY",
-      messageParameters = Map("className" -> className))
-  }
-
   def saveDataIntoViewNotAllowedError(): Throwable = {
     new AnalysisException(
       errorClass = "_LEGACY_ERROR_TEMP_1158",
@@ -2008,9 +2002,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
   }
 
   def userSpecifiedSchemaUnsupportedError(operation: String): Throwable = {
-    new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1189",
-      messageParameters = Map("operation" -> operation))
+    DataTypeErrors.userSpecifiedSchemaUnsupportedError(operation)
   }
 
   def tempViewNotSupportStreamingWriteError(viewName: String): Throwable = {
@@ -2380,9 +2372,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
   }
 
   def charOrVarcharTypeAsStringUnsupportedError(): Throwable = {
-    new AnalysisException(
-      errorClass = "UNSUPPORTED_CHAR_OR_VARCHAR_AS_STRING",
-      messageParameters = Map.empty)
+    DataTypeErrors.charOrVarcharTypeAsStringUnsupportedError()
   }
 
   def escapeCharacterInTheMiddleError(pattern: String, char: String): Throwable = {

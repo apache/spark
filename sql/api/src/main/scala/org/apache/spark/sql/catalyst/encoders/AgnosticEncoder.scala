@@ -26,7 +26,7 @@ import scala.reflect.{classTag, ClassTag}
 import org.apache.spark.sql.{Encoder, Row}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.CalendarInterval
-import org.apache.spark.util.Utils
+import org.apache.spark.util.SparkClassUtils
 
 /**
  * A non implementation specific encoder. This encoder containers all the information needed
@@ -122,7 +122,7 @@ object AgnosticEncoders {
         case (e, id) => EncoderField(s"_${id + 1}", e, e.nullable, Metadata.empty)
       }
       val cls = cachedCls.computeIfAbsent(encoders.size,
-        _ => Utils.getContextOrSparkClassLoader.loadClass(s"scala.Tuple${encoders.size}"))
+        _ => SparkClassUtils.getContextOrSparkClassLoader.loadClass(s"scala.Tuple${encoders.size}"))
       ProductEncoder[Any](ClassTag(cls), fields)
     }
 

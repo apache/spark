@@ -376,14 +376,12 @@ class BaseUDTFTestsMixin:
 
         class RandomUDTF:
             def eval(self, a: int):
-                yield a * int(random.random() * 100),
+                yield a + int(random.random()),
 
         random_udtf = udtf(RandomUDTF, returnType="x: int").asNondeterministic()
-        # TODO(SPARK-43966): support non-deterministic UDTFs
-        with self.assertRaisesRegex(
-            AnalysisException, "The operator expects a deterministic expression"
-        ):
-            random_udtf(lit(1)).collect()
+        assertDataFrameEqual(random_udtf(lit(1)), [Row(x=1)])
+        self.spark.udtf.register("random_udtf", random_udtf)
+        assertDataFrameEqual(self.spark.sql("select * from random_udtf(1)"), [Row(x=1)])
 
     def test_udtf_with_nondeterministic_input(self):
         from pyspark.sql.functions import rand
@@ -391,13 +389,9 @@ class BaseUDTFTestsMixin:
         @udtf(returnType="x: int")
         class TestUDTF:
             def eval(self, a: int):
-                yield a + 1,
+                yield 1 if a > 100 else 0,
 
-        # TODO(SPARK-43966): support non-deterministic UDTFs
-        with self.assertRaisesRegex(
-            AnalysisException, " The operator expects a deterministic expression"
-        ):
-            TestUDTF(rand(0) * 100).collect()
+        assertDataFrameEqual(TestUDTF(rand(0) * 100), [Row(x=0)])
 
     def test_udtf_with_invalid_return_type(self):
         @udtf(returnType="int")
@@ -493,6 +487,15 @@ class BaseUDTFTestsMixin:
 
         self.assertEqual(TestUDTF(lit(1)).collect(), [Row(x={1: "1"})])
 
+    def test_udtf_with_empty_output_types(self):
+        @udtf(returnType=StructType())
+        class TestUDTF:
+            def eval(self):
+                yield tuple()
+
+        assertDataFrameEqual(TestUDTF(), [Row()])
+
+    @unittest.skipIf(not have_pandas, pandas_requirement_message)
     def test_udtf_with_pandas_input_type(self):
         import pandas as pd
 
@@ -755,6 +758,11 @@ class BaseUDTFTestsMixin:
                 """Initialize the UDTF"""
                 ...
 
+            @staticmethod
+            def analyze(x: AnalyzeArgument) -> AnalyzeResult:
+                """Analyze the argument."""
+                ...
+
             def eval(self, x: int):
                 """Evaluate the input row."""
                 yield x + 1,
@@ -763,9 +771,10 @@ class BaseUDTFTestsMixin:
                 """Terminate the UDTF."""
                 ...
 
-        cls = udtf(TestUDTF, returnType="y: int").func
+        cls = udtf(TestUDTF).func
         self.assertIn("A UDTF for test", cls.__doc__)
         self.assertIn("Initialize the UDTF", cls.__init__.__doc__)
+        self.assertIn("Analyze the argument", cls.analyze.__doc__)
         self.assertIn("Evaluate the input row", cls.eval.__doc__)
         self.assertIn("Terminate the UDTF", cls.terminate.__doc__)
 
@@ -931,8 +940,7 @@ class BaseUDTFTestsMixin:
                     StructType().add("col0", IntegerType()).add("col1", StringType()),
                     [Row(a=1, b="x")],
                 ),
-                # TODO(SPARK-44479): Support Python UDTFs with empty schema
-                # (func(), StructType(), [Row()]),
+                (func(), StructType(), [Row()]),
             ]
         ):
             with self.subTest(query_no=i):

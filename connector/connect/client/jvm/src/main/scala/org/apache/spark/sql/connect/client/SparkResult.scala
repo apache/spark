@@ -36,10 +36,12 @@ import org.apache.spark.sql.util.ArrowUtils
 private[sql] class SparkResult[T](
     responses: java.util.Iterator[proto.ExecutePlanResponse],
     allocator: BufferAllocator,
-    encoder: AgnosticEncoder[T])
+    encoder: AgnosticEncoder[T],
+    timeZoneId: String)
     extends AutoCloseable
     with Cleanable { self =>
 
+  private[this] var opId: String = _
   private[this] var numRecords: Int = 0
   private[this] var structType: StructType = _
   private[this] var arrowSchema: pojo.Schema = _
@@ -72,6 +74,7 @@ private[sql] class SparkResult[T](
   }
 
   private def processResponses(
+      stopOnOperationId: Boolean = false,
       stopOnSchema: Boolean = false,
       stopOnArrowSchema: Boolean = false,
       stopOnFirstNonEmptyResponse: Boolean = false): Boolean = {
@@ -79,6 +82,20 @@ private[sql] class SparkResult[T](
     var stop = false
     while (!stop && responses.hasNext) {
       val response = responses.next()
+
+      // Save and validate operationId
+      if (opId == null) {
+        opId = response.getOperationId
+      }
+      if (opId != response.getOperationId) {
+        // backwards compatibility:
+        // response from an old server without operationId field would have getOperationId == "".
+        throw new IllegalStateException(
+          "Received response with wrong operationId. " +
+            s"Expected '$opId' but received '${response.getOperationId}'.")
+      }
+      stop |= stopOnOperationId
+
       if (response.hasSchema) {
         // The original schema should arrive before ArrowBatches.
         structType =
@@ -149,6 +166,17 @@ private[sql] class SparkResult[T](
   }
 
   /**
+   * @return
+   *   the operationId of the result.
+   */
+  def operationId: String = {
+    if (opId == null) {
+      processResponses(stopOnOperationId = true)
+    }
+    opId
+  }
+
+  /**
    * Create an Array with the contents of the result.
    */
   def toArray: Array[T] = {
@@ -186,7 +214,8 @@ private[sql] class SparkResult[T](
             new ConcatenatingArrowStreamReader(
               allocator,
               Iterator.single(new ResultMessageIterator(destructive)),
-              destructive))
+              destructive),
+            timeZoneId)
         }
       }
 

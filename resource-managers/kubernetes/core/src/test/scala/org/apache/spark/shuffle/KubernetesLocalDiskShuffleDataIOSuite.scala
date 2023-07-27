@@ -238,4 +238,18 @@ class KubernetesLocalDiskShuffleDataIOSuite extends SparkFunSuite with LocalRoot
     when(bm.TempFileBasedBlockStoreUpdater).thenAnswer(_ => throw new Exception())
     KubernetesLocalDiskShuffleExecutorComponents.recoverDiskStore(sparkConf, bm)
   }
+
+  test("SPARK-44534: Handle only shuffle files") {
+    val sparkConf = conf.clone.set("spark.local.dir",
+      conf.get("spark.local.dir") + "/spark-x/executor-y")
+    val dir = sparkConf.get("spark.local.dir") + "/blockmgr-z/00"
+    Files.createDirectories(new File(dir).toPath())
+    Seq("broadcast_0", "broadcast_0_piece0", "temp_shuffle_uuid").foreach { f =>
+      new File(dir, f).createNewFile()
+    }
+
+    val bm = mock(classOf[BlockManager])
+    when(bm.TempFileBasedBlockStoreUpdater).thenAnswer(_ => throw new Exception())
+    KubernetesLocalDiskShuffleExecutorComponents.recoverDiskStore(sparkConf, bm)
+  }
 }

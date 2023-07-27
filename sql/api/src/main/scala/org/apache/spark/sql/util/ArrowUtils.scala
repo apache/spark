@@ -26,8 +26,7 @@ import org.apache.arrow.vector.complex.MapVector
 import org.apache.arrow.vector.types.{DateUnit, FloatingPointPrecision, IntervalUnit, TimeUnit}
 import org.apache.arrow.vector.types.pojo.{ArrowType, Field, FieldType, Schema}
 
-import org.apache.spark.sql.errors.QueryExecutionErrors
-import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.errors.{ArrowErrors, DataTypeErrors}
 import org.apache.spark.sql.types._
 
 private[sql] object ArrowUtils {
@@ -61,7 +60,7 @@ private[sql] object ArrowUtils {
     case _: YearMonthIntervalType => new ArrowType.Interval(IntervalUnit.YEAR_MONTH)
     case _: DayTimeIntervalType => new ArrowType.Duration(TimeUnit.MICROSECOND)
     case _ =>
-      throw QueryExecutionErrors.unsupportedDataTypeError(dt)
+      throw DataTypeErrors.unsupportedDataTypeError(dt)
   }
 
   def fromArrowType(dt: ArrowType): DataType = dt match {
@@ -86,7 +85,7 @@ private[sql] object ArrowUtils {
     case ArrowType.Null.INSTANCE => NullType
     case yi: ArrowType.Interval if yi.getUnit == IntervalUnit.YEAR_MONTH => YearMonthIntervalType()
     case di: ArrowType.Duration if di.getUnit == TimeUnit.MICROSECOND => DayTimeIntervalType()
-    case _ => throw QueryExecutionErrors.unsupportedArrowTypeError(dt)
+    case _ => throw ArrowErrors.unsupportedArrowTypeError(dt)
   }
 
   /** Maps field from Spark to Arrow. NOTE: timeZoneId required for TimestampType */
@@ -172,16 +171,6 @@ private[sql] object ArrowUtils {
     }.toArray)
   }
 
-  /** Return Map with conf settings to be used in ArrowPythonRunner */
-  def getPythonRunnerConfMap(conf: SQLConf): Map[String, String] = {
-    val timeZoneConf = Seq(SQLConf.SESSION_LOCAL_TIMEZONE.key -> conf.sessionLocalTimeZone)
-    val pandasColsByName = Seq(SQLConf.PANDAS_GROUPED_MAP_ASSIGN_COLUMNS_BY_NAME.key ->
-      conf.pandasGroupedMapAssignColumnsByName.toString)
-    val arrowSafeTypeCheck = Seq(SQLConf.PANDAS_ARROW_SAFE_TYPE_CONVERSION.key ->
-      conf.arrowSafeTypeConversion.toString)
-    Map(timeZoneConf ++ pandasColsByName ++ arrowSafeTypeCheck: _*)
-  }
-
   private def deduplicateFieldNames(
       dt: DataType, errorOnDuplicatedFieldNames: Boolean): DataType = dt match {
     case udt: UserDefinedType[_] => deduplicateFieldNames(udt.sqlType, errorOnDuplicatedFieldNames)
@@ -190,7 +179,7 @@ private[sql] object ArrowUtils {
         st.names
       } else {
         if (errorOnDuplicatedFieldNames) {
-          throw QueryExecutionErrors.duplicatedFieldNameInArrowStructError(st.names)
+          throw ArrowErrors.duplicatedFieldNameInArrowStructError(st.names)
         }
         val genNawName = st.names.groupBy(identity).map {
           case (name, names) if names.length > 1 =>
