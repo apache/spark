@@ -117,8 +117,6 @@ if TYPE_CHECKING:
         SQLArrowTableUDFType,
         SQLBatchedUDFType,
         SQLTableUDFType,
-        SQLStreamingForeachBatchType,
-        SQLStreamingListenerType,
     )
 
     from py4j.java_gateway import JavaObject
@@ -163,18 +161,6 @@ class PythonEvalType:
 
     SQL_TABLE_UDF: "SQLTableUDFType" = 300
     SQL_ARROW_TABLE_UDF: "SQLArrowTableUDFType" = 301
-
-
-class StreamingPythonEvalType:
-    """
-    Evaluation type of streaming python functions.
-
-    These values are internal to PySpark.
-
-    These values should match values in org.apache.spark.api.python.StreamingPythonEvalType.
-    """
-    SQL_STREAMING_FOREACH_BATCH: "SQLStreamingForeachBatchType" = 100
-    SQL_STREAMING_LISTENER: "SQLStreamingListenerType" = 101
 
 
 def portable_hash(x: Hashable) -> int:

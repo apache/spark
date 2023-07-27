@@ -18,7 +18,7 @@ package org.apache.spark.sql.connect.planner
 
 import java.util.UUID
 
-import org.apache.spark.api.python.{PythonRDD, SimplePythonFunction, StreamingPythonEvalType, StreamingPythonRunner}
+import org.apache.spark.api.python.{PythonRDD, SimplePythonFunction, StreamingPythonRunner}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.connect.service.SessionHolder
@@ -89,7 +89,7 @@ object StreamingForeachBatchHelper extends Logging {
     val connectUrl = s"sc://localhost:$port/;user_id=${sessionHolder.userId}"
     val runner = StreamingPythonRunner(pythonFn, connectUrl)
     val (dataOut, dataIn) =
-      runner.init(sessionHolder.sessionId, StreamingPythonEvalType.SQL_STREAMING_FOREACH_BATCH)
+      runner.init(sessionHolder.sessionId, "pyspark.connect_streaming_foreachBatch")
 
     val foreachBatchRunnerFn: FnArgsWithId => Unit = (args: FnArgsWithId) => {
 

@@ -22,7 +22,6 @@ import os
 import json
 
 from pyspark.java_gateway import local_connect_and_auth
-from pyspark.rdd import StreamingPythonEvalType
 from pyspark.serializers import (
     read_int,
     write_int,
@@ -48,7 +47,10 @@ def main(infile, outfile):  # type: ignore[no-untyped-def]
     connect_url = os.environ["SPARK_CONNECT_LOCAL_URL"]
     session_id = utf8_deserializer.loads(infile)
 
-    print(f"Streaming worker is starting with url {connect_url} and sessionId {session_id}.")
+    print(
+        "Streaming listener worker is starting with "
+        f"url {connect_url} and sessionId {session_id}."
+    )
 
     spark_connect_session = SparkSession.builder.remote(connect_url).getOrCreate()
     spark_connect_session._client._session_id = session_id
@@ -56,22 +58,11 @@ def main(infile, outfile):  # type: ignore[no-untyped-def]
     # TODO(SPARK-44460): Pass credentials.
     # TODO(SPARK-44461): Enable Process Isolation
 
-    eval_type = read_int(infile)
-
-    func = worker.read_command(pickle_ser, infile)
+    listener = worker.read_command(pickle_ser, infile)
     write_int(0, outfile)  # Indicate successful initialization
 
     outfile.flush()
 
-    if eval_type == StreamingPythonEvalType.SQL_STREAMING_FOREACH_BATCH:
-        foreach_batch_fcn(infile, outfile, spark_connect_session, func)
-    elif eval_type == StreamingPythonEvalType.SQL_STREAMING_LISTENER:
-        streaming_listener_fcn(infile, outfile, spark_connect_session, func)
-    else:  # unreachable
-        raise ValueError("Unrecognized streaming function type")
-
-
-def streaming_listener_fcn(infile, outfile, spark_connect_session, listener):
     listener._set_spark_session(spark_connect_session)
     assert listener.spark == spark_connect_session
 
@@ -89,29 +80,12 @@ def streaming_listener_fcn(infile, outfile, spark_connect_session, listener):
     while True:
         event = utf8_deserializer.loads(infile)
         event_type = read_int(infile)
-        process(event, int(event_type))
-        outfile.flush()
-
-
-def foreach_batch_fcn(infile, outfile, spark_connect_session, func):
-    log_name = "Streaming ForeachBatch worker"
-
-    def process(df_id, batch_id):  # type: ignore[no-untyped-def]
-        print(f"{log_name} Started batch {batch_id} with DF id {df_id}")
-        batch_df = spark_connect_session._create_remote_dataframe(df_id)
-        func(batch_df, batch_id)
-        print(f"{log_name} Completed batch {batch_id} with DF id {df_id}")
-
-    while True:
-        df_ref_id = utf8_deserializer.loads(infile)
-        batch_id = read_long(infile)
-        process(df_ref_id, int(batch_id))  # TODO(SPARK-44463): Propagate error to the user.
-        write_int(0, outfile)
+        process(event, int(event_type))  # TODO(SPARK-44463): Propagate error to the user.
         outfile.flush()
 
 
 if __name__ == "__main__":
-    print("Starting streaming worker")
+    print("Starting streaming listener worker")
 
     # Read information about how to connect back to the JVM from the environment.
     java_port = int(os.environ["PYTHON_WORKER_FACTORY_PORT"])

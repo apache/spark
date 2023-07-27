@@ -157,7 +157,7 @@ class StreamingQueryManager private[sql] (sparkSession: SparkSession) extends Lo
       _.getAddListenerBuilder
         .setListenerPayload(ByteString.copyFrom(SparkSerDeUtils
           .serialize(StreamingListenerPacket(id, listener))))
-          .setId(id))
+        .setId(id))
   }
 
   /**

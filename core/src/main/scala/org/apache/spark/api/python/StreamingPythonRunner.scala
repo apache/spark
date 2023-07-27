@@ -27,18 +27,6 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.BUFFER_SIZE
 import org.apache.spark.internal.config.Python.{PYTHON_AUTH_SOCKET_TIMEOUT, PYTHON_USE_DAEMON}
 
-/**
- * Enumerate the type of command that will be sent to the Streaming Python worker on driver
- */
-private[spark] object StreamingPythonEvalType {
-  val SQL_STREAMING_FOREACH_BATCH = 100
-  val SQL_STREAMING_LISTENER = 101
-
-  def toString(pythonEvalType: Int): String = pythonEvalType match {
-    case SQL_STREAMING_FOREACH_BATCH => "SQL_STREAMING_FOREACH_BATCH"
-    case SQL_STREAMING_LISTENER => "SQL_STREAMING_LISTENER"
-  }
-}
 
 private[spark] object StreamingPythonRunner {
   def apply(func: PythonFunction, connectUrl: String): StreamingPythonRunner = {
@@ -60,7 +48,7 @@ private[spark] class StreamingPythonRunner(func: PythonFunction, connectUrl: Str
    * Initializes the Python worker for streaming functions. Sets up Spark Connect session
    * to be used with the functions.
    */
-  def init(sessionId: String, evalType: Int): (DataOutputStream, DataInputStream) = {
+  def init(sessionId: String, workerModule: String): (DataOutputStream, DataInputStream) = {
     log.info(s"Initializing Python runner (session: $sessionId ,pythonExec: $pythonExec")
     val env = SparkEnv.get
 
@@ -73,7 +61,7 @@ private[spark] class StreamingPythonRunner(func: PythonFunction, connectUrl: Str
     envVars.put("SPARK_CONNECT_LOCAL_URL", connectUrl)
 
     val pythonWorkerFactory =
-      new PythonWorkerFactory(pythonExec, "pyspark.streaming_worker", envVars.asScala.toMap)
+      new PythonWorkerFactory(pythonExec, workerModule, envVars.asScala.toMap)
     val (worker: Socket, _) = pythonWorkerFactory.createSimpleWorker()
 
     val stream = new BufferedOutputStream(worker.getOutputStream, bufferSize)
@@ -83,9 +71,6 @@ private[spark] class StreamingPythonRunner(func: PythonFunction, connectUrl: Str
 
     // Send sessionId
     PythonRDD.writeUTF(sessionId, dataOut)
-
-    // Send evalType
-    dataOut.writeInt(evalType)
 
     // send the user function to python process
     val command = func.command
