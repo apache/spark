@@ -4193,9 +4193,9 @@ test_that("catalog APIs, listTables, getTable, listColumns, listFunctions, funct
 
   # recoverPartitions does not work with temporary view
   expect_error(recoverPartitions("cars"),
-               paste("Error in recoverPartitions : analysis error - ",
-                     "[UNSUPPORTED_TEMP_VIEW_OPERATION.WITH_SUGGESTION] ",
-                     "Temp view `cars` does not support recoverPartitions()."), fixed = TRUE)
+               paste("Error in recoverPartitions : analysis error -",
+                     "[UNSUPPORTED_TEMP_VIEW_OPERATION.WITH_SUGGESTION]",
+                     "Temp view `cars` does not support recoverPartitions()"), fixed = TRUE)
   expect_error(refreshTable("cars"), NA)
   expect_error(refreshByPath("/"), NA)
 
