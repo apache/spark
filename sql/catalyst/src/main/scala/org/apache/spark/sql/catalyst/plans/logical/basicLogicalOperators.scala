@@ -28,6 +28,7 @@ import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, Partition
 import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
+import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
@@ -302,8 +303,15 @@ case class Filter(condition: Expression, child: LogicalPlan)
   extends OrderPreservingUnaryNode with PredicateHelper {
   override def output: Seq[Attribute] = child.output
 
-  override def maxRows: Option[Long] = child.maxRows
-  override def maxRowsPerPartition: Option[Long] = child.maxRowsPerPartition
+  override def maxRows: Option[Long] = condition match {
+    case Literal.FalseLiteral => Some(0L)
+    case _ => child.maxRows
+  }
+
+  override def maxRowsPerPartition: Option[Long] = condition match {
+    case Literal.FalseLiteral => Some(0L)
+    case _ => child.maxRowsPerPartition
+  }
 
   final override val nodePatterns: Seq[TreePattern] = Seq(FILTER)
 
@@ -676,7 +684,7 @@ case class InsertIntoDir(
     provider: Option[String],
     child: LogicalPlan,
     overwrite: Boolean = true)
-  extends UnaryNode {
+  extends UnaryNode with CTEInChildren {
 
   override def output: Seq[Attribute] = Seq.empty
   override def metadataOutput: Seq[Attribute] = Nil
@@ -886,6 +894,16 @@ case class WithCTE(plan: LogicalPlan, cteDefs: Seq[CTERelationDef]) extends Logi
   }
 }
 
+/**
+ * The logical node which is able to place the `WithCTE` node on its children.
+ */
+trait CTEInChildren extends LogicalPlan {
+  def withCTEDefs(cteDefs: Seq[CTERelationDef]): LogicalPlan = {
+    withNewChildren(children.map(WithCTE(_, cteDefs)))
+  }
+}
+
+
 case class WithWindowDefinition(
     windowDefinitions: Map[String, WindowSpecDefinition],
     child: LogicalPlan) extends UnaryNode {
@@ -922,7 +940,7 @@ object Range {
   }
 
   def getOutputAttrs: Seq[Attribute] = {
-    StructType(Array(StructField("id", LongType, nullable = false))).toAttributes
+    toAttributes(StructType(Array(StructField("id", LongType, nullable = false))))
   }
 
   private def typeCoercion: TypeCoercionBase = {
@@ -1182,7 +1200,7 @@ object Aggregate {
   }
 
   def supportsHashAggregate(aggregateBufferAttributes: Seq[Attribute]): Boolean = {
-    val aggregationBufferSchema = StructType.fromAttributes(aggregateBufferAttributes)
+    val aggregationBufferSchema = DataTypeUtils.fromAttributes(aggregateBufferAttributes)
     isAggregateBufferMutable(aggregationBufferSchema)
   }
 

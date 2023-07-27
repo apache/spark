@@ -31,6 +31,7 @@ from typing import (
     overload,
     Optional,
     Tuple,
+    Type,
     Callable,
     ValuesView,
     cast,
@@ -50,8 +51,11 @@ from pyspark.sql.connect.expressions import (
     SQLExpression,
     LambdaFunction,
     UnresolvedNamedLambdaVariable,
+    CallFunction,
 )
 from pyspark.sql.connect.udf import _create_py_udf
+from pyspark.sql.connect.udtf import AnalyzeArgument, AnalyzeResult  # noqa: F401
+from pyspark.sql.connect.udtf import _create_py_udtf
 from pyspark.sql import functions as pysparkfuncs
 from pyspark.sql.types import _from_numpy_type, DataType, StructType, ArrayType, StringType
 
@@ -67,6 +71,7 @@ if TYPE_CHECKING:
         UserDefinedFunctionLike,
     )
     from pyspark.sql.connect.dataframe import DataFrame
+    from pyspark.sql.connect.udtf import UserDefinedTableFunction
 
 
 def _to_col_with_plan_id(col: str, plan_id: Optional[int]) -> Column:
@@ -195,7 +200,7 @@ def _invoke_higher_order_function(
 
     :param name: Name of the expression
     :param cols: a list of columns
-    :param funs: a list of((*Column) -> Column functions.
+    :param funs: a list of (*Column) -> Column functions.
 
     :return: a Column
     """
@@ -3891,8 +3896,24 @@ def udf(
 udf.__doc__ = pysparkfuncs.udf.__doc__
 
 
-def call_function(udfName: str, *cols: "ColumnOrName") -> Column:
-    return _invoke_function(udfName, *[_to_col(c) for c in cols])
+def udtf(
+    cls: Optional[Type] = None,
+    *,
+    returnType: Optional[Union[StructType, str]] = None,
+    useArrow: Optional[bool] = None,
+) -> Union["UserDefinedTableFunction", Callable[[Type], "UserDefinedTableFunction"]]:
+    if cls is None:
+        return functools.partial(_create_py_udtf, returnType=returnType, useArrow=useArrow)
+    else:
+        return _create_py_udtf(cls=cls, returnType=returnType, useArrow=useArrow)
+
+
+udtf.__doc__ = pysparkfuncs.udtf.__doc__
+
+
+def call_function(funcName: str, *cols: "ColumnOrName") -> Column:
+    expressions = [_to_col(c)._expr for c in cols]
+    return Column(CallFunction(funcName, expressions))
 
 
 call_function.__doc__ = pysparkfuncs.call_function.__doc__

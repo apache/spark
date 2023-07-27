@@ -534,7 +534,7 @@ case class InputAdapter(child: SparkPlan) extends UnaryExecNode with InputRDDCod
 
   override def generateTreeString(
       depth: Int,
-      lastChildren: Seq[Boolean],
+      lastChildren: java.util.ArrayList[Boolean],
       append: String => Unit,
       verbose: Boolean,
       prefix: String = "",
@@ -800,7 +800,7 @@ case class WholeStageCodegenExec(child: SparkPlan)(val codegenStageId: Int)
 
   override def generateTreeString(
       depth: Int,
-      lastChildren: Seq[Boolean],
+      lastChildren: java.util.ArrayList[Boolean],
       append: String => Unit,
       verbose: Boolean,
       prefix: String = "",

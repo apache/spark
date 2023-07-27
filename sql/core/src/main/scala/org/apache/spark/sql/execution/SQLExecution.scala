@@ -21,6 +21,7 @@ import java.util.concurrent.{ConcurrentHashMap, ExecutorService, Future => JFutu
 import java.util.concurrent.atomic.AtomicLong
 
 import org.apache.spark.{ErrorMessageFormat, SparkContext, SparkThrowable, SparkThrowableHelper}
+import org.apache.spark.internal.config.{SPARK_DRIVER_PREFIX, SPARK_EXECUTOR_PREFIX}
 import org.apache.spark.internal.config.Tests.IS_TESTING
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.execution.ui.{SparkListenerSQLExecutionEnd, SparkListenerSQLExecutionStart}
@@ -97,7 +98,11 @@ object SQLExecution {
 
       val globalConfigs = sparkSession.sharedState.conf.getAll.toMap
       val modifiedConfigs = sparkSession.sessionState.conf.getAllConfs
-        .filterNot(kv => globalConfigs.get(kv._1).contains(kv._2))
+        .filterNot { case (key, value) =>
+          key.startsWith(SPARK_DRIVER_PREFIX) ||
+            key.startsWith(SPARK_EXECUTOR_PREFIX) ||
+            globalConfigs.get(key).contains(value)
+        }
       val redactedConfigs = sparkSession.sessionState.conf.redactOptions(modifiedConfigs)
 
       withSQLConfPropagated(sparkSession) {
@@ -124,7 +129,7 @@ object SQLExecution {
           val endTime = System.nanoTime()
           val errorMessage = ex.map {
             case e: SparkThrowable =>
-              SparkThrowableHelper.getMessage(e, ErrorMessageFormat.MINIMAL)
+              SparkThrowableHelper.getMessage(e, ErrorMessageFormat.PRETTY)
             case e =>
               // unexpected behavior
               SparkThrowableHelper.getMessage(e)

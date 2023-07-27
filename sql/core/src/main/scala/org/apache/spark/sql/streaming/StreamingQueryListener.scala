@@ -34,7 +34,7 @@ import org.apache.spark.scheduler.SparkListenerEvent
  * @since 2.0.0
  */
 @Evolving
-abstract class StreamingQueryListener {
+abstract class StreamingQueryListener extends Serializable {
 
   import StreamingQueryListener._
 
@@ -106,7 +106,7 @@ private[spark] class PythonStreamingQueryListenerWrapper(
  * @since 2.0.0
  */
 @Evolving
-object StreamingQueryListener {
+object StreamingQueryListener extends Serializable {
 
   /**
    * Base type of [[StreamingQueryListener]] events
@@ -128,7 +128,7 @@ object StreamingQueryListener {
       val id: UUID,
       val runId: UUID,
       val name: String,
-      val timestamp: String) extends Event {
+      val timestamp: String) extends Event with Serializable {
 
     def json: String = compact(render(jsonValue))
 
@@ -146,7 +146,8 @@ object StreamingQueryListener {
    * @since 2.1.0
    */
   @Evolving
-  class QueryProgressEvent private[sql](val progress: StreamingQueryProgress) extends Event {
+  class QueryProgressEvent private[sql](val progress: StreamingQueryProgress) extends Event
+    with Serializable {
 
     def json: String = compact(render(jsonValue))
 
@@ -165,7 +166,7 @@ object StreamingQueryListener {
   class QueryIdleEvent private[sql](
       val id: UUID,
       val runId: UUID,
-      val timestamp: String) extends Event {
+      val timestamp: String) extends Event with Serializable {
 
     def json: String = compact(render(jsonValue))
 
@@ -195,7 +196,7 @@ object StreamingQueryListener {
       val id: UUID,
       val runId: UUID,
       val exception: Option[String],
-      val errorClassOnException: Option[String]) extends Event {
+      val errorClassOnException: Option[String]) extends Event with Serializable {
     // compatibility with versions in prior to 3.5.0
     def this(id: UUID, runId: UUID, exception: Option[String]) = {
       this(id, runId, exception, None)

@@ -32,6 +32,7 @@ import org.apache.spark.sql.catalyst.analysis
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, GenericInternalRow, UnsafeProjection}
 import org.apache.spark.sql.catalyst.plans.{FullOuter, Inner, LeftAnti, LeftOuter, LeftSemi, PlanTest, RightOuter}
 import org.apache.spark.sql.catalyst.plans.logical.{Distinct, LocalRelation, LogicalPlan}
+import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.connect.common.InvalidPlanInput
 import org.apache.spark.sql.connect.common.LiteralValueProtoConverter.toLiteralProto
 import org.apache.spark.sql.connect.dsl.MockRemoteSession
@@ -710,7 +711,7 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
         proj(row).copy()
       }
 
-      val localRelationV2 = createLocalRelationProto(schema.toAttributes, inputRows)
+      val localRelationV2 = createLocalRelationProto(schema, inputRows)
 
       val cmd = localRelationV2.writeV2(
         tableName = Some("testcat.table_name"),
@@ -740,7 +741,7 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
         proj(row).copy()
       }
 
-      val localRelationV2 = createLocalRelationProto(schema.toAttributes, inputRows)
+      val localRelationV2 = createLocalRelationProto(schema, inputRows)
 
       val cmd = localRelationV2.writeV2(
         tableName = Some("testcat.table_name"),
@@ -778,7 +779,7 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
         proj(row).copy()
       }
 
-      val localRelationV2 = createLocalRelationProto(schema.toAttributes, inputRows)
+      val localRelationV2 = createLocalRelationProto(schema, inputRows)
 
       spark.sql("CREATE TABLE testcat.table_name (id bigint, data string) USING foo")
 
@@ -817,8 +818,8 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
         proj(row).copy()
       }
 
-      val localRelation1V2 = createLocalRelationProto(schema.toAttributes, inputRows1)
-      val localRelation2V2 = createLocalRelationProto(schema.toAttributes, inputRows2)
+      val localRelation1V2 = createLocalRelationProto(schema, inputRows1)
+      val localRelation2V2 = createLocalRelationProto(schema, inputRows2)
 
       spark.sql(
         "CREATE TABLE testcat.table_name (id bigint, data string) USING foo PARTITIONED BY (id)")
@@ -865,7 +866,7 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
         proj(row).copy()
       }
 
-      val localRelationV2 = createLocalRelationProto(schema.toAttributes, inputRows)
+      val localRelationV2 = createLocalRelationProto(schema, inputRows)
 
       spark.sql(
         "CREATE TABLE testcat.table_name (id bigint, data string) USING foo PARTITIONED BY (id)")
@@ -1050,7 +1051,7 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
     val buffer = ArrowConverters
       .toBatchWithSchemaIterator(
         Iterator.empty,
-        StructType.fromAttributes(attributes),
+        DataTypeUtils.fromAttributes(attributes),
         Long.MaxValue,
         Long.MaxValue,
         null,

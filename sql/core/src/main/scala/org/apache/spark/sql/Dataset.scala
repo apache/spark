@@ -47,7 +47,8 @@ import org.apache.spark.sql.catalyst.parser.{ParseException, ParserUtils}
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.trees.TreeNodeTag
-import org.apache.spark.sql.catalyst.util.IntervalUtils
+import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
+import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, IntervalUtils}
 import org.apache.spark.sql.catalyst.util.TypeUtils.toSQLId
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution._
@@ -89,7 +90,7 @@ private[sql] object Dataset {
     sparkSession.withActive {
       val qe = sparkSession.sessionState.executePlan(logicalPlan)
       qe.assertAnalyzed()
-      new Dataset[Row](qe, RowEncoder(qe.analyzed.schema))
+      new Dataset[Row](qe, ExpressionEncoder(qe.analyzed.schema))
   }
 
   /** A variant of ofRows that allows passing in a tracker so we can track query parsing time. */
@@ -97,7 +98,7 @@ private[sql] object Dataset {
     : DataFrame = sparkSession.withActive {
     val qe = new QueryExecution(sparkSession, logicalPlan, tracker)
     qe.assertAnalyzed()
-    new Dataset[Row](qe, RowEncoder(qe.analyzed.schema))
+    new Dataset[Row](qe, ExpressionEncoder(qe.analyzed.schema))
   }
 }
 
@@ -463,7 +464,7 @@ class Dataset[T] private[sql](
    */
   // This is declared with parentheses to prevent the Scala compiler from treating
   // `ds.toDF("1")` as invoking this toDF and then apply on the returned DataFrame.
-  def toDF(): DataFrame = new Dataset[Row](queryExecution, RowEncoder(schema))
+  def toDF(): DataFrame = new Dataset[Row](queryExecution, ExpressionEncoder(schema))
 
   /**
    * Returns a new Dataset where each record has been mapped on to the specified type. The
@@ -509,7 +510,8 @@ class Dataset[T] private[sql](
    * @since 3.4.0
    */
   def to(schema: StructType): DataFrame = withPlan {
-    Project.matchSchema(logicalPlan, schema, sparkSession.sessionState.conf)
+    val replaced = CharVarcharUtils.failIfHasCharVarchar(schema).asInstanceOf[StructType]
+    Project.matchSchema(logicalPlan, replaced, sparkSession.sessionState.conf)
   }
 
   /**
@@ -1684,7 +1686,7 @@ class Dataset[T] private[sql](
    * @group typedrel
    * @since 1.6.0
    */
-  def filter(conditionExpr: String): Dataset[T] = {
+  def filter(conditionExpr: String): Dataset[T] = sparkSession.withActive {
     filter(Column(sparkSession.sessionState.sqlParser.parseExpression(conditionExpr)))
   }
 
@@ -1710,9 +1712,7 @@ class Dataset[T] private[sql](
    * @group typedrel
    * @since 1.6.0
    */
-  def where(conditionExpr: String): Dataset[T] = {
-    filter(Column(sparkSession.sessionState.sqlParser.parseExpression(conditionExpr)))
-  }
+  def where(conditionExpr: String): Dataset[T] = filter(conditionExpr)
 
   /**
    * Groups the Dataset using the specified columns, so we can run aggregation on them. See
@@ -3409,7 +3409,7 @@ class Dataset[T] private[sql](
       sparkSession,
       MapInPandas(
         func,
-        func.dataType.asInstanceOf[StructType].toAttributes,
+        toAttributes(func.dataType.asInstanceOf[StructType]),
         logicalPlan,
         isBarrier))
   }
@@ -3424,7 +3424,7 @@ class Dataset[T] private[sql](
       sparkSession,
       PythonMapInArrow(
         func,
-        func.dataType.asInstanceOf[StructType].toAttributes,
+        toAttributes(func.dataType.asInstanceOf[StructType]),
         logicalPlan,
         isBarrier))
   }
@@ -3914,7 +3914,7 @@ class Dataset[T] private[sql](
   private def createTempViewCommand(
       viewName: String,
       replace: Boolean,
-      global: Boolean): CreateViewCommand = {
+      global: Boolean): CreateViewCommand = sparkSession.withActive {
     val viewType = if (global) GlobalTempView else LocalTempView
 
     val identifier = try {

@@ -35,8 +35,10 @@ class ArrowPythonRunner(
     protected override val timeZoneId: String,
     protected override val largeVarTypes: Boolean,
     protected override val workerConf: Map[String, String],
-    val pythonMetrics: Map[String, SQLMetric])
-  extends BasePythonRunner[Iterator[InternalRow], ColumnarBatch](funcs, evalType, argOffsets)
+    val pythonMetrics: Map[String, SQLMetric],
+    jobArtifactUUID: Option[String])
+  extends BasePythonRunner[Iterator[InternalRow], ColumnarBatch](
+    funcs, evalType, argOffsets, jobArtifactUUID)
   with BasicPythonArrowInput
   with BasicPythonArrowOutput {
 
@@ -53,4 +55,16 @@ class ArrowPythonRunner(
     bufferSize >= 4,
     "Pandas execution requires more than 4 bytes. Please set higher buffer. " +
       s"Please change '${SQLConf.PANDAS_UDF_BUFFER_SIZE.key}'.")
+}
+
+object ArrowPythonRunner {
+  /** Return Map with conf settings to be used in ArrowPythonRunner */
+  def getPythonRunnerConfMap(conf: SQLConf): Map[String, String] = {
+    val timeZoneConf = Seq(SQLConf.SESSION_LOCAL_TIMEZONE.key -> conf.sessionLocalTimeZone)
+    val pandasColsByName = Seq(SQLConf.PANDAS_GROUPED_MAP_ASSIGN_COLUMNS_BY_NAME.key ->
+      conf.pandasGroupedMapAssignColumnsByName.toString)
+    val arrowSafeTypeCheck = Seq(SQLConf.PANDAS_ARROW_SAFE_TYPE_CONVERSION.key ->
+      conf.arrowSafeTypeConversion.toString)
+    Map(timeZoneConf ++ pandasColsByName ++ arrowSafeTypeCheck: _*)
+  }
 }

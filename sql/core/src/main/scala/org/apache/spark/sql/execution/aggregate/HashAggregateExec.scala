@@ -31,13 +31,15 @@ import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.plans.logical.Aggregate
+import org.apache.spark.sql.catalyst.types.DataTypeUtils
+import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.catalyst.util.DateTimeConstants.NANOS_PER_MILLIS
 import org.apache.spark.sql.catalyst.util.truncatedString
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
 import org.apache.spark.sql.execution.vectorized.MutableColumnarRow
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{CalendarIntervalType, DecimalType, StringType, StructType}
+import org.apache.spark.sql.types.{CalendarIntervalType, DecimalType, StringType}
 import org.apache.spark.unsafe.KVIterator
 import org.apache.spark.util.Utils
 
@@ -132,11 +134,11 @@ case class HashAggregateExec(
   }
 
   private val groupingAttributes = groupingExpressions.map(_.toAttribute)
-  private val groupingKeySchema = StructType.fromAttributes(groupingAttributes)
+  private val groupingKeySchema = DataTypeUtils.fromAttributes(groupingAttributes)
   private val declFunctions = aggregateExpressions.map(_.aggregateFunction)
     .filter(_.isInstanceOf[DeclarativeAggregate])
     .map(_.asInstanceOf[DeclarativeAggregate])
-  private val bufferSchema = StructType.fromAttributes(aggregateBufferAttributes)
+  private val bufferSchema = DataTypeUtils.fromAttributes(aggregateBufferAttributes)
 
   // The name for Fast HashMap
   private var fastHashMapTerm: String = _
@@ -566,11 +568,11 @@ case class HashAggregateExec(
       ctx.currentVars = null
       ctx.INPUT_ROW = row
       val generateKeyRow = GenerateUnsafeProjection.createCode(ctx,
-        groupingKeySchema.toAttributes.zipWithIndex
+        toAttributes(groupingKeySchema).zipWithIndex
           .map { case (attr, i) => BoundReference(i, attr.dataType, attr.nullable) }
       )
       val generateBufferRow = GenerateUnsafeProjection.createCode(ctx,
-        bufferSchema.toAttributes.zipWithIndex.map { case (attr, i) =>
+        toAttributes(bufferSchema).zipWithIndex.map { case (attr, i) =>
           BoundReference(groupingKeySchema.length + i, attr.dataType, attr.nullable)
         })
       s"""

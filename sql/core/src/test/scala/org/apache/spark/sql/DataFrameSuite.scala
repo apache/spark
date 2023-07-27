@@ -34,9 +34,10 @@ import org.apache.spark.api.python.PythonEvalType
 import org.apache.spark.scheduler.{SparkListener, SparkListenerJobEnd}
 import org.apache.spark.sql.catalyst.{InternalRow, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
-import org.apache.spark.sql.catalyst.encoders.{ExpressionEncoder, RowEncoder}
+import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, AttributeReference, EqualTo, ExpressionSet, GreaterThan, Literal, PythonUDF, Uuid}
 import org.apache.spark.sql.catalyst.optimizer.ConvertToLocalRelation
+import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.logical.{ColumnStat, LeafNode, LocalRelation, LogicalPlan, OneRowRelation, Statistics}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.connector.FakeV2Provider
@@ -1720,7 +1721,7 @@ class DataFrameSuite extends QueryTest
 
       def checkSyntaxError(name: String): Unit = {
         checkError(
-          exception = intercept[org.apache.spark.sql.AnalysisException] {
+          exception = intercept[SparkException] {
             df(name)
           },
           errorClass = "_LEGACY_ERROR_TEMP_1049",
@@ -2887,7 +2888,7 @@ class DataFrameSuite extends QueryTest
     val df2 = Seq((1, 2, 4), (2, 3, 5)).toDF("a", "b", "c")
       .repartition($"a", $"b").sortWithinPartitions("a", "b")
 
-    implicit val valueEncoder = RowEncoder(df1.schema)
+    implicit val valueEncoder = ExpressionEncoder(df1.schema)
 
     val df3 = df1.groupBy("a", "b").as[GroupByKey, Row]
       .cogroup(df2.groupBy("a", "b").as[GroupByKey, Row]) { case (_, data1, data2) =>
@@ -2911,7 +2912,7 @@ class DataFrameSuite extends QueryTest
     val df2 = Seq((1, 2, 4), (2, 3, 5)).toDF("a1", "b", "c")
       .repartition($"a1", $"b").sortWithinPartitions("a1", "b")
 
-    implicit val valueEncoder = RowEncoder(df1.schema)
+    implicit val valueEncoder = ExpressionEncoder(df1.schema)
 
     val groupedDataset1 = df1.groupBy(($"a1" + 1).as("a"), $"b").as[GroupByKey, Row]
     val groupedDataset2 = df2.groupBy(($"a1" + 1).as("a"), $"b").as[GroupByKey, Row]
@@ -2929,7 +2930,7 @@ class DataFrameSuite extends QueryTest
   test("groupBy.as: throw AnalysisException for unresolved grouping expr") {
     val df = Seq((1, 2, 3), (2, 3, 4)).toDF("a", "b", "c")
 
-    implicit val valueEncoder = RowEncoder(df.schema)
+    implicit val valueEncoder = ExpressionEncoder(df.schema)
 
     checkError(
       exception = intercept[AnalysisException] {
@@ -3648,6 +3649,30 @@ class DataFrameSuite extends QueryTest
     val df1 = _spark.sql("select '2023-01-01'+ INTERVAL 1 YEAR as b")
     val df2 = _spark.sql("select '2023-01-01' as a").selectExpr("a + INTERVAL 1 YEAR as b")
     checkAnswer(df1, df2)
+  }
+
+  test("SPARK-44373: filter respects active session and it's params respects parser") {
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true",
+      SQLConf.ENFORCE_RESERVED_KEYWORDS.key -> "true") {
+      checkError(
+        exception = intercept[ParseException] {
+          spark.range(1).toDF("CASE").filter("CASE").collect()
+        },
+        errorClass = "PARSE_SYNTAX_ERROR",
+        parameters = Map("error" -> "'CASE'", "hint" -> ""))
+    }
+  }
+
+  test("SPARK-44373: createTempView respects active session and it's params respects parser") {
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true",
+      SQLConf.ENFORCE_RESERVED_KEYWORDS.key -> "true") {
+      checkError(
+        exception = intercept[AnalysisException] {
+          spark.range(1).createTempView("AUTHORIZATION")
+        },
+        errorClass = "_LEGACY_ERROR_TEMP_1321",
+        parameters = Map("viewName" -> "AUTHORIZATION"))
+    }
   }
 }
 

@@ -101,7 +101,7 @@ object ResolveInlineTables extends Rule[LogicalPlan] with CastSupport with Alias
       }
       StructField(name, tpe, nullable = column.exists(_.nullable))
     }
-    val attributes = StructType(fields).toAttributes
+    val attributes = DataTypeUtils.toAttributes(StructType(fields))
     assert(fields.size == table.names.size)
 
     val newRows: Seq[InternalRow] = table.rows.map { row =>

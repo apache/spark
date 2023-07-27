@@ -16,6 +16,7 @@
 #
 import shutil
 import tempfile
+import types
 import typing
 import os
 import functools
@@ -67,7 +68,7 @@ should_test_connect: str = typing.cast(str, connect_requirement_message is None)
 
 if should_test_connect:
     from pyspark.sql.connect.dataframe import DataFrame
-    from pyspark.sql.connect.plan import Read, Range, SQL
+    from pyspark.sql.connect.plan import Read, Range, SQL, LogicalPlan
     from pyspark.sql.connect.session import SparkSession
 
 
@@ -88,15 +89,32 @@ class MockRemoteSession:
         return functools.partial(self.hooks[item])
 
 
+class MockDF(DataFrame):
+    """Helper class that must only be used for the mock plan tests."""
+
+    def __init__(self, session: SparkSession, plan: LogicalPlan):
+        super().__init__(session)
+        self._plan = plan
+
+    def __getattr__(self, name):
+        """All attributes are resolved to columns, because none really exist in the
+        mocked DataFrame."""
+        return self[name]
+
+
 @unittest.skipIf(not should_test_connect, connect_requirement_message)
 class PlanOnlyTestFixture(unittest.TestCase, PySparkErrorTestUtils):
     @classmethod
     def _read_table(cls, table_name):
-        return DataFrame.withPlan(Read(table_name), cls.connect)
+        return cls._df_mock(Read(table_name))
 
     @classmethod
     def _udf_mock(cls, *args, **kwargs):
         return "internal_name"
+
+    @classmethod
+    def _df_mock(cls, plan: LogicalPlan) -> MockDF:
+        return MockDF(cls.connect, plan)
 
     @classmethod
     def _session_range(
@@ -106,17 +124,17 @@ class PlanOnlyTestFixture(unittest.TestCase, PySparkErrorTestUtils):
         step=1,
         num_partitions=None,
     ):
-        return DataFrame.withPlan(Range(start, end, step, num_partitions), cls.connect)
+        return cls._df_mock(Range(start, end, step, num_partitions))
 
     @classmethod
     def _session_sql(cls, query):
-        return DataFrame.withPlan(SQL(query), cls.connect)
+        return cls._df_mock(SQL(query))
 
     if have_pandas:
 
         @classmethod
         def _with_plan(cls, plan):
-            return DataFrame.withPlan(plan, cls.connect)
+            return cls._df_mock(plan)
 
     @classmethod
     def setUpClass(cls):
@@ -155,11 +173,15 @@ class ReusedConnectTestCase(unittest.TestCase, SQLTestUtils, PySparkErrorTestUti
         return conf
 
     @classmethod
+    def master(cls):
+        return "local[4]"
+
+    @classmethod
     def setUpClass(cls):
         cls.spark = (
             PySparkSession.builder.config(conf=cls.conf())
             .appName(cls.__name__)
-            .remote("local[4]")
+            .remote(cls.master())
             .getOrCreate()
         )
         cls.tempdir = tempfile.NamedTemporaryFile(delete=False)
