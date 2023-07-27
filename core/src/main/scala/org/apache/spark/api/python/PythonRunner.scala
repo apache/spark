@@ -309,8 +309,9 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
         val dataOut = new DataOutputStream(stream)
         // Partition index
         dataOut.writeInt(partitionIndex)
-        // Python version of driver
-        PythonRDD.writeUTF(pythonVer, dataOut)
+
+        PythonWorkerUtils.writePythonVersion(pythonVer, dataOut)
+
         // Init a ServerSocket to accept method calls from Python side.
         val isBarrier = context.isInstanceOf[BarrierTaskContext]
         if (isBarrier) {
@@ -406,69 +407,8 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
           PythonRDD.writeUTF(v, dataOut)
         }
 
-        // sparkFilesDir
-        val root = jobArtifactUUID.map { uuid =>
-          new File(SparkFiles.getRootDirectory(), uuid).getAbsolutePath
-        }.getOrElse(SparkFiles.getRootDirectory())
-        PythonRDD.writeUTF(root, dataOut)
-        // Python includes (*.zip and *.egg files)
-        dataOut.writeInt(pythonIncludes.size)
-        for (include <- pythonIncludes) {
-          PythonRDD.writeUTF(include, dataOut)
-        }
-        // Broadcast variables
-        val oldBids = PythonRDD.getWorkerBroadcasts(worker)
-        val newBids = broadcastVars.map(_.id).toSet
-        // number of different broadcasts
-        val toRemove = oldBids.diff(newBids)
-        val addedBids = newBids.diff(oldBids)
-        val cnt = toRemove.size + addedBids.size
-        val needsDecryptionServer = env.serializerManager.encryptionEnabled && addedBids.nonEmpty
-        dataOut.writeBoolean(needsDecryptionServer)
-        dataOut.writeInt(cnt)
-        def sendBidsToRemove(): Unit = {
-          for (bid <- toRemove) {
-            // remove the broadcast from worker
-            dataOut.writeLong(-bid - 1) // bid >= 0
-            oldBids.remove(bid)
-          }
-        }
-        if (needsDecryptionServer) {
-          // if there is encryption, we setup a server which reads the encrypted files, and sends
-          // the decrypted data to python
-          val idsAndFiles = broadcastVars.flatMap { broadcast =>
-            if (!oldBids.contains(broadcast.id)) {
-              oldBids.add(broadcast.id)
-              Some((broadcast.id, broadcast.value.path))
-            } else {
-              None
-            }
-          }
-          val server = new EncryptedPythonBroadcastServer(env, idsAndFiles)
-          dataOut.writeInt(server.port)
-          logTrace(s"broadcast decryption server setup on ${server.port}")
-          PythonRDD.writeUTF(server.secret, dataOut)
-          sendBidsToRemove()
-          idsAndFiles.foreach { case (id, _) =>
-            // send new broadcast
-            dataOut.writeLong(id)
-          }
-          dataOut.flush()
-          logTrace("waiting for python to read decrypted broadcast data from server")
-          server.waitTillBroadcastDataSent()
-          logTrace("done sending decrypted data to python")
-        } else {
-          sendBidsToRemove()
-          for (broadcast <- broadcastVars) {
-            if (!oldBids.contains(broadcast.id)) {
-              // send new broadcast
-              dataOut.writeLong(broadcast.id)
-              PythonRDD.writeUTF(broadcast.value.path, dataOut)
-              oldBids.add(broadcast.id)
-            }
-          }
-        }
-        dataOut.flush()
+        PythonWorkerUtils.writeSparkFiles(jobArtifactUUID, pythonIncludes, dataOut)
+        PythonWorkerUtils.writeBroadcasts(broadcastVars, worker, env, dataOut)
 
         dataOut.writeInt(evalType)
         writeCommand(dataOut)
@@ -524,9 +464,7 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
     }
 
     def writeUTF(str: String, dataOut: DataOutputStream): Unit = {
-      val bytes = str.getBytes(UTF_8)
-      dataOut.writeInt(bytes.length)
-      dataOut.write(bytes)
+      PythonWorkerUtils.writeUTF(str, dataOut)
     }
   }
 
@@ -599,13 +537,8 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
     protected def handleEndOfDataSection(): Unit = {
       // We've finished the data section of the output, but we can still
       // read some accumulator updates:
-      val numAccumulatorUpdates = stream.readInt()
-      (1 to numAccumulatorUpdates).foreach { _ =>
-        val updateLen = stream.readInt()
-        val update = new Array[Byte](updateLen)
-        stream.readFully(update)
-        maybeAccumulator.foreach(_.add(update))
-      }
+      PythonWorkerUtils.receiveAccumulatorUpdates(maybeAccumulator, stream)
+
       // Check whether the worker is ready to be re-used.
       if (stream.readInt() == SpecialLengths.END_OF_STREAM) {
         if (reuseWorker && releasedOrClosed.compareAndSet(false, true)) {
