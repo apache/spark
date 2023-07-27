@@ -159,7 +159,7 @@ Project [(INTERVAL '2' YEAR * cast(a as double)) AS (INTERVAL '2' YEAR * a)#x]
 -- !query
 select '2' / interval 2 second
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
   "sqlState" : "42K09",
@@ -181,7 +181,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 select '2' / interval 2 year
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
   "sqlState" : "42K09",
@@ -259,7 +259,7 @@ Project [(INTERVAL '2' YEAR * cast(null as double)) AS (INTERVAL '2' YEAR * NULL
 -- !query
 select 2 / interval '2' year
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
   "sqlState" : "42K09",
@@ -281,7 +281,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 select 2 / interval '2' hour
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
   "sqlState" : "42K09",
@@ -303,7 +303,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 select null / interval '2' year
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
   "sqlState" : "42K09",
@@ -325,7 +325,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 select null / interval '2' hour
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
   "sqlState" : "42K09",
@@ -1515,7 +1515,7 @@ select
   '4 day' + interval '10' day,
   '4 22 day to hour' - interval '10' day
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
   "sqlState" : "42K09",
@@ -1552,7 +1552,7 @@ Project [(INTERVAL '2' YEAR + cast(null as interval year)) AS (INTERVAL '2' YEAR
 -- !query
 select interval '2' year + '3-3'
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
   "sqlState" : "42K09",
@@ -1574,7 +1574,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 select interval '2' year - '4'
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
   "sqlState" : "42K09",
@@ -1618,7 +1618,7 @@ CreateViewCommand `interval_view`, select '1' str, false, false, LocalTempView, 
 -- !query
 select interval '2' year + str from interval_view
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
   "sqlState" : "42K09",
@@ -1640,7 +1640,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 select interval '2' year - str from interval_view
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
   "sqlState" : "42K09",
@@ -1684,7 +1684,7 @@ Project [cast(cast(str#x as timestamp) + INTERVAL '4 22:12' DAY TO MINUTE as str
 -- !query
 select interval '2-2' year to month + interval '3' day
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
   "sqlState" : "42K09",
@@ -1708,7 +1708,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 select interval '3' day + interval '2-2' year to month
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
   "sqlState" : "42K09",
@@ -1732,7 +1732,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 select interval '2-2' year to month - interval '3' day
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
   "sqlState" : "42K09",
@@ -1756,7 +1756,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 select interval '3' day - interval '2-2' year to month
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
   "sqlState" : "42K09",
@@ -1778,7 +1778,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 select 1 - interval '2' second
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
   "sqlState" : "42K09",
@@ -1802,7 +1802,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 select 1 + interval '2' month
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
   "sqlState" : "42K09",
@@ -1824,7 +1824,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 select interval '2' second + 1
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
   "sqlState" : "42K09",
@@ -1848,7 +1848,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 select interval '2' month - 1
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
   "sqlState" : "42K09",
@@ -2694,7 +2694,7 @@ Project [(INTERVAL '-1-1' YEAR TO MONTH = cast(INTERVAL '-13' MONTH as interval 
 -- !query
 SELECT INTERVAL 1 MONTH > INTERVAL 20 DAYS
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
   "sqlState" : "42K09",
@@ -2716,7 +2716,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 SELECT INTERVAL '1' DAY < '1'
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
   "sqlState" : "42K09",
@@ -2738,7 +2738,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 SELECT INTERVAL '1' DAY = '1'
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
   "sqlState" : "42K09",
@@ -2760,7 +2760,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 SELECT INTERVAL '1' DAY > '1'
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
   "sqlState" : "42K09",
@@ -2782,7 +2782,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 SELECT '1' < INTERVAL '1' DAY
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
   "sqlState" : "42K09",
@@ -2804,7 +2804,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 SELECT '1' = INTERVAL '1' DAY
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
   "sqlState" : "42K09",
@@ -2826,7 +2826,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 SELECT '1' > INTERVAL '1' DAY
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
   "sqlState" : "42K09",
@@ -2848,7 +2848,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 SELECT INTERVAL '1' YEAR < '1'
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
   "sqlState" : "42K09",
@@ -2870,7 +2870,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 SELECT INTERVAL '1' YEAR = '1'
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
   "sqlState" : "42K09",
@@ -2892,7 +2892,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 SELECT INTERVAL '1' YEAR > '1'
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
   "sqlState" : "42K09",
@@ -2914,7 +2914,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 SELECT '1' < INTERVAL '1' YEAR
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
   "sqlState" : "42K09",
@@ -2936,7 +2936,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 SELECT '1' = INTERVAL '1' YEAR
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
   "sqlState" : "42K09",
@@ -2958,7 +2958,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 SELECT '1' > INTERVAL '1' YEAR
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
   "sqlState" : "42K09",
@@ -2994,7 +2994,7 @@ Project [array(cast(INTERVAL '1' DAY as interval day to minute), cast(INTERVAL '
 -- !query
 SELECT array(INTERVAL 1 MONTH, INTERVAL 20 DAYS)
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "sqlState" : "42K09",
@@ -3030,7 +3030,7 @@ Project [coalesce(cast(INTERVAL '1' DAY as interval day to minute), cast(INTERVA
 -- !query
 SELECT coalesce(INTERVAL 1 MONTH, INTERVAL 20 DAYS)
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "sqlState" : "42K09",
@@ -3094,7 +3094,7 @@ Project [(INTERVAL '1 06' DAY TO HOUR div cast(INTERVAL '-01' HOUR as interval d
 -- !query
 SELECT div(INTERVAL '1' MONTH, INTERVAL '-1' DAY)
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
   "sqlState" : "42K09",

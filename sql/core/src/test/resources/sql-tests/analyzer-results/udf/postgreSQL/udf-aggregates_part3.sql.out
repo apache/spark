@@ -2,7 +2,7 @@
 -- !query
 select udf(max(min(unique1))) from tenk1
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "NESTED_AGGREGATE_FUNCTION",
   "sqlState" : "42607",
