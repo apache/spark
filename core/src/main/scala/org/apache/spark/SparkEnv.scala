@@ -73,7 +73,17 @@ class SparkEnv (
     val conf: SparkConf) extends Logging {
 
   @volatile private[spark] var isStopped = false
-  private val pythonWorkers = mutable.HashMap[(String, Map[String, String]), PythonWorkerFactory]()
+
+  /**
+   * A key for PythonWorkerFactory cache.
+   * @param pythonExec The python executable to run the Python worker.
+   * @param workerModule The worker module to be called in the worker, e.g., "pyspark.worker".
+   * @param daemonModule The daemon module name to reuse the worker, e.g., "pyspark.daemon".
+   * @param envVars The environment variables for the worker.
+   */
+  private case class PythonWorkersKey(
+      pythonExec: String, workerModule: String, daemonModule: String, envVars: Map[String, String])
+  private val pythonWorkers = mutable.HashMap[PythonWorkersKey, PythonWorkerFactory]()
 
   // A general, soft-reference map for metadata needed during HadoopRDD split computation
   // (e.g., HadoopFileRDD uses this to cache JobConfs and InputFormats).
@@ -115,32 +125,66 @@ class SparkEnv (
     }
   }
 
-  private[spark]
-  def createPythonWorker(
+  private[spark] def createPythonWorker(
       pythonExec: String,
+      workerModule: String,
+      daemonModule: String,
       envVars: Map[String, String]): (java.net.Socket, Option[Int]) = {
     synchronized {
-      val key = (pythonExec, envVars)
-      pythonWorkers.getOrElseUpdate(key, new PythonWorkerFactory(pythonExec, envVars)).create()
+      val key = PythonWorkersKey(pythonExec, workerModule, daemonModule, envVars)
+      pythonWorkers.getOrElseUpdate(key,
+        new PythonWorkerFactory(pythonExec, workerModule, daemonModule, envVars)).create()
     }
   }
 
-  private[spark]
-  def destroyPythonWorker(pythonExec: String,
-      envVars: Map[String, String], worker: Socket): Unit = {
+  private[spark] def createPythonWorker(
+      pythonExec: String,
+      workerModule: String,
+      envVars: Map[String, String]): (java.net.Socket, Option[Int]) = {
+    createPythonWorker(
+      pythonExec, workerModule, PythonWorkerFactory.defaultDaemonModule, envVars)
+  }
+
+  private[spark] def destroyPythonWorker(
+      pythonExec: String,
+      workerModule: String,
+      daemonModule: String,
+      envVars: Map[String, String],
+      worker: Socket): Unit = {
     synchronized {
-      val key = (pythonExec, envVars)
+      val key = PythonWorkersKey(pythonExec, workerModule, daemonModule, envVars)
       pythonWorkers.get(key).foreach(_.stopWorker(worker))
     }
   }
 
-  private[spark]
-  def releasePythonWorker(pythonExec: String,
-      envVars: Map[String, String], worker: Socket): Unit = {
+  private[spark] def destroyPythonWorker(
+      pythonExec: String,
+      workerModule: String,
+      envVars: Map[String, String],
+      worker: Socket): Unit = {
+    destroyPythonWorker(
+      pythonExec, workerModule, PythonWorkerFactory.defaultDaemonModule, envVars, worker)
+  }
+
+  private[spark] def releasePythonWorker(
+      pythonExec: String,
+      workerModule: String,
+      daemonModule: String,
+      envVars: Map[String, String],
+      worker: Socket): Unit = {
     synchronized {
-      val key = (pythonExec, envVars)
+      val key = PythonWorkersKey(pythonExec, workerModule, daemonModule, envVars)
       pythonWorkers.get(key).foreach(_.releaseWorker(worker))
     }
+  }
+
+  private[spark] def releasePythonWorker(
+      pythonExec: String,
+      workerModule: String,
+      envVars: Map[String, String],
+      worker: Socket): Unit = {
+    releasePythonWorker(
+      pythonExec, workerModule, PythonWorkerFactory.defaultDaemonModule, envVars, worker)
   }
 }
 

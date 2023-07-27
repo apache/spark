@@ -507,6 +507,16 @@ pyspark_sql = Module(
     ],
 )
 
+pyspark_testing = Module(
+    name="pyspark-testing",
+    dependencies=[pyspark_core, pyspark_sql],
+    source_file_regexes=["python/pyspark/testing"],
+    python_test_goals=[
+        # doctests
+        "pyspark.testing.utils",
+    ],
+)
+
 pyspark_resource = Module(
     name="pyspark-resource",
     dependencies=[pyspark_core],
@@ -614,11 +624,13 @@ pyspark_ml = Module(
         "pyspark.ml.torch.tests.test_distributor",
         "pyspark.ml.torch.tests.test_log_communication",
         "pyspark.ml.torch.tests.test_data_loader",
+        "pyspark.ml.deepspeed.tests.test_deepspeed_distributor",
         "pyspark.ml.tests.connect.test_legacy_mode_summarizer",
         "pyspark.ml.tests.connect.test_legacy_mode_evaluation",
         "pyspark.ml.tests.connect.test_legacy_mode_feature",
         "pyspark.ml.tests.connect.test_legacy_mode_classification",
         "pyspark.ml.tests.connect.test_legacy_mode_pipeline",
+        "pyspark.ml.tests.connect.test_legacy_mode_tuning",
     ],
     excluded_python_implementations=[
         "PyPy"  # Skip these tests under PyPy since they require numpy and it isn't available there
@@ -840,15 +852,18 @@ pyspark_connect = Module(
         "pyspark.sql.tests.connect.test_parity_column",
         "pyspark.sql.tests.connect.test_parity_readwriter",
         "pyspark.sql.tests.connect.test_parity_udf",
+        "pyspark.sql.tests.connect.test_parity_udtf",
         "pyspark.sql.tests.connect.test_parity_pandas_udf",
         "pyspark.sql.tests.connect.test_parity_pandas_map",
         "pyspark.sql.tests.connect.test_parity_arrow_map",
         "pyspark.sql.tests.connect.test_parity_pandas_grouped_map",
         "pyspark.sql.tests.connect.test_parity_pandas_cogrouped_map",
+        "pyspark.sql.tests.connect.test_utils",
         "pyspark.sql.tests.connect.client.test_artifact",
         "pyspark.sql.tests.connect.client.test_client",
         "pyspark.sql.tests.connect.streaming.test_parity_streaming",
         "pyspark.sql.tests.connect.streaming.test_parity_foreach",
+        "pyspark.sql.tests.connect.streaming.test_parity_foreachBatch",
         "pyspark.sql.tests.connect.test_parity_pandas_grouped_map_with_state",
         "pyspark.sql.tests.connect.test_parity_pandas_udf_scalar",
         "pyspark.sql.tests.connect.test_parity_pandas_udf_grouped_agg",
@@ -864,6 +879,7 @@ pyspark_connect = Module(
         "pyspark.ml.tests.connect.test_connect_feature",
         "pyspark.ml.tests.connect.test_connect_classification",
         "pyspark.ml.tests.connect.test_connect_pipeline",
+        "pyspark.ml.tests.connect.test_connect_tuning",
     ],
     excluded_python_implementations=[
         "PyPy"  # Skip these tests under PyPy since they require numpy, pandas, and pyarrow and

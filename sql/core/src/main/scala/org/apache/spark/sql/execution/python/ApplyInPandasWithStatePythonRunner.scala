@@ -34,7 +34,7 @@ import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.execution.metric.SQLMetric
-import org.apache.spark.sql.execution.python.ApplyInPandasWithStatePythonRunner.{InType, OutType, OutTypeForState, STATE_METADATA_SCHEMA_FROM_PYTHON_WORKER}
+import org.apache.spark.sql.execution.python.ApplyInPandasWithStatePythonRunner.{COUNT_COLUMN_SCHEMA_FROM_PYTHON_WORKER, InType, OutType, OutTypeForState, STATE_METADATA_SCHEMA_FROM_PYTHON_WORKER}
 import org.apache.spark.sql.execution.python.ApplyInPandasWithStateWriter.STATE_METADATA_SCHEMA
 import org.apache.spark.sql.execution.streaming.GroupStateImpl
 import org.apache.spark.sql.internal.SQLConf
@@ -61,8 +61,9 @@ class ApplyInPandasWithStatePythonRunner(
     keySchema: StructType,
     outputSchema: StructType,
     stateValueSchema: StructType,
-    val pythonMetrics: Map[String, SQLMetric])
-  extends BasePythonRunner[InType, OutType](funcs, evalType, argOffsets)
+    val pythonMetrics: Map[String, SQLMetric],
+    jobArtifactUUID: Option[String])
+  extends BasePythonRunner[InType, OutType](funcs, evalType, argOffsets, jobArtifactUUID)
   with PythonArrowInput[InType]
   with PythonArrowOutput[OutType] {
 
@@ -154,7 +155,24 @@ class ApplyInPandasWithStatePythonRunner(
     // data and state metadata have same number of rows, which is required by Arrow record
     // batch.
     assert(batch.numRows() > 0)
-    assert(schema.length == 2)
+    assert(schema.length == 3)
+
+    def getValueFromCountColumn(batch: ColumnarBatch): (Int, Int) = {
+      //  UDF returns a StructType column in ColumnarBatch, select the children here
+      val structVector = batch.column(0).asInstanceOf[ArrowColumnVector]
+      val dataType = schema(0).dataType.asInstanceOf[StructType]
+      assert(
+        DataTypeUtils.sameType(dataType, COUNT_COLUMN_SCHEMA_FROM_PYTHON_WORKER),
+        s"Schema equality check failure! type from Arrow: $dataType, " +
+        s"expected type: $COUNT_COLUMN_SCHEMA_FROM_PYTHON_WORKER"
+      )
+
+      // NOTE: See ApplyInPandasWithStatePythonRunner.COUNT_COLUMN_SCHEMA_FROM_PYTHON_WORKER
+      // for the schema.
+      val dataCount = structVector.getChild(0).getInt(0)
+      val stateCount = structVector.getChild(1).getInt(0)
+      (dataCount, stateCount)
+    }
 
     def getColumnarBatchForStructTypeColumn(
         batch: ColumnarBatch,
@@ -173,51 +191,43 @@ class ApplyInPandasWithStatePythonRunner(
       flattenedBatch
     }
 
-    def constructIterForData(batch: ColumnarBatch): Iterator[InternalRow] = {
-      val dataBatch = getColumnarBatchForStructTypeColumn(batch, 0, outputSchema)
-      dataBatch.rowIterator.asScala.flatMap { row =>
-        if (row.isNullAt(0)) {
-          // The entire row in record batch seems to be for state metadata.
-          None
-        } else {
-          Some(row)
-        }
+
+    def constructIterForData(batch: ColumnarBatch, numRows: Int): Iterator[InternalRow] = {
+      val dataBatch = getColumnarBatchForStructTypeColumn(batch, 1, outputSchema)
+      dataBatch.rowIterator.asScala.take(numRows).flatMap { row =>
+        Some(row)
       }
     }
 
-    def constructIterForState(batch: ColumnarBatch): Iterator[OutTypeForState] = {
-      val stateMetadataBatch = getColumnarBatchForStructTypeColumn(batch, 1,
+    def constructIterForState(batch: ColumnarBatch, numRows: Int): Iterator[OutTypeForState] = {
+      val stateMetadataBatch = getColumnarBatchForStructTypeColumn(batch, 2,
         STATE_METADATA_SCHEMA_FROM_PYTHON_WORKER)
 
-      stateMetadataBatch.rowIterator().asScala.flatMap { row =>
+      stateMetadataBatch.rowIterator().asScala.take(numRows).flatMap { row =>
         implicit val formats = org.json4s.DefaultFormats
 
-        if (row.isNullAt(0)) {
-          // The entire row in record batch seems to be for data.
+        // NOTE: See ApplyInPandasWithStatePythonRunner.STATE_METADATA_SCHEMA_FROM_PYTHON_WORKER
+        // for the schema.
+        val propertiesAsJson = parse(row.getUTF8String(0).toString)
+        val keyRowAsUnsafeAsBinary = row.getBinary(1)
+        val keyRowAsUnsafe = new UnsafeRow(keySchema.fields.length)
+        keyRowAsUnsafe.pointTo(keyRowAsUnsafeAsBinary, keyRowAsUnsafeAsBinary.length)
+        val maybeObjectRow = if (row.isNullAt(2)) {
           None
         } else {
-          // NOTE: See ApplyInPandasWithStatePythonRunner.STATE_METADATA_SCHEMA_FROM_PYTHON_WORKER
-          // for the schema.
-          val propertiesAsJson = parse(row.getUTF8String(0).toString)
-          val keyRowAsUnsafeAsBinary = row.getBinary(1)
-          val keyRowAsUnsafe = new UnsafeRow(keySchema.fields.length)
-          keyRowAsUnsafe.pointTo(keyRowAsUnsafeAsBinary, keyRowAsUnsafeAsBinary.length)
-          val maybeObjectRow = if (row.isNullAt(2)) {
-            None
-          } else {
-            val pickledStateValue = row.getBinary(2)
-            Some(PythonSQLUtils.toJVMRow(pickledStateValue, stateValueSchema,
-              stateRowDeserializer))
-          }
-          val oldTimeoutTimestamp = row.getLong(3)
-
-          Some((keyRowAsUnsafe, GroupStateImpl.fromJson(maybeObjectRow, propertiesAsJson),
-            oldTimeoutTimestamp))
+          val pickledStateValue = row.getBinary(2)
+          Some(PythonSQLUtils.toJVMRow(pickledStateValue, stateValueSchema,
+            stateRowDeserializer))
         }
+        val oldTimeoutTimestamp = row.getLong(3)
+
+        Some((keyRowAsUnsafe, GroupStateImpl.fromJson(maybeObjectRow, propertiesAsJson),
+          oldTimeoutTimestamp))
       }
     }
 
-    (constructIterForState(batch), constructIterForData(batch))
+    val (dataCount, stateCount) = getValueFromCountColumn(batch)
+    (constructIterForState(batch, stateCount), constructIterForData(batch, dataCount))
   }
 }
 
@@ -234,4 +244,11 @@ object ApplyInPandasWithStatePythonRunner {
       StructField("oldTimeoutTimestamp", LongType)
     )
   )
+  val COUNT_COLUMN_SCHEMA_FROM_PYTHON_WORKER: StructType = StructType(
+    Array(
+      StructField("dataCount", IntegerType),
+      StructField("stateCount", IntegerType)
+    )
+  )
+
 }

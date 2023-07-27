@@ -229,8 +229,7 @@ private[spark] class DAGScheduler(
    * Number of consecutive stage attempts allowed before a stage is aborted.
    */
   private[scheduler] val maxConsecutiveStageAttempts =
-    sc.getConf.getInt("spark.stage.maxConsecutiveAttempts",
-      DAGScheduler.DEFAULT_MAX_CONSECUTIVE_STAGE_ATTEMPTS)
+    sc.getConf.get(config.STAGE_MAX_CONSECUTIVE_ATTEMPTS)
 
   /**
    * Max stage attempts allowed before a stage is aborted.
@@ -1199,7 +1198,7 @@ private[spark] class DAGScheduler(
     val jobIds = activeJobs.filter { activeJob =>
       Option(activeJob.properties).exists { properties =>
         Option(properties.getProperty(SparkContext.SPARK_JOB_TAGS)).getOrElse("")
-          .split(SparkContext.SPARK_JOB_TAGS_SEP).toSet.contains(tag)
+          .split(SparkContext.SPARK_JOB_TAGS_SEP).filter(!_.isEmpty).toSet.contains(tag)
       }
     }.map(_.jobId)
     jobIds.foreach(handleJobCancellation(_,
@@ -1387,7 +1386,8 @@ private[spark] class DAGScheduler(
         if (stage.getNextAttemptId >= maxStageAttempts) {
           val reason = s"$stage (name=${stage.name}) has been resubmitted for the maximum " +
             s"allowable number of times: ${maxStageAttempts}, which is the max value of " +
-            s"config `spark.stage.maxAttempts` and `spark.stage.maxConsecutiveAttempts`."
+            s"config `${config.STAGE_MAX_ATTEMPTS.key}` and " +
+            s"`${config.STAGE_MAX_CONSECUTIVE_ATTEMPTS.key}`."
           abortStage(stage, reason, None)
         } else {
           val missing = getMissingParentStages(stage).sortBy(_.id)
@@ -1941,7 +1941,7 @@ private[spark] class DAGScheduler(
             isExecutorDecommissioningOrDecommissioned(taskScheduler, bmAddress)
           if (ignoreStageFailure) {
             logInfo(s"Ignoring fetch failure from $task of $failedStage attempt " +
-              s"${task.stageAttemptId} when count spark.stage.maxConsecutiveAttempts " +
+              s"${task.stageAttemptId} when count ${config.STAGE_MAX_CONSECUTIVE_ATTEMPTS.key} " +
               s"as executor ${bmAddress.executorId} is decommissioned and " +
               s" ${config.STAGE_IGNORE_DECOMMISSION_FETCH_FAILURE.key}=true")
           } else {
@@ -3003,8 +3003,8 @@ private[scheduler] class DAGSchedulerEventProcessLoop(dagScheduler: DAGScheduler
     case JobGroupCancelled(groupId) =>
       dagScheduler.handleJobGroupCancelled(groupId)
 
-    case JobTagCancelled(groupId) =>
-      dagScheduler.handleJobTagCancelled(groupId)
+    case JobTagCancelled(tag) =>
+      dagScheduler.handleJobTagCancelled(tag)
 
     case AllJobsCancelled =>
       dagScheduler.doCancelAllJobs()
@@ -3081,7 +3081,4 @@ private[spark] object DAGScheduler {
   // this is a simplistic way to avoid resubmitting tasks in the non-fetchable map stage one by one
   // as more failure events come in
   val RESUBMIT_TIMEOUT = 200
-
-  // Number of consecutive stage attempts allowed before a stage is aborted
-  val DEFAULT_MAX_CONSECUTIVE_STAGE_ATTEMPTS = 4
 }

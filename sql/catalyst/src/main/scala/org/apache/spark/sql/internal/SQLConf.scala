@@ -36,6 +36,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.{IGNORE_MISSING_FILES => SPARK_IGNORE_MISSING_FILES}
 import org.apache.spark.network.util.ByteUnit
+import org.apache.spark.sql.SqlApiConf
 import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.catalyst.analysis.{HintErrorLogger, Resolver}
 import org.apache.spark.sql.catalyst.expressions.CodegenObjectFactoryMode
@@ -179,6 +180,10 @@ object SQLConf {
     confGetter.set(getter)
   }
 
+  // Make sure SqlApiConf is always in sync with SQLConf. SqlApiConf will always try to
+  // load SqlConf to make sure both classes are in sync from the get go.
+  SqlApiConf.setConfGetter(() => SQLConf.get)
+
   /**
    * Returns the active config object within the current scope. If there is an active SparkSession,
    * the proper SQLConf associated with the thread's active session is used. If it's called from
@@ -320,6 +325,13 @@ object SQLConf {
     .version("3.4.0")
     .booleanConf
     .createWithDefault(false)
+
+  val ALLOW_NAMED_FUNCTION_ARGUMENTS = buildConf("spark.sql.allowNamedFunctionArguments")
+    .doc("If true, Spark will turn on support for named parameters for all functions that has" +
+      " it implemented.")
+    .version("3.5.0")
+    .booleanConf
+    .createWithDefault(true)
 
   val DYNAMIC_PARTITION_PRUNING_ENABLED =
     buildConf("spark.sql.optimizer.dynamicPartitionPruning.enabled")
@@ -2175,6 +2187,15 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val ENABLE_BUILD_SIDE_OUTER_SHUFFLED_HASH_JOIN_CODEGEN =
+    buildConf("spark.sql.codegen.join.buildSideOuterShuffledHashJoin.enabled")
+      .internal()
+      .doc("When true, enable code-gen for an OUTER shuffled hash join where outer side" +
+        " is the build side.")
+      .version("3.5.0")
+      .booleanConf
+      .createWithDefault(true)
+
   val ENABLE_FULL_OUTER_SORT_MERGE_JOIN_CODEGEN =
     buildConf("spark.sql.codegen.join.fullOuterSortMergeJoin.enabled")
       .internal()
@@ -2737,6 +2758,14 @@ object SQLConf {
     .booleanConf
     .createWithDefault(false)
 
+  val TVF_ALLOW_MULTIPLE_TABLE_ARGUMENTS_ENABLED =
+    buildConf("spark.sql.tvf.allowMultipleTableArguments.enabled")
+      .doc("When true, allows multiple table arguments for table-valued functions, " +
+        "receiving the cartesian product of all the rows of these tables.")
+      .version("3.5.0")
+      .booleanConf
+      .createWithDefault(false)
+
   val RANGE_EXCHANGE_SAMPLE_SIZE_PER_PARTITION =
     buildConf("spark.sql.execution.rangeExchange.sampleSizePerPartition")
       .internal()
@@ -2893,6 +2922,13 @@ object SQLConf {
       .version("3.4.0")
       .booleanConf
       .createWithDefault(false)
+
+  val PYTHON_TABLE_UDF_ARROW_ENABLED =
+    buildConf("spark.sql.execution.pythonUDTF.arrow.enabled")
+      .doc("Enable Arrow optimization for Python UDTFs.")
+      .version("3.5.0")
+      .booleanConf
+      .createWithDefault(true)
 
   val PANDAS_GROUPED_MAP_ASSIGN_COLUMNS_BY_NAME =
     buildConf("spark.sql.legacy.execution.pandas.groupedMap.assignColumnsByName")
@@ -3730,6 +3766,15 @@ object SQLConf {
     .checkValues(LegacyBehaviorPolicy.values.map(_.toString))
     .createWithDefault(LegacyBehaviorPolicy.EXCEPTION.toString)
 
+  val LEGACY_INLINE_CTE_IN_COMMANDS = buildConf("spark.sql.legacy.inlineCTEInCommands")
+    .internal()
+    .doc("If true, always inline the CTE relations for the queries in commands. This is the " +
+      "legacy behavior which may produce incorrect results because Spark may evaluate a CTE " +
+      "relation more than once, even if it's nondeterministic.")
+    .version("4.0.0")
+    .booleanConf
+    .createWithDefault(false)
+
   val LEGACY_TIME_PARSER_POLICY = buildConf("spark.sql.legacy.timeParserPolicy")
     .internal()
     .doc("When LEGACY, java.text.SimpleDateFormat is used for formatting and parsing " +
@@ -4253,6 +4298,17 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val LEGACY_NULL_IN_EMPTY_LIST_BEHAVIOR =
+    buildConf("spark.sql.legacy.nullInEmptyListBehavior")
+      .internal()
+      .doc("When set to true, restores the legacy incorrect behavior of IN expressions for " +
+        "NULL values IN an empty list (including IN subqueries and literal IN lists): " +
+        "`null IN (empty list)` should evaluate to false, but sometimes (not always) " +
+        "incorrectly evaluates to null in the legacy behavior.")
+      .version("3.5.0")
+      .booleanConf
+      .createWithDefault(true)
+
   val ERROR_MESSAGE_FORMAT = buildConf("spark.sql.error.messageFormat")
     .doc("When PRETTY, the error message consists of textual representation of error class, " +
       "message and query context. The MINIMAL and STANDARD formats are pretty JSON formats where " +
@@ -4415,7 +4471,7 @@ object SQLConf {
  *
  * SQLConf is thread-safe (internally synchronized, so safe to be used in multiple threads).
  */
-class SQLConf extends Serializable with Logging {
+class SQLConf extends Serializable with Logging with SqlApiConf {
   import SQLConf._
 
   /** Only low degree of contention is expected for conf, thus NOT using ConcurrentHashMap. */
@@ -4661,7 +4717,7 @@ class SQLConf extends Serializable with Logging {
 
   def subqueryReuseEnabled: Boolean = getConf(SUBQUERY_REUSE_ENABLED)
 
-  def caseSensitiveAnalysis: Boolean = getConf(SQLConf.CASE_SENSITIVE)
+  override def caseSensitiveAnalysis: Boolean = getConf(SQLConf.CASE_SENSITIVE)
 
   def constraintPropagationEnabled: Boolean = getConf(CONSTRAINT_PROPAGATION_ENABLED)
 
@@ -4680,7 +4736,7 @@ class SQLConf extends Serializable with Logging {
   def streamingSessionWindowMergeSessionInLocalPartition: Boolean =
     getConf(STREAMING_SESSION_WINDOW_MERGE_SESSIONS_IN_LOCAL_PARTITION)
 
-  def datetimeJava8ApiEnabled: Boolean = getConf(DATETIME_JAVA8API_ENABLED)
+  override def datetimeJava8ApiEnabled: Boolean = getConf(DATETIME_JAVA8API_ENABLED)
 
   def uiExplainMode: String = getConf(UI_EXPLAIN_MODE)
 
@@ -4910,6 +4966,8 @@ class SQLConf extends Serializable with Logging {
 
   def supportQuotedRegexColumnName: Boolean = getConf(SUPPORT_QUOTED_REGEX_COLUMN_NAME)
 
+  def tvfAllowMultipleTableArguments: Boolean = getConf(TVF_ALLOW_MULTIPLE_TABLE_ARGUMENTS_ENABLED)
+
   def rangeExchangeSampleSizePerPartition: Int = getConf(RANGE_EXCHANGE_SAMPLE_SIZE_PER_PARTITION)
 
   def arrowPySparkEnabled: Boolean = getConf(ARROW_PYSPARK_EXECUTION_ENABLED)
@@ -4975,7 +5033,7 @@ class SQLConf extends Serializable with Logging {
   def storeAssignmentPolicy: StoreAssignmentPolicy.Value =
     StoreAssignmentPolicy.withName(getConf(STORE_ASSIGNMENT_POLICY))
 
-  def ansiEnabled: Boolean = getConf(ANSI_ENABLED)
+  override def ansiEnabled: Boolean = getConf(ANSI_ENABLED)
 
   def enableDefaultColumns: Boolean = getConf(SQLConf.ENABLE_DEFAULT_COLUMNS)
 
@@ -4987,9 +5045,9 @@ class SQLConf extends Serializable with Logging {
   def useNullsForMissingDefaultColumnValues: Boolean =
     getConf(SQLConf.USE_NULLS_FOR_MISSING_DEFAULT_COLUMN_VALUES)
 
-  def enforceReservedKeywords: Boolean = ansiEnabled && getConf(ENFORCE_RESERVED_KEYWORDS)
+  override def enforceReservedKeywords: Boolean = ansiEnabled && getConf(ENFORCE_RESERVED_KEYWORDS)
 
-  def doubleQuotedIdentifiers: Boolean = ansiEnabled && getConf(DOUBLE_QUOTED_IDENTIFIERS)
+  override def doubleQuotedIdentifiers: Boolean = ansiEnabled && getConf(DOUBLE_QUOTED_IDENTIFIERS)
 
   def ansiRelationPrecedence: Boolean = ansiEnabled && getConf(ANSI_RELATION_PRECEDENCE)
 
@@ -5029,9 +5087,10 @@ class SQLConf extends Serializable with Logging {
   def replaceDatabricksSparkAvroEnabled: Boolean =
     getConf(SQLConf.LEGACY_REPLACE_DATABRICKS_SPARK_AVRO_ENABLED)
 
-  def setOpsPrecedenceEnforced: Boolean = getConf(SQLConf.LEGACY_SETOPS_PRECEDENCE_ENABLED)
+  override def setOpsPrecedenceEnforced: Boolean =
+    getConf(SQLConf.LEGACY_SETOPS_PRECEDENCE_ENABLED)
 
-  def exponentLiteralAsDecimalEnabled: Boolean =
+  override def exponentLiteralAsDecimalEnabled: Boolean =
     getConf(SQLConf.LEGACY_EXPONENT_LITERAL_AS_DECIMAL_ENABLED)
 
   def allowNegativeScaleOfDecimalEnabled: Boolean =
@@ -5045,7 +5104,7 @@ class SQLConf extends Serializable with Logging {
   def nameNonStructGroupingKeyAsValue: Boolean =
     getConf(SQLConf.NAME_NON_STRUCT_GROUPING_KEY_AS_VALUE)
 
-  def maxToStringFields: Int = getConf(SQLConf.MAX_TO_STRING_FIELDS)
+  override def maxToStringFields: Int = getConf(SQLConf.MAX_TO_STRING_FIELDS)
 
   def maxPlanStringLength: Int = getConf(SQLConf.MAX_PLAN_STRING_LENGTH).toInt
 

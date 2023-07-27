@@ -32,7 +32,7 @@ import org.apache.parquet.schema.PrimitiveType.PrimitiveTypeName
 import org.apache.parquet.schema.Type.Repetition
 import org.scalatest.BeforeAndAfter
 
-import org.apache.spark.{SparkContext, TestUtils}
+import org.apache.spark.{SparkContext, SparkException, TestUtils}
 import org.apache.spark.internal.io.FileCommitProtocol.TaskCommitMessage
 import org.apache.spark.internal.io.HadoopMapReduceCommitProtocol
 import org.apache.spark.scheduler.{SparkListener, SparkListenerJobStart}
@@ -382,10 +382,17 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSparkSession with 
       withTable("t") {
         sql("create table t(i int, d double) using parquet")
         // Calling `saveAsTable` to an existing table with append mode results in table insertion.
-        val msg = intercept[AnalysisException] {
-          Seq((1L, 2.0)).toDF("i", "d").write.mode("append").saveAsTable("t")
-        }.getMessage
-        assert(msg.contains("Cannot safely cast 'i': bigint to int"))
+        checkError(
+          exception = intercept[AnalysisException] {
+            Seq((1L, 2.0)).toDF("i", "d").write.mode("append").saveAsTable("t")
+          },
+          errorClass = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_SAFELY_CAST",
+          parameters = Map(
+            "tableName" -> "`spark_catalog`.`default`.`t`",
+            "colName" -> "`i`",
+            "srcType" -> "\"BIGINT\"",
+            "targetType" -> "\"INT\"")
+        )
 
         // Insert into table successfully.
         Seq((1, 2.0)).toDF("i", "d").write.mode("append").saveAsTable("t")
@@ -403,17 +410,29 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSparkSession with 
       withTable("t") {
         sql("create table t(i int, d double) using parquet")
         // Calling `saveAsTable` to an existing table with append mode results in table insertion.
-        var msg = intercept[AnalysisException] {
-          Seq(("a", "b")).toDF("i", "d").write.mode("append").saveAsTable("t")
-        }.getMessage
-        assert(msg.contains("Cannot safely cast 'i': string to int") &&
-          msg.contains("Cannot safely cast 'd': string to double"))
+        checkError(
+          exception = intercept[AnalysisException] {
+            Seq(("a", "b")).toDF("i", "d").write.mode("append").saveAsTable("t")
+          },
+          errorClass = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_SAFELY_CAST",
+          parameters = Map(
+            "tableName" -> "`spark_catalog`.`default`.`t`",
+            "colName" -> "`i`",
+            "srcType" -> "\"STRING\"",
+            "targetType" -> "\"INT\"")
+        )
 
-        msg = intercept[AnalysisException] {
-          Seq((true, false)).toDF("i", "d").write.mode("append").saveAsTable("t")
-        }.getMessage
-        assert(msg.contains("Cannot safely cast 'i': boolean to int") &&
-          msg.contains("Cannot safely cast 'd': boolean to double"))
+        checkError(
+          exception = intercept[AnalysisException] {
+            Seq((true, false)).toDF("i", "d").write.mode("append").saveAsTable("t")
+          },
+          errorClass = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_SAFELY_CAST",
+          parameters = Map(
+            "tableName" -> "`spark_catalog`.`default`.`t`",
+            "colName" -> "`i`",
+            "srcType" -> "\"BOOLEAN\"",
+            "targetType" -> "\"INT\"")
+        )
       }
     }
   }
@@ -614,12 +633,12 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSparkSession with 
     testRead(Option(dir).map(spark.read.text).get, data, textSchema)
 
     // Reader, with user specified schema, should just apply user schema on the file data
-    val e = intercept[AnalysisException] { spark.read.schema(userSchema).textFile() }
+    val e = intercept[SparkException] { spark.read.schema(userSchema).textFile() }
     assert(e.getMessage.toLowerCase(Locale.ROOT).contains(
       "user specified schema not supported"))
-    intercept[AnalysisException] { spark.read.schema(userSchema).textFile(dir) }
-    intercept[AnalysisException] { spark.read.schema(userSchema).textFile(dir, dir) }
-    intercept[AnalysisException] { spark.read.schema(userSchema).textFile(Seq(dir, dir): _*) }
+    intercept[SparkException] { spark.read.schema(userSchema).textFile(dir) }
+    intercept[SparkException] { spark.read.schema(userSchema).textFile(dir, dir) }
+    intercept[SparkException] { spark.read.schema(userSchema).textFile(Seq(dir, dir): _*) }
   }
 
   test("csv - API and behavior regarding schema") {
@@ -950,7 +969,7 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSparkSession with 
   test("SPARK-16848: table API throws an exception for user specified schema") {
     withTable("t") {
       val schema = StructType(StructField("a", StringType) :: Nil)
-      val e = intercept[AnalysisException] {
+      val e = intercept[SparkException] {
         spark.read.schema(schema).table("t")
       }.getMessage
       assert(e.contains("User specified schema not supported with `table`"))

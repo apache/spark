@@ -50,14 +50,14 @@ object ResolveInlineTables extends Rule[LogicalPlan] with CastSupport with Alias
   private[analysis] def validateInputDimension(table: UnresolvedInlineTable): Unit = {
     if (table.rows.nonEmpty) {
       val numCols = table.names.size
-      table.rows.zipWithIndex.foreach { case (row, ri) =>
+      table.rows.zipWithIndex.foreach { case (row, rowIndex) =>
         if (row.size != numCols) {
           table.failAnalysis(
-            errorClass = "_LEGACY_ERROR_TEMP_2305",
+            errorClass = "INVALID_INLINE_TABLE.NUM_COLUMNS_MISMATCH",
             messageParameters = Map(
-              "numCols" -> numCols.toString,
-              "rowSize" -> row.size.toString,
-              "ri" -> ri.toString))
+              "expectedNumCols" -> numCols.toString,
+              "actualNumCols" -> row.size.toString,
+              "rowIndex" -> rowIndex.toString))
         }
       }
     }
@@ -101,7 +101,7 @@ object ResolveInlineTables extends Rule[LogicalPlan] with CastSupport with Alias
       }
       StructField(name, tpe, nullable = column.exists(_.nullable))
     }
-    val attributes = StructType(fields).toAttributes
+    val attributes = DataTypeUtils.toAttributes(StructType(fields))
     assert(fields.size == table.names.size)
 
     val newRows: Seq[InternalRow] = table.rows.map { row =>

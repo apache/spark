@@ -26,7 +26,7 @@ import scala.reflect.ClassTag
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, Path}
 
-import org.apache.spark.SparkConf
+import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.{STORAGE_DECOMMISSION_FALLBACK_STORAGE_CLEANUP, STORAGE_DECOMMISSION_FALLBACK_STORAGE_PATH}
@@ -170,7 +170,8 @@ private[spark] object FallbackStorage extends Logging {
       case batchId: ShuffleBlockBatchId =>
         (batchId.shuffleId, batchId.mapId, batchId.startReduceId, batchId.endReduceId)
       case _ =>
-        throw new IllegalArgumentException("unexpected shuffle block id format: " + blockId)
+        throw SparkException.internalError(
+          s"unexpected shuffle block id format: $blockId", category = "STORAGE")
     }
 
     val name = ShuffleIndexBlockId(shuffleId, mapId, NOOP_REDUCE_ID).name

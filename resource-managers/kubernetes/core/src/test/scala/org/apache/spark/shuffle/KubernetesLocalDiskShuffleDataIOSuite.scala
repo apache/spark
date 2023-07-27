@@ -17,8 +17,12 @@
 
 package org.apache.spark.shuffle
 
+import java.io.File
+import java.nio.file.Files
+
 import scala.concurrent.duration._
 
+import org.mockito.Mockito.{mock, when}
 import org.scalatest.concurrent.Eventually.{eventually, interval, timeout}
 
 import org.apache.spark.{LocalRootDirsTest, MapOutputTrackerMaster, SparkContext, SparkFunSuite, TestUtils}
@@ -26,6 +30,7 @@ import org.apache.spark.LocalSparkContext.withSpark
 import org.apache.spark.deploy.k8s.Config.KUBERNETES_DRIVER_REUSE_PVC
 import org.apache.spark.internal.config._
 import org.apache.spark.scheduler.cluster.StandaloneSchedulerBackend
+import org.apache.spark.storage.BlockManager
 
 class KubernetesLocalDiskShuffleDataIOSuite extends SparkFunSuite with LocalRootDirsTest {
 
@@ -218,5 +223,33 @@ class KubernetesLocalDiskShuffleDataIOSuite extends SparkFunSuite with LocalRoot
         assert(master.shuffleStatuses(1).mapStatuses.map(_.mapId).toSet == Set(6, 7, 8))
       }
     }
+  }
+
+  test("SPARK-44501: Ignore checksum files") {
+    val sparkConf = conf.clone.set("spark.local.dir",
+      conf.get("spark.local.dir") + "/spark-x/executor-y")
+    val dir = sparkConf.get("spark.local.dir") + "/blockmgr-z/00"
+    Files.createDirectories(new File(dir).toPath())
+    Seq("ADLER32", "CRC32").foreach { algorithm =>
+      new File(dir, s"1.checksum.$algorithm").createNewFile()
+    }
+
+    val bm = mock(classOf[BlockManager])
+    when(bm.TempFileBasedBlockStoreUpdater).thenAnswer(_ => throw new Exception())
+    KubernetesLocalDiskShuffleExecutorComponents.recoverDiskStore(sparkConf, bm)
+  }
+
+  test("SPARK-44534: Handle only shuffle files") {
+    val sparkConf = conf.clone.set("spark.local.dir",
+      conf.get("spark.local.dir") + "/spark-x/executor-y")
+    val dir = sparkConf.get("spark.local.dir") + "/blockmgr-z/00"
+    Files.createDirectories(new File(dir).toPath())
+    Seq("broadcast_0", "broadcast_0_piece0", "temp_shuffle_uuid").foreach { f =>
+      new File(dir, f).createNewFile()
+    }
+
+    val bm = mock(classOf[BlockManager])
+    when(bm.TempFileBasedBlockStoreUpdater).thenAnswer(_ => throw new Exception())
+    KubernetesLocalDiskShuffleExecutorComponents.recoverDiskStore(sparkConf, bm)
   }
 }

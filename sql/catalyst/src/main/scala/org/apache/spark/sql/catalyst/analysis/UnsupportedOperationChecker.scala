@@ -19,11 +19,12 @@ package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, BinaryComparison, CurrentDate, CurrentTimestampLike, Expression, GreaterThan, GreaterThanOrEqual, GroupingSets, LessThan, LessThanOrEqual, LocalTimestamp, MonotonicallyIncreasingID, SessionWindow}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, CurrentDate, CurrentTimestampLike, Expression, GroupingSets, LocalTimestamp, MonotonicallyIncreasingID, SessionWindow, WindowExpression}
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.{GroupStateTimeout, OutputMode}
 
@@ -53,26 +54,6 @@ object UnsupportedOperationChecker extends Logging {
   private def hasEventTimeCol(exp: Expression): Boolean = exp.exists {
     case a: AttributeReference => a.metadata.contains(EventTimeWatermark.delayKey)
     case _ => false
-  }
-
-  /**
-   * Checks if the expression contains a range comparison, in which
-   * either side of the comparison is an event-time column. This is used for checking
-   * stream-stream time interval join.
-   * @param e the expression to be checked
-   * @return true if there is a time-interval join.
-   */
-  private def hasRangeExprAgainstEventTimeCol(e: Expression): Boolean = {
-    def hasEventTimeColBinaryComp(neq: Expression): Boolean = {
-      val exp = neq.asInstanceOf[BinaryComparison]
-      hasEventTimeCol(exp.left) || hasEventTimeCol(exp.right)
-    }
-
-    e.exists {
-      case neq @ (_: LessThanOrEqual | _: LessThan | _: GreaterThanOrEqual | _: GreaterThan) =>
-        hasEventTimeColBinaryComp(neq)
-      case _ => false
-    }
   }
 
   /**
@@ -508,8 +489,18 @@ object UnsupportedOperationChecker extends Logging {
         case Sample(_, _, _, _, child) if child.isStreaming =>
           throwError("Sampling is not supported on streaming DataFrames/Datasets")
 
-        case Window(_, _, _, child) if child.isStreaming =>
-          throwError("Non-time-based windows are not supported on streaming DataFrames/Datasets")
+        case Window(windowExpression, _, _, child) if child.isStreaming =>
+          val (windowFuncList, columnNameList, windowSpecList) = windowExpression.flatMap { e =>
+            e.collect {
+              case we: WindowExpression =>
+                (we.windowFunction.toString, e.toAttribute.sql, we.windowSpec.sql)
+              }
+          }.unzip3
+          throw QueryExecutionErrors.nonTimeWindowNotSupportedInStreamingError(
+            windowFuncList,
+            columnNameList,
+            windowSpecList,
+            subPlan.origin)
 
         case ReturnAnswer(child) if child.isStreaming =>
           throwError("Cannot return immediate result on streaming DataFrames/Dataset. Queries " +

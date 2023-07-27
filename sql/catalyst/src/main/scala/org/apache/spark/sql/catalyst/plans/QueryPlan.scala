@@ -27,6 +27,7 @@ import org.apache.spark.sql.catalyst.rules.UnknownRuleId
 import org.apache.spark.sql.catalyst.trees.{AlwaysProcess, CurrentOrigin, TreeNode, TreeNodeTag}
 import org.apache.spark.sql.catalyst.trees.TreePattern.{OUTER_REFERENCE, PLAN_EXPRESSION}
 import org.apache.spark.sql.catalyst.trees.TreePatternBits
+import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DataType, StructType}
 import org.apache.spark.util.collection.BitSet
@@ -406,7 +407,7 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
     }
   }
 
-  lazy val schema: StructType = StructType.fromAttributes(output)
+  lazy val schema: StructType = DataTypeUtils.fromAttributes(output)
 
   /** Returns the output schema in the tree format. */
   def schemaString: String = schema.treeString
