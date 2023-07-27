@@ -1,4 +1,4 @@
-#
+# mypy: ignore-errors
 # Licensed to the Apache Software Foundation (ASF) under one or more
 # contributor license agreements.  See the NOTICE file distributed with
 # this work for additional information regarding copyright ownership.
@@ -19,7 +19,7 @@ import os
 import shutil
 import sys
 import textwrap
-from typing import Any, Dict, Tuple
+from typing import Any, Callable, Dict, Tuple
 import unittest
 
 from pyspark import SparkConf, SparkContext
@@ -174,12 +174,13 @@ class DeepspeedTorchDistributorUnitTests(unittest.TestCase):
             self.assertEqual(distributed_cmd_args_expected, distributed_command_with_args)
 
 
-def _create_basic_function():
+def _create_basic_function() -> Callable:
     # TODO: swap out with better test function
     # once Deepspeed better supports CPU
-    def pythagoras(leg1: float, leg2: float):
+    def pythagoras(leg1: float, leg2: float) -> float:
         import deepspeed
 
+        print(deepspeed.__version__)
         return (leg1 * leg1 + leg2 * leg2) ** 0.5
 
     return pythagoras
@@ -193,7 +194,7 @@ def _create_pytorch_training_test_file():
     # import torch.nn as nn
     # from torch.utils.data import DataLoader, Dataset
     #
-    ## Simple model class
+    # Simple model class
     # class SimpleModel(nn.Module):
     #    def __init__(self):
     #        super(SimpleModel, self).__init__()
@@ -202,7 +203,7 @@ def _create_pytorch_training_test_file():
     #    def forward(self, x):
     #        return self.fc(x)
     #
-    ## Dummy dataset class
+    # Dummy dataset class
     # class DummyDataset(Dataset):
     #    def __init__(self, num_samples=1000, input_dim=10, num_classes=5):
     #        self.num_samples = num_samples
@@ -217,7 +218,7 @@ def _create_pytorch_training_test_file():
     #    def __getitem__(self, idx):
     #        return self.data[idx], self.labels[idx]
     #
-    ## Instantiate the model and the data loader
+    # Instantiate the model and the data loader
     # model = SimpleModel()
     # dataset = DummyDataset()
     # data_loader = DataLoader(dataset, batch_size=8, shuffle=True)
@@ -234,10 +235,13 @@ def _create_pytorch_training_test_file():
     #        "enabled": False,  # Set to True for mixed-precision training on supported hardware.
     #    },
     # }
-    # model, _, _, _ = deepspeed.initialize(model=model, model_parameters=model.parameters(), config_params=deepspeed_config)
+    # model, _, _, _ = deepspeed.initialize(
+    #        model=model,
+    #        model_parameters=model.parameters(),
+    #        config_params=deepspeed_config)
     # criterion = torch.nn.CrossEntropyLoss()
     # optimizer = model.optimizer
-    ## Training loop
+    # Training loop
     # for epoch in range(num_epochs):
     #    model.train()
     #    for inputs, targets in data_loader:
@@ -249,14 +253,13 @@ def _create_pytorch_training_test_file():
     # torch.save(model.state_dict(), "cpu_trained_model.pt")
     str_to_write = textwrap.dedent(
         """ 
-import sys
-def pythagorean_thm(x : int, y: int):
-    import deepspeed
-    return (x*x + y*y)**0.5
-print(pythagorean_thm(int(sys.argv[1]), int(sys.argv[2])))
-"""
+            import sys
+            def pythagorean_thm(x : int, y: int): # type: ignore 
+                import deepspeed # type: ignore
+                return (x*x + y*y)**0.5 # type: ignore
+            print(pythagorean_thm(int(sys.argv[1]), int(sys.argv[2])))"""
     )
-    cp_path = f"/tmp/test_deepspeed_training_file.py"
+    cp_path = "/tmp/test_deepspeed_training_file.py"
     with open(cp_path, "w") as f:
         f.write(str_to_write)
     yield cp_path
@@ -272,8 +275,8 @@ print(pythagorean_thm(int(sys.argv[1]), int(sys.argv[2])))
 # that use Deepspeed constructs.
 class DeepspeedTorchDistributorDistributedEndToEnd(unittest.TestCase):
     @classmethod
-    def setUpClass(cls):
-        (cls.gpu_discovery_script_file_name, cls.mnist_dir_path) = set_up_test_dirs()
+    def setUpClass(cls) -> None:
+        (cls.gpu_discovery_script_file_name, cls.mnist_dir_path) = set_up_test_dirs()  # noqa
         # "loadDefaults" is set to False because if not, the SparkConf will
         # use contain configurations from the LocalEndToEnd test,
         # which causes the test to break.
@@ -287,12 +290,12 @@ class DeepspeedTorchDistributorDistributedEndToEnd(unittest.TestCase):
         cls.spark = SparkSession(sc)
 
     @classmethod
-    def tearDownClass(cls):
+    def tearDownClass(cls) -> None:
         shutil.rmtree(cls.mnist_dir_path)
         os.unlink(cls.gpu_discovery_script_file_name)
         cls.spark.stop()
 
-    def test_simple_function_e2e(self):
+    def test_simple_function_e2e(self) -> None:
         train_fn = _create_basic_function()
         # Arguments for the pythagoras function train_fn
         x = 3
@@ -301,7 +304,7 @@ class DeepspeedTorchDistributorDistributedEndToEnd(unittest.TestCase):
         output = dist.run(train_fn, x, y)
         self.assertEqual(output, 5)
 
-    def test_pytorch_file_e2e(self):
+    def test_pytorch_file_e2e(self) -> None:
         # TODO: change to better test script
         # once Deepspeed CPU support is better
         with _create_pytorch_training_test_file() as cp_path:
@@ -311,8 +314,8 @@ class DeepspeedTorchDistributorDistributedEndToEnd(unittest.TestCase):
 
 class DeepspeedDistributorLocalEndToEndTests(unittest.TestCase):
     @classmethod
-    def setUpClass(cls):
-        cls.gpu_discovery_script_file_name, cls.mnist_dir_path = set_up_test_dirs()
+    def setUpClass(cls) -> None:
+        cls.gpu_discovery_script_file_name, cls.mnist_dir_path = set_up_test_dirs()  # noqa
         conf = SparkConf()
         for k, v in get_local_mode_conf().items():
             conf = conf.set(k, v)
@@ -323,12 +326,12 @@ class DeepspeedDistributorLocalEndToEndTests(unittest.TestCase):
         cls.spark = SparkSession(sc)
 
     @classmethod
-    def tearDownClass(cls):
+    def tearDownClass(cls) -> None:
         shutil.rmtree(cls.mnist_dir_path)
         os.unlink(cls.gpu_discovery_script_file_name)
         cls.spark.stop()
 
-    def test_simple_function_e2e(self):
+    def test_simple_function_e2e(self) -> None:
         train_fn = _create_basic_function()
         # Arguments for the pythagoras function train_fn
         x = 3
@@ -337,7 +340,7 @@ class DeepspeedDistributorLocalEndToEndTests(unittest.TestCase):
         output = dist.run(train_fn, x, y)
         self.assertEqual(output, 5)
 
-    def test_pytorch_file_e2e(self):
+    def test_pytorch_file_e2e(self) -> None:
         with _create_pytorch_training_test_file() as path_to_train_file:
             dist = DeepspeedTorchDistributor(numGpus=2, useGpu=False, localMode=True)
             dist.run(path_to_train_file, 2, 5)
