@@ -1027,3 +1027,27 @@ class DistributedSequenceID(Expression):
 
     def __repr__(self) -> str:
         return "DistributedSequenceID()"
+
+
+class CallFunction(Expression):
+    def __init__(self, name: str, args: Sequence["Expression"]):
+        super().__init__()
+
+        assert isinstance(name, str)
+        self._name = name
+
+        assert isinstance(args, list) and all(isinstance(arg, Expression) for arg in args)
+        self._args = args
+
+    def to_plan(self, session: "SparkConnectClient") -> "proto.Expression":
+        expr = proto.Expression()
+        expr.call_function.function_name = self._name
+        if len(self._args) > 0:
+            expr.call_function.arguments.extend([arg.to_plan(session) for arg in self._args])
+        return expr
+
+    def __repr__(self) -> str:
+        if len(self._args) > 0:
+            return f"CallFunction('{self._name}', {', '.join([str(arg) for arg in self._args])})"
+        else:
+            return f"CallFunction('{self._name}')"

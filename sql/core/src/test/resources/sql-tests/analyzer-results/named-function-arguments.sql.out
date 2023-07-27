@@ -200,7 +200,7 @@ CreateViewCommand `v`, SELECT id FROM range(0, 8), false, true, LocalTempView, t
 -- !query
 SELECT * FROM explode(collection => TABLE(v))
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
   "sqlState" : "42K09",

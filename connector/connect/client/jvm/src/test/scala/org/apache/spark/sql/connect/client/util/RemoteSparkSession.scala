@@ -93,19 +93,30 @@ object SparkConnectServerUtils {
    * configs, we add them here
    */
   private def testConfigs: Seq[String] = {
+    // To find InMemoryTableCatalog for V2 writer tests
+    val catalystTestJar =
+      tryFindJar("sql/catalyst", "spark-catalyst", "spark-catalyst", test = true)
+        .map(clientTestJar => Seq("--jars", clientTestJar.getCanonicalPath))
+        .getOrElse(Seq.empty)
+
+    // For UDF maven E2E tests, the server needs the client code to find the UDFs defined in tests.
+    val connectClientTestJar = tryFindJar(
+      "connector/connect/client/jvm",
+      // SBT passes the client & test jars to the server process automatically.
+      // So we skip building or finding this jar for SBT.
+      "sbt-tests-do-not-need-this-jar",
+      "spark-connect-client-jvm",
+      test = true)
+      .map(clientTestJar => Seq(clientTestJar.getCanonicalPath))
+      .getOrElse(Seq.empty)
+
+    val allJars = catalystTestJar ++ connectClientTestJar
+    val jarsConfigs = Seq("--jars", allJars.mkString(","))
+
     // Use InMemoryTableCatalog for V2 writer tests
-    val writerV2Configs = {
-      val catalystTestJar = findJar( // To find InMemoryTableCatalog for V2 writer tests
-        "sql/catalyst",
-        "spark-catalyst",
-        "spark-catalyst",
-        test = true).getCanonicalPath
-      Seq(
-        "--jars",
-        catalystTestJar,
-        "--conf",
-        "spark.sql.catalog.testcat=org.apache.spark.sql.connector.catalog.InMemoryTableCatalog")
-    }
+    val writerV2Configs = Seq(
+      "--conf",
+      "spark.sql.catalog.testcat=org.apache.spark.sql.connector.catalog.InMemoryTableCatalog")
 
     // Run tests using hive
     val hiveTestConfigs = {
@@ -128,18 +139,7 @@ object SparkConnectServerUtils {
       Seq("--conf", s"spark.sql.catalogImplementation=$catalogImplementation")
     }
 
-    // For UDF maven E2E tests, the server needs the client code to find the UDFs defined in tests.
-    val udfTestConfigs = tryFindJar(
-      "connector/connect/client/jvm",
-      // SBT passes the client & test jars to the server process automatically.
-      // So we skip building or finding this jar for SBT.
-      "sbt-tests-do-not-need-this-jar",
-      "spark-connect-client-jvm",
-      test = true)
-      .map(clientTestJar => Seq("--jars", clientTestJar.getCanonicalPath))
-      .getOrElse(Seq.empty)
-
-    writerV2Configs ++ hiveTestConfigs ++ udfTestConfigs
+    jarsConfigs ++ writerV2Configs ++ hiveTestConfigs
   }
 
   def start(): Unit = {

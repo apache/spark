@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst.ExtendedAnalysisException
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeReference, CaseWhen, Cast, CreateNamedStruct, Expression, GetStructField, IsNotNull, LessThan, Literal, PreciseTimestampConversion, SessionWindow, Subtract, TimeWindow, WindowTime}
 import org.apache.spark.sql.catalyst.plans.logical.{Expand, Filter, LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.rules.Rule
@@ -310,7 +310,7 @@ object ResolveWindowTime extends Rule[LogicalPlan] {
           if (!metadata.contains(TimeWindow.marker) &&
             !metadata.contains(SessionWindow.marker)) {
             // FIXME: error framework?
-            throw new AnalysisException(
+            throw new ExtendedAnalysisException(
               s"The input is not a correct window column: $windowTime", plan = Some(p))
           }
 
