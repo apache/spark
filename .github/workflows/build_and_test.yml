@@ -29,6 +29,11 @@ on:
         required: false
         type: boolean
         default: false
+    branch:
+      description: Branch to run the build against
+      required: false
+      type: string
+      default: branch-3.3
 
 jobs:
   configure-jobs:
