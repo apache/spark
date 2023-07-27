@@ -172,10 +172,10 @@ abstract class Optimizer(catalogManager: CatalogManager)
       // PropagateEmptyRelation can change the nullability of an attribute from nullable to
       // non-nullable when an empty relation child of a Union is removed
       UpdateAttributeNullability) ::
+    Batch("OptimizeOneRowJoin", Once, OptimizeOneRowJoin) ::
     Batch("Pullup Correlated Expressions", Once,
       OptimizeOneRowRelationSubquery,
-      PullupCorrelatedPredicates,
-      OptimizeOneRowJoin) ::
+      PullupCorrelatedPredicates) ::
     // Subquery batch applies the optimizer rules recursively. Therefore, it makes no sense
     // to enforce idempotence on it and we change this batch from Once to FixedPoint(1).
     Batch("Subquery", FixedPoint(1),
