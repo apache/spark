@@ -32,7 +32,7 @@ import org.apache.spark.TestUtils.withListener
 import org.apache.spark.internal.config.MAX_RESULT_SIZE
 import org.apache.spark.scheduler.{SparkListener, SparkListenerJobStart}
 import org.apache.spark.sql.catalyst.{FooClassWithEnum, FooEnum, ScroogeLikeExample}
-import org.apache.spark.sql.catalyst.encoders.{OuterScopes, RowEncoder}
+import org.apache.spark.sql.catalyst.encoders.{ExpressionEncoder, OuterScopes}
 import org.apache.spark.sql.catalyst.expressions.GenericRowWithSchema
 import org.apache.spark.sql.catalyst.plans.{LeftAnti, LeftSemi}
 import org.apache.spark.sql.catalyst.util.sideBySide
@@ -1322,7 +1322,7 @@ class DatasetSuite extends QueryTest
       } else {
         Row(l)
       }
-    })(RowEncoder(schema))
+    })(ExpressionEncoder(schema))
 
     val message = intercept[Exception] {
       df.collect()
@@ -1375,7 +1375,7 @@ class DatasetSuite extends QueryTest
 
   test("SPARK-15381: physical object operator should define `reference` correctly") {
     val df = Seq(1 -> 2).toDF("a", "b")
-    checkAnswer(df.map(row => row)(RowEncoder(df.schema)).select("b", "a"), Row(2, 1))
+    checkAnswer(df.map(row => row)(ExpressionEncoder(df.schema)).select("b", "a"), Row(2, 1))
   }
 
   private def checkShowString[T](ds: Dataset[T], expected: String): Unit = {
@@ -2157,7 +2157,7 @@ class DatasetSuite extends QueryTest
 
   test("SPARK-26233: serializer should enforce decimal precision and scale") {
     val s = StructType(Seq(StructField("a", StringType), StructField("b", DecimalType(38, 8))))
-    val encoder = RowEncoder(s)
+    val encoder = ExpressionEncoder(s)
     implicit val uEnc = encoder
     val df = spark.range(2).map(l => Row(l.toString, BigDecimal.valueOf(l + 0.1111)))
     checkAnswer(df.groupBy(col("a")).agg(first(col("b"))),

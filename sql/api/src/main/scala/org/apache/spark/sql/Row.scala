@@ -22,7 +22,7 @@ import scala.util.hashing.MurmurHash3
 
 import org.apache.spark.annotation.Stable
 import org.apache.spark.sql.catalyst.expressions.GenericRow
-import org.apache.spark.sql.errors.QueryExecutionErrors
+import org.apache.spark.sql.errors.DataTypeErrors
 import org.apache.spark.sql.types._
 
 /**
@@ -366,7 +366,7 @@ trait Row extends Serializable {
    * @throws IllegalArgumentException when a field `name` does not exist.
    */
   def fieldIndex(name: String): Int = {
-    throw QueryExecutionErrors.fieldIndexOnRowWithoutSchemaError()
+    throw DataTypeErrors.fieldIndexOnRowWithoutSchemaError()
   }
 
   /**
@@ -511,6 +511,6 @@ trait Row extends Serializable {
    * @throws NullPointerException when value is null.
    */
   private def getAnyValAs[T <: AnyVal](i: Int): T =
-    if (isNullAt(i)) throw QueryExecutionErrors.valueIsNullError(i)
+    if (isNullAt(i)) throw DataTypeErrors.valueIsNullError(i)
     else getAs[T](i)
 }

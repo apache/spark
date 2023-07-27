@@ -793,9 +793,14 @@ inlineTable
     ;
 
 functionTableSubqueryArgument
-    : TABLE identifierReference
-    | TABLE LEFT_PAREN identifierReference RIGHT_PAREN
-    | TABLE LEFT_PAREN query RIGHT_PAREN
+    : TABLE identifierReference tableArgumentPartitioning?
+    | TABLE LEFT_PAREN identifierReference RIGHT_PAREN tableArgumentPartitioning?
+    | TABLE LEFT_PAREN query RIGHT_PAREN tableArgumentPartitioning?
+    ;
+
+tableArgumentPartitioning
+    : (PARTITION | DISTRIBUTE) BY expressionSeq
+      ((ORDER | SORT) BY sortItem (COMMA sortItem)*)?
     ;
 
 functionTableNamedArgumentExpression

@@ -809,7 +809,7 @@ case class DescribeTableCommand(
  * 7. Common table expressions (CTEs)
  */
 case class DescribeQueryCommand(queryText: String, plan: LogicalPlan)
-  extends DescribeCommandBase {
+  extends DescribeCommandBase with CTEInChildren {
 
   override val output = DescribeCommandSchema.describeTableAttributes()
 
@@ -820,6 +820,10 @@ case class DescribeQueryCommand(queryText: String, plan: LogicalPlan)
     val queryExecution = sparkSession.sessionState.executePlan(plan)
     describeSchema(queryExecution.analyzed.schema, result, header = false)
     result.toSeq
+  }
+
+  override def withCTEDefs(cteDefs: Seq[CTERelationDef]): LogicalPlan = {
+    copy(plan = WithCTE(plan, cteDefs))
   }
 }
 
