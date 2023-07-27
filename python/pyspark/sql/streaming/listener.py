@@ -62,11 +62,11 @@ class StreamingQueryListener(ABC):
     >>> spark.streams.addListener(MyListener())
     """
 
-    def _set_spark_session(self, spark):
+    def _set_spark_session(self, spark: "SparkSession"):  # noqa: F821
         self._sparkSession = spark
 
     @property
-    def spark(self) -> Optional["SparkSession"]:
+    def spark(self) -> Optional["SparkSession"]:  # noqa: F821
         if hasattr(self, "_sparkSession"):
             return self._sparkSession
         else:

@@ -19,11 +19,9 @@
 A worker for streaming foreachBatch and query listener in Spark Connect.
 """
 import os
-import json
 
 from pyspark.java_gateway import local_connect_and_auth
 from pyspark.serializers import (
-    read_int,
     write_int,
     read_long,
     UTF8Deserializer,
@@ -31,13 +29,6 @@ from pyspark.serializers import (
 )
 from pyspark import worker
 from pyspark.sql import SparkSession
-
-from pyspark.sql.streaming.listener import (
-    QueryStartedEvent,
-    QueryProgressEvent,
-    QueryTerminatedEvent,
-    QueryIdleEvent,
-)
 
 pickle_ser = CPickleSerializer()
 utf8_deserializer = UTF8Deserializer()

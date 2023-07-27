@@ -25,7 +25,6 @@ from pyspark.java_gateway import local_connect_and_auth
 from pyspark.serializers import (
     read_int,
     write_int,
-    read_long,
     UTF8Deserializer,
     CPickleSerializer,
 )

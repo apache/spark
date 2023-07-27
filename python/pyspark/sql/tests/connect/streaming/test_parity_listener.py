@@ -19,17 +19,8 @@ import unittest
 import time
 
 from pyspark.sql.tests.streaming.test_streaming_listener import StreamingListenerTestsMixin
-from pyspark.sql.streaming.listener import (
-    StreamingQueryListener,
-    QueryStartedEvent,
-    QueryProgressEvent,
-    QueryTerminatedEvent,
-    SinkProgress,
-    SourceProgress,
-    StateOperatorProgress,
-    StreamingQueryProgress,
-)
-from pyspark.sql.types import StructType, StructField, StringType, NullType
+from pyspark.sql.streaming.listener import StreamingQueryListener, QueryStartedEvent
+from pyspark.sql.types import StructType, StructField, StringType
 from pyspark.testing.connectutils import ReusedConnectTestCase
 
 

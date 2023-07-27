@@ -631,9 +631,10 @@ class StreamingQueryManager:
         -----
         This function behaves differently in Spark Connect mode.
         In Connect, the provided functions doesn't have access to variables defined outside of it.
-        Also in Connect, you need to use `self.spark` to access spark session, you cannot just use `spark`.
-        In short, if you want to use spark session inside of the listener, please use `self.spark` in Connect mode,
-        and use `spark` otherwise.
+        Also in Connect, you need to use `self.spark` to access spark session.
+        Using `spark` would throw an exception.
+        In short, if you want to use spark session inside the listener,
+        please use `self.spark` in Connect mode, and use `spark` otherwise.
 
         Examples
         --------
