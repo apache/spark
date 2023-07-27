@@ -31,6 +31,7 @@ from typing import (
     Dict,
     List,
     Tuple,
+    Set,
     cast,
     overload,
     Iterable,
@@ -550,8 +551,46 @@ class SparkSession:
         except Exception:
             pass
 
-    def interrupt_all(self) -> None:
-        self.client.interrupt_all()
+    def interruptAll(self) -> List[str]:
+        op_ids = self.client.interrupt_all()
+        assert op_ids is not None
+        return op_ids
+
+    interruptAll.__doc__ = PySparkSession.interruptAll.__doc__
+
+    def interruptTag(self, tag: str) -> List[str]:
+        op_ids = self.client.interrupt_tag(tag)
+        assert op_ids is not None
+        return op_ids
+
+    interruptTag.__doc__ = PySparkSession.interruptTag.__doc__
+
+    def interruptOperation(self, op_id: str) -> List[str]:
+        op_ids = self.client.interrupt_operation(op_id)
+        assert op_ids is not None
+        return op_ids
+
+    interruptOperation.__doc__ = PySparkSession.interruptOperation.__doc__
+
+    def addTag(self, tag: str) -> None:
+        self.client.add_tag(tag)
+
+    addTag.__doc__ = PySparkSession.addTag.__doc__
+
+    def removeTag(self, tag: str) -> None:
+        self.client.remove_tag(tag)
+
+    removeTag.__doc__ = PySparkSession.removeTag.__doc__
+
+    def getTags(self) -> Set[str]:
+        return self.client.get_tags()
+
+    getTags.__doc__ = PySparkSession.getTags.__doc__
+
+    def clearTags(self) -> None:
+        return self.client.clear_tags()
+
+    clearTags.__doc__ = PySparkSession.clearTags.__doc__
 
     def stop(self) -> None:
         # Stopping the session will only close the connection to the current session (and
@@ -671,7 +710,7 @@ class SparkSession:
 
     copyFromLocalToFs.__doc__ = PySparkSession.copyFromLocalToFs.__doc__
 
-    def _createRemoteDataFrame(self, remote_id: str) -> "DataFrame":
+    def _create_remote_dataframe(self, remote_id: str) -> "DataFrame":
         """
         In internal API to reference a runtime DataFrame on the server side.
         This is used in ForeachBatch() runner, where the remote DataFrame refers to the

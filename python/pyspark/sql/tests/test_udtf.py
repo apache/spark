@@ -487,6 +487,15 @@ class BaseUDTFTestsMixin:
 
         self.assertEqual(TestUDTF(lit(1)).collect(), [Row(x={1: "1"})])
 
+    def test_udtf_with_empty_output_types(self):
+        @udtf(returnType=StructType())
+        class TestUDTF:
+            def eval(self):
+                yield tuple()
+
+        assertDataFrameEqual(TestUDTF(), [Row()])
+
+    @unittest.skipIf(not have_pandas, pandas_requirement_message)
     def test_udtf_with_pandas_input_type(self):
         import pandas as pd
 
@@ -931,8 +940,7 @@ class BaseUDTFTestsMixin:
                     StructType().add("col0", IntegerType()).add("col1", StringType()),
                     [Row(a=1, b="x")],
                 ),
-                # TODO(SPARK-44479): Support Python UDTFs with empty schema
-                # (func(), StructType(), [Row()]),
+                (func(), StructType(), [Row()]),
             ]
         ):
             with self.subTest(query_no=i):

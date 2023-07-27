@@ -25,7 +25,6 @@ import org.json4s.JsonDSL.{jobject2assoc, pair2Assoc}
 import org.json4s.jackson.JsonMethods.{compact, render}
 
 import org.apache.spark.annotation.Evolving
-import org.apache.spark.scheduler.SparkListenerEvent
 
 /**
  * Interface for listening to events related to [[StreamingQuery StreamingQueries]].
@@ -116,7 +115,7 @@ object StreamingQueryListener extends Serializable {
    * @since 3.5.0
    */
   @Evolving
-  trait Event extends SparkListenerEvent
+  trait Event
 
   /**
    * Event representing the start of a query
