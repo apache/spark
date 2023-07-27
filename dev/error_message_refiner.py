@@ -174,7 +174,7 @@ def _get_error_message(error_class: str) -> str:
 
 def ask_chat_gpt(error_class: str, model_name: str) -> Tuple[str, str]:
     """
-    Requests error message improvement from Chat GPT.
+    Requests error message improvement from GPT API
     Returns a tuple containing the old error message and the refined error message.
     """
     old_error_message = " ".join(_get_error_message(error_class))
