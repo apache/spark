@@ -25,7 +25,7 @@ import java.util.List;
 
 import com.google.common.collect.Iterators;
 import org.apache.spark.SparkConf;
-import org.apache.spark.network.util.NettyUtils;
+import org.apache.spark.network.util.JavaUtils;
 import org.apache.spark.streaming.util.WriteAheadLog;
 import org.apache.spark.streaming.util.WriteAheadLogRecordHandle;
 import org.apache.spark.streaming.util.WriteAheadLogUtils;
@@ -106,19 +106,19 @@ public class JavaWriteAheadLogSuite extends WriteAheadLog {
     WriteAheadLog wal = WriteAheadLogUtils.createLogForDriver(conf, null, null);
 
     String data1 = "data1";
-    WriteAheadLogRecordHandle handle = wal.write(NettyUtils.stringToBytes(data1), 1234);
+    WriteAheadLogRecordHandle handle = wal.write(JavaUtils.stringToBytes(data1), 1234);
     Assert.assertTrue(handle instanceof JavaWriteAheadLogSuiteHandle);
-    Assert.assertEquals(data1, NettyUtils.bytesToString(wal.read(handle)));
+    Assert.assertEquals(data1, JavaUtils.bytesToString(wal.read(handle)));
 
-    wal.write(NettyUtils.stringToBytes("data2"), 1235);
-    wal.write(NettyUtils.stringToBytes("data3"), 1236);
-    wal.write(NettyUtils.stringToBytes("data4"), 1237);
+    wal.write(JavaUtils.stringToBytes("data2"), 1235);
+    wal.write(JavaUtils.stringToBytes("data3"), 1236);
+    wal.write(JavaUtils.stringToBytes("data4"), 1237);
     wal.clean(1236, false);
 
     Iterator<ByteBuffer> dataIterator = wal.readAll();
     List<String> readData = new ArrayList<>();
     while (dataIterator.hasNext()) {
-      readData.add(NettyUtils.bytesToString(dataIterator.next()));
+      readData.add(JavaUtils.bytesToString(dataIterator.next()));
     }
     Assert.assertEquals(Arrays.asList("data3", "data4"), readData);
   }

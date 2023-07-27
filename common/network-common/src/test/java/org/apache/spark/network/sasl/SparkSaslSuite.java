@@ -137,17 +137,17 @@ public class SparkSaslSuite {
     doAnswer(invocation -> {
       ByteBuffer message = (ByteBuffer) invocation.getArguments()[1];
       RpcResponseCallback cb = (RpcResponseCallback) invocation.getArguments()[2];
-      assertEquals("Ping", NettyUtils.bytesToString(message));
-      cb.onSuccess(NettyUtils.stringToBytes("Pong"));
+      assertEquals("Ping", JavaUtils.bytesToString(message));
+      cb.onSuccess(JavaUtils.stringToBytes("Pong"));
       return null;
     })
       .when(rpcHandler)
       .receive(any(TransportClient.class), any(ByteBuffer.class), any(RpcResponseCallback.class));
 
     try (SaslTestCtx ctx = new SaslTestCtx(rpcHandler, encrypt, false)) {
-      ByteBuffer response = ctx.client.sendRpcSync(NettyUtils.stringToBytes("Ping"),
+      ByteBuffer response = ctx.client.sendRpcSync(JavaUtils.stringToBytes("Ping"),
         TimeUnit.SECONDS.toMillis(10));
-      assertEquals("Pong", NettyUtils.bytesToString(response));
+      assertEquals("Pong", JavaUtils.bytesToString(response));
     } finally {
       // There should be 2 terminated events; one for the client, one for the server.
       Throwable error = null;
@@ -310,7 +310,7 @@ public class SparkSaslSuite {
     // able to understand RPCs sent to it and thus close the connection.
     try (SaslTestCtx ctx = new SaslTestCtx(mock(RpcHandler.class), true, true)) {
       Exception e = assertThrows(Exception.class,
-        () -> ctx.client.sendRpcSync(NettyUtils.stringToBytes("Ping"),
+        () -> ctx.client.sendRpcSync(JavaUtils.stringToBytes("Ping"),
                 TimeUnit.SECONDS.toMillis(10)));
       assertFalse(e.getCause() instanceof TimeoutException);
     }

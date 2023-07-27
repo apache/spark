@@ -20,6 +20,7 @@ package org.apache.spark.network.util;
 import java.io.*;
 import java.nio.ByteBuffer;
 import java.nio.channels.ReadableByteChannel;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.util.*;
@@ -60,6 +61,22 @@ public class JavaUtils {
     if (obj == null) { return 0; }
     int hash = obj.hashCode();
     return hash != Integer.MIN_VALUE ? Math.abs(hash) : 0;
+  }
+
+  /**
+   * Convert the given string to a byte buffer. The resulting buffer can be
+   * converted back to the same string through {@link #bytesToString(ByteBuffer)}.
+   */
+  public static ByteBuffer stringToBytes(String s) {
+    return StandardCharsets.UTF_8.encode(s);
+  }
+
+  /**
+   * Convert the given byte buffer to a string. The resulting string can be
+   * converted back to the same byte buffer through {@link #stringToBytes(String)}.
+   */
+  public static String bytesToString(ByteBuffer b) {
+    return StandardCharsets.UTF_8.decode(b).toString();
   }
 
   /**

@@ -40,8 +40,8 @@ import org.apache.spark.network.server.RpcHandler;
 import org.apache.spark.network.server.StreamManager;
 import org.apache.spark.network.server.TransportServer;
 import org.apache.spark.network.server.TransportServerBootstrap;
+import org.apache.spark.network.util.JavaUtils;
 import org.apache.spark.network.util.MapConfigProvider;
-import org.apache.spark.network.util.NettyUtils;
 import org.apache.spark.network.util.TransportConf;
 
 public class AuthIntegrationSuite {
@@ -62,8 +62,8 @@ public class AuthIntegrationSuite {
     ctx.createServer("secret");
     ctx.createClient("secret");
 
-    ByteBuffer reply = ctx.client.sendRpcSync(NettyUtils.stringToBytes("Ping"), 5000);
-    assertEquals("Pong", NettyUtils.bytesToString(reply));
+    ByteBuffer reply = ctx.client.sendRpcSync(JavaUtils.stringToBytes("Ping"), 5000);
+    assertEquals("Pong", JavaUtils.bytesToString(reply));
     assertNull(ctx.authRpcHandler.saslHandler);
   }
 
@@ -83,8 +83,8 @@ public class AuthIntegrationSuite {
     ctx.createServer("secret", true);
     ctx.createClient("secret", false);
 
-    ByteBuffer reply = ctx.client.sendRpcSync(NettyUtils.stringToBytes("Ping"), 5000);
-    assertEquals("Pong", NettyUtils.bytesToString(reply));
+    ByteBuffer reply = ctx.client.sendRpcSync(JavaUtils.stringToBytes("Ping"), 5000);
+    assertEquals("Pong", JavaUtils.bytesToString(reply));
     assertNotNull(ctx.authRpcHandler.saslHandler);
     assertTrue(ctx.authRpcHandler.isAuthenticated());
   }
@@ -95,8 +95,8 @@ public class AuthIntegrationSuite {
     ctx.createServer("secret", false);
     ctx.createClient("secret", true);
 
-    ByteBuffer reply = ctx.client.sendRpcSync(NettyUtils.stringToBytes("Ping"), 5000);
-    assertEquals("Pong", NettyUtils.bytesToString(reply));
+    ByteBuffer reply = ctx.client.sendRpcSync(JavaUtils.stringToBytes("Ping"), 5000);
+    assertEquals("Pong", JavaUtils.bytesToString(reply));
   }
 
   @Test
@@ -112,7 +112,7 @@ public class AuthIntegrationSuite {
     assertNotNull(ctx.client.getChannel().pipeline()
       .remove(TransportCipher.ENCRYPTION_HANDLER_NAME));
     assertThrows(Exception.class,
-      () -> ctx.client.sendRpcSync(NettyUtils.stringToBytes("Ping"), 5000));
+      () -> ctx.client.sendRpcSync(JavaUtils.stringToBytes("Ping"), 5000));
     assertTrue(ctx.authRpcHandler.isAuthenticated());
   }
 
@@ -140,7 +140,7 @@ public class AuthIntegrationSuite {
     ctx.createClient("secret");
 
     Exception e = assertThrows(Exception.class,
-      () -> ctx.client.sendRpcSync(NettyUtils.stringToBytes("Ping"), 5000));
+      () -> ctx.client.sendRpcSync(JavaUtils.stringToBytes("Ping"), 5000));
     assertTrue(ctx.authRpcHandler.isAuthenticated());
     assertTrue(e.getMessage() + " is not an expected error", e.getMessage().contains("DDDDD"));
     // Verify we receive the complete error message
@@ -175,8 +175,8 @@ public class AuthIntegrationSuite {
             TransportClient client,
             ByteBuffer message,
             RpcResponseCallback callback) {
-          assertEquals("Ping", NettyUtils.bytesToString(message));
-          callback.onSuccess(NettyUtils.stringToBytes("Pong"));
+          assertEquals("Ping", JavaUtils.bytesToString(message));
+          callback.onSuccess(JavaUtils.stringToBytes("Pong"));
         }
 
         @Override

@@ -23,7 +23,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import org.apache.spark.network.util.NettyUtils;
+import org.apache.spark.network.util.JavaUtils;
 
 /**
  * A class that manages shuffle secret used by the external shuffle service.
@@ -58,7 +58,7 @@ public class ShuffleSecretManager implements SecretKeyHolder {
    * Register an application with its secret specified as a byte buffer.
    */
   public void registerApp(String appId, ByteBuffer shuffleSecret) {
-    registerApp(appId, NettyUtils.bytesToString(shuffleSecret));
+    registerApp(appId, JavaUtils.bytesToString(shuffleSecret));
   }
 
   /**
