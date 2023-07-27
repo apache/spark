@@ -37,7 +37,7 @@ Project [mask(AbCD123-@$#, Q, q, d, o) AS mask(AbCD123-@$#, Q, q, d, o)#x]
 -- !query
 SELECT mask('AbCD123-@$#', 'Qa', 'qa', 'da', 'oa')
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.INPUT_SIZE_NOT_ONE",
   "sqlState" : "42K09",
@@ -403,7 +403,7 @@ Project [mask(c1#x, null, null, null, null) AS mask(c1, NULL, NULL, NULL, NULL)#
 -- !query
 SELECT mask(c1, replaceArg) from values('abcd-EFGH-8765-4321', 'a') as t(c1, replaceArg)
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.NON_FOLDABLE_INPUT",
   "sqlState" : "42K09",
@@ -426,7 +426,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 SELECT mask(c1, replaceArg) from values('abcd-EFGH-8765-4321', 'ABC') as t(c1, replaceArg)
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.NON_FOLDABLE_INPUT",
   "sqlState" : "42K09",
@@ -449,7 +449,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 SELECT mask(c1, replaceArg) from values('abcd-EFGH-8765-4321', 123) as t(c1, replaceArg)
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
   "sqlState" : "42K09",
@@ -473,7 +473,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 SELECT mask('abcd-EFGH-8765-4321', 'A', 'w', '')
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.INPUT_SIZE_NOT_ONE",
   "sqlState" : "42K09",
@@ -494,7 +494,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 SELECT mask('abcd-EFGH-8765-4321', 'A', 'abc')
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.INPUT_SIZE_NOT_ONE",
   "sqlState" : "42K09",

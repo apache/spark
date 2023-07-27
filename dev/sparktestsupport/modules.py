@@ -1040,7 +1040,14 @@ pyspark_pandas_slow_connect = Module(
 pyspark_errors = Module(
     name="pyspark-errors",
     dependencies=[],
-    source_file_regexes=["python/pyspark/errors"],
+    source_file_regexes=[
+        # SPARK-44544: Force the execution of pyspark_errors when there are any changes
+        # in PySpark, since the Python Packaging Tests is only enabled within this module.
+        # This module is the smallest Python test module, it contains only 1 test file
+        # and normally takes < 2 seconds, so the additional cost is small.
+        "python/",
+        "python/pyspark/errors",
+    ],
     python_test_goals=[
         # unittests
         "pyspark.errors.tests.test_errors",

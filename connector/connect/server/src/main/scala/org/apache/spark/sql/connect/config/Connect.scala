@@ -23,6 +23,12 @@ import org.apache.spark.sql.connect.common.config.ConnectCommon
 object Connect {
   import org.apache.spark.sql.internal.SQLConf.buildStaticConf
 
+  val CONNECT_GRPC_BINDING_ADDRESS =
+    ConfigBuilder("spark.connect.grpc.binding.address")
+      .version("4.0.0")
+      .stringConf
+      .createOptional
+
   val CONNECT_GRPC_BINDING_PORT =
     ConfigBuilder("spark.connect.grpc.binding.port")
       .version("3.4.0")

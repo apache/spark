@@ -21,6 +21,7 @@ import sys
 import traceback
 from typing import List, IO
 
+from pyspark.accumulators import _accumulatorRegistry
 from pyspark.errors import PySparkRuntimeError, PySparkValueError
 from pyspark.java_gateway import local_connect_and_auth
 from pyspark.serializers import (
@@ -33,7 +34,15 @@ from pyspark.serializers import (
 from pyspark.sql.types import _parse_datatype_json_string
 from pyspark.sql.udtf import AnalyzeArgument, AnalyzeResult
 from pyspark.util import try_simplify_traceback
-from pyspark.worker import check_python_version, read_command, pickleSer, utf8_deserializer
+from pyspark.worker_util import (
+    check_python_version,
+    read_command,
+    pickleSer,
+    send_accumulator_updates,
+    setup_broadcasts,
+    setup_spark_files,
+    utf8_deserializer,
+)
 
 
 def read_udtf(infile: IO) -> type:
@@ -87,6 +96,11 @@ def main(infile: IO, outfile: IO) -> None:
     """
     try:
         check_python_version(infile)
+        setup_spark_files(infile)
+        setup_broadcasts(infile)
+
+        _accumulatorRegistry.clear()
+
         handler = read_udtf(infile)
         args = read_arguments(infile)
 
@@ -121,6 +135,8 @@ def main(infile: IO, outfile: IO) -> None:
             print("PySpark worker failed with exception:", file=sys.stderr)
             print(traceback.format_exc(), file=sys.stderr)
         sys.exit(-1)
+
+    send_accumulator_updates(outfile)
 
     # check end of stream
     if read_int(infile) == SpecialLengths.END_OF_STREAM:
