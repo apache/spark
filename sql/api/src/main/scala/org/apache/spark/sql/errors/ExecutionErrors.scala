@@ -24,7 +24,7 @@ import org.apache.arrow.vector.types.pojo.ArrowType
 import org.apache.spark.{SparkArithmeticException, SparkBuildInfo, SparkDateTimeException, SparkException, SparkIllegalArgumentException, SparkRuntimeException, SparkUnsupportedOperationException, SparkUpgradeException}
 import org.apache.spark.sql.catalyst.WalkedTypePath
 import org.apache.spark.sql.catalyst.trees.SQLQueryContext
-import org.apache.spark.sql.catalyst.util.DateTimeUtils
+import org.apache.spark.sql.catalyst.util.{DateTimeUtils, TimestampFormatter}
 import org.apache.spark.sql.internal.SqlApiConf
 import org.apache.spark.sql.types.{DataType, DoubleType, FloatType, LongType, StringType, UserDefinedType}
 import org.apache.spark.unsafe.types.UTF8String
@@ -120,11 +120,12 @@ private[sql] trait ExecutionErrors extends DataTypeErrorsBase {
   }
 
   def timestampAddOverflowError(micros: Long, amount: Int, unit: String): ArithmeticException = {
+    val timeZoneId = DateTimeUtils.getZoneId(SqlApiConf.get.sessionLocalTimeZone)
+    val str = TimestampFormatter.getFractionFormatter(timeZoneId).format(micros)
     new SparkArithmeticException(
       errorClass = "DATETIME_OVERFLOW",
       messageParameters = Map(
-        "operation" -> (s"add ${toSQLValue(amount)} $unit to " +
-          s"${DateTimeUtils.microsToInstant(micros)}")),
+        "operation" -> (s"add ${toSQLValue(amount)} $unit to TIMESTAMP '$str'")),
       context = Array.empty,
       summary = "")
   }
