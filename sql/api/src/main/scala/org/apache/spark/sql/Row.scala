@@ -31,7 +31,7 @@ import org.json4s.jackson.JsonMethods.{compact, pretty, render}
 
 import org.apache.spark.annotation.{Stable, Unstable}
 import org.apache.spark.sql.catalyst.expressions.GenericRow
-import org.apache.spark.sql.catalyst.util.{DateFormatter, DateTimeUtils, TimestampFormatter, UDTUtils}
+import org.apache.spark.sql.catalyst.util.{DateFormatter, SparkDateTimeUtils, TimestampFormatter, UDTUtils}
 import org.apache.spark.sql.errors.DataTypeErrors
 import org.apache.spark.sql.internal.SqlApiConf
 import org.apache.spark.sql.types._
@@ -551,7 +551,7 @@ trait Row extends Serializable {
   private[sql] def jsonValue: JValue = {
     require(schema != null, "JSON serialization requires a non-null schema.")
 
-    lazy val zoneId = DateTimeUtils.getZoneId(SqlApiConf.get.sessionLocalTimeZone)
+    lazy val zoneId = SparkDateTimeUtils.getZoneId(SqlApiConf.get.sessionLocalTimeZone)
     lazy val dateFormatter = DateFormatter()
     lazy val timestampFormatter = TimestampFormatter(zoneId)
 

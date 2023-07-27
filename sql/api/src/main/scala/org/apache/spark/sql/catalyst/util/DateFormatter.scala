@@ -23,7 +23,7 @@ import java.util.{Date, Locale}
 
 import org.apache.commons.lang3.time.FastDateFormat
 
-import org.apache.spark.sql.catalyst.util.DateTimeUtils._
+import org.apache.spark.sql.catalyst.util.SparkDateTimeUtils._
 import org.apache.spark.sql.internal.LegacyBehaviorPolicy._
 import org.apache.spark.sql.internal.SqlApiConf
 import org.apache.spark.unsafe.types.UTF8String
@@ -99,7 +99,7 @@ class DefaultDateFormatter(
 
   override def parse(s: String): Int = {
     try {
-      DateTimeUtils.stringToDateAnsi(UTF8String.fromString(s))
+      SparkDateTimeUtils.stringToDateAnsi(UTF8String.fromString(s))
     } catch checkParsedDiff(s, legacyFormatter.parse)
   }
 }
@@ -112,7 +112,7 @@ trait LegacyDateFormatter extends DateFormatter {
   }
 
   override def format(days: Int): String = {
-    format(DateTimeUtils.toJavaDate(days))
+    format(SparkDateTimeUtils.toJavaDate(days))
   }
 
   override def format(localDate: LocalDate): String = {
@@ -125,7 +125,7 @@ trait LegacyDateFormatter extends DateFormatter {
  * JVM time zone intentionally for compatibility with Spark 2.4 and earlier versions.
  *
  * Note: Using of the default JVM time zone makes the formatter compatible with the legacy
- *       `DateTimeUtils` methods `toJavaDate` and `fromJavaDate` that are based on the default
+ *       `SparkDateTimeUtils` methods `toJavaDate` and `fromJavaDate` that are based on the default
  *       JVM time zone too.
  *
  * @param pattern `java.text.SimpleDateFormat` compatible pattern.
@@ -145,7 +145,7 @@ class LegacyFastDateFormatter(pattern: String, locale: Locale) extends LegacyDat
  * JVM time zone intentionally for compatibility with Spark 2.4 and earlier versions.
  *
  * Note: Using of the default JVM time zone makes the formatter compatible with the legacy
- *       `DateTimeUtils` methods `toJavaDate` and `fromJavaDate` that are based on the default
+ *       `SparkDateTimeUtils` methods `toJavaDate` and `fromJavaDate` that are based on the default
  *       JVM time zone too.
  *
  * @param pattern The pattern describing the date and time format.
