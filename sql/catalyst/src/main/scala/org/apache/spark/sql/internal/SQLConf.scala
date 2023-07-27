@@ -1852,16 +1852,6 @@ object SQLConf {
       .createWithDefault(
         "org.apache.spark.sql.execution.streaming.state.HDFSBackedStateStoreProvider")
 
-  val ENABLE_STATE_STORE_MAINTENANCE_THREAD_POOL =
-    buildConf("spark.sql.streaming.stateStore.enableStateStoreMaintenanceThreadPool")
-      .internal()
-      .doc("Whether background maintenance tasks are executed by single thread or thread pool. " +
-        "the thread pool is consuming more resource than single thread, which might " +
-        "affect the performance of the query. " +
-        "Enable this if you observe the issue with the maintenance task.")
-      .booleanConf
-      .createWithDefault(false)
-
   val NUM_STATE_STORE_MAINTENANCE_THREADS =
     buildConf("spark.sql.streaming.stateStore.numStateStoreMaintenanceThreads")
       .internal()
@@ -1871,7 +1861,7 @@ object SQLConf {
         "With larger cluster sizes, this number can be increased.")
       .intConf
       .checkValue(_ > 0, "Must be greater than 0")
-        .createWithDefault(2)
+      .createWithDefault(Math.max(Runtime.getRuntime.availableProcessors() / 4, 1))
 
   val STATE_SCHEMA_CHECK_ENABLED =
     buildConf("spark.sql.streaming.stateStore.stateSchemaCheck")
@@ -4526,9 +4516,6 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def isStateSchemaCheckEnabled: Boolean = getConf(STATE_SCHEMA_CHECK_ENABLED)
 
   def numStateStoreMaintenanceThreads: Int = getConf(NUM_STATE_STORE_MAINTENANCE_THREADS)
-
-  def enableStateStoreMaintenanceThreadPool: Boolean =
-    getConf(ENABLE_STATE_STORE_MAINTENANCE_THREAD_POOL)
 
   def stateStoreMinDeltasForSnapshot: Int = getConf(STATE_STORE_MIN_DELTAS_FOR_SNAPSHOT)
 

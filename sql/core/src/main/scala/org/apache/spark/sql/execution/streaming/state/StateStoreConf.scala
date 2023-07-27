@@ -33,8 +33,6 @@ class StateStoreConf(
    */
   val numStateStoreMaintenanceThreads: Int = sqlConf.numStateStoreMaintenanceThreads
 
-  val enableStateStoreMaintenanceThreadPool: Boolean = sqlConf.enableStateStoreMaintenanceThreadPool
-
   /**
    * Minimum number of delta files in a chain after which HDFSBackedStateStore will
    * consider generating a snapshot.
