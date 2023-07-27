@@ -203,18 +203,8 @@ object FileSourceStrategy extends Strategy with PredicateHelper with Logging {
         }
       }
       val supportNestedPushDown = DataSourceUtils.supportNestedPredicatePushdown(fsRelation)
-      // It is safe to push down partial predicate because it will keep the predicate in filter
-      // node.
-      // Here is an example used to explain the reason. Let's say we have
-      // SELECT * FROM foobar WHERE (THEID > 0 AND TRIM(NAME) = 'mary') OR (NAME = 'fred') and we do
-      // not understand how to convert TRIM(NAME) = 'mary'. If we only convert THEID > 2, we will
-      // end up with (THEID > 2) OR (NAME = 'fred'), which the physical plan becomes to:
-      // == Physical Plan ==
-      // *(1) Filter (((THEID#1 > 0) AND (trim(NAME#0, None) = mary)) OR (NAME#0 = fred))
-      // +- *(1) ColumnarToRow
-      //   +- FileScan parquet spark_catalog.default.foobar[name#0,theid#1] Batched: true,
-      //        DataFilters: [(((theid#1 > 0) AND (trim(name#0, None) = mary)) OR (name#0 = fred))],
-      //        Format: Parquet,..., PushedFilters: [Or(GreaterThan(theid,0),EqualTo(name,fred))]
+      // It is safe to push down partial predicate because it will keep the origin predicate in
+      // filter node. Please see test in FileSourceStrategySuite.
       val canPartialPushDown = true
       val pushedFilters = dataFilters
         .flatMap(DataSourceStrategy.translateFilter(_, supportNestedPushDown, canPartialPushDown))

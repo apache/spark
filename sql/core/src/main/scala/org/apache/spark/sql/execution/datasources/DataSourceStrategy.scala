@@ -586,7 +586,8 @@ object DataSourceStrategy
    * @param translatedFilterToExpr An optional map from leaf node filter expressions to its
    *                               translated [[Filter]]. The map is used for rebuilding
    *                               [[Expression]] from [[Filter]].
-   * @param supportNestedPushDown Whether nested predicate pushdown is enabled.
+   * @param supportNestedPushDown Whether nested predicate push down is enabled.
+   * @param canPartialPushDown Can it be translated into partial predicate.
    * @return a `Some[Filter]` if the input [[Expression]] is convertible, otherwise a `None`.
    */
   protected[sql] def translateFilterWithMapping(
@@ -671,13 +672,7 @@ object DataSourceStrategy
     val supportNestedPredicatePushdown = DataSourceUtils.supportNestedPredicatePushdown(relation)
     // It is not safe to push down partial predicate because it will mark the partial pushed
     // predicate as handledFilters and will remove this predicate in filter node.
-    // Here is an example used to explain the reason.  Let's say we have
-    // SELECT * FROM foobar WHERE (THEID > 0 AND TRIM(NAME) = 'mary') OR (NAME = 'fred') and we do
-    // not understand how to convert TRIM(NAME) = 'mary'. If we only convert THEID > 2, we will
-    // end up with (THEID > 2) OR (NAME = 'fred'), which the physical plan becomes to:
-    // == Physical Plan ==
-    // *(1) Scan JDBCRelation(TEST.PEOPLE) [numPartitions=1] [NAME#0,THEID#1]
-    //   PushedFilters: [*Or(GreaterThan(THEID,0),EqualTo(NAME,fred))]
+    // Please see test in JDBCSuite.
     val canPartialPushDown = false
     // A map from original Catalyst expressions to corresponding translated data source filters.
     // If a predicate is not in this map, it means it cannot be pushed down.

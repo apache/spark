@@ -3295,7 +3295,7 @@ class DataSourceV2SQLSuiteV1Filter
     }
   }
 
-  test("SPARK-44493: Should not extract pushable predicates from disjunctive predicates") {
+  test("SPARK-44493: Push partial predicates are not supported") {
     val t1 = "testcat.ns1.ns2.tbl"
     withTable(t1) {
       sql(

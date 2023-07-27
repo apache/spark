@@ -2058,7 +2058,7 @@ class JDBCSuite extends QueryTest with SharedSparkSession {
     assert(df.collect.toSet === Set(Row("smith", 1)))
   }
 
-  test("SPARK-44493: Should not extract pushable predicates from disjunctive predicates") {
+  test("SPARK-44493: Push partial predicates are not supported") {
     val df = sql("SELECT * FROM foobar WHERE (THEID > 0 AND TRIM(NAME) = 'mary') OR (THEID > 10)")
 
     assert(getPhysicalFilters(df) contains resolve(df,

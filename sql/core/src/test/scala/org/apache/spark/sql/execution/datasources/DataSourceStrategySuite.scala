@@ -171,7 +171,7 @@ class DataSourceStrategySuite extends PlanTest with SharedSparkSession {
 
     // SPARK-22548 Incorrect nested AND expression pushed down to JDBC data source
     // (cint > 1 AND ABS(cint) < 10) OR (cint < 50 AND cint > 100)
-    testTranslateFilter(Or(
+    val disjunctivePredicate1 = Or(
       And(
         GreaterThan(attrInt, 1),
         // Functions such as 'Abs' are not supported
@@ -179,7 +179,15 @@ class DataSourceStrategySuite extends PlanTest with SharedSparkSession {
       ),
       And(
         GreaterThan(attrInt, 50),
-        LessThan(attrInt, 100))), None)
+        LessThan(attrInt, 100)))
+    testTranslateFilter(disjunctivePredicate1,
+      None, canPartialPushDown = false)
+    testTranslateFilter(disjunctivePredicate1,
+      Some(sources.Or(
+        sources.GreaterThan(intColName, 1),
+        sources.And(
+          sources.GreaterThan(intColName, 50),
+          sources.LessThan(intColName, 100)))))
 
     // NOT ((cint <= 1 OR ABS(cint) >= 10) AND (cint <= 50 OR cint >= 100))
     testTranslateFilter(Not(And(
@@ -241,7 +249,7 @@ class DataSourceStrategySuite extends PlanTest with SharedSparkSession {
           sources.IsNotNull(intColName)))))
 
     // (cint > 1 AND cint < 10) AND (ABS(cint) = 6 AND cint IS NOT NULL)
-    testTranslateFilter(And(
+    val conjunctivePredicate1 = And(
       And(
         GreaterThan(attrInt, 1),
         LessThan(attrInt, 10)
@@ -249,7 +257,15 @@ class DataSourceStrategySuite extends PlanTest with SharedSparkSession {
       And(
         // Functions such as 'Abs' are not supported
         EqualTo(Abs(attrInt), 6),
-        IsNotNull(attrInt))), None)
+        IsNotNull(attrInt)))
+    testTranslateFilter(conjunctivePredicate1,
+      None, canPartialPushDown = false)
+    testTranslateFilter(conjunctivePredicate1,
+      Some(sources.And(
+        sources.And(
+          sources.GreaterThan(intColName, 1),
+          sources.LessThan(intColName, 10)),
+        sources.IsNotNull(intColName))))
 
     // (cint > 1 OR cint < 10) AND (cint = 6 OR cint IS NOT NULL)
     testTranslateFilter(And(
@@ -269,7 +285,7 @@ class DataSourceStrategySuite extends PlanTest with SharedSparkSession {
           sources.IsNotNull(intColName)))))
 
     // (cint > 1 OR cint < 10) AND (cint = 6 OR cint IS NOT NULL)
-    testTranslateFilter(And(
+    val conjunctivePredicate2 = And(
       Or(
         GreaterThan(attrInt, 1),
         LessThan(attrInt, 10)
@@ -277,110 +293,28 @@ class DataSourceStrategySuite extends PlanTest with SharedSparkSession {
       Or(
         // Functions such as 'Abs' are not supported
         EqualTo(Abs(attrInt), 6),
-        IsNotNull(attrInt))), None)
-  }}
-
-  test("Extract pushable predicates from disjunctive predicates") {
-    val intColName = "cint"
-    val longColName = "clong"
-    val stringColName = "cstring"
-    val attrInt = $"$intColName".int
-    val attrLong = $"$longColName".long
-    val attrString = $"$stringColName".string
-
-    // (longColName in (1, 2) AND stringColName rlike '[a-z]+a') OR
-    //   (longColName in (3, 4) AND stringColName rlike '[a-z]+b')
-    testTranslateFilter(
-      Or(
-        And(attrLong.in(1, 2), attrString.rlike("[a-z]+a")),
-        And(attrLong.in(3, 4), attrString.rlike("[a-z]+b"))),
-      Some(
-        sources.Or(sources.In(longColName, Array(1, 2)),
-          sources.In(longColName, Array(3, 4)))))
-
-    // ((longColName = 1 OR longColName = 2) AND stringColName rlike '[a-z]+a') OR
-    //   (longColName in (3, 4) AND stringColName rlike '[a-z]+b') OR
-    //   (longColName > 1 AND longColName < 9 AND stringColName rlike '[a-z]+c') OR
-    testTranslateFilter(
-      Or(Or(
-        And(Or(attrLong === 1, attrLong === 2), attrString.rlike("[a-z]+a")),
-        And(attrLong.in(3, 4), attrString.rlike("[a-z]+b"))),
-        And(And(attrLong > 1, attrLong < 9), attrString.rlike("[a-z]+c"))),
+        IsNotNull(attrInt)))
+    testTranslateFilter(conjunctivePredicate2,
+      None, canPartialPushDown = false)
+    testTranslateFilter(conjunctivePredicate2,
       Some(
         sources.Or(
-          sources.Or(sources.Or(sources.EqualTo(longColName, 1), sources.EqualTo(longColName, 2)),
-            sources.In(longColName, Array(3, 4))),
-          sources.And(sources.GreaterThan(longColName, 1), sources.LessThan(longColName, 9)))))
+          sources.GreaterThan(intColName, 1),
+          sources.LessThan(intColName, 10))))
 
-    // (intColName > 1 AND longColName > 2 AND stringColName rlike '[a-z]+a') OR
-    //    (intColName > 2 AND longColName > 3 AND stringColName rlike '[a-z]+a')
-    testTranslateFilter(
-      Or(
-        And(And(attrInt > 1, attrLong > 2), attrString.rlike("[a-z]+a")),
-        And(And(attrInt > 2, attrLong > 3), attrString.rlike("[a-z]+b"))),
-      Some(
-        sources.Or(
-          sources.And(sources.GreaterThan(intColName, 1), sources.GreaterThan(longColName, 2)),
-          sources.And(sources.GreaterThan(intColName, 2), sources.GreaterThan(longColName, 3)))))
-
-    // (intColName > 1 AND longColName > 2 AND stringColName rlike '[a-z]+a') OR
-    //    (intColName > 2 AND longColName + 1 > 3 AND stringColName rlike '[a-z]+b')
-    testTranslateFilter(
-      Or(
-        And(And(attrInt > 1, attrLong > 2), attrString.rlike("[a-z]+a")),
-        And(And(attrInt > 2, attrLong + 1 > 3), attrString.rlike("[a-z]+b"))),
-      Some(
-        sources.Or(
-          sources.And(sources.GreaterThan(intColName, 1), sources.GreaterThan(longColName, 2)),
-          sources.GreaterThan(intColName, 2))))
-
-    // (intColName > 1 AND stringColName rlike '[a-z]+a') OR
-    //   (longColName > 2 AND stringColName rlike '[a-z]+b')
-    testTranslateFilter(
-      Or(
-        And(attrInt > 1, attrString.rlike("[a-z]+a")),
-        And(attrLong > 2, attrString.rlike("[a-z]+b"))),
-      Some(sources.Or(sources.GreaterThan(intColName, 1), sources.GreaterThan(longColName, 2))))
-
-    // intColName > 1 AND ((intColName > 1 AND stringColName rlike '[a-z]+a') OR
-    //   (longColName > 2 AND stringColName rlike '[a-z]+b'))
-    testTranslateFilter(
-      And(
-        GreaterThan(attrInt, 1),
-        Or(And(attrInt > 1, attrString.rlike("[a-z]+a")),
-          And(attrLong > 2, attrString.rlike("[a-z]+b")))),
-      Some(sources.And(sources.GreaterThan(intColName, 1),
-        sources.Or(sources.GreaterThan(intColName, 1), sources.GreaterThan(longColName, 2)))))
-
-    // Not(intColName > 1 OR (longColName > 3 AND stringColName rlike '[a-z]+a'))
+    // Not((cint > 1) OR (Abs(cint) = 6 AND cint < 1))
     testTranslateFilter(
       Not(Or(
         GreaterThan(attrInt, 1),
-        And(attrLong > 2, attrString.rlike("[a-z]+a")))),
+        And(EqualTo(Abs(attrInt), 6), LessThanOrEqual(attrInt, 1)))),
       None)
 
-    // (1 > 1 AND stringColName rlike '[a-z]+a') OR (2 > 2 AND stringColName rlike '[a-z]+b')
+    // (1 > 1 AND Abs(cint) > 1) OR (2 > 2 AND Abs(cint) > 2)
     testTranslateFilter(
-        Or(And(1 > 1, attrString.rlike("[a-z]+b")),
-          And(2 > 2, attrString.rlike("[a-z]+c"))),
+      Or(And(1 > 1, EqualTo(Abs(attrInt), 1)),
+        And(2 > 2, EqualTo(Abs(attrInt), 2))),
       Some(sources.Or(AlwaysFalse, AlwaysFalse)))
-
-    // (longColName + 2 > 1 AND stringColName rlike '[a-z]+a') OR
-    //   (longColName > 3 AND stringColName rlike '[a-z]+b')
-    testTranslateFilter(
-      Or(
-        And(attrLong + 2 > 1, attrString.rlike("[a-z]+a")),
-        And(attrLong > 3, attrString.rlike("[a-z]+b"))),
-      None)
-
-    // (intColName > 1 AND stringColName rlike '[a-z]+a') OR
-    //   (intColName + 1 < 9 AND stringColName rlike '[a-z]+b')
-    testTranslateFilter(
-      Or(
-        And(attrInt > 1, attrString.rlike("[a-z]+a")),
-        And(attrInt + 1 < 9, attrString.rlike("[a-z]+b"))),
-      None)
-  }
+  }}
 
   test("SPARK-26865 DataSourceV2Strategy should push normalized filters") {
     val attrInt = $"cint".int
@@ -422,9 +356,12 @@ class DataSourceStrategySuite extends PlanTest with SharedSparkSession {
    * Translate the given Catalyst [[Expression]] into data source [[sources.Filter]]
    * then verify against the given [[sources.Filter]].
    */
-  def testTranslateFilter(catalystFilter: Expression, result: Option[sources.Filter]): Unit = {
+  def testTranslateFilter(
+      catalystFilter: Expression,
+      result: Option[sources.Filter],
+      canPartialPushDown: Boolean = true): Unit = {
     assertResult(result) {
-      DataSourceStrategy.translateFilter(catalystFilter, true, true)
+      DataSourceStrategy.translateFilter(catalystFilter, true, canPartialPushDown)
     }
   }
 }

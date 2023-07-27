@@ -623,7 +623,7 @@ class FileSourceStrategySuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  test("SPARK-44493: Extract pushable predicates from disjunctive predicates") {
+  test("SPARK-44493: Push partial predicates are supported") {
     def getPushedFilters(df: DataFrame): Option[String] = {
       df.queryExecution.executedPlan.collectFirst {
         case f: FileSourceScanExec => f.metadata.get("PushedFilters")

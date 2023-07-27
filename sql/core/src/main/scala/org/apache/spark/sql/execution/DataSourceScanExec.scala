@@ -373,8 +373,8 @@ trait FileSourceScanLike extends DataSourceScanExec {
 
   private def translatePushedDownFilters(dataFilters: Seq[Expression]): Seq[Filter] = {
     val supportNestedPushDown = DataSourceUtils.supportNestedPredicatePushdown(relation)
-    // It will keep the partial pushed predicates in filter node.
-    // Please see test in FileSourceStrategySuite
+    // It is safe to push down partial predicate because it will keep the origin predicate in
+    // filter node. Please see test in FileSourceStrategySuite.
     val canPartialPushDown = true
     // `dataFilters` should not include any constant metadata col filters
     // because the metadata struct has been flatted in FileSourceStrategy

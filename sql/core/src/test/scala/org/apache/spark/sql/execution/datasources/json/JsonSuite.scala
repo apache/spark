@@ -3533,7 +3533,7 @@ class JsonV2Suite extends JsonSuite {
     }
   }
 
-  test("SPARK-44493: Extract pushable predicates from disjunctive predicates") {
+  test("SPARK-44493: Push partial predicates are supported") {
     import testImplicits._
     withTempPath { path =>
       Seq(
