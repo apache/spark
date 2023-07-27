@@ -43,6 +43,8 @@
   "shuffleMergedLocalBytesRead" : 0,
   "shuffleRemoteReqsDuration" : 0,
   "shuffleMergedRemoteReqsDuration" : 0,
+  "isShufflePushEnabled" : false,
+  "shuffleMergersCount" : 0,
   "shuffleWriteBytes" : 13180,
   "shuffleWriteTime" : 692000,
   "shuffleWriteRecords" : 0,
@@ -56,7 +58,7 @@
       "taskId" : 10,
       "index" : 2,
       "attempt" : 0,
-      "partitionId" : -1,
+      "partitionId": -1,
       "launchTime" : "2015-02-03T16:43:05.830GMT",
       "duration" : 456,
       "executorId" : "driver",
@@ -91,7 +93,6 @@
           "remoteBytesRead" : 0,
           "remoteBytesReadToDisk" : 0,
           "localBytesRead" : 0,
-          "recordsRead" : 0,
           "remoteReqsDuration" : 0,
           "shufflePushReadMetrics" : {
             "corruptMergedBlockChunks" : 0,
@@ -103,7 +104,8 @@
             "remoteMergedBytesRead" : 0,
             "localMergedBytesRead" : 0,
             "remoteMergedReqsDuration" : 0
-          }
+          },
+          "recordsRead" : 0
         },
         "shuffleWriteMetrics" : {
           "bytesWritten" : 1648,
@@ -119,7 +121,7 @@
       "taskId" : 14,
       "index" : 6,
       "attempt" : 0,
-      "partitionId" : -1,
+      "partitionId": -1,
       "launchTime" : "2015-02-03T16:43:05.832GMT",
       "duration" : 450,
       "executorId" : "driver",
@@ -154,7 +156,6 @@
           "remoteBytesRead" : 0,
           "remoteBytesReadToDisk" : 0,
           "localBytesRead" : 0,
-          "recordsRead" : 0,
           "remoteReqsDuration" : 0,
           "shufflePushReadMetrics" : {
             "corruptMergedBlockChunks" : 0,
@@ -166,7 +167,8 @@
             "remoteMergedBytesRead" : 0,
             "localMergedBytesRead" : 0,
             "remoteMergedReqsDuration" : 0
-          }
+          },
+          "recordsRead" : 0
         },
         "shuffleWriteMetrics" : {
           "bytesWritten" : 1648,
@@ -182,7 +184,7 @@
       "taskId" : 9,
       "index" : 1,
       "attempt" : 0,
-      "partitionId" : -1,
+      "partitionId": -1,
       "launchTime" : "2015-02-03T16:43:05.830GMT",
       "duration" : 454,
       "executorId" : "driver",
@@ -217,7 +219,6 @@
           "remoteBytesRead" : 0,
           "remoteBytesReadToDisk" : 0,
           "localBytesRead" : 0,
-          "recordsRead" : 0,
           "remoteReqsDuration" : 0,
           "shufflePushReadMetrics" : {
             "corruptMergedBlockChunks" : 0,
@@ -229,7 +230,8 @@
             "remoteMergedBytesRead" : 0,
             "localMergedBytesRead" : 0,
             "remoteMergedReqsDuration" : 0
-          }
+          },
+          "recordsRead" : 0
         },
         "shuffleWriteMetrics" : {
           "bytesWritten" : 1648,
@@ -245,7 +247,7 @@
       "taskId" : 13,
       "index" : 5,
       "attempt" : 0,
-      "partitionId" : -1,
+      "partitionId": -1,
       "launchTime" : "2015-02-03T16:43:05.831GMT",
       "duration" : 452,
       "executorId" : "driver",
@@ -280,7 +282,6 @@
           "remoteBytesRead" : 0,
           "remoteBytesReadToDisk" : 0,
           "localBytesRead" : 0,
-          "recordsRead" : 0,
           "remoteReqsDuration" : 0,
           "shufflePushReadMetrics" : {
             "corruptMergedBlockChunks" : 0,
@@ -292,7 +293,8 @@
             "remoteMergedBytesRead" : 0,
             "localMergedBytesRead" : 0,
             "remoteMergedReqsDuration" : 0
-          }
+          },
+          "recordsRead" : 0
         },
         "shuffleWriteMetrics" : {
           "bytesWritten" : 1648,
@@ -308,7 +310,7 @@
       "taskId" : 12,
       "index" : 4,
       "attempt" : 0,
-      "partitionId" : -1,
+      "partitionId": -1,
       "launchTime" : "2015-02-03T16:43:05.831GMT",
       "duration" : 454,
       "executorId" : "driver",
@@ -343,7 +345,6 @@
           "remoteBytesRead" : 0,
           "remoteBytesReadToDisk" : 0,
           "localBytesRead" : 0,
-          "recordsRead" : 0,
           "remoteReqsDuration" : 0,
           "shufflePushReadMetrics" : {
             "corruptMergedBlockChunks" : 0,
@@ -355,7 +356,8 @@
             "remoteMergedBytesRead" : 0,
             "localMergedBytesRead" : 0,
             "remoteMergedReqsDuration" : 0
-          }
+          },
+          "recordsRead" : 0
         },
         "shuffleWriteMetrics" : {
           "bytesWritten" : 1645,
@@ -371,7 +373,7 @@
       "taskId" : 11,
       "index" : 3,
       "attempt" : 0,
-      "partitionId" : -1,
+      "partitionId": -1,
       "launchTime" : "2015-02-03T16:43:05.830GMT",
       "duration" : 454,
       "executorId" : "driver",
@@ -406,7 +408,6 @@
           "remoteBytesRead" : 0,
           "remoteBytesReadToDisk" : 0,
           "localBytesRead" : 0,
-          "recordsRead" : 0,
           "remoteReqsDuration" : 0,
           "shufflePushReadMetrics" : {
             "corruptMergedBlockChunks" : 0,
@@ -418,7 +419,8 @@
             "remoteMergedBytesRead" : 0,
             "localMergedBytesRead" : 0,
             "remoteMergedReqsDuration" : 0
-          }
+          },
+          "recordsRead" : 0
         },
         "shuffleWriteMetrics" : {
           "bytesWritten" : 1647,
@@ -434,7 +436,7 @@
       "taskId" : 8,
       "index" : 0,
       "attempt" : 0,
-      "partitionId" : -1,
+      "partitionId": -1,
       "launchTime" : "2015-02-03T16:43:05.829GMT",
       "duration" : 454,
       "executorId" : "driver",
@@ -469,7 +471,6 @@
           "remoteBytesRead" : 0,
           "remoteBytesReadToDisk" : 0,
           "localBytesRead" : 0,
-          "recordsRead" : 0,
           "remoteReqsDuration" : 0,
           "shufflePushReadMetrics" : {
             "corruptMergedBlockChunks" : 0,
@@ -481,7 +482,8 @@
             "remoteMergedBytesRead" : 0,
             "localMergedBytesRead" : 0,
             "remoteMergedReqsDuration" : 0
-          }
+          },
+          "recordsRead" : 0
         },
         "shuffleWriteMetrics" : {
           "bytesWritten" : 1648,
@@ -497,7 +499,7 @@
       "taskId" : 15,
       "index" : 7,
       "attempt" : 0,
-      "partitionId" : -1,
+      "partitionId": -1,
       "launchTime" : "2015-02-03T16:43:05.833GMT",
       "duration" : 450,
       "executorId" : "driver",
@@ -532,7 +534,6 @@
           "remoteBytesRead" : 0,
           "remoteBytesReadToDisk" : 0,
           "localBytesRead" : 0,
-          "recordsRead" : 0,
           "remoteReqsDuration" : 0,
           "shufflePushReadMetrics" : {
             "corruptMergedBlockChunks" : 0,
@@ -544,7 +545,8 @@
             "remoteMergedBytesRead" : 0,
             "localMergedBytesRead" : 0,
             "remoteMergedReqsDuration" : 0
-          }
+          },
+          "recordsRead" : 0
         },
         "shuffleWriteMetrics" : {
           "bytesWritten" : 1648,
@@ -628,7 +630,5 @@
     "ConcurrentGCCount" : 0,
     "ConcurrentGCTime" : 0,
     "TotalGCTime" : 0
-  },
-  "isShufflePushEnabled" : false,
-  "shuffleMergersCount" : 0
+  }
 } ]

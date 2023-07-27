@@ -10,8 +10,8 @@
     "sparkUser" : "irashid",
     "completed" : true,
     "appSparkVersion" : "",
-    "startTimeEpoch" : 1426633910242,
     "endTimeEpoch" : 1426633945177,
+    "startTimeEpoch" : 1426633910242,
     "lastUpdatedEpoch" : 0
   }, {
     "attemptId" : "1",
@@ -22,8 +22,8 @@
     "sparkUser" : "irashid",
     "completed" : true,
     "appSparkVersion" : "",
-    "startTimeEpoch" : 1426533910242,
     "endTimeEpoch" : 1426533945177,
+    "startTimeEpoch" : 1426533910242,
     "lastUpdatedEpoch" : 0
   } ]
 }
