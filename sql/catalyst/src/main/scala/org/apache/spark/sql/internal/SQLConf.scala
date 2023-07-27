@@ -2917,8 +2917,7 @@ object SQLConf {
   val PYTHON_UDF_ARROW_ENABLED =
     buildConf("spark.sql.execution.pythonUDF.arrow.enabled")
       .doc("Enable Arrow optimization in regular Python UDFs. This optimization " +
-        "can only be enabled for atomic output types and input types except struct and map types " +
-        "when the given function takes at least one argument.")
+        "can only be enabled when the given function takes at least one argument.")
       .version("3.4.0")
       .booleanConf
       .createWithDefault(false)
