@@ -155,7 +155,7 @@ class StreamingQueryManager private[sql] (sparkSession: SparkSession) extends Lo
     cacheListenerById(id, listener)
     executeManagerCmd(
       _.getAddListenerBuilder
-        .setListenerPayload(ByteString.copyFrom(Utils
+        .setListenerPayload(ByteString.copyFrom(SparkSerDeUtils
           .serialize(StreamingListenerPacket(id, listener))))
           .setId(id))
   }
