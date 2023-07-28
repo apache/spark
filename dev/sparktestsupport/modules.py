@@ -975,10 +975,9 @@ pyspark_pandas_connect = Module(
 )
 
 
-# This module should contain the same test list with 'pyspark_pandas_slow' for maintenance.
 pyspark_pandas_slow_connect = Module(
     name="pyspark-pandas-slow-connect",
-    dependencies=[pyspark_connect, pyspark_pandas_slow],
+    dependencies=[pyspark_connect, pyspark_pandas, pyspark_pandas_slow],
     source_file_regexes=[
         "python/pyspark/pandas",
     ],
