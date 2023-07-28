@@ -17,24 +17,19 @@
 # under the License.
 #
 
-name: "Build (master, Scala 2.12, Hadoop 3, JDK 8, Maven)"
+name: "Build using Maven (master, Scala 2.12, Hadoop 3, JDK 8)"
 
 on:
-  schedule:
-    - cron: '0 13 * * *'
+  push:
+    branches:
+      - '**'
+#  schedule:
+#    - cron: '0 13 * * *'
 
 jobs:
   run-build:
     permissions:
       packages: write
     name: Run
-    uses: ./.github/workflows/build_and_test.yml
+    uses: ./.github/workflows/build_and_test_maven.yml
     if: github.repository == 'apache/spark'
-    with:
-      java: 8
-      branch: master
-      hadoop: hadoop3
-      jobs: >-
-        {
-          "maven-test" : "true"
-        }
