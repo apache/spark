@@ -1375,6 +1375,12 @@ object SQLConf {
     .timeConf(TimeUnit.SECONDS)
     .createWithDefaultString(s"${5 * 60}")
 
+  val INTERRUPT_ON_CANCEL = buildConf("spark.sql.execution.interruptOnCancel")
+    .doc("When true, all running tasks will be interrupted if one cancels a query.")
+    .version("3.5.0")
+    .booleanConf
+    .createWithDefault(true)
+
   // This is only used for the thriftserver
   val THRIFTSERVER_POOL = buildConf("spark.sql.thriftserver.scheduler.pool")
     .doc("Set a Fair Scheduler pool for a JDBC client session.")
@@ -1395,8 +1401,7 @@ object SQLConf {
       .doc("When true, all running tasks will be interrupted if one cancels a query. " +
         "When false, all running tasks will remain until finished.")
       .version("3.2.0")
-      .booleanConf
-      .createWithDefault(true)
+      .fallbackConf(INTERRUPT_ON_CANCEL)
 
   val THRIFTSERVER_QUERY_TIMEOUT =
     buildConf("spark.sql.thriftServer.queryTimeout")

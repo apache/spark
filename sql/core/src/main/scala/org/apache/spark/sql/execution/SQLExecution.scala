@@ -20,11 +20,13 @@ package org.apache.spark.sql.execution
 import java.util.concurrent.{ConcurrentHashMap, ExecutorService, Future => JFuture}
 import java.util.concurrent.atomic.AtomicLong
 
-import org.apache.spark.{ErrorMessageFormat, SparkContext, SparkThrowable, SparkThrowableHelper}
+import org.apache.spark.{ErrorMessageFormat, SparkThrowable, SparkThrowableHelper}
+import org.apache.spark.SparkContext.{SPARK_JOB_DESCRIPTION, SPARK_JOB_INTERRUPT_ON_CANCEL}
 import org.apache.spark.internal.config.{SPARK_DRIVER_PREFIX, SPARK_EXECUTOR_PREFIX}
 import org.apache.spark.internal.config.Tests.IS_TESTING
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.execution.ui.{SparkListenerSQLExecutionEnd, SparkListenerSQLExecutionStart}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.StaticSQLConf.SQL_EVENT_TRUNCATE_LENGTH
 import org.apache.spark.util.Utils
 
@@ -77,6 +79,10 @@ object SQLExecution {
     }
     val rootExecutionId = sc.getLocalProperty(EXECUTION_ROOT_ID_KEY).toLong
     executionIdToQueryExecution.put(executionId, queryExecution)
+    if (sc.getLocalProperty(SPARK_JOB_INTERRUPT_ON_CANCEL) == null) {
+      val interruptOnCancel = sparkSession.conf.get(SQLConf.INTERRUPT_ON_CANCEL)
+      sc.setInterruptOnCancel(interruptOnCancel)
+    }
     try {
       // sparkContext.getCallSite() would first try to pick up any call site that was previously
       // set, then fall back to Utils.getCallSite(); call Utils.getCallSite() directly on
@@ -85,7 +91,7 @@ object SQLExecution {
 
       val truncateLength = sc.conf.get(SQL_EVENT_TRUNCATE_LENGTH)
 
-      val desc = Option(sc.getLocalProperty(SparkContext.SPARK_JOB_DESCRIPTION))
+      val desc = Option(sc.getLocalProperty(SPARK_JOB_DESCRIPTION))
         .filter(_ => truncateLength > 0)
         .map { sqlStr =>
           val redactedStr = Utils
@@ -159,6 +165,7 @@ object SQLExecution {
       if (sc.getLocalProperty(EXECUTION_ROOT_ID_KEY) == executionId.toString) {
         sc.setLocalProperty(EXECUTION_ROOT_ID_KEY, null)
       }
+      sc.setLocalProperty(SPARK_JOB_INTERRUPT_ON_CANCEL, null)
     }
   }
 
