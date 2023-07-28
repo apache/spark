@@ -21,7 +21,7 @@ import scala.util.Random
 
 import org.apache.spark.{SparkException, SparkFunSuite}
 import org.apache.spark.sql.RandomDataGenerator
-import org.apache.spark.sql.catalyst.encoders.{ExamplePointUDT, RowEncoder}
+import org.apache.spark.sql.catalyst.encoders.{ExamplePointUDT, ExpressionEncoder}
 import org.apache.spark.sql.catalyst.expressions.{SafeProjection, UnsafeProjection}
 import org.apache.spark.sql.types._
 
@@ -75,7 +75,7 @@ class ArrayDataIndexedSeqSuite extends SparkFunSuite {
     arrayTypes.foreach { dt =>
       val schema = StructType(StructField("col_1", dt, nullable = false) :: Nil)
       val row = RandomDataGenerator.randomRow(random, schema)
-      val toRow = RowEncoder(schema).createSerializer()
+      val toRow = ExpressionEncoder(schema).createSerializer()
       val internalRow = toRow(row)
 
       val unsafeRowConverter = UnsafeProjection.create(schema)

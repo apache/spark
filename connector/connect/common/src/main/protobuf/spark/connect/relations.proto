@@ -71,6 +71,7 @@ message Relation {
     HtmlString html_string = 35;
     CachedLocalRelation cached_local_relation = 36;
     CachedRemoteRelation cached_remote_relation = 37;
+    CommonInlineUserDefinedTableFunction common_inline_user_defined_table_function = 38;
 
     // NA functions
     NAFill fill_na = 90;
@@ -230,10 +231,10 @@ message Join {
   optional JoinDataType join_data_type = 6;
 
   message JoinDataType {
-    // If the left data type is a struct that can be flatten to a row.
-    bool is_left_flattenable_to_row = 1;
-    // If the right data type is a struct that can be flatten to a row.
-    bool is_right_flattenable_to_row = 2;
+    // If the left data type is a struct.
+    bool is_left_struct = 1;
+    // If the right data type is a struct.
+    bool is_right_struct = 2;
   }
 }
 
@@ -939,6 +940,36 @@ message ApplyInPandasWithState {
 
   // (Required) Timeout configuration for groups that do not receive data for a while.
   string timeout_conf = 7;
+}
+
+message CommonInlineUserDefinedTableFunction {
+  // (Required) Name of the user-defined table function.
+  string function_name = 1;
+
+  // (Optional) Whether the user-defined table function is deterministic.
+  bool deterministic = 2;
+
+  // (Optional) Function input arguments. Empty arguments are allowed.
+  repeated Expression arguments = 3;
+
+  // (Required) Type of the user-defined table function.
+  oneof function {
+    PythonUDTF python_udtf = 4;
+  }
+}
+
+message PythonUDTF {
+  // (Optional) Return type of the Python UDTF.
+  optional DataType return_type = 1;
+
+  // (Required) EvalType of the Python UDTF.
+  int32 eval_type = 2;
+
+  // (Required) The encoded commands of the Python UDTF.
+  bytes command = 3;
+
+  // (Required) Python version being used in the client.
+  string python_ver = 4;
 }
 
 // Collect arbitrary (named) metrics from a dataset.

@@ -126,7 +126,6 @@ class SparkSession private[sql] (
   private def createDataset[T](encoder: AgnosticEncoder[T], data: Iterator[T]): Dataset[T] = {
     newDataset(encoder) { builder =>
       if (data.nonEmpty) {
-        val timeZoneId = conf.get("spark.sql.session.timeZone")
         val arrowData = ArrowSerializer.serialize(data, encoder, allocator, timeZoneId)
         if (arrowData.size() <= conf.get("spark.sql.session.localRelationCacheThreshold").toInt) {
           builder.getLocalRelationBuilder
@@ -417,6 +416,30 @@ class SparkSession private[sql] (
     range(start, end, step, Option(numPartitions))
   }
 
+  /**
+   * A collection of methods for registering user-defined functions (UDF).
+   *
+   * The following example registers a Scala closure as UDF:
+   * {{{
+   *   sparkSession.udf.register("myUDF", (arg1: Int, arg2: String) => arg2 + arg1)
+   * }}}
+   *
+   * The following example registers a UDF in Java:
+   * {{{
+   *   sparkSession.udf().register("myUDF",
+   *       (Integer arg1, String arg2) -> arg2 + arg1,
+   *       DataTypes.StringType);
+   * }}}
+   *
+   * @note
+   *   The user-defined functions must be deterministic. Due to optimization, duplicate
+   *   invocations may be eliminated or the function may even be invoked more times than it is
+   *   present in the query.
+   *
+   * @since 3.5.0
+   */
+  lazy val udf: UDFRegistration = new UDFRegistration(this)
+
   // scalastyle:off
   // Disable style checker so "implicits" object can start with lowercase i
   /**
@@ -505,9 +528,11 @@ class SparkSession private[sql] (
     client.semanticHash(plan).getSemanticHash.getResult
   }
 
+  private[sql] def timeZoneId: String = conf.get("spark.sql.session.timeZone")
+
   private[sql] def execute[T](plan: proto.Plan, encoder: AgnosticEncoder[T]): SparkResult[T] = {
     val value = client.execute(plan)
-    val result = new SparkResult(value, allocator, encoder)
+    val result = new SparkResult(value, allocator, encoder, timeZoneId)
     cleaner.register(result)
     result
   }
@@ -523,6 +548,13 @@ class SparkSession private[sql] (
   private[sql] def execute(command: proto.Command): Seq[ExecutePlanResponse] = {
     val plan = proto.Plan.newBuilder().setCommand(command).build()
     client.execute(plan).asScala.toSeq
+  }
+
+  private[sql] def registerUdf(udf: proto.CommonInlineUserDefinedFunction): Unit = {
+    val command = proto.Command.newBuilder().setRegisterFunction(udf).build()
+    val plan = proto.Plan.newBuilder().setCommand(command).build()
+
+    client.execute(plan)
   }
 
   @DeveloperApi
@@ -582,14 +614,40 @@ class SparkSession private[sql] (
   /**
    * Interrupt all operations of this session currently running on the connected server.
    *
-   * TODO/WIP: Currently it will interrupt the Spark Jobs running on the server, triggered from
-   * ExecutePlan requests. If an operation is not running a Spark Job, it becomes an noop and the
-   * operation will continue afterwards, possibly with more Spark Jobs.
+   * @return
+   *   sequence of operationIds of interrupted operations. Note: there is still a possibility of
+   *   operation finishing just as it is interrupted.
    *
    * @since 3.5.0
    */
-  def interruptAll(): Unit = {
-    client.interruptAll()
+  def interruptAll(): Seq[String] = {
+    client.interruptAll().getInterruptedIdsList.asScala.toSeq
+  }
+
+  /**
+   * Interrupt all operations of this session with the given operation tag.
+   *
+   * @return
+   *   sequence of operationIds of interrupted operations. Note: there is still a possibility of
+   *   operation finishing just as it is interrupted.
+   *
+   * @since 3.5.0
+   */
+  def interruptTag(tag: String): Seq[String] = {
+    client.interruptTag(tag).getInterruptedIdsList.asScala.toSeq
+  }
+
+  /**
+   * Interrupt an operation of this session with the given operationId.
+   *
+   * @return
+   *   sequence of operationIds of interrupted operations. Note: there is still a possibility of
+   *   operation finishing just as it is interrupted.
+   *
+   * @since 3.5.0
+   */
+  def interruptOperation(operationId: String): Seq[String] = {
+    client.interruptOperation(operationId).getInterruptedIdsList.asScala.toSeq
   }
 
   /**
@@ -609,6 +667,50 @@ class SparkSession private[sql] (
     client.shutdown()
     allocator.close()
     SparkSession.onSessionClose(this)
+  }
+
+  /**
+   * Add a tag to be assigned to all the operations started by this thread in this session.
+   *
+   * @param tag
+   *   The tag to be added. Cannot contain ',' (comma) character or be an empty string.
+   *
+   * @since 3.5.0
+   */
+  def addTag(tag: String): Unit = {
+    client.addTag(tag)
+  }
+
+  /**
+   * Remove a tag previously added to be assigned to all the operations started by this thread in
+   * this session. Noop if such a tag was not added earlier.
+   *
+   * @param tag
+   *   The tag to be removed. Cannot contain ',' (comma) character or be an empty string.
+   *
+   * @since 3.5.0
+   */
+  def removeTag(tag: String): Unit = {
+    client.removeTag(tag)
+  }
+
+  /**
+   * Get the tags that are currently set to be assigned to all the operations started by this
+   * thread.
+   *
+   * @since 3.5.0
+   */
+  def getTags(): Set[String] = {
+    client.getTags()
+  }
+
+  /**
+   * Clear the current thread's operation tags.
+   *
+   * @since 3.5.0
+   */
+  def clearTags(): Unit = {
+    client.clearTags()
   }
 }
 

@@ -31,7 +31,7 @@ import org.apache.spark.ml.linalg.{Vectors, VectorUDT}
 import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.sql.{Row, SparkSession}
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.encoders.RowEncoder
+import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions.AttributeReference
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
@@ -167,7 +167,7 @@ private[libsvm] class LibSVMFileFormat
             LabeledPoint(label, Vectors.sparse(numFeatures, indices, values))
           }
 
-      val toRow = RowEncoder(dataSchema).createSerializer()
+      val toRow = ExpressionEncoder(dataSchema).createSerializer()
       val fullOutput = dataSchema.map { f =>
         AttributeReference(f.name, f.dataType, f.nullable, f.metadata)()
       }

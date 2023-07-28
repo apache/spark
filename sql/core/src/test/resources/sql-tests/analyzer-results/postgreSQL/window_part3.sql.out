@@ -231,7 +231,7 @@ select f1, sum(f1) over (partition by f1
                          range between 1 preceding and 1 following)
 from t1 where f1 = f2
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.RANGE_FRAME_WITHOUT_ORDER",
   "sqlState" : "42K09",
@@ -315,7 +315,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 SELECT * FROM empsalary INNER JOIN tenk1 ON row_number() OVER (ORDER BY salary) < 10
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "UNSUPPORTED_EXPR_FOR_OPERATOR",
   "messageParameters" : {
@@ -334,7 +334,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 SELECT rank() OVER (ORDER BY 1), count(*) FROM empsalary GROUP BY 1
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "UNSUPPORTED_EXPR_FOR_OPERATOR",
   "messageParameters" : {
@@ -426,7 +426,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 SELECT ntile(0) OVER (ORDER BY ten), ten, four FROM tenk1
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.VALUE_OUT_OF_RANGE",
   "sqlState" : "42K09",
@@ -449,7 +449,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 SELECT nth_value(four, 0) OVER (ORDER BY ten), ten, four FROM tenk1
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.VALUE_OUT_OF_RANGE",
   "sqlState" : "42K09",

@@ -128,7 +128,10 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase {
     val distribution = physical.ClusteredDistribution(
       Seq(TransformExpression(BucketFunction, Seq(attr("ts")), Some(32))))
 
-    checkQueryPlan(df, distribution, physical.SinglePartition)
+    // Has exactly one partition.
+    val partitionValues = Seq(31).map(v => InternalRow.fromSeq(Seq(v)))
+    checkQueryPlan(df, distribution,
+      physical.KeyGroupedPartitioning(distribution.clustering, 1, partitionValues))
   }
 
   test("non-clustered distribution: no V2 catalog") {

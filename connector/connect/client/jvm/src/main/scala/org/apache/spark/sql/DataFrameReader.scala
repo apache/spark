@@ -25,9 +25,9 @@ import org.apache.spark.annotation.Stable
 import org.apache.spark.connect.proto.Parse.ParseFormat
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.StringEncoder
-import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, CharVarcharUtils}
+import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, SparkCharVarcharUtils}
 import org.apache.spark.sql.connect.common.DataTypeProtoConverter
-import org.apache.spark.sql.errors.QueryCompilationErrors
+import org.apache.spark.sql.errors.DataTypeErrors
 import org.apache.spark.sql.types.StructType
 
 /**
@@ -58,7 +58,7 @@ class DataFrameReader private[sql] (sparkSession: SparkSession) extends Logging 
    */
   def schema(schema: StructType): DataFrameReader = {
     if (schema != null) {
-      val replaced = CharVarcharUtils.failIfHasCharVarchar(schema).asInstanceOf[StructType]
+      val replaced = SparkCharVarcharUtils.failIfHasCharVarchar(schema).asInstanceOf[StructType]
       this.userSpecifiedSchema = Option(replaced)
     }
     this
@@ -563,7 +563,7 @@ class DataFrameReader private[sql] (sparkSession: SparkSession) extends Logging 
    */
   private def assertNoSpecifiedSchema(operation: String): Unit = {
     if (userSpecifiedSchema.nonEmpty) {
-      throw QueryCompilationErrors.userSpecifiedSchemaUnsupportedError(operation)
+      throw DataTypeErrors.userSpecifiedSchemaUnsupportedError(operation)
     }
   }
 

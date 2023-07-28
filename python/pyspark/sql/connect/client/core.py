@@ -17,12 +17,14 @@
 __all__ = [
     "ChannelBuilder",
     "SparkConnectClient",
+    "getLogLevel",
 ]
 
 from pyspark.sql.connect.utils import check_dependencies
 
 check_dependencies(__name__)
 
+import threading
 import logging
 import os
 import platform
@@ -41,6 +43,7 @@ from typing import (
     List,
     Tuple,
     Dict,
+    Set,
     NoReturn,
     cast,
     Callable,
@@ -75,6 +78,11 @@ from pyspark.sql.connect.expressions import (
     CommonInlineUserDefinedFunction,
     JavaUDF,
 )
+from pyspark.sql.connect.plan import (
+    CommonInlineUserDefinedTableFunction,
+    PythonUDTF,
+)
+from pyspark.sql.connect.utils import get_python_ver
 from pyspark.sql.pandas.types import _create_converter_to_pandas, from_arrow_schema
 from pyspark.sql.types import DataType, StructType, TimestampType, _has_type
 from pyspark.rdd import PythonEvalType
@@ -97,7 +105,7 @@ def _configure_logging() -> logging.Logger:
 
     # Check the environment variables for log levels:
     if "SPARK_CONNECT_LOG_LEVEL" in os.environ:
-        logger.setLevel(os.getenv("SPARK_CONNECT_LOG_LEVEL", "error").upper())
+        logger.setLevel(os.environ["SPARK_CONNECT_LOG_LEVEL"].upper())
     else:
         logger.disabled = True
     return logger
@@ -105,6 +113,20 @@ def _configure_logging() -> logging.Logger:
 
 # Instantiate the logger based on the environment configuration.
 logger = _configure_logging()
+
+
+def getLogLevel() -> Optional[int]:
+    """
+    This returns this log level as integer, or none (if no logging is enabled).
+
+    Spark Connect logging can be configured with environment variable 'SPARK_CONNECT_LOG_LEVEL'
+
+    .. versionadded:: 3.5.0
+    """
+
+    if not logger.disabled:
+        return logger.level
+    return None
 
 
 class ChannelBuilder:
@@ -569,6 +591,8 @@ class SparkConnectClient(object):
             the $USER environment. Defining the user ID as part of the connection string
             takes precedence.
         """
+        self.thread_local = threading.local()
+
         # Parse the connection string.
         self._builder = (
             connection
@@ -637,6 +661,40 @@ class SparkConnectClient(object):
         # construct the request
         req = self._execute_plan_request_with_metadata()
         req.plan.command.register_function.CopyFrom(fun)
+
+        self._execute(req)
+        return name
+
+    def register_udtf(
+        self,
+        function: Any,
+        return_type: Optional["DataTypeOrString"],
+        name: str,
+        eval_type: int = PythonEvalType.SQL_TABLE_UDF,
+        deterministic: bool = True,
+    ) -> str:
+        """
+        Register a user-defined table function (UDTF) in the session catalog
+        as a temporary function. The return type, if specified, must be a
+        struct type and it's validated when building the proto message
+        for the PythonUDTF.
+        """
+        udtf = PythonUDTF(
+            func=function,
+            return_type=return_type,
+            eval_type=eval_type,
+            python_ver=get_python_ver(),
+        )
+
+        func = CommonInlineUserDefinedTableFunction(
+            function_name=name,
+            function=udtf,
+            deterministic=deterministic,
+            arguments=[],
+        ).udtf_plan(self)
+
+        req = self._execute_plan_request_with_metadata()
+        req.plan.command.register_table_function.CopyFrom(func)
 
         self._execute(req)
         return name
@@ -718,14 +776,33 @@ class SparkConnectClient(object):
         logger.info(f"Executing plan {self._proto_to_string(plan)}")
         req = self._execute_plan_request_with_metadata()
         req.plan.CopyFrom(plan)
-        table, schema, metrics, observed_metrics, _ = self._execute_and_fetch(req)
+        (self_destruct_conf,) = self.get_config_with_defaults(
+            ("spark.sql.execution.arrow.pyspark.selfDestruct.enabled", "false"),
+        )
+        self_destruct = cast(str, self_destruct_conf).lower() == "true"
+        table, schema, metrics, observed_metrics, _ = self._execute_and_fetch(
+            req, self_destruct=self_destruct
+        )
         assert table is not None
 
         schema = schema or from_arrow_schema(table.schema, prefer_timestamp_ntz=True)
         assert schema is not None and isinstance(schema, StructType)
 
         # Rename columns to avoid duplicated column names.
-        pdf = table.rename_columns([f"col_{i}" for i in range(table.num_columns)]).to_pandas()
+        renamed_table = table.rename_columns([f"col_{i}" for i in range(table.num_columns)])
+        if self_destruct:
+            # Configure PyArrow to use as little memory as possible:
+            # self_destruct - free columns as they are converted
+            # split_blocks - create a separate Pandas block for each column
+            # use_threads - convert one column at a time
+            pandas_options = {
+                "self_destruct": True,
+                "split_blocks": True,
+                "use_threads": False,
+            }
+            pdf = renamed_table.to_pandas(**pandas_options)
+        else:
+            pdf = renamed_table.to_pandas()
         pdf.columns = schema.names
 
         if len(pdf.columns) > 0:
@@ -864,9 +941,11 @@ class SparkConnectClient(object):
         return self._builder._token
 
     def _execute_plan_request_with_metadata(self) -> pb2.ExecutePlanRequest:
-        req = pb2.ExecutePlanRequest()
-        req.session_id = self._session_id
-        req.client_type = self._builder.userAgent
+        req = pb2.ExecutePlanRequest(
+            session_id=self._session_id,
+            client_type=self._builder.userAgent,
+            tags=list(self.get_tags()),
+        )
         if self._user_id:
             req.user_context.user_id = self._user_id
         return req
@@ -1069,7 +1148,7 @@ class SparkConnectClient(object):
             self._handle_error(error)
 
     def _execute_and_fetch(
-        self, req: pb2.ExecutePlanRequest
+        self, req: pb2.ExecutePlanRequest, self_destruct: bool = False
     ) -> Tuple[
         Optional["pa.Table"],
         Optional[StructType],
@@ -1105,7 +1184,27 @@ class SparkConnectClient(object):
                 )
 
         if len(batches) > 0:
-            table = pa.Table.from_batches(batches=batches)
+            if self_destruct:
+                results = []
+                for batch in batches:
+                    # self_destruct frees memory column-wise, but Arrow record batches are
+                    # oriented row-wise, so copies each column into its own allocation
+                    batch = pa.RecordBatch.from_arrays(
+                        [
+                            # This call actually reallocates the array
+                            pa.concat_arrays([array])
+                            for array in batch
+                        ],
+                        schema=batch.schema,
+                    )
+                    results.append(batch)
+                table = pa.Table.from_batches(batches=results)
+                # Ensure only the table has a reference to the batches, so that
+                # self_destruct (if enabled) is effective
+                del results
+                del batches
+            else:
+                table = pa.Table.from_batches(batches=batches)
             return table, schema, metrics, observed_metrics, properties
         else:
             return None, schema, metrics, observed_metrics, properties
@@ -1165,12 +1264,22 @@ class SparkConnectClient(object):
         except Exception as error:
             self._handle_error(error)
 
-    def _interrupt_request(self, interrupt_type: str) -> pb2.InterruptRequest:
+    def _interrupt_request(
+        self, interrupt_type: str, id_or_tag: Optional[str] = None
+    ) -> pb2.InterruptRequest:
         req = pb2.InterruptRequest()
         req.session_id = self._session_id
         req.client_type = self._builder.userAgent
         if interrupt_type == "all":
             req.interrupt_type = pb2.InterruptRequest.InterruptType.INTERRUPT_TYPE_ALL
+        elif interrupt_type == "tag":
+            assert id_or_tag is not None
+            req.interrupt_type = pb2.InterruptRequest.InterruptType.INTERRUPT_TYPE_TAG
+            req.operation_tag = id_or_tag
+        elif interrupt_type == "operation":
+            assert id_or_tag is not None
+            req.interrupt_type = pb2.InterruptRequest.InterruptType.INTERRUPT_TYPE_OPERATION_ID
+            req.operation_id = id_or_tag
         else:
             raise PySparkValueError(
                 error_class="UNKNOWN_INTERRUPT_TYPE",
@@ -1182,14 +1291,7 @@ class SparkConnectClient(object):
             req.user_context.user_id = self._user_id
         return req
 
-    def interrupt_all(self) -> None:
-        """
-        Call the interrupt RPC of Spark Connect to interrupt all executions in this session.
-
-        Returns
-        -------
-        None
-        """
+    def interrupt_all(self) -> Optional[List[str]]:
         req = self._interrupt_request("all")
         try:
             for attempt in Retrying(
@@ -1202,10 +1304,79 @@ class SparkConnectClient(object):
                             "Received incorrect session identifier for request:"
                             f"{resp.session_id} != {self._session_id}"
                         )
-                    return
+                    return list(resp.interrupted_ids)
             raise SparkConnectException("Invalid state during retry exception handling.")
         except Exception as error:
             self._handle_error(error)
+
+    def interrupt_tag(self, tag: str) -> Optional[List[str]]:
+        req = self._interrupt_request("tag", tag)
+        try:
+            for attempt in Retrying(
+                can_retry=SparkConnectClient.retry_exception, **self._retry_policy
+            ):
+                with attempt:
+                    resp = self._stub.Interrupt(req, metadata=self._builder.metadata())
+                    if resp.session_id != self._session_id:
+                        raise SparkConnectException(
+                            "Received incorrect session identifier for request:"
+                            f"{resp.session_id} != {self._session_id}"
+                        )
+                    return list(resp.interrupted_ids)
+            raise SparkConnectException("Invalid state during retry exception handling.")
+        except Exception as error:
+            self._handle_error(error)
+
+    def interrupt_operation(self, op_id: str) -> Optional[List[str]]:
+        req = self._interrupt_request("operation", op_id)
+        try:
+            for attempt in Retrying(
+                can_retry=SparkConnectClient.retry_exception, **self._retry_policy
+            ):
+                with attempt:
+                    resp = self._stub.Interrupt(req, metadata=self._builder.metadata())
+                    if resp.session_id != self._session_id:
+                        raise SparkConnectException(
+                            "Received incorrect session identifier for request:"
+                            f"{resp.session_id} != {self._session_id}"
+                        )
+                    return list(resp.interrupted_ids)
+            raise SparkConnectException("Invalid state during retry exception handling.")
+        except Exception as error:
+            self._handle_error(error)
+
+    def add_tag(self, tag: str) -> None:
+        self._throw_if_invalid_tag(tag)
+        if not hasattr(self.thread_local, "tags"):
+            self.thread_local.tags = set()
+        self.thread_local.tags.add(tag)
+
+    def remove_tag(self, tag: str) -> None:
+        self._throw_if_invalid_tag(tag)
+        if not hasattr(self.thread_local, "tags"):
+            self.thread_local.tags = set()
+        self.thread_local.tags.remove(tag)
+
+    def get_tags(self) -> Set[str]:
+        if not hasattr(self.thread_local, "tags"):
+            self.thread_local.tags = set()
+        return self.thread_local.tags
+
+    def clear_tags(self) -> None:
+        self.thread_local.tags = set()
+
+    def _throw_if_invalid_tag(self, tag: str) -> None:
+        """
+        Validate if a tag for ExecutePlanRequest.tags is valid. Throw ``ValueError`` if
+        not.
+        """
+        spark_job_tags_sep = ","
+        if tag is None:
+            raise ValueError("Spark Connect tag cannot be null.")
+        if spark_job_tags_sep in tag:
+            raise ValueError(f"Spark Connect tag cannot contain '{spark_job_tags_sep}'.")
+        if len(tag) == 0:
+            raise ValueError("Spark Connect tag cannot be an empty string.")
 
     def _handle_error(self, error: Exception) -> NoReturn:
         """

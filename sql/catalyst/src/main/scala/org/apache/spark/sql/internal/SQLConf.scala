@@ -2917,11 +2917,17 @@ object SQLConf {
   val PYTHON_UDF_ARROW_ENABLED =
     buildConf("spark.sql.execution.pythonUDF.arrow.enabled")
       .doc("Enable Arrow optimization in regular Python UDFs. This optimization " +
-        "can only be enabled for atomic output types and input types except struct and map types " +
-        "when the given function takes at least one argument.")
+        "can only be enabled when the given function takes at least one argument.")
       .version("3.4.0")
       .booleanConf
       .createWithDefault(false)
+
+  val PYTHON_TABLE_UDF_ARROW_ENABLED =
+    buildConf("spark.sql.execution.pythonUDTF.arrow.enabled")
+      .doc("Enable Arrow optimization for Python UDTFs.")
+      .version("3.5.0")
+      .booleanConf
+      .createWithDefault(true)
 
   val PANDAS_GROUPED_MAP_ASSIGN_COLUMNS_BY_NAME =
     buildConf("spark.sql.legacy.execution.pandas.groupedMap.assignColumnsByName")
@@ -3759,6 +3765,15 @@ object SQLConf {
     .checkValues(LegacyBehaviorPolicy.values.map(_.toString))
     .createWithDefault(LegacyBehaviorPolicy.EXCEPTION.toString)
 
+  val LEGACY_INLINE_CTE_IN_COMMANDS = buildConf("spark.sql.legacy.inlineCTEInCommands")
+    .internal()
+    .doc("If true, always inline the CTE relations for the queries in commands. This is the " +
+      "legacy behavior which may produce incorrect results because Spark may evaluate a CTE " +
+      "relation more than once, even if it's nondeterministic.")
+    .version("4.0.0")
+    .booleanConf
+    .createWithDefault(false)
+
   val LEGACY_TIME_PARSER_POLICY = buildConf("spark.sql.legacy.timeParserPolicy")
     .internal()
     .doc("When LEGACY, java.text.SimpleDateFormat is used for formatting and parsing " +
@@ -4150,7 +4165,7 @@ object SQLConf {
   val LEGACY_EMPTY_CURRENT_DB_IN_CLI =
     buildConf("spark.sql.legacy.emptyCurrentDBInCli")
       .internal()
-      .doc("When false, spark-sql CLI prints the the current database in prompt")
+      .doc("When false, spark-sql CLI prints the current database in prompt.")
       .version("3.4.0")
       .booleanConf
       .createWithDefault(false)
@@ -4281,6 +4296,17 @@ object SQLConf {
       .version("3.5.0")
       .booleanConf
       .createWithDefault(false)
+
+  val LEGACY_NULL_IN_EMPTY_LIST_BEHAVIOR =
+    buildConf("spark.sql.legacy.nullInEmptyListBehavior")
+      .internal()
+      .doc("When set to true, restores the legacy incorrect behavior of IN expressions for " +
+        "NULL values IN an empty list (including IN subqueries and literal IN lists): " +
+        "`null IN (empty list)` should evaluate to false, but sometimes (not always) " +
+        "incorrectly evaluates to null in the legacy behavior.")
+      .version("3.5.0")
+      .booleanConf
+      .createWithDefault(true)
 
   val ERROR_MESSAGE_FORMAT = buildConf("spark.sql.error.messageFormat")
     .doc("When PRETTY, the error message consists of textual representation of error class, " +
@@ -4709,7 +4735,7 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def streamingSessionWindowMergeSessionInLocalPartition: Boolean =
     getConf(STREAMING_SESSION_WINDOW_MERGE_SESSIONS_IN_LOCAL_PARTITION)
 
-  def datetimeJava8ApiEnabled: Boolean = getConf(DATETIME_JAVA8API_ENABLED)
+  override def datetimeJava8ApiEnabled: Boolean = getConf(DATETIME_JAVA8API_ENABLED)
 
   def uiExplainMode: String = getConf(UI_EXPLAIN_MODE)
 

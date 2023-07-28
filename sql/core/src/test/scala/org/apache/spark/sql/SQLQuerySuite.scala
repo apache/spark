@@ -30,6 +30,7 @@ import org.apache.commons.io.FileUtils
 
 import org.apache.spark.{AccumulatorSuite, SPARK_DOC_ROOT, SparkException}
 import org.apache.spark.scheduler.{SparkListener, SparkListenerJobStart}
+import org.apache.spark.sql.catalyst.ExtendedAnalysisException
 import org.apache.spark.sql.catalyst.expressions.{GenericRow, Hex}
 import org.apache.spark.sql.catalyst.expressions.Cast._
 import org.apache.spark.sql.catalyst.expressions.aggregate.{Complete, Partial}
@@ -1647,18 +1648,16 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
       exception = intercept[AnalysisException] {
         sql("select * from json.invalid_file")
       },
-      errorClass = "UNSUPPORTED_DATASOURCE_FOR_DIRECT_QUERY",
-      parameters = Map("dataSourceType" -> "json"),
-      context = ExpectedContext("json.invalid_file", 14, 30)
+      errorClass = "PATH_NOT_FOUND",
+      parameters = Map("path" -> "file:/.*invalid_file"),
+      matchPVals = true
     )
 
     checkError(
       exception = intercept[AnalysisException] {
         sql(s"select id from `org.apache.spark.sql.hive.orc`.`file_path`")
       },
-      errorClass = "UNSUPPORTED_DATASOURCE_FOR_DIRECT_QUERY",
-      parameters = Map("dataSourceType" -> "org.apache.spark.sql.hive.orc"),
-      context = ExpectedContext("`org.apache.spark.sql.hive.orc`.`file_path`", 15, 57)
+      errorClass = "_LEGACY_ERROR_TEMP_1138"
     )
 
     e = intercept[AnalysisException] {
@@ -2634,11 +2633,12 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
     assert(!jobStarted.get(), "Command should not trigger a Spark job.")
   }
 
-  test("SPARK-20164: AnalysisException should be tolerant to null query plan") {
+  test("SPARK-20164: ExtendedAnalysisException should be tolerant to null query plan") {
     try {
-      throw new AnalysisException("", None, None, plan = null)
+      throw new ExtendedAnalysisException("", None, None, plan = null)
     } catch {
-      case ae: AnalysisException => assert(ae.plan == null && ae.getMessage == ae.getSimpleMessage)
+      case ae: ExtendedAnalysisException =>
+        assert(ae.plan == null && ae.getMessage == ae.getSimpleMessage)
     }
   }
 

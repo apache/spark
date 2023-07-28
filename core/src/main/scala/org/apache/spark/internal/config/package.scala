@@ -2244,6 +2244,14 @@ package object config {
       .booleanConf
       .createWithDefault(false)
 
+  private[spark] val EXECUTOR_ALLOW_SYNC_LOG_LEVEL =
+    ConfigBuilder("spark.executor.syncLogLevel.enabled")
+      .doc("If set to true, log level applied through SparkContext.setLogLevel() method " +
+        "will be propagated to all executors.")
+      .version("4.0.0")
+      .booleanConf
+      .createWithDefault(false)
+
   private[spark] val EXECUTOR_KILL_ON_FATAL_ERROR_DEPTH =
     ConfigBuilder("spark.executor.killOnFatalError.depth")
       .doc("The max depth of the exception chain in a failed task Spark will search for a fatal " +
@@ -2255,10 +2263,17 @@ package object config {
       .checkValue(_ >= 0, "needs to be a non-negative value")
       .createWithDefault(5)
 
+  private[spark] val STAGE_MAX_CONSECUTIVE_ATTEMPTS =
+    ConfigBuilder("spark.stage.maxConsecutiveAttempts")
+      .doc("Number of consecutive stage attempts allowed before a stage is aborted.")
+      .version("2.2.0")
+      .intConf
+      .createWithDefault(4)
+
   private[spark] val STAGE_IGNORE_DECOMMISSION_FETCH_FAILURE =
     ConfigBuilder("spark.stage.ignoreDecommissionFetchFailure")
       .doc("Whether ignore stage fetch failure caused by executor decommission when " +
-        "count spark.stage.maxConsecutiveAttempts")
+        s"count ${STAGE_MAX_CONSECUTIVE_ATTEMPTS.key}")
       .version("3.4.0")
       .booleanConf
       .createWithDefault(false)
@@ -2527,7 +2542,7 @@ package object config {
       .doc("Specify the max attempts for a stage - the spark job will be aborted if any of its " +
         "stages is resubmitted multiple times beyond the max retries limitation. The maximum " +
         "number of stage retries is the maximum of `spark.stage.maxAttempts` and " +
-        "`spark.stage.maxConsecutiveAttempts`.")
+        s"`${STAGE_MAX_CONSECUTIVE_ATTEMPTS.key}`.")
       .version("3.5.0")
       .intConf
       .createWithDefault(Int.MaxValue)

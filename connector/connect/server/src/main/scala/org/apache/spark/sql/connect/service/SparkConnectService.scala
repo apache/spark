@@ -17,34 +17,25 @@
 
 package org.apache.spark.sql.connect.service
 
+import java.net.InetSocketAddress
+import java.util.UUID
 import java.util.concurrent.TimeUnit
-
-import scala.annotation.tailrec
-import scala.collection.mutable.ArrayBuffer
-import scala.util.control.NonFatal
 
 import com.google.common.base.Ticker
 import com.google.common.cache.{CacheBuilder, RemovalListener, RemovalNotification}
-import com.google.protobuf.{Any => ProtoAny}
-import com.google.rpc.{Code => RPCCode, ErrorInfo, Status => RPCStatus}
-import io.grpc.{Server, Status}
+import io.grpc.Server
 import io.grpc.netty.NettyServerBuilder
-import io.grpc.protobuf.StatusProto
 import io.grpc.protobuf.services.ProtoReflectionService
 import io.grpc.stub.StreamObserver
 import org.apache.commons.lang3.StringUtils
-import org.apache.commons.lang3.exception.ExceptionUtils
-import org.json4s.JsonDSL._
-import org.json4s.jackson.JsonMethods.{compact, render}
 
-import org.apache.spark.{SparkEnv, SparkException, SparkThrowable}
-import org.apache.spark.api.python.PythonException
+import org.apache.spark.{SparkEnv, SparkSQLException}
 import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.{AddArtifactsRequest, AddArtifactsResponse}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SparkSession
-import org.apache.spark.sql.connect.config.Connect.{CONNECT_GRPC_BINDING_PORT, CONNECT_GRPC_MAX_INBOUND_MESSAGE_SIZE, CONNECT_JVM_STACK_TRACE_MAX_SIZE}
-import org.apache.spark.sql.internal.SQLConf.PYSPARK_JVM_STACKTRACE_ENABLED
+import org.apache.spark.sql.connect.config.Connect.{CONNECT_GRPC_BINDING_ADDRESS, CONNECT_GRPC_BINDING_PORT, CONNECT_GRPC_MAX_INBOUND_MESSAGE_SIZE}
+import org.apache.spark.sql.connect.utils.ErrorUtils
 
 /**
  * The SparkConnectService implementation.
@@ -58,101 +49,10 @@ class SparkConnectService(debug: Boolean)
     extends proto.SparkConnectServiceGrpc.SparkConnectServiceImplBase
     with Logging {
 
-  private def allClasses(cl: Class[_]): Seq[Class[_]] = {
-    val classes = ArrayBuffer.empty[Class[_]]
-    if (cl != null && !cl.equals(classOf[java.lang.Object])) {
-      classes.append(cl) // Includes itself.
-    }
-
-    @tailrec
-    def appendSuperClasses(clazz: Class[_]): Unit = {
-      if (clazz == null || clazz.equals(classOf[java.lang.Object])) return
-      classes.append(clazz.getSuperclass)
-      appendSuperClasses(clazz.getSuperclass)
-    }
-
-    appendSuperClasses(cl)
-    classes.toSeq
-  }
-
-  private def buildStatusFromThrowable(st: Throwable, stackTraceEnabled: Boolean): RPCStatus = {
-    val errorInfo = ErrorInfo
-      .newBuilder()
-      .setReason(st.getClass.getName)
-      .setDomain("org.apache.spark")
-      .putMetadata("classes", compact(render(allClasses(st.getClass).map(_.getName))))
-
-    lazy val stackTrace = Option(ExceptionUtils.getStackTrace(st))
-    val withStackTrace = if (stackTraceEnabled && stackTrace.nonEmpty) {
-      val maxSize = SparkEnv.get.conf.get(CONNECT_JVM_STACK_TRACE_MAX_SIZE)
-      errorInfo.putMetadata("stackTrace", StringUtils.abbreviate(stackTrace.get, maxSize))
-    } else {
-      errorInfo
-    }
-
-    RPCStatus
-      .newBuilder()
-      .setCode(RPCCode.INTERNAL_VALUE)
-      .addDetails(ProtoAny.pack(withStackTrace.build()))
-      .setMessage(SparkConnectService.extractErrorMessage(st))
-      .build()
-  }
-
-  private def isPythonExecutionException(se: SparkException): Boolean = {
-    // See also pyspark.errors.exceptions.captured.convert_exception in PySpark.
-    se.getCause != null && se.getCause
-      .isInstanceOf[PythonException] && se.getCause.getStackTrace
-      .exists(_.toString.contains("org.apache.spark.sql.execution.python"))
-  }
-
-  /**
-   * Common exception handling function for the Analysis and Execution methods. Closes the stream
-   * after the error has been sent.
-   *
-   * @param opType
-   *   String value indicating the operation type (analysis, execution)
-   * @param observer
-   *   The GRPC response observer.
-   * @tparam V
-   * @return
-   */
-  private def handleError[V](
-      opType: String,
-      observer: StreamObserver[V],
-      userId: String,
-      sessionId: String): PartialFunction[Throwable, Unit] = {
-    val session =
-      SparkConnectService
-        .getOrCreateIsolatedSession(userId, sessionId)
-        .session
-    val stackTraceEnabled = session.conf.get(PYSPARK_JVM_STACKTRACE_ENABLED)
-
-    {
-      case se: SparkException if isPythonExecutionException(se) =>
-        logError(s"Error during: $opType. UserId: $userId. SessionId: $sessionId.", se)
-        observer.onError(
-          StatusProto.toStatusRuntimeException(
-            buildStatusFromThrowable(se.getCause, stackTraceEnabled)))
-
-      case e: Throwable if e.isInstanceOf[SparkThrowable] || NonFatal.apply(e) =>
-        logError(s"Error during: $opType. UserId: $userId. SessionId: $sessionId.", e)
-        observer.onError(
-          StatusProto.toStatusRuntimeException(buildStatusFromThrowable(e, stackTraceEnabled)))
-
-      case e: Throwable =>
-        logError(s"Error during: $opType. UserId: $userId. SessionId: $sessionId.", e)
-        observer.onError(
-          Status.UNKNOWN
-            .withCause(e)
-            .withDescription(StringUtils.abbreviate(e.getMessage, 2048))
-            .asRuntimeException())
-    }
-  }
-
   /**
    * This is the main entry method for Spark Connect and all calls to execute a plan.
    *
-   * The plan execution is delegated to the [[SparkConnectStreamHandler]]. All error handling
+   * The plan execution is delegated to the [[SparkConnectExecutePlanHandler]]. All error handling
    * should be directly implemented in the deferred implementation. But this method catches
    * generic errors.
    *
@@ -163,9 +63,9 @@ class SparkConnectService(debug: Boolean)
       request: proto.ExecutePlanRequest,
       responseObserver: StreamObserver[proto.ExecutePlanResponse]): Unit = {
     try {
-      new SparkConnectStreamHandler(responseObserver).handle(request)
+      new SparkConnectExecutePlanHandler(responseObserver).handle(request)
     } catch {
-      handleError(
+      ErrorUtils.handleError(
         "execute",
         observer = responseObserver,
         userId = request.getUserContext.getUserId,
@@ -191,7 +91,7 @@ class SparkConnectService(debug: Boolean)
     try {
       new SparkConnectAnalyzeHandler(responseObserver).handle(request)
     } catch {
-      handleError(
+      ErrorUtils.handleError(
         "analyze",
         observer = responseObserver,
         userId = request.getUserContext.getUserId,
@@ -212,7 +112,7 @@ class SparkConnectService(debug: Boolean)
     try {
       new SparkConnectConfigHandler(responseObserver).handle(request)
     } catch {
-      handleError(
+      ErrorUtils.handleError(
         "config",
         observer = responseObserver,
         userId = request.getUserContext.getUserId,
@@ -239,7 +139,7 @@ class SparkConnectService(debug: Boolean)
     try {
       new SparkConnectArtifactStatusesHandler(responseObserver).handle(request)
     } catch
-      handleError(
+      ErrorUtils.handleError(
         "artifactStatus",
         observer = responseObserver,
         userId = request.getUserContext.getUserId,
@@ -255,7 +155,7 @@ class SparkConnectService(debug: Boolean)
     try {
       new SparkConnectInterruptHandler(responseObserver).handle(request)
     } catch
-      handleError(
+      ErrorUtils.handleError(
         "interrupt",
         observer = responseObserver,
         userId = request.getUserContext.getUserId,
@@ -269,7 +169,7 @@ class SparkConnectService(debug: Boolean)
  * Used to start the overall SparkConnect service and provides global state to manage the
  * different SparkSession from different users connecting to the cluster.
  */
-object SparkConnectService {
+object SparkConnectService extends Logging {
 
   private val CACHE_SIZE = 100
 
@@ -322,11 +222,29 @@ object SparkConnectService {
    * Based on the `key` find or create a new SparkSession.
    */
   def getOrCreateIsolatedSession(userId: String, sessionId: String): SessionHolder = {
+    // Validate that sessionId is formatted like UUID before creating session.
+    try {
+      UUID.fromString(sessionId).toString
+    } catch {
+      case _: IllegalArgumentException =>
+        throw new SparkSQLException(
+          errorClass = "INVALID_HANDLE.FORMAT",
+          messageParameters = Map("handle" -> sessionId))
+    }
     userSessionMapping.get(
       (userId, sessionId),
       () => {
-        SessionHolder(userId, sessionId, newIsolatedSession())
+        val holder = SessionHolder(userId, sessionId, newIsolatedSession())
+        holder.initializeSession()
+        holder
       })
+  }
+
+  /**
+   * Used for testing
+   */
+  private[connect] def invalidateAllSessions(): Unit = {
+    userSessionMapping.invalidateAll()
   }
 
   private def newIsolatedSession(): SparkSession = {
@@ -338,10 +256,15 @@ object SparkConnectService {
    */
   private def startGRPCService(): Unit = {
     val debugMode = SparkEnv.get.conf.getBoolean("spark.connect.grpc.debug.enabled", true)
+    val bindAddress = SparkEnv.get.conf.get(CONNECT_GRPC_BINDING_ADDRESS)
     val port = SparkEnv.get.conf.get(CONNECT_GRPC_BINDING_PORT)
-    val sb = NettyServerBuilder
-      .forPort(port)
-      .maxInboundMessageSize(SparkEnv.get.conf.get(CONNECT_GRPC_MAX_INBOUND_MESSAGE_SIZE).toInt)
+    val sb = bindAddress match {
+      case Some(hostname) =>
+        logInfo(s"start GRPC service at: $hostname")
+        NettyServerBuilder.forAddress(new InetSocketAddress(hostname, port))
+      case _ => NettyServerBuilder.forPort(port)
+    }
+    sb.maxInboundMessageSize(SparkEnv.get.conf.get(CONNECT_GRPC_MAX_INBOUND_MESSAGE_SIZE).toInt)
       .addService(new SparkConnectService(debugMode))
 
     // Add all registered interceptors to the server builder.
