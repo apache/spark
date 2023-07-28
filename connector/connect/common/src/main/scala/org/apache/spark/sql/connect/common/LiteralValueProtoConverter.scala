@@ -90,7 +90,8 @@ object LiteralValueProtoConverter {
         builder.setDecimal(decimalBuilder(Math.max(v.precision, v.scale), v.scale, v.toString))
       case v: Instant => builder.setTimestamp(SparkDateTimeUtils.instantToMicros(v))
       case v: Timestamp => builder.setTimestamp(SparkDateTimeUtils.fromJavaTimestamp(v))
-      case v: LocalDateTime => builder.setTimestampNtz(SparkDateTimeUtils.localDateTimeToMicros(v))
+      case v: LocalDateTime =>
+        builder.setTimestampNtz(SparkDateTimeUtils.localDateTimeToMicros(v))
       case v: Date => builder.setDate(SparkDateTimeUtils.fromJavaDate(v))
       case v: Duration => builder.setDayTimeInterval(IntervalUtils.durationToMicros(v))
       case v: Period => builder.setYearMonthInterval(IntervalUtils.periodToMonths(v))
