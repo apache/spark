@@ -798,7 +798,11 @@ class BasicCharVarcharTestSuite extends QueryTest with SharedSparkSession {
         sql("""SELECT from_json('{"a": "str"}', 'a CHAR(5)')""")
       },
       errorClass = "UNSUPPORTED_CHAR_OR_VARCHAR_AS_STRING",
-      parameters = Map.empty
+      parameters = Map.empty,
+      context = ExpectedContext(
+        fragment = "from_json('{\"a\": \"str\"}', 'a CHAR(5)')",
+        start = 7,
+        stop = 44)
     )
     withSQLConf((SQLConf.LEGACY_CHAR_VARCHAR_AS_STRING.key, "true")) {
       val df = sql("""SELECT from_json('{"a": "str"}', 'a CHAR(5)')""")
