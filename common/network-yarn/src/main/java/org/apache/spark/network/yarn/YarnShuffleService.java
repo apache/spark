@@ -416,7 +416,7 @@ public class YarnShuffleService extends AuxiliaryService {
     String appId = context.getApplicationId().toString();
     try {
       ByteBuffer appServiceData = context.getApplicationDataForService();
-      String payload = JavaUtils.bytesToString(appServiceData.slice());
+      String payload = JavaUtils.bytesToString(appServiceData);
       String shuffleSecret;
       Map<String, Object> metaInfo;
       try {

@@ -76,7 +76,7 @@ public class JavaUtils {
    * converted back to the same byte buffer through {@link #stringToBytes(String)}.
    */
   public static String bytesToString(ByteBuffer b) {
-    return StandardCharsets.UTF_8.decode(b).toString();
+    return StandardCharsets.UTF_8.decode(b.slice()).toString();
   }
 
   /**
