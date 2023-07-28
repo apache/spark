@@ -319,7 +319,7 @@ private[ui] class SqlStatsPagedTable(
         </span>
       </td>
       <td>
-        {info.state}
+        {if (info.isExecutionActive) "RUNNING" else info.state}
       </td>
       <td>
         {info.operationId}
