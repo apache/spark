@@ -179,13 +179,12 @@ private[sql] object DataTypeErrors extends DataTypeErrorsBase {
   }
 
   def invalidFieldName(fieldName: Seq[String], path: Seq[String], context: Origin): Throwable = {
-    new SparkException(
+    new AnalysisException(
       errorClass = "INVALID_FIELD_NAME",
       messageParameters = Map(
         "fieldName" -> toSQLId(fieldName),
         "path" -> toSQLId(path)),
-      cause = null,
-      context = context.getQueryContext)
+      origin = context)
   }
 
   def unscaledValueTooLargeForPrecisionError(
