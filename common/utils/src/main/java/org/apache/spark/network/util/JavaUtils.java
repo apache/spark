@@ -68,7 +68,7 @@ public class JavaUtils {
    * converted back to the same string through {@link #bytesToString(ByteBuffer)}.
    */
   public static ByteBuffer stringToBytes(String s) {
-    return StandardCharsets.UTF_8.encode(s);
+    return ByteBuffer.wrap(s.getBytes(StandardCharsets.UTF_8));
   }
 
   /**
