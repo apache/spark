@@ -190,15 +190,25 @@ def search_jar(project_relative_path, sbt_jar_name_prefix, mvn_jar_name_prefix):
         return jars[0]
 
 
+def _terminal_color_support():
+    try:
+        # determine if environment supports color
+        script = "$(test $(tput colors)) && $(test $(tput colors) -ge 8) && echo true || echo false"
+        return os.popen(script).read()
+    except Exception:
+        return False
+
+
 def _context_diff(actual: List[str], expected: List[str], n: int = 3):
     """
     Modified from difflib context_diff API,
     see original code here: https://github.com/python/cpython/blob/main/Lib/difflib.py#L1180
     """
+
     def red(s: str) -> str:
-        RedColor = "\033[31m"
-        NoColor = "\033[0m"
-        return RedColor + str(s) + NoColor
+        red_color = "\033[31m"
+        no_color = "\033[0m"
+        return red_color + str(s) + no_color
 
     prefix = dict(insert="+ ", delete="- ", replace="! ", equal="  ")
     for group in difflib.SequenceMatcher(None, actual, expected).get_grouped_opcodes(n):
@@ -206,7 +216,7 @@ def _context_diff(actual: List[str], expected: List[str], n: int = 3):
         if any(tag in {"replace", "delete"} for tag, _, _, _, _ in group):
             for tag, i1, i2, _, _ in group:
                 for line in actual[i1:i2]:
-                    if tag != "equal":
+                    if tag != "equal" and _terminal_color_support():
                         yield red(prefix[tag] + str(line))
                     else:
                         yield prefix[tag] + str(line)
@@ -217,7 +227,7 @@ def _context_diff(actual: List[str], expected: List[str], n: int = 3):
         if any(tag in {"replace", "insert"} for tag, _, _, _, _ in group):
             for tag, _, _, j1, j2 in group:
                 for line in expected[j1:j2]:
-                    if tag != "equal":
+                    if tag != "equal" and _terminal_color_support():
                         yield red(prefix[tag] + str(line))
                     else:
                         yield prefix[tag] + str(line)
