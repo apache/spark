@@ -45,7 +45,7 @@ def main(infile: IO, outfile: IO) -> None:
     )
 
     spark_connect_session = SparkSession.builder.remote(connect_url).getOrCreate()
-    spark_connect_session._client._session_id = session_id
+    spark_connect_session._client._session_id = session_id  # type: ignore[attr-defined]
 
     # TODO(SPARK-44460): Pass credentials.
     # TODO(SPARK-44461): Enable Process Isolation
