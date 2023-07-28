@@ -1043,7 +1043,7 @@ Apart from these, the following properties are also available, and may be useful
 </tr>
 <tr>
   <td><code>spark.shuffle.io.connectionCreationTimeout</code></td>
-  <td>value of <code>spark.network.timeout</code></td>
+  <td>value of <code>spark.shuffle.io.connectionTimeout</code></td>
   <td>
     Timeout for establishing a connection between the shuffle servers and clients.
   </td>
@@ -1227,7 +1227,7 @@ Apart from these, the following properties are also available, and may be useful
 </tr>
 <tr>
   <td><code>spark.files.io.connectionCreationTimeout</code></td>
-  <td>value of <code>spark.network.timeout</code></td>
+  <td>value of <code>spark.files.io.connectionTimeout</code></td>
   <td>
     Timeout for establishing a connection for fetching files in Spark RPC environments.
   </td>
@@ -2460,7 +2460,7 @@ Apart from these, the following properties are also available, and may be useful
 </tr>
 <tr>
   <td><code>spark.rpc.io.connectionCreationTimeout</code></td>
-  <td>value of <code>spark.network.timeout</code></td>
+  <td>value of <code>spark.rpc.io.connectionTimeout</code></td>
   <td>
     Timeout for establishing a connection between RPC peers.
   </td>
