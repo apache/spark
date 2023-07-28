@@ -20,11 +20,8 @@
 name: "Build using Maven (master, Scala 2.12, Hadoop 3, JDK 8)"
 
 on:
-  push:
-    branches:
-      - '**'
-#  schedule:
-#    - cron: '0 13 * * *'
+  schedule:
+    - cron: '0 13 * * *'
 
 jobs:
   run-build:
