@@ -331,7 +331,10 @@ class DummySparkConnectService() extends SparkConnectServiceGrpc.SparkConnectSer
 
   override def addArtifacts(responseObserver: StreamObserver[AddArtifactsResponse])
       : StreamObserver[AddArtifactsRequest] = new StreamObserver[AddArtifactsRequest] {
-    override def onNext(v: AddArtifactsRequest): Unit = inputArtifactRequests.append(v)
+    override def onNext(v: AddArtifactsRequest): Unit = {
+      assert(v.hasClientType)
+      inputArtifactRequests.append(v)
+    }
 
     override def onError(throwable: Throwable): Unit = responseObserver.onError(throwable)
 
@@ -344,6 +347,7 @@ class DummySparkConnectService() extends SparkConnectServiceGrpc.SparkConnectSer
   override def artifactStatus(
       request: ArtifactStatusesRequest,
       responseObserver: StreamObserver[ArtifactStatusesResponse]): Unit = {
+    assert(request.hasClientType)
     val builder = proto.ArtifactStatusesResponse.newBuilder()
     request.getNamesList().iterator().asScala.foreach { name =>
       val status = proto.ArtifactStatusesResponse.ArtifactStatus.newBuilder()
