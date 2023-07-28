@@ -739,21 +739,6 @@ object IntervalUtils extends SparkIntervalUtils {
     fromDoubles(interval.months / num, interval.days / num, interval.microseconds / num)
   }
 
-  private object ParseState extends Enumeration {
-    type ParseState = Value
-
-    val PREFIX,
-        TRIM_BEFORE_SIGN,
-        SIGN,
-        TRIM_BEFORE_VALUE,
-        VALUE,
-        VALUE_FRACTIONAL_PART,
-        TRIM_BEFORE_UNIT,
-        UNIT_BEGIN,
-        UNIT_SUFFIX,
-        UNIT_END = Value
-  }
-
   /**
    * A safe version of `stringToInterval`. It returns null for invalid input string.
    */
