@@ -556,8 +556,10 @@ case class SortMergeJoinExec(
 
     val doJoin = joinType match {
       case _: InnerLike =>
+        val cleanedFlag =
+          ctx.addMutableState(CodeGenerator.JAVA_BOOLEAN, "cleanedFlag", v => s"$v = false;")
         codegenInner(findNextJoinRows, beforeLoop, iterator, bufferedRow, condCheck, outputRow,
-          eagerCleanup)
+          eagerCleanup, cleanedFlag)
       case LeftOuter | RightOuter =>
         codegenOuter(streamedInput, findNextJoinRows, beforeLoop, iterator, bufferedRow, condCheck,
           ctx.freshName("hasOutputRow"), outputRow, eagerCleanup)
@@ -606,8 +608,13 @@ case class SortMergeJoinExec(
       bufferedRow: String,
       conditionCheck: String,
       outputRow: String,
-      eagerCleanup: String): String = {
+      eagerCleanup: String,
+      cleanedFlag: String): String = {
     s"""
+       |if($cleanedFlag) {
+       |  return;
+       |}
+       |
        |while ($findNextJoinRows) {
        |  $beforeLoop
        |  while ($matchIterator.hasNext()) {
@@ -617,6 +624,7 @@ case class SortMergeJoinExec(
        |  }
        |  if (shouldStop()) return;
        |}
+       |$cleanedFlag = true;
        |$eagerCleanup
      """.stripMargin
   }
