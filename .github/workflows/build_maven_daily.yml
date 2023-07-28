@@ -20,8 +20,11 @@
 name: "Build using Maven (master, Scala 2.12, Hadoop 3, JDK 8)"
 
 on:
-  schedule:
-    - cron: '0 13 * * *'
+  push:
+    branches:
+      - '**'
+#  schedule:
+#    - cron: '0 13 * * *'
 
 jobs:
   run-build:
@@ -29,4 +32,11 @@ jobs:
       packages: write
     name: Run
     uses: ./.github/workflows/build_and_test_maven.yml
-    if: github.repository == 'apache/spark'
+#    if: github.repository == 'apache/spark'
+    with:
+      java: 8
+      branch: master
+      hadoop: hadoop3
+      envs: >-
+        {
+        }
