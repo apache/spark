@@ -514,6 +514,7 @@ pyspark_testing = Module(
     python_test_goals=[
         # doctests
         "pyspark.testing.utils",
+        "pyspark.testing.pandasutils",
     ],
 )
 
