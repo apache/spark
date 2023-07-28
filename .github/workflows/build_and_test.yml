@@ -358,6 +358,8 @@ jobs:
       GITHUB_PREV_SHA: ${{ github.event.before }}
       SPARK_LOCAL_IP: localhost
       SKIP_PACKAGING: true
+      SKIP_MIMA: true
+      SKIP_UNIDOC: true
     steps:
       - name: Checkout Spark repository
         uses: actions/checkout@v3
