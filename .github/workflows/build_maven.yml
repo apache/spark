@@ -36,5 +36,5 @@ jobs:
       hadoop: hadoop3
       jobs: >-
         {
-          "run-maven-test": "true"
+          "maven-test": "true"
         }

@@ -100,7 +100,7 @@ jobs:
               \"lint\" : \"true\",
               \"k8s-integration-tests\" : \"true\",
               \"breaking-changes-buf\" : \"true\",
-              \"run-maven-test\" : \"true\",
+              \"maven-test\" : \"true\",
             }"
           echo $precondition # For debugging
           # Remove `\n` to avoid "Invalid format" error
@@ -284,9 +284,9 @@ jobs:
         name: unit-tests-log-${{ matrix.modules }}-${{ matrix.comment }}-${{ matrix.java }}-${{ matrix.hadoop }}-${{ matrix.hive }}
         path: "**/target/unit-tests.log"
 
-  run-maven-test:
+  maven-test:
     needs: precondition
-    if: fromJson(needs.precondition.outputs.required).run-maven-test == 'true'
+    if: fromJson(needs.precondition.outputs.required).maven-test == 'true'
     name: "Run Maven Test"
     permissions:
       packages: write
