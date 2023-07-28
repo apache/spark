@@ -290,6 +290,11 @@ jobs:
     permissions:
       packages: write
     uses: ./.github/workflows/maven_test.yml
+    with:
+      java: ${{ inputs.java }}
+      branch: ${{ inputs.branch }}
+      hadoop: ${{ inputs.hadoop }}
+      envs: ${{ fromJSON(inputs.envs) }}
 
   infra-image:
     name: "Base image build"
