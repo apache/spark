@@ -134,4 +134,14 @@ object Connect {
     .version("3.5.0")
     .intConf
     .createWithDefault(200)
+
+  val CONNECT_GRPC_MARSHALLER_RECURSION_LIMIT =
+    ConfigBuilder("spark.connect.grpc.marshallerRecursionLimit")
+      .doc(
+        """
+          |Sets the recursion limit to grpc protobuf messages.
+          |""".stripMargin)
+      .version("3.5.0")
+      .intConf
+      .createWithDefault(1024)
 }

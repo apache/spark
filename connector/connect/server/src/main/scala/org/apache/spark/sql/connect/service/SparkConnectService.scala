@@ -41,8 +41,7 @@ import org.apache.spark.connect.proto.SparkConnectServiceGrpc.AsyncService
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.UI.UI_ENABLED
 import org.apache.spark.sql.SparkSession
-import org.apache.spark.sql.connect.config.Connect.{CONNECT_GRPC_BINDING_ADDRESS, CONNECT_GRPC_BINDING_PORT, CONNECT_GRPC_MAX_INBOUND_MESSAGE_SIZE}
-import org.apache.spark.sql.connect.service.SparkConnectService.PROTOBUF_RECURSION_LIMIT
+import org.apache.spark.sql.connect.config.Connect.{CONNECT_GRPC_BINDING_ADDRESS, CONNECT_GRPC_BINDING_PORT, CONNECT_GRPC_MARSHALLER_RECURSION_LIMIT, CONNECT_GRPC_MAX_INBOUND_MESSAGE_SIZE}
 import org.apache.spark.sql.connect.ui.{SparkConnectServerAppStatusStore, SparkConnectServerListener, SparkConnectServerTab}
 import org.apache.spark.sql.connect.utils.ErrorUtils
 import org.apache.spark.status.ElementTrackingStore
@@ -178,13 +177,15 @@ class SparkConnectService(debug: Boolean)
   private def customizedMethodDesc(
     methodDef: MethodDescriptor[MessageLite, MessageLite]
   ): MethodDescriptor[MessageLite, MessageLite] = {
+    val recursionLimit =
+      SparkEnv.get.conf.get(CONNECT_GRPC_MARSHALLER_RECURSION_LIMIT)
     val requestMarshaller =
       ProtoLiteUtils.marshallerWithRecursionLimit(
         methodDef
           .getRequestMarshaller
           .asInstanceOf[PrototypeMarshaller[MessageLite]]
           .getMessagePrototype,
-        PROTOBUF_RECURSION_LIMIT
+        recursionLimit
       )
     val responseMarshaller =
       ProtoLiteUtils.marshallerWithRecursionLimit(
@@ -192,7 +193,7 @@ class SparkConnectService(debug: Boolean)
           .getResponseMarshaller
           .asInstanceOf[PrototypeMarshaller[MessageLite]]
           .getMessagePrototype,
-        PROTOBUF_RECURSION_LIMIT
+        recursionLimit
       )
     methodDef.toBuilder(requestMarshaller, responseMarshaller).build()
   }
@@ -231,8 +232,6 @@ object SparkConnectService extends Logging {
   private val CACHE_SIZE = 100
 
   private val CACHE_TIMEOUT_SECONDS = 3600
-
-  private val PROTOBUF_RECURSION_LIMIT = 1024
 
   // Type alias for the SessionCacheKey. Right now this is a String but allows us to switch to a
   // different or complex type easily.
