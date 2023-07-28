@@ -24,7 +24,7 @@ import scala.reflect.runtime.universe.TypeTag
 import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.serializer.{JavaSerializer, KryoSerializer}
 import org.apache.spark.sql.Row
-import org.apache.spark.sql.catalyst.encoders.{ExpressionEncoder, RowEncoder}
+import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions.UnsafeArrayData
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.Platform
@@ -128,7 +128,7 @@ class UnsafeArraySuite extends SparkFunSuite {
       val decimal = decimalArray(0)
       val schema = new StructType().add(
         "array", ArrayType(DecimalType(decimal.precision, decimal.scale)))
-      val encoder = RowEncoder(schema).resolveAndBind()
+      val encoder = ExpressionEncoder(schema).resolveAndBind()
       val externalRow = Row(decimalArray)
       val ir = encoder.createSerializer().apply(externalRow)
 
@@ -141,7 +141,7 @@ class UnsafeArraySuite extends SparkFunSuite {
     }
 
     val schema = new StructType().add("array", ArrayType(CalendarIntervalType))
-    val encoder = RowEncoder(schema).resolveAndBind()
+    val encoder = ExpressionEncoder(schema).resolveAndBind()
     val externalRow = Row(calendarintervalArray)
     val ir = encoder.createSerializer().apply(externalRow)
     val unsafeCalendar = ir.getArray(0)

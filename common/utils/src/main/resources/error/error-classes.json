@@ -2771,11 +2771,6 @@
     ],
     "sqlState" : "0A000"
   },
-  "UNSUPPORTED_DATA_SOURCE_FOR_DIRECT_QUERY" : {
-    "message" : [
-      "The direct query on files does not support the data source type: <className>. Please try a different data source type or consider using a different query method."
-    ]
-  },
   "UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE" : {
     "message" : [
       "The <format> datasource doesn't support the column <columnName> of the type <columnType>."

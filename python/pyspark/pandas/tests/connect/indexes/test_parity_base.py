@@ -35,12 +35,6 @@ class IndexesParityTests(
     def test_append(self):
         super().test_append()
 
-    @unittest.skip(
-        "TODO(SPARK-43611): Fix unexpected `AnalysisException` from Spark Connect client."
-    )
-    def test_monotonic(self):
-        super().test_monotonic()
-
     @unittest.skip("TODO(SPARK-43620): Support `Column` for SparkConnectColumn.__getitem__.")
     def test_factorize(self):
         super().test_factorize()

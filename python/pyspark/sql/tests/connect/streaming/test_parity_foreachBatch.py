@@ -33,7 +33,7 @@ class StreamingForeachBatchParityTests(StreamingTestsForeachBatchMixin, ReusedCo
 
 if __name__ == "__main__":
     import unittest
-    from pyspark.sql.tests.connect.streaming.test_parity_streaming_foreachBatch import *  # noqa: F401,E501
+    from pyspark.sql.tests.connect.streaming.test_parity_foreachBatch import *  # noqa: F401,E501
 
     try:
         import xmlrunner  # type: ignore[import]
