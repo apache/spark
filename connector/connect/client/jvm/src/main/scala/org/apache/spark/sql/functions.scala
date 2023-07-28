@@ -7923,15 +7923,19 @@ object functions {
   def call_udf(udfName: String, cols: Column*): Column = call_function(udfName, cols: _*)
 
   /**
-   * Call a builtin or temp function.
+   * Call a SQL function.
    *
    * @param funcName
-   *   function name
+   *   function name that follows the SQL identifier syntax (can be quoted, can be qualified)
    * @param cols
    *   the expression parameters of function
    * @since 3.5.0
    */
   @scala.annotation.varargs
-  def call_function(funcName: String, cols: Column*): Column = Column.fn(funcName, cols: _*)
+  def call_function(funcName: String, cols: Column*): Column = Column { builder =>
+    builder.getCallFunctionBuilder
+      .setFunctionName(funcName)
+      .addAllArguments(cols.map(_.expr).asJava)
+  }
 
 }

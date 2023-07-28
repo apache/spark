@@ -240,7 +240,7 @@ WITH outermost(x) AS (
 )
 SELECT * FROM outermost ORDER BY 1
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
   "sqlState" : "42P01",
@@ -424,7 +424,7 @@ WithCTE
 -- !query
 WITH test AS (SELECT 42) INSERT INTO test VALUES (1)
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
   "sqlState" : "42P01",
@@ -452,10 +452,14 @@ with test as (select 42) insert into test select * from test
 -- !query analysis
 InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/test, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/test], Append, `spark_catalog`.`default`.`test`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/test), [i]
 +- Project [cast(42#x as int) AS i#x]
-   +- Project [42#x]
-      +- SubqueryAlias test
-         +- Project [42 AS 42#x]
-            +- OneRowRelation
+   +- WithCTE
+      :- CTERelationDef xxxx, false
+      :  +- SubqueryAlias test
+      :     +- Project [42 AS 42#x]
+      :        +- OneRowRelation
+      +- Project [42#x]
+         +- SubqueryAlias test
+            +- CTERelationRef xxxx, true, [42#x]
 
 
 -- !query
