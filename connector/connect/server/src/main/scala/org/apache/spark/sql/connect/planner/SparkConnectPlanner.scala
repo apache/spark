@@ -2430,11 +2430,11 @@ class SparkConnectPlanner(val sessionHolder: SessionHolder) extends Logging {
         errorOnDuplicatedFieldNames = false)
     } else {
       val batches = ArrowConverters.toBatchWithSchemaIterator(
-        rows.iterator,
-        schema,
-        maxRecordsPerBatch,
-        maxBatchSize,
-        timeZoneId,
+        rowIter = rows.iterator,
+        schema = schema,
+        maxRecordsPerBatch = -1,
+        maxEstimatedBatchSize = maxBatchSize,
+        timeZoneId = timeZoneId,
         errorOnDuplicatedFieldNames = false)
       assert(batches.hasNext)
       val bytes = batches.next()

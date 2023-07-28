@@ -42,6 +42,22 @@ import org.apache.spark.sql.types._
 
 class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper with PrivateMethodTester {
 
+  test("many tables") {
+    withSQLConf("spark.sql.execution.arrow.maxRecordsPerBatch" -> "10") {
+      val numTables = 20
+      try {
+        for (i <- 0 to numTables) {
+          spark.sql(s"create table testcat.table${i} (id int)")
+        }
+        assert(spark.sql("show tables in testcat").collect().length == numTables + 1)
+      } finally {
+        for (i <- 0 to numTables) {
+          spark.sql(s"drop table if exists testcat.table${i}")
+        }
+      }
+    }
+  }
+
   // Spark Result
   test("spark result schema") {
     val df = spark.sql("select val from (values ('Hello'), ('World')) as t(val)")
