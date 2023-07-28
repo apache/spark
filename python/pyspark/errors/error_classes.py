@@ -164,6 +164,42 @@ ERROR_CLASSES_JSON = """
       "Remote client cannot create a SparkContext. Create SparkSession instead."
     ]
   },
+  "DIFFERENT_PANDAS_DATAFRAME" : {
+    "message" : [
+      "DataFrames are not almost equal:",
+      "Left: <left>",
+      "<left_dtype>",
+      "Right: <right>",
+      "<right_dtype>"
+    ]
+  },
+  "DIFFERENT_PANDAS_INDEX" : {
+    "message" : [
+      "Indices are not almost equal:",
+      "Left: <left>",
+      "<left_dtype>",
+      "Right: <right>",
+      "<right_dtype>"
+    ]
+  },
+  "DIFFERENT_PANDAS_MULTIINDEX" : {
+    "message" : [
+      "MultiIndices are not almost equal:",
+      "Left: <left>",
+      "<left_dtype>",
+      "Right: <right>",
+      "<right_dtype>"
+    ]
+  },
+  "DIFFERENT_PANDAS_SERIES" : {
+    "message" : [
+      "Series are not almost equal:",
+      "Left: <left>",
+      "<left_dtype>",
+      "Right: <right>",
+      "<right_dtype>"
+    ]
+  },
   "DIFFERENT_ROWS" : {
     "message" : [
       "<error_msg>"
@@ -231,6 +267,12 @@ ERROR_CLASSES_JSON = """
   "INVALID_NDARRAY_DIMENSION": {
     "message": [
       "NumPy array input should be of <dimensions> dimensions."
+    ]
+  },
+  "INVALID_PANDAS_ON_SPARK_COMPARISON" : {
+    "message" : [
+      "Expected two pandas-on-Spark DataFrames",
+      "but got actual: <actual_type> and expected: <expected_type>"
     ]
   },
   "INVALID_PANDAS_UDF" : {
