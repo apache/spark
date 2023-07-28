@@ -16,8 +16,8 @@
  */
 package org.apache.spark.sql.catalyst.util
 
-import org.apache.spark.sql.SqlApiConf
 import org.apache.spark.sql.errors.DataTypeErrors
+import org.apache.spark.sql.internal.SqlApiConf
 import org.apache.spark.sql.types.{ArrayType, CharType, DataType, MapType, StringType, StructType, VarcharType}
 
 trait SparkCharVarcharUtils {

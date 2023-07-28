@@ -499,6 +499,7 @@ class AnalyzePlanRequest(google.protobuf.message.Message):
     The session_id specifies a spark session for a user id (which is specified
     by user_context.user_id). The session_id is set by the client to be able to
     collate streaming responses from different queries within the dedicated session.
+    The id should be an UUID string of the format `00112233-4455-6677-8899-aabbccddeeff`
     """
     @property
     def user_context(self) -> global___UserContext:
@@ -1042,6 +1043,7 @@ class ExecutePlanRequest(google.protobuf.message.Message):
     The session_id specifies a spark session for a user id (which is specified
     by user_context.user_id). The session_id is set by the client to be able to
     collate streaming responses from different queries within the dedicated session.
+    The id should be an UUID string of the format `00112233-4455-6677-8899-aabbccddeeff`
     """
     @property
     def user_context(self) -> global___UserContext:
@@ -1722,6 +1724,7 @@ class ConfigRequest(google.protobuf.message.Message):
     The session_id specifies a spark session for a user id (which is specified
     by user_context.user_id). The session_id is set by the client to be able to
     collate streaming responses from different queries within the dedicated session.
+    The id should be an UUID string of the format `00112233-4455-6677-8899-aabbccddeeff`
     """
     @property
     def user_context(self) -> global___UserContext:
@@ -1961,6 +1964,7 @@ class AddArtifactsRequest(google.protobuf.message.Message):
     The session_id specifies a spark session for a user id (which is specified
     by user_context.user_id). The session_id is set by the client to be able to
     collate streaming responses from different queries within the dedicated session.
+    The id should be an UUID string of the format `00112233-4455-6677-8899-aabbccddeeff`
     """
     @property
     def user_context(self) -> global___UserContext:
@@ -2112,6 +2116,7 @@ class ArtifactStatusesRequest(google.protobuf.message.Message):
     The session_id specifies a spark session for a user id (which is specified
     by user_context.user_id). The session_id is set by the client to be able to
     collate streaming responses from different queries within the dedicated session.
+    The id should be an UUID string of the format `00112233-4455-6677-8899-aabbccddeeff`
     """
     @property
     def user_context(self) -> global___UserContext:
@@ -2278,6 +2283,7 @@ class InterruptRequest(google.protobuf.message.Message):
     The session_id specifies a spark session for a user id (which is specified
     by user_context.user_id). The session_id is set by the client to be able to
     collate streaming responses from different queries within the dedicated session.
+    The id should be an UUID string of the format `00112233-4455-6677-8899-aabbccddeeff`
     """
     @property
     def user_context(self) -> global___UserContext:

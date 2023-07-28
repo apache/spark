@@ -37,7 +37,7 @@ import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoder
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders._
 import org.apache.spark.sql.catalyst.expressions.GenericRowWithSchema
-import org.apache.spark.sql.errors.{DataTypeErrors, QueryCompilationErrors}
+import org.apache.spark.sql.errors.{ExecutionErrors, QueryCompilationErrors}
 import org.apache.spark.sql.types.Decimal
 
 /**
@@ -341,7 +341,7 @@ object ArrowDeserializers {
         }
 
       case (CalendarIntervalEncoder | _: UDTEncoder[_], _) =>
-        throw DataTypeErrors.unsupportedDataTypeError(encoder.dataType)
+        throw ExecutionErrors.unsupportedDataTypeError(encoder.dataType)
 
       case _ =>
         throw new RuntimeException(

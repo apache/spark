@@ -14,26 +14,8 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.sql.errors
+package org.apache.spark.sql.internal
 
-import org.apache.arrow.vector.types.pojo.ArrowType
-
-import org.apache.spark.SparkUnsupportedOperationException
-
-trait ArrowErrors {
-
-  def unsupportedArrowTypeError(typeName: ArrowType): SparkUnsupportedOperationException = {
-    new SparkUnsupportedOperationException(
-      errorClass = "UNSUPPORTED_ARROWTYPE",
-      messageParameters = Map("typeName" -> typeName.toString))
-  }
-
-  def duplicatedFieldNameInArrowStructError(
-      fieldNames: Seq[String]): SparkUnsupportedOperationException = {
-    new SparkUnsupportedOperationException(
-      errorClass = "DUPLICATED_FIELD_NAME_IN_ARROW_STRUCT",
-      messageParameters = Map("fieldNames" -> fieldNames.mkString("[", ", ", "]")))
-  }
+object LegacyBehaviorPolicy extends Enumeration {
+  val EXCEPTION, LEGACY, CORRECTED = Value
 }
-
-object ArrowErrors extends ArrowErrors

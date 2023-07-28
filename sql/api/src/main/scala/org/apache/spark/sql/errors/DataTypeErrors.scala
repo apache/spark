@@ -295,10 +295,4 @@ private[sql] object DataTypeErrors extends DataTypeErrorsBase {
       messageParameters = Map("operation" -> operation),
       cause = null)
   }
-
-  def unsupportedDataTypeError(typeName: DataType): SparkUnsupportedOperationException = {
-    new SparkUnsupportedOperationException(
-      errorClass = "UNSUPPORTED_DATATYPE",
-      messageParameters = Map("typeName" -> toSQLType(typeName)))
-  }
 }

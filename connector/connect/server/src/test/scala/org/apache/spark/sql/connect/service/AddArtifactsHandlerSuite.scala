@@ -18,6 +18,7 @@ package org.apache.spark.sql.connect.service
 
 import java.io.InputStream
 import java.nio.file.{Files, Path}
+import java.util.UUID
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable
@@ -36,6 +37,8 @@ import org.apache.spark.util.ThreadUtils
 class AddArtifactsHandlerSuite extends SharedSparkSession with ResourceHelper {
 
   private val CHUNK_SIZE: Int = 32 * 1024
+
+  private val sessionId = UUID.randomUUID.toString()
 
   class DummyStreamObserver(p: Promise[AddArtifactsResponse])
       extends StreamObserver[AddArtifactsResponse] {
@@ -125,7 +128,7 @@ class AddArtifactsHandlerSuite extends SharedSparkSession with ResourceHelper {
 
     val singleChunkArtifactRequest = AddArtifactsRequest
       .newBuilder()
-      .setSessionId("abc")
+      .setSessionId(sessionId)
       .setUserContext(context)
       .setBatch(
         proto.AddArtifactsRequest.Batch.newBuilder().addArtifacts(singleChunkArtifact).build())
@@ -168,7 +171,7 @@ class AddArtifactsHandlerSuite extends SharedSparkSession with ResourceHelper {
 
     val requestBuilder = AddArtifactsRequest
       .newBuilder()
-      .setSessionId("abc")
+      .setSessionId(sessionId)
       .setUserContext(context)
       .setBeginChunk(beginChunkedArtifact)
 
@@ -295,7 +298,7 @@ class AddArtifactsHandlerSuite extends SharedSparkSession with ResourceHelper {
 
       val singleChunkArtifactRequest = AddArtifactsRequest
         .newBuilder()
-        .setSessionId("abc")
+        .setSessionId(sessionId)
         .setUserContext(context)
         .setBatch(
           proto.AddArtifactsRequest.Batch.newBuilder().addArtifacts(singleChunkArtifact).build())
@@ -336,7 +339,7 @@ class AddArtifactsHandlerSuite extends SharedSparkSession with ResourceHelper {
 
     val singleChunkArtifactRequest = AddArtifactsRequest
       .newBuilder()
-      .setSessionId("abc")
+      .setSessionId(sessionId)
       .setUserContext(context)
       .setBatch(
         proto.AddArtifactsRequest.Batch.newBuilder().addArtifacts(singleChunkArtifact).build())
@@ -353,7 +356,7 @@ class AddArtifactsHandlerSuite extends SharedSparkSession with ResourceHelper {
 
     val beginChunkArtifactRequest = AddArtifactsRequest
       .newBuilder()
-      .setSessionId("abc")
+      .setSessionId(sessionId)
       .setUserContext(context)
       .setBeginChunk(beginChunkedArtifact)
       .build()
