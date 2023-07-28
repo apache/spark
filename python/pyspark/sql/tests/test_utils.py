@@ -150,8 +150,8 @@ class UtilsTestsMixin:
             ),
         )
 
-        actual_str = df1.toPandas().to_string(index=False)
-        expected_str = df2.toPandas().to_string(index=False)
+        actual_str = df1._jdf.showString(2, 2, False)
+        expected_str = df2._jdf.showString(2, 2, False)
 
         generated_diff = _context_diff(
             actual=actual_str.splitlines(), expected=expected_str.splitlines(), n=2
@@ -297,8 +297,8 @@ class UtilsTestsMixin:
             ),
         )
 
-        actual_str = df1.toPandas().to_string(index=False)
-        expected_str = df2.toPandas().to_string(index=False)
+        actual_str = df1._jdf.showString(2, 2, False)
+        expected_str = df2._jdf.showString(2, 2, False)
 
         generated_diff = _context_diff(
             actual=actual_str.splitlines(), expected=expected_str.splitlines(), n=2
@@ -596,8 +596,8 @@ class UtilsTestsMixin:
             schema=["id", "amount"],
         )
 
-        actual_str = df1.toPandas().to_string(index=False)
-        expected_str = df2.toPandas().to_string(index=False)
+        actual_str = df1._jdf.showString(2, 2, False)
+        expected_str = df2._jdf.showString(2, 2, False)
 
         generated_diff = _context_diff(
             actual=actual_str.splitlines(), expected=expected_str.splitlines(), n=2
@@ -757,8 +757,8 @@ class UtilsTestsMixin:
             schema=["id", "amount"],
         )
 
-        actual_str = df1.toPandas().to_string(index=False)
-        expected_str = df2.toPandas().to_string(index=False)
+        actual_str = df1._jdf.showString(2, 2, False)
+        expected_str = df2._jdf.showString(2, 2, False)
 
         generated_diff = _context_diff(
             actual=actual_str.splitlines(), expected=expected_str.splitlines(), n=2
@@ -847,8 +847,8 @@ class UtilsTestsMixin:
             schema=["id", "amount"],
         )
 
-        actual_str = df1.toPandas().to_string(index=False)
-        expected_str = df2.toPandas().to_string(index=False)
+        actual_str = df1._jdf.showString(3, 3, False)
+        expected_str = df2._jdf.showString(3, 3, False)
 
         generated_diff = _context_diff(
             actual=actual_str.splitlines(), expected=expected_str.splitlines(), n=2

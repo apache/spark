@@ -456,7 +456,7 @@ def assertDataFrameEqual(
         from pyspark.sql.connect.dataframe import DataFrame as ConnectDataFrame
 
         if isinstance(actual, ps.DataFrame) or isinstance(expected, ps.DataFrame):
-            # handle pandas DataFrames
+            # handle pandas-on-Spark DataFrames
             if not (isinstance(actual, ps.DataFrame) and isinstance(expected, ps.DataFrame)):
                 raise PySparkAssertionError(
                     error_class="INVALID_PANDAS_ON_SPARK_COMPARISON",
@@ -489,7 +489,7 @@ def assertDataFrameEqual(
             )
     except Exception:
         if isinstance(actual, ps.DataFrame) or isinstance(expected, ps.DataFrame):
-            # handle pandas DataFrames
+            # handle pandas-on-Spark DataFrames
             if not (isinstance(actual, ps.DataFrame) and isinstance(expected, ps.DataFrame)):
                 raise PySparkAssertionError(
                     error_class="INVALID_PANDAS_ON_SPARK_COMPARISON",
@@ -576,8 +576,8 @@ def assertDataFrameEqual(
                 diff_rows = True
 
         try:
-            actual_str = actual.toPandas().to_string(index=False)
-            expected_str = expected.toPandas().to_string(index=False)
+            actual_str = actual._jdf.showString(len(zipped), len(zipped), False)
+            expected_str = expected._jdf.showString(len(zipped), len(zipped), False)
 
             generated_diff = _context_diff(
                 actual=actual_str.splitlines(), expected=expected_str.splitlines(), n=len(zipped)
