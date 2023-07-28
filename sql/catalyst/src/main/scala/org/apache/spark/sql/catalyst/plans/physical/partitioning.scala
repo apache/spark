@@ -513,6 +513,35 @@ case class BroadcastPartitioning(mode: BroadcastMode) extends Partitioning {
 }
 
 /**
+ * Represents a partitioning use partition value map to partition.
+ */
+case class PartitionValueMapPartitioning(
+    expressions: Seq[Expression],
+    valueMap: Map[Seq[Any], Int],
+    numPartitions: Int) extends Partitioning {
+  override def satisfies0(required: Distribution): Boolean = {
+    super.satisfies0(required) || {
+      required match {
+        case h: StatefulOpClusteredDistribution =>
+          expressions.length == h.expressions.length && expressions.zip(h.expressions).forall {
+            case (l, r) => l.semanticEquals(r)
+          }
+        case c @ ClusteredDistribution(requiredClustering, requireAllClusterKeys, _) =>
+          if (requireAllClusterKeys) {
+            c.areAllClusterKeysMatched(expressions)
+          } else {
+            expressions.forall(x => requiredClustering.exists(_.semanticEquals(x)))
+          }
+        case _ => false
+      }
+    }
+  }
+
+  override def createShuffleSpec(distribution: ClusteredDistribution): ShuffleSpec =
+    PartitionValueMapShuffleSpec(this, distribution)
+}
+
+/**
  * This is used in the scenario where an operator has multiple children (e.g., join) and one or more
  * of which have their own requirement regarding whether its data can be considered as
  * co-partitioned from others. This offers APIs for:
@@ -727,6 +756,53 @@ case class KeyGroupedShuffleSpec(
         left.isSameFunction(right)
       case _ => false
     }
+
+  override def canCreatePartitioning: Boolean = false
+}
+
+case class PartitionValueMapShuffleSpec(
+    partitioning: PartitionValueMapPartitioning,
+    distribution: ClusteredDistribution) extends ShuffleSpec {
+
+  /**
+   * A sequence where each element is a set of positions of the partition expression to the cluster
+   * keys. For instance, if cluster keys are [a, b, b] and partition expressions are
+   * [bucket(4, a), years(b)], the result will be [(0), (1, 2)].
+   *
+   * Therefore the mapping here is very similar to that from `HashShuffleSpec`.
+   */
+  lazy val keyPositions: Seq[mutable.BitSet] = {
+    val distKeyToPos = mutable.Map.empty[Expression, mutable.BitSet]
+    distribution.clustering.zipWithIndex.foreach { case (distKey, distKeyPos) =>
+      distKeyToPos.getOrElseUpdate(distKey.canonicalized, mutable.BitSet.empty).add(distKeyPos)
+    }
+    partitioning.expressions.map(k => distKeyToPos.getOrElse(k.canonicalized, mutable.BitSet.empty))
+  }
+
+  override def numPartitions: Int = partitioning.numPartitions
+
+  override def isCompatibleWith(other: ShuffleSpec): Boolean = other match {
+    // Here we check:
+    //  1. both distributions have the same number of clustering keys
+    //  2. both partitioning have the same number of partitions
+    //  3. both partitioning have the same number of expressions
+    //  4. both partitioning have the same partition value map
+    //  5. each pair of partitioning expression from both sides has overlapping positions in their
+    //     corresponding distributions.
+    case otherSpec @ PartitionValueMapShuffleSpec(otherPartitioning, otherDistribution) =>
+      distribution.clustering.length == otherDistribution.clustering.length &&
+        numPartitions == other.numPartitions &&
+        partitioning.valueMap.equals(otherSpec.partitioning.valueMap) &&
+        partitioning.expressions.length == otherPartitioning.expressions.length && {
+        val otherKeyPositions = otherSpec.keyPositions
+        keyPositions.zip(otherKeyPositions).forall { case (left, right) =>
+          left.intersect(right).nonEmpty
+        }
+      }
+    case ShuffleSpecCollection(specs) =>
+      specs.exists(isCompatibleWith)
+    case _ => false
+  }
 
   override def canCreatePartitioning: Boolean = false
 }

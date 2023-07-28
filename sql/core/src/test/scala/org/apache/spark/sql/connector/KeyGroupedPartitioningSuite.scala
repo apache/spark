@@ -1037,4 +1037,75 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase {
       }
     }
   }
+
+  test("SPARK-41471: shuffle one side: only one side reports partitioning") {
+    val items_partitions = Array(identity("id"))
+    createTable(items, items_schema, items_partitions)
+
+    sql(s"INSERT INTO testcat.ns.$items VALUES " +
+      "(1, 'aa', 40.0, cast('2020-01-01' as timestamp)), " +
+      "(3, 'bb', 10.0, cast('2020-01-01' as timestamp)), " +
+      "(4, 'cc', 15.5, cast('2020-02-01' as timestamp))")
+
+    createTable(purchases, purchases_schema, Array.empty)
+    sql(s"INSERT INTO testcat.ns.$purchases VALUES " +
+      "(1, 42.0, cast('2020-01-01' as timestamp)), " +
+      "(3, 19.5, cast('2020-02-01' as timestamp))")
+
+    Seq(true, false).foreach { shuffleOneSide =>
+      withSQLConf(SQLConf.V2_BUCKETING_SHUFFLE_ONE_SIDE_ENABLED.key -> shuffleOneSide.toString) {
+        val df = sql("SELECT id, name, i.price as purchase_price, p.price as sale_price " +
+          s"FROM testcat.ns.$items i JOIN testcat.ns.$purchases p " +
+          "ON i.id = p.item_id ORDER BY id, purchase_price, sale_price")
+
+        val shuffles = collectShuffles(df.queryExecution.executedPlan)
+        if (shuffleOneSide) {
+          assert(shuffles.size == 1, "only shuffle one side not report partitioning")
+        } else {
+          assert(shuffles.size == 2, "should add two side shuffle when bucketing shuffle one side" +
+            " is not enabled")
+        }
+
+        checkAnswer(df, Seq(Row(1, "aa", 40.0, 42.0), Row(3, "bb", 10.0, 19.5)))
+      }
+    }
+  }
+
+
+  test("SPARK-41471: shuffle one side: partitioning with transform") {
+    val items_partitions = Array(years("arrive_time"))
+    createTable(items, items_schema, items_partitions)
+
+    sql(s"INSERT INTO testcat.ns.$items VALUES " +
+      "(1, 'aa', 40.0, cast('2020-01-01' as timestamp)), " +
+      "(3, 'bb', 10.0, cast('2020-01-01' as timestamp)), " +
+      "(4, 'cc', 15.5, cast('2021-02-01' as timestamp))")
+
+    createTable(purchases, purchases_schema, Array.empty)
+    sql(s"INSERT INTO testcat.ns.$purchases VALUES " +
+      "(1, 42.0, cast('2020-01-01' as timestamp)), " +
+      "(3, 19.5, cast('2021-02-01' as timestamp))")
+
+    Seq(true, false).foreach { shuffleOneSide =>
+      withSQLConf(SQLConf.V2_BUCKETING_SHUFFLE_ONE_SIDE_ENABLED.key -> shuffleOneSide.toString) {
+        val df = sql("SELECT id, name, i.price as purchase_price, p.price as sale_price " +
+          s"FROM testcat.ns.$items i JOIN testcat.ns.$purchases p " +
+          "ON i.arrive_time = p.time ORDER BY id, purchase_price, sale_price")
+
+        val shuffles = collectShuffles(df.queryExecution.executedPlan)
+        if (shuffleOneSide) {
+          assert(shuffles.size == 2, "partitioning with transform not work now")
+        } else {
+          assert(shuffles.size == 2, "should add two side shuffle when bucketing shuffle one side" +
+            " is not enabled")
+        }
+
+        checkAnswer(df, Seq(
+          Row(1, "aa", 40.0, 42.0),
+          Row(3, "bb", 10.0, 42.0),
+          Row(4, "cc", 15.5, 19.5)))
+      }
+    }
+  }
+
 }
