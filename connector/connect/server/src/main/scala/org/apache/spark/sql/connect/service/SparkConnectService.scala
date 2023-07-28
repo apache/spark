@@ -170,6 +170,8 @@ class SparkConnectService(debug: Boolean)
         sessionId = request.getSessionId)
   }
 
+  // customizedMethodDesc returns a customized MethodDescriptor
+  // with updated request and response marshallers.
   private def customizedMethodDesc(
     methodDef: MethodDescriptor[MessageLite, MessageLite]
   ): MethodDescriptor[MessageLite, MessageLite] = {
@@ -193,14 +195,24 @@ class SparkConnectService(debug: Boolean)
   }
 
   override def bindService(): ServerServiceDefinition = {
+    // First, get the SparkConnectService ServerServiceDefinition.
     val serviceDef = SparkConnectServiceGrpc.bindService(this)
+
+    // Create a new ServerServiceDefinition builder
+    // using the name of the original service definition.
     val builder = io.grpc.ServerServiceDefinition.builder(serviceDef.getServiceDescriptor.getName)
+
+    // Iterate through all the methods of the original service definition.
+    // For each method, add a customized method descriptor (with updated marshallers)
+    // and the original server call handler to the builder.
     serviceDef
       .getMethods
       .asScala
       .asInstanceOf[Iterable[ServerMethodDefinition[MessageLite, MessageLite]]]
       .foreach(method => builder.addMethod(
         customizedMethodDesc(method.getMethodDescriptor), method.getServerCallHandler))
+
+    // Build the final ServerServiceDefinition and return it.
     builder.build()
   }
 }

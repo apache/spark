@@ -44,10 +44,10 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper with PrivateM
 
   test("spark deep recursion") {
     var df = spark.range(1)
-    for (a <- 1 to 100) {
+    for (a <- 1 to 500) {
       df = df.union(spark.range(a, a + 1))
     }
-    assert(df.collect().length == 101)
+    assert(df.collect().length == 501)
   }
 
   // Spark Result
