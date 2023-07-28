@@ -402,7 +402,7 @@ jobs:
         # We should install one Python that is higher than 3+ for SQL and Yarn because:
         # - SQL component also has Python related tests, for example, IntegratedUDFTestUtils.
         # - Yarn has a Python specific test too, for example, YarnClusterSuite.
-        if: contains(matrix.modules, 'resource-managers/yarn') || (contains(matrix.modules, 'sql#core'))
+        if: contains(matrix.modules, 'resource-managers#yarn') || (contains(matrix.modules, 'sql#core'))
         with:
           python-version: 3.8
           architecture: x64
