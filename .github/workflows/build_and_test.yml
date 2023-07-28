@@ -285,6 +285,7 @@ jobs:
         path: "**/target/unit-tests.log"
 
   run-maven-test:
+    needs: precondition
     if: fromJson(needs.precondition.outputs.required).run-maven-test == 'true'
     name: "Run Maven Test"
     permissions:
