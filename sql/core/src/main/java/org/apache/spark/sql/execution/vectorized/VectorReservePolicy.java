@@ -41,9 +41,7 @@ public abstract class VectorReservePolicy {
 
   abstract int nextCapacity(int requiredCapacity);
 
-  boolean shouldCleanData() {
-    return false;
-  }
+  abstract boolean shouldCleanData();
 }
 
 class DefaultVectorReservePolicy extends VectorReservePolicy {

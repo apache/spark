@@ -489,7 +489,9 @@ object SQLConf {
 
   val VECTORIZED_HUGE_VECTOR_RESERVE_RATIO =
     buildConf("spark.sql.inMemoryColumnarStorage.hugeVectorReserveRatio")
-      .doc("spark will reserve requiredCapacity * this ratio memory next time")
+      .doc("spark will reserve requiredCapacity * this ratio memory next time. This is only " +
+        "effective when spark.sql.inMemoryColumnarStorage.hugeVectorThreshold > 0 and required " +
+        "memory larger than that threshold.")
       .version("3.5.0")
       .doubleConf
       .createWithDefault(1.2)
