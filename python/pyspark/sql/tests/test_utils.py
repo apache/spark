@@ -42,7 +42,6 @@ from pyspark.sql.types import (
 from pyspark.sql.dataframe import DataFrame
 
 import difflib
-from typing import Union
 
 
 class UtilsTestsMixin:
@@ -693,7 +692,7 @@ class UtilsTestsMixin:
             exception=pe.exception,
             error_class="INVALID_TYPE_DF_EQUALITY_ARG",
             message_parameters={
-                "expected_type": Union[DataFrame, ps.DataFrame],
+                "expected_type": f"{DataFrame.__name__}, {ps.DataFrame.__name__}",
                 "arg_name": "actual",
                 "actual_type": type(dict1),
             },
@@ -706,7 +705,7 @@ class UtilsTestsMixin:
             exception=pe.exception,
             error_class="INVALID_TYPE_DF_EQUALITY_ARG",
             message_parameters={
-                "expected_type": Union[DataFrame, ps.DataFrame],
+                "expected_type": f"{DataFrame.__name__}, {ps.DataFrame.__name__}",
                 "arg_name": "actual",
                 "actual_type": type(dict1),
             },

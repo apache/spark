@@ -158,7 +158,9 @@ class UtilsTestsMixin:
             exception=pe.exception,
             error_class="INVALID_TYPE_DF_EQUALITY_ARG",
             message_parameters={
-                "expected_type": Union[ps.DataFrame, ps.Series, ps.Index],
+                "expected_type": f"{ps.DataFrame.__name__}, "
+                f"{ps.Series.__name__}, "
+                f"{ps.Index.__name__}",
                 "arg_name": "actual",
                 "actual_type": type(list1),
             },

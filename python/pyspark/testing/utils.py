@@ -429,7 +429,7 @@ def assertDataFrameEqual(
             raise PySparkAssertionError(
                 error_class="INVALID_TYPE_DF_EQUALITY_ARG",
                 message_parameters={
-                    "expected_type": DataFrame,
+                    "expected_type": DataFrame.__name__,
                     "arg_name": "actual",
                     "actual_type": type(actual),
                 },
@@ -438,7 +438,7 @@ def assertDataFrameEqual(
             raise PySparkAssertionError(
                 error_class="INVALID_TYPE_DF_EQUALITY_ARG",
                 message_parameters={
-                    "expected_type": Union[DataFrame, List[Row]],
+                    "expected_type": f"{DataFrame.__name__}, {List[Row].__name__}",
                     "arg_name": "expected",
                     "actual_type": type(expected),
                 },
@@ -462,7 +462,7 @@ def assertDataFrameEqual(
             raise PySparkAssertionError(
                 error_class="INVALID_TYPE_DF_EQUALITY_ARG",
                 message_parameters={
-                    "expected_type": Union[DataFrame, ps.DataFrame],
+                    "expected_type": f"{DataFrame.__name__}, {ps.DataFrame.__name__}",
                     "arg_name": "actual",
                     "actual_type": type(actual),
                 },
@@ -471,7 +471,9 @@ def assertDataFrameEqual(
             raise PySparkAssertionError(
                 error_class="INVALID_TYPE_DF_EQUALITY_ARG",
                 message_parameters={
-                    "expected_type": Union[DataFrame, ps.DataFrame, List[Row]],
+                    "expected_type": f"{DataFrame.__name__}, "
+                    f"{ps.DataFrame.__name__}, "
+                    f"{List[Row].__name__}",
                     "arg_name": "expected",
                     "actual_type": type(expected),
                 },

@@ -387,7 +387,7 @@ def assertPandasOnSparkEqual(
         raise PySparkAssertionError(
             error_class="INVALID_TYPE_DF_EQUALITY_ARG",
             message_parameters={
-                "expected_type": Union[DataFrame, Series, Index],
+                "expected_type": f"{DataFrame.__name__}, {Series.__name__}, {Index.__name__}",
                 "arg_name": "actual",
                 "actual_type": type(actual),
             },
@@ -396,7 +396,10 @@ def assertPandasOnSparkEqual(
         raise PySparkAssertionError(
             error_class="INVALID_TYPE_DF_EQUALITY_ARG",
             message_parameters={
-                "expected_type": Union[DataFrame, pd.DataFrame, Series, Index],
+                "expected_type": f"{DataFrame.__name__}, "
+                f"{pd.DataFrame.__name__}, "
+                f"{Series.__name__}, "
+                f"{Index.__name__}",
                 "arg_name": "expected",
                 "actual_type": type(expected),
             },
