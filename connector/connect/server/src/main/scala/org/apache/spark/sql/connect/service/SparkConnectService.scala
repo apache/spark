@@ -295,7 +295,6 @@ object SparkConnectService extends Logging {
     if (debugMode) {
       sb.addService(ProtoReflectionService.newInstance())
     }
-
     server = sb.build
     server.start()
   }
