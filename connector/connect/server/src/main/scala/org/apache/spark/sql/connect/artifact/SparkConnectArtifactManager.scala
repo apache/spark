@@ -34,7 +34,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.connect.artifact.util.ArtifactUtils
 import org.apache.spark.sql.connect.config.Connect.CONNECT_COPY_FROM_LOCAL_TO_FS_ALLOW_DEST_LOCAL
-import org.apache.spark.sql.connect.service.{SessionHolder, SparkConnectService}
+import org.apache.spark.sql.connect.service.SessionHolder
 import org.apache.spark.storage.{CacheId, StorageLevel}
 import org.apache.spark.util.Utils
 
@@ -183,9 +183,6 @@ class SparkConnectArtifactManager(sessionHolder: SessionHolder) extends Logging 
 
     // Clean up artifacts folder
     FileUtils.deleteDirectory(artifactPath.toFile)
-
-    // Clean up running queries
-    SparkConnectService.streamingSessionManager.cleanupRunningQueries(sessionHolder)
   }
 
   private[connect] def uploadArtifactToFs(

@@ -165,6 +165,9 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
     logDebug(s"Expiring session with userId: $userId and sessionId: $sessionId")
     artifactManager.cleanUpResources()
     eventManager.postClosed()
+
+    // Clean up running queries
+    SparkConnectService.streamingSessionManager.cleanupRunningQueries(this)
   }
 
   /**
