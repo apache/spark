@@ -30,3 +30,10 @@ jobs:
     name: Run
     uses: ./.github/workflows/build_and_test_maven.yml
     if: github.repository == 'apache/spark'
+    with:
+      java: 8
+      branch: master
+      hadoop: hadoop3
+      envs: >-
+        {
+        }
