@@ -29,6 +29,7 @@ from typing import (
     Dict,
     List,
     Tuple,
+    Iterator,
 )
 from itertools import zip_longest
 
@@ -187,6 +188,35 @@ def search_jar(project_relative_path, sbt_jar_name_prefix, mvn_jar_name_prefix):
         raise RuntimeError("Found multiple JARs: %s; please remove all but one" % (", ".join(jars)))
     else:
         return jars[0]
+
+
+def _context_diff(actual: List[str], expected: List[str], n: int = 3):
+    def red(s: str) -> str:
+        RedColor = "\033[31m"
+        NoColor = "\033[0m"
+        return RedColor + str(s) + NoColor
+
+    prefix = dict(insert="+ ", delete="- ", replace="! ", equal="  ")
+    for group in difflib.SequenceMatcher(None, actual, expected).get_grouped_opcodes(n):
+        yield "*** actual ***"
+        if any(tag in {"replace", "delete"} for tag, _, _, _, _ in group):
+            for tag, i1, i2, _, _ in group:
+                for line in actual[i1:i2]:
+                    if tag != "equal":
+                        yield red(prefix[tag] + str(line))
+                    else:
+                        yield prefix[tag] + str(line)
+
+        yield "\n"
+
+        yield "*** expected ***"
+        if any(tag in {"replace", "insert"} for tag, _, _, _, _ in group):
+            for tag, _, _, j1, j2 in group:
+                for line in expected[j1:j2]:
+                    if tag != "equal":
+                        yield red(prefix[tag] + str(line))
+                    else:
+                        yield prefix[tag] + str(line)
 
 
 class PySparkErrorTestUtils:
@@ -484,23 +514,31 @@ def assertDataFrameEqual(
 
     def assert_rows_equal(rows1: List[Row], rows2: List[Row]):
         zipped = list(zip_longest(rows1, rows2))
-        rows_equal = True
-        error_msg = "Results do not match: "
-        diff_msg = ""
+        diff_rows = False
         diff_rows_cnt = 0
 
+        # count different rows
         for r1, r2 in zipped:
             if not compare_rows(r1, r2):
-                rows_equal = False
                 diff_rows_cnt += 1
-                generated_diff = difflib.ndiff(str(r1).splitlines(), str(r2).splitlines())
-                diff_msg += "\n" + "\n".join(generated_diff) + "\n"
-                diff_msg += "********************" + "\n"
+                diff_rows = True
 
-        if not rows_equal:
+        try:
+            actual_str = actual.toPandas().to_string(index=False)
+            expected_str = expected.toPandas().to_string(index=False)
+
+            generated_diff = _context_diff(
+                actual=actual_str.splitlines(), expected=expected_str.splitlines(), n=len(zipped)
+            )
+        except Exception:
+            # in case of expected list type or pandas duplicate field names
+            generated_diff = _context_diff(actual=rows1, expected=rows2, n=len(zipped))
+
+        if diff_rows:
+            error_msg = "Results do not match: "
             percent_diff = (diff_rows_cnt / len(zipped)) * 100
             error_msg += "( %.5f %% )" % percent_diff
-            error_msg += "\n" + "--- actual\n+++ expected\n" + diff_msg
+            error_msg += "\n" + "\n".join(generated_diff)
             raise PySparkAssertionError(
                 error_class="DIFFERENT_ROWS",
                 message_parameters={"error_msg": error_msg},
@@ -517,7 +555,6 @@ def assertDataFrameEqual(
     df_list = actual.collect()
 
     if not checkRowOrder:
-        # rename duplicate columns for sorting
         df_list = sorted(df_list, key=lambda x: str(x))
         expected_list = sorted(expected_list, key=lambda x: str(x))
 
