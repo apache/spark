@@ -100,7 +100,6 @@ jobs:
               \"lint\" : \"true\",
               \"k8s-integration-tests\" : \"true\",
               \"breaking-changes-buf\" : \"true\",
-              \"maven-test\" : \"true\",
             }"
           echo $precondition # For debugging
           # Remove `\n` to avoid "Invalid format" error
@@ -286,16 +285,9 @@ jobs:
 
   maven-test:
     name: "Run Maven Test"
-    needs: precondition
-    if: fromJson(needs.precondition.outputs.required).maven-test == 'true'
     permissions:
       packages: write
     uses: ./.github/workflows/maven_test.yml
-    with:
-      java: ${{ inputs.java }}
-      branch: ${{ inputs.branch }}
-      hadoop: ${{ inputs.hadoop }}
-      envs: ${{ fromJSON(inputs.envs) }}
 
   infra-image:
     name: "Base image build"
