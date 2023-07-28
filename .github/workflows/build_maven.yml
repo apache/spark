@@ -36,14 +36,5 @@ jobs:
       hadoop: hadoop3
       jobs: >-
         {
-          "build": "false",
-          "pyspark": "false",
-          "sparkr": "false",
-          "tpcds-1g": "false",
-          "docker-integration-tests": "false",
-          "scala-213": "false",
-          "java-11-17": "false",
-          "k8s-integration-tests": "false",
-          "breaking-changes-buf": "false",
           "maven-test" : "true"
         }
