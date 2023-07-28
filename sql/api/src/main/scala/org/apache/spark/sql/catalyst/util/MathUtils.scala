@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.util
 
 import org.apache.spark.sql.catalyst.trees.SQLQueryContext
-import org.apache.spark.sql.errors.QueryExecutionErrors
+import org.apache.spark.sql.errors.ExecutionErrors
 
 /**
  * Helper functions for arithmetic operations with overflow.
@@ -83,7 +83,7 @@ object MathUtils {
       f
     } catch {
       case e: ArithmeticException =>
-        throw QueryExecutionErrors.arithmeticOverflowError(e.getMessage, hint, context)
+        throw ExecutionErrors.arithmeticOverflowError(e.getMessage, hint, context)
     }
   }
 
