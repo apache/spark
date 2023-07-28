@@ -320,6 +320,11 @@ ERROR_CLASSES_JSON = """
       "The eval type for the UDTF '<name>' is invalid. It must be one of <eval_type>."
     ]
   },
+  "INVALID_UDTF_HANDLER_TYPE" : {
+    "message" : [
+      "The UDTF is invalid. The function handler must be a class, but got '<type>'. Please provide a class as the function handler."
+    ]
+  },
   "INVALID_UDTF_NO_EVAL" : {
     "message" : [
       "The UDTF '<name>' is invalid. It does not implement the required 'eval' method. Please implement the 'eval' method in '<name>' and try again."

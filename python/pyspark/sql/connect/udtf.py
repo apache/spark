@@ -124,6 +124,8 @@ class UserDefinedTableFunction:
         evalType: int = PythonEvalType.SQL_TABLE_UDF,
         deterministic: bool = True,
     ) -> None:
+        _validate_udtf_handler(func)
+
         self.func = func
         self.returnType: DataType = (
             UnparsedDataType(returnType) if isinstance(returnType, str) else returnType
@@ -131,8 +133,6 @@ class UserDefinedTableFunction:
         self._name = name or func.__name__
         self.evalType = evalType
         self.deterministic = deterministic
-
-        _validate_udtf_handler(func)
 
     def _build_common_inline_user_defined_table_function(
         self, *cols: "ColumnOrName"
