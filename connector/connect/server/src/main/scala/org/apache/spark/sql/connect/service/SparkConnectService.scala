@@ -21,21 +21,28 @@ import java.net.InetSocketAddress
 import java.util.UUID
 import java.util.concurrent.TimeUnit
 
+import scala.jdk.CollectionConverters.collectionAsScalaIterableConverter
+
 import com.google.common.base.Ticker
 import com.google.common.cache.{CacheBuilder, RemovalListener, RemovalNotification}
-import io.grpc.Server
+import com.google.protobuf.MessageLite
+import io.grpc.{BindableService, MethodDescriptor, Server, ServerMethodDefinition, ServerServiceDefinition}
+import io.grpc.MethodDescriptor.PrototypeMarshaller
 import io.grpc.netty.NettyServerBuilder
+import io.grpc.protobuf.lite.ProtoLiteUtils
 import io.grpc.protobuf.services.ProtoReflectionService
 import io.grpc.stub.StreamObserver
 import org.apache.commons.lang3.StringUtils
 
 import org.apache.spark.{SparkContext, SparkEnv, SparkSQLException}
 import org.apache.spark.connect.proto
-import org.apache.spark.connect.proto.{AddArtifactsRequest, AddArtifactsResponse}
+import org.apache.spark.connect.proto.{AddArtifactsRequest, AddArtifactsResponse, SparkConnectServiceGrpc}
+import org.apache.spark.connect.proto.SparkConnectServiceGrpc.AsyncService
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.UI.UI_ENABLED
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.connect.config.Connect.{CONNECT_GRPC_BINDING_ADDRESS, CONNECT_GRPC_BINDING_PORT, CONNECT_GRPC_MAX_INBOUND_MESSAGE_SIZE}
+import org.apache.spark.sql.connect.service.SparkConnectService.PROTOBUF_RECURSION_LIMIT
 import org.apache.spark.sql.connect.ui.{SparkConnectServerAppStatusStore, SparkConnectServerListener, SparkConnectServerTab}
 import org.apache.spark.sql.connect.utils.ErrorUtils
 import org.apache.spark.status.ElementTrackingStore
@@ -49,7 +56,8 @@ import org.apache.spark.status.ElementTrackingStore
  *   delegates debug behavior to the handlers.
  */
 class SparkConnectService(debug: Boolean)
-    extends proto.SparkConnectServiceGrpc.SparkConnectServiceImplBase
+    extends AsyncService
+    with BindableService
     with Logging {
 
   /**
@@ -164,6 +172,52 @@ class SparkConnectService(debug: Boolean)
         userId = request.getUserContext.getUserId,
         sessionId = request.getSessionId)
   }
+
+  // customizedMethodDesc returns a customized MethodDescriptor
+  // with updated request and response marshallers.
+  private def customizedMethodDesc(
+    methodDef: MethodDescriptor[MessageLite, MessageLite]
+  ): MethodDescriptor[MessageLite, MessageLite] = {
+    val requestMarshaller =
+      ProtoLiteUtils.marshallerWithRecursionLimit(
+        methodDef
+          .getRequestMarshaller
+          .asInstanceOf[PrototypeMarshaller[MessageLite]]
+          .getMessagePrototype,
+        PROTOBUF_RECURSION_LIMIT
+      )
+    val responseMarshaller =
+      ProtoLiteUtils.marshallerWithRecursionLimit(
+        methodDef
+          .getResponseMarshaller
+          .asInstanceOf[PrototypeMarshaller[MessageLite]]
+          .getMessagePrototype,
+        PROTOBUF_RECURSION_LIMIT
+      )
+    methodDef.toBuilder(requestMarshaller, responseMarshaller).build()
+  }
+
+  override def bindService(): ServerServiceDefinition = {
+    // First, get the SparkConnectService ServerServiceDefinition.
+    val serviceDef = SparkConnectServiceGrpc.bindService(this)
+
+    // Create a new ServerServiceDefinition builder
+    // using the name of the original service definition.
+    val builder = io.grpc.ServerServiceDefinition.builder(serviceDef.getServiceDescriptor.getName)
+
+    // Iterate through all the methods of the original service definition.
+    // For each method, add a customized method descriptor (with updated marshallers)
+    // and the original server call handler to the builder.
+    serviceDef
+      .getMethods
+      .asScala
+      .asInstanceOf[Iterable[ServerMethodDefinition[MessageLite, MessageLite]]]
+      .foreach(method => builder.addMethod(
+        customizedMethodDesc(method.getMethodDescriptor), method.getServerCallHandler))
+
+    // Build the final ServerServiceDefinition and return it.
+    builder.build()
+  }
 }
 
 /**
@@ -177,6 +231,8 @@ object SparkConnectService extends Logging {
   private val CACHE_SIZE = 100
 
   private val CACHE_TIMEOUT_SECONDS = 3600
+
+  private val PROTOBUF_RECURSION_LIMIT = 1024
 
   // Type alias for the SessionCacheKey. Right now this is a String but allows us to switch to a
   // different or complex type easily.
