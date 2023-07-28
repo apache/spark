@@ -21,20 +21,27 @@ import java.net.InetSocketAddress
 import java.util.UUID
 import java.util.concurrent.TimeUnit
 
+import scala.jdk.CollectionConverters.collectionAsScalaIterableConverter
+
 import com.google.common.base.Ticker
 import com.google.common.cache.{CacheBuilder, RemovalListener, RemovalNotification}
-import io.grpc.Server
+import com.google.protobuf.MessageLite
+import io.grpc.{BindableService, MethodDescriptor, Server, ServerMethodDefinition, ServerServiceDefinition}
+import io.grpc.MethodDescriptor.PrototypeMarshaller
 import io.grpc.netty.NettyServerBuilder
+import io.grpc.protobuf.lite.ProtoLiteUtils
 import io.grpc.protobuf.services.ProtoReflectionService
 import io.grpc.stub.StreamObserver
 import org.apache.commons.lang3.StringUtils
 
 import org.apache.spark.{SparkEnv, SparkSQLException}
 import org.apache.spark.connect.proto
-import org.apache.spark.connect.proto.{AddArtifactsRequest, AddArtifactsResponse}
+import org.apache.spark.connect.proto.{AddArtifactsRequest, AddArtifactsResponse, SparkConnectServiceGrpc}
+import org.apache.spark.connect.proto.SparkConnectServiceGrpc.AsyncService
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.connect.config.Connect.{CONNECT_GRPC_BINDING_ADDRESS, CONNECT_GRPC_BINDING_PORT, CONNECT_GRPC_MAX_INBOUND_MESSAGE_SIZE}
+import org.apache.spark.sql.connect.service.SparkConnectService.PROTOBUF_RECURSION_LIMIT
 import org.apache.spark.sql.connect.utils.ErrorUtils
 
 /**
@@ -46,7 +53,8 @@ import org.apache.spark.sql.connect.utils.ErrorUtils
  *   delegates debug behavior to the handlers.
  */
 class SparkConnectService(debug: Boolean)
-    extends proto.SparkConnectServiceGrpc.SparkConnectServiceImplBase
+    extends AsyncService
+    with BindableService
     with Logging {
 
   /**
@@ -161,6 +169,40 @@ class SparkConnectService(debug: Boolean)
         userId = request.getUserContext.getUserId,
         sessionId = request.getSessionId)
   }
+
+  private def customizedMethodDesc(
+    methodDef: MethodDescriptor[MessageLite, MessageLite]
+  ): MethodDescriptor[MessageLite, MessageLite] = {
+    val requestMarshaller =
+      ProtoLiteUtils.marshallerWithRecursionLimit(
+        methodDef
+          .getRequestMarshaller
+          .asInstanceOf[PrototypeMarshaller[MessageLite]]
+          .getMessagePrototype,
+        PROTOBUF_RECURSION_LIMIT
+      )
+    val responseMarshaller =
+      ProtoLiteUtils.marshallerWithRecursionLimit(
+        methodDef
+          .getResponseMarshaller
+          .asInstanceOf[PrototypeMarshaller[MessageLite]]
+          .getMessagePrototype,
+        PROTOBUF_RECURSION_LIMIT
+      )
+    methodDef.toBuilder(requestMarshaller, responseMarshaller).build()
+  }
+
+  override def bindService(): ServerServiceDefinition = {
+    val serviceDef = SparkConnectServiceGrpc.bindService(this)
+    val builder = io.grpc.ServerServiceDefinition.builder(serviceDef.getServiceDescriptor.getName)
+    serviceDef
+      .getMethods
+      .asScala
+      .asInstanceOf[Iterable[ServerMethodDefinition[MessageLite, MessageLite]]]
+      .foreach(method => builder.addMethod(
+        customizedMethodDesc(method.getMethodDescriptor), method.getServerCallHandler))
+    builder.build()
+  }
 }
 
 /**
@@ -174,6 +216,8 @@ object SparkConnectService extends Logging {
   private val CACHE_SIZE = 100
 
   private val CACHE_TIMEOUT_SECONDS = 3600
+
+  private val PROTOBUF_RECURSION_LIMIT = 1024
 
   // Type alias for the SessionCacheKey. Right now this is a String but allows us to switch to a
   // different or complex type easily.

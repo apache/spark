@@ -42,6 +42,14 @@ import org.apache.spark.sql.types._
 
 class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper with PrivateMethodTester {
 
+  test("spark deep recursion") {
+    var df = spark.range(1)
+    for (a <- 1 to 100) {
+      df = df.union(spark.range(a, a + 1))
+    }
+    assert(df.collect().length == 101)
+  }
+
   // Spark Result
   test("spark result schema") {
     val df = spark.sql("select val from (values ('Hello'), ('World')) as t(val)")
