@@ -61,6 +61,7 @@ import org.apache.hadoop.util.{RunJar, StringUtils}
 import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.apache.logging.log4j.{Level, LogManager}
 import org.apache.logging.log4j.core.LoggerContext
+import org.apache.logging.log4j.core.config.LoggerConfig
 import org.eclipse.jetty.util.MultiException
 import org.slf4j.Logger
 
@@ -2334,14 +2335,32 @@ private[spark] object Utils
    * configure a new log4j level
    */
   def setLogLevel(l: Level): Unit = {
-    val ctx = LogManager.getContext(false).asInstanceOf[LoggerContext]
-    val config = ctx.getConfiguration()
-    val loggerConfig = config.getLoggerConfig(LogManager.ROOT_LOGGER_NAME)
+    val (ctx, loggerConfig) = getLogContext
     loggerConfig.setLevel(l)
     ctx.updateLoggers()
 
     // Setting threshold to null as rootLevel will define log level for spark-shell
     Logging.sparkShellThresholdLevel = null
+  }
+
+
+  def setLogLevelIfNeeded(newLogLevel: String): Unit = {
+    if (newLogLevel != Utils.getLogLevel) {
+      Utils.setLogLevel(Level.toLevel(newLogLevel))
+    }
+  }
+
+  private lazy val getLogContext: (LoggerContext, LoggerConfig) = {
+    val ctx = LogManager.getContext(false).asInstanceOf[LoggerContext]
+    (ctx, ctx.getConfiguration().getLoggerConfig(LogManager.ROOT_LOGGER_NAME))
+  }
+
+  /**
+   * Get current log level
+   */
+  def getLogLevel: String = {
+    val (_, loggerConfig) = getLogContext
+    loggerConfig.getLevel.name
   }
 
   /**
