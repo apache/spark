@@ -34,8 +34,8 @@ private[sql] object UpCastRule {
 
   /**
    * Returns true iff we can safely up-cast the `from` type to `to` type without any truncating or
-   * precision lose or possible runtime failures. For example, long -> int, string -> int are not
-   * up-cast.
+   * precision lose or possible runtime failures. For example, long to int, string to int are not
+   * up-casts.
    */
   def canUpCast(from: DataType, to: DataType): Boolean = (from, to) match {
     case _ if from == to => true
