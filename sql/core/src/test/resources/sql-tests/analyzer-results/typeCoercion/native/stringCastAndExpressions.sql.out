@@ -131,7 +131,7 @@ Project [cast(a#x as binary) AS a#x]
 -- !query
 select cast(a as array<string>) from t
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.CAST_WITHOUT_SUGGESTION",
   "sqlState" : "42K09",
@@ -153,7 +153,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 select cast(a as struct<s:string>) from t
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.CAST_WITHOUT_SUGGESTION",
   "sqlState" : "42K09",
@@ -175,7 +175,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 select cast(a as map<string, string>) from t
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.CAST_WITHOUT_SUGGESTION",
   "sqlState" : "42K09",

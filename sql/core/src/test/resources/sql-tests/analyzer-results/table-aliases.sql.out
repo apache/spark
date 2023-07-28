@@ -95,7 +95,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 SELECT a AS col1, b AS col2 FROM testData AS t(c, d)
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
   "sqlState" : "42703",

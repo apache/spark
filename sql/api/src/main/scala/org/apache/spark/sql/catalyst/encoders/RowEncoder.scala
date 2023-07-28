@@ -20,10 +20,9 @@ package org.apache.spark.sql.catalyst.encoders
 import scala.collection.mutable
 import scala.reflect.classTag
 
-import org.apache.spark.sql.Row
+import org.apache.spark.sql.{Row, SqlApiConf}
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{BinaryEncoder, BoxedBooleanEncoder, BoxedByteEncoder, BoxedDoubleEncoder, BoxedFloatEncoder, BoxedIntEncoder, BoxedLongEncoder, BoxedShortEncoder, CalendarIntervalEncoder, DateEncoder, DayTimeIntervalEncoder, EncoderField, InstantEncoder, IterableEncoder, JavaDecimalEncoder, LocalDateEncoder, LocalDateTimeEncoder, MapEncoder, NullEncoder, RowEncoder => AgnosticRowEncoder, StringEncoder, TimestampEncoder, UDTEncoder, YearMonthIntervalEncoder}
-import org.apache.spark.sql.errors.QueryExecutionErrors
-import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.errors.EncoderErrors
 import org.apache.spark.sql.types._
 
 /**
@@ -59,14 +58,6 @@ import org.apache.spark.sql.types._
  * }}}
  */
 object RowEncoder {
-  def apply(schema: StructType, lenient: Boolean): ExpressionEncoder[Row] = {
-    ExpressionEncoder(encoderFor(schema, lenient))
-  }
-
-  def apply(schema: StructType): ExpressionEncoder[Row] = {
-    apply(schema, lenient = false)
-  }
-
   def encoderFor(schema: StructType): AgnosticEncoder[Row] = {
     encoderFor(schema, lenient = false)
   }
@@ -89,10 +80,10 @@ object RowEncoder {
     case dt: DecimalType => JavaDecimalEncoder(dt, lenientSerialization = true)
     case BinaryType => BinaryEncoder
     case StringType => StringEncoder
-    case TimestampType if SQLConf.get.datetimeJava8ApiEnabled => InstantEncoder(lenient)
+    case TimestampType if SqlApiConf.get.datetimeJava8ApiEnabled => InstantEncoder(lenient)
     case TimestampType => TimestampEncoder(lenient)
     case TimestampNTZType => LocalDateTimeEncoder
-    case DateType if SQLConf.get.datetimeJava8ApiEnabled => LocalDateEncoder(lenient)
+    case DateType if SqlApiConf.get.datetimeJava8ApiEnabled => LocalDateEncoder(lenient)
     case DateType => DateEncoder(lenient)
     case CalendarIntervalType => CalendarIntervalEncoder
     case _: DayTimeIntervalType => DayTimeIntervalEncoder
@@ -106,7 +97,7 @@ object RowEncoder {
         annotation.udt()
       } else {
         UDTRegistration.getUDTFor(udt.userClass.getName).getOrElse {
-          throw QueryExecutionErrors.userDefinedTypeNotAnnotatedAndRegisteredError(udt)
+          throw EncoderErrors.userDefinedTypeNotAnnotatedAndRegisteredError(udt)
         }
       }
       UDTEncoder(udt, udtClass.asInstanceOf[Class[_ <: UserDefinedType[_]]])
