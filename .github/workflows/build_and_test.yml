@@ -285,9 +285,9 @@ jobs:
         path: "**/target/unit-tests.log"
 
   maven-test:
+    name: "Run Maven Test"
     needs: precondition
     if: fromJson(needs.precondition.outputs.required).maven-test == 'true'
-    name: "Run Maven Test"
     permissions:
       packages: write
     uses: ./.github/workflows/maven_test.yml
