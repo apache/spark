@@ -20,7 +20,7 @@ package org.apache.spark.ui.jobs
 import java.util.Date
 import javax.servlet.http.HttpServletRequest
 
-import scala.collection.mutable.{HashMap, HashSet}
+import scala.collection.mutable.HashSet
 import scala.xml.{Node, Unparsed}
 
 import org.apache.spark.internal.config.UI._
@@ -211,16 +211,12 @@ private[ui] class StagePage(parent: StagesTab, store: AppStatusStore) extends We
       makeTimeline(
         // Only show the tasks in the table
         () => {
-          val taskDataSource = new TaskDataSource(
-            stageData,
-            pageSize = taskPageSize,
-            sortColumn = taskSortColumn,
-            desc = taskSortDesc,
-            store = parent.store)
           val from = (eventTimelineTaskPage - 1) * eventTimelineTaskPageSize
-          val to = taskDataSource.dataSize.min(
-            eventTimelineTaskPage * eventTimelineTaskPageSize)
-          taskDataSource.sliceData(from, to)
+          val dataSize = store.taskCount(stageData.stageId, stageData.attemptId).toInt
+          val to = dataSize.min(eventTimelineTaskPage * eventTimelineTaskPageSize)
+          val sliceData = store.taskList(stageData.stageId, stageData.attemptId, from, to - from,
+            indexName(taskSortColumn), !taskSortDesc)
+          sliceData
         }, currentTime,
         eventTimelineTaskPage, eventTimelineTaskPageSize, eventTimelineTotalPages, stageId,
         stageAttemptId, totalTasks) ++
@@ -438,36 +434,6 @@ private[ui] class StagePage(parent: StagesTab, store: AppStatusStore) extends We
       s"$groupArrayStr, $executorsArrayStr, $minLaunchTime, $maxFinishTime, " +
         s"${UIUtils.getTimeZoneOffset()})")}
     </script>
-  }
-
-}
-
-private[ui] class TaskDataSource(
-    stage: StageData,
-    pageSize: Int,
-    sortColumn: String,
-    desc: Boolean,
-    store: AppStatusStore) extends PagedDataSource[TaskData](pageSize) {
-  import ApiHelper._
-
-  // Keep an internal cache of executor log maps so that long task lists render faster.
-  private val executorIdToLogs = new HashMap[String, Map[String, String]]()
-
-  private var _tasksToShow: Seq[TaskData] = null
-
-  override def dataSize: Int = store.taskCount(stage.stageId, stage.attemptId).toInt
-
-  override def sliceData(from: Int, to: Int): Seq[TaskData] = {
-    if (_tasksToShow == null) {
-      _tasksToShow = store.taskList(stage.stageId, stage.attemptId, from, to - from,
-        indexName(sortColumn), !desc)
-    }
-    _tasksToShow
-  }
-
-  def executorLogs(id: String): Map[String, String] = {
-    executorIdToLogs.getOrElseUpdate(id,
-      store.asOption(store.executorSummary(id)).map(_.executorLogs).getOrElse(Map.empty))
   }
 
 }
