@@ -25,6 +25,7 @@ from pyspark.errors import (
 )
 from pyspark.testing.utils import assertDataFrameEqual, assertSchemaEqual, _context_diff
 from pyspark.testing.sqlutils import ReusedSQLTestCase
+from pyspark.sql import Row
 import pyspark.sql.functions as F
 from pyspark.sql.functions import to_date, unix_timestamp, from_unixtime
 from pyspark.sql.types import (
@@ -1123,9 +1124,9 @@ class UtilsTestsMixin:
         assertDataFrameEqual(df1, df2, checkRowOrder=True)
 
     def test_empty_expected_list(self):
-        df1 = self.spark.range(0, 10).drop("id")
+        df1 = self.spark.range(0, 5).drop("id")
 
-        df2 = []
+        df2 = [Row(), Row(), Row(), Row(), Row()]
 
         assertDataFrameEqual(df1, df2, checkRowOrder=False)
         assertDataFrameEqual(df1, df2, checkRowOrder=True)
