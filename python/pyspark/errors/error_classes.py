@@ -166,7 +166,38 @@ ERROR_CLASSES_JSON = """
   },
   "DIFFERENT_PANDAS_DATAFRAME" : {
     "message" : [
-      "<msg>"
+      "DataFrames are not almost equal:",
+      "Left: <left>",
+      "<left_dtype>",
+      "Right: <right>",
+      "<right_dtype>"
+    ]
+  },
+  "DIFFERENT_PANDAS_INDEX" : {
+    "message" : [
+      "Indices are not almost equal:",
+      "Left: <left>",
+      "<left_dtype>",
+      "Right: <right>",
+      "<right_dtype>"
+    ]
+  },
+  "DIFFERENT_PANDAS_MULTIINDEX" : {
+    "message" : [
+      "MultiIndices are not almost equal:",
+      "Left: <left>",
+      "<left_dtype>",
+      "Right: <right>",
+      "<right_dtype>"
+    ]
+  },
+  "DIFFERENT_PANDAS_SERIES" : {
+    "message" : [
+      "Series are not almost equal:",
+      "Left: <left>",
+      "<left_dtype>",
+      "Right: <right>",
+      "<right_dtype>"
     ]
   },
   "DIFFERENT_ROWS" : {

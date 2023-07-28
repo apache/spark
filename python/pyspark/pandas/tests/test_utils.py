@@ -26,7 +26,12 @@ from pyspark.pandas.utils import (
     validate_index_loc,
     validate_mode,
 )
-from pyspark.testing.pandasutils import PandasOnSparkTestCase, assertPandasOnSparkEqual
+from pyspark.testing.pandasutils import (
+    PandasOnSparkTestCase,
+    assertPandasOnSparkEqual,
+    _assert_pandas_equal,
+    _assert_pandas_almost_equal,
+)
 from pyspark.testing.sqlutils import SQLTestUtils
 from pyspark.errors import PySparkAssertionError
 
@@ -172,6 +177,100 @@ class UtilsTestsMixin:
         psdf2 = ps.DataFrame()
 
         assertPandasOnSparkEqual(psdf1, psdf2)
+
+    def test_dataframe_error_assert_pandas_equal(self):
+        pdf1 = pd.DataFrame({"a": [1, 2, 3], "b": [4, 5, 6]}, index=[0, 1, 3])
+        pdf2 = pd.DataFrame({"a": [1, 3, 3], "b": [4, 5, 6]}, index=[0, 1, 3])
+
+        with self.assertRaises(PySparkAssertionError) as pe:
+            _assert_pandas_equal(pdf1, pdf2, True)
+
+        self.check_error(
+            exception=pe.exception,
+            error_class="DIFFERENT_PANDAS_DATAFRAME",
+            message_parameters={
+                "left": pdf1.to_string(),
+                "left_dtype": str(pdf1.dtypes),
+                "right": pdf2.to_string(),
+                "right_dtype": str(pdf2.dtypes),
+            },
+        )
+
+    def test_series_error_assert_pandas_equal(self):
+        series1 = pd.Series([1, 2, 3])
+        series2 = pd.Series([4, 5, 6])
+
+        with self.assertRaises(PySparkAssertionError) as pe:
+            _assert_pandas_equal(series1, series2, True)
+
+        self.check_error(
+            exception=pe.exception,
+            error_class="DIFFERENT_PANDAS_SERIES",
+            message_parameters={
+                "left": series1,
+                "left_dtype": series1.dtype,
+                "right": series2,
+                "right_dtype": series2.dtype,
+            },
+        )
+
+    def test_index_error_assert_pandas_equal(self):
+        index1 = pd.Index([1, 2, 3])
+        index2 = pd.Index([4, 5, 6])
+
+        with self.assertRaises(PySparkAssertionError) as pe:
+            _assert_pandas_equal(index1, index2, True)
+
+        self.check_error(
+            exception=pe.exception,
+            error_class="DIFFERENT_PANDAS_INDEX",
+            message_parameters={
+                "left": index1,
+                "left_dtype": index1.dtype,
+                "right": index2,
+                "right_dtype": index2.dtype,
+            },
+        )
+
+    def test_multiindex_error_assert_pandas_almost_equal(self):
+        pdf1 = pd.DataFrame({"a": [1, 2], "b": [4, 10]}, index=[0, 1])
+        pdf2 = pd.DataFrame({"a": [1, 5, 3], "b": [1, 5, 6]}, index=[0, 1, 3])
+        multiindex1 = pd.MultiIndex.from_frame(pdf1)
+        multiindex2 = pd.MultiIndex.from_frame(pdf2)
+
+        with self.assertRaises(PySparkAssertionError) as pe:
+            _assert_pandas_almost_equal(multiindex1, multiindex2)
+
+        self.check_error(
+            exception=pe.exception,
+            error_class="DIFFERENT_PANDAS_MULTIINDEX",
+            message_parameters={
+                "left": multiindex1,
+                "left_dtype": multiindex1.dtype,
+                "right": multiindex2,
+                "right_dtype": multiindex2.dtype,
+            },
+        )
+
+    def test_dataframe_error_assert_pandas_on_spark_almost_equal(self):
+        import pyspark.pandas as ps
+
+        psdf1 = ps.DataFrame({"a": [1, 2, 3], "b": [4, 5, 6], "c": [7, 8, 9]})
+        psdf2 = ps.DataFrame({"a": [1, 2], "b": [4, 5], "c": [7, 8]})
+
+        with self.assertRaises(PySparkAssertionError) as pe:
+            assertPandasOnSparkEqual(psdf1, psdf2, almost=True)
+
+        self.check_error(
+            exception=pe.exception,
+            error_class="DIFFERENT_PANDAS_DATAFRAME",
+            message_parameters={
+                "left": psdf1.to_string(),
+                "left_dtype": str(psdf1.dtypes),
+                "right": psdf2.to_string(),
+                "right_dtype": str(psdf2.dtypes),
+            },
+        )
 
 
 class TestClassForLazyProp:
