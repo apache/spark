@@ -14,9 +14,9 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.sql
+package org.apache.spark.sql.internal
 
-
+import java.util.TimeZone
 import java.util.concurrent.atomic.AtomicReference
 
 import scala.util.Try
@@ -42,9 +42,15 @@ private[sql] trait SqlApiConf {
   def allowNegativeScaleOfDecimalEnabled: Boolean
   def charVarcharAsString: Boolean
   def datetimeJava8ApiEnabled: Boolean
+  def sessionLocalTimeZone: String
+  def legacyTimeParserPolicy: LegacyBehaviorPolicy.Value
 }
 
 private[sql] object SqlApiConf {
+  // Shared keys.
+  val ANSI_ENABLED_KEY: String = "spark.sql.ansi.enabled"
+  val LEGACY_TIME_PARSER_POLICY_KEY: String = "spark.sql.legacy.timeParserPolicy"
+
   /**
    * Defines a getter that returns the [[SqlApiConf]] within scope.
    */
@@ -78,4 +84,6 @@ private[sql] object DefaultSqlApiConf extends SqlApiConf {
   override def allowNegativeScaleOfDecimalEnabled: Boolean = false
   override def charVarcharAsString: Boolean = false
   override def datetimeJava8ApiEnabled: Boolean = false
+  override def sessionLocalTimeZone: String = TimeZone.getDefault.getID
+  override def legacyTimeParserPolicy: LegacyBehaviorPolicy.Value = LegacyBehaviorPolicy.EXCEPTION
 }
