@@ -79,7 +79,8 @@ object SQLExecution {
     }
     val rootExecutionId = sc.getLocalProperty(EXECUTION_ROOT_ID_KEY).toLong
     executionIdToQueryExecution.put(executionId, queryExecution)
-    if (sc.getLocalProperty(SPARK_JOB_INTERRUPT_ON_CANCEL) == null) {
+    val originalInterruptOnCancel = sc.getLocalProperty(SPARK_JOB_INTERRUPT_ON_CANCEL)
+    if (originalInterruptOnCancel == null) {
       val interruptOnCancel = sparkSession.conf.get(SQLConf.INTERRUPT_ON_CANCEL)
       sc.setInterruptOnCancel(interruptOnCancel)
     }
@@ -165,7 +166,7 @@ object SQLExecution {
       if (sc.getLocalProperty(EXECUTION_ROOT_ID_KEY) == executionId.toString) {
         sc.setLocalProperty(EXECUTION_ROOT_ID_KEY, null)
       }
-      sc.setLocalProperty(SPARK_JOB_INTERRUPT_ON_CANCEL, null)
+      sc.setLocalProperty(SPARK_JOB_INTERRUPT_ON_CANCEL, originalInterruptOnCancel)
     }
   }
 
