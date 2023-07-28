@@ -191,6 +191,10 @@ def search_jar(project_relative_path, sbt_jar_name_prefix, mvn_jar_name_prefix):
 
 
 def _context_diff(actual: List[str], expected: List[str], n: int = 3):
+    """
+    Modified from difflib context_diff API,
+    see original code here: https://github.com/python/cpython/blob/main/Lib/difflib.py#L1180
+    """
     def red(s: str) -> str:
         RedColor = "\033[31m"
         NoColor = "\033[0m"
