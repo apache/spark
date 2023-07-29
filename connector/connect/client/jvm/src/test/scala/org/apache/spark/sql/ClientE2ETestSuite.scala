@@ -29,7 +29,8 @@ import org.apache.commons.lang3.{JavaVersion, SystemUtils}
 import org.scalactic.TolerantNumerics
 import org.scalatest.PrivateMethodTester
 
-import org.apache.spark.{SPARK_VERSION, SparkException}
+import org.apache.spark.SparkBuildInfo.{spark_version => SPARK_VERSION}
+import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.StringEncoder
 import org.apache.spark.sql.catalyst.expressions.GenericRowWithSchema
 import org.apache.spark.sql.catalyst.parser.ParseException
@@ -37,7 +38,7 @@ import org.apache.spark.sql.connect.client.{SparkConnectClient, SparkResult}
 import org.apache.spark.sql.connect.client.util.{IntegrationTestUtils, RemoteSparkSession}
 import org.apache.spark.sql.connect.client.util.SparkConnectServerUtils.port
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.SqlApiConf
 import org.apache.spark.sql.types._
 
 class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper with PrivateMethodTester {
@@ -929,7 +930,7 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper with PrivateM
 
   test("SparkSession.createDataFrame - large data set") {
     val threshold = 1024 * 1024
-    withSQLConf(SQLConf.LOCAL_RELATION_CACHE_THRESHOLD.key -> threshold.toString) {
+    withSQLConf(SqlApiConf.LOCAL_RELATION_CACHE_THRESHOLD_KEY -> threshold.toString) {
       val count = 2
       val suffix = "abcdef"
       val str = scala.util.Random.alphanumeric.take(1024 * 1024).mkString + suffix
