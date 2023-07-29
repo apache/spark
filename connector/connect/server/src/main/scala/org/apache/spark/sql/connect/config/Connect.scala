@@ -131,9 +131,7 @@ object Connect {
 
   val CONNECT_USER_SESSION_CACHE_TIMEOUT =
     ConfigBuilder("spark.connect.userSession.cacheTimeout")
-      .doc("""
-          |Sets the cache timeout of user session.
-          |""".stripMargin)
+      .doc("Sets the cache timeout of user session.")
       .version("4.0.0")
       .intConf
       .createWithDefault(3600)
