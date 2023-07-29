@@ -16,7 +16,8 @@
 #
 
 """
-A worker for streaming foreachBatch and query listener in Spark Connect.
+A worker for streaming foreachBatch in Spark Connect.
+Usually this is ran on the driver side of the Spark Connect Server.
 """
 import os
 

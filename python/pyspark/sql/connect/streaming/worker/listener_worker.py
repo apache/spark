@@ -16,7 +16,8 @@
 #
 
 """
-A worker for streaming foreachBatch and query listener in Spark Connect.
+A worker for streaming query listener in Spark Connect.
+Usually this is ran on the driver side of the Spark Connect Server.
 """
 import os
 import json
@@ -48,7 +49,7 @@ def main(infile: IO, outfile: IO) -> None:
     session_id = utf8_deserializer.loads(infile)
 
     print(
-        "Streaming listener worker is starting with "
+        "Streaming query listener worker is starting with "
         f"url {connect_url} and sessionId {session_id}."
     )
 

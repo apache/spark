@@ -49,7 +49,7 @@ private[spark] class StreamingPythonRunner(func: PythonFunction, connectUrl: Str
    * to be used with the functions.
    */
   def init(sessionId: String, workerModule: String): (DataOutputStream, DataInputStream) = {
-    log.info(s"Initializing Python runner (session: $sessionId ,pythonExec: $pythonExec")
+    logInfo(s"Initializing Python runner (session: $sessionId ,pythonExec: $pythonExec")
     val env = SparkEnv.get
 
     val localdir = env.blockManager.diskBlockManager.localDirs.map(f => f.getPath()).mkString(",")

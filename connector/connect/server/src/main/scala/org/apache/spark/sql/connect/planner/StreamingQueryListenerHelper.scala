@@ -36,7 +36,8 @@ class PythonStreamingQueryListener(
   val connectUrl = s"sc://localhost:$port/;user_id=${sessionHolder.userId}"
   val runner = StreamingPythonRunner(listener, connectUrl)
 
-  val (dataOut, _) = runner.init(sessionHolder.sessionId, "pyspark.connect_streaming_listener")
+  val (dataOut, _) =
+    runner.init(sessionHolder.sessionId, "pyspark.sql.connect.streaming.worker.listener_worker")
 
   override def onQueryStarted(event: StreamingQueryListener.QueryStartedEvent): Unit = {
     PythonRDD.writeUTF(event.json, dataOut)
