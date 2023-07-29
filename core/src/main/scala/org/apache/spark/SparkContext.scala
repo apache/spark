@@ -678,7 +678,7 @@ class SparkContext(config: SparkConf) extends Logging {
     postApplicationStart()
 
     // After application started, attach handlers to started server and start handler.
-    _ui.foreach(_.attachAllHandler())
+    _ui.foreach(_.attachAllHandlers())
     // Attach the driver metrics servlet handler to the web ui after the metrics system is started.
     _env.metricsSystem.getServletHandlers.foreach(handler => ui.foreach(_.attachHandler(handler)))
 

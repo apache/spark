@@ -15,29 +15,27 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.execution.ui
+package org.apache.spark.sql.connect.ui
 
 import org.apache.spark.SparkConf
 import org.apache.spark.scheduler.SparkListener
-import org.apache.spark.sql.execution.streaming.StreamingQueryListenerBus
-import org.apache.spark.sql.streaming.ui.{StreamingQueryStatusListener, StreamingQueryTab}
 import org.apache.spark.status.{AppHistoryServerPlugin, ElementTrackingStore}
 import org.apache.spark.ui.SparkUI
 
-class StreamingQueryHistoryServerPlugin extends AppHistoryServerPlugin {
+class SparkConnectServerHistoryServerPlugin extends AppHistoryServerPlugin {
 
-  override def createListeners(conf: SparkConf, store: ElementTrackingStore): Seq[SparkListener] = {
-    val listenerBus = new StreamingQueryListenerBus(None)
-    listenerBus.addListener(new StreamingQueryStatusListener(conf, store))
-    Seq(listenerBus)
+  override def createListeners(
+      conf: SparkConf,
+      store: ElementTrackingStore): Seq[SparkListener] = {
+    Seq(new SparkConnectServerListener(store, conf))
   }
 
   override def setupUI(ui: SparkUI): Unit = {
-    val streamingQueryStatusStore = new StreamingQueryStatusStore(ui.store.store)
-    if (streamingQueryStatusStore.allQueryUIData.nonEmpty) {
-      new StreamingQueryTab(streamingQueryStatusStore, ui)
+    val store = new SparkConnectServerAppStatusStore(ui.store.store)
+    if (store.getSessionCount > 0) {
+      new SparkConnectServerTab(store, ui)
     }
   }
 
-  override def displayOrder: Int = 2
+  override def displayOrder: Int = 3
 }
