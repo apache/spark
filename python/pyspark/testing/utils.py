@@ -575,15 +575,19 @@ def assertDataFrameEqual(
                 diff_rows_cnt += 1
                 diff_rows = True
 
-        try:
-            actual_str = actual._jdf.showString(len(zipped), len(zipped), False)
-            expected_str = expected._jdf.showString(len(zipped), len(zipped), False)
+        if isinstance(expected, (DataFrame, ConnectDataFrame)):
+            if isinstance(expected, DataFrame):
+                actual_str = actual._jdf.showString(len(zipped), len(zipped), False)
+                expected_str = expected._jdf.showString(len(zipped), len(zipped), False)
+            else:
+                actual_str = actual._show_string(len(zipped), len(zipped), False)
+                expected_str = expected._show_string(len(zipped), len(zipped), False)
 
             generated_diff = _context_diff(
                 actual=actual_str.splitlines(), expected=expected_str.splitlines(), n=len(zipped)
             )
-        except Exception:
-            # in case of expected list type or pandas duplicate field names
+        else:
+            # in case of expected list type
             generated_diff = _context_diff(actual=rows1, expected=rows2, n=len(zipped))
 
         if diff_rows:

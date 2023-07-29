@@ -150,8 +150,13 @@ class UtilsTestsMixin:
             ),
         )
 
-        actual_str = df1._jdf.showString(2, 2, False)
-        expected_str = df2._jdf.showString(2, 2, False)
+        if isinstance(df2, DataFrame):
+            actual_str = df1._jdf.showString(2, 2, False)
+            expected_str = df2._jdf.showString(2, 2, False)
+        else:
+            # Spark Connect
+            actual_str = df1._show_string(2, 2, False)
+            expected_str = df2._show_string(2, 2, False)
 
         generated_diff = _context_diff(
             actual=actual_str.splitlines(), expected=expected_str.splitlines(), n=2
@@ -297,8 +302,13 @@ class UtilsTestsMixin:
             ),
         )
 
-        actual_str = df1._jdf.showString(2, 2, False)
-        expected_str = df2._jdf.showString(2, 2, False)
+        if isinstance(df2, DataFrame):
+            actual_str = df1._jdf.showString(2, 2, False)
+            expected_str = df2._jdf.showString(2, 2, False)
+        else:
+            # Spark Connect
+            actual_str = df1._show_string(2, 2, False)
+            expected_str = df2._show_string(2, 2, False)
 
         generated_diff = _context_diff(
             actual=actual_str.splitlines(), expected=expected_str.splitlines(), n=2
@@ -596,8 +606,13 @@ class UtilsTestsMixin:
             schema=["id", "amount"],
         )
 
-        actual_str = df1._jdf.showString(2, 2, False)
-        expected_str = df2._jdf.showString(2, 2, False)
+        if isinstance(df2, DataFrame):
+            actual_str = df1._jdf.showString(2, 2, False)
+            expected_str = df2._jdf.showString(2, 2, False)
+        else:
+            # Spark Connect
+            actual_str = df1._show_string(2, 2, False)
+            expected_str = df2._show_string(2, 2, False)
 
         generated_diff = _context_diff(
             actual=actual_str.splitlines(), expected=expected_str.splitlines(), n=2
@@ -757,8 +772,13 @@ class UtilsTestsMixin:
             schema=["id", "amount"],
         )
 
-        actual_str = df1._jdf.showString(2, 2, False)
-        expected_str = df2._jdf.showString(2, 2, False)
+        if isinstance(df2, DataFrame):
+            actual_str = df1._jdf.showString(2, 2, False)
+            expected_str = df2._jdf.showString(2, 2, False)
+        else:
+            # Spark Connect
+            actual_str = df1._show_string(2, 2, False)
+            expected_str = df2._show_string(2, 2, False)
 
         generated_diff = _context_diff(
             actual=actual_str.splitlines(), expected=expected_str.splitlines(), n=2
@@ -847,8 +867,13 @@ class UtilsTestsMixin:
             schema=["id", "amount"],
         )
 
-        actual_str = df1._jdf.showString(3, 3, False)
-        expected_str = df2._jdf.showString(3, 3, False)
+        if isinstance(df2, DataFrame):
+            actual_str = df1._jdf.showString(3, 3, False)
+            expected_str = df2._jdf.showString(3, 3, False)
+        else:
+            # Spark Connect
+            actual_str = df1._show_string(3, 3, False)
+            expected_str = df2._show_string(3, 3, False)
 
         generated_diff = _context_diff(
             actual=actual_str.splitlines(), expected=expected_str.splitlines(), n=2

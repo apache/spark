@@ -1325,7 +1325,7 @@ class BaseUDTFTestsMixin:
         for i, df in enumerate([TestUDTF(lit(10)), self.spark.sql("SELECT * FROM test_udtf(10)")]):
             with self.subTest(query_no=i):
                 assertSchemaEqual(df.schema, StructType().add("col1", IntegerType()))
-                self.assertEqual(df.collect(), [Row(col1=10), Row(col1=100)])
+                assertDataFrameEqual(df, [Row(col1=10), Row(col1=100)])
 
         self.assertEqual(test_accum.value, 222)
 
