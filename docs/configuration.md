@@ -3217,6 +3217,22 @@ Expression types in proto.</td>
 Command types in proto.</td>
   <td>3.4.0</td>
 </tr>
+<tr>
+  <td><code>spark.connect.userSession.cacheSize</code></td>
+  <td>
+    100
+  </td>
+  <td>Sets the cache size of user session.</td>
+  <td>4.0.0</td>
+</tr>
+<tr>
+  <td><code>spark.connect.userSession.cacheTimeout</code></td>
+  <td>
+    3600
+  </td>
+  <td>Sets the cache timeout of user session.</td>
+  <td>4.0.0</td>
+</tr>
 </table>
 
 ### Security

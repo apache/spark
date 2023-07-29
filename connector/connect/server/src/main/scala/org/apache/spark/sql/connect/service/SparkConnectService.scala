@@ -34,7 +34,7 @@ import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.{AddArtifactsRequest, AddArtifactsResponse}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SparkSession
-import org.apache.spark.sql.connect.config.Connect.{CONNECT_GRPC_BINDING_ADDRESS, CONNECT_GRPC_BINDING_PORT, CONNECT_GRPC_MAX_INBOUND_MESSAGE_SIZE}
+import org.apache.spark.sql.connect.config.Connect.{CONNECT_GRPC_BINDING_ADDRESS, CONNECT_GRPC_BINDING_PORT, CONNECT_GRPC_MAX_INBOUND_MESSAGE_SIZE, CONNECT_USER_SESSION_CACHE_SIZE, CONNECT_USER_SESSION_CACHE_TIMEOUT}
 import org.apache.spark.sql.connect.utils.ErrorUtils
 
 /**
@@ -171,9 +171,9 @@ class SparkConnectService(debug: Boolean)
  */
 object SparkConnectService extends Logging {
 
-  private val CACHE_SIZE = 100
+  private val CACHE_SIZE = SparkEnv.get.conf.get(CONNECT_USER_SESSION_CACHE_SIZE)
 
-  private val CACHE_TIMEOUT_SECONDS = 3600
+  private val CACHE_TIMEOUT_SECONDS = SparkEnv.get.conf.get(CONNECT_USER_SESSION_CACHE_TIMEOUT)
 
   // Type alias for the SessionCacheKey. Right now this is a String but allows us to switch to a
   // different or complex type easily.

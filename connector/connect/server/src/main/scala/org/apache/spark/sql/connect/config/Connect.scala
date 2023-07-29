@@ -121,4 +121,22 @@ object Connect {
       .version("3.5.0")
       .booleanConf
       .createWithDefault(false)
+
+  val CONNECT_USER_SESSION_CACHE_SIZE =
+    ConfigBuilder("spark.connect.userSession.cacheSize")
+      .doc("""
+          |Sets the cache size of user session.
+          |""".stripMargin)
+      .version("4.0.0")
+      .intConf
+      .createWithDefault(100)
+
+  val CONNECT_USER_SESSION_CACHE_TIMEOUT =
+    ConfigBuilder("spark.connect.userSession.cacheTimeout")
+      .doc("""
+          |Sets the cache timeout of user session.
+          |""".stripMargin)
+      .version("4.0.0")
+      .intConf
+      .createWithDefault(3600)
 }
