@@ -241,7 +241,7 @@ object TableOutputResolver {
         val extraCols = inputCols.filterNot(col => matchedCols.contains(col.name))
           .map(col => s"${toSQLId(col.name)}").mkString(", ")
         throw QueryCompilationErrors.incompatibleDataToTableExtraStructFieldsError(
-          tableName, colPath.quoted, extraCols
+          tableName, pathQuotedSafety(colPath), extraCols
         )
       } else {
         reordered
@@ -249,6 +249,10 @@ object TableOutputResolver {
     } else {
       Nil
     }
+  }
+
+  private def pathQuotedSafety(colPath: Seq[String]): String = {
+    if (colPath.isEmpty) "table" else colPath.quoted
   }
 
   private def resolveColumnsByPosition(
@@ -264,14 +268,14 @@ object TableOutputResolver {
         .map(col => toSQLId(col.name))
         .mkString(", ")
       throw QueryCompilationErrors.incompatibleDataToTableExtraStructFieldsError(
-        tableName, colPath.quoted, extraColsStr
+        tableName, pathQuotedSafety(colPath), extraColsStr
       )
     } else if (inputCols.size < expectedCols.size) {
       val missingColsStr = expectedCols.takeRight(expectedCols.size - inputCols.size)
         .map(col => toSQLId(col.name))
         .mkString(", ")
       throw QueryCompilationErrors.incompatibleDataToTableStructMissingFieldsError(
-        tableName, colPath.quoted, missingColsStr
+        tableName, pathQuotedSafety(colPath), missingColsStr
       )
     }
 
