@@ -28,13 +28,16 @@ import io.grpc.protobuf.services.ProtoReflectionService
 import io.grpc.stub.StreamObserver
 import org.apache.commons.lang3.StringUtils
 
-import org.apache.spark.{SparkEnv, SparkSQLException}
+import org.apache.spark.{SparkContext, SparkEnv, SparkSQLException}
 import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.{AddArtifactsRequest, AddArtifactsResponse}
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config.UI.UI_ENABLED
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.connect.config.Connect.{CONNECT_GRPC_BINDING_PORT, CONNECT_GRPC_MAX_INBOUND_MESSAGE_SIZE}
+import org.apache.spark.sql.connect.ui.{SparkConnectServerAppStatusStore, SparkConnectServerListener, SparkConnectServerTab}
 import org.apache.spark.sql.connect.utils.ErrorUtils
+import org.apache.spark.status.ElementTrackingStore
 
 /**
  * The SparkConnectService implementation.
@@ -180,6 +183,9 @@ object SparkConnectService {
 
   private[connect] var server: Server = _
 
+  private[connect] var uiTab: Option[SparkConnectServerTab] = None
+  private[connect] var listener: SparkConnectServerListener = _
+
   // For testing purpose, it's package level private.
   private[connect] def localPort: Int = {
     assert(server != null)
@@ -250,6 +256,20 @@ object SparkConnectService {
     SparkSession.active.newSession()
   }
 
+  private def createListenerAndUI(sc: SparkContext): Unit = {
+    val kvStore = sc.statusStore.store.asInstanceOf[ElementTrackingStore]
+    listener = new SparkConnectServerListener(kvStore, sc.conf)
+    sc.listenerBus.addToStatusQueue(listener)
+    uiTab = if (sc.getConf.get(UI_ENABLED)) {
+      Some(
+        new SparkConnectServerTab(
+          new SparkConnectServerAppStatusStore(kvStore),
+          SparkConnectServerTab.getSparkUI(sc)))
+    } else {
+      None
+    }
+  }
+
   /**
    * Starts the GRPC Serivce.
    */
@@ -274,8 +294,9 @@ object SparkConnectService {
   }
 
   // Starts the service
-  def start(): Unit = {
+  def start(sc: SparkContext): Unit = {
     startGRPCService()
+    createListenerAndUI(sc)
   }
 
   def stop(timeout: Option[Long] = None, unit: Option[TimeUnit] = None): Unit = {
@@ -288,6 +309,7 @@ object SparkConnectService {
       }
     }
     userSessionMapping.invalidateAll()
+    uiTab.foreach(_.detach())
   }
 
   def extractErrorMessage(st: Throwable): String = {
