@@ -37,7 +37,7 @@ import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoder
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders._
 import org.apache.spark.sql.catalyst.expressions.GenericRowWithSchema
-import org.apache.spark.sql.errors.{ExecutionErrors, QueryCompilationErrors}
+import org.apache.spark.sql.errors.{CompilationErrors, ExecutionErrors}
 import org.apache.spark.sql.types.Decimal
 
 /**
@@ -436,13 +436,13 @@ object ArrowDeserializers {
       val key = toKey(field.getName)
       val old = lookup.put(key, field)
       if (old.isDefined) {
-        throw QueryCompilationErrors.ambiguousColumnOrFieldError(
+        throw CompilationErrors.ambiguousColumnOrFieldError(
           field.getName :: Nil,
           fields.count(f => toKey(f.getName) == key))
       }
     }
     name => {
-      lookup.getOrElse(toKey(name), throw QueryCompilationErrors.columnNotFoundError(name))
+      lookup.getOrElse(toKey(name), throw CompilationErrors.columnNotFoundError(name))
     }
   }
 

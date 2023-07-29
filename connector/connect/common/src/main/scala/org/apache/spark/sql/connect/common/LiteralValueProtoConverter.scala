@@ -32,11 +32,11 @@ import com.google.protobuf.ByteString
 
 import org.apache.spark.connect.proto
 import org.apache.spark.sql.catalyst.ScalaReflection
-import org.apache.spark.sql.catalyst.util.{IntervalUtils, SparkDateTimeUtils}
+import org.apache.spark.sql.catalyst.util.{SparkDateTimeUtils, SparkIntervalUtils}
 import org.apache.spark.sql.connect.common.DataTypeProtoConverter._
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.CalendarInterval
-import org.apache.spark.util.Utils
+import org.apache.spark.util.SparkClassUtils
 
 object LiteralValueProtoConverter {
 
@@ -93,8 +93,8 @@ object LiteralValueProtoConverter {
       case v: LocalDateTime =>
         builder.setTimestampNtz(SparkDateTimeUtils.localDateTimeToMicros(v))
       case v: Date => builder.setDate(SparkDateTimeUtils.fromJavaDate(v))
-      case v: Duration => builder.setDayTimeInterval(IntervalUtils.durationToMicros(v))
-      case v: Period => builder.setYearMonthInterval(IntervalUtils.periodToMonths(v))
+      case v: Duration => builder.setDayTimeInterval(SparkIntervalUtils.durationToMicros(v))
+      case v: Period => builder.setYearMonthInterval(SparkIntervalUtils.periodToMonths(v))
       case v: Array[_] => builder.setArray(arrayBuilder(v))
       case v: CalendarInterval =>
         builder.setCalendarInterval(calendarIntervalBuilder(v.months, v.days, v.microseconds))
@@ -279,10 +279,10 @@ object LiteralValueProtoConverter {
           literal.getCalendarInterval.getMicroseconds)
 
       case proto.Expression.Literal.LiteralTypeCase.YEAR_MONTH_INTERVAL =>
-        IntervalUtils.monthsToPeriod(literal.getYearMonthInterval)
+        SparkIntervalUtils.monthsToPeriod(literal.getYearMonthInterval)
 
       case proto.Expression.Literal.LiteralTypeCase.DAY_TIME_INTERVAL =>
-        IntervalUtils.microsToDuration(literal.getDayTimeInterval)
+        SparkIntervalUtils.microsToDuration(literal.getDayTimeInterval)
 
       case proto.Expression.Literal.LiteralTypeCase.ARRAY =>
         toCatalystArray(literal.getArray)
@@ -376,7 +376,7 @@ object LiteralValueProtoConverter {
   def toCatalystStruct(struct: proto.Expression.Literal.Struct): Any = {
     def toTuple[A <: Object](data: Seq[A]): Product = {
       try {
-        val tupleClass = Utils.classForName(s"scala.Tuple${data.length}")
+        val tupleClass = SparkClassUtils.classForName(s"scala.Tuple${data.length}")
         tupleClass.getConstructors.head.newInstance(data: _*).asInstanceOf[Product]
       } catch {
         case _: Exception =>
