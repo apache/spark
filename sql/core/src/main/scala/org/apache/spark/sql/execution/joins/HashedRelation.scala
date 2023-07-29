@@ -238,14 +238,6 @@ private[joins] class UnsafeHashedRelation(
     (null, null)
   }
 
-  @transient
-  private var (locationLookUpVar, lastLookedKey) = if (isForSingleThreadUse) {
-    val map = this.binaryMap
-    new map.Location -> new UnsafeRow(numFields)
-  } else {
-    (null, null)
-  }
-
   private[joins] def this() = this(0, 0, null)  // Needed for serialization
 
   override def keyIsUnique: Boolean = binaryMap.numKeys() == binaryMap.numValues()

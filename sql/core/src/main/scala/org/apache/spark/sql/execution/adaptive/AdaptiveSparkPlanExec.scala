@@ -819,22 +819,7 @@ case class AdaptiveSparkPlanExec(
       OrphanBSCollect.orphan =>
       CreateStageResult(newPlan = plan, allChildStagesMaterialized = true,
         newStages = Seq.empty, orphanBatchScansWithProxyVar = Seq(bs))
-      val results = Seq(buildSideStageResult, streamsideStageResult)
-      val (leftPlan, rightPlan) = getLeftAndRightPlan(streamsideStageResult,
-        buildSideStageResult, bhj)
-      val newBhj = bhj.copy(left = leftPlan, right = rightPlan)
-      newBhj.copyTagsFrom(bhj)
 
-      CreateStageResult(
-        newPlan = newBhj,
-        allChildStagesMaterialized = results.forall(_.allChildStagesMaterialized),
-        newStages = results.flatMap(_.newStages),
-        orphanBatchScansWithProxyVar = results.flatMap(_.orphanBatchScansWithProxyVar)
-      )
-    case bs: BatchScanExec if bs.proxyForPushedBroadcastVar.isDefined && orphanBSCollect ==
-      OrphanBSCollect.orphan =>
-      CreateStageResult(newPlan = plan, allChildStagesMaterialized = true,
-        newStages = Seq.empty, orphanBatchScansWithProxyVar = Seq(bs))
     case _ =>
       if (plan.children.isEmpty) {
         CreateStageResult(newPlan = plan, allChildStagesMaterialized = true,

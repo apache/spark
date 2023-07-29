@@ -182,8 +182,6 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       }
     }
 
-    private val broadcastedCanonicalizedSubplans = mutable.Set.empty[LogicalPlan]
-
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
       // If it is an equi-join, we first look at the join hints w.r.t. the following order:
       //   1. broadcast hint: pick broadcast hash join if the join type is supported. If both sides
