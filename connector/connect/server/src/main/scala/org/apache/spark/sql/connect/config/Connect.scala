@@ -16,6 +16,8 @@
  */
 package org.apache.spark.sql.connect.config
 
+import java.util.concurrent.TimeUnit
+
 import org.apache.spark.internal.config.ConfigBuilder
 import org.apache.spark.network.util.ByteUnit
 import org.apache.spark.sql.connect.common.config.ConnectCommon
@@ -71,6 +73,26 @@ object Connect {
       .version("3.5.0")
       .intConf
       .createWithDefault(1024)
+
+  val CONNECT_EXECUTE_REATTACHABLE_MAX_STREAM_DURATION =
+    ConfigBuilder("spark.connect.execute.reattachable.maxStreamDuration")
+      .internal()
+      .doc("For reattachable execution, after this amount of time the response stream will be " +
+        "automatically completed and client needs to send a new ReattachExecute RPC to continue. " +
+        "Set to 0 for unlimited.")
+      .version("3.5.0")
+      .timeConf(TimeUnit.SECONDS)
+      .createWithDefault(5 * 60)
+
+  val CONNECT_EXECUTE_REATTACHABLE_MAX_STREAM_SIZE =
+    ConfigBuilder("spark.connect.execute.reattachable.maxStreamDuration")
+      .internal()
+      .doc("For reattachable execution, after total responses size exceeds this value, the " +
+        "response stream will be automatically completed and client needs to send a new " +
+        "ReattachExecute RPC to continue. Set to 0 for unlimited.")
+      .version("3.5.0")
+      .bytesConf(ByteUnit.BYTE)
+      .createWithDefaultString("1g")
 
   val CONNECT_EXTENSIONS_RELATION_CLASSES =
     ConfigBuilder("spark.connect.extensions.relation.classes")

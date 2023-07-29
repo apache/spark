@@ -17,8 +17,11 @@
 
 package org.apache.spark.sql.connect.service
 
+import java.util.UUID
+
 import scala.collection.JavaConverters._
 
+import org.apache.spark.SparkSQLException
 import org.apache.spark.connect.proto
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.connect.common.ProtoUtils
@@ -30,9 +33,21 @@ import org.apache.spark.util.SystemClock
  */
 private[connect] class ExecuteHolder(
     val request: proto.ExecutePlanRequest,
-    val operationId: String,
     val sessionHolder: SessionHolder)
     extends Logging {
+
+  val operationId = if (request.hasOperationId) {
+    try {
+      UUID.fromString(request.getOperationId).toString
+    } catch {
+      case _: IllegalArgumentException =>
+        throw new SparkSQLException(
+          errorClass = "INVALID_HANDLE.FORMAT",
+          messageParameters = Map("handle" -> request.getOperationId))
+    }
+  } else {
+    UUID.randomUUID().toString
+  }
 
   /**
    * Tag that is set for this execution on SparkContext, via SparkContext.addJobTag. Used
@@ -53,6 +68,20 @@ private[connect] class ExecuteHolder(
       tag
     }
     .toSet
+
+  /**
+   * If execution is reattachable, it's life cycle is not limited to a single ExecutePlanRequest,
+   * but can be reattached with ReattachExecute, and released with ReleaseExecute
+   */
+  val reattachable: Boolean = request.getRequestOptionsList.asScala.exists { option =>
+    option.hasReattachOptions && option.getReattachOptions.getReattachable == true
+  }
+
+  /**
+   * True if there is currently an RPC (ExecutePlanRequest, ReattachExecute) attached to this
+   * execution.
+   */
+  var attached: Boolean = true
 
   val session = sessionHolder.session
 
@@ -89,13 +118,10 @@ private[connect] class ExecuteHolder(
    * @param lastConsumedStreamIndex
    *   the last index that was already consumed. The consumer will start from index after that. 0
    *   means start from beginning (since first response has index 1)
-   * @return
-   *   true if the sender got detached without completing the stream. false if the executing
-   *   stream was completely sent out.
    */
   def attachAndRunGrpcResponseSender(
       responseSender: ExecuteGrpcResponseSender[proto.ExecutePlanResponse],
-      lastConsumedStreamIndex: Long): Boolean = {
+      lastConsumedStreamIndex: Long): Unit = {
     responseSender.run(responseObserver, lastConsumedStreamIndex)
   }
 

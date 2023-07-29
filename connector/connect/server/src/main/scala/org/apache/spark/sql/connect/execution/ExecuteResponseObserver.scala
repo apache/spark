@@ -19,6 +19,7 @@ package org.apache.spark.sql.connect.execution
 
 import scala.collection.mutable
 
+import com.google.protobuf.MessageLite
 import io.grpc.stub.StreamObserver
 
 import org.apache.spark.connect.proto
@@ -42,7 +43,7 @@ import org.apache.spark.sql.connect.service.ExecuteHolder
  * @see
  *   attachConsumer
  */
-private[connect] class ExecuteResponseObserver[T](val executeHolder: ExecuteHolder)
+private[connect] class ExecuteResponseObserver[T <: MessageLite](val executeHolder: ExecuteHolder)
     extends StreamObserver[T]
     with Logging {
 

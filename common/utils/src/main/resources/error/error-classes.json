@@ -1299,6 +1299,24 @@
     ],
     "sqlState" : "42000"
   },
+  "INVALID_CURSOR" : {
+    "message" : [
+      "The cursor is invalid."
+    ],
+    "subClass" : {
+      "DISCONNECTED" : {
+        "message" : [
+          "The cursor has been disconnected by the server."
+        ]
+      },
+      "POSITION" : {
+        "message" : [
+          "The requested cursor position is not available."
+        ]
+      }
+    },
+    "sqlState" : "HY108"
+  },
   "INVALID_DEFAULT_VALUE" : {
     "message" : [
       "Failed to execute <statement> command because the destination table column <colName> has a DEFAULT value <defaultValue>,"
