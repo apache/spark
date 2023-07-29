@@ -124,9 +124,7 @@ object Connect {
 
   val CONNECT_USER_SESSION_CACHE_SIZE =
     ConfigBuilder("spark.connect.userSession.cacheSize")
-      .doc("""
-          |Sets the cache size of user session.
-          |""".stripMargin)
+      .doc("Sets the cache size of user session.")
       .version("4.0.0")
       .intConf
       .createWithDefault(100)
