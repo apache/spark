@@ -55,6 +55,21 @@ class StubClassLoaderSuite extends SparkFunSuite {
     }
   }
 
+  test("call stub class default constructor") {
+    val cl = new RecordedStubClassLoader(getClass().getClassLoader(), _ => true)
+    // scalastyle:off classforname
+    val cls = Class.forName("my.name.HelloWorld", false, cl)
+    // scalastyle:on classforname
+    assert(cl.lastStubbed === "my.name.HelloWorld")
+    val error = intercept[java.lang.reflect.InvocationTargetException] {
+      cls.getDeclaredConstructor().newInstance()
+    }
+    assert(
+      error.getCause != null && error.getCause.getMessage.contains(
+        "Fail to initiate the class my.name.HelloWorld because it is stubbed"),
+      error)
+  }
+
   test("stub missing class") {
     val sysClassLoader = getClass.getClassLoader()
     val stubClassLoader = new RecordedStubClassLoader(null, _ => true)
