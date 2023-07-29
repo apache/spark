@@ -554,7 +554,7 @@ class SparkSession private[sql] (
     val command = proto.Command.newBuilder().setRegisterFunction(udf).build()
     val plan = proto.Plan.newBuilder().setCommand(command).build()
 
-    client.execute(plan)
+    client.execute(plan).asScala.foreach(_ => ())
   }
 
   @DeveloperApi
