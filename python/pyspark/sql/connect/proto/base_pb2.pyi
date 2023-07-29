@@ -1005,30 +1005,44 @@ class ExecutePlanRequest(google.protobuf.message.Message):
     class RequestOption(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
+        REATTACH_OPTIONS_FIELD_NUMBER: builtins.int
         EXTENSION_FIELD_NUMBER: builtins.int
+        @property
+        def reattach_options(self) -> global___ReattachOptions: ...
         @property
         def extension(self) -> google.protobuf.any_pb2.Any:
             """Extension type for request options"""
         def __init__(
             self,
             *,
+            reattach_options: global___ReattachOptions | None = ...,
             extension: google.protobuf.any_pb2.Any | None = ...,
         ) -> None: ...
         def HasField(
             self,
             field_name: typing_extensions.Literal[
-                "extension", b"extension", "request_option", b"request_option"
+                "extension",
+                b"extension",
+                "reattach_options",
+                b"reattach_options",
+                "request_option",
+                b"request_option",
             ],
         ) -> builtins.bool: ...
         def ClearField(
             self,
             field_name: typing_extensions.Literal[
-                "extension", b"extension", "request_option", b"request_option"
+                "extension",
+                b"extension",
+                "reattach_options",
+                b"reattach_options",
+                "request_option",
+                b"request_option",
             ],
         ) -> None: ...
         def WhichOneof(
             self, oneof_group: typing_extensions.Literal["request_option", b"request_option"]
-        ) -> typing_extensions.Literal["extension"] | None: ...
+        ) -> typing_extensions.Literal["reattach_options", "extension"] | None: ...
 
     SESSION_ID_FIELD_NUMBER: builtins.int
     USER_CONTEXT_FIELD_NUMBER: builtins.int
@@ -1324,6 +1338,18 @@ class ExecutePlanResponse(google.protobuf.message.Message):
             self, field_name: typing_extensions.Literal["name", b"name", "values", b"values"]
         ) -> None: ...
 
+    class ResponseComplete(google.protobuf.message.Message):
+        """If present, in a reattachable execution this means that after server sends onComplete,
+        the execution is complete. If the server sends onComplete without sending a ResponseComplete,
+        it means that there is more, and the client should use ReattachExecute RPC to continue.
+        """
+
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+        def __init__(
+            self,
+        ) -> None: ...
+
     SESSION_ID_FIELD_NUMBER: builtins.int
     OPERATION_ID_FIELD_NUMBER: builtins.int
     ARROW_BATCH_FIELD_NUMBER: builtins.int
@@ -1332,6 +1358,7 @@ class ExecutePlanResponse(google.protobuf.message.Message):
     STREAMING_QUERY_COMMAND_RESULT_FIELD_NUMBER: builtins.int
     GET_RESOURCES_COMMAND_RESULT_FIELD_NUMBER: builtins.int
     STREAMING_QUERY_MANAGER_COMMAND_RESULT_FIELD_NUMBER: builtins.int
+    RESPONSE_COMPLETE_FIELD_NUMBER: builtins.int
     EXTENSION_FIELD_NUMBER: builtins.int
     METRICS_FIELD_NUMBER: builtins.int
     OBSERVED_METRICS_FIELD_NUMBER: builtins.int
@@ -1369,6 +1396,9 @@ class ExecutePlanResponse(google.protobuf.message.Message):
     ) -> pyspark.sql.connect.proto.commands_pb2.StreamingQueryManagerCommandResult:
         """Response for commands on the streaming query manager."""
     @property
+    def response_complete(self) -> global___ExecutePlanResponse.ResponseComplete:
+        """Response type informing if the stream is complete in reattachable execution."""
+    @property
     def extension(self) -> google.protobuf.any_pb2.Any:
         """Support arbitrary result objects."""
     @property
@@ -1401,6 +1431,7 @@ class ExecutePlanResponse(google.protobuf.message.Message):
         | None = ...,
         streaming_query_manager_command_result: pyspark.sql.connect.proto.commands_pb2.StreamingQueryManagerCommandResult
         | None = ...,
+        response_complete: global___ExecutePlanResponse.ResponseComplete | None = ...,
         extension: google.protobuf.any_pb2.Any | None = ...,
         metrics: global___ExecutePlanResponse.Metrics | None = ...,
         observed_metrics: collections.abc.Iterable[global___ExecutePlanResponse.ObservedMetrics]
@@ -1418,6 +1449,8 @@ class ExecutePlanResponse(google.protobuf.message.Message):
             b"get_resources_command_result",
             "metrics",
             b"metrics",
+            "response_complete",
+            b"response_complete",
             "response_type",
             b"response_type",
             "schema",
@@ -1447,6 +1480,8 @@ class ExecutePlanResponse(google.protobuf.message.Message):
             b"observed_metrics",
             "operation_id",
             b"operation_id",
+            "response_complete",
+            b"response_complete",
             "response_type",
             b"response_type",
             "schema",
@@ -1472,6 +1507,7 @@ class ExecutePlanResponse(google.protobuf.message.Message):
         "streaming_query_command_result",
         "get_resources_command_result",
         "streaming_query_manager_command_result",
+        "response_complete",
         "extension",
     ] | None: ...
 
@@ -2384,3 +2420,281 @@ class InterruptResponse(google.protobuf.message.Message):
     ) -> None: ...
 
 global___InterruptResponse = InterruptResponse
+
+class ReattachOptions(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    REATTACHABLE_FIELD_NUMBER: builtins.int
+    reattachable: builtins.bool
+    """If true, the request can be reattached to using ReattachExecute.
+    ReattachExecute can be used either if the stream broke with a GRPC network error,
+    or if the server closed the stream without sending a response with StreamStatus.complete=true.
+    The server will keep a buffer of responses in case a response is lost, and
+    ReattachExecute needs to back-track.
+
+    If false, the execution response stream will will not be reattachable, and all responses are
+    immediately released by the server after being sent.
+    """
+    def __init__(
+        self,
+        *,
+        reattachable: builtins.bool = ...,
+    ) -> None: ...
+    def ClearField(
+        self, field_name: typing_extensions.Literal["reattachable", b"reattachable"]
+    ) -> None: ...
+
+global___ReattachOptions = ReattachOptions
+
+class ReattachExecuteRequest(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    SESSION_ID_FIELD_NUMBER: builtins.int
+    USER_CONTEXT_FIELD_NUMBER: builtins.int
+    OPERATION_ID_FIELD_NUMBER: builtins.int
+    CLIENT_TYPE_FIELD_NUMBER: builtins.int
+    LAST_RESPONSE_ID_FIELD_NUMBER: builtins.int
+    session_id: builtins.str
+    """(Required)
+
+    The session_id of the request to reattach to.
+    This must be an id of existing session.
+    """
+    @property
+    def user_context(self) -> global___UserContext:
+        """(Required) User context
+
+        user_context.user_id and session+id both identify a unique remote spark session on the
+        server side.
+        """
+    operation_id: builtins.str
+    """(Required)
+    Provide an id of the request to reattach to.
+    This must be an id of existing operation.
+    """
+    client_type: builtins.str
+    """Provides optional information about the client sending the request. This field
+    can be used for language or version specific information and is only intended for
+    logging purposes and will not be interpreted by the server.
+    """
+    last_response_id: builtins.str
+    """(Optional)
+    Last already processed response id from the response stream.
+    After reattach, server will resume the response stream after that response.
+    If not specified, server will restart the stream from the start.
+
+    Note: server controls the amount of responses that it buffers and it may drop responses,
+    that are far behind the latest returned response, so this can't be used to arbitrarily
+    scroll back the cursor. If the response is no longer available, this will result in an error.
+    """
+    def __init__(
+        self,
+        *,
+        session_id: builtins.str = ...,
+        user_context: global___UserContext | None = ...,
+        operation_id: builtins.str = ...,
+        client_type: builtins.str | None = ...,
+        last_response_id: builtins.str | None = ...,
+    ) -> None: ...
+    def HasField(
+        self,
+        field_name: typing_extensions.Literal[
+            "_client_type",
+            b"_client_type",
+            "_last_response_id",
+            b"_last_response_id",
+            "client_type",
+            b"client_type",
+            "last_response_id",
+            b"last_response_id",
+            "user_context",
+            b"user_context",
+        ],
+    ) -> builtins.bool: ...
+    def ClearField(
+        self,
+        field_name: typing_extensions.Literal[
+            "_client_type",
+            b"_client_type",
+            "_last_response_id",
+            b"_last_response_id",
+            "client_type",
+            b"client_type",
+            "last_response_id",
+            b"last_response_id",
+            "operation_id",
+            b"operation_id",
+            "session_id",
+            b"session_id",
+            "user_context",
+            b"user_context",
+        ],
+    ) -> None: ...
+    @typing.overload
+    def WhichOneof(
+        self, oneof_group: typing_extensions.Literal["_client_type", b"_client_type"]
+    ) -> typing_extensions.Literal["client_type"] | None: ...
+    @typing.overload
+    def WhichOneof(
+        self, oneof_group: typing_extensions.Literal["_last_response_id", b"_last_response_id"]
+    ) -> typing_extensions.Literal["last_response_id"] | None: ...
+
+global___ReattachExecuteRequest = ReattachExecuteRequest
+
+class ReleaseExecuteRequest(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    class _ReleaseType:
+        ValueType = typing.NewType("ValueType", builtins.int)
+        V: typing_extensions.TypeAlias = ValueType
+
+    class _ReleaseTypeEnumTypeWrapper(
+        google.protobuf.internal.enum_type_wrapper._EnumTypeWrapper[
+            ReleaseExecuteRequest._ReleaseType.ValueType
+        ],
+        builtins.type,
+    ):  # noqa: F821
+        DESCRIPTOR: google.protobuf.descriptor.EnumDescriptor
+        RELEASE_TYPE_UNSPECIFIED: ReleaseExecuteRequest._ReleaseType.ValueType  # 0
+        RELEASE_ALL: ReleaseExecuteRequest._ReleaseType.ValueType  # 1
+        """Release operation completely.
+        Note: This should be called when the server side operation is finished, and ExecutePlan or
+        ReattachExecute are finished processing the result stream, or inside onComplete / onError.
+        """
+        RELEASE_UNTIL_RESPONSE: ReleaseExecuteRequest._ReleaseType.ValueType  # 2
+        """Release all responses from the operation response stream up to and including
+        the response given by until_response_id.
+        While server determines by itself how much of a buffer of responses to keep, client providing
+        explicit release calls will help reduce resource consumption.
+        Noop if response_id not found in cached responses.
+        """
+
+    class ReleaseType(_ReleaseType, metaclass=_ReleaseTypeEnumTypeWrapper): ...
+    RELEASE_TYPE_UNSPECIFIED: ReleaseExecuteRequest.ReleaseType.ValueType  # 0
+    RELEASE_ALL: ReleaseExecuteRequest.ReleaseType.ValueType  # 1
+    """Release operation completely.
+    Note: This should be called when the server side operation is finished, and ExecutePlan or
+    ReattachExecute are finished processing the result stream, or inside onComplete / onError.
+    """
+    RELEASE_UNTIL_RESPONSE: ReleaseExecuteRequest.ReleaseType.ValueType  # 2
+    """Release all responses from the operation response stream up to and including
+    the response given by until_response_id.
+    While server determines by itself how much of a buffer of responses to keep, client providing
+    explicit release calls will help reduce resource consumption.
+    Noop if response_id not found in cached responses.
+    """
+
+    SESSION_ID_FIELD_NUMBER: builtins.int
+    USER_CONTEXT_FIELD_NUMBER: builtins.int
+    OPERATION_ID_FIELD_NUMBER: builtins.int
+    CLIENT_TYPE_FIELD_NUMBER: builtins.int
+    RELEASE_TYPE_FIELD_NUMBER: builtins.int
+    UNTIL_RESPONSE_ID_FIELD_NUMBER: builtins.int
+    session_id: builtins.str
+    """(Required)
+
+    The session_id of the request to reattach to.
+    This must be an id of existing session.
+    """
+    @property
+    def user_context(self) -> global___UserContext:
+        """(Required) User context
+
+        user_context.user_id and session+id both identify a unique remote spark session on the
+        server side.
+        """
+    operation_id: builtins.str
+    """(Required)
+    Provide an id of the request to reattach to.
+    This must be an id of existing operation.
+    """
+    client_type: builtins.str
+    """Provides optional information about the client sending the request. This field
+    can be used for language or version specific information and is only intended for
+    logging purposes and will not be interpreted by the server.
+    """
+    release_type: global___ReleaseExecuteRequest.ReleaseType.ValueType
+    until_response_id: builtins.str
+    """if release_type == RELEASE_UNTIL_RESPONSE, the response_id of the response up until and
+    including which to release.
+    """
+    def __init__(
+        self,
+        *,
+        session_id: builtins.str = ...,
+        user_context: global___UserContext | None = ...,
+        operation_id: builtins.str = ...,
+        client_type: builtins.str | None = ...,
+        release_type: global___ReleaseExecuteRequest.ReleaseType.ValueType = ...,
+        until_response_id: builtins.str = ...,
+    ) -> None: ...
+    def HasField(
+        self,
+        field_name: typing_extensions.Literal[
+            "_client_type",
+            b"_client_type",
+            "client_type",
+            b"client_type",
+            "release",
+            b"release",
+            "until_response_id",
+            b"until_response_id",
+            "user_context",
+            b"user_context",
+        ],
+    ) -> builtins.bool: ...
+    def ClearField(
+        self,
+        field_name: typing_extensions.Literal[
+            "_client_type",
+            b"_client_type",
+            "client_type",
+            b"client_type",
+            "operation_id",
+            b"operation_id",
+            "release",
+            b"release",
+            "release_type",
+            b"release_type",
+            "session_id",
+            b"session_id",
+            "until_response_id",
+            b"until_response_id",
+            "user_context",
+            b"user_context",
+        ],
+    ) -> None: ...
+    @typing.overload
+    def WhichOneof(
+        self, oneof_group: typing_extensions.Literal["_client_type", b"_client_type"]
+    ) -> typing_extensions.Literal["client_type"] | None: ...
+    @typing.overload
+    def WhichOneof(
+        self, oneof_group: typing_extensions.Literal["release", b"release"]
+    ) -> typing_extensions.Literal["until_response_id"] | None: ...
+
+global___ReleaseExecuteRequest = ReleaseExecuteRequest
+
+class ReleaseExecuteResponse(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    SESSION_ID_FIELD_NUMBER: builtins.int
+    OPERATION_ID_FIELD_NUMBER: builtins.int
+    session_id: builtins.str
+    """Session id in which the release was running."""
+    operation_id: builtins.str
+    """Operation id of the operation which the release concerns."""
+    def __init__(
+        self,
+        *,
+        session_id: builtins.str = ...,
+        operation_id: builtins.str = ...,
+    ) -> None: ...
+    def ClearField(
+        self,
+        field_name: typing_extensions.Literal[
+            "operation_id", b"operation_id", "session_id", b"session_id"
+        ],
+    ) -> None: ...
+
+global___ReleaseExecuteResponse = ReleaseExecuteResponse
