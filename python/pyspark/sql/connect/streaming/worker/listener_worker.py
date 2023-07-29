@@ -86,8 +86,6 @@ def main(infile: IO, outfile: IO) -> None:
 
 
 if __name__ == "__main__":
-    print("Starting streaming listener worker")
-
     # Read information about how to connect back to the JVM from the environment.
     java_port = int(os.environ["PYTHON_WORKER_FACTORY_PORT"])
     auth_secret = os.environ["PYTHON_WORKER_FACTORY_SECRET"]
