@@ -222,6 +222,21 @@ class ReplE2ESuite extends RemoteSparkSession with BeforeAndAfterEach {
     assertContains("Array[Long] = Array(25L, 26L, 29L, 34L, 41L)", output)
   }
 
+  test("Java UDF Registration") {
+    val input =
+      """
+        |import org.apache.spark.sql.api.java._
+        |import org.apache.spark.sql.types.LongType
+        |
+        |spark.udf.register("javaUdf", new UDF1[Long, Long] {
+        |  override def call(num: Long): Long = num * num * num + 250L
+        |}, LongType).asNondeterministic()
+        |spark.sql("select javaUdf(id) from range(5)").as[Long].collect()
+      """.stripMargin
+    val output = runCommandsInShell(input)
+    assertContains("Array[Long] = Array(25L, 26L, 29L, 34L, 41L)", output)
+  }
+
   test("UDF Registration") {
     // TODO SPARK-44449 make this long again when upcasting is in.
     val input = """
