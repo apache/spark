@@ -23,12 +23,11 @@ import java.time.{Duration, Instant, LocalDate, LocalDateTime, Period, ZoneOffse
 import org.apache.arrow.vector.{BigIntVector, BitVector, DateDayVector, DecimalVector, DurationVector, FieldVector, Float4Vector, Float8Vector, IntervalYearVector, IntVector, NullVector, SmallIntVector, TimeStampMicroTZVector, TimeStampMicroVector, TinyIntVector, VarBinaryVector, VarCharVector}
 import org.apache.arrow.vector.util.Text
 
-import org.apache.spark.sql.catalyst.expressions.Cast
-import org.apache.spark.sql.catalyst.util.{DateFormatter, IntervalUtils, StringUtils, TimestampFormatter}
+import org.apache.spark.sql.catalyst.util.{DateFormatter, SparkIntervalUtils, SparkStringUtils, TimestampFormatter}
 import org.apache.spark.sql.catalyst.util.DateTimeConstants.MICROS_PER_SECOND
 import org.apache.spark.sql.catalyst.util.IntervalStringStyles.ANSI_STYLE
 import org.apache.spark.sql.catalyst.util.SparkDateTimeUtils._
-import org.apache.spark.sql.types.{DataType, DayTimeIntervalType, Decimal, YearMonthIntervalType}
+import org.apache.spark.sql.types.{DataType, DayTimeIntervalType, Decimal, UpCastRule, YearMonthIntervalType}
 import org.apache.spark.sql.util.ArrowUtils
 
 /**
@@ -69,7 +68,7 @@ object ArrowVectorReader {
       vector: FieldVector,
       timeZoneId: String): ArrowVectorReader = {
     val vectorDataType = ArrowUtils.fromArrowType(vector.getField.getType)
-    if (!Cast.canUpCast(vectorDataType, targetDataType)) {
+    if (!UpCastRule.canUpCast(vectorDataType, targetDataType)) {
       throw new RuntimeException(
         s"Reading '$targetDataType' values from a ${vector.getClass} instance is not supported.")
     }
@@ -193,15 +192,15 @@ private[arrow] class VarCharVectorReader(v: VarCharVector)
 private[arrow] class VarBinaryVectorReader(v: VarBinaryVector)
     extends TypedArrowVectorReader[VarBinaryVector](v) {
   override def getBytes(i: Int): Array[Byte] = vector.get(i)
-  override def getString(i: Int): String = StringUtils.getHexString(getBytes(i))
+  override def getString(i: Int): String = SparkStringUtils.getHexString(getBytes(i))
 }
 
 private[arrow] class DurationVectorReader(v: DurationVector)
     extends TypedArrowVectorReader[DurationVector](v) {
   override def getDuration(i: Int): Duration = vector.getObject(i)
   override def getString(i: Int): String = {
-    IntervalUtils.toDayTimeIntervalString(
-      IntervalUtils.durationToMicros(getDuration(i)),
+    SparkIntervalUtils.toDayTimeIntervalString(
+      SparkIntervalUtils.durationToMicros(getDuration(i)),
       ANSI_STYLE,
       DayTimeIntervalType.DEFAULT.startField,
       DayTimeIntervalType.DEFAULT.endField)
@@ -212,7 +211,7 @@ private[arrow] class IntervalYearVectorReader(v: IntervalYearVector)
     extends TypedArrowVectorReader[IntervalYearVector](v) {
   override def getPeriod(i: Int): Period = vector.getObject(i).normalized()
   override def getString(i: Int): String = {
-    IntervalUtils.toYearMonthIntervalString(
+    SparkIntervalUtils.toYearMonthIntervalString(
       vector.get(i),
       ANSI_STYLE,
       YearMonthIntervalType.DEFAULT.startField,

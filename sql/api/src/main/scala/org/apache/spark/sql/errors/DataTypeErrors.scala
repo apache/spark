@@ -17,8 +17,10 @@
 package org.apache.spark.sql.errors
 
 import org.apache.spark.{SparkArithmeticException, SparkException, SparkIllegalArgumentException, SparkNumberFormatException, SparkRuntimeException, SparkUnsupportedOperationException}
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.trees.{Origin, SQLQueryContext}
 import org.apache.spark.sql.catalyst.util.QuotingUtils
+import org.apache.spark.sql.catalyst.util.QuotingUtils.toSQLSchema
 import org.apache.spark.sql.types.{DataType, Decimal, StringType}
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -97,49 +99,45 @@ private[sql] object DataTypeErrors extends DataTypeErrorsBase {
   }
 
   def schemaFailToParseError(schema: String, e: Throwable): Throwable = {
-    new SparkException(
+    new AnalysisException(
       errorClass = "INVALID_SCHEMA.PARSE_ERROR",
       messageParameters = Map(
-        "inputSchema" -> QuotingUtils.toSQLSchema(schema),
+        "inputSchema" -> toSQLSchema(schema),
         "reason" -> e.getMessage
       ),
-      cause = e)
+      cause = Some(e))
   }
 
   def invalidDayTimeIntervalType(startFieldName: String, endFieldName: String): Throwable = {
-    new SparkException(
+    new AnalysisException(
       errorClass = "_LEGACY_ERROR_TEMP_1224",
       messageParameters = Map(
         "startFieldName" -> startFieldName,
-        "endFieldName" -> endFieldName),
-      cause = null)
+        "endFieldName" -> endFieldName))
   }
 
   def invalidDayTimeField(field: Byte, supportedIds: Seq[String]): Throwable = {
-    new SparkException(
+    new AnalysisException(
       errorClass = "_LEGACY_ERROR_TEMP_1223",
       messageParameters = Map(
         "field" -> field.toString,
-        "supportedIds" -> supportedIds.mkString(", ")),
-      cause = null)
+        "supportedIds" -> supportedIds.mkString(", ")))
   }
 
   def invalidYearMonthField(field: Byte, supportedIds: Seq[String]): Throwable = {
-    new SparkException(
+    new AnalysisException(
       errorClass = "_LEGACY_ERROR_TEMP_1225",
       messageParameters = Map(
         "field" -> field.toString,
-        "supportedIds" -> supportedIds.mkString(", ")),
-      cause = null)
+        "supportedIds" -> supportedIds.mkString(", ")))
   }
 
   def decimalCannotGreaterThanPrecisionError(scale: Int, precision: Int): Throwable = {
-    new SparkException(
+    new AnalysisException(
       errorClass = "_LEGACY_ERROR_TEMP_1228",
       messageParameters = Map(
         "scale" -> scale.toString,
-        "precision" -> precision.toString),
-      cause = null)
+        "precision" -> precision.toString))
   }
 
   def negativeScaleNotAllowedError(scale: Int): Throwable = {
@@ -150,10 +148,9 @@ private[sql] object DataTypeErrors extends DataTypeErrorsBase {
   }
 
   def attributeNameSyntaxError(name: String): Throwable = {
-    new SparkException(
+    new AnalysisException(
       errorClass = "_LEGACY_ERROR_TEMP_1049",
-      messageParameters = Map("name" -> name),
-      cause = null)
+      messageParameters = Map("name" -> name))
   }
 
   def cannotMergeIncompatibleDataTypesError(left: DataType, right: DataType): Throwable = {
@@ -182,13 +179,12 @@ private[sql] object DataTypeErrors extends DataTypeErrorsBase {
   }
 
   def invalidFieldName(fieldName: Seq[String], path: Seq[String], context: Origin): Throwable = {
-    new SparkException(
+    new AnalysisException(
       errorClass = "INVALID_FIELD_NAME",
       messageParameters = Map(
         "fieldName" -> toSQLId(fieldName),
         "path" -> toSQLId(path)),
-      cause = null,
-      context = context.getQueryContext)
+      origin = context)
   }
 
   def unscaledValueTooLargeForPrecisionError(
@@ -241,13 +237,12 @@ private[sql] object DataTypeErrors extends DataTypeErrorsBase {
 
   def ambiguousColumnOrFieldError(
       name: Seq[String], numMatches: Int, context: Origin): Throwable = {
-    new SparkException(
+    new AnalysisException(
       errorClass = "AMBIGUOUS_COLUMN_OR_FIELD",
       messageParameters = Map(
         "name" -> toSQLId(name),
         "n" -> numMatches.toString),
-      cause = null,
-      context = context.getQueryContext)
+      origin = context)
   }
 
   def castingCauseOverflowError(t: String, from: DataType, to: DataType): ArithmeticException = {
@@ -283,16 +278,14 @@ private[sql] object DataTypeErrors extends DataTypeErrorsBase {
   }
 
   def charOrVarcharTypeAsStringUnsupportedError(): Throwable = {
-    new SparkException(
+    new AnalysisException(
       errorClass = "UNSUPPORTED_CHAR_OR_VARCHAR_AS_STRING",
-      messageParameters = Map.empty,
-      cause = null)
+      messageParameters = Map.empty)
   }
 
   def userSpecifiedSchemaUnsupportedError(operation: String): Throwable = {
-    new SparkException(
+    new AnalysisException(
       errorClass = "_LEGACY_ERROR_TEMP_1189",
-      messageParameters = Map("operation" -> operation),
-      cause = null)
+      messageParameters = Map("operation" -> operation))
   }
 }

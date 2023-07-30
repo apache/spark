@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.connect.planner
 
+import java.io.IOException
+
 import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.util.Try
@@ -1504,15 +1506,24 @@ class SparkConnectPlanner(val sessionHolder: SessionHolder) extends Logging {
   }
 
   private def unpackUdf(fun: proto.CommonInlineUserDefinedFunction): UdfPacket = {
-    Utils.deserialize[UdfPacket](
-      fun.getScalarScalaUdf.getPayload.toByteArray,
-      Utils.getContextOrSparkClassLoader)
+    unpackScalarScalaUDF[UdfPacket](fun.getScalarScalaUdf)
   }
 
   private def unpackForeachWriter(fun: proto.ScalarScalaUDF): ForeachWriterPacket = {
-    Utils.deserialize[ForeachWriterPacket](
-      fun.getPayload.toByteArray,
-      Utils.getContextOrSparkClassLoader)
+    unpackScalarScalaUDF[ForeachWriterPacket](fun)
+  }
+
+  private def unpackScalarScalaUDF[T](fun: proto.ScalarScalaUDF): T = {
+    try {
+      logDebug(s"Unpack using class loader: ${Utils.getContextOrSparkClassLoader}")
+      Utils.deserialize[T](fun.getPayload.toByteArray, Utils.getContextOrSparkClassLoader)
+    } catch {
+      case e: IOException if e.getCause.isInstanceOf[NoSuchMethodException] =>
+        throw new ClassNotFoundException(
+          s"Failed to load class correctly due to ${e.getCause}. " +
+            "Make sure the artifact where the class is defined is installed by calling" +
+            " session.addArtifact.")
+    }
   }
 
   /**
@@ -2418,7 +2429,6 @@ class SparkConnectPlanner(val sessionHolder: SessionHolder) extends Logging {
 
     // Convert the results to Arrow.
     val schema = df.schema
-    val maxRecordsPerBatch = session.sessionState.conf.arrowMaxRecordsPerBatch
     val maxBatchSize = (SparkEnv.get.conf.get(CONNECT_GRPC_ARROW_MAX_BATCH_SIZE) * 0.7).toLong
     val timeZoneId = session.sessionState.conf.sessionLocalTimeZone
 
@@ -2430,11 +2440,11 @@ class SparkConnectPlanner(val sessionHolder: SessionHolder) extends Logging {
         errorOnDuplicatedFieldNames = false)
     } else {
       val batches = ArrowConverters.toBatchWithSchemaIterator(
-        rows.iterator,
-        schema,
-        maxRecordsPerBatch,
-        maxBatchSize,
-        timeZoneId,
+        rowIter = rows.iterator,
+        schema = schema,
+        maxRecordsPerBatch = -1,
+        maxEstimatedBatchSize = maxBatchSize,
+        timeZoneId = timeZoneId,
         errorOnDuplicatedFieldNames = false)
       assert(batches.hasNext)
       val bytes = batches.next()

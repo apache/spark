@@ -885,7 +885,7 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
-  val CASE_SENSITIVE = buildConf("spark.sql.caseSensitive")
+  val CASE_SENSITIVE = buildConf(SqlApiConf.CASE_SENSITIVE_KEY)
     .internal()
     .doc("Whether the query analyzer should be case sensitive or not. " +
       "Default to case insensitive. It is highly discouraged to turn on case sensitive mode.")
@@ -2657,7 +2657,7 @@ object SQLConf {
     Try { DateTimeUtils.getZoneId(zone) }.isSuccess
   }
 
-  val SESSION_LOCAL_TIMEZONE = buildConf("spark.sql.session.timeZone")
+  val SESSION_LOCAL_TIMEZONE = buildConf(SqlApiConf.SESSION_LOCAL_TIMEZONE_KEY)
     .doc("The ID of session local timezone in the format of either region-based zone IDs or " +
       "zone offsets. Region IDs must have the form 'area/city', such as 'America/Los_Angeles'. " +
       "Zone offsets must be in the format '(+|-)HH', '(+|-)HH:mm' or '(+|-)HH:mm:ss', e.g '-08', " +
@@ -4334,7 +4334,7 @@ object SQLConf {
       .createWithDefault(false)
 
   val LOCAL_RELATION_CACHE_THRESHOLD =
-    buildConf("spark.sql.session.localRelationCacheThreshold")
+    buildConf(SqlApiConf.LOCAL_RELATION_CACHE_THRESHOLD_KEY)
       .doc("The threshold for the size in bytes of local relations to be cached at " +
         "the driver side after serialization.")
       .version("3.5.0")

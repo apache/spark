@@ -36,11 +36,11 @@ import org.apache.spark.sql.catalyst.{DefinedByConstructorParams, JavaTypeInfere
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoder
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{BinaryEncoder, BoxedBooleanEncoder, BoxedByteEncoder, BoxedDoubleEncoder, BoxedFloatEncoder, BoxedIntEncoder, BoxedLongEncoder, BoxedShortEncoder, CalendarIntervalEncoder, DateEncoder, DayTimeIntervalEncoder, EncoderField, InstantEncoder, IterableEncoder, JavaDecimalEncoder, LocalDateEncoder, LocalDateTimeEncoder, NullEncoder, PrimitiveBooleanEncoder, PrimitiveByteEncoder, PrimitiveDoubleEncoder, PrimitiveFloatEncoder, PrimitiveIntEncoder, PrimitiveLongEncoder, PrimitiveShortEncoder, RowEncoder, ScalaDecimalEncoder, StringEncoder, TimestampEncoder, UDTEncoder, YearMonthIntervalEncoder}
 import org.apache.spark.sql.catalyst.encoders.RowEncoder.{encoderFor => toRowEncoder}
-import org.apache.spark.sql.catalyst.util.{DateFormatter, StringUtils, TimestampFormatter}
+import org.apache.spark.sql.catalyst.util.{DateFormatter, SparkStringUtils, TimestampFormatter}
 import org.apache.spark.sql.catalyst.util.DateTimeConstants.MICROS_PER_SECOND
 import org.apache.spark.sql.catalyst.util.IntervalStringStyles.ANSI_STYLE
-import org.apache.spark.sql.catalyst.util.IntervalUtils._
 import org.apache.spark.sql.catalyst.util.SparkDateTimeUtils._
+import org.apache.spark.sql.catalyst.util.SparkIntervalUtils._
 import org.apache.spark.sql.connect.client.arrow.FooEnum.FooEnum
 import org.apache.spark.sql.connect.client.util.ConnectFunSuite
 import org.apache.spark.sql.types.{ArrayType, DataType, DayTimeIntervalType, Decimal, DecimalType, IntegerType, Metadata, SQLUserDefinedType, StructType, UserDefinedType, YearMonthIntervalType}
@@ -900,7 +900,7 @@ class ArrowEncoderSuite extends ConnectFunSuite with BeforeAndAfterAll {
           YearMonthIntervalType.DEFAULT.endField)
       })
   UpCastTestCase(BinaryEncoder, i => Array.tabulate(10)(j => (64 + j + i).toByte))
-    .test(StringEncoder, bytes => StringUtils.getHexString(bytes))
+    .test(StringEncoder, bytes => SparkStringUtils.getHexString(bytes))
 
   /* ******************************************************************** *
    * Arrow serialization/deserialization specific errors

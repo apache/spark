@@ -23,7 +23,6 @@ import java.util.concurrent.atomic.AtomicLong
 
 import scala.collection.JavaConverters._
 
-import org.apache.spark.TaskContext
 import org.apache.spark.api.java.function._
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{PrimitiveIntEncoder, PrimitiveLongEncoder}
 import org.apache.spark.sql.connect.client.util.QueryTest
@@ -157,11 +156,8 @@ class UserDefinedFunctionE2ETestSuite extends QueryTest {
     val sum = new AtomicLong()
     val func: Iterator[JLong] => Unit = f => {
       f.foreach(v => sum.addAndGet(v))
-      TaskContext
-        .get()
-        .addTaskCompletionListener(_ =>
-          // The value should be 45
-          assert(sum.get() == -1))
+      // The value should be 45
+      assert(sum.get() == -1)
     }
     val exception = intercept[Exception] {
       spark.range(10).repartition(1).foreachPartition(func)
@@ -178,11 +174,8 @@ class UserDefinedFunctionE2ETestSuite extends QueryTest {
         .foreachPartition(new ForeachPartitionFunction[JLong] {
           override def call(t: JIterator[JLong]): Unit = {
             t.asScala.foreach(v => sum.addAndGet(v))
-            TaskContext
-              .get()
-              .addTaskCompletionListener(_ =>
-                // The value should be 45
-                assert(sum.get() == -1))
+            // The value should be 45
+            assert(sum.get() == -1)
           }
         })
     }

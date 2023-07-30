@@ -27,7 +27,7 @@ import org.apache.spark.connect.proto
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.connect.common.ProtoUtils
 import org.apache.spark.sql.connect.planner.SparkConnectPlanner
-import org.apache.spark.sql.connect.service.ExecuteHolder
+import org.apache.spark.sql.connect.service.{ExecuteHolder, ExecuteSessionTag}
 import org.apache.spark.sql.connect.utils.ErrorUtils
 import org.apache.spark.util.Utils
 
@@ -95,8 +95,11 @@ private[connect] class ExecuteThreadRunner(executeHolder: ExecuteHolder) extends
       } finally {
         executeHolder.sessionHolder.session.sparkContext.removeJobTag(executeHolder.jobTag)
         executeHolder.sparkSessionTags.foreach { tag =>
-          executeHolder.sessionHolder.session.sparkContext
-            .removeJobTag(executeHolder.tagToSparkJobTag(tag))
+          executeHolder.sessionHolder.session.sparkContext.removeJobTag(
+            ExecuteSessionTag(
+              executeHolder.sessionHolder.userId,
+              executeHolder.sessionHolder.sessionId,
+              tag))
         }
       }
     } catch {
@@ -128,7 +131,11 @@ private[connect] class ExecuteThreadRunner(executeHolder: ExecuteHolder) extends
       session.sparkContext.addJobTag(executeHolder.jobTag)
       // Also set all user defined tags as Spark Job tags.
       executeHolder.sparkSessionTags.foreach { tag =>
-        session.sparkContext.addJobTag(executeHolder.tagToSparkJobTag(tag))
+        session.sparkContext.addJobTag(
+          ExecuteSessionTag(
+            executeHolder.sessionHolder.userId,
+            executeHolder.sessionHolder.sessionId,
+            tag))
       }
       session.sparkContext.setJobDescription(
         s"Spark Connect - ${StringUtils.abbreviate(debugString, 128)}")
