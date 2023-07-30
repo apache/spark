@@ -21,7 +21,7 @@ import java.net.InetSocketAddress
 import java.util.UUID
 import java.util.concurrent.TimeUnit
 
-import scala.jdk.CollectionConverters.collectionAsScalaIterableConverter
+import scala.jdk.CollectionConverters.iterableAsScalaIterableConverter
 
 import com.google.common.base.Ticker
 import com.google.common.cache.{CacheBuilder, RemovalListener, RemovalNotification}
@@ -172,16 +172,14 @@ class SparkConnectService(debug: Boolean)
         sessionId = request.getSessionId)
   }
 
-  // customizedMethodDesc returns a customized MethodDescriptor
-  // with updated request and response marshallers.
-  private def customizedMethodDesc(
-    methodDef: MethodDescriptor[MessageLite, MessageLite]
+  private def methodWithCustomMarshallers(
+    methodDesc: MethodDescriptor[MessageLite, MessageLite]
   ): MethodDescriptor[MessageLite, MessageLite] = {
     val recursionLimit =
       SparkEnv.get.conf.get(CONNECT_GRPC_MARSHALLER_RECURSION_LIMIT)
     val requestMarshaller =
       ProtoLiteUtils.marshallerWithRecursionLimit(
-        methodDef
+        methodDesc
           .getRequestMarshaller
           .asInstanceOf[PrototypeMarshaller[MessageLite]]
           .getMessagePrototype,
@@ -189,13 +187,17 @@ class SparkConnectService(debug: Boolean)
       )
     val responseMarshaller =
       ProtoLiteUtils.marshallerWithRecursionLimit(
-        methodDef
+        methodDesc
           .getResponseMarshaller
           .asInstanceOf[PrototypeMarshaller[MessageLite]]
           .getMessagePrototype,
         recursionLimit
       )
-    methodDef.toBuilder(requestMarshaller, responseMarshaller).build()
+    methodDesc
+      .toBuilder
+      .setRequestMarshaller(requestMarshaller)
+      .setResponseMarshaller(responseMarshaller)
+      .build()
   }
 
   override def bindService(): ServerServiceDefinition = {
@@ -214,7 +216,7 @@ class SparkConnectService(debug: Boolean)
       .asScala
       .asInstanceOf[Iterable[ServerMethodDefinition[MessageLite, MessageLite]]]
       .foreach(method => builder.addMethod(
-        customizedMethodDesc(method.getMethodDescriptor), method.getServerCallHandler))
+        methodWithCustomMarshallers(method.getMethodDescriptor), method.getServerCallHandler))
 
     // Build the final ServerServiceDefinition and return it.
     builder.build()

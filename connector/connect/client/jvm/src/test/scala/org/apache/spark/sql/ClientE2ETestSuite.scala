@@ -65,6 +65,7 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper with PrivateM
         }
       }
     }
+  }
 
   // Spark Result
   test("spark result schema") {
