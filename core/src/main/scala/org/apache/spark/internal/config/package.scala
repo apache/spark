@@ -2541,8 +2541,8 @@ package object config {
       .booleanConf
       .createWithDefault(false)
 
-  private[spark] val CONNECT_SCALA_UDF_STUB_CLASSES =
-    ConfigBuilder("spark.connect.scalaUdf.stubClasses")
+  private[spark] val CONNECT_SCALA_UDF_STUB_PREFIXES =
+    ConfigBuilder("spark.connect.scalaUdf.stubPrefixes")
       .internal()
       .doc("""
           |Comma-separated list of binary names of classes/packages that should be stubbed during
