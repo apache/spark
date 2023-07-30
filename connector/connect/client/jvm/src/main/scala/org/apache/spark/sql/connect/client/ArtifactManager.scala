@@ -42,8 +42,8 @@ import org.apache.spark.util.{SparkFileUtils, SparkThreadUtils}
 /**
  * The Artifact Manager is responsible for handling and transferring artifacts from the local
  * client to the server (local/remote).
- * @param userContext
- *   The user context the artifact manager operates in.
+ * @param clientConfig
+ *   The configuration of the client that the artifact manager operates in.
  * @param sessionId
  *   An unique identifier of the session which the artifact manager belongs to.
  * @param bstub
@@ -52,7 +52,7 @@ import org.apache.spark.util.{SparkFileUtils, SparkThreadUtils}
  *   An async stub to the server.
  */
 class ArtifactManager(
-    userContext: proto.UserContext,
+    clientConfig: SparkConnectClient.Configuration,
     sessionId: String,
     bstub: CustomSparkConnectBlockingStub,
     stub: CustomSparkConnectStub) {
@@ -114,7 +114,8 @@ class ArtifactManager(
     val artifactName = CACHE_PREFIX + "/" + hash
     val request = proto.ArtifactStatusesRequest
       .newBuilder()
-      .setUserContext(userContext)
+      .setUserContext(clientConfig.userContext)
+      .setClientType(clientConfig.userAgent)
       .setSessionId(sessionId)
       .addAllNames(Arrays.asList(artifactName))
       .build()
@@ -216,7 +217,8 @@ class ArtifactManager(
       stream: StreamObserver[proto.AddArtifactsRequest]): Unit = {
     val builder = proto.AddArtifactsRequest
       .newBuilder()
-      .setUserContext(userContext)
+      .setUserContext(clientConfig.userContext)
+      .setClientType(clientConfig.userAgent)
       .setSessionId(sessionId)
     artifacts.foreach { artifact =>
       val in = new CheckedInputStream(artifact.storage.stream, new CRC32)
@@ -271,7 +273,8 @@ class ArtifactManager(
       stream: StreamObserver[proto.AddArtifactsRequest]): Unit = {
     val builder = proto.AddArtifactsRequest
       .newBuilder()
-      .setUserContext(userContext)
+      .setUserContext(clientConfig.userContext)
+      .setClientType(clientConfig.userAgent)
       .setSessionId(sessionId)
 
     val in = new CheckedInputStream(artifact.storage.stream, new CRC32)
