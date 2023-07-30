@@ -575,13 +575,17 @@ def assertDataFrameEqual(
                 diff_rows_cnt += 1
                 diff_rows = True
 
+        if isinstance(actual, (DataFrame, ConnectDataFrame)):
+            if isinstance(actual, DataFrame):
+                actual_str = actual._jdf.showString(len(rows1), len(rows1), False)
+            else:
+                actual_str = actual._show_string(len(rows1), len(rows1), False)
+
         if isinstance(expected, (DataFrame, ConnectDataFrame)):
             if isinstance(expected, DataFrame):
-                actual_str = actual._jdf.showString(len(zipped), len(zipped), False)
-                expected_str = expected._jdf.showString(len(zipped), len(zipped), False)
+                expected_str = expected._jdf.showString(len(rows2), len(rows2), False)
             else:
-                actual_str = actual._show_string(len(zipped), len(zipped), False)
-                expected_str = expected._show_string(len(zipped), len(zipped), False)
+                expected_str = expected._show_string(len(rows2), len(rows2), False)
 
             generated_diff = _context_diff(
                 actual=actual_str.splitlines(), expected=expected_str.splitlines(), n=len(zipped)
