@@ -501,18 +501,6 @@ object StateStore extends Logging {
     }
   }
 
-  private def addPartitionForMaintenance(providerId: StateStoreProviderId): Unit = {
-    maintenancePartitions.add(providerId)
-  }
-
-  private def partitionIsQueuedForMaintenance(providerId: StateStoreProviderId): Boolean = {
-    maintenancePartitions.contains(providerId)
-  }
-
-  private def removePartitionFromMaintenanceSet(providerId: StateStoreProviderId): Unit = {
-    maintenancePartitions.remove(providerId)
-  }
-
   @GuardedBy("loadedProviders")
   private var maintenanceTask: MaintenanceTask = null
 
@@ -679,8 +667,8 @@ object StateStore extends Logging {
 
   private def processThisPartition(id: StateStoreProviderId): Boolean = {
     maintenanceThreadPoolLock.synchronized {
-      if (!partitionIsQueuedForMaintenance(id)) {
-        addPartitionForMaintenance(id)
+      if (!maintenancePartitions.contains(id)) {
+        maintenancePartitions.add(id)
         true
       } else {
         false
@@ -731,7 +719,7 @@ object StateStore extends Logging {
               logDebug(logMsg)
             }
             maintenanceThreadPoolLock.synchronized {
-              removePartitionFromMaintenanceSet(id)
+              maintenancePartitions.remove(id)
             }
           }
         })
