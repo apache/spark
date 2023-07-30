@@ -1529,7 +1529,7 @@ class PlanParserSuite extends AnalysisTest {
                     sameOrderExpressions = Seq.empty))
                 ))))))
         val sql3 = s"select * from my_tvf(arg1 => table(v1) " +
-          s"$partition by col1, col2 $order by col2 asc, col3 desc)"
+          s"$partition by (col1, col2) $order by (col2 asc, col3 desc))"
         assertEqual(
           sql3,
           Project(
@@ -1556,7 +1556,7 @@ class PlanParserSuite extends AnalysisTest {
                       sameOrderExpressions = Seq.empty))
                 ))))))
         val sql4 = s"select * from my_tvf(arg1 => table(select col1, col2, col3 from v2) " +
-          s"$partition by col1, col2 order by col2 asc, col3 desc)"
+          s"$partition by (col1, col2) order by (col2 asc, col3 desc))"
         assertEqual(
           sql4,
           Project(
@@ -1615,6 +1615,14 @@ class PlanParserSuite extends AnalysisTest {
           parameters = Map(
             "error" -> "'order'",
             "hint" -> ""))
+        val sql8 = s"select * from my_tvf(arg1 => table(select col1, col2, col3 from v2) " +
+          s"$partition by col1, col2 order by col2 asc, col3 desc)"
+        checkError(
+          exception = parseException(sql8),
+          errorClass = "PARSE_SYNTAX_ERROR",
+          parameters = Map(
+            "error" -> "'order'",
+            "hint" -> ": extra input 'order'"))
       }
     }
   }

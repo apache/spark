@@ -795,9 +795,13 @@ functionTableSubqueryArgument
     ;
 
 tableArgumentPartitioning
-    : (WITH SINGLE PARTITION) |
-      ((PARTITION | DISTRIBUTE) BY partition+=expression (COMMA partition+=expression)*)
-      ((ORDER | SORT) BY sortItem (COMMA sortItem)*)?
+    : ((WITH SINGLE PARTITION)
+        | ((PARTITION | DISTRIBUTE) BY
+            (((LEFT_PAREN partition+=expression (COMMA partition+=expression)* RIGHT_PAREN))
+            | partition+=expression)))
+      ((ORDER | SORT) BY
+        (((LEFT_PAREN sortItem (COMMA sortItem)* RIGHT_PAREN)
+        | sortItem)))?
     ;
 
 functionTableNamedArgumentExpression
