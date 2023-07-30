@@ -413,14 +413,6 @@ def assertDataFrameEqual(
 
         if isinstance(actual, ps.DataFrame) or isinstance(expected, ps.DataFrame):
             # handle pandas DataFrames
-            if not (isinstance(actual, ps.DataFrame) and isinstance(expected, ps.DataFrame)):
-                raise PySparkAssertionError(
-                    error_class="INVALID_PANDAS_ON_SPARK_COMPARISON",
-                    message_parameters={
-                        "actual_type": type(actual),
-                        "expected_type": type(expected),
-                    },
-                )
             # assert approximate equality for float data
             return assertPandasOnSparkEqual(
                 actual, expected, checkExact=False, checkRowOrder=checkRowOrder
@@ -446,14 +438,6 @@ def assertDataFrameEqual(
     except Exception:
         if isinstance(actual, ps.DataFrame) or isinstance(expected, ps.DataFrame):
             # handle pandas DataFrames
-            if not (isinstance(actual, ps.DataFrame) and isinstance(expected, ps.DataFrame)):
-                raise PySparkAssertionError(
-                    error_class="INVALID_PANDAS_ON_SPARK_COMPARISON",
-                    message_parameters={
-                        "actual_type": type(actual),
-                        "expected_type": type(expected),
-                    },
-                )
             # assert approximate equality for float data
             return assertPandasOnSparkEqual(
                 actual, expected, checkExact=False, checkRowOrder=checkRowOrder

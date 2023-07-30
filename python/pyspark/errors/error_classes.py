@@ -269,12 +269,6 @@ ERROR_CLASSES_JSON = """
       "NumPy array input should be of <dimensions> dimensions."
     ]
   },
-  "INVALID_PANDAS_ON_SPARK_COMPARISON" : {
-    "message" : [
-      "Expected two pandas-on-Spark DataFrames",
-      "but got actual: <actual_type> and expected: <expected_type>"
-    ]
-  },
   "INVALID_PANDAS_UDF" : {
     "message" : [
       "Invalid function: <detail>"
