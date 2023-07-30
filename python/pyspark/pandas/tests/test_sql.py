@@ -72,7 +72,9 @@ class SQLTestsMixin:
         import pandas as pd
 
         pdf = pd.DataFrame({"a": [1, 2, 3, 4]})
-        assertDataFrameEqual(ps.sql("SELECT {col} + 1 as a FROM {tbl}", col=pdf.a, tbl=pdf), pdf + 1)
+        assertDataFrameEqual(
+            ps.sql("SELECT {col} + 1 as a FROM {tbl}", col=pdf.a, tbl=pdf), pdf + 1
+        )
 
     def test_sql_with_python_objects(self):
         assertDataFrameEqual(
