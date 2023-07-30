@@ -34,6 +34,14 @@ private[client] class CustomSparkConnectBlockingStub(
     }
   }
 
+  def executePlanReattachable(request: ExecutePlanRequest)
+    : java.util.Iterator[ExecutePlanResponse] = {
+    GrpcExceptionConverter.convert {
+      GrpcExceptionConverter.convertIterator[ExecutePlanResponse](
+        new ExecutePlanResponseReattachableIterator(request, channel, retryPolicy))
+    }
+  }
+
   def analyzePlan(request: AnalyzePlanRequest): AnalyzePlanResponse = {
     GrpcExceptionConverter.convert {
       retryHandler.retry {

@@ -82,7 +82,11 @@ private[sql] class SparkConnectClient(
       .setClientType(userAgent)
       .addAllTags(tags.get.toSeq.asJava)
       .build()
-    bstub.executePlan(request)
+    if (configuration.useReattachableExecute) {
+      bstub.executePlanReattachable(request)
+    } else {
+      bstub.executePlan(request)
+    }
   }
 
   /**
@@ -545,6 +549,7 @@ object SparkConnectClient {
       metadata: Map[String, String] = Map.empty,
       userAgent: String = DEFAULT_USER_AGENT,
       retryPolicy: GrpcRetryHandler.RetryPolicy = GrpcRetryHandler.RetryPolicy(),
+      useReattachableExecute: Boolean = true,
       interceptors: List[ClientInterceptor] = List.empty) {
 
     def userContext: proto.UserContext = {
