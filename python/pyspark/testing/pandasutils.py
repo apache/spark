@@ -326,7 +326,7 @@ def _assert_pandas_almost_equal(
 
 def assertPandasOnSparkEqual(
     actual: Union[DataFrame, Series, Index],
-    expected: Union[DataFrame, pd.DataFrame, Series, Index],
+    expected: Union[DataFrame, pd.DataFrame, Series, pd.Series, Index, pd.Index],
     checkExact: bool = True,
     almost: bool = False,
     checkRowOrder: bool = False,
@@ -392,14 +392,16 @@ def assertPandasOnSparkEqual(
                 "actual_type": type(actual),
             },
         )
-    elif not isinstance(expected, (DataFrame, pd.DataFrame, Series, Index)):
+    elif not isinstance(expected, (DataFrame, pd.DataFrame, Series, pd.Series, Index, pd.Index)):
         raise PySparkAssertionError(
             error_class="INVALID_TYPE_DF_EQUALITY_ARG",
             message_parameters={
                 "expected_type": f"{DataFrame.__name__}, "
                 f"{pd.DataFrame.__name__}, "
                 f"{Series.__name__}, "
-                f"{Index.__name__}",
+                f"{pd.Series.__name__}, "
+                f"{Index.__name__}"
+                f"{pd.Index.__name__}, ",
                 "arg_name": "expected",
                 "actual_type": type(expected),
             },

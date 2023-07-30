@@ -50,6 +50,9 @@ private[sql] object SqlApiConf {
   // Shared keys.
   val ANSI_ENABLED_KEY: String = "spark.sql.ansi.enabled"
   val LEGACY_TIME_PARSER_POLICY_KEY: String = "spark.sql.legacy.timeParserPolicy"
+  val CASE_SENSITIVE_KEY: String = "spark.sql.caseSensitive"
+  val SESSION_LOCAL_TIMEZONE_KEY: String = "spark.sql.session.timeZone"
+  val LOCAL_RELATION_CACHE_THRESHOLD_KEY: String = "spark.sql.session.localRelationCacheThreshold"
 
   /**
    * Defines a getter that returns the [[SqlApiConf]] within scope.

@@ -115,6 +115,14 @@ object DeduplicateRelations extends Rule[LogicalPlan] {
         newProject => findAliases(newProject.projectList).map(_.exprId.id).toSeq,
         newProject => newProject.copy(newAliases(newProject.projectList)))
 
+    case a: Aggregate =>
+      deduplicateAndRenew[Aggregate](
+        existingRelations,
+        a,
+        newAggregate => findAliases(newAggregate.aggregateExpressions).map(_.exprId.id).toSeq,
+        newAggregate => newAggregate.copy(aggregateExpressions =
+          newAliases(newAggregate.aggregateExpressions)))
+
     case s: SerializeFromObject =>
       deduplicateAndRenew[SerializeFromObject](
         existingRelations,

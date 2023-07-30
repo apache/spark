@@ -121,4 +121,17 @@ object Connect {
       .version("3.5.0")
       .booleanConf
       .createWithDefault(false)
+
+  val CONNECT_UI_STATEMENT_LIMIT =
+    ConfigBuilder("spark.sql.connect.ui.retainedStatements")
+      .doc("The number of statements kept in the Spark Connect UI history.")
+      .version("3.5.0")
+      .intConf
+      .createWithDefault(200)
+
+  val CONNECT_UI_SESSION_LIMIT = ConfigBuilder("spark.sql.connect.ui.retainedSessions")
+    .doc("The number of client sessions kept in the Spark Connect UI history.")
+    .version("3.5.0")
+    .intConf
+    .createWithDefault(200)
 }
