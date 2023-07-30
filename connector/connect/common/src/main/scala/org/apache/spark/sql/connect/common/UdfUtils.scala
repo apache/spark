@@ -20,6 +20,7 @@ import scala.collection.JavaConverters._
 
 import org.apache.spark.api.java.function._
 import org.apache.spark.sql.Row
+import org.apache.spark.sql.api.java._
 import org.apache.spark.sql.streaming.GroupState
 
 /**
@@ -126,4 +127,30 @@ private[sql] object UdfUtils extends Serializable {
   def identical[T](): T => T = t => t
 
   def noOp[V, K](): V => K = _ => null.asInstanceOf[K]
+
+  def wrap(f: UDF0[_]): AnyRef = () => f.asInstanceOf[UDF0[Any]].call()
+  def wrap(f: UDF1[_, _]): AnyRef = f.asInstanceOf[UDF1[Any, Any]].call(_: Any)
+  def wrap(f: UDF2[_, _, _]): AnyRef = f.asInstanceOf[UDF2[Any, Any, Any]].call(_: Any, _: Any)
+  def wrap(f: UDF3[_, _, _, _]): AnyRef =
+    f.asInstanceOf[UDF3[Any, Any, Any, Any]].call(_: Any, _: Any, _: Any)
+  def wrap(f: UDF4[_, _, _, _, _]): AnyRef =
+    f.asInstanceOf[UDF4[Any, Any, Any, Any, Any]].call(_: Any, _: Any, _: Any, _: Any)
+  def wrap(f: UDF5[_, _, _, _, _, _]): AnyRef =
+    f.asInstanceOf[UDF5[Any, Any, Any, Any, Any, _]].call(_: Any, _: Any, _: Any, _: Any, _: Any)
+  def wrap(f: UDF6[_, _, _, _, _, _, _]): AnyRef = f
+    .asInstanceOf[UDF6[Any, Any, Any, Any, Any, Any, Any]]
+    .call(_: Any, _: Any, _: Any, _: Any, _: Any, _: Any)
+  def wrap(f: UDF7[_, _, _, _, _, _, _, _]): AnyRef = f
+    .asInstanceOf[UDF7[Any, Any, Any, Any, Any, Any, Any, Any]]
+    .call(_: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any)
+  def wrap(f: UDF8[_, _, _, _, _, _, _, _, _]): AnyRef = f
+    .asInstanceOf[UDF8[Any, Any, Any, Any, Any, Any, Any, Any, Any]]
+    .call(_: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any)
+  def wrap(f: UDF9[_, _, _, _, _, _, _, _, _, _]): AnyRef = f
+    .asInstanceOf[UDF9[Any, Any, Any, Any, Any, Any, Any, Any, Any, Any]]
+    .call(_: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any)
+  def wrap(f: UDF10[_, _, _, _, _, _, _, _, _, _, _]): AnyRef = f
+    .asInstanceOf[UDF10[Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any]]
+    .call(_: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any)
+
 }
