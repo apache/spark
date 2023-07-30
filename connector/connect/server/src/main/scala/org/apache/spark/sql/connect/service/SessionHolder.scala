@@ -60,7 +60,7 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
     val oldExecute = executions.putIfAbsent(executeHolder.operationId, executeHolder)
     if (oldExecute != null) {
       throw new SparkSQLException(
-        errorClass = "INVALID_HANDLE.ALREADY_EXISTS",
+        errorClass = "INVALID_HANDLE.OPERATION_ALREADY_EXISTS",
         messageParameters = Map("handle" -> executeHolder.operationId))
     }
     executeHolder

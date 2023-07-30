@@ -19,32 +19,36 @@ package org.apache.spark.sql.connect.service
 
 import io.grpc.stub.StreamObserver
 
+import org.apache.spark.SparkSQLException
 import org.apache.spark.connect.proto
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.connect.execution.ExecuteGrpcResponseSender
 
-class SparkConnectExecutePlanHandler(responseObserver: StreamObserver[proto.ExecutePlanResponse])
+class SparkConnectReattachExecuteHandler(
+    responseObserver: StreamObserver[proto.ExecutePlanResponse])
     extends Logging {
 
-  def handle(v: proto.ExecutePlanRequest): Unit = {
+  def handle(v: proto.ReattachExecuteRequest): Unit = {
     val sessionHolder = SparkConnectService
-      .getOrCreateIsolatedSession(v.getUserContext.getUserId, v.getSessionId)
-    val executeHolder = sessionHolder.createExecuteHolder(v)
+      .getIsolatedSession(v.getUserContext.getUserId, v.getSessionId)
+    val executeHolder = sessionHolder.executeHolder(v.getOperationId).getOrElse {
+      throw new SparkSQLException(
+        errorClass = "INVALID_HANDLE.OPERATION_NOT_FOUND",
+        messageParameters = Map("handle" -> v.getOperationId))
+    }
 
     try {
-      executeHolder.eventsManager.postStarted()
-      executeHolder.start()
+      val lastIndex = if (v.hasLastResponseId) {
+        executeHolder.responseObserver.getIndexById(v.getLastResponseId)
+      } else {
+        0
+      }
       val responseSender =
         new ExecuteGrpcResponseSender[proto.ExecutePlanResponse](executeHolder, responseObserver)
-      executeHolder.attachAndRunGrpcResponseSender(responseSender, 0)
+      executeHolder.attachAndRunGrpcResponseSender(responseSender, lastIndex)
     } finally {
-      // Non reattachable executions release here immediately.
-      // Reattachable executions close release with ReleaseExecute RPC.
-      if (!executeHolder.reattachable) {
-        executeHolder.join()
-        executeHolder.eventsManager.postClosed()
-        sessionHolder.removeExecuteHolder(executeHolder.operationId)
-      }
+      // Reattachable executions do not free the execution here, but client needs to call
+      // ReleaseExecute RPC.
       // TODO We mark in the ExecuteHolder that RPC detached.
     }
   }

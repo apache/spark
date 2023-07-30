@@ -1309,9 +1309,14 @@
           "The cursor has been disconnected by the server."
         ]
       },
-      "POSITION" : {
+      "POSITION_NOT_FOUND" : {
         "message" : [
-          "The requested cursor position is not available."
+          "The cursor position id <responseId> is not found."
+        ]
+      },
+      "POSITION_NOT_AVAILABLE" : {
+        "message" : [
+          "The cursor position id <responseId> is no longer available at index <index>."
         ]
       }
     },
@@ -1465,14 +1470,29 @@
       "The handle <handle> is invalid."
     ],
     "subClass" : {
-      "ALREADY_EXISTS" : {
+      "SESSION_ALREADY_EXISTS" : {
         "message" : [
-          "Handle already exists."
+          "Session already exists."
+        ]
+      },
+      "OPERATION_ALREADY_EXISTS" : {
+        "message" : [
+          "Operation already exists."
+        ]
+      },
+      "SESSION_NOT_FOUND" : {
+        "message" : [
+          "Session not found."
+        ]
+      },
+      "OPERATION_NOT_FOUND" : {
+        "message" : [
+          "Operation not found."
         ]
       },
       "FORMAT" : {
         "message" : [
-          "Handle has invalid format. Handle must an UUID string of the format '00112233-4455-6677-8899-aabbccddeeff'"
+          "Handle must be an UUID string of the format '00112233-4455-6677-8899-aabbccddeeff'"
         ]
       }
     },

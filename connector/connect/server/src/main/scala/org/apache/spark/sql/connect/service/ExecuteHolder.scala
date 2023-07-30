@@ -122,7 +122,7 @@ private[connect] class ExecuteHolder(
   def attachAndRunGrpcResponseSender(
       responseSender: ExecuteGrpcResponseSender[proto.ExecutePlanResponse],
       lastConsumedStreamIndex: Long): Unit = {
-    responseSender.run(responseObserver, lastConsumedStreamIndex)
+    responseSender.run(lastConsumedStreamIndex)
   }
 
   /**

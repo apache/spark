@@ -30,14 +30,17 @@ import org.apache.spark.sql.connect.service.ExecuteHolder
  * gets notified by ExecuteResponseObserver about available responses. It notifies the
  * ExecuteResponseObserver back about cached responses that can be removed after being sent out.
  * @param executeHolder
- *  the execution of this sender
- * @param responseObserver
+ *   The execution this sender attaches to.
+ * @param grpcObserver
  *   the GRPC request StreamObserver
  */
 private[connect] class ExecuteGrpcResponseSender[T <: MessageLite](
-  val executeHolder: ExecuteHolder,
-  grpcObserver: StreamObserver[T])
+    val executeHolder: ExecuteHolder,
+    grpcObserver: StreamObserver[T])
     extends Logging {
+
+  private var executionObserver = executeHolder.responseObserver
+    .asInstanceOf[ExecuteResponseObserver[T]]
 
   private var detached = false
 
@@ -55,8 +58,8 @@ private[connect] class ExecuteGrpcResponseSender[T <: MessageLite](
   /**
    * Attach to the executionObserver, consume responses from it, and send them to grpcObserver.
    *
-   * In non reattachable execution, it will keep sending responses until the query finishes.
-   * In reattachable execution, it can finish earlier after reaching a time deadline or size limit.
+   * In non reattachable execution, it will keep sending responses until the query finishes. In
+   * reattachable execution, it can finish earlier after reaching a time deadline or size limit.
    *
    * After this function finishes, the grpcObserver is closed with either onCompleted or onError.
    *
@@ -64,9 +67,7 @@ private[connect] class ExecuteGrpcResponseSender[T <: MessageLite](
    *   the last index that was already consumed and sent. This sender will start from index after
    *   that. 0 means start from beginning (since first response has index 1)
    */
-  def run(
-      executionObserver: ExecuteResponseObserver[T],
-      lastConsumedStreamIndex: Long): Unit = {
+  def run(lastConsumedStreamIndex: Long): Unit = {
     // register to be notified about available responses.
     executionObserver.attachConsumer(this)
 
@@ -77,7 +78,8 @@ private[connect] class ExecuteGrpcResponseSender[T <: MessageLite](
     val deadlineTimeMillis = if (!executeHolder.reattachable) {
       Long.MaxValue
     } else {
-      val confSize = SparkEnv.get.conf.get(CONNECT_EXECUTE_REATTACHABLE_MAX_STREAM_DURATION).toLong
+      val confSize =
+        SparkEnv.get.conf.get(CONNECT_EXECUTE_REATTACHABLE_MAX_STREAM_DURATION).toLong
       if (confSize > 0) System.currentTimeMillis() + 1000 * confSize else Long.MaxValue
     }
 
@@ -110,8 +112,7 @@ private[connect] class ExecuteGrpcResponseSender[T <: MessageLite](
       logDebug(s"Trying to get next response with index=$nextIndex.")
       executionObserver.synchronized {
         logDebug(s"Acquired lock.")
-        while (
-          !detachedFromObserver &&
+        while (!detachedFromObserver &&
           !gotResponse &&
           !streamFinished &&
           !deadlineLimitReached) {

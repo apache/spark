@@ -326,6 +326,10 @@ message ExecutePlanResponse {
   // It is an UUID string of the format `00112233-4455-6677-8899-aabbccddeeff`
   string operation_id = 12;
 
+  // Identified the response in the stream.
+  // The id is an UUID string of the format `00112233-4455-6677-8899-aabbccddeeff`
+  string response_id = 13;
+
   // Union type for the different response messages.
   oneof response_type {
     ArrowBatch arrow_batch = 2;
@@ -346,7 +350,7 @@ message ExecutePlanResponse {
     StreamingQueryManagerCommandResult streaming_query_manager_command_result = 11;
 
     // Response type informing if the stream is complete in reattachable execution.
-    ResponseComplete response_complete = 13;
+    ResponseComplete response_complete = 14;
 
     // Support arbitrary result objects.
     google.protobuf.Any extension = 999;

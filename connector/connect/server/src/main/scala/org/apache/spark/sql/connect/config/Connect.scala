@@ -87,9 +87,10 @@ object Connect {
   val CONNECT_EXECUTE_REATTACHABLE_MAX_STREAM_SIZE =
     ConfigBuilder("spark.connect.execute.reattachable.maxStreamDuration")
       .internal()
-      .doc("For reattachable execution, after total responses size exceeds this value, the " +
-        "response stream will be automatically completed and client needs to send a new " +
-        "ReattachExecute RPC to continue. Set to 0 for unlimited.")
+      .doc(
+        "For reattachable execution, after total responses size exceeds this value, the " +
+          "response stream will be automatically completed and client needs to send a new " +
+          "ReattachExecute RPC to continue. Set to 0 for unlimited.")
       .version("3.5.0")
       .bytesConf(ByteUnit.BYTE)
       .createWithDefaultString("1g")

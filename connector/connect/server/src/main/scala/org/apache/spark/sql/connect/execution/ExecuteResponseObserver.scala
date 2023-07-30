@@ -17,11 +17,14 @@
 
 package org.apache.spark.sql.connect.execution
 
+import java.util.UUID
+
 import scala.collection.mutable
 
 import com.google.protobuf.MessageLite
 import io.grpc.stub.StreamObserver
 
+import org.apache.spark.SparkSQLException
 import org.apache.spark.connect.proto
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.connect.service.ExecuteHolder
@@ -54,6 +57,10 @@ private[connect] class ExecuteResponseObserver[T <: MessageLite](val executeHold
   private val responses: mutable.Map[Long, CachedStreamResponse[T]] =
     new mutable.HashMap[Long, CachedStreamResponse[T]]()
 
+  private val responseIndexToId: mutable.Map[Long, String] = new mutable.HashMap[Long, String]()
+
+  private val responseIdToIndex: mutable.Map[String, Long] = new mutable.HashMap[String, Long]()
+
   /** Cached error of the execution, if an error was thrown. */
   private var error: Option[Throwable] = None
 
@@ -85,6 +92,8 @@ private[connect] class ExecuteResponseObserver[T <: MessageLite](val executeHold
     val processedResponse = setCommonResponseFields(r)
     responses +=
       ((lastProducedIndex, CachedStreamResponse[T](processedResponse, lastProducedIndex)))
+    responseIndexToId += ((lastProducedIndex, getResponseId(r)))
+    responseIdToIndex += ((getResponseId(r), lastProducedIndex))
     logDebug(s"Saved response with index=$lastProducedIndex")
     notifyAll()
   }
@@ -128,6 +137,17 @@ private[connect] class ExecuteResponseObserver[T <: MessageLite](val executeHold
     if (ret.isDefined) {
       if (index > highestConsumedIndex) highestConsumedIndex = index
       removeCachedResponses()
+    } else if (index <= highestConsumedIndex) {
+      // If index is <= highestConsumedIndex and not available, it was already removed from cache.
+      // This may happen if ReattachExecute is too late and the cached response was evicted.
+      val responseId = responseIndexToId.getOrElse(index, "<UNKNOWN>")
+      throw new SparkSQLException(
+        errorClass = "INVALID_CURSOR.POSITION_NOT_AVAILABLE",
+        messageParameters = Map("index" -> index.toString, "responseId" -> responseId))
+    } else if (getLastIndex.forall(index > _)) {
+      // If index > lastIndex, it's out of bounds. This is an internal error.
+      throw new IllegalStateException(
+        s"Cursor position $index is beyond last index $getLastIndex.")
     }
     ret
   }
@@ -145,6 +165,15 @@ private[connect] class ExecuteResponseObserver[T <: MessageLite](val executeHold
   /** Returns if the stream is finished. */
   def completed(): Boolean = synchronized {
     finalProducedIndex.isDefined
+  }
+
+  /** Get the index in the stream for ginen response id. */
+  def getIndexById(responseId: String): Long = {
+    responseIdToIndex.getOrElse(
+      responseId,
+      throw new SparkSQLException(
+        errorClass = "INVALID_CURSOR.POSITION_NOT_FOUND",
+        messageParameters = Map("responseId" -> responseId)))
   }
 
   /** Consumer (ExecuteResponseGRPCSender) waits on the monitor of ExecuteResponseObserver. */
@@ -176,8 +205,19 @@ private[connect] class ExecuteResponseObserver[T <: MessageLite](val executeHold
           .toBuilder()
           .setSessionId(executeHolder.sessionHolder.sessionId)
           .setOperationId(executeHolder.operationId)
+          .setResponseId(UUID.randomUUID.toString)
           .build()
           .asInstanceOf[T]
+    }
+  }
+
+  /**
+   * Get the response id from the response proto message.
+   */
+  private def getResponseId(response: T): String = {
+    response match {
+      case executePlanResponse: proto.ExecutePlanResponse =>
+        executePlanResponse.getResponseId
     }
   }
 }
