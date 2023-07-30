@@ -154,7 +154,7 @@ class SparkConnectService(debug: Boolean) extends AsyncService with BindableServ
   }
 
   /**
-   * Reattach and continue an ExecutePlan execution.
+   * This is the entry point for calls interrupting running executions.
    */
   override def interrupt(
       request: proto.InterruptRequest,
@@ -171,13 +171,29 @@ class SparkConnectService(debug: Boolean) extends AsyncService with BindableServ
 
 
   /**
-   * This is the entry point for calls interrupting running executions.
+   * Reattach and continue an ExecutePlan reattachable execution.
    */
   override def reattachExecute(
     request: proto.ReattachExecuteRequest,
     responseObserver: StreamObserver[proto.ExecutePlanResponse]): Unit = {
     try {
       new SparkConnectReattachExecuteHandler(responseObserver).handle(request)
+    } catch
+      ErrorUtils.handleError(
+        "reattachExecute",
+        observer = responseObserver,
+        userId = request.getUserContext.getUserId,
+        sessionId = request.getSessionId)
+  }
+
+  /**
+   * Release reattachable execution - either part of buffered response, or finish and release all.
+   */
+  override def releaseExecute(
+    request: proto.ReleaseExecuteRequest,
+    responseObserver: StreamObserver[proto.ReleaseExecuteResponse]): Unit = {
+    try {
+      new SparkConnectReleaseExecuteHandler(responseObserver).handle(request)
     } catch
       ErrorUtils.handleError(
         "reattachExecute",

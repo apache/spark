@@ -133,8 +133,8 @@ private[connect] object ErrorUtils extends Logging {
     }
     partial
       .andThen { case (original, wrapped) =>
-        // If ExecuteEventsManager, this is an execution error that needs to be posted to
-        //
+        // If ExecuteEventsManager is present, this this is an execution error that needs to be
+        // posted to it.
         events.foreach { executeEventsManager =>
           logError(s"Error during: $opType. UserId: $userId. SessionId: $sessionId.", original)
           if (isInterrupted) {

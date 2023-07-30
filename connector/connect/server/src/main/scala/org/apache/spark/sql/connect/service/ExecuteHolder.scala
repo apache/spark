@@ -133,13 +133,13 @@ private[connect] class ExecuteHolder(
   def attachAndRunGrpcResponseSender(
       responseSender: ExecuteGrpcResponseSender[proto.ExecutePlanResponse],
       lastConsumedResponseId: String): Unit = {
-    val lastConsumedIndex = responseObserver.getIndexById(lastConsumedResponseId)
+    val lastConsumedIndex = responseObserver.getResponseIndexById(lastConsumedResponseId)
     responseSender.run(lastConsumedIndex)
   }
 
   /**
-   * Removed cached responses from the response observer until and including response with
-   * responseId.
+   * Remove cached responses from the response observer until and including the response with
+   * given responseId.
    */
   def releaseUntilResponseId(responseId: String): Unit = {
     responseObserver.removeResponsesUntilId(responseId)

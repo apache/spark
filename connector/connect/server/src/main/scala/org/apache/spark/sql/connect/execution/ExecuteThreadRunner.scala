@@ -156,6 +156,12 @@ private[connect] class ExecuteThreadRunner(executeHolder: ExecuteHolder) extends
           throw new UnsupportedOperationException(
             s"${executeHolder.request.getPlan.getOpTypeCase} not supported.")
       }
+
+      if (executeHolder.reattachable) {
+        // Reattachable execution sends a ResponseComplete at the end of the stream
+        // to signal that there isn't more coming.
+        executeHolder.responseObserver.onNext(createResponseComplete())
+      }
     }
   }
 
@@ -188,6 +194,14 @@ private[connect] class ExecuteThreadRunner(executeHolder: ExecuteHolder) extends
         logWarning("Fail to extract debug information", e)
         "UNKNOWN"
     }
+  }
+
+  private def createResponseComplete(): proto.ExecutePlanResponse = {
+    // Send the Spark data type
+    proto.ExecutePlanResponse
+      .newBuilder()
+      .setResponseComplete(proto.ExecutePlanResponse.ResponseComplete.newBuilder().build())
+      .build()
   }
 
   private class ExecutionThread extends Thread {

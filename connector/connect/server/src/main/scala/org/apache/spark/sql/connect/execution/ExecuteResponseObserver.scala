@@ -160,10 +160,10 @@ private[connect] class ExecuteResponseObserver[T <: MessageLite](val executeHold
       throw new SparkSQLException(
         errorClass = "INVALID_CURSOR.POSITION_NOT_AVAILABLE",
         messageParameters = Map("index" -> index.toString, "responseId" -> responseId))
-    } else if (getLastIndex.exists(index > _)) {
+    } else if (getLastResponseIndex.exists(index > _)) {
       // If index > lastIndex, it's out of bounds. This is an internal error.
       throw new IllegalStateException(
-        s"Cursor position $index is beyond last index $getLastIndex.")
+        s"Cursor position $index is beyond last index $getLastResponseIndex.")
     }
     ret
   }
@@ -174,17 +174,12 @@ private[connect] class ExecuteResponseObserver[T <: MessageLite](val executeHold
   }
 
   /** If the stream is finished, the index of the last response, otherwise None. */
-  def getLastIndex(): Option[Long] = synchronized {
+  def getLastResponseIndex(): Option[Long] = synchronized {
     finalProducedIndex
   }
 
-  /** Returns if the stream is finished. */
-  def completed(): Boolean = synchronized {
-    finalProducedIndex.isDefined
-  }
-
-  /** Get the index in the stream for ginen response id. */
-  def getIndexById(responseId: String): Long = {
+  /** Get the index in the stream for given response id. */
+  def getResponseIndexById(responseId: String): Long = {
     responseIdToIndex.getOrElse(
       responseId,
       throw new SparkSQLException(
@@ -194,8 +189,13 @@ private[connect] class ExecuteResponseObserver[T <: MessageLite](val executeHold
 
   /** Remove cached responses up to and including response with given id. */
   def removeResponsesUntilId(responseId: String): Unit = {
-    val index = getIndexById(responseId)
+    val index = getResponseIndexById(responseId)
     removeResponsesUntilIndex(index)
+  }
+
+  /** Returns if the stream is finished. */
+  def completed(): Boolean = synchronized {
+    finalProducedIndex.isDefined
   }
 
   /** Consumer (ExecuteResponseGRPCSender) waits on the monitor of ExecuteResponseObserver. */

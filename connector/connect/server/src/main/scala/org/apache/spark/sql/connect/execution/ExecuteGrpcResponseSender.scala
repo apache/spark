@@ -107,7 +107,7 @@ private[connect] class ExecuteGrpcResponseSender[T <: MessageLite](
       // 2. has a response to send
       def gotResponse = response.nonEmpty
       // 3. sent everything from the stream and the stream is finished
-      def streamFinished = executionObserver.getLastIndex().exists(nextIndex > _)
+      def streamFinished = executionObserver.getLastResponseIndex().exists(nextIndex > _)
       // 4. time deadline or size limit reached
       def deadlineLimitReached =
         sentResponsesSize > maximumResponseSize || deadlineTimeMillis < System.currentTimeMillis()
@@ -135,9 +135,9 @@ private[connect] class ExecuteGrpcResponseSender[T <: MessageLite](
             logDebug(s"Reacquired lock after waiting.")
           }
         }
-        logDebug(
-          s"Exiting loop: detached=$detached, response=$response, " +
-            s"lastIndex=${executionObserver.getLastIndex()}, deadline=${deadlineLimitReached}")
+        logDebug(s"Exiting loop: detached=$detached, response=$response, " +
+          s"lastIndex=${executionObserver.getLastResponseIndex()}, " +
+          s"deadline=${deadlineLimitReached}")
       }
 
       // Process the outcome of the inner loop.
