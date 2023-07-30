@@ -24,6 +24,7 @@ import org.apache.spark.sql.catalyst.optimizer.RewritePredicateSubquery
 import org.apache.spark.sql.catalyst.planning.GroupBasedRowLevelOperation
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.catalyst.trees.TreePattern.DATASOURCEV2_RELATION
 import org.apache.spark.sql.connector.read.SupportsRuntimeV2Filtering
 import org.apache.spark.sql.connector.write.RowLevelOperation.Command
 import org.apache.spark.sql.connector.write.RowLevelOperation.Command.{DELETE, MERGE, UPDATE}
@@ -104,7 +105,7 @@ class RowLevelOperationRuntimeGroupFiltering(optimizeSubqueries: Rule[LogicalPla
     }
 
     // clone the relation and assign new expr IDs to avoid conflicts
-    matchingRowsPlan transformUpWithNewOutput {
+    matchingRowsPlan.transformUpWithNewOutputAndPruning(_.containsPattern(DATASOURCEV2_RELATION)) {
       case r: DataSourceV2Relation if r eq relation =>
         val newRelation = r.newInstance()
         newRelation -> r.output.zip(newRelation.output)

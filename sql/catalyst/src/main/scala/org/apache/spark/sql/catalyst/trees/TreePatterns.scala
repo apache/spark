@@ -105,6 +105,7 @@ object TreePattern extends Enumeration  {
   val AS_OF_JOIN: Value = Value
   val COMMAND: Value = Value
   val CTE: Value = Value
+  val DATASOURCEV2_RELATION: Value = Value
   val DISTINCT_LIKE: Value = Value
   val EVAL_PYTHON_UDF: Value = Value
   val EVAL_PYTHON_UDTF: Value = Value

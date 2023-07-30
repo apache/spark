@@ -26,6 +26,7 @@ import org.apache.spark.sql.catalyst.expressions.{Alias, AttributeReference, Exp
 import org.apache.spark.sql.catalyst.plans.logical.{Filter, LocalRelation, LogicalPlan, Project, Union}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, Origin}
+import org.apache.spark.sql.catalyst.trees.TreePattern.PROJECT
 import org.apache.spark.sql.types.IntegerType
 
 class QueryPlanSuite extends SparkFunSuite {
@@ -88,7 +89,8 @@ class QueryPlanSuite extends SparkFunSuite {
 
   test("SPARK-33035: consecutive attribute updates in parent plan nodes") {
     val testRule = new Rule[LogicalPlan] {
-      override def apply(plan: LogicalPlan): LogicalPlan = plan.transformUpWithNewOutput {
+      override def apply(plan: LogicalPlan): LogicalPlan = plan.transformUpWithNewOutputAndPruning(
+        _.containsPattern(PROJECT)) {
         case p @ Project(projList, _) =>
           // Assigns new `ExprId`s for output references
           val newPlan = p.copy(projectList = projList.map { ne => Alias(ne, ne.name)() })
@@ -133,7 +135,8 @@ class QueryPlanSuite extends SparkFunSuite {
   test("SPARK-38347: Nullability propagation in transformUpWithNewOutput") {
     // A test rule that replaces Attributes in Project's project list.
     val testRule = new Rule[LogicalPlan] {
-      override def apply(plan: LogicalPlan): LogicalPlan = plan.transformUpWithNewOutput {
+      override def apply(plan: LogicalPlan): LogicalPlan = plan.transformUpWithNewOutputAndPruning(
+        _.containsPattern(PROJECT)) {
         case p @ Project(projectList, _) =>
           val newProjectList = projectList.map {
             case a: AttributeReference => a.newInstance()

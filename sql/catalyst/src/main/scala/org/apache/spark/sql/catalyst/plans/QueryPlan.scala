@@ -283,17 +283,39 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
    * A variant of `transformUp`, which takes care of the case that the rule replaces a plan node
    * with a new one that has different output expr IDs, by updating the attribute references in
    * the parent nodes accordingly.
+   */
+  def transformUpWithNewOutput(
+      rule: PartialFunction[PlanType, (PlanType, Seq[(Attribute, Attribute)])],
+      skipCond: PlanType => Boolean = _ => false,
+      canGetOutput: PlanType => Boolean = _ => true): PlanType = {
+    transformUpWithNewOutputAndPruning(AlwaysProcess.fn, UnknownRuleId)(rule, skipCond,
+      canGetOutput)
+  }
+
+  /**
+   * A variant of `transformUp`, which takes care of the case that the rule replaces a plan node
+   * with a new one that has different output expr IDs, by updating the attribute references in
+   * the parent nodes accordingly.
    *
-   * @param rule the function to transform plan nodes, and return new nodes with attributes mapping
-   *             from old attributes to new attributes. The attribute mapping will be used to
-   *             rewrite attribute references in the parent nodes.
-   * @param skipCond a boolean condition to indicate if we can skip transforming a plan node to save
-   *                 time.
+   * @param rule         the function to transform plan nodes, and return new nodes with attributes
+   *                     mapping from old attributes to new attributes. The attribute mapping will
+   *                     be used to rewrite attribute references in the parent nodes.
+   * @param skipCond     a boolean condition to indicate if we can skip transforming a plan node to
+   *                     save time.
    * @param canGetOutput a boolean condition to indicate if we can get the output of a plan node
    *                     to prune the attributes mapping to be propagated. The default value is true
    *                     as only unresolved logical plan can't get output.
+   * @param cond         a Lambda expression to prune tree traversals. If `cond.apply` returns
+   *                     false on an expression T, skips processing T and its subtree; otherwise,
+   *                     processes T and its subtree recursively.
+   * @param ruleId       is a unique Id for `rule` to prune unnecessary tree traversals. When it is
+   *                     UnknownRuleId, no pruning happens. Otherwise, if `rule` (with id `ruleId`)
+   *                     has been marked as in effective on an expression T, skips processing T and
+   *                     its subtree. Do not pass it if the rule is not purely functional and reads
+   *                     a varying initial state for different invocations.
    */
-  def transformUpWithNewOutput(
+  def transformUpWithNewOutputAndPruning(cond: TreePatternBits => Boolean,
+      ruleId: RuleId = UnknownRuleId)(
       rule: PartialFunction[PlanType, (PlanType, Seq[(Attribute, Attribute)])],
       skipCond: PlanType => Boolean = _ => false,
       canGetOutput: PlanType => Boolean = _ => true): PlanType = {
@@ -306,6 +328,9 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
           val (newChild, childAttrMapping) = rewrite(child)
           attrMapping ++= childAttrMapping
           newChild
+        }
+        if (!cond.apply(this) || isRuleIneffective(ruleId)) {
+          return plan -> attrMapping
         }
 
         plan match {
@@ -361,7 +386,14 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
         } else {
           transferAttrMapping ++ newOtherAttrMapping
         }
-        planAfterRule -> resultAttrMapping.toSeq
+
+        // Check if unchanged and then possibly return old copy to avoid gc churn.
+        if (plan eq planAfterRule) {
+          plan.markRuleAsIneffective(ruleId)
+          plan -> resultAttrMapping.toSeq
+        } else {
+          planAfterRule -> resultAttrMapping.toSeq
+        }
       }
     }
     rewrite(this)._1

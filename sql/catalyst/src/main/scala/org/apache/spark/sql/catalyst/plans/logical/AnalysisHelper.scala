@@ -210,6 +210,16 @@ trait AnalysisHelper extends QueryPlan[LogicalPlan] { self: LogicalPlan =>
     }
   }
 
+  override def transformUpWithNewOutputAndPruning(cond: TreePatternBits => Boolean,
+      ruleId: RuleId = UnknownRuleId)(
+      rule: PartialFunction[LogicalPlan, (LogicalPlan, Seq[(Attribute, Attribute)])],
+      skipCond: LogicalPlan => Boolean = _ => false,
+      canGetOutput: LogicalPlan => Boolean = _ => true): LogicalPlan = {
+    AnalysisHelper.allowInvokingTransformsInAnalyzer {
+      super.transformUpWithNewOutputAndPruning(cond, ruleId)(rule, skipCond, canGetOutput)
+    }
+  }
+
   override def updateOuterReferencesInSubquery(plan: LogicalPlan, attrMap: AttributeMap[Attribute])
     : LogicalPlan = {
     AnalysisHelper.allowInvokingTransformsInAnalyzer {

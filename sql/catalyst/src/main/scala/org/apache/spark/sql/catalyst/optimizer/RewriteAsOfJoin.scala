@@ -22,6 +22,7 @@ import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
+import org.apache.spark.sql.catalyst.trees.TreePattern.AS_OF_JOIN
 
 /**
  * Replaces logical [[AsOfJoin]] operator using a combination of Join and Aggregate operator.
@@ -48,7 +49,8 @@ import org.apache.spark.sql.catalyst.rules._
  * }}}
  */
 object RewriteAsOfJoin extends Rule[LogicalPlan] {
-  def apply(plan: LogicalPlan): LogicalPlan = plan.transformUpWithNewOutput {
+  def apply(plan: LogicalPlan): LogicalPlan = plan.transformUpWithNewOutputAndPruning(
+    _.containsPattern(AS_OF_JOIN)) {
     case j @ AsOfJoin(left, right, asOfCondition, condition, joinType, orderExpression, _) =>
       val conditionWithOuterReference =
         condition.map(And(_, asOfCondition)).getOrElse(asOfCondition).transformUp {
