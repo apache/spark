@@ -24,9 +24,10 @@ import scala.collection.mutable
 import com.google.protobuf.MessageLite
 import io.grpc.stub.StreamObserver
 
-import org.apache.spark.SparkSQLException
+import org.apache.spark.{SparkEnv, SparkSQLException}
 import org.apache.spark.connect.proto
 import org.apache.spark.internal.Logging
+import org.apache.spark.sql.connect.config.Connect.CONNECT_EXECUTE_REATTACHABLE_SENDER_MAX_STREAM_SIZE
 import org.apache.spark.sql.connect.service.ExecuteHolder
 
 /**
@@ -84,6 +85,16 @@ private[connect] class ExecuteResponseObserver[T <: MessageLite](val executeHold
    */
   private var responseSender: Option[ExecuteGrpcResponseSender[T]] = None
 
+  /**
+   * Total size of response to be held buffered after giving out with getResponse. 0 for none, any
+   * value greater than 0 will buffer the response from getResponse.
+   */
+  private val retryBufferSize = if (executeHolder.reattachable) {
+    SparkEnv.get.conf.get(CONNECT_EXECUTE_REATTACHABLE_SENDER_MAX_STREAM_SIZE).toLong
+  } else {
+    0
+  }
+
   def onNext(r: T): Unit = synchronized {
     if (finalProducedIndex.nonEmpty) {
       throw new IllegalStateException("Stream onNext can't be called after stream completed")
@@ -127,8 +138,12 @@ private[connect] class ExecuteResponseObserver[T <: MessageLite](val executeHold
     notifyAll() // consumer
   }
 
-  /** Get response with a given index in the stream, if set. */
-  def getResponse(index: Long): Option[CachedStreamResponse[T]] = synchronized {
+  /**
+   * Get response with a given index in the stream, if set. Note: Upon returning the response,
+   * this response observer assumes that the response is consumed, and the response and previous
+   * response can be uncached, keeping retryBufferSize of responses for the case of retries.
+   */
+  def consumeResponse(index: Long): Option[CachedStreamResponse[T]] = synchronized {
     // we index stream responses from 1, getting a lower index would be invalid.
     assert(index >= 1)
     // it would be invalid if consumer would skip a response
@@ -136,7 +151,8 @@ private[connect] class ExecuteResponseObserver[T <: MessageLite](val executeHold
     val ret = responses.get(index)
     if (ret.isDefined) {
       if (index > highestConsumedIndex) highestConsumedIndex = index
-      removeCachedResponses()
+      // When the response is consumed, figure what previous responses can be uncached.
+      removeCachedResponses(index)
     } else if (index <= highestConsumedIndex) {
       // If index is <= highestConsumedIndex and not available, it was already removed from cache.
       // This may happen if ReattachExecute is too late and the cached response was evicted.
@@ -144,7 +160,7 @@ private[connect] class ExecuteResponseObserver[T <: MessageLite](val executeHold
       throw new SparkSQLException(
         errorClass = "INVALID_CURSOR.POSITION_NOT_AVAILABLE",
         messageParameters = Map("index" -> index.toString, "responseId" -> responseId))
-    } else if (getLastIndex.forall(index > _)) {
+    } else if (getLastIndex.exists(index > _)) {
       // If index > lastIndex, it's out of bounds. This is an internal error.
       throw new IllegalStateException(
         s"Cursor position $index is beyond last index $getLastIndex.")
@@ -176,6 +192,12 @@ private[connect] class ExecuteResponseObserver[T <: MessageLite](val executeHold
         messageParameters = Map("responseId" -> responseId)))
   }
 
+  /** Remove cached responses up to and including response with given id. */
+  def removeResponsesUntilId(responseId: String): Unit = {
+    val index = getIndexById(responseId)
+    removeResponsesUntilIndex(index)
+  }
+
   /** Consumer (ExecuteResponseGRPCSender) waits on the monitor of ExecuteResponseObserver. */
   private def notifyConsumer(): Unit = {
     notifyAll()
@@ -184,11 +206,27 @@ private[connect] class ExecuteResponseObserver[T <: MessageLite](val executeHold
   /**
    * Remove cached responses after response with lastReturnedIndex is returned from getResponse.
    * Remove according to caching policy:
-   *   - if query is not reattachable, remove all responses up to and including
-   *     highestConsumedIndex.
+   *   - if retryBufferSize is 0 (or query is not reattachable), remove all responses up to and
+   *     including lastSentIndex.
+   *   - otherwise keep responses backwards from lastSentIndex until their total size exceeds
+   *     retryBufferSize
    */
-  private def removeCachedResponses() = {
-    var i = highestConsumedIndex
+  private def removeCachedResponses(lastSentIndex: Long) = {
+    var i = lastSentIndex
+    var totalResponsesSize = 0L
+    while (i >= 1 && responses.get(i).isDefined && totalResponsesSize < retryBufferSize) {
+      totalResponsesSize += responses.get(i).get.serializedByteSize
+      i -= 1
+    }
+    removeResponsesUntilIndex(i)
+  }
+
+  /**
+   * Remove cached responses until given index. Iterating backwards, once an index is encountered
+   * that has been removed, all earlier indexes would also be removed.
+   */
+  private def removeResponsesUntilIndex(index: Long) = {
+    var i = index
     while (i >= 1 && responses.get(i).isDefined) {
       responses.remove(i)
       i -= 1

@@ -22,13 +22,12 @@ import io.grpc.stub.StreamObserver
 import org.apache.spark.SparkSQLException
 import org.apache.spark.connect.proto
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.connect.execution.ExecuteGrpcResponseSender
 
-class SparkConnectReattachExecuteHandler(
-    responseObserver: StreamObserver[proto.ExecutePlanResponse])
+class SparkConnectReleaseExecuteHandler(
+    responseObserver: StreamObserver[proto.ReleaseExecuteResponse])
     extends Logging {
 
-  def handle(v: proto.ReattachExecuteRequest): Unit = {
+  def handle(v: proto.ReleaseExecuteRequest): Unit = {
     val sessionHolder = SparkConnectService
       .getIsolatedSession(v.getUserContext.getUserId, v.getSessionId)
     val executeHolder = sessionHolder.executeHolder(v.getOperationId).getOrElse {
@@ -42,20 +41,26 @@ class SparkConnectReattachExecuteHandler(
         messageParameters = Map.empty)
     }
 
-    try {
-      val responseSender =
-        new ExecuteGrpcResponseSender[proto.ExecutePlanResponse](executeHolder, responseObserver)
-      if (v.hasLastResponseId) {
-        // start from response after lastResponseId
-        executeHolder.attachAndRunGrpcResponseSender(responseSender, v.getLastResponseId)
-      } else {
-        // start from the start of the stream.
-        executeHolder.attachAndRunGrpcResponseSender(responseSender)
-      }
-    } finally {
-      // Reattachable executions do not free the execution here, but client needs to call
-      // ReleaseExecute RPC.
-      // TODO We mark in the ExecuteHolder that RPC detached.
+    v.getReleaseType match {
+      case proto.ReleaseExecuteRequest.ReleaseType.RELEASE_ALL =>
+        executeHolder.close()
+      case proto.ReleaseExecuteRequest.ReleaseType.RELEASE_UNTIL_RESPONSE =>
+        if (!v.hasUntilResponseId) {
+          throw new IllegalArgumentException(
+            s"RELEASE_UNTIL_RESPONSE requested, but no until_response_id provided.")
+        }
+        executeHolder.releaseUntilResponseId(v.getUntilResponseId)
+      case other =>
+        throw new UnsupportedOperationException(s"Unknown ReleaseType $other!")
     }
+
+    val response = proto.ReleaseExecuteResponse
+      .newBuilder()
+      .setSessionId(v.getSessionId)
+      .setOperationId(v.getOperationId)
+      .build()
+
+    responseObserver.onNext(response)
+    responseObserver.onCompleted()
   }
 }

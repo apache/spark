@@ -22,7 +22,7 @@ import io.grpc.stub.StreamObserver
 
 import org.apache.spark.{SparkEnv, SparkSQLException}
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.connect.config.Connect.{CONNECT_EXECUTE_REATTACHABLE_MAX_STREAM_DURATION, CONNECT_EXECUTE_REATTACHABLE_MAX_STREAM_SIZE}
+import org.apache.spark.sql.connect.config.Connect.{CONNECT_EXECUTE_REATTACHABLE_SENDER_MAX_STREAM_DURATION, CONNECT_EXECUTE_REATTACHABLE_SENDER_MAX_STREAM_SIZE}
 import org.apache.spark.sql.connect.service.ExecuteHolder
 
 /**
@@ -68,6 +68,11 @@ private[connect] class ExecuteGrpcResponseSender[T <: MessageLite](
    *   that. 0 means start from beginning (since first response has index 1)
    */
   def run(lastConsumedStreamIndex: Long): Unit = {
+    logDebug(
+      s"GrpcResponseSender run for $executeHolder, " +
+        s"reattachable=${executeHolder.reattachable}, " +
+        s"lastConsumedStreamIndex=$lastConsumedStreamIndex")
+
     // register to be notified about available responses.
     executionObserver.attachConsumer(this)
 
@@ -79,7 +84,7 @@ private[connect] class ExecuteGrpcResponseSender[T <: MessageLite](
       Long.MaxValue
     } else {
       val confSize =
-        SparkEnv.get.conf.get(CONNECT_EXECUTE_REATTACHABLE_MAX_STREAM_DURATION).toLong
+        SparkEnv.get.conf.get(CONNECT_EXECUTE_REATTACHABLE_SENDER_MAX_STREAM_DURATION).toLong
       if (confSize > 0) System.currentTimeMillis() + 1000 * confSize else Long.MaxValue
     }
 
@@ -87,7 +92,8 @@ private[connect] class ExecuteGrpcResponseSender[T <: MessageLite](
     val maximumResponseSize: Long = if (!executeHolder.reattachable) {
       Long.MaxValue
     } else {
-      val confSize = SparkEnv.get.conf.get(CONNECT_EXECUTE_REATTACHABLE_MAX_STREAM_SIZE).toLong
+      val confSize =
+        SparkEnv.get.conf.get(CONNECT_EXECUTE_REATTACHABLE_SENDER_MAX_STREAM_SIZE).toLong
       if (confSize > 0) confSize else Long.MaxValue
     }
     var sentResponsesSize: Long = 0
@@ -101,7 +107,7 @@ private[connect] class ExecuteGrpcResponseSender[T <: MessageLite](
       // 2. has a response to send
       def gotResponse = response.nonEmpty
       // 3. sent everything from the stream and the stream is finished
-      def streamFinished = executionObserver.getLastIndex().forall(nextIndex <= _)
+      def streamFinished = executionObserver.getLastIndex().exists(nextIndex > _)
       // 4. time deadline or size limit reached
       def deadlineLimitReached =
         sentResponsesSize > maximumResponseSize || deadlineTimeMillis < System.currentTimeMillis()
@@ -117,21 +123,21 @@ private[connect] class ExecuteGrpcResponseSender[T <: MessageLite](
           !streamFinished &&
           !deadlineLimitReached) {
           logDebug(s"Try to get response with index=$nextIndex from observer.")
-          response = executionObserver.getResponse(nextIndex)
+          response = executionObserver.consumeResponse(nextIndex)
           logDebug(s"Response index=$nextIndex from observer: ${response.isDefined}")
           // If response is empty, release executionObserver lock and wait to get notified.
           // The state of detached, response and lastIndex are change under lock in
           // executionObserver, and will notify upon state change.
           if (response.isEmpty) {
-            logDebug(s"Wait for response to become available.")
             val timeout = Math.max(1, deadlineTimeMillis - System.currentTimeMillis())
+            logDebug(s"Wait for response to become available with timeout=$timeout ms.")
             executionObserver.wait(timeout)
             logDebug(s"Reacquired lock after waiting.")
           }
         }
         logDebug(
-          s"Exiting loop: detached=$detached, response=$response," +
-            s"lastIndex=${executionObserver.getLastIndex()}")
+          s"Exiting loop: detached=$detached, response=$response, " +
+            s"lastIndex=${executionObserver.getLastIndex()}, deadline=${deadlineLimitReached}")
       }
 
       // Process the outcome of the inner loop.
@@ -150,7 +156,7 @@ private[connect] class ExecuteGrpcResponseSender[T <: MessageLite](
         assert(finished == false)
       } else if (streamFinished) {
         // Stream is finished and all responses have been sent
-        logDebug(s"Sent all responses up to index ${nextIndex - 1}.")
+        logDebug(s"Stream finished and sent all responses up to index ${nextIndex - 1}.")
         executionObserver.getError() match {
           case Some(t) => grpcObserver.onError(t)
           case None => grpcObserver.onCompleted()
@@ -159,6 +165,7 @@ private[connect] class ExecuteGrpcResponseSender[T <: MessageLite](
       } else if (deadlineLimitReached) {
         // The stream is not complete, but should be finished now.
         // The client needs to reattach with ReattachExecute.
+        logDebug(s"Deadline reached, finishing stream after index ${nextIndex - 1}.")
         grpcObserver.onCompleted()
         finished = true
       }

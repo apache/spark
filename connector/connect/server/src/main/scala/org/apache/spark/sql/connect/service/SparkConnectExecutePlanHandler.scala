@@ -36,16 +36,15 @@ class SparkConnectExecutePlanHandler(responseObserver: StreamObserver[proto.Exec
       executeHolder.start()
       val responseSender =
         new ExecuteGrpcResponseSender[proto.ExecutePlanResponse](executeHolder, responseObserver)
-      executeHolder.attachAndRunGrpcResponseSender(responseSender, 0)
+      executeHolder.attachAndRunGrpcResponseSender(responseSender)
     } finally {
-      // Non reattachable executions release here immediately.
-      // Reattachable executions close release with ReleaseExecute RPC.
       if (!executeHolder.reattachable) {
-        executeHolder.join()
-        executeHolder.eventsManager.postClosed()
-        sessionHolder.removeExecuteHolder(executeHolder.operationId)
+        // Non reattachable executions release here immediately.
+        executeHolder.close()
+      } else {
+        // Reattachable executions close release with ReleaseExecute RPC.
+        // TODO We mark in the ExecuteHolder that RPC detached.
       }
-      // TODO We mark in the ExecuteHolder that RPC detached.
     }
   }
 }

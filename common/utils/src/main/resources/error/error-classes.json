@@ -1309,14 +1309,19 @@
           "The cursor has been disconnected by the server."
         ]
       },
-      "POSITION_NOT_FOUND" : {
+      "NOT_REATTACHABLE" : {
         "message" : [
-          "The cursor position id <responseId> is not found."
+          "The cursor is not reattachable."
         ]
       },
       "POSITION_NOT_AVAILABLE" : {
         "message" : [
           "The cursor position id <responseId> is no longer available at index <index>."
+        ]
+      },
+      "POSITION_NOT_FOUND" : {
+        "message" : [
+          "The cursor position id <responseId> is not found."
         ]
       }
     },

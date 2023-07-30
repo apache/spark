@@ -2565,7 +2565,7 @@ class ReleaseExecuteRequest(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.EnumDescriptor
         RELEASE_TYPE_UNSPECIFIED: ReleaseExecuteRequest._ReleaseType.ValueType  # 0
         RELEASE_ALL: ReleaseExecuteRequest._ReleaseType.ValueType  # 1
-        """Release operation completely.
+        """Release and close operation completely.
         Note: This should be called when the server side operation is finished, and ExecutePlan or
         ReattachExecute are finished processing the result stream, or inside onComplete / onError.
         """
@@ -2580,7 +2580,7 @@ class ReleaseExecuteRequest(google.protobuf.message.Message):
     class ReleaseType(_ReleaseType, metaclass=_ReleaseTypeEnumTypeWrapper): ...
     RELEASE_TYPE_UNSPECIFIED: ReleaseExecuteRequest.ReleaseType.ValueType  # 0
     RELEASE_ALL: ReleaseExecuteRequest.ReleaseType.ValueType  # 1
-    """Release operation completely.
+    """Release and close operation completely.
     Note: This should be called when the server side operation is finished, and ExecutePlan or
     ReattachExecute are finished processing the result stream, or inside onComplete / onError.
     """

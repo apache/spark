@@ -754,7 +754,7 @@ message ReleaseExecuteRequest {
   enum ReleaseType {
     RELEASE_TYPE_UNSPECIFIED = 0;
 
-    // Release operation completely.
+    // Release and close operation completely.
     // Note: This should be called when the server side operation is finished, and ExecutePlan or
     // ReattachExecute are finished processing the result stream, or inside onComplete / onError.
     RELEASE_ALL = 1;

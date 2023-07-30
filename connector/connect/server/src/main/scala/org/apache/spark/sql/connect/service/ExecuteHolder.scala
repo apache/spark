@@ -112,17 +112,37 @@ private[connect] class ExecuteHolder(
 
   /**
    * Attach an ExecuteGrpcResponseSender that will consume responses from the query and send them
+   * out on the Grpc response stream. The sender will start from the start of the response stream.
+   * @param responseSender
+   *   the ExecuteGrpcResponseSender
+   */
+  def attachAndRunGrpcResponseSender(
+      responseSender: ExecuteGrpcResponseSender[proto.ExecutePlanResponse]): Unit = {
+    responseSender.run(0)
+  }
+
+  /**
+   * Attach an ExecuteGrpcResponseSender that will consume responses from the query and send them
    * out on the Grpc response stream.
    * @param responseSender
    *   the ExecuteGrpcResponseSender
-   * @param lastConsumedStreamIndex
-   *   the last index that was already consumed. The consumer will start from index after that. 0
-   *   means start from beginning (since first response has index 1)
+   * @param lastConsumedResponseId
+   *   the last response that was already consumed. The sender will start from response after
+   *   that.
    */
   def attachAndRunGrpcResponseSender(
       responseSender: ExecuteGrpcResponseSender[proto.ExecutePlanResponse],
-      lastConsumedStreamIndex: Long): Unit = {
-    responseSender.run(lastConsumedStreamIndex)
+      lastConsumedResponseId: String): Unit = {
+    val lastConsumedIndex = responseObserver.getIndexById(lastConsumedResponseId)
+    responseSender.run(lastConsumedIndex)
+  }
+
+  /**
+   * Removed cached responses from the response observer until and including response with
+   * responseId.
+   */
+  def releaseUntilResponseId(responseId: String): Unit = {
+    responseObserver.removeResponsesUntilId(responseId)
   }
 
   /**
@@ -133,6 +153,17 @@ private[connect] class ExecuteHolder(
    */
   def interrupt(): Boolean = {
     runner.interrupt()
+  }
+
+  /**
+   * Close the execution and remove it from the session. Note: It blocks joining the
+   * ExecuteThreadRunner thread, so it assumes that it's called when the execution is ending or
+   * ended. If it is desired to kill the execution, interrupt() should be called first.
+   */
+  def close(): Unit = {
+    runner.join()
+    eventsManager.postClosed()
+    sessionHolder.removeExecuteHolder(operationId)
   }
 
   /**
