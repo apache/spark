@@ -174,7 +174,8 @@ private[spark] class Executor(
     val currentFiles = new HashMap[String, Long]
     val currentJars = new HashMap[String, Long]
     val currentArchives = new HashMap[String, Long]
-    val urlClassLoader = createClassLoader(currentJars, !isDefaultState(jobArtifactState.uuid))
+    val urlClassLoader =
+      createClassLoader(currentJars, isStubbingEnabledForState(jobArtifactState.uuid))
     val replClassLoader = addReplClassLoaderIfNeeded(
       urlClassLoader, jobArtifactState.replClassDirUri, jobArtifactState.uuid)
     new IsolatedSessionState(
@@ -184,6 +185,11 @@ private[spark] class Executor(
       currentArchives,
       jobArtifactState.replClassDirUri
     )
+  }
+
+  private def isStubbingEnabledForState(name: String) = {
+    !isDefaultState(name) &&
+      conf.get(CONNECT_SCALA_UDF_STUB_PREFIXES).nonEmpty
   }
 
   private def isDefaultState(name: String) = name == "default"
@@ -1031,8 +1037,8 @@ private[spark] class Executor(
       urls.mkString("'", ",", "'")
     )
 
-    if (useStub && conf.get(CONNECT_SCALA_UDF_STUB_CLASSES).nonEmpty) {
-      createClassLoaderWithStub(urls, conf.get(CONNECT_SCALA_UDF_STUB_CLASSES))
+    if (useStub) {
+      createClassLoaderWithStub(urls, conf.get(CONNECT_SCALA_UDF_STUB_PREFIXES))
     } else {
       createClassLoader(urls)
     }
@@ -1093,7 +1099,7 @@ private[spark] class Executor(
       state: IsolatedSessionState,
       testStartLatch: Option[CountDownLatch] = None,
       testEndLatch: Option[CountDownLatch] = None): Unit = {
-    var updated = false;
+    var renewClassLoader = false;
     lazy val hadoopConf = SparkHadoopUtil.get.newConfiguration(conf)
     updateDependenciesLock.lockInterruptibly()
     try {
@@ -1149,15 +1155,14 @@ private[spark] class Executor(
           if (!state.urlClassLoader.getURLs().contains(url)) {
             logInfo(s"Adding $url to class loader ${state.sessionUUID}")
             state.urlClassLoader.addURL(url)
-            if (!isDefaultState(state.sessionUUID)) {
-              updated = true
+            if (isStubbingEnabledForState(state.sessionUUID)) {
+              renewClassLoader = true
             }
           }
         }
       }
-      if (updated) {
-        // When a new url is added for non-default class loader, recreate the class loader
-        // to ensure all classes are updated.
+      if (renewClassLoader) {
+        // Recreate the class loader to ensure all classes are updated.
         state.urlClassLoader = createClassLoader(state.urlClassLoader.getURLs, useStub = true)
         state.replClassLoader =
           addReplClassLoaderIfNeeded(state.urlClassLoader, state.replClassDirUri, state.sessionUUID)
