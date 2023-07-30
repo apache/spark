@@ -60,4 +60,6 @@
               files="sql/core/src/main/java/org/apache/spark/sql/streaming/Trigger.java"/>
     <suppress checks="MethodName"
               files="connector/connect/client/jvm/src/main/java/org/apache/spark/sql/streaming/Trigger.java"/>
+    <suppress checks="LineLength"
+              files="src/main/java/org/apache/spark/sql/api/java/*"/>
 </suppressions>
