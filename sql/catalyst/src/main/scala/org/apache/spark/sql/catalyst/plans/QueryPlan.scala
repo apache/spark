@@ -330,7 +330,7 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
           newChild
         }
         if (!cond.apply(this) || isRuleIneffective(ruleId)) {
-          return plan -> attrMapping
+          return plan -> attrMapping.toSeq
         }
 
         plan match {
