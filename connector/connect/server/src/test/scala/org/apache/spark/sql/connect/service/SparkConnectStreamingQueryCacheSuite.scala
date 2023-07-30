@@ -22,7 +22,7 @@ import java.util.concurrent.atomic.AtomicInteger
 
 import scala.concurrent.duration.DurationInt
 
-import org.mockito.Mockito.when
+import org.mockito.Mockito.{verify, when}
 import org.scalatest.concurrent.Eventually.eventually
 import org.scalatest.concurrent.Futures.timeout
 import org.scalatestplus.mockito.MockitoSugar
@@ -95,7 +95,9 @@ class SparkConnectStreamingQueryCacheSuite extends SparkFunSuite with MockitoSug
     // Query is returned when correct session is used
     assert(sessionMgr.getCachedQuery(queryId, runId, mockSession).contains(mockQuery))
 
-    // Stop the query.
+    // Cleanup the query and verify if stop() method has been called.
+    sessionMgr.cleanupRunningQueries(sessionHolder)
+    verify(mockQuery).stop()
     when(mockQuery.isActive).thenReturn(false)
 
     val expectedExpiryTimeMs = sessionMgr.clock.getTimeMillis() + 1.minute.toMillis
