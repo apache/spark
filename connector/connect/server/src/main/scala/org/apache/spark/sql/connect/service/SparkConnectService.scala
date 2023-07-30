@@ -21,7 +21,7 @@ import java.net.InetSocketAddress
 import java.util.UUID
 import java.util.concurrent.TimeUnit
 
-import scala.jdk.CollectionConverters.iterableAsScalaIterableConverter
+import scala.jdk.CollectionConverters._
 
 import com.google.common.base.Ticker
 import com.google.common.cache.{CacheBuilder, RemovalListener, RemovalNotification}
@@ -54,10 +54,7 @@ import org.apache.spark.status.ElementTrackingStore
  * @param debug
  *   delegates debug behavior to the handlers.
  */
-class SparkConnectService(debug: Boolean)
-    extends AsyncService
-    with BindableService
-    with Logging {
+class SparkConnectService(debug: Boolean) extends AsyncService with BindableService with Logging {
 
   /**
    * This is the main entry method for Spark Connect and all calls to execute a plan.
@@ -172,29 +169,23 @@ class SparkConnectService(debug: Boolean)
         sessionId = request.getSessionId)
   }
 
-  private def methodWithCustomMarshallers(
-    methodDesc: MethodDescriptor[MessageLite, MessageLite]
-  ): MethodDescriptor[MessageLite, MessageLite] = {
+  private def methodWithCustomMarshallers(methodDesc: MethodDescriptor[MessageLite, MessageLite])
+      : MethodDescriptor[MessageLite, MessageLite] = {
     val recursionLimit =
       SparkEnv.get.conf.get(CONNECT_GRPC_MARSHALLER_RECURSION_LIMIT)
     val requestMarshaller =
       ProtoLiteUtils.marshallerWithRecursionLimit(
-        methodDesc
-          .getRequestMarshaller
+        methodDesc.getRequestMarshaller
           .asInstanceOf[PrototypeMarshaller[MessageLite]]
           .getMessagePrototype,
-        recursionLimit
-      )
+        recursionLimit)
     val responseMarshaller =
       ProtoLiteUtils.marshallerWithRecursionLimit(
-        methodDesc
-          .getResponseMarshaller
+        methodDesc.getResponseMarshaller
           .asInstanceOf[PrototypeMarshaller[MessageLite]]
           .getMessagePrototype,
-        recursionLimit
-      )
-    methodDesc
-      .toBuilder
+        recursionLimit)
+    methodDesc.toBuilder
       .setRequestMarshaller(requestMarshaller)
       .setResponseMarshaller(responseMarshaller)
       .build()
@@ -211,12 +202,12 @@ class SparkConnectService(debug: Boolean)
     // Iterate through all the methods of the original service definition.
     // For each method, add a customized method descriptor (with updated marshallers)
     // and the original server call handler to the builder.
-    serviceDef
-      .getMethods
-      .asScala
+    serviceDef.getMethods.asScala
       .asInstanceOf[Iterable[ServerMethodDefinition[MessageLite, MessageLite]]]
-      .foreach(method => builder.addMethod(
-        methodWithCustomMarshallers(method.getMethodDescriptor), method.getServerCallHandler))
+      .foreach(method =>
+        builder.addMethod(
+          methodWithCustomMarshallers(method.getMethodDescriptor),
+          method.getServerCallHandler))
 
     // Build the final ServerServiceDefinition and return it.
     builder.build()
