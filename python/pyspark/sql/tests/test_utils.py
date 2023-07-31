@@ -623,22 +623,54 @@ class UtilsTestsMixin:
         assertDataFrameEqual(df1, df2, checkRowOrder=False)
         assertDataFrameEqual(df1, df2, checkRowOrder=True)
 
-    def test_assert_error_pandas_df(self):
+    def test_assert_equal_exact_pandas_df(self):
+        import pyspark.pandas as ps
+
+        df1 = ps.DataFrame(data=[10, 20, 30], columns=["Numbers"])
+        df2 = ps.DataFrame(data=[10, 20, 30], columns=["Numbers"])
+
+        assertDataFrameEqual(df1, df2, checkRowOrder=False)
+        assertDataFrameEqual(df1, df2, checkRowOrder=True)
+
+    def test_assert_equal_exact_pandas_df(self):
+        import pyspark.pandas as ps
+
+        df1 = ps.DataFrame(data=[10, 20, 30], columns=["Numbers"])
+        df2 = ps.DataFrame(data=[30, 20, 10], columns=["Numbers"])
+
+        assertDataFrameEqual(df1, df2)
+
+    def test_assert_equal_approx_pandas_df(self):
+        import pyspark.pandas as ps
+
+        df1 = ps.DataFrame(data=[10.0001, 20.32, 30.1], columns=["Numbers"])
+        df2 = ps.DataFrame(data=[10.0, 20.32, 30.1], columns=["Numbers"])
+
+        assertDataFrameEqual(df1, df2, checkRowOrder=False)
+        assertDataFrameEqual(df1, df2, checkRowOrder=True)
+
+    def test_assert_error_pandas_pyspark_df(self):
+        import pyspark.pandas as ps
         import pandas as pd
 
-        df1 = pd.DataFrame(data=[10, 20, 30], columns=["Numbers"])
-        df2 = pd.DataFrame(data=[10, 20, 30], columns=["Numbers"])
+        df1 = ps.DataFrame(data=[10, 20, 30], columns=["Numbers"])
+        df2 = self.spark.createDataFrame([(10,), (11,), (13,)], ["Numbers"])
 
         with self.assertRaises(PySparkAssertionError) as pe:
-            assertDataFrameEqual(df1, df2)
+            assertDataFrameEqual(df1, df2, checkRowOrder=False)
 
         self.check_error(
             exception=pe.exception,
             error_class="INVALID_TYPE_DF_EQUALITY_ARG",
             message_parameters={
-                "expected_type": DataFrame,
-                "arg_name": "df",
-                "actual_type": pd.DataFrame,
+                "expected_type": f"{ps.DataFrame.__name__}, "
+                f"{pd.DataFrame.__name__}, "
+                f"{ps.Series.__name__}, "
+                f"{pd.Series.__name__}, "
+                f"{ps.Index.__name__}"
+                f"{pd.Index.__name__}, ",
+                "arg_name": "expected",
+                "actual_type": type(df2),
             },
         )
 
@@ -649,13 +681,20 @@ class UtilsTestsMixin:
             exception=pe.exception,
             error_class="INVALID_TYPE_DF_EQUALITY_ARG",
             message_parameters={
-                "expected_type": DataFrame,
-                "arg_name": "df",
-                "actual_type": pd.DataFrame,
+                "expected_type": f"{ps.DataFrame.__name__}, "
+                f"{pd.DataFrame.__name__}, "
+                f"{ps.Series.__name__}, "
+                f"{pd.Series.__name__}, "
+                f"{ps.Index.__name__}"
+                f"{pd.Index.__name__}, ",
+                "arg_name": "expected",
+                "actual_type": type(df2),
             },
         )
 
     def test_assert_error_non_pyspark_df(self):
+        import pyspark.pandas as ps
+
         dict1 = {"a": 1, "b": 2}
         dict2 = {"a": 1, "b": 2}
 
@@ -666,8 +705,8 @@ class UtilsTestsMixin:
             exception=pe.exception,
             error_class="INVALID_TYPE_DF_EQUALITY_ARG",
             message_parameters={
-                "expected_type": DataFrame,
-                "arg_name": "df",
+                "expected_type": f"{DataFrame.__name__}, {ps.DataFrame.__name__}",
+                "arg_name": "actual",
                 "actual_type": type(dict1),
             },
         )
@@ -679,8 +718,8 @@ class UtilsTestsMixin:
             exception=pe.exception,
             error_class="INVALID_TYPE_DF_EQUALITY_ARG",
             message_parameters={
-                "expected_type": DataFrame,
-                "arg_name": "df",
+                "expected_type": f"{DataFrame.__name__}, {ps.DataFrame.__name__}",
+                "arg_name": "actual",
                 "actual_type": type(dict1),
             },
         )

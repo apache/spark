@@ -27,7 +27,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.types.{MetadataBuilder, NumericType, StringType, StructType}
 import org.apache.spark.unsafe.types.UTF8String
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{SparkErrorUtils, Utils}
 
 package object util extends Logging {
 
@@ -81,27 +81,14 @@ package object util extends Logging {
   }
 
   def sideBySide(left: String, right: String): Seq[String] = {
-    sideBySide(left.split("\n"), right.split("\n"))
+    SparkStringUtils.sideBySide(left, right)
   }
 
   def sideBySide(left: Seq[String], right: Seq[String]): Seq[String] = {
-    val maxLeftSize = left.map(_.length).max
-    val leftPadded = left ++ Seq.fill(math.max(right.size - left.size, 0))("")
-    val rightPadded = right ++ Seq.fill(math.max(left.size - right.size, 0))("")
-
-    leftPadded.zip(rightPadded).map {
-      case (l, r) => (if (l == r) " " else "!") + l + (" " * ((maxLeftSize - l.length) + 3)) + r
-    }
+    SparkStringUtils.sideBySide(left, right)
   }
 
-  def stackTraceToString(t: Throwable): String = {
-    val out = new java.io.ByteArrayOutputStream
-    Utils.tryWithResource(new PrintWriter(out)) { writer =>
-      t.printStackTrace(writer)
-      writer.flush()
-    }
-    new String(out.toByteArray, UTF_8)
-  }
+  def stackTraceToString(t: Throwable): String = SparkErrorUtils.stackTraceToString(t)
 
   // Replaces attributes, string literals, complex type extractors with their pretty form so that
   // generated column names don't contain back-ticks or double-quotes.

@@ -38,11 +38,7 @@ private[connect] class ExecuteHolder(
    * Tag that is set for this execution on SparkContext, via SparkContext.addJobTag. Used
    * (internally) for cancallation of the Spark Jobs ran by this execution.
    */
-  val jobTag =
-    s"SparkConnect_Execute_" +
-      s"User_${sessionHolder.userId}_" +
-      s"Session_${sessionHolder.sessionId}_" +
-      s"Operation_${operationId}"
+  val jobTag = ExecuteJobTag(sessionHolder.userId, sessionHolder.sessionId, operationId)
 
   /**
    * Tags set by Spark Connect client users via SparkSession.addTag. Used to identify and group
@@ -120,5 +116,38 @@ private[connect] class ExecuteHolder(
   def tagToSparkJobTag(tag: String): String = {
     "SparkConnect_Execute_" +
       s"User_${sessionHolder.userId}_Session_${sessionHolder.sessionId}_Tag_${tag}"
+  }
+}
+
+/** Used to identify ExecuteHolder jobTag among SparkContext.SPARK_JOB_TAGS. */
+object ExecuteJobTag {
+  private val prefix = "SparkConnect_OperationTag"
+
+  def apply(sessionId: String, userId: String, operationId: String): String = {
+    s"${prefix}_" +
+      s"User_${userId}_" +
+      s"Session_${sessionId}_" +
+      s"Operation_${operationId}"
+  }
+
+  def unapply(jobTag: String): Option[String] = {
+    if (jobTag.startsWith(prefix)) Some(jobTag) else None
+  }
+}
+
+/** Used to identify ExecuteHolder sessionTag among SparkContext.SPARK_JOB_TAGS. */
+object ExecuteSessionTag {
+  private val prefix = "SparkConnect_SessionTag"
+
+  def apply(userId: String, sessionId: String, tag: String): String = {
+    ProtoUtils.throwIfInvalidTag(tag)
+    s"${prefix}_" +
+      s"User_${userId}_" +
+      s"Session_${sessionId}_" +
+      s"Tag_${tag}"
+  }
+
+  def unapply(sessionTag: String): Option[String] = {
+    if (sessionTag.startsWith(prefix)) Some(sessionTag) else None
   }
 }

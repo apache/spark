@@ -514,6 +514,7 @@ pyspark_testing = Module(
     python_test_goals=[
         # doctests
         "pyspark.testing.utils",
+        "pyspark.testing.pandasutils",
     ],
 )
 
@@ -890,7 +891,7 @@ pyspark_connect = Module(
 
 pyspark_pandas_connect = Module(
     name="pyspark-pandas-connect",
-    dependencies=[pyspark_connect, pyspark_pandas],
+    dependencies=[pyspark_connect, pyspark_pandas, pyspark_pandas_slow],
     source_file_regexes=[
         "python/pyspark/pandas",
     ],
@@ -948,23 +949,6 @@ pyspark_pandas_connect = Module(
         "pyspark.pandas.tests.connect.test_parity_utils",
         "pyspark.pandas.tests.connect.test_parity_window",
         "pyspark.pandas.tests.connect.indexes.test_parity_base",
-    ],
-    excluded_python_implementations=[
-        "PyPy"  # Skip these tests under PyPy since they require numpy, pandas, and pyarrow and
-        # they aren't available there
-    ],
-)
-
-
-# This module should contain the same test list with 'pyspark_pandas_slow' for maintenance.
-pyspark_pandas_slow_connect = Module(
-    name="pyspark-pandas-slow-connect",
-    dependencies=[pyspark_connect, pyspark_pandas_slow],
-    source_file_regexes=[
-        "python/pyspark/pandas",
-    ],
-    python_test_goals=[
-        # pandas-on-Spark unittests
         "pyspark.pandas.tests.connect.indexes.test_parity_datetime",
         "pyspark.pandas.tests.connect.indexes.test_parity_align",
         "pyspark.pandas.tests.connect.indexes.test_parity_indexing",
@@ -984,6 +968,22 @@ pyspark_pandas_slow_connect = Module(
         "pyspark.pandas.tests.connect.computation.test_parity_melt",
         "pyspark.pandas.tests.connect.computation.test_parity_missing_data",
         "pyspark.pandas.tests.connect.computation.test_parity_pivot",
+    ],
+    excluded_python_implementations=[
+        "PyPy"  # Skip these tests under PyPy since they require numpy, pandas, and pyarrow and
+        # they aren't available there
+    ],
+)
+
+
+pyspark_pandas_slow_connect = Module(
+    name="pyspark-pandas-slow-connect",
+    dependencies=[pyspark_connect, pyspark_pandas, pyspark_pandas_slow],
+    source_file_regexes=[
+        "python/pyspark/pandas",
+    ],
+    python_test_goals=[
+        # pandas-on-Spark unittests
         "pyspark.pandas.tests.connect.frame.test_parity_attrs",
         "pyspark.pandas.tests.connect.frame.test_parity_constructor",
         "pyspark.pandas.tests.connect.frame.test_parity_conversion",

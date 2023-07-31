@@ -20,9 +20,10 @@ package org.apache.spark.sql.catalyst.encoders
 import scala.collection.mutable
 import scala.reflect.classTag
 
-import org.apache.spark.sql.{Row, SqlApiConf}
+import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{BinaryEncoder, BoxedBooleanEncoder, BoxedByteEncoder, BoxedDoubleEncoder, BoxedFloatEncoder, BoxedIntEncoder, BoxedLongEncoder, BoxedShortEncoder, CalendarIntervalEncoder, DateEncoder, DayTimeIntervalEncoder, EncoderField, InstantEncoder, IterableEncoder, JavaDecimalEncoder, LocalDateEncoder, LocalDateTimeEncoder, MapEncoder, NullEncoder, RowEncoder => AgnosticRowEncoder, StringEncoder, TimestampEncoder, UDTEncoder, YearMonthIntervalEncoder}
-import org.apache.spark.sql.errors.EncoderErrors
+import org.apache.spark.sql.errors.ExecutionErrors
+import org.apache.spark.sql.internal.SqlApiConf
 import org.apache.spark.sql.types._
 
 /**
@@ -97,7 +98,7 @@ object RowEncoder {
         annotation.udt()
       } else {
         UDTRegistration.getUDTFor(udt.userClass.getName).getOrElse {
-          throw EncoderErrors.userDefinedTypeNotAnnotatedAndRegisteredError(udt)
+          throw ExecutionErrors.userDefinedTypeNotAnnotatedAndRegisteredError(udt)
         }
       }
       UDTEncoder(udt, udtClass.asInstanceOf[Class[_ <: UserDefinedType[_]]])
