@@ -216,11 +216,7 @@
     <commons-cli.version>1.5.0</commons-cli.version>
     <bouncycastle.version>1.70</bouncycastle.version>
     <tink.version>1.9.0</tink.version>
-    <!--
-      Please don't upgrade the version to 4.1.94.Final,
-      it needs to wait for `arrow-memory-netty` to be greater than 12.0.1.
-    -->
-    <netty.version>4.1.93.Final</netty.version>
+    <netty.version>4.1.96.Final</netty.version>
     <!--
     If you are changing Arrow version specification, please check
     ./python/pyspark/sql/pandas/utils.py, and ./python/setup.py too.
