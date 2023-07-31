@@ -169,13 +169,12 @@ class SparkConnectService(debug: Boolean) extends AsyncService with BindableServ
         sessionId = request.getSessionId)
   }
 
-
   /**
    * Reattach and continue an ExecutePlan reattachable execution.
    */
   override def reattachExecute(
-    request: proto.ReattachExecuteRequest,
-    responseObserver: StreamObserver[proto.ExecutePlanResponse]): Unit = {
+      request: proto.ReattachExecuteRequest,
+      responseObserver: StreamObserver[proto.ExecutePlanResponse]): Unit = {
     try {
       new SparkConnectReattachExecuteHandler(responseObserver).handle(request)
     } catch
@@ -190,8 +189,8 @@ class SparkConnectService(debug: Boolean) extends AsyncService with BindableServ
    * Release reattachable execution - either part of buffered response, or finish and release all.
    */
   override def releaseExecute(
-    request: proto.ReleaseExecuteRequest,
-    responseObserver: StreamObserver[proto.ReleaseExecuteResponse]): Unit = {
+      request: proto.ReleaseExecuteRequest,
+      responseObserver: StreamObserver[proto.ReleaseExecuteResponse]): Unit = {
     try {
       new SparkConnectReleaseExecuteHandler(responseObserver).handle(request)
     } catch

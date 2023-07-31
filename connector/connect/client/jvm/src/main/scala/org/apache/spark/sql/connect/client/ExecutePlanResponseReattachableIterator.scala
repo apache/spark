@@ -30,17 +30,18 @@ import org.apache.spark.internal.Logging
  * Retryable iterator of ExecutePlanResponses to an ExecutePlan call.
  *
  * It can handle situations when:
- * - the ExecutePlanResponse stream was broken by retryable network error (governed by retryPolicy)
- * - the ExecutePlanResponse was gracefully ended by the server without a ResultComplete message;
- *   this tells the client that there is more, and it should reattach to continue.
+ *   - the ExecutePlanResponse stream was broken by retryable network error (governed by
+ *     retryPolicy)
+ *   - the ExecutePlanResponse was gracefully ended by the server without a ResultComplete
+ *     message; this tells the client that there is more, and it should reattach to continue.
  *
  * Initial iterator is the result of an ExecutePlan on the request, but it can be reattached with
  * ReattachExecute request. ReattachExecute request is provided the responseId of last returned
  * ExecutePlanResponse on the iterator to return a new iterator from server that continues after
  * that.
  *
- * Since in reattachable execute the server does buffer some responses in case the client needs
- * to backtrack
+ * Since in reattachable execute the server does buffer some responses in case the client needs to
+ * backtrack
  */
 class ExecutePlanResponseReattachableIterator(
     request: proto.ExecutePlanRequest,
@@ -152,10 +153,13 @@ class ExecutePlanResponseReattachableIterator(
 
   /**
    * Inform the server to release the execution.
-   * This will send an asynchronous RPC which will not block this iterator, the iterator
-   * can continue to be consumed.
+   *
+   * This will send an asynchronous RPC which will not block this iterator, the iterator can
+   * continue to be consumed.
+   *
    * Release with untilResponseId informs the server that the iterator has been consumed until and
    * including response with that responseId, and these responses can be freed.
+   *
    * Release with None means that the responses have been completely consumed and informs the
    * server that the completed execution can be completely freed.
    */
@@ -165,13 +169,13 @@ class ExecutePlanResponseReattachableIterator(
   }
 
   /**
-   * Create result callback to the asynchronouse ReleaseExecute.
-   * The client does not block on ReleaseExecute and continues with iteration, but if it fails with
-   * a retryable error, the callback will retrigger the asynchronous ReleaseExecute.
+   * Create result callback to the asynchronouse ReleaseExecute. The client does not block on
+   * ReleaseExecute and continues with iteration, but if it fails with a retryable error, the
+   * callback will retrigger the asynchronous ReleaseExecute.
    */
   private def createRetryingReleaseExecuteResponseObserer(
-    requestForRetry: proto.ReleaseExecuteRequest,
-    currentRetryNum: Int = 0): StreamObserver[proto.ReleaseExecuteResponse] = {
+      requestForRetry: proto.ReleaseExecuteRequest,
+      currentRetryNum: Int = 0): StreamObserver[proto.ReleaseExecuteResponse] = {
     new StreamObserver[proto.ReleaseExecuteResponse] {
       override def onNext(v: proto.ReleaseExecuteResponse): Unit = {}
       override def onCompleted(): Unit = {}

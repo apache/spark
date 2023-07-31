@@ -543,8 +543,9 @@ object SparkConnectClient {
 
     /**
      * Enable reattachable execute.
-     * It makes client more robust, enabling reattaching to an ExecutePlanResponse stream
-     * in case of intermittent connection errors.
+     *
+     * It makes client more robust, enabling reattaching to an ExecutePlanResponse stream in case
+     * of intermittent connection errors.
      */
     def enableReattachableExecute(): Builder = {
       _configuration = _configuration.copy(useReattachableExecute = true)
