@@ -22,8 +22,8 @@ import java.util.Locale
 import scala.annotation.tailrec
 
 import org.apache.spark.annotation.Stable
-import org.apache.spark.sql.SqlApiConf
 import org.apache.spark.sql.errors.DataTypeErrors
+import org.apache.spark.sql.internal.SqlApiConf
 
 /**
  * The data type representing `java.math.BigDecimal` values.

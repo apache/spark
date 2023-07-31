@@ -178,18 +178,18 @@ def _vectorize_udtf(cls: Type) -> Type:
     if hasattr(cls, "terminate"):
         getattr(vectorized_udtf, "terminate").__doc__ = getattr(cls, "terminate").__doc__
 
+    if hasattr(vectorized_udtf, "analyze"):
+        getattr(vectorized_udtf, "analyze").__doc__ = getattr(cls, "analyze").__doc__
+
     return vectorized_udtf
 
 
 def _validate_udtf_handler(cls: Any, returnType: Optional[Union[StructType, str]]) -> None:
     """Validate the handler class of a UDTF."""
-    # TODO(SPARK-43968): add more compile time checks for UDTFs
 
     if not isinstance(cls, type):
         raise PySparkTypeError(
-            f"Invalid user defined table function: the function handler "
-            f"must be a class, but got {type(cls).__name__}. Please provide "
-            "a class as the handler."
+            error_class="INVALID_UDTF_HANDLER_TYPE", message_parameters={"type": type(cls).__name__}
         )
 
     if not hasattr(cls, "eval"):
@@ -234,6 +234,8 @@ class UserDefinedTableFunction:
         evalType: int = PythonEvalType.SQL_TABLE_UDF,
         deterministic: bool = True,
     ):
+        _validate_udtf_handler(func, returnType)
+
         self.func = func
         self._returnType = returnType
         self._returnType_placeholder: Optional[StructType] = None
@@ -242,8 +244,6 @@ class UserDefinedTableFunction:
         self._name = name or func.__name__
         self.evalType = evalType
         self.deterministic = deterministic
-
-        _validate_udtf_handler(func, returnType)
 
     @property
     def returnType(self) -> Optional[StructType]:

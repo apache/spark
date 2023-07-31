@@ -464,7 +464,7 @@ SELECT course, year, GROUPING(course) FROM courseSales GROUP BY course, year
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "UNSUPPORTED_GROUPING_EXPRESSION",
   "queryContext" : [ {
@@ -482,7 +482,7 @@ SELECT course, year, GROUPING_ID(course, year) FROM courseSales GROUP BY course,
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "UNSUPPORTED_GROUPING_EXPRESSION",
   "queryContext" : [ {

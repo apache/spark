@@ -92,7 +92,7 @@ sealed abstract class UserDefinedFunction {
 /**
  * Holder class for a scalar user-defined function and it's input/output encoder(s).
  */
-case class ScalarUserDefinedFunction private (
+case class ScalarUserDefinedFunction private[sql] (
     // SPARK-43198: Eagerly serialize to prevent the UDF from containing a reference to this class.
     serializedUdfPacket: Array[Byte],
     inputTypes: Seq[proto.DataType],

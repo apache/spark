@@ -21,6 +21,7 @@ import java.util.concurrent.{ConcurrentHashMap, ExecutorService, Future => JFutu
 import java.util.concurrent.atomic.AtomicLong
 
 import org.apache.spark.{ErrorMessageFormat, SparkContext, SparkThrowable, SparkThrowableHelper}
+import org.apache.spark.internal.config.{SPARK_DRIVER_PREFIX, SPARK_EXECUTOR_PREFIX}
 import org.apache.spark.internal.config.Tests.IS_TESTING
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.execution.ui.{SparkListenerSQLExecutionEnd, SparkListenerSQLExecutionStart}
@@ -97,7 +98,11 @@ object SQLExecution {
 
       val globalConfigs = sparkSession.sharedState.conf.getAll.toMap
       val modifiedConfigs = sparkSession.sessionState.conf.getAllConfs
-        .filterNot(kv => globalConfigs.get(kv._1).contains(kv._2))
+        .filterNot { case (key, value) =>
+          key.startsWith(SPARK_DRIVER_PREFIX) ||
+            key.startsWith(SPARK_EXECUTOR_PREFIX) ||
+            globalConfigs.get(key).contains(value)
+        }
       val redactedConfigs = sparkSession.sessionState.conf.redactOptions(modifiedConfigs)
 
       withSQLConfPropagated(sparkSession) {
@@ -114,7 +119,9 @@ object SQLExecution {
             // will be caught and reported in the `SparkListenerSQLExecutionEnd`
             sparkPlanInfo = SparkPlanInfo.fromSparkPlan(queryExecution.executedPlan),
             time = System.currentTimeMillis(),
-            redactedConfigs))
+            modifiedConfigs = redactedConfigs,
+            jobTags = sc.getJobTags()
+          ))
           body
         } catch {
           case e: Throwable =>

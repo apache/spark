@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.connect.client.util.ConnectFunSuite
 import org.apache.spark.sql.connect.common.UdfPacket
 import org.apache.spark.sql.functions.udf
-import org.apache.spark.util.Utils
+import org.apache.spark.util.SparkSerDeUtils
 
 class UserDefinedFunctionSuite extends ConnectFunSuite with BeforeAndAfterEach {
 
@@ -42,7 +42,7 @@ class UserDefinedFunctionSuite extends ConnectFunSuite with BeforeAndAfterEach {
 
     assert(udfObj.getNullable)
 
-    val deSer = Utils.deserialize[UdfPacket](udfObj.getPayload.toByteArray)
+    val deSer = SparkSerDeUtils.deserialize[UdfPacket](udfObj.getPayload.toByteArray)
 
     assert(deSer.function.asInstanceOf[Int => Int](5) == func(5))
     assert(deSer.outputEncoder == ScalaReflection.encoderFor(typeTag[Int]))

@@ -40,7 +40,6 @@ import org.apache.hadoop.io.{ArrayWritable, BooleanWritable, BytesWritable, Doub
 import org.apache.hadoop.mapred.{FileInputFormat, InputFormat, JobConf, SequenceFileInputFormat, TextInputFormat}
 import org.apache.hadoop.mapreduce.{InputFormat => NewInputFormat, Job => NewHadoopJob}
 import org.apache.hadoop.mapreduce.lib.input.{FileInputFormat => NewFileInputFormat}
-import org.apache.logging.log4j.Level
 
 import org.apache.spark.annotation.{DeveloperApi, Experimental}
 import org.apache.spark.broadcast.Broadcast
@@ -396,7 +395,10 @@ class SparkContext(config: SparkConf) extends Logging {
     require(SparkContext.VALID_LOG_LEVELS.contains(upperCased),
       s"Supplied level $logLevel did not match one of:" +
         s" ${SparkContext.VALID_LOG_LEVELS.mkString(",")}")
-    Utils.setLogLevel(Level.toLevel(upperCased))
+    Utils.setLogLevelIfNeeded(upperCased)
+    if (conf.get(EXECUTOR_ALLOW_SYNC_LOG_LEVEL) && _schedulerBackend != null) {
+      _schedulerBackend.updateExecutorsLogLevel(upperCased)
+    }
   }
 
   try {
@@ -585,6 +587,11 @@ class SparkContext(config: SparkConf) extends Logging {
     _dagScheduler = new DAGScheduler(this)
     _heartbeatReceiver.ask[Boolean](TaskSchedulerIsSet)
 
+    if (_conf.get(EXECUTOR_ALLOW_SYNC_LOG_LEVEL)) {
+      _conf.get(SPARK_LOG_LEVEL)
+        .foreach(logLevel => _schedulerBackend.updateExecutorsLogLevel(logLevel))
+    }
+
     val _executorMetricsSource =
       if (_conf.get(METRICS_EXECUTORMETRICS_SOURCE_ENABLED)) {
         Some(new ExecutorMetricsSource)
@@ -671,7 +678,7 @@ class SparkContext(config: SparkConf) extends Logging {
     postApplicationStart()
 
     // After application started, attach handlers to started server and start handler.
-    _ui.foreach(_.attachAllHandler())
+    _ui.foreach(_.attachAllHandlers())
     // Attach the driver metrics servlet handler to the web ui after the metrics system is started.
     _env.metricsSystem.getServletHandlers.foreach(handler => ui.foreach(_.attachHandler(handler)))
 

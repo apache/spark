@@ -167,6 +167,7 @@ class SparkConnectServiceSuite extends SharedSparkSession with MockitoSugar with
         .newBuilder()
         .setPlan(plan)
         .setUserContext(context)
+        .setSessionId(UUID.randomUUID.toString())
         .build()
 
       // Execute plan.
@@ -252,7 +253,7 @@ class SparkConnectServiceSuite extends SharedSparkSession with MockitoSugar with
             .newBuilder()
             .setInput(
               proto.Relation.newBuilder().setSql(proto.SQL.newBuilder().setQuery("select 1")))
-            .setPath("my/test/path")
+            .setPath(Utils.createTempDir().getAbsolutePath)
             .setMode(proto.WriteOperation.SaveMode.SAVE_MODE_OVERWRITE)),
       proto.Command
         .newBuilder()
@@ -300,7 +301,7 @@ class SparkConnectServiceSuite extends SharedSparkSession with MockitoSugar with
             .setAvailableNow(true)
             .setQueryName("test")
             .setFormat("memory")
-            .putOptions("checkpointLocation", s"${UUID.randomUUID}")
+            .putOptions("checkpointLocation", Utils.createTempDir().getAbsolutePath)
             .setPath("test-path")
             .build()),
       proto.Command
@@ -334,7 +335,8 @@ class SparkConnectServiceSuite extends SharedSparkSession with MockitoSugar with
                 .setCommand(ByteString.copyFrom("command".getBytes()))
                 .setPythonVer("3.10")
                 .build())))) { command =>
-    withCommandTest { verifyEvents =>
+    val sessionId = UUID.randomUUID.toString()
+    withCommandTest(sessionId) { verifyEvents =>
       val instance = new SparkConnectService(false)
       val context = proto.UserContext
         .newBuilder()
@@ -348,7 +350,7 @@ class SparkConnectServiceSuite extends SharedSparkSession with MockitoSugar with
       val request = proto.ExecutePlanRequest
         .newBuilder()
         .setPlan(plan)
-        .setSessionId("s1")
+        .setSessionId(sessionId)
         .setUserContext(context)
         .build()
 
@@ -393,11 +395,12 @@ class SparkConnectServiceSuite extends SharedSparkSession with MockitoSugar with
   }
 
   test("SPARK-43923: canceled request send events") {
+    val sessionId = UUID.randomUUID.toString
     withEvents { verifyEvents =>
       val instance = new SparkConnectService(false)
 
       // Add an always crashing UDF
-      val session = SparkConnectService.getOrCreateIsolatedSession("c1", "session").session
+      val session = SparkConnectService.getOrCreateIsolatedSession("c1", sessionId).session
       val sleep: Long => Long = { time =>
         Thread.sleep(time)
         time
@@ -417,7 +420,7 @@ class SparkConnectServiceSuite extends SharedSparkSession with MockitoSugar with
         .newBuilder()
         .setPlan(plan)
         .setUserContext(context)
-        .setSessionId("session")
+        .setSessionId(sessionId)
         .build()
 
       val thread = new Thread {
@@ -426,7 +429,7 @@ class SparkConnectServiceSuite extends SharedSparkSession with MockitoSugar with
           instance.interrupt(
             proto.InterruptRequest
               .newBuilder()
-              .setSessionId("session")
+              .setSessionId(sessionId)
               .setUserContext(context)
               .setInterruptType(proto.InterruptRequest.InterruptType.INTERRUPT_TYPE_ALL)
               .build(),
@@ -463,11 +466,12 @@ class SparkConnectServiceSuite extends SharedSparkSession with MockitoSugar with
   }
 
   test("SPARK-41165: failures in the arrow collect path should not cause hangs") {
+    val sessionId = UUID.randomUUID.toString
     withEvents { verifyEvents =>
       val instance = new SparkConnectService(false)
 
       // Add an always crashing UDF
-      val session = SparkConnectService.getOrCreateIsolatedSession("c1", "session").session
+      val session = SparkConnectService.getOrCreateIsolatedSession("c1", sessionId).session
       val instaKill: Long => Long = { _ =>
         throw new Exception("Kaboom")
       }
@@ -486,7 +490,7 @@ class SparkConnectServiceSuite extends SharedSparkSession with MockitoSugar with
         .newBuilder()
         .setPlan(plan)
         .setUserContext(context)
-        .setSessionId("session")
+        .setSessionId(sessionId)
         .build()
 
       // The observer is executed inside this thread. So
@@ -599,6 +603,7 @@ class SparkConnectServiceSuite extends SharedSparkSession with MockitoSugar with
         .newBuilder()
         .setPlan(plan)
         .setUserContext(context)
+        .setSessionId(UUID.randomUUID.toString())
         .build()
 
       // Execute plan.
@@ -637,7 +642,7 @@ class SparkConnectServiceSuite extends SharedSparkSession with MockitoSugar with
     }
   }
 
-  protected def withCommandTest(f: VerifyEvents => Unit): Unit = {
+  protected def withCommandTest(sessionId: String)(f: VerifyEvents => Unit): Unit = {
     withView("testview") {
       withTable("testcat.testtable") {
         withSparkConf(
@@ -649,7 +654,7 @@ class SparkConnectServiceSuite extends SharedSparkSession with MockitoSugar with
             when(restartedQuery.id).thenReturn(DEFAULT_UUID)
             when(restartedQuery.runId).thenReturn(DEFAULT_UUID)
             SparkConnectService.streamingSessionManager.registerNewStreamingQuery(
-              SparkConnectService.getOrCreateIsolatedSession("c1", "s1"),
+              SparkConnectService.getOrCreateIsolatedSession("c1", sessionId),
               restartedQuery)
             f(verifyEvents)
           }

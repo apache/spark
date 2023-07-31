@@ -41,7 +41,7 @@ import org.apache.spark.sql.connect.client.SparkConnectClient.Configuration
 import org.apache.spark.sql.connect.client.arrow.ArrowSerializer
 import org.apache.spark.sql.connect.client.util.Cleaner
 import org.apache.spark.sql.connect.common.LiteralValueProtoConverter.toLiteralProto
-import org.apache.spark.sql.internal.CatalogImpl
+import org.apache.spark.sql.internal.{CatalogImpl, SqlApiConf}
 import org.apache.spark.sql.streaming.DataStreamReader
 import org.apache.spark.sql.streaming.StreamingQueryManager
 import org.apache.spark.sql.types.StructType
@@ -126,9 +126,8 @@ class SparkSession private[sql] (
   private def createDataset[T](encoder: AgnosticEncoder[T], data: Iterator[T]): Dataset[T] = {
     newDataset(encoder) { builder =>
       if (data.nonEmpty) {
-        val timeZoneId = conf.get("spark.sql.session.timeZone")
         val arrowData = ArrowSerializer.serialize(data, encoder, allocator, timeZoneId)
-        if (arrowData.size() <= conf.get("spark.sql.session.localRelationCacheThreshold").toInt) {
+        if (arrowData.size() <= conf.get(SqlApiConf.LOCAL_RELATION_CACHE_THRESHOLD_KEY).toInt) {
           builder.getLocalRelationBuilder
             .setSchema(encoder.schema.json)
             .setData(arrowData)
@@ -529,9 +528,11 @@ class SparkSession private[sql] (
     client.semanticHash(plan).getSemanticHash.getResult
   }
 
+  private[sql] def timeZoneId: String = conf.get(SqlApiConf.SESSION_LOCAL_TIMEZONE_KEY)
+
   private[sql] def execute[T](plan: proto.Plan, encoder: AgnosticEncoder[T]): SparkResult[T] = {
     val value = client.execute(plan)
-    val result = new SparkResult(value, allocator, encoder)
+    val result = new SparkResult(value, allocator, encoder, timeZoneId)
     cleaner.register(result)
     result
   }
@@ -553,7 +554,7 @@ class SparkSession private[sql] (
     val command = proto.Command.newBuilder().setRegisterFunction(udf).build()
     val plan = proto.Plan.newBuilder().setCommand(command).build()
 
-    client.execute(plan)
+    client.execute(plan).asScala.foreach(_ => ())
   }
 
   @DeveloperApi
@@ -614,7 +615,7 @@ class SparkSession private[sql] (
    * Interrupt all operations of this session currently running on the connected server.
    *
    * @return
-   *   sequence of operationIds of interrupted operations. Note: there is still a possiblility of
+   *   sequence of operationIds of interrupted operations. Note: there is still a possibility of
    *   operation finishing just as it is interrupted.
    *
    * @since 3.5.0
@@ -627,7 +628,7 @@ class SparkSession private[sql] (
    * Interrupt all operations of this session with the given operation tag.
    *
    * @return
-   *   sequence of operationIds of interrupted operations. Note: there is still a possiblility of
+   *   sequence of operationIds of interrupted operations. Note: there is still a possibility of
    *   operation finishing just as it is interrupted.
    *
    * @since 3.5.0
@@ -640,7 +641,7 @@ class SparkSession private[sql] (
    * Interrupt an operation of this session with the given operationId.
    *
    * @return
-   *   sequence of operationIds of interrupted operations. Note: there is still a possiblility of
+   *   sequence of operationIds of interrupted operations. Note: there is still a possibility of
    *   operation finishing just as it is interrupted.
    *
    * @since 3.5.0

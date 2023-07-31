@@ -56,11 +56,12 @@ import org.apache.spark.util._
 
 private[spark] class IsolatedSessionState(
   val sessionUUID: String,
-  val urlClassLoader: MutableURLClassLoader,
+  var urlClassLoader: MutableURLClassLoader,
   var replClassLoader: ClassLoader,
   val currentFiles: HashMap[String, Long],
   val currentJars: HashMap[String, Long],
-  val currentArchives: HashMap[String, Long])
+  val currentArchives: HashMap[String, Long],
+  val replClassDirUri: Option[String])
 
 /**
  * Spark executor, backed by a threadpool to run tasks.
@@ -173,13 +174,25 @@ private[spark] class Executor(
     val currentFiles = new HashMap[String, Long]
     val currentJars = new HashMap[String, Long]
     val currentArchives = new HashMap[String, Long]
-    val urlClassLoader = createClassLoader(currentJars)
+    val urlClassLoader =
+      createClassLoader(currentJars, isStubbingEnabledForState(jobArtifactState.uuid))
     val replClassLoader = addReplClassLoaderIfNeeded(
-      urlClassLoader, jobArtifactState.replClassDirUri)
+      urlClassLoader, jobArtifactState.replClassDirUri, jobArtifactState.uuid)
     new IsolatedSessionState(
       jobArtifactState.uuid, urlClassLoader, replClassLoader,
-      currentFiles, currentJars, currentArchives)
+      currentFiles,
+      currentJars,
+      currentArchives,
+      jobArtifactState.replClassDirUri
+    )
   }
+
+  private def isStubbingEnabledForState(name: String) = {
+    !isDefaultState(name) &&
+      conf.get(CONNECT_SCALA_UDF_STUB_PREFIXES).nonEmpty
+  }
+
+  private def isDefaultState(name: String) = name == "default"
 
   // Classloader isolation
   // The default isolation group
@@ -514,9 +527,8 @@ private[spark] class Executor(
 
       // Classloader isolation
       val isolatedSession = taskDescription.artifacts.state match {
-        case Some(jobArtifactState) => isolatedSessionCache.get(
-          jobArtifactState.uuid,
-          () => newSessionState(jobArtifactState))
+        case Some(jobArtifactState) =>
+          isolatedSessionCache.get(jobArtifactState.uuid, () => newSessionState(jobArtifactState))
         case _ => defaultSessionState
       }
 
@@ -548,6 +560,9 @@ private[spark] class Executor(
           taskDescription.artifacts.jars,
           taskDescription.artifacts.archives,
           isolatedSession)
+        // Always reset the thread class loader to ensure if any updates, all threads (not only
+        // the thread that updated the dependencies) can update to the new class loader.
+        Thread.currentThread.setContextClassLoader(isolatedSession.replClassLoader)
         task = ser.deserialize[Task[Any]](
           taskDescription.serializedTask, Thread.currentThread.getContextClassLoader)
         task.localProperties = taskDescription.properties
@@ -999,7 +1014,9 @@ private[spark] class Executor(
    * Create a ClassLoader for use in tasks, adding any JARs specified by the user or any classes
    * created by the interpreter to the search path
    */
-  private def createClassLoader(currentJars: HashMap[String, Long]): MutableURLClassLoader = {
+  private def createClassLoader(
+      currentJars: HashMap[String, Long],
+      useStub: Boolean): MutableURLClassLoader = {
     // Bootstrap the list of jars with the user class path.
     val now = System.currentTimeMillis()
     userClassPath.foreach { url =>
@@ -1011,12 +1028,43 @@ private[spark] class Executor(
     val urls = userClassPath.toArray ++ currentJars.keySet.map { uri =>
       new File(uri.split("/").last).toURI.toURL
     }
-    logInfo(s"Starting executor with user classpath (userClassPathFirst = $userClassPathFirst): " +
-        urls.mkString("'", ",", "'"))
+    createClassLoader(urls, useStub)
+  }
+
+  private def createClassLoader(urls: Array[URL], useStub: Boolean): MutableURLClassLoader = {
+    logInfo(
+      s"Starting executor with user classpath (userClassPathFirst = $userClassPathFirst): " +
+      urls.mkString("'", ",", "'")
+    )
+
+    if (useStub) {
+      createClassLoaderWithStub(urls, conf.get(CONNECT_SCALA_UDF_STUB_PREFIXES))
+    } else {
+      createClassLoader(urls)
+    }
+  }
+
+  private def createClassLoader(urls: Array[URL]): MutableURLClassLoader = {
     if (userClassPathFirst) {
       new ChildFirstURLClassLoader(urls, systemLoader)
     } else {
       new MutableURLClassLoader(urls, systemLoader)
+    }
+  }
+
+  private def createClassLoaderWithStub(
+      urls: Array[URL],
+      binaryName: Seq[String]): MutableURLClassLoader = {
+    if (userClassPathFirst) {
+      // user -> (sys -> stub)
+      val stubClassLoader =
+        StubClassLoader(systemLoader, binaryName)
+      new ChildFirstURLClassLoader(urls, stubClassLoader)
+    } else {
+      // sys -> user -> stub
+      val stubClassLoader =
+        StubClassLoader(null, binaryName)
+      new ChildFirstURLClassLoader(urls, stubClassLoader, systemLoader)
     }
   }
 
@@ -1026,14 +1074,17 @@ private[spark] class Executor(
    */
   private def addReplClassLoaderIfNeeded(
       parent: ClassLoader,
-      sessionClassUri: Option[String]): ClassLoader = {
+      sessionClassUri: Option[String],
+      sessionUUID: String): ClassLoader = {
     val classUri = sessionClassUri.getOrElse(conf.get("spark.repl.class.uri", null))
-    if (classUri != null) {
+    val classLoader = if (classUri != null) {
       logInfo("Using REPL class URI: " + classUri)
       new ExecutorClassLoader(conf, env, classUri, parent, userClassPathFirst)
     } else {
       parent
     }
+    logInfo(s"Created or updated repl class loader $classLoader for $sessionUUID.")
+    classLoader
   }
 
   /**
@@ -1048,6 +1099,7 @@ private[spark] class Executor(
       state: IsolatedSessionState,
       testStartLatch: Option[CountDownLatch] = None,
       testEndLatch: Option[CountDownLatch] = None): Unit = {
+    var renewClassLoader = false;
     lazy val hadoopConf = SparkHadoopUtil.get.newConfiguration(conf)
     updateDependenciesLock.lockInterruptibly()
     try {
@@ -1056,7 +1108,7 @@ private[spark] class Executor(
 
       // If the session ID was specified from SparkSession, it's from a Spark Connect client.
       // Specify a dedicated directory for Spark Connect client.
-      lazy val root = if (state.sessionUUID != "default") {
+      lazy val root = if (!isDefaultState(state.sessionUUID)) {
         val newDest = new File(SparkFiles.getRootDirectory(), state.sessionUUID)
         newDest.mkdir()
         newDest
@@ -1101,10 +1153,19 @@ private[spark] class Executor(
           // Add it to our class loader
           val url = new File(root, localName).toURI.toURL
           if (!state.urlClassLoader.getURLs().contains(url)) {
-            logInfo(s"Adding $url to class loader")
+            logInfo(s"Adding $url to class loader ${state.sessionUUID}")
             state.urlClassLoader.addURL(url)
+            if (isStubbingEnabledForState(state.sessionUUID)) {
+              renewClassLoader = true
+            }
           }
         }
+      }
+      if (renewClassLoader) {
+        // Recreate the class loader to ensure all classes are updated.
+        state.urlClassLoader = createClassLoader(state.urlClassLoader.getURLs, useStub = true)
+        state.replClassLoader =
+          addReplClassLoaderIfNeeded(state.urlClassLoader, state.replClassDirUri, state.sessionUUID)
       }
       // For testing, so we can simulate a slow file download:
       testEndLatch.foreach(_.await())
