@@ -826,6 +826,11 @@
       "Not found an encoder of the type <typeName> to Spark SQL internal representation. Consider to change the input type to one of supported at '<docroot>/sql-ref-datatypes.html'."
     ]
   },
+  "ERROR_READING_AVRO_UNKNOWN_FINGERPRINT" : {
+    "message" : [
+      "Error reading avro data -- encountered an unknown fingerprint: <fingerprint>, not sure what schema to use. This could happen if you registered additional schemas after starting your spark context."
+    ]
+  },
   "EVENT_TIME_IS_NOT_ON_TIMESTAMP_TYPE" : {
     "message" : [
       "The event time <eventName> has the invalid type <eventType>, but expected \"TIMESTAMP\"."
@@ -858,6 +863,11 @@
       "Failed parsing struct: <raw>."
     ],
     "sqlState" : "22018"
+  },
+  "FAILED_REGISTER_CLASS_WITH_KRYO" : {
+    "message" : [
+      "Failed to register classes with Kryo"
+    ]
   },
   "FAILED_RENAME_PATH" : {
     "message" : [
@@ -1516,6 +1526,12 @@
     ],
     "sqlState" : "22032"
   },
+  "INVALID_KRYO_SERIALIZER_BUFFER_SIZE" : {
+    "message" : [
+      "<bufferSizeConfKey> must be less than 2048 MiB, got: <bufferSizeConfValue> MiB."
+    ],
+    "sqlState" : "F0000"
+  },
   "INVALID_LAMBDA_FUNCTION_CALL" : {
     "message" : [
       "Invalid lambda function call."
@@ -1956,6 +1972,11 @@
   "JOIN_CONDITION_IS_NOT_BOOLEAN_TYPE" : {
     "message" : [
       "The join condition <joinCondition> has the invalid type <conditionType>, expected \"BOOLEAN\"."
+    ]
+  },
+  "KRYO_BUFFER_OVERFLOW" : {
+    "message" : [
+      "Kryo serialization failed: <exceptionMsg>. To avoid this, increase <bufferSizeConfKey> value."
     ]
   },
   "LOAD_DATA_PATH_NOT_EXISTS" : {
