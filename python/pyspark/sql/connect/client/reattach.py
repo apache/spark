@@ -24,7 +24,7 @@ from typing import Optional, Dict, Any
 
 import pyspark.sql.connect.proto as pb2
 import pyspark.sql.connect.proto.base_pb2_grpc as grpc_lib
-from pyspark.sql.connect.client import SparkConnectClient
+from pyspark.sql.connect.client.core import SparkConnectClient
 from pyspark.sql.connect.client.core import Retrying
 
 
