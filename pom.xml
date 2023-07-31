@@ -187,7 +187,7 @@
     <!-- org.apache.commons/commons-pool2/-->
     <commons-pool2.version>2.11.1</commons-pool2.version>
     <datanucleus-core.version>4.1.17</datanucleus-core.version>
-    <guava.version>14.0.1</guava.version>
+    <guava.version>28.1-jre</guava.version>
     <janino.version>3.0.16</janino.version>
     <jersey.version>2.36</jersey.version>
     <joda.version>2.10.13</joda.version>
