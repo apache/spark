@@ -100,8 +100,15 @@ private[spark] class ShuffleMapTask(
     // ShuffleBlockId construction.
     val mapId = if (SparkEnv.get.conf.get(config.SHUFFLE_USE_OLD_FETCH_PROTOCOL)) {
       partitionId
-    } else context.taskAttemptId()
-    dep.shuffleWriterProcessor.write(rdd, dep, mapId, context, partition)
+    } else {
+      context.taskAttemptId()
+    }
+    dep.shuffleWriterProcessor.write(
+      rdd.iterator(partition, context),
+      dep,
+      mapId,
+      partitionId,
+      context)
   }
 
   override def preferredLocations: Seq[TaskLocation] = preferredLocs
