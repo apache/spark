@@ -797,6 +797,11 @@ object SparkConnect {
       )
     },
 
+    (Test /unmanagedJars) += (LocalProject("protobuf") / assembly).value,
+    (Test / fullClasspath) :=
+      (Test / fullClasspath).value.filterNot { f => f.toString.contains("spark-protobuf") },
+    (Test / fullClasspath) += (LocalProject("protobuf") / assembly).value,
+
     (assembly / test) := { },
 
     (assembly / logLevel) := Level.Info,

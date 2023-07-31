@@ -20,7 +20,7 @@
           }
         }, {
           "literal": {
-            "string": "org.apache.spark.connect.proto.StorageLevel"
+            "string": "org.apache.spark.sql.protobuf.protos.TestObj"
           }
         }]
       }
