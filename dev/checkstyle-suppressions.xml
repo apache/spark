@@ -60,4 +60,10 @@
               files="sql/core/src/main/java/org/apache/spark/sql/streaming/Trigger.java"/>
     <suppress checks="MethodName"
               files="connector/connect/client/jvm/src/main/java/org/apache/spark/sql/streaming/Trigger.java"/>
+    <suppress checks=".*"
+              files="connector/connect/server/src/test/java/org/apache/spark/sql/protobuf/protos/Test.java"/>
+    <suppress checks=".*"
+              files="connector/connect/server/src/test/java/org/apache/spark/sql/protobuf/protos/TestObj.java"/>
+    <suppress checks=".*"
+              files="connector/connect/server/src/test/java/org/apache/spark/sql/protobuf/protos/TestObjOrBuilder.java"/>
 </suppressions>
