@@ -26,10 +26,12 @@ dpkg-query -Wf '${Installed-Size}\t${Package}\n' | sort -n | tail -n 100
 df -h
 echo "Removing large packages"
 sudo rm -rf /usr/share/dotnet/
+sudo rm -rf /usr/local/lib/android
 sudo apt-get remove --purge -y '^aspnet.*'
 sudo apt-get remove --purge -y '^dotnet-.*'
 sudo apt-get remove --purge -y '^llvm-.*'
 sudo apt-get remove --purge -y 'php.*'
+sudo apt-get remove --purge -y '^mongodb-.*'
 sudo apt-get remove --purge -y snapd google-chrome-stable microsoft-edge-stable firefox
 sudo apt-get remove --purge -y azure-cli google-cloud-sdk mono-devel powershell
 sudo apt-get autoremove --purge -y
