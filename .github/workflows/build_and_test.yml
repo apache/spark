@@ -412,10 +412,10 @@ jobs:
           pyspark-coursier-
     - name: Free up disk space
       run: |
-        sudo rm -rf /__t/CodeQL
-        sudo rm -rf /__t/go
         du -sh /*
         du -sh /*/*
+        rm -rf /__t/CodeQL
+        rm -rf /__t/go
     - name: Install Java ${{ matrix.java }}
       uses: actions/setup-java@v3
       with:
