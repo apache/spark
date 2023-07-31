@@ -34,13 +34,13 @@ class VectorReservePolicySuite extends SparkFunSuite with SharedSparkSessionBase
       Array(new OnHeapColumnVector(80, dataType),
         new OffHeapColumnVector(80, dataType)).foreach { vector =>
         try {
-          // For small vector, new capacity = request capacity * 2 and will not reset this.
+          // The new capacity of small vector = request capacity * 2 and will not be reset
           vector.appendBytes(100, 0)
           assert(vector.getCapacity == 200)
           vector.reset()
           assert(vector.getCapacity == 200)
 
-          // For huge vector, new capacity = old capacity * 1.1 for huge vector and will be reset
+          // The new capacity of huge vector = old capacity * 1.1 for huge vector and will be reset
           vector.appendBytes(300, 0)
           assert(vector.getCapacity == 360)
           vector.reset()
