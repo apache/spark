@@ -415,12 +415,8 @@ jobs:
         java-version: ${{ matrix.java }}
     - name: List Python packages (Python 3.9, PyPy3)
       run: |
-        python3.9 -m pip list -v
-        du -sh /usr/local/lib/python3.9/dist-packages
-        du -sh /usr/local/lib/python3.9/dist-packages/*
-        pypy3 -m pip list -v
-        du -sh /usr/local/pypy/pypy3.8/lib/pypy3.8/site-packages
-        du -sh /usr/local/pypy/pypy3.8/lib/pypy3.8/site-packages/*
+        python3.9 -m pip list
+        pypy3 -m pip list
     - name: Install Conda for pip packaging test
       if: ${{ matrix.modules == 'pyspark-errors' }}
       run: |
