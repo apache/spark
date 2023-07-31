@@ -138,6 +138,7 @@ private[client] class GrpcRetryHandler(private val retryPolicy: GrpcRetryHandler
 }
 
 private[client] object GrpcRetryHandler extends Logging {
+
   /**
    * Retries the given function with exponential backoff according to the client's retryPolicy.
    * @param retryPolicy
@@ -161,8 +162,9 @@ private[client] object GrpcRetryHandler extends Logging {
       return fn
     } catch {
       case NonFatal(e) if retryPolicy.canRetry(e) && currentRetryNum < retryPolicy.maxRetries =>
-        logWarning(s"Non fatal error during RPC execution: $e, " +
-          s"retrying (currentRetryNum=$currentRetryNum)")
+        logWarning(
+          s"Non fatal error during RPC execution: $e, " +
+            s"retrying (currentRetryNum=$currentRetryNum)")
         Thread.sleep(
           (retryPolicy.maxBackoff min retryPolicy.initialBackoff * Math
             .pow(retryPolicy.backoffMultiplier, currentRetryNum)).toMillis)

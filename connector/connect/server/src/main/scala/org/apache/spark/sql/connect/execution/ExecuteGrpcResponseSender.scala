@@ -101,7 +101,7 @@ private[connect] class ExecuteGrpcResponseSender[T <: MessageLite](
     } else {
       val confSize =
         SparkEnv.get.conf.get(CONNECT_EXECUTE_REATTACHABLE_SENDER_MAX_STREAM_DURATION).toLong
-      if (confSize > 0) System.currentTimeMillis() + 1000 * confSize else Long.MaxValue
+      if (confSize > 0) System.currentTimeMillis() + confSize else Long.MaxValue
     }
 
     // Maximum total size of responses. The response which tips over this threshold will be sent.
@@ -151,9 +151,10 @@ private[connect] class ExecuteGrpcResponseSender[T <: MessageLite](
             logDebug(s"Reacquired executionObserver lock after waiting.")
           }
         }
-        logDebug(s"Exiting loop: detached=$detached, response=$response, " +
-          s"lastIndex=${executionObserver.getLastResponseIndex()}, " +
-          s"deadline=${deadlineLimitReached}")
+        logDebug(
+          s"Exiting loop: detached=$detached, response=$response, " +
+            s"lastIndex=${executionObserver.getLastResponseIndex()}, " +
+            s"deadline=${deadlineLimitReached}")
       }
 
       // Process the outcome of the inner loop.
@@ -195,15 +196,16 @@ private[connect] class ExecuteGrpcResponseSender[T <: MessageLite](
   }
 
   /**
-   * Send the response to the grpcCallObserver.
-   * In reattachable execution, we control the flow, and only pass the response to the
-   * grpcCallObserver when it's ready to send.
-   * Otherwise, grpcCallObserver.onNext() would return in a non-blocking way, but could queue
-   * responses without sending them if the client doesn't keep up receiving them.
-   * When pushing more responses to onNext(), there is no insight how far behind the service is
-   * in actually sending them out.
-   * @param deadlineTimeMillis when reattachable, wait for ready stream until this deadline.
-   * @return true if the response was sent, false otherwise (meaning deadline passed)
+   * Send the response to the grpcCallObserver. In reattachable execution, we control the flow,
+   * and only pass the response to the grpcCallObserver when it's ready to send. Otherwise,
+   * grpcCallObserver.onNext() would return in a non-blocking way, but could queue responses
+   * without sending them if the client doesn't keep up receiving them. When pushing more
+   * responses to onNext(), there is no insight how far behind the service is in actually sending
+   * them out.
+   * @param deadlineTimeMillis
+   *   when reattachable, wait for ready stream until this deadline.
+   * @return
+   *   true if the response was sent, false otherwise (meaning deadline passed)
    */
   private def sendResponse(response: T, deadlineTimeMillis: Long): Boolean = {
     if (!executeHolder.reattachable) {

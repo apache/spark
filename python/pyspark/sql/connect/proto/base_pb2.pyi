@@ -2552,52 +2552,46 @@ global___ReattachExecuteRequest = ReattachExecuteRequest
 class ReleaseExecuteRequest(google.protobuf.message.Message):
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
-    class _ReleaseType:
-        ValueType = typing.NewType("ValueType", builtins.int)
-        V: typing_extensions.TypeAlias = ValueType
-
-    class _ReleaseTypeEnumTypeWrapper(
-        google.protobuf.internal.enum_type_wrapper._EnumTypeWrapper[
-            ReleaseExecuteRequest._ReleaseType.ValueType
-        ],
-        builtins.type,
-    ):  # noqa: F821
-        DESCRIPTOR: google.protobuf.descriptor.EnumDescriptor
-        RELEASE_TYPE_UNSPECIFIED: ReleaseExecuteRequest._ReleaseType.ValueType  # 0
-        RELEASE_ALL: ReleaseExecuteRequest._ReleaseType.ValueType  # 1
+    class ReleaseAll(google.protobuf.message.Message):
         """Release and close operation completely.
         Note: This should be called when the server side operation is finished, and ExecutePlan or
         ReattachExecute are finished processing the result stream, or inside onComplete / onError.
+        This will not interrupt a running execution, but block until it's finished.
         """
-        RELEASE_UNTIL_RESPONSE: ReleaseExecuteRequest._ReleaseType.ValueType  # 2
+
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+        def __init__(
+            self,
+        ) -> None: ...
+
+    class ReleaseUntil(google.protobuf.message.Message):
         """Release all responses from the operation response stream up to and including
-        the response given by until_response_id.
+        the response with the given by response_id.
         While server determines by itself how much of a buffer of responses to keep, client providing
         explicit release calls will help reduce resource consumption.
         Noop if response_id not found in cached responses.
         """
 
-    class ReleaseType(_ReleaseType, metaclass=_ReleaseTypeEnumTypeWrapper): ...
-    RELEASE_TYPE_UNSPECIFIED: ReleaseExecuteRequest.ReleaseType.ValueType  # 0
-    RELEASE_ALL: ReleaseExecuteRequest.ReleaseType.ValueType  # 1
-    """Release and close operation completely.
-    Note: This should be called when the server side operation is finished, and ExecutePlan or
-    ReattachExecute are finished processing the result stream, or inside onComplete / onError.
-    """
-    RELEASE_UNTIL_RESPONSE: ReleaseExecuteRequest.ReleaseType.ValueType  # 2
-    """Release all responses from the operation response stream up to and including
-    the response given by until_response_id.
-    While server determines by itself how much of a buffer of responses to keep, client providing
-    explicit release calls will help reduce resource consumption.
-    Noop if response_id not found in cached responses.
-    """
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+        RESPONSE_ID_FIELD_NUMBER: builtins.int
+        response_id: builtins.str
+        def __init__(
+            self,
+            *,
+            response_id: builtins.str = ...,
+        ) -> None: ...
+        def ClearField(
+            self, field_name: typing_extensions.Literal["response_id", b"response_id"]
+        ) -> None: ...
 
     SESSION_ID_FIELD_NUMBER: builtins.int
     USER_CONTEXT_FIELD_NUMBER: builtins.int
     OPERATION_ID_FIELD_NUMBER: builtins.int
     CLIENT_TYPE_FIELD_NUMBER: builtins.int
-    RELEASE_TYPE_FIELD_NUMBER: builtins.int
-    UNTIL_RESPONSE_ID_FIELD_NUMBER: builtins.int
+    RELEASE_ALL_FIELD_NUMBER: builtins.int
+    RELEASE_UNTIL_FIELD_NUMBER: builtins.int
     session_id: builtins.str
     """(Required)
 
@@ -2621,11 +2615,10 @@ class ReleaseExecuteRequest(google.protobuf.message.Message):
     can be used for language or version specific information and is only intended for
     logging purposes and will not be interpreted by the server.
     """
-    release_type: global___ReleaseExecuteRequest.ReleaseType.ValueType
-    until_response_id: builtins.str
-    """if release_type == RELEASE_UNTIL_RESPONSE, the response_id of the response up until and
-    including which to release.
-    """
+    @property
+    def release_all(self) -> global___ReleaseExecuteRequest.ReleaseAll: ...
+    @property
+    def release_until(self) -> global___ReleaseExecuteRequest.ReleaseUntil: ...
     def __init__(
         self,
         *,
@@ -2633,8 +2626,8 @@ class ReleaseExecuteRequest(google.protobuf.message.Message):
         user_context: global___UserContext | None = ...,
         operation_id: builtins.str = ...,
         client_type: builtins.str | None = ...,
-        release_type: global___ReleaseExecuteRequest.ReleaseType.ValueType = ...,
-        until_response_id: builtins.str = ...,
+        release_all: global___ReleaseExecuteRequest.ReleaseAll | None = ...,
+        release_until: global___ReleaseExecuteRequest.ReleaseUntil | None = ...,
     ) -> None: ...
     def HasField(
         self,
@@ -2645,8 +2638,10 @@ class ReleaseExecuteRequest(google.protobuf.message.Message):
             b"client_type",
             "release",
             b"release",
-            "until_response_id",
-            b"until_response_id",
+            "release_all",
+            b"release_all",
+            "release_until",
+            b"release_until",
             "user_context",
             b"user_context",
         ],
@@ -2662,12 +2657,12 @@ class ReleaseExecuteRequest(google.protobuf.message.Message):
             b"operation_id",
             "release",
             b"release",
-            "release_type",
-            b"release_type",
+            "release_all",
+            b"release_all",
+            "release_until",
+            b"release_until",
             "session_id",
             b"session_id",
-            "until_response_id",
-            b"until_response_id",
             "user_context",
             b"user_context",
         ],
@@ -2679,7 +2674,7 @@ class ReleaseExecuteRequest(google.protobuf.message.Message):
     @typing.overload
     def WhichOneof(
         self, oneof_group: typing_extensions.Literal["release", b"release"]
-    ) -> typing_extensions.Literal["until_response_id"] | None: ...
+    ) -> typing_extensions.Literal["release_all", "release_until"] | None: ...
 
 global___ReleaseExecuteRequest = ReleaseExecuteRequest
 

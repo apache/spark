@@ -46,7 +46,8 @@ class ExecutePlanResponseReattachableIterator(
   private val initialRequest: proto.ExecutePlanRequest = request
     .toBuilder()
     .addRequestOptions(
-      proto.ExecutePlanRequest.RequestOption.newBuilder()
+      proto.ExecutePlanRequest.RequestOption
+        .newBuilder()
         .setReattachOptions(proto.ReattachOptions.newBuilder().setReattachable(true).build())
         .build())
     .setOperationId(operationId)
@@ -122,14 +123,12 @@ class ExecutePlanResponseReattachableIterator(
 
   private def releaseExecute(untilResponseId: Option[String]) = {
     val request = createReleaseExecuteRequest(untilResponseId)
-    rawAsyncStub.releaseExecute(
-      request,
-      createRetryingReleaseExecuteResponseObserer(request)
-    )
+    rawAsyncStub.releaseExecute(request, createRetryingReleaseExecuteResponseObserer(request))
   }
 
   private def createReattachExecuteRequest() = {
-    val reattach = proto.ReattachExecuteRequest.newBuilder()
+    val reattach = proto.ReattachExecuteRequest
+      .newBuilder()
       .setSessionId(initialRequest.getSessionId)
       .setUserContext(initialRequest.getUserContext)
       .setOperationId(initialRequest.getOperationId)
@@ -145,7 +144,8 @@ class ExecutePlanResponseReattachableIterator(
   }
 
   private def createReleaseExecuteRequest(untilResponseId: Option[String]) = {
-    val release = proto.ReleaseExecuteRequest.newBuilder()
+    val release = proto.ReleaseExecuteRequest
+      .newBuilder()
       .setSessionId(initialRequest.getSessionId)
       .setUserContext(initialRequest.getUserContext)
       .setOperationId(initialRequest.getOperationId)
@@ -156,18 +156,22 @@ class ExecutePlanResponseReattachableIterator(
 
     untilResponseId match {
       case None =>
-        release.setReleaseType(proto.ReleaseExecuteRequest.ReleaseType.RELEASE_ALL)
+        release.setReleaseAll(proto.ReleaseExecuteRequest.ReleaseAll.newBuilder().build())
       case Some(responseId) =>
-        release.setReleaseType(proto.ReleaseExecuteRequest.ReleaseType.RELEASE_UNTIL_RESPONSE)
-        release.setUntilResponseId(responseId)
+        release
+          .setReleaseUntil(
+            proto.ReleaseExecuteRequest.ReleaseUntil
+              .newBuilder()
+              .setResponseId(responseId)
+              .build())
     }
 
     release.build()
   }
 
   private def createRetryingReleaseExecuteResponseObserer(
-    requestForRetry: proto.ReleaseExecuteRequest, currentRetryNum: Int = 0)
-    : StreamObserver[proto.ReleaseExecuteResponse] = {
+      requestForRetry: proto.ReleaseExecuteRequest,
+      currentRetryNum: Int = 0): StreamObserver[proto.ReleaseExecuteResponse] = {
     new StreamObserver[proto.ReleaseExecuteResponse] {
       override def onNext(v: proto.ReleaseExecuteResponse): Unit = {}
       override def onCompleted(): Unit = {}
@@ -176,7 +180,8 @@ class ExecutePlanResponseReattachableIterator(
           Thread.sleep(
             (retryPolicy.maxBackoff min retryPolicy.initialBackoff * Math
               .pow(retryPolicy.backoffMultiplier, currentRetryNum)).toMillis)
-          rawAsyncStub.releaseExecute(requestForRetry,
+          rawAsyncStub.releaseExecute(
+            requestForRetry,
             createRetryingReleaseExecuteResponseObserer(requestForRetry, currentRetryNum + 1))
         case _ =>
           logWarning(s"ReleaseExecute failed with exception: $t.")

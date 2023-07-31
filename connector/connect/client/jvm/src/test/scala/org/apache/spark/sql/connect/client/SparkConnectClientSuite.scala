@@ -372,8 +372,8 @@ class DummySparkConnectService() extends SparkConnectServiceGrpc.SparkConnectSer
   }
 
   override def reattachExecute(
-    request: proto.ReattachExecuteRequest,
-    responseObserver: StreamObserver[proto.ExecutePlanResponse]): Unit = {
+      request: proto.ReattachExecuteRequest,
+      responseObserver: StreamObserver[proto.ExecutePlanResponse]): Unit = {
     // Reply with a dummy response using the same client ID
     val requestSessionId = request.getSessionId
     val response = ExecutePlanResponse

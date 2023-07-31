@@ -41,17 +41,13 @@ class SparkConnectReleaseExecuteHandler(
         messageParameters = Map.empty)
     }
 
-    v.getReleaseType match {
-      case proto.ReleaseExecuteRequest.ReleaseType.RELEASE_ALL =>
-        executeHolder.close()
-      case proto.ReleaseExecuteRequest.ReleaseType.RELEASE_UNTIL_RESPONSE =>
-        if (!v.hasUntilResponseId) {
-          throw new IllegalArgumentException(
-            s"RELEASE_UNTIL_RESPONSE requested, but no until_response_id provided.")
-        }
-        executeHolder.releaseUntilResponseId(v.getUntilResponseId)
-      case other =>
-        throw new UnsupportedOperationException(s"Unknown ReleaseType $other!")
+    if (v.hasReleaseAll) {
+      executeHolder.close()
+    } else if (v.hasReleaseUntil) {
+      val responseId = v.getReleaseUntil.getResponseId
+      executeHolder.releaseUntilResponseId(responseId)
+    } else {
+      throw new UnsupportedOperationException(s"Unknown ReleaseExecute type!")
     }
 
     val response = proto.ReleaseExecuteResponse

@@ -749,28 +749,24 @@ message ReleaseExecuteRequest {
   // logging purposes and will not be interpreted by the server.
   optional string client_type = 4;
 
-  ReleaseType release_type = 5;
+  // Release and close operation completely.
+  // Note: This should be called when the server side operation is finished, and ExecutePlan or
+  // ReattachExecute are finished processing the result stream, or inside onComplete / onError.
+  // This will not interrupt a running execution, but block until it's finished.
+  message ReleaseAll {}
 
-  enum ReleaseType {
-    RELEASE_TYPE_UNSPECIFIED = 0;
-
-    // Release and close operation completely.
-    // Note: This should be called when the server side operation is finished, and ExecutePlan or
-    // ReattachExecute are finished processing the result stream, or inside onComplete / onError.
-    RELEASE_ALL = 1;
-
-    // Release all responses from the operation response stream up to and including
-    // the response given by until_response_id.
-    // While server determines by itself how much of a buffer of responses to keep, client providing
-    // explicit release calls will help reduce resource consumption.
-    // Noop if response_id not found in cached responses.
-    RELEASE_UNTIL_RESPONSE = 2;
+  // Release all responses from the operation response stream up to and including
+  // the response with the given by response_id.
+  // While server determines by itself how much of a buffer of responses to keep, client providing
+  // explicit release calls will help reduce resource consumption.
+  // Noop if response_id not found in cached responses.
+  message ReleaseUntil {
+    string response_id = 1;
   }
 
   oneof release {
-    // if release_type == RELEASE_UNTIL_RESPONSE, the response_id of the response up until and
-    // including which to release.
-    string until_response_id = 6;
+    ReleaseAll release_all = 5;
+    ReleaseUntil release_until = 6;
   }
 }
 
