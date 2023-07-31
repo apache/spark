@@ -1377,7 +1377,7 @@ object SQLConf {
 
   val INTERRUPT_ON_CANCEL = buildConf("spark.sql.execution.interruptOnCancel")
     .doc("When true, all running tasks will be interrupted if one cancels a query.")
-    .version("3.5.0")
+    .version("4.0.0")
     .booleanConf
     .createWithDefault(true)
 
