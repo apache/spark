@@ -44,9 +44,6 @@ private[connect] class ExecuteGrpcResponseSender[T <: MessageLite](
 
   private var detached = false
 
-  // StreamObserver with extra super powers.
-  private val grpcCallObserver = grpcObserver.asInstanceOf[ServerCallStreamObserver[T]]
-
   // Signal to wake up when grpcCallObserver.isReady()
   private val grpcCallObserverReadySignal = new Object
 
@@ -85,6 +82,7 @@ private[connect] class ExecuteGrpcResponseSender[T <: MessageLite](
     // In reattachable execution, we check if grpcCallObserver is ready for sending.
     // See sendResponse
     if (executeHolder.reattachable) {
+      val grpcCallObserver = grpcObserver.asInstanceOf[ServerCallStreamObserver[T]]
       grpcCallObserver.setOnReadyHandler(() => {
         grpcCallObserverReadySignal.synchronized {
           grpcCallObserverReadySignal.notifyAll()
@@ -210,7 +208,7 @@ private[connect] class ExecuteGrpcResponseSender[T <: MessageLite](
   private def sendResponse(response: T, deadlineTimeMillis: Long): Boolean = {
     if (!executeHolder.reattachable) {
       // no flow control in non-reattachable execute
-      grpcCallObserver.onNext(response)
+      grpcObserver.onNext(response)
       true
     } else {
       // In reattachable execution, we control the flow, and only pass the response to the
@@ -223,6 +221,9 @@ private[connect] class ExecuteGrpcResponseSender[T <: MessageLite](
       // sending doesn't fall behind what we push from here.
       // By using the deadline, we exit the RPC if the responses aren't picked up by the client.
       // A client that is still interested in continuing the query will need to reattach.
+
+      val grpcCallObserver = grpcObserver.asInstanceOf[ServerCallStreamObserver[T]]
+
       grpcCallObserverReadySignal.synchronized {
         logDebug(s"Acquired grpcCallObserverReadySignal lock.")
         while (!grpcCallObserver.isReady() && deadlineTimeMillis >= System.currentTimeMillis()) {
