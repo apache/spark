@@ -17,8 +17,6 @@
 # limitations under the License.
 #
 
-# This script frees up 28 GB of disk space by deleting unneeded packages and
-# large directories.
 echo "=============================================================================="
 echo "Free up disk space on CI system"
 echo "=============================================================================="
@@ -31,12 +29,9 @@ sudo rm -rf /usr/share/dotnet/
 sudo apt-get remove --purge -y '^aspnet.*'
 sudo apt-get remove --purge -y '^dotnet-.*'
 sudo apt-get remove --purge -y '^llvm-.*'
-sudo apt-get remove --purge -y 'libllvm.*'
 sudo apt-get remove --purge -y 'php.*'
 sudo apt-get remove --purge -y snapd google-chrome-stable microsoft-edge-stable firefox
 sudo apt-get remove --purge -y azure-cli google-cloud-sdk mono-devel powershell
 sudo apt-get autoremove --purge -y
 sudo apt-get clean
-sudo apt-get update
-dpkg-query -Wf '${Installed-Size}\t${Package}\n' | sort -n | tail -n 100
 df -h
