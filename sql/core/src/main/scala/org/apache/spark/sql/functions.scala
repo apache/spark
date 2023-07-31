@@ -2643,6 +2643,8 @@ object functions {
    * Concatenates multiple input string columns together into a single string column,
    * using the given separator.
    *
+   * @note Input strings which are null are skipped.
+   *
    * @group string_funcs
    * @since 1.5.0
    */
@@ -3958,6 +3960,8 @@ object functions {
   /**
    * Concatenates multiple input columns together into a single column.
    * The function works with strings, binary and compatible array columns.
+   *
+   * @note Returns null if any of the input columns are null.
    *
    * @group collection_funcs
    * @since 1.5.0
