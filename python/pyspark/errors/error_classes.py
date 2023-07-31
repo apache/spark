@@ -713,6 +713,11 @@ ERROR_CLASSES_JSON = """
       "Expected <expected> values for `<item>`, got <actual>."
     ]
   },
+  "UDTF_ARROW_TYPE_CAST_ERROR" : {
+    "message" : [
+      "Cannot convert the output value of the column '<col_name>' with type '<col_type>' to the specified return type of the column: '<arrow_type>'. Please check if the data types match and try again."
+    ]
+  },
   "UDTF_EXEC_ERROR" : {
     "message" : [
       "User defined table function encountered an error in the '<method_name>' method: <error>"
