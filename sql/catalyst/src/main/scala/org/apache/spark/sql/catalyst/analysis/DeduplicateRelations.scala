@@ -243,27 +243,26 @@ object DeduplicateRelations extends Rule[LogicalPlan] {
             }
 
             planWithNewChildren match {
-              case c @ CoGroup(_, keyDeserializer, leftDeserializer, rightDeserializer,
-              leftGroup, rightGroup, leftAttr, rightAttr, leftOrder, rightOrder, _, left,
-              right) =>
+              case c: CoGroup =>
                 // SPARK-43781: CoGroup is a special case, as it has different output attributes
                 // from its children. We need to update the output attributes of CoGroup manually.
-                val newLeftAttr = rewriteAttrsMatchWithSubPlan(leftAttr, attrMap, left.output)
-                val newRightAttr = rewriteAttrsMatchWithSubPlan(rightAttr, attrMap, right.output)
-                val newLeftGroup = rewriteAttrsMatchWithSubPlan(leftGroup, attrMap, left.output)
+                val newLeftAttr = c.leftAttr.map(attr => attrMap.getOrElse(attr, attr))
+                val newRightAttr = rewriteAttrsMatchWithSubPlan(c.rightAttr, attrMap,
+                  c.right.output)
+                val newLeftGroup = rewriteAttrsMatchWithSubPlan(c.leftGroup, attrMap, c.left.output)
                 c.copy(
-                  keyDeserializer = keyDeserializer.asInstanceOf[UnresolvedDeserializer]
+                  keyDeserializer = c.keyDeserializer.asInstanceOf[UnresolvedDeserializer]
                     .copy(inputAttributes = newLeftGroup),
-                  leftDeserializer = leftDeserializer.asInstanceOf[UnresolvedDeserializer]
+                  leftDeserializer = c.leftDeserializer.asInstanceOf[UnresolvedDeserializer]
                     .copy(inputAttributes = newLeftAttr),
-                  rightDeserializer = rightDeserializer.asInstanceOf[UnresolvedDeserializer]
+                  rightDeserializer = c.rightDeserializer.asInstanceOf[UnresolvedDeserializer]
                     .copy(inputAttributes = newRightAttr),
                   leftGroup = newLeftGroup,
-                  rightGroup = rewriteAttrsMatchWithSubPlan(rightGroup, attrMap, right.output),
+                  rightGroup = rewriteAttrsMatchWithSubPlan(c.rightGroup, attrMap, c.right.output),
                   leftAttr = newLeftAttr,
                   rightAttr = newRightAttr,
-                  leftOrder = rewriteOrderMatchWithSubPlan(leftOrder, attrMap, left.output),
-                  rightOrder = rewriteOrderMatchWithSubPlan(rightOrder, attrMap, right.output))
+                  leftOrder = rewriteOrderMatchWithSubPlan(c.leftOrder, attrMap, c.left.output),
+                  rightOrder = rewriteOrderMatchWithSubPlan(c.rightOrder, attrMap, c.right.output))
               case _ => planWithNewChildren.rewriteAttrs(attrMap)
             }
           }
