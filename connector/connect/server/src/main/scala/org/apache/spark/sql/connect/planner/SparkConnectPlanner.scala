@@ -2833,7 +2833,7 @@ class SparkConnectPlanner(val sessionHolder: SessionHolder) extends Logging {
           StreamingForeachBatchHelper.scalaForeachBatchWrapper(scalaFn, sessionHolder)
 
         case StreamingForeachFunction.FunctionCase.FUNCTION_NOT_SET =>
-          throw InvalidPlanInput("Unexpected") // Unreachable
+          throw InvalidPlanInput("Unexpected foreachBatch function") // Unreachable
       }
 
       writer.foreachBatch(foreachBatchFn)
@@ -3076,23 +3076,27 @@ class SparkConnectPlanner(val sessionHolder: SessionHolder) extends Logging {
         respBuilder.setResetTerminated(true)
 
       case StreamingQueryManagerCommand.CommandCase.ADD_LISTENER =>
-        val listenerPacket = Utils
-          .deserialize[StreamingListenerPacket](
-            command.getAddListener.getListenerPayload.toByteArray,
-            Utils.getContextOrSparkClassLoader)
-        val listener: StreamingQueryListener = listenerPacket.listener
-          .asInstanceOf[StreamingQueryListener]
-        val id: String = listenerPacket.id
+        val listener = if (command.getAddListener.hasPythonListenerPayload) {
+          new PythonStreamingQueryListener(
+            transformPythonFunction(command.getAddListener.getPythonListenerPayload),
+            sessionHolder,
+            pythonExec)
+        } else {
+          val listenerPacket = Utils
+            .deserialize[StreamingListenerPacket](
+              command.getAddListener.getListenerPayload.toByteArray,
+              Utils.getContextOrSparkClassLoader)
+
+          listenerPacket.listener.asInstanceOf[StreamingQueryListener]
+        }
+
+        val id = command.getAddListener.getId
         sessionHolder.cacheListenerById(id, listener)
         session.streams.addListener(listener)
         respBuilder.setAddListener(true)
 
       case StreamingQueryManagerCommand.CommandCase.REMOVE_LISTENER =>
-        val listenerId = Utils
-          .deserialize[StreamingListenerPacket](
-            command.getRemoveListener.getListenerPayload.toByteArray,
-            Utils.getContextOrSparkClassLoader)
-          .id
+        val listenerId = command.getRemoveListener.getId
         val listener: StreamingQueryListener = sessionHolder.getListenerOrThrow(listenerId)
         session.streams.removeListener(listener)
         sessionHolder.removeCachedListener(listenerId)
