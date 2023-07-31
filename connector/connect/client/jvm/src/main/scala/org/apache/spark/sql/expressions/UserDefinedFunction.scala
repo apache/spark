@@ -157,7 +157,10 @@ object ScalarUserDefinedFunction {
         throw new SparkException(
           "UDF cannot be executed on a Spark cluster, it cannot be deserialized." +
             "This is very likely to be caused by the UDF having a self-reference, " +
-            "this is not supported by java serialization.")
+        throw new SparkException(
+          "UDF cannot be executed on a Spark cluster: it cannot be deserialized." +
+            "This is very likely to be caused by the UDF having a self-reference. " +
+            "This is not supported by java serialization.")
       case NonFatal(e) =>
         throw new SparkException(
           "UDF cannot be executed on a Spark cluster, it cannot be deserialized.",
