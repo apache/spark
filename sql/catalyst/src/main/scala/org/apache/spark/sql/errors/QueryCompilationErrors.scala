@@ -2130,25 +2130,25 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
   def cannotWriteTooManyColumnsToTableError(
       tableName: String,
       expected: Seq[String],
-      query: LogicalPlan): Throwable = {
+      queryOutput: Seq[Attribute]): Throwable = {
     new AnalysisException(
       errorClass = "INSERT_COLUMN_ARITY_MISMATCH.TOO_MANY_DATA_COLUMNS",
       messageParameters = Map(
         "tableName" -> toSQLId(tableName),
         "tableColumns" -> expected.map(c => toSQLId(c)).mkString(", "),
-        "dataColumns" -> query.output.map(c => toSQLId(c.name)).mkString(", ")))
+        "dataColumns" -> queryOutput.map(c => toSQLId(c.name)).mkString(", ")))
   }
 
   def cannotWriteNotEnoughColumnsToTableError(
       tableName: String,
       expected: Seq[String],
-      query: LogicalPlan): Throwable = {
+      queryOutput: Seq[Attribute]): Throwable = {
     new AnalysisException(
       errorClass = "INSERT_COLUMN_ARITY_MISMATCH.NOT_ENOUGH_DATA_COLUMNS",
       messageParameters = Map(
         "tableName" -> toSQLId(tableName),
         "tableColumns" -> expected.map(c => toSQLId(c)).mkString(", "),
-        "dataColumns" -> query.output.map(c => toSQLId(c.name)).mkString(", ")))
+        "dataColumns" -> queryOutput.map(c => toSQLId(c.name)).mkString(", ")))
   }
 
   def incompatibleDataToTableCannotFindDataError(

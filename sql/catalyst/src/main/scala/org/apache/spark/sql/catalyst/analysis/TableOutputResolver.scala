@@ -49,7 +49,7 @@ object TableOutputResolver {
 
     if (actualExpectedCols.size < query.output.size) {
       throw QueryCompilationErrors.cannotWriteTooManyColumnsToTableError(
-        tableName, actualExpectedCols.map(_.name), query)
+        tableName, actualExpectedCols.map(_.name), query.output)
     }
 
     val errors = new mutable.ArrayBuffer[String]()
@@ -77,7 +77,7 @@ object TableOutputResolver {
       }
       if (actualExpectedCols.size > queryOutputCols.size) {
         throw QueryCompilationErrors.cannotWriteNotEnoughColumnsToTableError(
-          tableName, actualExpectedCols.map(_.name), query)
+          tableName, actualExpectedCols.map(_.name), query.output)
       }
 
       resolveColumnsByPosition(tableName, queryOutputCols, actualExpectedCols, conf, errors += _)
@@ -240,19 +240,20 @@ object TableOutputResolver {
       if (matchedCols.size < inputCols.length) {
         val extraCols = inputCols.filterNot(col => matchedCols.contains(col.name))
           .map(col => s"${toSQLId(col.name)}").mkString(", ")
-        throw QueryCompilationErrors.incompatibleDataToTableExtraStructFieldsError(
-          tableName, pathQuotedSafety(colPath), extraCols
-        )
+        if (colPath.isEmpty) {
+          throw QueryCompilationErrors.cannotWriteNotEnoughColumnsToTableError(tableName,
+            expectedCols.map(_.name), inputCols.map(_.toAttribute))
+        } else {
+          throw QueryCompilationErrors.incompatibleDataToTableExtraStructFieldsError(
+            tableName, colPath.quoted, extraCols
+          )
+        }
       } else {
         reordered
       }
     } else {
       Nil
     }
-  }
-
-  private def pathQuotedSafety(colPath: Seq[String]): String = {
-    if (colPath.isEmpty) "table" else colPath.quoted
   }
 
   private def resolveColumnsByPosition(
@@ -267,16 +268,26 @@ object TableOutputResolver {
       val extraColsStr = inputCols.takeRight(inputCols.size - expectedCols.size)
         .map(col => toSQLId(col.name))
         .mkString(", ")
-      throw QueryCompilationErrors.incompatibleDataToTableExtraStructFieldsError(
-        tableName, pathQuotedSafety(colPath), extraColsStr
-      )
+      if (colPath.isEmpty) {
+        throw QueryCompilationErrors.cannotWriteTooManyColumnsToTableError(tableName,
+          expectedCols.map(_.name), inputCols.map(_.toAttribute))
+      } else {
+        throw QueryCompilationErrors.incompatibleDataToTableExtraStructFieldsError(
+          tableName, colPath.quoted, extraColsStr
+        )
+      }
     } else if (inputCols.size < expectedCols.size) {
       val missingColsStr = expectedCols.takeRight(expectedCols.size - inputCols.size)
         .map(col => toSQLId(col.name))
         .mkString(", ")
-      throw QueryCompilationErrors.incompatibleDataToTableStructMissingFieldsError(
-        tableName, pathQuotedSafety(colPath), missingColsStr
-      )
+      if (colPath.isEmpty) {
+        throw QueryCompilationErrors.cannotWriteNotEnoughColumnsToTableError(tableName,
+          expectedCols.map(_.name), inputCols.map(_.toAttribute))
+      } else {
+        throw QueryCompilationErrors.incompatibleDataToTableStructMissingFieldsError(
+          tableName, colPath.quoted, missingColsStr
+        )
+      }
     }
 
     inputCols.zip(expectedCols).flatMap { case (inputCol, expectedCol) =>
