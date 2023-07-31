@@ -238,6 +238,7 @@ try:
             "pyspark.mllib.linalg",
             "pyspark.mllib.stat",
             "pyspark.ml",
+            "pyspark.ml.connect",
             "pyspark.ml.linalg",
             "pyspark.ml.param",
             "pyspark.ml.torch",
