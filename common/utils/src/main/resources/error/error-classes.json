@@ -1475,9 +1475,9 @@
       "The handle <handle> is invalid."
     ],
     "subClass" : {
-      "SESSION_ALREADY_EXISTS" : {
+      "FORMAT" : {
         "message" : [
-          "Session already exists."
+          "Handle must be an UUID string of the format '00112233-4455-6677-8899-aabbccddeeff'"
         ]
       },
       "OPERATION_ALREADY_EXISTS" : {
@@ -1485,19 +1485,19 @@
           "Operation already exists."
         ]
       },
-      "SESSION_NOT_FOUND" : {
-        "message" : [
-          "Session not found."
-        ]
-      },
       "OPERATION_NOT_FOUND" : {
         "message" : [
           "Operation not found."
         ]
       },
-      "FORMAT" : {
+      "SESSION_ALREADY_EXISTS" : {
         "message" : [
-          "Handle must be an UUID string of the format '00112233-4455-6677-8899-aabbccddeeff'"
+          "Session already exists."
+        ]
+      },
+      "SESSION_NOT_FOUND" : {
+        "message" : [
+          "Session not found."
         ]
       }
     },
