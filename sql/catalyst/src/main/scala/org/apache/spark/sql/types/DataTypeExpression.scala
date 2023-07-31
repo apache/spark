@@ -33,12 +33,6 @@ case object BooleanTypeExpression extends DataTypeExpression(BooleanType)
 case object StringTypeExpression extends DataTypeExpression(StringType)
 case object TimestampTypeExpression extends DataTypeExpression(TimestampType)
 case object DateTypeExpression extends DataTypeExpression(DateType)
-case object ByteTypeExpression extends DataTypeExpression(ByteType)
-case object ShortTypeExpression extends DataTypeExpression(ShortType)
-case object IntegerTypeExpression extends DataTypeExpression(IntegerType)
-case object LongTypeExpression extends DataTypeExpression(LongType)
-case object DoubleTypeExpression extends DataTypeExpression(DoubleType)
-case object FloatTypeExpression extends DataTypeExpression(FloatType)
 
 object NumericTypeExpression {
   /**
