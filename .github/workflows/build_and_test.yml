@@ -412,6 +412,7 @@ jobs:
           pyspark-coursier-
     - name: Free up disk space
       run: |
+        dpkg-query -Wf '${Installed-Size}\t${Package}\n' | sort -n | tail -n 100
         du -sh /* || echo "fail to du"
         du -sh /*/* || echo "fail to du"
         rm -rf /__t/CodeQL || echo "fail to rm /__t/CodeQL"
