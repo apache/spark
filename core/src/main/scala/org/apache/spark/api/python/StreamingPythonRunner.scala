@@ -61,7 +61,7 @@ private[spark] class StreamingPythonRunner(func: PythonFunction, connectUrl: Str
     envVars.put("SPARK_CONNECT_LOCAL_URL", connectUrl)
 
     val pythonWorkerFactory = new PythonWorkerFactory(pythonExec, envVars.asScala.toMap)
-    val (worker: Socket, _) = pythonWorkerFactory.createStreamingWorker()
+    val (worker: Socket, _) = pythonWorkerFactory.createStreamingWorker(workerModule)
 
     val stream = new BufferedOutputStream(worker.getOutputStream, bufferSize)
     val dataOut = new DataOutputStream(stream)
