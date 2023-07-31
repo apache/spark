@@ -1325,7 +1325,7 @@
         ]
       }
     },
-    "sqlState" : "HY108"
+    "sqlState" : "HY109"
   },
   "INVALID_DEFAULT_VALUE" : {
     "message" : [

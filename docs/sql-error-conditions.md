@@ -844,7 +844,7 @@ Column or field `<name>` is of type `<type>` while it's required to be `<expecte
 
 ### [INVALID_CURSOR](sql-error-conditions-invalid-cursor-error-class.html)
 
-[SQLSTATE: HY108](sql-error-conditions-sqlstates.html#class-HY-cli-specific-condition)
+[SQLSTATE: HY109](sql-error-conditions-sqlstates.html#class-HY-cli-specific-condition)
 
 The cursor is invalid.
 
