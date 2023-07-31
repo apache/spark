@@ -18,7 +18,7 @@
 package org.apache.spark.sql.connect.execution
 
 import com.google.protobuf.MessageLite
-import io.grpc.stub.StreamObserver
+import io.grpc.stub.{ServerCallStreamObserver, StreamObserver}
 
 import org.apache.spark.{SparkEnv, SparkSQLException}
 import org.apache.spark.internal.Logging
@@ -43,6 +43,12 @@ private[connect] class ExecuteGrpcResponseSender[T <: MessageLite](
     .asInstanceOf[ExecuteResponseObserver[T]]
 
   private var detached = false
+
+  // StreamObserver with extra super powers.
+  private val grpcCallObserver = grpcObserver.asInstanceOf[ServerCallStreamObserver[T]]
+
+  // Signal to wake up when grpcCallObserver.isReady()
+  private val grpcCallObserverReadySignal = new Object
 
   /**
    * Detach this sender from executionObserver. Called only from executionObserver that this
@@ -75,6 +81,16 @@ private[connect] class ExecuteGrpcResponseSender[T <: MessageLite](
 
     // register to be notified about available responses.
     executionObserver.attachConsumer(this)
+
+    // In reattachable execution, we check if grpcCallObserver is ready for sending.
+    // See sendResponse
+    if (executeHolder.reattachable) {
+      grpcCallObserver.setOnReadyHandler(() => {
+        grpcCallObserverReadySignal.synchronized {
+          grpcCallObserverReadySignal.notifyAll()
+        }
+      })
+    }
 
     var nextIndex = lastConsumedStreamIndex + 1
     var finished = false
@@ -117,7 +133,7 @@ private[connect] class ExecuteGrpcResponseSender[T <: MessageLite](
       // or the stream is complete and it had already sent all responses.
       logDebug(s"Trying to get next response with index=$nextIndex.")
       executionObserver.synchronized {
-        logDebug(s"Acquired lock.")
+        logDebug(s"Acquired executionObserver lock.")
         while (!detachedFromObserver &&
           !gotResponse &&
           !streamFinished &&
@@ -132,7 +148,7 @@ private[connect] class ExecuteGrpcResponseSender[T <: MessageLite](
             val timeout = Math.max(1, deadlineTimeMillis - System.currentTimeMillis())
             logDebug(s"Wait for response to become available with timeout=$timeout ms.")
             executionObserver.wait(timeout)
-            logDebug(s"Reacquired lock after waiting.")
+            logDebug(s"Reacquired executionObserver lock after waiting.")
           }
         }
         logDebug(s"Exiting loop: detached=$detached, response=$response, " +
@@ -149,11 +165,17 @@ private[connect] class ExecuteGrpcResponseSender[T <: MessageLite](
         throw new SparkSQLException(errorClass = "INVALID_CURSOR.DISCONNECTED", Map.empty)
       } else if (gotResponse) {
         // There is a response available to be sent.
-        grpcObserver.onNext(response.get.response)
-        logDebug(s"Sent response index=$nextIndex.")
-        sentResponsesSize += response.get.serializedByteSize
-        nextIndex += 1
-        assert(finished == false)
+        val sent = sendResponse(response.get.response, deadlineTimeMillis)
+        if (sent) {
+          logDebug(s"Sent response index=$nextIndex.")
+          sentResponsesSize += response.get.serializedByteSize
+          nextIndex += 1
+          assert(finished == false)
+        } else {
+          // If it wasn't sent, time deadline must have been reached before stream became available.
+          assert(deadlineLimitReached)
+          finished = true
+        }
       } else if (streamFinished) {
         // Stream is finished and all responses have been sent
         logDebug(s"Stream finished and sent all responses up to index ${nextIndex - 1}.")
@@ -168,6 +190,53 @@ private[connect] class ExecuteGrpcResponseSender[T <: MessageLite](
         logDebug(s"Deadline reached, finishing stream after index ${nextIndex - 1}.")
         grpcObserver.onCompleted()
         finished = true
+      }
+    }
+  }
+
+  /**
+   * Send the response to the grpcCallObserver.
+   * In reattachable execution, we control the flow, and only pass the response to the
+   * grpcCallObserver when it's ready to send.
+   * Otherwise, grpcCallObserver.onNext() would return in a non-blocking way, but could queue
+   * responses without sending them if the client doesn't keep up receiving them.
+   * When pushing more responses to onNext(), there is no insight how far behind the service is
+   * in actually sending them out.
+   * @param deadlineTimeMillis when reattachable, wait for ready stream until this deadline.
+   * @return true if the response was sent, false otherwise (meaning deadline passed)
+   */
+  private def sendResponse(response: T, deadlineTimeMillis: Long): Boolean = {
+    if (!executeHolder.reattachable) {
+      // no flow control in non-reattachable execute
+      grpcCallObserver.onNext(response)
+      true
+    } else {
+      // In reattachable execution, we control the flow, and only pass the response to the
+      // grpcCallObserver when it's ready to send.
+      // Otherwise, grpcCallObserver.onNext() would return in a non-blocking way, but could queue
+      // responses without sending them if the client doesn't keep up receiving them.
+      // When pushing more responses to onNext(), there is no insight how far behind the service is
+      // in actually sending them out.
+      // By sending responses only when grpcCallObserver.isReady(), we control that the actual
+      // sending doesn't fall behind what we push from here.
+      // By using the deadline, we exit the RPC if the responses aren't picked up by the client.
+      // A client that is still interested in continuing the query will need to reattach.
+      grpcCallObserverReadySignal.synchronized {
+        logDebug(s"Acquired grpcCallObserverReadySignal lock.")
+        while (!grpcCallObserver.isReady() && deadlineTimeMillis >= System.currentTimeMillis()) {
+          val timeout = Math.max(1, deadlineTimeMillis - System.currentTimeMillis())
+          logDebug(s"Wait for grpcCallObserver to become ready with timeout=$timeout ms.")
+          grpcCallObserverReadySignal.wait(timeout)
+          logDebug(s"Reacquired grpcCallObserverReadySignal lock after waiting.")
+        }
+        if (grpcCallObserver.isReady()) {
+          logDebug(s"grpcCallObserver is ready, sending response.")
+          grpcCallObserver.onNext(response)
+          true
+        } else {
+          logDebug(s"grpcCallObserver is not ready, exiting.")
+          false
+        }
       }
     }
   }
