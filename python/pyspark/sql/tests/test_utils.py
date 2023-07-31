@@ -651,6 +651,7 @@ class UtilsTestsMixin:
 
     def test_assert_error_pandas_pyspark_df(self):
         import pyspark.pandas as ps
+        import pandas as pd
 
         df1 = ps.DataFrame(data=[10, 20, 30], columns=["Numbers"])
         df2 = self.spark.createDataFrame([(10,), (11,), (13,)], ["Numbers"])
@@ -660,10 +661,16 @@ class UtilsTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            error_class="INVALID_PANDAS_ON_SPARK_COMPARISON",
+            error_class="INVALID_TYPE_DF_EQUALITY_ARG",
             message_parameters={
-                "actual_type": type(df1),
-                "expected_type": type(df2),
+                "expected_type": f"{ps.DataFrame.__name__}, "
+                f"{pd.DataFrame.__name__}, "
+                f"{ps.Series.__name__}, "
+                f"{pd.Series.__name__}, "
+                f"{ps.Index.__name__}"
+                f"{pd.Index.__name__}, ",
+                "arg_name": "expected",
+                "actual_type": type(df2),
             },
         )
 
@@ -672,10 +679,16 @@ class UtilsTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            error_class="INVALID_PANDAS_ON_SPARK_COMPARISON",
+            error_class="INVALID_TYPE_DF_EQUALITY_ARG",
             message_parameters={
-                "actual_type": type(df1),
-                "expected_type": type(df2),
+                "expected_type": f"{ps.DataFrame.__name__}, "
+                f"{pd.DataFrame.__name__}, "
+                f"{ps.Series.__name__}, "
+                f"{pd.Series.__name__}, "
+                f"{ps.Index.__name__}"
+                f"{pd.Index.__name__}, ",
+                "arg_name": "expected",
+                "actual_type": type(df2),
             },
         )
 

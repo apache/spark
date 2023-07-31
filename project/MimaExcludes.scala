@@ -212,6 +212,9 @@ object MimaExcludes {
     ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.api.java.function.VoidFunction"),
     ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.api.java.function.VoidFunction2"),
 
+    // SPARK-43997: UDF* classes needed by SCSC and moved to sql/api
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.api.java.UDF*"),
+
     (problem: Problem) => problem match {
       case MissingClassProblem(cls) => !cls.fullName.startsWith("org.sparkproject.jpmml") &&
           !cls.fullName.startsWith("org.sparkproject.dmg.pmml")

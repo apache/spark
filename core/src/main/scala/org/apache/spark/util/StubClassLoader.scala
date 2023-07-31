@@ -70,8 +70,22 @@ object StubClassLoader {
       "()V",
       false)
 
-    ctorWriter.visitInsn(Opcodes.RETURN)
-    ctorWriter.visitMaxs(1, 1)
+    val internalException: String = "java/lang/ClassNotFoundException"
+    ctorWriter.visitTypeInsn(Opcodes.NEW, internalException)
+    ctorWriter.visitInsn(Opcodes.DUP)
+    ctorWriter.visitLdcInsn(
+      s"Fail to initiate the class $binaryName because it is stubbed. " +
+        "Please install the artifact of the missing class by calling session.addArtifact.")
+    // Invoke throwable constructor
+    ctorWriter.visitMethodInsn(
+      Opcodes.INVOKESPECIAL,
+      internalException,
+      "<init>",
+      "(Ljava/lang/String;)V",
+      false)
+
+    ctorWriter.visitInsn(Opcodes.ATHROW)
+    ctorWriter.visitMaxs(3, 3)
     ctorWriter.visitEnd()
     classWriter.visitEnd()
     classWriter.toByteArray

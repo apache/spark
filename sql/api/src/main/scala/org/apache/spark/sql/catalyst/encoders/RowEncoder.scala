@@ -67,7 +67,7 @@ object RowEncoder {
     encoderForDataType(schema, lenient).asInstanceOf[AgnosticEncoder[Row]]
   }
 
-  private[catalyst] def encoderForDataType(
+  private[sql] def encoderForDataType(
       dataType: DataType,
       lenient: Boolean): AgnosticEncoder[_] = dataType match {
     case NullType => NullEncoder

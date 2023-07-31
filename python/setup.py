@@ -264,6 +264,7 @@ try:
             "pyspark.pandas.usage_logging",
             "pyspark.python.pyspark",
             "pyspark.python.lib",
+            "pyspark.testing",
             "pyspark.data",
             "pyspark.licenses",
             "pyspark.resource",
