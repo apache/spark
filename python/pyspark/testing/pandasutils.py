@@ -93,15 +93,29 @@ def _assert_pandas_equal(
                 **kwargs,
             )
         except AssertionError:
+            left_str = left.to_string()
+            left_str_lst = left_str.splitlines()
+            msg = "Not equal"
+            for ele in left_str_lst:
+                msg += "\n" + ele
+            print("*********** LEFT TO STRING", left_str)
+            msg += "\n" + left_str
+            msg += "\n done"
             raise PySparkAssertionError(
                 error_class="DIFFERENT_PANDAS_DATAFRAME",
                 message_parameters={
-                    "left": left.to_string(),
-                    "left_dtype": str(left.dtypes),
-                    "right": right.to_string(),
-                    "right_dtype": str(right.dtypes),
+                    "msg": msg,
                 },
             )
+            # raise PySparkAssertionError(
+            #     error_class="DIFFERENT_PANDAS_DATAFRAME",
+            #     message_parameters={
+            #         "left": left.to_string(),
+            #         "left_dtype": str(left.dtypes),
+            #         "right": right.to_string(),
+            #         "right_dtype": str(right.dtypes),
+            #     },
+            # )
     elif isinstance(left, pd.Series) and isinstance(right, pd.Series):
         try:
             if LooseVersion(pd.__version__) >= LooseVersion("1.1"):
@@ -167,6 +181,7 @@ def _assert_pandas_almost_equal(
     atol = 1e-8
 
     if isinstance(left, pd.DataFrame) and isinstance(right, pd.DataFrame):
+        left_str = left.to_string()
         if left.shape != right.shape:
             raise PySparkAssertionError(
                 error_class="DIFFERENT_PANDAS_DATAFRAME",

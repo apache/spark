@@ -166,11 +166,7 @@ ERROR_CLASSES_JSON = """
   },
   "DIFFERENT_PANDAS_DATAFRAME" : {
     "message" : [
-      "DataFrames are not almost equal:",
-      "Left: <left>",
-      "<left_dtype>",
-      "Right: <right>",
-      "<right_dtype>"
+      "<msg>"
     ]
   },
   "DIFFERENT_PANDAS_INDEX" : {

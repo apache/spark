@@ -461,7 +461,7 @@ def assertDataFrameEqual(
             return assertPandasOnSparkEqual(
                 actual, expected, checkExact=False, checkRowOrder=checkRowOrder
             )
-        elif not isinstance(actual, (DataFrame, ps.DataFrame, ConnectDataFrame)):
+        elif not isinstance(actual, (DataFrame, ConnectDataFrame)):
             raise PySparkAssertionError(
                 error_class="INVALID_TYPE_DF_EQUALITY_ARG",
                 message_parameters={
@@ -470,7 +470,7 @@ def assertDataFrameEqual(
                     "actual_type": type(actual),
                 },
             )
-        elif not isinstance(expected, (DataFrame, ps.DataFrame, ConnectDataFrame, list)):
+        elif not isinstance(expected, (DataFrame, ConnectDataFrame, list)):
             raise PySparkAssertionError(
                 error_class="INVALID_TYPE_DF_EQUALITY_ARG",
                 message_parameters={
@@ -486,7 +486,7 @@ def assertDataFrameEqual(
             return assertPandasOnSparkEqual(
                 actual, expected, checkExact=False, checkRowOrder=checkRowOrder
             )
-        elif not isinstance(actual, (DataFrame, ps.DataFrame)):
+        elif not isinstance(actual, DataFrame):
             raise PySparkAssertionError(
                 error_class="INVALID_TYPE_DF_EQUALITY_ARG",
                 message_parameters={
@@ -495,7 +495,7 @@ def assertDataFrameEqual(
                     "actual_type": type(actual),
                 },
             )
-        elif not isinstance(expected, (DataFrame, ps.DataFrame, list)):
+        elif not isinstance(expected, (DataFrame, list)):
             raise PySparkAssertionError(
                 error_class="INVALID_TYPE_DF_EQUALITY_ARG",
                 message_parameters={
@@ -549,8 +549,6 @@ def assertDataFrameEqual(
 
         if isinstance(actual, DataFrame):
             actual_str = actual._jdf.showString(len(rows1), len(rows1), False)
-        elif isinstance(actual, ps.DataFrame):
-            actual_str = actual.to_string()
         else:
             # otherwise, actual is Connect DataFrame
             actual_str = actual._show_string(len(rows1), len(rows1), False)
@@ -561,8 +559,6 @@ def assertDataFrameEqual(
         else:
             if isinstance(expected, DataFrame):
                 expected_str = expected._jdf.showString(len(rows2), len(rows2), False)
-            elif isinstance(expected, ps.DataFrame):
-                expected_str = actual.to_string()
             else:
                 # otherwise, actual is Connect DataFrame
                 expected_str = expected._show_string(len(rows2), len(rows2), False)
