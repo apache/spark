@@ -11,6 +11,8 @@ package org.apache.spark.sql.protobuf.protos;
  * 1. Modify `connector/connect/server/src/test/resources/test.proto` to generate Java files
  * and replace the current file.
  * 2. Replace all `com.google.protobuf` in the file with `org.sparkproject.spark_protobuf.protobuf.`
+ * <p>
+ * TODO(SPARK-44606): Generate this file and replace the package names in the file when testing.
  */
 public final class TestObj extends
     org.sparkproject.spark_protobuf.protobuf.GeneratedMessageV3 implements
