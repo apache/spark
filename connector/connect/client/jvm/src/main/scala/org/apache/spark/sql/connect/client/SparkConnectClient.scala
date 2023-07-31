@@ -533,6 +533,24 @@ object SparkConnectClient {
       this
     }
 
+    /**
+     * Disable reattachable execute.
+     */
+    def disableReattachableExecute(): Builder = {
+      _configuration = _configuration.copy(useReattachableExecute = false)
+      this
+    }
+
+    /**
+     * Enable reattachable execute.
+     * It makes client more robust, enabling reattaching to an ExecutePlanResponse stream
+     * in case of intermittent connection errors.
+     */
+    def enableReattachableExecute(): Builder = {
+      _configuration = _configuration.copy(useReattachableExecute = true)
+      this
+    }
+
     def build(): SparkConnectClient = _configuration.toSparkConnectClient
   }
 
