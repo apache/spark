@@ -24,6 +24,7 @@ from typing import (
     no_type_check,
     overload,
     TYPE_CHECKING,
+    Iterator,
 )
 from warnings import warn
 
@@ -45,7 +46,157 @@ if TYPE_CHECKING:
     from pyspark.sql import DataFrame
 
 
-class PandasConversionMixin:
+class ArrowConversionMixin:
+    """
+    Mix-in for the conversion from Spark to Arrow. Currently, only :class:`DataFrame`
+    can use this class.
+    """
+
+    def toRecordBatches(self, maintain_order: bool = False) -> Iterator["pa.RecordBatch"]:
+        from pyspark.sql.dataframe import DataFrame
+
+        assert isinstance(self, DataFrame)
+
+        jconf = self.sparkSession._jconf
+        if not jconf.arrowPySparkEnabled():
+            raise RuntimeError("Arrow optimization is not enabled.")
+
+        try:
+            from pyspark.sql.pandas.types import to_arrow_schema
+            from pyspark.sql.pandas.utils import require_minimum_pyarrow_version
+
+            require_minimum_pyarrow_version()
+            to_arrow_schema(self.schema)
+        except Exception as e:
+            msg = (
+                "toPandas attempted Arrow optimization because "
+                "'spark.sql.execution.arrow.pyspark.enabled' is set to true, but has "
+                "reached the error below and will not continue because automatic fallback "
+                "with 'spark.sql.execution.arrow.pyspark.fallback.enabled' has been set to "
+                "false.\n  %s" % str(e)
+            )
+            warn(msg)
+            raise
+
+        yield from self._collect_as_arrow(
+            self_descruct=jconf.arrowPySparkSelfDestructEnabled(),
+            maintain_order=maintain_order,
+        )
+
+    def toTable(self, maintain_order: bool = False) -> "pa.Table":
+        from pyspark.sql.dataframe import DataFrame
+
+        assert isinstance(self, DataFrame)
+
+        jconf = self.sparkSession._jconf
+        if not jconf.arrowPySparkEnabled():
+            raise RuntimeError("Arrow optimization is not enabled.")
+
+        try:
+            from pyspark.sql.pandas.types import to_arrow_schema
+            from pyspark.sql.pandas.utils import require_minimum_pyarrow_version
+
+            require_minimum_pyarrow_version()
+            arrow_schema = to_arrow_schema(self.schema)
+        except Exception as e:
+            msg = (
+                "toPandas attempted Arrow optimization because "
+                "'spark.sql.execution.arrow.pyspark.enabled' is set to true, but has "
+                "reached the error below and will not continue because automatic fallback "
+                "with 'spark.sql.execution.arrow.pyspark.fallback.enabled' has been set to "
+                "false.\n  %s" % str(e)
+            )
+            warn(msg)
+            raise
+
+        import pyarrow
+
+        batches = self.toRecordBatches(maintain_order=maintain_order)
+        table = pyarrow.Table.from_batches(
+            batches,
+            schema=arrow_schema,
+        )
+
+        # Ensure only the table has a reference to the batches, so that
+        # self_destruct (if enabled) is effective
+        del batches
+
+        return table
+
+    def _collect_as_arrow(
+        self,
+        split_batches: bool = False,
+        maintain_order: bool = False,
+    ) -> Iterator["pa.RecordBatch"]:
+        """
+        Returns all records as a list of ArrowRecordBatches, pyarrow must be installed
+        and available on driver and worker Python environments.
+        This is an experimental feature.
+
+        :param split_batches: split batches such that each column is in its own allocation, so
+            that the selfDestruct optimization is effective; default False.
+
+        .. note:: Experimental.
+        """
+        from pyspark.sql.dataframe import DataFrame
+
+        assert isinstance(self, DataFrame)
+
+        with SCCallSiteSync(self._sc):
+            (
+                port,
+                auth_secret,
+                jsocket_auth_server,
+            ) = self._jdf.collectAsArrowToPython()
+
+        # Collect list of un-ordered batches where last element is a list of correct order indices
+        try:
+            batch_stream = _load_from_socket((port, auth_secret), ArrowCollectSerializer())
+            if split_batches:
+                # When spark.sql.execution.arrow.pyspark.selfDestruct.enabled, ensure
+                # each column in each record batch is contained in its own allocation.
+                # Otherwise, selfDestruct does nothing; it frees each column as its
+                # converted, but each column will actually be a list of slices of record
+                # batches, and so no memory is actually freed until all columns are
+                # converted.
+                def split_batches_fn(batch_stream):
+                    import pyarrow
+
+                    for batch_or_indices in batch_stream:
+                        if isinstance(batch_or_indices, pyarrow.RecordBatch):
+                            batch_or_indices = pyarrow.RecordBatch.from_arrays(
+                                [
+                                    # This call actually reallocates the array
+                                    pyarrow.concat_arrays([array])
+                                    for array in batch_or_indices
+                                ],
+                                schema=batch_or_indices.schema,
+                            )
+                        yield batch_or_indices
+
+                results = split_batches_fn(batch_stream)
+            else:
+                results = batch_stream
+        finally:
+            with unwrap_spark_exception():
+                # Join serving thread and raise any exceptions from collectAsArrowToPython
+                jsocket_auth_server.getResult()
+
+        if maintain_order:
+            # Separate RecordBatches from batch order indices in results
+            results = list(results)
+            batches = results[:-1]
+            batch_order = results[-1]
+
+            # Re-order the batch list using the correct order
+            return [batches[i] for i in batch_order]
+
+        import pyarrow
+
+        yield from (batch for batch in results if isinstance(batch, pyarrow.RecordBatch))
+
+
+class PandasConversionMixin(ArrowConversionMixin):
     """
     Mix-in for the conversion from Spark to pandas. Currently, only :class:`DataFrame`
     can use this class.
@@ -125,20 +276,13 @@ class PandasConversionMixin:
             # of PyArrow is found, if 'spark.sql.execution.arrow.pyspark.enabled' is enabled.
             if use_arrow:
                 try:
-                    import pyarrow
-
-                    self_destruct = jconf.arrowPySparkSelfDestructEnabled()
-                    batches = self._collect_as_arrow(split_batches=self_destruct)
-                    if len(batches) > 0:
-                        table = pyarrow.Table.from_batches(batches)
-                        # Ensure only the table has a reference to the batches, so that
-                        # self_destruct (if enabled) is effective
-                        del batches
+                    table = self.toTable(maintain_order=True)
+                    if table.num_rows > 0:
                         # Pandas DataFrame created from PyArrow uses datetime64[ns] for date type
                         # values, but we should use datetime.date to match the behavior with when
                         # Arrow optimization is disabled.
                         pandas_options = {"date_as_object": True}
-                        if self_destruct:
+                        if jconf.arrowPySparkSelfDestructEnabled():
                             # Configure PyArrow to use as little memory as possible:
                             # self_destruct - free columns as they are converted
                             # split_blocks - create a separate Pandas block for each column
@@ -229,66 +373,6 @@ class PandasConversionMixin:
             )
         else:
             return pdf
-
-    def _collect_as_arrow(self, split_batches: bool = False) -> List["pa.RecordBatch"]:
-        """
-        Returns all records as a list of ArrowRecordBatches, pyarrow must be installed
-        and available on driver and worker Python environments.
-        This is an experimental feature.
-
-        :param split_batches: split batches such that each column is in its own allocation, so
-            that the selfDestruct optimization is effective; default False.
-
-        .. note:: Experimental.
-        """
-        from pyspark.sql.dataframe import DataFrame
-
-        assert isinstance(self, DataFrame)
-
-        with SCCallSiteSync(self._sc):
-            (
-                port,
-                auth_secret,
-                jsocket_auth_server,
-            ) = self._jdf.collectAsArrowToPython()
-
-        # Collect list of un-ordered batches where last element is a list of correct order indices
-        try:
-            batch_stream = _load_from_socket((port, auth_secret), ArrowCollectSerializer())
-            if split_batches:
-                # When spark.sql.execution.arrow.pyspark.selfDestruct.enabled, ensure
-                # each column in each record batch is contained in its own allocation.
-                # Otherwise, selfDestruct does nothing; it frees each column as its
-                # converted, but each column will actually be a list of slices of record
-                # batches, and so no memory is actually freed until all columns are
-                # converted.
-                import pyarrow as pa
-
-                results = []
-                for batch_or_indices in batch_stream:
-                    if isinstance(batch_or_indices, pa.RecordBatch):
-                        batch_or_indices = pa.RecordBatch.from_arrays(
-                            [
-                                # This call actually reallocates the array
-                                pa.concat_arrays([array])
-                                for array in batch_or_indices
-                            ],
-                            schema=batch_or_indices.schema,
-                        )
-                    results.append(batch_or_indices)
-            else:
-                results = list(batch_stream)
-        finally:
-            with unwrap_spark_exception():
-                # Join serving thread and raise any exceptions from collectAsArrowToPython
-                jsocket_auth_server.getResult()
-
-        # Separate RecordBatches from batch order indices in results
-        batches = results[:-1]
-        batch_order = results[-1]
-
-        # Re-order the batch list using the correct order
-        return [batches[i] for i in batch_order]
 
 
 class SparkConversionMixin:
