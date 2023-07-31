@@ -20,21 +20,27 @@ package org.apache.spark.sql.connect.service
 import java.util.UUID
 import java.util.concurrent.TimeUnit
 
+import scala.jdk.CollectionConverters._
+
 import com.google.common.base.Ticker
 import com.google.common.cache.{CacheBuilder, RemovalListener, RemovalNotification}
-import io.grpc.Server
+import com.google.protobuf.MessageLite
+import io.grpc.{BindableService, MethodDescriptor, Server, ServerMethodDefinition, ServerServiceDefinition}
+import io.grpc.MethodDescriptor.PrototypeMarshaller
 import io.grpc.netty.NettyServerBuilder
+import io.grpc.protobuf.lite.ProtoLiteUtils
 import io.grpc.protobuf.services.ProtoReflectionService
 import io.grpc.stub.StreamObserver
 import org.apache.commons.lang3.StringUtils
 
 import org.apache.spark.{SparkContext, SparkEnv, SparkSQLException}
 import org.apache.spark.connect.proto
-import org.apache.spark.connect.proto.{AddArtifactsRequest, AddArtifactsResponse}
+import org.apache.spark.connect.proto.{AddArtifactsRequest, AddArtifactsResponse, SparkConnectServiceGrpc}
+import org.apache.spark.connect.proto.SparkConnectServiceGrpc.AsyncService
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.UI.UI_ENABLED
 import org.apache.spark.sql.SparkSession
-import org.apache.spark.sql.connect.config.Connect.{CONNECT_GRPC_BINDING_PORT, CONNECT_GRPC_MAX_INBOUND_MESSAGE_SIZE}
+import org.apache.spark.sql.connect.config.Connect.{CONNECT_GRPC_BINDING_PORT, CONNECT_GRPC_MARSHALLER_RECURSION_LIMIT, CONNECT_GRPC_MAX_INBOUND_MESSAGE_SIZE}
 import org.apache.spark.sql.connect.ui.{SparkConnectServerAppStatusStore, SparkConnectServerListener, SparkConnectServerTab}
 import org.apache.spark.sql.connect.utils.ErrorUtils
 import org.apache.spark.status.ElementTrackingStore
@@ -47,9 +53,7 @@ import org.apache.spark.status.ElementTrackingStore
  * @param debug
  *   delegates debug behavior to the handlers.
  */
-class SparkConnectService(debug: Boolean)
-    extends proto.SparkConnectServiceGrpc.SparkConnectServiceImplBase
-    with Logging {
+class SparkConnectService(debug: Boolean) extends AsyncService with BindableService with Logging {
 
   /**
    * This is the main entry method for Spark Connect and all calls to execute a plan.
@@ -162,6 +166,50 @@ class SparkConnectService(debug: Boolean)
         observer = responseObserver,
         userId = request.getUserContext.getUserId,
         sessionId = request.getSessionId)
+  }
+
+  private def methodWithCustomMarshallers(methodDesc: MethodDescriptor[MessageLite, MessageLite])
+      : MethodDescriptor[MessageLite, MessageLite] = {
+    val recursionLimit =
+      SparkEnv.get.conf.get(CONNECT_GRPC_MARSHALLER_RECURSION_LIMIT)
+    val requestMarshaller =
+      ProtoLiteUtils.marshallerWithRecursionLimit(
+        methodDesc.getRequestMarshaller
+          .asInstanceOf[PrototypeMarshaller[MessageLite]]
+          .getMessagePrototype,
+        recursionLimit)
+    val responseMarshaller =
+      ProtoLiteUtils.marshallerWithRecursionLimit(
+        methodDesc.getResponseMarshaller
+          .asInstanceOf[PrototypeMarshaller[MessageLite]]
+          .getMessagePrototype,
+        recursionLimit)
+    methodDesc.toBuilder
+      .setRequestMarshaller(requestMarshaller)
+      .setResponseMarshaller(responseMarshaller)
+      .build()
+  }
+
+  override def bindService(): ServerServiceDefinition = {
+    // First, get the SparkConnectService ServerServiceDefinition.
+    val serviceDef = SparkConnectServiceGrpc.bindService(this)
+
+    // Create a new ServerServiceDefinition builder
+    // using the name of the original service definition.
+    val builder = io.grpc.ServerServiceDefinition.builder(serviceDef.getServiceDescriptor.getName)
+
+    // Iterate through all the methods of the original service definition.
+    // For each method, add a customized method descriptor (with updated marshallers)
+    // and the original server call handler to the builder.
+    serviceDef.getMethods.asScala
+      .asInstanceOf[Iterable[ServerMethodDefinition[MessageLite, MessageLite]]]
+      .foreach(method =>
+        builder.addMethod(
+          methodWithCustomMarshallers(method.getMethodDescriptor),
+          method.getServerCallHandler))
+
+    // Build the final ServerServiceDefinition and return it.
+    builder.build()
   }
 }
 

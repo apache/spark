@@ -56,6 +56,16 @@ object Connect {
       .bytesConf(ByteUnit.BYTE)
       .createWithDefault(ConnectCommon.CONNECT_GRPC_MAX_MESSAGE_SIZE)
 
+  val CONNECT_GRPC_MARSHALLER_RECURSION_LIMIT =
+    ConfigBuilder("spark.connect.grpc.marshallerRecursionLimit")
+      .internal()
+      .doc("""
+          |Sets the recursion limit to grpc protobuf messages.
+          |""".stripMargin)
+      .version("3.5.0")
+      .intConf
+      .createWithDefault(1024)
+
   val CONNECT_EXTENSIONS_RELATION_CLASSES =
     ConfigBuilder("spark.connect.extensions.relation.classes")
       .doc("""
