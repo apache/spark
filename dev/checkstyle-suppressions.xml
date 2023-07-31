@@ -60,6 +60,7 @@
               files="sql/core/src/main/java/org/apache/spark/sql/streaming/Trigger.java"/>
     <suppress checks="MethodName"
               files="connector/connect/client/jvm/src/main/java/org/apache/spark/sql/streaming/Trigger.java"/>
+    <!-- SPARK-43646: Suppress the code style check of Protobuf Java files used for testing in the connect module -->
     <suppress checks=".*"
               files="connector/connect/server/src/test/java/org/apache/spark/sql/protobuf/protos/Test.java"/>
     <suppress checks=".*"
