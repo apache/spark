@@ -161,6 +161,8 @@ object ScalarUserDefinedFunction {
       case NonFatal(e) =>
         throw new SparkException(
           "UDF cannot be executed on a Spark cluster, it cannot be deserialized.",
+        throw new SparkException(
+          "UDF cannot be executed on a Spark cluster: it cannot be deserialized.",
           e)
     }
   }
