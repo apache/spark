@@ -507,18 +507,6 @@ def assertDataFrameEqual(
                 },
             )
 
-    # special cases: empty datasets, datasets with 0 columns
-    if (
-        isinstance(expected, DataFrame)
-        and (
-            (actual.first() is None and expected.first() is None)
-            or (len(actual.columns) == 0 and len(expected.columns) == 0)
-        )
-        or isinstance(expected, list)
-        and ((actual.first() is None or len(actual.columns) == 0) and len(expected) == 0)
-    ):
-        return True
-
     def compare_rows(r1: Row, r2: Row):
         def compare_vals(val1, val2):
             if isinstance(val1, list) and isinstance(val2, list):
@@ -559,24 +547,29 @@ def assertDataFrameEqual(
                 diff_rows_cnt += 1
                 diff_rows = True
 
-        if isinstance(actual, (DataFrame, ConnectDataFrame)):
-            if isinstance(actual, DataFrame):
-                actual_str = actual._jdf.showString(len(rows1), len(rows1), False)
-            else:
-                actual_str = actual._show_string(len(rows1), len(rows1), False)
+        if isinstance(actual, DataFrame):
+            actual_str = actual._jdf.showString(len(rows1), len(rows1), False)
+        elif isinstance(actual, ps.DataFrame):
+            actual_str = actual.to_string()
+        else:
+            # otherwise, actual is Connect DataFrame
+            actual_str = actual._show_string(len(rows1), len(rows1), False)
 
-        if isinstance(expected, (DataFrame, ConnectDataFrame)):
+        if isinstance(expected, list):
+            # if expected is type list
+            generated_diff = _context_diff(actual=rows1, expected=rows2, n=len(zipped))
+        else:
             if isinstance(expected, DataFrame):
                 expected_str = expected._jdf.showString(len(rows2), len(rows2), False)
+            elif isinstance(expected, ps.DataFrame):
+                expected_str = actual.to_string()
             else:
+                # otherwise, actual is Connect DataFrame
                 expected_str = expected._show_string(len(rows2), len(rows2), False)
 
             generated_diff = _context_diff(
                 actual=actual_str.splitlines(), expected=expected_str.splitlines(), n=len(zipped)
             )
-        else:
-            # in case of expected list type
-            generated_diff = _context_diff(actual=rows1, expected=rows2, n=len(zipped))
 
         if diff_rows:
             error_msg = "Results do not match: "
@@ -589,7 +582,7 @@ def assertDataFrameEqual(
             )
 
     # convert actual and expected to list
-    if not isinstance(expected, List):
+    if not isinstance(expected, list):
         # only compare schema if expected is not a List
         assertSchemaEqual(actual.schema, expected.schema)
         expected_list = expected.collect()
