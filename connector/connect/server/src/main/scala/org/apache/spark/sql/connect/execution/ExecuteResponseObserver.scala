@@ -103,8 +103,8 @@ private[connect] class ExecuteResponseObserver[T <: MessageLite](val executeHold
     val processedResponse = setCommonResponseFields(r)
     responses +=
       ((lastProducedIndex, CachedStreamResponse[T](processedResponse, lastProducedIndex)))
-    responseIndexToId += ((lastProducedIndex, getResponseId(r)))
-    responseIdToIndex += ((getResponseId(r), lastProducedIndex))
+    responseIndexToId += ((lastProducedIndex, getResponseId(processedResponse)))
+    responseIdToIndex += ((getResponseId(processedResponse), lastProducedIndex))
     logDebug(s"Saved response with index=$lastProducedIndex")
     notifyAll()
   }

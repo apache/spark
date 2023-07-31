@@ -162,6 +162,7 @@ private[connect] class ExecuteThreadRunner(executeHolder: ExecuteHolder) extends
         // to signal that there isn't more coming.
         executeHolder.responseObserver.onNext(createResponseComplete())
       }
+      executeHolder.responseObserver.onCompleted()
     }
   }
 
@@ -181,7 +182,6 @@ private[connect] class ExecuteThreadRunner(executeHolder: ExecuteHolder) extends
       command = command,
       responseObserver = responseObserver,
       executeHolder = executeHolder)
-    responseObserver.onCompleted()
   }
 
   private def requestString(request: Message) = {

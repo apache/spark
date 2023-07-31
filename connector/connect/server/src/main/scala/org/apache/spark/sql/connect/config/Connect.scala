@@ -82,7 +82,8 @@ object Connect {
         "Set to 0 for unlimited.")
       .version("3.5.0")
       .timeConf(TimeUnit.SECONDS)
-      .createWithDefault(5 * 60)
+      .createWithDefault(1) // todo for testing
+      // .createWithDefault(5 * 60)
 
   val CONNECT_EXECUTE_REATTACHABLE_SENDER_MAX_STREAM_SIZE =
     ConfigBuilder("spark.connect.execute.reattachable.senderMaxStreamSize")
@@ -93,7 +94,8 @@ object Connect {
           "ReattachExecute RPC to continue. Set to 0 for unlimited.")
       .version("3.5.0")
       .bytesConf(ByteUnit.BYTE)
-      .createWithDefaultString("1g")
+      .createWithDefaultString("150") // todo for testing
+      // .createWithDefaultString("1g")
 
   val CONNECT_EXECUTE_REATTACHABLE_OBSERVER_RETRY_BUFFER_SIZE =
     ConfigBuilder("spark.connect.execute.reattachable.observerRetryBufferSize")

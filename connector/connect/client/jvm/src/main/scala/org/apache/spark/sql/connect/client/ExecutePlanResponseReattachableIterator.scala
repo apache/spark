@@ -102,7 +102,7 @@ class ExecutePlanResponseReattachableIterator(
   }
 
   private def releaseExecute(untilResponseId: Option[String]) = {
-    val request = createReleaseExecuteRequest(lastResponseId)
+    val request = createReleaseExecuteRequest(untilResponseId)
     rawAsyncStub.releaseExecute(
       request,
       createRetryingReleaseExecuteResponseObserer(request)

@@ -195,7 +195,7 @@ private[client] object GrpcRetryHandler {
    *   Function that determines whether a retry is to be performed in the event of an error.
    */
   case class RetryPolicy(
-      maxRetries: Int = 15,
+      maxRetries: Int = 4, // todo lowered for testing
       initialBackoff: FiniteDuration = FiniteDuration(50, "ms"),
       maxBackoff: FiniteDuration = FiniteDuration(1, "min"),
       backoffMultiplier: Double = 4.0,

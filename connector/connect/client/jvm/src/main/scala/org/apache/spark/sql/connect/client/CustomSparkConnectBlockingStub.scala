@@ -38,6 +38,7 @@ private[client] class CustomSparkConnectBlockingStub(
     : java.util.Iterator[ExecutePlanResponse] = {
     GrpcExceptionConverter.convert {
       GrpcExceptionConverter.convertIterator[ExecutePlanResponse](
+        // Don't use retryHandler - own retry handling is inside.
         new ExecutePlanResponseReattachableIterator(request, channel, retryPolicy))
     }
   }
