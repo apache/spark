@@ -28,7 +28,7 @@ dpkg-query -Wf '${Installed-Size}\t${Package}\n' | sort -n | tail -n 100
 df -h
 echo "Removing large packages"
 sudo rm -rf /usr/share/dotnet/
-sudo apt-get remove -y aspnetcore
+sudo apt-get remove -y '^aspnet.*'
 sudo apt-get remove -y '^dotnet-.*'
 sudo apt-get remove -y '^llvm-.*'
 sudo apt-get remove -y 'php.*'
