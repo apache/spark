@@ -327,6 +327,7 @@ object SparkConnectService extends Logging {
       userId,
       sessionId,
       () => {
+        logDebug(s"Session not found: ($userId, $sessionId)")
         throw new SparkSQLException(
           errorClass = "INVALID_HANDLE.SESSION_NOT_FOUND",
           messageParameters = Map("handle" -> sessionId))

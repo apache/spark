@@ -1338,9 +1338,9 @@ class ExecutePlanResponse(google.protobuf.message.Message):
             self, field_name: typing_extensions.Literal["name", b"name", "values", b"values"]
         ) -> None: ...
 
-    class ResponseComplete(google.protobuf.message.Message):
+    class ResultComplete(google.protobuf.message.Message):
         """If present, in a reattachable execution this means that after server sends onComplete,
-        the execution is complete. If the server sends onComplete without sending a ResponseComplete,
+        the execution is complete. If the server sends onComplete without sending a ResultComplete,
         it means that there is more, and the client should use ReattachExecute RPC to continue.
         """
 
@@ -1359,7 +1359,7 @@ class ExecutePlanResponse(google.protobuf.message.Message):
     STREAMING_QUERY_COMMAND_RESULT_FIELD_NUMBER: builtins.int
     GET_RESOURCES_COMMAND_RESULT_FIELD_NUMBER: builtins.int
     STREAMING_QUERY_MANAGER_COMMAND_RESULT_FIELD_NUMBER: builtins.int
-    RESPONSE_COMPLETE_FIELD_NUMBER: builtins.int
+    RESULT_COMPLETE_FIELD_NUMBER: builtins.int
     EXTENSION_FIELD_NUMBER: builtins.int
     METRICS_FIELD_NUMBER: builtins.int
     OBSERVED_METRICS_FIELD_NUMBER: builtins.int
@@ -1401,7 +1401,7 @@ class ExecutePlanResponse(google.protobuf.message.Message):
     ) -> pyspark.sql.connect.proto.commands_pb2.StreamingQueryManagerCommandResult:
         """Response for commands on the streaming query manager."""
     @property
-    def response_complete(self) -> global___ExecutePlanResponse.ResponseComplete:
+    def result_complete(self) -> global___ExecutePlanResponse.ResultComplete:
         """Response type informing if the stream is complete in reattachable execution."""
     @property
     def extension(self) -> google.protobuf.any_pb2.Any:
@@ -1437,7 +1437,7 @@ class ExecutePlanResponse(google.protobuf.message.Message):
         | None = ...,
         streaming_query_manager_command_result: pyspark.sql.connect.proto.commands_pb2.StreamingQueryManagerCommandResult
         | None = ...,
-        response_complete: global___ExecutePlanResponse.ResponseComplete | None = ...,
+        result_complete: global___ExecutePlanResponse.ResultComplete | None = ...,
         extension: google.protobuf.any_pb2.Any | None = ...,
         metrics: global___ExecutePlanResponse.Metrics | None = ...,
         observed_metrics: collections.abc.Iterable[global___ExecutePlanResponse.ObservedMetrics]
@@ -1455,10 +1455,10 @@ class ExecutePlanResponse(google.protobuf.message.Message):
             b"get_resources_command_result",
             "metrics",
             b"metrics",
-            "response_complete",
-            b"response_complete",
             "response_type",
             b"response_type",
+            "result_complete",
+            b"result_complete",
             "schema",
             b"schema",
             "sql_command_result",
@@ -1486,12 +1486,12 @@ class ExecutePlanResponse(google.protobuf.message.Message):
             b"observed_metrics",
             "operation_id",
             b"operation_id",
-            "response_complete",
-            b"response_complete",
             "response_id",
             b"response_id",
             "response_type",
             b"response_type",
+            "result_complete",
+            b"result_complete",
             "schema",
             b"schema",
             "session_id",
@@ -1515,7 +1515,7 @@ class ExecutePlanResponse(google.protobuf.message.Message):
         "streaming_query_command_result",
         "get_resources_command_result",
         "streaming_query_manager_command_result",
-        "response_complete",
+        "result_complete",
         "extension",
     ] | None: ...
 

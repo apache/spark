@@ -44,6 +44,8 @@ private[connect] class ExecuteThreadRunner(executeHolder: ExecuteHolder) extends
 
   private var interrupted: Boolean = false
 
+  private var completed: Boolean = false
+
   /** Launches the execution in a background thread, returns immediately. */
   def start(): Unit = {
     executionThread.start()
@@ -57,11 +59,12 @@ private[connect] class ExecuteThreadRunner(executeHolder: ExecuteHolder) extends
   /**
    * Interrupt the executing thread.
    * @return
-   *   true if it was not interrupted before, false if it was already interrupted.
+   *   true if it was not interrupted before, false if it was already interrupted or completed.
    */
   def interrupt(): Boolean = {
     synchronized {
-      if (!interrupted) {
+      if (!interrupted && !completed) {
+        // checking completed prevents sending interrupt onError after onCompleted
         interrupted = true
         executionThread.interrupt()
         true
@@ -158,11 +161,15 @@ private[connect] class ExecuteThreadRunner(executeHolder: ExecuteHolder) extends
       }
 
       if (executeHolder.reattachable) {
-        // Reattachable execution sends a ResponseComplete at the end of the stream
+        // Reattachable execution sends a ResultComplete at the end of the stream
         // to signal that there isn't more coming.
-        executeHolder.responseObserver.onNext(createResponseComplete())
+        executeHolder.responseObserver.onNext(createResultComplete())
       }
-      executeHolder.responseObserver.onCompleted()
+      synchronized {
+        // Prevent interrupt after onCompleted, and throwing error to an alredy closed stream.
+        completed = true
+        executeHolder.responseObserver.onCompleted()
+      }
     }
   }
 
@@ -196,11 +203,11 @@ private[connect] class ExecuteThreadRunner(executeHolder: ExecuteHolder) extends
     }
   }
 
-  private def createResponseComplete(): proto.ExecutePlanResponse = {
+  private def createResultComplete(): proto.ExecutePlanResponse = {
     // Send the Spark data type
     proto.ExecutePlanResponse
       .newBuilder()
-      .setResponseComplete(proto.ExecutePlanResponse.ResponseComplete.newBuilder().build())
+      .setResultComplete(proto.ExecutePlanResponse.ResultComplete.newBuilder().build())
       .build()
   }
 

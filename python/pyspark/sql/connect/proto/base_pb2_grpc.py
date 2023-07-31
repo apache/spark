@@ -119,8 +119,8 @@ class SparkConnectServiceServicer(object):
     def ReattachExecute(self, request, context):
         """Reattach to an existing reattachable execution.
         The ExecutePlan must have been started with ReattachOptions.reattachable=true.
-        If the ExecutePlanResponse stream ends without a ResponseComplete message, there is more to
-        continue. If there is a ResponseComplete, the client should use ReleaseExecute with
+        If the ExecutePlanResponse stream ends without a ResultComplete message, there is more to
+        continue. If there is a ResultComplete, the client should use ReleaseExecute with
         """
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details("Method not implemented!")

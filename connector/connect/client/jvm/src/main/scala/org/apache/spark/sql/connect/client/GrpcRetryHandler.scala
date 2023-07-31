@@ -24,6 +24,8 @@ import scala.util.control.NonFatal
 import io.grpc.{Status, StatusRuntimeException}
 import io.grpc.stub.StreamObserver
 
+import org.apache.spark.internal.Logging
+
 private[client] class GrpcRetryHandler(private val retryPolicy: GrpcRetryHandler.RetryPolicy) {
 
   /**
@@ -135,7 +137,7 @@ private[client] class GrpcRetryHandler(private val retryPolicy: GrpcRetryHandler
   }
 }
 
-private[client] object GrpcRetryHandler {
+private[client] object GrpcRetryHandler extends Logging {
   /**
    * Retries the given function with exponential backoff according to the client's retryPolicy.
    * @param retryPolicy
@@ -159,6 +161,8 @@ private[client] object GrpcRetryHandler {
       return fn
     } catch {
       case NonFatal(e) if retryPolicy.canRetry(e) && currentRetryNum < retryPolicy.maxRetries =>
+        logWarning(s"Non fatal error during RPC execution: $e, " +
+          s"retrying (currentRetryNum=$currentRetryNum)")
         Thread.sleep(
           (retryPolicy.maxBackoff min retryPolicy.initialBackoff * Math
             .pow(retryPolicy.backoffMultiplier, currentRetryNum)).toMillis)
@@ -195,7 +199,7 @@ private[client] object GrpcRetryHandler {
    *   Function that determines whether a retry is to be performed in the event of an error.
    */
   case class RetryPolicy(
-      maxRetries: Int = 4, // todo lowered for testing
+      maxRetries: Int = 15,
       initialBackoff: FiniteDuration = FiniteDuration(50, "ms"),
       maxBackoff: FiniteDuration = FiniteDuration(1, "min"),
       backoffMultiplier: Double = 4.0,

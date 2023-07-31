@@ -33,7 +33,11 @@ class ExecutePlanResponseReattachableIterator(
     extends java.util.Iterator[proto.ExecutePlanResponse]
     with Logging {
 
-  val operationId = UUID.randomUUID.toString
+  val operationId = if (request.hasOperationId) {
+    request.getOperationId
+  } else {
+    UUID.randomUUID.toString
+  }
 
   // We don't want retry handling or error conversion done by the custom stubs.
   private val rawBlockingStub = proto.SparkConnectServiceGrpc.newBlockingStub(channel)
@@ -54,16 +58,19 @@ class ExecutePlanResponseReattachableIterator(
     rawBlockingStub.executePlan(initialRequest)
 
   override def next(): proto.ExecutePlanResponse = synchronized {
-    hasNext() // will trigger reattach in case the stream completed without responseComplete
+    // hasNext will trigger reattach in case the stream completed without responseComplete
+    if (!hasNext()) {
+      throw new java.util.NoSuchElementException()
+    }
 
     // Get next response, possibly triggering reattach in case of stream error.
     var firstTry = true
     val ret = retry {
       if (firstTry) {
-        // on first try, we use the initial iterator.
+        // on first try, we use the existing iterator.
         firstTry = false
       } else {
-        // Error retry reattach: After an error, attempt to
+        // on retry, the iterator is borked, so we need a new one
         iterator = rawBlockingStub.reattachExecute(createReattachExecuteRequest())
       }
       iterator.next()
@@ -71,7 +78,7 @@ class ExecutePlanResponseReattachableIterator(
 
     // Record last returned response, to know where to restart in case of reattach.
     lastResponseId = Some(ret.getResponseId)
-    if (ret.hasResponseComplete) {
+    if (ret.hasResultComplete) {
       responseComplete = true
       releaseExecute(None) // release all
     } else {
@@ -85,11 +92,23 @@ class ExecutePlanResponseReattachableIterator(
       // After response complete response
       return false
     }
+    var firstTry = true
     retry {
+      if (firstTry) {
+        // on first try, we use the existing iterator.
+        firstTry = false
+      } else {
+        // on retry, the iterator is borked, so we need a new one
+        iterator = rawBlockingStub.reattachExecute(createReattachExecuteRequest())
+      }
       var hasNext = iterator.hasNext()
       // Graceful reattach:
-      // If iterator ended, but there was no ResponseComplete, it means that there is more,
-      // and we need to reattach. While ResponseComplete didn't arrive, we keep reattaching.
+      // If iterator ended, but there was no ResultComplete, it means that there is more,
+      // and we need to reattach.
+      // It's possible that the next iterator will also close without any response, so we need
+      // to keep iterating in a loop.
+      // Eventually, there will be a non empty iterator, because there's a ResultComplete at
+      // the end of the stream.
       if (!hasNext && !responseComplete) {
         while (!hasNext) {
           iterator = rawBlockingStub.reattachExecute(createReattachExecuteRequest())
