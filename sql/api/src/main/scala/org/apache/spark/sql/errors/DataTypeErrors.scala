@@ -64,7 +64,7 @@ private[sql] object DataTypeErrors extends DataTypeErrorsBase {
   def unsupportedJavaTypeError(clazz: Class[_]): SparkRuntimeException = {
     new SparkRuntimeException(
       errorClass = "_LEGACY_ERROR_TEMP_2121",
-      messageParameters = Map("clazz" -> clazz.toString()))
+      messageParameters = Map("clazz" -> clazz.toString))
   }
 
   def nullLiteralsCannotBeCastedError(name: String): SparkUnsupportedOperationException = {
@@ -95,7 +95,7 @@ private[sql] object DataTypeErrors extends DataTypeErrorsBase {
   def unsupportedArrayTypeError(clazz: Class[_]): SparkRuntimeException = {
     new SparkRuntimeException(
       errorClass = "_LEGACY_ERROR_TEMP_2120",
-      messageParameters = Map("clazz" -> clazz.toString()))
+      messageParameters = Map("clazz" -> clazz.toString))
   }
 
   def schemaFailToParseError(schema: String, e: Throwable): Throwable = {
@@ -143,7 +143,7 @@ private[sql] object DataTypeErrors extends DataTypeErrorsBase {
   def negativeScaleNotAllowedError(scale: Int): Throwable = {
     val sqlConf = QuotingUtils.toSQLConf("spark.sql.legacy.allowNegativeScaleOfDecimal")
     SparkException.internalError(s"Negative scale is not allowed: ${scale.toString}." +
-      s" Set the config ${sqlConf}" +
+      s" Set the config $sqlConf" +
       " to \"true\" to allow it.")
   }
 
@@ -167,8 +167,8 @@ private[sql] object DataTypeErrors extends DataTypeErrorsBase {
     new SparkException(
       errorClass = "_LEGACY_ERROR_TEMP_2124",
       messageParameters = Map(
-        "leftScale" -> leftScale.toString(),
-        "rightScale" -> rightScale.toString()),
+        "leftScale" -> leftScale.toString,
+        "rightScale" -> rightScale.toString),
       cause = null)
   }
 
@@ -192,15 +192,7 @@ private[sql] object DataTypeErrors extends DataTypeErrorsBase {
       decimalPrecision: Int,
       decimalScale: Int,
       context: SQLQueryContext = null): ArithmeticException = {
-    new SparkArithmeticException(
-      errorClass = "NUMERIC_VALUE_OUT_OF_RANGE",
-      messageParameters = Map(
-        "value" -> value.toPlainString,
-        "precision" -> decimalPrecision.toString,
-        "scale" -> decimalScale.toString,
-        "config" -> toSQLConf("spark.sql.ansi.enabled")),
-      context = getQueryContext(context),
-      summary = getSummary(context))
+    numericValueOutOfRange(value, decimalPrecision, decimalScale, context)
   }
 
   def cannotChangeDecimalPrecisionError(
@@ -208,6 +200,14 @@ private[sql] object DataTypeErrors extends DataTypeErrorsBase {
       decimalPrecision: Int,
       decimalScale: Int,
       context: SQLQueryContext = null): ArithmeticException = {
+    numericValueOutOfRange(value, decimalPrecision, decimalScale, context)
+  }
+
+  private def numericValueOutOfRange(
+      value: Decimal,
+      decimalPrecision: Int,
+      decimalScale: Int,
+      context: SQLQueryContext): ArithmeticException = {
     new SparkArithmeticException(
       errorClass = "NUMERIC_VALUE_OUT_OF_RANGE",
       messageParameters = Map(
