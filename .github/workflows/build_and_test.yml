@@ -527,7 +527,7 @@ jobs:
 
   breaking-changes-buf:
     needs: [precondition]
-    if: always() && fromJson(needs.precondition.outputs.required).breaking-changes-buf == 'true'
+    if: (!cancelled()) && fromJson(needs.precondition.outputs.required).breaking-changes-buf == 'true'
     # Change 'branch-3.5' to 'branch-4.0' in master branch after cutting branch-4.0 branch.
     name: Breaking change detection with Buf (branch-3.5)
     runs-on: ubuntu-22.04

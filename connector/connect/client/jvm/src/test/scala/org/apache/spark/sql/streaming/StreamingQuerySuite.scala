@@ -33,7 +33,7 @@ import org.apache.spark.sql.connect.client.util.QueryTest
 import org.apache.spark.sql.functions.col
 import org.apache.spark.sql.functions.window
 import org.apache.spark.sql.streaming.StreamingQueryListener.{QueryIdleEvent, QueryStartedEvent, QueryTerminatedEvent}
-import org.apache.spark.util.Utils
+import org.apache.spark.util.SparkFileUtils
 
 class StreamingQuerySuite extends QueryTest with SQLHelper with Logging {
 
@@ -359,7 +359,7 @@ class TestForeachWriter[T] extends ForeachWriter[T] {
   var path: File = _
 
   def open(partitionId: Long, version: Long): Boolean = {
-    path = Utils.createTempDir()
+    path = SparkFileUtils.createTempDir()
     fileWriter = new FileWriter(path, true)
     true
   }
@@ -371,7 +371,7 @@ class TestForeachWriter[T] extends ForeachWriter[T] {
 
   def close(errorOrNull: Throwable): Unit = {
     fileWriter.close()
-    Utils.deleteRecursively(path)
+    SparkFileUtils.deleteRecursively(path)
   }
 }
 

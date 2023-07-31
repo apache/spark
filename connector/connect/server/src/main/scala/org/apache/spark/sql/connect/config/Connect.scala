@@ -62,6 +62,16 @@ object Connect {
       .bytesConf(ByteUnit.BYTE)
       .createWithDefault(ConnectCommon.CONNECT_GRPC_MAX_MESSAGE_SIZE)
 
+  val CONNECT_GRPC_MARSHALLER_RECURSION_LIMIT =
+    ConfigBuilder("spark.connect.grpc.marshallerRecursionLimit")
+      .internal()
+      .doc("""
+          |Sets the recursion limit to grpc protobuf messages.
+          |""".stripMargin)
+      .version("3.5.0")
+      .intConf
+      .createWithDefault(1024)
+
   val CONNECT_EXTENSIONS_RELATION_CLASSES =
     ConfigBuilder("spark.connect.extensions.relation.classes")
       .doc("""
@@ -121,4 +131,17 @@ object Connect {
       .version("3.5.0")
       .booleanConf
       .createWithDefault(false)
+
+  val CONNECT_UI_STATEMENT_LIMIT =
+    ConfigBuilder("spark.sql.connect.ui.retainedStatements")
+      .doc("The number of statements kept in the Spark Connect UI history.")
+      .version("3.5.0")
+      .intConf
+      .createWithDefault(200)
+
+  val CONNECT_UI_SESSION_LIMIT = ConfigBuilder("spark.sql.connect.ui.retainedSessions")
+    .doc("The number of client sessions kept in the Spark Connect UI history.")
+    .version("3.5.0")
+    .intConf
+    .createWithDefault(200)
 }
