@@ -255,6 +255,7 @@ try:
             "pyspark.sql.streaming",
             "pyspark.sql.worker",
             "pyspark.streaming",
+            "pyspark.sql.connect.streaming.worker",
             "pyspark.bin",
             "pyspark.sbin",
             "pyspark.jars",
