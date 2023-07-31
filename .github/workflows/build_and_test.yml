@@ -420,6 +420,8 @@ jobs:
         rm -rf /__t/go || echo "fail to rm /__t/go"
         du -sh /* || echo "fail to du"
         du -sh /*/* || echo "fail to du"
+        du -sh /usr/share/* || echo "fail to du"
+        du -sh /usr/local/lib/* || echo "fail to du"
         df -h
     - name: Install Java ${{ matrix.java }}
       uses: actions/setup-java@v3
