@@ -250,6 +250,7 @@ try:
             "pyspark.sql.protobuf",
             "pyspark.sql.streaming",
             "pyspark.streaming",
+            "pyspark.sql.connect.streaming.worker",
             "pyspark.bin",
             "pyspark.sbin",
             "pyspark.jars",
