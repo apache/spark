@@ -134,28 +134,6 @@ object ResolveLateralColumnAliasReference extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan = {
     if (!conf.getConf(SQLConf.LATERAL_COLUMN_ALIAS_IMPLICIT_ENABLED)) {
       plan
-//    } else if (plan.containsAllPatterns(
-//        UNRESOLVED_HAVING, LATERAL_COLUMN_ALIAS_REFERENCE, WINDOW_EXPRESSION)) {
-//      val unresolvedHavingPlans = plan.collect {
-//        case u: UnresolvedHaving => u
-//      }
-//      unresolvedHavingPlans.foreach { uHaving =>
-//        if (uHaving.containsAllPatterns(LATERAL_COLUMN_ALIAS_REFERENCE, WINDOW_EXPRESSION)) {
-//          uHaving.resolveOperatorsDownWithPruning(
-//            _.containsAllPatterns(LATERAL_COLUMN_ALIAS_REFERENCE, WINDOW_EXPRESSION)) {
-//            case Project(projectList, _) if exprsContainBothLCAAndWindow(projectList) =>
-//              val lcaRef = collectFirstLCARef(projectList).get
-//              throw QueryCompilationErrors
-//                .lateralColumnAliasInAggWithWindowAndHavingUnsupportedError(lcaRef.nameParts)
-//
-//            case Aggregate(_, aggrExprs, _) if exprsContainBothLCAAndWindow(aggrExprs) =>
-//              val lcaRef = collectFirstLCARef(aggrExprs).get
-//              throw QueryCompilationErrors
-//                .lateralColumnAliasInAggWithWindowAndHavingUnsupportedError(lcaRef.nameParts)
-//          }
-//        }
-//      }
-//      plan
     } else if (plan.containsAnyPattern(TEMP_RESOLVED_COLUMN, UNRESOLVED_HAVING)) {
       // It should not change the plan if `TempResolvedColumn` or `UnresolvedHaving` is present in
       // the query plan. These plans need certain plan shape to get recognized and resolved by other
