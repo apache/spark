@@ -25,6 +25,7 @@ from pyspark.errors import (
 )
 from pyspark.testing.utils import assertDataFrameEqual, assertSchemaEqual
 from pyspark.testing.sqlutils import ReusedSQLTestCase
+from pyspark.sql import Row
 import pyspark.sql.functions as F
 from pyspark.sql.functions import to_date, unix_timestamp, from_unixtime
 from pyspark.sql.types import (
@@ -42,6 +43,7 @@ from pyspark.sql.types import (
 from pyspark.sql.dataframe import DataFrame
 
 import difflib
+from typing import List, Union
 
 
 class UtilsTestsMixin:
@@ -705,7 +707,7 @@ class UtilsTestsMixin:
             exception=pe.exception,
             error_class="INVALID_TYPE_DF_EQUALITY_ARG",
             message_parameters={
-                "expected_type": f"{DataFrame.__name__}, {ps.DataFrame.__name__}",
+                "expected_type": Union[DataFrame, ps.DataFrame, List[Row]],
                 "arg_name": "actual",
                 "actual_type": type(dict1),
             },
@@ -718,7 +720,7 @@ class UtilsTestsMixin:
             exception=pe.exception,
             error_class="INVALID_TYPE_DF_EQUALITY_ARG",
             message_parameters={
-                "expected_type": f"{DataFrame.__name__}, {ps.DataFrame.__name__}",
+                "expected_type": Union[DataFrame, ps.DataFrame, List[Row]],
                 "arg_name": "actual",
                 "actual_type": type(dict1),
             },
@@ -1137,9 +1139,9 @@ class UtilsTestsMixin:
         assertDataFrameEqual(df1, df2, checkRowOrder=True)
 
     def test_empty_expected_list(self):
-        df1 = self.spark.range(0, 10).drop("id")
+        df1 = self.spark.range(0, 5).drop("id")
 
-        df2 = []
+        df2 = [Row(), Row(), Row(), Row(), Row()]
 
         assertDataFrameEqual(df1, df2, checkRowOrder=False)
         assertDataFrameEqual(df1, df2, checkRowOrder=True)
@@ -1182,9 +1184,7 @@ class UtilsTestsMixin:
         assertDataFrameEqual(df1, df2, checkRowOrder=False)
         assertDataFrameEqual(df1, df2, checkRowOrder=True)
 
-    def test_list_row_equal(self):
-        from pyspark.sql import Row
-
+    def test_df_list_row_equal(self):
         df1 = self.spark.createDataFrame(
             data=[
                 (1, 3000),
@@ -1198,9 +1198,48 @@ class UtilsTestsMixin:
         assertDataFrameEqual(df1, list_of_rows, checkRowOrder=False)
         assertDataFrameEqual(df1, list_of_rows, checkRowOrder=True)
 
-    def test_list_row_unequal_schema(self):
-        from pyspark.sql import Row
+    def test_list_rows_equal(self):
+        list_of_rows1 = [Row(1, "abc", 5000), Row(2, "def", 1000)]
+        list_of_rows2 = [Row(1, "abc", 5000), Row(2, "def", 1000)]
 
+        assertDataFrameEqual(list_of_rows1, list_of_rows2, checkRowOrder=False)
+        assertDataFrameEqual(list_of_rows1, list_of_rows2, checkRowOrder=True)
+
+    def test_list_rows_unequal(self):
+        list_of_rows1 = [Row(1, "abc", 5000), Row(2, "def", 1000)]
+        list_of_rows2 = [Row(1, "abc", 5000), Row(2, "defg", 1000)]
+
+        expected_error_message = "Results do not match: "
+        percent_diff = (1 / 2) * 100
+        expected_error_message += "( %.5f %% )" % percent_diff
+
+        generated_diff = difflib.ndiff(
+            str(list_of_rows1[1]).splitlines(), str(list_of_rows2[1]).splitlines()
+        )
+        diff_msg = "\n" + "\n".join(generated_diff) + "\n"
+        diff_msg += "********************" + "\n"
+
+        expected_error_message += "\n" + "--- actual\n+++ expected\n" + diff_msg
+
+        with self.assertRaises(PySparkAssertionError) as pe:
+            assertDataFrameEqual(list_of_rows1, list_of_rows2)
+
+        self.check_error(
+            exception=pe.exception,
+            error_class="DIFFERENT_ROWS",
+            message_parameters={"error_msg": expected_error_message},
+        )
+
+        with self.assertRaises(PySparkAssertionError) as pe:
+            assertDataFrameEqual(list_of_rows1, list_of_rows2, checkRowOrder=True)
+
+        self.check_error(
+            exception=pe.exception,
+            error_class="DIFFERENT_ROWS",
+            message_parameters={"error_msg": expected_error_message},
+        )
+
+    def test_list_row_unequal_schema(self):
         df1 = self.spark.createDataFrame(
             data=[
                 (1, 3000),
