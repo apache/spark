@@ -347,6 +347,7 @@ def assertSchemaEqual(actual: StructType, expected: StructType):
         else:
             return False
 
+    # ignore nullable flag by default
     if not compare_schemas_ignore_nullable(actual, expected):
         generated_diff = difflib.ndiff(str(actual).splitlines(), str(expected).splitlines())
 
@@ -547,25 +548,7 @@ def assertDataFrameEqual(
                 diff_rows_cnt += 1
                 diff_rows = True
 
-        if isinstance(actual, DataFrame):
-            actual_str = actual._jdf.showString(len(rows1), len(rows1), False)
-        else:
-            # otherwise, actual is Connect DataFrame
-            actual_str = actual._show_string(len(rows1), len(rows1), False)
-
-        if isinstance(expected, list):
-            # if expected is type list
-            generated_diff = _context_diff(actual=rows1, expected=rows2, n=len(zipped))
-        else:
-            if isinstance(expected, DataFrame):
-                expected_str = expected._jdf.showString(len(rows2), len(rows2), False)
-            else:
-                # otherwise, actual is Connect DataFrame
-                expected_str = expected._show_string(len(rows2), len(rows2), False)
-
-            generated_diff = _context_diff(
-                actual=actual_str.splitlines(), expected=expected_str.splitlines(), n=len(zipped)
-            )
+        generated_diff = _context_diff(actual=rows1, expected=rows2, n=len(zipped))
 
         if diff_rows:
             error_msg = "Results do not match: "

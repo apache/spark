@@ -150,17 +150,9 @@ class UtilsTestsMixin:
             ),
         )
 
-        if isinstance(df2, DataFrame):
-            actual_str = df1._jdf.showString(2, 2, False)
-            expected_str = df2._jdf.showString(2, 2, False)
-        else:
-            # Spark Connect
-            actual_str = df1._show_string(2, 2, False)
-            expected_str = df2._show_string(2, 2, False)
-
-        generated_diff = _context_diff(
-            actual=actual_str.splitlines(), expected=expected_str.splitlines(), n=2
-        )
+        generated_diff = _context_diff(actual=df1.collect(),
+                                       expected=df1.collect(),
+                                       n=2)
 
         error_msg = "Results do not match: "
         percent_diff = (1 / 2) * 100
@@ -302,17 +294,9 @@ class UtilsTestsMixin:
             ),
         )
 
-        if isinstance(df2, DataFrame):
-            actual_str = df1._jdf.showString(2, 2, False)
-            expected_str = df2._jdf.showString(2, 2, False)
-        else:
-            # Spark Connect
-            actual_str = df1._show_string(2, 2, False)
-            expected_str = df2._show_string(2, 2, False)
-
-        generated_diff = _context_diff(
-            actual=actual_str.splitlines(), expected=expected_str.splitlines(), n=2
-        )
+        generated_diff = _context_diff(actual=df1.collect(),
+                                       expected=df1.collect(),
+                                       n=2)
 
         error_msg = "Results do not match: "
         percent_diff = (1 / 2) * 100
@@ -606,17 +590,9 @@ class UtilsTestsMixin:
             schema=["id", "amount"],
         )
 
-        if isinstance(df2, DataFrame):
-            actual_str = df1._jdf.showString(2, 2, False)
-            expected_str = df2._jdf.showString(2, 2, False)
-        else:
-            # Spark Connect
-            actual_str = df1._show_string(2, 2, False)
-            expected_str = df2._show_string(2, 2, False)
-
-        generated_diff = _context_diff(
-            actual=actual_str.splitlines(), expected=expected_str.splitlines(), n=2
-        )
+        generated_diff = _context_diff(actual=df1.collect(),
+                                       expected=df2.collect(),
+                                       n=2)
 
         error_msg = "Results do not match: "
         percent_diff = (1 / 2) * 100
