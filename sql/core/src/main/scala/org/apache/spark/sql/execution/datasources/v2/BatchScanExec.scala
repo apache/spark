@@ -185,11 +185,4 @@ case class BatchScanExec(
       this.inputRDDCached = null
     }
   }
-
-  def resetFilteredPartitionsAndInputRdd(): Unit = {
-    this.synchronized {
-      this.filteredPartitions = null
-      this.inputRDDCached = null
-    }
-  }
 }
