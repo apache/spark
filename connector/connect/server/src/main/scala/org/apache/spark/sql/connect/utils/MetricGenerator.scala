@@ -22,7 +22,7 @@ import scala.collection.JavaConverters._
 import org.apache.spark.connect.proto.ExecutePlanResponse
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.execution.SparkPlan
-import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanExec, AdaptiveSparkPlanHelper, QueryStageExec}
+import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 
 /**
  * Helper object for generating responses with metrics from queries.
@@ -45,12 +45,6 @@ private[connect] object MetricGenerator extends AdaptiveSparkPlanHelper {
 
   private def transformChildren(p: SparkPlan): Seq[ExecutePlanResponse.Metrics.MetricObject] = {
     allChildren(p).flatMap(c => transformPlan(c, p.id))
-  }
-
-  private def allChildren(p: SparkPlan): Seq[SparkPlan] = p match {
-    case a: AdaptiveSparkPlanExec => Seq(a.executedPlan)
-    case s: QueryStageExec => Seq(s.plan)
-    case _ => p.children
   }
 
   private def transformPlan(

@@ -84,7 +84,7 @@ private[connect] class SparkConnectStreamingQueryCache(
 
   /**
    * Returns [[StreamingQuery]] if it is cached and session matches the cached query. It ensures
-   * the the session associated with it matches the session passed into the call. If the query is
+   * the session associated with it matches the session passed into the call. If the query is
    * inactive (i.e. it has a cache expiry time set), this access extends its expiry time. So if a
    * client keeps accessing a query, it stays in the cache.
    */
@@ -103,6 +103,18 @@ private[connect] class SparkConnectStreamingQueryCache(
           }
           Some(v.query)
         } else None // Should be rare, may be client is trying access from a different session.
+      }
+    }
+  }
+
+  /**
+   * Terminate all the running queries attached to the given sessionHolder. This is used when
+   * session is expired and we need to cleanup resources of that session.
+   */
+  def cleanupRunningQueries(sessionHolder: SessionHolder): Unit = {
+    for ((k, v) <- queryCache) {
+      if (v.userId.equals(sessionHolder.userId) && v.sessionId.equals(sessionHolder.sessionId)) {
+        v.query.stop()
       }
     }
   }

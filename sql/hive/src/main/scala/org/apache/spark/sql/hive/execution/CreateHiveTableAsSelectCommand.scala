@@ -21,7 +21,7 @@ import scala.util.control.NonFatal
 
 import org.apache.spark.sql.{Row, SaveMode, SparkSession}
 import org.apache.spark.sql.catalyst.catalog.CatalogTable
-import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.catalyst.plans.logical.{CTEInChildren, CTERelationDef, LogicalPlan, WithCTE}
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.command.{DataWritingCommand, LeafRunnableCommand}
@@ -38,7 +38,7 @@ case class CreateHiveTableAsSelectCommand(
     query: LogicalPlan,
     outputColumnNames: Seq[String],
     mode: SaveMode)
-  extends LeafRunnableCommand {
+  extends LeafRunnableCommand with CTEInChildren {
   assert(query.resolved)
   override def innerChildren: Seq[LogicalPlan] = query :: Nil
 
@@ -110,5 +110,9 @@ case class CreateHiveTableAsSelectCommand(
   override def argString(maxFields: Int): String = {
     s"[Database: ${tableDesc.database}, " +
       s"TableName: ${tableDesc.identifier.table}]"
+  }
+
+  override def withCTEDefs(cteDefs: Seq[CTERelationDef]): LogicalPlan = {
+    copy(query = WithCTE(query, cteDefs))
   }
 }

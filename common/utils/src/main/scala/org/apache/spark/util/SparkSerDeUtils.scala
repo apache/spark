@@ -16,7 +16,7 @@
  */
 package org.apache.spark.util
 
-import java.io.{ByteArrayOutputStream, ObjectOutputStream}
+import java.io.{ByteArrayInputStream, ByteArrayOutputStream, ObjectInputStream, ObjectOutputStream}
 
 object SparkSerDeUtils {
   /** Serialize an object using Java serialization */
@@ -26,5 +26,12 @@ object SparkSerDeUtils {
     oos.writeObject(o)
     oos.close()
     bos.toByteArray
+  }
+
+  /** Deserialize an object using Java serialization */
+  def deserialize[T](bytes: Array[Byte]): T = {
+    val bis = new ByteArrayInputStream(bytes)
+    val ois = new ObjectInputStream(bis)
+    ois.readObject.asInstanceOf[T]
   }
 }

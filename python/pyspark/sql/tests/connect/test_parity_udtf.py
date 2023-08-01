@@ -14,6 +14,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+import unittest
+
 from pyspark.testing.connectutils import should_test_connect
 
 if should_test_connect:
@@ -54,64 +56,22 @@ class UDTFParityTests(BaseUDTFTestsMixin, ReusedConnectTestCase):
         ):
             TestUDTF(lit(1)).collect()
 
-    def test_udtf_with_wrong_num_output(self):
-        err_msg = (
-            "java.lang.IllegalStateException: Input row doesn't have expected number of "
-            + "values required by the schema."
-        )
+    @unittest.skip("Spark Connect does not support broadcast but the test depends on it.")
+    def test_udtf_with_analyze_using_broadcast(self):
+        super().test_udtf_with_analyze_using_broadcast()
 
-        @udtf(returnType="a: int, b: int")
-        class TestUDTF:
-            def eval(self, a: int):
-                yield a,
+    @unittest.skip("Spark Connect does not support accumulator but the test depends on it.")
+    def test_udtf_with_analyze_using_accumulator(self):
+        super().test_udtf_with_analyze_using_accumulator()
 
-        with self.assertRaisesRegex(SparkConnectGrpcException, err_msg):
-            TestUDTF(lit(1)).collect()
+    def _add_pyfile(self, path):
+        self.spark.addArtifacts(path, pyfile=True)
 
-        @udtf(returnType="a: int")
-        class TestUDTF:
-            def eval(self, a: int):
-                yield a, a + 1
+    def _add_archive(self, path):
+        self.spark.addArtifacts(path, archive=True)
 
-        with self.assertRaisesRegex(SparkConnectGrpcException, err_msg):
-            TestUDTF(lit(1)).collect()
-
-    def test_udtf_terminate_with_wrong_num_output(self):
-        err_msg = (
-            "java.lang.IllegalStateException: Input row doesn't have expected number of "
-            "values required by the schema."
-        )
-
-        @udtf(returnType="a: int, b: int")
-        class TestUDTF:
-            def eval(self, a: int):
-                yield a, a + 1
-
-            def terminate(self):
-                yield 1, 2, 3
-
-        with self.assertRaisesRegex(SparkConnectGrpcException, err_msg):
-            TestUDTF(lit(1)).show()
-
-        @udtf(returnType="a: int, b: int")
-        class TestUDTF:
-            def eval(self, a: int):
-                yield a, a + 1
-
-            def terminate(self):
-                yield 1,
-
-        with self.assertRaisesRegex(SparkConnectGrpcException, err_msg):
-            TestUDTF(lit(1)).show()
-
-    def test_udtf_with_empty_yield(self):
-        @udtf(returnType="a: int")
-        class TestUDTF:
-            def eval(self, a: int):
-                yield
-
-        with self.assertRaisesRegex(SparkConnectGrpcException, "java.lang.NullPointerException"):
-            TestUDTF(lit(1)).collect()
+    def _add_file(self, path):
+        self.spark.addArtifacts(path, file=True)
 
 
 class ArrowUDTFParityTests(UDTFArrowTestsMixin, UDTFParityTests):

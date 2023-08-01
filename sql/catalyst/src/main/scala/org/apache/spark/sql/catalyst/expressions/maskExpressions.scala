@@ -18,10 +18,11 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
+import org.apache.spark.sql.catalyst.analysis.{ExpressionBuilder, TypeCheckResult}
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
+import org.apache.spark.sql.catalyst.plans.logical.{FunctionSignature, InputParameter}
 import org.apache.spark.sql.errors.QueryErrorsBase
 import org.apache.spark.sql.types.{AbstractDataType, DataType, StringType}
 import org.apache.spark.unsafe.types.UTF8String
@@ -75,6 +76,26 @@ import org.apache.spark.unsafe.types.UTF8String
   since = "3.4.0",
   group = "string_funcs")
 // scalastyle:on line.size.limit
+object MaskExpressionBuilder extends ExpressionBuilder {
+  override def functionSignature: Option[FunctionSignature] = {
+    val strArg = InputParameter("str")
+    val upperCharArg = InputParameter("upperChar", Some(Literal(Mask.MASKED_UPPERCASE)))
+    val lowerCharArg = InputParameter("lowerChar", Some(Literal(Mask.MASKED_LOWERCASE)))
+    val digitCharArg = InputParameter("digitChar", Some(Literal(Mask.MASKED_DIGIT)))
+    val otherCharArg = InputParameter(
+      "otherChar",
+      Some(Literal(Mask.MASKED_IGNORE, StringType)))
+    val functionSignature: FunctionSignature = FunctionSignature(Seq(
+      strArg, upperCharArg, lowerCharArg, digitCharArg, otherCharArg))
+    Some(functionSignature)
+  }
+
+  override def build(funcName: String, expressions: Seq[Expression]): Expression = {
+    assert(expressions.size == 5)
+    new Mask(expressions(0), expressions(1), expressions(2), expressions(3), expressions(4))
+  }
+}
+
 case class Mask(
     input: Expression,
     upperChar: Expression,
@@ -277,13 +298,13 @@ case class MaskArgument(maskChar: Char, ignore: Boolean)
 
 object Mask {
   // Default character to replace upper-case characters
-  private val MASKED_UPPERCASE = 'X'
+  val MASKED_UPPERCASE = 'X'
   // Default character to replace lower-case characters
-  private val MASKED_LOWERCASE = 'x'
+  val MASKED_LOWERCASE = 'x'
   // Default character to replace digits
-  private val MASKED_DIGIT = 'n'
+  val MASKED_DIGIT = 'n'
   // This value helps to retain original value in the input by ignoring the replacement rules
-  private val MASKED_IGNORE = null
+  val MASKED_IGNORE = null
 
   def transformInput(
       input: Any,

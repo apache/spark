@@ -35,6 +35,7 @@ import org.apache.spark.{SparkEnv, SparkException, SparkThrowable}
 import org.apache.spark.api.python.PythonException
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.connect.config.Connect
+import org.apache.spark.sql.connect.service.ExecuteEventsManager
 import org.apache.spark.sql.connect.service.SparkConnectService
 import org.apache.spark.sql.internal.SQLConf
 
@@ -103,32 +104,46 @@ private[connect] object ErrorUtils extends Logging {
       opType: String,
       observer: StreamObserver[V],
       userId: String,
-      sessionId: String): PartialFunction[Throwable, Unit] = {
+      sessionId: String,
+      events: Option[ExecuteEventsManager] = None,
+      isInterrupted: Boolean = false): PartialFunction[Throwable, Unit] = {
     val session =
       SparkConnectService
         .getOrCreateIsolatedSession(userId, sessionId)
         .session
     val stackTraceEnabled = session.conf.get(SQLConf.PYSPARK_JVM_STACKTRACE_ENABLED)
 
-    {
+    val partial: PartialFunction[Throwable, (Throwable, Throwable)] = {
       case se: SparkException if isPythonExecutionException(se) =>
-        logError(s"Error during: $opType. UserId: $userId. SessionId: $sessionId.", se)
-        observer.onError(
+        (
+          se,
           StatusProto.toStatusRuntimeException(
             buildStatusFromThrowable(se.getCause, stackTraceEnabled)))
 
       case e: Throwable if e.isInstanceOf[SparkThrowable] || NonFatal.apply(e) =>
-        logError(s"Error during: $opType. UserId: $userId. SessionId: $sessionId.", e)
-        observer.onError(
-          StatusProto.toStatusRuntimeException(buildStatusFromThrowable(e, stackTraceEnabled)))
+        (e, StatusProto.toStatusRuntimeException(buildStatusFromThrowable(e, stackTraceEnabled)))
 
       case e: Throwable =>
-        logError(s"Error during: $opType. UserId: $userId. SessionId: $sessionId.", e)
-        observer.onError(
+        (
+          e,
           Status.UNKNOWN
             .withCause(e)
             .withDescription(StringUtils.abbreviate(e.getMessage, 2048))
             .asRuntimeException())
     }
+    partial
+      .andThen { case (original, wrapped) =>
+        // If ExecuteEventsManager is present, this this is an execution error that needs to be
+        // posted to it.
+        events.foreach { executeEventsManager =>
+          logError(s"Error during: $opType. UserId: $userId. SessionId: $sessionId.", original)
+          if (isInterrupted) {
+            executeEventsManager.postCanceled()
+          } else {
+            executeEventsManager.postFailed(wrapped.getMessage)
+          }
+        }
+        observer.onError(wrapped)
+      }
   }
 }

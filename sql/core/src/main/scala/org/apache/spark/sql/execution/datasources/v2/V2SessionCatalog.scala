@@ -88,19 +88,11 @@ class V2SessionCatalog(catalog: SessionCatalog)
   }
 
   private def failTimeTravel(ident: Identifier, t: Table): Table = {
-    t match {
-      case V1Table(catalogTable) =>
-        if (catalogTable.tableType == CatalogTableType.VIEW) {
-          throw QueryCompilationErrors.timeTravelUnsupportedError(
-            toSQLId(catalogTable.identifier.nameParts))
-        } else {
-          throw QueryCompilationErrors.timeTravelUnsupportedError(
-            toSQLId(catalogTable.identifier.nameParts))
-        }
-
-      case _ => throw QueryCompilationErrors.timeTravelUnsupportedError(
-        toSQLId(ident.asTableIdentifier.nameParts))
+    val nameParts = t match {
+      case V1Table(catalogTable) => catalogTable.identifier.nameParts
+      case _ => ident.asTableIdentifier.nameParts
     }
+    throw QueryCompilationErrors.timeTravelUnsupportedError(toSQLId(nameParts))
   }
 
   override def invalidateTable(ident: Identifier): Unit = {
@@ -113,10 +105,6 @@ class V2SessionCatalog(catalog: SessionCatalog)
       partitions: Array[Transform],
       properties: util.Map[String, String]): Table = {
     createTable(ident, CatalogV2Util.v2ColumnsToStructType(columns), partitions, properties)
-  }
-
-  override def purgeTable(ident: Identifier): Boolean = {
-    dropTableInternal(ident, purge = true)
   }
 
   // TODO: remove it when no tests calling this deprecated method.
@@ -202,6 +190,10 @@ class V2SessionCatalog(catalog: SessionCatalog)
     loadTable(ident)
   }
 
+  override def purgeTable(ident: Identifier): Boolean = {
+    dropTableInternal(ident, purge = true)
+  }
+
   override def dropTable(ident: Identifier): Boolean = {
     dropTableInternal(ident)
   }
@@ -218,14 +210,16 @@ class V2SessionCatalog(catalog: SessionCatalog)
             foundType = v1Table.tableType.name,
             alternative = "DROP VIEW"
           )
+        case null =>
+          false
         case _ =>
+          catalog.invalidateCachedTable(ident.asTableIdentifier)
+          catalog.dropTable(
+            ident.asTableIdentifier,
+            ignoreIfNotExists = true,
+            purge = purge)
+          true
       }
-      catalog.invalidateCachedTable(ident.asTableIdentifier)
-      catalog.dropTable(
-        ident.asTableIdentifier,
-        ignoreIfNotExists = true,
-        purge = purge)
-      true
     } catch {
       case _: NoSuchTableException =>
         false

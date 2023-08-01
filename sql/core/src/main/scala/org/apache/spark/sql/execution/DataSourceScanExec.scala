@@ -30,8 +30,9 @@ import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, Partitioning, UnknownPartitioning}
 import org.apache.spark.sql.catalyst.util.{truncatedString, CaseInsensitiveMap}
 import org.apache.spark.sql.errors.QueryExecutionErrors
+import org.apache.spark.sql.execution
 import org.apache.spark.sql.execution.datasources._
-import org.apache.spark.sql.execution.datasources.parquet.{ParquetFileFormat => ParquetSource, ParquetRowIndexUtil}
+import org.apache.spark.sql.execution.datasources.parquet.{ParquetFileFormat => ParquetSource}
 import org.apache.spark.sql.execution.datasources.v2.PushedDownOperators
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
 import org.apache.spark.sql.execution.vectorized.ConstantColumnVector
@@ -370,8 +371,7 @@ trait FileSourceScanLike extends DataSourceScanExec {
     }
   }
 
-  @transient
-  protected lazy val pushedDownFilters = {
+  private def translatePushedDownFilters(dataFilters: Seq[Expression]): Seq[Filter] = {
     val supportNestedPredicatePushdown = DataSourceUtils.supportNestedPredicatePushdown(relation)
     // `dataFilters` should not include any constant metadata col filters
     // because the metadata struct has been flatted in FileSourceStrategy
@@ -381,6 +381,24 @@ trait FileSourceScanLike extends DataSourceScanExec {
       case FileSourceConstantMetadataAttribute(_) => true
       case _ => false
     }).flatMap(DataSourceStrategy.translateFilter(_, supportNestedPredicatePushdown))
+  }
+
+  @transient
+  protected lazy val pushedDownFilters: Seq[Filter] = translatePushedDownFilters(dataFilters)
+
+  @transient
+  protected lazy val dynamicallyPushedDownFilters: Seq[Filter] = {
+    if (dataFilters.exists(_.exists(_.isInstanceOf[execution.ScalarSubquery]))) {
+      // Replace scalar subquery to literal so that `DataSourceStrategy.translateFilter` can
+      // support translate it. The subquery must has been materialized since SparkPlan always
+      // execute subquery first.
+      val normalized = dataFilters.map(_.transform {
+        case scalarSubquery: execution.ScalarSubquery => scalarSubquery.toLiteral
+      })
+      translatePushedDownFilters(normalized)
+    } else {
+      pushedDownFilters
+    }
   }
 
   override lazy val metadata: Map[String, String] = {
@@ -543,7 +561,7 @@ case class FileSourceScanExec(
         dataSchema = relation.dataSchema,
         partitionSchema = relation.partitionSchema,
         requiredSchema = requiredSchema,
-        filters = pushedDownFilters,
+        filters = dynamicallyPushedDownFilters,
         options = options,
         hadoopConf = relation.sparkSession.sessionState.newHadoopConfWithOptions(relation.options))
 
@@ -691,11 +709,7 @@ case class FileSourceScanExec(
       partition.files.flatMap { file =>
         if (shouldProcess(file.getPath)) {
           val isSplitable = relation.fileFormat.isSplitable(
-              relation.sparkSession, relation.options, file.getPath) &&
-            // SPARK-39634: Allow file splitting in combination with row index generation once
-            // the fix for PARQUET-2161 is available.
-            (!relation.fileFormat.isInstanceOf[ParquetSource]
-              || !ParquetRowIndexUtil.isNeededForSchema(requiredSchema))
+              relation.sparkSession, relation.options, file.getPath)
           PartitionedFileUtil.splitFiles(
             sparkSession = relation.sparkSession,
             file = file,

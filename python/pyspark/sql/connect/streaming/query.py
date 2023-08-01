@@ -21,6 +21,9 @@ from typing import TYPE_CHECKING, Any, cast, Dict, List, Optional
 
 from pyspark.errors import StreamingQueryException, PySparkValueError
 import pyspark.sql.connect.proto as pb2
+from pyspark.serializers import CloudPickleSerializer
+from pyspark.sql.connect import proto
+from pyspark.sql.streaming import StreamingQueryListener
 from pyspark.sql.streaming.query import (
     StreamingQuery as PySparkStreamingQuery,
     StreamingQueryManager as PySparkStreamingQueryManager,
@@ -226,25 +229,27 @@ class StreamingQueryManager:
         cmd = pb2.StreamingQueryManagerCommand()
         cmd.reset_terminated = True
         self._execute_streaming_query_manager_cmd(cmd)
-        return None
 
     resetTerminated.__doc__ = PySparkStreamingQueryManager.resetTerminated.__doc__
 
-    def addListener(self, listener: Any) -> None:
-        # TODO(SPARK-42941): Change listener type to Connect StreamingQueryListener
-        # and implement below
-        raise NotImplementedError("addListener() is not implemented.")
+    def addListener(self, listener: StreamingQueryListener) -> None:
+        listener._init_listener_id()
+        cmd = pb2.StreamingQueryManagerCommand()
+        expr = proto.PythonUDF()
+        expr.command = CloudPickleSerializer().dumps(listener)
+        expr.python_ver = "%d.%d" % sys.version_info[:2]
+        cmd.add_listener.python_listener_payload.CopyFrom(expr)
+        cmd.add_listener.id = listener._id
+        self._execute_streaming_query_manager_cmd(cmd)
 
-    # TODO(SPARK-42941): uncomment below
-    # addListener.__doc__ = PySparkStreamingQueryManager.addListener.__doc__
+    addListener.__doc__ = PySparkStreamingQueryManager.addListener.__doc__
 
-    def removeListener(self, listener: Any) -> None:
-        # TODO(SPARK-42941): Change listener type to Connect StreamingQueryListener
-        # and implement below
-        raise NotImplementedError("removeListener() is not implemented.")
+    def removeListener(self, listener: StreamingQueryListener) -> None:
+        cmd = pb2.StreamingQueryManagerCommand()
+        cmd.remove_listener.id = listener._id
+        self._execute_streaming_query_manager_cmd(cmd)
 
-    # TODO(SPARK-42941): uncomment below
-    # removeListener.__doc__ = PySparkStreamingQueryManager.removeListener.__doc__
+    removeListener.__doc__ = PySparkStreamingQueryManager.removeListener.__doc__
 
     def _execute_streaming_query_manager_cmd(
         self, cmd: pb2.StreamingQueryManagerCommand

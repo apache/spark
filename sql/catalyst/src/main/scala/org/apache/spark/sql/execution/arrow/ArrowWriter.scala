@@ -24,7 +24,7 @@ import org.apache.arrow.vector.complex._
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.SpecializedGetters
-import org.apache.spark.sql.errors.QueryExecutionErrors
+import org.apache.spark.sql.errors.ExecutionErrors
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.ArrowUtils
 
@@ -83,7 +83,7 @@ object ArrowWriter {
       case (_: YearMonthIntervalType, vector: IntervalYearVector) => new IntervalYearWriter(vector)
       case (_: DayTimeIntervalType, vector: DurationVector) => new DurationWriter(vector)
       case (dt, _) =>
-        throw QueryExecutionErrors.unsupportedDataTypeError(dt)
+        throw ExecutionErrors.unsupportedDataTypeError(dt)
     }
   }
 }

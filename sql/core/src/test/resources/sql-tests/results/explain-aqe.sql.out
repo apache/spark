@@ -505,6 +505,45 @@ Results [1]: [max(key#x)#x AS max(key)#x]
 Output [1]: [max(key)#x]
 Arguments: isFinalPlan=false
 
+Subquery:3 Hosting operator id = 4 Hosting Expression = Subquery subquery#x, [id=#x]
+AdaptiveSparkPlan (17)
++- HashAggregate (16)
+   +- Exchange (15)
+      +- HashAggregate (14)
+         +- Project (13)
+            +- Filter (12)
+               +- Scan parquet spark_catalog.default.explain_temp3 (11)
+
+
+Subquery:4 Hosting operator id = 1 Hosting Expression = Subquery subquery#x, [id=#x]
+AdaptiveSparkPlan (10)
++- HashAggregate (9)
+   +- Exchange (8)
+      +- HashAggregate (7)
+         +- Project (6)
+            +- Filter (5)
+               +- Scan parquet spark_catalog.default.explain_temp2 (4)
+
+
+Subquery:5 Hosting operator id = 5 Hosting Expression = Subquery subquery#x, [id=#x]
+AdaptiveSparkPlan (17)
++- HashAggregate (16)
+   +- Exchange (15)
+      +- HashAggregate (14)
+         +- Project (13)
+            +- Filter (12)
+               +- Scan parquet spark_catalog.default.explain_temp3 (11)
+
+
+Subquery:6 Hosting operator id = 4 Hosting Expression = Subquery subquery#x, [id=#x]
+AdaptiveSparkPlan (17)
++- HashAggregate (16)
+   +- Exchange (15)
+      +- HashAggregate (14)
+         +- Project (13)
+            +- Filter (12)
+               +- Scan parquet spark_catalog.default.explain_temp3 (11)
+
 
 -- !query
 EXPLAIN FORMATTED
@@ -635,6 +674,25 @@ Results [1]: [avg(key#x)#x AS avg(key)#x]
 (17) AdaptiveSparkPlan
 Output [1]: [avg(key)#x]
 Arguments: isFinalPlan=false
+
+Subquery:3 Hosting operator id = 1 Hosting Expression = Subquery subquery#x, [id=#x]
+AdaptiveSparkPlan (10)
++- HashAggregate (9)
+   +- Exchange (8)
+      +- HashAggregate (7)
+         +- Project (6)
+            +- Filter (5)
+               +- Scan parquet spark_catalog.default.explain_temp2 (4)
+
+
+Subquery:4 Hosting operator id = 1 Hosting Expression = Subquery subquery#x, [id=#x]
+AdaptiveSparkPlan (17)
++- HashAggregate (16)
+   +- Exchange (15)
+      +- HashAggregate (14)
+         +- Project (13)
+            +- Filter (12)
+               +- Scan parquet spark_catalog.default.explain_temp3 (11)
 
 
 -- !query

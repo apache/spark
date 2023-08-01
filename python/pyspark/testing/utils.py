@@ -35,9 +35,10 @@ from itertools import zip_longest
 from pyspark import SparkContext, SparkConf
 from pyspark.errors import PySparkAssertionError, PySparkException
 from pyspark.find_spark_home import _find_spark_home
-from pyspark.sql.dataframe import DataFrame as DataFrame
+from pyspark.sql.dataframe import DataFrame
 from pyspark.sql import Row
 from pyspark.sql.types import StructType, AtomicType, StructField
+import pyspark.pandas as ps
 
 have_scipy = False
 have_numpy = False
@@ -314,23 +315,27 @@ def assertSchemaEqual(actual: StructType, expected: StructType):
 
 
 def assertDataFrameEqual(
-    actual: DataFrame,
-    expected: Union[DataFrame, List[Row]],
+    actual: Union[DataFrame, ps.DataFrame, List[Row]],
+    expected: Union[DataFrame, ps.DataFrame, List[Row]],
     checkRowOrder: bool = False,
     rtol: float = 1e-5,
     atol: float = 1e-8,
 ):
     r"""
-    A util function to assert equality between `actual` (DataFrame) and `expected`
-    (either DataFrame or list of Rows), with optional parameter `checkRowOrder`.
+    A util function to assert equality between `actual` and `expected`
+    (DataFrames or lists of Rows), with optional parameters `checkRowOrder`, `rtol`, and `atol`.
+
+    Supports Spark, Spark Connect, and pandas-on-Spark DataFrames.
+    For more information about pandas-on-Spark DataFrame equality, see the docs for
+    `assertPandasOnSparkEqual`.
 
     .. versionadded:: 3.5.0
 
     Parameters
     ----------
-    actual : DataFrame
+    actual : DataFrame (Spark, Spark Connect, or pandas-on-Spark) or list of Rows
         The DataFrame that is being compared or tested.
-    expected : DataFrame or list of Rows
+    expected : DataFrame (Spark, Spark Connect, or pandas-on-Spark) or list of Rows
         The expected result of the operation, for comparison with the actual result.
     checkRowOrder : bool, optional
         A flag indicating whether the order of rows should be considered in the comparison.
@@ -346,8 +351,13 @@ def assertDataFrameEqual(
 
     Notes
     -----
-    For checkRowOrder, note that PySpark DataFrame ordering is non-deterministic, unless
+    When `assertDataFrameEqual` fails, the error message uses the Python `difflib` library to
+    display a diff log of each row that differs in `actual` and `expected`.
+
+    For `checkRowOrder`, note that PySpark DataFrame ordering is non-deterministic, unless
     explicitly sorted.
+
+    Note that schema equality is checked only when `expected` is a DataFrame (not a list of Rows).
 
     For DataFrames with float values, assertDataFrame asserts approximate equality.
     Two float values a and b are approximately equal if the following equation is True:
@@ -362,6 +372,13 @@ def assertDataFrameEqual(
     >>> df1 = spark.createDataFrame(data=[("1", 0.1), ("2", 3.23)], schema=["id", "amount"])
     >>> df2 = spark.createDataFrame(data=[("1", 0.109), ("2", 3.23)], schema=["id", "amount"])
     >>> assertDataFrameEqual(df1, df2, rtol=1e-1)  # pass, DataFrames are approx equal by rtol
+    >>> df1 = spark.createDataFrame(data=[(1, 1000), (2, 3000)], schema=["id", "amount"])
+    >>> list_of_rows = [Row(1, 1000), Row(2, 3000)]
+    >>> assertDataFrameEqual(df1, list_of_rows)  # pass, actual and expected data are equal
+    >>> import pyspark.pandas as ps
+    >>> df1 = ps.DataFrame({'a': [1, 2, 3], 'b': [4, 5, 6], 'c': [7, 8, 9]})
+    >>> df2 = ps.DataFrame({'a': [1, 2, 3], 'b': [4, 5, 6], 'c': [7, 8, 9]})
+    >>> assertDataFrameEqual(df1, df2)  # pass, pandas-on-Spark DataFrames are equal
     >>> df1 = spark.createDataFrame(
     ...     data=[("1", 1000.00), ("2", 3000.00), ("3", 2000.00)], schema=["id", "amount"])
     >>> df2 = spark.createDataFrame(
@@ -369,56 +386,80 @@ def assertDataFrameEqual(
     >>> assertDataFrameEqual(df1, df2)  # doctest: +IGNORE_EXCEPTION_DETAIL
     Traceback (most recent call last):
     ...
-    PySparkAssertionError: [DIFFERENT_ROWS] Results do not match: ( 66.667 % )
-    [actual]
-    Row(id='1', amount=1000.0)
-    [expected]
-    Row(id='1', amount=1001.0)
-    [actual]
-    Row(id='3', amount=2000.0)
-    [expected]
-    Row(id='3', amount=2003.0)
+    PySparkAssertionError: [DIFFERENT_ROWS] Results do not match: ( 66.66667 % )
+    --- actual
+    +++ expected
+    - Row(id='1', amount=1000.0)
+    ?                       ^
+    + Row(id='1', amount=1001.0)
+    ?                       ^
+    - Row(id='3', amount=2000.0)
+    ?                       ^
+    + Row(id='3', amount=2003.0)
+    ?                       ^
+
     """
     if actual is None and expected is None:
         return True
     elif actual is None or expected is None:
         return False
 
+    import pyspark.pandas as ps
+    from pyspark.testing.pandasutils import assertPandasOnSparkEqual
+
     try:
         # If Spark Connect dependencies are available, allow Spark Connect DataFrame
         from pyspark.sql.connect.dataframe import DataFrame as ConnectDataFrame
 
-        if not isinstance(actual, DataFrame) and not isinstance(actual, ConnectDataFrame):
-            raise PySparkAssertionError(
-                error_class="UNSUPPORTED_DATA_TYPE",
-                message_parameters={"data_type": type(actual)},
+        if isinstance(actual, ps.DataFrame) or isinstance(expected, ps.DataFrame):
+            # handle pandas DataFrames
+            # assert approximate equality for float data
+            return assertPandasOnSparkEqual(
+                actual, expected, checkExact=False, checkRowOrder=checkRowOrder
             )
-        elif (
-            not isinstance(expected, DataFrame)
-            and not isinstance(expected, ConnectDataFrame)
-            and not isinstance(expected, List)
-        ):
+        elif not isinstance(actual, (DataFrame, ConnectDataFrame, list)):
             raise PySparkAssertionError(
-                error_class="UNSUPPORTED_DATA_TYPE",
-                message_parameters={"data_type": type(expected)},
+                error_class="INVALID_TYPE_DF_EQUALITY_ARG",
+                message_parameters={
+                    "expected_type": Union[DataFrame, ps.DataFrame, List[Row]],
+                    "arg_name": "actual",
+                    "actual_type": type(actual),
+                },
+            )
+        elif not isinstance(expected, (DataFrame, ConnectDataFrame, list)):
+            raise PySparkAssertionError(
+                error_class="INVALID_TYPE_DF_EQUALITY_ARG",
+                message_parameters={
+                    "expected_type": Union[DataFrame, ps.DataFrame, List[Row]],
+                    "arg_name": "expected",
+                    "actual_type": type(expected),
+                },
             )
     except Exception:
-        if not isinstance(actual, DataFrame):
-            raise PySparkAssertionError(
-                error_class="UNSUPPORTED_DATA_TYPE",
-                message_parameters={"data_type": type(actual)},
+        if isinstance(actual, ps.DataFrame) or isinstance(expected, ps.DataFrame):
+            # handle pandas DataFrames
+            # assert approximate equality for float data
+            return assertPandasOnSparkEqual(
+                actual, expected, checkExact=False, checkRowOrder=checkRowOrder
             )
-        elif not isinstance(expected, DataFrame) and not isinstance(expected, List):
+        elif not isinstance(actual, (DataFrame, list)):
             raise PySparkAssertionError(
-                error_class="UNSUPPORTED_DATA_TYPE",
-                message_parameters={"data_type": type(expected)},
+                error_class="INVALID_TYPE_DF_EQUALITY_ARG",
+                message_parameters={
+                    "expected_type": Union[DataFrame, ps.DataFrame, List[Row]],
+                    "arg_name": "actual",
+                    "actual_type": type(actual),
+                },
             )
-
-    # special cases: empty datasets, datasets with 0 columns
-    if (actual.first() is None and expected.first() is None) or (
-        len(actual.columns) == 0 and len(expected.columns) == 0
-    ):
-        return True
+        elif not isinstance(expected, (DataFrame, list)):
+            raise PySparkAssertionError(
+                error_class="INVALID_TYPE_DF_EQUALITY_ARG",
+                message_parameters={
+                    "expected_type": Union[DataFrame, ps.DataFrame, List[Row]],
+                    "arg_name": "expected",
+                    "actual_type": type(expected),
+                },
+            )
 
     def compare_rows(r1: Row, r2: Row):
         def compare_vals(val1, val2):
@@ -460,36 +501,40 @@ def assertDataFrameEqual(
             if not compare_rows(r1, r2):
                 rows_equal = False
                 diff_rows_cnt += 1
-                diff_msg += (
-                    "[actual]" + "\n" + str(r1) + "\n\n" + "[expected]" + "\n" + str(r2) + "\n\n"
-                )
-                diff_msg += "********************" + "\n\n"
+                generated_diff = difflib.ndiff(str(r1).splitlines(), str(r2).splitlines())
+                diff_msg += "\n" + "\n".join(generated_diff) + "\n"
+                diff_msg += "********************" + "\n"
 
         if not rows_equal:
             percent_diff = (diff_rows_cnt / len(zipped)) * 100
             error_msg += "( %.5f %% )" % percent_diff
-            error_msg += "\n" + diff_msg
+            error_msg += "\n" + "--- actual\n+++ expected\n" + diff_msg
             raise PySparkAssertionError(
                 error_class="DIFFERENT_ROWS",
                 message_parameters={"error_msg": error_msg},
             )
 
     # convert actual and expected to list
-    if not isinstance(expected, List):
+    if not isinstance(actual, list) and not isinstance(expected, list):
         # only compare schema if expected is not a List
         assertSchemaEqual(actual.schema, expected.schema)
+
+    if not isinstance(actual, list):
+        actual_list = actual.collect()
+    else:
+        actual_list = actual
+
+    if not isinstance(expected, list):
         expected_list = expected.collect()
     else:
         expected_list = expected
 
-    df_list = actual.collect()
-
     if not checkRowOrder:
         # rename duplicate columns for sorting
-        df_list = sorted(df_list, key=lambda x: str(x))
+        actual_list = sorted(actual_list, key=lambda x: str(x))
         expected_list = sorted(expected_list, key=lambda x: str(x))
 
-    assert_rows_equal(df_list, expected_list)
+    assert_rows_equal(actual_list, expected_list)
 
 
 def _test() -> None:

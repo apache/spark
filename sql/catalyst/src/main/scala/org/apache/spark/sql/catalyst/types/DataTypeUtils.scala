@@ -17,7 +17,7 @@
 package org.apache.spark.sql.catalyst.types
 
 import org.apache.spark.sql.catalyst.analysis.Resolver
-import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Cast, Literal}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, Cast, Literal}
 import org.apache.spark.sql.catalyst.util.TypeUtils.toSQLId
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf.StoreAssignmentPolicy
@@ -199,6 +199,9 @@ object DataTypeUtils {
   def toAttributes(schema: StructType): Seq[AttributeReference] = {
     schema.map(toAttribute)
   }
+
+  def fromAttributes(attributes: Seq[Attribute]): StructType =
+    StructType(attributes.map(a => StructField(a.name, a.dataType, a.nullable, a.metadata)))
 
   /**
    * Convert a literal to a DecimalType.

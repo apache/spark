@@ -335,11 +335,11 @@ class StructTypeSuite extends SparkFunSuite with SQLHelper {
         "path" -> "`s1`.`s12`"))
 
     // ambiguous name
-    var e2 = intercept[AnalysisException] {
+    e = intercept[AnalysisException] {
       check(Seq("S2", "x"), None)
     }
     checkError(
-      exception = e2,
+      exception = e,
       errorClass = "AMBIGUOUS_COLUMN_OR_FIELD",
       parameters = Map("name" -> "`S2`.`x`", "n" -> "2"))
     caseSensitiveCheck(Seq("s2", "x"), Some(Seq("s2") -> StructField("x", IntegerType)))

@@ -48,6 +48,7 @@ from pyspark.ml.torch.log_communication import (  # type: ignore
     LogStreamingClient,
     LogStreamingServer,
 )
+from pyspark.ml.dl_util import FunctionPickler
 from pyspark.ml.util import _get_active_session
 
 
@@ -515,10 +516,64 @@ class TorchDistributor(Distributor):
                 f"The {last_n_msg} included below: {task_output}"
             )
 
+    @staticmethod
+    def _get_output_from_framework_wrapper(
+        framework_wrapper: Optional[Callable],
+        input_params: Dict,
+        train_object: Union[Callable, str],
+        run_pytorch_file_fn: Optional[Callable],
+        *args: Any,
+        **kwargs: Any,
+    ) -> Optional[Any]:
+        """
+        This function is meant to get the output from framework wrapper function by passing in the
+        correct arguments, depending on the type of train_object.
+
+        Parameters
+        ----------
+        framework_wrapper: Optional[Callable]
+            Function pointer that will be invoked. Can either be the function that runs distributed
+            training on files if train_object is a string. Otherwise, it will be the function that
+            runs distributed training for functions if the train_object is a Callable
+        input_params: Dict
+            A dictionary that maps parameter to arguments for the command to be created.
+        train_object: Union[Callable, str]
+            This input comes from the user. If the user inputs a string, then this means
+            it's a filepath. Otherwise, if the input is a function, then this means that
+            the user wants to run this function in a distributed manner.
+        run_pytorch_file_fn: Optional[Callable]
+            The function that will be used to run distributed training of a file;
+            mainly used for the distributed training using a function.
+        *args: Any
+            Extra arguments to be used by framework wrapper.
+        **kwargs: Any
+            Extra keyword args to be used. Not currently supported but kept for
+            future improvement.
+
+        Returns
+        -------
+        Optional[Any]
+            Returns the result of the framework_wrapper
+        """
+        if not framework_wrapper:
+            raise RuntimeError("`framework_wrapper` is not set. ...")
+        # The object to train is a file path, so framework_wrapper is some
+        # run_training_on_pytorch_file function.
+        if type(train_object) is str:
+            return framework_wrapper(input_params, train_object, *args, **kwargs)
+        else:
+            # We are doing training with a function, will call run_training_on_pytorch_function
+            if not run_pytorch_file_fn:
+                run_pytorch_file_fn = TorchDistributor._run_training_on_pytorch_file
+            return framework_wrapper(
+                input_params, train_object, run_pytorch_file_fn, *args, **kwargs
+            )
+
     def _run_local_training(
         self,
         framework_wrapper_fn: Callable,
         train_object: Union[Callable, str],
+        run_pytorch_file_fn: Optional[Callable],
         *args: Any,
         **kwargs: Any,
     ) -> Optional[Any]:
@@ -536,7 +591,14 @@ class TorchDistributor(Distributor):
                 os.environ[CUDA_VISIBLE_DEVICES] = ",".join(selected_gpus)
 
             self.logger.info(f"Started local training with {self.num_processes} processes")
-            output = framework_wrapper_fn(self.input_params, train_object, *args, **kwargs)
+            output = TorchDistributor._get_output_from_framework_wrapper(
+                framework_wrapper_fn,
+                self.input_params,
+                train_object,
+                run_pytorch_file_fn,
+                *args,
+                **kwargs,
+            )
             self.logger.info(f"Finished local training with {self.num_processes} processes")
 
         finally:
@@ -552,6 +614,7 @@ class TorchDistributor(Distributor):
         self,
         framework_wrapper_fn: Optional[Callable],
         train_object: Union[Callable, str],
+        run_pytorch_file_fn: Optional[Callable],
         input_dataframe: Optional["DataFrame"],
         *args: Any,
         **kwargs: Any,
@@ -656,7 +719,14 @@ class TorchDistributor(Distributor):
             input_params["log_streaming_client"] = log_streaming_client
             try:
                 with TorchDistributor._setup_spark_partition_data(iterator, schema_json):
-                    output = framework_wrapper_fn(input_params, train_object, *args, **kwargs)
+                    output = TorchDistributor._get_output_from_framework_wrapper(
+                        framework_wrapper_fn,
+                        input_params,
+                        train_object,
+                        run_pytorch_file_fn,
+                        *args,
+                        **kwargs,
+                    )
             finally:
                 try:
                     LogStreamingClient._destroy()
@@ -686,6 +756,7 @@ class TorchDistributor(Distributor):
         self,
         framework_wrapper_fn: Callable,
         train_object: Union[Callable, str],
+        run_pytorch_file_fn: Optional[Callable],
         spark_dataframe: Optional["DataFrame"],
         *args: Any,
         **kwargs: Any,
@@ -702,7 +773,12 @@ class TorchDistributor(Distributor):
 
         try:
             spark_task_function = self._get_spark_task_function(
-                framework_wrapper_fn, train_object, spark_dataframe, *args, **kwargs
+                framework_wrapper_fn,
+                train_object,
+                run_pytorch_file_fn,
+                spark_dataframe,
+                *args,
+                **kwargs,
             )
             self._check_encryption()
             self.logger.info(
@@ -746,12 +822,13 @@ class TorchDistributor(Distributor):
         train_fn: Callable, *args: Any, **kwargs: Any
     ) -> Generator[Tuple[str, str], None, None]:
         save_dir = TorchDistributor._create_save_dir()
-        pickle_file_path = TorchDistributor._save_pickled_function(
-            save_dir, train_fn, *args, **kwargs
+        pickle_file_path = FunctionPickler.pickle_fn_and_save(
+            train_fn, "", save_dir, *args, **kwargs
         )
         output_file_path = os.path.join(save_dir, TorchDistributor._PICKLED_OUTPUT_FILE)
-        train_file_path = TorchDistributor._create_torchrun_train_file(
-            save_dir, pickle_file_path, output_file_path
+        script_path = os.path.join(save_dir, TorchDistributor._TRAIN_FILE)
+        train_file_path = FunctionPickler.create_fn_run_script(
+            pickle_file_path, output_file_path, script_path
         )
         try:
             yield (train_file_path, output_file_path)
@@ -804,20 +881,28 @@ class TorchDistributor(Distributor):
 
     @staticmethod
     def _run_training_on_pytorch_function(
-        input_params: Dict[str, Any], train_fn: Callable, *args: Any, **kwargs: Any
+        input_params: Dict[str, Any],
+        train_fn: Callable,
+        run_pytorch_file_fn: Optional[Callable],
+        *args: Any,
+        **kwargs: Any,
     ) -> Any:
+
+        if not run_pytorch_file_fn:
+            run_pytorch_file_fn = TorchDistributor._run_training_on_pytorch_file
+
         with TorchDistributor._setup_files(train_fn, *args, **kwargs) as (
             train_file_path,
             output_file_path,
         ):
-            TorchDistributor._run_training_on_pytorch_file(input_params, train_file_path)
+            run_pytorch_file_fn(input_params, train_file_path)
             if not os.path.exists(output_file_path):
                 raise RuntimeError(
                     "TorchDistributor failed during training."
                     "View stdout logs for detailed error message."
                 )
             try:
-                output = TorchDistributor._get_pickled_output(output_file_path)
+                output = FunctionPickler.get_fn_output(output_file_path)
             except Exception as e:
                 raise RuntimeError(
                     "TorchDistributor failed due to a pickling error. "
@@ -833,43 +918,6 @@ class TorchDistributor(Distributor):
     @staticmethod
     def _cleanup_files(save_dir: str) -> None:
         shutil.rmtree(save_dir, ignore_errors=True)
-
-    @staticmethod
-    def _save_pickled_function(
-        save_dir: str, train_fn: Union[str, Callable], *args: Any, **kwargs: Any
-    ) -> str:
-        saved_pickle_path = os.path.join(save_dir, TorchDistributor._PICKLED_FUNC_FILE)
-        with open(saved_pickle_path, "wb") as f:
-            cloudpickle.dump((train_fn, args, kwargs), f)
-        return saved_pickle_path
-
-    @staticmethod
-    def _create_torchrun_train_file(
-        save_dir_path: str, pickle_file_path: str, output_file_path: str
-    ) -> str:
-        code = textwrap.dedent(
-            f"""
-                    from pyspark import cloudpickle
-                    import os
-
-                    if __name__ == "__main__":
-                        with open("{pickle_file_path}", "rb") as f:
-                            train_fn, args, kwargs = cloudpickle.load(f)
-                        output = train_fn(*args, **kwargs)
-                        with open("{output_file_path}", "wb") as f:
-                            cloudpickle.dump(output, f)
-                    """
-        )
-        saved_file_path = os.path.join(save_dir_path, TorchDistributor._TRAIN_FILE)
-        with open(saved_file_path, "w") as f:
-            f.write(code)
-        return saved_file_path
-
-    @staticmethod
-    def _get_pickled_output(output_file_path: str) -> Any:
-        with open(output_file_path, "rb") as f:
-            output = cloudpickle.load(f)
-        return output
 
     def run(self, train_object: Union[Callable, str], *args: Any, **kwargs: Any) -> Optional[Any]:
         """Runs distributed training.
@@ -910,17 +958,28 @@ class TorchDistributor(Distributor):
             train_object is a Callable with an expected output. Returns None if train_object is
             a file.
         """
+        return self._run(
+            train_object, TorchDistributor._run_training_on_pytorch_file, *args, **kwargs
+        )
+
+    def _run(
+        self,
+        train_object: Union[Callable, str],
+        run_pytorch_file_fn: Callable,
+        *args: Any,
+        **kwargs: Any,
+    ) -> Optional[Any]:
         if isinstance(train_object, str):
-            framework_wrapper_fn = TorchDistributor._run_training_on_pytorch_file
+            framework_wrapper_fn = run_pytorch_file_fn
         else:
-            framework_wrapper_fn = (
-                TorchDistributor._run_training_on_pytorch_function  # type: ignore
-            )
+            framework_wrapper_fn = TorchDistributor._run_training_on_pytorch_function
         if self.local_mode:
-            output = self._run_local_training(framework_wrapper_fn, train_object, *args, **kwargs)
+            output = self._run_local_training(
+                framework_wrapper_fn, train_object, run_pytorch_file_fn, *args, **kwargs
+            )
         else:
             output = self._run_distributed_training(
-                framework_wrapper_fn, train_object, None, *args, **kwargs
+                framework_wrapper_fn, train_object, run_pytorch_file_fn, None, *args, **kwargs
             )
         return output
 
@@ -976,6 +1035,7 @@ class TorchDistributor(Distributor):
         return self._run_distributed_training(
             TorchDistributor._run_training_on_pytorch_function,
             train_function,
+            TorchDistributor._run_training_on_pytorch_file,
             spark_dataframe,
             *args,
             **kwargs,

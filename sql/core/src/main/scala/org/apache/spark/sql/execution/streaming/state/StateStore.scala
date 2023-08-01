@@ -30,6 +30,7 @@ import org.apache.spark.{SparkContext, SparkEnv}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.catalyst.util.UnsafeRowUtils
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
 import org.apache.spark.sql.execution.streaming.StatefulOperatorStateInfo
 import org.apache.spark.sql.execution.streaming.state.StateStore.{MaintenanceThreadPool, maintenanceThreadPool}
@@ -519,7 +520,9 @@ object StateStore extends Logging {
       version: Long,
       storeConf: StateStoreConf,
       hadoopConf: Configuration): ReadStateStore = {
-    require(version >= 0)
+    if (version < 0) {
+      throw QueryExecutionErrors.unexpectedStateStoreVersion(version)
+    }
     val storeProvider = getStateStoreProvider(storeProviderId, keySchema, valueSchema,
       numColsPrefixKey, storeConf, hadoopConf)
     storeProvider.getReadStore(version)
@@ -534,7 +537,9 @@ object StateStore extends Logging {
       version: Long,
       storeConf: StateStoreConf,
       hadoopConf: Configuration): StateStore = {
-    require(version >= 0)
+    if (version < 0) {
+      throw QueryExecutionErrors.unexpectedStateStoreVersion(version)
+    }
     val storeProvider = getStateStoreProvider(storeProviderId, keySchema, valueSchema,
       numColsPrefixKey, storeConf, hadoopConf)
     storeProvider.getStore(version)
@@ -656,6 +661,8 @@ object StateStore extends Logging {
             loadedProviders.synchronized {
               logInfo("Stopping maintenance task since an error was encountered.")
               stopMaintenanceTask()
+              // SPARK-44504 - Unload explicitly to force closing underlying DB instance
+              // and releasing allocated resources, especially for RocksDBStateStoreProvider.
               loadedProviders.keySet.foreach { key => unload(key) }
               loadedProviders.clear()
             }
