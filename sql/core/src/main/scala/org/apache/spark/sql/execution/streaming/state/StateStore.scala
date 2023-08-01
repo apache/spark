@@ -443,6 +443,8 @@ object StateStore extends Logging {
 
   private val maintenanceThreadPoolLock = new Object
 
+  // Shared exception between threads in thread pool that the scheduling thread
+  // checks to see if an exception has been thrown in the maintenance task
   private val threadPoolException = new AtomicReference[Throwable](null)
 
   // This set is to keep track of the partitions that are queued
@@ -493,10 +495,6 @@ object StateStore extends Logging {
 
     def execute(runnable: Runnable): Unit = {
       threadPool.execute(runnable)
-    }
-
-    def isRunning(): Boolean = {
-      !threadPool.isShutdown
     }
 
     def stop(): Unit = {
@@ -717,8 +715,7 @@ object StateStore extends Logging {
               threadPoolException.set(e)
               throw e
           } finally {
-            val endTime = System.currentTimeMillis()
-            val duration = endTime - startTime
+            val duration = System.currentTimeMillis() - startTime
             val logMsg = s"Finished maintenance task for provider=$id" +
               s" in elapsed_time=$duration\n"
             if (duration > 5000) {
@@ -731,6 +728,9 @@ object StateStore extends Logging {
             }
           }
         })
+      } else {
+        logInfo(s"Not processing partition ${id} for maintenance because it is currently " +
+          s"being processed")
       }
     }
   }
