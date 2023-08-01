@@ -3234,14 +3234,14 @@ class PlanGenerationTestSuite
 
   test("from_protobuf messageClassName") {
     binary.select(
-      pbFn.from_protobuf(fn.col("bytes"), "org.apache.spark.sql.protobuf.protos.TestObj"))
+      pbFn.from_protobuf(fn.col("bytes"), "org.apache.spark.sql.protobuf.protos.TestProtoObj"))
   }
 
   test("from_protobuf messageClassName options") {
     binary.select(
       pbFn.from_protobuf(
         fn.col("bytes"),
-        "org.apache.spark.sql.protobuf.protos.TestObj",
+        "org.apache.spark.sql.protobuf.protos.TestProtoObj",
         Map("recursive.fields.max.depth" -> "2").asJava))
   }
 

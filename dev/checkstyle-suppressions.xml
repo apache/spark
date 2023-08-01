@@ -64,9 +64,9 @@
               files="src/main/java/org/apache/spark/sql/api/java/*"/>
     <!-- SPARK-43646: Suppress the code style check of Protobuf Java files used for testing in the connect module -->
     <suppress checks=".*"
-              files="connector/connect/server/src/test/java/org/apache/spark/sql/protobuf/protos/Test.java"/>
+              files="connector/connect/server/src/test/java/org/apache/spark/sql/protobuf/protos/TestProto.java"/>
     <suppress checks=".*"
-              files="connector/connect/server/src/test/java/org/apache/spark/sql/protobuf/protos/TestObj.java"/>
+              files="connector/connect/server/src/test/java/org/apache/spark/sql/protobuf/protos/TestProtoObj.java"/>
     <suppress checks=".*"
-              files="connector/connect/server/src/test/java/org/apache/spark/sql/protobuf/protos/TestObjOrBuilder.java"/>
+              files="connector/connect/server/src/test/java/org/apache/spark/sql/protobuf/protos/TestProtoObjOrBuilder.java"/>
 </suppressions>

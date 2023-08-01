@@ -12,8 +12,8 @@ package org.apache.spark.sql.protobuf.protos;
  *  * <p>
  *  * TODO(SPARK-44606): Generate this file and replace the package names in the file when testing.
  */
-public interface TestObjOrBuilder extends
-    // @@protoc_insertion_point(interface_extends:org.apache.spark.sql.protobuf.protos.TestObj)
+public interface TestProtoObjOrBuilder extends
+    // @@protoc_insertion_point(interface_extends:org.apache.spark.sql.protobuf.protos.TestProtoObj)
     org.sparkproject.spark_protobuf.protobuf.MessageOrBuilder {
 
   /**

@@ -12,8 +12,8 @@ package org.apache.spark.sql.protobuf.protos;
  *  * <p>
  *  * TODO(SPARK-44606): Generate this file and replace the package names in the file when testing.
  */
-public final class Test {
-  private Test() {}
+public final class TestProto {
+  private TestProto() {}
   public static void registerAllExtensions(
       org.sparkproject.spark_protobuf.protobuf.ExtensionRegistryLite registry) {
   }
@@ -24,10 +24,10 @@ public final class Test {
         (org.sparkproject.spark_protobuf.protobuf.ExtensionRegistryLite) registry);
   }
   static final org.sparkproject.spark_protobuf.protobuf.Descriptors.Descriptor
-    internal_static_org_apache_spark_sql_protobuf_protos_TestObj_descriptor;
+    internal_static_org_apache_spark_sql_protobuf_protos_TestProtoObj_descriptor;
   static final 
     org.sparkproject.spark_protobuf.protobuf.GeneratedMessageV3.FieldAccessorTable
-      internal_static_org_apache_spark_sql_protobuf_protos_TestObj_fieldAccessorTable;
+      internal_static_org_apache_spark_sql_protobuf_protos_TestProtoObj_fieldAccessorTable;
 
   public static org.sparkproject.spark_protobuf.protobuf.Descriptors.FileDescriptor
       getDescriptor() {
@@ -38,18 +38,18 @@ public final class Test {
   static {
     String[] descriptorData = {
       "\n\ntest.proto\022$org.apache.spark.sql.proto" +
-      "buf.protos\"!\n\007TestObj\022\n\n\002v1\030\001 \001(\003\022\n\n\002v2\030" +
-      "\002 \001(\005B\002P\001b\006proto3"
+      "buf.protos\"&\n\014TestProtoObj\022\n\n\002v1\030\001 \001(\003\022\n" +
+      "\n\002v2\030\002 \001(\005B\rB\tTestProtoP\001b\006proto3"
     };
     descriptor = org.sparkproject.spark_protobuf.protobuf.Descriptors.FileDescriptor
       .internalBuildGeneratedFileFrom(descriptorData,
         new org.sparkproject.spark_protobuf.protobuf.Descriptors.FileDescriptor[] {
         });
-    internal_static_org_apache_spark_sql_protobuf_protos_TestObj_descriptor =
+    internal_static_org_apache_spark_sql_protobuf_protos_TestProtoObj_descriptor =
       getDescriptor().getMessageTypes().get(0);
-    internal_static_org_apache_spark_sql_protobuf_protos_TestObj_fieldAccessorTable = new
+    internal_static_org_apache_spark_sql_protobuf_protos_TestProtoObj_fieldAccessorTable = new
       org.sparkproject.spark_protobuf.protobuf.GeneratedMessageV3.FieldAccessorTable(
-        internal_static_org_apache_spark_sql_protobuf_protos_TestObj_descriptor,
+        internal_static_org_apache_spark_sql_protobuf_protos_TestProtoObj_descriptor,
         new String[] { "V1", "V2", });
   }
 

@@ -14,36 +14,36 @@ package org.apache.spark.sql.protobuf.protos;
  * <p>
  * TODO(SPARK-44606): Generate this file and replace the package names in the file when testing.
  */
-public final class TestObj extends
+public final class TestProtoObj extends
     org.sparkproject.spark_protobuf.protobuf.GeneratedMessageV3 implements
-    // @@protoc_insertion_point(message_implements:org.apache.spark.sql.protobuf.protos.TestObj)
-    TestObjOrBuilder {
+    // @@protoc_insertion_point(message_implements:org.apache.spark.sql.protobuf.protos.TestProtoObj)
+    TestProtoObjOrBuilder {
 private static final long serialVersionUID = 0L;
-  // Use TestObj.newBuilder() to construct.
-  private TestObj(org.sparkproject.spark_protobuf.protobuf.GeneratedMessageV3.Builder<?> builder) {
+  // Use TestProtoObj.newBuilder() to construct.
+  private TestProtoObj(org.sparkproject.spark_protobuf.protobuf.GeneratedMessageV3.Builder<?> builder) {
     super(builder);
   }
-  private TestObj() {
+  private TestProtoObj() {
   }
 
   @Override
   @SuppressWarnings({"unused"})
   protected Object newInstance(
       UnusedPrivateParameter unused) {
-    return new TestObj();
+    return new TestProtoObj();
   }
 
   public static final org.sparkproject.spark_protobuf.protobuf.Descriptors.Descriptor
       getDescriptor() {
-    return Test.internal_static_org_apache_spark_sql_protobuf_protos_TestObj_descriptor;
+    return TestProto.internal_static_org_apache_spark_sql_protobuf_protos_TestProtoObj_descriptor;
   }
 
   @Override
   protected FieldAccessorTable
       internalGetFieldAccessorTable() {
-    return Test.internal_static_org_apache_spark_sql_protobuf_protos_TestObj_fieldAccessorTable
+    return TestProto.internal_static_org_apache_spark_sql_protobuf_protos_TestProtoObj_fieldAccessorTable
         .ensureFieldAccessorsInitialized(
-            TestObj.class, Builder.class);
+            TestProtoObj.class, Builder.class);
   }
 
   public static final int V1_FIELD_NUMBER = 1;
@@ -115,10 +115,10 @@ private static final long serialVersionUID = 0L;
     if (obj == this) {
      return true;
     }
-    if (!(obj instanceof TestObj)) {
+    if (!(obj instanceof TestProtoObj)) {
       return super.equals(obj);
     }
-    TestObj other = (TestObj) obj;
+    TestProtoObj other = (TestProtoObj) obj;
 
     if (getV1()
         != other.getV1()) return false;
@@ -145,44 +145,44 @@ private static final long serialVersionUID = 0L;
     return hash;
   }
 
-  public static TestObj parseFrom(
+  public static TestProtoObj parseFrom(
       java.nio.ByteBuffer data)
       throws org.sparkproject.spark_protobuf.protobuf.InvalidProtocolBufferException {
     return PARSER.parseFrom(data);
   }
-  public static TestObj parseFrom(
+  public static TestProtoObj parseFrom(
       java.nio.ByteBuffer data,
       org.sparkproject.spark_protobuf.protobuf.ExtensionRegistryLite extensionRegistry)
       throws org.sparkproject.spark_protobuf.protobuf.InvalidProtocolBufferException {
     return PARSER.parseFrom(data, extensionRegistry);
   }
-  public static TestObj parseFrom(
+  public static TestProtoObj parseFrom(
       org.sparkproject.spark_protobuf.protobuf.ByteString data)
       throws org.sparkproject.spark_protobuf.protobuf.InvalidProtocolBufferException {
     return PARSER.parseFrom(data);
   }
-  public static TestObj parseFrom(
+  public static TestProtoObj parseFrom(
       org.sparkproject.spark_protobuf.protobuf.ByteString data,
       org.sparkproject.spark_protobuf.protobuf.ExtensionRegistryLite extensionRegistry)
       throws org.sparkproject.spark_protobuf.protobuf.InvalidProtocolBufferException {
     return PARSER.parseFrom(data, extensionRegistry);
   }
-  public static TestObj parseFrom(byte[] data)
+  public static TestProtoObj parseFrom(byte[] data)
       throws org.sparkproject.spark_protobuf.protobuf.InvalidProtocolBufferException {
     return PARSER.parseFrom(data);
   }
-  public static TestObj parseFrom(
+  public static TestProtoObj parseFrom(
       byte[] data,
       org.sparkproject.spark_protobuf.protobuf.ExtensionRegistryLite extensionRegistry)
       throws org.sparkproject.spark_protobuf.protobuf.InvalidProtocolBufferException {
     return PARSER.parseFrom(data, extensionRegistry);
   }
-  public static TestObj parseFrom(java.io.InputStream input)
+  public static TestProtoObj parseFrom(java.io.InputStream input)
       throws java.io.IOException {
     return org.sparkproject.spark_protobuf.protobuf.GeneratedMessageV3
         .parseWithIOException(PARSER, input);
   }
-  public static TestObj parseFrom(
+  public static TestProtoObj parseFrom(
       java.io.InputStream input,
       org.sparkproject.spark_protobuf.protobuf.ExtensionRegistryLite extensionRegistry)
       throws java.io.IOException {
@@ -190,26 +190,26 @@ private static final long serialVersionUID = 0L;
         .parseWithIOException(PARSER, input, extensionRegistry);
   }
 
-  public static TestObj parseDelimitedFrom(java.io.InputStream input)
+  public static TestProtoObj parseDelimitedFrom(java.io.InputStream input)
       throws java.io.IOException {
     return org.sparkproject.spark_protobuf.protobuf.GeneratedMessageV3
         .parseDelimitedWithIOException(PARSER, input);
   }
 
-  public static TestObj parseDelimitedFrom(
+  public static TestProtoObj parseDelimitedFrom(
       java.io.InputStream input,
       org.sparkproject.spark_protobuf.protobuf.ExtensionRegistryLite extensionRegistry)
       throws java.io.IOException {
     return org.sparkproject.spark_protobuf.protobuf.GeneratedMessageV3
         .parseDelimitedWithIOException(PARSER, input, extensionRegistry);
   }
-  public static TestObj parseFrom(
+  public static TestProtoObj parseFrom(
       org.sparkproject.spark_protobuf.protobuf.CodedInputStream input)
       throws java.io.IOException {
     return org.sparkproject.spark_protobuf.protobuf.GeneratedMessageV3
         .parseWithIOException(PARSER, input);
   }
-  public static TestObj parseFrom(
+  public static TestProtoObj parseFrom(
       org.sparkproject.spark_protobuf.protobuf.CodedInputStream input,
       org.sparkproject.spark_protobuf.protobuf.ExtensionRegistryLite extensionRegistry)
       throws java.io.IOException {
@@ -222,7 +222,7 @@ private static final long serialVersionUID = 0L;
   public static Builder newBuilder() {
     return DEFAULT_INSTANCE.toBuilder();
   }
-  public static Builder newBuilder(TestObj prototype) {
+  public static Builder newBuilder(TestProtoObj prototype) {
     return DEFAULT_INSTANCE.toBuilder().mergeFrom(prototype);
   }
   @Override
@@ -238,26 +238,26 @@ private static final long serialVersionUID = 0L;
     return builder;
   }
   /**
-   * Protobuf type {@code org.apache.spark.sql.protobuf.protos.TestObj}
+   * Protobuf type {@code org.apache.spark.sql.protobuf.protos.TestProtoObj}
    */
   public static final class Builder extends
       org.sparkproject.spark_protobuf.protobuf.GeneratedMessageV3.Builder<Builder> implements
-      // @@protoc_insertion_point(builder_implements:org.apache.spark.sql.protobuf.protos.TestObj)
-      TestObjOrBuilder {
+      // @@protoc_insertion_point(builder_implements:org.apache.spark.sql.protobuf.protos.TestProtoObj)
+      TestProtoObjOrBuilder {
     public static final org.sparkproject.spark_protobuf.protobuf.Descriptors.Descriptor
         getDescriptor() {
-      return Test.internal_static_org_apache_spark_sql_protobuf_protos_TestObj_descriptor;
+      return TestProto.internal_static_org_apache_spark_sql_protobuf_protos_TestProtoObj_descriptor;
     }
 
     @Override
     protected FieldAccessorTable
         internalGetFieldAccessorTable() {
-      return Test.internal_static_org_apache_spark_sql_protobuf_protos_TestObj_fieldAccessorTable
+      return TestProto.internal_static_org_apache_spark_sql_protobuf_protos_TestProtoObj_fieldAccessorTable
           .ensureFieldAccessorsInitialized(
-              TestObj.class, Builder.class);
+              TestProtoObj.class, Builder.class);
     }
 
-    // Construct using org.apache.spark.sql.protobuf.protos.TestObj.newBuilder()
+    // Construct using org.apache.spark.sql.protobuf.protos.TestProtoObj.newBuilder()
     private Builder() {
 
     }
@@ -279,17 +279,17 @@ private static final long serialVersionUID = 0L;
     @Override
     public org.sparkproject.spark_protobuf.protobuf.Descriptors.Descriptor
         getDescriptorForType() {
-      return Test.internal_static_org_apache_spark_sql_protobuf_protos_TestObj_descriptor;
+      return TestProto.internal_static_org_apache_spark_sql_protobuf_protos_TestProtoObj_descriptor;
     }
 
     @Override
-    public TestObj getDefaultInstanceForType() {
-      return TestObj.getDefaultInstance();
+    public TestProtoObj getDefaultInstanceForType() {
+      return TestProtoObj.getDefaultInstance();
     }
 
     @Override
-    public TestObj build() {
-      TestObj result = buildPartial();
+    public TestProtoObj build() {
+      TestProtoObj result = buildPartial();
       if (!result.isInitialized()) {
         throw newUninitializedMessageException(result);
       }
@@ -297,14 +297,14 @@ private static final long serialVersionUID = 0L;
     }
 
     @Override
-    public TestObj buildPartial() {
-      TestObj result = new TestObj(this);
+    public TestProtoObj buildPartial() {
+      TestProtoObj result = new TestProtoObj(this);
       if (bitField0_ != 0) { buildPartial0(result); }
       onBuilt();
       return result;
     }
 
-    private void buildPartial0(TestObj result) {
+    private void buildPartial0(TestProtoObj result) {
       int from_bitField0_ = bitField0_;
       if (((from_bitField0_ & 0x00000001) != 0)) {
         result.v1_ = v1_;
@@ -348,16 +348,16 @@ private static final long serialVersionUID = 0L;
     }
     @Override
     public Builder mergeFrom(org.sparkproject.spark_protobuf.protobuf.Message other) {
-      if (other instanceof TestObj) {
-        return mergeFrom((TestObj)other);
+      if (other instanceof TestProtoObj) {
+        return mergeFrom((TestProtoObj)other);
       } else {
         super.mergeFrom(other);
         return this;
       }
     }
 
-    public Builder mergeFrom(TestObj other) {
-      if (other == TestObj.getDefaultInstance()) return this;
+    public Builder mergeFrom(TestProtoObj other) {
+      if (other == TestProtoObj.getDefaultInstance()) return this;
       if (other.getV1() != 0L) {
         setV1(other.getV1());
       }
@@ -493,23 +493,23 @@ private static final long serialVersionUID = 0L;
     }
 
 
-    // @@protoc_insertion_point(builder_scope:org.apache.spark.sql.protobuf.protos.TestObj)
+    // @@protoc_insertion_point(builder_scope:org.apache.spark.sql.protobuf.protos.TestProtoObj)
   }
 
-  // @@protoc_insertion_point(class_scope:org.apache.spark.sql.protobuf.protos.TestObj)
-  private static final TestObj DEFAULT_INSTANCE;
+  // @@protoc_insertion_point(class_scope:org.apache.spark.sql.protobuf.protos.TestProtoObj)
+  private static final TestProtoObj DEFAULT_INSTANCE;
   static {
-    DEFAULT_INSTANCE = new TestObj();
+    DEFAULT_INSTANCE = new TestProtoObj();
   }
 
-  public static TestObj getDefaultInstance() {
+  public static TestProtoObj getDefaultInstance() {
     return DEFAULT_INSTANCE;
   }
 
-  private static final org.sparkproject.spark_protobuf.protobuf.Parser<TestObj>
-      PARSER = new org.sparkproject.spark_protobuf.protobuf.AbstractParser<TestObj>() {
+  private static final org.sparkproject.spark_protobuf.protobuf.Parser<TestProtoObj>
+      PARSER = new org.sparkproject.spark_protobuf.protobuf.AbstractParser<TestProtoObj>() {
     @Override
-    public TestObj parsePartialFrom(
+    public TestProtoObj parsePartialFrom(
         org.sparkproject.spark_protobuf.protobuf.CodedInputStream input,
         org.sparkproject.spark_protobuf.protobuf.ExtensionRegistryLite extensionRegistry)
         throws org.sparkproject.spark_protobuf.protobuf.InvalidProtocolBufferException {
@@ -528,17 +528,17 @@ private static final long serialVersionUID = 0L;
     }
   };
 
-  public static org.sparkproject.spark_protobuf.protobuf.Parser<TestObj> parser() {
+  public static org.sparkproject.spark_protobuf.protobuf.Parser<TestProtoObj> parser() {
     return PARSER;
   }
 
   @Override
-  public org.sparkproject.spark_protobuf.protobuf.Parser<TestObj> getParserForType() {
+  public org.sparkproject.spark_protobuf.protobuf.Parser<TestProtoObj> getParserForType() {
     return PARSER;
   }
 
   @Override
-  public TestObj getDefaultInstanceForType() {
+  public TestProtoObj getDefaultInstanceForType() {
     return DEFAULT_INSTANCE;
   }
 

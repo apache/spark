@@ -19,8 +19,9 @@ syntax = "proto3";
 package org.apache.spark.sql.protobuf.protos;
 
 option java_multiple_files = true;
+option java_outer_classname = "TestProto";
 
-message TestObj {
+message TestProtoObj {
   int64 v1 = 1;
   int32 v2 = 2;
 }

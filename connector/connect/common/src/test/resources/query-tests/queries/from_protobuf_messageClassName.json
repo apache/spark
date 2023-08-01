@@ -20,7 +20,7 @@
           }
         }, {
           "literal": {
-            "string": "org.apache.spark.sql.protobuf.protos.TestObj"
+            "string": "org.apache.spark.sql.protobuf.protos.TestProtoObj"
           }
         }]
       }
