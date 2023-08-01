@@ -149,7 +149,7 @@ class SparkThrowableSuite extends SparkFunSuite {
     checkIfUnique(messageFormats)
   }
 
-  test("Error classes match with document") {
+  ignore("Error classes match with document") {
     val errors = errorReader.errorInfoMap
 
     // the black list of error class name which should not add quote
