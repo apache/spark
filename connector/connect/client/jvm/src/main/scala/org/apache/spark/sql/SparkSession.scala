@@ -254,7 +254,8 @@ class SparkSession private[sql] (
     val plan = proto.Plan.newBuilder().setCommand(cmd)
     val responseIter = client.execute(plan.build())
 
-    val response = responseIter.asScala
+    // Note: .toSeq makes the stream be consumed and closed.
+    val response = responseIter.asScala.toSeq
       .find(_.hasSqlCommandResult)
       .getOrElse(throw new RuntimeException("SQLCommandResult must be present"))
 
@@ -310,7 +311,8 @@ class SparkSession private[sql] (
       val plan = proto.Plan.newBuilder().setCommand(cmd)
       val responseIter = client.execute(plan.build())
 
-      val response = responseIter.asScala
+      // Note: .toSeq makes the stream be consumed and closed.
+      val response = responseIter.asScala.toSeq
         .find(_.hasSqlCommandResult)
         .getOrElse(throw new RuntimeException("SQLCommandResult must be present"))
 
