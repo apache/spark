@@ -63,7 +63,8 @@ class DefaultVectorReservePolicy extends VectorReservePolicy {
     if (hugeThreshold < 0 || requiredCapacity < hugeThreshold) {
       currentCapacity = (int) Math.min(MAX_CAPACITY, requiredCapacity * 2L);
     } else {
-      currentCapacity = (int) Math.min(MAX_CAPACITY, requiredCapacity * hugeReserveRatio);
+      currentCapacity = (int) Math.min(MAX_CAPACITY,
+          (requiredCapacity - hugeThreshold) * hugeReserveRatio + hugeThreshold * 2L);
     }
     return currentCapacity;
   }
