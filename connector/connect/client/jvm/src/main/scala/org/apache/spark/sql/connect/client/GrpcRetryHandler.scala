@@ -24,35 +24,15 @@ import scala.util.control.NonFatal
 import io.grpc.{Status, StatusRuntimeException}
 import io.grpc.stub.StreamObserver
 
+import org.apache.spark.internal.Logging
+
 private[client] class GrpcRetryHandler(private val retryPolicy: GrpcRetryHandler.RetryPolicy) {
 
   /**
    * Retries the given function with exponential backoff according to the client's retryPolicy.
-   * @param fn
-   *   The function to retry.
-   * @param currentRetryNum
-   *   Current number of retries.
-   * @tparam T
-   *   The return type of the function.
-   * @return
-   *   The result of the function.
    */
-  @tailrec final def retry[T](fn: => T, currentRetryNum: Int = 0): T = {
-    if (currentRetryNum > retryPolicy.maxRetries) {
-      throw new IllegalArgumentException(
-        s"The number of retries ($currentRetryNum) must not exceed " +
-          s"the maximum number of retires (${retryPolicy.maxRetries}).")
-    }
-    try {
-      return fn
-    } catch {
-      case NonFatal(e) if retryPolicy.canRetry(e) && currentRetryNum < retryPolicy.maxRetries =>
-        Thread.sleep(
-          (retryPolicy.maxBackoff min retryPolicy.initialBackoff * Math
-            .pow(retryPolicy.backoffMultiplier, currentRetryNum)).toMillis)
-    }
-    retry(fn, currentRetryNum + 1)
-  }
+  def retry[T](fn: => T, currentRetryNum: Int = 0): T =
+    GrpcRetryHandler.retry(retryPolicy)(fn, currentRetryNum)
 
   /**
    * Generalizes the retry logic for RPC calls that return an iterator.
@@ -157,7 +137,40 @@ private[client] class GrpcRetryHandler(private val retryPolicy: GrpcRetryHandler
   }
 }
 
-private[client] object GrpcRetryHandler {
+private[client] object GrpcRetryHandler extends Logging {
+
+  /**
+   * Retries the given function with exponential backoff according to the client's retryPolicy.
+   * @param retryPolicy
+   *   The retry policy
+   * @param fn
+   *   The function to retry.
+   * @param currentRetryNum
+   *   Current number of retries.
+   * @tparam T
+   *   The return type of the function.
+   * @return
+   *   The result of the function.
+   */
+  @tailrec final def retry[T](retryPolicy: RetryPolicy)(fn: => T, currentRetryNum: Int = 0): T = {
+    if (currentRetryNum > retryPolicy.maxRetries) {
+      throw new IllegalArgumentException(
+        s"The number of retries ($currentRetryNum) must not exceed " +
+          s"the maximum number of retires (${retryPolicy.maxRetries}).")
+    }
+    try {
+      return fn
+    } catch {
+      case NonFatal(e) if retryPolicy.canRetry(e) && currentRetryNum < retryPolicy.maxRetries =>
+        logWarning(
+          s"Non fatal error during RPC execution: $e, " +
+            s"retrying (currentRetryNum=$currentRetryNum)")
+        Thread.sleep(
+          (retryPolicy.maxBackoff min retryPolicy.initialBackoff * Math
+            .pow(retryPolicy.backoffMultiplier, currentRetryNum)).toMillis)
+    }
+    retry(retryPolicy)(fn, currentRetryNum + 1)
+  }
 
   /**
    * Default canRetry in [[RetryPolicy]].
