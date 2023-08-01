@@ -33,7 +33,7 @@ import org.apache.spark.sql.functions._
 // - sample fraction: simple.sample(0.1)
 // - sample withReplacement_fraction: simple.sample(withReplacement = true, 0.11)
 // Add tests for exceptions thrown
-class DatasetSuite extends ConnectFunSuite with BeforeAndAfterEach {
+class ClientDatasetSuite extends ConnectFunSuite with BeforeAndAfterEach {
 
   private var server: Server = _
   private var service: DummySparkConnectService = _

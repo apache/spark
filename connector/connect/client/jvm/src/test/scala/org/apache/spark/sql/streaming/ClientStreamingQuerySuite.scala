@@ -35,7 +35,7 @@ import org.apache.spark.sql.functions.window
 import org.apache.spark.sql.streaming.StreamingQueryListener.{QueryIdleEvent, QueryStartedEvent, QueryTerminatedEvent}
 import org.apache.spark.util.SparkFileUtils
 
-class StreamingQuerySuite extends QueryTest with SQLHelper with Logging {
+class ClientStreamingQuerySuite extends QueryTest with SQLHelper with Logging {
 
   test("Streaming API with windowed aggregate query") {
     // This verifies standard streaming API by starting a streaming query with windowed count.
