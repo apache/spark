@@ -23,7 +23,7 @@ from pyspark.errors import (
     IllegalArgumentException,
     SparkUpgradeException,
 )
-from pyspark.testing.utils import assertDataFrameEqual, assertSchemaEqual
+from pyspark.testing.utils import assertDataFrameEqual, assertSchemaEqual, _context_diff
 from pyspark.testing.sqlutils import ReusedSQLTestCase
 from pyspark.sql import Row
 import pyspark.sql.functions as F
@@ -44,6 +44,7 @@ from pyspark.sql.dataframe import DataFrame
 
 import difflib
 from typing import List, Union
+from itertools import zip_longest
 
 
 class UtilsTestsMixin:
@@ -151,17 +152,22 @@ class UtilsTestsMixin:
             ),
         )
 
-        expected_error_message = "Results do not match: "
-        percent_diff = (1 / 2) * 100
-        expected_error_message += "( %.5f %% )" % percent_diff
+        rows_str1 = ""
+        rows_str2 = ""
 
-        generated_diff = difflib.ndiff(
-            str(df1.collect()[1]).splitlines(), str(df2.collect()[1]).splitlines()
+        # count different rows
+        for r1, r2 in list(zip_longest(df1.collect(), df2.collect())):
+            rows_str1 += str(r1) + "\n"
+            rows_str2 += str(r2) + "\n"
+
+        generated_diff = _context_diff(
+            actual=rows_str1.splitlines(), expected=rows_str2.splitlines(), n=2
         )
-        diff_msg = "\n" + "\n".join(generated_diff) + "\n"
-        diff_msg += "********************" + "\n"
 
-        expected_error_message += "\n" + "--- actual\n+++ expected\n" + diff_msg
+        error_msg = "Results do not match: "
+        percent_diff = (1 / 2) * 100
+        error_msg += "( %.5f %% )" % percent_diff
+        error_msg += "\n" + "\n".join(generated_diff)
 
         with self.assertRaises(PySparkAssertionError) as pe:
             assertDataFrameEqual(df1, df2)
@@ -169,7 +175,16 @@ class UtilsTestsMixin:
         self.check_error(
             exception=pe.exception,
             error_class="DIFFERENT_ROWS",
-            message_parameters={"error_msg": expected_error_message},
+            message_parameters={"error_msg": error_msg},
+        )
+
+        with self.assertRaises(PySparkAssertionError) as pe:
+            assertDataFrameEqual(df1, df2, checkRowOrder=True)
+
+        self.check_error(
+            exception=pe.exception,
+            error_class="DIFFERENT_ROWS",
+            message_parameters={"error_msg": error_msg},
         )
 
     def test_assert_approx_equal_arraytype_float_custom_rtol_pass(self):
@@ -266,6 +281,7 @@ class UtilsTestsMixin:
     def test_assert_notequal_arraytype(self):
         df1 = self.spark.createDataFrame(
             data=[
+                ("Amy", ["C++", "Rust"]),
                 ("John", ["Python", "Java"]),
                 ("Jane", ["Scala", "SQL", "Java"]),
             ],
@@ -278,6 +294,7 @@ class UtilsTestsMixin:
         )
         df2 = self.spark.createDataFrame(
             data=[
+                ("Amy", ["C++", "Rust"]),
                 ("John", ["Python", "Java"]),
                 ("Jane", ["Scala", "Java"]),
             ],
@@ -289,17 +306,25 @@ class UtilsTestsMixin:
             ),
         )
 
-        expected_error_message = "Results do not match: "
-        percent_diff = (1 / 2) * 100
-        expected_error_message += "( %.5f %% )" % percent_diff
+        rows_str1 = ""
+        rows_str2 = ""
 
-        generated_diff = difflib.ndiff(
-            str(df1.collect()[1]).splitlines(), str(df2.collect()[1]).splitlines()
+        sorted_list1 = sorted(df1.collect(), key=lambda x: str(x))
+        sorted_list2 = sorted(df2.collect(), key=lambda x: str(x))
+
+        # count different rows
+        for r1, r2 in list(zip_longest(sorted_list1, sorted_list2)):
+            rows_str1 += str(r1) + "\n"
+            rows_str2 += str(r2) + "\n"
+
+        generated_diff = _context_diff(
+            actual=rows_str1.splitlines(), expected=rows_str2.splitlines(), n=3
         )
-        diff_msg = "\n" + "\n".join(generated_diff) + "\n"
-        diff_msg += "********************" + "\n"
 
-        expected_error_message += "\n" + "--- actual\n+++ expected\n" + diff_msg
+        error_msg = "Results do not match: "
+        percent_diff = (1 / 3) * 100
+        error_msg += "( %.5f %% )" % percent_diff
+        error_msg += "\n" + "\n".join(generated_diff)
 
         with self.assertRaises(PySparkAssertionError) as pe:
             assertDataFrameEqual(df1, df2)
@@ -307,8 +332,25 @@ class UtilsTestsMixin:
         self.check_error(
             exception=pe.exception,
             error_class="DIFFERENT_ROWS",
-            message_parameters={"error_msg": expected_error_message},
+            message_parameters={"error_msg": error_msg},
         )
+
+        rows_str1 = ""
+        rows_str2 = ""
+
+        # count different rows
+        for r1, r2 in list(zip_longest(df1.collect(), df2.collect())):
+            rows_str1 += str(r1) + "\n"
+            rows_str2 += str(r2) + "\n"
+
+        generated_diff = _context_diff(
+            actual=rows_str1.splitlines(), expected=rows_str2.splitlines(), n=3
+        )
+
+        error_msg = "Results do not match: "
+        percent_diff = (1 / 3) * 100
+        error_msg += "( %.5f %% )" % percent_diff
+        error_msg += "\n" + "\n".join(generated_diff)
 
         with self.assertRaises(PySparkAssertionError) as pe:
             assertDataFrameEqual(df1, df2, checkRowOrder=True)
@@ -316,7 +358,7 @@ class UtilsTestsMixin:
         self.check_error(
             exception=pe.exception,
             error_class="DIFFERENT_ROWS",
-            message_parameters={"error_msg": expected_error_message},
+            message_parameters={"error_msg": error_msg},
         )
 
     def test_assert_equal_maptype(self):
@@ -588,17 +630,22 @@ class UtilsTestsMixin:
             schema=["id", "amount"],
         )
 
-        expected_error_message = "Results do not match: "
-        percent_diff = (1 / 2) * 100
-        expected_error_message += "( %.5f %% )" % percent_diff
+        rows_str1 = ""
+        rows_str2 = ""
 
-        generated_diff = difflib.ndiff(
-            str(df1.collect()[1]).splitlines(), str(df2.collect()[1]).splitlines()
+        # count different rows
+        for r1, r2 in list(zip_longest(df1.collect(), df2.collect())):
+            rows_str1 += str(r1) + "\n"
+            rows_str2 += str(r2) + "\n"
+
+        generated_diff = _context_diff(
+            actual=rows_str1.splitlines(), expected=rows_str2.splitlines(), n=2
         )
-        diff_msg = "\n" + "\n".join(generated_diff) + "\n"
-        diff_msg += "********************" + "\n"
 
-        expected_error_message += "\n" + "--- actual\n+++ expected\n" + diff_msg
+        error_msg = "Results do not match: "
+        percent_diff = (1 / 2) * 100
+        error_msg += "( %.5f %% )" % percent_diff
+        error_msg += "\n" + "\n".join(generated_diff)
 
         with self.assertRaises(PySparkAssertionError) as pe:
             assertDataFrameEqual(df1, df2)
@@ -606,7 +653,7 @@ class UtilsTestsMixin:
         self.check_error(
             exception=pe.exception,
             error_class="DIFFERENT_ROWS",
-            message_parameters={"error_msg": expected_error_message},
+            message_parameters={"error_msg": error_msg},
         )
 
         with self.assertRaises(PySparkAssertionError) as pe:
@@ -615,7 +662,7 @@ class UtilsTestsMixin:
         self.check_error(
             exception=pe.exception,
             error_class="DIFFERENT_ROWS",
-            message_parameters={"error_msg": expected_error_message},
+            message_parameters={"error_msg": error_msg},
         )
 
     def test_assert_equal_nulldf(self):
@@ -762,22 +809,22 @@ class UtilsTestsMixin:
             schema=["id", "amount"],
         )
 
-        expected_error_message = "Results do not match: "
+        rows_str1 = ""
+        rows_str2 = ""
+
+        # count different rows
+        for r1, r2 in list(zip_longest(df1.collect(), df2.collect())):
+            rows_str1 += str(r1) + "\n"
+            rows_str2 += str(r2) + "\n"
+
+        generated_diff = _context_diff(
+            actual=rows_str1.splitlines(), expected=rows_str2.splitlines(), n=2
+        )
+
+        error_msg = "Results do not match: "
         percent_diff = (2 / 2) * 100
-        expected_error_message += "( %.5f %% )" % percent_diff
-
-        generated_diff = difflib.ndiff(
-            str(df1.collect()[0]).splitlines(), str(df2.collect()[0]).splitlines()
-        )
-        diff_msg = "\n" + "\n".join(generated_diff) + "\n"
-        diff_msg += "********************" + "\n"
-        generated_diff = difflib.ndiff(
-            str(df1.collect()[1]).splitlines(), str(df2.collect()[1]).splitlines()
-        )
-        diff_msg += "\n" + "\n".join(generated_diff) + "\n"
-        diff_msg += "********************" + "\n"
-
-        expected_error_message += "\n" + "--- actual\n+++ expected\n" + diff_msg
+        error_msg += "( %.5f %% )" % percent_diff
+        error_msg += "\n" + "\n".join(generated_diff)
 
         with self.assertRaises(PySparkAssertionError) as pe:
             assertDataFrameEqual(df1, df2, checkRowOrder=True)
@@ -785,7 +832,7 @@ class UtilsTestsMixin:
         self.check_error(
             exception=pe.exception,
             error_class="DIFFERENT_ROWS",
-            message_parameters={"error_msg": expected_error_message},
+            message_parameters={"error_msg": error_msg},
         )
 
     def test_remove_non_word_characters_long(self):
@@ -857,22 +904,22 @@ class UtilsTestsMixin:
             schema=["id", "amount"],
         )
 
-        expected_error_message = "Results do not match: "
+        rows_str1 = ""
+        rows_str2 = ""
+
+        # count different rows
+        for r1, r2 in list(zip_longest(df1.collect(), df2.collect())):
+            rows_str1 += str(r1) + "\n"
+            rows_str2 += str(r2) + "\n"
+
+        generated_diff = _context_diff(
+            actual=rows_str1.splitlines(), expected=rows_str2.splitlines(), n=3
+        )
+
+        error_msg = "Results do not match: "
         percent_diff = (2 / 3) * 100
-        expected_error_message += "( %.5f %% )" % percent_diff
-
-        generated_diff = difflib.ndiff(
-            str(df1.collect()[0]).splitlines(), str(df2.collect()[0]).splitlines()
-        )
-        diff_msg = "\n" + "\n".join(generated_diff) + "\n"
-        diff_msg += "********************" + "\n"
-        generated_diff = difflib.ndiff(
-            str(df1.collect()[2]).splitlines(), str(df2.collect()[2]).splitlines()
-        )
-        diff_msg += "\n" + "\n".join(generated_diff) + "\n"
-        diff_msg += "********************" + "\n"
-
-        expected_error_message += "\n" + "--- actual\n+++ expected\n" + diff_msg
+        error_msg += "( %.5f %% )" % percent_diff
+        error_msg += "\n" + "\n".join(generated_diff)
 
         with self.assertRaises(PySparkAssertionError) as pe:
             assertDataFrameEqual(df1, df2)
@@ -880,7 +927,7 @@ class UtilsTestsMixin:
         self.check_error(
             exception=pe.exception,
             error_class="DIFFERENT_ROWS",
-            message_parameters={"error_msg": expected_error_message},
+            message_parameters={"error_msg": error_msg},
         )
 
         with self.assertRaises(PySparkAssertionError) as pe:
@@ -889,7 +936,7 @@ class UtilsTestsMixin:
         self.check_error(
             exception=pe.exception,
             error_class="DIFFERENT_ROWS",
-            message_parameters={"error_msg": expected_error_message},
+            message_parameters={"error_msg": error_msg},
         )
 
     def test_assert_notequal_schema(self):
@@ -1209,17 +1256,22 @@ class UtilsTestsMixin:
         list_of_rows1 = [Row(1, "abc", 5000), Row(2, "def", 1000)]
         list_of_rows2 = [Row(1, "abc", 5000), Row(2, "defg", 1000)]
 
-        expected_error_message = "Results do not match: "
-        percent_diff = (1 / 2) * 100
-        expected_error_message += "( %.5f %% )" % percent_diff
+        rows_str1 = ""
+        rows_str2 = ""
 
-        generated_diff = difflib.ndiff(
-            str(list_of_rows1[1]).splitlines(), str(list_of_rows2[1]).splitlines()
+        # count different rows
+        for r1, r2 in list(zip_longest(list_of_rows1, list_of_rows2)):
+            rows_str1 += str(r1) + "\n"
+            rows_str2 += str(r2) + "\n"
+
+        generated_diff = _context_diff(
+            actual=rows_str1.splitlines(), expected=rows_str2.splitlines(), n=2
         )
-        diff_msg = "\n" + "\n".join(generated_diff) + "\n"
-        diff_msg += "********************" + "\n"
 
-        expected_error_message += "\n" + "--- actual\n+++ expected\n" + diff_msg
+        error_msg = "Results do not match: "
+        percent_diff = (1 / 2) * 100
+        error_msg += "( %.5f %% )" % percent_diff
+        error_msg += "\n" + "\n".join(generated_diff)
 
         with self.assertRaises(PySparkAssertionError) as pe:
             assertDataFrameEqual(list_of_rows1, list_of_rows2)
@@ -1227,7 +1279,7 @@ class UtilsTestsMixin:
         self.check_error(
             exception=pe.exception,
             error_class="DIFFERENT_ROWS",
-            message_parameters={"error_msg": expected_error_message},
+            message_parameters={"error_msg": error_msg},
         )
 
         with self.assertRaises(PySparkAssertionError) as pe:
@@ -1236,10 +1288,59 @@ class UtilsTestsMixin:
         self.check_error(
             exception=pe.exception,
             error_class="DIFFERENT_ROWS",
-            message_parameters={"error_msg": expected_error_message},
+            message_parameters={"error_msg": error_msg},
         )
 
     def test_list_row_unequal_schema(self):
+        df1 = self.spark.createDataFrame(
+            data=[
+                (1, 3000),
+                (2, 1000),
+                (3, 10),
+            ],
+            schema=["id", "amount"],
+        )
+
+        list_of_rows = [Row(id=1, amount=300), Row(id=2, amount=100), Row(id=3, amount=10)]
+
+        rows_str1 = ""
+        rows_str2 = ""
+
+        # count different rows
+        for r1, r2 in list(zip_longest(df1, list_of_rows)):
+            rows_str1 += str(r1) + "\n"
+            rows_str2 += str(r2) + "\n"
+
+        generated_diff = _context_diff(
+            actual=rows_str1.splitlines(), expected=rows_str2.splitlines(), n=3
+        )
+
+        error_msg = "Results do not match: "
+        percent_diff = (2 / 3) * 100
+        error_msg += "( %.5f %% )" % percent_diff
+        error_msg += "\n" + "\n".join(generated_diff)
+
+        with self.assertRaises(PySparkAssertionError) as pe:
+            assertDataFrameEqual(df1, list_of_rows)
+
+        self.check_error(
+            exception=pe.exception,
+            error_class="DIFFERENT_ROWS",
+            message_parameters={"error_msg": error_msg},
+        )
+
+        with self.assertRaises(PySparkAssertionError) as pe:
+            assertDataFrameEqual(df1, list_of_rows, checkRowOrder=True)
+
+        self.check_error(
+            exception=pe.exception,
+            error_class="DIFFERENT_ROWS",
+            message_parameters={"error_msg": error_msg},
+        )
+
+    def test_list_row_unequal_schema(self):
+        from pyspark.sql import Row
+
         df1 = self.spark.createDataFrame(
             data=[
                 (1, 3000),
@@ -1250,22 +1351,22 @@ class UtilsTestsMixin:
 
         list_of_rows = [Row(1, "3000"), Row(2, "1000")]
 
-        expected_error_message = "Results do not match: "
+        rows_str1 = ""
+        rows_str2 = ""
+
+        # count different rows
+        for r1, r2 in list(zip_longest(df1.collect(), list_of_rows)):
+            rows_str1 += str(r1) + "\n"
+            rows_str2 += str(r2) + "\n"
+
+        generated_diff = _context_diff(
+            actual=rows_str1.splitlines(), expected=rows_str2.splitlines(), n=2
+        )
+
+        error_msg = "Results do not match: "
         percent_diff = (2 / 2) * 100
-        expected_error_message += "( %.5f %% )" % percent_diff
-
-        generated_diff = difflib.ndiff(
-            str(df1.collect()[0]).splitlines(), str(list_of_rows[0]).splitlines()
-        )
-        diff_msg = "\n" + "\n".join(generated_diff) + "\n"
-        diff_msg += "********************" + "\n"
-        generated_diff = difflib.ndiff(
-            str(df1.collect()[1]).splitlines(), str(list_of_rows[1]).splitlines()
-        )
-        diff_msg += "\n" + "\n".join(generated_diff) + "\n"
-        diff_msg += "********************" + "\n"
-
-        expected_error_message += "\n" + "--- actual\n+++ expected\n" + diff_msg
+        error_msg += "( %.5f %% )" % percent_diff
+        error_msg += "\n" + "\n".join(generated_diff)
 
         with self.assertRaises(PySparkAssertionError) as pe:
             assertDataFrameEqual(df1, list_of_rows)
@@ -1273,7 +1374,7 @@ class UtilsTestsMixin:
         self.check_error(
             exception=pe.exception,
             error_class="DIFFERENT_ROWS",
-            message_parameters={"error_msg": expected_error_message},
+            message_parameters={"error_msg": error_msg},
         )
 
         with self.assertRaises(PySparkAssertionError) as pe:
@@ -1282,7 +1383,7 @@ class UtilsTestsMixin:
         self.check_error(
             exception=pe.exception,
             error_class="DIFFERENT_ROWS",
-            message_parameters={"error_msg": expected_error_message},
+            message_parameters={"error_msg": error_msg},
         )
 
 
