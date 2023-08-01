@@ -238,12 +238,13 @@ object TableOutputResolver {
 
     if (reordered.length == expectedCols.length) {
       if (matchedCols.size < inputCols.length) {
-        val extraCols = inputCols.filterNot(col => matchedCols.contains(col.name))
-          .map(col => s"${toSQLId(col.name)}").mkString(", ")
         if (colPath.isEmpty) {
-          throw QueryCompilationErrors.cannotWriteNotEnoughColumnsToTableError(tableName,
-            expectedCols.map(_.name), inputCols.map(_.toAttribute))
+          val cannotFindCol = expectedCols.filter(col => !matchedCols.contains(col.name)).head.name
+          throw QueryCompilationErrors.incompatibleDataToTableCannotFindDataError(tableName,
+            cannotFindCol)
         } else {
+          val extraCols = inputCols.filterNot(col => matchedCols.contains(col.name))
+                  .map(col => s"${toSQLId(col.name)}").mkString(", ")
           throw QueryCompilationErrors.incompatibleDataToTableExtraStructFieldsError(
             tableName, colPath.quoted, extraCols
           )

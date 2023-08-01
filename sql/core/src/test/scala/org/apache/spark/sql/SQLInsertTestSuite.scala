@@ -213,10 +213,9 @@ trait SQLInsertTestSuite extends QueryTest with SQLTestUtils {
         exception = intercept[AnalysisException] {
           processInsert("t1", df, overwrite = false, byName = true)
         },
-        v1ErrorClass = "INSERT_COLUMN_ARITY_MISMATCH.NOT_ENOUGH_DATA_COLUMNS",
+        v1ErrorClass = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_FIND_DATA",
         v2ErrorClass = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_FIND_DATA",
-        v1Parameters = Map("tableName" -> "`spark_catalog`.`default`.`t1`",
-          "tableColumns" -> "`c1`, `c2`, `c3`", "dataColumns" -> "`c3`, `c2`, `x1`"),
+        v1Parameters = Map("tableName" -> "`spark_catalog`.`default`.`t1`", "colName" -> "`c1`"),
         v2Parameters = Map("tableName" -> "`testcat`.`t1`", "colName" -> "`c1`")
       )
       val df2 = Seq((3, 2, 1, 0)).toDF(Seq("c3", "c2", "c1", "c0"): _*)
