@@ -416,6 +416,8 @@ jobs:
         df -h
         du -sh /* || echo "fail to du"
         du -sh /*/* || echo "fail to du"
+        du -sh /usr/share/* || echo "fail to du"
+        du -sh /usr/local/lib/* || echo "fail to du"
         rm -rf /__t/CodeQL || echo "fail to rm /__t/CodeQL"
         rm -rf /__t/go || echo "fail to rm /__t/go"
         du -sh /* || echo "fail to du"
