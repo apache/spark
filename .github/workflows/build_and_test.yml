@@ -438,7 +438,6 @@ jobs:
       env: ${{ fromJSON(inputs.envs) }}
       shell: 'script -q -e -c "bash {0}"'
       run: |
-        df -h
         if [[ "$MODULES_TO_TEST" == "pyspark-errors" ]]; then
           export PATH=$PATH:$HOME/miniconda/bin
           export SKIP_PACKAGING=false
