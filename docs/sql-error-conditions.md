@@ -1555,7 +1555,7 @@ The `<clause>` clause may be used at most once per `<operation>` operation.
 
 [SQLSTATE: 4274K](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
 
-Cannot invoke function `<functionName>` because the parameter named `<parameterName>` is required at index `<index>`, but the function call did not supply a value. Please update the function call to supply an argument value (either positionally or by name) and retry the query again.
+Cannot invoke function `<functionName>` because the parameter named `<parameterName>` is required, but the function call did not supply a value. Please update the function call to supply an argument value (either positionally at index `<index>` or by name) and retry the query again.
 
 ### REQUIRES_SINGLE_PART_NAMESPACE
 
