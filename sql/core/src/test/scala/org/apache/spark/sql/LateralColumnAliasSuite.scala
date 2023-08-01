@@ -1157,7 +1157,7 @@ class LateralColumnAliasSuite extends LateralColumnAliasSuiteBase {
                |having count(*) > 0;
                |""".stripMargin)
         },
-      errorClass = "UNSUPPORTED_FEATURE.LATERAL_COLUMN_ALIAS_IN_AGGREGATE_WITH_WINDOW_AND_HAVING",
+        errorClass = "UNSUPPORTED_FEATURE.LATERAL_COLUMN_ALIAS_IN_AGGREGATE_WITH_WINDOW_AND_HAVING",
         parameters = Map("lca" -> "`min_alias`")
       )
     }
