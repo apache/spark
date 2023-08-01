@@ -299,13 +299,7 @@ object CheckConnectJvmClientCompatibility {
 
       // SQLImplicits
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.SQLImplicits.rddToDatasetHolder"),
-      ProblemFilters.exclude[Problem]("org.apache.spark.sql.SQLImplicits._sqlContext"),
-
-      // Encoders
-      ProblemFilters.exclude[MissingMethodProblem](
-        "org.apache.spark.sql.Encoders.javaSerialization"),
-      ProblemFilters.exclude[MissingMethodProblem](
-        "org.apache.spark.sql.Encoders.kryo")
+      ProblemFilters.exclude[Problem]("org.apache.spark.sql.SQLImplicits._sqlContext")
     )
     checkMiMaCompatibility(clientJar, sqlJar, includedRules, excludeRules)
   }
@@ -423,7 +417,13 @@ object CheckConnectJvmClientCompatibility {
       ProblemFilters.exclude[MissingClassProblem](
         "org.apache.spark.sql.streaming.RemoteStreamingQuery"),
       ProblemFilters.exclude[MissingClassProblem](
-        "org.apache.spark.sql.streaming.RemoteStreamingQuery$"))
+        "org.apache.spark.sql.streaming.RemoteStreamingQuery$"),
+
+      // Encoders are in the wrong JAR
+      ProblemFilters.exclude[MissingClassProblem](
+        "org.apache.spark.sql.Encoders"),
+      ProblemFilters.exclude[MissingClassProblem](
+        "org.apache.spark.sql.Encoders$"))
 
     checkMiMaCompatibility(sqlJar, clientJar, includedRules, excludeRules)
   }
