@@ -414,16 +414,9 @@ jobs:
       run: |
         dpkg-query -Wf '${Installed-Size}\t${Package}\n' | sort -n | tail -n 100
         df -h
-        du -sh /* || echo "fail to du"
-        du -sh /*/* || echo "fail to du"
-        du -sh /usr/share/* || echo "fail to du"
-        du -sh /usr/local/lib/* || echo "fail to du"
-        rm -rf /__t/CodeQL || echo "fail to rm /__t/CodeQL"
-        rm -rf /__t/go || echo "fail to rm /__t/go"
-        du -sh /* || echo "fail to du"
-        du -sh /*/* || echo "fail to du"
-        du -sh /usr/share/* || echo "fail to du"
-        du -sh /usr/local/lib/* || echo "fail to du"
+        rm -rf /__t/CodeQL || echo "fail to delete /__t/CodeQL"
+        rm -rf /__t/go || echo "fail to delete /__t/go"
+        rm -rf /__t/node || echo "fail to delete /__t/node"
         df -h
     - name: Install Java ${{ matrix.java }}
       uses: actions/setup-java@v3
