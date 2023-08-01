@@ -560,8 +560,6 @@ class ConfigResult:
 class SparkConnectClient(object):
     """
     Conceptually the remote spark session that communicates with the server
-
-    .. versionadded:: 3.4.0
     """
 
     @classmethod
@@ -574,10 +572,10 @@ class SparkConnectClient(object):
     def __init__(
         self,
         connection: Union[str, ChannelBuilder],
-        userId: Optional[str] = None,
-        channelOptions: Optional[List[Tuple[str, Any]]] = None,
-        retryPolicy: Optional[Dict[str, Any]] = None,
-        useReattachableExecute: bool = True,
+        user_id: Optional[str] = None,
+        channel_options: Optional[List[Tuple[str, Any]]] = None,
+        retry_policy: Optional[Dict[str, Any]] = None,
+        use_reattachable_execute: bool = True,
     ):
         """
         Creates a new SparkSession for the Spark Connect interface.
@@ -588,14 +586,14 @@ class SparkConnectClient(object):
             Connection string that is used to extract the connection parameters and configure
             the GRPC connection. Or instance of ChannelBuilder that creates GRPC connection.
             Defaults to `sc://localhost`.
-        userId : str, optional
+        user_id : str, optional
             Optional unique user ID that is used to differentiate multiple users and
             isolate their Spark Sessions. If the `user_id` is not set, will default to
             the $USER environment. Defining the user ID as part of the connection string
             takes precedence.
-        channelOptions: list of tuple, optional
+        channel_options: list of tuple, optional
             Additional options that can be passed to the GRPC channel construction.
-        retryPolicy: dict of str and any, optional
+        retry_policy: dict of str and any, optional
             Additional configuration for retrying. There are four configurations as below
                 * ``max_retries``
                     Maximum number of tries default 15
@@ -606,7 +604,7 @@ class SparkConnectClient(object):
                 * ``max_backoff``
                     Max backoff controls the maximum amount of time to wait before retrying
                     a failed request. Default: 60000(ms).
-        useReattachableExecute: bool
+        use_reattachable_execute: bool
             Enable reattachable execution.
         """
         self.thread_local = threading.local()
@@ -615,7 +613,7 @@ class SparkConnectClient(object):
         self._builder = (
             connection
             if isinstance(connection, ChannelBuilder)
-            else ChannelBuilder(connection, channelOptions)
+            else ChannelBuilder(connection, channel_options)
         )
         self._user_id = None
         self._retry_policy = {
@@ -624,8 +622,8 @@ class SparkConnectClient(object):
             "initial_backoff": 50,
             "max_backoff": 60000,
         }
-        if retryPolicy:
-            self._retry_policy.update(retryPolicy)
+        if retry_policy:
+            self._retry_policy.update(retry_policy)
 
         # Generate a unique session ID for this client. This UUID must be unique to allow
         # concurrent Spark sessions of the same user. If the channel is closed, creating
@@ -633,8 +631,8 @@ class SparkConnectClient(object):
         self._session_id = str(uuid.uuid4())
         if self._builder.userId is not None:
             self._user_id = self._builder.userId
-        elif userId is not None:
-            self._user_id = userId
+        elif user_id is not None:
+            self._user_id = user_id
         else:
             self._user_id = os.getenv("USER", None)
 
@@ -642,8 +640,16 @@ class SparkConnectClient(object):
         self._closed = False
         self._stub = grpc_lib.SparkConnectServiceStub(self._channel)
         self._artifact_manager = ArtifactManager(self._user_id, self._session_id, self._channel)
-        self._use_reattachable_execute = useReattachableExecute
+        self._use_reattachable_execute = use_reattachable_execute
         # Configure logging for the SparkConnect client.
+
+    def disable_reattachable_execute(self):
+        self._use_reattachable_execute = False
+        return self
+
+    def enable_reattachable_execute(self):
+        self._use_reattachable_execute = True
+        return self
 
     def register_udf(
         self,
@@ -1094,6 +1100,7 @@ class SparkConnectClient(object):
 
         try:
             if self._use_reattachable_execute:
+                # Don't use retryHandler - own retry handling is inside.
                 generator = ExecutePlanResponseReattachableIterator(
                     req, self._stub, self._retry_policy
                 )
@@ -1172,6 +1179,7 @@ class SparkConnectClient(object):
 
         try:
             if self._use_reattachable_execute:
+                # Don't use retryHandler - own retry handling is inside.
                 generator = ExecutePlanResponseReattachableIterator(
                     req, self._stub, self._retry_policy
                 )
