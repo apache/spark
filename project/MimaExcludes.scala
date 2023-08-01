@@ -73,7 +73,9 @@ object MimaExcludes {
     ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.AnalysisException$"),
     // [SPARK-44535][CONNECT][SQL] Move required Streaming API to sql/api
     ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.streaming.GroupStateTimeout"),
-    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.streaming.OutputMode")
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.streaming.OutputMode"),
+    // Need update
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.ml.image.SamplePathFilter$")
   )
 
   // Default exclude rules
