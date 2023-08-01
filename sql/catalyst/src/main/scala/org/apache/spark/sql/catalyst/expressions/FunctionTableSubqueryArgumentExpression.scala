@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import org.apache.spark.sql.catalyst.plans.logical.{HintInfo, LogicalPlan, OrderPreservingUnaryNode, Project}
+import org.apache.spark.sql.catalyst.plans.logical.{HintInfo, LogicalPlan, Project, Repartition, RepartitionByExpression, Sort}
 import org.apache.spark.sql.catalyst.trees.TreePattern.{FUNCTION_TABLE_RELATION_ARGUMENT_EXPRESSION, TreePattern}
 import org.apache.spark.sql.types.DataType
 
@@ -40,13 +40,31 @@ import org.apache.spark.sql.types.DataType
  * clause includes a following ORDER BY clause, Catalyst will sort the rows in each partition such
  * that the table-valued function receives them one-by-one in the requested order. Otherwise, if no
  * such ordering is specified, the ordering of rows within each partition is undefined.
+ *
+ * @param plan the logical plan provided as input for the table argument as either a logical
+ *             relation or as a more complex logical plan in the event of a table subquery.
+ * @param outerAttrs outer references of this subquery plan, generally empty since these table
+ *                   arguments do not allow correlated references currently
+ * @param exprId expression ID of this subquery expression, generally generated afresh each time
+ * @param partitionByExpressions if non-empty, the TABLE argument included the PARTITION BY clause
+ *                               to indicate that the input relation should be repartitioned by the
+ *                               hash of the provided expressions, such that all the rows with each
+ *                               unique combination of values of the partitioning expressions will
+ *                               be consumed by exactly one instance of the table function class.
+ * @param withSinglePartition if true, the TABLE argument included the WITH SINGLE PARTITION clause
+ *                            to indicate that the entire input relation should be repartitioned to
+ *                            one worker for consumption by exactly one instance of the table
+ *                            function class.
+ * @param orderByExpressions if non-empty, the TABLE argument included the ORDER BY clause to
+ *                           indicate that the rows within each partition of the table function are
+ *                           to arrive in the provided order.
  */
 case class FunctionTableSubqueryArgumentExpression(
     plan: LogicalPlan,
     outerAttrs: Seq[Expression] = Seq.empty,
     exprId: ExprId = NamedExpression.newExprId,
-    withSinglePartition: Boolean = false,
     partitionByExpressions: Seq[Expression] = Seq.empty,
+    withSinglePartition: Boolean = false,
     orderByExpressions: Seq[SortOrder] = Seq.empty)
   extends SubqueryExpression(plan, outerAttrs, exprId, Seq.empty, None) with Unevaluable {
 
@@ -63,8 +81,8 @@ case class FunctionTableSubqueryArgumentExpression(
       plan.canonicalized,
       outerAttrs.map(_.canonicalized),
       ExprId(0),
-      withSinglePartition,
       partitionByExpressions,
+      withSinglePartition,
       orderByExpressions)
   }
 
@@ -78,33 +96,28 @@ case class FunctionTableSubqueryArgumentExpression(
   def hasRepartitioning: Boolean = withSinglePartition || partitionByExpressions.nonEmpty
 
   lazy val evaluable: LogicalPlan = {
-    val subquery = if (hasRepartitioning) {
-      // If the TABLE argument includes the WITH SINGLE PARTITION or PARTITION BY or ORDER BY
-      // clause(s), add a corresponding logical operator to represent the repartitioning operation
-      // in the query plan.
-      RepartitionForTableFunctionCall(
-        child = plan,
-        withSinglePartition = withSinglePartition,
-        partitionByExpressions = partitionByExpressions,
-        orderByExpressions = orderByExpressions)
-    } else {
-      plan
+    // If the TABLE argument includes the WITH SINGLE PARTITION or PARTITION BY or ORDER BY
+    // clause(s), add a corresponding logical operator to represent the repartitioning operation in
+    // the query plan.
+    var subquery = plan
+    if (partitionByExpressions.nonEmpty) {
+      subquery = RepartitionByExpression(
+        partitionExpressions = partitionByExpressions,
+        child = subquery,
+        optNumPartitions = None)
+    }
+    if (withSinglePartition) {
+      subquery = Repartition(
+        numPartitions = 1,
+        shuffle = true,
+        child = subquery)
+    }
+    if (orderByExpressions.nonEmpty) {
+      subquery = Sort(
+        order = orderByExpressions,
+        global = false,
+        child = subquery)
     }
     Project(Seq(Alias(CreateStruct(subquery.output), "c")()), subquery)
   }
-}
-
-/**
- * If a table-valued function call includes a TABLE argument with the PARTITION BY clause, we add
- * this logical operator to represent the repartitioning operation in the query plan.
- */
-case class RepartitionForTableFunctionCall(
-    child: LogicalPlan,
-    withSinglePartition: Boolean,
-    partitionByExpressions: Seq[Expression],
-    orderByExpressions: Seq[SortOrder]) extends OrderPreservingUnaryNode {
-  override def output: Seq[Attribute] = child.output
-
-  override protected def withNewChildInternal(
-      newChild: LogicalPlan): RepartitionForTableFunctionCall = copy(child = newChild)
 }

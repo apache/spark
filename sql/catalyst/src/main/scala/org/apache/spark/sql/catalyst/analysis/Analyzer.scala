@@ -2453,11 +2453,11 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
         case s @ LateralSubquery(sub, _, exprId, _, _) if !sub.resolved =>
           resolveSubQuery(s, outer)(LateralSubquery(_, _, exprId))
         case a @ FunctionTableSubqueryArgumentExpression(
-            sub, _, exprId, withSinglePartition, partitionByExpressions, orderByExpressions)
+            sub, _, exprId, partitionByExpressions, withSinglePartition, orderByExpressions)
           if !sub.resolved =>
           resolveSubQuery(a, outer)(
             FunctionTableSubqueryArgumentExpression(
-              _, _, exprId, withSinglePartition, partitionByExpressions, orderByExpressions))
+              _, _, exprId, partitionByExpressions, withSinglePartition, orderByExpressions))
       }
     }
 

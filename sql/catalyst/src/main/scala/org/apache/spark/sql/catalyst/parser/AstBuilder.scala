@@ -1598,8 +1598,8 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
       ctx = ctx.tableArgumentPartitioning)
     FunctionTableSubqueryArgumentExpression(
       plan = p,
-      withSinglePartition = withSinglePartition,
       partitionByExpressions = partitionByExpressions,
+      withSinglePartition = withSinglePartition,
       orderByExpressions = orderByExpressions)
   }
 
