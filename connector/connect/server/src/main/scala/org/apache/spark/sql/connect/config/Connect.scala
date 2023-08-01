@@ -16,6 +16,8 @@
  */
 package org.apache.spark.sql.connect.config
 
+import java.util.concurrent.TimeUnit
+
 import org.apache.spark.internal.config.ConfigBuilder
 import org.apache.spark.network.util.ByteUnit
 import org.apache.spark.sql.connect.common.config.ConnectCommon
@@ -71,6 +73,39 @@ object Connect {
       .version("3.5.0")
       .intConf
       .createWithDefault(1024)
+
+  val CONNECT_EXECUTE_REATTACHABLE_SENDER_MAX_STREAM_DURATION =
+    ConfigBuilder("spark.connect.execute.reattachable.senderMaxStreamDuration")
+      .internal()
+      .doc("For reattachable execution, after this amount of time the response stream will be " +
+        "automatically completed and client needs to send a new ReattachExecute RPC to continue. " +
+        "Set to 0 for unlimited.")
+      .version("3.5.0")
+      .timeConf(TimeUnit.MILLISECONDS)
+      .createWithDefaultString("5m")
+
+  val CONNECT_EXECUTE_REATTACHABLE_SENDER_MAX_STREAM_SIZE =
+    ConfigBuilder("spark.connect.execute.reattachable.senderMaxStreamSize")
+      .internal()
+      .doc(
+        "For reattachable execution, after total responses size exceeds this value, the " +
+          "response stream will be automatically completed and client needs to send a new " +
+          "ReattachExecute RPC to continue. Set to 0 for unlimited.")
+      .version("3.5.0")
+      .bytesConf(ByteUnit.BYTE)
+      .createWithDefaultString("1g")
+
+  val CONNECT_EXECUTE_REATTACHABLE_OBSERVER_RETRY_BUFFER_SIZE =
+    ConfigBuilder("spark.connect.execute.reattachable.observerRetryBufferSize")
+      .internal()
+      .doc(
+        "For reattachable execution, the total size of responses that were already sent to be " +
+          "kept in the buffer in case of connection error and client needing to retry. " +
+          "Set 0 to don't buffer anything (even last sent response)." +
+          "With any value greater than 0, the last sent response will always be buffered.")
+      .version("3.5.0")
+      .bytesConf(ByteUnit.BYTE)
+      .createWithDefaultString("1m")
 
   val CONNECT_EXTENSIONS_RELATION_CLASSES =
     ConfigBuilder("spark.connect.extensions.relation.classes")
