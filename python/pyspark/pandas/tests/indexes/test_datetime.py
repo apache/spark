@@ -276,9 +276,6 @@ class DatetimeIndexTestsMixin:
 
 
 class DatetimeIndexTests(DatetimeIndexTestsMixin, PandasOnSparkTestCase, TestUtils):
-    def test_properties(self):
-        super(DatetimeIndexTests, self).test_properties()
-
     pass
 
 
