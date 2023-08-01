@@ -38,13 +38,10 @@ import org.apache.spark.util.SystemClock
  * no longer active), it is cached for 1 hour so that it is accessible from the client side. It
  * runs a background thread to run a periodic task that does the following:
  *   - Check the status of the queries, and drops those that expired (1 hour after being stopped).
- *   - Keep the associated session active by invoking supplied function `sessionKeepAliveFn`.
  *
  * This class helps with supporting following semantics for streaming query sessions:
- *   - Keep the session and session mapping at connect server alive as long as a streaming query
- *     is active. Even if the client side has disconnected.
- *     - This matches how streaming queries behave in Spark. The queries continue to run if
- *       notebook or job session is lost.
+ *   - If the session mapping on connect server side is expired, stop all the running queries
+ *     that are associated with that session.
  *   - Once a query is stopped, the reference and mappings are maintained for 1 hour and will be
  *     accessible from the client. This allows time for client to fetch status. If the client
  *     continues to access the query, it stays in the cache until 1 hour of inactivity.
@@ -52,7 +49,6 @@ import org.apache.spark.util.SystemClock
  * Note that these semantics are evolving and might change before being finalized in Connect.
  */
 private[connect] class SparkConnectStreamingQueryCache(
-    val sessionKeepAliveFn: (String, String) => Unit, // (userId, sessionId) => Unit.
     val clock: Clock = new SystemClock(),
     private val stoppedQueryInactivityTimeout: Duration = 1.hour, // Configurable for testing.
     private val sessionPollingPeriod: Duration = 1.minute // Configurable for testing.
@@ -108,13 +104,17 @@ private[connect] class SparkConnectStreamingQueryCache(
   }
 
   /**
-   * Terminate all the running queries attached to the given sessionHolder. This is used when
-   * session is expired and we need to cleanup resources of that session.
+   * Terminate all the running queries attached to the given sessionHolder and remove them from
+   * the queryCache. This is used when session is expired and we need to cleanup resources of
+   * that session.
    */
   def cleanupRunningQueries(sessionHolder: SessionHolder): Unit = {
     for ((k, v) <- queryCache) {
       if (v.userId.equals(sessionHolder.userId) && v.sessionId.equals(sessionHolder.sessionId)) {
-        v.query.stop()
+        if (v.query.isActive && Option(v.session.streams.get(k.queryId)).nonEmpty) {
+          log.info(s"Stopping the query with id ${k.queryId} since the session has timed out")
+          v.query.stop()
+        }
       }
     }
   }
@@ -168,9 +168,6 @@ private[connect] class SparkConnectStreamingQueryCache(
    */
   private def periodicMaintenance(): Unit = {
 
-    // Gather sessions to keep alive and invoke supplied function outside the lock.
-    val sessionsToKeepAlive = mutable.HashSet[(String, String)]()
-
     queryCacheLock.synchronized {
       val nowMs = clock.getTimeMillis()
 
@@ -182,12 +179,10 @@ private[connect] class SparkConnectStreamingQueryCache(
             log.info(s"Removing references for $id in session ${v.sessionId} after expiry period")
             queryCache.remove(k)
 
-          case Some(_) => // Inactive query waiting for expiration. Keep the session alive.
-            sessionsToKeepAlive.add((v.userId, v.sessionId))
+          case Some(_) => // Inactive query waiting for expiration. Do nothing.
+            log.info(s"Waiting for the expiration for $id in session ${v.sessionId}")
 
           case None => // Active query, check if it is stopped. Keep the session alive.
-            sessionsToKeepAlive.add((v.userId, v.sessionId))
-
             val isActive = v.query.isActive && Option(v.session.streams.get(id)).nonEmpty
 
             if (!isActive) {
@@ -197,10 +192,6 @@ private[connect] class SparkConnectStreamingQueryCache(
             }
         }
       }
-    }
-
-    for ((userId, sessionId) <- sessionsToKeepAlive) {
-      sessionKeepAliveFn(userId, sessionId)
     }
   }
 }
