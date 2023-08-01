@@ -2398,7 +2398,7 @@
   },
   "REQUIRED_PARAMETER_NOT_FOUND" : {
     "message" : [
-      "Cannot invoke function <functionName> because the parameter named <parameterName> is required at index <index>, but the function call did not supply a value. Please update the function call to supply an argument value (either positionally or by name) and retry the query again."
+      "Cannot invoke function <functionName> because the parameter named <parameterName> is required, but the function call did not supply a value. Please update the function call to supply an argument value (either positionally at index <index> or by name) and retry the query again."
     ],
     "sqlState" : "4274K"
   },
