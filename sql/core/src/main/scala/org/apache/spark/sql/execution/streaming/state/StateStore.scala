@@ -21,11 +21,14 @@ import java.util.UUID
 import java.util.concurrent.{ScheduledFuture, TimeUnit}
 import java.util.concurrent.atomic.AtomicReference
 import javax.annotation.concurrent.GuardedBy
+
 import scala.collection.mutable
 import scala.util.Try
 import scala.util.control.NonFatal
+
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
+
 import org.apache.spark.{SparkContext, SparkEnv}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
@@ -33,7 +36,6 @@ import org.apache.spark.sql.catalyst.util.UnsafeRowUtils
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
 import org.apache.spark.sql.execution.streaming.StatefulOperatorStateInfo
-import org.apache.spark.sql.execution.streaming.state.StateStore.{MaintenanceThreadPool, maintenanceThreadPool}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.{ThreadUtils, Utils}
 
