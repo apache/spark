@@ -2952,7 +2952,7 @@
       },
       "LATERAL_COLUMN_ALIAS_IN_AGGREGATE_WITH_WINDOW_AND_HAVING" : {
         "message" : [
-          "Referencing lateral column alias <lca> in the aggregate query both with window expressions and with having clause. Please rewrite the aggregate query by removing the having clause or removing lateral alias reference in the SELECT list."
+          "Referencing lateral column alias <lca> in the query both with window expressions and with having clause. Please rewrite the aggregate query by removing the having clause or removing lateral alias reference in the SELECT list that has the window expression and retry."
         ]
       },
       "LATERAL_COLUMN_ALIAS_IN_GROUP_BY" : {

@@ -22,7 +22,7 @@ import org.apache.spark.sql.catalyst.expressions.WindowExpression.hasWindowExpre
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.catalyst.trees.TreePattern.{LATERAL_COLUMN_ALIAS_REFERENCE, TEMP_RESOLVED_COLUMN, UNRESOLVED_HAVING}
+import org.apache.spark.sql.catalyst.trees.TreePattern.{LATERAL_COLUMN_ALIAS_REFERENCE, TEMP_RESOLVED_COLUMN, UNRESOLVED_HAVING, WINDOW_EXPRESSION}
 import org.apache.spark.sql.catalyst.util.toPrettySQL
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
@@ -134,6 +134,28 @@ object ResolveLateralColumnAliasReference extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan = {
     if (!conf.getConf(SQLConf.LATERAL_COLUMN_ALIAS_IMPLICIT_ENABLED)) {
       plan
+//    } else if (plan.containsAllPatterns(
+//        UNRESOLVED_HAVING, LATERAL_COLUMN_ALIAS_REFERENCE, WINDOW_EXPRESSION)) {
+//      val unresolvedHavingPlans = plan.collect {
+//        case u: UnresolvedHaving => u
+//      }
+//      unresolvedHavingPlans.foreach { uHaving =>
+//        if (uHaving.containsAllPatterns(LATERAL_COLUMN_ALIAS_REFERENCE, WINDOW_EXPRESSION)) {
+//          uHaving.resolveOperatorsDownWithPruning(
+//            _.containsAllPatterns(LATERAL_COLUMN_ALIAS_REFERENCE, WINDOW_EXPRESSION)) {
+//            case Project(projectList, _) if exprsContainBothLCAAndWindow(projectList) =>
+//              val lcaRef = collectFirstLCARef(projectList).get
+//              throw QueryCompilationErrors
+//                .lateralColumnAliasInAggWithWindowAndHavingUnsupportedError(lcaRef.nameParts)
+//
+//            case Aggregate(_, aggrExprs, _) if exprsContainBothLCAAndWindow(aggrExprs) =>
+//              val lcaRef = collectFirstLCARef(aggrExprs).get
+//              throw QueryCompilationErrors
+//                .lateralColumnAliasInAggWithWindowAndHavingUnsupportedError(lcaRef.nameParts)
+//          }
+//        }
+//      }
+//      plan
     } else if (plan.containsAnyPattern(TEMP_RESOLVED_COLUMN, UNRESOLVED_HAVING)) {
       // It should not change the plan if `TempResolvedColumn` or `UnresolvedHaving` is present in
       // the query plan. These plans need certain plan shape to get recognized and resolved by other
@@ -265,4 +287,67 @@ object ResolveLateralColumnAliasReference extends Rule[LogicalPlan] {
       }
     }
   }
+
+  /**
+   * Given a list of expressions, check if it contains both lca and window expressiosn (not
+   * necessarily in the same expression).
+   */
+  private def exprsContainBothLCAAndWindow(exprs: Seq[NamedExpression]): Boolean = {
+    exprs.exists(_.containsPattern(LATERAL_COLUMN_ALIAS_REFERENCE)) &&
+      exprs.exists(_.containsPattern(WINDOW_EXPRESSION))
+  }
+
+  /**
+   * Given a list of expression, collect the first lca reference expression.
+   */
+  private def collectFirstLCARef(
+      exprs: Seq[NamedExpression]): Option[LateralColumnAliasReference] = {
+    exprs.collectFirst {
+      case expr if expr.containsPattern(LATERAL_COLUMN_ALIAS_REFERENCE) =>
+        expr.collectFirst {
+          case lcaRef: LateralColumnAliasReference => lcaRef
+        }.get
+    }
+  }
+
+  /**
+   * The check used in CheckAnalysis, that throws errors with tailored messages when detecting
+   * there is a having - window - lca resolution deadlock.
+   *
+   * It is current limitation of lca that it can't resolve the query, when it satisfies all the
+   * following criteria:
+   *   1) the main (outer) query has having clause
+   *   2) there is a window expression in the query
+   *   3) in the same SELECT list as the window expression in 2), there is an lca
+   *
+   * This is because LCA won't rewrite plan until UNRESOLVED_HAVING is resolved; window expressions
+   * won't be extracted until LCA in the same SELECT lists are rewritten; however UNRESOLVED_HAVING
+   * depends on the child to be resolved, which could include the LCA. It becomes a deadlock.
+   *
+   * In the future we can try to break part of the deadlock by lifting the dependency requirement
+   * of LCA and UNRESOLVED_HAVING.
+   *
+   * The check performed in this function can contain false positives, e.g. the UNRESOLVED_HAVING
+   * is unresolved due to other factors but not relying on LCA.
+   *
+   * @param wholePlan the whole logical plan
+   * @param currentOperator the current operator being checked bottom up in CheckAnalysis
+   */
+  def checkHavingWindowLCAUnresolvedDeadlock(
+      wholePlan: LogicalPlan, currentOperator: LogicalPlan): Unit = {
+    if (wholePlan.containsPattern(UNRESOLVED_HAVING)) {
+      currentOperator match {
+        case Project(projectList, _) if exprsContainBothLCAAndWindow(projectList) =>
+          val lcaRef = collectFirstLCARef(projectList).get
+          throw QueryCompilationErrors
+            .lateralColumnAliasInAggWithWindowAndHavingUnsupportedError(lcaRef.nameParts)
+        case Aggregate(_, aggrExprs, _) if exprsContainBothLCAAndWindow(aggrExprs) =>
+          val lcaRef = collectFirstLCARef(aggrExprs).get
+          throw QueryCompilationErrors
+            .lateralColumnAliasInAggWithWindowAndHavingUnsupportedError(lcaRef.nameParts)
+        case _ =>
+      }
+    }
+  }
+
 }

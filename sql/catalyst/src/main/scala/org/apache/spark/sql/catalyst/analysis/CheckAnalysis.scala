@@ -261,6 +261,10 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
         // general unresolved check below to throw a more tailored error message.
         ResolveReferencesInAggregate.checkUnresolvedGroupByAll(operator)
 
+        // Throw a more tailored error message for the having - window - lca unresolved case.
+        // See comment of this check function for more details.
+        ResolveLateralColumnAliasReference.checkHavingWindowLCAUnresolvedDeadlock(plan, operator)
+
         getAllExpressions(operator).foreach(_.foreachUp {
           case a: Attribute if !a.resolved =>
             failUnresolvedAttribute(operator, a, "UNRESOLVED_COLUMN")

@@ -1139,4 +1139,52 @@ class LateralColumnAliasSuite extends LateralColumnAliasSuiteBase {
     // non group by or non aggregate function in Aggregate queries negative cases are covered in
     // "Aggregate expressions not eligible to lift up, throws same error as inline".
   }
+
+  test("Tailored error message in unsupported cases of HAVING, WINDOW and LCA") {
+    val tableName = "table"
+    withTable(tableName) {
+      sql(s"create table $tableName (col boolean) using orc")
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(
+            s"""
+               |with w AS (
+               |    select min(col) over () as min_alias,
+               |           min_alias as col_alias
+               |    FROM $tableName
+               |)
+               |select col_alias from w
+               |having count(*) > 0;
+               |""".stripMargin)
+        },
+      errorClass = "UNSUPPORTED_FEATURE.LATERAL_COLUMN_ALIAS_IN_AGGREGATE_WITH_WINDOW_AND_HAVING",
+        parameters = Map("lca" -> "`min_alias`")
+      )
+    }
+
+    checkError(
+      exception = intercept[AnalysisException] {
+        sql(
+          """
+            |SELECT
+            |  'a' as a
+            |FROM
+            |   (
+            |    select
+            |      ROW_NUMBER() OVER (
+            |        PARTITION BY b
+            |        ORDER BY c DESC) AS rank,
+            |      1 as d, d + 1 as e
+            |    FROM
+            |      (select 1 as b, 2 as c)
+            |  ) AS tbl1 INNER JOIN (select 1 as f) as tbl2 ON tbl2.f = 1
+            |GROUP BY
+            |  'a'
+            |HAVING (COUNT(1)) >= -1
+            |""".stripMargin)
+      },
+      errorClass = "UNSUPPORTED_FEATURE.LATERAL_COLUMN_ALIAS_IN_AGGREGATE_WITH_WINDOW_AND_HAVING",
+      parameters = Map("lca" -> "`d`")
+    )
+  }
 }
