@@ -52,8 +52,8 @@ class UserDefinedFunctionSuite extends ConnectFunSuite {
     val e = intercept[SparkException](udf(f))
     assert(
       e.getMessage.contains(
-        "UDF cannot be executed on a Spark cluster, it cannot be deserialized."))
-    assert(e.getMessage.contains("this is not supported by java serialization."))
+        "UDF cannot be executed on a Spark cluster: it cannot be deserialized."))
+    assert(e.getMessage.contains("This is not supported by java serialization."))
   }
 
   test("non deserializable UDFs") {
