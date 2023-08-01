@@ -656,21 +656,18 @@ object StateStore extends Logging {
       if (SparkEnv.get != null && !isMaintenanceRunning) {
         maintenanceTask = new MaintenanceTask(
           storeConf.maintenanceInterval,
-          task = {
-            doMaintenance()
-          },
-          onError = {
-            loadedProviders.synchronized {
+          task = { doMaintenance() },
+          onError = { loadedProviders.synchronized {
               logInfo("Stopping maintenance task since an error was encountered.")
               stopMaintenanceTask()
+              // SPARK-44504 - Unload explicitly to force closing underlying DB instance
+              // and releasing allocated resources, especially for RocksDBStateStoreProvider.
               loadedProviders.keySet.foreach { key => unload(key) }
               loadedProviders.clear()
             }
           }
         )
-        maintenanceThreadPool = new MaintenanceThreadPool(
-          numThreads = numMaintenanceThreads
-        )
+        maintenanceThreadPool = new MaintenanceThreadPool(numMaintenanceThreads)
         logInfo("State Store maintenance task started")
       }
     }

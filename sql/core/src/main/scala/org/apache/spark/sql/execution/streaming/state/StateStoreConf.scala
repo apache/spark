@@ -28,8 +28,7 @@ class StateStoreConf(
   def this() = this(new SQLConf)
 
   /**
-   * Size of MaintenanceThreadPool to perform maintenance tasks
-   * for StateStore
+   * Size of MaintenanceThreadPool to perform maintenance tasks for StateStore
    */
   val numStateStoreMaintenanceThreads: Int = sqlConf.numStateStoreMaintenanceThreads
 
