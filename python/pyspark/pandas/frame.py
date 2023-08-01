@@ -399,7 +399,7 @@ class DataFrame(Frame, Generic[T]):
         `compute.ops_on_diff_frames` should be turned on;
         2, when `data` is a local dataset (Pandas DataFrame/numpy ndarray/list/etc),
         it will first collect the `index` to driver if necessary, and then apply
-        the `Pandas.DataFrame(...)` creation internally;
+        the `pandas.DataFrame(...)` creation internally;
 
     Examples
     --------

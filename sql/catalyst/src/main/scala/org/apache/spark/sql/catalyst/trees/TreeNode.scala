@@ -28,7 +28,6 @@ import org.json4s.JsonAST._
 import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods._
 
-import org.apache.spark.QueryContext
 import org.apache.spark.sql.catalyst.{AliasIdentifier, CatalystIdentifier}
 import org.apache.spark.sql.catalyst.ScalaReflection._
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogStorageFormat, CatalogTable, CatalogTableType, FunctionResource}
@@ -53,59 +52,6 @@ import org.apache.spark.util.collection.BitSet
 /** Used by [[TreeNode.getNodeNumbered]] when traversing the tree for a given number */
 private class MutableInt(var i: Int)
 
-/**
- * Contexts of TreeNodes, including location, SQL text, object type and object name.
- * The only supported object type is "VIEW" now. In the future, we may support SQL UDF or other
- * objects which contain SQL text.
- */
-case class Origin(
-    line: Option[Int] = None,
-    startPosition: Option[Int] = None,
-    startIndex: Option[Int] = None,
-    stopIndex: Option[Int] = None,
-    sqlText: Option[String] = None,
-    objectType: Option[String] = None,
-    objectName: Option[String] = None) {
-
-  lazy val context: SQLQueryContext = SQLQueryContext(
-    line, startPosition, startIndex, stopIndex, sqlText, objectType, objectName)
-
-  def getQueryContext: Array[QueryContext] = if (context.isValid) {
-    Array(context)
-  } else {
-    Array.empty
-  }
-}
-
-/**
- * Provides a location for TreeNodes to ask about the context of their origin.  For example, which
- * line of code is currently being parsed.
- */
-object CurrentOrigin {
-  private val value = new ThreadLocal[Origin]() {
-    override def initialValue: Origin = Origin()
-  }
-
-  def get: Origin = value.get()
-  def set(o: Origin): Unit = value.set(o)
-
-  def reset(): Unit = value.set(Origin())
-
-  def setPosition(line: Int, start: Int): Unit = {
-    value.set(
-      value.get.copy(line = Some(line), startPosition = Some(start)))
-  }
-
-  def withOrigin[A](o: Origin)(f: => A): A = {
-    // remember the previous one so it can be reset to this
-    // this way withOrigin can be recursive
-    val previous = get
-    set(o)
-    val ret = try f finally { set(previous) }
-    ret
-  }
-}
-
 // A tag of a `TreeNode`, which defines name and type
 case class TreeNodeTag[T](name: String)
 
@@ -115,11 +61,14 @@ object AlwaysProcess {
 }
 
 // scalastyle:off
-abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product with TreePatternBits {
+abstract class TreeNode[BaseType <: TreeNode[BaseType]]
+  extends Product
+  with TreePatternBits
+  with WithOrigin {
 // scalastyle:on
   self: BaseType =>
 
-  val origin: Origin = CurrentOrigin.get
+  override val origin: Origin = CurrentOrigin.get
 
   /**
    * A mutable map for holding auxiliary information of this tree node. It will be carried over
@@ -987,7 +936,8 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product with Tre
       addSuffix: Boolean,
       maxFields: Int,
       printOperatorId: Boolean): Unit = {
-    generateTreeString(0, Nil, append, verbose, "", addSuffix, maxFields, printOperatorId, 0)
+    generateTreeString(0, new java.util.ArrayList(), append, verbose, "", addSuffix, maxFields,
+      printOperatorId, 0)
   }
 
   /**
@@ -1049,7 +999,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product with Tre
    */
   def generateTreeString(
       depth: Int,
-      lastChildren: Seq[Boolean],
+      lastChildren: java.util.ArrayList[Boolean],
       append: String => Unit,
       verbose: Boolean,
       prefix: String = "",
@@ -1057,12 +1007,14 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product with Tre
       maxFields: Int,
       printNodeId: Boolean,
       indent: Int = 0): Unit = {
-    append("   " * indent)
+    (0 until indent).foreach(_ => append("   "))
     if (depth > 0) {
-      lastChildren.init.foreach { isLast =>
+      val iter = lastChildren.iterator
+      (0 until lastChildren.size - 1).foreach { i =>
+        val isLast = iter.next
         append(if (isLast) "   " else ":  ")
       }
-      append(if (lastChildren.last) "+- " else ":- ")
+      append(if (lastChildren.get(lastChildren.size() - 1)) "+- " else ":- ")
     }
 
     val str = if (verbose) {
@@ -1079,22 +1031,36 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product with Tre
     append("\n")
 
     if (innerChildren.nonEmpty) {
+      lastChildren.add(children.isEmpty)
+      lastChildren.add(false)
       innerChildren.init.foreach(_.generateTreeString(
-        depth + 2, lastChildren :+ children.isEmpty :+ false, append, verbose,
+        depth + 2, lastChildren, append, verbose,
         addSuffix = addSuffix, maxFields = maxFields, printNodeId = printNodeId, indent = indent))
+      lastChildren.remove(lastChildren.size() - 1)
+      lastChildren.remove(lastChildren.size() - 1)
+
+      lastChildren.add(children.isEmpty)
+      lastChildren.add(true)
       innerChildren.last.generateTreeString(
-        depth + 2, lastChildren :+ children.isEmpty :+ true, append, verbose,
+        depth + 2, lastChildren, append, verbose,
         addSuffix = addSuffix, maxFields = maxFields, printNodeId = printNodeId, indent = indent)
+      lastChildren.remove(lastChildren.size() - 1)
+      lastChildren.remove(lastChildren.size() - 1)
     }
 
     if (children.nonEmpty) {
+      lastChildren.add(false)
       children.init.foreach(_.generateTreeString(
-        depth + 1, lastChildren :+ false, append, verbose, prefix, addSuffix,
+        depth + 1, lastChildren, append, verbose, prefix, addSuffix,
         maxFields, printNodeId = printNodeId, indent = indent)
       )
+      lastChildren.remove(lastChildren.size() - 1)
+
+      lastChildren.add(true)
       children.last.generateTreeString(
-        depth + 1, lastChildren :+ true, append, verbose, prefix,
+        depth + 1, lastChildren, append, verbose, prefix,
         addSuffix, maxFields, printNodeId = printNodeId, indent = indent)
+      lastChildren.remove(lastChildren.size() - 1)
     }
   }
 

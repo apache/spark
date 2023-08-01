@@ -204,7 +204,7 @@ SELECT
 FROM basic_pays
 ORDER BY salary
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "INVALID_WINDOW_SPEC_FOR_AGGREGATION_FUNC",
   "messageParameters" : {
@@ -230,7 +230,7 @@ SELECT
 FROM basic_pays
 ORDER BY salary
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "INVALID_WINDOW_SPEC_FOR_AGGREGATION_FUNC",
   "messageParameters" : {
@@ -255,7 +255,7 @@ SELECT
 FROM basic_pays
 ORDER BY salary
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "INVALID_WINDOW_SPEC_FOR_AGGREGATION_FUNC",
   "messageParameters" : {
@@ -281,7 +281,7 @@ SELECT
 FROM basic_pays
 ORDER BY salary
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "INVALID_WINDOW_SPEC_FOR_AGGREGATION_FUNC",
   "messageParameters" : {
@@ -307,7 +307,7 @@ SELECT
 FROM basic_pays
 ORDER BY salary
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "INVALID_WINDOW_SPEC_FOR_AGGREGATION_FUNC",
   "messageParameters" : {
@@ -332,7 +332,7 @@ SELECT
 FROM basic_pays
 ORDER BY salary
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "INVALID_WINDOW_SPEC_FOR_AGGREGATION_FUNC",
   "messageParameters" : {
@@ -414,7 +414,7 @@ FROM basic_pays
 WINDOW w AS (PARTITION BY department ORDER BY salary)
 ORDER BY salary
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "INVALID_WINDOW_SPEC_FOR_AGGREGATION_FUNC",
   "messageParameters" : {
@@ -441,7 +441,7 @@ FROM basic_pays
 WINDOW w AS (PARTITION BY department ORDER BY salary)
 ORDER BY salary
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "INVALID_WINDOW_SPEC_FOR_AGGREGATION_FUNC",
   "messageParameters" : {
@@ -467,7 +467,7 @@ FROM basic_pays
 WINDOW w AS (PARTITION BY department ORDER BY salary)
 ORDER BY salary
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "INVALID_WINDOW_SPEC_FOR_AGGREGATION_FUNC",
   "messageParameters" : {
@@ -494,7 +494,7 @@ FROM basic_pays
 WINDOW w AS (PARTITION BY department ROWS BETWEEN UNBOUNDED PRECEDING AND 1 FOLLOWING)
 ORDER BY salary
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "INVALID_WINDOW_SPEC_FOR_AGGREGATION_FUNC",
   "messageParameters" : {
@@ -521,7 +521,7 @@ FROM basic_pays
 WINDOW w AS (PARTITION BY department ROWS BETWEEN UNBOUNDED PRECEDING AND 1 FOLLOWING)
 ORDER BY salary
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "INVALID_WINDOW_SPEC_FOR_AGGREGATION_FUNC",
   "messageParameters" : {
@@ -547,7 +547,7 @@ FROM basic_pays
 WINDOW w AS (PARTITION BY department ROWS BETWEEN UNBOUNDED PRECEDING AND 1 FOLLOWING)
 ORDER BY salary
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "INVALID_WINDOW_SPEC_FOR_AGGREGATION_FUNC",
   "messageParameters" : {

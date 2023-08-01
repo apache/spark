@@ -815,10 +815,14 @@ class DataSourceV2SQLSuiteV1Filter
         if (nullable) {
           insertNullValueAndCheck()
         } else {
-          val e = intercept[Exception] {
-            insertNullValueAndCheck()
-          }
-          assert(e.getMessage.contains("Null value appeared in non-nullable field"))
+          // TODO assign a error-classes name
+          checkError(
+            exception = intercept[SparkException] {
+              insertNullValueAndCheck()
+            },
+            errorClass = null,
+            parameters = Map.empty
+          )
         }
     }
   }
@@ -1109,9 +1113,17 @@ class DataSourceV2SQLSuiteV1Filter
       sql(s"INSERT INTO $t1(data, id) VALUES('c', 3)")
       verifyTable(t1, df)
       // Missing columns
-      assert(intercept[AnalysisException] {
-        sql(s"INSERT INTO $t1 VALUES(4)")
-      }.getMessage.contains("not enough data columns"))
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(s"INSERT INTO $t1 VALUES(4)")
+        },
+        errorClass = "INSERT_COLUMN_ARITY_MISMATCH.NOT_ENOUGH_DATA_COLUMNS",
+        parameters = Map(
+          "tableName" -> "`default`.`tbl`",
+          "tableColumns" -> "`id`, `data`",
+          "dataColumns" -> "`col1`"
+        )
+      )
       // Duplicate columns
       checkError(
         exception = intercept[AnalysisException] {
@@ -1136,9 +1148,17 @@ class DataSourceV2SQLSuiteV1Filter
       sql(s"INSERT OVERWRITE $t1(data, id) VALUES('c', 3)")
       verifyTable(t1, Seq((3L, "c")).toDF("id", "data"))
       // Missing columns
-      assert(intercept[AnalysisException] {
-        sql(s"INSERT OVERWRITE $t1 VALUES(4)")
-      }.getMessage.contains("not enough data columns"))
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(s"INSERT OVERWRITE $t1 VALUES(4)")
+        },
+        errorClass = "INSERT_COLUMN_ARITY_MISMATCH.NOT_ENOUGH_DATA_COLUMNS",
+        parameters = Map(
+          "tableName" -> "`default`.`tbl`",
+          "tableColumns" -> "`id`, `data`",
+          "dataColumns" -> "`col1`"
+        )
+      )
       // Duplicate columns
       checkError(
         exception = intercept[AnalysisException] {
@@ -1164,9 +1184,17 @@ class DataSourceV2SQLSuiteV1Filter
       sql(s"INSERT OVERWRITE $t1(data, data2, id) VALUES('c', 'e', 1)")
       verifyTable(t1, Seq((1L, "c", "e"), (2L, "b", "d")).toDF("id", "data", "data2"))
       // Missing columns
-      assert(intercept[AnalysisException] {
-        sql(s"INSERT OVERWRITE $t1 VALUES('a', 4)")
-      }.getMessage.contains("not enough data columns"))
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(s"INSERT OVERWRITE $t1 VALUES('a', 4)")
+        },
+        errorClass = "INSERT_COLUMN_ARITY_MISMATCH.NOT_ENOUGH_DATA_COLUMNS",
+        parameters = Map(
+          "tableName" -> "`default`.`tbl`",
+          "tableColumns" -> "`id`, `data`, `data2`",
+          "dataColumns" -> "`col1`, `col2`"
+        )
+      )
       // Duplicate columns
       checkError(
         exception = intercept[AnalysisException] {
@@ -1688,6 +1716,24 @@ class DataSourceV2SQLSuiteV1Filter
       "(select min(x) from faketable)", // refers to a non-existent table
       "subquery expressions are not allowed for generated columns"
     )
+  }
+
+  test("SPARK-44313: generation expression validation passes when there is a char/varchar column") {
+    val tblName = "my_tab"
+    // InMemoryTableCatalog.capabilities() = {SUPPORTS_CREATE_TABLE_WITH_GENERATED_COLUMNS}
+    for (charVarCharCol <- Seq("name VARCHAR(64)", "name CHAR(64)")) {
+      withTable(s"testcat.$tblName") {
+        sql(
+          s"""
+             |CREATE TABLE testcat.$tblName(
+             |  $charVarCharCol,
+             |  tstamp TIMESTAMP,
+             |  tstamp_date DATE GENERATED ALWAYS AS (CAST(tstamp AS DATE))
+             |) USING foo
+             |""".stripMargin)
+        assert(catalog("testcat").asTableCatalog.tableExists(Identifier.of(Array(), tblName)))
+      }
+    }
   }
 
   test("ShowCurrentNamespace: basic tests") {

@@ -33,7 +33,7 @@ import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.catalyst.util.LegacyDateFormats.FAST_DATE_FORMAT
 import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns._
 import org.apache.spark.sql.errors.QueryExecutionErrors
-import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.{LegacyBehaviorPolicy, SQLConf}
 import org.apache.spark.sql.sources.Filter
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
@@ -85,14 +85,14 @@ class JacksonParser(
     options.enableDateTimeParsingFallback
       .orElse(SQLConf.get.jsonEnableDateTimeParsingFallback)
       .getOrElse {
-        SQLConf.get.legacyTimeParserPolicy == SQLConf.LegacyBehaviorPolicy.LEGACY ||
+        SQLConf.get.legacyTimeParserPolicy == LegacyBehaviorPolicy.LEGACY ||
           options.timestampFormatInRead.isEmpty
       }
   private val enableParsingFallbackForDateType =
     options.enableDateTimeParsingFallback
       .orElse(SQLConf.get.jsonEnableDateTimeParsingFallback)
       .getOrElse {
-        SQLConf.get.legacyTimeParserPolicy == SQLConf.LegacyBehaviorPolicy.LEGACY ||
+        SQLConf.get.legacyTimeParserPolicy == LegacyBehaviorPolicy.LEGACY ||
           options.dateFormatInRead.isEmpty
       }
 
@@ -448,14 +448,15 @@ class JacksonParser(
     var skipRow = false
 
     structFilters.reset()
-    resetExistenceDefaultsBitmask(schema)
+    lazy val bitmask = ResolveDefaultColumns.existenceDefaultsBitmask(schema)
+    resetExistenceDefaultsBitmask(schema, bitmask)
     while (!skipRow && nextUntil(parser, JsonToken.END_OBJECT)) {
       schema.getFieldIndex(parser.getCurrentName) match {
         case Some(index) =>
           try {
             row.update(index, fieldConverters(index).apply(parser))
             skipRow = structFilters.skipRow(row, index)
-            schema.existenceDefaultsBitmask(index) = false
+            bitmask(index) = false
           } catch {
             case e: SparkUpgradeException => throw e
             case NonFatal(e) if isRoot || enablePartialResults =>
@@ -469,7 +470,7 @@ class JacksonParser(
     if (skipRow) {
       None
     } else if (badRecordException.isEmpty) {
-      applyExistenceDefaultValuesToRow(schema, row)
+      applyExistenceDefaultValuesToRow(schema, row, bitmask)
       Some(row)
     } else {
       throw PartialResultException(row, badRecordException.get)

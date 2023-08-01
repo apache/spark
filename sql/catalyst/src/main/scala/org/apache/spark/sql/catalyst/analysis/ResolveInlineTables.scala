@@ -21,6 +21,7 @@ import scala.util.control.NonFatal
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.AliasHelper
+import org.apache.spark.sql.catalyst.optimizer.ReplaceExpressions
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.AlwaysProcess
@@ -36,8 +37,9 @@ object ResolveInlineTables extends Rule[LogicalPlan] with CastSupport with Alias
     AlwaysProcess.fn, ruleId) {
     case table: UnresolvedInlineTable if table.expressionsResolved =>
       validateInputDimension(table)
-      validateInputEvaluable(table)
-      convert(table)
+      val newTable = ReplaceExpressions(table).asInstanceOf[UnresolvedInlineTable]
+      validateInputEvaluable(newTable)
+      convert(newTable)
   }
 
   /**
@@ -101,7 +103,7 @@ object ResolveInlineTables extends Rule[LogicalPlan] with CastSupport with Alias
       }
       StructField(name, tpe, nullable = column.exists(_.nullable))
     }
-    val attributes = StructType(fields).toAttributes
+    val attributes = DataTypeUtils.toAttributes(StructType(fields))
     assert(fields.size == table.names.size)
 
     val newRows: Seq[InternalRow] = table.rows.map { row =>

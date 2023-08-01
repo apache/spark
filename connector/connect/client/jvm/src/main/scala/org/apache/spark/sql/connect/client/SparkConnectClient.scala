@@ -21,11 +21,15 @@ import java.net.URI
 import java.util.UUID
 import java.util.concurrent.Executor
 
+import scala.collection.JavaConverters._
+import scala.collection.mutable
+
 import com.google.protobuf.ByteString
-import io.grpc.{CallCredentials, CallOptions, Channel, ChannelCredentials, ClientCall, ClientInterceptor, CompositeChannelCredentials, ForwardingClientCall, Grpc, InsecureChannelCredentials, ManagedChannel, Metadata, MethodDescriptor, Status, TlsChannelCredentials}
+import io.grpc._
 
 import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.UserContext
+import org.apache.spark.sql.connect.common.ProtoUtils
 import org.apache.spark.sql.connect.common.config.ConnectCommon
 
 /**
@@ -35,12 +39,10 @@ private[sql] class SparkConnectClient(
     private[sql] val configuration: SparkConnectClient.Configuration,
     private val channel: ManagedChannel) {
 
-  def this(configuration: SparkConnectClient.Configuration) =
-    this(configuration, configuration.createChannel())
-
   private val userContext: UserContext = configuration.userContext
 
-  private[this] val stub = proto.SparkConnectServiceGrpc.newBlockingStub(channel)
+  private[this] val bstub = new CustomSparkConnectBlockingStub(channel, configuration.retryPolicy)
+  private[this] val stub = new CustomSparkConnectStub(channel, configuration.retryPolicy)
 
   private[client] def userAgent: String = configuration.userAgent
 
@@ -57,7 +59,7 @@ private[sql] class SparkConnectClient(
   private[sql] val sessionId: String = UUID.randomUUID.toString
 
   private[client] val artifactManager: ArtifactManager = {
-    new ArtifactManager(userContext, sessionId, channel)
+    new ArtifactManager(configuration, sessionId, bstub, stub)
   }
 
   /**
@@ -67,7 +69,7 @@ private[sql] class SparkConnectClient(
    */
   def analyze(request: proto.AnalyzePlanRequest): proto.AnalyzePlanResponse = {
     artifactManager.uploadAllClassFileArtifacts()
-    stub.analyzePlan(request)
+    bstub.analyzePlan(request)
   }
 
   def execute(plan: proto.Plan): java.util.Iterator[proto.ExecutePlanResponse] = {
@@ -78,8 +80,13 @@ private[sql] class SparkConnectClient(
       .setUserContext(userContext)
       .setSessionId(sessionId)
       .setClientType(userAgent)
+      .addAllTags(tags.get.toSeq.asJava)
       .build()
-    stub.executePlan(request)
+    if (configuration.useReattachableExecute) {
+      bstub.executePlanReattachable(request)
+    } else {
+      bstub.executePlan(request)
+    }
   }
 
   /**
@@ -95,7 +102,7 @@ private[sql] class SparkConnectClient(
       .setClientType(userAgent)
       .setUserContext(userContext)
       .build()
-    stub.config(request)
+    bstub.config(request)
   }
 
   /**
@@ -194,10 +201,63 @@ private[sql] class SparkConnectClient(
       .setClientType(userAgent)
       .setInterruptType(proto.InterruptRequest.InterruptType.INTERRUPT_TYPE_ALL)
       .build()
-    stub.interrupt(request)
+    bstub.interrupt(request)
   }
 
-  def copy(): SparkConnectClient = new SparkConnectClient(configuration)
+  private[sql] def interruptTag(tag: String): proto.InterruptResponse = {
+    val builder = proto.InterruptRequest.newBuilder()
+    val request = builder
+      .setUserContext(userContext)
+      .setSessionId(sessionId)
+      .setClientType(userAgent)
+      .setInterruptType(proto.InterruptRequest.InterruptType.INTERRUPT_TYPE_TAG)
+      .setOperationTag(tag)
+      .build()
+    bstub.interrupt(request)
+  }
+
+  private[sql] def interruptOperation(id: String): proto.InterruptResponse = {
+    val builder = proto.InterruptRequest.newBuilder()
+    val request = builder
+      .setUserContext(userContext)
+      .setSessionId(sessionId)
+      .setClientType(userAgent)
+      .setInterruptType(proto.InterruptRequest.InterruptType.INTERRUPT_TYPE_OPERATION_ID)
+      .setOperationId(id)
+      .build()
+    bstub.interrupt(request)
+  }
+
+  private[this] val tags = new InheritableThreadLocal[mutable.Set[String]] {
+    override def childValue(parent: mutable.Set[String]): mutable.Set[String] = {
+      // Note: make a clone such that changes in the parent tags aren't reflected in
+      // those of the children threads.
+      parent.clone()
+    }
+    override protected def initialValue(): mutable.Set[String] = new mutable.HashSet[String]()
+  }
+
+  private[sql] def addTag(tag: String): Unit = {
+    // validation is also done server side, but this will give error earlier.
+    ProtoUtils.throwIfInvalidTag(tag)
+    tags.get += tag
+  }
+
+  private[sql] def removeTag(tag: String): Unit = {
+    // validation is also done server side, but this will give error earlier.
+    ProtoUtils.throwIfInvalidTag(tag)
+    tags.get.remove(tag)
+  }
+
+  private[sql] def getTags(): Set[String] = {
+    tags.get.toSet
+  }
+
+  private[sql] def clearTags(): Unit = {
+    tags.get.clear()
+  }
+
+  def copy(): SparkConnectClient = configuration.toSparkConnectClient
 
   /**
    * Add a single artifact to the client session.
@@ -355,6 +415,11 @@ object SparkConnectClient {
 
     def sslEnabled: Boolean = _configuration.isSslEnabled.contains(true)
 
+    def retryPolicy(policy: GrpcRetryHandler.RetryPolicy): Builder = {
+      _configuration = _configuration.copy(retryPolicy = policy)
+      this
+    }
+
     private object URIParams {
       val PARAM_USER_ID = "user_id"
       val PARAM_USE_SSL = "use_ssl"
@@ -457,7 +522,37 @@ object SparkConnectClient {
       this
     }
 
-    def build(): SparkConnectClient = new SparkConnectClient(_configuration)
+    /**
+     * Add an interceptor to be used during channel creation.
+     *
+     * Note that interceptors added last are executed first by gRPC.
+     */
+    def interceptor(interceptor: ClientInterceptor): Builder = {
+      val interceptors = _configuration.interceptors ++ List(interceptor)
+      _configuration = _configuration.copy(interceptors = interceptors)
+      this
+    }
+
+    /**
+     * Disable reattachable execute.
+     */
+    def disableReattachableExecute(): Builder = {
+      _configuration = _configuration.copy(useReattachableExecute = false)
+      this
+    }
+
+    /**
+     * Enable reattachable execute.
+     *
+     * It makes client more robust, enabling reattaching to an ExecutePlanResponse stream in case
+     * of intermittent connection errors.
+     */
+    def enableReattachableExecute(): Builder = {
+      _configuration = _configuration.copy(useReattachableExecute = true)
+      this
+    }
+
+    def build(): SparkConnectClient = _configuration.toSparkConnectClient
   }
 
   /**
@@ -471,7 +566,10 @@ object SparkConnectClient {
       token: Option[String] = None,
       isSslEnabled: Option[Boolean] = None,
       metadata: Map[String, String] = Map.empty,
-      userAgent: String = DEFAULT_USER_AGENT) {
+      userAgent: String = DEFAULT_USER_AGENT,
+      retryPolicy: GrpcRetryHandler.RetryPolicy = GrpcRetryHandler.RetryPolicy(),
+      useReattachableExecute: Boolean = true,
+      interceptors: List[ClientInterceptor] = List.empty) {
 
     def userContext: proto.UserContext = {
       val builder = proto.UserContext.newBuilder()
@@ -502,12 +600,18 @@ object SparkConnectClient {
 
     def createChannel(): ManagedChannel = {
       val channelBuilder = Grpc.newChannelBuilderForAddress(host, port, credentials)
+
       if (metadata.nonEmpty) {
         channelBuilder.intercept(new MetadataHeaderClientInterceptor(metadata))
       }
+
+      interceptors.foreach(channelBuilder.intercept(_))
+
       channelBuilder.maxInboundMessageSize(ConnectCommon.CONNECT_GRPC_MAX_MESSAGE_SIZE)
       channelBuilder.build()
     }
+
+    def toSparkConnectClient: SparkConnectClient = new SparkConnectClient(this, createChannel())
   }
 
   /**
@@ -532,10 +636,6 @@ object SparkConnectClient {
             applier.fail(Status.UNAUTHENTICATED.withCause(e));
         }
       })
-    }
-
-    override def thisUsesUnstableApi(): Unit = {
-      // Marks this API is not stable. Left empty on purpose.
     }
   }
 

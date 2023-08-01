@@ -84,7 +84,7 @@ object ResolveUnion extends Rule[LogicalPlan] {
     }
 
     colType.fields
-      .filter(f => targetType.fields.find(tf => resolver(f.name, tf.name)).isEmpty)
+      .filter(f => !targetType.fields.exists(tf => resolver(f.name, tf.name)))
       .foreach { f =>
         newStructFields ++= Literal(f.name) :: ExtractValue(col, Literal(f.name), resolver) :: Nil
       }

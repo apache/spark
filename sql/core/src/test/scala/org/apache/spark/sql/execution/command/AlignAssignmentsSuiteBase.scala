@@ -147,7 +147,7 @@ abstract class AlignAssignmentsSuiteBase extends AnalysisTest {
   private val v2Catalog = {
     val newCatalog = mock(classOf[TableCatalog])
     when(newCatalog.loadTable(any())).thenAnswer((invocation: InvocationOnMock) => {
-      val ident = invocation.getArgument[Identifier](0)
+      val ident = invocation.getArguments()(0).asInstanceOf[Identifier]
       ident.name match {
         case "primitive_table" => primitiveTable
         case "primitive_table_src" => primitiveTableSource
@@ -172,7 +172,7 @@ abstract class AlignAssignmentsSuiteBase extends AnalysisTest {
   private val catalogManager = {
     val manager = mock(classOf[CatalogManager])
     when(manager.catalog(any())).thenAnswer((invocation: InvocationOnMock) => {
-      invocation.getArgument[String](0) match {
+      invocation.getArguments()(0).asInstanceOf[String] match {
         case "testcat" => v2Catalog
         case CatalogManager.SESSION_CATALOG_NAME => v2SessionCatalog
         case name => throw new CatalogNotFoundException(s"No such catalog: $name")

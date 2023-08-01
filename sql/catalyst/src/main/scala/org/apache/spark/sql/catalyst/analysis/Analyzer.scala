@@ -29,7 +29,7 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst._
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.encoders.OuterScopes
-import org.apache.spark.sql.catalyst.expressions.{Expression, FrameLessOffsetWindowFunction, _}
+import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.SubExprUtils._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.expressions.objects._
@@ -41,6 +41,7 @@ import org.apache.spark.sql.catalyst.streaming.StreamingRelationV2
 import org.apache.spark.sql.catalyst.trees.AlwaysProcess
 import org.apache.spark.sql.catalyst.trees.CurrentOrigin.withOrigin
 import org.apache.spark.sql.catalyst.trees.TreePattern._
+import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.util.{toPrettySQL, AUTO_GENERATED_ALIAS, CharVarcharUtils}
 import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns._
 import org.apache.spark.sql.connector.catalog.{View => _, _}
@@ -211,9 +212,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
         analyzed
       } catch {
         case e: AnalysisException =>
-          val ae = e.copy(plan = Option(analyzed))
-          ae.setStackTrace(e.getStackTrace)
-          throw ae
+          throw new ExtendedAnalysisException(e, analyzed)
       }
     }
   }
@@ -1366,7 +1365,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
               // column names. We need to make sure the static partition column name doesn't appear
               // there to catch the following ambiguous query:
               // INSERT OVERWRITE t PARTITION (c='1') (c) VALUES ('2')
-              if (query.output.find(col => conf.resolver(col.name, staticName)).nonEmpty) {
+              if (query.output.exists(col => conf.resolver(col.name, staticName))) {
                 throw QueryCompilationErrors.staticPartitionInUserSpecifiedColumnsError(staticName)
               }
             }
@@ -2161,6 +2160,12 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
               }
             }
           }
+
+          case u: UnresolvedPolymorphicPythonUDTF => withPosition(u) {
+            val elementSchema = u.resolveElementSchema(u.func, u.children)
+            PythonUDTF(u.name, u.func, elementSchema, u.children,
+              u.evalType, u.udfDeterministic, u.resultId)
+          }
         }
     }
 
@@ -2618,7 +2623,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
               withOrigin(t.origin)(t.copy(hasTried = true))
             } else {
               // This is a nested column, we still have a chance to match grouping expressions with
-              // the the top-levle column. Here we wrap the underlying `Attribute` with
+              // the top-level column. Here we wrap the underlying `Attribute` with
               // `TempResolvedColumn` and try again.
               val childWithTempCol = t.child.transformUp {
                 case a: Attribute => TempResolvedColumn(a, Seq(a.name))
@@ -2859,7 +2864,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
     private[analysis] def makeGeneratorOutput(
         generator: Generator,
         names: Seq[String]): Seq[Attribute] = {
-      val elementAttrs = generator.elementSchema.toAttributes
+      val elementAttrs = DataTypeUtils.toAttributes(generator.elementSchema)
 
       if (names.length == elementAttrs.length) {
         names.zip(elementAttrs).map {
@@ -3117,7 +3122,9 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
 
         // Finally, generate output columns according to the original projectList.
         val finalProjectList = aggregateExprs.map(_.toAttribute)
-        Project(finalProjectList, withWindow)
+        val newProject = Project(finalProjectList, withWindow)
+        newProject.copyTagsFrom(f)
+        newProject
 
       case p: LogicalPlan if !p.childrenResolved => p
 
@@ -3135,7 +3142,9 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
 
         // Finally, generate output columns according to the original projectList.
         val finalProjectList = aggregateExprs.map(_.toAttribute)
-        Project(finalProjectList, withWindow)
+        val newProject = Project(finalProjectList, withWindow)
+        newProject.copyTagsFrom(a)
+        newProject
 
       // We only extract Window Expressions after all expressions of the Project
       // have been resolved, and lateral column aliases are properly handled first.
@@ -3152,7 +3161,9 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
 
         // Finally, generate output columns according to the original projectList.
         val finalProjectList = projectList.map(_.toAttribute)
-        Project(finalProjectList, withWindow)
+        val newProject = Project(finalProjectList, withWindow)
+        newProject.copyTagsFrom(p)
+        newProject
     }
   }
 
@@ -3240,11 +3251,11 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
             val dataType = udf.children(i).dataType
             encOpt.map { enc =>
               val attrs = if (enc.isSerializedAsStructForTopLevel) {
-                dataType.asInstanceOf[StructType].toAttributes
+                DataTypeUtils.toAttributes(dataType.asInstanceOf[StructType])
               } else {
                 // the field name doesn't matter here, so we use
                 // a simple literal to avoid any overhead
-                new StructType().add("input", dataType).toAttributes
+                DataTypeUtils.toAttribute(StructField("input", dataType)) :: Nil
               }
               enc.resolveAndBind(attrs)
             }
@@ -3391,8 +3402,14 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
         (rightKeys ++ lUniqueOutput.map(_.withNullability(true)) ++ rUniqueOutput,
           leftKeys.map(_.withNullability(true)))
       case FullOuter =>
-        // in full outer join, joinCols should be non-null if there is.
-        val joinedCols = joinPairs.map { case (l, r) => Alias(Coalesce(Seq(l, r)), l.name)() }
+        // In full outer join, we should return non-null values for the join columns
+        // if either side has non-null values for those columns. Therefore, for each
+        // join column pair, add a coalesce to return the non-null value, if it exists.
+        val joinedCols = joinPairs.map { case (l, r) =>
+          // Since this is a full outer join, either side could be null, so we explicitly
+          // set the nullability to true for both sides.
+          Alias(Coalesce(Seq(l.withNullability(true), r.withNullability(true))), l.name)()
+        }
         (joinedCols ++
           lUniqueOutput.map(_.withNullability(true)) ++
           rUniqueOutput.map(_.withNullability(true)),

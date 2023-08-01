@@ -41,8 +41,7 @@ import org.apache.spark.sql.{AnalysisException, Column, DataFrame, Encoders, Que
 import org.apache.spark.sql.catalyst.csv.CSVOptions
 import org.apache.spark.sql.catalyst.util.{DateTimeTestUtils, DateTimeUtils}
 import org.apache.spark.sql.execution.datasources.CommonFileDataSourceSuite
-import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.internal.SQLConf.LegacyBehaviorPolicy
+import org.apache.spark.sql.internal.{LegacyBehaviorPolicy, SQLConf}
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 
@@ -3095,8 +3094,11 @@ abstract class CSVSuite
       }
       checkError(
         exception = exception,
-        errorClass = "_LEGACY_ERROR_TEMP_1150",
-        parameters = Map("field" -> colName, "fieldType" -> "binary", "format" -> "CSV")
+        errorClass = "UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE",
+        parameters = Map(
+          "columnName" -> s"`$colName`",
+          "columnType" -> "\"BINARY\"",
+          "format" -> "CSV")
       )
     }
   }

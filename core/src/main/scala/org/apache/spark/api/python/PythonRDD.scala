@@ -52,6 +52,8 @@ private[spark] class PythonRDD(
     isFromBarrier: Boolean = false)
   extends RDD[Array[Byte]](parent) {
 
+  private[this] val jobArtifactUUID = JobArtifactSet.getCurrentJobArtifactState.map(_.uuid)
+
   override def getPartitions: Array[Partition] = firstParent.partitions
 
   override val partitioner: Option[Partitioner] = {
@@ -61,7 +63,7 @@ private[spark] class PythonRDD(
   val asJavaRDD: JavaRDD[Array[Byte]] = JavaRDD.fromRDD(this)
 
   override def compute(split: Partition, context: TaskContext): Iterator[Array[Byte]] = {
-    val runner = PythonRunner(func)
+    val runner = PythonRunner(func, jobArtifactUUID)
     runner.compute(firstParent.iterator(split, context), split.index, context)
   }
 
@@ -485,9 +487,7 @@ private[spark] object PythonRDD extends Logging {
   }
 
   def writeUTF(str: String, dataOut: DataOutputStream): Unit = {
-    val bytes = str.getBytes(StandardCharsets.UTF_8)
-    dataOut.writeInt(bytes.length)
-    dataOut.write(bytes)
+    PythonWorkerUtils.writeUTF(str, dataOut)
   }
 
   /**

@@ -27,7 +27,6 @@ from collections import defaultdict
 
 from pyspark.errors import (
     PySparkAttributeError,
-    PySparkNotImplementedError,
     PySparkTypeError,
     PySparkException,
     PySparkValueError,
@@ -158,6 +157,19 @@ class SparkConnectSQLTestCase(ReusedConnectTestCase, SQLTestUtils, PandasOnSpark
 
 
 class SparkConnectBasicTests(SparkConnectSQLTestCase):
+    def test_df_getattr_behavior(self):
+        cdf = self.connect.range(10)
+        sdf = self.spark.range(10)
+
+        sdf._simple_extension = 10
+        cdf._simple_extension = 10
+
+        self.assertEqual(sdf._simple_extension, cdf._simple_extension)
+        self.assertEqual(type(sdf._simple_extension), type(cdf._simple_extension))
+
+        self.assertTrue(hasattr(cdf, "_simple_extension"))
+        self.assertFalse(hasattr(cdf, "_simple_extension_does_not_exsit"))
+
     def test_df_get_item(self):
         # SPARK-41779: test __getitem__
 
@@ -1297,8 +1309,8 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
             sdf.drop("a", "x").toPandas(),
         )
         self.assert_eq(
-            cdf.drop(cdf.a, cdf.x).toPandas(),
-            sdf.drop("a", "x").toPandas(),
+            cdf.drop(cdf.a, "x").toPandas(),
+            sdf.drop(sdf.a, "x").toPandas(),
         )
 
     def test_subquery_alias(self) -> None:
@@ -3186,16 +3198,6 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
         rows = [cols] * row_count
         self.assertEqual(row_count, self.connect.createDataFrame(data=rows).count())
 
-    def test_unsupported_udtf(self):
-        with self.assertRaises(PySparkNotImplementedError) as e:
-            self.connect.udtf.register()
-
-        self.check_error(
-            exception=e.exception,
-            error_class="NOT_IMPLEMENTED",
-            message_parameters={"feature": "udtf()"},
-        )
-
     def test_unsupported_jvm_attribute(self):
         # Unsupported jvm attributes for Spark session.
         unsupported_attrs = ["_jsc", "_jconf", "_jvm", "_jsparkSession"]
@@ -3334,9 +3336,9 @@ class SparkConnectSessionTests(ReusedConnectTestCase):
         other = PySparkSession.builder.remote("sc://other.remote:114/").create()
         self.assertNotEquals(self.spark, other)
 
-        # Reuses an active session that was previously created.
+        # Gets currently active session.
         same = PySparkSession.builder.remote("sc://other.remote.host:114/").getOrCreate()
-        self.assertEquals(self.spark, same)
+        self.assertEquals(other, same)
         same.stop()
 
         # Make sure the environment is clean.

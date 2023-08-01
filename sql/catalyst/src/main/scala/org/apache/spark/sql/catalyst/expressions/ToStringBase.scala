@@ -22,7 +22,7 @@ import java.time.ZoneOffset
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
-import org.apache.spark.sql.catalyst.util.{ArrayData, DateFormatter, IntervalStringStyles, IntervalUtils, MapData, StringUtils, TimestampFormatter}
+import org.apache.spark.sql.catalyst.util.{ArrayData, DateFormatter, IntervalStringStyles, IntervalUtils, MapData, SparkStringUtils, TimestampFormatter}
 import org.apache.spark.sql.catalyst.util.IntervalStringStyles.ANSI_STYLE
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.UTF8StringBuilder
@@ -53,7 +53,7 @@ trait ToStringBase { self: UnaryExpression with TimeZoneAwareExpression =>
     case CalendarIntervalType =>
       acceptAny[CalendarInterval](i => UTF8String.fromString(i.toString))
     case BinaryType if useHexFormatForBinary =>
-      acceptAny[Array[Byte]](binary => UTF8String.fromString(StringUtils.getHexString(binary)))
+      acceptAny[Array[Byte]](binary => UTF8String.fromString(SparkStringUtils.getHexString(binary)))
     case BinaryType =>
       acceptAny[Array[Byte]](UTF8String.fromBytes)
     case DateType =>
@@ -173,7 +173,7 @@ trait ToStringBase { self: UnaryExpression with TimeZoneAwareExpression =>
     from match {
       case BinaryType if useHexFormatForBinary =>
         (c, evPrim) =>
-          val utilCls = StringUtils.getClass.getName.stripSuffix("$")
+          val utilCls = SparkStringUtils.getClass.getName.stripSuffix("$")
           code"$evPrim = UTF8String.fromString($utilCls.getHexString($c));"
       case BinaryType =>
         (c, evPrim) => code"$evPrim = UTF8String.fromBytes($c);"

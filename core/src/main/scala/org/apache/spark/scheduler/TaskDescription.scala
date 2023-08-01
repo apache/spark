@@ -26,7 +26,7 @@ import scala.collection.JavaConverters._
 import scala.collection.immutable
 import scala.collection.mutable.{ArrayBuffer, HashMap, Map}
 
-import org.apache.spark.JobArtifactSet
+import org.apache.spark.{JobArtifactSet, JobArtifactState}
 import org.apache.spark.resource.ResourceInformation
 import org.apache.spark.util.{ByteBufferInputStream, ByteBufferOutputStream, Utils}
 
@@ -133,8 +133,11 @@ private[spark] object TaskDescription {
 
   private def deserializeArtifacts(dataIn: DataInputStream): JobArtifactSet = {
     new JobArtifactSet(
-      uuid = deserializeOptionString(dataIn),
-      replClassDirUri = deserializeOptionString(dataIn),
+      state = deserializeOptionString(dataIn).map { uuid =>
+        JobArtifactState(
+          uuid = uuid,
+          replClassDirUri = deserializeOptionString(dataIn))
+      },
       jars = immutable.Map(deserializeStringLongMap(dataIn).toSeq: _*),
       files = immutable.Map(deserializeStringLongMap(dataIn).toSeq: _*),
       archives = immutable.Map(deserializeStringLongMap(dataIn).toSeq: _*))
@@ -148,8 +151,10 @@ private[spark] object TaskDescription {
   }
 
   private def serializeArtifacts(artifacts: JobArtifactSet, dataOut: DataOutputStream): Unit = {
-    serializeOptionString(artifacts.uuid, dataOut)
-    serializeOptionString(artifacts.replClassDirUri, dataOut)
+    serializeOptionString(artifacts.state.map(_.uuid), dataOut)
+    artifacts.state.foreach { state =>
+      serializeOptionString(state.replClassDirUri, dataOut)
+    }
     serializeStringLongMap(Map(artifacts.jars.toSeq: _*), dataOut)
     serializeStringLongMap(Map(artifacts.files.toSeq: _*), dataOut)
     serializeStringLongMap(Map(artifacts.archives.toSeq: _*), dataOut)
