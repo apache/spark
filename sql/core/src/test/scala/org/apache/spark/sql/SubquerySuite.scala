@@ -2754,6 +2754,7 @@ class SubquerySuite extends QueryTest
       }
       assert(filter.isEmpty,
         "Filter should be removed after OptimizeSubqueries and OptimizeOneRowRelationSubquery")
+      checkAnswer(df, Row(1, "foo", 1, "foo"))
     }
   }
 }
