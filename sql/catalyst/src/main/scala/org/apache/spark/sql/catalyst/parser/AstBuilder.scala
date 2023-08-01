@@ -1567,26 +1567,13 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
     var withSinglePartition = false
     var partitionByExpressions = Seq.empty[Expression]
     var orderByExpressions = Seq.empty[SortOrder]
-    Option(ctx.tableArgumentPartitioning)
-      .foreach { p =>
-        if (p.SINGLE != null) {
-          withSinglePartition = true
-        }
+    Option(ctx.tableArgumentPartitioning).foreach { p =>
+      if (p.SINGLE != null) {
+        withSinglePartition = true
       }
-    Option(ctx.tableArgumentPartitioning)
-      .map(_.partition.asScala.map(expression))
-      .foreach { expressions =>
-        if (expressions.nonEmpty) {
-          partitionByExpressions = expressions
-        }
-      }
-    Option(ctx.tableArgumentPartitioning)
-      .map(_.sortItem.asScala.map(visitSortItem))
-      .foreach { expressions =>
-        if (expressions.nonEmpty) {
-          orderByExpressions = expressions
-        }
-      }
+      partitionByExpressions = p.partition.asScala.map(expression)
+      orderByExpressions = p.sortItem.asScala.map(visitSortItem)
+    }
     validate(
       !(withSinglePartition && partitionByExpressions.nonEmpty),
       message = "WITH SINGLE PARTITION cannot be specified if PARTITION BY is also present",

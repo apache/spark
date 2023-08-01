@@ -2528,11 +2528,6 @@
       "Failed to analyze the Python user defined table function: <msg>"
     ]
   },
-  "TABLE_VALUED_FUNCTION_PARTITION_BY_CLAUSE_NOT_SUPPORTED" : {
-    "message" : [
-      "Failed to evaluate the table-valued function call because it included the PARTITION BY clause<reason>."
-    ]
-  },
   "TABLE_VALUED_FUNCTION_TOO_MANY_TABLE_ARGUMENTS" : {
     "message" : [
       "There are too many table arguments for table-valued function. It allows one table argument, but got: <num>. If you want to allow it, please set \"spark.sql.allowMultipleTableArguments.enabled\" to \"true\""

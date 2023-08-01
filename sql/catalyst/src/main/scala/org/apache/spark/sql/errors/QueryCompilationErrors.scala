@@ -1975,12 +1975,6 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
     )
   }
 
-  def tableValuedFunctionPartitionByClauseNotSupported(reason: String): Throwable = {
-    new AnalysisException(
-      errorClass = "TABLE_VALUED_FUNCTION_PARTITION_BY_CLAUSE_NOT_SUPPORTED",
-      messageParameters = Map("reason" -> reason))
-  }
-
   def identifierTooManyNamePartsError(originalIdentifier: String): Throwable = {
     new AnalysisException(
       errorClass = "IDENTIFIER_TOO_MANY_NAME_PARTS",

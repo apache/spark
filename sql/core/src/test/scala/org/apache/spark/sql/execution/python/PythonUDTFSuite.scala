@@ -18,7 +18,7 @@
 package org.apache.spark.sql.execution.python
 
 import org.apache.spark.api.python.PythonEvalType
-import org.apache.spark.sql.{IntegratedUDFTestUtils, QueryTest, Row}
+import org.apache.spark.sql.{AnalysisException, IntegratedUDFTestUtils, QueryTest, Row}
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan, Repartition, RepartitionByExpression, Sort, SubqueryAlias}
 import org.apache.spark.sql.functions.lit
 import org.apache.spark.sql.test.SharedSparkSession
@@ -110,6 +110,7 @@ class PythonUDTFSuite extends QueryTest with SharedSparkSession {
   }
 
   test("SPARK-44503: Specify PARTITION BY and ORDER BY for TABLE arguments") {
+    // Positive tests
     assume(shouldTestPythonUDFs)
     def failure(plan: LogicalPlan): Unit = fail(s"Unexpected plan: $plan")
     sql(
@@ -151,6 +152,24 @@ class PythonUDTFSuite extends QueryTest with SharedSparkSession {
       .collectFirst { case r: Sort => r }.get match {
       case Sort(_, false, Repartition(1, true, SubqueryAlias(_, _: LocalRelation))) =>
       case other => failure(other)
+    }
+    // Negative tests
+    withTable("t") {
+      sql("create table t(col array<int>) using parquet")
+      val query = "select * from explode(table(t))"
+      checkError(
+        exception = intercept[AnalysisException](sql(query)),
+        errorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+        parameters = Map(
+          "sqlExpr" -> "\"explode(outer(__auto_generated_subquery_name_0.c))\"",
+          "paramIndex" -> "1",
+          "inputSql" -> "\"outer(__auto_generated_subquery_name_0.c)\"",
+          "inputType" -> "\"STRUCT<col: ARRAY<INT>>\"",
+          "requiredType" -> "(\"ARRAY\" or \"MAP\")"),
+        context = ExpectedContext(
+          fragment = "explode(table(t))",
+          start = 14,
+          stop = 30))
     }
   }
 }

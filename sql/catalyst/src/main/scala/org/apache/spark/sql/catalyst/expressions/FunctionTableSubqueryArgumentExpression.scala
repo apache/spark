@@ -68,6 +68,9 @@ case class FunctionTableSubqueryArgumentExpression(
     orderByExpressions: Seq[SortOrder] = Seq.empty)
   extends SubqueryExpression(plan, outerAttrs, exprId, Seq.empty, None) with Unevaluable {
 
+  assert(!(withSinglePartition && partitionByExpressions.nonEmpty),
+    "WITH SINGLE PARTITION is mutually exclusive with PARTITION BY")
+
   override def dataType: DataType = plan.schema
   override def nullable: Boolean = false
   override def withNewPlan(plan: LogicalPlan): FunctionTableSubqueryArgumentExpression =

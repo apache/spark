@@ -2075,10 +2075,10 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
                 val alias = SubqueryAlias.generateSubqueryName(s"_${tableArgs.size}")
                 resolvedFunc match {
                   case Generate(_: PythonUDTF, _, _, _, _, _) =>
-                  case _ if t.hasRepartitioning =>
-                    throw QueryCompilationErrors.tableValuedFunctionPartitionByClauseNotSupported(
-                      reason = ", but only Python table functions support this clause")
                   case _ =>
+                    assert(!t.hasRepartitioning,
+                      "Cannot evaluate the table-valued function call because it included the" +
+                        "PARTITION BY clause, but only Python table functions support this clause")
                 }
                 tableArgs.append(SubqueryAlias(alias, t.evaluable))
                 UnresolvedAttribute(Seq(alias, "c"))
@@ -2452,12 +2452,9 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
           InSubquery(values, expr.asInstanceOf[ListQuery])
         case s @ LateralSubquery(sub, _, exprId, _, _) if !sub.resolved =>
           resolveSubQuery(s, outer)(LateralSubquery(_, _, exprId))
-        case a @ FunctionTableSubqueryArgumentExpression(
-            sub, _, exprId, partitionByExpressions, withSinglePartition, orderByExpressions)
-          if !sub.resolved =>
+        case a: FunctionTableSubqueryArgumentExpression if !a.plan.resolved =>
           resolveSubQuery(a, outer)(
-            FunctionTableSubqueryArgumentExpression(
-              _, _, exprId, partitionByExpressions, withSinglePartition, orderByExpressions))
+            (plan, outerAttrs) => a.copy(plan = plan, outerAttrs = outerAttrs))
       }
     }
 
