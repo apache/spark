@@ -1693,12 +1693,6 @@ SQLSTATE: none assigned
 
 Failed to analyze the Python user defined table function: `<msg>`
 
-### TABLE_VALUED_FUNCTION_PARTITION_BY_CLAUSE_NOT_SUPPORTED
-
-SQLSTATE: none assigned
-
-Failed to evaluate the table-valued function call because it included the PARTITION BY clause`<reason>`.
-
 ### TABLE_VALUED_FUNCTION_TOO_MANY_TABLE_ARGUMENTS
 
 SQLSTATE: none assigned
