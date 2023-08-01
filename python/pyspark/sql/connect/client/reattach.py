@@ -209,14 +209,9 @@ class ExecutePlanResponseReattachableIterator(Generator):
             release.client_type = self._initial_request.client_type
 
         if not until_response_id:
-            release.release_type = (  # type: ignore[attr-defined]
-                pb2.ReleaseExecuteRequest.ReleaseType.RELEASE_UNTIL_RESPONSE  # type: ignore[attr-defined]
-            )
+            release.release_all.CopyFrom(pb2.ReleaseExecuteRequest.ReleaseAll())
         else:
-            release.release_type = (  # type: ignore[attr-defined]
-                pb2.ReleaseExecuteRequest.ReleaseType.RELEASE_ALL  # type: ignore[attr-defined]
-            )
-            release.until_response_id = until_response_id  # type: ignore[attr-defined]
+            release.release_util.response_id = until_response_id  # type: ignore[attr-defined]
 
         return release
 
