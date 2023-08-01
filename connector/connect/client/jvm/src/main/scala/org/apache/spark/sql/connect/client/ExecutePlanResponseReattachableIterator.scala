@@ -86,8 +86,12 @@ class ExecutePlanResponseReattachableIterator(
   private var responseComplete: Boolean = false
 
   // Initial iterator comes from ExecutePlan request.
-  private var iterator: java.util.Iterator[proto.ExecutePlanResponse] =
+  private var iterator: java.util.Iterator[proto.ExecutePlanResponse] = retry {
+    // From empirical observation even if one would expect an immediate error from the GRPC call,
+    // one is only thrown from the first iterator.next() or iterator.hasNext() call.
+    // However, in case this is a GRPC quirk that cannot be relied upon, retry also here.
     rawBlockingStub.executePlan(initialRequest)
+  }
 
   override def next(): proto.ExecutePlanResponse = synchronized {
     // hasNext will trigger reattach in case the stream completed without responseComplete

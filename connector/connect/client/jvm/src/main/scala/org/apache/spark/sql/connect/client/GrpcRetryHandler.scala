@@ -49,7 +49,12 @@ private[client] class GrpcRetryHandler(private val retryPolicy: GrpcRetryHandler
       extends java.util.Iterator[U] {
 
     private var opened = false // we only retry if it fails on first call when using the iterator
-    private var iterator = call(request)
+    private var iterator = retry {
+      // From empirical observation even if one would expect an immediate error from the GRPC call,
+      // one is only thrown from the first iterator.next() or iterator.hasNext() call.
+      // However, in case this is a GRPC quirk that cannot be relied upon, retry also here.
+      call(request)
+    }
 
     private def retryIter[V](f: java.util.Iterator[U] => V) = {
       if (!opened) {
