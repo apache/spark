@@ -15,7 +15,6 @@
 # limitations under the License.
 #
 from typing import Any, Callable, List, Optional, Union, TYPE_CHECKING, cast
-import warnings
 
 import pandas as pd
 from pandas.api.types import (  # type: ignore[attr-defined]
