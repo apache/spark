@@ -74,7 +74,7 @@ class ExecutePlanResponseReattachableIterator(Generator):
         # True after ResponseComplete message was seen in the stream.
         # Server will always send this message at the end of the stream, if the underlying iterator
         # finishes without producing one, another iterator needs to be reattached.
-        self._response_complete = False
+        self._result_complete = False
 
         # Initial iterator comes from ExecutePlan request.
         self._iterator: Iterator[pb2.ExecutePlanResponse] = self._stub.ExecutePlan(
@@ -96,7 +96,7 @@ class ExecutePlanResponseReattachableIterator(Generator):
 
         self._last_returned_response_id = ret.response_id
         if ret.response_complete:
-            self._response_complete = True
+            self._result_complete = True
             self._release_execute(None)  # release all
         else:
             self._release_execute(self._last_returned_response_id)
@@ -106,7 +106,7 @@ class ExecutePlanResponseReattachableIterator(Generator):
     def _has_next(self) -> bool:
         from pyspark.sql.connect.client.core import SparkConnectClient
 
-        if self._response_complete:
+        if self._result_complete:
             # After response complete response
             return False
         else:
@@ -137,13 +137,13 @@ class ExecutePlanResponseReattachableIterator(Generator):
                     # there is more, and we need to reattach. While ResponseComplete didn't
                     # arrive, we keep reattaching.
                     first_loop = True
-                    if not has_next and not self._response_complete:
+                    if not has_next and not self._result_complete:
                         while not has_next or first_loop:
                             self._iterator = self._stub.ReattachExecute(
                                 self._create_reattach_execute_request()
                             )
                             # shouldn't change
-                            assert not self._response_complete
+                            assert not self._result_complete
                             try:
                                 self._current = next(self._iterator)
                             except StopIteration:
