@@ -16,7 +16,6 @@
 #
 
 import pandas as pd
-from typing import Union
 
 from pyspark.pandas.indexes.base import Index
 from pyspark.pandas.utils import (

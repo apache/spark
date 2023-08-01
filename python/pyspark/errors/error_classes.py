@@ -166,7 +166,11 @@ ERROR_CLASSES_JSON = """
   },
   "DIFFERENT_PANDAS_DATAFRAME" : {
     "message" : [
-      "<msg>"
+      "DataFrames are not almost equal:",
+      "Left: <left>",
+      "<left_dtype>",
+      "Right: <right>",
+      "<right_dtype>"
     ]
   },
   "DIFFERENT_PANDAS_INDEX" : {
@@ -714,6 +718,11 @@ ERROR_CLASSES_JSON = """
   "UDF_RETURN_TYPE" : {
     "message" : [
       "Return type of the user-defined function should be <expected>, but is <actual>."
+    ]
+  },
+  "UDTF_ARROW_TYPE_CAST_ERROR" : {
+    "message" : [
+      "Cannot convert the output value of the column '<col_name>' with type '<col_type>' to the specified return type of the column: '<arrow_type>'. Please check if the data types match and try again."
     ]
   },
   "UDTF_EXEC_ERROR" : {

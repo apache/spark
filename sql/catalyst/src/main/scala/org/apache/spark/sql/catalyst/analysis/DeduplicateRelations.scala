@@ -429,7 +429,7 @@ object DeduplicateRelations extends Rule[LogicalPlan] {
     // in the original project list, to avoid assertion failures when rewriting attributes
     // in transformUpWithNewOutput.
     val oldAliasToNewAlias = AttributeMap(expressions.collect {
-      case a: Alias => (a.toAttribute, Alias(a.child, a.name)())
+      case a: Alias => (a.toAttribute, a.newInstance())
     })
     expressions.map {
       case a: Alias => oldAliasToNewAlias(a.toAttribute)
