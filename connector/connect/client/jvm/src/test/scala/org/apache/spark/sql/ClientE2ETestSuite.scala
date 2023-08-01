@@ -43,6 +43,12 @@ import org.apache.spark.sql.types._
 
 class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper with PrivateMethodTester {
 
+  test("throw ParseException") {
+    intercept[ParseException] {
+      spark.sql("selet 1").collect()
+    }
+  }
+
   test("spark deep recursion") {
     var df = spark.range(1)
     for (a <- 1 to 500) {
@@ -177,7 +183,7 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper with PrivateM
             StructField("job", StringType) :: Nil))
       .csv(testDataPath.toString)
     // Failed because the path cannot be provided both via option and load method (csv).
-    assertThrows[SparkException] {
+    assertThrows[AnalysisException] {
       df.collect()
     }
   }
@@ -381,7 +387,7 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper with PrivateM
     val df = spark.range(10)
     val outputFolderPath = Files.createTempDirectory("output").toAbsolutePath
     // Failed because the path cannot be provided both via option and save method.
-    assertThrows[SparkException] {
+    assertThrows[AnalysisException] {
       df.write.option("path", outputFolderPath.toString).save(outputFolderPath.toString)
     }
   }

@@ -16,18 +16,23 @@
  */
 package org.apache.spark.sql.connect.client
 
+import com.google.rpc.ErrorInfo
 import io.grpc.StatusRuntimeException
 import io.grpc.protobuf.StatusProto
 
-import org.apache.spark.{SparkException, SparkThrowable}
+import org.apache.spark.SparkException
+import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst.parser.ParseException
+import org.apache.spark.sql.catalyst.trees.Origin
+import org.apache.spark.util.JsonUtils
 
-private[client] object GrpcExceptionConverter {
+private[client] object GrpcExceptionConverter extends JsonUtils {
   def convert[T](f: => T): T = {
     try {
       f
     } catch {
       case e: StatusRuntimeException =>
-        throw toSparkThrowable(e)
+        throw toThrowable(e)
     }
   }
 
@@ -53,9 +58,36 @@ private[client] object GrpcExceptionConverter {
     }
   }
 
-  private def toSparkThrowable(ex: StatusRuntimeException): SparkThrowable with Throwable = {
+  private def errorInfoToThrowable(info: ErrorInfo, message: String): Throwable = {
+    val classes =
+      mapper.readValue(
+        info.getMetadataOrDefault("classes", "[]"), classOf[Array[String]]
+      )
+
+    for (cls <- classes) {
+      cls match {
+        case "org.apache.spark.sql.catalyst.parser.ParseException" =>
+          return new ParseException(None, message, Origin(), Origin())
+        case "org.apache.spark.sql.AnalysisException" =>
+          return new AnalysisException(message)
+        case _ =>
+          // Do nothing.
+      }
+    }
+
+    new SparkException(message)
+  }
+
+  private def toThrowable(ex: StatusRuntimeException): Throwable = {
     val status = StatusProto.fromThrowable(ex)
-    // TODO: Add finer grained error conversion
+
+    status.getDetailsList.forEach { d =>
+      if (d.is(classOf[ErrorInfo])) {
+        val errorInfo = d.unpack(classOf[ErrorInfo])
+        return errorInfoToThrowable(errorInfo, status.getMessage)
+      }
+    }
+
     new SparkException(status.getMessage, ex.getCause)
   }
 }
