@@ -94,7 +94,7 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper with PrivateM
     assume(IntegrationTestUtils.isSparkHiveJarAvailable)
     withTable("test_martin") {
       // Fails, because table does not exist.
-      assertThrows[SparkException] {
+      assertThrows[AnalysisException] {
         spark.sql("select * from test_martin").collect()
       }
       // Execute eager, DML
