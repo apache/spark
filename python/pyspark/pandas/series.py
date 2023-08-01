@@ -492,8 +492,8 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         --------
 
         >>> psser = ps.Series([1, 2, 3])
-        >>> psser.axes  # doctest: +SKIP
-        [Int64Index([0, 1, 2], dtype='int64')]
+        >>> psser.axes
+        [Index([0, 1, 2], dtype='int64')]
         """
         return [self.index]
 
