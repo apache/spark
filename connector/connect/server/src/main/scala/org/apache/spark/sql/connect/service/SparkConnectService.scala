@@ -251,7 +251,7 @@ class SparkConnectService(debug: Boolean) extends AsyncService with BindableServ
  * Used to start the overall SparkConnect service and provides global state to manage the
  * different SparkSession from different users connecting to the cluster.
  */
-object SparkConnectService {
+object SparkConnectService extends Logging {
 
   private val CACHE_SIZE = 100
 
