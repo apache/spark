@@ -161,7 +161,7 @@ private[connect] class SparkConnectStreamingQueryCache(
 
   /**
    * Periodic maintenance task to do the following:
-   *   - Update status of query if it is inactive. Sets an expiery time for such queries
+   *   - Update status of query if it is inactive. Sets an expiry time for such queries
    *   - Drop expired queries from the cache.
    *   - Poll sessions associated with the cached queries in order keep them alive in connect
    *     service' mapping (by invoking `sessionKeepAliveFn`).
