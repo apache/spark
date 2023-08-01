@@ -156,7 +156,7 @@ object ScalarUserDefinedFunction {
       case e: ClassCastException if e.getMessage.contains(LAMBDA_DESERIALIZATION_ERR_MSG) =>
         throw new SparkException(
           "UDF cannot be executed on a Spark cluster: it cannot be deserialized. " +
-            "This is very likely to be caused by the lambda function (the UDF) having a "
+            "This is very likely to be caused by the lambda function (the UDF) having a " +
             "self-reference. This is not supported by java serialization.")
       case NonFatal(e) =>
         throw new SparkException(
