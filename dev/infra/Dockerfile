@@ -77,3 +77,5 @@ RUN python3.9 -m pip install torcheval
 
 # Uninstall unused packages
 RUN $APT_REMOVE libgl1-mesa-dri
+RUN apt-get autoremove --purge -y
+RUN apt-get clean
