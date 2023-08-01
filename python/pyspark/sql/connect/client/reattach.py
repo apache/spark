@@ -64,7 +64,11 @@ class ExecutePlanResponseReattachableIterator(Generator):
             self._operation_id = str(uuid.uuid4())
 
         self._stub = stub
-        request.reattach_options.reattachable = True  # type: ignore[attr-defined]
+        request.request_options.append(
+            pb2.ExecutePlanRequest.RequestOption(
+                reattach_options=pb2.ReattachOptions(reattachable=True)
+            )
+        )
         self._initial_request = request
 
         # ResponseId of the last response returned by next()
@@ -84,8 +88,6 @@ class ExecutePlanResponseReattachableIterator(Generator):
         self._current: Optional[pb2.ExecutePlanResponse] = None
 
     def send(self, value: Any) -> pb2.ExecutePlanResponse:
-        from pyspark.sql.connect.client.core import SparkConnectClient
-
         # will trigger reattach in case the stream completed without response_complete
         if not self._has_next():
             raise StopIteration()
