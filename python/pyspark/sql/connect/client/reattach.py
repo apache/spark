@@ -25,7 +25,6 @@ import threading
 
 import pyspark.sql.connect.proto as pb2
 import pyspark.sql.connect.proto.base_pb2_grpc as grpc_lib
-from pyspark.sql.connect.client.core import Retrying
 
 
 class ExecutePlanResponseReattachableIterator(Generator):
@@ -105,6 +104,7 @@ class ExecutePlanResponseReattachableIterator(Generator):
 
     def _has_next(self) -> bool:
         from pyspark.sql.connect.client.core import SparkConnectClient
+        from pyspark.sql.connect.client.core import Retrying
 
         if self._result_complete:
             # After response complete response
@@ -165,13 +165,14 @@ class ExecutePlanResponseReattachableIterator(Generator):
         This will send an asynchronous RPC which will not block this iterator, the iterator can
         continue to be consumed.
 
-        Release with untilResponseId informs the server that the iterator has been consumed until and
-        including response with that responseId, and these responses can be freed.
+        Release with untilResponseId informs the server that the iterator has been consumed until
+        and including response with that responseId, and these responses can be freed.
 
         Release with None means that the responses have been completely consumed and informs the
         server that the completed execution can be completely freed.
         """
         from pyspark.sql.connect.client.core import SparkConnectClient
+        from pyspark.sql.connect.client.core import Retrying
 
         request = self._create_release_execute_request(until_response_id)
 
