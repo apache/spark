@@ -141,7 +141,8 @@ private[serializer] class GenericAvroSerializer[D <: GenericContainer]
             case None =>
               throw new SparkException(
                 errorClass = "ERROR_READING_AVRO_UNKNOWN_FINGERPRINT",
-                messageParameters = Map("fingerprint" -> fingerprint.toString))
+                messageParameters = Map("fingerprint" -> fingerprint.toString),
+                cause = null)
           }
         })
       } else {
