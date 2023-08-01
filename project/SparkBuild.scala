@@ -800,7 +800,7 @@ object SparkConnect {
     // SPARK-43646: The following 3 statements are used to make the connect module use the
     // Spark-proto assembly jar when compiling and testing using SBT, which can be keep same
     // behavior of Maven testing.
-    (Test /unmanagedJars) += (LocalProject("protobuf") / assembly).value,
+    (Test / unmanagedJars) += (LocalProject("protobuf") / assembly).value,
     (Test / fullClasspath) :=
       (Test / fullClasspath).value.filterNot { f => f.toString.contains("spark-protobuf") },
     (Test / fullClasspath) += (LocalProject("protobuf") / assembly).value,
