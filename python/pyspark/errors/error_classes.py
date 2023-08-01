@@ -164,6 +164,42 @@ ERROR_CLASSES_JSON = """
       "Remote client cannot create a SparkContext. Create SparkSession instead."
     ]
   },
+  "DIFFERENT_PANDAS_DATAFRAME" : {
+    "message" : [
+      "DataFrames are not almost equal:",
+      "Left: <left>",
+      "<left_dtype>",
+      "Right: <right>",
+      "<right_dtype>"
+    ]
+  },
+  "DIFFERENT_PANDAS_INDEX" : {
+    "message" : [
+      "Indices are not almost equal:",
+      "Left: <left>",
+      "<left_dtype>",
+      "Right: <right>",
+      "<right_dtype>"
+    ]
+  },
+  "DIFFERENT_PANDAS_MULTIINDEX" : {
+    "message" : [
+      "MultiIndices are not almost equal:",
+      "Left: <left>",
+      "<left_dtype>",
+      "Right: <right>",
+      "<right_dtype>"
+    ]
+  },
+  "DIFFERENT_PANDAS_SERIES" : {
+    "message" : [
+      "Series are not almost equal:",
+      "Left: <left>",
+      "<left_dtype>",
+      "Right: <right>",
+      "<right_dtype>"
+    ]
+  },
   "DIFFERENT_ROWS" : {
     "message" : [
       "<error_msg>"
@@ -281,6 +317,11 @@ ERROR_CLASSES_JSON = """
   "INVALID_UDTF_EVAL_TYPE" : {
     "message" : [
       "The eval type for the UDTF '<name>' is invalid. It must be one of <eval_type>."
+    ]
+  },
+  "INVALID_UDTF_HANDLER_TYPE" : {
+    "message" : [
+      "The UDTF is invalid. The function handler must be a class, but got '<type>'. Please provide a class as the function handler."
     ]
   },
   "INVALID_UDTF_NO_EVAL" : {
@@ -677,6 +718,11 @@ ERROR_CLASSES_JSON = """
   "UDF_RETURN_TYPE" : {
     "message" : [
       "Return type of the user-defined function should be <expected>, but is <actual>."
+    ]
+  },
+  "UDTF_ARROW_TYPE_CAST_ERROR" : {
+    "message" : [
+      "Cannot convert the output value of the column '<col_name>' with type '<col_type>' to the specified return type of the column: '<arrow_type>'. Please check if the data types match and try again."
     ]
   },
   "UDTF_EXEC_ERROR" : {

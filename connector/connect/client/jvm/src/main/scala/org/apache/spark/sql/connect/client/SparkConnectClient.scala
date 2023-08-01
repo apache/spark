@@ -59,7 +59,7 @@ private[sql] class SparkConnectClient(
   private[sql] val sessionId: String = UUID.randomUUID.toString
 
   private[client] val artifactManager: ArtifactManager = {
-    new ArtifactManager(userContext, sessionId, bstub, stub)
+    new ArtifactManager(configuration, sessionId, bstub, stub)
   }
 
   /**

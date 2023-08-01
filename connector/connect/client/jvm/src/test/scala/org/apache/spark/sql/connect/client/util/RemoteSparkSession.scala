@@ -96,7 +96,7 @@ object SparkConnectServerUtils {
     // To find InMemoryTableCatalog for V2 writer tests
     val catalystTestJar =
       tryFindJar("sql/catalyst", "spark-catalyst", "spark-catalyst", test = true)
-        .map(clientTestJar => Seq("--jars", clientTestJar.getCanonicalPath))
+        .map(clientTestJar => Seq(clientTestJar.getCanonicalPath))
         .getOrElse(Seq.empty)
 
     // For UDF maven E2E tests, the server needs the client code to find the UDFs defined in tests.
