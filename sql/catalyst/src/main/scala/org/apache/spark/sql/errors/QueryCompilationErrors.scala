@@ -116,11 +116,14 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
     )
   }
 
-  def unexpectedPositionalArgument(functionName: String, parameterName: String): Throwable = {
+  def unexpectedPositionalArgument(
+      functionName: String,
+      precedingNamedArgument: String): Throwable = {
     new AnalysisException(
       errorClass = "UNEXPECTED_POSITIONAL_ARGUMENT",
       messageParameters = Map(
-        "functionName" -> toSQLId(functionName), "parameterName" -> toSQLId(parameterName))
+        "functionName" -> toSQLId(functionName),
+        "parameterName" -> toSQLId(precedingNamedArgument))
     )
   }
 
