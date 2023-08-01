@@ -2077,7 +2077,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
                   case Generate(_: PythonUDTF, _, _, _, _, _) =>
                   case _ =>
                     assert(!t.hasRepartitioning,
-                      "Cannot evaluate the table-valued function call because it included the" +
+                      "Cannot evaluate the table-valued function call because it included the " +
                         "PARTITION BY clause, but only Python table functions support this clause")
                 }
                 tableArgs.append(SubqueryAlias(alias, t.evaluable))

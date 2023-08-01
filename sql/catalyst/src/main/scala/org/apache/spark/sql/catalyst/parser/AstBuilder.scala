@@ -1571,8 +1571,8 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
       if (p.SINGLE != null) {
         withSinglePartition = true
       }
-      partitionByExpressions = p.partition.asScala.map(expression)
-      orderByExpressions = p.sortItem.asScala.map(visitSortItem)
+      partitionByExpressions = p.partition.asScala.map(expression).toSeq
+      orderByExpressions = p.sortItem.asScala.map(visitSortItem).toSeq
     }
     validate(
       !(withSinglePartition && partitionByExpressions.nonEmpty),
