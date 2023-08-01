@@ -167,7 +167,6 @@ def _assert_pandas_almost_equal(
     atol = 1e-8
 
     if isinstance(left, pd.DataFrame) and isinstance(right, pd.DataFrame):
-        left_str = left.to_string()
         if left.shape != right.shape:
             raise PySparkAssertionError(
                 error_class="DIFFERENT_PANDAS_DATAFRAME",
