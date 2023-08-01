@@ -88,7 +88,7 @@ class ExecutePlanResponseReattachableIterator(Generator):
         self._current: Optional[pb2.ExecutePlanResponse] = None
 
     def send(self, value: Any) -> pb2.ExecutePlanResponse:
-        # will trigger reattach in case the stream completed without response_complete
+        # will trigger reattach in case the stream completed without result_complete
         if not self._has_next():
             raise StopIteration()
 
@@ -96,7 +96,7 @@ class ExecutePlanResponseReattachableIterator(Generator):
         assert ret is not None
 
         self._last_returned_response_id = ret.response_id
-        if ret.response_complete:
+        if ret.result_complete:
             self._result_complete = True
             self._release_execute(None)  # release all
         else:
@@ -178,7 +178,7 @@ class ExecutePlanResponseReattachableIterator(Generator):
 
         request = self._create_release_execute_request(until_response_id)
 
-        def target():
+        def target() -> None:
             for attempt in Retrying(
                 can_retry=SparkConnectClient.retry_exception, **self._retry_policy
             ):
@@ -201,8 +201,8 @@ class ExecutePlanResponseReattachableIterator(Generator):
 
     def _create_release_execute_request(
         self, until_response_id: Optional[str]
-    ) -> pb2.ReattachExecuteRequest:
-        release = pb2.ReattachExecuteRequest(
+    ) -> pb2.ReleaseExecuteRequest:
+        release = pb2.ReleaseExecuteRequest(
             session_id=self._initial_request.session_id,
             user_context=self._initial_request.user_context,
             operation_id=self._initial_request.operation_id,

@@ -643,11 +643,11 @@ class SparkConnectClient(object):
         self._use_reattachable_execute = use_reattachable_execute
         # Configure logging for the SparkConnect client.
 
-    def disable_reattachable_execute(self):
+    def disable_reattachable_execute(self) -> "SparkConnectClient":
         self._use_reattachable_execute = False
         return self
 
-    def enable_reattachable_execute(self):
+    def enable_reattachable_execute(self) -> "SparkConnectClient":
         self._use_reattachable_execute = True
         return self
 
