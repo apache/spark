@@ -147,10 +147,14 @@
       <groupId>org.apache.httpcomponents</groupId>
       <artifactId>httpcore</artifactId>
     </dependency>
-    <!-- for test -->
+    <!--
+      SPARK-44601: Add this test dependency to ensure that `hive-thriftserver` module
+      can be tested using Maven
+    -->
     <dependency>
       <groupId>org.codehaus.jackson</groupId>
       <artifactId>jackson-mapper-asl</artifactId>
+      <scope>test</scope>
     </dependency>
   </dependencies>
   <build>
