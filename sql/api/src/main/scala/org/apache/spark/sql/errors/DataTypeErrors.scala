@@ -64,7 +64,7 @@ private[sql] object DataTypeErrors extends DataTypeErrorsBase {
   def unsupportedJavaTypeError(clazz: Class[_]): SparkRuntimeException = {
     new SparkRuntimeException(
       errorClass = "_LEGACY_ERROR_TEMP_2121",
-      messageParameters = Map("clazz" -> clazz.toString))
+      messageParameters = Map("clazz" -> clazz.toString()))
   }
 
   def nullLiteralsCannotBeCastedError(name: String): SparkUnsupportedOperationException = {
@@ -95,7 +95,7 @@ private[sql] object DataTypeErrors extends DataTypeErrorsBase {
   def unsupportedArrayTypeError(clazz: Class[_]): SparkRuntimeException = {
     new SparkRuntimeException(
       errorClass = "_LEGACY_ERROR_TEMP_2120",
-      messageParameters = Map("clazz" -> clazz.toString))
+      messageParameters = Map("clazz" -> clazz.toString()))
   }
 
   def schemaFailToParseError(schema: String, e: Throwable): Throwable = {
@@ -143,7 +143,7 @@ private[sql] object DataTypeErrors extends DataTypeErrorsBase {
   def negativeScaleNotAllowedError(scale: Int): Throwable = {
     val sqlConf = QuotingUtils.toSQLConf("spark.sql.legacy.allowNegativeScaleOfDecimal")
     SparkException.internalError(s"Negative scale is not allowed: ${scale.toString}." +
-      s" Set the config $sqlConf" +
+      s" Set the config ${sqlConf}" +
       " to \"true\" to allow it.")
   }
 
@@ -167,8 +167,8 @@ private[sql] object DataTypeErrors extends DataTypeErrorsBase {
     new SparkException(
       errorClass = "_LEGACY_ERROR_TEMP_2124",
       messageParameters = Map(
-        "leftScale" -> leftScale.toString,
-        "rightScale" -> rightScale.toString),
+        "leftScale" -> leftScale.toString(),
+        "rightScale" -> rightScale.toString()),
       cause = null)
   }
 
