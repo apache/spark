@@ -619,9 +619,15 @@ object StateStore extends Logging {
 
   /** Stop maintenance thread and reset the maintenance task */
   def stopMaintenanceTask(): Unit = loadedProviders.synchronized {
-    if (maintenanceTask != null) {
+    if (maintenanceThreadPool != null) {
+      threadPoolException.set(null)
+      maintenanceThreadPoolLock.synchronized {
+        maintenancePartitions.clear()
+      }
       maintenanceThreadPool.stop()
       maintenanceThreadPool = null
+    }
+    if (maintenanceTask != null) {
       maintenanceTask.stop()
       maintenanceTask = null
     }
@@ -650,8 +656,6 @@ object StateStore extends Logging {
             loadedProviders.synchronized {
               logInfo("Stopping maintenance task since an error was encountered.")
               stopMaintenanceTask()
-              // SPARK-44504 - Unload explicitly to force closing underlying DB instance
-              // and releasing allocated resources, especially for RocksDBStateStoreProvider.
               loadedProviders.keySet.foreach { key => unload(key) }
               loadedProviders.clear()
             }
@@ -690,7 +694,7 @@ object StateStore extends Logging {
     }.foreach { case (id, provider) =>
       // check exception
       if (threadPoolException.get() != null) {
-        val exception = threadPoolException.getAndSet(null)
+        val exception = threadPoolException.get()
         logWarning("Error in maintenanceThreadPool", exception)
         throw exception
       }
