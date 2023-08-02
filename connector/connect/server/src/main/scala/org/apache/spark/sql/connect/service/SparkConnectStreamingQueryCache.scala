@@ -40,8 +40,8 @@ import org.apache.spark.util.SystemClock
  *   - Check the status of the queries, and drops those that expired (1 hour after being stopped).
  *
  * This class helps with supporting following semantics for streaming query sessions:
- *   - If the session mapping on connect server side is expired, stop all the running queries
- *     that are associated with that session.
+ *   - If the session mapping on connect server side is expired, stop all the running queries that
+ *     are associated with that session.
  *   - Once a query is stopped, the reference and mappings are maintained for 1 hour and will be
  *     accessible from the client. This allows time for client to fetch status. If the client
  *     continues to access the query, it stays in the cache until 1 hour of inactivity.
@@ -105,8 +105,8 @@ private[connect] class SparkConnectStreamingQueryCache(
 
   /**
    * Terminate all the running queries attached to the given sessionHolder and remove them from
-   * the queryCache. This is used when session is expired and we need to cleanup resources of
-   * that session.
+   * the queryCache. This is used when session is expired and we need to cleanup resources of that
+   * session.
    */
   def cleanupRunningQueries(sessionHolder: SessionHolder): Unit = {
     for ((k, v) <- queryCache) {
