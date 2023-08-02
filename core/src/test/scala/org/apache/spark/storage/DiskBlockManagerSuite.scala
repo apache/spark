@@ -29,7 +29,7 @@ import org.apache.commons.io.FileUtils
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.internal.config
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{SparkFileUtils, Utils}
 
 class DiskBlockManagerSuite extends SparkFunSuite {
   private val testConf = new SparkConf(false)
@@ -186,5 +186,14 @@ class DiskBlockManagerSuite extends SparkFunSuite {
     val writer = new FileWriter(file, true)
     for (i <- 0 until numBytes) writer.write(i)
     writer.close()
+  }
+
+  test("disk block manager should handle stale subdirectories") {
+    val blockId = RDDBlockId(1, 2)
+    val rddSplit = diskBlockManager.getFile(blockId.name)
+    val subDir = rddSplit.getParentFile
+    SparkFileUtils.deleteRecursively(subDir)
+    diskBlockManager.getFile(blockId.name)
+    assert(subDir.exists())
   }
 }
