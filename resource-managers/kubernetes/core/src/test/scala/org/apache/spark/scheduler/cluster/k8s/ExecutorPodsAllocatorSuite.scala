@@ -963,6 +963,38 @@ class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
     assert(podsAllocatorUnderTest.numOutstandingPods.get() == 0)
   }
 
+  test("SPARK-44609: Do not track an executor if it was removed from scheduler backend.") {
+    when(podOperations
+      .withLabel(SPARK_APP_ID_LABEL, TEST_SPARK_APP_ID))
+      .thenReturn(podOperations)
+    when(podOperations
+      .withLabel(SPARK_ROLE_LABEL, SPARK_POD_EXECUTOR_ROLE))
+      .thenReturn(podOperations)
+    when(podOperations
+      .withLabelIn(SPARK_EXECUTOR_ID_LABEL, "1"))
+      .thenReturn(labeledPods)
+
+    podsAllocatorUnderTest.setTotalExpectedExecutors(Map(defaultProfile -> 1))
+    assert(podsAllocatorUnderTest.numOutstandingPods.get() == 1)
+
+    // Verify initial pod creation.
+    verify(podOperations).create(podWithAttachedContainerForId(1))
+    snapshotsStore.notifySubscribers()
+    assert(podsAllocatorUnderTest.numOutstandingPods.get() == 1)
+
+    // Verify numOutstandingPods is 0 when pod is registered with scheduler backend.
+    when(schedulerBackend.getExecutorIds).thenReturn(Seq("1"))
+    snapshotsStore.notifySubscribers()
+    assert(podsAllocatorUnderTest.numOutstandingPods.get() == 0)
+
+    // Verify that allocator requests a new executor when scheduler backend does not track the
+    // existing executor anymore.
+    when(schedulerBackend.getExecutorIds).thenReturn(Seq.empty)
+    snapshotsStore.notifySubscribers()
+    assert(podsAllocatorUnderTest.numOutstandingPods.get() == 1)
+    verify(podOperations).create(podWithAttachedContainerForId(2))
+  }
+
   private def executorPodAnswer(): Answer[KubernetesExecutorSpec] =
     (invocation: InvocationOnMock) => {
       val k8sConf: KubernetesExecutorConf = invocation.getArgument(0)
