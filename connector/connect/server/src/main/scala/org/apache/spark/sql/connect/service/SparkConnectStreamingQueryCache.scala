@@ -67,11 +67,11 @@ private[connect] class SparkConnectStreamingQueryCache(
 
       queryCache.put(QueryCacheKey(query.id.toString, query.runId.toString), value) match {
         case Some(existing) => // Query is being replace. Not really expected.
-          log.warn(
+          logWarning(
             s"Replacing existing query in the cache (unexpected). Query Id: ${query.id}." +
               s"Existing value $existing, new value $value.")
         case None =>
-          log.info(s"Adding new query to the cache. Query Id ${query.id}, value $value.")
+          logInfo(s"Adding new query to the cache. Query Id ${query.id}, value $value.")
       }
 
       schedulePeriodicChecks() // Starts the scheduler thread if it hasn't started.
@@ -112,7 +112,7 @@ private[connect] class SparkConnectStreamingQueryCache(
     for ((k, v) <- queryCache) {
       if (v.userId.equals(sessionHolder.userId) && v.sessionId.equals(sessionHolder.sessionId)) {
         if (v.query.isActive && Option(v.session.streams.get(k.queryId)).nonEmpty) {
-          log.info(s"Stopping the query with id ${k.queryId} since the session has timed out")
+          logInfo(s"Stopping the query with id ${k.queryId} since the session has timed out")
           v.query.stop()
         }
       }
@@ -144,13 +144,13 @@ private[connect] class SparkConnectStreamingQueryCache(
     scheduledExecutor match {
       case Some(_) => // Already running.
       case None =>
-        log.info(s"Starting thread for polling streaming sessions every $sessionPollingPeriod")
+        logInfo(s"Starting thread for polling streaming sessions every $sessionPollingPeriod")
         scheduledExecutor = Some(Executors.newSingleThreadScheduledExecutor())
         scheduledExecutor.get.scheduleAtFixedRate(
           () => {
             try periodicMaintenance()
             catch {
-              case NonFatal(ex) => log.warn("Unexpected exception in periodic task", ex)
+              case NonFatal(ex) => logWarning("Unexpected exception in periodic task", ex)
             }
           },
           sessionPollingPeriod.toMillis,
@@ -176,17 +176,17 @@ private[connect] class SparkConnectStreamingQueryCache(
         v.expiresAtMs match {
 
           case Some(ts) if nowMs >= ts => // Expired. Drop references.
-            log.info(s"Removing references for $id in session ${v.sessionId} after expiry period")
+            logInfo(s"Removing references for $id in session ${v.sessionId} after expiry period")
             queryCache.remove(k)
 
           case Some(_) => // Inactive query waiting for expiration. Do nothing.
-            log.info(s"Waiting for the expiration for $id in session ${v.sessionId}")
+            logInfo(s"Waiting for the expiration for $id in session ${v.sessionId}")
 
           case None => // Active query, check if it is stopped. Keep the session alive.
             val isActive = v.query.isActive && Option(v.session.streams.get(id)).nonEmpty
 
             if (!isActive) {
-              log.info(s"Marking query $id in session ${v.sessionId} inactive.")
+              logInfo(s"Marking query $id in session ${v.sessionId} inactive.")
               val expiresAtMs = nowMs + stoppedQueryInactivityTimeout.toMillis
               queryCache.put(k, v.copy(expiresAtMs = Some(expiresAtMs)))
             }
