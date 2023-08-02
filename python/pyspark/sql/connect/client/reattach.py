@@ -96,7 +96,7 @@ class ExecutePlanResponseReattachableIterator(Generator):
         assert ret is not None
 
         self._last_returned_response_id = ret.response_id
-        if ret.result_complete:
+        if ret.HasField("result_complete"):
             self._result_complete = True
             self._release_execute(None)  # release all
         else:
@@ -112,15 +112,12 @@ class ExecutePlanResponseReattachableIterator(Generator):
             # After response complete response
             return False
         else:
-            first_try = True
             for attempt in Retrying(
                 can_retry=SparkConnectClient.retry_exception, **self._retry_policy
             ):
                 with attempt:
-                    if first_try:
-                        # on first try, we use the existing iterator.
-                        first_try = False
-                    else:
+                    # on first try, we use the existing iterator.
+                    if not attempt.is_first_try():
                         # on retry, the iterator is borked, so we need a new one
                         self._iterator = self._stub.ReattachExecute(
                             self._create_reattach_execute_request()
@@ -139,7 +136,7 @@ class ExecutePlanResponseReattachableIterator(Generator):
                     # there is more, and we need to reattach. While ResponseComplete didn't
                     # arrive, we keep reattaching.
                     first_loop = True
-                    if not has_next and not self._result_complete:
+                    if not self._result_complete and not has_next:
                         while not has_next or first_loop:
                             self._iterator = self._stub.ReattachExecute(
                                 self._create_reattach_execute_request()
@@ -214,7 +211,7 @@ class ExecutePlanResponseReattachableIterator(Generator):
         if not until_response_id:
             release.release_all.CopyFrom(pb2.ReleaseExecuteRequest.ReleaseAll())
         else:
-            release.release_util.response_id = until_response_id  # type: ignore[attr-defined]
+            release.release_until.response_id = until_response_id
 
         return release
 

@@ -602,7 +602,7 @@ class SparkConnectClient(object):
                 * ``initial_backoff``
                     Backoff to wait before the first retry. Default: 50(ms)
                 * ``max_backoff``
-                    Max backoff controls the maximum amount of time to wait before retrying
+                    Maximum backoff controls the maximum amount of time to wait before retrying
                     a failed request. Default: 60000(ms).
         use_reattachable_execute: bool
             Enable reattachable execution.
@@ -1131,7 +1131,15 @@ class SparkConnectClient(object):
 
         def handle_response(
             b: pb2.ExecutePlanResponse,
-        ) -> Union["pa.RecordBatch", StructType, PlanMetrics, PlanObservedMetrics, Dict[str, Any]]:
+        ) -> Iterator[
+            Union[
+                "pa.RecordBatch",
+                StructType,
+                PlanMetrics,
+                PlanObservedMetrics,
+                Dict[str, Any],
+            ]
+        ]:
             if b.session_id != self._session_id:
                 raise SparkConnectException(
                     "Received incorrect session identifier for request: "
@@ -1549,6 +1557,9 @@ class AttemptManager:
         else:
             self._retry_state.set_done()
             return None
+
+    def is_first_try(self) -> bool:
+        return self._retry_state._count == 0
 
 
 class Retrying:
