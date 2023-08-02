@@ -1626,9 +1626,10 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
         ----------
         sort : bool, default True
         use_na_sentinel : bool, default True
-            If True, the sentinel -1 will be used for NaN values. If False,
-            NaN values will be encoded as non-negative integers and will not drop the
-            NaN from the uniques of the values.
+            If True, the sentinel -1 will be used for NaN values, effectively assigning them
+            a distinct category. If False, NaN values will be encoded as non-negative integers,
+            treating them as unique categories in the encoding process and retaining them in the
+            set of unique categories in the data.
 
         Returns
         -------
