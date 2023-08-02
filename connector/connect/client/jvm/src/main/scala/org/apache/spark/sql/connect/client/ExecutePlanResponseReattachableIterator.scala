@@ -44,8 +44,8 @@ import org.apache.spark.internal.Logging
  * backtrack. To let server release this buffer sooner, this iterator asynchronously sends
  * ReleaseExecute RPCs that instruct the server to release responses that it already processed.
  *
- * Note: If the initial ExecutePlan did not even reach the server and execution didn't start,
- * the ReattachExecute can still fail with INVALID_HANDLE.OPERATION_NOT_FOUND, failing the whole
+ * Note: If the initial ExecutePlan did not even reach the server and execution didn't start, the
+ * ReattachExecute can still fail with INVALID_HANDLE.OPERATION_NOT_FOUND, failing the whole
  * operation.
  */
 class ExecutePlanResponseReattachableIterator(
