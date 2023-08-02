@@ -40,9 +40,10 @@ class VectorReservePolicySuite extends SparkFunSuite with SharedSparkSessionBase
           vector.reset()
           assert(vector.getCapacity == 200)
 
-          // The new capacity of huge vector = old capacity * 1.1 for huge vector and will be reset
+          // The new capacity of huge vector = (request capacity - HUGE_VECTOR_THRESHOLD) * 1.2 +
+          // HUGE_VECTOR_THRESHOLD * 2 = (300 - 300) * 1.2 + 300 * 2 and will be reset.
           vector.appendBytes(300, 0)
-          assert(vector.getCapacity == 360)
+          assert(vector.getCapacity == 600)
           vector.reset()
           assert(vector.getCapacity == 80)
         } finally {
