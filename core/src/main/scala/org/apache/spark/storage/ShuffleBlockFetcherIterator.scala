@@ -33,10 +33,10 @@ import io.netty.util.internal.OutOfDirectMemoryError
 import org.apache.commons.io.IOUtils
 import org.roaringbitmap.RoaringBitmap
 
-import org.apache.spark.{MapOutputTracker, SparkException, TaskContext}
+import org.apache.spark.{MapOutputTracker, MapOutputTrackerWorker, SparkEnv, SparkException, TaskContext}
 import org.apache.spark.MapOutputTracker.SHUFFLE_PUSH_MAP_ID
 import org.apache.spark.errors.SparkCoreErrors
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{config, Logging}
 import org.apache.spark.network.buffer.{FileSegmentManagedBuffer, ManagedBuffer}
 import org.apache.spark.network.shuffle._
 import org.apache.spark.network.shuffle.checksum.{Cause, ShuffleChecksumHelper}
@@ -110,6 +110,14 @@ final class ShuffleBlockFetcherIterator(
   // smaller than maxBytesInFlight is to allow multiple, parallel fetches from up to 5
   // nodes, rather than blocking on reading output from one node.
   private val targetRemoteRequestSize = math.max(maxBytesInFlight / 5, 1L)
+
+  private val isShuffleMigrationEnabled =
+    SparkEnv.get.conf.get(config.DECOMMISSION_ENABLED) &&
+      SparkEnv.get.conf.get(config.STORAGE_DECOMMISSION_ENABLED) &&
+      SparkEnv.get.conf.get(config.STORAGE_DECOMMISSION_SHUFFLE_BLOCKS_ENABLED)
+
+  private val shouldPerformShuffleLocationRefresh =
+    isShuffleMigrationEnabled && SparkEnv.get.conf.get(config.STORAGE_DECOMMISSION_SHUFFLE_REFRESH)
 
   /**
    * Total number of blocks to fetch.
@@ -264,18 +272,22 @@ final class ShuffleBlockFetcherIterator(
       case FetchBlockInfo(blockId, size, mapIndex) => (blockId.toString, (size, mapIndex))
     }.toMap
     val remainingBlocks = new HashSet[String]() ++= infoMap.keys
-    val deferredBlocks = new ArrayBuffer[String]()
+    val deferredBlocks = new HashMap[BlockManagerId, Queue[String]]()
     val blockIds = req.blocks.map(_.blockId.toString)
     val address = req.address
     val requestStartTime = clock.nanoTime()
 
     @inline def enqueueDeferredFetchRequestIfNecessary(): Unit = {
       if (remainingBlocks.isEmpty && deferredBlocks.nonEmpty) {
-        val blocks = deferredBlocks.map { blockId =>
-          val (size, mapIndex) = infoMap(blockId)
-          FetchBlockInfo(BlockId(blockId), size, mapIndex)
+        val newAddressToBlocks = new HashMap[BlockManagerId, Queue[FetchBlockInfo]]()
+        deferredBlocks.foreach { case (blockManagerId, blockIds) =>
+          val blocks = blockIds.map { blockId =>
+            val (size, mapIndex) = infoMap(blockId)
+            FetchBlockInfo(BlockId(blockId), size, mapIndex)
+          }
+          newAddressToBlocks.put(blockManagerId, blocks)
         }
-        results.put(DeferFetchRequestResult(FetchRequest(address, blocks)))
+        results.put(DeferFetchRequestResult(address, newAddressToBlocks))
         deferredBlocks.clear()
       }
     }
@@ -344,7 +356,8 @@ final class ShuffleBlockFetcherIterator(
                     s"due to Netty OOM, will retry")
                 }
                 remainingBlocks -= blockId
-                deferredBlocks += blockId
+                deferredBlocks.getOrElseUpdate(address, new Queue[String]())
+                  .enqueue(blockId)
                 enqueueDeferredFetchRequestIfNecessary()
               }
 
@@ -355,8 +368,23 @@ final class ShuffleBlockFetcherIterator(
                 updateMergedReqsDuration(wasReqForMergedChunks = true)
                 results.put(FallbackOnPushMergedFailureResult(
                   block, address, infoMap(blockId)._1, remainingBlocks.isEmpty))
-              } else {
+              } else if (!shouldPerformShuffleLocationRefresh) {
                 results.put(FailureFetchResult(block, infoMap(blockId)._2, address, e))
+              } else {
+                val (shuffleId, mapId) = BlockId.getShuffleIdAndMapId(block)
+                val mapOutputTrackerWorker = mapOutputTracker.asInstanceOf[MapOutputTrackerWorker]
+                val currentAddress = mapOutputTrackerWorker
+                  .getMapOutputLocationWithRefresh(shuffleId, mapId, address)
+                if (currentAddress != address) {
+                  logInfo(s"Map status location for block $blockId changed from $address " +
+                    s"to $currentAddress")
+                  remainingBlocks -= blockId
+                  deferredBlocks.getOrElseUpdate(currentAddress, new Queue[String]())
+                    .enqueue(blockId)
+                  enqueueDeferredFetchRequestIfNecessary()
+                } else {
+                  results.put(FailureFetchResult(block, infoMap(blockId)._2, address, e))
+                }
               }
           }
         }
@@ -970,15 +998,16 @@ final class ShuffleBlockFetcherIterator(
           }
           throwFetchFailedException(blockId, mapIndex, address, e, Some(errorMsg))
 
-        case DeferFetchRequestResult(request) =>
-          val address = request.address
-          numBlocksInFlightPerAddress(address) -= request.blocks.size
-          bytesInFlight -= request.size
+        case DeferFetchRequestResult(failedAddress, newAddressToBlocks) =>
+          numBlocksInFlightPerAddress(failedAddress) -= newAddressToBlocks.values.map(_.size).sum
+          bytesInFlight -= newAddressToBlocks.values.map(_.map(_.size).sum).sum
           reqsInFlight -= 1
           logDebug("Number of requests in flight " + reqsInFlight)
-          val defReqQueue =
-            deferredFetchRequests.getOrElseUpdate(address, new Queue[FetchRequest]())
-          defReqQueue.enqueue(request)
+          newAddressToBlocks.foreach { case (newAddress, blocks) =>
+            val defReqQueue =
+              deferredFetchRequests.getOrElseUpdate(newAddress, new Queue[FetchRequest]())
+            defReqQueue.enqueue(FetchRequest(newAddress, blocks))
+          }
           result = null
 
         case FallbackOnPushMergedFailureResult(blockId, address, size, isNetworkReqDone) =>
@@ -1580,7 +1609,9 @@ object ShuffleBlockFetcherIterator {
    * Result of a fetch request that should be deferred for some reasons, e.g., Netty OOM
    */
   private[storage]
-  case class DeferFetchRequestResult(fetchRequest: FetchRequest) extends FetchResult
+  case class DeferFetchRequestResult(
+      failedAddress: BlockManagerId,
+      newAddressToBlocks: HashMap[BlockManagerId, Queue[FetchBlockInfo]]) extends FetchResult
 
   /**
    * Result of an un-successful fetch of either of these:

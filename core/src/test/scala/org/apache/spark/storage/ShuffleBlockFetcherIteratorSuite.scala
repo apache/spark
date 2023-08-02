@@ -39,7 +39,7 @@ import org.mockito.stubbing.Answer
 import org.roaringbitmap.RoaringBitmap
 import org.scalatest.PrivateMethodTester
 
-import org.apache.spark.{MapOutputTracker, SparkFunSuite, TaskContext}
+import org.apache.spark.{MapOutputTrackerWorker, SharedSparkContext, SparkEnv, SparkFunSuite, TaskContext, TestUtils}
 import org.apache.spark.MapOutputTracker.SHUFFLE_PUSH_MAP_ID
 import org.apache.spark.network._
 import org.apache.spark.network.buffer.{FileSegmentManagedBuffer, ManagedBuffer}
@@ -51,16 +51,19 @@ import org.apache.spark.storage.ShuffleBlockFetcherIterator._
 import org.apache.spark.util.Utils
 
 
-class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodTester {
+class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite
+  with PrivateMethodTester
+  with SharedSparkContext {
 
   private var transfer: BlockTransferService = _
-  private var mapOutputTracker: MapOutputTracker = _
+  private var mapOutputTracker: MapOutputTrackerWorker = _
 
   override def beforeEach(): Unit = {
     transfer = mock(classOf[BlockTransferService])
-    mapOutputTracker = mock(classOf[MapOutputTracker])
+    mapOutputTracker = mock(classOf[MapOutputTrackerWorker])
     when(mapOutputTracker.getMapSizesForMergeResult(any(), any(), any()))
       .thenReturn(Seq.empty.iterator)
+    when(mapOutputTracker.getMapOutputLocationWithRefresh(any(), any(), any())).thenReturn(null)
   }
 
   private def doReturn(value: Any) = org.mockito.Mockito.doReturn(value, Seq.empty: _*)
@@ -662,6 +665,66 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
     sem.release()
     verify(blocks(ShuffleBlockId(0, 2, 0)), times(0)).retain()
     verify(blocks(ShuffleBlockId(0, 2, 0)), times(0)).release()
+  }
+
+  test("handle map output location change") {
+    TestUtils.withConf(
+      "spark.decommission.enabled" -> "true",
+      "spark.storage.decommission.enabled" -> "true",
+      "spark.storage.decommission.shuffleBlocks.enabled" -> "true"
+    ) {
+      val remoteBmId = BlockManagerId("test-remote-1", "test-remote-1", 2)
+      val blocks = Map[BlockId, ManagedBuffer](
+        ShuffleBlockId(0, 0, 0) -> createMockManagedBuffer(),
+        ShuffleBlockId(0, 1, 0) -> createMockManagedBuffer(),
+        ShuffleBlockId(0, 2, 0) -> createMockManagedBuffer()
+      )
+
+      answerFetchBlocks { invocation =>
+        val host = invocation.getArgument[String](0)
+        val listener = invocation.getArgument[BlockFetchingListener](4)
+        host match {
+          case "test-remote-1" =>
+            listener.onBlockFetchSuccess(
+              ShuffleBlockId(0, 0, 0).toString, blocks(ShuffleBlockId(0, 0, 0)))
+            // TODO: update exception type here
+            listener.onBlockFetchFailure(
+              ShuffleBlockId(0, 1, 0).toString, new RuntimeException())
+            listener.onBlockFetchFailure(
+              ShuffleBlockId(0, 2, 0).toString, new RuntimeException())
+          case "test-remote-2" =>
+            listener.onBlockFetchSuccess(
+              ShuffleBlockId(0, 1, 0).toString, blocks(ShuffleBlockId(0, 1, 0)))
+            listener.onBlockFetchSuccess(
+              ShuffleBlockId(0, 2, 0).toString, blocks(ShuffleBlockId(0, 2, 0)))
+        }
+      }
+
+      when(mapOutputTracker.getMapOutputLocationWithRefresh(any(), any(), any()))
+        .thenAnswer { invocation =>
+          val mapId = invocation.getArgument[Long](1)
+          mapId match {
+            case 0 => BlockManagerId("test-remote-1", "test-remote-1", 2)
+            case 1 => BlockManagerId("test-remote-2", "test-remote-2", 2)
+            case 2 => BlockManagerId("test-remote-2", "test-remote-2", 2)
+          }
+        }
+
+      Seq(true, false).foreach { isEnabled =>
+        SparkEnv.get.conf.set(
+          "spark.storage.decommission.shuffleBlocks.refreshLocationsEnabled", isEnabled.toString)
+        val iterator = createShuffleBlockIteratorWithDefaults(
+          Map(remoteBmId -> toBlockList(blocks.keys, 1L, 0))
+        )
+        if (isEnabled) {
+          assert(iterator.toList.map(_._1) == blocks.keys.toList)
+        } else {
+          intercept[FetchFailedException] {
+            iterator.toList
+          }
+        }
+      }
+    }
   }
 
   test("fail all blocks if any of the remote request fails") {

@@ -217,6 +217,14 @@ object BlockId {
   val TEMP_SHUFFLE = "temp_shuffle_([-A-Fa-f0-9]+)".r
   val TEST = "test_(.*)".r
 
+  def getShuffleIdAndMapId(blockId: BlockId): (Int, Long) = blockId match {
+    case ShuffleBlockId(shuffleId, mapId, _) => (shuffleId, mapId)
+    case ShuffleBlockBatchId(shuffleId, mapId, _, _) => (shuffleId, mapId)
+    case ShuffleDataBlockId(shuffleId, mapId, _) => (shuffleId, mapId)
+    case ShuffleIndexBlockId(shuffleId, mapId, _) => (shuffleId, mapId)
+    case _ => throw new SparkException(s"Unexpected shuffle BlockId $blockId")
+  }
+
   def apply(name: String): BlockId = name match {
     case RDD(rddId, splitIndex) =>
       RDDBlockId(rddId.toInt, splitIndex.toInt)

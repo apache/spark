@@ -39,7 +39,7 @@ import org.apache.spark.internal.config._
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.rpc.{RpcCallContext, RpcEndpoint, RpcEndpointRef, RpcEnv}
 import org.apache.spark.scheduler.{MapStatus, MergeStatus, ShuffleOutputStatus}
-import org.apache.spark.shuffle.MetadataFetchFailedException
+import org.apache.spark.shuffle.{MetadataFetchFailedException, MetadataUpdateFailedException}
 import org.apache.spark.storage.{BlockId, BlockManagerId, ShuffleBlockId, ShuffleMergedBlockId}
 import org.apache.spark.util._
 import org.apache.spark.util.collection.OpenHashMap
@@ -1286,6 +1286,30 @@ private[spark] class MapOutputTrackerWorker(conf: SparkConf) extends MapOutputTr
       shuffleId, startMapIndex, endMapIndex, startPartition, endPartition, useMergeResult = false)
     assert(mapSizesByExecutorId.enableBatchFetch == true)
     mapSizesByExecutorId.iter
+  }
+
+  def getMapOutputLocationWithRefresh(
+      shuffleId: Int,
+      mapId: Long,
+      prevLocation: BlockManagerId): BlockManagerId = {
+    // Try to get the cached location first in case other concurrent tasks
+    // fetched the fresh location already
+    var currentLocationOpt = getMapOutputLocation(shuffleId, mapId)
+    if (currentLocationOpt.isDefined && currentLocationOpt.get == prevLocation) {
+      // Address in the cache unchanged. Try to clean cache and get a fresh location
+      unregisterShuffle(shuffleId)
+      currentLocationOpt = getMapOutputLocation(shuffleId, mapId)
+    }
+    if (currentLocationOpt.isEmpty) {
+      throw new MetadataUpdateFailedException(shuffleId, mapId,
+        message = s"Failed to get map output location for shuffleId $shuffleId, mapId $mapId")
+    }
+    currentLocationOpt.get
+  }
+
+  private def getMapOutputLocation(shuffleId: Int, mapId: Long): Option[BlockManagerId] = {
+    val (mapOutputStatuses, _) = getStatuses(shuffleId, conf, false)
+    mapOutputStatuses.filter(_ != null).find(_.mapId == mapId).map(_.location)
   }
 
   override def getPushBasedShuffleMapSizesByExecutorId(
