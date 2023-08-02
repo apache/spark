@@ -1102,7 +1102,7 @@ class SparkConnectClient(object):
             if self._use_reattachable_execute:
                 # Don't use retryHandler - own retry handling is inside.
                 generator = ExecutePlanResponseReattachableIterator(
-                    req, self._stub, self._retry_policy
+                    req, self._stub, self._retry_policy, self._builder.metadata()
                 )
                 for b in generator:
                     handle_response(b)
@@ -1189,7 +1189,7 @@ class SparkConnectClient(object):
             if self._use_reattachable_execute:
                 # Don't use retryHandler - own retry handling is inside.
                 generator = ExecutePlanResponseReattachableIterator(
-                    req, self._stub, self._retry_policy
+                    req, self._stub, self._retry_policy, self._builder.metadata()
                 )
                 for b in generator:
                     yield from handle_response(b)

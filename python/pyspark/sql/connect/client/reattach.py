@@ -20,7 +20,7 @@ check_dependencies(__name__)
 
 import uuid
 from collections.abc import Generator
-from typing import Optional, Dict, Any, Iterator
+from typing import Optional, Dict, Any, Iterator, Iterable, Tuple
 import threading
 
 import pyspark.sql.connect.proto as pb2
@@ -56,6 +56,7 @@ class ExecutePlanResponseReattachableIterator(Generator):
         request: pb2.ExecutePlanRequest,
         stub: grpc_lib.SparkConnectServiceStub,
         retry_policy: Dict[str, Any],
+        metadata: Iterable[Tuple[str, str]],
     ):
         self._request = request
         self._retry_policy = retry_policy
@@ -88,7 +89,7 @@ class ExecutePlanResponseReattachableIterator(Generator):
         # Note: This is not retried, because no error would ever be thrown here, and GRPC will only
         # throw error on first self._has_next().
         self._iterator: Iterator[pb2.ExecutePlanResponse] = self._stub.ExecutePlan(
-            self._initial_request
+            self._initial_request, metadata=metadata
         )
 
         # Current item from this iterator.
