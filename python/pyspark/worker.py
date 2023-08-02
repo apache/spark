@@ -23,7 +23,7 @@ import sys
 import time
 from inspect import currentframe, getframeinfo, getfullargspec
 import json
-from typing import Iterator
+from typing import Iterable, Iterator
 
 # 'resource' is a Unix specific module.
 has_resource_module = True
@@ -599,7 +599,7 @@ def read_udtf(pickleSer, infile, eval_type):
                     raise PySparkTypeError(
                         error_class="INVALID_ARROW_UDTF_RETURN_TYPE",
                         message_parameters={
-                            "type_name": type(result).__name_,
+                            "type_name": type(result).__name__,
                             "value": str(result),
                         },
                     )
@@ -641,13 +641,7 @@ def read_udtf(pickleSer, infile, eval_type):
                     yield from eval(*[a[o] for o in arg_offsets])
             finally:
                 if terminate is not None:
-                    try:
-                        yield from terminate()
-                    except BaseException as e:
-                        raise PySparkRuntimeError(
-                            error_class="UDTF_EXEC_ERROR",
-                            message_parameters={"method_name": "terminate", "error": str(e)},
-                        )
+                    yield from terminate()
 
         return mapper, None, ser, ser
 
@@ -672,16 +666,29 @@ def read_udtf(pickleSer, infile, eval_type):
 
             # Evaluate the function and return a tuple back to the executor.
             def evaluate(*a) -> tuple:
-                res = f(*a)
+                try:
+                    res = f(*a)
+                except Exception as e:
+                    raise PySparkRuntimeError(
+                        error_class="UDTF_EXEC_ERROR",
+                        message_parameters={"method_name": f.__name__, "error": str(e)},
+                    )
+
                 if res is None:
                     # If the function returns None or does not have an explicit return statement,
                     # an empty tuple is returned to the executor.
                     # This is because directly constructing tuple(None) results in an exception.
                     return tuple()
-                else:
-                    # If the function returns a result, we map it to the internal representation and
-                    # returns the results as a tuple.
-                    return tuple(map(verify_and_convert_result, res))
+
+                if not isinstance(res, Iterable):
+                    raise PySparkRuntimeError(
+                        error_class="UDTF_RETURN_NOT_ITERABLE",
+                        message_parameters={"type": type(res).__name__},
+                    )
+
+                # If the function returns a result, we map it to the internal representation and
+                # returns the results as a tuple.
+                return tuple(map(verify_and_convert_result, res))
 
             return evaluate
 
@@ -699,13 +706,7 @@ def read_udtf(pickleSer, infile, eval_type):
                     yield eval(*[a[o] for o in arg_offsets])
             finally:
                 if terminate is not None:
-                    try:
-                        yield terminate()
-                    except BaseException as e:
-                        raise PySparkRuntimeError(
-                            error_class="UDTF_EXEC_ERROR",
-                            message_parameters={"method_name": "terminate", "error": str(e)},
-                        )
+                    yield terminate()
 
         return mapper, None, ser, ser
 
