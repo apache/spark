@@ -187,7 +187,7 @@ jobs:
             ./build/mvn $MAVEN_CLI_OPTS -pl "$TEST_MODULES" -Pyarn -Pmesos -Pkubernetes -Pvolcano -Phive -Phive-thriftserver -Phadoop-cloud -Pspark-ganglia-lgpl -Djava.version=${JAVA_VERSION/-ea} -Dtest.exclude.tags="$EXCLUDED_TAGS" test -fae
           elif [[ "$MODULES_TO_TEST" == "connect" ]]; then
             ./build/mvn $MAVEN_CLI_OPTS -Djava.version=${JAVA_VERSION/-ea} -pl connector/connect/client/jvm,connector/connect/common,connector/connect/server test -fae
-          elif [[ "$MODULES_TO_TEST" == "sql#hive-thriftserver" || contains(matrix.modules, 'repl') ]]; then
+          elif [[ "$MODULES_TO_TEST" == "sql#hive-thriftserver" || "$MODULES_TO_TEST" == *"repl"* ]]; then
             # To avoid a compilation loop, for the `sql/hive-thriftserver` module, run `clean install` instead
             # SPARK-44600: In order to force the `repl` module to use the network-common.jar for testing instead of using the classes directory, run `clean install` instead
             ./build/mvn $MAVEN_CLI_OPTS -pl sql/hive-thriftserver -Phive -Phive-thriftserver -Djava.version=${JAVA_VERSION/-ea} clean install -fae
