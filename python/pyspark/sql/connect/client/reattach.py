@@ -88,8 +88,8 @@ class ExecutePlanResponseReattachableIterator(Generator):
         # Initial iterator comes from ExecutePlan request.
         # Note: This is not retried, because no error would ever be thrown here, and GRPC will only
         # throw error on first self._has_next().
-        self._iterator: Iterator[pb2.ExecutePlanResponse] = self._stub.ExecutePlan(
-            self._initial_request, metadata=metadata
+        self._iterator: Iterator[pb2.ExecutePlanResponse] = iter(
+            self._stub.ExecutePlan(self._initial_request, metadata=metadata)
         )
 
         # Current item from this iterator.
