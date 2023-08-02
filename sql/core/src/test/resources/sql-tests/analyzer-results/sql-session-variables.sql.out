@@ -16,7 +16,7 @@ SET VARIABLE title = '-- Basic sanity --'
 -- !query analysis
 SetVariable [session.title(title, null, false)]
 +- SubqueryAlias T
-   +- Project [title#x AS session.title(title, null, false)#x]
+   +- Project [title#x AS session.title#x]
       +- GlobalLimit 2
          +- LocalLimit 2
             +- Project [-- Basic sanity -- AS title#x]
@@ -41,7 +41,7 @@ SET VARIABLE var1 = 6
 -- !query analysis
 SetVariable [session.var1(var1, 5, false)]
 +- SubqueryAlias T
-   +- Project [var1#x AS session.var1(var1, 5, false)#x]
+   +- Project [var1#x AS session.var1#x]
       +- GlobalLimit 2
          +- LocalLimit 2
             +- Project [6 AS var1#x]
@@ -66,7 +66,7 @@ SET VARIABLE title = 'Create Variable - Success Cases'
 -- !query analysis
 SetVariable [session.title(title, -- Basic sanity --, false)]
 +- SubqueryAlias T
-   +- Project [title#x AS session.title(title, -- Basic sanity --, false)#x]
+   +- Project [title#x AS session.title#x]
       +- GlobalLimit 2
          +- LocalLimit 2
             +- Project [Create Variable - Success Cases AS title#x]
@@ -123,7 +123,7 @@ SET VARIABLE title = 'Create Variable - Failure Cases'
 -- !query analysis
 SetVariable [session.title(title, Create Variable - Success Cases, false)]
 +- SubqueryAlias T
-   +- Project [title#x AS session.title(title, Create Variable - Success Cases, false)#x]
+   +- Project [title#x AS session.title#x]
       +- GlobalLimit 2
          +- LocalLimit 2
             +- Project [Create Variable - Failure Cases AS title#x]
@@ -155,7 +155,7 @@ SET VARIABLE title = 'Drop Variable'
 -- !query analysis
 SetVariable [session.title(title, Create Variable - Failure Cases, false)]
 +- SubqueryAlias T
-   +- Project [title#x AS session.title(title, Create Variable - Failure Cases, false)#x]
+   +- Project [title#x AS session.title#x]
       +- GlobalLimit 2
          +- LocalLimit 2
             +- Project [Drop Variable AS title#x]
@@ -184,7 +184,7 @@ DropVariableCommand system.session.var1, false
 -- !query
 SELECT var1
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
   "sqlState" : "42703",
@@ -225,7 +225,7 @@ SET VARIABLE title = 'Test qualifiers - success'
 -- !query analysis
 SetVariable [session.title(title, Drop Variable, false)]
 +- SubqueryAlias T
-   +- Project [title#x AS session.title(title, Drop Variable, false)#x]
+   +- Project [title#x AS session.title#x]
       +- GlobalLimit 2
          +- LocalLimit 2
             +- Project [Test qualifiers - success AS title#x]
@@ -250,7 +250,7 @@ SET VARIABLE var1 = 2
 -- !query analysis
 SetVariable [session.var1(var1, 1, false)]
 +- SubqueryAlias T
-   +- Project [var1#x AS session.var1(var1, 1, false)#x]
+   +- Project [var1#x AS session.var1#x]
       +- GlobalLimit 2
          +- LocalLimit 2
             +- Project [2 AS var1#x]
@@ -282,7 +282,7 @@ SET VARIABLE session.var1 = 2
 -- !query analysis
 SetVariable [session.var1(var1, 1, false)]
 +- SubqueryAlias T
-   +- Project [var1#x AS session.var1(var1, 1, false)#x]
+   +- Project [var1#x AS session.var1#x]
       +- GlobalLimit 2
          +- LocalLimit 2
             +- Project [2 AS var1#x]
@@ -314,7 +314,7 @@ SET VARIABLE system.session.var1 = 2
 -- !query analysis
 SetVariable [session.var1(var1, 1, false)]
 +- SubqueryAlias T
-   +- Project [var1#x AS session.var1(var1, 1, false)#x]
+   +- Project [var1#x AS session.var1#x]
       +- GlobalLimit 2
          +- LocalLimit 2
             +- Project [2 AS var1#x]
@@ -346,7 +346,7 @@ SET VARIABLE sYstem.sesSiOn.vaR1 = 2
 -- !query analysis
 SetVariable [session.var1(var1, 1, false)]
 +- SubqueryAlias T
-   +- Project [vaR1#x AS session.var1(var1, 1, false)#x]
+   +- Project [vaR1#x AS session.var1#x]
       +- GlobalLimit 2
          +- LocalLimit 2
             +- Project [2 AS vaR1#x]
@@ -465,7 +465,7 @@ SET VARIABLE title = 'Test qualifiers - fail'
 -- !query analysis
 SetVariable [session.title(title, Test qualifiers - success, false)]
 +- SubqueryAlias T
-   +- Project [title#x AS session.title(title, Test qualifiers - success, false)#x]
+   +- Project [title#x AS session.title#x]
       +- GlobalLimit 2
          +- LocalLimit 2
             +- Project [Test qualifiers - fail AS title#x]
@@ -541,7 +541,7 @@ CreateVariableCommand system.session.var1, INT, null, true
 -- !query
 SELECT var
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
   "sqlState" : "42703",
@@ -561,7 +561,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 SELECT ses.var1
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
   "sqlState" : "42703",
@@ -581,7 +581,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 SELECT b.sesson.var1
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
   "sqlState" : "42703",
@@ -601,7 +601,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 SELECT builtn.session.var1
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
   "sqlState" : "42703",
@@ -651,7 +651,7 @@ SET VARIABLE title = 'Test DEFAULT on create - success'
 -- !query analysis
 SetVariable [session.title(title, Test qualifiers - fail, false)]
 +- SubqueryAlias T
-   +- Project [title#x AS session.title(title, Test qualifiers - fail, false)#x]
+   +- Project [title#x AS session.title#x]
       +- GlobalLimit 2
          +- LocalLimit 2
             +- Project [Test DEFAULT on create - success AS title#x]
@@ -787,7 +787,7 @@ SET VARIABLE title = 'Test DEFAULT on create - failures'
 -- !query analysis
 SetVariable [session.title(title, Test DEFAULT on create - success, false)]
 +- SubqueryAlias T
-   +- Project [title#x AS session.title(title, Test DEFAULT on create - success, false)#x]
+   +- Project [title#x AS session.title#x]
       +- GlobalLimit 2
          +- LocalLimit 2
             +- Project [Test DEFAULT on create - failures AS title#x]
@@ -872,7 +872,7 @@ SET VARIABLE title = 'SET VARIABLE - single target'
 -- !query analysis
 SetVariable [session.title(title, Test DEFAULT on create - failures, false)]
 +- SubqueryAlias T
-   +- Project [title#x AS session.title(title, Test DEFAULT on create - failures, false)#x]
+   +- Project [title#x AS session.title#x]
       +- GlobalLimit 2
          +- LocalLimit 2
             +- Project [SET VARIABLE - single target AS title#x]
@@ -890,7 +890,7 @@ SET VARIABLE var1 = 7
 -- !query analysis
 SetVariable [session.var1(var1, 5, false)]
 +- SubqueryAlias T
-   +- Project [var1#x AS session.var1(var1, 5, false)#x]
+   +- Project [var1#x AS session.var1#x]
       +- GlobalLimit 2
          +- LocalLimit 2
             +- Project [7 AS var1#x]
@@ -909,7 +909,7 @@ SET VAR var1 = 8
 -- !query analysis
 SetVariable [session.var1(var1, 7, false)]
 +- SubqueryAlias T
-   +- Project [var1#x AS session.var1(var1, 7, false)#x]
+   +- Project [var1#x AS session.var1#x]
       +- GlobalLimit 2
          +- LocalLimit 2
             +- Project [8 AS var1#x]
@@ -928,7 +928,7 @@ SET VARIABLE var1 = (SELECT c1 FROM VALUES(1) AS T(c1))
 -- !query analysis
 SetVariable [session.var1(var1, 8, false)]
 +- SubqueryAlias T
-   +- Project [var1#x AS session.var1(var1, 8, false)#x]
+   +- Project [var1#x AS session.var1#x]
       +- GlobalLimit 2
          +- LocalLimit 2
             +- Project [scalar-subquery#x [] AS var1#x]
@@ -950,7 +950,7 @@ SET VARIABLE var1 = (SELECT c1 FROM VALUES(1) AS T(c1) WHERE 1=0)
 -- !query analysis
 SetVariable [session.var1(var1, 1, false)]
 +- SubqueryAlias T
-   +- Project [var1#x AS session.var1(var1, 1, false)#x]
+   +- Project [var1#x AS session.var1#x]
       +- GlobalLimit 2
          +- LocalLimit 2
             +- Project [scalar-subquery#x [] AS var1#x]
@@ -973,7 +973,7 @@ SET VARIABLE var1 = (SELECT c1 FROM VALUES(1.0) AS T(c1))
 -- !query analysis
 SetVariable [session.var1(var1, null, false)]
 +- SubqueryAlias T
-   +- Project [var1#x AS session.var1(var1, null, false)#x]
+   +- Project [var1#x AS session.var1#x]
       +- GlobalLimit 2
          +- LocalLimit 2
             +- Project [cast(var1#x as int) AS var1#x]
@@ -1033,7 +1033,7 @@ org.apache.spark.SparkException
 -- !query
 SET VARIABLE var1 = (SELECT c1, c1 FROM VALUES(1), (2) AS T(c1))
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "INVALID_SUBQUERY_EXPRESSION.SCALAR_SUBQUERY_RETURN_MORE_THAN_ONE_OUTPUT_COLUMN",
   "sqlState" : "42823",
@@ -1084,7 +1084,7 @@ SET VARIABLE var1 = var1 + 1
 -- !query analysis
 SetVariable [session.var1(var1, 5, false)]
 +- SubqueryAlias T
-   +- Project [var1#x AS session.var1(var1, 5, false)#x]
+   +- Project [var1#x AS session.var1#x]
       +- GlobalLimit 2
          +- LocalLimit 2
             +- Project [(session.var1(var1, 5, true) + 1) AS var1#x]
@@ -1109,7 +1109,7 @@ SET VARIABLE title = 'SET VARIABLE - comma separated target'
 -- !query analysis
 SetVariable [session.title(title, SET VARIABLE - single target, false)]
 +- SubqueryAlias T
-   +- Project [title#x AS session.title(title, SET VARIABLE - single target, false)#x]
+   +- Project [title#x AS session.title#x]
       +- GlobalLimit 2
          +- LocalLimit 2
             +- Project [SET VARIABLE - comma separated target AS title#x]
@@ -1139,7 +1139,7 @@ SET VARIABLE var1 = 6, var2 = 'world', var3 = pi()
 -- !query analysis
 SetVariable [session.var1(var1, 5, false), session.var2(var2, hello, false), session.var3(var3, 2.0, false)]
 +- SubqueryAlias T
-   +- Project [var1#x AS session.var1(var1, 5, false)#x, var2#x AS session.var2(var2, hello, false)#x, var3#x AS session.var3(var3, 2.0, false)#x]
+   +- Project [var1#x AS session.var1#x, var2#x AS session.var2#x, var3#x AS session.var3#x]
       +- GlobalLimit 2
          +- LocalLimit 2
             +- Project [6 AS var1#x, world AS var2#x, PI() AS var3#x]
@@ -1158,7 +1158,7 @@ SET VAR var1 = 7, var2 = 'universe', var3 = -1
 -- !query analysis
 SetVariable [session.var1(var1, 6, false), session.var2(var2, world, false), session.var3(var3, 3.141592653589793, false)]
 +- SubqueryAlias T
-   +- Project [var1#x AS session.var1(var1, 6, false)#x, var2#x AS session.var2(var2, world, false)#x, var3#x AS session.var3(var3, 3.141592653589793, false)#x]
+   +- Project [var1#x AS session.var1#x, var2#x AS session.var2#x, var3#x AS session.var3#x]
       +- GlobalLimit 2
          +- LocalLimit 2
             +- Project [var1#x, var2#x, cast(var3#x as double) AS var3#x]
@@ -1196,7 +1196,7 @@ SET VARIABLE var1 = var3, var2 = ascii(var1), var3 = var1
 -- !query analysis
 SetVariable [session.var1(var1, 5, false), session.var2(var2, hello, false), session.var3(var3, 2.0, false)]
 +- SubqueryAlias T
-   +- Project [var1#x AS session.var1(var1, 5, false)#x, var2#x AS session.var2(var2, hello, false)#x, var3#x AS session.var3(var3, 2.0, false)#x]
+   +- Project [var1#x AS session.var1#x, var2#x AS session.var2#x, var3#x AS session.var3#x]
       +- GlobalLimit 2
          +- LocalLimit 2
             +- Project [cast(var3#x as int) AS var1#x, cast(var2#x as string) AS var2#x, cast(var1#x as double) AS var3#x]
@@ -1216,7 +1216,7 @@ SET VARIABLE var1 = var3, var2 = INTERVAL'5' HOUR, var3 = var1
 -- !query analysis
 SetVariable [session.var1(var1, 2, false), session.var2(var2, 53, false), session.var3(var3, 5.0, false)]
 +- SubqueryAlias T
-   +- Project [var1#x AS session.var1(var1, 2, false)#x, var2#x AS session.var2(var2, 53, false)#x, var3#x AS session.var3(var3, 5.0, false)#x]
+   +- Project [var1#x AS session.var1#x, var2#x AS session.var2#x, var3#x AS session.var3#x]
       +- GlobalLimit 2
          +- LocalLimit 2
             +- Project [cast(var3#x as int) AS var1#x, cast(var2#x as string) AS var2#x, cast(var1#x as double) AS var3#x]
@@ -1232,7 +1232,7 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DUPLICATE_ASSIGNMENTS",
   "sqlState" : "42701",
   "messageParameters" : {
-    "nameList" : "`session`.`var1(var1, 5, false)`"
+    "nameList" : "`session`.`var1`"
   }
 }
 
@@ -1260,7 +1260,7 @@ SET VARIABLE title = 'SET VARIABLE - row assignment'
 -- !query analysis
 SetVariable [session.title(title, SET VARIABLE - comma separated target, false)]
 +- SubqueryAlias T
-   +- Project [title#x AS session.title(title, SET VARIABLE - comma separated target, false)#x]
+   +- Project [title#x AS session.title#x]
       +- GlobalLimit 2
          +- LocalLimit 2
             +- Project [SET VARIABLE - row assignment AS title#x]
@@ -1290,7 +1290,7 @@ SET VARIABLE (var1) = (SELECT c1 FROM VALUES(1) AS T(c1))
 -- !query analysis
 SetVariable [session.var1(var1, 5, false)]
 +- SubqueryAlias T
-   +- Project [c1#x AS session.var1(var1, 5, false)#x]
+   +- Project [c1#x AS session.var1#x]
       +- GlobalLimit 2
          +- LocalLimit 2
             +- Project [c1#x]
@@ -1310,7 +1310,7 @@ SET VAR (var1) = (SELECT c1 FROM VALUES(2) AS T(c1))
 -- !query analysis
 SetVariable [session.var1(var1, 1, false)]
 +- SubqueryAlias T
-   +- Project [c1#x AS session.var1(var1, 1, false)#x]
+   +- Project [c1#x AS session.var1#x]
       +- GlobalLimit 2
          +- LocalLimit 2
             +- Project [c1#x]
@@ -1330,7 +1330,7 @@ SET VARIABLE (var1, var2) = (SELECT c1, c2 FROM VALUES(10, 11) AS T(c1, c2))
 -- !query analysis
 SetVariable [session.var1(var1, 2, false), session.var2(var2, hello, false)]
 +- SubqueryAlias T
-   +- Project [c1#x AS session.var1(var1, 2, false)#x, var2#x AS session.var2(var2, hello, false)#x]
+   +- Project [c1#x AS session.var1#x, var2#x AS session.var2#x]
       +- GlobalLimit 2
          +- LocalLimit 2
             +- Project [c1#x, cast(c2#x as string) AS var2#x]
@@ -1351,7 +1351,7 @@ SET VARIABLE (var1, var2, var3) = (SELECT c1, c2, c3 FROM VALUES(100, 110, 120) 
 -- !query analysis
 SetVariable [session.var1(var1, 10, false), session.var2(var2, 11, false), session.var3(var3, 2.0, false)]
 +- SubqueryAlias T
-   +- Project [c1#x AS session.var1(var1, 10, false)#x, var2#x AS session.var2(var2, 11, false)#x, var3#x AS session.var3(var3, 2.0, false)#x]
+   +- Project [c1#x AS session.var1#x, var2#x AS session.var2#x, var3#x AS session.var3#x]
       +- GlobalLimit 2
          +- LocalLimit 2
             +- Project [c1#x, cast(c2#x as string) AS var2#x, cast(c3#x as double) AS var3#x]
@@ -1372,7 +1372,7 @@ SET VARIABLE (var1, var2, var3) = (SELECT c1, c2, c3 FROM VALUES(100, 110, 120) 
 -- !query analysis
 SetVariable [session.var1(var1, 100, false), session.var2(var2, 110, false), session.var3(var3, 120.0, false)]
 +- SubqueryAlias T
-   +- Project [c1#x AS session.var1(var1, 100, false)#x, var2#x AS session.var2(var2, 110, false)#x, var3#x AS session.var3(var3, 120.0, false)#x]
+   +- Project [c1#x AS session.var1#x, var2#x AS session.var2#x, var3#x AS session.var3#x]
       +- GlobalLimit 2
          +- LocalLimit 2
             +- Project [c1#x, cast(c2#x as string) AS var2#x, cast(c3#x as double) AS var3#x]
@@ -1452,7 +1452,7 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DUPLICATE_ASSIGNMENTS",
   "sqlState" : "42701",
   "messageParameters" : {
-    "nameList" : "`session`.`var1(var1, null, false)`"
+    "nameList" : "`session`.`var1`"
   }
 }
 
@@ -1480,7 +1480,7 @@ SET VARIABLE title = 'DEFAULT expression usage'
 -- !query analysis
 SetVariable [session.title(title, SET VARIABLE - row assignment, false)]
 +- SubqueryAlias T
-   +- Project [title#x AS session.title(title, SET VARIABLE - row assignment, false)#x]
+   +- Project [title#x AS session.title#x]
       +- GlobalLimit 2
          +- LocalLimit 2
             +- Project [DEFAULT expression usage AS title#x]
@@ -1510,7 +1510,7 @@ SET VARIABLE var1 = 'hello'
 -- !query analysis
 SetVariable [session.var1(var1, default1, false)]
 +- SubqueryAlias T
-   +- Project [var1#x AS session.var1(var1, default1, false)#x]
+   +- Project [var1#x AS session.var1#x]
       +- GlobalLimit 2
          +- LocalLimit 2
             +- Project [hello AS var1#x]
@@ -1522,7 +1522,7 @@ SET VARIABLE var1 = DEFAULT
 -- !query analysis
 SetVariable [session.var1(var1, hello, false)]
 +- SubqueryAlias T
-   +- Project [DEFAULT#x AS session.var1(var1, hello, false)#x]
+   +- Project [DEFAULT#x AS session.var1#x]
       +- GlobalLimit 2
          +- LocalLimit 2
             +- Project [default1 AS DEFAULT#x]
@@ -1541,7 +1541,7 @@ SET VARIABLE var1 = 'hello1'
 -- !query analysis
 SetVariable [session.var1(var1, default1, false)]
 +- SubqueryAlias T
-   +- Project [var1#x AS session.var1(var1, default1, false)#x]
+   +- Project [var1#x AS session.var1#x]
       +- GlobalLimit 2
          +- LocalLimit 2
             +- Project [hello1 AS var1#x]
@@ -1553,7 +1553,7 @@ SET VARIABLE var1 = 'hello2'
 -- !query analysis
 SetVariable [session.var1(var1, hello1, false)]
 +- SubqueryAlias T
-   +- Project [var1#x AS session.var1(var1, hello1, false)#x]
+   +- Project [var1#x AS session.var1#x]
       +- GlobalLimit 2
          +- LocalLimit 2
             +- Project [hello2 AS var1#x]
@@ -1565,7 +1565,7 @@ SET VARIABLE var1 = 'hello3'
 -- !query analysis
 SetVariable [session.var1(var1, hello2, false)]
 +- SubqueryAlias T
-   +- Project [var1#x AS session.var1(var1, hello2, false)#x]
+   +- Project [var1#x AS session.var1#x]
       +- GlobalLimit 2
          +- LocalLimit 2
             +- Project [hello3 AS var1#x]
@@ -1577,7 +1577,7 @@ SET VARIABLE var1 = DEFAULT, var2 = DEFAULT, var3 = DEFAULT
 -- !query analysis
 SetVariable [session.var1(var1, hello3, false), session.var2(var2, default2, false), session.var3(var3, default3, false)]
 +- SubqueryAlias T
-   +- Project [DEFAULT#x AS session.var1(var1, hello3, false)#x, DEFAULT#x AS session.var2(var2, default2, false)#x, DEFAULT#x AS session.var3(var3, default3, false)#x]
+   +- Project [DEFAULT#x AS session.var1#x, DEFAULT#x AS session.var2#x, DEFAULT#x AS session.var3#x]
       +- GlobalLimit 2
          +- LocalLimit 2
             +- Project [default1 AS DEFAULT#x, default2 AS DEFAULT#x, default3 AS DEFAULT#x]
@@ -1596,7 +1596,7 @@ SET VARIABLE var1 = 'hello'
 -- !query analysis
 SetVariable [session.var1(var1, default1, false)]
 +- SubqueryAlias T
-   +- Project [var1#x AS session.var1(var1, default1, false)#x]
+   +- Project [var1#x AS session.var1#x]
       +- GlobalLimit 2
          +- LocalLimit 2
             +- Project [hello AS var1#x]
@@ -1608,7 +1608,7 @@ SET VARIABLE (var1) = (SELECT DEFAULT FROM VALUES(1) AS T(c1))
 -- !query analysis
 SetVariable [session.var1(var1, hello, false)]
 +- SubqueryAlias T
-   +- Project [DEFAULT#x AS session.var1(var1, hello, false)#x]
+   +- Project [DEFAULT#x AS session.var1#x]
       +- GlobalLimit 2
          +- LocalLimit 2
             +- Project [default1 AS DEFAULT#x]
@@ -1628,7 +1628,7 @@ SET VARIABLE var1 = 'hello'
 -- !query analysis
 SetVariable [session.var1(var1, default1, false)]
 +- SubqueryAlias T
-   +- Project [var1#x AS session.var1(var1, default1, false)#x]
+   +- Project [var1#x AS session.var1#x]
       +- GlobalLimit 2
          +- LocalLimit 2
             +- Project [hello AS var1#x]
@@ -1640,7 +1640,7 @@ SET VARIABLE (var1) = (SELECT DEFAULT FROM VALUES('world') AS T(default))
 -- !query analysis
 SetVariable [session.var1(var1, hello, false)]
 +- SubqueryAlias T
-   +- Project [DEFAULT#x AS session.var1(var1, hello, false)#x]
+   +- Project [DEFAULT#x AS session.var1#x]
       +- GlobalLimit 2
          +- LocalLimit 2
             +- Project [DEFAULT#x]
@@ -1660,7 +1660,7 @@ SET VARIABLE var1 = 'hello'
 -- !query analysis
 SetVariable [session.var1(var1, world, false)]
 +- SubqueryAlias T
-   +- Project [var1#x AS session.var1(var1, world, false)#x]
+   +- Project [var1#x AS session.var1#x]
       +- GlobalLimit 2
          +- LocalLimit 2
             +- Project [hello AS var1#x]
@@ -1672,7 +1672,7 @@ SET VARIABLE (var1) = (SELECT DEFAULT FROM VALUES(1) AS T(c1) LIMIT 1)
 -- !query analysis
 SetVariable [session.var1(var1, hello, false)]
 +- SubqueryAlias T
-   +- Project [DEFAULT#x AS session.var1(var1, hello, false)#x]
+   +- Project [DEFAULT#x AS session.var1#x]
       +- GlobalLimit 2
          +- LocalLimit 2
             +- GlobalLimit 1
@@ -1694,7 +1694,7 @@ SET VARIABLE var1 = 'hello'
 -- !query analysis
 SetVariable [session.var1(var1, default1, false)]
 +- SubqueryAlias T
-   +- Project [var1#x AS session.var1(var1, default1, false)#x]
+   +- Project [var1#x AS session.var1#x]
       +- GlobalLimit 2
          +- LocalLimit 2
             +- Project [hello AS var1#x]
@@ -1706,7 +1706,7 @@ SET VARIABLE (var1) = (SELECT DEFAULT FROM VALUES(1),(2),(3) AS T(c1) LIMIT 1 OF
 -- !query analysis
 SetVariable [session.var1(var1, hello, false)]
 +- SubqueryAlias T
-   +- Project [DEFAULT#x AS session.var1(var1, hello, false)#x]
+   +- Project [DEFAULT#x AS session.var1#x]
       +- GlobalLimit 2
          +- LocalLimit 2
             +- GlobalLimit 1
@@ -1729,7 +1729,7 @@ SET VARIABLE var1 = 'hello'
 -- !query analysis
 SetVariable [session.var1(var1, default1, false)]
 +- SubqueryAlias T
-   +- Project [var1#x AS session.var1(var1, default1, false)#x]
+   +- Project [var1#x AS session.var1#x]
       +- GlobalLimit 2
          +- LocalLimit 2
             +- Project [hello AS var1#x]
@@ -1758,7 +1758,7 @@ SET VARIABLE var1 = 'hello'
 -- !query analysis
 SetVariable [session.var1(var1, hello, false)]
 +- SubqueryAlias T
-   +- Project [var1#x AS session.var1(var1, hello, false)#x]
+   +- Project [var1#x AS session.var1#x]
       +- GlobalLimit 2
          +- LocalLimit 2
             +- Project [hello AS var1#x]
@@ -1797,7 +1797,7 @@ SET VARIABLE (var1) = (VALUES(DEFAULT))
 -- !query analysis
 SetVariable [session.var1(var1, hello, false)]
 +- SubqueryAlias T
-   +- Project [col1#x AS session.var1(var1, hello, false)#x]
+   +- Project [col1#x AS session.var1#x]
       +- GlobalLimit 2
          +- LocalLimit 2
             +- LocalRelation [col1#x]
@@ -1816,7 +1816,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 SET VARIABLE var1 = session.default
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
   "sqlState" : "42703",
@@ -1856,7 +1856,7 @@ SET VARIABLE title = 'SET command'
 -- !query analysis
 SetVariable [session.title(title, DEFAULT expression usage, false)]
 +- SubqueryAlias T
-   +- Project [title#x AS session.title(title, DEFAULT expression usage, false)#x]
+   +- Project [title#x AS session.title#x]
       +- GlobalLimit 2
          +- LocalLimit 2
             +- Project [SET command AS title#x]
@@ -2036,7 +2036,7 @@ SET VARIABLE title = 'variable references -- visibility'
 -- !query analysis
 SetVariable [session.title(title, SET command, false)]
 +- SubqueryAlias T
-   +- Project [title#x AS session.title(title, SET command, false)#x]
+   +- Project [title#x AS session.title#x]
       +- GlobalLimit 2
          +- LocalLimit 2
             +- Project [variable references -- visibility AS title#x]
@@ -2164,7 +2164,7 @@ SET VARIABLE title = 'variable references -- prohibited'
 -- !query analysis
 SetVariable [session.title(title, variable references -- visibility, false)]
 +- SubqueryAlias T
-   +- Project [title#x AS session.title(title, variable references -- visibility, false)#x]
+   +- Project [title#x AS session.title#x]
       +- GlobalLimit 2
          +- LocalLimit 2
             +- Project [variable references -- prohibited AS title#x]
@@ -2187,7 +2187,7 @@ DropTable true, false
 -- !query
 CREATE TABLE T(c1 INT DEFAULT (var1))
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "NOT_SUPPORTED_COMMAND_WITHOUT_HIVE_SUPPORT",
   "messageParameters" : {

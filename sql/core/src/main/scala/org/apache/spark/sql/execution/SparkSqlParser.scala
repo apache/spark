@@ -573,9 +573,11 @@ class SparkSqlAstBuilder extends AstBuilder {
    *
    * For example:
    * {{{
-   *   CREATE [OR REPLACE] TEMPORARY VARIABLE [db_name.]variable_name
+   *   DECLARE [OR REPLACE] [VARIABLE] [db_name.]variable_name
    *   [dataType] [defaultExpression];
    * }}}
+   *
+   * We will ad CREATE VARIABLE for persisted variable definitions to this, hence the name...
    */
   override def visitCreateVariable(ctx: CreateVariableContext): LogicalPlan = withOrigin(ctx) {
 
@@ -628,7 +630,7 @@ class SparkSqlAstBuilder extends AstBuilder {
    *
    * For example:
    * {{{
-   *   DROP VARIABLE [IF EXISTS] variable;
+   *   DROP TEMPORARY VARIABLE [IF EXISTS] variable;
    * }}}
    */
   override def visitDropVariable(ctx: DropVariableContext): LogicalPlan = withOrigin(ctx) {
@@ -674,8 +676,7 @@ class SparkSqlAstBuilder extends AstBuilder {
        * The SET variable source is list of expressions.
        */
       val assignCtx = ctx.assignmentList()
-      val (varNames, varExprs) = assignCtx.assignment().asScala.map {
-        assign => {
+      val (varNames, varExprs) = assignCtx.assignment().asScala.map { assign =>
           val varIdent = visitMultipartIdentifier(assign.key)
           if (varIdent.length > 3) {
             throw QueryParsingErrors.unsupportedVariableNameError(varIdent, assign.key)
@@ -687,7 +688,6 @@ class SparkSqlAstBuilder extends AstBuilder {
           }
 
           (varIdent, varNamedExpr)
-        }
       }.toSeq.unzip
 
       val variables: Seq[UnresolvedVariable] = varNames.map { UnresolvedVariable(_) }

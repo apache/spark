@@ -28,8 +28,8 @@ import org.apache.spark.sql.types.StructField
 /**
  * Physical plan node for setting a variable.
  */
-case class SetVariableExec(variables: Seq[Expression],
-             query: SparkPlan) extends V2CommandExec with UnaryLike[SparkPlan] {
+case class SetVariableExec(variables: Seq[Expression], query: SparkPlan)
+  extends V2CommandExec with UnaryLike[SparkPlan] {
 
   override def output: Seq[Attribute] = Seq.empty
 
@@ -37,27 +37,28 @@ case class SetVariableExec(variables: Seq[Expression],
 
     val catalog = session.sessionState.catalog
 
+    // A local class to associate the set of variables with their type info
     case class VarInfoObj(identifier: VariableIdentifier, fieldInfo: StructField)
 
-    val varInfoList = variables.collect { case v: VariableReference =>
+    val varInfos = variables.collect { case v: VariableReference =>
       val varIdentifier = VariableIdentifier(v.varName)
-      val varInfo = catalog.getVariable(varIdentifier)
-      if (varInfo.isEmpty) {
+      catalog.getVariable(varIdentifier).map { varInfo =>
+        VarInfoObj(varIdentifier, varInfo._2)
+      }.getOrElse {
         throw new NoSuchVariableException(varIdentifier.nameParts)
       }
-      VarInfoObj(varIdentifier, varInfo.get._2)
     }
     val array = query.executeCollect()
     if (array.length == 0) {
-      varInfoList foreach(info => catalog.createTempVariable(info.identifier.variableName,
+      varInfos foreach(info => catalog.createTempVariable(info.identifier.variableName,
         Literal(null, info.fieldInfo.dataType),
-        info.fieldInfo.getCurrentDefaultValue().get
-        , overrideIfExists = true))
+        info.fieldInfo.getCurrentDefaultValue().get, // Variables always have a default value
+        overrideIfExists = true))
     } else if (array.length > 1) {
       throw QueryExecutionErrors.multipleRowSubqueryError()
     } else {
       val row = array(0)
-      varInfoList.zipWithIndex.foreach { case (varInfo, index) =>
+      varInfos.zipWithIndex.foreach { case (varInfo, index) =>
         val value = row.get(index, varInfo.fieldInfo.dataType)
         val valueType = varInfo.fieldInfo.dataType
         val name = varInfo.identifier.variableName

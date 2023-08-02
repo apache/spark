@@ -196,7 +196,7 @@ SELECT var1
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
   "sqlState" : "42703",
@@ -583,7 +583,7 @@ SELECT var
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
   "sqlState" : "42703",
@@ -605,7 +605,7 @@ SELECT ses.var1
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
   "sqlState" : "42703",
@@ -627,7 +627,7 @@ SELECT b.sesson.var1
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
   "sqlState" : "42703",
@@ -649,7 +649,7 @@ SELECT builtn.session.var1
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
   "sqlState" : "42703",
@@ -1090,7 +1090,7 @@ SET VARIABLE var1 = (SELECT c1, c1 FROM VALUES(1), (2) AS T(c1))
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "INVALID_SUBQUERY_EXPRESSION.SCALAR_SUBQUERY_RETURN_MORE_THAN_ONE_OUTPUT_COLUMN",
   "sqlState" : "42823",
@@ -1286,7 +1286,7 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DUPLICATE_ASSIGNMENTS",
   "sqlState" : "42701",
   "messageParameters" : {
-    "nameList" : "`session`.`var1(var1, 5, false)`"
+    "nameList" : "`session`.`var1`"
   }
 }
 
@@ -1500,7 +1500,7 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DUPLICATE_ASSIGNMENTS",
   "sqlState" : "42701",
   "messageParameters" : {
-    "nameList" : "`session`.`var1(var1, null, false)`"
+    "nameList" : "`session`.`var1`"
   }
 }
 
@@ -1814,7 +1814,7 @@ SET VARIABLE var1 = session.default
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
   "sqlState" : "42703",
@@ -2206,7 +2206,7 @@ CREATE TABLE T(c1 INT DEFAULT (var1))
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "NOT_SUPPORTED_COMMAND_WITHOUT_HIVE_SUPPORT",
   "messageParameters" : {
