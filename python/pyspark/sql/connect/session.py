@@ -233,7 +233,7 @@ class SparkSession:
             the $USER environment. Defining the user ID as part of the connection string
             takes precedence.
         """
-        self._client = SparkConnectClient(connection=connection, userId=userId)
+        self._client = SparkConnectClient(connection=connection, user_id=userId)
         self._session_id = self._client._session_id
 
     def table(self, tableName: str) -> DataFrame:
