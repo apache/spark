@@ -60,9 +60,7 @@ private[client] object GrpcExceptionConverter extends JsonUtils {
 
   private def errorInfoToThrowable(info: ErrorInfo, message: String): Throwable = {
     val classes =
-      mapper.readValue(
-        info.getMetadataOrDefault("classes", "[]"), classOf[Array[String]]
-      )
+      mapper.readValue(info.getMetadataOrDefault("classes", "[]"), classOf[Array[String]])
 
     for (cls <- classes) {
       cls match {
@@ -71,7 +69,7 @@ private[client] object GrpcExceptionConverter extends JsonUtils {
         case "org.apache.spark.sql.AnalysisException" =>
           return new AnalysisException(message)
         case _ =>
-          // Do nothing.
+        // Do nothing.
       }
     }
 
@@ -91,5 +89,3 @@ private[client] object GrpcExceptionConverter extends JsonUtils {
     new SparkException(status.getMessage, ex.getCause)
   }
 }
-
-
