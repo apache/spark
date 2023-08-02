@@ -1328,6 +1328,10 @@ class DataTypeTests(unittest.TestCase):
         self.assertEqual(repr(Row(a=Row())), "Row(a=<Row()>)")
         self.assertEqual(repr(Row(Row())), "<Row(<Row()>)>")
 
+        EmptyRow = Row()
+        self.assertEqual(repr(Row(a=EmptyRow())), "Row(a=Row())")
+        self.assertEqual(repr(Row(EmptyRow())), "<Row(Row())>")
+
     def test_empty_row(self):
         row = Row()
         self.assertEqual(len(row), 0)
