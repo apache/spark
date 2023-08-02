@@ -424,6 +424,7 @@ jobs:
       run: |
         curl -s https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh > miniconda.sh
         bash miniconda.sh -b -p $HOME/miniconda
+        rm miniconda.sh
     # Run the tests.
     - name: Run tests
       env: ${{ fromJSON(inputs.envs) }}
@@ -435,6 +436,9 @@ jobs:
           echo "Python Packaging Tests Enabled!"
         fi
         ./dev/run-tests --parallelism 1 --modules "$MODULES_TO_TEST"
+        if [[ "$MODULES_TO_TEST" == "pyspark-errors" ]]; then
+          rm -rf $HOME/miniconda
+        fi
     - name: Upload coverage to Codecov
       if: fromJSON(inputs.envs).PYSPARK_CODECOV == 'true'
       uses: codecov/codecov-action@v2
