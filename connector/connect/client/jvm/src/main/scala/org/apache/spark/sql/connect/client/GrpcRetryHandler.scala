@@ -99,6 +99,9 @@ private[client] class GrpcRetryHandler(private val retryPolicy: GrpcRetryHandler
       extends StreamObserver[U] {
 
     private var opened = false // only retries on first call
+
+    // Note: This is not retried, because no error would ever be thrown here, and GRPC will only
+    // throw error on first iterator.hasNext() or iterator.next()
     private var streamObserver = call(request)
 
     override def onNext(v: U): Unit = {

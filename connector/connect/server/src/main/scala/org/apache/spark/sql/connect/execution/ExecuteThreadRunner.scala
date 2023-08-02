@@ -38,7 +38,7 @@ import org.apache.spark.util.Utils
 private[connect] class ExecuteThreadRunner(executeHolder: ExecuteHolder) extends Logging {
 
   // The newly created thread will inherit all InheritableThreadLocals used by Spark,
-  // e.g. SparkContext.localProperties. If considering implementing a threadpool,
+  // e.g. SparkContext.localProperties. If considering implementing a thread-pool,
   // forwarding of thread locals needs to be taken into account.
   private var executionThread: Thread = new ExecutionThread()
 
@@ -166,7 +166,7 @@ private[connect] class ExecuteThreadRunner(executeHolder: ExecuteHolder) extends
         executeHolder.responseObserver.onNext(createResultComplete())
       }
       synchronized {
-        // Prevent interrupt after onCompleted, and throwing error to an alredy closed stream.
+        // Prevent interrupt after onCompleted, and throwing error to an already closed stream.
         completed = true
         executeHolder.responseObserver.onCompleted()
       }

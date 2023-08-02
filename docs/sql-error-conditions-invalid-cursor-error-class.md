@@ -1,7 +1,7 @@
 ---
 layout: global
-title: CONNECT error class
-displayTitle: CONNECT error class
+title: INVALID_CURSOR error class
+displayTitle: INVALID_CURSOR error class
 license: |
   Licensed to the Apache Software Foundation (ASF) under one or more
   contributor license agreements.  See the NOTICE file distributed with
@@ -19,30 +19,26 @@ license: |
   limitations under the License.
 ---
 
-SQLSTATE: none assigned
+[SQLSTATE: HY109](sql-error-conditions-sqlstates.html#class-HY-cli-specific-condition)
 
-Generic Spark Connect error.
+The cursor is invalid.
 
 This error class has the following derived error classes:
 
-## INTERCEPTOR_CTOR_MISSING
+## DISCONNECTED
 
-Cannot instantiate GRPC interceptor because `<cls>` is missing a default constructor without arguments.
+The cursor has been disconnected by the server.
 
-## INTERCEPTOR_RUNTIME_ERROR
+## NOT_REATTACHABLE
 
-Error instantiating GRPC interceptor: `<msg>`
+The cursor is not reattachable.
 
-## PLUGIN_CTOR_MISSING
+## POSITION_NOT_AVAILABLE
 
-Cannot instantiate Spark Connect plugin because `<cls>` is missing a default constructor without arguments.
+The cursor position id `<responseId>` is no longer available at index `<index>`.
 
-## PLUGIN_RUNTIME_ERROR
+## POSITION_NOT_FOUND
 
-Error instantiating Spark Connect plugin: `<msg>`
-
-## SESSION_NOT_SAME
-
-Both Datasets must belong to the same SparkSession.
+The cursor position id `<responseId>` is not found.
 
 
