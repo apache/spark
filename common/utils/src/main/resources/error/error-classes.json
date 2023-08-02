@@ -409,6 +409,11 @@
         "message" : [
           "Error instantiating Spark Connect plugin: <msg>"
         ]
+      },
+      "SESSION_NOT_SAME" : {
+        "message" : [
+          "Both Datasets must belong to the same SparkSession."
+        ]
       }
     }
   },

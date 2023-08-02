@@ -1750,7 +1750,10 @@ class Dataset[T] private[sql] (
 
   private def checkSameSparkSession(other: Dataset[_]): Unit = {
     if (this.sparkSession.sessionId != other.sparkSession.sessionId) {
-      throw new SparkException("Both Datasets must belong to the same SparkSession")
+      throw new SparkException(
+        errorClass = "CONNECT.SESSION_NOT_SAME",
+        messageParameters = Map.empty,
+        cause = null)
     }
   }
 
