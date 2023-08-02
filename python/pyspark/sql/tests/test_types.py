@@ -1323,6 +1323,11 @@ class DataTypeTests(unittest.TestCase):
         # test __repr__ with unicode values
         self.assertEqual(repr(Row("数", "量")), "<Row('数', '量')>")
 
+    # SPARK-44643: test __repr__ with empty Row
+    def test_row_repr_with_empty_row(self):
+        self.assertEqual(repr(Row(a=Row())), "Row(a=<Row()>)")
+        self.assertEqual(repr(Row(Row())), "<Row(<Row()>)>")
+
     def test_empty_row(self):
         row = Row()
         self.assertEqual(len(row), 0)
