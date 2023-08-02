@@ -591,6 +591,7 @@ def read_udtf(pickleSer, infile, eval_type):
 
         def wrap_arrow_udtf(f, return_type):
             arrow_return_type = to_arrow_type(return_type)
+            return_type_size = len(return_type)
 
             def verify_result(result):
                 import pandas as pd
@@ -609,11 +610,11 @@ def read_udtf(pickleSer, infile, eval_type):
                 # result dataframe may contain an empty row. For example, when a UDTF is
                 # defined as follows: def eval(self): yield tuple().
                 if len(result) > 0 or len(result.columns) > 0:
-                    if len(result.columns) != len(return_type):
+                    if len(result.columns) != return_type_size:
                         raise PySparkRuntimeError(
                             error_class="UDTF_RETURN_SCHEMA_MISMATCH",
                             message_parameters={
-                                "expected": str(len(return_type)),
+                                "expected": str(return_type_size),
                                 "actual": str(len(result.columns)),
                             },
                         )
@@ -650,15 +651,16 @@ def read_udtf(pickleSer, infile, eval_type):
         def wrap_udtf(f, return_type):
             assert return_type.needConversion()
             toInternal = return_type.toInternal
+            return_type_size = len(return_type)
 
             def verify_and_convert_result(result):
                 # TODO(SPARK-44005): support returning non-tuple values
                 if result is not None and hasattr(result, "__len__"):
-                    if len(result) != len(return_type):
+                    if len(result) != return_type_size:
                         raise PySparkRuntimeError(
                             error_class="UDTF_RETURN_SCHEMA_MISMATCH",
                             message_parameters={
-                                "expected": str(len(return_type)),
+                                "expected": str(return_type_size),
                                 "actual": str(len(result)),
                             },
                         )

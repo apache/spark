@@ -389,13 +389,14 @@ class BaseUDTFTestsMixin:
         class TestUDTF:
             def __init__(self):
                 raise Exception("error")
+
             def eval(self):
                 yield 1,
 
         with self.assertRaisesRegex(
-                PythonException,
-                r"\[UDTF_EXEC_ERROR\] User defined table function encountered an error "
-                r"in the '__init__' method: error",
+            PythonException,
+            r"\[UDTF_EXEC_ERROR\] User defined table function encountered an error "
+            r"in the '__init__' method: error",
         ):
             TestUDTF().show()
 
@@ -406,9 +407,9 @@ class BaseUDTFTestsMixin:
                 raise Exception("error")
 
         with self.assertRaisesRegex(
-                PythonException,
-                r"\[UDTF_EXEC_ERROR\] User defined table function encountered an error "
-                r"in the 'eval' method: error",
+            PythonException,
+            r"\[UDTF_EXEC_ERROR\] User defined table function encountered an error "
+            r"in the 'eval' method: error",
         ):
             TestUDTF().show()
 

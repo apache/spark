@@ -152,6 +152,7 @@ def _vectorize_udtf(cls: Type) -> Type:
                     error_class="UDTF_EXEC_ERROR",
                     message_parameters={"method_name": f.__name__, "error": str(e)},
                 )
+
         return evaluate
 
     class VectorizedUDTF:
