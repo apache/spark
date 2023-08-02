@@ -42,8 +42,13 @@ class ExecutePlanResponseReattachableIterator(Generator):
     ExecutePlanResponse on the iterator to return a new iterator from server that continues after
     that.
 
-    Since in reattachable execute the server does buffer some responses in case the client needs to
-    backtrack
+    In reattachable execute the server does buffer some responses in case the client needs to
+    backtrack. To let server release this buffer sooner, this iterator asynchronously sends
+    ReleaseExecute RPCs that instruct the server to release responses that it already processed.
+
+    Note: If the initial ExecutePlan did not even reach the server and execution didn't start,
+    the ReattachExecute can still fail with INVALID_HANDLE.OPERATION_NOT_FOUND, failing the whole
+    operation.
     """
 
     def __init__(
@@ -80,6 +85,8 @@ class ExecutePlanResponseReattachableIterator(Generator):
         self._result_complete = False
 
         # Initial iterator comes from ExecutePlan request.
+        # Note: This is not retried, because no error would ever be thrown here, and GRPC will only
+        # throw error on first self._has_next().
         self._iterator: Iterator[pb2.ExecutePlanResponse] = self._stub.ExecutePlan(
             self._initial_request
         )
