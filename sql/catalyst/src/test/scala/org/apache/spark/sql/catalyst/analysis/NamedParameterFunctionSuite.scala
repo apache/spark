@@ -63,6 +63,7 @@ class NamedParameterFunctionSuite extends AnalysisTest {
   final val k4Arg = NamedArgumentExpression("k4", Literal("v4"))
   final val namedK1Arg = NamedArgumentExpression("k1", Literal("v1-2"))
   final val args = Seq(k1Arg, k4Arg, k2Arg, k3Arg)
+
   final val expectedSeq = Seq(Literal("v1"), Literal("v2"), Literal("v3"), Literal("v4"))
   final val signature = DummyExpressionBuilder.defaultFunctionSignature
   final val illegalSignature = FunctionSignature(Seq(
