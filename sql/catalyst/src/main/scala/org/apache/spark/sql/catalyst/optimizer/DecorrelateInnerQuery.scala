@@ -886,7 +886,7 @@ object DecorrelateInnerQuery extends PredicateHelper {
               equivalences
             val newCorrelated =
               if (shouldDecorrelatePredicates) {
-                replaceOuterReferences(predicates, newOuterReferenceMap)
+                replaceOuterReferences(correlated, newOuterReferenceMap)
               } else Seq.empty[Expression]
             val newJoinCond = leftJoinCond ++ rightJoinCond ++ equalityCond
             // If we push the dependent join to both sides, we can augment the join condition

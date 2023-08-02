@@ -208,7 +208,7 @@ class DecorrelateInnerQuerySuite extends PlanTest {
     val correctAnswer =
       Join(
         testRelation.as("t1"), testRelation3,
-        Inner, None, JoinHint.NONE)
+        Inner, Some(a === a), JoinHint.NONE)
     check(innerPlan, outerPlan, correctAnswer, Seq(b3 === y, x === a))
   }
 
@@ -476,7 +476,7 @@ class DecorrelateInnerQuerySuite extends PlanTest {
       Aggregate(
         Seq(y), Seq(Alias(count(Literal(1)), "a")(), y),
         Project(Seq(x, y, a3, b3),
-          Join(testRelation2, testRelation3, Inner, Some(x === a3), JoinHint.NONE)))
+          Join(testRelation2, testRelation3, Inner, Some(And(y === y, x === a3)), JoinHint.NONE)))
     check(innerPlan, outerPlan, correctAnswer, Seq(y === a))
   }
 
@@ -535,6 +535,25 @@ class DecorrelateInnerQuerySuite extends PlanTest {
       Aggregate(
         Seq(b3), Seq(Alias(count(Literal(1)), "a")(), b3),
         Project(Seq(x, y, a3, b3),
+          Join(testRelation2, testRelation3, LeftOuter,
+            Some(And(b3 === b3, x === a3)), JoinHint.NONE)))
+    check(innerPlan, outerPlan, correctAnswer, Seq(b === b3))
+  }
+
+  test("SPARK-43780: correlated left join preserves the join predicates") {
+    // Left outer join preserves both predicates after being decorrelated.
+    val outerPlan = testRelation
+    val innerPlan =
+      Filter(
+        IsNotNull(c3),
+        Project(Seq(x, y, a3, b3, c3),
+          Join(testRelation2, testRelation3, LeftOuter,
+            Some(And(x === a3, b3 === OuterReference(b))), JoinHint.NONE)))
+
+    val correctAnswer =
+      Filter(
+        IsNotNull(c3),
+        Project(Seq(x, y, a3, b3, c3),
           Join(testRelation2, testRelation3, LeftOuter,
             Some(And(b3 === b3, x === a3)), JoinHint.NONE)))
     check(innerPlan, outerPlan, correctAnswer, Seq(b === b3))
