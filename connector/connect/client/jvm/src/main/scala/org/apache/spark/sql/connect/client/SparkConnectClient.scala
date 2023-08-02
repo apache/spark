@@ -75,8 +75,8 @@ private[sql] class SparkConnectClient(
   /**
    * Execute the plan and return response iterator.
    *
-   * It returns an open iterator. The caller needs to ensure that this iterator is fully consumed, otherwise
-   * resources held by a re-attachable query may be left dangling until server timeout.
+   * It returns an open iterator. The caller needs to ensure that this iterator is fully consumed,
+   * otherwise resources held by a re-attachable query may be left dangling until server timeout.
    */
   def execute(plan: proto.Plan): java.util.Iterator[proto.ExecutePlanResponse] = {
     artifactManager.uploadAllClassFileArtifacts()
