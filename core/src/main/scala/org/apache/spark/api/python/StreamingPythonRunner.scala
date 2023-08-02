@@ -95,6 +95,9 @@ private[spark] class StreamingPythonRunner(
     (dataOut, dataIn)
   }
 
+  /**
+   * Stops the Python worker.
+   */
   def stop(): Unit = {
     pythonWorker.foreach { worker =>
       SparkEnv.get.destroyPythonWorker(pythonExec, workerModule, envVars.asScala.toMap, worker)
