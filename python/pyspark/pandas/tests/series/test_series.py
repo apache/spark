@@ -692,7 +692,8 @@ class SeriesTestsMixin:
 
         psdf_other = ps.DataFrame({"a": [1, 2, 3], "b": [4, 5, 6]}, index=["x", "y", "z"])
         with self.assertRaisesRegex(ValueError, "matrices are not aligned"):
-            psdf["b"].dot(psdf_other)
+            with ps.option_context("compute.ops_on_diff_frames", True):
+                psdf["b"].dot(psdf_other)
 
     def test_tail(self):
         pser = pd.Series(range(1000), name="Koalas")

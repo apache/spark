@@ -2123,7 +2123,7 @@ class Index(IndexOpsMixin):
         # Check if the `self` and `other` have different index types.
         # 1. `self` is Index, `other` is MultiIndex
         # 2. `self` is MultiIndex, `other` is Index
-        is_index_types_different = isinstance(other, Index) and not isinstance(self, type(other))
+        is_index_types_different = isinstance(other, Index) and (type(self) != type(other))
         if is_index_types_different:
             if isinstance(self, MultiIndex):
                 # In case `self` is MultiIndex and `other` is Index,
