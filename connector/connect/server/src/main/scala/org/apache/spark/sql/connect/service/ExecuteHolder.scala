@@ -17,8 +17,11 @@
 
 package org.apache.spark.sql.connect.service
 
+import java.util.UUID
+
 import scala.collection.JavaConverters._
 
+import org.apache.spark.SparkSQLException
 import org.apache.spark.connect.proto
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.connect.common.ProtoUtils
@@ -30,19 +33,27 @@ import org.apache.spark.util.SystemClock
  */
 private[connect] class ExecuteHolder(
     val request: proto.ExecutePlanRequest,
-    val operationId: String,
     val sessionHolder: SessionHolder)
     extends Logging {
+
+  val operationId = if (request.hasOperationId) {
+    try {
+      UUID.fromString(request.getOperationId).toString
+    } catch {
+      case _: IllegalArgumentException =>
+        throw new SparkSQLException(
+          errorClass = "INVALID_HANDLE.FORMAT",
+          messageParameters = Map("handle" -> request.getOperationId))
+    }
+  } else {
+    UUID.randomUUID().toString
+  }
 
   /**
    * Tag that is set for this execution on SparkContext, via SparkContext.addJobTag. Used
    * (internally) for cancallation of the Spark Jobs ran by this execution.
    */
-  val jobTag =
-    s"SparkConnect_Execute_" +
-      s"User_${sessionHolder.userId}_" +
-      s"Session_${sessionHolder.sessionId}_" +
-      s"Operation_${operationId}"
+  val jobTag = ExecuteJobTag(sessionHolder.userId, sessionHolder.sessionId, operationId)
 
   /**
    * Tags set by Spark Connect client users via SparkSession.addTag. Used to identify and group
@@ -57,6 +68,20 @@ private[connect] class ExecuteHolder(
       tag
     }
     .toSet
+
+  /**
+   * If execution is reattachable, it's life cycle is not limited to a single ExecutePlanRequest,
+   * but can be reattached with ReattachExecute, and released with ReleaseExecute
+   */
+  val reattachable: Boolean = request.getRequestOptionsList.asScala.exists { option =>
+    option.hasReattachOptions && option.getReattachOptions.getReattachable == true
+  }
+
+  /**
+   * True if there is currently an RPC (ExecutePlanRequest, ReattachExecute) attached to this
+   * execution.
+   */
+  var attached: Boolean = true
 
   val session = sessionHolder.session
 
@@ -87,20 +112,37 @@ private[connect] class ExecuteHolder(
 
   /**
    * Attach an ExecuteGrpcResponseSender that will consume responses from the query and send them
+   * out on the Grpc response stream. The sender will start from the start of the response stream.
+   * @param responseSender
+   *   the ExecuteGrpcResponseSender
+   */
+  def attachAndRunGrpcResponseSender(
+      responseSender: ExecuteGrpcResponseSender[proto.ExecutePlanResponse]): Unit = {
+    responseSender.run(0)
+  }
+
+  /**
+   * Attach an ExecuteGrpcResponseSender that will consume responses from the query and send them
    * out on the Grpc response stream.
    * @param responseSender
    *   the ExecuteGrpcResponseSender
-   * @param lastConsumedStreamIndex
-   *   the last index that was already consumed. The consumer will start from index after that. 0
-   *   means start from beginning (since first response has index 1)
-   * @return
-   *   true if the sender got detached without completing the stream. false if the executing
-   *   stream was completely sent out.
+   * @param lastConsumedResponseId
+   *   the last response that was already consumed. The sender will start from response after
+   *   that.
    */
   def attachAndRunGrpcResponseSender(
       responseSender: ExecuteGrpcResponseSender[proto.ExecutePlanResponse],
-      lastConsumedStreamIndex: Long): Boolean = {
-    responseSender.run(responseObserver, lastConsumedStreamIndex)
+      lastConsumedResponseId: String): Unit = {
+    val lastConsumedIndex = responseObserver.getResponseIndexById(lastConsumedResponseId)
+    responseSender.run(lastConsumedIndex)
+  }
+
+  /**
+   * Remove cached responses from the response observer until and including the response with
+   * given responseId.
+   */
+  def releaseUntilResponseId(responseId: String): Unit = {
+    responseObserver.removeResponsesUntilId(responseId)
   }
 
   /**
@@ -114,11 +156,55 @@ private[connect] class ExecuteHolder(
   }
 
   /**
+   * Close the execution and remove it from the session. Note: It blocks joining the
+   * ExecuteThreadRunner thread, so it assumes that it's called when the execution is ending or
+   * ended. If it is desired to kill the execution, interrupt() should be called first.
+   */
+  def close(): Unit = {
+    runner.join()
+    eventsManager.postClosed()
+    sessionHolder.removeExecuteHolder(operationId)
+  }
+
+  /**
    * Spark Connect tags are also added as SparkContext job tags, but to make the tag unique, they
    * need to be combined with userId and sessionId.
    */
   def tagToSparkJobTag(tag: String): String = {
     "SparkConnect_Execute_" +
       s"User_${sessionHolder.userId}_Session_${sessionHolder.sessionId}_Tag_${tag}"
+  }
+}
+
+/** Used to identify ExecuteHolder jobTag among SparkContext.SPARK_JOB_TAGS. */
+object ExecuteJobTag {
+  private val prefix = "SparkConnect_OperationTag"
+
+  def apply(sessionId: String, userId: String, operationId: String): String = {
+    s"${prefix}_" +
+      s"User_${userId}_" +
+      s"Session_${sessionId}_" +
+      s"Operation_${operationId}"
+  }
+
+  def unapply(jobTag: String): Option[String] = {
+    if (jobTag.startsWith(prefix)) Some(jobTag) else None
+  }
+}
+
+/** Used to identify ExecuteHolder sessionTag among SparkContext.SPARK_JOB_TAGS. */
+object ExecuteSessionTag {
+  private val prefix = "SparkConnect_SessionTag"
+
+  def apply(userId: String, sessionId: String, tag: String): String = {
+    ProtoUtils.throwIfInvalidTag(tag)
+    s"${prefix}_" +
+      s"User_${userId}_" +
+      s"Session_${sessionId}_" +
+      s"Tag_${tag}"
+  }
+
+  def unapply(sessionTag: String): Option[String] = {
+    if (sessionTag.startsWith(prefix)) Some(sessionTag) else None
   }
 }

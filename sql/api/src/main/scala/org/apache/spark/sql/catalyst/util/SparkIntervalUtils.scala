@@ -16,10 +16,113 @@
  */
 package org.apache.spark.sql.catalyst.util
 
-import org.apache.spark.sql.catalyst.util.DateTimeConstants.{DAYS_PER_WEEK, MICROS_PER_HOUR, MICROS_PER_MINUTE, MICROS_PER_SECOND, MONTHS_PER_YEAR, NANOS_PER_MICROS, NANOS_PER_SECOND}
+import java.time.{Duration, Period}
+import java.time.temporal.ChronoUnit
+
+import scala.collection.mutable
+
+import org.apache.spark.sql.catalyst.util.DateTimeConstants._
+import org.apache.spark.sql.catalyst.util.IntervalStringStyles.{ANSI_STYLE, HIVE_STYLE, IntervalStyle}
+import org.apache.spark.sql.types.{DayTimeIntervalType => DT, YearMonthIntervalType => YM}
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 
 trait SparkIntervalUtils {
+  protected val MAX_DAY: Long = Long.MaxValue / MICROS_PER_DAY
+  protected val MAX_HOUR: Long = Long.MaxValue / MICROS_PER_HOUR
+  protected val MAX_MINUTE: Long = Long.MaxValue / MICROS_PER_MINUTE
+  protected val MAX_SECOND: Long = Long.MaxValue / MICROS_PER_SECOND
+  protected val MIN_SECOND: Long = Long.MinValue / MICROS_PER_SECOND
+
+  // The amount of seconds that can cause overflow in the conversion to microseconds
+  private final val minDurationSeconds = Math.floorDiv(Long.MinValue, MICROS_PER_SECOND)
+
+  /**
+   * Converts this duration to the total length in microseconds.
+   * <p>
+   * If this duration is too large to fit in a [[Long]] microseconds, then an
+   * exception is thrown.
+   * <p>
+   * If this duration has greater than microsecond precision, then the conversion
+   * will drop any excess precision information as though the amount in nanoseconds
+   * was subject to integer division by one thousand.
+   *
+   * @return The total length of the duration in microseconds
+   * @throws ArithmeticException If numeric overflow occurs
+   */
+  def durationToMicros(duration: Duration): Long = {
+    durationToMicros(duration, DT.SECOND)
+  }
+
+  def durationToMicros(duration: Duration, endField: Byte): Long = {
+    val seconds = duration.getSeconds
+    val micros = if (seconds == minDurationSeconds) {
+      val microsInSeconds = (minDurationSeconds + 1) * MICROS_PER_SECOND
+      val nanoAdjustment = duration.getNano
+      assert(0 <= nanoAdjustment && nanoAdjustment < NANOS_PER_SECOND,
+        "Duration.getNano() must return the adjustment to the seconds field " +
+          "in the range from 0 to 999999999 nanoseconds, inclusive.")
+      Math.addExact(microsInSeconds, (nanoAdjustment - NANOS_PER_SECOND) / NANOS_PER_MICROS)
+    } else {
+      val microsInSeconds = Math.multiplyExact(seconds, MICROS_PER_SECOND)
+      Math.addExact(microsInSeconds, duration.getNano / NANOS_PER_MICROS)
+    }
+
+    endField match {
+      case DT.DAY => micros - micros % MICROS_PER_DAY
+      case DT.HOUR => micros - micros % MICROS_PER_HOUR
+      case DT.MINUTE => micros - micros % MICROS_PER_MINUTE
+      case DT.SECOND => micros
+    }
+  }
+
+  /**
+   * Gets the total number of months in this period.
+   * <p>
+   * This returns the total number of months in the period by multiplying the
+   * number of years by 12 and adding the number of months.
+   * <p>
+   *
+   * @return The total number of months in the period, may be negative
+   * @throws ArithmeticException If numeric overflow occurs
+   */
+  def periodToMonths(period: Period): Int = {
+    periodToMonths(period, YM.MONTH)
+  }
+
+  def periodToMonths(period: Period, endField: Byte): Int = {
+    val monthsInYears = Math.multiplyExact(period.getYears, MONTHS_PER_YEAR)
+    val months = Math.addExact(monthsInYears, period.getMonths)
+    if (endField == YM.YEAR) {
+      months - months % MONTHS_PER_YEAR
+    } else {
+      months
+    }
+  }
+
+  /**
+   * Obtains a [[Duration]] representing a number of microseconds.
+   *
+   * @param micros The number of microseconds, positive or negative
+   * @return A [[Duration]], not null
+   */
+  def microsToDuration(micros: Long): Duration = Duration.of(micros, ChronoUnit.MICROS)
+
+  /**
+   * Obtains a [[Period]] representing a number of months. The days unit will be zero, and the years
+   * and months units will be normalized.
+   *
+   * <p>
+   * The months unit is adjusted to have an absolute value < 12, with the years unit being adjusted
+   * to compensate. For example, the method returns "2 years and 3 months" for the 27 input months.
+   * <p>
+   * The sign of the years and months units will be the same after normalization.
+   * For example, -13 months will be converted to "-1 year and -1 month".
+   *
+   * @param months The number of months, positive or negative
+   * @return The period of months, not null
+   */
+  def monthsToPeriod(months: Int): Period = Period.ofMonths(months).normalized()
+
   /**
    * Converts a string to [[CalendarInterval]] case-insensitively.
    *
@@ -226,22 +329,176 @@ trait SparkIntervalUtils {
     result
   }
 
+  /**
+   * Converts an year-month interval as a number of months to its textual representation
+   * which conforms to the ANSI SQL standard.
+   *
+   * @param months The number of months, positive or negative
+   * @param style The style of textual representation of the interval
+   * @param startField The start field (YEAR or MONTH) which the interval comprises of.
+   * @param endField The end field (YEAR or MONTH) which the interval comprises of.
+   * @return Year-month interval string
+   */
+  def toYearMonthIntervalString(
+      months: Int,
+      style: IntervalStyle,
+      startField: Byte,
+      endField: Byte): String = {
+    var sign = ""
+    var absMonths: Long = months
+    if (months < 0) {
+      sign = "-"
+      absMonths = -absMonths
+    }
+    val year = s"$sign${absMonths / MONTHS_PER_YEAR}"
+    val yearAndMonth = s"$year-${absMonths % MONTHS_PER_YEAR}"
+    style match {
+      case ANSI_STYLE =>
+        val formatBuilder = new StringBuilder("INTERVAL '")
+        if (startField == endField) {
+          startField match {
+            case YM.YEAR => formatBuilder.append(s"$year' YEAR")
+            case YM.MONTH => formatBuilder.append(s"$months' MONTH")
+          }
+        } else {
+          formatBuilder.append(s"$yearAndMonth' YEAR TO MONTH")
+        }
+        formatBuilder.toString
+      case HIVE_STYLE => s"$yearAndMonth"
+    }
+  }
+
+  /**
+   * Converts a day-time interval as a number of microseconds to its textual representation
+   * which conforms to the ANSI SQL standard.
+   *
+   * @param micros The number of microseconds, positive or negative
+   * @param style The style of textual representation of the interval
+   * @param startField The start field (DAY, HOUR, MINUTE, SECOND) which the interval comprises of.
+   * @param endField The end field (DAY, HOUR, MINUTE, SECOND) which the interval comprises of.
+   * @return Day-time interval string
+   */
+  def toDayTimeIntervalString(
+      micros: Long,
+      style: IntervalStyle,
+      startField: Byte,
+      endField: Byte): String = {
+    var sign = ""
+    var rest = micros
+    // scalastyle:off caselocale
+    val from = DT.fieldToString(startField).toUpperCase
+    val to = DT.fieldToString(endField).toUpperCase
+    // scalastyle:on caselocale
+    val prefix = "INTERVAL '"
+    val postfix = s"' ${if (startField == endField) from else s"$from TO $to"}"
+
+    if (micros < 0) {
+      if (micros == Long.MinValue) {
+        // Especial handling of minimum `Long` value because negate op overflows `Long`.
+        // seconds = 106751991 * (24 * 60 * 60) + 4 * 60 * 60 + 54 = 9223372036854
+        // microseconds = -9223372036854000000L-775808 == Long.MinValue
+        val baseStr = "-106751991 04:00:54.775808000"
+        val minIntervalString = style match {
+          case ANSI_STYLE =>
+            val firstStr = startField match {
+              case DT.DAY => s"-$MAX_DAY"
+              case DT.HOUR => s"-$MAX_HOUR"
+              case DT.MINUTE => s"-$MAX_MINUTE"
+              case DT.SECOND => s"-$MAX_SECOND.775808"
+            }
+            val followingStr = if (startField == endField) {
+              ""
+            } else {
+              val substrStart = startField match {
+                case DT.DAY => 10
+                case DT.HOUR => 13
+                case DT.MINUTE => 16
+              }
+              val substrEnd = endField match {
+                case DT.HOUR => 13
+                case DT.MINUTE => 16
+                case DT.SECOND => 26
+              }
+              baseStr.substring(substrStart, substrEnd)
+            }
+
+            s"$prefix$firstStr$followingStr$postfix"
+          case HIVE_STYLE => baseStr
+        }
+        return minIntervalString
+      } else {
+        sign = "-"
+        rest = -rest
+      }
+    }
+    val intervalString = style match {
+      case ANSI_STYLE =>
+        val formatBuilder = new mutable.StringBuilder(sign)
+        val formatArgs = new mutable.ArrayBuffer[Long]()
+        startField match {
+          case DT.DAY =>
+            formatBuilder.append(rest / MICROS_PER_DAY)
+            rest %= MICROS_PER_DAY
+          case DT.HOUR =>
+            formatBuilder.append("%02d")
+            formatArgs.append(rest / MICROS_PER_HOUR)
+            rest %= MICROS_PER_HOUR
+          case DT.MINUTE =>
+            formatBuilder.append("%02d")
+            formatArgs.append(rest / MICROS_PER_MINUTE)
+            rest %= MICROS_PER_MINUTE
+          case DT.SECOND =>
+            val leadZero = if (rest < 10 * MICROS_PER_SECOND) "0" else ""
+            formatBuilder.append(s"$leadZero" +
+              s"${java.math.BigDecimal.valueOf(rest, 6).stripTrailingZeros.toPlainString}")
+        }
+
+        if (startField < DT.HOUR && DT.HOUR <= endField) {
+          formatBuilder.append(" %02d")
+          formatArgs.append(rest / MICROS_PER_HOUR)
+          rest %= MICROS_PER_HOUR
+        }
+        if (startField < DT.MINUTE && DT.MINUTE <= endField) {
+          formatBuilder.append(":%02d")
+          formatArgs.append(rest / MICROS_PER_MINUTE)
+          rest %= MICROS_PER_MINUTE
+        }
+        if (startField < DT.SECOND && DT.SECOND <= endField) {
+          val leadZero = if (rest < 10 * MICROS_PER_SECOND) "0" else ""
+          formatBuilder.append(
+            s":$leadZero${java.math.BigDecimal.valueOf(rest, 6).stripTrailingZeros.toPlainString}")
+        }
+        s"$prefix${formatBuilder.toString.format(formatArgs.toSeq: _*)}$postfix"
+      case HIVE_STYLE =>
+        val secondsWithFraction = rest % MICROS_PER_MINUTE
+        rest /= MICROS_PER_MINUTE
+        val minutes = rest % MINUTES_PER_HOUR
+        rest /= MINUTES_PER_HOUR
+        val hours = rest % HOURS_PER_DAY
+        val days = rest / HOURS_PER_DAY
+        val seconds = secondsWithFraction / MICROS_PER_SECOND
+        val nanos = (secondsWithFraction % MICROS_PER_SECOND) * NANOS_PER_MICROS
+        f"$sign$days $hours%02d:$minutes%02d:$seconds%02d.$nanos%09d"
+    }
+    intervalString
+  }
+
   protected def unitToUtf8(unit: String): UTF8String = {
     UTF8String.fromString(unit)
   }
 
-  protected val intervalStr = unitToUtf8("interval")
+  protected val intervalStr: UTF8String = unitToUtf8("interval")
 
-  protected val yearStr = unitToUtf8("year")
-  protected val monthStr = unitToUtf8("month")
-  protected val weekStr = unitToUtf8("week")
-  protected val dayStr = unitToUtf8("day")
-  protected val hourStr = unitToUtf8("hour")
-  protected val minuteStr = unitToUtf8("minute")
-  protected val secondStr = unitToUtf8("second")
-  protected val millisStr = unitToUtf8("millisecond")
-  protected val microsStr = unitToUtf8("microsecond")
-  protected val nanosStr = unitToUtf8("nanosecond")
+  protected val yearStr: UTF8String = unitToUtf8("year")
+  protected val monthStr: UTF8String = unitToUtf8("month")
+  protected val weekStr: UTF8String = unitToUtf8("week")
+  protected val dayStr: UTF8String = unitToUtf8("day")
+  protected val hourStr: UTF8String = unitToUtf8("hour")
+  protected val minuteStr: UTF8String = unitToUtf8("minute")
+  protected val secondStr: UTF8String = unitToUtf8("second")
+  protected val millisStr: UTF8String = unitToUtf8("millisecond")
+  protected val microsStr: UTF8String = unitToUtf8("microsecond")
+  protected val nanosStr: UTF8String = unitToUtf8("nanosecond")
 
 
   private object ParseState extends Enumeration {
@@ -261,3 +518,9 @@ trait SparkIntervalUtils {
 }
 
 object SparkIntervalUtils extends SparkIntervalUtils
+
+// The style of textual representation of intervals
+object IntervalStringStyles extends Enumeration {
+  type IntervalStyle = Value
+  val ANSI_STYLE, HIVE_STYLE = Value
+}

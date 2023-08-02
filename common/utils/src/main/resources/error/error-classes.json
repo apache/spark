@@ -1299,6 +1299,34 @@
     ],
     "sqlState" : "42000"
   },
+  "INVALID_CURSOR" : {
+    "message" : [
+      "The cursor is invalid."
+    ],
+    "subClass" : {
+      "DISCONNECTED" : {
+        "message" : [
+          "The cursor has been disconnected by the server."
+        ]
+      },
+      "NOT_REATTACHABLE" : {
+        "message" : [
+          "The cursor is not reattachable."
+        ]
+      },
+      "POSITION_NOT_AVAILABLE" : {
+        "message" : [
+          "The cursor position id <responseId> is no longer available at index <index>."
+        ]
+      },
+      "POSITION_NOT_FOUND" : {
+        "message" : [
+          "The cursor position id <responseId> is not found."
+        ]
+      }
+    },
+    "sqlState" : "HY109"
+  },
   "INVALID_DEFAULT_VALUE" : {
     "message" : [
       "Failed to execute <statement> command because the destination table column <colName> has a DEFAULT value <defaultValue>,"
@@ -1447,14 +1475,29 @@
       "The handle <handle> is invalid."
     ],
     "subClass" : {
-      "ALREADY_EXISTS" : {
-        "message" : [
-          "Handle already exists."
-        ]
-      },
       "FORMAT" : {
         "message" : [
-          "Handle has invalid format. Handle must an UUID string of the format '00112233-4455-6677-8899-aabbccddeeff'"
+          "Handle must be an UUID string of the format '00112233-4455-6677-8899-aabbccddeeff'"
+        ]
+      },
+      "OPERATION_ALREADY_EXISTS" : {
+        "message" : [
+          "Operation already exists."
+        ]
+      },
+      "OPERATION_NOT_FOUND" : {
+        "message" : [
+          "Operation not found."
+        ]
+      },
+      "SESSION_ALREADY_EXISTS" : {
+        "message" : [
+          "Session already exists."
+        ]
+      },
+      "SESSION_NOT_FOUND" : {
+        "message" : [
+          "Session not found."
         ]
       }
     },

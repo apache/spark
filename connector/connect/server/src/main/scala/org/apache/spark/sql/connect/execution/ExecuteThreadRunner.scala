@@ -27,7 +27,7 @@ import org.apache.spark.connect.proto
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.connect.common.ProtoUtils
 import org.apache.spark.sql.connect.planner.SparkConnectPlanner
-import org.apache.spark.sql.connect.service.ExecuteHolder
+import org.apache.spark.sql.connect.service.{ExecuteHolder, ExecuteSessionTag}
 import org.apache.spark.sql.connect.utils.ErrorUtils
 import org.apache.spark.util.Utils
 
@@ -44,6 +44,8 @@ private[connect] class ExecuteThreadRunner(executeHolder: ExecuteHolder) extends
 
   private var interrupted: Boolean = false
 
+  private var completed: Boolean = false
+
   /** Launches the execution in a background thread, returns immediately. */
   def start(): Unit = {
     executionThread.start()
@@ -57,11 +59,12 @@ private[connect] class ExecuteThreadRunner(executeHolder: ExecuteHolder) extends
   /**
    * Interrupt the executing thread.
    * @return
-   *   true if it was not interrupted before, false if it was already interrupted.
+   *   true if it was not interrupted before, false if it was already interrupted or completed.
    */
   def interrupt(): Boolean = {
     synchronized {
-      if (!interrupted) {
+      if (!interrupted && !completed) {
+        // checking completed prevents sending interrupt onError after onCompleted
         interrupted = true
         executionThread.interrupt()
         true
@@ -95,8 +98,11 @@ private[connect] class ExecuteThreadRunner(executeHolder: ExecuteHolder) extends
       } finally {
         executeHolder.sessionHolder.session.sparkContext.removeJobTag(executeHolder.jobTag)
         executeHolder.sparkSessionTags.foreach { tag =>
-          executeHolder.sessionHolder.session.sparkContext
-            .removeJobTag(executeHolder.tagToSparkJobTag(tag))
+          executeHolder.sessionHolder.session.sparkContext.removeJobTag(
+            ExecuteSessionTag(
+              executeHolder.sessionHolder.userId,
+              executeHolder.sessionHolder.sessionId,
+              tag))
         }
       }
     } catch {
@@ -128,7 +134,11 @@ private[connect] class ExecuteThreadRunner(executeHolder: ExecuteHolder) extends
       session.sparkContext.addJobTag(executeHolder.jobTag)
       // Also set all user defined tags as Spark Job tags.
       executeHolder.sparkSessionTags.foreach { tag =>
-        session.sparkContext.addJobTag(executeHolder.tagToSparkJobTag(tag))
+        session.sparkContext.addJobTag(
+          ExecuteSessionTag(
+            executeHolder.sessionHolder.userId,
+            executeHolder.sessionHolder.sessionId,
+            tag))
       }
       session.sparkContext.setJobDescription(
         s"Spark Connect - ${StringUtils.abbreviate(debugString, 128)}")
@@ -149,6 +159,17 @@ private[connect] class ExecuteThreadRunner(executeHolder: ExecuteHolder) extends
           throw new UnsupportedOperationException(
             s"${executeHolder.request.getPlan.getOpTypeCase} not supported.")
       }
+
+      if (executeHolder.reattachable) {
+        // Reattachable execution sends a ResultComplete at the end of the stream
+        // to signal that there isn't more coming.
+        executeHolder.responseObserver.onNext(createResultComplete())
+      }
+      synchronized {
+        // Prevent interrupt after onCompleted, and throwing error to an alredy closed stream.
+        completed = true
+        executeHolder.responseObserver.onCompleted()
+      }
     }
   }
 
@@ -168,7 +189,6 @@ private[connect] class ExecuteThreadRunner(executeHolder: ExecuteHolder) extends
       command = command,
       responseObserver = responseObserver,
       executeHolder = executeHolder)
-    responseObserver.onCompleted()
   }
 
   private def requestString(request: Message) = {
@@ -181,6 +201,14 @@ private[connect] class ExecuteThreadRunner(executeHolder: ExecuteHolder) extends
         logWarning("Fail to extract debug information", e)
         "UNKNOWN"
     }
+  }
+
+  private def createResultComplete(): proto.ExecutePlanResponse = {
+    // Send the Spark data type
+    proto.ExecutePlanResponse
+      .newBuilder()
+      .setResultComplete(proto.ExecutePlanResponse.ResultComplete.newBuilder().build())
+      .build()
   }
 
   private class ExecutionThread extends Thread {

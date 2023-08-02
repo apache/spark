@@ -28,6 +28,7 @@ import org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning.ScanOperation
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.catalyst.trees.TreePattern.{PLAN_EXPRESSION, SCALAR_SUBQUERY}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.execution.{FileSourceScanExec, SparkPlan}
 import org.apache.spark.sql.types.{DoubleType, FloatType, StructType}
@@ -171,13 +172,12 @@ object FileSourceStrategy extends Strategy with PredicateHelper with Logging {
       val partitionKeyFilters = DataSourceStrategy.getPushedDownFilters(partitionColumns,
         normalizedFilters)
 
-      // subquery expressions are filtered out because they can't be used to prune buckets or pushed
-      // down as data filters, yet they would be executed
-      val normalizedFiltersWithoutSubqueries =
-        normalizedFilters.filterNot(SubqueryExpression.hasSubquery)
-
       val bucketSpec: Option[BucketSpec] = fsRelation.bucketSpec
       val bucketSet = if (shouldPruneBuckets(bucketSpec)) {
+        // subquery expressions are filtered out because they can't be used to prune buckets
+        // as data filters, yet they would be executed
+        val normalizedFiltersWithoutSubqueries =
+          normalizedFilters.filterNot(SubqueryExpression.hasSubquery)
         genBucketSet(normalizedFiltersWithoutSubqueries, bucketSpec.get)
       } else {
         None
@@ -189,7 +189,13 @@ object FileSourceStrategy extends Strategy with PredicateHelper with Logging {
       // Partition keys are not available in the statistics of the files.
       // `dataColumns` might have partition columns, we need to filter them out.
       val dataColumnsWithoutPartitionCols = dataColumns.filterNot(partitionSet.contains)
-      val dataFilters = normalizedFiltersWithoutSubqueries.flatMap { f =>
+      // Scalar subquery can be pushed down as data filter at runtime, since we always
+      // execute subquery first.
+      // It has no meaning to push down bloom filter, so skip it.
+      val normalizedFiltersWithScalarSubqueries = normalizedFilters
+        .filterNot(e => e.containsPattern(PLAN_EXPRESSION) && !e.containsPattern(SCALAR_SUBQUERY))
+        .filterNot(_.isInstanceOf[BloomFilterMightContain])
+      val dataFilters = normalizedFiltersWithScalarSubqueries.flatMap { f =>
         if (f.references.intersect(partitionSet).nonEmpty) {
           extractPredicatesWithinOutputSet(f, AttributeSet(dataColumnsWithoutPartitionCols))
         } else {

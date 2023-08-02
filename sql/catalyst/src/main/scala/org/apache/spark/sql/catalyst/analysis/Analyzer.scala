@@ -2623,7 +2623,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
               withOrigin(t.origin)(t.copy(hasTried = true))
             } else {
               // This is a nested column, we still have a chance to match grouping expressions with
-              // the the top-levle column. Here we wrap the underlying `Attribute` with
+              // the top-level column. Here we wrap the underlying `Attribute` with
               // `TempResolvedColumn` and try again.
               val childWithTempCol = t.child.transformUp {
                 case a: Attribute => TempResolvedColumn(a, Seq(a.name))
@@ -3251,7 +3251,12 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
             val dataType = udf.children(i).dataType
             encOpt.map { enc =>
               val attrs = if (enc.isSerializedAsStructForTopLevel) {
-                DataTypeUtils.toAttributes(dataType.asInstanceOf[StructType])
+                // Value class that has been replaced with its underlying type
+                if (enc.schema.fields.size == 1 && enc.schema.fields.head.dataType == dataType) {
+                  DataTypeUtils.toAttributes(enc.schema.asInstanceOf[StructType])
+                } else {
+                  DataTypeUtils.toAttributes(dataType.asInstanceOf[StructType])
+                }
               } else {
                 // the field name doesn't matter here, so we use
                 // a simple literal to avoid any overhead

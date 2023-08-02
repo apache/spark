@@ -100,8 +100,12 @@ case class ScalarSubquery(
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    toLiteral.doGenCode(ctx, ev)
+  }
+
+  def toLiteral: Literal = {
     require(updated, s"$this has not finished")
-    Literal.create(result, dataType).doGenCode(ctx, ev)
+    Literal.create(result, dataType)
   }
 }
 
