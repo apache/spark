@@ -18,6 +18,7 @@ from pyspark.sql.connect.utils import check_dependencies
 
 check_dependencies(__name__)
 
+import warnings
 import uuid
 from collections.abc import Generator
 from typing import Optional, Dict, Any, Iterator, Iterable, Tuple
@@ -188,11 +189,14 @@ class ExecutePlanResponseReattachableIterator(Generator):
         request = self._create_release_execute_request(until_response_id)
 
         def target() -> None:
-            for attempt in Retrying(
-                can_retry=SparkConnectClient.retry_exception, **self._retry_policy
-            ):
-                with attempt:
-                    self._stub.ReleaseExecute(request)
+            try:
+                for attempt in Retrying(
+                    can_retry=SparkConnectClient.retry_exception, **self._retry_policy
+                ):
+                    with attempt:
+                        self._stub.ReleaseExecute(request)
+            except Exception as e:
+                warnings.warn(f"ReleaseExecute failed with exception: {e}.")
 
         ExecutePlanResponseReattachableIterator._release_thread_pool.apply_async(target)
 
