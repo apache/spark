@@ -57,9 +57,7 @@ jobs:
           - hive2.3
         modules:
           - >-
-            core,launcher,common#unsafe,common#kvstore,common#network-common,common#network-shuffle,common#sketch
-          - >-
-            repl,sql#catalyst
+            core,repl,launcher,common#unsafe,common#kvstore,common#network-common,common#network-shuffle,common#sketch
           - >-
             graphx,streaming,mllib-local,mllib,hadoop-cloud
           - >-
@@ -67,7 +65,7 @@ jobs:
           - >-
             connector#kafka-0-10,connector#kafka-0-10-sql,connector#kafka-0-10-token-provider,connector#spark-ganglia-lgpl,connector#protobuf,connector#avro
           - >-
-            resource-managers#yarn,resource-managers#mesos,resource-managers#kubernetes#core
+            sql#catalyst,resource-managers#yarn,resource-managers#mesos,resource-managers#kubernetes#core
           - >-
             connect
         # Here, we split Hive and SQL tests into some of slow ones and the rest of them.
@@ -189,8 +187,9 @@ jobs:
             ./build/mvn $MAVEN_CLI_OPTS -pl "$TEST_MODULES" -Pyarn -Pmesos -Pkubernetes -Pvolcano -Phive -Phive-thriftserver -Phadoop-cloud -Pspark-ganglia-lgpl -Djava.version=${JAVA_VERSION/-ea} -Dtest.exclude.tags="$EXCLUDED_TAGS" test -fae
           elif [[ "$MODULES_TO_TEST" == "connect" ]]; then
             ./build/mvn $MAVEN_CLI_OPTS -Djava.version=${JAVA_VERSION/-ea} -pl connector/connect/client/jvm,connector/connect/common,connector/connect/server test -fae
-          elif [[ "$MODULES_TO_TEST" == "sql#hive-thriftserver" ]]; then
+          elif [[ "$MODULES_TO_TEST" == "sql#hive-thriftserver" || contains(matrix.modules, 'repl') ]]; then
             # To avoid a compilation loop, for the `sql/hive-thriftserver` module, run `clean install` instead
+            # SPARK-44600: In order to force the `repl` module to use the network-common.jar for testing instead of using the classes directory, run `clean install` instead
             ./build/mvn $MAVEN_CLI_OPTS -pl sql/hive-thriftserver -Phive -Phive-thriftserver -Djava.version=${JAVA_VERSION/-ea} clean install -fae
           else
             ./build/mvn $MAVEN_CLI_OPTS -pl "$TEST_MODULES" -Pyarn -Pmesos -Pkubernetes -Pvolcano -Phive -Phive-thriftserver -Pspark-ganglia-lgpl -Phadoop-cloud -Djava.version=${JAVA_VERSION/-ea} test -fae
