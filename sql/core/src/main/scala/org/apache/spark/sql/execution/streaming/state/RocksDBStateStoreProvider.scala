@@ -542,7 +542,14 @@ private[sql] class RocksDBStateStoreProvider
     val storeIdStr = s"StateStoreId(opId=${stateStoreId.operatorId}," +
       s"partId=${stateStoreId.partitionId},name=${stateStoreId.storeName})"
     val sparkConf = Option(SparkEnv.get).map(_.conf).getOrElse(new SparkConf)
-    val localRootDir = Utils.createTempDir(Utils.getLocalDir(sparkConf), storeIdStr)
+
+    val rocksDBConf = RocksDBConf(storeConf)
+
+    val localRootDir = if (rocksDBConf.forceJavaTmpDir) {
+      Utils.createTempDir(namePrefix = storeIdStr)
+    } else {
+      Utils.createTempDir(Utils.getLocalDir(sparkConf), storeIdStr)
+    }
     new RocksDB(dfsRootDir, RocksDBConf(storeConf), localRootDir, hadoopConf, storeIdStr,
       useColumnFamilies, storeConf.enableStateStoreCheckpointIds)
   }
