@@ -22,7 +22,10 @@ import java.util.{ArrayDeque, List => JList, Map => JMap}
 import javax.annotation.Nonnull
 
 import scala.annotation.tailrec
+import scala.collection.JavaConverters._
 import scala.reflect.ClassTag
+
+import org.apache.commons.lang3.reflect.{TypeUtils => JavaTypeUtils}
 
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoder
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{ArrayEncoder, BinaryEncoder, BoxedBooleanEncoder, BoxedByteEncoder, BoxedDoubleEncoder, BoxedFloatEncoder, BoxedIntEncoder, BoxedLongEncoder, BoxedShortEncoder, DayTimeIntervalEncoder, DEFAULT_JAVA_DECIMAL_ENCODER, EncoderField, IterableEncoder, JavaBeanEncoder, JavaBigIntEncoder, JavaEnumEncoder, LocalDateTimeEncoder, MapEncoder, PrimitiveBooleanEncoder, PrimitiveByteEncoder, PrimitiveDoubleEncoder, PrimitiveFloatEncoder, PrimitiveIntEncoder, PrimitiveLongEncoder, PrimitiveShortEncoder, STRICT_DATE_ENCODER, STRICT_INSTANT_ENCODER, STRICT_LOCAL_DATE_ENCODER, STRICT_TIMESTAMP_ENCODER, StringEncoder, UDTEncoder, YearMonthIntervalEncoder}
@@ -57,7 +60,8 @@ object JavaTypeInference {
     encoderFor(beanType, Set.empty).asInstanceOf[AgnosticEncoder[T]]
   }
 
-  private def encoderFor(t: Type, seenTypeSet: Set[Class[_]]): AgnosticEncoder[_] = t match {
+  private def encoderFor(t: Type, seenTypeSet: Set[Class[_]],
+    typeVariables: Map[TypeVariable[_], Type] = Map.empty): AgnosticEncoder[_] = t match {
 
     case c: Class[_] if c == java.lang.Boolean.TYPE => PrimitiveBooleanEncoder
     case c: Class[_] if c == java.lang.Byte.TYPE => PrimitiveByteEncoder
@@ -101,17 +105,23 @@ object JavaTypeInference {
       UDTEncoder(udt, udt.getClass)
 
     case c: Class[_] if c.isArray =>
-      val elementEncoder = encoderFor(c.getComponentType, seenTypeSet)
+      val elementEncoder = encoderFor(c.getComponentType, seenTypeSet, typeVariables)
       ArrayEncoder(elementEncoder, elementEncoder.nullable)
 
     case ImplementsList(c, Array(elementCls)) =>
-      val element = encoderFor(elementCls, seenTypeSet)
+      val element = encoderFor(elementCls, seenTypeSet, typeVariables)
       IterableEncoder(ClassTag(c), element, element.nullable, lenientSerialization = false)
 
     case ImplementsMap(c, Array(keyCls, valueCls)) =>
-      val keyEncoder = encoderFor(keyCls, seenTypeSet)
-      val valueEncoder = encoderFor(valueCls, seenTypeSet)
+      val keyEncoder = encoderFor(keyCls, seenTypeSet, typeVariables)
+      val valueEncoder = encoderFor(valueCls, seenTypeSet, typeVariables)
       MapEncoder(ClassTag(c), keyEncoder, valueEncoder, valueEncoder.nullable)
+
+    case tv: TypeVariable[_] =>
+      encoderFor(typeVariables(tv), seenTypeSet, typeVariables)
+
+    case pt: ParameterizedType =>
+      encoderFor(pt.getRawType, seenTypeSet, JavaTypeUtils.getTypeArguments(pt).asScala.toMap)
 
     case c: Class[_] =>
       if (seenTypeSet.contains(c)) {
@@ -124,7 +134,7 @@ object JavaTypeInference {
       // Note that the fields are ordered by name.
       val fields = properties.map { property =>
         val readMethod = property.getReadMethod
-        val encoder = encoderFor(readMethod.getGenericReturnType, seenTypeSet + c)
+        val encoder = encoderFor(readMethod.getGenericReturnType, seenTypeSet + c, typeVariables)
         // The existence of `javax.annotation.Nonnull`, means this field is not nullable.
         val hasNonNull = readMethod.isAnnotationPresent(classOf[Nonnull])
         EncoderField(
