@@ -49,6 +49,9 @@ on:
         required: false
         type: string
         default: ''
+
+permissions: read-all|write-all
+
 jobs:
   precondition:
     name: Check changes
