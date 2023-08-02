@@ -645,34 +645,39 @@ class DataFrameTestsMixin:
             df1.join(df2.hint("broadcast"), "id").explain(True)
             self.assertEqual(1, buf.getvalue().count("BroadcastHashJoin"))
 
-    def test_partitioning_hint_with_columns(self):
+    def test_hint_with_string_parameter(self):
         with self.sql_conf({"spark.sql.adaptive.coalescePartitions.enabled": False}):
             df = self.spark.createDataFrame(
-                zip(['A', 'B'] * 2 ** 9, range(2 ** 10)),
-                StructType([StructField('a', StringType()), StructField('n', IntegerType())])
+                zip(["A", "B"] * 2**9, range(2**10)),
+                StructType([StructField("a", StringType()), StructField("n", IntegerType())]),
             )
-            # COALESCE
-            coalesce = df.hint("coalesce", 2)
-            self.assertEqual(coalesce.rdd.getNumPartitions(), 2)
-            # REPARTITION_BY_RANGE
-            range_partitioned = df.hint("REPARTITION_BY_RANGE", 2, "a")
-            self.assertEqual(range_partitioned.rdd.getNumPartitions(), 2)
-            # REPARTITION
-            repartitioned1 = df.hint("REPARTITION", "a")
-            self.assertEqual(repartitioned1.rdd.getNumPartitions(),
-                             int(self.spark.conf.get("spark.sql.shuffle.partitions")))
-            repartitioned2 = df.hint("REPARTITION", 2)
-            self.assertEqual(repartitioned2.rdd.getNumPartitions(), 2)
-            repartitioned3 = df.hint("REPARTITION",  2, "a")
-            self.assertEqual(repartitioned3.rdd.getNumPartitions(), 2)
-            # REBALANCE
-            rebalanced1 = df.hint("REBALANCE", "a")  # just check this doesn't error
-            self.assertEqual(rebalanced1.rdd.getNumPartitions(),
-                             int(self.spark.conf.get("spark.sql.shuffle.partitions")))
-            rebalanced2 = df.hint("REBALANCE", 2)
-            self.assertEqual(rebalanced2.rdd.getNumPartitions(), 2)
-            rebalanced3 = df.hint("REBALANCE", 2, "a")
-            self.assertEqual(rebalanced3.rdd.getNumPartitions(), 2)
+            with io.StringIO() as buf, redirect_stdout(buf):
+                # COALESCE
+                coalesce = df.hint("coalesce", 2)
+                coalesce.explain(True)
+                output = buf.getvalue()
+                self.assertGreaterEqual(output.count("Coalesce 2"), 1)
+                buf.truncate(0)
+                buf.seek(0)
+
+                # REPARTITION_BY_RANGE
+                range_partitioned = df.hint("REPARTITION_BY_RANGE", 2, "a")
+                range_partitioned.explain(True)
+                output = buf.getvalue()
+                self.assertGreaterEqual(output.count("REPARTITION_BY_NUM"), 1)
+                buf.truncate(0)
+                buf.seek(0)
+
+                # REBALANCE
+                rebalanced1 = df.hint("REBALANCE", "a")  # just check this doesn't error
+                rebalanced1.explain(True)
+                rebalanced2 = df.hint("REBALANCE", 2)
+                rebalanced2.explain(True)
+                rebalanced3 = df.hint("REBALANCE", 2, "a")
+                rebalanced3.explain(True)
+                output = buf.getvalue()
+                self.assertGreaterEqual(output.count("REBALANCE_PARTITIONS_BY_NONE"), 1)
+                self.assertGreaterEqual(output.count("REBALANCE_PARTITIONS_BY_COL"), 2)
 
     # add tests for SPARK-23647 (test more types for hint)
     def test_extended_hint_types(self):

@@ -2807,7 +2807,8 @@ test_that("test hint", {
   execution_plan_hint <- capture.output(
     explain(hint(df, "hint1", 1.23456, "aaaaaaaaaa", hintList), TRUE)
   )
-  expect_true(any(grepl("1.23456, aaaaaaaaaa", execution_plan_hint)))
+  # aaaaaaaaaa would be parsed as an UnresolvedAttribute
+  expect_true(any(grepl("1.23456, 'aaaaaaaaaa", execution_plan_hint)))
 })
 
 test_that("toJSON() on DataFrame", {
