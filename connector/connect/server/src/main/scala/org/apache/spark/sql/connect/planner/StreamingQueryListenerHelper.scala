@@ -24,7 +24,7 @@ import org.apache.spark.sql.streaming.StreamingQueryListener
 /**
  * A helper class for handling StreamingQueryListener related functionality in Spark Connect. Each
  * instance of this class starts a python process, inside which has the python handling logic.
- * When new a event is received, it is serialized to json, and passed to the python process.
+ * When a new event is received, it is serialized to json, and passed to the python process.
  */
 class PythonStreamingQueryListener(
     listener: SimplePythonFunction,
@@ -66,10 +66,7 @@ class PythonStreamingQueryListener(
     dataOut.flush()
   }
 
-  def stopListenerProcess(): Unit = {
-    // scalastyle:off println
-    println(s"====listener stop====")
-    // scalastyle:on println
+  private[spark] def stopListenerProcess(): Unit = {
     runner.stop()
   }
 }

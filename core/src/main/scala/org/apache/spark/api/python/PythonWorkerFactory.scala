@@ -352,18 +352,9 @@ private[spark] class PythonWorkerFactory(
   }
 
   def stopWorker(worker: Socket): Unit = {
-    // scalastyle:off println
-    println(s"====stop worker called====")
-    // scalastyle:on println
     self.synchronized {
       if (useDaemon) {
-        // scalastyle:off println
-        println(s"====use daemon?====")
-        // scalastyle:on println
         if (daemon != null) {
-          // scalastyle:off println
-          println(s"====daemo====")
-          // scalastyle:on println
           daemonWorkers.get(worker).foreach { pid =>
             // tell daemon to kill worker by pid
             val output = new DataOutputStream(daemon.getOutputStream)
@@ -373,9 +364,6 @@ private[spark] class PythonWorkerFactory(
           }
         }
       } else {
-        // scalastyle:off println
-        println(s"====destroy worker====${simpleWorkers.get(worker)}")
-        // scalastyle:on println
         simpleWorkers.get(worker).foreach(_.destroy())
       }
     }

@@ -96,20 +96,7 @@ private[spark] class StreamingPythonRunner(
   }
 
   def stop(): Unit = {
-    // scalastyle:off println
-    println(s"Stopping Python runner (session: $sessionId, pythonExec: $pythonExec")
-    // scalastyle:on println
     pythonWorker.foreach { worker =>
-      // scalastyle:off println
-      println(s"Stopping Python runner worker: $worker")
-      // scalastyle:on println
-      // Cleanup the worker socket. This will also cause the Python worker to exit.
-//      try {
-//        worker.close()
-//      } catch {
-//        case e: Exception =>
-//          logWarning("Failed to close worker socket", e)
-//      }
       SparkEnv.get.destroyPythonWorker(pythonExec, workerModule, envVars.asScala.toMap, worker)
     }
   }
