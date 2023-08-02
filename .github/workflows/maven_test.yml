@@ -59,13 +59,15 @@ jobs:
           - >-
             core,repl,launcher,common#unsafe,common#kvstore,common#network-common,common#network-shuffle,common#sketch
           - >-
+            repl,sql#catalyst
+          - >-
             graphx,streaming,mllib-local,mllib,hadoop-cloud
           - >-
             sql#hive-thriftserver
           - >-
             connector#kafka-0-10,connector#kafka-0-10-sql,connector#kafka-0-10-token-provider,connector#spark-ganglia-lgpl,connector#protobuf,connector#avro
           - >-
-            sql#catalyst,resource-managers#yarn,resource-managers#mesos,resource-managers#kubernetes#core
+            resource-managers#yarn,resource-managers#mesos,resource-managers#kubernetes#core
           - >-
             connect
         # Here, we split Hive and SQL tests into some of slow ones and the rest of them.
