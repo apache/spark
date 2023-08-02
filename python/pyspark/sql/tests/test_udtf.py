@@ -1696,9 +1696,8 @@ class UDTFArrowTestsMixin(BaseUDTFTestsMixin):
             ("x: double", [Row(x=1.0)]),
             ("x: decimal(10, 0)", err),
             ("x: array<int>", err),
-            # TODO(SPARK-44561): fix AssertionError in convert_map and convert_struct
-            # ("x: map<string,int>", None),
-            # ("x: struct<a:int>", None)
+            ("x: map<string,int>", err),
+            ("x: struct<a:int>", err),
         ]:
             with self.subTest(ret_type=ret_type):
                 self._check_result_or_exception(TestUDTF, ret_type, expected)
@@ -1725,10 +1724,9 @@ class UDTFArrowTestsMixin(BaseUDTFTestsMixin):
             ("x: double", [Row(x=1.0)]),
             ("x: decimal(10, 0)", [Row(x=1)]),
             ("x: array<string>", [Row(x=["1"])]),
-            ("x: array<int>", err),
-            # TODO(SPARK-44561): fix AssertionError in convert_map and convert_struct
-            # ("x: map<string,int>", None),
-            # ("x: struct<a:int>", None)
+            ("x: array<int>", [Row(x=[1])]),
+            ("x: map<string,int>", err),
+            ("x: struct<a:int>", err),
         ]:
             with self.subTest(ret_type=ret_type):
                 self._check_result_or_exception(TestUDTF, ret_type, expected)
@@ -1756,9 +1754,8 @@ class UDTFArrowTestsMixin(BaseUDTFTestsMixin):
             ("x: decimal(10, 0)", err),
             ("x: array<string>", [Row(x=["h", "e", "l", "l", "o"])]),
             ("x: array<int>", err),
-            # TODO(SPARK-44561): fix AssertionError in convert_map and convert_struct
-            # ("x: map<string,int>", None),
-            # ("x: struct<a:int>", None)
+            ("x: map<string,int>", err),
+            ("x: struct<a:int>", err),
         ]:
             with self.subTest(ret_type=ret_type):
                 self._check_result_or_exception(TestUDTF, ret_type, expected)
@@ -1789,9 +1786,71 @@ class UDTFArrowTestsMixin(BaseUDTFTestsMixin):
             ("x: array<int>", [Row(x=[0, 1, 2])]),
             ("x: array<float>", [Row(x=[0, 1.1, 2])]),
             ("x: array<array<int>>", err),
-            # TODO(SPARK-44561): fix AssertionError in convert_map and convert_struct
-            # ("x: map<string,int>", None),
-            # ("x: struct<a:int>", None)
+            ("x: map<string,int>", err),
+            ("x: struct<a:int>", err),
+        ]:
+            with self.subTest(ret_type=ret_type):
+                self._check_result_or_exception(TestUDTF, ret_type, expected)
+
+    def test_map_output_type_casting(self):
+        class TestUDTF:
+            def eval(self):
+                yield {"a": 0, "b": 1.1, "c": 2},
+
+        err = "UDTF_ARROW_TYPE_CAST_ERROR"
+
+        for ret_type, expected in [
+            ("x: boolean", err),
+            ("x: tinyint", err),
+            ("x: smallint", err),
+            ("x: int", err),
+            ("x: bigint", err),
+            ("x: string", err),
+            ("x: date", err),
+            ("x: timestamp", err),
+            ("x: byte", err),
+            ("x: binary", err),
+            ("x: float", err),
+            ("x: double", err),
+            ("x: decimal(10, 0)", err),
+            ("x: array<string>", [Row(x=["a", "b", "c"])]),
+            ("x: map<string,string>", err),
+            ("x: map<string,boolean>", err),
+            ("x: map<string,int>", [Row(x={"a": 0, "b": 1, "c": 2})]),
+            ("x: map<string,float>", [Row(x={"a": 0, "b": 1.1, "c": 2})]),
+            ("x: map<string,map<string,int>>", err),
+            ("x: struct<a:int>", [Row(x=Row(a=0))]),
+        ]:
+            with self.subTest(ret_type=ret_type):
+                self._check_result_or_exception(TestUDTF, ret_type, expected)
+
+    def test_struct_output_type_casting(self):
+        class TestUDTF:
+            def eval(self):
+                yield {"a": 0, "b": 1.1, "c": 2},
+
+        err = "UDTF_ARROW_TYPE_CAST_ERROR"
+
+        for ret_type, expected in [
+            ("x: boolean", err),
+            ("x: tinyint", err),
+            ("x: smallint", err),
+            ("x: int", err),
+            ("x: bigint", err),
+            ("x: string", err),
+            ("x: date", err),
+            ("x: timestamp", err),
+            ("x: byte", err),
+            ("x: binary", err),
+            ("x: float", err),
+            ("x: double", err),
+            ("x: decimal(10, 0)", err),
+            ("x: array<string>", [Row(x=["a", "b", "c"])]),
+            ("x: map<string,string>", err),
+            ("x: struct<a:string,b:string,c:string>", [Row(Row(a="0", b="1.1", c="2"))]),
+            ("x: struct<a:int,b:int,c:int>", [Row(Row(a=0, b=1, c=2))]),
+            ("x: struct<a:float,b:float,c:float>", [Row(Row(a=0, b=1.1, c=2))]),
+            ("x: struct<a:struct<>,b:struct<>,c:struct<>>", err),
         ]:
             with self.subTest(ret_type=ret_type):
                 self._check_result_or_exception(TestUDTF, ret_type, expected)
