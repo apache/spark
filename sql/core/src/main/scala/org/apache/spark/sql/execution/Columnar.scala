@@ -208,11 +208,6 @@ case class ColumnarToRowExec(child: SparkPlan) extends ColumnarToRowTransition w
                |$termClass $localTerm = $refTerm.$funcToCall();
                |""".stripMargin
         }.mkString("\n")
-<<<<<<< HEAD
-=======
-
-
->>>>>>> 8adeb09c06f (WIP : DEX-8725. BroadcastHashJoin keys being pushed down to scan level)
         val newFilterExpr = pushedBroadcastFilters.zip(localBroadcastVarTerms).map {
           case (bcData, localInsetTerm) =>
             val attribute = this.output.find(_.name == bcData.columnName).get
