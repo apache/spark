@@ -38,8 +38,7 @@ class PythonStreamingQueryListener(
     listener,
     connectUrl,
     sessionHolder.sessionId,
-    "pyspark.sql.connect.streaming.worker.listener_worker"
-  )
+    "pyspark.sql.connect.streaming.worker.listener_worker")
 
   val (dataOut, _) = runner.init()
 
@@ -68,6 +67,9 @@ class PythonStreamingQueryListener(
   }
 
   def stopListenerProcess(): Unit = {
+    // scalastyle:off println
+    println(s"====listener stop====")
+    // scalastyle:on println
     runner.stop()
   }
 }

@@ -29,9 +29,9 @@ import org.apache.spark.connect.proto
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.SparkSession
-import org.apache.spark.sql.connect.planner.PythonStreamingQueryListener
 import org.apache.spark.sql.connect.artifact.SparkConnectArtifactManager
 import org.apache.spark.sql.connect.common.InvalidPlanInput
+import org.apache.spark.sql.connect.planner.PythonStreamingQueryListener
 import org.apache.spark.sql.streaming.StreamingQueryListener
 import org.apache.spark.util.{SystemClock}
 import org.apache.spark.util.Utils
@@ -221,16 +221,16 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
   }
 
   /**
-   * Returns [[StreamingQueryListener]] cached for Listener ID `id`.
-   * If it is not found, return None.
+   * Returns [[StreamingQueryListener]] cached for Listener ID `id`. If it is not found, return
+   * None.
    */
   private[connect] def getListener(id: String): Option[StreamingQueryListener] = {
     Option(listenerCache.get(id))
   }
 
   /**
-   * Removes corresponding StreamingQueryListener by ID.
-   * Terminates the python process if it's a Spark Connect PythonStreamingQueryListener.
+   * Removes corresponding StreamingQueryListener by ID. Terminates the python process if it's a
+   * Spark Connect PythonStreamingQueryListener.
    */
   private[connect] def removeCachedListener(id: String): Unit = {
     listenerCache.get(id) match {

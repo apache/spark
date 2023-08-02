@@ -69,9 +69,8 @@ private[spark] class StreamingPythonRunner(
     conf.set(PYTHON_USE_DAEMON, false)
     envVars.put("SPARK_CONNECT_LOCAL_URL", connectUrl)
 
-    val pythonWorkerFactory =
-      new PythonWorkerFactory(pythonExec, workerModule, envVars.asScala.toMap)
-    val (worker, _) = pythonWorkerFactory.createSimpleWorker()
+    val (worker, _) = env.createPythonWorker(
+      pythonExec, workerModule, envVars.asScala.toMap)
     pythonWorker = Some(worker)
 
     val stream = new BufferedOutputStream(worker.getOutputStream, bufferSize)
@@ -97,8 +96,20 @@ private[spark] class StreamingPythonRunner(
   }
 
   def stop(): Unit = {
-    logInfo(s"Stopping Python runner (session: $sessionId, pythonExec: $pythonExec")
+    // scalastyle:off println
+    println(s"Stopping Python runner (session: $sessionId, pythonExec: $pythonExec")
+    // scalastyle:on println
     pythonWorker.foreach { worker =>
+      // scalastyle:off println
+      println(s"Stopping Python runner worker: $worker")
+      // scalastyle:on println
+      // Cleanup the worker socket. This will also cause the Python worker to exit.
+//      try {
+//        worker.close()
+//      } catch {
+//        case e: Exception =>
+//          logWarning("Failed to close worker socket", e)
+//      }
       SparkEnv.get.destroyPythonWorker(pythonExec, workerModule, envVars.asScala.toMap, worker)
     }
   }
