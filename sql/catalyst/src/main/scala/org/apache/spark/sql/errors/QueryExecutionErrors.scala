@@ -2702,4 +2702,16 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       errorClass = "MERGE_CARDINALITY_VIOLATION",
       messageParameters = Map.empty)
   }
+
+  def unsupportedPurgePartitionError(): SparkUnsupportedOperationException = {
+    new SparkUnsupportedOperationException(
+      errorClass = "UNSUPPORTED_FEATURE.PURGE_PARTITION",
+      messageParameters = Map.empty)
+  }
+
+  def unsupportedPurgeTableError(): SparkUnsupportedOperationException = {
+    new SparkUnsupportedOperationException(
+      errorClass = "UNSUPPORTED_FEATURE.PURGE_TABLE",
+      messageParameters = Map.empty)
+  }
 }
