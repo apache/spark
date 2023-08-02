@@ -21,7 +21,8 @@ check_dependencies(__name__)
 import uuid
 from collections.abc import Generator
 from typing import Optional, Dict, Any, Iterator, Iterable, Tuple
-import threading
+from multiprocessing.pool import ThreadPool
+import os
 
 import pyspark.sql.connect.proto as pb2
 import pyspark.sql.connect.proto.base_pb2_grpc as grpc_lib
@@ -51,6 +52,8 @@ class ExecutePlanResponseReattachableIterator(Generator):
     operation.
     """
 
+    _release_thread_pool = ThreadPool(os.cpu_count() if os.cpu_count() else 8)
+
     def __init__(
         self,
         request: pb2.ExecutePlanRequest,
@@ -75,6 +78,7 @@ class ExecutePlanResponseReattachableIterator(Generator):
                 reattach_options=pb2.ReattachOptions(reattachable=True)
             )
         )
+        request.operation_id = self._operation_id
         self._initial_request = request
 
         # ResponseId of the last response returned by next()
@@ -190,7 +194,7 @@ class ExecutePlanResponseReattachableIterator(Generator):
                 with attempt:
                     self._stub.ReleaseExecute(request)
 
-        threading.Thread(target=target).start()
+        ExecutePlanResponseReattachableIterator._release_thread_pool.apply_async(target)
 
     def _create_reattach_execute_request(self) -> pb2.ReattachExecuteRequest:
         release = pb2.ReattachExecuteRequest(
