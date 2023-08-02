@@ -188,7 +188,7 @@ class DiskBlockManagerSuite extends SparkFunSuite {
     writer.close()
   }
 
-  test("disk block manager should handle stale subdirectories") {
+  test("SPARK-44632: disk block manager should handle stale subdirectories") {
     val blockId = RDDBlockId(1, 2)
     val rddSplit = diskBlockManager.getFile(blockId.name)
     val subDir = rddSplit.getParentFile
