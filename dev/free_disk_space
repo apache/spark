@@ -25,13 +25,9 @@ echo "Listing 100 largest packages"
 dpkg-query -Wf '${Installed-Size}\t${Package}\n' | sort -n | tail -n 100
 df -h
 
-du -sh /opt/*
-du -sh /opt/*/*
-
 echo "Removing large packages"
 sudo rm -rf /usr/share/dotnet/
 sudo rm -rf /usr/share/php/
-sudo rm -rf /usr/local/share/man/man1/
 sudo rm -rf /usr/local/graalvm/
 sudo rm -rf /usr/local/.ghcup/
 sudo rm -rf /usr/local/share/powershell
@@ -49,4 +45,5 @@ sudo apt-get remove --purge -y snapd google-chrome-stable microsoft-edge-stable 
 sudo apt-get remove --purge -y azure-cli google-cloud-sdk mono-devel powershell libgl1-mesa-dri
 sudo apt-get autoremove --purge -y
 sudo apt-get clean
+
 df -h
