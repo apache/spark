@@ -25,6 +25,7 @@ from typing import (
     Optional,
     Any,
 )
+import warnings
 
 from pyspark.ml.torch.distributor import TorchDistributor
 
@@ -97,6 +98,8 @@ class DeepspeedTorchDistributor(TorchDistributor):
             _ssl_conf=DeepspeedTorchDistributor._DEEPSPEED_SSL_CONF,
         )
         self.cleanup_deepspeed_conf = False
+        if not useGpu:
+            warnings.warn(message="Deepspeed usage with CPUs is not very well supported at this time.")
 
     @staticmethod
     def _get_deepspeed_config_path(deepspeed_config: Union[str, Dict[str, Any]]) -> str:
