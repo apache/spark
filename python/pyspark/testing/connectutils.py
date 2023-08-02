@@ -170,6 +170,7 @@ class ReusedConnectTestCase(unittest.TestCase, SQLTestUtils, PySparkErrorTestUti
         # Disable JVM stack trace in Spark Connect tests to prevent the
         # HTTP header size from exceeding the maximum allowed size.
         conf.set("spark.sql.pyspark.jvmStacktrace.enabled", "false")
+        conf.set("spark.connect.execute.reattachable.senderMaxStreamDuration", "1s")
         return conf
 
     @classmethod
