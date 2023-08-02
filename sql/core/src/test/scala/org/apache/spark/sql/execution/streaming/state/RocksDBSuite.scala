@@ -3497,6 +3497,28 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
         s"after load but was $threadId")
   }
 
+  test("SPARK-44639: Use Java tmp dir instead of configured local dirs") {
+    val conf = sqlConf
+    conf.setConfString(RocksDBConf.ROCKSDB_SQL_CONF_NAME_PREFIX + "." +
+      RocksDBConf.FORCE_JAVA_TMP_DIR_CONF_KEY, "true")
+
+    val provider = new RocksDBStateStoreProvider()
+    provider.init(
+      StateStoreId(
+        "/checkpoint",
+        0,
+        0
+      ),
+      new StructType(),
+      new StructType(),
+      0,
+      new StateStoreConf(conf),
+      new Configuration()
+    )
+
+    assert(provider.rocksDB.localRootDir.getParent() == System.getProperty("java.io.tmpdir"))
+  }
+
   private def dbConf = RocksDBConf(StateStoreConf(SQLConf.get.clone()))
 
   class RocksDBCheckpointFormatV2(
