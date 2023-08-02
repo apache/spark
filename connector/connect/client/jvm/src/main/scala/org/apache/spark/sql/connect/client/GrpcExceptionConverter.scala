@@ -58,18 +58,21 @@ private[client] object GrpcExceptionConverter extends JsonUtils {
     }
   }
 
+  private val errorFactory = new ErrorFactoryBuilder()
+    .addConstructor((message, _) => new ParseException(None, message, Origin(), Origin()))
+    .addConstructor((message, _) => new AnalysisException(message))
+    .build()
+
   private def errorInfoToThrowable(info: ErrorInfo, message: String): Throwable = {
     val classes =
       mapper.readValue(info.getMetadataOrDefault("classes", "[]"), classOf[Array[String]])
 
     for (cls <- classes) {
-      cls match {
-        case "org.apache.spark.sql.catalyst.parser.ParseException" =>
-          return new ParseException(None, message, Origin(), Origin())
-        case "org.apache.spark.sql.AnalysisException" =>
-          return new AnalysisException(message)
-        case _ =>
-        // Do nothing.
+      errorFactory.get(cls) match {
+        case Some(constructor) =>
+          return constructor(message, null)
+        case None =>
+        // Do nothing
       }
     }
 
