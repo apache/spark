@@ -182,11 +182,15 @@ private[sql] class SparkResult[T](
   def toArray: Array[T] = {
     val result = encoder.clsTag.newArray(length)
     val rows = iterator
-    var i = 0
-    while (rows.hasNext) {
-      result(i) = rows.next()
-      assert(i < numRecords)
-      i += 1
+    try {
+      var i = 0
+      while (rows.hasNext) {
+        result(i) = rows.next()
+        assert(i < numRecords)
+        i += 1
+      }
+    } finally {
+      rows.close()
     }
     result
   }

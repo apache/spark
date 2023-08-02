@@ -303,6 +303,7 @@ message ExecutePlanRequest {
 
   message RequestOption {
     oneof request_option {
+      ReattachOptions reattach_options = 1;
       // Extension type for request options
       google.protobuf.Any extension = 999;
     }
@@ -325,6 +326,10 @@ message ExecutePlanResponse {
   // It is an UUID string of the format `00112233-4455-6677-8899-aabbccddeeff`
   string operation_id = 12;
 
+  // Identified the response in the stream.
+  // The id is an UUID string of the format `00112233-4455-6677-8899-aabbccddeeff`
+  string response_id = 13;
+
   // Union type for the different response messages.
   oneof response_type {
     ArrowBatch arrow_batch = 2;
@@ -343,6 +348,9 @@ message ExecutePlanResponse {
 
     // Response for commands on the streaming query manager.
     StreamingQueryManagerCommandResult streaming_query_manager_command_result = 11;
+
+    // Response type informing if the stream is complete in reattachable execution.
+    ResultComplete result_complete = 14;
 
     // Support arbitrary result objects.
     google.protobuf.Any extension = 999;
@@ -391,6 +399,12 @@ message ExecutePlanResponse {
   message ObservedMetrics {
     string name = 1;
     repeated Expression.Literal values = 2;
+  }
+
+  message ResultComplete {
+    // If present, in a reattachable execution this means that after server sends onComplete,
+    // the execution is complete. If the server sends onComplete without sending a ResultComplete,
+    // it means that there is more, and the client should use ReattachExecute RPC to continue.
   }
 }
 
@@ -666,6 +680,104 @@ message InterruptResponse {
   repeated string interrupted_ids = 2;
 }
 
+message ReattachOptions {
+  // If true, the request can be reattached to using ReattachExecute.
+  // ReattachExecute can be used either if the stream broke with a GRPC network error,
+  // or if the server closed the stream without sending a response with StreamStatus.complete=true.
+  // The server will keep a buffer of responses in case a response is lost, and
+  // ReattachExecute needs to back-track.
+  //
+  // If false, the execution response stream will will not be reattachable, and all responses are
+  // immediately released by the server after being sent.
+  bool reattachable = 1;
+}
+
+message ReattachExecuteRequest {
+  // (Required)
+  //
+  // The session_id of the request to reattach to.
+  // This must be an id of existing session.
+  string session_id = 1;
+
+  // (Required) User context
+  //
+  // user_context.user_id and session+id both identify a unique remote spark session on the
+  // server side.
+  UserContext user_context = 2;
+
+  // (Required)
+  // Provide an id of the request to reattach to.
+  // This must be an id of existing operation.
+  string operation_id = 3;
+
+  // Provides optional information about the client sending the request. This field
+  // can be used for language or version specific information and is only intended for
+  // logging purposes and will not be interpreted by the server.
+  optional string client_type = 4;
+
+  // (Optional)
+  // Last already processed response id from the response stream.
+  // After reattach, server will resume the response stream after that response.
+  // If not specified, server will restart the stream from the start.
+  //
+  // Note: server controls the amount of responses that it buffers and it may drop responses,
+  // that are far behind the latest returned response, so this can't be used to arbitrarily
+  // scroll back the cursor. If the response is no longer available, this will result in an error.
+  optional string last_response_id = 5;
+}
+
+message ReleaseExecuteRequest {
+  // (Required)
+  //
+  // The session_id of the request to reattach to.
+  // This must be an id of existing session.
+  string session_id = 1;
+
+  // (Required) User context
+  //
+  // user_context.user_id and session+id both identify a unique remote spark session on the
+  // server side.
+  UserContext user_context = 2;
+
+  // (Required)
+  // Provide an id of the request to reattach to.
+  // This must be an id of existing operation.
+  string operation_id = 3;
+
+  // Provides optional information about the client sending the request. This field
+  // can be used for language or version specific information and is only intended for
+  // logging purposes and will not be interpreted by the server.
+  optional string client_type = 4;
+
+  // Release and close operation completely.
+  // Note: This should be called when the server side operation is finished, and ExecutePlan or
+  // ReattachExecute are finished processing the result stream, or inside onComplete / onError.
+  // This will not interrupt a running execution, but block until it's finished.
+  message ReleaseAll {}
+
+  // Release all responses from the operation response stream up to and including
+  // the response with the given by response_id.
+  // While server determines by itself how much of a buffer of responses to keep, client providing
+  // explicit release calls will help reduce resource consumption.
+  // Noop if response_id not found in cached responses.
+  message ReleaseUntil {
+    string response_id = 1;
+  }
+
+  oneof release {
+    ReleaseAll release_all = 5;
+    ReleaseUntil release_until = 6;
+  }
+}
+
+message ReleaseExecuteResponse {
+  // Session id in which the release was running.
+  string session_id = 1;
+
+  // Operation id of the operation which the release concerns.
+  string operation_id = 2;
+}
+
 // Main interface for the SparkConnect service.
 service SparkConnectService {
 
@@ -689,5 +801,17 @@ service SparkConnectService {
 
   // Interrupts running executions
   rpc Interrupt(InterruptRequest) returns (InterruptResponse) {}
+
+  // Reattach to an existing reattachable execution.
+  // The ExecutePlan must have been started with ReattachOptions.reattachable=true.
+  // If the ExecutePlanResponse stream ends without a ResultComplete message, there is more to
+  // continue. If there is a ResultComplete, the client should use ReleaseExecute with
+  rpc ReattachExecute(ReattachExecuteRequest) returns (stream ExecutePlanResponse) {}
+
+  // Release an reattachable execution, or parts thereof.
+  // The ExecutePlan must have been started with ReattachOptions.reattachable=true.
+  // Non reattachable executions are released automatically and immediately after the ExecutePlan
+  // RPC and ReleaseExecute doesn't need to be used.
+  rpc ReleaseExecute(ReleaseExecuteRequest) returns (ReleaseExecuteResponse) {}
 }
 

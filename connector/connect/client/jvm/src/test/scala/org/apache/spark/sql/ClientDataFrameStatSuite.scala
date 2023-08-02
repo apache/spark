@@ -24,7 +24,7 @@ import org.scalatest.matchers.must.Matchers._
 import org.apache.spark.SparkException
 import org.apache.spark.sql.connect.client.util.RemoteSparkSession
 
-class DataFrameStatSuite extends RemoteSparkSession {
+class ClientDataFrameStatSuite extends RemoteSparkSession {
   private def toLetter(i: Int): String = (i + 97).toChar.toString
 
   test("approxQuantile") {

@@ -842,6 +842,14 @@ The datasource `<datasource>` cannot save the column `<columnName>` because its 
 
 Column or field `<name>` is of type `<type>` while it's required to be `<expectedType>`.
 
+### [INVALID_CURSOR](sql-error-conditions-invalid-cursor-error-class.html)
+
+[SQLSTATE: HY109](sql-error-conditions-sqlstates.html#class-HY-cli-specific-condition)
+
+The cursor is invalid.
+
+For more details see [INVALID_CURSOR](sql-error-conditions-invalid-cursor-error-class.html)
+
 ### [INVALID_DEFAULT_VALUE](sql-error-conditions-invalid-default-value-error-class.html)
 
 SQLSTATE: none assigned

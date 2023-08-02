@@ -29,7 +29,8 @@ import org.apache.commons.lang3.{JavaVersion, SystemUtils}
 import org.scalactic.TolerantNumerics
 import org.scalatest.PrivateMethodTester
 
-import org.apache.spark.{SPARK_VERSION, SparkException}
+import org.apache.spark.SparkBuildInfo.{spark_version => SPARK_VERSION}
+import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.StringEncoder
 import org.apache.spark.sql.catalyst.expressions.GenericRowWithSchema
 import org.apache.spark.sql.catalyst.parser.ParseException
@@ -37,10 +38,34 @@ import org.apache.spark.sql.connect.client.{SparkConnectClient, SparkResult}
 import org.apache.spark.sql.connect.client.util.{IntegrationTestUtils, RemoteSparkSession}
 import org.apache.spark.sql.connect.client.util.SparkConnectServerUtils.port
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.SqlApiConf
 import org.apache.spark.sql.types._
 
 class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper with PrivateMethodTester {
+
+  test("spark deep recursion") {
+    var df = spark.range(1)
+    for (a <- 1 to 500) {
+      df = df.union(spark.range(a, a + 1))
+    }
+    assert(df.collect().length == 501)
+  }
+
+  test("many tables") {
+    withSQLConf("spark.sql.execution.arrow.maxRecordsPerBatch" -> "10") {
+      val numTables = 20
+      try {
+        for (i <- 0 to numTables) {
+          spark.sql(s"create table testcat.table${i} (id int)")
+        }
+        assert(spark.sql("show tables in testcat").collect().length == numTables + 1)
+      } finally {
+        for (i <- 0 to numTables) {
+          spark.sql(s"drop table if exists testcat.table${i}")
+        }
+      }
+    }
+  }
 
   // Spark Result
   test("spark result schema") {
@@ -929,7 +954,7 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper with PrivateM
 
   test("SparkSession.createDataFrame - large data set") {
     val threshold = 1024 * 1024
-    withSQLConf(SQLConf.LOCAL_RELATION_CACHE_THRESHOLD.key -> threshold.toString) {
+    withSQLConf(SqlApiConf.LOCAL_RELATION_CACHE_THRESHOLD_KEY -> threshold.toString) {
       val count = 2
       val suffix = "abcdef"
       val str = scala.util.Random.alphanumeric.take(1024 * 1024).mkString + suffix

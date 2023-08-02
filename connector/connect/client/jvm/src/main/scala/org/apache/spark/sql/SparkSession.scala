@@ -41,7 +41,7 @@ import org.apache.spark.sql.connect.client.SparkConnectClient.Configuration
 import org.apache.spark.sql.connect.client.arrow.ArrowSerializer
 import org.apache.spark.sql.connect.client.util.Cleaner
 import org.apache.spark.sql.connect.common.LiteralValueProtoConverter.toLiteralProto
-import org.apache.spark.sql.internal.CatalogImpl
+import org.apache.spark.sql.internal.{CatalogImpl, SqlApiConf}
 import org.apache.spark.sql.streaming.DataStreamReader
 import org.apache.spark.sql.streaming.StreamingQueryManager
 import org.apache.spark.sql.types.StructType
@@ -127,7 +127,7 @@ class SparkSession private[sql] (
     newDataset(encoder) { builder =>
       if (data.nonEmpty) {
         val arrowData = ArrowSerializer.serialize(data, encoder, allocator, timeZoneId)
-        if (arrowData.size() <= conf.get("spark.sql.session.localRelationCacheThreshold").toInt) {
+        if (arrowData.size() <= conf.get(SqlApiConf.LOCAL_RELATION_CACHE_THRESHOLD_KEY).toInt) {
           builder.getLocalRelationBuilder
             .setSchema(encoder.schema.json)
             .setData(arrowData)
@@ -254,7 +254,8 @@ class SparkSession private[sql] (
     val plan = proto.Plan.newBuilder().setCommand(cmd)
     val responseIter = client.execute(plan.build())
 
-    val response = responseIter.asScala
+    // Note: .toSeq makes the stream be consumed and closed.
+    val response = responseIter.asScala.toSeq
       .find(_.hasSqlCommandResult)
       .getOrElse(throw new RuntimeException("SQLCommandResult must be present"))
 
@@ -310,7 +311,8 @@ class SparkSession private[sql] (
       val plan = proto.Plan.newBuilder().setCommand(cmd)
       val responseIter = client.execute(plan.build())
 
-      val response = responseIter.asScala
+      // Note: .toSeq makes the stream be consumed and closed.
+      val response = responseIter.asScala.toSeq
         .find(_.hasSqlCommandResult)
         .getOrElse(throw new RuntimeException("SQLCommandResult must be present"))
 
@@ -528,7 +530,7 @@ class SparkSession private[sql] (
     client.semanticHash(plan).getSemanticHash.getResult
   }
 
-  private[sql] def timeZoneId: String = conf.get("spark.sql.session.timeZone")
+  private[sql] def timeZoneId: String = conf.get(SqlApiConf.SESSION_LOCAL_TIMEZONE_KEY)
 
   private[sql] def execute[T](plan: proto.Plan, encoder: AgnosticEncoder[T]): SparkResult[T] = {
     val value = client.execute(plan)
@@ -554,7 +556,7 @@ class SparkSession private[sql] (
     val command = proto.Command.newBuilder().setRegisterFunction(udf).build()
     val plan = proto.Plan.newBuilder().setCommand(command).build()
 
-    client.execute(plan)
+    client.execute(plan).asScala.foreach(_ => ())
   }
 
   @DeveloperApi

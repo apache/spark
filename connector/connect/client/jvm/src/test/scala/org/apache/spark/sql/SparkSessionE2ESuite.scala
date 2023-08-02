@@ -16,6 +16,8 @@
  */
 package org.apache.spark.sql
 
+import java.util.concurrent.ForkJoinPool
+
 import scala.collection.mutable
 import scala.concurrent.{ExecutionContext, ExecutionContextExecutor, Future}
 import scala.concurrent.duration._
@@ -25,7 +27,7 @@ import org.scalatest.concurrent.Eventually._
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.connect.client.util.RemoteSparkSession
-import org.apache.spark.util.ThreadUtils
+import org.apache.spark.util.SparkThreadUtils.awaitResult
 
 /**
  * NOTE: Do not import classes that only exist in `spark-connect-client-jvm.jar` into the this
@@ -102,7 +104,7 @@ class SparkSessionE2ESuite extends RemoteSparkSession {
     }
     assert(e2.getMessage.contains("OPERATION_CANCELED"), s"Unexpected exception: $e2")
     finished = true
-    assert(ThreadUtils.awaitResult(interruptor, 10.seconds))
+    assert(awaitResult(interruptor, 10.seconds))
     assert(interrupted.length == 2, s"Interrupted operations: $interrupted.")
   }
 
@@ -113,7 +115,7 @@ class SparkSessionE2ESuite extends RemoteSparkSession {
     // global ExecutionContext has only 2 threads in Apache Spark CI
     // create own thread pool for four Futures used in this test
     val numThreads = 4
-    val fpool = ThreadUtils.newForkJoinPool("job-tags-test-thread-pool", numThreads)
+    val fpool = new ForkJoinPool(numThreads)
     val executionContext = ExecutionContext.fromExecutorService(fpool)
 
     val q1 = Future {
@@ -200,11 +202,11 @@ class SparkSessionE2ESuite extends RemoteSparkSession {
       assert(interrupted.length == 2, s"Interrupted operations: $interrupted.")
     }
     val e2 = intercept[SparkException] {
-      ThreadUtils.awaitResult(q2, 1.minute)
+      awaitResult(q2, 1.minute)
     }
     assert(e2.getCause.getMessage contains "OPERATION_CANCELED")
     val e3 = intercept[SparkException] {
-      ThreadUtils.awaitResult(q3, 1.minute)
+      awaitResult(q3, 1.minute)
     }
     assert(e3.getCause.getMessage contains "OPERATION_CANCELED")
     assert(interrupted.length == 2, s"Interrupted operations: $interrupted.")
@@ -217,11 +219,11 @@ class SparkSessionE2ESuite extends RemoteSparkSession {
       assert(interrupted.length == 2, s"Interrupted operations: $interrupted.")
     }
     val e1 = intercept[SparkException] {
-      ThreadUtils.awaitResult(q1, 1.minute)
+      awaitResult(q1, 1.minute)
     }
     assert(e1.getCause.getMessage contains "OPERATION_CANCELED")
     val e4 = intercept[SparkException] {
-      ThreadUtils.awaitResult(q4, 1.minute)
+      awaitResult(q4, 1.minute)
     }
     assert(e4.getCause.getMessage contains "OPERATION_CANCELED")
     assert(interrupted.length == 2, s"Interrupted operations: $interrupted.")

@@ -362,4 +362,37 @@ class DummySparkConnectService() extends SparkConnectServiceGrpc.SparkConnectSer
     responseObserver.onNext(builder.build())
     responseObserver.onCompleted()
   }
+
+  override def interrupt(
+      request: proto.InterruptRequest,
+      responseObserver: StreamObserver[proto.InterruptResponse]): Unit = {
+    val response = proto.InterruptResponse.newBuilder().setSessionId(request.getSessionId).build()
+    responseObserver.onNext(response)
+    responseObserver.onCompleted()
+  }
+
+  override def reattachExecute(
+      request: proto.ReattachExecuteRequest,
+      responseObserver: StreamObserver[proto.ExecutePlanResponse]): Unit = {
+    // Reply with a dummy response using the same client ID
+    val requestSessionId = request.getSessionId
+    val response = ExecutePlanResponse
+      .newBuilder()
+      .setSessionId(requestSessionId)
+      .build()
+    responseObserver.onNext(response)
+    responseObserver.onCompleted()
+  }
+
+  override def releaseExecute(
+      request: proto.ReleaseExecuteRequest,
+      responseObserver: StreamObserver[proto.ReleaseExecuteResponse]): Unit = {
+    val response = proto.ReleaseExecuteResponse
+      .newBuilder()
+      .setSessionId(request.getSessionId)
+      .setOperationId(request.getOperationId)
+      .build()
+    responseObserver.onNext(response)
+    responseObserver.onCompleted()
+  }
 }

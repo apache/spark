@@ -59,7 +59,7 @@ private[sql] class SparkConnectClient(
   private[sql] val sessionId: String = UUID.randomUUID.toString
 
   private[client] val artifactManager: ArtifactManager = {
-    new ArtifactManager(userContext, sessionId, bstub, stub)
+    new ArtifactManager(configuration, sessionId, bstub, stub)
   }
 
   /**
@@ -82,7 +82,11 @@ private[sql] class SparkConnectClient(
       .setClientType(userAgent)
       .addAllTags(tags.get.toSeq.asJava)
       .build()
-    bstub.executePlan(request)
+    if (configuration.useReattachableExecute) {
+      bstub.executePlanReattachable(request)
+    } else {
+      bstub.executePlan(request)
+    }
   }
 
   /**
@@ -529,6 +533,25 @@ object SparkConnectClient {
       this
     }
 
+    /**
+     * Disable reattachable execute.
+     */
+    def disableReattachableExecute(): Builder = {
+      _configuration = _configuration.copy(useReattachableExecute = false)
+      this
+    }
+
+    /**
+     * Enable reattachable execute.
+     *
+     * It makes client more robust, enabling reattaching to an ExecutePlanResponse stream in case
+     * of intermittent connection errors.
+     */
+    def enableReattachableExecute(): Builder = {
+      _configuration = _configuration.copy(useReattachableExecute = true)
+      this
+    }
+
     def build(): SparkConnectClient = _configuration.toSparkConnectClient
   }
 
@@ -545,6 +568,7 @@ object SparkConnectClient {
       metadata: Map[String, String] = Map.empty,
       userAgent: String = DEFAULT_USER_AGENT,
       retryPolicy: GrpcRetryHandler.RetryPolicy = GrpcRetryHandler.RetryPolicy(),
+      useReattachableExecute: Boolean = true,
       interceptors: List[ClientInterceptor] = List.empty) {
 
     def userContext: proto.UserContext = {
