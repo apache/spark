@@ -20,7 +20,8 @@ import java.util.UUID
 
 import scala.util.control.NonFatal
 
-import io.grpc.ManagedChannel
+import io.grpc.{ManagedChannel, StatusRuntimeException}
+import io.grpc.protobuf.StatusProto
 import io.grpc.stub.StreamObserver
 
 import org.apache.spark.connect.proto
@@ -87,10 +88,7 @@ class ExecutePlanResponseReattachableIterator(
 
   // Initial iterator comes from ExecutePlan request.
   private var iterator: java.util.Iterator[proto.ExecutePlanResponse] = retry {
-    // From empirical observation even if one would expect an immediate error from the GRPC call,
-    // one is only thrown from the first iterator.next() or iterator.hasNext() call.
-    // However, in case this is a GRPC quirk that cannot be relied upon, retry also here.
-    rawBlockingStub.executePlan(initialRequest)
+    execute()
   }
 
   override def next(): proto.ExecutePlanResponse = synchronized {
@@ -107,9 +105,9 @@ class ExecutePlanResponseReattachableIterator(
         firstTry = false
       } else {
         // on retry, the iterator is borked, so we need a new one
-        iterator = rawBlockingStub.reattachExecute(createReattachExecuteRequest())
+        iterator = reattach()
       }
-      iterator.next()
+      callIter(_.next())
     }
 
     // Record last returned response, to know where to restart in case of reattach.
@@ -135,9 +133,9 @@ class ExecutePlanResponseReattachableIterator(
         firstTry = false
       } else {
         // on retry, the iterator is borked, so we need a new one
-        iterator = rawBlockingStub.reattachExecute(createReattachExecuteRequest())
+        iterator = reattach()
       }
-      var hasNext = iterator.hasNext()
+      var hasNext = callIter(_.hasNext())
       // Graceful reattach:
       // If iterator ended, but there was no ResultComplete, it means that there is more,
       // and we need to reattach.
@@ -145,13 +143,89 @@ class ExecutePlanResponseReattachableIterator(
         do {
           iterator = rawBlockingStub.reattachExecute(createReattachExecuteRequest())
           assert(!responseComplete) // shouldn't change...
-          hasNext = iterator.hasNext()
+          hasNext = callIter(_.hasNext())
           // It's possible that the new iterator will be empty, so we need to loop to get another.
           // Eventually, there will be a non empty iterator, because there's always a ResultComplete
           // at the end of the stream.
         } while (!hasNext)
       }
       hasNext
+    }
+  }
+
+  /**
+   * Get a new iterator to the execution by using ReattachExecute.
+   * However, if this fails with this operationId not existing on the server, this means that
+   * the initial ExecutePlan request didn't even reach the server. In that case, attempt to start
+   * again with ExecutePlan.
+   *
+   * Called inside retry block, so retryable failure will get handled upstream.
+   *
+   * Note: From empirical observation even if one would expect an immediate error from the GRPC,
+   * but one is only thrown from the first iterator.next() or iterator.hasNext() call.
+   * However, in case this is a GRPC quirk that cannot be relied upon, check the error here.
+   */
+  private def reattach(): java.util.Iterator[proto.ExecutePlanResponse] = {
+    try {
+      rawBlockingStub.reattachExecute(createReattachExecuteRequest())
+    } catch {
+      case ex: StatusRuntimeException if StatusProto.fromThrowable(ex).getMessage
+        .contains("INVALID_HANDLE.OPERATION_NOT_FOUND") =>
+      if (lastReturnedResponseId.isDefined) {
+        throw new IllegalStateException(
+          "OPERATION_NOT_FOUND on the server but responses were already received from it.", ex)
+      }
+      // We use the helper that will check if OPERATION_ALREADY_EXISTS out of abundance in case a
+      // situation in which some earlier lost ExecutePlan actually reached the server is possible.
+      execute()
+    }
+  }
+
+  /**
+   * Start the execution by using ExecutePlan.
+   * However, if this fails with this operationId already existing on the server, it means that
+   * a previous try has in fact reached the server. In that case, try to reattach to the execution
+   * instead.
+   *
+   * Note: From empirical observation even if one would expect an immediate error from the GRPC,
+   * but one is only thrown from the first iterator.next() or iterator.hasNext() call.
+   * However, in case this is a GRPC quirk that cannot be relied upon, check the error here.
+   */
+  private def execute(): java.util.Iterator[proto.ExecutePlanResponse] = {
+    try {
+      rawBlockingStub.executePlan(initialRequest)
+    } catch {
+      case ex: StatusRuntimeException
+      if StatusProto.fromThrowable(ex).getMessage
+        .contains("INVALID_HANDLE.OPERATION_ALREADY_EXISTS") =>
+      // we just checked that OPERATION_ALREADY_EXISTS, so we don't need to use the helper that
+      // would check if OPERATION_NOT_FOUND.
+      rawBlockingStub.reattachExecute(createReattachExecuteRequest())
+    }
+  }
+
+  /**
+   * Call next() or hasNext() on the iterator.
+   * If this fails with this operationId not existing on the server, this means that
+   * the initial ExecutePlan request didn't even reach the server. In that case, attempt to start
+   * again with ExecutePlan.
+   *
+   * Called inside retry block, so retryable failure will get handled upstream.
+   */
+  private def callIter[V](iterFun: java.util.Iterator[proto.ExecutePlanResponse] => V) = {
+    try {
+      iterFun(iterator)
+    } catch {
+      case ex: StatusRuntimeException
+        if StatusProto.fromThrowable(ex).getMessage
+        .contains("INVALID_HANDLE.OPERATION_NOT_FOUND") =>
+      if (lastReturnedResponseId.isDefined) {
+        throw new IllegalStateException(
+          "OPERATION_NOT_FOUND on the server but responses were already received from it.", ex)
+      }
+      // Try a new ExecutePlan, and throw upstream for retry.
+      iterator = execute()
+      throw new GrpcRetryHandler.RetryException
     }
   }
 
