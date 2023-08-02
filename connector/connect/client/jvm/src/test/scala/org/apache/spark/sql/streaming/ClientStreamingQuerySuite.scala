@@ -294,7 +294,7 @@ class ClientStreamingQuerySuite extends QueryTest with SQLHelper with Logging {
       spark.sql("DROP TABLE IF EXISTS my_listener_table")
     }
 
-    // List listeners after adding a new listener, length should be 2.
+    // List listeners after adding a new listener, length should be 1.
     val listeners = spark.streams.listListeners()
     assert(listeners.length == 1)
 

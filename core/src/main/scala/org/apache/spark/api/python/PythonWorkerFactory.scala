@@ -110,9 +110,9 @@ private[spark] class PythonWorkerFactory(pythonExec: String, envVars: Map[String
     }
   }
 
-  /** Creates a Python worker with `pyspark.streaming_worker` module. */
-  def createStreamingWorker(): (Socket, Option[Int]) = {
-    createSimpleWorker("pyspark.streaming_worker")
+  /** Creates a Python worker with streaming worker module. */
+  def createStreamingWorker(streamingWorkerModule: String): (Socket, Option[Int]) = {
+    createSimpleWorker(streamingWorkerModule)
   }
 
   /**

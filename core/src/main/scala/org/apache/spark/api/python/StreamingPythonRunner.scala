@@ -48,9 +48,8 @@ private[spark] class StreamingPythonRunner(func: PythonFunction, connectUrl: Str
    * Initializes the Python worker for streaming functions. Sets up Spark Connect session
    * to be used with the functions.
    */
-  def init(sessionId: String): (DataOutputStream, DataInputStream) = {
+  def init(sessionId: String, workerModule: String): (DataOutputStream, DataInputStream) = {
     logInfo(s"Initializing Python runner (session: $sessionId ,pythonExec: $pythonExec")
-
     val env = SparkEnv.get
 
     val localdir = env.blockManager.diskBlockManager.localDirs.map(f => f.getPath()).mkString(",")
@@ -62,7 +61,7 @@ private[spark] class StreamingPythonRunner(func: PythonFunction, connectUrl: Str
     envVars.put("SPARK_CONNECT_LOCAL_URL", connectUrl)
 
     val pythonWorkerFactory = new PythonWorkerFactory(pythonExec, envVars.asScala.toMap)
-    val (worker: Socket, _) = pythonWorkerFactory.createStreamingWorker()
+    val (worker: Socket, _) = pythonWorkerFactory.createStreamingWorker(workerModule)
 
     val stream = new BufferedOutputStream(worker.getOutputStream, bufferSize)
     val dataOut = new DataOutputStream(stream)
