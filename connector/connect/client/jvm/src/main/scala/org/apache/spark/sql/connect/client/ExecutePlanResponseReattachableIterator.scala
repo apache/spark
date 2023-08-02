@@ -154,61 +154,64 @@ class ExecutePlanResponseReattachableIterator(
   }
 
   /**
-   * Get a new iterator to the execution by using ReattachExecute.
-   * However, if this fails with this operationId not existing on the server, this means that
-   * the initial ExecutePlan request didn't even reach the server. In that case, attempt to start
-   * again with ExecutePlan.
+   * Get a new iterator to the execution by using ReattachExecute. However, if this fails with
+   * this operationId not existing on the server, this means that the initial ExecutePlan request
+   * didn't even reach the server. In that case, attempt to start again with ExecutePlan.
    *
    * Called inside retry block, so retryable failure will get handled upstream.
    *
    * Note: From empirical observation even if one would expect an immediate error from the GRPC,
-   * but one is only thrown from the first iterator.next() or iterator.hasNext() call.
-   * However, in case this is a GRPC quirk that cannot be relied upon, check the error here.
+   * but one is only thrown from the first iterator.next() or iterator.hasNext() call. However, in
+   * case this is a GRPC quirk that cannot be relied upon, check the error here.
    */
   private def reattach(): java.util.Iterator[proto.ExecutePlanResponse] = {
     try {
       rawBlockingStub.reattachExecute(createReattachExecuteRequest())
     } catch {
-      case ex: StatusRuntimeException if StatusProto.fromThrowable(ex).getMessage
-        .contains("INVALID_HANDLE.OPERATION_NOT_FOUND") =>
-      if (lastReturnedResponseId.isDefined) {
-        throw new IllegalStateException(
-          "OPERATION_NOT_FOUND on the server but responses were already received from it.", ex)
-      }
-      // We use the helper that will check if OPERATION_ALREADY_EXISTS out of abundance in case a
-      // situation in which some earlier lost ExecutePlan actually reached the server is possible.
-      execute()
+      case ex: StatusRuntimeException
+          if StatusProto
+            .fromThrowable(ex)
+            .getMessage
+            .contains("INVALID_HANDLE.OPERATION_NOT_FOUND") =>
+        if (lastReturnedResponseId.isDefined) {
+          throw new IllegalStateException(
+            "OPERATION_NOT_FOUND on the server but responses were already received from it.",
+            ex)
+        }
+        // We use the helper that will check if OPERATION_ALREADY_EXISTS out of abundance in case a
+        // situation in which some earlier lost ExecutePlan actually reached the server is possible.
+        execute()
     }
   }
 
   /**
-   * Start the execution by using ExecutePlan.
-   * However, if this fails with this operationId already existing on the server, it means that
-   * a previous try has in fact reached the server. In that case, try to reattach to the execution
-   * instead.
+   * Start the execution by using ExecutePlan. However, if this fails with this operationId
+   * already existing on the server, it means that a previous try has in fact reached the server.
+   * In that case, try to reattach to the execution instead.
    *
    * Note: From empirical observation even if one would expect an immediate error from the GRPC,
-   * but one is only thrown from the first iterator.next() or iterator.hasNext() call.
-   * However, in case this is a GRPC quirk that cannot be relied upon, check the error here.
+   * but one is only thrown from the first iterator.next() or iterator.hasNext() call. However, in
+   * case this is a GRPC quirk that cannot be relied upon, check the error here.
    */
   private def execute(): java.util.Iterator[proto.ExecutePlanResponse] = {
     try {
       rawBlockingStub.executePlan(initialRequest)
     } catch {
       case ex: StatusRuntimeException
-      if StatusProto.fromThrowable(ex).getMessage
-        .contains("INVALID_HANDLE.OPERATION_ALREADY_EXISTS") =>
-      // we just checked that OPERATION_ALREADY_EXISTS, so we don't need to use the helper that
-      // would check if OPERATION_NOT_FOUND.
-      rawBlockingStub.reattachExecute(createReattachExecuteRequest())
+          if StatusProto
+            .fromThrowable(ex)
+            .getMessage
+            .contains("INVALID_HANDLE.OPERATION_ALREADY_EXISTS") =>
+        // we just checked that OPERATION_ALREADY_EXISTS, so we don't need to use the helper that
+        // would check if OPERATION_NOT_FOUND.
+        rawBlockingStub.reattachExecute(createReattachExecuteRequest())
     }
   }
 
   /**
-   * Call next() or hasNext() on the iterator.
-   * If this fails with this operationId not existing on the server, this means that
-   * the initial ExecutePlan request didn't even reach the server. In that case, attempt to start
-   * again with ExecutePlan.
+   * Call next() or hasNext() on the iterator. If this fails with this operationId not existing on
+   * the server, this means that the initial ExecutePlan request didn't even reach the server. In
+   * that case, attempt to start again with ExecutePlan.
    *
    * Called inside retry block, so retryable failure will get handled upstream.
    */
@@ -217,15 +220,18 @@ class ExecutePlanResponseReattachableIterator(
       iterFun(iterator)
     } catch {
       case ex: StatusRuntimeException
-        if StatusProto.fromThrowable(ex).getMessage
-        .contains("INVALID_HANDLE.OPERATION_NOT_FOUND") =>
-      if (lastReturnedResponseId.isDefined) {
-        throw new IllegalStateException(
-          "OPERATION_NOT_FOUND on the server but responses were already received from it.", ex)
-      }
-      // Try a new ExecutePlan, and throw upstream for retry.
-      iterator = execute()
-      throw new GrpcRetryHandler.RetryException
+          if StatusProto
+            .fromThrowable(ex)
+            .getMessage
+            .contains("INVALID_HANDLE.OPERATION_NOT_FOUND") =>
+        if (lastReturnedResponseId.isDefined) {
+          throw new IllegalStateException(
+            "OPERATION_NOT_FOUND on the server but responses were already received from it.",
+            ex)
+        }
+        // Try a new ExecutePlan, and throw upstream for retry.
+        iterator = execute()
+        throw new GrpcRetryHandler.RetryException
     }
   }
 
