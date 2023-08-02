@@ -25,7 +25,6 @@ ENV DEBIAN_FRONTEND noninteractive
 ENV DEBCONF_NONINTERACTIVE_SEEN true
 
 ARG APT_INSTALL="apt-get install --no-install-recommends -y"
-ARG APT_REMOVE="apt-get remove --purge -y"
 
 RUN apt-get clean
 RUN apt-get update
@@ -74,7 +73,3 @@ RUN python3.9 -m pip install grpcio protobuf googleapis-common-protos grpcio-sta
 # Add torch as a testing dependency for TorchDistributor
 RUN python3.9 -m pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
 RUN python3.9 -m pip install torcheval
-
-# Uninstall unused packages
-RUN $APT_REMOVE libgl1-mesa-dri
-RUN apt-get autoremove --purge -y
