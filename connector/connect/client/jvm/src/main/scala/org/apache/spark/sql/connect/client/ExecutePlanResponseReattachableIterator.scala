@@ -85,10 +85,10 @@ class ExecutePlanResponseReattachableIterator(
   // ResponseId of the last response returned by next()
   private var lastReturnedResponseId: Option[String] = None
 
-  // True after ResponseComplete message was seen in the stream.
+  // True after ResultComplete message was seen in the stream.
   // Server will always send this message at the end of the stream, if the underlying iterator
   // finishes without producing one, another iterator needs to be reattached.
-  private var responseComplete: Boolean = false
+  private var resultComplete: Boolean = false
 
   // Initial iterator comes from ExecutePlan request.
   // Note: This is not retried, because no error would ever be thrown here, and GRPC will only
@@ -97,7 +97,7 @@ class ExecutePlanResponseReattachableIterator(
     rawBlockingStub.executePlan(initialRequest)
 
   override def next(): proto.ExecutePlanResponse = synchronized {
-    // hasNext will trigger reattach in case the stream completed without responseComplete
+    // hasNext will trigger reattach in case the stream completed without resultComplete
     if (!hasNext()) {
       throw new java.util.NoSuchElementException()
     }
@@ -118,7 +118,7 @@ class ExecutePlanResponseReattachableIterator(
     // Record last returned response, to know where to restart in case of reattach.
     lastReturnedResponseId = Some(ret.getResponseId)
     if (ret.hasResultComplete) {
-      responseComplete = true
+      resultComplete = true
       releaseExecute(None) // release all
     } else {
       releaseExecute(lastReturnedResponseId) // release until this response
@@ -127,7 +127,7 @@ class ExecutePlanResponseReattachableIterator(
   }
 
   override def hasNext(): Boolean = synchronized {
-    if (responseComplete) {
+    if (resultComplete) {
       // After response complete response
       return false
     }
@@ -144,10 +144,10 @@ class ExecutePlanResponseReattachableIterator(
       // Graceful reattach:
       // If iterator ended, but there was no ResultComplete, it means that there is more,
       // and we need to reattach.
-      if (!hasNext && !responseComplete) {
+      if (!hasNext && !resultComplete) {
         do {
           iterator = rawBlockingStub.reattachExecute(createReattachExecuteRequest())
-          assert(!responseComplete) // shouldn't change...
+          assert(!resultComplete) // shouldn't change...
           hasNext = iterator.hasNext()
           // It's possible that the new iterator will be empty, so we need to loop to get another.
           // Eventually, there will be a non empty iterator, because there's always a ResultComplete
