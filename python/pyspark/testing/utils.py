@@ -434,12 +434,12 @@ def assertDataFrameEqual(
     PySparkAssertionError: [DIFFERENT_ROWS] Results do not match: ( 66.66667 % )
     *** actual ***
     ! Row(id='1', amount=1000.0)
-      Row(id='2', amount=3000.0)
+    Row(id='2', amount=3000.0)
     ! Row(id='3', amount=2000.0)
 
     *** expected ***
     ! Row(id='1', amount=1001.0)
-      Row(id='2', amount=3000.0)
+    Row(id='2', amount=3000.0)
     ! Row(id='3', amount=2003.0)
     """
     if actual is None and expected is None:
