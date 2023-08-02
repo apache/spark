@@ -1498,12 +1498,12 @@ class Index(IndexOpsMixin):
         >>> s2 = ps.Series([1, 2, 3, 4], index=[2, 3, 4, 5])
 
         >>> s1.index.symmetric_difference(s2.index)
-        Index([5, 1], dtype='int64')
+        Index([1, 5], dtype='int64')
 
         You can set name of result Index.
 
         >>> s1.index.symmetric_difference(s2.index, result_name='pandas-on-Spark')
-        Index([5, 1], dtype='int64', name='pandas-on-Spark')
+        Index([1, 5], dtype='int64', name='pandas-on-Spark')
 
         You can set sort to `True`, if you want to sort the resulting index.
 
@@ -1512,8 +1512,8 @@ class Index(IndexOpsMixin):
 
         You can also use the ``^`` operator:
 
-        >>> s1.index ^ s2.index
-        Index([5, 1], dtype='int64')
+        >>> (s1.index ^ s2.index)
+        Index([1, 5], dtype='int64')
         """
         if type(self) != type(other):
             raise NotImplementedError(
