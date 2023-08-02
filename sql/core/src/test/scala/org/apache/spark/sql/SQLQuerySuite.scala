@@ -18,7 +18,6 @@
 package org.apache.spark.sql
 
 import java.io.File
-import java.math.RoundingMode
 import java.net.{MalformedURLException, URL}
 import java.sql.{Date, Timestamp}
 import java.time.{Duration, Period}
@@ -1510,13 +1509,12 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
           val sparkValue = Seq(multiplicandStr).toDF()
             .selectExpr("CAST(value as DECIMAL(38,10)) as a")
             .selectExpr("a * CAST(-12 as DECIMAL(38,10))").head().getDecimal(0)
+          assert(sparkValue.toString == "-110083130231976019291714061058.575919")
 
-          val l = new java.math.BigDecimal(multiplicandStr)
-          val r = new java.math.BigDecimal("-12.0000000000")
-          val prod = l.multiply(r)
-          val javaValue = prod.setScale(6, RoundingMode.HALF_UP)
-
-          assert(sparkValue == javaValue)
+          val sparkValue2 = Seq(multiplicandStr).toDF()
+            .selectExpr("CAST(value as DECIMAL(38,10)) as a")
+            .selectExpr("a / CAST(-12 as DECIMAL(38,10))").head().getDecimal(0)
+          assert(sparkValue2.toString == "-764466182166500133970236535.128999")
         }
       }
     })

@@ -410,10 +410,11 @@ abstract class BinaryArithmetic extends BinaryOperator
 
 object BinaryArithmetic {
 
+  // SPARK-40129: We need to use `MathContext` with precision = `Decimal.MAX_PRECISION + 1`,
+  // to fix decimal multipy bug. See SPARK-40129 for more details.
+  val mathContext = new MathContext(DecimalType.MAX_PRECISION + 1, RoundingMode.HALF_UP)
+
   def getMathContextValue(ctx: CodegenContext): GlobalValue = {
-    // SPARK-40129: We need to use `MathContext` with precision = `Decimal.MAX_PRECISION + 1`,
-    // to fix decimal multipy bug. See SPARK-40129 for more details.
-    val mathContext = new MathContext(DecimalType.MAX_PRECISION + 1, RoundingMode.HALF_UP)
     JavaCode.global(ctx.addReferenceObj("mathContext",
       mathContext, mathContext.getClass.getName), mathContext.getClass)
   }
@@ -609,8 +610,7 @@ case class Multiply(
   override def symbol: String = "*"
 
   override def decimalMethod(mathContextValue: GlobalValue, value1: String, value2: String):
-    String = s"Decimal.apply($value1.toJavaBigDecimal()" +
-      s".multiply($value2.toJavaBigDecimal(), $mathContextValue))"
+    String = s"$value1.multiply($value2, $mathContextValue)"
 
   // scalastyle:off
   // The formula follows Hive which is based on the SQL standard and MS SQL:
@@ -635,10 +635,8 @@ case class Multiply(
     case DecimalType.Fixed(precision, scale) =>
       // SPARK-40129: We need to use `MathContext` with precision = `Decimal.MAX_PRECISION + 1`,
       // to fix decimal multipy bug. See SPARK-40129 for more details.
-      checkDecimalOverflow(Decimal(input1.asInstanceOf[Decimal].toJavaBigDecimal
-        .multiply(input2.asInstanceOf[Decimal].toJavaBigDecimal,
-          new MathContext(DecimalType.MAX_PRECISION + 1, RoundingMode.HALF_UP))),
-        precision, scale)
+      checkDecimalOverflow(input1.asInstanceOf[Decimal].multiply(
+        input2.asInstanceOf[Decimal], BinaryArithmetic.mathContext), precision, scale)
     case _: IntegerType if failOnError =>
       MathUtils.multiplyExact(
         input1.asInstanceOf[Int],
@@ -968,7 +966,7 @@ case class Remainder(
   override def symbol: String = "%"
 
   override def decimalMethod(mathContextValue: GlobalValue, value1: String, value2: String):
-    String = s"$value1.remainder($value2)"
+    String = s"$value1.remainder($value2, $mathContextValue)"
 
   // scalastyle:off
   // The formula follows Hive which is based on the SQL standard and MS SQL:
@@ -1012,10 +1010,10 @@ case class Remainder(
       val integral = PhysicalIntegralType.integral(i)
       (left, right) => integral.rem(left, right)
 
-    case d @ DecimalType.Fixed(precision, scale) =>
-      val integral = PhysicalDecimalType(precision, scale).asIntegral.asInstanceOf[Integral[Any]]
+    case DecimalType.Fixed(precision, scale) =>
       (left, right) =>
-        checkDecimalOverflow(integral.rem(left, right).asInstanceOf[Decimal], precision, scale)
+        checkDecimalOverflow(left.asInstanceOf[Decimal].remainder(right.asInstanceOf[Decimal],
+          BinaryArithmetic.mathContext), precision, scale)
   }
 
   override def evalOperation(left: Any, right: Any): Any = mod(left, right)
