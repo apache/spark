@@ -39,11 +39,15 @@ trait AlterTableAddPartitionSuiteBase extends command.AlterTableAddPartitionSuit
   test("empty string as partition value") {
     withNamespaceAndTable("ns", "tbl") { t =>
       sql(s"CREATE TABLE $t (col1 INT, p1 STRING) $defaultUsing PARTITIONED BY (p1)")
-      val errMsg = intercept[AnalysisException] {
-        sql(s"ALTER TABLE $t ADD PARTITION (p1 = '')")
-      }.getMessage
-      assert(errMsg.contains("Partition spec is invalid. " +
-        "The spec ([p1=]) contains an empty partition column value"))
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(s"ALTER TABLE $t ADD PARTITION (p1 = '')")
+        },
+        errorClass = "_LEGACY_ERROR_TEMP_1076",
+        parameters = Map(
+          "details" -> "The spec ([p1=]) contains an empty partition column value"
+        )
+      )
     }
   }
 
