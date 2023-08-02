@@ -1582,7 +1582,7 @@ To tolerate the error on drop use DROP FUNCTION IF EXISTS.
 
 [SQLSTATE: 22023](sql-error-conditions-sqlstates.html#class-22-data-exception)
 
-Rule id not found for `<ruleName>`. Please modify RuleIdCollection.scala if you are adding a new rule.
+Not found an id for the rule name "`<ruleName>`". Please modify RuleIdCollection.scala if you are adding a new rule.
 
 ### SCALAR_SUBQUERY_IS_IN_GROUP_BY_OR_AGGREGATE_FUNCTION
 
