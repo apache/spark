@@ -205,7 +205,7 @@ private[connect] class SparkConnectServerListener(
         executionData.state = ExecutionState.READY
         updateLiveStore(executionData)
       case None =>
-        logWarning(s"onOperationReadyForExectuion called with unknown operation id: ${e.jobTag}")
+        logWarning(s"onOperationReadyForExecution called with unknown operation id: ${e.jobTag}")
     }
   }
 

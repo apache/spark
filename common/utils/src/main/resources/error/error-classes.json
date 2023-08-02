@@ -409,6 +409,11 @@
         "message" : [
           "Error instantiating Spark Connect plugin: <msg>"
         ]
+      },
+      "SESSION_NOT_SAME" : {
+        "message" : [
+          "Both Datasets must belong to the same SparkSession."
+        ]
       }
     }
   },
@@ -3013,6 +3018,16 @@
       "PIVOT_TYPE" : {
         "message" : [
           "Pivoting by the value '<value>' of the column data type <type>."
+        ]
+      },
+      "PURGE_PARTITION" : {
+        "message" : [
+          "Partition purge."
+        ]
+      },
+      "PURGE_TABLE" : {
+        "message" : [
+          "Purge table."
         ]
       },
       "PYTHON_UDF_IN_ON_CLAUSE" : {
