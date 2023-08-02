@@ -148,9 +148,8 @@ class ExecutePlanResponseReattachableIterator(Generator):
                     # If iterator ended, but there was no ResponseComplete, it means that
                     # there is more, and we need to reattach. While ResponseComplete didn't
                     # arrive, we keep reattaching.
-                    first_loop = True
                     if not self._result_complete and not has_next:
-                        while not has_next or first_loop:
+                        while not has_next:
                             self._iterator = iter(
                                 self._stub.ReattachExecute(self._create_reattach_execute_request())
                             )
@@ -161,12 +160,6 @@ class ExecutePlanResponseReattachableIterator(Generator):
                             except StopIteration:
                                 pass
                             has_next = self._current is not None
-                            if first_loop:
-                                # It's possible that the new iterator will be empty, so we need
-                                # to loop to get another. Eventually, there will be a non empty
-                                # iterator, because there's always a ResultComplete at the end
-                                # of the stream.
-                                first_loop = False
                     return has_next
             return False
 
@@ -201,16 +194,19 @@ class ExecutePlanResponseReattachableIterator(Generator):
         ExecutePlanResponseReattachableIterator._release_thread_pool.apply_async(target)
 
     def _create_reattach_execute_request(self) -> pb2.ReattachExecuteRequest:
-        release = pb2.ReattachExecuteRequest(
+        reattach = pb2.ReattachExecuteRequest(
             session_id=self._initial_request.session_id,
             user_context=self._initial_request.user_context,
             operation_id=self._initial_request.operation_id,
         )
 
         if self._initial_request.client_type:
-            release.client_type = self._initial_request.client_type
+            reattach.client_type = self._initial_request.client_type
 
-        return release
+        if self._last_returned_response_id:
+            reattach.last_response_id = self._last_returned_response_id
+
+        return reattach
 
     def _create_release_execute_request(
         self, until_response_id: Optional[str]
