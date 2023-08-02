@@ -127,8 +127,8 @@ class ExecutePlanResponseReattachableIterator(Generator):
                     # on first try, we use the existing iterator.
                     if not attempt.is_first_try():
                         # on retry, the iterator is borked, so we need a new one
-                        self._iterator = self._stub.ReattachExecute(
-                            self._create_reattach_execute_request()
+                        self._iterator = iter(
+                            self._stub.ReattachExecute(self._create_reattach_execute_request())
                         )
 
                     if self._current is None:
@@ -146,8 +146,8 @@ class ExecutePlanResponseReattachableIterator(Generator):
                     first_loop = True
                     if not self._result_complete and not has_next:
                         while not has_next or first_loop:
-                            self._iterator = self._stub.ReattachExecute(
-                                self._create_reattach_execute_request()
+                            self._iterator = iter(
+                                self._stub.ReattachExecute(self._create_reattach_execute_request())
                             )
                             # shouldn't change
                             assert not self._result_complete
