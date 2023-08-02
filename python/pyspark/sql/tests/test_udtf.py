@@ -26,6 +26,7 @@ from pyspark.errors import (
     PythonException,
     PySparkTypeError,
     AnalysisException,
+    PySparkRuntimeError,
 )
 from pyspark.files import SparkFiles
 from pyspark.rdd import PythonEvalType
@@ -739,6 +740,32 @@ class BaseUDTFTestsMixin:
                 "eval_type": "SQL_TABLE_UDF, SQL_ARROW_TABLE_UDF",
             },
         )
+
+    def test_udtf_pickle_error(self):
+        with tempfile.TemporaryDirectory() as d:
+            file = os.path.join(d, "file.txt")
+            file_obj = open(file, "w")
+
+            @udtf(returnType="x: int")
+            class TestUDTF:
+                def eval(self):
+                    obj = file_obj
+                    yield 1,
+
+            with self.assertRaisesRegex(PySparkRuntimeError, "UDTF_SERIALIZATION_ERROR"):
+                TestUDTF().collect()
+
+    def test_udtf_access_spark_session(self):
+        df = self.spark.range(10)
+
+        @udtf(returnType="x: int")
+        class TestUDTF:
+            def eval(self):
+                df.collect()
+                yield 1,
+
+        with self.assertRaisesRegex(PySparkRuntimeError, "UDTF_SERIALIZATION_ERROR"):
+            TestUDTF().collect()
 
     def test_udtf_no_eval(self):
         with self.assertRaises(PySparkAttributeError) as e:
