@@ -57,7 +57,7 @@ import org.apache.spark.util.{NextIterator, Utils}
 class RocksDB(
     dfsRootDir: String,
     val conf: RocksDBConf,
-    localRootDir: File = Utils.createTempDir(),
+    val localRootDir: File = Utils.createTempDir(),
     hadoopConf: Configuration = new Configuration,
     loggingId: String = "",
     useColumnFamilies: Boolean = false) extends Logging {

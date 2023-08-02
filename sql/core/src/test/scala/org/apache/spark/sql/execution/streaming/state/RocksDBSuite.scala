@@ -37,6 +37,7 @@ import org.apache.spark.sql.execution.streaming.CheckpointFileManager.{Cancellab
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.STREAMING_CHECKPOINT_FILE_MANAGER_CLASS
 import org.apache.spark.sql.test.{SharedSparkSession, SQLTestUtils}
+import org.apache.spark.sql.types.StructType
 import org.apache.spark.tags.SlowSQLTest
 import org.apache.spark.util.{ThreadUtils, Utils}
 import org.apache.spark.util.ArrayImplicits._
@@ -2169,6 +2170,28 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
         }
       }
     }
+  }
+
+  test("SPARK-44639: Use Java tmp dir instead of configured local dirs") {
+    val conf = sqlConf
+    conf.setConfString(RocksDBConf.ROCKSDB_SQL_CONF_NAME_PREFIX + "." +
+      RocksDBConf.FORCE_JAVA_TMP_DIR_CONF_KEY, "true")
+
+    val provider = new RocksDBStateStoreProvider()
+    provider.init(
+      StateStoreId(
+        "/checkpoint",
+        0,
+        0
+      ),
+      new StructType(),
+      new StructType(),
+      0,
+      new StateStoreConf(conf),
+      new Configuration()
+    )
+
+    assert(provider.rocksDB.localRootDir.getParent() == System.getProperty("java.io.tmpdir"))
   }
 
   private def sqlConf = SQLConf.get.clone()
