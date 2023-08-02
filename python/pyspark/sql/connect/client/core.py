@@ -1184,14 +1184,14 @@ class SparkConnectClient(object):
                     req, self._stub, self._retry_policy
                 )
                 for b in generator:
-                    yield handle_response(b)
+                    yield from handle_response(b)
             else:
                 for attempt in Retrying(
                     can_retry=SparkConnectClient.retry_exception, **self._retry_policy
                 ):
                     with attempt:
                         for b in self._stub.ExecutePlan(req, metadata=self._builder.metadata()):
-                            yield handle_response(b)
+                            yield from handle_response(b)
         except Exception as error:
             self._handle_error(error)
 
