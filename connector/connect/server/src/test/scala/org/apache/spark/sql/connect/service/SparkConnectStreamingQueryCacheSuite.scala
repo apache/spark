@@ -18,11 +18,10 @@
 package org.apache.spark.sql.connect.service
 
 import java.util.UUID
-import java.util.concurrent.atomic.AtomicInteger
 
 import scala.concurrent.duration.DurationInt
 
-import org.mockito.Mockito.{verify, when}
+import org.mockito.Mockito.when
 import org.scalatest.concurrent.Eventually.eventually
 import org.scalatest.concurrent.Futures.timeout
 import org.scalatestplus.mockito.MockitoSugar
@@ -36,9 +35,8 @@ import org.apache.spark.util.ManualClock
 class SparkConnectStreamingQueryCacheSuite extends SparkFunSuite with MockitoSugar {
 
   // Creates a manager with short durations for periodic check and expiry.
-  private def createSessionManager(keepAliveFn: (String, String) => Unit) = {
+  private def createSessionManager() = {
     new SparkConnectStreamingQueryCache(
-      keepAliveFn,
       clock = new ManualClock(),
       stoppedQueryInactivityTimeout = 1.minute, // This is on manual clock.
       sessionPollingPeriod = 20.milliseconds // This is real clock. Used for periodic task.
@@ -47,8 +45,6 @@ class SparkConnectStreamingQueryCacheSuite extends SparkFunSuite with MockitoSug
 
   test("Session cache functionality with a streaming query") {
     // Verifies common happy path for the query cache. Runs a query through its life cycle.
-
-    val numKeepAliveCalls = new AtomicInteger(0)
 
     val queryId = UUID.randomUUID().toString
     val runId = UUID.randomUUID().toString
@@ -59,11 +55,7 @@ class SparkConnectStreamingQueryCacheSuite extends SparkFunSuite with MockitoSug
     val sessionHolder =
       SessionHolder(userId = "test_user_1", sessionId = "test_session_1", session = mockSession)
 
-    val sessionMgr = createSessionManager(keepAliveFn = { case (userId, sessionId) =>
-      assert(userId == sessionHolder.userId)
-      assert(sessionId == sessionHolder.sessionId)
-      numKeepAliveCalls.incrementAndGet()
-    })
+    val sessionMgr = createSessionManager()
 
     val clock = sessionMgr.clock.asInstanceOf[ManualClock]
 
@@ -76,11 +68,6 @@ class SparkConnectStreamingQueryCacheSuite extends SparkFunSuite with MockitoSug
     // Register the query.
 
     sessionMgr.registerNewStreamingQuery(sessionHolder, mockQuery)
-
-    eventually(timeout(1.minute)) {
-      // Verify keep alive function is called a few times.
-      assert(numKeepAliveCalls.get() >= 5)
-    }
 
     sessionMgr.getCachedValue(queryId, runId) match {
       case Some(v) =>
@@ -96,8 +83,6 @@ class SparkConnectStreamingQueryCacheSuite extends SparkFunSuite with MockitoSug
     assert(sessionMgr.getCachedQuery(queryId, runId, mockSession).contains(mockQuery))
 
     // Cleanup the query and verify if stop() method has been called.
-    sessionMgr.cleanupRunningQueries(sessionHolder)
-    verify(mockQuery).stop()
     when(mockQuery.isActive).thenReturn(false)
 
     val expectedExpiryTimeMs = sessionMgr.clock.getTimeMillis() + 1.minute.toMillis
