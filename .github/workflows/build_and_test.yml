@@ -424,6 +424,7 @@ jobs:
       run: |
         curl -s https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh > miniconda.sh
         bash miniconda.sh -b -p $HOME/miniconda
+        rm miniconda.sh
     # Run the tests.
     - name: Run tests
       env: ${{ fromJSON(inputs.envs) }}
@@ -647,6 +648,7 @@ jobs:
         curl -LO https://github.com/bufbuild/buf/releases/download/v1.24.0/buf-Linux-x86_64.tar.gz
         mkdir -p $HOME/buf
         tar -xvzf buf-Linux-x86_64.tar.gz -C $HOME/buf --strip-components 1
+        rm buf-Linux-x86_64.tar.gz
         python3.9 -m pip install 'protobuf==3.20.3' 'mypy-protobuf==3.3.0'
     - name: Python code generation check
       run: if test -f ./dev/connect-check-protos.py; then PATH=$PATH:$HOME/buf/bin PYTHON_EXECUTABLE=python3.9 ./dev/connect-check-protos.py; fi
@@ -1027,6 +1029,7 @@ jobs:
           # TODO(SPARK-44495): Resume to use the latest minikube for k8s-integration-tests.
           curl -LO https://storage.googleapis.com/minikube/releases/v1.30.1/minikube-linux-amd64
           sudo install minikube-linux-amd64 /usr/local/bin/minikube
+          rm minikube-linux-amd64
           # Github Action limit cpu:2, memory: 6947MB, limit to 2U6G for better resource statistic
           minikube start --cpus 2 --memory 6144
       - name: Print K8S pods and nodes info
