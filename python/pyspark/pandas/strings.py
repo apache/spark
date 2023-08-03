@@ -18,7 +18,6 @@
 """
 String functions on pandas-on-Spark Series
 """
-import warnings
 from typing import (
     Any,
     Callable,
@@ -1580,7 +1579,7 @@ class StringMethods:
         Reverse every lowercase alphabetic word:
 
         >>> repl = lambda m: m.group(0)[::-1]
-        >>> ps.Series(['foo 123', 'bar baz', np.nan]).str.replace(r'[a-z]+', repl)
+        >>> ps.Series(['foo 123', 'bar baz', np.nan]).str.replace('[a-z]+', repl, regex=True)
         0    oof 123
         1    rab zab
         2       None
@@ -1588,9 +1587,9 @@ class StringMethods:
 
         Using regex groups (extract second group and swap case):
 
-        >>> pat = r"(?P<one>\\w+) (?P<two>\\w+) (?P<three>\\w+)"
+        >>> pat = "(?P<one>\\w+) (?P<two>\\w+) (?P<three>\\w+)"
         >>> repl = lambda m: m.group('two').swapcase()
-        >>> ps.Series(['One Two Three', 'Foo Bar Baz']).str.replace(pat, repl)
+        >>> ps.Series(['One Two Three', 'Foo Bar Baz']).str.replace(pat, repl, regex=True)
         0    tWO
         1    bAR
         dtype: object
@@ -1598,8 +1597,8 @@ class StringMethods:
         Using a compiled regex with flags:
 
         >>> import re
-        >>> regex_pat = re.compile(r'FUZ', flags=re.IGNORECASE)
-        >>> ps.Series(['foo', 'fuz', np.nan]).str.replace(regex_pat, 'bar')
+        >>> regex_pat = re.compile('FUZ', flags=re.IGNORECASE)
+        >>> ps.Series(['foo', 'fuz', np.nan]).str.replace(regex_pat, 'bar', regex=True)
         0     foo
         1     bar
         2    None
