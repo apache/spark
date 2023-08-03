@@ -251,6 +251,7 @@ case class StoragePartitionJoinParams(
     replicatePartitions: Boolean = false) {
   override def equals(other: Any): Boolean = other match {
     case other: StoragePartitionJoinParams =>
+      this.keyGroupedPartitioning == other.keyGroupedPartitioning &&
       this.commonPartitionValues == other.commonPartitionValues &&
       this.replicatePartitions == other.replicatePartitions &&
       this.applyPartialClustering == other.applyPartialClustering
@@ -259,6 +260,7 @@ case class StoragePartitionJoinParams(
   }
 
   override def hashCode(): Int = Objects.hashCode(
+    keyGroupedPartitioning: Option[Seq[Expression]],
     commonPartitionValues: Option[Seq[(InternalRow, Int)]],
     applyPartialClustering: java.lang.Boolean,
     replicatePartitions: java.lang.Boolean)
