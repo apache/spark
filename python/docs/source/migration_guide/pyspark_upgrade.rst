@@ -19,7 +19,7 @@
 Upgrading PySpark
 ==================
 
-Upgrading from PySpark 3.4 to 4.0
+Upgrading from PySpark 3.5 to 4.0
 ---------------------------------
 
 * In Spark 4.0, ``Int64Index`` and `Float64Index`` have been removed from pandas API on Spark, ``Index`` should be used directly.
