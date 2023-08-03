@@ -72,7 +72,7 @@ private[sql] class SparkConnectClient(
     bstub.analyzePlan(request)
   }
 
-  def execute(plan: proto.Plan): java.util.Iterator[proto.ExecutePlanResponse] = {
+  def execute(plan: proto.Plan): Iterator[proto.ExecutePlanResponse] = {
     artifactManager.uploadAllClassFileArtifacts()
     val request = proto.ExecutePlanRequest
       .newBuilder()

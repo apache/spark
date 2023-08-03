@@ -31,8 +31,8 @@ private[client] object GrpcExceptionConverter {
     }
   }
 
-  def convertIterator[T](iter: java.util.Iterator[T]): java.util.Iterator[T] = {
-    new java.util.Iterator[T] {
+  def convertIterator[T](iter: Iterator[T]): Iterator[T] = {
+    new Iterator[T] {
       override def hasNext: Boolean = {
         convert {
           iter.hasNext

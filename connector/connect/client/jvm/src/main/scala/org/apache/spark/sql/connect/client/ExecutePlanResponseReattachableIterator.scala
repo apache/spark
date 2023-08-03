@@ -52,7 +52,7 @@ class ExecutePlanResponseReattachableIterator(
     request: proto.ExecutePlanRequest,
     channel: ManagedChannel,
     retryPolicy: GrpcRetryHandler.RetryPolicy)
-    extends java.util.Iterator[proto.ExecutePlanResponse]
+    extends AutoConsumableIterator[proto.ExecutePlanResponse]
     with Logging {
 
   val operationId = if (request.hasOperationId) {
