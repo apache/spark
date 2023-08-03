@@ -39,7 +39,7 @@ import org.apache.spark.internal.config._
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.rpc.{RpcCallContext, RpcEndpoint, RpcEndpointRef, RpcEnv}
 import org.apache.spark.scheduler.{MapStatus, MergeStatus, ShuffleOutputStatus}
-import org.apache.spark.shuffle.{MetadataFetchFailedException, MetadataUpdateFailedException}
+import org.apache.spark.shuffle.MetadataFetchFailedException
 import org.apache.spark.storage.{BlockId, BlockManagerId, ShuffleBlockId, ShuffleMergedBlockId}
 import org.apache.spark.util._
 import org.apache.spark.util.collection.OpenHashMap
@@ -1301,7 +1301,7 @@ private[spark] class MapOutputTrackerWorker(conf: SparkConf) extends MapOutputTr
       currentLocationOpt = getMapOutputLocation(shuffleId, mapId)
     }
     if (currentLocationOpt.isEmpty) {
-      throw new MetadataUpdateFailedException(shuffleId, mapId,
+      throw new MetadataFetchFailedException(shuffleId, -1,
         message = s"Failed to get map output location for shuffleId $shuffleId, mapId $mapId")
     }
     currentLocationOpt.get

@@ -70,12 +70,3 @@ private[spark] class MetadataFetchFailedException(
     reduceId: Int,
     message: String)
   extends FetchFailedException(null, shuffleId, -1L, -1, reduceId, message)
-
-/**
- * Failed to update shuffle metadata (in cases like decommission).
- */
-private[spark] class MetadataUpdateFailedException(
-    shuffleId: Int,
-    mapId: Long,
-    message: String)
-  extends FetchFailedException(null, shuffleId, mapId, -1, -1, message)
