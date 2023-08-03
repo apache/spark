@@ -1092,4 +1092,21 @@ class MapOutputTrackerSuite extends SparkFunSuite with LocalSparkContext {
     shuffleStatus.removeMapOutput(mapIndex = 1, bmID)
     assert(shuffleStatus.getMapStatus(0).isEmpty)
   }
+
+  test("SPARK-44658: getMapOutputLocation should not throw NPE") {
+    val rpcEnv = createRpcEnv("test")
+    val tracker = newTrackerMaster()
+    try {
+      tracker.trackerEndpoint = rpcEnv.setupEndpoint(MapOutputTracker.ENDPOINT_NAME,
+        new MapOutputTrackerMasterEndpoint(rpcEnv, tracker, conf))
+      tracker.registerShuffle(0, 1, 1)
+      tracker.registerMapOutput(0, 0, MapStatus(BlockManagerId("exec-1", "hostA", 1000),
+        Array(2L), 0))
+      tracker.removeOutputsOnHost("hostA")
+      assert(tracker.getMapOutputLocation(0, 0) == None)
+    } finally {
+      tracker.stop()
+      rpcEnv.shutdown()
+    }
+  }
 }
