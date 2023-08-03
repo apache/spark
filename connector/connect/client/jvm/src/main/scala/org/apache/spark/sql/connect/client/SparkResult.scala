@@ -27,14 +27,14 @@ import org.apache.arrow.vector.types.pojo
 import org.apache.spark.connect.proto
 import org.apache.spark.sql.catalyst.encoders.{AgnosticEncoder, RowEncoder}
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{ProductEncoder, UnboundRowEncoder}
-import org.apache.spark.sql.connect.client.arrow.{AbstractMessageIterator, ArrowDeserializingIterator, CloseableIterator, ConcatenatingArrowStreamReader, MessageIterator}
+import org.apache.spark.sql.connect.client.arrow.{AbstractMessageIterator, ArrowDeserializingIterator, ConcatenatingArrowStreamReader, MessageIterator}
 import org.apache.spark.sql.connect.client.util.Cleanable
 import org.apache.spark.sql.connect.common.DataTypeProtoConverter
 import org.apache.spark.sql.types.{DataType, StructType}
 import org.apache.spark.sql.util.ArrowUtils
 
 private[sql] class SparkResult[T](
-    responses: java.util.Iterator[proto.ExecutePlanResponse],
+    responses: Iterator[proto.ExecutePlanResponse],
     allocator: BufferAllocator,
     encoder: AgnosticEncoder[T],
     timeZoneId: String)
@@ -246,7 +246,7 @@ private[sql] class SparkResult[T](
    */
   override def close(): Unit = cleaner.close()
 
-  override val cleaner: AutoCloseable = new SparkResultCloseable(resultMap)
+  override val cleaner: AutoCloseable = new SparkResultCloseable(resultMap, responses)
 
   private class ResultMessageIterator(destructive: Boolean) extends AbstractMessageIterator {
     private[this] var totalBytesRead = 0L
@@ -296,7 +296,15 @@ private[sql] class SparkResult[T](
   }
 }
 
-private[client] class SparkResultCloseable(resultMap: mutable.Map[Int, (Long, Seq[ArrowMessage])])
+private[client] class SparkResultCloseable(resultMap: mutable.Map[Int, (Long, Seq[ArrowMessage])],
+                                           responses: Iterator[proto.ExecutePlanResponse])
     extends AutoCloseable {
-  override def close(): Unit = resultMap.values.foreach(_._2.foreach(_.close()))
+  override def close(): Unit = {
+    resultMap.values.foreach(_._2.foreach(_.close()))
+
+    responses match {
+      case closeable: CloseableIterator[proto.ExecutePlanResponse] =>
+        closeable.close()
+    }
+  }
 }
