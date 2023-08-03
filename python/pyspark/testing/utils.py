@@ -292,6 +292,7 @@ def assertSchemaEqual(actual: StructType, expected: StructType):
     >>> s1 = StructType([StructField("names", ArrayType(DoubleType(), True), True)])
     >>> s2 = StructType([StructField("names", ArrayType(DoubleType(), True), True)])
     >>> assertSchemaEqual(s1, s2)  # pass, schemas are identical
+
     >>> df1 = spark.createDataFrame(data=[(1, 1000), (2, 3000)], schema=["id", "number"])
     >>> df2 = spark.createDataFrame(data=[("1", 1000), ("2", 5000)], schema=["id", "amount"])
     >>> assertSchemaEqual(df1.schema, df2.schema)  # doctest: +IGNORE_EXCEPTION_DETAIL
@@ -413,21 +414,21 @@ def assertDataFrameEqual(
     --------
     >>> df1 = spark.createDataFrame(data=[("1", 1000), ("2", 3000)], schema=["id", "amount"])
     >>> df2 = spark.createDataFrame(data=[("1", 1000), ("2", 3000)], schema=["id", "amount"])
-    >>> assertDataFrameEqual(df1, df2)
-    # pass, DataFrames are identical
+    >>> assertDataFrameEqual(df1, df2)  # pass, DataFrames are identical
+
     >>> df1 = spark.createDataFrame(data=[("1", 0.1), ("2", 3.23)], schema=["id", "amount"])
     >>> df2 = spark.createDataFrame(data=[("1", 0.109), ("2", 3.23)], schema=["id", "amount"])
-    >>> assertDataFrameEqual(df1, df2, rtol=1e-1)
-    # pass, DataFrames are approx equal by rtol
+    >>> assertDataFrameEqual(df1, df2, rtol=1e-1)  # pass, DataFrames are approx equal by rtol
+
     >>> df1 = spark.createDataFrame(data=[(1, 1000), (2, 3000)], schema=["id", "amount"])
     >>> list_of_rows = [Row(1, 1000), Row(2, 3000)]
-    >>> assertDataFrameEqual(df1, list_of_rows)
-    # pass, actual and expected data are equal
+    >>> assertDataFrameEqual(df1, list_of_rows)  # pass, actual and expected data are equal
+
     >>> import pyspark.pandas as ps
     >>> df1 = ps.DataFrame({'a': [1, 2, 3], 'b': [4, 5, 6], 'c': [7, 8, 9]})
     >>> df2 = ps.DataFrame({'a': [1, 2, 3], 'b': [4, 5, 6], 'c': [7, 8, 9]})
-    >>> assertDataFrameEqual(df1, df2)
-    # pass, pandas-on-Spark DataFrames are equal
+    >>> assertDataFrameEqual(df1, df2)  # pass, pandas-on-Spark DataFrames are equal
+
     >>> df1 = spark.createDataFrame(
     ...     data=[("1", 1000.00), ("2", 3000.00), ("3", 2000.00)], schema=["id", "amount"])
     >>> df2 = spark.createDataFrame(
