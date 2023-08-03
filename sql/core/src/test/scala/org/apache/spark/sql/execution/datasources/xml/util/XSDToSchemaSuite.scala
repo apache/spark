@@ -31,7 +31,7 @@ class XSDToSchemaSuite extends SharedSparkSession {
       .replace("file:/", "/")))
     val expectedSchema = buildSchema(
       field("basket",
-        struct(
+        structField(
           structArray("entry",
             field("key"),
             field("value"))), nullable = false))
@@ -43,7 +43,7 @@ class XSDToSchemaSuite extends SharedSparkSession {
       .replace("file:/", "/")))
     val expectedSchema = buildSchema(
       field("basket",
-        struct(
+        structField(
           structArray("entry",
             field("key"),
             field("value"))), nullable = false))
@@ -55,9 +55,9 @@ class XSDToSchemaSuite extends SharedSparkSession {
       .replace("file:/", "/")))
     val expectedSchema = buildSchema(
       field("catalog",
-        struct(
+        structField(
           field("product",
-            struct(
+            structField(
               structArray("catalog_item",
                 field("item_number", nullable = false),
                 field("price", FloatType, nullable = false),
@@ -78,7 +78,7 @@ class XSDToSchemaSuite extends SharedSparkSession {
     val parsedSchema = XSDToSchema.read(Paths.get(testFile(resDir + "choice.xsd")
       .replace("file:/", "/")))
     val expectedSchema = buildSchema(
-      field("el", struct(field("foo"), field("bar"), field("baz")), nullable = false))
+      field("el", structField(field("foo"), field("bar"), field("baz")), nullable = false))
     assert(expectedSchema === parsedSchema)
   }
 
@@ -94,21 +94,21 @@ class XSDToSchemaSuite extends SharedSparkSession {
       .replace("file:/", "/")))
     val expectedSchema = buildSchema(
       field("root",
-        struct(
+        structField(
           field("foo",
-            struct(
+            structField(
               field("xs_any")),
             nullable = false),
           field("bar",
-            struct(
+            structField(
               field("xs_any", nullable = false)),
             nullable = false),
           field("baz",
-            struct(
+            structField(
               field("xs_any", ArrayType(StringType), nullable = false)),
             nullable = false),
           field("bing",
-            struct(
+            structField(
               field("xs_any")),
             nullable = false)),
         nullable = false))
@@ -120,7 +120,7 @@ class XSDToSchemaSuite extends SharedSparkSession {
       .replace("file:/", "/")))
     val expectedSchema = buildSchema(
       field("test",
-        struct(field("userId", LongType, nullable = false)), nullable = false))
+        structField(field("userId", LongType, nullable = false)), nullable = false))
     assert(parsedSchema === expectedSchema)
   }
 
@@ -141,7 +141,7 @@ class XSDToSchemaSuite extends SharedSparkSession {
     val expectedSchema = buildSchema(
       field(
         "book",
-        struct(
+        structField(
           field("name", StringType, false),
           field("author", StringType, false),
           field("isbn", StringType, false)
@@ -150,7 +150,7 @@ class XSDToSchemaSuite extends SharedSparkSession {
       ),
       field(
         "bookList",
-        struct(
+        structField(
           structArray(
             "book",
             field("name", StringType, false),
@@ -171,7 +171,7 @@ class XSDToSchemaSuite extends SharedSparkSession {
     val expectedSchema = buildSchema(
       field(
         "employee",
-        struct(
+        structField(
           field("firstname", StringType, false),
           field("lastname", StringType, false),
           field("address", StringType, false),

@@ -25,23 +25,24 @@ import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.io.Source
 
+import org.apache.commons.lang3.exception.ExceptionUtils
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.io.{LongWritable, Text}
 import org.apache.hadoop.io.compress.GzipCodec
-import org.apache.hadoop.mapreduce.lib.input.InvalidInputException
 
 import org.apache.spark.SparkException
-import org.apache.spark.sql.{Row, SaveMode}
+import org.apache.spark.sql.{AnalysisException, Row, SaveMode}
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.execution.datasources.xml.TestUtils._
 import org.apache.spark.sql.execution.datasources.xml.XmlOptions._
-import org.apache.spark.sql.execution.datasources.xml.functions._
-import org.apache.spark.sql.functions.{column, explode}
+import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.UTF8String
 
 final class XmlSuite extends SharedSparkSession {
+  import testImplicits._
 
   private val resDir = "test-data/xml-resources/"
 
@@ -64,6 +65,7 @@ final class XmlSuite extends SharedSparkSession {
 
   test("DSL test") {
     val results = spark.read.format("xml")
+      .option("multiLine", "true")
       .load(getTestResourcePath(resDir + "cars.xml"))
       .select("year")
       .collect()
@@ -74,6 +76,7 @@ final class XmlSuite extends SharedSparkSession {
   test("DSL test with xml having unbalanced datatypes") {
     val results = spark.read
       .option("treatEmptyValuesAsNulls", "true")
+      .option("multiLine", "true")
       .xml(getTestResourcePath(resDir + "gps-empty-field.xml"))
 
     assert(results.collect().length === 2)
@@ -100,7 +103,8 @@ final class XmlSuite extends SharedSparkSession {
 
     // This should not throw an exception `java.lang.ArrayIndexOutOfBoundsException`
     // as non-existing values are represented as `null`s.
-    assert(results.collect()(0).getStruct(0).get(1) === null)
+    val res = results.collect();
+    assert(res(0).getStruct(0).get(1) === null)
   }
 
   test("DSL test with mixed elements (struct, string)") {
@@ -124,8 +128,9 @@ final class XmlSuite extends SharedSparkSession {
   }
 
   test("DSL test for iso-8859-1 encoded file") {
-    val dataFrame = new XmlReader(Map("charset" -> StandardCharsets.ISO_8859_1.name))
-      .xmlFile(spark, getTestResourcePath(resDir + "cars-iso-8859-1.xml"))
+    val dataFrame = spark.read
+      .option("charset", StandardCharsets.ISO_8859_1.name)
+      .xml(getTestResourcePath(resDir + "cars-iso-8859-1.xml"))
     assert(dataFrame.select("year").collect().length === 3)
 
     val results = dataFrame
@@ -154,13 +159,15 @@ final class XmlSuite extends SharedSparkSession {
   }
 
   test("DSL test bad charset name") {
-    val exception = intercept[UnsupportedCharsetException] {
+    // val exception = intercept[UnsupportedCharsetException] {
+    val exception = intercept[SparkException] {
       spark.read
         .option("charset", "1-9588-osi")
         .xml(getTestResourcePath(resDir + "cars.xml"))
         .select("year")
         .collect()
     }
+    ExceptionUtils.getRootCause(exception).isInstanceOf[UnsupportedCharsetException]
     assert(exception.getMessage.contains("1-9588-osi"))
   }
 
@@ -185,15 +192,17 @@ final class XmlSuite extends SharedSparkSession {
   }
 
   test("DSL test for parsing a malformed XML file") {
-    val results = new XmlReader(Map("mode" -> DropMalformedMode.name))
-      .xmlFile(spark, getTestResourcePath(resDir + "cars-malformed.xml"))
+    val results = spark.read
+      .option("mode", DropMalformedMode.name)
+      .xml(getTestResourcePath(resDir + "cars-malformed.xml"))
 
     assert(results.count() === 1)
   }
 
   test("DSL test for dropping malformed rows") {
-    val cars = new XmlReader(Map("mode" -> DropMalformedMode.name))
-      .xmlFile(spark, getTestResourcePath(resDir + "cars-malformed.xml"))
+    val cars = spark.read
+      .option("mode", DropMalformedMode.name)
+      .xml(getTestResourcePath(resDir + "cars-malformed.xml"))
 
     assert(cars.count() == 1)
     assert(cars.head() === Row("Chevy", "Volt", 2015))
@@ -201,34 +210,49 @@ final class XmlSuite extends SharedSparkSession {
 
   test("DSL test for failing fast") {
     val exceptionInParse = intercept[SparkException] {
-      new XmlReader(Map("mode" -> FailFastMode.name))
-        .xmlFile(spark, getTestResourcePath(resDir + "cars-malformed.xml"))
+      spark.read
+        .option("mode", FailFastMode.name)
+        .xml(getTestResourcePath(resDir + "cars-malformed.xml"))
         .collect()
     }
-    assert(exceptionInParse.getMessage.contains("Malformed line in FAILFAST mode"))
+    checkError(
+      // TODO: Exception was nested two level deep as opposed to just one like json/csv
+      exception = exceptionInParse.getCause.getCause.asInstanceOf[SparkException],
+      errorClass = "MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION",
+      parameters = Map(
+        "badRecord" -> "[null,null,null]",
+        "failFastMode" -> FailFastMode.name)
+    )
   }
 
   test("test FAILFAST with unclosed tag") {
     val exceptionInParse = intercept[SparkException] {
       spark.read
         .option("rowTag", "book")
-        .option("mode", "FAILFAST")
+        .option("mode", FailFastMode.name)
         .xml(getTestResourcePath(resDir + "unclosed_tag.xml"))
         .show()
     }
-    assert(exceptionInParse.getMessage.contains("Malformed line in FAILFAST mode"))
+    checkError(
+      // TODO: Exception was nested two level deep as opposed to just one like json/csv
+      exception = exceptionInParse.getCause.getCause.asInstanceOf[SparkException],
+      errorClass = "MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION",
+      parameters = Map(
+        "badRecord" -> "[empty row]",
+        "failFastMode" -> FailFastMode.name)
+    )
   }
 
   test("DSL test for permissive mode for corrupt records") {
-    val carsDf = new XmlReader(Map(
-        "mode" -> PermissiveMode.name,
-        "columnNameOfCorruptRecord" -> "_malformed_records"))
-      .xmlFile(spark, getTestResourcePath(resDir + "cars-malformed.xml"))
+    val carsDf = spark.read
+      .option("mode", PermissiveMode.name)
+      .option("columnNameOfCorruptRecord", "_malformed_records")
+      .xml(getTestResourcePath(resDir + "cars-malformed.xml"))
     val cars = carsDf.collect()
     assert(cars.length === 3)
 
-    val malformedRowOne = carsDf.select("_malformed_records").first().get(0).toString
-    val malformedRowTwo = carsDf.select("_malformed_records").take(2).last.get(0).toString
+    val malformedRowOne = carsDf.cache().select("_malformed_records").first().get(0).toString
+    val malformedRowTwo = carsDf.cache().select("_malformed_records").take(2).last.get(0).toString
     val expectedMalformedRowOne = "<ROW><year>2012</year><make>Tesla</make><model>>S" +
       "<comment>No comment</comment></ROW>"
     val expectedMalformedRowTwo = "<ROW></year><make>Ford</make><model>E350</model>model></model>" +
@@ -243,8 +267,9 @@ final class XmlSuite extends SharedSparkSession {
   }
 
   test("DSL test with empty file and known schema") {
-    val results = new XmlReader(buildSchema(field("column", StringType, false)))
-      .xmlFile(spark, getTestResourcePath(resDir + "empty.xml"))
+    val results = spark.read
+      .schema(buildSchema(field("column", StringType, false)))
+      .xml(getTestResourcePath(resDir + "empty.xml"))
       .count()
 
     assert(results === 0)
@@ -257,8 +282,8 @@ final class XmlSuite extends SharedSparkSession {
       field("make"),
       field("model"),
       field("comment"))
-    val results = new XmlReader(schema)
-      .xmlFile(spark, getTestResourcePath(resDir + "cars-unbalanced-elements.xml"))
+    val results = spark.read.schema(schema)
+      .xml(getTestResourcePath(resDir + "cars-unbalanced-elements.xml"))
       .count()
 
     assert(results === 3)
@@ -310,7 +335,8 @@ final class XmlSuite extends SharedSparkSession {
       .options(Map("codec" -> classOf[GzipCodec].getName))
       .xml(copyFilePath.toString)
     // Check that the part file has a .gz extension
-    assert(Files.exists(copyFilePath.resolve("part-00000.gz")))
+    assert(Files.list(copyFilePath).iterator().asScala
+      .count(_.getFileName.toString().endsWith(".xml.gz")) === 1)
 
     val carsCopy = spark.read.xml(copyFilePath.toString)
 
@@ -328,7 +354,8 @@ final class XmlSuite extends SharedSparkSession {
       .xml(copyFilePath.toString)
 
     // Check that the part file has a .gz extension
-    assert(Files.exists(copyFilePath.resolve("part-00000.gz")))
+    assert(Files.list(copyFilePath).iterator().asScala
+      .count(_.getFileName.toString().endsWith(".xml.gz")) === 1)
 
     val carsCopy = spark.read.xml(copyFilePath.toString)
 
@@ -364,7 +391,11 @@ final class XmlSuite extends SharedSparkSession {
       .options(Map("rootTag" -> "books", "rowTag" -> "book", "declaration" -> ""))
       .xml(copyFilePath1.toString)
 
-    assert(getLines(copyFilePath1.resolve("part-00000")).head === "<books>")
+    val xmlFile1 =
+      Files.list(copyFilePath1).iterator.asScala
+        .filter(_.getFileName.toString.startsWith("part-")).next()
+    val firstLine = getLines(xmlFile1).head
+    assert(firstLine === "<books>")
 
     val copyFilePath2 = getEmptyTempDir().resolve("books-copy.xml")
 
@@ -372,7 +403,10 @@ final class XmlSuite extends SharedSparkSession {
       .options(Map("rootTag" -> "books", "rowTag" -> "book"))
       .xml(copyFilePath2.toString)
 
-    assert(getLines(copyFilePath2.resolve("part-00000")).head ===
+    val xmlFile2 =
+      Files.list(copyFilePath2).iterator.asScala
+        .filter(_.getFileName.toString.startsWith("part-")).next()
+    assert(getLines(xmlFile2).head ===
       "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>")
   }
 
@@ -380,7 +414,11 @@ final class XmlSuite extends SharedSparkSession {
     val tempPath = getEmptyTempDir().resolve("items-temp.xml")
     val items = spark.createDataFrame(Seq(Tuple1(Array(Array(3, 4))))).toDF("thing").repartition(1)
     items.write.option("arrayElementName", "foo").xml(tempPath.toString)
-    assert(getLines(tempPath.resolve("part-00000")).count(_.contains("<foo>")) === 2)
+
+    val xmlFile =
+      Files.list(tempPath).iterator.asScala
+        .filter(_.getFileName.toString.startsWith("part-")).next()
+    assert(getLines(xmlFile).count(_.contains("<foo>")) === 2)
   }
 
   test("DSL save with nullValue and treatEmptyValuesAsNulls") {
@@ -432,9 +470,9 @@ final class XmlSuite extends SharedSparkSession {
   test("DSL save dataframe not read from a XML file") {
     val copyFilePath = getEmptyTempDir().resolve("data-copy.xml")
 
-    val schema = buildSchema(array("a", ArrayType(StringType)))
+    val schema = buildSchema(arrayField("a", ArrayType(StringType)))
     val data = spark.sparkContext.parallelize(
-      List(List(List("aa", "bb"), List("aa", "bb")))).map(Row(_))
+      List(List(List("aa", "bb"), List("aa", "bb"))).map(Row(_)))
     val df = spark.createDataFrame(data, schema)
     df.write.xml(copyFilePath.toString)
 
@@ -482,8 +520,8 @@ final class XmlSuite extends SharedSparkSession {
       val df = spark.createDataFrame(data, schema)
       df.write.xml(copyFilePath.toString)
 
-      val dfCopy = new XmlReader(schema)
-        .xmlFile(spark, copyFilePath.toString)
+      val dfCopy = spark.read.schema(schema)
+        .xml(copyFilePath.toString)
 
       assert(dfCopy.collect() === df.collect())
       assert(dfCopy.schema === df.schema)
@@ -536,7 +574,7 @@ final class XmlSuite extends SharedSparkSession {
       field("description"),
       field("genre"),
       field("price", DoubleType),
-      struct("publish_dates",
+      structField("publish_dates",
         field("publish_date", DateType)),
       field("title")))
 
@@ -554,7 +592,7 @@ final class XmlSuite extends SharedSparkSession {
       field("description"),
       field("genre"),
       field("price", DoubleType),
-      array("publish_date", DateType),
+      arrayField("publish_date", DateType),
       field("title")))
 
     assert(results.collect().length === 12)
@@ -568,13 +606,13 @@ final class XmlSuite extends SharedSparkSession {
     assert(results.schema == buildSchema(
       field(s"${DEFAULT_ATTRIBUTE_PREFIX}id"),
       field("author"),
-      struct("genre",
+      structField("genre",
         field("genreid", LongType),
         field("name")),
       field("price", DoubleType),
-      struct("publish_dates",
-        array("publish_date",
-          struct(
+      structField("publish_dates",
+        arrayField("publish_date",
+          structField(
             field(s"${DEFAULT_ATTRIBUTE_PREFIX}tag"),
             field("day", LongType),
             field("month", LongType),
@@ -586,13 +624,13 @@ final class XmlSuite extends SharedSparkSession {
 
   test("DSL test parsing and inferring attribute in elements having no child element") {
     // Default value.
-    val resultsOne = new XmlReader(Map("rowTag" -> "book"))
-      .xmlFile(spark, getTestResourcePath(resDir + "books-attributes-in-no-child.xml"))
+    val resultsOne = spark.read.option("rowTag", "book")
+      .xml(getTestResourcePath(resDir + "books-attributes-in-no-child.xml"))
 
     val schemaOne = buildSchema(
       field("_id"),
       field("author"),
-      struct("price",
+      structField("price",
         field("_VALUE"),
         field(s"_unit")),
       field("publish_date", DateType),
@@ -604,15 +642,16 @@ final class XmlSuite extends SharedSparkSession {
     // Explicitly set
     val attributePrefix = "@#"
     val valueTag = "#@@value"
-    val resultsTwo = new XmlReader(Map(
-        "rowTag" -> "book", "attributePrefix" -> attributePrefix,
-        "valueTag" -> valueTag))
-      .xmlFile(spark, getTestResourcePath(resDir + "books-attributes-in-no-child.xml"))
+    val resultsTwo = spark.read
+      .option("rowTag", "book")
+      .option("attributePrefix", attributePrefix)
+      .option("valueTag", valueTag)
+      .xml(getTestResourcePath(resDir + "books-attributes-in-no-child.xml"))
 
     val schemaTwo = buildSchema(
       field(s"${attributePrefix}id"),
       field("author"),
-      struct("price",
+      structField("price",
         field(valueTag),
         field(s"${attributePrefix}unit")),
       field("publish_date", DateType),
@@ -623,8 +662,10 @@ final class XmlSuite extends SharedSparkSession {
   }
 
   test("DSL test schema (excluding tags) inferred correctly") {
-    val results = new XmlReader(Map("excludeAttribute" -> true, "rowTag" -> "book"))
-      .xmlFile(spark, getTestResourcePath(resDir + "books.xml"))
+    val results = spark.read
+      .option("excludeAttribute", true)
+      .option("rowTag", "book")
+      .xml(getTestResourcePath(resDir + "books.xml"))
 
     val schema = buildSchema(
       field("author"),
@@ -644,8 +685,8 @@ final class XmlSuite extends SharedSparkSession {
       field("comment"),
       field("color"),
       field("year", IntegerType))
-    val results = new XmlReader(schema)
-      .xmlFile(spark, getTestResourcePath(resDir + "cars-unbalanced-elements.xml"))
+    val results = spark.read.schema(schema)
+      .xml(getTestResourcePath(resDir + "cars-unbalanced-elements.xml"))
       .count()
 
     assert(results === 3)
@@ -665,8 +706,9 @@ final class XmlSuite extends SharedSparkSession {
     val schema = buildSchema(
       field("name", StringType, false),
       field("age"))
-    val results = new XmlReader(schema)
-      .xmlFile(spark, getTestResourcePath(resDir + "null-numbers.xml"))
+    val results = spark.read.schema(schema)
+      .xml(getTestResourcePath(resDir + "null-numbers.xml"))
+      .select("name", "age")
       .collect()
 
     assert(results(0) === Row("alice", "35"))
@@ -678,8 +720,10 @@ final class XmlSuite extends SharedSparkSession {
     val schema = buildSchema(
       field("name", StringType, false),
       field("age", IntegerType))
-    val results = new XmlReader(schema, Map("treatEmptyValuesAsNulls" -> true))
-      .xmlFile(spark, getTestResourcePath(resDir + "null-numbers.xml"))
+    val results = spark.read.schema(schema)
+      .option("treatEmptyValuesAsNulls", true)
+      .xml(getTestResourcePath(resDir + "null-numbers.xml"))
+      .select("name", "age")
       .collect()
 
     assert(results(1) === Row("bob", null))
@@ -718,7 +762,7 @@ final class XmlSuite extends SharedSparkSession {
       field("author"),
       field("description"),
       field("genre"),
-      array("xs_any", StringType))
+      arrayField("xs_any", StringType))
     val results = spark.read.schema(schema).option("rowTag", "book")
       .xml(getTestResourcePath(resDir + "books.xml"))
       .collect()
@@ -740,8 +784,8 @@ final class XmlSuite extends SharedSparkSession {
 
   test("Produces correct result for empty vs non-existent rows") {
     val schema = buildSchema(
-      struct("b",
-        struct("es",
+      structField("b",
+        structField("es",
           field("e"),
           field("f"))))
     val result = spark.read
@@ -759,12 +803,12 @@ final class XmlSuite extends SharedSparkSession {
 
   test("Produces correct order of columns for nested rows when user specifies a schema") {
     val schema = buildSchema(
-      struct("c",
+      structField("c",
         field("b", IntegerType),
         field("a", IntegerType)))
 
-    val result = new XmlReader(schema)
-      .xmlFile(spark, getTestResourcePath(resDir + "simple-nested-objects.xml"))
+    val result = spark.read.schema(schema)
+      .xml(getTestResourcePath(resDir + "simple-nested-objects.xml"))
       .select("c.a", "c.b")
       .collect()
 
@@ -803,12 +847,12 @@ final class XmlSuite extends SharedSparkSession {
   }
 
   test("Nested element with same name as parent schema inference") {
-    val df = new XmlReader(Map("rowTag" -> "parent"))
-      .xmlFile(spark, getTestResourcePath(resDir + "nested-element-with-name-of-parent.xml"))
+    val df = spark.read.option("rowTag", "parent")
+      .xml(getTestResourcePath(resDir + "nested-element-with-name-of-parent.xml"))
 
     val schema = buildSchema(
       field("child"),
-      struct("parent",
+      structField("parent",
         field("child")))
     assert(df.schema === schema)
   }
@@ -907,8 +951,10 @@ final class XmlSuite extends SharedSparkSession {
   }
 
   test("ignoreSurroundingSpaces with non-string types") {
-    val results = new XmlReader(Map("ignoreSurroundingSpaces" -> true, "rowTag" -> "person"))
-      .xmlFile(spark, getTestResourcePath(resDir + "ages-with-spaces.xml"))
+    val results = spark.read
+      .option("ignoreSurroundingSpaces", true)
+      .option("rowTag", "person")
+      .xml(getTestResourcePath(resDir + "ages-with-spaces.xml"))
       .collect()
     val attrValOne = results(0).getStruct(0)(1)
     val attrValTwo = results(1).getStruct(0)(0)
@@ -918,9 +964,11 @@ final class XmlSuite extends SharedSparkSession {
   }
 
   test("DSL test with malformed attributes") {
-    val results = new XmlReader(Map("mode" -> DropMalformedMode.name, "rowTag" -> "book"))
-        .xmlFile(spark, getTestResourcePath(resDir + "books-malformed-attributes.xml"))
-        .collect()
+    val results = spark.read
+      .option("mode", DropMalformedMode.name)
+      .option("rowTag", "book")
+      .xml(getTestResourcePath(resDir + "books-malformed-attributes.xml"))
+      .collect()
 
     assert(results.length === 2)
     assert(results(0)(0) === "bk111")
@@ -967,8 +1015,8 @@ final class XmlSuite extends SharedSparkSession {
       field("non-empty-tag", IntegerType),
       field("self-closing-tag", IntegerType))
 
-    val result = new XmlReader(schema)
-      .xmlFile(spark, getTestResourcePath(resDir + "self-closing-tag.xml"))
+    val result = spark.read.schema(schema)
+      .xml(getTestResourcePath(resDir + "self-closing-tag.xml"))
       .collect()
 
     assert(result(0) === Row(1, null))
@@ -993,16 +1041,16 @@ final class XmlSuite extends SharedSparkSession {
 
   test("DSL test nulls out invalid values when set to permissive and given explicit schema") {
     val schema = buildSchema(
-      struct("integer_value",
+      structField("integer_value",
         field("_VALUE", IntegerType),
         field("_int", IntegerType)),
-      struct("long_value",
+      structField("long_value",
         field("_VALUE", LongType),
         field("_int", StringType)),
       field("float_value", FloatType),
       field("double_value", DoubleType),
       field("boolean_value", BooleanType),
-      field("string_value"), array("integer_array", IntegerType),
+      field("string_value"), arrayField("integer_array", IntegerType),
       field("integer_map", MapType(StringType, IntegerType)),
       field("_malformed_records", StringType))
     val results = spark.read
@@ -1099,8 +1147,12 @@ final class XmlSuite extends SharedSparkSession {
         .replace("file:/", "/"))
       .option("mode", "PERMISSIVE")
       .option("columnNameOfCorruptRecord", "_malformed_records")
-      .xml(getTestResourcePath(resDir + "basket_invalid.xml"))
-    assert(basketDF.select("_malformed_records").head().getString(0).startsWith("<basket>"))
+      .xml(getTestResourcePath(resDir + "basket_invalid.xml")).cache()
+    assert(basketDF.filter($"_malformed_records".isNotNull).count() == 1)
+    assert(basketDF.filter($"_malformed_records".isNull).count() == 1)
+    val rec = basketDF.select("_malformed_records").collect()(1).getString(0)
+    assert(rec.startsWith("<basket>") && rec.indexOf("<extra>123</extra>") != -1 &&
+      rec.endsWith("</basket>"))
   }
 
   test("test XSD validation with addFile() with validation error") {
@@ -1111,8 +1163,12 @@ final class XmlSuite extends SharedSparkSession {
       .option("rowValidationXSDPath", "basket.xsd")
       .option("mode", "PERMISSIVE")
       .option("columnNameOfCorruptRecord", "_malformed_records")
-      .xml(getTestResourcePath(resDir + "basket_invalid.xml"))
-    assert(basketDF.select("_malformed_records").head().getString(0).startsWith("<basket>"))
+      .xml(getTestResourcePath(resDir + "basket_invalid.xml")).cache()
+    assert(basketDF.filter($"_malformed_records".isNotNull).count() == 1)
+    assert(basketDF.filter($"_malformed_records".isNull).count() == 1)
+    val rec = basketDF.select("_malformed_records").collect()(1).getString(0)
+    assert(rec.startsWith("<basket>") && rec.indexOf("<extra>123</extra>") != -1 &&
+      rec.endsWith("</basket>"))
   }
 
   test("test xmlRdd") {
@@ -1121,7 +1177,7 @@ final class XmlSuite extends SharedSparkSession {
       "<ROW><year>1997</year><make>Ford</make><model>E350</model><comment>Get one</comment></ROW>",
       "<ROW><year>2015</year><make>Chevy</make><model>Volt</model><comment>No</comment></ROW>")
     val rdd = spark.sparkContext.parallelize(data)
-    assert(new XmlReader().xmlRdd(spark, rdd).collect().length === 3)
+    assert(spark.read.xml(rdd).collect().length === 3)
   }
 
   import testImplicits._
@@ -1180,9 +1236,9 @@ final class XmlSuite extends SharedSparkSession {
     val xmlSchema = schema_of_xml_df(df.select("payload"))
     val result = from_xml_string(xmlData, xmlSchema)
 
-    assert(result.getString(0) === "bar")
-    assert(result.getString(1) === "dave guy")
-    assert(result.getString(2) === "14ft3")
+    assert(result.getAs[UTF8String](0).toString === "bar")
+    assert(result.getAs[UTF8String](1).toString === "dave guy")
+    assert(result.getAs[UTF8String](2).toString === "14ft3")
   }
 
   test("from_xml with PERMISSIVE parse mode with no corrupt col schema") {
@@ -1201,7 +1257,7 @@ final class XmlSuite extends SharedSparkSession {
     val xmlSchema = schema_of_xml_df(dfNoError.select("payload"))
     val df = spark.createDataFrame(Seq((8, xmlData))).toDF("number", "payload")
     val result = df.withColumn("decoded", from_xml(df.col("payload"), xmlSchema))
-    assert(result.select("decoded").head().get(0) === null)
+    assert(result.select("decoded").head().get(0) === Row(null, null))
   }
 
   test("decimals with scale greater than precision") {
@@ -1220,7 +1276,8 @@ final class XmlSuite extends SharedSparkSession {
   }
 
   test("double field encounters whitespace-only value") {
-    val schema = buildSchema(struct("Book", field("Price", DoubleType)), field("_corrupt_record"))
+    val schema = buildSchema(structField("Book", field("Price", DoubleType)),
+      field("_corrupt_record"))
     val whitespaceDF = spark.read
       .option("rowTag", "Books")
       .schema(schema)
@@ -1231,7 +1288,8 @@ final class XmlSuite extends SharedSparkSession {
   }
 
   test("struct with only attributes and no value tag does not crash") {
-    val schema = buildSchema(struct("book", field("_id", StringType)), field("_corrupt_record"))
+    val schema = buildSchema(structField("book", field("_id", StringType)),
+      field("_corrupt_record"))
     val booksDF = spark.read
       .option("rowTag", "book")
       .schema(schema)
@@ -1291,6 +1349,8 @@ final class XmlSuite extends SharedSparkSession {
   test("StructType with missing optional StructType child") {
     val df = spark.read.option("rowTag", "Foo")
       .xml(getTestResourcePath(resDir + "struct_with_optional_child.xml"))
+    val res = df.collect()
+    assert(res.length == 1)
     assert(df.selectExpr("SIZE(Bar)").collect().head.getInt(0) === 2)
   }
 
@@ -1396,8 +1456,9 @@ final class XmlSuite extends SharedSparkSession {
       .option("dateFormat", "MM-dd-yyyy")
       .xml(getTestResourcePath(resDir + "date.xml"))
     val expectedSchema =
-      buildSchema(field("author"), field("date", DateType), field("date2", DateType))
+      buildSchema(field("author"), field("date", TimestampType), field("date2", DateType))
     assert(df.schema === expectedSchema)
+    assert(df.collect().head.getAs[Timestamp](1).toString === "2021-01-31 16:00:00.0")
     assert(df.collect().head.getAs[Date](2).toString === "2021-02-01")
   }
 
@@ -1409,32 +1470,40 @@ final class XmlSuite extends SharedSparkSession {
     val expectedSchema =
       buildSchema(
         field("author"),
-        field("time", TimestampType),
+        field("time", StringType),
         field("time2", TimestampType),
         field("time3", StringType),
         field("time4", StringType)
       )
     assert(df.schema === expectedSchema)
-    assert(df.collect().head.getAs[Timestamp](1).getTime === 1322907330000L)
+    assert(df.collect().head.get(1) === "2011-12-03T10:15:30Z")
     assert(df.collect().head.getAs[Timestamp](2).getTime === 1322936130000L)
   }
 
   test("Test custom timestampFormat without timezone") {
+    val xml = s"""<book>
+                 |    <author>John Smith</author>
+                 |    <time>2011-12-03T10:15:30Z</time>
+                 |    <time2>12-03-2011 10:15:30 PST</time2>
+                 |    <time3>2011/12/03 06:15:30</time3>
+                 |</book>""".stripMargin
+    val input = spark.createDataset(Seq(xml))
     val df = spark.read
       .option("rowTag", "book")
       .option("timestampFormat", "yyyy/MM/dd HH:mm:ss")
-      .xml(getTestResourcePath(resDir + "time.xml"))
+      .xml(input)
     val expectedSchema =
       buildSchema(
         field("author"),
-        field("time", TimestampType),
+        field("time", StringType),
         field("time2", StringType),
-        field("time3", TimestampType),
-        field("time4", StringType)
+        field("time3", TimestampType)
       )
     assert(df.schema === expectedSchema)
-    assert(df.collect().head.getAs[Timestamp](1).getTime === 1322907330000L)
-    assert(df.collect().head.getAs[Timestamp](3).getTime === 1322892930000L)
+    val res = df.collect()
+    assert(res.head.get(1) === "2011-12-03T10:15:30Z")
+    assert(res.head.get(2) === "12-03-2011 10:15:30 PST")
+    assert(res.head.getAs[Timestamp](3).getTime === 1322892930000L)
   }
 
   test("Test custom timestampFormat with offset") {
@@ -1445,19 +1514,19 @@ final class XmlSuite extends SharedSparkSession {
     val expectedSchema =
       buildSchema(
         field("author"),
-        field("time", TimestampType),
+        field("time", StringType),
         field("time2", StringType),
         field("time3", StringType),
         field("time4", TimestampType)
       )
     assert(df.schema === expectedSchema)
-    assert(df.collect().head.getAs[Timestamp](1).getTime === 1322907330000L)
+    assert(df.collect().head.get(1) === "2011-12-03T10:15:30Z")
     assert(df.collect().head.getAs[Timestamp](4).getTime === 1322892930000L)
   }
 
   test("Test null number type is null not 0.0") {
     val schema = buildSchema(
-      struct("Header",
+      structField("Header",
         field("_Name"), field("_SequenceNumber", LongType)),
       structArray("T",
         field("_Number", LongType), field("_VALUE", DoubleType), field("_Volume", DoubleType)))
@@ -1507,12 +1576,22 @@ final class XmlSuite extends SharedSparkSession {
   }
 
   test("Issue 588: Ensure fails when data is not present, with or without schema") {
-    intercept[InvalidInputException] {
+    val exception1 = intercept[AnalysisException] {
       spark.read.xml("/this/file/does/not/exist")
     }
-    intercept[InvalidInputException] {
+    checkError(
+      exception = exception1,
+      errorClass = "PATH_NOT_FOUND",
+      parameters = Map("path" -> "file:/this/file/does/not/exist")
+    )
+    val exception2 = intercept[AnalysisException] {
       spark.read.schema(buildSchema(field("dummy"))).xml("/this/file/does/not/exist")
     }
+    checkError(
+      exception = exception2,
+      errorClass = "PATH_NOT_FOUND",
+      parameters = Map("path" -> "file:/this/file/does/not/exist")
+    )
   }
 
   test("Issue 614: mixed content element parsed as string in schema") {

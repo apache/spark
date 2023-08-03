@@ -15,11 +15,10 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.execution.datasources.csv
+package org.apache.spark.sql.execution.datasources.xml
 
 import java.nio.charset.{Charset, StandardCharsets}
 
-import com.univocity.parsers.csv.CsvParser
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, Path}
 import org.apache.hadoop.mapreduce.Job
@@ -31,16 +30,18 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.{BinaryFileRDD, RDD}
 import org.apache.spark.sql.{Dataset, Encoders, SparkSession}
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.csv.{CSVHeaderChecker, CSVInferSchema, CSVOptions, UnivocityParser}
+import org.apache.spark.sql.catalyst.util.FailureSafeParser
 import org.apache.spark.sql.execution.SQLExecution
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.execution.datasources.text.TextFileFormat
+import org.apache.spark.sql.execution.datasources.xml.parsers.StaxXmlParser
+import org.apache.spark.sql.execution.datasources.xml.util.InferSchema
 import org.apache.spark.sql.types.StructType
 
 /**
- * Common functions for parsing CSV files
+ * Common functions for parsing XML files
  */
-abstract class CSVDataSource extends Serializable {
+abstract class XMLDataSource extends Serializable {
   def isSplitable: Boolean
 
   /**
@@ -49,9 +50,8 @@ abstract class CSVDataSource extends Serializable {
   def readFile(
       conf: Configuration,
       file: PartitionedFile,
-      parser: UnivocityParser,
-      headerChecker: CSVHeaderChecker,
-      requiredSchema: StructType): Iterator[InternalRow]
+      parser: StaxXmlParser,
+      schema: StructType): Iterator[InternalRow]
 
   /**
    * Infers the schema from `inputPaths` files.
@@ -59,7 +59,7 @@ abstract class CSVDataSource extends Serializable {
   final def inferSchema(
       sparkSession: SparkSession,
       inputPaths: Seq[FileStatus],
-      parsedOptions: CSVOptions): Option[StructType] = {
+      parsedOptions: XmlOptions): Option[StructType] = {
     if (inputPaths.nonEmpty) {
       Some(infer(sparkSession, inputPaths, parsedOptions))
     } else {
@@ -70,82 +70,65 @@ abstract class CSVDataSource extends Serializable {
   protected def infer(
       sparkSession: SparkSession,
       inputPaths: Seq[FileStatus],
-      parsedOptions: CSVOptions): StructType
+      parsedOptions: XmlOptions): StructType
 }
 
-object CSVDataSource extends Logging {
-  def apply(options: CSVOptions): CSVDataSource = {
+object XMLDataSource extends Logging {
+  def apply(options: XmlOptions): XMLDataSource = {
     if (options.multiLine) {
-      MultiLineCSVDataSource
+      MultiLineXMLDataSource
     } else {
-      TextInputCSVDataSource
+      TextInputXMLDataSource
     }
   }
 }
 
-object TextInputCSVDataSource extends CSVDataSource {
+object TextInputXMLDataSource extends XMLDataSource {
   override val isSplitable: Boolean = true
 
   override def readFile(
       conf: Configuration,
       file: PartitionedFile,
-      parser: UnivocityParser,
-      headerChecker: CSVHeaderChecker,
-      requiredSchema: StructType): Iterator[InternalRow] = {
+      parser: StaxXmlParser,
+      schema: StructType): Iterator[InternalRow] = {
     val lines = {
-      val linesReader = new HadoopFileLinesReader(file, parser.options.lineSeparatorInRead, conf)
+      val linesReader = new HadoopFileLinesReader(file, None, conf)
       Option(TaskContext.get()).foreach(_.addTaskCompletionListener[Unit](_ => linesReader.close()))
       linesReader.map { line =>
         new String(line.getBytes, 0, line.getLength, parser.options.charset)
       }
     }
 
-    UnivocityParser.parseIterator(lines, parser, headerChecker, requiredSchema)
+    val safeParser = new FailureSafeParser[String](
+      input => parser.parse(input),
+      parser.options.parseMode,
+      schema,
+      parser.options.columnNameOfCorruptRecord)
+
+    lines.flatMap(safeParser.parse)
   }
 
   override def infer(
       sparkSession: SparkSession,
       inputPaths: Seq[FileStatus],
-      parsedOptions: CSVOptions): StructType = {
-    val csv = createBaseDataset(sparkSession, inputPaths, parsedOptions)
-    val maybeFirstLine = CSVUtils.filterCommentAndEmpty(csv, parsedOptions).take(1).headOption
-    inferFromDataset(sparkSession, csv, maybeFirstLine, parsedOptions)
+      parsedOptions: XmlOptions): StructType = {
+    val xml = createBaseDataset(sparkSession, inputPaths, parsedOptions)
+    inferFromDataset(xml, parsedOptions)
   }
 
   /**
    * Infers the schema from `Dataset` that stores CSV string records.
    */
   def inferFromDataset(
-      sparkSession: SparkSession,
-      csv: Dataset[String],
-      maybeFirstLine: Option[String],
-      parsedOptions: CSVOptions): StructType = {
-    val csvParser = new CsvParser(parsedOptions.asParserSettings)
-    maybeFirstLine.map(csvParser.parseLine(_)) match {
-      case Some(firstRow) if firstRow != null =>
-        val caseSensitive = sparkSession.sessionState.conf.caseSensitiveAnalysis
-        val header = CSVUtils.makeSafeHeader(firstRow, caseSensitive, parsedOptions)
-        val sampled: Dataset[String] = CSVUtils.sample(csv, parsedOptions)
-        val tokenRDD = sampled.rdd.mapPartitions { iter =>
-          val filteredLines = CSVUtils.filterCommentAndEmpty(iter, parsedOptions)
-          val linesWithoutHeader =
-            CSVUtils.filterHeaderLine(filteredLines, maybeFirstLine.get, parsedOptions)
-          val parser = new CsvParser(parsedOptions.asParserSettings)
-          linesWithoutHeader.map(parser.parseLine)
-        }
-        SQLExecution.withSQLConfPropagated(csv.sparkSession) {
-          new CSVInferSchema(parsedOptions).infer(tokenRDD, header)
-        }
-      case _ =>
-        // If the first line could not be read, just return the empty schema.
-        StructType(Nil)
-    }
+      xml: Dataset[String],
+      parsedOptions: XmlOptions): StructType = {
+    InferSchema.infer(xml.rdd, parsedOptions)
   }
 
   private def createBaseDataset(
       sparkSession: SparkSession,
       inputPaths: Seq[FileStatus],
-      options: CSVOptions): Dataset[String] = {
+      options: XmlOptions): Dataset[String] = {
     val paths = inputPaths.map(_.getPath.toString)
     val df = sparkSession.baseRelationToDataFrame(
       DataSource.apply(
@@ -168,61 +151,42 @@ object TextInputCSVDataSource extends CSVDataSource {
   }
 }
 
-object MultiLineCSVDataSource extends CSVDataSource {
+object MultiLineXMLDataSource extends XMLDataSource {
   override val isSplitable: Boolean = false
 
   override def readFile(
       conf: Configuration,
       file: PartitionedFile,
-      parser: UnivocityParser,
-      headerChecker: CSVHeaderChecker,
+      parser: StaxXmlParser,
       requiredSchema: StructType): Iterator[InternalRow] = {
-    UnivocityParser.parseStream(
+    parser.parseStream(
       CodecStreams.createInputStreamWithCloseResource(conf, file.toPath),
-      parser,
-      headerChecker,
       requiredSchema)
   }
 
   override def infer(
       sparkSession: SparkSession,
       inputPaths: Seq[FileStatus],
-      parsedOptions: CSVOptions): StructType = {
-    val  csv = createBaseRdd(sparkSession, inputPaths, parsedOptions)
-    csv.flatMap { lines =>
-      val path = new Path(lines.getPath())
-      UnivocityParser.tokenizeStream(
-        CodecStreams.createInputStreamWithCloseResource(lines.getConfiguration, path),
-        shouldDropHeader = false,
-        new CsvParser(parsedOptions.asParserSettings),
-        encoding = parsedOptions.charset)
-    }.take(1).headOption match {
-      case Some(firstRow) =>
-        val caseSensitive = sparkSession.sessionState.conf.caseSensitiveAnalysis
-        val header = CSVUtils.makeSafeHeader(firstRow, caseSensitive, parsedOptions)
-        val tokenRDD = csv.flatMap { lines =>
-          UnivocityParser.tokenizeStream(
-            CodecStreams.createInputStreamWithCloseResource(
-              lines.getConfiguration,
-              new Path(lines.getPath())),
-            parsedOptions.headerFlag,
-            new CsvParser(parsedOptions.asParserSettings),
-            encoding = parsedOptions.charset)
-        }
-        val sampled = CSVUtils.sample(tokenRDD, parsedOptions)
-        SQLExecution.withSQLConfPropagated(sparkSession) {
-          new CSVInferSchema(parsedOptions).infer(sampled, header)
-        }
-      case None =>
-        // If the first row could not be read, just return the empty schema.
-        StructType(Nil)
+      parsedOptions: XmlOptions): StructType = {
+    val xml = createBaseRdd(sparkSession, inputPaths, parsedOptions)
+
+    val tokenRDD = xml.flatMap { portableDataStream =>
+      StaxXmlParser.tokenizeStream(
+        CodecStreams.createInputStreamWithCloseResource(
+          portableDataStream.getConfiguration,
+          new Path(portableDataStream.getPath())),
+        parsedOptions)
+    }
+    SQLExecution.withSQLConfPropagated(sparkSession) {
+      val schema = InferSchema.infer(tokenRDD, parsedOptions)
+      schema
     }
   }
 
   private def createBaseRdd(
       sparkSession: SparkSession,
       inputPaths: Seq[FileStatus],
-      options: CSVOptions): RDD[PortableDataStream] = {
+      options: XmlOptions): RDD[PortableDataStream] = {
     val paths = inputPaths.map(_.getPath)
     val name = paths.mkString(",")
     val job = Job.getInstance(sparkSession.sessionState.newHadoopConfWithOptions(
@@ -239,6 +203,6 @@ object MultiLineCSVDataSource extends CSVDataSource {
       sparkSession.sparkContext.defaultMinPartitions)
 
     // Only returns `PortableDataStream`s without paths.
-    rdd.setName(s"CSVFile: $name").values
+    rdd.setName(s"XMLFile: $name").values
   }
 }

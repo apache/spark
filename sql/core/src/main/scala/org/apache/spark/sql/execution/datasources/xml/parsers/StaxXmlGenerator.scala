@@ -16,15 +16,16 @@
  */
 package org.apache.spark.sql.execution.datasources.xml.parsers
 
-import java.sql.{Date, Timestamp}
-import java.time.format.DateTimeFormatter
+import java.sql.Timestamp
 import javax.xml.stream.XMLStreamWriter
 
 import scala.collection.Map
 
-import org.apache.spark.sql.Row
+import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.util.{ArrayData, MapData}
 import org.apache.spark.sql.execution.datasources.xml.XmlOptions
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.UTF8String
 
 // This class is borrowed from Spark json datasource.
 private[xml] object StaxXmlGenerator {
@@ -40,7 +41,7 @@ private[xml] object StaxXmlGenerator {
   def apply(
       schema: StructType,
       writer: XMLStreamWriter,
-      options: XmlOptions)(row: Row): Unit = {
+      options: XmlOptions)(row: InternalRow): Unit = {
 
     require(options.attributePrefix.nonEmpty,
       "'attributePrefix' option should not be empty string.")
@@ -71,9 +72,11 @@ private[xml] object StaxXmlGenerator {
           writer.writeAttribute(name.substring(options.attributePrefix.length), v.toString)
 
         // For ArrayType, we just need to write each as XML element.
-        case (ArrayType(ty, _), v: scala.collection.Seq[_]) =>
-          v.foreach { e =>
-            writeChildElement(name, ty, e)
+        case (ArrayType(ty, _), v: ArrayData) =>
+          var i = 0;
+          while (i < v.numElements()) {
+            writeChildElement(name, ty, v.get(i, ty))
+            i += 1;
           }
         // For other datatypes, we just write normal elements.
         case _ =>
@@ -83,21 +86,21 @@ private[xml] object StaxXmlGenerator {
 
     def writeElement(dt: DataType, v: Any, options: XmlOptions): Unit = (dt, v) match {
       case (_, null) | (NullType, _) => writer.writeCharacters(options.nullValue)
+      case (StringType, v: UTF8String) => writer.writeCharacters(v.toString)
       case (StringType, v: String) => writer.writeCharacters(v)
       case (TimestampType, v: Timestamp) =>
-        val formatter = options.timestampFormat.map(DateTimeFormatter.ofPattern).
-          getOrElse(DateTimeFormatter.ISO_INSTANT)
-        writer.writeCharacters(formatter.format(v.toInstant()))
-      case (DateType, v: Date) =>
-        val formatter = options.dateFormat.map(DateTimeFormatter.ofPattern).
-          getOrElse(DateTimeFormatter.ISO_DATE)
-        writer.writeCharacters(formatter.format(v.toLocalDate()))
+        writer.writeCharacters(options.timestampFormatterInWrite.format(v.toInstant()))
+      case (TimestampType, v: Long) =>
+        writer.writeCharacters(options.timestampFormatterInWrite.format(v))
+      case (DateType, v: Int) =>
+        writer.writeCharacters(options.dateFormatterInWrite.format(v))
       case (IntegerType, v: Int) => writer.writeCharacters(v.toString)
       case (ShortType, v: Short) => writer.writeCharacters(v.toString)
       case (FloatType, v: Float) => writer.writeCharacters(v.toString)
       case (DoubleType, v: Double) => writer.writeCharacters(v.toString)
       case (LongType, v: Long) => writer.writeCharacters(v.toString)
       case (DecimalType(), v: java.math.BigDecimal) => writer.writeCharacters(v.toString)
+      case (DecimalType(), v: Decimal) => writer.writeCharacters(v.toString)
       case (ByteType, v: Byte) => writer.writeCharacters(v.toString)
       case (BooleanType, v: Boolean) => writer.writeCharacters(v.toString)
 
@@ -106,9 +109,11 @@ private[xml] object StaxXmlGenerator {
       // this case only can happen when we convert a normal [[DataFrame]] to XML file.
       // When [[ArrayType]] has [[ArrayType]] as elements, it is confusing what is element name
       // for XML file.
-      case (ArrayType(ty, _), v: scala.collection.Seq[_]) =>
-        v.foreach { e =>
-          writeChild(options.arrayElementName, ty, e)
+      case (ArrayType(ty, _), v: ArrayData) =>
+        var i = 0;
+        while (i < v.numElements()) {
+          writeChild(options.arrayElementName, ty, v.get(i, ty))
+          i += 1;
         }
 
       case (MapType(_, vt, _), mv: Map[_, _]) =>
@@ -121,8 +126,10 @@ private[xml] object StaxXmlGenerator {
             writeChild(k.toString, vt, v)
         }
 
-      case (StructType(ty), r: Row) =>
-        val (attributes, elements) = ty.zip(r.toSeq).partition { case (f, _) =>
+      case (mt: MapType, mv: MapData) => writeMapData(mt, mv)
+
+      case (st: StructType, r: InternalRow) =>
+        val (attributes, elements) = st.zip(r.toSeq(st)).partition { case (f, _) =>
           f.name.startsWith(options.attributePrefix) && f.name != options.valueTag
         }
         // We need to write attributes first before the value.
@@ -136,7 +143,25 @@ private[xml] object StaxXmlGenerator {
           s"Failed to convert value $v (class of ${v.getClass}) in type $dt to XML.")
     }
 
-    val (attributes, elements) = schema.zip(row.toSeq).partition { case (f, _) =>
+    def writeMapData(mapType: MapType, map: MapData): Unit = {
+      val keyArray = map.keyArray()
+      val valueArray = map.valueArray()
+      // write attributes first
+      Seq (true, false).foreach { writeAttribute =>
+        var i = 0
+        while (i < map.numElements()) {
+          val key = keyArray.get(i, mapType.keyType).toString
+          val isAttribute = key.startsWith(options.attributePrefix) && key != options.valueTag
+          if (writeAttribute == isAttribute) {
+            writeChild(key, mapType.valueType, valueArray.get(i, mapType.valueType))
+          }
+          i += 1
+        }
+      }
+    }
+
+    val rowSeq = row.toSeq(schema)
+    val (attributes, elements) = schema.zip(rowSeq).partition { case (f, _) =>
       f.name.startsWith(options.attributePrefix) && f.name != options.valueTag
     }
     // Writing attributes
@@ -152,7 +177,8 @@ private[xml] object StaxXmlGenerator {
     // Writing elements
     val (names, values) = elements.unzip
     val elementSchema = StructType(schema.filter(names.contains))
-    val elementRow = Row.fromSeq(row.toSeq.filter(values.contains))
+
+    val elementRow = InternalRow.fromSeq(rowSeq.filter(values.contains))
     writeElement(elementSchema, elementRow, options)
     writer.writeEndElement()
   }

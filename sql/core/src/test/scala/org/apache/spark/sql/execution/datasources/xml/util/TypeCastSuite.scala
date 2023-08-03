@@ -17,15 +17,17 @@
 package org.apache.spark.sql.execution.datasources.xml.util
 
 import java.math.BigDecimal
-import java.sql.{Date, Timestamp}
-import java.time.{ZonedDateTime, ZoneId}
 import java.util.Locale
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.catalyst.util.{DateFormatter, DateTimeUtils, TimestampFormatter}
+import org.apache.spark.sql.catalyst.util.LegacyDateFormats.FAST_DATE_FORMAT
 import org.apache.spark.sql.execution.datasources.xml.XmlOptions
+import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.UTF8String
 
-final class TypeCastSuite extends SparkFunSuite {
+final class TypeCastSuite extends SharedSparkSession {
 
   test("Can parse decimal type values") {
     val options = new XmlOptions()
@@ -50,7 +52,7 @@ final class TypeCastSuite extends SparkFunSuite {
 
   test("String type should always return the same as the input") {
     val options = new XmlOptions()
-    assert(TypeCast.castTo("", StringType, options) === "")
+    assert(TypeCast.castTo("", StringType, options) === UTF8String.fromString(""))
   }
 
   test("Types are cast correctly") {
@@ -65,73 +67,76 @@ final class TypeCastSuite extends SparkFunSuite {
     assert(TypeCast.castTo("1", BooleanType, options) === true)
     assert(TypeCast.castTo("false", BooleanType, options) === false)
     assert(TypeCast.castTo("0", BooleanType, options) === false)
-    assert(
-      TypeCast.castTo("2002-05-30 21:46:54", TimestampType, options) ===
-      Timestamp.from(
-        ZonedDateTime.of(2002, 5, 30, 21, 46, 54, 0, ZoneId.of("UTC"))
-        .toInstant()
-      )
-    )
-    assert(
-      TypeCast.castTo("2002-05-30T21:46:54", TimestampType, options) ===
-      Timestamp.from(
-        ZonedDateTime.of(2002, 5, 30, 21, 46, 54, 0, ZoneId.of("UTC"))
-        .toInstant()
-      )
-    )
-    assert(
-      TypeCast.castTo("2002-05-30T21:46:54.1234", TimestampType, options) ===
-      Timestamp.from(
-        ZonedDateTime.of(2002, 5, 30, 21, 46, 54, 123400000, ZoneId.of("UTC"))
-        .toInstant()
-      )
-    )
-    assert(
-      TypeCast.castTo("2002-05-30T21:46:54Z", TimestampType, options) ===
-      Timestamp.from(
-        ZonedDateTime.of(2002, 5, 30, 21, 46, 54, 0, ZoneId.of("UTC"))
-        .toInstant()
-      )
-    )
-    assert(
-      TypeCast.castTo("2002-05-30T21:46:54-06:00", TimestampType, options) ===
-      Timestamp.from(
-        ZonedDateTime.of(2002, 5, 30, 21, 46, 54, 0, ZoneId.of("-06:00"))
-        .toInstant()
-      )
-    )
-    assert(
-      TypeCast.castTo("2002-05-30T21:46:54+06:00", TimestampType, options) ===
-      Timestamp.from(
-        ZonedDateTime.of(2002, 5, 30, 21, 46, 54, 0, ZoneId.of("+06:00"))
-        .toInstant()
-      )
-    )
-    assert(
-      TypeCast.castTo("2002-05-30T21:46:54.1234Z", TimestampType, options) ===
-      Timestamp.from(
-        ZonedDateTime.of(2002, 5, 30, 21, 46, 54, 123400000, ZoneId.of("UTC"))
-        .toInstant()
-      )
-    )
-    assert(
-      TypeCast.castTo("2002-05-30T21:46:54.1234-06:00", TimestampType, options) ===
-      Timestamp.from(
-        ZonedDateTime.of(2002, 5, 30, 21, 46, 54, 123400000, ZoneId.of("-06:00"))
-        .toInstant()
-      )
-    )
-    assert(
-      TypeCast.castTo("2002-05-30T21:46:54.1234+06:00", TimestampType, options) ===
-      Timestamp.from(
-        ZonedDateTime.of(2002, 5, 30, 21, 46, 54, 123400000, ZoneId.of("+06:00"))
-        .toInstant()
-      )
-    )
-    assert(TypeCast.castTo("2002-09-24", DateType, options) === Date.valueOf("2002-09-24"))
-    assert(TypeCast.castTo("2002-09-24Z", DateType, options) === Date.valueOf("2002-09-24"))
-    assert(TypeCast.castTo("2002-09-24-06:00", DateType, options) === Date.valueOf("2002-09-24"))
-    assert(TypeCast.castTo("2002-09-24+06:00", DateType, options) === Date.valueOf("2002-09-24"))
+
+    {
+      val ts = TypeCast.castTo("2002-05-30 21:46:54", TimestampType, options)
+      assert(ts === 1022820414000000L)
+      assert(ts ===
+        TimestampFormatter(None, DateTimeUtils.getZoneId(SQLConf.get.sessionLocalTimeZone),
+          Locale.US, FAST_DATE_FORMAT, true).parse("2002-05-30 21:46:54"))
+    }
+    {
+      val ts = TypeCast.castTo("2002-05-30T21:46:54", TimestampType, options)
+      assert(ts === 1022820414000000L)
+      assert(ts ===
+        TimestampFormatter(None, DateTimeUtils.getZoneId(SQLConf.get.sessionLocalTimeZone),
+          Locale.US, FAST_DATE_FORMAT, true).parse("2002-05-30T21:46:54"))
+    }
+    {
+      val ts = TypeCast.castTo("2002-05-30T21:46:54.1234", TimestampType, options)
+      assert(ts === 1022820414123400L)
+      assert(ts ===
+        TimestampFormatter(None, DateTimeUtils.getZoneId(SQLConf.get.sessionLocalTimeZone),
+          Locale.US, FAST_DATE_FORMAT, true).parse("2002-05-30T21:46:54.1234"))
+    }
+    {
+      val ts = TypeCast.castTo("2002-05-30T21:46:54Z", TimestampType, options)
+      assert(ts === 1022795214000000L)
+      assert(ts ===
+        TimestampFormatter(None, DateTimeUtils.getZoneId("UTC"),
+          Locale.US, FAST_DATE_FORMAT, true).parse("2002-05-30T21:46:54Z"))
+    }
+    {
+      val ts = TypeCast.castTo("2002-05-30T21:46:54-06:00", TimestampType, options)
+      assert(ts === 1022816814000000L)
+      assert(ts ===
+        TimestampFormatter(None, DateTimeUtils.getZoneId("-06:00"),
+          Locale.US, FAST_DATE_FORMAT, true).parse("2002-05-30T21:46:54-06:00"))
+    }
+    {
+      val ts = TypeCast.castTo("2002-05-30T21:46:54+06:00", TimestampType, options)
+      assert(ts === 1022773614000000L)
+      assert(ts ===
+        TimestampFormatter(None, DateTimeUtils.getZoneId("+06:00"),
+          Locale.US, FAST_DATE_FORMAT, true).parse("2002-05-30T21:46:54+06:00"))
+    }
+    {
+      val ts = TypeCast.castTo("2002-05-30T21:46:54.1234Z", TimestampType, options)
+      assert(ts === 1022795214123400L)
+      assert(ts ===
+        TimestampFormatter(None, DateTimeUtils.getZoneId("UTC"),
+          Locale.US, FAST_DATE_FORMAT, true).parse("2002-05-30T21:46:54.1234Z"))
+    }
+    {
+      val ts = TypeCast.castTo("2002-05-30T21:46:54.1234-06:00", TimestampType, options)
+      assert(ts === 1022816814123400L)
+      assert(ts ===
+        TimestampFormatter(None, DateTimeUtils.getZoneId("-06:00"),
+          Locale.US, FAST_DATE_FORMAT, true).parse("2002-05-30T21:46:54.1234-06:00"))
+    }
+    {
+      val ts = TypeCast.castTo("2002-05-30T21:46:54.1234+06:00", TimestampType, options)
+      assert(ts === 1022773614123400L)
+      assert(ts ===
+        TimestampFormatter(None, DateTimeUtils.getZoneId("+06:00"),
+          Locale.US, FAST_DATE_FORMAT, true).parse("2002-05-30T21:46:54.1234+06:00"))
+    }
+    {
+      val date = TypeCast.castTo("2002-09-24", DateType, options)
+      assert(date === 11954)
+      assert(date === DateFormatter(DateFormatter.defaultPattern,
+          Locale.US, FAST_DATE_FORMAT, true).parse("2002-09-24"))
+    }
   }
 
   test("Types with sign are cast correctly") {
@@ -167,10 +172,9 @@ final class TypeCastSuite extends SparkFunSuite {
 
   test("Parsing built-in timestamp formatters") {
     val options = XmlOptions(Map())
-    val expectedResult = Timestamp.from(
-      ZonedDateTime.of(2002, 5, 30, 21, 46, 54, 0, ZoneId.of("UTC"))
-        .toInstant
-    )
+    val expectedResult =
+      TimestampFormatter(None, DateTimeUtils.getZoneId(SQLConf.get.sessionLocalTimeZone),
+      Locale.US, FAST_DATE_FORMAT, true).parse("2002-05-30 21:46:54")
     assert(
       TypeCast.castTo("2002-05-30 21:46:54", TimestampType, options) === expectedResult
     )
@@ -178,10 +182,14 @@ final class TypeCastSuite extends SparkFunSuite {
       TypeCast.castTo("2002-05-30T21:46:54", TimestampType, options) === expectedResult
     )
     assert(
-      TypeCast.castTo("2002-05-30T21:46:54+00:00", TimestampType, options) === expectedResult
+      TypeCast.castTo("2002-05-30T21:46:54+00:00", TimestampType, options) ===
+        TimestampFormatter(None, DateTimeUtils.getZoneId(SQLConf.get.sessionLocalTimeZone),
+          Locale.US, FAST_DATE_FORMAT, true).parse("2002-05-30T21:46:54+00:00")
     )
     assert(
-      TypeCast.castTo("2002-05-30T21:46:54.0000Z", TimestampType, options) === expectedResult
+      TypeCast.castTo("2002-05-30T21:46:54.0000Z", TimestampType, options) ===
+        TimestampFormatter(None, DateTimeUtils.getZoneId(SQLConf.get.sessionLocalTimeZone),
+          Locale.US, FAST_DATE_FORMAT, true).parse("2002-05-30T21:46:54.0000Z")
     )
   }
 
@@ -189,48 +197,38 @@ final class TypeCastSuite extends SparkFunSuite {
     var options = XmlOptions(Map("timestampFormat" -> "MM-dd-yyyy HH:mm:ss", "timezone" -> "UTC"))
     assert(
       TypeCast.castTo("12-03-2011 10:15:30", TimestampType, options) ===
-        Timestamp.from(
-          ZonedDateTime.of(2011, 12, 3, 10, 15, 30, 0, ZoneId.of("UTC"))
-            .toInstant
-        )
+        TimestampFormatter("MM-dd-yyyy HH:mm:ss", DateTimeUtils.getZoneId("UTC"),
+          Locale.US, FAST_DATE_FORMAT, true).parse("12-03-2011 10:15:30")
     )
 
     options = XmlOptions(Map("timestampFormat" -> "yyyy/MM/dd HH:mm:ss", "timezone" -> "UTC"))
     assert(
       TypeCast.castTo("2011/12/03 10:15:30", TimestampType, options) ===
-        Timestamp.from(
-          ZonedDateTime.of(2011, 12, 3, 10, 15, 30, 0, ZoneId.of("UTC"))
-            .toInstant
-        )
-    )
-
-    options = XmlOptions(Map("timestampFormat" -> "yyyy/MM/dd HH:mm:ss",
-      "timezone" -> "Asia/Shanghai"))
-    assert(
-      TypeCast.castTo("2011/12/03 10:15:30", TimestampType, options) !==
-        Timestamp.from(
-          ZonedDateTime.of(2011, 12, 3, 10, 15, 30, 0, ZoneId.of("UTC"))
-            .toInstant
-        )
+        TimestampFormatter("yyyy/MM/dd HH:mm:ss", DateTimeUtils.getZoneId("UTC"),
+          Locale.US, FAST_DATE_FORMAT, true).parse("2011/12/03 10:15:30")
     )
 
     options = XmlOptions(Map("timestampFormat" -> "yyyy/MM/dd HH:mm:ss",
       "timezone" -> "Asia/Shanghai"))
     assert(
       TypeCast.castTo("2011/12/03 10:15:30", TimestampType, options) ===
-        Timestamp.from(
-          ZonedDateTime.of(2011, 12, 3, 10, 15, 30, 0, ZoneId.of("Asia/Shanghai"))
-            .toInstant
-        )
+        TimestampFormatter("yyyy/MM/dd HH:mm:ss", DateTimeUtils.getZoneId("Asia/Shanghai"),
+          Locale.US, FAST_DATE_FORMAT, true).parse("2011/12/03 10:15:30")
+    )
+
+    options = XmlOptions(Map("timestampFormat" -> "yyyy/MM/dd HH:mm:ss",
+      "timezone" -> "Asia/Shanghai"))
+    assert(
+      TypeCast.castTo("2011/12/03 10:15:30", TimestampType, options) ===
+        TimestampFormatter("yyyy/MM/dd HH:mm:ss", DateTimeUtils.getZoneId("Asia/Shanghai"),
+          Locale.US, FAST_DATE_FORMAT, true).parse("2011/12/03 10:15:30")
     )
 
     options = XmlOptions(Map("timestampFormat" -> "yyyy/MM/dd HH:mm:ss"))
-    intercept[IllegalArgumentException](
-      TypeCast.castTo("2011/12/03 10:15:30", TimestampType, options) ===
-        Timestamp.from(
-          ZonedDateTime.of(2011, 12, 3, 10, 15, 30, 0, ZoneId.of("UTC"))
-            .toInstant
-        )
+    assert(TypeCast.castTo("2011/12/03 10:15:30", TimestampType, options) ===
+        TimestampFormatter("yyyy/MM/dd HH:mm:ss",
+          DateTimeUtils.getZoneId(SQLConf.get.sessionLocalTimeZone),
+          Locale.US, FAST_DATE_FORMAT, true).parse("2011/12/03 10:15:30")
     )
   }
 }

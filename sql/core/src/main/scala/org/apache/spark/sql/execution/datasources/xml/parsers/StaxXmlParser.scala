@@ -16,64 +16,108 @@
  */
 package org.apache.spark.sql.execution.datasources.xml.parsers
 
-import java.io.StringReader
-import javax.xml.stream.XMLEventReader
+import java.io.{CharConversionException, InputStream, InputStreamReader, StringReader}
+import java.nio.charset.{Charset, MalformedInputException}
+import javax.xml.stream.{XMLEventReader, XMLStreamException}
 import javax.xml.stream.events.{Attribute, Characters, EndElement, StartElement, XMLEvent}
 import javax.xml.transform.stream.StreamSource
 import javax.xml.validation.Schema
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
-import scala.util.Try
 import scala.util.control.NonFatal
+import scala.xml.SAXException
 
+import org.apache.spark.SparkUpgradeException
 import org.apache.spark.internal.Logging
-import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.Row
-import org.apache.spark.sql.catalyst.util.{DropMalformedMode, FailFastMode, ParseMode, PermissiveMode}
+import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, BadRecordException, DropMalformedMode, FailureSafeParser, GenericArrayData, MapData, ParseMode, PartialResultArrayException, PartialResultException, PermissiveMode}
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.datasources.xml.XmlOptions
+import org.apache.spark.sql.execution.datasources.xml.parsers.StaxXmlParser.convertStream
 import org.apache.spark.sql.execution.datasources.xml.util._
 import org.apache.spark.sql.execution.datasources.xml.util.TypeCast._
+import org.apache.spark.sql.internal.{LegacyBehaviorPolicy, SQLConf}
+import org.apache.spark.sql.sources.Filter
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.UTF8String
 
-/**
- * Wraps parser to iteration process.
- */
-private[xml] object StaxXmlParser extends Serializable with Logging {
-  def parse(
-      xml: RDD[String],
-      schema: StructType,
-      options: XmlOptions): RDD[Row] = {
-    xml.mapPartitions { iter =>
-      val xsdSchema = Option(options.rowValidationXSDPath).map(ValidatorUtil.getSchema)
-      iter.flatMap { xml =>
-        doParseColumn(xml, schema, options, options.parseMode, xsdSchema)
+class StaxXmlParser(
+    schema: StructType,
+    val options: XmlOptions,
+    filters: Seq[Filter] = Seq.empty) extends Logging {
+
+  private val factory = options.buildXmlFactory()
+
+  // Flags to signal if we need to fall back to the backward compatible behavior of parsing
+  // dates and timestamps.
+  // For more information, see comments for "enableDateTimeParsingFallback" option in XmlOptions.
+  private val enableParsingFallbackForTimestampType =
+  options.enableDateTimeParsingFallback
+    .orElse(SQLConf.get.jsonEnableDateTimeParsingFallback)
+    .getOrElse {
+      SQLConf.get.legacyTimeParserPolicy == LegacyBehaviorPolicy.LEGACY ||
+        options.timestampFormatInRead.isEmpty
+    }
+  private val enableParsingFallbackForDateType =
+    options.enableDateTimeParsingFallback
+      .orElse(SQLConf.get.jsonEnableDateTimeParsingFallback)
+      .getOrElse {
+        SQLConf.get.legacyTimeParserPolicy == LegacyBehaviorPolicy.LEGACY ||
+          options.dateFormatInRead.isEmpty
       }
+
+  /**
+   * Parses a single XML string and turns it into either one resulting row or no row (if the
+   * the record is malformed).
+   */
+  val parse: String => Option[InternalRow] = {
+    // This is intentionally a val to create a function once and reuse.
+    if (schema.isEmpty) {
+      (_: String) => Some(InternalRow.empty)
+    } else {
+      val xsdSchema = Option(options.rowValidationXSDPath).map(ValidatorUtil.getSchema)
+      (input: String) => doParseColumn(input, options.parseMode, xsdSchema)
     }
   }
 
-  def parseColumn(xml: String, schema: StructType, options: XmlOptions): Row = {
+  def parseStream(
+    inputStream: InputStream,
+    schema: StructType): Iterator[InternalRow] = {
+    val xsdSchema = Option(options.rowValidationXSDPath).map(ValidatorUtil.getSchema)
+    val safeParser = new FailureSafeParser[String](
+      input => doParseColumn(input, options.parseMode, xsdSchema),
+      options.parseMode,
+      schema,
+      options.columnNameOfCorruptRecord)
+
+    val xmlTokenizer = new XmlTokenizer(inputStream, options)
+    convertStream(xmlTokenizer) { tokens =>
+      safeParser.parse(tokens)
+    }.flatten
+  }
+
+  def parseColumn(xml: String, schema: StructType): InternalRow = {
     // The user=specified schema from from_xml, etc will typically not include a
     // "corrupted record" column. In PERMISSIVE mode, which puts bad records in
     // such a column, this would cause an error. In this mode, if such a column
     // is not manually specified, then fall back to DROPMALFORMED, which will return
     // null column values where parsing fails.
     val parseMode =
-      if (options.parseMode == PermissiveMode &&
-          !schema.fields.exists(_.name == options.columnNameOfCorruptRecord)) {
-        DropMalformedMode
-      } else {
-        options.parseMode
-      }
+    if (options.parseMode == PermissiveMode &&
+      !schema.fields.exists(_.name == options.columnNameOfCorruptRecord)) {
+      DropMalformedMode
+    } else {
+      options.parseMode
+    }
     val xsdSchema = Option(options.rowValidationXSDPath).map(ValidatorUtil.getSchema)
-    doParseColumn(xml, schema, options, parseMode, xsdSchema).orNull
+    doParseColumn(xml, parseMode, xsdSchema).orNull
   }
 
-  private def doParseColumn(xml: String,
-      schema: StructType,
-      options: XmlOptions,
+  def doParseColumn(xml: String,
       parseMode: ParseMode,
-      xsdSchema: Option[Schema]): Option[Row] = {
+      xsdSchema: Option[Schema]): Option[InternalRow] = {
+    val xmlRecord = UTF8String.fromString(xml)
     try {
       xsdSchema.foreach { schema =>
         schema.newValidator().validate(new StreamSource(new StringReader(xml)))
@@ -82,45 +126,32 @@ private[xml] object StaxXmlParser extends Serializable with Logging {
       val rootAttributes = StaxXmlParserUtils.gatherRootAttributes(parser)
       Some(convertObject(parser, schema, options, rootAttributes))
     } catch {
-      case e: PartialResultException =>
-        failedRecord(xml, options, parseMode, schema,
-          e.cause, Some(e.partialResult))
-      case NonFatal(e) =>
-        failedRecord(xml, options, parseMode, schema, e)
-    }
-  }
-
-  private def failedRecord(record: String,
-      options: XmlOptions,
-      parseMode: ParseMode,
-      schema: StructType,
-      cause: Throwable = null,
-      partialResult: Option[Row] = None): Option[Row] = {
-    // create a row even if no corrupt record column is present
-    val abbreviatedRecord =
-      (if (record.length() > 1000) record.substring(0, 1000) + "..." else record).
-        replaceAll("\n", "")
-    parseMode match {
-      case FailFastMode =>
-        logInfo(s"Malformed line: $abbreviatedRecord")
-        logDebug("Caused by:", cause)
-        throw new IllegalArgumentException("Malformed line in FAILFAST mode", cause)
-      case DropMalformedMode =>
-        logInfo(s"Malformed line: $abbreviatedRecord")
-        logDebug("Caused by:", cause)
-        None
-      case PermissiveMode =>
-        logDebug(s"Malformed line: $abbreviatedRecord")
-        logDebug("Caused by:", cause)
-        // The logic below is borrowed from Apache Spark's FailureSafeParser.
-        val resultRow = new Array[Any](schema.length)
-        schema.filterNot(_.name == options.columnNameOfCorruptRecord).foreach { from =>
-          val sourceIndex = schema.fieldIndex(from.name)
-          resultRow(sourceIndex) = partialResult.map(_.get(sourceIndex)).orNull
-        }
-        val corruptFieldIndex = Try(schema.fieldIndex(options.columnNameOfCorruptRecord)).toOption
-        corruptFieldIndex.foreach(resultRow(_) = record)
-        Some(Row.fromSeq(resultRow.toIndexedSeq))
+      case e: SparkUpgradeException => throw e
+      case e@(_: RuntimeException | _: XMLStreamException | _: MalformedInputException
+              | _: SAXException) =>
+        // XML parser currently doesn't support partial results for corrupted records.
+        // For such records, all fields other than the field configured by
+        // `columnNameOfCorruptRecord` are set to `null`.
+        throw BadRecordException(() => xmlRecord, () => Array.empty, e)
+      case e: CharConversionException if options.charset.isEmpty =>
+        val msg =
+          """JSON parser cannot handle a character in its input.
+            |Specifying encoding as an input option explicitly might help to resolve the issue.
+            |""".stripMargin + e.getMessage
+        val wrappedCharException = new CharConversionException(msg)
+        wrappedCharException.initCause(e)
+        throw BadRecordException(() => xmlRecord, () => Array.empty,
+          wrappedCharException)
+      case PartialResultException(row, cause) =>
+        throw BadRecordException(
+          record = () => xmlRecord,
+          partialResults = () => Array(row),
+          cause)
+      case PartialResultArrayException(rows, cause) =>
+        throw BadRecordException(
+          record = () => xmlRecord,
+          partialResults = () => rows,
+          cause)
     }
   }
 
@@ -148,7 +179,7 @@ private[xml] object StaxXmlParser extends Serializable with Logging {
         if (options.treatEmptyValuesAsNulls || options.nullValue == "") {
           null
         } else {
-          ""
+          UTF8String.fromString("")
         }
       case (_: EndElement, _: DataType) => null
       case (c: Characters, ArrayType(st, _)) =>
@@ -204,24 +235,25 @@ private[xml] object StaxXmlParser extends Serializable with Logging {
       parser: XMLEventReader,
       valueType: DataType,
       options: XmlOptions,
-      attributes: Array[Attribute]): Map[String, Any] = {
-    val kvPairs = ArrayBuffer.empty[(String, Any)]
+      attributes: Array[Attribute]): MapData = {
+    val kvPairs = ArrayBuffer.empty[(UTF8String, Any)]
     attributes.foreach { attr =>
-      kvPairs += (options.attributePrefix + attr.getName.getLocalPart -> attr.getValue)
+      kvPairs += (UTF8String.fromString(options.attributePrefix + attr.getName.getLocalPart)
+        -> convertTo(attr.getValue, valueType, options))
     }
     var shouldStop = false
     while (!shouldStop) {
       parser.nextEvent match {
         case e: StartElement =>
           kvPairs +=
-            (StaxXmlParserUtils.getName(e.asStartElement.getName, options) ->
+            (UTF8String.fromString(StaxXmlParserUtils.getName(e.asStartElement.getName, options)) ->
              convertField(parser, valueType, options))
         case _: EndElement =>
           shouldStop = StaxXmlParserUtils.checkEndElement(parser)
         case _ => // do nothing
       }
     }
-    kvPairs.toMap
+    ArrayBasedMapData(kvPairs.toMap)
   }
 
   /**
@@ -251,7 +283,7 @@ private[xml] object StaxXmlParser extends Serializable with Logging {
       parser: XMLEventReader,
       schema: StructType,
       options: XmlOptions,
-      attributes: Array[Attribute] = Array.empty): Row = {
+      attributes: Array[Attribute] = Array.empty): InternalRow = {
     // TODO: This method might have to be removed. Some logics duplicate `convertObject()`
     val row = new Array[Any](schema.length)
 
@@ -260,8 +292,8 @@ private[xml] object StaxXmlParser extends Serializable with Logging {
 
     // Then, we read elements here.
     val fieldsMap = convertField(parser, schema, options) match {
-      case row: Row =>
-        Map(schema.map(_.name).zip(row.toSeq): _*)
+      case internalRow: InternalRow =>
+        Map(schema.map(_.name).zip(internalRow.toSeq(schema)): _*)
       case v if schema.fieldNames.contains(options.valueTag) =>
         // If this is the element having no children, then it wraps attributes
         // with a row So, we first need to find the field name that has the real
@@ -280,21 +312,21 @@ private[xml] object StaxXmlParser extends Serializable with Logging {
 
     if (valuesMap.isEmpty) {
       // Return an empty row with all nested elements by the schema set to null.
-      Row.fromSeq(Seq.fill(schema.fieldNames.length)(null))
+      InternalRow.fromSeq(Seq.fill(schema.fieldNames.length)(null))
     } else {
-      Row.fromSeq(row.toIndexedSeq)
+      InternalRow.fromSeq(row.toIndexedSeq)
     }
   }
 
   /**
-   * Parse an object from the event stream into a new Row representing the schema.
+   * Parse an object from the event stream into a new InternalRow representing the schema.
    * Fields in the xml that are not defined in the requested schema will be dropped.
    */
   private def convertObject(
       parser: XMLEventReader,
       schema: StructType,
       options: XmlOptions,
-      rootAttributes: Array[Attribute] = Array.empty): Row = {
+      rootAttributes: Array[Attribute] = Array.empty): InternalRow = {
     val row = new Array[Any](schema.length)
     val nameToIndex = schema.map(_.name).zipWithIndex.toMap
     // If there are attributes, then we process them first.
@@ -355,8 +387,9 @@ private[xml] object StaxXmlParser extends Serializable with Logging {
               }
           }
         } catch {
-          case NonFatal(exception) if options.parseMode == PermissiveMode =>
-            badRecordException = badRecordException.orElse(Some(exception))
+          case e: SparkUpgradeException => throw e
+          case NonFatal(e) =>
+            badRecordException = badRecordException.orElse(Some(e))
         }
 
         case _: EndElement =>
@@ -366,10 +399,212 @@ private[xml] object StaxXmlParser extends Serializable with Logging {
       }
     }
 
+    // TODO: find a more efficient way to convert ArrayBuffer to GenericArrayData
+    val newRow = new Array[Any](schema.length)
+    var i = 0
+    while (i < schema.length) {
+      if (row(i).isInstanceOf[ArrayBuffer[_]]) {
+        newRow(i) = new GenericArrayData(row(i).asInstanceOf[ArrayBuffer[Any]])
+      } else {
+        newRow(i) = row(i)
+      }
+      i += 1;
+    }
+
     if (badRecordException.isEmpty) {
-      Row.fromSeq(row.toIndexedSeq)
+      InternalRow.fromSeq(newRow.toIndexedSeq)
     } else {
-      throw PartialResultException(Row.fromSeq(row.toIndexedSeq), badRecordException.get)
+      throw PartialResultException(InternalRow.fromSeq(newRow.toIndexedSeq),
+        badRecordException.get)
+    }
+  }
+}
+
+/**
+ * XMLRecordReader class to read through a given xml document to output xml blocks as records
+ * as specified by the start tag and end tag.
+ *
+ * This implementation is ultimately loosely based on LineRecordReader in Hadoop.
+ */
+private[xml] class XmlTokenizer(
+  inputStream: InputStream,
+  options: XmlOptions) {
+  private val reader = new InputStreamReader(inputStream, Charset.forName(options.charset))
+  private var currentStartTag: String = _
+  private var buffer = new StringBuilder()
+  private val startTag = s"<${options.rowTag}>"
+  private val endTag = s"</${options.rowTag}>"
+
+    /**
+   * Finds the start of the next record.
+   * It treats data from `startTag` and `endTag` as a record.
+   *
+   * @param key the current key that will be written
+   * @param value  the object that will be written
+   * @return whether it reads successfully
+   */
+  def next(): Option[String] = {
+    if (readUntilStartElement()) {
+      try {
+        buffer.append(currentStartTag)
+        // Don't check whether the end element was found. Even if not, return everything
+        // that was read, which will invariably cause a parse error later
+        readUntilEndElement(currentStartTag.endsWith(">"))
+        return Some(buffer.toString())
+      } finally {
+        buffer = new StringBuilder()
+      }
+    }
+    None
+  }
+
+  private def readUntilStartElement(): Boolean = {
+    currentStartTag = startTag
+    var i = 0
+    while (true) {
+      val cOrEOF = reader.read()
+      if (cOrEOF == -1) { // || (i == 0 && getFilePosition() > end)) {
+        // End of file or end of split.
+        return false
+      }
+      val c = cOrEOF.toChar
+      if (c == startTag(i)) {
+        if (i >= startTag.length - 1) {
+          // Found start tag.
+          return true
+        }
+        // else in start tag
+        i += 1
+      } else {
+        // if doesn't match the closing angle bracket, check if followed by attributes
+        if (i == (startTag.length - 1) && Character.isWhitespace(c)) {
+          // Found start tag with attributes. Remember to write with following whitespace
+          // char, not angle bracket
+          currentStartTag = startTag.dropRight(1) + c
+          return true
+        }
+        // else not in start tag
+        i = 0
+      }
+    }
+    // Unreachable.
+    false
+  }
+
+  private def readUntilEndElement(startTagClosed: Boolean): Boolean = {
+    // Index into the start or end tag that has matched so far
+    var si = 0
+    var ei = 0
+    // How many other start tags enclose the one that's started already?
+    var depth = 0
+    // Previously read character
+    var prevC = '\u0000'
+
+    // The current start tag already found may or may not have terminated with
+    // a '>' as it may have attributes we read here. If not, we search for
+    // a self-close tag, but only until a non-self-closing end to the start
+    // tag is found
+    var canSelfClose = !startTagClosed
+
+    while (true) {
+
+      val cOrEOF = reader.read()
+      if (cOrEOF == -1) {
+        // End of file (ignore end of split).
+        return false
+      }
+
+      val c = cOrEOF.toChar
+      buffer.append(c)
+
+      if (c == '>' && prevC != '/') {
+        canSelfClose = false
+      }
+
+      // Still matching a start tag?
+      if (c == startTag(si)) {
+        // Still also matching an end tag?
+        if (c == endTag(ei)) {
+          // In start tag or end tag.
+          si += 1
+          ei += 1
+        } else {
+          if (si >= startTag.length - 1) {
+            // Found start tag.
+            si = 0
+            ei = 0
+            depth += 1
+          } else {
+            // In start tag.
+            si += 1
+            ei = 0
+          }
+        }
+      } else if (c == endTag(ei)) {
+        if (ei >= endTag.length - 1) {
+          if (depth == 0) {
+            // Found closing end tag.
+            return true
+          }
+          // else found nested end tag.
+          si = 0
+          ei = 0
+          depth -= 1
+        } else {
+          // In end tag.
+          si = 0
+          ei += 1
+        }
+      } else if (c == '>' && prevC == '/' && canSelfClose) {
+        if (depth == 0) {
+          // found a self-closing tag (end tag)
+          return true
+        }
+        // else found self-closing nested tag (end tag)
+        si = 0
+        ei = 0
+        depth -= 1
+      } else if (si == (startTag.length - 1) && Character.isWhitespace(c)) {
+        // found a start tag with attributes
+        si = 0
+        ei = 0
+        depth += 1
+      } else {
+        // Not in start tag or end tag.
+        si = 0
+        ei = 0
+      }
+      prevC = c
+    }
+    // Unreachable.
+    false
+  }
+}
+
+private[sql] object StaxXmlParser {
+  /**
+   * Parses a stream that contains CSV strings and turns it into an iterator of tokens.
+   */
+  def tokenizeStream(inputStream: InputStream, options: XmlOptions): Iterator[String] = {
+    val xmlTokenizer = new XmlTokenizer(inputStream, options)
+    convertStream(xmlTokenizer)(tokens => tokens)
+  }
+
+  private def convertStream[T](
+    xmlTokenizer: XmlTokenizer)(
+    convert: String => T) = new Iterator[T] {
+
+    private var nextRecord = xmlTokenizer.next()
+
+    override def hasNext: Boolean = nextRecord.nonEmpty
+
+    override def next(): T = {
+      if (!hasNext) {
+        throw QueryExecutionErrors.endOfStreamError()
+      }
+      val curRecord = convert(nextRecord.get)
+      nextRecord = xmlTokenizer.next()
+      curRecord
     }
   }
 }

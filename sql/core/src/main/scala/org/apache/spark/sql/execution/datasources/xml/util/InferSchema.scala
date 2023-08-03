@@ -33,7 +33,7 @@ import org.apache.spark.sql.execution.datasources.xml.parsers.StaxXmlParserUtils
 import org.apache.spark.sql.execution.datasources.xml.util.TypeCast._
 import org.apache.spark.sql.types._
 
-private[xml] object InferSchema {
+private[sql] object InferSchema {
 
   /**
    * Copied from internal Spark api
@@ -83,9 +83,7 @@ private[xml] object InferSchema {
             schema.newValidator().validate(new StreamSource(new StringReader(xml)))
           }
 
-          val parser = StaxXmlParserUtils.filteredReader(xml)
-          val rootAttributes = StaxXmlParserUtils.gatherRootAttributes(parser)
-          Some(inferObject(parser, options, rootAttributes))
+          Some(infer(xml, options))
         } catch {
           case NonFatal(_) if options.parseMode == PermissiveMode =>
             Some(StructType(Seq(StructField(options.columnNameOfCorruptRecord, StringType))))
@@ -103,6 +101,12 @@ private[xml] object InferSchema {
     }
   }
 
+  def infer(xml: String, options: XmlOptions): DataType = {
+    val parser = StaxXmlParserUtils.filteredReader(xml)
+    val rootAttributes = StaxXmlParserUtils.gatherRootAttributes(parser)
+    inferObject(parser, options, rootAttributes)
+  }
+
   private def inferFrom(datum: String, options: XmlOptions): DataType = {
     val value = if (datum != null && options.ignoreSurroundingSpaces) {
       datum.trim()
@@ -118,8 +122,8 @@ private[xml] object InferSchema {
         case v if isInteger(v) => IntegerType
         case v if isDouble(v) => DoubleType
         case v if isBoolean(v) => BooleanType
-        case v if isTimestamp(v, options) => TimestampType
         case v if isDate(v, options) => DateType
+        case v if isTimestamp(v, options) => TimestampType
         case _ => StringType
       }
     } else {
@@ -237,7 +241,7 @@ private[xml] object InferSchema {
   /**
    * Convert NullType to StringType and remove StructTypes with no fields
    */
-  private def canonicalizeType(dt: DataType): Option[DataType] = dt match {
+  def canonicalizeType(dt: DataType): Option[DataType] = dt match {
     case at @ ArrayType(elementType, _) =>
       for {
         canonicalType <- canonicalizeType(elementType)

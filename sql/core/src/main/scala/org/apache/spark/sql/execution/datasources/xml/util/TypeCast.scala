@@ -17,17 +17,18 @@
 package org.apache.spark.sql.execution.datasources.xml.util
 
 import java.math.BigDecimal
-import java.sql.{Date, Timestamp}
 import java.text.NumberFormat
-import java.time.{Instant, LocalDate, ZoneId}
-import java.time.format.{DateTimeFormatter, DateTimeFormatterBuilder}
 import java.util.Locale
 
 import scala.util.Try
 import scala.util.control.Exception._
+import scala.util.control.NonFatal
 
+import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.execution.datasources.xml.XmlOptions
+import org.apache.spark.sql.internal.{LegacyBehaviorPolicy, SQLConf}
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.UTF8String
 
 /**
  * Utility functions for type casting
@@ -66,7 +67,7 @@ private[xml] object TypeCast {
           Decimal(new BigDecimal(datum.replaceAll(",", "")), dt.precision, dt.scale)
         case _: TimestampType => parseXmlTimestamp(datum, options)
         case _: DateType => parseXmlDate(datum, options)
-        case _: StringType => datum
+        case _: StringType => UTF8String.fromString(datum)
         case _ => throw new IllegalArgumentException(s"Unsupported type: ${castType.typeName}")
       }
     }
@@ -80,75 +81,33 @@ private[xml] object TypeCast {
     }
   }
 
-  private val supportedXmlDateFormatters = Seq(
-    // 2011-12-03
-    // 2011-12-03+01:00
-    DateTimeFormatter.ISO_DATE
-  )
-
-  private def parseXmlDate(value: String, options: XmlOptions): Date = {
-    val formatters = options.dateFormat.map(DateTimeFormatter.ofPattern).
-      map(supportedXmlDateFormatters :+ _).getOrElse(supportedXmlDateFormatters)
-    formatters.foreach { format =>
-      try {
-        return Date.valueOf(LocalDate.parse(value, format))
-      } catch {
-        case _: Exception => // continue
-      }
-    }
-    throw new IllegalArgumentException(s"cannot convert value $value to Date")
+  private def parseXmlDate(value: String, options: XmlOptions): Int = {
+    options.dateFormatter.parse(value)
   }
 
-  private val supportedXmlTimestampFormatters = Seq(
-    // 2002-05-30 21:46:54
-    new DateTimeFormatterBuilder()
-      .parseCaseInsensitive()
-      .append(DateTimeFormatter.ISO_LOCAL_DATE)
-      .appendLiteral(' ')
-      .append(DateTimeFormatter.ISO_LOCAL_TIME)
-      .toFormatter()
-      .withZone(ZoneId.of("UTC")),
-    // 2002-05-30T21:46:54
-    DateTimeFormatter.ISO_LOCAL_DATE_TIME.withZone(ZoneId.of("UTC")),
-    // 2002-05-30T21:46:54+06:00
-    DateTimeFormatter.ISO_OFFSET_DATE_TIME,
-    // 2002-05-30T21:46:54.1234Z
-    DateTimeFormatter.ISO_INSTANT
-  )
-
-  private def parseXmlTimestamp(value: String, options: XmlOptions): Timestamp = {
-    supportedXmlTimestampFormatters.foreach { format =>
-      try {
-        return Timestamp.from(Instant.from(format.parse(value)))
-      } catch {
-        case _: Exception => // continue
-      }
+  private def parseXmlTimestamp(value: String, options: XmlOptions): Long = {
+    try {
+      options.timestampFormatter.parse(value)
+    } catch {
+      case NonFatal(e) =>
+        // If fails to parse, then tries the way used in 2.0 and 1.x for backwards
+        // compatibility if enabled.
+        val enableParsingFallbackForTimestampType =
+          options.enableDateTimeParsingFallback
+            .orElse(SQLConf.get.jsonEnableDateTimeParsingFallback)
+            .getOrElse {
+              SQLConf.get.legacyTimeParserPolicy == LegacyBehaviorPolicy.LEGACY ||
+                options.timestampFormatInRead.isEmpty
+            }
+        if (!enableParsingFallbackForTimestampType) {
+          throw e
+        }
+        val str = DateTimeUtils.cleanLegacyTimestampStr(UTF8String.fromString(value))
+        DateTimeUtils.stringToTimestamp(str, options.zoneId).getOrElse(throw e)
     }
-    options.timestampFormat.foreach { formatString =>
-      // Check if there is offset or timezone and apply Spark timeZone if not
-      // Useful to support Java 8 and Java 11+ as they prioritize zone and offset differently
-      val hasTemporalInformation = formatString.indexOf("V") +
-        formatString.indexOf("z") +
-        formatString.indexOf("O") +
-        formatString.indexOf("X") +
-        formatString.indexOf("x") +
-        formatString.indexOf("Z") != (-6)
-      val format = if (hasTemporalInformation) {
-        DateTimeFormatter.ofPattern(formatString)
-      } else {
-        DateTimeFormatter.ofPattern(formatString).withZone(options.timezone.map(ZoneId.of).orNull)
-      }
-      try {
-        return Timestamp.from(Instant.from(format.parse(value)))
-      } catch {
-        case _: Exception => // continue
-      }
-    }
-    throw new IllegalArgumentException(s"cannot convert value $value to Timestamp")
   }
 
-
-    // TODO: This function unnecessarily does type dispatch. Should merge it with `castTo`.
+  // TODO: This function unnecessarily does type dispatch. Should merge it with `castTo`.
   private[xml] def convertTo(
       datum: String,
       dataType: DataType,
@@ -227,20 +186,14 @@ private[xml] object TypeCast {
 
   private[xml] def isTimestamp(value: String, options: XmlOptions): Boolean = {
     try {
-      parseXmlTimestamp(value, options)
-      true
+      options.timestampFormatter.parseOptional(value).isDefined
     } catch {
       case _: IllegalArgumentException => false
     }
   }
 
   private[xml] def isDate(value: String, options: XmlOptions): Boolean = {
-    try {
-      parseXmlDate(value, options)
-      true
-    } catch {
-      case _: IllegalArgumentException => false
-    }
+    (allCatch opt options.dateFormatter.parse(value)).isDefined
   }
 
   private[xml] def signSafeToLong(value: String, options: XmlOptions): Long = {

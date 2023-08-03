@@ -17,20 +17,53 @@
 package org.apache.spark.sql.execution.datasources.xml
 
 import java.nio.charset.StandardCharsets
+import java.time.ZoneId
+import java.util.Locale
+import javax.xml.stream.XMLInputFactory
 
-import org.apache.spark.sql.catalyst.util.{ParseMode, PermissiveMode}
+import org.apache.spark.internal.Logging
+import org.apache.spark.sql.catalyst.{DataSourceOptions, FileSourceOptions}
+import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, CompressionCodecs, DateFormatter, DateTimeUtils, ParseMode, PermissiveMode, TimestampFormatter}
+import org.apache.spark.sql.catalyst.util.LegacyDateFormats.FAST_DATE_FORMAT
+import org.apache.spark.sql.errors.QueryExecutionErrors
+import org.apache.spark.sql.internal.{LegacyBehaviorPolicy, SQLConf}
 
 /**
  * Options for the XML data source.
  */
-private[xml] class XmlOptions(
-    @transient private val parameters: Map[String, String])
-  extends Serializable {
+private[sql] class XmlOptions(
+    @transient val parameters: CaseInsensitiveMap[String],
+    defaultTimeZoneId: String,
+    defaultColumnNameOfCorruptRecord: String)
+  extends FileSourceOptions(parameters) with Logging {
 
-  def this() = this(Map.empty)
+  import XmlOptions._
 
-  val charset = parameters.getOrElse("charset", XmlOptions.DEFAULT_CHARSET)
-  val codec = parameters.get("compression").orElse(parameters.get("codec")).orNull
+  def this(
+    parameters: Map[String, String] = Map.empty,
+    defaultTimeZoneId: String = SQLConf.get.sessionLocalTimeZone,
+    defaultColumnNameOfCorruptRecord: String = "") = {
+    this(
+      CaseInsensitiveMap(parameters),
+      defaultTimeZoneId,
+      defaultColumnNameOfCorruptRecord)
+  }
+
+  private def getBool(paramName: String, default: Boolean = false): Boolean = {
+    val param = parameters.getOrElse(paramName, default.toString)
+    if (param == null) {
+      default
+    } else if (param.toLowerCase(Locale.ROOT) == "true") {
+      true
+    } else if (param.toLowerCase(Locale.ROOT) == "false") {
+      false
+    } else {
+      throw QueryExecutionErrors.paramIsNotBooleanValueError(paramName)
+    }
+  }
+
+  val compressionCodec = parameters.get("compression").orElse(parameters.get("codec"))
+    .map(CompressionCodecs.getCodecClassName)
   val rowTag = parameters.getOrElse("rowTag", XmlOptions.DEFAULT_ROW_TAG)
   require(rowTag.nonEmpty, "'rowTag' option should not be empty string.")
   require(!rowTag.startsWith("<") && !rowTag.endsWith(">"),
@@ -65,12 +98,106 @@ private[xml] class XmlOptions(
   val wildcardColName =
     parameters.getOrElse("wildcardColName", XmlOptions.DEFAULT_WILDCARD_COL_NAME)
   val ignoreNamespace = parameters.get("ignoreNamespace").map(_.toBoolean).getOrElse(false)
-  val timestampFormat = parameters.get("timestampFormat")
+
+  /**
+   * Infer columns with all valid date entries as date type (otherwise inferred as string or
+   * timestamp type) if schema inference is enabled.
+   *
+   * Enabled by default.
+   *
+   * Not compatible with legacyTimeParserPolicy == LEGACY since legacy date parser will accept
+   * extra trailing characters. Thus, disabled when legacyTimeParserPolicy == LEGACY
+   */
+  val preferDate = {
+    if (SQLConf.get.legacyTimeParserPolicy == LegacyBehaviorPolicy.LEGACY) {
+      false
+    } else {
+      getBool(PREFER_DATE, true)
+    }
+  }
+
+  val dateFormatOption: Option[String] = parameters.get(DATE_FORMAT)
+  // Provide a default value for dateFormatInRead when preferDate. This ensures that the
+  // Iso8601DateFormatter (with strict date parsing) is used for date inference
+  val dateFormatInRead: Option[String] =
+  if (preferDate) {
+    Option(dateFormatOption.getOrElse(DateFormatter.defaultPattern))
+  } else {
+    dateFormatOption
+  }
+  val dateFormatInWrite: String = parameters.getOrElse(DATE_FORMAT, DateFormatter.defaultPattern)
+
+
+  val timestampFormatInRead: Option[String] =
+    if (SQLConf.get.legacyTimeParserPolicy == LegacyBehaviorPolicy.LEGACY) {
+      Some(parameters.getOrElse(TIMESTAMP_FORMAT,
+        s"${DateFormatter.defaultPattern}'T'HH:mm:ss.SSSXXX"))
+    } else {
+      parameters.get(TIMESTAMP_FORMAT)
+    }
+  val timestampFormatInWrite: String = parameters.getOrElse(TIMESTAMP_FORMAT,
+    if (SQLConf.get.legacyTimeParserPolicy == LegacyBehaviorPolicy.LEGACY) {
+      s"${DateFormatter.defaultPattern}'T'HH:mm:ss.SSSXXX"
+    } else {
+      s"${DateFormatter.defaultPattern}'T'HH:mm:ss[.SSS][XXX]"
+    })
+
+  // SPARK-39731: Enables the backward compatible parsing behavior.
+  // Generally, this config should be set to false to avoid producing potentially incorrect results
+  // which is the current default (see JacksonParser).
+  //
+  // If enabled and the date cannot be parsed, we will fall back to `DateTimeUtils.stringToDate`.
+  // If enabled and the timestamp cannot be parsed, `DateTimeUtils.stringToTimestamp` will be used.
+  // Otherwise, depending on the parser policy and a custom pattern, an exception may be thrown and
+  // the value will be parsed as null.
+  val enableDateTimeParsingFallback: Option[Boolean] =
+  parameters.get(ENABLE_DATETIME_PARSING_FALLBACK).map(_.toBoolean)
+
   val timezone = parameters.get("timezone")
-  val dateFormat = parameters.get("dateFormat")
+
+  val zoneId: ZoneId = DateTimeUtils.getZoneId(
+    parameters.getOrElse(DateTimeUtils.TIMEZONE_OPTION,
+      parameters.getOrElse(TIME_ZONE, defaultTimeZoneId)))
+
+  // A language tag in IETF BCP 47 format
+  val locale: Locale = parameters.get(LOCALE).map(Locale.forLanguageTag).getOrElse(Locale.US)
+
+  val multiLine = parameters.get(MULTI_LINE).map(_.toBoolean).getOrElse(true)
+  val charset = parameters.getOrElse(ENCODING,
+    parameters.getOrElse(CHARSET, XmlOptions.DEFAULT_CHARSET))
+
+  def buildXmlFactory(): XMLInputFactory = {
+    XMLInputFactory.newInstance()
+  }
+
+  val timestampFormatter = TimestampFormatter(
+    timestampFormatInRead,
+    zoneId,
+    locale,
+    legacyFormat = FAST_DATE_FORMAT,
+    isParsing = true)
+
+  val timestampFormatterInWrite = TimestampFormatter(
+    timestampFormatInWrite,
+    zoneId,
+    locale,
+    legacyFormat = FAST_DATE_FORMAT,
+    isParsing = false)
+
+  val dateFormatter = DateFormatter(
+    dateFormatInRead,
+    locale,
+    legacyFormat = FAST_DATE_FORMAT,
+    isParsing = true)
+
+  val dateFormatterInWrite = DateFormatter(
+    dateFormatInWrite,
+    locale,
+    legacyFormat = FAST_DATE_FORMAT,
+    isParsing = false)
 }
 
-private[xml] object XmlOptions {
+private[sql] object XmlOptions extends DataSourceOptions {
   val DEFAULT_ATTRIBUTE_PREFIX = "_"
   val DEFAULT_VALUE_TAG = "_VALUE"
   val DEFAULT_ROW_TAG = "ROW"
@@ -80,6 +207,23 @@ private[xml] object XmlOptions {
   val DEFAULT_CHARSET: String = StandardCharsets.UTF_8.name
   val DEFAULT_NULL_VALUE: String = null
   val DEFAULT_WILDCARD_COL_NAME = "xs_any"
+  val PREFER_DATE = newOption("preferDate")
+  val LOCALE = newOption("locale")
+  val COMPRESSION = newOption("compression")
+  val ENABLE_DATETIME_PARSING_FALLBACK = newOption("enableDateTimeParsingFallback")
+  val MULTI_LINE = newOption("multiLine")
+  val DATE_FORMAT = newOption("dateFormat")
+  val TIMESTAMP_FORMAT = newOption("timestampFormat")
+  // Options with alternative
+  val ENCODING = "encoding"
+  val CHARSET = "charset"
+  newOption(ENCODING, CHARSET)
+  val TIME_ZONE = "timezone"
+  newOption(DateTimeUtils.TIMEZONE_OPTION, TIME_ZONE)
 
-  def apply(parameters: Map[String, String]): XmlOptions = new XmlOptions(parameters)
+  def apply(parameters: Map[String, String]): XmlOptions =
+    new XmlOptions(parameters, SQLConf.get.sessionLocalTimeZone)
+
+  def apply(): XmlOptions =
+    new XmlOptions(Map.empty, SQLConf.get.sessionLocalTimeZone)
 }
