@@ -32,7 +32,8 @@ private[client] class CustomSparkConnectBlockingStub(
   def executePlan(request: ExecutePlanRequest): Iterator[ExecutePlanResponse] = {
     GrpcExceptionConverter.convert {
       GrpcExceptionConverter.convertIterator[ExecutePlanResponse](
-        retryHandler.RetryIterator(request, stub.executePlan(_).asScala))
+        retryHandler.RetryIterator[ExecutePlanRequest, ExecutePlanResponse]
+          (request, (stub.executePlan(_).asScala)))
     }
   }
 
