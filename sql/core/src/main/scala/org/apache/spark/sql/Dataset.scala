@@ -2255,8 +2255,8 @@ class Dataset[T] private[sql](
       val newUnion = Union(newChildren)
       newUnion.copyTagsFrom(u)
       newUnion
-    } {
-      else u
+    } else {
+      u
     }
   }
 
