@@ -104,23 +104,75 @@ case class FunctionTableSubqueryArgumentExpression(
     // the query plan.
     var subquery = plan
     if (partitionByExpressions.nonEmpty) {
-      subquery = RepartitionByExpression(
-        partitionExpressions = partitionByExpressions,
-        child = subquery,
-        optNumPartitions = None)
+      // Add a projection to project each of the partitioning expressions that it is not a simple
+      // attribute that is already present in the plan output. Then add a sort operation by the
+      // partition keys (plus any explicit ORDER BY items) since after the hash-based shuffle
+      // operation, the rows from several partitions may arrive interleaved. In this way, the Python
+      // UDTF evaluator is able to inspect the values of the partitioning expressions for adjacent
+      // rows in order to determine when each partition ends and the next one begins.
+      subquery = Sort(
+        order = partitionByExpressions.map(e => SortOrder(e, Ascending)) ++ orderByExpressions,
+        global = false,
+        child = RepartitionByExpression(
+          partitionExpressions = extraProjectedPartitioningExpressions.map(_.toAttribute),
+          optNumPartitions = None,
+          child = Project(
+            projectList = subquery.output ++ extraProjectedPartitioningExpressions,
+            child = subquery)))
     }
     if (withSinglePartition) {
       subquery = Repartition(
         numPartitions = 1,
         shuffle = true,
         child = subquery)
-    }
-    if (orderByExpressions.nonEmpty) {
-      subquery = Sort(
-        order = orderByExpressions,
-        global = false,
-        child = subquery)
+      if (orderByExpressions.nonEmpty) {
+        subquery = Sort(
+          order = orderByExpressions,
+          global = false,
+          child = subquery)
+      }
     }
     Project(Seq(Alias(CreateStruct(subquery.output), "c")()), subquery)
   }
+
+  /**
+   * These are the indexes of the PARTITION BY expressions within the concatenation of the child's
+   * output attributes and the [[extraProjectedPartitioningExpressions]]. We send these indexes to
+   * the Python UDTF evalator so it knows which expressions to compare on adjacent rows to know when
+   * the partition has changed.
+   */
+  lazy val partitioningExpressionIndexes: Seq[Int] = partitionByExpressions.map { e =>
+    subqueryOutputs.get(e).getOrElse {
+      lazy val extraIndexes = extraProjectedPartitioningExpressions.map(_.child).zipWithIndex.toMap
+      extraIndexes.get(e).get + plan.output.length
+    }
+  }
+
+  private lazy val extraProjectedPartitioningExpressions: Seq[Alias] = {
+    partitionByExpressions.filter { e =>
+      !subqueryOutputs.contains(e)
+    }.zipWithIndex.map { case (expr, index) =>
+      Alias(expr, s"partition_by_$index")()
+    }
+  }
+
+  private lazy val subqueryOutputs: Map[Expression, Int] = plan.output.zipWithIndex.toMap
 }
+
+object FunctionTableSubqueryArgumentExpression {
+  /**
+   * Returns a sequence of zero-based integer indexes identifying the values of a Python UDTF's
+   * 'eval' method's *args list that correspond to partitioning columns of the input TABLE argument.
+   */
+  def partitionChildIndexes(udtfArguments: Seq[Expression]): Seq[Int] = {
+    udtfArguments.zipWithIndex.flatMap { case (expr, index) =>
+      expr match {
+        case f: FunctionTableSubqueryArgumentExpression =>
+          f.partitioningExpressionIndexes.map(_ + index)
+        case _ =>
+          Seq()
+      }
+    }
+  }
+}
+
