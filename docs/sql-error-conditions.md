@@ -1563,7 +1563,7 @@ The `<clause>` clause may be used at most once per `<operation>` operation.
 
 [SQLSTATE: 4274K](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
 
-Cannot invoke function `<functionName>` because the parameter named `<parameterName>` is required, but the function call did not supply a value. Please update the function call to supply an argument value (either positionally or by name) and retry the query again.
+Cannot invoke function `<functionName>` because the parameter named `<parameterName>` is required, but the function call did not supply a value. Please update the function call to supply an argument value (either positionally at index `<index>` or by name) and retry the query again.
 
 ### REQUIRES_SINGLE_PART_NAMESPACE
 
@@ -1585,6 +1585,12 @@ Choose a different name, drop or replace the existing function, or add the IF NO
 The function `<routineName>` cannot be found. Verify the spelling and correctness of the schema and catalog.
 If you did not qualify the name with a schema and catalog, verify the current_schema() output, or qualify the name with the correct schema and catalog.
 To tolerate the error on drop use DROP FUNCTION IF EXISTS.
+
+### RULE_ID_NOT_FOUND
+
+[SQLSTATE: 22023](sql-error-conditions-sqlstates.html#class-22-data-exception)
+
+Not found an id for the rule name "`<ruleName>`". Please modify RuleIdCollection.scala if you are adding a new rule.
 
 ### SCALAR_SUBQUERY_IS_IN_GROUP_BY_OR_AGGREGATE_FUNCTION
 
@@ -1778,7 +1784,7 @@ Parameter `<paramIndex>` of function `<functionName>` requires the `<requiredTyp
 
 [SQLSTATE: 4274K](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
 
-Cannot invoke function `<functionName>` because it contains positional argument(s) following named argument(s); please rearrange them so the positional arguments come first and then retry the query again.
+Cannot invoke function `<functionName>` because it contains positional argument(s) following the named argument assigned to `<parameterName>`; please rearrange them so the positional arguments come first and then retry the query again.
 
 ### UNKNOWN_PROTOBUF_MESSAGE_TYPE
 

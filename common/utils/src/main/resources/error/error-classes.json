@@ -809,12 +809,12 @@
     "subClass" : {
       "BOTH_POSITIONAL_AND_NAMED" : {
         "message" : [
-          "A positional argument and named argument both referred to the same parameter."
+          "A positional argument and named argument both referred to the same parameter. Please remove the named argument referring to this parameter."
         ]
       },
       "DOUBLE_NAMED_ARGUMENT_REFERENCE" : {
         "message" : [
-          "More than one named argument referred to the same parameter."
+          "More than one named argument referred to the same parameter. Please assign a value only once."
         ]
       }
     },
@@ -2446,7 +2446,7 @@
   },
   "REQUIRED_PARAMETER_NOT_FOUND" : {
     "message" : [
-      "Cannot invoke function <functionName> because the parameter named <parameterName> is required, but the function call did not supply a value. Please update the function call to supply an argument value (either positionally or by name) and retry the query again."
+      "Cannot invoke function <functionName> because the parameter named <parameterName> is required, but the function call did not supply a value. Please update the function call to supply an argument value (either positionally at index <index> or by name) and retry the query again."
     ],
     "sqlState" : "4274K"
   },
@@ -2470,6 +2470,12 @@
       "To tolerate the error on drop use DROP FUNCTION IF EXISTS."
     ],
     "sqlState" : "42883"
+  },
+  "RULE_ID_NOT_FOUND" : {
+    "message" : [
+      "Not found an id for the rule name \"<ruleName>\". Please modify RuleIdCollection.scala if you are adding a new rule."
+    ],
+    "sqlState" : "22023"
   },
   "SCALAR_SUBQUERY_IS_IN_GROUP_BY_OR_AGGREGATE_FUNCTION" : {
     "message" : [
@@ -2647,7 +2653,7 @@
   },
   "UNEXPECTED_POSITIONAL_ARGUMENT" : {
     "message" : [
-      "Cannot invoke function <functionName> because it contains positional argument(s) following named argument(s); please rearrange them so the positional arguments come first and then retry the query again."
+      "Cannot invoke function <functionName> because it contains positional argument(s) following the named argument assigned to <parameterName>; please rearrange them so the positional arguments come first and then retry the query again."
     ],
     "sqlState" : "4274K"
   },
@@ -5487,11 +5493,6 @@
     "message" : [
       "Once strategy's idempotence is broken for batch <batchName>",
       "<plan>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2175" : {
-    "message" : [
-      "Rule id not found for <ruleName>. Please modify RuleIdCollection.scala if you are adding a new rule."
     ]
   },
   "_LEGACY_ERROR_TEMP_2176" : {
