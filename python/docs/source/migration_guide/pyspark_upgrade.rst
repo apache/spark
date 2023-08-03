@@ -22,7 +22,7 @@ Upgrading PySpark
 Upgrading from PySpark 3.5 to 4.0
 ---------------------------------
 
-* In Spark 4.0, the various datetime attributes of ``DatetimeIndex`` (``day``, ``month``, ``year`` etc.) are now ``int32``, instead of ``int64``.
+* In Spark 4.0, the various datetime attributes of ``DatetimeIndex`` (``day``, ``month``, ``year`` etc.) are now ``int32`` instead of ``int64`` from pandas API on Spark.
 
 
 Upgrading from PySpark 3.3 to 3.4
