@@ -156,11 +156,11 @@ private[connect] class ExecuteHolder(
   }
 
   /**
-   * Close the execution and remove it from the session. Note: It blocks joining the
-   * ExecuteThreadRunner thread, so it assumes that it's called when the execution is ending or
-   * ended. If it is desired to kill the execution, interrupt() should be called first.
+   * Close the execution and remove it from the session. Note: it first interrupts the runner if
+   * it's still running, and it waits for it to finish.
    */
   def close(): Unit = {
+    runner.interrupt()
     runner.join()
     eventsManager.postClosed()
     sessionHolder.removeExecuteHolder(operationId)
