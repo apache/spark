@@ -56,26 +56,14 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
     new ConcurrentHashMap()
 
   private[connect] def createExecuteHolder(request: proto.ExecutePlanRequest): ExecuteHolder = {
-    val operationId = if (request.hasOperationId) {
-      try {
-        UUID.fromString(request.getOperationId).toString
-      } catch {
-        case _: IllegalArgumentException =>
-          throw new SparkSQLException(
-            errorClass = "INVALID_HANDLE.FORMAT",
-            messageParameters = Map("handle" -> request.getOperationId))
-      }
-    } else {
-      UUID.randomUUID().toString
-    }
-    val executePlanHolder = new ExecuteHolder(request, operationId, this)
-    val oldExecute = executions.putIfAbsent(operationId, executePlanHolder)
+    val executeHolder = new ExecuteHolder(request, this)
+    val oldExecute = executions.putIfAbsent(executeHolder.operationId, executeHolder)
     if (oldExecute != null) {
       throw new SparkSQLException(
-        errorClass = "INVALID_HANDLE.ALREADY_EXISTS",
-        messageParameters = Map("handle" -> operationId))
+        errorClass = "INVALID_HANDLE.OPERATION_ALREADY_EXISTS",
+        messageParameters = Map("handle" -> executeHolder.operationId))
     }
-    executePlanHolder
+    executeHolder
   }
 
   private[connect] def executeHolder(operationId: String): Option[ExecuteHolder] = {
@@ -165,6 +153,9 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
     logDebug(s"Expiring session with userId: $userId and sessionId: $sessionId")
     artifactManager.cleanUpResources()
     eventManager.postClosed()
+
+    // Clean up running queries
+    SparkConnectService.streamingSessionManager.cleanupRunningQueries(this)
   }
 
   /**

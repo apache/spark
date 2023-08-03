@@ -205,6 +205,7 @@ jobs:
       HIVE_PROFILE: ${{ matrix.hive }}
       GITHUB_PREV_SHA: ${{ github.event.before }}
       SPARK_LOCAL_IP: localhost
+      SKIP_PACKAGING: true
     steps:
     - name: Checkout Spark repository
       uses: actions/checkout@v3
@@ -239,6 +240,8 @@ jobs:
         key: ${{ matrix.java }}-${{ matrix.hadoop }}-coursier-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
         restore-keys: |
           ${{ matrix.java }}-${{ matrix.hadoop }}-coursier-
+    - name: Free up disk space
+      run: ./dev/free_disk_space
     - name: Install Java ${{ matrix.java }}
       uses: actions/setup-java@v3
       with:
@@ -345,6 +348,8 @@ jobs:
           - ${{ inputs.java }}
         modules:
           - >-
+            pyspark-errors
+          - >-
             pyspark-sql, pyspark-mllib, pyspark-resource, pyspark-testing
           - >-
             pyspark-core, pyspark-streaming, pyspark-ml
@@ -353,7 +358,7 @@ jobs:
           - >-
             pyspark-pandas-slow
           - >-
-            pyspark-connect, pyspark-errors
+            pyspark-connect
           - >-
             pyspark-pandas-connect
           - >-
@@ -366,6 +371,7 @@ jobs:
       SPARK_LOCAL_IP: localhost
       SKIP_UNIDOC: true
       SKIP_MIMA: true
+      SKIP_PACKAGING: true
       METASPACE_SIZE: 1g
     steps:
     - name: Checkout Spark repository
@@ -414,14 +420,21 @@ jobs:
         python3.9 -m pip list
         pypy3 -m pip list
     - name: Install Conda for pip packaging test
+      if: ${{ matrix.modules == 'pyspark-errors' }}
       run: |
         curl -s https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh > miniconda.sh
         bash miniconda.sh -b -p $HOME/miniconda
+        rm miniconda.sh
     # Run the tests.
     - name: Run tests
       env: ${{ fromJSON(inputs.envs) }}
+      shell: 'script -q -e -c "bash {0}"'
       run: |
-        export PATH=$PATH:$HOME/miniconda/bin
+        if [[ "$MODULES_TO_TEST" == "pyspark-errors" ]]; then
+          export PATH=$PATH:$HOME/miniconda/bin
+          export SKIP_PACKAGING=false
+          echo "Python Packaging Tests Enabled!"
+        fi
         ./dev/run-tests --parallelism 1 --modules "$MODULES_TO_TEST"
     - name: Upload coverage to Codecov
       if: fromJSON(inputs.envs).PYSPARK_CODECOV == 'true'
@@ -457,6 +470,7 @@ jobs:
       GITHUB_PREV_SHA: ${{ github.event.before }}
       SPARK_LOCAL_IP: localhost
       SKIP_MIMA: true
+      SKIP_PACKAGING: true
     steps:
     - name: Checkout Spark repository
       uses: actions/checkout@v3
@@ -516,7 +530,7 @@ jobs:
 
   breaking-changes-buf:
     needs: [precondition]
-    if: always() && fromJson(needs.precondition.outputs.required).breaking-changes-buf == 'true'
+    if: (!cancelled()) && fromJson(needs.precondition.outputs.required).breaking-changes-buf == 'true'
     # Change 'branch-3.5' to 'branch-4.0' in master branch after cutting branch-4.0 branch.
     name: Breaking change detection with Buf (branch-3.5)
     runs-on: ubuntu-22.04
@@ -634,6 +648,7 @@ jobs:
         curl -LO https://github.com/bufbuild/buf/releases/download/v1.24.0/buf-Linux-x86_64.tar.gz
         mkdir -p $HOME/buf
         tar -xvzf buf-Linux-x86_64.tar.gz -C $HOME/buf --strip-components 1
+        rm buf-Linux-x86_64.tar.gz
         python3.9 -m pip install 'protobuf==3.20.3' 'mypy-protobuf==3.3.0'
     - name: Python code generation check
       run: if test -f ./dev/connect-check-protos.py; then PATH=$PATH:$HOME/buf/bin PYTHON_EXECUTABLE=python3.9 ./dev/connect-check-protos.py; fi
@@ -911,6 +926,7 @@ jobs:
       SPARK_LOCAL_IP: localhost
       ORACLE_DOCKER_IMAGE_NAME: gvenzl/oracle-xe:21.3.0
       SKIP_MIMA: true
+      SKIP_PACKAGING: true
     steps:
     - name: Checkout Spark repository
       uses: actions/checkout@v3
@@ -1013,6 +1029,7 @@ jobs:
           # TODO(SPARK-44495): Resume to use the latest minikube for k8s-integration-tests.
           curl -LO https://storage.googleapis.com/minikube/releases/v1.30.1/minikube-linux-amd64
           sudo install minikube-linux-amd64 /usr/local/bin/minikube
+          rm minikube-linux-amd64
           # Github Action limit cpu:2, memory: 6947MB, limit to 2U6G for better resource statistic
           minikube start --cpus 2 --memory 6144
       - name: Print K8S pods and nodes info

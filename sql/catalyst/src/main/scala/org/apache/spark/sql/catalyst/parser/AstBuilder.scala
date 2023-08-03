@@ -1564,14 +1564,30 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
     }.getOrElse {
       plan(ctx.query)
     }
-    val partitioning = Option(ctx.tableArgumentPartitioning)
-    if (partitioning.isDefined) {
-      // The PARTITION BY clause is not implemented yet for TABLE arguments to table valued function
-      // calls.
-      operationNotAllowed(
-        "Specifying the PARTITION BY clause for TABLE arguments is not implemented yet", ctx)
+    var withSinglePartition = false
+    var partitionByExpressions = Seq.empty[Expression]
+    var orderByExpressions = Seq.empty[SortOrder]
+    Option(ctx.tableArgumentPartitioning).foreach { p =>
+      if (p.SINGLE != null) {
+        withSinglePartition = true
+      }
+      partitionByExpressions = p.partition.asScala.map(expression).toSeq
+      orderByExpressions = p.sortItem.asScala.map(visitSortItem).toSeq
     }
-    FunctionTableSubqueryArgumentExpression(p)
+    validate(
+      !(withSinglePartition && partitionByExpressions.nonEmpty),
+      message = "WITH SINGLE PARTITION cannot be specified if PARTITION BY is also present",
+      ctx = ctx.tableArgumentPartitioning)
+    validate(
+      !(orderByExpressions.nonEmpty && partitionByExpressions.isEmpty && !withSinglePartition),
+      message = "ORDER BY cannot be specified unless either " +
+        "PARTITION BY or WITH SINGLE PARTITION is also present",
+      ctx = ctx.tableArgumentPartitioning)
+    FunctionTableSubqueryArgumentExpression(
+      plan = p,
+      partitionByExpressions = partitionByExpressions,
+      withSinglePartition = withSinglePartition,
+      orderByExpressions = orderByExpressions)
   }
 
   private def extractFunctionTableNamedArgument(

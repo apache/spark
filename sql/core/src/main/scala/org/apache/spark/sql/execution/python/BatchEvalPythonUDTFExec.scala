@@ -19,14 +19,13 @@ package org.apache.spark.sql.execution.python
 
 import java.io.DataOutputStream
 import java.net.Socket
-import java.nio.charset.StandardCharsets.UTF_8
 
 import scala.collection.JavaConverters._
 
 import net.razorvine.pickle.Unpickler
 
 import org.apache.spark.{JobArtifactSet, SparkEnv, TaskContext}
-import org.apache.spark.api.python.{ChainedPythonFunctions, PythonEvalType}
+import org.apache.spark.api.python.{ChainedPythonFunctions, PythonEvalType, PythonWorkerUtils}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.util.GenericArrayData
@@ -126,8 +125,6 @@ object PythonUDTFRunner {
     }
     dataOut.writeInt(udtf.func.command.length)
     dataOut.write(udtf.func.command.toArray)
-    val schemaBytes = udtf.elementSchema.json.getBytes(UTF_8)
-    dataOut.writeInt(schemaBytes.length)
-    dataOut.write(schemaBytes)
+    PythonWorkerUtils.writeUTF(udtf.elementSchema.json, dataOut)
   }
 }

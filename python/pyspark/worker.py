@@ -22,7 +22,6 @@ import os
 import sys
 import time
 from inspect import currentframe, getframeinfo, getfullargspec
-import importlib
 import json
 from typing import Iterator
 
@@ -37,10 +36,8 @@ import warnings
 import faulthandler
 
 from pyspark.accumulators import _accumulatorRegistry
-from pyspark.broadcast import Broadcast, _broadcastRegistry
 from pyspark.java_gateway import local_connect_and_auth
 from pyspark.taskcontext import BarrierTaskContext, TaskContext
-from pyspark.files import SparkFiles
 from pyspark.resource import ResourceInformation
 from pyspark.rdd import PythonEvalType
 from pyspark.serializers import (
@@ -67,9 +64,15 @@ from pyspark.sql.types import StructType, _parse_datatype_json_string
 from pyspark.util import fail_on_stopiteration, try_simplify_traceback
 from pyspark import shuffle
 from pyspark.errors import PySparkRuntimeError, PySparkTypeError
-
-pickleSer = CPickleSerializer()
-utf8_deserializer = UTF8Deserializer()
+from pyspark.worker_util import (
+    check_python_version,
+    read_command,
+    pickleSer,
+    send_accumulator_updates,
+    setup_broadcasts,
+    setup_spark_files,
+    utf8_deserializer,
+)
 
 
 def report_times(outfile, boot, init, finish):
@@ -77,20 +80,6 @@ def report_times(outfile, boot, init, finish):
     write_long(int(1000 * boot), outfile)
     write_long(int(1000 * init), outfile)
     write_long(int(1000 * finish), outfile)
-
-
-def add_path(path):
-    # worker can be used, so do not add path multiple times
-    if path not in sys.path:
-        # overwrite system packages
-        sys.path.insert(1, path)
-
-
-def read_command(serializer, file):
-    command = serializer._read_with_length(file)
-    if isinstance(command, Broadcast):
-        command = serializer.loads(command.value)
-    return command
 
 
 def chain(f, g):
@@ -615,8 +604,11 @@ def read_udtf(pickleSer, infile, eval_type):
                         },
                     )
 
-                # Check when the dataframe has both rows and columns.
-                if not result.empty or len(result.columns) != 0:
+                # Validate the output schema when the result dataframe has either output
+                # rows or columns. Note that we avoid using `df.empty` here because the
+                # result dataframe may contain an empty row. For example, when a UDTF is
+                # defined as follows: def eval(self): yield tuple().
+                if len(result) > 0 or len(result.columns) > 0:
                     if len(result.columns) != len(return_type):
                         raise PySparkRuntimeError(
                             error_class="UDTF_RETURN_SCHEMA_MISMATCH",
@@ -665,6 +657,19 @@ def read_udtf(pickleSer, infile, eval_type):
             assert return_type.needConversion()
             toInternal = return_type.toInternal
 
+            def verify_and_convert_result(result):
+                # TODO(SPARK-44005): support returning non-tuple values
+                if result is not None and hasattr(result, "__len__"):
+                    if len(result) != len(return_type):
+                        raise PySparkRuntimeError(
+                            error_class="UDTF_RETURN_SCHEMA_MISMATCH",
+                            message_parameters={
+                                "expected": str(len(return_type)),
+                                "actual": str(len(result)),
+                            },
+                        )
+                return toInternal(result)
+
             # Evaluate the function and return a tuple back to the executor.
             def evaluate(*a) -> tuple:
                 res = f(*a)
@@ -676,7 +681,7 @@ def read_udtf(pickleSer, infile, eval_type):
                 else:
                     # If the function returns a result, we map it to the internal representation and
                     # returns the results as a tuple.
-                    return tuple(map(toInternal, res))
+                    return tuple(map(verify_and_convert_result, res))
 
             return evaluate
 
@@ -970,21 +975,6 @@ def read_udfs(pickleSer, infile, eval_type):
     return func, None, ser, ser
 
 
-def check_python_version(infile):
-    """
-    Check the Python version between the running process and the one used to serialize the command.
-    """
-    version = utf8_deserializer.loads(infile)
-    if version != "%d.%d" % sys.version_info[:2]:
-        raise PySparkRuntimeError(
-            error_class="PYTHON_VERSION_MISMATCH",
-            message_parameters={
-                "worker_version": str(sys.version_info[:2]),
-                "driver_version": str(version),
-            },
-        )
-
-
 def main(infile, outfile):
     faulthandler_log_path = os.environ.get("PYTHON_FAULTHANDLER_DIR", None)
     try:
@@ -1074,47 +1064,8 @@ def main(infile, outfile):
         shuffle.DiskBytesSpilled = 0
         _accumulatorRegistry.clear()
 
-        # fetch name of workdir
-        spark_files_dir = utf8_deserializer.loads(infile)
-        SparkFiles._root_directory = spark_files_dir
-        SparkFiles._is_running_on_worker = True
-
-        # fetch names of includes (*.zip and *.egg files) and construct PYTHONPATH
-        add_path(spark_files_dir)  # *.py files that were added will be copied here
-        num_python_includes = read_int(infile)
-        for _ in range(num_python_includes):
-            filename = utf8_deserializer.loads(infile)
-            add_path(os.path.join(spark_files_dir, filename))
-
-        importlib.invalidate_caches()
-
-        # fetch names and values of broadcast variables
-        needs_broadcast_decryption_server = read_bool(infile)
-        num_broadcast_variables = read_int(infile)
-        if needs_broadcast_decryption_server:
-            # read the decrypted data from a server in the jvm
-            port = read_int(infile)
-            auth_secret = utf8_deserializer.loads(infile)
-            (broadcast_sock_file, _) = local_connect_and_auth(port, auth_secret)
-
-        for _ in range(num_broadcast_variables):
-            bid = read_long(infile)
-            if bid >= 0:
-                if needs_broadcast_decryption_server:
-                    read_bid = read_long(broadcast_sock_file)
-                    assert read_bid == bid
-                    _broadcastRegistry[bid] = Broadcast(sock_file=broadcast_sock_file)
-                else:
-                    path = utf8_deserializer.loads(infile)
-                    _broadcastRegistry[bid] = Broadcast(path=path)
-
-            else:
-                bid = -bid - 1
-                _broadcastRegistry.pop(bid)
-
-        if needs_broadcast_decryption_server:
-            broadcast_sock_file.write(b"1")
-            broadcast_sock_file.close()
+        setup_spark_files(infile)
+        setup_broadcasts(infile)
 
         _accumulatorRegistry.clear()
         eval_type = read_int(infile)
@@ -1178,9 +1129,7 @@ def main(infile, outfile):
 
     # Mark the beginning of the accumulators section of the output
     write_int(SpecialLengths.END_OF_DATA_SECTION, outfile)
-    write_int(len(_accumulatorRegistry), outfile)
-    for (aid, accum) in _accumulatorRegistry.items():
-        pickleSer._write_with_length((aid, accum._value), outfile)
+    send_accumulator_updates(outfile)
 
     # check end of stream
     if read_int(infile) == SpecialLengths.END_OF_STREAM:

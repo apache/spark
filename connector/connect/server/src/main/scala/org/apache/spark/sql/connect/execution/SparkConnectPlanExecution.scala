@@ -70,7 +70,6 @@ private[execution] class SparkConnectPlanExecution(executeHolder: ExecuteHolder)
     if (dataframe.queryExecution.observedMetrics.nonEmpty) {
       responseObserver.onNext(createObservedMetricsResponse(request.getSessionId, dataframe))
     }
-    responseObserver.onCompleted()
   }
 
   type Batch = (Array[Byte], Long)
