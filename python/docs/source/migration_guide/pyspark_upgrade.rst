@@ -19,6 +19,12 @@
 Upgrading PySpark
 ==================
 
+Upgrading from PySpark 3.5 to 4.0
+---------------------------------
+
+* In Spark 4.0, the default value of ``regex`` parameter for ``Series.str.replace`` has been changed from ``True`` to ``False`` from pandas API on Spark. Additionally, a single character ``pat`` with ``regex=True`` is now treated as a regular expression instead of a string literal.
+
+
 Upgrading from PySpark 3.3 to 3.4
 ---------------------------------
 
