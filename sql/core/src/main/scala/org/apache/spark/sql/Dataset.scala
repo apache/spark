@@ -2243,13 +2243,21 @@ class Dataset[T] private[sql](
   // This breaks caching, but it's usually ok because it addresses a very specific use case:
   // using union to union many files or partitions.
   private def combineUnions(u: Union): LogicalPlan = {
+    var changed = false
     val newChildren = u.children.flatMap {
       case child: Union if u.byName == child.byName && u.allowMissingCol == child.allowMissingCol =>
+        changed = true
         child.children
       case other =>
         Seq(other)
     }
-    u.withNewChildren(newChildren)
+    if (changed) {
+      val newUnion = Union(newChildren)
+      newUnion.copyTagsFrom(u)
+      newUnion
+    } {
+      else u
+    }
   }
 
   /**
