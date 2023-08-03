@@ -1658,6 +1658,19 @@ class UDTFArrowTestsMixin(BaseUDTFTestsMixin):
             PythonEvalType.SQL_ARROW_TABLE_UDF,
         )
 
+    def test_udtf_arrow_sql_conf(self):
+        class TestUDTF:
+            def eval(self):
+                yield 1,
+
+        self.spark.sql("SET spark.sql.execution.pythonUDTF.arrow.enabled=False")
+        self.assertEqual(udtf(TestUDTF, returnType="x: int").evalType, PythonEvalType.SQL_TABLE_UDF)
+        self.spark.sql("SET spark.sql.execution.pythonUDTF.arrow.enabled=True")
+        self.assertEqual(
+            udtf(TestUDTF, returnType="x: int").evalType, PythonEvalType.SQL_ARROW_TABLE_UDF
+        )
+        self.spark.sql("RESET spark.sql.execution.pythonUDTF.arrow.enabled")
+
     def test_udtf_eval_returning_non_tuple(self):
         class TestUDTF:
             def eval(self, a: int):
