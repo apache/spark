@@ -30,10 +30,4 @@ rm -rf /__t/CodeQL
 rm -rf /__t/go
 rm -rf /__t/node
 
-apt-get clean
-apt-get update
-apt-get remove --purge -y libgl1-mesa-dri
-apt-get autoremove --purge -y
-apt-get clean
-
 df -h
