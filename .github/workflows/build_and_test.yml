@@ -414,6 +414,7 @@ jobs:
       run: |
         dpkg-query -Wf '${Installed-Size}\t${Package}\n' | sort -n | tail -n 100
         df -h
+        echo "Removing large directories"
         rm -rf /__t/CodeQL || echo "fail to delete /__t/CodeQL"
         rm -rf /__t/go || echo "fail to delete /__t/go"
         rm -rf /__t/node || echo "fail to delete /__t/node"
