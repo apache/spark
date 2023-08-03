@@ -20,7 +20,7 @@ import java.util.UUID
 
 import scala.util.control.NonFatal
 
-import io.grpc.{ManagedChannel, StatusRuntimeException}
+import io.grpc.ManagedChannel
 import io.grpc.stub.StreamObserver
 
 import org.apache.spark.connect.proto
@@ -119,14 +119,14 @@ class ExecutePlanResponseReattachableIterator(
       // Record last returned response, to know where to restart in case of reattach.
       lastReturnedResponseId = Some(ret.getResponseId)
       if (ret.hasResultComplete) {
-        release()
+        releaseAll()
       } else {
         releaseUntil(lastReturnedResponseId.get)
       }
       ret
     } catch {
-      case ex: StatusRuntimeException =>
-        release() // ReleaseExecute on server after error.
+      case NonFatal(ex) =>
+        releaseAll() // ReleaseExecute on server after error.
         throw ex
     }
   }
@@ -163,8 +163,8 @@ class ExecutePlanResponseReattachableIterator(
         hasNext
       }
     } catch {
-      case ex: StatusRuntimeException =>
-        release() // ReleaseExecute on server after error.
+      case NonFatal(ex) =>
+        releaseAll() // ReleaseExecute on server after error.
         throw ex
     }
   }
@@ -189,7 +189,7 @@ class ExecutePlanResponseReattachableIterator(
    * This will send an asynchronous RPC which will not block this. The client continues executing,
    * and if the release fails, server is equipped to deal with abandoned executions.
    */
-  private def release(): Unit = {
+  private def releaseAll(): Unit = {
     if (!resultComplete) {
       val request = createReleaseExecuteRequest(None)
       rawAsyncStub.releaseExecute(request, createRetryingReleaseExecuteResponseObserer(request))
