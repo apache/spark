@@ -194,7 +194,7 @@ object UserDefinedPythonTableFunction {
       envVars.put("SPARK_SIMPLIFIED_TRACEBACK", "1")
     }
     workerMemoryMb.foreach { memoryMb =>
-      envVars.put("PYSPARK_TVF_ANALYZE_MEMORY_MB", memoryMb.toString)
+      envVars.put("PYSPARK_UDTF_ANALYZE_MEMORY_MB", memoryMb.toString)
     }
     envVars.put("SPARK_AUTH_SOCKET_TIMEOUT", authSocketTimeout.toString)
     envVars.put("SPARK_BUFFER_SIZE", bufferSize.toString)

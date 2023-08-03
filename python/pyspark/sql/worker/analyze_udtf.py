@@ -98,7 +98,7 @@ def main(infile: IO, outfile: IO) -> None:
     try:
         check_python_version(infile)
 
-        memory_limit_mb = int(os.environ.get("PYSPARK_TVF_ANALYZE_MEMORY_MB", "-1"))
+        memory_limit_mb = int(os.environ.get("PYSPARK_UDTF_ANALYZE_MEMORY_MB", "-1"))
         setup_memory_limits(memory_limit_mb)
 
         setup_spark_files(infile)
