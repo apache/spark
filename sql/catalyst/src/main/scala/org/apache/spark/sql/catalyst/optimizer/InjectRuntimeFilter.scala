@@ -125,14 +125,14 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
    */
   private def extractSelectiveFilterOverScan(
       plan: LogicalPlan,
-      filterCreationSideKey: Expression): Option[LogicalPlan] = {
-    @tailrec
+      filterCreationSideKey: Expression): Option[(Expression, LogicalPlan)] = {
     def extract(
         p: LogicalPlan,
         predicateReference: AttributeSet,
         hasHitFilter: Boolean,
         hasHitSelectiveFilter: Boolean,
-        currentPlan: LogicalPlan): Option[LogicalPlan] = p match {
+        currentPlan: LogicalPlan,
+        targetCreationSideExpr: Expression): Option[(Expression, LogicalPlan)] = p match {
       case Project(projectList, child) if hasHitFilter =>
         // We need to make sure all expressions referenced by filter predicates are simple
         // expressions.
@@ -143,41 +143,62 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
             referencedExprs.map(_.references).foldLeft(AttributeSet.empty)(_ ++ _),
             hasHitFilter,
             hasHitSelectiveFilter,
-            currentPlan)
+            currentPlan,
+            targetCreationSideExpr)
         } else {
           None
         }
       case Project(_, child) =>
         assert(predicateReference.isEmpty && !hasHitSelectiveFilter)
-        extract(child, predicateReference, hasHitFilter, hasHitSelectiveFilter, currentPlan)
+        extract(child, predicateReference, hasHitFilter, hasHitSelectiveFilter, currentPlan,
+          targetCreationSideExpr)
       case Filter(condition, child) if isSimpleExpression(condition) =>
         extract(
           child,
           predicateReference ++ condition.references,
           hasHitFilter = true,
           hasHitSelectiveFilter = hasHitSelectiveFilter || isLikelySelective(condition),
-          currentPlan)
-      case ExtractEquiJoinKeys(_, _, _, _, _, left, right, _) =>
+          currentPlan,
+          targetCreationSideExpr)
+      case ExtractEquiJoinKeys(_, lkeys, rkeys, _, _, left, right, _) =>
         // Runtime filters use one side of the [[Join]] to build a set of join key values and prune
         // the other side of the [[Join]]. It's also OK to use a superset of the join key values
         // (ignore null values) to do the pruning.
         if (left.output.exists(_.semanticEquals(filterCreationSideKey))) {
           extract(left, AttributeSet.empty,
-            hasHitFilter = false, hasHitSelectiveFilter = false, currentPlan = left)
+            hasHitFilter = false, hasHitSelectiveFilter = false, currentPlan = left,
+            targetCreationSideExpr = targetCreationSideExpr).orElse {
+            // We can also extract from the right side if the join keys are transitive.
+            lkeys.zip(rkeys).find(_._1.semanticEquals(targetCreationSideExpr)).map(_._2)
+              .flatMap { passedFilterCreationSideExp =>
+                extract(right, AttributeSet.empty,
+                  hasHitFilter = false, hasHitSelectiveFilter = false, currentPlan = right,
+                  targetCreationSideExpr = passedFilterCreationSideExp)
+              }
+          }
         } else if (right.output.exists(_.semanticEquals(filterCreationSideKey))) {
           extract(right, AttributeSet.empty,
-            hasHitFilter = false, hasHitSelectiveFilter = false, currentPlan = right)
+            hasHitFilter = false, hasHitSelectiveFilter = false, currentPlan = right,
+            targetCreationSideExpr = targetCreationSideExpr).orElse {
+            // We can also extract from the right side if the join keys are transitive.
+            rkeys.zip(lkeys).find(_._1.semanticEquals(targetCreationSideExpr)).map(_._2)
+              .flatMap { passedFilterCreationSideExp =>
+                extract(left, AttributeSet.empty,
+                  hasHitFilter = false, hasHitSelectiveFilter = false, currentPlan = left,
+                  targetCreationSideExpr = passedFilterCreationSideExp)
+              }
+          }
         } else {
           None
         }
       case _: LeafNode if hasHitSelectiveFilter =>
-        Some(currentPlan)
+        Some((targetCreationSideExpr, currentPlan))
       case _ => None
     }
 
     if (!plan.isStreaming) {
-      extract(plan, AttributeSet.empty,
-        hasHitFilter = false, hasHitSelectiveFilter = false, currentPlan = plan)
+      extract(plan, AttributeSet.empty, hasHitFilter = false, hasHitSelectiveFilter = false,
+        currentPlan = plan, targetCreationSideExpr = filterCreationSideExp)
     } else {
       None
     }
@@ -239,7 +260,7 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
       filterApplicationSide: LogicalPlan,
       filterCreationSide: LogicalPlan,
       filterApplicationSideKey: Expression,
-      filterCreationSideKey: Expression): Option[LogicalPlan] = {
+      filterCreationSideKey: Expression): Option[(Expression, LogicalPlan)] = {
     if (findExpressionAndTrackLineageDown(
       filterApplicationSideKey, filterApplicationSide).isDefined &&
       satisfyByteSizeRequirement(filterApplicationSide)) {
@@ -331,8 +352,8 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
             val hasShuffle = isProbablyShuffleJoin(left, right, hint)
             if (canPruneLeft(joinType) && (hasShuffle || probablyHasShuffle(left))) {
               extractBeneficialFilterCreatePlan(left, right, l, r).foreach {
-                filterCreationSidePlan =>
-                  newLeft = injectFilter(l, newLeft, r, filterCreationSidePlan)
+                case (filterCreationSideExp, filterCreationSidePlan) =>
+                  newLeft = injectFilter(l, newLeft, filterCreationSideExp, filterCreationSidePlan)
               }
             }
             // Did we actually inject on the left? If not, try on the right
@@ -341,8 +362,9 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
             if (newLeft.fastEquals(oldLeft) && canPruneRight(joinType) &&
               (hasShuffle || probablyHasShuffle(right))) {
               extractBeneficialFilterCreatePlan(right, left, r, l).foreach {
-                filterCreationSidePlan =>
-                  newRight = injectFilter(r, newRight, l, filterCreationSidePlan)
+                case (filterCreationSideExp, filterCreationSidePlan) =>
+                  newRight = injectFilter(
+                    r, newRight, filterCreationSideExp, filterCreationSidePlan)
               }
             }
             if (!newLeft.fastEquals(oldLeft) || !newRight.fastEquals(oldRight)) {
