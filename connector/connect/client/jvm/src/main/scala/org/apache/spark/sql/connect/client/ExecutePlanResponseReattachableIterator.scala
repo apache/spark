@@ -52,7 +52,7 @@ class ExecutePlanResponseReattachableIterator(
     request: proto.ExecutePlanRequest,
     channel: ManagedChannel,
     retryPolicy: GrpcRetryHandler.RetryPolicy)
-    extends AutoConsumableIterator[proto.ExecutePlanResponse]
+    extends CloseableIterator[proto.ExecutePlanResponse]
     with Logging {
 
   val operationId = if (request.hasOperationId) {
@@ -167,6 +167,10 @@ class ExecutePlanResponseReattachableIterator(
         releaseAll() // ReleaseExecute on server after error.
         throw ex
     }
+  }
+
+  override def close(): Unit = {
+    // releaseAll() // TODO rebase after https://github.com/apache/spark/pull/42304
   }
 
   /**

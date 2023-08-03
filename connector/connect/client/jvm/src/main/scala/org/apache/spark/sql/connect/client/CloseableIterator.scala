@@ -18,7 +18,3 @@
 package org.apache.spark.sql.connect.client
 
 private[sql] trait CloseableIterator[E] extends Iterator[E] with AutoCloseable
-
-private[sql] trait AutoConsumableIterator[E] extends CloseableIterator[E] {
-  def close(): Unit = this.toSeq.foreach(_ => ())
-}
