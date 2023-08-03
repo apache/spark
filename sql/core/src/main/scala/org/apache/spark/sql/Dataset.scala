@@ -42,7 +42,6 @@ import org.apache.spark.sql.catalyst.catalog.HiveTableRelation
 import org.apache.spark.sql.catalyst.encoders._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.json.{JacksonGenerator, JSONOptions}
-import org.apache.spark.sql.catalyst.optimizer.CombineUnions
 import org.apache.spark.sql.catalyst.parser.{ParseException, ParserUtils}
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -2241,6 +2240,18 @@ class Dataset[T] private[sql](
     Offset(Literal(n), logicalPlan)
   }
 
+  // This breaks caching, but it's usually ok because it addresses a very specific use case:
+  // using union to union many files or partitions.
+  private def combineUnions(u: Union): LogicalPlan = {
+    val newChildren = u.children.flatMap {
+      case child: Union if u.byName == child.byName && u.allowMissingCol == child.allowMissingCol =>
+        child.children
+      case other =>
+        Seq(other)
+    }
+    u.withNewChildren(newChildren)
+  }
+
   /**
    * Returns a new Dataset containing union of rows in this Dataset and another Dataset.
    *
@@ -2272,9 +2283,7 @@ class Dataset[T] private[sql](
    * @since 2.0.0
    */
   def union(other: Dataset[T]): Dataset[T] = withSetOperator {
-    // This breaks caching, but it's usually ok because it addresses a very specific use case:
-    // using union to union many files or partitions.
-    CombineUnions(Union(logicalPlan, other.logicalPlan))
+    combineUnions(Union(logicalPlan, other.logicalPlan))
   }
 
   /**
@@ -2366,9 +2375,7 @@ class Dataset[T] private[sql](
    * @since 3.1.0
    */
   def unionByName(other: Dataset[T], allowMissingColumns: Boolean): Dataset[T] = withSetOperator {
-    // This breaks caching, but it's usually ok because it addresses a very specific use case:
-    // using union to union many files or partitions.
-    CombineUnions(Union(logicalPlan :: other.logicalPlan :: Nil, true, allowMissingColumns))
+    combineUnions(Union(logicalPlan :: other.logicalPlan :: Nil, true, allowMissingColumns))
   }
 
   /**
