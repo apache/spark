@@ -3506,21 +3506,7 @@
         <module>sql/hive-thriftserver</module>
       </modules>
     </profile>
-
-    <profile>
-      <id>iceberg</id>
-      <dependencies>
-        <dependency>
-          <groupId>org.apache.iceberg</groupId>
-          <artifactId>iceberg-spark-runtime</artifactId>
-          <version>3.3.2.7.2.18.0-SNAPSHOT</version>
-        </dependency>
-      </dependencies>
-      <modules>
-        <module>sql/iceberg</module>
-      </modules>
-    </profile>
-
+    
     <profile>
       <id>hadoop-cloud</id>
       <modules>

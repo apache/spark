@@ -100,11 +100,6 @@
       <artifactId>orc-core</artifactId>
     </dependency>
     <dependency>
-      <groupId>com.github.ben-manes.caffeine</groupId>
-      <artifactId>caffeine</artifactId>
-      <version>2.8.4</version>
-    </dependency>
-    <dependency>
       <groupId>org.apache.orc</groupId>
       <artifactId>orc-mapreduce</artifactId>
     </dependency>
