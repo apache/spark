@@ -1516,7 +1516,7 @@ class StringMethods:
         n: int = -1,
         case: Optional[bool] = None,
         flags: int = 0,
-        regex: bool = True,
+        regex: bool = False,
     ) -> "ps.Series":
         """
         Replace occurrences of pattern/regex in the Series with some other
@@ -1605,10 +1605,6 @@ class StringMethods:
         2    None
         dtype: object
         """
-        warnings.warn(
-            "Default value of `regex` will be changed to `False` instead of `True` in 4.0.0.",
-            FutureWarning,
-        )
 
         def pandas_replace(s) -> ps.Series[str]:  # type: ignore[no-untyped-def]
             return s.str.replace(pat, repl, n=n, case=case, flags=flags, regex=regex)
@@ -2027,7 +2023,7 @@ class StringMethods:
 
         @pandas_udf(returnType=return_type)  # type: ignore[call-overload]
         def pudf(s: pd.Series) -> pd.Series:
-            return s.str.split(pat, n)
+            return s.str.split(pat, n=n)
 
         psser = self._data._with_new_scol(
             pudf(self._data.spark.column).alias(self._data._internal.data_spark_column_names[0]),
@@ -2174,7 +2170,7 @@ class StringMethods:
 
         @pandas_udf(returnType=return_type)  # type: ignore[call-overload]
         def pudf(s: pd.Series) -> pd.Series:
-            return s.str.rsplit(pat, n)
+            return s.str.rsplit(pat, n=n)
 
         psser = self._data._with_new_scol(
             pudf(self._data.spark.column).alias(self._data._internal.data_spark_column_names[0]),
