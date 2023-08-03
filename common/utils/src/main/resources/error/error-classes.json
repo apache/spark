@@ -2412,6 +2412,12 @@
     ],
     "sqlState" : "42883"
   },
+  "RULE_ID_NOT_FOUND" : {
+    "message" : [
+      "Not found an id for the rule name \"<ruleName>\". Please modify RuleIdCollection.scala if you are adding a new rule."
+    ],
+    "sqlState" : "22023"
+  },
   "SCALAR_SUBQUERY_IS_IN_GROUP_BY_OR_AGGREGATE_FUNCTION" : {
     "message" : [
       "The correlated scalar subquery '<sqlExpr>' is neither present in GROUP BY, nor in an aggregate function. Add it to GROUP BY using ordinal position or wrap it in `first()` (or `first_value`) if you don't care which value you get."
@@ -5423,11 +5429,6 @@
     "message" : [
       "Once strategy's idempotence is broken for batch <batchName>",
       "<plan>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2175" : {
-    "message" : [
-      "Rule id not found for <ruleName>. Please modify RuleIdCollection.scala if you are adding a new rule."
     ]
   },
   "_LEGACY_ERROR_TEMP_2176" : {
