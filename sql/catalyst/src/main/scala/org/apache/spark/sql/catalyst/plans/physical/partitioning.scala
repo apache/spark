@@ -355,6 +355,13 @@ case class KeyGroupedPartitioning(
 
   override def createShuffleSpec(distribution: ClusteredDistribution): ShuffleSpec =
     KeyGroupedShuffleSpec(this, distribution)
+
+  def uniquePartitionValues: Seq[InternalRow] = {
+    partitionValues
+        .map(InternalRowComparableWrapper(_, expressions))
+        .distinct
+        .map(_.row)
+  }
 }
 
 object KeyGroupedPartitioning {
