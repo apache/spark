@@ -75,8 +75,9 @@ private[sql] class SparkConnectClient(
   /**
    * Execute the plan and return response iterator.
    *
-   * It returns an open iterator. The caller needs to ensure that this iterator is fully consumed,
-   * otherwise resources held by a re-attachable query may be left dangling until server timeout.
+   * It returns CloseableIterator. For resource management it is better to close it once you are
+   * done. If you don't close it, it and the underlying data will be cleaned up once the iterator
+   * is garbage collected.
    */
   def execute(plan: proto.Plan): CloseableIterator[proto.ExecutePlanResponse] = {
     artifactManager.uploadAllClassFileArtifacts()

@@ -170,7 +170,7 @@ class ExecutePlanResponseReattachableIterator(
   }
 
   override def close(): Unit = {
-    // releaseAll() // TODO rebase after https://github.com/apache/spark/pull/42304
+    releaseAll()
   }
 
   /**

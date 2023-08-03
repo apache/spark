@@ -28,17 +28,19 @@ private[sql] trait CloseableIterator[E] extends Iterator[E] with AutoCloseable {
 }
 
 private[sql] object CloseableIterator {
+
   /**
    * Wrap iterator to get CloseeableIterator, if it wasn't closeable already.
    */
   def apply[T](iterator: Iterator[T]): CloseableIterator[T] = iterator match {
     case closeable: CloseableIterator[T] => closeable
-    case _ => new CloseableIterator[T] {
-      override def next(): T = iterator.next()
+    case _ =>
+      new CloseableIterator[T] {
+        override def next(): T = iterator.next()
 
-      override def hasNext(): Boolean = iterator.hasNext
+        override def hasNext(): Boolean = iterator.hasNext
 
-      override def close() = { /* empty */ }
-    }
+        override def close() = { /* empty */ }
+      }
   }
 }
