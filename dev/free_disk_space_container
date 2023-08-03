@@ -26,12 +26,12 @@ dpkg-query -Wf '${Installed-Size}\t${Package}\n' | sort -n | tail -n 100
 df -h
 
 echo "Removing large packages"
-sudo rm -rf /__t/CodeQL
-sudo rm -rf /__t/go
-sudo rm -rf /__t/node
+rm -rf /__t/CodeQL
+rm -rf /__t/go
+rm -rf /__t/node
 
-sudo apt-get remove --purge -y libgl1-mesa-dri
-sudo apt-get autoremove --purge -y
-sudo apt-get clean
+apt-get remove --purge -y libgl1-mesa-dri
+apt-get autoremove --purge -y
+apt-get clean
 
 df -h
