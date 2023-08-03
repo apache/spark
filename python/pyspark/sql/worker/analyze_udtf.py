@@ -40,6 +40,7 @@ from pyspark.worker_util import (
     pickleSer,
     send_accumulator_updates,
     setup_broadcasts,
+    setup_memory_limits,
     setup_spark_files,
     utf8_deserializer,
 )
@@ -96,6 +97,10 @@ def main(infile: IO, outfile: IO) -> None:
     """
     try:
         check_python_version(infile)
+
+        memory_limit_mb = int(os.environ.get("PYSPARK_TVF_ANALYZE_MEMORY_MB", "-1"))
+        setup_memory_limits(memory_limit_mb)
+
         setup_spark_files(infile)
         setup_broadcasts(infile)
 
