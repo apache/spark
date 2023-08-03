@@ -1093,7 +1093,7 @@ class MapOutputTrackerSuite extends SparkFunSuite with LocalSparkContext {
     assert(shuffleStatus.getMapStatus(0).isEmpty)
   }
 
-  test("SPARK-44658: getMapOutputLocation should not throw NPE") {
+  test("SPARK-44661: getMapOutputLocation should not throw NPE") {
     val rpcEnv = createRpcEnv("test")
     val tracker = newTrackerMaster()
     try {
