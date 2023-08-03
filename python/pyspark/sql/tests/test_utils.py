@@ -727,7 +727,7 @@ class UtilsTestsMixin:
             error_class="INVALID_TYPE_DF_EQUALITY_ARG",
             message_parameters={
                 "expected_type": Union[DataFrame, ps.DataFrame, List[Row]],
-                "arg_name": "actual",
+                "arg_name": "expected",
                 "actual_type": None,
             },
         )
@@ -740,7 +740,7 @@ class UtilsTestsMixin:
             error_class="INVALID_TYPE_DF_EQUALITY_ARG",
             message_parameters={
                 "expected_type": Union[DataFrame, ps.DataFrame, List[Row]],
-                "arg_name": "actual",
+                "arg_name": "expected",
                 "actual_type": None,
             },
         )
