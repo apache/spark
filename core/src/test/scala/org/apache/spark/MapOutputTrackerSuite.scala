@@ -1083,4 +1083,13 @@ class MapOutputTrackerSuite extends SparkFunSuite with LocalSparkContext {
       rpcEnv.shutdown()
     }
   }
+
+  test("SPARK-44658: ShuffleStatus.getMapStatus should return None") {
+    val bmID = BlockManagerId("a", "hostA", 1000)
+    val mapStatus = MapStatus(bmID, Array(1000L, 10000L), mapTaskId = 0)
+    val shuffleStatus = new ShuffleStatus(1000)
+    shuffleStatus.addMapOutput(mapIndex = 1, mapStatus)
+    shuffleStatus.removeMapOutput(mapIndex = 1, bmID)
+    assert(shuffleStatus.getMapStatus(0).isEmpty)
+  }
 }
