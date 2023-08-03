@@ -411,14 +411,7 @@ jobs:
         restore-keys: |
           pyspark-coursier-
     - name: Free up disk space
-      run: |
-        dpkg-query -Wf '${Installed-Size}\t${Package}\n' | sort -n | tail -n 100
-        df -h
-        echo "Removing large directories"
-        rm -rf /__t/CodeQL || echo "fail to delete /__t/CodeQL"
-        rm -rf /__t/go || echo "fail to delete /__t/go"
-        rm -rf /__t/node || echo "fail to delete /__t/node"
-        df -h
+      run: ./dev/free_disk_space_container
     - name: Install Java ${{ matrix.java }}
       uses: actions/setup-java@v3
       with:
@@ -517,6 +510,8 @@ jobs:
         key: sparkr-coursier-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
         restore-keys: |
           sparkr-coursier-
+    - name: Free up disk space
+      run: ./dev/free_disk_space_container
     - name: Install Java ${{ inputs.java }}
       uses: actions/setup-java@v3
       with:
@@ -630,6 +625,8 @@ jobs:
       with:
         distribution: temurin
         java-version: 8
+    - name: Free up disk space
+      run: ./dev/free_disk_space_container
     - name: License test
       run: ./dev/check-license
     - name: Dependencies test
