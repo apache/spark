@@ -766,6 +766,14 @@ def _create_converter_from_pandas(
         (default ``True``)
     ignore_unexpected_complex_type_values : bool, optional
         Whether ignore the case where unexpected values are given for complex types.
+        If ``False``, each complex type expects:
+
+        * array type: :class:`Iterable`
+        * map type: :class:`dict`
+        * struct type: :class:`dict` or :class:`tuple`
+
+        and raise an AssertionError when the given value is not the expected type.
+        If ``True``, just ignore and return the give value.
         (default ``False``)
 
     Returns
