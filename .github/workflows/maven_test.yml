@@ -190,7 +190,7 @@ jobs:
           elif [[ "$MODULES_TO_TEST" == "sql#hive-thriftserver" || "$MODULES_TO_TEST" == *"repl"* ]]; then
             # To avoid a compilation loop, for the `sql/hive-thriftserver` module, run `clean install` instead
             # SPARK-44600: In order to force the `repl` module to use the network-common.jar for testing instead of using the classes directory, run `clean install` instead
-            ./build/mvn $MAVEN_CLI_OPTS -pl sql/hive-thriftserver -Phive -Phive-thriftserver -Djava.version=${JAVA_VERSION/-ea} clean install -fae
+            ./build/mvn $MAVEN_CLI_OPTS -pl "$TEST_MODULES" -Phive -Phive-thriftserver -Djava.version=${JAVA_VERSION/-ea} clean install -fae
           else
             ./build/mvn $MAVEN_CLI_OPTS -pl "$TEST_MODULES" -Pyarn -Pmesos -Pkubernetes -Pvolcano -Phive -Phive-thriftserver -Pspark-ganglia-lgpl -Phadoop-cloud -Djava.version=${JAVA_VERSION/-ea} test -fae
           fi
