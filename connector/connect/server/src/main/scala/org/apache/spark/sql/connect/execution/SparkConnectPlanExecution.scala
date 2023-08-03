@@ -100,7 +100,8 @@ private[execution] class SparkConnectPlanExecution(executeHolder: ExecuteHolder)
     val maxRecordsPerBatch = spark.sessionState.conf.arrowMaxRecordsPerBatch
     val timeZoneId = spark.sessionState.conf.sessionLocalTimeZone
     // Conservatively sets it 70% because the size is not accurate but estimated.
-    val maxBatchSize = (SparkEnv.get.conf.get(CONNECT_GRPC_ARROW_MAX_BATCH_SIZE) * 0.7).toLong
+    val maxBatchSize =
+      (SparkEnv.get.conf.get(CONNECT_GRPC_ARROW_MAX_BATCH_SIZE) * 0.7).toLong * 1024L * 1024L
 
     val converter = rowToArrowConverter(
       schema,
