@@ -18,10 +18,11 @@
 User-defined table function related classes and functions
 """
 from dataclasses import dataclass
+from functools import wraps
 import inspect
 import sys
 import warnings
-from typing import Any, Iterable, Iterator, Type, TYPE_CHECKING, Optional, Union
+from typing import Any, Iterable, Iterator, Type, TYPE_CHECKING, Optional, Union, Callable
 
 from py4j.java_gateway import JavaObject
 
@@ -143,8 +144,10 @@ def _vectorize_udtf(cls: Type) -> Type:
     """Vectorize a Python UDTF handler class."""
     import pandas as pd
 
-    def wrap_func(f):
-        def evaluate(*a):
+    # Wrap the exception thrown from the UDTF in a PySparkRuntimeError.
+    def wrap_func(f: Callable[..., Any]) -> Callable[..., Any]:
+        @wraps(f)
+        def evaluate(*a: Any) -> Any:
             try:
                 return f(*a)
             except Exception as e:
@@ -185,8 +188,9 @@ def _vectorize_udtf(cls: Type) -> Type:
                         )
                     yield pd.DataFrame(res)
 
-        def terminate(self) -> Iterator[pd.DataFrame]:
-            if hasattr(self.func, "terminate"):
+        if hasattr(cls, "terminate"):
+
+            def terminate(self) -> Iterator[pd.DataFrame]:
                 yield pd.DataFrame(wrap_func(self.func.terminate)())
 
     vectorized_udtf = VectorizedUDTF
