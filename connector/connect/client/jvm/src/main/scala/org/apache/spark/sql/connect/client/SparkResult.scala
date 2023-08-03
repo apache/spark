@@ -34,7 +34,7 @@ import org.apache.spark.sql.types.{DataType, StructType}
 import org.apache.spark.sql.util.ArrowUtils
 
 private[sql] class SparkResult[T](
-    responses: Iterator[proto.ExecutePlanResponse],
+    responses: CloseableIterator[proto.ExecutePlanResponse],
     allocator: BufferAllocator,
     encoder: AgnosticEncoder[T],
     timeZoneId: String)
@@ -198,17 +198,17 @@ private[sql] class SparkResult[T](
   /**
    * Returns an iterator over the contents of the result.
    */
-  def iterator: java.util.Iterator[T] with AutoCloseable =
+  def iterator: CloseableIterator[T] =
     buildIterator(destructive = false)
 
   /**
    * Returns an destructive iterator over the contents of the result.
    */
-  def destructiveIterator: java.util.Iterator[T] with AutoCloseable =
+  def destructiveIterator: CloseableIterator[T] =
     buildIterator(destructive = true)
 
-  private def buildIterator(destructive: Boolean): java.util.Iterator[T] with AutoCloseable = {
-    new java.util.Iterator[T] with AutoCloseable {
+  private def buildIterator(destructive: Boolean): CloseableIterator[T] = {
+    new CloseableIterator[T] {
       private[this] var iterator: CloseableIterator[T] = _
 
       private def initialize(): Unit = {
@@ -296,15 +296,12 @@ private[sql] class SparkResult[T](
   }
 }
 
-private[client] class SparkResultCloseable(resultMap: mutable.Map[Int, (Long, Seq[ArrowMessage])],
-                                           responses: Iterator[proto.ExecutePlanResponse])
+private[client] class SparkResultCloseable(
+    resultMap: mutable.Map[Int, (Long, Seq[ArrowMessage])],
+    responses: CloseableIterator[proto.ExecutePlanResponse])
     extends AutoCloseable {
   override def close(): Unit = {
     resultMap.values.foreach(_._2.foreach(_.close()))
-
-    responses match {
-      case closeable: CloseableIterator[proto.ExecutePlanResponse] =>
-        closeable.close()
-    }
+    responses.close()
   }
 }

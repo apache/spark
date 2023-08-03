@@ -29,16 +29,17 @@ private[client] class CustomSparkConnectBlockingStub(
   private val stub = SparkConnectServiceGrpc.newBlockingStub(channel)
   private val retryHandler = new GrpcRetryHandler(retryPolicy)
 
-  def executePlan(request: ExecutePlanRequest): Iterator[ExecutePlanResponse] = {
+  def executePlan(request: ExecutePlanRequest): CloseableIterator[ExecutePlanResponse] = {
     GrpcExceptionConverter.convert {
       GrpcExceptionConverter.convertIterator[ExecutePlanResponse](
-        retryHandler.RetryIterator[ExecutePlanRequest, ExecutePlanResponse]
-          (request, (stub.executePlan(_).asScala)))
+        retryHandler.RetryIterator[ExecutePlanRequest, ExecutePlanResponse](
+          request,
+          r => CloseableIterator(stub.executePlan(r).asScala)))
     }
   }
 
   def executePlanReattachable(
-      request: ExecutePlanRequest): Iterator[ExecutePlanResponse] = {
+      request: ExecutePlanRequest): CloseableIterator[ExecutePlanResponse] = {
     GrpcExceptionConverter.convert {
       GrpcExceptionConverter.convertIterator[ExecutePlanResponse](
         // Don't use retryHandler - own retry handling is inside.

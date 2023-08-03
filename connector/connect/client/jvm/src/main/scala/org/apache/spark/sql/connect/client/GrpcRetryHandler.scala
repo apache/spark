@@ -45,8 +45,8 @@ private[client] class GrpcRetryHandler(private val retryPolicy: GrpcRetryHandler
    * @tparam U
    *   The type of the response.
    */
-  class RetryIterator[T, U](request: T, call: T => Iterator[U])
-      extends Iterator[U] {
+  class RetryIterator[T, U](request: T, call: T => CloseableIterator[U])
+      extends CloseableIterator[U] {
 
     private var opened = false // we only retry if it fails on first call when using the iterator
     private var iterator = call(request)
@@ -77,10 +77,14 @@ private[client] class GrpcRetryHandler(private val retryPolicy: GrpcRetryHandler
     override def hasNext: Boolean = {
       retryIter(_.hasNext)
     }
+
+    override def close(): Unit = {
+      iterator.close()
+    }
   }
 
   object RetryIterator {
-    def apply[T, U](request: T, call: T => Iterator[U]): RetryIterator[T, U] =
+    def apply[T, U](request: T, call: T => CloseableIterator[U]): RetryIterator[T, U] =
       new RetryIterator(request, call)
   }
 

@@ -17,4 +17,28 @@
 
 package org.apache.spark.sql.connect.client
 
-private[sql] trait CloseableIterator[E] extends Iterator[E] with AutoCloseable
+private[sql] trait CloseableIterator[E] extends Iterator[E] with AutoCloseable { self =>
+  def asJava: java.util.Iterator[E] = new java.util.Iterator[E] with AutoCloseable {
+    override def next() = self.next()
+
+    override def hasNext() = self.hasNext
+
+    override def close() = self.close()
+  }
+}
+
+private[sql] object CloseableIterator {
+  /**
+   * Wrap iterator to get CloseeableIterator, if it wasn't closeable already.
+   */
+  def apply[T](iterator: Iterator[T]): CloseableIterator[T] = iterator match {
+    case closeable: CloseableIterator[T] => closeable
+    case _ => new CloseableIterator[T] {
+      override def next(): T = iterator.next()
+
+      override def hasNext(): Boolean = iterator.hasNext
+
+      override def close() = { /* empty */ }
+    }
+  }
+}

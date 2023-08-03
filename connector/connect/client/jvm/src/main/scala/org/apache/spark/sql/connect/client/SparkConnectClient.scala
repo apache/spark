@@ -78,7 +78,7 @@ private[sql] class SparkConnectClient(
    * It returns an open iterator. The caller needs to ensure that this iterator is fully consumed,
    * otherwise resources held by a re-attachable query may be left dangling until server timeout.
    */
-  def execute(plan: proto.Plan): Iterator[proto.ExecutePlanResponse] = {
+  def execute(plan: proto.Plan): CloseableIterator[proto.ExecutePlanResponse] = {
     artifactManager.uploadAllClassFileArtifacts()
     val request = proto.ExecutePlanRequest
       .newBuilder()
