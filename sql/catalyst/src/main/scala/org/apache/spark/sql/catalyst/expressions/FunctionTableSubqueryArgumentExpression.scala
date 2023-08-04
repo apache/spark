@@ -140,8 +140,8 @@ case class FunctionTableSubqueryArgumentExpression(
   /**
    * These are the indexes of the PARTITION BY expressions within the concatenation of the child's
    * output attributes and the [[extraProjectedPartitioningExpressions]]. We send these indexes to
-   * the Python UDTF evalator so it knows which expressions to compare on adjacent rows to know when
-   * the partition has changed.
+   * the Python UDTF evaluator so it knows which expressions to compare on adjacent rows to know
+   * when the partition has changed.
    */
   lazy val partitioningExpressionIndexes: Seq[Int] = partitionByExpressions.map { e =>
     subqueryOutputs.get(e).getOrElse {
