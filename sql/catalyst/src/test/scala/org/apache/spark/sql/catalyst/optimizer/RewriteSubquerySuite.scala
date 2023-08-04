@@ -24,6 +24,7 @@ import org.apache.spark.sql.catalyst.expressions.{IsNull, ListQuery, Not}
 import org.apache.spark.sql.catalyst.plans.{ExistenceJoin, LeftSemi, PlanTest}
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
+import org.apache.spark.sql.internal.SQLConf
 
 
 class RewriteSubquerySuite extends PlanTest {
@@ -39,18 +40,20 @@ class RewriteSubquerySuite extends PlanTest {
   }
 
   test("Column pruning after rewriting predicate subquery") {
-    val relation = LocalRelation($"a".int, $"b".int)
-    val relInSubquery = LocalRelation($"x".int, $"y".int, $"z".int)
+    withSQLConf(SQLConf.IN_SUBQUERY_CONVERT_JOIN_THRESHOLD.key -> "-1") {
+      val relation = LocalRelation($"a".int, $"b".int)
+      val relInSubquery = LocalRelation($"x".int, $"y".int, $"z".int)
 
-    val query = relation.where($"a".in(ListQuery(relInSubquery.select($"x")))).select($"a")
+      val query = relation.where($"a".in(ListQuery(relInSubquery.select($"x")))).select($"a")
 
-    val optimized = Optimize.execute(query.analyze)
-    val correctAnswer = relation
-      .select($"a")
-      .join(relInSubquery.select($"x"), LeftSemi, Some($"a" === $"x"))
-      .analyze
+      val optimized = Optimize.execute(query.analyze)
+      val correctAnswer = relation
+        .select($"a")
+        .join(relInSubquery.select($"x"), LeftSemi, Some($"a" === $"x"))
+        .analyze
 
-    comparePlans(optimized, correctAnswer)
+      comparePlans(optimized, correctAnswer)
+    }
   }
 
   test("NOT-IN subquery nested inside OR") {
