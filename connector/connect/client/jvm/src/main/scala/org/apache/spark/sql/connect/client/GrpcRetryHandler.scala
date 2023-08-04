@@ -49,7 +49,7 @@ private[client] class GrpcRetryHandler(private val retryPolicy: GrpcRetryHandler
       extends CloseableIterator[U] {
 
     private var opened = false // we only retry if it fails on first call when using the iterator
-    private var iterator = call(request)
+    private var iter = call(request)
 
     private def retryIter[V](f: Iterator[U] => V) = {
       if (!opened) {
@@ -61,12 +61,12 @@ private[client] class GrpcRetryHandler(private val retryPolicy: GrpcRetryHandler
             firstTry = false
           } else {
             // on retry, we need to call the RPC again.
-            iterator = call(request)
+            iter = call(request)
           }
-          f(iterator)
+          f(iter)
         }
       } else {
-        f(iterator)
+        f(iter)
       }
     }
 
@@ -79,7 +79,7 @@ private[client] class GrpcRetryHandler(private val retryPolicy: GrpcRetryHandler
     }
 
     override def close(): Unit = {
-      iterator.close()
+      iter.close()
     }
   }
 

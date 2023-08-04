@@ -209,11 +209,11 @@ private[sql] class SparkResult[T](
 
   private def buildIterator(destructive: Boolean): CloseableIterator[T] = {
     new CloseableIterator[T] {
-      private[this] var iterator: CloseableIterator[T] = _
+      private[this] var iter: CloseableIterator[T] = _
 
       private def initialize(): Unit = {
-        if (iterator == null) {
-          iterator = new ArrowDeserializingIterator(
+        if (iter == null) {
+          iter = new ArrowDeserializingIterator(
             createEncoder(encoder, schema),
             new ConcatenatingArrowStreamReader(
               allocator,
@@ -225,17 +225,17 @@ private[sql] class SparkResult[T](
 
       override def hasNext: Boolean = {
         initialize()
-        iterator.hasNext
+        iter.hasNext
       }
 
       override def next(): T = {
         initialize()
-        iterator.next()
+        iter.next()
       }
 
       override def close(): Unit = {
-        if (iterator != null) {
-          iterator.close()
+        if (iter != null) {
+          iter.close()
         }
       }
     }
