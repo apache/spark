@@ -140,7 +140,8 @@ public class BroadcastedJoinKeysWrapperImpl implements BroadcastedJoinKeysWrappe
                       new Function1[bcjk.indexesOfInterest.length];
                   for (int i = 0; i < bcjk.indexesOfInterest.length; ++i) {
                     DataType keyDataType = bcjk.keyDataTypes[i];
-                    toScalaConverters[i] = CatalystTypeConverters.createToScalaConverter(keyDataType);
+                    toScalaConverters[i] = CatalystTypeConverters.createToScalaConverter(
+                        keyDataType);
                   }
                   Iterator<Object[]> keysAsScala = keysIter.map(f -> {
                     Object[] arr = new Object[bcjk.indexesOfInterest.length];
