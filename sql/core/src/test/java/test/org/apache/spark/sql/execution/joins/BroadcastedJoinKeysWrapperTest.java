@@ -29,7 +29,7 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.Set;
 
-import org.apache.spark.sql.catalyst.bcVar.ArrayWrapper;
+import org.apache.spark.sql.catalyst.bcvar.ArrayWrapper;
 import org.apache.spark.sql.execution.joins.BroadcastedJoinKeysWrapperImpl;
 import scala.collection.JavaConversions;
 import scala.reflect.ClassTag;
@@ -42,7 +42,7 @@ import org.apache.spark.sql.SparkSession;
 import org.apache.spark.sql.catalyst.expressions.BoundReference;
 import org.apache.spark.sql.catalyst.expressions.Expression;
 import org.apache.spark.sql.execution.SparkPlan;
-import org.apache.spark.sql.catalyst.bcVar.BroadcastedJoinKeysWrapper;
+import org.apache.spark.sql.catalyst.bcvar.BroadcastedJoinKeysWrapper;
 import org.apache.spark.sql.execution.joins.HashedRelation;
 import org.apache.spark.sql.types.DataType;
 import org.apache.spark.sql.types.DataTypes;

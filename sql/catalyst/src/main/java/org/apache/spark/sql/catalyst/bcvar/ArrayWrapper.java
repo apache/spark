@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.catalyst.bcVar;
+package org.apache.spark.sql.catalyst.bcvar;
 
 public interface ArrayWrapper<T> {
   Object get(int pos);

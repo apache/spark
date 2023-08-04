@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.catalyst.bcVar;
+package org.apache.spark.sql.catalyst.bcvar;
 
 import java.io.Externalizable;
 

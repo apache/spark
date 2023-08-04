@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.connector.read;
 
-import org.apache.spark.sql.catalyst.bcVar.BroadcastedJoinKeysWrapper;
+import org.apache.spark.sql.catalyst.bcvar.BroadcastedJoinKeysWrapper;
 
 public class PushedBroadcastFilterData {
   public final String columnName;

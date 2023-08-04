@@ -558,9 +558,9 @@ object InMemoryTable {
   val SIMULATE_FAILED_WRITE_OPTION = "spark.sql.test.simulateFailedWrite"
 
   val BROADCASTED_JOIN_KEYS_WRAPPER_CLASS =
-    "org.apache.spark.sql.catalyst.bcVar.BroadcastedJoinKeysWrapper"
+    "org.apache.spark.sql.catalyst.bcvar.BroadcastedJoinKeysWrapper"
 
-  val ARRAY_WRAPPER_CLASS = "org.apache.spark.sql.catalyst.bcVar.ArrayWrapper"
+  val ARRAY_WRAPPER_CLASS = "org.apache.spark.sql.catalyst.bcvar.ArrayWrapper"
 
   def filtersToKeys(
       keys: Iterable[Seq[Any]],
