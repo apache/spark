@@ -155,6 +155,15 @@ class BaseUDTFTestsMixin:
         with self.assertRaisesRegex(PythonException, "Unexpected tuple 1 with StructType"):
             func(lit(1)).collect()
 
+    def test_udtf_with_invalid_return_value(self):
+        @udtf(returnType="x: int")
+        class TestUDTF:
+            def eval(self, a):
+                return a
+
+        with self.assertRaisesRegex(PythonException, "UDTF_RETURN_NOT_ITERABLE"):
+            TestUDTF(lit(1)).collect()
+
     def test_udtf_eval_with_no_return(self):
         @udtf(returnType="a: int")
         class TestUDTF:
@@ -350,6 +359,35 @@ class BaseUDTFTestsMixin:
             ],
         )
 
+    def test_init_with_exception(self):
+        @udtf(returnType="x: int")
+        class TestUDTF:
+            def __init__(self):
+                raise Exception("error")
+
+            def eval(self):
+                yield 1,
+
+        with self.assertRaisesRegex(
+            PythonException,
+            r"\[UDTF_EXEC_ERROR\] User defined table function encountered an error "
+            r"in the '__init__' method: error",
+        ):
+            TestUDTF().show()
+
+    def test_eval_with_exception(self):
+        @udtf(returnType="x: int")
+        class TestUDTF:
+            def eval(self):
+                raise Exception("error")
+
+        with self.assertRaisesRegex(
+            PythonException,
+            r"\[UDTF_EXEC_ERROR\] User defined table function encountered an error "
+            r"in the 'eval' method: error",
+        ):
+            TestUDTF().show()
+
     def test_terminate_with_exceptions(self):
         @udtf(returnType="a: int, b: int")
         class TestUDTF:
@@ -361,8 +399,8 @@ class BaseUDTFTestsMixin:
 
         with self.assertRaisesRegex(
             PythonException,
-            "User defined table function encountered an error in the 'terminate' "
-            "method: terminate error",
+            r"\[UDTF_EXEC_ERROR\] User defined table function encountered an error "
+            r"in the 'terminate' method: terminate error",
         ):
             TestUDTF(lit(1)).collect()
 
