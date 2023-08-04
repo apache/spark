@@ -252,9 +252,12 @@ class SparkSession private[sql] (
           .setSql(sqlText)
           .addAllPosArgs(args.map(toLiteralProto).toIterable.asJava)))
     val plan = proto.Plan.newBuilder().setCommand(cmd)
-    val responseIter = client.execute(plan.build())
+    val responseSeq = client.execute(plan.build()).asScala.toSeq
 
-    val response = responseIter.asScala
+    // sequence is a lazy stream, force materialize it to make sure it is consumed.
+    responseSeq.foreach(_ => ())
+
+    val response = responseSeq
       .find(_.hasSqlCommandResult)
       .getOrElse(throw new RuntimeException("SQLCommandResult must be present"))
 
@@ -308,9 +311,12 @@ class SparkSession private[sql] (
             .setSql(sqlText)
             .putAllArgs(args.asScala.mapValues(toLiteralProto).toMap.asJava)))
       val plan = proto.Plan.newBuilder().setCommand(cmd)
-      val responseIter = client.execute(plan.build())
+      val responseSeq = client.execute(plan.build()).asScala.toSeq
 
-      val response = responseIter.asScala
+      // sequence is a lazy stream, force materialize it to make sure it is consumed.
+      responseSeq.foreach(_ => ())
+
+      val response = responseSeq
         .find(_.hasSqlCommandResult)
         .getOrElse(throw new RuntimeException("SQLCommandResult must be present"))
 
@@ -547,14 +553,15 @@ class SparkSession private[sql] (
 
   private[sql] def execute(command: proto.Command): Seq[ExecutePlanResponse] = {
     val plan = proto.Plan.newBuilder().setCommand(command).build()
-    client.execute(plan).asScala.toSeq
+    val seq = client.execute(plan).asScala.toSeq
+    // sequence is a lazy stream, force materialize it to make sure it is consumed.
+    seq.foreach(_ => ())
+    seq
   }
 
   private[sql] def registerUdf(udf: proto.CommonInlineUserDefinedFunction): Unit = {
     val command = proto.Command.newBuilder().setRegisterFunction(udf).build()
-    val plan = proto.Plan.newBuilder().setCommand(command).build()
-
-    client.execute(plan).asScala.foreach(_ => ())
+    execute(command)
   }
 
   @DeveloperApi

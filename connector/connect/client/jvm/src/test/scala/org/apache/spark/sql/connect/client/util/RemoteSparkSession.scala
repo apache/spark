@@ -50,7 +50,7 @@ import org.apache.spark.sql.connect.common.config.ConnectCommon
 object SparkConnectServerUtils {
 
   // Server port
-  private[spark] val port: Int =
+  val port: Int =
     ConnectCommon.CONNECT_GRPC_BINDING_PORT + util.Random.nextInt(1000)
 
   @volatile private var stopped = false
@@ -139,7 +139,15 @@ object SparkConnectServerUtils {
       Seq("--conf", s"spark.sql.catalogImplementation=$catalogImplementation")
     }
 
-    jarsConfigs ++ writerV2Configs ++ hiveTestConfigs
+    // Make the server terminate reattachable streams every 1 second and 123 bytes,
+    // to make the tests exercise reattach.
+    val reattachExecuteConfigs = Seq(
+      "--conf",
+      "spark.connect.execute.reattachable.senderMaxStreamDuration=1s",
+      "--conf",
+      "spark.connect.execute.reattachable.senderMaxStreamSize=123")
+
+    jarsConfigs ++ writerV2Configs ++ hiveTestConfigs ++ reattachExecuteConfigs
   }
 
   def start(): Unit = {

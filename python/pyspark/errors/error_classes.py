@@ -167,36 +167,44 @@ ERROR_CLASSES_JSON = """
   "DIFFERENT_PANDAS_DATAFRAME" : {
     "message" : [
       "DataFrames are not almost equal:",
-      "Left: <left>",
+      "Left:",
+      "<left>",
       "<left_dtype>",
-      "Right: <right>",
+      "Right:",
+      "<right>",
       "<right_dtype>"
     ]
   },
   "DIFFERENT_PANDAS_INDEX" : {
     "message" : [
       "Indices are not almost equal:",
-      "Left: <left>",
+      "Left:",
+      "<left>",
       "<left_dtype>",
-      "Right: <right>",
+      "Right:",
+      "<right>",
       "<right_dtype>"
     ]
   },
   "DIFFERENT_PANDAS_MULTIINDEX" : {
     "message" : [
       "MultiIndices are not almost equal:",
-      "Left: <left>",
+      "Left:",
+      "<left>",
       "<left_dtype>",
-      "Right: <right>",
+      "Right:",
+      "<right>",
       "<right_dtype>"
     ]
   },
   "DIFFERENT_PANDAS_SERIES" : {
     "message" : [
       "Series are not almost equal:",
-      "Left: <left>",
+      "Left:",
+      "<left>",
       "<left_dtype>",
-      "Right: <right>",
+      "Right:",
+      "<right>",
       "<right_dtype>"
     ]
   },
@@ -728,6 +736,11 @@ ERROR_CLASSES_JSON = """
   "UDTF_EXEC_ERROR" : {
     "message" : [
       "User defined table function encountered an error in the '<method_name>' method: <error>"
+    ]
+  },
+  "UDTF_RETURN_NOT_ITERABLE" : {
+    "message" : [
+      "The return value of the UDTF is invalid. It should be an iterable (e.g., generator or list), but got '<type>'. Please make sure that the UDTF returns one of these types."
     ]
   },
   "UDTF_RETURN_SCHEMA_MISMATCH" : {

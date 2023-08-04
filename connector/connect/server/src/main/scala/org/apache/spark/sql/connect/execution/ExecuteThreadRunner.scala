@@ -38,11 +38,15 @@ import org.apache.spark.util.Utils
 private[connect] class ExecuteThreadRunner(executeHolder: ExecuteHolder) extends Logging {
 
   // The newly created thread will inherit all InheritableThreadLocals used by Spark,
-  // e.g. SparkContext.localProperties. If considering implementing a threadpool,
+  // e.g. SparkContext.localProperties. If considering implementing a thread-pool,
   // forwarding of thread locals needs to be taken into account.
   private var executionThread: Thread = new ExecutionThread()
 
   private var interrupted: Boolean = false
+
+  private var completed: Boolean = false
+
+  private val lock = new Object
 
   /** Launches the execution in a background thread, returns immediately. */
   def start(): Unit = {
@@ -57,11 +61,12 @@ private[connect] class ExecuteThreadRunner(executeHolder: ExecuteHolder) extends
   /**
    * Interrupt the executing thread.
    * @return
-   *   true if it was not interrupted before, false if it was already interrupted.
+   *   true if it was not interrupted before, false if it was already interrupted or completed.
    */
   def interrupt(): Boolean = {
-    synchronized {
-      if (!interrupted) {
+    lock.synchronized {
+      if (!interrupted && !completed) {
+        // checking completed prevents sending interrupt onError after onCompleted
         interrupted = true
         executionThread.interrupt()
         true
@@ -116,7 +121,7 @@ private[connect] class ExecuteThreadRunner(executeHolder: ExecuteHolder) extends
   // Inner executeInternal is wrapped by execute() for error handling.
   private def executeInternal() = {
     // synchronized - check if already got interrupted while starting.
-    synchronized {
+    lock.synchronized {
       if (interrupted) {
         throw new InterruptedException()
       }
@@ -156,6 +161,26 @@ private[connect] class ExecuteThreadRunner(executeHolder: ExecuteHolder) extends
           throw new UnsupportedOperationException(
             s"${executeHolder.request.getPlan.getOpTypeCase} not supported.")
       }
+
+      lock.synchronized {
+        // Synchronized before sending ResultComplete, and up until completing the result stream
+        // to prevent a situation in which a client of reattachable execution receives
+        // ResultComplete, and proceeds to send ReleaseExecute, and that triggers an interrupt
+        // before it finishes.
+
+        if (interrupted) {
+          // check if it got interrupted at the very last moment
+          throw new InterruptedException()
+        }
+        completed = true // no longer interruptible
+
+        if (executeHolder.reattachable) {
+          // Reattachable execution sends a ResultComplete at the end of the stream
+          // to signal that there isn't more coming.
+          executeHolder.responseObserver.onNext(createResultComplete())
+        }
+        executeHolder.responseObserver.onCompleted()
+      }
     }
   }
 
@@ -175,7 +200,6 @@ private[connect] class ExecuteThreadRunner(executeHolder: ExecuteHolder) extends
       command = command,
       responseObserver = responseObserver,
       executeHolder = executeHolder)
-    responseObserver.onCompleted()
   }
 
   private def requestString(request: Message) = {
@@ -188,6 +212,14 @@ private[connect] class ExecuteThreadRunner(executeHolder: ExecuteHolder) extends
         logWarning("Fail to extract debug information", e)
         "UNKNOWN"
     }
+  }
+
+  private def createResultComplete(): proto.ExecutePlanResponse = {
+    // Send the Spark data type
+    proto.ExecutePlanResponse
+      .newBuilder()
+      .setResultComplete(proto.ExecutePlanResponse.ResultComplete.newBuilder().build())
+      .build()
   }
 
   private class ExecutionThread extends Thread {
