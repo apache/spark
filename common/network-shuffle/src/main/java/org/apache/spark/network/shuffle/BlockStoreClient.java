@@ -30,7 +30,9 @@ import java.util.concurrent.TimeUnit;
 import java.util.function.Supplier;
 
 import com.codahale.metrics.MetricSet;
+import com.google.common.base.Preconditions;
 import com.google.common.util.concurrent.Uninterruptibles;
+import org.apache.spark.network.sasl.SaslTimeoutException;
 import org.apache.spark.network.util.NettyUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -170,7 +172,8 @@ public abstract class BlockStoreClient implements Closeable {
     checkInit();
     int maxRetries = transportConf.maxIORetries();
     int retryWaitTime = transportConf.ioRetryWaitTimeMs();
-    retry(0, maxRetries, retryWaitTime, () -> {
+    boolean enableSaslRetries = transportConf.enableSaslRetries();
+    retry(0, 0, maxRetries, enableSaslRetries, retryWaitTime, () -> {
       CompletableFuture<Map<String, String[]>> tempHostLocalDirsCompletable =
               new CompletableFuture<>();
       getHostLocalDirsInternal(host, port, execIds, tempHostLocalDirsCompletable);
@@ -213,24 +216,45 @@ public abstract class BlockStoreClient implements Closeable {
   }
 
   private <T> void retry(
-      int times,
+      final int retryCountValue,
+      final int saslRetryCountValue,
       final int maxRetries,
+      final boolean enableSaslRetries,
       int delayMs,
       Supplier<CompletableFuture<T>> action,
       CompletableFuture<T> future) {
     action.get()
             .thenAccept(future::complete)
             .exceptionally(e -> {
+              int retryCount = retryCountValue;
+              int saslRetryCount = saslRetryCountValue;
               boolean isIOException = e instanceof IOException
                       || (e.getCause() != null && e.getCause() instanceof IOException);
-              if (times >= maxRetries || !isIOException) {
+              boolean isSaslTimeout = enableSaslRetries && e instanceof SaslTimeoutException;
+              if (!isSaslTimeout && saslRetryCount > 0) {
+                Preconditions.checkState(retryCount >= saslRetryCount,
+                        "retryCount must be greater than or equal to saslRetryCount");
+                retryCount -= saslRetryCount;
+                saslRetryCount = 0;
+              }
+              boolean hasRemainingRetries = retryCount < maxRetries;
+              boolean shouldRetry = (isSaslTimeout || isIOException) &&
+                      hasRemainingRetries;
+              if (!shouldRetry) {
                 future.completeExceptionally(e);
               } else {
+                if (enableSaslRetries && e instanceof SaslTimeoutException) {
+                  saslRetryCount += 1;
+                }
+                retryCount += 1;
+                int finalRetryCount = retryCount;
+                int finalSaslRetryCount = saslRetryCount;
                 executorService.execute(() -> {
                   logger.info("Retrying ({}/{}) for getting host local dirs after {} ms",
-                          times + 1, maxRetries, delayMs);
+                          finalRetryCount, maxRetries, delayMs);
                   Uninterruptibles.sleepUninterruptibly(delayMs, TimeUnit.MILLISECONDS);
-                  retry(times + 1, maxRetries, enableSaslRetries, delayMs, action, future);
+                  retry(finalRetryCount, finalSaslRetryCount, maxRetries, enableSaslRetries,
+                          delayMs, action, future);
                 });
               }
               return null;

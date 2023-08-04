@@ -400,7 +400,7 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
       clientConf, null, false, 5000)
     try {
       testExternalBlockStoreClient.init("APP_ID")
-      Seq((0, true), (2, true), (3, false)).foreach { case (maxCnt, success) =>
+      Seq((0, true), (2, true), (3, true), (4, false)).foreach { case (maxCnt, success) =>
         sendRpcThrowIOExceptionIdx = 0
         sendRpcThrowIOExceptionMaxCnt = maxCnt
         val hostLocalDirsCompletable = new CompletableFuture[java.util.Map[String, Array[String]]]
