@@ -134,6 +134,12 @@
       <artifactId>hadoop-azure</artifactId>
       <version>${hadoop.version}</version>
       <scope>${hadoop.deps.scope}</scope>
+      <exclusions>
+        <exclusion>
+          <groupId>org.codehaus.jackson</groupId>
+          <artifactId>jackson-core-asl</artifactId>
+        </exclusion>
+      </exclusions>
     </dependency>
     <!--
     There's now a hadoop-cloud-storage which transitively pulls in the store JARs,
@@ -145,6 +151,10 @@
       <version>${hadoop.version}</version>
       <scope>${hadoop.deps.scope}</scope>
       <exclusions>
+        <exclusion>
+          <groupId>org.apache.hadoop</groupId>
+          <artifactId>hadoop-common</artifactId>
+        </exclusion>
         <exclusion>
           <!--
           This is a code coverage library introduced by aliyun-java-sdk-core, only for testing
