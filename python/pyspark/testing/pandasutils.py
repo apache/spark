@@ -171,10 +171,7 @@ def _assert_pandas_almost_equal(
     def compare_vals_approx(val1, val2):
         # compare vals for approximate equality
         if isinstance(lval, (float, decimal.Decimal)) or isinstance(rval, (float, decimal.Decimal)):
-            print("\nentered if float or decimal\n")
             if abs(float(lval) - float(rval)) > (atol + rtol * abs(float(rval))):
-                print("left", abs(float(lval) - float(rval)))
-                print("right", (atol + rtol * abs(float(rval))))
                 return False
         elif val1 != val2:
             return False
