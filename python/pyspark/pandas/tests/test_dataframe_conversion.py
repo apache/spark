@@ -86,8 +86,8 @@ class DataFrameConversionTest(ComparisonTestBase, SQLTestUtils, TestUtils):
     @staticmethod
     def get_excel_dfs(pandas_on_spark_location, pandas_location):
         return {
-            "got": pd.read_excel(pandas_on_spark_location, index_col=0),
-            "expected": pd.read_excel(pandas_location, index_col=0),
+            "got": pd.read_excel(pandas_on_spark_location, index_col=0, engine="openpyxl"),
+            "expected": pd.read_excel(pandas_location, index_col=0, engine="openpyxl"),
         }
 
     def test_to_excel(self):
