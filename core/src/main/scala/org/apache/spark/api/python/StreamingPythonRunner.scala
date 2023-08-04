@@ -80,7 +80,7 @@ private[spark] class StreamingPythonRunner(
       conf.set(PYTHON_USE_DAEMON, prevConf)
     }
 
-    val stream = new BufferedOutputStream(worker.getOutputStream, bufferSize)
+    val stream = new BufferedOutputStream(pythonWorker.get.getOutputStream, bufferSize)
     val dataOut = new DataOutputStream(stream)
 
     // TODO(SPARK-44461): verify python version
@@ -94,7 +94,8 @@ private[spark] class StreamingPythonRunner(
     dataOut.write(command.toArray)
     dataOut.flush()
 
-    val dataIn = new DataInputStream(new BufferedInputStream(worker.getInputStream, bufferSize))
+    val dataIn = new DataInputStream(
+      new BufferedInputStream(pythonWorker.get.getInputStream, bufferSize))
 
     val resFromPython = dataIn.readInt()
     logInfo(s"Runner initialization returned $resFromPython")
