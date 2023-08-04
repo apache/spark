@@ -252,6 +252,8 @@ class ExecutePlanResponseReattachableIterator(Generator):
                     self._stub.ExecutePlan(self._initial_request, metadata=self._metadata)
                 )
                 raise SparkConnectRetryException("Retrying ...")
+            else:
+                raise e
 
     def _create_reattach_execute_request(self) -> pb2.ReattachExecuteRequest:
         reattach = pb2.ReattachExecuteRequest(
