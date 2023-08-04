@@ -41,11 +41,10 @@ import org.apache.spark.sql.catalyst.catalog.HiveTableRelation
 import org.apache.spark.sql.catalyst.encoders._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.json.{JacksonGenerator, JSONOptions}
-import org.apache.spark.sql.catalyst.optimizer.CombineUnions
 import org.apache.spark.sql.catalyst.parser.{ParseException, ParserUtils}
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.catalyst.trees.TreeNodeTag
+import org.apache.spark.sql.catalyst.trees.{TreeNodeTag, TreePattern}
 import org.apache.spark.sql.catalyst.util.IntervalUtils
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.errors.QueryCompilationErrors.toSQLId
@@ -2279,6 +2278,51 @@ class Dataset[T] private[sql](
     Offset(Literal(n), logicalPlan)
   }
 
+  // This breaks caching, but it's usually ok because it addresses a very specific use case:
+  // using union to union many files or partitions.
+  private def combineUnions(plan: LogicalPlan): LogicalPlan = {
+    plan.transformDownWithPruning(_.containsPattern(TreePattern.UNION)) {
+      case Distinct(u: Union) =>
+        Distinct(flattenUnion(u, isUnionDistinct = true))
+      // Only handle distinct-like 'Deduplicate', where the keys == output
+      case Deduplicate(keys: Seq[Attribute], u: Union) if AttributeSet(keys) == u.outputSet =>
+        Deduplicate(keys, flattenUnion(u, true))
+      case u: Union =>
+        flattenUnion(u, isUnionDistinct = false)
+    }
+  }
+
+  private def flattenUnion(u: Union, isUnionDistinct: Boolean): Union = {
+    var changed = false
+    // We only need to look at the direct children of Union, as the nested adjacent Unions should
+    // have been combined already by previous `Dataset#union` transformations.
+    val newChildren = u.children.flatMap {
+      case Distinct(Union(children, byName, allowMissingCol))
+          if isUnionDistinct && byName == u.byName && allowMissingCol == u.allowMissingCol =>
+        changed = true
+        children
+      // Only handle distinct-like 'Deduplicate', where the keys == output
+      case Deduplicate(keys: Seq[Attribute], child @ Union(children, byName, allowMissingCol))
+          if AttributeSet(keys) == child.outputSet && isUnionDistinct && byName == u.byName &&
+            allowMissingCol == u.allowMissingCol =>
+        changed = true
+        children
+      case Union(children, byName, allowMissingCol)
+          if !isUnionDistinct && byName == u.byName && allowMissingCol == u.allowMissingCol =>
+        changed = true
+        children
+      case other =>
+        Seq(other)
+    }
+    if (changed) {
+      val newUnion = Union(newChildren)
+      newUnion.copyTagsFrom(u)
+      newUnion
+    } else {
+      u
+    }
+  }
+
   /**
    * Returns a new Dataset containing union of rows in this Dataset and another Dataset.
    *
@@ -2310,9 +2354,7 @@ class Dataset[T] private[sql](
    * @since 2.0.0
    */
   def union(other: Dataset[T]): Dataset[T] = withSetOperator {
-    // This breaks caching, but it's usually ok because it addresses a very specific use case:
-    // using union to union many files or partitions.
-    CombineUnions(Union(logicalPlan, other.logicalPlan))
+    combineUnions(Union(logicalPlan, other.logicalPlan))
   }
 
   /**
@@ -2404,9 +2446,7 @@ class Dataset[T] private[sql](
    * @since 3.1.0
    */
   def unionByName(other: Dataset[T], allowMissingColumns: Boolean): Dataset[T] = withSetOperator {
-    // This breaks caching, but it's usually ok because it addresses a very specific use case:
-    // using union to union many files or partitions.
-    CombineUnions(Union(logicalPlan :: other.logicalPlan :: Nil, true, allowMissingColumns))
+    combineUnions(Union(logicalPlan :: other.logicalPlan :: Nil, true, allowMissingColumns))
   }
 
   /**
