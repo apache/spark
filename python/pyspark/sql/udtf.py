@@ -322,8 +322,8 @@ class UserDefinedTableFunction:
                 error_class="UDTF_SERIALIZATION_ERROR",
                 message_parameters={
                     "name": self._name,
-                    "message": f"Please check the stack trace and "
-                    f"make sure the function is serializable.",
+                    "message": "Please check the stack trace and make sure the "
+                    "function is serializable.",
                 },
             )
 

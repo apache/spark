@@ -749,7 +749,7 @@ class BaseUDTFTestsMixin:
             @udtf(returnType="x: int")
             class TestUDTF:
                 def eval(self):
-                    obj = file_obj
+                    file_obj
                     yield 1,
 
             with self.assertRaisesRegex(PySparkRuntimeError, "UDTF_SERIALIZATION_ERROR"):
