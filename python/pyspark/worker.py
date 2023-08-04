@@ -21,18 +21,11 @@ Worker that receives input from Piped RDD.
 import os
 import sys
 import time
-from inspect import currentframe, getframeinfo, getfullargspec
+from inspect import getfullargspec
 import json
 from typing import Iterable, Iterator
 
-# 'resource' is a Unix specific module.
-has_resource_module = True
-try:
-    import resource
-except ImportError:
-    has_resource_module = False
 import traceback
-import warnings
 import faulthandler
 
 from pyspark.accumulators import _accumulatorRegistry
@@ -70,6 +63,7 @@ from pyspark.worker_util import (
     pickleSer,
     send_accumulator_updates,
     setup_broadcasts,
+    setup_memory_limits,
     setup_spark_files,
     utf8_deserializer,
 )
@@ -998,38 +992,8 @@ def main(infile, outfile):
         boundPort = read_int(infile)
         secret = UTF8Deserializer().loads(infile)
 
-        # set up memory limits
         memory_limit_mb = int(os.environ.get("PYSPARK_EXECUTOR_MEMORY_MB", "-1"))
-        if memory_limit_mb > 0 and has_resource_module:
-            total_memory = resource.RLIMIT_AS
-            try:
-                (soft_limit, hard_limit) = resource.getrlimit(total_memory)
-                msg = "Current mem limits: {0} of max {1}\n".format(soft_limit, hard_limit)
-                print(msg, file=sys.stderr)
-
-                # convert to bytes
-                new_limit = memory_limit_mb * 1024 * 1024
-
-                if soft_limit == resource.RLIM_INFINITY or new_limit < soft_limit:
-                    msg = "Setting mem limits to {0} of max {1}\n".format(new_limit, new_limit)
-                    print(msg, file=sys.stderr)
-                    resource.setrlimit(total_memory, (new_limit, new_limit))
-
-            except (resource.error, OSError, ValueError) as e:
-                # not all systems support resource limits, so warn instead of failing
-                lineno = (
-                    getframeinfo(currentframe()).lineno + 1 if currentframe() is not None else 0
-                )
-                if "__file__" in globals():
-                    print(
-                        warnings.formatwarning(
-                            "Failed to set memory limit: {0}".format(e),
-                            ResourceWarning,
-                            __file__,
-                            lineno,
-                        ),
-                        file=sys.stderr,
-                    )
+        setup_memory_limits(memory_limit_mb)
 
         # initialize global state
         taskContext = None
