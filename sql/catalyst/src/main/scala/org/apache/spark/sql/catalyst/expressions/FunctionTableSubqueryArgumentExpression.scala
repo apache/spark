@@ -110,15 +110,16 @@ case class FunctionTableSubqueryArgumentExpression(
       // operation, the rows from several partitions may arrive interleaved. In this way, the Python
       // UDTF evaluator is able to inspect the values of the partitioning expressions for adjacent
       // rows in order to determine when each partition ends and the next one begins.
+      subquery = Project(
+        projectList = subquery.output ++ extraProjectedPartitioningExpressions,
+        child = subquery)
       subquery = Sort(
         order = partitionByExpressions.map(e => SortOrder(e, Ascending)) ++ orderByExpressions,
         global = false,
         child = RepartitionByExpression(
-          partitionExpressions = extraProjectedPartitioningExpressions.map(_.toAttribute),
+          partitionExpressions = partitioningExpressionIndexes.map(i => subquery.output(i)),
           optNumPartitions = None,
-          child = Project(
-            projectList = subquery.output ++ extraProjectedPartitioningExpressions,
-            child = subquery)))
+          child = subquery))
     }
     if (withSinglePartition) {
       subquery = Repartition(
