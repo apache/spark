@@ -476,7 +476,7 @@ def assertDataFrameEqual(
             },
         )
 
-    is_pandas = False
+    has_pandas = False
     try:
         # If pandas dependencies are available, allow pandas or pandas-on-Spark DataFrame
         import pyspark.pandas as ps
@@ -484,22 +484,25 @@ def assertDataFrameEqual(
         from pyspark.testing.pandasutils import (
             assertPandasOnSparkEqual,
             _assert_pandas_almost_equal,
+            PandasOnSparkTestUtils,
         )
 
-        is_pandas = True
+        has_pandas = True
     except Exception:
+        # no pandas, so we won't call pandasutils functions
         pass
 
-    if is_pandas:
-        if isinstance(actual, pd.DataFrame) or isinstance(expected, pd.DataFrame):
+    if has_pandas:
+        if (
+            isinstance(actual, pd.DataFrame)
+            or isinstance(expected, pd.DataFrame)
+            or isinstance(actual, ps.DataFrame)
+            or isinstance(expected, ps.DataFrame)
+        ):
             # handle pandas DataFrames
             # assert approximate equality for float data
-            return _assert_pandas_almost_equal(actual, expected)
-        elif isinstance(actual, ps.DataFrame) or isinstance(expected, ps.DataFrame):
-            # handle pandas DataFrames
-            # assert approximate equality for float data
-            return assertPandasOnSparkEqual(
-                actual, expected, checkExact=False, checkRowOrder=checkRowOrder
+            return PandasOnSparkTestUtils().assert_eq(
+                actual, expected, check_exact=False, almost=True
             )
 
     try:

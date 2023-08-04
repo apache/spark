@@ -470,6 +470,15 @@ class PandasOnSparkTestUtils:
         import pandas as pd
         from pandas.api.types import is_list_like
 
+        # for pandas-on-Spark, ignore row order by default because row ordering not guaranteed
+        if isinstance(left, (ps.DataFrame, ps.Series, ps.Index)):
+            return assertPandasOnSparkEqual(
+                left, right, checkExact=check_exact, almost=almost, checkRowOrder=False
+            )
+        elif isinstance(right, (ps.DataFrame, ps.Series, ps.Index)):
+            return assertPandasOnSparkEqual(
+                right, left, checkExact=check_exact, almost=almost, checkRowOrder=False
+            )
         lobj = self._to_pandas(left)
         robj = self._to_pandas(right)
         if isinstance(lobj, (pd.DataFrame, pd.Series, pd.Index)):
