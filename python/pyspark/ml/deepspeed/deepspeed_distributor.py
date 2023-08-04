@@ -25,7 +25,6 @@ from typing import (
     Optional,
     Any,
 )
-import warnings
 
 from pyspark.ml.torch.distributor import TorchDistributor
 
@@ -99,7 +98,12 @@ class DeepspeedTorchDistributor(TorchDistributor):
         )
         self.cleanup_deepspeed_conf = False
         if not useGpu:
-            warnings.warn(message="Deepspeed usage with CPUs is not very well supported at this time.")
+            # Note: this is because CPU is not *as* well supported by 
+            # deepspeed itself. Once Deepspeed + Intel and others better
+            # support this feature, it will be safe to remove this error
+            # because the command we generate to run deepspeed should work
+            # fine with CPUs.
+            raise RuntimeError("CPUs aren't supported at this time.")
 
     @staticmethod
     def _get_deepspeed_config_path(deepspeed_config: Union[str, Dict[str, Any]]) -> str:
