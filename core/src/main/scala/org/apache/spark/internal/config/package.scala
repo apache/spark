@@ -601,6 +601,12 @@ package object config {
       .booleanConf
       .createWithDefault(false)
 
+  private[spark] val DYN_ALLOCATION_STREAMING_ENABLED =
+    ConfigBuilder("spark.dynamicAllocation.streaming.enabled")
+      .version("3.5.0")
+      .booleanConf
+      .createWithDefault(false)
+
   private[spark] val DYN_ALLOCATION_TESTING =
     ConfigBuilder("spark.dynamicAllocation.testing")
       .version("1.2.0")
@@ -630,6 +636,12 @@ package object config {
       .doubleConf
       .createWithDefault(1.0)
 
+  private[spark] val DYN_ALLOCATION_EXECUTOR_DEALLOCATION_RATIO =
+    ConfigBuilder("spark.dynamicAllocation.executorDeallocationRatio")
+      .version("3.5.0")
+      .doubleConf
+      .createWithDefault(1.0)
+
   private[spark] val DYN_ALLOCATION_CACHED_EXECUTOR_IDLE_TIMEOUT =
     ConfigBuilder("spark.dynamicAllocation.cachedExecutorIdleTimeout")
       .version("1.4.0")
@@ -643,6 +655,11 @@ package object config {
       .timeConf(TimeUnit.SECONDS)
       .checkValue(_ >= 0L, "Timeout must be >= 0.")
       .createWithDefault(60)
+
+  private[spark] val DYN_ALLOCATION_EXECUTOR_DEALLOCATION_TIMEOUT =
+    ConfigBuilder("spark.dynamicAllocation.executorDeallocationTimeout")
+      .version("3.5.0")
+      .fallbackConf(DYN_ALLOCATION_EXECUTOR_IDLE_TIMEOUT)
 
   private[spark] val DYN_ALLOCATION_SHUFFLE_TRACKING_ENABLED =
     ConfigBuilder("spark.dynamicAllocation.shuffleTracking.enabled")

@@ -133,6 +133,16 @@ private[spark] class ExecutorAllocationManager(
 
   private val defaultProfileId = resourceProfileManager.defaultResourceProfile.id
 
+  private val streamingDRAFeatureEnabled = conf.get(DYN_ALLOCATION_STREAMING_ENABLED)
+
+  private val executorDeallocationRatio =
+    conf.get(DYN_ALLOCATION_EXECUTOR_DEALLOCATION_RATIO)
+
+  private var removeTime: Long = NOT_SET
+
+  private val executorDeallocationTimeoutS =
+    conf.get(DYN_ALLOCATION_EXECUTOR_DEALLOCATION_TIMEOUT)
+
   validateSettings()
 
   // Number of executors to add for each ResourceProfile in the next round
@@ -185,6 +195,12 @@ private[spark] class ExecutorAllocationManager(
    * If not, throw an appropriate exception.
    */
   private def validateSettings(): Unit = {
+
+    if ( streamingDRAFeatureEnabled && !Utils.isDynamicAllocationEnabled(conf) ) {
+      throw new SparkException(
+        s"${DYN_ALLOCATION_ENABLED.key} must be  enabled " +
+          s"for ${DYN_ALLOCATION_STREAMING_ENABLED.key} to work")
+    }
     if (minNumExecutors < 0 || maxNumExecutors < 0) {
       throw new SparkException(
         s"${DYN_ALLOCATION_MIN_EXECUTORS.key} and ${DYN_ALLOCATION_MAX_EXECUTORS.key} must be " +
@@ -204,6 +220,10 @@ private[spark] class ExecutorAllocationManager(
       throw new SparkException(
         s"s${DYN_ALLOCATION_SUSTAINED_SCHEDULER_BACKLOG_TIMEOUT.key} must be > 0!")
     }
+    if (executorDeallocationTimeoutS <= 0) {
+      throw new SparkException(
+        s"s${DYN_ALLOCATION_EXECUTOR_DEALLOCATION_TIMEOUT.key} must be > 0!")
+    }
     if (!conf.get(config.SHUFFLE_SERVICE_ENABLED) && !reliableShuffleStorage) {
       if (conf.get(config.DYN_ALLOCATION_SHUFFLE_TRACKING_ENABLED)) {
         logInfo("Dynamic allocation is enabled without a shuffle service.")
@@ -219,6 +239,11 @@ private[spark] class ExecutorAllocationManager(
     if (executorAllocationRatio > 1.0 || executorAllocationRatio <= 0.0) {
       throw new SparkException(
         s"${DYN_ALLOCATION_EXECUTOR_ALLOCATION_RATIO.key} must be > 0 and <= 1.0")
+    }
+
+    if (executorDeallocationRatio > 1.0 || executorDeallocationRatio <= 0.0) {
+      throw new SparkException(
+        s"${DYN_ALLOCATION_EXECUTOR_DEALLOCATION_RATIO.key} must be > 0 and <= 1.0")
     }
   }
 
@@ -328,7 +353,8 @@ private[spark] class ExecutorAllocationManager(
    * This is factored out into its own method for testing.
    */
   private def schedule(): Unit = synchronized {
-    val executorIdsToBeRemoved = executorMonitor.timedOutExecutors()
+    val idleExecutorsIds = executorMonitor.timedOutExecutors()
+    val executorIdsToBeRemoved = maxExecutorDeallocationsPerEvaluation(idleExecutorsIds)
     if (executorIdsToBeRemoved.nonEmpty) {
       initializing = false
     }
@@ -337,6 +363,39 @@ private[spark] class ExecutorAllocationManager(
     updateAndSyncNumExecutorsTarget(clock.nanoTime())
     if (executorIdsToBeRemoved.nonEmpty) {
       removeExecutors(executorIdsToBeRemoved)
+    }
+  }
+
+  /**
+   * Maximum number of executors to be removed per dra evaluation.
+   * This function executes logic only with `spark.dynamicAllocation.streaming.enabled` flag enabled
+   */
+  private def maxExecutorDeallocationsPerEvaluation(
+                                                     timedOutExecs : Seq[(String, Int)]
+                                                   ): Seq[(String, Int)] = {
+    if (!streamingDRAFeatureEnabled) {
+      timedOutExecs
+    }
+    else {
+      val currentTime = clock.nanoTime()
+
+      if (removeTime == NOT_SET) {
+        removeTime = currentTime
+        timedOutExecs
+      }
+      else if (removeTime < currentTime && timedOutExecs.nonEmpty) {
+        val deallocationLimit = Math.ceil(timedOutExecs.size * executorDeallocationRatio).toInt
+        val executorsToDeallocate = timedOutExecs.take(deallocationLimit)
+        logInfo(s"$executorsToDeallocate will be removed " +
+          s"out of $timedOutExecs idle executors in this evaluation " +
+          s"based on the deallocation ratio: $executorDeallocationRatio and " +
+          s"deallocation timeout of: $executorDeallocationTimeoutS seconds")
+        removeTime = clock.nanoTime() + TimeUnit.SECONDS.toNanos(executorDeallocationTimeoutS)
+        executorsToDeallocate
+      }
+      else {
+        Seq.empty[(String, Int)]
+      }
     }
   }
 
@@ -669,6 +728,27 @@ private[spark] class ExecutorAllocationManager(
     private val stageAttemptToExecutorPlacementHints =
       new mutable.HashMap[StageAttempt, (Int, Map[String, Int], Int)]
 
+    // to track total no. of tasks in each stage of a micro-batch (streaming use case)
+    // this will help in requesting resources by counting pending tasks in job,
+    // rather than counting pending tasks in a stage.
+    private val jobStagesToNumTasks = new mutable.HashMap[Int, Int]
+
+    override def onJobStart(jobStart: SparkListenerJobStart): Unit = {
+      if (streamingDRAFeatureEnabled) {
+        jobStart.stageInfos.foreach {stageInfo =>
+          jobStagesToNumTasks(stageInfo.stageId) = stageInfo.numTasks
+        }
+        logDebug(s"added stages $jobStagesToNumTasks to the Job ${jobStart.jobId}")
+      }
+    }
+
+    override def onJobEnd(jobEnd: SparkListenerJobEnd): Unit = {
+      if (streamingDRAFeatureEnabled) {
+        jobStagesToNumTasks.clear()
+        logDebug(s"cleared all stages of the Job ${jobEnd.jobId}")
+      }
+    }
+
     override def onStageSubmitted(stageSubmitted: SparkListenerStageSubmitted): Unit = {
       initializing = false
       val stageId = stageSubmitted.stageInfo.stageId
@@ -701,6 +781,11 @@ private[spark] class ExecutorAllocationManager(
           (numTasksPending, hostToLocalTaskCountPerStage.toMap, profId))
         // Update the executor placement hints
         updateExecutorPlacementHints()
+
+        if (streamingDRAFeatureEnabled) {
+          jobStagesToNumTasks -= stageId
+          logDebug(s"removed current stage $stageId from pending tasks of the job")
+        }
 
         if (!numExecutorsTargetPerResourceProfileId.contains(profId)) {
           numExecutorsTargetPerResourceProfileId.put(profId, initialNumExecutors)
@@ -739,7 +824,14 @@ private[spark] class ExecutorAllocationManager(
         if (stageAttemptToNumTasks.isEmpty
           && stageAttemptToPendingSpeculativeTasks.isEmpty
           && stageAttemptToSpeculativeTaskIndices.isEmpty) {
-          allocationManager.onSchedulerQueueEmpty()
+          if (streamingDRAFeatureEnabled) {
+            if (!hasPendingTasksFromOtherStagesOfTheJob) {
+              allocationManager.onSchedulerQueueEmpty()
+              logDebug("cleared timer when stages in a job are completed")
+            }
+          } else {
+            allocationManager.onSchedulerQueueEmpty()
+          }
         }
       }
     }
@@ -868,15 +960,23 @@ private[spark] class ExecutorAllocationManager(
       }
     }
 
+    def pendingTasksFromOtherStagesOfTheJob: Int = jobStagesToNumTasks.values.sum
+
+    def hasPendingTasksFromOtherStagesOfTheJob: Boolean =
+      pendingTasksFromOtherStagesOfTheJob > 0
+
     /**
-     * An estimate of the total number of pending tasks remaining for currently running stages. Does
-     * not account for tasks which may have failed and been resubmitted.
+     * An estimate of the total number of pending tasks remaining for currently running stages.
+     * will also account for pending tasks in other pending stages of a micro-job when
+     * `spark.dynamicAllocation.streaming.enabled` is enabled.
+     * Does not account for tasks which may have failed and been resubmitted.
      *
      * Note: This is not thread-safe without the caller owning the `allocationManager` lock.
      */
     def pendingTasksPerResourceProfile(rpId: Int): Int = {
       val attempts = resourceProfileIdToStageAttempt.getOrElse(rpId, Set.empty).toSeq
       attempts.map(attempt => getPendingTaskSum(attempt)).sum
+      + pendingTasksFromOtherStagesOfTheJob
     }
 
     def hasPendingRegularTasks: Boolean = {
@@ -916,8 +1016,13 @@ private[spark] class ExecutorAllocationManager(
       attempts.count(attempt => unschedulableTaskSets.contains(attempt))
     }
 
+    /**
+     * Will account for only pending tasks and speculative tasks of a current stage.
+     * Will also account for pending tasks from other stages if enabled for streaming use case.
+     * i.e if `spark.dynamicAllocation.streaming.enabled` is enabled.
+     */
     def hasPendingTasks: Boolean = {
-      hasPendingSpeculativeTasks || hasPendingRegularTasks
+      hasPendingSpeculativeTasks || hasPendingRegularTasks || hasPendingTasksFromOtherStagesOfTheJob
     }
 
     def totalRunningTasksPerResourceProfile(rp: Int): Int = {
