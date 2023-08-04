@@ -39,7 +39,6 @@ from pyspark.find_spark_home import _find_spark_home
 from pyspark.sql.dataframe import DataFrame
 from pyspark.sql import Row
 from pyspark.sql.types import StructType, AtomicType, StructField
-import pyspark.pandas as ps
 
 have_scipy = False
 have_numpy = False
@@ -359,9 +358,16 @@ def assertSchemaEqual(actual: StructType, expected: StructType):
         )
 
 
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    import pandas
+    import pyspark.pandas
+
+
 def assertDataFrameEqual(
-    actual: Union[DataFrame, ps.DataFrame, List[Row]],
-    expected: Union[DataFrame, ps.DataFrame, List[Row]],
+    actual: Union[DataFrame, "pandas.DataFrame", "pyspark.pandas.DataFrame", List[Row]],
+    expected: Union[DataFrame, "pandas.DataFrame", "pyspark.pandas.DataFrame", List[Row]],
     checkRowOrder: bool = False,
     rtol: float = 1e-5,
     atol: float = 1e-8,
@@ -447,20 +453,37 @@ def assertDataFrameEqual(
     elif actual is None or expected is None:
         return False
 
-    import pyspark.pandas as ps
-    from pyspark.testing.pandasutils import assertPandasOnSparkEqual
-
+    is_pandas = False
     try:
-        # If Spark Connect dependencies are available, allow Spark Connect DataFrame
-        from pyspark.sql.connect.dataframe import DataFrame as ConnectDataFrame
+        # If pandas dependencies are available, allow pandas or pandas-on-Spark DataFrame
+        import pyspark.pandas as ps
+        import pandas as pd
+        from pyspark.testing.pandasutils import (
+            assertPandasOnSparkEqual,
+            _assert_pandas_almost_equal,
+        )
 
-        if isinstance(actual, ps.DataFrame) or isinstance(expected, ps.DataFrame):
+        is_pandas = True
+    except Exception:
+        pass
+
+    if is_pandas:
+        if isinstance(actual, pd.DataFrame) or isinstance(expected, pd.DataFrame):
+            # handle pandas DataFrames
+            # assert approximate equality for float data
+            return _assert_pandas_almost_equal(actual, expected)
+        elif isinstance(actual, ps.DataFrame) or isinstance(expected, ps.DataFrame):
             # handle pandas DataFrames
             # assert approximate equality for float data
             return assertPandasOnSparkEqual(
                 actual, expected, checkExact=False, checkRowOrder=checkRowOrder
             )
-        elif not isinstance(actual, (DataFrame, ConnectDataFrame, list)):
+
+    try:
+        # If Spark Connect dependencies are available, allow Spark Connect DataFrame
+        from pyspark.sql.connect.dataframe import DataFrame as ConnectDataFrame
+
+        if not isinstance(actual, (DataFrame, ConnectDataFrame, list)):
             raise PySparkAssertionError(
                 error_class="INVALID_TYPE_DF_EQUALITY_ARG",
                 message_parameters={
@@ -479,13 +502,7 @@ def assertDataFrameEqual(
                 },
             )
     except Exception:
-        if isinstance(actual, ps.DataFrame) or isinstance(expected, ps.DataFrame):
-            # handle pandas DataFrames
-            # assert approximate equality for float data
-            return assertPandasOnSparkEqual(
-                actual, expected, checkExact=False, checkRowOrder=checkRowOrder
-            )
-        elif not isinstance(actual, (DataFrame, list)):
+        if not isinstance(actual, (DataFrame, list)):
             raise PySparkAssertionError(
                 error_class="INVALID_TYPE_DF_EQUALITY_ARG",
                 message_parameters={

@@ -32,6 +32,7 @@ from pyspark.pandas.series import Series
 from pyspark.pandas.utils import SPARK_CONF_ARROW_ENABLED
 from pyspark.testing.sqlutils import ReusedSQLTestCase
 from pyspark.errors import PySparkAssertionError
+from pyspark.sql import Row
 
 tabulate_requirement_message = None
 try:
@@ -159,12 +160,25 @@ def _assert_pandas_almost_equal(
     This function checks if given pandas objects approximately same,
     which means the conditions below:
       - Both objects are nullable
-      - Compare floats rounding to the number of decimal places, 7 after
-        dropping missing values (NaN, NaT, None)
+      - Compare decimals and floats according to the following formula:
+        absolute(a - b) <= (atol + rtol * absolute(b))
+        where rtol=1e-5 and atol=1e-8 by numpy convention
     """
     # following pandas convention, rtol=1e-5 and atol=1e-8
     rtol = 1e-5
     atol = 1e-8
+
+    def compare_vals_approx(val1, val2):
+        # compare vals for approximate equality
+        if isinstance(lval, (float, decimal.Decimal)) or isinstance(rval, (float, decimal.Decimal)):
+            print("\nentered if float or decimal\n")
+            if abs(float(lval) - float(rval)) > (atol + rtol * abs(float(rval))):
+                print("left", abs(float(lval) - float(rval)))
+                print("right", (atol + rtol * abs(float(rval))))
+                return False
+        elif val1 != val2:
+            return False
+        return True
 
     if isinstance(left, pd.DataFrame) and isinstance(right, pd.DataFrame):
         if left.shape != right.shape:
@@ -200,19 +214,16 @@ def _assert_pandas_almost_equal(
                         },
                     )
             for lval, rval in zip(left[lcol].dropna(), right[rcol].dropna()):
-                if (isinstance(lval, float) or isinstance(lval, decimal.Decimal)) and (
-                    isinstance(rval, float) or isinstance(rval, decimal.Decimal)
-                ):
-                    if abs(float(lval) - float(rval)) > (atol + rtol * abs(float(rval))):
-                        raise PySparkAssertionError(
-                            error_class="DIFFERENT_PANDAS_DATAFRAME",
-                            message_parameters={
-                                "left": left.to_string(),
-                                "left_dtype": str(left.dtypes),
-                                "right": right.to_string(),
-                                "right_dtype": str(right.dtypes),
-                            },
-                        )
+                if not compare_vals_approx(lval, rval):
+                    raise PySparkAssertionError(
+                        error_class="DIFFERENT_PANDAS_DATAFRAME",
+                        message_parameters={
+                            "left": left.to_string(),
+                            "left_dtype": str(left.dtypes),
+                            "right": right.to_string(),
+                            "right_dtype": str(right.dtypes),
+                        },
+                    )
         if left.columns.names != right.columns.names:
             raise PySparkAssertionError(
                 error_class="DIFFERENT_PANDAS_DATAFRAME",
@@ -246,19 +257,16 @@ def _assert_pandas_almost_equal(
                     },
                 )
         for lval, rval in zip(left.dropna(), right.dropna()):
-            if (isinstance(lval, float) or isinstance(lval, decimal.Decimal)) and (
-                isinstance(rval, float) or isinstance(rval, decimal.Decimal)
-            ):
-                if abs(float(lval) - float(rval)) > (atol + rtol * abs(float(rval))):
-                    raise PySparkAssertionError(
-                        error_class="DIFFERENT_PANDAS_SERIES",
-                        message_parameters={
-                            "left": left,
-                            "left_dtype": left.dtype,
-                            "right": right,
-                            "right_dtype": right.dtype,
-                        },
-                    )
+            if not compare_vals_approx(lval, rval):
+                raise PySparkAssertionError(
+                    error_class="DIFFERENT_PANDAS_SERIES",
+                    message_parameters={
+                        "left": left,
+                        "left_dtype": left.dtype,
+                        "right": right,
+                        "right_dtype": right.dtype,
+                    },
+                )
     elif isinstance(left, pd.MultiIndex) and isinstance(right, pd.MultiIndex):
         if len(left) != len(right):
             raise PySparkAssertionError(
@@ -271,19 +279,16 @@ def _assert_pandas_almost_equal(
                 },
             )
         for lval, rval in zip(left, right):
-            if (isinstance(lval, float) or isinstance(lval, decimal.Decimal)) and (
-                isinstance(rval, float) or isinstance(rval, decimal.Decimal)
-            ):
-                if abs(float(lval) - float(rval)) > (atol + rtol * abs(float(rval))):
-                    raise PySparkAssertionError(
-                        error_class="DIFFERENT_PANDAS_MULTIINDEX",
-                        message_parameters={
-                            "left": left,
-                            "left_dtype": left.dtype,
-                            "right": right,
-                            "right_dtype": right.dtype,
-                        },
-                    )
+            if not compare_vals_approx(lval, rval):
+                raise PySparkAssertionError(
+                    error_class="DIFFERENT_PANDAS_MULTIINDEX",
+                    message_parameters={
+                        "left": left,
+                        "left_dtype": left.dtype,
+                        "right": right,
+                        "right_dtype": right.dtype,
+                    },
+                )
     elif isinstance(left, pd.Index) and isinstance(right, pd.Index):
         if len(left) != len(right):
             raise PySparkAssertionError(
@@ -307,21 +312,39 @@ def _assert_pandas_almost_equal(
                     },
                 )
         for lval, rval in zip(left.dropna(), right.dropna()):
-            if (isinstance(lval, float) or isinstance(lval, decimal.Decimal)) and (
-                isinstance(rval, float) or isinstance(rval, decimal.Decimal)
-            ):
-                if abs(float(lval) - float(rval)) > (atol + rtol * abs(float(rval))):
-                    raise PySparkAssertionError(
-                        error_class="DIFFERENT_PANDAS_INDEX",
-                        message_parameters={
-                            "left": left,
-                            "left_dtype": left.dtype,
-                            "right": right,
-                            "right_dtype": right.dtype,
-                        },
-                    )
+            if not compare_vals_approx(lval, rval):
+                raise PySparkAssertionError(
+                    error_class="DIFFERENT_PANDAS_INDEX",
+                    message_parameters={
+                        "left": left,
+                        "left_dtype": left.dtype,
+                        "right": right,
+                        "right_dtype": right.dtype,
+                    },
+                )
     else:
-        raise ValueError("Unexpected values: (%s, %s)" % (left, right))
+        if not isinstance(left, (pd.DataFrame, pd.Series, pd.Index)):
+            raise PySparkAssertionError(
+                error_class="INVALID_TYPE_DF_EQUALITY_ARG",
+                message_parameters={
+                    "expected_type": f"{pd.DataFrame.__name__}, "
+                    f"{pd.Series.__name__}, "
+                    f"{pd.Index.__name__}, ",
+                    "arg_name": "left",
+                    "actual_type": type(left),
+                },
+            )
+        elif not isinstance(right, (pd.DataFrame, pd.Series, pd.Index)):
+            raise PySparkAssertionError(
+                error_class="INVALID_TYPE_DF_EQUALITY_ARG",
+                message_parameters={
+                    "expected_type": f"{pd.DataFrame.__name__}, "
+                    f"{pd.Series.__name__}, "
+                    f"{pd.Index.__name__}, ",
+                    "arg_name": "right",
+                    "actual_type": type(right),
+                },
+            )
 
 
 def assertPandasOnSparkEqual(
