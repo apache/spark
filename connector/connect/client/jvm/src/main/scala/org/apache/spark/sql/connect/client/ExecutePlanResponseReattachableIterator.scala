@@ -20,7 +20,8 @@ import java.util.UUID
 
 import scala.util.control.NonFatal
 
-import io.grpc.ManagedChannel
+import io.grpc.{ManagedChannel, StatusRuntimeException}
+import io.grpc.protobuf.StatusProto
 import io.grpc.stub.StreamObserver
 
 import org.apache.spark.connect.proto
@@ -38,15 +39,12 @@ import org.apache.spark.internal.Logging
  * Initial iterator is the result of an ExecutePlan on the request, but it can be reattached with
  * ReattachExecute request. ReattachExecute request is provided the responseId of last returned
  * ExecutePlanResponse on the iterator to return a new iterator from server that continues after
- * that.
+ * that. If the initial ExecutePlan did not even reach the server, and hence reattach fails with
+ * INVALID_HANDLE.OPERATION_NOT_FOUND, we attempt to retry ExecutePlan.
  *
  * In reattachable execute the server does buffer some responses in case the client needs to
  * backtrack. To let server release this buffer sooner, this iterator asynchronously sends
  * ReleaseExecute RPCs that instruct the server to release responses that it already processed.
- *
- * Note: If the initial ExecutePlan did not even reach the server and execution didn't start, the
- * ReattachExecute can still fail with INVALID_HANDLE.OPERATION_NOT_FOUND, failing the whole
- * operation.
  */
 class ExecutePlanResponseReattachableIterator(
     request: proto.ExecutePlanRequest,
@@ -85,10 +83,10 @@ class ExecutePlanResponseReattachableIterator(
   // ResponseId of the last response returned by next()
   private var lastReturnedResponseId: Option[String] = None
 
-  // True after ResponseComplete message was seen in the stream.
+  // True after ResultComplete message was seen in the stream.
   // Server will always send this message at the end of the stream, if the underlying iterator
   // finishes without producing one, another iterator needs to be reattached.
-  private var responseComplete: Boolean = false
+  private var resultComplete: Boolean = false
 
   // Initial iterator comes from ExecutePlan request.
   // Note: This is not retried, because no error would ever be thrown here, and GRPC will only
@@ -97,82 +95,131 @@ class ExecutePlanResponseReattachableIterator(
     rawBlockingStub.executePlan(initialRequest)
 
   override def next(): proto.ExecutePlanResponse = synchronized {
-    // hasNext will trigger reattach in case the stream completed without responseComplete
+    // hasNext will trigger reattach in case the stream completed without resultComplete
     if (!hasNext()) {
       throw new java.util.NoSuchElementException()
     }
 
-    // Get next response, possibly triggering reattach in case of stream error.
-    var firstTry = true
-    val ret = retry {
-      if (firstTry) {
-        // on first try, we use the existing iterator.
-        firstTry = false
-      } else {
-        // on retry, the iterator is borked, so we need a new one
-        iterator = rawBlockingStub.reattachExecute(createReattachExecuteRequest())
+    try {
+      // Get next response, possibly triggering reattach in case of stream error.
+      var firstTry = true
+      val ret = retry {
+        if (firstTry) {
+          // on first try, we use the existing iterator.
+          firstTry = false
+        } else {
+          // on retry, the iterator is borked, so we need a new one
+          iterator = rawBlockingStub.reattachExecute(createReattachExecuteRequest())
+        }
+        callIter(_.next())
       }
-      iterator.next()
-    }
 
-    // Record last returned response, to know where to restart in case of reattach.
-    lastReturnedResponseId = Some(ret.getResponseId)
-    if (ret.hasResultComplete) {
-      responseComplete = true
-      releaseExecute(None) // release all
-    } else {
-      releaseExecute(lastReturnedResponseId) // release until this response
+      // Record last returned response, to know where to restart in case of reattach.
+      lastReturnedResponseId = Some(ret.getResponseId)
+      if (ret.hasResultComplete) {
+        releaseAll()
+      } else {
+        releaseUntil(lastReturnedResponseId.get)
+      }
+      ret
+    } catch {
+      case NonFatal(ex) =>
+        releaseAll() // ReleaseExecute on server after error.
+        throw ex
     }
-    ret
   }
 
   override def hasNext(): Boolean = synchronized {
-    if (responseComplete) {
+    if (resultComplete) {
       // After response complete response
       return false
     }
     var firstTry = true
-    retry {
-      if (firstTry) {
-        // on first try, we use the existing iterator.
-        firstTry = false
-      } else {
-        // on retry, the iterator is borked, so we need a new one
-        iterator = rawBlockingStub.reattachExecute(createReattachExecuteRequest())
-      }
-      var hasNext = iterator.hasNext()
-      // Graceful reattach:
-      // If iterator ended, but there was no ResultComplete, it means that there is more,
-      // and we need to reattach.
-      if (!hasNext && !responseComplete) {
-        do {
+    try {
+      retry {
+        if (firstTry) {
+          // on first try, we use the existing iterator.
+          firstTry = false
+        } else {
+          // on retry, the iterator is borked, so we need a new one
           iterator = rawBlockingStub.reattachExecute(createReattachExecuteRequest())
-          assert(!responseComplete) // shouldn't change...
-          hasNext = iterator.hasNext()
-          // It's possible that the new iterator will be empty, so we need to loop to get another.
-          // Eventually, there will be a non empty iterator, because there's always a ResultComplete
-          // at the end of the stream.
-        } while (!hasNext)
+        }
+        var hasNext = callIter(_.hasNext())
+        // Graceful reattach:
+        // If iterator ended, but there was no ResultComplete, it means that there is more,
+        // and we need to reattach.
+        if (!hasNext && !resultComplete) {
+          do {
+            iterator = rawBlockingStub.reattachExecute(createReattachExecuteRequest())
+            assert(!resultComplete) // shouldn't change...
+            hasNext = callIter(_.hasNext())
+            // It's possible that the new iterator will be empty, so we need to loop to get another.
+            // Eventually, there will be a non empty iterator, because there is always a
+            // ResultComplete inserted by the server at the end of the stream.
+          } while (!hasNext)
+        }
+        hasNext
       }
-      hasNext
+    } catch {
+      case NonFatal(ex) =>
+        releaseAll() // ReleaseExecute on server after error.
+        throw ex
     }
   }
 
   /**
-   * Inform the server to release the execution.
+   * Inform the server to release the buffered execution results until and including given result.
    *
    * This will send an asynchronous RPC which will not block this iterator, the iterator can
    * continue to be consumed.
-   *
-   * Release with untilResponseId informs the server that the iterator has been consumed until and
-   * including response with that responseId, and these responses can be freed.
-   *
-   * Release with None means that the responses have been completely consumed and informs the
-   * server that the completed execution can be completely freed.
    */
-  private def releaseExecute(untilResponseId: Option[String]): Unit = {
-    val request = createReleaseExecuteRequest(untilResponseId)
-    rawAsyncStub.releaseExecute(request, createRetryingReleaseExecuteResponseObserer(request))
+  private def releaseUntil(untilResponseId: String): Unit = {
+    if (!resultComplete) {
+      val request = createReleaseExecuteRequest(Some(untilResponseId))
+      rawAsyncStub.releaseExecute(request, createRetryingReleaseExecuteResponseObserer(request))
+    }
+  }
+
+  /**
+   * Inform the server to release the execution, either because all results were consumed, or the
+   * execution finished with error and the error was received.
+   *
+   * This will send an asynchronous RPC which will not block this. The client continues executing,
+   * and if the release fails, server is equipped to deal with abandoned executions.
+   */
+  private def releaseAll(): Unit = {
+    if (!resultComplete) {
+      val request = createReleaseExecuteRequest(None)
+      rawAsyncStub.releaseExecute(request, createRetryingReleaseExecuteResponseObserer(request))
+      resultComplete = true
+    }
+  }
+
+  /**
+   * Call next() or hasNext() on the iterator. If this fails with this operationId not existing on
+   * the server, this means that the initial ExecutePlan request didn't even reach the server. In
+   * that case, attempt to start again with ExecutePlan.
+   *
+   * Called inside retry block, so retryable failure will get handled upstream.
+   */
+  private def callIter[V](iterFun: java.util.Iterator[proto.ExecutePlanResponse] => V) = {
+    try {
+      iterFun(iterator)
+    } catch {
+      case ex: StatusRuntimeException
+          if StatusProto
+            .fromThrowable(ex)
+            .getMessage
+            .contains("INVALID_HANDLE.OPERATION_NOT_FOUND") =>
+        if (lastReturnedResponseId.isDefined) {
+          throw new IllegalStateException(
+            "OPERATION_NOT_FOUND on the server but responses were already received from it.",
+            ex)
+        }
+        // Try a new ExecutePlan, and throw upstream for retry.
+        iterator = rawBlockingStub.executePlan(initialRequest)
+        throw new GrpcRetryHandler.RetryException
+    }
   }
 
   /**

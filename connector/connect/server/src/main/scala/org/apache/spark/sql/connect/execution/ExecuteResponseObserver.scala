@@ -179,7 +179,7 @@ private[connect] class ExecuteResponseObserver[T <: MessageLite](val executeHold
   }
 
   /** Get the index in the stream for given response id. */
-  def getResponseIndexById(responseId: String): Long = {
+  def getResponseIndexById(responseId: String): Long = synchronized {
     responseIdToIndex.getOrElse(
       responseId,
       throw new SparkSQLException(
@@ -188,7 +188,7 @@ private[connect] class ExecuteResponseObserver[T <: MessageLite](val executeHold
   }
 
   /** Remove cached responses up to and including response with given id. */
-  def removeResponsesUntilId(responseId: String): Unit = {
+  def removeResponsesUntilId(responseId: String): Unit = synchronized {
     val index = getResponseIndexById(responseId)
     removeResponsesUntilIndex(index)
   }
