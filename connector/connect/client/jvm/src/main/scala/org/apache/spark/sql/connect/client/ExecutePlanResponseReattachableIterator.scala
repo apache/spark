@@ -92,8 +92,8 @@ class ExecutePlanResponseReattachableIterator(
 
   // Initial iterator comes from ExecutePlan request.
   // Note: This is not retried, because no error would ever be thrown here, and GRPC will only
-  // throw error on first responseIterator.hasNext() or responseIterator.next()
-  private var responseIterator: java.util.Iterator[proto.ExecutePlanResponse] =
+  // throw error on first iter.hasNext() or iter.next()
+  private var iter: java.util.Iterator[proto.ExecutePlanResponse] =
     rawBlockingStub.executePlan(initialRequest)
 
   override def next(): proto.ExecutePlanResponse = synchronized {
@@ -107,13 +107,13 @@ class ExecutePlanResponseReattachableIterator(
       var firstTry = true
       val ret = retry {
         if (firstTry) {
-          // on first try, we use the existing responseIterator.
+          // on first try, we use the existing iter.
           firstTry = false
         } else {
-          // on retry, the responseIterator is borked, so we need a new one
-          responseIterator = rawBlockingStub.reattachExecute(createReattachExecuteRequest())
+          // on retry, the iter is borked, so we need a new one
+          iter = rawBlockingStub.reattachExecute(createReattachExecuteRequest())
         }
-        responseIterator.next()
+        iter.next()
       }
 
       // Record last returned response, to know where to restart in case of reattach.
@@ -140,23 +140,23 @@ class ExecutePlanResponseReattachableIterator(
     try {
       retry {
         if (firstTry) {
-          // on first try, we use the existing responseIterator.
+          // on first try, we use the existing iter.
           firstTry = false
         } else {
-          // on retry, the responseIterator is borked, so we need a new one
-          responseIterator = rawBlockingStub.reattachExecute(createReattachExecuteRequest())
+          // on retry, the iter is borked, so we need a new one
+          iter = rawBlockingStub.reattachExecute(createReattachExecuteRequest())
         }
-        var hasNext = responseIterator.hasNext()
+        var hasNext = iter.hasNext()
         // Graceful reattach:
-        // If responseIterator ended, but there was no ResultComplete, it means that there is more,
+        // If iter ended, but there was no ResultComplete, it means that there is more,
         // and we need to reattach.
         if (!hasNext && !resultComplete) {
           do {
-            responseIterator = rawBlockingStub.reattachExecute(createReattachExecuteRequest())
+            iter = rawBlockingStub.reattachExecute(createReattachExecuteRequest())
             assert(!resultComplete) // shouldn't change...
-            hasNext = responseIterator.hasNext()
-            // It's possible that the new responseIterator will be empty, so we need try again.
-            // Eventually, there will be a non empty responseIterator, because there is always a
+            hasNext = iter.hasNext()
+            // It's possible that the new iter will be empty, so we need to loop to get another.
+            // Eventually, there will be a non empty iter, because there is always a
             // ResultComplete inserted by the server at the end of the stream.
           } while (!hasNext)
         }
