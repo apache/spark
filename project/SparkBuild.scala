@@ -709,7 +709,7 @@ object KubernetesIntegrationTests {
 object DependencyOverrides {
   import BuildCommons.protoVersion
 
-  lazy val guavaVersion = sys.props.get("guava.version").getOrElse("14.0.1")
+  lazy val guavaVersion = sys.props.get("guava.version").getOrElse("28.1-jre")
   lazy val settings = Seq(
     dependencyOverrides += "com.google.guava" % "guava" % guavaVersion,
     dependencyOverrides += "com.google.protobuf" % "protobuf-java" % protoVersion,

@@ -18,12 +18,15 @@
 package org.apache.spark.sql.execution.ui
 
 import java.util.Properties
+
 import scala.collection.mutable.{ArrayBuffer, ListBuffer}
+
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, Path}
 import org.json4s.jackson.JsonMethods._
 import org.scalatest.BeforeAndAfter
 import org.scalatest.time.SpanSugar._
+
 import org.apache.spark._
 import org.apache.spark.LocalSparkContext._
 import org.apache.spark.executor.ExecutorMetrics
@@ -42,7 +45,7 @@ import org.apache.spark.sql.connector.catalog.Table
 import org.apache.spark.sql.connector.metric.{CustomMetric, CustomTaskMetric}
 import org.apache.spark.sql.connector.read.{InputPartition, PartitionReader, PartitionReaderFactory}
 import org.apache.spark.sql.connector.write.{BatchWrite, DataWriter, DataWriterFactory, LogicalWriteInfo, PhysicalWriteInfo, Write, WriteBuilder}
-import org.apache.spark.sql.execution.{LeafExecNode, QueryExecution, SQLExecution, SparkPlanInfo}
+import org.apache.spark.sql.execution.{LeafExecNode, QueryExecution, SparkPlanInfo, SQLExecution}
 import org.apache.spark.sql.execution.adaptive.DisableAdaptiveExecution
 import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
