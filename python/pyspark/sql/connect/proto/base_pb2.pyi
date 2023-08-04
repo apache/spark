@@ -2554,9 +2554,7 @@ class ReleaseExecuteRequest(google.protobuf.message.Message):
 
     class ReleaseAll(google.protobuf.message.Message):
         """Release and close operation completely.
-        Note: This should be called when the server side operation is finished, and ExecutePlan or
-        ReattachExecute are finished processing the result stream, or inside onComplete / onError.
-        This will not interrupt a running execution, but block until it's finished.
+        This will also interrupt the query if it is running execution, and wait for it to be torn down.
         """
 
         DESCRIPTOR: google.protobuf.descriptor.Descriptor

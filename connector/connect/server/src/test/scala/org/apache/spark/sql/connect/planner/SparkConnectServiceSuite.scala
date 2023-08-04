@@ -493,24 +493,37 @@ class SparkConnectServiceSuite extends SharedSparkSession with MockitoSugar with
         .setSessionId(sessionId)
         .build()
 
-      // The observer is executed inside this thread. So
-      // we can perform the checks inside the observer.
+      // Even though the observer is executed inside this thread, this thread is also executing
+      // the SparkConnectService. If we throw an exception inside it, it will be caught by
+      // the ErrorUtils.handleError wrapping instance.executePlan and turned into an onError
+      // call with StatusRuntimeException, which will be eaten here.
+      var failures: mutable.ArrayBuffer[String] = new mutable.ArrayBuffer[String]()
       instance.executePlan(
         request,
         new StreamObserver[proto.ExecutePlanResponse] {
           override def onNext(v: proto.ExecutePlanResponse): Unit = {
-            fail("this should not receive responses")
+            // The query receives some pre-execution responses such as schema, but should
+            // never proceed to execution and get query results.
+            if (v.hasArrowBatch) {
+              failures += s"this should not receive query results but got $v"
+            }
           }
 
           override def onError(throwable: Throwable): Unit = {
-            assert(throwable.isInstanceOf[StatusRuntimeException])
-            verifyEvents.onError(throwable)
+            try {
+              assert(throwable.isInstanceOf[StatusRuntimeException])
+              verifyEvents.onError(throwable)
+            } catch {
+              case t: Throwable =>
+                failures += s"assertion $t validating processing onError($throwable)."
+            }
           }
 
           override def onCompleted(): Unit = {
-            fail("this should not complete")
+            failures += "this should not complete"
           }
         })
+      assert(failures.isEmpty, s"this should have no failures but got $failures")
       verifyEvents.onCompleted()
     }
   }
