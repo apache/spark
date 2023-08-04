@@ -123,6 +123,23 @@ object PythonUDTFRunner {
     argOffsets.foreach { offset =>
       dataOut.writeInt(offset)
     }
+    var firstTableArgumentIndex = 0
+    var numTableArgumentColumns = 0
+    var numPartitionChildIndexes = 0
+    var partitionChildIndexes = Seq.empty[Int]
+    udtf.children.zipWithIndex.foreach {
+      case (f: FunctionTableSubqueryArgumentExpression, index: Int) =>
+        firstTableArgumentIndex = index
+        numTableArgumentColumns = f.plan.output.length
+        numPartitionChildIndexes = f.partitioningExpressionIndexes.length
+        partitionChildIndexes =
+          FunctionTableSubqueryArgumentExpression.partitionChildIndexes(udtf.children)
+      case _ =>
+    }
+    dataOut.writeInt(numTableArgumentColumns)
+    dataOut.writeInt(firstTableArgumentIndex)
+    dataOut.writeInt(numPartitionChildIndexes)
+    partitionChildIndexes.foreach(dataOut.writeInt)
     dataOut.writeInt(udtf.func.command.length)
     dataOut.write(udtf.func.command.toArray)
     PythonWorkerUtils.writeUTF(udtf.elementSchema.json, dataOut)

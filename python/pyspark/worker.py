@@ -557,6 +557,10 @@ def read_udtf(pickleSer, infile, eval_type):
     # See `PythonUDTFRunner.PythonUDFWriterThread.writeCommand'
     num_arg = read_int(infile)
     arg_offsets = [read_int(infile) for _ in range(num_arg)]
+    first_table_argument_index = read_int(infile)
+    num_table_argument_columns = read_int(infile)
+    num_partition_child_indexes = read_int(infile)
+    partition_child_indexes = [read_int(infile) for i in xrange(num_partition_child_indexes)]
     handler = read_command(pickleSer, infile)
     if not isinstance(handler, type):
         raise PySparkRuntimeError(
@@ -638,6 +642,10 @@ def read_udtf(pickleSer, infile, eval_type):
                 for a in it:
                     # The eval function yields an iterator. Each element produced by this
                     # iterator is a tuple in the form of (pandas.DataFrame, arrow_return_type).
+                    #
+                    # TODO: compare adjacent values in each a[o] for consecutive rows.
+                    # If any values change, call 'terminate' on the UDTF class instance,
+                    # then destroy it and create a new one.
                     yield from eval(*[a[o] for o in arg_offsets])
             finally:
                 if terminate is not None:
@@ -696,6 +704,9 @@ def read_udtf(pickleSer, infile, eval_type):
         def mapper(_, it):
             try:
                 for a in it:
+                    # TODO: compare adjacent values in each a[o] for consecutive rows.
+                    # If any values change, call 'terminate' on the UDTF class instance,
+                    # then destroy it and create a new one.
                     yield eval(*[a[o] for o in arg_offsets])
             finally:
                 if terminate is not None:
