@@ -127,7 +127,12 @@ object RewritePredicateSubquery extends Rule[LogicalPlan] with PredicateHelper {
           val newSub = dedupSubqueryOnSelfJoin(p, sub, Some(values))
           val inConditions = values.zip(newSub.output).map(EqualTo.tupled)
           val (joinCond, outerPlan) = rewriteExistentialExpr(inConditions ++ conditions, p)
-          Join(outerPlan, newSub, LeftSemi, joinCond, JoinHint(None, subHint))
+          val inSubqueryThreshold = SQLConf.get.getConf(SQLConf.IN_SUBQUERY_CONVERT_JOIN_THRESHOLD)
+          if (newSub.maxRows.exists(_ <= inSubqueryThreshold)) {
+            Filter(condition, child)
+          } else {
+            Join(outerPlan, newSub, LeftSemi, joinCond, JoinHint(None, subHint))
+          }
         case (p, Not(InSubquery(values, ListQuery(sub, _, _, _, conditions, subHint)))) =>
           // This is a NULL-aware (left) anti join (NAAJ) e.g. col NOT IN expr
           // Construct the condition. A NULL in one of the conditions is regarded as a positive

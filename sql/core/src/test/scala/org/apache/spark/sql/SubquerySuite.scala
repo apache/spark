@@ -2757,4 +2757,31 @@ class SubquerySuite extends QueryTest
       checkAnswer(df, Row(1, "foo", 1, "foo"))
     }
   }
+
+  test("SPARK-44654: in subquery in partitioning expression") {
+    withSQLConf(SQLConf.IN_SUBQUERY_CONVERT_JOIN_THRESHOLD.key -> "1") {
+      withTable("parquet_part") {
+        Seq("1" -> "a", "2" -> "a", "3" -> "b", "4" -> "b")
+          .toDF("id_value", "id_type")
+          .write
+          .mode(SaveMode.Overwrite)
+          .partitionBy("id_type")
+          .format("parquet")
+          .saveAsTable("parquet_part")
+        val df = sql(
+          "SELECT * FROM parquet_part WHERE id_type in (SELECT max(id_type) from parquet_part)")
+        var join = df.queryExecution.optimizedPlan.collect {
+          case j: Join => j
+        }
+        assert(join.isEmpty, "In subquery should not convert to join")
+
+        val df1 = sql(
+          "SELECT * FROM parquet_part WHERE id_type in (SELECT id_type from parquet_part)")
+        join = df1.queryExecution.optimizedPlan.collect {
+          case j: Join => j
+        }
+        assert(!join.isEmpty, "In subquery convert to join.")
+      }
+    }
+  }
 }

@@ -3378,6 +3378,13 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val IN_SUBQUERY_CONVERT_JOIN_THRESHOLD =
+    buildConf("spark.sql.optimizer.inSubqueryConvertJoinThreshold")
+      .doc("Whether In Subquery is optimized to join limit.")
+      .version("3.5.0")
+      .longConf
+      .createWithDefault(10L)
+
   val PULL_HINTS_INTO_SUBQUERIES =
     buildConf("spark.sql.optimizer.pullHintsIntoSubqueries")
       .internal()
@@ -4740,6 +4747,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def stringRedactionPattern: Option[Regex] = getConf(SQL_STRING_REDACTION_PATTERN)
 
   def sortBeforeRepartition: Boolean = getConf(SORT_BEFORE_REPARTITION)
+
+  def inSubqueryConvertJoinThreshold: Long = getConf(IN_SUBQUERY_CONVERT_JOIN_THRESHOLD)
 
   def topKSortFallbackThreshold: Int = getConf(TOP_K_SORT_FALLBACK_THRESHOLD)
 
