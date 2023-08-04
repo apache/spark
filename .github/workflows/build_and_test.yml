@@ -415,9 +415,10 @@ jobs:
     - name: Free up disk space
       shell: 'script -q -e -c "bash {0}"'
       run: |
-        # uninstall large libraries only used for ML
         if [[ "$MODULES_TO_TEST" != *"pyspark-ml"* ]]; then
-          python3.9 -m pip uninstall -y torch torchvision torcheval torchtnt tensorboard
+          # uninstall large libraries only used for ML
+          python3.9 -m pip uninstall -y torch torchvision torcheval torchtnt
+          python3.9 -m pip uninstall -y tensorboard tensorboard-data-server
         fi
         ./dev/free_disk_space_container
     - name: Install Java ${{ matrix.java }}
