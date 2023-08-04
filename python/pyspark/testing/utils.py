@@ -479,8 +479,6 @@ def assertDataFrameEqual(
         import pyspark.pandas as ps
         import pandas as pd
         from pyspark.testing.pandasutils import (
-            assertPandasOnSparkEqual,
-            _assert_pandas_almost_equal,
             PandasOnSparkTestUtils,
         )
 
@@ -499,7 +497,7 @@ def assertDataFrameEqual(
             # handle pandas DataFrames
             # assert approximate equality for float data
             return PandasOnSparkTestUtils().assert_eq(
-                actual, expected, check_exact=False, almost=True
+                actual, expected, check_exact=False, almost=True, check_row_order=checkRowOrder
             )
 
     try:
@@ -529,7 +527,7 @@ def assertDataFrameEqual(
             raise PySparkAssertionError(
                 error_class="INVALID_TYPE_DF_EQUALITY_ARG",
                 message_parameters={
-                    "expected_type": Union[DataFrame, ps.DataFrame, List[Row]],
+                    "expected_type": "Union[DataFrame, ps.DataFrame, List[Row]]",
                     "arg_name": "actual",
                     "actual_type": type(actual),
                 },
@@ -538,7 +536,7 @@ def assertDataFrameEqual(
             raise PySparkAssertionError(
                 error_class="INVALID_TYPE_DF_EQUALITY_ARG",
                 message_parameters={
-                    "expected_type": Union[DataFrame, ps.DataFrame, List[Row]],
+                    "expected_type": "Union[DataFrame, ps.DataFrame, List[Row]]",
                     "arg_name": "expected",
                     "actual_type": type(expected),
                 },

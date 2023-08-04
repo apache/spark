@@ -120,13 +120,13 @@ class UtilsTestsMixin:
         assertPandasOnSparkEqual(psdf1, psdf2, checkRowOrder=False)
         assertPandasOnSparkEqual(psdf1, psdf2, checkRowOrder=True)
 
-    def test_assertPandasOnSparkEqual_ignoreOrder_default(self):
+    def test_assertPandasOnSparkEqual_ignoreOrder(self):
         import pyspark.pandas as ps
 
         psdf1 = ps.DataFrame({"a": [1, 2, 3], "b": [4, 5, 6], "c": [7, 8, 9]})
         psdf2 = ps.DataFrame({"a": [2, 1, 3], "b": [5, 4, 6], "c": [8, 7, 9]})
 
-        assertPandasOnSparkEqual(psdf1, psdf2)
+        assertPandasOnSparkEqual(psdf1, psdf2, checkRowOrder=False)
 
     def test_assert_series_assertPandasOnSparkEqual(self):
         import pyspark.pandas as ps
