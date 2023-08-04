@@ -377,7 +377,7 @@ def assertDataFrameEqual(
     A util function to assert equality between `actual` and `expected`
     (DataFrames or lists of Rows), with optional parameters `checkRowOrder`, `rtol`, and `atol`.
 
-    Supports Spark, Spark Connect, and pandas-on-Spark DataFrames.
+    Supports Spark, Spark Connect, pandas, and pandas-on-Spark DataFrames.
     For more information about pandas-on-Spark DataFrame equality, see the docs for
     `assertPandasOnSparkEqual`.
 
@@ -385,9 +385,9 @@ def assertDataFrameEqual(
 
     Parameters
     ----------
-    actual : DataFrame (Spark, Spark Connect, or pandas-on-Spark) or list of Rows
+    actual : DataFrame (Spark, Spark Connect, pandas, or pandas-on-Spark) or list of Rows
         The DataFrame that is being compared or tested.
-    expected : DataFrame (Spark, Spark Connect, or pandas-on-Spark) or list of Rows
+    expected : DataFrame (Spark, Spark Connect, pandas, or pandas-on-Spark) or list of Rows
         The expected result of the operation, for comparison with the actual result.
     checkRowOrder : bool, optional
         A flag indicating whether the order of rows should be considered in the comparison.
@@ -452,9 +452,6 @@ def assertDataFrameEqual(
     Row(id='2', amount=3000.0)
     ! Row(id='3', amount=2003.0)
     """
-    import pyspark.pandas as ps
-    from pyspark.testing.pandasutils import assertPandasOnSparkEqual
-
     if actual is None and expected is None:
         return True
     elif actual is None:
