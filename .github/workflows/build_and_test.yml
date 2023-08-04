@@ -417,7 +417,7 @@ jobs:
       run: |
         # uninstall large libraries only used for ML
         if [[ "$MODULES_TO_TEST" != *"pyspark-ml"* ]]; then
-          python3.9 -m pip uninstall -y torch torchvision torcheval torchtnt
+          python3.9 -m pip uninstall -y torch torchvision torcheval torchtnt tensorboard
         fi
         ./dev/free_disk_space_container
     - name: Install Java ${{ matrix.java }}
