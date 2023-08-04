@@ -11976,7 +11976,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         show_counts : bool, optional
             Whether to show the non-null counts.
 
-            .. versionadded:: 3.5.0
+            .. versionadded:: 4.0.0
 
         Returns
         -------
