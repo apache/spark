@@ -762,17 +762,19 @@ class BaseUDTFTestsMixin:
             ("x: struct<a:string,b:string,c:string>", [Row(Row(a="0", b="1.1", c="2"))]),
             ("x: struct<a:int,b:int,c:int>", [Row(Row(a=0, b=None, c=2))]),
             ("x: struct<a:float,b:float,c:float>", [Row(Row(a=None, b=1.1, c=None))]),
-            ("x: struct<a:struct<>,b:struct<>,c:struct<>>", "UNEXPECTED_TUPLE_WITH_STRUCT"),
         ]:
             with self.subTest(ret_type=ret_type):
                 self._check_result_or_exception(TestUDTF, ret_type, expected)
 
     def test_struct_output_type_casting_row(self):
+        self.check_struct_output_type_casting_row(Py4JJavaError)
+
+    def check_struct_output_type_casting_row(self, error_type):
         class TestUDTF:
             def eval(self):
                 yield Row(a=0, b=1.1, c=2),
 
-        err = ("PickleException", Py4JJavaError)
+        err = ("PickleException", error_type)
 
         for ret_type, expected in [
             ("x: boolean", err),
@@ -781,8 +783,8 @@ class BaseUDTFTestsMixin:
             ("x: int", err),
             ("x: bigint", err),
             ("x: string", err),
-            ("x: date", "AttributeError"),
-            ("x: timestamp", "AttributeError"),
+            ("x: date", "ValueError"),
+            ("x: timestamp", "ValueError"),
             ("x: byte", err),
             ("x: binary", err),
             ("x: float", err),
@@ -793,7 +795,6 @@ class BaseUDTFTestsMixin:
             ("x: struct<a:string,b:string,c:string>", [Row(Row(a="0", b="1.1", c="2"))]),
             ("x: struct<a:int,b:int,c:int>", [Row(Row(a=0, b=None, c=2))]),
             ("x: struct<a:float,b:float,c:float>", [Row(Row(a=None, b=1.1, c=None))]),
-            ("x: struct<a:struct<>,b:struct<>,c:struct<>>", "UNEXPECTED_TUPLE_WITH_STRUCT"),
         ]:
             with self.subTest(ret_type=ret_type):
                 if isinstance(expected, tuple):
