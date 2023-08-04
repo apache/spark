@@ -189,7 +189,6 @@ jobs:
             ./build/mvn $MAVEN_CLI_OPTS -Djava.version=${JAVA_VERSION/-ea} -pl connector/connect/client/jvm,connector/connect/common,connector/connect/server test -fae
           elif [[ "$MODULES_TO_TEST" == *"sql#hive-thriftserver"* ]]; then
             # To avoid a compilation loop, for the `sql/hive-thriftserver` module, run `clean install` instead
-            # SPARK-44600: In order to force the `repl` module to use jar of another module for testing instead of using the classes directory, run `clean install` instead
             ./build/mvn $MAVEN_CLI_OPTS -pl "$TEST_MODULES" -Pyarn -Pmesos -Pkubernetes -Pvolcano -Phive -Phive-thriftserver -Phadoop-cloud -Pspark-ganglia-lgpl -Djava.version=${JAVA_VERSION/-ea} clean install -fae
           else
             ./build/mvn $MAVEN_CLI_OPTS -pl "$TEST_MODULES" -Pyarn -Pmesos -Pkubernetes -Pvolcano -Phive -Phive-thriftserver -Pspark-ganglia-lgpl -Phadoop-cloud -Djava.version=${JAVA_VERSION/-ea} test -fae
