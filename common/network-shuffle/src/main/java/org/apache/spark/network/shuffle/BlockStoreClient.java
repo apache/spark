@@ -170,7 +170,7 @@ public abstract class BlockStoreClient implements Closeable {
     checkInit();
     int maxRetries = transportConf.maxIORetries();
     int retryWaitTime = transportConf.ioRetryWaitTimeMs();
-    retry(1, maxRetries, retryWaitTime, () -> {
+    retry(0, maxRetries, retryWaitTime, () -> {
       CompletableFuture<Map<String, String[]>> tempHostLocalDirsCompletable =
               new CompletableFuture<>();
       getHostLocalDirsInternal(host, port, execIds, tempHostLocalDirsCompletable);
@@ -228,9 +228,9 @@ public abstract class BlockStoreClient implements Closeable {
               } else {
                 executorService.execute(() -> {
                   logger.info("Retrying ({}/{}) for getting host local dirs after {} ms",
-                          times, maxRetries, delayMs);
+                          times + 1, maxRetries, delayMs);
                   Uninterruptibles.sleepUninterruptibly(delayMs, TimeUnit.MILLISECONDS);
-                  retry(times + 1, maxRetries, delayMs, action, future);
+                  retry(times + 1, maxRetries, enableSaslRetries, delayMs, action, future);
                 });
               }
               return null;
