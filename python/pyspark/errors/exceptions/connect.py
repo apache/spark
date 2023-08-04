@@ -188,3 +188,10 @@ class SparkUpgradeException(SparkConnectGrpcException, BaseSparkUpgradeException
     """
     Exception thrown because of Spark upgrade from Spark Connect.
     """
+
+
+class SparkConnectRetryException(SparkConnectException):
+    """
+    An exception that can be thrown upstream when inside retry and which will be retryable
+    regardless of policy.
+    """

@@ -21,10 +21,14 @@ check_dependencies(__name__)
 import warnings
 import uuid
 from collections.abc import Generator
-from typing import Optional, Dict, Any, Iterator, Iterable, Tuple
+from typing import Optional, Dict, Any, Iterator, Iterable, Tuple, Callable, cast
 from multiprocessing.pool import ThreadPool
 import os
 
+import grpc
+from grpc_status import rpc_status
+
+from pyspark.errors.exceptions.connect import SparkConnectRetryException
 import pyspark.sql.connect.proto as pb2
 import pyspark.sql.connect.proto.base_pb2_grpc as grpc_lib
 
@@ -42,15 +46,12 @@ class ExecutePlanResponseReattachableIterator(Generator):
     Initial iterator is the result of an ExecutePlan on the request, but it can be reattached with
     ReattachExecute request. ReattachExecute request is provided the responseId of last returned
     ExecutePlanResponse on the iterator to return a new iterator from server that continues after
-    that.
+    that. If the initial ExecutePlan did not even reach the server, and hence reattach fails with
+    INVALID_HANDLE.OPERATION_NOT_FOUND, we attempt to retry ExecutePlan.
 
     In reattachable execute the server does buffer some responses in case the client needs to
     backtrack. To let server release this buffer sooner, this iterator asynchronously sends
     ReleaseExecute RPCs that instruct the server to release responses that it already processed.
-
-    Note: If the initial ExecutePlan did not even reach the server and execution didn't start,
-    the ReattachExecute can still fail with INVALID_HANDLE.OPERATION_NOT_FOUND, failing the whole
-    operation.
     """
 
     _release_thread_pool = ThreadPool(os.cpu_count() if os.cpu_count() else 8)
@@ -93,6 +94,7 @@ class ExecutePlanResponseReattachableIterator(Generator):
         # Initial iterator comes from ExecutePlan request.
         # Note: This is not retried, because no error would ever be thrown here, and GRPC will only
         # throw error on first self._has_next().
+        self._metadata = metadata
         self._iterator: Iterator[pb2.ExecutePlanResponse] = iter(
             self._stub.ExecutePlan(self._initial_request, metadata=metadata)
         )
@@ -139,7 +141,7 @@ class ExecutePlanResponseReattachableIterator(Generator):
 
                         if self._current is None:
                             try:
-                                self._current = next(self._iterator)
+                                self._current = self._call_iter(lambda: next(self._iterator))
                             except StopIteration:
                                 pass
 
@@ -159,7 +161,7 @@ class ExecutePlanResponseReattachableIterator(Generator):
                                 # shouldn't change
                                 assert not self._result_complete
                                 try:
-                                    self._current = next(self._iterator)
+                                    self._current = self._call_iter(lambda: next(self._iterator))
                                 except StopIteration:
                                     pass
                                 has_next = self._current is not None
@@ -225,6 +227,31 @@ class ExecutePlanResponseReattachableIterator(Generator):
 
         ExecutePlanResponseReattachableIterator._release_thread_pool.apply_async(target)
         self._result_complete = True
+
+    def _call_iter(self, iter_fun: Callable) -> Any:
+        """
+        Call next() on the iterator. If this fails with this operationId not existing
+        on the server, this means that the initial ExecutePlan request didn't even reach the
+        server. In that case, attempt to start again with ExecutePlan.
+
+        Called inside retry block, so retryable failure will get handled upstream.
+        """
+        try:
+            return iter_fun()
+        except grpc.RpcError as e:
+            status = rpc_status.from_call(cast(grpc.Call, e))
+            if "INVALID_HANDLE.OPERATION_NOT_FOUND" in status.message:
+                if self._last_returned_response_id is not None:
+                    raise RuntimeError(
+                        "OPERATION_NOT_FOUND on the server but "
+                        "responses were already received from it.",
+                        e,
+                    )
+                # Try a new ExecutePlan, and throw upstream for retry.
+                self._iterator = iter(
+                    self._stub.ExecutePlan(self._initial_request, metadata=self._metadata)
+                )
+                raise SparkConnectRetryException("Retrying ...")
 
     def _create_reattach_execute_request(self) -> pb2.ReattachExecuteRequest:
         reattach = pb2.ReattachExecuteRequest(

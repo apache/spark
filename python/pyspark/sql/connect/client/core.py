@@ -74,6 +74,7 @@ from pyspark.errors.exceptions.connect import (
     convert_exception,
     SparkConnectException,
     SparkConnectGrpcException,
+    SparkConnectRetryException,
 )
 from pyspark.sql.connect.expressions import (
     PythonUDF,
@@ -1549,7 +1550,7 @@ class AttemptManager:
     ) -> Optional[bool]:
         if isinstance(exc_val, BaseException):
             # Swallow the exception.
-            if self._can_retry(exc_val):
+            if self._can_retry(exc_val) or isinstance(exc_val, SparkConnectRetryException):
                 self._retry_state.set_exception(exc_val)
                 return True
             # Bubble up the exception.
