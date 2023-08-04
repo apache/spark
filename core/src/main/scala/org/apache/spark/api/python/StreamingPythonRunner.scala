@@ -73,7 +73,7 @@ private[spark] class StreamingPythonRunner(
     conf.set(PYTHON_USE_DAEMON, false)
     try {
       val workerFactory = new PythonWorkerFactory(pythonExec, envVars.asScala.toMap)
-      val (worker: Socket, _) = pythonWorkerFactory.createStreamingWorker(workerModule)
+      val (worker: Socket, _) = workerFactory.createStreamingWorker(workerModule)
       pythonWorker = Some(worker)
       pythonWorkerFactory = Some(workerFactory)
     } finally {
