@@ -190,12 +190,15 @@ private[spark] object ResourceUtils extends Logging {
   def addTaskResourceRequests(
       sparkConf: SparkConf,
       treqs: TaskResourceRequests): Unit = {
-    listResourceIds(sparkConf, SPARK_TASK_PREFIX).map { resourceId =>
+    val nonZeroTaskReqs = listResourceIds(sparkConf, SPARK_TASK_PREFIX).map { resourceId =>
       val settings = sparkConf.getAllWithPrefix(resourceId.confPrefix).toMap
       val amountDouble = settings.getOrElse(AMOUNT,
         throw new SparkException(s"You must specify an amount for ${resourceId.resourceName}")
       ).toDouble
-      treqs.resource(resourceId.resourceName, amountDouble)
+      (resourceId.resourceName, amountDouble)
+    }.toMap.filter { case (_, amount) => amount > 0.0 }
+    nonZeroTaskReqs.foreach { case (resourceName, amount) =>
+      treqs.resource(resourceName, amount)
     }
   }
 

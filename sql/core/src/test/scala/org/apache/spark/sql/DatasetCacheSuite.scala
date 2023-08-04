@@ -272,4 +272,25 @@ class DatasetCacheSuite extends QueryTest
       }
     }
   }
+
+  test("SPARK-44653: non-trivial DataFrame unions should not break caching") {
+    val df1 = Seq(1 -> 1).toDF("i", "j")
+    val df2 = Seq(2 -> 2).toDF("i", "j")
+    val df3 = Seq(3 -> 3).toDF("i", "j")
+
+    withClue("positive") {
+      val unionDf = df1.union(df2).select($"i")
+      unionDf.cache()
+      val finalDf = unionDf.union(df3.select($"i"))
+      assert(finalDf.queryExecution.executedPlan.exists(_.isInstanceOf[InMemoryTableScanExec]))
+    }
+
+    withClue("negative") {
+      val unionDf = df1.union(df2)
+      unionDf.cache()
+      val finalDf = unionDf.union(df3)
+      // It's by design to break caching here.
+      assert(!finalDf.queryExecution.executedPlan.exists(_.isInstanceOf[InMemoryTableScanExec]))
+    }
+  }
 }
