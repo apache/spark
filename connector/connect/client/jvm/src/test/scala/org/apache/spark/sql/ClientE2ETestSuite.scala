@@ -755,7 +755,7 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper with PrivateM
 
   private def checkSameResult[E](expected: scala.collection.Seq[E], dataset: Dataset[E]): Unit = {
     dataset.withResult { result =>
-      assert(expected === result.iterator.asScala.toBuffer)
+      assert(expected === result.iterator.toBuffer)
     }
   }
 

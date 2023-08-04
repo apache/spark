@@ -2365,7 +2365,6 @@ def concat(
 
     See Also
     --------
-    Series.append : Concatenate Series.
     DataFrame.join : Join DataFrames using indexes.
     DataFrame.merge : Merge DataFrames by indexes or columns.
 

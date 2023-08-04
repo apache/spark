@@ -20,7 +20,8 @@ import java.util.UUID
 
 import scala.util.control.NonFatal
 
-import io.grpc.ManagedChannel
+import io.grpc.{ManagedChannel, StatusRuntimeException}
+import io.grpc.protobuf.StatusProto
 import io.grpc.stub.StreamObserver
 
 import org.apache.spark.connect.proto
@@ -38,21 +39,18 @@ import org.apache.spark.internal.Logging
  * Initial iterator is the result of an ExecutePlan on the request, but it can be reattached with
  * ReattachExecute request. ReattachExecute request is provided the responseId of last returned
  * ExecutePlanResponse on the iterator to return a new iterator from server that continues after
- * that.
+ * that. If the initial ExecutePlan did not even reach the server, and hence reattach fails with
+ * INVALID_HANDLE.OPERATION_NOT_FOUND, we attempt to retry ExecutePlan.
  *
  * In reattachable execute the server does buffer some responses in case the client needs to
  * backtrack. To let server release this buffer sooner, this iterator asynchronously sends
  * ReleaseExecute RPCs that instruct the server to release responses that it already processed.
- *
- * Note: If the initial ExecutePlan did not even reach the server and execution didn't start, the
- * ReattachExecute can still fail with INVALID_HANDLE.OPERATION_NOT_FOUND, failing the whole
- * operation.
  */
 class ExecutePlanResponseReattachableIterator(
     request: proto.ExecutePlanRequest,
     channel: ManagedChannel,
     retryPolicy: GrpcRetryHandler.RetryPolicy)
-    extends java.util.Iterator[proto.ExecutePlanResponse]
+    extends CloseableIterator[proto.ExecutePlanResponse]
     with Logging {
 
   val operationId = if (request.hasOperationId) {
@@ -92,8 +90,8 @@ class ExecutePlanResponseReattachableIterator(
 
   // Initial iterator comes from ExecutePlan request.
   // Note: This is not retried, because no error would ever be thrown here, and GRPC will only
-  // throw error on first iterator.hasNext() or iterator.next()
-  private var iterator: java.util.Iterator[proto.ExecutePlanResponse] =
+  // throw error on first iter.hasNext() or iter.next()
+  private var iter: java.util.Iterator[proto.ExecutePlanResponse] =
     rawBlockingStub.executePlan(initialRequest)
 
   override def next(): proto.ExecutePlanResponse = synchronized {
@@ -107,13 +105,13 @@ class ExecutePlanResponseReattachableIterator(
       var firstTry = true
       val ret = retry {
         if (firstTry) {
-          // on first try, we use the existing iterator.
+          // on first try, we use the existing iter.
           firstTry = false
         } else {
-          // on retry, the iterator is borked, so we need a new one
-          iterator = rawBlockingStub.reattachExecute(createReattachExecuteRequest())
+          // on retry, the iter is borked, so we need a new one
+          iter = rawBlockingStub.reattachExecute(createReattachExecuteRequest())
         }
-        iterator.next()
+        callIter(_.next())
       }
 
       // Record last returned response, to know where to restart in case of reattach.
@@ -140,23 +138,23 @@ class ExecutePlanResponseReattachableIterator(
     try {
       retry {
         if (firstTry) {
-          // on first try, we use the existing iterator.
+          // on first try, we use the existing iter.
           firstTry = false
         } else {
-          // on retry, the iterator is borked, so we need a new one
-          iterator = rawBlockingStub.reattachExecute(createReattachExecuteRequest())
+          // on retry, the iter is borked, so we need a new one
+          iter = rawBlockingStub.reattachExecute(createReattachExecuteRequest())
         }
-        var hasNext = iterator.hasNext()
+        var hasNext = callIter(_.hasNext())
         // Graceful reattach:
-        // If iterator ended, but there was no ResultComplete, it means that there is more,
+        // If iter ended, but there was no ResultComplete, it means that there is more,
         // and we need to reattach.
         if (!hasNext && !resultComplete) {
           do {
-            iterator = rawBlockingStub.reattachExecute(createReattachExecuteRequest())
+            iter = rawBlockingStub.reattachExecute(createReattachExecuteRequest())
             assert(!resultComplete) // shouldn't change...
-            hasNext = iterator.hasNext()
-            // It's possible that the new iterator will be empty, so we need to loop to get another.
-            // Eventually, there will be a non empty iterator, because there is always a
+            hasNext = callIter(_.hasNext())
+            // It's possible that the new iter will be empty, so we need to loop to get another.
+            // Eventually, there will be a non empty iter, because there is always a
             // ResultComplete inserted by the server at the end of the stream.
           } while (!hasNext)
         }
@@ -167,6 +165,10 @@ class ExecutePlanResponseReattachableIterator(
         releaseAll() // ReleaseExecute on server after error.
         throw ex
     }
+  }
+
+  override def close(): Unit = {
+    releaseAll()
   }
 
   /**
@@ -194,6 +196,33 @@ class ExecutePlanResponseReattachableIterator(
       val request = createReleaseExecuteRequest(None)
       rawAsyncStub.releaseExecute(request, createRetryingReleaseExecuteResponseObserer(request))
       resultComplete = true
+    }
+  }
+
+  /**
+   * Call next() or hasNext() on the iterator. If this fails with this operationId not existing on
+   * the server, this means that the initial ExecutePlan request didn't even reach the server. In
+   * that case, attempt to start again with ExecutePlan.
+   *
+   * Called inside retry block, so retryable failure will get handled upstream.
+   */
+  private def callIter[V](iterFun: java.util.Iterator[proto.ExecutePlanResponse] => V) = {
+    try {
+      iterFun(iter)
+    } catch {
+      case ex: StatusRuntimeException
+          if StatusProto
+            .fromThrowable(ex)
+            .getMessage
+            .contains("INVALID_HANDLE.OPERATION_NOT_FOUND") =>
+        if (lastReturnedResponseId.isDefined) {
+          throw new IllegalStateException(
+            "OPERATION_NOT_FOUND on the server but responses were already received from it.",
+            ex)
+        }
+        // Try a new ExecutePlan, and throw upstream for retry.
+        iter = rawBlockingStub.executePlan(initialRequest)
+        throw new GrpcRetryHandler.RetryException
     }
   }
 

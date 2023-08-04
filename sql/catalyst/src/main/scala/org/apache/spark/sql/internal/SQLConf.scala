@@ -2944,6 +2944,18 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val PYTHON_TABLE_UDF_ANALYZER_MEMORY =
+    buildConf("spark.sql.analyzer.pythonUDTF.analyzeInPython.memory")
+      .doc("The amount of memory to be allocated to PySpark for Python UDTF analyzer, in MiB " +
+        "unless otherwise specified. If set, PySpark memory for Python UDTF analyzer will be " +
+        "limited to this amount. If not set, Spark will not limit Python's " +
+        "memory use and it is up to the application to avoid exceeding the overhead memory space " +
+        "shared with other non-JVM processes.\nNote: Windows does not support resource limiting " +
+        "and actual resource is not limited on MacOS.")
+      .version("4.0.0")
+      .bytesConf(ByteUnit.MiB)
+      .createOptional
+
   val PANDAS_GROUPED_MAP_ASSIGN_COLUMNS_BY_NAME =
     buildConf("spark.sql.legacy.execution.pandas.groupedMap.assignColumnsByName")
       .internal()
@@ -5011,6 +5023,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def pysparkWorkerPythonExecutable: Option[String] =
     getConf(SQLConf.PYSPARK_WORKER_PYTHON_EXECUTABLE)
+
+  def pythonUDTFAnalyzerMemory: Option[Long] = getConf(PYTHON_TABLE_UDF_ANALYZER_MEMORY)
 
   def replaceExceptWithFilter: Boolean = getConf(REPLACE_EXCEPT_WITH_FILTER)
 

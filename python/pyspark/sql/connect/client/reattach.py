@@ -21,9 +21,12 @@ check_dependencies(__name__)
 import warnings
 import uuid
 from collections.abc import Generator
-from typing import Optional, Dict, Any, Iterator, Iterable, Tuple
+from typing import Optional, Dict, Any, Iterator, Iterable, Tuple, Callable, cast
 from multiprocessing.pool import ThreadPool
 import os
+
+import grpc
+from grpc_status import rpc_status
 
 import pyspark.sql.connect.proto as pb2
 import pyspark.sql.connect.proto.base_pb2_grpc as grpc_lib
@@ -42,15 +45,12 @@ class ExecutePlanResponseReattachableIterator(Generator):
     Initial iterator is the result of an ExecutePlan on the request, but it can be reattached with
     ReattachExecute request. ReattachExecute request is provided the responseId of last returned
     ExecutePlanResponse on the iterator to return a new iterator from server that continues after
-    that.
+    that. If the initial ExecutePlan did not even reach the server, and hence reattach fails with
+    INVALID_HANDLE.OPERATION_NOT_FOUND, we attempt to retry ExecutePlan.
 
     In reattachable execute the server does buffer some responses in case the client needs to
     backtrack. To let server release this buffer sooner, this iterator asynchronously sends
     ReleaseExecute RPCs that instruct the server to release responses that it already processed.
-
-    Note: If the initial ExecutePlan did not even reach the server and execution didn't start,
-    the ReattachExecute can still fail with INVALID_HANDLE.OPERATION_NOT_FOUND, failing the whole
-    operation.
     """
 
     _release_thread_pool = ThreadPool(os.cpu_count() if os.cpu_count() else 8)
@@ -93,6 +93,7 @@ class ExecutePlanResponseReattachableIterator(Generator):
         # Initial iterator comes from ExecutePlan request.
         # Note: This is not retried, because no error would ever be thrown here, and GRPC will only
         # throw error on first self._has_next().
+        self._metadata = metadata
         self._iterator: Iterator[pb2.ExecutePlanResponse] = iter(
             self._stub.ExecutePlan(self._initial_request, metadata=metadata)
         )
@@ -111,9 +112,9 @@ class ExecutePlanResponseReattachableIterator(Generator):
         self._last_returned_response_id = ret.response_id
         if ret.HasField("result_complete"):
             self._result_complete = True
-            self._release_execute(None)  # release all
+            self._release_all()
         else:
-            self._release_execute(self._last_returned_response_id)
+            self._release_until(self._last_returned_response_id)
         self._current = None
         return ret
 
@@ -125,57 +126,61 @@ class ExecutePlanResponseReattachableIterator(Generator):
             # After response complete response
             return False
         else:
-            for attempt in Retrying(
-                can_retry=SparkConnectClient.retry_exception, **self._retry_policy
-            ):
-                with attempt:
-                    # on first try, we use the existing iterator.
-                    if not attempt.is_first_try():
-                        # on retry, the iterator is borked, so we need a new one
-                        self._iterator = iter(
-                            self._stub.ReattachExecute(self._create_reattach_execute_request())
-                        )
-
-                    if self._current is None:
-                        try:
-                            self._current = next(self._iterator)
-                        except StopIteration:
-                            pass
-
-                    has_next = self._current is not None
-
-                    # Graceful reattach:
-                    # If iterator ended, but there was no ResponseComplete, it means that
-                    # there is more, and we need to reattach. While ResponseComplete didn't
-                    # arrive, we keep reattaching.
-                    if not self._result_complete and not has_next:
-                        while not has_next:
+            try:
+                for attempt in Retrying(
+                    can_retry=SparkConnectClient.retry_exception, **self._retry_policy
+                ):
+                    with attempt:
+                        # on first try, we use the existing iterator.
+                        if not attempt.is_first_try():
+                            # on retry, the iterator is borked, so we need a new one
                             self._iterator = iter(
                                 self._stub.ReattachExecute(self._create_reattach_execute_request())
                             )
-                            # shouldn't change
-                            assert not self._result_complete
+
+                        if self._current is None:
                             try:
-                                self._current = next(self._iterator)
+                                self._current = self._call_iter(lambda: next(self._iterator))
                             except StopIteration:
                                 pass
-                            has_next = self._current is not None
-                    return has_next
+
+                        has_next = self._current is not None
+
+                        # Graceful reattach:
+                        # If iterator ended, but there was no ResponseComplete, it means that
+                        # there is more, and we need to reattach. While ResponseComplete didn't
+                        # arrive, we keep reattaching.
+                        if not self._result_complete and not has_next:
+                            while not has_next:
+                                self._iterator = iter(
+                                    self._stub.ReattachExecute(
+                                        self._create_reattach_execute_request()
+                                    )
+                                )
+                                # shouldn't change
+                                assert not self._result_complete
+                                try:
+                                    self._current = self._call_iter(lambda: next(self._iterator))
+                                except StopIteration:
+                                    pass
+                                has_next = self._current is not None
+                        return has_next
+            except Exception as e:
+                self._release_all()
+                raise e
             return False
 
-    def _release_execute(self, until_response_id: Optional[str]) -> None:
+    def _release_until(self, until_response_id: str) -> None:
         """
-        Inform the server to release the execution.
+        Inform the server to release the buffered execution results until and including given
+        result.
 
         This will send an asynchronous RPC which will not block this iterator, the iterator can
         continue to be consumed.
-
-        Release with untilResponseId informs the server that the iterator has been consumed until
-        and including response with that responseId, and these responses can be freed.
-
-        Release with None means that the responses have been completely consumed and informs the
-        server that the completed execution can be completely freed.
         """
+        if self._result_complete:
+            return
+
         from pyspark.sql.connect.client.core import SparkConnectClient
         from pyspark.sql.connect.client.core import Retrying
 
@@ -192,6 +197,62 @@ class ExecutePlanResponseReattachableIterator(Generator):
                 warnings.warn(f"ReleaseExecute failed with exception: {e}.")
 
         ExecutePlanResponseReattachableIterator._release_thread_pool.apply_async(target)
+
+    def _release_all(self) -> None:
+        """
+        Inform the server to release the execution, either because all results were consumed,
+        or the execution finished with error and the error was received.
+
+        This will send an asynchronous RPC which will not block this. The client continues
+        executing, and if the release fails, server is equipped to deal with abandoned executions.
+        """
+        if self._result_complete:
+            return
+
+        from pyspark.sql.connect.client.core import SparkConnectClient
+        from pyspark.sql.connect.client.core import Retrying
+
+        request = self._create_release_execute_request(None)
+
+        def target() -> None:
+            try:
+                for attempt in Retrying(
+                    can_retry=SparkConnectClient.retry_exception, **self._retry_policy
+                ):
+                    with attempt:
+                        self._stub.ReleaseExecute(request)
+            except Exception as e:
+                warnings.warn(f"ReleaseExecute failed with exception: {e}.")
+
+        ExecutePlanResponseReattachableIterator._release_thread_pool.apply_async(target)
+        self._result_complete = True
+
+    def _call_iter(self, iter_fun: Callable) -> Any:
+        """
+        Call next() on the iterator. If this fails with this operationId not existing
+        on the server, this means that the initial ExecutePlan request didn't even reach the
+        server. In that case, attempt to start again with ExecutePlan.
+
+        Called inside retry block, so retryable failure will get handled upstream.
+        """
+        try:
+            return iter_fun()
+        except grpc.RpcError as e:
+            status = rpc_status.from_call(cast(grpc.Call, e))
+            if "INVALID_HANDLE.OPERATION_NOT_FOUND" in status.message:
+                if self._last_returned_response_id is not None:
+                    raise RuntimeError(
+                        "OPERATION_NOT_FOUND on the server but "
+                        "responses were already received from it.",
+                        e,
+                    )
+                # Try a new ExecutePlan, and throw upstream for retry.
+                self._iterator = iter(
+                    self._stub.ExecutePlan(self._initial_request, metadata=self._metadata)
+                )
+                raise RetryException()
+            else:
+                raise e
 
     def _create_reattach_execute_request(self) -> pb2.ReattachExecuteRequest:
         reattach = pb2.ReattachExecuteRequest(
@@ -231,7 +292,15 @@ class ExecutePlanResponseReattachableIterator(Generator):
         super().throw(type, value, traceback)
 
     def close(self) -> None:
+        self._release_all()
         return super().close()
 
     def __del__(self) -> None:
         return self.close()
+
+
+class RetryException(Exception):
+    """
+    An exception that can be thrown upstream when inside retry and which will be retryable
+    regardless of policy.
+    """
