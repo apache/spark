@@ -22,6 +22,7 @@ import numpy as np
 import pandas as pd
 
 from pyspark import pandas as ps
+from pyspark.errors import PySparkValueError
 from pyspark.testing.pandasutils import ComparisonTestBase
 from pyspark.testing.sqlutils import SQLTestUtils
 
@@ -555,10 +556,6 @@ class SeriesComputeMixin:
         with self.assertWarns(FutureWarning):
             psser.between(1, 4, inclusive=True)
 
-    @unittest.skipIf(
-        LooseVersion(pd.__version__) >= LooseVersion("2.0.0"),
-        "TODO(SPARK-43479): Enable SeriesTests.test_between_time for pandas 2.0.0.",
-    )
     def test_between_time(self):
         idx = pd.date_range("2018-04-09", periods=4, freq="1D20min")
         pser = pd.Series([1, 2, 3, 4], index=idx)
@@ -580,6 +577,30 @@ class SeriesComputeMixin:
         self.assert_eq(
             pser.between_time("0:15", "0:45").sort_index(),
             psser.between_time("0:15", "0:45").sort_index(),
+        )
+
+        self.assert_eq(
+            pser.between_time("0:15", "0:45", inclusive="neither").sort_index(),
+            psser.between_time("0:15", "0:45", inclusive="neither").sort_index(),
+        )
+
+        self.assert_eq(
+            pser.between_time("0:15", "0:45", inclusive="left").sort_index(),
+            psser.between_time("0:15", "0:45", inclusive="left").sort_index(),
+        )
+
+        self.assert_eq(
+            pser.between_time("0:15", "0:45", inclusive="right").sort_index(),
+            psser.between_time("0:15", "0:45", inclusive="right").sort_index(),
+        )
+
+        with self.assertRaises(PySparkValueError) as ctx:
+            psser.between_time("0:15", "0:45", inclusive="")
+
+        self.check_error(
+            exception=ctx.exception,
+            error_class="VALUE_NOT_ALLOWED",
+            message_parameters={"arg_name": "inclusive", "allowed_values": str(["left", "right", "both", "neither"])},
         )
 
     def test_at_time(self):
