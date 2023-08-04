@@ -103,7 +103,7 @@ class DeepspeedTorchDistributor(TorchDistributor):
             # support this feature, it will be safe to remove this error
             # because the command we generate to run deepspeed should work
             # fine with CPUs.
-            raise RuntimeError("CPUs aren't supported at this time.")
+            raise RuntimeError("Running Deepspeed without GPUs aren't supported at this time. Change `useGpu=True` if you are running on a machine with GPUs")
 
     @staticmethod
     def _get_deepspeed_config_path(deepspeed_config: Union[str, Dict[str, Any]]) -> str:
