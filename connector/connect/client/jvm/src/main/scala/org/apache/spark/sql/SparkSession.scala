@@ -252,10 +252,8 @@ class SparkSession private[sql] (
           .setSql(sqlText)
           .addAllPosArgs(args.map(toLiteralProto).toIterable.asJava)))
     val plan = proto.Plan.newBuilder().setCommand(cmd)
-    val responseSeq = client.execute(plan.build()).asScala.toSeq
-
-    // sequence is a lazy stream, force materialize it to make sure it is consumed.
-    responseSeq.foreach(_ => ())
+    // .toBuffer forces that the iterator is consumed and closed
+    val responseSeq = client.execute(plan.build()).toBuffer.toSeq
 
     val response = responseSeq
       .find(_.hasSqlCommandResult)
@@ -311,10 +309,8 @@ class SparkSession private[sql] (
             .setSql(sqlText)
             .putAllArgs(args.asScala.mapValues(toLiteralProto).toMap.asJava)))
       val plan = proto.Plan.newBuilder().setCommand(cmd)
-      val responseSeq = client.execute(plan.build()).asScala.toSeq
-
-      // sequence is a lazy stream, force materialize it to make sure it is consumed.
-      responseSeq.foreach(_ => ())
+      // .toBuffer forces that the iterator is consumed and closed
+      val responseSeq = client.execute(plan.build()).toBuffer.toSeq
 
       val response = responseSeq
         .find(_.hasSqlCommandResult)
@@ -548,15 +544,14 @@ class SparkSession private[sql] (
     f(builder)
     builder.getCommonBuilder.setPlanId(planIdGenerator.getAndIncrement())
     val plan = proto.Plan.newBuilder().setRoot(builder).build()
-    client.execute(plan).asScala.foreach(_ => ())
+    // .toBuffer forces that the iterator is consumed and closed
+    client.execute(plan).toBuffer
   }
 
   private[sql] def execute(command: proto.Command): Seq[ExecutePlanResponse] = {
     val plan = proto.Plan.newBuilder().setCommand(command).build()
-    val seq = client.execute(plan).asScala.toSeq
-    // sequence is a lazy stream, force materialize it to make sure it is consumed.
-    seq.foreach(_ => ())
-    seq
+    // .toBuffer forces that the iterator is consumed and closed
+    client.execute(plan).toBuffer.toSeq
   }
 
   private[sql] def registerUdf(udf: proto.CommonInlineUserDefinedFunction): Unit = {
