@@ -477,7 +477,7 @@ class PandasOnSparkTestUtils:
         import pandas as pd
         from pandas.api.types import is_list_like
 
-        # for pandas-on-Spark, ignore row order by default because row ordering not guaranteed
+        # for pandas-on-Spark DataFrames, allow choice to ignore row order
         if isinstance(left, (ps.DataFrame, ps.Series, ps.Index)):
             return assertPandasOnSparkEqual(
                 left, right, checkExact=check_exact, almost=almost, checkRowOrder=check_row_order
