@@ -221,7 +221,7 @@ class ExecutePlanResponseReattachableIterator(
             ex)
         }
         // Try a new ExecutePlan, and throw upstream for retry.
-        iterator = rawBlockingStub.executePlan(initialRequest)
+        iter = rawBlockingStub.executePlan(initialRequest)
         throw new GrpcRetryHandler.RetryException
     }
   }
