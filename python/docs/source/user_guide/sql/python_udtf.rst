@@ -60,10 +60,16 @@ To implement a Python UDTF, you can define a class implementing the methods:
             Evaluate the function using the given input arguments.
 
             This method is required and must be implemented.
+            
+            The arguments provided to the UDTF call are mapped to the values in the
+            `*args` list sequentially. Each provided scalar expression maps to exactly
+            one value in this `*args` list. Each provided TABLE argument of N columns
+            maps to exactly N values in this `*args` list, in the order of the columns
+            as they appear in the table.
 
-            It is called on every input row, and can produce zero or more output rows.
-            Each element in the tuple will correspond to one column specified in the
-            return type of the UDTF.
+            This method is called on every input row, and can produce zero or more
+            output rows. Each element in the tuple will correspond to one column
+            specified in the return type of the UDTF.
 
             Parameters
             ----------
