@@ -209,6 +209,24 @@ private[spark] object HiveUtils extends Logging {
       .booleanConf
       .createWithDefault(true)
 
+  val HIVE_PARQUET_FILE_EXTENSION_ENABLED =
+    buildConf("spark.sql.hive.fileExtensionParquet.enabled")
+      .doc("When true, append file extension for Parquet files written using Hive Serde, " +
+        "as same as Data Source file format does. The file extension is composed of " +
+        "`.<compression-algorithm>.parquet`, e.g. `.zstd.parquet`.")
+      .version("4.0.0")
+      .booleanConf
+      .createWithDefault(false)
+
+  val HIVE_ORC_FILE_EXTENSION_ENABLED =
+    buildConf("spark.sql.hive.fileExtensionOrc.enabled")
+      .doc("When true, append file extension for ORC files written using Hive Serde, " +
+        "as same as Data Source file format does. The file extension is composed of " +
+        "`.<compression-algorithm>.orc`, e.g. `.zstd.orc`")
+      .version("4.0.0")
+      .booleanConf
+      .createWithDefault(false)
+
   /**
    * The version of the hive client that will be used to communicate with the metastore.  Note that
    * this does not necessarily need to be the same version of Hive that is used internally by

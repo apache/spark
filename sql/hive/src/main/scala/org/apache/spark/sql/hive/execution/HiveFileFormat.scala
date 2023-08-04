@@ -19,6 +19,7 @@ package org.apache.spark.sql.hive.execution
 
 import scala.collection.JavaConverters._
 
+import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, Path}
 import org.apache.hadoop.hive.ql.exec.Utilities
 import org.apache.hadoop.hive.ql.io.{HiveFileFormatUtils, HiveOutputFormat}
@@ -30,6 +31,8 @@ import org.apache.hadoop.hive.serde2.typeinfo.TypeInfoUtils
 import org.apache.hadoop.io.Writable
 import org.apache.hadoop.mapred.{JobConf, Reporter}
 import org.apache.hadoop.mapreduce.{Job, TaskAttemptContext}
+import org.apache.orc.OrcConf.COMPRESS
+import org.apache.parquet.hadoop.codec.CodecConfig
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.SPECULATION_ENABLED
@@ -37,7 +40,9 @@ import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.datasources.{FileFormat, OutputWriter, OutputWriterFactory}
-import org.apache.spark.sql.hive.{HiveInspectors, HiveTableUtil}
+import org.apache.spark.sql.execution.datasources.orc.OrcUtils
+import org.apache.spark.sql.hive.{HiveInspectors, HiveTableUtil, HiveUtils}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.DataSourceRegister
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.SerializableJobConf
@@ -88,6 +93,9 @@ class HiveFileFormat(fileSinkConf: FileSinkDesc)
     HiveTableUtil.configureJobPropertiesForStorageHandler(tableDesc, conf, false)
     Utilities.copyTableJobPropertiesToConf(tableDesc, conf)
 
+    // Keep consistent with DataSource implementation for Parquet and ORC format
+    configureFileExtension(conf)
+
     // Avoid referencing the outer object.
     val fileSinkConfSer = fileSinkConf
     new OutputWriterFactory {
@@ -120,6 +128,23 @@ class HiveFileFormat(fileSinkConf: FileSinkDesc)
           case _: IllegalArgumentException => false
         }
       case _ => true
+    }
+  }
+
+  private def configureFileExtension(conf: Configuration): Unit = {
+    fileSinkConf.getTableInfo.getOutputFileFormatClassName match {
+      case "org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat"
+        if SQLConf.get.getConf(HiveUtils.HIVE_PARQUET_FILE_EXTENSION_ENABLED) =>
+        conf.set("hive.output.file.extension",
+          CodecConfig.from(new JobConf(conf)).getCodec.getExtension + ".parquet")
+      case "org.apache.hadoop.hive.ql.io.orc.OrcOutputFormat"
+        if SQLConf.get.getConf(HiveUtils.HIVE_ORC_FILE_EXTENSION_ENABLED) =>
+        val compressionExtension: String = {
+          val name = conf.get(COMPRESS.getAttribute)
+          OrcUtils.extensionsForCompressionCodecNames.getOrElse(name, "")
+        }
+        conf.set("hive.output.file.extension", compressionExtension + ".orc")
+      case _ =>
     }
   }
 }
