@@ -107,13 +107,7 @@ private[spark] class StreamingPythonRunner(
    */
   def stop(): Unit = {
     pythonWorker.foreach { worker =>
-      val prevConf = conf.get(PYTHON_USE_DAEMON)
-      conf.set(PYTHON_USE_DAEMON, false)
-      try {
-        pythonWorkerFactory.foreach(_.stopWorker(worker))
-      } finally {
-        conf.set(PYTHON_USE_DAEMON, prevConf)
-      }
+      pythonWorkerFactory.foreach(_.stopWorker(worker))
     }
   }
 }
