@@ -237,6 +237,54 @@ struct<>
 
 
 -- !query
+DECLARE VARIABLE var1 INT
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DROP VARIABLE var1
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "error" : "'VARIABLE'",
+    "hint" : ""
+  }
+}
+
+
+-- !query
+DROP VARIABLE system.session.var1
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "error" : "'VARIABLE'",
+    "hint" : ""
+  }
+}
+
+
+-- !query
+DROP TEMPORARY VARIABLE var1
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
 SET VARIABLE title = 'Test qualifiers - success'
 -- !query schema
 struct<>
@@ -1277,7 +1325,7 @@ struct<>
 
 
 -- !query
-SET VARIABLE var1 = 1, var2 = 0, var1 = 1
+SET VARIABLE var1 = 1, var2 = 0, vAr1 = 1
 -- !query schema
 struct<>
 -- !query output

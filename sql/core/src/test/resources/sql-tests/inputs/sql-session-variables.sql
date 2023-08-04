@@ -37,6 +37,12 @@ DROP TEMPORARY VARIABLE var1;
 -- Success
 DROP TEMPORARY VARIABLE IF EXISTS var1;
 
+-- Fail: TEMPORARY is mandatory on DROP
+DECLARE VARIABLE var1 INT;
+DROP VARIABLE var1;
+DROP VARIABLE system.session.var1;
+DROP TEMPORARY VARIABLE var1;
+
 SET VARIABLE title = 'Test qualifiers - success';
 DECLARE VARIABLE var1 INT DEFAULT 1;
 SELECT 1 as Expected, var1 as Unqualified, session.var1 AS SchemaQualified, system.session.var1 AS fullyQualified;
@@ -190,7 +196,7 @@ SELECT var1 AS `2`, var2 AS `104`, var3 AS `5`;
 SET VARIABLE var1 = var3, var2 = INTERVAL'5' HOUR, var3 = var1;
 
 -- Duplicates check
-SET VARIABLE var1 = 1, var2 = 0, var1 = 1;
+SET VARIABLE var1 = 1, var2 = 0, vAr1 = 1;
 
 DROP TEMPORARY VARIABLE var1;
 DROP TEMPORARY VARIABLE var2;

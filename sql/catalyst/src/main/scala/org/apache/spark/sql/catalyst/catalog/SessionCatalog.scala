@@ -31,6 +31,7 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.internal.Logging
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst._
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry.FunctionBuilder
@@ -38,7 +39,7 @@ import org.apache.spark.sql.catalyst.expressions.{Alias, Expression, ExpressionI
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParseException, ParserInterface}
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project, SubqueryAlias, View}
 import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, Origin}
-import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, StringUtils}
+import org.apache.spark.sql.catalyst.util.{quoteNameParts, CharVarcharUtils, StringUtils}
 import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.internal.SQLConf
@@ -645,7 +646,9 @@ class SessionCatalog(
                       overrideIfExists: Boolean): Unit = synchronized {
     val tempVariable = VariableIdentifier(Seq(SYSTEM_CATALOG, SESSION_DATABASE, name))
     if (variables.contains(tempVariable) && !overrideIfExists) {
-      throw new VariableAlreadyExistsException(name)
+      throw new AnalysisException(errorClass = "VARIABLE_ALREADY_EXISTS",
+        messageParameters = Map("variableName"
+          -> quoteNameParts(UnresolvedAttribute.parseAttributeName(name))))
     }
     val structField = StructField(name, initialValue.dataType)
       .withCurrentDefaultValue(variableDefault)

@@ -221,6 +221,46 @@ DropVariableCommand system.session.var1, true
 
 
 -- !query
+DECLARE VARIABLE var1 INT
+-- !query analysis
+CreateVariableCommand system.session.var1, INT, null, false
+
+
+-- !query
+DROP VARIABLE var1
+-- !query analysis
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "error" : "'VARIABLE'",
+    "hint" : ""
+  }
+}
+
+
+-- !query
+DROP VARIABLE system.session.var1
+-- !query analysis
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "error" : "'VARIABLE'",
+    "hint" : ""
+  }
+}
+
+
+-- !query
+DROP TEMPORARY VARIABLE var1
+-- !query analysis
+DropVariableCommand system.session.var1, false
+
+
+-- !query
 SET VARIABLE title = 'Test qualifiers - success'
 -- !query analysis
 SetVariable [session.title(title, Drop Variable, false)]
@@ -1225,7 +1265,7 @@ SetVariable [session.var1(var1, 2, false), session.var2(var2, 53, false), sessio
 
 
 -- !query
-SET VARIABLE var1 = 1, var2 = 0, var1 = 1
+SET VARIABLE var1 = 1, var2 = 0, vAr1 = 1
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {

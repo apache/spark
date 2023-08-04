@@ -168,7 +168,7 @@ statement
     | DROP TEMPORARY? FUNCTION (IF EXISTS)? identifierReference        #dropFunction
     | DECLARE (OR REPLACE)? VARIABLE?
         multipartIdentifier dataType? variableDefaultExpression?       #createVariable
-    | DROP TEMPORARY? VARIABLE (IF EXISTS)? multipartIdentifier        #dropVariable
+    | DROP TEMPORARY VARIABLE (IF EXISTS)? multipartIdentifier         #dropVariable
     | EXPLAIN (LOGICAL | FORMATTED | EXTENDED | CODEGEN | COST)?
         statement                                                      #explain
     | SHOW TABLES ((FROM | IN) identifierReference)?

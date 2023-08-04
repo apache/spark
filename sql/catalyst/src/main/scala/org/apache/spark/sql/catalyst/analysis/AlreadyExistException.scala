@@ -137,15 +137,6 @@ class ViewAlreadyExistsException(errorClass: String, messageParameters: Map[Stri
       messageParameters = Map("relationName" -> ident.quoted))
 }
 
-class VariableAlreadyExistsException(errorClass: String, messageParameters: Map[String, String])
-  extends AnalysisException(errorClass, messageParameters) {
-  def this(variable: String) = {
-    this(errorClass = "VARIABLE_ALREADY_EXISTS",
-      messageParameters = Map("variableName"
-        -> quoteNameParts(UnresolvedAttribute.parseAttributeName(variable))))
-  }
-}
-
 // any changes to this class should be backward compatible as it may be used by external connectors
 class PartitionAlreadyExistsException private(
     message: String,
