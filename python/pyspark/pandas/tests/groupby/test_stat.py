@@ -206,13 +206,6 @@ class GroupbyStatMixin:
             psdf.groupby("A").sum(min_count=3).sort_index(),
         )
 
-    @unittest.skipIf(
-        LooseVersion(pd.__version__) >= LooseVersion("2.0.0"),
-        "TODO(SPARK-43553): Enable GroupByTests.test_mad for pandas 2.0.0.",
-    )
-    def test_mad(self):
-        self._test_stat_func(lambda groupby_obj: groupby_obj.mad())
-
     def test_first(self):
         self._test_stat_func(lambda groupby_obj: groupby_obj.first())
         self._test_stat_func(lambda groupby_obj: groupby_obj.first(numeric_only=None))
