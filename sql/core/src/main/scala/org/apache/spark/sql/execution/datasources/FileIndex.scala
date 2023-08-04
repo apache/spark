@@ -46,6 +46,10 @@ case class FileStatusWithMetadata(fileStatus: FileStatus, metadata: Map[String, 
  */
 case class PartitionDirectory(values: InternalRow, files: Seq[FileStatusWithMetadata])
 
+/**
+ * A runner that extracts file metadata filters from the given `filters` and use it to prune files
+ * in `PartitionDirectory`.
+ */
 class FilePruningRunner(filters: Seq[Expression]) {
   // retrieve the file constant metadata filters and reduce to a final filter expression that can
   // be applied to files.
