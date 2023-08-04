@@ -18,10 +18,9 @@ package org.apache.spark.sql.catalyst
 
 import java.beans.{Introspector, PropertyDescriptor}
 import java.lang.reflect.{ParameterizedType, Type, TypeVariable}
-import java.util.{ArrayDeque, List => JList, Map => JMap}
+import java.util.{List => JList, Map => JMap}
 import javax.annotation.Nonnull
 
-import scala.annotation.tailrec
 import scala.collection.JavaConverters._
 import scala.reflect.ClassTag
 
@@ -108,13 +107,13 @@ object JavaTypeInference {
       val elementEncoder = encoderFor(c.getComponentType, seenTypeSet, typeVariables)
       ArrayEncoder(elementEncoder, elementEncoder.nullable)
 
-    case ImplementsList(c, Array(elementCls)) =>
-      val element = encoderFor(elementCls, seenTypeSet, typeVariables)
+    case c: Class[_] if classOf[JList[_]].isAssignableFrom(c) =>
+      val element = encoderFor(c.getTypeParameters.array(0), seenTypeSet, typeVariables)
       IterableEncoder(ClassTag(c), element, element.nullable, lenientSerialization = false)
 
-    case ImplementsMap(c, Array(keyCls, valueCls)) =>
-      val keyEncoder = encoderFor(keyCls, seenTypeSet, typeVariables)
-      val valueEncoder = encoderFor(valueCls, seenTypeSet, typeVariables)
+    case c: Class[_] if classOf[JMap[_, _]].isAssignableFrom(c) =>
+      val keyEncoder = encoderFor(c.getTypeParameters.array(0), seenTypeSet, typeVariables)
+      val valueEncoder = encoderFor(c.getTypeParameters.array(1), seenTypeSet, typeVariables)
       MapEncoder(ClassTag(c), keyEncoder, valueEncoder, valueEncoder.nullable)
 
     case tv: TypeVariable[_] =>
@@ -157,59 +156,4 @@ object JavaTypeInference {
       .filterNot(_.getName == "declaringClass")
       .filter(_.getReadMethod != null)
   }
-
-  private class ImplementsGenericInterface(interface: Class[_]) {
-    assert(interface.isInterface)
-    assert(interface.getTypeParameters.nonEmpty)
-
-    def unapply(t: Type): Option[(Class[_], Array[Type])] = implementsInterface(t).map { cls =>
-      cls -> findTypeArgumentsForInterface(t)
-    }
-
-    @tailrec
-    private def implementsInterface(t: Type): Option[Class[_]] = t match {
-      case pt: ParameterizedType => implementsInterface(pt.getRawType)
-      case c: Class[_] if interface.isAssignableFrom(c) => Option(c)
-      case _ => None
-    }
-
-    private def findTypeArgumentsForInterface(t: Type): Array[Type] = {
-      val queue = new ArrayDeque[(Type, Map[Any, Type])]
-      queue.add(t -> Map.empty)
-      while (!queue.isEmpty) {
-        queue.poll() match {
-          case (pt: ParameterizedType, bindings) =>
-            // translate mappings...
-            val mappedTypeArguments = pt.getActualTypeArguments.map {
-              case v: TypeVariable[_] => bindings(v.getName)
-              case v => v
-            }
-            if (pt.getRawType == interface) {
-              return mappedTypeArguments
-            } else {
-              val mappedTypeArgumentMap = mappedTypeArguments
-                .zipWithIndex.map(_.swap)
-                .toMap[Any, Type]
-              queue.add(pt.getRawType -> mappedTypeArgumentMap)
-            }
-          case (c: Class[_], indexedBindings) =>
-            val namedBindings = c.getTypeParameters.zipWithIndex.map {
-              case (parameter, index) =>
-                parameter.getName -> indexedBindings(index)
-            }.toMap[Any, Type]
-            val superClass = c.getGenericSuperclass
-            if (superClass != null) {
-              queue.add(superClass -> namedBindings)
-            }
-            c.getGenericInterfaces.foreach { iface =>
-              queue.add(iface -> namedBindings)
-            }
-        }
-      }
-      throw ExecutionErrors.unreachableError()
-    }
-  }
-
-  private object ImplementsList extends ImplementsGenericInterface(classOf[JList[_]])
-  private object ImplementsMap extends ImplementsGenericInterface(classOf[JMap[_, _]])
 }
