@@ -427,8 +427,9 @@ def assertPandasOnSparkEqual(
             },
         )
     else:
-        actual = actual.to_pandas()
-        if not isinstance(expected, pd.DataFrame):
+        if not isinstance(actual, (pd.DataFrame, pd.Index, pd.Series)):
+            actual = actual.to_pandas()
+        if not isinstance(expected, (pd.DataFrame, pd.Index, pd.Series)):
             expected = expected.to_pandas()
 
         if not checkRowOrder:
