@@ -66,12 +66,17 @@ private[spark] class StreamingPythonRunner(
 
     envVars.put("SPARK_AUTH_SOCKET_TIMEOUT", authSocketTimeout.toString)
     envVars.put("SPARK_BUFFER_SIZE", bufferSize.toString)
-    conf.set(PYTHON_USE_DAEMON, false)
     envVars.put("SPARK_CONNECT_LOCAL_URL", connectUrl)
 
-    val (worker, _) = env.createPythonWorker(
-      pythonExec, workerModule, envVars.asScala.toMap)
-    pythonWorker = Some(worker)
+    val prevConf = conf.get(PYTHON_USE_DAEMON)
+    conf.set(PYTHON_USE_DAEMON, false)
+    try {
+      val (worker, _) = env.createPythonWorker(
+        pythonExec, workerModule, envVars.asScala.toMap)
+      pythonWorker = Some(worker)
+    } finally {
+      conf.set(PYTHON_USE_DAEMON, prevConf)
+    }
 
     val stream = new BufferedOutputStream(worker.getOutputStream, bufferSize)
     val dataOut = new DataOutputStream(stream)
@@ -100,7 +105,13 @@ private[spark] class StreamingPythonRunner(
    */
   def stop(): Unit = {
     pythonWorker.foreach { worker =>
-      SparkEnv.get.destroyPythonWorker(pythonExec, workerModule, envVars.asScala.toMap, worker)
+      val prevConf = conf.get(PYTHON_USE_DAEMON)
+      conf.set(PYTHON_USE_DAEMON, false)
+      try {
+        SparkEnv.get.destroyPythonWorker(pythonExec, workerModule, envVars.asScala.toMap, worker)
+      } finally {
+        conf.set(PYTHON_USE_DAEMON, prevConf)
+      }
     }
   }
 }
