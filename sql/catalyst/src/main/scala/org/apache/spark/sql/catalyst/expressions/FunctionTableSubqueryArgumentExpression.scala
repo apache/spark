@@ -113,11 +113,12 @@ case class FunctionTableSubqueryArgumentExpression(
       subquery = Project(
         projectList = subquery.output ++ extraProjectedPartitioningExpressions,
         child = subquery)
+      val partitioningAttributes = partitioningExpressionIndexes.map(i => subquery.output(i))
       subquery = Sort(
-        order = partitionByExpressions.map(e => SortOrder(e, Ascending)) ++ orderByExpressions,
+        order = partitioningAttributes.map(e => SortOrder(e, Ascending)) ++ orderByExpressions,
         global = false,
         child = RepartitionByExpression(
-          partitionExpressions = partitioningExpressionIndexes.map(i => subquery.output(i)),
+          partitionExpressions = partitioningAttributes,
           optNumPartitions = None,
           child = subquery))
     }
