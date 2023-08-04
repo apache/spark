@@ -18,8 +18,9 @@ import os
 import shutil
 import tempfile
 import unittest
-
 from typing import Iterator
+
+from py4j.protocol import Py4JJavaError
 
 from pyspark.errors import (
     PySparkAttributeError,
@@ -543,12 +544,14 @@ class BaseUDTFTestsMixin:
 
         assertDataFrameEqual(TestUDTF(), [Row()])
 
-    def _check_result_or_exception(self, func_handler, ret_type, expected):
+    def _check_result_or_exception(
+        self, func_handler, ret_type, expected, *, err_type=PythonException
+    ):
         func = udtf(func_handler, returnType=ret_type)
         if not isinstance(expected, str):
             assertDataFrameEqual(func(), expected)
         else:
-            with self.assertRaisesRegex(PythonException, expected):
+            with self.assertRaisesRegex(err_type, expected):
                 func().collect()
 
     def test_numeric_output_type_casting(self):
@@ -640,19 +643,127 @@ class BaseUDTFTestsMixin:
     def test_array_output_type_casting(self):
         class TestUDTF:
             def eval(self):
-                yield [1, 2],
+                yield [0, 1.1, 2],
 
         for ret_type, expected in [
+            ("x: boolean", [Row(x=None)]),
+            ("x: tinyint", [Row(x=None)]),
+            ("x: smallint", [Row(x=None)]),
             ("x: int", [Row(x=None)]),
-            ("x: array<int>", [Row(x=[1, 2])]),
-            ("x: array<double>", [Row(x=[None, None])]),
-            ("x: array<string>", [Row(x=["1", "2"])]),
-            ("x: array<boolean>", [Row(x=[None, None])]),
-            ("x: array<array<int>>", [Row(x=[None, None])]),
+            ("x: bigint", [Row(x=None)]),
+            ("x: string", [Row(x="[0, 1.1, 2]")]),
+            ("x: date", "AttributeError"),
+            ("x: timestamp", "AttributeError"),
+            ("x: byte", [Row(x=None)]),
+            ("x: binary", [Row(x=None)]),
+            ("x: float", [Row(x=None)]),
+            ("x: double", [Row(x=None)]),
+            ("x: decimal(10, 0)", [Row(x=None)]),
+            ("x: array<int>", [Row(x=[0, None, 2])]),
+            ("x: array<double>", [Row(x=[None, 1.1, None])]),
+            ("x: array<string>", [Row(x=["0", "1.1", "2"])]),
+            ("x: array<boolean>", [Row(x=[None, None, None])]),
+            ("x: array<array<int>>", [Row(x=[None, None, None])]),
             ("x: map<string,int>", [Row(x=None)]),
+            ("x: struct<a:int,b:int,c:int>", [Row(x=Row(a=0, b=None, c=2))]),
         ]:
             with self.subTest(ret_type=ret_type):
                 self._check_result_or_exception(TestUDTF, ret_type, expected)
+
+    def test_map_output_type_casting(self):
+        class TestUDTF:
+            def eval(self):
+                yield {"a": 0, "b": 1.1, "c": 2},
+
+        for ret_type, expected in [
+            ("x: boolean", [Row(x=None)]),
+            ("x: tinyint", [Row(x=None)]),
+            ("x: smallint", [Row(x=None)]),
+            ("x: int", [Row(x=None)]),
+            ("x: bigint", [Row(x=None)]),
+            ("x: string", [Row(x="{a=0, b=1.1, c=2}")]),
+            ("x: date", "AttributeError"),
+            ("x: timestamp", "AttributeError"),
+            ("x: byte", [Row(x=None)]),
+            ("x: binary", [Row(x=None)]),
+            ("x: float", [Row(x=None)]),
+            ("x: double", [Row(x=None)]),
+            ("x: decimal(10, 0)", [Row(x=None)]),
+            ("x: array<string>", [Row(x=None)]),
+            ("x: map<string,string>", [Row(x={"a": "0", "b": "1.1", "c": "2"})]),
+            ("x: map<string,boolean>", [Row(x={"a": None, "b": None, "c": None})]),
+            ("x: map<string,int>", [Row(x={"a": 0, "b": None, "c": 2})]),
+            ("x: map<string,float>", [Row(x={"a": None, "b": 1.1, "c": None})]),
+            ("x: map<string,map<string,int>>", [Row(x={"a": None, "b": None, "c": None})]),
+            ("x: struct<a:int>", [Row(x=Row(a=0))]),
+        ]:
+            with self.subTest(ret_type=ret_type):
+                self._check_result_or_exception(TestUDTF, ret_type, expected)
+
+    def test_struct_output_type_casting_dict(self):
+        class TestUDTF:
+            def eval(self):
+                yield {"a": 0, "b": 1.1, "c": 2},
+
+        for ret_type, expected in [
+            ("x: boolean", [Row(x=None)]),
+            ("x: tinyint", [Row(x=None)]),
+            ("x: smallint", [Row(x=None)]),
+            ("x: int", [Row(x=None)]),
+            ("x: bigint", [Row(x=None)]),
+            ("x: string", [Row(x="{a=0, b=1.1, c=2}")]),
+            ("x: date", "AttributeError"),
+            ("x: timestamp", "AttributeError"),
+            ("x: byte", [Row(x=None)]),
+            ("x: binary", [Row(x=None)]),
+            ("x: float", [Row(x=None)]),
+            ("x: double", [Row(x=None)]),
+            ("x: decimal(10, 0)", [Row(x=None)]),
+            ("x: array<string>", [Row(x=None)]),
+            ("x: map<string,string>", [Row(x={"a": "0", "b": "1.1", "c": "2"})]),
+            ("x: struct<a:string,b:string,c:string>", [Row(Row(a="0", b="1.1", c="2"))]),
+            ("x: struct<a:int,b:int,c:int>", [Row(Row(a=0, b=None, c=2))]),
+            ("x: struct<a:float,b:float,c:float>", [Row(Row(a=None, b=1.1, c=None))]),
+            ("x: struct<a:struct<>,b:struct<>,c:struct<>>", "UNEXPECTED_TUPLE_WITH_STRUCT"),
+        ]:
+            with self.subTest(ret_type=ret_type):
+                self._check_result_or_exception(TestUDTF, ret_type, expected)
+
+    def test_struct_output_type_casting_row(self):
+        class TestUDTF:
+            def eval(self):
+                yield Row(a=0, b=1.1, c=2),
+
+        err = ("PickleException", Py4JJavaError)
+
+        for ret_type, expected in [
+            ("x: boolean", err),
+            ("x: tinyint", err),
+            ("x: smallint", err),
+            ("x: int", err),
+            ("x: bigint", err),
+            ("x: string", err),
+            ("x: date", "AttributeError"),
+            ("x: timestamp", "AttributeError"),
+            ("x: byte", err),
+            ("x: binary", err),
+            ("x: float", err),
+            ("x: double", err),
+            ("x: decimal(10, 0)", err),
+            ("x: array<string>", err),
+            ("x: map<string,string>", err),
+            ("x: struct<a:string,b:string,c:string>", [Row(Row(a="0", b="1.1", c="2"))]),
+            ("x: struct<a:int,b:int,c:int>", [Row(Row(a=0, b=None, c=2))]),
+            ("x: struct<a:float,b:float,c:float>", [Row(Row(a=None, b=1.1, c=None))]),
+            ("x: struct<a:struct<>,b:struct<>,c:struct<>>", "UNEXPECTED_TUPLE_WITH_STRUCT"),
+        ]:
+            with self.subTest(ret_type=ret_type):
+                if isinstance(expected, tuple):
+                    self._check_result_or_exception(
+                        TestUDTF, ret_type, expected[0], err_type=expected[1]
+                    )
+                else:
+                    self._check_result_or_exception(TestUDTF, ret_type, expected)
 
     def test_inconsistent_output_types(self):
         class TestUDTF:
@@ -1788,6 +1899,7 @@ class UDTFArrowTestsMixin(BaseUDTFTestsMixin):
             ("x: array<array<int>>", err),
             ("x: map<string,int>", err),
             ("x: struct<a:int>", err),
+            ("x: struct<a:int,b:int,c:int>", err),
         ]:
             with self.subTest(ret_type=ret_type):
                 self._check_result_or_exception(TestUDTF, ret_type, expected)
