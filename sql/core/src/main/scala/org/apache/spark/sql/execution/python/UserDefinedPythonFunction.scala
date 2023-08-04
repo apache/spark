@@ -175,6 +175,7 @@ object UserDefinedPythonTableFunction {
     val reuseWorker = env.conf.get(PYTHON_WORKER_REUSE)
     val localdir = env.blockManager.diskBlockManager.localDirs.map(f => f.getPath()).mkString(",")
     val simplifiedTraceback: Boolean = SQLConf.get.pysparkSimplifiedTraceback
+    val workerMemoryMb = SQLConf.get.pythonUDTFAnalyzerMemory
 
     val jobArtifactUUID = JobArtifactSet.getCurrentJobArtifactState.map(_.uuid)
 
@@ -191,6 +192,9 @@ object UserDefinedPythonTableFunction {
     }
     if (simplifiedTraceback) {
       envVars.put("SPARK_SIMPLIFIED_TRACEBACK", "1")
+    }
+    workerMemoryMb.foreach { memoryMb =>
+      envVars.put("PYSPARK_UDTF_ANALYZER_MEMORY_MB", memoryMb.toString)
     }
     envVars.put("SPARK_AUTH_SOCKET_TIMEOUT", authSocketTimeout.toString)
     envVars.put("SPARK_BUFFER_SIZE", bufferSize.toString)
