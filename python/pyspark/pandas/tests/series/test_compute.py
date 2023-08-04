@@ -142,11 +142,7 @@ class SeriesComputeMixin:
             expected = ps.DataFrame([[1, 2], [2, 3]], index=["x", "y"], columns=["self", "other"])
             self.assert_eq(expected, psser.compare(psser + 1).sort_index())
 
-    @unittest.skipIf(
-        LooseVersion(pd.__version__) >= LooseVersion("2.0.0"),
-        "TODO(SPARK-43465): Enable SeriesTests.test_append for pandas 2.0.0.",
-    )
-    def test_append(self):
+    def test_concat(self):
         pser1 = pd.Series([1, 2, 3], name="0")
         pser2 = pd.Series([4, 5, 6], name="0")
         pser3 = pd.Series([4, 5, 6], index=[3, 4, 5], name="0")
@@ -154,16 +150,12 @@ class SeriesComputeMixin:
         psser2 = ps.from_pandas(pser2)
         psser3 = ps.from_pandas(pser3)
 
-        self.assert_eq(psser1.append(psser2), pser1.append(pser2))
-        self.assert_eq(psser1.append(psser3), pser1.append(pser3))
+        self.assert_eq(ps.concat([psser1, psser2]), pd.concat([pser1, pser2]))
+        self.assert_eq(ps.concat([psser1, psser3]), pd.concat([pser1, pser3]))
         self.assert_eq(
-            psser1.append(psser2, ignore_index=True), pser1.append(pser2, ignore_index=True)
+            ps.concat([psser1, psser2], ignore_index=True),
+            pd.concat([pser1, pser2], ignore_index=True),
         )
-
-        psser1.append(psser3, verify_integrity=True)
-        msg = "Indices have overlapping values"
-        with self.assertRaises(ValueError, msg=msg):
-            psser1.append(psser2, verify_integrity=True)
 
     def test_shift(self):
         pser = pd.Series([10, 20, 15, 30, 45], name="x")

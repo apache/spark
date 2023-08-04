@@ -168,7 +168,9 @@ private[client] object GrpcRetryHandler extends Logging {
     try {
       return fn
     } catch {
-      case NonFatal(e) if retryPolicy.canRetry(e) && currentRetryNum < retryPolicy.maxRetries =>
+      case NonFatal(e)
+          if (retryPolicy.canRetry(e) || e.isInstanceOf[RetryException])
+            && currentRetryNum < retryPolicy.maxRetries =>
         logWarning(
           s"Non fatal error during RPC execution: $e, " +
             s"retrying (currentRetryNum=$currentRetryNum)")
@@ -213,4 +215,10 @@ private[client] object GrpcRetryHandler extends Logging {
       maxBackoff: FiniteDuration = FiniteDuration(1, "min"),
       backoffMultiplier: Double = 4.0,
       canRetry: Throwable => Boolean = retryException) {}
+
+  /**
+   * An exception that can be thrown upstream when inside retry and which will be retryable
+   * regardless of policy.
+   */
+  class RetryException extends Throwable
 }
