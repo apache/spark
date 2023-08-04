@@ -28,7 +28,6 @@ import os
 import grpc
 from grpc_status import rpc_status
 
-from pyspark.errors.exceptions.connect import SparkConnectRetryException
 import pyspark.sql.connect.proto as pb2
 import pyspark.sql.connect.proto.base_pb2_grpc as grpc_lib
 
@@ -251,7 +250,7 @@ class ExecutePlanResponseReattachableIterator(Generator):
                 self._iterator = iter(
                     self._stub.ExecutePlan(self._initial_request, metadata=self._metadata)
                 )
-                raise SparkConnectRetryException("Retrying ...")
+                raise RetryException()
             else:
                 raise e
 
@@ -298,3 +297,10 @@ class ExecutePlanResponseReattachableIterator(Generator):
 
     def __del__(self) -> None:
         return self.close()
+
+
+class RetryException(Exception):
+    """
+    An exception that can be thrown upstream when inside retry and which will be retryable
+    regardless of policy.
+    """
