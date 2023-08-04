@@ -40,10 +40,8 @@ from pyspark.sql.types import (
     IntegerType,
     BooleanType,
 )
-from pyspark.sql.dataframe import DataFrame
 
 import difflib
-from typing import List, Union
 from itertools import zip_longest
 
 
@@ -673,8 +671,6 @@ class UtilsTestsMixin:
         assertDataFrameEqual(df1, df2, checkRowOrder=True)
 
     def test_assert_unequal_null_actual(self):
-        import pyspark.pandas as ps
-
         df1 = None
         df2 = self.spark.createDataFrame(
             data=[
@@ -691,7 +687,7 @@ class UtilsTestsMixin:
             exception=pe.exception,
             error_class="INVALID_TYPE_DF_EQUALITY_ARG",
             message_parameters={
-                "expected_type": Union[DataFrame, ps.DataFrame, List[Row]],
+                "expected_type": "Union[DataFrame, ps.DataFrame, List[Row]]",
                 "arg_name": "actual",
                 "actual_type": None,
             },
@@ -704,15 +700,13 @@ class UtilsTestsMixin:
             exception=pe.exception,
             error_class="INVALID_TYPE_DF_EQUALITY_ARG",
             message_parameters={
-                "expected_type": Union[DataFrame, ps.DataFrame, List[Row]],
+                "expected_type": "Union[DataFrame, ps.DataFrame, List[Row]]",
                 "arg_name": "actual",
                 "actual_type": None,
             },
         )
 
     def test_assert_unequal_null_expected(self):
-        import pyspark.pandas as ps
-
         df1 = self.spark.createDataFrame(
             data=[
                 ("1", 1000),
@@ -729,7 +723,7 @@ class UtilsTestsMixin:
             exception=pe.exception,
             error_class="INVALID_TYPE_DF_EQUALITY_ARG",
             message_parameters={
-                "expected_type": Union[DataFrame, ps.DataFrame, List[Row]],
+                "expected_type": "Union[DataFrame, ps.DataFrame, List[Row]]",
                 "arg_name": "expected",
                 "actual_type": None,
             },
@@ -742,7 +736,7 @@ class UtilsTestsMixin:
             exception=pe.exception,
             error_class="INVALID_TYPE_DF_EQUALITY_ARG",
             message_parameters={
-                "expected_type": Union[DataFrame, ps.DataFrame, List[Row]],
+                "expected_type": "Union[DataFrame, ps.DataFrame, List[Row]]",
                 "arg_name": "expected",
                 "actual_type": None,
             },
@@ -924,8 +918,6 @@ class UtilsTestsMixin:
         )
 
     def test_assert_error_non_pyspark_df(self):
-        import pyspark.pandas as ps
-
         dict1 = {"a": 1, "b": 2}
         dict2 = {"a": 1, "b": 2}
 
@@ -936,7 +928,7 @@ class UtilsTestsMixin:
             exception=pe.exception,
             error_class="INVALID_TYPE_DF_EQUALITY_ARG",
             message_parameters={
-                "expected_type": Union[DataFrame, ps.DataFrame, List[Row]],
+                "expected_type": "Union[DataFrame, ps.DataFrame, List[Row]]",
                 "arg_name": "actual",
                 "actual_type": type(dict1),
             },
@@ -949,7 +941,7 @@ class UtilsTestsMixin:
             exception=pe.exception,
             error_class="INVALID_TYPE_DF_EQUALITY_ARG",
             message_parameters={
-                "expected_type": Union[DataFrame, ps.DataFrame, List[Row]],
+                "expected_type": "Union[DataFrame, ps.DataFrame, List[Row]]",
                 "arg_name": "actual",
                 "actual_type": type(dict1),
             },
