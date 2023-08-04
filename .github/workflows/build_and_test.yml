@@ -222,13 +222,6 @@ jobs:
         git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' merge --no-commit --progress --squash FETCH_HEAD
         git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' commit -m "Merged commit" --allow-empty
     # Cache local repositories. Note that GitHub Actions cache has a 2G limit.
-    - name: Cache Coursier local repository
-      uses: actions/cache@v3
-      with:
-        path: ~/.cache/coursier
-        key: ${{ matrix.java }}-${{ matrix.hadoop }}-coursier-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
-        restore-keys: |
-          ${{ matrix.java }}-${{ matrix.hadoop }}-coursier-
     - name: Free up disk space
       run: ./dev/free_disk_space
     - name: Install Java ${{ matrix.java }}
