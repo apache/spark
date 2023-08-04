@@ -2942,7 +2942,7 @@ object SQLConf {
       .doc("Enable Arrow optimization for Python UDTFs.")
       .version("3.5.0")
       .booleanConf
-      .createWithDefault(true)
+      .createWithDefault(false)
 
   val PYTHON_TABLE_UDF_ANALYZER_MEMORY =
     buildConf("spark.sql.analyzer.pythonUDTF.analyzeInPython.memory")
