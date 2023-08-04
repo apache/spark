@@ -3436,13 +3436,6 @@
 
     <profile>
       <id>iceberg</id>
-      <dependencies>
-        <dependency>
-          <groupId>org.apache.iceberg</groupId>
-          <artifactId>iceberg-spark-runtime-3.3_2.12</artifactId>
-          <version>1.4.0-SNAPSHOT</version>
-        </dependency>
-      </dependencies>
       <modules>
         <module>sql/iceberg</module>
       </modules>
