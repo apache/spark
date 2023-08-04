@@ -3584,7 +3584,10 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         if inclusive not in allowed_inclusive_values:
             raise PySparkValueError(
                 error_class="VALUE_NOT_ALLOWED",
-                message_parameters={"arg_name": "inclusive", "allowed_values": str(allowed_inclusive_values)},
+                message_parameters={
+                    "arg_name": "inclusive",
+                    "allowed_values": str(allowed_inclusive_values),
+                },
             )
 
         psdf = self.copy()

@@ -187,7 +187,10 @@ class FrameReindexingMixin:
         self.check_error(
             exception=ctx.exception,
             error_class="VALUE_NOT_ALLOWED",
-            message_parameters={"arg_name": "inclusive", "allowed_values": str(["left", "right", "both", "neither"])},
+            message_parameters={
+                "arg_name": "inclusive",
+                "allowed_values": str(["left", "right", "both", "neither"]),
+            },
         )
 
     def test_drop(self):
