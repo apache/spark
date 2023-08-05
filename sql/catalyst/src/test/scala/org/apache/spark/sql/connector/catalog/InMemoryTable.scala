@@ -373,6 +373,8 @@ class InMemoryTable(
                   }).foreach(newPartition.withRow)
                   newPartition
                 })
+              
+              case _ => // skip
             }
           }
         this.broadcastVarFilters = this.broadcastVarFilters ++ filters.filter {
