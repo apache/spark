@@ -43,8 +43,15 @@ import org.apache.spark.network.util.IOMode;
 import org.apache.spark.network.util.NettyUtils;
 import org.apache.spark.network.util.TransportConf;
 
+import static org.apache.spark.network.util.NettyUtils.getRemoteAddress;
+
+/**
+ * Extends {@link TransportContext} to support customized shuffle service. Specifically, we modified the Netty Channel
+ * Pipeline so that IO expensive messages such as FINALIZE_SHUFFLE_MERGE are processed in the separate handlers.
+ * */
 public class ShuffleTransportContext extends TransportContext {
   private static final Logger logger = LoggerFactory.getLogger(ShuffleTransportContext.class);
+  private static final ShuffleMessageDecoder SHUFFLE_DECODER = new ShuffleMessageDecoder(MessageDecoder.INSTANCE);
   private final EventLoopGroup finalizeWorkers;
 
   public ShuffleTransportContext(
@@ -74,7 +81,7 @@ public class ShuffleTransportContext extends TransportContext {
   @Override
   public TransportChannelHandler initializePipeline(SocketChannel channel) {
     TransportChannelHandler ch = super.initializePipeline(channel);
-    addFinalizeHandlerToPipelineIfNeeded(channel, ch);
+    addHandlerToPipeline(channel, ch);
     return ch;
   }
 
@@ -82,7 +89,7 @@ public class ShuffleTransportContext extends TransportContext {
   public TransportChannelHandler initializePipeline(SocketChannel channel,
       RpcHandler channelRpcHandler) {
     TransportChannelHandler ch = super.initializePipeline(channel, channelRpcHandler);
-    addFinalizeHandlerToPipelineIfNeeded(channel, ch);
+    addHandlerToPipeline(channel, ch);
     return ch;
   }
 
@@ -90,7 +97,7 @@ public class ShuffleTransportContext extends TransportContext {
    * Add finalize handler to pipeline if needed. This is needed only when separateFinalizeShuffleMerge
    * is enabled.
    */
-  private void addFinalizeHandlerToPipelineIfNeeded(SocketChannel channel,
+  private void addHandlerToPipeline(SocketChannel channel,
       TransportChannelHandler ch) {
     if (finalizeWorkers != null) {
       channel.pipeline().addLast(finalizeWorkers, FinalizedHandler.HANDLER_NAME,
@@ -100,10 +107,7 @@ public class ShuffleTransportContext extends TransportContext {
 
   @Override
   protected MessageToMessageDecoder<ByteBuf> getDecoder() {
-    if (finalizeWorkers != null) {
-      return new ShuffleMessageDecoder(MessageDecoder.INSTANCE);
-    }
-    return super.getDecoder();
+    return finalizeWorkers == null ? super.getDecoder() : SHUFFLE_DECODER;
   }
 
   static class ShuffleMessageDecoder extends MessageToMessageDecoder<ByteBuf> {
