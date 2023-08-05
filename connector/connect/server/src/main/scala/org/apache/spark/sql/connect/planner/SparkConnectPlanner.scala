@@ -1514,15 +1514,20 @@ class SparkConnectPlanner(val sessionHolder: SessionHolder) extends Logging {
   }
 
   private def unpackScalarScalaUDF[T](fun: proto.ScalarScalaUDF): T = {
+    def classNotFoundException(cause: Throwable): ClassNotFoundException =
+      new ClassNotFoundException(
+        s"Failed to load class correctly due to $cause. " +
+          "Make sure the artifact where the class is defined is installed by calling" +
+          " session.addArtifact.")
     try {
       logDebug(s"Unpack using class loader: ${Utils.getContextOrSparkClassLoader}")
       Utils.deserialize[T](fun.getPayload.toByteArray, Utils.getContextOrSparkClassLoader)
     } catch {
       case e: IOException if e.getCause.isInstanceOf[NoSuchMethodException] =>
-        throw new ClassNotFoundException(
-          s"Failed to load class correctly due to ${e.getCause}. " +
-            "Make sure the artifact where the class is defined is installed by calling" +
-            " session.addArtifact.")
+        throw classNotFoundException(e.getCause)
+      case e: RuntimeException
+          if e.getCause != null && e.getCause.getCause.isInstanceOf[NoSuchMethodException] =>
+        throw classNotFoundException(e.getCause.getCause)
     }
   }
 
