@@ -30,7 +30,7 @@ if should_test_connect:
 @unittest.skipIf(not should_test_connect, connect_requirement_message)
 class SparkConnectClientTestCase(unittest.TestCase):
     def test_user_agent_passthrough(self):
-        client = SparkConnectClient("sc://foo/;user_agent=bar")
+        client = SparkConnectClient("sc://foo/;user_agent=bar", use_reattachable_execute=False)
         mock = MockService(client._session_id)
         client._stub = mock
 
@@ -41,7 +41,7 @@ class SparkConnectClientTestCase(unittest.TestCase):
         self.assertRegex(mock.req.client_type, r"^bar spark/[^ ]+ os/[^ ]+ python/[^ ]+$")
 
     def test_user_agent_default(self):
-        client = SparkConnectClient("sc://foo/")
+        client = SparkConnectClient("sc://foo/", use_reattachable_execute=False)
         mock = MockService(client._session_id)
         client._stub = mock
 
@@ -54,11 +54,11 @@ class SparkConnectClientTestCase(unittest.TestCase):
         )
 
     def test_properties(self):
-        client = SparkConnectClient("sc://foo/;token=bar")
+        client = SparkConnectClient("sc://foo/;token=bar", use_reattachable_execute=False)
         self.assertEqual(client.token, "bar")
         self.assertEqual(client.host, "foo")
 
-        client = SparkConnectClient("sc://foo/")
+        client = SparkConnectClient("sc://foo/", use_reattachable_execute=False)
         self.assertIsNone(client.token)
 
     def test_channel_builder(self):
@@ -67,12 +67,14 @@ class SparkConnectClientTestCase(unittest.TestCase):
             def userId(self) -> Optional[str]:
                 return "abc"
 
-        client = SparkConnectClient(CustomChannelBuilder("sc://foo/"))
+        client = SparkConnectClient(
+            CustomChannelBuilder("sc://foo/"), use_reattachable_execute=False
+        )
 
         self.assertEqual(client._user_id, "abc")
 
     def test_interrupt_all(self):
-        client = SparkConnectClient("sc://foo/;token=bar")
+        client = SparkConnectClient("sc://foo/;token=bar", use_reattachable_execute=False)
         mock = MockService(client._session_id)
         client._stub = mock
 
@@ -80,7 +82,7 @@ class SparkConnectClientTestCase(unittest.TestCase):
         self.assertIsNotNone(mock.req, "Interrupt API was not called when expected")
 
     def test_is_closed(self):
-        client = SparkConnectClient("sc://foo/;token=bar")
+        client = SparkConnectClient("sc://foo/;token=bar", use_reattachable_execute=False)
 
         self.assertFalse(client.is_closed)
         client.close()

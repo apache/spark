@@ -34,7 +34,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.sql.catalyst.{InternalRow, SQLConfHelper}
 import org.apache.spark.sql.catalyst.analysis.Resolver
-import org.apache.spark.sql.catalyst.encoders.RowEncoder
+import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions.SpecificInternalRow
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, CharVarcharUtils, DateTimeUtils, GenericArrayData}
@@ -327,7 +327,7 @@ object JdbcUtils extends Logging with SQLConfHelper {
       dialect: JdbcDialect): Iterator[Row] = {
     val inputMetrics =
       Option(TaskContext.get()).map(_.taskMetrics().inputMetrics).getOrElse(new InputMetrics)
-    val fromRow = RowEncoder(schema).resolveAndBind().createDeserializer()
+    val fromRow = ExpressionEncoder(schema).resolveAndBind().createDeserializer()
     val internalRows = resultSetToSparkInternalRows(resultSet, dialect, schema, inputMetrics)
     internalRows.map(fromRow)
   }
@@ -483,7 +483,8 @@ object JdbcUtils extends Logging with SQLConfHelper {
       (rs: ResultSet, row: InternalRow, pos: Int) =>
         val t = rs.getTimestamp(pos + 1)
         if (t != null) {
-          row.setLong(pos, DateTimeUtils.fromJavaTimestamp(t))
+          row.setLong(pos, DateTimeUtils.
+                            fromJavaTimestamp(dialect.convertJavaTimestampToTimestamp(t)))
         } else {
           row.update(pos, null)
         }

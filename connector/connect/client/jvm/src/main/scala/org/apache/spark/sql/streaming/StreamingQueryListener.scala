@@ -25,7 +25,6 @@ import org.json4s.JsonDSL.{jobject2assoc, pair2Assoc}
 import org.json4s.jackson.JsonMethods.{compact, render}
 
 import org.apache.spark.annotation.Evolving
-import org.apache.spark.scheduler.SparkListenerEvent
 
 /**
  * Interface for listening to events related to [[StreamingQuery StreamingQueries]].
@@ -77,34 +76,6 @@ abstract class StreamingQueryListener extends Serializable {
 }
 
 /**
- * Py4J allows a pure interface so this proxy is required.
- */
-private[spark] trait PythonStreamingQueryListener {
-  import StreamingQueryListener._
-
-  def onQueryStarted(event: QueryStartedEvent): Unit
-
-  def onQueryProgress(event: QueryProgressEvent): Unit
-
-  def onQueryIdle(event: QueryIdleEvent): Unit
-
-  def onQueryTerminated(event: QueryTerminatedEvent): Unit
-}
-
-private[spark] class PythonStreamingQueryListenerWrapper(listener: PythonStreamingQueryListener)
-    extends StreamingQueryListener {
-  import StreamingQueryListener._
-
-  def onQueryStarted(event: QueryStartedEvent): Unit = listener.onQueryStarted(event)
-
-  def onQueryProgress(event: QueryProgressEvent): Unit = listener.onQueryProgress(event)
-
-  override def onQueryIdle(event: QueryIdleEvent): Unit = listener.onQueryIdle(event)
-
-  def onQueryTerminated(event: QueryTerminatedEvent): Unit = listener.onQueryTerminated(event)
-}
-
-/**
  * Companion object of [[StreamingQueryListener]] that defines the listener events.
  * @since 3.5.0
  */
@@ -116,7 +87,7 @@ object StreamingQueryListener extends Serializable {
    * @since 3.5.0
    */
   @Evolving
-  trait Event extends SparkListenerEvent
+  trait Event
 
   /**
    * Event representing the start of a query

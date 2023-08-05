@@ -23,7 +23,7 @@ import org.apache.hadoop.fs.Path
 
 import org.apache.spark.{SPARK_DOC_ROOT, SparkException, SparkThrowable, SparkThrowableHelper, SparkUnsupportedOperationException}
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.{FunctionIdentifier, QualifiedTableName, TableIdentifier}
+import org.apache.spark.sql.catalyst.{ExtendedAnalysisException, FunctionIdentifier, QualifiedTableName, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableException, FunctionAlreadyExistsException, NamespaceAlreadyExistsException, NoSuchFunctionException, NoSuchNamespaceException, NoSuchPartitionException, NoSuchTableException, ResolvedTable, Star, TableAlreadyExistsException, UnresolvedRegex}
 import org.apache.spark.sql.catalyst.catalog.{CatalogTable, InvalidUDFClassException}
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
@@ -48,7 +48,7 @@ import org.apache.spark.sql.types._
  * As commands are executed eagerly, this also includes errors thrown during the execution of
  * commands, which users can see immediately.
  */
-private[sql] object QueryCompilationErrors extends QueryErrorsBase {
+private[sql] object QueryCompilationErrors extends QueryErrorsBase with CompilationErrors {
 
   def unexpectedRequiredParameterInFunctionSignature(
       functionName: String, functionSignature: FunctionSignature) : Throwable = {
@@ -90,12 +90,13 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
   }
 
   def requiredParameterNotFound(
-      functionName: String, parameterName: String) : Throwable = {
+      functionName: String, parameterName: String, index: Int) : Throwable = {
     new AnalysisException(
       errorClass = "REQUIRED_PARAMETER_NOT_FOUND",
       messageParameters = Map(
         "functionName" -> toSQLId(functionName),
-        "parameterName" -> toSQLId(parameterName))
+        "parameterName" -> toSQLId(parameterName),
+        "index" -> index.toString)
     )
   }
 
@@ -115,10 +116,14 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
     )
   }
 
-  def unexpectedPositionalArgument(functionName: String): Throwable = {
+  def unexpectedPositionalArgument(
+      functionName: String,
+      precedingNamedArgument: String): Throwable = {
     new AnalysisException(
       errorClass = "UNEXPECTED_POSITIONAL_ARGUMENT",
-      messageParameters = Map("functionName" -> toSQLId(functionName))
+      messageParameters = Map(
+        "functionName" -> toSQLId(functionName),
+        "parameterName" -> toSQLId(precedingNamedArgument))
     )
   }
 
@@ -1688,12 +1693,6 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
         "tableSchema" -> tableSchema.toString))
   }
 
-  def unsupportedDataSourceTypeForDirectQueryOnFilesError(className: String): Throwable = {
-    new AnalysisException(
-      errorClass = "UNSUPPORTED_DATA_SOURCE_FOR_DIRECT_QUERY",
-      messageParameters = Map("className" -> className))
-  }
-
   def saveDataIntoViewNotAllowedError(): Throwable = {
     new AnalysisException(
       errorClass = "_LEGACY_ERROR_TEMP_1158",
@@ -1901,7 +1900,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
 
   def streamJoinStreamWithoutEqualityPredicateUnsupportedError(plan: LogicalPlan): Throwable = {
     val errorClass = "_LEGACY_ERROR_TEMP_1181"
-    new AnalysisException(
+    new ExtendedAnalysisException(
       SparkThrowableHelper.getMessage(errorClass, Map.empty[String, String]),
       errorClass = Some(errorClass),
       messageParameters = Map.empty,
@@ -1927,21 +1926,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
 
   def ambiguousColumnOrFieldError(
       name: Seq[String], numMatches: Int, context: Origin): Throwable = {
-    new AnalysisException(
-      errorClass = "AMBIGUOUS_COLUMN_OR_FIELD",
-      messageParameters = Map(
-        "name" -> toSQLId(name),
-        "n" -> numMatches.toString),
-      origin = context)
-  }
-
-  def ambiguousColumnOrFieldError(
-      name: Seq[String], numMatches: Int): Throwable = {
-    new AnalysisException(
-      errorClass = "AMBIGUOUS_COLUMN_OR_FIELD",
-      messageParameters = Map(
-        "name" -> toSQLId(name),
-        "n" -> numMatches.toString))
+    DataTypeErrors.ambiguousColumnOrFieldError(name, numMatches, context)
   }
 
   def ambiguousReferenceError(name: String, ambiguousReferences: Seq[Attribute]): Throwable = {
@@ -2008,9 +1993,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
   }
 
   def userSpecifiedSchemaUnsupportedError(operation: String): Throwable = {
-    new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1189",
-      messageParameters = Map("operation" -> operation))
+    DataTypeErrors.userSpecifiedSchemaUnsupportedError(operation)
   }
 
   def tempViewNotSupportStreamingWriteError(viewName: String): Throwable = {
@@ -2380,9 +2363,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
   }
 
   def charOrVarcharTypeAsStringUnsupportedError(): Throwable = {
-    new AnalysisException(
-      errorClass = "UNSUPPORTED_CHAR_OR_VARCHAR_AS_STRING",
-      messageParameters = Map.empty)
+    DataTypeErrors.charOrVarcharTypeAsStringUnsupportedError()
   }
 
   def escapeCharacterInTheMiddleError(pattern: String, char: String): Throwable = {
@@ -2472,14 +2453,6 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
     new AnalysisException(
       errorClass = "COLUMN_ALREADY_EXISTS",
       messageParameters = Map("columnName" -> toSQLId(columnName)))
-  }
-
-  def columnNotFoundError(colName: String): Throwable = {
-    new AnalysisException(
-      errorClass = "COLUMN_NOT_FOUND",
-      messageParameters = Map(
-        "colName" -> toSQLId(colName),
-        "caseSensitiveConfig" -> toSQLConf(SQLConf.CASE_SENSITIVE.key)))
   }
 
   def noSuchTableError(db: String, table: String): Throwable = {
@@ -3574,20 +3547,6 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
     new AnalysisException(
       errorClass = "PROTOBUF_MESSAGE_NOT_FOUND",
       messageParameters = Map("messageName" -> messageName))
-  }
-
-  def descriptorParseError(cause: Throwable): Throwable = {
-    new AnalysisException(
-      errorClass = "CANNOT_PARSE_PROTOBUF_DESCRIPTOR",
-      messageParameters = Map.empty,
-      cause = Option(cause))
-  }
-
-  def cannotFindDescriptorFileError(filePath: String, cause: Throwable): Throwable = {
-    new AnalysisException(
-      errorClass = "PROTOBUF_DESCRIPTOR_FILE_NOT_FOUND",
-      messageParameters = Map("filePath" -> filePath),
-      cause = Option(cause))
   }
 
   def foundRecursionInProtobufSchema(fieldDescriptor: String): Throwable = {

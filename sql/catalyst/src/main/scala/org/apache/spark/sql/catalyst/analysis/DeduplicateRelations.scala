@@ -115,6 +115,14 @@ object DeduplicateRelations extends Rule[LogicalPlan] {
         newProject => findAliases(newProject.projectList).map(_.exprId.id).toSeq,
         newProject => newProject.copy(newAliases(newProject.projectList)))
 
+    case a: Aggregate =>
+      deduplicateAndRenew[Aggregate](
+        existingRelations,
+        a,
+        newAggregate => findAliases(newAggregate.aggregateExpressions).map(_.exprId.id).toSeq,
+        newAggregate => newAggregate.copy(aggregateExpressions =
+          newAliases(newAggregate.aggregateExpressions)))
+
     case s: SerializeFromObject =>
       deduplicateAndRenew[SerializeFromObject](
         existingRelations,
@@ -421,7 +429,7 @@ object DeduplicateRelations extends Rule[LogicalPlan] {
     // in the original project list, to avoid assertion failures when rewriting attributes
     // in transformUpWithNewOutput.
     val oldAliasToNewAlias = AttributeMap(expressions.collect {
-      case a: Alias => (a.toAttribute, Alias(a.child, a.name)())
+      case a: Alias => (a.toAttribute, a.newInstance())
     })
     expressions.map {
       case a: Alias => oldAliasToNewAlias(a.toAttribute)

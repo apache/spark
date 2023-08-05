@@ -60,7 +60,7 @@ from pyspark.testing.sqlutils import (
     pandas_requirement_message,
     pyarrow_requirement_message,
 )
-from pyspark.testing.utils import QuietTest
+from pyspark.testing.utils import QuietTest, assertDataFrameEqual
 
 if have_pandas:
     import pandas as pd
@@ -527,6 +527,27 @@ class ScalarPandasUDFTestsMixin:
                 self.assertEqual(i, id)
                 self.assertEqual(pd.Timestamp(i).to_pydatetime(), f[0])
                 self.assertListEqual([i, i + 1], f[1])
+
+    def test_vectorized_udf_struct_empty(self):
+        df = self.spark.range(3)
+        return_type = StructType()
+
+        def _scalar_f(id):
+            return pd.DataFrame(index=id)
+
+        scalar_f = pandas_udf(_scalar_f, returnType=return_type)
+
+        @pandas_udf(returnType=return_type, functionType=PandasUDFType.SCALAR_ITER)
+        def iter_f(it):
+            for id in it:
+                yield _scalar_f(id)
+
+        for f, udf_type in [(scalar_f, "SCALAR"), (iter_f, "SCALAR_ITER")]:
+            with self.subTest(udf_type=udf_type):
+                assertDataFrameEqual(
+                    df.withColumn("f", f(col("id"))),
+                    [Row(id=0, f=Row()), Row(id=1, f=Row()), Row(id=2, f=Row())],
+                )
 
     def test_vectorized_udf_nested_struct(self):
         with QuietTest(self.sc):

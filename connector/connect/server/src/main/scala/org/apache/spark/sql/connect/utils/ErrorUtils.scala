@@ -133,11 +133,15 @@ private[connect] object ErrorUtils extends Logging {
     }
     partial
       .andThen { case (original, wrapped) =>
-        logError(s"Error during: $opType. UserId: $userId. SessionId: $sessionId.", original)
-        if (isInterrupted) {
-          events.foreach(_.postCanceled)
-        } else {
-          events.foreach(_.postFailed(wrapped.getMessage))
+        // If ExecuteEventsManager is present, this this is an execution error that needs to be
+        // posted to it.
+        events.foreach { executeEventsManager =>
+          logError(s"Error during: $opType. UserId: $userId. SessionId: $sessionId.", original)
+          if (isInterrupted) {
+            executeEventsManager.postCanceled()
+          } else {
+            executeEventsManager.postFailed(wrapped.getMessage)
+          }
         }
         observer.onError(wrapped)
       }

@@ -789,9 +789,19 @@ inlineTable
     ;
 
 functionTableSubqueryArgument
-    : TABLE identifierReference
-    | TABLE LEFT_PAREN identifierReference RIGHT_PAREN
-    | TABLE LEFT_PAREN query RIGHT_PAREN
+    : TABLE identifierReference tableArgumentPartitioning?
+    | TABLE LEFT_PAREN identifierReference RIGHT_PAREN tableArgumentPartitioning?
+    | TABLE LEFT_PAREN query RIGHT_PAREN tableArgumentPartitioning?
+    ;
+
+tableArgumentPartitioning
+    : ((WITH SINGLE PARTITION)
+        | ((PARTITION | DISTRIBUTE) BY
+            (((LEFT_PAREN partition+=expression (COMMA partition+=expression)* RIGHT_PAREN))
+            | partition+=expression)))
+      ((ORDER | SORT) BY
+        (((LEFT_PAREN sortItem (COMMA sortItem)* RIGHT_PAREN)
+        | sortItem)))?
     ;
 
 functionTableNamedArgumentExpression
@@ -1467,6 +1477,7 @@ ansiNonReserved
     | SETS
     | SHORT
     | SHOW
+    | SINGLE
     | SKEWED
     | SMALLINT
     | SORT
@@ -1801,6 +1812,7 @@ nonReserved
     | SETS
     | SHORT
     | SHOW
+    | SINGLE
     | SKEWED
     | SMALLINT
     | SOME

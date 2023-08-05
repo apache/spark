@@ -1354,6 +1354,17 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
     })
   }
 
+  test("SPARK-44520: invalid path for support direct query shall throw correct exception") {
+    checkError(
+      exception = intercept[AnalysisException] {
+        sql(s"select id from parquet.`invalid_path`")
+      },
+      errorClass = "PATH_NOT_FOUND",
+      parameters = Map("path" -> "file.*invalid_path"),
+      matchPVals = true
+    )
+  }
+
   test("run sql directly on files - orc") {
     val df = spark.range(100).toDF()
     withTempPath(f => {

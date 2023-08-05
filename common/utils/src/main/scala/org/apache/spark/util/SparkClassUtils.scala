@@ -16,9 +16,13 @@
  */
 package org.apache.spark.util
 
+import java.util.Random
+
 import scala.util.Try
 
 trait SparkClassUtils {
+  val random = new Random()
+
   def getSparkClassLoader: ClassLoader = getClass.getClassLoader
 
   def getContextOrSparkClassLoader: ClassLoader =

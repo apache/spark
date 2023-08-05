@@ -24,7 +24,7 @@ import org.apache.spark.sql.types._
 @ExpressionDescription(
   usage = """
     _FUNC_(window_column) - Extract the time value from time/session window column which can be used for event time value of window.
-      The extracted time is (window.end - 1) which reflects the fact that the the aggregating
+      The extracted time is (window.end - 1) which reflects the fact that the aggregating
       windows have exclusive upper bound - [start, end)
       See <a href="https://spark.apache.org/docs/latest/structured-streaming-programming-guide.html#window-operations-on-event-time">'Window Operations on Event Time'</a> in Structured Streaming guide doc for detailed explanation and examples.
   """,
