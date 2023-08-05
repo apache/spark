@@ -17,9 +17,14 @@
 
 package org.apache.spark.sql.connect.execution
 
-private[execution] case class CachedStreamResponse[T](
+import com.google.protobuf.MessageLite
+
+private[execution] case class CachedStreamResponse[T <: MessageLite](
     // the actual cached response
     response: T,
     // index of the response in the response stream.
     // responses produced in the stream are numbered consecutively starting from 1.
-    streamIndex: Long)
+    streamIndex: Long) {
+
+  def serializedByteSize: Long = response.getSerializedSize.toLong
+}

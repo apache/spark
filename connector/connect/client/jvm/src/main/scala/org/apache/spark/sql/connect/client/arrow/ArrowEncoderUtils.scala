@@ -24,8 +24,11 @@ import org.apache.arrow.vector.complex.StructVector
 
 private[arrow] object ArrowEncoderUtils {
   object Classes {
+    val WRAPPED_ARRAY: Class[_] = classOf[scala.collection.mutable.WrappedArray[_]]
     val ITERABLE: Class[_] = classOf[scala.collection.Iterable[_]]
+    val MAP: Class[_] = classOf[scala.collection.Map[_, _]]
     val JLIST: Class[_] = classOf[java.util.List[_]]
+    val JMAP: Class[_] = classOf[java.util.Map[_, _]]
   }
 
   def isSubClass(cls: Class[_], tag: ClassTag[_]): Boolean = {
@@ -36,8 +39,6 @@ private[arrow] object ArrowEncoderUtils {
     throw new RuntimeException(s"Unsupported collection type: $cls")
   }
 }
-
-trait CloseableIterator[E] extends Iterator[E] with AutoCloseable
 
 private[arrow] object StructVectors {
   def unapply(v: AnyRef): Option[(StructVector, Seq[FieldVector])] = v match {

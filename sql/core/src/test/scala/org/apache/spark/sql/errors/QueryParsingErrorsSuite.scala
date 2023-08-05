@@ -32,16 +32,11 @@ class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession with SQL
     intercept[ParseException](sql(sqlText).collect())
   }
 
-  test("NAMED_ARGUMENTS_SUPPORT_DISABLED: named arguments not turned on") {
+  test("NAMED_PARAMETER_SUPPORT_DISABLED: named arguments not turned on") {
     withSQLConf("spark.sql.allowNamedFunctionArguments" -> "false") {
       checkError(
-        exception = parseException("SELECT * FROM encode(value => 'abc', charset => 'utf-8')"),
-        errorClass = "NAMED_ARGUMENTS_SUPPORT_DISABLED",
-        parameters = Map("functionName" -> toSQLId("encode"), "argument" -> toSQLId("value"))
-      )
-      checkError(
         exception = parseException("SELECT explode(arr => array(10, 20))"),
-        errorClass = "NAMED_ARGUMENTS_SUPPORT_DISABLED",
+        errorClass = "NAMED_PARAMETER_SUPPORT_DISABLED",
         parameters = Map("functionName"-> toSQLId("explode"), "argument" -> toSQLId("arr"))
       )
     }

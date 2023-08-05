@@ -20,6 +20,7 @@ import unittest
 from pyspark.errors import PySparkTypeError, PySparkValueError
 from pyspark.sql import SparkSession as PySparkSession
 from pyspark.sql.types import StringType, StructType, StructField, ArrayType, IntegerType
+from pyspark.testing import assertDataFrameEqual
 from pyspark.testing.pandasutils import PandasOnSparkTestUtils
 from pyspark.testing.connectutils import ReusedConnectTestCase, should_test_connect
 from pyspark.testing.sqlutils import SQLTestUtils
@@ -2341,6 +2342,23 @@ class SparkConnectFunctionTests(ReusedConnectTestCase, PandasOnSparkTestUtils, S
             cdf.withColumn("A", cfun(cdf.c)).toPandas(),
             sdf.withColumn("A", sfun(sdf.c)).toPandas(),
         )
+
+    def test_udtf(self):
+        class TestUDTF:
+            def eval(self, x: int, y: int):
+                yield x, x + 1
+                yield y, y + 1
+
+        sfunc = SF.udtf(TestUDTF, returnType="a: int, b: int")
+        cfunc = CF.udtf(TestUDTF, returnType="a: int, b: int")
+
+        assertDataFrameEqual(sfunc(SF.lit(1), SF.lit(1)), cfunc(CF.lit(1), CF.lit(1)))
+
+        self.spark.udtf.register("test_udtf", sfunc)
+        self.connect.udtf.register("test_udtf", cfunc)
+
+        query = "select * from test_udtf(1, 2)"
+        assertDataFrameEqual(self.spark.sql(query), self.connect.sql(query))
 
     def test_pandas_udf_import(self):
         self.assert_eq(getattr(CF, "pandas_udf"), getattr(SF, "pandas_udf"))

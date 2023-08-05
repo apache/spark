@@ -103,6 +103,7 @@ trait EvalPythonUDTFExec extends UnaryExecNode {
         }
 
       val joined = new JoinedRow
+      val nullRow = new GenericInternalRow(udtf.elementSchema.length)
       val resultProj = UnsafeProjection.create(output, output)
 
       outputRowIterator.flatMap { outputRows =>
@@ -118,7 +119,15 @@ trait EvalPythonUDTFExec extends UnaryExecNode {
         // from the UDTF are from the `terminate()` call. We leave the left side as the last
         // element of its child output to keep it consistent with the Generate implementation
         // and Hive UDTFs.
-        outputRows.map(r => resultProj(joined.withRight(r)))
+        outputRows.map { r =>
+          // When the UDTF's result is None, such as `def eval(): yield`,
+          // we join it with a null row to avoid NullPointerException.
+          if (r == null) {
+            resultProj(joined.withRight(nullRow))
+          } else {
+            resultProj(joined.withRight(r))
+          }
+        }
       }
     }
   }

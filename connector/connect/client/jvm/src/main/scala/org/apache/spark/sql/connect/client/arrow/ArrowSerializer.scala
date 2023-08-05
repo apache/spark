@@ -37,8 +37,9 @@ import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.DefinedByConstructorParams
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoder
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders._
-import org.apache.spark.sql.catalyst.util.{DateTimeUtils, IntervalUtils}
-import org.apache.spark.sql.errors.QueryExecutionErrors
+import org.apache.spark.sql.catalyst.util.{SparkDateTimeUtils, SparkIntervalUtils}
+import org.apache.spark.sql.connect.client.CloseableIterator
+import org.apache.spark.sql.errors.ExecutionErrors
 import org.apache.spark.sql.types.Decimal
 import org.apache.spark.sql.util.ArrowUtils
 
@@ -191,11 +192,14 @@ object ArrowSerializer {
       allocator: BufferAllocator,
       timeZoneId: String): ByteString = {
     val serializer = new ArrowSerializer[T](enc, allocator, timeZoneId)
-    serializer.reset()
-    input.foreach(serializer.append)
-    val output = ByteString.newOutput()
-    serializer.writeIpcStream(output)
-    output.toByteString
+    try {
+      input.foreach(serializer.append)
+      val output = ByteString.newOutput()
+      serializer.writeIpcStream(output)
+      output.toByteString
+    } finally {
+      serializer.close()
+    }
   }
 
   /**
@@ -313,47 +317,47 @@ object ArrowSerializer {
       case (DayTimeIntervalEncoder, v: DurationVector) =>
         new FieldSerializer[Duration, DurationVector](v) {
           override def set(index: Int, value: Duration): Unit =
-            vector.setSafe(index, IntervalUtils.durationToMicros(value))
+            vector.setSafe(index, SparkIntervalUtils.durationToMicros(value))
         }
       case (YearMonthIntervalEncoder, v: IntervalYearVector) =>
         new FieldSerializer[Period, IntervalYearVector](v) {
           override def set(index: Int, value: Period): Unit =
-            vector.setSafe(index, IntervalUtils.periodToMonths(value))
+            vector.setSafe(index, SparkIntervalUtils.periodToMonths(value))
         }
       case (DateEncoder(true) | LocalDateEncoder(true), v: DateDayVector) =>
         new FieldSerializer[Any, DateDayVector](v) {
           override def set(index: Int, value: Any): Unit =
-            vector.setSafe(index, DateTimeUtils.anyToDays(value))
+            vector.setSafe(index, SparkDateTimeUtils.anyToDays(value))
         }
       case (DateEncoder(false), v: DateDayVector) =>
         new FieldSerializer[java.sql.Date, DateDayVector](v) {
           override def set(index: Int, value: java.sql.Date): Unit =
-            vector.setSafe(index, DateTimeUtils.fromJavaDate(value))
+            vector.setSafe(index, SparkDateTimeUtils.fromJavaDate(value))
         }
       case (LocalDateEncoder(false), v: DateDayVector) =>
         new FieldSerializer[LocalDate, DateDayVector](v) {
           override def set(index: Int, value: LocalDate): Unit =
-            vector.setSafe(index, DateTimeUtils.localDateToDays(value))
+            vector.setSafe(index, SparkDateTimeUtils.localDateToDays(value))
         }
       case (TimestampEncoder(true) | InstantEncoder(true), v: TimeStampMicroTZVector) =>
         new FieldSerializer[Any, TimeStampMicroTZVector](v) {
           override def set(index: Int, value: Any): Unit =
-            vector.setSafe(index, DateTimeUtils.anyToMicros(value))
+            vector.setSafe(index, SparkDateTimeUtils.anyToMicros(value))
         }
       case (TimestampEncoder(false), v: TimeStampMicroTZVector) =>
         new FieldSerializer[java.sql.Timestamp, TimeStampMicroTZVector](v) {
           override def set(index: Int, value: java.sql.Timestamp): Unit =
-            vector.setSafe(index, DateTimeUtils.fromJavaTimestamp(value))
+            vector.setSafe(index, SparkDateTimeUtils.fromJavaTimestamp(value))
         }
       case (InstantEncoder(false), v: TimeStampMicroTZVector) =>
         new FieldSerializer[Instant, TimeStampMicroTZVector](v) {
           override def set(index: Int, value: Instant): Unit =
-            vector.setSafe(index, DateTimeUtils.instantToMicros(value))
+            vector.setSafe(index, SparkDateTimeUtils.instantToMicros(value))
         }
       case (LocalDateTimeEncoder, v: TimeStampMicroVector) =>
         new FieldSerializer[LocalDateTime, TimeStampMicroVector](v) {
           override def set(index: Int, value: LocalDateTime): Unit =
-            vector.setSafe(index, DateTimeUtils.localDateTimeToMicros(value))
+            vector.setSafe(index, SparkDateTimeUtils.localDateTimeToMicros(value))
         }
 
       case (OptionEncoder(value), v) =>
@@ -439,7 +443,7 @@ object ArrowSerializer {
         }
 
       case (CalendarIntervalEncoder | _: UDTEncoder[_], _) =>
-        throw QueryExecutionErrors.unsupportedDataTypeError(encoder.dataType)
+        throw ExecutionErrors.unsupportedDataTypeError(encoder.dataType)
 
       case _ =>
         throw new RuntimeException(s"Unsupported Encoder($encoder)/Vector($v) combination.")

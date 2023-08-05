@@ -25,7 +25,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.plans.physical.Partitioning
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.errors.QueryExecutionErrors
+import org.apache.spark.sql.errors.ExecutionErrors
 import org.apache.spark.sql.execution.command.DataWritingCommandExec
 import org.apache.spark.sql.execution.datasources.V1WriteCommand
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
@@ -85,20 +85,16 @@ case class ColumnarToRowExec(child: SparkPlan) extends ColumnarToRowTransition w
   )
 
   override def doExecute(): RDD[InternalRow] = {
-    val numOutputRows = longMetric("numOutputRows")
-    val numInputBatches = longMetric("numInputBatches")
-    val evaluatorFactory =
-      new ColumnarToRowEvaluatorFactory(
-        child.output,
-        numOutputRows,
-        numInputBatches)
-
+    val evaluatorFactory = new ColumnarToRowEvaluatorFactory(
+      child.output,
+      longMetric("numOutputRows"),
+      longMetric("numInputBatches"))
     if (conf.usePartitionEvaluator) {
       child.executeColumnar().mapPartitionsWithEvaluator(evaluatorFactory)
     } else {
-      child.executeColumnar().mapPartitionsInternal { batches =>
+      child.executeColumnar().mapPartitionsWithIndexInternal { (index, batches) =>
         val evaluator = evaluatorFactory.createEvaluator()
-        evaluator.eval(0, batches)
+        evaluator.eval(index, batches)
       }
     }
   }
@@ -277,7 +273,7 @@ private object RowToColumnConverter {
       case dt: DecimalType => new DecimalConverter(dt)
       case mt: MapType => MapConverter(getConverterForType(mt.keyType, nullable = false),
         getConverterForType(mt.valueType, mt.valueContainsNull))
-      case unknown => throw QueryExecutionErrors.unsupportedDataTypeError(unknown)
+      case unknown => throw ExecutionErrors.unsupportedDataTypeError(unknown)
     }
 
     if (nullable) {
@@ -454,25 +450,20 @@ case class RowToColumnarExec(child: SparkPlan) extends RowToColumnarTransition {
   )
 
   override def doExecuteColumnar(): RDD[ColumnarBatch] = {
-    val numInputRows = longMetric("numInputRows")
-    val numOutputBatches = longMetric("numOutputBatches")
-    // Instead of creating a new config we are reusing columnBatchSize. In the future if we do
-    // combine with some of the Arrow conversion tools we will need to unify some of the configs.
-    val numRows = conf.columnBatchSize
-    val evaluatorFactory =
-      new RowToColumnarEvaluatorFactory(
-        conf.offHeapColumnVectorEnabled,
-        numRows,
-        schema,
-        numInputRows,
-        numOutputBatches)
-
+    val evaluatorFactory = new RowToColumnarEvaluatorFactory(
+      conf.offHeapColumnVectorEnabled,
+      // Instead of creating a new config we are reusing columnBatchSize. In the future if we do
+      // combine with some of the Arrow conversion tools we will need to unify some of the configs.
+      conf.columnBatchSize,
+      schema,
+      longMetric("numInputRows"),
+      longMetric("numOutputBatches"))
     if (conf.usePartitionEvaluator) {
       child.execute().mapPartitionsWithEvaluator(evaluatorFactory)
     } else {
-      child.execute().mapPartitionsInternal { rowIterator =>
+      child.execute().mapPartitionsWithIndexInternal { (index, rowIterator) =>
         val evaluator = evaluatorFactory.createEvaluator()
-        evaluator.eval(0, rowIterator)
+        evaluator.eval(index, rowIterator)
       }
     }
   }
