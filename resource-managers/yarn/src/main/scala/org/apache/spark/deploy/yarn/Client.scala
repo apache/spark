@@ -77,6 +77,7 @@ private[spark] class Client(
   private val isClusterMode = sparkConf.get(SUBMIT_DEPLOY_MODE) == "cluster"
 
   private val isClientUnmanagedAMEnabled = sparkConf.get(YARN_UNMANAGED_AM) && !isClusterMode
+  private val statCachePreloadedEnabled = sparkConf.get(YARN_CLIENT_STAT_CACHE_PRELOADED_ENABLED)
   private var appMaster: ApplicationMaster = _
   private var stagingDirPath: Path = _
 
@@ -502,6 +503,85 @@ private[spark] class Client(
         distributedNames += fileName
         true
       }
+    }
+
+    def obtainCommonParentDir(jars: Seq[String]): Seq[String] = {
+      val commonDir = new ArrayBuffer[URI]()
+      val parentDirCounter = new HashMap[URI, Int]()
+      jars.foreach { jar =>
+        if (!Utils.isLocalUri(jar)) {
+          val path = getQualifiedLocalPath(Utils.resolveURI(jar), hadoopConf)
+
+          val pathFs = FileSystem.get(path.toUri(), hadoopConf)
+          val fss = pathFs.globStatus(path)
+          if (fss == null) {
+            throw new FileNotFoundException(s"Path ${path.toString} does not exist")
+          }
+          fss.filter(_.isFile()).foreach { entry =>
+            val uri = entry.getPath().toUri()
+            val parentUri = entry.getPath.getParent.toUri
+            // parentDirCounter(parentUri) =
+            parentDirCounter.getOrElseUpdate(parentUri,
+              parentDirCounter.getOrElse(parentUri, 0) + 1)
+            statCache.update(uri, entry)
+            // distribute(uri.toString(), targetDir = Some(LOCALIZED_LIB_DIR))
+          }
+        }
+      }
+
+
+      jars
+    }
+
+    // def preloadStatCache()
+
+    if (statCachePreloadedEnabled) {
+      logDebug("Preload the following directories")
+      // We only consider jar specified in SPARK_JARS
+      // Extract common parent paths based on xx
+      sparkConf.get(SPARK_JARS) match {
+        case Some(jars) =>
+          // Break the list of jars to upload, and resolve globs.
+          val localJars = new ArrayBuffer[String]()
+          jars.foreach { jar =>
+            if (!Utils.isLocalUri(jar)) {
+              val path = getQualifiedLocalPath(Utils.resolveURI(jar), hadoopConf)
+              val pathFs = FileSystem.get(path.toUri(), hadoopConf)
+              val fss = pathFs.globStatus(path)
+              if (fss == null) {
+                throw new FileNotFoundException(s"Path ${path.toString} does not exist")
+              }
+              fss.filter(_.isFile()).foreach { entry =>
+                val uri = entry.getPath().toUri()
+                statCache.update(uri, entry)
+                distribute(uri.toString(), targetDir = Some(LOCALIZED_LIB_DIR))
+              }
+            } else {
+              localJars += jar
+            }
+          }
+      }
+
+          // Preload all the fileStatus from above parent paths into statCache
+      val jarCacheDir = "/root/hello/word"
+      logInfo("pre load to stat cache.")
+      val jarCacheDirPath = new Path(jarCacheDir)
+      fs.listStatus(jarCacheDirPath)
+        .foreach { fileStatus =>
+          val localPath = getQualifiedLocalPath(fileStatus.getPath.toUri, hadoopConf)
+          val srcFs = localPath.getFileSystem(hadoopConf)
+          val qualifiedSrcPath = srcFs.makeQualified(localPath)
+          val qualifiedSrcDir = qualifiedSrcPath.getParent
+          val resolvedSrcDir = symlinkCache.getOrElseUpdate(qualifiedSrcDir.toUri,
+            srcFs.resolvePath(qualifiedSrcDir))
+          val updatedPath = new Path(resolvedSrcDir, qualifiedSrcPath.getName)
+          logInfo(s"add ${updatedPath.toUri} plan to added to stat cache.")
+          statCache.put(updatedPath.toUri, fileStatus)
+
+          val current = new Path(updatedPath.toUri.getPath())
+          logInfo(s"also add current path ${current.toUri} to stat cache.")
+          statCache.put(current.toUri, fileStatus)
+        }
     }
 
     /*

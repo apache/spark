@@ -462,6 +462,20 @@ package object config extends Logging {
     .stringConf
     .createWithDefault("yarn.io/fpga")
 
+  private[spark] val YARN_CLIENT_STAT_CACHE_PRELOADED_ENABLED =
+    ConfigBuilder("spark.yarn.client.statCache.preloaded.enabled")
+    .doc("This configuration enables statCache to be preloaded at YARN client side. This feature " +
+      "analyzes the pattern of resources paths. If multiple resources shared the same parent " +
+      "directory, a single <code>listStatus*</code> will be invoked on the parent directory " +
+      "instead of multiple <code>getFileStatus*</code> performed on each individual resources. " +
+      "If most resources are from the same directory, this feature greatly reduces the RPC call, " +
+      "reduce job runtime, and improve the job runtime variation due to network delays. " +
+      "Noticing, this could potentially increase the memory overhead at client side" +
+      "the destination parent directory contains much more files.")
+    .version("3.5.0")
+    .booleanConf
+    .createWithDefault(false)
+
   private[yarn] val YARN_EXECUTOR_RESOURCE_TYPES_PREFIX = "spark.yarn.executor.resource."
   private[yarn] val YARN_DRIVER_RESOURCE_TYPES_PREFIX = "spark.yarn.driver.resource."
   private[yarn] val YARN_AM_RESOURCE_TYPES_PREFIX = "spark.yarn.am.resource."
