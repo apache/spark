@@ -131,8 +131,8 @@
 | org.apache.spark.sql.catalyst.expressions.EqualTo | == | SELECT 2 == 2 | struct<(2 = 2):boolean> |
 | org.apache.spark.sql.catalyst.expressions.EulerNumber | e | SELECT e() | struct<E():double> |
 | org.apache.spark.sql.catalyst.expressions.Exp | exp | SELECT exp(0) | struct<EXP(0):double> |
-| org.apache.spark.sql.catalyst.expressions.Explode | explode | SELECT explode(array(10, 20)) | struct<col:int> |
-| org.apache.spark.sql.catalyst.expressions.Explode | explode_outer | SELECT explode_outer(array(10, 20)) | struct<col:int> |
+| org.apache.spark.sql.catalyst.expressions.ExplodeExpressionBuilder | explode | SELECT explode(array(10, 20)) | struct<col:int> |
+| org.apache.spark.sql.catalyst.expressions.ExplodeExpressionBuilder | explode_outer | SELECT explode_outer(array(10, 20)) | struct<col:int> |
 | org.apache.spark.sql.catalyst.expressions.Expm1 | expm1 | SELECT expm1(0) | struct<EXPM1(0):double> |
 | org.apache.spark.sql.catalyst.expressions.Extract | extract | SELECT extract(YEAR FROM TIMESTAMP '2019-08-12 01:00:00.123456') | struct<extract(YEAR FROM TIMESTAMP '2019-08-12 01:00:00.123456'):int> |
 | org.apache.spark.sql.catalyst.expressions.Factorial | factorial | SELECT factorial(5) | struct<factorial(5):bigint> |
@@ -212,7 +212,7 @@
 | org.apache.spark.sql.catalyst.expressions.MapKeys | map_keys | SELECT map_keys(map(1, 'a', 2, 'b')) | struct<map_keys(map(1, a, 2, b)):array<int>> |
 | org.apache.spark.sql.catalyst.expressions.MapValues | map_values | SELECT map_values(map(1, 'a', 2, 'b')) | struct<map_values(map(1, a, 2, b)):array<string>> |
 | org.apache.spark.sql.catalyst.expressions.MapZipWith | map_zip_with | SELECT map_zip_with(map(1, 'a', 2, 'b'), map(1, 'x', 2, 'y'), (k, v1, v2) -> concat(v1, v2)) | struct<map_zip_with(map(1, a, 2, b), map(1, x, 2, y), lambdafunction(concat(namedlambdavariable(), namedlambdavariable()), namedlambdavariable(), namedlambdavariable(), namedlambdavariable())):map<int,string>> |
-| org.apache.spark.sql.catalyst.expressions.Mask | mask | SELECT mask('abcd-EFGH-8765-4321') | struct<mask(abcd-EFGH-8765-4321, X, x, n, NULL):string> |
+| org.apache.spark.sql.catalyst.expressions.MaskExpressionBuilder | mask | SELECT mask('abcd-EFGH-8765-4321') | struct<mask(abcd-EFGH-8765-4321, X, x, n, NULL):string> |
 | org.apache.spark.sql.catalyst.expressions.Md5 | md5 | SELECT md5('Spark') | struct<md5(Spark):string> |
 | org.apache.spark.sql.catalyst.expressions.MicrosToTimestamp | timestamp_micros | SELECT timestamp_micros(1230219000123123) | struct<timestamp_micros(1230219000123123):timestamp> |
 | org.apache.spark.sql.catalyst.expressions.MillisToTimestamp | timestamp_millis | SELECT timestamp_millis(1230219000123) | struct<timestamp_millis(1230219000123):timestamp> |
@@ -385,7 +385,7 @@
 | org.apache.spark.sql.catalyst.expressions.aggregate.Corr | corr | SELECT corr(c1, c2) FROM VALUES (3, 2), (3, 3), (6, 4) as tab(c1, c2) | struct<corr(c1, c2):double> |
 | org.apache.spark.sql.catalyst.expressions.aggregate.Count | count | SELECT count(*) FROM VALUES (NULL), (5), (5), (20) AS tab(col) | struct<count(1):bigint> |
 | org.apache.spark.sql.catalyst.expressions.aggregate.CountIf | count_if | SELECT count_if(col % 2 = 0) FROM VALUES (NULL), (0), (1), (2), (3) AS tab(col) | struct<count_if(((col % 2) = 0)):bigint> |
-| org.apache.spark.sql.catalyst.expressions.aggregate.CountMinSketchAgg | count_min_sketch | SELECT hex(count_min_sketch(col, 0.5d, 0.5d, 1)) FROM VALUES (1), (2), (1) AS tab(col) | struct<hex(count_min_sketch(col, 0.5, 0.5, 1)):string> |
+| org.apache.spark.sql.catalyst.expressions.aggregate.CountMinSketchAggExpressionBuilder | count_min_sketch | SELECT hex(count_min_sketch(col, 0.5d, 0.5d, 1)) FROM VALUES (1), (2), (1) AS tab(col) | struct<hex(count_min_sketch(col, 0.5, 0.5, 1)):string> |
 | org.apache.spark.sql.catalyst.expressions.aggregate.CovPopulation | covar_pop | SELECT covar_pop(c1, c2) FROM VALUES (1,1), (2,2), (3,3) AS tab(c1, c2) | struct<covar_pop(c1, c2):double> |
 | org.apache.spark.sql.catalyst.expressions.aggregate.CovSample | covar_samp | SELECT covar_samp(c1, c2) FROM VALUES (1,1), (2,2), (3,3) AS tab(c1, c2) | struct<covar_samp(c1, c2):double> |
 | org.apache.spark.sql.catalyst.expressions.aggregate.First | first | SELECT first(col) FROM VALUES (10), (5), (20) AS tab(col) | struct<first(col):int> |
@@ -397,6 +397,7 @@
 | org.apache.spark.sql.catalyst.expressions.aggregate.Kurtosis | kurtosis | SELECT kurtosis(col) FROM VALUES (-10), (-20), (100), (1000) AS tab(col) | struct<kurtosis(col):double> |
 | org.apache.spark.sql.catalyst.expressions.aggregate.Last | last | SELECT last(col) FROM VALUES (10), (5), (20) AS tab(col) | struct<last(col):int> |
 | org.apache.spark.sql.catalyst.expressions.aggregate.Last | last_value | SELECT last_value(col) FROM VALUES (10), (5), (20) AS tab(col) | struct<last_value(col):int> |
+| org.apache.spark.sql.catalyst.expressions.aggregate.ListAgg | listagg | SELECT listagg(col) FROM VALUES ('a'), ('b'), ('c') AS tab(col) | struct<listagg(col):string> |
 | org.apache.spark.sql.catalyst.expressions.aggregate.Max | max | SELECT max(col) FROM VALUES (10), (50), (20) AS tab(col) | struct<max(col):int> |
 | org.apache.spark.sql.catalyst.expressions.aggregate.MaxBy | max_by | SELECT max_by(x, y) FROM VALUES ('a', 10), ('b', 50), ('c', 20) AS tab(x, y) | struct<max_by(x, y):string> |
 | org.apache.spark.sql.catalyst.expressions.aggregate.Median | median | SELECT median(col) FROM VALUES (0), (10) AS tab(col) | struct<median(col):double> |

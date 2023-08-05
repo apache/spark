@@ -505,6 +505,7 @@ Below is a list of all the keywords in Spark SQL.
 |LIMIT|non-reserved|non-reserved|non-reserved|
 |LINES|non-reserved|non-reserved|non-reserved|
 |LIST|non-reserved|non-reserved|non-reserved|
+|LISTAGG|non-reserved|non-reserved|non-reserved|
 |LOAD|non-reserved|non-reserved|non-reserved|
 |LOCAL|non-reserved|non-reserved|reserved|
 |LOCATION|non-reserved|non-reserved|non-reserved|

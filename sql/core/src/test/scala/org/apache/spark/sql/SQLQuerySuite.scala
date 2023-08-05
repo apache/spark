@@ -158,6 +158,57 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
     }
   }
 
+  test("SPARK-42746: listagg function") {
+    withTempView("df", "df2") {
+      Seq(("a", "b"), ("a", "c"), ("b", "c"), ("b", "d"), (null, null)).toDF("a", "b")
+        .createOrReplaceTempView("df")
+      checkAnswer(
+        sql("select listagg(b) from df group by a"),
+        Row("b,c") :: Row("c,d") :: Row(null) :: Nil)
+
+      checkAnswer(
+        sql("select listagg(b, '|') from df group by a"),
+        Row("b|c") :: Row("c|d") :: Row(null) :: Nil)
+
+      checkAnswer(
+        sql("SELECT LISTAGG(a) FROM df"),
+        Row("a,a,b,b") :: Nil)
+
+      checkAnswer(
+        sql("SELECT LISTAGG(DISTINCT a) FROM df"),
+        Row("a,b") :: Nil)
+
+      checkAnswer(
+        sql("SELECT LISTAGG(a) WITHIN GROUP (ORDER BY a) FROM df"),
+        Row("a,a,b,b") :: Nil)
+
+      checkAnswer(
+        sql("SELECT LISTAGG(a) WITHIN GROUP (ORDER BY a DESC) FROM df"),
+        Row("b,b,a,a") :: Nil)
+
+      checkAnswer(
+        sql("SELECT LISTAGG(a) WITHIN GROUP (ORDER BY a DESC) " +
+          "OVER (PARTITION BY b) FROM df"),
+        Row("a") :: Row("b,a") :: Row("b,a") :: Row("b") :: Row(null) :: Nil)
+
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql("SELECT LISTAGG(a) WITHIN GROUP (ORDER BY b) FROM df")
+        },
+        errorClass = "FUNCTION_AND_ORDER_EXPRESSION_MISMATCH_ERROR",
+        parameters = Map(
+          "functionName" -> "list_agg",
+          "functionExpr" -> "\"a\"",
+          "orderExpr" -> "\"b\""))
+
+      Seq((1, true), (2, false), (3, false)).toDF("a", "b").createOrReplaceTempView("df2")
+
+      checkAnswer(
+        sql("SELECT LISTAGG(a), LISTAGG(b) FROM df2"),
+        Row("1,2,3", "false,false,true") :: Nil)
+    }
+  }
+
   test("support table.star") {
     checkAnswer(
       sql(

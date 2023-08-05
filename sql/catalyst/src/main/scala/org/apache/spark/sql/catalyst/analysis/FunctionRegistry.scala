@@ -477,6 +477,7 @@ object FunctionRegistry {
     expression[Percentile]("percentile"),
     expression[Median]("median"),
     expression[Skewness]("skewness"),
+    expression[ListAgg]("listagg"),
     expression[ApproximatePercentile]("percentile_approx"),
     expression[ApproximatePercentile]("approx_percentile", true),
     expression[HistogramNumeric]("histogram_numeric"),

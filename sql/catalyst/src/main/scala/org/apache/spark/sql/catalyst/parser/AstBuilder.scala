@@ -35,7 +35,7 @@ import org.apache.spark.sql.catalyst.{FunctionIdentifier, SQLConfHelper, TableId
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogStorageFormat}
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.aggregate.{AnyValue, First, Last, PercentileCont, PercentileDisc}
+import org.apache.spark.sql.catalyst.expressions.aggregate.{AnyValue, First, Last, ListAgg, PercentileCont, PercentileDisc}
 import org.apache.spark.sql.catalyst.parser.SqlBaseParser._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -2194,6 +2194,38 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
     }
     val filter = Option(ctx.where).map(expression(_))
     val aggregateExpression = percentile.toAggregateExpression(false, filter)
+    ctx.windowSpec match {
+      case spec: WindowRefContext =>
+        UnresolvedWindowExpression(aggregateExpression, visitWindowRef(spec))
+      case spec: WindowDefContext =>
+        WindowExpression(aggregateExpression, visitWindowDef(spec))
+      case _ => aggregateExpression
+    }
+  }
+
+  /**
+   * Create a ListAgg expression.
+   */
+  override def visitListAgg(ctx: ListAggContext): AnyRef = {
+    val column = expression(ctx.aggEpxr)
+    val sortOrder = visitSortItem(ctx.sortItem)
+    if (!column.semanticEquals(sortOrder.child)) {
+      throw QueryCompilationErrors.functionAndOrderExpressionMismatchError("list_agg", column,
+        sortOrder.child)
+    }
+    val listAgg = if (ctx.delimiter != null) {
+      sortOrder.direction match {
+        case Ascending => ListAgg(sortOrder.child, Literal(ctx.delimiter.getText))
+        case Descending => ListAgg(sortOrder.child, Literal(ctx.delimiter.getText), true)
+      }
+    } else {
+      sortOrder.direction match {
+        case Ascending => ListAgg(sortOrder.child)
+        case Descending => ListAgg(sortOrder.child, Literal(","), true)
+      }
+    }
+    val isDistinct = Option(ctx.setQuantifier()).exists(_.DISTINCT != null)
+    val aggregateExpression = listAgg.toAggregateExpression(isDistinct)
     ctx.windowSpec match {
       case spec: WindowRefContext =>
         UnresolvedWindowExpression(aggregateExpression, visitWindowRef(spec))
