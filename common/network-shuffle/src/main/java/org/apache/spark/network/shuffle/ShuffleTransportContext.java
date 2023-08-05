@@ -60,8 +60,7 @@ public class ShuffleTransportContext extends TransportContext {
       boolean isClientOnly) {
     super(conf, rpcHandler, closeIdleConnections, isClientOnly);
 
-    if (conf.getModuleName() != null &&
-      conf.getModuleName().equalsIgnoreCase("shuffle") && conf.separateFinalizeShuffleMerge()) {
+    if ("shuffle".equalsIgnoreCase(conf.getModuleName()) && conf.separateFinalizeShuffleMerge()) {
       finalizeWorkers = NettyUtils.createEventLoop(
         IOMode.valueOf(conf.ioMode()),
         conf.finalizeShuffleMergeHandlerThreads(),
@@ -143,9 +142,9 @@ public class ShuffleTransportContext extends TransportContext {
   }
 
   /**
-   * Internal message to handle rpc requests that should not be accepted by
-   * {@link TransportChannelHandler}. Since, this message doesn't extend {@link Message}, it will
-   * not be accepted by {@link TransportChannelHandler}.
+   * Internal message to handle rpc requests that is not accepted by
+   * {@link TransportChannelHandler} as this message doesn't extend {@link Message}. It will
+   * be accepted by {@link FinalizedHandler} instead, which is configured to execute in a separate EventLoopGroup
    */
   static class RpcRequestInternal {
     public final BlockTransferMessage.Type messageType;
@@ -179,7 +178,10 @@ public class ShuffleTransportContext extends TransportContext {
     @Override
     protected void channelRead0(ChannelHandlerContext channelHandlerContext,
         RpcRequestInternal req) throws Exception {
-      logger.debug("finalize handler invoked for rpc request {}", req.rpcRequest.requestId);
+      if (logger.isTraceEnabled()) {
+        logger.trace("Finalize shuffle req from {} for rpc request {}",
+                getRemoteAddress(channelHandlerContext.channel()), req.rpcRequest.requestId);
+      }
       this.transportRequestHandler.handle(req.rpcRequest);
     }
   }
