@@ -340,7 +340,7 @@ case class AdaptiveSparkPlanExec(
             allStageIdsProcessed, delayedStages, cachedBatchScansForStage, orphanBatchScans)
         // In case of errors, we cancel all running stages and throw exception.
         if (errors.nonEmpty) {
-          cleanUpAndThrowException(errors, None)
+          cleanUpAndThrowException(errors.toSeq, None)
         }
         // remove satisfied orphans
         orphanBatchScans = orphanBatchScans.filterNot(BroadcastHashJoinUtil.isBatchScanReady)
@@ -494,7 +494,7 @@ case class AdaptiveSparkPlanExec(
       }
       stage.id
     }).toSet
-    stagedIdsBatchProcessed -> errors
+    stagedIdsBatchProcessed -> errors.toSeq
   }
 
   private def pushBroadcastVarToUnreadyBatchScans(

@@ -256,7 +256,7 @@ case class ColumnarToRowExec(child: SparkPlan) extends ColumnarToRowTransition w
     }
     val pushedBroadcastFilters = batchScanOpt.map(bs => {
       val sr = bs.scan.asInstanceOf[SupportsRuntimeFiltering]
-      val allPushedBCvar = sr.getPushedBroadcastFilters.asScala
+      val allPushedBCvar = sr.getPushedBroadcastFilters.asScala.toSeq
       val partitionColNames = sr.filterAttributes().map(
         BroadcastHashJoinUtil.convertNameReferencesToString)
       // identify non partition filters
