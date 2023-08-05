@@ -648,7 +648,6 @@ def read_udtf(pickleSer, infile, eval_type):
             return_type_size = len(return_type)
 
             def verify_and_convert_result(result):
-                # TODO(SPARK-44005): support returning non-tuple values
                 if result is not None and hasattr(result, "__len__"):
                     if len(result) != return_type_size:
                         raise PySparkRuntimeError(
@@ -658,6 +657,13 @@ def read_udtf(pickleSer, infile, eval_type):
                                 "actual": str(len(result)),
                             },
                         )
+
+                if not isinstance(result, (list, dict, tuple)) and not hasattr(result, "__dict__"):
+                    raise PySparkRuntimeError(
+                        error_class="UDTF_INVALID_OUTPUT_ROW_TYPE",
+                        message_parameters={"type": type(result).__name__},
+                    )
+
                 return toInternal(result)
 
             # Evaluate the function and return a tuple back to the executor.
