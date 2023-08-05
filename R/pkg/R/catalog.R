@@ -77,35 +77,6 @@ listCatalogs <- function() {
   dataFrame(callJMethod(callJMethod(catalog, "listCatalogs"), "toDF"))
 }
 
-#' (Deprecated) Create an external table
-#'
-#' Creates an external table based on the dataset in a data source,
-#' Returns a SparkDataFrame associated with the external table.
-#'
-#' The data source is specified by the \code{source} and a set of options(...).
-#' If \code{source} is not specified, the default data source configured by
-#' "spark.sql.sources.default" will be used.
-#'
-#' @param tableName a name of the table.
-#' @param path the path of files to load.
-#' @param source the name of external data source.
-#' @param schema the schema of the data required for some data sources.
-#' @param ... additional argument(s) passed to the method.
-#' @return A SparkDataFrame.
-#' @rdname createExternalTable-deprecated
-#' @seealso \link{createTable}
-#' @examples
-#'\dontrun{
-#' sparkR.session()
-#' df <- createExternalTable("myjson", path="path/to/json", source="json", schema)
-#' }
-#' @name createExternalTable
-#' @note createExternalTable since 1.4.0
-createExternalTable <- function(tableName, path = NULL, source = NULL, schema = NULL, ...) {
-  .Deprecated("createTable", old = "createExternalTable")
-  createTable(tableName, path, source, schema, ...)
-}
-
 #' Creates a table based on the dataset in a data source
 #'
 #' Creates a table based on the dataset in a data source. Returns a SparkDataFrame associated with
