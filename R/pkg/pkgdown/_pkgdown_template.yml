@@ -53,7 +53,6 @@ reference:
   - colnames
   - count
   - createDataFrame
-  - createExternalTable
   - createOrReplaceTempView
   - createTable
   - crossJoin
