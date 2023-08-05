@@ -36,6 +36,9 @@ object MimaExcludes {
 
   // Exclude rules for 4.0.x
   lazy val v40excludes = v35excludes ++ Seq(
+    // [SPARK-44685][SQL] Remove deprecated Catalog#createExternalTable
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.sql.SQLContext.createExternalTable"),
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.sql.catalog.Catalog.createExternalTable")
   )
 
   // Exclude rules for 3.5.x from 3.4.0
