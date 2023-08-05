@@ -21,7 +21,7 @@ import java.util.UUID
 
 import scala.collection.mutable
 
-import com.google.protobuf.MessageLite
+import com.google.protobuf.Message
 import io.grpc.stub.StreamObserver
 
 import org.apache.spark.{SparkEnv, SparkSQLException}
@@ -47,7 +47,7 @@ import org.apache.spark.sql.connect.service.ExecuteHolder
  * @see
  *   attachConsumer
  */
-private[connect] class ExecuteResponseObserver[T <: MessageLite](val executeHolder: ExecuteHolder)
+private[connect] class ExecuteResponseObserver[T <: Message](val executeHolder: ExecuteHolder)
     extends StreamObserver[T]
     with Logging {
 

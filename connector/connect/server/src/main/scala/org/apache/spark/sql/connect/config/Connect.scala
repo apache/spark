@@ -82,7 +82,7 @@ object Connect {
         "Set to 0 for unlimited.")
       .version("3.5.0")
       .timeConf(TimeUnit.MILLISECONDS)
-      .createWithDefaultString("5m")
+      .createWithDefaultString("20s")
 
   val CONNECT_EXECUTE_REATTACHABLE_SENDER_MAX_STREAM_SIZE =
     ConfigBuilder("spark.connect.execute.reattachable.senderMaxStreamSize")
