@@ -17,12 +17,10 @@
 
 package org.apache.spark.network.util;
 
-import com.google.common.base.Preconditions;
-
 import java.util.Locale;
 import java.util.Properties;
 import java.util.concurrent.TimeUnit;
-
+import com.google.common.base.Preconditions;
 import com.google.common.primitives.Ints;
 import io.netty.util.NettyRuntime;
 
@@ -335,6 +333,8 @@ public class TransportConf {
    * percentage of 2 * #cores.
    */
   public int finalizeShuffleMergeHandlerThreads() {
+    Preconditions.checkArgument(separateFinalizeShuffleMerge(),
+        "Please set spark.shuffle.server.finalizeShuffleMergeThreadsPercent to a positive value");
     if (!this.getModuleName().equalsIgnoreCase("shuffle")) {
       return 0;
     }
