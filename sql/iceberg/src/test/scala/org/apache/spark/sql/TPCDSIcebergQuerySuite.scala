@@ -32,7 +32,7 @@ class TPCDSIcebergQuerySuite extends TPCDSQuerySuite with TPCDSIcebergBase {
     Set("q14", "q14a")
 }
 
-// TODO: Asif Fix the catalog issue of test
+// TODO(Asif): Fix the catalog issue of test
 /*
 @ExtendedSQLTest
 class TPCDSIcebergQueryWithStatsSuite extends TPCDSIcebergQuerySuite {

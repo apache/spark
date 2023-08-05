@@ -19,6 +19,6 @@
 package org.apache.spark.broadcast
 
 trait BroadcastLifeCycleListener {
-  def onDestroy(bcId: Long)
-  def onBroadcastManagerStop()
+  def onDestroy(bcId: Long): Unit
+  def onBroadcastManagerStop(): Unit
 }

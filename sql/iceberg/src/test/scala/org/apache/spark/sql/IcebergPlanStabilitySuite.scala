@@ -55,7 +55,7 @@ class TPCDSIcebergV1_4_PlanStabilitySuite extends TPCDSV1_4_PlanStabilitySuite
   // these queries are affected because push down of broadcast variable results in
   // reuse exchange getting eliminated
 
-  // TODO: Asif check q58 && q83 it has subquery broadcast which got eliminated, why?
+  // TODO(Asif): check q58 && q83 it has subquery broadcast which got eliminated, why?
   val queriesAffectedByBroadcastVarPush = Set("q2", "q23b", "q31", "q33", "q39a", "q39b", "q56",
   "q58", "q59", "q60", "q61", "q83")
 
@@ -82,7 +82,7 @@ class TPCDSIcebergV2_7_PlanStabilitySuite extends TPCDSV2_7_PlanStabilitySuite
   // these queries are affected because push down of broadcast variable results in
   // reuse exchange getting eliminated
 
-  // TODO: Asif check q78 it has subquery broadcast which got eliminated, why?
+  // TODO(Asif): check q78 it has subquery broadcast which got eliminated, why?
   val queriesAffectedByBroadcastVarPush = Set("q18a", "q64", "q70a", "q75", "q78")
 
   override protected def getAppropriateFileName(queryName: String, suggestedFileName: String):
