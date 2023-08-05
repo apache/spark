@@ -373,7 +373,7 @@ class InMemoryTable(
                   }).foreach(newPartition.withRow)
                   newPartition
                 })
-              
+
               case _ => // skip
             }
           }
