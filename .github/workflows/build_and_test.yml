@@ -350,9 +350,11 @@ jobs:
           - >-
             pyspark-errors
           - >-
-            pyspark-sql, pyspark-mllib, pyspark-resource, pyspark-testing
+            pyspark-sql, pyspark-resource, pyspark-testing
           - >-
-            pyspark-core, pyspark-streaming, pyspark-ml
+            pyspark-core, pyspark-streaming
+          - >-
+            pyspark-mllib, pyspark-ml, pyspark-ml-connect
           - >-
             pyspark-pandas
           - >-
@@ -411,7 +413,13 @@ jobs:
         restore-keys: |
           pyspark-coursier-
     - name: Free up disk space
-      run: ./dev/free_disk_space_container
+      shell: 'script -q -e -c "bash {0}"'
+      run: |
+        if [[ "$MODULES_TO_TEST" != *"pyspark-ml"* ]]; then
+          # uninstall libraries dedicated for ML testing
+          python3.9 -m pip uninstall -y torch torchvision torcheval torchtnt tensorboard mlflow
+        fi
+        ./dev/free_disk_space_container
     - name: Install Java ${{ matrix.java }}
       uses: actions/setup-java@v3
       with:
