@@ -3158,7 +3158,7 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
     // Make sure it can be converted to Catalyst expressions.
     val expr = expression(exprCtx)
     if (expr.containsPattern(PARAMETER)) {
-      QueryParsingErrors.parameterMarkerNotAllowed(place, expr.origin)
+      throw QueryParsingErrors.parameterMarkerNotAllowed(place, expr.origin)
     }
     // Extract the raw expression text so that we can save the user provided text. We don't
     // use `Expression.sql` to avoid storing incorrect text caused by bugs in any expression's
