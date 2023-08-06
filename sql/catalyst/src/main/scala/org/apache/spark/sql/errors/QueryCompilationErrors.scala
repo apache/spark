@@ -1073,7 +1073,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
 
   def corruptedTableNameContextInCatalogError(numParts: Int, index: Int): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1084",
+      errorClass = "INTERNAL_ERROR_METADATA_CATALOG.TABLE_NAME_CONTEXT",
       messageParameters = Map(
         "numParts" -> numParts.toString,
         "index" -> index.toString))
@@ -1081,14 +1081,14 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
 
   def corruptedViewSQLConfigsInCatalogError(e: Exception): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1085",
+      errorClass = "INTERNAL_ERROR_METADATA_CATALOG.SQL_CONFIG",
       messageParameters = Map.empty,
       cause = Some(e))
   }
 
   def corruptedViewQueryOutputColumnsInCatalogError(numCols: String, index: Int): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1086",
+      errorClass = "INTERNAL_ERROR_METADATA_CATALOG.VIEW_QUERY_COLUMN_ARITY",
       messageParameters = Map(
         "numCols" -> numCols,
         "index" -> index.toString))
@@ -1096,14 +1096,21 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
 
   def corruptedViewReferredTempViewInCatalogError(e: Exception): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1087",
+      errorClass = "INTERNAL_ERROR_METADATA_CATALOG.TEMP_VIEW_REFERENCE",
       messageParameters = Map.empty,
       cause = Some(e))
   }
 
   def corruptedViewReferredTempFunctionsInCatalogError(e: Exception): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1088",
+      errorClass = "INTERNAL_ERROR_METADATA_CATALOG.TEMP_FUNCTION_REFERENCE",
+      messageParameters = Map.empty,
+      cause = Some(e))
+  }
+
+  def corruptedViewReferredTempVariablesInCatalogError(e: Exception): Throwable = {
+    new AnalysisException(
+      errorClass = "INTERNAL_ERROR_METADATA_CATALOG.TEMP_VARIABLE_REFERENCE",
       messageParameters = Map.empty,
       cause = Some(e))
   }
@@ -2908,6 +2915,18 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
         "objName" -> toSQLId(name.nameParts),
         "tempObj" -> "FUNCTION",
         "tempObjName" -> toSQLId(funcName)))
+  }
+
+  def notAllowedToCreatePermanentViewByReferencingTempVarError(
+      name: TableIdentifier,
+      varName: String): Throwable = {
+    new AnalysisException(
+      errorClass = "INVALID_TEMP_OBJ_REFERENCE",
+      messageParameters = Map(
+        "obj" -> "VIEW",
+        "objName" -> toSQLId(name.nameParts),
+        "tempObj" -> "VARIABLE",
+        "tempObjName" -> toSQLId(varName)))
   }
 
   def queryFromRawFilesIncludeCorruptRecordColumnError(): Throwable = {

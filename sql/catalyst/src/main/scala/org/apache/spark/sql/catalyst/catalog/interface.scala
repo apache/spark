@@ -370,6 +370,21 @@ case class CatalogTable(
     }
   }
 
+  /**
+   * Return temporary variable names the current view was referred. should be empty if the
+   * CatalogTable is not a Temporary View or created by older versions of Spark(before 3.4.0).
+   */
+  def viewReferredTempVariableNames: Seq[String] = {
+    try {
+      properties.get(VIEW_REFERRED_TEMP_VARIABLE_NAMES).map { json =>
+        parse(json).asInstanceOf[JArray].arr.map(_.asInstanceOf[JString].s)
+      }.getOrElse(Seq.empty)
+    } catch {
+      case e: Exception =>
+        throw QueryCompilationErrors.corruptedViewReferredTempVariablesInCatalogError(e)
+    }
+  }
+
   /** Syntactic sugar to update a field in `storage`. */
   def withNewStorage(
       locationUri: Option[URI] = storage.locationUri,
@@ -474,6 +489,7 @@ object CatalogTable {
 
   val VIEW_REFERRED_TEMP_VIEW_NAMES = VIEW_PREFIX + "referredTempViewNames"
   val VIEW_REFERRED_TEMP_FUNCTION_NAMES = VIEW_PREFIX + "referredTempFunctionsNames"
+  val VIEW_REFERRED_TEMP_VARIABLE_NAMES = VIEW_PREFIX + "referredTempVariablesNames"
 
   val VIEW_STORING_ANALYZED_PLAN = VIEW_PREFIX + "storingAnalyzedPlan"
 

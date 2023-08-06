@@ -1352,7 +1352,8 @@ case class CacheTableAsSelect(
     isLazy: Boolean,
     options: Map[String, String],
     isAnalyzed: Boolean = false,
-    referredTempFunctions: Seq[String] = Seq.empty) extends AnalysisOnlyCommand {
+    referredTempFunctions: Seq[String] = Seq.empty,
+    referredTempVariables: Seq[String] = Seq.empty) extends AnalysisOnlyCommand {
   override protected def withNewChildrenInternal(
       newChildren: IndexedSeq[LogicalPlan]): CacheTableAsSelect = {
     assert(!isAnalyzed)
@@ -1364,8 +1365,9 @@ case class CacheTableAsSelect(
   override def markAsAnalyzed(ac: AnalysisContext): LogicalPlan = {
     copy(
       isAnalyzed = true,
-      // Collect the referred temporary functions from AnalysisContext
-      referredTempFunctions = ac.referredTempFunctionNames.toSeq)
+      // Collect the referred temporary functions and variables from AnalysisContext
+      referredTempFunctions = ac.referredTempFunctionNames.toSeq,
+      referredTempVariables = ac.referredTempVariableNames.toSeq)
   }
 }
 

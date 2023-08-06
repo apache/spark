@@ -2194,6 +2194,31 @@ WithCTE
 
 
 -- !query
+CREATE OR REPLACE TEMPORARY VIEW v AS SELECT var1 AS c1
+-- !query analysis
+CreateViewCommand `v`, SELECT var1 AS c1, false, true, LocalTempView, true, [var1]
+   +- Project [session.var1(var1, 1, true) AS c1#x]
+      +- OneRowRelation
+
+
+-- !query
+SELECT * FROM v
+-- !query analysis
+Project [c1#x]
++- SubqueryAlias v
+   +- View (`v`, [c1#x])
+      +- Project [cast(c1#x as int) AS c1#x]
+         +- Project [session.var1(var1, 1, true) AS c1#x]
+            +- OneRowRelation
+
+
+-- !query
+DROP VIEW v
+-- !query analysis
+DropTempViewCommand v
+
+
+-- !query
 DROP TEMPORARY VARIABLE var1
 -- !query analysis
 DropVariableCommand system.session.var1, false
@@ -2218,37 +2243,18 @@ CreateVariableCommand system.session.var1, INT, 1, true
 
 
 -- !query
-DROP TABLE IF EXISTS T
--- !query analysis
-DropTable true, false
-+- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.T
-
-
--- !query
-CREATE TABLE T(c1 INT DEFAULT (var1))
--- !query analysis
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "NOT_SUPPORTED_COMMAND_WITHOUT_HIVE_SUPPORT",
-  "messageParameters" : {
-    "cmd" : "CREATE Hive TABLE (AS SELECT)"
-  }
-}
-
-
--- !query
-DROP TABLE IF EXISTS T
--- !query analysis
-DropTable true, false
-+- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.T
-
-
--- !query
 CREATE OR REPLACE VIEW v AS SELECT var1 AS c1
 -- !query analysis
-CreateViewCommand `spark_catalog`.`default`.`v`, SELECT var1 AS c1, false, true, PersistedView, true
-   +- Project [session.var1(var1, 1, true) AS c1#x]
-      +- OneRowRelation
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "INVALID_TEMP_OBJ_REFERENCE",
+  "messageParameters" : {
+    "obj" : "VIEW",
+    "objName" : "`spark_catalog`.`default`.`v`",
+    "tempObj" : "VARIABLE",
+    "tempObjName" : "`var1`"
+  }
+}
 
 
 -- !query

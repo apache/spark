@@ -136,6 +136,7 @@ case class AnalysisContext(
     // 2. If we are not resolving a view, this field will be updated everytime the analyzer
     //    lookup a temporary function. And export to the view metadata.
     referredTempFunctionNames: mutable.Set[String] = mutable.Set.empty,
+    referredTempVariableNames: mutable.Set[String] = mutable.Set.empty,
     outerPlan: Option[LogicalPlan] = None)
 
 object AnalysisContext {
@@ -162,7 +163,8 @@ object AnalysisContext {
       maxNestedViewDepth,
       originContext.relationCache,
       viewDesc.viewReferredTempViewNames,
-      mutable.Set(viewDesc.viewReferredTempFunctionNames: _*))
+      mutable.Set(viewDesc.viewReferredTempFunctionNames: _*),
+      mutable.Set(viewDesc.viewReferredTempVariableNames: _*))
     set(context)
     try f finally { set(originContext) }
   }

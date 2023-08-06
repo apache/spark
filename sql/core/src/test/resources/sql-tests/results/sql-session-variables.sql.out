@@ -2218,6 +2218,30 @@ struct<1:int>
 
 
 -- !query
+CREATE OR REPLACE TEMPORARY VIEW v AS SELECT var1 AS c1
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT * FROM v
+-- !query schema
+struct<c1:int>
+-- !query output
+1
+
+
+-- !query
+DROP VIEW v
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
 DROP TEMPORARY VARIABLE var1
 -- !query schema
 struct<>
@@ -2242,41 +2266,20 @@ struct<>
 
 
 -- !query
-DROP TABLE IF EXISTS T
--- !query schema
-struct<>
--- !query output
-
-
-
--- !query
-CREATE TABLE T(c1 INT DEFAULT (var1))
--- !query schema
-struct<>
--- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "NOT_SUPPORTED_COMMAND_WITHOUT_HIVE_SUPPORT",
-  "messageParameters" : {
-    "cmd" : "CREATE Hive TABLE (AS SELECT)"
-  }
-}
-
-
--- !query
-DROP TABLE IF EXISTS T
--- !query schema
-struct<>
--- !query output
-
-
-
--- !query
 CREATE OR REPLACE VIEW v AS SELECT var1 AS c1
 -- !query schema
 struct<>
 -- !query output
-
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "INVALID_TEMP_OBJ_REFERENCE",
+  "messageParameters" : {
+    "obj" : "VIEW",
+    "objName" : "`spark_catalog`.`default`.`v`",
+    "tempObj" : "VARIABLE",
+    "tempObjName" : "`var1`"
+  }
+}
 
 
 -- !query

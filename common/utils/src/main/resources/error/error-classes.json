@@ -1246,6 +1246,44 @@
     ],
     "sqlState" : "XX000"
   },
+  "INTERNAL_ERROR_METADATA_CATALOG" : {
+    "message" : [
+      "An object in teh metadata catalog has been corrupted:"
+    ],
+    "subClass" : {
+      "TABLE_NAME_CONTEXT" : {
+        "message" : [
+          "Corrupted table name context in catalog: <numParts> parts expected, but part <index> is missing."
+        ]
+      },
+      "SQL_CONFIG" : {
+        "message" : [
+          "Corrupted view SQL configs in catalog."
+        ]
+      },
+      "VIEW_QUERY_COLUMN_ARITY" : {
+        "message" : [
+          "Corrupted view query output column names in catalog: <numCols> parts expected, but part <index> is missing."
+        ]
+      },
+      "TEMP_VIEW_REFERENCE" : {
+        "message" : [
+          "Corrupted view referred temp view names in catalog."
+        ]
+      },
+      "TEMP_FUNCTION_REFERENCE" : {
+        "message" : [
+          "Corrupted view referred temp functions names in catalog."
+        ]
+      },
+      "TEMP_VARIABLE_REFERENCE" : {
+        "message" : [
+          "Corrupted view referred temp variable names in catalog."
+        ]
+      }
+    },
+    "sqlState" : "XX000"
+  },
   "INTERNAL_ERROR_NETWORK" : {
     "message" : [
       "<message>"
@@ -3934,31 +3972,6 @@
   "_LEGACY_ERROR_TEMP_1083" : {
     "message" : [
       "Number of buckets should be greater than 0 but less than or equal to bucketing.maxBuckets (`<bucketingMaxBuckets>`). Got `<numBuckets>`."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1084" : {
-    "message" : [
-      "Corrupted table name context in catalog: <numParts> parts expected, but part <index> is missing."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1085" : {
-    "message" : [
-      "Corrupted view SQL configs in catalog."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1086" : {
-    "message" : [
-      "Corrupted view query output column names in catalog: <numCols> parts expected, but part <index> is missing."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1087" : {
-    "message" : [
-      "Corrupted view referred temp view names in catalog."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1088" : {
-    "message" : [
-      "Corrupted view referred temp functions names in catalog."
     ]
   },
   "_LEGACY_ERROR_TEMP_1089" : {

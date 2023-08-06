@@ -174,7 +174,7 @@ class SessionCatalog(
   }
 
   /**
-   * Qualifies the table identifier with the current database if not specified, and normalize all
+   * Qualifies the variable identifier with the current database if not specified, and normalize all
    * the names.
    */
   def qualifyIdentifier(ident: VariableIdentifier): VariableIdentifier = {
@@ -662,7 +662,25 @@ class SessionCatalog(
     val qualifiedVariable = VariableIdentifier(variable.variableName,
       Some(variable.database.getOrElse(SESSION_DATABASE)),
       Some(variable.catalog.getOrElse(SYSTEM_CATALOG)))
-    variables.get(qualifiedVariable)
+    val isResolvingView = AnalysisContext.get.catalogAndNamespace.nonEmpty
+    val referredTempVariableNames = AnalysisContext.get.referredTempVariableNames
+    if (isResolvingView) {
+      // When resolving a view, only return a temp variable if it's referred by this view.
+      if (referredTempVariableNames.contains(variable.variableName)) {
+        variables.get(qualifiedVariable)
+      } else {
+        None
+      }
+    } else {
+      val result = variables.get(qualifiedVariable)
+      if (result.isDefined) {
+        // We are not resolving a view and the function is a temp one, add it to
+        // `AnalysisContext`, so during the view creation, we can save all referred temp
+        // variables to view metadata.
+        AnalysisContext.get.referredTempVariableNames.add(variable.variableName)
+      }
+      result
+    }
   }
 
   /**

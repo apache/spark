@@ -125,7 +125,8 @@ case class CreateTempViewUsing(
         originalText = None,
         analyzedPlan,
         aliasedPlan = analyzedPlan,
-        referredTempFunctions = Seq.empty)
+        referredTempFunctions = Seq.empty,
+        referredTempVariables = Seq.empty)
       catalog.createGlobalTempView(tableIdent.table, viewDefinition, replace)
     } else {
       val viewDefinition = createTemporaryViewRelation(
@@ -136,7 +137,8 @@ case class CreateTempViewUsing(
         originalText = None,
         analyzedPlan,
         aliasedPlan = analyzedPlan,
-        referredTempFunctions = Seq.empty)
+        referredTempFunctions = Seq.empty,
+        referredTempVariables = Seq.empty)
       catalog.createTempView(tableIdent.table, viewDefinition, replace)
     }
 
