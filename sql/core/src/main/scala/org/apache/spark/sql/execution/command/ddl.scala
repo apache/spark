@@ -37,7 +37,9 @@ import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns
+import org.apache.spark.sql.catalyst.util.TypeUtils.toSQLId
 import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Identifier, TableCatalog}
 import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
 import org.apache.spark.sql.connector.catalog.SupportsNamespaces._
@@ -333,10 +335,11 @@ case class AlterTableUnsetPropertiesCommand(
     val catalog = sparkSession.sessionState.catalog
     val table = catalog.getTableRawMetadata(tableName)
     if (!ifExists) {
-      propKeys.foreach { k =>
-        if (!table.properties.contains(k) && k != TableCatalog.PROP_COMMENT) {
-          throw QueryCompilationErrors.unsetNonExistentPropertyError(k, table.identifier)
-        }
+      val nonexistentKeys = propKeys.filter(key => !table.properties.contains(key)
+        && key != TableCatalog.PROP_COMMENT)
+      if (nonexistentKeys.nonEmpty) {
+        throw QueryCompilationErrors.unsetNonExistentPropertiesError(
+          nonexistentKeys, table.identifier)
       }
     }
     // If comment is in the table property, we reset it to None
@@ -379,7 +382,7 @@ case class AlterTableChangeColumnCommand(
     // Throw an AnalysisException if the column name/dataType is changed.
     if (!columnEqual(originColumn, newColumn, resolver)) {
       throw QueryCompilationErrors.alterTableChangeColumnNotSupportedForColumnTypeError(
-        originColumn, newColumn)
+        toSQLId(table.identifier.nameParts), originColumn, newColumn)
     }
 
     val newDataSchema = table.dataSchema.fields.map { field =>
@@ -937,8 +940,8 @@ object DDLUtils extends Logging {
     HiveTableRelation(
       table,
       // Hive table columns are always nullable.
-      table.dataSchema.asNullable.toAttributes,
-      table.partitionSchema.asNullable.toAttributes)
+      toAttributes(table.dataSchema.asNullable),
+      toAttributes(table.partitionSchema.asNullable))
   }
 
   /**
@@ -992,7 +995,7 @@ object DDLUtils extends Logging {
         case HIVE_PROVIDER =>
           val serde = table.storage.serde
           if (schema.exists(_.dataType.isInstanceOf[AnsiIntervalType])) {
-            throw hiveTableWithAnsiIntervalsError(table.identifier.toString)
+            throw hiveTableWithAnsiIntervalsError(table.identifier)
           } else if (serde == HiveSerDe.sourceToSerDe("orc").get.serde) {
             checkDataColNames("orc", schema)
           } else if (serde == HiveSerDe.sourceToSerDe("parquet").get.serde ||
@@ -1029,14 +1032,22 @@ object DDLUtils extends Logging {
   /**
    * Throws exception if outputPath tries to overwrite inputpath.
    */
-  def verifyNotReadPath(query: LogicalPlan, outputPath: Path) : Unit = {
+  def verifyNotReadPath(
+      query: LogicalPlan,
+      outputPath: Path,
+      table: Option[CatalogTable] = None) : Unit = {
     val inputPaths = query.collect {
       case LogicalRelation(r: HadoopFsRelation, _, _, _) =>
         r.location.rootPaths
     }.flatten
 
     if (inputPaths.contains(outputPath)) {
-      throw QueryCompilationErrors.cannotOverwritePathBeingReadFromError()
+      table match {
+        case Some(v) =>
+          throw QueryCompilationErrors.cannotOverwriteTableThatIsBeingReadFromError(v.identifier)
+        case _ =>
+          throw QueryCompilationErrors.cannotOverwritePathBeingReadFromError(outputPath.toString)
+      }
     }
   }
 }

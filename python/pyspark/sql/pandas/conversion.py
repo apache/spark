@@ -16,6 +16,8 @@
 #
 import sys
 from typing import (
+    Any,
+    Callable,
     List,
     Optional,
     Union,
@@ -28,7 +30,8 @@ from warnings import warn
 from pyspark.errors.exceptions.captured import unwrap_spark_exception
 from pyspark.rdd import _load_from_socket
 from pyspark.sql.pandas.serializers import ArrowCollectSerializer
-from pyspark.sql.types import TimestampType, StructType, DataType
+from pyspark.sql.pandas.types import _dedup_names
+from pyspark.sql.types import ArrayType, MapType, TimestampType, StructType, DataType, _create_row
 from pyspark.sql.utils import is_timestamp_ntz_preferred
 from pyspark.traceback_utils import SCCallSiteSync
 from pyspark.errors import PySparkTypeError
@@ -85,8 +88,6 @@ class PandasConversionMixin:
         import pandas as pd
 
         jconf = self.sparkSession._jconf
-        timezone = jconf.sessionLocalTimeZone()
-        struct_in_pandas = jconf.pandasStructHandlingMode()
 
         if jconf.arrowPySparkEnabled():
             use_arrow = True
@@ -159,24 +160,30 @@ class PandasConversionMixin:
                     else:
                         pdf = pd.DataFrame(columns=self.columns)
 
-                    error_on_duplicated_field_names = False
-                    if struct_in_pandas == "legacy":
-                        error_on_duplicated_field_names = True
-                        struct_in_pandas = "dict"
+                    if len(pdf.columns) > 0:
+                        timezone = jconf.sessionLocalTimeZone()
+                        struct_in_pandas = jconf.pandasStructHandlingMode()
 
-                    return pd.concat(
-                        [
-                            _create_converter_to_pandas(
-                                field.dataType,
-                                field.nullable,
-                                timezone=timezone,
-                                struct_in_pandas=struct_in_pandas,
-                                error_on_duplicated_field_names=error_on_duplicated_field_names,
-                            )(pser)
-                            for (_, pser), field in zip(pdf.items(), self.schema.fields)
-                        ],
-                        axis="columns",
-                    )
+                        error_on_duplicated_field_names = False
+                        if struct_in_pandas == "legacy":
+                            error_on_duplicated_field_names = True
+                            struct_in_pandas = "dict"
+
+                        return pd.concat(
+                            [
+                                _create_converter_to_pandas(
+                                    field.dataType,
+                                    field.nullable,
+                                    timezone=timezone,
+                                    struct_in_pandas=struct_in_pandas,
+                                    error_on_duplicated_field_names=error_on_duplicated_field_names,
+                                )(pser)
+                                for (_, pser), field in zip(pdf.items(), self.schema.fields)
+                            ],
+                            axis="columns",
+                        )
+                    else:
+                        return pdf
                 except Exception as e:
                     # We might have to allow fallback here as well but multiple Spark jobs can
                     # be executed. So, simply fail in this case for now.
@@ -192,21 +199,36 @@ class PandasConversionMixin:
                     raise
 
         # Below is toPandas without Arrow optimization.
-        pdf = pd.DataFrame.from_records(self.collect(), columns=self.columns)
+        rows = self.collect()
+        if len(rows) > 0:
+            pdf = pd.DataFrame.from_records(
+                rows, index=range(len(rows)), columns=self.columns  # type: ignore[arg-type]
+            )
+        else:
+            pdf = pd.DataFrame(columns=self.columns)
 
-        return pd.concat(
-            [
-                _create_converter_to_pandas(
-                    field.dataType,
-                    field.nullable,
-                    timezone=timezone,
-                    struct_in_pandas=("row" if struct_in_pandas == "legacy" else struct_in_pandas),
-                    error_on_duplicated_field_names=False,
-                )(pser)
-                for (_, pser), field in zip(pdf.items(), self.schema.fields)
-            ],
-            axis="columns",
-        )
+        if len(pdf.columns) > 0:
+            timezone = jconf.sessionLocalTimeZone()
+            struct_in_pandas = jconf.pandasStructHandlingMode()
+
+            return pd.concat(
+                [
+                    _create_converter_to_pandas(
+                        field.dataType,
+                        field.nullable,
+                        timezone=timezone,
+                        struct_in_pandas=(
+                            "row" if struct_in_pandas == "legacy" else struct_in_pandas
+                        ),
+                        error_on_duplicated_field_names=False,
+                        timestamp_utc_localized=False,
+                    )(pser)
+                    for (_, pser), field in zip(pdf.items(), self.schema.fields)
+                ],
+                axis="columns",
+            )
+        else:
+            return pdf
 
     def _collect_as_arrow(self, split_batches: bool = False) -> List["pa.RecordBatch"]:
         """
@@ -357,22 +379,105 @@ class SparkConversionMixin:
         assert isinstance(self, SparkSession)
 
         if timezone is not None:
-            from pyspark.sql.pandas.types import _check_series_convert_timestamps_tz_local
+            from pyspark.sql.pandas.types import (
+                _check_series_convert_timestamps_tz_local,
+                _get_local_timezone,
+            )
             from pandas.core.dtypes.common import is_datetime64tz_dtype, is_timedelta64_dtype
 
             copied = False
             if isinstance(schema, StructType):
-                for field in schema:
-                    # TODO: handle nested timestamps, such as ArrayType(TimestampType())?
-                    if isinstance(field.dataType, TimestampType):
-                        s = _check_series_convert_timestamps_tz_local(pdf[field.name], timezone)
-                        if s is not pdf[field.name]:
-                            if not copied:
-                                # Copy once if the series is modified to prevent the original
-                                # Pandas DataFrame from being updated
-                                pdf = pdf.copy()
-                                copied = True
-                            pdf[field.name] = s
+
+                def _create_converter(data_type: DataType) -> Callable[[pd.Series], pd.Series]:
+                    if isinstance(data_type, TimestampType):
+
+                        def correct_timestamp(pser: pd.Series) -> pd.Series:
+                            return _check_series_convert_timestamps_tz_local(pser, timezone)
+
+                        return correct_timestamp
+
+                    def _converter(dt: DataType) -> Optional[Callable[[Any], Any]]:
+                        if isinstance(dt, ArrayType):
+                            element_conv = _converter(dt.elementType) or (lambda x: x)
+
+                            def convert_array(value: Any) -> Any:
+                                if value is None:
+                                    return None
+                                else:
+                                    return [element_conv(v) for v in value]
+
+                            return convert_array
+
+                        elif isinstance(dt, MapType):
+                            key_conv = _converter(dt.keyType) or (lambda x: x)
+                            value_conv = _converter(dt.valueType) or (lambda x: x)
+
+                            def convert_map(value: Any) -> Any:
+                                if value is None:
+                                    return None
+                                else:
+                                    return {key_conv(k): value_conv(v) for k, v in value.items()}
+
+                            return convert_map
+
+                        elif isinstance(dt, StructType):
+                            field_names = dt.names
+                            dedup_field_names = _dedup_names(field_names)
+                            field_convs = [
+                                _converter(f.dataType) or (lambda x: x) for f in dt.fields
+                            ]
+
+                            def convert_struct(value: Any) -> Any:
+                                if value is None:
+                                    return None
+                                elif isinstance(value, dict):
+                                    _values = [
+                                        field_convs[i](value.get(name, None))
+                                        for i, name in enumerate(dedup_field_names)
+                                    ]
+                                    return _create_row(field_names, _values)
+                                else:
+                                    _values = [
+                                        field_convs[i](value[i]) for i, name in enumerate(value)
+                                    ]
+                                    return _create_row(field_names, _values)
+
+                            return convert_struct
+
+                        elif isinstance(dt, TimestampType):
+
+                            def convert_timestamp(value: Any) -> Any:
+                                if value is None:
+                                    return None
+                                else:
+                                    return (
+                                        pd.Timestamp(value)
+                                        .tz_localize(timezone, ambiguous=False)  # type: ignore
+                                        .tz_convert(_get_local_timezone())
+                                        .tz_localize(None)
+                                        .to_pydatetime()
+                                    )
+
+                            return convert_timestamp
+
+                        else:
+                            return None
+
+                    conv = _converter(data_type)
+                    if conv is not None:
+                        return lambda pser: pser.apply(conv)  # type: ignore[return-value]
+                    else:
+                        return lambda pser: pser
+
+                if len(pdf.columns) > 0:
+                    pdf = pd.concat(
+                        [
+                            _create_converter(field.dataType)(pser)
+                            for (_, pser), field in zip(pdf.items(), schema.fields)
+                        ],
+                        axis="columns",
+                    )
+                    copied = True
             else:
                 should_localize = not is_timestamp_ntz_preferred()
                 for column, series in pdf.items():
@@ -401,7 +506,9 @@ class SparkConversionMixin:
                     )
 
         # Convert pandas.DataFrame to list of numpy records
-        np_records = pdf.to_records(index=False)
+        np_records = pdf.set_axis(
+            [f"col_{i}" for i in range(len(pdf.columns))], axis="columns"  # type: ignore[arg-type]
+        ).to_records(index=False)
 
         # Check if any columns need to be fixed for Spark to infer properly
         if len(np_records) > 0:
@@ -459,7 +566,11 @@ class SparkConversionMixin:
 
         from pyspark.sql.pandas.serializers import ArrowStreamPandasSerializer
         from pyspark.sql.types import TimestampType
-        from pyspark.sql.pandas.types import from_arrow_type, to_arrow_type
+        from pyspark.sql.pandas.types import (
+            from_arrow_type,
+            to_arrow_type,
+            _deduplicate_field_names,
+        )
         from pyspark.sql.pandas.utils import (
             require_minimum_pandas_version,
             require_minimum_pyarrow_version,
@@ -487,7 +598,7 @@ class SparkConversionMixin:
 
         # Determine arrow types to coerce data when creating batches
         if isinstance(schema, StructType):
-            arrow_types = [to_arrow_type(f.dataType) for f in schema.fields]
+            spark_types = [_deduplicate_field_names(f.dataType) for f in schema.fields]
         elif isinstance(schema, DataType):
             raise PySparkTypeError(
                 error_class="UNSUPPORTED_DATA_TYPE_FOR_ARROW",
@@ -495,10 +606,8 @@ class SparkConversionMixin:
             )
         else:
             # Any timestamps must be coerced to be compatible with Spark
-            arrow_types = [
-                to_arrow_type(TimestampType())
-                if is_datetime64_dtype(t) or is_datetime64tz_dtype(t)
-                else None
+            spark_types = [
+                TimestampType() if is_datetime64_dtype(t) or is_datetime64tz_dtype(t) else None
                 for t in pdf.dtypes
             ]
 
@@ -506,17 +615,19 @@ class SparkConversionMixin:
         step = self._jconf.arrowMaxRecordsPerBatch()
         pdf_slices = (pdf.iloc[start : start + step] for start in range(0, len(pdf), step))
 
-        # Create list of Arrow (columns, type) for serializer dump_stream
+        # Create list of Arrow (columns, arrow_type, spark_type) for serializer dump_stream
         arrow_data = [
-            [(c, t) for (_, c), t in zip(pdf_slice.items(), arrow_types)]
+            [
+                (c, to_arrow_type(t) if t is not None else None, t)
+                for (_, c), t in zip(pdf_slice.items(), spark_types)
+            ]
             for pdf_slice in pdf_slices
         ]
 
         jsparkSession = self._jsparkSession
 
         safecheck = self._jconf.arrowSafeTypeConversion()
-        col_by_name = True  # col by name only applies to StructType columns, can't happen here
-        ser = ArrowStreamPandasSerializer(timezone, safecheck, col_by_name)
+        ser = ArrowStreamPandasSerializer(timezone, safecheck)
 
         @no_type_check
         def reader_func(temp_filename):

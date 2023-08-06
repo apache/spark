@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution.command
 
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.expressions.{ArrayTransform, AttributeReference, BooleanLiteral, Cast, CheckOverflowInTableInsert, CreateNamedStruct, EvalMode, GetStructField, IntegerLiteral, LambdaFunction, LongLiteral, MapFromArrays, StringLiteral}
 import org.apache.spark.sql.catalyst.expressions.objects.{AssertNotNull, StaticInvoke}
 import org.apache.spark.sql.catalyst.plans.logical.{Assignment, InsertAction, MergeAction, MergeIntoTable, UpdateAction}
@@ -24,7 +25,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.StoreAssignmentPolicy
 import org.apache.spark.sql.types.IntegerType
 
-class AlignMergeAssignmentsSuite extends AlignAssignmentsSuite {
+class AlignMergeAssignmentsSuite extends AlignAssignmentsSuiteBase {
 
   test("align assignments (primitive types)") {
     val (matchedActions, notMatchedActions, notMatchedBySourceActions) =
@@ -578,13 +579,34 @@ class AlignMergeAssignmentsSuite extends AlignAssignmentsSuite {
             "Multiple assignments for 'txt': 'a', 'b'")
 
           // two updates to a nested column
-          assertAnalysisException(
-            s"""MERGE INTO nested_struct_table t USING nested_struct_table src
-               |ON t.i = src.i
-               |$clause THEN
-               | UPDATE SET s.n_i = 1, s.n_s = null, s.n_i = -1
-               |""".stripMargin,
-            "Multiple assignments for 's.n_i': 1, -1")
+          val e = intercept[AnalysisException] {
+            parseAndResolve(
+              s"""MERGE INTO nested_struct_table t USING nested_struct_table src
+                 |ON t.i = src.i
+                 |$clause THEN
+                 | UPDATE SET s.n_i = 1, s.n_s = null, s.n_i = -1
+                 |""".stripMargin
+            )
+          }
+          if (policy == StoreAssignmentPolicy.ANSI) {
+            checkError(
+              exception = e,
+              errorClass = "DATATYPE_MISMATCH.INVALID_ROW_LEVEL_OPERATION_ASSIGNMENTS",
+              parameters = Map(
+                "sqlExpr" -> "\"s.n_i = 1\", \"s.n_s = NULL\", \"s.n_i = -1\"",
+                "errors" -> "\n- Multiple assignments for 's.n_i': 1, -1")
+            )
+          } else {
+            checkError(
+              exception = e,
+              errorClass = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_SAFELY_CAST",
+              parameters = Map(
+                "tableName" -> "``",
+                "colName" -> "`s`.`n_s`",
+                "srcType" -> "\"VOID\"",
+                "targetType" -> "\"STRUCT<DN_I:INT,DN_L:BIGINT>\"")
+            )
+          }
 
           // conflicting updates to a nested struct and its fields
           assertAnalysisException(
@@ -606,14 +628,6 @@ class AlignMergeAssignmentsSuite extends AlignAssignmentsSuite {
       """MERGE INTO primitive_table t USING primitive_table src
         |ON t.i = src.i
         |WHEN NOT MATCHED THEN
-        | INSERT (i, txt) VALUES (src.i, src.txt)
-        |""".stripMargin,
-      "No assignment for 'l'")
-
-    assertAnalysisException(
-      """MERGE INTO primitive_table t USING primitive_table src
-        |ON t.i = src.i
-        |WHEN NOT MATCHED THEN
         | INSERT (i, l, txt, txt) VALUES (src.i, src.l, src.txt, src.txt)
         |""".stripMargin,
       "Multiple assignments for 'txt'")
@@ -624,10 +638,7 @@ class AlignMergeAssignmentsSuite extends AlignAssignmentsSuite {
         |WHEN NOT MATCHED THEN
         | INSERT (s.n_i) VALUES (1)
         |""".stripMargin,
-      "INSERT assignment keys cannot be nested fields: t.s.`n_i` = 1",
-      "No assignment for 'i'",
-      "No assignment for 's'",
-      "No assignment for 'txt'")
+      "INSERT assignment keys cannot be nested fields: t.s.`n_i` = 1")
   }
 
   test("updates to nested structs in arrays") {
@@ -679,13 +690,20 @@ class AlignMergeAssignmentsSuite extends AlignAssignmentsSuite {
              |""".stripMargin)
         assertNullCheckExists(plan4, Seq("s", "n_s", "dn_i"))
 
-        assertAnalysisException(
-          s"""MERGE INTO nested_struct_table t USING nested_struct_table src
-             |ON t.i = src.i
-             |$clause THEN
-             | UPDATE SET s.n_s = named_struct('dn_i', 1)
-             |""".stripMargin,
-          "Cannot find data for output column 's.n_s.dn_l'")
+        val e = intercept[AnalysisException] {
+          parseAndResolve(
+            s"""MERGE INTO nested_struct_table t USING nested_struct_table src
+               |ON t.i = src.i
+               |$clause THEN
+               | UPDATE SET s.n_s = named_struct('dn_i', 1)
+               |""".stripMargin
+          )
+        }
+        checkError(
+          exception = e,
+          errorClass = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_FIND_DATA",
+          parameters = Map("tableName" -> "``", "colName" -> "`s`.`n_s`.`dn_l`")
+        )
 
         // ANSI mode does NOT allow string to int casts
         assertAnalysisException(
@@ -818,13 +836,20 @@ class AlignMergeAssignmentsSuite extends AlignAssignmentsSuite {
              |""".stripMargin)
         assertNullCheckExists(plan4, Seq("s", "n_s", "dn_i"))
 
-        assertAnalysisException(
-          s"""MERGE INTO nested_struct_table t USING nested_struct_table src
-             |ON t.i = src.i
-             |$clause THEN
-             | UPDATE SET s.n_s = named_struct('dn_i', 1)
-             |""".stripMargin,
-          "Cannot find data for output column 's.n_s.dn_l'")
+        val e = intercept[AnalysisException] {
+          parseAndResolve(
+            s"""MERGE INTO nested_struct_table t USING nested_struct_table src
+               |ON t.i = src.i
+               |$clause THEN
+               | UPDATE SET s.n_s = named_struct('dn_i', 1)
+               |""".stripMargin
+          )
+        }
+        checkError(
+          exception = e,
+          errorClass = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_FIND_DATA",
+          parameters = Map("tableName" -> "``", "colName" -> "`s`.`n_s`.`dn_l`")
+        )
 
         // strict mode does NOT allow string to int casts
         assertAnalysisException(
@@ -866,6 +891,8 @@ class AlignMergeAssignmentsSuite extends AlignAssignmentsSuite {
           |ON t.b = s.b
           |WHEN MATCHED THEN
           | UPDATE SET t.i = DEFAULT
+          |WHEN NOT MATCHED AND (s.i = 1) THEN
+          | INSERT (b) VALUES (false)
           |WHEN NOT MATCHED THEN
           | INSERT (i, b) VALUES (DEFAULT, false)
           |WHEN NOT MATCHED BY SOURCE THEN
@@ -889,8 +916,26 @@ class AlignMergeAssignmentsSuite extends AlignAssignmentsSuite {
         fail(s"Unexpected actions: $other")
     }
 
-    notMatchedActions match {
-      case Seq(InsertAction(None, assignments)) =>
+    assert(notMatchedActions.length == 2)
+    notMatchedActions(0) match {
+      case InsertAction(Some(_), assignments) =>
+        assignments match {
+          case Seq(
+              Assignment(b: AttributeReference, BooleanLiteral(false)),
+              Assignment(i: AttributeReference, IntegerLiteral(42))) =>
+
+            assert(b.name == "b")
+            assert(i.name == "i")
+
+          case other =>
+            fail(s"Unexpected assignments: $other")
+        }
+
+      case other =>
+        fail(s"Unexpected actions: $other")
+    }
+    notMatchedActions(1) match {
+      case InsertAction(None, assignments) =>
         assignments match {
           case Seq(
               Assignment(b: AttributeReference, BooleanLiteral(false)),

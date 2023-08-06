@@ -228,7 +228,8 @@ class ClientSuite extends SparkFunSuite with Matchers {
       val sparkConf = new SparkConf().set("spark.yarn.applicationType", sourceType)
       val args = new ClientArguments(Array())
 
-      val appContext = spy(Records.newRecord(classOf[ApplicationSubmissionContext]))
+      val appContext = spy[ApplicationSubmissionContext](
+        Records.newRecord(classOf[ApplicationSubmissionContext]))
       val appId = ApplicationId.newInstance(123456, id)
       appContext.setApplicationId(appId)
       val getNewApplicationResponse = Records.newRecord(classOf[GetNewApplicationResponse])
@@ -248,7 +249,7 @@ class ClientSuite extends SparkFunSuite with Matchers {
         request.setApplicationSubmissionContext(subContext)
 
         val rmContext = mock(classOf[RMContext])
-        val conf = spy(classOf[Configuration])
+        val conf = spy[Configuration](classOf[Configuration])
         val map = new ConcurrentHashMap[ApplicationId, RMApp]()
         when(rmContext.getRMApps).thenReturn(map)
         val dispatcher = mock(classOf[Dispatcher])
@@ -732,7 +733,7 @@ class ClientSuite extends SparkFunSuite with Matchers {
       sparkConf: SparkConf,
       args: Array[String] = Array()): Client = {
     val clientArgs = new ClientArguments(args)
-    spy(new Client(clientArgs, sparkConf, null))
+    spy[Client](new Client(clientArgs, sparkConf, null))
   }
 
   private def classpath(client: Client): Array[String] = {

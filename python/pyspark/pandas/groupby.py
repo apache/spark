@@ -646,6 +646,11 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         2  4.0  1.500000  1.000000
         """
         self._validate_agg_columns(numeric_only=numeric_only, function_name="median")
+        warnings.warn(
+            "Default value of `numeric_only` will be changed to `False` "
+            "instead of `True` in 4.0.0.",
+            FutureWarning,
+        )
 
         return self._reduce_for_stat_function(
             F.mean, accepted_spark_types=(NumericType,), bool_to_numeric=True
@@ -885,6 +890,11 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         pyspark.pandas.Series.groupby
         pyspark.pandas.DataFrame.groupby
         """
+        warnings.warn(
+            "Default value of `numeric_only` will be changed to `False` "
+            "instead of `True` in 4.0.0.",
+            FutureWarning,
+        )
         if numeric_only is not None and not isinstance(numeric_only, bool):
             raise TypeError("numeric_only must be None or bool")
         if not isinstance(min_count, int):
@@ -980,87 +990,6 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
             accepted_spark_types=(NumericType,),
             bool_to_numeric=True,
         )
-
-    # TODO: 'axis', 'skipna', 'level' parameter should be implemented.
-    def mad(self) -> FrameLike:
-        """
-        Compute mean absolute deviation of groups, excluding missing values.
-
-        .. versionadded:: 3.4.0
-
-        .. deprecated:: 3.4.0
-
-        Examples
-        --------
-        >>> df = ps.DataFrame({"A": [1, 2, 1, 1], "B": [True, False, False, True],
-        ...                    "C": [3, 4, 3, 4], "D": ["a", "b", "b", "a"]})
-
-        >>> df.groupby("A").mad()
-                  B         C
-        A
-        1  0.444444  0.444444
-        2  0.000000  0.000000
-
-        >>> df.B.groupby(df.A).mad()
-        A
-        1    0.444444
-        2    0.000000
-        Name: B, dtype: float64
-
-        See Also
-        --------
-        pyspark.pandas.Series.groupby
-        pyspark.pandas.DataFrame.groupby
-        """
-        warnings.warn(
-            "The 'mad' method is deprecated and will be removed in a future version. "
-            "To compute the same result, you may do `(group_df - group_df.mean()).abs().mean()`.",
-            FutureWarning,
-        )
-        groupkey_names = [SPARK_INDEX_NAME_FORMAT(i) for i in range(len(self._groupkeys))]
-        internal, agg_columns, sdf = self._prepare_reduce(
-            groupkey_names=groupkey_names,
-            accepted_spark_types=(NumericType, BooleanType),
-            bool_to_numeric=False,
-        )
-        psdf: DataFrame = DataFrame(internal)
-
-        if len(psdf._internal.column_labels) > 0:
-            window = Window.partitionBy(groupkey_names).rowsBetween(
-                Window.unboundedPreceding, Window.unboundedFollowing
-            )
-            new_agg_scols = {}
-            new_stat_scols = []
-            for agg_column in agg_columns:
-                # it is not able to directly use 'self._reduce_for_stat_function', due to
-                # 'it is not allowed to use a window function inside an aggregate function'.
-                # so we need to create temporary columns to compute the 'abs(x - avg(x))' here.
-                agg_column_name = agg_column._internal.data_spark_column_names[0]
-                new_agg_column_name = verify_temp_column_name(
-                    psdf._internal.spark_frame, "__tmp_agg_col_{}__".format(agg_column_name)
-                )
-                casted_agg_scol = F.col(agg_column_name).cast("double")
-                new_agg_scols[new_agg_column_name] = F.abs(
-                    casted_agg_scol - F.avg(casted_agg_scol).over(window)
-                )
-                new_stat_scols.append(F.avg(F.col(new_agg_column_name)).alias(agg_column_name))
-
-            sdf = (
-                psdf._internal.spark_frame.withColumns(new_agg_scols)
-                .groupby(groupkey_names)
-                .agg(*new_stat_scols)
-            )
-        else:
-            sdf = sdf.select(*groupkey_names).distinct()
-
-        internal = internal.copy(
-            spark_frame=sdf,
-            index_spark_columns=[scol_for(sdf, col) for col in groupkey_names],
-            data_spark_columns=[scol_for(sdf, col) for col in internal.data_spark_column_names],
-            data_fields=None,
-        )
-
-        return self._prepare_return(DataFrame(internal))
 
     def sem(self, ddof: int = 1) -> FrameLike:
         """
@@ -1277,6 +1206,12 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         """
         if not isinstance(min_count, int):
             raise TypeError("min_count must be integer")
+
+        warnings.warn(
+            "Default value of `numeric_only` will be changed to `False` "
+            "instead of `True` in 4.0.0.",
+            FutureWarning,
+        )
 
         self._validate_agg_columns(numeric_only=numeric_only, function_name="prod")
 
@@ -1884,7 +1819,7 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
 
         >>> def plus_min(x):
         ...     return x + x.min()
-        >>> g.apply(plus_min).sort_index()  # doctest: +NORMALIZE_WHITESPACE
+        >>> g.apply(plus_min).sort_index()  # doctest: +SKIP
             A  B   C
         0  aa  2   8
         1  aa  3  10
@@ -1906,7 +1841,7 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
 
         >>> def pandas_div(x) -> ps.DataFrame[int, [float, float]]:
         ...     return x[['B', 'C']] / x[['B', 'C']]
-        >>> g.apply(pandas_div).sort_index()  # doctest: +NORMALIZE_WHITESPACE
+        >>> g.apply(pandas_div).sort_index()  # doctest: +SKIP
             c0   c1
         0  1.0  1.0
         1  1.0  1.0
@@ -1914,7 +1849,7 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
 
         >>> def pandas_div(x) -> ps.DataFrame[("index", int), [("f1", float), ("f2", float)]]:
         ...     return x[['B', 'C']] / x[['B', 'C']]
-        >>> g.apply(pandas_div).sort_index()  # doctest: +NORMALIZE_WHITESPACE
+        >>> g.apply(pandas_div).sort_index()  # doctest: +SKIP
                 f1   f2
         index
         0      1.0  1.0
@@ -1933,7 +1868,7 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
 
         >>> def plus_min(x):
         ...     return x + x.min()
-        >>> df.B.groupby(df.A).apply(plus_min).sort_index()
+        >>> df.B.groupby(df.A).apply(plus_min).sort_index()  # doctest: +SKIP
         0    2
         1    3
         2    6
@@ -3530,6 +3465,12 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
 
         self._validate_agg_columns(numeric_only=numeric_only, function_name="median")
 
+        warnings.warn(
+            "Default value of `numeric_only` will be changed to `False` "
+            "instead of `True` in 4.0.0.",
+            FutureWarning,
+        )
+
         def stat_function(col: Column) -> Column:
             return F.percentile_approx(col, 0.5, accuracy)
 
@@ -4256,6 +4197,10 @@ class SeriesGroupBy(GroupBy[Series]):
            NaN    1
         Name: B, dtype: int64
         """
+        warnings.warn(
+            "The resulting Series will have a fixed name of 'count' from 4.0.0.",
+            FutureWarning,
+        )
         groupkeys = self._groupkeys + self._agg_columns
         groupkey_names = [SPARK_INDEX_NAME_FORMAT(i) for i in range(len(groupkeys))]
         groupkey_cols = [s.spark.column.alias(name) for s, name in zip(groupkeys, groupkey_names)]

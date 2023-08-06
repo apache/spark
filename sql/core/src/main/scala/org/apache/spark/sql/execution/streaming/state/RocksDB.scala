@@ -34,6 +34,7 @@ import org.rocksdb.TickerType._
 import org.apache.spark.TaskContext
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.util.{NextIterator, Utils}
 
 /**
@@ -55,6 +56,15 @@ class RocksDB(
     localRootDir: File = Utils.createTempDir(),
     hadoopConf: Configuration = new Configuration,
     loggingId: String = "") extends Logging {
+
+  case class RocksDBSnapshot(checkpointDir: File, version: Long, numKeys: Long) {
+    def close(): Unit = {
+      silentDeleteRecursively(checkpointDir, s"Free up local checkpoint of snapshot $version")
+    }
+  }
+
+  @volatile private var latestSnapshot: Option[RocksDBSnapshot] = None
+  @volatile private var lastSnapshotVersion = 0L
 
   RocksDBLoader.loadLibrary()
 
@@ -83,9 +93,6 @@ class RocksDB(
 
   private val columnFamilyOptions = new ColumnFamilyOptions()
 
-  private val dbOptions =
-    new Options(new DBOptions(), columnFamilyOptions) // options to open the RocksDB
-
   // Set RocksDB options around MemTable memory usage. By default, we let RocksDB
   // use its internal default values for these settings.
   if (conf.writeBufferSizeMB > 0L) {
@@ -95,6 +102,9 @@ class RocksDB(
   if (conf.maxWriteBufferNumber > 0L) {
     columnFamilyOptions.setMaxWriteBufferNumber(conf.maxWriteBufferNumber)
   }
+
+  private val dbOptions =
+    new Options(new DBOptions(), columnFamilyOptions) // options to open the RocksDB
 
   dbOptions.setCreateIfMissing(true)
   dbOptions.setTableFormatConfig(tableFormatConfig)
@@ -109,13 +119,15 @@ class RocksDB(
   private val nativeStats = dbOptions.statistics()
 
   private val workingDir = createTempDir("workingDir")
-  private val fileManager = new RocksDBFileManager(
-    dfsRootDir, createTempDir("fileManager"), hadoopConf, loggingId = loggingId)
+  private val fileManager = new RocksDBFileManager(dfsRootDir, createTempDir("fileManager"),
+    hadoopConf, conf.compressionCodec, loggingId = loggingId)
   private val byteArrayPair = new ByteArrayPair()
   private val commitLatencyMs = new mutable.HashMap[String, Long]()
   private val acquireLock = new Object
 
   @volatile private var db: NativeRocksDB = _
+  @volatile private var changelogWriter: Option[StateStoreChangelogWriter] = None
+  private val enableChangelogCheckpointing: Boolean = conf.enableChangelogCheckpointing
   @volatile private var loadedVersion = -1L   // -1 = nothing valid is loaded
   @volatile private var numKeysOnLoadedVersion = 0L
   @volatile private var numKeysOnWritingVersion = 0L
@@ -129,17 +141,20 @@ class RocksDB(
    * Note that this will copy all the necessary file from DFS to local disk as needed,
    * and possibly restart the native RocksDB instance.
    */
-  def load(version: Long): RocksDB = {
+  def load(version: Long, readOnly: Boolean = false): RocksDB = {
     assert(version >= 0)
     acquire()
     logInfo(s"Loading $version")
     try {
       if (loadedVersion != version) {
         closeDB()
-        val metadata = fileManager.loadCheckpointFromDfs(version, workingDir)
+        val latestSnapshotVersion = fileManager.getLatestSnapshotVersion(version)
+        val metadata = fileManager.loadCheckpointFromDfs(latestSnapshotVersion, workingDir)
+        loadedVersion = latestSnapshotVersion
+
         openDB()
 
-        val numKeys = if (!conf.trackTotalNumberOfRows) {
+        numKeysOnWritingVersion = if (!conf.trackTotalNumberOfRows) {
           // we don't track the total number of rows - discard the number being track
           -1L
         } else if (metadata.numKeys < 0) {
@@ -149,10 +164,10 @@ class RocksDB(
         } else {
           metadata.numKeys
         }
-        numKeysOnWritingVersion = numKeys
-        numKeysOnLoadedVersion = numKeys
-
-        loadedVersion = version
+        if (loadedVersion != version) replayChangelog(version)
+        // After changelog replay the numKeysOnWritingVersion will be updated to
+        // the correct number of keys in the loaded version.
+        numKeysOnLoadedVersion = numKeysOnWritingVersion
         fileManagerMetrics = fileManager.latestLoadCheckpointMetrics
       }
       if (conf.resetStatsOnLoad) {
@@ -164,7 +179,34 @@ class RocksDB(
         loadedVersion = -1  // invalidate loaded data
         throw t
     }
+    if (enableChangelogCheckpointing && !readOnly) {
+      // Make sure we don't leak resource.
+      changelogWriter.foreach(_.abort())
+      changelogWriter = Some(fileManager.getChangeLogWriter(version + 1))
+    }
     this
+  }
+
+  /**
+   * Replay change log from the loaded version to the target version.
+   */
+  private def replayChangelog(endVersion: Long): Unit = {
+    for (v <- loadedVersion + 1 to endVersion) {
+      var changelogReader: StateStoreChangelogReader = null
+      try {
+        changelogReader = fileManager.getChangelogReader(v)
+        changelogReader.foreach { case (key, value) =>
+          if (value != null) {
+            put(key, value)
+          } else {
+            remove(key)
+          }
+        }
+      } finally {
+        if (changelogReader != null) changelogReader.close()
+      }
+    }
+    loadedVersion = endVersion
   }
 
   /**
@@ -187,6 +229,7 @@ class RocksDB(
       }
     }
     db.put(writeOptions, key, value)
+    changelogWriter.foreach(_.put(key, value))
   }
 
   /**
@@ -201,6 +244,7 @@ class RocksDB(
       }
     }
     db.delete(writeOptions, key)
+    changelogWriter.foreach(_.delete(key))
   }
 
   /**
@@ -286,44 +330,66 @@ class RocksDB(
    */
   def commit(): Long = {
     val newVersion = loadedVersion + 1
-    val checkpointDir = createTempDir("checkpoint")
-    var rocksDBBackgroundThreadPaused = false
     try {
-      // Make sure the directory does not exist. Native RocksDB fails if the directory to
-      // checkpoint exists.
-      Utils.deleteRecursively(checkpointDir)
 
       logInfo(s"Flushing updates for $newVersion")
-      val flushTimeMs = timeTakenMs { db.flush(flushOptions) }
 
-      val compactTimeMs = if (conf.compactOnCommit) {
-        logInfo("Compacting")
-        timeTakenMs { db.compactRange() }
-      } else 0
-
-      logInfo("Pausing background work")
-      val pauseTimeMs = timeTakenMs {
-        db.pauseBackgroundWork() // To avoid files being changed while committing
-        rocksDBBackgroundThreadPaused = true
-      }
-
-      logInfo(s"Creating checkpoint for $newVersion in $checkpointDir")
-      val checkpointTimeMs = timeTakenMs {
-        val cp = Checkpoint.create(db)
-        cp.createCheckpoint(checkpointDir.toString)
+      var compactTimeMs = 0L
+      var flushTimeMs = 0L
+      var checkpointTimeMs = 0L
+      if (shouldCreateSnapshot()) {
+        // Need to flush the change to disk before creating a checkpoint
+        // because rocksdb wal is disabled.
+        logInfo(s"Flushing updates for $newVersion")
+        flushTimeMs = timeTakenMs { db.flush(flushOptions) }
+        if (conf.compactOnCommit) {
+          logInfo("Compacting")
+          compactTimeMs = timeTakenMs { db.compactRange() }
+        }
+        checkpointTimeMs = timeTakenMs {
+          val checkpointDir = createTempDir("checkpoint")
+          logInfo(s"Creating checkpoint for $newVersion in $checkpointDir")
+          // Make sure the directory does not exist. Native RocksDB fails if the directory to
+          // checkpoint exists.
+          Utils.deleteRecursively(checkpointDir)
+          // We no longer pause background operation before creating a RocksDB checkpoint because
+          // it is unnecessary. The captured snapshot will still be consistent with ongoing
+          // background operations.
+          val cp = Checkpoint.create(db)
+          cp.createCheckpoint(checkpointDir.toString)
+          synchronized {
+            // if changelog checkpointing is disabled, the snapshot is uploaded synchronously
+            // inside the uploadSnapshot() called below.
+            // If changelog checkpointing is enabled, snapshot will be uploaded asynchronously
+            // during state store maintenance.
+            latestSnapshot.foreach(_.close())
+            latestSnapshot = Some(
+              RocksDBSnapshot(checkpointDir, newVersion, numKeysOnWritingVersion))
+            lastSnapshotVersion = newVersion
+          }
+        }
       }
 
       logInfo(s"Syncing checkpoint for $newVersion to DFS")
       val fileSyncTimeMs = timeTakenMs {
-        fileManager.saveCheckpointToDfs(checkpointDir, newVersion, numKeysOnWritingVersion)
+        if (enableChangelogCheckpointing) {
+          try {
+            assert(changelogWriter.isDefined)
+            changelogWriter.foreach(_.commit())
+          } finally {
+            changelogWriter = None
+          }
+        } else {
+          assert(changelogWriter.isEmpty)
+          uploadSnapshot()
+        }
       }
+
       numKeysOnLoadedVersion = numKeysOnWritingVersion
       loadedVersion = newVersion
-      fileManagerMetrics = fileManager.latestSaveCheckpointMetrics
       commitLatencyMs ++= Map(
         "flush" -> flushTimeMs,
         "compact" -> compactTimeMs,
-        "pause" -> pauseTimeMs,
         "checkpoint" -> checkpointTimeMs,
         "fileSync" -> fileSyncTimeMs
       )
@@ -334,11 +400,40 @@ class RocksDB(
         loadedVersion = -1  // invalidate loaded version
         throw t
     } finally {
-      if (rocksDBBackgroundThreadPaused) db.continueBackgroundWork()
-      silentDeleteRecursively(checkpointDir, s"committing $newVersion")
       // reset resources as either 1) we already pushed the changes and it has been committed or
       // 2) commit has failed and the current version is "invalidated".
       release()
+    }
+  }
+
+  private def shouldCreateSnapshot(): Boolean = {
+    if (enableChangelogCheckpointing) {
+      assert(changelogWriter.isDefined)
+      val newVersion = loadedVersion + 1
+      newVersion - lastSnapshotVersion >= conf.minDeltasForSnapshot ||
+        changelogWriter.get.size > 10000
+    } else true
+  }
+
+  private def uploadSnapshot(): Unit = {
+    val localCheckpoint = synchronized {
+      val checkpoint = latestSnapshot
+      latestSnapshot = None
+      checkpoint
+    }
+    localCheckpoint match {
+      case Some(RocksDBSnapshot(localDir, version, numKeys)) =>
+        try {
+          val uploadTime = timeTakenMs {
+            fileManager.saveCheckpointToDfs(localDir, version, numKeys)
+            fileManagerMetrics = fileManager.latestSaveCheckpointMetrics
+          }
+          logInfo(s"$loggingId: Upload snapshot of version $version," +
+            s" time taken: $uploadTime ms")
+        } finally {
+          localCheckpoint.foreach(_.close())
+        }
+      case _ =>
     }
   }
 
@@ -348,11 +443,17 @@ class RocksDB(
   def rollback(): Unit = {
     numKeysOnWritingVersion = numKeysOnLoadedVersion
     loadedVersion = -1L
+    changelogWriter.foreach(_.abort())
+    // Make sure changelogWriter gets recreated next time.
+    changelogWriter = None
     release()
     logInfo(s"Rolled back to $loadedVersion")
   }
 
-  def cleanup(): Unit = {
+  def doMaintenance(): Unit = {
+    if (enableChangelogCheckpointing) {
+      uploadSnapshot()
+    }
     val cleanupTime = timeTakenMs {
       fileManager.deleteOldVersions(conf.minVersionsToRetain)
     }
@@ -362,6 +463,8 @@ class RocksDB(
   /** Release all resources */
   def close(): Unit = {
     try {
+      // Acquire DB instance lock and release at the end to allow for synchronized access
+      acquire()
       closeDB()
 
       readOptions.close()
@@ -369,10 +472,15 @@ class RocksDB(
       flushOptions.close()
       dbOptions.close()
       dbLogger.close()
+      synchronized {
+        latestSnapshot.foreach(_.close())
+      }
       silentDeleteRecursively(localRootDir, "closing RocksDB")
     } catch {
       case e: Exception =>
         logWarning("Error closing RocksDB", e)
+    } finally {
+      release()
     }
   }
 
@@ -450,11 +558,8 @@ class RocksDB(
     }
     if (isAcquiredByDifferentThread) {
       val stackTraceOutput = acquiredThreadInfo.threadRef.get.get.getStackTrace.mkString("\n")
-      val msg = s"RocksDB instance could not be acquired by $newAcquiredThreadInfo as it " +
-        s"was not released by $acquiredThreadInfo after $timeWaitedMs ms.\n" +
-        s"Thread holding the lock has trace: $stackTraceOutput"
-      logError(msg)
-      throw new IllegalStateException(s"$loggingId: $msg")
+      throw QueryExecutionErrors.unreleasedThreadError(loggingId, newAcquiredThreadInfo.toString,
+        acquiredThreadInfo.toString, timeWaitedMs, stackTraceOutput)
     } else {
       acquiredThreadInfo = newAcquiredThreadInfo
       // Add a listener to always release the lock when the task (if active) completes
@@ -550,7 +655,9 @@ class ByteArrayPair(var key: Array[Byte] = null, var value: Array[Byte] = null) 
  */
 case class RocksDBConf(
     minVersionsToRetain: Int,
+    minDeltasForSnapshot: Int,
     compactOnCommit: Boolean,
+    enableChangelogCheckpointing: Boolean,
     blockSizeKB: Long,
     blockCacheSizeMB: Long,
     lockAcquireTimeoutMs: Long,
@@ -563,7 +670,8 @@ case class RocksDBConf(
     boundedMemoryUsage: Boolean,
     totalMemoryUsageMB: Long,
     writeBufferCacheRatio: Double,
-    highPriorityPoolRatio: Double)
+    highPriorityPoolRatio: Double,
+    compressionCodec: String)
 
 object RocksDBConf {
   /** Common prefix of all confs in SQLConf that affects RocksDB */
@@ -585,6 +693,8 @@ object RocksDBConf {
 
   // Configuration that specifies whether to compact the RocksDB data every time data is committed
   private val COMPACT_ON_COMMIT_CONF = SQLConfEntry("compactOnCommit", "false")
+  private val ENABLE_CHANGELOG_CHECKPOINTING_CONF = SQLConfEntry(
+    "changelogCheckpointing.enabled", "false")
   private val BLOCK_SIZE_KB_CONF = SQLConfEntry("blockSizeKB", "4")
   private val BLOCK_CACHE_SIZE_MB_CONF = SQLConfEntry("blockCacheSizeMB", "8")
   // See SPARK-42794 for details.
@@ -705,7 +815,9 @@ object RocksDBConf {
 
     RocksDBConf(
       storeConf.minVersionsToRetain,
+      storeConf.minDeltasForSnapshot,
       getBooleanConf(COMPACT_ON_COMMIT_CONF),
+      getBooleanConf(ENABLE_CHANGELOG_CHECKPOINTING_CONF),
       getPositiveLongConf(BLOCK_SIZE_KB_CONF),
       getPositiveLongConf(BLOCK_CACHE_SIZE_MB_CONF),
       getPositiveLongConf(LOCK_ACQUIRE_TIMEOUT_MS_CONF),
@@ -718,7 +830,8 @@ object RocksDBConf {
       getBooleanConf(BOUNDED_MEMORY_USAGE_CONF),
       getLongConf(MAX_MEMORY_USAGE_MB_CONF),
       getRatioConf(WRITE_BUFFER_CACHE_RATIO_CONF),
-      getRatioConf(HIGH_PRIORITY_POOL_RATIO_CONF))
+      getRatioConf(HIGH_PRIORITY_POOL_RATIO_CONF),
+      storeConf.compressionCodec)
   }
 
   def apply(): RocksDBConf = apply(new StateStoreConf())

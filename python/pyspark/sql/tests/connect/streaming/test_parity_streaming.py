@@ -15,8 +15,6 @@
 # limitations under the License.
 #
 
-import unittest
-
 from pyspark.sql.tests.streaming.test_streaming import StreamingTestsMixin
 from pyspark.testing.connectutils import ReusedConnectTestCase
 

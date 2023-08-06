@@ -498,13 +498,13 @@ from tenk1 o
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
   "sqlState" : "42703",
   "messageParameters" : {
     "objectName" : "`o`.`unique1`",
-    "proposal" : "`i`.`unique1`, `i`.`unique2`, `i`.`hundred`, `i`.`even`, `i`.`four`"
+    "proposal" : "`i`.`unique1`, `i`.`unique2`, `i`.`even`, `i`.`four`, `i`.`odd`"
   },
   "queryContext" : [ {
     "objectType" : "",

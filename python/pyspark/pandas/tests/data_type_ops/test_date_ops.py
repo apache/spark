@@ -16,6 +16,8 @@
 #
 
 import datetime
+import unittest
+from distutils.version import LooseVersion
 
 import pandas as pd
 from pandas.api.types import CategoricalDtype
@@ -61,6 +63,10 @@ class DateOpsTestsMixin:
         for psser in self.pssers:
             self.assertRaises(TypeError, lambda: self.psser + psser)
 
+    @unittest.skipIf(
+        LooseVersion(pd.__version__) >= LooseVersion("2.0.0"),
+        "TODO(SPARK-43571): Enable DateOpsTests.test_sub for pandas 2.0.0.",
+    )
     def test_sub(self):
         self.assertRaises(TypeError, lambda: self.psser - "x")
         self.assertRaises(TypeError, lambda: self.psser - 1)
@@ -122,6 +128,10 @@ class DateOpsTestsMixin:
         self.assertRaises(TypeError, lambda: 1 + self.psser)
         self.assertRaises(TypeError, lambda: self.some_date + self.psser)
 
+    @unittest.skipIf(
+        LooseVersion(pd.__version__) >= LooseVersion("2.0.0"),
+        "TODO(SPARK-43570): Enable DateOpsTests.test_rsub for pandas 2.0.0.",
+    )
     def test_rsub(self):
         self.assertRaises(TypeError, lambda: "x" - self.psser)
         self.assertRaises(TypeError, lambda: 1 - self.psser)

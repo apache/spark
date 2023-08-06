@@ -25,6 +25,7 @@ import scala.collection.JavaConverters._
 import scala.reflect.runtime.universe.TypeTag
 
 import com.google.common.cache.{CacheBuilder, CacheLoader}
+import io.grpc.ClientInterceptor
 import org.apache.arrow.memory.RootAllocator
 
 import org.apache.spark.annotation.{DeveloperApi, Experimental}
@@ -37,10 +38,12 @@ import org.apache.spark.sql.catalyst.encoders.{AgnosticEncoder, RowEncoder}
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{BoxedLongEncoder, UnboundRowEncoder}
 import org.apache.spark.sql.connect.client.{ClassFinder, SparkConnectClient, SparkResult}
 import org.apache.spark.sql.connect.client.SparkConnectClient.Configuration
-import org.apache.spark.sql.connect.client.util.{Cleaner, ConvertToArrow}
+import org.apache.spark.sql.connect.client.arrow.ArrowSerializer
+import org.apache.spark.sql.connect.client.util.Cleaner
 import org.apache.spark.sql.connect.common.LiteralValueProtoConverter.toLiteralProto
-import org.apache.spark.sql.internal.CatalogImpl
+import org.apache.spark.sql.internal.{CatalogImpl, SqlApiConf}
 import org.apache.spark.sql.streaming.DataStreamReader
+import org.apache.spark.sql.streaming.StreamingQueryManager
 import org.apache.spark.sql.types.StructType
 
 /**
@@ -123,15 +126,13 @@ class SparkSession private[sql] (
   private def createDataset[T](encoder: AgnosticEncoder[T], data: Iterator[T]): Dataset[T] = {
     newDataset(encoder) { builder =>
       if (data.nonEmpty) {
-        val timeZoneId = conf.get("spark.sql.session.timeZone")
-        val (arrowData, arrowDataSize) =
-          ConvertToArrow(encoder, data, timeZoneId, errorOnDuplicatedFieldNames = true, allocator)
-        if (arrowDataSize <= conf.get("spark.sql.session.localRelationCacheThreshold").toInt) {
+        val arrowData = ArrowSerializer.serialize(data, encoder, allocator, timeZoneId)
+        if (arrowData.size() <= conf.get(SqlApiConf.LOCAL_RELATION_CACHE_THRESHOLD_KEY).toInt) {
           builder.getLocalRelationBuilder
             .setSchema(encoder.schema.json)
             .setData(arrowData)
         } else {
-          val hash = client.cacheLocalRelation(arrowDataSize, arrowData, encoder.schema.json)
+          val hash = client.cacheLocalRelation(arrowData, encoder.schema.json)
           builder.getCachedLocalRelationBuilder
             .setUserId(client.userId)
             .setSessionId(client.sessionId)
@@ -227,6 +228,42 @@ class SparkSession private[sql] (
   }
 
   /**
+   * Executes a SQL query substituting positional parameters by the given arguments, returning the
+   * result as a `DataFrame`. This API eagerly runs DDL/DML commands, but not for SELECT queries.
+   *
+   * @param sqlText
+   *   A SQL statement with positional parameters to execute.
+   * @param args
+   *   An array of Java/Scala objects that can be converted to SQL literal expressions. See <a
+   *   href="https://spark.apache.org/docs/latest/sql-ref-datatypes.html"> Supported Data
+   *   Types</a> for supported value types in Scala/Java. For example: 1, "Steven",
+   *   LocalDate.of(2023, 4, 2). A value can be also a `Column` of literal expression, in that
+   *   case it is taken as is.
+   *
+   * @since 3.5.0
+   */
+  @Experimental
+  def sql(sqlText: String, args: Array[_]): DataFrame = newDataFrame { builder =>
+    // Send the SQL once to the server and then check the output.
+    val cmd = newCommand(b =>
+      b.setSqlCommand(
+        proto.SqlCommand
+          .newBuilder()
+          .setSql(sqlText)
+          .addAllPosArgs(args.map(toLiteralProto).toIterable.asJava)))
+    val plan = proto.Plan.newBuilder().setCommand(cmd)
+    // .toBuffer forces that the iterator is consumed and closed
+    val responseSeq = client.execute(plan.build()).toBuffer.toSeq
+
+    val response = responseSeq
+      .find(_.hasSqlCommandResult)
+      .getOrElse(throw new RuntimeException("SQLCommandResult must be present"))
+
+    // Update the builder with the values from the result.
+    builder.mergeFrom(response.getSqlCommandResult.getRelation)
+  }
+
+  /**
    * Executes a SQL query substituting named parameters by the given arguments, returning the
    * result as a `DataFrame`. This API eagerly runs DDL/DML commands, but not for SELECT queries.
    *
@@ -272,9 +309,10 @@ class SparkSession private[sql] (
             .setSql(sqlText)
             .putAllArgs(args.asScala.mapValues(toLiteralProto).toMap.asJava)))
       val plan = proto.Plan.newBuilder().setCommand(cmd)
-      val responseIter = client.execute(plan.build())
+      // .toBuffer forces that the iterator is consumed and closed
+      val responseSeq = client.execute(plan.build()).toBuffer.toSeq
 
-      val response = responseIter.asScala
+      val response = responseSeq
         .find(_.hasSqlCommandResult)
         .getOrElse(throw new RuntimeException("SQLCommandResult must be present"))
 
@@ -289,7 +327,7 @@ class SparkSession private[sql] (
    * @since 3.4.0
    */
   def sql(query: String): DataFrame = {
-    sql(query, Map.empty[String, String])
+    sql(query, Array.empty)
   }
 
   /**
@@ -314,6 +352,8 @@ class SparkSession private[sql] (
    * @since 3.5.0
    */
   def readStream: DataStreamReader = new DataStreamReader(this)
+
+  lazy val streams: StreamingQueryManager = new StreamingQueryManager(this)
 
   /**
    * Interface through which the user may create, drop, alter or query underlying databases,
@@ -378,6 +418,30 @@ class SparkSession private[sql] (
     range(start, end, step, Option(numPartitions))
   }
 
+  /**
+   * A collection of methods for registering user-defined functions (UDF).
+   *
+   * The following example registers a Scala closure as UDF:
+   * {{{
+   *   sparkSession.udf.register("myUDF", (arg1: Int, arg2: String) => arg2 + arg1)
+   * }}}
+   *
+   * The following example registers a UDF in Java:
+   * {{{
+   *   sparkSession.udf().register("myUDF",
+   *       (Integer arg1, String arg2) -> arg2 + arg1,
+   *       DataTypes.StringType);
+   * }}}
+   *
+   * @note
+   *   The user-defined functions must be deterministic. Due to optimization, duplicate
+   *   invocations may be eliminated or the function may even be invoked more times than it is
+   *   present in the query.
+   *
+   * @since 3.5.0
+   */
+  lazy val udf: UDFRegistration = new UDFRegistration(this)
+
   // scalastyle:off
   // Disable style checker so "implicits" object can start with lowercase i
   /**
@@ -391,7 +455,7 @@ class SparkSession private[sql] (
    *
    * @since 3.4.0
    */
-  object implicits extends SQLImplicits(this)
+  object implicits extends SQLImplicits(this) with Serializable
   // scalastyle:on
 
   def newSession(): SparkSession = {
@@ -466,9 +530,11 @@ class SparkSession private[sql] (
     client.semanticHash(plan).getSemanticHash.getResult
   }
 
+  private[sql] def timeZoneId: String = conf.get(SqlApiConf.SESSION_LOCAL_TIMEZONE_KEY)
+
   private[sql] def execute[T](plan: proto.Plan, encoder: AgnosticEncoder[T]): SparkResult[T] = {
     val value = client.execute(plan)
-    val result = new SparkResult(value, allocator, encoder)
+    val result = new SparkResult(value, allocator, encoder, timeZoneId)
     cleaner.register(result)
     result
   }
@@ -478,12 +544,19 @@ class SparkSession private[sql] (
     f(builder)
     builder.getCommonBuilder.setPlanId(planIdGenerator.getAndIncrement())
     val plan = proto.Plan.newBuilder().setRoot(builder).build()
-    client.execute(plan).asScala.foreach(_ => ())
+    // .toBuffer forces that the iterator is consumed and closed
+    client.execute(plan).toBuffer
   }
 
   private[sql] def execute(command: proto.Command): Seq[ExecutePlanResponse] = {
     val plan = proto.Plan.newBuilder().setCommand(command).build()
-    client.execute(plan).asScala.toSeq
+    // .toBuffer forces that the iterator is consumed and closed
+    client.execute(plan).toBuffer.toSeq
+  }
+
+  private[sql] def registerUdf(udf: proto.CommonInlineUserDefinedFunction): Unit = {
+    val command = proto.Command.newBuilder().setRegisterFunction(udf).build()
+    execute(command)
   }
 
   @DeveloperApi
@@ -543,14 +616,40 @@ class SparkSession private[sql] (
   /**
    * Interrupt all operations of this session currently running on the connected server.
    *
-   * TODO/WIP: Currently it will interrupt the Spark Jobs running on the server, triggered from
-   * ExecutePlan requests. If an operation is not running a Spark Job, it becomes an noop and the
-   * operation will continue afterwards, possibly with more Spark Jobs.
+   * @return
+   *   sequence of operationIds of interrupted operations. Note: there is still a possibility of
+   *   operation finishing just as it is interrupted.
    *
    * @since 3.5.0
    */
-  def interruptAll(): Unit = {
-    client.interruptAll()
+  def interruptAll(): Seq[String] = {
+    client.interruptAll().getInterruptedIdsList.asScala.toSeq
+  }
+
+  /**
+   * Interrupt all operations of this session with the given operation tag.
+   *
+   * @return
+   *   sequence of operationIds of interrupted operations. Note: there is still a possibility of
+   *   operation finishing just as it is interrupted.
+   *
+   * @since 3.5.0
+   */
+  def interruptTag(tag: String): Seq[String] = {
+    client.interruptTag(tag).getInterruptedIdsList.asScala.toSeq
+  }
+
+  /**
+   * Interrupt an operation of this session with the given operationId.
+   *
+   * @return
+   *   sequence of operationIds of interrupted operations. Note: there is still a possibility of
+   *   operation finishing just as it is interrupted.
+   *
+   * @since 3.5.0
+   */
+  def interruptOperation(operationId: String): Seq[String] = {
+    client.interruptOperation(operationId).getInterruptedIdsList.asScala.toSeq
   }
 
   /**
@@ -570,6 +669,50 @@ class SparkSession private[sql] (
     client.shutdown()
     allocator.close()
     SparkSession.onSessionClose(this)
+  }
+
+  /**
+   * Add a tag to be assigned to all the operations started by this thread in this session.
+   *
+   * @param tag
+   *   The tag to be added. Cannot contain ',' (comma) character or be an empty string.
+   *
+   * @since 3.5.0
+   */
+  def addTag(tag: String): Unit = {
+    client.addTag(tag)
+  }
+
+  /**
+   * Remove a tag previously added to be assigned to all the operations started by this thread in
+   * this session. Noop if such a tag was not added earlier.
+   *
+   * @param tag
+   *   The tag to be removed. Cannot contain ',' (comma) character or be an empty string.
+   *
+   * @since 3.5.0
+   */
+  def removeTag(tag: String): Unit = {
+    client.removeTag(tag)
+  }
+
+  /**
+   * Get the tags that are currently set to be assigned to all the operations started by this
+   * thread.
+   *
+   * @since 3.5.0
+   */
+  def getTags(): Set[String] = {
+    client.getTags()
+  }
+
+  /**
+   * Clear the current thread's operation tags.
+   *
+   * @since 3.5.0
+   */
+  def clearTags(): Unit = {
+    client.clearTags()
   }
 }
 
@@ -597,7 +740,7 @@ object SparkSession extends Logging {
    * Create a new [[SparkSession]] based on the connect client [[Configuration]].
    */
   private[sql] def create(configuration: Configuration): SparkSession = {
-    new SparkSession(new SparkConnectClient(configuration), cleaner, planIdGenerator)
+    new SparkSession(configuration.toSparkConnectClient, cleaner, planIdGenerator)
   }
 
   /**
@@ -630,6 +773,18 @@ object SparkSession extends Logging {
 
     def remote(connectionString: String): Builder = {
       builder.connectionString(connectionString)
+      this
+    }
+
+    /**
+     * Add an interceptor [[ClientInterceptor]] to be used during channel creation.
+     *
+     * Note that interceptors added last are executed first by gRPC.
+     *
+     * @since 3.5.0
+     */
+    def interceptor(interceptor: ClientInterceptor): Builder = {
+      builder.interceptor(interceptor)
       this
     }
 

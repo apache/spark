@@ -3832,13 +3832,12 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "INSERT_COLUMN_ARITY_MISMATCH",
+  "errorClass" : "INSERT_COLUMN_ARITY_MISMATCH.TOO_MANY_DATA_COLUMNS",
   "sqlState" : "21S01",
   "messageParameters" : {
-    "insertedColumns" : "5",
-    "staticPartCols" : "0",
-    "tableName" : "`spark_catalog`.`default`.`num_result`",
-    "targetColumns" : "3"
+    "dataColumns" : "`id`, `id`, `val`, `val`, `(val * val)`",
+    "tableColumns" : "`id1`, `id2`, `result`",
+    "tableName" : "`spark_catalog`.`default`.`num_result`"
   }
 }
 
@@ -4698,11 +4697,12 @@ struct<>
 -- !query output
 org.apache.spark.SparkIllegalArgumentException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2278",
+  "errorClass" : "INVALID_FORMAT.MISMATCH_INPUT",
+  "sqlState" : "42601",
   "messageParameters" : {
     "format" : "99G999G999",
     "input" : "-34,338,492",
-    "valueType" : "string"
+    "inputType" : "\"STRING\""
   }
 }
 
@@ -4712,7 +4712,7 @@ SELECT '' AS to_number_2,  to_number('-34,338,492.654,878', '99G999G999D999G999'
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "INVALID_FORMAT.THOUSANDS_SEPS_MUST_BEFORE_DEC",
   "sqlState" : "42601",
@@ -4774,7 +4774,7 @@ SELECT '' AS to_number_15, to_number('123,000','999G')
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "INVALID_FORMAT.CONT_THOUSANDS_SEPS",
   "sqlState" : "42601",
@@ -4798,11 +4798,12 @@ struct<>
 -- !query output
 org.apache.spark.SparkIllegalArgumentException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2278",
+  "errorClass" : "INVALID_FORMAT.MISMATCH_INPUT",
+  "sqlState" : "42601",
   "messageParameters" : {
     "format" : "999G999",
     "input" : "123456",
-    "valueType" : "string"
+    "inputType" : "\"STRING\""
   }
 }
 

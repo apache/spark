@@ -37,7 +37,7 @@ import org.apache.spark.{SparkException, SparkFiles, TestUtils}
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
 import org.apache.spark.sql.catalyst.plans.logical.Project
 import org.apache.spark.sql.execution.WholeStageCodegenExec
-import org.apache.spark.sql.functions.max
+import org.apache.spark.sql.functions.{call_function, max}
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SQLTestUtils
@@ -552,6 +552,19 @@ class HiveUDFSuite extends QueryTest with TestHiveSingleton with SQLTestUtils {
     }
   }
 
+  test("Invoke a persist hive function with call_function") {
+    val testData = spark.range(5).repartition(1)
+    withUserDefinedFunction("custom_avg" -> false) {
+      sql(s"CREATE FUNCTION custom_avg AS '${classOf[GenericUDAFAverage].getName}'")
+      checkAnswer(
+        testData.select(
+          call_function("custom_avg", $"id"),
+          call_function("default.custom_avg", $"id"),
+          call_function("spark_catalog.default.custom_avg", $"id")),
+        Row(2.0, 2.0, 2.0))
+    }
+  }
+
   test("Temp function has dots in the names") {
     withUserDefinedFunction("test_avg" -> false, "`default.test_avg`" -> true) {
       sql(s"CREATE FUNCTION test_avg AS '${classOf[GenericUDAFAverage].getName}'")
@@ -738,7 +751,8 @@ class HiveUDFSuite extends QueryTest with TestHiveSingleton with SQLTestUtils {
           e,
           "FAILED_EXECUTE_UDF",
           parameters = Map(
-            "functionName" -> s"${classOf[GenericUDFAssertTrue].getName}",
+            "functionName" ->
+              "`org`.`apache`.`hadoop`.`hive`.`ql`.`udf`.`generic`.`GenericUDFAssertTrue`",
             "signature" -> "boolean",
             "result" -> "void"))
       }
@@ -768,7 +782,8 @@ class HiveUDFSuite extends QueryTest with TestHiveSingleton with SQLTestUtils {
           exception = intercept[SparkException](df.collect()).getCause.asInstanceOf[SparkException],
           errorClass = "FAILED_EXECUTE_UDF",
           parameters = Map(
-            "functionName" -> s"${classOf[SimpleUDFAssertTrue].getName}",
+            "functionName" ->
+              "`org`.`apache`.`spark`.`sql`.`hive`.`execution`.`SimpleUDFAssertTrue`",
             "signature" -> "boolean",
             "result" -> "boolean"
           )

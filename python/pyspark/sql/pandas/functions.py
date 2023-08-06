@@ -416,11 +416,14 @@ def _create_pandas_udf(f, returnType, evalType):
         PythonEvalType.SQL_MAP_ARROW_ITER_UDF,
         PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF,
         PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF_WITH_STATE,
+        PythonEvalType.SQL_ARROW_BATCHED_UDF,
     ]:
         # In case of 'SQL_GROUPED_MAP_PANDAS_UDF', deprecation warning is being triggered
         # at `apply` instead.
         # In case of 'SQL_MAP_PANDAS_ITER_UDF', 'SQL_MAP_ARROW_ITER_UDF' and
         # 'SQL_COGROUPED_MAP_PANDAS_UDF', the evaluation type will always be set.
+        # In case of 'SQL_ARROW_BATCHED_UDF', no deprecation warning is required since it is not
+        # exposed to users.
         pass
     elif len(argspec.annotations) > 0:
         try:

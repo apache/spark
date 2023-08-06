@@ -24,41 +24,7 @@ from pyspark.testing.pandasutils import PandasOnSparkTestUtils
 class OpsOnDiffFramesGroupByParityTests(
     OpsOnDiffFramesGroupByTestsMixin, PandasOnSparkTestUtils, ReusedConnectTestCase
 ):
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_cumcount(self):
-        super().test_cumcount()
-
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_cummax(self):
-        super().test_cummax()
-
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_cummin(self):
-        super().test_cummin()
-
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_cumprod(self):
-        super().test_cumprod()
-
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_cumsum(self):
-        super().test_cumsum()
-
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_diff(self):
-        super().test_diff()
-
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_fillna(self):
-        super().test_fillna()
-
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_fillna(self):
-        super().test_fillna()
-
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_shift(self):
-        super().test_shift()
+    pass
 
 
 if __name__ == "__main__":

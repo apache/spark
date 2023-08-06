@@ -25,6 +25,8 @@ import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.expressions.{Expression, InputFileBlockLength, InputFileBlockStart, InputFileName, RowOrdering}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
+import org.apache.spark.sql.catalyst.util.TypeUtils._
 import org.apache.spark.sql.connector.expressions.{FieldReference, RewritableTransform}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.command.DDLUtils
@@ -43,15 +45,17 @@ class ResolveSQLOnFile(sparkSession: SparkSession) extends Rule[LogicalPlan] {
     conf.runSQLonFile && u.multipartIdentifier.size == 2
   }
 
-  private def resolveDataSource(ident: Seq[String]): DataSource = {
+  private def resolveDataSource(unresolved: UnresolvedRelation): DataSource = {
+    val ident = unresolved.multipartIdentifier
     val dataSource = DataSource(sparkSession, paths = Seq(ident.last), className = ident.head)
     // `dataSource.providingClass` may throw ClassNotFoundException, the caller side will try-catch
     // it and return the original plan, so that the analyzer can report table not found later.
     val isFileFormat = classOf[FileFormat].isAssignableFrom(dataSource.providingClass)
     if (!isFileFormat ||
       dataSource.className.toLowerCase(Locale.ROOT) == DDLUtils.HIVE_PROVIDER) {
-      throw QueryCompilationErrors.unsupportedDataSourceTypeForDirectQueryOnFilesError(
-        dataSource.className)
+      unresolved.failAnalysis(
+        errorClass = "UNSUPPORTED_DATASOURCE_FOR_DIRECT_QUERY",
+        messageParameters = Map("dataSourceType" -> ident.head))
     }
     dataSource
   }
@@ -63,19 +67,19 @@ class ResolveSQLOnFile(sparkSession: SparkSession) extends Rule[LogicalPlan] {
       // fail to time travel. Otherwise, this is some other catalog table that isn't resolved yet,
       // so we should leave it be for now.
       try {
-        resolveDataSource(u.multipartIdentifier)
-        throw QueryCompilationErrors.timeTravelUnsupportedError("path-based tables")
+        resolveDataSource(u)
+        throw QueryCompilationErrors.timeTravelUnsupportedError(toSQLId(u.multipartIdentifier))
       } catch {
         case _: ClassNotFoundException => r
       }
 
     case u: UnresolvedRelation if maybeSQLFile(u) =>
       try {
-        val ds = resolveDataSource(u.multipartIdentifier)
+        val ds = resolveDataSource(u)
         LogicalRelation(ds.resolveRelation())
       } catch {
         case _: ClassNotFoundException => u
-        case e: Exception =>
+        case e: Exception if !e.isInstanceOf[AnalysisException] =>
           // the provider is valid, but failed to create a logical plan
           u.failAnalysis(
             errorClass = "UNSUPPORTED_DATASOURCE_FOR_DIRECT_QUERY",
@@ -98,13 +102,15 @@ case class PreprocessTableCreation(catalog: SessionCatalog) extends Rule[Logical
     // we fail the query if the partitioning information is specified.
     case c @ CreateTableV1(tableDesc, _, None) if tableDesc.schema.isEmpty =>
       if (tableDesc.bucketSpec.isDefined) {
-        failAnalysis("Cannot specify bucketing information if the table schema is not specified " +
-          "when creating and will be inferred at runtime")
+        throw new AnalysisException(
+          errorClass = "SPECIFY_BUCKETING_IS_NOT_ALLOWED",
+          messageParameters = Map.empty
+        )
       }
       if (tableDesc.partitionColumnNames.nonEmpty) {
-        failAnalysis("It is not allowed to specify partition columns when the table schema is " +
-          "not defined. When the table schema is not provided, schema and partition columns " +
-          "will be inferred.")
+        throw new AnalysisException(
+          errorClass = "SPECIFY_PARTITION_IS_NOT_ALLOWED",
+          messageParameters = Map.empty)
       }
       c
 
@@ -192,7 +198,7 @@ case class PreprocessTableCreation(catalog: SessionCatalog) extends Rule[Logical
       c.copy(
         tableDesc = existingTable,
         query = Some(TableOutputResolver.resolveOutputColumns(
-          tableDesc.qualifiedName, existingTable.schema.toAttributes, newQuery,
+          tableDesc.qualifiedName, toAttributes(existingTable.schema), newQuery,
           byName = true, conf)))
 
     // Here we normalize partition, bucket and sort column names, w.r.t. the case sensitivity
@@ -315,7 +321,9 @@ case class PreprocessTableCreation(catalog: SessionCatalog) extends Rule[Logical
     SchemaUtils.checkColumnNameDuplication(normalizedPartitionCols, conf.resolver)
 
     if (schema.nonEmpty && normalizedPartitionCols.length == schema.length) {
-      failAnalysis("Cannot use all columns for partition columns")
+      throw new AnalysisException(
+        errorClass = "ALL_PARTITION_COLUMNS_NOT_ALLOWED",
+        messageParameters = Map.empty)
     }
 
     schema.filter(f => normalizedPartitionCols.contains(f.name)).map(_.dataType).foreach {
@@ -362,7 +370,7 @@ case class PreprocessTableCreation(catalog: SessionCatalog) extends Rule[Logical
  * table. It also does data type casting and field renaming, to make sure that the columns to be
  * inserted have the correct data type and fields have the correct names.
  */
-object PreprocessTableInsertion extends Rule[LogicalPlan] {
+object PreprocessTableInsertion extends ResolveInsertionBase {
   private def preprocess(
       insert: InsertIntoStatement,
       tblName: String,
@@ -374,11 +382,6 @@ object PreprocessTableInsertion extends Rule[LogicalPlan] {
 
     val staticPartCols = normalizedPartSpec.filter(_._2.isDefined).keySet
     val expectedColumns = insert.table.output.filterNot(a => staticPartCols.contains(a.name))
-
-    if (expectedColumns.length != insert.query.schema.length) {
-      throw QueryCompilationErrors.mismatchedInsertedDataColumnNumberError(
-        tblName, insert, staticPartCols)
-    }
 
     val partitionsTrackedByCatalog = catalogTable.isDefined &&
       catalogTable.get.partitionColumnNames.nonEmpty &&
@@ -392,8 +395,30 @@ object PreprocessTableInsertion extends Rule[LogicalPlan] {
       }
     }
 
-    val newQuery = TableOutputResolver.resolveOutputColumns(
-      tblName, expectedColumns, insert.query, byName = false, conf)
+    // Create a project if this INSERT has a user-specified column list.
+    val hasColumnList = insert.userSpecifiedCols.nonEmpty
+    val query = if (hasColumnList) {
+      createProjectForByNameQuery(tblName, insert)
+    } else {
+      insert.query
+    }
+    val newQuery = try {
+      TableOutputResolver.resolveOutputColumns(
+        tblName, expectedColumns, query, byName = hasColumnList || insert.byName, conf,
+        supportColDefaultValue = true)
+    } catch {
+      case e: AnalysisException if staticPartCols.nonEmpty &&
+        (e.getErrorClass == "INSERT_COLUMN_ARITY_MISMATCH.NOT_ENOUGH_DATA_COLUMNS" ||
+          e.getErrorClass == "INSERT_COLUMN_ARITY_MISMATCH.TOO_MANY_DATA_COLUMNS") =>
+        val newException = e.copy(
+          errorClass = Some("INSERT_PARTITION_COLUMN_ARITY_MISMATCH"),
+          messageParameters = e.messageParameters ++ Map(
+            "tableColumns" -> insert.table.output.map(c => toSQLId(c.name)).mkString(", "),
+            "staticPartCols" -> staticPartCols.toSeq.sorted.map(c => toSQLId(c)).mkString(", ")
+          ))
+        newException.setStackTrace(e.getStackTrace)
+        throw newException
+    }
     if (normalizedPartSpec.nonEmpty) {
       if (normalizedPartSpec.size != partColNames.length) {
         throw QueryCompilationErrors.requestedPartitionsMismatchTablePartitionsError(
@@ -409,7 +434,7 @@ object PreprocessTableInsertion extends Rule[LogicalPlan] {
   }
 
   def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
-    case i @ InsertIntoStatement(table, _, _, query, _, _) if table.resolved && query.resolved =>
+    case i @ InsertIntoStatement(table, _, _, query, _, _, _) if table.resolved && query.resolved =>
       table match {
         case relation: HiveTableRelation =>
           val metadata = relation.tableMeta
@@ -471,8 +496,8 @@ object PreReadCheck extends (LogicalPlan => Unit) {
         val numInputFileBlockSources = o.children.map(checkNumInputFileBlockSources(e, _)).sum
         if (numInputFileBlockSources > 1) {
           e.failAnalysis(
-            errorClass = "_LEGACY_ERROR_TEMP_2302",
-            messageParameters = Map("name" -> e.prettyName))
+            errorClass = "MULTI_SOURCES_UNSUPPORTED_FOR_EXPRESSION",
+            messageParameters = Map("expr" -> toSQLExpr(e)))
         } else {
           numInputFileBlockSources
         }
@@ -486,17 +511,18 @@ object PreReadCheck extends (LogicalPlan => Unit) {
  */
 object PreWriteCheck extends (LogicalPlan => Unit) {
 
-  def failAnalysis(msg: String): Unit = { throw new AnalysisException(msg) }
-
   def apply(plan: LogicalPlan): Unit = {
     plan.foreach {
-      case InsertIntoStatement(l @ LogicalRelation(relation, _, _, _), partition, _, query, _, _) =>
+      case InsertIntoStatement(l @ LogicalRelation(relation, _, _, _), partition,
+          _, query, _, _, _) =>
         // Get all input data source relations of the query.
         val srcRelations = query.collect {
           case LogicalRelation(src, _, _, _) => src
         }
         if (srcRelations.contains(relation)) {
-          failAnalysis("Cannot insert into table that is also being read from.")
+          throw new AnalysisException(
+            errorClass = "UNSUPPORTED_INSERT.READ_FROM",
+            messageParameters = Map("relationId" -> toSQLId(relation.toString)))
         } else {
           // OK
         }
@@ -506,20 +532,49 @@ object PreWriteCheck extends (LogicalPlan => Unit) {
 
           // Right now, we do not support insert into a non-file-based data source table with
           // partition specs.
-          case _: InsertableRelation if partition.nonEmpty =>
-            failAnalysis(s"Insert into a partition is not allowed because $l is not partitioned.")
+          case i: InsertableRelation if partition.nonEmpty =>
+            throw new AnalysisException(
+              errorClass = "UNSUPPORTED_INSERT.NOT_PARTITIONED",
+              messageParameters = Map("relationId" -> toSQLId(i.toString)))
 
-          case _ => failAnalysis(s"$relation does not allow insertion.")
+          case _ =>
+            throw new AnalysisException(
+              errorClass = "UNSUPPORTED_INSERT.NOT_ALLOWED",
+              messageParameters = Map("relationId" -> toSQLId(relation.toString)))
         }
 
-      case InsertIntoStatement(t, _, _, _, _, _)
+      case InsertIntoStatement(t, _, _, _, _, _, _)
         if !t.isInstanceOf[LeafNode] ||
           t.isInstanceOf[Range] ||
           t.isInstanceOf[OneRowRelation] ||
           t.isInstanceOf[LocalRelation] =>
-        failAnalysis(s"Inserting into an RDD-based table is not allowed.")
+        throw new AnalysisException(
+          errorClass = "UNSUPPORTED_INSERT.RDD_BASED",
+          messageParameters = Map.empty)
 
       case _ => // OK
     }
+  }
+}
+
+/**
+ * A rule to qualify relative locations with warehouse path before it breaks in catalog
+ * operation and data reading and writing.
+ *
+ * @param catalog the session catalog
+ */
+case class QualifyLocationWithWarehouse(catalog: SessionCatalog) extends Rule[LogicalPlan] {
+
+  override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperators {
+    case c @ CreateTableV1(tableDesc, _, _) if !c.locationQualifiedOrAbsent =>
+      val qualifiedTableIdent = catalog.qualifyIdentifier(tableDesc.identifier)
+      val loc = tableDesc.storage.locationUri.get
+      val db = qualifiedTableIdent.database.get
+      val newLocation = catalog.makeQualifiedTablePath(loc, db)
+      val newTable = tableDesc.copy(
+        identifier = qualifiedTableIdent,
+        storage = tableDesc.storage.copy(locationUri = Some(newLocation))
+      )
+      c.copy(tableDesc = newTable)
   }
 }

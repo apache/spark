@@ -29,7 +29,7 @@ import scala.reflect.ClassTag
 import com.google.common.collect.{ConcurrentHashMultiset, ImmutableMultiset}
 import com.google.common.util.concurrent.Striped
 
-import org.apache.spark.TaskContext
+import org.apache.spark.{SparkException, TaskContext}
 import org.apache.spark.errors.SparkCoreErrors
 import org.apache.spark.internal.Logging
 
@@ -543,8 +543,9 @@ private[storage] class BlockInfoManager(trackingCacheVisibility: Boolean = false
     logTrace(s"Task $taskAttemptId trying to remove block $blockId")
     blockInfo(blockId) { (info, condition) =>
       if (info.writerTask != taskAttemptId) {
-        throw new IllegalStateException(
-          s"Task $taskAttemptId called remove() on block $blockId without a write lock")
+        throw SparkException.internalError(
+          s"Task $taskAttemptId called remove() on block $blockId without a write lock",
+          category = "STORAGE")
       } else {
         invisibleRDDBlocks.synchronized {
           blockInfoWrappers.remove(blockId)

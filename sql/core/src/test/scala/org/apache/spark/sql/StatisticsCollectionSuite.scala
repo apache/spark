@@ -851,11 +851,13 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
   }
 
   test("SPARK-43383: Add rowCount statistics to LocalRelation") {
-    val optimizedPlan = spark.sql("select * from values(1),(2),(3),(4),(5),(6)")
-      .queryExecution.optimizedPlan
-    assert(optimizedPlan.isInstanceOf[LocalRelation])
+    withSQLConf("spark.sql.test.localRelationRowCount" -> "true") {
+      val optimizedPlan = spark.sql("select * from values(1),(2),(3),(4),(5),(6)")
+        .queryExecution.optimizedPlan
+      assert(optimizedPlan.isInstanceOf[LocalRelation])
 
-    val stats = optimizedPlan.stats
-    assert(stats.rowCount.isDefined && stats.rowCount.get == 6)
+      val stats = optimizedPlan.stats
+      assert(stats.rowCount.isDefined && stats.rowCount.get == 6)
+    }
   }
 }

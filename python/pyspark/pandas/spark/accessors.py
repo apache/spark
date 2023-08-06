@@ -30,7 +30,7 @@ from pyspark.pandas._typing import IndexOpsLike
 from pyspark.pandas.internal import InternalField
 
 # For Supporting Spark Connect
-from pyspark.sql.utils import is_remote
+from pyspark.sql.utils import get_column_class, get_dataframe_class
 
 if TYPE_CHECKING:
     from pyspark.sql._typing import OptionalPrimitiveType
@@ -105,7 +105,7 @@ class SparkIndexOpsMethods(Generic[IndexOpsLike], metaclass=ABCMeta):
         2    1.098612
         Name: a, dtype: float64
 
-        >>> df.index.spark.transform(lambda c: c + 10)
+        >>> df.index.spark.transform(lambda c: c + 10)  # doctest: +SKIP
         Int64Index([10, 11, 12], dtype='int64')
 
         >>> df.a.spark.transform(lambda c: c + df.b.spark.column)
@@ -119,12 +119,7 @@ class SparkIndexOpsMethods(Generic[IndexOpsLike], metaclass=ABCMeta):
         if isinstance(self._data, MultiIndex):
             raise NotImplementedError("MultiIndex does not support spark.transform yet.")
         output = func(self._data.spark.column)
-        if is_remote():
-            from pyspark.sql.connect.column import Column as ConnectColumn
-
-            Column = ConnectColumn
-        else:
-            Column = PySparkColumn  # type: ignore[assignment]
+        Column = get_column_class()
         if not isinstance(output, Column):
             raise ValueError(
                 "The output of the function [%s] should be of a "
@@ -200,12 +195,7 @@ class SparkSeriesMethods(SparkIndexOpsMethods["ps.Series"]):
         from pyspark.pandas.internal import HIDDEN_COLUMNS
 
         output = func(self._data.spark.column)
-        if is_remote():
-            from pyspark.sql.connect.column import Column as ConnectColumn
-
-            Column = ConnectColumn
-        else:
-            Column = PySparkColumn  # type: ignore[assignment]
+        Column = get_column_class()
         if not isinstance(output, Column):
             raise ValueError(
                 "The output of the function [%s] should be of a "
@@ -291,13 +281,14 @@ class SparkIndexMethods(SparkIndexOpsMethods["ps.Index"]):
 
         Examples
         --------
+        >>> import pyspark.pandas as ps
         >>> idx = ps.Index([1, 2, 3])
-        >>> idx
+        >>> idx  # doctest: +SKIP
         Int64Index([1, 2, 3], dtype='int64')
 
         The analyzed one should return the same value.
 
-        >>> idx.spark.analyzed
+        >>> idx.spark.analyzed  # doctest: +SKIP
         Int64Index([1, 2, 3], dtype='int64')
 
         However, it won't work with the same anchor Index.
@@ -308,7 +299,7 @@ class SparkIndexMethods(SparkIndexOpsMethods["ps.Index"]):
         ValueError: ... enable 'compute.ops_on_diff_frames' option.
 
         >>> with ps.option_context('compute.ops_on_diff_frames', True):
-        ...     (idx + idx.spark.analyzed).sort_values()
+        ...     (idx + idx.spark.analyzed).sort_values()  # doctest: +SKIP
         Int64Index([2, 4, 6], dtype='int64')
         """
         from pyspark.pandas.frame import DataFrame
@@ -951,12 +942,7 @@ class SparkFrameMethods:
         2  3      1
         """
         output = func(self.frame(index_col))
-        if is_remote():
-            from pyspark.sql.connect.dataframe import DataFrame as ConnectDataFrame
-
-            SparkDataFrame = ConnectDataFrame
-        else:
-            SparkDataFrame = PySparkDataFrame  # type: ignore[assignment]
+        SparkDataFrame = get_dataframe_class()
         if not isinstance(output, SparkDataFrame):
             raise ValueError(
                 "The output of the function [%s] should be of a "

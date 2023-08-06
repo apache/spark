@@ -24,8 +24,7 @@ import org.apache.commons.lang3.{JavaVersion, SystemUtils}
 import org.apache.spark.SparkUpgradeException
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils._
-import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.internal.SQLConf.LegacyBehaviorPolicy
+import org.apache.spark.sql.internal.{LegacyBehaviorPolicy, SQLConf}
 import org.apache.spark.unsafe.types.UTF8String
 
 class TimestampFormatterSuite extends DatetimeFormatterSuite {
@@ -412,7 +411,7 @@ class TimestampFormatterSuite extends DatetimeFormatterSuite {
     assert(formatter.format(date(1970, 1, 3)) == "03")
     assert(formatter.format(date(1970, 4, 9)) == "99")
 
-    if (System.getProperty("java.version").split("\\D+")(0).toInt < 9) {
+    if (SystemUtils.isJavaVersionAtMost(JavaVersion.JAVA_1_8)) {
       // https://bugs.openjdk.java.net/browse/JDK-8079628
       intercept[SparkUpgradeException] {
         formatter.format(date(1970, 4, 10))
@@ -471,5 +470,41 @@ class TimestampFormatterSuite extends DatetimeFormatterSuite {
     assert(formatter.parseOptional("abc").isEmpty)
     assert(
       formatter.parseWithoutTimeZoneOptional("abc", false).isEmpty)
+  }
+
+  test("SPARK-39280: support returning optional parse results in the iso8601 formatter") {
+    val formatter = new Iso8601TimestampFormatter(
+      "yyyy-MM-dd HH:mm:ss.SSSS",
+      locale = DateFormatter.defaultLocale,
+      legacyFormat = LegacyDateFormats.SIMPLE_DATE_FORMAT,
+      isParsing = true, zoneId = DateTimeTestUtils.LA)
+    assert(formatter.parseOptional("9999-12-31 23:59:59.9990").contains(253402329599999000L))
+    assert(formatter.parseWithoutTimeZoneOptional("9999-12-31 23:59:59.9990", false)
+      .contains(253402300799999000L))
+    assert(formatter.parseOptional("abc").isEmpty)
+    assert(formatter.parseWithoutTimeZoneOptional("abc", false).isEmpty)
+
+    assert(formatter.parseOptional("2012-00-65 23:59:59.9990").isEmpty)
+    assert(formatter.parseWithoutTimeZoneOptional("2012-00-65 23:59:59.9990", false)
+      .isEmpty)
+  }
+
+  test("SPARK-39281: support returning optional parse results in the legacy formatter") {
+    val fastFormatter = new LegacyFastTimestampFormatter(
+      "yyyy-MM-dd HH:mm:ss.SSSS",
+      locale = DateFormatter.defaultLocale,
+      zoneId = DateTimeTestUtils.UTC)
+
+    val simpleFormatter = new LegacySimpleTimestampFormatter(
+      "yyyy-MM-dd HH:mm:ss.SSSS",
+      locale = DateFormatter.defaultLocale,
+      zoneId = DateTimeTestUtils.UTC)
+
+    assert(fastFormatter.parseOptional("2023-12-31 23:59:59.9990").contains(1704067199999000L))
+    assert(fastFormatter.parseOptional("abc").isEmpty)
+
+    assert(simpleFormatter.parseOptional("2023-12-31 23:59:59.9990").contains(1704067208990000L))
+    assert(simpleFormatter.parseOptional("abc").isEmpty)
+
   }
 }

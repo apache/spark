@@ -142,7 +142,7 @@ Filter (min(a)#x < max(a)#x)
 -- !query
 SELECT a FROM test_having HAVING min(a) < max(a)
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "MISSING_GROUP_BY",
   "sqlState" : "42803",
@@ -159,7 +159,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 SELECT 1 AS one FROM test_having HAVING a > 1
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
   "sqlState" : "42703",
@@ -208,4 +208,5 @@ Filter (one#x < 2)
 -- !query
 DROP TABLE test_having
 -- !query analysis
-DropTableCommand `spark_catalog`.`default`.`test_having`, false, false, false
+DropTable false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.test_having

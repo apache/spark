@@ -89,6 +89,11 @@ ERROR_CLASSES_JSON = """
       "Cannot convert <from_type> into <to_type>."
     ]
   },
+  "CANNOT_DETERMINE_TYPE": {
+    "message": [
+      "Some of types cannot be determined after inferring."
+    ]
+  },
   "CANNOT_GET_BATCH_ID": {
     "message": [
       "Could not get batch id from <obj_name>."
@@ -159,6 +164,63 @@ ERROR_CLASSES_JSON = """
       "Remote client cannot create a SparkContext. Create SparkSession instead."
     ]
   },
+  "DIFFERENT_PANDAS_DATAFRAME" : {
+    "message" : [
+      "DataFrames are not almost equal:",
+      "Left:",
+      "<left>",
+      "<left_dtype>",
+      "Right:",
+      "<right>",
+      "<right_dtype>"
+    ]
+  },
+  "DIFFERENT_PANDAS_INDEX" : {
+    "message" : [
+      "Indices are not almost equal:",
+      "Left:",
+      "<left>",
+      "<left_dtype>",
+      "Right:",
+      "<right>",
+      "<right_dtype>"
+    ]
+  },
+  "DIFFERENT_PANDAS_MULTIINDEX" : {
+    "message" : [
+      "MultiIndices are not almost equal:",
+      "Left:",
+      "<left>",
+      "<left_dtype>",
+      "Right:",
+      "<right>",
+      "<right_dtype>"
+    ]
+  },
+  "DIFFERENT_PANDAS_SERIES" : {
+    "message" : [
+      "Series are not almost equal:",
+      "Left:",
+      "<left>",
+      "<left_dtype>",
+      "Right:",
+      "<right>",
+      "<right_dtype>"
+    ]
+  },
+  "DIFFERENT_ROWS" : {
+    "message" : [
+      "<error_msg>"
+    ]
+  },
+  "DIFFERENT_SCHEMA" : {
+    "message" : [
+      "Schemas do not match.",
+      "--- actual",
+      "+++ expected",
+      "<error_msg>"
+    ]
+  },
   "DISALLOWED_TYPE_FOR_CONTAINER" : {
     "message" : [
       "Argument `<arg_name>`(type: <arg_type>) should only contain a type in [<allowed_types>], got <return_type>"
@@ -183,6 +245,11 @@ ERROR_CLASSES_JSON = """
     "message" : [
       "`spark.python.profile` or `spark.python.profile.memory` configuration",
       " must be set to `true` to enable Python profile."
+    ]
+  },
+  "INVALID_ARROW_UDTF_RETURN_TYPE" : {
+    "message" : [
+      "The return type of the arrow-optimized Python UDTF should be of type 'pandas.DataFrame', but the function returned a value of type <type_name> with value: <value>."
     ]
   },
   "INVALID_BROADCAST_OPERATION": {
@@ -240,9 +307,39 @@ ERROR_CLASSES_JSON = """
       "StructField does not have typeName. Use typeName on its type explicitly instead."
     ]
   },
+  "INVALID_TYPE_DF_EQUALITY_ARG" : {
+    "message" : [
+      "Expected type <expected_type> for `<arg_name>` but got type <actual_type>."
+    ]
+  },
   "INVALID_UDF_EVAL_TYPE" : {
     "message" : [
       "Eval type for UDF must be <eval_type>."
+    ]
+  },
+  "INVALID_UDTF_BOTH_RETURN_TYPE_AND_ANALYZE" : {
+    "message" : [
+      "The UDTF '<name>' is invalid. It has both its return type and an 'analyze' attribute. Please make it have one of either the return type or the 'analyze' static method in '<name>' and try again."
+    ]
+  },
+  "INVALID_UDTF_EVAL_TYPE" : {
+    "message" : [
+      "The eval type for the UDTF '<name>' is invalid. It must be one of <eval_type>."
+    ]
+  },
+  "INVALID_UDTF_HANDLER_TYPE" : {
+    "message" : [
+      "The UDTF is invalid. The function handler must be a class, but got '<type>'. Please provide a class as the function handler."
+    ]
+  },
+  "INVALID_UDTF_NO_EVAL" : {
+    "message" : [
+      "The UDTF '<name>' is invalid. It does not implement the required 'eval' method. Please implement the 'eval' method in '<name>' and try again."
+    ]
+  },
+  "INVALID_UDTF_RETURN_TYPE" : {
+    "message" : [
+      "The UDTF '<name>' is invalid. It does not specify its return type or implement the required 'analyze' static method. Please specify the return type or implement the 'analyze' static method in '<name>' and try again."
     ]
   },
   "INVALID_WHEN_USAGE": {
@@ -470,6 +567,11 @@ ERROR_CLASSES_JSON = """
       "Argument `<arg_name>` should be a list[str], got <arg_type>."
     ]
   },
+  "NOT_LIST_OR_NONE_OR_STRUCT" : {
+    "message" : [
+      "Argument `<arg_name>` should be a list, None or StructType, got <arg_type>."
+    ]
+  },
   "NOT_LIST_OR_STR_OR_TUPLE" : {
     "message" : [
       "Argument `<arg_name>` should be a list, str or tuple, got <arg_type>."
@@ -576,9 +678,24 @@ ERROR_CLASSES_JSON = """
       "Result vector from pandas_udf was not the required length: expected <expected>, got <actual>."
     ]
   },
+  "SESSION_ALREADY_EXIST" : {
+    "message" : [
+      "Cannot start a remote Spark session because there is a regular Spark session already running."
+    ]
+  },
+  "SESSION_NOT_SAME" : {
+    "message" : [
+      "Both Datasets must belong to the same SparkSession."
+    ]
+  },
   "SESSION_OR_CONTEXT_EXISTS" : {
     "message" : [
       "There should not be an existing Spark Session or Spark Context."
+    ]
+  },
+  "SHOULD_NOT_DATAFRAME": {
+    "message": [
+      "Argument `<arg_name>` should not be a DataFrame."
     ]
   },
   "SLICE_WITH_STEP" : {
@@ -604,6 +721,41 @@ ERROR_CLASSES_JSON = """
   "TOO_MANY_VALUES" : {
     "message" : [
       "Expected <expected> values for `<item>`, got <actual>."
+    ]
+  },
+  "UDF_RETURN_TYPE" : {
+    "message" : [
+      "Return type of the user-defined function should be <expected>, but is <actual>."
+    ]
+  },
+  "UDTF_ARROW_TYPE_CAST_ERROR" : {
+    "message" : [
+      "Cannot convert the output value of the column '<col_name>' with type '<col_type>' to the specified return type of the column: '<arrow_type>'. Please check if the data types match and try again."
+    ]
+  },
+  "UDTF_EXEC_ERROR" : {
+    "message" : [
+      "User defined table function encountered an error in the '<method_name>' method: <error>"
+    ]
+  },
+  "UDTF_RETURN_NOT_ITERABLE" : {
+    "message" : [
+      "The return value of the UDTF is invalid. It should be an iterable (e.g., generator or list), but got '<type>'. Please make sure that the UDTF returns one of these types."
+    ]
+  },
+  "UDTF_RETURN_SCHEMA_MISMATCH" : {
+    "message" : [
+      "The number of columns in the result does not match the specified schema. Expected column count: <expected>, Actual column count: <actual>. Please make sure the values returned by the function have the same number of columns as specified in the output schema."
+    ]
+  },
+  "UDTF_RETURN_TYPE_MISMATCH" : {
+    "message" : [
+      "Mismatch in return type for the UDTF '<name>'. Expected a 'StructType', but got '<return_type>'. Please ensure the return type is a correctly formatted StructType."
+    ]
+  },
+  "UDTF_SERIALIZATION_ERROR" : {
+    "message" : [
+      "Cannot serialize the UDTF '<name>': <message>"
     ]
   },
   "UNEXPECTED_RESPONSE_FROM_SERVER" : {

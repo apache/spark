@@ -26,6 +26,7 @@ import "spark/connect/catalog.proto";
 
 option java_multiple_files = true;
 option java_package = "org.apache.spark.connect.proto";
+option go_package = "internal/generated";
 
 // The main [[Relation]] type. Fundamentally, a relation is a typed container
 // that has exactly one explicit relation type set.
@@ -69,6 +70,8 @@ message Relation {
     ApplyInPandasWithState apply_in_pandas_with_state = 34;
     HtmlString html_string = 35;
     CachedLocalRelation cached_local_relation = 36;
+    CachedRemoteRelation cached_remote_relation = 37;
+    CommonInlineUserDefinedTableFunction common_inline_user_defined_table_function = 38;
 
     // NA functions
     NAFill fill_na = 90;
@@ -114,6 +117,9 @@ message SQL {
 
   // (Optional) A map of parameter names to literal expressions.
   map<string, Expression.Literal> args = 2;
+
+  // (Optional) A sequence of literal expressions for positional parameters in the SQL query text.
+  repeated Expression.Literal pos_args = 3;
 }
 
 // Relation that reads from a file / table or other data source. Does not have additional
@@ -219,6 +225,16 @@ message Join {
     JOIN_TYPE_LEFT_ANTI = 5;
     JOIN_TYPE_LEFT_SEMI = 6;
     JOIN_TYPE_CROSS = 7;
+  }
+
+  // (Optional) Only used by joinWith. Set the left and right join data types.
+  optional JoinDataType join_data_type = 6;
+
+  message JoinDataType {
+    // If the left data type is a struct.
+    bool is_left_struct = 1;
+    // If the right data type is a struct.
+    bool is_right_struct = 2;
   }
 }
 
@@ -390,8 +406,14 @@ message CachedLocalRelation {
   // (Required) An identifier of the Spark SQL session in which the user created the local relation.
   string sessionId = 2;
 
-  // (Required) A sha-256 hash of the serialized local relation.
+  // (Required) A sha-256 hash of the serialized local relation in proto, see LocalRelation.
   string hash = 3;
+}
+
+// Represents a remote relation that has been cached on server.
+message CachedRemoteRelation {
+  // (Required) ID of the remote related (assigned by the service).
+  string relation_id = 1;
 }
 
 // Relation of type [[Sample]] that samples a fraction of the dataset.
@@ -856,6 +878,22 @@ message GroupMap {
 
   // (Optional) Expressions for sorting. Only used by Scala Sorted Group Map API.
   repeated Expression sorting_expressions = 4;
+
+  // Below fields are only used by (Flat)MapGroupsWithState
+  // (Optional) Input relation for initial State.
+  Relation initial_input = 5;
+
+  // (Optional) Expressions for grouping keys of the initial state input relation.
+  repeated Expression initial_grouping_expressions = 6;
+
+  // (Optional) True if MapGroupsWithState, false if FlatMapGroupsWithState.
+  optional bool is_map_groups_with_state = 7;
+
+  // (Optional) The output mode of the function.
+  optional string output_mode = 8;
+
+  // (Optional) Timeout configuration for groups that do not receive data for a while.
+  optional string timeout_conf = 9;
 }
 
 message CoGroupMap {
@@ -902,6 +940,36 @@ message ApplyInPandasWithState {
 
   // (Required) Timeout configuration for groups that do not receive data for a while.
   string timeout_conf = 7;
+}
+
+message CommonInlineUserDefinedTableFunction {
+  // (Required) Name of the user-defined table function.
+  string function_name = 1;
+
+  // (Optional) Whether the user-defined table function is deterministic.
+  bool deterministic = 2;
+
+  // (Optional) Function input arguments. Empty arguments are allowed.
+  repeated Expression arguments = 3;
+
+  // (Required) Type of the user-defined table function.
+  oneof function {
+    PythonUDTF python_udtf = 4;
+  }
+}
+
+message PythonUDTF {
+  // (Optional) Return type of the Python UDTF.
+  optional DataType return_type = 1;
+
+  // (Required) EvalType of the Python UDTF.
+  int32 eval_type = 2;
+
+  // (Required) The encoded commands of the Python UDTF.
+  bytes command = 3;
+
+  // (Required) Python version being used in the client.
+  string python_ver = 4;
 }
 
 // Collect arbitrary (named) metrics from a dataset.

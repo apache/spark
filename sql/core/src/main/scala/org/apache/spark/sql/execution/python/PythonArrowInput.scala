@@ -23,7 +23,7 @@ import org.apache.arrow.vector.VectorSchemaRoot
 import org.apache.arrow.vector.ipc.ArrowStreamWriter
 
 import org.apache.spark.{SparkEnv, TaskContext}
-import org.apache.spark.api.python.{BasePythonRunner, PythonRDD}
+import org.apache.spark.api.python.{BasePythonRunner, ChainedPythonFunctions, PythonRDD}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.execution.arrow.ArrowWriter
 import org.apache.spark.sql.execution.metric.SQLMetric
@@ -44,6 +44,8 @@ private[python] trait PythonArrowInput[IN] { self: BasePythonRunner[IN, _] =>
 
   protected val errorOnDuplicatedFieldNames: Boolean
 
+  protected val largeVarTypes: Boolean
+
   protected def pythonMetrics: Map[String, SQLMetric]
 
   protected def writeIteratorToArrowStream(
@@ -51,6 +53,12 @@ private[python] trait PythonArrowInput[IN] { self: BasePythonRunner[IN, _] =>
       writer: ArrowStreamWriter,
       dataOut: DataOutputStream,
       inputIterator: Iterator[IN]): Unit
+
+  protected def writeUDF(
+      dataOut: DataOutputStream,
+      funcs: Seq[ChainedPythonFunctions],
+      argOffsets: Array[Array[Int]]): Unit =
+    PythonUDFRunner.writeUDFs(dataOut, funcs, argOffsets)
 
   protected def handleMetadataBeforeExec(stream: DataOutputStream): Unit = {
     // Write config for the worker as a number of key -> value pairs of strings
@@ -71,11 +79,12 @@ private[python] trait PythonArrowInput[IN] { self: BasePythonRunner[IN, _] =>
 
       protected override def writeCommand(dataOut: DataOutputStream): Unit = {
         handleMetadataBeforeExec(dataOut)
-        PythonUDFRunner.writeUDFs(dataOut, funcs, argOffsets)
+        writeUDF(dataOut, funcs, argOffsets)
       }
 
       protected override def writeIteratorToStream(dataOut: DataOutputStream): Unit = {
-        val arrowSchema = ArrowUtils.toArrowSchema(schema, timeZoneId, errorOnDuplicatedFieldNames)
+        val arrowSchema = ArrowUtils.toArrowSchema(
+          schema, timeZoneId, errorOnDuplicatedFieldNames, largeVarTypes)
         val allocator = ArrowUtils.rootAllocator.newChildAllocator(
           s"stdout writer for $pythonExec", 0, Long.MaxValue)
         val root = VectorSchemaRoot.create(arrowSchema, allocator)

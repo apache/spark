@@ -20,17 +20,18 @@ package org.apache.spark.sql.catalyst.analysis
 import scala.collection.mutable
 
 import org.apache.spark.sql.catalyst.ProjectingInternalRow
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, ExprId, V2ExpressionUtils}
-import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeReference, AttributeSet, Expression, ExprId, Literal, V2ExpressionUtils}
+import org.apache.spark.sql.catalyst.plans.logical.{Assignment, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.catalyst.util.RowDeltaUtils.ORIGINAL_ROW_ID_VALUE_PREFIX
+import org.apache.spark.sql.catalyst.types.DataTypeUtils
+import org.apache.spark.sql.catalyst.util.RowDeltaUtils._
 import org.apache.spark.sql.catalyst.util.WriteDeltaProjections
 import org.apache.spark.sql.connector.catalog.SupportsRowLevelOperations
+import org.apache.spark.sql.connector.expressions.FieldReference
 import org.apache.spark.sql.connector.write.{RowLevelOperation, RowLevelOperationInfoImpl, RowLevelOperationTable, SupportsDelta}
 import org.apache.spark.sql.connector.write.RowLevelOperation.Command
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
-import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 trait RewriteRowLevelCommand extends Rule[LogicalPlan] {
@@ -91,6 +92,48 @@ trait RewriteRowLevelCommand extends Rule[LogicalPlan] {
     rowIdAttrs
   }
 
+  protected def resolveAttrRef(name: String, plan: LogicalPlan): AttributeReference = {
+    V2ExpressionUtils.resolveRef[AttributeReference](FieldReference(name), plan)
+  }
+
+  protected def deltaDeleteOutput(
+      rowAttrs: Seq[Attribute],
+      rowIdAttrs: Seq[Attribute],
+      metadataAttrs: Seq[Attribute],
+      originalRowIdValues: Seq[Expression] = Seq.empty): Seq[Expression] = {
+    val rowValues = buildDeltaDeleteRowValues(rowAttrs, rowIdAttrs)
+    Seq(Literal(DELETE_OPERATION)) ++ rowValues ++ metadataAttrs ++ originalRowIdValues
+  }
+
+  private def buildDeltaDeleteRowValues(
+      rowAttrs: Seq[Attribute],
+      rowIdAttrs: Seq[Attribute]): Seq[Expression] = {
+
+    // nullify all row attrs that don't belong to row ID
+    val rowIdAttSet = AttributeSet(rowIdAttrs)
+    rowAttrs.map {
+      case attr if rowIdAttSet.contains(attr) => attr
+      case attr => Literal(null, attr.dataType)
+    }
+  }
+
+  protected def deltaInsertOutput(
+      assignments: Seq[Assignment],
+      metadataAttrs: Seq[Attribute],
+      originalRowIdValues: Seq[Expression] = Seq.empty): Seq[Expression] = {
+    val rowValues = assignments.map(_.value)
+    val extraNullValues = (metadataAttrs ++ originalRowIdValues).map(e => Literal(null, e.dataType))
+    Seq(Literal(INSERT_OPERATION)) ++ rowValues ++ extraNullValues
+  }
+
+  protected def deltaUpdateOutput(
+      assignments: Seq[Assignment],
+      metadataAttrs: Seq[Attribute],
+      originalRowIdValues: Seq[Expression]): Seq[Expression] = {
+    val rowValues = assignments.map(_.value)
+    Seq(Literal(UPDATE_OPERATION)) ++ rowValues ++ metadataAttrs ++ originalRowIdValues
+  }
+
   protected def buildWriteDeltaProjections(
       plan: LogicalPlan,
       rowAttrs: Seq[Attribute],
@@ -119,7 +162,7 @@ trait RewriteRowLevelCommand extends Rule[LogicalPlan] {
       attrs: Seq[Attribute]): ProjectingInternalRow = {
 
     val colOrdinals = attrs.map(attr => findColOrdinal(plan, attr.name))
-    val schema = StructType.fromAttributes(attrs)
+    val schema = DataTypeUtils.fromAttributes(attrs)
     ProjectingInternalRow(schema, colOrdinals)
   }
 
@@ -133,11 +176,43 @@ trait RewriteRowLevelCommand extends Rule[LogicalPlan] {
       val originalValueIndex = findColOrdinal(plan, ORIGINAL_ROW_ID_VALUE_PREFIX + attr.name)
       if (originalValueIndex != -1) originalValueIndex else findColOrdinal(plan, attr.name)
     }
-    val schema = StructType.fromAttributes(rowIdAttrs)
+    val schema = DataTypeUtils.fromAttributes(rowIdAttrs)
     ProjectingInternalRow(schema, colOrdinals)
   }
 
   private def findColOrdinal(plan: LogicalPlan, name: String): Int = {
     plan.output.indexWhere(attr => conf.resolver(attr.name, name))
+  }
+
+  protected def buildOriginalRowIdValues(
+      rowIdAttrs: Seq[Attribute],
+      assignments: Seq[Assignment]): Seq[Alias] = {
+    val rowIdAttrSet = AttributeSet(rowIdAttrs)
+    assignments.flatMap { assignment =>
+      val key = assignment.key.asInstanceOf[Attribute]
+      val value = assignment.value
+      if (rowIdAttrSet.contains(key) && !key.semanticEquals(value)) {
+        Some(Alias(key, ORIGINAL_ROW_ID_VALUE_PREFIX + key.name)())
+      } else {
+        None
+      }
+    }
+  }
+
+  // generates output attributes with fresh expr IDs and correct nullability for nodes like Expand
+  // and MergeRows where there are multiple outputs for each input row
+  protected def generateExpandOutput(
+      attrs: Seq[Attribute],
+      outputs: Seq[Seq[Expression]]): Seq[Attribute] = {
+
+    // build a correct nullability map for output attributes
+    // an attribute is nullable if at least one output may produce null
+    val nullabilityMap = attrs.indices.map { index =>
+      index -> outputs.exists(output => output(index).nullable)
+    }.toMap
+
+    attrs.zipWithIndex.map { case (attr, index) =>
+      AttributeReference(attr.name, attr.dataType, nullabilityMap(index), attr.metadata)()
+    }
   }
 }

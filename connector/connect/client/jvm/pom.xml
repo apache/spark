@@ -22,7 +22,7 @@
   <parent>
     <groupId>org.apache.spark</groupId>
     <artifactId>spark-parent_2.12</artifactId>
-    <version>3.5.0-SNAPSHOT</version>
+    <version>4.0.0-SNAPSHOT</version>
     <relativePath>../../../../pom.xml</relativePath>
   </parent>
 
@@ -32,9 +32,6 @@
   <url>https://spark.apache.org/</url>
   <properties>
     <sbt.project.name>connect-client-jvm</sbt.project.name>
-    <guava.version>31.0.1-jre</guava.version>
-    <guava.failureaccess.version>1.0.1</guava.failureaccess.version>
-    <mima.version>1.1.0</mima.version>
   </properties>
 
   <dependencies>
@@ -49,29 +46,26 @@
         </exclusion>
       </exclusions>
     </dependency>
-    <!--TODO: fix the dependency once the catalyst refactoring is done-->
     <dependency>
       <groupId>org.apache.spark</groupId>
-      <artifactId>spark-catalyst_${scala.binary.version}</artifactId>
+      <artifactId>spark-sql-api_${scala.binary.version}</artifactId>
       <version>${project.version}</version>
       <scope>provided</scope>
-      <exclusions>
-        <exclusion>
-          <groupId>com.google.guava</groupId>
-          <artifactId>guava</artifactId>
-        </exclusion>
-      </exclusions>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.spark</groupId>
+      <artifactId>spark-sketch_${scala.binary.version}</artifactId>
+      <version>${project.version}</version>
     </dependency>
     <dependency>
       <groupId>com.google.protobuf</groupId>
       <artifactId>protobuf-java</artifactId>
-      <version>${protobuf.version}</version>
       <scope>compile</scope>
     </dependency>
     <dependency>
       <groupId>com.google.guava</groupId>
       <artifactId>guava</artifactId>
-      <version>${guava.version}</version>
+      <version>${connect.guava.version}</version>
       <scope>compile</scope>
     </dependency>
     <dependency>
@@ -100,12 +94,6 @@
       <artifactId>ammonite_${scala.version}</artifactId>
       <version>${ammonite.version}</version>
       <scope>provided</scope>
-      <exclusions>
-        <exclusion>
-          <groupId>org.scala-lang.modules</groupId>
-          <artifactId>scala-xml_${scala.binary.version}</artifactId>
-        </exclusion>
-      </exclusions>
     </dependency>
     <dependency>
       <groupId>org.apache.spark</groupId>
@@ -139,6 +127,7 @@
     </dependency>
   </dependencies>
   <build>
+    <outputDirectory>target/scala-${scala.binary.version}/classes</outputDirectory>
     <testOutputDirectory>target/scala-${scala.binary.version}/test-classes</testOutputDirectory>
     <plugins>
       <!-- Shade all Guava / Protobuf / Netty dependencies of this build -->
@@ -164,6 +153,7 @@
               <include>org.codehaus.mojo:*</include>
               <include>org.checkerframework:*</include>
               <include>org.apache.spark:spark-connect-common_${scala.binary.version}</include>
+              <include>org.apache.spark:spark-common-utils_${scala.binary.version}</include>
             </includes>
           </artifactSet>
           <relocations>
@@ -219,6 +209,24 @@
             <goals>
               <goal>test-jar</goal>
             </goals>
+          </execution>
+        </executions>
+      </plugin>
+      <plugin>
+        <groupId>org.codehaus.mojo</groupId>
+        <artifactId>build-helper-maven-plugin</artifactId>
+        <executions>
+          <execution>
+            <id>add-sources</id>
+            <phase>generate-sources</phase>
+            <goals>
+              <goal>add-source</goal>
+            </goals>
+            <configuration>
+              <sources>
+                <source>src/main/scala-${scala.binary.version}</source>
+              </sources>
+            </configuration>
           </execution>
         </executions>
       </plugin>

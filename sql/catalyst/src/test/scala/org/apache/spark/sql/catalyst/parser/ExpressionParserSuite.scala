@@ -27,6 +27,7 @@ import org.apache.spark.sql.catalyst.FunctionIdentifier
 import org.apache.spark.sql.catalyst.analysis.{UnresolvedAttribute, _}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.{First, Last}
+import org.apache.spark.sql.catalyst.plans.logical.{OneRowRelation, Project}
 import org.apache.spark.sql.catalyst.util.{DateTimeTestUtils, IntervalUtils}
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.internal.SQLConf
@@ -193,14 +194,13 @@ class ExpressionParserSuite extends AnalysisTest {
   }
 
   test("like escape expressions") {
-    val message = "Escape string must contain only one character."
     assertEqual("a like 'pattern%' escape '#'", $"a".like("pattern%", '#'))
     assertEqual("a like 'pattern%' escape '\"'", $"a".like("pattern%", '\"'))
 
     checkError(
       exception = parseException("a like 'pattern%' escape '##'"),
-      errorClass = "_LEGACY_ERROR_TEMP_0017",
-      parameters = Map.empty,
+      errorClass = "INVALID_ESC",
+      parameters = Map("invalidEscape" -> "'##'"),
       context = ExpectedContext(
         fragment = "like 'pattern%' escape '##'",
         start = 2,
@@ -208,8 +208,8 @@ class ExpressionParserSuite extends AnalysisTest {
 
     checkError(
       exception = parseException("a like 'pattern%' escape ''"),
-      errorClass = "_LEGACY_ERROR_TEMP_0017",
-      parameters = Map.empty,
+      errorClass = "INVALID_ESC",
+      parameters = Map("invalidEscape" -> "''"),
       context = ExpectedContext(
         fragment = "like 'pattern%' escape ''",
         start = 2,
@@ -220,8 +220,8 @@ class ExpressionParserSuite extends AnalysisTest {
 
     checkError(
       exception = parseException("a not like 'pattern%' escape '\"/'"),
-      errorClass = "_LEGACY_ERROR_TEMP_0017",
-      parameters = Map.empty,
+      errorClass = "INVALID_ESC",
+      parameters = Map("invalidEscape" -> "'\"/'"),
       context = ExpectedContext(
         fragment = "not like 'pattern%' escape '\"/'",
         start = 2,
@@ -229,8 +229,8 @@ class ExpressionParserSuite extends AnalysisTest {
 
     checkError(
       exception = parseException("a not like 'pattern%' escape ''"),
-      errorClass = "_LEGACY_ERROR_TEMP_0017",
-      parameters = Map.empty,
+      errorClass = "INVALID_ESC",
+      parameters = Map("invalidEscape" -> "''"),
       context = ExpectedContext(
         fragment = "not like 'pattern%' escape ''",
         start = 2,
@@ -328,6 +328,23 @@ class ExpressionParserSuite extends AnalysisTest {
       exception = parseException("foo(a x)"),
       errorClass = "PARSE_SYNTAX_ERROR",
       parameters = Map("error" -> "'x'", "hint" -> ": extra input 'x'"))
+  }
+
+  test("function expressions with named arguments") {
+    assertEqual("encode(value => 'abc', charset => 'utf-8')",
+      $"encode".function(NamedArgumentExpression("value", Literal("abc")),
+      NamedArgumentExpression("charset", Literal("utf-8"))))
+    assertEqual("encode('abc', charset => 'utf-8')",
+      $"encode".function(Literal("abc"), NamedArgumentExpression("charset", Literal("utf-8"))))
+    assertEqual("encode(charset => 'utf-8', 'abc')",
+      $"encode".function(NamedArgumentExpression("charset", Literal("utf-8")), Literal("abc")))
+    assertEqual("encode('abc', charset => 'utf' || '-8')",
+      $"encode".function(Literal("abc"), NamedArgumentExpression("charset",
+        Concat(Literal("utf") :: Literal("-8") :: Nil))))
+    val unresolvedAlias = Project(Seq(UnresolvedAlias(Literal("1"))), OneRowRelation())
+    assertEqual("encode(value => ((select '1')), charset => 'utf-8')",
+      $"encode".function(NamedArgumentExpression("value", ScalarSubquery(plan = unresolvedAlias)),
+        NamedArgumentExpression("charset", Literal("utf-8"))))
   }
 
   private def lv(s: Symbol) = UnresolvedNamedLambdaVariable(Seq(s.name))
@@ -731,7 +748,7 @@ class ExpressionParserSuite extends AnalysisTest {
     assertEqual("10Y", Literal(10.toByte))
     checkError(
       exception = parseException("1000Y"),
-      errorClass = "_LEGACY_ERROR_TEMP_0023",
+      errorClass = "INVALID_NUMERIC_LITERAL_RANGE",
       parameters = Map(
         "rawStrippedQualifier" -> "1000",
         "minValue" -> Byte.MinValue.toString,
@@ -746,7 +763,7 @@ class ExpressionParserSuite extends AnalysisTest {
     assertEqual("10S", Literal(10.toShort))
     checkError(
       exception = parseException("40000S"),
-      errorClass = "_LEGACY_ERROR_TEMP_0023",
+      errorClass = "INVALID_NUMERIC_LITERAL_RANGE",
       parameters = Map(
         "rawStrippedQualifier" -> "40000",
         "minValue" -> Short.MinValue.toString,
@@ -761,7 +778,7 @@ class ExpressionParserSuite extends AnalysisTest {
     assertEqual("10L", Literal(10L))
     checkError(
       exception = parseException("78732472347982492793712334L"),
-      errorClass = "_LEGACY_ERROR_TEMP_0023",
+      errorClass = "INVALID_NUMERIC_LITERAL_RANGE",
       parameters = Map(
         "rawStrippedQualifier" -> "78732472347982492793712334",
         "minValue" -> Long.MinValue.toString,
@@ -776,7 +793,7 @@ class ExpressionParserSuite extends AnalysisTest {
     assertEqual("10.0D", Literal(10.0D))
     checkError(
       exception = parseException("-1.8E308D"),
-      errorClass = "_LEGACY_ERROR_TEMP_0023",
+      errorClass = "INVALID_NUMERIC_LITERAL_RANGE",
       parameters = Map(
         "rawStrippedQualifier" -> "-1.8E308",
         "minValue" -> BigDecimal(Double.MinValue).toString,
@@ -788,7 +805,7 @@ class ExpressionParserSuite extends AnalysisTest {
         stop = 8))
     checkError(
       exception = parseException("1.8E308D"),
-      errorClass = "_LEGACY_ERROR_TEMP_0023",
+      errorClass = "INVALID_NUMERIC_LITERAL_RANGE",
       parameters = Map(
         "rawStrippedQualifier" -> "1.8E308",
         "minValue" -> BigDecimal(Double.MinValue).toString,

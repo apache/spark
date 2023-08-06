@@ -205,7 +205,7 @@ Project [hex(cast(abc as binary)) AS hex(CAST(abc AS BINARY))#x]
 -- !query
 SELECT HEX(CAST(CAST(123 AS byte) AS binary))
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.CAST_WITH_CONF_SUGGESTION",
   "sqlState" : "42K09",
@@ -229,7 +229,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 SELECT HEX(CAST(CAST(-123 AS byte) AS binary))
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.CAST_WITH_CONF_SUGGESTION",
   "sqlState" : "42K09",
@@ -253,7 +253,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 SELECT HEX(CAST(123S AS binary))
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.CAST_WITH_CONF_SUGGESTION",
   "sqlState" : "42K09",
@@ -277,7 +277,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 SELECT HEX(CAST(-123S AS binary))
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.CAST_WITH_CONF_SUGGESTION",
   "sqlState" : "42K09",
@@ -301,7 +301,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 SELECT HEX(CAST(123 AS binary))
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.CAST_WITH_CONF_SUGGESTION",
   "sqlState" : "42K09",
@@ -325,7 +325,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 SELECT HEX(CAST(-123 AS binary))
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.CAST_WITH_CONF_SUGGESTION",
   "sqlState" : "42K09",
@@ -349,7 +349,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 SELECT HEX(CAST(123L AS binary))
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.CAST_WITH_CONF_SUGGESTION",
   "sqlState" : "42K09",
@@ -373,7 +373,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 SELECT HEX(CAST(-123L AS binary))
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.CAST_WITH_CONF_SUGGESTION",
   "sqlState" : "42K09",

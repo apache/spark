@@ -39,12 +39,37 @@ import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, UnsafeProjection, UnsafeRow}
 import org.apache.spark.sql.catalyst.util.quietly
 import org.apache.spark.sql.execution.streaming._
+import org.apache.spark.sql.execution.streaming.state.StateStoreCoordinatorSuite.withCoordinatorRef
 import org.apache.spark.sql.functions.count
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.tags.ExtendedSQLTest
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.Utils
+
+class FakeStateStoreProviderWithMaintenanceError extends StateStoreProvider {
+  private var id: StateStoreId = null
+
+  override def init(
+      stateStoreId: StateStoreId,
+      keySchema: StructType,
+      valueSchema: StructType,
+      numColsPrefixKey: Int,
+      storeConfs: StateStoreConf,
+      hadoopConf: Configuration): Unit = {
+    id = stateStoreId
+  }
+
+  override def stateStoreId: StateStoreId = id
+
+  override def close(): Unit = {}
+
+  override def getStore(version: Long): StateStore = null
+
+  override def doMaintenance(): Unit = {
+    throw new RuntimeException("Intentional maintenance failure")
+  }
+}
 
 @ExtendedSQLTest
 class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
@@ -211,22 +236,40 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
       // Corrupt snapshot file and verify that it throws error
       assert(getData(provider, snapshotVersion) === Set(("a", 0) -> snapshotVersion))
       corruptFile(provider, snapshotVersion, isSnapshot = true)
-      intercept[Exception] {
+      var e = intercept[SparkException] {
         getData(provider, snapshotVersion)
       }
+      checkError(
+        e,
+        errorClass = "CANNOT_LOAD_STATE_STORE.UNCATEGORIZED",
+        parameters = Map.empty
+      )
 
       // Corrupt delta file and verify that it throws error
       assert(getData(provider, snapshotVersion - 1) === Set(("a", 0) -> (snapshotVersion - 1)))
       corruptFile(provider, snapshotVersion - 1, isSnapshot = false)
-      intercept[Exception] {
+      e = intercept[SparkException] {
         getData(provider, snapshotVersion - 1)
       }
+      checkError(
+        e,
+        errorClass = "CANNOT_LOAD_STATE_STORE.UNCATEGORIZED",
+        parameters = Map.empty
+      )
 
       // Delete delta file and verify that it throws error
       deleteFilesEarlierThanVersion(provider, snapshotVersion)
-      intercept[Exception] {
+      e = intercept[SparkException] {
         getData(provider, snapshotVersion - 1)
       }
+      checkError(
+        e.getCause.asInstanceOf[SparkThrowable],
+        errorClass = "CANNOT_LOAD_STATE_STORE.CANNOT_READ_DELTA_FILE_NOT_EXISTS",
+        parameters = Map(
+          "fileToRead" -> s"${provider.stateStoreId.storeCheckpointLocation()}/1.delta",
+          "clazz" -> s"${provider.toString}"
+        )
+      )
     }
   }
 
@@ -279,7 +322,7 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
     val timeoutDuration = 1.minute
 
     quietly {
-      withSpark(new SparkContext(conf)) { sc =>
+      withSpark(SparkContext.getOrCreate(conf)) { sc =>
         withCoordinatorRef(sc) { coordinatorRef =>
           require(!StateStore.isMaintenanceRunning, "StateStore is unexpectedly running")
 
@@ -389,7 +432,7 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
     val timeoutDuration = 1.minute
 
     quietly {
-      withSpark(new SparkContext(conf)) { sc =>
+      withSpark(SparkContext.getOrCreate(conf)) { sc =>
         withCoordinatorRef(sc) { coordinatorRef =>
           require(!StateStore.isMaintenanceRunning, "StateStore is unexpectedly running")
 
@@ -875,12 +918,17 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
       assert(getLatestData(provider) === Set(("b", 0) -> 2))
 
       // Trying to get newer versions should fail
-      intercept[Exception] {
+      var e = intercept[SparkException] {
         provider.getStore(2)
       }
-      intercept[Exception] {
+      assert(e.getCause.isInstanceOf[SparkException])
+      assert(e.getCause.getMessage.contains("does not exist"))
+
+      e = intercept[SparkException] {
         getData(provider, 2)
       }
+      assert(e.getCause.isInstanceOf[SparkException])
+      assert(e.getCause.getMessage.contains("does not exist"))
 
       // New updates to the reloaded store with new version, and does not change old version
       tryWithProviderResource(newStoreProvider(store.id)) { reloadedProvider =>
@@ -1018,9 +1066,14 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
   testWithAllCodec("getStore with invalid versions") {
     tryWithProviderResource(newStoreProvider()) { provider =>
       def checkInvalidVersion(version: Int): Unit = {
-        intercept[Exception] {
+        val e = intercept[SparkException] {
           provider.getStore(version)
         }
+        checkError(
+          e,
+          errorClass = "CANNOT_LOAD_STATE_STORE.UNCATEGORIZED",
+          parameters = Map.empty
+        )
       }
 
       checkInvalidVersion(-1)
@@ -1159,59 +1212,84 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
   }
 
   test("StateStore.get") {
+    val conf = new SparkConf()
+      .setMaster("local")
+      .setAppName("test")
     quietly {
-      val dir = newDir()
-      val storeId = StateStoreProviderId(StateStoreId(dir, 0, 0), UUID.randomUUID)
-      val storeConf = getDefaultStoreConf
-      val hadoopConf = new Configuration()
+      withSpark(SparkContext.getOrCreate(conf)) { sc =>
+        withCoordinatorRef(sc) { coordinatorRef =>
+          val dir = newDir()
+          val storeId = StateStoreProviderId(StateStoreId(dir, 0, 0), UUID.randomUUID)
+          val storeConf = getDefaultStoreConf
+          val hadoopConf = new Configuration()
 
-      // Verify that trying to get incorrect versions throw errors
-      intercept[IllegalArgumentException] {
-        StateStore.get(
-          storeId, keySchema, valueSchema, 0, -1, storeConf, hadoopConf)
+          // Verify that trying to get incorrect versions throw errors
+          var e = intercept[SparkException] {
+            StateStore.get(
+              storeId, keySchema, valueSchema, 0, -1, storeConf, hadoopConf)
+          }
+          checkError(
+            e,
+            errorClass = "CANNOT_LOAD_STATE_STORE.UNEXPECTED_VERSION",
+            parameters = Map(
+              "version" -> "-1"
+            )
+          )
+
+          e = intercept[SparkException] {
+            StateStore.get(
+              storeId, keySchema, valueSchema, 0, 1, storeConf, hadoopConf)
+          }
+          checkError(
+            e.getCause.asInstanceOf[SparkThrowable],
+            errorClass = "CANNOT_LOAD_STATE_STORE.CANNOT_READ_DELTA_FILE_NOT_EXISTS",
+            parameters = Map(
+              "fileToRead" -> s"$dir/0/0/1.delta",
+              "clazz" -> "HDFSStateStoreProvider\\[.+\\]"
+            ),
+            matchPVals = true
+          )
+
+          // Increase version of the store and try to get again
+          val store0 = StateStore.get(
+            storeId, keySchema, valueSchema, 0, 0, storeConf, hadoopConf)
+          assert(store0.version === 0)
+          put(store0, "a", 0, 1)
+          store0.commit()
+
+          val store1 = StateStore.get(
+            storeId, keySchema, valueSchema, 0, 1, storeConf, hadoopConf)
+          assert(StateStore.isLoaded(storeId))
+          assert(store1.version === 1)
+          assert(rowPairsToDataSet(store1.iterator()) === Set(("a", 0) -> 1))
+
+          // Verify that you can also load older version
+          val store0reloaded = StateStore.get(
+            storeId, keySchema, valueSchema, 0, 0, storeConf, hadoopConf)
+          assert(store0reloaded.version === 0)
+          assert(rowPairsToDataSet(store0reloaded.iterator()) === Set.empty)
+
+          // Verify that you can remove the store and still reload and use it
+          StateStore.unload(storeId)
+          assert(!StateStore.isLoaded(storeId))
+
+          val store1reloaded = StateStore.get(
+            storeId, keySchema, valueSchema, 0, 1, storeConf, hadoopConf)
+          assert(StateStore.isLoaded(storeId))
+          assert(store1reloaded.version === 1)
+          put(store1reloaded, "a", 0, 2)
+          assert(store1reloaded.commit() === 2)
+          assert(rowPairsToDataSet(store1reloaded.iterator()) === Set(("a", 0) -> 2))
+        }
       }
-      assert(!StateStore.isLoaded(storeId)) // version -1 should not attempt to load the store
-
-      intercept[IllegalStateException] {
-        StateStore.get(
-          storeId, keySchema, valueSchema, 0, 1, storeConf, hadoopConf)
-      }
-
-      // Increase version of the store and try to get again
-      val store0 = StateStore.get(
-        storeId, keySchema, valueSchema, 0, 0, storeConf, hadoopConf)
-      assert(store0.version === 0)
-      put(store0, "a", 0, 1)
-      store0.commit()
-
-      val store1 = StateStore.get(
-        storeId, keySchema, valueSchema, 0, 1, storeConf, hadoopConf)
-      assert(StateStore.isLoaded(storeId))
-      assert(store1.version === 1)
-      assert(rowPairsToDataSet(store1.iterator()) === Set(("a", 0) -> 1))
-
-      // Verify that you can also load older version
-      val store0reloaded = StateStore.get(
-        storeId, keySchema, valueSchema, 0, 0, storeConf, hadoopConf)
-      assert(store0reloaded.version === 0)
-      assert(rowPairsToDataSet(store0reloaded.iterator()) === Set.empty)
-
-      // Verify that you can remove the store and still reload and use it
-      StateStore.unload(storeId)
-      assert(!StateStore.isLoaded(storeId))
-
-      val store1reloaded = StateStore.get(
-        storeId, keySchema, valueSchema, 0, 1, storeConf, hadoopConf)
-      assert(StateStore.isLoaded(storeId))
-      assert(store1reloaded.version === 1)
-      put(store1reloaded, "a", 0, 2)
-      assert(store1reloaded.commit() === 2)
-      assert(rowPairsToDataSet(store1reloaded.iterator()) === Set(("a", 0) -> 2))
     }
   }
 
   test("reports memory usage") {
-    tryWithProviderResource(newStoreProvider()) { provider =>
+    // RocksDB metrics is only guaranteed to update when snapshot is created, so we set
+    // minDeltasForSnapshot = 1 to enable snapshot generation here.
+    tryWithProviderResource(newStoreProvider(minDeltasForSnapshot = 1,
+      numOfVersToRetainInMemory = 1)) { provider =>
       val store = provider.getStore(0)
       val noDataMemoryUsed = store.metrics.memoryUsedBytes
       put(store, "a", 0, 1)
@@ -1262,10 +1340,42 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
     assert(metricNew.name === "m1", "incorrect name in copied instance")
 
     val conf = new SparkConf().setMaster("local").setAppName("SPARK-35763")
-    withSpark(new SparkContext(conf)) { sc =>
+    withSpark(SparkContext.getOrCreate(conf)) { sc =>
       val sqlMetric = metric.createSQLMetric(sc)
       assert(sqlMetric != null)
       assert(sqlMetric.name === Some("desc1"))
+    }
+  }
+
+  test("SPARK-44438: maintenance task should be shutdown on error") {
+    val conf = new SparkConf()
+      .setMaster("local")
+      .setAppName("test")
+    val sqlConf = getDefaultSQLConf(
+      SQLConf.STATE_STORE_MIN_DELTAS_FOR_SNAPSHOT.defaultValue.get,
+      SQLConf.MAX_BATCHES_TO_RETAIN_IN_MEMORY.defaultValue.get
+    )
+    // Make maintenance interval small so that maintenance task is called right after scheduling.
+    sqlConf.setConf(SQLConf.STREAMING_MAINTENANCE_INTERVAL, 100L)
+    // Use the `FakeStateStoreProviderWithMaintenanceError` to run the test
+    sqlConf.setConf(SQLConf.STATE_STORE_PROVIDER_CLASS,
+      classOf[FakeStateStoreProviderWithMaintenanceError].getName)
+
+    quietly {
+      withSpark(new SparkContext(conf)) { sc =>
+        withCoordinatorRef(sc) { _ =>
+          val storeId = StateStoreProviderId(StateStoreId("firstDir", 0, 1), UUID.randomUUID)
+          val storeConf = StateStoreConf(sqlConf)
+
+          // get the state store and kick off the maintenance task
+          StateStore.get(storeId, null, null, 0, 0, storeConf, sc.hadoopConfiguration)
+
+          eventually(timeout(30.seconds)) {
+            assert(!StateStore.isMaintenanceRunning)
+          }
+          StateStore.stop()
+        }
+      }
     }
   }
 
