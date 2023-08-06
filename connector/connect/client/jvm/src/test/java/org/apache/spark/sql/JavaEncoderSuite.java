@@ -16,21 +16,26 @@
  */
 package org.apache.spark.sql;
 
+import java.io.Serializable;
+import java.math.BigDecimal;
+import java.util.Arrays;
+import java.util.List;
+
 import org.junit.*;
 import static org.junit.Assert.*;
 
 import static org.apache.spark.sql.Encoders.*;
 import static org.apache.spark.sql.functions.*;
+import static org.apache.spark.sql.RowFactory.create;
 import org.apache.spark.sql.connect.client.SparkConnectClient;
 import org.apache.spark.sql.connect.client.util.SparkConnectServerUtils;
-
-import java.math.BigDecimal;
-import java.util.Arrays;
+import org.apache.spark.api.java.function.MapFunction;
+import org.apache.spark.sql.types.StructType;
 
 /**
  * Tests for the encoders class.
  */
-public class JavaEncoderSuite {
+public class JavaEncoderSuite implements Serializable {
   private static SparkSession spark;
 
   @BeforeClass
@@ -90,5 +95,23 @@ public class JavaEncoderSuite {
         bigDec(1002, 2),
         dataset(DECIMAL(), bigDec(1000, 2), bigDec(2, 2))
             .select(sum(v)).as(DECIMAL()).head().setScale(2));
+  }
+
+  @Test
+  public void testRowEncoder() {
+    final StructType schema = new StructType()
+        .add("a", "int")
+        .add("b", "string");
+    final Dataset<Row> df = spark.range(3)
+        .map(new MapFunction<Long, Row>() {
+               @Override
+               public Row call(Long i) {
+                 return create(i.intValue(), "s" + i);
+               }
+             },
+            Encoders.row(schema))
+        .filter(col("a").geq(1));
+    final List<Row> expected = Arrays.asList(create(1, "s1"), create(2, "s2"));
+    Assert.assertEquals(expected, df.collectAsList());
   }
 }

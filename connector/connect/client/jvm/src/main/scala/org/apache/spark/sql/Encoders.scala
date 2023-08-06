@@ -19,8 +19,9 @@ package org.apache.spark.sql
 import scala.reflect.runtime.universe.TypeTag
 
 import org.apache.spark.sql.catalyst.{JavaTypeInference, ScalaReflection}
-import org.apache.spark.sql.catalyst.encoders.AgnosticEncoder
+import org.apache.spark.sql.catalyst.encoders.{AgnosticEncoder, RowEncoder => RowEncoderFactory}
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders._
+import org.apache.spark.sql.types.StructType
 
 /**
  * Methods for creating an [[Encoder]].
@@ -167,6 +168,11 @@ object Encoders {
    * @since 3.5.0
    */
   def bean[T](beanClass: Class[T]): Encoder[T] = JavaTypeInference.encoderFor(beanClass)
+
+  /**
+   * Creates a [[Row]] encoder for schema `schema`. Since: 3.5.0
+   */
+  def row(schema: StructType): Encoder[Row] = RowEncoderFactory.encoderFor(schema)
 
   private def tupleEncoder[T](encoders: Encoder[_]*): Encoder[T] = {
     ProductEncoder.tuple(encoders.asInstanceOf[Seq[AgnosticEncoder[_]]]).asInstanceOf[Encoder[T]]
