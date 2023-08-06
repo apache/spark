@@ -19,8 +19,8 @@ package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.SparkThrowableHelper
 import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst.util.AttributeNameParser
 import org.apache.spark.sql.catalyst.util.QuotingUtils.{quoted, quoteIdentifier, quoteNameParts}
-import org.apache.spark.sql.catalyst.util.SparkStringUtils
 import org.apache.spark.sql.connector.catalog.Identifier
 
 /**
@@ -90,7 +90,7 @@ class TableAlreadyExistsException private(
   def this(table: String) = {
     this(errorClass = "TABLE_OR_VIEW_ALREADY_EXISTS",
       messageParameters = Map("relationName" ->
-        quoteNameParts(SparkStringUtils.parseAttributeName(table))),
+        quoteNameParts(AttributeNameParser.parseAttributeName(table))),
       cause = None)
   }
 
@@ -121,7 +121,7 @@ class TempTableAlreadyExistsException(errorClass: String, messageParameters: Map
   def this(table: String) = {
     this(errorClass = "TEMP_TABLE_OR_VIEW_ALREADY_EXISTS",
       messageParameters = Map("relationName"
-        -> quoteNameParts(SparkStringUtils.parseAttributeName(table))))
+        -> quoteNameParts(AttributeNameParser.parseAttributeName(table))))
   }
 }
 

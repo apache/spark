@@ -19,7 +19,6 @@ package org.apache.spark.sql.catalyst.util
 import java.util.concurrent.atomic.AtomicBoolean
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.errors.DataTypeErrors
 import org.apache.spark.unsafe.array.ByteArrayUtils
 
 /**
@@ -99,46 +98,6 @@ object SparkStringUtils extends Logging {
   /** Shorthand for calling truncatedString() without start or end strings. */
   def truncatedString[T](seq: Seq[T], sep: String, maxFields: Int): String = {
     truncatedString(seq, "", sep, "", maxFields)
-  }
-
-  def parseAttributeName(name: String): Seq[String] = {
-    def e = DataTypeErrors.attributeNameSyntaxError(name)
-
-    val nameParts = scala.collection.mutable.ArrayBuffer.empty[String]
-    val tmp = scala.collection.mutable.ArrayBuffer.empty[Char]
-    var inBacktick = false
-    var i = 0
-    while (i < name.length) {
-      val char = name(i)
-      if (inBacktick) {
-        if (char == '`') {
-          if (i + 1 < name.length && name(i + 1) == '`') {
-            tmp += '`'
-            i += 1
-          } else {
-            inBacktick = false
-            if (i + 1 < name.length && name(i + 1) != '.') throw e
-          }
-        } else {
-          tmp += char
-        }
-      } else {
-        if (char == '`') {
-          if (tmp.nonEmpty) throw e
-          inBacktick = true
-        } else if (char == '.') {
-          if (name(i - 1) == '.' || i == name.length - 1) throw e
-          nameParts += tmp.mkString
-          tmp.clear()
-        } else {
-          tmp += char
-        }
-      }
-      i += 1
-    }
-    if (inBacktick) throw e
-    nameParts += tmp.mkString
-    nameParts.toSeq
   }
 
     /**
