@@ -171,6 +171,14 @@ SQLSTATE: none assigned
 
 Could not load Protobuf class with name `<protobufClassName>`. `<explanation>`.
 
+### [CANNOT_LOAD_STATE_STORE](sql-error-conditions-cannot-load-state-store-error-class.html)
+
+SQLSTATE: 58030
+
+An error occurred during loading state.
+
+For more details see [CANNOT_LOAD_STATE_STORE](sql-error-conditions-cannot-load-state-store-error-class.html)
+
 ### CANNOT_MERGE_INCOMPATIBLE_DATA_TYPE
 
 [SQLSTATE: 42825](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
@@ -834,6 +842,14 @@ The datasource `<datasource>` cannot save the column `<columnName>` because its 
 
 Column or field `<name>` is of type `<type>` while it's required to be `<expectedType>`.
 
+### [INVALID_CURSOR](sql-error-conditions-invalid-cursor-error-class.html)
+
+[SQLSTATE: HY109](sql-error-conditions-sqlstates.html#class-HY-cli-specific-condition)
+
+The cursor is invalid.
+
+For more details see [INVALID_CURSOR](sql-error-conditions-invalid-cursor-error-class.html)
+
 ### [INVALID_DEFAULT_VALUE](sql-error-conditions-invalid-default-value-error-class.html)
 
 SQLSTATE: none assigned
@@ -909,6 +925,14 @@ For more details see [INVALID_FORMAT](sql-error-conditions-invalid-format-error-
 [SQLSTATE: 22023](sql-error-conditions-sqlstates.html#class-22-data-exception)
 
 The fraction of sec must be zero. Valid range is [0, 60]. If necessary set `<ansiConfig>` to "false" to bypass this error.
+
+### [INVALID_HANDLE](sql-error-conditions-invalid-handle-error-class.html)
+
+[SQLSTATE: HY000](sql-error-conditions-sqlstates.html#class-HY-cli-specific-condition)
+
+The handle `<handle>` is invalid.
+
+For more details see [INVALID_HANDLE](sql-error-conditions-invalid-handle-error-class.html)
 
 ### INVALID_HIVE_COLUMN_NAME
 
@@ -1539,7 +1563,7 @@ The `<clause>` clause may be used at most once per `<operation>` operation.
 
 [SQLSTATE: 4274K](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
 
-Cannot invoke function `<functionName>` because the parameter named `<parameterName>` is required, but the function call did not supply a value. Please update the function call to supply an argument value (either positionally or by name) and retry the query again.
+Cannot invoke function `<functionName>` because the parameter named `<parameterName>` is required, but the function call did not supply a value. Please update the function call to supply an argument value (either positionally at index `<index>` or by name) and retry the query again.
 
 ### REQUIRES_SINGLE_PART_NAMESPACE
 
@@ -1561,6 +1585,12 @@ Choose a different name, drop or replace the existing function, or add the IF NO
 The function `<routineName>` cannot be found. Verify the spelling and correctness of the schema and catalog.
 If you did not qualify the name with a schema and catalog, verify the current_schema() output, or qualify the name with the correct schema and catalog.
 To tolerate the error on drop use DROP FUNCTION IF EXISTS.
+
+### RULE_ID_NOT_FOUND
+
+[SQLSTATE: 22023](sql-error-conditions-sqlstates.html#class-22-data-exception)
+
+Not found an id for the rule name "`<ruleName>`". Please modify RuleIdCollection.scala if you are adding a new rule.
 
 ### SCALAR_SUBQUERY_IS_IN_GROUP_BY_OR_AGGREGATE_FUNCTION
 
@@ -1671,6 +1701,12 @@ The table or view `<relationName>` cannot be found. Verify the spelling and corr
 If you did not qualify the name with a schema, verify the current_schema() output, or qualify the name with the correct schema and catalog.
 To tolerate the error on drop use DROP VIEW IF EXISTS or DROP TABLE IF EXISTS.
 
+### TABLE_VALUED_FUNCTION_FAILED_TO_ANALYZE_IN_PYTHON
+
+SQLSTATE: none assigned
+
+Failed to analyze the Python user defined table function: `<msg>`
+
 ### TABLE_VALUED_FUNCTION_TOO_MANY_TABLE_ARGUMENTS
 
 SQLSTATE: none assigned
@@ -1748,7 +1784,7 @@ Parameter `<paramIndex>` of function `<functionName>` requires the `<requiredTyp
 
 [SQLSTATE: 4274K](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
 
-Cannot invoke function `<functionName>` because it contains positional argument(s) following named argument(s); please rearrange them so the positional arguments come first and then retry the query again.
+Cannot invoke function `<functionName>` because it contains positional argument(s) following the named argument assigned to `<parameterName>`; please rearrange them so the positional arguments come first and then retry the query again.
 
 ### UNKNOWN_PROTOBUF_MESSAGE_TYPE
 
@@ -1877,12 +1913,6 @@ Unsupported data source type for direct query on files: `<dataSourceType>`
 [SQLSTATE: 0A000](sql-error-conditions-sqlstates.html#class-0A-feature-not-supported)
 
 Unsupported data type `<typeName>`.
-
-### UNSUPPORTED_DATA_SOURCE_FOR_DIRECT_QUERY
-
-SQLSTATE: none assigned
-
-The direct query on files does not support the data source type: `<className>`. Please try a different data source type or consider using a different query method.
 
 ### UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE
 

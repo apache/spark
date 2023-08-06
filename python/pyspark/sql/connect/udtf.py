@@ -33,8 +33,8 @@ from pyspark.sql.connect.plan import (
 )
 from pyspark.sql.connect.types import UnparsedDataType
 from pyspark.sql.connect.utils import get_python_ver
-from pyspark.sql.udtf import UDTFRegistration as PySparkUDTFRegistration
-from pyspark.sql.udtf import _validate_udtf_handler
+from pyspark.sql.udtf import AnalyzeArgument, AnalyzeResult  # noqa: F401
+from pyspark.sql.udtf import UDTFRegistration as PySparkUDTFRegistration, _validate_udtf_handler
 from pyspark.sql.types import DataType, StructType
 from pyspark.errors import PySparkRuntimeError, PySparkTypeError
 
@@ -47,7 +47,7 @@ if TYPE_CHECKING:
 
 def _create_udtf(
     cls: Type,
-    returnType: Union[StructType, str],
+    returnType: Optional[Union[StructType, str]],
     name: Optional[str] = None,
     evalType: int = PythonEvalType.SQL_TABLE_UDF,
     deterministic: bool = True,
@@ -60,7 +60,7 @@ def _create_udtf(
 
 def _create_py_udtf(
     cls: Type,
-    returnType: Union[StructType, str],
+    returnType: Optional[Union[StructType, str]],
     name: Optional[str] = None,
     deterministic: bool = True,
     useArrow: Optional[bool] = None,
@@ -70,11 +70,11 @@ def _create_py_udtf(
     else:
         from pyspark.sql.connect.session import _active_spark_session
 
-        arrow_enabled = (
-            _active_spark_session.conf.get("spark.sql.execution.pythonUDTF.arrow.enabled") == "true"
-            if _active_spark_session is not None
-            else True
-        )
+        arrow_enabled = False
+        if _active_spark_session is not None:
+            value = _active_spark_session.conf.get("spark.sql.execution.pythonUDTF.arrow.enabled")
+            if isinstance(value, str) and value.lower() == "true":
+                arrow_enabled = True
 
     # Create a regular Python UDTF and check for invalid handler class.
     regular_udtf = _create_udtf(cls, returnType, name, PythonEvalType.SQL_TABLE_UDF, deterministic)
@@ -119,20 +119,24 @@ class UserDefinedTableFunction:
     def __init__(
         self,
         func: Type,
-        returnType: Union[StructType, str],
+        returnType: Optional[Union[StructType, str]],
         name: Optional[str] = None,
         evalType: int = PythonEvalType.SQL_TABLE_UDF,
         deterministic: bool = True,
     ) -> None:
+        _validate_udtf_handler(func, returnType)
+
         self.func = func
-        self.returnType: DataType = (
-            UnparsedDataType(returnType) if isinstance(returnType, str) else returnType
+        self.returnType: Optional[DataType] = (
+            None
+            if returnType is None
+            else UnparsedDataType(returnType)
+            if isinstance(returnType, str)
+            else returnType
         )
         self._name = name or func.__name__
         self.evalType = evalType
         self.deterministic = deterministic
-
-        _validate_udtf_handler(func)
 
     def _build_common_inline_user_defined_table_function(
         self, *cols: "ColumnOrName"

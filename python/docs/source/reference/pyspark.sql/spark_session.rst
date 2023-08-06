@@ -50,7 +50,7 @@ See also :class:`SparkSession`.
     SparkSession.udf
     SparkSession.udtf
     SparkSession.version
-
+    is_remote
 
 Spark Connect Only
 ------------------
@@ -63,3 +63,10 @@ Spark Connect Only
     SparkSession.addArtifacts
     SparkSession.copyFromLocalToFs
     SparkSession.client
+    SparkSession.interruptAll
+    SparkSession.interruptTag
+    SparkSession.interruptOperation
+    SparkSession.addTag
+    SparkSession.removeTag
+    SparkSession.getTags
+    SparkSession.clearTags

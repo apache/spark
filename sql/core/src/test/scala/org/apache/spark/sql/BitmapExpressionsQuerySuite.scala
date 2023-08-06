@@ -207,4 +207,48 @@ class BitmapExpressionsQuerySuite extends QueryTest with SharedSparkSession {
       Seq(Row("700000"))
     )
   }
+
+  test("bitmap_count called with non-binary type") {
+    val df = Seq(12).toDF("a")
+    checkError(
+      exception = intercept[AnalysisException] {
+        df.selectExpr("bitmap_count(a)")
+      },
+      errorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+      parameters = Map(
+        "sqlExpr" -> "\"bitmap_count(a)\"",
+        "paramIndex" -> "0",
+        "requiredType" -> "\"BINARY\"",
+        "inputSql" -> "\"a\"",
+        "inputType" -> "\"INT\""
+      ),
+      context = ExpectedContext(
+        fragment = "bitmap_count(a)",
+        start = 0,
+        stop = 14
+      )
+    )
+  }
+
+  test("bitmap_or_agg called with non-binary type") {
+    val df = Seq(12).toDF("a")
+    checkError(
+      exception = intercept[AnalysisException] {
+        df.selectExpr("bitmap_or_agg(a)")
+      },
+      errorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+      parameters = Map(
+        "sqlExpr" -> "\"bitmap_or_agg(a)\"",
+        "paramIndex" -> "0",
+        "requiredType" -> "\"BINARY\"",
+        "inputSql" -> "\"a\"",
+        "inputType" -> "\"INT\""
+      ),
+      context = ExpectedContext(
+        fragment = "bitmap_or_agg(a)",
+        start = 0,
+        stop = 15
+      )
+    )
+  }
 }

@@ -16,13 +16,14 @@
  */
 package org.apache.spark.util
 
-import java.io.IOException
+import java.io.{Closeable, IOException, PrintWriter}
+import java.nio.charset.StandardCharsets.UTF_8
 
 import scala.util.control.NonFatal
 
 import org.apache.spark.internal.Logging
 
-object SparkErrorUtils extends Logging {
+private[spark] trait SparkErrorUtils extends Logging {
   /**
    * Execute a block of code that returns a value, re-throwing any non-fatal uncaught
    * exceptions as IOException. This is used when implementing Externalizable and Serializable's
@@ -41,4 +42,52 @@ object SparkErrorUtils extends Logging {
         throw new IOException(e)
     }
   }
+
+  def tryWithResource[R <: Closeable, T](createResource: => R)(f: R => T): T = {
+    val resource = createResource
+    try f.apply(resource) finally resource.close()
+  }
+
+  /**
+   * Execute a block of code, then a finally block, but if exceptions happen in
+   * the finally block, do not suppress the original exception.
+   *
+   * This is primarily an issue with `finally { out.close() }` blocks, where
+   * close needs to be called to clean up `out`, but if an exception happened
+   * in `out.write`, it's likely `out` may be corrupted and `out.close` will
+   * fail as well. This would then suppress the original/likely more meaningful
+   * exception from the original `out.write` call.
+   */
+  def tryWithSafeFinally[T](block: => T)(finallyBlock: => Unit): T = {
+    var originalThrowable: Throwable = null
+    try {
+      block
+    } catch {
+      case t: Throwable =>
+        // Purposefully not using NonFatal, because even fatal exceptions
+        // we don't want to have our finallyBlock suppress
+        originalThrowable = t
+        throw originalThrowable
+    } finally {
+      try {
+        finallyBlock
+      } catch {
+        case t: Throwable if (originalThrowable != null && originalThrowable != t) =>
+          originalThrowable.addSuppressed(t)
+          logWarning(s"Suppressing exception in finally: ${t.getMessage}", t)
+          throw originalThrowable
+      }
+    }
+  }
+
+  def stackTraceToString(t: Throwable): String = {
+    val out = new java.io.ByteArrayOutputStream
+    SparkErrorUtils.tryWithResource(new PrintWriter(out)) { writer =>
+      t.printStackTrace(writer)
+      writer.flush()
+    }
+    new String(out.toByteArray, UTF_8)
+  }
 }
+
+object SparkErrorUtils extends SparkErrorUtils

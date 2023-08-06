@@ -31,8 +31,8 @@ private[client] object GrpcExceptionConverter {
     }
   }
 
-  def convertIterator[T](iter: java.util.Iterator[T]): java.util.Iterator[T] = {
-    new java.util.Iterator[T] {
+  def convertIterator[T](iter: CloseableIterator[T]): CloseableIterator[T] = {
+    new CloseableIterator[T] {
       override def hasNext: Boolean = {
         convert {
           iter.hasNext
@@ -42,6 +42,12 @@ private[client] object GrpcExceptionConverter {
       override def next(): T = {
         convert {
           iter.next()
+        }
+      }
+
+      override def close(): Unit = {
+        convert {
+          iter.close()
         }
       }
     }

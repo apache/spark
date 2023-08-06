@@ -40,8 +40,6 @@ private[arrow] object ArrowEncoderUtils {
   }
 }
 
-trait CloseableIterator[E] extends Iterator[E] with AutoCloseable
-
 private[arrow] object StructVectors {
   def unapply(v: AnyRef): Option[(StructVector, Seq[FieldVector])] = v match {
     case root: VectorSchemaRoot => Option((null, root.getFieldVectors.asScala.toSeq))

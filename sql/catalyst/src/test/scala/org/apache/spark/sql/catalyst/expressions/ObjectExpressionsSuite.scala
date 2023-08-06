@@ -25,7 +25,7 @@ import scala.reflect.ClassTag
 import scala.reflect.runtime.universe.TypeTag
 import scala.util.Random
 
-import org.apache.spark.{SparkConf, SparkFunSuite, SparkRuntimeException}
+import org.apache.spark.{SparkConf, SparkException, SparkFunSuite, SparkRuntimeException}
 import org.apache.spark.serializer.{JavaSerializer, KryoSerializer}
 import org.apache.spark.sql.{RandomDataGenerator, Row}
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow, ScalaReflection, ScroogeLikeExample}
@@ -71,6 +71,38 @@ class ObjectExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     val inputObject = BoundReference(0, ObjectType(cls), nullable = true)
     val invoke = Invoke(inputObject, "_2", IntegerType)
     checkEvaluationWithMutableProjection(invoke, null, inputRow)
+  }
+
+  test("SPARK-44525: Invoke could not find method") {
+    val inputRow = InternalRow(new Object)
+    val inputObject = BoundReference(0, ObjectType(classOf[Object]), nullable = false)
+
+    checkError(
+      exception = intercept[SparkException] {
+        Invoke(inputObject, "zeroArgNotExistMethod", IntegerType).eval(inputRow)
+      },
+      errorClass = "INTERNAL_ERROR",
+      parameters = Map("message" ->
+        ("Couldn't find method zeroArgNotExistMethod with arguments " +
+          "() on class java.lang.Object.")
+      )
+    )
+
+    checkError(
+      exception = intercept[SparkException] {
+        Invoke(
+          inputObject,
+          "oneArgNotExistMethod",
+          IntegerType,
+          Seq(Literal.fromObject(UTF8String.fromString("dummyInputString"))),
+          Seq(StringType)).eval(inputRow)
+      },
+      errorClass = "INTERNAL_ERROR",
+      parameters = Map("message" ->
+        ("Couldn't find method oneArgNotExistMethod with arguments " +
+          "(class org.apache.spark.unsafe.types.UTF8String) on class java.lang.Object.")
+      )
+    )
   }
 
   test("MapObjects should make copies of unsafe-backed data") {
@@ -451,7 +483,7 @@ class ObjectExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     testTypes.foreach { dt =>
       genSchema(dt).map { schema =>
         val row = RandomDataGenerator.randomRow(random, schema)
-        val toRow = RowEncoder(schema).createSerializer()
+        val toRow = ExpressionEncoder(schema).createSerializer()
         val internalRow = toRow(row)
         val lambda = LambdaVariable("dummy", schema(0).dataType, schema(0).nullable, id = 0)
         checkEvaluationWithoutCodegen(lambda, internalRow.get(0, schema(0).dataType), internalRow)

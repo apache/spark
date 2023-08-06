@@ -45,9 +45,14 @@ import org.apache.spark.util.{SparkFatalException, ThreadUtils}
 trait BroadcastExchangeLike extends Exchange {
 
   /**
-   * The broadcast job group ID
+   * The broadcast run ID in job tag
    */
-  def runId: UUID = UUID.randomUUID
+  val runId: UUID = UUID.randomUUID
+
+  /**
+   * The broadcast job tag
+   */
+  def jobTag: String = s"broadcast exchange (runId ${runId.toString})"
 
   /**
    * The asynchronous job that prepares the broadcast relation.
@@ -79,8 +84,6 @@ case class BroadcastExchangeExec(
     mode: BroadcastMode,
     child: SparkPlan) extends BroadcastExchangeLike {
   import BroadcastExchangeExec._
-
-  override val runId: UUID = UUID.randomUUID
 
   override lazy val metrics = Map(
     "dataSize" -> SQLMetrics.createSizeMetric(sparkContext, "data size"),
@@ -123,9 +126,6 @@ case class BroadcastExchangeExec(
       (BytesToBytesMap.MAX_CAPACITY / 1.5).toLong
     case _ => 512000000
   }
-
-  @transient
-  private lazy val jobTag = s"broadcast exchange (runId ${runId.toString})"
 
   @transient
   override lazy val relationFuture: Future[broadcast.Broadcast[Any]] = {

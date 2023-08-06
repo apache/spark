@@ -24,8 +24,6 @@ import javax.servlet.http.HttpServletRequest
 
 import scala.xml._
 
-import org.apache.commons.text.StringEscapeUtils
-
 import org.apache.spark.status.AppStatusStore
 import org.apache.spark.status.api.v1
 import org.apache.spark.ui._
@@ -217,26 +215,12 @@ private[ui] class StagePagedTable(
         <td>{data.shuffleWriteWithUnit}</td> ++
         {
           if (isFailedStage) {
-            failureReasonHtml(info)
+            UIUtils.errorMessageCell(info.failureReason.getOrElse(""))
           } else {
             Seq.empty
           }
         }
     }
-  }
-
-  private def failureReasonHtml(s: v1.StageData): Seq[Node] = {
-    val failureReason = s.failureReason.getOrElse("")
-    val isMultiline = failureReason.indexOf('\n') >= 0
-    // Display the first line by default
-    val failureReasonSummary = StringEscapeUtils.escapeHtml4(
-      if (isMultiline) {
-        failureReason.substring(0, failureReason.indexOf('\n'))
-      } else {
-        failureReason
-      })
-    val details = UIUtils.detailsUINode(isMultiline, failureReason)
-    <td valign="middle">{failureReasonSummary}{details}</td>
   }
 
   private def makeDescription(s: v1.StageData, descriptionOption: Option[String]): Seq[Node] = {

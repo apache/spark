@@ -143,6 +143,65 @@
       "Could not load Protobuf class with name <protobufClassName>. <explanation>."
     ]
   },
+  "CANNOT_LOAD_STATE_STORE" : {
+    "message" : [
+      "An error occurred during loading state."
+    ],
+    "subClass" : {
+      "CANNOT_READ_CHECKPOINT" : {
+        "message" : [
+          "Cannot read RocksDB checkpoint metadata. Expected <expectedVersion>, but found <actualVersion>."
+        ]
+      },
+      "CANNOT_READ_DELTA_FILE_KEY_SIZE" : {
+        "message" : [
+          "Error reading delta file <fileToRead> of <clazz>: key size cannot be <keySize>."
+        ]
+      },
+      "CANNOT_READ_DELTA_FILE_NOT_EXISTS" : {
+        "message" : [
+          "Error reading delta file <fileToRead> of <clazz>: <fileToRead> does not exist."
+        ]
+      },
+      "CANNOT_READ_SNAPSHOT_FILE_KEY_SIZE" : {
+        "message" : [
+          "Error reading snapshot file <fileToRead> of <clazz>: key size cannot be <keySize>."
+        ]
+      },
+      "CANNOT_READ_SNAPSHOT_FILE_VALUE_SIZE" : {
+        "message" : [
+          "Error reading snapshot file <fileToRead> of <clazz>: value size cannot be <valueSize>."
+        ]
+      },
+      "CANNOT_READ_STREAMING_STATE_FILE" : {
+        "message" : [
+          "Error reading streaming state file of <fileToRead> does not exist. If the stream job is restarted with a new or updated state operation, please create a new checkpoint location or clear the existing checkpoint location."
+        ]
+      },
+      "UNCATEGORIZED" : {
+        "message" : [
+          ""
+        ]
+      },
+      "UNEXPECTED_FILE_SIZE" : {
+        "message" : [
+          "Copied <dfsFile> to <localFile>, expected <expectedSize> bytes, found <localFileSize> bytes."
+        ]
+      },
+      "UNEXPECTED_VERSION" : {
+        "message" : [
+          "Version cannot be <version> because it is less than 0."
+        ]
+      },
+      "UNRELEASED_THREAD_ERROR" : {
+        "message" : [
+          "<loggingId>: RocksDB instance could not be acquired by <newAcquiredThreadInfo> as it was not released by <acquiredThreadInfo> after <timeWaitedMs> ms.",
+          "Thread holding the lock has trace: <stackTraceOutput>"
+        ]
+      }
+    },
+    "sqlState" : "58030"
+  },
   "CANNOT_MERGE_INCOMPATIBLE_DATA_TYPE" : {
     "message" : [
       "Failed to merge incompatible data types <left> and <right>. Please check the data types of the columns being merged and ensure that they are compatible. If necessary, consider casting the columns to compatible data types before attempting the merge."
@@ -349,6 +408,11 @@
       "PLUGIN_RUNTIME_ERROR" : {
         "message" : [
           "Error instantiating Spark Connect plugin: <msg>"
+        ]
+      },
+      "SESSION_NOT_SAME" : {
+        "message" : [
+          "Both Datasets must belong to the same SparkSession."
         ]
       }
     }
@@ -745,12 +809,12 @@
     "subClass" : {
       "BOTH_POSITIONAL_AND_NAMED" : {
         "message" : [
-          "A positional argument and named argument both referred to the same parameter."
+          "A positional argument and named argument both referred to the same parameter. Please remove the named argument referring to this parameter."
         ]
       },
       "DOUBLE_NAMED_ARGUMENT_REFERENCE" : {
         "message" : [
-          "More than one named argument referred to the same parameter."
+          "More than one named argument referred to the same parameter. Please assign a value only once."
         ]
       }
     },
@@ -1240,6 +1304,34 @@
     ],
     "sqlState" : "42000"
   },
+  "INVALID_CURSOR" : {
+    "message" : [
+      "The cursor is invalid."
+    ],
+    "subClass" : {
+      "DISCONNECTED" : {
+        "message" : [
+          "The cursor has been disconnected by the server."
+        ]
+      },
+      "NOT_REATTACHABLE" : {
+        "message" : [
+          "The cursor is not reattachable."
+        ]
+      },
+      "POSITION_NOT_AVAILABLE" : {
+        "message" : [
+          "The cursor position id <responseId> is no longer available at index <index>."
+        ]
+      },
+      "POSITION_NOT_FOUND" : {
+        "message" : [
+          "The cursor position id <responseId> is not found."
+        ]
+      }
+    },
+    "sqlState" : "HY109"
+  },
   "INVALID_DEFAULT_VALUE" : {
     "message" : [
       "Failed to execute <statement> command because the destination table column <colName> has a DEFAULT value <defaultValue>,"
@@ -1382,6 +1474,39 @@
       "The fraction of sec must be zero. Valid range is [0, 60]. If necessary set <ansiConfig> to \"false\" to bypass this error."
     ],
     "sqlState" : "22023"
+  },
+  "INVALID_HANDLE" : {
+    "message" : [
+      "The handle <handle> is invalid."
+    ],
+    "subClass" : {
+      "FORMAT" : {
+        "message" : [
+          "Handle must be an UUID string of the format '00112233-4455-6677-8899-aabbccddeeff'"
+        ]
+      },
+      "OPERATION_ALREADY_EXISTS" : {
+        "message" : [
+          "Operation already exists."
+        ]
+      },
+      "OPERATION_NOT_FOUND" : {
+        "message" : [
+          "Operation not found."
+        ]
+      },
+      "SESSION_ALREADY_EXISTS" : {
+        "message" : [
+          "Session already exists."
+        ]
+      },
+      "SESSION_NOT_FOUND" : {
+        "message" : [
+          "Session not found."
+        ]
+      }
+    },
+    "sqlState" : "HY000"
   },
   "INVALID_HIVE_COLUMN_NAME" : {
     "message" : [
@@ -2321,7 +2446,7 @@
   },
   "REQUIRED_PARAMETER_NOT_FOUND" : {
     "message" : [
-      "Cannot invoke function <functionName> because the parameter named <parameterName> is required, but the function call did not supply a value. Please update the function call to supply an argument value (either positionally or by name) and retry the query again."
+      "Cannot invoke function <functionName> because the parameter named <parameterName> is required, but the function call did not supply a value. Please update the function call to supply an argument value (either positionally at index <index> or by name) and retry the query again."
     ],
     "sqlState" : "4274K"
   },
@@ -2345,6 +2470,12 @@
       "To tolerate the error on drop use DROP FUNCTION IF EXISTS."
     ],
     "sqlState" : "42883"
+  },
+  "RULE_ID_NOT_FOUND" : {
+    "message" : [
+      "Not found an id for the rule name \"<ruleName>\". Please modify RuleIdCollection.scala if you are adding a new rule."
+    ],
+    "sqlState" : "22023"
   },
   "SCALAR_SUBQUERY_IS_IN_GROUP_BY_OR_AGGREGATE_FUNCTION" : {
     "message" : [
@@ -2446,6 +2577,11 @@
     ],
     "sqlState" : "42P01"
   },
+  "TABLE_VALUED_FUNCTION_FAILED_TO_ANALYZE_IN_PYTHON" : {
+    "message" : [
+      "Failed to analyze the Python user defined table function: <msg>"
+    ]
+  },
   "TABLE_VALUED_FUNCTION_TOO_MANY_TABLE_ARGUMENTS" : {
     "message" : [
       "There are too many table arguments for table-valued function. It allows one table argument, but got: <num>. If you want to allow it, please set \"spark.sql.allowMultipleTableArguments.enabled\" to \"true\""
@@ -2517,7 +2653,7 @@
   },
   "UNEXPECTED_POSITIONAL_ARGUMENT" : {
     "message" : [
-      "Cannot invoke function <functionName> because it contains positional argument(s) following named argument(s); please rearrange them so the positional arguments come first and then retry the query again."
+      "Cannot invoke function <functionName> because it contains positional argument(s) following the named argument assigned to <parameterName>; please rearrange them so the positional arguments come first and then retry the query again."
     ],
     "sqlState" : "4274K"
   },
@@ -2682,11 +2818,6 @@
       "Unsupported data type <typeName>."
     ],
     "sqlState" : "0A000"
-  },
-  "UNSUPPORTED_DATA_SOURCE_FOR_DIRECT_QUERY" : {
-    "message" : [
-      "The direct query on files does not support the data source type: <className>. Please try a different data source type or consider using a different query method."
-    ]
   },
   "UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE" : {
     "message" : [
@@ -2893,6 +3024,16 @@
       "PIVOT_TYPE" : {
         "message" : [
           "Pivoting by the value '<value>' of the column data type <type>."
+        ]
+      },
+      "PURGE_PARTITION" : {
+        "message" : [
+          "Partition purge."
+        ]
+      },
+      "PURGE_TABLE" : {
+        "message" : [
+          "Purge table."
         ]
       },
       "PYTHON_UDF_IN_ON_CLAUSE" : {
@@ -5354,11 +5495,6 @@
       "<plan>."
     ]
   },
-  "_LEGACY_ERROR_TEMP_2175" : {
-    "message" : [
-      "Rule id not found for <ruleName>. Please modify RuleIdCollection.scala if you are adding a new rule."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_2176" : {
     "message" : [
       "Cannot create array with <numElements> elements of data due to exceeding the limit <maxRoundedArrayLength> elements for ArrayData. <additionalErrorMessage>"
@@ -5742,16 +5878,6 @@
   "_LEGACY_ERROR_TEMP_2256" : {
     "message" : [
       "Foreach writer has been aborted due to a task failure."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2258" : {
-    "message" : [
-      "Error reading delta file <fileToRead> of <clazz>: key size cannot be <keySize>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2259" : {
-    "message" : [
-      "Error reading snapshot file <fileToRead> of <clazz>: <message>"
     ]
   },
   "_LEGACY_ERROR_TEMP_2260" : {

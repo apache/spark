@@ -27,19 +27,21 @@ import org.apache.arrow.vector.types.pojo
 import org.apache.spark.connect.proto
 import org.apache.spark.sql.catalyst.encoders.{AgnosticEncoder, RowEncoder}
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{ProductEncoder, UnboundRowEncoder}
-import org.apache.spark.sql.connect.client.arrow.{AbstractMessageIterator, ArrowDeserializingIterator, CloseableIterator, ConcatenatingArrowStreamReader, MessageIterator}
+import org.apache.spark.sql.connect.client.arrow.{AbstractMessageIterator, ArrowDeserializingIterator, ConcatenatingArrowStreamReader, MessageIterator}
 import org.apache.spark.sql.connect.client.util.Cleanable
 import org.apache.spark.sql.connect.common.DataTypeProtoConverter
 import org.apache.spark.sql.types.{DataType, StructType}
 import org.apache.spark.sql.util.ArrowUtils
 
 private[sql] class SparkResult[T](
-    responses: java.util.Iterator[proto.ExecutePlanResponse],
+    responses: CloseableIterator[proto.ExecutePlanResponse],
     allocator: BufferAllocator,
-    encoder: AgnosticEncoder[T])
+    encoder: AgnosticEncoder[T],
+    timeZoneId: String)
     extends AutoCloseable
     with Cleanable { self =>
 
+  private[this] var opId: String = _
   private[this] var numRecords: Int = 0
   private[this] var structType: StructType = _
   private[this] var arrowSchema: pojo.Schema = _
@@ -72,6 +74,7 @@ private[sql] class SparkResult[T](
   }
 
   private def processResponses(
+      stopOnOperationId: Boolean = false,
       stopOnSchema: Boolean = false,
       stopOnArrowSchema: Boolean = false,
       stopOnFirstNonEmptyResponse: Boolean = false): Boolean = {
@@ -79,6 +82,20 @@ private[sql] class SparkResult[T](
     var stop = false
     while (!stop && responses.hasNext) {
       val response = responses.next()
+
+      // Save and validate operationId
+      if (opId == null) {
+        opId = response.getOperationId
+      }
+      if (opId != response.getOperationId) {
+        // backwards compatibility:
+        // response from an old server without operationId field would have getOperationId == "".
+        throw new IllegalStateException(
+          "Received response with wrong operationId. " +
+            s"Expected '$opId' but received '${response.getOperationId}'.")
+      }
+      stop |= stopOnOperationId
+
       if (response.hasSchema) {
         // The original schema should arrive before ArrowBatches.
         structType =
@@ -149,16 +166,31 @@ private[sql] class SparkResult[T](
   }
 
   /**
+   * @return
+   *   the operationId of the result.
+   */
+  def operationId: String = {
+    if (opId == null) {
+      processResponses(stopOnOperationId = true)
+    }
+    opId
+  }
+
+  /**
    * Create an Array with the contents of the result.
    */
   def toArray: Array[T] = {
     val result = encoder.clsTag.newArray(length)
     val rows = iterator
-    var i = 0
-    while (rows.hasNext) {
-      result(i) = rows.next()
-      assert(i < numRecords)
-      i += 1
+    try {
+      var i = 0
+      while (rows.hasNext) {
+        result(i) = rows.next()
+        assert(i < numRecords)
+        i += 1
+      }
+    } finally {
+      rows.close()
     }
     result
   }
@@ -166,43 +198,44 @@ private[sql] class SparkResult[T](
   /**
    * Returns an iterator over the contents of the result.
    */
-  def iterator: java.util.Iterator[T] with AutoCloseable =
+  def iterator: CloseableIterator[T] =
     buildIterator(destructive = false)
 
   /**
    * Returns an destructive iterator over the contents of the result.
    */
-  def destructiveIterator: java.util.Iterator[T] with AutoCloseable =
+  def destructiveIterator: CloseableIterator[T] =
     buildIterator(destructive = true)
 
-  private def buildIterator(destructive: Boolean): java.util.Iterator[T] with AutoCloseable = {
-    new java.util.Iterator[T] with AutoCloseable {
-      private[this] var iterator: CloseableIterator[T] = _
+  private def buildIterator(destructive: Boolean): CloseableIterator[T] = {
+    new CloseableIterator[T] {
+      private[this] var iter: CloseableIterator[T] = _
 
       private def initialize(): Unit = {
-        if (iterator == null) {
-          iterator = new ArrowDeserializingIterator(
+        if (iter == null) {
+          iter = new ArrowDeserializingIterator(
             createEncoder(encoder, schema),
             new ConcatenatingArrowStreamReader(
               allocator,
               Iterator.single(new ResultMessageIterator(destructive)),
-              destructive))
+              destructive),
+            timeZoneId)
         }
       }
 
       override def hasNext: Boolean = {
         initialize()
-        iterator.hasNext
+        iter.hasNext
       }
 
       override def next(): T = {
         initialize()
-        iterator.next()
+        iter.next()
       }
 
       override def close(): Unit = {
-        if (iterator != null) {
-          iterator.close()
+        if (iter != null) {
+          iter.close()
         }
       }
     }
@@ -213,7 +246,7 @@ private[sql] class SparkResult[T](
    */
   override def close(): Unit = cleaner.close()
 
-  override val cleaner: AutoCloseable = new SparkResultCloseable(resultMap)
+  override val cleaner: AutoCloseable = new SparkResultCloseable(resultMap, responses)
 
   private class ResultMessageIterator(destructive: Boolean) extends AbstractMessageIterator {
     private[this] var totalBytesRead = 0L
@@ -263,7 +296,12 @@ private[sql] class SparkResult[T](
   }
 }
 
-private[client] class SparkResultCloseable(resultMap: mutable.Map[Int, (Long, Seq[ArrowMessage])])
+private[client] class SparkResultCloseable(
+    resultMap: mutable.Map[Int, (Long, Seq[ArrowMessage])],
+    responses: CloseableIterator[proto.ExecutePlanResponse])
     extends AutoCloseable {
-  override def close(): Unit = resultMap.values.foreach(_._2.foreach(_.close()))
+  override def close(): Unit = {
+    resultMap.values.foreach(_._2.foreach(_.close()))
+    responses.close()
+  }
 }

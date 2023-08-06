@@ -21,6 +21,7 @@ check_dependencies(__name__)
 from typing import Any, List, Optional, Type, Sequence, Union, cast, TYPE_CHECKING, Mapping, Dict
 import functools
 import json
+import pickle
 from threading import Lock
 from inspect import signature, isclass
 
@@ -40,7 +41,7 @@ from pyspark.sql.connect.expressions import (
     LiteralExpression,
 )
 from pyspark.sql.connect.types import pyspark_types_to_proto_types, UnparsedDataType
-from pyspark.errors import PySparkTypeError, PySparkNotImplementedError
+from pyspark.errors import PySparkTypeError, PySparkNotImplementedError, PySparkRuntimeError
 
 if TYPE_CHECKING:
     from pyspark.sql.connect._typing import ColumnOrName
@@ -2181,26 +2182,38 @@ class PythonUDTF:
     def __init__(
         self,
         func: Type,
-        return_type: Union[DataType, str],
+        return_type: Optional[Union[DataType, str]],
         eval_type: int,
         python_ver: str,
     ) -> None:
         self._func = func
         self._name = func.__name__
-        self._return_type: DataType = (
-            UnparsedDataType(return_type) if isinstance(return_type, str) else return_type
+        self._return_type: Optional[DataType] = (
+            None
+            if return_type is None
+            else UnparsedDataType(return_type)
+            if isinstance(return_type, str)
+            else return_type
         )
         self._eval_type = eval_type
         self._python_ver = python_ver
 
     def to_plan(self, session: "SparkConnectClient") -> proto.PythonUDTF:
         udtf = proto.PythonUDTF()
-        # Currently the return type cannot be None.
-        # TODO(SPARK-44380): support `analyze` in Python UDTFs
-        assert self._return_type is not None
-        udtf.return_type.CopyFrom(pyspark_types_to_proto_types(self._return_type))
+        if self._return_type is not None:
+            udtf.return_type.CopyFrom(pyspark_types_to_proto_types(self._return_type))
         udtf.eval_type = self._eval_type
-        udtf.command = CloudPickleSerializer().dumps(self._func)
+        try:
+            udtf.command = CloudPickleSerializer().dumps(self._func)
+        except pickle.PicklingError:
+            raise PySparkRuntimeError(
+                error_class="UDTF_SERIALIZATION_ERROR",
+                message_parameters={
+                    "name": self._name,
+                    "message": "Please check the stack trace and "
+                    "make sure the function is serializable.",
+                },
+            )
         udtf.python_ver = self._python_ver
         return udtf
 

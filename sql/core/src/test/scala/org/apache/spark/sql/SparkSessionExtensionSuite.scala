@@ -279,40 +279,36 @@ class SparkSessionExtensionSuite extends SparkFunSuite with SQLHelper {
     }
     withSession(extensions) { session =>
       session.conf.set(SQLConf.ADAPTIVE_EXECUTION_ENABLED, enableAQE)
-      Seq(true, false).foreach { enableEvaluator =>
-        withSQLConf(SQLConf.USE_PARTITION_EVALUATOR.key -> enableEvaluator.toString) {
-          assert(session.sessionState.columnarRules.contains(
-            MyColumnarRule(PreRuleReplaceAddWithBrokenVersion(), MyPostRule())))
-          import session.sqlContext.implicits._
-          // perform a join to inject a broadcast exchange
-          val left = Seq((1, 50L), (2, 100L), (3, 150L)).toDF("l1", "l2")
-          val right = Seq((1, 50L), (2, 100L), (3, 150L)).toDF("r1", "r2")
-          val data = left.join(right, $"l1" === $"r1")
-            // repartitioning avoids having the add operation pushed up into the LocalTableScan
-            .repartition(1)
-          val df = data.selectExpr("l2 + r2")
-          // execute the plan so that the final adaptive plan is available when AQE is on
-          df.collect()
-          val found = collectPlanSteps(df.queryExecution.executedPlan).sum
-          // 1 MyBroadcastExchangeExec
-          // 1 MyShuffleExchangeExec
-          // 1 ColumnarToRowExec
-          // 2 ColumnarProjectExec
-          // 1 ReplacedRowToColumnarExec
-          // so 11121 is expected.
-          assert(found == 11121)
+      assert(session.sessionState.columnarRules.contains(
+        MyColumnarRule(PreRuleReplaceAddWithBrokenVersion(), MyPostRule())))
+      import session.sqlContext.implicits._
+      // perform a join to inject a broadcast exchange
+      val left = Seq((1, 50L), (2, 100L), (3, 150L)).toDF("l1", "l2")
+      val right = Seq((1, 50L), (2, 100L), (3, 150L)).toDF("r1", "r2")
+      val data = left.join(right, $"l1" === $"r1")
+        // repartitioning avoids having the add operation pushed up into the LocalTableScan
+        .repartition(1)
+      val df = data.selectExpr("l2 + r2")
+      // execute the plan so that the final adaptive plan is available when AQE is on
+      df.collect()
+      val found = collectPlanSteps(df.queryExecution.executedPlan).sum
+      // 1 MyBroadcastExchangeExec
+      // 1 MyShuffleExchangeExec
+      // 1 ColumnarToRowExec
+      // 2 ColumnarProjectExec
+      // 1 ReplacedRowToColumnarExec
+      // so 11121 is expected.
+      assert(found == 11121)
 
-          // Verify that we get back the expected, wrong, result
-          val result = df.collect()
-          assert(result(0).getLong(0) == 101L) // Check that broken columnar Add was used.
-          assert(result(1).getLong(0) == 201L)
-          assert(result(2).getLong(0) == 301L)
+      // Verify that we get back the expected, wrong, result
+      val result = df.collect()
+      assert(result(0).getLong(0) == 101L) // Check that broken columnar Add was used.
+      assert(result(1).getLong(0) == 201L)
+      assert(result(2).getLong(0) == 301L)
 
-          withTempPath { path =>
-            val e = intercept[Exception](df.write.parquet(path.getCanonicalPath))
-            assert(e.getMessage == "columnar write")
-          }
-        }
+      withTempPath { path =>
+        val e = intercept[Exception](df.write.parquet(path.getCanonicalPath))
+        assert(e.getMessage == "columnar write")
       }
     }
   }
@@ -1003,7 +999,7 @@ case class MyShuffleExchangeExec(delegate: ShuffleExchangeExec) extends ShuffleE
  * whether AQE is enabled.
  */
 case class MyBroadcastExchangeExec(delegate: BroadcastExchangeExec) extends BroadcastExchangeLike {
-  override def runId: UUID = delegate.runId
+  override val runId: UUID = delegate.runId
   override def relationFuture: java.util.concurrent.Future[Broadcast[Any]] =
     delegate.relationFuture
   override def completionFuture: Future[Broadcast[Any]] = delegate.submitBroadcastJob

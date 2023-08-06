@@ -18,9 +18,7 @@ package org.apache.spark.sql.connect.planner
 
 import java.util.UUID
 
-import org.apache.spark.api.python.PythonRDD
-import org.apache.spark.api.python.SimplePythonFunction
-import org.apache.spark.api.python.StreamingPythonRunner
+import org.apache.spark.api.python.{PythonRDD, SimplePythonFunction, StreamingPythonRunner}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.connect.service.SessionHolder
@@ -44,16 +42,16 @@ object StreamingForeachBatchHelper extends Logging {
       sessionHolder: SessionHolder): ForeachBatchFnType = { (df: DataFrame, batchId: Long) =>
     {
       val dfId = UUID.randomUUID().toString
-      log.info(s"Caching DataFrame with id $dfId") // TODO: Add query id to the log.
+      logInfo(s"Caching DataFrame with id $dfId") // TODO: Add query id to the log.
 
-      // TODO: Sanity check there is no other active DataFrame for this query. The query id
-      //       needs to be saved in the cache for this check.
+      // TODO(SPARK-44462): Sanity check there is no other active DataFrame for this query.
+      //  The query id needs to be saved in the cache for this check.
 
       sessionHolder.cacheDataFrameById(dfId, df)
       try {
         fn(FnArgsWithId(dfId, df, batchId))
       } finally {
-        log.info(s"Removing DataFrame with id $dfId from the cache")
+        logInfo(s"Removing DataFrame with id $dfId from the cache")
         sessionHolder.removeCachedDataFrame(dfId)
       }
     }
@@ -69,7 +67,8 @@ object StreamingForeachBatchHelper extends Logging {
   def scalaForeachBatchWrapper(
       fn: ForeachBatchFnType,
       sessionHolder: SessionHolder): ForeachBatchFnType = {
-    // TODO: Set up Spark Connect session. Do we actually need this for the first version?
+    // TODO(SPARK-44462): Set up Spark Connect session.
+    // Do we actually need this for the first version?
     dataFrameCachingWrapper(
       (args: FnArgsWithId) => {
         fn(args.df, args.batchId) // dfId is not used, see hack comment above.
@@ -88,8 +87,13 @@ object StreamingForeachBatchHelper extends Logging {
 
     val port = SparkConnectService.localPort
     val connectUrl = s"sc://localhost:$port/;user_id=${sessionHolder.userId}"
-    val runner = StreamingPythonRunner(pythonFn, connectUrl)
-    val (dataOut, dataIn) = runner.init(sessionHolder.sessionId)
+    val runner = StreamingPythonRunner(
+      pythonFn,
+      connectUrl,
+      sessionHolder.sessionId,
+      "pyspark.sql.connect.streaming.worker.foreachBatch_worker")
+    val (dataOut, dataIn) =
+      runner.init()
 
     val foreachBatchRunnerFn: FnArgsWithId => Unit = (args: FnArgsWithId) => {
 
@@ -104,15 +108,15 @@ object StreamingForeachBatchHelper extends Logging {
       dataOut.flush()
 
       val ret = dataIn.readInt()
-      log.info(s"Python foreach batch for dfId ${args.dfId} completed (ret: $ret)")
+      logInfo(s"Python foreach batch for dfId ${args.dfId} completed (ret: $ret)")
     }
 
     dataFrameCachingWrapper(foreachBatchRunnerFn, sessionHolder)
   }
 
   // TODO(SPARK-44433): Improve termination of Processes
-  //   The goal is that when a query is terminated, the python process asociated with foreachBatch
-  //   should be terminated. One way to do that is by registering stremaing query listener:
+  //   The goal is that when a query is terminated, the python process associated with foreachBatch
+  //   should be terminated. One way to do that is by registering streaming query listener:
   //   After pythonForeachBatchWrapper() is invoked by the SparkConnectPlanner.
   //   At that time, we don't have the streaming queries yet.
   //   Planner should call back into this helper with the query id when it starts it immediately

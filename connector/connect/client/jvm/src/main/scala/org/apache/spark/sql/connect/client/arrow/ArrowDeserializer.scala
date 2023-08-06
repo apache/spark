@@ -28,7 +28,7 @@ import scala.collection.mutable
 import scala.reflect.ClassTag
 
 import org.apache.arrow.memory.BufferAllocator
-import org.apache.arrow.vector.{BigIntVector, BitVector, DateDayVector, DecimalVector, DurationVector, FieldVector, Float4Vector, Float8Vector, IntervalYearVector, IntVector, NullVector, SmallIntVector, TimeStampMicroTZVector, TimeStampMicroVector, TinyIntVector, VarBinaryVector, VarCharVector, VectorSchemaRoot}
+import org.apache.arrow.vector.{FieldVector, VarCharVector, VectorSchemaRoot}
 import org.apache.arrow.vector.complex.{ListVector, MapVector, StructVector}
 import org.apache.arrow.vector.ipc.ArrowReader
 import org.apache.arrow.vector.util.Text
@@ -37,8 +37,8 @@ import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoder
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders._
 import org.apache.spark.sql.catalyst.expressions.GenericRowWithSchema
-import org.apache.spark.sql.catalyst.util.DateTimeUtils
-import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
+import org.apache.spark.sql.connect.client.CloseableIterator
+import org.apache.spark.sql.errors.{CompilationErrors, ExecutionErrors}
 import org.apache.spark.sql.types.Decimal
 
 /**
@@ -54,13 +54,14 @@ object ArrowDeserializers {
   def deserializeFromArrow[T](
       input: Iterator[Array[Byte]],
       encoder: AgnosticEncoder[T],
-      allocator: BufferAllocator): CloseableIterator[T] = {
+      allocator: BufferAllocator,
+      timeZoneId: String): CloseableIterator[T] = {
     try {
       val reader = new ConcatenatingArrowStreamReader(
         allocator,
         input.map(bytes => new MessageIterator(new ByteArrayInputStream(bytes), allocator)),
         destructive = true)
-      new ArrowDeserializingIterator(encoder, reader)
+      new ArrowDeserializingIterator(encoder, reader, timeZoneId)
     } catch {
       case _: IOException =>
         new EmptyDeserializingIterator(encoder)
@@ -72,7 +73,8 @@ object ArrowDeserializers {
    */
   private[arrow] def deserializerFor[T](
       encoder: AgnosticEncoder[T],
-      root: VectorSchemaRoot): Deserializer[T] = {
+      root: VectorSchemaRoot,
+      timeZoneId: String): Deserializer[T] = {
     val data: AnyRef = if (encoder.isStruct) {
       root
     } else {
@@ -80,138 +82,141 @@ object ArrowDeserializers {
       // by convention we bind to the first one.
       root.getVector(0)
     }
-    deserializerFor(encoder, data).asInstanceOf[Deserializer[T]]
+    deserializerFor(encoder, data, timeZoneId).asInstanceOf[Deserializer[T]]
   }
 
   private[arrow] def deserializerFor(
       encoder: AgnosticEncoder[_],
-      data: AnyRef): Deserializer[Any] = {
+      data: AnyRef,
+      timeZoneId: String): Deserializer[Any] = {
     (encoder, data) match {
-      case (PrimitiveBooleanEncoder | BoxedBooleanEncoder, v: BitVector) =>
-        new FieldDeserializer[Boolean, BitVector](v) {
-          def value(i: Int): Boolean = vector.get(i) != 0
+      case (PrimitiveBooleanEncoder | BoxedBooleanEncoder, v: FieldVector) =>
+        new LeafFieldDeserializer[Boolean](encoder, v, timeZoneId) {
+          override def value(i: Int): Boolean = reader.getBoolean(i)
         }
-      case (PrimitiveByteEncoder | BoxedByteEncoder, v: TinyIntVector) =>
-        new FieldDeserializer[Byte, TinyIntVector](v) {
-          def value(i: Int): Byte = vector.get(i)
+      case (PrimitiveByteEncoder | BoxedByteEncoder, v: FieldVector) =>
+        new LeafFieldDeserializer[Byte](encoder, v, timeZoneId) {
+          override def value(i: Int): Byte = reader.getByte(i)
         }
-      case (PrimitiveShortEncoder | BoxedShortEncoder, v: SmallIntVector) =>
-        new FieldDeserializer[Short, SmallIntVector](v) {
-          def value(i: Int): Short = vector.get(i)
+      case (PrimitiveShortEncoder | BoxedShortEncoder, v: FieldVector) =>
+        new LeafFieldDeserializer[Short](encoder, v, timeZoneId) {
+          override def value(i: Int): Short = reader.getShort(i)
         }
-      case (PrimitiveIntEncoder | BoxedIntEncoder, v: IntVector) =>
-        new FieldDeserializer[Int, IntVector](v) {
-          def value(i: Int): Int = vector.get(i)
+      case (PrimitiveIntEncoder | BoxedIntEncoder, v: FieldVector) =>
+        new LeafFieldDeserializer[Int](encoder, v, timeZoneId) {
+          override def value(i: Int): Int = reader.getInt(i)
         }
-      case (PrimitiveLongEncoder | BoxedLongEncoder, v: BigIntVector) =>
-        new FieldDeserializer[Long, BigIntVector](v) {
-          def value(i: Int): Long = vector.get(i)
+      case (PrimitiveLongEncoder | BoxedLongEncoder, v: FieldVector) =>
+        new LeafFieldDeserializer[Long](encoder, v, timeZoneId) {
+          override def value(i: Int): Long = reader.getLong(i)
         }
-      case (PrimitiveFloatEncoder | BoxedFloatEncoder, v: Float4Vector) =>
-        new FieldDeserializer[Float, Float4Vector](v) {
-          def value(i: Int): Float = vector.get(i)
+      case (PrimitiveFloatEncoder | BoxedFloatEncoder, v: FieldVector) =>
+        new LeafFieldDeserializer[Float](encoder, v, timeZoneId) {
+          override def value(i: Int): Float = reader.getFloat(i)
         }
-      case (PrimitiveDoubleEncoder | BoxedDoubleEncoder, v: Float8Vector) =>
-        new FieldDeserializer[Double, Float8Vector](v) {
-          def value(i: Int): Double = vector.get(i)
+      case (PrimitiveDoubleEncoder | BoxedDoubleEncoder, v: FieldVector) =>
+        new LeafFieldDeserializer[Double](encoder, v, timeZoneId) {
+          override def value(i: Int): Double = reader.getDouble(i)
         }
-      case (NullEncoder, v: NullVector) =>
-        new FieldDeserializer[Any, NullVector](v) {
-          def value(i: Int): Any = null
+      case (NullEncoder, _: FieldVector) =>
+        new Deserializer[Any] {
+          def get(i: Int): Any = null
         }
-      case (StringEncoder, v: VarCharVector) =>
-        new FieldDeserializer[String, VarCharVector](v) {
-          def value(i: Int): String = getString(vector, i)
+      case (StringEncoder, v: FieldVector) =>
+        new LeafFieldDeserializer[String](encoder, v, timeZoneId) {
+          override def value(i: Int): String = reader.getString(i)
         }
-      case (JavaEnumEncoder(tag), v: VarCharVector) =>
+      case (JavaEnumEncoder(tag), v: FieldVector) =>
         // It would be nice if we can get Enum.valueOf working...
         val valueOf = methodLookup.findStatic(
           tag.runtimeClass,
           "valueOf",
           MethodType.methodType(tag.runtimeClass, classOf[String]))
-        new FieldDeserializer[Enum[_], VarCharVector](v) {
-          def value(i: Int): Enum[_] = {
-            valueOf.invoke(getString(vector, i)).asInstanceOf[Enum[_]]
+        new LeafFieldDeserializer[Enum[_]](encoder, v, timeZoneId) {
+          override def value(i: Int): Enum[_] = {
+            valueOf.invoke(reader.getString(i)).asInstanceOf[Enum[_]]
           }
         }
-      case (ScalaEnumEncoder(parent, _), v: VarCharVector) =>
+      case (ScalaEnumEncoder(parent, _), v: FieldVector) =>
         val mirror = scala.reflect.runtime.currentMirror
         val module = mirror.classSymbol(parent).module.asModule
         val enumeration = mirror.reflectModule(module).instance.asInstanceOf[Enumeration]
-        new FieldDeserializer[Enumeration#Value, VarCharVector](v) {
-          def value(i: Int): Enumeration#Value = enumeration.withName(getString(vector, i))
+        new LeafFieldDeserializer[Enumeration#Value](encoder, v, timeZoneId) {
+          override def value(i: Int): Enumeration#Value = {
+            enumeration.withName(reader.getString(i))
+          }
         }
-      case (BinaryEncoder, v: VarBinaryVector) =>
-        new FieldDeserializer[Array[Byte], VarBinaryVector](v) {
-          def value(i: Int): Array[Byte] = vector.get(i)
+      case (BinaryEncoder, v: FieldVector) =>
+        new LeafFieldDeserializer[Array[Byte]](encoder, v, timeZoneId) {
+          override def value(i: Int): Array[Byte] = reader.getBytes(i)
         }
-      case (SparkDecimalEncoder(_), v: DecimalVector) =>
-        new FieldDeserializer[Decimal, DecimalVector](v) {
-          def value(i: Int): Decimal = Decimal(vector.getObject(i))
+      case (SparkDecimalEncoder(_), v: FieldVector) =>
+        new LeafFieldDeserializer[Decimal](encoder, v, timeZoneId) {
+          override def value(i: Int): Decimal = reader.getDecimal(i)
         }
-      case (ScalaDecimalEncoder(_), v: DecimalVector) =>
-        new FieldDeserializer[BigDecimal, DecimalVector](v) {
-          def value(i: Int): BigDecimal = BigDecimal(vector.getObject(i))
+      case (ScalaDecimalEncoder(_), v: FieldVector) =>
+        new LeafFieldDeserializer[BigDecimal](encoder, v, timeZoneId) {
+          override def value(i: Int): BigDecimal = reader.getScalaDecimal(i)
         }
-      case (JavaDecimalEncoder(_, _), v: DecimalVector) =>
-        new FieldDeserializer[JBigDecimal, DecimalVector](v) {
-          def value(i: Int): JBigDecimal = vector.getObject(i)
+      case (JavaDecimalEncoder(_, _), v: FieldVector) =>
+        new LeafFieldDeserializer[JBigDecimal](encoder, v, timeZoneId) {
+          override def value(i: Int): JBigDecimal = reader.getJavaDecimal(i)
         }
-      case (ScalaBigIntEncoder, v: DecimalVector) =>
-        new FieldDeserializer[BigInt, DecimalVector](v) {
-          def value(i: Int): BigInt = new BigInt(vector.getObject(i).toBigInteger)
+      case (ScalaBigIntEncoder, v: FieldVector) =>
+        new LeafFieldDeserializer[BigInt](encoder, v, timeZoneId) {
+          override def value(i: Int): BigInt = reader.getScalaBigInt(i)
         }
-      case (JavaBigIntEncoder, v: DecimalVector) =>
-        new FieldDeserializer[JBigInteger, DecimalVector](v) {
-          def value(i: Int): JBigInteger = vector.getObject(i).toBigInteger
+      case (JavaBigIntEncoder, v: FieldVector) =>
+        new LeafFieldDeserializer[JBigInteger](encoder, v, timeZoneId) {
+          override def value(i: Int): JBigInteger = reader.getJavaBigInt(i)
         }
-      case (DayTimeIntervalEncoder, v: DurationVector) =>
-        new FieldDeserializer[Duration, DurationVector](v) {
-          def value(i: Int): Duration = vector.getObject(i)
+      case (DayTimeIntervalEncoder, v: FieldVector) =>
+        new LeafFieldDeserializer[Duration](encoder, v, timeZoneId) {
+          override def value(i: Int): Duration = reader.getDuration(i)
         }
-      case (YearMonthIntervalEncoder, v: IntervalYearVector) =>
-        new FieldDeserializer[Period, IntervalYearVector](v) {
-          def value(i: Int): Period = vector.getObject(i).normalized()
+      case (YearMonthIntervalEncoder, v: FieldVector) =>
+        new LeafFieldDeserializer[Period](encoder, v, timeZoneId) {
+          override def value(i: Int): Period = reader.getPeriod(i)
         }
-      case (DateEncoder(_), v: DateDayVector) =>
-        new FieldDeserializer[java.sql.Date, DateDayVector](v) {
-          def value(i: Int): java.sql.Date = DateTimeUtils.toJavaDate(vector.get(i))
+      case (DateEncoder(_), v: FieldVector) =>
+        new LeafFieldDeserializer[java.sql.Date](encoder, v, timeZoneId) {
+          override def value(i: Int): java.sql.Date = reader.getDate(i)
         }
-      case (LocalDateEncoder(_), v: DateDayVector) =>
-        new FieldDeserializer[LocalDate, DateDayVector](v) {
-          def value(i: Int): LocalDate = DateTimeUtils.daysToLocalDate(vector.get(i))
+      case (LocalDateEncoder(_), v: FieldVector) =>
+        new LeafFieldDeserializer[LocalDate](encoder, v, timeZoneId) {
+          override def value(i: Int): LocalDate = reader.getLocalDate(i)
         }
-      case (TimestampEncoder(_), v: TimeStampMicroTZVector) =>
-        new FieldDeserializer[java.sql.Timestamp, TimeStampMicroTZVector](v) {
-          def value(i: Int): java.sql.Timestamp = DateTimeUtils.toJavaTimestamp(vector.get(i))
+      case (TimestampEncoder(_), v: FieldVector) =>
+        new LeafFieldDeserializer[java.sql.Timestamp](encoder, v, timeZoneId) {
+          override def value(i: Int): java.sql.Timestamp = reader.getTimestamp(i)
         }
-      case (InstantEncoder(_), v: TimeStampMicroTZVector) =>
-        new FieldDeserializer[Instant, TimeStampMicroTZVector](v) {
-          def value(i: Int): Instant = DateTimeUtils.microsToInstant(vector.get(i))
+      case (InstantEncoder(_), v: FieldVector) =>
+        new LeafFieldDeserializer[Instant](encoder, v, timeZoneId) {
+          override def value(i: Int): Instant = reader.getInstant(i)
         }
-      case (LocalDateTimeEncoder, v: TimeStampMicroVector) =>
-        new FieldDeserializer[LocalDateTime, TimeStampMicroVector](v) {
-          def value(i: Int): LocalDateTime = DateTimeUtils.microsToLocalDateTime(vector.get(i))
+      case (LocalDateTimeEncoder, v: FieldVector) =>
+        new LeafFieldDeserializer[LocalDateTime](encoder, v, timeZoneId) {
+          override def value(i: Int): LocalDateTime = reader.getLocalDateTime(i)
         }
 
       case (OptionEncoder(value), v) =>
-        val deserializer = deserializerFor(value, v)
+        val deserializer = deserializerFor(value, v, timeZoneId)
         new Deserializer[Any] {
           override def get(i: Int): Any = Option(deserializer.get(i))
         }
 
       case (ArrayEncoder(element, _), v: ListVector) =>
-        val deserializer = deserializerFor(element, v.getDataVector)
-        new FieldDeserializer[AnyRef, ListVector](v) {
+        val deserializer = deserializerFor(element, v.getDataVector, timeZoneId)
+        new VectorFieldDeserializer[AnyRef, ListVector](v) {
           def value(i: Int): AnyRef = getArray(vector, i, deserializer)(element.clsTag)
         }
 
       case (IterableEncoder(tag, element, _, _), v: ListVector) =>
-        val deserializer = deserializerFor(element, v.getDataVector)
+        val deserializer = deserializerFor(element, v.getDataVector, timeZoneId)
         if (isSubClass(Classes.WRAPPED_ARRAY, tag)) {
           // Wrapped array is a bit special because we need to use an array of the element type.
           // Some parts of our codebase (unfortunately) rely on this for type inference on results.
-          new FieldDeserializer[mutable.WrappedArray[Any], ListVector](v) {
+          new VectorFieldDeserializer[mutable.WrappedArray[Any], ListVector](v) {
             def value(i: Int): mutable.WrappedArray[Any] = {
               val array = getArray(vector, i, deserializer)(element.clsTag)
               ScalaCollectionUtils.wrap(array)
@@ -219,7 +224,7 @@ object ArrowDeserializers {
           }
         } else if (isSubClass(Classes.ITERABLE, tag)) {
           val companion = ScalaCollectionUtils.getIterableCompanion(tag)
-          new FieldDeserializer[Iterable[Any], ListVector](v) {
+          new VectorFieldDeserializer[Iterable[Any], ListVector](v) {
             def value(i: Int): Iterable[Any] = {
               val builder = companion.newBuilder[Any]
               loadListIntoBuilder(vector, i, deserializer, builder)
@@ -228,7 +233,7 @@ object ArrowDeserializers {
           }
         } else if (isSubClass(Classes.JLIST, tag)) {
           val newInstance = resolveJavaListCreator(tag)
-          new FieldDeserializer[JList[Any], ListVector](v) {
+          new VectorFieldDeserializer[JList[Any], ListVector](v) {
             def value(i: Int): JList[Any] = {
               var index = v.getElementStartIndex(i)
               val end = v.getElementEndIndex(i)
@@ -246,12 +251,13 @@ object ArrowDeserializers {
 
       case (MapEncoder(tag, key, value, _), v: MapVector) =>
         val structVector = v.getDataVector.asInstanceOf[StructVector]
-        val keyDeserializer = deserializerFor(key, structVector.getChild(MapVector.KEY_NAME))
+        val keyDeserializer =
+          deserializerFor(key, structVector.getChild(MapVector.KEY_NAME), timeZoneId)
         val valueDeserializer =
-          deserializerFor(value, structVector.getChild(MapVector.VALUE_NAME))
+          deserializerFor(value, structVector.getChild(MapVector.VALUE_NAME), timeZoneId)
         if (isSubClass(Classes.MAP, tag)) {
           val companion = ScalaCollectionUtils.getMapCompanion(tag)
-          new FieldDeserializer[Map[Any, Any], MapVector](v) {
+          new VectorFieldDeserializer[Map[Any, Any], MapVector](v) {
             def value(i: Int): Map[Any, Any] = {
               val builder = companion.newBuilder[Any, Any]
               var index = v.getElementStartIndex(i)
@@ -266,7 +272,7 @@ object ArrowDeserializers {
           }
         } else if (isSubClass(Classes.JMAP, tag)) {
           val newInstance = resolveJavaMapCreator(tag)
-          new FieldDeserializer[JMap[Any, Any], MapVector](v) {
+          new VectorFieldDeserializer[JMap[Any, Any], MapVector](v) {
             def value(i: Int): JMap[Any, Any] = {
               val map = newInstance()
               var index = v.getElementStartIndex(i)
@@ -288,12 +294,12 @@ object ArrowDeserializers {
           ScalaReflection.findConstructor(tag.runtimeClass, fields.map(_.enc.clsTag.runtimeClass))
         val deserializers = if (isTuple(tag.runtimeClass)) {
           fields.zip(vectors).map { case (field, vector) =>
-            deserializerFor(field.enc, vector)
+            deserializerFor(field.enc, vector, timeZoneId)
           }
         } else {
           val lookup = createFieldLookup(vectors)
           fields.map { field =>
-            deserializerFor(field.enc, lookup(field.name))
+            deserializerFor(field.enc, lookup(field.name), timeZoneId)
           }
         }
         new StructFieldSerializer[Any](struct) {
@@ -305,7 +311,7 @@ object ArrowDeserializers {
       case (r @ RowEncoder(fields), StructVectors(struct, vectors)) =>
         val lookup = createFieldLookup(vectors)
         val deserializers = fields.toArray.map { field =>
-          deserializerFor(field.enc, lookup(field.name))
+          deserializerFor(field.enc, lookup(field.name), timeZoneId)
         }
         new StructFieldSerializer[Any](struct) {
           def value(i: Int): Any = {
@@ -320,7 +326,7 @@ object ArrowDeserializers {
         val lookup = createFieldLookup(vectors)
         val setters = fields.map { field =>
           val vector = lookup(field.name)
-          val deserializer = deserializerFor(field.enc, vector)
+          val deserializer = deserializerFor(field.enc, vector, timeZoneId)
           val setter = methodLookup.findVirtual(
             tag.runtimeClass,
             field.writeMethod.get,
@@ -336,7 +342,7 @@ object ArrowDeserializers {
         }
 
       case (CalendarIntervalEncoder | _: UDTEncoder[_], _) =>
-        throw QueryExecutionErrors.unsupportedDataTypeError(encoder.dataType)
+        throw ExecutionErrors.unsupportedDataTypeError(encoder.dataType)
 
       case _ =>
         throw new RuntimeException(
@@ -431,13 +437,13 @@ object ArrowDeserializers {
       val key = toKey(field.getName)
       val old = lookup.put(key, field)
       if (old.isDefined) {
-        throw QueryCompilationErrors.ambiguousColumnOrFieldError(
+        throw CompilationErrors.ambiguousColumnOrFieldError(
           field.getName :: Nil,
           fields.count(f => toKey(f.getName) == key))
       }
     }
     name => {
-      lookup.getOrElse(toKey(name), throw QueryCompilationErrors.columnNotFoundError(name))
+      lookup.getOrElse(toKey(name), throw CompilationErrors.columnNotFoundError(name))
     }
   }
 
@@ -478,9 +484,9 @@ object ArrowDeserializers {
     def get(i: Int): E
   }
 
-  abstract class FieldDeserializer[E, V <: FieldVector](val vector: V) extends Deserializer[E] {
+  abstract class FieldDeserializer[E] extends Deserializer[E] {
     def value(i: Int): E
-    def isNull(i: Int): Boolean = vector.isNull(i)
+    def isNull(i: Int): Boolean
     override def get(i: Int): E = {
       if (!isNull(i)) {
         value(i)
@@ -490,8 +496,23 @@ object ArrowDeserializers {
     }
   }
 
+  abstract class LeafFieldDeserializer[E](val reader: ArrowVectorReader)
+      extends FieldDeserializer[E] {
+    def this(encoder: AgnosticEncoder[_], vector: FieldVector, timeZoneId: String) = {
+      this(ArrowVectorReader(encoder.dataType, vector, timeZoneId))
+    }
+    def value(i: Int): E
+    def isNull(i: Int): Boolean = reader.isNull(i)
+  }
+
+  abstract class VectorFieldDeserializer[E, V <: FieldVector](val vector: V)
+      extends FieldDeserializer[E] {
+    def value(i: Int): E
+    def isNull(i: Int): Boolean = vector.isNull(i)
+  }
+
   abstract class StructFieldSerializer[E](v: StructVector)
-      extends FieldDeserializer[E, StructVector](v) {
+      extends VectorFieldDeserializer[E, StructVector](v) {
     override def isNull(i: Int): Boolean = vector != null && vector.isNull(i)
   }
 }
@@ -505,11 +526,12 @@ class EmptyDeserializingIterator[E](val encoder: AgnosticEncoder[E])
 
 class ArrowDeserializingIterator[E](
     val encoder: AgnosticEncoder[E],
-    private[this] val reader: ArrowReader)
+    private[this] val reader: ArrowReader,
+    timeZoneId: String)
     extends CloseableIterator[E] {
   private[this] var index = 0
   private[this] val root = reader.getVectorSchemaRoot
-  private[this] val deserializer = ArrowDeserializers.deserializerFor(encoder, root)
+  private[this] val deserializer = ArrowDeserializers.deserializerFor(encoder, root, timeZoneId)
 
   override def hasNext: Boolean = {
     if (index >= root.getRowCount) {
