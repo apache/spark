@@ -184,7 +184,7 @@ public class TransportChannelHandler extends SimpleChannelInboundHandler<Message
     return responseHandler;
   }
 
-  public TransportRequestHandler getRequestHandler () {
+  public TransportRequestHandler getRequestHandler() {
     return requestHandler;
   }
 

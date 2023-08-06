@@ -328,16 +328,16 @@ public class TransportConf {
    * Percentage of io.serverThreads used by netty to process FinalizeShuffleMerge. When the config
    * `spark.shuffle.server.finalizeShuffleMergeThreadsPercent` is set, shuffle server will use a
    * separate EventLoopGroup to process FinalizeShuffleMerge messages, which are I/O intensive and
-   * could take long time to process due to disk contentions. The number of threads used for handling
-   * finalizeShuffleMerge requests are percentage of io.serverThreads (if defined) else it is a
-   * percentage of 2 * #cores.
+   * could take long time to process due to disk contentions. The number of threads used for
+   * handling finalizeShuffleMerge requests are percentage of io.serverThreads (if defined) else it
+   * is a percentage of 2 * #cores.
    */
   public int finalizeShuffleMergeHandlerThreads() {
-    Preconditions.checkArgument(separateFinalizeShuffleMerge(),
-        "Please set spark.shuffle.server.finalizeShuffleMergeThreadsPercent to a positive value");
     if (!this.getModuleName().equalsIgnoreCase("shuffle")) {
       return 0;
     }
+    Preconditions.checkArgument(separateFinalizeShuffleMerge(),
+        "Please set spark.shuffle.server.finalizeShuffleMergeThreadsPercent to a positive value");
     int finalizeShuffleMergeThreadsPercent =
         Integer.parseInt(conf.get("spark.shuffle.server.finalizeShuffleMergeThreadsPercent"));
     int threads =

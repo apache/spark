@@ -46,12 +46,14 @@ import org.apache.spark.network.util.TransportConf;
 import static org.apache.spark.network.util.NettyUtils.getRemoteAddress;
 
 /**
- * Extends {@link TransportContext} to support customized shuffle service. Specifically, we modified the Netty Channel
- * Pipeline so that IO expensive messages such as FINALIZE_SHUFFLE_MERGE are processed in the separate handlers.
+ * Extends {@link TransportContext} to support customized shuffle service. Specifically, we
+ * modified the Netty Channel Pipeline so that IO expensive messages such as FINALIZE_SHUFFLE_MERGE
+ * are processed in the separate handlers.
  * */
 public class ShuffleTransportContext extends TransportContext {
   private static final Logger logger = LoggerFactory.getLogger(ShuffleTransportContext.class);
-  private static final ShuffleMessageDecoder SHUFFLE_DECODER = new ShuffleMessageDecoder(MessageDecoder.INSTANCE);
+  private static final ShuffleMessageDecoder SHUFFLE_DECODER =
+      new ShuffleMessageDecoder(MessageDecoder.INSTANCE);
   private final EventLoopGroup finalizeWorkers;
 
   public ShuffleTransportContext(
@@ -94,8 +96,8 @@ public class ShuffleTransportContext extends TransportContext {
   }
 
   /**
-   * Add finalize handler to pipeline if needed. This is needed only when separateFinalizeShuffleMerge
-   * is enabled.
+   * Add finalize handler to pipeline if needed. This is needed only when
+   * separateFinalizeShuffleMerge is enabled.
    */
   private void addHandlerToPipeline(SocketChannel channel,
       TransportChannelHandler ch) {
@@ -113,7 +115,7 @@ public class ShuffleTransportContext extends TransportContext {
   static class ShuffleMessageDecoder extends MessageToMessageDecoder<ByteBuf> {
 
     private final MessageDecoder delegate;
-    public ShuffleMessageDecoder(MessageDecoder delegate) {
+    ShuffleMessageDecoder(MessageDecoder delegate) {
       super();
       this.delegate = delegate;
     }
@@ -147,14 +149,15 @@ public class ShuffleTransportContext extends TransportContext {
 
   /**
    * Internal message to handle rpc requests that is not accepted by
-   * {@link TransportChannelHandler} as this message doesn't extend {@link Message}. It will
-   * be accepted by {@link FinalizedHandler} instead, which is configured to execute in a separate EventLoopGroup
+   * {@link TransportChannelHandler} as this message doesn't extend {@link Message}. It will be
+   * accepted by {@link FinalizedHandler} instead, which is configured to execute in a separate
+   * EventLoopGroup.
    */
   static class RpcRequestInternal {
     public final BlockTransferMessage.Type messageType;
     public final RpcRequest rpcRequest;
 
-    public RpcRequestInternal(BlockTransferMessage.Type messageType,
+    RpcRequestInternal(BlockTransferMessage.Type messageType,
         RpcRequest rpcRequest) {
       this.messageType = messageType;
       this.rpcRequest = rpcRequest;
@@ -175,7 +178,7 @@ public class ShuffleTransportContext extends TransportContext {
       return false;
     }
 
-    public FinalizedHandler(TransportRequestHandler transportRequestHandler) {
+    FinalizedHandler(TransportRequestHandler transportRequestHandler) {
       this.transportRequestHandler = transportRequestHandler;
     }
 
