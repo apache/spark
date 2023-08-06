@@ -495,10 +495,11 @@ class ParametersSuite extends QueryTest with SharedSparkSession {
           "CREATE TABLE t11(c1 int default :parm) USING parquet",
           args = Map("parm" -> 5))
       },
-      errorClass = "INVALID_DEFAULT_VALUE.UNRESOLVED_EXPRESSION",
-      parameters = Map(
-        "statement" -> "CREATE TABLE",
-        "colName" -> "`c1`",
-        "defaultValue" -> ":parm"))
+      errorClass = "UNSUPPORTED_FEATURE.PARAMETER_MARKER_IN_UNEXPECTED_STATEMENT",
+      parameters = Map("statement" -> "DEFAULT"),
+      context = ExpectedContext(
+        fragment = "default :parm",
+        start = 24,
+        stop = 36))
   }
 }
