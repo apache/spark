@@ -241,8 +241,10 @@ jobs:
         restore-keys: |
           ${{ matrix.java }}-${{ matrix.hadoop }}-coursier-
     - name: Free up disk space
-      if: hashFiles('./dev/free_disk_space')
-      run: ./dev/free_disk_space
+      run: |
+        if [ -f ./dev/free_disk_space ]; then
+          ./dev/free_disk_space
+        fi
     - name: Install Java ${{ matrix.java }}
       uses: actions/setup-java@v3
       with:
@@ -522,8 +524,10 @@ jobs:
         restore-keys: |
           sparkr-coursier-
     - name: Free up disk space
-      if: hashFiles('./dev/free_disk_space_container')
-      run: ./dev/free_disk_space_container
+      run: |
+        if [ -f ./dev/free_disk_space_container ]; then
+          ./dev/free_disk_space_container
+        fi
     - name: Install Java ${{ inputs.java }}
       uses: actions/setup-java@v3
       with:
@@ -633,8 +637,10 @@ jobs:
         restore-keys: |
           docs-maven-
     - name: Free up disk space
-      if: hashFiles('./dev/free_disk_space_container')
-      run: ./dev/free_disk_space_container
+      run: |
+        if [ -f ./dev/free_disk_space_container ]; then
+          ./dev/free_disk_space_container
+        fi
     - name: Install Java 8
       uses: actions/setup-java@v3
       with:
