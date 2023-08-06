@@ -170,7 +170,9 @@ object Encoders {
   def bean[T](beanClass: Class[T]): Encoder[T] = JavaTypeInference.encoderFor(beanClass)
 
   /**
-   * Creates a [[Row]] encoder for schema `schema`. Since: 3.5.0
+   * Creates a [[Row]] encoder for schema `schema`.
+   *
+   * @since 3.5.0
    */
   def row(schema: StructType): Encoder[Row] = RowEncoderFactory.encoderFor(schema)
 

@@ -180,7 +180,8 @@ object Encoders {
 
   /**
    * Creates a [[Row]] encoder for schema `schema`.
-   * Since: 3.5.0
+   *
+   * @since 3.5.0
    */
   def row(schema: StructType): Encoder[Row] = ExpressionEncoder(schema)
 
