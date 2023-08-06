@@ -21,10 +21,8 @@ import java.util.Arrays;
 import java.util.Objects;
 import java.util.StringJoiner;
 
-import com.google.common.base.Preconditions;
-
 import org.apache.spark.annotation.Evolving;
-import org.apache.spark.sql.catalyst.util.package$;
+import org.apache.spark.sql.catalyst.util.QuotingUtils;
 
 /**
  *  An {@link Identifier} implementation.
@@ -36,8 +34,8 @@ class IdentifierImpl implements Identifier {
   private String name;
 
   IdentifierImpl(String[] namespace, String name) {
-    Preconditions.checkNotNull(namespace, "Identifier namespace cannot be null");
-    Preconditions.checkNotNull(name, "Identifier name cannot be null");
+//    Preconditions.checkNotNull(namespace, "Identifier namespace cannot be null");
+//    Preconditions.checkNotNull(name, "Identifier name cannot be null");
     this.namespace = namespace;
     this.name = name;
   }
@@ -56,9 +54,9 @@ class IdentifierImpl implements Identifier {
   public String toString() {
     StringJoiner joiner = new StringJoiner(".");
     for (String p : namespace) {
-      joiner.add(package$.MODULE$.quoteIfNeeded(p));
+      joiner.add(QuotingUtils.quoteIfNeeded(p));
     }
-    joiner.add(package$.MODULE$.quoteIfNeeded(name));
+    joiner.add(QuotingUtils.quoteIfNeeded(name));
     return joiner.toString();
   }
 
