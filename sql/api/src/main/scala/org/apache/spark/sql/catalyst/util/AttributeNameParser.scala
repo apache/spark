@@ -27,7 +27,6 @@ trait AttributeNameParser {
    */
   def parseAttributeName(name: String): Seq[String] = {
     def e = DataTypeErrors.attributeNameSyntaxError(name)
-
     val nameParts = scala.collection.mutable.ArrayBuffer.empty[String]
     val tmp = scala.collection.mutable.ArrayBuffer.empty[Char]
     var inBacktick = false
