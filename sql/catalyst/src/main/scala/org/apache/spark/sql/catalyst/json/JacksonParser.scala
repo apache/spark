@@ -232,7 +232,7 @@ class JacksonParser(
             case "-INF" | "-Infinity" if options.allowNonNumericNumbers =>
               Float.NegativeInfinity
             case _ => throw StringAsDataTypeException(parser.getCurrentName, parser.getText,
-              VALUE_STRING, FloatType)
+              FloatType)
           }
       }
 
@@ -251,7 +251,7 @@ class JacksonParser(
             case "-INF" | "-Infinity" if options.allowNonNumericNumbers =>
               Double.NegativeInfinity
             case _ => throw StringAsDataTypeException(parser.getCurrentName, parser.getText,
-              VALUE_STRING, DoubleType)
+              DoubleType)
           }
       }
 

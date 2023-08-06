@@ -726,8 +726,8 @@ class QueryExecutionErrorsSuite
         "failFastMode" -> "FAILFAST",
         "fieldName" -> "`a`",
         "fieldValue" -> "'str'",
-        "token" -> "VALUE_STRING",
-        "dataType" -> "FloatType"),
+        "inputType" -> "StringType",
+        "targetType" -> "FloatType"),
       sqlState = "22023")
   }
 
