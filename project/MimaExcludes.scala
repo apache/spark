@@ -71,7 +71,9 @@ object MimaExcludes {
     ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.RowFactory"),
     // [SPARK-44535][CONNECT][SQL] Move required Streaming API to sql/api
     ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.streaming.GroupStateTimeout"),
-    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.streaming.OutputMode")
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.streaming.OutputMode"),
+    // [SPARK-44692][CONNECT][SQL] Move Trigger(s) to sql/api
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.streaming.Trigger")
   )
 
   // Default exclude rules
