@@ -71,6 +71,8 @@ object MimaExcludes {
     // [SPARK-44507][SQL][CONNECT] Move AnalysisException to sql/api.
     ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.AnalysisException"),
     ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.AnalysisException$"),
+    // [SPARK-44686][CONNECT][SQL] Add the ability to create a RowEncoder in Encoders
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.RowFactory"),
     // [SPARK-44535][CONNECT][SQL] Move required Streaming API to sql/api
     ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.streaming.GroupStateTimeout"),
     ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.streaming.OutputMode")
