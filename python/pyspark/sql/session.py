@@ -768,7 +768,7 @@ class SparkSession(SparkConversionMixin):
         Examples
         --------
         >>> spark.conf
-        <pyspark.sql.conf.RuntimeConfig object ...>
+        <pyspark...RuntimeConf...>
 
         Set a runtime configuration for the session
 
@@ -1698,7 +1698,7 @@ class SparkSession(SparkConversionMixin):
         Examples
         --------
         >>> spark.readStream
-        <pyspark.sql.streaming.readwriter.DataStreamReader object ...>
+        <pyspark...DataStreamReader object ...>
 
         The example below uses Rate source that generates rows continuously.
         After that, we operate a modulo by 3, and then write the stream out to the console.
@@ -1734,7 +1734,7 @@ class SparkSession(SparkConversionMixin):
         Examples
         --------
         >>> spark.streams
-        <pyspark.sql.streaming.query.StreamingQueryManager object ...>
+        <pyspark...StreamingQueryManager object ...>
 
         Get the list of active streaming queries
 
