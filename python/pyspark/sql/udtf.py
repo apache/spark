@@ -17,6 +17,7 @@
 """
 User-defined table function related classes and functions
 """
+import pickle
 import sys
 import warnings
 from functools import wraps
@@ -240,7 +241,29 @@ class UserDefinedTableFunction:
         spark = SparkSession._getActiveSessionOrCreate()
         sc = spark.sparkContext
 
-        wrapped_func = _wrap_function(sc, func)
+        try:
+            wrapped_func = _wrap_function(sc, func)
+        except pickle.PicklingError as e:
+            if "CONTEXT_ONLY_VALID_ON_DRIVER" in str(e):
+                raise PySparkRuntimeError(
+                    error_class="UDTF_SERIALIZATION_ERROR",
+                    message_parameters={
+                        "name": self._name,
+                        "message": "it appears that you are attempting to reference SparkSession "
+                        "inside a UDTF. SparkSession can only be used on the driver, "
+                        "not in code that runs on workers. Please remove the reference "
+                        "and try again.",
+                    },
+                ) from None
+            raise PySparkRuntimeError(
+                error_class="UDTF_SERIALIZATION_ERROR",
+                message_parameters={
+                    "name": self._name,
+                    "message": "Please check the stack trace and make sure the "
+                    "function is serializable.",
+                },
+            )
+
         jdt = spark._jsparkSession.parseDataType(self.returnType.json())
         assert sc._jvm is not None
         judtf = sc._jvm.org.apache.spark.sql.execution.python.UserDefinedPythonTableFunction(
