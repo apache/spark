@@ -33,7 +33,7 @@ import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.catalyst.util.LegacyDateFormats.FAST_DATE_FORMAT
 import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns._
 import org.apache.spark.sql.errors.QueryExecutionErrors
-import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.{LegacyBehaviorPolicy, SQLConf}
 import org.apache.spark.sql.sources.Filter
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
@@ -85,14 +85,14 @@ class JacksonParser(
     options.enableDateTimeParsingFallback
       .orElse(SQLConf.get.jsonEnableDateTimeParsingFallback)
       .getOrElse {
-        SQLConf.get.legacyTimeParserPolicy == SQLConf.LegacyBehaviorPolicy.LEGACY ||
+        SQLConf.get.legacyTimeParserPolicy == LegacyBehaviorPolicy.LEGACY ||
           options.timestampFormatInRead.isEmpty
       }
   private val enableParsingFallbackForDateType =
     options.enableDateTimeParsingFallback
       .orElse(SQLConf.get.jsonEnableDateTimeParsingFallback)
       .getOrElse {
-        SQLConf.get.legacyTimeParserPolicy == SQLConf.LegacyBehaviorPolicy.LEGACY ||
+        SQLConf.get.legacyTimeParserPolicy == LegacyBehaviorPolicy.LEGACY ||
           options.dateFormatInRead.isEmpty
       }
 

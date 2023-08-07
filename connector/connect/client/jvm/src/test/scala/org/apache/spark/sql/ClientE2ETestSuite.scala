@@ -29,7 +29,8 @@ import org.apache.commons.lang3.{JavaVersion, SystemUtils}
 import org.scalactic.TolerantNumerics
 import org.scalatest.PrivateMethodTester
 
-import org.apache.spark.{SPARK_VERSION, SparkException}
+import org.apache.spark.SparkBuildInfo.{spark_version => SPARK_VERSION}
+import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.StringEncoder
 import org.apache.spark.sql.catalyst.expressions.GenericRowWithSchema
 import org.apache.spark.sql.catalyst.parser.ParseException
@@ -37,11 +38,34 @@ import org.apache.spark.sql.connect.client.{SparkConnectClient, SparkResult}
 import org.apache.spark.sql.connect.client.util.{IntegrationTestUtils, RemoteSparkSession}
 import org.apache.spark.sql.connect.client.util.SparkConnectServerUtils.port
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.SqlApiConf
 import org.apache.spark.sql.types._
-import org.apache.spark.sql.vectorized.ColumnarBatch
 
 class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper with PrivateMethodTester {
+
+  test("spark deep recursion") {
+    var df = spark.range(1)
+    for (a <- 1 to 500) {
+      df = df.union(spark.range(a, a + 1))
+    }
+    assert(df.collect().length == 501)
+  }
+
+  test("many tables") {
+    withSQLConf("spark.sql.execution.arrow.maxRecordsPerBatch" -> "10") {
+      val numTables = 20
+      try {
+        for (i <- 0 to numTables) {
+          spark.sql(s"create table testcat.table${i} (id int)")
+        }
+        assert(spark.sql("show tables in testcat").collect().length == numTables + 1)
+      } finally {
+        for (i <- 0 to numTables) {
+          spark.sql(s"drop table if exists testcat.table${i}")
+        }
+      }
+    }
+  }
 
   // Spark Result
   test("spark result schema") {
@@ -571,7 +595,7 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper with PrivateM
     (col("id") / lit(10.0d)).as("b"),
     col("id"),
     lit("world").as("d"),
-    (col("id") % 2).cast("int").as("a"))
+    (col("id") % 2).as("a"))
 
   private def validateMyTypeResult(result: Array[MyType]): Unit = {
     result.zipWithIndex.foreach { case (MyType(id, a, b), i) =>
@@ -731,7 +755,7 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper with PrivateM
 
   private def checkSameResult[E](expected: scala.collection.Seq[E], dataset: Dataset[E]): Unit = {
     dataset.withResult { result =>
-      assert(expected === result.iterator.asScala.toBuffer)
+      assert(expected === result.iterator.toBuffer)
     }
   }
 
@@ -893,14 +917,12 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper with PrivateM
 
   test("Dataset result destructive iterator") {
     // Helper methods for accessing private field `idxToBatches` from SparkResult
-    val _idxToBatches =
-      PrivateMethod[mutable.Map[Int, ColumnarBatch]](Symbol("idxToBatches"))
+    val getResultMap =
+      PrivateMethod[mutable.Map[Int, Any]](Symbol("resultMap"))
 
-    def getColumnarBatches(result: SparkResult[_]): Seq[ColumnarBatch] = {
-      val idxToBatches = result invokePrivate _idxToBatches()
-
-      // Sort by key to get stable results.
-      idxToBatches.toSeq.sortBy(_._1).map(_._2)
+    def assertResultsMapEmpty(result: SparkResult[_]): Unit = {
+      val resultMap = result invokePrivate getResultMap()
+      assert(resultMap.isEmpty)
     }
 
     val df = spark
@@ -911,25 +933,19 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper with PrivateM
       try {
         // build and verify the destructive iterator
         val iterator = result.destructiveIterator
-        // batches is empty before traversing the result iterator
-        assert(getColumnarBatches(result).isEmpty)
-        var previousBatch: ColumnarBatch = null
-        val buffer = mutable.Buffer.empty[Long]
+        // resultMap Map is empty before traversing the result iterator
+        assertResultsMapEmpty(result)
+        val buffer = mutable.Set.empty[Long]
         while (iterator.hasNext) {
-          // always having 1 batch, since a columnar batch will be removed and closed after
-          // its data got consumed.
-          val batches = getColumnarBatches(result)
-          assert(batches.size === 1)
-          assert(batches.head != previousBatch)
-          previousBatch = batches.head
-
-          buffer.append(iterator.next())
+          // resultMap is empty during iteration because results get removed immediately on access.
+          assertResultsMapEmpty(result)
+          buffer += iterator.next()
         }
-        // Batches should be closed and removed after traversing all the records.
-        assert(getColumnarBatches(result).isEmpty)
+        // resultMap Map is empty afterward because all results have been removed.
+        assertResultsMapEmpty(result)
 
-        val expectedResult = Seq(6L, 7L, 8L)
-        assert(buffer.size === 3 && expectedResult.forall(buffer.contains))
+        val expectedResult = Set(6L, 7L, 8L)
+        assert(buffer.size === 3 && expectedResult == buffer)
       } finally {
         result.close()
       }
@@ -938,7 +954,7 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper with PrivateM
 
   test("SparkSession.createDataFrame - large data set") {
     val threshold = 1024 * 1024
-    withSQLConf(SQLConf.LOCAL_RELATION_CACHE_THRESHOLD.key -> threshold.toString) {
+    withSQLConf(SqlApiConf.LOCAL_RELATION_CACHE_THRESHOLD_KEY -> threshold.toString) {
       val count = 2
       val suffix = "abcdef"
       val str = scala.util.Random.alphanumeric.take(1024 * 1024).mkString + suffix

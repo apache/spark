@@ -177,6 +177,8 @@ private[spark] class CoarseGrainedExecutorBackend(
         case NonFatal(e) =>
           exitExecutor(1, "Unable to create executor due to " + e.getMessage, e)
       }
+    case UpdateExecutorLogLevel(newLogLevel) =>
+      Utils.setLogLevelIfNeeded(newLogLevel)
 
     case LaunchTask(data) =>
       if (executor == null) {
@@ -473,6 +475,8 @@ private[spark] object CoarseGrainedExecutorBackend extends Logging {
       }
 
       driverConf.set(EXECUTOR_ID, arguments.executorId)
+      cfg.logLevel.foreach(logLevel => Utils.setLogLevelIfNeeded(logLevel))
+
       val env = SparkEnv.createExecutorEnv(driverConf, arguments.executorId, arguments.bindAddress,
         arguments.hostname, arguments.cores, cfg.ioEncryptionKey, isLocal = false)
       // Set the application attemptId in the BlockStoreClient if available.

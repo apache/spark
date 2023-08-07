@@ -487,9 +487,7 @@ private[spark] object PythonRDD extends Logging {
   }
 
   def writeUTF(str: String, dataOut: DataOutputStream): Unit = {
-    val bytes = str.getBytes(StandardCharsets.UTF_8)
-    dataOut.writeInt(bytes.length)
-    dataOut.write(bytes)
+    PythonWorkerUtils.writeUTF(str, dataOut)
   }
 
   /**

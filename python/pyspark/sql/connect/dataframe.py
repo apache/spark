@@ -1584,7 +1584,15 @@ class DataFrame:
                 error_class="NOT_IMPLEMENTED",
                 message_parameters={"feature": f"{name}()"},
             )
+
+        if name not in self.columns:
+            raise AttributeError(
+                "'%s' object has no attribute '%s'" % (self.__class__.__name__, name)
+            )
+
         return self[name]
+
+    __getattr__.__doc__ = PySparkDataFrame.__getattr__.__doc__
 
     @overload
     def __getitem__(self, item: Union[int, str]) -> Column:
