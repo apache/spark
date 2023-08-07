@@ -866,7 +866,7 @@
   },
   "FAILED_REGISTER_CLASS_WITH_KRYO" : {
     "message" : [
-      "Failed to register classes with Kryo"
+      "Failed to register classes with Kryo."
     ]
   },
   "FAILED_RENAME_PATH" : {
@@ -1528,7 +1528,7 @@
   },
   "INVALID_KRYO_SERIALIZER_BUFFER_SIZE" : {
     "message" : [
-      "<bufferSizeConfKey> must be less than 2048 MiB, got: <bufferSizeConfValue> MiB."
+      "The value of the config \"<bufferSizeConfKey>\" must be less than 2048 MiB, but got <bufferSizeConfValue> MiB."
     ],
     "sqlState" : "F0000"
   },
@@ -1976,7 +1976,7 @@
   },
   "KRYO_BUFFER_OVERFLOW" : {
     "message" : [
-      "Kryo serialization failed: <exceptionMsg>. To avoid this, increase <bufferSizeConfKey> value."
+      "Kryo serialization failed: <exceptionMsg>. To avoid this, increase \"<bufferSizeConfKey>\" value."
     ]
   },
   "LOAD_DATA_PATH_NOT_EXISTS" : {
