@@ -100,7 +100,7 @@ object SparkStringUtils extends Logging {
     truncatedString(seq, "", sep, "", maxFields)
   }
 
-    /**
+  /**
    * Returns a pretty string of the byte array which prints each byte as a hex digit and add spaces
    * between them. For example, [1A C0].
    */
