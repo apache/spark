@@ -530,7 +530,7 @@ Failed parsing struct: `<raw>`.
 
 SQLSTATE: none assigned
 
-Failed to register classes with Kryo
+Failed to register classes with Kryo.
 
 ### FAILED_RENAME_PATH
 
@@ -980,7 +980,7 @@ Input schema `<jsonSchema>` can only contain STRING as a key type for a MAP.
 
 SQLSTATE: F0000
 
-`<bufferSizeConfKey>` must be less than 2048 MiB, got: `<bufferSizeConfValue>` MiB.
+The value of the config "`<bufferSizeConfKey>`" must be less than 2048 MiB, but got `<bufferSizeConfValue>` MiB.
 
 ### [INVALID_LAMBDA_FUNCTION_CALL](sql-error-conditions-invalid-lambda-function-call-error-class.html)
 
@@ -1177,7 +1177,7 @@ The join condition `<joinCondition>` has the invalid type `<conditionType>`, exp
 
 SQLSTATE: none assigned
 
-Kryo serialization failed: `<exceptionMsg>`. To avoid this, increase `<bufferSizeConfKey>` value.
+Kryo serialization failed: `<exceptionMsg>`. To avoid this, increase "`<bufferSizeConfKey>`" value.
 
 ### LOAD_DATA_PATH_NOT_EXISTS
 
