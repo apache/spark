@@ -17,6 +17,7 @@
 """
 User-defined table function related classes and functions
 """
+import pickle
 from dataclasses import dataclass
 from functools import wraps
 import inspect
@@ -105,11 +106,11 @@ def _create_py_udtf(
         from pyspark.sql import SparkSession
 
         session = SparkSession._instantiatedSession
-        arrow_enabled = (
-            session.conf.get("spark.sql.execution.pythonUDTF.arrow.enabled") == "true"
-            if session is not None
-            else True
-        )
+        arrow_enabled = False
+        if session is not None:
+            value = session.conf.get("spark.sql.execution.pythonUDTF.arrow.enabled")
+            if isinstance(value, str) and value.lower() == "true":
+                arrow_enabled = True
 
     # Create a regular Python UDTF and check for invalid handler class.
     regular_udtf = _create_udtf(cls, returnType, name, PythonEvalType.SQL_TABLE_UDF, deterministic)
@@ -303,7 +304,29 @@ class UserDefinedTableFunction:
         spark = SparkSession._getActiveSessionOrCreate()
         sc = spark.sparkContext
 
-        wrapped_func = _wrap_function(sc, func)
+        try:
+            wrapped_func = _wrap_function(sc, func)
+        except pickle.PicklingError as e:
+            if "CONTEXT_ONLY_VALID_ON_DRIVER" in str(e):
+                raise PySparkRuntimeError(
+                    error_class="UDTF_SERIALIZATION_ERROR",
+                    message_parameters={
+                        "name": self._name,
+                        "message": "it appears that you are attempting to reference SparkSession "
+                        "inside a UDTF. SparkSession can only be used on the driver, "
+                        "not in code that runs on workers. Please remove the reference "
+                        "and try again.",
+                    },
+                ) from None
+            raise PySparkRuntimeError(
+                error_class="UDTF_SERIALIZATION_ERROR",
+                message_parameters={
+                    "name": self._name,
+                    "message": "Please check the stack trace and make sure the "
+                    "function is serializable.",
+                },
+            )
+
         assert sc._jvm is not None
         if self.returnType is None:
             judtf = sc._jvm.org.apache.spark.sql.execution.python.UserDefinedPythonTableFunction(

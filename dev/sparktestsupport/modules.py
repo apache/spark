@@ -816,10 +816,9 @@ pyspark_pandas_slow = Module(
 
 pyspark_connect = Module(
     name="pyspark-connect",
-    dependencies=[pyspark_sql, pyspark_ml, connect],
+    dependencies=[pyspark_sql, connect],
     source_file_regexes=[
         "python/pyspark/sql/connect",
-        "python/pyspark/ml/connect",
     ],
     python_test_goals=[
         # sql doctests
@@ -870,6 +869,21 @@ pyspark_connect = Module(
         "pyspark.sql.tests.connect.test_parity_pandas_udf_scalar",
         "pyspark.sql.tests.connect.test_parity_pandas_udf_grouped_agg",
         "pyspark.sql.tests.connect.test_parity_pandas_udf_window",
+    ],
+    excluded_python_implementations=[
+        "PyPy"  # Skip these tests under PyPy since they require numpy, pandas, and pyarrow and
+        # they aren't available there
+    ],
+)
+
+
+pyspark_ml_connect = Module(
+    name="pyspark-ml-connect",
+    dependencies=[pyspark_connect, pyspark_ml],
+    source_file_regexes=[
+        "python/pyspark/ml/connect",
+    ],
+    python_test_goals=[
         # ml doctests
         "pyspark.ml.connect.functions",
         # ml unittests
