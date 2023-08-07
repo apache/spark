@@ -244,7 +244,7 @@ object TableOutputResolver {
             cannotFindCol)
         } else {
           val extraCols = inputCols.filterNot(col => matchedCols.contains(col.name))
-                  .map(col => s"${toSQLId(col.name)}").mkString(", ")
+            .map(col => s"${toSQLId(col.name)}").mkString(", ")
           throw QueryCompilationErrors.incompatibleDataToTableExtraStructFieldsError(
             tableName, colPath.quoted, extraCols
           )
