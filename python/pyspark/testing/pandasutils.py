@@ -518,16 +518,7 @@ class PandasOnSparkTestUtils:
                 atol=atol,
                 checkRowOrder=check_row_order,
             )
-        elif isinstance(right, (ps.DataFrame, ps.Series, ps.Index)):
-            return assertPandasOnSparkEqual(
-                left,
-                right,
-                checkExact=check_exact,
-                almost=almost,
-                rtol=rtol,
-                atol=atol,
-                checkRowOrder=check_row_order,
-            )
+
         lobj = self._to_pandas(left)
         robj = self._to_pandas(right)
         if isinstance(lobj, (pd.DataFrame, pd.Series, pd.Index)):
