@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution.datasources
 
 import java.util.Locale
 
+import scala.collection.immutable.ListMap
 import scala.collection.mutable
 
 import org.apache.hadoop.fs.Path
@@ -670,9 +671,10 @@ object DataSourceStrategy
     // A map from original Catalyst expressions to corresponding translated data source filters.
     // If a predicate is not in this map, it means it cannot be pushed down.
     val supportNestedPredicatePushdown = DataSourceUtils.supportNestedPredicatePushdown(relation)
-    val translatedMap: Map[Expression, Filter] = predicates.flatMap { p =>
+    // SPARK-41636: we keep the order of the predicates to avoid CodeGenerator cache misses
+    val translatedMap: Map[Expression, Filter] = ListMap(predicates.flatMap { p =>
       translateFilter(p, supportNestedPredicatePushdown).map(f => p -> f)
-    }.toMap
+    }: _*)
 
     val pushedFilters: Seq[Filter] = translatedMap.values.toSeq
 
