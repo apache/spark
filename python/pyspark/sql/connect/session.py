@@ -97,7 +97,7 @@ if TYPE_CHECKING:
 
 class SparkSession:
     # The active SparkSession for the current thread
-    _active_session = threading.local()
+    _active_session: ClassVar[threading.local] = threading.local()
     # Reference to the root SparkSession
     _default_session: ClassVar[Optional["SparkSession"]] = None
     _lock: ClassVar[RLock] = RLock()
