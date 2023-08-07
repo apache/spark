@@ -68,7 +68,7 @@ def _create_py_udtf(
     if useArrow is not None:
         arrow_enabled = useArrow
     else:
-        from pyspark.sql.connect import SparkSession
+        from pyspark.sql.connect.session import SparkSession
 
         arrow_enabled = False
         try:
@@ -167,6 +167,7 @@ class UserDefinedTableFunction:
         )
 
     def __call__(self, *cols: "ColumnOrName") -> "DataFrame":
+        from pyspark.sql.connect.session import SparkSession
         from pyspark.sql.connect.dataframe import DataFrame
 
         session = SparkSession.active()
