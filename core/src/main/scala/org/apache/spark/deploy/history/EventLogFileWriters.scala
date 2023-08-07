@@ -124,7 +124,10 @@ abstract class EventLogFileWriter(
   }
 
   protected def closeWriter(): Unit = {
-    writer.foreach(_.close())
+    writer.foreach(w => {
+      logInfo(s"Finished logging events to $logPath")
+      w.close()
+    })
   }
 
   protected def renameFile(src: Path, dest: Path, overwrite: Boolean): Unit = {
