@@ -615,6 +615,7 @@ class SparkSqlAstBuilder extends AstBuilder {
         ctx.multipartIdentifier)
     }
 
+    /** The fully qualified variable name is system.session.varname */
     val schemaQualifiedName = if (multipartIdentifier.length < 2) {
       SESSION_DATABASE +: multipartIdentifier
     } else {

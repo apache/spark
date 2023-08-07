@@ -53,7 +53,11 @@ object TableOutputResolver {
         if (DataTypeUtils.sameType(inputCol.dataType, expected.dataType)) {
           inputCol
         } else {
-          Alias(cast(inputCol, expected.dataType, conf, expected.varName), expected.varName)()
+          /** SET VAR always uses ANSI with stare-assignment rules */
+          val cast = Cast(inputCol, expected.dataType, Option(conf.sessionLocalTimeZone),
+            ansiEnabled = true)
+          cast.setTagValue(Cast.BY_TABLE_INSERTION, ())
+          Alias(checkCastOverflowInTableInsert(cast, expected.varName), expected.varName)()
         }
       }
     }
