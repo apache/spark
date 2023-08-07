@@ -16,6 +16,8 @@
  */
 package org.apache.spark.sql.connect.client
 
+import scala.jdk.CollectionConverters._
+
 import com.google.rpc.ErrorInfo
 import io.grpc.StatusRuntimeException
 import io.grpc.protobuf.StatusProto
@@ -59,36 +61,32 @@ private[client] object GrpcExceptionConverter extends JsonUtils {
   }
 
   private val errorFactory = new ErrorFactoryBuilder()
-    .addConstructor((message, _) => new ParseException(None, message, Origin(), Origin()))
-    .addConstructor((message, _) => new AnalysisException(message))
+    .registerConstructor((message, _) => new ParseException(None, message, Origin(), Origin()))
+    .registerConstructor((message, _) => new AnalysisException(message))
     .build()
 
-  private def errorInfoToThrowable(info: ErrorInfo, message: String): Throwable = {
+  private def errorInfoToThrowable(info: ErrorInfo, message: String): Option[Throwable] = {
     val classes =
       mapper.readValue(info.getMetadataOrDefault("classes", "[]"), classOf[Array[String]])
 
-    for (cls <- classes) {
-      errorFactory.get(cls) match {
-        case Some(constructor) =>
-          return constructor(message, null)
-        case None =>
-        // Do nothing
+    classes
+      .find(errorFactory.contains(_))
+      .map { cls =>
+        errorFactory.get(cls).get(message, null)
       }
-    }
-
-    new SparkException(message)
   }
 
   private def toThrowable(ex: StatusRuntimeException): Throwable = {
     val status = StatusProto.fromThrowable(ex)
 
-    status.getDetailsList.forEach { d =>
-      if (d.is(classOf[ErrorInfo])) {
+    status
+      .getDetailsList
+      .asScala
+      .find(_.is(classOf[ErrorInfo]))
+      .flatMap { d =>
         val errorInfo = d.unpack(classOf[ErrorInfo])
-        return errorInfoToThrowable(errorInfo, status.getMessage)
+        errorInfoToThrowable(errorInfo, status.getMessage)
       }
-    }
-
-    new SparkException(status.getMessage, ex.getCause)
+      .getOrElse(new SparkException(status.getMessage, ex.getCause))
   }
 }

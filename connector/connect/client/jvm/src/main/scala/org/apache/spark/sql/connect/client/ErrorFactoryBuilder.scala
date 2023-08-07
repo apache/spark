@@ -19,12 +19,18 @@ package org.apache.spark.sql.connect.client
 import scala.collection.mutable
 import scala.reflect.ClassTag
 
-private[client] class ErrorFactoryBuilder() {
+private[client] class ErrorFactoryBuilder {
 
-  private val constructors = mutable.Map[String, (String, Throwable) => Throwable]()
+  private val constructors = mutable.Map.empty[String, (String, Throwable) => Throwable]
 
-  def addConstructor[T <: Throwable: ClassTag](
-      throwableCtr: (String, Throwable) => T): ErrorFactoryBuilder = {
+  /**
+   * registerConstructors register throwableCtr in ErrorFactoryBuilder.
+   * @param throwableCtr the constructor that construct Throwable based on message and cause.
+   * @return this
+   */
+  def registerConstructor[T <: Throwable: ClassTag](
+      throwableCtr: (String, Throwable) => T
+  ): ErrorFactoryBuilder = {
     val className = implicitly[reflect.ClassTag[T]].runtimeClass.getName
     assert(!constructors.contains(className))
     constructors(className) = throwableCtr
