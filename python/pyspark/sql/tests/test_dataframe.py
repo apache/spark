@@ -1008,6 +1008,32 @@ class DataFrameTestsMixin:
             IllegalArgumentException, lambda: self.spark.range(1).sample(-1.0).count()
         )
 
+    def test_toDF_with_string(self):
+        df = self.spark.createDataFrame([("John", 30), ("Alice", 25), ("Bob", 28)])
+        data = [("John", 30), ("Alice", 25), ("Bob", 28)]
+
+        result = df.toDF("key", "value")
+        self.assertEqual(result.schema.simpleString(), "struct<key:string,value:bigint>")
+        self.assertEqual(result.collect(), data)
+
+        with self.assertRaises(PySparkTypeError) as pe:
+            df.toDF("key", None)
+
+        self.check_error(
+            exception=pe.exception,
+            error_class="NOT_LIST_OF_STR",
+            message_parameters={"arg_name": "cols", "arg_type": "NoneType"},
+        )
+
+        with self.assertRaises(PySparkValueError) as pe:
+            df.toDF("key")
+
+        self.check_error(
+            exception=pe.exception,
+            error_class="LENGTH_MISMATCH",
+            message_parameters={"arg_name": "cols", "expected_length": 2, "actual_length": 1},
+        )
+
     def test_toDF_with_schema_string(self):
         data = [Row(key=i, value=str(i)) for i in range(100)]
         rdd = self.sc.parallelize(data, 5)

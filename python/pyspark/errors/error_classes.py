@@ -367,6 +367,11 @@ ERROR_CLASSES_JSON = """
       "Key-value pair or a list of pairs is required."
     ]
   },
+  "LENGTH_MISMATCH" : {
+    "message" : [
+      "The length of `<arg_name>` must be <expected_length>, got <actual_length>."
+    ]
+  },
   "LENGTH_SHOULD_BE_THE_SAME" : {
     "message" : [
       "<arg1> and <arg2> should be of the same length, got <arg1_length> and <arg2_length>."

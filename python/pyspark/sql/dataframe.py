@@ -5304,6 +5304,23 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         | 16|  Bob|
         +---+-----+
         """
+        expected_len_cols = len(self.columns)
+        actual_len_cols = len(cols)
+        if expected_len_cols != actual_len_cols:
+            raise PySparkValueError(
+                error_class="LENGTH_MISMATCH",
+                message_parameters={
+                    "arg_name": "cols",
+                    "expected_length": expected_len_cols,
+                    "actual_length": actual_len_cols,
+                },
+            )
+        for col in cols:
+            if not isinstance(col, str):
+                raise PySparkTypeError(
+                    error_class="NOT_LIST_OF_STR",
+                    message_parameters={"arg_name": "cols", "arg_type": type(col).__name__},
+                )
         jdf = self._jdf.toDF(self._jseq(cols))
         return DataFrame(jdf, self.sparkSession)
 
