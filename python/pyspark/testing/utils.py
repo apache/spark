@@ -478,9 +478,7 @@ def assertDataFrameEqual(
         # If pandas dependencies are available, allow pandas or pandas-on-Spark DataFrame
         import pyspark.pandas as ps
         import pandas as pd
-        from pyspark.testing.pandasutils import (
-            PandasOnSparkTestUtils,
-        )
+        from pyspark.testing.pandasutils import PandasOnSparkTestUtils
 
         has_pandas = True
     except Exception:
@@ -497,7 +495,7 @@ def assertDataFrameEqual(
             # handle pandas DataFrames
             # assert approximate equality for float data
             return PandasOnSparkTestUtils().assert_eq(
-                actual, expected, check_exact=False, almost=True, check_row_order=checkRowOrder
+                actual, expected, almost=True, rtol=rtol, atol=atol, check_row_order=checkRowOrder
             )
 
     try:

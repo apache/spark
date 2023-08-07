@@ -153,19 +153,20 @@ def _assert_pandas_equal(
 
 
 def _assert_pandas_almost_equal(
-    left: Union[pd.DataFrame, pd.Series, pd.Index], right: Union[pd.DataFrame, pd.Series, pd.Index]
+    left: Union[pd.DataFrame, pd.Series, pd.Index],
+    right: Union[pd.DataFrame, pd.Series, pd.Index],
+    rtol: float = 1e-5,
+    atol: float = 1e-8,
 ):
     """
     This function checks if given pandas objects approximately same,
     which means the conditions below:
       - Both objects are nullable
-      - Compare decimals and floats according to the following formula:
+      - Compare decimals and floats, where two values a and b are approximately equal
+        if they satisfy the following formula:
         absolute(a - b) <= (atol + rtol * absolute(b))
-        where rtol=1e-5 and atol=1e-8 by numpy convention
+        where rtol=1e-5 and atol=1e-8 by default
     """
-    # following pandas convention, rtol=1e-5 and atol=1e-8
-    rtol = 1e-5
-    atol = 1e-8
 
     def compare_vals_approx(val1, val2):
         # compare vals for approximate equality
@@ -348,6 +349,8 @@ def assertPandasOnSparkEqual(
     expected: Union[DataFrame, pd.DataFrame, Series, pd.Series, Index, pd.Index],
     checkExact: bool = True,
     almost: bool = False,
+    rtol: float = 1e-5,
+    atol: float = 1e-8,
     checkRowOrder: bool = True,
 ):
     r"""
@@ -373,6 +376,12 @@ def assertPandasOnSparkEqual(
         (see documentation for more details).
         If set to 'False' (default), the data is compared exactly with `unittest`'s
         `assertEqual`.
+    rtol : float, optional
+        The relative tolerance, used in asserting almost equality for float values in actual
+        and expected. Set to 1e-5 by default. (See Notes)
+    atol : float, optional
+        The absolute tolerance, used in asserting almost equality for float values in actual
+        and expected. Set to 1e-8 by default. (See Notes)
     checkRowOrder : bool, optional
         A flag indicating whether the order of rows should be considered in the comparison.
         If set to `False`, the row order is not taken into account.
@@ -383,6 +392,11 @@ def assertPandasOnSparkEqual(
     -----
     For `checkRowOrder`, note that pandas-on-Spark DataFrame ordering is non-deterministic, unless
     explicitly sorted.
+
+    When `almost` is set to True, approximate equality will be asserted, where two values
+    a and b are approximately equal if they satisfy the following formula:
+
+    ``absolute(a - b) <= (atol + rtol * absolute(b))``.
 
     Examples
     --------
@@ -438,7 +452,7 @@ def assertPandasOnSparkEqual(
                 expected = expected.sort_values(by=expected.columns[0], ignore_index=True)
 
         if almost:
-            _assert_pandas_almost_equal(actual, expected)
+            _assert_pandas_almost_equal(actual, expected, rtol=rtol, atol=atol)
         else:
             _assert_pandas_equal(actual, expected, checkExact=checkExact)
 
@@ -453,8 +467,14 @@ class PandasOnSparkTestUtils:
     def assertPandasEqual(self, left: Any, right: Any, check_exact: bool = True):
         _assert_pandas_equal(left, right, check_exact)
 
-    def assertPandasAlmostEqual(self, left: Any, right: Any):
-        _assert_pandas_almost_equal(left, right)
+    def assertPandasAlmostEqual(
+        self,
+        left: Any,
+        right: Any,
+        rtol: float = 1e-5,
+        atol: float = 1e-8,
+    ):
+        _assert_pandas_almost_equal(left, right, rtol=rtol, atol=atol)
 
     def assert_eq(
         self,
@@ -462,6 +482,8 @@ class PandasOnSparkTestUtils:
         right: Any,
         check_exact: bool = True,
         almost: bool = False,
+        rtol: float = 1e-5,
+        atol: float = 1e-8,
         check_row_order: bool = True,
     ):
         """
@@ -471,8 +493,16 @@ class PandasOnSparkTestUtils:
         :param left: object to compare
         :param right: object to compare
         :param check_exact: if this is False, the comparison is done less precisely.
-        :param almost: if this is enabled, the comparison is delegated to `unittest`'s
-                       `assertAlmostEqual`. See its documentation for more details.
+        :param almost: if this is enabled, the comparison asserts approximate equality
+            for float and decimal values, where two values a and b are approximately equal
+            if they satisfy the following formula:
+            absolute(a - b) <= (atol + rtol * absolute(b))
+        :param rtol: The relative tolerance, used in asserting approximate equality for
+            float values. Set to 1e-5 by default.
+        :param atol: The absolute tolerance, used in asserting approximate equality for
+            float values in actual and expected. Set to 1e-8 by default.
+        :param check_row_order: A flag indicating whether the order of rows should be considered
+            in the comparison. If set to False, row order will be ignored.
         """
         import pandas as pd
         from pandas.api.types import is_list_like
@@ -480,17 +510,29 @@ class PandasOnSparkTestUtils:
         # for pandas-on-Spark DataFrames, allow choice to ignore row order
         if isinstance(left, (ps.DataFrame, ps.Series, ps.Index)):
             return assertPandasOnSparkEqual(
-                left, right, checkExact=check_exact, almost=almost, checkRowOrder=check_row_order
+                left,
+                right,
+                checkExact=check_exact,
+                almost=almost,
+                rtol=rtol,
+                atol=atol,
+                checkRowOrder=check_row_order,
             )
         elif isinstance(right, (ps.DataFrame, ps.Series, ps.Index)):
             return assertPandasOnSparkEqual(
-                right, left, checkExact=check_exact, almost=almost, checkRowOrder=check_row_order
+                left,
+                right,
+                checkExact=check_exact,
+                almost=almost,
+                rtol=rtol,
+                atol=atol,
+                checkRowOrder=check_row_order,
             )
         lobj = self._to_pandas(left)
         robj = self._to_pandas(right)
         if isinstance(lobj, (pd.DataFrame, pd.Series, pd.Index)):
             if almost:
-                _assert_pandas_almost_equal(lobj, robj)
+                _assert_pandas_almost_equal(lobj, robj, rtol=rtol, atol=atol)
             else:
                 _assert_pandas_equal(lobj, robj, checkExact=check_exact)
         elif is_list_like(lobj) and is_list_like(robj):

@@ -27,7 +27,7 @@ from pyspark.errors import (
     IllegalArgumentException,
     SparkUpgradeException,
 )
-from pyspark.testing.utils import assertDataFrameEqual, assertSchemaEqual, _context_diff
+from pyspark.testing.utils import assertDataFrameEqual, assertSchemaEqual, _context_diff, have_numpy
 from pyspark.testing.sqlutils import ReusedSQLTestCase
 from pyspark.sql import Row
 import pyspark.sql.functions as F
@@ -744,7 +744,7 @@ class UtilsTestsMixin:
             },
         )
 
-    @unittest.skipIf(not have_pandas, "no pandas dependency")
+    @unittest.skipIf(not have_pandas or not have_numpy, "no pandas or numpy dependency")
     def test_assert_equal_exact_pandas_df(self):
         import pandas as pd
         import numpy as np
@@ -759,8 +759,8 @@ class UtilsTestsMixin:
         assertDataFrameEqual(df1, df2, checkRowOrder=False)
         assertDataFrameEqual(df1, df2, checkRowOrder=True)
 
-    @unittest.skipIf(not have_pandas, "no pandas dependency")
-    def test_assert_approx_equal_exact_pandas_df(self):
+    @unittest.skipIf(not have_pandas or not have_numpy, "no pandas or numpy dependency")
+    def test_assert_approx_equal_pandas_df(self):
         import pandas as pd
         import numpy as np
 
@@ -775,7 +775,48 @@ class UtilsTestsMixin:
         assertDataFrameEqual(df1, df2, checkRowOrder=False)
         assertDataFrameEqual(df1, df2, checkRowOrder=True)
 
-    @unittest.skipIf(not have_pandas, "no pandas dependency")
+    @unittest.skipIf(not have_pandas or not have_numpy, "no pandas or numpy dependency")
+    def test_assert_approx_equal_fail_exact_pandas_df(self):
+        import pandas as pd
+        import numpy as np
+
+        # test that asserts close enough equality for pandas df
+        df1 = pd.DataFrame(
+            data=np.array([(1, 2, 3), (4, 5, 6), (7, 8, 59)]), columns=["a", "b", "c"]
+        )
+        df2 = pd.DataFrame(
+            data=np.array([(1, 2, 3), (4, 5, 6), (7, 8, 59.0001)]), columns=["a", "b", "c"]
+        )
+
+        with self.assertRaises(PySparkAssertionError) as pe:
+            assertDataFrameEqual(df1, df2, checkRowOrder=False, rtol=0, atol=0)
+
+        self.check_error(
+            exception=pe.exception,
+            error_class="DIFFERENT_PANDAS_DATAFRAME",
+            message_parameters={
+                "left": df1.to_string(),
+                "left_dtype": str(df1.dtypes),
+                "right": df2.to_string(),
+                "right_dtype": str(df2.dtypes),
+            },
+        )
+
+        with self.assertRaises(PySparkAssertionError) as pe:
+            assertDataFrameEqual(df1, df2, checkRowOrder=True, rtol=0, atol=0)
+
+        self.check_error(
+            exception=pe.exception,
+            error_class="DIFFERENT_PANDAS_DATAFRAME",
+            message_parameters={
+                "left": df1.to_string(),
+                "left_dtype": str(df1.dtypes),
+                "right": df2.to_string(),
+                "right_dtype": str(df2.dtypes),
+            },
+        )
+
+    @unittest.skipIf(not have_pandas or not have_numpy, "no pandas or numpy dependency")
     def test_assert_unequal_pandas_df(self):
         import pandas as pd
         import numpy as np
@@ -815,7 +856,7 @@ class UtilsTestsMixin:
             },
         )
 
-    @unittest.skipIf(not have_pandas, "no pandas dependency")
+    @unittest.skipIf(not have_pandas or not have_numpy, "no pandas or numpy dependency")
     def test_assert_type_error_pandas_df(self):
         import pyspark.pandas as ps
         import pandas as pd
