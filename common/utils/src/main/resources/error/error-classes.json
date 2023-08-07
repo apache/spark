@@ -1248,27 +1248,17 @@
   },
   "INTERNAL_ERROR_METADATA_CATALOG" : {
     "message" : [
-      "An object in teh metadata catalog has been corrupted:"
+      "An object in the metadata catalog has been corrupted:"
     ],
     "subClass" : {
-      "TABLE_NAME_CONTEXT" : {
-        "message" : [
-          "Corrupted table name context in catalog: <numParts> parts expected, but part <index> is missing."
-        ]
-      },
       "SQL_CONFIG" : {
         "message" : [
           "Corrupted view SQL configs in catalog."
         ]
       },
-      "VIEW_QUERY_COLUMN_ARITY" : {
+      "TABLE_NAME_CONTEXT" : {
         "message" : [
-          "Corrupted view query output column names in catalog: <numCols> parts expected, but part <index> is missing."
-        ]
-      },
-      "TEMP_VIEW_REFERENCE" : {
-        "message" : [
-          "Corrupted view referred temp view names in catalog."
+          "Corrupted table name context in catalog: <numParts> parts expected, but part <index> is missing."
         ]
       },
       "TEMP_FUNCTION_REFERENCE" : {
@@ -1279,6 +1269,16 @@
       "TEMP_VARIABLE_REFERENCE" : {
         "message" : [
           "Corrupted view referred temp variable names in catalog."
+        ]
+      },
+      "TEMP_VIEW_REFERENCE" : {
+        "message" : [
+          "Corrupted view referred temp view names in catalog."
+        ]
+      },
+      "VIEW_QUERY_COLUMN_ARITY" : {
+        "message" : [
+          "Corrupted view query output column names in catalog: <numCols> parts expected, but part <index> is missing."
         ]
       }
     },

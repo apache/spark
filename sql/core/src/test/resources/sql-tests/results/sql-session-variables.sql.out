@@ -724,7 +724,7 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "UNRESOLVED_VARIABLE",
   "sqlState" : "42883",
   "messageParameters" : {
-    "searchPath" : "[`SESSION`]",
+    "searchPath" : "[`SYSTEM`.`SESSION`]",
     "variableName" : "`var1`"
   }
 }
@@ -740,7 +740,7 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "UNRESOLVED_VARIABLE",
   "sqlState" : "42883",
   "messageParameters" : {
-    "searchPath" : "[`SESSION`]",
+    "searchPath" : "[`SYSTEM`.`SESSION`]",
     "variableName" : "`var1`"
   }
 }

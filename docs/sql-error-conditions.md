@@ -793,6 +793,14 @@ For more details see [INSUFFICIENT_TABLE_PROPERTY](sql-error-conditions-insuffic
 
 `<message>`
 
+### [INTERNAL_ERROR_METADATA_CATALOG](sql-error-conditions-internal-error-metadata-catalog-error-class.html)
+
+[SQLSTATE: XX000](sql-error-conditions-sqlstates.html#class-XX-internal-error)
+
+An object in the metadata catalog has been corrupted:
+
+For more details see [INTERNAL_ERROR_METADATA_CATALOG](sql-error-conditions-internal-error-metadata-catalog-error-class.html)
+
 ### INTERNAL_ERROR_NETWORK
 
 [SQLSTATE: XX000](sql-error-conditions-sqlstates.html#class-XX-internal-error)

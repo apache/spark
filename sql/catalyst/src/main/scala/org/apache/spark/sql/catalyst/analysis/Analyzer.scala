@@ -1496,11 +1496,11 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
     def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUp {
       // Don't wait other rules to resolve the child plans of `InsertIntoStatement` as we need
       // to resolve column "DEFAULT" in the child plans so that they must be unresolved.
-      case i: InsertIntoStatement => new ResolveColumnDefaultInInsert(catalog)(i)
+      case i: InsertIntoStatement => new ResolveColumnDefaultInCommandInputQuery(catalog)(i)
 
       // Don't wait other rules to resolve the child plans of `SetVariable` as we need
       // to resolve column "DEFAULT" in the child plans so that they must be unresolved.
-      case s: SetVariable => new ResolveColumnDefaultInInsert(catalog)(s)
+      case s: SetVariable => new ResolveColumnDefaultInCommandInputQuery(catalog)(s)
 
       // Wait for other rules to resolve child plans first
       case p: LogicalPlan if !p.childrenResolved => p
@@ -1722,8 +1722,8 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
         val resolvedNoOuter = partitionExprs.map(resolveExpressionByPlanChildren(_, r))
         val (newPartitionExprs, newChild) = resolveExprsAndAddMissingAttrs(resolvedNoOuter, child)
         // Outer reference has lower priority than this. See the doc of `ResolveReferences`.
-        val resolvedWithOuterRefs = newPartitionExprs.map(resolveOuterRef)
-        val finalPartitionExprs = resolvedWithOuterRefs.map(e => resolveVariables(e))
+        val resolvedWithOuter = newPartitionExprs.map(resolveOuterRef)
+        val finalPartitionExprs = resolvedWithOuter.map(e => resolveVariables(e))
         if (child.output == newChild.output) {
           r.copy(finalPartitionExprs, newChild)
         } else {
@@ -1738,8 +1738,8 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
         val resolvedWithAgg = resolveColWithAgg(resolvedNoOuter, child)
         val (newCond, newChild) = resolveExprsAndAddMissingAttrs(Seq(resolvedWithAgg), child)
         // Outer reference has lowermost priority. See the doc of `ResolveReferences`.
-        val withOuterCond = resolveOuterRef(newCond.head)
-        val finalCond = resolveVariables(withOuterCond)
+        val resolvedWithOuter = resolveOuterRef(newCond.head)
+        val finalCond = resolveVariables(resolvedWithOuter)
         if (child.output == newChild.output) {
           f.copy(condition = finalCond)
         } else {

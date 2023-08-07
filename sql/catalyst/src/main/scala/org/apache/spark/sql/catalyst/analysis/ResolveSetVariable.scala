@@ -51,7 +51,7 @@ case class ResolveSetVariable(catalog: SessionCatalog) extends Rule[LogicalPlan]
             catalog.getVariable(varIdent).map { varInfo =>
               VariableReference(varIdent.variableName, varInfo._1, canFold = false)
             }.getOrElse {
-              throw unresolvedVariableError(varIdent, Seq("SESSION"))
+              throw unresolvedVariableError(varIdent, Seq("SYSTEM.SESSION"))
             }
           case other => other
         }

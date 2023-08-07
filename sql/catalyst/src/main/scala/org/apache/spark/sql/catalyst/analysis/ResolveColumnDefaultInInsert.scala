@@ -42,7 +42,7 @@ import org.apache.spark.sql.types.StructField
  * 3. The plan nodes between [[UnresolvedInlineTable]] and [[InsertIntoStatement]] are either
  *    [[Project]], or [[Aggregate]], or [[SubqueryAlias]].
  */
-class ResolveColumnDefaultInInsert(catalog: SessionCatalog)
+class ResolveColumnDefaultInCommandInputQuery(catalog: SessionCatalog)
   extends SQLConfHelper with ColumnResolutionHelper {
 
   def sessionCatalog: SessionCatalog = catalog
@@ -90,7 +90,7 @@ class ResolveColumnDefaultInInsert(catalog: SessionCatalog)
             val varIdent = VariableIdentifier(v.nameParts)
             val varInfo = sessionCatalog.getVariable(varIdent)
             if (!varInfo.isDefined) {
-              throw unresolvedVariableError(varIdent, Seq("SESSION"))
+              throw unresolvedVariableError(varIdent, Seq("SYSTEM.SESSION"))
             }
             varInfo.get._2
         }
