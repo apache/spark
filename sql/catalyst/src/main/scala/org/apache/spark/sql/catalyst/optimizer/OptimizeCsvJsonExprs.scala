@@ -102,8 +102,12 @@ object OptimizeCsvJsonExprs extends Rule[LogicalPlan] {
       // this case similarly.
       child
 
-    case g @ GetStructField(j @ JsonToStructs(schema: StructType, _, _, _), ordinal, _)
-        if schema.length > 1 && j.options.isEmpty =>
+    case g @ GetStructField(j @ JsonToStructs(schema: StructType, _, child, _), ordinal, _)
+        if schema.length > 1 && j.options.isEmpty && child.exists {
+          case _: RegExpReplace => false
+          case _: RegExpExtract => false
+          case _ => true
+        } =>
         // Options here should be empty because the optimization should not be enabled
         // for some options. For example, when the parse mode is failfast it should not
         // optimize, and should force to parse the whole input JSON with failing fast for
