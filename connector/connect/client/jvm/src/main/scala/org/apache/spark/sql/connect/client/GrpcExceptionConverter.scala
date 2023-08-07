@@ -17,6 +17,7 @@
 package org.apache.spark.sql.connect.client
 
 import scala.jdk.CollectionConverters._
+import scala.reflect.ClassTag
 
 import com.google.rpc.ErrorInfo
 import io.grpc.StatusRuntimeException
@@ -60,33 +61,41 @@ private[client] object GrpcExceptionConverter extends JsonUtils {
     }
   }
 
-  private val errorFactory = new ErrorFactoryBuilder()
-    .registerConstructor((message, _) => new ParseException(None, message, Origin(), Origin()))
-    .registerConstructor((message, _) => new AnalysisException(message))
-    .build()
+  private def errorConstructor[T <: Throwable: ClassTag](
+      throwableCtr: (String, Throwable) => T): (String, (String, Throwable) => Throwable) = {
+    val className = implicitly[reflect.ClassTag[T]].runtimeClass.getName
+    (className, throwableCtr)
+  }
+
+  private val errorFactory = Map(
+    errorConstructor((message, _) => new ParseException(None, message, Origin(), Origin())),
+    errorConstructor((message, cause) => new AnalysisException(message, cause = Option(cause))))
 
   private def errorInfoToThrowable(info: ErrorInfo, message: String): Option[Throwable] = {
     val classes =
       mapper.readValue(info.getMetadataOrDefault("classes", "[]"), classOf[Array[String]])
 
     classes
-      .find(errorFactory.contains(_))
+      .find(errorFactory.contains)
       .map { cls =>
-        errorFactory.get(cls).get(message, null)
+        val constructor = errorFactory.get(cls).get
+        constructor(message, null)
       }
   }
 
   private def toThrowable(ex: StatusRuntimeException): Throwable = {
     val status = StatusProto.fromThrowable(ex)
 
-    status
-      .getDetailsList
-      .asScala
+    val fallbackEx = new SparkException(status.getMessage, ex.getCause)
+
+    val errorInfoOpt = status.getDetailsList.asScala
       .find(_.is(classOf[ErrorInfo]))
-      .flatMap { d =>
-        val errorInfo = d.unpack(classOf[ErrorInfo])
-        errorInfoToThrowable(errorInfo, status.getMessage)
-      }
-      .getOrElse(new SparkException(status.getMessage, ex.getCause))
+
+    if (errorInfoOpt.isEmpty) {
+      return fallbackEx
+    }
+
+    errorInfoToThrowable(errorInfoOpt.get.unpack(classOf[ErrorInfo]), status.getMessage)
+      .getOrElse(fallbackEx)
   }
 }
