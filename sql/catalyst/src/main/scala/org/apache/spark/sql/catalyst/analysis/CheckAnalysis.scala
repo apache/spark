@@ -1328,6 +1328,11 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
           failOnInvalidOuterReference(a)
           checkPlan(a.child, aggregated = true, canContainOuter)
 
+        // Same as Aggregate above.
+        case w: Window =>
+          failOnInvalidOuterReference(w)
+          checkPlan(w.child, aggregated = true, canContainOuter)
+
         // Distinct does not host any correlated expressions, but during the optimization phase
         // it will be rewritten as Aggregate, which can only be on a correlation path if the
         // correlation contains only the supported correlated equality predicates.

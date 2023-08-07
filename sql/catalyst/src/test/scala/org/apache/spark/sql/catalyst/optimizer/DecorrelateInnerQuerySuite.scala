@@ -454,4 +454,48 @@ class DecorrelateInnerQuerySuite extends PlanTest {
             DomainJoin(Seq(x), testRelation))))
     check(innerPlan, outerPlan, correctAnswer, Seq(x <=> x))
   }
+
+  test("window function with correlated equality predicate") {
+    val outerPlan = testRelation2
+    val innerPlan =
+      Window(Seq(b, c),
+        partitionSpec = Seq(c), orderSpec = b.asc :: Nil,
+        Filter(And(OuterReference(x) === a, b === 3),
+          testRelation))
+    // Both the project list and the partition spec have added the correlated variable.
+    val correctAnswer =
+      Window(Seq(b, c, a), partitionSpec = Seq(c, a), orderSpec = b.asc :: Nil,
+        Filter(b === 3,
+          testRelation))
+    check(innerPlan, outerPlan, correctAnswer, Seq(x === a))
+  }
+
+  test("window function with correlated non-equality predicate") {
+    val outerPlan = testRelation2
+    val innerPlan =
+      Window(Seq(b, c),
+        partitionSpec = Seq(c), orderSpec = b.asc :: Nil,
+        Filter(And(OuterReference(x) > a, b === 3),
+          testRelation))
+    // Both the project list and the partition spec have added the correlated variable.
+    // The input to the filter is a domain join that produces 'x' values.
+    val correctAnswer =
+    Window(Seq(b, c, x), partitionSpec = Seq(c, x), orderSpec = b.asc :: Nil,
+      Filter(And(b === 3, x > a),
+        DomainJoin(Seq(x), testRelation)))
+    check(innerPlan, outerPlan, correctAnswer, Seq(x <=> x))
+  }
+
+  test("window function with correlated columns inside") {
+    val outerPlan = testRelation2
+    val innerPlan =
+      Window(projectList = Seq(b, c),
+        partitionSpec = Seq(c, OuterReference(x)), orderSpec = b.asc :: Nil,
+        Filter(b === 3,
+          testRelation))
+    val e = intercept[java.lang.AssertionError] {
+      DecorrelateInnerQuery(innerPlan, outerPlan.select())
+    }
+    assert(e.getMessage.contains("Correlated column is not allowed in"))
+  }
 }
