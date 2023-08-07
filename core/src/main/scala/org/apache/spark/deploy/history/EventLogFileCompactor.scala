@@ -149,7 +149,7 @@ class EventLogFileCompactor(
     val logWriter = new CompactedEventLogFileWriter(lastIndexEventLogPath, "dummy", None,
       lastIndexEventLogPath.getParent.toUri, sparkConf, hadoopConf)
 
-    val startTime = System.nanoTime()
+    val startTime = System.currentTimeMillis()
     logWriter.start()
     eventLogFiles.foreach { file =>
       EventFilter.applyFilterToFile(fs, filters, file.getPath,
@@ -159,7 +159,7 @@ class EventLogFileCompactor(
       )
     }
     logWriter.stop()
-    val duration = System.nanoTime() - startTime
+    val duration = System.currentTimeMillis() - startTime
     logInfo(s"Finished rewriting eventLog files to ${logWriter.logPath} took $duration ms.")
 
     logWriter.logPath
