@@ -286,7 +286,14 @@ class JacksonParser(
           }
 
         case VALUE_NUMBER_INT =>
-          parser.getLongValue * 1000000L
+          // consider negative number, which started with '-'
+          if (parser.getTextLength < 13) {
+            parser.getLongValue * 1000000L
+          } else if (parser.getTextLength < 16) {
+            parser.getLongValue * 1000L
+          } else {
+            parser.getLongValue * 1L
+          }
       }
 
     case TimestampNTZType =>
