@@ -27,7 +27,7 @@ import io.grpc.stub.StreamObserver
 import org.apache.spark.{SparkEnv, SparkSQLException}
 import org.apache.spark.connect.proto
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.connect.config.Connect.CONNECT_EXECUTE_REATTACHABLE_SENDER_MAX_STREAM_SIZE
+import org.apache.spark.sql.connect.config.Connect.CONNECT_EXECUTE_REATTACHABLE_OBSERVER_RETRY_BUFFER_SIZE
 import org.apache.spark.sql.connect.service.ExecuteHolder
 
 /**
@@ -85,12 +85,18 @@ private[connect] class ExecuteResponseObserver[T <: Message](val executeHolder: 
    */
   private var responseSender: Option[ExecuteGrpcResponseSender[T]] = None
 
+  // Statistics about cached responses.
+  private var cachedSizeUntilHighestConsumed = CachedSize()
+  private var cachedSizeUntilLastProduced = CachedSize()
+  private var autoRemovedSize = CachedSize()
+  private var totalSize = CachedSize()
+
   /**
    * Total size of response to be held buffered after giving out with getResponse. 0 for none, any
    * value greater than 0 will buffer the response from getResponse.
    */
   private val retryBufferSize = if (executeHolder.reattachable) {
-    SparkEnv.get.conf.get(CONNECT_EXECUTE_REATTACHABLE_SENDER_MAX_STREAM_SIZE).toLong
+    SparkEnv.get.conf.get(CONNECT_EXECUTE_REATTACHABLE_OBSERVER_RETRY_BUFFER_SIZE).toLong
   } else {
     0
   }
@@ -101,11 +107,19 @@ private[connect] class ExecuteResponseObserver[T <: Message](val executeHolder: 
     }
     lastProducedIndex += 1
     val processedResponse = setCommonResponseFields(r)
-    responses +=
-      ((lastProducedIndex, CachedStreamResponse[T](processedResponse, lastProducedIndex)))
-    responseIndexToId += ((lastProducedIndex, getResponseId(processedResponse)))
-    responseIdToIndex += ((getResponseId(processedResponse), lastProducedIndex))
-    logDebug(s"Saved response with index=$lastProducedIndex")
+    val responseId = getResponseId(processedResponse)
+    val response = CachedStreamResponse[T](processedResponse, responseId, lastProducedIndex)
+
+    responses += ((lastProducedIndex, response))
+    responseIndexToId += ((lastProducedIndex, responseId))
+    responseIdToIndex += ((responseId, lastProducedIndex))
+
+    cachedSizeUntilLastProduced.add(response)
+    totalSize.add(response)
+
+    logDebug(
+      s"Execution opId=${executeHolder.operationId} produced response " +
+        s"responseId=${responseId} idx=$lastProducedIndex")
     notifyAll()
   }
 
@@ -115,7 +129,9 @@ private[connect] class ExecuteResponseObserver[T <: Message](val executeHolder: 
     }
     error = Some(t)
     finalProducedIndex = Some(lastProducedIndex) // no responses to be send after error.
-    logDebug(s"Error. Last stream index is $lastProducedIndex.")
+    logDebug(
+      s"Execution opId=${executeHolder.operationId} produced error. " +
+        s"Last stream index is $lastProducedIndex.")
     notifyAll()
   }
 
@@ -124,7 +140,9 @@ private[connect] class ExecuteResponseObserver[T <: Message](val executeHolder: 
       throw new IllegalStateException("Stream onCompleted can't be called after stream completed")
     }
     finalProducedIndex = Some(lastProducedIndex)
-    logDebug(s"Completed. Last stream index is $lastProducedIndex.")
+    logDebug(
+      s"Execution opId=${executeHolder.operationId} completed stream. " +
+        s"Last stream index is $lastProducedIndex.")
     notifyAll()
   }
 
@@ -150,9 +168,18 @@ private[connect] class ExecuteResponseObserver[T <: Message](val executeHolder: 
     assert(index <= highestConsumedIndex + 1)
     val ret = responses.get(index)
     if (ret.isDefined) {
-      if (index > highestConsumedIndex) highestConsumedIndex = index
+      if (index > highestConsumedIndex) {
+        highestConsumedIndex = index
+        cachedSizeUntilHighestConsumed.add(ret.get)
+      }
       // When the response is consumed, figure what previous responses can be uncached.
-      removeCachedResponses(index)
+      // (We keep at least one response before the one we send to consumer now)
+      removeCachedResponses(index - 1)
+      logDebug(
+        s"CONSUME opId=${executeHolder.operationId} responseId=${ret.get.responseId} " +
+          s"idx=$index. size=${ret.get.serializedByteSize} " +
+          s"cachedUntilConsumed=$cachedSizeUntilHighestConsumed " +
+          s"cachedUntilProduced=$cachedSizeUntilLastProduced")
     } else if (index <= highestConsumedIndex) {
       // If index is <= highestConsumedIndex and not available, it was already removed from cache.
       // This may happen if ReattachExecute is too late and the cached response was evicted.
@@ -191,6 +218,25 @@ private[connect] class ExecuteResponseObserver[T <: Message](val executeHolder: 
   def removeResponsesUntilId(responseId: String): Unit = synchronized {
     val index = getResponseIndexById(responseId)
     removeResponsesUntilIndex(index)
+    logDebug(
+      s"RELEASE opId=${executeHolder.operationId} until " +
+        s"responseId=$responseId " +
+        s"idx=$index. " +
+        s"cachedUntilConsumed=$cachedSizeUntilHighestConsumed " +
+        s"cachedUntilProduced=$cachedSizeUntilLastProduced")
+  }
+
+  /** Remove all cached responses */
+  def removeAll(): Unit = synchronized {
+    removeResponsesUntilIndex(lastProducedIndex)
+    logInfo(
+      s"Release all for opId=${executeHolder.operationId}. Execution stats: " +
+        s"total=${totalSize} " +
+        s"autoRemoved=${autoRemovedSize} " +
+        s"cachedUntilConsumed=$cachedSizeUntilHighestConsumed " +
+        s"cachedUntilProduced=$cachedSizeUntilLastProduced " +
+        s"maxCachedUntilConsumed=${cachedSizeUntilHighestConsumed.max} " +
+        s"maxCachedUntilProduced=${cachedSizeUntilLastProduced.max}")
   }
 
   /** Returns if the stream is finished. */
@@ -218,16 +264,31 @@ private[connect] class ExecuteResponseObserver[T <: Message](val executeHolder: 
       totalResponsesSize += responses.get(i).get.serializedByteSize
       i -= 1
     }
-    removeResponsesUntilIndex(i)
+    if (responses.get(i).isDefined) {
+      logDebug(
+        s"AUTORELEASE opId=${executeHolder.operationId} until idx=$i. " +
+          s"cachedUntilConsumed=$cachedSizeUntilHighestConsumed " +
+          s"cachedUntilProduced=$cachedSizeUntilLastProduced")
+      removeResponsesUntilIndex(i, true)
+    } else {
+      logDebug(
+        s"NO AUTORELEASE opId=${executeHolder.operationId}. " +
+          s"cachedUntilConsumed=$cachedSizeUntilHighestConsumed " +
+          s"cachedUntilProduced=$cachedSizeUntilLastProduced")
+    }
   }
 
   /**
    * Remove cached responses until given index. Iterating backwards, once an index is encountered
    * that has been removed, all earlier indexes would also be removed.
    */
-  private def removeResponsesUntilIndex(index: Long) = {
+  private def removeResponsesUntilIndex(index: Long, autoRemoved: Boolean = false) = {
     var i = index
     while (i >= 1 && responses.get(i).isDefined) {
+      val r = responses.get(i).get
+      cachedSizeUntilHighestConsumed.remove(r)
+      cachedSizeUntilLastProduced.remove(r)
+      if (autoRemoved) autoRemovedSize.add(r)
       responses.remove(i)
       i -= 1
     }
@@ -257,5 +318,27 @@ private[connect] class ExecuteResponseObserver[T <: Message](val executeHolder: 
       case executePlanResponse: proto.ExecutePlanResponse =>
         executePlanResponse.getResponseId
     }
+  }
+
+  /**
+   * Helper for counting statistics about cached responses.
+   */
+  private case class CachedSize(var bytes: Long = 0L, var num: Long = 0L) {
+    var maxBytes: Long = 0L
+    var maxNum: Long = 0L
+
+    def add(t: CachedStreamResponse[T]): Unit = {
+      bytes += t.serializedByteSize
+      if (bytes > maxBytes) maxBytes = bytes
+      num += 1
+      if (num > maxNum) maxNum = num
+    }
+
+    def remove(t: CachedStreamResponse[T]): Unit = {
+      bytes -= t.serializedByteSize
+      num -= 1
+    }
+
+    def max: CachedSize = CachedSize(maxBytes, maxNum)
   }
 }

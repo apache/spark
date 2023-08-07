@@ -162,6 +162,7 @@ private[connect] class ExecuteHolder(
   def close(): Unit = {
     runner.interrupt()
     runner.join()
+    responseObserver.removeAll()
     eventsManager.postClosed()
     sessionHolder.removeExecuteHolder(operationId)
   }
