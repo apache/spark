@@ -19,8 +19,8 @@
 package org.apache.spark.deploy.master
 
 import java.net.ServerSocket
+import java.util.concurrent.ThreadLocalRandom
 
-import org.apache.commons.lang3.RandomUtils
 import org.apache.curator.test.TestingServer
 
 import org.apache.spark.{SecurityManager, SparkConf, SparkFunSuite}
@@ -117,7 +117,7 @@ class PersistenceEngineSuite extends SparkFunSuite {
   }
 
   private def findFreePort(conf: SparkConf): Int = {
-    val candidatePort = RandomUtils.nextInt(1024, 65536)
+    val candidatePort = ThreadLocalRandom.current().nextInt(1024, 65536)
     Utils.startServiceOnPort(candidatePort, (trialPort: Int) => {
       val socket = new ServerSocket(trialPort)
       socket.close()
