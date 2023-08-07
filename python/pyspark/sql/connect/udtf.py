@@ -68,6 +68,8 @@ def _create_py_udtf(
     if useArrow is not None:
         arrow_enabled = useArrow
     else:
+        from pyspark.sql.connect import SparkSession
+
         arrow_enabled = False
         try:
             session = SparkSession.active()
