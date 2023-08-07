@@ -150,11 +150,11 @@ private[sql] object ArrowConverters extends Logging {
         // Always write the schema.
         MessageSerializer.serialize(writeChannel, arrowSchema)
 
-        val isBatchSizeLimitExceeded = {
+        def isBatchSizeLimitExceeded: Boolean = {
           // If `maxEstimatedBatchSize` is zero or negative, it implies unlimited.
           maxEstimatedBatchSize > 0 && estimatedBatchSize >= maxEstimatedBatchSize
         }
-        val isRecordLimitExceeded = {
+        def isRecordLimitExceeded: Boolean = {
           // If `maxRecordsPerBatch` is zero or negative, it implies unlimited.
           maxRecordsPerBatch > 0 && rowCountInLastBatch >= maxRecordsPerBatch
         }

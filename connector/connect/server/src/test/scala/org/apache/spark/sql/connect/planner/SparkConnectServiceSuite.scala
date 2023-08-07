@@ -238,6 +238,67 @@ class SparkConnectServiceSuite extends SharedSparkSession with MockitoSugar with
     }
   }
 
+  test("SPARK-44657: Arrow batches respect max batch size limit") {
+    // Set 10 KiB as the batch size limit
+    val batchSize = 10 * 1024
+    withSparkConf("spark.connect.grpc.arrow.maxBatchSize" -> batchSize.toString) {
+      // TODO(SPARK-44121) Renable Arrow-based connect tests in Java 21
+      assume(SystemUtils.isJavaVersionAtMost(JavaVersion.JAVA_17))
+      val instance = new SparkConnectService(false)
+      val connect = new MockRemoteSession()
+      val context = proto.UserContext
+        .newBuilder()
+        .setUserId("c1")
+        .build()
+      val plan = proto.Plan
+        .newBuilder()
+        .setRoot(connect.sql("select * from range(0, 15000, 1, 1)"))
+        .build()
+      val request = proto.ExecutePlanRequest
+        .newBuilder()
+        .setPlan(plan)
+        .setUserContext(context)
+        .setSessionId(UUID.randomUUID.toString())
+        .build()
+
+      // Execute plan.
+      @volatile var done = false
+      val responses = mutable.Buffer.empty[proto.ExecutePlanResponse]
+      instance.executePlan(
+        request,
+        new StreamObserver[proto.ExecutePlanResponse] {
+          override def onNext(v: proto.ExecutePlanResponse): Unit = {
+            responses += v
+          }
+
+          override def onError(throwable: Throwable): Unit = {
+            throw throwable
+          }
+
+          override def onCompleted(): Unit = {
+            done = true
+          }
+        })
+      // The current implementation is expected to be blocking. This is here to make sure it is.
+      assert(done)
+
+      // 1 schema + 1 metric + at least 2 data batches
+      assert(responses.size > 3)
+
+      val allocator = new RootAllocator()
+
+      // Check the 'data' batches
+      responses.tail.dropRight(1).foreach { response =>
+        assert(response.hasArrowBatch)
+        val batch = response.getArrowBatch
+        assert(batch.getData != null)
+        // Batch size must be <= 70% since we intentionally use this multiplier for the size
+        // estimator.
+        assert(batch.getData.size() <= batchSize * 0.7)
+      }
+    }
+  }
+
   gridTest("SPARK-43923: commands send events")(
     Seq(
       proto.Command

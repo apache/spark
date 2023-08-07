@@ -2429,8 +2429,7 @@ class SparkConnectPlanner(val sessionHolder: SessionHolder) extends Logging {
 
     // Convert the results to Arrow.
     val schema = df.schema
-    val maxBatchSize =
-      (SparkEnv.get.conf.get(CONNECT_GRPC_ARROW_MAX_BATCH_SIZE) * 0.7).toLong * 1024L * 1024L
+    val maxBatchSize = (SparkEnv.get.conf.get(CONNECT_GRPC_ARROW_MAX_BATCH_SIZE) * 0.7).toLong
     val timeZoneId = session.sessionState.conf.sessionLocalTimeZone
 
     // Convert the data.
