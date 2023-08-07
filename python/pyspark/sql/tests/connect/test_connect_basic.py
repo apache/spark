@@ -3044,9 +3044,6 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
         # SPARK-41934: Disable unsupported functions.
 
         with self.assertRaises(NotImplementedError):
-            RemoteSparkSession.getActiveSession()
-
-        with self.assertRaises(NotImplementedError):
             RemoteSparkSession.builder.enableHiveSupport()
 
         for f in (
@@ -3331,6 +3328,7 @@ class SparkConnectSessionTests(ReusedConnectTestCase):
         spark.stop()
 
     def test_can_create_multiple_sessions_to_different_remotes(self):
+        self.spark.stop()
         self.assertIsNotNone(self.spark._client)
         # Creates a new remote session.
         other = PySparkSession.builder.remote("sc://other.remote:114/").create()
