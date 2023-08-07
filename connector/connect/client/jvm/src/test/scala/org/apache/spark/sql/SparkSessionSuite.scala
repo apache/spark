@@ -97,6 +97,7 @@ class SparkSessionSuite extends ConnectFunSuite {
     assertThrows[RuntimeException] {
       session.range(10).count()
     }
+    session.close()
   }
 
   test("Default/Active session") {
@@ -112,7 +113,7 @@ class SparkSessionSuite extends ConnectFunSuite {
     assert(SparkSession.active == session1)
 
     // Create another session...
-    val session2 = SparkSession.builder().remote(connectionString2).getOrCreate()
+    val session2 = SparkSession.builder().remote(connectionString2).create()
     assert(SparkSession.getDefaultSession.contains(session1))
     assert(SparkSession.getActiveSession.contains(session1))
     SparkSession.setActiveSession(session2)
@@ -143,8 +144,8 @@ class SparkSessionSuite extends ConnectFunSuite {
   }
 
   test("active session in multiple threads") {
-    val session1 = SparkSession.builder().remote(connectionString1).getOrCreate()
-    val session2 = SparkSession.builder().remote(connectionString2).getOrCreate()
+    val session1 = SparkSession.builder().remote(connectionString1).create()
+    val session2 = SparkSession.builder().remote(connectionString1).create()
     SparkSession.setActiveSession(session2)
     assert(SparkSession.getDefaultSession.contains(session1))
     assert(SparkSession.getActiveSession.contains(session2))

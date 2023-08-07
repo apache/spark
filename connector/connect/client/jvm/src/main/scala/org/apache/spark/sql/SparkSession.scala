@@ -737,6 +737,17 @@ object SparkSession extends Logging {
   private val defaultSession = new AtomicReference[SparkSession]
 
   /**
+   * Set the (global) default [[SparkSession]], and (thread-local) active [[SparkSession]]
+   * when they are not set yet.
+   */
+  private def setDefaultAndActiveSession(session: SparkSession): Unit = {
+    defaultSession.compareAndSet(null, session)
+    if (getActiveSession.isEmpty) {
+      setActiveSession(session)
+    }
+  }
+
+  /**
    * Create a new [[SparkSession]] based on the connect client [[Configuration]].
    */
   private[sql] def create(configuration: Configuration): SparkSession = {
@@ -814,10 +825,15 @@ object SparkSession extends Logging {
      *
      * This will always return a newly created session.
      *
+     * This method will update the default and/or active session if they are not set.
+     *
      * @since 3.5.0
      */
     def create(): SparkSession = {
-      tryCreateSessionFromClient().getOrElse(SparkSession.this.create(builder.configuration))
+      val session = tryCreateSessionFromClient()
+        .getOrElse(SparkSession.this.create(builder.configuration))
+      setDefaultAndActiveSession(session)
+      session
     }
 
     /**
@@ -833,12 +849,7 @@ object SparkSession extends Logging {
     def getOrCreate(): SparkSession = {
       val session = tryCreateSessionFromClient()
         .getOrElse(sessions.get(builder.configuration))
-      // To be compatible with the SQL API we update the default
-      // and active session here if they are not set.
-      defaultSession.compareAndSet(null, session)
-      if (getActiveSession.isEmpty) {
-        setActiveSession(session)
-      }
+      setDefaultAndActiveSession(session)
       session
     }
   }
