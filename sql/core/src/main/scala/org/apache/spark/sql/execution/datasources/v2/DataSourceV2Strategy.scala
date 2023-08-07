@@ -271,9 +271,6 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
         r: DataSourceV2Relation, _, query, _, _, Some(write), _) =>
       OverwriteByExpressionExec(planLater(query), refreshCache(r), write) :: Nil
 
-    case SetVariable(variables, query) =>
-      SetVariableExec(variables, planLater(query)) :: Nil
-
     case OverwritePartitionsDynamic(r: DataSourceV2Relation, query, _, _, Some(write)) =>
       OverwritePartitionsDynamicExec(planLater(query), refreshCache(r), write) :: Nil
 
@@ -492,8 +489,7 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
 
     case r: CacheTableAsSelect =>
       CacheTableAsSelectExec(
-        r.tempViewName, r.plan, r.originalText, r.isLazy, r.options,
-        r.referredTempFunctions, r.referredTempVariables) :: Nil
+        r.tempViewName, r.plan, r.originalText, r.isLazy, r.options, r.referredTempFunctions) :: Nil
 
     case r: UncacheTable =>
       def isTempView(table: LogicalPlan): Boolean = table match {

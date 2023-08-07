@@ -37,27 +37,30 @@ import org.apache.spark.sql.types.{ArrayType, DataType, DecimalType, IntegralTyp
 object TableOutputResolver {
 
   def resolveVariableOutputColumns(
-      expected: Seq[Expression],
+      expected: Seq[VariableReference],
       query: LogicalPlan,
       conf: SQLConf): LogicalPlan = {
 
     if (expected.size != query.output.size) {
-      throw new AnalysisException(errorClass = "ASSIGNMENT_ARITY_MISMATCH",
-        messageParameters = Map("numTarget" -> expected.size.toString,
+      throw new AnalysisException(
+        errorClass = "ASSIGNMENT_ARITY_MISMATCH",
+        messageParameters = Map(
+          "numTarget" -> expected.size.toString,
           "numExpr" -> query.output.size.toString))
     }
 
     val resolved: Seq[NamedExpression] = {
-      query.output.zip(expected.asInstanceOf[Seq[VariableReference]]).map {
-        case (inputCol, expected) =>
+      query.output.zip(expected).map { case (inputCol, expected) =>
         if (DataTypeUtils.sameType(inputCol.dataType, expected.dataType)) {
           inputCol
         } else {
-          /** SET VAR always uses ANSI with stare-assignment rules */
-          val cast = Cast(inputCol, expected.dataType, Option(conf.sessionLocalTimeZone),
+          // SET VAR always uses the ANSI store assignment policy
+          val cast = Cast(
+            inputCol,
+            expected.dataType,
+            Option(conf.sessionLocalTimeZone),
             ansiEnabled = true)
-          cast.setTagValue(Cast.BY_TABLE_INSERTION, ())
-          Alias(checkCastOverflowInTableInsert(cast, expected.varName), expected.varName)()
+          Alias(cast, expected.identifier.name)()
         }
       }
     }

@@ -430,39 +430,6 @@ case class OuterReference(e: NamedExpression)
 }
 
 /**
- * A place holder used to hold a reference that has been resolved to a field outside of the current
- * plan. This is used for correlated subqueries.
- */
-case class VariableReference(varName: String, literal: Literal, canFold: Boolean = true)
-  extends LeafExpression {
-
-  override def dataType: DataType = literal.dataType
-  override def nullable: Boolean = literal.nullable
-  override def prettyName: String = "session." + varName
-  override def foldable: Boolean = canFold
-
-  override def sql: String = varName
-
-  final override val nodePatterns: Seq[TreePattern] = Seq(VARIABLE_REFERENCE)
-
-  /** Returns the result of evaluating this expression on a given input Row */
-  override def eval(input: InternalRow): Any = literal.value
-
-  /**
-   * Returns Java source code that can be compiled to evaluate this expression.
-   * The default behavior is to call the eval method of the expression. Concrete expression
-   * implementations should override this to do actual code generation.
-   *
-   * @param ctx a [[CodegenContext]]
-   * @param ev  an [[ExprCode]] with unique terms.
-   * @return an [[ExprCode]] containing the Java source code to generate the given expression
-   */
-  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    literal.doGenCode(ctx, ev)
-  }
-}
-
-/**
  * A placeholder used to hold a [[NamedExpression]] that has been temporarily resolved as the
  * reference to a lateral column alias. It will be restored back to [[UnresolvedAttribute]] if
  * the lateral column alias can't be resolved, or become a normal resolved column in the rewritten

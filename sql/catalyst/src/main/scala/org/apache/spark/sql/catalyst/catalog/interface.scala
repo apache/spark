@@ -375,10 +375,12 @@ case class CatalogTable(
    * Return temporary variable names the current view was referred. should be empty if the
    * CatalogTable is not a Temporary View or created by older versions of Spark(before 3.4.0).
    */
-  def viewReferredTempVariableNames: Seq[String] = {
+  def viewReferredTempVariableNames: Seq[Seq[String]] = {
     try {
       properties.get(VIEW_REFERRED_TEMP_VARIABLE_NAMES).map { json =>
-        parse(json).asInstanceOf[JArray].arr.map(_.asInstanceOf[JString].s)
+        parse(json).asInstanceOf[JArray].arr.map { namePartsJson =>
+          namePartsJson.asInstanceOf[JArray].arr.map(_.asInstanceOf[JString].s)
+        }
       }.getOrElse(Seq.empty)
     } catch {
       case e: Exception =>

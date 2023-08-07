@@ -17,10 +17,6 @@
 
 package org.apache.spark.sql.catalyst
 
-import java.util.Locale
-
-import org.apache.spark.sql.internal.SQLConf
-
 /**
  * An identifier that optionally specifies a database.
  *
@@ -142,40 +138,4 @@ object FunctionIdentifier {
   def apply(funcName: String): FunctionIdentifier = new FunctionIdentifier(funcName)
   def apply(funcName: String, database: Option[String]): FunctionIdentifier =
     new FunctionIdentifier(funcName, database)
-}
-
-/**
- * Identifies a variable in a database.
- * If `database` is not defined, the current database is used.
- */
-case class VariableIdentifier(variableName: String, database: Option[String],
-                              catalog: Option[String])
-  extends CatalystIdentifier {
-  assert(catalog.isEmpty || database.isDefined)
-
-  override val identifier: String = variableName
-
-  def this(variableName: String) = this(variableName, None, None)
-  def this(variableName: String, database: Option[String]) = this(variableName, database, None)
-
-  override def toString: String = unquotedString
-}
-
-object VariableIdentifier {
-  def format(name: String): String = {
-    if (SQLConf.get.caseSensitiveAnalysis) name else name.toLowerCase(Locale.ROOT)
-  }
-
-  def apply(variableName: String): VariableIdentifier = new VariableIdentifier(variableName)
-  def apply(variableName: String, database: Option[String]): VariableIdentifier =
-    new VariableIdentifier(variableName, database)
-  def apply(identifiers: Seq[String]): VariableIdentifier = {
-    assert(identifiers.length <= 3 && identifiers.nonEmpty)
-    identifiers.length match {
-      case 3 => new VariableIdentifier(format(identifiers(2)), Some(format(identifiers(1))),
-      Some(format(identifiers.head)))
-      case 2 => new VariableIdentifier(format(identifiers(1)), Some(format(identifiers.head)), None)
-      case _ => new VariableIdentifier(format(identifiers.head), None, None)
-    }
-  }
 }

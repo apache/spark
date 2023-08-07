@@ -20,7 +20,6 @@ import scala.collection.mutable
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.catalog.SessionCatalog
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.SubExprUtils._
 import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, Median, PercentileCont, PercentileDisc}
@@ -28,7 +27,7 @@ import org.apache.spark.sql.catalyst.optimizer.{BooleanSimplification, Decorrela
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.trees.TreeNodeTag
-import org.apache.spark.sql.catalyst.trees.TreePattern.{LATERAL_COLUMN_ALIAS_REFERENCE, UNRESOLVED_WINDOW_EXPRESSION}
+import org.apache.spark.sql.catalyst.trees.TreePattern.{LATERAL_COLUMN_ALIAS_REFERENCE, PLAN_EXPRESSION, UNRESOLVED_WINDOW_EXPRESSION}
 import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, StringUtils, TypeUtils}
 import org.apache.spark.sql.connector.catalog.{LookupCatalog, SupportsPartitionManagement}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryErrorsBase}
@@ -41,8 +40,6 @@ import org.apache.spark.util.Utils
  * Throws user facing errors when passed invalid queries that fail to analyze.
  */
 trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsBase {
-
-  def sessionCatalog: SessionCatalog
 
   protected def isView(nameParts: Seq[String]): Boolean
 
@@ -262,7 +259,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
 
         // Fail if we still have an unresolved all in group by. This needs to run before the
         // general unresolved check below to throw a more tailored error message.
-        new ResolveReferencesInAggregate(sessionCatalog).checkUnresolvedGroupByAll(operator)
+        new ResolveReferencesInAggregate(catalogManager).checkUnresolvedGroupByAll(operator)
 
         getAllExpressions(operator).foreach(_.foreachUp {
           case a: Attribute if !a.resolved =>
@@ -653,6 +650,16 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
           case alter: AlterTableCommand =>
             checkAlterTableCommand(alter)
 
+          case c: CreateVariable
+              if c.resolved && c.defaultExpr.child.containsPattern(PLAN_EXPRESSION) =>
+            val ident = c.name.asInstanceOf[ResolvedIdentifier]
+            val varName = toSQLId(
+              ident.catalog.name +: ident.identifier.namespace :+ ident.identifier.name)
+            throw QueryCompilationErrors.defaultValuesMayNotContainSubQueryExpressions(
+              "CRETE VARIABLE",
+              varName,
+              c.defaultExpr.originalSQL)
+
           case _ => // Falls back to the following checks
         }
 
@@ -756,6 +763,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
             !o.isInstanceOf[Aggregate] && !o.isInstanceOf[Window] &&
             !o.isInstanceOf[Expand] &&
             !o.isInstanceOf[Generate] &&
+            !o.isInstanceOf[CreateVariable] &&
             // Lateral join is checked in checkSubqueryExpression.
             !o.isInstanceOf[LateralJoin] =>
             // The rule above is used to check Aggregate operator.

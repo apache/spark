@@ -17,64 +17,63 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.VariableIdentifier
-import org.apache.spark.sql.catalyst.catalog.SessionCatalog
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.plans.logical.{Limit, LogicalPlan, SetVariable, SubqueryAlias}
+import org.apache.spark.sql.catalyst.plans.logical.{Limit, LogicalPlan, SetVariable}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.COMMAND
+import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.errors.DataTypeErrors.toSQLId
 import org.apache.spark.sql.errors.QueryCompilationErrors.unresolvedVariableError
 import org.apache.spark.sql.types.IntegerType
 
 /**
- * Resolves columns of an output table from the data in a logical plan. This rule will:
- *
- * - Insert casts when data types do not match
- * - Detect plans that are not compatible with the output table and throw AnalysisException
+ * Resolves the target SQL variables that we want to set in SetVariable, and add cast if necessary
+ * to make the assignment valid.
  */
-case class ResolveSetVariable(catalog: SessionCatalog) extends Rule[LogicalPlan] {
+class ResolveSetVariable(val catalogManager: CatalogManager) extends Rule[LogicalPlan]
+  with ColumnResolutionHelper {
 
   override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsWithPruning(
     _.containsPattern(COMMAND), ruleId) {
-    case setVariable: SetVariable
-      if setVariable.sourceQuery.resolved && !setVariable.targetVariables.forall(_.resolved) =>
+    // Resolve the left hand side of the SET VAR command
+    case setVariable: SetVariable if !setVariable.targetVariables.forall(_.resolved) =>
+      val resolvedVars = setVariable.targetVariables.map {
+        case u: UnresolvedAttribute =>
+          lookupVariable(u.nameParts) match {
+            case Some(variable) => variable.copy(canFold = false)
+            case _ => throw unresolvedVariableError(u.nameParts, Seq("SYSTEM", "SESSION"))
+          }
 
-      /**
-       * Resolve the left hand side of the SET
-       */
-      val resolvedVars = setVariable.targetVariables.map { variable =>
-        variable match {
-          case v: UnresolvedVariable =>
-            val varIdent = VariableIdentifier(v.nameParts)
-            catalog.getVariable(varIdent).map { varInfo =>
-              VariableReference(varIdent.variableName, varInfo._1, canFold = false)
-            }.getOrElse {
-              throw unresolvedVariableError(varIdent, Seq("SYSTEM.SESSION"))
-            }
-          case other => other
-        }
+        case other => throw SparkException.internalError(
+          "Unexpected target variable expression in SetVariable: " + other)
       }
 
-      /**
-       * Protect against duplicate variable names
-       * Names are normalized when the variables are created.
-       * No need for case insensitive comparison here.
-       */
-      val varNames = resolvedVars.collect { case variable => variable.prettyName }
-      val dups = varNames.diff(varNames.distinct).distinct
+      // Protect against duplicate variable names
+      // Names are normalized when the variables are created.
+      // No need for case insensitive comparison here.
+      // TODO: we need to group by the qualified variable name once other catalogs support it.
+      val dups = resolvedVars.groupBy(_.identifier.name).filter(kv => kv._2.length > 1)
       if (dups.nonEmpty) {
-        throw new AnalysisException(errorClass = "DUPLICATE_ASSIGNMENTS",
-          messageParameters = Map("nameList" -> dups.map(toSQLId).mkString(", ")))
+        throw new AnalysisException(
+          errorClass = "DUPLICATE_ASSIGNMENTS",
+          messageParameters = Map("nameList" -> dups.keys.map(toSQLId).mkString(", ")))
       }
 
+      setVariable.copy(targetVariables = resolvedVars)
+
+    case setVariable: SetVariable
+        if setVariable.targetVariables.forall(_.isInstanceOf[VariableReference]) &&
+          setVariable.sourceQuery.resolved =>
+      val targetVariables = setVariable.targetVariables.map(_.asInstanceOf[VariableReference])
       val withCasts = TableOutputResolver.resolveVariableOutputColumns(
-        resolvedVars, setVariable.sourceQuery, conf)
-
-      val withLimit = SubqueryAlias("T", UnresolvedSubqueryColumnAliases(varNames,
-        Limit(Literal(2, IntegerType), withCasts)))
-
-      setVariable.copy(sourceQuery = withLimit, targetVariables = resolvedVars)
+        targetVariables, setVariable.sourceQuery, conf)
+      val withLimit = if (withCasts.maxRows.exists(_ <= 2)) {
+        withCasts
+      } else {
+        Limit(Literal(2, IntegerType), withCasts)
+      }
+      setVariable.copy(sourceQuery = withLimit)
   }
 }

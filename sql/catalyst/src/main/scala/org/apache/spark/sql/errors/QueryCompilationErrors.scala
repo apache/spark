@@ -23,7 +23,7 @@ import org.apache.hadoop.fs.Path
 
 import org.apache.spark.{SPARK_DOC_ROOT, SparkException, SparkThrowable, SparkThrowableHelper, SparkUnsupportedOperationException}
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.{ExtendedAnalysisException, FunctionIdentifier, QualifiedTableName, TableIdentifier, VariableIdentifier}
+import org.apache.spark.sql.catalyst.{ExtendedAnalysisException, FunctionIdentifier, QualifiedTableName, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableException, FunctionAlreadyExistsException, NamespaceAlreadyExistsException, NoSuchFunctionException, NoSuchNamespaceException, NoSuchPartitionException, NoSuchTableException, ResolvedTable, Star, TableAlreadyExistsException, UnresolvedRegex}
 import org.apache.spark.sql.catalyst.catalog.{CatalogTable, InvalidUDFClassException}
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
@@ -712,12 +712,12 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       messageParameters = Map("dt" -> dt.toString))
   }
 
-  def unresolvedVariableError(name: VariableIdentifier, searchPath: Seq[String]): Throwable = {
+  def unresolvedVariableError(name: Seq[String], searchPath: Seq[String]): Throwable = {
     new AnalysisException(
       errorClass = "UNRESOLVED_VARIABLE",
       messageParameters = Map(
-        "variableName" -> toSQLId(name.variableName),
-        "searchPath" -> searchPath.map(toSQLId).mkString("[", ", ", "]")))
+        "variableName" -> toSQLId(name),
+        "searchPath" -> toSQLId(searchPath)))
   }
 
   def unresolvedRoutineError(name: FunctionIdentifier, searchPath: Seq[String]): Throwable = {

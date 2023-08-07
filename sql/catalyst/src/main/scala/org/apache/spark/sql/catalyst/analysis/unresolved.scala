@@ -202,56 +202,6 @@ object UnresolvedTVFAliases {
 }
 
 /**
- * Holds the name of a variable (on the left hand side of a SET) that has yet to be resolved.
- */
-case class UnresolvedVariable(nameParts: Seq[String]) extends Attribute with Unevaluable {
-
-  def name: String =
-    nameParts.map(n => if (n.contains(".")) s"`$n`" else n).mkString(".")
-
-  override def exprId: ExprId = throw new UnresolvedException("exprId")
-  override def dataType: DataType = throw new UnresolvedException("dataType")
-  override def nullable: Boolean = throw new UnresolvedException("nullable")
-  override def qualifier: Seq[String] = throw new UnresolvedException("qualifier")
-  override lazy val resolved = false
-
-  override def newInstance(): UnresolvedVariable = this
-  override def withNullability(newNullability: Boolean): UnresolvedVariable = this
-  override def withQualifier(newQualifier: Seq[String]): UnresolvedVariable = this
-  override def withName(newName: String): UnresolvedVariable = UnresolvedVariable.quoted(newName)
-  override def withMetadata(newMetadata: Metadata): Attribute = this
-  override def withExprId(newExprId: ExprId): UnresolvedVariable = this
-  override def withDataType(newType: DataType): Attribute = this
-  final override val nodePatterns: Seq[TreePattern] = Seq(UNRESOLVED_ATTRIBUTE)
-
-  override def toString: String = s"'$name"
-
-  override def sql: String = nameParts.map(quoteIfNeeded(_)).mkString(".")
-
-  /**
-   * Returns true if this matches the token. This requires the variable to only have one part in
-   * its name and that matches the given token in a case insensitive way.
-   */
-  def equalsIgnoreCase(token: String): Boolean = {
-    nameParts.length == 1 && nameParts.head.equalsIgnoreCase(token)
-  }
-}
-
-object UnresolvedVariable {
-  /**
-   * Creates an [[UnresolvedVariable]], parsing segments separated by dots ('.').
-   */
-  def apply(name: String): UnresolvedVariable =
-    new UnresolvedVariable(CatalystSqlParser.parseMultipartIdentifier(name))
-
-  /**
-   * Creates an [[UnresolvedVariable]], from a single quoted string (for example using backticks in
-   * HiveQL). Since the string is considered quoted, no processing is done on the name.
-   */
-  def quoted(name: String): UnresolvedVariable = new UnresolvedVariable(Seq(name))
-}
-
-/**
  * Holds the name of an attribute that has yet to be resolved.
  */
 case class UnresolvedAttribute(nameParts: Seq[String]) extends Attribute with Unevaluable {

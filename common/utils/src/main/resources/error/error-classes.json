@@ -1401,7 +1401,7 @@
   },
   "INVALID_DEFAULT_VALUE" : {
     "message" : [
-      "Failed to execute <statement> command because the destination table column <colName> has a DEFAULT value <defaultValue>,"
+      "Failed to execute <statement> command because the destination column or variable <colName> has a DEFAULT value <defaultValue>,"
     ],
     "subClass" : {
       "DATA_TYPE" : {
@@ -1970,16 +1970,10 @@
           "Unsupported function name <funcName>."
         ]
       },
-      "UNSUPPORTED_VARIABLE_NAME" : {
-        "message" : [
-          "Unsupported variable name <varName>.",
-          "The name of a temporary variable must be of the form [[SYSTEM.]SESSION.]variable_identifier."
-        ]
-      },
       "VARIABLE_TYPE_OR_DEFAULT_REQUIRED" : {
         "message" : [
-          "The definition of variable <varName> required either a datatype or a DEFAULT clause.",
-          "For example, use: `DECLARE` <varName> `STRING` or `DECLARE` <varName> `= 'SQL'` instead of `DECLARE` <varName>"
+          "The definition of a SQL variable requires either a datatype or a DEFAULT clause.",
+          "For example, use `DECLARE name STRING` or `DECLARE name = 'SQL'` instead of `DECLARE name`."
         ]
       }
     },
@@ -3180,7 +3174,7 @@
       },
       "SET_VARIABLE_USING_SET" : {
         "message" : [
-          "<variableName> is a VARIABLE and cannot be updated using the SET statement. Use SET VARIABLE  <variableName> = ... instead."
+          "<variableName> is a VARIABLE and cannot be updated using the SET statement. Use SET VARIABLE <variableName> = ... instead."
         ]
       },
       "TABLE_OPERATION" : {

@@ -680,19 +680,6 @@ case class DeleteFromTable(
 }
 
 /**
- * The logical plan of the SET variable command.
- */
-case class SetVariable(
-    targetVariables: Seq[Expression],
-    sourceQuery: LogicalPlan)
-  extends UnaryCommand {
-
-  override def child: LogicalPlan = sourceQuery
-  override protected def withNewChildInternal(newChild: LogicalPlan): SetVariable =
-    copy(sourceQuery = newChild)
-}
-
-/**
  * The logical plan of the DELETE FROM command that can be executed using data source filters.
  *
  * As opposed to [[DeleteFromTable]], this node represents a DELETE operation where the condition
@@ -1352,8 +1339,7 @@ case class CacheTableAsSelect(
     isLazy: Boolean,
     options: Map[String, String],
     isAnalyzed: Boolean = false,
-    referredTempFunctions: Seq[String] = Seq.empty,
-    referredTempVariables: Seq[String] = Seq.empty) extends AnalysisOnlyCommand {
+    referredTempFunctions: Seq[String] = Seq.empty) extends AnalysisOnlyCommand {
   override protected def withNewChildrenInternal(
       newChildren: IndexedSeq[LogicalPlan]): CacheTableAsSelect = {
     assert(!isAnalyzed)
@@ -1365,9 +1351,8 @@ case class CacheTableAsSelect(
   override def markAsAnalyzed(ac: AnalysisContext): LogicalPlan = {
     copy(
       isAnalyzed = true,
-      // Collect the referred temporary functions and variables from AnalysisContext
-      referredTempFunctions = ac.referredTempFunctionNames.toSeq,
-      referredTempVariables = ac.referredTempVariableNames.toSeq)
+      // Collect the referred temporary functions from AnalysisContext
+      referredTempFunctions = ac.referredTempFunctionNames.toSeq)
   }
 }
 
@@ -1482,4 +1467,49 @@ case class TableSpec(
   def withNewLocation(newLocation: Option[String]): TableSpec = {
     TableSpec(properties, provider, options, newLocation, comment, serde, external)
   }
+}
+
+/**
+ * A fake expression which holds the default value expression and its original SQL text.
+ */
+case class DefaultValueExpression(child: Expression, originalSQL: String)
+  extends UnaryExpression with Unevaluable {
+  override def dataType: DataType = child.dataType
+  override protected def withNewChildInternal(newChild: Expression): Expression =
+    copy(child = newChild)
+}
+
+/**
+ * The logical plan of the DECLARE [OR REPLACE] TEMPORARY VARIABLE command.
+ */
+case class CreateVariable(
+    name: LogicalPlan,
+    defaultExpr: DefaultValueExpression,
+    replace: Boolean) extends UnaryCommand with SupportsSubquery {
+  override def child: LogicalPlan = name
+  override protected def withNewChildInternal(newChild: LogicalPlan): LogicalPlan =
+    copy(name = newChild)
+}
+
+/**
+ * The logical plan of the DROP TEMPORARY VARIABLE command.
+ */
+case class DropVariable(
+    name: LogicalPlan,
+    ifExists: Boolean) extends UnaryCommand {
+  override def child: LogicalPlan = name
+  override protected def withNewChildInternal(newChild: LogicalPlan): LogicalPlan =
+    copy(name = newChild)
+}
+
+/**
+ * The logical plan of the SET VARIABLE command.
+ */
+case class SetVariable(
+    targetVariables: Seq[Expression],
+    sourceQuery: LogicalPlan)
+  extends UnaryCommand {
+  override def child: LogicalPlan = sourceQuery
+  override protected def withNewChildInternal(newChild: LogicalPlan): SetVariable =
+    copy(sourceQuery = newChild)
 }

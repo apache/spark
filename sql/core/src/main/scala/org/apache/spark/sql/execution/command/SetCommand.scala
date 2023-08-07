@@ -19,7 +19,6 @@ package org.apache.spark.sql.execution.command
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{AnalysisException, Row, SparkSession}
-import org.apache.spark.sql.catalyst.VariableIdentifier
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.logical.IgnoreCachedData
@@ -103,13 +102,11 @@ case class SetCommand(kv: Option[(String, Option[String])])
           case _: ParseException =>
           Seq()
         }
-        if (varName.length > 0 && varName.length <= 3) {
-          val varIdent = VariableIdentifier(
-            sparkSession.sessionState.sqlParser.parseMultipartIdentifier(key))
-          if (sparkSession.sessionState.catalog.getVariable(varIdent).isDefined) {
+        if (varName.nonEmpty && varName.length <= 3) {
+          if (sparkSession.sessionState.analyzer.lookupVariable(varName).isDefined) {
             throw new AnalysisException(
               errorClass = "UNSUPPORTED_FEATURE.SET_VARIABLE_USING_SET",
-              messageParameters = Map("variableName" -> toSQLId(varIdent.variableName)))
+              messageParameters = Map("variableName" -> toSQLId(varName)))
           }
         }
         if (sparkSession.conf.get(CATALOG_IMPLEMENTATION.key).equals("hive") &&

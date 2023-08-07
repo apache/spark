@@ -136,7 +136,7 @@ case class AnalysisContext(
     // 2. If we are not resolving a view, this field will be updated everytime the analyzer
     //    lookup a temporary function. And export to the view metadata.
     referredTempFunctionNames: mutable.Set[String] = mutable.Set.empty,
-    referredTempVariableNames: mutable.Set[String] = mutable.Set.empty,
+    referredTempVariableNames: Seq[Seq[String]] = Seq.empty,
     outerPlan: Option[LogicalPlan] = None)
 
 object AnalysisContext {
@@ -164,7 +164,7 @@ object AnalysisContext {
       originContext.relationCache,
       viewDesc.viewReferredTempViewNames,
       mutable.Set(viewDesc.viewReferredTempFunctionNames: _*),
-      mutable.Set(viewDesc.viewReferredTempVariableNames: _*))
+      viewDesc.viewReferredTempVariableNames)
     set(context)
     try f finally { set(originContext) }
   }
@@ -190,7 +190,6 @@ object AnalysisContext {
 class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor[LogicalPlan]
   with CheckAnalysis with SQLConfHelper with ColumnResolutionHelper {
 
-  def sessionCatalog: SessionCatalog = catalogManager.v1SessionCatalog
   private val v1SessionCatalog: SessionCatalog = catalogManager.v1SessionCatalog
 
   override protected def validatePlanChanges(
@@ -287,7 +286,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
       ResolveFieldNameAndPosition ::
       AddMetadataColumns ::
       DeduplicateRelations ::
-      ResolveReferences(v1SessionCatalog) ::
+      new ResolveReferences(catalogManager) ::
       ResolveLateralColumnAliasReference ::
       ResolveExpressionsWithNamePlaceholders ::
       ResolveDeserializer ::
@@ -308,7 +307,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
       ResolveWindowFrame ::
       ResolveNaturalAndUsingJoin ::
       ResolveOutputRelation ::
-      ResolveSetVariable(v1SessionCatalog) ::
+      new ResolveSetVariable(catalogManager) ::
       ExtractWindowExpressions ::
       GlobalAggregates ::
       ResolveAggregateFunctions ::
@@ -1457,6 +1456,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
    * Some plan nodes have special column reference resolution logic, please read these sub-rules for
    * details:
    *  - [[ResolveReferencesInAggregate]]
+   *  - [[ResolveReferencesInUpdate]]
    *  - [[ResolveReferencesInSort]]
    *
    * Note: even if we use a single rule to resolve columns, it's still non-trivial to have a
@@ -1465,10 +1465,17 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
    *       previous options are permanently not applicable. If the current option can be applicable
    *       in the next iteration (other rules update the plan), we should not try the next option.
    */
-  case class ResolveReferences(catalog: SessionCatalog)
+  class ResolveReferences(val catalogManager: CatalogManager)
     extends Rule[LogicalPlan] with ColumnResolutionHelper {
 
-    def sessionCatalog: SessionCatalog = catalog
+    private val resolveColumnDefaultInCommandInputQuery =
+      new ResolveColumnDefaultInCommandInputQuery(catalogManager)
+    private val resolveReferencesInAggregate =
+      new ResolveReferencesInAggregate(catalogManager)
+    private val resolveReferencesInUpdate =
+      new ResolveReferencesInUpdate(catalogManager)
+    private val resolveReferencesInSort =
+      new ResolveReferencesInSort(catalogManager)
 
     /**
      * Return true if there're conflicting attributes among children's outputs of a plan
@@ -1496,11 +1503,11 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
     def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUp {
       // Don't wait other rules to resolve the child plans of `InsertIntoStatement` as we need
       // to resolve column "DEFAULT" in the child plans so that they must be unresolved.
-      case i: InsertIntoStatement => new ResolveColumnDefaultInCommandInputQuery(catalog)(i)
+      case i: InsertIntoStatement => resolveColumnDefaultInCommandInputQuery(i)
 
       // Don't wait other rules to resolve the child plans of `SetVariable` as we need
       // to resolve column "DEFAULT" in the child plans so that they must be unresolved.
-      case s: SetVariable => new ResolveColumnDefaultInCommandInputQuery(catalog)(s)
+      case s: SetVariable => resolveColumnDefaultInCommandInputQuery(s)
 
       // Wait for other rules to resolve child plans first
       case p: LogicalPlan if !p.childrenResolved => p
@@ -1605,7 +1612,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
       // rule: ResolveDeserializer.
       case plan if containsDeserializer(plan.expressions) => plan
 
-      case a: Aggregate => new ResolveReferencesInAggregate(catalog)(a)
+      case a: Aggregate => resolveReferencesInAggregate(a)
 
       // Special case for Project as it supports lateral column alias.
       case p: Project =>
@@ -1622,7 +1629,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
         // implementation and should be resolved based on the table schema.
         o.copy(deleteExpr = resolveExpressionByPlanOutput(o.deleteExpr, o.table))
 
-      case u: UpdateTable => new ResolveReferencesInUpdate(catalog)(u)
+      case u: UpdateTable => resolveReferencesInUpdate(u)
 
       case m @ MergeIntoTable(targetTable, sourceTable, _, _, _, _)
         if !m.resolved && targetTable.resolved && sourceTable.resolved =>
@@ -1749,7 +1756,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
         }
 
       case s: Sort if !s.resolved || s.missingInput.nonEmpty =>
-        new ResolveReferencesInSort(catalog)(s)
+        resolveReferencesInSort(s)
 
       case q: LogicalPlan =>
         logTrace(s"Attempting to resolve ${q.simpleString(conf.maxToStringFields)}")

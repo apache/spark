@@ -26,18 +26,16 @@ import scala.collection.JavaConverters._
 import org.antlr.v4.runtime.{ParserRuleContext, Token}
 import org.antlr.v4.runtime.tree.TerminalNode
 
-import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier, VariableIdentifier}
-import org.apache.spark.sql.catalyst.analysis.{GlobalTempView, LocalTempView, PersistedView, UnresolvedFunctionName, UnresolvedIdentifier, UnresolvedVariable}
+import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
+import org.apache.spark.sql.catalyst.analysis.{GlobalTempView, LocalTempView, PersistedView, UnresolvedFunctionName, UnresolvedIdentifier}
 import org.apache.spark.sql.catalyst.catalog._
-import org.apache.spark.sql.catalyst.catalog.SessionCatalog.{SESSION_DATABASE, SYSTEM_CATALOG}
-import org.apache.spark.sql.catalyst.expressions.{Alias, Expression, Literal, NamedExpression}
+import org.apache.spark.sql.catalyst.expressions.{Expression, Literal}
 import org.apache.spark.sql.catalyst.parser._
 import org.apache.spark.sql.catalyst.parser.SqlBaseParser._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.trees.TreePattern.PARAMETER
 import org.apache.spark.sql.catalyst.util.DateTimeConstants
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryParsingErrors}
-import org.apache.spark.sql.errors.QueryParsingErrors.toSQLId
 import org.apache.spark.sql.execution.command._
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.internal.{HiveSerDe, SQLConf, VariableSubstitution}
@@ -566,158 +564,6 @@ class SparkSqlAstBuilder extends AstBuilder {
           ctx.REPLACE != null,
           viewType = viewType)
       })
-    }
-  }
-
-  /**
-   * Create a [[CreateVariableCommand]].
-   *
-   * For example:
-   * {{{
-   *   DECLARE [OR REPLACE] [VARIABLE] [db_name.]variable_name
-   *   [dataType] [defaultExpression];
-   * }}}
-   *
-   * We will ad CREATE VARIABLE for persisted variable definitions to this, hence the name...
-   */
-  override def  visitCreateVariable(ctx: CreateVariableContext): LogicalPlan = withOrigin(ctx) {
-
-    def format(name: String): String = {
-      if (conf.caseSensitiveAnalysis) name else name.toLowerCase(Locale.ROOT)
-    }
-
-    val multipartIdentifier = visitMultipartIdentifier(ctx.multipartIdentifier)
-    if (ctx.variableDefaultExpression() == null && ctx.dataType == null) {
-      throw new ParseException(
-        errorClass = "INVALID_SQL_SYNTAX.VARIABLE_TYPE_OR_DEFAULT_REQUIRED",
-        messageParameters = Map(
-          "varName" -> toSQLId(multipartIdentifier)),
-        ctx.multipartIdentifier)
-    }
-
-    val defaultExpression = if (ctx.variableDefaultExpression() == null) {
-      "null"
-    } else {
-      visitVariableDefaultExpression(ctx.variableDefaultExpression())
-    }
-    val dataTypeStr: Option[String] =
-      if (Option(ctx.dataType).nonEmpty) {
-        Option(source(Option(ctx.dataType).get))
-      } else {
-        Option(null)
-      }
-
-    if (multipartIdentifier.length > 3) {
-      throw new ParseException(
-        errorClass = "INVALID_SQL_SYNTAX.UNSUPPORTED_VARIABLE_NAME",
-        messageParameters = Map(
-          "varName" -> toSQLId(multipartIdentifier)),
-        ctx.multipartIdentifier)
-    }
-
-    /** The fully qualified variable name is system.session.varname */
-    val schemaQualifiedName = if (multipartIdentifier.length < 2) {
-      SESSION_DATABASE +: multipartIdentifier
-    } else {
-      multipartIdentifier
-    }
-
-    val catalogQualifiedName = if (schemaQualifiedName.length < 3) {
-      SYSTEM_CATALOG +: schemaQualifiedName
-    } else {
-      schemaQualifiedName
-    }
-    val variableIdentifier = VariableIdentifier(catalogQualifiedName)
-
-    if (variableIdentifier != VariableIdentifier(
-      Seq(SYSTEM_CATALOG, SESSION_DATABASE, format(catalogQualifiedName.last)))) {
-      throw new ParseException(
-        errorClass = "INVALID_SQL_SYNTAX.UNSUPPORTED_VARIABLE_NAME",
-        messageParameters = Map(
-          "varName" -> toSQLId(multipartIdentifier)),
-        ctx.multipartIdentifier)
-    }
-
-    CreateVariableCommand(variableIdentifier, dataTypeStr, defaultExpression, ctx.REPLACE != null)
-  }
-
-  /**
-   * Create a DROP VARIABLE statement.
-   *
-   * For example:
-   * {{{
-   *   DROP TEMPORARY VARIABLE [IF EXISTS] variable;
-   * }}}
-   */
-  override def visitDropVariable(ctx: DropVariableContext): LogicalPlan = withOrigin(ctx) {
-    val variableName = visitMultipartIdentifier(ctx.multipartIdentifier)
-    if (variableName.length > 3) {
-      throw new ParseException(
-        errorClass = "INVALID_SQL_SYNTAX.UNSUPPORTED_VARIABLE_NAME",
-        messageParameters = Map(
-          "varName" -> toSQLId(variableName)),
-        ctx)
-    }
-
-    val variableIdentifier = VariableIdentifier(variableName)
-
-    if (ctx.TEMPORARY() != null) {
-      if (variableIdentifier.database.getOrElse(SESSION_DATABASE) != SESSION_DATABASE ||
-        variableIdentifier.catalog.getOrElse(SYSTEM_CATALOG) != SYSTEM_CATALOG) {
-        throw new ParseException(
-          errorClass = "INVALID_SQL_SYNTAX.UNSUPPORTED_VARIABLE_NAME",
-          messageParameters = Map(
-            "varName" -> toSQLId(variableIdentifier.nameParts)),
-          ctx)
-      }
-
-      DropVariableCommand(
-        identifier = VariableIdentifier(Seq(SYSTEM_CATALOG, SESSION_DATABASE,
-          variableIdentifier.variableName)),
-        ifExists = ctx.EXISTS != null)
-    } else {
-      DropVariableCommand(
-        identifier = variableIdentifier,
-        ifExists = ctx.EXISTS != null)
-    }
-  }
-
-  override def visitSetVariable(ctx: SetVariableContext): LogicalPlan = withOrigin(ctx) {
-
-    if (ctx.query() != null) {
-      /** The SET variable source is a query */
-      val varList =
-        ctx.multipartIdentifierList.multipartIdentifier.asScala.map { variableIdent =>
-          val varName = visitMultipartIdentifier(variableIdent)
-          UnresolvedVariable(varName).asInstanceOf[Expression]
-      }.toSeq
-      val query = visitQuery(ctx.query())
-      SetVariable(varList, query)
-    } else {
-      /** The SET variable source is list of expressions. */
-      val assignCtx = ctx.assignmentList()
-      val (varNames, varExprs) = assignCtx.assignment().asScala.map { assign =>
-          val varIdent = visitMultipartIdentifier(assign.key)
-          if (varIdent.length > 3) {
-            throw new ParseException(
-              errorClass = "INVALID_SQL_SYNTAX.UNSUPPORTED_VARIABLE_NAME",
-              messageParameters = Map(
-                "varName" -> toSQLId(varIdent)),
-              assign.key)
-          }
-          val varExpr = expression(assign.value)
-          val varNamedExpr = varExpr match {
-            case n: NamedExpression => n
-            case e => Alias(e, varIdent.takeRight(1).head)()
-          }
-
-          (varIdent, varNamedExpr)
-      }.toSeq.unzip
-
-      val variables: Seq[UnresolvedVariable] = varNames.map { UnresolvedVariable(_) }
-
-      val source = Project(varExprs, OneRowRelation())
-      SetVariable(variables, source)
     }
   }
 

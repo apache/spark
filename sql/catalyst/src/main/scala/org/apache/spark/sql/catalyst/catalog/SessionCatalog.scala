@@ -31,28 +31,24 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst._
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry.FunctionBuilder
-import org.apache.spark.sql.catalyst.expressions.{Alias, Expression, ExpressionInfo, Literal, UpCast}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Expression, ExpressionInfo, UpCast}
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParseException, ParserInterface}
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project, SubqueryAlias, View}
 import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, Origin}
-import org.apache.spark.sql.catalyst.util.{quoteNameParts, CharVarcharUtils, StringUtils}
-import org.apache.spark.sql.catalyst.util.TypeUtils.toSQLId
+import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, StringUtils}
 import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.StaticSQLConf.GLOBAL_TEMP_DATABASE
-import org.apache.spark.sql.types.{StructField, StructType}
+import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.{CaseInsensitiveStringMap, PartitioningUtils}
 import org.apache.spark.util.Utils
 
 object SessionCatalog {
   val DEFAULT_DATABASE = "default"
-  val SESSION_DATABASE = "session"
-  val SYSTEM_CATALOG = "system"
 }
 
 /**
@@ -130,10 +126,6 @@ class SessionCatalog(
   @GuardedBy("this")
   protected val tempViews = new mutable.HashMap[String, TemporaryViewRelation]
 
-  /** List of SQL variables, mapping from variable name to their definition and value. */
-  @GuardedBy("this")
-  protected val variables = new mutable.HashMap[VariableIdentifier, (Literal, StructField)]
-
   // Note: we track current database here because certain operations do not explicitly
   // specify the database (e.g. DROP TABLE my_table). In these cases we must first
   // check whether the temporary view or function exists, then, if not, operate on
@@ -170,17 +162,6 @@ class SessionCatalog(
   def qualifyIdentifier(ident: TableIdentifier): TableIdentifier = {
     TableIdentifier(
       table = format(ident.table),
-      database = getDatabase(ident),
-      catalog = getCatalog(ident))
-  }
-
-  /**
-   * Qualifies the variable identifier with the current database if not specified, and normalize all
-   * the names.
-   */
-  def qualifyIdentifier(ident: VariableIdentifier): VariableIdentifier = {
-    VariableIdentifier(
-      variableName = ident.variableName,
       database = getDatabase(ident),
       catalog = getCatalog(ident))
   }
@@ -631,70 +612,6 @@ class SessionCatalog(
     val qualifiedIdent = qualifyIdentifier(tableIdent)
     val dbLocation = getDatabaseMetadata(qualifiedIdent.database.get).locationUri
     new Path(new Path(dbLocation), qualifiedIdent.table).toUri
-  }
-
-  // --------------------------------------------------
-  // | Methods that interact with temp variables only |
-  // --------------------------------------------------
-
-  /**
-   * Create a temporary variable.
-   */
-  def createTempVariable(
-                      name: String,
-                      initialValue: Literal,
-                      variableDefault: String,
-                      overrideIfExists: Boolean): Unit = synchronized {
-    val tempVariable = VariableIdentifier(Seq(SYSTEM_CATALOG, SESSION_DATABASE, name))
-    if (variables.contains(tempVariable) && !overrideIfExists) {
-      throw new AnalysisException(errorClass = "VARIABLE_ALREADY_EXISTS",
-        messageParameters = Map("variableName"
-          -> quoteNameParts(UnresolvedAttribute.parseAttributeName(name))))
-    }
-    val structField = StructField(name, initialValue.dataType)
-      .withCurrentDefaultValue(variableDefault)
-    variables.put(tempVariable, (initialValue, structField))
-  }
-
-  /**
-   * Generate a [[Variable]] operator from the temporary variable stored.
-   */
-  def getVariable(variable: VariableIdentifier): Option[(Literal, StructField)] = synchronized {
-    val qualifiedVariable = VariableIdentifier(variable.variableName,
-      Some(variable.database.getOrElse(SESSION_DATABASE)),
-      Some(variable.catalog.getOrElse(SYSTEM_CATALOG)))
-    val isResolvingView = AnalysisContext.get.catalogAndNamespace.nonEmpty
-    val referredTempVariableNames = AnalysisContext.get.referredTempVariableNames
-    if (isResolvingView) {
-      // When resolving a view, only return a temp variable if it's referred by this view.
-      if (referredTempVariableNames.contains(variable.variableName)) {
-        variables.get(qualifiedVariable)
-      } else {
-        None
-      }
-    } else {
-      val result = variables.get(qualifiedVariable)
-      if (result.isDefined) {
-        // We are not resolving a view and the function is a temp one, add it to
-        // `AnalysisContext`, so during the view creation, we can save all referred temp
-        // variables to view metadata.
-        AnalysisContext.get.referredTempVariableNames.add(variable.variableName)
-      }
-      result
-    }
-  }
-
-  /**
-   * Drop a temporary variable.
-   *
-   * Returns true if this variable is dropped successfully, false otherwise.
-   */
-  def dropTempVariable(variableIdentifier: VariableIdentifier,
-                       ifExists: Boolean): Unit = synchronized {
-    if (!variables.remove(variableIdentifier).isDefined && !ifExists) {
-      throw new AnalysisException(errorClass = "VARIABLE_NOT_FOUND",
-        Map("variableName" -> toSQLId(variableIdentifier.nameParts)))
-    }
   }
 
   // ----------------------------------------------
