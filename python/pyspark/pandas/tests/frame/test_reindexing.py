@@ -879,8 +879,7 @@ class FrameReindexingMixin:
 
 
 class FrameReidexingTests(FrameReindexingMixin, ComparisonTestBase, SQLTestUtils):
-    def test_between_time(self):
-        super().test_between_time()
+    pass
 
 
 if __name__ == "__main__":

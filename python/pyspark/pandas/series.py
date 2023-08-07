@@ -6740,7 +6740,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         inclusive : {"both", "neither", "left", "right"}, default "both"
             Include boundaries; whether to set each bound as closed or open.
 
-            .. versionadded:: 3.5.0
+            .. versionadded:: 4.0.0
 
         axis : {0 or 'index', 1 or 'columns'}, default 0
             Determine range time on index or columns value.
