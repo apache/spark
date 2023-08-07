@@ -404,7 +404,7 @@ object Word2VecModel extends MLReadable[Word2VecModel] {
       val spark = sparkSession
       import spark.implicits._
 
-      val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
+      val metadata = DefaultParamsReader.loadMetadata(path, sparkSession, className)
       val (major, minor) = VersionUtils.majorMinorVersion(metadata.sparkVersion)
 
       val dataPath = new Path(path, "data").toString

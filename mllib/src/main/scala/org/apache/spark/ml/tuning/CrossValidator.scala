@@ -257,7 +257,7 @@ object CrossValidator extends MLReadable[CrossValidator] {
       implicit val format = DefaultFormats
 
       val (metadata, estimator, evaluator, estimatorParamMaps) =
-        ValidatorParams.loadImpl(path, sc, className)
+        ValidatorParams.loadImpl(path, sparkSession, className)
       val cv = new CrossValidator(metadata.uid)
         .setEstimator(estimator)
         .setEvaluator(evaluator)
@@ -428,10 +428,10 @@ object CrossValidatorModel extends MLReadable[CrossValidatorModel] {
       implicit val format = DefaultFormats
 
       val (metadata, estimator, evaluator, estimatorParamMaps) =
-        ValidatorParams.loadImpl(path, sc, className)
+        ValidatorParams.loadImpl(path, sparkSession, className)
       val numFolds = (metadata.params \ "numFolds").extract[Int]
       val bestModelPath = new Path(path, "bestModel").toString
-      val bestModel = DefaultParamsReader.loadParamsInstance[Model[_]](bestModelPath, sc)
+      val bestModel = DefaultParamsReader.loadParamsInstance[Model[_]](bestModelPath, sparkSession)
       val avgMetrics = (metadata.metadata \ "avgMetrics").extract[Seq[Double]].toArray
       val persistSubModels = (metadata.metadata \ "persistSubModels")
         .extractOrElse[Boolean](false)
@@ -445,7 +445,7 @@ object CrossValidatorModel extends MLReadable[CrossValidatorModel] {
           for (paramIndex <- estimatorParamMaps.indices) {
             val modelPath = new Path(splitPath, paramIndex.toString).toString
             _subModels(splitIndex)(paramIndex) =
-              DefaultParamsReader.loadParamsInstance(modelPath, sc)
+              DefaultParamsReader.loadParamsInstance(modelPath, sparkSession)
           }
         }
         Some(_subModels)

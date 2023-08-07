@@ -827,7 +827,7 @@ object LinearRegressionModel extends MLReadable[LinearRegressionModel] {
     private val className = classOf[LinearRegressionModel].getName
 
     override def load(path: String): LinearRegressionModel = {
-      val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
+      val metadata = DefaultParamsReader.loadMetadata(path, sparkSession, className)
 
       val dataPath = new Path(path, "data").toString
       val data = sparkSession.read.format("parquet").load(dataPath)

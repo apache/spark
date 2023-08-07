@@ -184,7 +184,7 @@ object ChiSqSelectorModel extends MLReadable[ChiSqSelectorModel] {
     private val className = classOf[ChiSqSelectorModel].getName
 
     override def load(path: String): ChiSqSelectorModel = {
-      val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
+      val metadata = DefaultParamsReader.loadMetadata(path, sparkSession, className)
       val dataPath = new Path(path, "data").toString
       val data = sparkSession.read.parquet(dataPath).select("selectedFeatures").head()
       val selectedFeatures = data.getAs[Seq[Int]](0).toArray

@@ -349,7 +349,7 @@ object FMClassificationModel extends MLReadable[FMClassificationModel] {
     private val className = classOf[FMClassificationModel].getName
 
     override def load(path: String): FMClassificationModel = {
-      val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
+      val metadata = DefaultParamsReader.loadMetadata(path, sparkSession, className)
       val dataPath = new Path(path, "data").toString
       val data = sparkSession.read.format("parquet").load(dataPath)
 

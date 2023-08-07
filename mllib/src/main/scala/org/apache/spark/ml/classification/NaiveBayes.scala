@@ -613,7 +613,7 @@ object NaiveBayesModel extends MLReadable[NaiveBayesModel] {
 
     override def load(path: String): NaiveBayesModel = {
       implicit val format = DefaultFormats
-      val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
+      val metadata = DefaultParamsReader.loadMetadata(path, sparkSession, className)
       val (major, minor) = VersionUtils.majorMinorVersion(metadata.sparkVersion)
 
       val dataPath = new Path(path, "data").toString

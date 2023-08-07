@@ -259,7 +259,7 @@ object MinMaxScalerModel extends MLReadable[MinMaxScalerModel] {
     private val className = classOf[MinMaxScalerModel].getName
 
     override def load(path: String): MinMaxScalerModel = {
-      val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
+      val metadata = DefaultParamsReader.loadMetadata(path, sparkSession, className)
       val dataPath = new Path(path, "data").toString
       val data = sparkSession.read.parquet(dataPath)
       val Row(originalMin: Vector, originalMax: Vector) =

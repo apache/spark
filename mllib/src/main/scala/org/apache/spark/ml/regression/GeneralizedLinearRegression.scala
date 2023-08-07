@@ -1156,7 +1156,7 @@ object GeneralizedLinearRegressionModel extends MLReadable[GeneralizedLinearRegr
     private val className = classOf[GeneralizedLinearRegressionModel].getName
 
     override def load(path: String): GeneralizedLinearRegressionModel = {
-      val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
+      val metadata = DefaultParamsReader.loadMetadata(path, sparkSession, className)
 
       val dataPath = new Path(path, "data").toString
       val data = sparkSession.read.parquet(dataPath)

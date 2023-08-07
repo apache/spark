@@ -136,7 +136,7 @@ private[r] object RandomForestRegressorWrapper extends MLReadable[RandomForestRe
       val pipelinePath = new Path(path, "pipeline").toString
       val pipeline = PipelineModel.load(pipelinePath)
 
-      val rMetadataStr = sc.textFile(rMetadataPath, 1).first()
+      val rMetadataStr = sparkSession.read.text(rMetadataPath).first().getString(0)
       val rMetadata = parse(rMetadataStr)
       val formula = (rMetadata \ "formula").extract[String]
       val features = (rMetadata \ "features").extract[Array[String]]

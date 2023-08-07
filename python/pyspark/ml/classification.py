@@ -90,7 +90,7 @@ from pyspark.ml.util import (
 from pyspark.ml.wrapper import JavaParams, JavaPredictor, JavaPredictionModel, JavaWrapper
 from pyspark.ml.common import inherit_doc
 from pyspark.ml.linalg import Matrix, Vector, Vectors, VectorUDT
-from pyspark.sql import DataFrame, Row
+from pyspark.sql import DataFrame, Row, SparkSession
 from pyspark.sql.functions import udf, when
 from pyspark.sql.types import ArrayType, DoubleType
 from pyspark.storagelevel import StorageLevel
@@ -3690,9 +3690,9 @@ class _OneVsRestSharedReadWrite:
         cast(MLWritable, instance.getClassifier()).save(classifierPath)
 
     @staticmethod
-    def loadClassifier(path: str, sc: SparkContext) -> Union[OneVsRest, "OneVsRestModel"]:
+    def loadClassifier(path: str, sparkSession: SparkSession) -> Union[OneVsRest, "OneVsRestModel"]:
         classifierPath = os.path.join(path, "classifier")
-        return DefaultParamsReader.loadParamsInstance(classifierPath, sc)
+        return DefaultParamsReader.loadParamsInstance(classifierPath, sparkSession)
 
     @staticmethod
     def validateParams(instance: Union[OneVsRest, "OneVsRestModel"]) -> None:
@@ -3715,11 +3715,13 @@ class OneVsRestReader(MLReader[OneVsRest]):
         self.cls = cls
 
     def load(self, path: str) -> OneVsRest:
-        metadata = DefaultParamsReader.loadMetadata(path, self.sc)
+        metadata = DefaultParamsReader.loadMetadata(path, self.sparkSession)
         if not DefaultParamsReader.isPythonParamsInstance(metadata):
             return JavaMLReader(self.cls).load(path)  # type: ignore[arg-type]
         else:
-            classifier = cast(Classifier, _OneVsRestSharedReadWrite.loadClassifier(path, self.sc))
+            classifier = cast(
+                Classifier, _OneVsRestSharedReadWrite.loadClassifier(path, self.sparkSession)
+            )
             ova: OneVsRest = OneVsRest(classifier=classifier)._resetUid(metadata["uid"])
             DefaultParamsReader.getAndSetParams(ova, metadata, skipParams=["classifier"])
             return ova
@@ -3958,16 +3960,18 @@ class OneVsRestModelReader(MLReader[OneVsRestModel]):
         self.cls = cls
 
     def load(self, path: str) -> OneVsRestModel:
-        metadata = DefaultParamsReader.loadMetadata(path, self.sc)
+        metadata = DefaultParamsReader.loadMetadata(path, self.sparkSession)
         if not DefaultParamsReader.isPythonParamsInstance(metadata):
             return JavaMLReader(self.cls).load(path)  # type: ignore[arg-type]
         else:
-            classifier = _OneVsRestSharedReadWrite.loadClassifier(path, self.sc)
+            classifier = _OneVsRestSharedReadWrite.loadClassifier(path, self.sparkSession)
             numClasses = metadata["numClasses"]
             subModels = [None] * numClasses
             for idx in range(numClasses):
                 subModelPath = os.path.join(path, f"model_{idx}")
-                subModels[idx] = DefaultParamsReader.loadParamsInstance(subModelPath, self.sc)
+                subModels[idx] = DefaultParamsReader.loadParamsInstance(
+                    subModelPath, self.sparkSession
+                )
             ovaModel = OneVsRestModel(cast(List[ClassificationModel], subModels))._resetUid(
                 metadata["uid"]
             )

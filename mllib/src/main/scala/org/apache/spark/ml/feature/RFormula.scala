@@ -444,7 +444,7 @@ object RFormulaModel extends MLReadable[RFormulaModel] {
     private val className = classOf[RFormulaModel].getName
 
     override def load(path: String): RFormulaModel = {
-      val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
+      val metadata = DefaultParamsReader.loadMetadata(path, sparkSession, className)
 
       val dataPath = new Path(path, "data").toString
       val data = sparkSession.read.parquet(dataPath).select("label", "terms", "hasIntercept").head()
@@ -515,7 +515,7 @@ private object ColumnPruner extends MLReadable[ColumnPruner] {
     private val className = classOf[ColumnPruner].getName
 
     override def load(path: String): ColumnPruner = {
-      val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
+      val metadata = DefaultParamsReader.loadMetadata(path, sparkSession, className)
 
       val dataPath = new Path(path, "data").toString
       val data = sparkSession.read.parquet(dataPath).select("columnsToPrune").head()
@@ -606,7 +606,7 @@ private object VectorAttributeRewriter extends MLReadable[VectorAttributeRewrite
     private val className = classOf[VectorAttributeRewriter].getName
 
     override def load(path: String): VectorAttributeRewriter = {
-      val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
+      val metadata = DefaultParamsReader.loadMetadata(path, sparkSession, className)
 
       val dataPath = new Path(path, "data").toString
       val data = sparkSession.read.parquet(dataPath).select("vectorCol", "prefixesToRewrite").head()

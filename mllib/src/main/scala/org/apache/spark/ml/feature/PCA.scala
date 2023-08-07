@@ -205,7 +205,7 @@ object PCAModel extends MLReadable[PCAModel] {
      * @return a [[PCAModel]]
      */
     override def load(path: String): PCAModel = {
-      val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
+      val metadata = DefaultParamsReader.loadMetadata(path, sparkSession, className)
 
       val dataPath = new Path(path, "data").toString
       val model = if (majorVersion(metadata.sparkVersion) >= 2) {

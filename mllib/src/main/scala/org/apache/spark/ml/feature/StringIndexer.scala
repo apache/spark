@@ -505,7 +505,7 @@ object StringIndexerModel extends MLReadable[StringIndexerModel] {
     private val className = classOf[StringIndexerModel].getName
 
     override def load(path: String): StringIndexerModel = {
-      val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
+      val metadata = DefaultParamsReader.loadMetadata(path, sparkSession, className)
       val dataPath = new Path(path, "data").toString
 
       // We support loading old `StringIndexerModel` saved by previous Spark versions.

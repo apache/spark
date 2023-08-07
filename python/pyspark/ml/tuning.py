@@ -56,9 +56,9 @@ from pyspark.ml.util import (
     JavaMLWriter,
 )
 from pyspark.ml.wrapper import JavaParams, JavaEstimator, JavaWrapper
+from pyspark.sql import SparkSession
 from pyspark.sql.functions import col, lit, rand, UserDefinedFunction
 from pyspark.sql.types import BooleanType
-
 from pyspark.sql.dataframe import DataFrame
 
 if TYPE_CHECKING:
@@ -426,12 +426,12 @@ class _ValidatorSharedReadWrite:
 
     @staticmethod
     def load(
-        path: str, sc: SparkContext, metadata: Dict[str, Any]
+        path: str, sparkSession: SparkSession, metadata: Dict[str, Any]
     ) -> Tuple[Dict[str, Any], Estimator, Evaluator, List["ParamMap"]]:
         evaluatorPath = os.path.join(path, "evaluator")
-        evaluator: Evaluator = DefaultParamsReader.loadParamsInstance(evaluatorPath, sc)
+        evaluator: Evaluator = DefaultParamsReader.loadParamsInstance(evaluatorPath, sparkSession)
         estimatorPath = os.path.join(path, "estimator")
-        estimator: Estimator = DefaultParamsReader.loadParamsInstance(estimatorPath, sc)
+        estimator: Estimator = DefaultParamsReader.loadParamsInstance(estimatorPath, sparkSession)
 
         uidToParams = MetaAlgorithmReadWrite.getUidMap(estimator)
         uidToParams[evaluator.uid] = evaluator
@@ -449,7 +449,7 @@ class _ValidatorSharedReadWrite:
                 else:
                     relativePath = jsonParam["value"]
                     valueSavedPath = os.path.join(path, relativePath)
-                    value = DefaultParamsReader.loadParamsInstance(valueSavedPath, sc)
+                    value = DefaultParamsReader.loadParamsInstance(valueSavedPath, sparkSession)
                 paramMap[param] = value
             estimatorParamMaps.append(paramMap)
 
@@ -509,12 +509,12 @@ class CrossValidatorReader(MLReader["CrossValidator"]):
         self.cls = cls
 
     def load(self, path: str) -> "CrossValidator":
-        metadata = DefaultParamsReader.loadMetadata(path, self.sc)
+        metadata = DefaultParamsReader.loadMetadata(path, self.sparkSession)
         if not DefaultParamsReader.isPythonParamsInstance(metadata):
             return JavaMLReader(self.cls).load(path)  # type: ignore[arg-type]
         else:
             metadata, estimator, evaluator, estimatorParamMaps = _ValidatorSharedReadWrite.load(
-                path, self.sc, metadata
+                path, self.sparkSession, metadata
             )
             cv = CrossValidator(
                 estimator=estimator, estimatorParamMaps=estimatorParamMaps, evaluator=evaluator
@@ -542,16 +542,18 @@ class CrossValidatorModelReader(MLReader["CrossValidatorModel"]):
         self.cls = cls
 
     def load(self, path: str) -> "CrossValidatorModel":
-        metadata = DefaultParamsReader.loadMetadata(path, self.sc)
+        metadata = DefaultParamsReader.loadMetadata(path, self.sparkSession)
         if not DefaultParamsReader.isPythonParamsInstance(metadata):
             return JavaMLReader(self.cls).load(path)  # type: ignore[arg-type]
         else:
             metadata, estimator, evaluator, estimatorParamMaps = _ValidatorSharedReadWrite.load(
-                path, self.sc, metadata
+                path, self.sparkSession, metadata
             )
             numFolds = metadata["paramMap"]["numFolds"]
             bestModelPath = os.path.join(path, "bestModel")
-            bestModel: Model = DefaultParamsReader.loadParamsInstance(bestModelPath, self.sc)
+            bestModel: Model = DefaultParamsReader.loadParamsInstance(
+                bestModelPath, self.sparkSession
+            )
             avgMetrics = metadata["avgMetrics"]
             if "stdMetrics" in metadata:
                 stdMetrics = metadata["stdMetrics"]
@@ -567,7 +569,7 @@ class CrossValidatorModelReader(MLReader["CrossValidatorModel"]):
                             path, "subModels", f"fold{splitIndex}", f"{paramIndex}"
                         )
                         subModels[splitIndex][paramIndex] = DefaultParamsReader.loadParamsInstance(
-                            modelPath, self.sc
+                            modelPath, self.sparkSession
                         )
             else:
                 subModels = None
@@ -1169,12 +1171,12 @@ class TrainValidationSplitReader(MLReader["TrainValidationSplit"]):
         self.cls = cls
 
     def load(self, path: str) -> "TrainValidationSplit":
-        metadata = DefaultParamsReader.loadMetadata(path, self.sc)
+        metadata = DefaultParamsReader.loadMetadata(path, self.sparkSession)
         if not DefaultParamsReader.isPythonParamsInstance(metadata):
             return JavaMLReader(self.cls).load(path)  # type: ignore[arg-type]
         else:
             metadata, estimator, evaluator, estimatorParamMaps = _ValidatorSharedReadWrite.load(
-                path, self.sc, metadata
+                path, self.sparkSession, metadata
             )
             tvs = TrainValidationSplit(
                 estimator=estimator, estimatorParamMaps=estimatorParamMaps, evaluator=evaluator
@@ -1202,15 +1204,17 @@ class TrainValidationSplitModelReader(MLReader["TrainValidationSplitModel"]):
         self.cls = cls
 
     def load(self, path: str) -> "TrainValidationSplitModel":
-        metadata = DefaultParamsReader.loadMetadata(path, self.sc)
+        metadata = DefaultParamsReader.loadMetadata(path, self.sparkSession)
         if not DefaultParamsReader.isPythonParamsInstance(metadata):
             return JavaMLReader(self.cls).load(path)  # type: ignore[arg-type]
         else:
             metadata, estimator, evaluator, estimatorParamMaps = _ValidatorSharedReadWrite.load(
-                path, self.sc, metadata
+                path, self.sparkSession, metadata
             )
             bestModelPath = os.path.join(path, "bestModel")
-            bestModel: Model = DefaultParamsReader.loadParamsInstance(bestModelPath, self.sc)
+            bestModel: Model = DefaultParamsReader.loadParamsInstance(
+                bestModelPath, self.sparkSession
+            )
             validationMetrics = metadata["validationMetrics"]
             persistSubModels = ("persistSubModels" in metadata) and metadata["persistSubModels"]
 
@@ -1219,7 +1223,7 @@ class TrainValidationSplitModelReader(MLReader["TrainValidationSplitModel"]):
                 for paramIndex in range(len(estimatorParamMaps)):
                     modelPath = os.path.join(path, "subModels", f"{paramIndex}")
                     subModels[paramIndex] = DefaultParamsReader.loadParamsInstance(
-                        modelPath, self.sc
+                        modelPath, self.sparkSession
                     )
             else:
                 subModels = None

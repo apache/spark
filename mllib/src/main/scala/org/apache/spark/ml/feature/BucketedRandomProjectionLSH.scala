@@ -240,7 +240,7 @@ object BucketedRandomProjectionLSHModel extends MLReadable[BucketedRandomProject
     private val className = classOf[BucketedRandomProjectionLSHModel].getName
 
     override def load(path: String): BucketedRandomProjectionLSHModel = {
-      val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
+      val metadata = DefaultParamsReader.loadMetadata(path, sparkSession, className)
 
       val dataPath = new Path(path, "data").toString
       val data = sparkSession.read.parquet(dataPath)

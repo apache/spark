@@ -316,7 +316,7 @@ object DecisionTreeRegressionModel extends MLReadable[DecisionTreeRegressionMode
 
     override def load(path: String): DecisionTreeRegressionModel = {
       implicit val format = DefaultFormats
-      val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
+      val metadata = DefaultParamsReader.loadMetadata(path, sparkSession, className)
       val numFeatures = (metadata.metadata \ "numFeatures").extract[Int]
       val root = loadTreeNodes(path, metadata, sparkSession)
       val model = new DecisionTreeRegressionModel(metadata.uid, root, numFeatures)

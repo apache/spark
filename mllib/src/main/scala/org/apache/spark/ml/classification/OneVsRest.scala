@@ -37,7 +37,7 @@ import org.apache.spark.ml.param.{Param, ParamMap, ParamPair, Params}
 import org.apache.spark.ml.param.shared.{HasParallelism, HasWeightCol}
 import org.apache.spark.ml.util._
 import org.apache.spark.ml.util.Instrumentation.instrumented
-import org.apache.spark.sql.{Column, DataFrame, Dataset, Row}
+import org.apache.spark.sql.{Column, DataFrame, Dataset, Row, SparkSession}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
 import org.apache.spark.storage.StorageLevel
@@ -110,12 +110,13 @@ private[ml] object OneVsRestParams extends ClassifierTypeTrait {
 
   def loadImpl(
       path: String,
-      sc: SparkContext,
+      sparkSession: SparkSession,
       expectedClassName: String): (DefaultParamsReader.Metadata, ClassifierType) = {
 
-    val metadata = DefaultParamsReader.loadMetadata(path, sc, expectedClassName)
+    val metadata = DefaultParamsReader.loadMetadata(path, sparkSession, expectedClassName)
     val classifierPath = new Path(path, "classifier").toString
-    val estimator = DefaultParamsReader.loadParamsInstance[ClassifierType](classifierPath, sc)
+    val estimator = DefaultParamsReader.loadParamsInstance[ClassifierType](classifierPath,
+      sparkSession)
     (metadata, estimator)
   }
 }
@@ -295,12 +296,12 @@ object OneVsRestModel extends MLReadable[OneVsRestModel] {
 
     override def load(path: String): OneVsRestModel = {
       implicit val format = DefaultFormats
-      val (metadata, classifier) = OneVsRestParams.loadImpl(path, sc, className)
+      val (metadata, classifier) = OneVsRestParams.loadImpl(path, sparkSession, className)
       val labelMetadata = Metadata.fromJson((metadata.metadata \ "labelMetadata").extract[String])
       val numClasses = (metadata.metadata \ "numClasses").extract[Int]
       val models = Range(0, numClasses).toArray.map { idx =>
         val modelPath = new Path(path, s"model_$idx").toString
-        DefaultParamsReader.loadParamsInstance[ClassificationModel[_, _]](modelPath, sc)
+        DefaultParamsReader.loadParamsInstance[ClassificationModel[_, _]](modelPath, sparkSession)
       }
       val ovrModel = new OneVsRestModel(metadata.uid, labelMetadata, models)
       metadata.getAndSetParams(ovrModel)
@@ -497,7 +498,7 @@ object OneVsRest extends MLReadable[OneVsRest] {
     private val className = classOf[OneVsRest].getName
 
     override def load(path: String): OneVsRest = {
-      val (metadata, classifier) = OneVsRestParams.loadImpl(path, sc, className)
+      val (metadata, classifier) = OneVsRestParams.loadImpl(path, sparkSession, className)
       val ovr = new OneVsRest(metadata.uid)
       metadata.getAndSetParams(ovr)
       ovr.setClassifier(classifier)

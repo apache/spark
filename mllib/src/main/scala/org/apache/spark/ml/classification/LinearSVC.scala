@@ -458,7 +458,7 @@ object LinearSVCModel extends MLReadable[LinearSVCModel] {
     private val className = classOf[LinearSVCModel].getName
 
     override def load(path: String): LinearSVCModel = {
-      val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
+      val metadata = DefaultParamsReader.loadMetadata(path, sparkSession, className)
       val dataPath = new Path(path, "data").toString
       val data = sparkSession.read.format("parquet").load(dataPath)
       val Row(coefficients: Vector, intercept: Double) =

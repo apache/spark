@@ -514,7 +514,7 @@ object FMRegressionModel extends MLReadable[FMRegressionModel] {
     private val className = classOf[FMRegressionModel].getName
 
     override def load(path: String): FMRegressionModel = {
-      val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
+      val metadata = DefaultParamsReader.loadMetadata(path, sparkSession, className)
       val dataPath = new Path(path, "data").toString
       val data = sparkSession.read.format("parquet").load(dataPath)
 

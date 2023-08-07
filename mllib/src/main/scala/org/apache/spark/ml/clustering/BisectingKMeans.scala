@@ -198,7 +198,7 @@ object BisectingKMeansModel extends MLReadable[BisectingKMeansModel] {
     private val className = classOf[BisectingKMeansModel].getName
 
     override def load(path: String): BisectingKMeansModel = {
-      val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
+      val metadata = DefaultParamsReader.loadMetadata(path, sparkSession, className)
       val dataPath = new Path(path, "data").toString
       val mllibModel = MLlibBisectingKMeansModel.load(sc, dataPath)
       val model = new BisectingKMeansModel(metadata.uid, mllibModel)

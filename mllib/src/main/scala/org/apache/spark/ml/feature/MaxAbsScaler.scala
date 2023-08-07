@@ -174,7 +174,7 @@ object MaxAbsScalerModel extends MLReadable[MaxAbsScalerModel] {
     private val className = classOf[MaxAbsScalerModel].getName
 
     override def load(path: String): MaxAbsScalerModel = {
-      val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
+      val metadata = DefaultParamsReader.loadMetadata(path, sparkSession, className)
       val dataPath = new Path(path, "data").toString
       val Row(maxAbs: Vector) = sparkSession.read.parquet(dataPath)
         .select("maxAbs")

@@ -316,7 +316,7 @@ object ImputerModel extends MLReadable[ImputerModel] {
     private val className = classOf[ImputerModel].getName
 
     override def load(path: String): ImputerModel = {
-      val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
+      val metadata = DefaultParamsReader.loadMetadata(path, sparkSession, className)
       val dataPath = new Path(path, "data").toString
       val surrogateDF = sqlContext.read.parquet(dataPath)
       val model = new ImputerModel(metadata.uid, surrogateDF)

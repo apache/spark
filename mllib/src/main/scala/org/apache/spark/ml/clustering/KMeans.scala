@@ -269,7 +269,7 @@ object KMeansModel extends MLReadable[KMeansModel] {
       val sparkSession = super.sparkSession
       import sparkSession.implicits._
 
-      val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
+      val metadata = DefaultParamsReader.loadMetadata(path, sparkSession, className)
       val dataPath = new Path(path, "data").toString
 
       val clusterCenters = if (majorVersion(metadata.sparkVersion) >= 2) {

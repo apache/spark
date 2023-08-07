@@ -107,7 +107,7 @@ private[r] object ALSWrapper extends MLReadable[ALSWrapper] {
       val rMetadataPath = new Path(path, "rMetadata").toString
       val modelPath = new Path(path, "model").toString
 
-      val rMetadataStr = sc.textFile(rMetadataPath, 1).first()
+      val rMetadataStr = sparkSession.read.text(rMetadataPath).first().getString(0)
       val rMetadata = parse(rMetadataStr)
       val ratingCol = (rMetadata \ "ratingCol").extract[String]
       val alsModel = ALSModel.load(modelPath)

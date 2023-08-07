@@ -252,7 +252,7 @@ object GaussianMixtureModel extends MLReadable[GaussianMixtureModel] {
     private val className = classOf[GaussianMixtureModel].getName
 
     override def load(path: String): GaussianMixtureModel = {
-      val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
+      val metadata = DefaultParamsReader.loadMetadata(path, sparkSession, className)
 
       val dataPath = new Path(path, "data").toString
       val row = sparkSession.read.parquet(dataPath).select("weights", "mus", "sigmas").head()

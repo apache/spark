@@ -114,7 +114,7 @@ private[r] object NaiveBayesWrapper extends MLReadable[NaiveBayesWrapper] {
       val rMetadataPath = new Path(path, "rMetadata").toString
       val pipelinePath = new Path(path, "pipeline").toString
 
-      val rMetadataStr = sc.textFile(rMetadataPath, 1).first()
+      val rMetadataStr = sparkSession.read.text(rMetadataPath).first().getString(0)
       val rMetadata = parse(rMetadataStr)
       val labels = (rMetadata \ "labels").extract[Array[String]]
       val features = (rMetadata \ "features").extract[Array[String]]

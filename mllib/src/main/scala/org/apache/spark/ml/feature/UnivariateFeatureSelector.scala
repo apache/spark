@@ -362,7 +362,7 @@ object UnivariateFeatureSelectorModel extends MLReadable[UnivariateFeatureSelect
     private val className = classOf[UnivariateFeatureSelectorModel].getName
 
     override def load(path: String): UnivariateFeatureSelectorModel = {
-      val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
+      val metadata = DefaultParamsReader.loadMetadata(path, sparkSession, className)
       val dataPath = new Path(path, "data").toString
       val data = sparkSession.read.parquet(dataPath)
         .select("selectedFeatures").head()

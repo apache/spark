@@ -508,7 +508,7 @@ private[ml] object EnsembleModelReadWrite {
       treeClassName: String): (Metadata, Array[(Metadata, Node)], Array[Double]) = {
     import sparkSession.implicits._
     implicit val format = DefaultFormats
-    val metadata = DefaultParamsReader.loadMetadata(path, sparkSession.sparkContext, className)
+    val metadata = DefaultParamsReader.loadMetadata(path, sparkSession, className)
 
     // Get impurity to construct ImpurityCalculator for each node
     val impurityType: String = {
