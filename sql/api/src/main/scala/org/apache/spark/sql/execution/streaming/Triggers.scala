@@ -28,8 +28,6 @@ import org.apache.spark.sql.streaming.Trigger
 import org.apache.spark.unsafe.types.UTF8String
 
 private object Triggers {
-  // This is a copy of the same class in sql/core/...execution/streaming/Triggers.scala
-
   def validate(intervalMs: Long): Unit = {
     require(intervalMs >= 0, "the interval of trigger should not be negative")
   }
@@ -87,8 +85,8 @@ object ProcessingTimeTrigger {
 }
 
 /**
- * A [[Trigger]] that continuously processes streaming data, asynchronously checkpointing at the
- * specified interval.
+ * A [[Trigger]] that continuously processes streaming data, asynchronously checkpointing at
+ * the specified interval.
  */
 case class ContinuousTrigger(intervalMs: Long) extends Trigger {
   Triggers.validate(intervalMs)
