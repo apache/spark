@@ -2236,6 +2236,19 @@ abstract class DDLSuite extends QueryTest with DDLSuiteBase {
     }
   }
 
+  test("SPARK-44698 Create table like should also copy table stats") {
+    val catalog = spark.sessionState.catalog
+    withTable("s", "t1") {
+      sql("CREATE TABLE s(a INT, b INT)")
+      sql("INSERT INTO s VALUES(1, 2)")
+      val source = catalog.getTableMetadata(TableIdentifier("s"))
+
+      sql("CREATE TABLE t1 LIKE s")
+      val table1 = catalog.getTableMetadata(TableIdentifier("t1"))
+      assert(table1.stats.size == source.stats.size)
+    }
+  }
+
   test(s"Add a directory when ${SQLConf.LEGACY_ADD_SINGLE_FILE_IN_ADD_FILE.key} set to false") {
     // SPARK-43093: Don't use `withTempDir` to clean up temp dir, it will cause test cases in
     // shared session that need to execute `Executor.updateDependencies` test fail.
