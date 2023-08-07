@@ -648,8 +648,8 @@ def read_udtf(pickleSer, infile, eval_type):
             return_type_size = len(return_type)
 
             def verify_and_convert_result(result):
-                if result is not None and hasattr(result, "__len__"):
-                    if len(result) != return_type_size:
+                if result is not None:
+                    if hasattr(result, "__len__") and len(result) != return_type_size:
                         raise PySparkRuntimeError(
                             error_class="UDTF_RETURN_SCHEMA_MISMATCH",
                             message_parameters={
@@ -658,11 +658,11 @@ def read_udtf(pickleSer, infile, eval_type):
                             },
                         )
 
-                if not isinstance(result, (list, dict, tuple)) and not hasattr(result, "__dict__"):
-                    raise PySparkRuntimeError(
-                        error_class="UDTF_INVALID_OUTPUT_ROW_TYPE",
-                        message_parameters={"type": type(result).__name__},
-                    )
+                    if not (isinstance(result, (list, dict, tuple)) or hasattr(result, "__dict__")):
+                        raise PySparkRuntimeError(
+                            error_class="UDTF_INVALID_OUTPUT_ROW_TYPE",
+                            message_parameters={"type": type(result).__name__},
+                        )
 
                 return toInternal(result)
 
