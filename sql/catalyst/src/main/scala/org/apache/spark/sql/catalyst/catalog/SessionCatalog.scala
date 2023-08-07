@@ -40,6 +40,7 @@ import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParseException, 
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project, SubqueryAlias, View}
 import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, Origin}
 import org.apache.spark.sql.catalyst.util.{quoteNameParts, CharVarcharUtils, StringUtils}
+import org.apache.spark.sql.catalyst.util.TypeUtils.toSQLId
 import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.internal.SQLConf
@@ -685,13 +686,14 @@ class SessionCatalog(
 
   /**
    * Drop a temporary variable.
-   *4
+   *
    * Returns true if this variable is dropped successfully, false otherwise.
    */
   def dropTempVariable(variableIdentifier: VariableIdentifier,
                        ifExists: Boolean): Unit = synchronized {
     if (!variables.remove(variableIdentifier).isDefined && !ifExists) {
-      throw new NoSuchVariableException(variableIdentifier.nameParts)
+      throw new AnalysisException(errorClass = "VARIABLE_NOT_FOUND",
+        Map("variableName" -> toSQLId(variableIdentifier.nameParts)))
     }
   }
 

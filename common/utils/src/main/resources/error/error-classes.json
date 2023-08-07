@@ -1975,6 +1975,12 @@
           "Unsupported variable name <varName>.",
           "The name of a temporary variable must be of the form [[SYSTEM.]SESSION.]variable_identifier."
         ]
+      },
+      "VARIABLE_TYPE_OR_DEFAULT_REQUIRED" : {
+        "message" : [
+          "The definition of variable <varName> required either a datatype or a DEFAULT clause.",
+          "For example, use: `DECLARE` <varName> `STRING` or `DECLARE` <varName> `= 'SQL'` instead of `DECLARE` <varName>"
+        ]
       }
     },
     "sqlState" : "42000"
@@ -2651,12 +2657,6 @@
     "message" : [
       "Query [id = <id>, runId = <runId>] terminated with exception: <message>"
     ]
-  },
-  "SUBQUERY_IN_DEFAULT_EXPRESSION" : {
-    "message" : [
-      "Failed to execute command because subquery expressions are not allowed in DEFAULT values."
-    ],
-    "sqlState" : "0A000"
   },
   "SUM_OF_LIMIT_AND_OFFSET_EXCEEDS_MAX_INT" : {
     "message" : [

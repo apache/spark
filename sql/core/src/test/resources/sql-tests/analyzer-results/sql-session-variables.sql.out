@@ -204,7 +204,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 -- !query
 DROP TEMPORARY VARIABLE var1
 -- !query analysis
-org.apache.spark.sql.catalyst.analysis.NoSuchVariableException
+org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "VARIABLE_NOT_FOUND",
   "sqlState" : "42883",
@@ -401,9 +401,9 @@ Project [2 AS Expected#x, session.VAR1(VAR1, 2, true) AS Unqualified#x, session.
 
 
 -- !query
-DECLARE OR REPLACE VARIABLE var1
+DECLARE OR REPLACE VARIABLE var1 INT
 -- !query analysis
-CreateVariableCommand system.session.var1, null, true
+CreateVariableCommand system.session.var1, INT, null, true
 
 
 -- !query
@@ -415,7 +415,7 @@ DropVariableCommand system.session.var1, false
 -- !query
 DROP TEMPORARY VARIABLE var1
 -- !query analysis
-org.apache.spark.sql.catalyst.analysis.NoSuchVariableException
+org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "VARIABLE_NOT_FOUND",
   "sqlState" : "42883",
@@ -426,9 +426,9 @@ org.apache.spark.sql.catalyst.analysis.NoSuchVariableException
 
 
 -- !query
-DECLARE OR REPLACE VARIABLE var1
+DECLARE OR REPLACE VARIABLE var1 INT
 -- !query analysis
-CreateVariableCommand system.session.var1, null, true
+CreateVariableCommand system.session.var1, INT, null, true
 
 
 -- !query
@@ -440,7 +440,7 @@ DropVariableCommand system.session.var1, false
 -- !query
 DROP TEMPORARY VARIABLE var1
 -- !query analysis
-org.apache.spark.sql.catalyst.analysis.NoSuchVariableException
+org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "VARIABLE_NOT_FOUND",
   "sqlState" : "42883",
@@ -451,9 +451,9 @@ org.apache.spark.sql.catalyst.analysis.NoSuchVariableException
 
 
 -- !query
-DECLARE OR REPLACE VARIABLE var1
+DECLARE OR REPLACE VARIABLE var1 INT
 -- !query analysis
-CreateVariableCommand system.session.var1, null, true
+CreateVariableCommand system.session.var1, INT, null, true
 
 
 -- !query
@@ -465,7 +465,7 @@ DropVariableCommand system.session.var1, false
 -- !query
 DROP TEMPORARY VARIABLE var1
 -- !query analysis
-org.apache.spark.sql.catalyst.analysis.NoSuchVariableException
+org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "VARIABLE_NOT_FOUND",
   "sqlState" : "42883",
@@ -476,9 +476,9 @@ org.apache.spark.sql.catalyst.analysis.NoSuchVariableException
 
 
 -- !query
-DECLARE OR REPLACE VARIABLE var1
+DECLARE OR REPLACE VARIABLE var1 INT
 -- !query analysis
-CreateVariableCommand system.session.var1, null, true
+CreateVariableCommand system.session.var1, INT, null, true
 
 
 -- !query
@@ -490,7 +490,7 @@ DropVariableCommand system.session.var1, false
 -- !query
 DROP TEMPORARY VARIABLE var1
 -- !query analysis
-org.apache.spark.sql.catalyst.analysis.NoSuchVariableException
+org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "VARIABLE_NOT_FOUND",
   "sqlState" : "42883",
@@ -725,7 +725,7 @@ Project [true AS Expected#x, (session.var1(var1, 1.023906964275029, true) >= cas
 
 
 -- !query
-DECLARE OR REPLACE VARIABLE var1 DEFAULT 'Hello'
+DECLARE OR REPLACE VARIABLE var1 = 'Hello'
 -- !query analysis
 CreateVariableCommand system.session.var1, 'Hello', true
 
@@ -820,6 +820,26 @@ Project [true AS Expected#x, (length(cast(session.var1(var1, null, true) as stri
 DROP TEMPORARY VARIABLE var1
 -- !query analysis
 DropVariableCommand system.session.var1, false
+
+
+-- !query
+DECLARE var1
+-- !query analysis
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "INVALID_SQL_SYNTAX.VARIABLE_TYPE_OR_DEFAULT_REQUIRED",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "varName" : "`var1`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 12,
+    "fragment" : "DECLARE var1"
+  } ]
+}
 
 
 -- !query

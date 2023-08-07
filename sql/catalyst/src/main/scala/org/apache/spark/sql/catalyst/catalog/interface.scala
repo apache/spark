@@ -29,6 +29,7 @@ import org.json4s.JsonAST.{JArray, JString}
 import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.internal.Logging
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, InternalRow, SQLConfHelper, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.{MultiInstanceRelation, UnresolvedLeafNode}
 import org.apache.spark.sql.catalyst.catalog.CatalogTable.VIEW_STORING_ANALYZED_PLAN
@@ -381,7 +382,10 @@ case class CatalogTable(
       }.getOrElse(Seq.empty)
     } catch {
       case e: Exception =>
-        throw QueryCompilationErrors.corruptedViewReferredTempVariablesInCatalogError(e)
+        throw new AnalysisException(
+          errorClass = "INTERNAL_ERROR_METADATA_CATALOG.TEMP_VARIABLE_REFERENCE",
+          messageParameters = Map.empty,
+          cause = Some(e))
     }
   }
 

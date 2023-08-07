@@ -102,4 +102,9 @@ Unsupported function name `<funcName>`.
 Unsupported variable name `<varName>`.
 The name of a temporary variable must be of the form [[SYSTEM.]SESSION.]variable_identifier.
 
+## VARIABLE_TYPE_OR_DEFAULT_REQUIRED
+
+The definition of variable `<varName>` required either a datatype or a DEFAULT clause.
+For example, use: `DECLARE` `<varName>` `STRING` or `DECLARE` `<varName>` `= 'SQL'` instead of `DECLARE` `<varName>`
+
 

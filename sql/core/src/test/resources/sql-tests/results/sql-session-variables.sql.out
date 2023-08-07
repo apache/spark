@@ -218,7 +218,7 @@ DROP TEMPORARY VARIABLE var1
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.catalyst.analysis.NoSuchVariableException
+org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "VARIABLE_NOT_FOUND",
   "sqlState" : "42883",
@@ -421,7 +421,7 @@ struct<Expected:int,Unqualified:int,SchemaQualified:int,fullyQualified:int>
 
 
 -- !query
-DECLARE OR REPLACE VARIABLE var1
+DECLARE OR REPLACE VARIABLE var1 INT
 -- !query schema
 struct<>
 -- !query output
@@ -441,7 +441,7 @@ DROP TEMPORARY VARIABLE var1
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.catalyst.analysis.NoSuchVariableException
+org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "VARIABLE_NOT_FOUND",
   "sqlState" : "42883",
@@ -452,7 +452,7 @@ org.apache.spark.sql.catalyst.analysis.NoSuchVariableException
 
 
 -- !query
-DECLARE OR REPLACE VARIABLE var1
+DECLARE OR REPLACE VARIABLE var1 INT
 -- !query schema
 struct<>
 -- !query output
@@ -472,7 +472,7 @@ DROP TEMPORARY VARIABLE var1
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.catalyst.analysis.NoSuchVariableException
+org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "VARIABLE_NOT_FOUND",
   "sqlState" : "42883",
@@ -483,7 +483,7 @@ org.apache.spark.sql.catalyst.analysis.NoSuchVariableException
 
 
 -- !query
-DECLARE OR REPLACE VARIABLE var1
+DECLARE OR REPLACE VARIABLE var1 INT
 -- !query schema
 struct<>
 -- !query output
@@ -503,7 +503,7 @@ DROP TEMPORARY VARIABLE var1
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.catalyst.analysis.NoSuchVariableException
+org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "VARIABLE_NOT_FOUND",
   "sqlState" : "42883",
@@ -514,7 +514,7 @@ org.apache.spark.sql.catalyst.analysis.NoSuchVariableException
 
 
 -- !query
-DECLARE OR REPLACE VARIABLE var1
+DECLARE OR REPLACE VARIABLE var1 INT
 -- !query schema
 struct<>
 -- !query output
@@ -534,7 +534,7 @@ DROP TEMPORARY VARIABLE var1
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.catalyst.analysis.NoSuchVariableException
+org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "VARIABLE_NOT_FOUND",
   "sqlState" : "42883",
@@ -787,7 +787,7 @@ true	true
 
 
 -- !query
-DECLARE OR REPLACE VARIABLE var1 DEFAULT 'Hello'
+DECLARE OR REPLACE VARIABLE var1 = 'Hello'
 -- !query schema
 struct<>
 -- !query output
@@ -902,6 +902,28 @@ DROP TEMPORARY VARIABLE var1
 struct<>
 -- !query output
 
+
+
+-- !query
+DECLARE var1
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "INVALID_SQL_SYNTAX.VARIABLE_TYPE_OR_DEFAULT_REQUIRED",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "varName" : "`var1`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 12,
+    "fragment" : "DECLARE var1"
+  } ]
+}
 
 
 -- !query

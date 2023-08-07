@@ -18,13 +18,13 @@
 package org.apache.spark.sql.execution.command
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.{Row, SparkSession}
+import org.apache.spark.sql.{AnalysisException, Row, SparkSession}
 import org.apache.spark.sql.catalyst.VariableIdentifier
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.logical.IgnoreCachedData
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
-import org.apache.spark.sql.errors.QueryCompilationErrors
+import org.apache.spark.sql.errors.QueryCompilationErrors.toSQLId
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.StaticSQLConf.CATALOG_IMPLEMENTATION
 import org.apache.spark.sql.types.{StringType, StructField, StructType}
@@ -107,7 +107,9 @@ case class SetCommand(kv: Option[(String, Option[String])])
           val varIdent = VariableIdentifier(
             sparkSession.sessionState.sqlParser.parseMultipartIdentifier(key))
           if (sparkSession.sessionState.catalog.getVariable(varIdent).isDefined) {
-            throw QueryCompilationErrors.setVariableUsingSetCommandError(varIdent)
+            throw new AnalysisException(
+              errorClass = "UNSUPPORTED_FEATURE.SET_VARIABLE_USING_SET",
+              messageParameters = Map("variableName" -> toSQLId(varIdent.variableName)))
           }
         }
         if (sparkSession.conf.get(CATALOG_IMPLEMENTATION.key).equals("hive") &&

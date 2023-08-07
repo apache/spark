@@ -2561,13 +2561,6 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       summary = getSummary(context))
   }
 
-  def multipleRowSubqueryError(): Throwable = {
-    new SparkException(
-      errorClass = "ROW_SUBQUERY_TOO_MANY_ROWS",
-      messageParameters = Map.empty,
-      cause = null)
-  }
-
   def comparatorReturnsNull(firstValue: String, secondValue: String): Throwable = {
     new SparkException(
       errorClass = "COMPARATOR_RETURNS_NULL",

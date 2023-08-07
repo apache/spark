@@ -37,6 +37,7 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.trees.TreePattern.PARAMETER
 import org.apache.spark.sql.catalyst.util.DateTimeConstants
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryParsingErrors}
+import org.apache.spark.sql.errors.QueryParsingErrors.toSQLId
 import org.apache.spark.sql.execution.command._
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.internal.{HiveSerDe, SQLConf, VariableSubstitution}
@@ -579,13 +580,21 @@ class SparkSqlAstBuilder extends AstBuilder {
    *
    * We will ad CREATE VARIABLE for persisted variable definitions to this, hence the name...
    */
-  override def visitCreateVariable(ctx: CreateVariableContext): LogicalPlan = withOrigin(ctx) {
+  override def  visitCreateVariable(ctx: CreateVariableContext): LogicalPlan = withOrigin(ctx) {
 
     def format(name: String): String = {
       if (conf.caseSensitiveAnalysis) name else name.toLowerCase(Locale.ROOT)
     }
 
     val multipartIdentifier = visitMultipartIdentifier(ctx.multipartIdentifier)
+    if (ctx.variableDefaultExpression() == null && ctx.dataType == null) {
+      throw new ParseException(
+        errorClass = "INVALID_SQL_SYNTAX.VARIABLE_TYPE_OR_DEFAULT_REQUIRED",
+        messageParameters = Map(
+          "varName" -> toSQLId(multipartIdentifier)),
+        ctx.multipartIdentifier)
+    }
+
     val defaultExpression = if (ctx.variableDefaultExpression() == null) {
       "null"
     } else {
@@ -599,8 +608,11 @@ class SparkSqlAstBuilder extends AstBuilder {
       }
 
     if (multipartIdentifier.length > 3) {
-      throw QueryParsingErrors.unsupportedVariableNameError(
-        multipartIdentifier, ctx.multipartIdentifier)
+      throw new ParseException(
+        errorClass = "INVALID_SQL_SYNTAX.UNSUPPORTED_VARIABLE_NAME",
+        messageParameters = Map(
+          "varName" -> toSQLId(multipartIdentifier)),
+        ctx.multipartIdentifier)
     }
 
     val schemaQualifiedName = if (multipartIdentifier.length < 2) {
@@ -618,8 +630,11 @@ class SparkSqlAstBuilder extends AstBuilder {
 
     if (variableIdentifier != VariableIdentifier(
       Seq(SYSTEM_CATALOG, SESSION_DATABASE, format(catalogQualifiedName.last)))) {
-      throw QueryParsingErrors.unsupportedVariableNameError(
-        multipartIdentifier, ctx.multipartIdentifier)
+      throw new ParseException(
+        errorClass = "INVALID_SQL_SYNTAX.UNSUPPORTED_VARIABLE_NAME",
+        messageParameters = Map(
+          "varName" -> toSQLId(multipartIdentifier)),
+        ctx.multipartIdentifier)
     }
 
     CreateVariableCommand(variableIdentifier, dataTypeStr, defaultExpression, ctx.REPLACE != null)
@@ -636,7 +651,11 @@ class SparkSqlAstBuilder extends AstBuilder {
   override def visitDropVariable(ctx: DropVariableContext): LogicalPlan = withOrigin(ctx) {
     val variableName = visitMultipartIdentifier(ctx.multipartIdentifier)
     if (variableName.length > 3) {
-      throw QueryParsingErrors.unsupportedVariableNameError(variableName, ctx)
+      throw new ParseException(
+        errorClass = "INVALID_SQL_SYNTAX.UNSUPPORTED_VARIABLE_NAME",
+        messageParameters = Map(
+          "varName" -> toSQLId(variableName)),
+        ctx)
     }
 
     val variableIdentifier = VariableIdentifier(variableName)
@@ -644,7 +663,11 @@ class SparkSqlAstBuilder extends AstBuilder {
     if (ctx.TEMPORARY() != null) {
       if (variableIdentifier.database.getOrElse(SESSION_DATABASE) != SESSION_DATABASE ||
         variableIdentifier.catalog.getOrElse(SYSTEM_CATALOG) != SYSTEM_CATALOG) {
-        throw QueryParsingErrors.unsupportedVariableNameError(variableIdentifier.nameParts, ctx)
+        throw new ParseException(
+          errorClass = "INVALID_SQL_SYNTAX.UNSUPPORTED_VARIABLE_NAME",
+          messageParameters = Map(
+            "varName" -> toSQLId(variableIdentifier.nameParts)),
+          ctx)
       }
 
       DropVariableCommand(
@@ -661,9 +684,7 @@ class SparkSqlAstBuilder extends AstBuilder {
   override def visitSetVariable(ctx: SetVariableContext): LogicalPlan = withOrigin(ctx) {
 
     if (ctx.query() != null) {
-      /**
-      * The SET variable source is a query
-      */
+      /** The SET variable source is a query */
       val varList =
         ctx.multipartIdentifierList.multipartIdentifier.asScala.map { variableIdent =>
           val varName = visitMultipartIdentifier(variableIdent)
@@ -672,14 +693,16 @@ class SparkSqlAstBuilder extends AstBuilder {
       val query = visitQuery(ctx.query())
       SetVariable(varList, query)
     } else {
-      /**
-       * The SET variable source is list of expressions.
-       */
+      /** The SET variable source is list of expressions. */
       val assignCtx = ctx.assignmentList()
       val (varNames, varExprs) = assignCtx.assignment().asScala.map { assign =>
           val varIdent = visitMultipartIdentifier(assign.key)
           if (varIdent.length > 3) {
-            throw QueryParsingErrors.unsupportedVariableNameError(varIdent, assign.key)
+            throw new ParseException(
+              errorClass = "INVALID_SQL_SYNTAX.UNSUPPORTED_VARIABLE_NAME",
+              messageParameters = Map(
+                "varName" -> toSQLId(varIdent)),
+              assign.key)
           }
           val varExpr = expression(assign.value)
           val varNamedExpr = varExpr match {

@@ -17,11 +17,12 @@
 
 package org.apache.spark.sql.execution.datasources.v2
 
+import org.apache.spark.SparkException
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{InternalRow, VariableIdentifier}
-import org.apache.spark.sql.catalyst.analysis.NoSuchVariableException
 import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression, Literal, VariableReference}
 import org.apache.spark.sql.catalyst.trees.UnaryLike
-import org.apache.spark.sql.errors.QueryExecutionErrors
+import org.apache.spark.sql.catalyst.util.TypeUtils.toSQLId
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.types.StructField
 
@@ -45,7 +46,8 @@ case class SetVariableExec(variables: Seq[Expression], query: SparkPlan)
       catalog.getVariable(varIdentifier).map { varInfo =>
         VarInfoObj(varIdentifier, varInfo._2)
       }.getOrElse {
-        throw new NoSuchVariableException(varIdentifier.nameParts)
+        throw new AnalysisException(errorClass = "VARIABLE_NOT_FOUND",
+          Map("variableName" -> toSQLId(varIdentifier.nameParts)))
       }
     }
     val array = query.executeCollect()
@@ -55,7 +57,10 @@ case class SetVariableExec(variables: Seq[Expression], query: SparkPlan)
         info.fieldInfo.getCurrentDefaultValue().get, // Variables always have a default value
         overrideIfExists = true))
     } else if (array.length > 1) {
-      throw QueryExecutionErrors.multipleRowSubqueryError()
+      throw new SparkException(
+        errorClass = "ROW_SUBQUERY_TOO_MANY_ROWS",
+        messageParameters = Map.empty,
+        cause = null)
     } else {
       val row = array(0)
       varInfos.zipWithIndex.foreach { case (varInfo, index) =>

@@ -40,10 +40,11 @@ import org.apache.spark.util.Utils
  * Few examples are:
  *   we use this to support "left" by replacing it with "substring".
  *   we use this to replace Every and Any with Min and Max respectively.
+ *   We also use it to fold away Variable References in favor of the actual values.
  */
 object ReplaceExpressions extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan.transformWithPruning(
-    _.containsAnyPattern(RUNTIME_REPLACEABLE)) {
+    _.containsAnyPattern(RUNTIME_REPLACEABLE, VARIABLE_REFERENCE)) {
     case p => p.mapExpressions(replace)
   }
 

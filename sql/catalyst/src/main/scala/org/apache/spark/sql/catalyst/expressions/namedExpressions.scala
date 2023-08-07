@@ -443,7 +443,7 @@ case class VariableReference(varName: String, literal: Literal, canFold: Boolean
 
   override def sql: String = varName
 
-  final override val nodePatterns: Seq[TreePattern] = Seq(RUNTIME_REPLACEABLE)
+  final override val nodePatterns: Seq[TreePattern] = Seq(VARIABLE_REFERENCE)
 
   /** Returns the result of evaluating this expression on a given input Row */
   override def eval(input: InternalRow): Any = literal.value

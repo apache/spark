@@ -1737,12 +1737,6 @@ SQLSTATE: none assigned
 
 Query [id = `<id>`, runId = `<runId>`] terminated with exception: `<message>`
 
-### SUBQUERY_IN_DEFAULT_EXPRESSION
-
-[SQLSTATE: 0A000](sql-error-conditions-sqlstates.html#class-0A-feature-not-supported)
-
-Failed to execute command because subquery expressions are not allowed in DEFAULT values.
-
 ### SUM_OF_LIMIT_AND_OFFSET_EXCEEDS_MAX_INT
 
 SQLSTATE: none assigned

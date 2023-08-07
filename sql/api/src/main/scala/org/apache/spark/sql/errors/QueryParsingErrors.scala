@@ -551,15 +551,6 @@ private[sql] object QueryParsingErrors extends DataTypeErrorsBase {
       ctx)
   }
 
-  def unsupportedVariableNameError(variableName: Seq[String],
-                                   ctx: ParserRuleContext): Throwable = {
-    new ParseException(
-      errorClass = "INVALID_SQL_SYNTAX.UNSUPPORTED_VARIABLE_NAME",
-      messageParameters = Map(
-        "varName" -> toSQLId(variableName)),
-      ctx)
-  }
-
   def createFuncWithBothIfNotExistsAndReplaceError(ctx: CreateFunctionContext): Throwable = {
     new ParseException(
       errorClass = "INVALID_SQL_SYNTAX.CREATE_FUNC_WITH_IF_NOT_EXISTS_AND_REPLACE",

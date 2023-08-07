@@ -720,13 +720,6 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
         "searchPath" -> searchPath.map(toSQLId).mkString("[", ", ", "]")))
   }
 
-  def setVariableUsingSetCommandError(name: VariableIdentifier): Throwable = {
-    new AnalysisException(
-      errorClass = "UNSUPPORTED_FEATURE.SET_VARIABLE_USING_SET",
-      messageParameters = Map(
-        "variableName" -> toSQLId(name.variableName)))
-  }
-
   def unresolvedRoutineError(name: FunctionIdentifier, searchPath: Seq[String]): Throwable = {
     new AnalysisException(
       errorClass = "UNRESOLVED_ROUTINE",
@@ -1104,13 +1097,6 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
   def corruptedViewReferredTempFunctionsInCatalogError(e: Exception): Throwable = {
     new AnalysisException(
       errorClass = "INTERNAL_ERROR_METADATA_CATALOG.TEMP_FUNCTION_REFERENCE",
-      messageParameters = Map.empty,
-      cause = Some(e))
-  }
-
-  def corruptedViewReferredTempVariablesInCatalogError(e: Exception): Throwable = {
-    new AnalysisException(
-      errorClass = "INTERNAL_ERROR_METADATA_CATALOG.TEMP_VARIABLE_REFERENCE",
       messageParameters = Map.empty,
       cause = Some(e))
   }
