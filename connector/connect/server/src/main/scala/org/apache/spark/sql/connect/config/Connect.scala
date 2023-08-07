@@ -74,6 +74,17 @@ object Connect {
       .intConf
       .createWithDefault(1024)
 
+  val CONNECT_EXECUTE_REATTACHABLE_ENABLED =
+    ConfigBuilder("spark.connect.execute.reattachable.enabled")
+      .internal()
+      .doc("Enables reattachable execution on the server. If disabled and a client requests it, " +
+        "non-reattachable execution will follow and should run until query completion. This will " +
+        "work, unless there is a GRPC stream error, in which case the client will discover that " +
+        "execution is not reattachable when trying to reattach fails.")
+      .version("3.5.0")
+      .booleanConf
+      .createWithDefault(true)
+
   val CONNECT_EXECUTE_REATTACHABLE_SENDER_MAX_STREAM_DURATION =
     ConfigBuilder("spark.connect.execute.reattachable.senderMaxStreamDuration")
       .internal()
