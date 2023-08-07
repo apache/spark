@@ -149,11 +149,8 @@ private[connect] class ExecuteResponseObserver[T <: Message](val executeHolder: 
   /** Attach a new consumer (ExecuteResponseGRPCSender). */
   def attachConsumer(newSender: ExecuteGrpcResponseSender[T]): Unit = synchronized {
     // detach the current sender before attaching new one
-    // this.synchronized() needs to be held while detaching a sender, and the detached sender
-    // needs to be notified with notifyAll() afterwards.
     responseSender.foreach(_.detach())
     responseSender = Some(newSender)
-    notifyAll() // consumer
   }
 
   /**

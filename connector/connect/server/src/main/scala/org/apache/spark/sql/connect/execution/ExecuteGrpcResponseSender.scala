@@ -53,13 +53,15 @@ private[connect] class ExecuteGrpcResponseSender[T <: Message](
 
   /**
    * Detach this sender from executionObserver. Called only from executionObserver that this
-   * sender is attached to. executionObserver holds lock, and needs to notify after this call.
+   * sender is attached to. Lock on executionObserver is held, and notifyAll will wake up this
+   * sender if sleeping.
    */
-  def detach(): Unit = {
+  def detach(): Unit = executionObserver.synchronized {
     if (detached == true) {
       throw new IllegalStateException("ExecuteGrpcResponseSender already detached!")
     }
     detached = true
+    executionObserver.notifyAll()
   }
 
   def run(lastConsumedStreamIndex: Long): Unit = {
@@ -75,6 +77,7 @@ private[connect] class ExecuteGrpcResponseSender[T <: Message](
       // Therefore, we launch another thread to operate on the grpcObserver and send the responses,
       // while this thread will exit from the executePlan/reattachExecute call, allowing GRPC
       // to send the OnReady events.
+      // See https://github.com/grpc/grpc-java/issues/7361
 
       val t = new Thread(
         s"SparkConnectGRPCSender_" +
@@ -243,7 +246,7 @@ private[connect] class ExecuteGrpcResponseSender[T <: Message](
         // The client needs to reattach with ReattachExecute.
         logInfo(
           s"Deadline reached, shutting down stream for opId=${executeHolder.operationId} " +
-            s"after index ${nextIndex - 1}. + " +
+            s"after index ${nextIndex - 1}. " +
             s"totalTime=${System.nanoTime - startTime}ns " +
             s"waitingForResults=${consumeSleep}ns waitingForSend=${sendSleep}ns")
         grpcObserver.onCompleted()
