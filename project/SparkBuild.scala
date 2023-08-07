@@ -449,7 +449,7 @@ object SparkBuild extends PomBuild {
   enable(Unidoc.settings)(spark)
 
   /* Sql-api ANTLR generation settings */
-  enable(Catalyst.settings)(sqlApi)
+  enable(SqlApi.settings)(sqlApi)
 
   /* Spark SQL Core console settings */
   enable(SQL.settings)(sql)
@@ -1169,7 +1169,7 @@ object OldDeps {
   )
 }
 
-object Catalyst {
+object SqlApi {
   import com.simplytyped.Antlr4Plugin
   import com.simplytyped.Antlr4Plugin.autoImport._
 
