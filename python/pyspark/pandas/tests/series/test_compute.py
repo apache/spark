@@ -471,7 +471,7 @@ class SeriesComputeMixin:
         pcodes, puniques = pser.factorize()
         kcodes, kuniques = psser.factorize()
         self.assert_eq(pcodes, kcodes.to_list())
-        # pandas: Float64Index([], dtype='float64')
+        # pandas: Index([], dtype='float64')
         self.assert_eq(pd.Index([]), kuniques)
 
         pser = pd.Series([np.nan, np.nan])
@@ -479,7 +479,7 @@ class SeriesComputeMixin:
         pcodes, puniques = pser.factorize()
         kcodes, kuniques = psser.factorize()
         self.assert_eq(pcodes, kcodes.to_list())
-        # pandas: Float64Index([], dtype='float64')
+        # pandas: Index([], dtype='float64')
         self.assert_eq(pd.Index([]), kuniques)
 
         #
