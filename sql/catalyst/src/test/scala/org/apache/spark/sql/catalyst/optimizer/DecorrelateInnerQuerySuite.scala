@@ -489,7 +489,7 @@ class DecorrelateInnerQuerySuite extends PlanTest {
   test("window function with correlated columns inside") {
     val outerPlan = testRelation2
     val innerPlan =
-      Window(projectList = Seq(b, c),
+      Window(Seq(b, c),
         partitionSpec = Seq(c, OuterReference(x)), orderSpec = b.asc :: Nil,
         Filter(b === 3,
           testRelation))
