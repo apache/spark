@@ -619,8 +619,3 @@ SELECT t0a, (SELECT sum(d) FROM
   FROM   t2)
 )
 FROM t0;
-
-
-SELECT 1
-FROM t0
-WHERE t0a = (SELECT MAX(tmp.s) FROM (SELECT SUM(t1a)  OVER (partition by t1b order by t1c) as s FROM t1 where t1.t1a = t0.t0b) as tmp);
