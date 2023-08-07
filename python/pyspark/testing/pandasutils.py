@@ -124,10 +124,10 @@ def _assert_pandas_equal(
             raise PySparkAssertionError(
                 error_class="DIFFERENT_PANDAS_SERIES",
                 message_parameters={
-                    "left": left,
-                    "left_dtype": left.dtype,
-                    "right": right,
-                    "right_dtype": right.dtype,
+                    "left": left.to_string(),
+                    "left_dtype": str(left.dtype),
+                    "right": right.to_string(),
+                    "right_dtype": str(right.dtype),
                 },
             )
     elif isinstance(left, pd.Index) and isinstance(right, pd.Index):
@@ -143,9 +143,9 @@ def _assert_pandas_equal(
                 error_class="DIFFERENT_PANDAS_INDEX",
                 message_parameters={
                     "left": left,
-                    "left_dtype": left.dtype,
+                    "left_dtype": str(left.dtype),
                     "right": right,
-                    "right_dtype": right.dtype,
+                    "right_dtype": str(right.dtype),
                 },
             )
     else:
@@ -236,10 +236,10 @@ def _assert_pandas_almost_equal(
             raise PySparkAssertionError(
                 error_class="DIFFERENT_PANDAS_SERIES",
                 message_parameters={
-                    "left": left,
-                    "left_dtype": left.dtype,
-                    "right": right,
-                    "right_dtype": right.dtype,
+                    "left": left.to_string(),
+                    "left_dtype": str(left.dtype),
+                    "right": right.to_string(),
+                    "right_dtype": str(right.dtype),
                 },
             )
         for lnull, rnull in zip(left.isnull(), right.isnull()):
@@ -247,10 +247,10 @@ def _assert_pandas_almost_equal(
                 raise PySparkAssertionError(
                     error_class="DIFFERENT_PANDAS_SERIES",
                     message_parameters={
-                        "left": left,
-                        "left_dtype": left.dtype,
-                        "right": right,
-                        "right_dtype": right.dtype,
+                        "left": left.to_string(),
+                        "left_dtype": str(left.dtype),
+                        "right": right.to_string(),
+                        "right_dtype": str(right.dtype),
                     },
                 )
         for lval, rval in zip(left.dropna(), right.dropna()):
@@ -258,10 +258,10 @@ def _assert_pandas_almost_equal(
                 raise PySparkAssertionError(
                     error_class="DIFFERENT_PANDAS_SERIES",
                     message_parameters={
-                        "left": left,
-                        "left_dtype": left.dtype,
-                        "right": right,
-                        "right_dtype": right.dtype,
+                        "left": left.to_string(),
+                        "left_dtype": str(left.dtype),
+                        "right": right.to_string(),
+                        "right_dtype": str(right.dtype),
                     },
                 )
     elif isinstance(left, pd.MultiIndex) and isinstance(right, pd.MultiIndex):
@@ -270,9 +270,9 @@ def _assert_pandas_almost_equal(
                 error_class="DIFFERENT_PANDAS_MULTIINDEX",
                 message_parameters={
                     "left": left,
-                    "left_dtype": left.dtype,
+                    "left_dtype": str(left.dtype),
                     "right": right,
-                    "right_dtype": right.dtype,
+                    "right_dtype": str(right.dtype),
                 },
             )
         for lval, rval in zip(left, right):
@@ -281,9 +281,9 @@ def _assert_pandas_almost_equal(
                     error_class="DIFFERENT_PANDAS_MULTIINDEX",
                     message_parameters={
                         "left": left,
-                        "left_dtype": left.dtype,
+                        "left_dtype": str(left.dtype),
                         "right": right,
-                        "right_dtype": right.dtype,
+                        "right_dtype": str(right.dtype),
                     },
                 )
     elif isinstance(left, pd.Index) and isinstance(right, pd.Index):
@@ -292,9 +292,9 @@ def _assert_pandas_almost_equal(
                 error_class="DIFFERENT_PANDAS_INDEX",
                 message_parameters={
                     "left": left,
-                    "left_dtype": left.dtype,
+                    "left_dtype": str(left.dtype),
                     "right": right,
-                    "right_dtype": right.dtype,
+                    "right_dtype": str(right.dtype),
                 },
             )
         for lnull, rnull in zip(left.isnull(), right.isnull()):
@@ -303,9 +303,9 @@ def _assert_pandas_almost_equal(
                     error_class="DIFFERENT_PANDAS_INDEX",
                     message_parameters={
                         "left": left,
-                        "left_dtype": left.dtype,
+                        "left_dtype": str(left.dtype),
                         "right": right,
-                        "right_dtype": right.dtype,
+                        "right_dtype": str(right.dtype),
                     },
                 )
         for lval, rval in zip(left.dropna(), right.dropna()):
@@ -314,9 +314,9 @@ def _assert_pandas_almost_equal(
                     error_class="DIFFERENT_PANDAS_INDEX",
                     message_parameters={
                         "left": left,
-                        "left_dtype": left.dtype,
+                        "left_dtype": str(left.dtype),
                         "right": right,
-                        "right_dtype": right.dtype,
+                        "right_dtype": str(right.dtype),
                     },
                 )
     else:

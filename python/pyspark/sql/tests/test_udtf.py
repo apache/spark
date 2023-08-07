@@ -26,6 +26,7 @@ from pyspark.errors import (
     PythonException,
     PySparkTypeError,
     AnalysisException,
+    PySparkRuntimeError,
 )
 from pyspark.files import SparkFiles
 from pyspark.rdd import PythonEvalType
@@ -739,6 +740,32 @@ class BaseUDTFTestsMixin:
                 "eval_type": "SQL_TABLE_UDF, SQL_ARROW_TABLE_UDF",
             },
         )
+
+    def test_udtf_pickle_error(self):
+        with tempfile.TemporaryDirectory() as d:
+            file = os.path.join(d, "file.txt")
+            file_obj = open(file, "w")
+
+            @udtf(returnType="x: int")
+            class TestUDTF:
+                def eval(self):
+                    file_obj
+                    yield 1,
+
+            with self.assertRaisesRegex(PySparkRuntimeError, "UDTF_SERIALIZATION_ERROR"):
+                TestUDTF().collect()
+
+    def test_udtf_access_spark_session(self):
+        df = self.spark.range(10)
+
+        @udtf(returnType="x: int")
+        class TestUDTF:
+            def eval(self):
+                df.collect()
+                yield 1,
+
+        with self.assertRaisesRegex(PySparkRuntimeError, "UDTF_SERIALIZATION_ERROR"):
+            TestUDTF().collect()
 
     def test_udtf_no_eval(self):
         with self.assertRaises(PySparkAttributeError) as e:
@@ -1695,6 +1722,22 @@ class UDTFArrowTestsMixin(BaseUDTFTestsMixin):
             udtf(TestUDTF, returnType="x: string", useArrow=True).evalType,
             PythonEvalType.SQL_ARROW_TABLE_UDF,
         )
+
+    def test_udtf_arrow_sql_conf(self):
+        class TestUDTF:
+            def eval(self):
+                yield 1,
+
+        # We do not use `self.sql_conf` here to test the SQL SET command
+        # instead of using PySpark's `spark.conf.set`.
+        old_value = self.spark.conf.get("spark.sql.execution.pythonUDTF.arrow.enabled")
+        self.spark.sql("SET spark.sql.execution.pythonUDTF.arrow.enabled=False")
+        self.assertEqual(udtf(TestUDTF, returnType="x: int").evalType, PythonEvalType.SQL_TABLE_UDF)
+        self.spark.sql("SET spark.sql.execution.pythonUDTF.arrow.enabled=True")
+        self.assertEqual(
+            udtf(TestUDTF, returnType="x: int").evalType, PythonEvalType.SQL_ARROW_TABLE_UDF
+        )
+        self.spark.conf.set("spark.sql.execution.pythonUDTF.arrow.enabled", old_value)
 
     def test_udtf_eval_returning_non_tuple(self):
         class TestUDTF:

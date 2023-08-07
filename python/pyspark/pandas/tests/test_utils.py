@@ -208,10 +208,10 @@ class UtilsTestsMixin:
             exception=pe.exception,
             error_class="DIFFERENT_PANDAS_SERIES",
             message_parameters={
-                "left": series1,
-                "left_dtype": series1.dtype,
-                "right": series2,
-                "right_dtype": series2.dtype,
+                "left": series1.to_string(),
+                "left_dtype": str(series1.dtype),
+                "right": series2.to_string(),
+                "right_dtype": str(series2.dtype),
             },
         )
 
@@ -227,9 +227,9 @@ class UtilsTestsMixin:
             error_class="DIFFERENT_PANDAS_INDEX",
             message_parameters={
                 "left": index1,
-                "left_dtype": index1.dtype,
+                "left_dtype": str(index1.dtype),
                 "right": index2,
-                "right_dtype": index2.dtype,
+                "right_dtype": str(index2.dtype),
             },
         )
 
@@ -247,9 +247,9 @@ class UtilsTestsMixin:
             error_class="DIFFERENT_PANDAS_MULTIINDEX",
             message_parameters={
                 "left": multiindex1,
-                "left_dtype": multiindex1.dtype,
+                "left_dtype": str(multiindex1.dtype),
                 "right": multiindex2,
-                "right_dtype": multiindex2.dtype,
+                "right_dtype": str(multiindex1.dtype),
             },
         )
 
