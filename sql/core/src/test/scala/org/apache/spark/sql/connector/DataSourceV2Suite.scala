@@ -29,6 +29,7 @@ import org.apache.spark.sql.connector.catalog.TableCapability._
 import org.apache.spark.sql.connector.expressions.{Expression, FieldReference, Literal, NamedReference, NullOrdering, SortDirection, SortOrder, Transform}
 import org.apache.spark.sql.connector.expressions.filter.Predicate
 import org.apache.spark.sql.connector.read._
+import org.apache.spark.sql.connector.read.Scan.ColumnarSupportMode
 import org.apache.spark.sql.connector.read.partitioning.{KeyGroupedPartitioning, Partitioning, UnknownPartitioning}
 import org.apache.spark.sql.execution.SortExec
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
@@ -388,6 +389,23 @@ class DataSourceV2Suite extends QueryTest with SharedSparkSession with AdaptiveS
     assert(df.queryExecution.executedPlan.collect { case e: Exchange => e }.isEmpty)
   }
 
+  test("SPARK-44505: should not call planInputPartitions() on explain") {
+    val df = spark.read.format(classOf[ScanDefinedColumnarSupport].getName)
+      .option("columnar", "PARTITION_DEFINED").load()
+    // Default mode will throw an exception on explain.
+    var ex = intercept[IllegalArgumentException](df.explain())
+    assert(ex.getMessage == "planInputPartitions must not be called")
+
+    Seq("SUPPORTED", "UNSUPPORTED").foreach { o =>
+      val dfScan = spark.read.format(classOf[ScanDefinedColumnarSupport].getName)
+        .option("columnar", o).load()
+      dfScan.explain()
+      //  Will fail during regular execution.
+      ex = intercept[IllegalArgumentException](dfScan.count())
+      assert(ex.getMessage == "planInputPartitions must not be called")
+    }
+  }
+
   test("simple writable data source") {
     Seq(classOf[SimpleWritableDataSource], classOf[JavaSimpleWritableDataSource]).foreach { cls =>
       withTempPath { file =>
@@ -421,19 +439,31 @@ class DataSourceV2Suite extends QueryTest with SharedSparkSession with AdaptiveS
           spark.read.format(cls.getName).option("path", path).load(),
           spark.range(5).select($"id", -$"id"))
 
-        val e = intercept[AnalysisException] {
-          spark.range(5).select($"id" as Symbol("i"), -$"id" as Symbol("j"))
-            .write.format(cls.getName)
-            .option("path", path).mode("ignore").save()
-        }
-        assert(e.message.contains("please use Append or Overwrite modes instead"))
+        checkError(
+          exception = intercept[AnalysisException] {
+            spark.range(5).select($"id" as Symbol("i"), -$"id" as Symbol("j"))
+              .write.format(cls.getName)
+              .option("path", path).mode("ignore").save()
+          },
+          errorClass = "_LEGACY_ERROR_TEMP_1308",
+          parameters = Map(
+            "source" -> cls.getName,
+            "createMode" -> "Ignore"
+          )
+        )
 
-        val e2 = intercept[AnalysisException] {
-          spark.range(5).select($"id" as Symbol("i"), -$"id" as Symbol("j"))
-            .write.format(cls.getName)
-            .option("path", path).mode("error").save()
-        }
-        assert(e2.getMessage.contains("please use Append or Overwrite modes instead"))
+        checkError(
+          exception = intercept[AnalysisException] {
+            spark.range(5).select($"id" as Symbol("i"), -$"id" as Symbol("j"))
+              .write.format(cls.getName)
+              .option("path", path).mode("error").save()
+          },
+          errorClass = "_LEGACY_ERROR_TEMP_1308",
+          parameters = Map(
+            "source" -> cls.getName,
+            "createMode" -> "ErrorIfExists"
+          )
+        )
       }
     }
   }
@@ -672,6 +702,25 @@ class SimpleSinglePartitionSource extends TestingV2Source {
       new MyScanBuilder()
     }
   }
+}
+
+class ScanDefinedColumnarSupport extends TestingV2Source {
+
+  class MyScanBuilder(st: ColumnarSupportMode) extends SimpleScanBuilder {
+    override def planInputPartitions(): Array[InputPartition] = {
+      throw new IllegalArgumentException("planInputPartitions must not be called")
+    }
+
+    override def columnarSupportMode() : ColumnarSupportMode = st
+
+  }
+
+  override def getTable(options: CaseInsensitiveStringMap): Table = new SimpleBatchTable {
+    override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = {
+      new MyScanBuilder(Scan.ColumnarSupportMode.valueOf(options.get("columnar")))
+    }
+  }
+
 }
 
 

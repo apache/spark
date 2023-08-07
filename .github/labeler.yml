@@ -76,7 +76,7 @@ CORE:
   - "common/kvstore/**/*"
   - "common/network-common/**/*"
   - "common/network-shuffle/**/*"
-  - "python/pyspark/**/*.py"
+  - "python/pyspark/*.py"
   - "python/pyspark/tests/**/*.py"
 SPARK SUBMIT:
   - "bin/spark-submit*"
@@ -155,6 +155,7 @@ CONNECT:
   - "connector/connect/**/*"
   - "**/sql/sparkconnect/**/*"
   - "python/pyspark/sql/**/connect/**/*"
+  - "python/pyspark/ml/**/connect/**/*"
 PROTOBUF:
   - "connector/protobuf/**/*"
   - "python/pyspark/sql/protobuf/**/*"

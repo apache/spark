@@ -406,7 +406,7 @@ SELECT regexp_replace('healthy, wealthy, and wise', '\\w+thy', 'something', -2)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.VALUE_OUT_OF_RANGE",
   "sqlState" : "42K09",
@@ -431,7 +431,7 @@ SELECT regexp_replace('healthy, wealthy, and wise', '\\w+thy', 'something', 0)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.VALUE_OUT_OF_RANGE",
   "sqlState" : "42K09",

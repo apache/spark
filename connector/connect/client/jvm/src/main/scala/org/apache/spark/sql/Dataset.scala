@@ -29,7 +29,7 @@ import org.apache.spark.api.java.function._
 import org.apache.spark.connect.proto
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoder
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders._
-import org.apache.spark.sql.catalyst.expressions.RowOrdering
+import org.apache.spark.sql.catalyst.expressions.OrderUtils
 import org.apache.spark.sql.connect.client.SparkResult
 import org.apache.spark.sql.connect.common.{DataTypeProtoConverter, StorageLevelProtoConverter, UdfUtils}
 import org.apache.spark.sql.expressions.ScalarUserDefinedFunction
@@ -37,7 +37,7 @@ import org.apache.spark.sql.functions.{struct, to_json}
 import org.apache.spark.sql.streaming.DataStreamWriter
 import org.apache.spark.sql.types.{Metadata, StructType}
 import org.apache.spark.storage.StorageLevel
-import org.apache.spark.util.Utils
+import org.apache.spark.util.SparkClassUtils
 
 /**
  * A Dataset is a strongly typed collection of domain-specific objects that can be transformed in
@@ -876,7 +876,7 @@ class Dataset[T] private[sql] (
 
     val tupleEncoder =
       ProductEncoder[(T, U)](
-        ClassTag(Utils.getContextOrSparkClassLoader.loadClass(s"scala.Tuple2")),
+        ClassTag(SparkClassUtils.getContextOrSparkClassLoader.loadClass(s"scala.Tuple2")),
         Seq(
           EncoderField(s"_1", this.encoder, leftNullable, Metadata.empty),
           EncoderField(s"_2", other.encoder, rightNullable, Metadata.empty)))
@@ -889,8 +889,8 @@ class Dataset[T] private[sql] (
         .setJoinType(joinTypeValue)
         .setJoinCondition(condition.expr)
         .setJoinDataType(joinBuilder.getJoinDataTypeBuilder
-          .setIsLeftFlattenableToRow(this.encoder.isFlattenable)
-          .setIsRightFlattenableToRow(other.encoder.isFlattenable))
+          .setIsLeftStruct(this.encoder.isStruct)
+          .setIsRightStruct(other.encoder.isStruct))
     }
   }
 
@@ -1750,7 +1750,10 @@ class Dataset[T] private[sql] (
 
   private def checkSameSparkSession(other: Dataset[_]): Unit = {
     if (this.sparkSession.sessionId != other.sparkSession.sessionId) {
-      throw new SparkException("Both Datasets must belong to the same SparkSession")
+      throw new SparkException(
+        errorClass = "CONNECT.SESSION_NOT_SAME",
+        messageParameters = Map.empty,
+        cause = null)
     }
   }
 
@@ -2035,7 +2038,7 @@ class Dataset[T] private[sql] (
    * @since 3.4.0
    */
   def sample(withReplacement: Boolean, fraction: Double): Dataset[T] = {
-    sample(withReplacement, fraction, Utils.random.nextLong)
+    sample(withReplacement, fraction, SparkClassUtils.random.nextLong)
   }
 
   /**
@@ -2069,7 +2072,7 @@ class Dataset[T] private[sql] (
     //  between construction and execution the query might fail or produce wrong results. Another
     //  problem can come from data that arrives between the execution of the returned datasets.
     val sortOrder = schema.collect {
-      case f if RowOrdering.isOrderable(f.dataType) => col(f.name).asc
+      case f if OrderUtils.isOrderable(f.dataType) => col(f.name).asc
     }
     val sortedInput = sortWithinPartitions(sortOrder: _*).plan.getRoot
     val sum = weights.sum
@@ -2114,7 +2117,7 @@ class Dataset[T] private[sql] (
    * @since 3.4.0
    */
   def randomSplit(weights: Array[Double]): Array[Dataset[T]] = {
-    randomSplit(weights, Utils.random.nextLong)
+    randomSplit(weights, SparkClassUtils.random.nextLong)
   }
 
   private def withColumns(names: Seq[String], values: Seq[Column]): DataFrame = {
@@ -2829,7 +2832,7 @@ class Dataset[T] private[sql] (
   /**
    * Returns an iterator that contains all rows in this Dataset.
    *
-   * The returned iterator implements [[AutoCloseable]]. For memory management it is better to
+   * The returned iterator implements [[AutoCloseable]]. For resource management it is better to
    * close it once you are done. If you don't close it, it and the underlying data will be cleaned
    * up once the iterator is garbage collected.
    *
@@ -2837,7 +2840,7 @@ class Dataset[T] private[sql] (
    * @since 3.4.0
    */
   def toLocalIterator(): java.util.Iterator[T] = {
-    collectResult().destructiveIterator
+    collectResult().destructiveIterator.asJava
   }
 
   /**

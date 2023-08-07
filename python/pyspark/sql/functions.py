@@ -49,7 +49,8 @@ from pyspark.sql.types import ArrayType, DataType, StringType, StructType, _from
 
 # Keep UserDefinedFunction import for backwards compatible import; moved in SPARK-22409
 from pyspark.sql.udf import UserDefinedFunction, _create_py_udf  # noqa: F401
-from pyspark.sql.udtf import UserDefinedTableFunction, _create_udtf
+from pyspark.sql.udtf import AnalyzeArgument, AnalyzeResult  # noqa: F401
+from pyspark.sql.udtf import UserDefinedTableFunction, _create_py_udtf
 
 # Keep pandas_udf and PandasUDFType import for backwards compatible import; moved in SPARK-28264
 from pyspark.sql.pandas.functions import pandas_udf, PandasUDFType  # noqa: F401
@@ -12770,7 +12771,7 @@ def arrays_zip(*cols: "ColumnOrName") -> Column:
     Examples
     --------
     >>> from pyspark.sql.functions import arrays_zip
-    >>> df = spark.createDataFrame([(([1, 2, 3], [2, 4, 6], [3, 6]))], ['vals1', 'vals2', 'vals3'])
+    >>> df = spark.createDataFrame([([1, 2, 3], [2, 4, 6], [3, 6])], ['vals1', 'vals2', 'vals3'])
     >>> df = df.select(arrays_zip(df.vals1, df.vals2, df.vals3).alias('zipped'))
     >>> df.show(truncate=False)
     +------------------------------------+
@@ -13041,7 +13042,7 @@ def _invoke_higher_order_function(
 
     :param name: Name of the expression
     :param cols: a list of columns
-    :param funs: a list of((*Column) -> Column functions.
+    :param funs: a list of (*Column) -> Column functions.
 
     :return: a Column
     """
@@ -14395,16 +14396,16 @@ def call_udf(udfName: str, *cols: "ColumnOrName") -> Column:
 
 
 @try_remote_functions
-def call_function(udfName: str, *cols: "ColumnOrName") -> Column:
+def call_function(funcName: str, *cols: "ColumnOrName") -> Column:
     """
-    Call a builtin or temp function.
+    Call a SQL function.
 
     .. versionadded:: 3.5.0
 
     Parameters
     ----------
-    udfName : str
-        name of the function
+    funcName : str
+        function name that follows the SQL identifier syntax (can be quoted, can be qualified)
     cols : :class:`~pyspark.sql.Column` or str
         column names or :class:`~pyspark.sql.Column`\\s to be used in the function
 
@@ -14442,9 +14443,22 @@ def call_function(udfName: str, *cols: "ColumnOrName") -> Column:
     +-------+
     |    2.0|
     +-------+
+    >>> _ = spark.sql("CREATE FUNCTION custom_avg AS 'test.org.apache.spark.sql.MyDoubleAvg'")
+    >>> df.select(call_function("custom_avg", col("id"))).show()
+    +------------------------------------+
+    |spark_catalog.default.custom_avg(id)|
+    +------------------------------------+
+    |                               102.0|
+    +------------------------------------+
+    >>> df.select(call_function("spark_catalog.default.custom_avg", col("id"))).show()
+    +------------------------------------+
+    |spark_catalog.default.custom_avg(id)|
+    +------------------------------------+
+    |                               102.0|
+    +------------------------------------+
     """
     sc = get_active_spark_context()
-    return _invoke_function("call_function", udfName, _to_seq(sc, cols, _to_java_column))
+    return _invoke_function("call_function", funcName, _to_seq(sc, cols, _to_java_column))
 
 
 @try_remote_functions
@@ -15510,11 +15524,13 @@ def udf(
         return _create_py_udf(f=f, returnType=returnType, useArrow=useArrow)
 
 
+@try_remote_functions
 def udtf(
     cls: Optional[Type] = None,
     *,
-    returnType: Union[StructType, str],
-) -> Union[UserDefinedTableFunction, functools.partial]:
+    returnType: Optional[Union[StructType, str]] = None,
+    useArrow: Optional[bool] = None,
+) -> Union["UserDefinedTableFunction", Callable[[Type], "UserDefinedTableFunction"]]:
     """Creates a user defined table function (UDTF).
 
     .. versionadded:: 3.5.0
@@ -15523,32 +15539,24 @@ def udtf(
     ----------
     cls : class
         the Python user-defined table function handler class.
-    returnType : :class:`pyspark.sql.types.StructType` or str
+    returnType : :class:`pyspark.sql.types.StructType` or str, optional
         the return type of the user-defined table function. The value can be either a
         :class:`pyspark.sql.types.StructType` object or a DDL-formatted struct type string.
+        If None, the handler class must provide `analyze` static method.
+    useArrow : bool or None, optional
+        whether to use Arrow to optimize the (de)serializations. When it's set to None, the
+        Spark config "spark.sql.execution.pythonUDTF.arrow.enabled" is used.
 
     Examples
     --------
-    Implement the UDTF class
+    Implement the UDTF class and create a UDTF:
 
     >>> class TestUDTF:
     ...     def eval(self, *args: Any):
     ...         yield "hello", "world"
-
-    Create the UDTF
-
+    ...
     >>> from pyspark.sql.functions import udtf
     >>> test_udtf = udtf(TestUDTF, returnType="c1: string, c2: string")
-
-    Create the UDTF using the decorator
-
-    >>> @udtf(returnType="c1: int, c2: int")
-    ... class PlusOne:
-    ...     def eval(self, x: int):
-    ...         yield x, x + 1
-
-    Invoke the UDTF
-
     >>> test_udtf().show()
     +-----+-----+
     |   c1|   c2|
@@ -15556,10 +15564,61 @@ def udtf(
     |hello|world|
     +-----+-----+
 
-    Invoke the UDTF with parameters
+    UDTF can also be created using the decorator syntax:
 
+    >>> @udtf(returnType="c1: int, c2: int")
+    ... class PlusOne:
+    ...     def eval(self, x: int):
+    ...         yield x, x + 1
+    ...
     >>> from pyspark.sql.functions import lit
     >>> PlusOne(lit(1)).show()
+    +---+---+
+    | c1| c2|
+    +---+---+
+    |  1|  2|
+    +---+---+
+
+    UDTF can also have `analyze` static method instead of a static return type:
+
+    The `analyze` static method should take arguments:
+
+    - The number and order of arguments are the same as the UDTF inputs
+    - Each argument is a :class:`pyspark.sql.udtf.AnalyzeArgument`, containing:
+      - data_type: DataType
+      - value: Any: the calculated value if the argument is foldable; otherwise None
+      - is_table: bool: True if the argument is a table argument
+
+    and return a :class:`pyspark.sql.udtf.AnalyzeResult`, containing.
+
+    - schema: StructType
+
+    >>> from pyspark.sql.udtf import AnalyzeArgument, AnalyzeResult
+    >>> # or from pyspark.sql.functions import AnalyzeArgument, AnalyzeResult
+    >>> @udtf
+    ... class TestUDTFWithAnalyze:
+    ...     @staticmethod
+    ...     def analyze(a: AnalyzeArgument, b: AnalyzeArgument) -> AnalyzeResult:
+    ...         return AnalyzeResult(StructType().add("a", a.data_type).add("b", b.data_type))
+    ...
+    ...     def eval(self, a, b):
+    ...         yield a, b
+    ...
+    >>> TestUDTFWithAnalyze(lit(1), lit("x")).show()
+    +---+---+
+    |  a|  b|
+    +---+---+
+    |  1|  x|
+    +---+---+
+
+    Arrow optimization can be explicitly enabled when creating UDTFs:
+
+    >>> @udtf(returnType="c1: int, c2: int", useArrow=True)
+    ... class ArrowPlusOne:
+    ...     def eval(self, x: int):
+    ...         yield x, x + 1
+    ...
+    >>> ArrowPlusOne(lit(1)).show()
     +---+---+
     | c1| c2|
     +---+---+
@@ -15599,9 +15658,9 @@ def udtf(
     User-defined table functions do not accept keyword arguments on the calling side.
     """
     if cls is None:
-        return functools.partial(_create_udtf, returnType=returnType)
+        return functools.partial(_create_py_udtf, returnType=returnType, useArrow=useArrow)
     else:
-        return _create_udtf(cls=cls, returnType=returnType)
+        return _create_py_udtf(cls=cls, returnType=returnType, useArrow=useArrow)
 
 
 def _test() -> None:

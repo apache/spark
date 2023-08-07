@@ -182,12 +182,21 @@ class DataSourceV2DataFrameSuite
           Array.empty[Transform], Collections.emptyMap[String, String])
         val df = sql(s"select interval 1 millisecond as i")
         val v2Writer = df.writeTo("testcat.table_name")
-        val e1 = intercept[AnalysisException](v2Writer.append())
-        assert(e1.getMessage.contains(s"Cannot use interval type in the table schema."))
-        val e2 = intercept[AnalysisException](v2Writer.overwrite(df("i")))
-        assert(e2.getMessage.contains(s"Cannot use interval type in the table schema."))
-        val e3 = intercept[AnalysisException](v2Writer.overwritePartitions())
-        assert(e3.getMessage.contains(s"Cannot use interval type in the table schema."))
+        checkError(
+          exception = intercept[AnalysisException](v2Writer.append()),
+          errorClass = "_LEGACY_ERROR_TEMP_1183",
+          parameters = Map.empty
+        )
+        checkError(
+          exception = intercept[AnalysisException](v2Writer.overwrite(df("i"))),
+          errorClass = "_LEGACY_ERROR_TEMP_1183",
+          parameters = Map.empty
+        )
+        checkError(
+          exception = intercept[AnalysisException](v2Writer.overwritePartitions()),
+          errorClass = "_LEGACY_ERROR_TEMP_1183",
+          parameters = Map.empty
+        )
       }
     }
   }

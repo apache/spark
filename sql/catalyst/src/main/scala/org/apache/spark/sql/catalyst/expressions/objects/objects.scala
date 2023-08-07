@@ -31,6 +31,7 @@ import org.apache.spark.{SparkConf, SparkEnv}
 import org.apache.spark.serializer._
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.{InternalRow, ScalaReflection}
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.encoders.EncoderUtils
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen._
@@ -48,6 +49,19 @@ import org.apache.spark.util.Utils
 trait InvokeLike extends Expression with NonSQLExpression with ImplicitCastInputTypes {
 
   def arguments: Seq[Expression]
+  protected def argumentTypes: Seq[AbstractDataType] = inputTypes
+
+  override def checkInputDataTypes(): TypeCheckResult = {
+    if (!argumentTypes.isEmpty && argumentTypes.length != arguments.length) {
+      TypeCheckResult.DataTypeMismatch(
+        errorSubClass = "WRONG_NUM_ARG_TYPES",
+        messageParameters = Map(
+          "expectedNum" -> arguments.length.toString,
+          "actualNum" -> argumentTypes.length.toString))
+    } else {
+      super.checkInputDataTypes()
+    }
+  }
 
   def propagateNull: Boolean
 
@@ -171,7 +185,7 @@ trait InvokeLike extends Expression with NonSQLExpression with ImplicitCastInput
   final def findMethod(cls: Class[_], functionName: String, argClasses: Seq[Class[_]]): Method = {
     val method = MethodUtils.getMatchingAccessibleMethod(cls, functionName, argClasses: _*)
     if (method == null) {
-      throw QueryExecutionErrors.methodNotDeclaredError(functionName)
+      throw QueryExecutionErrors.methodNotFoundError(cls, functionName, argClasses)
     } else {
       method
     }
@@ -384,6 +398,7 @@ case class Invoke(
     } else {
       Nil
     }
+  override protected def argumentTypes: Seq[AbstractDataType] = methodInputTypes
 
   private lazy val encodedFunctionName = ScalaReflection.encodeFieldNameToIdentifier(functionName)
 

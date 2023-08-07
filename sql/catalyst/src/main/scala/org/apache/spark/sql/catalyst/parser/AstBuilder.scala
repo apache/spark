@@ -1554,11 +1554,40 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
   override def visitFunctionTableSubqueryArgument(
       ctx: FunctionTableSubqueryArgumentContext): Expression = withOrigin(ctx) {
     val p = Option(ctx.identifierReference).map { r =>
+      // Make sure that the identifier after the TABLE keyword is surrounded by parentheses, as
+      // required by the SQL standard. If not, return an informative error message.
+      if (ctx.LEFT_PAREN() == null) {
+        throw QueryParsingErrors.invalidTableFunctionIdentifierArgumentMissingParentheses(
+          ctx, argumentName = ctx.identifierReference().getText)
+      }
       createUnresolvedRelation(r)
     }.getOrElse {
       plan(ctx.query)
     }
-    FunctionTableSubqueryArgumentExpression(p)
+    var withSinglePartition = false
+    var partitionByExpressions = Seq.empty[Expression]
+    var orderByExpressions = Seq.empty[SortOrder]
+    Option(ctx.tableArgumentPartitioning).foreach { p =>
+      if (p.SINGLE != null) {
+        withSinglePartition = true
+      }
+      partitionByExpressions = p.partition.asScala.map(expression).toSeq
+      orderByExpressions = p.sortItem.asScala.map(visitSortItem).toSeq
+    }
+    validate(
+      !(withSinglePartition && partitionByExpressions.nonEmpty),
+      message = "WITH SINGLE PARTITION cannot be specified if PARTITION BY is also present",
+      ctx = ctx.tableArgumentPartitioning)
+    validate(
+      !(orderByExpressions.nonEmpty && partitionByExpressions.isEmpty && !withSinglePartition),
+      message = "ORDER BY cannot be specified unless either " +
+        "PARTITION BY or WITH SINGLE PARTITION is also present",
+      ctx = ctx.tableArgumentPartitioning)
+    FunctionTableSubqueryArgumentExpression(
+      plan = p,
+      partitionByExpressions = partitionByExpressions,
+      withSinglePartition = withSinglePartition,
+      orderByExpressions = orderByExpressions)
   }
 
   private def extractFunctionTableNamedArgument(

@@ -408,7 +408,7 @@ case class AdaptiveSparkPlanExec(
 
   override def generateTreeString(
       depth: Int,
-      lastChildren: Seq[Boolean],
+      lastChildren: java.util.ArrayList[Boolean],
       append: String => Unit,
       verbose: Boolean,
       prefix: String = "",
@@ -427,9 +427,10 @@ case class AdaptiveSparkPlanExec(
       printNodeId,
       indent)
     if (currentPhysicalPlan.fastEquals(initialPlan)) {
+      lastChildren.add(true)
       currentPhysicalPlan.generateTreeString(
         depth + 1,
-        lastChildren :+ true,
+        lastChildren,
         append,
         verbose,
         prefix = "",
@@ -437,6 +438,7 @@ case class AdaptiveSparkPlanExec(
         maxFields,
         printNodeId,
         indent)
+      lastChildren.remove(lastChildren.size() - 1)
     } else {
       generateTreeStringWithHeader(
         if (isFinalPlan) "Final Plan" else "Current Plan",
@@ -470,7 +472,7 @@ case class AdaptiveSparkPlanExec(
     append(s"+- == $header ==\n")
     plan.generateTreeString(
       0,
-      Nil,
+      new java.util.ArrayList(),
       append,
       verbose,
       prefix = "",

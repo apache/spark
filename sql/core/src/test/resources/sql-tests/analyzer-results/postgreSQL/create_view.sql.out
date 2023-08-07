@@ -67,7 +67,7 @@ org.apache.spark.sql.AnalysisException
 CREATE VIEW key_dependent_view_no_cols AS
    SELECT FROM view_base_table GROUP BY key HAVING length(data) > 0
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
   "sqlState" : "42703",
@@ -545,7 +545,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 CREATE VIEW v10_temp AS SELECT * FROM v7_temp
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
   "sqlState" : "42P01",
@@ -565,7 +565,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 CREATE VIEW v11_temp AS SELECT t1.id, t2.a FROM base_table t1, v10_temp t2
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
   "sqlState" : "42P01",
@@ -585,7 +585,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 CREATE VIEW v12_temp AS SELECT true FROM v11_temp
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
   "sqlState" : "42P01",

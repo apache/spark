@@ -61,6 +61,7 @@ import org.apache.hadoop.util.{RunJar, StringUtils}
 import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.apache.logging.log4j.{Level, LogManager}
 import org.apache.logging.log4j.core.LoggerContext
+import org.apache.logging.log4j.core.config.LoggerConfig
 import org.eclipse.jetty.util.MultiException
 import org.slf4j.Logger
 
@@ -91,8 +92,12 @@ private[spark] object CallSite {
 /**
  * Various utility methods used by Spark.
  */
-private[spark] object Utils extends Logging with SparkClassUtils {
-  val random = new Random()
+private[spark] object Utils
+  extends Logging
+  with SparkClassUtils
+  with SparkErrorUtils
+  with SparkFileUtils
+  with SparkSerDeUtils {
 
   private val sparkUncaughtExceptionHandler = new SparkUncaughtExceptionHandler
   @volatile private var cachedLocalDir: String = ""
@@ -118,32 +123,6 @@ private[spark] object Utils extends Logging with SparkClassUtils {
   private val copyBuffer = ThreadLocal.withInitial[Array[Byte]](() => {
     new Array[Byte](COPY_BUFFER_LEN)
   })
-
-  /** Serialize an object using Java serialization */
-  def serialize[T](o: T): Array[Byte] = {
-    SparkSerDerseUtils.serialize(o)
-  }
-
-  /** Deserialize an object using Java serialization */
-  def deserialize[T](bytes: Array[Byte]): T = {
-    val bis = new ByteArrayInputStream(bytes)
-    val ois = new ObjectInputStream(bis)
-    ois.readObject.asInstanceOf[T]
-  }
-
-  /** Deserialize an object using Java serialization and the given ClassLoader */
-  def deserialize[T](bytes: Array[Byte], loader: ClassLoader): T = {
-    val bis = new ByteArrayInputStream(bytes)
-    val ois = new ObjectInputStream(bis) {
-      override def resolveClass(desc: ObjectStreamClass): Class[_] = {
-        // scalastyle:off classforname
-        Class.forName(desc.getName, false, loader)
-        // scalastyle:on classforname
-      }
-    }
-    ois.readObject.asInstanceOf[T]
-  }
-
   /** Deserialize a Long value (used for [[org.apache.spark.api.python.PythonPartitioner]]) */
   def deserializeLongValue(bytes: Array[Byte]) : Long = {
     // Note: we assume that we are given a Long value encoded in network (big-endian) byte order
@@ -188,11 +167,6 @@ private[spark] object Utils extends Logging with SparkClassUtils {
   /** String interning to reduce the memory usage. */
   def weakIntern(s: String): String = {
     weakStringInterner.intern(s)
-  }
-
-  /** Determines whether the provided class is loadable in the current thread. */
-  def classIsLoadable(clazz: String): Boolean = {
-    Try { classForName(clazz, initialize = false) }.isSuccess
   }
 
   /**
@@ -259,47 +233,10 @@ private[spark] object Utils extends Logging with SparkClassUtils {
   }
 
   /**
-   * Create a directory given the abstract pathname
-   * @return true, if the directory is successfully created; otherwise, return false.
-   */
-  def createDirectory(dir: File): Boolean = {
-    try {
-      // SPARK-35907: The check was required by File.mkdirs() because it could sporadically
-      // fail silently. After switching to Files.createDirectories(), ideally, there should
-      // no longer be silent fails. But the check is kept for the safety concern. We can
-      // remove the check when we're sure that Files.createDirectories() would never fail silently.
-      Files.createDirectories(dir.toPath)
-      if ( !dir.exists() || !dir.isDirectory) {
-        logError(s"Failed to create directory " + dir)
-      }
-      dir.isDirectory
-    } catch {
-      case e: Exception =>
-        logError(s"Failed to create directory " + dir, e)
-        false
-    }
-  }
-
-  /**
-   * Create a directory inside the given parent directory. The directory is guaranteed to be
-   * newly created, and is not marked for automatic deletion.
-   */
-  def createDirectory(root: String, namePrefix: String = "spark"): File = {
-    JavaUtils.createDirectory(root, namePrefix)
-  }
-
-  /**
-   * Create a temporary directory inside the `java.io.tmpdir` prefixed with `spark`.
-   * The directory will be automatically deleted when the VM shuts down.
-   */
-  def createTempDir(): File =
-    createTempDir(System.getProperty("java.io.tmpdir"), "spark")
-
-  /**
    * Create a temporary directory inside the given parent directory. The directory will be
    * automatically deleted when the VM shuts down.
    */
-  def createTempDir(
+  override def createTempDir(
       root: String = System.getProperty("java.io.tmpdir"),
       namePrefix: String = "spark"): File = {
     val dir = createDirectory(root, namePrefix)
@@ -442,7 +379,7 @@ private[spark] object Utils extends Logging with SparkClassUtils {
     // `file` and `localhost` are not used. Just to prevent URI from parsing `fileName` as
     // scheme or host. The prefix "/" is required because URI doesn't accept a relative path.
     // We should remove it after we get the raw path.
-    encodeRelativeUnixPathToURIRawPath(fileName).substring(1)
+    encodeRelativeUnixPathToURIRawPath(fileName)
   }
 
   /**
@@ -453,7 +390,7 @@ private[spark] object Utils extends Logging with SparkClassUtils {
     // `file` and `localhost` are not used. Just to prevent URI from parsing `fileName` as
     // scheme or host. The prefix "/" is required because URI doesn't accept a relative path.
     // We should remove it after we get the raw path.
-    new URI("file", null, "localhost", -1, "/" + path, null, null).getRawPath
+    new URI("file", null, "localhost", -1, "/" + path, null, null).getRawPath.substring(1)
   }
 
   /**
@@ -1182,29 +1119,13 @@ private[spark] object Utils extends Logging with SparkClassUtils {
   }
 
   /**
-   * Lists files recursively.
-   */
-  def recursiveList(f: File): Array[File] = {
-    require(f.isDirectory)
-    val result = f.listFiles.toBuffer
-    val dirList = result.filter(_.isDirectory)
-    while (dirList.nonEmpty) {
-      val curDir = dirList.remove(0)
-      val files = curDir.listFiles()
-      result ++= files
-      dirList ++= files.filter(_.isDirectory)
-    }
-    result.toArray
-  }
-
-  /**
    * Delete a file or directory and its contents recursively.
    * Don't follow directories if they are symlinks.
    * Throws an exception if deletion is unsuccessful.
    */
-  def deleteRecursively(file: File): Unit = {
+  override def deleteRecursively(file: File): Unit = {
+    super.deleteRecursively(file)
     if (file != null) {
-      JavaUtils.deleteRecursively(file)
       ShutdownHookManager.removeShutdownDeleteDir(file)
     }
   }
@@ -1449,16 +1370,6 @@ private[spark] object Utils extends Logging with SparkClassUtils {
     }
   }
 
-  /**
-   * Execute a block of code that returns a value, re-throwing any non-fatal uncaught
-   * exceptions as IOException. This is used when implementing Externalizable and Serializable's
-   * read and write methods, since Java's serializer will not report non-IOExceptions properly;
-   * see SPARK-4080 for more context.
-   */
-  def tryOrIOException[T](block: => T): T = {
-    SparkErrorUtils.tryOrIOException(block)
-  }
-
   /** Executes the given block. Log non-fatal errors if any, and only throw fatal errors */
   def tryLogNonFatalError(block: => Unit): Unit = {
     try {
@@ -1466,38 +1377,6 @@ private[spark] object Utils extends Logging with SparkClassUtils {
     } catch {
       case NonFatal(t) =>
         logError(s"Uncaught exception in thread ${Thread.currentThread().getName}", t)
-    }
-  }
-
-  /**
-   * Execute a block of code, then a finally block, but if exceptions happen in
-   * the finally block, do not suppress the original exception.
-   *
-   * This is primarily an issue with `finally { out.close() }` blocks, where
-   * close needs to be called to clean up `out`, but if an exception happened
-   * in `out.write`, it's likely `out` may be corrupted and `out.close` will
-   * fail as well. This would then suppress the original/likely more meaningful
-   * exception from the original `out.write` call.
-   */
-  def tryWithSafeFinally[T](block: => T)(finallyBlock: => Unit): T = {
-    var originalThrowable: Throwable = null
-    try {
-      block
-    } catch {
-      case t: Throwable =>
-        // Purposefully not using NonFatal, because even fatal exceptions
-        // we don't want to have our finallyBlock suppress
-        originalThrowable = t
-        throw originalThrowable
-    } finally {
-      try {
-        finallyBlock
-      } catch {
-        case t: Throwable if (originalThrowable != null && originalThrowable != t) =>
-          originalThrowable.addSuppressed(t)
-          logWarning(s"Suppressing exception in finally: ${t.getMessage}", t)
-          throw originalThrowable
-      }
     }
   }
 
@@ -2085,16 +1964,6 @@ private[spark] object Utils extends Logging with SparkClassUtils {
     }
   }
 
-  /**
-   * Return a well-formed URI for the file described by a user input string.
-   *
-   * If the supplied path does not contain a scheme, or is a relative path, it will be
-   * converted into an absolute path with a file:// scheme.
-   */
-  def resolveURI(path: String): URI = {
-    SparkFileUtils.resolveURI(path)
-  }
-
   /** Resolve a comma-separated list of paths. */
   def resolveURIs(paths: String): String = {
     if (paths == null || paths.trim.isEmpty) {
@@ -2447,14 +2316,32 @@ private[spark] object Utils extends Logging with SparkClassUtils {
    * configure a new log4j level
    */
   def setLogLevel(l: Level): Unit = {
-    val ctx = LogManager.getContext(false).asInstanceOf[LoggerContext]
-    val config = ctx.getConfiguration()
-    val loggerConfig = config.getLoggerConfig(LogManager.ROOT_LOGGER_NAME)
+    val (ctx, loggerConfig) = getLogContext
     loggerConfig.setLevel(l)
     ctx.updateLoggers()
 
     // Setting threshold to null as rootLevel will define log level for spark-shell
     Logging.sparkShellThresholdLevel = null
+  }
+
+
+  def setLogLevelIfNeeded(newLogLevel: String): Unit = {
+    if (newLogLevel != Utils.getLogLevel) {
+      Utils.setLogLevel(Level.toLevel(newLogLevel))
+    }
+  }
+
+  private lazy val getLogContext: (LoggerContext, LoggerConfig) = {
+    val ctx = LogManager.getContext(false).asInstanceOf[LoggerContext]
+    (ctx, ctx.getConfiguration().getLoggerConfig(LogManager.ROOT_LOGGER_NAME))
+  }
+
+  /**
+   * Get current log level
+   */
+  def getLogLevel: String = {
+    val (_, loggerConfig) = getLogContext
+    loggerConfig.getLevel.name
   }
 
   /**
@@ -2744,11 +2631,6 @@ private[spark] object Utils extends Logging with SparkClassUtils {
       s"${DYN_ALLOCATION_INITIAL_EXECUTORS.key}, ${DYN_ALLOCATION_MIN_EXECUTORS.key} and " +
         s"${EXECUTOR_INSTANCES.key}")
     initialExecutors
-  }
-
-  def tryWithResource[R <: Closeable, T](createResource: => R)(f: R => T): T = {
-    val resource = createResource
-    try f.apply(resource) finally resource.close()
   }
 
   /**

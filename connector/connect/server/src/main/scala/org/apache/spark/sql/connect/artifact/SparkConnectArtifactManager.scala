@@ -31,12 +31,13 @@ import org.apache.hadoop.fs.{LocalFileSystem, Path => FSPath}
 
 import org.apache.spark.{JobArtifactSet, JobArtifactState, SparkContext, SparkEnv}
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config.CONNECT_SCALA_UDF_STUB_PREFIXES
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.connect.artifact.util.ArtifactUtils
 import org.apache.spark.sql.connect.config.Connect.CONNECT_COPY_FROM_LOCAL_TO_FS_ALLOW_DEST_LOCAL
 import org.apache.spark.sql.connect.service.SessionHolder
 import org.apache.spark.storage.{CacheId, StorageLevel}
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{ChildFirstURLClassLoader, StubClassLoader, Utils}
 
 /**
  * The Artifact Manager for the [[SparkConnectService]].
@@ -161,7 +162,19 @@ class SparkConnectArtifactManager(sessionHolder: SessionHolder) extends Logging 
    */
   def classloader: ClassLoader = {
     val urls = getSparkConnectAddedJars :+ classDir.toUri.toURL
-    new URLClassLoader(urls.toArray, Utils.getContextOrSparkClassLoader)
+    val loader = if (SparkEnv.get.conf.get(CONNECT_SCALA_UDF_STUB_PREFIXES).nonEmpty) {
+      val stubClassLoader =
+        StubClassLoader(null, SparkEnv.get.conf.get(CONNECT_SCALA_UDF_STUB_PREFIXES))
+      new ChildFirstURLClassLoader(
+        urls.toArray,
+        stubClassLoader,
+        Utils.getContextOrSparkClassLoader)
+    } else {
+      new URLClassLoader(urls.toArray, Utils.getContextOrSparkClassLoader)
+    }
+
+    logDebug(s"Using class loader: $loader, containing urls: $urls")
+    loader
   }
 
   /**
