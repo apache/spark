@@ -102,6 +102,8 @@ class SparkSessionSuite extends ConnectFunSuite {
 
   test("Default/Active session") {
     // Make sure we start with a clean slate.
+    SparkSession.clearDefaultSession()
+    SparkSession.clearActiveSession()
     assert(SparkSession.getDefaultSession.isEmpty)
     assert(SparkSession.getActiveSession.isEmpty)
     intercept[IllegalStateException](SparkSession.active)
@@ -144,6 +146,8 @@ class SparkSessionSuite extends ConnectFunSuite {
   }
 
   test("active session in multiple threads") {
+    SparkSession.clearDefaultSession()
+    SparkSession.clearActiveSession()
     val session1 = SparkSession.builder().remote(connectionString1).create()
     val session2 = SparkSession.builder().remote(connectionString1).create()
     SparkSession.setActiveSession(session2)

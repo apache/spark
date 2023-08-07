@@ -737,8 +737,8 @@ object SparkSession extends Logging {
   private val defaultSession = new AtomicReference[SparkSession]
 
   /**
-   * Set the (global) default [[SparkSession]], and (thread-local) active [[SparkSession]]
-   * when they are not set yet.
+   * Set the (global) default [[SparkSession]], and (thread-local) active [[SparkSession]] when
+   * they are not set yet.
    */
   private def setDefaultAndActiveSession(session: SparkSession): Unit = {
     defaultSession.compareAndSet(null, session)
