@@ -27,8 +27,7 @@ import scala.collection.mutable.ArrayBuffer
 import scala.util.Try
 import scala.util.control.NonFatal
 
-import org.slf4j.LoggerFactory
-
+import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.util.{DropMalformedMode, FailFastMode, ParseMode, PermissiveMode}
@@ -40,9 +39,7 @@ import org.apache.spark.sql.types._
 /**
  * Wraps parser to iteration process.
  */
-private[xml] object StaxXmlParser extends Serializable {
-  private val logger = LoggerFactory.getLogger(StaxXmlParser.getClass)
-
+private[xml] object StaxXmlParser extends Serializable with Logging {
   def parse(
       xml: RDD[String],
       schema: StructType,
@@ -105,16 +102,16 @@ private[xml] object StaxXmlParser extends Serializable {
         replaceAll("\n", "")
     parseMode match {
       case FailFastMode =>
-        logger.info("Malformed line:", abbreviatedRecord)
-        logger.debug("Caused by:", cause)
+        logInfo(s"Malformed line: $abbreviatedRecord")
+        logDebug("Caused by:", cause)
         throw new IllegalArgumentException("Malformed line in FAILFAST mode", cause)
       case DropMalformedMode =>
-        logger.info("Malformed line:", abbreviatedRecord)
-        logger.debug("Caused by:", cause)
+        logInfo(s"Malformed line: $abbreviatedRecord")
+        logDebug("Caused by:", cause)
         None
       case PermissiveMode =>
-        logger.debug("Malformed line:", abbreviatedRecord)
-        logger.debug("Caused by:", cause)
+        logDebug(s"Malformed line: $abbreviatedRecord")
+        logDebug("Caused by:", cause)
         // The logic below is borrowed from Apache Spark's FailureSafeParser.
         val resultRow = new Array[Any](schema.length)
         schema.filterNot(_.name == options.columnNameOfCorruptRecord).foreach { from =>
