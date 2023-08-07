@@ -37,6 +37,7 @@ from typing import (
     overload,
     Iterable,
     TYPE_CHECKING,
+    ClassVar,
 )
 
 import numpy as np
@@ -98,8 +99,8 @@ class SparkSession:
     # The active SparkSession for the current thread
     _active_session = threading.local()
     # Reference to the root SparkSession
-    _default_session: Optional["SparkSession"] = None
-    _lock = RLock()
+    _default_session: ClassVar[Optional["SparkSession"]] = None
+    _lock: ClassVar[RLock] = RLock()
 
     class Builder:
         """Builder for :class:`SparkSession`."""
