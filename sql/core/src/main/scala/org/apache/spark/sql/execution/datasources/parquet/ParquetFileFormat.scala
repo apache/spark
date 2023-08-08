@@ -229,6 +229,10 @@ class ParquetFileFormat
       SQLConf.PARQUET_INT96_AS_TIMESTAMP.key,
       sparkSession.sessionState.conf.isParquetINT96AsTimestamp)
 
+    hadoopConf.setBoolean(
+      SQLConf.FILE_META_CACHE_PARQUET_ENABLED.key,
+      sparkSession.sessionState.conf.fileMetaCacheParquetEnabled)
+
     val broadcastedHadoopConf =
       sparkSession.sparkContext.broadcast(new SerializableConfiguration(hadoopConf))
 
@@ -266,19 +270,27 @@ class ParquetFileFormat
 
       val sharedConf = broadcastedHadoopConf.value.value
 
+      val metaCacheEnabled =
+        sharedConf.getBoolean(SQLConf.FILE_META_CACHE_PARQUET_ENABLED.key, false)
+
       S3FileUtils.tryOpenClose(sharedConf, filePath)
-      val startTime = System.currentTimeMillis()
-      var fileReader = Option.empty[ParquetFileReader]
+      val footerStartTime = System.currentTimeMillis()
+
       val fileFooter = if (enableVectorizedReader) {
+        ParquetFileMetaUtils.readFooterByNoFilter(metaCacheEnabled, sharedConf, filePath)
+      } else {
+        ParquetFooterReader.readFooter(sharedConf, filePath, SKIP_ROW_GROUPS)
+      }
+      val footerFileMetaData = fileFooter.getFileMetaData
+
+      val fileReader = if (enableVectorizedReader) {
         // When there are vectorized reads, we can avoid reading the footer twice by reading
         // all row groups in advance and filter row groups according to filters that require
         // push down (no need to read the footer metadata again).
-        fileReader = Option.apply(ParquetFooterReader.reader(sharedConf, file))
-        fileReader.get.getFooter
+        Option.apply(new ParquetFileReader(sharedConf, filePath, fileFooter))
       } else {
-        ParquetFooterReader.readFooter(sharedConf, file, ParquetFooterReader.SKIP_ROW_GROUPS)
+        Option.empty[ParquetFileReader]
       }
-      val footerFileMetaData = fileFooter.getFileMetaData
 
       val datetimeRebaseMode = DataSourceUtils.datetimeRebaseMode(
         footerFileMetaData.getKeyValueMetaData.get,
@@ -337,7 +349,6 @@ class ParquetFileFormat
         }
       }
       val taskContext = Option(TaskContext.get())
-      val firstFooterEndTime = System.currentTimeMillis()
       if (enableVectorizedReader) {
         val vectorizedReader = new VectorizedParquetRecordReader(
           convertTz.orNull,
@@ -354,10 +365,10 @@ class ParquetFileFormat
         if (returningBatch) {
           vectorizedReader.enableReturningBatches()
         }
-        val secondFooterEndTime = System.currentTimeMillis()
-        if ((secondFooterEndTime - startTime) > 100) {
-          logWarning(s"Reading parquet footer cost much time: ${firstFooterEndTime - startTime} ms "
-            + s"and ${secondFooterEndTime - firstFooterEndTime} ms")
+        val footerEndTime = System.currentTimeMillis()
+        if ((footerEndTime - footerStartTime) > 100) {
+          logWarning(s"VectorizedReader read parquet footer cost " +
+            s"much time: ${footerEndTime - footerStartTime}ms")
         }
         try {
           if (collectQueryMetricsEnabled) {
@@ -369,7 +380,7 @@ class ParquetFileFormat
               file.queryMetrics(1) = info.getSkipBloomBlocks
               file.queryMetrics(2) = info.getSkipBloomRows
             }
-            file.queryMetrics(3) = secondFooterEndTime - startTime
+            file.queryMetrics(3) = footerEndTime - footerStartTime
           }
         } catch {
           case e: Throwable =>
@@ -400,9 +411,8 @@ class ParquetFileFormat
         val fullSchema = requiredSchema.toAttributes ++ partitionSchema.toAttributes
         val unsafeProjection = GenerateUnsafeProjection.generate(fullSchema, fullSchema)
         val footerEndTime = System.currentTimeMillis()
-        if ((footerEndTime - startTime) > 100) {
-          logWarning(s"Reading parquet footer may cost much time: "
-            + s"${firstFooterEndTime - startTime} ms and ${footerEndTime - firstFooterEndTime} ms")
+        if ((footerEndTime - footerStartTime) > 100) {
+          logWarning(s"Reading parquet footer cost much time: ${footerEndTime - footerStartTime}ms")
         }
 
         if (partitionSchema.length == 0) {
