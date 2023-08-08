@@ -43,7 +43,7 @@ import org.apache.spark.errors.SparkCoreErrors
 import org.apache.spark.executor.DataReadMethod
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config
-import org.apache.spark.internal.config.{Network, RDD_CACHE_VISIBILITY_TRACKING_ENABLED}
+import org.apache.spark.internal.config.{Network, RDD_CACHE_VISIBILITY_TRACKING_ENABLED, STORAGE_DECOMMISSION_ENABLED, STORAGE_DECOMMISSION_RDD_BLOCKS_ENABLED, STORAGE_DECOMMISSION_SHUFFLE_BLOCKS_ENABLED}
 import org.apache.spark.memory.{MemoryManager, MemoryMode}
 import org.apache.spark.metrics.source.Source
 import org.apache.spark.network._
@@ -193,9 +193,13 @@ private[spark] class BlockManager(
   private[spark] val subDirsPerLocalDir = conf.get(config.DISKSTORE_SUB_DIRECTORIES)
 
   val diskBlockManager = {
-    // Only perform cleanup if an external service is not serving our shuffle files.
+    // Perform cleanup if an external service is not serving our shuffle files. Also delete the
+    // files after migration to free up disk space.
     val deleteFilesOnStop =
-      !externalShuffleServiceEnabled || isDriver
+    !externalShuffleServiceEnabled || isDriver ||
+      (conf.get(STORAGE_DECOMMISSION_ENABLED) &&
+        conf.get(STORAGE_DECOMMISSION_RDD_BLOCKS_ENABLED) &&
+        conf.get(STORAGE_DECOMMISSION_SHUFFLE_BLOCKS_ENABLED))
     new DiskBlockManager(conf, deleteFilesOnStop = deleteFilesOnStop, isDriver = isDriver)
   }
 
