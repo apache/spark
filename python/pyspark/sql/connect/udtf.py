@@ -70,11 +70,11 @@ def _create_py_udtf(
     else:
         from pyspark.sql.connect.session import _active_spark_session
 
-        arrow_enabled = (
-            _active_spark_session.conf.get("spark.sql.execution.pythonUDTF.arrow.enabled") == "true"
-            if _active_spark_session is not None
-            else True
-        )
+        arrow_enabled = False
+        if _active_spark_session is not None:
+            value = _active_spark_session.conf.get("spark.sql.execution.pythonUDTF.arrow.enabled")
+            if isinstance(value, str) and value.lower() == "true":
+                arrow_enabled = True
 
     # Create a regular Python UDTF and check for invalid handler class.
     regular_udtf = _create_udtf(cls, returnType, name, PythonEvalType.SQL_TABLE_UDF, deterministic)

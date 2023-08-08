@@ -19,9 +19,18 @@
 Util functions for workers.
 """
 import importlib
+from inspect import currentframe, getframeinfo
 import os
 import sys
 from typing import Any, IO
+import warnings
+
+# 'resource' is a Unix specific module.
+has_resource_module = True
+try:
+    import resource
+except ImportError:
+    has_resource_module = False
 
 from pyspark.accumulators import _accumulatorRegistry
 from pyspark.broadcast import Broadcast, _broadcastRegistry
@@ -69,6 +78,44 @@ def check_python_version(infile: IO) -> None:
                 "driver_version": str(version),
             },
         )
+
+
+def setup_memory_limits(memory_limit_mb: int) -> None:
+    """
+    Sets up the memory limits.
+
+    If memory_limit_mb > 0 and `resource` module is available, sets the memory limit.
+    Windows does not support resource limiting and actual resource is not limited on MacOS.
+    """
+    if memory_limit_mb > 0 and has_resource_module:
+        total_memory = resource.RLIMIT_AS
+        try:
+            (soft_limit, hard_limit) = resource.getrlimit(total_memory)
+            msg = "Current mem limits: {0} of max {1}\n".format(soft_limit, hard_limit)
+            print(msg, file=sys.stderr)
+
+            # convert to bytes
+            new_limit = memory_limit_mb * 1024 * 1024
+
+            if soft_limit == resource.RLIM_INFINITY or new_limit < soft_limit:
+                msg = "Setting mem limits to {0} of max {1}\n".format(new_limit, new_limit)
+                print(msg, file=sys.stderr)
+                resource.setrlimit(total_memory, (new_limit, new_limit))
+
+        except (resource.error, OSError, ValueError) as e:
+            # not all systems support resource limits, so warn instead of failing
+            curent = currentframe()
+            lineno = getframeinfo(curent).lineno + 1 if curent is not None else 0
+            if "__file__" in globals():
+                print(
+                    warnings.formatwarning(
+                        "Failed to set memory limit: {0}".format(e),
+                        ResourceWarning,
+                        __file__,
+                        lineno,
+                    ),
+                    file=sys.stderr,
+                )
 
 
 def setup_spark_files(infile: IO) -> None:

@@ -39,10 +39,6 @@ class FrameDescribeMixin:
         psdf = ps.from_pandas(pdf)
         return pdf, psdf
 
-    @unittest.skipIf(
-        LooseVersion(pd.__version__) >= LooseVersion("2.0.0"),
-        "TODO(SPARK-43556): Enable DataFrameSlowTests.test_describe for pandas 2.0.0.",
-    )
     def test_describe(self):
         pdf, psdf = self.df_pair
 
@@ -78,19 +74,10 @@ class FrameDescribeMixin:
             }
         )
         pdf = psdf._to_pandas()
-        # NOTE: Set `datetime_is_numeric=True` for pandas:
-        # FutureWarning: Treating datetime data as categorical rather than numeric in
-        # `.describe` is deprecated and will be removed in a future version of pandas.
-        # Specify `datetime_is_numeric=True` to silence this
-        # warning and adopt the future behavior now.
-        # NOTE: Compare the result except percentiles, since we use approximate percentile
-        # so the result is different from pandas.
         if LooseVersion(pd.__version__) >= LooseVersion("1.1.0"):
             self.assert_eq(
                 psdf.describe().loc[["count", "mean", "min", "max"]],
-                pdf.describe(datetime_is_numeric=True)
-                .astype(str)
-                .loc[["count", "mean", "min", "max"]],
+                pdf.describe().astype(str).loc[["count", "mean", "min", "max"]],
             )
         else:
             self.assert_eq(
@@ -136,17 +123,13 @@ class FrameDescribeMixin:
         if LooseVersion(pd.__version__) >= LooseVersion("1.1.0"):
             self.assert_eq(
                 psdf.describe().loc[["count", "mean", "min", "max"]],
-                pdf.describe(datetime_is_numeric=True)
-                .astype(str)
-                .loc[["count", "mean", "min", "max"]],
+                pdf.describe().astype(str).loc[["count", "mean", "min", "max"]],
             )
             psdf.A += psdf.A
             pdf.A += pdf.A
             self.assert_eq(
                 psdf.describe().loc[["count", "mean", "min", "max"]],
-                pdf.describe(datetime_is_numeric=True)
-                .astype(str)
-                .loc[["count", "mean", "min", "max"]],
+                pdf.describe().astype(str).loc[["count", "mean", "min", "max"]],
             )
         else:
             expected_result = ps.DataFrame(
@@ -187,7 +170,7 @@ class FrameDescribeMixin:
         )
         pdf = psdf._to_pandas()
         if LooseVersion(pd.__version__) >= LooseVersion("1.1.0"):
-            pandas_result = pdf.describe(datetime_is_numeric=True)
+            pandas_result = pdf.describe()
             pandas_result.B = pandas_result.B.astype(str)
             self.assert_eq(
                 psdf.describe().loc[["count", "mean", "min", "max"]],
@@ -195,7 +178,7 @@ class FrameDescribeMixin:
             )
             psdf.A += psdf.A
             pdf.A += pdf.A
-            pandas_result = pdf.describe(datetime_is_numeric=True)
+            pandas_result = pdf.describe()
             pandas_result.B = pandas_result.B.astype(str)
             self.assert_eq(
                 psdf.describe().loc[["count", "mean", "min", "max"]],
@@ -252,7 +235,7 @@ class FrameDescribeMixin:
         )
         pdf = psdf._to_pandas()
         if LooseVersion(pd.__version__) >= LooseVersion("1.1.0"):
-            pandas_result = pdf.describe(datetime_is_numeric=True)
+            pandas_result = pdf.describe()
             pandas_result.b = pandas_result.b.astype(str)
             self.assert_eq(
                 psdf.describe().loc[["count", "mean", "min", "max"]],
@@ -288,10 +271,6 @@ class FrameDescribeMixin:
         with self.assertRaisesRegex(ValueError, msg):
             psdf.describe()
 
-    @unittest.skipIf(
-        LooseVersion(pd.__version__) >= LooseVersion("2.0.0"),
-        "TODO(SPARK-43556): Enable DataFrameSlowTests.test_describe for pandas 2.0.0.",
-    )
     def test_describe_empty(self):
         # Empty DataFrame
         psdf = ps.DataFrame(columns=["A", "B"])
@@ -328,7 +307,7 @@ class FrameDescribeMixin:
         # For timestamp type, we should convert NaT to None in pandas result
         # since pandas API on Spark doesn't support the NaT for object type.
         if LooseVersion(pd.__version__) >= LooseVersion("1.1.0"):
-            pdf_result = pdf[pdf.a != pdf.a].describe(datetime_is_numeric=True)
+            pdf_result = pdf[pdf.a != pdf.a].describe()
             self.assert_eq(
                 psdf[psdf.a != psdf.a].describe(),
                 pdf_result.where(pdf_result.notnull(), None).astype(str),
@@ -367,7 +346,7 @@ class FrameDescribeMixin:
         )
         pdf = psdf._to_pandas()
         if LooseVersion(pd.__version__) >= LooseVersion("1.1.0"):
-            pdf_result = pdf[pdf.a != pdf.a].describe(datetime_is_numeric=True)
+            pdf_result = pdf[pdf.a != pdf.a].describe()
             pdf_result.b = pdf_result.b.where(pdf_result.b.notnull(), None).astype(str)
             self.assert_eq(
                 psdf[psdf.a != psdf.a].describe(),
@@ -417,7 +396,7 @@ class FrameDescribeMixin:
         )
         pdf = psdf._to_pandas()
         if LooseVersion(pd.__version__) >= LooseVersion("1.1.0"):
-            pdf_result = pdf[pdf.a != pdf.a].describe(datetime_is_numeric=True)
+            pdf_result = pdf[pdf.a != pdf.a].describe()
             self.assert_eq(
                 psdf[psdf.a != psdf.a].describe(),
                 pdf_result.where(pdf_result.notnull(), None).astype(str),

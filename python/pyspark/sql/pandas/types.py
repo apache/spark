@@ -21,7 +21,7 @@ pandas instances during the type conversion.
 """
 import datetime
 import itertools
-from typing import Any, Callable, List, Optional, Union, TYPE_CHECKING
+from typing import Any, Callable, Iterable, List, Optional, Union, TYPE_CHECKING
 
 from pyspark.sql.types import (
     cast,
@@ -750,6 +750,7 @@ def _create_converter_from_pandas(
     *,
     timezone: Optional[str],
     error_on_duplicated_field_names: bool = True,
+    ignore_unexpected_complex_type_values: bool = False,
 ) -> Callable[["pd.Series"], "pd.Series"]:
     """
     Create a converter of pandas Series to create Spark DataFrame with Arrow optimization.
@@ -763,6 +764,17 @@ def _create_converter_from_pandas(
     error_on_duplicated_field_names : bool, optional
         Whether raise an exception when there are duplicated field names.
         (default ``True``)
+    ignore_unexpected_complex_type_values : bool, optional
+        Whether ignore the case where unexpected values are given for complex types.
+        If ``False``, each complex type expects:
+
+        * array type: :class:`Iterable`
+        * map type: :class:`dict`
+        * struct type: :class:`dict` or :class:`tuple`
+
+        and raise an AssertionError when the given value is not the expected type.
+        If ``True``, just ignore and return the give value.
+        (default ``False``)
 
     Returns
     -------
@@ -781,15 +793,26 @@ def _create_converter_from_pandas(
     def _converter(dt: DataType) -> Optional[Callable[[Any], Any]]:
 
         if isinstance(dt, ArrayType):
-            _element_conv = _converter(dt.elementType)
-            if _element_conv is None:
-                return None
+            _element_conv = _converter(dt.elementType) or (lambda x: x)
 
-            def convert_array(value: Any) -> Any:
-                if value is None:
-                    return None
-                else:
-                    return [_element_conv(v) for v in value]  # type: ignore[misc]
+            if ignore_unexpected_complex_type_values:
+
+                def convert_array(value: Any) -> Any:
+                    if value is None:
+                        return None
+                    elif isinstance(value, Iterable):
+                        return [_element_conv(v) for v in value]
+                    else:
+                        return value
+
+            else:
+
+                def convert_array(value: Any) -> Any:
+                    if value is None:
+                        return None
+                    else:
+                        assert isinstance(value, Iterable)
+                        return [_element_conv(v) for v in value]
 
             return convert_array
 
@@ -797,12 +820,24 @@ def _create_converter_from_pandas(
             _key_conv = _converter(dt.keyType) or (lambda x: x)
             _value_conv = _converter(dt.valueType) or (lambda x: x)
 
-            def convert_map(value: Any) -> Any:
-                if value is None:
-                    return None
-                else:
-                    assert isinstance(value, dict)
-                    return [(_key_conv(k), _value_conv(v)) for k, v in value.items()]
+            if ignore_unexpected_complex_type_values:
+
+                def convert_map(value: Any) -> Any:
+                    if value is None:
+                        return None
+                    elif isinstance(value, dict):
+                        return [(_key_conv(k), _value_conv(v)) for k, v in value.items()]
+                    else:
+                        return value
+
+            else:
+
+                def convert_map(value: Any) -> Any:
+                    if value is None:
+                        return None
+                    else:
+                        assert isinstance(value, dict)
+                        return [(_key_conv(k), _value_conv(v)) for k, v in value.items()]
 
             return convert_map
 
@@ -820,17 +855,38 @@ def _create_converter_from_pandas(
 
             field_convs = [_converter(f.dataType) or (lambda x: x) for f in dt.fields]
 
-            def convert_struct(value: Any) -> Any:
-                if value is None:
-                    return None
-                elif isinstance(value, dict):
-                    return {
-                        dedup_field_names[i]: field_convs[i](value.get(key, None))
-                        for i, key in enumerate(field_names)
-                    }
-                else:
-                    assert isinstance(value, tuple)
-                    return {dedup_field_names[i]: field_convs[i](v) for i, v in enumerate(value)}
+            if ignore_unexpected_complex_type_values:
+
+                def convert_struct(value: Any) -> Any:
+                    if value is None:
+                        return None
+                    elif isinstance(value, dict):
+                        return {
+                            dedup_field_names[i]: field_convs[i](value.get(key, None))
+                            for i, key in enumerate(field_names)
+                        }
+                    elif isinstance(value, tuple):
+                        return {
+                            dedup_field_names[i]: field_convs[i](v) for i, v in enumerate(value)
+                        }
+                    else:
+                        return value
+
+            else:
+
+                def convert_struct(value: Any) -> Any:
+                    if value is None:
+                        return None
+                    elif isinstance(value, dict):
+                        return {
+                            dedup_field_names[i]: field_convs[i](value.get(key, None))
+                            for i, key in enumerate(field_names)
+                        }
+                    else:
+                        assert isinstance(value, tuple)
+                        return {
+                            dedup_field_names[i]: field_convs[i](v) for i, v in enumerate(value)
+                        }
 
             return convert_struct
 

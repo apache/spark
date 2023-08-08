@@ -53,12 +53,6 @@ class CategoricalParityTests(
     def test_set_categories(self):
         super().test_set_categories()
 
-    @unittest.skip(
-        "TODO(SPARK-43611): Fix unexpected `AnalysisException` from Spark Connect client."
-    )
-    def test_unstack(self):
-        super().test_unstack()
-
 
 if __name__ == "__main__":
     from pyspark.pandas.tests.connect.test_parity_categorical import *  # noqa: F401

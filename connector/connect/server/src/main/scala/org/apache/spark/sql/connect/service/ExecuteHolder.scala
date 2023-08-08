@@ -51,7 +51,7 @@ private[connect] class ExecuteHolder(
 
   /**
    * Tag that is set for this execution on SparkContext, via SparkContext.addJobTag. Used
-   * (internally) for cancallation of the Spark Jobs ran by this execution.
+   * (internally) for cancellation of the Spark Jobs ran by this execution.
    */
   val jobTag = ExecuteJobTag(sessionHolder.userId, sessionHolder.sessionId, operationId)
 
@@ -156,11 +156,11 @@ private[connect] class ExecuteHolder(
   }
 
   /**
-   * Close the execution and remove it from the session. Note: It blocks joining the
-   * ExecuteThreadRunner thread, so it assumes that it's called when the execution is ending or
-   * ended. If it is desired to kill the execution, interrupt() should be called first.
+   * Close the execution and remove it from the session. Note: it first interrupts the runner if
+   * it's still running, and it waits for it to finish.
    */
   def close(): Unit = {
+    runner.interrupt()
     runner.join()
     eventsManager.postClosed()
     sessionHolder.removeExecuteHolder(operationId)

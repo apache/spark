@@ -71,9 +71,15 @@ object MimaExcludes {
     // [SPARK-44507][SQL][CONNECT] Move AnalysisException to sql/api.
     ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.AnalysisException"),
     ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.AnalysisException$"),
+    // [SPARK-44686][CONNECT][SQL] Add the ability to create a RowEncoder in Encoders
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.RowFactory"),
     // [SPARK-44535][CONNECT][SQL] Move required Streaming API to sql/api
     ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.streaming.GroupStateTimeout"),
-    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.streaming.OutputMode")
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.streaming.OutputMode"),
+    // [SPARK-44198][CORE] Support propagation of the log level to the executors
+    ProblemFilters.exclude[MissingTypesProblem]("org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages$SparkAppConfig$"),
+    // [SPARK-44692][CONNECT][SQL] Move Trigger(s) to sql/api
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.streaming.Trigger")
   )
 
   // Default exclude rules

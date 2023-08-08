@@ -668,7 +668,6 @@ pyspark_pandas = Module(
         "pyspark.pandas.indexes.datetimes",
         "pyspark.pandas.indexes.timedelta",
         "pyspark.pandas.indexes.multi",
-        "pyspark.pandas.indexes.numeric",
         "pyspark.pandas.spark.accessors",
         "pyspark.pandas.spark.utils",
         "pyspark.pandas.typedef.typehints",
@@ -703,6 +702,7 @@ pyspark_pandas = Module(
         "pyspark.pandas.tests.test_default_index",
         "pyspark.pandas.tests.test_expanding",
         "pyspark.pandas.tests.test_extension",
+        "pyspark.pandas.tests.test_ewm",
         "pyspark.pandas.tests.test_frame_spark",
         "pyspark.pandas.tests.test_generic_functions",
         "pyspark.pandas.tests.test_indexops_spark",
@@ -816,10 +816,9 @@ pyspark_pandas_slow = Module(
 
 pyspark_connect = Module(
     name="pyspark-connect",
-    dependencies=[pyspark_sql, pyspark_ml, connect],
+    dependencies=[pyspark_sql, connect],
     source_file_regexes=[
         "python/pyspark/sql/connect",
-        "python/pyspark/ml/connect",
     ],
     python_test_goals=[
         # sql doctests
@@ -870,6 +869,21 @@ pyspark_connect = Module(
         "pyspark.sql.tests.connect.test_parity_pandas_udf_scalar",
         "pyspark.sql.tests.connect.test_parity_pandas_udf_grouped_agg",
         "pyspark.sql.tests.connect.test_parity_pandas_udf_window",
+    ],
+    excluded_python_implementations=[
+        "PyPy"  # Skip these tests under PyPy since they require numpy, pandas, and pyarrow and
+        # they aren't available there
+    ],
+)
+
+
+pyspark_ml_connect = Module(
+    name="pyspark-ml-connect",
+    dependencies=[pyspark_connect, pyspark_ml],
+    source_file_regexes=[
+        "python/pyspark/ml/connect",
+    ],
+    python_test_goals=[
         # ml doctests
         "pyspark.ml.connect.functions",
         # ml unittests
@@ -928,6 +942,7 @@ pyspark_pandas_connect = Module(
         "pyspark.pandas.tests.connect.test_parity_default_index",
         "pyspark.pandas.tests.connect.test_parity_expanding",
         "pyspark.pandas.tests.connect.test_parity_extension",
+        "pyspark.pandas.tests.connect.test_parity_ewm",
         "pyspark.pandas.tests.connect.test_parity_frame_spark",
         "pyspark.pandas.tests.connect.test_parity_generic_functions",
         "pyspark.pandas.tests.connect.test_parity_indexops_spark",
