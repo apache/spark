@@ -143,10 +143,13 @@ case class FunctionTableSubqueryArgumentExpression(
    * the Python UDTF evaluator so it knows which expressions to compare on adjacent rows to know
    * when the partition has changed.
    */
-  lazy val partitioningExpressionIndexes: Seq[Int] = partitionByExpressions.map { e =>
-    subqueryOutputs.get(e).getOrElse {
-      lazy val extraIndexes = extraProjectedPartitioningExpressions.map(_.child).zipWithIndex.toMap
-      extraIndexes.get(e).get + plan.output.length
+  lazy val partitioningExpressionIndexes: Seq[Int] = {
+    val extraPartitionByExpressionsToIndexes: Map[Expression, Int] =
+      extraProjectedPartitioningExpressions.map(_.child).zipWithIndex.toMap
+    partitionByExpressions.map { e =>
+      subqueryOutputs.get(e).getOrElse {
+        extraPartitionByExpressionsToIndexes.get(e).get + plan.output.length
+      }
     }
   }
 
