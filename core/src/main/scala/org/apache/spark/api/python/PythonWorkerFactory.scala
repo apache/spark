@@ -172,7 +172,7 @@ private[spark] class PythonWorkerFactory(
       workerEnv.put("PYTHONPATH", pythonPath)
       // This is equivalent to setting the -u flag; we use it because ipython doesn't support -u:
       workerEnv.put("PYTHONUNBUFFERED", "YES")
-      workerEnv.put("PYTHON_WORKER_FACTORY_PORT",  serverSocketChannel.socket().getLocalPort
+      workerEnv.put("PYTHON_WORKER_FACTORY_PORT", serverSocketChannel.socket().getLocalPort
         .toString)
       workerEnv.put("PYTHON_WORKER_FACTORY_SECRET", authHelper.secret)
       if (Utils.preferIPv6) {

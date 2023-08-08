@@ -95,7 +95,7 @@ class CoGroupedArrowPythonRunner(
           true
         } else {
           dataOut.writeInt(0)
-	  false
+          false
         }
       }
 
