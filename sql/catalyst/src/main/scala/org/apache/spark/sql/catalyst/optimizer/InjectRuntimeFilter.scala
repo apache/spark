@@ -170,7 +170,8 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
       REGEXP_EXTRACT_FAMILY, REGEXP_REPLACE)
   }
 
-  private def isProbablyShuffleJoin(left: LogicalPlan,
+  private def isProbablyShuffleJoin(
+      left: LogicalPlan,
       right: LogicalPlan,
       hint: JoinHint,
       joinType: JoinType): Boolean = {
