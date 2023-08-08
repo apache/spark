@@ -1183,6 +1183,26 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper with PrivateM
     val joined = ds1.joinWith(ds2, $"a.value._1" === $"b.value._2", "inner")
     checkSameResult(Seq((Some((2, 3)), Some((1, 2)))), joined)
   }
+
+  test("dropDuplicatesWithinWatermark not supported in batch DataFrame") {
+    def testAndVerify(df: Dataset[_]): Unit = {
+      val exc = intercept[AnalysisException] {
+        df.write.format("noop").mode(SaveMode.Append).save()
+      }
+
+      assert(exc.getMessage.contains("dropDuplicatesWithinWatermark is not supported"))
+      assert(exc.getMessage.contains("batch DataFrames/DataSets"))
+    }
+
+    val result = spark.range(10).dropDuplicatesWithinWatermark()
+    testAndVerify(result)
+
+    val result2 = spark
+      .range(10)
+      .withColumn("newcol", col("id"))
+      .dropDuplicatesWithinWatermark("newcol")
+    testAndVerify(result2)
+  }
 }
 
 private[sql] case class ClassData(a: String, b: Int)
