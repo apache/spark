@@ -249,9 +249,7 @@ class FunctionTestSuite extends ConnectFunSuite {
     pbFn.to_protobuf(a, "FakeMessage", "fakeBytes".getBytes(), Map.empty[String, String].asJava),
     pbFn.to_protobuf(a, "FakeMessage", "fakeBytes".getBytes()))
 
-  testEquals("call_udf",
-    callUDF("bob", lit(1)),
-    call_udf("bob", lit(1)))
+  testEquals("call_udf", callUDF("bob", lit(1)), call_udf("bob", lit(1)))
 
   test("assert_true no message") {
     val e = assert_true(a).expr

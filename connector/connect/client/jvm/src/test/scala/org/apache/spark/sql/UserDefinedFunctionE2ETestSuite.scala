@@ -257,9 +257,7 @@ class UserDefinedFunctionE2ETestSuite extends QueryTest {
     val session: SparkSession = spark
     import session.implicits._
     val fn = udf(((i: Long) => (i + 1).toInt), IntegerType)
-    checkDataset(
-      session.range(2).select(fn($"id")).as[Int],
-      1, 2)
+    checkDataset(session.range(2).select(fn($"id")).as[Int], 1, 2)
   }
 
   test("java UDF") {
@@ -270,8 +268,6 @@ class UserDefinedFunctionE2ETestSuite extends QueryTest {
         override def call(t1: Long, t2: Long): Int = (t1 + t2 + 1).toInt
       },
       IntegerType)
-    checkDataset(
-      session.range(2).select(fn($"id", $"id" + 2)).as[Int],
-      3, 5)
+    checkDataset(session.range(2).select(fn($"id", $"id" + 2)).as[Int], 3, 5)
   }
 }
