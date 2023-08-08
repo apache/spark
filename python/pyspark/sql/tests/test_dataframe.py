@@ -1031,7 +1031,7 @@ class DataFrameTestsMixin:
         self.check_error(
             exception=pe.exception,
             error_class="LENGTH_MISMATCH",
-            message_parameters={"arg_name": "cols", "expected_length": 2, "actual_length": 1},
+            message_parameters={"arg_name": "cols", "expected_length": "2", "actual_length": "1"},
         )
 
     def test_toDF_with_schema_string(self):

@@ -5311,8 +5311,8 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
                 error_class="LENGTH_MISMATCH",
                 message_parameters={
                     "arg_name": "cols",
-                    "expected_length": expected_len_cols,
-                    "actual_length": actual_len_cols,
+                    "expected_length": str(expected_len_cols),
+                    "actual_length": str(actual_len_cols),
                 },
             )
         for col in cols:
