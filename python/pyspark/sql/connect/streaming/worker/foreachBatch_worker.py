@@ -16,7 +16,8 @@
 #
 
 """
-A worker for streaming foreachBatch and query listener in Spark Connect.
+A worker for streaming foreachBatch in Spark Connect.
+Usually this is ran on the driver side of the Spark Connect Server.
 """
 import os
 
@@ -29,20 +30,23 @@ from pyspark.serializers import (
 )
 from pyspark import worker
 from pyspark.sql import SparkSession
+from typing import IO
 
 pickle_ser = CPickleSerializer()
 utf8_deserializer = UTF8Deserializer()
 
 
-def main(infile, outfile):  # type: ignore[no-untyped-def]
-    log_name = "Streaming ForeachBatch worker"
+def main(infile: IO, outfile: IO) -> None:
     connect_url = os.environ["SPARK_CONNECT_LOCAL_URL"]
     session_id = utf8_deserializer.loads(infile)
 
-    print(f"{log_name} is starting with url {connect_url} and sessionId {session_id}.")
+    print(
+        "Streaming foreachBatch worker is starting with "
+        f"url {connect_url} and sessionId {session_id}."
+    )
 
     spark_connect_session = SparkSession.builder.remote(connect_url).getOrCreate()
-    spark_connect_session._client._session_id = session_id
+    spark_connect_session._client._session_id = session_id  # type: ignore[attr-defined]
 
     # TODO(SPARK-44460): Pass credentials.
     # TODO(SPARK-44461): Enable Process Isolation
@@ -51,6 +55,8 @@ def main(infile, outfile):  # type: ignore[no-untyped-def]
     write_int(0, outfile)  # Indicate successful initialization
 
     outfile.flush()
+
+    log_name = "Streaming ForeachBatch worker"
 
     def process(df_id, batch_id):  # type: ignore[no-untyped-def]
         print(f"{log_name} Started batch {batch_id} with DF id {df_id}")
@@ -67,12 +73,12 @@ def main(infile, outfile):  # type: ignore[no-untyped-def]
 
 
 if __name__ == "__main__":
-    print("Starting streaming worker")
-
     # Read information about how to connect back to the JVM from the environment.
     java_port = int(os.environ["PYTHON_WORKER_FACTORY_PORT"])
     auth_secret = os.environ["PYTHON_WORKER_FACTORY_SECRET"]
-    (sock_file, _) = local_connect_and_auth(java_port, auth_secret)
+    (sock_file, sock) = local_connect_and_auth(java_port, auth_secret)
+    # There could be a long time between each micro batch.
+    sock.settimeout(None)
     write_int(os.getpid(), sock_file)
     sock_file.flush()
     main(sock_file, sock_file)

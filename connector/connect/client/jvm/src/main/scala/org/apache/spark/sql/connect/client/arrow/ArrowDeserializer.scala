@@ -37,7 +37,8 @@ import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoder
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders._
 import org.apache.spark.sql.catalyst.expressions.GenericRowWithSchema
-import org.apache.spark.sql.errors.{DataTypeErrors, QueryCompilationErrors}
+import org.apache.spark.sql.connect.client.CloseableIterator
+import org.apache.spark.sql.errors.{CompilationErrors, ExecutionErrors}
 import org.apache.spark.sql.types.Decimal
 
 /**
@@ -341,7 +342,7 @@ object ArrowDeserializers {
         }
 
       case (CalendarIntervalEncoder | _: UDTEncoder[_], _) =>
-        throw DataTypeErrors.unsupportedDataTypeError(encoder.dataType)
+        throw ExecutionErrors.unsupportedDataTypeError(encoder.dataType)
 
       case _ =>
         throw new RuntimeException(
@@ -436,13 +437,13 @@ object ArrowDeserializers {
       val key = toKey(field.getName)
       val old = lookup.put(key, field)
       if (old.isDefined) {
-        throw QueryCompilationErrors.ambiguousColumnOrFieldError(
+        throw CompilationErrors.ambiguousColumnOrFieldError(
           field.getName :: Nil,
           fields.count(f => toKey(f.getName) == key))
       }
     }
     name => {
-      lookup.getOrElse(toKey(name), throw QueryCompilationErrors.columnNotFoundError(name))
+      lookup.getOrElse(toKey(name), throw CompilationErrors.columnNotFoundError(name))
     }
   }
 

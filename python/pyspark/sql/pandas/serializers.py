@@ -19,7 +19,7 @@
 Serializers for PyArrow and pandas conversions. See `pyspark.serializers` for more details.
 """
 
-from pyspark.errors import PySparkTypeError, PySparkValueError
+from pyspark.errors import PySparkRuntimeError, PySparkTypeError, PySparkValueError
 from pyspark.serializers import Serializer, read_int, write_int, UTF8Deserializer, CPickleSerializer
 from pyspark.sql.pandas.types import (
     from_arrow_type,
@@ -537,6 +537,73 @@ class ArrowStreamPandasUDTFSerializer(ArrowStreamPandasUDFSerializer):
             arrs.append(self._create_struct_array(s, t))
 
         return pa.RecordBatch.from_arrays(arrs, ["_%d" % i for i in range(len(arrs))])
+
+    def _create_array(self, series, arrow_type, spark_type=None, arrow_cast=False):
+        """
+        Override the `_create_array` method in the superclass to create an Arrow Array
+        from a given pandas.Series and an arrow type. The difference here is that we always
+        use arrow cast when creating the arrow array. Also, the error messages are specific
+        to arrow-optimized Python UDTFs.
+
+        Parameters
+        ----------
+        series : pandas.Series
+            A single series
+        arrow_type : pyarrow.DataType, optional
+            If None, pyarrow's inferred type will be used
+        spark_type : DataType, optional
+            If None, spark type converted from arrow_type will be used
+        arrow_cast: bool, optional
+            Whether to apply Arrow casting when the user-specified return type mismatches the
+            actual return values.
+
+        Returns
+        -------
+        pyarrow.Array
+        """
+        import pyarrow as pa
+        from pandas.api.types import is_categorical_dtype
+
+        if is_categorical_dtype(series.dtype):
+            series = series.astype(series.dtypes.categories.dtype)
+
+        if arrow_type is not None:
+            dt = spark_type or from_arrow_type(arrow_type, prefer_timestamp_ntz=True)
+            # TODO(SPARK-43579): cache the converter for reuse
+            conv = _create_converter_from_pandas(
+                dt, timezone=self._timezone, error_on_duplicated_field_names=False
+            )
+            series = conv(series)
+
+        if hasattr(series.array, "__arrow_array__"):
+            mask = None
+        else:
+            mask = series.isnull()
+
+        try:
+            try:
+                return pa.Array.from_pandas(
+                    series, mask=mask, type=arrow_type, safe=self._safecheck
+                )
+            except pa.lib.ArrowException:
+                if arrow_cast:
+                    return pa.Array.from_pandas(series, mask=mask).cast(
+                        target_type=arrow_type, safe=self._safecheck
+                    )
+                else:
+                    raise
+        except pa.lib.ArrowException:
+            # Display the most user-friendly error messages instead of showing
+            # arrow's error message. This also works better with Spark Connect
+            # where the exception messages are by default truncated.
+            raise PySparkRuntimeError(
+                error_class="UDTF_ARROW_TYPE_CAST_ERROR",
+                message_parameters={
+                    "col_name": series.name,
+                    "col_type": str(series.dtype),
+                    "arrow_type": arrow_type,
+                },
+            ) from None
 
     def __repr__(self):
         return "ArrowStreamPandasUDTFSerializer"

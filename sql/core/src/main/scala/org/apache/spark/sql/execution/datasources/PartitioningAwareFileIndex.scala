@@ -28,7 +28,6 @@ import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.{expressions, InternalRow}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
-import org.apache.spark.sql.execution.datasources.FileFormat.createMetadataInternalRow
 import org.apache.spark.sql.types.StructType
 
 /**
@@ -73,48 +72,10 @@ abstract class PartitioningAwareFileIndex(
       isDataPath(f.getPath) && f.getLen > 0
     }
 
-    // retrieve the file constant metadata filters and reduce to a final filter expression that can
-    // be applied to files.
-    val fileMetadataFilterOpt = dataFilters.filter { f =>
-      f.references.nonEmpty && f.references.forall {
-        case FileSourceConstantMetadataAttribute(metadataAttr) =>
-          // we only know block start and length after splitting files, so skip it here
-          metadataAttr.name != FileFormat.FILE_BLOCK_START &&
-            metadataAttr.name != FileFormat.FILE_BLOCK_LENGTH
-        case _ => false
-      }
-    }.reduceOption(expressions.And)
-
-    // - Retrieve all required metadata attributes and put them into a sequence
-    // - Bind all file constant metadata attribute references to their respective index
-    val requiredMetadataColumnNames: mutable.Buffer[String] = mutable.Buffer.empty
-    val boundedFilterMetadataStructOpt = fileMetadataFilterOpt.map { fileMetadataFilter =>
-      Predicate.createInterpreted(fileMetadataFilter.transform {
-        case attr: AttributeReference =>
-          val existingMetadataColumnIndex = requiredMetadataColumnNames.indexOf(attr.name)
-          val metadataColumnIndex = if (existingMetadataColumnIndex >= 0) {
-            existingMetadataColumnIndex
-          } else {
-            requiredMetadataColumnNames += attr.name
-            requiredMetadataColumnNames.length - 1
-          }
-          BoundReference(metadataColumnIndex, attr.dataType, nullable = true)
-      })
-    }
-
-    def matchFileMetadataPredicate(partitionValues: InternalRow, f: FileStatus): Boolean = {
-      // use option.forall, so if there is no filter no metadata struct, return true
-      boundedFilterMetadataStructOpt.forall { boundedFilter =>
-        val row =
-          createMetadataInternalRow(partitionValues, requiredMetadataColumnNames.toSeq,
-            SparkPath.fromFileStatus(f), f.getLen, f.getModificationTime)
-        boundedFilter.eval(row)
-      }
-    }
-
+    val filePruningRunner = new FilePruningRunner(dataFilters)
     val selectedPartitions = if (partitionSpec().partitionColumns.isEmpty) {
-      PartitionDirectory(InternalRow.empty, allFiles().toArray
-        .filter(f => isNonEmptyFile(f) && matchFileMetadataPredicate(InternalRow.empty, f))) :: Nil
+      filePruningRunner.prune(
+        PartitionDirectory(InternalRow.empty, allFiles().toArray.filter(isNonEmptyFile))) :: Nil
     } else {
       if (recursiveFileLookup) {
         throw new IllegalArgumentException(
@@ -125,14 +86,13 @@ abstract class PartitioningAwareFileIndex(
           val files: Seq[FileStatus] = leafDirToChildrenFiles.get(path) match {
             case Some(existingDir) =>
               // Directory has children files in it, return them
-              existingDir.filter(f => matchPathPattern(f) && isNonEmptyFile(f) &&
-                matchFileMetadataPredicate(values, f))
+              existingDir.filter(f => matchPathPattern(f) && isNonEmptyFile(f))
 
             case None =>
               // Directory does not exist, or has no children files
               Nil
           }
-          PartitionDirectory(values, files.toArray)
+          filePruningRunner.prune(PartitionDirectory(values, files.toArray))
       }
     }
     logTrace("Selected files after partition pruning:\n\t" + selectedPartitions.mkString("\n\t"))

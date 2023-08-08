@@ -25,12 +25,24 @@ The handle `<handle>` is invalid.
 
 This error class has the following derived error classes:
 
-## ALREADY_EXISTS
-
-Handle already exists.
-
 ## FORMAT
 
-Handle has invalid format. Handle must an UUID string of the format '00112233-4455-6677-8899-aabbccddeeff'
+Handle must be an UUID string of the format '00112233-4455-6677-8899-aabbccddeeff'
+
+## OPERATION_ALREADY_EXISTS
+
+Operation already exists.
+
+## OPERATION_NOT_FOUND
+
+Operation not found.
+
+## SESSION_ALREADY_EXISTS
+
+Session already exists.
+
+## SESSION_NOT_FOUND
+
+Session not found.
 
 

@@ -288,9 +288,7 @@ object SparkBuild extends PomBuild {
           // TODO(SPARK-43850): Remove the following suppression rules and remove `import scala.language.higherKinds`
           // from the corresponding files when Scala 2.12 is no longer supported.
           "-Wconf:cat=unused-imports&src=org\\/apache\\/spark\\/graphx\\/impl\\/VertexPartitionBase.scala:s",
-          "-Wconf:cat=unused-imports&src=org\\/apache\\/spark\\/graphx\\/impl\\/VertexPartitionBaseOps.scala:s",
-          // SPARK-40497 Upgrade Scala to 2.13.11 and suppress `Implicit definition should have explicit type`
-          "-Wconf:msg=Implicit definition should have explicit type:s"
+          "-Wconf:cat=unused-imports&src=org\\/apache\\/spark\\/graphx\\/impl\\/VertexPartitionBaseOps.scala:s"
         )
       }
     }
@@ -453,7 +451,7 @@ object SparkBuild extends PomBuild {
   enable(Unidoc.settings)(spark)
 
   /* Sql-api ANTLR generation settings */
-  enable(Catalyst.settings)(sqlApi)
+  enable(SqlApi.settings)(sqlApi)
 
   /* Spark SQL Core console settings */
   enable(SQL.settings)(sql)
@@ -1190,7 +1188,7 @@ object OldDeps {
   )
 }
 
-object Catalyst {
+object SqlApi {
   import com.simplytyped.Antlr4Plugin
   import com.simplytyped.Antlr4Plugin.autoImport._
 

@@ -2514,6 +2514,27 @@ class DatasetSuite extends QueryTest
       }
     }
   }
+
+  test("SPARK-44311: UDF on value class taking underlying type (backwards compatability)") {
+    val f = udf((v: Int) => v > 1)
+    val ds = Seq(ValueClassContainer(ValueClass(1)), ValueClassContainer(ValueClass(2))).toDS()
+
+    checkDataset(ds.filter(f(col("v"))), ValueClassContainer(ValueClass(2)))
+  }
+
+  test("SPARK-44311: UDF on value class field in product") {
+    val f = udf((v: ValueClass) => v.i > 1)
+    val ds = Seq(ValueClassContainer(ValueClass(1)), ValueClassContainer(ValueClass(2))).toDS()
+
+    checkDataset(ds.filter(f(col("v"))), ValueClassContainer(ValueClass(2)))
+  }
+
+  test("SPARK-44311: UDF on value class this is stored as a struct") {
+    val f = udf((v: ValueClass) => v.i > 1)
+    val ds = Seq(Tuple1(ValueClass(1)), Tuple1(ValueClass(2))).toDS()
+
+    checkDataset(ds.filter(f(col("_1"))), Tuple1(ValueClass(2)))
+  }
 }
 
 class DatasetLargeResultCollectingSuite extends QueryTest
@@ -2544,6 +2565,9 @@ class DatasetLargeResultCollectingSuite extends QueryTest
     val res = df.queryExecution.executedPlan.executeCollect()
   }
 }
+
+case class ValueClass(i: Int) extends AnyVal
+case class ValueClassContainer(v: ValueClass)
 
 case class Bar(a: Int)
 

@@ -20,6 +20,7 @@ import scala.collection.JavaConverters._
 
 import org.apache.spark.api.java.function._
 import org.apache.spark.sql.Row
+import org.apache.spark.sql.api.java._
 import org.apache.spark.sql.streaming.GroupState
 
 /**
@@ -126,4 +127,450 @@ private[sql] object UdfUtils extends Serializable {
   def identical[T](): T => T = t => t
 
   def noOp[V, K](): V => K = _ => null.asInstanceOf[K]
+
+  //  (1 to 22).foreach { i =>
+  //    val extTypeArgs = (0 to i).map(_ => "_").mkString(", ")
+  //    val anyTypeArgs = (0 to i).map(_ => "Any").mkString(", ")
+  //    val anyCast = s".asInstanceOf[UDF$i[$anyTypeArgs]]"
+  //    val anyParams = (1 to i).map(_ => "_: Any").mkString(", ")
+  //    println(s"""
+  //               |def wrap(f: UDF$i[$extTypeArgs]): AnyRef = {
+  //               |  f$anyCast.call($anyParams)
+  //               |}""".stripMargin)
+  //  }
+
+  def wrap(f: UDF0[_]): AnyRef = { () =>
+    f.asInstanceOf[UDF0[Any]].call()
+  }
+
+  def wrap(f: UDF1[_, _]): AnyRef = {
+    f.asInstanceOf[UDF1[Any, Any]].call(_: Any)
+  }
+
+  def wrap(f: UDF2[_, _, _]): AnyRef = {
+    f.asInstanceOf[UDF2[Any, Any, Any]].call(_: Any, _: Any)
+  }
+
+  def wrap(f: UDF3[_, _, _, _]): AnyRef = {
+    f.asInstanceOf[UDF3[Any, Any, Any, Any]].call(_: Any, _: Any, _: Any)
+  }
+
+  def wrap(f: UDF4[_, _, _, _, _]): AnyRef = {
+    f.asInstanceOf[UDF4[Any, Any, Any, Any, Any]].call(_: Any, _: Any, _: Any, _: Any)
+  }
+
+  def wrap(f: UDF5[_, _, _, _, _, _]): AnyRef = {
+    f.asInstanceOf[UDF5[Any, Any, Any, Any, Any, Any]]
+      .call(_: Any, _: Any, _: Any, _: Any, _: Any)
+  }
+
+  def wrap(f: UDF6[_, _, _, _, _, _, _]): AnyRef = {
+    f.asInstanceOf[UDF6[Any, Any, Any, Any, Any, Any, Any]]
+      .call(_: Any, _: Any, _: Any, _: Any, _: Any, _: Any)
+  }
+
+  def wrap(f: UDF7[_, _, _, _, _, _, _, _]): AnyRef = {
+    f.asInstanceOf[UDF7[Any, Any, Any, Any, Any, Any, Any, Any]]
+      .call(_: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any)
+  }
+
+  def wrap(f: UDF8[_, _, _, _, _, _, _, _, _]): AnyRef = {
+    f.asInstanceOf[UDF8[Any, Any, Any, Any, Any, Any, Any, Any, Any]]
+      .call(_: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any)
+  }
+
+  def wrap(f: UDF9[_, _, _, _, _, _, _, _, _, _]): AnyRef = {
+    f.asInstanceOf[UDF9[Any, Any, Any, Any, Any, Any, Any, Any, Any, Any]]
+      .call(_: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any)
+  }
+
+  def wrap(f: UDF10[_, _, _, _, _, _, _, _, _, _, _]): AnyRef = {
+    f.asInstanceOf[UDF10[Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any]]
+      .call(_: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any)
+  }
+
+  def wrap(f: UDF11[_, _, _, _, _, _, _, _, _, _, _, _]): AnyRef = {
+    f.asInstanceOf[UDF11[Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any]]
+      .call(
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any)
+  }
+
+  def wrap(f: UDF12[_, _, _, _, _, _, _, _, _, _, _, _, _]): AnyRef = {
+    f.asInstanceOf[UDF12[Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any]]
+      .call(
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any)
+  }
+
+  def wrap(f: UDF13[_, _, _, _, _, _, _, _, _, _, _, _, _, _]): AnyRef = {
+    f.asInstanceOf[UDF13[Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any]]
+      .call(
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any)
+  }
+
+  def wrap(f: UDF14[_, _, _, _, _, _, _, _, _, _, _, _, _, _, _]): AnyRef = {
+    f.asInstanceOf[
+      UDF14[Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any]]
+      .call(
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any)
+  }
+
+  def wrap(f: UDF15[_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _]): AnyRef = {
+    f.asInstanceOf[
+      UDF15[Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any]]
+      .call(
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any)
+  }
+
+  def wrap(f: UDF16[_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _]): AnyRef = {
+    f.asInstanceOf[
+      UDF16[Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any]]
+      .call(
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any)
+  }
+
+  def wrap(f: UDF17[_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _]): AnyRef = {
+    f.asInstanceOf[UDF17[
+      Any,
+      Any,
+      Any,
+      Any,
+      Any,
+      Any,
+      Any,
+      Any,
+      Any,
+      Any,
+      Any,
+      Any,
+      Any,
+      Any,
+      Any,
+      Any,
+      Any,
+      Any]]
+      .call(
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any)
+  }
+
+  def wrap(f: UDF18[_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _]): AnyRef = {
+    f.asInstanceOf[UDF18[
+      Any,
+      Any,
+      Any,
+      Any,
+      Any,
+      Any,
+      Any,
+      Any,
+      Any,
+      Any,
+      Any,
+      Any,
+      Any,
+      Any,
+      Any,
+      Any,
+      Any,
+      Any,
+      Any]]
+      .call(
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any)
+  }
+
+  def wrap(f: UDF19[_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _]): AnyRef = {
+    f.asInstanceOf[UDF19[
+      Any,
+      Any,
+      Any,
+      Any,
+      Any,
+      Any,
+      Any,
+      Any,
+      Any,
+      Any,
+      Any,
+      Any,
+      Any,
+      Any,
+      Any,
+      Any,
+      Any,
+      Any,
+      Any,
+      Any]]
+      .call(
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any)
+  }
+
+  def wrap(f: UDF20[_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _]): AnyRef = {
+    f.asInstanceOf[UDF20[
+      Any,
+      Any,
+      Any,
+      Any,
+      Any,
+      Any,
+      Any,
+      Any,
+      Any,
+      Any,
+      Any,
+      Any,
+      Any,
+      Any,
+      Any,
+      Any,
+      Any,
+      Any,
+      Any,
+      Any,
+      Any]]
+      .call(
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any)
+  }
+
+  def wrap(f: UDF21[_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _]): AnyRef = {
+    f.asInstanceOf[UDF21[
+      Any,
+      Any,
+      Any,
+      Any,
+      Any,
+      Any,
+      Any,
+      Any,
+      Any,
+      Any,
+      Any,
+      Any,
+      Any,
+      Any,
+      Any,
+      Any,
+      Any,
+      Any,
+      Any,
+      Any,
+      Any,
+      Any]]
+      .call(
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any)
+  }
+
+  def wrap(
+      f: UDF22[_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _]): AnyRef = {
+    f.asInstanceOf[UDF22[
+      Any,
+      Any,
+      Any,
+      Any,
+      Any,
+      Any,
+      Any,
+      Any,
+      Any,
+      Any,
+      Any,
+      Any,
+      Any,
+      Any,
+      Any,
+      Any,
+      Any,
+      Any,
+      Any,
+      Any,
+      Any,
+      Any,
+      Any]]
+      .call(
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any,
+        _: Any)
+  }
 }
