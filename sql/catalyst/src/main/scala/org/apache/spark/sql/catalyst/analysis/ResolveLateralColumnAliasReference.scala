@@ -131,21 +131,21 @@ object ResolveLateralColumnAliasReference extends Rule[LogicalPlan] {
       (pList.exists(hasWindowExpression) && p.expressions.forall(_.resolved) && p.childrenResolved)
   }
 
-  /** Internal application method. A hand-written top down recursive traverse. */
+  /** Internal application method. A hand-written bottom-up recursive traverse. */
   private def apply0(plan: LogicalPlan): LogicalPlan = {
     plan match {
       case p: LogicalPlan if !p.containsPattern(LATERAL_COLUMN_ALIAS_REFERENCE) =>
         p
 
       // It should not change the Aggregate (and thus the plan shape) if its parent is an
-      // UnresolvedHaving, to avoid breaking the shape pattern  `UnresolvedHaving - Aggregate`
-      // matched by ResolveAggregateFunctions. See SPARK-42936 for more details.
-      case u @ UnresolvedHaving(_, agg: Aggregate)
-        if agg.aggregateExpressions.exists(_.containsPattern(LATERAL_COLUMN_ALIAS_REFERENCE)) =>
+      // UnresolvedHaving, to avoid breaking the shape pattern `UnresolvedHaving - Aggregate`
+      // matched by ResolveAggregateFunctions. See SPARK-42936 and SPARK-44714 for more details.
+      case u @ UnresolvedHaving(_, agg: Aggregate) =>
         u.copy(child = agg.mapChildren(apply0))
 
-      case p @ Project(projectList, child) if ruleApplicableOnOperator(p, projectList)
-        && projectList.exists(_.containsPattern(LATERAL_COLUMN_ALIAS_REFERENCE)) =>
+      case pOriginal: Project if ruleApplicableOnOperator(pOriginal, pOriginal.projectList)
+          && pOriginal.projectList.exists(_.containsPattern(LATERAL_COLUMN_ALIAS_REFERENCE)) =>
+        val p @ Project(projectList, child) = pOriginal.mapChildren(apply0)
         var aliasMap = AttributeMap.empty[AliasEntry]
         val referencedAliases = collection.mutable.Set.empty[AliasEntry]
         def unwrapLCAReference(e: NamedExpression): NamedExpression = {
@@ -176,7 +176,7 @@ object ResolveLateralColumnAliasReference extends Rule[LogicalPlan] {
             unwrapLCAReference(e)
         }
 
-        val newPlan = if (referencedAliases.isEmpty) {
+        if (referencedAliases.isEmpty) {
           p
         } else {
           val outerProjectList = collection.mutable.Seq(newProjectList: _*)
@@ -191,11 +191,13 @@ object ResolveLateralColumnAliasReference extends Rule[LogicalPlan] {
             child = Project(innerProjectList.toSeq, child)
           )
         }
-        newPlan.mapChildren(apply0)
 
-      case agg @ Aggregate(groupingExpressions, aggregateExpressions, _)
-        if ruleApplicableOnOperator(agg, aggregateExpressions)
-          && aggregateExpressions.exists(_.containsPattern(LATERAL_COLUMN_ALIAS_REFERENCE)) =>
+      case aggOriginal: Aggregate
+        if ruleApplicableOnOperator(aggOriginal, aggOriginal.aggregateExpressions)
+          && aggOriginal.aggregateExpressions.exists(
+            _.containsPattern(LATERAL_COLUMN_ALIAS_REFERENCE)) =>
+        val agg @ Aggregate(groupingExpressions, aggregateExpressions, _) =
+          aggOriginal.mapChildren(apply0)
 
         // Check if current Aggregate is eligible to lift up with Project: the aggregate
         // expression only contains: 1) aggregate functions, 2) grouping expressions, 3) leaf
@@ -218,53 +220,51 @@ object ResolveLateralColumnAliasReference extends Rule[LogicalPlan] {
           }
         }
         if (!aggregateExpressions.forall(eligibleToLiftUp)) {
-          return agg
-        }
-
-        val newAggExprs = collection.mutable.Set.empty[NamedExpression]
-        val expressionMap = collection.mutable.LinkedHashMap.empty[Expression, NamedExpression]
-        // Extract the expressions to keep in the Aggregate. Return the transformed expression
-        // fully substituted with the attribute reference to the extracted expressions.
-        def extractExpressions(expr: Expression): Expression = {
-          expr match {
-            case w @ WindowExpression(function, spec) =>
-              // Manually skip the handling on the function itself, iterate on its children
-              // instead. This is because WindowExpression.windowFunction can be an
-              // [[AggregateExpression]], but we don't want to extract it to the below Aggregate.
-              // For example, for WindowExpression
-              // `sum(sum(col1)) over (partition by .. order by ..)`, we want to avoid extracting
-              // the whole windowFunction `sum(sum(col1))`, but to extract its child `sum(col1)`
-              // instead.
-              w.copy(
-                windowFunction = function.mapChildren(extractExpressions),
-                windowSpec = extractExpressions(spec).asInstanceOf[WindowSpecDefinition])
-            case aggExpr: AggregateExpression =>
-              // Doesn't support referencing a lateral alias in aggregate function
-              if (aggExpr.containsPattern(LATERAL_COLUMN_ALIAS_REFERENCE)) {
-                aggExpr.collectFirst {
-                  case lcaRef: LateralColumnAliasReference =>
-                    throw QueryCompilationErrors.lateralColumnAliasInAggFuncUnsupportedError(
-                      lcaRef.nameParts, aggExpr)
+          agg
+        } else {
+          val newAggExprs = collection.mutable.Set.empty[NamedExpression]
+          val expressionMap = collection.mutable.LinkedHashMap.empty[Expression, NamedExpression]
+          // Extract the expressions to keep in the Aggregate. Return the transformed expression
+          // fully substituted with the attribute reference to the extracted expressions.
+          def extractExpressions(expr: Expression): Expression = {
+            expr match {
+              case w @ WindowExpression(function, spec) =>
+                // Manually skip the handling on the function itself, iterate on its children
+                // instead. This is because WindowExpression.windowFunction can be an
+                // [[AggregateExpression]], but we don't want to extract it to the below Aggregate.
+                // For example, for WindowExpression
+                // `sum(sum(col1)) over (partition by .. order by ..)`, we want to avoid extracting
+                // the whole windowFunction `sum(sum(col1))`, but to extract its child `sum(col1)`
+                // instead.
+                w.copy(
+                  windowFunction = function.mapChildren(extractExpressions),
+                  windowSpec = extractExpressions(spec).asInstanceOf[WindowSpecDefinition])
+              case aggExpr: AggregateExpression =>
+                // Doesn't support referencing a lateral alias in aggregate function
+                if (aggExpr.containsPattern(LATERAL_COLUMN_ALIAS_REFERENCE)) {
+                  aggExpr.collectFirst {
+                    case lcaRef: LateralColumnAliasReference =>
+                      throw QueryCompilationErrors.lateralColumnAliasInAggFuncUnsupportedError(
+                        lcaRef.nameParts, aggExpr)
+                  }
                 }
-              }
-              val ne = expressionMap.getOrElseUpdate(aggExpr.canonicalized, assignAlias(aggExpr))
-              newAggExprs += ne
-              ne.toAttribute
-            case e if groupingExpressions.exists(_.semanticEquals(e)) =>
-              val ne = expressionMap.getOrElseUpdate(e.canonicalized, assignAlias(e))
-              newAggExprs += ne
-              ne.toAttribute
-            case e => e.mapChildren(extractExpressions)
+                val ne = expressionMap.getOrElseUpdate(aggExpr.canonicalized, assignAlias(aggExpr))
+                newAggExprs += ne
+                ne.toAttribute
+              case e if groupingExpressions.exists(_.semanticEquals(e)) =>
+                val ne = expressionMap.getOrElseUpdate(e.canonicalized, assignAlias(e))
+                newAggExprs += ne
+                ne.toAttribute
+              case e => e.mapChildren(extractExpressions)
+            }
           }
+          val projectExprs = aggregateExpressions.map(
+            extractExpressions(_).asInstanceOf[NamedExpression])
+          Project(
+            projectList = projectExprs,
+            child = agg.copy(aggregateExpressions = newAggExprs.toSeq)
+          )
         }
-        val projectExprs = aggregateExpressions.map(
-          extractExpressions(_).asInstanceOf[NamedExpression])
-        val newPlan = Project(
-          projectList = projectExprs,
-          child = agg.copy(aggregateExpressions = newAggExprs.toSeq)
-        )
-        // apply to the Project in the same round
-        apply0(newPlan)
 
       case p: LogicalPlan =>
         p.mapChildren(apply0)

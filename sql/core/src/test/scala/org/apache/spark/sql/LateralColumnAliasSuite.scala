@@ -1176,7 +1176,7 @@ class LateralColumnAliasSuite extends LateralColumnAliasSuiteBase {
     //  2) there is a window expression in the query
     //  3) in the same SELECT list as the window expression in 2), there is an lca
     // Though [UNSUPPORTED_FEATURE.LATERAL_COLUMN_ALIAS_IN_AGGREGATE_WITH_WINDOW_AND_HAVING] is
-    // still not supported, after [TODO: SPARK ticket number], a lot other limitations are
+    // still not supported, after SPARK-44714, a lot other limitations are
     // lifted because it allows to resolve LCA when the query has UnresolvedHaving but its direct
     // child does not contain an LCA.
     // Testcases in this test focus on this change regarding enablement of resolution.
