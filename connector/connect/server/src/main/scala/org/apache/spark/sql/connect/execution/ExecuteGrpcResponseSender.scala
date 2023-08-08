@@ -66,14 +66,12 @@ private[connect] class ExecuteGrpcResponseSender[T <: Message](
 
   def run(lastConsumedStreamIndex: Long): Unit = {
     if (executeHolder.reattachable) {
-      // In reattachable execution, check if grpcObserver is ready for sending, by using
-      // setOnReadyHandler of the ServerCallStreamObserver. Otherwise, calling grpcObserver.onNext
-      // can queue the responses without sending them, and it is unknown how far behind it is, and
-      // hence how much the executionObserver needs to buffer.
+      // In reattachable execution we use setOnReadyHandler and grpcCallObserver.isReady to control
+      // backpressure. See sendResponse.
       //
-      // Because OnReady events get queued on the same GRPC inboud queue as the executePlan or
-      // reattachExecute RPC handler that this is executing in, OnReady events will not arrive and
-      // not trigger the OnReadyHandler unless this thread returns from executePlan/reattachExecute.
+      // Because calls to OnReadyHandler get queued on the same GRPC inboud queue as the executePlan
+      // or reattachExecute RPC handler that this is executing in, they will not arrive and not
+      // trigger the OnReadyHandler unless this thread returns from executePlan/reattachExecute.
       // Therefore, we launch another thread to operate on the grpcObserver and send the responses,
       // while this thread will exit from the executePlan/reattachExecute call, allowing GRPC
       // to send the OnReady events.
@@ -256,12 +254,11 @@ private[connect] class ExecuteGrpcResponseSender[T <: Message](
   }
 
   /**
-   * Send the response to the grpcCallObserver. In reattachable execution, we control the flow,
-   * and only pass the response to the grpcCallObserver when it's ready to send. Otherwise,
-   * grpcCallObserver.onNext() would return in a non-blocking way, but could queue responses
-   * without sending them if the client doesn't keep up receiving them. When pushing more
-   * responses to onNext(), there is no insight how far behind the service is in actually sending
-   * them out.
+   * Send the response to the grpcCallObserver.
+   *
+   * In reattachable execution, we control the backpressure and only send when the grpcCallObserver
+   * is in fact ready to send.
+   *
    * @param deadlineTimeMillis
    *   when reattachable, wait for ready stream until this deadline.
    * @return
@@ -278,12 +275,12 @@ private[connect] class ExecuteGrpcResponseSender[T <: Message](
       grpcObserver.onNext(response.response)
       true
     } else {
-      // In reattachable execution, we control the flow, and only pass the response to the
+      // In reattachable execution, we control the backpressure, and only pass the response to the
       // grpcCallObserver when it's ready to send.
       // Otherwise, grpcCallObserver.onNext() would return in a non-blocking way, but could queue
       // responses without sending them if the client doesn't keep up receiving them.
       // When pushing more responses to onNext(), there is no insight how far behind the service is
-      // in actually sending them out.
+      // in actually sending them out. See https://github.com/grpc/grpc-java/issues/1549
       // By sending responses only when grpcCallObserver.isReady(), we control that the actual
       // sending doesn't fall behind what we push from here.
       // By using the deadline, we exit the RPC if the responses aren't picked up by the client.
