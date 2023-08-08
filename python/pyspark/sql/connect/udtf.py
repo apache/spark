@@ -68,13 +68,20 @@ def _create_py_udtf(
     if useArrow is not None:
         arrow_enabled = useArrow
     else:
-        from pyspark.sql.connect.session import _active_spark_session
+        from pyspark.sql.connect.session import SparkSession
 
         arrow_enabled = False
-        if _active_spark_session is not None:
-            value = _active_spark_session.conf.get("spark.sql.execution.pythonUDTF.arrow.enabled")
-            if isinstance(value, str) and value.lower() == "true":
-                arrow_enabled = True
+        try:
+            session = SparkSession.active()
+            arrow_enabled = (
+                str(session.conf.get("spark.sql.execution.pythonUDTF.arrow.enabled")).lower()
+                == "true"
+            )
+        except PySparkRuntimeError as e:
+            if e.error_class == "NO_ACTIVE_OR_DEFAULT_SESSION":
+                pass  # Just uses the default if no session found.
+            else:
+                raise e
 
     # Create a regular Python UDTF and check for invalid handler class.
     regular_udtf = _create_udtf(cls, returnType, name, PythonEvalType.SQL_TABLE_UDF, deterministic)
@@ -156,17 +163,13 @@ class UserDefinedTableFunction:
         )
 
     def __call__(self, *cols: "ColumnOrName") -> "DataFrame":
+        from pyspark.sql.connect.session import SparkSession
         from pyspark.sql.connect.dataframe import DataFrame
-        from pyspark.sql.connect.session import _active_spark_session
 
-        if _active_spark_session is None:
-            raise PySparkRuntimeError(
-                "An active SparkSession is required for "
-                "executing a Python user-defined table function."
-            )
+        session = SparkSession.active()
 
         plan = self._build_common_inline_user_defined_table_function(*cols)
-        return DataFrame.withPlan(plan, _active_spark_session)
+        return DataFrame.withPlan(plan, session)
 
     def asNondeterministic(self) -> "UserDefinedTableFunction":
         self.deterministic = False
