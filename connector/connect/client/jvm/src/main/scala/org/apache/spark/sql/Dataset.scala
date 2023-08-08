@@ -2401,10 +2401,10 @@ class Dataset[T] private[sql] (
 
   private def buildDropDuplicates(
       columns: Option[Seq[String]],
-      withWaterMark: Boolean): Dataset[T] = sparkSession.newDataset(encoder) { builder =>
+      withinWaterMark: Boolean): Dataset[T] = sparkSession.newDataset(encoder) { builder =>
     val dropBuilder = builder.getDeduplicateBuilder
       .setInput(plan.getRoot)
-      .setWithinWatermark(true)
+      .setWithinWatermark(withinWaterMark)
     if (columns.isDefined) {
       dropBuilder.addAllColumnNames(columns.get.asJava)
     } else {
@@ -2419,7 +2419,7 @@ class Dataset[T] private[sql] (
    * @group typedrel
    * @since 3.4.0
    */
-  def dropDuplicates(): Dataset[T] = buildDropDuplicates(None, withWaterMark = false)
+  def dropDuplicates(): Dataset[T] = buildDropDuplicates(None, withinWaterMark = false)
 
   /**
    * (Scala-specific) Returns a new Dataset with duplicate rows removed, considering only the
@@ -2429,7 +2429,7 @@ class Dataset[T] private[sql] (
    * @since 3.4.0
    */
   def dropDuplicates(colNames: Seq[String]): Dataset[T] = {
-    buildDropDuplicates(Option(colNames), withWaterMark = false)
+    buildDropDuplicates(Option(colNames), withinWaterMark = false)
   }
 
   /**
@@ -2453,10 +2453,10 @@ class Dataset[T] private[sql] (
   }
 
   def dropDuplicatesWithinWatermark(): Dataset[T] =
-    buildDropDuplicates(None, withWaterMark = true)
+    buildDropDuplicates(None, withinWaterMark = true)
 
   def dropDuplicatesWithinWatermark(colNames: Seq[String]): Dataset[T] = {
-    buildDropDuplicates(Option(colNames), withWaterMark = false)
+    buildDropDuplicates(Option(colNames), withinWaterMark = true)
   }
 
   def dropDuplicatesWithinWatermark(colNames: Array[String]): Dataset[T] = {
