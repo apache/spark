@@ -191,10 +191,17 @@ case class BatchScanExec(
                   Seq.fill(numSplits)(Seq.empty))
               }
             } else {
+              // either `commonPartitionValues` is not defined, or it is defined but
+              // `applyPartialClustering` is false.
               val partitionMapping = groupedPartitions.map { case (row, parts) =>
                 InternalRowComparableWrapper(row, p.expressions) -> parts
               }.toMap
-              finalPartitions = p.partitionValues.map { partValue =>
+
+              // In case `commonPartitionValues` is not defined (e.g., SPJ is not used), there
+              // could exist duplicated partition values, as partition grouping is not done
+              // at the beginning and postponed to this method. It is important to use unique
+              // partition values here so that grouped partitions won't get duplicated.
+              finalPartitions = p.uniquePartitionValues.map { partValue =>
                 // Use empty partition for those partition values that are not present
                 partitionMapping.getOrElse(
                   InternalRowComparableWrapper(partValue, p.expressions), Seq.empty)
