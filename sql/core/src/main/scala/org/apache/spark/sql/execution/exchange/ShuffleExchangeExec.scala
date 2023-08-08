@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.exchange
 
 import java.util.function.Supplier
 
-import scala.collection.mutable
+import scala.collection.{mutable, Seq}
 import scala.concurrent.Future
 
 import org.apache.spark._
@@ -301,9 +301,12 @@ object ShuffleExchangeExec {
           ascending = true,
           samplePointsPerPartitionHint = SQLConf.get.rangeExchangeSampleSizePerPartition)
       case SinglePartition => new ConstantPartitioner
-      case PartitionValueMapPartitioning(_, valueMap, n) =>
-        new PartitionValueMapPartitioner(valueMap = mutable.Map(valueMap.toSeq: _*),
-          numPartitions = n)
+      case KeyGroupedPartitioning(expressions, n, partitionValues) =>
+        val partitionValueMap = mutable.Map[Seq[Any], Int]()
+        partitionValues.zipWithIndex.foreach(partAndIndex => {
+          partitionValueMap(partAndIndex._1.toSeq(expressions.map(_.dataType))) = partAndIndex._2
+        })
+        new KeyGroupedPartitioner(partitionValueMap, n)
       case _ => throw new IllegalStateException(s"Exchange not implemented for $newPartitioning")
       // TODO: Handle BroadcastPartitioning.
     }
@@ -330,7 +333,7 @@ object ShuffleExchangeExec {
         val projection = UnsafeProjection.create(sortingExpressions.map(_.child), outputAttributes)
         row => projection(row)
       case SinglePartition => identity
-      case PartitionValueMapPartitioning(expressions, _, _) =>
+      case KeyGroupedPartitioning(expressions, _, _) =>
         row => bindReferences(expressions, outputAttributes).map(_.eval(row))
       case _ => throw new IllegalStateException(s"Exchange not implemented for $newPartitioning")
     }

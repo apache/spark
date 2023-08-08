@@ -140,7 +140,7 @@ private[spark] class PartitionIdPassthrough(override val numPartitions: Int) ext
 /**
  * A [[org.apache.spark.Partitioner]] that partitions all records use partition value map
  */
-private[spark] class PartitionValueMapPartitioner(
+private[spark] class KeyGroupedPartitioner(
     valueMap: mutable.Map[Seq[Any], Int],
     override val numPartitions: Int) extends Partitioner {
   override def getPartition(key: Any): Int = {
