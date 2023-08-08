@@ -487,4 +487,19 @@ class ParametersSuite extends QueryTest with SharedSparkSession {
         start = 7,
         stop = 13))
   }
+
+  test("SPARK-44680: parameters in DEFAULT") {
+    checkError(
+      exception = intercept[AnalysisException] {
+        spark.sql(
+          "CREATE TABLE t11(c1 int default :parm) USING parquet",
+          args = Map("parm" -> 5))
+      },
+      errorClass = "UNSUPPORTED_FEATURE.PARAMETER_MARKER_IN_UNEXPECTED_STATEMENT",
+      parameters = Map("statement" -> "DEFAULT"),
+      context = ExpectedContext(
+        fragment = "default :parm",
+        start = 24,
+        stop = 36))
+  }
 }

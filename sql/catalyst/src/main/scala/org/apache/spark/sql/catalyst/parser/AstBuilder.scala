@@ -40,6 +40,7 @@ import org.apache.spark.sql.catalyst.parser.SqlBaseParser._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.trees.CurrentOrigin
+import org.apache.spark.sql.catalyst.trees.TreePattern.PARAMETER
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, DateTimeUtils, GeneratedColumn, IntervalUtils, ResolveDefaultColumns}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils.{convertSpecialDate, convertSpecialTimestamp, convertSpecialTimestampNTZ, getZoneId, stringToDate, stringToTimestamp, stringToTimestampWithoutTimeZone}
@@ -3130,9 +3131,12 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
     ctx.asScala.headOption.map(visitLocationSpec)
   }
 
-  private def verifyAndGetExpression(exprCtx: ExpressionContext): String = {
+  private def verifyAndGetExpression(exprCtx: ExpressionContext, place: String): String = {
     // Make sure it can be converted to Catalyst expressions.
-    expression(exprCtx)
+    val expr = expression(exprCtx)
+    if (expr.containsPattern(PARAMETER)) {
+      throw QueryParsingErrors.parameterMarkerNotAllowed(place, expr.origin)
+    }
     // Extract the raw expression text so that we can save the user provided text. We don't
     // use `Expression.sql` to avoid storing incorrect text caused by bugs in any expression's
     // `sql` method. Note: `exprCtx.getText` returns a string without spaces, so we need to
@@ -3147,7 +3151,7 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
    */
   override def visitDefaultExpression(ctx: DefaultExpressionContext): String =
     withOrigin(ctx) {
-      verifyAndGetExpression(ctx.expression())
+      verifyAndGetExpression(ctx.expression(), "DEFAULT")
     }
 
   /**
@@ -3155,7 +3159,7 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
    */
   override def visitGenerationExpression(ctx: GenerationExpressionContext): String =
     withOrigin(ctx) {
-      verifyAndGetExpression(ctx.expression())
+      verifyAndGetExpression(ctx.expression(), "GENERATED")
     }
 
   /**
