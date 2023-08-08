@@ -44,20 +44,14 @@ class SparkConnectReattachExecuteHandler(
         messageParameters = Map.empty)
     }
 
-    try {
-      val responseSender =
-        new ExecuteGrpcResponseSender[proto.ExecutePlanResponse](executeHolder, responseObserver)
-      if (v.hasLastResponseId) {
-        // start from response after lastResponseId
-        executeHolder.attachAndRunGrpcResponseSender(responseSender, v.getLastResponseId)
-      } else {
-        // start from the start of the stream.
-        executeHolder.attachAndRunGrpcResponseSender(responseSender)
-      }
-    } finally {
-      // Reattachable executions do not free the execution here, but client needs to call
-      // ReleaseExecute RPC.
-      // TODO We mark in the ExecuteHolder that RPC detached.
+    val responseSender =
+      new ExecuteGrpcResponseSender[proto.ExecutePlanResponse](executeHolder, responseObserver)
+    if (v.hasLastResponseId) {
+      // start from response after lastResponseId
+      executeHolder.attachAndRunGrpcResponseSender(responseSender, v.getLastResponseId)
+    } else {
+      // start from the start of the stream.
+      executeHolder.attachAndRunGrpcResponseSender(responseSender)
     }
   }
 }
