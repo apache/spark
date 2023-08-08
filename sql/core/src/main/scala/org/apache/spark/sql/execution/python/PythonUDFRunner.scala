@@ -18,7 +18,6 @@
 package org.apache.spark.sql.execution.python
 
 import java.io._
-import java.net._
 import java.util.concurrent.atomic.AtomicBoolean
 
 import org.apache.spark._

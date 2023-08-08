@@ -18,7 +18,6 @@
 package org.apache.spark.api.python
 
 import java.io.{BufferedInputStream, BufferedOutputStream, DataInputStream, DataOutputStream}
-import java.net.Socket
 
 import scala.collection.JavaConverters._
 
@@ -50,7 +49,7 @@ private[spark] class StreamingPythonRunner(
 
   private val envVars: java.util.Map[String, String] = func.envVars
   private val pythonExec: String = func.pythonExec
-  private var pythonWorker: Option[Socket] = None
+  private var pythonWorker: Option[PythonWorker] = None
   protected val pythonVer: String = func.pythonVer
 
   /**
@@ -78,7 +77,8 @@ private[spark] class StreamingPythonRunner(
       conf.set(PYTHON_USE_DAEMON, prevConf)
     }
 
-    val stream = new BufferedOutputStream(pythonWorker.get.getOutputStream, bufferSize)
+    val stream = new BufferedOutputStream(
+      pythonWorker.get.channel.socket().getOutputStream, bufferSize)
     val dataOut = new DataOutputStream(stream)
 
     // TODO(SPARK-44461): verify python version
@@ -93,7 +93,7 @@ private[spark] class StreamingPythonRunner(
     dataOut.flush()
 
     val dataIn = new DataInputStream(
-      new BufferedInputStream(pythonWorker.get.getInputStream, bufferSize))
+      new BufferedInputStream(pythonWorker.get.channel.socket().getInputStream, bufferSize))
 
     val resFromPython = dataIn.readInt()
     logInfo(s"Runner initialization returned $resFromPython")

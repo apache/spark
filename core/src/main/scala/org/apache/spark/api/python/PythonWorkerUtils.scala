@@ -18,7 +18,6 @@
 package org.apache.spark.api.python
 
 import java.io.{DataInputStream, DataOutputStream, File}
-import java.net.Socket
 import java.nio.charset.StandardCharsets
 
 import org.apache.spark.{SparkEnv, SparkFiles}
@@ -76,7 +75,7 @@ private[spark] object PythonWorkerUtils extends Logging {
    */
   def writeBroadcasts(
       broadcastVars: Seq[Broadcast[PythonBroadcast]],
-      worker: Socket,
+      worker: PythonWorker,
       env: SparkEnv,
       dataOut: DataOutputStream): Unit = {
     // Broadcast variables

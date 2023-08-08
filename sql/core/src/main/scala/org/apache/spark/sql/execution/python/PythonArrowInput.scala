@@ -17,7 +17,6 @@
 package org.apache.spark.sql.execution.python
 
 import java.io.DataOutputStream
-import java.net.Socket
 
 import org.apache.arrow.vector.VectorSchemaRoot
 import org.apache.arrow.vector.ipc.ArrowStreamWriter
@@ -69,11 +68,24 @@ private[python] trait PythonArrowInput[IN] { self: BasePythonRunner[IN, _] =>
       PythonRDD.writeUTF(v, stream)
     }
   }
-  private val arrowSchema = ArrowUtils.toArrowSchema(schema, timeZoneId)
+  private val arrowSchema = ArrowUtils.toArrowSchema(
+    schema, timeZoneId, errorOnDuplicatedFieldNames, largeVarTypes)
   private val allocator =
     ArrowUtils.rootAllocator.newChildAllocator(s"stdout writer for $pythonExec", 0, Long.MaxValue)
   protected val root = VectorSchemaRoot.create(arrowSchema, allocator)
   protected var writer: ArrowStreamWriter = _
+
+protected def close(): Unit = {
+  Utils.tryWithSafeFinally {
+    // end writes footer to the output stream and doesn't clean any resources.
+    // It could throw exception if the output stream is closed, so it should be
+    // in the try block.
+    writer.end()
+  } {
+    root.close()
+    allocator.close()
+  }
+}
 
   protected override def newWriter(
       env: SparkEnv,
@@ -82,18 +94,6 @@ private[python] trait PythonArrowInput[IN] { self: BasePythonRunner[IN, _] =>
       partitionIndex: Int,
       context: TaskContext): Writer = {
     new Writer(env, worker, inputIterator, partitionIndex, context) {
-      protected def close(): Unit = {
-        Utils.tryWithSafeFinally {
-          // end writes footer to the output stream and doesn't clean any resources.
-          // It could throw exception if the output stream is closed, so it should be
-          // in the try block.
-          writer.end()
-        } {
-          root.close()
-          allocator.close()
-        }
-      }
-
       protected override def writeCommand(dataOut: DataOutputStream): Unit = {
         handleMetadataBeforeExec(dataOut)
         writeUDF(dataOut, funcs, argOffsets)

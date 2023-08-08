@@ -18,7 +18,7 @@
 package org.apache.spark.api.python
 
 import java.io.{DataInputStream, DataOutputStream, EOFException, File, InputStream}
-import java.net.{InetAddress, InetSocketAddress, ServerSocket, SocketException}
+import java.net.{InetAddress, InetSocketAddress, SocketException}
 import java.nio.channels._
 import java.util.Arrays
 import java.util.concurrent.TimeUnit
@@ -393,7 +393,7 @@ private[spark] class PythonWorkerFactory(
     worker.stop()
   }
 
-  def releaseWorker(worker: Socket): Unit = {
+  def releaseWorker(worker: PythonWorker): Unit = {
     if (useDaemon) {
       self.synchronized {
         lastActivityNs = System.nanoTime()
