@@ -710,7 +710,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         """For debugging purposes, prints to stdout all the generated code found
         in this :class:`DataFrame` plan (i.e., the output of each WholeStageCodegen subtree).
 
-        .. versionadded:: 3.5.0
+        .. versionadded:: 4.0.0
 
         Examples
         --------
