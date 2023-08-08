@@ -31,10 +31,8 @@ final class XmlPartitioningSuite extends SparkFunSuite with Matchers with Before
     val spark = SparkSession.builder()
       .master("local[2]")
       .appName("XmlPartitioningSuite")
-      .config("spark.ui.enabled", false)
       .config("spark.hadoop.fs.local.block.size", blockSize)
       .getOrCreate()
-    spark.sparkContext.setLogLevel("WARN")
     try {
       val fileName = s"test-data/xml-resources/fias_house${if (large) ".large" else ""}.xml$suffix"
       val xmlFile = getClass.getClassLoader.getResource(fileName).getFile

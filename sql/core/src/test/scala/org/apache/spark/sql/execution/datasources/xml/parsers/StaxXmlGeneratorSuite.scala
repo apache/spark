@@ -20,10 +20,7 @@ import java.nio.file.Files
 import java.sql.{Date, Timestamp}
 import java.time.{ZonedDateTime, ZoneId}
 
-import org.scalatest.BeforeAndAfterAll
-
-import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 
 case class KnownData(
@@ -39,32 +36,9 @@ case class KnownData(
     nullDatum: Null
 )
 
-final class StaxXmlGeneratorSuite extends SparkFunSuite with BeforeAndAfterAll {
-
-  private lazy val spark: SparkSession = {
-    // It is intentionally a val to allow import implicits.
-    SparkSession.builder().
-      master("local[2]").
-      appName("XmlSuite").
-      config("spark.ui.enabled", false).
-      getOrCreate()
-  }
-
-  override def beforeAll(): Unit = {
-    super.beforeAll()
-    spark.sparkContext.setLogLevel("WARN")
-  }
-
-  override def afterAll(): Unit = {
-    try {
-      spark.stop()
-    } finally {
-      super.afterAll()
-    }
-  }
-
+final class StaxXmlGeneratorSuite extends SharedSparkSession {
   test("write/read roundtrip") {
-    import spark.implicits._
+    import testImplicits._
 
     val dataset = Seq(
       KnownData(
