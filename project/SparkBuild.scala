@@ -1554,7 +1554,6 @@ object CopyDependencies {
       // Later, when the dependencies are copied, we manually copy the shaded Jar only.
       val fid = (LocalProject("connect") / assembly).value
       val fidClient = (LocalProject("connect-client-jvm") / assembly).value
-      val fidProtobuf = (LocalProject("protobuf-assembly") / assembly).value
 
       (Compile / dependencyClasspath).value.map(_.data)
         .filter { jar => jar.isFile() }
@@ -1570,9 +1569,6 @@ object CopyDependencies {
           } else if (jar.getName.contains("connect-client-jvm") &&
             !SbtPomKeys.profiles.value.contains("noshade-connect-client-jvm")) {
             Files.copy(fidClient.toPath, destJar.toPath)
-          } else if (jar.getName.contains("spark-protobuf") &&
-            !SbtPomKeys.profiles.value.contains("noshade-protobuf")) {
-            Files.copy(fidProtobuf.toPath, destJar.toPath)
           } else {
             Files.copy(jar.toPath(), destJar.toPath())
           }
