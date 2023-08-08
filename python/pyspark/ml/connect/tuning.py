@@ -178,11 +178,12 @@ def _parallelFitTasks(
 
     def get_single_task(index: int, param_map: Any) -> Callable[[], Tuple[int, float]]:
         def single_task() -> Tuple[int, float]:
-            # Active session is thread-local variable, in background thread the active session
-            # is not set, the following line sets it as the main thread active session.
-            active_session._jvm.SparkSession.setActiveSession(  # type: ignore[union-attr]
-                active_session._jsparkSession  # type: ignore[union-attr]
-            )
+            if not is_remote():
+                # Active session is thread-local variable, in background thread the active session
+                # is not set, the following line sets it as the main thread active session.
+                active_session._jvm.SparkSession.setActiveSession(  # type: ignore[union-attr]
+                    active_session._jsparkSession  # type: ignore[union-attr]
+                )
 
             model = estimator.fit(train, param_map)
             metric = evaluator.evaluate(

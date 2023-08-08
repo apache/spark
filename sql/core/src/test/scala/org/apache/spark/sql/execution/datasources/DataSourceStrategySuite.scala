@@ -324,4 +324,18 @@ class DataSourceStrategySuite extends PlanTest with SharedSparkSession {
       DataSourceStrategy.translateFilter(catalystFilter, true)
     }
   }
+
+  test("SPARK-41636: selectFilters returns predicates in deterministic order") {
+
+    val predicates = Seq(EqualTo($"id", 1), EqualTo($"id", 2),
+      EqualTo($"id", 3), EqualTo($"id", 4), EqualTo($"id", 5), EqualTo($"id", 6))
+
+    val (unhandledPredicates, pushedFilters, handledFilters) =
+      DataSourceStrategy.selectFilters(FakeRelation(), predicates)
+    assert(unhandledPredicates.equals(predicates))
+    assert(pushedFilters.zipWithIndex.forall { case (f, i) =>
+      f.equals(sources.EqualTo("id", i + 1))
+    })
+    assert(handledFilters.isEmpty)
+  }
 }

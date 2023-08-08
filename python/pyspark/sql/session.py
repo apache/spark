@@ -64,8 +64,8 @@ from pyspark.sql.types import (
     _from_numpy_type,
 )
 from pyspark.errors.exceptions.captured import install_exception_handler
-from pyspark.sql.utils import is_timestamp_ntz_preferred, to_str
-from pyspark.errors import PySparkValueError, PySparkTypeError
+from pyspark.sql.utils import is_timestamp_ntz_preferred, to_str, try_remote_session_classmethod
+from pyspark.errors import PySparkValueError, PySparkTypeError, PySparkRuntimeError
 
 if TYPE_CHECKING:
     from pyspark.sql._typing import AtomicValue, RowLike, OptionalPrimitiveType
@@ -500,7 +500,7 @@ class SparkSession(SparkConversionMixin):
                     ).applyModifiableSettings(session._jsparkSession, self._options)
                 return session
 
-        # SparkConnect-specific API
+        # Spark Connect-specific API
         def create(self) -> "SparkSession":
             """Creates a new SparkSession. Can only be used in the context of Spark Connect
             and will throw an exception otherwise.
@@ -510,6 +510,10 @@ class SparkSession(SparkConversionMixin):
             Returns
             -------
             :class:`SparkSession`
+
+            Notes
+            -----
+            This method will update the default and/or active session if they are not set.
             """
             opts = dict(self._options)
             if "SPARK_REMOTE" in os.environ or "spark.remote" in opts:
@@ -546,7 +550,11 @@ class SparkSession(SparkConversionMixin):
     # to Python 3.9.6 (https://github.com/python/cpython/pull/28838)
     @classproperty
     def builder(cls) -> Builder:
-        """Creates a :class:`Builder` for constructing a :class:`SparkSession`."""
+        """Creates a :class:`Builder` for constructing a :class:`SparkSession`.
+
+        .. versionchanged:: 3.4.0
+            Supports Spark Connect.
+        """
         return cls.Builder()
 
     _instantiatedSession: ClassVar[Optional["SparkSession"]] = None
@@ -632,11 +640,15 @@ class SparkSession(SparkConversionMixin):
         return self.__class__(self._sc, self._jsparkSession.newSession())
 
     @classmethod
+    @try_remote_session_classmethod
     def getActiveSession(cls) -> Optional["SparkSession"]:
         """
         Returns the active :class:`SparkSession` for the current thread, returned by the builder
 
         .. versionadded:: 3.0.0
+
+        .. versionchanged:: 3.5.0
+            Supports Spark Connect.
 
         Returns
         -------
@@ -666,6 +678,30 @@ class SparkSession(SparkConversionMixin):
                 return SparkSession._activeSession
             else:
                 return None
+
+    @classmethod
+    @try_remote_session_classmethod
+    def active(cls) -> "SparkSession":
+        """
+        Returns the active or default :class:`SparkSession` for the current thread, returned by
+        the builder.
+
+        .. versionadded:: 3.5.0
+
+        Returns
+        -------
+        :class:`SparkSession`
+            Spark session if an active or default session exists for the current thread.
+        """
+        session = cls.getActiveSession()
+        if session is None:
+            session = cls._instantiatedSession
+            if session is None:
+                raise PySparkRuntimeError(
+                    error_class="NO_ACTIVE_OR_DEFAULT_SESSION",
+                    message_parameters={},
+                )
+        return session
 
     @property
     def sparkContext(self) -> SparkContext:
@@ -698,6 +734,9 @@ class SparkSession(SparkConversionMixin):
 
         .. versionadded:: 2.0.0
 
+        .. versionchanged:: 3.4.0
+            Supports Spark Connect.
+
         Returns
         -------
         str
@@ -719,6 +758,9 @@ class SparkSession(SparkConversionMixin):
 
         .. versionadded:: 2.0.0
 
+        .. versionchanged:: 3.4.0
+            Supports Spark Connect.
+
         Returns
         -------
         :class:`pyspark.sql.conf.RuntimeConfig`
@@ -726,7 +768,7 @@ class SparkSession(SparkConversionMixin):
         Examples
         --------
         >>> spark.conf
-        <pyspark.sql.conf.RuntimeConfig object ...>
+        <pyspark...RuntimeConf...>
 
         Set a runtime configuration for the session
 
@@ -804,6 +846,9 @@ class SparkSession(SparkConversionMixin):
         """Returns a :class:`UDTFRegistration` for UDTF registration.
 
         .. versionadded:: 3.5.0
+
+        .. versionchanged:: 3.5.0
+            Supports Spark Connect.
 
         Returns
         -------
@@ -1639,6 +1684,9 @@ class SparkSession(SparkConversionMixin):
 
         .. versionadded:: 2.0.0
 
+        .. versionchanged:: 3.5.0
+            Supports Spark Connect.
+
         Notes
         -----
         This API is evolving.
@@ -1650,7 +1698,7 @@ class SparkSession(SparkConversionMixin):
         Examples
         --------
         >>> spark.readStream
-        <pyspark.sql.streaming.readwriter.DataStreamReader object ...>
+        <pyspark...DataStreamReader object ...>
 
         The example below uses Rate source that generates rows continuously.
         After that, we operate a modulo by 3, and then write the stream out to the console.
@@ -1672,6 +1720,9 @@ class SparkSession(SparkConversionMixin):
 
         .. versionadded:: 2.0.0
 
+        .. versionchanged:: 3.5.0
+            Supports Spark Connect.
+
         Notes
         -----
         This API is evolving.
@@ -1683,7 +1734,7 @@ class SparkSession(SparkConversionMixin):
         Examples
         --------
         >>> spark.streams
-        <pyspark.sql.streaming.query.StreamingQueryManager object ...>
+        <pyspark...StreamingQueryManager object ...>
 
         Get the list of active streaming queries
 

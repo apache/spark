@@ -19,7 +19,7 @@ package org.apache.spark.sql
 import java.io.Closeable
 import java.net.URI
 import java.util.concurrent.TimeUnit._
-import java.util.concurrent.atomic.AtomicLong
+import java.util.concurrent.atomic.{AtomicLong, AtomicReference}
 
 import scala.collection.JavaConverters._
 import scala.reflect.runtime.universe.TypeTag
@@ -252,10 +252,8 @@ class SparkSession private[sql] (
           .setSql(sqlText)
           .addAllPosArgs(args.map(toLiteralProto).toIterable.asJava)))
     val plan = proto.Plan.newBuilder().setCommand(cmd)
-    val responseSeq = client.execute(plan.build()).asScala.toSeq
-
-    // sequence is a lazy stream, force materialize it to make sure it is consumed.
-    responseSeq.foreach(_ => ())
+    // .toBuffer forces that the iterator is consumed and closed
+    val responseSeq = client.execute(plan.build()).toBuffer.toSeq
 
     val response = responseSeq
       .find(_.hasSqlCommandResult)
@@ -311,10 +309,8 @@ class SparkSession private[sql] (
             .setSql(sqlText)
             .putAllArgs(args.asScala.mapValues(toLiteralProto).toMap.asJava)))
       val plan = proto.Plan.newBuilder().setCommand(cmd)
-      val responseSeq = client.execute(plan.build()).asScala.toSeq
-
-      // sequence is a lazy stream, force materialize it to make sure it is consumed.
-      responseSeq.foreach(_ => ())
+      // .toBuffer forces that the iterator is consumed and closed
+      val responseSeq = client.execute(plan.build()).toBuffer.toSeq
 
       val response = responseSeq
         .find(_.hasSqlCommandResult)
@@ -548,15 +544,14 @@ class SparkSession private[sql] (
     f(builder)
     builder.getCommonBuilder.setPlanId(planIdGenerator.getAndIncrement())
     val plan = proto.Plan.newBuilder().setRoot(builder).build()
-    client.execute(plan).asScala.foreach(_ => ())
+    // .toBuffer forces that the iterator is consumed and closed
+    client.execute(plan).toBuffer
   }
 
   private[sql] def execute(command: proto.Command): Seq[ExecutePlanResponse] = {
     val plan = proto.Plan.newBuilder().setCommand(command).build()
-    val seq = client.execute(plan).asScala.toSeq
-    // sequence is a lazy stream, force materialize it to make sure it is consumed.
-    seq.foreach(_ => ())
-    seq
+    // .toBuffer forces that the iterator is consumed and closed
+    client.execute(plan).toBuffer.toSeq
   }
 
   private[sql] def registerUdf(udf: proto.CommonInlineUserDefinedFunction): Unit = {
@@ -735,6 +730,23 @@ object SparkSession extends Logging {
       override def load(c: Configuration): SparkSession = create(c)
     })
 
+  /** The active SparkSession for the current thread. */
+  private val activeThreadSession = new InheritableThreadLocal[SparkSession]
+
+  /** Reference to the root SparkSession. */
+  private val defaultSession = new AtomicReference[SparkSession]
+
+  /**
+   * Set the (global) default [[SparkSession]], and (thread-local) active [[SparkSession]] when
+   * they are not set yet.
+   */
+  private def setDefaultAndActiveSession(session: SparkSession): Unit = {
+    defaultSession.compareAndSet(null, session)
+    if (getActiveSession.isEmpty) {
+      setActiveSession(session)
+    }
+  }
+
   /**
    * Create a new [[SparkSession]] based on the connect client [[Configuration]].
    */
@@ -747,8 +759,17 @@ object SparkSession extends Logging {
    */
   private[sql] def onSessionClose(session: SparkSession): Unit = {
     sessions.invalidate(session.client.configuration)
+    defaultSession.compareAndSet(session, null)
+    if (getActiveSession.contains(session)) {
+      clearActiveSession()
+    }
   }
 
+  /**
+   * Creates a [[SparkSession.Builder]] for constructing a [[SparkSession]].
+   *
+   * @since 3.4.0
+   */
   def builder(): Builder = new Builder()
 
   private[sql] lazy val cleaner = {
@@ -804,10 +825,15 @@ object SparkSession extends Logging {
      *
      * This will always return a newly created session.
      *
+     * This method will update the default and/or active session if they are not set.
+     *
      * @since 3.5.0
      */
     def create(): SparkSession = {
-      tryCreateSessionFromClient().getOrElse(SparkSession.this.create(builder.configuration))
+      val session = tryCreateSessionFromClient()
+        .getOrElse(SparkSession.this.create(builder.configuration))
+      setDefaultAndActiveSession(session)
+      session
     }
 
     /**
@@ -816,30 +842,79 @@ object SparkSession extends Logging {
      * If a session exist with the same configuration that is returned instead of creating a new
      * session.
      *
+     * This method will update the default and/or active session if they are not set.
+     *
      * @since 3.5.0
      */
     def getOrCreate(): SparkSession = {
-      tryCreateSessionFromClient().getOrElse(sessions.get(builder.configuration))
+      val session = tryCreateSessionFromClient()
+        .getOrElse(sessions.get(builder.configuration))
+      setDefaultAndActiveSession(session)
+      session
     }
   }
 
-  def getActiveSession: Option[SparkSession] = {
-    throw new UnsupportedOperationException("getActiveSession is not supported")
+  /**
+   * Returns the default SparkSession.
+   *
+   * @since 3.5.0
+   */
+  def getDefaultSession: Option[SparkSession] = Option(defaultSession.get())
+
+  /**
+   * Sets the default SparkSession.
+   *
+   * @since 3.5.0
+   */
+  def setDefaultSession(session: SparkSession): Unit = {
+    defaultSession.set(session)
   }
 
-  def getDefaultSession: Option[SparkSession] = {
-    throw new UnsupportedOperationException("getDefaultSession is not supported")
+  /**
+   * Clears the default SparkSession.
+   *
+   * @since 3.5.0
+   */
+  def clearDefaultSession(): Unit = {
+    defaultSession.set(null)
   }
 
+  /**
+   * Returns the active SparkSession for the current thread.
+   *
+   * @since 3.5.0
+   */
+  def getActiveSession: Option[SparkSession] = Option(activeThreadSession.get())
+
+  /**
+   * Changes the SparkSession that will be returned in this thread and its children when
+   * SparkSession.getOrCreate() is called. This can be used to ensure that a given thread receives
+   * an isolated SparkSession.
+   *
+   * @since 3.5.0
+   */
   def setActiveSession(session: SparkSession): Unit = {
-    throw new UnsupportedOperationException("setActiveSession is not supported")
+    activeThreadSession.set(session)
   }
 
+  /**
+   * Clears the active SparkSession for current thread.
+   *
+   * @since 3.5.0
+   */
   def clearActiveSession(): Unit = {
-    throw new UnsupportedOperationException("clearActiveSession is not supported")
+    activeThreadSession.remove()
   }
 
+  /**
+   * Returns the currently active SparkSession, otherwise the default one. If there is no default
+   * SparkSession, throws an exception.
+   *
+   * @since 3.5.0
+   */
   def active: SparkSession = {
-    throw new UnsupportedOperationException("active is not supported")
+    getActiveSession
+      .orElse(getDefaultSession)
+      .getOrElse(throw new IllegalStateException("No active or default Spark session found"))
   }
 }
