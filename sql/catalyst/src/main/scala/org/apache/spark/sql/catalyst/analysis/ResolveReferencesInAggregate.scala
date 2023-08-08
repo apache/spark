@@ -17,12 +17,11 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.expressions.{AliasHelper, Attribute, Expression, NamedExpression}
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, AppendColumns, LogicalPlan}
-import org.apache.spark.sql.catalyst.trees.TreePattern.{LATERAL_COLUMN_ALIAS_REFERENCE, UNRESOLVED_ATTRIBUTE}
+import org.apache.spark.sql.catalyst.trees.TreePattern.UNRESOLVED_ATTRIBUTE
 
 /**
  * A virtual rule to resolve [[UnresolvedAttribute]] in [[Aggregate]]. It's only used by the real
@@ -74,12 +73,6 @@ object ResolveReferencesInAggregate extends SQLConfHelper
         resolvedAggExprsWithOuter,
         resolveGroupByAlias(resolvedAggExprsWithOuter, resolvedGroupExprsNoOuter)
       ).map(resolveOuterRef)
-      // TODO: currently we don't support LCA in `groupingExpressions` yet.
-      if (resolved.exists(_.containsPattern(LATERAL_COLUMN_ALIAS_REFERENCE))) {
-        throw new AnalysisException(
-          errorClass = "UNSUPPORTED_FEATURE.LATERAL_COLUMN_ALIAS_IN_GROUP_BY",
-          messageParameters = Map.empty)
-      }
       resolved
     } else {
       // Do not resolve columns in grouping expressions to outer references here, as the aggregate

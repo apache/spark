@@ -31,3 +31,6 @@ SELECT k AS lca, lca + 1 AS col FROM v1 GROUP BY lca;
 -- GROUP BY ALL has higher priority than outer reference. This query should run as `a` and `b` are
 -- in GROUP BY due to the GROUP BY ALL resolution.
 SELECT * FROM v2 WHERE EXISTS (SELECT a, b FROM v1 GROUP BY all);
+
+-- GROUP BY alias with struct type
+SELECT named_struct('a', named_struct('b', 1)) AS foo, foo.a.b + 1 AS bar GROUP BY foo, bar

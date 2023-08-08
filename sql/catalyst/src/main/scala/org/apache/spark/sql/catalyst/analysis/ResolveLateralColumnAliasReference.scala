@@ -109,7 +109,7 @@ import org.apache.spark.sql.internal.SQLConf
  * [[ExtractWindowExpressions]].
  */
 // scalastyle:on line.size.limit
-object ResolveLateralColumnAliasReference extends Rule[LogicalPlan] {
+object ResolveLateralColumnAliasReference extends Rule[LogicalPlan] with AliasHelper {
   case class AliasEntry(alias: Alias, index: Int)
 
   private def assignAlias(expr: Expression): NamedExpression = {
@@ -133,6 +133,27 @@ object ResolveLateralColumnAliasReference extends Rule[LogicalPlan] {
 
   /** Internal application method. A hand-written bottom-up recursive traverse. */
   private def apply0(plan: LogicalPlan): LogicalPlan = {
+    // Check if current Aggregate is eligible to lift up with Project: the aggregate
+    // expression only contains: 1) aggregate functions, 2) grouping expressions, 3) leaf
+    // expressions excluding attributes not in grouping expressions
+    // This check is to prevent unnecessary transformation on invalid plan, to guarantee it
+    // throws the same exception. For example, cases like non-aggregate expressions not
+    // in group by, once transformed, will throw a different exception: missing input.
+    def eligibleToLiftUp(exp: Expression, groupingExpressions: Seq[Expression]): Boolean = {
+      exp match {
+        case _: AggregateExpression => true
+        case e if groupingExpressions.exists(_.semanticEquals(e)) => true
+        case a: Attribute => false
+        case s: ScalarSubquery if s.children.nonEmpty
+          && !groupingExpressions.exists(_.semanticEquals(s)) => false
+        // Manually skip detection on function itself because it can be an aggregate function.
+        // This is to avoid expressions like sum(salary) over () eligible to lift up.
+        case WindowExpression(function, spec) =>
+          function.children.forall(eligibleToLiftUp(_, groupingExpressions)
+            && eligibleToLiftUp(spec, groupingExpressions))
+        case e => e.children.forall(eligibleToLiftUp(_, groupingExpressions))
+      }
+    }
     plan match {
       case p: LogicalPlan if !p.containsPattern(LATERAL_COLUMN_ALIAS_REFERENCE) =>
         p
@@ -192,34 +213,15 @@ object ResolveLateralColumnAliasReference extends Rule[LogicalPlan] {
           )
         }
 
-      case aggOriginal: Aggregate
+      case aggOriginal@ Aggregate(groupingExpressions, _, _)
         if ruleApplicableOnOperator(aggOriginal, aggOriginal.aggregateExpressions)
           && aggOriginal.aggregateExpressions.exists(
-            _.containsPattern(LATERAL_COLUMN_ALIAS_REFERENCE)) =>
+            _.containsPattern(LATERAL_COLUMN_ALIAS_REFERENCE))
+          && !groupingExpressions.exists(_.containsPattern(LATERAL_COLUMN_ALIAS_REFERENCE)) =>
         val agg @ Aggregate(groupingExpressions, aggregateExpressions, _) =
           aggOriginal.mapChildren(apply0)
 
-        // Check if current Aggregate is eligible to lift up with Project: the aggregate
-        // expression only contains: 1) aggregate functions, 2) grouping expressions, 3) leaf
-        // expressions excluding attributes not in grouping expressions
-        // This check is to prevent unnecessary transformation on invalid plan, to guarantee it
-        // throws the same exception. For example, cases like non-aggregate expressions not
-        // in group by, once transformed, will throw a different exception: missing input.
-        def eligibleToLiftUp(exp: Expression): Boolean = {
-          exp match {
-            case _: AggregateExpression => true
-            case e if groupingExpressions.exists(_.semanticEquals(e)) => true
-            case a: Attribute => false
-            case s: ScalarSubquery if s.children.nonEmpty
-              && !groupingExpressions.exists(_.semanticEquals(s)) => false
-            // Manually skip detection on function itself because it can be an aggregate function.
-            // This is to avoid expressions like sum(salary) over () eligible to lift up.
-            case WindowExpression(function, spec) =>
-              function.children.forall(eligibleToLiftUp) && eligibleToLiftUp(spec)
-            case e => e.children.forall(eligibleToLiftUp)
-          }
-        }
-        if (!aggregateExpressions.forall(eligibleToLiftUp)) {
+        if (!aggregateExpressions.forall(eligibleToLiftUp(_, groupingExpressions))) {
           agg
         } else {
           val newAggExprs = collection.mutable.Set.empty[NamedExpression]
@@ -265,7 +267,85 @@ object ResolveLateralColumnAliasReference extends Rule[LogicalPlan] {
             child = agg.copy(aggregateExpressions = newAggExprs.toSeq)
           )
         }
+      case agg @ Aggregate(groupingExpressions, aggregateExpressions, child)
+        if ruleApplicableOnOperator(agg, aggregateExpressions)
+        && groupingExpressions.exists(_.containsPattern(LATERAL_COLUMN_ALIAS_REFERENCE)) =>
+        if (!aggregateExpressions.forall(eligibleToLiftUp(_, groupingExpressions))) {
+          return agg
+        }
+        val newAggExprs = collection.mutable.Seq[NamedExpression](
+          aggregateExpressions: _*)
+        var addProject = collection.mutable.Buffer.empty[NamedExpression]
 
+        var newGroupExprs = groupingExpressions.map(g => {
+          if (child.output.contains(g)) {
+            g
+          } else {
+            val index = aggregateExpressions.indexWhere(e => {
+              val te = if (e.resolved) trimAliases(e) else e
+              te.semanticEquals(g)
+            })
+
+            val project = if (index > -1) {
+              val agg = aggregateExpressions(index)
+              val newAgg = g match {
+                case Alias(expr, _) if agg.isInstanceOf[Alias] =>
+                  Alias(expr, agg.asInstanceOf[Alias].name)()
+                case expr if agg.isInstanceOf[Alias] =>
+                  Alias(expr, agg.asInstanceOf[Alias].name)()
+                case _ =>
+                  assignAlias(g)
+              }
+              newAggExprs(index) = newAgg.toAttribute
+              newAgg
+            } else {
+              assignAlias(g)
+            }
+            addProject += project
+            project.toAttribute
+          }
+        })
+
+        val pushDownProject = collection.mutable.Buffer.empty[NamedExpression]
+        addProject = addProject.map(expr => {
+          expr.transformWithPruning(_.containsPattern(LATERAL_COLUMN_ALIAS_REFERENCE)) {
+            case l: LateralColumnAliasReference =>
+              val alias = addProject.find(_.name.equals(l.a.name))
+              if (alias.isDefined) {
+                val newNe = l.ne.transform {
+                  case expr: NamedExpression if expr.name == alias.get.name
+                    && expr.dataType == alias.get.dataType =>
+                    alias.get.toAttribute
+                }.asInstanceOf[NamedExpression]
+                l.copy(ne = newNe, a = alias.get.toAttribute)
+              } else if (newAggExprs.exists(_.name.equals(l.a.name))) {
+                val index = newAggExprs.indexWhere(_.name.equals(l.a.name))
+                val agg = newAggExprs(index)
+                newGroupExprs = newGroupExprs.map { group =>
+                  val tgroup = if (group.resolved) trimAliases(group) else group
+                  val tagg = if (agg.resolved) trimAliases(agg) else agg
+                  if (tgroup.semanticEquals(tagg)) {
+                    agg.toAttribute
+                  } else {
+                    group
+                  }
+                }
+                val newNe = l.ne.transform {
+                  case expr: NamedExpression if expr.name == agg.name
+                    && expr.dataType == agg.dataType =>
+                    agg.toAttribute
+                }.asInstanceOf[NamedExpression]
+                pushDownProject += agg
+                newAggExprs(index) = agg.toAttribute
+                l.copy(ne = newNe, a = agg.toAttribute)
+              } else {
+                l
+              }
+          }.asInstanceOf[NamedExpression]
+        })
+
+        val projectList = child.output ++ pushDownProject ++ addProject
+        Aggregate(newGroupExprs.toSeq, newAggExprs.toSeq, Project(projectList, child))
       case p: LogicalPlan =>
         p.mapChildren(apply0)
     }

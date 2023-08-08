@@ -94,21 +94,27 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 -- !query
 SELECT k AS lca, lca + 1 AS col FROM v1 GROUP BY k, col
 -- !query analysis
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "UNSUPPORTED_FEATURE.LATERAL_COLUMN_ALIAS_IN_GROUP_BY",
-  "sqlState" : "0A000"
-}
+Aggregate [lca#x, col#x], [lca#x, col#x]
++- Project [a#x, b#x, k#x, lca#x, (lca#x + 1) AS col#x]
+   +- Project [a#x, b#x, k#x, k#x AS lca#x]
+      +- SubqueryAlias v1
+         +- View (`v1`, [a#x,b#x,k#x])
+            +- Project [cast(a#x as int) AS a#x, cast(b#x as int) AS b#x, cast(k#x as int) AS k#x]
+               +- SubqueryAlias t
+                  +- LocalRelation [a#x, b#x, k#x]
 
 
 -- !query
 SELECT k AS lca, lca + 1 AS col FROM v1 GROUP BY all
 -- !query analysis
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "UNSUPPORTED_FEATURE.LATERAL_COLUMN_ALIAS_IN_GROUP_BY",
-  "sqlState" : "0A000"
-}
+Aggregate [lca#x, col#x], [lca#x, col#x]
++- Project [a#x, b#x, k#x, lca#x, (lca#x + 1) AS col#x]
+   +- Project [a#x, b#x, k#x, k#x AS lca#x]
+      +- SubqueryAlias v1
+         +- View (`v1`, [a#x,b#x,k#x])
+            +- Project [cast(a#x as int) AS a#x, cast(b#x as int) AS b#x, cast(k#x as int) AS k#x]
+               +- SubqueryAlias t
+                  +- LocalRelation [a#x, b#x, k#x]
 
 
 -- !query
@@ -140,3 +146,12 @@ Project [x#x, y#x, all#x]
          +- Project [cast(x#x as int) AS x#x, cast(y#x as int) AS y#x, cast(all#x as int) AS all#x]
             +- SubqueryAlias t
                +- LocalRelation [x#x, y#x, all#x]
+
+
+-- !query
+SELECT named_struct('a', named_struct('b', 1)) AS foo, foo.a.b + 1 AS bar GROUP BY foo, bar
+-- !query analysis
+Aggregate [foo#x, bar#x], [foo#x, bar#x]
++- Project [foo#x, (foo#x.a.b + 1) AS bar#x]
+   +- Project [named_struct(a, named_struct(b, 1)) AS foo#x]
+      +- OneRowRelation
