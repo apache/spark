@@ -96,7 +96,8 @@ private[spark] object Utils
   extends Logging
   with SparkClassUtils
   with SparkErrorUtils
-  with SparkFileUtils {
+  with SparkFileUtils
+  with SparkSerDeUtils {
 
   private val sparkUncaughtExceptionHandler = new SparkUncaughtExceptionHandler
   @volatile private var cachedLocalDir: String = ""
@@ -122,26 +123,6 @@ private[spark] object Utils
   private val copyBuffer = ThreadLocal.withInitial[Array[Byte]](() => {
     new Array[Byte](COPY_BUFFER_LEN)
   })
-
-  /** Serialize an object using Java serialization */
-  def serialize[T](o: T): Array[Byte] = SparkSerDeUtils.serialize(o)
-
-  /** Deserialize an object using Java serialization */
-  def deserialize[T](bytes: Array[Byte]): T = SparkSerDeUtils.deserialize(bytes)
-
-  /** Deserialize an object using Java serialization and the given ClassLoader */
-  def deserialize[T](bytes: Array[Byte], loader: ClassLoader): T = {
-    val bis = new ByteArrayInputStream(bytes)
-    val ois = new ObjectInputStream(bis) {
-      override def resolveClass(desc: ObjectStreamClass): Class[_] = {
-        // scalastyle:off classforname
-        Class.forName(desc.getName, false, loader)
-        // scalastyle:on classforname
-      }
-    }
-    ois.readObject.asInstanceOf[T]
-  }
-
   /** Deserialize a Long value (used for [[org.apache.spark.api.python.PythonPartitioner]]) */
   def deserializeLongValue(bytes: Array[Byte]) : Long = {
     // Note: we assume that we are given a Long value encoded in network (big-endian) byte order

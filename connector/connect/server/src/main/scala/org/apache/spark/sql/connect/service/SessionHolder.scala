@@ -31,6 +31,7 @@ import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.connect.artifact.SparkConnectArtifactManager
 import org.apache.spark.sql.connect.common.InvalidPlanInput
+import org.apache.spark.sql.connect.planner.PythonStreamingQueryListener
 import org.apache.spark.sql.streaming.StreamingQueryListener
 import org.apache.spark.util.{SystemClock}
 import org.apache.spark.util.Utils
@@ -220,20 +221,22 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
   }
 
   /**
-   * Returns [[StreamingQueryListener]] cached for Listener ID `id`. If it is not found, throw
-   * [[InvalidPlanInput]].
+   * Returns [[StreamingQueryListener]] cached for Listener ID `id`. If it is not found, return
+   * None.
    */
-  private[connect] def getListenerOrThrow(id: String): StreamingQueryListener = {
+  private[connect] def getListener(id: String): Option[StreamingQueryListener] = {
     Option(listenerCache.get(id))
-      .getOrElse {
-        throw InvalidPlanInput(s"No listener with id $id is found in the session $sessionId")
-      }
   }
 
   /**
-   * Removes corresponding StreamingQueryListener by ID.
+   * Removes corresponding StreamingQueryListener by ID. Terminates the python process if it's a
+   * Spark Connect PythonStreamingQueryListener.
    */
-  private[connect] def removeCachedListener(id: String): StreamingQueryListener = {
+  private[connect] def removeCachedListener(id: String): Unit = {
+    listenerCache.get(id) match {
+      case pyListener: PythonStreamingQueryListener => pyListener.stopListenerProcess()
+      case _ => // do nothing
+    }
     listenerCache.remove(id)
   }
 

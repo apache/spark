@@ -45,13 +45,13 @@ private[client] class GrpcRetryHandler(private val retryPolicy: GrpcRetryHandler
    * @tparam U
    *   The type of the response.
    */
-  class RetryIterator[T, U](request: T, call: T => java.util.Iterator[U])
-      extends java.util.Iterator[U] {
+  class RetryIterator[T, U](request: T, call: T => CloseableIterator[U])
+      extends CloseableIterator[U] {
 
     private var opened = false // we only retry if it fails on first call when using the iterator
-    private var iterator = call(request)
+    private var iter = call(request)
 
-    private def retryIter[V](f: java.util.Iterator[U] => V) = {
+    private def retryIter[V](f: Iterator[U] => V) = {
       if (!opened) {
         opened = true
         var firstTry = true
@@ -61,26 +61,30 @@ private[client] class GrpcRetryHandler(private val retryPolicy: GrpcRetryHandler
             firstTry = false
           } else {
             // on retry, we need to call the RPC again.
-            iterator = call(request)
+            iter = call(request)
           }
-          f(iterator)
+          f(iter)
         }
       } else {
-        f(iterator)
+        f(iter)
       }
     }
 
     override def next: U = {
-      retryIter(_.next())
+      retryIter(_.next)
     }
 
     override def hasNext: Boolean = {
-      retryIter(_.hasNext())
+      retryIter(_.hasNext)
+    }
+
+    override def close(): Unit = {
+      iter.close()
     }
   }
 
   object RetryIterator {
-    def apply[T, U](request: T, call: T => java.util.Iterator[U]): RetryIterator[T, U] =
+    def apply[T, U](request: T, call: T => CloseableIterator[U]): RetryIterator[T, U] =
       new RetryIterator(request, call)
   }
 
@@ -99,6 +103,9 @@ private[client] class GrpcRetryHandler(private val retryPolicy: GrpcRetryHandler
       extends StreamObserver[U] {
 
     private var opened = false // only retries on first call
+
+    // Note: This is not retried, because no error would ever be thrown here, and GRPC will only
+    // throw error on first iterator.hasNext() or iterator.next()
     private var streamObserver = call(request)
 
     override def onNext(v: U): Unit = {
@@ -161,7 +168,9 @@ private[client] object GrpcRetryHandler extends Logging {
     try {
       return fn
     } catch {
-      case NonFatal(e) if retryPolicy.canRetry(e) && currentRetryNum < retryPolicy.maxRetries =>
+      case NonFatal(e)
+          if (retryPolicy.canRetry(e) || e.isInstanceOf[RetryException])
+            && currentRetryNum < retryPolicy.maxRetries =>
         logWarning(
           s"Non fatal error during RPC execution: $e, " +
             s"retrying (currentRetryNum=$currentRetryNum)")
@@ -206,4 +215,10 @@ private[client] object GrpcRetryHandler extends Logging {
       maxBackoff: FiniteDuration = FiniteDuration(1, "min"),
       backoffMultiplier: Double = 4.0,
       canRetry: Throwable => Boolean = retryException) {}
+
+  /**
+   * An exception that can be thrown upstream when inside retry and which will be retryable
+   * regardless of policy.
+   */
+  class RetryException extends Throwable
 }

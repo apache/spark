@@ -162,7 +162,9 @@ case class ScalaUDF(
     if (useEncoder) {
       val enc = inputEncoders(i).get
       val fromRow = enc.createDeserializer()
-      val converter = if (enc.isSerializedAsStructForTopLevel) {
+      val unwrappedValueClass = enc.isSerializedAsStruct &&
+        enc.schema.fields.size == 1 && enc.schema.fields.head.dataType == dataType
+      val converter = if (enc.isSerializedAsStructForTopLevel && !unwrappedValueClass) {
         row: Any => fromRow(row.asInstanceOf[InternalRow])
       } else {
         val inputRow = new GenericInternalRow(1)

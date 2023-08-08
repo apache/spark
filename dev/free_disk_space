@@ -24,14 +24,21 @@ echo "=================================="
 echo "Listing 100 largest packages"
 dpkg-query -Wf '${Installed-Size}\t${Package}\n' | sort -n | tail -n 100
 df -h
+
 echo "Removing large packages"
 sudo rm -rf /usr/share/dotnet/
+sudo rm -rf /usr/share/php/
 sudo rm -rf /usr/local/graalvm/
 sudo rm -rf /usr/local/.ghcup/
 sudo rm -rf /usr/local/share/powershell
 sudo rm -rf /usr/local/share/chromium
 sudo rm -rf /usr/local/lib/android
 sudo rm -rf /usr/local/lib/node_modules
+
+sudo rm -rf /opt/az
+sudo rm -rf /opt/hostedtoolcache/CodeQL
+sudo rm -rf /opt/hostedtoolcache/go
+sudo rm -rf /opt/hostedtoolcache/node
 
 sudo apt-get remove --purge -y '^aspnet.*'
 sudo apt-get remove --purge -y '^dotnet-.*'
@@ -42,4 +49,5 @@ sudo apt-get remove --purge -y snapd google-chrome-stable microsoft-edge-stable 
 sudo apt-get remove --purge -y azure-cli google-cloud-sdk mono-devel powershell libgl1-mesa-dri
 sudo apt-get autoremove --purge -y
 sudo apt-get clean
+
 df -h

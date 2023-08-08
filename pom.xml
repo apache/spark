@@ -190,7 +190,7 @@
     <!-- org.apache.commons/commons-lang/-->
     <commons-lang2.version>2.6</commons-lang2.version>
     <!-- org.apache.commons/commons-lang3/-->
-    <commons-lang3.version>3.12.0</commons-lang3.version>
+    <commons-lang3.version>3.13.0</commons-lang3.version>
     <!-- org.apache.commons/commons-pool2/-->
     <commons-pool2.version>2.11.1</commons-pool2.version>
     <datanucleus-core.version>4.1.17</datanucleus-core.version>
@@ -3600,7 +3600,7 @@
     <profile>
       <id>scala-2.13</id>
       <properties>
-        <scala.version>2.13.11</scala.version>
+        <scala.version>2.13.8</scala.version>
         <scala.binary.version>2.13</scala.binary.version>
       </properties>
       <build>
@@ -3659,10 +3659,6 @@
                   -->
                   <arg>-Wconf:cat=unused-imports&amp;src=org\/apache\/spark\/graphx\/impl\/VertexPartitionBase.scala:s</arg>
                   <arg>-Wconf:cat=unused-imports&amp;src=org\/apache\/spark\/graphx\/impl\/VertexPartitionBaseOps.scala:s</arg>
-                  <!--
-                    SPARK-40497 Upgrade Scala to 2.13.11 and suppress `Implicit definition should have explicit type`
-                  -->
-                  <arg>-Wconf:msg=Implicit definition should have explicit type:s</arg>
                 </args>
                 <compilerPlugins combine.self="override">
                 </compilerPlugins>

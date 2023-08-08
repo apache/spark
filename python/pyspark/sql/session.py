@@ -1788,6 +1788,8 @@ class SparkSession(SparkConversionMixin):
 
         Notes
         -----
+        This API is unstable, and a developer API. It returns non-API instance
+        :class:`SparkConnectClient`.
         This is an API dedicated to Spark Connect client only. With regular Spark Session, it throws
         an exception.
         """

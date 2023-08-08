@@ -41,4 +41,8 @@ Cannot instantiate Spark Connect plugin because `<cls>` is missing a default con
 
 Error instantiating Spark Connect plugin: `<msg>`
 
+## SESSION_NOT_SAME
+
+Both Datasets must belong to the same SparkSession.
+
 

@@ -72,7 +72,14 @@ private[sql] class SparkConnectClient(
     bstub.analyzePlan(request)
   }
 
-  def execute(plan: proto.Plan): java.util.Iterator[proto.ExecutePlanResponse] = {
+  /**
+   * Execute the plan and return response iterator.
+   *
+   * It returns CloseableIterator. For resource management it is better to close it once you are
+   * done. If you don't close it, it and the underlying data will be cleaned up once the iterator
+   * is garbage collected.
+   */
+  def execute(plan: proto.Plan): CloseableIterator[proto.ExecutePlanResponse] = {
     artifactManager.uploadAllClassFileArtifacts()
     val request = proto.ExecutePlanRequest
       .newBuilder()

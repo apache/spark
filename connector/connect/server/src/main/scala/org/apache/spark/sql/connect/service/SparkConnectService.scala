@@ -270,7 +270,7 @@ object SparkConnectService extends Logging {
   // For testing purpose, it's package level private.
   private[connect] def localPort: Int = {
     assert(server != null)
-    // Return the actual local port being used. This can be different from the csonfigured port
+    // Return the actual local port being used. This can be different from the configured port
     // when the server binds to the port 0 as an example.
     server.getPort
   }
@@ -279,10 +279,7 @@ object SparkConnectService extends Logging {
     cacheBuilder(CACHE_SIZE, CACHE_TIMEOUT_SECONDS).build[SessionCacheKey, SessionHolder]()
 
   private[connect] val streamingSessionManager =
-    new SparkConnectStreamingQueryCache(sessionKeepAliveFn = { case (userId, sessionId) =>
-      // Use getIfPresent() rather than get() to prevent accidental loading.
-      userSessionMapping.getIfPresent((userId, sessionId))
-    })
+    new SparkConnectStreamingQueryCache()
 
   private class RemoveSessionListener extends RemovalListener[SessionCacheKey, SessionHolder] {
     override def onRemoval(
@@ -375,7 +372,7 @@ object SparkConnectService extends Logging {
   }
 
   /**
-   * Starts the GRPC Serivce.
+   * Starts the GRPC Service.
    */
   private def startGRPCService(): Unit = {
     val debugMode = SparkEnv.get.conf.getBoolean("spark.connect.grpc.debug.enabled", true)

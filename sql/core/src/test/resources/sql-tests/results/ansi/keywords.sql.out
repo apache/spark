@@ -258,6 +258,7 @@ SET	false
 SETS	false
 SHORT	false
 SHOW	false
+SINGLE	false
 SKEWED	false
 SMALLINT	false
 SOME	true

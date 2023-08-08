@@ -17,15 +17,17 @@
 """
 User-defined table function related classes and functions
 """
+import pickle
 from dataclasses import dataclass
+from functools import wraps
 import inspect
 import sys
 import warnings
-from typing import Any, Iterator, Type, TYPE_CHECKING, Optional, Union
+from typing import Any, Iterable, Iterator, Type, TYPE_CHECKING, Optional, Union, Callable
 
 from py4j.java_gateway import JavaObject
 
-from pyspark.errors import PySparkAttributeError, PySparkTypeError
+from pyspark.errors import PySparkAttributeError, PySparkRuntimeError, PySparkTypeError
 from pyspark.rdd import PythonEvalType
 from pyspark.sql.column import _to_java_column, _to_seq
 from pyspark.sql.pandas.utils import require_minimum_pandas_version, require_minimum_pyarrow_version
@@ -104,11 +106,11 @@ def _create_py_udtf(
         from pyspark.sql import SparkSession
 
         session = SparkSession._instantiatedSession
-        arrow_enabled = (
-            session.conf.get("spark.sql.execution.pythonUDTF.arrow.enabled") == "true"
-            if session is not None
-            else True
-        )
+        arrow_enabled = False
+        if session is not None:
+            value = session.conf.get("spark.sql.execution.pythonUDTF.arrow.enabled")
+            if isinstance(value, str) and value.lower() == "true":
+                arrow_enabled = True
 
     # Create a regular Python UDTF and check for invalid handler class.
     regular_udtf = _create_udtf(cls, returnType, name, PythonEvalType.SQL_TABLE_UDF, deterministic)
@@ -143,6 +145,20 @@ def _vectorize_udtf(cls: Type) -> Type:
     """Vectorize a Python UDTF handler class."""
     import pandas as pd
 
+    # Wrap the exception thrown from the UDTF in a PySparkRuntimeError.
+    def wrap_func(f: Callable[..., Any]) -> Callable[..., Any]:
+        @wraps(f)
+        def evaluate(*a: Any) -> Any:
+            try:
+                return f(*a)
+            except Exception as e:
+                raise PySparkRuntimeError(
+                    error_class="UDTF_EXEC_ERROR",
+                    message_parameters={"method_name": f.__name__, "error": str(e)},
+                )
+
+        return evaluate
+
     class VectorizedUDTF:
         def __init__(self) -> None:
             self.func = cls()
@@ -157,17 +173,26 @@ def _vectorize_udtf(cls: Type) -> Type:
 
         def eval(self, *args: pd.Series) -> Iterator[pd.DataFrame]:
             if len(args) == 0:
-                yield pd.DataFrame(self.func.eval())
+                yield pd.DataFrame(wrap_func(self.func.eval)())
             else:
                 # Create tuples from the input pandas Series, each tuple
                 # represents a row across all Series.
                 row_tuples = zip(*args)
                 for row in row_tuples:
-                    yield pd.DataFrame(self.func.eval(*row))
+                    res = wrap_func(self.func.eval)(*row)
+                    if res is not None and not isinstance(res, Iterable):
+                        raise PySparkRuntimeError(
+                            error_class="UDTF_RETURN_NOT_ITERABLE",
+                            message_parameters={
+                                "type": type(res).__name__,
+                            },
+                        )
+                    yield pd.DataFrame(res)
 
-        def terminate(self) -> Iterator[pd.DataFrame]:
-            if hasattr(self.func, "terminate"):
-                yield pd.DataFrame(self.func.terminate())
+        if hasattr(cls, "terminate"):
+
+            def terminate(self) -> Iterator[pd.DataFrame]:
+                yield pd.DataFrame(wrap_func(self.func.terminate)())
 
     vectorized_udtf = VectorizedUDTF
     vectorized_udtf.__name__ = cls.__name__
@@ -279,7 +304,29 @@ class UserDefinedTableFunction:
         spark = SparkSession._getActiveSessionOrCreate()
         sc = spark.sparkContext
 
-        wrapped_func = _wrap_function(sc, func)
+        try:
+            wrapped_func = _wrap_function(sc, func)
+        except pickle.PicklingError as e:
+            if "CONTEXT_ONLY_VALID_ON_DRIVER" in str(e):
+                raise PySparkRuntimeError(
+                    error_class="UDTF_SERIALIZATION_ERROR",
+                    message_parameters={
+                        "name": self._name,
+                        "message": "it appears that you are attempting to reference SparkSession "
+                        "inside a UDTF. SparkSession can only be used on the driver, "
+                        "not in code that runs on workers. Please remove the reference "
+                        "and try again.",
+                    },
+                ) from None
+            raise PySparkRuntimeError(
+                error_class="UDTF_SERIALIZATION_ERROR",
+                message_parameters={
+                    "name": self._name,
+                    "message": "Please check the stack trace and make sure the "
+                    "function is serializable.",
+                },
+            )
+
         assert sc._jvm is not None
         if self.returnType is None:
             judtf = sc._jvm.org.apache.spark.sql.execution.python.UserDefinedPythonTableFunction(
