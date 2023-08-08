@@ -190,10 +190,6 @@ class NamespaceTestsMixin:
         self.assert_eq(pd.to_datetime(pdf), ps.to_datetime(psdf))
         self.assert_eq(pd.to_datetime(dict_from_pdf), ps.to_datetime(dict_from_pdf))
 
-    @unittest.skipIf(
-        LooseVersion(pd.__version__) >= LooseVersion("2.0.0"),
-        "TODO(SPARK-43709): Enable NamespaceTests.test_date_range for pandas 2.0.0.",
-    )
     def test_date_range(self):
         self.assert_eq(
             ps.date_range(start="1/1/2018", end="1/08/2018"),
@@ -223,16 +219,6 @@ class NamespaceTestsMixin:
         self.assert_eq(
             ps.date_range(start="1/1/2018", periods=5, freq=pd.offsets.MonthEnd(3)),
             pd.date_range(start="1/1/2018", periods=5, freq=pd.offsets.MonthEnd(3)),
-        )
-
-        self.assert_eq(
-            ps.date_range(start="2017-01-01", end="2017-01-04", closed="left"),
-            pd.date_range(start="2017-01-01", end="2017-01-04", closed="left"),
-        )
-
-        self.assert_eq(
-            ps.date_range(start="2017-01-01", end="2017-01-04", closed="right"),
-            pd.date_range(start="2017-01-01", end="2017-01-04", closed="right"),
         )
 
         self.assertRaises(
