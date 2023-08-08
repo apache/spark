@@ -893,7 +893,7 @@ For more details see [INVALID_CURSOR](sql-error-conditions-invalid-cursor-error-
 
 SQLSTATE: none assigned
 
-Failed to execute `<statement>` command because the destination table column `<colName>` has a DEFAULT value `<defaultValue>`,
+Failed to execute `<statement>` command because the destination column or variable `<colName>` has a DEFAULT value `<defaultValue>`,
 
 For more details see [INVALID_DEFAULT_VALUE](sql-error-conditions-invalid-default-value-error-class.html)
 

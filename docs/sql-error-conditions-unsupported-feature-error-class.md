@@ -179,7 +179,7 @@ set PROPERTIES and DBPROPERTIES at the same time.
 
 ## SET_VARIABLE_USING_SET
 
-`<variableName>` is a VARIABLE and cannot be updated using the SET statement. Use SET VARIABLE  `<variableName>` = ... instead.
+`<variableName>` is a VARIABLE and cannot be updated using the SET statement. Use SET VARIABLE `<variableName>` = ... instead.
 
 ## TABLE_OPERATION
 
