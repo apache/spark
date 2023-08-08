@@ -104,7 +104,7 @@ object NamedParametersSupport {
     val positionalParametersSet = allParameterNames.take(positionalArgs.size).toSet
     val namedParametersSet = collection.mutable.Set[String]()
 
-    for (arg <- namedArgs) {
+    namedArgs.zipWithIndex.foreach { case (arg, index) =>
       arg match {
         case namedArg: NamedArgumentExpression =>
           val parameterName = namedArg.key
@@ -122,7 +122,8 @@ object NamedParametersSupport {
           }
           namedParametersSet.add(namedArg.key)
         case _ =>
-          throw QueryCompilationErrors.unexpectedPositionalArgument(functionName)
+          throw QueryCompilationErrors.unexpectedPositionalArgument(
+            functionName, namedArgs(index - 1).asInstanceOf[NamedArgumentExpression].key)
       }
     }
 
@@ -141,15 +142,16 @@ object NamedParametersSupport {
     }.toMap
 
     // We rearrange named arguments to match their positional order.
-    val rearrangedNamedArgs: Seq[Expression] = namedParameters.map { param =>
-      namedArgMap.getOrElse(
-        param.name,
-        if (param.default.isEmpty) {
-          throw QueryCompilationErrors.requiredParameterNotFound(functionName, param.name)
-        } else {
-          param.default.get
-        }
-      )
+    val rearrangedNamedArgs: Seq[Expression] = namedParameters.zipWithIndex.map {
+      case (param, index) =>
+        namedArgMap.getOrElse(
+          param.name,
+          if (param.default.isEmpty) {
+            throw QueryCompilationErrors.requiredParameterNotFound(functionName, param.name, index)
+          } else {
+            param.default.get
+          }
+        )
     }
     val rearrangedArgs = positionalArgs ++ rearrangedNamedArgs
     assert(rearrangedArgs.size == parameters.size)

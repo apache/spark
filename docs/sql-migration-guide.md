@@ -28,7 +28,7 @@ license: |
 - Since Spark 3.5, Spark thrift server will interrupt task when canceling a running statement. To restore the previous behavior, set `spark.sql.thriftServer.interruptOnCancel` to `false`.
 - Since Spark 3.5, the Avro will throw `AnalysisException` when reading Interval types as Date or Timestamp types, or reading Decimal types with lower precision. To restore the legacy behavior, set `spark.sql.legacy.avro.allowIncompatibleSchema` to `true`
 - Since Spark 3.5, Row's json and prettyJson methods are moved to `ToJsonUtil`.
-- Since Spark 3.5, ParseException is a subclass of SparkException instead of AnalysisException.
+- Since Spark 3.5, the `plan` field is moved from `AnalysisException` to `EnhancedAnalysisException`.
 
 ## Upgrading from Spark SQL 3.3 to 3.4
 

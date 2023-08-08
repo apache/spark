@@ -409,6 +409,11 @@
         "message" : [
           "Error instantiating Spark Connect plugin: <msg>"
         ]
+      },
+      "SESSION_NOT_SAME" : {
+        "message" : [
+          "Both Datasets must belong to the same SparkSession."
+        ]
       }
     }
   },
@@ -804,12 +809,12 @@
     "subClass" : {
       "BOTH_POSITIONAL_AND_NAMED" : {
         "message" : [
-          "A positional argument and named argument both referred to the same parameter."
+          "A positional argument and named argument both referred to the same parameter. Please remove the named argument referring to this parameter."
         ]
       },
       "DOUBLE_NAMED_ARGUMENT_REFERENCE" : {
         "message" : [
-          "More than one named argument referred to the same parameter."
+          "More than one named argument referred to the same parameter. Please assign a value only once."
         ]
       }
     },
@@ -824,6 +829,11 @@
   "ENCODER_NOT_FOUND" : {
     "message" : [
       "Not found an encoder of the type <typeName> to Spark SQL internal representation. Consider to change the input type to one of supported at '<docroot>/sql-ref-datatypes.html'."
+    ]
+  },
+  "ERROR_READING_AVRO_UNKNOWN_FINGERPRINT" : {
+    "message" : [
+      "Error reading avro data -- encountered an unknown fingerprint: <fingerprint>, not sure what schema to use. This could happen if you registered additional schemas after starting your spark context."
     ]
   },
   "EVENT_TIME_IS_NOT_ON_TIMESTAMP_TYPE" : {
@@ -858,6 +868,11 @@
       "Failed parsing struct: <raw>."
     ],
     "sqlState" : "22018"
+  },
+  "FAILED_REGISTER_CLASS_WITH_KRYO" : {
+    "message" : [
+      "Failed to register classes with Kryo."
+    ]
   },
   "FAILED_RENAME_PATH" : {
     "message" : [
@@ -1299,6 +1314,34 @@
     ],
     "sqlState" : "42000"
   },
+  "INVALID_CURSOR" : {
+    "message" : [
+      "The cursor is invalid."
+    ],
+    "subClass" : {
+      "DISCONNECTED" : {
+        "message" : [
+          "The cursor has been disconnected by the server."
+        ]
+      },
+      "NOT_REATTACHABLE" : {
+        "message" : [
+          "The cursor is not reattachable."
+        ]
+      },
+      "POSITION_NOT_AVAILABLE" : {
+        "message" : [
+          "The cursor position id <responseId> is no longer available at index <index>."
+        ]
+      },
+      "POSITION_NOT_FOUND" : {
+        "message" : [
+          "The cursor position id <responseId> is not found."
+        ]
+      }
+    },
+    "sqlState" : "HY109"
+  },
   "INVALID_DEFAULT_VALUE" : {
     "message" : [
       "Failed to execute <statement> command because the destination table column <colName> has a DEFAULT value <defaultValue>,"
@@ -1447,14 +1490,29 @@
       "The handle <handle> is invalid."
     ],
     "subClass" : {
-      "ALREADY_EXISTS" : {
-        "message" : [
-          "Handle already exists."
-        ]
-      },
       "FORMAT" : {
         "message" : [
-          "Handle has invalid format. Handle must an UUID string of the format '00112233-4455-6677-8899-aabbccddeeff'"
+          "Handle must be an UUID string of the format '00112233-4455-6677-8899-aabbccddeeff'"
+        ]
+      },
+      "OPERATION_ALREADY_EXISTS" : {
+        "message" : [
+          "Operation already exists."
+        ]
+      },
+      "OPERATION_NOT_FOUND" : {
+        "message" : [
+          "Operation not found."
+        ]
+      },
+      "SESSION_ALREADY_EXISTS" : {
+        "message" : [
+          "Session already exists."
+        ]
+      },
+      "SESSION_NOT_FOUND" : {
+        "message" : [
+          "Session not found."
         ]
       }
     },
@@ -1515,6 +1573,12 @@
       "Input schema <jsonSchema> can only contain STRING as a key type for a MAP."
     ],
     "sqlState" : "22032"
+  },
+  "INVALID_KRYO_SERIALIZER_BUFFER_SIZE" : {
+    "message" : [
+      "The value of the config \"<bufferSizeConfKey>\" must be less than 2048 MiB, but got <bufferSizeConfValue> MiB."
+    ],
+    "sqlState" : "F0000"
   },
   "INVALID_LAMBDA_FUNCTION_CALL" : {
     "message" : [
@@ -1958,6 +2022,11 @@
       "The join condition <joinCondition> has the invalid type <conditionType>, expected \"BOOLEAN\"."
     ]
   },
+  "KRYO_BUFFER_OVERFLOW" : {
+    "message" : [
+      "Kryo serialization failed: <exceptionMsg>. To avoid this, increase \"<bufferSizeConfKey>\" value."
+    ]
+  },
   "LOAD_DATA_PATH_NOT_EXISTS" : {
     "message" : [
       "LOAD DATA input path does not exist: <path>."
@@ -1993,6 +2062,11 @@
       "CANNOT_PARSE_JSON_ARRAYS_AS_STRUCTS" : {
         "message" : [
           "Parsing JSON arrays as structs is forbidden."
+        ]
+      },
+      "CANNOT_PARSE_STRING_AS_DATATYPE" : {
+        "message" : [
+          "Cannot parse the value <fieldValue> of the field <fieldName> as target spark data type <targetType> from the input type <inputType>."
         ]
       },
       "WITHOUT_SUGGESTION" : {
@@ -2398,7 +2472,7 @@
   },
   "REQUIRED_PARAMETER_NOT_FOUND" : {
     "message" : [
-      "Cannot invoke function <functionName> because the parameter named <parameterName> is required, but the function call did not supply a value. Please update the function call to supply an argument value (either positionally or by name) and retry the query again."
+      "Cannot invoke function <functionName> because the parameter named <parameterName> is required, but the function call did not supply a value. Please update the function call to supply an argument value (either positionally at index <index> or by name) and retry the query again."
     ],
     "sqlState" : "4274K"
   },
@@ -2422,6 +2496,12 @@
       "To tolerate the error on drop use DROP FUNCTION IF EXISTS."
     ],
     "sqlState" : "42883"
+  },
+  "RULE_ID_NOT_FOUND" : {
+    "message" : [
+      "Not found an id for the rule name \"<ruleName>\". Please modify RuleIdCollection.scala if you are adding a new rule."
+    ],
+    "sqlState" : "22023"
   },
   "SCALAR_SUBQUERY_IS_IN_GROUP_BY_OR_AGGREGATE_FUNCTION" : {
     "message" : [
@@ -2599,7 +2679,7 @@
   },
   "UNEXPECTED_POSITIONAL_ARGUMENT" : {
     "message" : [
-      "Cannot invoke function <functionName> because it contains positional argument(s) following named argument(s); please rearrange them so the positional arguments come first and then retry the query again."
+      "Cannot invoke function <functionName> because it contains positional argument(s) following the named argument assigned to <parameterName>; please rearrange them so the positional arguments come first and then retry the query again."
     ],
     "sqlState" : "4274K"
   },
@@ -2970,6 +3050,16 @@
       "PIVOT_TYPE" : {
         "message" : [
           "Pivoting by the value '<value>' of the column data type <type>."
+        ]
+      },
+      "PURGE_PARTITION" : {
+        "message" : [
+          "Partition purge."
+        ]
+      },
+      "PURGE_TABLE" : {
+        "message" : [
+          "Purge table."
         ]
       },
       "PYTHON_UDF_IN_ON_CLAUSE" : {
@@ -5254,11 +5344,6 @@
       "Exception when registering StreamingQueryListener."
     ]
   },
-  "_LEGACY_ERROR_TEMP_2133" : {
-    "message" : [
-      "Cannot parse field name <fieldName>, field value <fieldValue>, [<token>] as target spark data type [<dataType>]."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_2134" : {
     "message" : [
       "Cannot parse field value <value> for pattern <pattern> as target spark data type [<dataType>]."
@@ -5429,11 +5514,6 @@
     "message" : [
       "Once strategy's idempotence is broken for batch <batchName>",
       "<plan>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2175" : {
-    "message" : [
-      "Rule id not found for <ruleName>. Please modify RuleIdCollection.scala if you are adding a new rule."
     ]
   },
   "_LEGACY_ERROR_TEMP_2176" : {

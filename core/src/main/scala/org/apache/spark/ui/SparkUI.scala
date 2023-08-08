@@ -67,15 +67,31 @@ private[spark] class SparkUI private (
     createServletHandler("/", servlet, basePath)
   }
 
+  private var readyToAttachHandlers = false
+
   /**
    * Attach all existing handlers to ServerInfo.
    */
-  def attachAllHandler(): Unit = {
+  def attachAllHandlers(): Unit = {
+    // Attach all handlers that have been added already, but not yet attached.
     serverInfo.foreach { server =>
       server.removeHandler(initHandler)
       handlers.foreach(server.addHandler(_, securityManager))
     }
+    // Handlers attached after this can be directly started.
+    readyToAttachHandlers = true
   }
+
+  /** Attaches a handler to this UI.
+   *  Note: The handler will not be attached until readyToAttachHandlers is true,
+   *  handlers added before that will be attached by attachAllHandlers */
+  override def attachHandler(handler: ServletContextHandler): Unit = synchronized {
+    handlers += handler
+    if (readyToAttachHandlers) {
+      serverInfo.foreach(_.addHandler(handler, securityManager))
+    }
+  }
+
   /** Initialize all components of the server. */
   def initialize(): Unit = {
     val jobsTab = new JobsTab(this, store)

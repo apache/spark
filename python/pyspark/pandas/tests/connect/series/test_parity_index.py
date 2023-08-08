@@ -22,11 +22,8 @@ from pyspark.testing.pandasutils import PandasOnSparkTestUtils
 
 
 class SeriesParityIndexTests(SeriesIndexMixin, PandasOnSparkTestUtils, ReusedConnectTestCase):
-    @unittest.skip(
-        "TODO(SPARK-43611): Fix unexpected `AnalysisException` from Spark Connect client."
-    )
-    def test_reset_index_with_default_index_types(self):
-        super().test_reset_index_with_default_index_types()
+
+    pass
 
 
 if __name__ == "__main__":

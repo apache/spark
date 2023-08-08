@@ -93,7 +93,7 @@ private[connect] object ProtoUtils {
   def throwIfInvalidTag(tag: String): Unit = {
     // Same format rules apply to Spark Connect execution tags as to SparkContext job tags,
     // because the Spark Connect job tag is also used as part of SparkContext job tag.
-    // See SparkContext.throwIfInvalidTag and ExecuteHolder.tagToSparkJobTag
+    // See SparkContext.throwIfInvalidTag and ExecuteHolderSessionTag
     if (tag == null) {
       throw new IllegalArgumentException("Spark Connect tag cannot be null.")
     }

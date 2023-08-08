@@ -1750,7 +1750,10 @@ class Dataset[T] private[sql] (
 
   private def checkSameSparkSession(other: Dataset[_]): Unit = {
     if (this.sparkSession.sessionId != other.sparkSession.sessionId) {
-      throw new SparkException("Both Datasets must belong to the same SparkSession")
+      throw new SparkException(
+        errorClass = "CONNECT.SESSION_NOT_SAME",
+        messageParameters = Map.empty,
+        cause = null)
     }
   }
 
@@ -2829,7 +2832,7 @@ class Dataset[T] private[sql] (
   /**
    * Returns an iterator that contains all rows in this Dataset.
    *
-   * The returned iterator implements [[AutoCloseable]]. For memory management it is better to
+   * The returned iterator implements [[AutoCloseable]]. For resource management it is better to
    * close it once you are done. If you don't close it, it and the underlying data will be cleaned
    * up once the iterator is garbage collected.
    *
@@ -2837,7 +2840,7 @@ class Dataset[T] private[sql] (
    * @since 3.4.0
    */
   def toLocalIterator(): java.util.Iterator[T] = {
-    collectResult().destructiveIterator
+    collectResult().destructiveIterator.asJava
   }
 
   /**

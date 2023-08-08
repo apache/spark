@@ -68,12 +68,21 @@ object MimaExcludes {
     ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.status.api.v1.JobData.this"),
     // [SPARK-44205][SQL] Extract Catalyst Code from DecimalType
     ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.sql.types.DecimalType.unapply"),
+    // [SPARK-44507][SQL][CONNECT] Move AnalysisException to sql/api.
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.AnalysisException"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.AnalysisException$"),
+    // [SPARK-44686][CONNECT][SQL] Add the ability to create a RowEncoder in Encoders
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.RowFactory"),
     // [SPARK-44535][CONNECT][SQL] Move required Streaming API to sql/api
     ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.streaming.GroupStateTimeout"),
-    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.streaming.OutputMode")
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.streaming.OutputMode"),
+    // [SPARK-44198][CORE] Support propagation of the log level to the executors
+    ProblemFilters.exclude[MissingTypesProblem]("org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages$SparkAppConfig$"),
+    // [SPARK-44692][CONNECT][SQL] Move Trigger(s) to sql/api
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.streaming.Trigger")
   )
 
-  // Defulat exclude rules
+  // Default exclude rules
   lazy val defaultExcludes = Seq(
     // Spark Internals
     ProblemFilters.exclude[Problem]("org.apache.spark.rpc.*"),
@@ -208,6 +217,9 @@ object MimaExcludes {
     ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.api.java.function.ReduceFunction"),
     ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.api.java.function.VoidFunction"),
     ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.api.java.function.VoidFunction2"),
+
+    // SPARK-43997: UDF* classes needed by SCSC and moved to sql/api
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.api.java.UDF*"),
 
     (problem: Problem) => problem match {
       case MissingClassProblem(cls) => !cls.fullName.startsWith("org.sparkproject.jpmml") &&

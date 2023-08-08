@@ -2402,7 +2402,7 @@ class Row(tuple):
                 "%s=%r" % (k, v) for k, v in zip(self.__fields__, tuple(self))
             )
         else:
-            return "<Row(%s)>" % ", ".join("%r" % field for field in self)
+            return "<Row(%s)>" % ", ".join(repr(field) for field in self)
 
 
 class DateConverter:
