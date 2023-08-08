@@ -481,7 +481,7 @@ def assertDataFrameEqual(
         from pyspark.testing.pandasutils import PandasOnSparkTestUtils
 
         has_pandas = True
-    except Exception:
+    except ImportError:
         # no pandas, so we won't call pandasutils functions
         pass
 
@@ -498,30 +498,12 @@ def assertDataFrameEqual(
                 actual, expected, almost=True, rtol=rtol, atol=atol, check_row_order=checkRowOrder
             )
 
-    try:
-        # If Spark Connect dependencies are available, allow Spark Connect DataFrame
-        from pyspark.sql.connect.dataframe import DataFrame as ConnectDataFrame
+        from pyspark.sql.utils import get_dataframe_class
 
-        if not isinstance(actual, (DataFrame, ConnectDataFrame, list)):
-            raise PySparkAssertionError(
-                error_class="INVALID_TYPE_DF_EQUALITY_ARG",
-                message_parameters={
-                    "expected_type": Union[DataFrame, ps.DataFrame, List[Row]],
-                    "arg_name": "actual",
-                    "actual_type": type(actual),
-                },
-            )
-        elif not isinstance(expected, (DataFrame, ConnectDataFrame, list)):
-            raise PySparkAssertionError(
-                error_class="INVALID_TYPE_DF_EQUALITY_ARG",
-                message_parameters={
-                    "expected_type": Union[DataFrame, ps.DataFrame, List[Row]],
-                    "arg_name": "expected",
-                    "actual_type": type(expected),
-                },
-            )
-    except Exception:
-        if not isinstance(actual, (DataFrame, list)):
+        # check if Spark or Connect DataFrame
+        SparkDataFrame = get_dataframe_class()
+
+        if not isinstance(actual, (SparkDataFrame, list)):
             raise PySparkAssertionError(
                 error_class="INVALID_TYPE_DF_EQUALITY_ARG",
                 message_parameters={
@@ -530,7 +512,7 @@ def assertDataFrameEqual(
                     "actual_type": type(actual),
                 },
             )
-        elif not isinstance(expected, (DataFrame, list)):
+        elif not isinstance(expected, (SparkDataFrame, list)):
             raise PySparkAssertionError(
                 error_class="INVALID_TYPE_DF_EQUALITY_ARG",
                 message_parameters={
