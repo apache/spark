@@ -29,6 +29,7 @@ Upgrading from PySpark 3.5 to 4.0
 * In Spark 4.0, ``Series.append`` has been removed from pandas API on Spark, use ``ps.concat`` instead.
 * In Spark 4.0, ``DataFrame.mad`` has been removed from pandas API on Spark.
 * In Spark 4.0, ``Series.mad`` has been removed from pandas API on Spark.
+* In Spark 4.0, ``na_sentinel`` parameter from ``Index.factorize`` and `Series.factorize`` has been removed from pandas API on Spark, use ``use_na_sentinel`` instead.
 * In Spark 4.0, the various datetime attributes of ``DatetimeIndex`` (``day``, ``month``, ``year`` etc.) are now ``int32`` instead of ``int64`` from pandas API on Spark.
 
 
