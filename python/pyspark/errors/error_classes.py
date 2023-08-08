@@ -617,6 +617,11 @@ ERROR_CLASSES_JSON = """
       "Argument `<arg_name>` should be a WindowSpec, got <arg_type>."
     ]
   },
+  "NO_ACTIVE_OR_DEFAULT_SESSION" : {
+    "message" : [
+      "No active or default Spark session found. Please create a new Spark session before running the code."
+    ]
+  },
   "NO_ACTIVE_SESSION" : {
     "message" : [
       "No active Spark session found. Please create a new Spark session before running the code."
