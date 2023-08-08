@@ -670,15 +670,11 @@ class SeriesTestsMixin:
         with self.assertRaisesRegex(ValueError, "The item should not be empty."):
             psser.filter(items=[(), ("three", "z")])
 
-    @unittest.skipIf(
-        LooseVersion(pd.__version__) >= LooseVersion("2.0.0"),
-        "TODO(SPARK-43480): Enable SeriesTests.test_iteritems for pandas 2.0.0.",
-    )
-    def test_iteritems(self):
+    def test_items(self):
         pser = pd.Series(["A", "B", "C"])
         psser = ps.from_pandas(pser)
 
-        for (p_name, p_items), (k_name, k_items) in zip(pser.iteritems(), psser.iteritems()):
+        for (p_name, p_items), (k_name, k_items) in zip(pser.items(), psser.items()):
             self.assert_eq(p_name, k_name)
             self.assert_eq(p_items, k_items)
 
@@ -692,7 +688,8 @@ class SeriesTestsMixin:
 
         psdf_other = ps.DataFrame({"a": [1, 2, 3], "b": [4, 5, 6]}, index=["x", "y", "z"])
         with self.assertRaisesRegex(ValueError, "matrices are not aligned"):
-            psdf["b"].dot(psdf_other)
+            with ps.option_context("compute.ops_on_diff_frames", True):
+                psdf["b"].dot(psdf_other)
 
     def test_tail(self):
         pser = pd.Series(range(1000), name="Koalas")

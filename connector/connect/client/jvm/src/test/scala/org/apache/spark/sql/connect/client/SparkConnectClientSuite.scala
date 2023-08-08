@@ -16,6 +16,7 @@
  */
 package org.apache.spark.sql.connect.client
 
+import java.util.UUID
 import java.util.concurrent.TimeUnit
 
 import scala.collection.JavaConverters._
@@ -292,12 +293,30 @@ class DummySparkConnectService() extends SparkConnectServiceGrpc.SparkConnectSer
       responseObserver: StreamObserver[ExecutePlanResponse]): Unit = {
     // Reply with a dummy response using the same client ID
     val requestSessionId = request.getSessionId
+    val operationId = if (request.hasOperationId) {
+      request.getOperationId
+    } else {
+      UUID.randomUUID().toString
+    }
     inputPlan = request.getPlan
     val response = ExecutePlanResponse
       .newBuilder()
       .setSessionId(requestSessionId)
+      .setOperationId(operationId)
       .build()
     responseObserver.onNext(response)
+    // Reattachable execute must end with ResultComplete
+    if (request.getRequestOptionsList.asScala.exists { option =>
+        option.hasReattachOptions && option.getReattachOptions.getReattachable == true
+      }) {
+      val resultComplete = ExecutePlanResponse
+        .newBuilder()
+        .setSessionId(requestSessionId)
+        .setOperationId(operationId)
+        .setResultComplete(proto.ExecutePlanResponse.ResultComplete.newBuilder().build())
+        .build()
+      responseObserver.onNext(resultComplete)
+    }
     responseObserver.onCompleted()
   }
 

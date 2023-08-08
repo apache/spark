@@ -484,6 +484,12 @@ SQLSTATE: none assigned
 
 Not found an encoder of the type `<typeName>` to Spark SQL internal representation. Consider to change the input type to one of supported at '`<docroot>`/sql-ref-datatypes.html'.
 
+### ERROR_READING_AVRO_UNKNOWN_FINGERPRINT
+
+SQLSTATE: none assigned
+
+Error reading avro data -- encountered an unknown fingerprint: `<fingerprint>`, not sure what schema to use. This could happen if you registered additional schemas after starting your spark context.
+
 ### EVENT_TIME_IS_NOT_ON_TIMESTAMP_TYPE
 
 SQLSTATE: none assigned
@@ -519,6 +525,12 @@ Failed preparing of the function `<funcName>` for call. Please, double check fun
 [SQLSTATE: 22018](sql-error-conditions-sqlstates.html#class-22-data-exception)
 
 Failed parsing struct: `<raw>`.
+
+### FAILED_REGISTER_CLASS_WITH_KRYO
+
+SQLSTATE: none assigned
+
+Failed to register classes with Kryo.
 
 ### FAILED_RENAME_PATH
 
@@ -972,6 +984,12 @@ Cannot convert JSON root field to target Spark type.
 
 Input schema `<jsonSchema>` can only contain STRING as a key type for a MAP.
 
+### INVALID_KRYO_SERIALIZER_BUFFER_SIZE
+
+SQLSTATE: F0000
+
+The value of the config "`<bufferSizeConfKey>`" must be less than 2048 MiB, but got `<bufferSizeConfValue>` MiB.
+
 ### [INVALID_LAMBDA_FUNCTION_CALL](sql-error-conditions-invalid-lambda-function-call-error-class.html)
 
 SQLSTATE: none assigned
@@ -1162,6 +1180,12 @@ For more details see [INVALID_WRITE_DISTRIBUTION](sql-error-conditions-invalid-w
 SQLSTATE: none assigned
 
 The join condition `<joinCondition>` has the invalid type `<conditionType>`, expected "BOOLEAN".
+
+### KRYO_BUFFER_OVERFLOW
+
+SQLSTATE: none assigned
+
+Kryo serialization failed: `<exceptionMsg>`. To avoid this, increase "`<bufferSizeConfKey>`" value.
 
 ### LOAD_DATA_PATH_NOT_EXISTS
 
@@ -1563,7 +1587,7 @@ The `<clause>` clause may be used at most once per `<operation>` operation.
 
 [SQLSTATE: 4274K](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
 
-Cannot invoke function `<functionName>` because the parameter named `<parameterName>` is required, but the function call did not supply a value. Please update the function call to supply an argument value (either positionally or by name) and retry the query again.
+Cannot invoke function `<functionName>` because the parameter named `<parameterName>` is required, but the function call did not supply a value. Please update the function call to supply an argument value (either positionally at index `<index>` or by name) and retry the query again.
 
 ### REQUIRES_SINGLE_PART_NAMESPACE
 
@@ -1585,6 +1609,12 @@ Choose a different name, drop or replace the existing function, or add the IF NO
 The function `<routineName>` cannot be found. Verify the spelling and correctness of the schema and catalog.
 If you did not qualify the name with a schema and catalog, verify the current_schema() output, or qualify the name with the correct schema and catalog.
 To tolerate the error on drop use DROP FUNCTION IF EXISTS.
+
+### RULE_ID_NOT_FOUND
+
+[SQLSTATE: 22023](sql-error-conditions-sqlstates.html#class-22-data-exception)
+
+Not found an id for the rule name "`<ruleName>`". Please modify RuleIdCollection.scala if you are adding a new rule.
 
 ### SCALAR_SUBQUERY_IS_IN_GROUP_BY_OR_AGGREGATE_FUNCTION
 
@@ -1778,7 +1808,7 @@ Parameter `<paramIndex>` of function `<functionName>` requires the `<requiredTyp
 
 [SQLSTATE: 4274K](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
 
-Cannot invoke function `<functionName>` because it contains positional argument(s) following named argument(s); please rearrange them so the positional arguments come first and then retry the query again.
+Cannot invoke function `<functionName>` because it contains positional argument(s) following the named argument assigned to `<parameterName>`; please rearrange them so the positional arguments come first and then retry the query again.
 
 ### UNKNOWN_PROTOBUF_MESSAGE_TYPE
 

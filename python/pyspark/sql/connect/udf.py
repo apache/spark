@@ -37,8 +37,7 @@ from pyspark.sql.connect.column import Column
 from pyspark.sql.connect.types import UnparsedDataType
 from pyspark.sql.types import DataType, StringType
 from pyspark.sql.udf import UDFRegistration as PySparkUDFRegistration
-from pyspark.errors import PySparkTypeError
-
+from pyspark.errors import PySparkTypeError, PySparkRuntimeError
 
 if TYPE_CHECKING:
     from pyspark.sql.connect._typing import (
@@ -58,14 +57,20 @@ def _create_py_udf(
     from pyspark.sql.udf import _create_arrow_py_udf
 
     if useArrow is None:
-        from pyspark.sql.connect.session import _active_spark_session
+        is_arrow_enabled = False
+        try:
+            from pyspark.sql.connect.session import SparkSession
 
-        is_arrow_enabled = (
-            False
-            if _active_spark_session is None
-            else _active_spark_session.conf.get("spark.sql.execution.pythonUDF.arrow.enabled")
-            == "true"
-        )
+            session = SparkSession.active()
+            is_arrow_enabled = (
+                str(session.conf.get("spark.sql.execution.pythonUDF.arrow.enabled")).lower()
+                == "true"
+            )
+        except PySparkRuntimeError as e:
+            if e.error_class == "NO_ACTIVE_OR_DEFAULT_SESSION":
+                pass  # Just uses the default if no session found.
+            else:
+                raise e
     else:
         is_arrow_enabled = useArrow
 
