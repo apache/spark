@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.analysis
 
 import scala.collection.mutable
 
-import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeMap, AttributeSet, NamedExpression, OuterReference, SortOrder, SubqueryExpression}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeMap, AttributeReference, AttributeSet, NamedExpression, OuterReference, SortOrder, SubqueryExpression}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern._
@@ -233,12 +233,12 @@ object DeduplicateRelations extends Rule[LogicalPlan] {
                 attrMap: AttributeMap[Attribute],
                 planOutput: Seq[Attribute]): Seq[SortOrder] = {
               val canRewriteAttrs = attrMap.filter(a => planOutput.contains(a._2))
-              attrs.filter(_.child.isInstanceOf[Attribute]).map(attr => {
-                if (canRewriteAttrs.contains(attr.child.asInstanceOf[Attribute])) {
-                  attr.copy(child = canRewriteAttrs(attr.child.asInstanceOf[Attribute]))
-                } else {
-                  attr
+              attrs.map(attr => {
+                attr.transformWithPruning(_.containsPattern(ATTRIBUTE_REFERENCE)) {
+                  case a: AttributeReference =>
+                    canRewriteAttrs.getOrElse(a, a)
                 }
+                attr
               })
             }
 
@@ -250,19 +250,22 @@ object DeduplicateRelations extends Rule[LogicalPlan] {
                 val newRightAttr = rewriteAttrsMatchWithSubPlan(c.rightAttr, attrMap,
                   c.right.output)
                 val newLeftGroup = rewriteAttrsMatchWithSubPlan(c.leftGroup, attrMap, c.left.output)
-                c.copy(
-                  keyDeserializer = c.keyDeserializer.asInstanceOf[UnresolvedDeserializer]
-                    .copy(inputAttributes = newLeftGroup),
-                  leftDeserializer = c.leftDeserializer.asInstanceOf[UnresolvedDeserializer]
-                    .copy(inputAttributes = newLeftAttr),
-                  rightDeserializer = c.rightDeserializer.asInstanceOf[UnresolvedDeserializer]
-                    .copy(inputAttributes = newRightAttr),
-                  leftGroup = newLeftGroup,
-                  rightGroup = rewriteAttrsMatchWithSubPlan(c.rightGroup, attrMap, c.right.output),
-                  leftAttr = newLeftAttr,
-                  rightAttr = newRightAttr,
-                  leftOrder = rewriteOrderMatchWithSubPlan(c.leftOrder, attrMap, c.left.output),
-                  rightOrder = rewriteOrderMatchWithSubPlan(c.rightOrder, attrMap, c.right.output))
+                val newRightGroup = rewriteAttrsMatchWithSubPlan(c.rightGroup, attrMap,
+                  c.right.output)
+                val newLeftOrder = rewriteOrderMatchWithSubPlan(c.leftOrder, attrMap,
+                  c.left.output)
+                val newRightOrder = rewriteOrderMatchWithSubPlan(c.rightOrder, attrMap,
+                  c.right.output)
+                val newKeyDes = c.keyDeserializer.asInstanceOf[UnresolvedDeserializer]
+                  .copy(inputAttributes = newLeftGroup)
+                val newLeftDes = c.leftDeserializer.asInstanceOf[UnresolvedDeserializer]
+                  .copy(inputAttributes = newLeftAttr)
+                val newRightDes = c.rightDeserializer.asInstanceOf[UnresolvedDeserializer]
+                  .copy(inputAttributes = newRightAttr)
+                c.copy(keyDeserializer = newKeyDes, leftDeserializer = newLeftDes,
+                  rightDeserializer = newRightDes, leftGroup = newLeftGroup,
+                  rightGroup = newRightGroup, leftAttr = newLeftAttr, rightAttr = newRightAttr,
+                  leftOrder = newLeftOrder, rightOrder = newRightOrder)
               case _ => planWithNewChildren.rewriteAttrs(attrMap)
             }
           }
