@@ -8057,6 +8057,42 @@ object functions {
   // scalastyle:off line.size.limit
 
   /**
+   * Defines a deterministic user-defined function (UDF) using a Scala closure. For this variant,
+   * the caller must specify the output data type, and there is no automatic input type coercion.
+   * By default the returned UDF is deterministic. To change it to nondeterministic, call the
+   * API `UserDefinedFunction.asNondeterministic()`.
+   *
+   * Note that, although the Scala closure can have primitive-type function argument, it doesn't
+   * work well with null values. Because the Scala closure is passed in as Any type, there is no
+   * type information for the function arguments. Without the type information, Spark may blindly
+   * pass null to the Scala closure with primitive-type argument, and the closure will see the
+   * default value of the Java type for the null argument, e.g. `udf((x: Int) => x, IntegerType)`,
+   * the result is 0 for null input.
+   *
+   * @param f  A closure in Scala
+   * @param dataType  The output data type of the UDF
+   *
+   * @group udf_funcs
+   * @since 3.5.0
+   */
+  @deprecated("Scala `udf` method with return type parameter is deprecated. " +
+    "Please use Scala `udf` method without return type parameter.", "3.0.0")
+  def udf(f: AnyRef, dataType: DataType): UserDefinedFunction = {
+    ScalarUserDefinedFunction(f, dataType)
+  }
+
+  /**
+   * Call an user-defined function.
+   *
+   * @group udf_funcs
+   * @since 3.5.0
+   */
+  @scala.annotation.varargs
+  @deprecated("Use call_udf")
+  def callUDF(udfName: String, cols: Column*): Column =
+    call_function(udfName, cols: _*)
+
+  /**
    * Call an user-defined function. Example:
    * {{{
    *  import org.apache.spark.sql._
