@@ -164,7 +164,9 @@ case class PythonUDTF(
     children: Seq[Expression],
     evalType: Int,
     udfDeterministic: Boolean,
-    resultId: ExprId = NamedExpression.newExprId)
+    resultId: ExprId = NamedExpression.newExprId,
+    pythonUDTFPartitionColumnIndexes: PythonUDTFPartitionColumnIndexes =
+    PythonUDTFPartitionColumnIndexes())
   extends UnevaluableGenerator with PythonFuncExpression {
 
   override lazy val canonicalized: Expression = {
@@ -176,6 +178,17 @@ case class PythonUDTF(
   override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): PythonUDTF =
     copy(children = newChildren)
 }
+
+/**
+ * Holds the indexes of the TABLE argument to a Python UDTF call, if applicable.
+ * @param numTableArgumentColumns The number of columns in the TABLE argument, if applicable.
+ * @param numPartitionChildIndexes The number of partitioning columns in each TABLE argument.
+ * @param partitionChildIndexes The indexes of the partitioning columns in each TABLE argument.
+ */
+case class PythonUDTFPartitionColumnIndexes(
+    numTableArgumentColumns: Int = 0,
+    numPartitionChildIndexes: Int = 0,
+    partitionChildIndexes: Seq[Int] = Seq.empty[Int])
 
 /**
  * A placeholder of a polymorphic Python table-valued function.

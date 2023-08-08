@@ -2069,6 +2069,8 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
             }
 
             val tableArgs = mutable.ArrayBuffer.empty[LogicalPlan]
+            val functionTableSubqueryArgs =
+              mutable.ArrayBuffer.empty[FunctionTableSubqueryArgumentExpression]
             val tvf = resolvedFunc.transformAllExpressionsWithPruning(
               _.containsPattern(FUNCTION_TABLE_RELATION_ARGUMENT_EXPRESSION), ruleId)  {
               case t: FunctionTableSubqueryArgumentExpression =>
@@ -2081,6 +2083,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
                         "PARTITION BY clause, but only Python table functions support this clause")
                 }
                 tableArgs.append(SubqueryAlias(alias, t.evaluable))
+                functionTableSubqueryArgs.append(t)
                 UnresolvedAttribute(Seq(alias, "c"))
             }
             if (tableArgs.nonEmpty) {
@@ -2089,11 +2092,24 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
                   tableArgs.size)
               }
               val alias = SubqueryAlias.generateSubqueryName(s"_${tableArgs.size}")
+              // Propagate the column indexes for TABLE arguments to toe PythonUDTF instance.
+              val tvfWithTableColumnIndexes: LogicalPlan = tvf match {
+                case g @ Generate(p: PythonUDTF, _, _, _, _, _) =>
+                  assert(functionTableSubqueryArgs.length == 1)
+                  val tableArg = functionTableSubqueryArgs.head
+                  val indexes = PythonUDTFPartitionColumnIndexes(
+                    numTableArgumentColumns = tableArg.plan.output.length,
+                    numPartitionChildIndexes = tableArg.partitioningExpressionIndexes.length,
+                    partitionChildIndexes = tableArg.partitioningExpressionIndexes)
+                  g.copy(generator = p.copy(pythonUDTFPartitionColumnIndexes = indexes))
+                case _ =>
+                  tvf
+              }
               Project(
                 Seq(UnresolvedStar(Some(Seq(alias)))),
                 LateralJoin(
                   tableArgs.reduceLeft(Join(_, _, Inner, None, JoinHint.NONE)),
-                  LateralSubquery(SubqueryAlias(alias, tvf)), Inner, None)
+                  LateralSubquery(SubqueryAlias(alias, tvfWithTableColumnIndexes)), Inner, None)
               )
             } else {
               tvf

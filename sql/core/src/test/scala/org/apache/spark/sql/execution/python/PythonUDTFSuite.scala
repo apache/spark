@@ -116,6 +116,17 @@ class PythonUDTFSuite extends QueryTest with SharedSparkSession {
     def failure(plan: LogicalPlan): Unit = {
       fail(s"Unexpected plan: $plan")
     }
+    spark.udtf.registerPython("testUDTF", pythonUDTF)
+    checkAnswer(
+      sql(
+        """
+          |WITH t AS (
+          |  SELECT id FROM range(0, 3)
+          |)
+          |SELECT * FROM testUDTF(TABLE(t) PARTITION BY id)
+          |""".stripMargin),
+      Seq(Row(0), Row(1), Row(2))
+    )
     sql(
       """
         |SELECT * FROM testUDTF(

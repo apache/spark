@@ -1621,6 +1621,33 @@ class BaseUDTFTestsMixin:
                     assertSchemaEqual(df.schema, StructType().add("col1", IntegerType()))
                     assertDataFrameEqual(df, [Row(col1=10), Row(col1=100)])
 
+    def test_udtf_with_table_argument_and_partition_by(self):
+        class TestUDTF:
+            def __init__(self):
+                self._sum = 0
+
+            def eval(self, row: Row):
+                self._sum += row["id"]
+
+            def terminate(self):
+                yield self._sum,
+
+        func = udtf(TestUDTF, returnType="a: int")
+        self.spark.udtf.register("test_udtf", func)
+        self.assertEqual(
+            self.spark.sql(
+                """
+                WITH t AS (
+                  SELECT 0 AS partition_col, id FROM range(0, 2)
+                  UNION ALL
+                  SELECT 1 AS partition_col, id FROM range(0, 3)
+                )
+                SELECT * FROM test_udtf(TABLE(t) PARTITION BY partition_col)
+                """
+            ).collect(),
+            [Row(a=3), Row(a=7)],
+        )
+
 
 class UDTFTests(BaseUDTFTestsMixin, ReusedSQLTestCase):
     @classmethod

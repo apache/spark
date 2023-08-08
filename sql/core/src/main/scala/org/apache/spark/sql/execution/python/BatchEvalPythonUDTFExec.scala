@@ -26,6 +26,7 @@ import net.razorvine.pickle.Unpickler
 
 import org.apache.spark.{JobArtifactSet, SparkEnv, TaskContext}
 import org.apache.spark.api.python.{ChainedPythonFunctions, PythonEvalType, PythonWorkerUtils}
+import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.util.GenericArrayData
@@ -116,30 +117,16 @@ class PythonUDTFRunner(
   }
 }
 
-object PythonUDTFRunner {
+object PythonUDTFRunner extends Logging {
 
   def writeUDTF(dataOut: DataOutputStream, udtf: PythonUDTF, argOffsets: Array[Int]): Unit = {
     dataOut.writeInt(argOffsets.length)
     argOffsets.foreach { offset =>
       dataOut.writeInt(offset)
     }
-    var firstTableArgumentIndex = 0
-    var numTableArgumentColumns = 0
-    var numPartitionChildIndexes = 0
-    var partitionChildIndexes = Seq.empty[Int]
-    udtf.children.zipWithIndex.foreach {
-      case (f: FunctionTableSubqueryArgumentExpression, index: Int) =>
-        firstTableArgumentIndex = index
-        numTableArgumentColumns = f.plan.output.length
-        numPartitionChildIndexes = f.partitioningExpressionIndexes.length
-        partitionChildIndexes =
-          FunctionTableSubqueryArgumentExpression.partitionChildIndexes(udtf.children)
-      case _ =>
-    }
-    dataOut.writeInt(numTableArgumentColumns)
-    dataOut.writeInt(firstTableArgumentIndex)
-    dataOut.writeInt(numPartitionChildIndexes)
-    partitionChildIndexes.foreach(dataOut.writeInt)
+    dataOut.writeInt(udtf.pythonUDTFPartitionColumnIndexes.numTableArgumentColumns)
+    dataOut.writeInt(udtf.pythonUDTFPartitionColumnIndexes.numPartitionChildIndexes)
+    udtf.pythonUDTFPartitionColumnIndexes.partitionChildIndexes.foreach(dataOut.writeInt)
     dataOut.writeInt(udtf.func.command.length)
     dataOut.write(udtf.func.command.toArray)
     PythonWorkerUtils.writeUTF(udtf.elementSchema.json, dataOut)

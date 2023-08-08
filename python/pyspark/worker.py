@@ -557,10 +557,9 @@ def read_udtf(pickleSer, infile, eval_type):
     # See `PythonUDTFRunner.PythonUDFWriterThread.writeCommand'
     num_arg = read_int(infile)
     arg_offsets = [read_int(infile) for _ in range(num_arg)]
-    first_table_argument_index = read_int(infile)
     num_table_argument_columns = read_int(infile)
     num_partition_child_indexes = read_int(infile)
-    partition_child_indexes = [read_int(infile) for i in xrange(num_partition_child_indexes)]
+    partition_child_indexes = [read_int(infile) for i in range(num_partition_child_indexes)]
     handler = read_command(pickleSer, infile)
     if not isinstance(handler, type):
         raise PySparkRuntimeError(
@@ -590,6 +589,21 @@ def read_udtf(pickleSer, infile, eval_type):
             "implemented the 'eval' method. Please add the 'eval' method and try "
             "the query again."
         )
+
+    # Inspects the values of the projected PARTITION BY expressions, if any.
+    # When these values change, calls the 'terminate' method on the UDTF class
+    # instance and then destroys it and creates a new one to implement the desired
+    # partitioning semantics.
+    def check_partition_boundaries(arguments):
+        print('ntac: ' + str(num_table_argument_columns) + ', arguments: ' + str(arguments))
+        if num_table_argument_columns > 0:
+            print('@@@ A')
+            table_arguments = (arguments[i] for i in partition_child_indexes)
+            prev_table_arguments = (prev_arguments[i] for i in partition_child_indexes)
+            if len([1 for (k, v) in zip(table_arguments, prev_table_arguments) if k != v]) > 0:
+                raise PySparkRuntimeError(
+                    "Partition boundaries changed: " + arguments + ", " + prev_arguments)
+        prev_arguments = arguments
 
     if eval_type == PythonEvalType.SQL_ARROW_TABLE_UDF:
 
@@ -643,9 +657,11 @@ def read_udtf(pickleSer, infile, eval_type):
                     # The eval function yields an iterator. Each element produced by this
                     # iterator is a tuple in the form of (pandas.DataFrame, arrow_return_type).
                     #
-                    # TODO: compare adjacent values in each a[o] for consecutive rows.
+                    # Compare adjacent PARTITION BY values in consecutive rows.
                     # If any values change, call 'terminate' on the UDTF class instance,
                     # then destroy it and create a new one.
+                    # arguments = [a[o] for o in arg_offsets]
+                    # check_partition_boundaries(arguments)
                     yield from eval(*[a[o] for o in arg_offsets])
             finally:
                 if terminate is not None:
@@ -704,9 +720,11 @@ def read_udtf(pickleSer, infile, eval_type):
         def mapper(_, it):
             try:
                 for a in it:
-                    # TODO: compare adjacent values in each a[o] for consecutive rows.
+                    # Compare adjacent PARTITION BY values in consecutive rows.
                     # If any values change, call 'terminate' on the UDTF class instance,
                     # then destroy it and create a new one.
+                    # arguments = [a[o] for o in arg_offsets]
+                    # check_partition_boundaries(arguments)
                     yield eval(*[a[o] for o in arg_offsets])
             finally:
                 if terminate is not None:
