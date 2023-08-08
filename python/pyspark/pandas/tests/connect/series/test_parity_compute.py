@@ -15,6 +15,9 @@
 # limitations under the License.
 #
 import unittest
+import numpy as np
+import pandas as pd
+import pyspark.pandas as ps
 
 from pyspark.pandas.tests.series.test_compute import SeriesComputeMixin
 from pyspark.testing.connectutils import ReusedConnectTestCase
@@ -22,7 +25,28 @@ from pyspark.testing.pandasutils import PandasOnSparkTestUtils
 
 
 class SeriesParityComputeTests(SeriesComputeMixin, PandasOnSparkTestUtils, ReusedConnectTestCase):
-    pass
+    def test_mode(self):
+        pdf = pd.DataFrame(
+            {
+                "A": [1, 2, None, 4, 5, 4, 2],
+                "B": [-0.1, 0.2, -0.3, np.nan, 0.5, -0.1, -0.1],
+                "C": ["d", "b", "c", "c", "e", "a", "a"],
+                "D": [np.nan, np.nan, np.nan, np.nan, 0.1, -0.1, -0.1],
+                "E": [np.nan, np.nan, np.nan, np.nan, np.nan, np.nan, np.nan],
+            }
+        )
+        psdf = ps.from_pandas(pdf)
+
+        self.assert_eq(psdf.mode(), pdf.mode())
+        self.assert_eq(psdf.mode(numeric_only=True), pdf.mode(numeric_only=True))
+        self.assert_eq(psdf.mode(dropna=False), pdf.mode(dropna=False))
+
+        # dataframe with single column
+        for c in ["A", "B", "C", "D", "E"]:
+            self.assert_eq(psdf[[c]].mode(), pdf[[c]].mode())
+
+        with self.assertRaises(ValueError):
+            psdf.mode(axis=2)
 
 
 if __name__ == "__main__":
