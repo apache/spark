@@ -1010,6 +1010,24 @@ object SQLConf {
     .intConf
     .createWithDefault(4096)
 
+  val FILE_META_CACHE_PARQUET_ENABLED = buildConf("spark.sql.fileMetaCache.parquet.enabled")
+    .doc("To indicate if enable parquet file meta cache, it is recommended to enabled " +
+      "this config when multiple queries are performed on the same dataset, default is false.")
+    .booleanConf
+    .createWithDefault(false)
+
+  val FILE_META_CACHE_TTL_SINCE_LAST_ACCESS =
+    buildConf("spark.sql.fileMetaCache.ttlSinceLastAccess")
+    .doc("Time-to-live for file metadata cache entry after last access, the unit is seconds.")
+    .timeConf(TimeUnit.SECONDS)
+    .createWithDefault(86400L)
+
+  val FILE_META_CACHE_MAX_SIZE =
+    buildConf("spark.sql.fileMetaCache.maxSize")
+      .doc("Maximum capacity of the file metadata cache")
+      .intConf
+      .createWithDefault(20000)
+
   val ORC_COMPRESSION = buildConf("spark.sql.orc.compression.codec")
     .doc("Sets the compression codec used when writing ORC files. If either `compression` or " +
       "`orc.compress` is specified in the table-specific options/properties, the precedence " +
@@ -3830,6 +3848,8 @@ class SQLConf extends Serializable with Logging {
   def parquetVectorizedReaderEnabled: Boolean = getConf(PARQUET_VECTORIZED_READER_ENABLED)
 
   def parquetVectorizedReaderBatchSize: Int = getConf(PARQUET_VECTORIZED_READER_BATCH_SIZE)
+
+  def fileMetaCacheParquetEnabled: Boolean = getConf(FILE_META_CACHE_PARQUET_ENABLED)
 
   def columnBatchSize: Int = getConf(COLUMN_BATCH_SIZE)
 
