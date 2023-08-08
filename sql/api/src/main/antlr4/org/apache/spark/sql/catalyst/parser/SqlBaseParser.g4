@@ -799,8 +799,13 @@ functionTableSubqueryArgument
     ;
 
 tableArgumentPartitioning
-    : (PARTITION | DISTRIBUTE) BY expressionSeq
-      ((ORDER | SORT) BY sortItem (COMMA sortItem)*)?
+    : ((WITH SINGLE PARTITION)
+        | ((PARTITION | DISTRIBUTE) BY
+            (((LEFT_PAREN partition+=expression (COMMA partition+=expression)* RIGHT_PAREN))
+            | partition+=expression)))
+      ((ORDER | SORT) BY
+        (((LEFT_PAREN sortItem (COMMA sortItem)* RIGHT_PAREN)
+        | sortItem)))?
     ;
 
 functionTableNamedArgumentExpression
@@ -1477,6 +1482,7 @@ ansiNonReserved
     | SETS
     | SHORT
     | SHOW
+    | SINGLE
     | SKEWED
     | SMALLINT
     | SORT
@@ -1812,6 +1818,7 @@ nonReserved
     | SETS
     | SHORT
     | SHOW
+    | SINGLE
     | SKEWED
     | SMALLINT
     | SOME

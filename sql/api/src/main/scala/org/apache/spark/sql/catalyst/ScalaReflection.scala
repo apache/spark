@@ -30,7 +30,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoder
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders._
-import org.apache.spark.sql.errors.EncoderErrors
+import org.apache.spark.sql.errors.ExecutionErrors
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.CalendarInterval
 
@@ -377,13 +377,13 @@ object ScalaReflection extends ScalaReflection {
 
       case t if definedByConstructorParams(t) =>
         if (seenTypeSet.contains(t)) {
-          throw EncoderErrors.cannotHaveCircularReferencesInClassError(t.toString)
+          throw ExecutionErrors.cannotHaveCircularReferencesInClassError(t.toString)
         }
         val params = getConstructorParameters(t).map {
           case (fieldName, fieldType) =>
             if (SourceVersion.isKeyword(fieldName) ||
               !SourceVersion.isIdentifier(encodeFieldNameToIdentifier(fieldName))) {
-              throw EncoderErrors.cannotUseInvalidJavaIdentifierAsFieldNameError(
+              throw ExecutionErrors.cannotUseInvalidJavaIdentifierAsFieldNameError(
                 fieldName,
                 path)
             }
@@ -396,7 +396,7 @@ object ScalaReflection extends ScalaReflection {
         }
         ProductEncoder(ClassTag(getClassFromType(t)), params)
       case _ =>
-        throw EncoderErrors.cannotFindEncoderForTypeError(tpe.toString)
+        throw ExecutionErrors.cannotFindEncoderForTypeError(tpe.toString)
     }
   }
 }
@@ -477,7 +477,7 @@ trait ScalaReflection extends Logging {
    */
   private def getCompanionConstructor(tpe: Type): Symbol = {
     def throwUnsupportedOperation = {
-      throw EncoderErrors.cannotFindConstructorForTypeError(tpe.toString)
+      throw ExecutionErrors.cannotFindConstructorForTypeError(tpe.toString)
     }
     tpe.typeSymbol.asClass.companion match {
       case NoSymbol => throwUnsupportedOperation
@@ -500,7 +500,7 @@ trait ScalaReflection extends Logging {
       val primaryConstructorSymbol: Option[Symbol] = constructorSymbol.asTerm.alternatives.find(
         s => s.isMethod && s.asMethod.isPrimaryConstructor)
       if (primaryConstructorSymbol.isEmpty) {
-        throw EncoderErrors.primaryConstructorNotFoundError(tpe.getClass)
+        throw ExecutionErrors.primaryConstructorNotFoundError(tpe.getClass)
       } else {
         primaryConstructorSymbol.get.asMethod.paramLists
       }

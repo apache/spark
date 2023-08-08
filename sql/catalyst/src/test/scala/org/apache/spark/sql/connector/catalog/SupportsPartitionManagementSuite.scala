@@ -21,7 +21,7 @@ import java.util
 
 import scala.collection.JavaConverters._
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.{SparkFunSuite, SparkUnsupportedOperationException}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{NoSuchPartitionException, PartitionsAlreadyExistException}
 import org.apache.spark.sql.connector.expressions.{LogicalExpressions, NamedReference, Transform}
@@ -89,10 +89,13 @@ class SupportsPartitionManagementSuite extends SparkFunSuite {
     val table = catalog.loadTable(ident)
     val partTable = new InMemoryPartitionTable(
       table.name(), table.schema(), table.partitioning(), table.properties())
-    val errMsg = intercept[UnsupportedOperationException] {
-      partTable.purgePartition(InternalRow.apply("3"))
-    }.getMessage
-    assert(errMsg.contains("purge is not supported"))
+    checkError(
+      exception = intercept[SparkUnsupportedOperationException] {
+        partTable.purgePartition(InternalRow.apply("3"))
+      },
+      errorClass = "UNSUPPORTED_FEATURE.PURGE_PARTITION",
+      parameters = Map.empty
+    )
   }
 
   test("replacePartitionMetadata") {

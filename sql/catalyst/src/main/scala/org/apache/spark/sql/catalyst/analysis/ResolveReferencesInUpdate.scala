@@ -25,7 +25,7 @@ import org.apache.spark.sql.errors.QueryCompilationErrors
 /**
  * A virtual rule to resolve [[UnresolvedAttribute]] in [[UpdateTable]]. It's only used by the real
  * rule `ResolveReferences`. The column resolution order for [[UpdateTable]] is:
- * 1. Resolves the column to `AttributeReference`` with the output of the child plan. This
+ * 1. Resolves the column to `AttributeReference` with the output of the child plan. This
  *    includes metadata columns as well.
  * 2. Resolves the column to a literal function which is allowed to be invoked without braces, e.g.
  *    `SELECT col, current_date FROM t`.

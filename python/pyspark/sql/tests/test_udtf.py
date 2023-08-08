@@ -14,9 +14,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-
+import os
+import shutil
+import tempfile
 import unittest
-
 from typing import Iterator
 
 from py4j.protocol import Py4JJavaError
@@ -26,7 +27,9 @@ from pyspark.errors import (
     PythonException,
     PySparkTypeError,
     AnalysisException,
+    PySparkRuntimeError,
 )
+from pyspark.files import SparkFiles
 from pyspark.rdd import PythonEvalType
 from pyspark.sql.functions import (
     array,
@@ -179,6 +182,15 @@ class BaseUDTFTestsMixin:
         with self.assertRaisesRegex(PythonException, "Unexpected tuple 1 with StructType"):
             func(lit(1)).collect()
 
+    def test_udtf_with_invalid_return_value(self):
+        @udtf(returnType="x: int")
+        class TestUDTF:
+            def eval(self, a):
+                return a
+
+        with self.assertRaisesRegex(PythonException, "UDTF_RETURN_NOT_ITERABLE"):
+            TestUDTF(lit(1)).collect()
+
     def test_udtf_eval_with_no_return(self):
         @udtf(returnType="a: int")
         class TestUDTF:
@@ -256,28 +268,75 @@ class BaseUDTFTestsMixin:
         ):
             TestUDTF(lit(1), lit(2)).collect()
 
+    def test_udtf_init_with_additional_args(self):
+        @udtf(returnType="x int")
+        class TestUDTF:
+            def __init__(self, a: int):
+                ...
+
+            def eval(self, a: int):
+                yield a,
+
+        with self.assertRaisesRegex(
+            PythonException, r"__init__\(\) missing 1 required positional argument: 'a'"
+        ):
+            TestUDTF(lit(1)).show()
+
+    def test_udtf_terminate_with_additional_args(self):
+        @udtf(returnType="x int")
+        class TestUDTF:
+            def eval(self, a: int):
+                yield a,
+
+            def terminate(self, a: int):
+                ...
+
+        with self.assertRaisesRegex(
+            PythonException, r"terminate\(\) missing 1 required positional argument: 'a'"
+        ):
+            TestUDTF(lit(1)).show()
+
     def test_udtf_with_wrong_num_output(self):
-        # TODO(SPARK-43968): check this during compile time instead of runtime
         err_msg = (
-            "java.lang.IllegalStateException: Input row doesn't have expected number of "
-            + "values required by the schema."
+            r"\[UDTF_RETURN_SCHEMA_MISMATCH\] The number of columns in the "
+            "result does not match the specified schema."
         )
 
+        # Output less columns than specified return schema
         @udtf(returnType="a: int, b: int")
         class TestUDTF:
             def eval(self, a: int):
                 yield a,
 
-        with self.assertRaisesRegex(Py4JJavaError, err_msg):
+        with self.assertRaisesRegex(PythonException, err_msg):
             TestUDTF(lit(1)).collect()
 
+        # Output more columns than specified return schema
         @udtf(returnType="a: int")
         class TestUDTF:
             def eval(self, a: int):
                 yield a, a + 1
 
-        with self.assertRaisesRegex(Py4JJavaError, err_msg):
+        with self.assertRaisesRegex(PythonException, err_msg):
             TestUDTF(lit(1)).collect()
+
+    def test_udtf_with_empty_output_schema_and_non_empty_output(self):
+        @udtf(returnType=StructType())
+        class TestUDTF:
+            def eval(self):
+                yield 1,
+
+        with self.assertRaisesRegex(PythonException, "UDTF_RETURN_SCHEMA_MISMATCH"):
+            TestUDTF().collect()
+
+    def test_udtf_with_non_empty_output_schema_and_empty_output(self):
+        @udtf(returnType="a: int")
+        class TestUDTF:
+            def eval(self):
+                yield tuple()
+
+        with self.assertRaisesRegex(PythonException, "UDTF_RETURN_SCHEMA_MISMATCH"):
+            TestUDTF().collect()
 
     def test_udtf_init(self):
         @udtf(returnType="a: int, b: int, c: string")
@@ -327,6 +386,35 @@ class BaseUDTFTestsMixin:
             ],
         )
 
+    def test_init_with_exception(self):
+        @udtf(returnType="x: int")
+        class TestUDTF:
+            def __init__(self):
+                raise Exception("error")
+
+            def eval(self):
+                yield 1,
+
+        with self.assertRaisesRegex(
+            PythonException,
+            r"\[UDTF_EXEC_ERROR\] User defined table function encountered an error "
+            r"in the '__init__' method: error",
+        ):
+            TestUDTF().show()
+
+    def test_eval_with_exception(self):
+        @udtf(returnType="x: int")
+        class TestUDTF:
+            def eval(self):
+                raise Exception("error")
+
+        with self.assertRaisesRegex(
+            PythonException,
+            r"\[UDTF_EXEC_ERROR\] User defined table function encountered an error "
+            r"in the 'eval' method: error",
+        ):
+            TestUDTF().show()
+
     def test_terminate_with_exceptions(self):
         @udtf(returnType="a: int, b: int")
         class TestUDTF:
@@ -338,15 +426,15 @@ class BaseUDTFTestsMixin:
 
         with self.assertRaisesRegex(
             PythonException,
-            "User defined table function encountered an error in the 'terminate' "
-            "method: terminate error",
+            r"\[UDTF_EXEC_ERROR\] User defined table function encountered an error "
+            r"in the 'terminate' method: terminate error",
         ):
             TestUDTF(lit(1)).collect()
 
     def test_udtf_terminate_with_wrong_num_output(self):
         err_msg = (
-            "java.lang.IllegalStateException: Input row doesn't have expected number of "
-            "values required by the schema."
+            r"\[UDTF_RETURN_SCHEMA_MISMATCH\] The number of columns in the result "
+            "does not match the specified schema."
         )
 
         @udtf(returnType="a: int, b: int")
@@ -357,7 +445,7 @@ class BaseUDTFTestsMixin:
             def terminate(self):
                 yield 1, 2, 3
 
-        with self.assertRaisesRegex(Py4JJavaError, err_msg):
+        with self.assertRaisesRegex(PythonException, err_msg):
             TestUDTF(lit(1)).show()
 
         @udtf(returnType="a: int, b: int")
@@ -368,7 +456,7 @@ class BaseUDTFTestsMixin:
             def terminate(self):
                 yield 1,
 
-        with self.assertRaisesRegex(Py4JJavaError, err_msg):
+        with self.assertRaisesRegex(PythonException, err_msg):
             TestUDTF(lit(1)).show()
 
     def test_nondeterministic_udtf(self):
@@ -495,6 +583,241 @@ class BaseUDTFTestsMixin:
 
         assertDataFrameEqual(TestUDTF(), [Row()])
 
+    def _check_result_or_exception(
+        self, func_handler, ret_type, expected, *, err_type=PythonException
+    ):
+        func = udtf(func_handler, returnType=ret_type)
+        if not isinstance(expected, str):
+            assertDataFrameEqual(func(), expected)
+        else:
+            with self.assertRaisesRegex(err_type, expected):
+                func().collect()
+
+    def test_numeric_output_type_casting(self):
+        class TestUDTF:
+            def eval(self):
+                yield 1,
+
+        for i, (ret_type, expected) in enumerate(
+            [
+                ("x: boolean", [Row(x=None)]),
+                ("x: tinyint", [Row(x=1)]),
+                ("x: smallint", [Row(x=1)]),
+                ("x: int", [Row(x=1)]),
+                ("x: bigint", [Row(x=1)]),
+                ("x: string", [Row(x="1")]),  # int to string is ok, but string to int is None
+                (
+                    "x: date",
+                    "AttributeError",
+                ),  # AttributeError: 'int' object has no attribute 'toordinal'
+                (
+                    "x: timestamp",
+                    "AttributeError",
+                ),  # AttributeError: 'int' object has no attribute 'tzinfo'
+                ("x: byte", [Row(x=1)]),
+                ("x: binary", [Row(x=None)]),
+                ("x: float", [Row(x=None)]),
+                ("x: double", [Row(x=None)]),
+                ("x: decimal(10, 0)", [Row(x=None)]),
+                ("x: array<int>", [Row(x=None)]),
+                ("x: map<string,int>", [Row(x=None)]),
+                ("x: struct<a:int>", "UNEXPECTED_TUPLE_WITH_STRUCT"),
+            ]
+        ):
+            with self.subTest(ret_type=ret_type):
+                self._check_result_or_exception(TestUDTF, ret_type, expected)
+
+    def test_numeric_string_output_type_casting(self):
+        class TestUDTF:
+            def eval(self):
+                yield "1",
+
+        for ret_type, expected in [
+            ("x: boolean", [Row(x=None)]),
+            ("x: tinyint", [Row(x=None)]),
+            ("x: smallint", [Row(x=None)]),
+            ("x: int", [Row(x=None)]),
+            ("x: bigint", [Row(x=None)]),
+            ("x: string", [Row(x="1")]),
+            ("x: date", "AttributeError"),
+            ("x: timestamp", "AttributeError"),
+            ("x: byte", [Row(x=None)]),
+            ("x: binary", [Row(x=bytearray(b"1"))]),
+            ("x: float", [Row(x=None)]),
+            ("x: double", [Row(x=None)]),
+            ("x: decimal(10, 0)", [Row(x=None)]),
+            ("x: array<int>", [Row(x=None)]),
+            ("x: map<string,int>", [Row(x=None)]),
+            ("x: struct<a:int>", "UNEXPECTED_TUPLE_WITH_STRUCT"),
+        ]:
+            with self.subTest(ret_type=ret_type):
+                self._check_result_or_exception(TestUDTF, ret_type, expected)
+
+    def test_string_output_type_casting(self):
+        class TestUDTF:
+            def eval(self):
+                yield "hello",
+
+        for ret_type, expected in [
+            ("x: boolean", [Row(x=None)]),
+            ("x: tinyint", [Row(x=None)]),
+            ("x: smallint", [Row(x=None)]),
+            ("x: int", [Row(x=None)]),
+            ("x: bigint", [Row(x=None)]),
+            ("x: string", [Row(x="hello")]),
+            ("x: date", "AttributeError"),
+            ("x: timestamp", "AttributeError"),
+            ("x: byte", [Row(x=None)]),
+            ("x: binary", [Row(x=bytearray(b"hello"))]),
+            ("x: float", [Row(x=None)]),
+            ("x: double", [Row(x=None)]),
+            ("x: decimal(10, 0)", [Row(x=None)]),
+            ("x: array<int>", [Row(x=None)]),
+            ("x: map<string,int>", [Row(x=None)]),
+            ("x: struct<a:int>", "UNEXPECTED_TUPLE_WITH_STRUCT"),
+        ]:
+            with self.subTest(ret_type=ret_type):
+                self._check_result_or_exception(TestUDTF, ret_type, expected)
+
+    def test_array_output_type_casting(self):
+        class TestUDTF:
+            def eval(self):
+                yield [0, 1.1, 2],
+
+        for ret_type, expected in [
+            ("x: boolean", [Row(x=None)]),
+            ("x: tinyint", [Row(x=None)]),
+            ("x: smallint", [Row(x=None)]),
+            ("x: int", [Row(x=None)]),
+            ("x: bigint", [Row(x=None)]),
+            ("x: string", [Row(x="[0, 1.1, 2]")]),
+            ("x: date", "AttributeError"),
+            ("x: timestamp", "AttributeError"),
+            ("x: byte", [Row(x=None)]),
+            ("x: binary", [Row(x=None)]),
+            ("x: float", [Row(x=None)]),
+            ("x: double", [Row(x=None)]),
+            ("x: decimal(10, 0)", [Row(x=None)]),
+            ("x: array<int>", [Row(x=[0, None, 2])]),
+            ("x: array<double>", [Row(x=[None, 1.1, None])]),
+            ("x: array<string>", [Row(x=["0", "1.1", "2"])]),
+            ("x: array<boolean>", [Row(x=[None, None, None])]),
+            ("x: array<array<int>>", [Row(x=[None, None, None])]),
+            ("x: map<string,int>", [Row(x=None)]),
+            ("x: struct<a:int,b:int,c:int>", [Row(x=Row(a=0, b=None, c=2))]),
+        ]:
+            with self.subTest(ret_type=ret_type):
+                self._check_result_or_exception(TestUDTF, ret_type, expected)
+
+    def test_map_output_type_casting(self):
+        class TestUDTF:
+            def eval(self):
+                yield {"a": 0, "b": 1.1, "c": 2},
+
+        for ret_type, expected in [
+            ("x: boolean", [Row(x=None)]),
+            ("x: tinyint", [Row(x=None)]),
+            ("x: smallint", [Row(x=None)]),
+            ("x: int", [Row(x=None)]),
+            ("x: bigint", [Row(x=None)]),
+            ("x: string", [Row(x="{a=0, b=1.1, c=2}")]),
+            ("x: date", "AttributeError"),
+            ("x: timestamp", "AttributeError"),
+            ("x: byte", [Row(x=None)]),
+            ("x: binary", [Row(x=None)]),
+            ("x: float", [Row(x=None)]),
+            ("x: double", [Row(x=None)]),
+            ("x: decimal(10, 0)", [Row(x=None)]),
+            ("x: array<string>", [Row(x=None)]),
+            ("x: map<string,string>", [Row(x={"a": "0", "b": "1.1", "c": "2"})]),
+            ("x: map<string,boolean>", [Row(x={"a": None, "b": None, "c": None})]),
+            ("x: map<string,int>", [Row(x={"a": 0, "b": None, "c": 2})]),
+            ("x: map<string,float>", [Row(x={"a": None, "b": 1.1, "c": None})]),
+            ("x: map<string,map<string,int>>", [Row(x={"a": None, "b": None, "c": None})]),
+            ("x: struct<a:int>", [Row(x=Row(a=0))]),
+        ]:
+            with self.subTest(ret_type=ret_type):
+                self._check_result_or_exception(TestUDTF, ret_type, expected)
+
+    def test_struct_output_type_casting_dict(self):
+        class TestUDTF:
+            def eval(self):
+                yield {"a": 0, "b": 1.1, "c": 2},
+
+        for ret_type, expected in [
+            ("x: boolean", [Row(x=None)]),
+            ("x: tinyint", [Row(x=None)]),
+            ("x: smallint", [Row(x=None)]),
+            ("x: int", [Row(x=None)]),
+            ("x: bigint", [Row(x=None)]),
+            ("x: string", [Row(x="{a=0, b=1.1, c=2}")]),
+            ("x: date", "AttributeError"),
+            ("x: timestamp", "AttributeError"),
+            ("x: byte", [Row(x=None)]),
+            ("x: binary", [Row(x=None)]),
+            ("x: float", [Row(x=None)]),
+            ("x: double", [Row(x=None)]),
+            ("x: decimal(10, 0)", [Row(x=None)]),
+            ("x: array<string>", [Row(x=None)]),
+            ("x: map<string,string>", [Row(x={"a": "0", "b": "1.1", "c": "2"})]),
+            ("x: struct<a:string,b:string,c:string>", [Row(Row(a="0", b="1.1", c="2"))]),
+            ("x: struct<a:int,b:int,c:int>", [Row(Row(a=0, b=None, c=2))]),
+            ("x: struct<a:float,b:float,c:float>", [Row(Row(a=None, b=1.1, c=None))]),
+        ]:
+            with self.subTest(ret_type=ret_type):
+                self._check_result_or_exception(TestUDTF, ret_type, expected)
+
+    def test_struct_output_type_casting_row(self):
+        self.check_struct_output_type_casting_row(Py4JJavaError)
+
+    def check_struct_output_type_casting_row(self, error_type):
+        class TestUDTF:
+            def eval(self):
+                yield Row(a=0, b=1.1, c=2),
+
+        err = ("PickleException", error_type)
+
+        for ret_type, expected in [
+            ("x: boolean", err),
+            ("x: tinyint", err),
+            ("x: smallint", err),
+            ("x: int", err),
+            ("x: bigint", err),
+            ("x: string", err),
+            ("x: date", "ValueError"),
+            ("x: timestamp", "ValueError"),
+            ("x: byte", err),
+            ("x: binary", err),
+            ("x: float", err),
+            ("x: double", err),
+            ("x: decimal(10, 0)", err),
+            ("x: array<string>", err),
+            ("x: map<string,string>", err),
+            ("x: struct<a:string,b:string,c:string>", [Row(Row(a="0", b="1.1", c="2"))]),
+            ("x: struct<a:int,b:int,c:int>", [Row(Row(a=0, b=None, c=2))]),
+            ("x: struct<a:float,b:float,c:float>", [Row(Row(a=None, b=1.1, c=None))]),
+        ]:
+            with self.subTest(ret_type=ret_type):
+                if isinstance(expected, tuple):
+                    self._check_result_or_exception(
+                        TestUDTF, ret_type, expected[0], err_type=expected[1]
+                    )
+                else:
+                    self._check_result_or_exception(TestUDTF, ret_type, expected)
+
+    def test_inconsistent_output_types(self):
+        class TestUDTF:
+            def eval(self):
+                yield 1,
+                yield [1, 2],
+
+        for ret_type, expected in [
+            ("x: int", [Row(x=1), Row(x=None)]),
+            ("x: array<int>", [Row(x=None), Row(x=[1, 2])]),
+        ]:
+            with self.subTest(ret_type=ret_type):
+                assertDataFrameEqual(udtf(TestUDTF, returnType=ret_type)(), expected)
+
     @unittest.skipIf(not have_pandas, pandas_requirement_message)
     def test_udtf_with_pandas_input_type(self):
         import pandas as pd
@@ -530,6 +853,32 @@ class BaseUDTFTestsMixin:
             },
         )
 
+    def test_udtf_pickle_error(self):
+        with tempfile.TemporaryDirectory() as d:
+            file = os.path.join(d, "file.txt")
+            file_obj = open(file, "w")
+
+            @udtf(returnType="x: int")
+            class TestUDTF:
+                def eval(self):
+                    file_obj
+                    yield 1,
+
+            with self.assertRaisesRegex(PySparkRuntimeError, "UDTF_SERIALIZATION_ERROR"):
+                TestUDTF().collect()
+
+    def test_udtf_access_spark_session(self):
+        df = self.spark.range(10)
+
+        @udtf(returnType="x: int")
+        class TestUDTF:
+            def eval(self):
+                df.collect()
+                yield 1,
+
+        with self.assertRaisesRegex(PySparkRuntimeError, "UDTF_SERIALIZATION_ERROR"):
+            TestUDTF().collect()
+
     def test_udtf_no_eval(self):
         with self.assertRaises(PySparkAttributeError) as e:
 
@@ -545,18 +894,26 @@ class BaseUDTFTestsMixin:
         )
 
     def test_udtf_with_no_handler_class(self):
-        err_msg = "the function handler must be a class"
-        with self.assertRaisesRegex(TypeError, err_msg):
+        with self.assertRaises(PySparkTypeError) as e:
 
             @udtf(returnType="a: int")
             def test_udtf(a: int):
                 yield a,
 
-        def test_udtf(a: int):
-            yield a
+        self.check_error(
+            exception=e.exception,
+            error_class="INVALID_UDTF_HANDLER_TYPE",
+            message_parameters={"type": "function"},
+        )
 
-        with self.assertRaisesRegex(TypeError, err_msg):
-            udtf(test_udtf, returnType="a: int")
+        with self.assertRaises(PySparkTypeError) as e:
+            udtf(1, returnType="a: int")
+
+        self.check_error(
+            exception=e.exception,
+            error_class="INVALID_UDTF_HANDLER_TYPE",
+            message_parameters={"type": "int"},
+        )
 
     def test_udtf_with_table_argument_query(self):
         class TestUDTF:
@@ -1222,6 +1579,225 @@ class BaseUDTFTestsMixin:
         ):
             self.spark.sql("SELECT * FROM test_udtf(1, 'x')").collect()
 
+    def test_udtf_with_analyze_using_broadcast(self):
+        colname = self.sc.broadcast("col1")
+
+        @udtf
+        class TestUDTF:
+            @staticmethod
+            def analyze(a: AnalyzeArgument) -> AnalyzeResult:
+                return AnalyzeResult(StructType().add(colname.value, a.data_type))
+
+            def eval(self, a):
+                assert colname.value == "col1"
+                yield a,
+
+            def terminate(self):
+                assert colname.value == "col1"
+                yield 100,
+
+        self.spark.udtf.register("test_udtf", TestUDTF)
+
+        for i, df in enumerate([TestUDTF(lit(10)), self.spark.sql("SELECT * FROM test_udtf(10)")]):
+            with self.subTest(query_no=i):
+                assertSchemaEqual(df.schema, StructType().add("col1", IntegerType()))
+                assertDataFrameEqual(df, [Row(col1=10), Row(col1=100)])
+
+    def test_udtf_with_analyze_using_accumulator(self):
+        test_accum = self.sc.accumulator(0)
+
+        @udtf
+        class TestUDTF:
+            @staticmethod
+            def analyze(a: AnalyzeArgument) -> AnalyzeResult:
+                test_accum.add(1)
+                return AnalyzeResult(StructType().add("col1", a.data_type))
+
+            def eval(self, a):
+                test_accum.add(10)
+                yield a,
+
+            def terminate(self):
+                test_accum.add(100)
+                yield 100,
+
+        self.spark.udtf.register("test_udtf", TestUDTF)
+
+        for i, df in enumerate([TestUDTF(lit(10)), self.spark.sql("SELECT * FROM test_udtf(10)")]):
+            with self.subTest(query_no=i):
+                assertSchemaEqual(df.schema, StructType().add("col1", IntegerType()))
+                assertDataFrameEqual(df, [Row(col1=10), Row(col1=100)])
+
+        self.assertEqual(test_accum.value, 222)
+
+    def _add_pyfile(self, path):
+        self.sc.addPyFile(path)
+
+    def test_udtf_with_analyze_using_pyfile(self):
+        with tempfile.TemporaryDirectory() as d:
+            pyfile_path = os.path.join(d, "my_pyfile.py")
+            with open(pyfile_path, "w") as f:
+                f.write("my_func = lambda: 'col1'")
+
+            self._add_pyfile(pyfile_path)
+
+            class TestUDTF:
+                @staticmethod
+                def call_my_func() -> str:
+                    import my_pyfile
+
+                    return my_pyfile.my_func()
+
+                @staticmethod
+                def analyze(a: AnalyzeArgument) -> AnalyzeResult:
+                    return AnalyzeResult(StructType().add(TestUDTF.call_my_func(), a.data_type))
+
+                def eval(self, a):
+                    assert TestUDTF.call_my_func() == "col1"
+                    yield a,
+
+                def terminate(self):
+                    assert TestUDTF.call_my_func() == "col1"
+                    yield 100,
+
+            test_udtf = udtf(TestUDTF)
+            self.spark.udtf.register("test_udtf", test_udtf)
+
+            for i, df in enumerate(
+                [test_udtf(lit(10)), self.spark.sql("SELECT * FROM test_udtf(10)")]
+            ):
+                with self.subTest(query_no=i):
+                    assertSchemaEqual(df.schema, StructType().add("col1", IntegerType()))
+                    assertDataFrameEqual(df, [Row(col1=10), Row(col1=100)])
+
+    def test_udtf_with_analyze_using_zipped_package(self):
+        with tempfile.TemporaryDirectory() as d:
+            package_path = os.path.join(d, "my_zipfile")
+            os.mkdir(package_path)
+            pyfile_path = os.path.join(package_path, "__init__.py")
+            with open(pyfile_path, "w") as f:
+                f.write("my_func = lambda: 'col1'")
+            shutil.make_archive(package_path, "zip", d, "my_zipfile")
+
+            self._add_pyfile(f"{package_path}.zip")
+
+            class TestUDTF:
+                @staticmethod
+                def call_my_func() -> str:
+                    import my_zipfile
+
+                    return my_zipfile.my_func()
+
+                @staticmethod
+                def analyze(a: AnalyzeArgument) -> AnalyzeResult:
+                    return AnalyzeResult(StructType().add(TestUDTF.call_my_func(), a.data_type))
+
+                def eval(self, a):
+                    assert TestUDTF.call_my_func() == "col1"
+                    yield a,
+
+                def terminate(self):
+                    assert TestUDTF.call_my_func() == "col1"
+                    yield 100,
+
+            test_udtf = udtf(TestUDTF)
+            self.spark.udtf.register("test_udtf", test_udtf)
+
+            for i, df in enumerate(
+                [test_udtf(lit(10)), self.spark.sql("SELECT * FROM test_udtf(10)")]
+            ):
+                with self.subTest(query_no=i):
+                    assertSchemaEqual(df.schema, StructType().add("col1", IntegerType()))
+                    assertDataFrameEqual(df, [Row(col1=10), Row(col1=100)])
+
+    def _add_archive(self, path):
+        self.sc.addArchive(path)
+
+    def test_udtf_with_analyze_using_archive(self):
+        with tempfile.TemporaryDirectory() as d:
+            archive_path = os.path.join(d, "my_archive")
+            os.mkdir(archive_path)
+            pyfile_path = os.path.join(archive_path, "my_file.txt")
+            with open(pyfile_path, "w") as f:
+                f.write("col1")
+            shutil.make_archive(archive_path, "zip", d, "my_archive")
+
+            self._add_archive(f"{archive_path}.zip#my_files")
+
+            class TestUDTF:
+                @staticmethod
+                def read_my_archive() -> str:
+                    with open(
+                        os.path.join(
+                            SparkFiles.getRootDirectory(), "my_files", "my_archive", "my_file.txt"
+                        ),
+                        "r",
+                    ) as my_file:
+                        return my_file.read().strip()
+
+                @staticmethod
+                def analyze(a: AnalyzeArgument) -> AnalyzeResult:
+                    return AnalyzeResult(StructType().add(TestUDTF.read_my_archive(), a.data_type))
+
+                def eval(self, a):
+                    assert TestUDTF.read_my_archive() == "col1"
+                    yield a,
+
+                def terminate(self):
+                    assert TestUDTF.read_my_archive() == "col1"
+                    yield 100,
+
+            test_udtf = udtf(TestUDTF)
+            self.spark.udtf.register("test_udtf", test_udtf)
+
+            for i, df in enumerate(
+                [test_udtf(lit(10)), self.spark.sql("SELECT * FROM test_udtf(10)")]
+            ):
+                with self.subTest(query_no=i):
+                    assertSchemaEqual(df.schema, StructType().add("col1", IntegerType()))
+                    assertDataFrameEqual(df, [Row(col1=10), Row(col1=100)])
+
+    def _add_file(self, path):
+        self.sc.addFile(path)
+
+    def test_udtf_with_analyze_using_file(self):
+        with tempfile.TemporaryDirectory() as d:
+            file_path = os.path.join(d, "my_file.txt")
+            with open(file_path, "w") as f:
+                f.write("col1")
+
+            self._add_file(file_path)
+
+            class TestUDTF:
+                @staticmethod
+                def read_my_file() -> str:
+                    with open(
+                        os.path.join(SparkFiles.getRootDirectory(), "my_file.txt"), "r"
+                    ) as my_file:
+                        return my_file.read().strip()
+
+                @staticmethod
+                def analyze(a: AnalyzeArgument) -> AnalyzeResult:
+                    return AnalyzeResult(StructType().add(TestUDTF.read_my_file(), a.data_type))
+
+                def eval(self, a):
+                    assert TestUDTF.read_my_file() == "col1"
+                    yield a,
+
+                def terminate(self):
+                    assert TestUDTF.read_my_file() == "col1"
+                    yield 100,
+
+            test_udtf = udtf(TestUDTF)
+            self.spark.udtf.register("test_udtf", test_udtf)
+
+            for i, df in enumerate(
+                [test_udtf(lit(10)), self.spark.sql("SELECT * FROM test_udtf(10)")]
+            ):
+                with self.subTest(query_no=i):
+                    assertSchemaEqual(df.schema, StructType().add("col1", IntegerType()))
+                    assertDataFrameEqual(df, [Row(col1=10), Row(col1=100)])
+
 
 class UDTFTests(BaseUDTFTestsMixin, ReusedSQLTestCase):
     @classmethod
@@ -1259,6 +1835,22 @@ class UDTFArrowTestsMixin(BaseUDTFTestsMixin):
             PythonEvalType.SQL_ARROW_TABLE_UDF,
         )
 
+    def test_udtf_arrow_sql_conf(self):
+        class TestUDTF:
+            def eval(self):
+                yield 1,
+
+        # We do not use `self.sql_conf` here to test the SQL SET command
+        # instead of using PySpark's `spark.conf.set`.
+        old_value = self.spark.conf.get("spark.sql.execution.pythonUDTF.arrow.enabled")
+        self.spark.sql("SET spark.sql.execution.pythonUDTF.arrow.enabled=False")
+        self.assertEqual(udtf(TestUDTF, returnType="x: int").evalType, PythonEvalType.SQL_TABLE_UDF)
+        self.spark.sql("SET spark.sql.execution.pythonUDTF.arrow.enabled=True")
+        self.assertEqual(
+            udtf(TestUDTF, returnType="x: int").evalType, PythonEvalType.SQL_ARROW_TABLE_UDF
+        )
+        self.spark.conf.set("spark.sql.execution.pythonUDTF.arrow.enabled", old_value)
+
     def test_udtf_eval_returning_non_tuple(self):
         class TestUDTF:
             def eval(self, a: int):
@@ -1276,51 +1868,231 @@ class UDTFArrowTestsMixin(BaseUDTFTestsMixin):
         func = udtf(TestUDTF, returnType="a: int")
         self.assertEqual(func(lit(1)).collect(), [Row(a=1)])
 
-    def test_udtf_terminate_with_wrong_num_output(self):
-        # The error message for arrow-optimized UDTF is different from regular UDTF.
-        err_msg = "The number of columns in the result does not match the specified schema."
-
-        @udtf(returnType="a: int, b: int")
+    def test_numeric_output_type_casting(self):
         class TestUDTF:
-            def eval(self, a: int):
-                yield a, a + 1
-
-            def terminate(self):
-                yield 1, 2, 3
-
-        with self.assertRaisesRegex(PythonException, err_msg):
-            TestUDTF(lit(1)).show()
-
-        @udtf(returnType="a: int, b: int")
-        class TestUDTF:
-            def eval(self, a: int):
-                yield a, a + 1
-
-            def terminate(self):
+            def eval(self):
                 yield 1,
 
-        with self.assertRaisesRegex(PythonException, err_msg):
-            TestUDTF(lit(1)).show()
+        err = "UDTF_ARROW_TYPE_CAST_ERROR"
 
-    def test_udtf_with_wrong_num_output(self):
-        # The error message for arrow-optimized UDTF is different.
-        err_msg = "The number of columns in the result does not match the specified schema."
+        for ret_type, expected in [
+            ("x: boolean", [Row(x=True)]),
+            ("x: tinyint", [Row(x=1)]),
+            ("x: smallint", [Row(x=1)]),
+            ("x: int", [Row(x=1)]),
+            ("x: bigint", [Row(x=1)]),
+            ("x: string", [Row(x="1")]),  # require arrow.cast
+            ("x: date", err),
+            ("x: byte", [Row(x=1)]),
+            ("x: binary", [Row(x=bytearray(b"\x01"))]),
+            ("x: float", [Row(x=1.0)]),
+            ("x: double", [Row(x=1.0)]),
+            ("x: decimal(10, 0)", err),
+            ("x: array<int>", err),
+            ("x: map<string,int>", err),
+            ("x: struct<a:int>", err),
+        ]:
+            with self.subTest(ret_type=ret_type):
+                self._check_result_or_exception(TestUDTF, ret_type, expected)
 
-        @udtf(returnType="a: int, b: int")
+    def test_numeric_string_output_type_casting(self):
         class TestUDTF:
-            def eval(self, a: int):
-                yield a,
+            def eval(self):
+                yield "1",
 
-        with self.assertRaisesRegex(PythonException, err_msg):
-            TestUDTF(lit(1)).collect()
+        err = "UDTF_ARROW_TYPE_CAST_ERROR"
 
-        @udtf(returnType="a: int")
+        for ret_type, expected in [
+            ("x: boolean", [Row(x=True)]),
+            ("x: tinyint", [Row(x=1)]),
+            ("x: smallint", [Row(x=1)]),
+            ("x: int", [Row(x=1)]),
+            ("x: bigint", [Row(x=1)]),
+            ("x: string", [Row(x="1")]),
+            ("x: date", err),
+            ("x: timestamp", err),
+            ("x: byte", [Row(x=1)]),
+            ("x: binary", [Row(x=bytearray(b"1"))]),
+            ("x: float", [Row(x=1.0)]),
+            ("x: double", [Row(x=1.0)]),
+            ("x: decimal(10, 0)", [Row(x=1)]),
+            ("x: array<string>", [Row(x=["1"])]),
+            ("x: array<int>", [Row(x=[1])]),
+            ("x: map<string,int>", err),
+            ("x: struct<a:int>", err),
+        ]:
+            with self.subTest(ret_type=ret_type):
+                self._check_result_or_exception(TestUDTF, ret_type, expected)
+
+    def test_string_output_type_casting(self):
         class TestUDTF:
-            def eval(self, a: int):
-                yield a, a + 1
+            def eval(self):
+                yield "hello",
 
-        with self.assertRaisesRegex(PythonException, err_msg):
-            TestUDTF(lit(1)).collect()
+        err = "UDTF_ARROW_TYPE_CAST_ERROR"
+
+        for ret_type, expected in [
+            ("x: boolean", err),
+            ("x: tinyint", err),
+            ("x: smallint", err),
+            ("x: int", err),
+            ("x: bigint", err),
+            ("x: string", [Row(x="hello")]),
+            ("x: date", err),
+            ("x: timestamp", err),
+            ("x: byte", err),
+            ("x: binary", [Row(x=bytearray(b"hello"))]),
+            ("x: float", err),
+            ("x: double", err),
+            ("x: decimal(10, 0)", err),
+            ("x: array<string>", [Row(x=["h", "e", "l", "l", "o"])]),
+            ("x: array<int>", err),
+            ("x: map<string,int>", err),
+            ("x: struct<a:int>", err),
+        ]:
+            with self.subTest(ret_type=ret_type):
+                self._check_result_or_exception(TestUDTF, ret_type, expected)
+
+    def test_array_output_type_casting(self):
+        class TestUDTF:
+            def eval(self):
+                yield [0, 1.1, 2],
+
+        err = "UDTF_ARROW_TYPE_CAST_ERROR"
+
+        for ret_type, expected in [
+            ("x: boolean", err),
+            ("x: tinyint", err),
+            ("x: smallint", err),
+            ("x: int", err),
+            ("x: bigint", err),
+            ("x: string", err),
+            ("x: date", err),
+            ("x: timestamp", err),
+            ("x: byte", err),
+            ("x: binary", err),
+            ("x: float", err),
+            ("x: double", err),
+            ("x: decimal(10, 0)", err),
+            ("x: array<string>", [Row(x=["0", "1.1", "2"])]),
+            ("x: array<boolean>", [Row(x=[False, True, True])]),
+            ("x: array<int>", [Row(x=[0, 1, 2])]),
+            ("x: array<float>", [Row(x=[0, 1.1, 2])]),
+            ("x: array<array<int>>", err),
+            ("x: map<string,int>", err),
+            ("x: struct<a:int>", err),
+            ("x: struct<a:int,b:int,c:int>", err),
+        ]:
+            with self.subTest(ret_type=ret_type):
+                self._check_result_or_exception(TestUDTF, ret_type, expected)
+
+    def test_map_output_type_casting(self):
+        class TestUDTF:
+            def eval(self):
+                yield {"a": 0, "b": 1.1, "c": 2},
+
+        err = "UDTF_ARROW_TYPE_CAST_ERROR"
+
+        for ret_type, expected in [
+            ("x: boolean", err),
+            ("x: tinyint", err),
+            ("x: smallint", err),
+            ("x: int", err),
+            ("x: bigint", err),
+            ("x: string", err),
+            ("x: date", err),
+            ("x: timestamp", err),
+            ("x: byte", err),
+            ("x: binary", err),
+            ("x: float", err),
+            ("x: double", err),
+            ("x: decimal(10, 0)", err),
+            ("x: array<string>", [Row(x=["a", "b", "c"])]),
+            ("x: map<string,string>", err),
+            ("x: map<string,boolean>", err),
+            ("x: map<string,int>", [Row(x={"a": 0, "b": 1, "c": 2})]),
+            ("x: map<string,float>", [Row(x={"a": 0, "b": 1.1, "c": 2})]),
+            ("x: map<string,map<string,int>>", err),
+            ("x: struct<a:int>", [Row(x=Row(a=0))]),
+        ]:
+            with self.subTest(ret_type=ret_type):
+                self._check_result_or_exception(TestUDTF, ret_type, expected)
+
+    def test_struct_output_type_casting_dict(self):
+        class TestUDTF:
+            def eval(self):
+                yield {"a": 0, "b": 1.1, "c": 2},
+
+        err = "UDTF_ARROW_TYPE_CAST_ERROR"
+
+        for ret_type, expected in [
+            ("x: boolean", err),
+            ("x: tinyint", err),
+            ("x: smallint", err),
+            ("x: int", err),
+            ("x: bigint", err),
+            ("x: string", err),
+            ("x: date", err),
+            ("x: timestamp", err),
+            ("x: byte", err),
+            ("x: binary", err),
+            ("x: float", err),
+            ("x: double", err),
+            ("x: decimal(10, 0)", err),
+            ("x: array<string>", [Row(x=["a", "b", "c"])]),
+            ("x: map<string,string>", err),
+            ("x: struct<a:string,b:string,c:string>", [Row(Row(a="0", b="1.1", c="2"))]),
+            ("x: struct<a:int,b:int,c:int>", [Row(Row(a=0, b=1, c=2))]),
+            ("x: struct<a:float,b:float,c:float>", [Row(Row(a=0, b=1.1, c=2))]),
+            ("x: struct<a:struct<>,b:struct<>,c:struct<>>", err),
+        ]:
+            with self.subTest(ret_type=ret_type):
+                self._check_result_or_exception(TestUDTF, ret_type, expected)
+
+    def test_struct_output_type_casting_row(self):
+        class TestUDTF:
+            def eval(self):
+                yield Row(a=0, b=1.1, c=2),
+
+        err = "UDTF_ARROW_TYPE_CAST_ERROR"
+
+        for ret_type, expected in [
+            ("x: boolean", err),
+            ("x: tinyint", err),
+            ("x: smallint", err),
+            ("x: int", err),
+            ("x: bigint", err),
+            ("x: string", err),
+            ("x: date", err),
+            ("x: timestamp", err),
+            ("x: byte", err),
+            ("x: binary", err),
+            ("x: float", err),
+            ("x: double", err),
+            ("x: decimal(10, 0)", err),
+            ("x: array<string>", [Row(x=["0", "1.1", "2"])]),
+            ("x: map<string,string>", err),
+            ("x: struct<a:string,b:string,c:string>", [Row(Row(a="0", b="1.1", c="2"))]),
+            ("x: struct<a:int,b:int,c:int>", [Row(Row(a=0, b=1, c=2))]),
+            ("x: struct<a:float,b:float,c:float>", [Row(Row(a=0, b=1.1, c=2))]),
+            ("x: struct<a:struct<>,b:struct<>,c:struct<>>", err),
+        ]:
+            with self.subTest(ret_type=ret_type):
+                self._check_result_or_exception(TestUDTF, ret_type, expected)
+
+    def test_inconsistent_output_types(self):
+        class TestUDTF:
+            def eval(self):
+                yield 1,
+                yield [1, 2],
+
+        for ret_type in [
+            "x: int",
+            "x: array<int>",
+        ]:
+            with self.subTest(ret_type=ret_type):
+                with self.assertRaisesRegex(PythonException, "UDTF_ARROW_TYPE_CAST_ERROR"):
+                    udtf(TestUDTF, returnType=ret_type)().collect()
 
 
 class UDTFArrowTests(UDTFArrowTestsMixin, ReusedSQLTestCase):
