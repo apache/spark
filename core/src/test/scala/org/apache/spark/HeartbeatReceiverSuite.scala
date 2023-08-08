@@ -262,7 +262,6 @@ class HeartbeatReceiverSuite
     }.getMessage
     assert(m.contains("spark.network.timeoutInterval should be less than or equal to " +
       STORAGE_BLOCKMANAGER_HEARTBEAT_TIMEOUT.key))
-    sc.stop()
   }
 
   /** Manually send a heartbeat and return the response. */
