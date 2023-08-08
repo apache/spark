@@ -1732,11 +1732,11 @@ class DataFrame:
     to.__doc__ = PySparkDataFrame.to.__doc__
 
     def toDF(self, *cols: str) -> "DataFrame":
-        for col in cols:
-            if not isinstance(col, str):
+        for col_ in cols:
+            if not isinstance(col_, str):
                 raise PySparkTypeError(
                     error_class="NOT_LIST_OF_STR",
-                    message_parameters={"arg_name": "cols", "arg_type": type(col).__name__},
+                    message_parameters={"arg_name": "cols", "arg_type": type(col_).__name__},
                 )
         return DataFrame.withPlan(plan.ToDF(self._plan, list(cols)), self._session)
 
