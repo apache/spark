@@ -23,7 +23,6 @@ import java.sql.Date;
 import java.sql.Timestamp;
 import java.time.LocalDateTime;
 import java.util.Arrays;
-import java.util.Collections;
 import java.util.HashSet;
 import java.util.LinkedList;
 import java.util.List;
@@ -31,7 +30,6 @@ import java.util.Set;
 
 import org.apache.spark.sql.catalyst.bcvar.ArrayWrapper;
 import org.apache.spark.sql.execution.joins.BroadcastedJoinKeysWrapperImpl;
-import scala.collection.JavaConversions;
 import scala.reflect.ClassTag;
 
 import org.apache.spark.broadcast.Broadcast;
@@ -241,10 +239,11 @@ public class BroadcastedJoinKeysWrapperTest {
     int indexOfAttrib =  sp.output().indexWhere(attr -> attr.dataType().equals(dataType));
     Expression expr = new BoundReference(indexOfAttrib, sp.output().apply(indexOfAttrib).dataType(),
         false);
-
-    final HashedRelation hr = HashedRelation.apply(sp.executeToIterator(),
-        JavaConversions.asScalaBuffer(Collections.singletonList(expr)),
-        64, null, false, false, false);
+    scala.collection.mutable.Buffer<Expression> temp = new scala.collection.mutable.ArrayBuffer();
+    temp.$plus$eq(expr);
+    final HashedRelation hr = HashedRelation.apply(sp.executeToIterator(), temp.toSeq(),
+        64, null, false, false,
+        false);
     this.bc.setHashedRelation(hr);
     BroadcastedJoinKeysWrapper wrapper =
         new BroadcastedJoinKeysWrapperImpl(this.bc, new DataType[]{dataType},
@@ -262,7 +261,7 @@ public class BroadcastedJoinKeysWrapperTest {
     private HashedRelation hr = null;
 
     DummyBroadcast(long id) {
-      super(id, ClassTag.apply(HashedRelation.class));
+      super(id, ClassTag.<HashedRelation>apply(HashedRelation.class));
     }
 
     @Override
