@@ -62,7 +62,6 @@ abstract class EvalPythonEvaluatorFactory(
         iters: Iterator[InternalRow]*): Iterator[InternalRow] = {
       val iter = iters.head
       val context = TaskContext.get()
-      val contextAwareIterator = new ContextAwareIterator(context, iter)
 
       // The queue used to buffer input rows so we can drain it to
       // combine input with output from Python.
@@ -97,7 +96,7 @@ abstract class EvalPythonEvaluatorFactory(
       }.toArray)
 
       // Add rows to queue to join later with the result.
-      val projectedRowIter = contextAwareIterator.map { inputRow =>
+      val projectedRowIter = iter.map { inputRow =>
         queue.add(inputRow.asInstanceOf[UnsafeRow])
         projection(inputRow)
       }
