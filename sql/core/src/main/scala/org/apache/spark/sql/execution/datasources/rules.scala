@@ -403,9 +403,9 @@ object PreprocessTableInsertion extends ResolveInsertionBase {
       insert.query
     }
     val newQuery = try {
+      val byName = hasColumnList || insert.byName
       TableOutputResolver.resolveOutputColumns(
-        tblName, expectedColumns, query, byName = hasColumnList || insert.byName, conf,
-        supportColDefaultValue = true)
+        tblName, expectedColumns, query, byName, conf, supportColDefaultValue = byName)
     } catch {
       case e: AnalysisException if staticPartCols.nonEmpty &&
         (e.getErrorClass == "INSERT_COLUMN_ARITY_MISMATCH.NOT_ENOUGH_DATA_COLUMNS" ||
