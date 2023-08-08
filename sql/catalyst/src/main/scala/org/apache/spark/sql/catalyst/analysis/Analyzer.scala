@@ -2101,7 +2101,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
                     numTableArgumentColumns = tableArg.plan.output.length,
                     numPartitionChildIndexes = tableArg.partitioningExpressionIndexes.length,
                     partitionChildIndexes = tableArg.partitioningExpressionIndexes)
-                  g.copy(generator = p.copy(pythonUDTFPartitionColumnIndexes = indexes))
+                  g.copy(generator = p.copy(pythonUDTFPartitionColumnIndexes = Some(indexes)))
                 case _ =>
                   tvf
               }

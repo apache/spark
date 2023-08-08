@@ -1645,7 +1645,7 @@ class BaseUDTFTestsMixin:
                 SELECT * FROM test_udtf(TABLE(t) PARTITION BY partition_col)
                 """
             ).collect(),
-            [Row(a=3), Row(a=7)],
+            [Row(a=1), Row(a=3)],
         )
 
 

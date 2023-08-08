@@ -595,14 +595,17 @@ def read_udtf(pickleSer, infile, eval_type):
     # instance and then destroys it and creates a new one to implement the desired
     # partitioning semantics.
     def check_partition_boundaries(arguments):
-        print('ntac: ' + str(num_table_argument_columns) + ', arguments: ' + str(arguments))
+        print(f'''ntac: {num_table_argument_columns},
+              npci: {num_partition_child_indexes},
+              pci: {partition_child_indexes},
+              arguments: {arguments}''')
         if num_table_argument_columns > 0:
             print('@@@ A')
             table_arguments = (arguments[i] for i in partition_child_indexes)
             prev_table_arguments = (prev_arguments[i] for i in partition_child_indexes)
             if len([1 for (k, v) in zip(table_arguments, prev_table_arguments) if k != v]) > 0:
                 raise PySparkRuntimeError(
-                    "Partition boundaries changed: " + arguments + ", " + prev_arguments)
+                    f"Partition boundaries changed: {arguments}, {prev_arguments}")
         prev_arguments = arguments
 
     if eval_type == PythonEvalType.SQL_ARROW_TABLE_UDF:
@@ -660,9 +663,9 @@ def read_udtf(pickleSer, infile, eval_type):
                     # Compare adjacent PARTITION BY values in consecutive rows.
                     # If any values change, call 'terminate' on the UDTF class instance,
                     # then destroy it and create a new one.
-                    # arguments = [a[o] for o in arg_offsets]
-                    # check_partition_boundaries(arguments)
-                    yield from eval(*[a[o] for o in arg_offsets])
+                    arguments = [a[o] for o in arg_offsets]
+                    check_partition_boundaries(arguments)
+                    yield from eval(*arguments)
             finally:
                 if terminate is not None:
                     try:
@@ -723,9 +726,9 @@ def read_udtf(pickleSer, infile, eval_type):
                     # Compare adjacent PARTITION BY values in consecutive rows.
                     # If any values change, call 'terminate' on the UDTF class instance,
                     # then destroy it and create a new one.
-                    # arguments = [a[o] for o in arg_offsets]
-                    # check_partition_boundaries(arguments)
-                    yield eval(*[a[o] for o in arg_offsets])
+                    arguments = [a[o] for o in arg_offsets]
+                    check_partition_boundaries(arguments)
+                    yield eval(*arguments)
             finally:
                 if terminate is not None:
                     try:
