@@ -17,12 +17,11 @@
 
 package org.apache.spark.sql.connect.planner
 
-import java.io.IOException
-
 import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.util.Try
 
+import com.google.common.base.Throwables
 import com.google.common.collect.{Lists, Maps}
 import com.google.protobuf.{Any => ProtoAny, ByteString}
 import io.grpc.{Context, Status, StatusRuntimeException}
@@ -1518,11 +1517,15 @@ class SparkConnectPlanner(val sessionHolder: SessionHolder) extends Logging {
       logDebug(s"Unpack using class loader: ${Utils.getContextOrSparkClassLoader}")
       Utils.deserialize[T](fun.getPayload.toByteArray, Utils.getContextOrSparkClassLoader)
     } catch {
-      case e: IOException if e.getCause.isInstanceOf[NoSuchMethodException] =>
-        throw new ClassNotFoundException(
-          s"Failed to load class correctly due to ${e.getCause}. " +
-            "Make sure the artifact where the class is defined is installed by calling" +
-            " session.addArtifact.")
+      case t: Throwable =>
+        Throwables.getRootCause(t) match {
+          case nsm: NoSuchMethodException =>
+            throw new ClassNotFoundException(
+              s"Failed to load class correctly due to $nsm. " +
+                "Make sure the artifact where the class is defined is installed by calling" +
+                " session.addArtifact.")
+          case _ => throw t
+        }
     }
   }
 
