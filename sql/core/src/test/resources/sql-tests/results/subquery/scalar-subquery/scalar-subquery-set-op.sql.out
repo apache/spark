@@ -1041,27 +1041,3 @@ org.apache.spark.sql.AnalysisException
     "fragment" : "SELECT sum(t0a) as d\n  FROM   t1"
   } ]
 }
-
-
--- !query
-SELECT 1
-FROM t0
-WHERE t0a = (SELECT MAX(tmp.s) FROM (SELECT SUM(t1a)  OVER (partition by t1b order by t1c) as s FROM t1 where t1.t1a = t0.t0b) as tmp)
--- !query schema
-struct<>
--- !query output
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.ACCESSING_OUTER_QUERY_COLUMN_IS_NOT_ALLOWED",
-  "sqlState" : "0A000",
-  "messageParameters" : {
-    "treeNode" : "Filter (t1a#x = outer(t0b#x))\n+- SubqueryAlias t1\n   +- View (`t1`, [t1a#x,t1b#x,t1c#x])\n      +- Project [cast(col1#x as int) AS t1a#x, cast(col2#x as int) AS t1b#x, cast(col3#x as int) AS t1c#x]\n         +- LocalRelation [col1#x, col2#x, col3#x]\n"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 55,
-    "stopIndex" : 142,
-    "fragment" : "SELECT SUM(t1a)  OVER (partition by t1b order by t1c) as s FROM t1 where t1.t1a = t0.t0b"
-  } ]
-}

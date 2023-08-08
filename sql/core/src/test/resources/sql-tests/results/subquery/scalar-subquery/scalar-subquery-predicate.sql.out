@@ -478,23 +478,9 @@ WHERE t1b = (SELECT MAX(tmp.s) FROM (
              SELECT SUM(t2c) OVER (partition by t2c order by t1.t1d + t2d) as s
                FROM t2) as tmp)
 -- !query schema
-struct<>
+struct<1:int>
 -- !query output
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.CORRELATED_REFERENCE",
-  "sqlState" : "0A000",
-  "messageParameters" : {
-    "sqlExprs" : "\"sum(t2c) OVER (PARTITION BY t2c ORDER BY (t1d + t2d) ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS s\",\"(t1d + t2d) ASC NULLS FIRST\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 69,
-    "stopIndex" : 157,
-    "fragment" : "SELECT SUM(t2c) OVER (partition by t2c order by t1.t1d + t2d) as s\n               FROM t2"
-  } ]
-}
+
 
 
 -- !query
