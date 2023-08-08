@@ -293,6 +293,33 @@ class JsonFunctionsSuite extends QueryTest with SharedSparkSession {
       Row(Row(java.sql.Date.valueOf("2015-08-26"))))
   }
 
+  test("from_json with timestamp in second") {
+    val df = Seq("""{"timestamp": 1691241070}""").toDS()
+    val schema = new StructType().add("timestamp", TimestampType)
+
+    checkAnswer(
+      df.select(from_json($"value", schema)),
+      Row(Row(java.sql.Timestamp.valueOf("2023-08-05 06:11:10.0"))))
+  }
+
+  test("from_json with timestamp in millisecond") {
+    val df = Seq("""{"timestamp": 1691241070000}""").toDS()
+    val schema = new StructType().add("timestamp", TimestampType)
+
+    checkAnswer(
+      df.select(from_json($"value", schema)),
+      Row(Row(java.sql.Timestamp.valueOf("2023-08-05 06:11:10.0"))))
+  }
+
+  test("from_json with timestamp in microsecond") {
+    val df = Seq("""{"timestamp": 1691241070000000}""").toDS()
+    val schema = new StructType().add("timestamp", TimestampType)
+
+    checkAnswer(
+      df.select(from_json($"value", schema)),
+      Row(Row(java.sql.Timestamp.valueOf("2023-08-05 06:11:10.0"))))
+  }
+
   test("from_json with option (allowUnquotedControlChars)") {
     val df = Seq("{\"str\": \"a\u0001b\"}").toDS()
     val schema = new StructType().add("str", StringType)
