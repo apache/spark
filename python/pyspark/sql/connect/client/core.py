@@ -620,10 +620,17 @@ class SparkConnectClient(object):
         )
         self._user_id = None
         self._retry_policy = {
+            # Please synchronize changes here with Scala side
+            # GrpcRetryHandler.scala
+            #
+            # Note: the number of retries is selected so that the maximum tolerated wait
+            # is guaranteed to be at least 10 minutes
             "max_retries": 15,
-            "backoff_multiplier": 4,
-            "initial_backoff": 50,
-            "max_backoff": 60000,
+            "backoff_multiplier": 4.,
+            "initial_backoff": 50.,
+            "max_backoff": 60000.,
+            "jitter": 500,
+            "jitter_from_threshold": 2000,
         }
         if retry_policy:
             self._retry_policy.update(retry_policy)
@@ -1588,16 +1595,22 @@ class Retrying:
     def __init__(
         self,
         max_retries: int,
-        initial_backoff: int,
-        max_backoff: int,
+        initial_backoff: float,
+        max_backoff: float,
         backoff_multiplier: float,
+        jitter: float,
+        jitter_from_threshold: float,
         can_retry: Callable[..., bool] = lambda x: True,
+        sleep: Callable[[float], None] = time.sleep
     ) -> None:
         self._can_retry = can_retry
         self._max_retries = max_retries
         self._initial_backoff = initial_backoff
         self._max_backoff = max_backoff
         self._backoff_multiplier = backoff_multiplier
+        self._jitter = jitter
+        self._jitter_from_threshold = jitter_from_threshold
+        self._sleep = sleep
 
     def __iter__(self) -> Generator[AttemptManager, None, None]:
         """
@@ -1608,11 +1621,12 @@ class Retrying:
         A generator that yields the current attempt.
         """
         retry_state = RetryState()
+        next_backoff = self._initial_backoff
+
         while True:
             # Check if the operation was completed successfully.
             if retry_state.done():
                 break
-
             # If the number of retries have exceeded the maximum allowed retries.
             if retry_state.count() > self._max_retries:
                 e = retry_state.exception()
@@ -1626,17 +1640,13 @@ class Retrying:
 
             # Do backoff
             if retry_state.count() > 0:
-                backoff = random.randrange(
-                    0,
-                    int(
-                        min(
-                            self._initial_backoff * self._backoff_multiplier ** retry_state.count(),
-                            self._max_backoff,
-                        )
-                    ),
-                )
-                logger.debug(f"Retrying call after {backoff} ms sleep")
-                # Pythons sleep takes seconds as arguments.
-                time.sleep(backoff / 1000.0)
+                # Randomize backoff for this iteration
+                backoff = next_backoff
+                if backoff >= self._jitter_from_threshold:
+                    backoff += random.uniform(0, self._jitter)
 
+                next_backoff = min(self._max_backoff, next_backoff * self._backoff_multiplier)
+
+                logger.debug(f"Retrying call after {backoff} ms sleep")
+                self._sleep(backoff / 1000.0)
             yield AttemptManager(self._can_retry, retry_state)

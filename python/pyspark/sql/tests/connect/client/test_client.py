@@ -22,6 +22,9 @@ from pyspark.sql.connect.client import SparkConnectClient, ChannelBuilder
 import pyspark.sql.connect.proto as proto
 from pyspark.testing.connectutils import should_test_connect, connect_requirement_message
 
+from pyspark.sql.connect.client.core import Retrying
+from pyspark.sql.connect.client.reattach import RetryException
+
 if should_test_connect:
     import pandas as pd
     import pyarrow as pa
@@ -87,6 +90,29 @@ class SparkConnectClientTestCase(unittest.TestCase):
         self.assertFalse(client.is_closed)
         client.close()
         self.assertTrue(client.is_closed)
+
+    def test_retry(self):
+        client = SparkConnectClient("sc://foo/;token=bar")
+
+        total_sleep = 0
+
+        def sleep(t):
+            nonlocal total_sleep
+            total_sleep += t
+
+        try:
+            for attempt in Retrying(
+                can_retry=SparkConnectClient.retry_exception,
+                sleep=sleep,
+                **client._retry_policy
+            ):
+                with attempt:
+                    raise RetryException()
+        except RetryException:
+            pass
+
+        # tolerated at least 10 mins of fails
+        self.assertGreaterEqual(total_sleep, 600)
 
 
 class MockService:

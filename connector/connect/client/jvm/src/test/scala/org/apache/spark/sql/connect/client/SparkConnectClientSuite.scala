@@ -214,15 +214,37 @@ class SparkConnectClientSuite extends ConnectFunSuite with BeforeAndAfterEach {
     }
   }
 
-  private class DummyFn(val e: Throwable) {
+  private class DummyFn(val e: Throwable, numFails: Int = 3) {
     var counter = 0
     def fn(): Int = {
-      if (counter < 3) {
+      if (counter < numFails) {
         counter += 1
         throw e
       } else {
         42
       }
+    }
+  }
+
+  test("Retry retries for long enough") {
+    // repeat test few times to avoid random flakes
+    for (_ <- 1 to 10) {
+      var totalSleepMs: Long = 0
+
+      def sleep(t: Long): Unit = {
+        totalSleepMs += t
+      }
+
+      val dummyFn = new DummyFn(new StatusRuntimeException(Status.UNAVAILABLE), numFails = 100)
+      val retryHandler = new GrpcRetryHandler(GrpcRetryHandler.RetryPolicy(), sleep)
+
+      assertThrows[StatusRuntimeException] {
+        retryHandler.retry {
+          dummyFn.fn()
+        }
+      }
+
+      assert(totalSleepMs >= 10 * 60 * 1000) // waited at least 10 minutes
     }
   }
 

@@ -297,6 +297,6 @@ class ExecutePlanResponseReattachableIterator(
   /**
    * Retries the given function with exponential backoff according to the client's retryPolicy.
    */
-  private def retry[T](fn: => T, currentRetryNum: Int = 0): T =
-    GrpcRetryHandler.retry(retryPolicy)(fn, currentRetryNum)
+  private def retry[T](fn: => T): T =
+    GrpcRetryHandler.retry(retryPolicy)(fn)
 }
