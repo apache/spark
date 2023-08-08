@@ -611,8 +611,11 @@ class RocksDB(
     if (log.isWarnEnabled) dbLogLevel = InfoLogLevel.WARN_LEVEL
     if (log.isInfoEnabled) dbLogLevel = InfoLogLevel.INFO_LEVEL
     if (log.isDebugEnabled) dbLogLevel = InfoLogLevel.DEBUG_LEVEL
-    dbOptions.setLogger(dbLogger)
+    dbLogger.setInfoLogLevel(dbLogLevel)
+    // The log level set in dbLogger is effective and the one to dbOptions isn't applied to
+    // customized logger. We still set it as it might show up in RocksDB config file or logging.
     dbOptions.setInfoLogLevel(dbLogLevel)
+    dbOptions.setLogger(dbLogger)
     logInfo(s"Set RocksDB native logging level to $dbLogLevel")
     dbLogger
   }
