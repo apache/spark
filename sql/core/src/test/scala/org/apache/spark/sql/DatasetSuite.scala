@@ -32,7 +32,8 @@ import org.apache.spark.TestUtils.withListener
 import org.apache.spark.internal.config.MAX_RESULT_SIZE
 import org.apache.spark.scheduler.{SparkListener, SparkListenerJobStart}
 import org.apache.spark.sql.catalyst.{FooClassWithEnum, FooEnum, ScroogeLikeExample}
-import org.apache.spark.sql.catalyst.encoders.{OuterScopes, RowEncoder}
+import org.apache.spark.sql.catalyst.encoders.{ExpressionEncoder, OuterScopes}
+import org.apache.spark.sql.catalyst.expressions.GenericRowWithSchema
 import org.apache.spark.sql.catalyst.plans.{LeftAnti, LeftSemi}
 import org.apache.spark.sql.catalyst.util.sideBySide
 import org.apache.spark.sql.execution.{LogicalRDD, RDDScanExec, SQLExecution}
@@ -601,7 +602,7 @@ class DatasetSuite extends QueryTest
           (g, iter) => Iterator(g, iter.mkString(", "))
         }
       },
-      errorClass = "_LEGACY_ERROR_TEMP_1020",
+      errorClass = "INVALID_USAGE_OF_STAR_OR_REGEX",
       parameters = Map("elem" -> "'*'", "prettyName" -> "MapGroups"))
   }
 
@@ -629,7 +630,7 @@ class DatasetSuite extends QueryTest
           (g, iter) => Iterator(g, iter.mkString(", "))
         }
       },
-      errorClass = "_LEGACY_ERROR_TEMP_1020",
+      errorClass = "INVALID_USAGE_OF_STAR_OR_REGEX",
       parameters = Map("elem" -> "'*'", "prettyName" -> "MapGroups"))
   }
 
@@ -665,6 +666,27 @@ class DatasetSuite extends QueryTest
       "b", "[b,2,1], [b,1,2]",
       "c", "[c,1,1]"
     )
+  }
+
+  test("groupByKey, keyAs - duplicates") {
+    val ds = spark
+      .range(10)
+      .as[Long]
+      .groupByKey(id => K2(id % 2, id % 4))
+      .keyAs[K1]
+      .flatMapGroups((_, it) => Seq(it.toSeq.size))
+    checkDatasetUnorderly(ds, 3, 2, 3, 2)
+  }
+
+  test("groupByKey, keyAs, keys - duplicates") {
+    val result = spark
+      .range(10)
+      .as[Long]
+      .groupByKey(id => K2(id % 2, id % 4))
+      .keyAs[K1]
+      .keys
+      .collect()
+    assert(result.sortBy(_.a) === Seq(K1(0), K1(0), K1(1), K1(1)))
   }
 
   test("groupBy function, mapValues, flatMap") {
@@ -1300,7 +1322,7 @@ class DatasetSuite extends QueryTest
       } else {
         Row(l)
       }
-    })(RowEncoder(schema))
+    })(ExpressionEncoder(schema))
 
     val message = intercept[Exception] {
       df.collect()
@@ -1353,7 +1375,7 @@ class DatasetSuite extends QueryTest
 
   test("SPARK-15381: physical object operator should define `reference` correctly") {
     val df = Seq(1 -> 2).toDF("a", "b")
-    checkAnswer(df.map(row => row)(RowEncoder(df.schema)).select("b", "a"), Row(2, 1))
+    checkAnswer(df.map(row => row)(ExpressionEncoder(df.schema)).select("b", "a"), Row(2, 1))
   }
 
   private def checkShowString[T](ds: Dataset[T], expected: String): Unit = {
@@ -1430,7 +1452,7 @@ class DatasetSuite extends QueryTest
       """+---+----+---+
         ||  b|   a|  c|
         |+---+----+---+
-        ||  0|null|  1|
+        ||  0|NULL|  1|
         ||  0|    |  1|
         ||  0|ab c|  1|
         ||  0|1098|  1|
@@ -2135,7 +2157,7 @@ class DatasetSuite extends QueryTest
 
   test("SPARK-26233: serializer should enforce decimal precision and scale") {
     val s = StructType(Seq(StructField("a", StringType), StructField("b", DecimalType(38, 8))))
-    val encoder = RowEncoder(s)
+    val encoder = ExpressionEncoder(s)
     implicit val uEnc = encoder
     val df = spark.range(2).map(l => Row(l.toString, BigDecimal.valueOf(l + 0.1111)))
     checkAnswer(df.groupBy(col("a")).agg(first(col("b"))),
@@ -2429,6 +2451,90 @@ class DatasetSuite extends QueryTest
       assert(parquetFiles.size === 10)
     }
   }
+
+  test("SPARK-37829: DataFrame outer join") {
+    // Same as "SPARK-15441: Dataset outer join" but using DataFrames instead of Datasets
+    val left = Seq(ClassData("a", 1), ClassData("b", 2)).toDF().as("left")
+    val right = Seq(ClassData("x", 2), ClassData("y", 3)).toDF().as("right")
+    val joined = left.joinWith(right, $"left.b" === $"right.b", "left")
+
+    val leftFieldSchema = StructType(
+      Seq(
+        StructField("a", StringType),
+        StructField("b", IntegerType, nullable = false)
+      )
+    )
+    val rightFieldSchema = StructType(
+      Seq(
+        StructField("a", StringType),
+        StructField("b", IntegerType, nullable = false)
+      )
+    )
+    val expectedSchema = StructType(
+      Seq(
+        StructField(
+          "_1",
+          leftFieldSchema,
+          nullable = false
+        ),
+        // This is a left join, so the right output is nullable:
+        StructField(
+          "_2",
+          rightFieldSchema
+        )
+      )
+    )
+    assert(joined.schema === expectedSchema)
+
+    val result = joined.collect().toSet
+    val expected = Set(
+      new GenericRowWithSchema(Array("a", 1), leftFieldSchema) ->
+        null,
+      new GenericRowWithSchema(Array("b", 2), leftFieldSchema) ->
+        new GenericRowWithSchema(Array("x", 2), rightFieldSchema)
+    )
+    assert(result == expected)
+  }
+
+  test("SPARK-43124: Show does not trigger job execution on CommandResults") {
+    withSQLConf(SQLConf.OPTIMIZER_EXCLUDED_RULES.key -> "") {
+      withTable("t1") {
+        sql("create table t1(c int) using parquet")
+
+        @volatile var jobCounter = 0
+        val listener = new SparkListener {
+          override def onJobStart(jobStart: SparkListenerJobStart): Unit = {
+            jobCounter += 1
+          }
+        }
+        withListener(spark.sparkContext, listener) { _ =>
+          sql("show tables").show()
+        }
+        assert(jobCounter === 0)
+      }
+    }
+  }
+
+  test("SPARK-44311: UDF on value class taking underlying type (backwards compatability)") {
+    val f = udf((v: Int) => v > 1)
+    val ds = Seq(ValueClassContainer(ValueClass(1)), ValueClassContainer(ValueClass(2))).toDS()
+
+    checkDataset(ds.filter(f(col("v"))), ValueClassContainer(ValueClass(2)))
+  }
+
+  test("SPARK-44311: UDF on value class field in product") {
+    val f = udf((v: ValueClass) => v.i > 1)
+    val ds = Seq(ValueClassContainer(ValueClass(1)), ValueClassContainer(ValueClass(2))).toDS()
+
+    checkDataset(ds.filter(f(col("v"))), ValueClassContainer(ValueClass(2)))
+  }
+
+  test("SPARK-44311: UDF on value class this is stored as a struct") {
+    val f = udf((v: ValueClass) => v.i > 1)
+    val ds = Seq(Tuple1(ValueClass(1)), Tuple1(ValueClass(2))).toDS()
+
+    checkDataset(ds.filter(f(col("_1"))), Tuple1(ValueClass(2)))
+  }
 }
 
 class DatasetLargeResultCollectingSuite extends QueryTest
@@ -2459,6 +2565,9 @@ class DatasetLargeResultCollectingSuite extends QueryTest
     val res = df.queryExecution.executedPlan.executeCollect()
   }
 }
+
+case class ValueClass(i: Int) extends AnyVal
+case class ValueClassContainer(v: ValueClass)
 
 case class Bar(a: Int)
 
@@ -2562,3 +2671,6 @@ case class SpecialCharClass(`field.1`: String, `field 2`: String)
 /** Used to test Java Enums from Scala code */
 case class SaveModeCase(mode: SaveMode)
 case class SaveModeArrayCase(modes: Array[SaveMode])
+
+case class K1(a: Long)
+case class K2(a: Long, b: Long)

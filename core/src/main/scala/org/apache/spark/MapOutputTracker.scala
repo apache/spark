@@ -42,6 +42,7 @@ import org.apache.spark.scheduler.{MapStatus, MergeStatus, ShuffleOutputStatus}
 import org.apache.spark.shuffle.MetadataFetchFailedException
 import org.apache.spark.storage.{BlockId, BlockManagerId, ShuffleBlockId, ShuffleMergedBlockId}
 import org.apache.spark.util._
+import org.apache.spark.util.collection.OpenHashMap
 import org.apache.spark.util.io.{ChunkedByteBuffer, ChunkedByteBufferOutputStream}
 
 /**
@@ -148,6 +149,12 @@ private class ShuffleStatus(
   private[this] var shufflePushMergerLocations: Seq[BlockManagerId] = Seq.empty
 
   /**
+   * Mapping from a mapId to the mapIndex, this is required to reduce the searching overhead within
+   * the function updateMapOutput(mapId, bmAddress).
+   */
+  private[this] val mapIdToMapIndex = new OpenHashMap[Long, Int]()
+
+  /**
    * Register a map output. If there is already a registered location for the map output then it
    * will be replaced by the new location.
    */
@@ -157,6 +164,17 @@ private class ShuffleStatus(
       invalidateSerializedMapOutputStatusCache()
     }
     mapStatuses(mapIndex) = status
+    mapIdToMapIndex(status.mapId) = mapIndex
+  }
+
+  /**
+   * Get the map output that corresponding to a given mapId.
+   */
+  def getMapStatus(mapId: Long): Option[MapStatus] = withReadLock {
+    mapIdToMapIndex.get(mapId).map(mapStatuses(_)) match {
+      case Some(null) => None
+      case m => m
+    }
   }
 
   /**
@@ -164,15 +182,16 @@ private class ShuffleStatus(
    */
   def updateMapOutput(mapId: Long, bmAddress: BlockManagerId): Unit = withWriteLock {
     try {
-      val mapStatusOpt = mapStatuses.find(x => x != null && x.mapId == mapId)
+      val mapIndex = mapIdToMapIndex.get(mapId)
+      val mapStatusOpt = mapIndex.map(mapStatuses(_)).flatMap(Option(_))
       mapStatusOpt match {
         case Some(mapStatus) =>
           logInfo(s"Updating map output for ${mapId} to ${bmAddress}")
           mapStatus.updateLocation(bmAddress)
           invalidateSerializedMapOutputStatusCache()
         case None =>
-          val index = mapStatusesDeleted.indexWhere(x => x != null && x.mapId == mapId)
-          if (index >= 0 && mapStatuses(index) == null) {
+          if (mapIndex.map(mapStatusesDeleted).exists(_.mapId == mapId)) {
+            val index = mapIndex.get
             val mapStatus = mapStatusesDeleted(index)
             mapStatus.updateLocation(bmAddress)
             mapStatuses(index) = mapStatus
@@ -1034,7 +1053,7 @@ private[spark] class MapOutputTrackerMaster(
           val blockManagerIds = getLocationsWithLargestOutputs(dep.shuffleId, partitionId,
             dep.partitioner.numPartitions, REDUCER_PREF_LOCS_FRACTION)
           if (blockManagerIds.nonEmpty) {
-            blockManagerIds.get.map(_.host)
+            blockManagerIds.get.map(_.host).distinct.toSeq
           } else {
             Nil
           }
@@ -1122,7 +1141,7 @@ private[spark] class MapOutputTrackerMaster(
         if (startMapIndex < endMapIndex &&
           (startMapIndex >= 0 && endMapIndex <= statuses.length)) {
           val statusesPicked = statuses.slice(startMapIndex, endMapIndex).filter(_ != null)
-          statusesPicked.map(_.location.host).toSeq
+          statusesPicked.map(_.location.host).distinct.toSeq
         } else {
           Nil
         }
@@ -1137,9 +1156,7 @@ private[spark] class MapOutputTrackerMaster(
    */
   def getMapOutputLocation(shuffleId: Int, mapId: Long): Option[BlockManagerId] = {
     shuffleStatuses.get(shuffleId).flatMap { shuffleStatus =>
-      shuffleStatus.withMapStatuses { mapStatues =>
-        mapStatues.filter(_ != null).find(_.mapId == mapId).map(_.location)
-      }
+      shuffleStatus.getMapStatus(mapId).map(_.location)
     }
   }
 

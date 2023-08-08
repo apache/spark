@@ -75,6 +75,24 @@ class OpenHashMap[K : ClassTag, @specialized(Long, Int, Double) V: ClassTag](
     }
   }
 
+  /** Get the value for a given key, return None if the key doesn't exist */
+  def get(k: K): Option[V] = {
+    if (k == null) {
+      if (haveNullValue) {
+        Some(nullValue)
+      } else {
+        None
+      }
+    } else {
+      val pos = _keySet.getPos(k)
+      if (pos < 0) {
+        None
+      } else {
+        Some(_values(pos))
+      }
+    }
+  }
+
   /** Set the value for a key */
   def update(k: K, v: V): Unit = {
     if (k == null) {

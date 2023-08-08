@@ -28,7 +28,6 @@ import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
-import org.apache.spark.sql.catalyst.analysis.TypeCoercion.numericPrecedence
 import org.apache.spark.sql.catalyst.expressions.Cast._
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenContext
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
@@ -40,6 +39,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.types.DataTypeTestUtils.{dayTimeIntervalTypes, yearMonthIntervalTypes}
 import org.apache.spark.sql.types.DayTimeIntervalType.{DAY, HOUR, MINUTE, SECOND}
+import org.apache.spark.sql.types.UpCastRule.numericPrecedence
 import org.apache.spark.sql.types.YearMonthIntervalType.{MONTH, YEAR}
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -1390,5 +1390,12 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
     val expr = CheckOverflowInTableInsert(cast, "column_1")
     assert(expr.sql == cast.sql)
     assert(expr.toString == cast.toString)
+  }
+
+  test("SPARK-43336: Casting between Timestamp and TimestampNTZ requires timezone") {
+    val timestampLiteral = Literal.create(1L, TimestampType)
+    val timestampNTZLiteral = Literal.create(1L, TimestampNTZType)
+    assert(!Cast(timestampLiteral, TimestampNTZType).resolved)
+    assert(!Cast(timestampNTZLiteral, TimestampType).resolved)
   }
 }

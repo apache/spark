@@ -34,147 +34,55 @@ import com.typesafe.tools.mima.core.ProblemFilters._
  */
 object MimaExcludes {
 
-  // Exclude rules for 3.5.x
-  lazy val v35excludes = v34excludes ++ Seq(
+  // Exclude rules for 4.0.x
+  lazy val v40excludes = v35excludes ++ Seq(
   )
 
-  // Exclude rules for 3.4.x from 3.3.0
-  lazy val v34excludes = defaultExcludes ++ Seq(
-    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.ml.recommendation.ALS.checkedCast"),
-    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.ml.recommendation.ALSModel.checkedCast"),
-
-    // [SPARK-39110] Show metrics properties in HistoryServer environment tab
-    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.status.api.v1.ApplicationEnvironmentInfo.this"),
-
-    // [SPARK-38775][ML] Cleanup validation functions
-    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.ml.PredictionModel.extractInstances"),
-    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.ml.Predictor.extractInstances"),
-    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.ml.Predictor.extractLabeledPoints"),
-    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.ml.classification.ClassificationModel.extractInstances"),
-    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.ml.classification.Classifier.extractInstances"),
-    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.ml.classification.Classifier.extractLabeledPoints"),
-    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.ml.classification.Classifier.validateNumClasses"),
-    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.ml.classification.Classifier.validateLabel"),
-    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.ml.classification.OneVsRest.extractInstances"),
-    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.ml.classification.OneVsRestModel.extractInstances"),
-
-    // [SPARK-39703][SPARK-39062] Mima complains with Scala 2.13 for the changes in DeployMessages
-    ProblemFilters.exclude[MissingTypesProblem]("org.apache.spark.deploy.DeployMessages$LaunchExecutor$"),
-    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.deploy.DeployMessages#RequestExecutors.requestedTotal"),
-    ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.deploy.DeployMessages#RequestExecutors.copy"),
-    ProblemFilters.exclude[IncompatibleResultTypeProblem]("org.apache.spark.deploy.DeployMessages#RequestExecutors.copy$default$2"),
-    ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.deploy.DeployMessages#RequestExecutors.this"),
-    ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.deploy.DeployMessages#RequestExecutors.apply"),
-
-    // [SPARK-38679][CORE] Expose the number of partitions in a stage to TaskContext
-    ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.TaskContext.numPartitions"),
-
-    // [SPARK-39506] In terms of 3 layer namespace effort, add currentCatalog, setCurrentCatalog and listCatalogs API to Catalog interface
-    ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.sql.catalog.Catalog.currentCatalog"),
-    ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.sql.catalog.Catalog.setCurrentCatalog"),
+  // Exclude rules for 3.5.x from 3.4.0
+  lazy val v35excludes = defaultExcludes ++ Seq(
+    // [SPARK-44531][CONNECT][SQL] Move encoder inference to sql/api
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.types.DataTypes"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.types.SQLUserDefinedType"),
+    // [SPARK-43165][SQL] Move canWrite to DataTypeUtils
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.sql.types.DataType.canWrite"),
+    // [SPARK-43195][CORE] Remove unnecessary serializable wrapper in HadoopFSUtils
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.util.HadoopFSUtils$SerializableBlockLocation"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.util.HadoopFSUtils$SerializableBlockLocation$"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.util.HadoopFSUtils$SerializableFileStatus"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.util.HadoopFSUtils$SerializableFileStatus$"),
+    // [SPARK-43792][SQL][PYTHON][CONNECT] Add optional pattern for Catalog.listCatalogs
     ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.sql.catalog.Catalog.listCatalogs"),
-
-    // [SPARK-39704][SQL] Implement createIndex & dropIndex & indexExists in JDBC (H2 dialect)
-    ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.sql.jdbc.JdbcDialect.createIndex"),
-    ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.sql.jdbc.JdbcDialect.dropIndex"),
-    ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.sql.jdbc.JdbcDialect.indexExists"),
-
-    // [SPARK-39759][SQL] Implement listIndexes in JDBC (H2 dialect)
-    ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.sql.jdbc.JdbcDialect.listIndexes"),
-
-    // [SPARK-38929][SQL] Improve error messages for cast failures in ANSI
-    ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.sql.types.Decimal.fromStringANSI"),
-    ProblemFilters.exclude[IncompatibleResultTypeProblem]("org.apache.spark.sql.types.Decimal.fromStringANSI$default$3"),
-
-    // [SPARK-36511][MINOR][SQL] Remove ColumnIOUtil
-    ProblemFilters.exclude[MissingClassProblem]("org.apache.parquet.io.ColumnIOUtil"),
-
-    // [SPARK-36620] [SHUFFLE] Expose shuffle push metrics
-    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.status.api.v1.ShuffleReadMetricDistributions.this"),
-    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.status.api.v1.ShuffleReadMetrics.this"),
-    ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.status.api.v1.StageData.this"),
-
-    // [SPARK-40324][SQL] Provide query context in AnalysisException
-    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.sql.AnalysisException.copy"),
-    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.sql.AnalysisException.withPosition"),
-
-    // [SPARK-40400][SQL] Pass error message parameters to exceptions as a map
-    ProblemFilters.exclude[IncompatibleResultTypeProblem]("org.apache.spark.sql.AnalysisException.messageParameters"),
-    ProblemFilters.exclude[IncompatibleResultTypeProblem]("org.apache.spark.sql.AnalysisException.copy$default$7"),
-    ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.sql.AnalysisException.copy"),
-    ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.sql.AnalysisException.this"),
-    ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.SparkException.this"),
-
-    // [SPARK-37935][SQL] Eliminate separate error sub-classes fields
-    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.SparkException.this"),
-    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.sql.AnalysisException.this"),
-
-    // [SPARK-38270][SQL] Spark SQL CLI's AM should keep same exit code with client side
-    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages#Shutdown.productPrefix"),
-    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages#Shutdown.productArity"),
-    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages#Shutdown.productElement"),
-    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages#Shutdown.productIterator"),
-    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages#Shutdown.canEqual"),
-    ProblemFilters.exclude[FinalMethodProblem]("org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages#Shutdown.toString"),
-    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages#Shutdown.productElementName"),
-    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages#Shutdown.productElementNames"),
-
-    // [SPARK-40950][CORE] Fix isRemoteAddressMaxedOut performance overhead on scala 2.13
-    ProblemFilters.exclude[IncompatibleResultTypeProblem]("org.apache.spark.storage.ShuffleBlockFetcherIterator#FetchRequest.blocks"),
-    ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.storage.ShuffleBlockFetcherIterator#FetchRequest.copy"),
-    ProblemFilters.exclude[IncompatibleResultTypeProblem]("org.apache.spark.storage.ShuffleBlockFetcherIterator#FetchRequest.copy$default$2"),
-    ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.storage.ShuffleBlockFetcherIterator#FetchRequest.this"),
-    ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.storage.ShuffleBlockFetcherIterator#FetchRequest.apply"),
-
-    // [SPARK-41072][SS] Add the error class STREAM_FAILED to StreamingQueryException
-    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.sql.streaming.StreamingQueryException.this"),
-
-    // [SPARK-41180][SQL] Reuse INVALID_SCHEMA instead of _LEGACY_ERROR_TEMP_1227
-    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.sql.types.DataType.parseTypeWithFallback"),
-
-    // [SPARK-41360][CORE] Avoid BlockManager re-registration if the executor has been lost
-    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.storage.BlockManagerMessages#RegisterBlockManager.copy"),
-    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.storage.BlockManagerMessages#RegisterBlockManager.this"),
-    ProblemFilters.exclude[MissingTypesProblem]("org.apache.spark.storage.BlockManagerMessages$RegisterBlockManager$"),
-    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.storage.BlockManagerMessages#RegisterBlockManager.apply"),
-
-    // [SPARK-41709][CORE][SQL][UI] Explicitly define Seq as collection.Seq to avoid toSeq when create ui objects from protobuf objects for Scala 2.13
-    ProblemFilters.exclude[IncompatibleResultTypeProblem]("org.apache.spark.status.api.v1.ApplicationEnvironmentInfo.sparkProperties"),
-    ProblemFilters.exclude[IncompatibleResultTypeProblem]("org.apache.spark.status.api.v1.ApplicationEnvironmentInfo.hadoopProperties"),
-    ProblemFilters.exclude[IncompatibleResultTypeProblem]("org.apache.spark.status.api.v1.ApplicationEnvironmentInfo.systemProperties"),
-    ProblemFilters.exclude[IncompatibleResultTypeProblem]("org.apache.spark.status.api.v1.ApplicationEnvironmentInfo.classpathEntries"),
-    ProblemFilters.exclude[IncompatibleResultTypeProblem]("org.apache.spark.status.api.v1.ApplicationEnvironmentInfo.resourceProfiles"),
-    ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.status.api.v1.ApplicationInfo.apply"),
-    ProblemFilters.exclude[IncompatibleResultTypeProblem]("org.apache.spark.status.api.v1.ApplicationInfo.attempts"),
-    ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.status.api.v1.ApplicationInfo.copy"),
-    ProblemFilters.exclude[IncompatibleResultTypeProblem]("org.apache.spark.status.api.v1.ApplicationInfo.copy$default$7"),
-    ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.status.api.v1.ApplicationInfo.this"),
-    ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.status.api.v1.ApplicationInfo.apply"),
-    ProblemFilters.exclude[IncompatibleResultTypeProblem]("org.apache.spark.status.api.v1.JobData.stageIds"),
-    ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.status.api.v1.JobData.this"),
-    ProblemFilters.exclude[IncompatibleResultTypeProblem]("org.apache.spark.status.api.v1.RDDPartitionInfo.executors"),
-    ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.status.api.v1.RDDPartitionInfo.this"),
-    ProblemFilters.exclude[IncompatibleResultTypeProblem]("org.apache.spark.status.api.v1.TaskData.accumulatorUpdates"),
-    ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.status.api.v1.TaskData.this"),
-
-    // [SPARK-41423][CORE] Protobuf serializer for StageDataWrapper for Scala 2.13
-    ProblemFilters.exclude[IncompatibleResultTypeProblem]("org.apache.spark.status.api.v1.StageData.rddIds"),
-    ProblemFilters.exclude[IncompatibleResultTypeProblem]("org.apache.spark.status.api.v1.StageData.accumulatorUpdates"),
-    ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.status.api.v1.StageData.this"),
-
-    // [SPARK-41890][CORE][SQL][UI] Reduce `toSeq` in `RDDOperationGraphWrapperSerializer`/`SparkPlanGraphWrapperSerializer` for Scala 2.13
-    ProblemFilters.exclude[IncompatibleResultTypeProblem]("org.apache.spark.status.api.v1.sql.ExecutionData.nodes"),
-    ProblemFilters.exclude[IncompatibleResultTypeProblem]("org.apache.spark.status.api.v1.sql.ExecutionData.edges"),
-    ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.status.api.v1.sql.ExecutionData.this"),
-    ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.status.api.v1.sql.Node.apply"),
-    ProblemFilters.exclude[IncompatibleResultTypeProblem]("org.apache.spark.status.api.v1.sql.Node.metrics"),
-    ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.status.api.v1.sql.Node.copy"),
-    ProblemFilters.exclude[IncompatibleResultTypeProblem]("org.apache.spark.status.api.v1.sql.Node.copy$default$4"),
-    ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.status.api.v1.sql.Node.this"),
-    ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.status.api.v1.sql.Node.apply")
+    // [SPARK-43881][SQL][PYTHON][CONNECT] Add optional pattern for Catalog.listDatabases
+    ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.sql.catalog.Catalog.listDatabases"),
+    // [SPARK-43961][SQL][PYTHON][CONNECT] Add optional pattern for Catalog.listTables
+    ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.sql.catalog.Catalog.listTables"),
+    // [SPARK-43992][SQL][PYTHON][CONNECT] Add optional pattern for Catalog.listFunctions
+    ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.sql.catalog.Catalog.listFunctions"),
+     // [SPARK-43919][SQL] Extract JSON functionality out of Row
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.sql.Row.json"),
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.sql.Row.prettyJson"),
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.sql.expressions.MutableAggregationBuffer.json"),
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.sql.expressions.MutableAggregationBuffer.prettyJson"),
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.sql.expressions.MutableAggregationBuffer.jsonValue"),
+    // [SPARK-43952][CORE][CONNECT][SQL] Add SparkContext APIs for query cancellation by tag
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.status.api.v1.JobData.this"),
+    // [SPARK-44205][SQL] Extract Catalyst Code from DecimalType
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.sql.types.DecimalType.unapply"),
+    // [SPARK-44507][SQL][CONNECT] Move AnalysisException to sql/api.
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.AnalysisException"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.AnalysisException$"),
+    // [SPARK-44686][CONNECT][SQL] Add the ability to create a RowEncoder in Encoders
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.RowFactory"),
+    // [SPARK-44535][CONNECT][SQL] Move required Streaming API to sql/api
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.streaming.GroupStateTimeout"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.streaming.OutputMode"),
+    // [SPARK-44198][CORE] Support propagation of the log level to the executors
+    ProblemFilters.exclude[MissingTypesProblem]("org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages$SparkAppConfig$"),
+    // [SPARK-44692][CONNECT][SQL] Move Trigger(s) to sql/api
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.streaming.Trigger")
   )
 
-  // Defulat exclude rules
+  // Default exclude rules
   lazy val defaultExcludes = Seq(
     // Spark Internals
     ProblemFilters.exclude[Problem]("org.apache.spark.rpc.*"),
@@ -196,6 +104,123 @@ object MimaExcludes {
     // Avro source implementation is internal.
     ProblemFilters.exclude[Problem]("org.apache.spark.sql.v2.avro.*"),
 
+    // SPARK-43169: shaded and generated protobuf code
+    ProblemFilters.exclude[Problem]("org.sparkproject.spark_core.protobuf.*"),
+    ProblemFilters.exclude[Problem]("org.apache.spark.status.protobuf.StoreTypes*"),
+
+    // SPARK-43265: Move Error framework to a common utils module
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.QueryContext"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.SparkException"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.SparkException$"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.SparkThrowable"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.ErrorInfo$"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.ErrorSubInfo$"),
+
+    // SPARK-44104: shaded protobuf code and Apis with parameters relocated
+    ProblemFilters.exclude[Problem]("org.sparkproject.spark_protobuf.protobuf.*"),
+    ProblemFilters.exclude[Problem]("org.apache.spark.sql.protobuf.utils.SchemaConverters.*"),
+    
+    // SPARK-44255: Relocate StorageLevel to common/utils
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.storage.StorageLevel"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.storage.StorageLevel$"),
+
+    // SPARK-44475: Relocate DataType and Parser to sql/api
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.types.ArrayType"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.types.ArrayType$"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.types.BinaryType"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.types.BinaryType$"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.types.BooleanType"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.types.BooleanType$"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.types.ByteType"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.types.ByteType$"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.types.CalendarIntervalType"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.types.CalendarIntervalType$"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.types.CharType"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.types.CharType$"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.types.DataType"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.types.DataType$"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.types.DateType"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.types.DateType$"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.types.DayTimeIntervalType"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.types.DayTimeIntervalType$"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.types.Decimal"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.types.Decimal$"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.types.ShortType"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.types.ShortType$"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.types.StringType"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.types.StringType$"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.types.StructField"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.types.StructField$"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.types.StructType"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.types.StructType$"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.types.TimestampNTZType"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.types.TimestampNTZType$"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.types.TimestampType"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.types.TimestampType$"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.types.UDTRegistration"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.types.UDTRegistration$"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.types.VarcharType"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.types.VarcharType$"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.types.YearMonthIntervalType"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.types.YearMonthIntervalType$"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.types.DecimalType"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.types.DecimalType$"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.types.DoubleType"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.types.DoubleType$"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.types.DoubleType$DoubleAsIfIntegral"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.types.DoubleType$DoubleAsIfIntegral$"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.types.DoubleType$DoubleIsConflicted"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.types.FloatType"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.types.FloatType$"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.types.FloatType$FloatAsIfIntegral"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.types.FloatType$FloatAsIfIntegral$"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.types.FloatType$FloatIsConflicted"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.types.IntegerType"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.types.IntegerType$"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.types.LongType"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.types.LongType$"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.types.MapType"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.types.MapType$"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.types.Metadata"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.types.Metadata$"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.types.MetadataBuilder"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.types.NullType"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.types.NullType$"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.types.ObjectType"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.types.ObjectType$"),
+
+    // SPARK-44496: Move Interfaces needed by SCSC to sql/api.
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.Encoder"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.Row"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.Row$"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.api.java.function.package"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.api.java.function.package$"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.api.java.function.CoGroupFunction"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.api.java.function.DoubleFlatMapFunction"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.api.java.function.DoubleFunction"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.api.java.function.FilterFunction"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.api.java.function.FlatMapFunction"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.api.java.function.FlatMapFunction2"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.api.java.function.FlatMapGroupsFunction"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.api.java.function.ForeachFunction"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.api.java.function.ForeachPartitionFunction"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.api.java.function.Function"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.api.java.function.Function0"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.api.java.function.Function2"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.api.java.function.Function3"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.api.java.function.Function4"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.api.java.function.MapFunction"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.api.java.function.MapGroupsFunction"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.api.java.function.MapPartitionsFunction"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.api.java.function.PairFlatMapFunction"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.api.java.function.PairFunction"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.api.java.function.ReduceFunction"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.api.java.function.VoidFunction"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.api.java.function.VoidFunction2"),
+
+    // SPARK-43997: UDF* classes needed by SCSC and moved to sql/api
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.api.java.UDF*"),
+
     (problem: Problem) => problem match {
       case MissingClassProblem(cls) => !cls.fullName.startsWith("org.sparkproject.jpmml") &&
           !cls.fullName.startsWith("org.sparkproject.dmg.pmml")
@@ -204,8 +229,8 @@ object MimaExcludes {
   )
 
   def excludes(version: String) = version match {
+    case v if v.startsWith("4.0") => v40excludes
     case v if v.startsWith("3.5") => v35excludes
-    case v if v.startsWith("3.4") => v34excludes
     case _ => Seq()
   }
 }

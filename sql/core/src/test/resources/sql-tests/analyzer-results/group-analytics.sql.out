@@ -330,9 +330,9 @@ Aggregate [course#x, year#x, spark_grouping_id#xL], [course#x, year#x, cast((shi
 -- !query
 SELECT course, year, GROUPING(course) FROM courseSales GROUP BY course, year
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2445",
+  "errorClass" : "UNSUPPORTED_GROUPING_EXPRESSION",
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
@@ -346,9 +346,9 @@ org.apache.spark.sql.AnalysisException
 -- !query
 SELECT course, year, GROUPING_ID(course, year) FROM courseSales GROUP BY course, year
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2407",
+  "errorClass" : "UNSUPPORTED_GROUPING_EXPRESSION",
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",

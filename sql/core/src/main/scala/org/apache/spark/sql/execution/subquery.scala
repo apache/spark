@@ -100,8 +100,12 @@ case class ScalarSubquery(
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    toLiteral.doGenCode(ctx, ev)
+  }
+
+  def toLiteral: Literal = {
     require(updated, s"$this has not finished")
-    Literal.create(result, dataType).doGenCode(ctx, ev)
+    Literal.create(result, dataType)
   }
 }
 
@@ -193,7 +197,8 @@ case class PlanSubqueries(sparkSession: SparkSession) extends Rule[SparkPlan] {
           )
         }
         val executedPlan = QueryExecution.prepareExecutedPlan(sparkSession, query)
-        InSubqueryExec(expr, SubqueryExec(s"subquery#${exprId.id}", executedPlan), exprId)
+        InSubqueryExec(expr, SubqueryExec(s"subquery#${exprId.id}", executedPlan),
+          exprId, shouldBroadcast = true)
     }
   }
 }

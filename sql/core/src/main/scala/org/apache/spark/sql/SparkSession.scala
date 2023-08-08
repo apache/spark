@@ -35,16 +35,18 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.scheduler.{SparkListener, SparkListenerApplicationEnd}
 import org.apache.spark.sql.catalog.Catalog
 import org.apache.spark.sql.catalyst._
-import org.apache.spark.sql.catalyst.analysis.{ParameterizedQuery, UnresolvedRelation}
+import org.apache.spark.sql.catalyst.analysis.{NameParameterizedQuery, PosParameterizedQuery, UnresolvedRelation}
 import org.apache.spark.sql.catalyst.encoders._
 import org.apache.spark.sql.catalyst.expressions.AttributeReference
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, Range}
+import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.connector.ExternalCommandRunner
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.command.ExternalCommandExecutor
 import org.apache.spark.sql.execution.datasources.{DataSource, LogicalRelation}
+import org.apache.spark.sql.functions.lit
 import org.apache.spark.sql.internal._
 import org.apache.spark.sql.internal.StaticSQLConf.CATALOG_IMPLEMENTATION
 import org.apache.spark.sql.sources.BaseRelation
@@ -224,6 +226,8 @@ class SparkSession private(
    */
   def udf: UDFRegistration = sessionState.udfRegistration
 
+  def udtf: UDTFRegistration = sessionState.udtfRegistration
+
   /**
    * Returns a `StreamingQueryManager` that allows managing all the
    * `StreamingQuery`s active on `this`.
@@ -296,7 +300,7 @@ class SparkSession private(
    */
   def emptyDataset[T: Encoder]: Dataset[T] = {
     val encoder = implicitly[Encoder[T]]
-    new Dataset(self, LocalRelation(encoder.schema.toAttributes), encoder)
+    new Dataset(self, LocalRelation(encoder.schema), encoder)
   }
 
   /**
@@ -316,7 +320,7 @@ class SparkSession private(
    */
   def createDataFrame[A <: Product : TypeTag](data: Seq[A]): DataFrame = withActive {
     val schema = ScalaReflection.schemaFor[A].dataType.asInstanceOf[StructType]
-    val attributeSeq = schema.toAttributes
+    val attributeSeq = toAttributes(schema)
     Dataset.ofRows(self, LocalRelation.fromProduct(attributeSeq, data))
   }
 
@@ -356,7 +360,7 @@ class SparkSession private(
     val replaced = CharVarcharUtils.failIfHasCharVarchar(schema).asInstanceOf[StructType]
     // TODO: use MutableProjection when rowRDD is another DataFrame and the applied
     // schema differs from the existing schema on any field data type.
-    val encoder = RowEncoder(replaced)
+    val encoder = ExpressionEncoder(replaced)
     val toRow = encoder.createSerializer()
     val catalystRows = rowRDD.map(toRow)
     internalCreateDataFrame(catalystRows.setName(rowRDD.name), schema)
@@ -387,7 +391,7 @@ class SparkSession private(
   @DeveloperApi
   def createDataFrame(rows: java.util.List[Row], schema: StructType): DataFrame = withActive {
     val replaced = CharVarcharUtils.failIfHasCharVarchar(schema).asInstanceOf[StructType]
-    Dataset.ofRows(self, LocalRelation.fromExternalRows(replaced.toAttributes, rows.asScala.toSeq))
+    Dataset.ofRows(self, LocalRelation.fromExternalRows(toAttributes(replaced), rows.asScala.toSeq))
   }
 
   /**
@@ -476,7 +480,7 @@ class SparkSession private(
   def createDataset[T : Encoder](data: Seq[T]): Dataset[T] = {
     val enc = encoderFor[T]
     val toRow = enc.createSerializer()
-    val attributes = enc.schema.toAttributes
+    val attributes = toAttributes(enc.schema)
     val encoded = data.map(d => toRow(d).copy())
     val plan = new LocalRelation(attributes, encoded)
     Dataset[T](self, plan)
@@ -562,7 +566,7 @@ class SparkSession private(
     // TODO: use MutableProjection when rowRDD is another DataFrame and the applied
     // schema differs from the existing schema on any field data type.
     val logicalPlan = LogicalRDD(
-      schema.toAttributes,
+      toAttributes(schema),
       catalystRows,
       isStreaming = isStreaming)(self)
     Dataset.ofRows(self, logicalPlan)
@@ -607,31 +611,52 @@ class SparkSession private(
    * ----------------- */
 
   /**
-   * Executes a SQL query substituting named parameters by the given arguments,
+   * Executes a SQL query substituting positional parameters by the given arguments,
    * returning the result as a `DataFrame`.
    * This API eagerly runs DDL/DML commands, but not for SELECT queries.
    *
-   * @param sqlText A SQL statement with named parameters to execute.
-   * @param args A map of parameter names to string values that are parsed as
-   *             SQL literal expressions. For example, map keys: "rank", "name", "birthdate";
-   *             map values: "1", "'Steven'", "DATE'2023-03-21'". The fragments of string values
-   *             belonged to SQL comments are skipped while parsing.
+   * @param sqlText A SQL statement with positional parameters to execute.
+   * @param args An array of Java/Scala objects that can be converted to
+   *             SQL literal expressions. See
+   *             <a href="https://spark.apache.org/docs/latest/sql-ref-datatypes.html">
+   *             Supported Data Types</a> for supported value types in Scala/Java.
+   *             For example, 1, "Steven", LocalDate.of(2023, 4, 2).
+   *             A value can be also a `Column` of literal expression, in that case
+   *             it is taken as is.
+   * @param tracker A tracker that can notify when query is ready for execution
+   */
+  private[sql] def sql(sqlText: String, args: Array[_], tracker: QueryPlanningTracker): DataFrame =
+    withActive {
+      val plan = tracker.measurePhase(QueryPlanningTracker.PARSING) {
+        val parsedPlan = sessionState.sqlParser.parsePlan(sqlText)
+        if (args.nonEmpty) {
+          PosParameterizedQuery(parsedPlan, args.map(lit(_).expr))
+        } else {
+          parsedPlan
+        }
+      }
+      Dataset.ofRows(self, plan, tracker)
+    }
+
+  /**
+   * Executes a SQL query substituting positional parameters by the given arguments,
+   * returning the result as a `DataFrame`.
+   * This API eagerly runs DDL/DML commands, but not for SELECT queries.
    *
-   * @since 3.4.0
+   * @param sqlText A SQL statement with positional parameters to execute.
+   * @param args An array of Java/Scala objects that can be converted to
+   *             SQL literal expressions. See
+   *             <a href="https://spark.apache.org/docs/latest/sql-ref-datatypes.html">
+   *             Supported Data Types</a> for supported value types in Scala/Java.
+   *             For example, 1, "Steven", LocalDate.of(2023, 4, 2).
+   *             A value can be also a `Column` of literal expression, in that case
+   *             it is taken as is.
+   *
+   * @since 3.5.0
    */
   @Experimental
-  def sql(sqlText: String, args: Map[String, String]): DataFrame = withActive {
-    val tracker = new QueryPlanningTracker
-    val plan = tracker.measurePhase(QueryPlanningTracker.PARSING) {
-      val parser = sessionState.sqlParser
-      val parsedPlan = parser.parsePlan(sqlText)
-      if (args.nonEmpty) {
-        ParameterizedQuery(parsedPlan, args.mapValues(parser.parseExpression).toMap)
-      } else {
-        parsedPlan
-      }
-    }
-    Dataset.ofRows(self, plan, tracker)
+  def sql(sqlText: String, args: Array[_]): DataFrame = {
+    sql(sqlText, args, new QueryPlanningTracker)
   }
 
   /**
@@ -640,15 +665,73 @@ class SparkSession private(
    * This API eagerly runs DDL/DML commands, but not for SELECT queries.
    *
    * @param sqlText A SQL statement with named parameters to execute.
-   * @param args A map of parameter names to string values that are parsed as
-   *             SQL literal expressions. For example, map keys: "rank", "name", "birthdate";
-   *             map values: "1", "'Steven'", "DATE'2023-03-21'". The fragments of string values
-   *             belonged to SQL comments are skipped while parsing.
+   * @param args A map of parameter names to Java/Scala objects that can be converted to
+   *             SQL literal expressions. See
+   *             <a href="https://spark.apache.org/docs/latest/sql-ref-datatypes.html">
+   *             Supported Data Types</a> for supported value types in Scala/Java.
+   *             For example, map keys: "rank", "name", "birthdate";
+   *             map values: 1, "Steven", LocalDate.of(2023, 4, 2).
+   *             Map value can be also a `Column` of literal expression, in that case
+   *             it is taken as is.
+   * @param tracker A tracker that can notify when query is ready for execution
+   */
+  private[sql] def sql(
+      sqlText: String,
+      args: Map[String, Any],
+      tracker: QueryPlanningTracker): DataFrame =
+    withActive {
+      val plan = tracker.measurePhase(QueryPlanningTracker.PARSING) {
+        val parsedPlan = sessionState.sqlParser.parsePlan(sqlText)
+        if (args.nonEmpty) {
+          NameParameterizedQuery(parsedPlan, args.mapValues(lit(_).expr).toMap)
+        } else {
+          parsedPlan
+        }
+      }
+      Dataset.ofRows(self, plan, tracker)
+    }
+
+  /**
+   * Executes a SQL query substituting named parameters by the given arguments,
+   * returning the result as a `DataFrame`.
+   * This API eagerly runs DDL/DML commands, but not for SELECT queries.
+   *
+   * @param sqlText A SQL statement with named parameters to execute.
+   * @param args A map of parameter names to Java/Scala objects that can be converted to
+   *             SQL literal expressions. See
+   *             <a href="https://spark.apache.org/docs/latest/sql-ref-datatypes.html">
+   *             Supported Data Types</a> for supported value types in Scala/Java.
+   *             For example, map keys: "rank", "name", "birthdate";
+   *             map values: 1, "Steven", LocalDate.of(2023, 4, 2).
+   *             Map value can be also a `Column` of literal expression, in that case
+   *             it is taken as is.
    *
    * @since 3.4.0
    */
   @Experimental
-  def sql(sqlText: String, args: java.util.Map[String, String]): DataFrame = {
+  def sql(sqlText: String, args: Map[String, Any]): DataFrame = {
+    sql(sqlText, args, new QueryPlanningTracker)
+  }
+
+  /**
+   * Executes a SQL query substituting named parameters by the given arguments,
+   * returning the result as a `DataFrame`.
+   * This API eagerly runs DDL/DML commands, but not for SELECT queries.
+   *
+   * @param sqlText A SQL statement with named parameters to execute.
+   * @param args A map of parameter names to Java/Scala objects that can be converted to
+   *             SQL literal expressions. See
+   *             <a href="https://spark.apache.org/docs/latest/sql-ref-datatypes.html">
+   *             Supported Data Types</a> for supported value types in Scala/Java.
+   *             For example, map keys: "rank", "name", "birthdate";
+   *             map values: 1, "Steven", LocalDate.of(2023, 4, 2).
+   *             Map value can be also a `Column` of literal expression, in that case
+   *             it is taken as is.
+   *
+   * @since 3.4.0
+   */
+  @Experimental
+  def sql(sqlText: String, args: java.util.Map[String, Any]): DataFrame = {
     sql(sqlText, args.asScala.toMap)
   }
 
@@ -658,7 +741,7 @@ class SparkSession private(
    *
    * @since 2.0.0
    */
-  def sql(sqlText: String): DataFrame = sql(sqlText, Map.empty[String, String])
+  def sql(sqlText: String): DataFrame = sql(sqlText, Map.empty[String, Any])
 
   /**
    * Execute an arbitrary string command inside an external execution engine rather than Spark.

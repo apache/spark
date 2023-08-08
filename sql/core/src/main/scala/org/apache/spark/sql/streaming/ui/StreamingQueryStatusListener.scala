@@ -38,8 +38,8 @@ import org.apache.spark.util.kvstore.KVIndex
  * UI data for both active and inactive query.
  */
 private[sql] class StreamingQueryStatusListener(
-    conf: SparkConf,
-    store: ElementTrackingStore) extends StreamingQueryListener {
+    val conf: SparkConf,
+    val store: ElementTrackingStore) extends StreamingQueryListener {
 
   private val streamingProgressRetention =
     conf.get(StaticSQLConf.STREAMING_UI_RETAINED_PROGRESS_UPDATES)
@@ -98,6 +98,8 @@ private[sql] class StreamingQueryStatusListener(
     }
   }
 
+  override def onQueryIdle(event: StreamingQueryListener.QueryIdleEvent): Unit = {}
+
   override def onQueryTerminated(
       event: StreamingQueryListener.QueryTerminatedEvent): Unit = {
     val querySummary = store.read(classOf[StreamingQueryData], event.runId.toString)
@@ -107,7 +109,7 @@ private[sql] class StreamingQueryStatusListener(
       querySummary.id,
       querySummary.runId,
       isActive = false,
-      querySummary.exception,
+      event.exception,
       querySummary.startTimestamp,
       Some(curTime)
     ), checkTriggers = true)

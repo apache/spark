@@ -71,7 +71,7 @@ Spark SQL uses the following `SQLSTATE` classes:
 </tr>
 <tr>
   <td></td>
-  <td><a href="arithmetic-overflow-error-class.md">ARITHMETIC_OVERFLOW</a>, <a href="sql-error-conditions.html#cast_overflow">CAST_OVERFLOW</a>, <a href="sql-error-conditions.html#cast_overflow_in_table_insert">CAST_OVERFLOW_IN_TABLE_INSERT</a>, <a href="sql-error-conditions.html#decimal_precision_exceeds_max_precision">DECIMAL_PRECISION_EXCEEDS_MAX_PRECISION</a>, <a href="sql-error-conditions.html#element_at_by_index_zero">ELEMENT_AT_BY_INDEX_ZERO</a>, <a href="sql-error-conditions.html#incorrect_end_offset">INCORRECT_END_OFFSET</a>, <a href="sql-error-conditions.html#incorrect_ramp_up_rate">INCORRECT_RAMP_UP_RATE</a>, <a href="invalid-array-index-error-class.md">INVALID_ARRAY_INDEX</a>, <a href="invalid-array-index-in-element-at-error-class.md">INVALID_ARRAY_INDEX_IN_ELEMENT_AT</a>, <a href="sql-error-conditions.html#numeric_out_of_supported_range">NUMERIC_OUT_OF_SUPPORTED_RANGE</a>, <a href="sql-error-conditions.html#numeric_value_out_of_range">NUMERIC_VALUE_OUT_OF_RANGE</a>
+  <td><a href="arithmetic-overflow-error-class.md">ARITHMETIC_OVERFLOW</a>, <a href="sql-error-conditions.html#cast_overflow">CAST_OVERFLOW</a>, <a href="sql-error-conditions.html#cast_overflow_in_table_insert">CAST_OVERFLOW_IN_TABLE_INSERT</a>, <a href="sql-error-conditions.html#decimal_precision_exceeds_max_precision">DECIMAL_PRECISION_EXCEEDS_MAX_PRECISION</a>, <a href="sql-error-conditions.html#invalid_index_of_zero">INVALID_INDEX_OF_ZERO</a>, <a href="sql-error-conditions.html#incorrect_end_offset">INCORRECT_END_OFFSET</a>, <a href="sql-error-conditions.html#incorrect_ramp_up_rate">INCORRECT_RAMP_UP_RATE</a>, <a href="invalid-array-index-error-class.md">INVALID_ARRAY_INDEX</a>, <a href="invalid-array-index-in-element-at-error-class.md">INVALID_ARRAY_INDEX_IN_ELEMENT_AT</a>, <a href="sql-error-conditions.html#numeric_out_of_supported_range">NUMERIC_OUT_OF_SUPPORTED_RANGE</a>, <a href="sql-error-conditions.html#numeric_value_out_of_range">NUMERIC_VALUE_OUT_OF_RANGE</a>
   </td>
 </tr>
     <tr>
@@ -696,6 +696,21 @@ Spark SQL uses the following `SQLSTATE` classes:
 <tr>
   <td></td>
   <td><a href="sql-error-conditions.html#grouping_size_limit_exceeded">GROUPING_SIZE_LIMIT_EXCEEDED</a>, <a href="sql-error-conditions.html#too_many_array_elements">TOO_MANY_ARRAY_ELEMENTS</a>
+  </td>
+</tr>
+
+</table>
+## Class `HY`: CLI-specific condition
+
+<table class="table table-striped">
+<thead><tr><th>SQLSTATE</th><th>Description and issuing error classes</th></tr></thead>
+<tr>
+  <td>HY008</td>
+  <td>operation canceled</td>
+</tr>
+<tr>
+  <td></td>
+  <td><a href="sql-error-conditions.html#operation_canceled">OPERATION_CANCELED</a>
   </td>
 </tr>
 

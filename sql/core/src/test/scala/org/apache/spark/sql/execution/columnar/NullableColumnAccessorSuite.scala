@@ -22,6 +22,7 @@ import java.nio.ByteBuffer
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.CatalystTypeConverters
 import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, UnsafeProjection}
+import org.apache.spark.sql.catalyst.types.{PhysicalArrayType, PhysicalMapType, PhysicalStructType}
 import org.apache.spark.sql.types._
 
 class TestNullableColumnAccessor[JvmType](
@@ -43,8 +44,9 @@ class NullableColumnAccessorSuite extends SparkFunSuite {
   Seq(
     NULL, BOOLEAN, BYTE, SHORT, INT, LONG, FLOAT, DOUBLE,
     STRING, BINARY, COMPACT_DECIMAL(15, 10), LARGE_DECIMAL(20, 10),
-    STRUCT(StructType(StructField("a", StringType) :: Nil)),
-    ARRAY(ArrayType(IntegerType)), MAP(MapType(IntegerType, StringType)),
+    STRUCT(PhysicalStructType(Array(StructField("a", StringType)))),
+    ARRAY(PhysicalArrayType(IntegerType, true)),
+    MAP(PhysicalMapType(IntegerType, StringType, true)),
     CALENDAR_INTERVAL)
     .foreach {
     testNullableColumnAccessor(_)
@@ -65,7 +67,8 @@ class NullableColumnAccessorSuite extends SparkFunSuite {
     test(s"Nullable $typeName column accessor: access null values") {
       val builder = TestNullableColumnBuilder(columnType)
       val randomRow = makeRandomRow(columnType)
-      val proj = UnsafeProjection.create(Array[DataType](columnType.dataType))
+      val proj = UnsafeProjection.create(Array[DataType](
+        ColumnarDataTypeUtils.toLogicalDataType(columnType.dataType)))
 
       (0 until 4).foreach { _ =>
         builder.appendFrom(proj(randomRow), 0)
@@ -74,13 +77,16 @@ class NullableColumnAccessorSuite extends SparkFunSuite {
 
       val accessor = TestNullableColumnAccessor(builder.build(), columnType)
       val row = new GenericInternalRow(1)
-      val converter = CatalystTypeConverters.createToScalaConverter(columnType.dataType)
+      val converter = CatalystTypeConverters.createToScalaConverter(
+        ColumnarDataTypeUtils.toLogicalDataType(columnType.dataType))
 
       (0 until 4).foreach { _ =>
         assert(accessor.hasNext)
         accessor.extractTo(row, 0)
-        assert(converter(row.get(0, columnType.dataType))
-          === converter(randomRow.get(0, columnType.dataType)))
+        assert(converter(row.get(0,
+          ColumnarDataTypeUtils.toLogicalDataType(columnType.dataType)))
+          === converter(randomRow.get(0,
+          ColumnarDataTypeUtils.toLogicalDataType(columnType.dataType))))
 
         assert(accessor.hasNext)
         accessor.extractTo(row, 0)

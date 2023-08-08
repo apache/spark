@@ -45,9 +45,14 @@ import org.apache.spark.util.{SparkFatalException, ThreadUtils}
 trait BroadcastExchangeLike extends Exchange {
 
   /**
-   * The broadcast job group ID
+   * The broadcast run ID in job tag
    */
-  def runId: UUID = UUID.randomUUID
+  val runId: UUID = UUID.randomUUID
+
+  /**
+   * The broadcast job tag
+   */
+  def jobTag: String = s"broadcast exchange (runId ${runId.toString})"
 
   /**
    * The asynchronous job that prepares the broadcast relation.
@@ -79,8 +84,6 @@ case class BroadcastExchangeExec(
     mode: BroadcastMode,
     child: SparkPlan) extends BroadcastExchangeLike {
   import BroadcastExchangeExec._
-
-  override val runId: UUID = UUID.randomUUID
 
   override lazy val metrics = Map(
     "dataSize" -> SQLMetrics.createSizeMetric(sparkContext, "data size"),
@@ -129,9 +132,9 @@ case class BroadcastExchangeExec(
     SQLExecution.withThreadLocalCaptured[broadcast.Broadcast[Any]](
       session, BroadcastExchangeExec.executionContext) {
           try {
-            // Setup a job group here so later it may get cancelled by groupId if necessary.
-            sparkContext.setJobGroup(runId.toString, s"broadcast exchange (runId $runId)",
-              interruptOnCancel = true)
+            // Setup a job tag here so later it may get cancelled by tag if necessary.
+            sparkContext.addJobTag(jobTag)
+            sparkContext.setInterruptOnCancel(true)
             val beforeCollect = System.nanoTime()
             // Use executeCollect/executeCollectIterator to avoid conversion to Scala types
             val (numRows, input) = child.executeCollectIterator()
@@ -211,7 +214,7 @@ case class BroadcastExchangeExec(
       case ex: TimeoutException =>
         logError(s"Could not execute broadcast in $timeout secs.", ex)
         if (!relationFuture.isDone) {
-          sparkContext.cancelJobGroup(runId.toString)
+          sparkContext.cancelJobsWithTag(jobTag)
           relationFuture.cancel(true)
         }
         throw QueryExecutionErrors.executeBroadcastTimeoutError(timeout, Some(ex))

@@ -213,7 +213,6 @@ Apache Software Foundation License 2.0
 common/network-common/src/main/java/org/apache/spark/network/util/LimitedInputStream.java
 core/src/main/java/org/apache/spark/util/collection/TimSort.java
 core/src/main/resources/org/apache/spark/ui/static/bootstrap*
-core/src/main/resources/org/apache/spark/ui/static/jsonFormatter*
 core/src/main/resources/org/apache/spark/ui/static/vis*
 docs/js/vendor/bootstrap.js
 connector/spark-ganglia-lgpl/src/main/java/com/codahale/metrics/ganglia/GangliaReporter.java

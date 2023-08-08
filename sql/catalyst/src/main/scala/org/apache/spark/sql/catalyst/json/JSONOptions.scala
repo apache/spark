@@ -21,14 +21,13 @@ import java.nio.charset.{Charset, StandardCharsets}
 import java.time.ZoneId
 import java.util.Locale
 
-import com.fasterxml.jackson.core.{JsonFactory, JsonFactoryBuilder}
+import com.fasterxml.jackson.core.{JsonFactory, JsonFactoryBuilder, StreamReadConstraints}
 import com.fasterxml.jackson.core.json.JsonReadFeature
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.{DataSourceOptions, FileSourceOptions}
 import org.apache.spark.sql.catalyst.util._
-import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.internal.SQLConf.LegacyBehaviorPolicy
+import org.apache.spark.sql.internal.{LegacyBehaviorPolicy, SQLConf}
 
 /**
  * Options for parsing JSON data into Spark SQL rows.
@@ -42,6 +41,21 @@ private[sql] class JSONOptions(
   extends FileSourceOptions(parameters) with Logging  {
 
   import JSONOptions._
+
+  private val maxNestingDepth: Int = parameters
+    .get("maxNestingDepth")
+    .map(_.toInt)
+    .getOrElse(StreamReadConstraints.DEFAULT_MAX_DEPTH)
+
+  private val maxNumLen: Int = parameters
+    .get("maxNumLen")
+    .map(_.toInt)
+    .getOrElse(StreamReadConstraints.DEFAULT_MAX_NUM_LEN)
+
+  private val maxStringLen: Int = parameters
+    .get("maxStringLen")
+    .map(_.toInt)
+    .getOrElse(StreamReadConstraints.DEFAULT_MAX_STRING_LEN)
 
   def this(
     parameters: Map[String, String],
@@ -176,6 +190,13 @@ private[sql] class JSONOptions(
 
   /** Build a Jackson [[JsonFactory]] using JSON options. */
   def buildJsonFactory(): JsonFactory = {
+    val streamReadConstraints = StreamReadConstraints
+      .builder()
+      .maxNestingDepth(maxNestingDepth)
+      .maxNumberLength(maxNumLen)
+      .maxStringLength(maxStringLen)
+      .build()
+
     new JsonFactoryBuilder()
       .configure(JsonReadFeature.ALLOW_JAVA_COMMENTS, allowComments)
       .configure(JsonReadFeature.ALLOW_UNQUOTED_FIELD_NAMES, allowUnquotedFieldNames)
@@ -186,6 +207,7 @@ private[sql] class JSONOptions(
         JsonReadFeature.ALLOW_BACKSLASH_ESCAPING_ANY_CHARACTER,
         allowBackslashEscapingAnyCharacter)
       .configure(JsonReadFeature.ALLOW_UNESCAPED_CONTROL_CHARS, allowUnquotedControlChars)
+      .streamReadConstraints(streamReadConstraints)
       .build()
   }
 }

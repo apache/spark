@@ -75,12 +75,10 @@ def check_connect_protos():
         else:
             fail(
                 "Generated files for pyspark-connect are out of sync! "
-                "If you have touched files under connector/connect/src/main/protobuf, "
+                "If you have touched files under connector/connect/common/src/main/protobuf/, "
                 "please run ./dev/connect-gen-protos.sh. "
                 "If you haven't touched any file above, please rebase your PR against main branch."
             )
 
 
 check_connect_protos()
-
-# TODO: also check generated code in pyspark-ml and pyspark-mllib.

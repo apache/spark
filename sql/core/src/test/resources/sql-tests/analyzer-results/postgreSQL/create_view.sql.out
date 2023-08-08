@@ -31,7 +31,8 @@ DropTableCommand `spark_catalog`.`default`.`toyemp`, false, true, false
 -- !query
 DROP TABLE emp
 -- !query analysis
-DropTableCommand `spark_catalog`.`default`.`emp`, false, false, false
+DropTable false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.emp
 
 
 -- !query
@@ -66,7 +67,7 @@ org.apache.spark.sql.AnalysisException
 CREATE VIEW key_dependent_view_no_cols AS
    SELECT FROM view_base_table GROUP BY key HAVING length(data) > 0
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
   "sqlState" : "42703",
@@ -207,7 +208,8 @@ DropTableCommand `spark_catalog`.`default`.`viewtest`, false, true, false
 -- !query
 DROP TABLE viewtest_tbl
 -- !query analysis
-DropTableCommand `spark_catalog`.`default`.`viewtest_tbl`, false, false, false
+DropTable false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.viewtest_tbl
 
 
 -- !query
@@ -543,7 +545,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 CREATE VIEW v10_temp AS SELECT * FROM v7_temp
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
   "sqlState" : "42P01",
@@ -563,7 +565,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 CREATE VIEW v11_temp AS SELECT t1.id, t2.a FROM base_table t1, v10_temp t2
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
   "sqlState" : "42P01",
@@ -574,8 +576,8 @@ org.apache.spark.sql.AnalysisException
     "objectType" : "",
     "objectName" : "",
     "startIndex" : 64,
-    "stopIndex" : 74,
-    "fragment" : "v10_temp t2"
+    "stopIndex" : 71,
+    "fragment" : "v10_temp"
   } ]
 }
 
@@ -583,7 +585,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 CREATE VIEW v12_temp AS SELECT true FROM v11_temp
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
   "sqlState" : "42P01",
@@ -1356,7 +1358,8 @@ DescribeTableCommand `spark_catalog`.`testviewschm2`.`v3`, false, [col_name#x, d
 -- !query
 drop table tt3
 -- !query analysis
-DropTableCommand `spark_catalog`.`testviewschm2`.`tt3`, false, false, false
+DropTable false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), testviewschm2.tt3
 
 
 -- !query

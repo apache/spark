@@ -39,7 +39,7 @@ import org.apache.spark.internal.config._
 import org.apache.spark.rdd.{HadoopRDD, NewHadoopRDD}
 import org.apache.spark.serializer.KryoSerializer
 import org.apache.spark.storage.StorageLevel
-import org.apache.spark.util.{Utils, VersionUtils}
+import org.apache.spark.util.Utils
 
 class FileSuite extends SparkFunSuite with LocalSparkContext {
   var tempDir: File = _
@@ -148,9 +148,7 @@ class FileSuite extends SparkFunSuite with LocalSparkContext {
       case _: LinkageError => None
       case NonFatal(_) => None
     }
-  } ++ {
-    if (VersionUtils.isHadoop3) Seq((new Lz4Codec(), "lz4")) else Seq.empty
-  }
+  } ++ Seq((new Lz4Codec(), "lz4"))
 
   codecs.foreach { case (codec, codecName) =>
     runSequenceFileCodecTest(codec, codecName)

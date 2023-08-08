@@ -460,7 +460,7 @@ trait NonSQLExpression extends Expression {
     transform {
       case a: Attribute => new PrettyAttribute(a)
       case a: Alias => PrettyAttribute(a.sql, a.dataType)
-      case p: PythonUDF => PrettyPythonUDF(p.name, p.dataType, p.children)
+      case p: PythonFuncExpression => PrettyPythonUDF(p.name, p.dataType, p.children)
     }.toString
   }
 }

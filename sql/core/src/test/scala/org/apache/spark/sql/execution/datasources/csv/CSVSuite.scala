@@ -41,8 +41,7 @@ import org.apache.spark.sql.{AnalysisException, Column, DataFrame, Encoders, Que
 import org.apache.spark.sql.catalyst.csv.CSVOptions
 import org.apache.spark.sql.catalyst.util.{DateTimeTestUtils, DateTimeUtils}
 import org.apache.spark.sql.execution.datasources.CommonFileDataSourceSuite
-import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.internal.SQLConf.LegacyBehaviorPolicy
+import org.apache.spark.sql.internal.{LegacyBehaviorPolicy, SQLConf}
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 
@@ -1853,7 +1852,7 @@ abstract class CSVSuite
 
   test("SPARK-24244: Select a subset of all columns") {
     withTempPath { path =>
-      import collection.JavaConverters._
+      import scala.collection.JavaConverters._
       val schema = new StructType()
         .add("f1", IntegerType).add("f2", IntegerType).add("f3", IntegerType)
         .add("f4", IntegerType).add("f5", IntegerType).add("f6", IntegerType)
@@ -3095,8 +3094,11 @@ abstract class CSVSuite
       }
       checkError(
         exception = exception,
-        errorClass = "_LEGACY_ERROR_TEMP_1150",
-        parameters = Map("field" -> colName, "fieldType" -> "binary", "format" -> "CSV")
+        errorClass = "UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE",
+        parameters = Map(
+          "columnName" -> s"`$colName`",
+          "columnType" -> "\"BINARY\"",
+          "format" -> "CSV")
       )
     }
   }
@@ -3218,7 +3220,7 @@ class CSVv1Suite extends CSVSuite {
 
       checkError(
         exception = exception.getCause.asInstanceOf[SparkException],
-        errorClass = "MALFORMED_RECORD_IN_PARSING",
+        errorClass = "MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION",
         parameters = Map(
           "badRecord" -> "[2015,Chevy,Volt,null,null]",
           "failFastMode" -> "FAILFAST")

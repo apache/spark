@@ -26,7 +26,7 @@ from pyspark.pandas.config import option_context
 from pyspark.pandas.tests.data_type_ops.testing_utils import OpsTestBase
 
 
-class CategoricalOpsTest(OpsTestBase):
+class CategoricalOpsTestsMixin:
     @property
     def pdf(self):
         return pd.DataFrame(
@@ -543,6 +543,10 @@ class CategoricalOpsTest(OpsTestBase):
             pdf["this_ordered_string_cat"] >= pdf["that_ordered_string_cat"],
             psdf["this_ordered_string_cat"] >= psdf["that_ordered_string_cat"],
         )
+
+
+class CategoricalOpsTests(CategoricalOpsTestsMixin, OpsTestBase):
+    pass
 
 
 if __name__ == "__main__":

@@ -394,7 +394,6 @@ private[history] class ApplicationCacheCheckFilter(
     val httpRequest = request.asInstanceOf[HttpServletRequest]
     val httpResponse = response.asInstanceOf[HttpServletResponse]
     val requestURI = httpRequest.getRequestURI
-    val operation = httpRequest.getMethod
 
     // if the request is for an attempt, check to see if it is in need of delete/refresh
     // and have the cache update the UI if so

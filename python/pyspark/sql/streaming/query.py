@@ -16,12 +16,11 @@
 #
 
 import json
-import sys
 from typing import Any, Dict, List, Optional
 
 from py4j.java_gateway import JavaObject, java_import
 
-from pyspark.errors import StreamingQueryException
+from pyspark.errors import StreamingQueryException, PySparkValueError
 from pyspark.errors.exceptions.captured import (
     StreamingQueryException as CapturedStreamingQueryException,
 )
@@ -36,6 +35,9 @@ class StreamingQuery:
     All these methods are thread-safe.
 
     .. versionadded:: 2.0.0
+
+    .. versionchanged:: 3.5.0
+        Supports Spark Connect.
 
     Notes
     -----
@@ -56,6 +58,9 @@ class StreamingQuery:
 
         .. versionadded:: 2.0.0
 
+        .. versionchanged:: 3.5.0
+            Supports Spark Connect.
+
         Returns
         -------
         str
@@ -68,7 +73,7 @@ class StreamingQuery:
 
         Get the unique id of this query that persists across restarts from checkpoint data
 
-        >>> sq.id # doctest: +ELLIPSIS
+        >>> sq.id
         '...'
 
         >>> sq.stop()
@@ -83,6 +88,9 @@ class StreamingQuery:
 
         .. versionadded:: 2.1.0
 
+        .. versionchanged:: 3.5.0
+            Supports Spark Connect.
+
         Returns
         -------
         str
@@ -95,7 +103,7 @@ class StreamingQuery:
 
         Get the unique id of this query that does not persist across restarts
 
-        >>> sq.runId # doctest: +ELLIPSIS
+        >>> sq.runId
         '...'
 
         >>> sq.stop()
@@ -111,6 +119,9 @@ class StreamingQuery:
         This name, if set, must be unique across all active queries.
 
         .. versionadded:: 2.0.0
+
+        .. versionchanged:: 3.5.0
+            Supports Spark Connect.
 
         Returns
         -------
@@ -137,6 +148,9 @@ class StreamingQuery:
         Whether this streaming query is currently active or not.
 
         .. versionadded:: 2.0.0
+
+        .. versionchanged:: 3.5.0
+            Supports Spark Connect.
 
         Returns
         -------
@@ -169,6 +183,9 @@ class StreamingQuery:
 
         .. versionadded:: 2.0.0
 
+        .. versionchanged:: 3.5.0
+            Supports Spark Connect.
+
         Parameters
         ----------
         timeout : int, optional
@@ -194,8 +211,11 @@ class StreamingQuery:
         >>> sq.stop()
         """
         if timeout is not None:
-            if not isinstance(timeout, (int, float)) or timeout < 0:
-                raise ValueError("timeout must be a positive integer or float. Got %s" % timeout)
+            if not isinstance(timeout, (int, float)) or timeout <= 0:
+                raise PySparkValueError(
+                    error_class="VALUE_NOT_POSITIVE",
+                    message_parameters={"arg_name": "timeout", "arg_value": type(timeout).__name__},
+                )
             return self._jsq.awaitTermination(int(timeout * 1000))
         else:
             return self._jsq.awaitTermination()
@@ -206,6 +226,9 @@ class StreamingQuery:
         Returns the current status of the query.
 
         .. versionadded:: 2.1.0
+
+        .. versionchanged:: 3.5.0
+            Supports Spark Connect.
 
         Returns
         -------
@@ -219,7 +242,7 @@ class StreamingQuery:
 
         Get the current status of the query
 
-        >>> sq.status # doctest: +ELLIPSIS
+        >>> sq.status
         {'message': '...', 'isDataAvailable': ..., 'isTriggerActive': ...}
 
         >>> sq.stop()
@@ -235,6 +258,9 @@ class StreamingQuery:
 
         .. versionadded:: 2.1.0
 
+        .. versionchanged:: 3.5.0
+            Supports Spark Connect.
+
         Returns
         -------
         list
@@ -248,7 +274,7 @@ class StreamingQuery:
 
         Get an array of the most recent query progress updates for this query
 
-        >>> sq.recentProgress # doctest: +ELLIPSIS
+        >>> sq.recentProgress
         [...]
 
         >>> sq.stop()
@@ -262,6 +288,9 @@ class StreamingQuery:
         None if there were no progress updates
 
         .. versionadded:: 2.1.0
+
+        .. versionchanged:: 3.5.0
+            Supports Spark Connect.
 
         Returns
         -------
@@ -292,6 +321,9 @@ class StreamingQuery:
 
         .. versionadded:: 2.0.0
 
+        .. versionchanged:: 3.5.0
+            Supports Spark Connect.
+
         Notes
         -----
         In the case of continually arriving data, this method may block forever.
@@ -320,6 +352,9 @@ class StreamingQuery:
 
         .. versionadded:: 2.0.0
 
+        .. versionchanged:: 3.5.0
+            Supports Spark Connect.
+
         Examples
         --------
         >>> sdf = spark.readStream.format("rate").load()
@@ -330,6 +365,7 @@ class StreamingQuery:
         Stop streaming query
 
         >>> sq.stop()
+
         >>> sq.isActive
         False
         """
@@ -340,6 +376,9 @@ class StreamingQuery:
         Prints the (logical and physical) plans to the console for debugging purpose.
 
         .. versionadded:: 2.1.0
+
+        .. versionchanged:: 3.5.0
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -381,6 +420,9 @@ class StreamingQuery:
         """
         .. versionadded:: 2.1.0
 
+        .. versionchanged:: 3.5.0
+            Supports Spark Connect.
+
         Returns
         -------
         :class:`StreamingQueryException`
@@ -400,6 +442,9 @@ class StreamingQueryManager:
 
     .. versionadded:: 2.0.0
 
+    .. versionchanged:: 3.5.0
+        Supports Spark Connect.
+
     Notes
     -----
     This API is evolving.
@@ -414,6 +459,9 @@ class StreamingQueryManager:
         Returns a list of active queries associated with this SparkSession
 
         .. versionadded:: 2.0.0
+
+        .. versionchanged:: 3.5.0
+            Supports Spark Connect.
 
         Returns
         -------
@@ -439,11 +487,14 @@ class StreamingQueryManager:
         """
         return [StreamingQuery(jsq) for jsq in self._jsqm.active()]
 
-    def get(self, id: str) -> StreamingQuery:
+    def get(self, id: str) -> Optional[StreamingQuery]:
         """
         Returns an active query from this :class:`SparkSession`.
 
         .. versionadded:: 2.0.0
+
+        .. versionchanged:: 3.5.0
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -478,7 +529,11 @@ class StreamingQueryManager:
         True
         >>> sq.stop()
         """
-        return StreamingQuery(self._jsqm.get(id))
+        query = self._jsqm.get(id)
+        if query is not None:
+            return StreamingQuery(query)
+        else:
+            return None
 
     def awaitAnyTermination(self, timeout: Optional[int] = None) -> Optional[bool]:
         """
@@ -502,6 +557,9 @@ class StreamingQueryManager:
         throws :class:`StreamingQueryException`, if `this` query has terminated with an exception
 
         .. versionadded:: 2.0.0
+
+        .. versionchanged:: 3.5.0
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -529,7 +587,10 @@ class StreamingQueryManager:
         """
         if timeout is not None:
             if not isinstance(timeout, (int, float)) or timeout < 0:
-                raise ValueError("timeout must be a positive integer or float. Got %s" % timeout)
+                raise PySparkValueError(
+                    error_class="VALUE_NOT_POSITIVE",
+                    message_parameters={"arg_name": "timeout", "arg_value": type(timeout).__name__},
+                )
             return self._jsqm.awaitAnyTermination(int(timeout * 1000))
         else:
             return self._jsqm.awaitAnyTermination()
@@ -540,6 +601,9 @@ class StreamingQueryManager:
         again to wait for new terminations.
 
         .. versionadded:: 2.0.0
+
+        .. versionchanged:: 3.5.0
+            Supports Spark Connect.
 
         Examples
         --------
@@ -554,11 +618,23 @@ class StreamingQueryManager:
 
         .. versionadded:: 3.4.0
 
+        .. versionchanged:: 3.5.0
+            Supports Spark Connect.
+
         Parameters
         ----------
         listener : :class:`StreamingQueryListener`
             A :class:`StreamingQueryListener` to receive up-calls for life cycle events of
             :class:`~pyspark.sql.streaming.StreamingQuery`.
+
+        Notes
+        -----
+        This function behaves differently in Spark Connect mode.
+        In Connect, the provided functions doesn't have access to variables defined outside of it.
+        Also in Connect, you need to use `self.spark` to access spark session.
+        Using `spark` would throw an exception.
+        In short, if you want to use spark session inside the listener,
+        please use `self.spark` in Connect mode, and use `spark` otherwise.
 
         Examples
         --------
@@ -570,8 +646,12 @@ class StreamingQueryManager:
         ...     def onQueryProgress(self, event):
         ...         pass
         ...
+        ...     def onQueryIdle(self, event):
+        ...         pass
+        ...
         ...     def onQueryTerminated(self, event):
         ...         pass
+        ...
         >>> test_listener = TestListener()
 
         Register streaming query listener
@@ -614,8 +694,12 @@ class StreamingQueryManager:
         ...     def onQueryProgress(self, event):
         ...         pass
         ...
+        ...     def onQueryIdle(self, event):
+        ...         pass
+        ...
         ...     def onQueryTerminated(self, event):
         ...         pass
+        ...
         >>> test_listener = TestListener()
 
         Register streaming query listener
@@ -632,6 +716,7 @@ class StreamingQueryManager:
 def _test() -> None:
     import doctest
     import os
+    import sys
     from pyspark.sql import SparkSession
     import pyspark.sql.streaming.query
     from py4j.protocol import Py4JError

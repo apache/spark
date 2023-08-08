@@ -438,6 +438,13 @@ private[spark] class AppStatusListener(
       .flatMap { p => Option(p.getProperty(SparkContext.SPARK_JOB_DESCRIPTION)) }
     val jobGroup = Option(event.properties)
       .flatMap { p => Option(p.getProperty(SparkContext.SPARK_JOB_GROUP_ID)) }
+    val jobTags = Option(event.properties)
+      .flatMap { p => Option(p.getProperty(SparkContext.SPARK_JOB_TAGS)) }
+      .map(_.split(SparkContext.SPARK_JOB_TAGS_SEP).toSet)
+      .getOrElse(Set())
+      .toSeq
+      .filter(!_.isEmpty)
+      .sorted
     val sqlExecutionId = Option(event.properties)
       .flatMap(p => Option(p.getProperty(SQL_EXECUTION_ID_KEY)).map(_.toLong))
 
@@ -448,6 +455,7 @@ private[spark] class AppStatusListener(
       if (event.time > 0) Some(new Date(event.time)) else None,
       event.stageIds,
       jobGroup,
+      jobTags,
       numTasks,
       sqlExecutionId)
     liveJobs.put(event.jobId, job)

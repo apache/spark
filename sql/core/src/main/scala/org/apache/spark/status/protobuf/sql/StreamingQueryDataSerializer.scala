@@ -23,7 +23,7 @@ import org.apache.spark.sql.streaming.ui.StreamingQueryData
 import org.apache.spark.status.protobuf.{ProtobufSerDe, StoreTypes}
 import org.apache.spark.status.protobuf.Utils._
 
-class StreamingQueryDataSerializer extends ProtobufSerDe[StreamingQueryData] {
+private[protobuf] class StreamingQueryDataSerializer extends ProtobufSerDe[StreamingQueryData] {
 
   override def serialize(data: StreamingQueryData): Array[Byte] = {
     val builder = StoreTypes.StreamingQueryData.newBuilder()

@@ -413,6 +413,15 @@ of the most common options to set are:
   <td>2.2.0</td>
 </tr>
 <tr>
+  <td><code>spark.log.level</code></td>
+  <td>(none)</td>
+  <td>
+    When set, overrides any user-defined log settings as if calling
+    <code>SparkContext.setLogLevel()</code> at Spark startup. Valid log levels include: "ALL", "DEBUG", "ERROR", "FATAL", "INFO", "OFF", "TRACE", "WARN".
+  </td>
+  <td>3.5.0</td>
+</tr>
+<tr>
   <td><code>spark.driver.supervise</code></td>
   <td>false</td>
   <td>
@@ -1033,6 +1042,14 @@ Apart from these, the following properties are also available, and may be useful
   <td>1.2.0</td>
 </tr>
 <tr>
+  <td><code>spark.shuffle.io.connectionCreationTimeout</code></td>
+  <td>value of <code>spark.shuffle.io.connectionTimeout</code></td>
+  <td>
+    Timeout for establishing a connection between the shuffle servers and clients.
+  </td>
+  <td>3.2.0</td>
+</tr>
+<tr>
   <td><code>spark.shuffle.service.enabled</code></td>
   <td>false</td>
   <td>
@@ -1207,6 +1224,14 @@ Apart from these, the following properties are also available, and may be useful
     for at least `connectionTimeout`.
   </td>
   <td>1.6.0</td>
+</tr>
+<tr>
+  <td><code>spark.files.io.connectionCreationTimeout</code></td>
+  <td>value of <code>spark.files.io.connectionTimeout</code></td>
+  <td>
+    Timeout for establishing a connection for fetching files in Spark RPC environments.
+  </td>
+  <td>3.2.0</td>
 </tr>
 <tr>
   <td><code>spark.shuffle.checksum.enabled</code></td>
@@ -2432,6 +2457,14 @@ Apart from these, the following properties are also available, and may be useful
     `connectionTimeout`.
   </td>
   <td>1.2.0</td>
+</tr>
+<tr>
+  <td><code>spark.rpc.io.connectionCreationTimeout</code></td>
+  <td>value of <code>spark.rpc.io.connectionTimeout</code></td>
+  <td>
+    Timeout for establishing a connection between RPC peers.
+  </td>
+  <td>3.2.0</td>
 </tr>
 </table>
 

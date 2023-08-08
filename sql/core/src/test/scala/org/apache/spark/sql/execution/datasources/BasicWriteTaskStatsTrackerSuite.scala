@@ -85,6 +85,7 @@ class BasicWriteTaskStatsTrackerSuite extends SparkFunSuite {
     val missing = new Path(tempDirPath, "missing")
     val tracker = new BasicWriteTaskStatsTracker(conf)
     tracker.newFile(missing.toString)
+    tracker.closeFile(missing.toString)
     assertStats(tracker, 0, 0)
   }
 
@@ -92,7 +93,7 @@ class BasicWriteTaskStatsTrackerSuite extends SparkFunSuite {
     val tracker = new BasicWriteTaskStatsTracker(conf)
     tracker.newFile("")
     intercept[IllegalArgumentException] {
-      finalStatus(tracker)
+      tracker.closeFile("")
     }
   }
 
@@ -100,7 +101,7 @@ class BasicWriteTaskStatsTrackerSuite extends SparkFunSuite {
     val tracker = new BasicWriteTaskStatsTracker(conf)
     tracker.newFile(null)
     intercept[IllegalArgumentException] {
-      finalStatus(tracker)
+      tracker.closeFile(null)
     }
   }
 
@@ -109,6 +110,7 @@ class BasicWriteTaskStatsTrackerSuite extends SparkFunSuite {
     val tracker = new BasicWriteTaskStatsTracker(conf)
     tracker.newFile(file.toString)
     touch(file)
+    tracker.closeFile(file.toString)
     assertStats(tracker, 1, 0)
   }
 
@@ -117,6 +119,7 @@ class BasicWriteTaskStatsTrackerSuite extends SparkFunSuite {
     val tracker = new BasicWriteTaskStatsTracker(conf)
     tracker.newFile(file.toString)
     write1(file)
+    tracker.closeFile(file.toString)
     assertStats(tracker, 1, len1)
   }
 
@@ -125,6 +128,7 @@ class BasicWriteTaskStatsTrackerSuite extends SparkFunSuite {
     val tracker = new BasicWriteTaskStatsTracker(conf)
     tracker.newFile(file.toString)
     val stream = localfs.create(file, true)
+    tracker.closeFile(file.toString)
     try {
       assertStats(tracker, 1, 0)
       stream.write(data1)
@@ -141,8 +145,10 @@ class BasicWriteTaskStatsTrackerSuite extends SparkFunSuite {
     val tracker = new BasicWriteTaskStatsTracker(conf)
     tracker.newFile(file1.toString)
     write1(file1)
+    tracker.closeFile(file1.toString)
     tracker.newFile(file2.toString)
     write2(file2)
+    tracker.closeFile(file2.toString)
     assertStats(tracker, 2, len1 + len2)
   }
 
@@ -153,10 +159,13 @@ class BasicWriteTaskStatsTrackerSuite extends SparkFunSuite {
     val tracker = new BasicWriteTaskStatsTracker(conf)
     tracker.newFile(file1.toString)
     write1(file1)
+    tracker.closeFile(file1.toString)
     tracker.newFile(file2.toString)
     write2(file2)
+    tracker.closeFile(file2.toString)
     tracker.newFile(file3.toString)
     touch(file3)
+    tracker.closeFile(file3.toString)
     assertStats(tracker, 3, len1 + len2)
   }
 
@@ -168,13 +177,16 @@ class BasicWriteTaskStatsTrackerSuite extends SparkFunSuite {
     // file 1
     tracker.newFile(file1.toString)
     write1(file1)
+    tracker.closeFile(file1.toString)
 
     // file 2 is noted, but not created
     tracker.newFile(file2.toString)
+    tracker.closeFile(file2.toString)
 
     // file 3 is noted & then created
     tracker.newFile(file3.toString)
     write2(file3)
+    tracker.closeFile(file3.toString)
 
     // the expected size is file1 + file3; only two files are reported
     // as found

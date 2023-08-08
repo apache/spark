@@ -50,11 +50,6 @@ class DataFrameParityTests(DataFrameTestsMixin, ReusedConnectTestCase):
     def test_repartitionByRange_dataframe(self):
         super().test_repartitionByRange_dataframe()
 
-    # TODO(SPARK-41834): Implement SparkSession.conf
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_repr_behaviors(self):
-        super().test_repr_behaviors()
-
     @unittest.skip("Spark Connect does not SparkContext but the tests depend on them.")
     def test_same_semantics_error(self):
         super().test_same_semantics_error()
@@ -67,20 +62,8 @@ class DataFrameParityTests(DataFrameTestsMixin, ReusedConnectTestCase):
     def test_toDF_with_schema_string(self):
         super().test_toDF_with_schema_string()
 
-    # TODO(SPARK-41876): Implement DataFrame `toLocalIterator`
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_to_local_iterator(self):
-        super().test_to_local_iterator()
-
-    # TODO(SPARK-41876): Implement DataFrame `toLocalIterator`
-    @unittest.skip("Fails in Spark Connect, should enable.")
     def test_to_local_iterator_not_fully_consumed(self):
-        super().test_to_local_iterator_not_fully_consumed()
-
-    # TODO(SPARK-41876): Implement DataFrame `toLocalIterator`
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_to_local_iterator_prefetch(self):
-        super().test_to_local_iterator_prefetch()
+        self.check_to_local_iterator_not_fully_consumed()
 
     def test_to_pandas_for_array_of_struct(self):
         # Spark Connect's implementation is based on Arrow.

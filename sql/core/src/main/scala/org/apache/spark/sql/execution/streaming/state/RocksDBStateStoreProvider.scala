@@ -24,6 +24,7 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.spark.{SparkConf, SparkEnv}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.Utils
 
@@ -143,7 +144,8 @@ private[sql] class RocksDBStateStoreProvider
         CUSTOM_METRIC_TOTAL_COMPACT_TIME -> sumNativeOpsLatencyMillis("compaction"),
         CUSTOM_METRIC_COMPACT_READ_BYTES -> nativeOpsMetrics("totalBytesReadByCompaction"),
         CUSTOM_METRIC_COMPACT_WRITTEN_BYTES -> nativeOpsMetrics("totalBytesWrittenByCompaction"),
-        CUSTOM_METRIC_FLUSH_WRITTEN_BYTES -> nativeOpsMetrics("totalBytesWrittenByFlush")
+        CUSTOM_METRIC_FLUSH_WRITTEN_BYTES -> nativeOpsMetrics("totalBytesWrittenByFlush"),
+        CUSTOM_METRIC_PINNED_BLOCKS_MEM_USAGE -> rocksDBMetrics.pinnedBlocksMemUsage
       ) ++ rocksDBMetrics.zipFileBytesUncompressed.map(bytes =>
         Map(CUSTOM_METRIC_ZIP_FILE_BYTES_UNCOMPRESSED -> bytes)).getOrElse(Map())
 
@@ -189,13 +191,33 @@ private[sql] class RocksDBStateStoreProvider
   override def stateStoreId: StateStoreId = stateStoreId_
 
   override def getStore(version: Long): StateStore = {
-    require(version >= 0, "Version cannot be less than 0")
-    rocksDB.load(version)
-    new RocksDBStateStore(version)
+    try {
+      if (version < 0) {
+        throw QueryExecutionErrors.unexpectedStateStoreVersion(version)
+      }
+      rocksDB.load(version)
+      new RocksDBStateStore(version)
+    }
+    catch {
+      case e: Throwable => throw QueryExecutionErrors.cannotLoadStore(e)
+    }
+  }
+
+  override def getReadStore(version: Long): StateStore = {
+    try {
+      if (version < 0) {
+        throw QueryExecutionErrors.unexpectedStateStoreVersion(version)
+      }
+      rocksDB.load(version, true)
+      new RocksDBStateStore(version)
+    }
+    catch {
+      case e: Throwable => throw QueryExecutionErrors.cannotLoadStore(e)
+    }
   }
 
   override def doMaintenance(): Unit = {
-    rocksDB.cleanup()
+    rocksDB.doMaintenance()
   }
 
   override def close(): Unit = {
@@ -299,8 +321,10 @@ object RocksDBStateStoreProvider {
     "RocksDB: compaction - total bytes written by the compaction process")
   val CUSTOM_METRIC_FLUSH_WRITTEN_BYTES = StateStoreCustomSizeMetric(
     "rocksdbTotalBytesWrittenByFlush",
-    "RocksDB: flush - total bytes written by flush"
-  )
+    "RocksDB: flush - total bytes written by flush")
+  val CUSTOM_METRIC_PINNED_BLOCKS_MEM_USAGE = StateStoreCustomSizeMetric(
+    "rocksdbPinnedBlocksMemoryUsage",
+    "RocksDB: memory usage for pinned blocks")
 
   // Total SST file size
   val CUSTOM_METRIC_SST_FILE_SIZE = StateStoreCustomSizeMetric(
@@ -315,6 +339,7 @@ object RocksDBStateStoreProvider {
     CUSTOM_METRIC_BLOCK_CACHE_MISS, CUSTOM_METRIC_BLOCK_CACHE_HITS, CUSTOM_METRIC_BYTES_READ,
     CUSTOM_METRIC_BYTES_WRITTEN, CUSTOM_METRIC_ITERATOR_BYTES_READ, CUSTOM_METRIC_STALL_TIME,
     CUSTOM_METRIC_TOTAL_COMPACT_TIME, CUSTOM_METRIC_COMPACT_READ_BYTES,
-    CUSTOM_METRIC_COMPACT_WRITTEN_BYTES, CUSTOM_METRIC_FLUSH_WRITTEN_BYTES
+    CUSTOM_METRIC_COMPACT_WRITTEN_BYTES, CUSTOM_METRIC_FLUSH_WRITTEN_BYTES,
+    CUSTOM_METRIC_PINNED_BLOCKS_MEM_USAGE
   )
 }

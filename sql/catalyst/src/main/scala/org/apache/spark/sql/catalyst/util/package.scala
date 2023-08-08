@@ -20,16 +20,14 @@ package org.apache.spark.sql.catalyst
 import java.io._
 import java.nio.charset.Charset
 import java.nio.charset.StandardCharsets.UTF_8
-import java.util.concurrent.atomic.AtomicBoolean
 
 import com.google.common.io.ByteStreams
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{MetadataBuilder, NumericType, StringType}
+import org.apache.spark.sql.types.{MetadataBuilder, NumericType, StringType, StructType}
 import org.apache.spark.unsafe.types.UTF8String
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{SparkErrorUtils, Utils}
 
 package object util extends Logging {
 
@@ -83,27 +81,14 @@ package object util extends Logging {
   }
 
   def sideBySide(left: String, right: String): Seq[String] = {
-    sideBySide(left.split("\n"), right.split("\n"))
+    SparkStringUtils.sideBySide(left, right)
   }
 
   def sideBySide(left: Seq[String], right: Seq[String]): Seq[String] = {
-    val maxLeftSize = left.map(_.length).max
-    val leftPadded = left ++ Seq.fill(math.max(right.size - left.size, 0))("")
-    val rightPadded = right ++ Seq.fill(math.max(left.size - right.size, 0))("")
-
-    leftPadded.zip(rightPadded).map {
-      case (l, r) => (if (l == r) " " else "!") + l + (" " * ((maxLeftSize - l.length) + 3)) + r
-    }
+    SparkStringUtils.sideBySide(left, right)
   }
 
-  def stackTraceToString(t: Throwable): String = {
-    val out = new java.io.ByteArrayOutputStream
-    Utils.tryWithResource(new PrintWriter(out)) { writer =>
-      t.printStackTrace(writer)
-      writer.flush()
-    }
-    new String(out.toByteArray, UTF_8)
-  }
+  def stackTraceToString(t: Throwable): String = SparkErrorUtils.stackTraceToString(t)
 
   // Replaces attributes, string literals, complex type extractors with their pretty form so that
   // generated column names don't contain back-ticks or double-quotes.
@@ -121,13 +106,11 @@ package object util extends Logging {
       PrettyAttribute(r.makeSQLString(r.parameters.map(toPrettySQL)), r.dataType)
     case c: Cast if !c.getTagValue(Cast.USER_SPECIFIED_CAST).getOrElse(false) =>
       PrettyAttribute(usePrettyExpression(c.child).sql, c.dataType)
-    case p: PythonUDF => PrettyPythonUDF(p.name, p.dataType, p.children)
+    case p: PythonFuncExpression => PrettyPythonUDF(p.name, p.dataType, p.children)
   }
 
   def quoteIdentifier(name: String): String = {
-    // Escapes back-ticks within the identifier name with double-back-ticks, and then quote the
-    // identifier with back-ticks.
-    "`" + name.replace("`", "``") + "`"
+    SparkStringUtils.quoteIdentifier(name)
   }
 
   def quoteNameParts(name: Seq[String]): String = {
@@ -135,28 +118,14 @@ package object util extends Logging {
   }
 
   def quoteIfNeeded(part: String): String = {
-    if (part.matches("[a-zA-Z0-9_]+") && !part.matches("\\d+")) {
-      part
-    } else {
-      s"`${part.replace("`", "``")}`"
-    }
+    QuotingUtils.quoteIfNeeded(part)
   }
 
   def toPrettySQL(e: Expression): String = usePrettyExpression(e).sql
 
   def escapeSingleQuotedString(str: String): String = {
-    val builder = new StringBuilder
-
-    str.foreach {
-      case '\'' => builder ++= s"\\\'"
-      case ch => builder += ch
-    }
-
-    builder.toString()
+    QuotingUtils.escapeSingleQuotedString(str)
   }
-
-  /** Whether we have warned about plan string truncation yet. */
-  private val truncationWarningPrinted = new AtomicBoolean(false)
 
   /**
    * Format a sequence with semantics similar to calling .mkString(). Any elements beyond
@@ -170,36 +139,25 @@ package object util extends Logging {
       sep: String,
       end: String,
       maxFields: Int): String = {
-    if (seq.length > maxFields) {
-      if (truncationWarningPrinted.compareAndSet(false, true)) {
-        logWarning(
-          "Truncated the string representation of a plan since it was too large. This " +
-            s"behavior can be adjusted by setting '${SQLConf.MAX_TO_STRING_FIELDS.key}'.")
-      }
-      val numFields = math.max(0, maxFields - 1)
-      seq.take(numFields).mkString(
-        start, sep, sep + "... " + (seq.length - numFields) + " more fields" + end)
-    } else {
-      seq.mkString(start, sep, end)
-    }
+    SparkStringUtils.truncatedString(seq, start, sep, end, maxFields)
   }
 
   /** Shorthand for calling truncatedString() without start or end strings. */
   def truncatedString[T](seq: Seq[T], sep: String, maxFields: Int): String = {
-    truncatedString(seq, "", sep, "", maxFields)
+    SparkStringUtils.truncatedString(seq, "", sep, "", maxFields)
   }
 
   val METADATA_COL_ATTR_KEY = "__metadata_col"
 
-  implicit class MetadataColumnHelper(attr: Attribute) {
-    /**
-     * If set, this metadata column can only be accessed with qualifiers, e.g. `qualifiers.col` or
-     * `qualifiers.*`. If not set, metadata columns cannot be accessed via star.
-     */
-    val QUALIFIED_ACCESS_ONLY = "__qualified_access_only"
+  /**
+   * If set, this metadata column can only be accessed with qualifiers, e.g. `qualifiers.col` or
+   * `qualifiers.*`. If not set, metadata columns cannot be accessed via star.
+   */
+  val QUALIFIED_ACCESS_ONLY = "__qualified_access_only"
 
-    def isMetadataCol: Boolean = attr.metadata.contains(METADATA_COL_ATTR_KEY) &&
-      attr.metadata.getBoolean(METADATA_COL_ATTR_KEY)
+  implicit class MetadataColumnHelper(attr: Attribute) {
+
+    def isMetadataCol: Boolean = MetadataAttribute.isValid(attr.metadata)
 
     def qualifiedAccessOnly: Boolean = attr.isMetadataCol &&
       attr.metadata.contains(QUALIFIED_ACCESS_ONLY) &&
@@ -208,7 +166,7 @@ package object util extends Logging {
     def markAsQualifiedAccessOnly(): Attribute = attr.withMetadata(
       new MetadataBuilder()
         .withMetadata(attr.metadata)
-        .putBoolean(METADATA_COL_ATTR_KEY, true)
+        .putString(METADATA_COL_ATTR_KEY, attr.name)
         .putBoolean(QUALIFIED_ACCESS_ONLY, true)
         .build()
     )
@@ -225,5 +183,26 @@ package object util extends Logging {
         attr
       }
     }
+  }
+
+  val AUTO_GENERATED_ALIAS = "__autoGeneratedAlias"
+
+  val INTERNAL_METADATA_KEYS = Seq(
+    AUTO_GENERATED_ALIAS,
+    METADATA_COL_ATTR_KEY,
+    QUALIFIED_ACCESS_ONLY,
+    FileSourceMetadataAttribute.FILE_SOURCE_METADATA_COL_ATTR_KEY,
+    FileSourceConstantMetadataStructField.FILE_SOURCE_CONSTANT_METADATA_COL_ATTR_KEY,
+    FileSourceGeneratedMetadataStructField.FILE_SOURCE_GENERATED_METADATA_COL_ATTR_KEY
+  )
+
+  def removeInternalMetadata(schema: StructType): StructType = {
+    StructType(schema.map { field =>
+      var builder = new MetadataBuilder().withMetadata(field.metadata)
+      INTERNAL_METADATA_KEYS.foreach { key =>
+        builder = builder.remove(key)
+      }
+      field.copy(metadata = builder.build())
+    })
   }
 }

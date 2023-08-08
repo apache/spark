@@ -18,15 +18,18 @@ package org.apache.spark.sql.expressions
 
 import scala.collection.JavaConverters._
 import scala.reflect.runtime.universe.TypeTag
+import scala.util.control.NonFatal
 
 import com.google.protobuf.ByteString
 
+import org.apache.spark.SparkException
 import org.apache.spark.connect.proto
 import org.apache.spark.sql.Column
 import org.apache.spark.sql.catalyst.ScalaReflection
-import org.apache.spark.sql.catalyst.encoders.AgnosticEncoder
-import org.apache.spark.sql.connect.common.UdfPacket
-import org.apache.spark.util.Utils
+import org.apache.spark.sql.catalyst.encoders.{AgnosticEncoder, RowEncoder}
+import org.apache.spark.sql.connect.common.{DataTypeProtoConverter, UdfPacket}
+import org.apache.spark.sql.types.DataType
+import org.apache.spark.util.{SparkClassUtils, SparkSerDeUtils}
 
 /**
  * A user-defined function. To create one, use the `udf` functions in `functions`.
@@ -92,20 +95,23 @@ sealed abstract class UserDefinedFunction {
 /**
  * Holder class for a scalar user-defined function and it's input/output encoder(s).
  */
-case class ScalarUserDefinedFunction(
-    function: AnyRef,
-    inputEncoders: Seq[AgnosticEncoder[_]],
-    outputEncoder: AgnosticEncoder[_],
+case class ScalarUserDefinedFunction private[sql] (
+    // SPARK-43198: Eagerly serialize to prevent the UDF from containing a reference to this class.
+    serializedUdfPacket: Array[Byte],
+    inputTypes: Seq[proto.DataType],
+    outputType: proto.DataType,
     name: Option[String],
     override val nullable: Boolean,
     override val deterministic: Boolean)
     extends UserDefinedFunction {
 
   private[this] lazy val udf = {
-    val udfPacketBytes = Utils.serialize(UdfPacket(function, inputEncoders, outputEncoder))
     val scalaUdfBuilder = proto.ScalarScalaUDF
       .newBuilder()
-      .setPayload(ByteString.copyFrom(udfPacketBytes))
+      .setPayload(ByteString.copyFrom(serializedUdfPacket))
+      // Send the real inputs and return types to obtain the types without deser the udf bytes.
+      .addAllInputTypes(inputTypes.asJava)
+      .setOutputType(outputType)
       .setNullable(nullable)
 
     scalaUdfBuilder.build()
@@ -127,9 +133,38 @@ case class ScalarUserDefinedFunction(
   override def asNonNullable(): ScalarUserDefinedFunction = copy(nullable = false)
 
   override def asNondeterministic(): ScalarUserDefinedFunction = copy(deterministic = false)
+
+  def toProto: proto.CommonInlineUserDefinedFunction = {
+    val builder = proto.CommonInlineUserDefinedFunction.newBuilder()
+    builder
+      .setDeterministic(deterministic)
+      .setScalarScalaUdf(udf)
+
+    name.foreach(builder.setFunctionName)
+    builder.build()
+  }
 }
 
 object ScalarUserDefinedFunction {
+  private val LAMBDA_DESERIALIZATION_ERR_MSG: String =
+    "cannot assign instance of java.lang.invoke.SerializedLambda to field"
+
+  private def checkDeserializable(bytes: Array[Byte]): Unit = {
+    try {
+      SparkSerDeUtils.deserialize(bytes, SparkClassUtils.getContextOrSparkClassLoader)
+    } catch {
+      case e: ClassCastException if e.getMessage.contains(LAMBDA_DESERIALIZATION_ERR_MSG) =>
+        throw new SparkException(
+          "UDF cannot be executed on a Spark cluster: it cannot be deserialized. " +
+            "This is very likely to be caused by the lambda function (the UDF) having a " +
+            "self-reference. This is not supported by java serialization.")
+      case NonFatal(e) =>
+        throw new SparkException(
+          "UDF cannot be executed on a Spark cluster: it cannot be deserialized.",
+          e)
+    }
+  }
+
   private[sql] def apply(
       function: AnyRef,
       returnType: TypeTag[_],
@@ -137,10 +172,33 @@ object ScalarUserDefinedFunction {
 
     ScalarUserDefinedFunction(
       function = function,
-      inputEncoders = parameterTypes.map(tag => ScalaReflection.encoderFor(tag)),
-      outputEncoder = ScalaReflection.encoderFor(returnType),
+      // Input can be a row because the input data schema can be found from the plan.
+      inputEncoders =
+        parameterTypes.map(tag => ScalaReflection.encoderForWithRowEncoderSupport(tag)),
+      // Output cannot be a row as there is no good way to get the return data type.
+      outputEncoder = ScalaReflection.encoderFor(returnType))
+  }
+
+  private[sql] def apply(
+      function: AnyRef,
+      inputEncoders: Seq[AgnosticEncoder[_]],
+      outputEncoder: AgnosticEncoder[_]): ScalarUserDefinedFunction = {
+    val udfPacketBytes =
+      SparkSerDeUtils.serialize(UdfPacket(function, inputEncoders, outputEncoder))
+    checkDeserializable(udfPacketBytes)
+    ScalarUserDefinedFunction(
+      serializedUdfPacket = udfPacketBytes,
+      inputTypes = inputEncoders.map(_.dataType).map(DataTypeProtoConverter.toConnectProtoType),
+      outputType = DataTypeProtoConverter.toConnectProtoType(outputEncoder.dataType),
       name = None,
       nullable = true,
       deterministic = true)
+  }
+
+  private[sql] def apply(function: AnyRef, returnType: DataType): ScalarUserDefinedFunction = {
+    ScalarUserDefinedFunction(
+      function = function,
+      inputEncoders = Seq.empty[AgnosticEncoder[_]],
+      outputEncoder = RowEncoder.encoderForDataType(returnType, lenient = false))
   }
 }

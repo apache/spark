@@ -165,7 +165,7 @@ SELECT c1 FROM (values (1,2), (3,2)) t(c1, c2) GROUP BY GROUPING SETS (())
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "MISSING_AGGREGATION",
   "sqlState" : "42803",
@@ -224,3 +224,21 @@ struct<grouping_id(k1, k2):bigint,avg(v):double>
 0	2.0
 1	1.0
 1	2.0
+
+
+-- !query
+SELECT CASE WHEN a IS NULL THEN count(b) WHEN b IS NULL THEN count(c) END
+FROM grouping
+GROUP BY GROUPING SETS (a, b, c)
+-- !query schema
+struct<CASE WHEN (a IS NULL) THEN count(b) WHEN (b IS NULL) THEN count(c) END:bigint>
+-- !query output
+1
+1
+1
+1
+1
+1
+1
+1
+1

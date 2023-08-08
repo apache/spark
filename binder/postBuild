@@ -33,9 +33,9 @@ else
 fi
 
 if [[ ! $VERSION < "3.4.0" ]]; then
-  pip install plotly "pyspark[sql,ml,mllib,pandas_on_spark,connect]$SPECIFIER$VERSION"
+  pip install plotly "pandas<2.0.0" "pyspark[sql,ml,mllib,pandas_on_spark,connect]$SPECIFIER$VERSION"
 else
-  pip install plotly "pyspark[sql,ml,mllib,pandas_on_spark]$SPECIFIER$VERSION"
+  pip install plotly "pandas<2.0.0" "pyspark[sql,ml,mllib,pandas_on_spark]$SPECIFIER$VERSION"
 fi
 
 # Set 'PYARROW_IGNORE_TIMEZONE' to surpress warnings from PyArrow.
@@ -44,6 +44,7 @@ echo "export PYARROW_IGNORE_TIMEZONE=1" >> ~/.profile
 # Add sbin to PATH to run `start-connect-server.sh`.
 SPARK_HOME=$(python -c "from pyspark.find_spark_home import _find_spark_home; print(_find_spark_home())")
 echo "export PATH=${PATH}:${SPARK_HOME}/sbin" >> ~/.profile
+echo "export SPARK_HOME=${SPARK_HOME}" >> ~/.profile
 
 # Add Spark version to env for running command dynamically based on Spark version.
 SPARK_VERSION=$(python -c "import pyspark; print(pyspark.__version__)")

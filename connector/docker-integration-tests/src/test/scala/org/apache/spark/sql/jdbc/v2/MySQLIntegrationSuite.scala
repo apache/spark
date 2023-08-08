@@ -21,7 +21,7 @@ import java.sql.{Connection, SQLFeatureNotSupportedException}
 
 import org.scalatest.time.SpanSugar._
 
-import org.apache.spark.SparkConf
+import org.apache.spark.{SparkConf, SparkSQLFeatureNotSupportedException}
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.execution.datasources.v2.jdbc.JDBCTableCatalog
 import org.apache.spark.sql.jdbc.DatabaseOnDocker
@@ -100,11 +100,20 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTest
     expectedSchema = new StructType().add("ID", StringType, true, defaultMetadata)
     assert(t.schema === expectedSchema)
     // Update column type from STRING to INTEGER
-    val msg1 = intercept[AnalysisException] {
-      sql(s"ALTER TABLE $tbl ALTER COLUMN id TYPE INTEGER")
-    }.getMessage
-    assert(msg1.contains(
-      s"Cannot update $catalogName.alt_table field ID: string cannot be cast to int"))
+    val sql1 = s"ALTER TABLE $tbl ALTER COLUMN id TYPE INTEGER"
+    checkError(
+      exception = intercept[AnalysisException] {
+        sql(sql1)
+      },
+      errorClass = "NOT_SUPPORTED_CHANGE_COLUMN",
+      parameters = Map(
+        "originType" -> "\"STRING\"",
+        "newType" -> "\"INT\"",
+        "newName" -> "`ID`",
+        "originName" -> "`ID`",
+        "table" -> s"`$catalogName`.`alt_table`"),
+      context = ExpectedContext(fragment = sql1, start = 0, stop = 55)
+    )
   }
 
   override def testRenameColumn(tbl: String): Unit = {
@@ -125,11 +134,11 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTest
   override def testUpdateColumnNullability(tbl: String): Unit = {
     sql(s"CREATE TABLE $tbl (ID STRING NOT NULL)")
     // Update nullability is unsupported for mysql db.
-    val msg = intercept[AnalysisException] {
-      sql(s"ALTER TABLE $tbl ALTER COLUMN ID DROP NOT NULL")
-    }.getCause.asInstanceOf[SQLFeatureNotSupportedException].getMessage
-
-    assert(msg.contains("UpdateColumnNullability is not supported"))
+    checkError(
+      exception = intercept[SparkSQLFeatureNotSupportedException] {
+        sql(s"ALTER TABLE $tbl ALTER COLUMN ID DROP NOT NULL")
+      },
+      errorClass = "_LEGACY_ERROR_TEMP_2271")
   }
 
   override def testCreateTableWithProperty(tbl: String): Unit = {
@@ -145,4 +154,13 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTest
   override def supportListIndexes: Boolean = true
 
   override def indexOptions: String = "KEY_BLOCK_SIZE=10"
+
+  test("SPARK-42943: Use LONGTEXT instead of TEXT for StringType for effective length") {
+    val tableName = catalogName + ".t1"
+    withTable(tableName) {
+      sql(s"CREATE TABLE $tableName(c1 string)")
+      sql(s"INSERT INTO $tableName SELECT rpad('hi', 65536, 'spark')")
+      assert(sql(s"SELECT char_length(c1) from $tableName").head().get(0) === 65536)
+    }
+  }
 }

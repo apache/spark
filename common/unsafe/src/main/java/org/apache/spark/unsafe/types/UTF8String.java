@@ -500,6 +500,14 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
   }
 
   /**
+   * Determines if the specified character (Unicode code point) is white space or an ISO control
+   * character according to Java.
+   */
+  private boolean isWhitespaceOrISOControl(int codePoint) {
+    return Character.isWhitespace(codePoint) || Character.isISOControl(codePoint);
+  }
+
+  /**
    * Trims space characters (ASCII 32) from both ends of this string.
    *
    * @return this string with no spaces at the start or end
@@ -535,14 +543,14 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
   public UTF8String trimAll() {
     int s = 0;
     // skip all of the whitespaces in the left side
-    while (s < this.numBytes && Character.isWhitespace(getByte(s))) s++;
+    while (s < this.numBytes && isWhitespaceOrISOControl(getByte(s))) s++;
     if (s == this.numBytes) {
       // Everything trimmed
       return EMPTY_UTF8;
     }
     // skip all of the whitespaces in the right side
     int e = this.numBytes - 1;
-    while (e > s && Character.isWhitespace(getByte(e))) e--;
+    while (e > s && isWhitespaceOrISOControl(getByte(e))) e--;
     if (s == 0 && e == numBytes - 1) {
       // Nothing trimmed
       return this;
@@ -1131,11 +1139,11 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
 
   private boolean toLong(LongWrapper toLongResult, boolean allowDecimal) {
     int offset = 0;
-    while (offset < this.numBytes && Character.isWhitespace(getByte(offset))) offset++;
+    while (offset < this.numBytes && isWhitespaceOrISOControl(getByte(offset))) offset++;
     if (offset == this.numBytes) return false;
 
     int end = this.numBytes - 1;
-    while (end > offset && Character.isWhitespace(getByte(end))) end--;
+    while (end > offset && isWhitespaceOrISOControl(getByte(end))) end--;
 
     byte b = getByte(offset);
     final boolean negative = b == '-';
@@ -1228,11 +1236,11 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
 
   private boolean toInt(IntWrapper intWrapper, boolean allowDecimal) {
     int offset = 0;
-    while (offset < this.numBytes && Character.isWhitespace(getByte(offset))) offset++;
+    while (offset < this.numBytes && isWhitespaceOrISOControl(getByte(offset))) offset++;
     if (offset == this.numBytes) return false;
 
     int end = this.numBytes - 1;
-    while (end > offset && Character.isWhitespace(getByte(end))) end--;
+    while (end > offset && isWhitespaceOrISOControl(getByte(end))) end--;
 
     byte b = getByte(offset);
     final boolean negative = b == '-';
@@ -1410,7 +1418,8 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
    * substitutions) that are required to change one of the strings into the other.
    */
   public int levenshteinDistance(UTF8String other) {
-    // Implementation adopted from org.apache.common.lang3.StringUtils.getLevenshteinDistance
+    // Implementation adopted from
+    // org.apache.commons.text.similarity.LevenshteinDistance.unlimitedCompare
 
     int n = numChars();
     int m = other.numChars();
@@ -1466,6 +1475,96 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     }
 
     return p[n];
+  }
+
+  public int levenshteinDistance(UTF8String other, int threshold) {
+    // Implementation adopted from
+    // org.apache.commons.text.similarity.LevenshteinDistance.limitedCompare
+
+    int n = numChars();
+    int m = other.numChars();
+
+    if (n == 0) {
+      return m <= threshold ? m : -1;
+    }
+    if (m == 0) {
+      return n <= threshold ? n : -1;
+    }
+
+    UTF8String s, t;
+
+    if (n <= m) {
+      s = this;
+      t = other;
+    } else {
+      s = other;
+      t = this;
+      int swap;
+      swap = n;
+      n = m;
+      m = swap;
+    }
+
+    if (m - n > threshold) {
+      return -1;
+    }
+
+    int[] p = new int[n + 1];
+    int[] d = new int[n + 1];
+    int[] swap;
+
+    int i, i_bytes, num_bytes_i, j, j_bytes, num_bytes_j;
+
+    final int boundary = Math.min(n, threshold) + 1;
+    for (i = 0; i < boundary; i++) { p[i] = i; }
+    Arrays.fill(p, boundary, p.length, Integer.MAX_VALUE);
+    Arrays.fill(d, Integer.MAX_VALUE);
+
+    for (j = 0, j_bytes = 0; j < m; j_bytes += num_bytes_j, j++) {
+      num_bytes_j = numBytesForFirstByte(t.getByte(j_bytes));
+
+      d[0] = j + 1;
+
+      final int min = Math.max(1, j + 1 - threshold);
+      final int max = j + 1 > Integer.MAX_VALUE - threshold ? n : Math.min(n, j + 1 + threshold);
+      if (min > 1) {
+        d[min - 1] = Integer.MAX_VALUE;
+      }
+
+      int lowerBound = Integer.MAX_VALUE;
+
+      for (i = 0, i_bytes = 0; i <= max; i_bytes += num_bytes_i, i++) {
+        if (i < min - 1) {
+          num_bytes_i = numBytesForFirstByte(s.getByte(i_bytes));
+        } else if (i == min - 1) {
+          num_bytes_i = 0;
+        } else {
+          if (ByteArrayMethods.arrayEquals(t.base, t.offset + j_bytes,
+                  s.base, s.offset + i_bytes, num_bytes_j)) {
+            d[i] = p[i - 1];
+          } else {
+            d[i] = 1 + Math.min(Math.min(d[i - 1], p[i]), p[i - 1]);
+          }
+          lowerBound = Math.min(lowerBound, d[i]);
+          num_bytes_i = numBytesForFirstByte(s.getByte(i_bytes));
+        }
+      }
+
+      if (lowerBound > threshold) {
+        return -1;
+      }
+
+      swap = p;
+      p = d;
+      d = swap;
+    }
+
+    // if p[n] is greater than the threshold, there's no guarantee on it
+    // being the correct distance
+    if (p[n] <= threshold) {
+      return p[n];
+    }
+    return -1;
   }
 
   @Override

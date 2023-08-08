@@ -51,6 +51,7 @@ DataFrame
     DataFrame.distinct
     DataFrame.drop
     DataFrame.dropDuplicates
+    DataFrame.dropDuplicatesWithinWatermark
     DataFrame.drop_duplicates
     DataFrame.dropna
     DataFrame.dtypes
@@ -79,6 +80,7 @@ DataFrame
     DataFrame.melt
     DataFrame.na
     DataFrame.observe
+    DataFrame.offset
     DataFrame.orderBy
     DataFrame.persist
     DataFrame.printSchema

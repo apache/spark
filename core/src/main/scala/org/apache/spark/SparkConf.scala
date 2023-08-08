@@ -503,8 +503,6 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging with Seria
       logWarning(msg)
     }
 
-    val executorOptsKey = EXECUTOR_JAVA_OPTIONS.key
-
     // Used by Yarn in 1.1 and before
     sys.props.get("spark.driver.libraryPath").foreach { value =>
       val warning =
@@ -518,16 +516,19 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging with Seria
     }
 
     // Validate spark.executor.extraJavaOptions
-    getOption(executorOptsKey).foreach { javaOpts =>
-      if (javaOpts.contains("-Dspark")) {
-        val msg = s"$executorOptsKey is not allowed to set Spark options (was '$javaOpts'). " +
-          "Set them directly on a SparkConf or in a properties file when using ./bin/spark-submit."
-        throw new Exception(msg)
-      }
-      if (javaOpts.contains("-Xmx")) {
-        val msg = s"$executorOptsKey is not allowed to specify max heap memory settings " +
-          s"(was '$javaOpts'). Use spark.executor.memory instead."
-        throw new Exception(msg)
+    Seq(EXECUTOR_JAVA_OPTIONS.key, "spark.executor.defaultJavaOptions").foreach { executorOptsKey =>
+      getOption(executorOptsKey).foreach { javaOpts =>
+        if (javaOpts.contains("-Dspark")) {
+          val msg = s"$executorOptsKey is not allowed to set Spark options (was '$javaOpts'). " +
+            "Set them directly on a SparkConf or in a properties file " +
+            "when using ./bin/spark-submit."
+          throw new Exception(msg)
+        }
+        if (javaOpts.contains("-Xmx")) {
+          val msg = s"$executorOptsKey is not allowed to specify max heap memory settings " +
+            s"(was '$javaOpts'). Use spark.executor.memory instead."
+          throw new Exception(msg)
+        }
       }
     }
 
@@ -709,7 +710,11 @@ private[spark] object SparkConf extends Logging {
       AlternateConfig("spark.yarn.access.namenodes", "2.2"),
       AlternateConfig("spark.yarn.access.hadoopFileSystems", "3.0")),
     "spark.kafka.consumer.cache.capacity" -> Seq(
-      AlternateConfig("spark.sql.kafkaConsumerCache.capacity", "3.0"))
+      AlternateConfig("spark.sql.kafkaConsumerCache.capacity", "3.0")),
+    MAX_EXECUTOR_FAILURES.key -> Seq(
+      AlternateConfig("spark.yarn.max.executor.failures", "3.5")),
+    EXECUTOR_ATTEMPT_FAILURE_VALIDITY_INTERVAL_MS.key -> Seq(
+      AlternateConfig("spark.yarn.executor.failuresValidityInterval", "3.5"))
   )
 
   /**

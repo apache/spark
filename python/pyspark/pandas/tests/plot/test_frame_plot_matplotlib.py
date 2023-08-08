@@ -18,6 +18,7 @@
 import base64
 from io import BytesIO
 import unittest
+from distutils.version import LooseVersion
 
 import pandas as pd
 import numpy as np
@@ -39,7 +40,7 @@ if have_matplotlib:
 
 
 @unittest.skipIf(not have_matplotlib, matplotlib_requirement_message)
-class DataFramePlotMatplotlibTest(PandasOnSparkTestCase, TestUtils):
+class DataFramePlotMatplotlibTestsMixin:
     sample_ratio_default = None
 
     @classmethod
@@ -78,6 +79,11 @@ class DataFramePlotMatplotlibTest(PandasOnSparkTestCase, TestUtils):
         plt.close(ax.figure)
         return b64_data
 
+    @unittest.skipIf(
+        LooseVersion(pd.__version__) >= LooseVersion("2.0.0"),
+        "TODO(SPARK-43641): Enable DataFramePlotMatplotlibTests.test_line_plot "
+        "for pandas 2.0.0.",
+    )
     def test_line_plot(self):
         def check_line_plot(pdf, psdf):
             ax1 = pdf.plot(kind="line", colormap="Paired")
@@ -102,6 +108,10 @@ class DataFramePlotMatplotlibTest(PandasOnSparkTestCase, TestUtils):
         psdf1.columns = columns
         check_line_plot(pdf1, psdf1)
 
+    @unittest.skipIf(
+        LooseVersion(pd.__version__) >= LooseVersion("2.0.0"),
+        "TODO(SPARK-43634): Enable DataFramePlotMatplotlibTests.test_area_plot for pandas 2.0.0.",
+    )
     def test_area_plot(self):
         def check_area_plot(pdf, psdf):
             ax1 = pdf.plot(kind="area", colormap="Paired")
@@ -126,6 +136,11 @@ class DataFramePlotMatplotlibTest(PandasOnSparkTestCase, TestUtils):
         psdf.columns = columns
         check_area_plot(pdf, psdf)
 
+    @unittest.skipIf(
+        LooseVersion(pd.__version__) >= LooseVersion("2.0.0"),
+        "TODO(SPARK-43635): Enable DataFramePlotMatplotlibTests.test_area_plot_stacked_false "
+        "for pandas 2.0.0.",
+    )
     def test_area_plot_stacked_false(self):
         def check_area_plot_stacked_false(pdf, psdf):
             ax1 = pdf.plot.area(stacked=False)
@@ -153,6 +168,11 @@ class DataFramePlotMatplotlibTest(PandasOnSparkTestCase, TestUtils):
         psdf.columns = columns
         check_area_plot_stacked_false(pdf, psdf)
 
+    @unittest.skipIf(
+        LooseVersion(pd.__version__) >= LooseVersion("2.0.0"),
+        "TODO(SPARK-43636): Enable DataFramePlotMatplotlibTests.test_area_plot_y "
+        "for pandas 2.0.0.",
+    )
     def test_area_plot_y(self):
         def check_area_plot_y(pdf, psdf, y):
             ax1 = pdf.plot.area(y=y)
@@ -179,6 +199,11 @@ class DataFramePlotMatplotlibTest(PandasOnSparkTestCase, TestUtils):
         psdf.columns = columns
         check_area_plot_y(pdf, psdf, y=("x", "sales"))
 
+    @unittest.skipIf(
+        LooseVersion(pd.__version__) >= LooseVersion("2.0.0"),
+        "TODO(SPARK-43639): Enable DataFramePlotMatplotlibTests.test_barh_plot_with_x_y "
+        "for pandas 2.0.0.",
+    )
     def test_barh_plot_with_x_y(self):
         def check_barh_plot_with_x_y(pdf, psdf, x, y):
             ax1 = pdf.plot(kind="barh", x=x, y=y, colormap="Paired")
@@ -204,6 +229,11 @@ class DataFramePlotMatplotlibTest(PandasOnSparkTestCase, TestUtils):
         psdf1.columns = columns
         check_barh_plot_with_x_y(pdf1, psdf1, x=("x", "lab"), y=("y", "val"))
 
+    @unittest.skipIf(
+        LooseVersion(pd.__version__) >= LooseVersion("2.0.0"),
+        "TODO(SPARK-43640): Enable DataFramePlotMatplotlibTests.test_barh_plot "
+        "for pandas 2.0.0.",
+    )
     def test_barh_plot(self):
         def check_barh_plot(pdf, psdf):
             ax1 = pdf.plot(kind="barh", colormap="Paired")
@@ -229,6 +259,10 @@ class DataFramePlotMatplotlibTest(PandasOnSparkTestCase, TestUtils):
         psdf1.columns = columns
         check_barh_plot(pdf1, psdf1)
 
+    @unittest.skipIf(
+        LooseVersion(pd.__version__) >= LooseVersion("2.0.0"),
+        "TODO(SPARK-43637): Enable DataFramePlotMatplotlibTests.test_bar_plot " "for pandas 2.0.0.",
+    )
     def test_bar_plot(self):
         def check_bar_plot(pdf, psdf):
             ax1 = pdf.plot(kind="bar", colormap="Paired")
@@ -253,6 +287,11 @@ class DataFramePlotMatplotlibTest(PandasOnSparkTestCase, TestUtils):
         psdf1.columns = columns
         check_bar_plot(pdf1, psdf1)
 
+    @unittest.skipIf(
+        LooseVersion(pd.__version__) >= LooseVersion("2.0.0"),
+        "TODO(SPARK-43638): Enable DataFramePlotMatplotlibTests.test_bar_with_x_y "
+        "for pandas 2.0.0.",
+    )
     def test_bar_with_x_y(self):
         # this is testing plot with specified x and y
         pdf = pd.DataFrame({"lab": ["A", "B", "C"], "val": [10, 30, 20]})
@@ -287,6 +326,10 @@ class DataFramePlotMatplotlibTest(PandasOnSparkTestCase, TestUtils):
         bin8 = self.plot_to_base64(ax8)
         self.assertEqual(bin7, bin8)
 
+    @unittest.skipIf(
+        LooseVersion(pd.__version__) >= LooseVersion("2.0.0"),
+        "TODO(SPARK-43642): Enable DataFramePlotMatplotlibTests.test_pie_plot " "for pandas 2.0.0.",
+    )
     def test_pie_plot(self):
         def check_pie_plot(pdf, psdf, y):
             ax1 = pdf.plot.pie(y=y, figsize=(5, 5), colormap="Paired")
@@ -348,6 +391,11 @@ class DataFramePlotMatplotlibTest(PandasOnSparkTestCase, TestUtils):
         error_message = "pie requires either y column or 'subplots=True'"
         self.assertTrue(error_message in str(context.exception))
 
+    @unittest.skipIf(
+        LooseVersion(pd.__version__) >= LooseVersion("2.0.0"),
+        "TODO(SPARK-43643): Enable DataFramePlotMatplotlibTests.test_scatter_plot "
+        "for pandas 2.0.0.",
+    )
     def test_scatter_plot(self):
         def check_scatter_plot(pdf, psdf, x, y, c):
             ax1 = pdf.plot.scatter(x=x, y=y)
@@ -380,6 +428,10 @@ class DataFramePlotMatplotlibTest(PandasOnSparkTestCase, TestUtils):
         psdf1.columns = columns
         check_scatter_plot(pdf1, psdf1, x=("x", "a"), y=("x", "b"), c=("y", "c"))
 
+    @unittest.skipIf(
+        LooseVersion(pd.__version__) >= LooseVersion("2.0.0"),
+        "TODO(SPARK-43720): Enable DataFramePlotMatplotlibTests.test_hist_plot for pandas 2.0.0.",
+    )
     def test_hist_plot(self):
         def check_hist_plot(pdf, psdf):
             _, ax1 = plt.subplots(1, 1)
@@ -431,6 +483,10 @@ class DataFramePlotMatplotlibTest(PandasOnSparkTestCase, TestUtils):
         psdf1.columns = columns
         check_hist_plot(pdf1, psdf1)
 
+    @unittest.skipIf(
+        LooseVersion(pd.__version__) >= LooseVersion("2.0.0"),
+        "TODO(SPARK-43722): Enable DataFramePlotMatplotlibTests.test_kde_plot for pandas 2.0.0.",
+    )
     def test_kde_plot(self):
         def moving_average(a, n=10):
             ret = np.cumsum(a, dtype=float)
@@ -471,6 +527,12 @@ class DataFramePlotMatplotlibTest(PandasOnSparkTestCase, TestUtils):
         pdf1.columns = columns
         check_kde_plot(pdf1, psdf1, bw_method=0.3)
         check_kde_plot(pdf1, psdf1, ind=[1, 2, 3], bw_method=3.0)
+
+
+class DataFramePlotMatplotlibTests(
+    DataFramePlotMatplotlibTestsMixin, PandasOnSparkTestCase, TestUtils
+):
+    pass
 
 
 if __name__ == "__main__":

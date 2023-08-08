@@ -21,8 +21,8 @@ import java.nio.{ByteBuffer, ByteOrder}
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.types.PhysicalDataType
 import org.apache.spark.sql.execution.columnar.{ColumnBuilder, NativeColumnBuilder}
-import org.apache.spark.sql.types.AtomicType
 import org.apache.spark.unsafe.Platform
 
 /**
@@ -41,7 +41,7 @@ import org.apache.spark.unsafe.Platform
  *     header         body
  * }}}
  */
-private[columnar] trait CompressibleColumnBuilder[T <: AtomicType]
+private[columnar] trait CompressibleColumnBuilder[T <: PhysicalDataType]
   extends ColumnBuilder with Logging {
 
   this: NativeColumnBuilder[T] with WithCompressionSchemes =>

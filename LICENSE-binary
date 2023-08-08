@@ -412,7 +412,6 @@ com.google.cloud.bigdataoss:gcs-connector
 
 core/src/main/java/org/apache/spark/util/collection/TimSort.java
 core/src/main/resources/org/apache/spark/ui/static/bootstrap*
-core/src/main/resources/org/apache/spark/ui/static/jsonFormatter*
 core/src/main/resources/org/apache/spark/ui/static/vis*
 docs/js/vendor/bootstrap.js
 
@@ -431,7 +430,6 @@ javolution:javolution
 com.esotericsoftware:kryo-shaded
 com.esotericsoftware:minlog
 com.esotericsoftware:reflectasm
-com.google.protobuf:protobuf-java
 org.codehaus.janino:commons-compiler
 org.codehaus.janino:janino
 jline:jline
@@ -443,6 +441,7 @@ pl.edu.icm:JLargeArrays
 BSD 3-Clause
 ------------
 
+com.google.protobuf:protobuf-java
 dk.brics.automaton:automaton
 org.antlr:antlr-runtime
 org.antlr:ST4

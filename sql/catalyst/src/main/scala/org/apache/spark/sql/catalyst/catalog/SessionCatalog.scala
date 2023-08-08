@@ -288,7 +288,7 @@ class SessionCatalog(
   def dropDatabase(db: String, ignoreIfNotExists: Boolean, cascade: Boolean): Unit = {
     val dbName = format(db)
     if (dbName == DEFAULT_DATABASE) {
-      throw QueryCompilationErrors.cannotDropDefaultDatabaseError
+      throw QueryCompilationErrors.cannotDropDefaultDatabaseError(dbName)
     }
     if (!ignoreIfNotExists) {
       requireDbExists(dbName)
@@ -416,7 +416,7 @@ class SessionCatalog(
     }
   }
 
-  private def makeQualifiedTablePath(locationUri: URI, database: String): URI = {
+  def makeQualifiedTablePath(locationUri: URI, database: String): URI = {
     if (locationUri.isAbsolute) {
       locationUri
     } else if (new Path(locationUri).isAbsolute) {
@@ -909,11 +909,11 @@ class SessionCatalog(
       val viewText = metadata.viewText.get
       val userSpecifiedColumns =
         if (metadata.schema.fieldNames.toSeq == metadata.viewQueryColumnNames) {
-          ""
+          " "
         } else {
-          s"(${metadata.schema.fieldNames.mkString(", ")})"
+          s" (${metadata.schema.fieldNames.mkString(", ")}) "
         }
-      Some(s"CREATE OR REPLACE VIEW $viewName $userSpecifiedColumns AS $viewText")
+      Some(s"CREATE OR REPLACE VIEW $viewName${userSpecifiedColumns}AS $viewText")
     }
   }
 
@@ -1720,31 +1720,37 @@ class SessionCatalog(
       arguments: Seq[Expression],
       registry: FunctionRegistryBase[T],
       createFunctionBuilder: CatalogFunction => FunctionRegistryBase[T]#FunctionBuilder): T = {
-    val qualifiedIdent = qualifyIdentifier(name)
-    val db = qualifiedIdent.database.get
-    val funcName = qualifiedIdent.funcName
-    if (registry.functionExists(qualifiedIdent)) {
-      // This function has been already loaded into the function registry.
-      registry.lookupFunction(qualifiedIdent, arguments)
-    } else {
-      // The function has not been loaded to the function registry, which means
-      // that the function is a persistent function (if it actually has been registered
-      // in the metastore). We need to first put the function in the function registry.
-      val catalogFunction = externalCatalog.getFunction(db, funcName)
-      loadFunctionResources(catalogFunction.resources)
-      // Please note that qualifiedName is provided by the user. However,
-      // catalogFunction.identifier.unquotedString is returned by the underlying
-      // catalog. So, it is possible that qualifiedName is not exactly the same as
-      // catalogFunction.identifier.unquotedString (difference is on case-sensitivity).
-      // At here, we preserve the input from the user.
-      val funcMetadata = catalogFunction.copy(identifier = qualifiedIdent)
-      registerFunction(
-        funcMetadata,
-        overrideIfExists = false,
-        registry = registry,
-        functionBuilder = createFunctionBuilder(funcMetadata))
-      // Now, we need to create the Expression.
-      registry.lookupFunction(qualifiedIdent, arguments)
+    // `synchronized` is used to prevent multiple threads from concurrently resolving the
+    // same function that has not yet been loaded into the function registry. This is needed
+    // because calling `registerFunction` twice with `overrideIfExists = false` can lead to
+    // a FunctionAlreadyExistsException.
+    synchronized {
+      val qualifiedIdent = qualifyIdentifier(name)
+      val db = qualifiedIdent.database.get
+      val funcName = qualifiedIdent.funcName
+      if (registry.functionExists(qualifiedIdent)) {
+        // This function has been already loaded into the function registry.
+        registry.lookupFunction(qualifiedIdent, arguments)
+      } else {
+        // The function has not been loaded to the function registry, which means
+        // that the function is a persistent function (if it actually has been registered
+        // in the metastore). We need to first put the function in the function registry.
+        val catalogFunction = externalCatalog.getFunction(db, funcName)
+        loadFunctionResources(catalogFunction.resources)
+        // Please note that qualifiedName is provided by the user. However,
+        // catalogFunction.identifier.unquotedString is returned by the underlying
+        // catalog. So, it is possible that qualifiedName is not exactly the same as
+        // catalogFunction.identifier.unquotedString (difference is on case-sensitivity).
+        // At here, we preserve the input from the user.
+        val funcMetadata = catalogFunction.copy(identifier = qualifiedIdent)
+        registerFunction(
+          funcMetadata,
+          overrideIfExists = false,
+          registry = registry,
+          functionBuilder = createFunctionBuilder(funcMetadata))
+        // Now, we need to create the Expression.
+        registry.lookupFunction(qualifiedIdent, arguments)
+      }
     }
   }
 

@@ -21,7 +21,7 @@ import scala.collection.mutable.{Map => MutableMap}
 import scala.collection.mutable
 
 import org.apache.spark.sql.{Dataset, SparkSession}
-import org.apache.spark.sql.catalyst.encoders.RowEncoder
+import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, CurrentBatchTimestamp, CurrentDate, CurrentTimestamp, FileSourceMetadataAttribute, LocalTimestamp}
 import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LocalRelation, LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.streaming.{StreamingRelationV2, WriteToStream}
@@ -723,7 +723,7 @@ class MicroBatchExecution(
     markMicroBatchExecutionStart()
 
     val nextBatch =
-      new Dataset(lastExecution, RowEncoder(lastExecution.analyzed.schema))
+      new Dataset(lastExecution, ExpressionEncoder(lastExecution.analyzed.schema))
 
     val batchSinkProgress: Option[StreamWriterCommitProgress] = reportTimeTaken("addBatch") {
       SQLExecution.withNewExecutionId(lastExecution) {
@@ -760,9 +760,11 @@ class MicroBatchExecution(
    * checkpointing to offset log and any microbatch startup tasks.
    */
   protected def markMicroBatchStart(): Unit = {
-    assert(offsetLog.add(currentBatchId,
-      availableOffsets.toOffsetSeq(sources, offsetSeqMetadata)),
-      s"Concurrent update to the log. Multiple streaming jobs detected for $currentBatchId")
+    if (!offsetLog.add(currentBatchId,
+      availableOffsets.toOffsetSeq(sources, offsetSeqMetadata))) {
+      throw QueryExecutionErrors.concurrentStreamLogUpdate(currentBatchId)
+    }
+
     logInfo(s"Committed offsets for batch $currentBatchId. " +
       s"Metadata ${offsetSeqMetadata.toString}")
   }
@@ -780,9 +782,9 @@ class MicroBatchExecution(
   protected def markMicroBatchEnd(): Unit = {
     watermarkTracker.updateWatermark(lastExecution.executedPlan)
     reportTimeTaken("commitOffsets") {
-      assert(commitLog.add(currentBatchId, CommitMetadata(watermarkTracker.currentWatermark)),
-        "Concurrent update to the commit log. Multiple streaming jobs detected for " +
-          s"$currentBatchId")
+      if (!commitLog.add(currentBatchId, CommitMetadata(watermarkTracker.currentWatermark))) {
+        throw QueryExecutionErrors.concurrentStreamLogUpdate(currentBatchId)
+      }
     }
     committedOffsets ++= availableOffsets
   }

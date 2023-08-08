@@ -31,10 +31,13 @@ class AlterTableRecoverPartitionsSuite
   test("partition recovering of v2 tables is not supported") {
     withNamespaceAndTable("ns", "tbl") { t =>
       spark.sql(s"CREATE TABLE $t (id bigint, data string) $defaultUsing")
-      val errMsg = intercept[AnalysisException] {
-        sql(s"ALTER TABLE $t RECOVER PARTITIONS")
-      }.getMessage
-      assert(errMsg.contains("ALTER TABLE ... RECOVER PARTITIONS is not supported for v2 tables"))
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(s"ALTER TABLE $t RECOVER PARTITIONS")
+        },
+        errorClass = "NOT_SUPPORTED_COMMAND_FOR_V2_TABLE",
+        parameters = Map("cmd" -> "ALTER TABLE ... RECOVER PARTITIONS")
+      )
     }
   }
 }

@@ -39,7 +39,6 @@ object ExtractPythonUDFFromAggregate extends Rule[LogicalPlan] {
    */
   private def belongAggregate(e: Expression, agg: Aggregate): Boolean = {
     e.isInstanceOf[AggregateExpression] ||
-      PythonUDF.isGroupedAggPandasUDF(e) ||
       agg.groupingExpressions.exists(_.semanticEquals(e))
   }
 
@@ -271,7 +270,8 @@ object ExtractPythonUDFs extends Rule[LogicalPlan] {
           val evaluation = evalType match {
             case PythonEvalType.SQL_BATCHED_UDF =>
               BatchEvalPython(validUdfs, resultAttrs, child)
-            case PythonEvalType.SQL_SCALAR_PANDAS_UDF | PythonEvalType.SQL_SCALAR_PANDAS_ITER_UDF =>
+            case PythonEvalType.SQL_SCALAR_PANDAS_UDF | PythonEvalType.SQL_SCALAR_PANDAS_ITER_UDF
+                 | PythonEvalType.SQL_ARROW_BATCHED_UDF =>
               ArrowEvalPython(validUdfs, resultAttrs, child, evalType)
             case _ =>
               throw new IllegalStateException("Unexpected UDF evalType")
@@ -301,6 +301,26 @@ object ExtractPythonUDFs extends Rule[LogicalPlan] {
         Project(plan.output, newPlan)
       } else {
         newPlan
+      }
+    }
+  }
+}
+
+/**
+ * Extracts PythonUDTFs from operators, rewriting the query plan so that UDTFs can be evaluated.
+ */
+object ExtractPythonUDTFs extends Rule[LogicalPlan] {
+  def apply(plan: LogicalPlan): LogicalPlan = plan match {
+    // A correlated subquery will be rewritten into join later, and will go through this rule
+    // eventually. Here we skip subquery, as Python UDTFs only need to be extracted once.
+    case s: Subquery if s.correlated => plan
+
+    case _ => plan.transformUpWithPruning(_.containsPattern(GENERATE)) {
+      case g @ Generate(func: PythonUDTF, _, _, _, _, child) => func.evalType match {
+        case PythonEvalType.SQL_TABLE_UDF =>
+          BatchEvalPythonUDTF(func, g.requiredChildOutput, g.generatorOutput, child)
+        case PythonEvalType.SQL_ARROW_TABLE_UDF =>
+          ArrowEvalPythonUDTF(func, g.requiredChildOutput, g.generatorOutput, child, func.evalType)
       }
     }
   }

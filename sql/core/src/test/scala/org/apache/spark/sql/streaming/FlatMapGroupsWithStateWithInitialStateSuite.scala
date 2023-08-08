@@ -26,7 +26,9 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.FlatMapGroupsWithStateSuite.{assertCanGetProcessingTime, assertCannotGetWatermark}
 import org.apache.spark.sql.streaming.GroupStateTimeout.{EventTimeTimeout, NoTimeout, ProcessingTimeTimeout}
 import org.apache.spark.sql.streaming.util.StreamManualClock
+import org.apache.spark.tags.SlowSQLTest
 
+@SlowSQLTest
 class FlatMapGroupsWithStateWithInitialStateSuite extends StateStoreMetricsTest {
   import testImplicits._
 

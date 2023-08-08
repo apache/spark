@@ -17,18 +17,14 @@
 package org.apache.spark.sql.connect.client
 
 import java.io.{File, Writer}
-import java.net.URLClassLoader
 import java.nio.charset.StandardCharsets
 import java.nio.file.{Files, Paths}
 import java.util.regex.Pattern
 
-import scala.reflect.runtime.universe.runtimeMirror
-
-import com.typesafe.tools.mima.core.{Problem, ProblemFilter, ProblemFilters}
+import com.typesafe.tools.mima.core._
 import com.typesafe.tools.mima.lib.MiMaLib
 
 import org.apache.spark.sql.connect.client.util.IntegrationTestUtils._
-import org.apache.spark.util.ChildFirstURLClassLoader
 
 /**
  * A tool for checking the binary compatibility of the connect client API against the spark SQL
@@ -62,31 +58,47 @@ object CheckConnectJvmClientCompatibility {
           "spark-connect-client-jvm-assembly",
           "spark-connect-client-jvm")
       val sqlJar: File = findJar("sql/core", "spark-sql", "spark-sql")
-      val problems = checkMiMaCompatibility(clientJar, sqlJar)
-      if (problems.nonEmpty) {
-        resultWriter.write(s"ERROR: Comparing client jar: $clientJar and and sql jar: $sqlJar \n")
-        resultWriter.write(s"problems: \n")
-        resultWriter.write(s"${problems.map(p => p.description("client")).mkString("\n")}")
-        resultWriter.write("\n")
-        resultWriter.write(
-          "Exceptions to binary compatibility can be added in " +
-            "'CheckConnectJvmClientCompatibility#checkMiMaCompatibility'\n")
-      }
-      val incompatibleApis = checkDatasetApiCompatibility(clientJar, sqlJar)
-      if (incompatibleApis.nonEmpty) {
-        resultWriter.write(
-          "ERROR: The Dataset apis only exist in the connect client " +
-            "module and not belong to the sql module include: \n")
-        resultWriter.write(incompatibleApis.mkString("\n"))
-        resultWriter.write("\n")
-        resultWriter.write(
-          "Exceptions can be added to exceptionMethods in " +
-            "'CheckConnectJvmClientCompatibility#checkDatasetApiCompatibility'\n")
-      }
+      val problemsWithSqlModule = checkMiMaCompatibilityWithSqlModule(clientJar, sqlJar)
+      appendMimaCheckErrorMessageIfNeeded(
+        resultWriter,
+        problemsWithSqlModule,
+        clientJar,
+        sqlJar,
+        "Sql")
+
+      val problemsWithClientModule =
+        checkMiMaCompatibilityWithReversedSqlModule(clientJar, sqlJar)
+      appendMimaCheckErrorMessageIfNeeded(
+        resultWriter,
+        problemsWithClientModule,
+        clientJar,
+        sqlJar,
+        "ReversedSql",
+        "Sql")
+
+      val avroJar: File = findJar("connector/avro", "spark-avro", "spark-avro")
+      val problemsWithAvroModule = checkMiMaCompatibilityWithAvroModule(clientJar, avroJar)
+      appendMimaCheckErrorMessageIfNeeded(
+        resultWriter,
+        problemsWithAvroModule,
+        clientJar,
+        avroJar,
+        "Avro")
+
+      val protobufJar: File =
+        findJar("connector/protobuf", "spark-protobuf-assembly", "spark-protobuf")
+      val problemsWithProtobufModule =
+        checkMiMaCompatibilityWithProtobufModule(clientJar, protobufJar)
+      appendMimaCheckErrorMessageIfNeeded(
+        resultWriter,
+        problemsWithProtobufModule,
+        clientJar,
+        protobufJar,
+        "Protobuf")
     } catch {
       case e: Throwable =>
         println(e.getMessage)
-        resultWriter.write(s"ERROR: ${e.getMessage}")
+        resultWriter.write(s"ERROR: ${e.getMessage}\n")
     } finally {
       if (resultWriter != null) {
         resultWriter.close()
@@ -94,122 +106,336 @@ object CheckConnectJvmClientCompatibility {
     }
   }
 
-  /**
-   * MiMa takes an old jar (sql jar) and a new jar (client jar) as inputs and then reports all
-   * incompatibilities found in the new jar. The incompatibility result is then filtered using
-   * include and exclude rules. Include rules are first applied to find all client classes that
-   * need to be checked. Then exclude rules are applied to filter out all unsupported methods in
-   * the client classes.
-   */
-  private def checkMiMaCompatibility(clientJar: File, sqlJar: File): List[Problem] = {
-    val mima = new MiMaLib(Seq(clientJar, sqlJar))
-    val allProblems = mima.collectProblems(sqlJar, clientJar, List.empty)
-    val includedRules = Seq(
-      IncludeByName("org.apache.spark.sql.Column.*"),
-      IncludeByName("org.apache.spark.sql.ColumnName.*"),
-      IncludeByName("org.apache.spark.sql.DataFrame.*"),
-      IncludeByName("org.apache.spark.sql.DataFrameReader.*"),
-      IncludeByName("org.apache.spark.sql.DataFrameNaFunctions.*"),
-      IncludeByName("org.apache.spark.sql.DataFrameStatFunctions.*"),
-      IncludeByName("org.apache.spark.sql.DataFrameWriter.*"),
-      IncludeByName("org.apache.spark.sql.DataFrameWriterV2.*"),
-      IncludeByName("org.apache.spark.sql.Dataset.*"),
-      IncludeByName("org.apache.spark.sql.functions.*"),
-      IncludeByName("org.apache.spark.sql.RelationalGroupedDataset.*"),
-      IncludeByName("org.apache.spark.sql.SparkSession.*"),
-      IncludeByName("org.apache.spark.sql.RuntimeConfig.*"),
-      IncludeByName("org.apache.spark.sql.TypedColumn.*"),
-      IncludeByName("org.apache.spark.sql.SQLImplicits.*"),
-      IncludeByName("org.apache.spark.sql.DatasetHolder.*"))
+  private def checkMiMaCompatibilityWithAvroModule(
+      clientJar: File,
+      avroJar: File): List[Problem] = {
+    val includedRules = Seq(IncludeByName("org.apache.spark.sql.avro.functions.*"))
+    val excludeRules = Seq.empty
+    checkMiMaCompatibility(clientJar, avroJar, includedRules, excludeRules)
+  }
+
+  private def checkMiMaCompatibilityWithProtobufModule(
+      clientJar: File,
+      protobufJar: File): List[Problem] = {
+    val includedRules = Seq(IncludeByName("org.apache.spark.sql.protobuf.functions.*"))
+    val excludeRules = Seq.empty
+    checkMiMaCompatibility(clientJar, protobufJar, includedRules, excludeRules)
+  }
+
+  private def checkMiMaCompatibilityWithSqlModule(
+      clientJar: File,
+      sqlJar: File): List[Problem] = {
+    val includedRules = Seq(IncludeByName("org.apache.spark.sql.*"))
     val excludeRules = Seq(
       // Filter unsupported rules:
       // Note when muting errors for a method, checks on all overloading methods are also muted.
 
-      // Skip all shaded dependencies and proto files in the client.
-      ProblemFilters.exclude[Problem]("org.sparkproject.*"),
-      ProblemFilters.exclude[Problem]("org.apache.spark.connect.proto.*"),
+      // Skip unsupported packages
+      ProblemFilters.exclude[Problem]("org.apache.spark.sql.api.*"), // Java, Python, R
+      ProblemFilters.exclude[Problem]("org.apache.spark.sql.catalyst.*"),
+      ProblemFilters.exclude[Problem]("org.apache.spark.sql.columnar.*"),
+      ProblemFilters.exclude[Problem]("org.apache.spark.sql.connector.*"),
+      ProblemFilters.exclude[Problem]("org.apache.spark.sql.execution.*"),
+      ProblemFilters.exclude[Problem]("org.apache.spark.sql.expressions.*"),
+      ProblemFilters.exclude[Problem]("org.apache.spark.sql.internal.*"),
+      ProblemFilters.exclude[Problem]("org.apache.spark.sql.jdbc.*"),
+      ProblemFilters.exclude[Problem]("org.apache.spark.sql.sources.*"),
+      ProblemFilters.exclude[Problem]("org.apache.spark.sql.streaming.ui.*"),
+      ProblemFilters.exclude[Problem]("org.apache.spark.sql.test.*"),
+      ProblemFilters.exclude[Problem]("org.apache.spark.sql.util.*"),
+
+      // Skip private[sql] constructors
+      ProblemFilters.exclude[Problem]("org.apache.spark.sql.*.this"),
+
+      // Skip unsupported classes
+      ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.ExperimentalMethods"),
+      ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.SQLContext"),
+      ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.SQLContext$*"),
+      ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.SparkSessionExtensions"),
+      ProblemFilters.exclude[MissingClassProblem](
+        "org.apache.spark.sql.SparkSessionExtensionsProvider"),
+      ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.UDTFRegistration"),
+      ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.UDFRegistration$"),
 
       // DataFrame Reader & Writer
-      ProblemFilters.exclude[Problem]("org.apache.spark.sql.DataFrameReader.json"), // deprecated
+      ProblemFilters.exclude[Problem]("org.apache.spark.sql.DataFrameReader.json"), // rdd
 
       // DataFrameNaFunctions
-      ProblemFilters.exclude[Problem]("org.apache.spark.sql.DataFrameNaFunctions.this"),
+      ProblemFilters.exclude[Problem]("org.apache.spark.sql.DataFrameNaFunctions.fillValue"),
 
       // DataFrameStatFunctions
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.DataFrameStatFunctions.bloomFilter"),
-      ProblemFilters.exclude[Problem]("org.apache.spark.sql.DataFrameStatFunctions.this"),
 
       // Dataset
+      ProblemFilters.exclude[MissingClassProblem](
+        "org.apache.spark.sql.Dataset$" // private[sql]
+      ),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.Dataset.ofRows"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.Dataset.DATASET_ID_TAG"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.Dataset.COL_POS_KEY"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.Dataset.DATASET_ID_KEY"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.Dataset.curId"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.Dataset.observe"),
+      ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.Observation"),
+      ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.Observation$"),
+      ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.ObservationListener"),
+      ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.ObservationListener$"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.Dataset.queryExecution"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.Dataset.encoder"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.Dataset.sqlContext"),
-      ProblemFilters.exclude[Problem]("org.apache.spark.sql.Dataset.joinWith"),
+      ProblemFilters.exclude[Problem]("org.apache.spark.sql.Dataset.metadataColumn"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.Dataset.selectUntyped"), // protected
-      ProblemFilters.exclude[Problem]("org.apache.spark.sql.Dataset.reduce"),
-      ProblemFilters.exclude[Problem]("org.apache.spark.sql.Dataset.groupByKey"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.Dataset.explode"), // deprecated
-      ProblemFilters.exclude[Problem]("org.apache.spark.sql.Dataset.filter"),
-      ProblemFilters.exclude[Problem]("org.apache.spark.sql.Dataset.map"),
-      ProblemFilters.exclude[Problem]("org.apache.spark.sql.Dataset.mapPartitions"),
-      ProblemFilters.exclude[Problem]("org.apache.spark.sql.Dataset.flatMap"),
-      ProblemFilters.exclude[Problem]("org.apache.spark.sql.Dataset.foreach"),
-      ProblemFilters.exclude[Problem]("org.apache.spark.sql.Dataset.foreachPartition"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.Dataset.rdd"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.Dataset.toJavaRDD"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.Dataset.javaRDD"),
-      ProblemFilters.exclude[Problem]("org.apache.spark.sql.Dataset.writeStream"),
-      ProblemFilters.exclude[Problem]("org.apache.spark.sql.Dataset.this"),
 
       // functions
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.functions.udf"),
-      ProblemFilters.exclude[Problem]("org.apache.spark.sql.functions.call_udf"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.functions.callUDF"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.functions.unwrap_udt"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.functions.udaf"),
-      ProblemFilters.exclude[Problem]("org.apache.spark.sql.functions.typedlit"),
-      ProblemFilters.exclude[Problem]("org.apache.spark.sql.functions.typedLit"),
+
+      // KeyValueGroupedDataset
+      ProblemFilters.exclude[Problem](
+        "org.apache.spark.sql.KeyValueGroupedDataset.queryExecution"),
 
       // RelationalGroupedDataset
+      ProblemFilters.exclude[MissingClassProblem](
+        "org.apache.spark.sql.RelationalGroupedDataset$*" // private[sql]
+      ),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.RelationalGroupedDataset.apply"),
-      ProblemFilters.exclude[Problem]("org.apache.spark.sql.RelationalGroupedDataset.as"),
-      ProblemFilters.exclude[Problem]("org.apache.spark.sql.RelationalGroupedDataset.this"),
 
       // SparkSession
-      ProblemFilters.exclude[Problem]("org.apache.spark.sql.SparkSession.clearDefaultSession"),
-      ProblemFilters.exclude[Problem]("org.apache.spark.sql.SparkSession.setDefaultSession"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.SparkSession.sparkContext"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.SparkSession.sharedState"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.SparkSession.sessionState"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.SparkSession.sqlContext"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.SparkSession.listenerManager"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.SparkSession.experimental"),
-      ProblemFilters.exclude[Problem]("org.apache.spark.sql.SparkSession.udf"),
+      ProblemFilters.exclude[Problem]("org.apache.spark.sql.SparkSession.udtf"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.SparkSession.streams"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.SparkSession.createDataFrame"),
       ProblemFilters.exclude[Problem](
         "org.apache.spark.sql.SparkSession.baseRelationToDataFrame"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.SparkSession.createDataset"),
-      ProblemFilters.exclude[Problem]("org.apache.spark.sql.SparkSession.catalog"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.SparkSession.executeCommand"),
-      ProblemFilters.exclude[Problem]("org.apache.spark.sql.SparkSession.readStream"),
+      // TODO(SPARK-44068): Support positional parameters in Scala connect client
+      ProblemFilters.exclude[Problem]("org.apache.spark.sql.SparkSession.sql"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.SparkSession.this"),
 
-      // RuntimeConfig
-      ProblemFilters.exclude[Problem]("org.apache.spark.sql.RuntimeConfig.this"),
+      // SparkSession#implicits
+      ProblemFilters.exclude[DirectMissingMethodProblem](
+        "org.apache.spark.sql.SparkSession#implicits._sqlContext"),
 
-      // TypedColumn
-      ProblemFilters.exclude[Problem]("org.apache.spark.sql.TypedColumn.this"),
+      // SparkSession#Builder
+      ProblemFilters.exclude[DirectMissingMethodProblem](
+        "org.apache.spark.sql.SparkSession#Builder.appName"),
+      ProblemFilters.exclude[DirectMissingMethodProblem](
+        "org.apache.spark.sql.SparkSession#Builder.config"),
+      ProblemFilters.exclude[DirectMissingMethodProblem](
+        "org.apache.spark.sql.SparkSession#Builder.master"),
+      ProblemFilters.exclude[DirectMissingMethodProblem](
+        "org.apache.spark.sql.SparkSession#Builder.enableHiveSupport"),
+      ProblemFilters.exclude[DirectMissingMethodProblem](
+        "org.apache.spark.sql.SparkSession#Builder.withExtensions"),
+
+      // RuntimeConfig
+      ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.RuntimeConfig$"),
+
+      // DataStreamWriter
+      ProblemFilters.exclude[MissingClassProblem](
+        "org.apache.spark.sql.streaming.DataStreamWriter$"),
+      ProblemFilters.exclude[Problem](
+        "org.apache.spark.sql.streaming.DataStreamWriter.foreachBatch" // TODO(SPARK-42944)
+      ),
+      ProblemFilters.exclude[Problem](
+        "org.apache.spark.sql.streaming.DataStreamWriter.SOURCE*" // These are constant vals.
+      ),
+
+      // StreamingQueryException
+      ProblemFilters.exclude[DirectMissingMethodProblem](
+        "org.apache.spark.sql.streaming.StreamingQueryException.message"),
+      ProblemFilters.exclude[DirectMissingMethodProblem](
+        "org.apache.spark.sql.streaming.StreamingQueryException.cause"),
+      ProblemFilters.exclude[DirectMissingMethodProblem](
+        "org.apache.spark.sql.streaming.StreamingQueryException.startOffset"),
+      ProblemFilters.exclude[DirectMissingMethodProblem](
+        "org.apache.spark.sql.streaming.StreamingQueryException.endOffset"),
+      ProblemFilters.exclude[DirectMissingMethodProblem](
+        "org.apache.spark.sql.streaming.StreamingQueryException.time"),
+
+      // Classes missing from streaming API
+      ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.ForeachWriter"),
+      ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.streaming.GroupState"),
+      ProblemFilters.exclude[MissingClassProblem](
+        "org.apache.spark.sql.streaming.TestGroupState"),
+      ProblemFilters.exclude[MissingClassProblem](
+        "org.apache.spark.sql.streaming.TestGroupState$"),
+      ProblemFilters.exclude[MissingClassProblem](
+        "org.apache.spark.sql.streaming.PythonStreamingQueryListener"),
+      ProblemFilters.exclude[MissingClassProblem](
+        "org.apache.spark.sql.streaming.PythonStreamingQueryListenerWrapper"),
+      ProblemFilters.exclude[MissingTypesProblem](
+        "org.apache.spark.sql.streaming.StreamingQueryListener$Event"),
+      ProblemFilters.exclude[MissingTypesProblem](
+        "org.apache.spark.sql.streaming.StreamingQueryListener$QueryIdleEvent"),
+      ProblemFilters.exclude[DirectMissingMethodProblem](
+        "org.apache.spark.sql.streaming.StreamingQueryListener#QueryIdleEvent.logEvent"),
+      ProblemFilters.exclude[MissingTypesProblem](
+        "org.apache.spark.sql.streaming.StreamingQueryListener$QueryProgressEvent"),
+      ProblemFilters.exclude[DirectMissingMethodProblem](
+        "org.apache.spark.sql.streaming.StreamingQueryListener#QueryProgressEvent.logEvent"),
+      ProblemFilters.exclude[MissingTypesProblem](
+        "org.apache.spark.sql.streaming.StreamingQueryListener$QueryStartedEvent"),
+      ProblemFilters.exclude[DirectMissingMethodProblem](
+        "org.apache.spark.sql.streaming.StreamingQueryListener#QueryStartedEvent.logEvent"),
+      ProblemFilters.exclude[MissingTypesProblem](
+        "org.apache.spark.sql.streaming.StreamingQueryListener$QueryTerminatedEvent"),
+      ProblemFilters.exclude[DirectMissingMethodProblem](
+        "org.apache.spark.sql.streaming.StreamingQueryListener#QueryTerminatedEvent.logEvent"),
 
       // SQLImplicits
-      ProblemFilters.exclude[Problem]("org.apache.spark.sql.SQLImplicits.this"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.SQLImplicits.rddToDatasetHolder"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.SQLImplicits._sqlContext"))
+    checkMiMaCompatibility(clientJar, sqlJar, includedRules, excludeRules)
+  }
+
+  /**
+   * This check ensures client jar dose not expose any unwanted APIs by mistake.
+   */
+  private def checkMiMaCompatibilityWithReversedSqlModule(
+      clientJar: File,
+      sqlJar: File): List[Problem] = {
+    val includedRules = Seq(IncludeByName("org.apache.spark.sql.*"))
+    val excludeRules = Seq(
+      // Skipped packages
+      ProblemFilters.exclude[Problem]("org.apache.spark.sql.avro.*"),
+      ProblemFilters.exclude[Problem]("org.apache.spark.sql.connect.*"),
+      ProblemFilters.exclude[Problem]("org.apache.spark.sql.protobuf.*"),
+
+      // private[sql]
+      ProblemFilters.exclude[Problem]("org.apache.spark.sql.*.this"),
+      ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.DataFrameStatFunctions$"),
+      ProblemFilters.exclude[MissingClassProblem](
+        "org.apache.spark.sql.KeyValueGroupedDatasetImpl"),
+      ProblemFilters.exclude[MissingClassProblem](
+        "org.apache.spark.sql.KeyValueGroupedDatasetImpl$"),
+      ProblemFilters.exclude[ReversedMissingMethodProblem](
+        "org.apache.spark.sql.SQLImplicits._sqlContext" // protected
+      ),
+
+      // Catalyst Refactoring
+      ProblemFilters.exclude[Problem]("org.apache.spark.sql.catalyst.util.SparkCollectionUtils"),
+      ProblemFilters.exclude[Problem]("org.apache.spark.sql.catalyst.util.SparkCollectionUtils$"),
+
+      // New public APIs added in the client
+      // ScalarUserDefinedFunction
+      ProblemFilters
+        .exclude[MissingClassProblem](
+          "org.apache.spark.sql.expressions.ScalarUserDefinedFunction"),
+      ProblemFilters.exclude[MissingClassProblem](
+        "org.apache.spark.sql.expressions.ScalarUserDefinedFunction$"),
+
+      // Dataset
+      ProblemFilters.exclude[DirectMissingMethodProblem](
+        "org.apache.spark.sql.Dataset.plan"
+      ), // developer API
+      ProblemFilters.exclude[IncompatibleResultTypeProblem](
+        "org.apache.spark.sql.Dataset.encoder"),
+      ProblemFilters.exclude[DirectMissingMethodProblem](
+        "org.apache.spark.sql.Dataset.collectResult"),
+
+      // RuntimeConfig
+      ProblemFilters.exclude[MissingTypesProblem](
+        "org.apache.spark.sql.RuntimeConfig" // Client version extends Logging
+      ),
+      ProblemFilters.exclude[Problem](
+        "org.apache.spark.sql.RuntimeConfig.*" // Mute missing Logging methods
+      ),
+      // ConnectRepl
+      ProblemFilters.exclude[MissingClassProblem](
+        "org.apache.spark.sql.application.ConnectRepl" // developer API
+      ),
+      ProblemFilters.exclude[MissingClassProblem](
+        "org.apache.spark.sql.application.ConnectRepl$" // developer API
+      ),
+
+      // SparkSession
+      // developer API
+      ProblemFilters.exclude[DirectMissingMethodProblem](
+        "org.apache.spark.sql.SparkSession.newDataFrame"),
+      ProblemFilters.exclude[DirectMissingMethodProblem](
+        "org.apache.spark.sql.SparkSession.newDataset"),
+      ProblemFilters.exclude[DirectMissingMethodProblem](
+        "org.apache.spark.sql.SparkSession.execute"),
+      // Experimental
+      ProblemFilters.exclude[DirectMissingMethodProblem](
+        "org.apache.spark.sql.SparkSession.addArtifact"),
+      ProblemFilters.exclude[DirectMissingMethodProblem](
+        "org.apache.spark.sql.SparkSession.addArtifacts"),
+      ProblemFilters.exclude[DirectMissingMethodProblem](
+        "org.apache.spark.sql.SparkSession.registerClassFinder"),
+      // public
+      ProblemFilters.exclude[DirectMissingMethodProblem](
+        "org.apache.spark.sql.SparkSession.interruptAll"),
+      ProblemFilters.exclude[DirectMissingMethodProblem](
+        "org.apache.spark.sql.SparkSession.interruptTag"),
+      ProblemFilters.exclude[DirectMissingMethodProblem](
+        "org.apache.spark.sql.SparkSession.interruptOperation"),
+      ProblemFilters.exclude[DirectMissingMethodProblem](
+        "org.apache.spark.sql.SparkSession.addTag"),
+      ProblemFilters.exclude[DirectMissingMethodProblem](
+        "org.apache.spark.sql.SparkSession.removeTag"),
+      ProblemFilters.exclude[DirectMissingMethodProblem](
+        "org.apache.spark.sql.SparkSession.getTags"),
+      ProblemFilters.exclude[DirectMissingMethodProblem](
+        "org.apache.spark.sql.SparkSession.clearTags"),
+      // SparkSession#Builder
+      ProblemFilters.exclude[DirectMissingMethodProblem](
+        "org.apache.spark.sql.SparkSession#Builder.remote"),
+      ProblemFilters.exclude[DirectMissingMethodProblem](
+        "org.apache.spark.sql.SparkSession#Builder.client"),
+      ProblemFilters.exclude[DirectMissingMethodProblem](
+        "org.apache.spark.sql.SparkSession#Builder.build" // deprecated
+      ),
+      ProblemFilters.exclude[DirectMissingMethodProblem](
+        "org.apache.spark.sql.SparkSession#Builder.create"),
+      ProblemFilters.exclude[DirectMissingMethodProblem](
+        "org.apache.spark.sql.SparkSession#Builder.interceptor"),
+
+      // Steaming API
+      ProblemFilters.exclude[MissingTypesProblem](
+        "org.apache.spark.sql.streaming.DataStreamWriter" // Client version extends Logging
+      ),
+      ProblemFilters.exclude[Problem](
+        "org.apache.spark.sql.streaming.DataStreamWriter.*" // Mute missing Logging methods
+      ),
+      ProblemFilters.exclude[MissingClassProblem](
+        "org.apache.spark.sql.streaming.RemoteStreamingQuery"),
+      ProblemFilters.exclude[MissingClassProblem](
+        "org.apache.spark.sql.streaming.RemoteStreamingQuery$"),
+
+      // Encoders are in the wrong JAR
+      ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.Encoders"),
+      ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.Encoders$"))
+
+    checkMiMaCompatibility(sqlJar, clientJar, includedRules, excludeRules)
+  }
+
+  /**
+   * MiMa takes a new jar and an old jar as inputs and then reports all incompatibilities found in
+   * the new jar. The incompatibility result is then filtered using include and exclude rules.
+   * Include rules are first applied to find all client classes that need to be checked. Then
+   * exclude rules are applied to filter out all unsupported methods in the client classes.
+   */
+  private def checkMiMaCompatibility(
+      newJar: File,
+      oldJar: File,
+      includedRules: Seq[IncludeByName],
+      excludeRules: Seq[ProblemFilter]): List[Problem] = {
+    val mima = new MiMaLib(Seq(newJar, oldJar))
+    val allProblems = mima.collectProblems(oldJar, newJar, List.empty)
     val problems = allProblems
       .filter { p =>
         includedRules.exists(rule => rule(p))
@@ -220,33 +446,23 @@ object CheckConnectJvmClientCompatibility {
     problems
   }
 
-  private def checkDatasetApiCompatibility(clientJar: File, sqlJar: File): Seq[String] = {
-
-    def methods(jar: File, className: String): Seq[String] = {
-      val classLoader: URLClassLoader =
-        new ChildFirstURLClassLoader(Seq(jar.toURI.toURL).toArray, this.getClass.getClassLoader)
-      val mirror = runtimeMirror(classLoader)
-      // scalastyle:off classforname
-      val classSymbol =
-        mirror.classSymbol(Class.forName(className, false, classLoader))
-      // scalastyle:on classforname
-      classSymbol.typeSignature.members
-        .filter(_.isMethod)
-        .map(_.asMethod)
-        .filter(m => m.isPublic)
-        .map(_.fullName)
-        .toSeq
+  private def appendMimaCheckErrorMessageIfNeeded(
+      resultWriter: Writer,
+      problems: List[Problem],
+      clientModule: File,
+      targetModule: File,
+      targetName: String,
+      description: String = "client"): Unit = {
+    if (problems.nonEmpty) {
+      resultWriter.write(
+        s"ERROR: Comparing Client jar: $clientModule and $targetName jar: $targetModule \n")
+      resultWriter.write(s"problems with $targetName module: \n")
+      resultWriter.write(s"${problems.map(p => p.description(description)).mkString("\n")}")
+      resultWriter.write("\n")
+      resultWriter.write(
+        "Exceptions to binary compatibility can be added in " +
+          s"'CheckConnectJvmClientCompatibility#checkMiMaCompatibilityWith${targetName}Module'\n")
     }
-
-    val className = "org.apache.spark.sql.Dataset"
-    val clientMethods = methods(clientJar, className)
-    val sqlMethods = methods(sqlJar, className)
-    // Exclude some public methods that must be added through `exceptionMethods`
-    val exceptionMethods =
-      Seq("org.apache.spark.sql.Dataset.collectResult", "org.apache.spark.sql.Dataset.plan")
-
-    // Find new public functions that are not in sql module `Dataset`.
-    clientMethods.diff(sqlMethods).diff(exceptionMethods)
   }
 
   private case class IncludeByName(name: String) extends ProblemFilter {

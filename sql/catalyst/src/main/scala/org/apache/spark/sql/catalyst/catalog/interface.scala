@@ -30,7 +30,7 @@ import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, InternalRow, SQLConfHelper, TableIdentifier}
-import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
+import org.apache.spark.sql.catalyst.analysis.{MultiInstanceRelation, UnresolvedLeafNode}
 import org.apache.spark.sql.catalyst.catalog.CatalogTable.VIEW_STORING_ANALYZED_PLAN
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, AttributeReference, Cast, ExprId, Literal}
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -497,21 +497,20 @@ object CatalogTable {
 
   def readLargeTableProp(props: Map[String, String], key: String): Option[String] = {
     props.get(key).orElse {
-      if (props.filterKeys(_.startsWith(key)).isEmpty) {
-        None
-      } else {
-        val numParts = props.get(s"$key.numParts")
-        if (numParts.isEmpty) {
-          throw QueryCompilationErrors.cannotReadCorruptedTablePropertyError(key)
-        } else {
-          val parts = (0 until numParts.get.toInt).map { index =>
-            props.getOrElse(s"$key.part.$index", {
-              throw QueryCompilationErrors.cannotReadCorruptedTablePropertyError(
-                key, s"Missing part $index, $numParts parts are expected.")
-            })
-          }
-          Some(parts.mkString)
+      if (props.exists { case (mapKey, _) => mapKey.startsWith(key) }) {
+        props.get(s"$key.numParts") match {
+          case None => throw QueryCompilationErrors.insufficientTablePropertyError(key)
+          case Some(numParts) =>
+            val parts = (0 until numParts.toInt).map { index =>
+              val keyPart = s"$key.part.$index"
+              props.getOrElse(keyPart, {
+                throw QueryCompilationErrors.insufficientTablePropertyPartError(keyPart, numParts)
+              })
+            }
+            Some(parts.mkString)
         }
+      } else {
+        None
       }
     }
   }
@@ -791,10 +790,8 @@ object CatalogTypes {
 case class UnresolvedCatalogRelation(
     tableMeta: CatalogTable,
     options: CaseInsensitiveStringMap = CaseInsensitiveStringMap.empty(),
-    override val isStreaming: Boolean = false) extends LeafNode {
+    override val isStreaming: Boolean = false) extends UnresolvedLeafNode {
   assert(tableMeta.identifier.database.isDefined)
-  override lazy val resolved: Boolean = false
-  override def output: Seq[Attribute] = Nil
 }
 
 /**
@@ -804,12 +801,9 @@ case class UnresolvedCatalogRelation(
  */
 case class TemporaryViewRelation(
     tableMeta: CatalogTable,
-    plan: Option[LogicalPlan] = None) extends LeafNode {
+    plan: Option[LogicalPlan] = None) extends UnresolvedLeafNode {
   require(plan.isEmpty ||
     (plan.get.resolved && tableMeta.properties.contains(VIEW_STORING_ANALYZED_PLAN)))
-
-  override lazy val resolved: Boolean = false
-  override def output: Seq[Attribute] = Nil
 }
 
 /**

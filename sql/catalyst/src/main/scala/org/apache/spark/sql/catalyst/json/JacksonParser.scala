@@ -33,7 +33,7 @@ import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.catalyst.util.LegacyDateFormats.FAST_DATE_FORMAT
 import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns._
 import org.apache.spark.sql.errors.QueryExecutionErrors
-import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.{LegacyBehaviorPolicy, SQLConf}
 import org.apache.spark.sql.sources.Filter
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
@@ -85,14 +85,14 @@ class JacksonParser(
     options.enableDateTimeParsingFallback
       .orElse(SQLConf.get.jsonEnableDateTimeParsingFallback)
       .getOrElse {
-        SQLConf.get.legacyTimeParserPolicy == SQLConf.LegacyBehaviorPolicy.LEGACY ||
+        SQLConf.get.legacyTimeParserPolicy == LegacyBehaviorPolicy.LEGACY ||
           options.timestampFormatInRead.isEmpty
       }
   private val enableParsingFallbackForDateType =
     options.enableDateTimeParsingFallback
       .orElse(SQLConf.get.jsonEnableDateTimeParsingFallback)
       .getOrElse {
-        SQLConf.get.legacyTimeParserPolicy == SQLConf.LegacyBehaviorPolicy.LEGACY ||
+        SQLConf.get.legacyTimeParserPolicy == LegacyBehaviorPolicy.LEGACY ||
           options.dateFormatInRead.isEmpty
       }
 
@@ -135,7 +135,7 @@ class JacksonParser(
         // List([str_a_2,null], [null,str_b_3])
         //
       case START_ARRAY if allowArrayAsStructs =>
-        val array = convertArray(parser, elementConverter, isRoot = true)
+        val array = convertArray(parser, elementConverter, isRoot = true, arrayAsStructs = true)
         // Here, as we support reading top level JSON arrays and take every element
         // in such an array as a row, this case is possible.
         if (array.numElements() == 0) {
@@ -144,7 +144,7 @@ class JacksonParser(
           array.toArray[InternalRow](schema)
         }
       case START_ARRAY =>
-        throw QueryExecutionErrors.cannotParseJsonArraysAsStructsError()
+        throw JsonArraysAsStructsException()
     }
   }
 
@@ -231,8 +231,8 @@ class JacksonParser(
               Float.PositiveInfinity
             case "-INF" | "-Infinity" if options.allowNonNumericNumbers =>
               Float.NegativeInfinity
-            case _ => throw QueryExecutionErrors.cannotParseStringAsDataTypeError(
-              parser, VALUE_STRING, FloatType)
+            case _ => throw StringAsDataTypeException(parser.getCurrentName, parser.getText,
+              FloatType)
           }
       }
 
@@ -250,8 +250,8 @@ class JacksonParser(
               Double.PositiveInfinity
             case "-INF" | "-Infinity" if options.allowNonNumericNumbers =>
               Double.NegativeInfinity
-            case _ => throw QueryExecutionErrors.cannotParseStringAsDataTypeError(
-              parser, VALUE_STRING, DoubleType)
+            case _ => throw StringAsDataTypeException(parser.getCurrentName, parser.getText,
+              DoubleType)
           }
       }
 
@@ -448,14 +448,15 @@ class JacksonParser(
     var skipRow = false
 
     structFilters.reset()
-    resetExistenceDefaultsBitmask(schema)
+    lazy val bitmask = ResolveDefaultColumns.existenceDefaultsBitmask(schema)
+    resetExistenceDefaultsBitmask(schema, bitmask)
     while (!skipRow && nextUntil(parser, JsonToken.END_OBJECT)) {
       schema.getFieldIndex(parser.getCurrentName) match {
         case Some(index) =>
           try {
             row.update(index, fieldConverters(index).apply(parser))
             skipRow = structFilters.skipRow(row, index)
-            schema.existenceDefaultsBitmask(index) = false
+            bitmask(index) = false
           } catch {
             case e: SparkUpgradeException => throw e
             case NonFatal(e) if isRoot || enablePartialResults =>
@@ -469,7 +470,7 @@ class JacksonParser(
     if (skipRow) {
       None
     } else if (badRecordException.isEmpty) {
-      applyExistenceDefaultValuesToRow(schema, row)
+      applyExistenceDefaultValuesToRow(schema, row, bitmask)
       Some(row)
     } else {
       throw PartialResultException(row, badRecordException.get)
@@ -517,7 +518,8 @@ class JacksonParser(
   private def convertArray(
       parser: JsonParser,
       fieldConverter: ValueConverter,
-      isRoot: Boolean = false): ArrayData = {
+      isRoot: Boolean = false,
+      arrayAsStructs: Boolean = false): ArrayData = {
     val values = ArrayBuffer.empty[Any]
     var badRecordException: Option[Throwable] = None
 
@@ -537,6 +539,9 @@ class JacksonParser(
 
     if (badRecordException.isEmpty) {
       arrayData
+    } else if (arrayAsStructs) {
+      throw PartialResultArrayException(arrayData.toArray[InternalRow](schema),
+        badRecordException.get)
     } else {
       throw PartialResultException(InternalRow(arrayData), badRecordException.get)
     }
@@ -570,7 +575,7 @@ class JacksonParser(
         // JSON parser currently doesn't support partial results for corrupted records.
         // For such records, all fields other than the field configured by
         // `columnNameOfCorruptRecord` are set to `null`.
-        throw BadRecordException(() => recordLiteral(record), () => None, e)
+        throw BadRecordException(() => recordLiteral(record), () => Array.empty, e)
       case e: CharConversionException if options.encoding.isEmpty =>
         val msg =
           """JSON parser cannot handle a character in its input.
@@ -578,11 +583,17 @@ class JacksonParser(
             |""".stripMargin + e.getMessage
         val wrappedCharException = new CharConversionException(msg)
         wrappedCharException.initCause(e)
-        throw BadRecordException(() => recordLiteral(record), () => None, wrappedCharException)
+        throw BadRecordException(() => recordLiteral(record), () => Array.empty,
+          wrappedCharException)
       case PartialResultException(row, cause) =>
         throw BadRecordException(
           record = () => recordLiteral(record),
-          partialResult = () => Some(row),
+          partialResults = () => Array(row),
+          cause)
+      case PartialResultArrayException(rows, cause) =>
+        throw BadRecordException(
+          record = () => recordLiteral(record),
+          partialResults = () => rows,
           cause)
     }
   }

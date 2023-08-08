@@ -23,6 +23,7 @@ import java.sql.Date;
 import java.sql.Timestamp;
 import java.time.*;
 import java.util.*;
+import java.util.stream.Collectors;
 import javax.annotation.Nonnull;
 
 import org.apache.spark.api.java.Optional;
@@ -41,6 +42,7 @@ import org.apache.spark.api.java.JavaPairRDD;
 import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.api.java.function.*;
 import org.apache.spark.sql.*;
+import static org.apache.spark.sql.RowFactory.create;
 import org.apache.spark.sql.catalyst.encoders.OuterScopes;
 import org.apache.spark.sql.catalyst.expressions.GenericRow;
 import org.apache.spark.sql.test.TestSparkSession;
@@ -533,6 +535,76 @@ public class JavaDatasetSuite implements Serializable {
     Assert.assertEquals(
       Arrays.asList(tuple2(2, 2), tuple2(3, 3)),
       joined.collectAsList());
+  }
+
+  private static final Comparator<Tuple2<String, Integer>> comparatorStringAndIntTuple =
+      new Comparator<Tuple2<String, Integer>>() {
+        @Override
+        public int compare(Tuple2<String, Integer> o1, Tuple2<String, Integer> o2) {
+          if (o1._1.compareTo(o2._1) != 0) {
+            return o1._1.compareTo(o2._1);
+          }
+          return o1._2.compareTo(o2._2);
+        }
+
+        @Override
+        public boolean equals(Object obj) {
+          return super.equals(obj);
+        }
+      };
+
+  private void assertEqualsUnorderly(
+      List<Tuple2<String, Integer>> expected,
+      List<Tuple2<String, Integer>> actual) {
+    Assert.assertEquals(
+        expected.stream().sorted(comparatorStringAndIntTuple).collect(Collectors.toList()),
+        actual.stream().sorted(comparatorStringAndIntTuple).collect(Collectors.toList())
+    );
+  }
+
+  @Test
+  public void testDropDuplicates() {
+    List<Tuple2<String, Integer>> data = Arrays.asList(
+        new Tuple2<>("a", 1), new Tuple2<>("a", 2),
+        new Tuple2<>("b", 1), new Tuple2<>("a", 1)
+    );
+    Dataset<Tuple2<String, Integer>> ds = spark.createDataset(data,
+        Encoders.tuple(Encoders.STRING(), Encoders.INT()));
+
+    assertEqualsUnorderly(
+        Arrays.asList(tuple2("a", 1), tuple2("a", 2), tuple2("b", 1)),
+        ds.dropDuplicates().collectAsList()
+    );
+
+    assertEqualsUnorderly(
+        Arrays.asList(tuple2("a", 1), tuple2("b", 1)),
+        ds.dropDuplicates("_1").collectAsList()
+    );
+
+    assertEqualsUnorderly(
+        Arrays.asList(tuple2("a", 1), tuple2("b", 1)),
+        ds.dropDuplicates(new String[] { "_1" }).collectAsList()
+    );
+
+    assertEqualsUnorderly(
+        Arrays.asList(tuple2("a", 1), tuple2("a", 2)),
+        ds.dropDuplicates("_2").collectAsList()
+    );
+
+    assertEqualsUnorderly(
+        Arrays.asList(tuple2("a", 1), tuple2("a", 2)),
+        ds.dropDuplicates(new String[] { "_2" }).collectAsList()
+    );
+
+    assertEqualsUnorderly(
+        Arrays.asList(tuple2("a", 1), tuple2("a", 2), tuple2("b", 1)),
+        ds.dropDuplicates("_1", "_2").collectAsList()
+    );
+
+    assertEqualsUnorderly(
+        Arrays.asList(tuple2("a", 1), tuple2("a", 2), tuple2("b", 1)),
+        ds.dropDuplicates(new String[] { "_1", "_2" }).collectAsList()
+    );
   }
 
   @Test
@@ -1883,6 +1955,24 @@ public class JavaDatasetSuite implements Serializable {
     Dataset<SpecificListsBean> dataset =
       spark.createDataset(beans, Encoders.bean(SpecificListsBean.class));
     Assert.assertEquals(beans, dataset.collectAsList());
+  }
+
+  @Test
+  public void testRowEncoder() {
+    final StructType schema = new StructType()
+        .add("a", "int")
+        .add("b", "string");
+    final Dataset<Row> df = spark.range(3)
+        .map(new MapFunction<Long, Row>() {
+               @Override
+               public Row call(Long i) {
+                 return create(i.intValue(), "s" + i);
+               }
+             },
+            Encoders.row(schema))
+        .filter(col("a").geq(1));
+    final List<Row> expected = Arrays.asList(create(1, "s1"), create(2, "s2"));
+    Assert.assertEquals(expected, df.collectAsList());
   }
 
   public static class SpecificListsBean implements Serializable {

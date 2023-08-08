@@ -131,8 +131,8 @@ if in_spark:
 # binary format protocol with the Java version, see ARROW_HOME/format/* for specifications.
 # Also don't forget to update python/docs/source/getting_started/install.rst.
 _minimum_pandas_version = "1.0.5"
-_minimum_pyarrow_version = "1.0.0"
-_minimum_grpc_version = "1.48.1"
+_minimum_pyarrow_version = "4.0.0"
+_minimum_grpc_version = "1.56.0"
 _minimum_googleapis_common_protos_version = "1.56.4"
 
 
@@ -238,16 +238,23 @@ try:
             "pyspark.mllib.linalg",
             "pyspark.mllib.stat",
             "pyspark.ml",
+            "pyspark.ml.connect",
             "pyspark.ml.linalg",
             "pyspark.ml.param",
             "pyspark.ml.torch",
+            "pyspark.ml.deepspeed",
             "pyspark.sql",
             "pyspark.sql.avro",
             "pyspark.sql.connect",
+            "pyspark.sql.connect.avro",
+            "pyspark.sql.connect.client",
             "pyspark.sql.connect.proto",
+            "pyspark.sql.connect.streaming",
+            "pyspark.sql.connect.streaming.worker",
             "pyspark.sql.pandas",
             "pyspark.sql.protobuf",
             "pyspark.sql.streaming",
+            "pyspark.sql.worker",
             "pyspark.streaming",
             "pyspark.bin",
             "pyspark.sbin",
@@ -262,6 +269,7 @@ try:
             "pyspark.pandas.usage_logging",
             "pyspark.python.pyspark",
             "pyspark.python.lib",
+            "pyspark.testing",
             "pyspark.data",
             "pyspark.licenses",
             "pyspark.resource",
@@ -320,11 +328,10 @@ try:
                 "numpy>=1.15",
             ],
         },
-        python_requires=">=3.7",
+        python_requires=">=3.8",
         classifiers=[
             "Development Status :: 5 - Production/Stable",
             "License :: OSI Approved :: Apache Software License",
-            "Programming Language :: Python :: 3.7",
             "Programming Language :: Python :: 3.8",
             "Programming Language :: Python :: 3.9",
             "Programming Language :: Python :: 3.10",

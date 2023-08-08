@@ -352,20 +352,40 @@ class DataFrameSetOperationsSuite extends QueryTest with SharedSparkSession {
 
   test("SPARK-19893: cannot run set operations with map type") {
     val df = spark.range(1).select(map(lit("key"), $"id").as("m"))
-    val e = intercept[AnalysisException](df.intersect(df))
-    assert(e.message.contains(
-      "Cannot have map type columns in DataFrame which calls set operations"))
-    val e2 = intercept[AnalysisException](df.except(df))
-    assert(e2.message.contains(
-      "Cannot have map type columns in DataFrame which calls set operations"))
-    val e3 = intercept[AnalysisException](df.distinct())
-    assert(e3.message.contains(
-      "Cannot have map type columns in DataFrame which calls set operations"))
+    checkError(
+      exception = intercept[AnalysisException](df.intersect(df)),
+      errorClass = "UNSUPPORTED_FEATURE.SET_OPERATION_ON_MAP_TYPE",
+      parameters = Map(
+        "colName" -> "`m`",
+        "dataType" -> "\"MAP<STRING, BIGINT>\"")
+    )
+    checkError(
+      exception = intercept[AnalysisException](df.except(df)),
+      errorClass = "UNSUPPORTED_FEATURE.SET_OPERATION_ON_MAP_TYPE",
+      parameters = Map(
+        "colName" -> "`m`",
+        "dataType" -> "\"MAP<STRING, BIGINT>\"")
+    )
+    checkError(
+      exception = intercept[AnalysisException](df.distinct()),
+      errorClass = "UNSUPPORTED_FEATURE.SET_OPERATION_ON_MAP_TYPE",
+      parameters = Map(
+        "colName" -> "`m`",
+        "dataType" -> "\"MAP<STRING, BIGINT>\"")
+    )
     withTempView("v") {
       df.createOrReplaceTempView("v")
-      val e4 = intercept[AnalysisException](sql("SELECT DISTINCT m FROM v"))
-      assert(e4.message.contains(
-        "Cannot have map type columns in DataFrame which calls set operations"))
+      checkError(
+        exception = intercept[AnalysisException](sql("SELECT DISTINCT m FROM v")),
+        errorClass = "UNSUPPORTED_FEATURE.SET_OPERATION_ON_MAP_TYPE",
+        parameters = Map(
+          "colName" -> "`m`",
+          "dataType" -> "\"MAP<STRING, BIGINT>\""),
+        context = ExpectedContext(
+          fragment = "SELECT DISTINCT m FROM v",
+          start = 0,
+          stop = 23)
+      )
     }
   }
 

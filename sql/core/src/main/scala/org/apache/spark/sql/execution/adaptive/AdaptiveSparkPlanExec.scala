@@ -40,7 +40,7 @@ import org.apache.spark.sql.catalyst.util.sideBySide
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanExec._
-import org.apache.spark.sql.execution.bucketing.DisableUnnecessaryBucketedScan
+import org.apache.spark.sql.execution.bucketing.{CoalesceBucketsInJoin, DisableUnnecessaryBucketedScan}
 import org.apache.spark.sql.execution.columnar.InMemoryTableScanExec
 import org.apache.spark.sql.execution.exchange._
 import org.apache.spark.sql.execution.ui.{SparkListenerSQLAdaptiveExecutionUpdate, SparkListenerSQLAdaptiveSQLMetricUpdates, SQLPlanMetric}
@@ -117,7 +117,10 @@ case class AdaptiveSparkPlanExec(
     // around this case.
     val ensureRequirements =
       EnsureRequirements(requiredDistribution.isDefined, requiredDistribution)
+    // CoalesceBucketsInJoin can help eliminate shuffles and must be run before
+    // EnsureRequirements
     Seq(
+      CoalesceBucketsInJoin,
       RemoveRedundantProjects,
       ensureRequirements,
       AdjustShuffleExchangePosition,
@@ -140,7 +143,7 @@ case class AdaptiveSparkPlanExec(
     // `OptimizeShuffleWithLocalRead` needs to make use of 'AQEShuffleReadExec.partitionSpecs'
     // added by `CoalesceShufflePartitions`, and must be executed after it.
     OptimizeShuffleWithLocalRead
-  )
+  ) ++ context.session.sessionState.adaptiveRulesHolder.queryStageOptimizerRules
 
   // This rule is stateful as it maintains the codegen stage ID. We can't create a fresh one every
   // time and need to keep it in a variable.
@@ -405,7 +408,7 @@ case class AdaptiveSparkPlanExec(
 
   override def generateTreeString(
       depth: Int,
-      lastChildren: Seq[Boolean],
+      lastChildren: java.util.ArrayList[Boolean],
       append: String => Unit,
       verbose: Boolean,
       prefix: String = "",
@@ -424,9 +427,10 @@ case class AdaptiveSparkPlanExec(
       printNodeId,
       indent)
     if (currentPhysicalPlan.fastEquals(initialPlan)) {
+      lastChildren.add(true)
       currentPhysicalPlan.generateTreeString(
         depth + 1,
-        lastChildren :+ true,
+        lastChildren,
         append,
         verbose,
         prefix = "",
@@ -434,6 +438,7 @@ case class AdaptiveSparkPlanExec(
         maxFields,
         printNodeId,
         indent)
+      lastChildren.remove(lastChildren.size() - 1)
     } else {
       generateTreeStringWithHeader(
         if (isFinalPlan) "Final Plan" else "Current Plan",
@@ -467,7 +472,7 @@ case class AdaptiveSparkPlanExec(
     append(s"+- == $header ==\n")
     plan.generateTreeString(
       0,
-      Nil,
+      new java.util.ArrayList(),
       append,
       verbose,
       prefix = "",
@@ -584,8 +589,15 @@ case class AdaptiveSparkPlanExec(
           BroadcastQueryStageExec(currentStageId, newPlan, e.canonicalized)
         }
       case i: InMemoryTableScanExec =>
-        // No need to optimize `InMemoryTableScanExec` as it's a leaf node.
-        TableCacheQueryStageExec(currentStageId, i)
+        // Apply `queryStageOptimizerRules` so that we can reuse subquery.
+        // No need to apply `postStageCreationRules` for `InMemoryTableScanExec`
+        // as it's a leaf node.
+        val newPlan = optimizeQueryStage(i, isFinalStage = false)
+        if (!newPlan.isInstanceOf[InMemoryTableScanExec]) {
+          throw SparkException.internalError(
+            "Custom AQE rules cannot transform table scan node to something else.")
+        }
+        TableCacheQueryStageExec(currentStageId, newPlan)
     }
     currentStageId += 1
     setLogicalLinkForNewQueryStage(queryStage, plan)

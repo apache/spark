@@ -30,6 +30,7 @@ import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.catalyst.trees.AlwaysProcess
 import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
+import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
@@ -95,6 +96,9 @@ abstract class Optimizer(catalogManager: CatalogManager)
         OptimizeRepartition,
         TransposeWindow,
         NullPropagation,
+        // NullPropagation may introduce Exists subqueries, so RewriteNonCorrelatedExists must run
+        // after.
+        RewriteNonCorrelatedExists,
         NullDownPropagation,
         ConstantPropagation,
         FoldablePropagation,
@@ -153,7 +157,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
     //   since the other rules might make two separate Unions operators adjacent.
     Batch("Inline CTE", Once,
       InlineCTE()) ::
-    Batch("Union", Once,
+    Batch("Union", fixedPoint,
       RemoveNoopOperators,
       CombineUnions,
       RemoveNoopUnion) ::
@@ -174,7 +178,8 @@ abstract class Optimizer(catalogManager: CatalogManager)
     // Subquery batch applies the optimizer rules recursively. Therefore, it makes no sense
     // to enforce idempotence on it and we change this batch from Once to FixedPoint(1).
     Batch("Subquery", FixedPoint(1),
-      OptimizeSubqueries) ::
+      OptimizeSubqueries,
+      OptimizeOneRowRelationSubquery) ::
     Batch("Replace Operators", fixedPoint,
       RewriteExceptAll,
       RewriteIntersectAll,
@@ -679,6 +684,8 @@ object RemoveNoopUnion extends Rule[LogicalPlan] {
       d.withNewChildren(Seq(simplifyUnion(u)))
     case d @ Deduplicate(_, u: Union) =>
       d.withNewChildren(Seq(simplifyUnion(u)))
+    case d @ DeduplicateWithinWatermark(_, u: Union) =>
+      d.withNewChildren(Seq(simplifyUnion(u)))
   }
 }
 
@@ -859,7 +866,7 @@ object ColumnPruning extends Rule[LogicalPlan] {
       val newProjects = e.projections.map { proj =>
         proj.zip(e.output).filter { case (_, a) =>
           newOutput.contains(a)
-        }.unzip._1
+        }.map(_._1)
       }
       a.copy(child = Expand(newProjects, newOutput, grandChild))
 
@@ -878,6 +885,10 @@ object ColumnPruning extends Rule[LogicalPlan] {
     case f @ FlatMapGroupsInPandas(_, _, _, child) if !child.outputSet.subsetOf(f.references) =>
       f.copy(child = prunedChild(child, f.references))
     case e @ Expand(_, _, child) if !child.outputSet.subsetOf(e.references) =>
+      e.copy(child = prunedChild(child, e.references))
+
+    // prune unused columns from child of MergeRows for row-level operations
+    case e @ MergeRows(_, _, _, _, _, _, _, child) if !child.outputSet.subsetOf(e.references) =>
       e.copy(child = prunedChild(child, e.references))
 
     // prune unrequired references
@@ -1213,15 +1224,6 @@ object CollapseRepartition extends Rule[LogicalPlan] {
     // child.
     case r @ RebalancePartitions(_, child: RebalancePartitions, _, _) =>
       r.withNewChildren(child.children)
-    // Case 5: When a LocalLimit has a child of Repartition we can remove the Repartition.
-    // Because its output is determined by the number of partitions and the expressions of the
-    // Repartition. Therefore, it is feasible to remove Repartition except for repartition by
-    // nondeterministic expressions, because users may expect to randomly take data.
-    case l @ LocalLimit(_, r: RepartitionByExpression)
-        if r.partitionExpressions.nonEmpty && r.partitionExpressions.forall(_.deterministic) =>
-      l.copy(child = r.child)
-    case l @ LocalLimit(_, r: RebalancePartitions) =>
-      l.copy(child = r.child)
   }
 }
 
@@ -1460,6 +1462,9 @@ object CombineUnions extends Rule[LogicalPlan] {
     // Only handle distinct-like 'Deduplicate', where the keys == output
     case Deduplicate(keys: Seq[Attribute], u: Union) if AttributeSet(keys) == u.outputSet =>
       Deduplicate(keys, flattenUnion(u, true))
+    case DeduplicateWithinWatermark(keys: Seq[Attribute], u: Union)
+      if AttributeSet(keys) == u.outputSet =>
+      DeduplicateWithinWatermark(keys, flattenUnion(u, true))
   }
 
   private def flattenUnion(union: Union, flattenDistinct: Boolean): Union = {
@@ -2102,11 +2107,11 @@ object DecimalAggregates extends Rule[LogicalPlan] {
     case q: LogicalPlan => q.transformExpressionsDownWithPruning(
       _.containsAnyPattern(SUM, AVERAGE), ruleId) {
       case we @ WindowExpression(ae @ AggregateExpression(af, _, _, _, _), _) => af match {
-        case Sum(e @ DecimalType.Expression(prec, scale), _) if prec + 10 <= MAX_LONG_DIGITS =>
+        case Sum(e @ DecimalExpression(prec, scale), _) if prec + 10 <= MAX_LONG_DIGITS =>
           MakeDecimal(we.copy(windowFunction = ae.copy(aggregateFunction = Sum(UnscaledValue(e)))),
             prec + 10, scale)
 
-        case Average(e @ DecimalType.Expression(prec, scale), _) if prec + 4 <= MAX_DOUBLE_DIGITS =>
+        case Average(e @ DecimalExpression(prec, scale), _) if prec + 4 <= MAX_DOUBLE_DIGITS =>
           val newAggExpr =
             we.copy(windowFunction = ae.copy(aggregateFunction = Average(UnscaledValue(e))))
           Cast(
@@ -2116,10 +2121,10 @@ object DecimalAggregates extends Rule[LogicalPlan] {
         case _ => we
       }
       case ae @ AggregateExpression(af, _, _, _, _) => af match {
-        case Sum(e @ DecimalType.Expression(prec, scale), _) if prec + 10 <= MAX_LONG_DIGITS =>
+        case Sum(e @ DecimalExpression(prec, scale), _) if prec + 10 <= MAX_LONG_DIGITS =>
           MakeDecimal(ae.copy(aggregateFunction = Sum(UnscaledValue(e))), prec + 10, scale)
 
-        case Average(e @ DecimalType.Expression(prec, scale), _) if prec + 4 <= MAX_DOUBLE_DIGITS =>
+        case Average(e @ DecimalExpression(prec, scale), _) if prec + 4 <= MAX_DOUBLE_DIGITS =>
           val newAggExpr = ae.copy(aggregateFunction = Average(UnscaledValue(e)))
           Cast(
             Divide(newAggExpr, Literal.create(math.pow(10.0, scale), DoubleType)),
@@ -2422,7 +2427,7 @@ object GenerateOptimization extends Rule[LogicalPlan] {
             }
             // As we change the child of the generator, its output data type must be updated.
             val updatedGeneratorOutput = rewrittenG.generatorOutput
-              .zip(rewrittenG.generator.elementSchema.toAttributes)
+              .zip(toAttributes(rewrittenG.generator.elementSchema))
               .map { case (oldAttr, newAttr) =>
                 newAttr.withExprId(oldAttr.exprId).withName(oldAttr.name)
               }

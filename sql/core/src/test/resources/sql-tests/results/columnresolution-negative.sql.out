@@ -283,7 +283,7 @@ SELECT db1.t1.i1 FROM t1, mydb2.t1
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
   "sqlState" : "42703",
@@ -322,13 +322,13 @@ SELECT mydb1.t1 FROM t1
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
   "sqlState" : "42703",
   "messageParameters" : {
     "objectName" : "`mydb1`.`t1`",
-    "proposal" : "`spark_catalog`.`mydb1`.`t1`.`i1`"
+    "proposal" : "`t1`.`i1`"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -347,10 +347,10 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_1051",
+  "errorClass" : "CANNOT_RESOLVE_STAR_EXPAND",
   "messageParameters" : {
-    "columns" : "i1",
-    "targetString" : "t1.x.y"
+    "columns" : "`i1`",
+    "targetString" : "`t1`.`x`.`y`"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -367,13 +367,13 @@ SELECT t1 FROM mydb1.t1
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
   "sqlState" : "42703",
   "messageParameters" : {
     "objectName" : "`t1`",
-    "proposal" : "`spark_catalog`.`mydb1`.`t1`.`i1`"
+    "proposal" : "`i1`"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -398,7 +398,7 @@ SELECT mydb1.t1.i1 FROM t1
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
   "sqlState" : "42703",
@@ -460,7 +460,7 @@ org.apache.spark.sql.AnalysisException
     "actualCols" : "[]",
     "colName" : "i1",
     "expectedNum" : "1",
-    "suggestion" : "CREATE OR REPLACE VIEW spark_catalog.mydb1.v1  AS SELECT * FROM t1",
+    "suggestion" : "CREATE OR REPLACE VIEW spark_catalog.mydb1.v1 AS SELECT * FROM t1",
     "viewName" : "`spark_catalog`.`mydb1`.`v1`"
   }
 }

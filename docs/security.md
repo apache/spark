@@ -60,6 +60,20 @@ distributing the shared secret. Each application will use a unique shared secret
 the case of YARN, this feature relies on YARN RPC encryption being enabled for the distribution of
 secrets to be secure.
 
+<table class="table table-striped">
+<thead><tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr></thead>
+<tr>
+  <td><code>spark.yarn.shuffle.server.recovery.disabled</code></td>
+  <td>false</td>
+  <td>
+    Set to true for applications that have higher security requirements and prefer that their
+    secret is not saved in the db. The shuffle data of such applications wll not be recovered after
+    the External Shuffle Service restarts.
+  </td>
+  <td>3.5.0</td>
+</tr>
+</table>
+
 ### Kubernetes
 
 On Kubernetes, Spark will also automatically generate an authentication secret unique to each
@@ -275,6 +289,12 @@ The following options control the authentication of Web UIs:
 
 <table class="table table-striped">
 <thead><tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr></thead>
+<tr>
+  <td><code>spark.ui.allowFramingFrom</code></td>
+  <td><code>SAMEORIGIN</code></td>
+  <td>Allow framing for a specific named URI via <code>X-Frame-Options</code>. By default, allow only from the same origin.</td>
+  <td>1.6.0</td>
+</tr>
 <tr>
   <td><code>spark.ui.filters</code></td>
   <td>None</td>

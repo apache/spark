@@ -38,6 +38,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
 import org.apache.spark.sql.catalyst.parser.LegacyTypeStringParser
+import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.datasources._
@@ -205,11 +206,22 @@ class ParquetFileFormat
 
       val sharedConf = broadcastedHadoopConf.value.value
 
-      lazy val footerFileMetaData =
-        ParquetFooterReader.readFooter(sharedConf, filePath, SKIP_ROW_GROUPS).getFileMetaData
+      val fileFooter = if (enableVectorizedReader) {
+        // When there are vectorized reads, we can avoid reading the footer twice by reading
+        // all row groups in advance and filter row groups according to filters that require
+        // push down (no need to read the footer metadata again).
+        ParquetFooterReader.readFooter(sharedConf, file, ParquetFooterReader.WITH_ROW_GROUPS)
+      } else {
+        ParquetFooterReader.readFooter(sharedConf, file, ParquetFooterReader.SKIP_ROW_GROUPS)
+      }
+
+      val footerFileMetaData = fileFooter.getFileMetaData
       val datetimeRebaseSpec = DataSourceUtils.datetimeRebaseSpec(
         footerFileMetaData.getKeyValueMetaData.get,
         datetimeRebaseModeInRead)
+      val int96RebaseSpec = DataSourceUtils.int96RebaseSpec(
+        footerFileMetaData.getKeyValueMetaData.get, int96RebaseModeInRead)
+
       // Try to push down filters when filter push-down is enabled.
       val pushed = if (enableParquetFilterPushDown) {
         val parquetSchema = footerFileMetaData.getSchema
@@ -247,9 +259,6 @@ class ParquetFileFormat
           None
         }
 
-      val int96RebaseSpec = DataSourceUtils.int96RebaseSpec(
-        footerFileMetaData.getKeyValueMetaData.get,
-        int96RebaseModeInRead)
 
       val attemptId = new TaskAttemptID(new TaskID(new JobID(), TaskType.MAP, 0), 0)
       val hadoopAttemptContext =
@@ -279,7 +288,7 @@ class ParquetFileFormat
         // Instead, we use FileScanRDD's task completion listener to close this iterator.
         val iter = new RecordReaderIterator(vectorizedReader)
         try {
-          vectorizedReader.initialize(split, hadoopAttemptContext)
+          vectorizedReader.initialize(split, hadoopAttemptContext, Option.apply(fileFooter))
           logDebug(s"Appending $partitionSchema ${file.partitionValues}")
           vectorizedReader.initBatch(partitionSchema, file.partitionValues)
           if (returningBatch) {
@@ -315,7 +324,7 @@ class ParquetFileFormat
         try {
           readerWithRowIndexes.initialize(split, hadoopAttemptContext)
 
-          val fullSchema = requiredSchema.toAttributes ++ partitionSchema.toAttributes
+          val fullSchema = toAttributes(requiredSchema) ++ toAttributes(partitionSchema)
           val unsafeProjection = GenerateUnsafeProjection.generate(fullSchema, fullSchema)
 
           if (partitionSchema.length == 0) {
@@ -350,9 +359,23 @@ class ParquetFileFormat
 
     case _ => false
   }
+
+  override def metadataSchemaFields: Seq[StructField] = {
+    super.metadataSchemaFields :+ ParquetFileFormat.ROW_INDEX_FIELD
+  }
 }
 
 object ParquetFileFormat extends Logging {
+  val ROW_INDEX = "row_index"
+
+  // A name for a temporary column that holds row indexes computed by the file format reader
+  // until they can be placed in the _metadata struct.
+  val ROW_INDEX_TEMPORARY_COLUMN_NAME = s"_tmp_metadata_$ROW_INDEX"
+
+  // The field readers can use to access the generated row index column.
+  val ROW_INDEX_FIELD = FileSourceGeneratedMetadataStructField(
+    ROW_INDEX, ROW_INDEX_TEMPORARY_COLUMN_NAME, LongType, nullable = false)
+
   private[parquet] def readSchema(
       footers: Seq[Footer], sparkSession: SparkSession): Option[StructType] = {
 
