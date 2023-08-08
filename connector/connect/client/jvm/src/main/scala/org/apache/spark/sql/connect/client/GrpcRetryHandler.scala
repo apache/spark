@@ -17,15 +17,16 @@
 
 package org.apache.spark.sql.connect.client
 
-import scala.annotation.tailrec
 import scala.concurrent.duration.{Duration, FiniteDuration}
+import scala.util.Random
 import scala.util.control.NonFatal
+
 import io.grpc.{Status, StatusRuntimeException}
 import io.grpc.stub.StreamObserver
+
 import org.apache.spark.SparkException
 import org.apache.spark.internal.Logging
 
-import scala.util.Random
 
 private[client] class GrpcRetryHandler(private val retryPolicy: GrpcRetryHandler.RetryPolicy,
                                        private val sleep: Long => Unit = Thread.sleep) {
