@@ -287,6 +287,8 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
       AddMetadataColumns ::
       DeduplicateRelations ::
       new ResolveReferences(catalogManager) ::
+      // Please do not insert any other rules in between. See the TODO comments in rule
+      // ResolveLateralColumnAliasReference for more details.
       ResolveLateralColumnAliasReference ::
       ResolveExpressionsWithNamePlaceholders ::
       ResolveDeserializer ::
