@@ -81,12 +81,15 @@ object TreePattern extends Enumeration  {
   val REGEXP_EXTRACT_FAMILY: Value = Value
   val REGEXP_REPLACE: Value = Value
   val RUNTIME_REPLACEABLE: Value = Value
+  val RUNTIME_FILTER_EXPRESSION: Value = Value
+  val RUNTIME_FILTER_SUBQUERY: Value = Value
   val SCALAR_SUBQUERY: Value = Value
   val SCALAR_SUBQUERY_REFERENCE: Value = Value
   val SCALA_UDF: Value = Value
   val SESSION_WINDOW: Value = Value
   val SORT: Value = Value
   val SUBQUERY_ALIAS: Value = Value
+  val SUBQUERY_WRAPPER: Value = Value
   val SUM: Value = Value
   val TIME_WINDOW: Value = Value
   val TIME_ZONE_AWARE_EXPRESSION: Value = Value

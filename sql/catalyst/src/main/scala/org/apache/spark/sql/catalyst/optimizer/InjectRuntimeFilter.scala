@@ -48,14 +48,18 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
       filterApplicationSideExp: Expression,
       filterApplicationSidePlan: LogicalPlan,
       filterCreationSideExp: Expression,
-      filterCreationSidePlan: LogicalPlan): LogicalPlan = {
+      filterCreationSidePlan: LogicalPlan,
+      hint: JoinHint): LogicalPlan = {
     require(conf.runtimeFilterBloomFilterEnabled || conf.runtimeFilterSemiJoinReductionEnabled)
     if (conf.runtimeFilterBloomFilterEnabled) {
+      val canReuseExchange = conf.exchangeReuseEnabled &&
+        (canBroadcastBySize(filterCreationSidePlan, conf) || hintToBroadcastRight(hint))
       injectBloomFilter(
         filterApplicationSideExp,
         filterApplicationSidePlan,
         filterCreationSideExp,
-        filterCreationSidePlan
+        filterCreationSidePlan,
+        canReuseExchange
       )
     } else {
       injectInSubqueryFilter(
@@ -71,7 +75,8 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
       filterApplicationSideExp: Expression,
       filterApplicationSidePlan: LogicalPlan,
       filterCreationSideExp: Expression,
-      filterCreationSidePlan: LogicalPlan): LogicalPlan = {
+      filterCreationSidePlan: LogicalPlan,
+      canReuseExchange: Boolean): LogicalPlan = {
     // Skip if the filter creation side is too big
     if (filterCreationSidePlan.stats.sizeInBytes > conf.runtimeFilterCreationSideThreshold) {
       return filterApplicationSidePlan
@@ -87,7 +92,12 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
     val alias = Alias(bloomFilterAgg.toAggregateExpression(), "bloomFilter")()
     val aggregate =
       ConstantFolding(ColumnPruning(Aggregate(Nil, Seq(alias), filterCreationSidePlan)))
-    val bloomFilterSubquery = ScalarSubquery(aggregate, Nil)
+    val bloomFilterSubquery = if (canReuseExchange) {
+      // Try to reuse the results of broadcast exchange.
+      RuntimeFilterSubquery(filterApplicationSideExp, aggregate, Seq(filterCreationSideExp), 0)
+    } else {
+      ScalarSubquery(aggregate, Nil)
+    }
     val filter = BloomFilterMightContain(bloomFilterSubquery,
       new XxHash64(Seq(filterApplicationSideExp)))
     Filter(filter, filterApplicationSidePlan)
@@ -329,14 +339,14 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
             if (canPruneLeft(joinType)) {
               extractBeneficialFilterCreatePlan(left, right, l, r, hint).foreach {
                 filterCreationSidePlan =>
-                  newLeft = injectFilter(l, newLeft, r, filterCreationSidePlan)
+                  newLeft = injectFilter(l, newLeft, r, filterCreationSidePlan, hint)
               }
             }
             // Did we actually inject on the left? If not, try on the right
             if (newLeft.fastEquals(oldLeft) && canPruneRight(joinType)) {
               extractBeneficialFilterCreatePlan(right, left, r, l, hint).foreach {
                 filterCreationSidePlan =>
-                  newRight = injectFilter(r, newRight, l, filterCreationSidePlan)
+                  newRight = injectFilter(r, newRight, l, filterCreationSidePlan, hint)
               }
             }
             if (!newLeft.fastEquals(oldLeft) || !newRight.fastEquals(oldRight)) {

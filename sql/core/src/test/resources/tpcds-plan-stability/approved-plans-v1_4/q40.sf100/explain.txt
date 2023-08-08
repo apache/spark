@@ -47,7 +47,7 @@ Input [5]: [cs_warehouse_sk#1, cs_item_sk#2, cs_order_number#3, cs_sales_price#4
 
 (3) Filter [codegen id : 1]
 Input [5]: [cs_warehouse_sk#1, cs_item_sk#2, cs_order_number#3, cs_sales_price#4, cs_sold_date_sk#5]
-Condition : ((isnotnull(cs_warehouse_sk#1) AND isnotnull(cs_item_sk#2)) AND might_contain(Subquery scalar-subquery#7, [id=#8], xxhash64(cs_item_sk#2, 42)))
+Condition : ((isnotnull(cs_warehouse_sk#1) AND isnotnull(cs_item_sk#2)) AND might_contain(runtimefilterexpression(Subquery scalar-subquery#7, [id=#8]), xxhash64(cs_item_sk#2, 42)))
 
 (4) Exchange
 Input [5]: [cs_warehouse_sk#1, cs_item_sk#2, cs_order_number#3, cs_sales_price#4, cs_sold_date_sk#5]

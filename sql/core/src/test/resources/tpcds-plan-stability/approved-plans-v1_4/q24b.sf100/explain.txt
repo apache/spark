@@ -62,7 +62,7 @@ Input [6]: [ss_item_sk#1, ss_customer_sk#2, ss_store_sk#3, ss_ticket_number#4, s
 
 (3) Filter [codegen id : 2]
 Input [6]: [ss_item_sk#1, ss_customer_sk#2, ss_store_sk#3, ss_ticket_number#4, ss_net_paid#5, ss_sold_date_sk#6]
-Condition : ((((isnotnull(ss_ticket_number#4) AND isnotnull(ss_item_sk#1)) AND isnotnull(ss_store_sk#3)) AND isnotnull(ss_customer_sk#2)) AND might_contain(Subquery scalar-subquery#7, [id=#8], xxhash64(ss_store_sk#3, 42)))
+Condition : ((((isnotnull(ss_ticket_number#4) AND isnotnull(ss_item_sk#1)) AND isnotnull(ss_store_sk#3)) AND isnotnull(ss_customer_sk#2)) AND might_contain(runtimefilterexpression(Subquery scalar-subquery#7, [id=#8]), xxhash64(ss_store_sk#3, 42)))
 
 (4) Project [codegen id : 2]
 Output [5]: [ss_item_sk#1, ss_customer_sk#2, ss_store_sk#3, ss_ticket_number#4, ss_net_paid#5]

@@ -174,6 +174,46 @@ case class InSubqueryExec(
     copy(child = newChild)
 }
 
+case class SubqueryWrapper(
+    plan: BaseSubqueryExec,
+    exprId: ExprId)
+  extends ExecSubqueryExpression with LeafLike[Expression] {
+
+  override def dataType: DataType = plan.schema.fields.head.dataType
+  override def nullable: Boolean = true
+  override def toString: String = s"${plan.name}"
+  override def withNewPlan(plan: BaseSubqueryExec): SubqueryWrapper = copy(plan = plan)
+  final override def nodePatternsInternal: Seq[TreePattern] = Seq(SUBQUERY_WRAPPER)
+
+  override lazy val canonicalized: Expression = {
+    SubqueryWrapper(plan.canonicalized.asInstanceOf[BaseSubqueryExec], ExprId(0))
+  }
+
+  @transient private var result: Array[Any] = null
+  @volatile private var updated: Boolean = false
+
+  def updateResult(): Unit = {
+    val rows = plan.executeCollect()
+    result = if (plan.output.length > 1) {
+      rows.asInstanceOf[Array[Any]]
+    } else {
+      rows.map(_.get(0, plan.schema.fields.head.dataType))
+    }
+
+    updated = true
+  }
+
+  override def eval(input: InternalRow): Array[Any] = {
+    require(updated, s"$this has not finished")
+    result
+  }
+
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    require(updated, s"$this has not finished")
+    Literal.create(result, dataType).doGenCode(ctx, ev)
+  }
+}
+
 /**
  * Plans subqueries that are present in the given [[SparkPlan]].
  */

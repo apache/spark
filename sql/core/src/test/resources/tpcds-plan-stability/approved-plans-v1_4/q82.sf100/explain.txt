@@ -113,7 +113,7 @@ Input [2]: [ss_item_sk#11, ss_sold_date_sk#12]
 
 (19) Filter [codegen id : 5]
 Input [2]: [ss_item_sk#11, ss_sold_date_sk#12]
-Condition : (isnotnull(ss_item_sk#11) AND might_contain(Subquery scalar-subquery#13, [id=#14], xxhash64(ss_item_sk#11, 42)))
+Condition : (isnotnull(ss_item_sk#11) AND might_contain(runtimefilterexpression(Subquery scalar-subquery#13, [id=#14]), xxhash64(ss_item_sk#11, 42)))
 
 (20) Project [codegen id : 5]
 Output [1]: [ss_item_sk#11]
