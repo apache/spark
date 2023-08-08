@@ -1025,15 +1025,6 @@ class DataFrameTestsMixin:
             message_parameters={"arg_name": "cols", "arg_type": "NoneType"},
         )
 
-        with self.assertRaises(PySparkValueError) as pe:
-            df.toDF("key")
-
-        self.check_error(
-            exception=pe.exception,
-            error_class="LENGTH_MISMATCH",
-            message_parameters={"arg_name": "cols", "expected_length": "2", "actual_length": "1"},
-        )
-
     def test_toDF_with_schema_string(self):
         data = [Row(key=i, value=str(i)) for i in range(100)]
         rdd = self.sc.parallelize(data, 5)

@@ -1732,17 +1732,6 @@ class DataFrame:
     to.__doc__ = PySparkDataFrame.to.__doc__
 
     def toDF(self, *cols: str) -> "DataFrame":
-        expected_len_cols = len(self.columns)
-        actual_len_cols = len(cols)
-        if expected_len_cols != actual_len_cols:
-            raise PySparkValueError(
-                error_class="LENGTH_MISMATCH",
-                message_parameters={
-                    "arg_name": "cols",
-                    "expected_length": str(expected_len_cols),
-                    "actual_length": str(actual_len_cols),
-                },
-            )
         for col in cols:
             if not isinstance(col, str):
                 raise PySparkTypeError(
