@@ -734,8 +734,8 @@ class DataFrame(Frame, Generic[T]):
         --------
 
         >>> df = ps.DataFrame({'col1': [1, 2], 'col2': [3, 4]})
-        >>> df.axes  # doctest: +SKIP
-        [Int64Index([0, 1], dtype='int64'), Index(['col1', 'col2'], dtype='object')]
+        >>> df.axes
+        [Index([0, 1], dtype='int64'), Index(['col1', 'col2'], dtype='object')]
         """
         return [self.index, self.columns]
 
@@ -8707,8 +8707,8 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         the original DataFrame’s index in the result unlike pandas.
 
         >>> join_psdf = psdf1.join(psdf2.set_index('key'), on='key')
-        >>> join_psdf.index  # doctest: +SKIP
-        Int64Index([0, 1, 2, 3], dtype='int64')
+        >>> join_psdf.index
+        Index([0, 1, 2, 3], dtype='int64')
         """
         if isinstance(right, ps.Series):
             common = list(self.columns.intersection([right.name]))

@@ -725,6 +725,23 @@ class QueryExecutionErrorsSuite
     }
   }
 
+  test("CANNOT_PARSE_STRING_AS_DATATYPE: parse string as float use from_json") {
+    val jsonStr = """{"a": "str"}"""
+    checkError(
+      exception = intercept[SparkRuntimeException] {
+        sql(s"""SELECT from_json('$jsonStr', 'a FLOAT', map('mode','FAILFAST'))""").collect()
+      },
+      errorClass = "MALFORMED_RECORD_IN_PARSING.CANNOT_PARSE_STRING_AS_DATATYPE",
+      parameters = Map(
+        "badRecord" -> jsonStr,
+        "failFastMode" -> "FAILFAST",
+        "fieldName" -> "`a`",
+        "fieldValue" -> "'str'",
+        "inputType" -> "StringType",
+        "targetType" -> "FloatType"),
+      sqlState = "22023")
+  }
+
   test("BINARY_ARITHMETIC_OVERFLOW: byte plus byte result overflow") {
     withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
       checkError(

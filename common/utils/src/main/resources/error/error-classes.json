@@ -831,6 +831,11 @@
       "Not found an encoder of the type <typeName> to Spark SQL internal representation. Consider to change the input type to one of supported at '<docroot>/sql-ref-datatypes.html'."
     ]
   },
+  "ERROR_READING_AVRO_UNKNOWN_FINGERPRINT" : {
+    "message" : [
+      "Error reading avro data -- encountered an unknown fingerprint: <fingerprint>, not sure what schema to use. This could happen if you registered additional schemas after starting your spark context."
+    ]
+  },
   "EVENT_TIME_IS_NOT_ON_TIMESTAMP_TYPE" : {
     "message" : [
       "The event time <eventName> has the invalid type <eventType>, but expected \"TIMESTAMP\"."
@@ -863,6 +868,11 @@
       "Failed parsing struct: <raw>."
     ],
     "sqlState" : "22018"
+  },
+  "FAILED_REGISTER_CLASS_WITH_KRYO" : {
+    "message" : [
+      "Failed to register classes with Kryo."
+    ]
   },
   "FAILED_RENAME_PATH" : {
     "message" : [
@@ -1564,6 +1574,12 @@
     ],
     "sqlState" : "22032"
   },
+  "INVALID_KRYO_SERIALIZER_BUFFER_SIZE" : {
+    "message" : [
+      "The value of the config \"<bufferSizeConfKey>\" must be less than 2048 MiB, but got <bufferSizeConfValue> MiB."
+    ],
+    "sqlState" : "F0000"
+  },
   "INVALID_LAMBDA_FUNCTION_CALL" : {
     "message" : [
       "Invalid lambda function call."
@@ -2006,6 +2022,11 @@
       "The join condition <joinCondition> has the invalid type <conditionType>, expected \"BOOLEAN\"."
     ]
   },
+  "KRYO_BUFFER_OVERFLOW" : {
+    "message" : [
+      "Kryo serialization failed: <exceptionMsg>. To avoid this, increase \"<bufferSizeConfKey>\" value."
+    ]
+  },
   "LOAD_DATA_PATH_NOT_EXISTS" : {
     "message" : [
       "LOAD DATA input path does not exist: <path>."
@@ -2041,6 +2062,11 @@
       "CANNOT_PARSE_JSON_ARRAYS_AS_STRUCTS" : {
         "message" : [
           "Parsing JSON arrays as structs is forbidden."
+        ]
+      },
+      "CANNOT_PARSE_STRING_AS_DATATYPE" : {
+        "message" : [
+          "Cannot parse the value <fieldValue> of the field <fieldName> as target spark data type <targetType> from the input type <inputType>."
         ]
       },
       "WITHOUT_SUGGESTION" : {
@@ -5316,11 +5342,6 @@
   "_LEGACY_ERROR_TEMP_2131" : {
     "message" : [
       "Exception when registering StreamingQueryListener."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2133" : {
-    "message" : [
-      "Cannot parse field name <fieldName>, field value <fieldValue>, [<token>] as target spark data type [<dataType>]."
     ]
   },
   "_LEGACY_ERROR_TEMP_2134" : {

@@ -261,7 +261,7 @@ class DatetimeIndex(Index):
         --------
         >>> idx = ps.date_range('2016-12-31', '2017-01-08', freq='D')  # doctest: +SKIP
         >>> idx.dayofweek  # doctest: +SKIP
-        Int64Index([5, 6, 0, 1, 2, 3, 4, 5, 6], dtype='int64')
+        Index([5, 6, 0, 1, 2, 3, 4, 5, 6], dtype='int64')
         """
         warnings.warn(
             "`dayofweek` will return int32 index instead of int 64 index in 4.0.0.",
@@ -737,13 +737,13 @@ class DatetimeIndex(Index):
                       dtype='datetime64[ns]', freq=None)
 
         >>> psidx.indexer_between_time("00:01", "00:02").sort_values()  # doctest: +SKIP
-        Int64Index([1, 2], dtype='int64')
+        Index([1, 2], dtype='int64')
 
         >>> psidx.indexer_between_time("00:01", "00:02", include_end=False)  # doctest: +SKIP
-        Int64Index([1], dtype='int64')
+        Index([1], dtype='int64')
 
         >>> psidx.indexer_between_time("00:01", "00:02", include_start=False)  # doctest: +SKIP
-        Int64Index([2], dtype='int64')
+        Index([2], dtype='int64')
         """
 
         def pandas_between_time(pdf) -> ps.DataFrame[int]:  # type: ignore[no-untyped-def]
@@ -783,10 +783,10 @@ class DatetimeIndex(Index):
                       dtype='datetime64[ns]', freq=None)
 
         >>> psidx.indexer_at_time("00:00")  # doctest: +SKIP
-        Int64Index([0], dtype='int64')
+        Index([0], dtype='int64')
 
         >>> psidx.indexer_at_time("00:01")  # doctest: +SKIP
-        Int64Index([1], dtype='int64')
+        Index([1], dtype='int64')
         """
         if asof:
             raise NotImplementedError("'asof' argument is not supported")
