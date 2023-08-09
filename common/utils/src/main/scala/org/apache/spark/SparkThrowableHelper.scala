@@ -19,8 +19,6 @@ package org.apache.spark
 
 import scala.collection.JavaConverters._
 
-import com.fasterxml.jackson.core.util.MinimalPrettyPrinter
-
 import org.apache.spark.util.JsonUtils.toJsonString
 import org.apache.spark.util.SparkClassUtils
 
