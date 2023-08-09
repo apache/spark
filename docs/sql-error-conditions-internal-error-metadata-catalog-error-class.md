@@ -1,7 +1,7 @@
 ---
 layout: global
-title: INVALID_DEFAULT_VALUE error class
-displayTitle: INVALID_DEFAULT_VALUE error class
+title: INTERNAL_ERROR_METADATA_CATALOG error class
+displayTitle: INTERNAL_ERROR_METADATA_CATALOG error class
 license: |
   Licensed to the Apache Software Foundation (ASF) under one or more
   contributor license agreements.  See the NOTICE file distributed with
@@ -19,22 +19,34 @@ license: |
   limitations under the License.
 ---
 
-SQLSTATE: none assigned
+[SQLSTATE: XX000](sql-error-conditions-sqlstates.html#class-XX-internal-error)
 
-Failed to execute `<statement>` command because the destination column or variable `<colName>` has a DEFAULT value `<defaultValue>`,
+An object in the metadata catalog has been corrupted:
 
 This error class has the following derived error classes:
 
-## DATA_TYPE
+## SQL_CONFIG
 
-which requires `<expectedType>` type, but the statement provided a value of incompatible `<actualType>` type.
+Corrupted view SQL configs in catalog.
 
-## SUBQUERY_EXPRESSION
+## TABLE_NAME_CONTEXT
 
-which contains subquery expressions.
+Corrupted table name context in catalog: `<numParts>` parts expected, but part `<index>` is missing.
 
-## UNRESOLVED_EXPRESSION
+## TEMP_FUNCTION_REFERENCE
 
-which fails to resolve as a valid expression.
+Corrupted view referred temp functions names in catalog.
+
+## TEMP_VARIABLE_REFERENCE
+
+Corrupted view referred temp variable names in catalog.
+
+## TEMP_VIEW_REFERENCE
+
+Corrupted view referred temp view names in catalog.
+
+## VIEW_QUERY_COLUMN_ARITY
+
+Corrupted view query output column names in catalog: `<numCols>` parts expected, but part `<index>` is missing.
 
 
