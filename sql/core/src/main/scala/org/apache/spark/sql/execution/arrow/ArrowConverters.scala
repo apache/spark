@@ -150,17 +150,22 @@ private[sql] object ArrowConverters extends Logging {
         // Always write the schema.
         MessageSerializer.serialize(writeChannel, arrowSchema)
 
+        def isBatchSizeLimitExceeded: Boolean = {
+          // If `maxEstimatedBatchSize` is zero or negative, it implies unlimited.
+          maxEstimatedBatchSize > 0 && estimatedBatchSize >= maxEstimatedBatchSize
+        }
+        def isRecordLimitExceeded: Boolean = {
+          // If `maxRecordsPerBatch` is zero or negative, it implies unlimited.
+          maxRecordsPerBatch > 0 && rowCountInLastBatch >= maxRecordsPerBatch
+        }
         // Always write the first row.
         while (rowIter.hasNext && (
-          // For maxBatchSize and maxRecordsPerBatch, respect whatever smaller.
           // If the size in bytes is positive (set properly), always write the first row.
-          rowCountInLastBatch == 0 && maxEstimatedBatchSize > 0 ||
-            // If the size in bytes of rows are 0 or negative, unlimit it.
-            estimatedBatchSize <= 0 ||
-            estimatedBatchSize < maxEstimatedBatchSize ||
-            // If the size of rows are 0 or negative, unlimit it.
-            maxRecordsPerBatch <= 0 ||
-            rowCountInLastBatch < maxRecordsPerBatch)) {
+          (rowCountInLastBatch == 0 && maxEstimatedBatchSize > 0) ||
+            // If either limit is hit, create a batch. This implies that the limit that is hit first
+            // triggers the creation of a batch even if the other limit is not yet hit, hence
+            // preferring the more restrictive limit.
+            (!isBatchSizeLimitExceeded && !isRecordLimitExceeded))) {
           val row = rowIter.next()
           arrowWriter.write(row)
           estimatedBatchSize += (row match {

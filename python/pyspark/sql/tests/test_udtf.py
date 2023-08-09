@@ -163,24 +163,21 @@ class BaseUDTFTestsMixin:
         self.assertEqual(rows, [Row(a=1, b=2), Row(a=2, b=3)])
 
     def test_udtf_eval_returning_non_tuple(self):
+        @udtf(returnType="a: int")
         class TestUDTF:
             def eval(self, a: int):
                 yield a
 
-        func = udtf(TestUDTF, returnType="a: int")
-        # TODO(SPARK-44005): improve this error message
-        with self.assertRaisesRegex(PythonException, "Unexpected tuple 1 with StructType"):
-            func(lit(1)).collect()
+        with self.assertRaisesRegex(PythonException, "UDTF_INVALID_OUTPUT_ROW_TYPE"):
+            TestUDTF(lit(1)).collect()
 
-    def test_udtf_eval_returning_non_generator(self):
+        @udtf(returnType="a: int")
         class TestUDTF:
             def eval(self, a: int):
                 return (a,)
 
-        func = udtf(TestUDTF, returnType="a: int")
-        # TODO(SPARK-44005): improve this error message
-        with self.assertRaisesRegex(PythonException, "Unexpected tuple 1 with StructType"):
-            func(lit(1)).collect()
+        with self.assertRaisesRegex(PythonException, "UDTF_INVALID_OUTPUT_ROW_TYPE"):
+            TestUDTF(lit(1)).collect()
 
     def test_udtf_with_invalid_return_value(self):
         @udtf(returnType="x: int")
@@ -1852,21 +1849,20 @@ class UDTFArrowTestsMixin(BaseUDTFTestsMixin):
         self.spark.conf.set("spark.sql.execution.pythonUDTF.arrow.enabled", old_value)
 
     def test_udtf_eval_returning_non_tuple(self):
+        @udtf(returnType="a: int")
         class TestUDTF:
             def eval(self, a: int):
                 yield a
 
-        func = udtf(TestUDTF, returnType="a: int")
         # When arrow is enabled, it can handle non-tuple return value.
-        self.assertEqual(func(lit(1)).collect(), [Row(a=1)])
+        assertDataFrameEqual(TestUDTF(lit(1)), [Row(a=1)])
 
-    def test_udtf_eval_returning_non_generator(self):
+        @udtf(returnType="a: int")
         class TestUDTF:
             def eval(self, a: int):
-                return (a,)
+                return [a]
 
-        func = udtf(TestUDTF, returnType="a: int")
-        self.assertEqual(func(lit(1)).collect(), [Row(a=1)])
+        assertDataFrameEqual(TestUDTF(lit(1)), [Row(a=1)])
 
     def test_numeric_output_type_casting(self):
         class TestUDTF:
