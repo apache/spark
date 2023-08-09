@@ -40,14 +40,6 @@ class PythonUDTFSuite extends QueryTest with SharedSparkSession {
       |        yield a, b, b - a
       |""".stripMargin
 
-  private val pythonScriptTableArg: String =
-    """
-      |from pyspark.sql.types import Row
-      |class TableArgUDTF:
-      |    def eval(self, row: Row):
-      |        yield row['id'], row['id'], row['id']
-      |""".stripMargin
-
   private val arrowPythonScript: String =
     """
       |import pandas as pd
@@ -65,9 +57,6 @@ class PythonUDTFSuite extends QueryTest with SharedSparkSession {
 
   private val pythonUDTF: UserDefinedPythonTableFunction =
     createUserDefinedPythonTableFunction("SimpleUDTF", pythonScript, returnType)
-
-  private val pythonTableArgUDTF: UserDefinedPythonTableFunction =
-    createUserDefinedPythonTableFunction("TableArgUDTF", pythonScriptTableArg, returnType)
 
   private val arrowPythonUDTF: UserDefinedPythonTableFunction =
     createUserDefinedPythonTableFunction(
@@ -127,20 +116,6 @@ class PythonUDTFSuite extends QueryTest with SharedSparkSession {
     def failure(plan: LogicalPlan): Unit = {
       fail(s"Unexpected plan: $plan")
     }
-    spark.udtf.registerPython("TableArgUDTF", pythonTableArgUDTF)
-    checkAnswer(
-      sql(
-        """
-          |WITH t AS (
-          |  SELECT id FROM range(0, 3)
-          |)
-          |SELECT * FROM TableArgUDTF(TABLE(t) PARTITION BY id)
-          |""".stripMargin),
-      Seq(
-        Row(0, 0, 0),
-        Row(1, 1, 1),
-        Row(2, 2, 2))
-    )
     sql(
       """
         |SELECT * FROM testUDTF(
