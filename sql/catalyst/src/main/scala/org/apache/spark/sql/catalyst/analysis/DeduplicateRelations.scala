@@ -222,13 +222,11 @@ object DeduplicateRelations extends Rule[LogicalPlan] {
           } else {
             def rewriteAttrsMatchWithSubPlan[T <: Expression](
                 attrs: Seq[T],
-                attrMap: AttributeMap[Attribute],
-                planOutput: Seq[Attribute]): Seq[T] = {
-              val canRewriteAttrs = attrMap.filter(a => planOutput.contains(a._2))
+                attrMap: Map[Attribute, Attribute]): Seq[T] = {
               attrs.map(attr => {
                 attr.transformWithPruning(_.containsPattern(ATTRIBUTE_REFERENCE)) {
                   case a: AttributeReference =>
-                    canRewriteAttrs.getOrElse(a, a)
+                    attrMap.getOrElse(a, a)
                 }.asInstanceOf[T]
               })
             }
@@ -238,16 +236,14 @@ object DeduplicateRelations extends Rule[LogicalPlan] {
                 // SPARK-43781: CoGroup is a special case, `rewriteAttrs` will incorrectly update
                 // some fields that do not need to be updated. We need to update the output
                 // attributes of CoGroup manually.
+                val leftAttrMap = attrMap.filter(a => c.left.output.contains(a._2))
+                val rightAttrMap = attrMap.filter(a => c.right.output.contains(a._2))
                 val newLeftAttr = c.leftAttr.map(attr => attrMap.getOrElse(attr, attr))
-                val newRightAttr = rewriteAttrsMatchWithSubPlan(c.rightAttr, attrMap,
-                  c.right.output)
-                val newLeftGroup = rewriteAttrsMatchWithSubPlan(c.leftGroup, attrMap, c.left.output)
-                val newRightGroup = rewriteAttrsMatchWithSubPlan(c.rightGroup, attrMap,
-                  c.right.output)
-                val newLeftOrder = rewriteAttrsMatchWithSubPlan(c.leftOrder, attrMap,
-                  c.left.output)
-                val newRightOrder = rewriteAttrsMatchWithSubPlan(c.rightOrder, attrMap,
-                  c.right.output)
+                val newRightAttr = rewriteAttrsMatchWithSubPlan(c.rightAttr, rightAttrMap)
+                val newLeftGroup = rewriteAttrsMatchWithSubPlan(c.leftGroup, leftAttrMap)
+                val newRightGroup = rewriteAttrsMatchWithSubPlan(c.rightGroup, rightAttrMap)
+                val newLeftOrder = rewriteAttrsMatchWithSubPlan(c.leftOrder, leftAttrMap)
+                val newRightOrder = rewriteAttrsMatchWithSubPlan(c.rightOrder, rightAttrMap)
                 val newKeyDes = c.keyDeserializer.asInstanceOf[UnresolvedDeserializer]
                   .copy(inputAttributes = newLeftGroup)
                 val newLeftDes = c.leftDeserializer.asInstanceOf[UnresolvedDeserializer]
