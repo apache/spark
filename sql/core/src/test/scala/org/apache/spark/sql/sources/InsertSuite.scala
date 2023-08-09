@@ -962,11 +962,15 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
       (1 to 10).map(i => Row(i, null))
     )
 
-    sql("INSERT OVERWRITE TABLE jsonTable SELECT a FROM jt")
-    checkAnswer(
-      sql("SELECT a, b FROM jsonTable"),
-      (1 to 10).map(i => Row(i, null))
-    )
+    checkError(
+      exception = intercept[AnalysisException] {
+        sql("INSERT OVERWRITE TABLE jsonTable SELECT a FROM jt")
+      },
+      errorClass = "INSERT_COLUMN_ARITY_MISMATCH.NOT_ENOUGH_DATA_COLUMNS",
+      parameters = Map(
+        "tableName" -> "`unknown`",
+        "tableColumns" -> "`a`, `b`",
+        "dataColumns" -> "`a`"))
 
     sql("INSERT OVERWRITE TABLE jsonTable(a) SELECT a FROM jt")
     checkAnswer(
@@ -1027,13 +1031,13 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
     }
     withTable("t") {
       sql("create table t(i int, s bigint default 42, x bigint) using parquet")
-      sql("insert into t values(1)")
+      sql("insert into t(i) values(1)")
       checkAnswer(spark.table("t"), Row(1, 42L, null))
     }
     // The table has a partitioning column and a default value is injected.
     withTable("t") {
       sql("create table t(i boolean, s bigint, q int default 42) using parquet partitioned by (i)")
-      sql("insert into t partition(i='true') values(5, default)")
+      sql("insert into t partition(i='true') (s, q) values(5, default)")
       checkAnswer(spark.table("t"), Row(5, 42, true))
     }
     // The table has a partitioning column and a default value is added per an explicit reference.
@@ -1495,14 +1499,14 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
       sql(createTableIntCol)
       sql("alter table t add column s bigint default 42")
       sql("alter table t add column x bigint")
-      sql("insert into t values(1)")
+      sql("insert into t(i) values(1)")
       checkAnswer(spark.table("t"), Row(1, 42, null))
     }
     // The table has a partitioning column and a default value is injected.
     withTable("t") {
       sql("create table t(i boolean, s bigint) using parquet partitioned by (i)")
       sql("alter table t add column q int default 42")
-      sql("insert into t partition(i='true') values(5, default)")
+      sql("insert into t partition(i='true') (s, q) values(5, default)")
       checkAnswer(spark.table("t"), Row(5, 42, true))
     }
     // The default value parses correctly as a constant but non-literal expression.
@@ -1517,7 +1521,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
     withTable("t") {
       sql("create table t(i boolean default false) using parquet")
       sql("alter table t add column s bigint default 42")
-      sql("insert into t values(false, default), (default, 42)")
+      sql("insert into t(i, s) values(false, default), (default, 42)")
       checkAnswer(spark.table("t"), Seq(Row(false, 42), Row(false, 42)))
     }
     // There is an explicit default value provided in the INSERT INTO statement in the VALUES,
