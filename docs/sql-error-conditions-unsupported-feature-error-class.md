@@ -177,6 +177,10 @@ set PROPERTIES and DBPROPERTIES at the same time.
 
 `<property>` is a reserved table property, `<msg>`.
 
+## SET_VARIABLE_USING_SET
+
+`<variableName>` is a VARIABLE and cannot be updated using the SET statement. Use SET VARIABLE `<variableName>` = ... instead.
+
 ## TABLE_OPERATION
 
 Table `<tableName>` does not support `<operation>`. Please check the current catalog and namespace to make sure the qualified table name is expected, and also check the catalog implementation which is configured by "spark.sql.catalog".
