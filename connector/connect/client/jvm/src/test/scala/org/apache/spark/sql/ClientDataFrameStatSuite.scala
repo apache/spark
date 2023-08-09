@@ -176,4 +176,81 @@ class ClientDataFrameStatSuite extends RemoteSparkSession {
     assert(sketch.relativeError() === 0.001)
     assert(sketch.confidence() === 0.99 +- 5e-3)
   }
+
+  test("Bloom filter -- Long Column") {
+    val session = spark
+    import session.implicits._
+    val data = Range(0, 1000).map(_.toLong)
+    val df = data.toDF("id")
+    checkBloomFilter(data, df)
+  }
+
+  test("Bloom filter -- Int Column") {
+    val session = spark
+    import session.implicits._
+    val data = Range(0, 1000)
+    val df = data.toDF("id")
+    checkBloomFilter(data, df)
+  }
+
+  test("Bloom filter -- Short Column") {
+    val session = spark
+    import session.implicits._
+    val data = Range(0, 1000).map(_.toShort)
+    val df = data.toDF("id")
+    checkBloomFilter(data, df)
+  }
+
+  test("Bloom filter -- Byte Column") {
+    val session = spark
+    import session.implicits._
+    val data = Range(0, 1000).map(_.toByte)
+    val df = data.toDF("id")
+    checkBloomFilter(data, df)
+  }
+
+  test("Bloom filter -- String Column") {
+    val session = spark
+    import session.implicits._
+    val data = Range(0, 1000).map(_.toString)
+    val df = data.toDF("id")
+    checkBloomFilter(data, df)
+  }
+
+  private def checkBloomFilter(data: Seq[Any], df: DataFrame) = {
+    val filter1 = df.stat.bloomFilter("id", 1000, 0.03)
+    assert(filter1.expectedFpp() - 0.03 < 1e-3)
+    assert(data.forall(filter1.mightContain))
+    val filter2 = df.stat.bloomFilter("id", 1000, 64 * 5)
+    assert(filter2.bitSize() == 64 * 5)
+    assert(data.forall(filter2.mightContain))
+  }
+
+  test("Bloom filter -- Wrong dataType Column") {
+    val session = spark
+    import session.implicits._
+    val data = Range(0, 1000).map(_.toDouble)
+    val message = intercept[SparkException] {
+      data.toDF("id").stat.bloomFilter("id", 1000, 0.03)
+    }.getMessage
+    assert(message.contains("DATATYPE_MISMATCH.BLOOM_FILTER_WRONG_TYPE"))
+  }
+
+  test("Bloom filter test invalid inputs") {
+    val df = spark.range(1000).toDF("id")
+    val message1 = intercept[SparkException] {
+      df.stat.bloomFilter("id", -1000, 100)
+    }.getMessage
+    assert(message1.contains("Expected insertions must be positive"))
+
+    val message2 = intercept[SparkException] {
+      df.stat.bloomFilter("id", 1000, -100)
+    }.getMessage
+    assert(message2.contains("Number of bits must be positive"))
+
+    val message3 = intercept[SparkException] {
+      df.stat.bloomFilter("id", 1000, -1.0)
+    }.getMessage
+    assert(message3.contains("False positive probability must be within range (0.0, 1.0)"))
+  }
 }
