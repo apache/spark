@@ -13357,7 +13357,9 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
         if on is None and not isinstance(self.index, DatetimeIndex):
             raise NotImplementedError("resample currently works only for DatetimeIndex")
-        if on is not None and not isinstance(as_spark_type(on.dtype), TimestampType):
+        if on is not None and not isinstance(
+            as_spark_type(on.dtype), (TimestampType, TimestampNTZType)
+        ):
             raise NotImplementedError("`on` currently works only for TimestampType")
 
         agg_columns: List[ps.Series] = []
