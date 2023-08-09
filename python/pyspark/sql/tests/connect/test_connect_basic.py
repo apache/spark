@@ -23,6 +23,7 @@ import random
 import shutil
 import string
 import tempfile
+import uuid
 from collections import defaultdict
 
 from pyspark.errors import (
@@ -76,7 +77,7 @@ if should_test_connect:
     from pyspark.sql.connect.dataframe import DataFrame as CDataFrame
     from pyspark.sql import functions as SF
     from pyspark.sql.connect import functions as CF
-    from pyspark.sql.connect.client.core import Retrying
+    from pyspark.sql.connect.client.core import Retrying, SparkConnectClient
 
 
 class SparkConnectSQLTestCase(ReusedConnectTestCase, SQLTestUtils, PandasOnSparkTestUtils):
@@ -3523,8 +3524,16 @@ class ChannelBuilderTests(unittest.TestCase):
         self.assertEqual([("param1", "120 21"), ("x-my-header", "abcd")], md)
 
     def test_metadata(self):
-        chan = ChannelBuilder("sc://host/;session_id=abcdefgh")
-        self.assertEqual("abcdefgh", chan.session_id)
+        id = str(uuid.uuid4())
+        chan = ChannelBuilder(f"sc://host/;session_id={id}")
+        self.assertEqual(id, chan.session_id)
+
+        with self.assertRaises(ValueError) as ve:
+            chan = ChannelBuilder("sc://host/;session_id=abcd")
+            SparkConnectClient(chan)
+        self.assertIn(
+            "Could not parse 'session_id' parameter for connection string", str(ve.exception)
+        )
 
         chan = ChannelBuilder("sc://host/")
         self.assertIsNone(chan.session_id)

@@ -363,7 +363,13 @@ class ChannelBuilder:
         The session_id extracted from the parameters of the connection string or `None` if not
         specified.
         """
-        return self.params.get(ChannelBuilder.PARAM_SESSION_ID, None)
+        session_id = self.params.get(ChannelBuilder.PARAM_SESSION_ID, None)
+        if session_id is not None:
+            try:
+                uuid.UUID(session_id, version=4)
+            except ValueError as ve:
+                raise ValueError("Could not parse 'session_id' parameter for connection string", ve)
+        return session_id
 
     def toChannel(self) -> grpc.Channel:
         """

@@ -465,7 +465,14 @@ object SparkConnectClient {
     }
 
     def sessionId(value: String): Builder = {
-      require(value != null)
+      try {
+        UUID.fromString(value).toString
+      } catch {
+        case e: IllegalArgumentException =>
+          throw new IllegalArgumentException(
+            "Parameter value 'session_id' must be a valid UUID format.",
+            e)
+      }
       _configuration = _configuration.copy(sessionId = Some(value))
       this
     }
