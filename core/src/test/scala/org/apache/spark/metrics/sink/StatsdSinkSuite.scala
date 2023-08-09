@@ -192,7 +192,7 @@ class StatsdSinkSuite extends SparkFunSuite {
       sink.registry.register("test-123.driver.spark.streaming.local.latency", gauge)
       sink.report()
 
-      val p = new DatagramPacket(new Array[Byte](socketBufferSize), socketBufferSize)
+      val p = new DatagramPacket(new Array[Byte](maxPayloadSize), maxPayloadSize)
       socket.receive(p)
 
       val metricKeys = sink.registry.getGauges(sink.filter).keySet.asScala
