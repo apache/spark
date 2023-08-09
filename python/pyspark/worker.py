@@ -566,20 +566,41 @@ def read_udtf(pickleSer, infile, eval_type):
             f"The return type of a UDTF must be a struct type, but got {type(return_type)}."
         )
 
+    # This class holds the UDTF class instance and associated state as we evaluate rows.
+    # We keep this state in a class to simplify updating it as needed within nested
+    # function calls, such as when we destroy the UDTF class instance when partition
+    # boundaries change and then create a new one.
+    class UdtfState:
+        def __init__(self):
+            self.udtf = None
+            self.prev_arguments = None
+            self.eval = None
+            self.terminate = None
+
+        def set_terminate(self, wrap_udtf, return_type):
+            if hasattr(self.udtf, "terminate"):
+                self.terminate = wrap_udtf(getattr(self.udtf, "terminate"), return_type)
+            else:
+                self.terminate = None
+
+    udtf_state = UdtfState()
+
     # Instantiate the UDTF class.
-    def create_udtf_class_instance():
+    def create_udtf_class_instance(return_type):
         try:
-            udtf = handler()
+            if udtf_state.udtf is not None:
+                del udtf_state.udtf
+            udtf_state.udtf = handler()
+            udtf_state.prev_arguments = None
         except Exception as e:
             raise PySparkRuntimeError(
                 error_class="UDTF_EXEC_ERROR",
                 message_parameters={"method_name": "__init__", "error": str(e)},
             )
-        return udtf
-    udtf = create_udtf_class_instance()
+    create_udtf_class_instance(return_type)
 
     # Validate the UDTF
-    if not hasattr(udtf, "eval"):
+    if not hasattr(udtf_state.udtf, "eval"):
         raise PySparkRuntimeError(
             "Failed to execute the user defined table function because it has not "
             "implemented the 'eval' method. Please add the 'eval' method and try "
@@ -587,32 +608,19 @@ def read_udtf(pickleSer, infile, eval_type):
         )
 
     # Inspects the values of the projected PARTITION BY expressions, if any.
-    # When these values change, calls the 'terminate' method on the UDTF class
-    # instance and then destroys it and creates a new one to implement the desired
-    # partitioning semantics.
-    def check_partition_boundaries(arguments, prev_arguments, udtf, terminate):
-        print(f'''npci: {num_partition_child_indexes},
-              pci: {partition_child_indexes},
-              arguments: {arguments}''')
-        if num_partition_child_indexes == 0 or prev_arguments is None:
-            return udtf
+    # Returns true when these values change, in which case the caller should invoke
+    # the 'terminate' method on the UDTF class instance and then destroy it and
+    # creates a new one to implement the desired partitioning semantics.
+    def check_partition_boundaries(arguments):
+        if num_partition_child_indexes == 0 or udtf_state.prev_arguments is None:
+            udtf_state.prev_arguments = arguments
+            return False
         cur_table_arg = [arg for arg in arguments if type(arg) is Row][0]
-        prev_table_arg = [arg for arg in prev_arguments if type(arg) is Row][0]
+        prev_table_arg = [arg for arg in udtf_state.prev_arguments if type(arg) is Row][0]
         cur_partition_values = [cur_table_arg[i] for i in partition_child_indexes]
         prev_partition_values = [prev_table_arg[i] for i in partition_child_indexes]
-        changed_partitions = False
-        for (k, v) in zip(cur_partition_values, prev_partition_values):
-            if k != v:
-                changed_partitions = True
-                break
-        if changed_partitions:
-            # Call 'terminate' on the UDTF class instance, if applicable.
-            if terminate is not None:
-                terminate()
-            # Destroy the UDTF class instance and create a new one.
-            return create_udtf_class_instance()
-        else:
-            return udtf
+        udtf_state.prev_arguments = arguments
+        any(((k, v) in zip(cur_partition_values, prev_partition_values) if k != v))
 
     if eval_type == PythonEvalType.SQL_ARROW_TABLE_UDF:
 
@@ -654,16 +662,11 @@ def read_udtf(pickleSer, infile, eval_type):
 
             return lambda *a: map(lambda res: (res, arrow_return_type), map(verify_result, f(*a)))
 
-        eval = wrap_arrow_udtf(getattr(udtf, "eval"), return_type)
-
-        if hasattr(udtf, "terminate"):
-            terminate = wrap_arrow_udtf(getattr(udtf, "terminate"), return_type)
-        else:
-            terminate = None
+        udtf_state.eval = wrap_arrow_udtf(getattr(udtf_state.udtf, "eval"), return_type)
+        udtf_state.set_terminate(wrap_udtf, return_type)
 
         def mapper(_, it):
             try:
-                prev_arguments = None
                 for a in it:
                     # The eval function yields an iterator. Each element produced by this
                     # iterator is a tuple in the form of (pandas.DataFrame, arrow_return_type).
@@ -672,13 +675,20 @@ def read_udtf(pickleSer, infile, eval_type):
                     # If any values change, call 'terminate' on the UDTF class instance,
                     # then destroy it and create a new one.
                     arguments = [a[o] for o in arg_offsets]
-                    global udtf
-                    udtf = check_partition_boundaries(arguments, prev_arguments, udtf, terminate)
-                    prev_arguments = arguments
-                    yield from eval(*arguments)
+                    changed_partitions = check_partition_boundaries(arguments)
+                    if changed_partitions:
+                        # Call 'terminate' on the UDTF class instance, if applicable.
+                        # Then destroy the UDTF class instance and create a new one.
+                        if udtf_state.terminate is not None:
+                            yield from udtf_state.terminate()
+                        create_udtf_classs_instance(return_type)
+                        udtf_state.eval = wrap_arrow_udtf(
+                            getattr(udtf_state.udtf, "eval"), return_type)
+                        udtf_state.set_terminate(wrap_udtf, return_type)
+                    yield from udtf_state.eval(*arguments)
             finally:
-                if terminate is not None:
-                    yield from terminate()
+                if udtf_state.terminate is not None:
+                    yield from udtf_state.terminate()
 
         return mapper, None, ser, ser
 
@@ -736,29 +746,30 @@ def read_udtf(pickleSer, infile, eval_type):
 
             return evaluate
 
-        eval = wrap_udtf(getattr(udtf, "eval"), return_type)
-
-        if hasattr(udtf, "terminate"):
-            terminate = wrap_udtf(getattr(udtf, "terminate"), return_type)
-        else:
-            terminate = None
+        udtf_state.eval = wrap_udtf(getattr(udtf_state.udtf, "eval"), return_type)
+        udtf_state.set_terminate(wrap_udtf, return_type)
 
         # Return an iterator of iterators.
         def mapper(_, it):
             try:
-                prev_arguments = None
                 for a in it:
                     # Compare adjacent PARTITION BY values in consecutive rows.
                     # If any values change, call 'terminate' on the UDTF class instance,
                     # then destroy it and create a new one.
                     arguments = [a[o] for o in arg_offsets]
-                    global udtf
-                    udtf = check_partition_boundaries(arguments, prev_arguments, udtf, terminate)
-                    prev_arguments = arguments
-                    yield eval(*arguments)
+                    changed_partitions = check_partition_boundaries(arguments)
+                    if changed_partitions:
+                        # Call 'terminate' on the UDTF class instance, if applicable.
+                        # Then destroy the UDTF class instance and create a new one.
+                        if udtf_state.terminate is not None:
+                            yield udtf_state.terminate()
+                        create_udtf_class_instance(return_type)
+                        udtf_state.eval = wrap_udtf(getattr(udtf_state.udtf, "eval"), return_type)
+                        udtf_state.set_terminate(wrap_udtf, return_type)
+                    yield udtf_state.eval(*arguments)
             finally:
-                if terminate is not None:
-                    yield terminate()
+                if udtf_state.terminate is not None:
+                    yield udtf_state.terminate()
 
         return mapper, None, ser, ser
 
