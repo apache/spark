@@ -1159,31 +1159,14 @@ object functions {
   }
 
   /**
-   * Aggregate function: returns the concatenated input values.
-   *
-   * @group agg_funcs
-   * @since 4.0.0
-   */
-  def listagg(columnName: String): Column = listagg(Column(columnName))
-
-  /**
    * Aggregate function: returns the concatenated input values, separated by the delimiter string.
    *
    * @group agg_funcs
    * @since 4.0.0
    */
-  def listagg(e: Column, delimiter: String): Column = withAggregateFunction {
-    ListAgg(e.expr, Literal.create(delimiter, StringType))
+  def listagg(e: Column, delimiter: Column): Column = withAggregateFunction {
+    ListAgg(e.expr, delimiter.expr)
   }
-
-  /**
-   * Aggregate function: returns the concatenated input values, separated by the delimiter string.
-   *
-   * @group agg_funcs
-   * @since 4.0.0
-   */
-  def listagg(columnName: String, delimiter: String): Column =
-    listagg(Column(columnName), delimiter)
 
   /**
    * Aggregate function: returns the concatenated input values, separated by the delimiter string.
@@ -1200,7 +1183,8 @@ object functions {
    * @group agg_funcs
    * @since 4.0.0
    */
-  def listagg_distinct(columnName: String): Column = listagg_distinct(Column(columnName))
+  def listagg_distinct(e: Column, delimiter: Column): Column = withAggregateFunction(
+    ListAgg(e.expr, delimiter.expr), isDistinct = true)
 
   /**
    * Aggregate function: alias for `var_samp`.

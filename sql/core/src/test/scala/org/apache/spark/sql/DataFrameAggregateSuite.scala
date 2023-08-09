@@ -635,10 +635,6 @@ class DataFrameAggregateSuite extends QueryTest
       df4.selectExpr("listagg(a, '|')", "listagg(b, '|')"),
       Seq(Row("a|b|c", "b|c|d"))
     )
-    checkAnswer(
-      df4.select(listagg($"a", "|"), listagg($"b", "|")),
-      Seq(Row("a|b|c", "b|c|d"))
-    )
   }
 
   test("SPARK-31500: collect_set() of BinaryType returns duplicate elements") {
