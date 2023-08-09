@@ -16,6 +16,8 @@
  */
 package org.apache.spark.sql.connect.client
 
+import java.util.UUID
+
 import org.apache.spark.sql.connect.client.util.ConnectFunSuite
 
 /**
@@ -46,7 +48,7 @@ class SparkConnectClientBuilderParseTestSuite extends ConnectFunSuite {
   argumentTest("user_id", "U1238", _.userId.get)
   argumentTest("user_name", "alice", _.userName.get)
   argumentTest("user_agent", "MY APP", _.userAgent)
-  argumentTest("session_id", "abcdefghijklmnop", _.sessionId.get)
+  argumentTest("session_id", UUID.randomUUID().toString, _.sessionId.get)
 
   test("Argument - remote") {
     val builder =

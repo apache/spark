@@ -3532,7 +3532,7 @@ class ChannelBuilderTests(unittest.TestCase):
             chan = ChannelBuilder("sc://host/;session_id=abcd")
             SparkConnectClient(chan)
         self.assertIn(
-            "Could not parse 'session_id' parameter for connection string", str(ve.exception)
+            "Parameter value 'session_id' must be a valid UUID format.", str(ve.exception)
         )
 
         chan = ChannelBuilder("sc://host/")
