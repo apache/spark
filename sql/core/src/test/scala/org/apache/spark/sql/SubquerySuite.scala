@@ -860,7 +860,7 @@ class SubquerySuite extends QueryTest
       checkErrorMatchPVals(
         exception4,
         errorClass = "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY." +
-          "ACCESSING_OUTER_QUERY_COLUMN_IS_NOT_ALLOWED",
+          "CORRELATED_COLUMN_IS_NOT_ALLOWED_IN_PREDICATE",
         parameters = Map("treeNode" -> "(?s).*"),
         sqlState = None,
         context = ExpectedContext(
