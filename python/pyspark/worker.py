@@ -670,10 +670,6 @@ def read_udtf(pickleSer, infile, eval_type):
                 for a in it:
                     # The eval function yields an iterator. Each element produced by this
                     # iterator is a tuple in the form of (pandas.DataFrame, arrow_return_type).
-                    #
-                    # Compare adjacent PARTITION BY values in consecutive rows.
-                    # If any values change, call 'terminate' on the UDTF class instance,
-                    # then destroy it and create a new one.
                     arguments = [a[o] for o in arg_offsets]
                     changed_partitions = check_partition_boundaries(arguments)
                     if changed_partitions:
@@ -753,9 +749,6 @@ def read_udtf(pickleSer, infile, eval_type):
         def mapper(_, it):
             try:
                 for a in it:
-                    # Compare adjacent PARTITION BY values in consecutive rows.
-                    # If any values change, call 'terminate' on the UDTF class instance,
-                    # then destroy it and create a new one.
                     arguments = [a[o] for o in arg_offsets]
                     changed_partitions = check_partition_boundaries(arguments)
                     if changed_partitions:
