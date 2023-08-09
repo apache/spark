@@ -34,6 +34,7 @@ class ArrowPythonUDTFRunner(
     udtf: PythonUDTF,
     evalType: Int,
     offsets: Array[Int],
+    names: Array[Option[String]],
     protected override val schema: StructType,
     protected override val timeZoneId: String,
     protected override val largeVarTypes: Boolean,
@@ -49,7 +50,7 @@ class ArrowPythonUDTFRunner(
       dataOut: DataOutputStream,
       funcs: Seq[ChainedPythonFunctions],
       argOffsets: Array[Array[Int]]): Unit = {
-    PythonUDTFRunner.writeUDTF(dataOut, udtf, offsets)
+    PythonUDTFRunner.writeUDTF(dataOut, udtf, offsets, names)
   }
 
   override val pythonExec: String =

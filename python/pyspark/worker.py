@@ -550,7 +550,10 @@ def read_udtf(pickleSer, infile, eval_type):
 
     # See `PythonUDTFRunner.PythonUDFWriterThread.writeCommand'
     num_arg = read_int(infile)
-    arg_offsets = [read_int(infile) for _ in range(num_arg)]
+    offsets = [read_int(infile) for _ in range(num_arg)]
+    names = [utf8_deserializer.loads(infile) if read_bool(infile) else None for _ in range(num_arg)]
+    args_offsets = [offset for offset, name in zip(offsets, names) if name is None]
+    kwargs_offsets = {name: offset for offset, name in zip(offsets, names) if name is not None}
     handler = read_command(pickleSer, infile)
     if not isinstance(handler, type):
         raise PySparkRuntimeError(
@@ -619,7 +622,9 @@ def read_udtf(pickleSer, infile, eval_type):
                 )
                 return result
 
-            return lambda *a: map(lambda res: (res, arrow_return_type), map(verify_result, f(*a)))
+            return lambda *a, **kw: map(
+                lambda res: (res, arrow_return_type), map(verify_result, f(*a, **kw))
+            )
 
         eval = wrap_arrow_udtf(getattr(udtf, "eval"), return_type)
 
@@ -633,7 +638,10 @@ def read_udtf(pickleSer, infile, eval_type):
                 for a in it:
                     # The eval function yields an iterator. Each element produced by this
                     # iterator is a tuple in the form of (pandas.DataFrame, arrow_return_type).
-                    yield from eval(*[a[o] for o in arg_offsets])
+                    yield from eval(
+                        *[a[o] for o in args_offsets],
+                        **{k: a[o] for k, o in kwargs_offsets.items()},
+                    )
             finally:
                 if terminate is not None:
                     yield from terminate()
@@ -667,9 +675,9 @@ def read_udtf(pickleSer, infile, eval_type):
                 return toInternal(result)
 
             # Evaluate the function and return a tuple back to the executor.
-            def evaluate(*a) -> tuple:
+            def evaluate(*a, **kw) -> tuple:
                 try:
-                    res = f(*a)
+                    res = f(*a, **kw)
                 except Exception as e:
                     raise PySparkRuntimeError(
                         error_class="UDTF_EXEC_ERROR",
@@ -705,7 +713,10 @@ def read_udtf(pickleSer, infile, eval_type):
         def mapper(_, it):
             try:
                 for a in it:
-                    yield eval(*[a[o] for o in arg_offsets])
+                    yield eval(
+                        *[a[o] for o in args_offsets],
+                        **{k: a[o] for k, o in kwargs_offsets.items()},
+                    )
             finally:
                 if terminate is not None:
                     yield terminate()

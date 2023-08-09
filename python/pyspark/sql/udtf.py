@@ -148,9 +148,9 @@ def _vectorize_udtf(cls: Type) -> Type:
     # Wrap the exception thrown from the UDTF in a PySparkRuntimeError.
     def wrap_func(f: Callable[..., Any]) -> Callable[..., Any]:
         @wraps(f)
-        def evaluate(*a: Any) -> Any:
+        def evaluate(*a: Any, **kw: Any) -> Any:
             try:
-                return f(*a)
+                return f(*a, **kw)
             except Exception as e:
                 raise PySparkRuntimeError(
                     error_class="UDTF_EXEC_ERROR",
@@ -168,18 +168,22 @@ def _vectorize_udtf(cls: Type) -> Type:
         ):
 
             @staticmethod
-            def analyze(*args: AnalyzeArgument) -> AnalyzeResult:
-                return cls.analyze(*args)
+            def analyze(*args: AnalyzeArgument, **kwargs: AnalyzeArgument) -> AnalyzeResult:
+                return cls.analyze(*args, **kwargs)
 
-        def eval(self, *args: pd.Series) -> Iterator[pd.DataFrame]:
-            if len(args) == 0:
+        def eval(self, *args: pd.Series, **kwargs: pd.Series) -> Iterator[pd.DataFrame]:
+            if len(args) == 0 and len(kwargs) == 0:
                 yield pd.DataFrame(wrap_func(self.func.eval)())
             else:
                 # Create tuples from the input pandas Series, each tuple
                 # represents a row across all Series.
-                row_tuples = zip(*args)
+                keys = list(kwargs.keys())
+                len_args = len(args)
+                row_tuples = zip(*args, *[kwargs[key] for key in keys])
                 for row in row_tuples:
-                    res = wrap_func(self.func.eval)(*row)
+                    res = wrap_func(self.func.eval)(
+                        *row[:len_args], **{key: row[len_args + i] for i, key in enumerate(keys)}
+                    )
                     if res is not None and not isinstance(res, Iterable):
                         raise PySparkRuntimeError(
                             error_class="UDTF_RETURN_NOT_ITERABLE",

@@ -57,6 +57,7 @@ case class BatchEvalPythonUDTFExec(
    */
   override protected def evaluate(
       argOffsets: Array[Int],
+      argNames: Array[Option[String]],
       iter: Iterator[InternalRow],
       schema: StructType,
       context: TaskContext): Iterator[Iterator[InternalRow]] = {
@@ -67,7 +68,7 @@ case class BatchEvalPythonUDTFExec(
 
     // Output iterator for results from Python.
     val outputIterator =
-      new PythonUDTFRunner(udtf, argOffsets, pythonMetrics, jobArtifactUUID)
+      new PythonUDTFRunner(udtf, argOffsets, argNames, pythonMetrics, jobArtifactUUID)
         .compute(inputIterator, context.partitionId(), context)
 
     val unpickle = new Unpickler
@@ -95,6 +96,7 @@ case class BatchEvalPythonUDTFExec(
 class PythonUDTFRunner(
     udtf: PythonUDTF,
     argOffsets: Array[Int],
+    argNames: Array[Option[String]],
     pythonMetrics: Map[String, SQLMetric],
     jobArtifactUUID: Option[String])
   extends BasePythonUDFRunner(
@@ -110,7 +112,7 @@ class PythonUDTFRunner(
     new PythonUDFWriterThread(env, worker, inputIterator, partitionIndex, context) {
 
       protected override def writeCommand(dataOut: DataOutputStream): Unit = {
-        PythonUDTFRunner.writeUDTF(dataOut, udtf, argOffsets)
+        PythonUDTFRunner.writeUDTF(dataOut, udtf, argOffsets, argNames)
       }
     }
   }
@@ -118,10 +120,22 @@ class PythonUDTFRunner(
 
 object PythonUDTFRunner {
 
-  def writeUDTF(dataOut: DataOutputStream, udtf: PythonUDTF, argOffsets: Array[Int]): Unit = {
+  def writeUDTF(
+      dataOut: DataOutputStream,
+      udtf: PythonUDTF,
+      argOffsets: Array[Int],
+      argNames: Array[Option[String]]): Unit = {
     dataOut.writeInt(argOffsets.length)
     argOffsets.foreach { offset =>
       dataOut.writeInt(offset)
+    }
+    assert(argOffsets.length == argNames.length)
+    argNames.foreach {
+      case Some(name) =>
+        dataOut.writeBoolean(true)
+        PythonWorkerUtils.writeUTF(name, dataOut)
+      case _ =>
+        dataOut.writeBoolean(false)
     }
     dataOut.writeInt(udtf.func.command.length)
     dataOut.write(udtf.func.command.toArray)

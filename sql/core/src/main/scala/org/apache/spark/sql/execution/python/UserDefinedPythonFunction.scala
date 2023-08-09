@@ -234,6 +234,14 @@ object UserDefinedPythonTableFunction {
           dataOut.writeBoolean(false)
         }
         dataOut.writeBoolean(is_table)
+        // If the expr is NamedArgumentExpression, send its name.
+        expr match {
+          case NamedArgumentExpression(key, _) =>
+            dataOut.writeBoolean(true)
+            PythonWorkerUtils.writeUTF(key, dataOut)
+          case _ =>
+            dataOut.writeBoolean(false)
+        }
       }
 
       dataOut.writeInt(SpecialLengths.END_OF_STREAM)

@@ -53,6 +53,7 @@ case class ArrowEvalPythonUDTFExec(
 
   override protected def evaluate(
       argOffsets: Array[Int],
+      argNames: Array[Option[String]],
       iter: Iterator[InternalRow],
       schema: StructType,
       context: TaskContext): Iterator[Iterator[InternalRow]] = {
@@ -65,6 +66,7 @@ case class ArrowEvalPythonUDTFExec(
       udtf,
       evalType,
       argOffsets,
+      argNames,
       schema,
       sessionLocalTimeZone,
       largeVarTypes,
