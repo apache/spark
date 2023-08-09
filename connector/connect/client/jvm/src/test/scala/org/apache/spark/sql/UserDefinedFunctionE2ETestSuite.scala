@@ -95,6 +95,18 @@ class UserDefinedFunctionE2ETestSuite extends QueryTest {
     rows.forEach(x => assert(x == 42))
   }
 
+  test("Dataset explode") {
+    val rows = spark
+      .range(3)
+      .explode(col("id") + 41, col("id") + 10) { case Row(x: Long, y: Long) =>
+        Iterator((x, x - 1), (y, y + 1))
+      }
+      .as(spark.implicits.newProductEncoder[(Long, Long)])
+      .collect()
+      .toSeq
+    assert(rows === Seq((41L, 40L), (10L, 11L), (42L, 41L), (11L, 12L), (43L, 42L), (12L, 13L)))
+  }
+
   test("Dataset typed flat map - java") {
     val rows = spark
       .range(5)

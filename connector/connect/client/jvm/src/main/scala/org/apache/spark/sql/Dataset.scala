@@ -21,6 +21,7 @@ import java.util.{Collections, Locale}
 import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.reflect.ClassTag
+import scala.reflect.runtime.universe.TypeTag
 import scala.util.control.NonFatal
 
 import org.apache.spark.SparkException
@@ -2722,6 +2723,38 @@ class Dataset[T] private[sql] (
    */
   def flatMap[U](f: FlatMapFunction[T, U], encoder: Encoder[U]): Dataset[U] = {
     flatMap(UdfUtils.flatMapFuncToScalaFunc(f))(encoder)
+  }
+
+  /**
+   * (Scala-specific) Returns a new Dataset where each row has been expanded to zero or more rows
+   * by the provided function. This is similar to a `LATERAL VIEW` in HiveQL. The columns of the
+   * input row are implicitly joined with each row that is output by the function.
+   *
+   * Given that this is deprecated, as an alternative, you can explode columns either using
+   * `functions.explode()` or `flatMap()`. The following example uses these alternatives to count
+   * the number of books that contain a given word:
+   *
+   * {{{
+   *   case class Book(title: String, words: String)
+   *   val ds: Dataset[Book]
+   *
+   *   val allWords = ds.select($"title", explode(split($"words", " ")).as("word"))
+   *
+   *   val bookCountPerWord = allWords.groupBy("word").agg(count_distinct("title"))
+   * }}}
+   *
+   * Using `flatMap()` this can similarly be exploded as:
+   *
+   * {{{
+   *   ds.flatMap(_.words.split(" "))
+   * }}}
+   *
+   * @group untypedrel
+   * @since 3.5.0
+   */
+  @deprecated("use flatMap() or select() with functions.explode() instead", "2.0.0")
+  def explode[A <: Product: TypeTag](input: Column*)(f: Row => TraversableOnce[A]): DataFrame = {
+    select(input: _*).flatMap(f)(Encoders.product[A]).toDF()
   }
 
   /**
