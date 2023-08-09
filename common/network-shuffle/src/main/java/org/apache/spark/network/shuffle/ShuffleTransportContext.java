@@ -71,9 +71,9 @@ public class ShuffleTransportContext extends TransportContext {
 
     if ("shuffle".equalsIgnoreCase(conf.getModuleName()) && conf.separateFinalizeShuffleMerge()) {
       finalizeWorkers = NettyUtils.createEventLoop(
-        IOMode.valueOf(conf.ioMode()),
-        conf.finalizeShuffleMergeHandlerThreads(),
-        "shuffle-finalize-merge-handler");
+          IOMode.valueOf(conf.ioMode()),
+          conf.finalizeShuffleMergeHandlerThreads(),
+          "shuffle-finalize-merge-handler");
       logger.info("finalize shuffle merged workers created");
     } else {
       finalizeWorkers = null;
@@ -100,10 +100,10 @@ public class ShuffleTransportContext extends TransportContext {
    * separateFinalizeShuffleMerge is enabled.
    */
   private void addHandlerToPipeline(SocketChannel channel,
-      TransportChannelHandler ch) {
+      TransportChannelHandler transportChannelHandler) {
     if (finalizeWorkers != null) {
       channel.pipeline().addLast(finalizeWorkers, FinalizedHandler.HANDLER_NAME,
-        new FinalizedHandler(ch.getRequestHandler()));
+        new FinalizedHandler(transportChannelHandler.getRequestHandler()));
     }
   }
 
@@ -121,7 +121,7 @@ public class ShuffleTransportContext extends TransportContext {
     }
 
     /**
-     * Decode the message and check if it is a finalize merge request. If yes, then create a
+     * Decode the message and check if it is a finalize merge request. If yes, then create an
      * internal rpc request message and add it to the list of messages to be handled by
      * {@link TransportChannelHandler}
     */
