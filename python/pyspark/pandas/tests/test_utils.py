@@ -111,7 +111,7 @@ class UtilsTestsMixin:
         with self.assertRaisesRegex(IndexError, err_msg):
             validate_index_loc(psidx, -4)
 
-    def test_assert_df_assertPandasOnSparkEqual(self):
+    def test_assert_df_assert_pandas_on_spark_equal(self):
         import pyspark.pandas as ps
 
         psdf1 = ps.DataFrame({"a": [1, 2, 3], "b": [4, 5, 6], "c": [7, 8, 9]})
@@ -120,15 +120,15 @@ class UtilsTestsMixin:
         assertPandasOnSparkEqual(psdf1, psdf2, checkRowOrder=False)
         assertPandasOnSparkEqual(psdf1, psdf2, checkRowOrder=True)
 
-    def test_assertPandasOnSparkEqual_ignoreOrder_default(self):
+    def test_assert_pandas_on_spark_equal_ignore_order(self):
         import pyspark.pandas as ps
 
         psdf1 = ps.DataFrame({"a": [1, 2, 3], "b": [4, 5, 6], "c": [7, 8, 9]})
         psdf2 = ps.DataFrame({"a": [2, 1, 3], "b": [5, 4, 6], "c": [8, 7, 9]})
 
-        assertPandasOnSparkEqual(psdf1, psdf2)
+        assertPandasOnSparkEqual(psdf1, psdf2, checkRowOrder=False)
 
-    def test_assert_series_assertPandasOnSparkEqual(self):
+    def test_assert_series_assert_pandas_on_spark_equal(self):
         import pyspark.pandas as ps
 
         s1 = ps.Series([212.32, 100.0001])
@@ -136,7 +136,7 @@ class UtilsTestsMixin:
 
         assertPandasOnSparkEqual(s1, s2, checkExact=False)
 
-    def test_assert_index_assertPandasOnSparkEqual(self):
+    def test_assert_index_assert_pandas_on_spark_equal(self):
         import pyspark.pandas as ps
 
         s1 = ps.Index([212.300001, 100.000])
@@ -144,7 +144,7 @@ class UtilsTestsMixin:
 
         assertPandasOnSparkEqual(s1, s2, almost=True)
 
-    def test_assert_error_assertPandasOnSparkEqual(self):
+    def test_assert_error_assert_pandas_on_spark_equal(self):
         import pyspark.pandas as ps
 
         list1 = [10, 20, 30]
@@ -165,13 +165,13 @@ class UtilsTestsMixin:
             },
         )
 
-    def test_assert_None_assertPandasOnSparkEqual(self):
+    def test_assert_None_assert_pandas_on_spark_equal(self):
         psdf1 = None
         psdf2 = None
 
         assertPandasOnSparkEqual(psdf1, psdf2)
 
-    def test_assert_empty_assertPandasOnSparkEqual(self):
+    def test_assert_empty_assert_pandas_on_spark_equal(self):
         import pyspark.pandas as ps
 
         psdf1 = ps.DataFrame()
