@@ -22,6 +22,8 @@ import java.nio.charset.StandardCharsets.UTF_8
 import java.util.Properties
 import java.util.concurrent.TimeUnit._
 
+import scala.collection.JavaConverters._
+
 import com.codahale.metrics._
 
 import org.apache.spark.{SecurityManager, SparkConf, SparkFunSuite}
@@ -45,6 +47,7 @@ class StatsdSinkSuite extends SparkFunSuite {
     val props = new Properties
     defaultProps.foreach(e => props.put(e._1, e._2))
     props.put(STATSD_KEY_PORT, socket.getLocalPort.toString)
+    props.put(STATSD_KEY_REGEX, "test-[0-9]+.driver.(CodeGenerator|BlockManager)")
     val registry = new MetricRegistry
     val sink = new StatsdSink(props, registry, securityMgr)
     try {
@@ -155,6 +158,33 @@ class StatsdSinkSuite extends SparkFunSuite {
         assert(expectedResults.contains(result) || result.matches(oneMoreResult),
           "Timer metric received should match data sent")
       }
+    }
+  }
+
+
+  test("metrics StatsD sink with filtered Gauge") {
+    withSocketAndSink { (socket, sink) =>
+      val gauge = new Gauge[Double] {
+        override def getValue: Double = 1.23
+      }
+
+      val filteredMetricKeys = Set(
+        "test-123.driver.CodeGenerator.generatedMethodSize",
+        "test-123.driver.CodeGenerator.generatedMethodSize"
+      )
+
+      filteredMetricKeys.foreach(sink.registry.register(_, gauge))
+
+      sink.registry.register("test-123.driver.spark.streaming.local.latency", gauge)
+      sink.report()
+
+      val p = new DatagramPacket(new Array[Byte](socketBufferSize), socketBufferSize)
+      socket.receive(p)
+
+      val metricKeys = sink.registry.getGauges(sink.filter).keySet.asScala
+
+      assert(metricKeys.equals(filteredMetricKeys),
+        "Should contain only metrics matches regex filter")
     }
   }
 }
