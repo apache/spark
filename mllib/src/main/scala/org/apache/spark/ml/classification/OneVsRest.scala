@@ -28,7 +28,6 @@ import org.json4s._
 import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods._
 
-import org.apache.spark.SparkContext
 import org.apache.spark.annotation.Since
 import org.apache.spark.ml._
 import org.apache.spark.ml.attribute._
@@ -93,7 +92,7 @@ private[ml] object OneVsRestParams extends ClassifierTypeTrait {
   def saveImpl(
       path: String,
       instance: OneVsRestParams,
-      sc: SparkContext,
+      sparkSession: SparkSession,
       extraMetadata: Option[JObject] = None): Unit = {
 
     val params = instance.extractParamMap().toSeq
@@ -102,7 +101,7 @@ private[ml] object OneVsRestParams extends ClassifierTypeTrait {
       .map { case ParamPair(p, v) => p.name -> parse(p.jsonEncode(v)) }
       .toList)
 
-    DefaultParamsWriter.saveMetadata(instance, path, sc, extraMetadata, Some(jsonParams))
+    DefaultParamsWriter.saveMetadata(instance, path, sparkSession, extraMetadata, Some(jsonParams))
 
     val classifierPath = new Path(path, "classifier").toString
     instance.getClassifier.asInstanceOf[MLWritable].save(classifierPath)
@@ -281,7 +280,7 @@ object OneVsRestModel extends MLReadable[OneVsRestModel] {
     override protected def saveImpl(path: String): Unit = {
       val extraJson = ("labelMetadata" -> instance.labelMetadata.json) ~
         ("numClasses" -> instance.models.length)
-      OneVsRestParams.saveImpl(path, instance, sc, Some(extraJson))
+      OneVsRestParams.saveImpl(path, instance, sparkSession, Some(extraJson))
       instance.models.map(_.asInstanceOf[MLWritable]).zipWithIndex.foreach { case (model, idx) =>
         val modelPath = new Path(path, s"model_$idx").toString
         model.save(modelPath)
@@ -488,7 +487,7 @@ object OneVsRest extends MLReadable[OneVsRest] {
     OneVsRestParams.validateParams(instance)
 
     override protected def saveImpl(path: String): Unit = {
-      OneVsRestParams.saveImpl(path, instance, sc)
+      OneVsRestParams.saveImpl(path, instance, sparkSession)
     }
   }
 

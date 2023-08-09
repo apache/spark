@@ -245,7 +245,7 @@ object CrossValidator extends MLReadable[CrossValidator] {
     ValidatorParams.validateParams(instance)
 
     override protected def saveImpl(path: String): Unit =
-      ValidatorParams.saveImpl(path, instance, sc)
+      ValidatorParams.saveImpl(path, instance, sparkSession)
   }
 
   private class CrossValidatorReader extends MLReader[CrossValidator] {
@@ -400,7 +400,7 @@ object CrossValidatorModel extends MLReadable[CrossValidatorModel] {
       import org.json4s.JsonDSL._
       val extraMetadata = ("avgMetrics" -> instance.avgMetrics.toSeq) ~
         ("persistSubModels" -> persistSubModels)
-      ValidatorParams.saveImpl(path, instance, sc, Some(extraMetadata))
+      ValidatorParams.saveImpl(path, instance, sparkSession, Some(extraMetadata))
       val bestModelPath = new Path(path, "bestModel").toString
       instance.bestModel.asInstanceOf[MLWritable].save(bestModelPath)
       if (persistSubModels) {

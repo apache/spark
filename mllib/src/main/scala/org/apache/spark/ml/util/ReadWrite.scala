@@ -381,7 +381,7 @@ trait DefaultParamsReadable[T] extends MLReadable[T] {
 private[ml] class DefaultParamsWriter(instance: Params) extends MLWriter {
 
   override protected def saveImpl(path: String): Unit = {
-    DefaultParamsWriter.saveMetadata(instance, path, sc)
+    DefaultParamsWriter.saveMetadata(instance, path, sparkSession)
   }
 }
 
@@ -405,12 +405,14 @@ private[ml] object DefaultParamsWriter {
   def saveMetadata(
       instance: Params,
       path: String,
-      sc: SparkContext,
+      sparkSession: SparkSession,
       extraMetadata: Option[JObject] = None,
       paramMap: Option[JValue] = None): Unit = {
     val metadataPath = new Path(path, "metadata").toString
-    val metadataJson = getMetadataToSave(instance, sc, extraMetadata, paramMap)
-    sc.parallelize(Seq(metadataJson), 1).saveAsTextFile(metadataPath)
+    val metadataJson = getMetadataToSave(instance, sparkSession.sparkContext, extraMetadata,
+      paramMap)
+    import sparkSession.implicits._
+    Seq(metadataJson).toDF.repartition(1).write.text(metadataPath)
   }
 
   /**

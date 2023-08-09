@@ -3677,14 +3677,14 @@ class _OneVsRestSharedReadWrite:
     @staticmethod
     def saveImpl(
         instance: Union[OneVsRest, "OneVsRestModel"],
-        sc: SparkContext,
+        sparkSession: SparkSession,
         path: str,
         extraMetadata: Optional[Dict[str, Any]] = None,
     ) -> None:
         skipParams = ["classifier"]
         jsonParams = DefaultParamsWriter.extractJsonParams(instance, skipParams)
         DefaultParamsWriter.saveMetadata(
-            instance, path, sc, paramMap=jsonParams, extraMetadata=extraMetadata
+            instance, path, sparkSession, paramMap=jsonParams, extraMetadata=extraMetadata
         )
         classifierPath = os.path.join(path, "classifier")
         cast(MLWritable, instance.getClassifier()).save(classifierPath)
@@ -3735,7 +3735,7 @@ class OneVsRestWriter(MLWriter):
 
     def saveImpl(self, path: str) -> None:
         _OneVsRestSharedReadWrite.validateParams(self.instance)
-        _OneVsRestSharedReadWrite.saveImpl(self.instance, self.sc, path)
+        _OneVsRestSharedReadWrite.saveImpl(self.instance, self.sparkSession, path)
 
 
 class OneVsRestModel(
@@ -3991,7 +3991,9 @@ class OneVsRestModelWriter(MLWriter):
         instance = self.instance
         numClasses = len(instance.models)
         extraMetadata = {"numClasses": numClasses}
-        _OneVsRestSharedReadWrite.saveImpl(instance, self.sc, path, extraMetadata=extraMetadata)
+        _OneVsRestSharedReadWrite.saveImpl(
+            instance, self.sparkSession, path, extraMetadata=extraMetadata
+        )
         for idx in range(numClasses):
             subModelPath = os.path.join(path, f"model_{idx}")
             cast(MLWritable, instance.models[idx]).save(subModelPath)

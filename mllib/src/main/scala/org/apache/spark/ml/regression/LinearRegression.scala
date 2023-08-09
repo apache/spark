@@ -783,7 +783,7 @@ private class InternalLinearRegressionModelWriter
     val instance = stage.asInstanceOf[LinearRegressionModel]
     val sc = sparkSession.sparkContext
     // Save metadata and Params
-    DefaultParamsWriter.saveMetadata(instance, path, sc)
+    DefaultParamsWriter.saveMetadata(instance, path, sparkSession)
     // Save model data: intercept, coefficients, scale
     val data = Data(instance.intercept, instance.coefficients, instance.scale)
     val dataPath = new Path(path, "data").toString

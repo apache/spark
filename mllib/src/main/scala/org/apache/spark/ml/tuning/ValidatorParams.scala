@@ -21,7 +21,6 @@ import org.apache.hadoop.fs.Path
 import org.json4s._
 import org.json4s.jackson.JsonMethods._
 
-import org.apache.spark.SparkContext
 import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.ml.evaluation.Evaluator
 import org.apache.spark.ml.param.{Param, ParamMap, ParamPair, Params}
@@ -123,7 +122,7 @@ private[ml] object ValidatorParams {
   def saveImpl(
       path: String,
       instance: ValidatorParams,
-      sc: SparkContext,
+      sparkSession: SparkSession,
       extraMetadata: Option[JObject] = None): Unit = {
     import org.json4s.JsonDSL._
 
@@ -160,7 +159,7 @@ private[ml] object ValidatorParams {
       }.toList ++ List("estimatorParamMaps" -> parse(estimatorParamMapsJson))
     )
 
-    DefaultParamsWriter.saveMetadata(instance, path, sc, extraMetadata, Some(jsonParams))
+    DefaultParamsWriter.saveMetadata(instance, path, sparkSession, extraMetadata, Some(jsonParams))
 
     val evaluatorPath = new Path(path, "evaluator").toString
     instance.getEvaluator.asInstanceOf[MLWritable].save(evaluatorPath)

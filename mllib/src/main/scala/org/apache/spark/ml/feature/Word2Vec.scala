@@ -349,7 +349,7 @@ object Word2VecModel extends MLReadable[Word2VecModel] {
   class Word2VecModelWriter(instance: Word2VecModel) extends MLWriter {
 
     override protected def saveImpl(path: String): Unit = {
-      DefaultParamsWriter.saveMetadata(instance, path, sc)
+      DefaultParamsWriter.saveMetadata(instance, path, sparkSession)
 
       val wordVectors = instance.wordVectors.getVectors
       val dataPath = new Path(path, "data").toString

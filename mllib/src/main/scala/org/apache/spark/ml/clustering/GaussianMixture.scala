@@ -234,7 +234,7 @@ object GaussianMixtureModel extends MLReadable[GaussianMixtureModel] {
 
     override protected def saveImpl(path: String): Unit = {
       // Save metadata and Params
-      DefaultParamsWriter.saveMetadata(instance, path, sc)
+      DefaultParamsWriter.saveMetadata(instance, path, sparkSession)
       // Save model data: weights and gaussians
       val weights = instance.weights
       val gaussians = instance.gaussians

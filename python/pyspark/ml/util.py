@@ -423,7 +423,7 @@ class DefaultParamsWriter(MLWriter):
         self.instance = instance
 
     def saveImpl(self, path: str) -> None:
-        DefaultParamsWriter.saveMetadata(self.instance, path, self.sc)
+        DefaultParamsWriter.saveMetadata(self.instance, path, self.sparkSession)
 
     @staticmethod
     def extractJsonParams(instance: "Params", skipParams: Sequence[str]) -> Dict[str, Any]:
@@ -437,7 +437,7 @@ class DefaultParamsWriter(MLWriter):
     def saveMetadata(
         instance: "Params",
         path: str,
-        sc: SparkContext,
+        sparkSession: SparkSession,
         extraMetadata: Optional[Dict[str, Any]] = None,
         paramMap: Optional[Dict[str, Any]] = None,
     ) -> None:
@@ -461,9 +461,11 @@ class DefaultParamsWriter(MLWriter):
         """
         metadataPath = os.path.join(path, "metadata")
         metadataJson = DefaultParamsWriter._get_metadata_to_save(
-            instance, sc, extraMetadata, paramMap
+            instance, sparkSession.sparkContext, extraMetadata, paramMap
         )
-        sc.parallelize([metadataJson], 1).saveAsTextFile(metadataPath)
+        sparkSession.createDataFrame([metadataJson], "string").repartition(1).write.text(
+            metadataPath
+        )
 
     @staticmethod
     def _get_metadata_to_save(

@@ -300,7 +300,7 @@ object DecisionTreeRegressionModel extends MLReadable[DecisionTreeRegressionMode
     override protected def saveImpl(path: String): Unit = {
       val extraMetadata: JObject = Map(
         "numFeatures" -> instance.numFeatures)
-      DefaultParamsWriter.saveMetadata(instance, path, sc, Some(extraMetadata))
+      DefaultParamsWriter.saveMetadata(instance, path, sparkSession, Some(extraMetadata))
       val (nodeData, _) = NodeData.build(instance.rootNode, 0)
       val dataPath = new Path(path, "data").toString
       val numDataParts = NodeData.inferNumPartitions(instance.numNodes)

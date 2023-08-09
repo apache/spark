@@ -382,7 +382,7 @@ class _ValidatorSharedReadWrite:
     def saveImpl(
         path: str,
         instance: _ValidatorParams,
-        sc: SparkContext,
+        sparkSession: SparkSession,
         extraMetadata: Optional[Dict[str, Any]] = None,
     ) -> None:
         numParamsNotJson = 0
@@ -418,7 +418,7 @@ class _ValidatorSharedReadWrite:
         jsonParams = DefaultParamsWriter.extractJsonParams(instance, skipParams)
         jsonParams["estimatorParamMaps"] = jsonEstimatorParamMaps
 
-        DefaultParamsWriter.saveMetadata(instance, path, sc, extraMetadata, jsonParams)
+        DefaultParamsWriter.saveMetadata(instance, path, sparkSession, extraMetadata, jsonParams)
         evaluatorPath = os.path.join(path, "evaluator")
         cast(MLWritable, instance.getEvaluator()).save(evaluatorPath)
         estimatorPath = os.path.join(path, "estimator")
@@ -532,7 +532,7 @@ class CrossValidatorWriter(MLWriter):
 
     def saveImpl(self, path: str) -> None:
         _ValidatorSharedReadWrite.validateParams(self.instance)
-        _ValidatorSharedReadWrite.saveImpl(path, self.instance, self.sc)
+        _ValidatorSharedReadWrite.saveImpl(path, self.instance, self.sparkSession)
 
 
 @inherit_doc
@@ -606,7 +606,9 @@ class CrossValidatorModelWriter(MLWriter):
         if instance.stdMetrics:
             extraMetadata["stdMetrics"] = instance.stdMetrics
 
-        _ValidatorSharedReadWrite.saveImpl(path, instance, self.sc, extraMetadata=extraMetadata)
+        _ValidatorSharedReadWrite.saveImpl(
+            path, instance, self.sparkSession, extraMetadata=extraMetadata
+        )
         bestModelPath = os.path.join(path, "bestModel")
         cast(MLWritable, instance.bestModel).save(bestModelPath)
         if persistSubModels:
@@ -1194,7 +1196,7 @@ class TrainValidationSplitWriter(MLWriter):
 
     def saveImpl(self, path: str) -> None:
         _ValidatorSharedReadWrite.validateParams(self.instance)
-        _ValidatorSharedReadWrite.saveImpl(path, self.instance, self.sc)
+        _ValidatorSharedReadWrite.saveImpl(path, self.instance, self.sparkSession)
 
 
 @inherit_doc
@@ -1260,7 +1262,9 @@ class TrainValidationSplitModelWriter(MLWriter):
             "validationMetrics": instance.validationMetrics,
             "persistSubModels": persistSubModels,
         }
-        _ValidatorSharedReadWrite.saveImpl(path, instance, self.sc, extraMetadata=extraMetadata)
+        _ValidatorSharedReadWrite.saveImpl(
+            path, instance, self.sparkSession, extraMetadata=extraMetadata
+        )
         bestModelPath = os.path.join(path, "bestModel")
         cast(MLWritable, instance.bestModel).save(bestModelPath)
         if persistSubModels:

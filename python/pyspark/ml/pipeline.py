@@ -229,7 +229,7 @@ class PipelineWriter(MLWriter):
     def saveImpl(self, path: str) -> None:
         stages = self.instance.getStages()
         PipelineSharedReadWrite.validateStages(stages)
-        PipelineSharedReadWrite.saveImpl(self.instance, stages, self.sc, path)
+        PipelineSharedReadWrite.saveImpl(self.instance, stages, self.sparkSession, path)
 
 
 @inherit_doc
@@ -265,7 +265,7 @@ class PipelineModelWriter(MLWriter):
         stages = self.instance.stages
         PipelineSharedReadWrite.validateStages(cast(List["PipelineStage"], stages))
         PipelineSharedReadWrite.saveImpl(
-            self.instance, cast(List["PipelineStage"], stages), self.sc, path
+            self.instance, cast(List["PipelineStage"], stages), self.sparkSession, path
         )
 
 
@@ -401,7 +401,7 @@ class PipelineSharedReadWrite:
     def saveImpl(
         instance: Union[Pipeline, PipelineModel],
         stages: List["PipelineStage"],
-        sc: SparkContext,
+        sparkSession: SparkSession,
         path: str,
     ) -> None:
         """
@@ -411,7 +411,7 @@ class PipelineSharedReadWrite:
         """
         stageUids = [stage.uid for stage in stages]
         jsonParams = {"stageUids": stageUids, "language": "Python"}
-        DefaultParamsWriter.saveMetadata(instance, path, sc, paramMap=jsonParams)
+        DefaultParamsWriter.saveMetadata(instance, path, sparkSession, paramMap=jsonParams)
         stagesDir = os.path.join(path, "stages")
         for index, stage in enumerate(stages):
             cast(MLWritable, stage).write().save(

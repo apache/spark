@@ -26,7 +26,6 @@ import org.apache.hadoop.fs.Path
 import org.json4s._
 import org.json4s.jackson.JsonMethods._
 
-import org.apache.spark.SparkContext
 import org.apache.spark.annotation.{DeveloperApi, Since}
 import org.apache.spark.internal.Logging
 import org.apache.spark.ml.param.{Param, ParamMap, Params}
@@ -203,7 +202,7 @@ object Pipeline extends MLReadable[Pipeline] {
     override def save(path: String): Unit =
       instrumented(_.withSaveInstanceEvent(this, path)(super.save(path)))
     override protected def saveImpl(path: String): Unit =
-      SharedReadWrite.saveImpl(instance, instance.getStages, sc, path)
+      SharedReadWrite.saveImpl(instance, instance.getStages, sparkSession, path)
   }
 
   private class PipelineReader extends MLReader[Pipeline] {
@@ -244,11 +243,11 @@ object Pipeline extends MLReadable[Pipeline] {
     def saveImpl(
         instance: Params,
         stages: Array[PipelineStage],
-        sc: SparkContext,
+        sparkSession: SparkSession,
         path: String): Unit = instrumented { instr =>
       val stageUids = stages.map(_.uid)
       val jsonParams = List("stageUids" -> parse(compact(render(stageUids.toSeq))))
-      DefaultParamsWriter.saveMetadata(instance, path, sc, paramMap = Some(jsonParams))
+      DefaultParamsWriter.saveMetadata(instance, path, sparkSession, paramMap = Some(jsonParams))
 
       // Save stages
       val stagesDir = new Path(path, "stages").toString
@@ -345,7 +344,7 @@ object PipelineModel extends MLReadable[PipelineModel] {
     override def save(path: String): Unit =
       instrumented(_.withSaveInstanceEvent(this, path)(super.save(path)))
     override protected def saveImpl(path: String): Unit = SharedReadWrite.saveImpl(instance,
-      instance.stages.asInstanceOf[Array[PipelineStage]], sc, path)
+      instance.stages.asInstanceOf[Array[PipelineStage]], sparkSession, path)
   }
 
   private class PipelineModelReader extends MLReader[PipelineModel] {

@@ -305,7 +305,7 @@ object ImputerModel extends MLReadable[ImputerModel] {
   private[ImputerModel] class ImputerModelWriter(instance: ImputerModel) extends MLWriter {
 
     override protected def saveImpl(path: String): Unit = {
-      DefaultParamsWriter.saveMetadata(instance, path, sc)
+      DefaultParamsWriter.saveMetadata(instance, path, sparkSession)
       val dataPath = new Path(path, "data").toString
       instance.surrogateDF.repartition(1).write.parquet(dataPath)
     }

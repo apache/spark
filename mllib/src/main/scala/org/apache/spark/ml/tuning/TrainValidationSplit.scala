@@ -212,7 +212,7 @@ object TrainValidationSplit extends MLReadable[TrainValidationSplit] {
     ValidatorParams.validateParams(instance)
 
     override protected def saveImpl(path: String): Unit =
-      ValidatorParams.saveImpl(path, instance, sc)
+      ValidatorParams.saveImpl(path, instance, sparkSession)
   }
 
   private class TrainValidationSplitReader extends MLReader[TrainValidationSplit] {
@@ -364,7 +364,7 @@ object TrainValidationSplitModel extends MLReadable[TrainValidationSplitModel] {
       import org.json4s.JsonDSL._
       val extraMetadata = ("validationMetrics" -> instance.validationMetrics.toSeq) ~
         ("persistSubModels" -> persistSubModels)
-      ValidatorParams.saveImpl(path, instance, sc, Some(extraMetadata))
+      ValidatorParams.saveImpl(path, instance, sparkSession, Some(extraMetadata))
       val bestModelPath = new Path(path, "bestModel").toString
       instance.bestModel.asInstanceOf[MLWritable].save(bestModelPath)
       if (persistSubModels) {
