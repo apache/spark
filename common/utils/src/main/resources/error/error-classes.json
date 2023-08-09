@@ -143,6 +143,65 @@
       "Could not load Protobuf class with name <protobufClassName>. <explanation>."
     ]
   },
+  "CANNOT_LOAD_STATE_STORE" : {
+    "message" : [
+      "An error occurred during loading state."
+    ],
+    "subClass" : {
+      "CANNOT_READ_CHECKPOINT" : {
+        "message" : [
+          "Cannot read RocksDB checkpoint metadata. Expected <expectedVersion>, but found <actualVersion>."
+        ]
+      },
+      "CANNOT_READ_DELTA_FILE_KEY_SIZE" : {
+        "message" : [
+          "Error reading delta file <fileToRead> of <clazz>: key size cannot be <keySize>."
+        ]
+      },
+      "CANNOT_READ_DELTA_FILE_NOT_EXISTS" : {
+        "message" : [
+          "Error reading delta file <fileToRead> of <clazz>: <fileToRead> does not exist."
+        ]
+      },
+      "CANNOT_READ_SNAPSHOT_FILE_KEY_SIZE" : {
+        "message" : [
+          "Error reading snapshot file <fileToRead> of <clazz>: key size cannot be <keySize>."
+        ]
+      },
+      "CANNOT_READ_SNAPSHOT_FILE_VALUE_SIZE" : {
+        "message" : [
+          "Error reading snapshot file <fileToRead> of <clazz>: value size cannot be <valueSize>."
+        ]
+      },
+      "CANNOT_READ_STREAMING_STATE_FILE" : {
+        "message" : [
+          "Error reading streaming state file of <fileToRead> does not exist. If the stream job is restarted with a new or updated state operation, please create a new checkpoint location or clear the existing checkpoint location."
+        ]
+      },
+      "UNCATEGORIZED" : {
+        "message" : [
+          ""
+        ]
+      },
+      "UNEXPECTED_FILE_SIZE" : {
+        "message" : [
+          "Copied <dfsFile> to <localFile>, expected <expectedSize> bytes, found <localFileSize> bytes."
+        ]
+      },
+      "UNEXPECTED_VERSION" : {
+        "message" : [
+          "Version cannot be <version> because it is less than 0."
+        ]
+      },
+      "UNRELEASED_THREAD_ERROR" : {
+        "message" : [
+          "<loggingId>: RocksDB instance could not be acquired by <newAcquiredThreadInfo> as it was not released by <acquiredThreadInfo> after <timeWaitedMs> ms.",
+          "Thread holding the lock has trace: <stackTraceOutput>"
+        ]
+      }
+    },
+    "sqlState" : "58030"
+  },
   "CANNOT_MERGE_INCOMPATIBLE_DATA_TYPE" : {
     "message" : [
       "Failed to merge incompatible data types <left> and <right>. Please check the data types of the columns being merged and ensure that they are compatible. If necessary, consider casting the columns to compatible data types before attempting the merge."
@@ -349,6 +408,11 @@
       "PLUGIN_RUNTIME_ERROR" : {
         "message" : [
           "Error instantiating Spark Connect plugin: <msg>"
+        ]
+      },
+      "SESSION_NOT_SAME" : {
+        "message" : [
+          "Both Datasets must belong to the same SparkSession."
         ]
       }
     }
@@ -738,6 +802,24 @@
     ],
     "sqlState" : "23505"
   },
+  "DUPLICATE_ROUTINE_PARAMETER_ASSIGNMENT" : {
+    "message" : [
+      "Call to function <functionName> is invalid because it includes multiple argument assignments to the same parameter name <parameterName>."
+    ],
+    "subClass" : {
+      "BOTH_POSITIONAL_AND_NAMED" : {
+        "message" : [
+          "A positional argument and named argument both referred to the same parameter. Please remove the named argument referring to this parameter."
+        ]
+      },
+      "DOUBLE_NAMED_ARGUMENT_REFERENCE" : {
+        "message" : [
+          "More than one named argument referred to the same parameter. Please assign a value only once."
+        ]
+      }
+    },
+    "sqlState" : "4274K"
+  },
   "EMPTY_JSON_FIELD_VALUE" : {
     "message" : [
       "Failed to parse an empty string for data type <dataType>."
@@ -747,6 +829,11 @@
   "ENCODER_NOT_FOUND" : {
     "message" : [
       "Not found an encoder of the type <typeName> to Spark SQL internal representation. Consider to change the input type to one of supported at '<docroot>/sql-ref-datatypes.html'."
+    ]
+  },
+  "ERROR_READING_AVRO_UNKNOWN_FINGERPRINT" : {
+    "message" : [
+      "Error reading avro data -- encountered an unknown fingerprint: <fingerprint>, not sure what schema to use. This could happen if you registered additional schemas after starting your spark context."
     ]
   },
   "EVENT_TIME_IS_NOT_ON_TIMESTAMP_TYPE" : {
@@ -781,6 +868,11 @@
       "Failed parsing struct: <raw>."
     ],
     "sqlState" : "22018"
+  },
+  "FAILED_REGISTER_CLASS_WITH_KRYO" : {
+    "message" : [
+      "Failed to register classes with Kryo."
+    ]
   },
   "FAILED_RENAME_PATH" : {
     "message" : [
@@ -1222,6 +1314,34 @@
     ],
     "sqlState" : "42000"
   },
+  "INVALID_CURSOR" : {
+    "message" : [
+      "The cursor is invalid."
+    ],
+    "subClass" : {
+      "DISCONNECTED" : {
+        "message" : [
+          "The cursor has been disconnected by the server."
+        ]
+      },
+      "NOT_REATTACHABLE" : {
+        "message" : [
+          "The cursor is not reattachable."
+        ]
+      },
+      "POSITION_NOT_AVAILABLE" : {
+        "message" : [
+          "The cursor position id <responseId> is no longer available at index <index>."
+        ]
+      },
+      "POSITION_NOT_FOUND" : {
+        "message" : [
+          "The cursor position id <responseId> is not found."
+        ]
+      }
+    },
+    "sqlState" : "HY109"
+  },
   "INVALID_DEFAULT_VALUE" : {
     "message" : [
       "Failed to execute <statement> command because the destination table column <colName> has a DEFAULT value <defaultValue>,"
@@ -1365,6 +1485,39 @@
     ],
     "sqlState" : "22023"
   },
+  "INVALID_HANDLE" : {
+    "message" : [
+      "The handle <handle> is invalid."
+    ],
+    "subClass" : {
+      "FORMAT" : {
+        "message" : [
+          "Handle must be an UUID string of the format '00112233-4455-6677-8899-aabbccddeeff'"
+        ]
+      },
+      "OPERATION_ALREADY_EXISTS" : {
+        "message" : [
+          "Operation already exists."
+        ]
+      },
+      "OPERATION_NOT_FOUND" : {
+        "message" : [
+          "Operation not found."
+        ]
+      },
+      "SESSION_ALREADY_EXISTS" : {
+        "message" : [
+          "Session already exists."
+        ]
+      },
+      "SESSION_NOT_FOUND" : {
+        "message" : [
+          "Session not found."
+        ]
+      }
+    },
+    "sqlState" : "HY000"
+  },
   "INVALID_HIVE_COLUMN_NAME" : {
     "message" : [
       "Cannot create the table <tableName> having the nested column <columnName> whose name contains invalid characters <invalidChars> in Hive metastore."
@@ -1420,6 +1573,12 @@
       "Input schema <jsonSchema> can only contain STRING as a key type for a MAP."
     ],
     "sqlState" : "22032"
+  },
+  "INVALID_KRYO_SERIALIZER_BUFFER_SIZE" : {
+    "message" : [
+      "The value of the config \"<bufferSizeConfKey>\" must be less than 2048 MiB, but got <bufferSizeConfValue> MiB."
+    ],
+    "sqlState" : "F0000"
   },
   "INVALID_LAMBDA_FUNCTION_CALL" : {
     "message" : [
@@ -1863,6 +2022,11 @@
       "The join condition <joinCondition> has the invalid type <conditionType>, expected \"BOOLEAN\"."
     ]
   },
+  "KRYO_BUFFER_OVERFLOW" : {
+    "message" : [
+      "Kryo serialization failed: <exceptionMsg>. To avoid this, increase \"<bufferSizeConfKey>\" value."
+    ]
+  },
   "LOAD_DATA_PATH_NOT_EXISTS" : {
     "message" : [
       "LOAD DATA input path does not exist: <path>."
@@ -1898,6 +2062,11 @@
       "CANNOT_PARSE_JSON_ARRAYS_AS_STRUCTS" : {
         "message" : [
           "Parsing JSON arrays as structs is forbidden."
+        ]
+      },
+      "CANNOT_PARSE_STRING_AS_DATATYPE" : {
+        "message" : [
+          "Cannot parse the value <fieldValue> of the field <fieldName> as target spark data type <targetType> from the input type <inputType>."
         ]
       },
       "WITHOUT_SUGGESTION" : {
@@ -1956,7 +2125,13 @@
       "Not allowed to implement multiple UDF interfaces, UDF class <className>."
     ]
   },
-  "NAMED_ARGUMENTS_SUPPORT_DISABLED" : {
+  "NAMED_PARAMETERS_NOT_SUPPORTED" : {
+    "message" : [
+      "Named parameters are not supported for function <functionName>; please retry the query with positional arguments to the function call instead."
+    ],
+    "sqlState" : "4274K"
+  },
+  "NAMED_PARAMETER_SUPPORT_DISABLED" : {
     "message" : [
       "Cannot call function <functionName> because named argument references are not enabled here. In this case, the named argument reference was <argument>. Set \"spark.sql.allowNamedFunctionArguments\" to \"true\" to turn on feature."
     ]
@@ -2166,6 +2341,12 @@
       "Number of given aliases does not match number of output columns. Function name: <funcName>; number of aliases: <aliasesNum>; number of output columns: <outColsNum>."
     ]
   },
+  "OPERATION_CANCELED" : {
+    "message" : [
+      "Operation has been canceled."
+    ],
+    "sqlState" : "HY008"
+  },
   "ORDER_BY_POS_OUT_OF_RANGE" : {
     "message" : [
       "ORDER BY position <index> is not in select list (valid range is [1, <size>])."
@@ -2289,6 +2470,12 @@
     ],
     "sqlState" : "42614"
   },
+  "REQUIRED_PARAMETER_NOT_FOUND" : {
+    "message" : [
+      "Cannot invoke function <functionName> because the parameter named <parameterName> is required, but the function call did not supply a value. Please update the function call to supply an argument value (either positionally at index <index> or by name) and retry the query again."
+    ],
+    "sqlState" : "4274K"
+  },
   "REQUIRES_SINGLE_PART_NAMESPACE" : {
     "message" : [
       "<sessionCatalog> requires a single-part namespace, but got <namespace>."
@@ -2309,6 +2496,12 @@
       "To tolerate the error on drop use DROP FUNCTION IF EXISTS."
     ],
     "sqlState" : "42883"
+  },
+  "RULE_ID_NOT_FOUND" : {
+    "message" : [
+      "Not found an id for the rule name \"<ruleName>\". Please modify RuleIdCollection.scala if you are adding a new rule."
+    ],
+    "sqlState" : "22023"
   },
   "SCALAR_SUBQUERY_IS_IN_GROUP_BY_OR_AGGREGATE_FUNCTION" : {
     "message" : [
@@ -2410,6 +2603,11 @@
     ],
     "sqlState" : "42P01"
   },
+  "TABLE_VALUED_FUNCTION_FAILED_TO_ANALYZE_IN_PYTHON" : {
+    "message" : [
+      "Failed to analyze the Python user defined table function: <msg>"
+    ]
+  },
   "TABLE_VALUED_FUNCTION_TOO_MANY_TABLE_ARGUMENTS" : {
     "message" : [
       "There are too many table arguments for table-valued function. It allows one table argument, but got: <num>. If you want to allow it, please set \"spark.sql.allowMultipleTableArguments.enabled\" to \"true\""
@@ -2479,6 +2677,12 @@
     ],
     "sqlState" : "42K09"
   },
+  "UNEXPECTED_POSITIONAL_ARGUMENT" : {
+    "message" : [
+      "Cannot invoke function <functionName> because it contains positional argument(s) following the named argument assigned to <parameterName>; please rearrange them so the positional arguments come first and then retry the query again."
+    ],
+    "sqlState" : "4274K"
+  },
   "UNKNOWN_PROTOBUF_MESSAGE_TYPE" : {
     "message" : [
       "Attempting to treat <descriptorName> as a Message, but it was <containingType>."
@@ -2507,6 +2711,12 @@
       "All unpivot value columns must have the same size as there are value column names (<names>)."
     ],
     "sqlState" : "428C4"
+  },
+  "UNRECOGNIZED_PARAMETER_NAME" : {
+    "message" : [
+      "Cannot invoke function <functionName> because the function call included a named argument reference for the argument named <argumentName>, but this function does not include any signature containing an argument with this name. Did you mean one of the following? [<proposal>]."
+    ],
+    "sqlState" : "4274K"
   },
   "UNRECOGNIZED_SQL_TYPE" : {
     "message" : [
@@ -2634,11 +2844,6 @@
       "Unsupported data type <typeName>."
     ],
     "sqlState" : "0A000"
-  },
-  "UNSUPPORTED_DATA_SOURCE_FOR_DIRECT_QUERY" : {
-    "message" : [
-      "The direct query on files does not support the data source type: <className>. Please try a different data source type or consider using a different query method."
-    ]
   },
   "UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE" : {
     "message" : [
@@ -2845,6 +3050,16 @@
       "PIVOT_TYPE" : {
         "message" : [
           "Pivoting by the value '<value>' of the column data type <type>."
+        ]
+      },
+      "PURGE_PARTITION" : {
+        "message" : [
+          "Partition purge."
+        ]
+      },
+      "PURGE_TABLE" : {
+        "message" : [
+          "Purge table."
         ]
       },
       "PYTHON_UDF_IN_ON_CLAUSE" : {
@@ -5129,11 +5344,6 @@
       "Exception when registering StreamingQueryListener."
     ]
   },
-  "_LEGACY_ERROR_TEMP_2133" : {
-    "message" : [
-      "Cannot parse field name <fieldName>, field value <fieldValue>, [<token>] as target spark data type [<dataType>]."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_2134" : {
     "message" : [
       "Cannot parse field value <value> for pattern <pattern> as target spark data type [<dataType>]."
@@ -5304,11 +5514,6 @@
     "message" : [
       "Once strategy's idempotence is broken for batch <batchName>",
       "<plan>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2175" : {
-    "message" : [
-      "Rule id not found for <ruleName>. Please modify RuleIdCollection.scala if you are adding a new rule."
     ]
   },
   "_LEGACY_ERROR_TEMP_2176" : {
@@ -5694,16 +5899,6 @@
   "_LEGACY_ERROR_TEMP_2256" : {
     "message" : [
       "Foreach writer has been aborted due to a task failure."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2258" : {
-    "message" : [
-      "Error reading delta file <fileToRead> of <clazz>: key size cannot be <keySize>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2259" : {
-    "message" : [
-      "Error reading snapshot file <fileToRead> of <clazz>: <message>"
     ]
   },
   "_LEGACY_ERROR_TEMP_2260" : {

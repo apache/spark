@@ -31,6 +31,7 @@ import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.types.UpCastRule.numericPrecedence
 
 abstract class TypeCoercionBase {
   /**
@@ -264,8 +265,10 @@ abstract class TypeCoercionBase {
             s -> Nil
           } else {
             assert(newChildren.length == 2)
+            val newExcept = Except(newChildren.head, newChildren.last, isAll)
+            newExcept.copyTagsFrom(s)
             val attrMapping = left.output.zip(newChildren.head.output)
-            Except(newChildren.head, newChildren.last, isAll) -> attrMapping
+            newExcept -> attrMapping
           }
 
         case s @ Intersect(left, right, isAll) if s.childrenResolved &&
@@ -275,19 +278,22 @@ abstract class TypeCoercionBase {
             s -> Nil
           } else {
             assert(newChildren.length == 2)
+            val newIntersect = Intersect(newChildren.head, newChildren.last, isAll)
+            newIntersect.copyTagsFrom(s)
             val attrMapping = left.output.zip(newChildren.head.output)
-            Intersect(newChildren.head, newChildren.last, isAll) -> attrMapping
+            newIntersect -> attrMapping
           }
 
         case s: Union if s.childrenResolved && !s.byName &&
           s.children.forall(_.output.length == s.children.head.output.length) && !s.resolved =>
           val newChildren: Seq[LogicalPlan] = buildNewChildrenWithWiderTypes(s.children)
-
           if (newChildren.isEmpty) {
             s -> Nil
           } else {
             val attrMapping = s.children.head.output.zip(newChildren.head.output)
-            s.copy(children = newChildren) -> attrMapping
+            val newUnion = s.copy(children = newChildren)
+            newUnion.copyTagsFrom(s)
+            newUnion -> attrMapping
           }
       }
     }
@@ -855,17 +861,6 @@ object TypeCoercion extends TypeCoercionBase {
       StringLiteralCoercion :: Nil) :: Nil
 
   override def canCast(from: DataType, to: DataType): Boolean = Cast.canCast(from, to)
-
-  // See https://cwiki.apache.org/confluence/display/Hive/LanguageManual+Types.
-  // The conversion for integral and floating point types have a linear widening hierarchy:
-  val numericPrecedence =
-    IndexedSeq(
-      ByteType,
-      ShortType,
-      IntegerType,
-      LongType,
-      FloatType,
-      DoubleType)
 
   override val findTightestCommonType: (DataType, DataType) => Option[DataType] = {
       case (t1, t2) if t1 == t2 => Some(t1)

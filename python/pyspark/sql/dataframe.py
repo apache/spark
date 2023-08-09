@@ -1052,6 +1052,9 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         .. versionadded:: 2.1.0
 
+        .. versionchanged:: 3.5.0
+            Supports Spark Connect.
+
         Parameters
         ----------
         eventTime : str
@@ -5301,6 +5304,12 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         | 16|  Bob|
         +---+-----+
         """
+        for col in cols:
+            if not isinstance(col, str):
+                raise PySparkTypeError(
+                    error_class="NOT_LIST_OF_STR",
+                    message_parameters={"arg_name": "cols", "arg_type": type(col).__name__},
+                )
         jdf = self._jdf.toDF(self._jseq(cols))
         return DataFrame(jdf, self.sparkSession)
 

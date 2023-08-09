@@ -41,6 +41,7 @@ message Command {
     StreamingQueryCommand streaming_query_command = 7;
     GetResourcesCommand get_resources_command = 8;
     StreamingQueryManagerCommand streaming_query_manager_command = 9;
+    CommonInlineUserDefinedTableFunction register_table_function = 10;
 
     // This field is used to mark extensions to the protocol. When plugins generate arbitrary
     // Commands they can add them here. During the planning the correct resolution is done.
@@ -364,6 +365,8 @@ message StreamingQueryManagerCommand {
 
   message StreamingQueryListenerCommand {
     bytes listener_payload = 1;
+    optional PythonUDF python_listener_payload = 2;
+    string id = 3;
   }
 }
 
@@ -399,7 +402,8 @@ message StreamingQueryManagerCommandResult {
   }
 
   message ListStreamingQueryListenerResult {
-    repeated StreamingQueryListenerInstance listeners = 1;
+    // (Required) Reference IDs of listener instances.
+    repeated string listener_ids = 1;
   }
 }
 

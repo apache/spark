@@ -31,6 +31,7 @@ from typing import (
     Tuple,
     Type,
     Union,
+    Set,
     cast,
     no_type_check,
     overload,
@@ -63,8 +64,8 @@ from pyspark.sql.types import (
     _from_numpy_type,
 )
 from pyspark.errors.exceptions.captured import install_exception_handler
-from pyspark.sql.utils import is_timestamp_ntz_preferred, to_str
-from pyspark.errors import PySparkValueError, PySparkTypeError
+from pyspark.sql.utils import is_timestamp_ntz_preferred, to_str, try_remote_session_classmethod
+from pyspark.errors import PySparkValueError, PySparkTypeError, PySparkRuntimeError
 
 if TYPE_CHECKING:
     from pyspark.sql._typing import AtomicValue, RowLike, OptionalPrimitiveType
@@ -499,7 +500,7 @@ class SparkSession(SparkConversionMixin):
                     ).applyModifiableSettings(session._jsparkSession, self._options)
                 return session
 
-        # SparkConnect-specific API
+        # Spark Connect-specific API
         def create(self) -> "SparkSession":
             """Creates a new SparkSession. Can only be used in the context of Spark Connect
             and will throw an exception otherwise.
@@ -509,6 +510,10 @@ class SparkSession(SparkConversionMixin):
             Returns
             -------
             :class:`SparkSession`
+
+            Notes
+            -----
+            This method will update the default and/or active session if they are not set.
             """
             opts = dict(self._options)
             if "SPARK_REMOTE" in os.environ or "spark.remote" in opts:
@@ -545,7 +550,11 @@ class SparkSession(SparkConversionMixin):
     # to Python 3.9.6 (https://github.com/python/cpython/pull/28838)
     @classproperty
     def builder(cls) -> Builder:
-        """Creates a :class:`Builder` for constructing a :class:`SparkSession`."""
+        """Creates a :class:`Builder` for constructing a :class:`SparkSession`.
+
+        .. versionchanged:: 3.4.0
+            Supports Spark Connect.
+        """
         return cls.Builder()
 
     _instantiatedSession: ClassVar[Optional["SparkSession"]] = None
@@ -631,11 +640,15 @@ class SparkSession(SparkConversionMixin):
         return self.__class__(self._sc, self._jsparkSession.newSession())
 
     @classmethod
+    @try_remote_session_classmethod
     def getActiveSession(cls) -> Optional["SparkSession"]:
         """
         Returns the active :class:`SparkSession` for the current thread, returned by the builder
 
         .. versionadded:: 3.0.0
+
+        .. versionchanged:: 3.5.0
+            Supports Spark Connect.
 
         Returns
         -------
@@ -665,6 +678,30 @@ class SparkSession(SparkConversionMixin):
                 return SparkSession._activeSession
             else:
                 return None
+
+    @classmethod
+    @try_remote_session_classmethod
+    def active(cls) -> "SparkSession":
+        """
+        Returns the active or default :class:`SparkSession` for the current thread, returned by
+        the builder.
+
+        .. versionadded:: 3.5.0
+
+        Returns
+        -------
+        :class:`SparkSession`
+            Spark session if an active or default session exists for the current thread.
+        """
+        session = cls.getActiveSession()
+        if session is None:
+            session = cls._instantiatedSession
+            if session is None:
+                raise PySparkRuntimeError(
+                    error_class="NO_ACTIVE_OR_DEFAULT_SESSION",
+                    message_parameters={},
+                )
+        return session
 
     @property
     def sparkContext(self) -> SparkContext:
@@ -697,6 +734,9 @@ class SparkSession(SparkConversionMixin):
 
         .. versionadded:: 2.0.0
 
+        .. versionchanged:: 3.4.0
+            Supports Spark Connect.
+
         Returns
         -------
         str
@@ -718,6 +758,9 @@ class SparkSession(SparkConversionMixin):
 
         .. versionadded:: 2.0.0
 
+        .. versionchanged:: 3.4.0
+            Supports Spark Connect.
+
         Returns
         -------
         :class:`pyspark.sql.conf.RuntimeConfig`
@@ -725,7 +768,7 @@ class SparkSession(SparkConversionMixin):
         Examples
         --------
         >>> spark.conf
-        <pyspark.sql.conf.RuntimeConfig object ...>
+        <pyspark...RuntimeConf...>
 
         Set a runtime configuration for the session
 
@@ -803,6 +846,9 @@ class SparkSession(SparkConversionMixin):
         """Returns a :class:`UDTFRegistration` for UDTF registration.
 
         .. versionadded:: 3.5.0
+
+        .. versionchanged:: 3.5.0
+            Supports Spark Connect.
 
         Returns
         -------
@@ -1638,6 +1684,9 @@ class SparkSession(SparkConversionMixin):
 
         .. versionadded:: 2.0.0
 
+        .. versionchanged:: 3.5.0
+            Supports Spark Connect.
+
         Notes
         -----
         This API is evolving.
@@ -1649,7 +1698,7 @@ class SparkSession(SparkConversionMixin):
         Examples
         --------
         >>> spark.readStream
-        <pyspark.sql.streaming.readwriter.DataStreamReader object ...>
+        <pyspark...DataStreamReader object ...>
 
         The example below uses Rate source that generates rows continuously.
         After that, we operate a modulo by 3, and then write the stream out to the console.
@@ -1671,6 +1720,9 @@ class SparkSession(SparkConversionMixin):
 
         .. versionadded:: 2.0.0
 
+        .. versionchanged:: 3.5.0
+            Supports Spark Connect.
+
         Notes
         -----
         This API is evolving.
@@ -1682,7 +1734,7 @@ class SparkSession(SparkConversionMixin):
         Examples
         --------
         >>> spark.streams
-        <pyspark.sql.streaming.query.StreamingQueryManager object ...>
+        <pyspark...StreamingQueryManager object ...>
 
         Get the list of active streaming queries
 
@@ -1787,6 +1839,8 @@ class SparkSession(SparkConversionMixin):
 
         Notes
         -----
+        This API is unstable, and a developer API. It returns non-API instance
+        :class:`SparkConnectClient`.
         This is an API dedicated to Spark Connect client only. With regular Spark Session, it throws
         an exception.
         """
@@ -1855,6 +1909,127 @@ class SparkSession(SparkConversionMixin):
         """
         raise RuntimeError(
             "SparkSession.copyFromLocalToFs is only supported with Spark Connect; "
+            "however, the current Spark session does not use Spark Connect."
+        )
+
+    def interruptAll(self) -> List[str]:
+        """
+        Interrupt all operations of this session currently running on the connected server.
+
+        .. versionadded:: 3.5.0
+
+        Returns
+        -------
+        list of str
+            List of operationIds of interrupted operations.
+
+        Notes
+        -----
+        There is still a possibility of operation finishing just as it is interrupted.
+        """
+        raise RuntimeError(
+            "SparkSession.interruptAll is only supported with Spark Connect; "
+            "however, the current Spark session does not use Spark Connect."
+        )
+
+    def interruptTag(self, tag: str) -> List[str]:
+        """
+        Interrupt all operations of this session with the given operation tag.
+
+        .. versionadded:: 3.5.0
+
+        Returns
+        -------
+        list of str
+            List of operationIds of interrupted operations.
+
+        Notes
+        -----
+        There is still a possibility of operation finishing just as it is interrupted.
+        """
+        raise RuntimeError(
+            "SparkSession.interruptTag is only supported with Spark Connect; "
+            "however, the current Spark session does not use Spark Connect."
+        )
+
+    def interruptOperation(self, op_id: str) -> List[str]:
+        """
+        Interrupt an operation of this session with the given operationId.
+
+        .. versionadded:: 3.5.0
+
+        Returns
+        -------
+        list of str
+            List of operationIds of interrupted operations.
+
+        Notes
+        -----
+        There is still a possibility of operation finishing just as it is interrupted.
+        """
+        raise RuntimeError(
+            "SparkSession.interruptOperation is only supported with Spark Connect; "
+            "however, the current Spark session does not use Spark Connect."
+        )
+
+    def addTag(self, tag: str) -> None:
+        """
+        Add a tag to be assigned to all the operations started by this thread in this session.
+
+        .. versionadded:: 3.5.0
+
+        Parameters
+        ----------
+        tag : list of str
+            The tag to be added. Cannot contain ',' (comma) character or be an empty string.
+        """
+        raise RuntimeError(
+            "SparkSession.addTag is only supported with Spark Connect; "
+            "however, the current Spark session does not use Spark Connect."
+        )
+
+    def removeTag(self, tag: str) -> None:
+        """
+        Remove a tag previously added to be assigned to all the operations started by this thread in
+        this session. Noop if such a tag was not added earlier.
+
+        .. versionadded:: 3.5.0
+
+        Parameters
+        ----------
+        tag : list of str
+            The tag to be removed. Cannot contain ',' (comma) character or be an empty string.
+        """
+        raise RuntimeError(
+            "SparkSession.removeTag is only supported with Spark Connect; "
+            "however, the current Spark session does not use Spark Connect."
+        )
+
+    def getTags(self) -> Set[str]:
+        """
+        Get the tags that are currently set to be assigned to all the operations started by this
+        thread.
+
+        .. versionadded:: 3.5.0
+
+        Returns
+        -------
+        set of str
+            Set of tags of interrupted operations.
+        """
+        raise RuntimeError(
+            "SparkSession.getTags is only supported with Spark Connect; "
+            "however, the current Spark session does not use Spark Connect."
+        )
+
+    def clearTags(self) -> None:
+        """
+        Clear the current thread's operation tags.
+
+        .. versionadded:: 3.5.0
+        """
+        raise RuntimeError(
+            "SparkSession.clearTags is only supported with Spark Connect; "
             "however, the current Spark session does not use Spark Connect."
         )
 

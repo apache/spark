@@ -11,6 +11,7 @@
         "schema": "struct\u003cid:bigint,a:int,b:double\u003e"
       }
     },
-    "columnNames": ["a", "b", "id"]
+    "columnNames": ["a", "b", "id"],
+    "withinWatermark": false
   }
 }

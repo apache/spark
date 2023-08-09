@@ -29,7 +29,6 @@ import org.apache.spark.{SparkException, SparkRuntimeException}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Literal, StructsToJson}
 import org.apache.spark.sql.catalyst.expressions.Cast._
-import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.execution.WholeStageCodegenExec
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
@@ -542,7 +541,7 @@ class JsonFunctionsSuite extends QueryTest with SharedSparkSession {
     )
 
     checkError(
-      exception = intercept[ParseException] {
+      exception = intercept[AnalysisException] {
         df3.selectExpr("""from_json(value, 'time InvalidType')""")
       },
       errorClass = "PARSE_SYNTAX_ERROR",
@@ -1152,7 +1151,7 @@ class JsonFunctionsSuite extends QueryTest with SharedSparkSession {
     val invalidJsonSchema = """{"fields": [{"a":123}], "type": "struct"}"""
     val invalidJsonSchemaReason = "Failed to convert the JSON string '{\"a\":123}' to a field."
     checkError(
-      exception = intercept[SparkException] {
+      exception = intercept[AnalysisException] {
         df.select(from_json($"json", invalidJsonSchema, Map.empty[String, String])).collect()
       },
       errorClass = "INVALID_SCHEMA.PARSE_ERROR",
@@ -1167,7 +1166,7 @@ class JsonFunctionsSuite extends QueryTest with SharedSparkSession {
       "was expecting (JSON String, Number, Array, Object or token 'null', 'true' or 'false')\n " +
       "at [Source: (String)\"MAP<INT, cow>\"; line: 1, column: 4]"
     checkError(
-      exception = intercept[SparkException] {
+      exception = intercept[AnalysisException] {
         df.select(from_json($"json", invalidDataType, Map.empty[String, String])).collect()
       },
       errorClass = "INVALID_SCHEMA.PARSE_ERROR",
@@ -1182,7 +1181,7 @@ class JsonFunctionsSuite extends QueryTest with SharedSparkSession {
       "was expecting (JSON String, Number, Array, Object or token 'null', 'true' or 'false')\n" +
       " at [Source: (String)\"x INT, a cow\"; line: 1, column: 2]"
     checkError(
-      exception = intercept[SparkException] {
+      exception = intercept[AnalysisException] {
         df.select(from_json($"json", invalidTableSchema, Map.empty[String, String])).collect()
       },
       errorClass = "INVALID_SCHEMA.PARSE_ERROR",

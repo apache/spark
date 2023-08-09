@@ -206,4 +206,77 @@ class ReplE2ESuite extends RemoteSparkSession with BeforeAndAfterEach {
     assertContains("Array[Int] = Array(2, 2, 2, 2, 2)", output)
     // scalastyle:on classforname line.size.limit
   }
+
+  test("Java UDF") {
+    val input =
+      """
+        |import org.apache.spark.sql.api.java._
+        |import org.apache.spark.sql.types.LongType
+        |
+        |val javaUdf = udf(new UDF1[Long, Long] {
+        |  override def call(num: Long): Long = num * num + 25L
+        |}, LongType).asNondeterministic()
+        |spark.range(5).select(javaUdf(col("id"))).as[Long].collect()
+      """.stripMargin
+    val output = runCommandsInShell(input)
+    assertContains("Array[Long] = Array(25L, 26L, 29L, 34L, 41L)", output)
+  }
+
+  test("Java UDF Registration") {
+    val input =
+      """
+        |import org.apache.spark.sql.api.java._
+        |import org.apache.spark.sql.types.LongType
+        |
+        |spark.udf.register("javaUdf", new UDF1[Long, Long] {
+        |  override def call(num: Long): Long = num * num * num + 250L
+        |}, LongType)
+        |spark.sql("select javaUdf(id) from range(5)").as[Long].collect()
+      """.stripMargin
+    val output = runCommandsInShell(input)
+    assertContains("Array[Long] = Array(250L, 251L, 258L, 277L, 314L)", output)
+  }
+
+  test("UDF Registration") {
+    // TODO SPARK-44449 make this long again when upcasting is in.
+    val input = """
+        |class A(x: Int) { def get: Long = x * 100 }
+        |val myUdf = udf((x: Int) => new A(x).get)
+        |spark.udf.register("dummyUdf", myUdf)
+        |spark.sql("select dummyUdf(id) from range(5)").as[Long].collect()
+      """.stripMargin
+    val output = runCommandsInShell(input)
+    assertContains("Array[Long] = Array(0L, 100L, 200L, 300L, 400L)", output)
+  }
+
+  test("UDF closure registration") {
+    // TODO SPARK-44449 make this int again when upcasting is in.
+    val input = """
+        |class A(x: Int) { def get: Long = x * 15 }
+        |spark.udf.register("directUdf", (x: Int) => new A(x).get)
+        |spark.sql("select directUdf(id) from range(5)").as[Long].collect()
+      """.stripMargin
+    val output = runCommandsInShell(input)
+    assertContains("Array[Long] = Array(0L, 15L, 30L, 45L, 60L)", output)
+  }
+
+  test("call_udf") {
+    val input = """
+        |val df = Seq(("id1", 1), ("id2", 4), ("id3", 5)).toDF("id", "value")
+        |spark.udf.register("simpleUDF", (v: Int) => v * v)
+        |df.select($"id", call_udf("simpleUDF", $"value")).collect()
+      """.stripMargin
+    val output = runCommandsInShell(input)
+    assertContains("Array[org.apache.spark.sql.Row] = Array([id1,1], [id2,16], [id3,25])", output)
+  }
+
+  test("call_function") {
+    val input = """
+        |val df = Seq(("id1", 1), ("id2", 4), ("id3", 5)).toDF("id", "value")
+        |spark.udf.register("simpleUDF", (v: Int) => v * v)
+        |df.select($"id", call_function("simpleUDF", $"value")).collect()
+      """.stripMargin
+    val output = runCommandsInShell(input)
+    assertContains("Array[org.apache.spark.sql.Row] = Array([id1,1], [id2,16], [id3,25])", output)
+  }
 }

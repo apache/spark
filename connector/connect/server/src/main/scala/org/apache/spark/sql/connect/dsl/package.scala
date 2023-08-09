@@ -1056,7 +1056,7 @@ package object dsl {
       def randomSplit(weights: Array[Double], seed: Long): Array[Relation] = {
         require(
           weights.forall(_ >= 0),
-          s"Weights must be nonnegative, but got ${weights.mkString("[", ",", "]")}")
+          s"Weights must be non-negative, but got ${weights.mkString("[", ",", "]")}")
         require(
           weights.sum > 0,
           s"Sum of weights must be positive, but got ${weights.mkString("[", ",", "]")}")

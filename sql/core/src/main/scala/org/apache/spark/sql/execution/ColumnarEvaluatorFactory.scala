@@ -70,42 +70,37 @@ class RowToColumnarEvaluatorFactory(
         inputs: Iterator[InternalRow]*): Iterator[ColumnarBatch] = {
       assert(inputs.length == 1)
       val rowIterator = inputs.head
-
-      if (rowIterator.hasNext) {
-        new Iterator[ColumnarBatch] {
-          private val converters = new RowToColumnConverter(schema)
-          private val vectors: Seq[WritableColumnVector] = if (enableOffHeapColumnVector) {
-            OffHeapColumnVector.allocateColumns(numRows, schema)
-          } else {
-            OnHeapColumnVector.allocateColumns(numRows, schema)
-          }
-          private val cb: ColumnarBatch = new ColumnarBatch(vectors.toArray)
-
-          TaskContext.get().addTaskCompletionListener[Unit] { _ =>
-            cb.close()
-          }
-
-          override def hasNext: Boolean = {
-            rowIterator.hasNext
-          }
-
-          override def next(): ColumnarBatch = {
-            cb.setNumRows(0)
-            vectors.foreach(_.reset())
-            var rowCount = 0
-            while (rowCount < numRows && rowIterator.hasNext) {
-              val row = rowIterator.next()
-              converters.convert(row, vectors.toArray)
-              rowCount += 1
-            }
-            cb.setNumRows(rowCount)
-            numInputRows += rowCount
-            numOutputBatches += 1
-            cb
-          }
+      new Iterator[ColumnarBatch] {
+        private lazy val converters = new RowToColumnConverter(schema)
+        private lazy val vectors: Seq[WritableColumnVector] = if (enableOffHeapColumnVector) {
+          OffHeapColumnVector.allocateColumns(numRows, schema)
+        } else {
+          OnHeapColumnVector.allocateColumns(numRows, schema)
         }
-      } else {
-        Iterator.empty
+        private lazy val cb: ColumnarBatch = new ColumnarBatch(vectors.toArray)
+
+        TaskContext.get().addTaskCompletionListener[Unit] { _ =>
+          cb.close()
+        }
+
+        override def hasNext: Boolean = {
+          rowIterator.hasNext
+        }
+
+        override def next(): ColumnarBatch = {
+          cb.setNumRows(0)
+          vectors.foreach(_.reset())
+          var rowCount = 0
+          while (rowCount < numRows && rowIterator.hasNext) {
+            val row = rowIterator.next()
+            converters.convert(row, vectors.toArray)
+            rowCount += 1
+          }
+          cb.setNumRows(rowCount)
+          numInputRows += rowCount
+          numOutputBatches += 1
+          cb
+        }
       }
     }
   }

@@ -50,9 +50,9 @@ black==22.6.0
 py
 
 # Spark Connect (required)
-grpcio==1.56.0
-grpcio-status==1.56.0
-protobuf==3.19.5
+grpcio>=1.48,<1.57
+grpcio-status>=1.48,<1.57
+protobuf==3.20.3
 googleapis-common-protos==1.56.4
 
 # Spark Connect python proto generation plugin (optional)
@@ -64,4 +64,7 @@ grpc-stubs==1.24.11
 torch
 torchvision
 torcheval
+
+# DeepspeedTorchDistributor dependencies
+deepspeed
 

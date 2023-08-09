@@ -18,6 +18,7 @@ import os
 import time
 import unittest
 
+from pyspark.sql.utils import PythonException
 from pyspark.testing.sqlutils import (
     ReusedSQLTestCase,
     have_pandas,
@@ -25,6 +26,7 @@ from pyspark.testing.sqlutils import (
     pandas_requirement_message,
     pyarrow_requirement_message,
 )
+from pyspark.testing.utils import QuietTest
 
 if have_pyarrow:
     import pyarrow as pa
@@ -87,6 +89,31 @@ class MapInArrowTestsMixin(object):
         df = self.spark.range(10)
         actual = df.repartition(1).mapInArrow(func, "a long").collect()
         self.assertEqual(set((r.a for r in actual)), set(range(100)))
+
+    def test_other_than_recordbatch_iter(self):
+        with QuietTest(self.sc):
+            self.check_other_than_recordbatch_iter()
+
+    def check_other_than_recordbatch_iter(self):
+        def not_iter(_):
+            return 1
+
+        def bad_iter_elem(_):
+            return iter([1])
+
+        with self.assertRaisesRegex(
+            PythonException,
+            "Return type of the user-defined function should be iterator "
+            "of pyarrow.RecordBatch, but is int.",
+        ):
+            (self.spark.range(10, numPartitions=3).mapInArrow(not_iter, "a int").count())
+
+        with self.assertRaisesRegex(
+            PythonException,
+            "Return type of the user-defined function should be iterator "
+            "of pyarrow.RecordBatch, but is iterator of int.",
+        ):
+            (self.spark.range(10, numPartitions=3).mapInArrow(bad_iter_elem, "a int").count())
 
     def test_empty_iterator(self):
         def empty_iter(_):

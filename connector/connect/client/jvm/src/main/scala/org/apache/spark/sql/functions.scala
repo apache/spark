@@ -22,8 +22,10 @@ import scala.collection.JavaConverters._
 import scala.reflect.runtime.universe.{typeTag, TypeTag}
 
 import org.apache.spark.connect.proto
+import org.apache.spark.sql.api.java._
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.PrimitiveLongEncoder
 import org.apache.spark.sql.connect.common.LiteralValueProtoConverter._
+import org.apache.spark.sql.connect.common.UdfUtils
 import org.apache.spark.sql.expressions.{ScalarUserDefinedFunction, UserDefinedFunction}
 import org.apache.spark.sql.types.{DataType, StructType}
 import org.apache.spark.sql.types.DataType.parseTypeWithFallback
@@ -7903,18 +7905,228 @@ object functions {
       typeTag[A9],
       typeTag[A10])
   }
+
+  //////////////////////////////////////////////////////////////////////////////////////////////
+  // Java UDF functions
+  //////////////////////////////////////////////////////////////////////////////////////////////
+
+  /**
+   * Defines a Java UDF0 instance as user-defined function (UDF). The caller must specify the
+   * output data type, and there is no automatic input type coercion. By default the returned UDF
+   * is deterministic. To change it to nondeterministic, call the API
+   * `UserDefinedFunction.asNondeterministic()`.
+   *
+   * @group udf_funcs
+   * @since 3.5.0
+   */
+  def udf(f: UDF0[_], returnType: DataType): UserDefinedFunction = {
+    ScalarUserDefinedFunction(UdfUtils.wrap(f), returnType)
+  }
+
+  /**
+   * Defines a Java UDF1 instance as user-defined function (UDF). The caller must specify the
+   * output data type, and there is no automatic input type coercion. By default the returned UDF
+   * is deterministic. To change it to nondeterministic, call the API
+   * `UserDefinedFunction.asNondeterministic()`.
+   *
+   * @group udf_funcs
+   * @since 3.5.0
+   */
+  def udf(f: UDF1[_, _], returnType: DataType): UserDefinedFunction = {
+    ScalarUserDefinedFunction(UdfUtils.wrap(f), returnType)
+  }
+
+  /**
+   * Defines a Java UDF2 instance as user-defined function (UDF). The caller must specify the
+   * output data type, and there is no automatic input type coercion. By default the returned UDF
+   * is deterministic. To change it to nondeterministic, call the API
+   * `UserDefinedFunction.asNondeterministic()`.
+   *
+   * @group udf_funcs
+   * @since 3.5.0
+   */
+  def udf(f: UDF2[_, _, _], returnType: DataType): UserDefinedFunction = {
+    ScalarUserDefinedFunction(UdfUtils.wrap(f), returnType)
+  }
+
+  /**
+   * Defines a Java UDF3 instance as user-defined function (UDF). The caller must specify the
+   * output data type, and there is no automatic input type coercion. By default the returned UDF
+   * is deterministic. To change it to nondeterministic, call the API
+   * `UserDefinedFunction.asNondeterministic()`.
+   *
+   * @group udf_funcs
+   * @since 3.5.0
+   */
+  def udf(f: UDF3[_, _, _, _], returnType: DataType): UserDefinedFunction = {
+    ScalarUserDefinedFunction(UdfUtils.wrap(f), returnType)
+  }
+
+  /**
+   * Defines a Java UDF4 instance as user-defined function (UDF). The caller must specify the
+   * output data type, and there is no automatic input type coercion. By default the returned UDF
+   * is deterministic. To change it to nondeterministic, call the API
+   * `UserDefinedFunction.asNondeterministic()`.
+   *
+   * @group udf_funcs
+   * @since 3.5.0
+   */
+  def udf(f: UDF4[_, _, _, _, _], returnType: DataType): UserDefinedFunction = {
+    ScalarUserDefinedFunction(UdfUtils.wrap(f), returnType)
+  }
+
+  /**
+   * Defines a Java UDF5 instance as user-defined function (UDF). The caller must specify the
+   * output data type, and there is no automatic input type coercion. By default the returned UDF
+   * is deterministic. To change it to nondeterministic, call the API
+   * `UserDefinedFunction.asNondeterministic()`.
+   *
+   * @group udf_funcs
+   * @since 3.5.0
+   */
+  def udf(f: UDF5[_, _, _, _, _, _], returnType: DataType): UserDefinedFunction = {
+    ScalarUserDefinedFunction(UdfUtils.wrap(f), returnType)
+  }
+
+  /**
+   * Defines a Java UDF6 instance as user-defined function (UDF). The caller must specify the
+   * output data type, and there is no automatic input type coercion. By default the returned UDF
+   * is deterministic. To change it to nondeterministic, call the API
+   * `UserDefinedFunction.asNondeterministic()`.
+   *
+   * @group udf_funcs
+   * @since 3.5.0
+   */
+  def udf(f: UDF6[_, _, _, _, _, _, _], returnType: DataType): UserDefinedFunction = {
+    ScalarUserDefinedFunction(UdfUtils.wrap(f), returnType)
+  }
+
+  /**
+   * Defines a Java UDF7 instance as user-defined function (UDF). The caller must specify the
+   * output data type, and there is no automatic input type coercion. By default the returned UDF
+   * is deterministic. To change it to nondeterministic, call the API
+   * `UserDefinedFunction.asNondeterministic()`.
+   *
+   * @group udf_funcs
+   * @since 3.5.0
+   */
+  def udf(f: UDF7[_, _, _, _, _, _, _, _], returnType: DataType): UserDefinedFunction = {
+    ScalarUserDefinedFunction(UdfUtils.wrap(f), returnType)
+  }
+
+  /**
+   * Defines a Java UDF8 instance as user-defined function (UDF). The caller must specify the
+   * output data type, and there is no automatic input type coercion. By default the returned UDF
+   * is deterministic. To change it to nondeterministic, call the API
+   * `UserDefinedFunction.asNondeterministic()`.
+   *
+   * @group udf_funcs
+   * @since 3.5.0
+   */
+  def udf(f: UDF8[_, _, _, _, _, _, _, _, _], returnType: DataType): UserDefinedFunction = {
+    ScalarUserDefinedFunction(UdfUtils.wrap(f), returnType)
+  }
+
+  /**
+   * Defines a Java UDF9 instance as user-defined function (UDF). The caller must specify the
+   * output data type, and there is no automatic input type coercion. By default the returned UDF
+   * is deterministic. To change it to nondeterministic, call the API
+   * `UserDefinedFunction.asNondeterministic()`.
+   *
+   * @group udf_funcs
+   * @since 3.5.0
+   */
+  def udf(f: UDF9[_, _, _, _, _, _, _, _, _, _], returnType: DataType): UserDefinedFunction = {
+    ScalarUserDefinedFunction(UdfUtils.wrap(f), returnType)
+  }
+
+  /**
+   * Defines a Java UDF10 instance as user-defined function (UDF). The caller must specify the
+   * output data type, and there is no automatic input type coercion. By default the returned UDF
+   * is deterministic. To change it to nondeterministic, call the API
+   * `UserDefinedFunction.asNondeterministic()`.
+   *
+   * @group udf_funcs
+   * @since 3.5.0
+   */
+  def udf(
+      f: UDF10[_, _, _, _, _, _, _, _, _, _, _],
+      returnType: DataType): UserDefinedFunction = {
+    ScalarUserDefinedFunction(UdfUtils.wrap(f), returnType)
+  }
   // scalastyle:off line.size.limit
 
   /**
-   * Call a builtin or temp function.
+   * Defines a deterministic user-defined function (UDF) using a Scala closure. For this variant,
+   * the caller must specify the output data type, and there is no automatic input type coercion.
+   * By default the returned UDF is deterministic. To change it to nondeterministic, call the API
+   * `UserDefinedFunction.asNondeterministic()`.
+   *
+   * Note that, although the Scala closure can have primitive-type function argument, it doesn't
+   * work well with null values. Because the Scala closure is passed in as Any type, there is no
+   * type information for the function arguments. Without the type information, Spark may blindly
+   * pass null to the Scala closure with primitive-type argument, and the closure will see the
+   * default value of the Java type for the null argument, e.g. `udf((x: Int) => x, IntegerType)`,
+   * the result is 0 for null input.
+   *
+   * @param f
+   *   A closure in Scala
+   * @param dataType
+   *   The output data type of the UDF
+   *
+   * @group udf_funcs
+   * @since 3.5.0
+   */
+  @deprecated(
+    "Scala `udf` method with return type parameter is deprecated. " +
+      "Please use Scala `udf` method without return type parameter.",
+    "3.0.0")
+  def udf(f: AnyRef, dataType: DataType): UserDefinedFunction = {
+    ScalarUserDefinedFunction(f, dataType)
+  }
+
+  /**
+   * Call an user-defined function.
+   *
+   * @group udf_funcs
+   * @since 3.5.0
+   */
+  @scala.annotation.varargs
+  @deprecated("Use call_udf")
+  def callUDF(udfName: String, cols: Column*): Column =
+    call_function(udfName, cols: _*)
+
+  /**
+   * Call an user-defined function. Example:
+   * {{{
+   *  import org.apache.spark.sql._
+   *
+   *  val df = Seq(("id1", 1), ("id2", 4), ("id3", 5)).toDF("id", "value")
+   *  val spark = df.sparkSession
+   *  spark.udf.register("simpleUDF", (v: Int) => v * v)
+   *  df.select($"id", call_udf("simpleUDF", $"value"))
+   * }}}
+   *
+   * @group udf_funcs
+   * @since 3.5.0
+   */
+  @scala.annotation.varargs
+  def call_udf(udfName: String, cols: Column*): Column = call_function(udfName, cols: _*)
+
+  /**
+   * Call a SQL function.
    *
    * @param funcName
-   *   function name
+   *   function name that follows the SQL identifier syntax (can be quoted, can be qualified)
    * @param cols
    *   the expression parameters of function
    * @since 3.5.0
    */
   @scala.annotation.varargs
-  def call_function(funcName: String, cols: Column*): Column = Column.fn(funcName, cols: _*)
+  def call_function(funcName: String, cols: Column*): Column = Column { builder =>
+    builder.getCallFunctionBuilder
+      .setFunctionName(funcName)
+      .addAllArguments(cols.map(_.expr).asJava)
+  }
 
 }

@@ -171,6 +171,14 @@ SQLSTATE: none assigned
 
 Could not load Protobuf class with name `<protobufClassName>`. `<explanation>`.
 
+### [CANNOT_LOAD_STATE_STORE](sql-error-conditions-cannot-load-state-store-error-class.html)
+
+SQLSTATE: 58030
+
+An error occurred during loading state.
+
+For more details see [CANNOT_LOAD_STATE_STORE](sql-error-conditions-cannot-load-state-store-error-class.html)
+
 ### CANNOT_MERGE_INCOMPATIBLE_DATA_TYPE
 
 [SQLSTATE: 42825](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
@@ -456,6 +464,14 @@ Found duplicate clauses: `<clauseName>`. Please, remove one of them.
 
 Found duplicate keys `<keyColumn>`.
 
+### [DUPLICATE_ROUTINE_PARAMETER_ASSIGNMENT](sql-error-conditions-duplicate-routine-parameter-assignment-error-class.html)
+
+[SQLSTATE: 4274K](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+Call to function `<functionName>` is invalid because it includes multiple argument assignments to the same parameter name `<parameterName>`.
+
+For more details see [DUPLICATE_ROUTINE_PARAMETER_ASSIGNMENT](sql-error-conditions-duplicate-routine-parameter-assignment-error-class.html)
+
 ### EMPTY_JSON_FIELD_VALUE
 
 [SQLSTATE: 42604](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
@@ -467,6 +483,12 @@ Failed to parse an empty string for data type `<dataType>`.
 SQLSTATE: none assigned
 
 Not found an encoder of the type `<typeName>` to Spark SQL internal representation. Consider to change the input type to one of supported at '`<docroot>`/sql-ref-datatypes.html'.
+
+### ERROR_READING_AVRO_UNKNOWN_FINGERPRINT
+
+SQLSTATE: none assigned
+
+Error reading avro data -- encountered an unknown fingerprint: `<fingerprint>`, not sure what schema to use. This could happen if you registered additional schemas after starting your spark context.
 
 ### EVENT_TIME_IS_NOT_ON_TIMESTAMP_TYPE
 
@@ -503,6 +525,12 @@ Failed preparing of the function `<funcName>` for call. Please, double check fun
 [SQLSTATE: 22018](sql-error-conditions-sqlstates.html#class-22-data-exception)
 
 Failed parsing struct: `<raw>`.
+
+### FAILED_REGISTER_CLASS_WITH_KRYO
+
+SQLSTATE: none assigned
+
+Failed to register classes with Kryo.
 
 ### FAILED_RENAME_PATH
 
@@ -826,6 +854,14 @@ The datasource `<datasource>` cannot save the column `<columnName>` because its 
 
 Column or field `<name>` is of type `<type>` while it's required to be `<expectedType>`.
 
+### [INVALID_CURSOR](sql-error-conditions-invalid-cursor-error-class.html)
+
+[SQLSTATE: HY109](sql-error-conditions-sqlstates.html#class-HY-cli-specific-condition)
+
+The cursor is invalid.
+
+For more details see [INVALID_CURSOR](sql-error-conditions-invalid-cursor-error-class.html)
+
 ### [INVALID_DEFAULT_VALUE](sql-error-conditions-invalid-default-value-error-class.html)
 
 SQLSTATE: none assigned
@@ -902,6 +938,14 @@ For more details see [INVALID_FORMAT](sql-error-conditions-invalid-format-error-
 
 The fraction of sec must be zero. Valid range is [0, 60]. If necessary set `<ansiConfig>` to "false" to bypass this error.
 
+### [INVALID_HANDLE](sql-error-conditions-invalid-handle-error-class.html)
+
+[SQLSTATE: HY000](sql-error-conditions-sqlstates.html#class-HY-cli-specific-condition)
+
+The handle `<handle>` is invalid.
+
+For more details see [INVALID_HANDLE](sql-error-conditions-invalid-handle-error-class.html)
+
 ### INVALID_HIVE_COLUMN_NAME
 
 SQLSTATE: none assigned
@@ -939,6 +983,12 @@ Cannot convert JSON root field to target Spark type.
 [SQLSTATE: 22032](sql-error-conditions-sqlstates.html#class-22-data-exception)
 
 Input schema `<jsonSchema>` can only contain STRING as a key type for a MAP.
+
+### INVALID_KRYO_SERIALIZER_BUFFER_SIZE
+
+SQLSTATE: F0000
+
+The value of the config "`<bufferSizeConfKey>`" must be less than 2048 MiB, but got `<bufferSizeConfValue>` MiB.
 
 ### [INVALID_LAMBDA_FUNCTION_CALL](sql-error-conditions-invalid-lambda-function-call-error-class.html)
 
@@ -1131,6 +1181,12 @@ SQLSTATE: none assigned
 
 The join condition `<joinCondition>` has the invalid type `<conditionType>`, expected "BOOLEAN".
 
+### KRYO_BUFFER_OVERFLOW
+
+SQLSTATE: none assigned
+
+Kryo serialization failed: `<exceptionMsg>`. To avoid this, increase "`<bufferSizeConfKey>`" value.
+
 ### LOAD_DATA_PATH_NOT_EXISTS
 
 SQLSTATE: none assigned
@@ -1210,7 +1266,13 @@ SQLSTATE: none assigned
 
 Not allowed to implement multiple UDF interfaces, UDF class `<className>`.
 
-### NAMED_ARGUMENTS_SUPPORT_DISABLED
+### NAMED_PARAMETERS_NOT_SUPPORTED
+
+[SQLSTATE: 4274K](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+Named parameters are not supported for function `<functionName>`; please retry the query with positional arguments to the function call instead.
+
+### NAMED_PARAMETER_SUPPORT_DISABLED
 
 SQLSTATE: none assigned
 
@@ -1380,6 +1442,12 @@ SQLSTATE: none assigned
 
 Number of given aliases does not match number of output columns. Function name: `<funcName>`; number of aliases: `<aliasesNum>`; number of output columns: `<outColsNum>`.
 
+### OPERATION_CANCELED
+
+[SQLSTATE: HY008](sql-error-conditions-sqlstates.html#class-HY-cli-specific-condition)
+
+Operation has been canceled.
+
 ### ORDER_BY_POS_OUT_OF_RANGE
 
 [SQLSTATE: 42805](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
@@ -1515,6 +1583,12 @@ Failed to rename as `<sourcePath>` was not found.
 
 The `<clause>` clause may be used at most once per `<operation>` operation.
 
+### REQUIRED_PARAMETER_NOT_FOUND
+
+[SQLSTATE: 4274K](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+Cannot invoke function `<functionName>` because the parameter named `<parameterName>` is required, but the function call did not supply a value. Please update the function call to supply an argument value (either positionally at index `<index>` or by name) and retry the query again.
+
 ### REQUIRES_SINGLE_PART_NAMESPACE
 
 [SQLSTATE: 42K05](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
@@ -1535,6 +1609,12 @@ Choose a different name, drop or replace the existing function, or add the IF NO
 The function `<routineName>` cannot be found. Verify the spelling and correctness of the schema and catalog.
 If you did not qualify the name with a schema and catalog, verify the current_schema() output, or qualify the name with the correct schema and catalog.
 To tolerate the error on drop use DROP FUNCTION IF EXISTS.
+
+### RULE_ID_NOT_FOUND
+
+[SQLSTATE: 22023](sql-error-conditions-sqlstates.html#class-22-data-exception)
+
+Not found an id for the rule name "`<ruleName>`". Please modify RuleIdCollection.scala if you are adding a new rule.
 
 ### SCALAR_SUBQUERY_IS_IN_GROUP_BY_OR_AGGREGATE_FUNCTION
 
@@ -1645,6 +1725,12 @@ The table or view `<relationName>` cannot be found. Verify the spelling and corr
 If you did not qualify the name with a schema, verify the current_schema() output, or qualify the name with the correct schema and catalog.
 To tolerate the error on drop use DROP VIEW IF EXISTS or DROP TABLE IF EXISTS.
 
+### TABLE_VALUED_FUNCTION_FAILED_TO_ANALYZE_IN_PYTHON
+
+SQLSTATE: none assigned
+
+Failed to analyze the Python user defined table function: `<msg>`
+
 ### TABLE_VALUED_FUNCTION_TOO_MANY_TABLE_ARGUMENTS
 
 SQLSTATE: none assigned
@@ -1718,6 +1804,12 @@ Found an unclosed bracketed comment. Please, append */ at the end of the comment
 
 Parameter `<paramIndex>` of function `<functionName>` requires the `<requiredType>` type, however `<inputSql>` has the type `<inputType>`.
 
+### UNEXPECTED_POSITIONAL_ARGUMENT
+
+[SQLSTATE: 4274K](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+Cannot invoke function `<functionName>` because it contains positional argument(s) following the named argument assigned to `<parameterName>`; please rearrange them so the positional arguments come first and then retry the query again.
+
 ### UNKNOWN_PROTOBUF_MESSAGE_TYPE
 
 SQLSTATE: none assigned
@@ -1747,6 +1839,12 @@ Unpivot value columns must share a least common type, some types do not: [`<type
 [SQLSTATE: 428C4](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
 
 All unpivot value columns must have the same size as there are value column names (`<names>`).
+
+### UNRECOGNIZED_PARAMETER_NAME
+
+[SQLSTATE: 4274K](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+Cannot invoke function `<functionName>` because the function call included a named argument reference for the argument named `<argumentName>`, but this function does not include any signature containing an argument with this name. Did you mean one of the following? [`<proposal>`].
 
 ### UNRECOGNIZED_SQL_TYPE
 
@@ -1839,12 +1937,6 @@ Unsupported data source type for direct query on files: `<dataSourceType>`
 [SQLSTATE: 0A000](sql-error-conditions-sqlstates.html#class-0A-feature-not-supported)
 
 Unsupported data type `<typeName>`.
-
-### UNSUPPORTED_DATA_SOURCE_FOR_DIRECT_QUERY
-
-SQLSTATE: none assigned
-
-The direct query on files does not support the data source type: `<className>`. Please try a different data source type or consider using a different query method.
 
 ### UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE
 

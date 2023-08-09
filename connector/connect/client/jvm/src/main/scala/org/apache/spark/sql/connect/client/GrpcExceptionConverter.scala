@@ -16,23 +16,31 @@
  */
 package org.apache.spark.sql.connect.client
 
+import scala.jdk.CollectionConverters._
+import scala.reflect.ClassTag
+
+import com.google.rpc.ErrorInfo
 import io.grpc.StatusRuntimeException
 import io.grpc.protobuf.StatusProto
 
-import org.apache.spark.{SparkException, SparkThrowable}
+import org.apache.spark.SparkException
+import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst.parser.ParseException
+import org.apache.spark.sql.catalyst.trees.Origin
+import org.apache.spark.util.JsonUtils
 
-private[client] object GrpcExceptionConverter {
+private[client] object GrpcExceptionConverter extends JsonUtils {
   def convert[T](f: => T): T = {
     try {
       f
     } catch {
       case e: StatusRuntimeException =>
-        throw toSparkThrowable(e)
+        throw toThrowable(e)
     }
   }
 
-  def convertIterator[T](iter: java.util.Iterator[T]): java.util.Iterator[T] = {
-    new java.util.Iterator[T] {
+  def convertIterator[T](iter: CloseableIterator[T]): CloseableIterator[T] = {
+    new CloseableIterator[T] {
       override def hasNext: Boolean = {
         convert {
           iter.hasNext
@@ -44,14 +52,50 @@ private[client] object GrpcExceptionConverter {
           iter.next()
         }
       }
+
+      override def close(): Unit = {
+        convert {
+          iter.close()
+        }
+      }
     }
   }
 
-  private def toSparkThrowable(ex: StatusRuntimeException): SparkThrowable with Throwable = {
+  private def errorConstructor[T <: Throwable: ClassTag](
+      throwableCtr: (String, Throwable) => T): (String, (String, Throwable) => Throwable) = {
+    val className = implicitly[reflect.ClassTag[T]].runtimeClass.getName
+    (className, throwableCtr)
+  }
+
+  private val errorFactory = Map(
+    errorConstructor((message, _) => new ParseException(None, message, Origin(), Origin())),
+    errorConstructor((message, cause) => new AnalysisException(message, cause = Option(cause))))
+
+  private def errorInfoToThrowable(info: ErrorInfo, message: String): Option[Throwable] = {
+    val classes =
+      mapper.readValue(info.getMetadataOrDefault("classes", "[]"), classOf[Array[String]])
+
+    classes
+      .find(errorFactory.contains)
+      .map { cls =>
+        val constructor = errorFactory.get(cls).get
+        constructor(message, null)
+      }
+  }
+
+  private def toThrowable(ex: StatusRuntimeException): Throwable = {
     val status = StatusProto.fromThrowable(ex)
-    // TODO: Add finer grained error conversion
-    new SparkException(status.getMessage, ex.getCause)
+
+    val fallbackEx = new SparkException(status.getMessage, ex.getCause)
+
+    val errorInfoOpt = status.getDetailsList.asScala
+      .find(_.is(classOf[ErrorInfo]))
+
+    if (errorInfoOpt.isEmpty) {
+      return fallbackEx
+    }
+
+    errorInfoToThrowable(errorInfoOpt.get.unpack(classOf[ErrorInfo]), status.getMessage)
+      .getOrElse(fallbackEx)
   }
 }
-
-

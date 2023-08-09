@@ -23,11 +23,12 @@ import java.util.concurrent.atomic.AtomicLong
 
 import scala.collection.JavaConverters._
 
-import org.apache.spark.TaskContext
 import org.apache.spark.api.java.function._
+import org.apache.spark.sql.api.java.UDF2
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{PrimitiveIntEncoder, PrimitiveLongEncoder}
 import org.apache.spark.sql.connect.client.util.QueryTest
 import org.apache.spark.sql.functions.{col, struct, udf}
+import org.apache.spark.sql.types.IntegerType
 
 /**
  * All tests in this class requires client UDF defined in this test class synced with the server.
@@ -157,11 +158,8 @@ class UserDefinedFunctionE2ETestSuite extends QueryTest {
     val sum = new AtomicLong()
     val func: Iterator[JLong] => Unit = f => {
       f.foreach(v => sum.addAndGet(v))
-      TaskContext
-        .get()
-        .addTaskCompletionListener(_ =>
-          // The value should be 45
-          assert(sum.get() == -1))
+      // The value should be 45
+      assert(sum.get() == -1)
     }
     val exception = intercept[Exception] {
       spark.range(10).repartition(1).foreachPartition(func)
@@ -178,11 +176,8 @@ class UserDefinedFunctionE2ETestSuite extends QueryTest {
         .foreachPartition(new ForeachPartitionFunction[JLong] {
           override def call(t: JIterator[JLong]): Unit = {
             t.asScala.foreach(v => sum.addAndGet(v))
-            TaskContext
-              .get()
-              .addTaskCompletionListener(_ =>
-                // The value should be 45
-                assert(sum.get() == -1))
+            // The value should be 45
+            assert(sum.get() == -1)
           }
         })
     }
@@ -256,5 +251,23 @@ class UserDefinedFunctionE2ETestSuite extends QueryTest {
       "b",
       "b",
       "c")
+  }
+
+  test("(deprecated) scala UDF with dataType") {
+    val session: SparkSession = spark
+    import session.implicits._
+    val fn = udf(((i: Long) => (i + 1).toInt), IntegerType)
+    checkDataset(session.range(2).select(fn($"id")).as[Int], 1, 2)
+  }
+
+  test("java UDF") {
+    val session: SparkSession = spark
+    import session.implicits._
+    val fn = udf(
+      new UDF2[Long, Long, Int] {
+        override def call(t1: Long, t2: Long): Int = (t1 + t2 + 1).toInt
+      },
+      IntegerType)
+    checkDataset(session.range(2).select(fn($"id", $"id" + 2)).as[Int], 3, 5)
   }
 }
