@@ -44,8 +44,6 @@ private[spark] class StatsdSink(
     val property: Properties, val registry: MetricRegistry) extends Sink with Logging {
   import StatsdSink._
 
-  def propertyToOption(prop: String): Option[String] = Option(property.getProperty(prop))
-
   val host = property.getProperty(STATSD_KEY_HOST, STATSD_DEFAULT_HOST)
   val port = property.getProperty(STATSD_KEY_PORT, STATSD_DEFAULT_PORT).toInt
 
@@ -56,7 +54,7 @@ private[spark] class StatsdSink(
 
   val prefix = property.getProperty(STATSD_KEY_PREFIX, STATSD_DEFAULT_PREFIX)
 
-  val filter = propertyToOption(STATSD_KEY_REGEX) match {
+  val filter = Option(property.getProperty(STATSD_KEY_REGEX)) match {
     case Some(pattern) => new MetricFilter() {
       override def matches(name: String, metric: Metric): Boolean = {
         pattern.r.findFirstMatchIn(name).isDefined
