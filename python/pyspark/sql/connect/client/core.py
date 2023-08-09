@@ -626,9 +626,9 @@ class SparkConnectClient(object):
             # Note: the number of retries is selected so that the maximum tolerated wait
             # is guaranteed to be at least 10 minutes
             "max_retries": 15,
-            "backoff_multiplier": 4.,
-            "initial_backoff": 50.,
-            "max_backoff": 60000.,
+            "backoff_multiplier": 4.0,
+            "initial_backoff": 50.0,
+            "max_backoff": 60000.0,
             "jitter": 500,
             "jitter_from_threshold": 2000,
         }
@@ -1601,7 +1601,7 @@ class Retrying:
         jitter: float,
         jitter_from_threshold: float,
         can_retry: Callable[..., bool] = lambda x: True,
-        sleep: Callable[[float], None] = time.sleep
+        sleep: Callable[[float], None] = time.sleep,
     ) -> None:
         self._can_retry = can_retry
         self._max_retries = max_retries

@@ -102,9 +102,7 @@ class SparkConnectClientTestCase(unittest.TestCase):
 
         try:
             for attempt in Retrying(
-                can_retry=SparkConnectClient.retry_exception,
-                sleep=sleep,
-                **client._retry_policy
+                can_retry=SparkConnectClient.retry_exception, sleep=sleep, **client._retry_policy
             ):
                 with attempt:
                     raise RetryException()
