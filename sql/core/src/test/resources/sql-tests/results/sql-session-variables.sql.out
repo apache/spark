@@ -849,28 +849,11 @@ NULL	NULL
 
 
 -- !query
-DECLARE OR REPLACE VARIABLE var1 INT DEFAULT CURRENT_USER
+DECLARE OR REPLACE VARIABLE var1 STRING DEFAULT CURRENT_USER
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.SparkNumberFormatException
-{
-  "errorClass" : "CAST_INVALID_INPUT",
-  "sqlState" : "22018",
-  "messageParameters" : {
-    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
-    "expression" : "'wenchen'",
-    "sourceType" : "\"STRING\"",
-    "targetType" : "\"INT\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 1,
-    "stopIndex" : 57,
-    "fragment" : "DECLARE OR REPLACE VARIABLE var1 INT DEFAULT CURRENT_USER"
-  } ]
-}
+
 
 
 -- !query
@@ -878,7 +861,7 @@ SELECT 'true' AS Expected, length(var1) > 0 AS result
 -- !query schema
 struct<Expected:string,result:boolean>
 -- !query output
-true	NULL
+true	true
 
 
 -- !query

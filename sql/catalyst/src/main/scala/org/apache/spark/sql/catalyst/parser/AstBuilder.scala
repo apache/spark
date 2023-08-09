@@ -5119,7 +5119,7 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
       val variables = ctx.multipartIdentifierList.multipartIdentifier.asScala.map { variableIdent =>
         val varName = visitMultipartIdentifier(variableIdent)
         UnresolvedAttribute(varName)
-      }
+      }.toSeq
       SetVariable(variables, visitQuery(ctx.query()))
     } else {
       // The SET variable source is list of expressions.
@@ -5131,7 +5131,7 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
           case e => Alias(e, varIdent.last)()
         }
         (UnresolvedAttribute(varIdent), varNamedExpr)
-      }.unzip
+      }.toSeq.unzip
       SetVariable(variables, Project(values, OneRowRelation()))
     }
   }
