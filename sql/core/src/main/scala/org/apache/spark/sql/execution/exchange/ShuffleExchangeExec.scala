@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.exchange
 
 import java.util.function.Supplier
 
-import scala.collection.{mutable, Seq}
+import scala.collection.mutable
 import scala.concurrent.Future
 
 import org.apache.spark._
