@@ -20,6 +20,7 @@ package org.apache.spark.storage
 import java.io.{File, InputStream, IOException}
 import java.nio.ByteBuffer
 import java.nio.file.Files
+import java.util.concurrent.ThreadLocalRandom
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable
@@ -31,7 +32,6 @@ import scala.reflect.ClassTag
 import scala.reflect.classTag
 
 import com.esotericsoftware.kryo.KryoException
-import org.apache.commons.lang3.RandomUtils
 import org.mockito.{ArgumentCaptor, ArgumentMatchers => mc}
 import org.mockito.Mockito.{doAnswer, mock, never, spy, times, verify, when}
 import org.scalatest.PrivateMethodTester
@@ -1887,7 +1887,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with PrivateMethodTe
         (transCtx.createServer(port, Seq.empty[TransportServerBootstrap].asJava), port)
       }
 
-      val candidatePort = RandomUtils.nextInt(1024, 65536)
+      val candidatePort = ThreadLocalRandom.current().nextInt(1024, 65536)
       val (server, shufflePort) = Utils.startServiceOnPort(candidatePort,
         newShuffleServer, conf, "ShuffleServer")
 
@@ -2274,7 +2274,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with PrivateMethodTe
         (transCtx.createServer(port, Seq.empty[TransportServerBootstrap].asJava), port)
       }
 
-      val candidatePort = RandomUtils.nextInt(1024, 65536)
+      val candidatePort = ThreadLocalRandom.current().nextInt(1024, 65536)
       val (server, shufflePort) = Utils.startServiceOnPort(candidatePort,
         newShuffleServer, conf, "ShuffleServer")
 

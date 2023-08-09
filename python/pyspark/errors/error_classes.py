@@ -617,6 +617,11 @@ ERROR_CLASSES_JSON = """
       "Argument `<arg_name>` should be a WindowSpec, got <arg_type>."
     ]
   },
+  "NO_ACTIVE_OR_DEFAULT_SESSION" : {
+    "message" : [
+      "No active or default Spark session found. Please create a new Spark session before running the code."
+    ]
+  },
   "NO_ACTIVE_SESSION" : {
     "message" : [
       "No active Spark session found. Please create a new Spark session before running the code."
@@ -736,6 +741,11 @@ ERROR_CLASSES_JSON = """
   "UDTF_EXEC_ERROR" : {
     "message" : [
       "User defined table function encountered an error in the '<method_name>' method: <error>"
+    ]
+  },
+  "UDTF_INVALID_OUTPUT_ROW_TYPE" : {
+    "message" : [
+        "The type of an individual output row in the UDTF is invalid. Each row should be a tuple, list, or dict, but got '<type>'. Please make sure that the output rows are of the correct type."
     ]
   },
   "UDTF_RETURN_NOT_ITERABLE" : {
