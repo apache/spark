@@ -425,7 +425,7 @@ jobs:
       run: |
         if [[ "$MODULES_TO_TEST" != *"pyspark-ml"* ]] && [[ "$BRANCH" != "branch-3.5" ]]; then
           # uninstall libraries dedicated for ML testing
-          python3.9 -m pip uninstall -y torch torchvision torcheval torchtnt tensorboard mlflow
+          python3.9 -m pip uninstall -y torch torchvision torcheval torchtnt tensorboard mlflow deepspeed
         fi
         if [ -f ./dev/free_disk_space_container ]; then
           ./dev/free_disk_space_container
