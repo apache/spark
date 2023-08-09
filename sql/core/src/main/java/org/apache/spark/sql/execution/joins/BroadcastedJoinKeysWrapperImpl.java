@@ -32,6 +32,7 @@ import com.google.common.cache.LoadingCache;
 
 import java.util.concurrent.ExecutionException;
 
+import java.util.concurrent.TimeUnit;
 import org.apache.spark.broadcast.Broadcast;
 import org.apache.spark.sql.catalyst.CatalystTypeConverters;
 import org.apache.spark.sql.catalyst.InternalRow;
@@ -61,7 +62,7 @@ public class BroadcastedJoinKeysWrapperImpl implements BroadcastedJoinKeysWrappe
 
   private static final LoadingCache<BroadcastedJoinKeysWrapperImpl, Set<Object>>
     idempotentializerForSet = CacheBuilder.newBuilder().expireAfterWrite(
-      Duration.ofSeconds(CACHE_EXPIRY)).maximumSize(CACHE_SIZE).weakValues().build(
+     CACHE_EXPIRY, TimeUnit.SECONDS).maximumSize(CACHE_SIZE).weakValues().build(
           new CacheLoader<BroadcastedJoinKeysWrapperImpl, Set<Object>>() {
             public Set<Object> load(BroadcastedJoinKeysWrapperImpl bcjk) {
                 BroadcastJoinKeysReaper.checkInitialized();
@@ -76,7 +77,7 @@ public class BroadcastedJoinKeysWrapperImpl implements BroadcastedJoinKeysWrappe
             });
 
   private static final LoadingCache<BroadcastedJoinKeysWrapperImpl, Object> idempotentializer =
-      CacheBuilder.newBuilder().expireAfterWrite(Duration.ofSeconds(CACHE_EXPIRY))
+      CacheBuilder.newBuilder().expireAfterWrite(CACHE_EXPIRY, TimeUnit.SECONDS)
       .maximumSize(CACHE_SIZE).weakValues().build(
           new CacheLoader<BroadcastedJoinKeysWrapperImpl, Object>() {
             // this will register the Reaper on the driver side as well as executor side to get
