@@ -27,9 +27,9 @@ import io.grpc.stub.StreamObserver
 import org.apache.spark.SparkException
 import org.apache.spark.internal.Logging
 
-
-private[client] class GrpcRetryHandler(private val retryPolicy: GrpcRetryHandler.RetryPolicy,
-                                       private val sleep: Long => Unit = Thread.sleep) {
+private[client] class GrpcRetryHandler(
+    private val retryPolicy: GrpcRetryHandler.RetryPolicy,
+    private val sleep: Long => Unit = Thread.sleep) {
 
   /**
    * Retries the given function with exponential backoff according to the client's retryPolicy.
@@ -163,7 +163,8 @@ private[client] object GrpcRetryHandler extends Logging {
    * @return
    *   The result of the function.
    */
-  final def retry[T](retryPolicy: RetryPolicy, sleep: Long => Unit = Thread.sleep)(fn: => T): T = {
+  final def retry[T](retryPolicy: RetryPolicy, sleep: Long => Unit = Thread.sleep)(
+      fn: => T): T = {
     var currentRetryNum = 0
     var lastException: Throwable = null
     var nextBackoff: Duration = retryPolicy.initialBackoff
@@ -203,6 +204,7 @@ private[client] object GrpcRetryHandler extends Logging {
       messageParameters = Map.empty,
       cause = lastException)
   }
+
   /**
    * Default canRetry in [[RetryPolicy]].
    * @param e
