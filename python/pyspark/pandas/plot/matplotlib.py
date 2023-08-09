@@ -15,7 +15,6 @@
 # limitations under the License.
 #
 
-import warnings
 from distutils.version import LooseVersion
 
 import matplotlib as mat

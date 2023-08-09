@@ -191,8 +191,6 @@ object CheckConnectJvmClientCompatibility {
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.Dataset.javaRDD"),
 
       // functions
-      ProblemFilters.exclude[Problem]("org.apache.spark.sql.functions.udf"),
-      ProblemFilters.exclude[Problem]("org.apache.spark.sql.functions.callUDF"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.functions.unwrap_udt"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.functions.udaf"),
 
@@ -214,14 +212,11 @@ object CheckConnectJvmClientCompatibility {
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.SparkSession.listenerManager"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.SparkSession.experimental"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.SparkSession.udtf"),
-      ProblemFilters.exclude[Problem]("org.apache.spark.sql.SparkSession.streams"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.SparkSession.createDataFrame"),
       ProblemFilters.exclude[Problem](
         "org.apache.spark.sql.SparkSession.baseRelationToDataFrame"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.SparkSession.createDataset"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.SparkSession.executeCommand"),
-      // TODO(SPARK-44068): Support positional parameters in Scala connect client
-      ProblemFilters.exclude[Problem]("org.apache.spark.sql.SparkSession.sql"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.SparkSession.this"),
 
       // SparkSession#implicits
@@ -266,8 +261,6 @@ object CheckConnectJvmClientCompatibility {
         "org.apache.spark.sql.streaming.StreamingQueryException.time"),
 
       // Classes missing from streaming API
-      ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.ForeachWriter"),
-      ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.streaming.GroupState"),
       ProblemFilters.exclude[MissingClassProblem](
         "org.apache.spark.sql.streaming.TestGroupState"),
       ProblemFilters.exclude[MissingClassProblem](
