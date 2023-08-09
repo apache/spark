@@ -230,7 +230,7 @@ class ClientDataFrameStatSuite extends RemoteSparkSession {
     val session = spark
     import session.implicits._
     val data = Range(0, 1000).map(_.toDouble)
-    val message = intercept[SparkException] {
+    val message = intercept[AnalysisException] {
       data.toDF("id").stat.bloomFilter("id", 1000, 0.03)
     }.getMessage
     assert(message.contains("DATATYPE_MISMATCH.BLOOM_FILTER_WRONG_TYPE"))
