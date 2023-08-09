@@ -755,15 +755,16 @@ Project [NULL AS Expected#x, variablereference(system.session.var1=CAST(NULL AS 
 
 
 -- !query
-DECLARE OR REPLACE VARIABLE var1 STRING DEFAULT CURRENT_USER
+DECLARE OR REPLACE VARIABLE var1 STRING DEFAULT CURRENT_DATABASE()
 -- !query analysis
-[Analyzer test output redacted due to nondeterminism]
+CreateVariable defaultvalueexpression(cast(current_database() as string), CURRENT_DATABASE()), true
++- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.var1
 
 
 -- !query
 SELECT 'true' AS Expected, length(var1) > 0 AS result
 -- !query analysis
-Project [true AS Expected#x, (length(variablereference(system.session.var1='serge.rielau')) > 0) AS result#x]
+Project [true AS Expected#x, (length(variablereference(system.session.var1='default')) > 0) AS result#x]
 +- OneRowRelation
 
 
