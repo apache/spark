@@ -59,6 +59,7 @@ class BasicDriverFeatureStepSuite extends SparkFunSuite {
       .set(KUBERNETES_DRIVER_LIMIT_CORES, "4")
       .set(DRIVER_MEMORY.key, "256M")
       .set(DRIVER_MEMORY_OVERHEAD, 200L)
+      .set(KUBERNETES_DRIVER_LIMIT_MEMORY, "1024M")
       .set(CONTAINER_IMAGE, "spark-driver:latest")
       .set(IMAGE_PULL_SECRETS, TEST_IMAGE_PULL_SECRETS)
     resources.foreach { case (_, testRInfo) =>
@@ -111,7 +112,7 @@ class BasicDriverFeatureStepSuite extends SparkFunSuite {
     assert(amountAndFormat(requests("cpu")) === "2")
     assert(amountAndFormat(requests("memory")) === "456Mi")
     val limits = resourceRequirements.getLimits.asScala
-    assert(amountAndFormat(limits("memory")) === "456Mi")
+    assert(amountAndFormat(limits("memory")) === "1024M")
     assert(amountAndFormat(limits("cpu")) === "4")
     resources.foreach { case (k8sName, testRInfo) =>
       assert(amountAndFormat(limits(k8sName)) === testRInfo.count)

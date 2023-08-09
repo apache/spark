@@ -333,6 +333,20 @@ private[spark] object Config extends Logging {
       .stringConf
       .createOptional
 
+  val KUBERNETES_DRIVER_LIMIT_MEMORY =
+    ConfigBuilder("spark.kubernetes.driver.limit.memory")
+      .doc("Specify the hard memory limit for each driver pod")
+      .version("3.5.0")
+      .stringConf
+      .createOptional
+
+  val KUBERNETES_EXECUTOR_LIMIT_MEMORY =
+    ConfigBuilder("spark.kubernetes.executor.limit.memory")
+      .doc("Specify the hard memory limit for each executor pod")
+      .version("3.5.0")
+      .stringConf
+      .createOptional
+
   val KUBERNETES_DRIVER_POD_NAME =
     ConfigBuilder("spark.kubernetes.driver.pod.name")
       .doc("Name of the driver pod.")

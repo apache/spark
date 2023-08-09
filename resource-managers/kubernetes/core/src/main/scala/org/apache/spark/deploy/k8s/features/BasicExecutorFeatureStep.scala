@@ -77,6 +77,12 @@ private[spark] class BasicExecutorFeatureStep(
   private val executorMemoryString = s"${execResources.executorMemoryMiB}m"
   // we don't include any kubernetes conf specific requests or limits when using custom
   // ResourceProfiles because we don't have a way of overriding them if needed
+  private val executorLimitMemory =
+    if (isDefaultProfile && kubernetesConf.sparkConf.contains(KUBERNETES_EXECUTOR_LIMIT_MEMORY)) {
+      kubernetesConf.get(KUBERNETES_EXECUTOR_LIMIT_MEMORY).get
+    } else {
+      s"${execResources.totalMemMiB}Mi"
+    }
   private val executorCoresRequest =
     if (isDefaultProfile && kubernetesConf.sparkConf.contains(KUBERNETES_EXECUTOR_REQUEST_CORES)) {
       kubernetesConf.get(KUBERNETES_EXECUTOR_REQUEST_CORES).get
@@ -117,6 +123,7 @@ private[spark] class BasicExecutorFeatureStep(
       .replaceAll("[^\\w-]+", "_")
 
     val executorMemoryQuantity = new Quantity(s"${execResources.totalMemMiB}Mi")
+    val executorLimitMemoryQuantity = new Quantity(executorLimitMemory)
     val executorCpuQuantity = new Quantity(executorCoresRequest)
     val executorResourceQuantities =
       buildExecutorResourcesQuantities(execResources.customResources.values.toSet)
@@ -192,7 +199,7 @@ private[spark] class BasicExecutorFeatureStep(
       .withImagePullPolicy(kubernetesConf.imagePullPolicy)
       .editOrNewResources()
         .addToRequests("memory", executorMemoryQuantity)
-        .addToLimits("memory", executorMemoryQuantity)
+        .addToLimits("memory", executorLimitMemoryQuantity)
         .addToRequests("cpu", executorCpuQuantity)
         .addToLimits(executorResourceQuantities.asJava)
         .endResources()

@@ -145,6 +145,8 @@ class BasicExecutorFeatureStepSuite extends SparkFunSuite with BeforeAndAfter {
   }
 
   test("basic executor pod has reasonable defaults") {
+    baseConf.set(KUBERNETES_EXECUTOR_LIMIT_MEMORY, "2048M")
+    initDefaultProfile(baseConf)
     val conf = newExecutorConf()
     val step = new BasicExecutorFeatureStep(conf, new SecurityManager(baseConf),
       defaultProfile)
@@ -161,13 +163,15 @@ class BasicExecutorFeatureStepSuite extends SparkFunSuite with BeforeAndAfter {
 
     assert(executor.pod.getSpec.getImagePullSecrets.asScala === TEST_IMAGE_PULL_SECRET_OBJECTS)
 
-    // There is exactly 1 container with 1 volume mount and default memory limits.
-    // Default memory limit is 1024M + 384M (minimum overhead constant).
+    // There is exactly 1 container with 1 volume mount and default memory requests.
+    // Default memory requests is 1024M + 384M (minimum overhead constant).
     assert(executor.container.getImage === EXECUTOR_IMAGE)
     assert(executor.container.getVolumeMounts.size() == 1)
     assert(executor.container.getResources.getLimits.size() === 1)
     assert(amountAndFormat(executor.container.getResources
-      .getLimits.get("memory")) === "1408Mi")
+      .getRequests.get("memory")) === "1408Mi")
+    assert(amountAndFormat(executor.container.getResources
+      .getLimits.get("memory")) === "2048M")
 
     // The pod has no node selector, and 1 volume.
     assert(executor.pod.getSpec.getNodeSelector.isEmpty)
