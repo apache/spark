@@ -172,7 +172,7 @@ private[client] object GrpcRetryHandler extends Logging {
     while (currentRetryNum <= retryPolicy.maxRetries) {
       if (currentRetryNum != 0) {
         var currentBackoff = nextBackoff
-        if (currentBackoff >= retryPolicy.jitterFromThreshold) {
+        if (currentBackoff >= retryPolicy.minJitterThreshold) {
           currentBackoff += Random.nextDouble() * retryPolicy.jitter
         }
         nextBackoff = nextBackoff * retryPolicy.backoffMultiplier min retryPolicy.maxBackoff
@@ -244,7 +244,7 @@ private[client] object GrpcRetryHandler extends Logging {
       maxBackoff: FiniteDuration = FiniteDuration(1, "min"),
       backoffMultiplier: Double = 4.0,
       jitter: FiniteDuration = FiniteDuration(500, "ms"),
-      jitterFromThreshold: FiniteDuration = FiniteDuration(2, "s"),
+      minJitterThreshold: FiniteDuration = FiniteDuration(2, "s"),
       canRetry: Throwable => Boolean = retryException) {}
 
   /**

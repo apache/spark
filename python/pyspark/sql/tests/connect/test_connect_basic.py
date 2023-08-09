@@ -3372,7 +3372,7 @@ class ClientTests(unittest.TestCase):
             initial_backoff=1,
             max_backoff=10,
             jitter=0,
-            jitter_from_threshold=0,
+            min_jitter_threshold=0,
         ):
             with attempt:
                 stub(2, call_wrap, grpc.StatusCode.INTERNAL)
@@ -3389,7 +3389,7 @@ class ClientTests(unittest.TestCase):
             initial_backoff=1,
             max_backoff=10,
             jitter=0,
-            jitter_from_threshold=0,
+            min_jitter_threshold=0,
         ):
             with attempt:
                 stub(2, call_wrap, grpc.StatusCode.INTERNAL)
@@ -3407,7 +3407,7 @@ class ClientTests(unittest.TestCase):
                 backoff_multiplier=1,
                 initial_backoff=50,
                 jitter=0,
-                jitter_from_threshold=0,
+                min_jitter_threshold=0,
             ):
                 with attempt:
                     stub(5, call_wrap, grpc.StatusCode.INTERNAL)
@@ -3425,7 +3425,7 @@ class ClientTests(unittest.TestCase):
             initial_backoff=1,
             max_backoff=10,
             jitter=0,
-            jitter_from_threshold=0,
+            min_jitter_threshold=0,
         ):
             with attempt:
                 stub(2, call_wrap, grpc.StatusCode.UNAVAILABLE)
@@ -3443,7 +3443,7 @@ class ClientTests(unittest.TestCase):
                 backoff_multiplier=1,
                 initial_backoff=50,
                 jitter=0,
-                jitter_from_threshold=0,
+                min_jitter_threshold=0,
             ):
                 with attempt:
                     stub(5, call_wrap, grpc.StatusCode.UNAVAILABLE)
@@ -3461,7 +3461,7 @@ class ClientTests(unittest.TestCase):
                 initial_backoff=1,
                 max_backoff=10,
                 jitter=0,
-                jitter_from_threshold=0,
+                min_jitter_threshold=0,
             ):
                 with attempt:
                     stub(5, call_wrap, grpc.StatusCode.INTERNAL)

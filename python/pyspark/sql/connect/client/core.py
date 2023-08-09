@@ -627,10 +627,10 @@ class SparkConnectClient(object):
             # is guaranteed to be at least 10 minutes
             "max_retries": 15,
             "backoff_multiplier": 4.0,
-            "initial_backoff": 50.0,
-            "max_backoff": 60000.0,
+            "initial_backoff": 50,
+            "max_backoff": 60000,
             "jitter": 500,
-            "jitter_from_threshold": 2000,
+            "min_jitter_threshold": 2000,
         }
         if retry_policy:
             self._retry_policy.update(retry_policy)
@@ -1595,11 +1595,11 @@ class Retrying:
     def __init__(
         self,
         max_retries: int,
-        initial_backoff: float,
-        max_backoff: float,
+        initial_backoff: int,
+        max_backoff: int,
         backoff_multiplier: float,
-        jitter: float,
-        jitter_from_threshold: float,
+        jitter: int,
+        min_jitter_threshold: int,
         can_retry: Callable[..., bool] = lambda x: True,
         sleep: Callable[[float], None] = time.sleep,
     ) -> None:
@@ -1609,7 +1609,7 @@ class Retrying:
         self._max_backoff = max_backoff
         self._backoff_multiplier = backoff_multiplier
         self._jitter = jitter
-        self._jitter_from_threshold = jitter_from_threshold
+        self._min_jitter_threshold = min_jitter_threshold
         self._sleep = sleep
 
     def __iter__(self) -> Generator[AttemptManager, None, None]:
@@ -1621,7 +1621,7 @@ class Retrying:
         A generator that yields the current attempt.
         """
         retry_state = RetryState()
-        next_backoff = self._initial_backoff
+        next_backoff: float = self._initial_backoff
 
         while True:
             # Check if the operation was completed successfully.
@@ -1642,7 +1642,7 @@ class Retrying:
             if retry_state.count() > 0:
                 # Randomize backoff for this iteration
                 backoff = next_backoff
-                if backoff >= self._jitter_from_threshold:
+                if backoff >= self._min_jitter_threshold:
                     backoff += random.uniform(0, self._jitter)
 
                 next_backoff = min(self._max_backoff, next_backoff * self._backoff_multiplier)
