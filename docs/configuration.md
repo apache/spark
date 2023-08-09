@@ -2398,6 +2398,14 @@ Apart from these, the following properties are also available, and may be useful
   <td>1.3.0</td>
 </tr>
 <tr>
+  <td><code>spark.network.timeoutInterval</code></td>
+  <td>60s</td>
+  <td>
+    Interval for the driver to check and expire dead executors.
+  </td>
+  <td>1.3.2</td>
+</tr>
+<tr>
   <td><code>spark.network.io.preferDirectBufs</code></td>
   <td>true</td>
   <td>

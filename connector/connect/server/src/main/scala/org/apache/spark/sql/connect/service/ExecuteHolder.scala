@@ -20,11 +20,13 @@ package org.apache.spark.sql.connect.service
 import java.util.UUID
 
 import scala.collection.JavaConverters._
+import scala.collection.mutable
 
-import org.apache.spark.SparkSQLException
+import org.apache.spark.{SparkEnv, SparkSQLException}
 import org.apache.spark.connect.proto
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.connect.common.ProtoUtils
+import org.apache.spark.sql.connect.config.Connect.CONNECT_EXECUTE_REATTACHABLE_ENABLED
 import org.apache.spark.sql.connect.execution.{ExecuteGrpcResponseSender, ExecuteResponseObserver, ExecuteThreadRunner}
 import org.apache.spark.util.SystemClock
 
@@ -35,6 +37,8 @@ private[connect] class ExecuteHolder(
     val request: proto.ExecutePlanRequest,
     val sessionHolder: SessionHolder)
     extends Logging {
+
+  val session = sessionHolder.session
 
   val operationId = if (request.hasOperationId) {
     try {
@@ -73,8 +77,11 @@ private[connect] class ExecuteHolder(
    * If execution is reattachable, it's life cycle is not limited to a single ExecutePlanRequest,
    * but can be reattached with ReattachExecute, and released with ReleaseExecute
    */
-  val reattachable: Boolean = request.getRequestOptionsList.asScala.exists { option =>
-    option.hasReattachOptions && option.getReattachOptions.getReattachable == true
+  val reattachable: Boolean = {
+    SparkEnv.get.conf.get(CONNECT_EXECUTE_REATTACHABLE_ENABLED) &&
+    request.getRequestOptionsList.asScala.exists { option =>
+      option.hasReattachOptions && option.getReattachOptions.getReattachable == true
+    }
   }
 
   /**
@@ -83,7 +90,12 @@ private[connect] class ExecuteHolder(
    */
   var attached: Boolean = true
 
-  val session = sessionHolder.session
+  /**
+   * Threads that execute the ExecuteGrpcResponseSender and send the GRPC responses.
+   *
+   * TODO(SPARK-44625): Joining and cleaning up these threads during cleanup.
+   */
+  val grpcSenderThreads: mutable.ArrayBuffer[Thread] = new mutable.ArrayBuffer[Thread]()
 
   val responseObserver: ExecuteResponseObserver[proto.ExecutePlanResponse] =
     new ExecuteResponseObserver[proto.ExecutePlanResponse](this)
@@ -162,6 +174,7 @@ private[connect] class ExecuteHolder(
   def close(): Unit = {
     runner.interrupt()
     runner.join()
+    responseObserver.removeAll()
     eventsManager.postClosed()
     sessionHolder.removeExecuteHolder(operationId)
   }
