@@ -35,16 +35,32 @@ require_minimum_pyarrow_version()
 
 def python_udtf_simple_example(spark: SparkSession) -> None:
 
-    from pyspark.sql.functions import lit, udtf
-
     class SimpleUDTF:
         def eval(self, x: int, y: int) -> Iterator[Any]:
             yield x + y, x - y
 
-    # Now, create a Python UDTF using the defined class and specify a return type
+    from pyspark.sql.functions import lit, udtf
+
     func = udtf(SimpleUDTF, returnType="c1: int, c2: int")
 
     func(lit(1), lit(2)).show()  # type: ignore
+    # +---+---+
+    # | c1| c2|
+    # +---+---+
+    # |  3| -1|
+    # +---+---+
+
+
+def python_udtf_decorator_example(spark: SparkSession) -> None:
+
+    from pyspark.sql.functions import lit, udtf
+
+    @udtf(returnType="c1: int, c2: int")  # type: ignore
+    class SimpleUDTF:
+        def eval(self, x: int, y: int) -> Iterator[Any]:
+            yield x + y, x - y
+
+    SimpleUDTF(lit(1), lit(2)).show()  # type: ignore
     # +---+---+
     # | c1| c2|
     # +---+---+
@@ -56,7 +72,6 @@ def python_udtf_registration(spark: SparkSession) -> None:
 
     from pyspark.sql.functions import udtf
 
-    # Use the decorator to define the UDTF.
     @udtf(returnType="c1: int, c2: int")  # type: ignore
     class PlusOne:
         def eval(self, x: int) -> Iterator[Any]:
@@ -81,6 +96,16 @@ def python_udtf_registration(spark: SparkSession) -> None:
     # |  0|  1|  0|  1|
     # |  1|  2|  1|  2|
     # +---+---+---+---+
+
+
+def python_udtf_arrow_example(spark: SparkSession) -> None:
+
+    from pyspark.sql.functions import udtf
+
+    @udtf(returnType="c1: int, c2: int", useArrow=True)  # type: ignore
+    class PlusOne:
+        def eval(self, x: int) -> Iterator[Any]:
+            yield x, x + 1
 
 
 def python_udtf_terminate_example(spark: SparkSession) -> None:
@@ -181,8 +206,14 @@ if __name__ == "__main__":
     print("Running simple Python UDTF example")
     python_udtf_simple_example(spark)
 
+    print("Running simple Python UDTF decorator example")
+    python_udtf_decorator_example(spark)
+
     print("Running Python UDTF registration example")
     python_udtf_registration(spark)
+
+    print("Running Python UDTF arrow example")
+    python_udtf_arrow_example(spark)
 
     print("Running Python UDTF terminate example")
     python_udtf_terminate_example(spark)

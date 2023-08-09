@@ -15639,13 +15639,6 @@ def udtf(
     Use "yield" to produce one row for the UDTF result relation as many times
     as needed. In the context of a lateral join, each such result row will be
     associated with the most recent input row consumed from the "eval" method.
-    Or, use "return" to produce multiple rows for the UDTF result relation at
-    once.
-
-    >>> class TestUDTF:
-    ...     def eval(self, a: int):
-    ...         return [(a, a + 1), (a, a + 2)]
-    >>> test_udtf = udtf(TestUDTF, returnType="x: int, y: int")
 
     User-defined table functions are considered opaque to the optimizer by default.
     As a result, operations like filters from WHERE clauses or limits from
