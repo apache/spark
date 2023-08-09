@@ -468,24 +468,29 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       nameParts: Seq[String],
       isTemp: Boolean,
       cmd: String,
-      mismatchHint: Option[String],
+      hint: Boolean,
       t: TreeNode[_]): Throwable = {
-    val suggestion = mismatchHint.map(" " + _).getOrElse("")
     if (isTemp) {
       new AnalysisException(
-        errorClass = "UNSUPPORTED_TEMP_VIEW_OPERATION.WITH_SUGGESTION",
+        errorClass = if (hint) {
+          "UNSUPPORTED_TEMP_VIEW_OPERATION.WITH_SUGGESTION"
+        } else {
+          "UNSUPPORTED_TEMP_VIEW_OPERATION.WITHOUT_SUGGESTION"
+        },
         messageParameters = Map(
           "tempViewName" -> toSQLId(nameParts),
-          "operation" -> cmd,
-          "suggestion" -> suggestion),
+          "operation" -> cmd),
         origin = t.origin)
     } else {
       new AnalysisException(
-        errorClass = "UNSUPPORTED_VIEW_OPERATION.WITH_SUGGESTION",
+        errorClass = if (hint) {
+          "UNSUPPORTED_VIEW_OPERATION.WITH_SUGGESTION"
+        } else {
+          "UNSUPPORTED_VIEW_OPERATION.WITHOUT_SUGGESTION"
+        },
         messageParameters = Map(
           "viewName" -> toSQLId(nameParts),
-          "operation" -> cmd,
-          "suggestion" -> suggestion),
+          "operation" -> cmd),
         origin = t.origin)
     }
   }
@@ -503,14 +508,19 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
   }
 
   def expectViewNotTableError(
-      v: ResolvedTable, cmd: String, mismatchHint: Option[String], t: TreeNode[_]): Throwable = {
-    val suggestion = mismatchHint.map(" " + _).getOrElse("")
+      nameParts: Seq[String],
+      cmd: String,
+      hint: Boolean,
+      t: TreeNode[_]): Throwable = {
     new AnalysisException(
-      errorClass = "UNSUPPORTED_TABLE_OPERATION.WITH_SUGGESTION",
+      errorClass = if (hint) {
+        "UNSUPPORTED_TABLE_OPERATION.WITH_SUGGESTION"
+      } else {
+        "UNSUPPORTED_TABLE_OPERATION.WITHOUT_SUGGESTION"
+      },
       messageParameters = Map(
-        "tableName" -> toSQLId(v.identifier.quoted),
-        "operation" -> cmd,
-        "suggestion" -> suggestion),
+        "tableName" -> toSQLId(nameParts),
+        "operation" -> cmd),
       origin = t.origin)
   }
 

@@ -898,9 +898,8 @@ class HiveDDLSuite
           },
           errorClass = "UNSUPPORTED_TABLE_OPERATION.WITH_SUGGESTION",
           parameters = Map(
-            "tableName" -> s"`default`.`$tabName`",
-            "operation" -> "ALTER VIEW ... SET TBLPROPERTIES",
-            "suggestion" -> " Please use ALTER TABLE instead."),
+            "tableName" -> s"`$SESSION_CATALOG_NAME`.`default`.`$tabName`",
+            "operation" -> "ALTER VIEW ... SET TBLPROPERTIES"),
           context = ExpectedContext(fragment = tabName, start = 11, stop = 14)
         )
 
@@ -922,9 +921,8 @@ class HiveDDLSuite
           },
           errorClass = "UNSUPPORTED_TABLE_OPERATION.WITH_SUGGESTION",
           parameters = Map(
-            "tableName" -> s"`default`.`$tabName`",
-            "operation" -> "ALTER VIEW ... UNSET TBLPROPERTIES",
-            "suggestion" -> " Please use ALTER TABLE instead."),
+            "tableName" -> s"`$SESSION_CATALOG_NAME`.`default`.`$tabName`",
+            "operation" -> "ALTER VIEW ... UNSET TBLPROPERTIES"),
           context = ExpectedContext(fragment = tabName, start = 11, stop = 14)
         )
 

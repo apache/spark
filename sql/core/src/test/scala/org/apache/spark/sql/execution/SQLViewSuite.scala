@@ -133,11 +133,10 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
         exception = intercept[AnalysisException] {
           sql("ALTER VIEW tab1 AS SELECT * FROM jt")
         },
-        errorClass = "UNSUPPORTED_TABLE_OPERATION.WITH_SUGGESTION",
+        errorClass = "UNSUPPORTED_TABLE_OPERATION.WITHOUT_SUGGESTION",
         parameters = Map(
-          "tableName" -> "`default`.`tab1`",
-          "operation" -> "ALTER VIEW ... AS",
-          "suggestion" -> ""
+          "tableName" -> s"`$SESSION_CATALOG_NAME`.`default`.`tab1`",
+          "operation" -> "ALTER VIEW ... AS"
         ),
         context = ExpectedContext(
           fragment = "tab1",

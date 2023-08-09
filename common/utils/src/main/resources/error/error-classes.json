@@ -3321,7 +3321,7 @@
       },
       "WITH_SUGGESTION" : {
         "message" : [
-          "<suggestion>."
+          "Please use ALTER TABLE instead."
         ]
       }
     }
@@ -3338,7 +3338,7 @@
       },
       "WITH_SUGGESTION" : {
         "message" : [
-          "<suggestion>."
+          "Please use ALTER VIEW instead."
         ]
       }
     }
@@ -3361,7 +3361,7 @@
       },
       "WITH_SUGGESTION" : {
         "message" : [
-          "<suggestion>."
+          "Please use ALTER VIEW instead."
         ]
       }
     }
