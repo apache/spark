@@ -18,9 +18,7 @@ package org.apache.spark.sql.connect.planner
 
 import java.util.UUID
 
-import org.apache.spark.api.python.PythonRDD
-import org.apache.spark.api.python.SimplePythonFunction
-import org.apache.spark.api.python.StreamingPythonRunner
+import org.apache.spark.api.python.{PythonRDD, SimplePythonFunction, StreamingPythonRunner}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.connect.service.SessionHolder
@@ -89,8 +87,13 @@ object StreamingForeachBatchHelper extends Logging {
 
     val port = SparkConnectService.localPort
     val connectUrl = s"sc://localhost:$port/;user_id=${sessionHolder.userId}"
-    val runner = StreamingPythonRunner(pythonFn, connectUrl)
-    val (dataOut, dataIn) = runner.init(sessionHolder.sessionId)
+    val runner = StreamingPythonRunner(
+      pythonFn,
+      connectUrl,
+      sessionHolder.sessionId,
+      "pyspark.sql.connect.streaming.worker.foreachBatch_worker")
+    val (dataOut, dataIn) =
+      runner.init()
 
     val foreachBatchRunnerFn: FnArgsWithId => Unit = (args: FnArgsWithId) => {
 
@@ -112,8 +115,8 @@ object StreamingForeachBatchHelper extends Logging {
   }
 
   // TODO(SPARK-44433): Improve termination of Processes
-  //   The goal is that when a query is terminated, the python process asociated with foreachBatch
-  //   should be terminated. One way to do that is by registering stremaing query listener:
+  //   The goal is that when a query is terminated, the python process associated with foreachBatch
+  //   should be terminated. One way to do that is by registering streaming query listener:
   //   After pythonForeachBatchWrapper() is invoked by the SparkConnectPlanner.
   //   At that time, we don't have the streaming queries yet.
   //   Planner should call back into this helper with the query id when it starts it immediately

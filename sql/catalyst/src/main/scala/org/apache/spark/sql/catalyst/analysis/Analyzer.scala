@@ -29,7 +29,7 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst._
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.encoders.OuterScopes
-import org.apache.spark.sql.catalyst.expressions.{Expression, FrameLessOffsetWindowFunction, _}
+import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.SubExprUtils._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.expressions.objects._
@@ -212,9 +212,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
         analyzed
       } catch {
         case e: AnalysisException =>
-          val ae = e.copy(plan = Option(analyzed))
-          ae.setStackTrace(e.getStackTrace)
-          throw ae
+          throw new ExtendedAnalysisException(e, analyzed)
       }
     }
   }
@@ -287,6 +285,8 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
       AddMetadataColumns ::
       DeduplicateRelations ::
       ResolveReferences ::
+      // Please do not insert any other rules in between. See the TODO comments in rule
+      // ResolveLateralColumnAliasReference for more details.
       ResolveLateralColumnAliasReference ::
       ResolveExpressionsWithNamePlaceholders ::
       ResolveDeserializer ::
@@ -761,7 +761,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
       case p: Pivot if !p.childrenResolved || !p.aggregates.forall(_.resolved)
         || (p.groupByExprsOpt.isDefined && !p.groupByExprsOpt.get.forall(_.resolved))
         || !p.pivotColumn.resolved || !p.pivotValues.forall(_.resolved) => p
-      case Pivot(groupByExprsOpt, pivotColumn, pivotValues, aggregates, child) =>
+      case p @ Pivot(groupByExprsOpt, pivotColumn, pivotValues, aggregates, child) =>
         if (!RowOrdering.isOrderable(pivotColumn.dataType)) {
           throw QueryCompilationErrors.unorderablePivotColError(pivotColumn)
         }
@@ -825,7 +825,9 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
               Alias(ExtractValue(pivotAtt, Literal(i), resolver), outputName(value, aggregate))()
             }
           }
-          Project(groupByExprsAttr ++ pivotOutputs, secondAgg)
+          val newProject = Project(groupByExprsAttr ++ pivotOutputs, secondAgg)
+          newProject.copyTagsFrom(p)
+          newProject
         } else {
           val pivotAggregates: Seq[NamedExpression] = pivotValues.flatMap { value =>
             def ifExpr(e: Expression) = {
@@ -859,7 +861,9 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
               Alias(filteredAggregate, outputName(value, aggregate))()
             }
           }
-          Aggregate(groupByExprs, groupByExprs ++ pivotAggregates, child)
+          val newAggregate = Aggregate(groupByExprs, groupByExprs ++ pivotAggregates, child)
+          newAggregate.copyTagsFrom(p)
+          newAggregate
         }
     }
 
@@ -2075,6 +2079,13 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
               _.containsPattern(FUNCTION_TABLE_RELATION_ARGUMENT_EXPRESSION), ruleId)  {
               case t: FunctionTableSubqueryArgumentExpression =>
                 val alias = SubqueryAlias.generateSubqueryName(s"_${tableArgs.size}")
+                resolvedFunc match {
+                  case Generate(_: PythonUDTF, _, _, _, _, _) =>
+                  case _ =>
+                    assert(!t.hasRepartitioning,
+                      "Cannot evaluate the table-valued function call because it included the " +
+                        "PARTITION BY clause, but only Python table functions support this clause")
+                }
                 tableArgs.append(SubqueryAlias(alias, t.evaluable))
                 UnresolvedAttribute(Seq(alias, "c"))
             }
@@ -2447,8 +2458,9 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
           InSubquery(values, expr.asInstanceOf[ListQuery])
         case s @ LateralSubquery(sub, _, exprId, _, _) if !sub.resolved =>
           resolveSubQuery(s, outer)(LateralSubquery(_, _, exprId))
-        case a @ FunctionTableSubqueryArgumentExpression(sub, _, exprId) if !sub.resolved =>
-          resolveSubQuery(a, outer)(FunctionTableSubqueryArgumentExpression(_, _, exprId))
+        case a: FunctionTableSubqueryArgumentExpression if !a.plan.resolved =>
+          resolveSubQuery(a, outer)(
+            (plan, outerAttrs) => a.copy(plan = plan, outerAttrs = outerAttrs))
       }
     }
 
@@ -2625,7 +2637,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
               withOrigin(t.origin)(t.copy(hasTried = true))
             } else {
               // This is a nested column, we still have a chance to match grouping expressions with
-              // the the top-levle column. Here we wrap the underlying `Attribute` with
+              // the top-level column. Here we wrap the underlying `Attribute` with
               // `TempResolvedColumn` and try again.
               val childWithTempCol = t.child.transformUp {
                 case a: Attribute => TempResolvedColumn(a, Seq(a.name))
@@ -3124,7 +3136,9 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
 
         // Finally, generate output columns according to the original projectList.
         val finalProjectList = aggregateExprs.map(_.toAttribute)
-        Project(finalProjectList, withWindow)
+        val newProject = Project(finalProjectList, withWindow)
+        newProject.copyTagsFrom(f)
+        newProject
 
       case p: LogicalPlan if !p.childrenResolved => p
 
@@ -3142,7 +3156,9 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
 
         // Finally, generate output columns according to the original projectList.
         val finalProjectList = aggregateExprs.map(_.toAttribute)
-        Project(finalProjectList, withWindow)
+        val newProject = Project(finalProjectList, withWindow)
+        newProject.copyTagsFrom(a)
+        newProject
 
       // We only extract Window Expressions after all expressions of the Project
       // have been resolved, and lateral column aliases are properly handled first.
@@ -3159,7 +3175,9 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
 
         // Finally, generate output columns according to the original projectList.
         val finalProjectList = projectList.map(_.toAttribute)
-        Project(finalProjectList, withWindow)
+        val newProject = Project(finalProjectList, withWindow)
+        newProject.copyTagsFrom(p)
+        newProject
     }
   }
 
@@ -3247,7 +3265,12 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
             val dataType = udf.children(i).dataType
             encOpt.map { enc =>
               val attrs = if (enc.isSerializedAsStructForTopLevel) {
-                DataTypeUtils.toAttributes(dataType.asInstanceOf[StructType])
+                // Value class that has been replaced with its underlying type
+                if (enc.schema.fields.size == 1 && enc.schema.fields.head.dataType == dataType) {
+                  DataTypeUtils.toAttributes(enc.schema.asInstanceOf[StructType])
+                } else {
+                  DataTypeUtils.toAttributes(dataType.asInstanceOf[StructType])
+                }
               } else {
                 // the field name doesn't matter here, so we use
                 // a simple literal to avoid any overhead

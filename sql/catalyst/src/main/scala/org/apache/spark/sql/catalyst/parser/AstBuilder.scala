@@ -40,6 +40,7 @@ import org.apache.spark.sql.catalyst.parser.SqlBaseParser._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.trees.CurrentOrigin
+import org.apache.spark.sql.catalyst.trees.TreePattern.PARAMETER
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, DateTimeUtils, GeneratedColumn, IntervalUtils, ResolveDefaultColumns}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils.{convertSpecialDate, convertSpecialTimestamp, convertSpecialTimestampNTZ, getZoneId, stringToDate, stringToTimestamp, stringToTimestampWithoutTimeZone}
@@ -1564,14 +1565,30 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
     }.getOrElse {
       plan(ctx.query)
     }
-    val partitioning = Option(ctx.tableArgumentPartitioning)
-    if (partitioning.isDefined) {
-      // The PARTITION BY clause is not implemented yet for TABLE arguments to table valued function
-      // calls.
-      operationNotAllowed(
-        "Specifying the PARTITION BY clause for TABLE arguments is not implemented yet", ctx)
+    var withSinglePartition = false
+    var partitionByExpressions = Seq.empty[Expression]
+    var orderByExpressions = Seq.empty[SortOrder]
+    Option(ctx.tableArgumentPartitioning).foreach { p =>
+      if (p.SINGLE != null) {
+        withSinglePartition = true
+      }
+      partitionByExpressions = p.partition.asScala.map(expression).toSeq
+      orderByExpressions = p.sortItem.asScala.map(visitSortItem).toSeq
     }
-    FunctionTableSubqueryArgumentExpression(p)
+    validate(
+      !(withSinglePartition && partitionByExpressions.nonEmpty),
+      message = "WITH SINGLE PARTITION cannot be specified if PARTITION BY is also present",
+      ctx = ctx.tableArgumentPartitioning)
+    validate(
+      !(orderByExpressions.nonEmpty && partitionByExpressions.isEmpty && !withSinglePartition),
+      message = "ORDER BY cannot be specified unless either " +
+        "PARTITION BY or WITH SINGLE PARTITION is also present",
+      ctx = ctx.tableArgumentPartitioning)
+    FunctionTableSubqueryArgumentExpression(
+      plan = p,
+      partitionByExpressions = partitionByExpressions,
+      withSinglePartition = withSinglePartition,
+      orderByExpressions = orderByExpressions)
   }
 
   private def extractFunctionTableNamedArgument(
@@ -3137,9 +3154,12 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
     ctx.asScala.headOption.map(visitLocationSpec)
   }
 
-  private def verifyAndGetExpression(exprCtx: ExpressionContext): String = {
+  private def verifyAndGetExpression(exprCtx: ExpressionContext, place: String): String = {
     // Make sure it can be converted to Catalyst expressions.
-    expression(exprCtx)
+    val expr = expression(exprCtx)
+    if (expr.containsPattern(PARAMETER)) {
+      throw QueryParsingErrors.parameterMarkerNotAllowed(place, expr.origin)
+    }
     // Extract the raw expression text so that we can save the user provided text. We don't
     // use `Expression.sql` to avoid storing incorrect text caused by bugs in any expression's
     // `sql` method. Note: `exprCtx.getText` returns a string without spaces, so we need to
@@ -3154,7 +3174,7 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
    */
   override def visitDefaultExpression(ctx: DefaultExpressionContext): String =
     withOrigin(ctx) {
-      verifyAndGetExpression(ctx.expression())
+      verifyAndGetExpression(ctx.expression(), "DEFAULT")
     }
 
   /**
@@ -3162,7 +3182,7 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
    */
   override def visitGenerationExpression(ctx: GenerationExpressionContext): String =
     withOrigin(ctx) {
-      verifyAndGetExpression(ctx.expression())
+      verifyAndGetExpression(ctx.expression(), "GENERATED")
     }
 
   /**

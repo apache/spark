@@ -234,7 +234,7 @@ Project [regexp_replace(healthy, wealthy, and wise, \w+thy, something, 1) AS reg
 -- !query
 SELECT regexp_replace('healthy, wealthy, and wise', '\\w+thy', 'something', -2)
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.VALUE_OUT_OF_RANGE",
   "sqlState" : "42K09",
@@ -257,7 +257,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 SELECT regexp_replace('healthy, wealthy, and wise', '\\w+thy', 'something', 0)
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.VALUE_OUT_OF_RANGE",
   "sqlState" : "42K09",
