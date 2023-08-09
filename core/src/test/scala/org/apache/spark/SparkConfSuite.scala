@@ -498,6 +498,20 @@ class SparkConfSuite extends SparkFunSuite with LocalSparkContext with ResetSyst
         }
     }
   }
+
+  test("SPARK-44650: spark.executor.defaultJavaOptions Check illegal java options") {
+    val conf = new SparkConf()
+    conf.validateSettings()
+    conf.set(EXECUTOR_JAVA_OPTIONS.key, "-Dspark.foo=bar")
+    intercept[Exception] {
+      conf.validateSettings()
+    }
+    conf.remove(EXECUTOR_JAVA_OPTIONS.key)
+    conf.set("spark.executor.defaultJavaOptions", "-Dspark.foo=bar")
+    intercept[Exception] {
+      conf.validateSettings()
+    }
+  }
 }
 
 class Class1 {}

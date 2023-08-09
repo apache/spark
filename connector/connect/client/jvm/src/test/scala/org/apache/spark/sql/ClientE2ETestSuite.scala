@@ -43,6 +43,12 @@ import org.apache.spark.sql.types._
 
 class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper with PrivateMethodTester {
 
+  test("throw ParseException") {
+    intercept[ParseException] {
+      spark.sql("selet 1").collect()
+    }
+  }
+
   test("spark deep recursion") {
     var df = spark.range(1)
     for (a <- 1 to 500) {
@@ -88,7 +94,7 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper with PrivateM
     assume(IntegrationTestUtils.isSparkHiveJarAvailable)
     withTable("test_martin") {
       // Fails, because table does not exist.
-      assertThrows[SparkException] {
+      assertThrows[AnalysisException] {
         spark.sql("select * from test_martin").collect()
       }
       // Execute eager, DML
@@ -177,7 +183,7 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper with PrivateM
             StructField("job", StringType) :: Nil))
       .csv(testDataPath.toString)
     // Failed because the path cannot be provided both via option and load method (csv).
-    assertThrows[SparkException] {
+    assertThrows[AnalysisException] {
       df.collect()
     }
   }
@@ -381,7 +387,7 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper with PrivateM
     val df = spark.range(10)
     val outputFolderPath = Files.createTempDirectory("output").toAbsolutePath
     // Failed because the path cannot be provided both via option and save method.
-    assertThrows[SparkException] {
+    assertThrows[AnalysisException] {
       df.write.option("path", outputFolderPath.toString).save(outputFolderPath.toString)
     }
   }
@@ -755,7 +761,7 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper with PrivateM
 
   private def checkSameResult[E](expected: scala.collection.Seq[E], dataset: Dataset[E]): Unit = {
     dataset.withResult { result =>
-      assert(expected === result.iterator.asScala.toBuffer)
+      assert(expected === result.iterator.toBuffer)
     }
   }
 
@@ -1176,6 +1182,26 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper with PrivateM
     val ds2 = Seq(Some((1, 2)), Some((2, 3)), None).toDS().as("b")
     val joined = ds1.joinWith(ds2, $"a.value._1" === $"b.value._2", "inner")
     checkSameResult(Seq((Some((2, 3)), Some((1, 2)))), joined)
+  }
+
+  test("dropDuplicatesWithinWatermark not supported in batch DataFrame") {
+    def testAndVerify(df: Dataset[_]): Unit = {
+      val exc = intercept[AnalysisException] {
+        df.write.format("noop").mode(SaveMode.Append).save()
+      }
+
+      assert(exc.getMessage.contains("dropDuplicatesWithinWatermark is not supported"))
+      assert(exc.getMessage.contains("batch DataFrames/DataSets"))
+    }
+
+    val result = spark.range(10).dropDuplicatesWithinWatermark()
+    testAndVerify(result)
+
+    val result2 = spark
+      .range(10)
+      .withColumn("newcol", col("id"))
+      .dropDuplicatesWithinWatermark("newcol")
+    testAndVerify(result2)
   }
 }
 

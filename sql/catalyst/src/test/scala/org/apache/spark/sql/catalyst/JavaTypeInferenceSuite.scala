@@ -66,6 +66,7 @@ class LeafBean {
   @BeanProperty var period: java.time.Period = _
   @BeanProperty var enum: java.time.Month = _
   @BeanProperty val readOnlyString = "read-only"
+  @BeanProperty var genericNestedBean: JavaBeanWithGenerics[String, String] = _
 
   var nonNullString: String = "value"
   @javax.annotation.Nonnull
@@ -184,6 +185,9 @@ class JavaTypeInferenceSuite extends SparkFunSuite {
       encoderField("date", STRICT_DATE_ENCODER),
       encoderField("duration", DayTimeIntervalEncoder),
       encoderField("enum", JavaEnumEncoder(classTag[java.time.Month])),
+      encoderField("genericNestedBean", JavaBeanEncoder(
+        ClassTag(classOf[JavaBeanWithGenerics[String, String]]),
+        Seq(encoderField("attribute", StringEncoder), encoderField("value", StringEncoder)))),
       encoderField("instant", STRICT_INSTANT_ENCODER),
       encoderField("localDate", STRICT_LOCAL_DATE_ENCODER),
       encoderField("localDateTime", LocalDateTimeEncoder),

@@ -22,11 +22,11 @@ from pyspark.testing.pandasutils import PandasOnSparkTestUtils
 
 
 class SeriesParityComputeTests(SeriesComputeMixin, PandasOnSparkTestUtils, ReusedConnectTestCase):
-    @unittest.skip(
-        "TODO(SPARK-43611): Fix unexpected `AnalysisException` from Spark Connect client."
-    )
-    def test_unstack(self):
-        super().test_unstack()
+    pass
+
+    @unittest.skip("TODO(SPARK-43620): Support `Column` for SparkConnectColumn.__getitem__.")
+    def test_factorize(self):
+        super().test_factorize()
 
 
 if __name__ == "__main__":

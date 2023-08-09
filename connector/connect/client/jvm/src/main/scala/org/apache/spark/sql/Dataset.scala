@@ -128,10 +128,12 @@ import org.apache.spark.util.SparkClassUtils
 class Dataset[T] private[sql] (
     val sparkSession: SparkSession,
     @DeveloperApi val plan: proto.Plan,
-    val encoder: AgnosticEncoder[T])
+    val encoder: Encoder[T])
     extends Serializable {
   // Make sure we don't forget to set plan id.
   assert(plan.getRoot.getCommon.hasPlanId)
+
+  private[sql] val agnosticEncoder: AgnosticEncoder[T] = encoderFor(encoder)
 
   override def toString: String = {
     try {
@@ -828,7 +830,7 @@ class Dataset[T] private[sql] (
   }
 
   private def buildSort(global: Boolean, sortExprs: Seq[Column]): Dataset[T] = {
-    sparkSession.newDataset(encoder) { builder =>
+    sparkSession.newDataset(agnosticEncoder) { builder =>
       builder.getSortBuilder
         .setInput(plan.getRoot)
         .setIsGlobal(global)
@@ -878,8 +880,8 @@ class Dataset[T] private[sql] (
       ProductEncoder[(T, U)](
         ClassTag(SparkClassUtils.getContextOrSparkClassLoader.loadClass(s"scala.Tuple2")),
         Seq(
-          EncoderField(s"_1", this.encoder, leftNullable, Metadata.empty),
-          EncoderField(s"_2", other.encoder, rightNullable, Metadata.empty)))
+          EncoderField(s"_1", this.agnosticEncoder, leftNullable, Metadata.empty),
+          EncoderField(s"_2", other.agnosticEncoder, rightNullable, Metadata.empty)))
 
     sparkSession.newDataset(tupleEncoder) { builder =>
       val joinBuilder = builder.getJoinBuilder
@@ -889,8 +891,8 @@ class Dataset[T] private[sql] (
         .setJoinType(joinTypeValue)
         .setJoinCondition(condition.expr)
         .setJoinDataType(joinBuilder.getJoinDataTypeBuilder
-          .setIsLeftStruct(this.encoder.isStruct)
-          .setIsRightStruct(other.encoder.isStruct))
+          .setIsLeftStruct(this.agnosticEncoder.isStruct)
+          .setIsRightStruct(other.agnosticEncoder.isStruct))
     }
   }
 
@@ -1010,13 +1012,13 @@ class Dataset[T] private[sql] (
    * @since 3.4.0
    */
   @scala.annotation.varargs
-  def hint(name: String, parameters: Any*): Dataset[T] = sparkSession.newDataset(encoder) {
-    builder =>
+  def hint(name: String, parameters: Any*): Dataset[T] =
+    sparkSession.newDataset(agnosticEncoder) { builder =>
       builder.getHintBuilder
         .setInput(plan.getRoot)
         .setName(name)
         .addAllParameters(parameters.map(p => functions.lit(p).expr).asJava)
-  }
+    }
 
   private def getPlanId: Option[Long] =
     if (plan.getRoot.hasCommon && plan.getRoot.getCommon.hasPlanId) {
@@ -1056,7 +1058,7 @@ class Dataset[T] private[sql] (
    * @group typedrel
    * @since 3.4.0
    */
-  def as(alias: String): Dataset[T] = sparkSession.newDataset(encoder) { builder =>
+  def as(alias: String): Dataset[T] = sparkSession.newDataset(agnosticEncoder) { builder =>
     builder.getSubqueryAliasBuilder
       .setInput(plan.getRoot)
       .setAlias(alias)
@@ -1238,8 +1240,9 @@ class Dataset[T] private[sql] (
    * @group typedrel
    * @since 3.4.0
    */
-  def filter(condition: Column): Dataset[T] = sparkSession.newDataset(encoder) { builder =>
-    builder.getFilterBuilder.setInput(plan.getRoot).setCondition(condition.expr)
+  def filter(condition: Column): Dataset[T] = sparkSession.newDataset(agnosticEncoder) {
+    builder =>
+      builder.getFilterBuilder.setInput(plan.getRoot).setCondition(condition.expr)
   }
 
   /**
@@ -1355,12 +1358,12 @@ class Dataset[T] private[sql] (
   def reduce(func: (T, T) => T): T = {
     val udf = ScalarUserDefinedFunction(
       function = func,
-      inputEncoders = encoder :: encoder :: Nil,
-      outputEncoder = encoder)
+      inputEncoders = agnosticEncoder :: agnosticEncoder :: Nil,
+      outputEncoder = agnosticEncoder)
     val reduceExpr = Column.fn("reduce", udf.apply(col("*"), col("*"))).expr
 
     val result = sparkSession
-      .newDataset(encoder) { builder =>
+      .newDataset(agnosticEncoder) { builder =>
         builder.getAggregateBuilder
           .setInput(plan.getRoot)
           .addAggregateExpressions(reduceExpr)
@@ -1718,7 +1721,7 @@ class Dataset[T] private[sql] (
    * @group typedrel
    * @since 3.4.0
    */
-  def limit(n: Int): Dataset[T] = sparkSession.newDataset(encoder) { builder =>
+  def limit(n: Int): Dataset[T] = sparkSession.newDataset(agnosticEncoder) { builder =>
     builder.getLimitBuilder
       .setInput(plan.getRoot)
       .setLimit(n)
@@ -1730,7 +1733,7 @@ class Dataset[T] private[sql] (
    * @group typedrel
    * @since 3.4.0
    */
-  def offset(n: Int): Dataset[T] = sparkSession.newDataset(encoder) { builder =>
+  def offset(n: Int): Dataset[T] = sparkSession.newDataset(agnosticEncoder) { builder =>
     builder.getOffsetBuilder
       .setInput(plan.getRoot)
       .setOffset(n)
@@ -1739,7 +1742,7 @@ class Dataset[T] private[sql] (
   private def buildSetOp(right: Dataset[T], setOpType: proto.SetOperation.SetOpType)(
       f: proto.SetOperation.Builder => Unit): Dataset[T] = {
     checkSameSparkSession(right)
-    sparkSession.newDataset(encoder) { builder =>
+    sparkSession.newDataset(agnosticEncoder) { builder =>
       f(
         builder.getSetOpBuilder
           .setSetOpType(setOpType)
@@ -2012,7 +2015,7 @@ class Dataset[T] private[sql] (
    * @since 3.4.0
    */
   def sample(withReplacement: Boolean, fraction: Double, seed: Long): Dataset[T] = {
-    sparkSession.newDataset(encoder) { builder =>
+    sparkSession.newDataset(agnosticEncoder) { builder =>
       builder.getSampleBuilder
         .setInput(plan.getRoot)
         .setWithReplacement(withReplacement)
@@ -2080,7 +2083,7 @@ class Dataset[T] private[sql] (
     normalizedCumWeights
       .sliding(2)
       .map { case Array(low, high) =>
-        sparkSession.newDataset(encoder) { builder =>
+        sparkSession.newDataset(agnosticEncoder) { builder =>
           builder.getSampleBuilder
             .setInput(sortedInput)
             .setWithReplacement(false)
@@ -2399,6 +2402,20 @@ class Dataset[T] private[sql] (
         .addAllColumnNames(cols.asJava)
   }
 
+  private def buildDropDuplicates(
+      columns: Option[Seq[String]],
+      withinWaterMark: Boolean): Dataset[T] = sparkSession.newDataset(agnosticEncoder) {
+    builder =>
+      val dropBuilder = builder.getDeduplicateBuilder
+        .setInput(plan.getRoot)
+        .setWithinWatermark(withinWaterMark)
+      if (columns.isDefined) {
+        dropBuilder.addAllColumnNames(columns.get.asJava)
+      } else {
+        dropBuilder.setAllColumnsAsKeys(true)
+      }
+  }
+
   /**
    * Returns a new Dataset that contains only the unique rows from this Dataset. This is an alias
    * for `distinct`.
@@ -2406,11 +2423,7 @@ class Dataset[T] private[sql] (
    * @group typedrel
    * @since 3.4.0
    */
-  def dropDuplicates(): Dataset[T] = sparkSession.newDataset(encoder) { builder =>
-    builder.getDeduplicateBuilder
-      .setInput(plan.getRoot)
-      .setAllColumnsAsKeys(true)
-  }
+  def dropDuplicates(): Dataset[T] = buildDropDuplicates(None, withinWaterMark = false)
 
   /**
    * (Scala-specific) Returns a new Dataset with duplicate rows removed, considering only the
@@ -2419,11 +2432,8 @@ class Dataset[T] private[sql] (
    * @group typedrel
    * @since 3.4.0
    */
-  def dropDuplicates(colNames: Seq[String]): Dataset[T] = sparkSession.newDataset(encoder) {
-    builder =>
-      builder.getDeduplicateBuilder
-        .setInput(plan.getRoot)
-        .addAllColumnNames(colNames.asJava)
+  def dropDuplicates(colNames: Seq[String]): Dataset[T] = {
+    buildDropDuplicates(Option(colNames), withinWaterMark = false)
   }
 
   /**
@@ -2443,16 +2453,14 @@ class Dataset[T] private[sql] (
    */
   @scala.annotation.varargs
   def dropDuplicates(col1: String, cols: String*): Dataset[T] = {
-    val colNames: Seq[String] = col1 +: cols
-    dropDuplicates(colNames)
+    dropDuplicates(col1 +: cols)
   }
 
-  def dropDuplicatesWithinWatermark(): Dataset[T] = {
-    dropDuplicatesWithinWatermark(this.columns)
-  }
+  def dropDuplicatesWithinWatermark(): Dataset[T] =
+    buildDropDuplicates(None, withinWaterMark = true)
 
   def dropDuplicatesWithinWatermark(colNames: Seq[String]): Dataset[T] = {
-    throw new UnsupportedOperationException("dropDuplicatesWithinWatermark is not implemented.")
+    buildDropDuplicates(Option(colNames), withinWaterMark = true)
   }
 
   def dropDuplicatesWithinWatermark(colNames: Array[String]): Dataset[T] = {
@@ -2461,8 +2469,7 @@ class Dataset[T] private[sql] (
 
   @scala.annotation.varargs
   def dropDuplicatesWithinWatermark(col1: String, cols: String*): Dataset[T] = {
-    val colNames: Seq[String] = col1 +: cols
-    dropDuplicatesWithinWatermark(colNames)
+    dropDuplicatesWithinWatermark(col1 +: cols)
   }
 
   /**
@@ -2627,9 +2634,9 @@ class Dataset[T] private[sql] (
   def filter(func: T => Boolean): Dataset[T] = {
     val udf = ScalarUserDefinedFunction(
       function = func,
-      inputEncoders = encoder :: Nil,
+      inputEncoders = agnosticEncoder :: Nil,
       outputEncoder = PrimitiveBooleanEncoder)
-    sparkSession.newDataset[T](encoder) { builder =>
+    sparkSession.newDataset[T](agnosticEncoder) { builder =>
       builder.getFilterBuilder
         .setInput(plan.getRoot)
         .setCondition(udf.apply(col("*")).expr)
@@ -2680,7 +2687,7 @@ class Dataset[T] private[sql] (
     val outputEncoder = encoderFor[U]
     val udf = ScalarUserDefinedFunction(
       function = func,
-      inputEncoders = encoder :: Nil,
+      inputEncoders = agnosticEncoder :: Nil,
       outputEncoder = outputEncoder)
     sparkSession.newDataset(outputEncoder) { builder =>
       builder.getMapPartitionsBuilder
@@ -2782,7 +2789,7 @@ class Dataset[T] private[sql] (
    * @since 3.4.0
    */
   def tail(n: Int): Array[T] = {
-    val lastN = sparkSession.newDataset(encoder) { builder =>
+    val lastN = sparkSession.newDataset(agnosticEncoder) { builder =>
       builder.getTailBuilder
         .setInput(plan.getRoot)
         .setLimit(n)
@@ -2832,7 +2839,7 @@ class Dataset[T] private[sql] (
   /**
    * Returns an iterator that contains all rows in this Dataset.
    *
-   * The returned iterator implements [[AutoCloseable]]. For memory management it is better to
+   * The returned iterator implements [[AutoCloseable]]. For resource management it is better to
    * close it once you are done. If you don't close it, it and the underlying data will be cleaned
    * up once the iterator is garbage collected.
    *
@@ -2840,7 +2847,7 @@ class Dataset[T] private[sql] (
    * @since 3.4.0
    */
   def toLocalIterator(): java.util.Iterator[T] = {
-    collectResult().destructiveIterator
+    collectResult().destructiveIterator.asJava
   }
 
   /**
@@ -2853,7 +2860,7 @@ class Dataset[T] private[sql] (
   }
 
   private def buildRepartition(numPartitions: Int, shuffle: Boolean): Dataset[T] = {
-    sparkSession.newDataset(encoder) { builder =>
+    sparkSession.newDataset(agnosticEncoder) { builder =>
       builder.getRepartitionBuilder
         .setInput(plan.getRoot)
         .setNumPartitions(numPartitions)
@@ -2863,11 +2870,12 @@ class Dataset[T] private[sql] (
 
   private def buildRepartitionByExpression(
       numPartitions: Option[Int],
-      partitionExprs: Seq[Column]): Dataset[T] = sparkSession.newDataset(encoder) { builder =>
-    val repartitionBuilder = builder.getRepartitionByExpressionBuilder
-      .setInput(plan.getRoot)
-      .addAllPartitionExprs(partitionExprs.map(_.expr).asJava)
-    numPartitions.foreach(repartitionBuilder.setNumPartitions)
+      partitionExprs: Seq[Column]): Dataset[T] = sparkSession.newDataset(agnosticEncoder) {
+    builder =>
+      val repartitionBuilder = builder.getRepartitionByExpressionBuilder
+        .setInput(plan.getRoot)
+        .addAllPartitionExprs(partitionExprs.map(_.expr).asJava)
+      numPartitions.foreach(repartitionBuilder.setNumPartitions)
   }
 
   /**
@@ -3180,7 +3188,7 @@ class Dataset[T] private[sql] (
    * @since 3.5.0
    */
   def withWatermark(eventTime: String, delayThreshold: String): Dataset[T] = {
-    sparkSession.newDataset(encoder) { builder =>
+    sparkSession.newDataset(agnosticEncoder) { builder =>
       builder.getWithWatermarkBuilder
         .setInput(plan.getRoot)
         .setEventTime(eventTime)
@@ -3248,7 +3256,7 @@ class Dataset[T] private[sql] (
     sparkSession.analyze(plan, proto.AnalyzePlanRequest.AnalyzeCase.SCHEMA)
   }
 
-  def collectResult(): SparkResult[T] = sparkSession.execute(plan, encoder)
+  def collectResult(): SparkResult[T] = sparkSession.execute(plan, agnosticEncoder)
 
   private[sql] def withResult[E](f: SparkResult[T] => E): E = {
     val result = collectResult()

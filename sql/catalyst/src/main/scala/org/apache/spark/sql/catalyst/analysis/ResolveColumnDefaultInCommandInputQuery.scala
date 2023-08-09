@@ -18,29 +18,31 @@
 package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.sql.catalyst.SQLConfHelper
-import org.apache.spark.sql.catalyst.expressions.Alias
+import org.apache.spark.sql.catalyst.expressions.{Alias, VariableReference}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.trees.TreePattern.UNRESOLVED_ATTRIBUTE
 import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns.{containsExplicitDefaultColumn, getDefaultValueExprOrNullLit, isExplicitDefaultColumn}
+import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StructField
 
 /**
  * A virtual rule to resolve column "DEFAULT" in [[Project]] and [[UnresolvedInlineTable]] under
- * [[InsertIntoStatement]]. It's only used by the real rule `ResolveReferences`.
+ * [[InsertIntoStatement]] and [[SetVariable]]. It's only used by the real rule `ResolveReferences`.
  *
  * This virtual rule is triggered if:
  * 1. The column "DEFAULT" can't be resolved normally by `ResolveReferences`. This is guaranteed as
  *    `ResolveReferences` resolves the query plan bottom up. This means that when we reach here to
- *    resolve [[InsertIntoStatement]], its child plans have already been resolved by
- *    `ResolveReferences`.
- * 2. The plan nodes between [[Project]] and [[InsertIntoStatement]] are
- *    all unary nodes that inherit the output columns from its child.
- * 3. The plan nodes between [[UnresolvedInlineTable]] and [[InsertIntoStatement]] are either
+ *    resolve the command, its child plans have already been resolved by `ResolveReferences`.
+ * 2. The plan nodes between [[Project]] and command are all unary nodes that inherit the
+ *    output columns from its child.
+ * 3. The plan nodes between [[UnresolvedInlineTable]] and command are either
  *    [[Project]], or [[Aggregate]], or [[SubqueryAlias]].
  */
-case object ResolveColumnDefaultInInsert extends SQLConfHelper with ColumnResolutionHelper {
+class ResolveColumnDefaultInCommandInputQuery(val catalogManager: CatalogManager)
+  extends SQLConfHelper with ColumnResolutionHelper {
+
   // TODO (SPARK-43752): support v2 write commands as well.
   def apply(plan: LogicalPlan): LogicalPlan = plan match {
     case i: InsertIntoStatement if conf.enableDefaultColumns && i.table.resolved &&
@@ -75,6 +77,18 @@ case object ResolveColumnDefaultInInsert extends SQLConfHelper with ColumnResolu
           i
         }
       }
+
+    case s: SetVariable if s.targetVariables.forall(_.isInstanceOf[VariableReference]) &&
+        s.sourceQuery.containsPattern(UNRESOLVED_ATTRIBUTE) =>
+      val expectedQuerySchema = s.targetVariables.map {
+        case v: VariableReference =>
+          StructField(v.identifier.name, v.dataType, v.nullable)
+            .withCurrentDefaultValue(v.varDef.defaultValueSQL)
+      }
+      // We match the query schema with the SET variable schema by position. If the n-th
+      // column of the query is the DEFAULT column, we should get the default value expression
+      // defined for the n-th variable of the SET.
+      s.withNewChildren(Seq(resolveColumnDefault(s.sourceQuery, expectedQuerySchema)))
 
     case _ => plan
   }
