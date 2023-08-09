@@ -19,7 +19,8 @@ package org.apache.spark.sql.execution.python
 
 import org.apache.spark.api.python.PythonEvalType
 import org.apache.spark.sql.{AnalysisException, IntegratedUDFTestUtils, QueryTest, Row}
-import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan, Repartition, RepartitionByExpression, Sort, SubqueryAlias}
+import org.apache.spark.sql.catalyst.expressions.{Add, Alias, FunctionTableSubqueryArgumentExpression, Literal}
+import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan, OneRowRelation, Project, Repartition, RepartitionByExpression, Sort, SubqueryAlias}
 import org.apache.spark.sql.functions.lit
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.StructType
@@ -112,7 +113,9 @@ class PythonUDTFSuite extends QueryTest with SharedSparkSession {
   test("SPARK-44503: Specify PARTITION BY and ORDER BY for TABLE arguments") {
     // Positive tests
     assume(shouldTestPythonUDFs)
-    def failure(plan: LogicalPlan): Unit = fail(s"Unexpected plan: $plan")
+    def failure(plan: LogicalPlan): Unit = {
+      fail(s"Unexpected plan: $plan")
+    }
     sql(
       """
         |SELECT * FROM testUDTF(
@@ -120,8 +123,12 @@ class PythonUDTFSuite extends QueryTest with SharedSparkSession {
         |  PARTITION BY X)
         |""".stripMargin).queryExecution.analyzed
       .collectFirst { case r: RepartitionByExpression => r }.get match {
-      case RepartitionByExpression(_, SubqueryAlias(_, _: LocalRelation), _, _) =>
-      case other => failure(other)
+      case RepartitionByExpression(
+        _, Project(
+          _, SubqueryAlias(
+            _, _: LocalRelation)), _, _) =>
+      case other =>
+        failure(other)
     }
     sql(
       """
@@ -130,8 +137,11 @@ class PythonUDTFSuite extends QueryTest with SharedSparkSession {
         |  WITH SINGLE PARTITION)
         |""".stripMargin).queryExecution.analyzed
       .collectFirst { case r: Repartition => r }.get match {
-      case Repartition(1, true, SubqueryAlias(_, _: LocalRelation)) =>
-      case other => failure(other)
+      case Repartition(
+        1, true, SubqueryAlias(
+          _, _: LocalRelation)) =>
+      case other =>
+        failure(other)
     }
     sql(
       """
@@ -140,8 +150,13 @@ class PythonUDTFSuite extends QueryTest with SharedSparkSession {
         |  PARTITION BY SUBSTR(X, 2) ORDER BY (X, Y))
         |""".stripMargin).queryExecution.analyzed
       .collectFirst { case r: Sort => r }.get match {
-      case Sort(_, false, RepartitionByExpression(_, SubqueryAlias(_, _: LocalRelation), _, _)) =>
-      case other => failure(other)
+      case Sort(
+        _, false, RepartitionByExpression(
+          _, Project(
+            _, SubqueryAlias(
+              _, _: LocalRelation)), _, _)) =>
+      case other =>
+        failure(other)
     }
     sql(
       """
@@ -150,8 +165,12 @@ class PythonUDTFSuite extends QueryTest with SharedSparkSession {
         |  WITH SINGLE PARTITION ORDER BY (X, Y))
         |""".stripMargin).queryExecution.analyzed
       .collectFirst { case r: Sort => r }.get match {
-      case Sort(_, false, Repartition(1, true, SubqueryAlias(_, _: LocalRelation))) =>
-      case other => failure(other)
+      case Sort(
+        _, false, Repartition(
+          1, true, SubqueryAlias(
+            _, _: LocalRelation))) =>
+      case other =>
+        failure(other)
     }
     // Negative tests
     withTable("t") {
@@ -171,5 +190,93 @@ class PythonUDTFSuite extends QueryTest with SharedSparkSession {
           start = 14,
           stop = 30))
     }
+  }
+
+  test("SPARK-44503: Compute partition child indexes for various UDTF argument lists") {
+    // Each of the following tests calls the PythonUDTF.partitionChildIndexes with a list of
+    // expressions and then checks the PARTITION BY child expression indexes that come out.
+    val projectList = Seq(
+      Alias(Literal(42), "a")(),
+      Alias(Literal(43), "b")())
+    val projectTwoValues = Project(
+      projectList = projectList,
+      child = OneRowRelation())
+    // There are no UDTF TABLE arguments, so there are no PARTITION BY child expression indexes.
+    val partitionChildIndexes = FunctionTableSubqueryArgumentExpression.partitionChildIndexes(_)
+    assert(partitionChildIndexes(Seq(
+      Literal(41))) ==
+      Seq.empty[Int])
+    assert(partitionChildIndexes(Seq(
+      Literal(41),
+      Literal("abc"))) ==
+      Seq.empty[Int])
+    // The UDTF TABLE argument has no PARTITION BY expressions, so there are no PARTITION BY child
+    // expression indexes.
+    assert(partitionChildIndexes(Seq(
+      FunctionTableSubqueryArgumentExpression(
+        plan = projectTwoValues))) ==
+      Seq.empty[Int])
+    // The UDTF TABLE argument has two PARTITION BY expressions which are equal to the output
+    // attributes from the provided relation, in order. Therefore the PARTITION BY child expression
+    // indexes are 0 and 1.
+    assert(partitionChildIndexes(Seq(
+      FunctionTableSubqueryArgumentExpression(
+        plan = projectTwoValues,
+        partitionByExpressions = projectTwoValues.output))) ==
+      Seq(0, 1))
+    // The UDTF TABLE argument has one PARTITION BY expression which is equal to the first output
+    // attribute from the provided relation. Therefore the PARTITION BY child expression index is 0.
+    assert(partitionChildIndexes(Seq(
+      FunctionTableSubqueryArgumentExpression(
+        plan = projectTwoValues,
+        partitionByExpressions = Seq(projectList.head.toAttribute)))) ==
+      Seq(0))
+    // The UDTF TABLE argument has one PARTITION BY expression which is equal to the second output
+    // attribute from the provided relation. Therefore the PARTITION BY child expression index is 1.
+    assert(partitionChildIndexes(Seq(
+      FunctionTableSubqueryArgumentExpression(
+        plan = projectTwoValues,
+        partitionByExpressions = Seq(projectList.last.toAttribute)))) ==
+      Seq(1))
+    // The UDTF has one scalar argument, then one TABLE argument, then another scalar argument. The
+    // TABLE argument has two PARTITION BY expressions which are equal to the output attributes from
+    // the provided relation, in order. Therefore the PARTITION BY child expression indexes are 1
+    // and 2, because they begin at an offset of 1 from the zero-based start of the list of values
+    // provided to the UDTF 'eval' method.
+    assert(partitionChildIndexes(Seq(
+      Literal(41),
+      FunctionTableSubqueryArgumentExpression(
+        plan = projectTwoValues,
+        partitionByExpressions = projectTwoValues.output),
+      Literal("abc"))) ==
+      Seq(1, 2))
+    // Same as above, but the PARTITION BY expressions are new expressions which must be projected
+    // after all the attributes from the relation provided to the UDTF TABLE argument. Therefore the
+    // PARTITION BY child indexes are 3 and 4 because they begin at an offset of 3 from the
+    // zero-based start of the list of values provided to the UDTF 'eval' method.
+    assert(partitionChildIndexes(Seq(
+      Literal(41),
+      FunctionTableSubqueryArgumentExpression(
+        plan = projectTwoValues,
+        partitionByExpressions = Seq(Literal(42), Literal(43))),
+      Literal("abc"))) ==
+      Seq(3, 4))
+    // Same as above, but the PARTITION BY list comprises just one addition expression.
+    assert(partitionChildIndexes(Seq(
+      Literal(41),
+      FunctionTableSubqueryArgumentExpression(
+        plan = projectTwoValues,
+        partitionByExpressions = Seq(Add(projectList.head.toAttribute, Literal(1)))),
+      Literal("abc"))) ==
+      Seq(3))
+    // Same as above, but the PARTITION BY list comprises one literal value and one addition
+    // expression.
+    assert(partitionChildIndexes(Seq(
+      Literal(41),
+      FunctionTableSubqueryArgumentExpression(
+        plan = projectTwoValues,
+        partitionByExpressions = Seq(Literal(42), Add(projectList.head.toAttribute, Literal(1)))),
+      Literal("abc"))) ==
+      Seq(3, 4))
   }
 }
