@@ -220,11 +220,11 @@ object DeduplicateRelations extends Rule[LogicalPlan] {
           if (attrMap.isEmpty) {
             planWithNewChildren
           } else {
-            def rewriteAttrsMatchWithSubPlan[T <: Expression](
-                attrs: Seq[T],
+            def rewriteAttrs[T <: Expression](
+                exprs: Seq[T],
                 attrMap: Map[Attribute, Attribute]): Seq[T] = {
-              attrs.map(attr => {
-                attr.transformWithPruning(_.containsPattern(ATTRIBUTE_REFERENCE)) {
+              exprs.map(expr => {
+                expr.transformWithPruning(_.containsPattern(ATTRIBUTE_REFERENCE)) {
                   case a: AttributeReference =>
                     attrMap.getOrElse(a, a)
                 }.asInstanceOf[T]
@@ -238,12 +238,12 @@ object DeduplicateRelations extends Rule[LogicalPlan] {
                 // attributes of CoGroup manually.
                 val leftAttrMap = attrMap.filter(a => c.left.output.contains(a._2))
                 val rightAttrMap = attrMap.filter(a => c.right.output.contains(a._2))
-                val newLeftAttr = c.leftAttr.map(attr => attrMap.getOrElse(attr, attr))
-                val newRightAttr = rewriteAttrsMatchWithSubPlan(c.rightAttr, rightAttrMap)
-                val newLeftGroup = rewriteAttrsMatchWithSubPlan(c.leftGroup, leftAttrMap)
-                val newRightGroup = rewriteAttrsMatchWithSubPlan(c.rightGroup, rightAttrMap)
-                val newLeftOrder = rewriteAttrsMatchWithSubPlan(c.leftOrder, leftAttrMap)
-                val newRightOrder = rewriteAttrsMatchWithSubPlan(c.rightOrder, rightAttrMap)
+                val newLeftAttr = rewriteAttrs(c.leftAttr, leftAttrMap)
+                val newRightAttr = rewriteAttrs(c.rightAttr, rightAttrMap)
+                val newLeftGroup = rewriteAttrs(c.leftGroup, leftAttrMap)
+                val newRightGroup = rewriteAttrs(c.rightGroup, rightAttrMap)
+                val newLeftOrder = rewriteAttrs(c.leftOrder, leftAttrMap)
+                val newRightOrder = rewriteAttrs(c.rightOrder, rightAttrMap)
                 val newKeyDes = c.keyDeserializer.asInstanceOf[UnresolvedDeserializer]
                   .copy(inputAttributes = newLeftGroup)
                 val newLeftDes = c.leftDeserializer.asInstanceOf[UnresolvedDeserializer]
