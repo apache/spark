@@ -137,7 +137,7 @@ select * from t left join t2 on (t.c in (select e from t_empty)) is null
 struct<c:int,d:int>
 -- !query output
 1	NULL
-NULL	2
+NULL	NULL
 
 
 -- !query
@@ -146,7 +146,7 @@ select * from t left join t2 on (t.c not in (select e from t_empty)) is null
 struct<c:int,d:int>
 -- !query output
 1	NULL
-NULL	2
+NULL	NULL
 
 
 -- !query
