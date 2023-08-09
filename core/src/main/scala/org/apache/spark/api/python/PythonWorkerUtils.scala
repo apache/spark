@@ -116,9 +116,6 @@ private[spark] object PythonWorkerUtils extends Logging {
         dataOut.writeLong(id)
       }
       dataOut.flush()
-      logTrace("waiting for python to read decrypted broadcast data from server")
-      server.waitTillBroadcastDataSent()
-      logTrace("done sending decrypted data to python")
     } else {
       sendBidsToRemove()
       for (broadcast <- broadcastVars) {
