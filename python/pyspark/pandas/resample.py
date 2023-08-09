@@ -46,7 +46,8 @@ from pyspark.sql import Column, functions as F
 from pyspark.sql.types import (
     NumericType,
     StructField,
-    TimestampType,
+    TimestampNTZType,
+    DataType,
 )
 
 from pyspark import pandas as ps  # For running doctests and reference resolution in PyCharm.
@@ -131,6 +132,13 @@ class Resampler(Generic[FrameLike], metaclass=ABCMeta):
             return self._resamplekey.spark.column
 
     @property
+    def _resamplekey_type(self) -> DataType:
+        if self._resamplekey is None:
+            return self._psdf.index.spark.data_type
+        else:
+            return self._resamplekey.spark.data_type
+
+    @property
     def _agg_columns_scols(self) -> List[Column]:
         return [s.spark.column for s in self._agg_columns]
 
@@ -154,7 +162,8 @@ class Resampler(Generic[FrameLike], metaclass=ABCMeta):
             col = col._jc if isinstance(col, Column) else F.lit(col)._jc
             return sql_utils.makeInterval(unit, col)
 
-    def _bin_time_stamp(self, origin: pd.Timestamp, ts_scol: Column) -> Column:
+    def _bin_timestamp(self, origin: pd.Timestamp, ts_scol: Column) -> Column:
+        key_type = self._resamplekey_type
         origin_scol = F.lit(origin)
         (rule_code, n) = (self._offset.rule_code, getattr(self._offset, "n"))
         left_closed, right_closed = (self._closed == "left", self._closed == "right")
@@ -188,7 +197,7 @@ class Resampler(Generic[FrameLike], metaclass=ABCMeta):
                     F.year(ts_scol) - (mod - n)
                 )
 
-            return F.to_timestamp(
+            ret = F.to_timestamp(
                 F.make_date(
                     F.when(edge_cond, edge_label).otherwise(non_edge_label), F.lit(12), F.lit(31)
                 )
@@ -227,7 +236,7 @@ class Resampler(Generic[FrameLike], metaclass=ABCMeta):
                     truncated_ts_scol - self.get_make_interval("MONTH", mod - n)
                 )
 
-            return F.to_timestamp(
+            ret = F.to_timestamp(
                 F.last_day(F.when(edge_cond, edge_label).otherwise(non_edge_label))
             )
 
@@ -242,15 +251,15 @@ class Resampler(Generic[FrameLike], metaclass=ABCMeta):
                 )
 
                 if left_closed and left_labeled:
-                    return F.date_trunc("DAY", ts_scol)
+                    ret = F.date_trunc("DAY", ts_scol)
                 elif left_closed and right_labeled:
-                    return F.date_trunc("DAY", F.date_add(ts_scol, 1))
+                    ret = F.date_trunc("DAY", F.date_add(ts_scol, 1))
                 elif right_closed and left_labeled:
-                    return F.when(edge_cond, F.date_trunc("DAY", F.date_sub(ts_scol, 1))).otherwise(
+                    ret = F.when(edge_cond, F.date_trunc("DAY", F.date_sub(ts_scol, 1))).otherwise(
                         F.date_trunc("DAY", ts_scol)
                     )
                 else:
-                    return F.when(edge_cond, F.date_trunc("DAY", ts_scol)).otherwise(
+                    ret = F.when(edge_cond, F.date_trunc("DAY", ts_scol)).otherwise(
                         F.date_trunc("DAY", F.date_add(ts_scol, 1))
                     )
 
@@ -272,13 +281,15 @@ class Resampler(Generic[FrameLike], metaclass=ABCMeta):
                 else:
                     non_edge_label = F.date_sub(truncated_ts_scol, mod - n)
 
-                return F.when(edge_cond, edge_label).otherwise(non_edge_label)
+                ret = F.when(edge_cond, edge_label).otherwise(non_edge_label)
 
         elif rule_code in ["H", "T", "S"]:
             unit_mapping = {"H": "HOUR", "T": "MINUTE", "S": "SECOND"}
             unit_str = unit_mapping[rule_code]
 
             truncated_ts_scol = F.date_trunc(unit_str, ts_scol)
+            if isinstance(key_type, TimestampNTZType):
+                truncated_ts_scol = F.to_timestamp_ntz(truncated_ts_scol)
             diff = timestampdiff(unit_str, origin_scol, truncated_ts_scol)
             mod = F.lit(0) if n == 1 else (diff % F.lit(n))
 
@@ -307,10 +318,15 @@ class Resampler(Generic[FrameLike], metaclass=ABCMeta):
                     truncated_ts_scol + self.get_make_interval(unit_str, n),
                 ).otherwise(truncated_ts_scol - self.get_make_interval(unit_str, mod - n))
 
-            return F.when(edge_cond, edge_label).otherwise(non_edge_label)
+            ret = F.when(edge_cond, edge_label).otherwise(non_edge_label)
 
         else:
             raise ValueError("Got the unexpected unit {}".format(rule_code))
+
+        if isinstance(key_type, TimestampNTZType):
+            return F.to_timestamp_ntz(ret)
+        else:
+            return ret
 
     def _downsample(self, f: str) -> DataFrame:
         """
@@ -374,12 +390,9 @@ class Resampler(Generic[FrameLike], metaclass=ABCMeta):
         bin_col_label = verify_temp_column_name(self._psdf, bin_col_name)
         bin_col_field = InternalField(
             dtype=np.dtype("datetime64[ns]"),
-            struct_field=StructField(bin_col_name, TimestampType(), True),
+            struct_field=StructField(bin_col_name, self._resamplekey_type, True),
         )
-        bin_scol = self._bin_time_stamp(
-            ts_origin,
-            self._resamplekey_scol,
-        )
+        bin_scol = self._bin_timestamp(ts_origin, self._resamplekey_scol)
 
         agg_columns = [
             psser for psser in self._agg_columns if (isinstance(psser.spark.data_type, NumericType))
