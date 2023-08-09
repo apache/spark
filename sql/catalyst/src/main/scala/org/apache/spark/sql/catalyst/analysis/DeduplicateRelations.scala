@@ -244,8 +244,9 @@ object DeduplicateRelations extends Rule[LogicalPlan] {
 
             planWithNewChildren match {
               case c: CoGroup =>
-                // SPARK-43781: CoGroup is a special case, as it has different output attributes
-                // from its children. We need to update the output attributes of CoGroup manually.
+                // SPARK-43781: CoGroup is a special case, `rewriteAttrs` will incorrectly update
+                // some fields that do not need to be updated. We need to update the output
+                // attributes of CoGroup manually.
                 val newLeftAttr = c.leftAttr.map(attr => attrMap.getOrElse(attr, attr))
                 val newRightAttr = rewriteAttrsMatchWithSubPlan(c.rightAttr, attrMap,
                   c.right.output)
