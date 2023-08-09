@@ -3311,7 +3311,7 @@
   },
   "UNSUPPORTED_TABLE_OPERATION" : {
     "message" : [
-      "Table <tableName> does not support <operation>."
+      "The table <tableName> does not support <operation>."
     ],
     "subClass" : {
       "WITHOUT_SUGGESTION" : {
@@ -3328,7 +3328,7 @@
   },
   "UNSUPPORTED_TEMP_VIEW_OPERATION" : {
     "message" : [
-      "Temp view <tempViewName> does not support <operation>."
+      "The temp view <tempViewName> does not support <operation>."
     ],
     "subClass" : {
       "WITHOUT_SUGGESTION" : {
@@ -3351,7 +3351,7 @@
   },
   "UNSUPPORTED_VIEW_OPERATION" : {
     "message" : [
-      "View <viewName> does not support <operation>."
+      "The view <viewName> does not support <operation>."
     ],
     "subClass" : {
       "WITHOUT_SUGGESTION" : {
