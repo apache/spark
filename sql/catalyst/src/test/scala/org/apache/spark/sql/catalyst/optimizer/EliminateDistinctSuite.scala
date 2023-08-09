@@ -18,8 +18,10 @@ package org.apache.spark.sql.catalyst.optimizer
 
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
+import org.apache.spark.sql.catalyst.expressions.Expression
+import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans.PlanTest
-import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Expand, LocalRelation, LogicalPlan}
+import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 
 class EliminateDistinctSuite extends PlanTest {
@@ -30,27 +32,61 @@ class EliminateDistinctSuite extends PlanTest {
         EliminateDistinct) :: Nil
   }
 
-  val testRelation = LocalRelation('a.int)
+  val testRelation = LocalRelation($"a".int)
+  val testRelation2 = LocalRelation($"a".int, $"b".string)
 
-  test("Eliminate Distinct in Max") {
-    val query = testRelation
-      .select(maxDistinct('a).as('result))
-      .analyze
-    val answer = testRelation
-      .select(max('a).as('result))
-      .analyze
-    assert(query != answer)
-    comparePlans(Optimize.execute(query), answer)
+  Seq(
+    Max(_),
+    Min(_),
+    BitAndAgg(_),
+    BitOrAgg(_),
+    First(_, ignoreNulls = true),
+    First(_, ignoreNulls = false),
+    Last(_, ignoreNulls = true),
+    Last(_, ignoreNulls = false),
+    CollectSet(_: Expression)
+  ).foreach {
+    aggBuilder =>
+      val agg = aggBuilder($"a")
+      test(s"Eliminate Distinct in $agg") {
+        val query = testRelation
+          .select(agg.toAggregateExpression(isDistinct = true).as("result"))
+          .analyze
+        val answer = testRelation
+          .select(agg.toAggregateExpression(isDistinct = false).as("result"))
+          .analyze
+        assert(query != answer)
+        comparePlans(Optimize.execute(query), answer)
+      }
+
+      test(s"SPARK-38177: Eliminate Distinct in non-root $agg") {
+        val query = testRelation
+          .select(agg.toAggregateExpression(isDistinct = true).as("result"))
+          .limit(1)
+          .analyze
+        val answer = testRelation
+          .select(agg.toAggregateExpression(isDistinct = false).as("result"))
+          .limit(1)
+          .analyze
+        assert(query != answer)
+        comparePlans(Optimize.execute(query), answer)
+      }
   }
 
-  test("Eliminate Distinct in Min") {
-    val query = testRelation
-      .select(minDistinct('a).as('result))
-      .analyze
-    val answer = testRelation
-      .select(min('a).as('result))
-      .analyze
-    assert(query != answer)
-    comparePlans(Optimize.execute(query), answer)
+  test("SPARK-38832: Remove unnecessary distinct in aggregate expression by distinctKeys") {
+    val q1 = testRelation2.groupBy($"a")($"a")
+      .rebalance().groupBy()(countDistinct($"a") as "x", sumDistinct($"a") as "y").analyze
+    val r1 = testRelation2.groupBy($"a")($"a")
+      .rebalance().groupBy()(count($"a") as "x", sum($"a") as "y").analyze
+    comparePlans(Optimize.execute(q1), r1)
+
+    // not a subset of distinct attr
+    val q2 = testRelation2.groupBy($"a", $"b")($"a", $"b")
+      .rebalance().groupBy()(countDistinct($"a") as "x", sumDistinct($"a") as "y").analyze
+    comparePlans(Optimize.execute(q2), q2)
+
+    // child distinct key is empty
+    val q3 = testRelation2.groupBy($"a")(countDistinct($"a") as "x").analyze
+    comparePlans(Optimize.execute(q3), q3)
   }
 }

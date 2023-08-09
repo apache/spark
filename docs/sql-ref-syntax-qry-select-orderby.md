@@ -28,7 +28,7 @@ clause, this clause guarantees a total order in the output.
 ### Syntax
 
 ```sql
-ORDER BY { expression [ sort_direction | nulls_sort_oder ] [ , ... ] }
+ORDER BY { expression [ sort_direction | nulls_sort_order ] [ , ... ] }
 ```
 
 ### Parameters
@@ -143,3 +143,8 @@ SELECT * FROM person ORDER BY name ASC, age DESC;
 * [CLUSTER BY Clause](sql-ref-syntax-qry-select-clusterby.html)
 * [DISTRIBUTE BY Clause](sql-ref-syntax-qry-select-distribute-by.html)
 * [LIMIT Clause](sql-ref-syntax-qry-select-limit.html)
+* [OFFSET Clause](sql-ref-syntax-qry-select-offset.html)
+* [CASE Clause](sql-ref-syntax-qry-select-case.html)
+* [PIVOT Clause](sql-ref-syntax-qry-select-pivot.html)
+* [UNPIVOT Clause](sql-ref-syntax-qry-select-unpivot.html)
+* [LATERAL VIEW Clause](sql-ref-syntax-qry-select-lateral-view.html)

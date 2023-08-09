@@ -216,7 +216,7 @@ object NaiveBayesModel extends Loader[NaiveBayesModel] {
       val data = dataArray(0)
       val labels = data.getAs[Seq[Double]](0).toArray
       val pi = data.getAs[Seq[Double]](1).toArray
-      val theta = data.getAs[Seq[Seq[Double]]](2).map(_.toArray).toArray
+      val theta = data.getSeq[scala.collection.Seq[Double]](2).map(_.toArray).toArray
       val modelType = data.getString(3)
       new NaiveBayesModel(labels, pi, theta, modelType)
     }
@@ -260,7 +260,7 @@ object NaiveBayesModel extends Loader[NaiveBayesModel] {
       val data = dataArray(0)
       val labels = data.getAs[Seq[Double]](0).toArray
       val pi = data.getAs[Seq[Double]](1).toArray
-      val theta = data.getAs[Seq[Seq[Double]]](2).map(_.toArray).toArray
+      val theta = data.getSeq[scala.collection.Seq[Double]](2).map(_.toArray).toArray
       new NaiveBayesModel(labels, pi, theta)
     }
   }
@@ -367,8 +367,8 @@ class NaiveBayes private (
     val dataset = data.map { case LabeledPoint(label, features) => (label, features.asML) }
       .toDF("label", "features")
 
-    // mllib NaiveBayes allows input labels like {-1, +1}, so set `positiveLabel` as false.
-    val newModel = nb.trainWithLabelCheck(dataset, positiveLabel = false)
+    // mllib NaiveBayes allows input labels like {-1, +1}, so set `nonNegativeLabel` as false.
+    val newModel = nb.trainWithLabelCheck(dataset, nonNegativeLabel = false)
 
     val pi = newModel.pi.toArray
     val theta = Array.ofDim[Double](newModel.numClasses, newModel.numFeatures)

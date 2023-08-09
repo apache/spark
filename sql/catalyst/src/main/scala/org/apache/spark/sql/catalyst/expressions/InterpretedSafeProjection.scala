@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.aggregate.NoOp
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, ArrayData, GenericArrayData, MapData}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
 
@@ -29,6 +30,9 @@ import org.apache.spark.sql.types._
  *                    to a schema.
  */
 class InterpretedSafeProjection(expressions: Seq[Expression]) extends Projection {
+
+  private[this] val subExprEliminationEnabled = SQLConf.get.subexpressionEliminationEnabled
+  private[this] val exprs = prepareExpressions(expressions, subExprEliminationEnabled)
 
   private[this] val mutableRow = new SpecificInternalRow(expressions.map(_.dataType))
 
@@ -49,7 +53,7 @@ class InterpretedSafeProjection(expressions: Seq[Expression]) extends Projection
         }
       }
     }
-    (e, f)
+    (exprs(i), f)
   }
 
   private def generateSafeValueConverter(dt: DataType): Any => Any = dt match {
@@ -96,7 +100,15 @@ class InterpretedSafeProjection(expressions: Seq[Expression]) extends Projection
     case _ => identity
   }
 
+  override def initialize(partitionIndex: Int): Unit = {
+    initializeExprs(exprs, partitionIndex)
+  }
+
   override def apply(row: InternalRow): InternalRow = {
+    if (subExprEliminationEnabled) {
+      runtime.setInput(row)
+    }
+
     var i = 0
     while (i < exprsWithWriters.length) {
       val (expr, writer) = exprsWithWriters(i)
@@ -116,10 +128,6 @@ object InterpretedSafeProjection {
    * Returns an [[SafeProjection]] for given sequence of bound Expressions.
    */
   def createProjection(exprs: Seq[Expression]): Projection = {
-    // We need to make sure that we do not reuse stateful expressions.
-    val cleanedExpressions = exprs.map(_.transform {
-      case s: Stateful => s.freshCopy()
-    })
-    new InterpretedSafeProjection(cleanedExpressions)
+    new InterpretedSafeProjection(exprs)
   }
 }

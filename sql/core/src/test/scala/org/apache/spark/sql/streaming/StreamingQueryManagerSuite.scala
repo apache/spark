@@ -34,8 +34,10 @@ import org.apache.spark.sql.execution.datasources.v2.StreamingDataSourceV2Relati
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.util.BlockingSource
+import org.apache.spark.tags.SlowSQLTest
 import org.apache.spark.util.Utils
 
+@SlowSQLTest
 class StreamingQueryManagerSuite extends StreamTest {
 
   import AwaitTerminationTester._
@@ -201,6 +203,10 @@ class StreamingQueryManagerSuite extends StreamTest {
 
       // After that query is stopped, awaitAnyTerm should throw exception
       eventually(Timeout(streamingTimeout)) { require(!q3.isActive) } // wait for query to stop
+      // When `isActive` becomes `false`, `StreamingQueryManager` may not receive the error yet.
+      // Hence, call `stop` to wait until the thread of `q3` exits so that we can ensure
+      // `StreamingQueryManager` has already received the error.
+      q3.stop()
       testAwaitAnyTermination(
         ExpectException[SparkException],
         awaitTimeout = 100.milliseconds,
@@ -217,6 +223,10 @@ class StreamingQueryManagerSuite extends StreamTest {
       require(!q4.isActive)
       val q5 = stopRandomQueryAsync(10.milliseconds, withError = true)
       eventually(Timeout(streamingTimeout)) { require(!q5.isActive) }
+      // When `isActive` becomes `false`, `StreamingQueryManager` may not receive the error yet.
+      // Hence, call `stop` to wait until the thread of `q5` exits so that we can ensure
+      // `StreamingQueryManager` has already received the error.
+      q5.stop()
       // After q5 terminates with exception, awaitAnyTerm should start throwing exception
       testAwaitAnyTermination(ExpectException[SparkException], awaitTimeout = 2.seconds)
     }
@@ -447,9 +457,9 @@ class StreamingQueryManagerSuite extends StreamTest {
 
   /** Stop a random active query either with `stop()` or with an error */
   private def stopRandomQueryAsync(stopAfter: Span, withError: Boolean): StreamingQuery = {
-
+    // scalastyle:off executioncontextglobal
     import scala.concurrent.ExecutionContext.Implicits.global
-
+    // scalastyle:on executioncontextglobal
     val activeQueries = spark.streams.active
     val queryToStop = activeQueries(Random.nextInt(activeQueries.length))
     Future {

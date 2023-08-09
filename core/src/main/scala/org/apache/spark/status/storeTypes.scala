@@ -26,6 +26,7 @@ import com.fasterxml.jackson.databind.annotation.JsonDeserialize
 import org.apache.spark.status.KVUtils._
 import org.apache.spark.status.api.v1._
 import org.apache.spark.ui.scope._
+import org.apache.spark.util.Utils
 import org.apache.spark.util.kvstore.KVIndex
 
 private[spark] case class AppStatusStoreMetadata(version: Long)
@@ -57,7 +58,7 @@ private[spark] class ExecutorSummaryWrapper(val info: ExecutorSummary) {
   private def active: Boolean = info.isActive
 
   @JsonIgnore @KVIndex("host")
-  val host: String = info.hostPort.split(":")(0)
+  val host: String = Utils.parseHostPort(info.hostPort)._1
 
 }
 
@@ -94,7 +95,7 @@ private[spark] class StageDataWrapper(
   private def active: Boolean = info.status == StageStatus.ACTIVE
 
   @JsonIgnore @KVIndex("completionTime")
-  private def completionTime: Long = info.completionTime.map(_.getTime).getOrElse(-1L)
+  def completionTime: Long = info.completionTime.map(_.getTime).getOrElse(-1L)
 }
 
 /**
@@ -128,7 +129,7 @@ private[spark] object TaskIndexNames {
   final val SER_TIME = "rst"
   final val SHUFFLE_LOCAL_BLOCKS = "slbl"
   final val SHUFFLE_READ_RECORDS = "srr"
-  final val SHUFFLE_READ_TIME = "srt"
+  final val SHUFFLE_READ_FETCH_WAIT_TIME = "srt"
   final val SHUFFLE_REMOTE_BLOCKS = "srbl"
   final val SHUFFLE_REMOTE_READS = "srby"
   final val SHUFFLE_REMOTE_READS_TO_DISK = "srbd"
@@ -137,9 +138,20 @@ private[spark] object TaskIndexNames {
   final val SHUFFLE_WRITE_RECORDS = "swr"
   final val SHUFFLE_WRITE_SIZE = "sws"
   final val SHUFFLE_WRITE_TIME = "swt"
+  final val SHUFFLE_REMOTE_REQS_DURATION = "srrd"
+  final val SHUFFLE_PUSH_CORRUPT_MERGED_BLOCK_CHUNKS = "spcmbc"
+  final val SHUFFLE_PUSH_MERGED_FETCH_FALLBACK_COUNT = "spmffc"
+  final val SHUFFLE_PUSH_MERGED_REMOTE_BLOCKS = "spmrb"
+  final val SHUFFLE_PUSH_MERGED_LOCAL_BLOCKS = "spmlb"
+  final val SHUFFLE_PUSH_MERGED_REMOTE_CHUNKS = "spmrc"
+  final val SHUFFLE_PUSH_MERGED_LOCAL_CHUNKS = "spmlc"
+  final val SHUFFLE_PUSH_MERGED_REMOTE_READS = "spmrr"
+  final val SHUFFLE_PUSH_MERGED_LOCAL_READS = "spmlr"
+  final val SHUFFLE_PUSH_MERGED_REMOTE_REQS_DURATION = "spmrrd"
   final val STAGE = "stage"
   final val STATUS = "sta"
   final val TASK_INDEX = "idx"
+  final val TASK_PARTITION_ID = "partid"
   final val COMPLETION_TIME = "ct"
 }
 
@@ -160,6 +172,10 @@ private[spark] class TaskDataWrapper(
     val index: Int,
     @KVIndexParam(value = TaskIndexNames.ATTEMPT, parent = TaskIndexNames.STAGE)
     val attempt: Int,
+    @KVIndexParam(value = TaskIndexNames.TASK_PARTITION_ID, parent = TaskIndexNames.STAGE)
+    // Different kvstores have different default values (eg 0 or -1),
+    // thus we use the default value here for backwards compatibility.
+    val partitionId: Int = -1,
     @KVIndexParam(value = TaskIndexNames.LAUNCH_TIME, parent = TaskIndexNames.STAGE)
     val launchTime: Long,
     val resultFetchStart: Long,
@@ -174,7 +190,7 @@ private[spark] class TaskDataWrapper(
     @KVIndexParam(value = TaskIndexNames.LOCALITY, parent = TaskIndexNames.STAGE)
     val taskLocality: String,
     val speculative: Boolean,
-    val accumulatorUpdates: Seq[AccumulableInfo],
+    val accumulatorUpdates: collection.Seq[AccumulableInfo],
     val errorMessage: Option[String],
 
     val hasMetrics: Boolean,
@@ -216,7 +232,8 @@ private[spark] class TaskDataWrapper(
     val shuffleRemoteBlocksFetched: Long,
     @KVIndexParam(value = TaskIndexNames.SHUFFLE_LOCAL_BLOCKS, parent = TaskIndexNames.STAGE)
     val shuffleLocalBlocksFetched: Long,
-    @KVIndexParam(value = TaskIndexNames.SHUFFLE_READ_TIME, parent = TaskIndexNames.STAGE)
+    @KVIndexParam(value = TaskIndexNames.SHUFFLE_READ_FETCH_WAIT_TIME,
+      parent = TaskIndexNames.STAGE)
     val shuffleFetchWaitTime: Long,
     @KVIndexParam(value = TaskIndexNames.SHUFFLE_REMOTE_READS, parent = TaskIndexNames.STAGE)
     val shuffleRemoteBytesRead: Long,
@@ -226,6 +243,38 @@ private[spark] class TaskDataWrapper(
     val shuffleLocalBytesRead: Long,
     @KVIndexParam(value = TaskIndexNames.SHUFFLE_READ_RECORDS, parent = TaskIndexNames.STAGE)
     val shuffleRecordsRead: Long,
+    @KVIndexParam(
+      value = TaskIndexNames.SHUFFLE_PUSH_CORRUPT_MERGED_BLOCK_CHUNKS,
+      parent = TaskIndexNames.STAGE)
+    val shuffleCorruptMergedBlockChunks: Long,
+    @KVIndexParam(value = TaskIndexNames.SHUFFLE_PUSH_MERGED_FETCH_FALLBACK_COUNT,
+      parent = TaskIndexNames.STAGE)
+    val shuffleMergedFetchFallbackCount: Long,
+    @KVIndexParam(
+      value = TaskIndexNames.SHUFFLE_PUSH_MERGED_REMOTE_BLOCKS, parent = TaskIndexNames.STAGE)
+    val shuffleMergedRemoteBlocksFetched: Long,
+    @KVIndexParam(
+      value = TaskIndexNames.SHUFFLE_PUSH_MERGED_LOCAL_BLOCKS, parent = TaskIndexNames.STAGE)
+    val shuffleMergedLocalBlocksFetched: Long,
+    @KVIndexParam(
+      value = TaskIndexNames.SHUFFLE_PUSH_MERGED_REMOTE_CHUNKS, parent = TaskIndexNames.STAGE)
+    val shuffleMergedRemoteChunksFetched: Long,
+    @KVIndexParam(
+      value = TaskIndexNames.SHUFFLE_PUSH_MERGED_LOCAL_CHUNKS, parent = TaskIndexNames.STAGE)
+    val shuffleMergedLocalChunksFetched: Long,
+    @KVIndexParam(
+      value = TaskIndexNames.SHUFFLE_PUSH_MERGED_REMOTE_READS, parent = TaskIndexNames.STAGE)
+    val shuffleMergedRemoteBytesRead: Long,
+    @KVIndexParam(
+      value = TaskIndexNames.SHUFFLE_PUSH_MERGED_LOCAL_READS, parent = TaskIndexNames.STAGE)
+    val shuffleMergedLocalBytesRead: Long,
+    @KVIndexParam(
+      value = TaskIndexNames.SHUFFLE_REMOTE_REQS_DURATION, parent = TaskIndexNames.STAGE)
+    val shuffleRemoteReqsDuration: Long,
+    @KVIndexParam(
+      value = TaskIndexNames.SHUFFLE_PUSH_MERGED_REMOTE_REQS_DURATION,
+      parent = TaskIndexNames.STAGE)
+    val shuffleMergedRemoteReqDuration: Long,
     @KVIndexParam(value = TaskIndexNames.SHUFFLE_WRITE_SIZE, parent = TaskIndexNames.STAGE)
     val shuffleBytesWritten: Long,
     @KVIndexParam(value = TaskIndexNames.SHUFFLE_WRITE_TIME, parent = TaskIndexNames.STAGE)
@@ -271,7 +320,18 @@ private[spark] class TaskDataWrapper(
           getMetricValue(shuffleRemoteBytesRead),
           getMetricValue(shuffleRemoteBytesReadToDisk),
           getMetricValue(shuffleLocalBytesRead),
-          getMetricValue(shuffleRecordsRead)),
+          getMetricValue(shuffleRecordsRead),
+          getMetricValue(shuffleRemoteReqsDuration),
+          new ShufflePushReadMetrics(
+            getMetricValue(shuffleCorruptMergedBlockChunks),
+            getMetricValue(shuffleMergedFetchFallbackCount),
+            getMetricValue(shuffleMergedRemoteBlocksFetched),
+            getMetricValue(shuffleMergedLocalBlocksFetched),
+            getMetricValue(shuffleMergedRemoteChunksFetched),
+            getMetricValue(shuffleMergedLocalChunksFetched),
+            getMetricValue(shuffleMergedRemoteBytesRead),
+            getMetricValue(shuffleMergedLocalBytesRead),
+            getMetricValue(shuffleMergedRemoteReqDuration))),
         new ShuffleWriteMetrics(
           getMetricValue(shuffleBytesWritten),
           getMetricValue(shuffleWriteTime),
@@ -284,6 +344,7 @@ private[spark] class TaskDataWrapper(
       taskId,
       index,
       attempt,
+      partitionId,
       new Date(launchTime),
       if (resultFetchStart > 0L) Some(new Date(resultFetchStart)) else None,
       if (duration > 0L) Some(duration) else None,
@@ -342,7 +403,7 @@ private[spark] class TaskDataWrapper(
   @JsonIgnore @KVIndex(value = TaskIndexNames.SHUFFLE_TOTAL_READS, parent = TaskIndexNames.STAGE)
   private def shuffleTotalReads: Long = {
     if (hasMetrics) {
-      getMetricValue(shuffleLocalBytesRead) + getMetricValue(shuffleRemoteBytesRead)
+      shuffleLocalBytesRead + shuffleRemoteBytesRead
     } else {
       -1L
     }
@@ -351,7 +412,7 @@ private[spark] class TaskDataWrapper(
   @JsonIgnore @KVIndex(value = TaskIndexNames.SHUFFLE_TOTAL_BLOCKS, parent = TaskIndexNames.STAGE)
   private def shuffleTotalBlocks: Long = {
     if (hasMetrics) {
-      getMetricValue(shuffleLocalBlocksFetched) + getMetricValue(shuffleRemoteBlocksFetched)
+      shuffleLocalBlocksFetched + shuffleRemoteBlocksFetched
     } else {
       -1L
     }
@@ -398,6 +459,18 @@ private[spark] class ExecutorStageSummaryWrapper(
 
 }
 
+private[spark] class SpeculationStageSummaryWrapper(
+    val stageId: Int,
+    val stageAttemptId: Int,
+    val info: SpeculationStageSummary) {
+
+  @JsonIgnore @KVIndex("stage")
+  private def stage: Array[Int] = Array(stageId, stageAttemptId)
+
+  @KVIndex
+  private[this] val id: Array[Int] = Array(stageId, stageAttemptId)
+}
+
 private[spark] class StreamBlockData(
   val name: String,
   val executorId: String,
@@ -417,8 +490,8 @@ private[spark] class StreamBlockData(
 private[spark] class RDDOperationClusterWrapper(
     val id: String,
     val name: String,
-    val childNodes: Seq[RDDOperationNode],
-    val childClusters: Seq[RDDOperationClusterWrapper]) {
+    val childNodes: collection.Seq[RDDOperationNode],
+    val childClusters: collection.Seq[RDDOperationClusterWrapper]) {
 
   def toRDDOperationCluster(): RDDOperationCluster = {
     val isBarrier = childNodes.exists(_.barrier)
@@ -435,9 +508,9 @@ private[spark] class RDDOperationClusterWrapper(
 
 private[spark] class RDDOperationGraphWrapper(
     @KVIndexParam val stageId: Int,
-    val edges: Seq[RDDOperationEdge],
-    val outgoingEdges: Seq[RDDOperationEdge],
-    val incomingEdges: Seq[RDDOperationEdge],
+    val edges: collection.Seq[RDDOperationEdge],
+    val outgoingEdges: collection.Seq[RDDOperationEdge],
+    val incomingEdges: collection.Seq[RDDOperationEdge],
     val rootCluster: RDDOperationClusterWrapper) {
 
   def toRDDOperationGraph(): RDDOperationGraph = {
@@ -473,6 +546,7 @@ private[spark] class CachedQuantile(
     val taskCount: Long,
 
     // The following fields are an exploded view of a single entry for TaskMetricDistributions.
+    val duration: Double,
     val executorDeserializeTime: Double,
     val executorDeserializeCpuTime: Double,
     val executorRunTime: Double,
@@ -500,6 +574,16 @@ private[spark] class CachedQuantile(
     val shuffleRemoteBytesRead: Double,
     val shuffleRemoteBytesReadToDisk: Double,
     val shuffleTotalBlocksFetched: Double,
+    val shuffleCorruptMergedBlockChunks: Double,
+    val shuffleMergedFetchFallbackCount: Double,
+    val shuffleMergedRemoteBlocksFetched: Double,
+    val shuffleMergedLocalBlocksFetched: Double,
+    val shuffleMergedRemoteChunksFetched: Double,
+    val shuffleMergedLocalChunksFetched: Double,
+    val shuffleMergedRemoteBytesRead: Double,
+    val shuffleMergedLocalBytesRead: Double,
+    val shuffleRemoteReqsDuration: Double,
+    val shuffleMergedRemoteReqsDuration: Double,
 
     val shuffleWriteBytes: Double,
     val shuffleWriteRecords: Double,
@@ -510,5 +594,18 @@ private[spark] class CachedQuantile(
 
   @KVIndex("stage") @JsonIgnore
   def stage: Array[Int] = Array(stageId, stageAttemptId)
+
+}
+
+private[spark] class ProcessSummaryWrapper(val info: ProcessSummary) {
+
+  @JsonIgnore @KVIndex
+  private def id: String = info.id
+
+  @JsonIgnore @KVIndex("active")
+  private def active: Boolean = info.isActive
+
+  @JsonIgnore @KVIndex("host")
+  val host: String = Utils.parseHostPort(info.hostPort)._1
 
 }

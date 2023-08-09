@@ -23,7 +23,6 @@ import org.apache.spark.sql.Encoder
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, UnsafeProjection, UnsafeRow}
 import org.apache.spark.sql.execution.streaming.GroupStateImpl._
-import org.apache.spark.sql.streaming.FlatMapGroupsWithStateSuite._
 import org.apache.spark.sql.streaming.StreamTest
 import org.apache.spark.sql.types._
 

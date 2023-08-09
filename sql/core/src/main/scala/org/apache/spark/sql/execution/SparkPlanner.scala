@@ -18,18 +18,16 @@
 package org.apache.spark.sql.execution
 
 import org.apache.spark.sql._
+import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.adaptive.LogicalQueryStageStrategy
+import org.apache.spark.sql.execution.command.v2.V2CommandStrategy
 import org.apache.spark.sql.execution.datasources.{DataSourceStrategy, FileSourceStrategy}
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Strategy
-import org.apache.spark.sql.internal.SQLConf
 
-class SparkPlanner(
-    val session: SparkSession,
-    val conf: SQLConf,
-    val experimentalMethods: ExperimentalMethods)
-  extends SparkStrategies {
+class SparkPlanner(val session: SparkSession, val experimentalMethods: ExperimentalMethods)
+  extends SparkStrategies with SQLConfHelper {
 
   def numPartitions: Int = conf.numShufflePartitions
 
@@ -39,13 +37,16 @@ class SparkPlanner(
       LogicalQueryStageStrategy ::
       PythonEvals ::
       new DataSourceV2Strategy(session) ::
+      V2CommandStrategy ::
       FileSourceStrategy ::
-      DataSourceStrategy(conf) ::
+      DataSourceStrategy ::
       SpecialLimits ::
       Aggregation ::
       Window ::
+      WindowGroupLimit ::
       JoinSelection ::
       InMemoryScans ::
+      SparkScripts ::
       BasicOperators :: Nil)
 
   /**

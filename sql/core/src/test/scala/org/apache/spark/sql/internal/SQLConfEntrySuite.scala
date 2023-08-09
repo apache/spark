@@ -185,12 +185,14 @@ class SQLConfEntrySuite extends SparkFunSuite {
     val e1 = intercept[IllegalArgumentException] {
       conf.getConf(confEntry)
     }
-    assert(e1.getMessage === "The maximum size of the cache must not be negative")
+    assert(e1.getMessage === s"'-1' in ${confEntry.key} is invalid." +
+      s" The maximum size of the cache must not be negative")
 
     val e2 = intercept[IllegalArgumentException] {
       conf.setConfString(confEntry.key, "-1")
     }
-    assert(e2.getMessage === "The maximum size of the cache must not be negative")
+    assert(e2.getMessage === s"'-1' in ${confEntry.key} is invalid." +
+      s" The maximum size of the cache must not be negative")
   }
 
   test("clone SQLConf") {

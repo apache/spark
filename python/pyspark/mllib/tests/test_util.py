@@ -50,10 +50,8 @@ class MLUtilsTests(MLlibTestCase):
 
     def test_load_vectors(self):
         import shutil
-        data = [
-            [1.0, 2.0, 3.0],
-            [1.0, 2.0, 3.0]
-        ]
+
+        data = [[1.0, 2.0, 3.0], [1.0, 2.0, 3.0]]
         temp_dir = tempfile.mkdtemp()
         load_vectors_path = os.path.join(temp_dir, "test_load_vectors")
         try:
@@ -63,7 +61,7 @@ class MLUtilsTests(MLlibTestCase):
             self.assertEqual(len(ret), 2)
             self.assertEqual(ret[0], DenseVector([1.0, 2.0, 3.0]))
             self.assertEqual(ret[1], DenseVector([1.0, 2.0, 3.0]))
-        except:
+        except BaseException:
             self.fail()
         finally:
             shutil.rmtree(load_vectors_path)
@@ -72,16 +70,21 @@ class MLUtilsTests(MLlibTestCase):
 class LinearDataGeneratorTests(MLlibTestCase):
     def test_dim(self):
         linear_data = LinearDataGenerator.generateLinearInput(
-            intercept=0.0, weights=[0.0, 0.0, 0.0],
-            xMean=[0.0, 0.0, 0.0], xVariance=[0.33, 0.33, 0.33],
-            nPoints=4, seed=0, eps=0.1)
+            intercept=0.0,
+            weights=[0.0, 0.0, 0.0],
+            xMean=[0.0, 0.0, 0.0],
+            xVariance=[0.33, 0.33, 0.33],
+            nPoints=4,
+            seed=0,
+            eps=0.1,
+        )
         self.assertEqual(len(linear_data), 4)
         for point in linear_data:
             self.assertEqual(len(point.features), 3)
 
         linear_data = LinearDataGenerator.generateLinearRDD(
-            sc=self.sc, nexamples=6, nfeatures=2, eps=0.1,
-            nParts=2, intercept=0.0).collect()
+            sc=self.sc, nexamples=6, nfeatures=2, eps=0.1, nParts=2, intercept=0.0
+        ).collect()
         self.assertEqual(len(linear_data), 6)
         for point in linear_data:
             self.assertEqual(len(point.features), 2)
@@ -94,11 +97,12 @@ class SerDeTest(MLlibTestCase):
 
 
 if __name__ == "__main__":
-    from pyspark.mllib.tests.test_util import *
+    from pyspark.mllib.tests.test_util import *  # noqa: F401
 
     try:
         import xmlrunner
-        testRunner = xmlrunner.XMLTestRunner(output='target/test-reports', verbosity=2)
+
+        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
     except ImportError:
         testRunner = None
     unittest.main(testRunner=testRunner, verbosity=2)

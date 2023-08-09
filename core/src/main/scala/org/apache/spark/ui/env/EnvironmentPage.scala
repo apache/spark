@@ -77,12 +77,16 @@ private[ui] class EnvironmentPage(
     val sparkPropertiesTable = UIUtils.listingTable(propertyHeader, propertyRow,
       Utils.redact(conf, appEnv.sparkProperties.sorted), fixedWidth = true,
       headerClasses = headerClasses)
+    val emptyProperties = collection.Seq.empty[(String, String)]
     val hadoopPropertiesTable = UIUtils.listingTable(propertyHeader, propertyRow,
-      Utils.redact(conf, appEnv.hadoopProperties.sorted), fixedWidth = true,
-      headerClasses = headerClasses)
+      Utils.redact(conf, Option(appEnv.hadoopProperties).getOrElse(emptyProperties).sorted),
+      fixedWidth = true, headerClasses = headerClasses)
     val systemPropertiesTable = UIUtils.listingTable(propertyHeader, propertyRow,
       Utils.redact(conf, appEnv.systemProperties.sorted), fixedWidth = true,
       headerClasses = headerClasses)
+    val metricsPropertiesTable = UIUtils.listingTable(propertyHeader, propertyRow,
+      Utils.redact(conf, Option(appEnv.metricsProperties).getOrElse(emptyProperties).sorted),
+      fixedWidth = true, headerClasses = headerClasses)
     val classpathEntriesTable = UIUtils.listingTable(
       classPathHeader, classPathRow, appEnv.classpathEntries.sorted, fixedWidth = true,
       headerClasses = headerClasses)
@@ -142,6 +146,17 @@ private[ui] class EnvironmentPage(
         </span>
         <div class="aggregated-systemProperties collapsible-table collapsed">
           {systemPropertiesTable}
+        </div>
+        <span class="collapse-aggregated-metricsProperties collapse-table"
+              onClick="collapseTable('collapse-aggregated-metricsProperties',
+            'aggregated-metricsProperties')">
+          <h4>
+            <span class="collapse-table-arrow arrow-closed"></span>
+            <a>Metrics Properties</a>
+          </h4>
+        </span>
+        <div class="aggregated-metricsProperties collapsible-table collapsed">
+          {metricsPropertiesTable}
         </div>
         <span class="collapse-aggregated-classpathEntries collapse-table"
             onClick="collapseTable('collapse-aggregated-classpathEntries',

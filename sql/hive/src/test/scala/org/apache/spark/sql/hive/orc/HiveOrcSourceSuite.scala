@@ -113,48 +113,73 @@ class HiveOrcSourceSuite extends OrcSuite with TestHiveSingleton {
       val orcDir = new File(dir, "orc").getCanonicalPath
 
       // write path
-      var msg = intercept[AnalysisException] {
-        sql("select interval 1 days").write.mode("overwrite").orc(orcDir)
-      }.getMessage
-      assert(msg.contains("Cannot save interval data type into external storage."))
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql("select interval 1 days").write.mode("overwrite").orc(orcDir)
+        },
+        errorClass = "UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE",
+        parameters = Map(
+          "columnName" -> "`INTERVAL '1' DAY`",
+          "columnType" -> "\"INTERVAL DAY\"",
+          "format" -> "ORC")
+      )
 
-      msg = intercept[AnalysisException] {
-        sql("select null").write.mode("overwrite").orc(orcDir)
-      }.getMessage
-      assert(msg.contains("ORC data source does not support null data type."))
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql("select null").write.mode("overwrite").orc(orcDir)
+        },
+        errorClass = "UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE",
+        parameters = Map(
+          "columnName" -> "`NULL`",
+          "columnType" -> "\"VOID\"",
+          "format" -> "ORC")
+      )
 
-      msg = intercept[AnalysisException] {
-        spark.udf.register("testType", () => new IntervalData())
-        sql("select testType()").write.mode("overwrite").orc(orcDir)
-      }.getMessage
-      assert(msg.contains("ORC data source does not support interval data type."))
+      checkError(
+        exception = intercept[AnalysisException] {
+          spark.udf.register("testType", () => new IntervalData())
+          sql("select testType()").write.mode("overwrite").orc(orcDir)
+        },
+        errorClass = "UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE",
+        parameters = Map(
+          "columnName" -> "`testType()`",
+          "columnType" -> "\"INTERVAL\"",
+          "format" -> "ORC")
+      )
 
       // read path
-      msg = intercept[AnalysisException] {
-        val schema = StructType(StructField("a", CalendarIntervalType, true) :: Nil)
-        spark.range(1).write.mode("overwrite").orc(orcDir)
-        spark.read.schema(schema).orc(orcDir).collect()
-      }.getMessage
-      assert(msg.contains("ORC data source does not support interval data type."))
+      checkError(
+        exception = intercept[AnalysisException] {
+          val schema = StructType(StructField("a", CalendarIntervalType, true) :: Nil)
+          spark.range(1).write.mode("overwrite").orc(orcDir)
+          spark.read.schema(schema).orc(orcDir).collect()
+        },
+        errorClass = "UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE",
+        parameters = Map(
+          "columnName" -> "`a`",
+          "columnType" -> "\"INTERVAL\"",
+          "format" -> "ORC")
+      )
 
-      msg = intercept[AnalysisException] {
-        val schema = StructType(StructField("a", new IntervalUDT(), true) :: Nil)
-        spark.range(1).write.mode("overwrite").orc(orcDir)
-        spark.read.schema(schema).orc(orcDir).collect()
-      }.getMessage
-      assert(msg.contains("ORC data source does not support interval data type."))
+      checkError(
+        exception = intercept[AnalysisException] {
+          val schema = StructType(StructField("a", new IntervalUDT(), true) :: Nil)
+          spark.range(1).write.mode("overwrite").orc(orcDir)
+          spark.read.schema(schema).orc(orcDir).collect()
+        },
+        errorClass = "UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE",
+        parameters = Map(
+          "columnName" -> "`a`",
+          "columnType" -> "\"INTERVAL\"",
+          "format" -> "ORC")
+      )
     }
   }
 
   test("Check BloomFilter creation") {
     Seq(true, false).foreach { convertMetastore =>
       withSQLConf(HiveUtils.CONVERT_METASTORE_ORC.key -> s"$convertMetastore") {
-        if (HiveUtils.isHive23) {
-          testBloomFilterCreation(org.apache.orc.OrcProto.Stream.Kind.BLOOM_FILTER_UTF8)
-        } else {
-          // Before ORC-101
-          testBloomFilterCreation(org.apache.orc.OrcProto.Stream.Kind.BLOOM_FILTER)
-        }
+        testBloomFilterCreation(org.apache.orc.OrcProto.Stream.Kind.BLOOM_FILTER_UTF8)
       }
     }
   }
@@ -162,7 +187,7 @@ class HiveOrcSourceSuite extends OrcSuite with TestHiveSingleton {
   test("Enforce direct encoding column-wise selectively") {
     Seq(true, false).foreach { convertMetastore =>
       withSQLConf(HiveUtils.CONVERT_METASTORE_ORC.key -> s"$convertMetastore") {
-        testSelectiveDictionaryEncoding(isSelective = false, isHive23 = HiveUtils.isHive23)
+        testSelectiveDictionaryEncoding(isSelective = false, isHiveOrc = true)
       }
     }
   }
@@ -322,7 +347,6 @@ class HiveOrcSourceSuite extends OrcSuite with TestHiveSingleton {
   }
 
   test("SPARK-31580: Read a file written before ORC-569") {
-    assume(HiveUtils.isHive23) // Hive 1.2 doesn't use Apache ORC
     // Test ORC file came from ORC-621
     val df = readResourceOrcFile("test-data/TestStringDictionary.testRowIndex.orc")
     assert(df.where("str < 'row 001000'").count() === 1000)

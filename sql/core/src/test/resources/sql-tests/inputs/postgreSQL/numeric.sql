@@ -754,22 +754,22 @@ DROP TABLE ceil_floor_round;
 -- 	round((2.5 * 10 ^ i)::numeric, -i)
 -- FROM generate_series(-5,5) AS t(i);
 
--- [SPARK-21117] Built-in SQL Function Support - WIDTH_BUCKET
 -- Testing for width_bucket(). For convenience, we test both the
 -- numeric and float8 versions of the function in this file.
 
 -- errors
--- SELECT width_bucket(5.0, 3.0, 4.0, 0);
--- SELECT width_bucket(5.0, 3.0, 4.0, -5);
--- SELECT width_bucket(3.5, 3.0, 3.0, 888);
--- SELECT width_bucket(5.0::float8, 3.0::float8, 4.0::float8, 0);
--- SELECT width_bucket(5.0::float8, 3.0::float8, 4.0::float8, -5);
--- SELECT width_bucket(3.5::float8, 3.0::float8, 3.0::float8, 888);
--- SELECT width_bucket('NaN', 3.0, 4.0, 888);
--- SELECT width_bucket(0::float8, 'NaN', 4.0::float8, 888);
+SELECT width_bucket(5.0, 3.0, 4.0, 0);
+SELECT width_bucket(5.0, 3.0, 4.0, -5);
+SELECT width_bucket(3.5, 3.0, 3.0, 888);
+SELECT width_bucket(double(5.0), double(3.0), double(4.0), 0);
+SELECT width_bucket(double(5.0), double(3.0), double(4.0), -5);
+SELECT width_bucket(double(3.5), double(3.0), double(3.0), 888);
+SELECT width_bucket('NaN', 3.0, 4.0, 888);
+SELECT width_bucket(double(0), 'NaN', double(4.0), 888);
 
 -- normal operation
 -- CREATE TABLE width_bucket_test (operand_num numeric, operand_f8 float8);
+CREATE TABLE width_bucket_test (operand_num decimal(30,15), operand_f8 double) USING parquet;
 
 -- COPY width_bucket_test (operand_num) FROM stdin;
 -- -5.2
@@ -795,63 +795,78 @@ DROP TABLE ceil_floor_round;
 
 -- UPDATE width_bucket_test SET operand_f8 = operand_num::float8;
 
--- SELECT
---     operand_num,
---     width_bucket(operand_num, 0, 10, 5) AS wb_1,
---     width_bucket(operand_f8, 0, 10, 5) AS wb_1f,
---     width_bucket(operand_num, 10, 0, 5) AS wb_2,
---     width_bucket(operand_f8, 10, 0, 5) AS wb_2f,
---     width_bucket(operand_num, 2, 8, 4) AS wb_3,
---     width_bucket(operand_f8, 2, 8, 4) AS wb_3f,
---     width_bucket(operand_num, 5.0, 5.5, 20) AS wb_4,
---     width_bucket(operand_f8, 5.0, 5.5, 20) AS wb_4f,
---     width_bucket(operand_num, -25, 25, 10) AS wb_5,
---     width_bucket(operand_f8, -25, 25, 10) AS wb_5f
---     FROM width_bucket_test;
+INSERT INTO width_bucket_test VALUES
+    (-5.2, -5.2),
+    (-0.0000000001, -0.0000000001),
+    (0.000000000001, 0.000000000001),
+    (1, 1),
+    (1.99999999999999, 1.99999999999999),
+    (2, 2),
+    (2.00000000000001, 2.00000000000001),
+    (3, 3),
+    (4, 4),
+    (4.5, 4.5),
+    (5, 5),
+    (5.5, 5.5),
+    (6, 6),
+    (7, 7),
+    (8, 8),
+    (9, 9),
+    (9.99999999999999, 9.99999999999999),
+    (10, 10),
+    (10.0000000000001, 10.0000000000001);
+
+SELECT
+    operand_num,
+    width_bucket(operand_num, 0, 10, 5) AS wb_1,
+    width_bucket(operand_f8, 0, 10, 5) AS wb_1f,
+    width_bucket(operand_num, 10, 0, 5) AS wb_2,
+    width_bucket(operand_f8, 10, 0, 5) AS wb_2f,
+    width_bucket(operand_num, 2, 8, 4) AS wb_3,
+    width_bucket(operand_f8, 2, 8, 4) AS wb_3f,
+    width_bucket(operand_num, 5.0, 5.5, 20) AS wb_4,
+    width_bucket(operand_f8, 5.0, 5.5, 20) AS wb_4f,
+    width_bucket(operand_num, -25, 25, 10) AS wb_5,
+    width_bucket(operand_f8, -25, 25, 10) AS wb_5f
+    FROM width_bucket_test
+    ORDER BY operand_num ASC;
 
 -- for float8 only, check positive and negative infinity: we require
 -- finite bucket bounds, but allow an infinite operand
--- SELECT width_bucket(0.0::float8, 'Infinity'::float8, 5, 10); -- error
--- SELECT width_bucket(0.0::float8, 5, '-Infinity'::float8, 20); -- error
--- SELECT width_bucket('Infinity'::float8, 1, 10, 10),
---        width_bucket('-Infinity'::float8, 1, 10, 10);
+SELECT width_bucket(double(0.0), double('Infinity'), 5, 10); -- error
+SELECT width_bucket(double(0.0), 5, double('-Infinity'), 20); -- error
+SELECT width_bucket(double('Infinity'), 1, 10, 10),
+       width_bucket(double('-Infinity'), 1, 10, 10);
 
--- DROP TABLE width_bucket_test;
+DROP TABLE width_bucket_test;
 
--- [SPARK-28137] Missing Data Type Formatting Functions: TO_CHAR
 -- TO_CHAR()
---
--- SELECT '' AS to_char_1, to_char(val, '9G999G999G999G999G999')
--- 	FROM num_data;
+-- some queries are commented out as the format string is not supported by Spark
+SELECT '' AS to_char_3, to_char(val, '9999999999999999.999999999999999PR'), val
+FROM num_data;
 
--- SELECT '' AS to_char_2, to_char(val, '9G999G999G999G999G999D999G999G999G999G999')
--- 	FROM num_data;
+SELECT '' AS to_char_4, to_char(val, '9999999999999999.999999999999999S'), val
+FROM num_data;
 
--- SELECT '' AS to_char_3, to_char(val, '9999999999999999.999999999999999PR')
--- 	FROM num_data;
-
--- SELECT '' AS to_char_4, to_char(val, '9999999999999999.999999999999999S')
--- 	FROM num_data;
-
--- SELECT '' AS to_char_5,  to_char(val, 'MI9999999999999999.999999999999999')     FROM num_data;
--- SELECT '' AS to_char_6,  to_char(val, 'FMS9999999999999999.999999999999999')    FROM num_data;
--- SELECT '' AS to_char_7,  to_char(val, 'FM9999999999999999.999999999999999THPR') FROM num_data;
--- SELECT '' AS to_char_8,  to_char(val, 'SG9999999999999999.999999999999999th')   FROM num_data;
--- SELECT '' AS to_char_9,  to_char(val, '0999999999999999.999999999999999')       FROM num_data;
--- SELECT '' AS to_char_10, to_char(val, 'S0999999999999999.999999999999999')      FROM num_data;
--- SELECT '' AS to_char_11, to_char(val, 'FM0999999999999999.999999999999999')     FROM num_data;
--- SELECT '' AS to_char_12, to_char(val, 'FM9999999999999999.099999999999999') 	FROM num_data;
--- SELECT '' AS to_char_13, to_char(val, 'FM9999999999990999.990999999999999') 	FROM num_data;
--- SELECT '' AS to_char_14, to_char(val, 'FM0999999999999999.999909999999999') 	FROM num_data;
--- SELECT '' AS to_char_15, to_char(val, 'FM9999999990999999.099999999999999') 	FROM num_data;
--- SELECT '' AS to_char_16, to_char(val, 'L9999999999999999.099999999999999')	FROM num_data;
--- SELECT '' AS to_char_17, to_char(val, 'FM9999999999999999.99999999999999')	FROM num_data;
--- SELECT '' AS to_char_18, to_char(val, 'S 9 9 9 9 9 9 9 9 9 9 9 9 9 9 9 9 . 9 9 9 9 9 9 9 9 9 9 9 9 9 9 9 9 9') FROM num_data;
--- SELECT '' AS to_char_19, to_char(val, 'FMS 9 9 9 9 9 9 9 9 9 9 9 9 9 9 9 9 . 9 9 9 9 9 9 9 9 9 9 9 9 9 9 9 9 9') FROM num_data;
--- SELECT '' AS to_char_20, to_char(val, E'99999 "text" 9999 "9999" 999 "\\"text between quote marks\\"" 9999') FROM num_data;
--- SELECT '' AS to_char_21, to_char(val, '999999SG9999999999')			FROM num_data;
--- SELECT '' AS to_char_22, to_char(val, 'FM9999999999999999.999999999999999')	FROM num_data;
--- SELECT '' AS to_char_23, to_char(val, '9.999EEEE')				FROM num_data;
+SELECT '' AS to_char_5,  to_char(val, 'MI9999999999999999.999999999999999'), val     FROM num_data;
+-- SELECT '' AS to_char_6,  to_char(val, 'FMS9999999999999999.999999999999999'), val    FROM num_data;
+-- SELECT '' AS to_char_7,  to_char(val, 'FM9999999999999999.999999999999999THPR'), val FROM num_data;
+-- SELECT '' AS to_char_8,  to_char(val, 'SG9999999999999999.999999999999999th'), val   FROM num_data;
+SELECT '' AS to_char_9,  to_char(val, '0999999999999999.999999999999999'), val       FROM num_data;
+SELECT '' AS to_char_10, to_char(val, 'S0999999999999999.999999999999999'), val      FROM num_data;
+-- SELECT '' AS to_char_11, to_char(val, 'FM0999999999999999.999999999999999'), val     FROM num_data;
+-- SELECT '' AS to_char_12, to_char(val, 'FM9999999999999999.099999999999999'), val 	FROM num_data;
+-- SELECT '' AS to_char_13, to_char(val, 'FM9999999999990999.990999999999999'), val 	FROM num_data;
+-- SELECT '' AS to_char_14, to_char(val, 'FM0999999999999999.999909999999999'), val 	FROM num_data;
+-- SELECT '' AS to_char_15, to_char(val, 'FM9999999990999999.099999999999999'), val 	FROM num_data;
+-- SELECT '' AS to_char_16, to_char(val, 'L9999999999999999.099999999999999'), val	FROM num_data;
+-- SELECT '' AS to_char_17, to_char(val, 'FM9999999999999999.99999999999999'), val	FROM num_data;
+-- SELECT '' AS to_char_18, to_char(val, 'S 9 9 9 9 9 9 9 9 9 9 9 9 9 9 9 9 . 9 9 9 9 9 9 9 9 9 9 9 9 9 9 9 9 9'), val FROM num_data;
+-- SELECT '' AS to_char_19, to_char(val, 'FMS 9 9 9 9 9 9 9 9 9 9 9 9 9 9 9 9 . 9 9 9 9 9 9 9 9 9 9 9 9 9 9 9 9 9'), val FROM num_data;
+-- SELECT '' AS to_char_20, to_char(val, E'99999 "text" 9999 "9999" 999 "\\"text between quote marks\\"" 9999'), val FROM num_data;
+-- SELECT '' AS to_char_21, to_char(val, '999999SG9999999999'), val			FROM num_data;
+-- SELECT '' AS to_char_22, to_char(val, 'FM9999999999999999.999999999999999'), val	FROM num_data;
+-- SELECT '' AS to_char_23, to_char(val, '9.999EEEE'), val				FROM num_data;
 
 -- SELECT '' AS to_char_24, to_char('100'::numeric, 'FM999.9');
 -- SELECT '' AS to_char_25, to_char('100'::numeric, 'FM999.');
@@ -871,24 +886,24 @@ DROP TABLE ceil_floor_round;
 
 -- [SPARK-28137] Missing Data Type Formatting Functions: TO_NUMBER
 -- TO_NUMBER()
---
+-- some queries are commented out as the format string is not supported by Spark
 -- SET lc_numeric = 'C';
--- SELECT '' AS to_number_1,  to_number('-34,338,492', '99G999G999');
--- SELECT '' AS to_number_2,  to_number('-34,338,492.654,878', '99G999G999D999G999');
+SELECT '' AS to_number_1,  to_number('-34,338,492', '99G999G999');
+SELECT '' AS to_number_2,  to_number('-34,338,492.654,878', '99G999G999D999G999');
 -- SELECT '' AS to_number_3,  to_number('<564646.654564>', '999999.999999PR');
--- SELECT '' AS to_number_4,  to_number('0.00001-', '9.999999S');
+SELECT '' AS to_number_4,  to_number('0.00001-', '9.999999S');
 -- SELECT '' AS to_number_5,  to_number('5.01-', 'FM9.999999S');
 -- SELECT '' AS to_number_5,  to_number('5.01-', 'FM9.999999MI');
 -- SELECT '' AS to_number_7,  to_number('5 4 4 4 4 8 . 7 8', '9 9 9 9 9 9 . 9 9');
 -- SELECT '' AS to_number_8,  to_number('.01', 'FM9.99');
--- SELECT '' AS to_number_9,  to_number('.0', '99999999.99999999');
--- SELECT '' AS to_number_10, to_number('0', '99.99');
+SELECT '' AS to_number_9,  to_number('.0', '99999999.99999999');
+SELECT '' AS to_number_10, to_number('0', '99.99');
 -- SELECT '' AS to_number_11, to_number('.-01', 'S99.99');
--- SELECT '' AS to_number_12, to_number('.01-', '99.99S');
+SELECT '' AS to_number_12, to_number('.01-', '99.99S');
 -- SELECT '' AS to_number_13, to_number(' . 0 1-', ' 9 9 . 9 9 S');
--- SELECT '' AS to_number_14, to_number('34,50','999,99');
--- SELECT '' AS to_number_15, to_number('123,000','999G');
--- SELECT '' AS to_number_16, to_number('123456','999G999');
+SELECT '' AS to_number_14, to_number('34,50','999,99');
+SELECT '' AS to_number_15, to_number('123,000','999G');
+SELECT '' AS to_number_16, to_number('123456','999G999');
 -- SELECT '' AS to_number_17, to_number('$1234.56','L9,999.99');
 -- SELECT '' AS to_number_18, to_number('$1234.56','L99,999.99');
 -- SELECT '' AS to_number_19, to_number('$1,234.56','L99,999.99');

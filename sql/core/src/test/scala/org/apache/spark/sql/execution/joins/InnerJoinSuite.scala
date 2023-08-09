@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution.joins
 
 import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.sql.catalyst.expressions.Expression
+import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight, BuildSide}
 import org.apache.spark.sql.catalyst.planning.ExtractEquiJoinKeys
 import org.apache.spark.sql.catalyst.plans.Inner
 import org.apache.spark.sql.catalyst.plans.logical.{Join, JoinHint}
@@ -31,6 +32,8 @@ import org.apache.spark.sql.types.{IntegerType, StringType, StructType}
 class InnerJoinSuite extends SparkPlanTest with SharedSparkSession {
   import testImplicits.newProductEncoder
   import testImplicits.localSeqToDatasetHolder
+
+  private val EnsureRequirements = new EnsureRequirements()
 
   private lazy val myUpperCaseData = spark.createDataFrame(
     sparkContext.parallelize(Seq(
@@ -100,7 +103,7 @@ class InnerJoinSuite extends SparkPlanTest with SharedSparkSession {
         boundCondition,
         leftPlan,
         rightPlan)
-      EnsureRequirements(spark.sessionState.conf).apply(broadcastJoin)
+      EnsureRequirements.apply(broadcastJoin)
     }
 
     def makeShuffledHashJoin(
@@ -114,7 +117,7 @@ class InnerJoinSuite extends SparkPlanTest with SharedSparkSession {
         side, None, leftPlan, rightPlan)
       val filteredJoin =
         boundCondition.map(FilterExec(_, shuffledHashJoin)).getOrElse(shuffledHashJoin)
-      EnsureRequirements(spark.sessionState.conf).apply(filteredJoin)
+      EnsureRequirements.apply(filteredJoin)
     }
 
     def makeSortMergeJoin(
@@ -125,15 +128,15 @@ class InnerJoinSuite extends SparkPlanTest with SharedSparkSession {
         rightPlan: SparkPlan) = {
       val sortMergeJoin = joins.SortMergeJoinExec(leftKeys, rightKeys, Inner, boundCondition,
         leftPlan, rightPlan)
-      EnsureRequirements(spark.sessionState.conf).apply(sortMergeJoin)
+      EnsureRequirements.apply(sortMergeJoin)
     }
 
     testWithWholeStageCodegenOnAndOff(s"$testName using BroadcastHashJoin (build=left)") { _ =>
-      extractJoinParts().foreach { case (_, leftKeys, rightKeys, boundCondition, _, _, _) =>
+      extractJoinParts().foreach { case (_, leftKeys, rightKeys, boundCondition, _, _, _, _) =>
         withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
           checkAnswer2(leftRows, rightRows, (leftPlan: SparkPlan, rightPlan: SparkPlan) =>
             makeBroadcastHashJoin(
-              leftKeys, rightKeys, boundCondition, leftPlan, rightPlan, joins.BuildLeft),
+              leftKeys, rightKeys, boundCondition, leftPlan, rightPlan, BuildLeft),
             expectedAnswer.map(Row.fromTuple),
             sortAnswers = true)
         }
@@ -141,35 +144,35 @@ class InnerJoinSuite extends SparkPlanTest with SharedSparkSession {
     }
 
     testWithWholeStageCodegenOnAndOff(s"$testName using BroadcastHashJoin (build=right)") { _ =>
-      extractJoinParts().foreach { case (_, leftKeys, rightKeys, boundCondition, _, _, _) =>
+      extractJoinParts().foreach { case (_, leftKeys, rightKeys, boundCondition, _, _, _, _) =>
         withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
           checkAnswer2(leftRows, rightRows, (leftPlan: SparkPlan, rightPlan: SparkPlan) =>
             makeBroadcastHashJoin(
-              leftKeys, rightKeys, boundCondition, leftPlan, rightPlan, joins.BuildRight),
+              leftKeys, rightKeys, boundCondition, leftPlan, rightPlan, BuildRight),
             expectedAnswer.map(Row.fromTuple),
             sortAnswers = true)
         }
       }
     }
 
-    test(s"$testName using ShuffledHashJoin (build=left)") {
-      extractJoinParts().foreach { case (_, leftKeys, rightKeys, boundCondition, _, _, _) =>
+    testWithWholeStageCodegenOnAndOff(s"$testName using ShuffledHashJoin (build=left)") { _ =>
+      extractJoinParts().foreach { case (_, leftKeys, rightKeys, boundCondition, _, _, _, _) =>
         withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
           checkAnswer2(leftRows, rightRows, (leftPlan: SparkPlan, rightPlan: SparkPlan) =>
             makeShuffledHashJoin(
-              leftKeys, rightKeys, boundCondition, leftPlan, rightPlan, joins.BuildLeft),
+              leftKeys, rightKeys, boundCondition, leftPlan, rightPlan, BuildLeft),
             expectedAnswer.map(Row.fromTuple),
             sortAnswers = true)
         }
       }
     }
 
-    test(s"$testName using ShuffledHashJoin (build=right)") {
-      extractJoinParts().foreach { case (_, leftKeys, rightKeys, boundCondition, _, _, _) =>
+    testWithWholeStageCodegenOnAndOff(s"$testName using ShuffledHashJoin (build=right)") { _ =>
+      extractJoinParts().foreach { case (_, leftKeys, rightKeys, boundCondition, _, _, _, _) =>
         withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
           checkAnswer2(leftRows, rightRows, (leftPlan: SparkPlan, rightPlan: SparkPlan) =>
             makeShuffledHashJoin(
-              leftKeys, rightKeys, boundCondition, leftPlan, rightPlan, joins.BuildRight),
+              leftKeys, rightKeys, boundCondition, leftPlan, rightPlan, BuildRight),
             expectedAnswer.map(Row.fromTuple),
             sortAnswers = true)
         }
@@ -177,12 +180,16 @@ class InnerJoinSuite extends SparkPlanTest with SharedSparkSession {
     }
 
     testWithWholeStageCodegenOnAndOff(s"$testName using SortMergeJoin") { _ =>
-      extractJoinParts().foreach { case (_, leftKeys, rightKeys, boundCondition, _, _, _) =>
+      extractJoinParts().foreach { case (_, leftKeys, rightKeys, boundCondition, _, _, _, _) =>
         withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
-          checkAnswer2(leftRows, rightRows, (leftPlan: SparkPlan, rightPlan: SparkPlan) =>
-            makeSortMergeJoin(leftKeys, rightKeys, boundCondition, leftPlan, rightPlan),
-            expectedAnswer.map(Row.fromTuple),
-            sortAnswers = true)
+          Seq(true, false).foreach { enable =>
+            withSQLConf(SQLConf.USE_PARTITION_EVALUATOR.key -> enable.toString) {
+              checkAnswer2(leftRows, rightRows, (leftPlan: SparkPlan, rightPlan: SparkPlan) =>
+                makeSortMergeJoin(leftKeys, rightKeys, boundCondition, leftPlan, rightPlan),
+                expectedAnswer.map(Row.fromTuple),
+                sortAnswers = true)
+            }
+          }
         }
       }
     }
@@ -197,7 +204,7 @@ class InnerJoinSuite extends SparkPlanTest with SharedSparkSession {
       }
     }
 
-    test(s"$testName using BroadcastNestedLoopJoin build left") {
+    testWithWholeStageCodegenOnAndOff(s"$testName using BroadcastNestedLoopJoin build left") { _ =>
       withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
         checkAnswer2(leftRows, rightRows, (left: SparkPlan, right: SparkPlan) =>
           BroadcastNestedLoopJoinExec(left, right, BuildLeft, Inner, Some(condition())),
@@ -206,7 +213,7 @@ class InnerJoinSuite extends SparkPlanTest with SharedSparkSession {
       }
     }
 
-    test(s"$testName using BroadcastNestedLoopJoin build right") {
+    testWithWholeStageCodegenOnAndOff(s"$testName using BroadcastNestedLoopJoin build right") { _ =>
       withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
         checkAnswer2(leftRows, rightRows, (left: SparkPlan, right: SparkPlan) =>
           BroadcastNestedLoopJoinExec(left, right, BuildRight, Inner, Some(condition())),

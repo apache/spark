@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import java.nio.charset.StandardCharsets
-import java.time.{ZoneId, ZoneOffset}
+import java.time.{Duration, Period, ZoneId, ZoneOffset}
 
 import scala.collection.mutable.ArrayBuffer
 import scala.language.implicitConversions
@@ -29,7 +29,7 @@ import org.scalatest.exceptions.TestFailedException
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.{RandomDataGenerator, Row}
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.encoders.{ExamplePointUDT, RowEncoder}
+import org.apache.spark.sql.catalyst.encoders.{ExamplePointUDT, ExpressionEncoder}
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateMutableProjection
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, DateTimeUtils, GenericArrayData, IntervalUtils}
 import org.apache.spark.sql.types.{ArrayType, StructType, _}
@@ -60,13 +60,21 @@ class HashExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("sha2") {
+    checkEvaluation(Sha2(Literal("ABC".getBytes(StandardCharsets.UTF_8)), Literal(224)),
+      "107c5072b799c4771f328304cfe1ebb375eb6ea7f35a3aa753836fad")
+    checkEvaluation(Sha2(Literal("ABC".getBytes(StandardCharsets.UTF_8)), Literal(0)),
+      DigestUtils.sha256Hex("ABC"))
     checkEvaluation(Sha2(Literal("ABC".getBytes(StandardCharsets.UTF_8)), Literal(256)),
       DigestUtils.sha256Hex("ABC"))
     checkEvaluation(Sha2(Literal.create(Array[Byte](1, 2, 3, 4, 5, 6), BinaryType), Literal(384)),
       DigestUtils.sha384Hex(Array[Byte](1, 2, 3, 4, 5, 6)))
+    checkEvaluation(Sha2(Literal("ABC".getBytes(StandardCharsets.UTF_8)), Literal(512)),
+      DigestUtils.sha512Hex("ABC"))
     // unsupported bit length
     checkEvaluation(Sha2(Literal.create(null, BinaryType), Literal(1024)), null)
+    // null input and valid bit length
     checkEvaluation(Sha2(Literal.create(null, BinaryType), Literal(512)), null)
+    // valid input and null bit length
     checkEvaluation(Sha2(Literal("ABC".getBytes(StandardCharsets.UTF_8)),
       Literal.create(null, IntegerType)), null)
     checkEvaluation(Sha2(Literal.create(null, BinaryType), Literal.create(null, IntegerType)), null)
@@ -176,7 +184,7 @@ class HashExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   test("hive-hash for date type") {
     def checkHiveHashForDateType(dateString: String, expected: Long): Unit = {
       checkHiveHash(
-        DateTimeUtils.stringToDate(UTF8String.fromString(dateString), ZoneOffset.UTC).get,
+        DateTimeUtils.stringToDate(UTF8String.fromString(dateString)).get,
         DateType,
         expected)
     }
@@ -194,9 +202,11 @@ class HashExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     // before epoch
     checkHiveHashForDateType("1800-01-01", -62091)
 
+    // negative year
+    checkHiveHashForDateType("-1212-01-01", -1162202)
+
     // Invalid input: bad date string. Hive returns 0 for such cases
     intercept[NoSuchElementException](checkHiveHashForDateType("0-0-0", 0))
-    intercept[NoSuchElementException](checkHiveHashForDateType("-1212-01-01", 0))
     intercept[NoSuchElementException](checkHiveHashForDateType("2016-99-99", 0))
 
     // Invalid input: Empty string. Hive returns 0 for this case
@@ -697,9 +707,31 @@ class HashExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(XxHash64(Seq(literal), 100L), XxHash64(Seq(literal), 100).eval())
   }
 
+  test("SPARK-35113: HashExpression support DayTimeIntervalType/YearMonthIntervalType") {
+    val dayTime = Literal.create(Duration.ofSeconds(1237123123), DayTimeIntervalType())
+    val yearMonth = Literal.create(Period.ofMonths(1234), YearMonthIntervalType())
+    checkEvaluation(Murmur3Hash(Seq(dayTime), 10), -428664612)
+    checkEvaluation(Murmur3Hash(Seq(yearMonth), 10), -686520021)
+    checkEvaluation(XxHash64(Seq(dayTime), 10), 8228802290839366895L)
+    checkEvaluation(XxHash64(Seq(yearMonth), 10), -1774215319882784110L)
+    checkEvaluation(HiveHash(Seq(dayTime)), 743331816)
+    checkEvaluation(HiveHash(Seq(yearMonth)), 1234)
+  }
+
+  test("SPARK-35207: Compute hash consistent between -0.0 and 0.0") {
+    def checkResult(exprs1: Expression, exprs2: Expression): Unit = {
+      checkEvaluation(Murmur3Hash(Seq(exprs1), 42), Murmur3Hash(Seq(exprs2), 42).eval())
+      checkEvaluation(XxHash64(Seq(exprs1), 42), XxHash64(Seq(exprs2), 42).eval())
+      checkEvaluation(HiveHash(Seq(exprs1)), HiveHash(Seq(exprs2)).eval())
+    }
+
+    checkResult(Literal.create(-0D, DoubleType), Literal.create(0D, DoubleType))
+    checkResult(Literal.create(-0F, FloatType), Literal.create(0F, FloatType))
+  }
+
   private def testHash(inputSchema: StructType): Unit = {
     val inputGenerator = RandomDataGenerator.forType(inputSchema, nullable = false).get
-    val toRow = RowEncoder(inputSchema).createSerializer()
+    val toRow = ExpressionEncoder(inputSchema).createSerializer()
     val seed = scala.util.Random.nextInt()
     test(s"murmur3/xxHash64/hive hash: ${inputSchema.simpleString}") {
       for (_ <- 1 to 10) {

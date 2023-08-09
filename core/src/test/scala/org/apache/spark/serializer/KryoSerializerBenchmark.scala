@@ -18,13 +18,16 @@
 package org.apache.spark.serializer
 
 import scala.concurrent._
+// scalastyle:off executioncontextglobal
 import scala.concurrent.ExecutionContext.Implicits.global
+// scalastyle:on executioncontextglobal
 import scala.concurrent.duration._
 
 import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.benchmark.{Benchmark, BenchmarkBase}
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.Kryo._
+import org.apache.spark.internal.config.Tests.IS_TESTING
 import org.apache.spark.launcher.SparkLauncher.EXECUTOR_EXTRA_JAVA_OPTIONS
 import org.apache.spark.serializer.KryoTest._
 import org.apache.spark.util.ThreadUtils
@@ -34,10 +37,10 @@ import org.apache.spark.util.ThreadUtils
  * To run this benchmark:
  * {{{
  *   1. without sbt:
- *      bin/spark-submit --class <this class> --jars <spark core test jar>
- *   2. build/sbt "core/test:runMain <this class>"
+ *      bin/spark-submit --class <this class> <spark core test jar>
+ *   2. build/sbt "core/Test/runMain <this class>"
  *   3. generate result:
- *      SPARK_GENERATE_BENCHMARK_FILES=1 build/sbt "core/test:runMain <this class>"
+ *      SPARK_GENERATE_BENCHMARK_FILES=1 build/sbt "core/Test/runMain <this class>"
  *      Results will be written to "benchmarks/KryoSerializerBenchmark-results.txt".
  * }}}
  */
@@ -57,6 +60,7 @@ object KryoSerializerBenchmark extends BenchmarkBase {
   private def run(usePool: Boolean, benchmark: Benchmark): Unit = {
     lazy val sc = createSparkContext(usePool)
 
+    System.clearProperty(IS_TESTING.key)
     benchmark.addCase(s"KryoPool:$usePool") { _ =>
       val futures = for (_ <- 0 until N) yield {
         Future {
@@ -76,7 +80,7 @@ object KryoSerializerBenchmark extends BenchmarkBase {
     conf.set(EXECUTOR_EXTRA_JAVA_OPTIONS,
       "-XX:+UseParallelGC -XX:-UseDynamicNumberOfGCThreads")
     conf.set(SERIALIZER, "org.apache.spark.serializer.KryoSerializer")
-    conf.set(KRYO_USER_REGISTRATORS, classOf[MyRegistrator].getName)
+    conf.set(KRYO_USER_REGISTRATORS, Seq(classOf[MyRegistrator].getName))
     conf.set(KRYO_USE_POOL, usePool)
 
     if (sc != null) {

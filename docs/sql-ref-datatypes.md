@@ -37,16 +37,60 @@ Spark SQL and DataFrames support the following data types:
   - `DecimalType`: Represents arbitrary-precision signed decimal numbers. Backed internally by `java.math.BigDecimal`. A `BigDecimal` consists of an arbitrary precision integer unscaled value and a 32-bit integer scale.
 * String type
   - `StringType`: Represents character string values.
+  - `VarcharType(length)`: A variant of `StringType` which has a length limitation. Data writing will fail if the input string exceeds the length limitation. Note: this type can only be used in table schema, not functions/operators.
+  - `CharType(length)`: A variant of `VarcharType(length)` which is fixed length. Reading column of type `CharType(n)` always returns string values of length `n`. Char type column comparison will pad the short one to the longer length.
 * Binary type
   - `BinaryType`: Represents byte sequence values.
 * Boolean type
   - `BooleanType`: Represents boolean values.
 * Datetime type
-  - `TimestampType`: Represents values comprising values of fields year, month, day,
-  hour, minute, and second, with the session local time-zone. The timestamp value represents an
-  absolute point in time.
   - `DateType`: Represents values comprising values of fields year, month and day, without a
   time-zone.
+  - `TimestampType`: Timestamp with local time zone(TIMESTAMP_LTZ). It represents values comprising values of fields year, month, day,
+  hour, minute, and second, with the session local time-zone. The timestamp value represents an
+  absolute point in time.
+  - `TimestampNTZType`: Timestamp without time zone(TIMESTAMP_NTZ). It represents values comprising values of fields year, month, day,
+  hour, minute, and second. All operations are performed without taking any time zone into account.
+    - Note: TIMESTAMP in Spark is a user-specified alias associated with one of the TIMESTAMP_LTZ and TIMESTAMP_NTZ variations.  Users can set the default timestamp type as `TIMESTAMP_LTZ`(default value) or `TIMESTAMP_NTZ` via the configuration `spark.sql.timestampType`.
+
+* Interval types
+  - `YearMonthIntervalType(startField, endField)`: Represents a year-month interval which is made up of a contiguous subset of the following fields:
+    - MONTH, months within years `[0..11]`,
+    - YEAR, years in the range `[0..178956970]`.
+
+    Individual interval fields are non-negative, but an interval itself can have a sign, and be negative.
+
+    `startField` is the leftmost field, and `endField` is the rightmost field of the type. Valid values of `startField` and `endField` are 0(MONTH) and 1(YEAR). Supported year-month interval types are:
+    
+    |Year-Month Interval Type|SQL type|An instance of the type|
+    |---------|----|-------------------|
+    |`YearMonthIntervalType(YEAR, YEAR)` or `YearMonthIntervalType(YEAR)`|INTERVAL YEAR|`INTERVAL '2021' YEAR`|
+    |`YearMonthIntervalType(YEAR, MONTH)`|INTERVAL YEAR TO MONTH|`INTERVAL '2021-07' YEAR TO MONTH`|
+    |`YearMonthIntervalType(MONTH, MONTH)` or `YearMonthIntervalType(MONTH)`|INTERVAL MONTH|`INTERVAL '10' MONTH`|
+
+  - `DayTimeIntervalType(startField, endField)`: Represents a day-time interval which is made up of a contiguous subset of the following fields:
+    - SECOND, seconds within minutes and possibly fractions of a second `[0..59.999999]`,
+    - MINUTE, minutes within hours `[0..59]`,
+    - HOUR, hours within days `[0..23]`,
+    - DAY, days in the range `[0..106751991]`.
+
+    Individual interval fields are non-negative, but an interval itself can have a sign, and be negative.
+
+    `startField` is the leftmost field, and `endField` is the rightmost field of the type. Valid values of `startField` and `endField` are 0 (DAY), 1 (HOUR), 2 (MINUTE), 3 (SECOND). Supported day-time interval types are:
+
+    |Day-Time Interval Type|SQL type|An instance of the type|
+    |---------|----|-------------------|
+    |`DayTimeIntervalType(DAY, DAY)` or `DayTimeIntervalType(DAY)`|INTERVAL DAY|`INTERVAL '100' DAY`|
+    |`DayTimeIntervalType(DAY, HOUR)`|INTERVAL DAY TO HOUR|`INTERVAL '100 10' DAY TO HOUR`|
+    |`DayTimeIntervalType(DAY, MINUTE)`|INTERVAL DAY TO MINUTE|`INTERVAL '100 10:30' DAY TO MINUTE`|
+    |`DayTimeIntervalType(DAY, SECOND)`|INTERVAL DAY TO SECOND|`INTERVAL '100 10:30:40.999999' DAY TO SECOND`|
+    |`DayTimeIntervalType(HOUR, HOUR)` or `DayTimeIntervalType(HOUR)`|INTERVAL HOUR|`INTERVAL '123' HOUR`|
+    |`DayTimeIntervalType(HOUR, MINUTE)`|INTERVAL HOUR TO MINUTE|`INTERVAL '123:10' HOUR TO MINUTE`|
+    |`DayTimeIntervalType(HOUR, SECOND)`|INTERVAL HOUR TO SECOND|`INTERVAL '123:10:59' HOUR TO SECOND`|
+    |`DayTimeIntervalType(MINUTE, MINUTE)` or `DayTimeIntervalType(MINUTE)`|INTERVAL MINUTE|`INTERVAL '1000' MINUTE`|
+    |`DayTimeIntervalType(MINUTE, SECOND)`|INTERVAL MINUTE TO SECOND|`INTERVAL '1000:01.001' MINUTE TO SECOND`|
+    |`DayTimeIntervalType(SECOND, SECOND)` or `DayTimeIntervalType(SECOND)`|INTERVAL SECOND|`INTERVAL '1000.000001' SECOND`|
+
 * Complex types
   - `ArrayType(elementType, containsNull)`: Represents values comprising a sequence of
   elements with the type of `elementType`. `containsNull` is used to indicate if
@@ -64,6 +108,38 @@ Spark SQL and DataFrames support the following data types:
     `null` values.
 
 <div class="codetabs">
+
+<div data-lang="python"  markdown="1">
+
+All data types of Spark SQL are located in the package of `pyspark.sql.types`.
+You can access them by doing
+{% highlight python %}
+from pyspark.sql.types import *
+{% endhighlight %}
+
+|Data type|Value type in Python|API to access or create a data type|
+|---------|--------------------|-----------------------------------|
+|**ByteType**|int or long<br/>**Note:** Numbers will be converted to 1-byte signed integer numbers at runtime. Please make sure that numbers are within the range of -128 to 127.|ByteType()|
+|**ShortType**|int or long<br/>**Note:** Numbers will be converted to 2-byte signed integer numbers at runtime. Please make sure that numbers are within the range of -32768 to 32767.|ShortType()|
+|**IntegerType**|int or long|IntegerType()|
+|**LongType**|long<br/>**Note:** Numbers will be converted to 8-byte signed integer numbers at runtime. Please make sure that numbers are within the range of -9223372036854775808 to 9223372036854775807. Otherwise, please convert data to decimal.Decimal and use DecimalType.|LongType()|
+|**FloatType**|float<br/>**Note:** Numbers will be converted to 4-byte single-precision floating point numbers at runtime.|FloatType()|
+|**DoubleType**|float|DoubleType()|
+|**DecimalType**|decimal.Decimal|DecimalType()|
+|**StringType**|string|StringType()|
+|**BinaryType**|bytearray|BinaryType()|
+|**BooleanType**|bool|BooleanType()|
+|**TimestampType**|datetime.datetime|TimestampType()|
+|**TimestampNTZType**|datetime.datetime|TimestampNTZType()|
+|**DateType**|datetime.date|DateType()|
+|**DayTimeIntervalType**|datetime.timedelta|DayTimeIntervalType()|
+|**ArrayType**|list, tuple, or array|ArrayType(*elementType*, [*containsNull*])<br/>**Note:**The default value of *containsNull* is True.|
+|**MapType**|dict|MapType(*keyType*, *valueType*, [*valueContainsNull]*)<br/>**Note:**The default value of *valueContainsNull* is True.|
+|**StructType**|list or tuple|StructType(*fields*)<br/>**Note:** *fields* is a Seq of StructFields. Also, two fields with the same name are not allowed.|
+|**StructField**|The value type in Python of the data type of this field<br/>(For example, Int for a StructField with the data type IntegerType)|StructField(*name*, *dataType*, [*nullable*])<br/>**Note:** The default value of *nullable* is True.|
+
+</div>
+
 <div data-lang="scala"  markdown="1">
 
 All data types of Spark SQL are located in the package `org.apache.spark.sql.types`.
@@ -83,8 +159,11 @@ You can access them by doing
 |**StringType**|String|StringType|
 |**BinaryType**|Array[Byte]|BinaryType|
 |**BooleanType**|Boolean|BooleanType|
-|**TimestampType**|java.sql.Timestamp|TimestampType|
-|**DateType**|java.sql.Date|DateType|
+|**TimestampType**|java.time.Instant or java.sql.Timestamp|TimestampType|
+|**TimestampNTZType**|java.time.LocalDateTime|TimestampNTZType|
+|**DateType**|java.time.LocalDate or java.sql.Date|DateType|
+|**YearMonthIntervalType**|java.time.Period|YearMonthIntervalType|
+|**DayTimeIntervalType**|java.time.Duration|DayTimeIntervalType|
 |**ArrayType**|scala.collection.Seq|ArrayType(*elementType*, [*containsNull]*)<br/>**Note:** The default value of *containsNull* is true.|
 |**MapType**|scala.collection.Map|MapType(*keyType*, *valueType*, [*valueContainsNull]*)<br/>**Note:** The default value of *valueContainsNull* is true.|
 |**StructType**|org.apache.spark.sql.Row|StructType(*fields*)<br/>**Note:** *fields* is a Seq of StructFields. Also, two fields with the same name are not allowed.|
@@ -111,41 +190,15 @@ please use factory methods provided in
 |**StringType**|String|DataTypes.StringType|
 |**BinaryType**|byte[]|DataTypes.BinaryType|
 |**BooleanType**|boolean or Boolean|DataTypes.BooleanType|
-|**TimestampType**|java.sql.Timestamp|DataTypes.TimestampType|
-|**DateType**|java.sql.Date|DataTypes.DateType|
+|**TimestampType**|java.time.Instant or java.sql.Timestamp|DataTypes.TimestampType|
+|**TimestampNTZType**|java.time.LocalDateTime|DataTypes.TimestampNTZType|
+|**DateType**|java.time.LocalDate or java.sql.Date|DataTypes.DateType|
+|**YearMonthIntervalType**|java.time.Period|DataTypes.YearMonthIntervalType|
+|**DayTimeIntervalType**|java.time.Duration|DataTypes.DayTimeIntervalType|
 |**ArrayType**|java.util.List|DataTypes.createArrayType(*elementType*)<br/>**Note:** The value of *containsNull* will be true.<br/>DataTypes.createArrayType(*elementType*, *containsNull*).|
 |**MapType**|java.util.Map|DataTypes.createMapType(*keyType*, *valueType*)<br/>**Note:** The value of *valueContainsNull* will be true.<br/>DataTypes.createMapType(*keyType*, *valueType*, *valueContainsNull*)|
 |**StructType**|org.apache.spark.sql.Row|DataTypes.createStructType(*fields*)<br/>**Note:** *fields* is a List or an array of StructFields.Also, two fields with the same name are not allowed.|
 |**StructField**|The value type in Java of the data type of this field (For example, int for a StructField with the data type IntegerType)|DataTypes.createStructField(*name*, *dataType*, *nullable*)| 
-
-</div>
-
-<div data-lang="python"  markdown="1">
-
-All data types of Spark SQL are located in the package of `pyspark.sql.types`.
-You can access them by doing
-{% highlight python %}
-from pyspark.sql.types import *
-{% endhighlight %}
-
-|Data type|Value type in Python|API to access or create a data type|
-|---------|--------------------|-----------------------------------|
-|**ByteType**|int or long<br/>**Note:** Numbers will be converted to 1-byte signed integer numbers at runtime. Please make sure that numbers are within the range of -128 to 127.|ByteType()|
-|**ShortType**|int or long<br/>**Note:** Numbers will be converted to 2-byte signed integer numbers at runtime. Please make sure that numbers are within the range of -32768 to 32767.|ShortType()|
-|**IntegerType**|int or long|IntegerType()|
-|**LongType**|long<br/>**Note:** Numbers will be converted to 8-byte signed integer numbers at runtime. Please make sure that numbers are within the range of -9223372036854775808 to 9223372036854775807.Otherwise, please convert data to decimal.Decimal and use DecimalType.|LongType()|
-|**FloatType**|float<br/>**Note:** Numbers will be converted to 4-byte single-precision floating point numbers at runtime.|FloatType()|
-|**DoubleType**|float|DoubleType()|
-|**DecimalType**|decimal.Decimal|DecimalType()|
-|**StringType**|string|StringType()|
-|**BinaryType**|bytearray|BinaryType()|
-|**BooleanType**|bool|BooleanType()|
-|**TimestampType**|datetime.datetime|TimestampType()|
-|**DateType**|datetime.date|DateType()|
-|**ArrayType**|list, tuple, or array|ArrayType(*elementType*, [*containsNull*])<br/>**Note:**The default value of *containsNull* is True.|
-|**MapType**|dict|MapType(*keyType*, *valueType*, [*valueContainsNull]*)<br/>**Note:**The default value of *valueContainsNull* is True.|
-|**StructType**|list or tuple|StructType(*fields*)<br/>**Note:** *fields* is a Seq of StructFields. Also, two fields with the same name are not allowed.|
-|**StructField**|The value type in Python of the data type of this field<br/>(For example, Int for a StructField with the data type IntegerType)|StructField(*name*, *dataType*, [*nullable*])<br/>**Note:** The default value of *nullable* is True.|
 
 </div>
 
@@ -186,13 +239,15 @@ The following table shows the type names as well as aliases used in Spark SQL pa
 |**FloatType**|FLOAT, REAL|
 |**DoubleType**|DOUBLE|
 |**DateType**|DATE|
-|**TimestampType**|TIMESTAMP|
+|**TimestampType**|TIMESTAMP, TIMESTAMP_LTZ|
+|**TimestampNTZType**|TIMESTAMP_NTZ|
 |**StringType**|STRING|
 |**BinaryType**|BINARY|
 |**DecimalType**|DECIMAL, DEC, NUMERIC|
-|**CalendarIntervalType**|INTERVAL|
-|**ArrayType**|ARRAY<element_type>|
-|**StructType**|STRUCT<field1_name: field1_type, field2_name: field2_type, ...>|
+|**YearMonthIntervalType**|INTERVAL YEAR, INTERVAL YEAR TO MONTH, INTERVAL MONTH|
+|**DayTimeIntervalType**|INTERVAL DAY, INTERVAL DAY TO HOUR, INTERVAL DAY TO MINUTE, INTERVAL DAY TO SECOND, INTERVAL HOUR, INTERVAL HOUR TO MINUTE, INTERVAL HOUR TO SECOND, INTERVAL MINUTE, INTERVAL MINUTE TO SECOND, INTERVAL SECOND|
+|**ArrayType**|ARRAY\<element_type>|
+|**StructType**|STRUCT<field1_name: field1_type, field2_name: field2_type, ...><br/> **Note:** ':' is optional.|
 |**MapType**|MAP<key_type, value_type>|
 
 </div>

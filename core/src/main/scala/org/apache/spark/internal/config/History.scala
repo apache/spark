@@ -17,6 +17,7 @@
 
 package org.apache.spark.internal.config
 
+import java.util.Locale
 import java.util.concurrent.TimeUnit
 
 import org.apache.spark.network.util.ByteUnit
@@ -39,6 +40,16 @@ private[spark] object History {
     .version("1.4.0")
     .timeConf(TimeUnit.SECONDS)
     .createWithDefaultString("10s")
+
+  val UPDATE_BATCHSIZE = ConfigBuilder("spark.history.fs.update.batchSize")
+    .doc("Specifies the batch size for updating new eventlog files. " +
+      "This controls each scan process to be completed within a reasonable time, and such " +
+      "prevent the initial scan from running too long and blocking new eventlog files to " +
+      "be scanned in time in large environments.")
+    .version("3.4.0")
+    .intConf
+    .checkValue(v => v > 0, "The update batchSize should be a positive integer.")
+    .createWithDefault(Int.MaxValue)
 
   val CLEANER_ENABLED = ConfigBuilder("spark.history.fs.cleaner.enabled")
     .version("1.4.0")
@@ -67,6 +78,21 @@ private[spark] object History {
     .version("2.3.0")
     .stringConf
     .createOptional
+
+  object LocalStoreSerializer extends Enumeration {
+    val JSON, PROTOBUF = Value
+  }
+
+  val LOCAL_STORE_SERIALIZER = ConfigBuilder("spark.history.store.serializer")
+    .doc("Serializer for writing/reading in-memory UI objects to/from disk-based KV Store; " +
+      "JSON or PROTOBUF. JSON serializer is the only choice before Spark 3.4.0, thus it is the " +
+      "default value. PROTOBUF serializer is fast and compact, and it is the default " +
+      "serializer for disk-based KV store of live UI.")
+    .version("3.4.0")
+    .stringConf
+    .transform(_.toUpperCase(Locale.ROOT))
+    .checkValues(LocalStoreSerializer.values.map(_.toString))
+    .createWithDefault(LocalStoreSerializer.JSON.toString)
 
   val MAX_LOCAL_DISK_USAGE = ConfigBuilder("spark.history.store.maxDiskUsage")
     .version("2.3.0")
@@ -195,4 +221,32 @@ private[spark] object History {
       .version("3.0.0")
       .booleanConf
       .createWithDefault(true)
+
+  val HYBRID_STORE_ENABLED = ConfigBuilder("spark.history.store.hybridStore.enabled")
+    .doc("Whether to use HybridStore as the store when parsing event logs. " +
+      "HybridStore will first write data to an in-memory store and having a background thread " +
+      "that dumps data to a disk store after the writing to in-memory store is completed.")
+    .version("3.1.0")
+    .booleanConf
+    .createWithDefault(false)
+
+  val MAX_IN_MEMORY_STORE_USAGE = ConfigBuilder("spark.history.store.hybridStore.maxMemoryUsage")
+    .doc("Maximum memory space that can be used to create HybridStore. The HybridStore co-uses " +
+      "the heap memory, so the heap memory should be increased through the memory option for SHS " +
+      "if the HybridStore is enabled.")
+    .version("3.1.0")
+    .bytesConf(ByteUnit.BYTE)
+    .createWithDefaultString("2g")
+
+  object HybridStoreDiskBackend extends Enumeration {
+    val LEVELDB, ROCKSDB = Value
+  }
+
+  val HYBRID_STORE_DISK_BACKEND = ConfigBuilder("spark.history.store.hybridStore.diskBackend")
+    .doc("Specifies a disk-based store used in hybrid store; LEVELDB or ROCKSDB.")
+    .version("3.3.0")
+    .stringConf
+    .transform(_.toUpperCase(Locale.ROOT))
+    .checkValues(HybridStoreDiskBackend.values.map(_.toString))
+    .createWithDefault(HybridStoreDiskBackend.ROCKSDB.toString)
 }

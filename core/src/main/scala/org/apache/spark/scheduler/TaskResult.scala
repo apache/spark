@@ -24,20 +24,21 @@ import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.SparkEnv
 import org.apache.spark.metrics.ExecutorMetricType
-import org.apache.spark.serializer.SerializerInstance
+import org.apache.spark.serializer.{SerializerHelper, SerializerInstance}
 import org.apache.spark.storage.BlockId
 import org.apache.spark.util.{AccumulatorV2, Utils}
+import org.apache.spark.util.io.ChunkedByteBuffer
 
 // Task result. Also contains updates to accumulator variables and executor metric peaks.
 private[spark] sealed trait TaskResult[T]
 
 /** A reference to a DirectTaskResult that has been stored in the worker's BlockManager. */
-private[spark] case class IndirectTaskResult[T](blockId: BlockId, size: Int)
+private[spark] case class IndirectTaskResult[T](blockId: BlockId, size: Long)
   extends TaskResult[T] with Serializable
 
 /** A TaskResult that contains the task's return value, accumulator updates and metric peaks. */
 private[spark] class DirectTaskResult[T](
-    var valueBytes: ByteBuffer,
+    var valueByteBuffer: ChunkedByteBuffer,
     var accumUpdates: Seq[AccumulatorV2[_, _]],
     var metricPeaks: Array[Long])
   extends TaskResult[T] with Externalizable {
@@ -45,12 +46,18 @@ private[spark] class DirectTaskResult[T](
   private var valueObjectDeserialized = false
   private var valueObject: T = _
 
-  def this() = this(null.asInstanceOf[ByteBuffer], null,
+  def this(
+    valueByteBuffer: ByteBuffer,
+    accumUpdates: Seq[AccumulatorV2[_, _]],
+    metricPeaks: Array[Long]) = {
+    this(new ChunkedByteBuffer(Array(valueByteBuffer)), accumUpdates, metricPeaks)
+  }
+
+  def this() = this(null.asInstanceOf[ChunkedByteBuffer], Seq(),
     new Array[Long](ExecutorMetricType.numMetrics))
 
   override def writeExternal(out: ObjectOutput): Unit = Utils.tryOrIOException {
-    out.writeInt(valueBytes.remaining)
-    Utils.writeByteBuffer(valueBytes, out)
+    valueByteBuffer.writeExternal(out)
     out.writeInt(accumUpdates.size)
     accumUpdates.foreach(out.writeObject)
     out.writeInt(metricPeaks.length)
@@ -58,10 +65,8 @@ private[spark] class DirectTaskResult[T](
   }
 
   override def readExternal(in: ObjectInput): Unit = Utils.tryOrIOException {
-    val blen = in.readInt()
-    val byteVal = new Array[Byte](blen)
-    in.readFully(byteVal)
-    valueBytes = ByteBuffer.wrap(byteVal)
+    valueByteBuffer = new ChunkedByteBuffer()
+    valueByteBuffer.readExternal(in)
 
     val numUpdates = in.readInt
     if (numUpdates == 0) {
@@ -71,7 +76,7 @@ private[spark] class DirectTaskResult[T](
       for (i <- 0 until numUpdates) {
         _accumUpdates += in.readObject.asInstanceOf[AccumulatorV2[_, _]]
       }
-      accumUpdates = _accumUpdates
+      accumUpdates = _accumUpdates.toSeq
     }
 
     val numMetrics = in.readInt
@@ -100,7 +105,7 @@ private[spark] class DirectTaskResult[T](
       // This should not run when holding a lock because it may cost dozens of seconds for a large
       // value
       val ser = if (resultSer == null) SparkEnv.get.serializer.newInstance() else resultSer
-      valueObject = ser.deserialize(valueBytes)
+      valueObject = SerializerHelper.deserializeFromChunkedBuffer(ser, valueByteBuffer)
       valueObjectDeserialized = true
       valueObject
     }

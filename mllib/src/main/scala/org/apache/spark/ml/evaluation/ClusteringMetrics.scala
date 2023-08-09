@@ -21,7 +21,7 @@ import org.apache.spark.SparkContext
 import org.apache.spark.annotation.Since
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.ml.linalg.{BLAS, DenseVector, Vector, Vectors}
-import org.apache.spark.ml.util.MetadataUtils
+import org.apache.spark.ml.util.DatasetUtils._
 import org.apache.spark.sql.{Column, DataFrame, Dataset}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.DoubleType
@@ -37,13 +37,18 @@ class ClusteringMetrics private[spark](dataset: Dataset[_]) {
 
   def getDistanceMeasure: String = distanceMeasure
 
-  def setDistanceMeasure(value: String) : Unit = distanceMeasure = value
+  def setDistanceMeasure(value: String) : this.type = {
+    require(value.equalsIgnoreCase("squaredEuclidean") ||
+      value.equalsIgnoreCase("cosine"))
+    distanceMeasure = value
+    this
+  }
 
   /**
    * Returns the silhouette score
    */
   @Since("3.1.0")
-  lazy val silhouette: Double = {
+  def silhouette(): Double = {
     val columns = dataset.columns.toSeq
     if (distanceMeasure.equalsIgnoreCase("squaredEuclidean")) {
       SquaredEuclideanSilhouette.computeSilhouetteScore(
@@ -127,7 +132,7 @@ private[evaluation] abstract class Silhouette {
  * `$a_{i}$` can be interpreted as how well `i` is assigned to its cluster
  * (the smaller the value, the better the assignment), while `$b_{i}$` is
  * a measure of how well `i` has not been assigned to its "neighboring cluster",
- * ie. the nearest cluster to `i`.
+ * i.e. the nearest cluster to `i`.
  *
  * Unfortunately, the naive implementation of the algorithm requires to compute
  * the distance of each couple of points in the dataset. Since the computation of
@@ -288,29 +293,39 @@ private[evaluation] object SquaredEuclideanSilhouette extends Silhouette {
       predictionCol: String,
       featuresCol: String,
       weightCol: String): Map[Double, ClusterStats] = {
-    val numFeatures = MetadataUtils.getNumFeatures(df, featuresCol)
+    val numFeatures = getNumFeatures(df, featuresCol)
     val clustersStatsRDD = df.select(
       col(predictionCol).cast(DoubleType), col(featuresCol), col("squaredNorm"), col(weightCol))
       .rdd
       .map { row => (row.getDouble(0), (row.getAs[Vector](1), row.getDouble(2), row.getDouble(3))) }
-      .aggregateByKey
-      [(DenseVector, Double, Double)]((Vectors.zeros(numFeatures).toDense, 0.0, 0.0))(
+      .aggregateByKey[(DenseVector, Double, Double)]((null.asInstanceOf[DenseVector], 0.0, 0.0))(
         seqOp = {
-          case (
-            (featureSum: DenseVector, squaredNormSum: Double, weightSum: Double),
-            (features, squaredNorm, weight)
-            ) =>
-            require(weight >= 0.0, s"illegal weight value: $weight.  weight must be >= 0.0.")
-            BLAS.axpy(weight, features, featureSum)
-            (featureSum, squaredNormSum + squaredNorm * weight, weightSum + weight)
+          case t: ((DenseVector, Double, Double), (Vector, Double, Double)) =>
+            val ((featureSum, squaredNormSum, weightSum),
+                 (features: Vector, squaredNorm, weight)) = t
+            val theFeatureSum =
+              if (featureSum == null) {
+                Vectors.zeros(numFeatures).toDense
+              } else {
+                featureSum
+              }
+            BLAS.axpy(weight, features, theFeatureSum)
+            (theFeatureSum, squaredNormSum + squaredNorm * weight, weightSum + weight)
         },
         combOp = {
-          case (
-            (featureSum1, squaredNormSum1, weightSum1),
-            (featureSum2, squaredNormSum2, weightSum2)
-            ) =>
-            BLAS.axpy(1.0, featureSum2, featureSum1)
-            (featureSum1, squaredNormSum1 + squaredNormSum2, weightSum1 + weightSum2)
+          case t: ((DenseVector, Double, Double), (DenseVector, Double, Double)) =>
+            val ((featureSum1, squaredNormSum1, weightSum1),
+                 (featureSum2, squaredNormSum2, weightSum2)) = t
+            val theFeatureSum =
+              if (featureSum1 == null) {
+                featureSum2
+              } else if (featureSum2 == null) {
+                featureSum1
+              } else {
+                BLAS.axpy(1.0, featureSum2, featureSum1)
+                featureSum1
+              }
+            (theFeatureSum, squaredNormSum1 + squaredNormSum2, weightSum1 + weightSum2)
         }
       )
 
@@ -382,7 +397,7 @@ private[evaluation] object SquaredEuclideanSilhouette extends Silhouette {
     val clustersStatsMap = SquaredEuclideanSilhouette
       .computeClusterStats(dfWithSquaredNorm, predictionCol, featuresCol, weightCol)
 
-    // Silhouette is reasonable only when the number of clusters is greater then 1
+    // Silhouette is reasonable only when the number of clusters is greater than 1
     assert(clustersStatsMap.size > 1, "Number of clusters must be greater than one.")
 
     val bClustersStatsMap = dataset.sparkSession.sparkContext.broadcast(clustersStatsMap)
@@ -487,30 +502,44 @@ private[evaluation] object CosineSilhouette extends Silhouette {
    *                      for the point.
    * @param weightCol The name of the column which contains the instance weight.
    * @return A [[scala.collection.immutable.Map]] which associates each cluster id to a
-   *         its statistics (ie. the precomputed values `N` and `$\Omega_{\Gamma}$`).
+   *         its statistics (i.e. the precomputed values `N` and `$\Omega_{\Gamma}$`).
    */
   def computeClusterStats(
       df: DataFrame,
       featuresCol: String,
       predictionCol: String,
       weightCol: String): Map[Double, (Vector, Double)] = {
-    val numFeatures = MetadataUtils.getNumFeatures(df, featuresCol)
+    val numFeatures = getNumFeatures(df, featuresCol)
     val clustersStatsRDD = df.select(
       col(predictionCol).cast(DoubleType), col(normalizedFeaturesColName), col(weightCol))
       .rdd
       .map { row => (row.getDouble(0), (row.getAs[Vector](1), row.getDouble(2))) }
-      .aggregateByKey[(DenseVector, Double)]((Vectors.zeros(numFeatures).toDense, 0.0))(
+      .aggregateByKey[(DenseVector, Double)]((null.asInstanceOf[DenseVector], 0.0))(
       seqOp = {
-        case ((normalizedFeaturesSum: DenseVector, weightSum: Double),
-        (normalizedFeatures, weight)) =>
-          require(weight >= 0.0, s"illegal weight value: $weight.  weight must be >= 0.0.")
-          BLAS.axpy(weight, normalizedFeatures, normalizedFeaturesSum)
-          (normalizedFeaturesSum, weightSum + weight)
+        case t: ((DenseVector, Double), (Vector, Double)) =>
+          val ((normalizedFeaturesSum, weightSum), (normalizedFeatures, weight)) = t
+          val theNormalizedFeaturesSum =
+            if (normalizedFeaturesSum == null) {
+              Vectors.zeros(numFeatures).toDense
+            } else {
+              normalizedFeaturesSum
+            }
+          BLAS.axpy(weight, normalizedFeatures, theNormalizedFeaturesSum)
+          (theNormalizedFeaturesSum, weightSum + weight)
       },
       combOp = {
-        case ((normalizedFeaturesSum1, weightSum1), (normalizedFeaturesSum2, weightSum2)) =>
-          BLAS.axpy(1.0, normalizedFeaturesSum2, normalizedFeaturesSum1)
-          (normalizedFeaturesSum1, weightSum1 + weightSum2)
+        case t: ((DenseVector, Double), (DenseVector, Double)) =>
+          val ((normalizedFeaturesSum1, weightSum1), (normalizedFeaturesSum2, weightSum2)) = t
+          val theNormalizedFeaturesSum =
+            if (normalizedFeaturesSum1 == null) {
+              normalizedFeaturesSum2
+            } else if (normalizedFeaturesSum2 == null) {
+              normalizedFeaturesSum1
+            } else {
+              BLAS.axpy(1.0, normalizedFeaturesSum2, normalizedFeaturesSum1)
+              normalizedFeaturesSum1
+            }
+          (theNormalizedFeaturesSum, weightSum1 + weightSum2)
       }
     )
 
@@ -575,7 +604,7 @@ private[evaluation] object CosineSilhouette extends Silhouette {
     val clustersStatsMap = computeClusterStats(dfWithNormalizedFeatures, featuresCol,
       predictionCol, weightCol)
 
-    // Silhouette is reasonable only when the number of clusters is greater then 1
+    // Silhouette is reasonable only when the number of clusters is greater than 1
     assert(clustersStatsMap.size > 1, "Number of clusters must be greater than one.")
 
     val bClustersStatsMap = dataset.sparkSession.sparkContext.broadcast(clustersStatsMap)

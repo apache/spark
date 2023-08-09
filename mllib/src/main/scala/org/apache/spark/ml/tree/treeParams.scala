@@ -60,8 +60,9 @@ private[ml] trait DecisionTreeParams extends PredictorParams
    */
   final val maxDepth: IntParam =
     new IntParam(this, "maxDepth", "Maximum depth of the tree. (Nonnegative)" +
-      " E.g., depth 0 means 1 leaf node; depth 1 means 1 internal node + 2 leaf nodes.",
-      ParamValidators.gtEq(0))
+      " E.g., depth 0 means 1 leaf node; depth 1 means 1 internal node + 2 leaf nodes." +
+      " Must be in range [0, 30].",
+      ParamValidators.inRange(0, 30))
 
   /**
    * Maximum number of bins used for discretizing continuous features and for choosing how to split
@@ -333,8 +334,6 @@ private[ml] trait TreeEnsembleParams extends DecisionTreeParams {
     "Fraction of the training data used for learning each decision tree, in range (0, 1].",
     ParamValidators.inRange(0, 1, lowerInclusive = false, upperInclusive = true))
 
-  setDefault(subsamplingRate -> 1.0)
-
   /** @group getParam */
   final def getSubsamplingRate: Double = $(subsamplingRate)
 
@@ -386,10 +385,10 @@ private[ml] trait TreeEnsembleParams extends DecisionTreeParams {
       || Try(value.toInt).filter(_ > 0).isSuccess
       || Try(value.toDouble).filter(_ > 0).filter(_ <= 1.0).isSuccess)
 
-  setDefault(featureSubsetStrategy -> "auto")
-
   /** @group getParam */
   final def getFeatureSubsetStrategy: String = $(featureSubsetStrategy).toLowerCase(Locale.ROOT)
+
+  setDefault(subsamplingRate -> 1.0, featureSubsetStrategy -> "auto")
 }
 
 /**
@@ -448,8 +447,6 @@ private[ml] trait RandomForestParams extends TreeEnsembleParams {
     new IntParam(this, "numTrees", "Number of trees to train (at least 1)",
     ParamValidators.gtEq(1))
 
-  setDefault(numTrees -> 20)
-
   /** @group getParam */
   final def getNumTrees: Int = $(numTrees)
 
@@ -461,11 +458,11 @@ private[ml] trait RandomForestParams extends TreeEnsembleParams {
   final val bootstrap: BooleanParam = new BooleanParam(this, "bootstrap",
     "Whether bootstrap samples are used when building trees.")
 
-  setDefault(bootstrap -> true)
-
   /** @group getParam */
   @Since("3.0.0")
   final def getBootstrap: Boolean = $(bootstrap)
+
+  setDefault(numTrees -> 20, bootstrap -> true)
 }
 
 private[ml] trait RandomForestClassifierParams
@@ -518,9 +515,7 @@ private[ml] trait GBTParams extends TreeEnsembleParams with HasMaxIter with HasS
     "(a.k.a. learning rate) in interval (0, 1] for shrinking the contribution of each estimator.",
     ParamValidators.inRange(0, 1, lowerInclusive = false, upperInclusive = true))
 
-  setDefault(maxIter -> 20, stepSize -> 0.1, validationTol -> 0.01)
-
-  setDefault(featureSubsetStrategy -> "all")
+  setDefault(maxIter -> 20, stepSize -> 0.1, validationTol -> 0.01, featureSubsetStrategy -> "all")
 
   /** (private[ml]) Create a BoostingStrategy instance to use with the old API. */
   private[ml] def getOldBoostingStrategy(

@@ -18,38 +18,64 @@ import time
 import unittest
 
 from pyspark import StorageLevel
-from pyspark.streaming.kinesis import KinesisUtils, InitialPositionInStream
-from pyspark.testing.streamingutils import should_test_kinesis, kinesis_requirement_message, \
-    PySparkStreamingTestCase
+from pyspark.streaming.kinesis import KinesisUtils, InitialPositionInStream, MetricsLevel
+from pyspark.testing.streamingutils import (
+    should_test_kinesis,
+    kinesis_requirement_message,
+    PySparkStreamingTestCase,
+)
 
 
 @unittest.skipIf(not should_test_kinesis, kinesis_requirement_message)
 class KinesisStreamTests(PySparkStreamingTestCase):
-
     def test_kinesis_stream_api(self):
         # Don't start the StreamingContext because we cannot test it in Jenkins
         KinesisUtils.createStream(
-            self.ssc, "myAppNam", "mySparkStream",
-            "https://kinesis.us-west-2.amazonaws.com", "us-west-2",
-            InitialPositionInStream.LATEST, 2, StorageLevel.MEMORY_AND_DISK_2)
+            self.ssc,
+            "myAppNam",
+            "mySparkStream",
+            "https://kinesis.us-west-2.amazonaws.com",
+            "us-west-2",
+            InitialPositionInStream.LATEST,
+            2,
+            MetricsLevel.DETAILED,
+            StorageLevel.MEMORY_AND_DISK_2,
+        )
         KinesisUtils.createStream(
-            self.ssc, "myAppNam", "mySparkStream",
-            "https://kinesis.us-west-2.amazonaws.com", "us-west-2",
-            InitialPositionInStream.LATEST, 2, StorageLevel.MEMORY_AND_DISK_2,
-            "awsAccessKey", "awsSecretKey")
+            self.ssc,
+            "myAppNam",
+            "mySparkStream",
+            "https://kinesis.us-west-2.amazonaws.com",
+            "us-west-2",
+            InitialPositionInStream.LATEST,
+            2,
+            MetricsLevel.DETAILED,
+            StorageLevel.MEMORY_AND_DISK_2,
+            "awsAccessKey",
+            "awsSecretKey",
+        )
 
     def test_kinesis_stream(self):
         import random
-        kinesisAppName = ("KinesisStreamTests-%d" % abs(random.randint(0, 10000000)))
+
+        kinesisAppName = "KinesisStreamTests-%d" % abs(random.randint(0, 10000000))
         kinesisTestUtils = self.ssc._jvm.org.apache.spark.streaming.kinesis.KinesisTestUtils(2)
         try:
             kinesisTestUtils.createStream()
             aWSCredentials = kinesisTestUtils.getAWSCredentials()
             stream = KinesisUtils.createStream(
-                self.ssc, kinesisAppName, kinesisTestUtils.streamName(),
-                kinesisTestUtils.endpointUrl(), kinesisTestUtils.regionName(),
-                InitialPositionInStream.LATEST, 10, StorageLevel.MEMORY_ONLY,
-                aWSCredentials.getAWSAccessKeyId(), aWSCredentials.getAWSSecretKey())
+                self.ssc,
+                kinesisAppName,
+                kinesisTestUtils.streamName(),
+                kinesisTestUtils.endpointUrl(),
+                kinesisTestUtils.regionName(),
+                InitialPositionInStream.LATEST,
+                10,
+                MetricsLevel.DETAILED,
+                StorageLevel.MEMORY_ONLY,
+                aWSCredentials.getAWSAccessKeyId(),
+                aWSCredentials.getAWSSecretKey(),
+            )
 
             outputBuffer = []
 
@@ -69,8 +95,9 @@ class KinesisStreamTests(PySparkStreamingTestCase):
                     break
                 time.sleep(10)
             self.assertEqual(expectedOutput, set(outputBuffer))
-        except:
+        except BaseException:
             import traceback
+
             traceback.print_exc()
             raise
         finally:
@@ -80,11 +107,12 @@ class KinesisStreamTests(PySparkStreamingTestCase):
 
 
 if __name__ == "__main__":
-    from pyspark.streaming.tests.test_kinesis import *
+    from pyspark.streaming.tests.test_kinesis import *  # noqa: F401
 
     try:
         import xmlrunner
-        testRunner = xmlrunner.XMLTestRunner(output='target/test-reports', verbosity=2)
+
+        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
     except ImportError:
         testRunner = None
     unittest.main(testRunner=testRunner, verbosity=2)

@@ -22,9 +22,13 @@ import org.scalatest.BeforeAndAfterAll
 import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.catalyst.analysis.AnalysisTest
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 
-class ListTablesSuite extends QueryTest with TestHiveSingleton with BeforeAndAfterAll {
+class ListTablesSuite extends QueryTest
+  with AnalysisTest
+  with TestHiveSingleton
+  with BeforeAndAfterAll {
   import hiveContext._
   import hiveContext.implicits._
 
@@ -33,8 +37,8 @@ class ListTablesSuite extends QueryTest with TestHiveSingleton with BeforeAndAft
   override def beforeAll(): Unit = {
     super.beforeAll()
     // The catalog in HiveContext is a case insensitive one.
-    sessionState.catalog.createTempView(
-      "ListTablesSuiteTable", df.logicalPlan, overrideIfExists = true)
+    createTempView(
+      sessionState.catalog, "ListTablesSuiteTable", df.logicalPlan, overrideIfExists = true)
     sql("CREATE TABLE HiveListTablesSuiteTable (key int, value string)")
     sql("CREATE DATABASE IF NOT EXISTS ListTablesSuiteDB")
     sql("CREATE TABLE ListTablesSuiteDB.HiveInDBListTablesSuiteTable (key int, value string)")

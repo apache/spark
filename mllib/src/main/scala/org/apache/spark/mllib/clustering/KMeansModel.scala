@@ -50,9 +50,16 @@ class KMeansModel (@Since("1.0.0") val clusterCenters: Array[Vector],
 
   // TODO: computation of statistics may take seconds, so save it to KMeansModel in training
   @transient private lazy val statistics = if (clusterCenters == null) {
-    null
+    None
   } else {
-    distanceMeasureInstance.computeStatistics(clusterCentersWithNorm)
+    val k = clusterCenters.length
+    val numFeatures = clusterCenters.head.size
+    if (DistanceMeasure.shouldComputeStatistics(k) &&
+        DistanceMeasure.shouldComputeStatisticsLocally(k, numFeatures)) {
+      Some(distanceMeasureInstance.computeStatistics(clusterCentersWithNorm))
+    } else {
+      None
+    }
   }
 
   @Since("2.4.0")
@@ -145,9 +152,9 @@ object KMeansModel extends Loader[KMeansModel] {
     }
   }
 
-  private case class Cluster(id: Int, point: Vector)
+  private[KMeansModel] case class Cluster(id: Int, point: Vector)
 
-  private object Cluster {
+  private[KMeansModel] object Cluster {
     def apply(r: Row): Cluster = {
       Cluster(r.getInt(0), r.getAs[Vector](1))
     }

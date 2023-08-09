@@ -1,0 +1,240 @@
+== Physical Plan ==
+TakeOrderedAndProject (28)
++- * HashAggregate (27)
+   +- Exchange (26)
+      +- * HashAggregate (25)
+         +- * Project (24)
+            +- * SortMergeJoin Inner (23)
+               :- * Sort (16)
+               :  +- Exchange (15)
+               :     +- * Project (14)
+               :        +- * BroadcastHashJoin Inner BuildRight (13)
+               :           :- * Project (11)
+               :           :  +- * BroadcastHashJoin Inner BuildLeft (10)
+               :           :     :- BroadcastExchange (5)
+               :           :     :  +- * Project (4)
+               :           :     :     +- * Filter (3)
+               :           :     :        +- * ColumnarToRow (2)
+               :           :     :           +- Scan parquet spark_catalog.default.item (1)
+               :           :     +- * Project (9)
+               :           :        +- * Filter (8)
+               :           :           +- * ColumnarToRow (7)
+               :           :              +- Scan parquet spark_catalog.default.inventory (6)
+               :           +- ReusedExchange (12)
+               +- * Sort (22)
+                  +- Exchange (21)
+                     +- * Project (20)
+                        +- * Filter (19)
+                           +- * ColumnarToRow (18)
+                              +- Scan parquet spark_catalog.default.catalog_sales (17)
+
+
+(1) Scan parquet spark_catalog.default.item
+Output [5]: [i_item_sk#1, i_item_id#2, i_item_desc#3, i_current_price#4, i_manufact_id#5]
+Batched: true
+Location [not included in comparison]/{warehouse_dir}/item]
+PushedFilters: [IsNotNull(i_current_price), GreaterThanOrEqual(i_current_price,68.00), LessThanOrEqual(i_current_price,98.00), In(i_manufact_id, [677,694,808,940]), IsNotNull(i_item_sk)]
+ReadSchema: struct<i_item_sk:int,i_item_id:string,i_item_desc:string,i_current_price:decimal(7,2),i_manufact_id:int>
+
+(2) ColumnarToRow [codegen id : 1]
+Input [5]: [i_item_sk#1, i_item_id#2, i_item_desc#3, i_current_price#4, i_manufact_id#5]
+
+(3) Filter [codegen id : 1]
+Input [5]: [i_item_sk#1, i_item_id#2, i_item_desc#3, i_current_price#4, i_manufact_id#5]
+Condition : ((((isnotnull(i_current_price#4) AND (i_current_price#4 >= 68.00)) AND (i_current_price#4 <= 98.00)) AND i_manufact_id#5 IN (677,940,694,808)) AND isnotnull(i_item_sk#1))
+
+(4) Project [codegen id : 1]
+Output [4]: [i_item_sk#1, i_item_id#2, i_item_desc#3, i_current_price#4]
+Input [5]: [i_item_sk#1, i_item_id#2, i_item_desc#3, i_current_price#4, i_manufact_id#5]
+
+(5) BroadcastExchange
+Input [4]: [i_item_sk#1, i_item_id#2, i_item_desc#3, i_current_price#4]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [plan_id=1]
+
+(6) Scan parquet spark_catalog.default.inventory
+Output [3]: [inv_item_sk#6, inv_quantity_on_hand#7, inv_date_sk#8]
+Batched: true
+Location: InMemoryFileIndex []
+PartitionFilters: [isnotnull(inv_date_sk#8), dynamicpruningexpression(inv_date_sk#8 IN dynamicpruning#9)]
+PushedFilters: [IsNotNull(inv_quantity_on_hand), GreaterThanOrEqual(inv_quantity_on_hand,100), LessThanOrEqual(inv_quantity_on_hand,500), IsNotNull(inv_item_sk)]
+ReadSchema: struct<inv_item_sk:int,inv_quantity_on_hand:int>
+
+(7) ColumnarToRow
+Input [3]: [inv_item_sk#6, inv_quantity_on_hand#7, inv_date_sk#8]
+
+(8) Filter
+Input [3]: [inv_item_sk#6, inv_quantity_on_hand#7, inv_date_sk#8]
+Condition : (((isnotnull(inv_quantity_on_hand#7) AND (inv_quantity_on_hand#7 >= 100)) AND (inv_quantity_on_hand#7 <= 500)) AND isnotnull(inv_item_sk#6))
+
+(9) Project
+Output [2]: [inv_item_sk#6, inv_date_sk#8]
+Input [3]: [inv_item_sk#6, inv_quantity_on_hand#7, inv_date_sk#8]
+
+(10) BroadcastHashJoin [codegen id : 3]
+Left keys [1]: [i_item_sk#1]
+Right keys [1]: [inv_item_sk#6]
+Join type: Inner
+Join condition: None
+
+(11) Project [codegen id : 3]
+Output [5]: [i_item_sk#1, i_item_id#2, i_item_desc#3, i_current_price#4, inv_date_sk#8]
+Input [6]: [i_item_sk#1, i_item_id#2, i_item_desc#3, i_current_price#4, inv_item_sk#6, inv_date_sk#8]
+
+(12) ReusedExchange [Reuses operator id: 33]
+Output [1]: [d_date_sk#10]
+
+(13) BroadcastHashJoin [codegen id : 3]
+Left keys [1]: [inv_date_sk#8]
+Right keys [1]: [d_date_sk#10]
+Join type: Inner
+Join condition: None
+
+(14) Project [codegen id : 3]
+Output [4]: [i_item_sk#1, i_item_id#2, i_item_desc#3, i_current_price#4]
+Input [6]: [i_item_sk#1, i_item_id#2, i_item_desc#3, i_current_price#4, inv_date_sk#8, d_date_sk#10]
+
+(15) Exchange
+Input [4]: [i_item_sk#1, i_item_id#2, i_item_desc#3, i_current_price#4]
+Arguments: hashpartitioning(i_item_sk#1, 5), ENSURE_REQUIREMENTS, [plan_id=2]
+
+(16) Sort [codegen id : 4]
+Input [4]: [i_item_sk#1, i_item_id#2, i_item_desc#3, i_current_price#4]
+Arguments: [i_item_sk#1 ASC NULLS FIRST], false, 0
+
+(17) Scan parquet spark_catalog.default.catalog_sales
+Output [2]: [cs_item_sk#11, cs_sold_date_sk#12]
+Batched: true
+Location [not included in comparison]/{warehouse_dir}/catalog_sales]
+PushedFilters: [IsNotNull(cs_item_sk)]
+ReadSchema: struct<cs_item_sk:int>
+
+(18) ColumnarToRow [codegen id : 5]
+Input [2]: [cs_item_sk#11, cs_sold_date_sk#12]
+
+(19) Filter [codegen id : 5]
+Input [2]: [cs_item_sk#11, cs_sold_date_sk#12]
+Condition : (isnotnull(cs_item_sk#11) AND might_contain(Subquery scalar-subquery#13, [id=#14], xxhash64(cs_item_sk#11, 42)))
+
+(20) Project [codegen id : 5]
+Output [1]: [cs_item_sk#11]
+Input [2]: [cs_item_sk#11, cs_sold_date_sk#12]
+
+(21) Exchange
+Input [1]: [cs_item_sk#11]
+Arguments: hashpartitioning(cs_item_sk#11, 5), ENSURE_REQUIREMENTS, [plan_id=3]
+
+(22) Sort [codegen id : 6]
+Input [1]: [cs_item_sk#11]
+Arguments: [cs_item_sk#11 ASC NULLS FIRST], false, 0
+
+(23) SortMergeJoin [codegen id : 7]
+Left keys [1]: [i_item_sk#1]
+Right keys [1]: [cs_item_sk#11]
+Join type: Inner
+Join condition: None
+
+(24) Project [codegen id : 7]
+Output [3]: [i_item_id#2, i_item_desc#3, i_current_price#4]
+Input [5]: [i_item_sk#1, i_item_id#2, i_item_desc#3, i_current_price#4, cs_item_sk#11]
+
+(25) HashAggregate [codegen id : 7]
+Input [3]: [i_item_id#2, i_item_desc#3, i_current_price#4]
+Keys [3]: [i_item_id#2, i_item_desc#3, i_current_price#4]
+Functions: []
+Aggregate Attributes: []
+Results [3]: [i_item_id#2, i_item_desc#3, i_current_price#4]
+
+(26) Exchange
+Input [3]: [i_item_id#2, i_item_desc#3, i_current_price#4]
+Arguments: hashpartitioning(i_item_id#2, i_item_desc#3, i_current_price#4, 5), ENSURE_REQUIREMENTS, [plan_id=4]
+
+(27) HashAggregate [codegen id : 8]
+Input [3]: [i_item_id#2, i_item_desc#3, i_current_price#4]
+Keys [3]: [i_item_id#2, i_item_desc#3, i_current_price#4]
+Functions: []
+Aggregate Attributes: []
+Results [3]: [i_item_id#2, i_item_desc#3, i_current_price#4]
+
+(28) TakeOrderedAndProject
+Input [3]: [i_item_id#2, i_item_desc#3, i_current_price#4]
+Arguments: 100, [i_item_id#2 ASC NULLS FIRST], [i_item_id#2, i_item_desc#3, i_current_price#4]
+
+===== Subqueries =====
+
+Subquery:1 Hosting operator id = 6 Hosting Expression = inv_date_sk#8 IN dynamicpruning#9
+BroadcastExchange (33)
++- * Project (32)
+   +- * Filter (31)
+      +- * ColumnarToRow (30)
+         +- Scan parquet spark_catalog.default.date_dim (29)
+
+
+(29) Scan parquet spark_catalog.default.date_dim
+Output [2]: [d_date_sk#10, d_date#15]
+Batched: true
+Location [not included in comparison]/{warehouse_dir}/date_dim]
+PushedFilters: [IsNotNull(d_date), GreaterThanOrEqual(d_date,2000-02-01), LessThanOrEqual(d_date,2000-04-01), IsNotNull(d_date_sk)]
+ReadSchema: struct<d_date_sk:int,d_date:date>
+
+(30) ColumnarToRow [codegen id : 1]
+Input [2]: [d_date_sk#10, d_date#15]
+
+(31) Filter [codegen id : 1]
+Input [2]: [d_date_sk#10, d_date#15]
+Condition : (((isnotnull(d_date#15) AND (d_date#15 >= 2000-02-01)) AND (d_date#15 <= 2000-04-01)) AND isnotnull(d_date_sk#10))
+
+(32) Project [codegen id : 1]
+Output [1]: [d_date_sk#10]
+Input [2]: [d_date_sk#10, d_date#15]
+
+(33) BroadcastExchange
+Input [1]: [d_date_sk#10]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [plan_id=5]
+
+Subquery:2 Hosting operator id = 19 Hosting Expression = Subquery scalar-subquery#13, [id=#14]
+ObjectHashAggregate (40)
++- Exchange (39)
+   +- ObjectHashAggregate (38)
+      +- * Project (37)
+         +- * Filter (36)
+            +- * ColumnarToRow (35)
+               +- Scan parquet spark_catalog.default.item (34)
+
+
+(34) Scan parquet spark_catalog.default.item
+Output [3]: [i_item_sk#1, i_current_price#4, i_manufact_id#5]
+Batched: true
+Location [not included in comparison]/{warehouse_dir}/item]
+PushedFilters: [IsNotNull(i_current_price), GreaterThanOrEqual(i_current_price,68.00), LessThanOrEqual(i_current_price,98.00), In(i_manufact_id, [677,694,808,940]), IsNotNull(i_item_sk)]
+ReadSchema: struct<i_item_sk:int,i_current_price:decimal(7,2),i_manufact_id:int>
+
+(35) ColumnarToRow [codegen id : 1]
+Input [3]: [i_item_sk#1, i_current_price#4, i_manufact_id#5]
+
+(36) Filter [codegen id : 1]
+Input [3]: [i_item_sk#1, i_current_price#4, i_manufact_id#5]
+Condition : ((((isnotnull(i_current_price#4) AND (i_current_price#4 >= 68.00)) AND (i_current_price#4 <= 98.00)) AND i_manufact_id#5 IN (677,940,694,808)) AND isnotnull(i_item_sk#1))
+
+(37) Project [codegen id : 1]
+Output [1]: [i_item_sk#1]
+Input [3]: [i_item_sk#1, i_current_price#4, i_manufact_id#5]
+
+(38) ObjectHashAggregate
+Input [1]: [i_item_sk#1]
+Keys: []
+Functions [1]: [partial_bloom_filter_agg(xxhash64(i_item_sk#1, 42), 239, 6582, 0, 0)]
+Aggregate Attributes [1]: [buf#16]
+Results [1]: [buf#17]
+
+(39) Exchange
+Input [1]: [buf#17]
+Arguments: SinglePartition, ENSURE_REQUIREMENTS, [plan_id=6]
+
+(40) ObjectHashAggregate
+Input [1]: [buf#17]
+Keys: []
+Functions [1]: [bloom_filter_agg(xxhash64(i_item_sk#1, 42), 239, 6582, 0, 0)]
+Aggregate Attributes [1]: [bloom_filter_agg(xxhash64(i_item_sk#1, 42), 239, 6582, 0, 0)#18]
+Results [1]: [bloom_filter_agg(xxhash64(i_item_sk#1, 42), 239, 6582, 0, 0)#18 AS bloomFilter#19]
+
+

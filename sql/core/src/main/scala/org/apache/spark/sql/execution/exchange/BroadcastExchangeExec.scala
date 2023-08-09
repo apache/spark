@@ -25,17 +25,56 @@ import scala.concurrent.duration.NANOSECONDS
 import scala.util.control.NonFatal
 
 import org.apache.spark.{broadcast, SparkException}
-import org.apache.spark.launcher.SparkLauncher
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
+import org.apache.spark.sql.catalyst.plans.logical.Statistics
 import org.apache.spark.sql.catalyst.plans.physical.{BroadcastMode, BroadcastPartitioning, Partitioning}
-import org.apache.spark.sql.execution.{SparkPlan, SQLExecution}
-import org.apache.spark.sql.execution.joins.HashedRelation
+import org.apache.spark.sql.errors.QueryExecutionErrors
+import org.apache.spark.sql.execution.{FileSourceScanExec, SparkPlan, SQLExecution}
+import org.apache.spark.sql.execution.joins.{HashedRelation, HashedRelationBroadcastMode}
 import org.apache.spark.sql.execution.metric.SQLMetrics
 import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
+import org.apache.spark.sql.types.LongType
 import org.apache.spark.unsafe.map.BytesToBytesMap
 import org.apache.spark.util.{SparkFatalException, ThreadUtils}
+
+/**
+ * Common trait for all broadcast exchange implementations to facilitate pattern matching.
+ */
+trait BroadcastExchangeLike extends Exchange {
+
+  /**
+   * The broadcast run ID in job tag
+   */
+  val runId: UUID = UUID.randomUUID
+
+  /**
+   * The broadcast job tag
+   */
+  def jobTag: String = s"broadcast exchange (runId ${runId.toString})"
+
+  /**
+   * The asynchronous job that prepares the broadcast relation.
+   */
+  def relationFuture: Future[broadcast.Broadcast[Any]]
+
+  /**
+   * The asynchronous job that materializes the broadcast. It's used for registering callbacks on
+   * `relationFuture`. Note that calling this method may not start the execution of broadcast job.
+   * It also does the preparations work, such as waiting for the subqueries.
+   */
+  final def submitBroadcastJob: scala.concurrent.Future[broadcast.Broadcast[Any]] = executeQuery {
+    completionFuture
+  }
+
+  protected def completionFuture: scala.concurrent.Future[broadcast.Broadcast[Any]]
+
+  /**
+   * Returns the runtime statistics after broadcast materialization.
+   */
+  def runtimeStatistics: Statistics
+}
 
 /**
  * A [[BroadcastExchangeExec]] collects, transforms and finally broadcasts the result of
@@ -43,13 +82,12 @@ import org.apache.spark.util.{SparkFatalException, ThreadUtils}
  */
 case class BroadcastExchangeExec(
     mode: BroadcastMode,
-    child: SparkPlan) extends Exchange {
+    child: SparkPlan) extends BroadcastExchangeLike {
   import BroadcastExchangeExec._
-
-  private[sql] val runId: UUID = UUID.randomUUID
 
   override lazy val metrics = Map(
     "dataSize" -> SQLMetrics.createSizeMetric(sparkContext, "data size"),
+    "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"),
     "collectTime" -> SQLMetrics.createTimingMetric(sparkContext, "time to collect"),
     "buildTime" -> SQLMetrics.createTimingMetric(sparkContext, "time to build"),
     "broadcastTime" -> SQLMetrics.createTimingMetric(sparkContext, "time to broadcast"))
@@ -60,33 +98,50 @@ case class BroadcastExchangeExec(
     BroadcastExchangeExec(mode.canonicalized, child.canonicalized)
   }
 
+  override def runtimeStatistics: Statistics = {
+    val dataSize = metrics("dataSize").value
+    val rowCount = metrics("numOutputRows").value
+    Statistics(dataSize, Some(rowCount))
+  }
+
   @transient
   private lazy val promise = Promise[broadcast.Broadcast[Any]]()
 
-  /**
-   * For registering callbacks on `relationFuture`.
-   * Note that calling this field will not start the execution of broadcast job.
-   */
   @transient
-  lazy val completionFuture: scala.concurrent.Future[broadcast.Broadcast[Any]] = promise.future
+  override lazy val completionFuture: scala.concurrent.Future[broadcast.Broadcast[Any]] =
+    promise.future
 
   @transient
-  private val timeout: Long = SQLConf.get.broadcastTimeout
+  private val timeout: Long = conf.broadcastTimeout
 
   @transient
-  private[sql] lazy val relationFuture: Future[broadcast.Broadcast[Any]] = {
+  private lazy val maxBroadcastRows = mode match {
+    case HashedRelationBroadcastMode(key, _)
+      // NOTE: LongHashedRelation is used for single key with LongType. This should be kept
+      // consistent with HashedRelation.apply.
+      if !(key.length == 1 && key.head.dataType == LongType) =>
+      // Since the maximum number of keys that BytesToBytesMap supports is 1 << 29,
+      // and only 70% of the slots can be used before growing in UnsafeHashedRelation,
+      // here the limitation should not be over 341 million.
+      (BytesToBytesMap.MAX_CAPACITY / 1.5).toLong
+    case _ => 512000000
+  }
+
+  @transient
+  override lazy val relationFuture: Future[broadcast.Broadcast[Any]] = {
     SQLExecution.withThreadLocalCaptured[broadcast.Broadcast[Any]](
-      sqlContext.sparkSession, BroadcastExchangeExec.executionContext) {
+      session, BroadcastExchangeExec.executionContext) {
           try {
-            // Setup a job group here so later it may get cancelled by groupId if necessary.
-            sparkContext.setJobGroup(runId.toString, s"broadcast exchange (runId $runId)",
-              interruptOnCancel = true)
+            // Setup a job tag here so later it may get cancelled by tag if necessary.
+            sparkContext.addJobTag(jobTag)
+            sparkContext.setInterruptOnCancel(true)
             val beforeCollect = System.nanoTime()
             // Use executeCollect/executeCollectIterator to avoid conversion to Scala types
             val (numRows, input) = child.executeCollectIterator()
-            if (numRows >= MAX_BROADCAST_TABLE_ROWS) {
-              throw new SparkException(
-                s"Cannot broadcast the table over $MAX_BROADCAST_TABLE_ROWS rows: $numRows rows")
+            longMetric("numOutputRows") += numRows
+            if (numRows >= maxBroadcastRows) {
+              throw QueryExecutionErrors.cannotBroadcastTableOverMaxTableRowsError(
+                maxBroadcastRows, numRows)
             }
 
             val beforeBuild = System.nanoTime()
@@ -107,15 +162,15 @@ case class BroadcastExchangeExec(
 
             longMetric("dataSize") += dataSize
             if (dataSize >= MAX_BROADCAST_TABLE_BYTES) {
-              throw new SparkException(
-                s"Cannot broadcast the table that is larger than 8GB: ${dataSize >> 30} GB")
+              throw QueryExecutionErrors.cannotBroadcastTableOverMaxTableBytesError(
+                MAX_BROADCAST_TABLE_BYTES, dataSize)
             }
 
             val beforeBroadcast = System.nanoTime()
             longMetric("buildTime") += NANOSECONDS.toMillis(beforeBroadcast - beforeBuild)
 
-            // Broadcast the relation
-            val broadcasted = sparkContext.broadcast(relation)
+            // SPARK-39983 - Broadcast the relation without caching the unserialized object.
+            val broadcasted = sparkContext.broadcastInternal(relation, serializedOnly = true)
             longMetric("broadcastTime") += NANOSECONDS.toMillis(
               System.nanoTime() - beforeBroadcast)
             val executionId = sparkContext.getLocalProperty(SQLExecution.EXECUTION_ID_KEY)
@@ -127,12 +182,9 @@ case class BroadcastExchangeExec(
             // SparkFatalException, which is a subclass of Exception. ThreadUtils.awaitResult
             // will catch this exception and re-throw the wrapped fatal throwable.
             case oe: OutOfMemoryError =>
+              val tables = child.collect { case f: FileSourceScanExec => f.tableIdentifier }.flatten
               val ex = new SparkFatalException(
-                new OutOfMemoryError("Not enough memory to build and broadcast the table to all " +
-                  "worker nodes. As a workaround, you can either disable broadcast by setting " +
-                  s"${SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key} to -1 or increase the spark " +
-                  s"driver memory by setting ${SparkLauncher.DRIVER_MEMORY} to a higher value.")
-                  .initCause(oe.getCause))
+                QueryExecutionErrors.notEnoughMemoryToBuildAndBroadcastTableError(oe, tables))
               promise.tryFailure(ex)
               throw ex
             case e if !NonFatal(e) =>
@@ -152,8 +204,7 @@ case class BroadcastExchangeExec(
   }
 
   override protected def doExecute(): RDD[InternalRow] = {
-    throw new UnsupportedOperationException(
-      "BroadcastExchange does not support the execute() code path.")
+    throw QueryExecutionErrors.executeCodePathUnsupportedError("BroadcastExchange")
   }
 
   override protected[sql] def doExecuteBroadcast[T](): broadcast.Broadcast[T] = {
@@ -163,23 +214,18 @@ case class BroadcastExchangeExec(
       case ex: TimeoutException =>
         logError(s"Could not execute broadcast in $timeout secs.", ex)
         if (!relationFuture.isDone) {
-          sparkContext.cancelJobGroup(runId.toString)
+          sparkContext.cancelJobsWithTag(jobTag)
           relationFuture.cancel(true)
         }
-        throw new SparkException(s"Could not execute broadcast in $timeout secs. " +
-          s"You can increase the timeout for broadcasts via ${SQLConf.BROADCAST_TIMEOUT.key} or " +
-          s"disable broadcast join by setting ${SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key} to -1",
-          ex)
+        throw QueryExecutionErrors.executeBroadcastTimeoutError(timeout, Some(ex))
     }
   }
+
+  override protected def withNewChildInternal(newChild: SparkPlan): BroadcastExchangeExec =
+    copy(child = newChild)
 }
 
 object BroadcastExchangeExec {
-  // Since the maximum number of keys that BytesToBytesMap supports is 1 << 29,
-  // and only 70% of the slots can be used before growing in HashedRelation,
-  // here the limitation should not be over 341 million.
-  val MAX_BROADCAST_TABLE_ROWS = (BytesToBytesMap.MAX_CAPACITY / 1.5).toLong
-
   val MAX_BROADCAST_TABLE_BYTES = 8L << 30
 
   private[execution] val executionContext = ExecutionContext.fromExecutorService(

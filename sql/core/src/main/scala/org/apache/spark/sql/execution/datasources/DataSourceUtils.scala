@@ -19,26 +19,38 @@ package org.apache.spark.sql.execution.datasources
 
 import java.util.Locale
 
+import scala.collection.JavaConverters._
+
 import org.apache.hadoop.fs.Path
 import org.json4s.NoTypeHints
 import org.json4s.jackson.Serialization
 
 import org.apache.spark.SparkUpgradeException
-import org.apache.spark.sql.{SPARK_LEGACY_DATETIME, SPARK_VERSION_METADATA_KEY}
-import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.{SPARK_LEGACY_DATETIME_METADATA_KEY, SPARK_LEGACY_INT96_METADATA_KEY, SPARK_TIMEZONE_METADATA_KEY, SPARK_VERSION_METADATA_KEY}
+import org.apache.spark.sql.catalyst.catalog.{CatalogTable, CatalogUtils}
+import org.apache.spark.sql.catalyst.expressions.{AttributeReference, AttributeSet, Expression, ExpressionSet, PredicateHelper}
 import org.apache.spark.sql.catalyst.util.RebaseDateTime
-import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.internal.SQLConf.LegacyBehaviorPolicy
+import org.apache.spark.sql.catalyst.util.RebaseDateTime.RebaseSpec
+import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
+import org.apache.spark.sql.execution.datasources.parquet.ParquetOptions
+import org.apache.spark.sql.internal.{LegacyBehaviorPolicy, SQLConf}
 import org.apache.spark.sql.sources.BaseRelation
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.util.Utils
 
 
-object DataSourceUtils {
+object DataSourceUtils extends PredicateHelper {
   /**
    * The key to use for storing partitionBy columns as options.
    */
   val PARTITIONING_COLUMNS_KEY = "__partition_columns"
+
+  /**
+   * The key to use for specifying partition overwrite mode when
+   * INSERT OVERWRITE a partitioned data source table.
+   */
+  val PARTITION_OVERWRITE_MODE = "partitionOverwriteMode"
 
   /**
    * Utility methods for converting partitionBy columns to options and back.
@@ -54,14 +66,30 @@ object DataSourceUtils {
   }
 
   /**
+   * Verify if the field name is supported in datasource. This verification should be done
+   * in a driver side.
+   */
+  def checkFieldNames(format: FileFormat, schema: StructType): Unit = {
+    schema.foreach { field =>
+      if (!format.supportFieldName(field.name)) {
+        throw QueryCompilationErrors.invalidColumnNameAsPathError(
+          format.getClass.getSimpleName, field.name)
+      }
+      field.dataType match {
+        case s: StructType => checkFieldNames(format, s)
+        case _ =>
+      }
+    }
+  }
+
+  /**
    * Verify if the schema is supported in datasource. This verification should be done
    * in a driver side.
    */
   def verifySchema(format: FileFormat, schema: StructType): Unit = {
     schema.foreach { field =>
       if (!format.supportDataType(field.dataType)) {
-        throw new AnalysisException(
-          s"$format data source does not support ${field.dataType.catalogString} data type.")
+        throw QueryCompilationErrors.dataTypeUnsupportedByDataSourceError(format.toString, field)
       }
     }
   }
@@ -87,63 +115,79 @@ object DataSourceUtils {
       case _ => false
     }
 
-  def datetimeRebaseMode(
+  private def getRebaseSpec(
       lookupFileMeta: String => String,
-      modeByConfig: String): LegacyBehaviorPolicy.Value = {
-    if (Utils.isTesting && SQLConf.get.getConfString("spark.test.forceNoRebase", "") == "true") {
-      return LegacyBehaviorPolicy.CORRECTED
+      modeByConfig: String,
+      minVersion: String,
+      metadataKey: String): RebaseSpec = {
+    val policy = if (Utils.isTesting &&
+      SQLConf.get.getConfString("spark.test.forceNoRebase", "") == "true") {
+      LegacyBehaviorPolicy.CORRECTED
+    } else {
+      // If there is no version, we return the mode specified by the config.
+      Option(lookupFileMeta(SPARK_VERSION_METADATA_KEY)).map { version =>
+        // Files written by Spark 2.4 and earlier follow the legacy hybrid calendar and we need to
+        // rebase the datetime values.
+        // Files written by `minVersion` and latter may also need the rebase if they were written
+        // with the "LEGACY" rebase mode.
+        if (version < minVersion || lookupFileMeta(metadataKey) != null) {
+          LegacyBehaviorPolicy.LEGACY
+        } else {
+          LegacyBehaviorPolicy.CORRECTED
+        }
+      }.getOrElse(LegacyBehaviorPolicy.withName(modeByConfig))
     }
-    // If there is no version, we return the mode specified by the config.
-    Option(lookupFileMeta(SPARK_VERSION_METADATA_KEY)).map { version =>
-      // Files written by Spark 2.4 and earlier follow the legacy hybrid calendar and we need to
-      // rebase the datetime values.
-      // Files written by Spark 3.0 and latter may also need the rebase if they were written with
-      // the "LEGACY" rebase mode.
-      if (version < "3.0.0" || lookupFileMeta(SPARK_LEGACY_DATETIME) != null) {
-        LegacyBehaviorPolicy.LEGACY
-      } else {
-        LegacyBehaviorPolicy.CORRECTED
-      }
-    }.getOrElse(LegacyBehaviorPolicy.withName(modeByConfig))
+    policy match {
+      case LegacyBehaviorPolicy.LEGACY =>
+        RebaseSpec(LegacyBehaviorPolicy.LEGACY, Option(lookupFileMeta(SPARK_TIMEZONE_METADATA_KEY)))
+      case _ => RebaseSpec(policy)
+    }
+  }
+
+  def datetimeRebaseSpec(
+      lookupFileMeta: String => String,
+      modeByConfig: String): RebaseSpec = {
+    getRebaseSpec(
+      lookupFileMeta,
+      modeByConfig,
+      "3.0.0",
+      SPARK_LEGACY_DATETIME_METADATA_KEY)
+  }
+
+  def int96RebaseSpec(
+      lookupFileMeta: String => String,
+      modeByConfig: String): RebaseSpec = {
+    getRebaseSpec(
+      lookupFileMeta,
+      modeByConfig,
+      "3.1.0",
+      SPARK_LEGACY_INT96_METADATA_KEY)
   }
 
   def newRebaseExceptionInRead(format: String): SparkUpgradeException = {
-    val config = if (format == "Parquet") {
-      SQLConf.LEGACY_PARQUET_REBASE_MODE_IN_READ.key
-    } else if (format == "Avro") {
-      SQLConf.LEGACY_AVRO_REBASE_MODE_IN_READ.key
-    } else {
-      throw new IllegalStateException("unrecognized format " + format)
+    val (config, option) = format match {
+      case "Parquet INT96" =>
+        (SQLConf.PARQUET_INT96_REBASE_MODE_IN_READ.key, ParquetOptions.INT96_REBASE_MODE)
+      case "Parquet" =>
+        (SQLConf.PARQUET_REBASE_MODE_IN_READ.key, ParquetOptions.DATETIME_REBASE_MODE)
+      case "Avro" =>
+        (SQLConf.AVRO_REBASE_MODE_IN_READ.key, "datetimeRebaseMode")
+      case _ => throw new IllegalStateException(s"Unrecognized format $format.")
     }
-    new SparkUpgradeException("3.0", "reading dates before 1582-10-15 or timestamps before " +
-      s"1900-01-01T00:00:00Z from $format files can be ambiguous, as the files may be written by " +
-      "Spark 2.x or legacy versions of Hive, which uses a legacy hybrid calendar that is " +
-      "different from Spark 3.0+'s Proleptic Gregorian calendar. See more details in " +
-      s"SPARK-31404. You can set $config to 'LEGACY' to rebase the datetime values w.r.t. " +
-      s"the calendar difference during reading. Or set $config to 'CORRECTED' to read the " +
-      "datetime values as it is.", null)
+    QueryExecutionErrors.sparkUpgradeInReadingDatesError(format, config, option)
   }
 
   def newRebaseExceptionInWrite(format: String): SparkUpgradeException = {
-    val config = if (format == "Parquet") {
-      SQLConf.LEGACY_PARQUET_REBASE_MODE_IN_WRITE.key
-    } else if (format == "Avro") {
-      SQLConf.LEGACY_AVRO_REBASE_MODE_IN_WRITE.key
-    } else {
-      throw new IllegalStateException("unrecognized format " + format)
+    val config = format match {
+      case "Parquet INT96" => SQLConf.PARQUET_INT96_REBASE_MODE_IN_WRITE.key
+      case "Parquet" => SQLConf.PARQUET_REBASE_MODE_IN_WRITE.key
+      case "Avro" => SQLConf.AVRO_REBASE_MODE_IN_WRITE.key
+      case _ => throw new IllegalStateException(s"Unrecognized format $format.")
     }
-    new SparkUpgradeException("3.0", "writing dates before 1582-10-15 or timestamps before " +
-      s"1900-01-01T00:00:00Z into $format files can be dangerous, as the files may be read by " +
-      "Spark 2.x or legacy versions of Hive later, which uses a legacy hybrid calendar that is " +
-      "different from Spark 3.0+'s Proleptic Gregorian calendar. See more details in " +
-      s"SPARK-31404. You can set $config to 'LEGACY' to rebase the datetime values w.r.t. " +
-      "the calendar difference during writing, to get maximum interoperability. Or set " +
-      s"$config to 'CORRECTED' to write the datetime values as it is, if you are 100% sure that " +
-      "the written files will only be read by Spark 3.0+ or other systems that use Proleptic " +
-      "Gregorian calendar.", null)
+    QueryExecutionErrors.sparkUpgradeInWritingDatesError(format, config)
   }
 
-  def creteDateRebaseFuncInRead(
+  def createDateRebaseFuncInRead(
       rebaseMode: LegacyBehaviorPolicy.Value,
       format: String): Int => Int = rebaseMode match {
     case LegacyBehaviorPolicy.EXCEPTION => days: Int =>
@@ -155,7 +199,7 @@ object DataSourceUtils {
     case LegacyBehaviorPolicy.CORRECTED => identity[Int]
   }
 
-  def creteDateRebaseFuncInWrite(
+  def createDateRebaseFuncInWrite(
       rebaseMode: LegacyBehaviorPolicy.Value,
       format: String): Int => Int = rebaseMode match {
     case LegacyBehaviorPolicy.EXCEPTION => days: Int =>
@@ -167,19 +211,20 @@ object DataSourceUtils {
     case LegacyBehaviorPolicy.CORRECTED => identity[Int]
   }
 
-  def creteTimestampRebaseFuncInRead(
-      rebaseMode: LegacyBehaviorPolicy.Value,
-      format: String): Long => Long = rebaseMode match {
+  def createTimestampRebaseFuncInRead(
+      rebaseSpec: RebaseSpec,
+      format: String): Long => Long = rebaseSpec.mode match {
     case LegacyBehaviorPolicy.EXCEPTION => micros: Long =>
       if (micros < RebaseDateTime.lastSwitchJulianTs) {
         throw DataSourceUtils.newRebaseExceptionInRead(format)
       }
       micros
-    case LegacyBehaviorPolicy.LEGACY => RebaseDateTime.rebaseJulianToGregorianMicros
+    case LegacyBehaviorPolicy.LEGACY =>
+      RebaseDateTime.rebaseJulianToGregorianMicros(rebaseSpec.timeZone, _)
     case LegacyBehaviorPolicy.CORRECTED => identity[Long]
   }
 
-  def creteTimestampRebaseFuncInWrite(
+  def createTimestampRebaseFuncInWrite(
       rebaseMode: LegacyBehaviorPolicy.Value,
       format: String): Long => Long = rebaseMode match {
     case LegacyBehaviorPolicy.EXCEPTION => micros: Long =>
@@ -187,7 +232,51 @@ object DataSourceUtils {
         throw DataSourceUtils.newRebaseExceptionInWrite(format)
       }
       micros
-    case LegacyBehaviorPolicy.LEGACY => RebaseDateTime.rebaseGregorianToJulianMicros
+    case LegacyBehaviorPolicy.LEGACY =>
+      val timeZone = SQLConf.get.sessionLocalTimeZone
+      RebaseDateTime.rebaseGregorianToJulianMicros(timeZone, _)
     case LegacyBehaviorPolicy.CORRECTED => identity[Long]
+  }
+
+  def generateDatasourceOptions(
+      extraOptions: CaseInsensitiveStringMap, table: CatalogTable): Map[String, String] = {
+    val pathOption = table.storage.locationUri.map("path" -> CatalogUtils.URIToString(_))
+    val options = table.storage.properties ++ pathOption
+    if (!SQLConf.get.getConf(SQLConf.LEGACY_EXTRA_OPTIONS_BEHAVIOR)) {
+      // Check the same key with different values
+      table.storage.properties.foreach { case (k, v) =>
+        if (extraOptions.containsKey(k) && extraOptions.get(k) != v) {
+          throw QueryCompilationErrors.failToResolveDataSourceForTableError(table, k)
+        }
+      }
+      // To keep the original key from table properties, here we filter all case insensitive
+      // duplicate keys out from extra options.
+      val lowerCasedDuplicatedKeys =
+        table.storage.properties.keySet.map(_.toLowerCase(Locale.ROOT))
+          .intersect(extraOptions.keySet.asScala)
+      extraOptions.asCaseSensitiveMap().asScala.filterNot {
+        case (k, _) => lowerCasedDuplicatedKeys.contains(k.toLowerCase(Locale.ROOT))
+      }.toMap ++ options
+    } else {
+      options
+    }
+  }
+
+  def getPartitionFiltersAndDataFilters(
+      partitionSchema: StructType,
+      normalizedFilters: Seq[Expression]): (Seq[Expression], Seq[Expression]) = {
+    val partitionColumns = normalizedFilters.flatMap { expr =>
+      expr.collect {
+        case attr: AttributeReference if partitionSchema.names.contains(attr.name) =>
+          attr
+      }
+    }
+    val partitionSet = AttributeSet(partitionColumns)
+    val (partitionFilters, dataFilters) = normalizedFilters.partition(f =>
+      f.references.nonEmpty && f.references.subsetOf(partitionSet)
+    )
+    val extraPartitionFilter =
+      dataFilters.flatMap(extractPredicatesWithinOutputSet(_, partitionSet))
+    (ExpressionSet(partitionFilters ++ extraPartitionFilter).toSeq, dataFilters)
   }
 }

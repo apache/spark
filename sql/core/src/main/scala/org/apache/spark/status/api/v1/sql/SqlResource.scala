@@ -84,22 +84,18 @@ private[v1] class SqlResource extends BaseAppResource {
       case _ =>
     }
 
-    val status = if (exec.jobs.size == completed.size) {
-      "COMPLETED"
-    } else if (failed.nonEmpty) {
-      "FAILED"
-    } else {
-      "RUNNING"
-    }
-
     val duration = exec.completionTime.getOrElse(new Date()).getTime - exec.submissionTime
     val planDetails = if (planDescription) exec.physicalPlanDescription else ""
-    val nodes = if (details) printableMetrics(graph.allNodes, exec.metricValues) else Seq.empty
+    val nodes = if (details) {
+      printableMetrics(graph.allNodes, Option(exec.metricValues).getOrElse(Map.empty))
+    } else {
+      Seq.empty
+    }
     val edges = if (details) graph.edges else Seq.empty
 
     new ExecutionData(
       exec.executionId,
-      status,
+      exec.executionStatus,
       exec.description,
       planDetails,
       new Date(exec.submissionTime),
@@ -111,8 +107,8 @@ private[v1] class SqlResource extends BaseAppResource {
       edges)
   }
 
-  private def printableMetrics(allNodes: Seq[SparkPlanGraphNode],
-    metricValues: Map[Long, String]): Seq[Node] = {
+  private def printableMetrics(allNodes: collection.Seq[SparkPlanGraphNode],
+    metricValues: Map[Long, String]): collection.Seq[Node] = {
 
     def getMetric(metricValues: Map[Long, String], accumulatorId: Long,
       metricName: String): Option[Metric] = {
@@ -134,7 +130,8 @@ private[v1] class SqlResource extends BaseAppResource {
     nodes.sortBy(_.nodeId).reverse
   }
 
-  private def getNodeIdAndWSCGIdMap(allNodes: Seq[SparkPlanGraphNode]): Map[Long, Option[Long]] = {
+  private def getNodeIdAndWSCGIdMap(
+      allNodes: collection.Seq[SparkPlanGraphNode]): Map[Long, Option[Long]] = {
     val wscgNodes = allNodes.filter(_.name.trim.startsWith(WHOLE_STAGE_CODEGEN))
     val nodeIdAndWSCGIdMap: Map[Long, Option[Long]] = wscgNodes.flatMap {
       _ match {

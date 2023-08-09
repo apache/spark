@@ -63,13 +63,15 @@ class DataFrameRangeSuite extends QueryTest with SharedSparkSession with Eventua
     val res7 = spark.range(-10, -9, -20, 1).select("id")
     assert(res7.count == 0)
 
-    val res8 = spark.range(Long.MinValue, Long.MaxValue, Long.MaxValue, 100).select("id")
-    assert(res8.count == 3)
-    assert(res8.agg(sum("id")).as("sumid").collect() === Seq(Row(-3)))
+    if (!conf.ansiEnabled) {
+      val res8 = spark.range(Long.MinValue, Long.MaxValue, Long.MaxValue, 100).select("id")
+      assert(res8.count == 3)
+      assert(res8.agg(sum("id")).as("sumid").collect() === Seq(Row(-3)))
 
-    val res9 = spark.range(Long.MaxValue, Long.MinValue, Long.MinValue, 100).select("id")
-    assert(res9.count == 2)
-    assert(res9.agg(sum("id")).as("sumid").collect() === Seq(Row(Long.MaxValue - 1)))
+      val res9 = spark.range(Long.MaxValue, Long.MinValue, Long.MinValue, 100).select("id")
+      assert(res9.count == 2)
+      assert(res9.agg(sum("id")).as("sumid").collect() === Seq(Row(Long.MaxValue - 1)))
+    }
 
     // only end provided as argument
     val res10 = spark.range(10).select("id")

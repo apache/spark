@@ -21,9 +21,9 @@ import java.util.UUID
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable
-import scala.collection.mutable.ArrayBuffer
 
-import io.fabric8.kubernetes.client.DefaultKubernetesClient
+import io.fabric8.kubernetes.api.model.NamespaceBuilder
+import io.fabric8.kubernetes.client.KubernetesClient
 import org.scalatest.concurrent.Eventually
 
 import org.apache.spark.SparkConf
@@ -33,29 +33,29 @@ import org.apache.spark.internal.config.JARS
 import org.apache.spark.internal.config.Tests.IS_TESTING
 import org.apache.spark.internal.config.UI.UI_ENABLED
 
-private[spark] class KubernetesTestComponents(defaultClient: DefaultKubernetesClient) {
+private[spark] class KubernetesTestComponents(val kubernetesClient: KubernetesClient) {
 
   val namespaceOption = Option(System.getProperty(CONFIG_KEY_KUBE_NAMESPACE))
   val hasUserSpecifiedNamespace = namespaceOption.isDefined
-  val namespace = namespaceOption.getOrElse(UUID.randomUUID().toString.replaceAll("-", ""))
+  val namespace = namespaceOption.getOrElse("spark-" +
+    UUID.randomUUID().toString.replaceAll("-", ""))
   val serviceAccountName =
     Option(System.getProperty(CONFIG_KEY_KUBE_SVC_ACCOUNT))
       .getOrElse("default")
-  val kubernetesClient = defaultClient.inNamespace(namespace)
   val clientConfig = kubernetesClient.getConfiguration
 
   def createNamespace(): Unit = {
-    defaultClient.namespaces.createNew()
+    kubernetesClient.namespaces.create(new NamespaceBuilder()
       .withNewMetadata()
       .withName(namespace)
       .endMetadata()
-      .done()
+      .build())
   }
 
   def deleteNamespace(): Unit = {
-    defaultClient.namespaces.withName(namespace).delete()
+    kubernetesClient.namespaces.withName(namespace).delete()
     Eventually.eventually(KubernetesSuite.TIMEOUT, KubernetesSuite.INTERVAL) {
-      val namespaceList = defaultClient
+      val namespaceList = kubernetesClient
         .namespaces()
         .list()
         .getItems
@@ -69,7 +69,7 @@ private[spark] class KubernetesTestComponents(defaultClient: DefaultKubernetesCl
       .set("spark.master", s"k8s://${kubernetesClient.getMasterUrl}")
       .set("spark.kubernetes.namespace", namespace)
       .set("spark.executor.cores", "1")
-      .set("spark.executors.instances", "1")
+      .set("spark.executor.instances", "1")
       .set("spark.app.name", "spark-test-app")
       .set(IS_TESTING.key, "false")
       .set(UI_ENABLED.key, "true")
@@ -110,7 +110,8 @@ private[spark] object SparkAppLauncher extends Logging {
       timeoutSecs: Int,
       sparkHomeDir: Path,
       isJVM: Boolean,
-      pyFiles: Option[String] = None): Unit = {
+      pyFiles: Option[String] = None,
+      env: Map[String, String] = Map.empty[String, String]): Unit = {
     val sparkSubmitExecutable = sparkHomeDir.resolve(Paths.get("bin", "spark-submit"))
     logInfo(s"Launching a spark app with arguments $appArguments and conf $appConf")
     val preCommandLine = if (isJVM) {
@@ -131,6 +132,6 @@ private[spark] object SparkAppLauncher extends Logging {
       commandLine ++= appArguments.appArgs
     }
     logInfo(s"Launching a spark app with command line: ${commandLine.mkString(" ")}")
-    ProcessUtils.executeProcess(commandLine.toArray, timeoutSecs)
+    ProcessUtils.executeProcess(commandLine.toArray, timeoutSecs, env = env)
   }
 }

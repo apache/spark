@@ -18,11 +18,13 @@
 package org.apache.spark.sql.catalyst.expressions.aggregate
 
 import java.sql.{Date, Timestamp}
+import java.time.LocalDateTime
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.TypeCheckFailure
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, BoundReference, CreateArray, Literal, SpecificInternalRow}
+import org.apache.spark.sql.catalyst.expressions.Cast._
 import org.apache.spark.sql.catalyst.util.{ArrayData, DateTimeUtils}
 import org.apache.spark.sql.types._
 
@@ -35,40 +37,64 @@ class ApproxCountDistinctForIntervalsSuite extends SparkFunSuite {
       val wrongColumn = ApproxCountDistinctForIntervals(
         AttributeReference("a", dataType)(),
         endpointsExpression = CreateArray(Seq(1, 10).map(Literal(_))))
-      assert(
-        wrongColumn.checkInputDataTypes() match {
-          case TypeCheckFailure(msg)
-            if msg.contains("requires (numeric or timestamp or date) type") => true
-          case _ => false
-        })
+      assert(wrongColumn.checkInputDataTypes() ==
+        DataTypeMismatch(
+          errorSubClass = "UNEXPECTED_INPUT_TYPE",
+          messageParameters = Map(
+            "paramIndex" -> "1",
+            "requiredType" -> ("(\"NUMERIC\" or \"TIMESTAMP\" or \"DATE\" or \"TIMESTAMP_NTZ\"" +
+              " or \"INTERVAL YEAR TO MONTH\" or \"INTERVAL DAY TO SECOND\")"),
+            "inputSql" -> "\"a\"",
+            "inputType" -> toSQLType(dataType)
+          )
+        )
+      )
     }
 
     var wrongEndpoints = ApproxCountDistinctForIntervals(
       AttributeReference("a", DoubleType)(),
       endpointsExpression = Literal(0.5d))
-    assert(
-      wrongEndpoints.checkInputDataTypes() match {
-        case TypeCheckFailure(msg) if msg.contains("requires array type") => true
-        case _ => false
-      })
+    assert(wrongEndpoints.checkInputDataTypes() ==
+      DataTypeMismatch(
+        errorSubClass = "UNEXPECTED_INPUT_TYPE",
+        messageParameters = Map(
+          "paramIndex" -> "2",
+          "requiredType" -> "\"ARRAY\"",
+          "inputSql" -> "\"0.5\"",
+          "inputType" -> "\"DOUBLE\""
+        )
+      )
+    )
 
     wrongEndpoints = ApproxCountDistinctForIntervals(
       AttributeReference("a", DoubleType)(),
       endpointsExpression = CreateArray(Seq(AttributeReference("b", DoubleType)())))
     assert(wrongEndpoints.checkInputDataTypes() ==
-      TypeCheckFailure("The endpoints provided must be constant literals"))
+      DataTypeMismatch(
+        errorSubClass = "NON_FOLDABLE_INPUT",
+        messageParameters = Map(
+          "inputName" -> "endpointsExpression",
+          "inputType" -> "\"ARRAY<DOUBLE>\"")))
 
     wrongEndpoints = ApproxCountDistinctForIntervals(
       AttributeReference("a", DoubleType)(),
       endpointsExpression = CreateArray(Array(10L).map(Literal(_))))
     assert(wrongEndpoints.checkInputDataTypes() ==
-      TypeCheckFailure("The number of endpoints must be >= 2 to construct intervals"))
+      DataTypeMismatch("WRONG_NUM_ENDPOINTS", Map("actualNumber" -> "1")))
 
     wrongEndpoints = ApproxCountDistinctForIntervals(
       AttributeReference("a", DoubleType)(),
       endpointsExpression = CreateArray(Array("foobar").map(Literal(_))))
+    // scalastyle:off line.size.limit
     assert(wrongEndpoints.checkInputDataTypes() ==
-        TypeCheckFailure("Endpoints require (numeric or timestamp or date) type"))
+      DataTypeMismatch(
+        errorSubClass = "UNEXPECTED_INPUT_TYPE",
+        messageParameters = Map(
+          "paramIndex" -> "2",
+          "requiredType" -> "ARRAY OF (\"NUMERIC\" or \"DATE\" or \"TIMESTAMP\" or \"TIMESTAMP_NTZ\" or \"ANSI INTERVAL\")",
+          "inputSql" -> "\"array(foobar)\"",
+          "inputType" -> "\"ARRAY<STRING>\"")))
+    // scalastyle:on line.size.limit
   }
 
   /** Create an ApproxCountDistinctForIntervals instance and an input and output buffer. */
@@ -199,7 +225,9 @@ class ApproxCountDistinctForIntervalsSuite extends SparkFunSuite {
       (intRecords.map(DateTimeUtils.toJavaDate),
           intEndpoints.map(DateTimeUtils.toJavaDate), DateType),
       (intRecords.map(DateTimeUtils.toJavaTimestamp(_)),
-          intEndpoints.map(DateTimeUtils.toJavaTimestamp(_)), TimestampType)
+          intEndpoints.map(DateTimeUtils.toJavaTimestamp(_)), TimestampType),
+      (intRecords.map(DateTimeUtils.microsToLocalDateTime(_)),
+        intEndpoints.map(DateTimeUtils.microsToLocalDateTime(_)), TimestampNTZType)
     )
 
     inputs.foreach { case (records, endpoints, dataType) =>
@@ -209,6 +237,7 @@ class ApproxCountDistinctForIntervalsSuite extends SparkFunSuite {
         val value = r match {
           case d: Date => DateTimeUtils.fromJavaDate(d)
           case t: Timestamp => DateTimeUtils.fromJavaTimestamp(t)
+          case ldt: LocalDateTime => DateTimeUtils.localDateTimeToMicros(ldt)
           case _ => r
         }
         input.update(0, value)

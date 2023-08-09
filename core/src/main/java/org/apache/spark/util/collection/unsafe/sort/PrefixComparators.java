@@ -104,6 +104,7 @@ public class PrefixComparators {
     @Override public boolean sortDescending() { return false; }
     @Override public boolean sortSigned() { return false; }
     @Override public boolean nullsFirst() { return true; }
+    @Override
     public int compare(long aPrefix, long bPrefix) {
       return UnsignedLongs.compare(aPrefix, bPrefix);
     }
@@ -113,6 +114,7 @@ public class PrefixComparators {
     @Override public boolean sortDescending() { return false; }
     @Override public boolean sortSigned() { return false; }
     @Override public boolean nullsFirst() { return false; }
+    @Override
     public int compare(long aPrefix, long bPrefix) {
       return UnsignedLongs.compare(aPrefix, bPrefix);
     }
@@ -122,6 +124,7 @@ public class PrefixComparators {
     @Override public boolean sortDescending() { return true; }
     @Override public boolean sortSigned() { return false; }
     @Override public boolean nullsFirst() { return true; }
+    @Override
     public int compare(long bPrefix, long aPrefix) {
       return UnsignedLongs.compare(aPrefix, bPrefix);
     }
@@ -131,6 +134,7 @@ public class PrefixComparators {
     @Override public boolean sortDescending() { return true; }
     @Override public boolean sortSigned() { return false; }
     @Override public boolean nullsFirst() { return false; }
+    @Override
     public int compare(long bPrefix, long aPrefix) {
       return UnsignedLongs.compare(aPrefix, bPrefix);
     }
@@ -140,8 +144,9 @@ public class PrefixComparators {
     @Override public boolean sortDescending() { return false; }
     @Override public boolean sortSigned() { return true; }
     @Override public boolean nullsFirst() { return true; }
+    @Override
     public int compare(long a, long b) {
-      return (a < b) ? -1 : (a > b) ? 1 : 0;
+      return Long.compare(a, b);
     }
   }
 
@@ -149,8 +154,9 @@ public class PrefixComparators {
     @Override public boolean sortDescending() { return false; }
     @Override public boolean sortSigned() { return true; }
     @Override public boolean nullsFirst() { return false; }
+    @Override
     public int compare(long a, long b) {
-      return (a < b) ? -1 : (a > b) ? 1 : 0;
+      return Long.compare(a, b);
     }
   }
 
@@ -158,8 +164,9 @@ public class PrefixComparators {
     @Override public boolean sortDescending() { return true; }
     @Override public boolean sortSigned() { return true; }
     @Override public boolean nullsFirst() { return true; }
+    @Override
     public int compare(long b, long a) {
-      return (a < b) ? -1 : (a > b) ? 1 : 0;
+      return Long.compare(a, b);
     }
   }
 
@@ -167,8 +174,9 @@ public class PrefixComparators {
     @Override public boolean sortDescending() { return true; }
     @Override public boolean sortSigned() { return true; }
     @Override public boolean nullsFirst() { return false; }
+    @Override
     public int compare(long b, long a) {
-      return (a < b) ? -1 : (a > b) ? 1 : 0;
+      return Long.compare(a, b);
     }
   }
 }

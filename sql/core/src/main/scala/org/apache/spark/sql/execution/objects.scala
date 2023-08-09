@@ -32,8 +32,10 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.objects.Invoke
+import org.apache.spark.sql.catalyst.plans.ReferenceAllColumns
 import org.apache.spark.sql.catalyst.plans.logical.{EventTimeWatermark, FunctionUtils, LogicalGroupState}
 import org.apache.spark.sql.catalyst.plans.physical._
+import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.execution.python.BatchIterator
 import org.apache.spark.sql.execution.r.ArrowRRunner
 import org.apache.spark.sql.execution.streaming.GroupStateImpl
@@ -58,13 +60,8 @@ trait ObjectProducerExec extends SparkPlan {
 /**
  * Physical version of `ObjectConsumer`.
  */
-trait ObjectConsumerExec extends UnaryExecNode {
+trait ObjectConsumerExec extends UnaryExecNode with ReferenceAllColumns[SparkPlan] {
   assert(child.output.length == 1)
-
-  // This operator always need all columns of its child, even it doesn't reference to.
-  @transient
-  override lazy val references: AttributeSet = child.outputSet
-
   def inputObjectType: DataType = child.output.head.dataType
 }
 
@@ -99,6 +96,9 @@ case class DeserializeToObjectExec(
       iter.map(projection)
     }
   }
+
+  override protected def withNewChildInternal(newChild: SparkPlan): DeserializeToObjectExec =
+    copy(child = newChild)
 }
 
 /**
@@ -135,6 +135,9 @@ case class SerializeFromObjectExec(
       iter.map(projection)
     }
   }
+
+  override protected def withNewChildInternal(newChild: SparkPlan): SerializeFromObjectExec =
+    copy(child = newChild)
 }
 
 /**
@@ -195,6 +198,9 @@ case class MapPartitionsExec(
       func(iter.map(getObject)).map(outputObject)
     }
   }
+
+  override protected def withNewChildInternal(newChild: SparkPlan): MapPartitionsExec =
+    copy(child = newChild)
 }
 
 /**
@@ -252,6 +258,9 @@ case class MapPartitionsInRWithArrowExec(
       }.map(outputProject)
     }
   }
+
+  override protected def withNewChildInternal(newChild: SparkPlan): MapPartitionsInRWithArrowExec =
+    copy(child = newChild)
 }
 
 /**
@@ -276,12 +285,12 @@ case class MapElementsExec(
   }
 
   override def doConsume(ctx: CodegenContext, input: Seq[ExprCode], row: ExprCode): String = {
-    val (funcClass, methodName) = func match {
+    val (funcClass, funcName) = func match {
       case m: MapFunction[_, _] => classOf[MapFunction[_, _]] -> "call"
       case _ => FunctionUtils.getFunctionOneName(outputObjectType, child.output(0).dataType)
     }
     val funcObj = Literal.create(func, ObjectType(funcClass))
-    val callFunc = Invoke(funcObj, methodName, outputObjectType, child.output)
+    val callFunc = Invoke(funcObj, funcName, outputObjectType, child.output, propagateNull = false)
 
     val result = BindReferences.bindReference(callFunc, child.output).genCode(ctx)
 
@@ -304,6 +313,9 @@ case class MapElementsExec(
   override def outputOrdering: Seq[SortOrder] = child.outputOrdering
 
   override def outputPartitioning: Partitioning = child.outputPartitioning
+
+  override protected def withNewChildInternal(newChild: SparkPlan): MapElementsExec =
+    copy(child = newChild)
 }
 
 /**
@@ -333,6 +345,9 @@ case class AppendColumnsExec(
       }
     }
   }
+
+  override protected def withNewChildInternal(newChild: SparkPlan): AppendColumnsExec =
+    copy(child = newChild)
 }
 
 /**
@@ -366,11 +381,15 @@ case class AppendColumnsWithObjectExec(
       }
     }
   }
+
+  override protected def withNewChildInternal(newChild: SparkPlan): AppendColumnsWithObjectExec =
+    copy(child = newChild)
 }
 
 /**
  * Groups the input rows together and calls the function with each group and an iterator containing
- * all elements in the group.  The result of this function is flattened before being output.
+ * all elements in the group. The iterator is sorted according to `dataOrder` if given.
+ * The result of this function is flattened before being output.
  */
 case class MapGroupsExec(
     func: (Any, Iterator[Any]) => TraversableOnce[Any],
@@ -378,6 +397,7 @@ case class MapGroupsExec(
     valueDeserializer: Expression,
     groupingAttributes: Seq[Attribute],
     dataAttributes: Seq[Attribute],
+    dataOrder: Seq[SortOrder],
     outputObjAttr: Attribute,
     child: SparkPlan) extends UnaryExecNode with ObjectProducerExec {
 
@@ -387,7 +407,7 @@ case class MapGroupsExec(
     ClusteredDistribution(groupingAttributes) :: Nil
 
   override def requiredChildOrdering: Seq[Seq[SortOrder]] =
-    Seq(groupingAttributes.map(SortOrder(_, Ascending)))
+    Seq(groupingAttributes.map(SortOrder(_, Ascending)) ++ dataOrder)
 
   override protected def doExecute(): RDD[InternalRow] = {
     child.execute().mapPartitionsInternal { iter =>
@@ -405,6 +425,9 @@ case class MapGroupsExec(
       }
     }
   }
+
+  override protected def withNewChildInternal(newChild: SparkPlan): MapGroupsExec =
+    copy(child = newChild)
 }
 
 object MapGroupsExec {
@@ -414,6 +437,7 @@ object MapGroupsExec {
       valueDeserializer: Expression,
       groupingAttributes: Seq[Attribute],
       dataAttributes: Seq[Attribute],
+      dataOrder: Seq[SortOrder],
       outputObjAttr: Attribute,
       timeoutConf: GroupStateTimeout,
       child: SparkPlan): MapGroupsExec = {
@@ -425,7 +449,7 @@ object MapGroupsExec {
       func(key, values, GroupStateImpl.createForBatch(timeoutConf, watermarkPresent))
     }
     new MapGroupsExec(f, keyDeserializer, valueDeserializer,
-      groupingAttributes, dataAttributes, outputObjAttr, child)
+      groupingAttributes, dataAttributes, dataOrder, outputObjAttr, child)
   }
 }
 
@@ -495,6 +519,9 @@ case class FlatMapGroupsInRExec(
       }
     }
   }
+
+  override protected def withNewChildInternal(newChild: SparkPlan): FlatMapGroupsInRExec =
+    copy(child = newChild)
 }
 
 /**
@@ -567,9 +594,19 @@ case class FlatMapGroupsInRWithArrowExec(
       // binary in a batch due to the limitation of R API. See also ARROW-4512.
       val columnarBatchIter = runner.compute(groupedByRKey, -1)
       val outputProject = UnsafeProjection.create(output, output)
-      columnarBatchIter.flatMap(_.rowIterator().asScala).map(outputProject)
+      val outputTypes = DataTypeUtils.fromAttributes(output).map(_.dataType)
+
+      columnarBatchIter.flatMap { batch =>
+        val actualDataTypes = (0 until batch.numCols()).map(i => batch.column(i).dataType())
+        assert(outputTypes == actualDataTypes, "Invalid schema from gapply(): " +
+          s"expected ${outputTypes.mkString(", ")}, got ${actualDataTypes.mkString(", ")}")
+        batch.rowIterator().asScala
+      }.map(outputProject)
     }
   }
+
+  override protected def withNewChildInternal(newChild: SparkPlan): FlatMapGroupsInRWithArrowExec =
+    copy(child = newChild)
 }
 
 /**
@@ -586,15 +623,19 @@ case class CoGroupExec(
     rightGroup: Seq[Attribute],
     leftAttr: Seq[Attribute],
     rightAttr: Seq[Attribute],
+    leftOrder: Seq[SortOrder],
+    rightOrder: Seq[SortOrder],
     outputObjAttr: Attribute,
     left: SparkPlan,
     right: SparkPlan) extends BinaryExecNode with ObjectProducerExec {
 
   override def requiredChildDistribution: Seq[Distribution] =
-    HashClusteredDistribution(leftGroup) :: HashClusteredDistribution(rightGroup) :: Nil
+    ClusteredDistribution(leftGroup) :: ClusteredDistribution(rightGroup) :: Nil
 
   override def requiredChildOrdering: Seq[Seq[SortOrder]] =
-    leftGroup.map(SortOrder(_, Ascending)) :: rightGroup.map(SortOrder(_, Ascending)) :: Nil
+    (leftGroup.map(SortOrder(_, Ascending)) ++ leftOrder) ::
+      (rightGroup.map(SortOrder(_, Ascending)) ++ rightOrder) ::
+      Nil
 
   override protected def doExecute(): RDD[InternalRow] = {
     left.execute().zipPartitions(right.execute()) { (leftData, rightData) =>
@@ -616,4 +657,7 @@ case class CoGroupExec(
       }
     }
   }
+
+  override protected def withNewChildrenInternal(
+    newLeft: SparkPlan, newRight: SparkPlan): CoGroupExec = copy(left = newLeft, right = newRight)
 }

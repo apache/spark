@@ -18,13 +18,15 @@
 package org.apache.spark.sql.execution.command
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.{Row, SparkSession}
+import org.apache.spark.sql.{AnalysisException, Row, SparkSession}
 import org.apache.spark.sql.catalyst.expressions.Attribute
-import org.apache.spark.sql.catalyst.plans.logical.{IgnoreCachedData, LogicalPlan}
+import org.apache.spark.sql.catalyst.parser.ParseException
+import org.apache.spark.sql.catalyst.plans.logical.IgnoreCachedData
+import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
+import org.apache.spark.sql.errors.QueryCompilationErrors.toSQLId
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.StaticSQLConf.CATALOG_IMPLEMENTATION
 import org.apache.spark.sql.types.{StringType, StructField, StructType}
-
 
 /**
  * Command that runs
@@ -34,13 +36,14 @@ import org.apache.spark.sql.types.{StringType, StructField, StructType}
  *   set;
  * }}}
  */
-case class SetCommand(kv: Option[(String, Option[String])]) extends RunnableCommand with Logging {
+case class SetCommand(kv: Option[(String, Option[String])])
+  extends LeafRunnableCommand with Logging {
 
   private def keyValueOutput: Seq[Attribute] = {
-    val schema = StructType(
-      StructField("key", StringType, nullable = false) ::
-        StructField("value", StringType, nullable = false) :: Nil)
-    schema.toAttributes
+    val schema = StructType(Array(
+      StructField("key", StringType, nullable = false),
+        StructField("value", StringType, nullable = false)))
+    toAttributes(schema)
   }
 
   private val (_output, runFunc): (Seq[Attribute], SparkSession => Seq[Row]) = kv match {
@@ -89,6 +92,23 @@ case class SetCommand(kv: Option[(String, Option[String])]) extends RunnableComm
     // Configures a single property.
     case Some((key, Some(value))) =>
       val runFunc = (sparkSession: SparkSession) => {
+        /**
+         * Be nice and detect if the key matches a SQL variable.
+         * If it does give a meaningful error pointing the user to SET VARIABLE
+         */
+        val varName = try {
+          sparkSession.sessionState.sqlParser.parseMultipartIdentifier(key)
+        } catch {
+          case _: ParseException =>
+          Seq()
+        }
+        if (varName.nonEmpty && varName.length <= 3) {
+          if (sparkSession.sessionState.analyzer.lookupVariable(varName).isDefined) {
+            throw new AnalysisException(
+              errorClass = "UNSUPPORTED_FEATURE.SET_VARIABLE_USING_SET",
+              messageParameters = Map("variableName" -> toSQLId(varName)))
+          }
+        }
         if (sparkSession.conf.get(CATALOG_IMPLEMENTATION.key).equals("hive") &&
             key.startsWith("hive.")) {
           logWarning(s"'SET $key=$value' might not work, since Spark doesn't support changing " +
@@ -106,7 +126,8 @@ case class SetCommand(kv: Option[(String, Option[String])]) extends RunnableComm
     // Queries all key-value pairs that are set in the SQLConf of the sparkSession.
     case None =>
       val runFunc = (sparkSession: SparkSession) => {
-        sparkSession.conf.getAll.toSeq.sorted.map { case (k, v) => Row(k, v) }
+        val redactedConf = SQLConf.get.redactOptions(sparkSession.conf.getAll)
+        redactedConf.toSeq.sorted.map { case (k, v) => Row(k, v) }
       }
       (keyValueOutput, runFunc)
 
@@ -123,12 +144,12 @@ case class SetCommand(kv: Option[(String, Option[String])]) extends RunnableComm
               Option(version).getOrElse("<unknown>"))
         }
       }
-      val schema = StructType(
-        StructField("key", StringType, nullable = false) ::
-          StructField("value", StringType, nullable = false) ::
-          StructField("meaning", StringType, nullable = false) ::
-          StructField("Since version", StringType, nullable = false) :: Nil)
-      (schema.toAttributes, runFunc)
+      val schema = StructType(Array(
+        StructField("key", StringType, nullable = false),
+          StructField("value", StringType, nullable = false),
+          StructField("meaning", StringType, nullable = false),
+          StructField("Since version", StringType, nullable = false)))
+      (toAttributes(schema), runFunc)
 
     // Queries the deprecated "mapred.reduce.tasks" property.
     case Some((SQLConf.Deprecated.MAPRED_REDUCE_TASKS, None)) =>
@@ -138,15 +159,31 @@ case class SetCommand(kv: Option[(String, Option[String])]) extends RunnableComm
             s"showing ${SQLConf.SHUFFLE_PARTITIONS.key} instead.")
         Seq(Row(
           SQLConf.SHUFFLE_PARTITIONS.key,
-          sparkSession.sessionState.conf.numShufflePartitions.toString))
+          sparkSession.sessionState.conf.defaultNumShufflePartitions.toString))
       }
       (keyValueOutput, runFunc)
 
     // Queries a single property.
     case Some((key, None)) =>
       val runFunc = (sparkSession: SparkSession) => {
-        val value = sparkSession.conf.getOption(key).getOrElse("<undefined>")
-        Seq(Row(key, value))
+        val value = sparkSession.conf.getOption(key).getOrElse {
+          // Also lookup the `sharedState.hadoopConf` to display default value for hadoop conf
+          // correctly. It completes all the session-level configs with `sparkSession.conf`
+          // together.
+          //
+          // Note that, as the write-side does not prohibit to set static hadoop/hive to SQLConf
+          // yet, users may get wrong results before reaching here,
+          // e.g. 'SET hive.metastore.uris=abc', where 'hive.metastore.uris' is static and 'abc' is
+          // of no effect, but will show 'abc' via 'SET hive.metastore.uris' wrongly.
+          //
+          // Instead of showing incorrect `<undefined>` to users, it's more reasonable to show the
+          // effective default values. For example, the hadoop output codec/compression configs
+          // take affect from table to table, file to file, so they are not static and users are
+          // very likely to change them based the default value they see.
+          sparkSession.sharedState.hadoopConf.get(key, "<undefined>")
+        }
+        val (_, redactedValue) = SQLConf.get.redactOptions(Seq((key, value))).head
+        Seq(Row(key, redactedValue))
       }
       (keyValueOutput, runFunc)
   }
@@ -166,15 +203,24 @@ object SetCommand {
  * via [[SetCommand]] will get reset to default value. Command that runs
  * {{{
  *   reset;
+ *   reset spark.sql.session.timeZone;
  * }}}
  */
-case object ResetCommand extends RunnableCommand with IgnoreCachedData {
+case class ResetCommand(config: Option[String]) extends LeafRunnableCommand with IgnoreCachedData {
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
-    val conf = sparkSession.sessionState.conf
-    conf.clear()
-    sparkSession.sparkContext.conf.getAll.foreach { case (k, v) =>
-      conf.setConfString(k, v)
+    val globalInitialConfigs = sparkSession.sharedState.conf
+    config match {
+      case Some(key) =>
+        sparkSession.conf.unset(key)
+        sparkSession.initialSessionOptions.get(key)
+          .orElse(globalInitialConfigs.getOption(key))
+          .foreach(sparkSession.conf.set(key, _))
+      case None =>
+        sparkSession.sessionState.conf.clear()
+        SQLConf.mergeSparkConf(sparkSession.sessionState.conf, globalInitialConfigs)
+        SQLConf.mergeNonStaticSQLConfigs(sparkSession.sessionState.conf,
+          sparkSession.initialSessionOptions)
     }
     Seq.empty[Row]
   }

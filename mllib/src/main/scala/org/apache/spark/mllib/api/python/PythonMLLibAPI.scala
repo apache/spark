@@ -90,12 +90,12 @@ private[python] class PythonMLLibAPI extends Serializable {
       initialWeights: Vector): JList[Object] = {
     try {
       val model = learner.run(data.rdd.persist(StorageLevel.MEMORY_AND_DISK), initialWeights)
-      if (model.isInstanceOf[LogisticRegressionModel]) {
-        val lrModel = model.asInstanceOf[LogisticRegressionModel]
-        List(lrModel.weights, lrModel.intercept, lrModel.numFeatures, lrModel.numClasses)
-          .map(_.asInstanceOf[Object]).asJava
-      } else {
-        List(model.weights, model.intercept).map(_.asInstanceOf[Object]).asJava
+      model match {
+        case lrModel: LogisticRegressionModel =>
+          List(lrModel.weights, lrModel.intercept, lrModel.numFeatures, lrModel.numClasses)
+            .map(_.asInstanceOf[Object]).asJava
+        case _ =>
+          List(model.weights, model.intercept).map(_.asInstanceOf[Object]).asJava
       }
     } finally {
       data.rdd.unpersist()
@@ -351,13 +351,15 @@ private[python] class PythonMLLibAPI extends Serializable {
       seed: java.lang.Long,
       initializationSteps: Int,
       epsilon: Double,
-      initialModel: java.util.ArrayList[Vector]): KMeansModel = {
+      initialModel: java.util.ArrayList[Vector],
+      distanceMeasure: String): KMeansModel = {
     val kMeansAlg = new KMeans()
       .setK(k)
       .setMaxIterations(maxIterations)
       .setInitializationMode(initializationMode)
       .setInitializationSteps(initializationSteps)
       .setEpsilon(epsilon)
+      .setDistanceMeasure(distanceMeasure)
 
     if (seed != null) kMeansAlg.setSeed(seed)
     if (!initialModel.isEmpty()) kMeansAlg.setInitialModel(new KMeansModel(initialModel))
@@ -398,7 +400,7 @@ private[python] class PythonMLLibAPI extends Serializable {
 
     if (initialModelWeights != null && initialModelMu != null && initialModelSigma != null) {
       val gaussians = initialModelMu.asScala.toSeq.zip(initialModelSigma.asScala.toSeq).map {
-        case (x, y) => new MultivariateGaussian(x.asInstanceOf[Vector], y.asInstanceOf[Matrix])
+        case (x, y) => new MultivariateGaussian(x, y)
       }
       val initialModel = new GaussianMixtureModel(
         initialModelWeights.asScala.toArray, gaussians.toArray)
@@ -1223,28 +1225,28 @@ private[python] class PythonMLLibAPI extends Serializable {
    * Python-friendly version of [[MLUtils.convertVectorColumnsToML()]].
    */
   def convertVectorColumnsToML(dataset: DataFrame, cols: JArrayList[String]): DataFrame = {
-    MLUtils.convertVectorColumnsToML(dataset, cols.asScala: _*)
+    MLUtils.convertVectorColumnsToML(dataset, cols.asScala.toSeq: _*)
   }
 
   /**
    * Python-friendly version of [[MLUtils.convertVectorColumnsFromML()]]
    */
   def convertVectorColumnsFromML(dataset: DataFrame, cols: JArrayList[String]): DataFrame = {
-    MLUtils.convertVectorColumnsFromML(dataset, cols.asScala: _*)
+    MLUtils.convertVectorColumnsFromML(dataset, cols.asScala.toSeq: _*)
   }
 
   /**
    * Python-friendly version of [[MLUtils.convertMatrixColumnsToML()]].
    */
   def convertMatrixColumnsToML(dataset: DataFrame, cols: JArrayList[String]): DataFrame = {
-    MLUtils.convertMatrixColumnsToML(dataset, cols.asScala: _*)
+    MLUtils.convertMatrixColumnsToML(dataset, cols.asScala.toSeq: _*)
   }
 
   /**
    * Python-friendly version of [[MLUtils.convertMatrixColumnsFromML()]]
    */
   def convertMatrixColumnsFromML(dataset: DataFrame, cols: JArrayList[String]): DataFrame = {
-    MLUtils.convertMatrixColumnsFromML(dataset, cols.asScala: _*)
+    MLUtils.convertMatrixColumnsFromML(dataset, cols.asScala.toSeq: _*)
   }
 }
 
@@ -1313,8 +1315,10 @@ private[spark] abstract class SerDeBase {
   def dumps(obj: AnyRef): Array[Byte] = {
     obj match {
       // Pickler in Python side cannot deserialize Scala Array normally. See SPARK-12834.
-      case array: Array[_] => new Pickler().dumps(array.toSeq.asJava)
-      case _ => new Pickler().dumps(obj)
+      case array: Array[_] => new Pickler(/* useMemo = */ true,
+        /* valueCompare = */ false).dumps(array.toSeq.asJava)
+      case _ => new Pickler(/* useMemo = */ true,
+        /* valueCompare = */ false).dumps(obj)
     }
   }
 

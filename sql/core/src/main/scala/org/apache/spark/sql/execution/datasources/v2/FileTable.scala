@@ -22,10 +22,11 @@ import scala.collection.JavaConverters._
 
 import org.apache.hadoop.fs.{FileStatus, Path}
 
-import org.apache.spark.sql.{AnalysisException, SparkSession}
+import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.connector.catalog.{SupportsRead, SupportsWrite, Table, TableCapability}
 import org.apache.spark.sql.connector.catalog.TableCapability._
 import org.apache.spark.sql.connector.expressions.Transform
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.execution.streaming.{FileStreamSink, MetadataLogFileIndex}
 import org.apache.spark.sql.types.{DataType, StructType}
@@ -53,7 +54,7 @@ abstract class FileTable(
     } else {
       // This is a non-streaming file based datasource.
       val rootPathsSpecified = DataSource.checkAndGlobPathIfNecessary(paths, hadoopConf,
-        checkEmptyGlobPath = true, checkFilesExist = true)
+        checkEmptyGlobPath = true, checkFilesExist = true, enableGlobbing = globPaths)
       val fileStatusCache = FileStatusCache.getOrCreate(sparkSession)
       new InMemoryFileIndex(
         sparkSession, rootPathsSpecified, caseSensitiveMap, userSpecifiedSchema, fileStatusCache)
@@ -68,8 +69,7 @@ abstract class FileTable(
     }.orElse {
       inferSchema(fileIndex.allFiles())
     }.getOrElse {
-      throw new AnalysisException(
-        s"Unable to infer schema for $formatName. It must be specified manually.")
+      throw QueryCompilationErrors.dataSchemaNotSpecifiedError(formatName)
     }
     fileIndex match {
       case _: MetadataLogFileIndex => schema
@@ -79,17 +79,14 @@ abstract class FileTable(
 
   override lazy val schema: StructType = {
     val caseSensitive = sparkSession.sessionState.conf.caseSensitiveAnalysis
-    SchemaUtils.checkColumnNameDuplication(dataSchema.fieldNames,
-      "in the data schema", caseSensitive)
+    SchemaUtils.checkSchemaColumnNameDuplication(dataSchema, caseSensitive)
     dataSchema.foreach { field =>
       if (!supportsDataType(field.dataType)) {
-        throw new AnalysisException(
-          s"$formatName data source does not support ${field.dataType.catalogString} data type.")
+        throw QueryCompilationErrors.dataTypeUnsupportedByDataSourceError(formatName, field)
       }
     }
     val partitionSchema = fileIndex.partitionSchema
-    SchemaUtils.checkColumnNameDuplication(partitionSchema.fieldNames,
-      "in the partition schema", caseSensitive)
+    SchemaUtils.checkSchemaColumnNameDuplication(partitionSchema, caseSensitive)
     val partitionNameSet: Set[String] =
       partitionSchema.fields.map(PartitioningUtils.getColName(_, caseSensitive)).toSet
 
@@ -139,8 +136,16 @@ abstract class FileTable(
    * 2. Catalog support is required, which is still under development for data source V2.
    */
   def fallbackFileFormat: Class[_ <: FileFormat]
+
+  /**
+   * Whether or not paths should be globbed before being used to access files.
+   */
+  private def globPaths: Boolean = {
+    val entry = options.get(DataSource.GLOB_PATHS_KEY)
+    Option(entry).map(_ == "true").getOrElse(true)
+  }
 }
 
 object FileTable {
-  private val CAPABILITIES = Set(BATCH_READ, BATCH_WRITE, TRUNCATE).asJava
+  private val CAPABILITIES = util.EnumSet.of(BATCH_READ, BATCH_WRITE)
 }

@@ -50,7 +50,13 @@ import org.apache.spark.streaming.scheduler.StreamingListener
  * computation can be started and stopped using `context.start()` and `context.stop()`,
  * respectively. `context.awaitTermination()` allows the current thread to wait for the
  * termination of a context by `stop()` or by an exception.
+ * @deprecated This is deprecated as of Spark 3.4.0.
+ *             There are no longer updates to DStream and it's a legacy project.
+ *             There is a newer and easier to use streaming engine
+ *             in Spark called Structured Streaming.
+ *             You should use Spark Structured Streaming for your streaming applications.
  */
+@deprecated("DStream is deprecated. Migrate to Structured Streaming.", "Spark 3.4.0")
 class JavaStreamingContext(val ssc: StreamingContext) extends Closeable {
 
   /**
@@ -67,7 +73,7 @@ class JavaStreamingContext(val ssc: StreamingContext) extends Closeable {
    * @param master Name of the Spark Master
    * @param appName Name to be used when registering with the scheduler
    * @param batchDuration The time interval at which streaming data will be divided into batches
-   * @param sparkHome The SPARK_HOME directory on the slave nodes
+   * @param sparkHome The SPARK_HOME directory on the worker nodes
    * @param jarFile JAR file containing job code, to ship to cluster. This can be a path on the
    *                local file system or an HDFS, HTTP, HTTPS, or FTP URL.
    */
@@ -84,7 +90,7 @@ class JavaStreamingContext(val ssc: StreamingContext) extends Closeable {
    * @param master Name of the Spark Master
    * @param appName Name to be used when registering with the scheduler
    * @param batchDuration The time interval at which streaming data will be divided into batches
-   * @param sparkHome The SPARK_HOME directory on the slave nodes
+   * @param sparkHome The SPARK_HOME directory on the worker nodes
    * @param jars Collection of JARs to send to the cluster. These can be paths on the local file
    *             system or HDFS, HTTP, HTTPS, or FTP URLs.
    */
@@ -101,7 +107,7 @@ class JavaStreamingContext(val ssc: StreamingContext) extends Closeable {
    * @param master Name of the Spark Master
    * @param appName Name to be used when registering with the scheduler
    * @param batchDuration The time interval at which streaming data will be divided into batches
-   * @param sparkHome The SPARK_HOME directory on the slave nodes
+   * @param sparkHome The SPARK_HOME directory on the worker nodes
    * @param jars Collection of JARs to send to the cluster. These can be paths on the local file
    *             system or HDFS, HTTP, HTTPS, or FTP URLs.
    * @param environment Environment variables to set on worker nodes
@@ -366,7 +372,7 @@ class JavaStreamingContext(val ssc: StreamingContext) extends Closeable {
     implicit val cm: ClassTag[T] =
       implicitly[ClassTag[AnyRef]].asInstanceOf[ClassTag[T]]
     val sQueue = new scala.collection.mutable.Queue[RDD[T]]
-    sQueue.enqueue(queue.asScala.map(_.rdd).toSeq: _*)
+    sQueue ++= queue.asScala.map(_.rdd)
     ssc.queueStream(sQueue)
   }
 
@@ -390,7 +396,7 @@ class JavaStreamingContext(val ssc: StreamingContext) extends Closeable {
     implicit val cm: ClassTag[T] =
       implicitly[ClassTag[AnyRef]].asInstanceOf[ClassTag[T]]
     val sQueue = new scala.collection.mutable.Queue[RDD[T]]
-    sQueue.enqueue(queue.asScala.map(_.rdd).toSeq: _*)
+    sQueue ++= queue.asScala.map(_.rdd)
     ssc.queueStream(sQueue, oneAtATime)
   }
 
@@ -415,13 +421,13 @@ class JavaStreamingContext(val ssc: StreamingContext) extends Closeable {
     implicit val cm: ClassTag[T] =
       implicitly[ClassTag[AnyRef]].asInstanceOf[ClassTag[T]]
     val sQueue = new scala.collection.mutable.Queue[RDD[T]]
-    sQueue.enqueue(queue.asScala.map(_.rdd).toSeq: _*)
+    sQueue ++= queue.asScala.map(_.rdd)
     ssc.queueStream(sQueue, oneAtATime, defaultRDD.rdd)
   }
 
   /**
      * Create an input stream with any arbitrary user implemented receiver.
-     * Find more details at: http://spark.apache.org/docs/latest/streaming-custom-receivers.html
+     * Find more details at: https://spark.apache.org/docs/latest/streaming-custom-receivers.html
      * @param receiver Custom implementation of Receiver
      */
   def receiverStream[T](receiver: Receiver[T]): JavaReceiverInputDStream[T] = {

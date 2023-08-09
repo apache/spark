@@ -18,13 +18,18 @@ package org.apache.spark.deploy.k8s.features
 
 import io.fabric8.kubernetes.api.model.HasMetadata
 
+import org.apache.spark.annotation.{DeveloperApi, Unstable}
 import org.apache.spark.deploy.k8s.SparkPod
 
 /**
+ * :: DeveloperApi ::
+ *
  * A collection of functions that together represent a "feature" in pods that are launched for
  * Spark drivers and executors.
  */
-private[spark] trait KubernetesFeatureConfigStep {
+@Unstable
+@DeveloperApi
+trait KubernetesFeatureConfigStep {
 
   /**
    * Apply modifications on the given pod in accordance to this feature. This can include attaching
@@ -65,7 +70,15 @@ private[spark] trait KubernetesFeatureConfigStep {
 
   /**
    * Return any additional Kubernetes resources that should be added to support this feature. Only
-   * applicable when creating the driver in cluster mode.
+   * applicable when creating the driver in cluster mode. Resources would be setup/refresh before
+   * Pod creation.
+   */
+  def getAdditionalPreKubernetesResources(): Seq[HasMetadata] = Seq.empty
+
+  /**
+   * Return any additional Kubernetes resources that should be added to support this feature. Only
+   * applicable when creating the driver in cluster mode. Resources would be setup/refresh after
+   * Pod creation.
    */
   def getAdditionalKubernetesResources(): Seq[HasMetadata] = Seq.empty
 }

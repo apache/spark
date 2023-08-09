@@ -1,0 +1,42 @@
+TakeOrderedAndProject [w_warehouse_name,i_item_id,inv_before,inv_after]
+  WholeStageCodegen (5)
+    Filter [inv_before,inv_after]
+      HashAggregate [w_warehouse_name,i_item_id,sum,sum] [sum(CASE WHEN (d_date < 2000-03-11) THEN inv_quantity_on_hand ELSE 0 END),sum(CASE WHEN (d_date >= 2000-03-11) THEN inv_quantity_on_hand ELSE 0 END),inv_before,inv_after,sum,sum]
+        InputAdapter
+          Exchange [w_warehouse_name,i_item_id] #1
+            WholeStageCodegen (4)
+              HashAggregate [w_warehouse_name,i_item_id,d_date,inv_quantity_on_hand] [sum,sum,sum,sum]
+                Project [inv_quantity_on_hand,w_warehouse_name,i_item_id,d_date]
+                  BroadcastHashJoin [inv_date_sk,d_date_sk]
+                    Project [inv_quantity_on_hand,inv_date_sk,w_warehouse_name,i_item_id]
+                      BroadcastHashJoin [inv_item_sk,i_item_sk]
+                        Project [inv_item_sk,inv_quantity_on_hand,inv_date_sk,w_warehouse_name]
+                          BroadcastHashJoin [inv_warehouse_sk,w_warehouse_sk]
+                            Filter [inv_warehouse_sk,inv_item_sk]
+                              ColumnarToRow
+                                InputAdapter
+                                  Scan parquet spark_catalog.default.inventory [inv_item_sk,inv_warehouse_sk,inv_quantity_on_hand,inv_date_sk]
+                                    SubqueryBroadcast [d_date_sk] #1
+                                      BroadcastExchange #2
+                                        WholeStageCodegen (1)
+                                          Filter [d_date,d_date_sk]
+                                            ColumnarToRow
+                                              InputAdapter
+                                                Scan parquet spark_catalog.default.date_dim [d_date_sk,d_date]
+                            InputAdapter
+                              BroadcastExchange #3
+                                WholeStageCodegen (1)
+                                  Filter [w_warehouse_sk]
+                                    ColumnarToRow
+                                      InputAdapter
+                                        Scan parquet spark_catalog.default.warehouse [w_warehouse_sk,w_warehouse_name]
+                        InputAdapter
+                          BroadcastExchange #4
+                            WholeStageCodegen (2)
+                              Project [i_item_sk,i_item_id]
+                                Filter [i_current_price,i_item_sk]
+                                  ColumnarToRow
+                                    InputAdapter
+                                      Scan parquet spark_catalog.default.item [i_item_sk,i_item_id,i_current_price]
+                    InputAdapter
+                      ReusedExchange [d_date_sk,d_date] #2

@@ -21,6 +21,7 @@ import scala.util.Random
 
 import breeze.linalg.{DenseMatrix => BDM, DenseVector => BDV, Vector => BV}
 import breeze.stats.distributions.{Multinomial => BrzMultinomial}
+import breeze.stats.distributions.Rand.FixedSeed.randBasis
 import org.scalatest.exceptions.TestFailedException
 
 import org.apache.spark.{SparkException, SparkFunSuite}
@@ -36,7 +37,7 @@ object NaiveBayesSuite {
 
   private def calcLabel(p: Double, pi: Array[Double]): Int = {
     var sum = 0.0
-    for (j <- 0 until pi.length) {
+    for (j <- pi.indices) {
       sum += pi(j)
       if (p < sum) return j
     }
@@ -107,9 +108,9 @@ class NaiveBayesSuite extends SparkFunSuite with MLlibTestSparkContext {
     val modelIndex = piData.indices.zip(model.labels.map(_.toInt))
     try {
       for (i <- modelIndex) {
-        assert(math.exp(piData(i._2)) ~== math.exp(model.pi(i._1)) absTol 0.05)
+        assert(piData(i._2) ~== model.pi(i._1) relTol 0.35)
         for (j <- thetaData(i._2).indices) {
-          assert(math.exp(thetaData(i._2)(j)) ~== math.exp(model.theta(i._1)(j)) absTol 0.05)
+          assert(thetaData(i._2)(j) ~== model.theta(i._1)(j) relTol 0.35)
         }
       }
     } catch {

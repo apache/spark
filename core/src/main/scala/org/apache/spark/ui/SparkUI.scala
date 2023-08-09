@@ -18,6 +18,9 @@
 package org.apache.spark.ui
 
 import java.util.Date
+import javax.servlet.http.{HttpServlet, HttpServletRequest, HttpServletResponse}
+
+import org.eclipse.jetty.servlet.ServletContextHandler
 
 import org.apache.spark.{SecurityManager, SparkConf, SparkContext}
 import org.apache.spark.internal.Logging
@@ -53,6 +56,41 @@ private[spark] class SparkUI private (
   var appId: String = _
 
   private var streamingJobProgressListener: Option[SparkListener] = None
+
+  private val initHandler: ServletContextHandler = {
+    val servlet = new HttpServlet() {
+      override def doGet(req: HttpServletRequest, res: HttpServletResponse): Unit = {
+        res.setContentType("text/html;charset=utf-8")
+        res.getWriter.write("Spark is starting up. Please wait a while until it's ready.")
+      }
+    }
+    createServletHandler("/", servlet, basePath)
+  }
+
+  private var readyToAttachHandlers = false
+
+  /**
+   * Attach all existing handlers to ServerInfo.
+   */
+  def attachAllHandlers(): Unit = {
+    // Attach all handlers that have been added already, but not yet attached.
+    serverInfo.foreach { server =>
+      server.removeHandler(initHandler)
+      handlers.foreach(server.addHandler(_, securityManager))
+    }
+    // Handlers attached after this can be directly started.
+    readyToAttachHandlers = true
+  }
+
+  /** Attaches a handler to this UI.
+   *  Note: The handler will not be attached until readyToAttachHandlers is true,
+   *  handlers added before that will be attached by attachAllHandlers */
+  override def attachHandler(handler: ServletContextHandler): Unit = synchronized {
+    handlers += handler
+    if (readyToAttachHandlers) {
+      serverInfo.foreach(_.addHandler(handler, securityManager))
+    }
+  }
 
   /** Initialize all components of the server. */
   def initialize(): Unit = {
@@ -96,6 +134,24 @@ private[spark] class SparkUI private (
     appId = id
   }
 
+  /**
+   * To start SparUI, Spark starts Jetty Server first to bind address.
+   * After the Spark application is fully started, call [attachAllHandlers]
+   * to start all existing handlers.
+   */
+  override def bind(): Unit = {
+    assert(serverInfo.isEmpty, s"Attempted to bind $className more than once!")
+    try {
+      val server = initServer()
+      server.addHandler(initHandler, securityManager)
+      serverInfo = Some(server)
+    } catch {
+      case e: Exception =>
+        logError(s"Failed to bind $className", e)
+        System.exit(1)
+    }
+  }
+
   /** Stop the server behind this web interface. Only valid after bind(). */
   override def stop(): Unit = {
     super.stop()
@@ -110,6 +166,11 @@ private[spark] class SparkUI private (
     }
   }
 
+  override def checkUIViewPermissions(appId: String, attemptId: Option[String],
+      user: String): Boolean = {
+    securityManager.checkUIViewPermissions(user)
+  }
+
   def getApplicationInfoList: Iterator[ApplicationInfo] = {
     Iterator(new ApplicationInfo(
       id = appId,
@@ -122,7 +183,7 @@ private[spark] class SparkUI private (
         attemptId = None,
         startTime = new Date(startTime),
         endTime = new Date(-1),
-        duration = 0,
+        duration = System.currentTimeMillis() - startTime,
         lastUpdated = new Date(startTime),
         sparkUser = getSparkUser,
         completed = false,

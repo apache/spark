@@ -34,14 +34,10 @@ Spark uses pattern letters in the following table for date and timestamp parsing
 |**y**|year|year|2020; 20|
 |**D**|day-of-year|number(3)|189|
 |**M/L**|month-of-year|month|7; 07; Jul; July|
-|**d**|day-of-month|number(3)|28|
+|**d**|day-of-month|number(2)|28|
 |**Q/q**|quarter-of-year|number/text|3; 03; Q3; 3rd quarter|
-|**Y**|week-based-year|year|1996; 96|
-|**w**|week-of-week-based-year|number(2)|27|
-|**W**|week-of-month|number(1)|4|
 |**E**|day-of-week|text|Tue; Tuesday|
-|**u**|localized day-of-week|number/text|2; 02; Tue; Tuesday|
-|**F**|week-of-month|number(1)|3|
+|**F**|aligned day of week in month|number(1)|3|
 |**a**|am-pm-of-day|am-pm|PM|
 |**h**|clock-hour-of-am-pm (1-12)|number(2)|12|
 |**K**|hour-of-am-pm (0-11)|number(2)|0|
@@ -63,9 +59,11 @@ Spark uses pattern letters in the following table for date and timestamp parsing
 
 The count of pattern letters determines the format.
 
-- Text: The text style is determined based on the number of pattern letters used. Less than 4 pattern letters will use the short form. Exactly 4 pattern letters will use the full form. Exactly 5 pattern letters will use the narrow form. 5 or more letters will fail.
+- Text: The text style is determined based on the number of pattern letters used. Less than 4 pattern letters will use the short text form, typically an abbreviation, e.g. day-of-week Monday might output "Mon". Exactly 4 pattern letters will use the full text form, typically the full description, e.g, day-of-week Monday might output "Monday". 5 or more letters will fail.
 
-- Number(n): The n here represents the maximum count of letters this type of datetime pattern can be used. If the count of letters is one, then the value is output using the minimum number of digits and without padding. Otherwise, the count of digits is used as the width of the output field, with the value zero-padded as necessary.
+- Number(n): The n here represents the maximum count of letters this type of datetime pattern can be used.
+  - In formatting, if the count of letters is one, then the value is output using the minimum number of digits and without padding otherwise, the count of digits is used as the width of the output field, with the value zero-padded as necessary.
+  - In parsing, the exact count of digits is expected in the input field.
 
 - Number/Text: If the count of pattern letters is 3 or greater, use the Text rules above. Otherwise use the Number rules above.
 
@@ -74,9 +72,9 @@ The count of pattern letters determines the format.
   For formatting, the fraction length would be padded to the number of contiguous 'S' with zeros.
   Spark supports datetime of micro-of-second precision, which has up to 6 significant digits, but can parse nano-of-second with exceeded part truncated.
 
-- Year: The count of letters determines the minimum field width below which padding is used. If the count of letters is two, then a reduced two digit form is used. For printing, this outputs the rightmost two digits. For parsing, this will parse using the base value of 2000, resulting in a year within the range 2000 to 2099 inclusive. If the count of letters is less than four (but not two), then the sign is only output for negative years. Otherwise, the sign is output if the pad width is exceeded when 'G' is not present.
+- Year: The count of letters determines the minimum field width below which padding is used. If the count of letters is two, then a reduced two digit form is used. For printing, this outputs the rightmost two digits. For parsing, this will parse using the base value of 2000, resulting in a year within the range 2000 to 2099 inclusive. If the count of letters is less than four (but not two), then the sign is only output for negative years. Otherwise, the sign is output if the pad width is exceeded when 'G' is not present. 7 or more letters will fail.
 
-- Month: If the number of pattern letters is 3 or more, the month is interpreted as text; otherwise, it is interpreted as a number. The text form is depend on letters - 'M' denotes the 'standard' form, and 'L' is for 'stand-alone' form. The difference between the 'standard' and 'stand-alone' forms is trickier to describe as there is no difference in English. However, in other languages there is a difference in the word used when the text is used alone, as opposed to in a complete date. For example, the word used for a month when used alone in a date picker is different to the word used for month in association with a day and year in a date. In Russian, 'Июль' is the stand-alone form of July, and 'Июля' is the standard form. Here are examples for all supported pattern letters (more than 4 letters is invalid):
+- Month: It follows the rule of Number/Text. The text form is depend on letters - 'M' denotes the 'standard' form, and 'L' is for 'stand-alone' form. These two forms are different only in some certain languages. For example, in Russian, 'Июль' is the stand-alone form of July, and 'Июля' is the standard form. Here are examples for all supported pattern letters:
   - `'M'` or `'L'`: Month number in a year starting from 1. There is no difference between 'M' and 'L'. Month from 1 to 9 are printed without padding.
     ```sql
     spark-sql> select date_format(date '1970-01-01', "M");
@@ -107,8 +105,8 @@ The count of pattern letters determines the format.
     ```
   - `'MMMM'`: full textual month representation in the standard form. It is used for parsing/formatting months as a part of dates/timestamps.
     ```sql
-    spark-sql> select date_format(date '1970-01-01', "MMMM yyyy");
-    January 1970
+    spark-sql> select date_format(date '1970-01-01', "d MMMM");
+    1 January
     spark-sql> select to_csv(named_struct('date', date '1970-01-01'), map('dateFormat', 'd MMMM', 'locale', 'RU'));
     1 января
     ```
@@ -136,9 +134,5 @@ The count of pattern letters determines the format.
   During formatting, all valid data will be output even it is in the optional section.
   During parsing, the whole section may be missing from the parsed string.
   An optional section is started by `[` and ended using `]` (or at the end of the pattern).
-
-More details for the text style:
-
-- Short Form: Short text, typically an abbreviation. For example, day-of-week Monday might output "Mon".
-
-- Full Form: Full text, typically the full description. For example, day-of-week Monday might output "Monday".
+  
+- Symbols of 'E', 'F', 'q' and 'Q' can only be used for datetime formatting, e.g. `date_format`. They are not allowed used for datetime parsing, e.g. `to_timestamp`.

@@ -27,8 +27,7 @@ import com.google.common.collect.Maps;
 import io.netty.buffer.Unpooled;
 import org.junit.Test;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.fail;
+import static org.junit.Assert.*;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyLong;
@@ -46,6 +45,7 @@ import org.apache.spark.network.client.RpcResponseCallback;
 import org.apache.spark.network.client.TransportClient;
 import org.apache.spark.network.shuffle.protocol.BlockTransferMessage;
 import org.apache.spark.network.shuffle.protocol.FetchShuffleBlocks;
+import org.apache.spark.network.shuffle.protocol.FetchShuffleBlockChunks;
 import org.apache.spark.network.shuffle.protocol.OpenBlocks;
 import org.apache.spark.network.shuffle.protocol.StreamHandle;
 import org.apache.spark.network.util.MapConfigProvider;
@@ -189,16 +189,99 @@ public class OneForOneBlockFetcherSuite {
 
   @Test
   public void testEmptyBlockFetch() {
-    try {
-      fetchBlocks(
-        Maps.newLinkedHashMap(),
-        new String[] {},
-        new OpenBlocks("app-id", "exec-id", new String[] {}),
-        conf);
-      fail();
-    } catch (IllegalArgumentException e) {
-      assertEquals("Zero-sized blockIds array", e.getMessage());
+    IllegalArgumentException e = assertThrows(IllegalArgumentException.class,
+      () -> fetchBlocks(Maps.newLinkedHashMap(), new String[] {},
+        new OpenBlocks("app-id", "exec-id", new String[] {}), conf));
+    assertEquals("Zero-sized blockIds array", e.getMessage());
+  }
+
+  @Test
+  public void testFetchShuffleBlocksOrder() {
+    LinkedHashMap<String, ManagedBuffer> blocks = Maps.newLinkedHashMap();
+    blocks.put("shuffle_0_0_0", new NioManagedBuffer(ByteBuffer.wrap(new byte[1])));
+    blocks.put("shuffle_0_2_1", new NioManagedBuffer(ByteBuffer.wrap(new byte[2])));
+    blocks.put("shuffle_0_10_2", new NettyManagedBuffer(Unpooled.wrappedBuffer(new byte[3])));
+    String[] blockIds = blocks.keySet().toArray(new String[blocks.size()]);
+
+    BlockFetchingListener listener = fetchBlocks(
+      blocks,
+      blockIds,
+      new FetchShuffleBlocks("app-id", "exec-id", 0,
+              new long[]{0, 2, 10}, new int[][]{{0}, {1}, {2}}, false),
+      conf);
+
+    for (String blockId : blockIds) {
+      verify(listener).onBlockFetchSuccess(blockId, blocks.get(blockId));
     }
+  }
+
+  @Test
+  public void testBatchFetchShuffleBlocksOrder() {
+    LinkedHashMap<String, ManagedBuffer> blocks = Maps.newLinkedHashMap();
+    blocks.put("shuffle_0_0_1_2", new NioManagedBuffer(ByteBuffer.wrap(new byte[1])));
+    blocks.put("shuffle_0_2_2_3", new NioManagedBuffer(ByteBuffer.wrap(new byte[2])));
+    blocks.put("shuffle_0_10_3_4", new NettyManagedBuffer(Unpooled.wrappedBuffer(new byte[3])));
+    String[] blockIds = blocks.keySet().toArray(new String[blocks.size()]);
+
+    BlockFetchingListener listener = fetchBlocks(
+      blocks,
+      blockIds,
+      new FetchShuffleBlocks("app-id", "exec-id", 0,
+              new long[]{0, 2, 10}, new int[][]{{1, 2}, {2, 3}, {3, 4}}, true),
+      conf);
+
+    for (String blockId : blockIds) {
+      verify(listener).onBlockFetchSuccess(blockId, blocks.get(blockId));
+    }
+  }
+
+  @Test
+  public void testShuffleBlockChunksFetch() {
+    LinkedHashMap<String, ManagedBuffer> blocks = Maps.newLinkedHashMap();
+    blocks.put("shuffleChunk_0_0_0_0", new NioManagedBuffer(ByteBuffer.wrap(new byte[12])));
+    blocks.put("shuffleChunk_0_0_0_1", new NioManagedBuffer(ByteBuffer.wrap(new byte[23])));
+    blocks.put("shuffleChunk_0_0_0_2",
+      new NettyManagedBuffer(Unpooled.wrappedBuffer(new byte[23])));
+    String[] blockIds = blocks.keySet().toArray(new String[blocks.size()]);
+
+    BlockFetchingListener listener = fetchBlocks(blocks, blockIds,
+      new FetchShuffleBlockChunks("app-id", "exec-id", 0, 0, new int[] { 0 },
+        new int[][] {{ 0, 1, 2 }}), conf);
+    for (int i = 0; i < 3; i ++) {
+      verify(listener, times(1)).onBlockFetchSuccess("shuffleChunk_0_0_0_" + i,
+        blocks.get("shuffleChunk_0_0_0_" + i));
+    }
+  }
+
+  @Test
+  public void testShuffleBlockChunkFetchFailure() {
+    LinkedHashMap<String, ManagedBuffer> blocks = Maps.newLinkedHashMap();
+    blocks.put("shuffleChunk_0_0_0_0", new NioManagedBuffer(ByteBuffer.wrap(new byte[12])));
+    blocks.put("shuffleChunk_0_0_0_1", null);
+    blocks.put("shuffleChunk_0_0_0_2",
+      new NettyManagedBuffer(Unpooled.wrappedBuffer(new byte[23])));
+    String[] blockIds = blocks.keySet().toArray(new String[blocks.size()]);
+
+    BlockFetchingListener listener = fetchBlocks(blocks, blockIds,
+      new FetchShuffleBlockChunks("app-id", "exec-id", 0, 0, new int[]{0}, new int[][]{{0, 1, 2}}),
+        conf);
+    verify(listener, times(1)).onBlockFetchSuccess("shuffleChunk_0_0_0_0",
+      blocks.get("shuffleChunk_0_0_0_0"));
+    verify(listener, times(1)).onBlockFetchFailure(eq("shuffleChunk_0_0_0_1"), any());
+    verify(listener, times(1)).onBlockFetchSuccess("shuffleChunk_0_0_0_2",
+      blocks.get("shuffleChunk_0_0_0_2"));
+  }
+
+  @Test
+  public void testInvalidShuffleBlockIds() {
+    assertThrows(IllegalArgumentException.class, () -> fetchBlocks(new LinkedHashMap<>(),
+      new String[]{"shuffle_0_0"},
+      new FetchShuffleBlocks("app-id", "exec-id", 0, new long[] { 0 },
+        new int[][] {{ 0 }}, false), conf));
+    assertThrows(IllegalArgumentException.class, () -> fetchBlocks(new LinkedHashMap<>(),
+      new String[]{"shuffleChunk_0_0_0_0_0"},
+      new FetchShuffleBlockChunks("app-id", "exec-id", 0, 0, new int[] { 0 },
+        new int[][] {{ 0 }}), conf));
   }
 
   /**

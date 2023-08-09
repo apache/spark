@@ -17,13 +17,10 @@
 
 package org.apache.spark.ml.feature
 
-import scala.collection.mutable.ArrayBuilder
-
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.annotation.Since
 import org.apache.spark.ml._
-import org.apache.spark.ml.attribute.{Attribute, AttributeGroup, NominalAttribute}
 import org.apache.spark.ml.linalg._
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
@@ -31,7 +28,7 @@ import org.apache.spark.ml.stat.Summarizer
 import org.apache.spark.ml.util._
 import org.apache.spark.sql._
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.types.{StructField, StructType}
+import org.apache.spark.sql.types.StructType
 
 
 /**
@@ -59,7 +56,7 @@ private[feature] trait VarianceThresholdSelectorParams extends Params
 
 /**
  * Feature selector that removes all low-variance features. Features with a
- * variance not greater than the threshold will be removed. The default is to keep
+ * (sample) variance not greater than the threshold will be removed. The default is to keep
  * all features with non-zero variance, i.e. remove the features that have the
  * same value in all samples.
  */

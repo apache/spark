@@ -19,10 +19,10 @@ package org.apache.spark.sql.execution.columnar.compression
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.expressions.GenericInternalRow
+import org.apache.spark.sql.catalyst.types.PhysicalDataType
 import org.apache.spark.sql.execution.columnar._
 import org.apache.spark.sql.execution.columnar.ColumnarTestUtils._
 import org.apache.spark.sql.execution.vectorized.OnHeapColumnVector
-import org.apache.spark.sql.types.AtomicType
 
 class PassThroughSuite extends SparkFunSuite {
   val nullValue = -1
@@ -33,7 +33,7 @@ class PassThroughSuite extends SparkFunSuite {
   testPassThrough(new FloatColumnStats, FLOAT)
   testPassThrough(new DoubleColumnStats, DOUBLE)
 
-  def testPassThrough[T <: AtomicType](
+  def testPassThrough[T <: PhysicalDataType](
       columnStats: ColumnStats,
       columnType: NativeColumnType[T]): Unit = {
 
@@ -46,7 +46,7 @@ class PassThroughSuite extends SparkFunSuite {
 
       val builder = TestCompressibleColumnBuilder(columnStats, columnType, PassThrough)
 
-      input.map { value =>
+      input.foreach { value =>
         val row = new GenericInternalRow(1)
         columnType.setField(row, 0, value)
         builder.appendFrom(row, 0)
@@ -98,7 +98,7 @@ class PassThroughSuite extends SparkFunSuite {
       val row = new GenericInternalRow(1)
       val nullRow = new GenericInternalRow(1)
       nullRow.setNullAt(0)
-      input.map { value =>
+      input.foreach { value =>
         if (value == nullValue) {
           builder.appendFrom(nullRow, 0)
         } else {
@@ -117,7 +117,8 @@ class PassThroughSuite extends SparkFunSuite {
       assertResult(PassThrough.typeId, "Wrong compression scheme ID")(buffer.getInt())
 
       val decoder = PassThrough.decoder(buffer, columnType)
-      val columnVector = new OnHeapColumnVector(input.length, columnType.dataType)
+      val columnVector = new OnHeapColumnVector(input.length,
+        ColumnarDataTypeUtils.toLogicalDataType(columnType.dataType))
       decoder.decompress(columnVector, input.length)
 
       if (input.nonEmpty) {

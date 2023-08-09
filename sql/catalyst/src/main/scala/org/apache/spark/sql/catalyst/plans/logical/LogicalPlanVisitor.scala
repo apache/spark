@@ -30,6 +30,7 @@ trait LogicalPlanVisitor[T] {
     case p: Filter => visitFilter(p)
     case p: Generate => visitGenerate(p)
     case p: GlobalLimit => visitGlobalLimit(p)
+    case p: Offset => visitOffset(p)
     case p: Intersect => visitIntersect(p)
     case p: Join => visitJoin(p)
     case p: LocalLimit => visitLocalLimit(p)
@@ -37,10 +38,14 @@ trait LogicalPlanVisitor[T] {
     case p: Project => visitProject(p)
     case p: Repartition => visitRepartition(p)
     case p: RepartitionByExpression => visitRepartitionByExpr(p)
+    case p: RebalancePartitions => visitRebalancePartitions(p)
     case p: Sample => visitSample(p)
     case p: ScriptTransformation => visitScriptTransform(p)
     case p: Union => visitUnion(p)
     case p: Window => visitWindow(p)
+    case p: Tail => visitTail(p)
+    case p: Sort => visitSort(p)
+    case p: WithCTE => visitWithCTE(p)
     case p: LogicalPlan => default(p)
   }
 
@@ -60,6 +65,8 @@ trait LogicalPlanVisitor[T] {
 
   def visitGlobalLimit(p: GlobalLimit): T
 
+  def visitOffset(p: Offset): T
+
   def visitIntersect(p: Intersect): T
 
   def visitJoin(p: Join): T
@@ -74,6 +81,8 @@ trait LogicalPlanVisitor[T] {
 
   def visitRepartitionByExpr(p: RepartitionByExpression): T
 
+  def visitRebalancePartitions(p: RebalancePartitions): T
+
   def visitSample(p: Sample): T
 
   def visitScriptTransform(p: ScriptTransformation): T
@@ -81,4 +90,10 @@ trait LogicalPlanVisitor[T] {
   def visitUnion(p: Union): T
 
   def visitWindow(p: Window): T
+
+  def visitTail(p: Tail): T
+
+  def visitSort(sort: Sort): T
+
+  def visitWithCTE(p: WithCTE): T
 }

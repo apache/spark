@@ -46,7 +46,7 @@ object Utils {
 
   def createOffer(
                    offerId: String,
-                   slaveId: String,
+                   agentId: String,
                    mem: Int,
                    cpus: Int,
                    ports: Option[(Long, Long)] = None,
@@ -77,8 +77,8 @@ object Utils {
     builder.setId(createOfferId(offerId))
       .setFrameworkId(FrameworkID.newBuilder()
       .setValue("f1"))
-      .setSlaveId(SlaveID.newBuilder().setValue(slaveId))
-      .setHostname(s"host${slaveId}")
+      .setSlaveId(SlaveID.newBuilder().setValue(agentId))
+      .setHostname(s"host${agentId}")
       .addAllAttributes(attributes.asJava)
       .build()
   }
@@ -101,8 +101,8 @@ object Utils {
     OfferID.newBuilder().setValue(offerId).build()
   }
 
-  def createSlaveId(slaveId: String): SlaveID = {
-    SlaveID.newBuilder().setValue(slaveId).build()
+  def createAgentId(agentId: String): SlaveID = {
+    SlaveID.newBuilder().setValue(agentId).build()
   }
 
   def createExecutorId(executorId: String): ExecutorID = {
@@ -128,8 +128,9 @@ object Utils {
       .getEnvironment
       .getVariablesList
       .asScala
-    assert(envVars
-      .count(!_.getName.startsWith("SPARK_")) == 2) // user-defined secret env vars
+    assert(envVars.count { x =>
+      !x.getName.startsWith("SPARK_") && x.getName != "OMP_NUM_THREADS"
+    } == 2) // user-defined secret env vars
     val variableOne = envVars.filter(_.getName == "SECRET_ENV_KEY").head
     assert(variableOne.getSecret.isInitialized)
     assert(variableOne.getSecret.getType == Secret.Type.REFERENCE)
@@ -157,8 +158,9 @@ object Utils {
       .getEnvironment
       .getVariablesList
       .asScala
-    assert(envVars
-      .count(!_.getName.startsWith("SPARK_")) == 2) // user-defined secret env vars
+    assert(envVars.count { x =>
+      !x.getName.startsWith("SPARK_") && x.getName != "OMP_NUM_THREADS"
+    } == 2) // user-defined secret env vars
     val variableOne = envVars.filter(_.getName == "USER").head
     assert(variableOne.getSecret.isInitialized)
     assert(variableOne.getSecret.getType == Secret.Type.VALUE)
@@ -227,4 +229,3 @@ object Utils {
       .build()
   }
 }
-

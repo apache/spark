@@ -21,7 +21,7 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, Path}
 import org.apache.hadoop.mapreduce._
 
-import org.apache.spark.sql.{AnalysisException, SparkSession}
+import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.csv.{CSVHeaderChecker, CSVOptions, UnivocityParser}
 import org.apache.spark.sql.catalyst.expressions.ExprUtils
@@ -100,30 +100,19 @@ class CSVFileFormat extends TextBasedFileFormat with DataSourceRegister {
       hadoopConf: Configuration): (PartitionedFile) => Iterator[InternalRow] = {
     val broadcastedHadoopConf =
       sparkSession.sparkContext.broadcast(new SerializableConfiguration(hadoopConf))
-
+    val columnPruning = sparkSession.sessionState.conf.csvColumnPruning
     val parsedOptions = new CSVOptions(
       options,
-      sparkSession.sessionState.conf.csvColumnPruning,
+      columnPruning,
       sparkSession.sessionState.conf.sessionLocalTimeZone,
       sparkSession.sessionState.conf.columnNameOfCorruptRecord)
 
     // Check a field requirement for corrupt records here to throw an exception in a driver side
     ExprUtils.verifyColumnNameOfCorruptRecord(dataSchema, parsedOptions.columnNameOfCorruptRecord)
-
-    if (requiredSchema.length == 1 &&
-      requiredSchema.head.name == parsedOptions.columnNameOfCorruptRecord) {
-      throw new AnalysisException(
-        "Since Spark 2.3, the queries from raw JSON/CSV files are disallowed when the\n" +
-          "referenced columns only include the internal corrupt record column\n" +
-          "(named _corrupt_record by default). For example:\n" +
-          "spark.read.schema(schema).csv(file).filter($\"_corrupt_record\".isNotNull).count()\n" +
-          "and spark.read.schema(schema).csv(file).select(\"_corrupt_record\").show().\n" +
-          "Instead, you can cache or save the parsed results and then send the same query.\n" +
-          "For example, val df = spark.read.schema(schema).csv(file).cache() and then\n" +
-          "df.filter($\"_corrupt_record\".isNotNull).count()."
-      )
-    }
-    val columnPruning = sparkSession.sessionState.conf.csvColumnPruning
+    // Don't push any filter which refers to the "virtual" column which cannot present in the input.
+    // Such filters will be applied later on the upper layer.
+    val actualFilters =
+      filters.filterNot(_.references.contains(parsedOptions.columnNameOfCorruptRecord))
 
     (file: PartitionedFile) => {
       val conf = broadcastedHadoopConf.value.value
@@ -135,11 +124,11 @@ class CSVFileFormat extends TextBasedFileFormat with DataSourceRegister {
         actualDataSchema,
         actualRequiredSchema,
         parsedOptions,
-        filters)
+        actualFilters)
       val schema = if (columnPruning) actualRequiredSchema else actualDataSchema
       val isStartOfFile = file.start == 0
       val headerChecker = new CSVHeaderChecker(
-        schema, parsedOptions, source = s"CSV file: ${file.filePath}", isStartOfFile)
+        schema, parsedOptions, source = s"CSV file: ${file.urlEncodedPath}", isStartOfFile)
       CSVDataSource(parsedOptions).readFile(
         conf,
         file,
@@ -156,6 +145,8 @@ class CSVFileFormat extends TextBasedFileFormat with DataSourceRegister {
   override def equals(other: Any): Boolean = other.isInstanceOf[CSVFileFormat]
 
   override def supportDataType(dataType: DataType): Boolean = dataType match {
+    case _: BinaryType => false
+
     case _: AtomicType => true
 
     case udt: UserDefinedType[_] => supportDataType(udt.sqlType)
@@ -164,4 +155,3 @@ class CSVFileFormat extends TextBasedFileFormat with DataSourceRegister {
   }
 
 }
-

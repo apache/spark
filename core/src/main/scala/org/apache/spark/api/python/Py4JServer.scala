@@ -21,6 +21,7 @@ import java.net.InetAddress
 import java.util.Locale
 
 import org.apache.spark.SparkConf
+import org.apache.spark.errors.SparkCoreErrors
 import org.apache.spark.internal.Logging
 import org.apache.spark.util.Utils
 
@@ -34,7 +35,7 @@ private[spark] class Py4JServer(sparkConf: SparkConf) extends Logging {
   // Java system properties and such
   private val localhost = InetAddress.getLoopbackAddress()
   private[spark] val server = if (sys.env.getOrElse(
-      "PYSPARK_PIN_THREAD", "false").toLowerCase(Locale.ROOT) == "true") {
+      "PYSPARK_PIN_THREAD", "true").toLowerCase(Locale.ROOT) == "true") {
     new py4j.ClientServer.ClientServerBuilder()
       .authToken(secret)
       .javaPort(0)
@@ -52,18 +53,18 @@ private[spark] class Py4JServer(sparkConf: SparkConf) extends Logging {
   def start(): Unit = server match {
     case clientServer: py4j.ClientServer => clientServer.startServer()
     case gatewayServer: py4j.GatewayServer => gatewayServer.start()
-    case other => throw new RuntimeException(s"Unexpected Py4J server ${other.getClass}")
+    case other => throw SparkCoreErrors.unexpectedPy4JServerError(other)
   }
 
   def getListeningPort: Int = server match {
     case clientServer: py4j.ClientServer => clientServer.getJavaServer.getListeningPort
     case gatewayServer: py4j.GatewayServer => gatewayServer.getListeningPort
-    case other => throw new RuntimeException(s"Unexpected Py4J server ${other.getClass}")
+    case other => throw SparkCoreErrors.unexpectedPy4JServerError(other)
   }
 
   def shutdown(): Unit = server match {
     case clientServer: py4j.ClientServer => clientServer.shutdown()
     case gatewayServer: py4j.GatewayServer => gatewayServer.shutdown()
-    case other => throw new RuntimeException(s"Unexpected Py4J server ${other.getClass}")
+    case other => throw SparkCoreErrors.unexpectedPy4JServerError(other)
   }
 }

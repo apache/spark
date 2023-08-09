@@ -21,8 +21,6 @@ using Logistic Regression as the base classifier.
 Run with:
   bin/spark-submit examples/src/main/python/ml/one_vs_rest_example.py
 """
-from __future__ import print_function
-
 # $example on$
 from pyspark.ml.classification import LogisticRegression, OneVsRest
 from pyspark.ml.evaluation import MulticlassClassificationEvaluator

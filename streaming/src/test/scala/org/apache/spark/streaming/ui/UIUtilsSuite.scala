@@ -20,12 +20,13 @@ package org.apache.spark.streaming.ui
 import java.util.TimeZone
 import java.util.concurrent.TimeUnit
 
-import org.scalatest.Matchers
+import org.scalatest.matchers.must.Matchers
+import org.scalatest.matchers.should.Matchers._
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.ui.{UIUtils => SparkUIUtils}
 
-class UIUtilsSuite extends SparkFunSuite with Matchers{
+class UIUtilsSuite extends SparkFunSuite with Matchers {
 
   test("shortTimeUnitString") {
     assert("ns" === UIUtils.shortTimeUnitString(TimeUnit.NANOSECONDS))

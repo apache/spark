@@ -30,7 +30,7 @@ import org.apache.spark.sql.{DataFrame, Dataset}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
 import org.apache.spark.storage.StorageLevel
-import org.apache.spark.util.collection.OpenHashMap
+import org.apache.spark.util.collection.{OpenHashMap, Utils}
 
 /**
  * Params for [[CountVectorizer]] and [[CountVectorizerModel]].
@@ -241,7 +241,10 @@ class CountVectorizer @Since("1.5.0") (@Since("1.5.0") override val uid: String)
     }
     wordCounts.unpersist()
 
-    require(vocab.length > 0, "The vocabulary size should be > 0. Lower minDF as necessary.")
+    if (vocab.isEmpty) {
+      this.logWarning("The vocabulary size is empty. " +
+        "If this was unexpected, you may wish to lower minDF (or) increase maxDF.")
+    }
     copyValues(new CountVectorizerModel(uid, vocab).setParent(this))
   }
 
@@ -302,7 +305,7 @@ class CountVectorizerModel(
   override def transform(dataset: Dataset[_]): DataFrame = {
     val outputSchema = transformSchema(dataset.schema, logging = true)
     if (broadcastDict.isEmpty) {
-      val dict = vocabulary.zipWithIndex.toMap
+      val dict = Utils.toMapWithIndex(vocabulary)
       broadcastDict = Some(dataset.sparkSession.sparkContext.broadcast(dict))
     }
     val dictBr = broadcastDict.get

@@ -20,6 +20,7 @@ package org.apache.spark.sql.catalyst.util
 import scala.collection.mutable
 
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.array.ByteArrayMethods
@@ -52,24 +53,20 @@ class ArrayBasedMapBuilder(keyType: DataType, valueType: DataType) extends Seria
 
   def put(key: Any, value: Any): Unit = {
     if (key == null) {
-      throw new RuntimeException("Cannot use null as map key.")
+      throw QueryExecutionErrors.nullAsMapKeyNotAllowedError()
     }
 
     val index = keyToIndex.getOrDefault(key, -1)
     if (index == -1) {
       if (size >= ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH) {
-        throw new RuntimeException(s"Unsuccessful attempt to build maps with $size elements " +
-          s"due to exceeding the map size limit ${ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH}.")
+        throw QueryExecutionErrors.exceedMapSizeLimitError(size)
       }
       keyToIndex.put(key, values.length)
       keys.append(key)
       values.append(value)
     } else {
       if (mapKeyDedupPolicy == SQLConf.MapKeyDedupPolicy.EXCEPTION.toString) {
-        throw new RuntimeException(s"Duplicate map key $key was found, please check the input " +
-          "data. If you want to remove the duplicated keys, you can set " +
-          s"${SQLConf.MAP_KEY_DEDUP_POLICY.key} to ${SQLConf.MapKeyDedupPolicy.LAST_WIN} so that " +
-          "the key inserted at last takes precedence.")
+        throw QueryExecutionErrors.duplicateMapKeyFoundError(key)
       } else if (mapKeyDedupPolicy == SQLConf.MapKeyDedupPolicy.LAST_WIN.toString) {
         // Overwrite the previous value, as the policy is last wins.
         values(index) = value
@@ -82,15 +79,14 @@ class ArrayBasedMapBuilder(keyType: DataType, valueType: DataType) extends Seria
   // write a 2-field row, the first field is key and the second field is value.
   def put(entry: InternalRow): Unit = {
     if (entry.isNullAt(0)) {
-      throw new RuntimeException("Cannot use null as map key.")
+      throw QueryExecutionErrors.nullAsMapKeyNotAllowedError()
     }
     put(keyGetter(entry, 0), valueGetter(entry, 1))
   }
 
   def putAll(keyArray: ArrayData, valueArray: ArrayData): Unit = {
     if (keyArray.numElements() != valueArray.numElements()) {
-      throw new RuntimeException(
-        "The key array and value array of MapData must have the same length.")
+      throw QueryExecutionErrors.mapDataKeyArrayLengthDiffersFromValueArrayLengthError()
     }
 
     var i = 0

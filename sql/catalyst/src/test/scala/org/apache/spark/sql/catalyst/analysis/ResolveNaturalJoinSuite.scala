@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions._
@@ -25,10 +24,10 @@ import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
 
 class ResolveNaturalJoinSuite extends AnalysisTest {
-  lazy val a = 'a.string
-  lazy val b = 'b.string
-  lazy val c = 'c.string
-  lazy val d = 'd.struct('f1.int, 'f2.long)
+  lazy val a = $"a".string
+  lazy val b = $"b".string
+  lazy val c = $"c".string
+  lazy val d = $"d".struct($"f1".int, $"f2".long)
   lazy val aNotNull = a.notNull
   lazy val bNotNull = b.notNull
   lazy val cNotNull = c.notNull
@@ -109,12 +108,16 @@ class ResolveNaturalJoinSuite extends AnalysisTest {
   }
 
   test("using unresolved attribute") {
-    assertAnalysisError(
+    assertAnalysisErrorClass(
       r1.join(r2, UsingJoin(Inner, Seq("d"))),
-      "USING column `d` cannot be resolved on the left side of the join" :: Nil)
-    assertAnalysisError(
+      expectedErrorClass = "UNRESOLVED_USING_COLUMN_FOR_JOIN",
+      expectedMessageParameters = Map(
+        "colName" -> "`d`", "side" -> "left", "suggestion" -> "`a`, `b`"))
+    assertAnalysisErrorClass(
       r1.join(r2, UsingJoin(Inner, Seq("b"))),
-      "USING column `b` cannot be resolved on the right side of the join" :: Nil)
+      expectedErrorClass = "UNRESOLVED_USING_COLUMN_FOR_JOIN",
+      expectedMessageParameters = Map(
+        "colName" -> "`b`", "side" -> "right", "suggestion" -> "`a`, `c`"))
   }
 
   test("using join with a case sensitive analyzer") {
@@ -123,16 +126,19 @@ class ResolveNaturalJoinSuite extends AnalysisTest {
     val usingPlan = r1.join(r2, UsingJoin(Inner, Seq("a")), None)
     checkAnalysis(usingPlan, expected, caseSensitive = true)
 
-    assertAnalysisError(
+    assertAnalysisErrorClass(
       r1.join(r2, UsingJoin(Inner, Seq("A"))),
-      "USING column `A` cannot be resolved on the left side of the join" :: Nil)
+      expectedErrorClass = "UNRESOLVED_USING_COLUMN_FOR_JOIN",
+      expectedMessageParameters = Map(
+        "colName" -> "`A`", "side" -> "left", "suggestion" -> "`a`, `b`"))
   }
 
   test("using join on nested fields") {
-    assertAnalysisError(
+    assertAnalysisErrorClass(
       r5.join(r6, UsingJoin(Inner, Seq("d.f1"))),
-      "USING column `d.f1` cannot be resolved on the left side of the join. " +
-        "The left-side columns: [d]" :: Nil)
+      expectedErrorClass = "UNRESOLVED_USING_COLUMN_FOR_JOIN",
+      expectedMessageParameters = Map(
+        "colName" -> "`d`.`f1`", "side" -> "left", "suggestion" -> "`d`"))
   }
 
   test("using join with a case insensitive analyzer") {

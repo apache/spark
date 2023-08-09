@@ -26,7 +26,7 @@ import org.apache.arrow.vector.VectorSchemaRoot
 import org.apache.arrow.vector.ipc.{ArrowStreamReader, ArrowStreamWriter}
 import org.apache.arrow.vector.util.ByteArrayReadableSeekableByteChannel
 
-import org.apache.spark.{SparkException, TaskContext}
+import org.apache.spark.TaskContext
 import org.apache.spark.api.r._
 import org.apache.spark.api.r.SpecialLengths
 import org.apache.spark.broadcast.Broadcast
@@ -83,7 +83,8 @@ class ArrowRRunner(
        */
       override protected def writeIteratorToStream(dataOut: DataOutputStream): Unit = {
         if (inputIterator.hasNext) {
-          val arrowSchema = ArrowUtils.toArrowSchema(schema, timeZoneId)
+          val arrowSchema =
+            ArrowUtils.toArrowSchema(schema, timeZoneId, errorOnDuplicatedFieldNames = true)
           val allocator = ArrowUtils.rootAllocator.newChildAllocator(
             "stdout writer for R", 0, Long.MaxValue)
           val root = VectorSchemaRoot.create(arrowSchema, allocator)

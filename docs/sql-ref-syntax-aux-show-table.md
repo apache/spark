@@ -97,7 +97,7 @@ SHOW TABLE EXTENDED LIKE 'employee';
 +--------+---------+-----------+--------------------------------------------------------------+
 
 -- showing the multiple table details with pattern matching
-SHOW TABLE EXTENDED  LIKE `employe*`;
+SHOW TABLE EXTENDED  LIKE 'employe*';
 +--------+---------+-----------+--------------------------------------------------------------+
 |database|tableName|isTemporary|                         information                          |
 +--------+---------+-----------+--------------------------------------------------------------+
@@ -146,7 +146,7 @@ SHOW TABLE EXTENDED  LIKE `employe*`;
 +--------+---------+----------+---------------------------------------------------------------+
   
 -- show partition file system details
-SHOW TABLE EXTENDED  IN default LIKE `employee` PARTITION (`grade=1`);
+SHOW TABLE EXTENDED  IN default LIKE 'employee' PARTITION (grade=1);
 +--------+---------+-----------+--------------------------------------------------------------+
 |database|tableName|isTemporary|                         information                          |
 +--------+---------+-----------+--------------------------------------------------------------+
@@ -169,7 +169,7 @@ SHOW TABLE EXTENDED  IN default LIKE `employee` PARTITION (`grade=1`);
 +--------+---------+-----------+--------------------------------------------------------------+
 
 -- show partition file system details with regex fails as shown below
-SHOW TABLE EXTENDED  IN default LIKE `empl*` PARTITION (`grade=1`);
+SHOW TABLE EXTENDED  IN default LIKE 'empl*' PARTITION (grade=1);
 Error: Error running query: org.apache.spark.sql.catalyst.analysis.NoSuchTableException:
  Table or view 'emplo*' not found in database 'default'; (state=,code=0)
 ```

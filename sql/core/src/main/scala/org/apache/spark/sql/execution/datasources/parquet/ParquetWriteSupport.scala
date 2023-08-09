@@ -31,13 +31,12 @@ import org.apache.parquet.io.api.{Binary, RecordConsumer}
 
 import org.apache.spark.SPARK_VERSION_SHORT
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.{SPARK_LEGACY_DATETIME, SPARK_VERSION_METADATA_KEY}
+import org.apache.spark.sql.{SPARK_LEGACY_DATETIME_METADATA_KEY, SPARK_LEGACY_INT96_METADATA_KEY, SPARK_TIMEZONE_METADATA_KEY, SPARK_VERSION_METADATA_KEY}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.SpecializedGetters
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.execution.datasources.DataSourceUtils
-import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.internal.SQLConf.LegacyBehaviorPolicy
+import org.apache.spark.sql.internal.{LegacyBehaviorPolicy, SQLConf}
 import org.apache.spark.sql.types._
 
 /**
@@ -80,13 +79,19 @@ class ParquetWriteSupport extends WriteSupport[InternalRow] with Logging {
     new Array[Byte](Decimal.minBytesForPrecision(DecimalType.MAX_PRECISION))
 
   private val datetimeRebaseMode = LegacyBehaviorPolicy.withName(
-    SQLConf.get.getConf(SQLConf.LEGACY_PARQUET_REBASE_MODE_IN_WRITE))
+    SQLConf.get.getConf(SQLConf.PARQUET_REBASE_MODE_IN_WRITE))
 
-  private val dateRebaseFunc = DataSourceUtils.creteDateRebaseFuncInWrite(
+  private val dateRebaseFunc = DataSourceUtils.createDateRebaseFuncInWrite(
     datetimeRebaseMode, "Parquet")
 
-  private val timestampRebaseFunc = DataSourceUtils.creteTimestampRebaseFuncInWrite(
+  private val timestampRebaseFunc = DataSourceUtils.createTimestampRebaseFuncInWrite(
     datetimeRebaseMode, "Parquet")
+
+  private val int96RebaseMode = LegacyBehaviorPolicy.withName(
+    SQLConf.get.getConf(SQLConf.PARQUET_INT96_REBASE_MODE_IN_WRITE))
+
+  private val int96RebaseFunc = DataSourceUtils.createTimestampRebaseFuncInWrite(
+    int96RebaseMode, "Parquet INT96")
 
   override def init(configuration: Configuration): WriteContext = {
     val schemaString = configuration.get(ParquetWriteSupport.SPARK_ROW_SCHEMA)
@@ -111,9 +116,19 @@ class ParquetWriteSupport extends WriteSupport[InternalRow] with Logging {
       ParquetReadSupport.SPARK_METADATA_KEY -> schemaString
     ) ++ {
       if (datetimeRebaseMode == LegacyBehaviorPolicy.LEGACY) {
-        Some(SPARK_LEGACY_DATETIME -> "")
+        Map(
+          SPARK_LEGACY_DATETIME_METADATA_KEY -> "",
+          SPARK_TIMEZONE_METADATA_KEY -> SQLConf.get.sessionLocalTimeZone)
       } else {
-        None
+        Map.empty
+      }
+    } ++ {
+      if (int96RebaseMode == LegacyBehaviorPolicy.LEGACY) {
+        Map(
+          SPARK_LEGACY_INT96_METADATA_KEY -> "",
+          SPARK_TIMEZONE_METADATA_KEY -> SQLConf.get.sessionLocalTimeZone)
+      } else {
+        Map.empty
       }
     }
 
@@ -168,11 +183,11 @@ class ParquetWriteSupport extends WriteSupport[InternalRow] with Logging {
         (row: SpecializedGetters, ordinal: Int) =>
           recordConsumer.addInteger(dateRebaseFunc(row.getInt(ordinal)))
 
-      case IntegerType =>
+      case IntegerType | _: YearMonthIntervalType =>
         (row: SpecializedGetters, ordinal: Int) =>
           recordConsumer.addInteger(row.getInt(ordinal))
 
-      case LongType =>
+      case LongType | _: DayTimeIntervalType =>
         (row: SpecializedGetters, ordinal: Int) =>
           recordConsumer.addLong(row.getLong(ordinal))
 
@@ -193,7 +208,8 @@ class ParquetWriteSupport extends WriteSupport[InternalRow] with Logging {
         outputTimestampType match {
           case SQLConf.ParquetOutputTimestampType.INT96 =>
             (row: SpecializedGetters, ordinal: Int) =>
-              val (julianDay, timeOfDayNanos) = DateTimeUtils.toJulianDay(row.getLong(ordinal))
+              val micros = int96RebaseFunc(row.getLong(ordinal))
+              val (julianDay, timeOfDayNanos) = DateTimeUtils.toJulianDay(micros)
               val buf = ByteBuffer.wrap(timestampBuffer)
               buf.order(ByteOrder.LITTLE_ENDIAN).putLong(timeOfDayNanos).putInt(julianDay)
               recordConsumer.addBinary(Binary.fromReusedByteArray(timestampBuffer))
@@ -209,6 +225,11 @@ class ParquetWriteSupport extends WriteSupport[InternalRow] with Logging {
               val millis = DateTimeUtils.microsToMillis(timestampRebaseFunc(micros))
               recordConsumer.addLong(millis)
         }
+
+      case TimestampNTZType =>
+        // For TimestampNTZType column, Spark always output as INT64 with Timestamp annotation in
+        // MICROS time unit.
+        (row: SpecializedGetters, ordinal: Int) => recordConsumer.addLong(row.getLong(ordinal))
 
       case BinaryType =>
         (row: SpecializedGetters, ordinal: Int) =>
@@ -230,8 +251,7 @@ class ParquetWriteSupport extends WriteSupport[InternalRow] with Logging {
 
       case t: UserDefinedType[_] => makeWriter(t.sqlType)
 
-      // TODO Adds IntervalType support
-      case _ => sys.error(s"Unsupported data type $dataType.")
+      case _ => throw new IllegalStateException(s"Unsupported data type $dataType.")
     }
   }
 
@@ -469,7 +489,6 @@ object ParquetWriteSupport {
   val SPARK_ROW_SCHEMA: String = "org.apache.spark.sql.parquet.row.attributes"
 
   def setSchema(schema: StructType, configuration: Configuration): Unit = {
-    schema.map(_.name).foreach(ParquetSchemaConverter.checkFieldName)
     configuration.set(SPARK_ROW_SCHEMA, schema.json)
     configuration.setIfUnset(
       ParquetOutputFormat.WRITER_VERSION,

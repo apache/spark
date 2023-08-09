@@ -41,7 +41,7 @@ import java.util.Set;
  */
 @Experimental
 public class CaseInsensitiveStringMap implements Map<String, String> {
-  private final Logger logger = LoggerFactory.getLogger(CaseInsensitiveStringMap.class);
+  private static final Logger logger = LoggerFactory.getLogger(CaseInsensitiveStringMap.class);
 
   private String unsupportedOperationMsg = "CaseInsensitiveStringMap is read-only.";
 

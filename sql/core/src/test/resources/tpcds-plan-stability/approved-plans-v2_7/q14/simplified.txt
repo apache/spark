@@ -1,0 +1,204 @@
+TakeOrderedAndProject [i_brand_id,i_class_id,i_category_id,channel,sales,number_sales,channel,i_brand_id,i_class_id,i_category_id,sales,number_sales]
+  WholeStageCodegen (52)
+    BroadcastHashJoin [i_brand_id,i_class_id,i_category_id,i_brand_id,i_class_id,i_category_id]
+      Filter [sales]
+        Subquery #4
+          WholeStageCodegen (8)
+            HashAggregate [sum,count] [avg((cast(quantity as decimal(10,0)) * list_price)),average_sales,sum,count]
+              InputAdapter
+                Exchange #12
+                  WholeStageCodegen (7)
+                    HashAggregate [quantity,list_price] [sum,count,sum,count]
+                      InputAdapter
+                        Union
+                          WholeStageCodegen (2)
+                            Project [ss_quantity,ss_list_price]
+                              BroadcastHashJoin [ss_sold_date_sk,d_date_sk]
+                                ColumnarToRow
+                                  InputAdapter
+                                    Scan parquet spark_catalog.default.store_sales [ss_quantity,ss_list_price,ss_sold_date_sk]
+                                      ReusedSubquery [d_date_sk] #3
+                                InputAdapter
+                                  ReusedExchange [d_date_sk] #6
+                          WholeStageCodegen (4)
+                            Project [cs_quantity,cs_list_price]
+                              BroadcastHashJoin [cs_sold_date_sk,d_date_sk]
+                                ColumnarToRow
+                                  InputAdapter
+                                    Scan parquet spark_catalog.default.catalog_sales [cs_quantity,cs_list_price,cs_sold_date_sk]
+                                      ReusedSubquery [d_date_sk] #3
+                                InputAdapter
+                                  ReusedExchange [d_date_sk] #6
+                          WholeStageCodegen (6)
+                            Project [ws_quantity,ws_list_price]
+                              BroadcastHashJoin [ws_sold_date_sk,d_date_sk]
+                                ColumnarToRow
+                                  InputAdapter
+                                    Scan parquet spark_catalog.default.web_sales [ws_quantity,ws_list_price,ws_sold_date_sk]
+                                      ReusedSubquery [d_date_sk] #3
+                                InputAdapter
+                                  ReusedExchange [d_date_sk] #6
+        HashAggregate [i_brand_id,i_class_id,i_category_id,sum,isEmpty,count] [sum((cast(ss_quantity as decimal(10,0)) * ss_list_price)),count(1),channel,sales,number_sales,sum,isEmpty,count]
+          InputAdapter
+            Exchange [i_brand_id,i_class_id,i_category_id] #1
+              WholeStageCodegen (25)
+                HashAggregate [i_brand_id,i_class_id,i_category_id,ss_quantity,ss_list_price] [sum,isEmpty,count,sum,isEmpty,count]
+                  Project [ss_quantity,ss_list_price,i_brand_id,i_class_id,i_category_id]
+                    BroadcastHashJoin [ss_sold_date_sk,d_date_sk]
+                      Project [ss_quantity,ss_list_price,ss_sold_date_sk,i_brand_id,i_class_id,i_category_id]
+                        BroadcastHashJoin [ss_item_sk,i_item_sk]
+                          BroadcastHashJoin [ss_item_sk,ss_item_sk]
+                            Filter [ss_item_sk]
+                              ColumnarToRow
+                                InputAdapter
+                                  Scan parquet spark_catalog.default.store_sales [ss_item_sk,ss_quantity,ss_list_price,ss_sold_date_sk]
+                                    SubqueryBroadcast [d_date_sk] #1
+                                      BroadcastExchange #2
+                                        WholeStageCodegen (1)
+                                          Project [d_date_sk]
+                                            Filter [d_week_seq,d_date_sk]
+                                              ReusedSubquery [d_week_seq] #2
+                                              ColumnarToRow
+                                                InputAdapter
+                                                  Scan parquet spark_catalog.default.date_dim [d_date_sk,d_week_seq]
+                                                    Subquery #2
+                                                      WholeStageCodegen (1)
+                                                        Project [d_week_seq]
+                                                          Filter [d_year,d_moy,d_dom]
+                                                            ColumnarToRow
+                                                              InputAdapter
+                                                                Scan parquet spark_catalog.default.date_dim [d_week_seq,d_year,d_moy,d_dom]
+                            InputAdapter
+                              BroadcastExchange #3
+                                WholeStageCodegen (11)
+                                  Project [i_item_sk]
+                                    BroadcastHashJoin [i_brand_id,i_class_id,i_category_id,brand_id,class_id,category_id]
+                                      Filter [i_brand_id,i_class_id,i_category_id]
+                                        ColumnarToRow
+                                          InputAdapter
+                                            Scan parquet spark_catalog.default.item [i_item_sk,i_brand_id,i_class_id,i_category_id]
+                                      InputAdapter
+                                        BroadcastExchange #4
+                                          WholeStageCodegen (10)
+                                            BroadcastHashJoin [brand_id,class_id,category_id,i_brand_id,i_class_id,i_category_id]
+                                              HashAggregate [brand_id,class_id,category_id]
+                                                InputAdapter
+                                                  Exchange [brand_id,class_id,category_id] #5
+                                                    WholeStageCodegen (6)
+                                                      HashAggregate [brand_id,class_id,category_id]
+                                                        Project [i_brand_id,i_class_id,i_category_id]
+                                                          BroadcastHashJoin [ss_sold_date_sk,d_date_sk]
+                                                            Project [ss_sold_date_sk,i_brand_id,i_class_id,i_category_id]
+                                                              BroadcastHashJoin [ss_item_sk,i_item_sk]
+                                                                Filter [ss_item_sk]
+                                                                  ColumnarToRow
+                                                                    InputAdapter
+                                                                      Scan parquet spark_catalog.default.store_sales [ss_item_sk,ss_sold_date_sk]
+                                                                        SubqueryBroadcast [d_date_sk] #3
+                                                                          BroadcastExchange #6
+                                                                            WholeStageCodegen (1)
+                                                                              Project [d_date_sk]
+                                                                                Filter [d_year,d_date_sk]
+                                                                                  ColumnarToRow
+                                                                                    InputAdapter
+                                                                                      Scan parquet spark_catalog.default.date_dim [d_date_sk,d_year]
+                                                                InputAdapter
+                                                                  BroadcastExchange #7
+                                                                    WholeStageCodegen (4)
+                                                                      BroadcastHashJoin [i_brand_id,i_class_id,i_category_id,i_brand_id,i_class_id,i_category_id]
+                                                                        Filter [i_item_sk,i_brand_id,i_class_id,i_category_id]
+                                                                          ColumnarToRow
+                                                                            InputAdapter
+                                                                              Scan parquet spark_catalog.default.item [i_item_sk,i_brand_id,i_class_id,i_category_id]
+                                                                        InputAdapter
+                                                                          BroadcastExchange #8
+                                                                            WholeStageCodegen (3)
+                                                                              Project [i_brand_id,i_class_id,i_category_id]
+                                                                                BroadcastHashJoin [cs_sold_date_sk,d_date_sk]
+                                                                                  Project [cs_sold_date_sk,i_brand_id,i_class_id,i_category_id]
+                                                                                    BroadcastHashJoin [cs_item_sk,i_item_sk]
+                                                                                      Filter [cs_item_sk]
+                                                                                        ColumnarToRow
+                                                                                          InputAdapter
+                                                                                            Scan parquet spark_catalog.default.catalog_sales [cs_item_sk,cs_sold_date_sk]
+                                                                                              ReusedSubquery [d_date_sk] #3
+                                                                                      InputAdapter
+                                                                                        BroadcastExchange #9
+                                                                                          WholeStageCodegen (1)
+                                                                                            Filter [i_item_sk]
+                                                                                              ColumnarToRow
+                                                                                                InputAdapter
+                                                                                                  Scan parquet spark_catalog.default.item [i_item_sk,i_brand_id,i_class_id,i_category_id]
+                                                                                  InputAdapter
+                                                                                    ReusedExchange [d_date_sk] #6
+                                                            InputAdapter
+                                                              ReusedExchange [d_date_sk] #6
+                                              InputAdapter
+                                                BroadcastExchange #10
+                                                  WholeStageCodegen (9)
+                                                    Project [i_brand_id,i_class_id,i_category_id]
+                                                      BroadcastHashJoin [ws_sold_date_sk,d_date_sk]
+                                                        Project [ws_sold_date_sk,i_brand_id,i_class_id,i_category_id]
+                                                          BroadcastHashJoin [ws_item_sk,i_item_sk]
+                                                            Filter [ws_item_sk]
+                                                              ColumnarToRow
+                                                                InputAdapter
+                                                                  Scan parquet spark_catalog.default.web_sales [ws_item_sk,ws_sold_date_sk]
+                                                                    ReusedSubquery [d_date_sk] #3
+                                                            InputAdapter
+                                                              ReusedExchange [i_item_sk,i_brand_id,i_class_id,i_category_id] #9
+                                                        InputAdapter
+                                                          ReusedExchange [d_date_sk] #6
+                          InputAdapter
+                            BroadcastExchange #11
+                              WholeStageCodegen (23)
+                                BroadcastHashJoin [i_item_sk,ss_item_sk]
+                                  Filter [i_item_sk,i_brand_id,i_class_id,i_category_id]
+                                    ColumnarToRow
+                                      InputAdapter
+                                        Scan parquet spark_catalog.default.item [i_item_sk,i_brand_id,i_class_id,i_category_id]
+                                  InputAdapter
+                                    ReusedExchange [ss_item_sk] #3
+                      InputAdapter
+                        ReusedExchange [d_date_sk] #2
+      InputAdapter
+        BroadcastExchange #13
+          WholeStageCodegen (51)
+            Filter [sales]
+              ReusedSubquery [average_sales] #4
+              HashAggregate [i_brand_id,i_class_id,i_category_id,sum,isEmpty,count] [sum((cast(ss_quantity as decimal(10,0)) * ss_list_price)),count(1),channel,sales,number_sales,sum,isEmpty,count]
+                InputAdapter
+                  Exchange [i_brand_id,i_class_id,i_category_id] #14
+                    WholeStageCodegen (50)
+                      HashAggregate [i_brand_id,i_class_id,i_category_id,ss_quantity,ss_list_price] [sum,isEmpty,count,sum,isEmpty,count]
+                        Project [ss_quantity,ss_list_price,i_brand_id,i_class_id,i_category_id]
+                          BroadcastHashJoin [ss_sold_date_sk,d_date_sk]
+                            Project [ss_quantity,ss_list_price,ss_sold_date_sk,i_brand_id,i_class_id,i_category_id]
+                              BroadcastHashJoin [ss_item_sk,i_item_sk]
+                                BroadcastHashJoin [ss_item_sk,ss_item_sk]
+                                  Filter [ss_item_sk]
+                                    ColumnarToRow
+                                      InputAdapter
+                                        Scan parquet spark_catalog.default.store_sales [ss_item_sk,ss_quantity,ss_list_price,ss_sold_date_sk]
+                                          SubqueryBroadcast [d_date_sk] #5
+                                            BroadcastExchange #15
+                                              WholeStageCodegen (1)
+                                                Project [d_date_sk]
+                                                  Filter [d_week_seq,d_date_sk]
+                                                    ReusedSubquery [d_week_seq] #6
+                                                    ColumnarToRow
+                                                      InputAdapter
+                                                        Scan parquet spark_catalog.default.date_dim [d_date_sk,d_week_seq]
+                                                          Subquery #6
+                                                            WholeStageCodegen (1)
+                                                              Project [d_week_seq]
+                                                                Filter [d_year,d_moy,d_dom]
+                                                                  ColumnarToRow
+                                                                    InputAdapter
+                                                                      Scan parquet spark_catalog.default.date_dim [d_week_seq,d_year,d_moy,d_dom]
+                                  InputAdapter
+                                    ReusedExchange [ss_item_sk] #3
+                                InputAdapter
+                                  ReusedExchange [i_item_sk,i_brand_id,i_class_id,i_category_id] #11
+                            InputAdapter
+                              ReusedExchange [d_date_sk] #15

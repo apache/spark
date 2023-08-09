@@ -21,6 +21,7 @@ import org.apache.spark.ml.linalg.Vectors
 import org.apache.spark.ml.param.ParamsSuite
 import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTest, MLTestingUtils}
 import org.apache.spark.sql.{DataFrame, Row}
+import org.apache.spark.sql.functions.col
 
 class IsotonicRegressionSuite extends MLTest with DefaultReadWriteTest {
 
@@ -99,6 +100,37 @@ class IsotonicRegressionSuite extends MLTest with DefaultReadWriteTest {
     assert(model.getIsotonic)
     assert(model.getFeatureIndex === 0)
     assert(model.hasParent)
+  }
+
+  test("IsotonicRegression validate input dataset") {
+    testInvalidRegressionLabels(new IsotonicRegression().fit(_))
+    testInvalidWeights(new IsotonicRegression().setWeightCol("weight").fit(_))
+    testInvalidVectors(new IsotonicRegression().fit(_))
+
+    // features contains NULL
+    val df1 = sc.parallelize(Seq(
+      (1.0, 1.0, null),
+      (1.0, 1.0, "1.0")
+    )).toDF("label", "weight", "str_features")
+      .select(col("label"), col("weight"), col("str_features").cast("double").as("features"))
+    val e1 = intercept[Exception](new IsotonicRegression().fit(df1))
+    assert(e1.getMessage.contains("Features MUST NOT be Null or NaN"))
+
+    // features contains NaN
+    val df2 = sc.parallelize(Seq(
+      (1.0, 1.0, 1.0),
+      (1.0, 1.0, Double.NaN)
+    )).toDF("label", "weight", "features")
+    val e2 = intercept[Exception](new IsotonicRegression().fit(df2))
+    assert(e2.getMessage.contains("Features MUST NOT be Null or NaN"))
+
+    // features contains Infinity
+    val df3 = sc.parallelize(Seq(
+      (1.0, 1.0, 1.0),
+      (1.0, 1.0, Double.PositiveInfinity)
+    )).toDF("label", "weight", "features")
+    val e3 = intercept[Exception](new IsotonicRegression().fit(df3))
+    assert(e3.getMessage.contains("Features MUST NOT be Infinity"))
   }
 
   test("set parameters") {

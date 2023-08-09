@@ -29,10 +29,10 @@ import org.apache.spark.benchmark.{Benchmark, BenchmarkBase}
  * To run this benchmark:
  * {{{
  *   1. without sbt:
- *      bin/spark-submit --class <this class> --jars <spark core test jar>
- *   2. build/sbt "core/test:runMain <this class>"
+ *      bin/spark-submit --class <this class> <spark core test jar>
+ *   2. build/sbt "core/Test/runMain <this class>"
  *   3. generate result:
- *      SPARK_GENERATE_BENCHMARK_FILES=1 build/sbt "core/test:runMain <this class>"
+ *      SPARK_GENERATE_BENCHMARK_FILES=1 build/sbt "core/Test/runMain <this class>"
  *      Results will be written to "benchmarks/CoalescedRDD-results.txt".
  * }}}
  * */
@@ -46,7 +46,7 @@ object CoalescedRDDBenchmark extends BenchmarkBase {
     for (numPartitions <- Seq(100, 500, 1000, 5000, 10000)) {
       for (numHosts <- Seq(1, 5, 10, 20, 40, 80)) {
 
-        import collection.mutable
+        import scala.collection.mutable
         val hosts = mutable.ArrayBuffer[String]()
         (1 to numHosts).foreach(hosts += "m" + _)
         hosts.length
@@ -76,6 +76,12 @@ object CoalescedRDDBenchmark extends BenchmarkBase {
     val numIters = 3
     runBenchmark("Coalesced RDD , large scale") {
       coalescedRDD(numIters)
+    }
+  }
+
+  override def afterAll(): Unit = {
+    if (sc != null) {
+      sc.stop()
     }
   }
 }

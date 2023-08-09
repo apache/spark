@@ -68,7 +68,7 @@ public abstract class ManagedBuffer {
   public abstract ManagedBuffer release();
 
   /**
-   * Convert the buffer into an Netty object, used to write the data out. The return value is either
+   * Convert the buffer into a Netty object, used to write the data out. The return value is either
    * a {@link io.netty.buffer.ByteBuf} or a {@link io.netty.channel.FileRegion}.
    *
    * If this method returns a ByteBuf, then that buffer's reference count will be incremented and

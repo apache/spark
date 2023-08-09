@@ -33,15 +33,16 @@ class InterpretedProjection(expressions: Seq[Expression]) extends Projection {
   def this(expressions: Seq[Expression], inputSchema: Seq[Attribute]) =
     this(bindReferences(expressions, inputSchema))
 
-  override def initialize(partitionIndex: Int): Unit = {
-    expressions.foreach(_.foreach {
-      case n: Nondeterministic => n.initialize(partitionIndex)
-      case _ =>
-    })
+  // null check is required for when Kryo invokes the no-arg constructor.
+  protected val exprArray = if (expressions != null) {
+    prepareExpressions(expressions, subExprEliminationEnabled = false).toArray
+  } else {
+    null
   }
 
-  // null check is required for when Kryo invokes the no-arg constructor.
-  protected val exprArray = if (expressions != null) expressions.toArray else null
+  override def initialize(partitionIndex: Int): Unit = {
+    initializeExprs(exprArray, partitionIndex)
+  }
 
   def apply(input: InternalRow): InternalRow = {
     val outputArray = new Array[Any](exprArray.length)

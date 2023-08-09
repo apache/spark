@@ -18,13 +18,13 @@
 package org.apache.spark.sql.execution.datasources.v2
 
 import org.apache.spark.sql.catalyst.analysis.{MultiInstanceRelation, NamedRelation}
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
-import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LogicalPlan, Statistics}
-import org.apache.spark.sql.catalyst.util.truncatedString
-import org.apache.spark.sql.connector.catalog.{CatalogPlugin, Identifier, Table, TableCapability}
-import org.apache.spark.sql.connector.read.{Scan, ScanBuilder, Statistics => V2Statistics, SupportsReportStatistics}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, AttributeReference, Expression, SortOrder}
+import org.apache.spark.sql.catalyst.plans.logical.{ColumnStat, ExposesMetadataColumns, Histogram, HistogramBin, LeafNode, LogicalPlan, Statistics}
+import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
+import org.apache.spark.sql.catalyst.util.{truncatedString, CharVarcharUtils}
+import org.apache.spark.sql.connector.catalog.{CatalogPlugin, FunctionCatalog, Identifier, SupportsMetadataColumns, Table, TableCapability}
+import org.apache.spark.sql.connector.read.{Scan, Statistics => V2Statistics, SupportsReportStatistics}
 import org.apache.spark.sql.connector.read.streaming.{Offset, SparkDataStream}
-import org.apache.spark.sql.connector.write.WriteBuilder
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.util.Utils
 
@@ -35,8 +35,9 @@ import org.apache.spark.util.Utils
  * @param output the output attributes of this relation.
  * @param catalog catalogPlugin for the table. None if no catalog is specified.
  * @param identifier the identifier for the table. None if no identifier is defined.
- * @param options The options for this table operation. It's used to create fresh [[ScanBuilder]]
- *                and [[WriteBuilder]].
+ * @param options The options for this table operation. It's used to create fresh
+ *                [[org.apache.spark.sql.connector.read.ScanBuilder]] and
+ *                [[org.apache.spark.sql.connector.write.WriteBuilder]].
  */
 case class DataSourceV2Relation(
     table: Table,
@@ -44,16 +45,32 @@ case class DataSourceV2Relation(
     catalog: Option[CatalogPlugin],
     identifier: Option[Identifier],
     options: CaseInsensitiveStringMap)
-  extends LeafNode with MultiInstanceRelation with NamedRelation {
+  extends LeafNode with MultiInstanceRelation with NamedRelation with ExposesMetadataColumns {
 
   import DataSourceV2Implicits._
+
+  lazy val funCatalog: Option[FunctionCatalog] = catalog.collect {
+    case c: FunctionCatalog => c
+  }
+
+  override lazy val metadataOutput: Seq[AttributeReference] = table match {
+    case hasMeta: SupportsMetadataColumns =>
+      metadataOutputWithOutConflicts(
+        hasMeta.metadataColumns.toAttributes, hasMeta.canRenameConflictingMetadataColumns)
+    case _ =>
+      Nil
+  }
 
   override def name: String = table.name()
 
   override def skipSchemaResolution: Boolean = table.supports(TableCapability.ACCEPT_ANY_SCHEMA)
 
   override def simpleString(maxFields: Int): String = {
-    s"RelationV2${truncatedString(output, "[", ", ", "]", maxFields)} $name"
+    val qualifiedTableName = (catalog, identifier) match {
+      case (Some(cat), Some(ident)) => s"${cat.name()}.${ident.toString}"
+      case _ => ""
+    }
+    s"RelationV2${truncatedString(output, "[", ", ", "]", maxFields)} $qualifiedTableName $name"
   }
 
   override def computeStats(): Statistics = {
@@ -65,10 +82,10 @@ case class DataSourceV2Relation(
         s"BUG: computeStats called before pushdown on DSv2 relation: $name")
     } else {
       // when not testing, return stats because bad stats are better than failing a query
-      table.asReadable.newScanBuilder(options) match {
+      table.asReadable.newScanBuilder(options).build() match {
         case r: SupportsReportStatistics =>
           val statistics = r.estimateStatistics()
-          DataSourceV2Relation.transformV2Stats(statistics, None, conf.defaultSizeInBytes)
+          DataSourceV2Relation.transformV2Stats(statistics, None, conf.defaultSizeInBytes, output)
         case _ =>
           Statistics(sizeInBytes = conf.defaultSizeInBytes)
       }
@@ -77,6 +94,15 @@ case class DataSourceV2Relation(
 
   override def newInstance(): DataSourceV2Relation = {
     copy(output = output.map(_.newInstance()))
+  }
+
+  def withMetadataColumns(): DataSourceV2Relation = {
+    val newMetadata = metadataOutput.filterNot(outputSet.contains)
+    if (newMetadata.nonEmpty) {
+      DataSourceV2Relation(table, output ++ newMetadata, catalog, identifier, options)
+    } else {
+      this
+    }
   }
 }
 
@@ -87,16 +113,21 @@ case class DataSourceV2Relation(
  * plan. This ensures that the stats that are used by the optimizer account for the filters and
  * projection that will be pushed down.
  *
- * @param table a DSv2 [[Table]]
+ * @param relation a [[DataSourceV2Relation]]
  * @param scan a DSv2 [[Scan]]
  * @param output the output attributes of this relation
+ * @param keyGroupedPartitioning if set, the partitioning expressions that are used to split the
+ *                               rows in the scan across different partitions
+ * @param ordering if set, the ordering provided by the scan
  */
 case class DataSourceV2ScanRelation(
-    table: Table,
+    relation: DataSourceV2Relation,
     scan: Scan,
-    output: Seq[AttributeReference]) extends LeafNode with NamedRelation {
+    output: Seq[AttributeReference],
+    keyGroupedPartitioning: Option[Seq[Expression]] = None,
+    ordering: Option[Seq[SortOrder]] = None) extends LeafNode with NamedRelation {
 
-  override def name: String = table.name()
+  override def name: String = relation.table.name()
 
   override def simpleString(maxFields: Int): String = {
     s"RelationV2${truncatedString(output, "[", ", ", "]", maxFields)} $name"
@@ -106,7 +137,7 @@ case class DataSourceV2ScanRelation(
     scan match {
       case r: SupportsReportStatistics =>
         val statistics = r.estimateStatistics()
-        DataSourceV2Relation.transformV2Stats(statistics, None, conf.defaultSizeInBytes)
+        DataSourceV2Relation.transformV2Stats(statistics, None, conf.defaultSizeInBytes, output)
       case _ =>
         Statistics(sizeInBytes = conf.defaultSizeInBytes)
     }
@@ -124,6 +155,8 @@ case class StreamingDataSourceV2Relation(
     output: Seq[Attribute],
     scan: Scan,
     stream: SparkDataStream,
+    catalog: Option[CatalogPlugin],
+    identifier: Option[Identifier],
     startOffset: Option[Offset] = None,
     endOffset: Option[Offset] = None)
   extends LeafNode with MultiInstanceRelation {
@@ -135,10 +168,21 @@ case class StreamingDataSourceV2Relation(
   override def computeStats(): Statistics = scan match {
     case r: SupportsReportStatistics =>
       val statistics = r.estimateStatistics()
-      DataSourceV2Relation.transformV2Stats(statistics, None, conf.defaultSizeInBytes)
+      DataSourceV2Relation.transformV2Stats(statistics, None, conf.defaultSizeInBytes, output)
     case _ =>
       Statistics(sizeInBytes = conf.defaultSizeInBytes)
   }
+
+  private val stringArgsVal: Seq[Any] = {
+    val qualifiedTableName = (catalog, identifier) match {
+      case (Some(cat), Some(ident)) => Some(s"${cat.name()}.${ident.toString}")
+      case _ => None
+    }
+
+    Seq(output, qualifiedTableName, scan, stream, startOffset, endOffset)
+  }
+
+  override protected def stringArgs: Iterator[Any] = stringArgsVal.iterator
 }
 
 object DataSourceV2Relation {
@@ -147,8 +191,11 @@ object DataSourceV2Relation {
       catalog: Option[CatalogPlugin],
       identifier: Option[Identifier],
       options: CaseInsensitiveStringMap): DataSourceV2Relation = {
-    val output = table.schema().toAttributes
-    DataSourceV2Relation(table, output, catalog, identifier, options)
+    import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
+    // The v2 source may return schema containing char/varchar type. We replace char/varchar
+    // with "annotated" string type here as the query engine doesn't support char/varchar yet.
+    val schema = CharVarcharUtils.replaceCharVarcharWithStringInSchema(table.columns.asSchema)
+    DataSourceV2Relation(table, toAttributes(schema), catalog, identifier, options)
   }
 
   def create(
@@ -163,14 +210,52 @@ object DataSourceV2Relation {
   def transformV2Stats(
       v2Statistics: V2Statistics,
       defaultRowCount: Option[BigInt],
-      defaultSizeInBytes: Long): Statistics = {
+      defaultSizeInBytes: Long,
+      output: Seq[Attribute] = Seq.empty): Statistics = {
     val numRows: Option[BigInt] = if (v2Statistics.numRows().isPresent) {
       Some(v2Statistics.numRows().getAsLong)
     } else {
       defaultRowCount
     }
+
+    var colStats: Seq[(Attribute, ColumnStat)] = Seq.empty[(Attribute, ColumnStat)]
+    if (!v2Statistics.columnStats().isEmpty) {
+      val v2ColumnStat = v2Statistics.columnStats()
+      val keys = v2ColumnStat.keySet()
+
+      keys.forEach(key => {
+        val colStat = v2ColumnStat.get(key)
+        val distinct: Option[BigInt] =
+          if (colStat.distinctCount().isPresent) Some(colStat.distinctCount().getAsLong) else None
+        val min: Option[Any] = if (colStat.min().isPresent) Some(colStat.min().get) else None
+        val max: Option[Any] = if (colStat.max().isPresent) Some(colStat.max().get) else None
+        val nullCount: Option[BigInt] =
+          if (colStat.nullCount().isPresent) Some(colStat.nullCount().getAsLong) else None
+        val avgLen: Option[Long] =
+          if (colStat.avgLen().isPresent) Some(colStat.avgLen().getAsLong) else None
+        val maxLen: Option[Long] =
+          if (colStat.maxLen().isPresent) Some(colStat.maxLen().getAsLong) else None
+        val histogram = if (colStat.histogram().isPresent) {
+          val v2Histogram = colStat.histogram().get()
+          val bins = v2Histogram.bins()
+          Some(Histogram(v2Histogram.height(),
+            bins.map(bin => HistogramBin(bin.lo, bin.hi, bin.ndv))))
+        } else {
+          None
+        }
+
+        val catalystColStat = ColumnStat(distinct, min, max, nullCount, avgLen, maxLen, histogram)
+
+        output.foreach(attribute => {
+          if (attribute.name.equals(key.describe())) {
+            colStats = colStats :+ (attribute -> catalystColStat)
+          }
+        })
+      })
+    }
     Statistics(
       sizeInBytes = v2Statistics.sizeInBytes().orElse(defaultSizeInBytes),
-      rowCount = numRows)
+      rowCount = numRows,
+      attributeStats = AttributeMap(colStats))
   }
 }

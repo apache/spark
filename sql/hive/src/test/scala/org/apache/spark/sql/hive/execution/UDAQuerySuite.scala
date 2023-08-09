@@ -17,25 +17,18 @@
 
 package org.apache.spark.sql.hive.execution
 
-import java.lang.{Double => jlDouble, Integer => jlInt, Long => jlLong}
-
-import scala.collection.JavaConverters._
-import scala.util.Random
-
-import test.org.apache.spark.sql.MyDoubleAvg
-import test.org.apache.spark.sql.MyDoubleSum
+import java.lang.{Double => jlDouble, Long => jlLong}
 
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions.GenericInternalRow
-import org.apache.spark.sql.catalyst.expressions.UnsafeRow
-import org.apache.spark.sql.expressions.{Aggregator}
+import org.apache.spark.sql.expressions.Aggregator
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.hive.test.TestHiveSingleton
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.types._
+import org.apache.spark.tags.SlowHiveTest
 
 class MyDoubleAvgAggBase extends Aggregator[jlDouble, (Double, Long), jlDouble] {
   def zero: (Double, Long) = (0.0, 0L)
@@ -119,6 +112,27 @@ object CountSerDeAgg extends Aggregator[Int, CountSerDeSQL, CountSerDeSQL] {
   def outputEncoder: Encoder[CountSerDeSQL] = ExpressionEncoder[CountSerDeSQL]()
 }
 
+object ArrayDataAgg extends Aggregator[Array[Double], Array[Double], Array[Double]] {
+  def zero: Array[Double] = Array(0.0, 0.0, 0.0)
+  def reduce(s: Array[Double], array: Array[Double]): Array[Double] = {
+    require(s.length == array.length)
+    for ( j <- s.indices) {
+      s(j) += array(j)
+    }
+    s
+  }
+  def merge(s1: Array[Double], s2: Array[Double]): Array[Double] = {
+    require(s1.length == s2.length)
+    for ( j <- s1.indices) {
+      s1(j) += s2(j)
+    }
+    s1
+  }
+  def finish(s: Array[Double]): Array[Double] = s
+  def bufferEncoder: Encoder[Array[Double]] = ExpressionEncoder[Array[Double]]
+  def outputEncoder: Encoder[Array[Double]] = ExpressionEncoder[Array[Double]]
+}
+
 abstract class UDAQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
   import testImplicits._
 
@@ -156,20 +170,11 @@ abstract class UDAQuerySuite extends QueryTest with SQLTestUtils with TestHiveSi
       (3, null, null)).toDF("key", "value1", "value2")
     data2.write.saveAsTable("agg2")
 
-    val data3 = Seq[(Seq[Integer], Integer, Integer)](
-      (Seq[Integer](1, 1), 10, -10),
-      (Seq[Integer](null), -60, 60),
-      (Seq[Integer](1, 1), 30, -30),
-      (Seq[Integer](1), 30, 30),
-      (Seq[Integer](2), 1, 1),
-      (null, -10, 10),
-      (Seq[Integer](2, 3), -1, null),
-      (Seq[Integer](2, 3), 1, 1),
-      (Seq[Integer](2, 3, 4), null, 1),
-      (Seq[Integer](null), 100, -10),
-      (Seq[Integer](3), null, 3),
-      (null, null, null),
-      (Seq[Integer](3), null, null)).toDF("key", "value1", "value2")
+    val data3 = Seq[(Seq[Double], Int)](
+      (Seq(1.0, 2.0, 3.0), 0),
+      (Seq(4.0, 5.0, 6.0), 0),
+      (Seq(7.0, 8.0, 9.0), 0)
+    ).toDF("data", "dummy")
     data3.write.saveAsTable("agg3")
 
     val data4 = Seq[Boolean](true, false, true).toDF("boolvalues")
@@ -184,6 +189,7 @@ abstract class UDAQuerySuite extends QueryTest with SQLTestUtils with TestHiveSi
     spark.udf.register("mydoublesum", udaf(MyDoubleSumAgg))
     spark.udf.register("mydoubleavg", udaf(MyDoubleAvgAgg))
     spark.udf.register("longProductSum", udaf(LongProductSumAgg))
+    spark.udf.register("arraysum", udaf(ArrayDataAgg))
   }
 
   override def afterAll(): Unit = {
@@ -219,16 +225,21 @@ abstract class UDAQuerySuite extends QueryTest with SQLTestUtils with TestHiveSi
   }
 
   test("non-deterministic children expressions of aggregator") {
-    val e = intercept[AnalysisException] {
-      spark.sql(
-        """
-          |SELECT mydoublesum(value + 1.5 * key + rand())
-          |FROM agg1
-          |GROUP BY key
-        """.stripMargin)
-    }.getMessage
-    assert(Seq("nondeterministic expression",
-      "should not appear in the arguments of an aggregate function").forall(e.contains))
+    checkError(
+      exception = intercept[AnalysisException] {
+        spark.sql(
+          """
+            |SELECT mydoublesum(value + 1.5 * key + rand())
+            |FROM agg1
+            |GROUP BY key
+          """.stripMargin)
+      },
+      errorClass = "AGGREGATE_FUNCTION_WITH_NONDETERMINISTIC_EXPRESSION",
+      parameters = Map("sqlExpr" -> "\"mydoublesum(((value + (1.5 * key)) + rand()))\""),
+      context = ExpectedContext(
+        fragment = "value + 1.5 * key + rand()",
+        start = 20,
+        stop = 45))
   }
 
   test("interpreted aggregate function") {
@@ -354,6 +365,12 @@ abstract class UDAQuerySuite extends QueryTest with SQLTestUtils with TestHiveSi
         Row(3, 0, null, 1, 3, 0, 0, 0, null, 1, 3, 0, 2, 2) :: Nil)
   }
 
+  test("SPARK-32159: array encoders should be resolved in analyzer") {
+    checkAnswer(
+      spark.sql("SELECT arraysum(data) FROM agg3"),
+      Row(Seq(12.0, 15.0, 18.0)) :: Nil)
+  }
+
   test("verify aggregator ser/de behavior") {
     val data = sparkContext.parallelize((1 to 100).toSeq, 3).toDF("value1")
     val agg = udaf(CountSerDeAgg)
@@ -372,8 +389,10 @@ abstract class UDAQuerySuite extends QueryTest with SQLTestUtils with TestHiveSi
   }
 }
 
+@SlowHiveTest
 class HashUDAQuerySuite extends UDAQuerySuite
 
+@SlowHiveTest
 class HashUDAQueryWithControlledFallbackSuite extends UDAQuerySuite {
 
   override protected def checkAnswer(actual: => DataFrame, expectedAnswer: Seq[Row]): Unit = {

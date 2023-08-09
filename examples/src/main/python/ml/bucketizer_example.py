@@ -15,8 +15,6 @@
 # limitations under the License.
 #
 
-from __future__ import print_function
-
 from pyspark.sql import SparkSession
 # $example on$
 from pyspark.ml.feature import Bucketizer
@@ -39,7 +37,7 @@ if __name__ == "__main__":
     # Transform original data into its bucket index.
     bucketedData = bucketizer.transform(dataFrame)
 
-    print("Bucketizer output with %d buckets" % (len(bucketizer.getSplits())-1))
+    print("Bucketizer output with %d buckets" % (len(bucketizer.getSplits()) - 1))
     bucketedData.show()
     # $example off$
 

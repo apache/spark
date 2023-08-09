@@ -19,9 +19,11 @@ package org.apache.spark.benchmark
 
 import java.io.{File, FileOutputStream, OutputStream}
 
+import org.apache.spark.internal.config.Tests.IS_TESTING
+
 /**
  * A base class for generate benchmark results to a file.
- * For JDK9+, JDK major version number is added to the file names to distingush the results.
+ * For JDK9+, JDK major version number is added to the file names to distinguish the results.
  */
 abstract class BenchmarkBase {
   var output: Option[OutputStream] = None
@@ -42,13 +44,25 @@ abstract class BenchmarkBase {
   }
 
   def main(args: Array[String]): Unit = {
+    // turning this on so the behavior between running benchmark via `spark-submit` or SBT will
+    // be consistent, also allow users to turn on/off certain behavior such as
+    // `spark.sql.codegen.factoryMode`
+    System.setProperty(IS_TESTING.key, "true")
     val regenerateBenchmarkFiles: Boolean = System.getenv("SPARK_GENERATE_BENCHMARK_FILES") == "1"
     if (regenerateBenchmarkFiles) {
       val version = System.getProperty("java.version").split("\\D+")(0).toInt
       val jdkString = if (version > 8) s"-jdk$version" else ""
       val resultFileName =
         s"${this.getClass.getSimpleName.replace("$", "")}$jdkString$suffix-results.txt"
-      val file = new File(s"benchmarks/$resultFileName")
+      val prefix = Benchmarks.currentProjectRoot.map(_ + "/").getOrElse("")
+      val dir = new File(s"${prefix}benchmarks/")
+      if (!dir.exists()) {
+        // scalastyle:off println
+        println(s"Creating ${dir.getAbsolutePath} for benchmark results.")
+        // scalastyle:on println
+        dir.mkdirs()
+      }
+      val file = new File(dir, resultFileName)
       if (!file.exists()) {
         file.createNewFile()
       }

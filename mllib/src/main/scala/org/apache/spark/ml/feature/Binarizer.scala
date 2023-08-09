@@ -112,7 +112,7 @@ final class Binarizer @Since("1.4.0") (@Since("1.4.0") override val uid: String)
         (Seq($(inputCol)), Seq($(outputCol)), Seq($(threshold)))
       }
 
-    val ouputCols = inputColNames.zip(tds).map { case (inputColName, td) =>
+    val mappedOutputCols = inputColNames.zip(tds).map { case (inputColName, td) =>
       val binarizerUDF = dataset.schema(inputColName).dataType match {
         case DoubleType =>
           udf { in: Double => if (in > td) 1.0 else 0.0 }
@@ -147,8 +147,8 @@ final class Binarizer @Since("1.4.0") (@Since("1.4.0") override val uid: String)
       binarizerUDF(col(inputColName))
     }
 
-    val ouputMetadata = outputColNames.map(outputSchema(_).metadata)
-    dataset.withColumns(outputColNames, ouputCols, ouputMetadata)
+    val outputMetadata = outputColNames.map(outputSchema(_).metadata)
+    dataset.withColumns(outputColNames, mappedOutputCols, outputMetadata)
   }
 
   @Since("1.4.0")

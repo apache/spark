@@ -49,7 +49,6 @@ They cannot be used as a direct replacement for a cluster filesystem such as HDF
 
 Key differences are:
 
-* Changes to stored objects may not be immediately visible, both in directory listings and actual data access.
 * The means by which directories are emulated may make working with them slow.
 * Rename operations may be very slow and, on failure, leave the store in an unknown state.
 * Seeking within a file may require new HTTP calls, hurting performance. 
@@ -58,7 +57,6 @@ How does this affect Spark?
 
 1. Reading and writing data can be significantly slower than working with a normal filesystem.
 1. Some directory structures may be very inefficient to scan during query split calculation.
-1. The output of work may not be immediately visible to a follow-on query.
 1. The rename-based algorithm by which Spark normally commits work when saving an RDD, DataFrame or Dataset
  is potentially both slow and unreliable.
 
@@ -66,8 +64,28 @@ For these reasons, it is not always safe to use an object store as a direct dest
 an intermediate store in a chain of queries. Consult the documentation of the object store and its
 connector to determine which uses are considered safe.
 
-In particular: *without some form of consistency layer, Amazon S3 cannot
-be safely used as the direct destination of work with the normal rename-based committer.*
+### Consistency
+
+As of 2021, the object stores of Amazon (S3), Google Cloud (GCS) and Microsoft (Azure Storage, ADLS Gen1, ADLS Gen2) are all *consistent*.
+
+This means that as soon as a file is written/updated it can be listed, viewed and opened by other processes
+-and the latest version will be retrieved. This was a known issue with AWS S3, especially with 404 caching
+of HEAD requests made before an object was created.
+
+Even so: none of the store connectors provide any guarantees as to how their clients cope with objects
+which are overwritten while a stream is reading them. Do not assume that the old file can be safely
+read, nor that there is any bounded time period for changes to become visible -or indeed, that
+the clients will not simply fail if a file being read is overwritten.
+
+For this reason: avoid overwriting files where it is known/likely that other clients
+will be actively reading them.
+
+Other object stores are *inconsistent*
+
+This includes [OpenStack Swift](https://docs.openstack.org/swift/latest/).
+
+Such stores are not always safe to use as a destination of work -consult
+each store's specific documentation. 
 
 ### Installation
 
@@ -87,7 +105,7 @@ is set to the chosen version of Spark:
   ...
   <dependency>
     <groupId>org.apache.spark</groupId>
-    <artifactId>hadoop-cloud_{{site.SCALA_BINARY_VERSION}}</artifactId>
+    <artifactId>spark-hadoop-cloud_{{site.SCALA_BINARY_VERSION}}</artifactId>
     <version>${spark.version}</version>
     <scope>provided</scope>
   </dependency>
@@ -103,7 +121,7 @@ for talking to cloud infrastructures, in which case this module may not be neede
 Spark jobs must authenticate with the object stores to access data within them.
 
 1. When Spark is running in a cloud infrastructure, the credentials are usually automatically set up.
-1. `spark-submit` reads the `AWS_ACCESS_KEY`, `AWS_SECRET_KEY`
+1. `spark-submit` reads the `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`
 and `AWS_SESSION_TOKEN` environment variables and sets the associated authentication options
 for the `s3n` and `s3a` connectors to Amazon S3.
 1. In a Hadoop cluster, settings may be set in the `core-site.xml` file.
@@ -163,10 +181,15 @@ different stores and connectors when renaming directories:
 | Amazon S3     | s3a       | Unsafe                  | O(data) |
 | Azure Storage | wasb      | Safe                    | O(files) |
 | Azure Datalake Gen 2 | abfs | Safe                  | O(1) |
-| Google GCS    | gs        | Safe                    | O(1) |
+| Google Cloud Storage | gs        | Mixed                    | O(files) |
 
-As storing temporary files can run up charges; delete
+1. As storing temporary files can run up charges; delete
 directories called `"_temporary"` on a regular basis.
+1. For AWS S3, set a limit on how long multipart uploads can remain outstanding.
+This avoids incurring bills from incompleted uploads.
+1. For Google cloud, directory rename is file-by-file. Consider using the v2 committer
+and only write code which generates idempotent output -including filenames,
+as it is *no more unsafe* than the v1 committer, and faster.
 
 ### Parquet I/O Settings
 
@@ -208,9 +231,15 @@ The size of the window needs to be set to handle this.
 is no need for a workflow of write-then-rename to ensure that files aren't picked up
 while they are still being written. Applications can write straight to the monitored directory.
 
-1. Streams should only be checkpointed to a store implementing a fast and
-atomic `rename()` operation.
-Otherwise the checkpointing may be slow and potentially unreliable.
+1. In case of the default checkpoint file manager called `FileContextBasedCheckpointFileManager`
+streams should only be checkpointed to a store implementing a fast and
+atomic `rename()` operation. Otherwise the checkpointing may be slow and potentially unreliable.
+On AWS S3 with Hadoop 3.3.1 or later using the S3A connector the abortable stream based checkpoint
+file manager can be used (by setting the `spark.sql.streaming.checkpointFileManagerClass`
+configuration to `org.apache.spark.internal.io.cloud.AbortableStreamBasedCheckpointFileManager`)
+which eliminates the slow rename. In this case users must be extra careful to avoid the reuse of
+the checkpoint location among multiple queries running parallelly as that could lead to corruption
+of the checkpointing data.
 
 ## Committing work into cloud storage safely and fast.
 
@@ -219,8 +248,13 @@ exhibits eventual consistency (example: S3), and often slower than classic
 filesystem renames.
 
 Some object store connectors provide custom committers to commit tasks and
-jobs without using rename. In versions of Spark built with Hadoop 3.1 or later,
-the S3A connector for AWS S3 is such a committer.
+jobs without using rename. 
+
+### Hadoop S3A committers
+
+In versions of Spark built with Hadoop 3.1 or later,
+the hadoop-aws JAR contains committers safe to use for S3 storage
+accessed via the s3a connector.
 
 Instead of writing data to a temporary directory on the store for renaming,
 these committers write the files to the final destination, but do not issue
@@ -243,19 +277,123 @@ It has been tested with the most common formats supported by Spark.
 mydataframe.write.format("parquet").save("s3a://bucket/destination")
 ```
 
-More details on these committers can be found in the latest Hadoop documentation.
+More details on these committers can be found in 
+[the latest Hadoop documentation](https://hadoop.apache.org/docs/current/)
+with S3A committer detail covered in
+[Committing work to S3 with the S3A Committers](https://hadoop.apache.org/docs/current/hadoop-aws/tools/hadoop-aws/committers.html).
+
+Note: depending upon the committer used, in-progress statistics may be
+under-reported with Hadoop versions before 3.3.1.
+
+### Amazon EMR: the EMRFS S3-optimized committer
+
+Amazon EMR has its own S3-aware committers for parquet data.
+For instructions on use, see
+[the EMRFS S3-optimized committer](https://docs.aws.amazon.com/emr/latest/ReleaseGuide/emr-spark-s3-optimized-committer.html)
+
+For implementation and performanc details, see
+["Improve Apache Spark write performance on Apache Parquet formats with the EMRFS S3-optimized committer"](https://aws.amazon.com/blogs/big-data/improve-apache-spark-write-performance-on-apache-parquet-formats-with-the-emrfs-s3-optimized-committer/
+
+
+### Azure and Google cloud storage: MapReduce Intermediate Manifest Committer.
+
+Versions of the hadoop-mapreduce-core JAR shipped after September 2022 (3.3.5 and later)
+contain a committer optimized for performance and resilience on
+Azure ADLS Generation 2 and Google Cloud Storage.
+
+This committer, the "manifest committer" uses a manifest file to propagate
+directory listing information from the task committers to the job committer.
+These manifests can be written atomically, without relying on atomic directory rename,
+something GCS lacks.
+
+The job committer reads these manifests and will rename files from the task output
+directories directly into the destination directory, in parallel, with optional
+rate limiting to avoid throttling IO.
+This delivers performance and scalability on the object stores.
+
+It is not critical for job correctness to use this with Azure storage; the
+classic FileOutputCommitter is safe there -however this new committer scales
+better for large jobs with deep and wide directory trees.
+
+Because Google GCS does not support atomic directory renaming,
+the manifest committer should be used where available.
+
+This committer does support  "dynamic partition overwrite" (see below). 
+
+For details on availability and use of this committer, consult
+the hadoop documentation for the Hadoop release used.
+
+It is not available on Hadoop 3.3.4 or earlier.
+
+### IBM Cloud Object Storage: Stocator
+
+IBM provide the Stocator output committer for IBM Cloud Object Storage and OpenStack Swift.
+
+Source, documentation and releasea can be found at
+[https://github.com/CODAIT/stocator](Stocator - Storage Connector for Apache Spark).
+
+
+## Cloud Committers and `INSERT OVERWRITE TABLE`
+
+Spark has a feature called "dynamic partition overwrite"; a table can be updated and only those
+partitions into which new data is added will have their contents replaced.
+
+This is used in SQL statements of the form `INSERT OVERWRITE TABLE`,
+and when Datasets are written in mode "overwrite"
+
+{% highlight scala %}
+eventDataset.write
+  .mode("overwrite")
+  .partitionBy("year", "month")
+  .format("parquet")
+  .save(tablePath)
+{% endhighlight %}
+
+This feature uses file renaming and has specific requirements of
+both the committer and the filesystem:
+
+1. The committer's working directory must be in the destination filesystem.
+2. The target filesystem must support file rename efficiently.
+
+These conditions are _not_ met by the S3A committers and AWS S3 storage.
+
+Committers for other cloud stores _may_ support this feature, and
+declare to spark that they are compatible. If dynamic partition overwrite
+is required when writing data through a hadoop committer, Spark
+will always permit this when the original `FileOutputCommitter`
+is used. For other committers, after their instantiation, Spark
+will probe for their declaration of compatibility, and
+permit the operation if state that they are compatible.
+
+If the committer is not compatible, the operation will fail with
+the error message
+`PathOutputCommitter does not support dynamicPartitionOverwrite`
+
+Unless there is a compatible committer for the target filesystem,
+the sole solution is to use a cloud-friendly format for data
+storage.
 
 ## Further Reading
 
 Here is the documentation on the standard connectors both from Apache and the cloud providers.
 
-* [OpenStack Swift](https://hadoop.apache.org/docs/current/hadoop-openstack/index.html).
-* [Azure Blob Storage and Azure Datalake Gen 2](https://hadoop.apache.org/docs/current/hadoop-aws/tools/hadoop-aws/index.html).
+* [Azure Blob Storage](https://hadoop.apache.org/docs/current/hadoop-azure/index.html).
+* [Azure Blob Filesystem (ABFS) and Azure Datalake Gen 2](https://hadoop.apache.org/docs/current/hadoop-azure/abfs.html).
 * [Azure Data Lake Gen 1](https://hadoop.apache.org/docs/current/hadoop-azure-datalake/index.html).
+* [Amazon S3 Strong Consistency](https://aws.amazon.com/s3/consistency/)
 * [Hadoop-AWS module (Hadoop 3.x)](https://hadoop.apache.org/docs/current3/hadoop-aws/tools/hadoop-aws/index.html).
-* [Amazon S3 via S3A and S3N (Hadoop 2.x)](https://hadoop.apache.org/docs/current/hadoop-aws/tools/hadoop-aws/index.html).
-* [Amazon EMR File System (EMRFS)](https://docs.aws.amazon.com/emr/latest/ManagementGuide/emr-fs.html). From Amazon
-* [Google Cloud Storage Connector for Spark and Hadoop](https://cloud.google.com/hadoop/google-cloud-storage-connector). From Google
+* [Amazon EMR File System (EMRFS)](https://docs.aws.amazon.com/emr/latest/ManagementGuide/emr-fs.html). From Amazon.
+* [Using the EMRFS S3-optimized Committer](https://docs.amazonaws.cn/en_us/emr/latest/ReleaseGuide/emr-spark-s3-optimized-committer.html)
+* [Google Cloud Storage Connector for Spark and Hadoop](https://cloud.google.com/dataproc/docs/concepts/connectors/cloud-storage). From Google.
 * [The Azure Blob Filesystem driver (ABFS)](https://docs.microsoft.com/en-us/azure/storage/blobs/data-lake-storage-abfs-driver)
-* IBM Cloud Object Storage connector for Apache Spark: [Stocator](https://github.com/CODAIT/stocator), [IBM Object Storage](https://www.ibm.com/cloud/object-storage), [how-to-use-connector](https://developer.ibm.com/code/2018/08/16/installing-running-stocator-apache-spark-ibm-cloud-object-storage). From IBM
+* IBM Cloud Object Storage connector for Apache Spark: [Stocator](https://github.com/CODAIT/stocator),
+  [IBM Object Storage](https://www.ibm.com/cloud/object-storage). From IBM.
+* [Using JindoFS SDK to access Alibaba Cloud OSS](https://github.com/aliyun/alibabacloud-jindofs).
+
+The Cloud Committer problem and hive-compatible solutions
+* [Committing work to S3 with the S3A Committers](https://hadoop.apache.org/docs/current/hadoop-aws/tools/hadoop-aws/committers.html)
+* [Improve Apache Spark write performance on Apache Parquet formats with the EMRFS S3-optimized committer](https://aws.amazon.com/blogs/big-data/improve-apache-spark-write-performance-on-apache-parquet-formats-with-the-emrfs-s3-optimized-committer/)
+* [The Manifest Committer for Azure and Google Cloud Storage](https://github.com/apache/hadoop/blob/trunk/hadoop-mapreduce-project/hadoop-mapreduce-client/hadoop-mapreduce-client-core/src/site/markdown/manifest_committer.md)
+* [A Zero-rename committer](https://github.com/steveloughran/zero-rename-committer/releases/).
+* [Stocator: A High Performance Object Store Connector for Spark](http://arxiv.org/abs/1709.01812)
 

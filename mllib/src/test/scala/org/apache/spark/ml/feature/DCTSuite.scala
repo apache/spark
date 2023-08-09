@@ -81,7 +81,7 @@ class DCTSuite extends MLTest with DefaultReadWriteTest {
       .map { case Row(vec: Vector) => vec.size }
       .head()
 
-    // Can not infer size of ouput vector, since no metadata is provided
+    // Can not infer size of output vector, since no metadata is provided
     intercept[TestFailedException] {
       val transformed = transformer.transform(dataset)
       checkVectorSizeOnDF(transformed, "resultVec", vectorSize)

@@ -21,6 +21,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
+import org.apache.spark.sql.catalyst.util.TypeUtils
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.collection.unsafe.sort.PrefixComparators._
@@ -44,11 +45,11 @@ case object Descending extends SortDirection {
   override def defaultNullOrdering: NullOrdering = NullsLast
 }
 
-case object NullsFirst extends NullOrdering{
+case object NullsFirst extends NullOrdering {
   override def sql: String = "NULLS FIRST"
 }
 
-case object NullsLast extends NullOrdering{
+case object NullsLast extends NullOrdering {
   override def sql: String = "NULLS LAST"
 }
 
@@ -63,19 +64,13 @@ case class SortOrder(
     child: Expression,
     direction: SortDirection,
     nullOrdering: NullOrdering,
-    sameOrderExpressions: Set[Expression])
-  extends UnaryExpression with Unevaluable {
+    sameOrderExpressions: Seq[Expression])
+  extends Expression with Unevaluable {
 
-  /** Sort order is not foldable because we don't have an eval for it. */
-  override def foldable: Boolean = false
+  override def children: Seq[Expression] = child +: sameOrderExpressions
 
-  override def checkInputDataTypes(): TypeCheckResult = {
-    if (RowOrdering.isOrderable(dataType)) {
-      TypeCheckResult.TypeCheckSuccess
-    } else {
-      TypeCheckResult.TypeCheckFailure(s"cannot sort data type ${dataType.catalogString}")
-    }
-  }
+  override def checkInputDataTypes(): TypeCheckResult =
+    TypeUtils.checkForOrderingExpr(dataType, prettyName)
 
   override def dataType: DataType = child.dataType
   override def nullable: Boolean = child.nullable
@@ -86,16 +81,19 @@ case class SortOrder(
   def isAscending: Boolean = direction == Ascending
 
   def satisfies(required: SortOrder): Boolean = {
-    (sameOrderExpressions + child).exists(required.child.semanticEquals) &&
+    children.exists(required.child.semanticEquals) &&
       direction == required.direction && nullOrdering == required.nullOrdering
   }
+
+  override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): SortOrder =
+    copy(child = newChildren.head, sameOrderExpressions = newChildren.tail)
 }
 
 object SortOrder {
   def apply(
      child: Expression,
      direction: SortDirection,
-     sameOrderExpressions: Set[Expression] = Set.empty): SortOrder = {
+     sameOrderExpressions: Seq[Expression] = Seq.empty): SortOrder = {
     new SortOrder(child, direction, direction.defaultNullOrdering, sameOrderExpressions)
   }
 
@@ -130,7 +128,8 @@ object SortOrder {
 case class SortPrefix(child: SortOrder) extends UnaryExpression {
 
   val nullValue = child.child.dataType match {
-    case BooleanType | DateType | TimestampType | _: IntegralType =>
+    case BooleanType | DateType | TimestampType | TimestampNTZType |
+         _: IntegralType | _: AnsiIntervalType =>
       if (nullAsSmallest) Long.MinValue else Long.MaxValue
     case dt: DecimalType if dt.precision - dt.scale <= Decimal.MAX_LONG_DIGITS =>
       if (nullAsSmallest) Long.MinValue else Long.MaxValue
@@ -152,7 +151,8 @@ case class SortPrefix(child: SortOrder) extends UnaryExpression {
   private lazy val calcPrefix: Any => Long = child.child.dataType match {
     case BooleanType => (raw) =>
       if (raw.asInstanceOf[Boolean]) 1 else 0
-    case DateType | TimestampType | _: IntegralType => (raw) =>
+    case DateType | TimestampType | TimestampNTZType |
+         _: IntegralType | _: AnsiIntervalType => (raw) =>
       raw.asInstanceOf[java.lang.Number].longValue()
     case FloatType | DoubleType => (raw) => {
       val dVal = raw.asInstanceOf[java.lang.Number].doubleValue()
@@ -169,7 +169,13 @@ case class SortPrefix(child: SortOrder) extends UnaryExpression {
       val s = p - (dt.precision - dt.scale)
       (raw) => {
         val value = raw.asInstanceOf[Decimal]
-        if (value.changePrecision(p, s)) value.toUnscaledLong else Long.MinValue
+        if (value.changePrecision(p, s)) {
+          value.toUnscaledLong
+        } else if (value.toBigDecimal.signum < 0) {
+          Long.MinValue
+        } else {
+          Long.MaxValue
+        }
       }
     case dt: DecimalType => (raw) =>
       DoublePrefixComparator.computePrefix(raw.asInstanceOf[Decimal].toDouble)
@@ -196,21 +202,20 @@ case class SortPrefix(child: SortOrder) extends UnaryExpression {
         s"$input ? 1L : 0L"
       case _: IntegralType =>
         s"(long) $input"
-      case DateType | TimestampType =>
+      case DateType | TimestampType | TimestampNTZType | _: AnsiIntervalType =>
         s"(long) $input"
       case FloatType | DoubleType =>
         s"$DoublePrefixCmp.computePrefix((double)$input)"
       case StringType => s"$StringPrefixCmp.computePrefix($input)"
       case BinaryType => s"$BinaryPrefixCmp.computePrefix($input)"
+      case dt: DecimalType if dt.precision < Decimal.MAX_LONG_DIGITS =>
+        s"$input.toUnscaledLong()"
       case dt: DecimalType if dt.precision - dt.scale <= Decimal.MAX_LONG_DIGITS =>
-        if (dt.precision <= Decimal.MAX_LONG_DIGITS) {
-          s"$input.toUnscaledLong()"
-        } else {
-          // reduce the scale to fit in a long
-          val p = Decimal.MAX_LONG_DIGITS
-          val s = p - (dt.precision - dt.scale)
-          s"$input.changePrecision($p, $s) ? $input.toUnscaledLong() : ${Long.MinValue}L"
-        }
+        // reduce the scale to fit in a long
+        val p = Decimal.MAX_LONG_DIGITS
+        val s = p - (dt.precision - dt.scale)
+        s"$input.changePrecision($p, $s) ? $input.toUnscaledLong() : " +
+            s"$input.toBigDecimal().signum() < 0 ? ${Long.MinValue}L : ${Long.MaxValue}L"
       case dt: DecimalType =>
         s"$DoublePrefixCmp.computePrefix($input.toDouble())"
       case _ => "0L"
@@ -227,4 +232,7 @@ case class SortPrefix(child: SortOrder) extends UnaryExpression {
   }
 
   override def dataType: DataType = LongType
+
+  override protected def withNewChildInternal(newChild: Expression): SortPrefix =
+    copy(child = newChild.asInstanceOf[SortOrder])
 }

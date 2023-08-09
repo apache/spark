@@ -466,7 +466,7 @@ final class OnlineLDAOptimizer extends LDAOptimizer with Logging {
     val seed = randomGenerator.nextLong()
     // If and only if optimizeDocConcentration is set true,
     // we calculate logphat in the same pass as other statistics.
-    // No calculation of loghat happens otherwise.
+    // No calculation of logphat happens otherwise.
     val logphatPartOptionBase = () => if (optimizeDocConcentration) {
                                         Some(BDV.zeros[Double](k))
                                       } else {
@@ -490,16 +490,24 @@ final class OnlineLDAOptimizer extends LDAOptimizer with Logging {
         Iterator((stat, logphatPartOption, nonEmptyDocCount))
     }
 
-    val elementWiseSum = (
+    def elementWiseSum(
         u: (BDM[Double], Option[BDV[Double]], Long),
-        v: (BDM[Double], Option[BDV[Double]], Long)) => {
-      u._1 += v._1
+        v: (BDM[Double], Option[BDV[Double]], Long)): (BDM[Double], Option[BDV[Double]], Long) = {
+      val vec =
+        if (u._1 == null) {
+          v._1
+        } else if (v._1 == null) {
+          u._1
+        } else {
+          u._1 += v._1
+          u._1
+        }
       u._2.foreach(_ += v._2.get)
-      (u._1, u._2, u._3 + v._3)
+      (vec, u._2, u._3 + v._3)
     }
 
     val (statsSum: BDM[Double], logphatOption: Option[BDV[Double]], nonEmptyDocsN: Long) = stats
-      .treeAggregate((BDM.zeros[Double](k, vocabSize), logphatPartOptionBase(), 0L))(
+      .treeAggregate((null.asInstanceOf[BDM[Double]], logphatPartOptionBase(), 0L))(
         elementWiseSum, elementWiseSum
       )
 

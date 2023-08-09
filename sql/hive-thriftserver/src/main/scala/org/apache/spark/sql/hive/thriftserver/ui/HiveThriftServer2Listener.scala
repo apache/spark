@@ -93,7 +93,7 @@ private[thriftserver] class HiveThriftServer2Listener(
     val execList = executionList.values().asScala.filter(_.groupId == groupId).toSeq
     if (execList.nonEmpty) {
       execList.foreach { exec =>
-        exec.jobId += jobId.toString
+        exec.jobId += jobId
         updateLiveStore(exec)
       }
     } else {
@@ -101,11 +101,12 @@ private[thriftserver] class HiveThriftServer2Listener(
       // Execution end event (Refer SPARK-27019). To handle that situation, if occurs in
       // Thriftserver, following code will take care. Here will come only if JobStart event comes
       // after Execution End event.
-      val storeExecInfo = kvstore.view(classOf[ExecutionInfo]).asScala.filter(_.groupId == groupId)
+      val storeExecInfo = KVUtils.viewToSeq(
+        kvstore.view(classOf[ExecutionInfo]), Int.MaxValue)(_.groupId == groupId)
       storeExecInfo.foreach { exec =>
         val liveExec = getOrCreateExecution(exec.execId, exec.statement, exec.sessionId,
           exec.startTimestamp, exec.userName)
-        liveExec.jobId += jobId.toString
+        liveExec.jobId += jobId
         updateStoreWithTriggerEnabled(liveExec)
         executionList.remove(liveExec.execId)
       }
@@ -119,6 +120,7 @@ private[thriftserver] class HiveThriftServer2Listener(
       case e: SparkListenerThriftServerOperationStart => onOperationStart(e)
       case e: SparkListenerThriftServerOperationParsed => onOperationParsed(e)
       case e: SparkListenerThriftServerOperationCanceled => onOperationCanceled(e)
+      case e: SparkListenerThriftServerOperationTimeout => onOperationTimeout(e)
       case e: SparkListenerThriftServerOperationError => onOperationError(e)
       case e: SparkListenerThriftServerOperationFinish => onOperationFinished(e)
       case e: SparkListenerThriftServerOperationClosed => onOperationClosed(e)
@@ -177,6 +179,15 @@ private[thriftserver] class HiveThriftServer2Listener(
       case Some(executionData) =>
         executionData.finishTimestamp = e.finishTime
         executionData.state = ExecutionState.CANCELED
+        updateLiveStore(executionData)
+      case None => logWarning(s"onOperationCanceled called with unknown operation id: ${e.id}")
+    }
+
+  private def onOperationTimeout(e: SparkListenerThriftServerOperationTimeout): Unit =
+    Option(executionList.get(e.id)) match {
+      case Some(executionData) =>
+        executionData.finishTimestamp = e.finishTime
+        executionData.state = ExecutionState.TIMEDOUT
         updateLiveStore(executionData)
       case None => logWarning(s"onOperationCanceled called with unknown operation id: ${e.id}")
     }

@@ -30,7 +30,6 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 
 import static org.apache.spark.launcher.CommandBuilderUtils.*;
-import static org.apache.spark.launcher.CommandBuilderUtils.join;
 
 /**
  * Launcher for Spark applications.
@@ -45,6 +44,10 @@ public class SparkLauncher extends AbstractLauncher<SparkLauncher> {
 
   /** The Spark master. */
   public static final String SPARK_MASTER = "spark.master";
+
+  /** The Spark remote. */
+  public static final String SPARK_REMOTE = "spark.remote";
+  public static final String SPARK_LOCAL_REMOTE = "spark.local.connect";
 
   /** The Spark deploy mode. */
   public static final String DEPLOY_MODE = "spark.submit.deployMode";
@@ -92,8 +95,18 @@ public class SparkLauncher extends AbstractLauncher<SparkLauncher> {
   /**
    * Maximum time (in ms) to wait for a child process to connect back to the launcher server
    * when using @link{#start()}.
+   *
+   * @deprecated use `CHILD_CONNECTION_TIMEOUT`
+   * @since 1.6.0
    */
-  public static final String CHILD_CONNECTION_TIMEOUT = "spark.launcher.childConectionTimeout";
+  public static final String DEPRECATED_CHILD_CONNECTION_TIMEOUT =
+    "spark.launcher.childConectionTimeout";
+
+  /**
+   * Maximum time (in ms) to wait for a child process to connect back to the launcher server
+   * when using @link{#start()}.
+   */
+  public static final String CHILD_CONNECTION_TIMEOUT = "spark.launcher.childConnectionTimeout";
 
   /** Used internally to create unique logger names. */
   private static final AtomicInteger COUNTER = new AtomicInteger();

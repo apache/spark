@@ -17,6 +17,8 @@
 
 package org.apache.spark
 
+import org.apache.spark.scheduler.ExecutorDecommissionInfo
+
 /**
  * A client that communicates with the cluster manager to request or kill executors.
  * This is currently supported only in YARN mode.
@@ -80,6 +82,59 @@ private[spark] trait ExecutorAllocationClient {
     adjustTargetNumExecutors: Boolean,
     countFailures: Boolean,
     force: Boolean = false): Seq[String]
+
+  /**
+   * Request that the cluster manager decommission the specified executors.
+   * Default implementation delegates to kill, scheduler must override
+   * if it supports graceful decommissioning.
+   *
+   * @param executorsAndDecomInfo identifiers of executors & decom info.
+   * @param adjustTargetNumExecutors whether the target number of executors will be adjusted down
+   *                                 after these executors have been decommissioned.
+   * @param triggeredByExecutor whether the decommission is triggered at executor.
+   * @return the ids of the executors acknowledged by the cluster manager to be removed.
+   */
+  def decommissionExecutors(
+      executorsAndDecomInfo: Array[(String, ExecutorDecommissionInfo)],
+      adjustTargetNumExecutors: Boolean,
+      triggeredByExecutor: Boolean): Seq[String] = {
+    killExecutors(executorsAndDecomInfo.map(_._1),
+      adjustTargetNumExecutors,
+      countFailures = false)
+  }
+
+
+  /**
+   * Request that the cluster manager decommission the specified executor.
+   * Delegates to decommissionExecutors.
+   *
+   * @param executorId identifiers of executor to decommission
+   * @param decommissionInfo information about the decommission (reason, host loss)
+   * @param adjustTargetNumExecutors if we should adjust the target number of executors.
+   * @param triggeredByExecutor whether the decommission is triggered at executor.
+   *                            (TODO: add a new type like `ExecutorDecommissionInfo` for the
+   *                            case where executor is decommissioned at executor first, so we
+   *                            don't need this extra parameter.)
+   * @return whether the request is acknowledged by the cluster manager.
+   */
+  final def decommissionExecutor(
+      executorId: String,
+      decommissionInfo: ExecutorDecommissionInfo,
+      adjustTargetNumExecutors: Boolean,
+      triggeredByExecutor: Boolean = false): Boolean = {
+    val decommissionedExecutors = decommissionExecutors(
+      Array((executorId, decommissionInfo)),
+      adjustTargetNumExecutors = adjustTargetNumExecutors,
+      triggeredByExecutor = triggeredByExecutor)
+    decommissionedExecutors.nonEmpty && decommissionedExecutors(0).equals(executorId)
+  }
+
+  /**
+   * Request that the cluster manager decommission every executor on the specified host.
+   *
+   * @return whether the request is acknowledged by the cluster manager.
+   */
+  def decommissionExecutorsOnHost(host: String): Boolean
 
   /**
    * Request that the cluster manager kill every executor on the specified host.

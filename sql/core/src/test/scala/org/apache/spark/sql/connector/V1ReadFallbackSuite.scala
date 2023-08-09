@@ -17,13 +17,9 @@
 
 package org.apache.spark.sql.connector
 
-import java.util
-
-import scala.collection.JavaConverters._
-
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, QueryTest, Row, SparkSession, SQLContext}
-import org.apache.spark.sql.connector.catalog.{Identifier, SupportsRead, Table, TableCapability, TableProvider}
+import org.apache.spark.sql.connector.catalog.{BasicInMemoryTableCatalog, Identifier, SupportsRead, Table, TableCapability}
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.connector.read.{Scan, ScanBuilder, SupportsPushDownFilters, SupportsPushDownRequiredColumns, V1Scan}
 import org.apache.spark.sql.execution.RowDataSourceScanExec
@@ -106,7 +102,7 @@ class V1ReadFallbackCatalog extends BasicInMemoryTableCatalog {
       ident: Identifier,
       schema: StructType,
       partitions: Array[Transform],
-      properties: util.Map[String, String]): Table = {
+      properties: java.util.Map[String, String]): Table = {
     // To simplify the test implementation, only support fixed schema.
     if (schema != V1ReadFallbackCatalog.schema || partitions.nonEmpty) {
       throw new UnsupportedOperationException
@@ -131,8 +127,8 @@ class TableWithV1ReadFallback(override val name: String) extends Table with Supp
 
   override def schema(): StructType = V1ReadFallbackCatalog.schema
 
-  override def capabilities(): util.Set[TableCapability] = {
-    Set(TableCapability.BATCH_READ).asJava
+  override def capabilities(): java.util.Set[TableCapability] = {
+    java.util.EnumSet.of(TableCapability.BATCH_READ)
   }
 
   override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = {

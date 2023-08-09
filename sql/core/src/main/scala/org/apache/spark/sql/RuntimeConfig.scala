@@ -17,11 +17,11 @@
 
 package org.apache.spark.sql
 
+import org.apache.spark.SPARK_DOC_ROOT
 import org.apache.spark.annotation.Stable
-import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.{ConfigEntry, OptionalConfigEntry}
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.internal.SQLConf.{DeprecatedConfig, RemovedConfig}
 
 /**
  * Runtime configuration interface for Spark. To access this, use `SparkSession.conf`.
@@ -62,6 +62,14 @@ class RuntimeConfig private[sql](sqlConf: SQLConf = new SQLConf) {
   }
 
   /**
+   * Sets the given Spark runtime configuration property.
+   */
+  private[sql] def set[T](entry: ConfigEntry[T], value: T): Unit = {
+    requireNonStaticConf(entry.key)
+    sqlConf.setConf(entry, value)
+  }
+
+  /**
    * Returns the value of Spark runtime configuration property for the given key.
    *
    * @throws java.util.NoSuchElementException if the key is not set and does not have a default
@@ -86,18 +94,18 @@ class RuntimeConfig private[sql](sqlConf: SQLConf = new SQLConf) {
    * Returns the value of Spark runtime configuration property for the given key.
    */
   @throws[NoSuchElementException]("if the key is not set")
-  protected[sql] def get[T](entry: ConfigEntry[T]): T = {
+  private[sql] def get[T](entry: ConfigEntry[T]): T = {
     sqlConf.getConf(entry)
   }
 
-  protected[sql] def get[T](entry: OptionalConfigEntry[T]): Option[T] = {
+  private[sql] def get[T](entry: OptionalConfigEntry[T]): Option[T] = {
     sqlConf.getConf(entry)
   }
 
   /**
    * Returns the value of Spark runtime configuration property for the given key.
    */
-  protected[sql] def get[T](entry: ConfigEntry[T], default: T): T = {
+  private[sql] def get[T](entry: ConfigEntry[T], default: T): T = {
     sqlConf.getConf(entry, default)
   }
 
@@ -145,17 +153,17 @@ class RuntimeConfig private[sql](sqlConf: SQLConf = new SQLConf) {
   /**
    * Returns whether a particular key is set.
    */
-  protected[sql] def contains(key: String): Boolean = {
+  private[sql] def contains(key: String): Boolean = {
     sqlConf.contains(key)
   }
 
   private def requireNonStaticConf(key: String): Unit = {
-    if (SQLConf.staticConfKeys.contains(key)) {
-      throw new AnalysisException(s"Cannot modify the value of a static config: $key")
+    if (SQLConf.isStaticConfigKey(key)) {
+      throw QueryCompilationErrors.cannotModifyValueOfStaticConfigError(key)
     }
     if (sqlConf.setCommandRejectsSparkCoreConfs &&
-        ConfigEntry.findEntry(key) != null && !SQLConf.sqlConfEntries.containsKey(key)) {
-      throw new AnalysisException(s"Cannot modify the value of a Spark config: $key")
+        ConfigEntry.findEntry(key) != null && !SQLConf.containsConfigKey(key)) {
+      throw QueryCompilationErrors.cannotModifyValueOfSparkConfigError(key, SPARK_DOC_ROOT)
     }
   }
 }

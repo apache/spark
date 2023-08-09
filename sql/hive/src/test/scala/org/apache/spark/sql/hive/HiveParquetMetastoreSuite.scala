@@ -473,7 +473,7 @@ class HiveParquetMetastoreSuite extends ParquetPartitioningTest {
     checkCached(tableIdentifier)
     // For insert into non-partitioned table, we will do the conversion,
     // so the converted test_insert_parquet should be cached.
-    sessionState.refreshTable("test_insert_parquet")
+    spark.catalog.refreshTable("test_insert_parquet")
     assert(getCachedDataSourceTable(tableIdentifier) === null)
     sql(
       """
@@ -486,7 +486,7 @@ class HiveParquetMetastoreSuite extends ParquetPartitioningTest {
       sql("select * from test_insert_parquet"),
       sql("select a, b from jt").collect())
     // Invalidate the cache.
-    sessionState.refreshTable("test_insert_parquet")
+    spark.catalog.refreshTable("test_insert_parquet")
     assert(getCachedDataSourceTable(tableIdentifier) === null)
 
     // Create a partitioned table.
@@ -536,7 +536,7 @@ class HiveParquetMetastoreSuite extends ParquetPartitioningTest {
           |select b, '2015-04-02', a FROM jt
         """.stripMargin).collect())
 
-    sessionState.refreshTable("test_parquet_partitioned_cache_test")
+    spark.catalog.refreshTable("test_parquet_partitioned_cache_test")
     assert(getCachedDataSourceTable(tableIdentifier) === null)
 
     dropTables("test_insert_parquet", "test_parquet_partitioned_cache_test")

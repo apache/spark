@@ -28,7 +28,8 @@ private[master] class ExecutorDesc(
     val memory: Int,
     // resources(e.f. gpu/fpga) allocated to this executor
     // map from resource name to ResourceInformation
-    val resources: Map[String, ResourceInformation]) {
+    val resources: Map[String, ResourceInformation],
+    val rpId: Int) {
 
   var state = ExecutorState.LAUNCHING
 

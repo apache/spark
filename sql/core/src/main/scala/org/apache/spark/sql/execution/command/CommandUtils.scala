@@ -22,16 +22,17 @@ import java.net.URI
 import scala.collection.mutable
 import scala.util.control.NonFatal
 
-import org.apache.hadoop.fs.{FileSystem, Path, PathFilter}
+import org.apache.hadoop.fs.{FileStatus, FileSystem, Path, PathFilter}
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.{AnalysisException, SparkSession}
+import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.{InternalRow, TableIdentifier}
-import org.apache.spark.sql.catalyst.catalog.{CatalogColumnStat, CatalogStatistics, CatalogTable}
+import org.apache.spark.sql.catalyst.catalog.{CatalogStatistics, CatalogTable, CatalogTablePartition, CatalogTableType}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.util.{ArrayData, GenericArrayData}
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.execution.datasources.{DataSourceUtils, InMemoryFileIndex}
 import org.apache.spark.sql.internal.{SessionState, SQLConf}
@@ -56,9 +57,15 @@ object CommandUtils extends Logging {
     val catalog = sparkSession.sessionState.catalog
     if (sparkSession.sessionState.conf.autoSizeUpdateEnabled) {
       val newTable = catalog.getTableMetadata(table.identifier)
-      val newSize = CommandUtils.calculateTotalSize(sparkSession, newTable)
-      val newStats = CatalogStatistics(sizeInBytes = newSize)
-      catalog.alterTableStats(table.identifier, Some(newStats))
+      val (newSize, newPartitions) = CommandUtils.calculateTotalSize(sparkSession, newTable)
+      val isNewStats = newTable.stats.map(newSize != _.sizeInBytes).getOrElse(true)
+      if (isNewStats) {
+        val newStats = CatalogStatistics(sizeInBytes = newSize)
+        catalog.alterTableStats(table.identifier, Some(newStats))
+      }
+      if (newPartitions.nonEmpty) {
+        catalog.alterPartitions(table.identifier, newPartitions)
+      }
     } else if (table.stats.nonEmpty) {
       catalog.alterTableStats(table.identifier, None)
     } else {
@@ -67,22 +74,29 @@ object CommandUtils extends Logging {
     }
   }
 
-  def calculateTotalSize(spark: SparkSession, catalogTable: CatalogTable): BigInt = {
+  def calculateTotalSize(
+      spark: SparkSession,
+      catalogTable: CatalogTable): (BigInt, Seq[CatalogTablePartition]) = {
     val sessionState = spark.sessionState
     val startTime = System.nanoTime()
-    val totalSize = if (catalogTable.partitionColumnNames.isEmpty) {
-      calculateSingleLocationSize(sessionState, catalogTable.identifier,
-        catalogTable.storage.locationUri)
+    val (totalSize, newPartitions) = if (catalogTable.partitionColumnNames.isEmpty) {
+      (calculateSingleLocationSize(sessionState, catalogTable.identifier,
+        catalogTable.storage.locationUri), Seq())
     } else {
       // Calculate table size as a sum of the visible partitions. See SPARK-21079
       val partitions = sessionState.catalog.listPartitions(catalogTable.identifier)
       logInfo(s"Starting to calculate sizes for ${partitions.length} partitions.")
       val paths = partitions.map(_.storage.locationUri)
-      calculateMultipleLocationSizes(spark, catalogTable.identifier, paths).sum
+      val sizes = calculateMultipleLocationSizes(spark, catalogTable.identifier, paths)
+      val newPartitions = partitions.zipWithIndex.flatMap { case (p, idx) =>
+        val newStats = CommandUtils.compareAndGetNewStats(p.stats, sizes(idx), None)
+        newStats.map(_ => p.copy(stats = newStats))
+      }
+      (sizes.sum, newPartitions)
     }
     logInfo(s"It took ${(System.nanoTime() - startTime) / (1000 * 1000)} ms to calculate" +
       s" the total size for table ${catalogTable.identifier}.")
-    totalSize
+    (totalSize, newPartitions)
   }
 
   def calculateSingleLocationSize(
@@ -99,13 +113,12 @@ object CommandUtils extends Logging {
     // countFileSize to count the table size.
     val stagingDir = sessionState.conf.getConfString("hive.exec.stagingdir", ".hive-staging")
 
-    def getPathSize(fs: FileSystem, path: Path): Long = {
-      val fileStatus = fs.getFileStatus(path)
+    def getPathSize(fs: FileSystem, fileStatus: FileStatus): Long = {
       val size = if (fileStatus.isDirectory) {
-        fs.listStatus(path)
+        fs.listStatus(fileStatus.getPath)
           .map { status =>
             if (isDataPath(status.getPath, stagingDir)) {
-              getPathSize(fs, status.getPath)
+              getPathSize(fs, status)
             } else {
               0L
             }
@@ -122,7 +135,7 @@ object CommandUtils extends Logging {
       val path = new Path(p)
       try {
         val fs = path.getFileSystem(sessionState.newHadoopConf())
-        getPathSize(fs, path)
+        getPathSize(fs, fs.getFileStatus(path))
       } catch {
         case NonFatal(e) =>
           logWarning(
@@ -163,7 +176,7 @@ object CommandUtils extends Logging {
       .getConfString("hive.exec.stagingdir", ".hive-staging")
     val filter = new PathFilterIgnoreNonData(stagingDir)
     val sizes = InMemoryFileIndex.bulkListLeafFiles(paths.flatten,
-      sparkSession.sessionState.newHadoopConf(), filter, sparkSession, areRootPaths = true).map {
+      sparkSession.sessionState.newHadoopConf(), filter, sparkSession).map {
       case (_, files) => files.map(_.getLen).sum
     }
     // the size is 0 where paths(i) is not defined and sizes(i) where it is defined
@@ -194,6 +207,41 @@ object CommandUtils extends Logging {
       }
     }
     newStats
+  }
+
+  def analyzeTable(
+      sparkSession: SparkSession,
+      tableIdent: TableIdentifier,
+      noScan: Boolean): Unit = {
+    val sessionState = sparkSession.sessionState
+    val db = tableIdent.database.getOrElse(sessionState.catalog.getCurrentDatabase)
+    val tableIdentWithDB = TableIdentifier(tableIdent.table, Some(db))
+    val tableMeta = sessionState.catalog.getTableMetadata(tableIdentWithDB)
+    if (tableMeta.tableType == CatalogTableType.VIEW) {
+      // Analyzes a catalog view if the view is cached
+      val table = sparkSession.table(tableIdent.quotedString)
+      val cacheManager = sparkSession.sharedState.cacheManager
+      if (cacheManager.lookupCachedData(table.logicalPlan).isDefined) {
+        if (!noScan) {
+          // To collect table stats, materializes an underlying columnar RDD
+          table.count()
+        }
+      } else {
+        throw QueryCompilationErrors.analyzeTableNotSupportedOnViewsError()
+      }
+    } else {
+      // Compute stats for the whole table
+      val (newTotalSize, _) = CommandUtils.calculateTotalSize(sparkSession, tableMeta)
+      val newRowCount =
+        if (noScan) None else Some(BigInt(sparkSession.table(tableIdentWithDB).count()))
+
+      // Update the metastore if the above statistics of the table are different from those
+      // recorded in the metastore.
+      val newStats = CommandUtils.compareAndGetNewStats(tableMeta.stats, newTotalSize, newRowCount)
+      if (newStats.isDefined) {
+        sessionState.catalog.alterTableStats(tableIdentWithDB, newStats)
+      }
+    }
   }
 
   /**
@@ -272,7 +320,7 @@ object CommandUtils extends Logging {
         }
       }
     }
-    AttributeMap(attributePercentiles.toSeq)
+    AttributeMap(attributePercentiles)
   }
 
 
@@ -281,8 +329,7 @@ object CommandUtils extends Logging {
     case _: IntegralType => true
     case _: DecimalType => true
     case DoubleType | FloatType => true
-    case DateType => true
-    case TimestampType => true
+    case _: DatetimeType => true
     case _ => false
   }
 
@@ -331,8 +378,7 @@ object CommandUtils extends Logging {
       case _: DecimalType => fixedLenTypeStruct
       case DoubleType | FloatType => fixedLenTypeStruct
       case BooleanType => fixedLenTypeStruct
-      case DateType => fixedLenTypeStruct
-      case TimestampType => fixedLenTypeStruct
+      case _: DatetimeType => fixedLenTypeStruct
       case BinaryType | StringType =>
         // For string and binary type, we don't compute min, max or histogram
         val nullLit = Literal(null, col.dataType)
@@ -343,8 +389,8 @@ object CommandUtils extends Logging {
           Coalesce(Seq(Cast(Max(Length(col)), LongType), defaultSize)),
           nullArray)
       case _ =>
-        throw new AnalysisException("Analyzing column statistics is not supported for column " +
-          s"${col.name} of data type: ${col.dataType}.")
+        throw QueryCompilationErrors.analyzingColumnStatisticsNotSupportedForColumnTypeError(
+          col.name, col.dataType)
     }
   }
 
@@ -391,7 +437,7 @@ object CommandUtils extends Logging {
     try {
       sparkSession.catalog.uncacheTable(name)
     } catch {
-      case NonFatal(e) => logWarning("Exception when attempting to uncache $name", e)
+      case NonFatal(e) => logWarning(s"Exception when attempting to uncache $name", e)
     }
   }
 }

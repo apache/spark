@@ -89,8 +89,7 @@ object ChiSquareTest {
     if (flatten) {
       resultDF
     } else {
-      resultDF.groupBy()
-        .agg(collect_list(struct("*")))
+      resultDF.agg(collect_list(struct("*")))
         .as[Seq[(Int, Double, Int, Double)]]
         .map { seq =>
           val results = seq.toArray.sortBy(_._1)

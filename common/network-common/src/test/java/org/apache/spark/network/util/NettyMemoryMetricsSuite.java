@@ -108,9 +108,8 @@ public class NettyMemoryMetricsSuite {
     Assert.assertNotNull(clientMetricMap.get(
       MetricRegistry.name("shuffle-client", directMemoryMetric)));
 
-    TransportClient client = null;
-    try {
-      client = clientFactory.createClient(TestUtils.getLocalHost(), server.getPort());
+    try (TransportClient client =
+        clientFactory.createClient(TestUtils.getLocalHost(), server.getPort())) {
       Assert.assertTrue(client.isActive());
 
       Assert.assertTrue(((Gauge<Long>)serverMetricMap.get(
@@ -123,10 +122,6 @@ public class NettyMemoryMetricsSuite {
       Assert.assertTrue(((Gauge<Long>)clientMetricMap.get(
         MetricRegistry.name("shuffle-client", directMemoryMetric))).getValue() >= 0L);
 
-    } finally {
-      if (client != null) {
-        client.close();
-      }
     }
   }
 

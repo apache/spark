@@ -25,6 +25,7 @@ import org.apache.hadoop.mapreduce.{OutputCommitter => MapReduceOutputCommitter}
 import org.apache.spark.{SparkEnv, TaskContext}
 import org.apache.spark.executor.CommitDeniedException
 import org.apache.spark.internal.Logging
+import org.apache.spark.util.Utils
 
 object SparkHadoopMapRedUtil extends Logging {
   /**
@@ -47,8 +48,8 @@ object SparkHadoopMapRedUtil extends Logging {
     // Called after we have decided to commit
     def performCommit(): Unit = {
       try {
-        committer.commitTask(mrTaskContext)
-        logInfo(s"$mrTaskAttemptID: Committed")
+        val (_, timeCost) = Utils.timeTakenMs(committer.commitTask(mrTaskContext))
+        logInfo(s"$mrTaskAttemptID: Committed. Elapsed time: $timeCost ms.")
       } catch {
         case cause: IOException =>
           logError(s"Error committing the output of task: $mrTaskAttemptID", cause)

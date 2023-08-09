@@ -20,7 +20,6 @@ package org.apache.spark.deploy.mesos.ui
 import org.apache.spark.{SecurityManager, SparkConf}
 import org.apache.spark.scheduler.cluster.mesos.MesosClusterScheduler
 import org.apache.spark.ui.{SparkUI, WebUI}
-import org.apache.spark.ui.JettyUtils._
 
 /**
  * UI that displays driver results from the [[org.apache.spark.deploy.mesos.MesosClusterDispatcher]]

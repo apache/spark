@@ -29,7 +29,8 @@ private[spark] object Kryo {
   val KRYO_USER_REGISTRATORS = ConfigBuilder("spark.kryo.registrator")
     .version("0.5.0")
     .stringConf
-    .createOptional
+    .toSequence
+    .createWithDefault(Nil)
 
   val KRYO_CLASSES_TO_REGISTER = ConfigBuilder("spark.kryo.classesToRegister")
     .version("1.2.0")
@@ -40,7 +41,7 @@ private[spark] object Kryo {
   val KRYO_USE_UNSAFE = ConfigBuilder("spark.kryo.unsafe")
     .version("2.1.0")
     .booleanConf
-    .createWithDefault(false)
+    .createWithDefault(true)
 
   val KRYO_USE_POOL = ConfigBuilder("spark.kryo.pool")
     .version("3.0.0")

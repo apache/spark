@@ -164,8 +164,9 @@ public class InMemoryStore implements KVStore {
   }
 
   /**
-   * An alias class for the type "ConcurrentHashMap<Comparable<Object>, Boolean>", which is used
-   * as a concurrent hashset for storing natural keys and the boolean value doesn't matter.
+   * An alias class for the type "{@literal ConcurrentHashMap<Comparable<Object>, Boolean>}",
+   * which is used as a concurrent hashset for storing natural keys
+   * and the boolean value doesn't matter.
    */
   private static class NaturalKeys extends ConcurrentHashMap<Comparable<Object>, Boolean> {}
 
@@ -465,11 +466,6 @@ public class InMemoryStore implements KVStore {
     @Override
     public T next() {
       return iter.next();
-    }
-
-    @Override
-    public void remove() {
-      throw new UnsupportedOperationException();
     }
 
     @Override

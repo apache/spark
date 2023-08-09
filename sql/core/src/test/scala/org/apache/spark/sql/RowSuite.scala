@@ -105,4 +105,10 @@ class RowSuite extends SparkFunSuite with SharedSparkSession {
     val empty = Row()
     assert(empty.toString == "[]")
   }
+
+  test("SPARK-37654: row contains a null at the requested index should return null") {
+    assert(Row(Seq("value")).getSeq(0) === List("value"))
+    assert(Row(Seq()).getSeq(0) === List())
+    assert(Row(null).getSeq(0) === null)
+  }
 }

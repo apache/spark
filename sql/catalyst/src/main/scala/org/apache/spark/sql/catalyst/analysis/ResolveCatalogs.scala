@@ -17,213 +17,73 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogPlugin, LookupCatalog, SupportsNamespaces, TableCatalog, TableChange}
+import org.apache.spark.sql.connector.catalog.{CatalogManager, Identifier, LookupCatalog}
+import org.apache.spark.sql.errors.QueryCompilationErrors
 
 /**
- * Resolves catalogs from the multi-part identifiers in SQL statements, and convert the statements
- * to the corresponding v2 commands if the resolved catalog is not the session catalog.
+ * Resolves the catalog of the name parts for table/view/function/namespace.
  */
 class ResolveCatalogs(val catalogManager: CatalogManager)
   extends Rule[LogicalPlan] with LookupCatalog {
-  import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
-  import org.apache.spark.sql.connector.catalog.CatalogV2Util._
 
-  override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
-    case AlterTableAddColumnsStatement(
-         nameParts @ NonSessionCatalogAndTable(catalog, tbl), cols) =>
-      cols.foreach(c => failCharType(c.dataType))
-      val changes = cols.map { col =>
-        TableChange.addColumn(
-          col.name.toArray,
-          col.dataType,
-          col.nullable,
-          col.comment.orNull,
-          col.position.orNull)
-      }
-      createAlterTable(nameParts, catalog, tbl, changes)
+  override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperatorsDown {
+    // We only support temp variables for now and the system catalog is not properly implemented
+    // yet. We need to resolve `UnresolvedIdentifier` for variable commands specially.
+    case c @ CreateVariable(UnresolvedIdentifier(nameParts, _), _, _) =>
+      val resolved = resolveVariableName(nameParts)
+      c.copy(name = resolved)
+    case d @ DropVariable(UnresolvedIdentifier(nameParts, _), _) =>
+      val resolved = resolveVariableName(nameParts)
+      d.copy(name = resolved)
 
-    case AlterTableReplaceColumnsStatement(
-        nameParts @ NonSessionCatalogAndTable(catalog, tbl), cols) =>
-      cols.foreach(c => failCharType(c.dataType))
-      val changes: Seq[TableChange] = loadTable(catalog, tbl.asIdentifier) match {
-        case Some(table) =>
-          // REPLACE COLUMNS deletes all the existing columns and adds new columns specified.
-          val deleteChanges = table.schema.fieldNames.map { name =>
-            TableChange.deleteColumn(Array(name))
-          }
-          val addChanges = cols.map { col =>
-            TableChange.addColumn(
-              col.name.toArray,
-              col.dataType,
-              col.nullable,
-              col.comment.orNull,
-              col.position.orNull)
-          }
-          deleteChanges ++ addChanges
-        case None => Seq()
-      }
-      createAlterTable(nameParts, catalog, tbl, changes)
-
-    case a @ AlterTableAlterColumnStatement(
-         nameParts @ NonSessionCatalogAndTable(catalog, tbl), _, _, _, _, _) =>
-      a.dataType.foreach(failCharType)
-      val colName = a.column.toArray
-      val typeChange = a.dataType.map { newDataType =>
-        TableChange.updateColumnType(colName, newDataType)
-      }
-      val nullabilityChange = a.nullable.map { nullable =>
-        TableChange.updateColumnNullability(colName, nullable)
-      }
-      val commentChange = a.comment.map { newComment =>
-        TableChange.updateColumnComment(colName, newComment)
-      }
-      val positionChange = a.position.map { newPosition =>
-        TableChange.updateColumnPosition(colName, newPosition)
-      }
-      createAlterTable(
-        nameParts,
-        catalog,
-        tbl,
-        typeChange.toSeq ++ nullabilityChange ++ commentChange ++ positionChange)
-
-    case AlterTableRenameColumnStatement(
-         nameParts @ NonSessionCatalogAndTable(catalog, tbl), col, newName) =>
-      val changes = Seq(TableChange.renameColumn(col.toArray, newName))
-      createAlterTable(nameParts, catalog, tbl, changes)
-
-    case AlterTableDropColumnsStatement(
-         nameParts @ NonSessionCatalogAndTable(catalog, tbl), cols) =>
-      val changes = cols.map(col => TableChange.deleteColumn(col.toArray))
-      createAlterTable(nameParts, catalog, tbl, changes)
-
-    case AlterTableSetPropertiesStatement(
-         nameParts @ NonSessionCatalogAndTable(catalog, tbl), props) =>
-      val changes = props.map { case (key, value) =>
-        TableChange.setProperty(key, value)
-      }.toSeq
-      createAlterTable(nameParts, catalog, tbl, changes)
-
-    // TODO: v2 `UNSET TBLPROPERTIES` should respect the ifExists flag.
-    case AlterTableUnsetPropertiesStatement(
-         nameParts @ NonSessionCatalogAndTable(catalog, tbl), keys, _) =>
-      val changes = keys.map(key => TableChange.removeProperty(key))
-      createAlterTable(nameParts, catalog, tbl, changes)
-
-    case AlterTableSetLocationStatement(
-         nameParts @ NonSessionCatalogAndTable(catalog, tbl), partitionSpec, newLoc) =>
-      if (partitionSpec.nonEmpty) {
-        throw new AnalysisException(
-          "ALTER TABLE SET LOCATION does not support partition for v2 tables.")
-      }
-      val changes = Seq(TableChange.setProperty(TableCatalog.PROP_LOCATION, newLoc))
-      createAlterTable(nameParts, catalog, tbl, changes)
-
-    case AlterViewSetPropertiesStatement(
-         NonSessionCatalogAndTable(catalog, tbl), props) =>
-      throw new AnalysisException(
-        s"Can not specify catalog `${catalog.name}` for view ${tbl.quoted} " +
-          s"because view support in catalog has not been implemented yet")
-
-    case AlterViewUnsetPropertiesStatement(
-         NonSessionCatalogAndTable(catalog, tbl), keys, ifExists) =>
-      throw new AnalysisException(
-        s"Can not specify catalog `${catalog.name}` for view ${tbl.quoted} " +
-          s"because view support in catalog has not been implemented yet")
-
-    case RenameTableStatement(NonSessionCatalogAndTable(catalog, oldName), newNameParts, isView) =>
-      if (isView) {
-        throw new AnalysisException("Renaming view is not supported in v2 catalogs.")
-      }
-      RenameTable(catalog.asTableCatalog, oldName.asIdentifier, newNameParts.asIdentifier)
-
-    case DescribeColumnStatement(
-         NonSessionCatalogAndTable(catalog, tbl), colNameParts, isExtended) =>
-      throw new AnalysisException("Describing columns is not supported for v2 tables.")
-
-    case c @ CreateTableStatement(
-         NonSessionCatalogAndTable(catalog, tbl), _, _, _, _, _, _, _, _, _) =>
-      assertNoCharTypeInSchema(c.tableSchema)
-      CreateV2Table(
-        catalog.asTableCatalog,
-        tbl.asIdentifier,
-        c.tableSchema,
-        // convert the bucket spec and add it as a transform
-        c.partitioning ++ c.bucketSpec.map(_.asTransform),
-        convertTableProperties(c.properties, c.options, c.location, c.comment, c.provider),
-        ignoreIfExists = c.ifNotExists)
-
-    case c @ CreateTableAsSelectStatement(
-         NonSessionCatalogAndTable(catalog, tbl), _, _, _, _, _, _, _, _, _, _) =>
-      CreateTableAsSelect(
-        catalog.asTableCatalog,
-        tbl.asIdentifier,
-        // convert the bucket spec and add it as a transform
-        c.partitioning ++ c.bucketSpec.map(_.asTransform),
-        c.asSelect,
-        convertTableProperties(c.properties, c.options, c.location, c.comment, c.provider),
-        writeOptions = c.writeOptions,
-        ignoreIfExists = c.ifNotExists)
-
-    case RefreshTableStatement(NonSessionCatalogAndTable(catalog, tbl)) =>
-      RefreshTable(catalog.asTableCatalog, tbl.asIdentifier)
-
-    case c @ ReplaceTableStatement(
-         NonSessionCatalogAndTable(catalog, tbl), _, _, _, _, _, _, _, _, _) =>
-      assertNoCharTypeInSchema(c.tableSchema)
-      ReplaceTable(
-        catalog.asTableCatalog,
-        tbl.asIdentifier,
-        c.tableSchema,
-        // convert the bucket spec and add it as a transform
-        c.partitioning ++ c.bucketSpec.map(_.asTransform),
-        convertTableProperties(c.properties, c.options, c.location, c.comment, c.provider),
-        orCreate = c.orCreate)
-
-    case c @ ReplaceTableAsSelectStatement(
-         NonSessionCatalogAndTable(catalog, tbl), _, _, _, _, _, _, _, _, _, _) =>
-      ReplaceTableAsSelect(
-        catalog.asTableCatalog,
-        tbl.asIdentifier,
-        // convert the bucket spec and add it as a transform
-        c.partitioning ++ c.bucketSpec.map(_.asTransform),
-        c.asSelect,
-        convertTableProperties(c.properties, c.options, c.location, c.comment, c.provider),
-        writeOptions = c.writeOptions,
-        orCreate = c.orCreate)
-
-    case DropTableStatement(NonSessionCatalogAndTable(catalog, tbl), ifExists, _) =>
-      DropTable(catalog.asTableCatalog, tbl.asIdentifier, ifExists)
-
-    case DropViewStatement(NonSessionCatalogAndTable(catalog, viewName), _) =>
-      throw new AnalysisException(
-        s"Can not specify catalog `${catalog.name}` for view ${viewName.quoted} " +
-          s"because view support in catalog has not been implemented yet")
-
-    case c @ CreateNamespaceStatement(CatalogAndNamespace(catalog, ns), _, _)
-        if !isSessionCatalog(catalog) =>
-      CreateNamespace(catalog.asNamespaceCatalog, ns, c.ifNotExists, c.properties)
-
-    case UseStatement(isNamespaceSet, nameParts) =>
-      if (isNamespaceSet) {
-        SetCatalogAndNamespace(catalogManager, None, Some(nameParts))
+    case UnresolvedIdentifier(nameParts, allowTemp) =>
+      if (allowTemp && catalogManager.v1SessionCatalog.isTempView(nameParts)) {
+        val ident = Identifier.of(nameParts.dropRight(1).toArray, nameParts.last)
+        ResolvedIdentifier(FakeSystemCatalog, ident)
       } else {
-        val CatalogAndNamespace(catalog, ns) = nameParts
-        val namespace = if (ns.nonEmpty) Some(ns) else None
-        SetCatalogAndNamespace(catalogManager, Some(catalog.name()), namespace)
+        val CatalogAndIdentifier(catalog, identifier) = nameParts
+        ResolvedIdentifier(catalog, identifier)
       }
-
-    case ShowCurrentNamespaceStatement() =>
-      ShowCurrentNamespace(catalogManager)
+    case s @ ShowTables(UnresolvedNamespace(Seq()), _, _) =>
+      s.copy(namespace = ResolvedNamespace(currentCatalog, catalogManager.currentNamespace))
+    case s @ ShowTableExtended(UnresolvedNamespace(Seq()), _, _, _) =>
+      s.copy(namespace = ResolvedNamespace(currentCatalog, catalogManager.currentNamespace))
+    case s @ ShowViews(UnresolvedNamespace(Seq()), _, _) =>
+      s.copy(namespace = ResolvedNamespace(currentCatalog, catalogManager.currentNamespace))
+    case s @ ShowFunctions(UnresolvedNamespace(Seq()), _, _, _, _) =>
+      s.copy(namespace = ResolvedNamespace(currentCatalog, catalogManager.currentNamespace))
+    case a @ AnalyzeTables(UnresolvedNamespace(Seq()), _) =>
+      a.copy(namespace = ResolvedNamespace(currentCatalog, catalogManager.currentNamespace))
+    case UnresolvedNamespace(Seq()) =>
+      ResolvedNamespace(currentCatalog, Seq.empty[String])
+    case UnresolvedNamespace(CatalogAndNamespace(catalog, ns)) =>
+      ResolvedNamespace(catalog, ns)
   }
 
-  object NonSessionCatalogAndTable {
-    def unapply(nameParts: Seq[String]): Option[(CatalogPlugin, Seq[String])] = nameParts match {
-      case NonSessionCatalogAndIdentifier(catalog, ident) =>
-        Some(catalog -> ident.asMultipartIdentifier)
-      case _ => None
+  private def resolveVariableName(nameParts: Seq[String]): ResolvedIdentifier = {
+    def ident: Identifier = Identifier.of(Array(CatalogManager.SESSION_NAMESPACE), nameParts.last)
+    if (nameParts.length == 1) {
+      ResolvedIdentifier(FakeSystemCatalog, ident)
+    } else if (nameParts.length == 2) {
+      if (nameParts.head.equalsIgnoreCase(CatalogManager.SESSION_NAMESPACE)) {
+        ResolvedIdentifier(FakeSystemCatalog, ident)
+      } else {
+        throw QueryCompilationErrors.unresolvedVariableError(
+          nameParts, Seq(CatalogManager.SYSTEM_CATALOG_NAME, CatalogManager.SESSION_NAMESPACE))
+      }
+    } else if (nameParts.length == 3) {
+      if (nameParts(0).equalsIgnoreCase(CatalogManager.SYSTEM_CATALOG_NAME) &&
+        nameParts(1).equalsIgnoreCase(CatalogManager.SESSION_NAMESPACE)) {
+        ResolvedIdentifier(FakeSystemCatalog, ident)
+      } else {
+        throw QueryCompilationErrors.unresolvedVariableError(
+          nameParts, Seq(CatalogManager.SYSTEM_CATALOG_NAME, CatalogManager.SESSION_NAMESPACE))
+      }
+    } else {
+      throw QueryCompilationErrors.unresolvedVariableError(
+        nameParts, Seq(CatalogManager.SYSTEM_CATALOG_NAME, CatalogManager.SESSION_NAMESPACE))
     }
   }
 }

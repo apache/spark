@@ -27,6 +27,8 @@ import org.apache.spark.{SparkEnv, TaskContext}
 import org.apache.spark.api.python.{BasePythonRunner, ChainedPythonFunctions, PythonRDD}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.execution.arrow.ArrowWriter
+import org.apache.spark.sql.execution.metric.SQLMetric
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.ArrowUtils
 import org.apache.spark.sql.vectorized.ColumnarBatch
@@ -44,10 +46,19 @@ class CoGroupedArrowPythonRunner(
     leftSchema: StructType,
     rightSchema: StructType,
     timeZoneId: String,
-    conf: Map[String, String])
+    conf: Map[String, String],
+    val pythonMetrics: Map[String, SQLMetric],
+    jobArtifactUUID: Option[String])
   extends BasePythonRunner[
-    (Iterator[InternalRow], Iterator[InternalRow]), ColumnarBatch](funcs, evalType, argOffsets)
-  with PythonArrowOutput {
+    (Iterator[InternalRow], Iterator[InternalRow]), ColumnarBatch](
+    funcs, evalType, argOffsets, jobArtifactUUID)
+  with BasicPythonArrowOutput {
+
+  override val pythonExec: String =
+    SQLConf.get.pysparkWorkerPythonExecutable.getOrElse(
+      funcs.head.funcs.head.pythonExec)
+
+  override val simplifiedTraceback: Boolean = SQLConf.get.pysparkSimplifiedTraceback
 
   protected def newWriterThread(
       env: SparkEnv,
@@ -74,10 +85,14 @@ class CoGroupedArrowPythonRunner(
         // For each we first send the number of dataframes in each group then send
         // first df, then send second df.  End of data is marked by sending 0.
         while (inputIterator.hasNext) {
+          val startData = dataOut.size()
           dataOut.writeInt(2)
           val (nextLeft, nextRight) = inputIterator.next()
           writeGroup(nextLeft, leftSchema, dataOut, "left")
           writeGroup(nextRight, rightSchema, dataOut, "right")
+
+          val deltaData = dataOut.size() - startData
+          pythonMetrics("pythonDataSent") += deltaData
         }
         dataOut.writeInt(0)
       }
@@ -87,7 +102,8 @@ class CoGroupedArrowPythonRunner(
           schema: StructType,
           dataOut: DataOutputStream,
           name: String): Unit = {
-        val arrowSchema = ArrowUtils.toArrowSchema(schema, timeZoneId)
+        val arrowSchema =
+          ArrowUtils.toArrowSchema(schema, timeZoneId, errorOnDuplicatedFieldNames = true)
         val allocator = ArrowUtils.rootAllocator.newChildAllocator(
           s"stdout writer for $pythonExec ($name)", 0, Long.MaxValue)
         val root = VectorSchemaRoot.create(arrowSchema, allocator)

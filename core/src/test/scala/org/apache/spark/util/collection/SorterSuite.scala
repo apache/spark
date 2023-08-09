@@ -22,11 +22,10 @@ import java.util.Arrays
 import java.util.concurrent.TimeUnit
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.internal.Logging
 import org.apache.spark.util.Utils.timeIt
 import org.apache.spark.util.random.XORShiftRandom
 
-class SorterSuite extends SparkFunSuite with Logging {
+class SorterSuite extends SparkFunSuite {
 
   test("equivalent to Arrays.sort") {
     val rand = new XORShiftRandom(123)
@@ -39,8 +38,8 @@ class SorterSuite extends SparkFunSuite with Logging {
     new Sorter(new KeyReuseIntArraySortDataFormat)
       .sort(data2, 0, data2.length, Ordering[IntWrapper])
 
-    assert(data0.view === data1.view)
-    assert(data0.view === data2.view)
+    assert(data0 === data1)
+    assert(data0 === data2)
   }
 
   test("KVArraySorter") {

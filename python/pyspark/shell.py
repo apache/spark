@@ -22,55 +22,102 @@ This file is designed to be launched as a PYTHONSTARTUP script.
 """
 
 import atexit
+import builtins
 import os
 import platform
 import warnings
+import sys
 
-import py4j
-
-from pyspark import SparkConf
+import pyspark
 from pyspark.context import SparkContext
-from pyspark.sql import SparkSession, SQLContext
+from pyspark.sql import SparkSession
+from pyspark.sql.context import SQLContext
+from pyspark.sql.utils import is_remote
+from urllib.parse import urlparse
 
-if os.environ.get("SPARK_EXECUTOR_URI"):
-    SparkContext.setSystemProperty("spark.executor.uri", os.environ["SPARK_EXECUTOR_URI"])
+if getattr(builtins, "__IPYTHON__", False):
+    # (Only) during PYTHONSTARTUP execution, IPython temporarily adds the parent
+    # directory of the script into the Python path, which results in searching
+    # packages under `pyspark` directory.
+    # For example, `import pandas` attempts to import `pyspark.pandas`, see also SPARK-42266.
+    if "__file__" in globals():
+        parent_dir = os.path.abspath(os.path.dirname(__file__))
+        if parent_dir in sys.path:
+            sys.path.remove(parent_dir)
 
-SparkContext._ensure_initialized()
 
-try:
-    spark = SparkSession._create_shell_session()
-except Exception:
-    import sys
-    import traceback
-    warnings.warn("Failed to initialize Spark session.")
-    traceback.print_exc(file=sys.stderr)
-    sys.exit(1)
+if is_remote():
+    try:
+        # Creates pyspark.sql.connect.SparkSession.
+        spark = SparkSession.builder.getOrCreate()
+    except Exception:
+        import sys
+        import traceback
 
-sc = spark.sparkContext
+        warnings.warn("Failed to initialize Spark session.")
+        traceback.print_exc(file=sys.stderr)
+        sys.exit(1)
+    version = pyspark.__version__
+    sc = None
+else:
+    if os.environ.get("SPARK_EXECUTOR_URI"):
+        SparkContext.setSystemProperty("spark.executor.uri", os.environ["SPARK_EXECUTOR_URI"])
+
+    SparkContext._ensure_initialized()
+
+    try:
+        spark = SparkSession._create_shell_session()
+    except Exception:
+        import sys
+        import traceback
+
+        warnings.warn("Failed to initialize Spark session.")
+        traceback.print_exc(file=sys.stderr)
+        sys.exit(1)
+
+    sc = spark.sparkContext
+    atexit.register((lambda sc: lambda: sc.stop())(sc))
+
+    # for compatibility
+    sqlContext = SQLContext._get_or_create(sc)
+    sqlCtx = sqlContext
+    version = sc.version
+
 sql = spark.sql
-atexit.register(lambda: sc.stop())
 
-# for compatibility
-sqlContext = spark._wrapped
-sqlCtx = sqlContext
-
-print(r"""Welcome to
+print(
+    r"""Welcome to
       ____              __
      / __/__  ___ _____/ /__
     _\ \/ _ \/ _ `/ __/  '_/
    /__ / .__/\_,_/_/ /_/\_\   version %s
       /_/
-""" % sc.version)
-print("Using Python version %s (%s, %s)" % (
-    platform.python_version(),
-    platform.python_build()[0],
-    platform.python_build()[1]))
+"""
+    % version
+)
+print(
+    "Using Python version %s (%s, %s)"
+    % (platform.python_version(), platform.python_build()[0], platform.python_build()[1])
+)
+if is_remote():
+    url = os.environ.get("SPARK_REMOTE", None)
+    assert url is not None
+    if url.startswith("local"):
+        url = "sc://localhost"  # only for display in the console.
+    print("Client connected to the Spark Connect server at %s" % urlparse(url).netloc)
+else:
+    print("Spark context Web UI available at %s" % (sc.uiWebUrl))  # type: ignore[union-attr]
+    print(
+        "Spark context available as 'sc' (master = %s, app id = %s)."
+        % (sc.master, sc.applicationId)  # type: ignore[union-attr]
+    )
+
 print("SparkSession available as 'spark'.")
 
 # The ./bin/pyspark script stores the old PYTHONSTARTUP value in OLD_PYTHONSTARTUP,
 # which allows us to execute the user's PYTHONSTARTUP file:
-_pythonstartup = os.environ.get('OLD_PYTHONSTARTUP')
+_pythonstartup = os.environ.get("OLD_PYTHONSTARTUP")
 if _pythonstartup and os.path.isfile(_pythonstartup):
     with open(_pythonstartup) as f:
-        code = compile(f.read(), _pythonstartup, 'exec')
+        code = compile(f.read(), _pythonstartup, "exec")
         exec(code)

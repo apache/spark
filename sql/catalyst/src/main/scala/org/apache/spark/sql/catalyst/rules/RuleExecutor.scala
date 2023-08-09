@@ -17,12 +17,13 @@
 
 package org.apache.spark.sql.catalyst.rules
 
+import org.apache.spark.SparkException
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.QueryPlanningTracker
-import org.apache.spark.sql.catalyst.errors.TreeNodeException
 import org.apache.spark.sql.catalyst.trees.TreeNode
 import org.apache.spark.sql.catalyst.util.DateTimeConstants.NANOS_PER_SECOND
 import org.apache.spark.sql.catalyst.util.sideBySide
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.util.Utils
 
@@ -41,6 +42,73 @@ object RuleExecutor {
 
   def getCurrentMetrics(): QueryExecutionMetrics = {
     queryExecutionMeter.getMetrics()
+  }
+}
+
+class PlanChangeLogger[TreeType <: TreeNode[_]] extends Logging {
+
+  private val logLevel = SQLConf.get.planChangeLogLevel
+
+  private val logRules = SQLConf.get.planChangeRules.map(Utils.stringToSeq)
+
+  private val logBatches = SQLConf.get.planChangeBatches.map(Utils.stringToSeq)
+
+  def logRule(ruleName: String, oldPlan: TreeType, newPlan: TreeType): Unit = {
+    if (!newPlan.fastEquals(oldPlan)) {
+      if (logRules.isEmpty || logRules.get.contains(ruleName)) {
+        def message(): String = {
+          s"""
+             |=== Applying Rule $ruleName ===
+             |${sideBySide(oldPlan.treeString, newPlan.treeString).mkString("\n")}
+           """.stripMargin
+        }
+
+        logBasedOnLevel(message)
+      }
+    }
+  }
+
+  def logBatch(batchName: String, oldPlan: TreeType, newPlan: TreeType): Unit = {
+    if (logBatches.isEmpty || logBatches.get.contains(batchName)) {
+      def message(): String = {
+        if (!oldPlan.fastEquals(newPlan)) {
+          s"""
+             |=== Result of Batch $batchName ===
+             |${sideBySide(oldPlan.treeString, newPlan.treeString).mkString("\n")}
+          """.stripMargin
+        } else {
+          s"Batch $batchName has no effect."
+        }
+      }
+
+      logBasedOnLevel(message)
+    }
+  }
+
+  def logMetrics(metrics: QueryExecutionMetrics): Unit = {
+    val totalTime = metrics.time / NANOS_PER_SECOND.toDouble
+    val totalTimeEffective = metrics.timeEffective / NANOS_PER_SECOND.toDouble
+    val message =
+      s"""
+         |=== Metrics of Executed Rules ===
+         |Total number of runs: ${metrics.numRuns}
+         |Total time: $totalTime seconds
+         |Total number of effective runs: ${metrics.numEffectiveRuns}
+         |Total time of effective runs: $totalTimeEffective seconds
+      """.stripMargin
+
+    logBasedOnLevel(message)
+  }
+
+  private def logBasedOnLevel(f: => String): Unit = {
+    logLevel match {
+      case "TRACE" => logTrace(f)
+      case "DEBUG" => logDebug(f)
+      case "INFO" => logInfo(f)
+      case "WARN" => logWarning(f)
+      case "ERROR" => logError(f)
+      case _ => logTrace(f)
+    }
   }
 }
 
@@ -80,16 +148,18 @@ abstract class RuleExecutor[TreeType <: TreeNode[_]] extends Logging {
   /** Defines a sequence of rule batches, to be overridden by the implementation. */
   protected def batches: Seq[Batch]
 
-  /** Once batches that are blacklisted in the idempotence checker */
-  protected val blacklistedOnceBatches: Set[String] = Set.empty
+  /** Once batches that are excluded in the idempotence checker */
+  protected val excludedOnceBatches: Set[String] = Set.empty
 
   /**
-   * Defines a check function that checks for structural integrity of the plan after the execution
-   * of each rule. For example, we can check whether a plan is still resolved after each rule in
-   * `Optimizer`, so we can catch rules that return invalid plans. The check function returns
-   * `false` if the given plan doesn't pass the structural integrity check.
+   * Defines a validate function that validates the plan changes after the execution of each rule,
+   * to make sure these rules make valid changes to the plan. For example, we can check whether
+   * a plan is still resolved after each rule in `Optimizer`, so that we can catch rules that
+   * turn the plan into unresolved.
    */
-  protected def isPlanIntegral(plan: TreeType): Boolean = true
+  protected def validatePlanChanges(
+      previousPlan: TreeType,
+      currentPlan: TreeType): Option[String] = None
 
   /**
    * Util method for checking whether a plan remains the same if re-optimized.
@@ -97,12 +167,8 @@ abstract class RuleExecutor[TreeType <: TreeNode[_]] extends Logging {
   private def checkBatchIdempotence(batch: Batch, plan: TreeType): Unit = {
     val reOptimized = batch.rules.foldLeft(plan) { case (p, rule) => rule(p) }
     if (!plan.fastEquals(reOptimized)) {
-      val message =
-        s"""
-           |Once strategy's idempotence is broken for batch ${batch.name}
-           |${sideBySide(plan.treeString, reOptimized.treeString).mkString("\n")}
-          """.stripMargin
-      throw new TreeNodeException(reOptimized, message, null)
+      throw QueryExecutionErrors.onceStrategyIdempotenceIsBrokenForBatchError(
+        batch.name, plan, reOptimized)
     }
   }
 
@@ -124,15 +190,22 @@ abstract class RuleExecutor[TreeType <: TreeNode[_]] extends Logging {
   def execute(plan: TreeType): TreeType = {
     var curPlan = plan
     val queryExecutionMetrics = RuleExecutor.queryExecutionMeter
-    val planChangeLogger = new PlanChangeLogger()
+    val planChangeLogger = new PlanChangeLogger[TreeType]()
     val tracker: Option[QueryPlanningTracker] = QueryPlanningTracker.get
     val beforeMetrics = RuleExecutor.getCurrentMetrics()
 
-    // Run the structural integrity checker against the initial input
-    if (!isPlanIntegral(plan)) {
-      val message = "The structural integrity of the input plan is broken in " +
-        s"${this.getClass.getName.stripSuffix("$")}."
-      throw new TreeNodeException(plan, message, null)
+    val enableValidation = SQLConf.get.getConf(SQLConf.PLAN_CHANGE_VALIDATION)
+    // Validate the initial input.
+    if (Utils.isTesting || enableValidation) {
+      validatePlanChanges(plan, plan) match {
+        case Some(msg) =>
+          val ruleExecutorName = this.getClass.getName.stripSuffix("$")
+          throw new SparkException(
+            errorClass = "PLAN_VALIDATION_FAILED_RULE_EXECUTOR",
+            messageParameters = Map("ruleExecutor" -> ruleExecutorName, "reason" -> msg),
+            cause = null)
+        case _ =>
+      }
     }
 
     batches.foreach { batch =>
@@ -154,19 +227,26 @@ abstract class RuleExecutor[TreeType <: TreeNode[_]] extends Logging {
               queryExecutionMetrics.incNumEffectiveExecution(rule.ruleName)
               queryExecutionMetrics.incTimeEffectiveExecutionBy(rule.ruleName, runTime)
               planChangeLogger.logRule(rule.ruleName, plan, result)
+              // Run the plan changes validation after each rule.
+              if (Utils.isTesting || enableValidation) {
+                validatePlanChanges(plan, result) match {
+                  case Some(msg) =>
+                    throw new SparkException(
+                      errorClass = "PLAN_VALIDATION_FAILED_RULE_IN_BATCH",
+                      messageParameters = Map(
+                        "rule" -> rule.ruleName,
+                        "batch" -> batch.name,
+                        "reason" -> msg),
+                      cause = null)
+                  case _ =>
+                }
+              }
             }
             queryExecutionMetrics.incExecutionTimeBy(rule.ruleName, runTime)
             queryExecutionMetrics.incNumExecution(rule.ruleName)
 
             // Record timing information using QueryPlanningTracker
             tracker.foreach(_.recordRuleInvocation(rule.ruleName, runTime, effective))
-
-            // Run the structural integrity checker against the plan after each rule.
-            if (!isPlanIntegral(result)) {
-              val message = s"After applying rule ${rule.ruleName} in batch ${batch.name}, " +
-                "the structural integrity of the plan is broken."
-              throw new TreeNodeException(result, message, null)
-            }
 
             result
         }
@@ -182,14 +262,14 @@ abstract class RuleExecutor[TreeType <: TreeNode[_]] extends Logging {
             val message = s"Max iterations (${iteration - 1}) reached for batch ${batch.name}" +
               s"$endingMsg"
             if (Utils.isTesting || batch.strategy.errorOnExceed) {
-              throw new TreeNodeException(curPlan, message, null)
+              throw new RuntimeException(message)
             } else {
               logWarning(message)
             }
           }
           // Check idempotence for Once batches.
           if (batch.strategy == Once &&
-            Utils.isTesting && !blacklistedOnceBatches.contains(batch.name)) {
+            Utils.isTesting && !excludedOnceBatches.contains(batch.name)) {
             checkBatchIdempotence(batch, curPlan)
           }
           continue = false
@@ -208,70 +288,5 @@ abstract class RuleExecutor[TreeType <: TreeNode[_]] extends Logging {
     planChangeLogger.logMetrics(RuleExecutor.getCurrentMetrics() - beforeMetrics)
 
     curPlan
-  }
-
-  private class PlanChangeLogger {
-
-    private val logLevel = SQLConf.get.optimizerPlanChangeLogLevel
-
-    private val logRules = SQLConf.get.optimizerPlanChangeRules.map(Utils.stringToSeq)
-
-    private val logBatches = SQLConf.get.optimizerPlanChangeBatches.map(Utils.stringToSeq)
-
-    def logRule(ruleName: String, oldPlan: TreeType, newPlan: TreeType): Unit = {
-      if (logRules.isEmpty || logRules.get.contains(ruleName)) {
-        def message(): String = {
-          s"""
-             |=== Applying Rule ${ruleName} ===
-             |${sideBySide(oldPlan.treeString, newPlan.treeString).mkString("\n")}
-           """.stripMargin
-        }
-
-        logBasedOnLevel(message)
-      }
-    }
-
-    def logBatch(batchName: String, oldPlan: TreeType, newPlan: TreeType): Unit = {
-      if (logBatches.isEmpty || logBatches.get.contains(batchName)) {
-        def message(): String = {
-          if (!oldPlan.fastEquals(newPlan)) {
-            s"""
-               |=== Result of Batch ${batchName} ===
-               |${sideBySide(oldPlan.treeString, newPlan.treeString).mkString("\n")}
-            """.stripMargin
-          } else {
-            s"Batch ${batchName} has no effect."
-          }
-        }
-
-        logBasedOnLevel(message)
-      }
-    }
-
-    def logMetrics(metrics: QueryExecutionMetrics): Unit = {
-      val totalTime = metrics.time / NANOS_PER_SECOND.toDouble
-      val totalTimeEffective = metrics.timeEffective / NANOS_PER_SECOND.toDouble
-      val message =
-        s"""
-           |=== Metrics of Executed Rules ===
-           |Total number of runs: ${metrics.numRuns}
-           |Total time: ${totalTime} seconds
-           |Total number of effective runs: ${metrics.numEffectiveRuns}
-           |Total time of effective runs: ${totalTimeEffective} seconds
-        """.stripMargin
-
-      logBasedOnLevel(message)
-    }
-
-    private def logBasedOnLevel(f: => String): Unit = {
-      logLevel match {
-        case "TRACE" => logTrace(f)
-        case "DEBUG" => logDebug(f)
-        case "INFO" => logInfo(f)
-        case "WARN" => logWarning(f)
-        case "ERROR" => logError(f)
-        case _ => logTrace(f)
-      }
-    }
   }
 }

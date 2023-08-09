@@ -16,7 +16,6 @@
  */
 package org.apache.spark.sql.connector
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.SparkConf
@@ -56,7 +55,7 @@ class DummyReadOnlyFileTable extends Table with SupportsRead {
   }
 
   override def capabilities(): java.util.Set[TableCapability] =
-    Set(TableCapability.BATCH_READ, TableCapability.ACCEPT_ANY_SCHEMA).asJava
+    java.util.EnumSet.of(TableCapability.BATCH_READ, TableCapability.ACCEPT_ANY_SCHEMA)
 }
 
 class DummyWriteOnlyFileDataSourceV2 extends FileDataSourceV2 {
@@ -79,7 +78,7 @@ class DummyWriteOnlyFileTable extends Table with SupportsWrite {
     throw new AnalysisException("Dummy file writer")
 
   override def capabilities(): java.util.Set[TableCapability] =
-    Set(TableCapability.BATCH_WRITE, TableCapability.ACCEPT_ANY_SCHEMA).asJava
+    java.util.EnumSet.of(TableCapability.BATCH_WRITE, TableCapability.ACCEPT_ANY_SCHEMA)
 }
 
 class FileDataSourceV2FallBackSuite extends QueryTest with SharedSparkSession {
@@ -178,14 +177,14 @@ class FileDataSourceV2FallBackSuite extends QueryTest with SharedSparkSession {
             inputData.write.format(format).save(path.getCanonicalPath)
             sparkContext.listenerBus.waitUntilEmpty()
             assert(commands.length == 1)
-            assert(commands.head._1 == "save")
+            assert(commands.head._1 == "command")
             assert(commands.head._2.isInstanceOf[InsertIntoHadoopFsRelationCommand])
             assert(commands.head._2.asInstanceOf[InsertIntoHadoopFsRelationCommand]
               .fileFormat.isInstanceOf[ParquetFileFormat])
             val df = spark.read.format(format).load(path.getCanonicalPath)
             checkAnswer(df, inputData.toDF())
             assert(
-              df.queryExecution.executedPlan.find(_.isInstanceOf[FileSourceScanExec]).isDefined)
+              df.queryExecution.executedPlan.exists(_.isInstanceOf[FileSourceScanExec]))
           }
         } finally {
           spark.listenerManager.unregister(listener)

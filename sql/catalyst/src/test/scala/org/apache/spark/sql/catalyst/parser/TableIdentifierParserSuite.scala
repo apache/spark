@@ -16,12 +16,10 @@
  */
 package org.apache.spark.sql.catalyst.parser
 
-import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.plans.SQLHelper
+import org.apache.spark.sql.catalyst.{SQLKeywordUtils, TableIdentifier}
 import org.apache.spark.sql.internal.SQLConf
 
-class TableIdentifierParserSuite extends SparkFunSuite with SQLHelper {
+class TableIdentifierParserSuite extends SQLKeywordUtils {
   import CatalystSqlParser._
 
   // Add "$elem$", "$value$" & "$key$"
@@ -285,333 +283,6 @@ class TableIdentifierParserSuite extends SparkFunSuite with SQLHelper {
     "where",
     "with")
 
-  // All the keywords in `docs/sql-keywords.md` are listed below:
-  val allCandidateKeywords = Set(
-    "add",
-    "after",
-    "all",
-    "alter",
-    "analyze",
-    "and",
-    "anti",
-    "any",
-    "archive",
-    "array",
-    "as",
-    "asc",
-    "at",
-    "authorization",
-    "between",
-    "both",
-    "bucket",
-    "buckets",
-    "by",
-    "cache",
-    "cascade",
-    "case",
-    "cast",
-    "change",
-    "check",
-    "clear",
-    "cluster",
-    "clustered",
-    "codegen",
-    "collate",
-    "collection",
-    "column",
-    "columns",
-    "comment",
-    "commit",
-    "compact",
-    "compactions",
-    "compute",
-    "concatenate",
-    "constraint",
-    "cost",
-    "create",
-    "cross",
-    "cube",
-    "current",
-    "current_date",
-    "current_time",
-    "current_timestamp",
-    "current_user",
-    "data",
-    "database",
-    "databases",
-    "day",
-    "dbproperties",
-    "defined",
-    "delete",
-    "delimited",
-    "desc",
-    "describe",
-    "dfs",
-    "directories",
-    "directory",
-    "distinct",
-    "distribute",
-    "div",
-    "drop",
-    "else",
-    "end",
-    "escape",
-    "escaped",
-    "except",
-    "exchange",
-    "exists",
-    "explain",
-    "export",
-    "extended",
-    "external",
-    "extract",
-    "false",
-    "fetch",
-    "fields",
-    "fileformat",
-    "first",
-    "following",
-    "for",
-    "foreign",
-    "format",
-    "formatted",
-    "from",
-    "full",
-    "function",
-    "functions",
-    "global",
-    "grant",
-    "group",
-    "grouping",
-    "having",
-    "hour",
-    "if",
-    "ignore",
-    "import",
-    "in",
-    "index",
-    "indexes",
-    "inner",
-    "inpath",
-    "inputformat",
-    "insert",
-    "intersect",
-    "interval",
-    "into",
-    "is",
-    "items",
-    "join",
-    "keys",
-    "last",
-    "lateral",
-    "lazy",
-    "leading",
-    "left",
-    "like",
-    "limit",
-    "lines",
-    "list",
-    "load",
-    "local",
-    "location",
-    "lock",
-    "locks",
-    "logical",
-    "macro",
-    "map",
-    "minus",
-    "minute",
-    "month",
-    "msck",
-    "namespaces",
-    "natural",
-    "no",
-    "not",
-    "null",
-    "nulls",
-    "of",
-    "on",
-    "only",
-    "option",
-    "options",
-    "or",
-    "order",
-    "out",
-    "outer",
-    "outputformat",
-    "over",
-    "overlaps",
-    "overlay",
-    "overwrite",
-    "partition",
-    "partitioned",
-    "partitions",
-    "percent",
-    "pivot",
-    "placing",
-    "position",
-    "preceding",
-    "primary",
-    "principals",
-    "purge",
-    "query",
-    "range",
-    "recordreader",
-    "recordwriter",
-    "recover",
-    "reduce",
-    "references",
-    "refresh",
-    "rename",
-    "repair",
-    "replace",
-    "reset",
-    "restrict",
-    "revoke",
-    "right",
-    "rlike",
-    "role",
-    "roles",
-    "rollback",
-    "rollup",
-    "row",
-    "rows",
-    "schema",
-    "second",
-    "select",
-    "semi",
-    "separated",
-    "serde",
-    "serdeproperties",
-    "session_user",
-    "set",
-    "sets",
-    "show",
-    "skewed",
-    "some",
-    "sort",
-    "sorted",
-    "start",
-    "statistics",
-    "stored",
-    "stratify",
-    "struct",
-    "substr",
-    "substring",
-    "table",
-    "tables",
-    "tablesample",
-    "tblproperties",
-    "temporary",
-    "terminated",
-    "then",
-    "to",
-    "touch",
-    "trailing",
-    "transaction",
-    "transactions",
-    "transform",
-    "true",
-    "truncate",
-    "unarchive",
-    "unbounded",
-    "uncache",
-    "union",
-    "unique",
-    "unknown",
-    "unlock",
-    "unset",
-    "use",
-    "user",
-    "using",
-    "values",
-    "view",
-    "views",
-    "when",
-    "where",
-    "window",
-    "with",
-    "year")
-
-  val reservedKeywordsInAnsiMode = Set(
-    "all",
-    "and",
-    "anti",
-    "any",
-    "as",
-    "authorization",
-    "both",
-    "case",
-    "cast",
-    "check",
-    "collate",
-    "column",
-    "constraint",
-    "create",
-    "cross",
-    "current_date",
-    "current_time",
-    "current_timestamp",
-    "current_user",
-    "day",
-    "distinct",
-    "else",
-    "end",
-    "escape",
-    "except",
-    "false",
-    "fetch",
-    "for",
-    "foreign",
-    "from",
-    "full",
-    "grant",
-    "group",
-    "having",
-    "hour",
-    "in",
-    "inner",
-    "intersect",
-    "into",
-    "join",
-    "is",
-    "leading",
-    "left",
-    "minute",
-    "month",
-    "natural",
-    "not",
-    "null",
-    "on",
-    "only",
-    "or",
-    "order",
-    "outer",
-    "overlaps",
-    "primary",
-    "references",
-    "right",
-    "select",
-    "semi",
-    "session_user",
-    "minus",
-    "second",
-    "some",
-    "table",
-    "then",
-    "to",
-    "trailing",
-    "union",
-    "unique",
-    "unknown",
-    "user",
-    "using",
-    "when",
-    "where",
-    "with",
-    "year")
-
-  val nonReservedKeywordsInAnsiMode = allCandidateKeywords -- reservedKeywordsInAnsiMode
 
   test("table identifier") {
     // Regular names.
@@ -619,8 +290,17 @@ class TableIdentifierParserSuite extends SparkFunSuite with SQLHelper {
     assert(TableIdentifier("q", Option("d")) === parseTableIdentifier("d.q"))
 
     // Illegal names.
-    Seq("", "d.q.g", "t:", "${some.var.x}", "tab:1").foreach { identifier =>
-      intercept[ParseException](parseTableIdentifier(identifier))
+    Seq(
+      "" -> ("PARSE_EMPTY_STATEMENT", Map.empty[String, String]),
+      "d.q.g" -> ("PARSE_SYNTAX_ERROR", Map("error" -> "'.'", "hint" -> "")),
+      "t:" -> ("PARSE_SYNTAX_ERROR", Map("error" -> "':'", "hint" -> ": extra input ':'")),
+      "${some.var.x}" -> ("PARSE_SYNTAX_ERROR", Map("error" -> "'$'", "hint" -> "")),
+      "tab:1" -> ("PARSE_SYNTAX_ERROR", Map("error" -> "':'", "hint" -> ""))
+    ).foreach { case (identifier, (errorClass, parameters)) =>
+      checkError(
+        exception = intercept[ParseException](parseTableIdentifier(identifier)),
+        errorClass = errorClass,
+        parameters = parameters)
     }
   }
 
@@ -633,16 +313,26 @@ class TableIdentifierParserSuite extends SparkFunSuite with SQLHelper {
   }
 
   test("table identifier - reserved/non-reserved keywords if ANSI mode enabled") {
-    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true",
+      SQLConf.ENFORCE_RESERVED_KEYWORDS.key -> "true") {
       reservedKeywordsInAnsiMode.foreach { keyword =>
-        val errMsg = intercept[ParseException] {
-          parseTableIdentifier(keyword)
-        }.getMessage
-        assert(errMsg.contains("no viable alternative at input"))
+        checkError(
+          exception = intercept[ParseException](parseTableIdentifier(keyword)),
+          errorClass = "PARSE_SYNTAX_ERROR",
+          parameters = Map("error" -> s"'$keyword'", "hint" -> ""))
         assert(TableIdentifier(keyword) === parseTableIdentifier(s"`$keyword`"))
         assert(TableIdentifier(keyword, Option("db")) === parseTableIdentifier(s"db.`$keyword`"))
       }
       nonReservedKeywordsInAnsiMode.foreach { keyword =>
+        assert(TableIdentifier(keyword) === parseTableIdentifier(s"$keyword"))
+        assert(TableIdentifier(keyword, Option("db")) === parseTableIdentifier(s"db.$keyword"))
+      }
+    }
+
+    withSQLConf(
+      SQLConf.ANSI_ENABLED.key -> "true",
+      SQLConf.ENFORCE_RESERVED_KEYWORDS.key -> "false") {
+      reservedKeywordsInAnsiMode.foreach { keyword =>
         assert(TableIdentifier(keyword) === parseTableIdentifier(s"$keyword"))
         assert(TableIdentifier(keyword, Option("db")) === parseTableIdentifier(s"db.$keyword"))
       }
@@ -682,8 +372,11 @@ class TableIdentifierParserSuite extends SparkFunSuite with SQLHelper {
     val complexName = TableIdentifier("`weird`table`name", Some("`d`b`1"))
     assert(complexName === parseTableIdentifier("```d``b``1`.```weird``table``name`"))
     assert(complexName === parseTableIdentifier(complexName.quotedString))
-    intercept[ParseException](parseTableIdentifier(complexName.unquotedString))
-    // Table identifier contains countious backticks should be treated correctly.
+    checkError(
+      exception = intercept[ParseException](parseTableIdentifier(complexName.unquotedString)),
+      errorClass = "PARSE_SYNTAX_ERROR",
+      parameters = Map("error" -> "'b'", "hint" -> ""))
+    // Table identifier contains continuous backticks should be treated correctly.
     val complexName2 = TableIdentifier("x``y", Some("d``b"))
     assert(complexName2 === parseTableIdentifier(complexName2.quotedString))
   }

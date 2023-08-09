@@ -54,7 +54,7 @@ setMethod("show", "WindowSpec",
 #' Defines the partitioning columns in a WindowSpec.
 #'
 #' @param x a WindowSpec.
-#' @param col a column to partition on (desribed by the name or Column).
+#' @param col a column to partition on (described by the name or Column).
 #' @param ... additional column(s) to partition on.
 #' @return A WindowSpec.
 #' @rdname partitionBy
@@ -135,7 +135,7 @@ setMethod("orderBy",
 #' An offset indicates the number of rows above or below the current row, the frame for the
 #' current row starts or ends. For instance, given a row based sliding frame with a lower bound
 #' offset of -1 and a upper bound offset of +2. The frame for row with index 5 would range from
-#' index 4 to index 6.
+#' index 4 to index 7.
 #'
 #' @param x a WindowSpec
 #' @param start boundary start, inclusive.
@@ -231,7 +231,7 @@ setMethod("rangeBetween",
 #' @rdname over
 #' @name over
 #' @aliases over,Column,WindowSpec-method
-#' @family colum_func
+#' @family column_func
 #' @examples
 #' \dontrun{
 #'   df <- createDataFrame(mtcars)

@@ -18,7 +18,8 @@
 package org.apache.spark.shuffle
 
 import org.apache.spark.network.buffer.ManagedBuffer
-import org.apache.spark.storage.BlockId
+import org.apache.spark.network.shuffle.MergedBlockMeta
+import org.apache.spark.storage.{BlockId, ShuffleMergedBlockId}
 
 private[spark]
 /**
@@ -39,6 +40,28 @@ trait ShuffleBlockResolver {
    * If the data for that block is not available, throws an unspecified exception.
    */
   def getBlockData(blockId: BlockId, dirs: Option[Array[String]] = None): ManagedBuffer
+
+  /**
+   * Retrieve a list of BlockIds for a given shuffle map. Used to delete shuffle files
+   * from the external shuffle service after the associated executor has been removed.
+   */
+  def getBlocksForShuffle(shuffleId: Int, mapId: Long): Seq[BlockId] = {
+    Seq.empty
+  }
+
+  /**
+   * Retrieve the data for the specified merged shuffle block as multiple chunks.
+   */
+  def getMergedBlockData(
+      blockId: ShuffleMergedBlockId,
+      dirs: Option[Array[String]]): Seq[ManagedBuffer]
+
+  /**
+   * Retrieve the meta data for the specified merged shuffle block.
+   */
+  def getMergedBlockMeta(
+      blockId: ShuffleMergedBlockId,
+      dirs: Option[Array[String]]): MergedBlockMeta
 
   def stop(): Unit
 }

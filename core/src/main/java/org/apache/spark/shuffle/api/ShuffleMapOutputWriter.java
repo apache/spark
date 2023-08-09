@@ -20,6 +20,7 @@ package org.apache.spark.shuffle.api;
 import java.io.IOException;
 
 import org.apache.spark.annotation.Private;
+import org.apache.spark.shuffle.api.metadata.MapOutputCommitMessage;
 
 /**
  * :: Private ::
@@ -58,12 +59,24 @@ public interface ShuffleMapOutputWriter {
    * available to downstream reduce tasks. If this method throws any exception, this module's
    * {@link #abort(Throwable)} method will be invoked before propagating the exception.
    * <p>
+   * Shuffle extensions which care about the cause of shuffle data corruption should store
+   * the checksums properly. When corruption happens, Spark would provide the checksum
+   * of the fetched partition to the shuffle extension to help diagnose the cause of corruption.
+   * <p>
    * This can also close any resources and clean up temporary state if necessary.
    * <p>
-   * The returned array should contain, for each partition from (0) to (numPartitions - 1), the
-   * number of bytes written by the partition writer for that partition id.
+   * The returned commit message is a structure with two components:
+   * <p>
+   * 1) An array of longs, which should contain, for each partition from (0) to
+   *    (numPartitions - 1), the number of bytes written by the partition writer
+   *    for that partition id.
+   * <p>
+   * 2) An optional metadata blob that can be used by shuffle readers.
+   *
+   * @param checksums The checksum values for each partition (where checksum index is equivalent to
+   *                  partition id) if shuffle checksum enabled. Otherwise, it's empty.
    */
-  long[] commitAllPartitions() throws IOException;
+  MapOutputCommitMessage commitAllPartitions(long[] checksums) throws IOException;
 
   /**
    * Abort all of the writes done by any writers returned by {@link #getPartitionWriter(int)}.

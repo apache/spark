@@ -40,7 +40,7 @@ class MetricsReporter(
   // together in Ganglia as a single metric group
   registerGauge("inputRate-total", _.inputRowsPerSecond, 0.0)
   registerGauge("processingRate-total", _.processedRowsPerSecond, 0.0)
-  registerGauge("latency", _.durationMs.get("triggerExecution").longValue(), 0L)
+  registerGauge("latency", _.durationMs.getOrDefault("triggerExecution", 0L).longValue(), 0L)
 
   private val timestampFormat = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'") // ISO8601
   timestampFormat.setTimeZone(DateTimeUtils.getTimeZone("UTC"))

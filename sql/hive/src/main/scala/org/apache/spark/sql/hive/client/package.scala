@@ -100,13 +100,16 @@ package object client {
         "org.apache.curator:*",
         "org.pentaho:pentaho-aggdesigner-algorithm"))
 
-    // Since HIVE-14496, Hive materialized view need calcite-core.
+    // Since HIVE-23980, calcite-core included in Hive package jar.
     // For spark, only VersionsSuite currently creates a hive materialized view for testing.
-    case object v2_3 extends HiveVersion("2.3.7",
-      exclusions = Seq("org.apache.calcite:calcite-druid",
+    case object v2_3 extends HiveVersion("2.3.9",
+      exclusions = Seq("org.apache.calcite:calcite-core",
+        "org.apache.calcite:calcite-druid",
         "org.apache.calcite.avatica:avatica",
+        "com.fasterxml.jackson.core:*",
         "org.apache.curator:*",
-        "org.pentaho:pentaho-aggdesigner-algorithm"))
+        "org.pentaho:pentaho-aggdesigner-algorithm",
+        "org.apache.hive:hive-vector-code-gen"))
 
     // Since Hive 3.0, HookUtils uses org.apache.logging.log4j.util.Strings
     // Since HIVE-14496, Hive.java uses calcite-core
@@ -114,19 +117,19 @@ package object client {
       extraDeps = Seq("org.apache.logging.log4j:log4j-api:2.10.0",
         "org.apache.derby:derby:10.14.1.0"),
       exclusions = Seq("org.apache.calcite:calcite-druid",
-        "org.apache.calcite.avatica:avatica",
         "org.apache.curator:*",
-        "org.pentaho:pentaho-aggdesigner-algorithm"))
+        "org.pentaho:pentaho-aggdesigner-algorithm",
+        "org.apache.hive:hive-vector-code-gen"))
 
     // Since Hive 3.0, HookUtils uses org.apache.logging.log4j.util.Strings
     // Since HIVE-14496, Hive.java uses calcite-core
-    case object v3_1 extends HiveVersion("3.1.2",
+    case object v3_1 extends HiveVersion("3.1.3",
       extraDeps = Seq("org.apache.logging.log4j:log4j-api:2.10.0",
         "org.apache.derby:derby:10.14.1.0"),
       exclusions = Seq("org.apache.calcite:calcite-druid",
-        "org.apache.calcite.avatica:avatica",
         "org.apache.curator:*",
-        "org.pentaho:pentaho-aggdesigner-algorithm"))
+        "org.pentaho:pentaho-aggdesigner-algorithm",
+        "org.apache.hive:hive-vector-code-gen"))
 
     val allSupportedHiveVersions =
       Set(v12, v13, v14, v1_0, v1_1, v1_2, v2_0, v2_1, v2_2, v2_3, v3_0, v3_1)

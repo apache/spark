@@ -27,10 +27,11 @@ import org.apache.spark.sql.internal.SQLConf
  * To run this benchmark:
  * {{{
  *   1. without sbt:
- *      bin/spark-submit --class <this class> --jars <spark core test jar> <sql core test jar>
- *   2. build/sbt "sql/test:runMain <this class>"
+ *      bin/spark-submit --class <this class>
+ *        --jars <spark core test jar>,<spark catalyst test jar> <sql core test jar>
+ *   2. build/sbt "sql/Test/runMain <this class>"
  *   3. generate result:
- *      SPARK_GENERATE_BENCHMARK_FILES=1 build/sbt "sql/test:runMain <this class>"
+ *      SPARK_GENERATE_BENCHMARK_FILES=1 build/sbt "sql/Test/runMain <this class>"
  *      Results will be written to "benchmarks/ExtractBenchmark-results.txt".
  * }}}
  */
@@ -38,7 +39,9 @@ object ExtractBenchmark extends SqlBasedBenchmark {
 
   private def doBenchmark(cardinality: Long, exprs: String*): Unit = {
     val sinceSecond = Instant.parse("2010-01-01T00:00:00Z").getEpochSecond
-    withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "true") {
+    withSQLConf(
+      SQLConf.LEGACY_INTERVAL_ENABLED.key -> "true",
+      SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "true") {
       spark
         .range(sinceSecond, sinceSecond + cardinality, 1, 1)
         .selectExpr(exprs: _*)
@@ -59,10 +62,10 @@ object ExtractBenchmark extends SqlBasedBenchmark {
   }
 
   private def castExpr(from: String): String = from match {
-    case "timestamp" => "cast(id as timestamp)"
-    case "date" => "cast(cast(id as timestamp) as date)"
-    case "interval" => "(cast(cast(id as timestamp) as date) - date'0001-01-01') + " +
-      "(cast(id as timestamp) - timestamp'1000-01-01 01:02:03.123456')"
+    case "timestamp" => "timestamp_seconds(id)"
+    case "date" => "cast(timestamp_seconds(id) as date)"
+    case "interval" => "(cast(timestamp_seconds(id) as date) - date'0001-01-01') + " +
+      "(timestamp_seconds(id) - timestamp'1000-01-01 01:02:03.123456')"
     case other => throw new IllegalArgumentException(
       s"Unsupported column type $other. Valid column types are 'timestamp' and 'date'")
   }

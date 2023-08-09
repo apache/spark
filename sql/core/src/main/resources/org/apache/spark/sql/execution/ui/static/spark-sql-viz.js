@@ -87,14 +87,14 @@ function preprocessGraphLayout(g) {
     var node = g.node(nodes[i]);
     node.padding = "5";
 
-    var firstSearator;
+    var firstSeparator;
     var secondSeparator;
     var splitter;
     if (node.isCluster) {
-      firstSearator = secondSeparator = labelSeparator;
+      firstSeparator = secondSeparator = labelSeparator;
       splitter = "\\n";
     } else {
-      firstSearator = "<span class='stageId-and-taskId-metrics'>";
+      firstSeparator = "<span class='stageId-and-taskId-metrics'>";
       secondSeparator = "</span>";
       splitter = "<br>";
     }
@@ -104,7 +104,7 @@ function preprocessGraphLayout(g) {
       if (newTexts) {
         node.label = node.label.replace(
             newTexts[0],
-            newTexts[1] + firstSearator + newTexts[2] + secondSeparator + newTexts[3]);
+            newTexts[1] + firstSeparator + newTexts[2] + secondSeparator + newTexts[3]);
       }
     });
   }

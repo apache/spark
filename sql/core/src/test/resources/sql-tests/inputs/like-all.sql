@@ -1,3 +1,5 @@
+-- test cases for like all
+
 CREATE OR REPLACE TEMPORARY VIEW like_all_table AS SELECT * FROM (VALUES
   ('google', '%oo%'),
   ('facebook', '%oo%'),
@@ -36,4 +38,4 @@ SELECT company FROM like_all_table WHERE company LIKE ALL (NULL, NULL);
 SELECT company FROM like_all_table WHERE company NOT LIKE ALL (NULL, NULL);
 
 -- negative case
-SELECT company FROM like_any_table WHERE company LIKE ALL ();
+SELECT company FROM like_all_table WHERE company LIKE ALL ();

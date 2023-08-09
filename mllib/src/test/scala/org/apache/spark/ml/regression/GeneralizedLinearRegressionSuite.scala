@@ -211,6 +211,37 @@ class GeneralizedLinearRegressionSuite extends MLTest with DefaultReadWriteTest 
     assert(model.getLink === "identity")
   }
 
+  test("GeneralizedLinearRegression validate input dataset") {
+    testInvalidRegressionLabels(new GeneralizedLinearRegression().fit(_))
+    testInvalidWeights(new GeneralizedLinearRegression().setWeightCol("weight").fit(_))
+    testInvalidVectors(new GeneralizedLinearRegression().fit(_))
+
+    // offsets contains NULL
+    val df1 = sc.parallelize(Seq(
+      (1.0, null, Vectors.dense(1.0, 2.0)),
+      (1.0, "1.0", Vectors.dense(1.0, 2.0))
+    )).toDF("label", "str_offset", "features")
+      .select(col("label"), col("str_offset").cast("double").as("offset"), col("features"))
+    val e1 = intercept[Exception](new GeneralizedLinearRegression().setOffsetCol("offset").fit(df1))
+    assert(e1.getMessage.contains("Offsets MUST NOT be Null or NaN"))
+
+    // offsets contains NaN
+    val df2 = sc.parallelize(Seq(
+      (1.0, Double.NaN, Vectors.dense(1.0, 2.0)),
+      (1.0, 1.0, Vectors.dense(1.0, 2.0))
+    )).toDF("label", "offset", "features")
+    val e2 = intercept[Exception](new GeneralizedLinearRegression().setOffsetCol("offset").fit(df2))
+    assert(e2.getMessage.contains("Offsets MUST NOT be Null or NaN"))
+
+    // offsets contains Infinity
+    val df3 = sc.parallelize(Seq(
+      (1.0, Double.PositiveInfinity, Vectors.dense(1.0, 2.0)),
+      (1.0, 1.0, Vectors.dense(1.0, 2.0))
+    )).toDF("label", "offset", "features")
+    val e3 = intercept[Exception](new GeneralizedLinearRegression().setOffsetCol("offset").fit(df3))
+    assert(e3.getMessage.contains("Offsets MUST NOT be Infinity"))
+  }
+
   test("prediction on single instance") {
     val glr = new GeneralizedLinearRegression
     val model = glr.setFamily("gaussian").setLink("identity")
@@ -494,7 +525,7 @@ class GeneralizedLinearRegressionSuite extends MLTest with DefaultReadWriteTest 
        [1] -0.0457441 -0.6833928
        [1] 1.8121235  -0.1747493  -0.5815417
 
-       R code for deivance calculation:
+       R code for deviance calculation:
        data = cbind(y=c(0,1,0,0,0,1), x1=c(18, 12, 15, 13, 15, 16), x2=c(1,0,0,2,1,1))
        summary(glm(y~x1+x2, family=poisson, data=data.frame(data)))$deviance
        [1] 3.70055
@@ -506,8 +537,6 @@ class GeneralizedLinearRegressionSuite extends MLTest with DefaultReadWriteTest 
       Vectors.dense(1.8121235, -0.1747493, -0.5815417))
 
     val residualDeviancesR = Array(3.809296, 3.70055)
-
-    import GeneralizedLinearRegression._
 
     var idx = 0
     val link = "log"
@@ -789,8 +818,6 @@ class GeneralizedLinearRegressionSuite extends MLTest with DefaultReadWriteTest 
 
     val expected = Seq(0.5108256, 0.1201443, 1.600000, 1.886792, 0.625, 0.530,
       -0.4700036, -0.6348783, 1.325782, 1.463641)
-
-    import GeneralizedLinearRegression._
 
     var idx = 0
     for (family <- GeneralizedLinearRegression.supportedFamilyNames.sortWith(_ < _)) {
@@ -1659,13 +1686,13 @@ class GeneralizedLinearRegressionSuite extends MLTest with DefaultReadWriteTest 
         .setFeaturesCol("features")
       val model = trainer.fit(dataset)
       val actual = model.summary.aic
-      assert(actual ~= expected(idx) absTol 1e-4, "Model mismatch: GLM with regParam = $regParam.")
+      assert(actual ~= expected(idx) absTol 1e-4, s"Model mismatch: GLM with regParam = $regParam.")
       idx += 1
     }
   }
 
   test("evaluate with labels that are not doubles") {
-    // Evaulate with a dataset that contains Labels not as doubles to verify correct casting
+    // Evaluate with a dataset that contains Labels not as doubles to verify correct casting
     val dataset = Seq(
       Instance(17.0, 1.0, Vectors.dense(0.0, 5.0).toSparse),
       Instance(19.0, 1.0, Vectors.dense(1.0, 7.0)),

@@ -21,9 +21,12 @@ import java.util.Collections
 
 import org.apache.spark.sql.{AnalysisException, DataFrame, Row, SaveMode}
 import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
-import org.apache.spark.sql.catalyst.plans.logical.{AppendData, LogicalPlan}
-import org.apache.spark.sql.connector.catalog.Identifier
+import org.apache.spark.sql.catalyst.plans.logical.{AppendData, CreateTableAsSelect, LogicalPlan, ReplaceTableAsSelect}
+import org.apache.spark.sql.connector.catalog.{Identifier, InMemoryTableCatalog}
+import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.execution.QueryExecution
+import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.QueryExecutionListener
 
@@ -91,7 +94,7 @@ class DataSourceV2DataFrameSuite
       assert(spark.table(t1).count() === 0)
 
       // appends are by name not by position
-      df.select('data, 'id).write.mode("append").saveAsTable(t1)
+      df.select($"data", $"id").write.mode("append").saveAsTable(t1)
       checkAnswer(spark.table(t1), df)
     }
   }
@@ -170,20 +173,94 @@ class DataSourceV2DataFrameSuite
   }
 
   test("Cannot write data with intervals to v2") {
-    withTable("testcat.table_name") {
-      val testCatalog = spark.sessionState.catalogManager.catalog("testcat").asTableCatalog
-      testCatalog.createTable(
-        Identifier.of(Array(), "table_name"),
-        new StructType().add("i", "interval"),
-        Array.empty, Collections.emptyMap[String, String])
-      val df = sql("select interval 1 day as i")
-      val v2Writer = df.writeTo("testcat.table_name")
-      val e1 = intercept[AnalysisException](v2Writer.append())
-      assert(e1.getMessage.contains(s"Cannot use interval type in the table schema."))
-      val e2 = intercept[AnalysisException](v2Writer.overwrite(df("i")))
-      assert(e2.getMessage.contains(s"Cannot use interval type in the table schema."))
-      val e3 = intercept[AnalysisException](v2Writer.overwritePartitions())
-      assert(e3.getMessage.contains(s"Cannot use interval type in the table schema."))
+    withSQLConf(SQLConf.LEGACY_INTERVAL_ENABLED.key -> "true") {
+      withTable("testcat.table_name") {
+        val testCatalog = spark.sessionState.catalogManager.catalog("testcat").asTableCatalog
+        testCatalog.createTable(
+          Identifier.of(Array(), "table_name"),
+          new StructType().add("i", "interval"),
+          Array.empty[Transform], Collections.emptyMap[String, String])
+        val df = sql(s"select interval 1 millisecond as i")
+        val v2Writer = df.writeTo("testcat.table_name")
+        checkError(
+          exception = intercept[AnalysisException](v2Writer.append()),
+          errorClass = "_LEGACY_ERROR_TEMP_1183",
+          parameters = Map.empty
+        )
+        checkError(
+          exception = intercept[AnalysisException](v2Writer.overwrite(df("i"))),
+          errorClass = "_LEGACY_ERROR_TEMP_1183",
+          parameters = Map.empty
+        )
+        checkError(
+          exception = intercept[AnalysisException](v2Writer.overwritePartitions()),
+          errorClass = "_LEGACY_ERROR_TEMP_1183",
+          parameters = Map.empty
+        )
+      }
+    }
+  }
+
+  test("options to scan v2 table should be passed to DataSourceV2Relation") {
+    val t1 = "testcat.ns1.ns2.tbl"
+    withTable(t1) {
+      val df1 = Seq((1L, "a"), (2L, "b"), (3L, "c")).toDF("id", "data")
+      df1.write.saveAsTable(t1)
+
+      val optionName = "fakeOption"
+      val df2 = spark.read
+        .option(optionName, false)
+        .table(t1)
+      val options = df2.queryExecution.analyzed.collectFirst {
+        case d: DataSourceV2Relation => d.options
+      }.get
+      assert(options.get(optionName) === "false")
+    }
+  }
+
+  test("CTAS and RTAS should take write options") {
+
+    var plan: LogicalPlan = null
+    val listener = new QueryExecutionListener {
+      override def onSuccess(funcName: String, qe: QueryExecution, durationNs: Long): Unit = {
+        plan = qe.analyzed
+      }
+      override def onFailure(funcName: String, qe: QueryExecution, exception: Exception): Unit = {}
+    }
+
+    try {
+      spark.listenerManager.register(listener)
+
+      val t1 = "testcat.ns1.ns2.tbl"
+
+      val df1 = Seq((1L, "a"), (2L, "b"), (3L, "c")).toDF("id", "data")
+      df1.write.option("option1", "20").saveAsTable(t1)
+
+      sparkContext.listenerBus.waitUntilEmpty()
+      plan match {
+        case o: CreateTableAsSelect =>
+          assert(o.writeOptions == Map("option1" -> "20"))
+        case other =>
+          fail(s"Expected to parse ${classOf[CreateTableAsSelect].getName} from query," +
+            s"got ${other.getClass.getName}: $plan")
+      }
+      checkAnswer(spark.table(t1), df1)
+
+      val df2 = Seq((1L, "d"), (2L, "e"), (3L, "f")).toDF("id", "data")
+      df2.write.option("option2", "30").mode("overwrite").saveAsTable(t1)
+
+      sparkContext.listenerBus.waitUntilEmpty()
+      plan match {
+        case o: ReplaceTableAsSelect =>
+          assert(o.writeOptions == Map("option2" -> "30"))
+        case other =>
+          fail(s"Expected to parse ${classOf[ReplaceTableAsSelect].getName} from query," +
+            s"got ${other.getClass.getName}: $plan")
+      }
+
+      checkAnswer(spark.table(t1), df2)
+    } finally {
+      spark.listenerManager.unregister(listener)
     }
   }
 }

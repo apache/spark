@@ -25,12 +25,12 @@ import org.apache.spark.sql.internal.{SessionState, SessionStateBuilder, SQLConf
  * A special `SparkSession` prepared for testing.
  */
 private[spark] class TestSparkSession(sc: SparkContext) extends SparkSession(sc) { self =>
-  def this(sparkConf: SparkConf) {
+  def this(sparkConf: SparkConf) = {
     this(new SparkContext("local[2]", "test-sql-context",
       sparkConf.set("spark.sql.testkey", "true")))
   }
 
-  def this() {
+  def this() = {
     this(new SparkConf)
   }
 
@@ -61,7 +61,13 @@ private[sql] object TestSQLContext {
   val overrideConfs: Map[String, String] =
     Map(
       // Fewer shuffle partitions to speed up testing.
-      SQLConf.SHUFFLE_PARTITIONS.key -> "5")
+      SQLConf.SHUFFLE_PARTITIONS.key -> "5",
+      // Enable parquet read field id for tests to ensure correctness
+      // By default, if Spark schema doesn't contain the `parquet.field.id` metadata,
+      // the underlying matching mechanism should behave exactly like name matching
+      // which is the existing behavior. Therefore, turning this on ensures that we didn't
+      // introduce any regression for such mixed matching mode.
+      SQLConf.PARQUET_FIELD_ID_READ_ENABLED.key -> "true")
 }
 
 private[sql] class TestSQLSessionStateBuilder(

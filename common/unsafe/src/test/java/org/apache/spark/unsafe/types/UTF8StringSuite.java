@@ -229,6 +229,10 @@ public class UTF8StringSuite {
     assertEquals(fromString("1"), fromString("1").trim());
     assertEquals(fromString("1"), fromString("1\t").trimAll());
 
+    assertEquals(fromString("1中文").toString(), fromString("1中文").trimAll().toString());
+    assertEquals(fromString("1"), fromString("1\u0003").trimAll());
+    assertEquals(fromString("1"), fromString("1\u007F").trimAll());
+
     assertEquals(fromString("hello"), fromString("  hello ").trim());
     assertEquals(fromString("hello "), fromString("  hello ").trimLeft());
     assertEquals(fromString("  hello"), fromString("  hello ").trimRight());
@@ -390,18 +394,44 @@ public class UTF8StringSuite {
     assertEquals(fromString("example"), e.substringSQL(0, Integer.MAX_VALUE));
     assertEquals(fromString("example"), e.substringSQL(1, Integer.MAX_VALUE));
     assertEquals(fromString("xample"), e.substringSQL(2, Integer.MAX_VALUE));
+    assertEquals(EMPTY_UTF8, e.substringSQL(-100, -100));
+    assertEquals(EMPTY_UTF8, e.substringSQL(-1207959552, -1207959552));
+    assertEquals(fromString("pl"), e.substringSQL(-3, 2));
+    assertEquals(EMPTY_UTF8, e.substringSQL(Integer.MIN_VALUE, 6));
   }
 
   @Test
   public void split() {
     UTF8String[] negativeAndZeroLimitCase =
       new UTF8String[]{fromString("ab"), fromString("def"), fromString("ghi"), fromString("")};
-    assertTrue(Arrays.equals(fromString("ab,def,ghi,").split(fromString(","), 0),
-      negativeAndZeroLimitCase));
-    assertTrue(Arrays.equals(fromString("ab,def,ghi,").split(fromString(","), -1),
-      negativeAndZeroLimitCase));
-    assertTrue(Arrays.equals(fromString("ab,def,ghi,").split(fromString(","), 2),
-      new UTF8String[]{fromString("ab"), fromString("def,ghi,")}));
+    assertArrayEquals(
+      negativeAndZeroLimitCase,
+      fromString("ab,def,ghi,").split(fromString(","), 0));
+    assertArrayEquals(
+      negativeAndZeroLimitCase,
+      fromString("ab,def,ghi,").split(fromString(","), -1));
+    assertArrayEquals(
+      new UTF8String[]{fromString("ab"), fromString("def,ghi,")},
+      fromString("ab,def,ghi,").split(fromString(","), 2));
+    // Split with empty pattern ignores trailing empty spaces.
+    assertArrayEquals(
+      new UTF8String[]{fromString("a"), fromString("b")},
+      fromString("ab").split(fromString(""), 0));
+    assertArrayEquals(
+      new UTF8String[]{fromString("a"), fromString("b")},
+      fromString("ab").split(fromString(""), -1));
+    assertArrayEquals(
+      new UTF8String[]{fromString("a"), fromString("b")},
+      fromString("ab").split(fromString(""), 2));
+    assertArrayEquals(
+      new UTF8String[]{fromString("a"), fromString("b")},
+      fromString("ab").split(fromString(""), 100));
+    assertArrayEquals(
+      new UTF8String[]{fromString("a")},
+      fromString("ab").split(fromString(""), 1));
+    assertArrayEquals(
+      new UTF8String[]{fromString("")},
+      fromString("").split(fromString(""), 0));
   }
 
   @Test
@@ -461,10 +491,10 @@ public class UTF8StringSuite {
     assertEquals(
       fromString("1a2s3ae"),
       fromString("translate").translate(ImmutableMap.of(
-        'r', '1',
-        'n', '2',
-        'l', '3',
-        't', '\0'
+        "r", "1",
+        "n", "2",
+        "l", "3",
+        "t", "\0"
       )));
     assertEquals(
       fromString("translate"),
@@ -472,16 +502,16 @@ public class UTF8StringSuite {
     assertEquals(
       fromString("asae"),
       fromString("translate").translate(ImmutableMap.of(
-        'r', '\0',
-        'n', '\0',
-        'l', '\0',
-        't', '\0'
+        "r", "\0",
+        "n", "\0",
+        "l", "\0",
+        "t", "\0"
       )));
     assertEquals(
       fromString("aa世b"),
       fromString("花花世界").translate(ImmutableMap.of(
-        '花', 'a',
-        '界', 'b'
+        "花", "a",
+        "界", "b"
       )));
   }
 
@@ -606,12 +636,8 @@ public class UTF8StringSuite {
 
     for (final long offset : offsets) {
       try {
-        fromAddress(test, BYTE_ARRAY_OFFSET + offset, test.length)
-            .writeTo(outputStream);
-
-        throw new IllegalStateException(Long.toString(offset));
-      } catch (ArrayIndexOutOfBoundsException e) {
-        // ignore
+        assertThrows(ArrayIndexOutOfBoundsException.class,
+          () -> fromAddress(test, BYTE_ARRAY_OFFSET + offset, test.length).writeTo(outputStream));
       } finally {
         outputStream.reset();
       }
@@ -848,8 +874,8 @@ public class UTF8StringSuite {
     };
     byte[] c = new byte[1];
 
-    for (int i = 0; i < wrongFirstBytes.length; ++i) {
-      c[0] = (byte)wrongFirstBytes[i];
+    for (int wrongFirstByte : wrongFirstBytes) {
+      c[0] = (byte) wrongFirstByte;
       assertEquals(1, fromBytes(c).numChars());
     }
   }

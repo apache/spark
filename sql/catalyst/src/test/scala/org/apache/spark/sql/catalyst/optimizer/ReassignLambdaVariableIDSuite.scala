@@ -32,7 +32,7 @@ class ReassignLambdaVariableIDSuite extends PlanTest {
   }
 
   test("basic: replace positive IDs with unique negative IDs") {
-    val testRelation = LocalRelation('col.int)
+    val testRelation = LocalRelation($"col".int)
     val var1 = LambdaVariable("a", BooleanType, true, id = 2)
     val var2 = LambdaVariable("b", BooleanType, true, id = 4)
     val query = testRelation.where(var1 && var2)
@@ -42,7 +42,7 @@ class ReassignLambdaVariableIDSuite extends PlanTest {
   }
 
   test("ignore LambdaVariable with negative IDs") {
-    val testRelation = LocalRelation('col.int)
+    val testRelation = LocalRelation($"col".int)
     val var1 = LambdaVariable("a", BooleanType, true, id = -2)
     val var2 = LambdaVariable("b", BooleanType, true, id = -4)
     val query = testRelation.where(var1 && var2)
@@ -51,7 +51,7 @@ class ReassignLambdaVariableIDSuite extends PlanTest {
   }
 
   test("fail if positive ID LambdaVariable and negative LambdaVariable both exist") {
-    val testRelation = LocalRelation('col.int)
+    val testRelation = LocalRelation($"col".int)
     val var1 = LambdaVariable("a", BooleanType, true, id = -2)
     val var2 = LambdaVariable("b", BooleanType, true, id = 4)
     val query = testRelation.where(var1 && var2)

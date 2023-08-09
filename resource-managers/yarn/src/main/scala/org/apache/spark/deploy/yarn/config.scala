@@ -17,12 +17,14 @@
 
 package org.apache.spark.deploy.yarn
 
+import java.util.Properties
 import java.util.concurrent.TimeUnit
 
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.ConfigBuilder
 import org.apache.spark.network.util.ByteUnit
 
-package object config {
+package object config extends Logging {
 
   /* Common app configuration. */
 
@@ -50,12 +52,46 @@ package object config {
       .timeConf(TimeUnit.MILLISECONDS)
       .createOptional
 
-  private[spark] val EXECUTOR_ATTEMPT_FAILURE_VALIDITY_INTERVAL_MS =
-    ConfigBuilder("spark.yarn.executor.failuresValidityInterval")
-      .doc("Interval after which Executor failures will be considered independent and not " +
-        "accumulate towards the attempt count.")
-      .version("2.0.0")
-      .timeConf(TimeUnit.MILLISECONDS)
+  private[spark] val AM_CLIENT_MODE_TREAT_DISCONNECT_AS_FAILED =
+    ConfigBuilder("spark.yarn.am.clientModeTreatDisconnectAsFailed")
+      .doc("Treat yarn-client unclean disconnects as failures. In yarn-client mode, normally the " +
+        "application will always finish with a final status of SUCCESS because in some cases, " +
+        "it is not possible to know if the Application was terminated intentionally by the user " +
+        "or if there was a real error. This config changes that behavior such that " +
+        "if the Application Master disconnects from the driver uncleanly (ie without the proper" +
+        " shutdown handshake) the application will terminate with a final status of FAILED. " +
+        "This will allow the caller to decide if it was truly a failure. Note that " +
+        "if this config is set and the user just terminate the client application badly " +
+        "it may show a status of FAILED when it wasn't really FAILED.")
+      .version("3.3.0")
+      .booleanConf
+      .createWithDefault(false)
+
+  private[spark] val AM_CLIENT_MODE_EXIT_ON_ERROR =
+    ConfigBuilder("spark.yarn.am.clientModeExitOnError")
+      .doc("In yarn-client mode, when this is true, if driver got " +
+        "application report with final status of KILLED or FAILED, " +
+        "driver will stop corresponding SparkContext and exit program with code 1. " +
+        "Note, if this is true and called from another application, it will terminate " +
+        "the parent application as well.")
+      .version("3.3.0")
+      .booleanConf
+      .createWithDefault(false)
+
+  private[spark] val AM_TOKEN_CONF_REGEX =
+    ConfigBuilder("spark.yarn.am.tokenConfRegex")
+      .doc("The value of this config is a regex expression used to grep a " +
+        "list of config entries from the job's configuration file (e.g., hdfs-site.xml) and send " +
+        "to RM, which uses them when renewing delegation tokens. A typical use case of this " +
+        "feature is to support delegation tokens in an environment where a YARN cluster needs to " +
+        "talk to multiple downstream HDFS clusters, where the YARN RM may not have configs " +
+        "(e.g., dfs.nameservices, dfs.ha.namenodes.*, dfs.namenode.rpc-address.*) to connect to " +
+        "these clusters. In this scenario, Spark users can specify the config value to be " +
+        "'^dfs.nameservices$|^dfs.namenode.rpc-address.*$|^dfs.ha.namenodes.*$' to parse " +
+        "these HDFS configs from the job's local configuration files. This config is very " +
+        "similar to 'mapreduce.job.send-token-conf'. Please check YARN-5910 for more details.")
+      .version("3.3.0")
+      .stringConf
       .createOptional
 
   private[spark] val MAX_APP_ATTEMPTS = ConfigBuilder("spark.yarn.maxAppAttempts")
@@ -74,10 +110,11 @@ package object config {
     .doc("Whether to populate Hadoop classpath from `yarn.application.classpath` and " +
       "`mapreduce.application.classpath` Note that if this is set to `false`, it requires " +
       "a `with-Hadoop` Spark distribution that bundles Hadoop runtime or user has to provide " +
-      "a Hadoop installation separately.")
+      "a Hadoop installation separately. By default, for `with-hadoop` Spark distribution, " +
+      "this is set to `false`; for `no-hadoop` distribution, this is set to `true`.")
     .version("2.4.6")
     .booleanConf
-    .createWithDefault(true)
+    .createWithDefault(isHadoopProvided())
 
   private[spark] val GATEWAY_ROOT_PATH = ConfigBuilder("spark.yarn.config.gatewayPath")
     .doc("Root of configuration paths that is present on gateway nodes, and will be replaced " +
@@ -179,12 +216,33 @@ package object config {
     .timeConf(TimeUnit.MILLISECONDS)
     .createWithDefaultString("1s")
 
+  private[spark] val REPORT_LOG_FREQUENCY = {
+    ConfigBuilder("spark.yarn.report.loggingFrequency")
+      .doc("Maximum number of application reports processed " +
+        "until the next application status is logged. " +
+        "If there is a change of state, the application status will be logged " +
+        "regardless of the number of application reports processed.")
+      .version("3.5.0")
+      .intConf
+      .checkValue(_ > 0, "logging frequency should be positive")
+      .createWithDefault(30)
+  }
+
   private[spark] val CLIENT_LAUNCH_MONITOR_INTERVAL =
     ConfigBuilder("spark.yarn.clientLaunchMonitorInterval")
       .doc("Interval between requests for status the client mode AM when starting the app.")
       .version("2.3.0")
       .timeConf(TimeUnit.MILLISECONDS)
       .createWithDefaultString("1s")
+
+  private[spark] val CLIENT_INCLUDE_DRIVER_LOGS_LINK =
+    ConfigBuilder("spark.yarn.includeDriverLogsLink")
+      .doc("In cluster mode, whether the client application report includes links to the driver "
+          + "container's logs. This requires polling the ResourceManager's REST API, so it "
+          + "places some additional load on the RM.")
+      .version("3.1.0")
+      .booleanConf
+      .createWithDefault(false)
 
   /* Shared Client-mode AM / Driver configuration. */
 
@@ -210,11 +268,6 @@ package object config {
       .version("1.2.0")
       .intConf
       .createWithDefault(25)
-
-  private[spark] val MAX_EXECUTOR_FAILURES = ConfigBuilder("spark.yarn.max.executor.failures")
-    .version("1.0.0")
-    .intConf
-    .createOptional
 
   private[spark] val MAX_REPORTER_THREAD_FAILURES =
     ConfigBuilder("spark.yarn.scheduler.reporterThread.maxFailures")
@@ -376,22 +429,57 @@ package object config {
     .stringConf
     .createOptional
 
-  /* YARN allocator-level blacklisting related config entries. */
-  private[spark] val YARN_EXECUTOR_LAUNCH_BLACKLIST_ENABLED =
-    ConfigBuilder("spark.yarn.blacklist.executor.launch.blacklisting.enabled")
-      .version("2.4.0")
+  /* YARN allocator-level excludeOnFailure related config entries. */
+  private[spark] val YARN_EXECUTOR_LAUNCH_EXCLUDE_ON_FAILURE_ENABLED =
+    ConfigBuilder("spark.yarn.executor.launch.excludeOnFailure.enabled")
+      .version("3.1.0")
+      .withAlternative("spark.yarn.blacklist.executor.launch.blacklisting.enabled")
       .booleanConf
       .createWithDefault(false)
 
-  /* Initially blacklisted YARN nodes. */
+  /* Initially excluded YARN nodes. */
   private[spark] val YARN_EXCLUDE_NODES = ConfigBuilder("spark.yarn.exclude.nodes")
     .version("3.0.0")
     .stringConf
     .toSequence
     .createWithDefault(Nil)
 
+  private[spark] val YARN_GPU_DEVICE = ConfigBuilder("spark.yarn.resourceGpuDeviceName")
+    .version("3.2.1")
+    .doc("Specify the mapping of the Spark resource type of gpu to the YARN resource "
+      + "representing a GPU. By default YARN uses yarn.io/gpu but if YARN has been "
+      + "configured with a custom resource type, this allows remapping it. "
+      + "Applies when using the <code>spark.{driver/executor}.resource.gpu.*</code> configs.")
+    .stringConf
+    .createWithDefault("yarn.io/gpu")
+
+  private[spark] val YARN_FPGA_DEVICE = ConfigBuilder("spark.yarn.resourceFpgaDeviceName")
+    .version("3.2.1")
+    .doc("Specify the mapping of the Spark resource type of fpga to the YARN resource "
+      + "representing a FPGA. By default YARN uses yarn.io/fpga but if YARN has been "
+      + "configured with a custom resource type, this allows remapping it. "
+      + "Applies when using the <code>spark.{driver/executor}.resource.fpga.*</code> configs.")
+    .stringConf
+    .createWithDefault("yarn.io/fpga")
+
   private[yarn] val YARN_EXECUTOR_RESOURCE_TYPES_PREFIX = "spark.yarn.executor.resource."
   private[yarn] val YARN_DRIVER_RESOURCE_TYPES_PREFIX = "spark.yarn.driver.resource."
   private[yarn] val YARN_AM_RESOURCE_TYPES_PREFIX = "spark.yarn.am.resource."
 
+  def isHadoopProvided(): Boolean = IS_HADOOP_PROVIDED
+
+  private lazy val IS_HADOOP_PROVIDED: Boolean = {
+    val configPath = "org/apache/spark/deploy/yarn/config.properties"
+    val propertyKey = "spark.yarn.isHadoopProvided"
+    try {
+      val prop = new Properties()
+      prop.load(ClassLoader.getSystemClassLoader.getResourceAsStream(configPath))
+      prop.getProperty(propertyKey).toBoolean
+    } catch {
+      case e: Exception =>
+        log.warn(s"Can not load the default value of `$propertyKey` from " +
+          s"`$configPath` with error, ${e.toString}. Using `false` as a default value.")
+        false
+    }
+  }
 }

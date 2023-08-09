@@ -19,22 +19,28 @@ package org.apache.spark.scheduler.cluster.k8s
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicReference
 
+import scala.collection.mutable
+
 import io.fabric8.kubernetes.api.model.{Pod, PodBuilder}
 import org.jmock.lib.concurrent.DeterministicScheduler
 import org.scalatest.BeforeAndAfter
-import scala.collection.mutable
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.deploy.k8s.Constants._
+import org.apache.spark.util.ManualClock
 
 class ExecutorPodsSnapshotsStoreSuite extends SparkFunSuite with BeforeAndAfter {
 
   private var eventBufferScheduler: DeterministicScheduler = _
   private var eventQueueUnderTest: ExecutorPodsSnapshotsStoreImpl = _
+  private var clock: ManualClock = _
 
   before {
     eventBufferScheduler = new DeterministicScheduler()
-    eventQueueUnderTest = new ExecutorPodsSnapshotsStoreImpl(eventBufferScheduler)
+    clock = new ManualClock()
+    val conf = new SparkConf()
+    eventQueueUnderTest = new ExecutorPodsSnapshotsStoreImpl(eventBufferScheduler, clock, conf)
+    ExecutorPodsSnapshot.setShouldCheckAllContainers(false)
   }
 
   test("Subscribers get notified of events periodically.") {
@@ -51,6 +57,7 @@ class ExecutorPodsSnapshotsStoreSuite extends SparkFunSuite with BeforeAndAfter 
     assert(receivedSnapshots1 === Seq(ExecutorPodsSnapshot()))
     assert(receivedSnapshots2 === Seq(ExecutorPodsSnapshot()))
 
+    clock.advance(100)
     pushPodWithIndex(1)
     // Force time to move forward so that the buffer is emitted, scheduling the
     // processing task on the subscription executor...
@@ -59,7 +66,7 @@ class ExecutorPodsSnapshotsStoreSuite extends SparkFunSuite with BeforeAndAfter 
 
     assert(receivedSnapshots1 === Seq(
       ExecutorPodsSnapshot(),
-      ExecutorPodsSnapshot(Seq(podWithIndex(1)))))
+      ExecutorPodsSnapshot(Seq(podWithIndex(1)), 0)))
     assert(receivedSnapshots2 === Seq(ExecutorPodsSnapshot()))
 
     eventBufferScheduler.tick(1000, TimeUnit.MILLISECONDS)
@@ -67,29 +74,29 @@ class ExecutorPodsSnapshotsStoreSuite extends SparkFunSuite with BeforeAndAfter 
     // Don't repeat snapshots
     assert(receivedSnapshots1 === Seq(
       ExecutorPodsSnapshot(),
-      ExecutorPodsSnapshot(Seq(podWithIndex(1)))))
+      ExecutorPodsSnapshot(Seq(podWithIndex(1)), 0)))
     assert(receivedSnapshots2 === Seq(
       ExecutorPodsSnapshot(),
-      ExecutorPodsSnapshot(Seq(podWithIndex(1)))))
+      ExecutorPodsSnapshot(Seq(podWithIndex(1)), 0)))
     pushPodWithIndex(2)
     pushPodWithIndex(3)
     eventBufferScheduler.tick(1000, TimeUnit.MILLISECONDS)
 
     assert(receivedSnapshots1 === Seq(
       ExecutorPodsSnapshot(),
-      ExecutorPodsSnapshot(Seq(podWithIndex(1))),
-      ExecutorPodsSnapshot(Seq(podWithIndex(1), podWithIndex(2))),
-      ExecutorPodsSnapshot(Seq(podWithIndex(1), podWithIndex(2), podWithIndex(3)))))
+      ExecutorPodsSnapshot(Seq(podWithIndex(1)), 0),
+      ExecutorPodsSnapshot(Seq(podWithIndex(1), podWithIndex(2)), 0),
+      ExecutorPodsSnapshot(Seq(podWithIndex(1), podWithIndex(2), podWithIndex(3)), 0)))
     assert(receivedSnapshots2 === Seq(
       ExecutorPodsSnapshot(),
-      ExecutorPodsSnapshot(Seq(podWithIndex(1)))))
+      ExecutorPodsSnapshot(Seq(podWithIndex(1)), 0)))
 
     eventBufferScheduler.tick(1000, TimeUnit.MILLISECONDS)
     assert(receivedSnapshots1 === Seq(
       ExecutorPodsSnapshot(),
-      ExecutorPodsSnapshot(Seq(podWithIndex(1))),
-      ExecutorPodsSnapshot(Seq(podWithIndex(1), podWithIndex(2))),
-      ExecutorPodsSnapshot(Seq(podWithIndex(1), podWithIndex(2), podWithIndex(3)))))
+      ExecutorPodsSnapshot(Seq(podWithIndex(1)), 0),
+      ExecutorPodsSnapshot(Seq(podWithIndex(1), podWithIndex(2)), 0),
+      ExecutorPodsSnapshot(Seq(podWithIndex(1), podWithIndex(2), podWithIndex(3)), 0)))
     assert(receivedSnapshots1 === receivedSnapshots2)
   }
 
@@ -112,13 +119,14 @@ class ExecutorPodsSnapshotsStoreSuite extends SparkFunSuite with BeforeAndAfter 
     eventBufferScheduler.tick(1000, TimeUnit.MILLISECONDS)
     assert(receivedSnapshots === Seq(
       ExecutorPodsSnapshot(),
-      ExecutorPodsSnapshot(Seq(podWithIndex(1)))))
+      ExecutorPodsSnapshot(Seq(podWithIndex(1)), 0)))
+    clock.advance(100)
     eventQueueUnderTest.replaceSnapshot(Seq(podWithIndex(2)))
     eventBufferScheduler.tick(1000, TimeUnit.MILLISECONDS)
     assert(receivedSnapshots === Seq(
       ExecutorPodsSnapshot(),
-      ExecutorPodsSnapshot(Seq(podWithIndex(1))),
-      ExecutorPodsSnapshot(Seq(podWithIndex(2)))))
+      ExecutorPodsSnapshot(Seq(podWithIndex(1)), 0),
+      ExecutorPodsSnapshot(Seq(podWithIndex(2)), 100)))
   }
 
   private def pushPodWithIndex(index: Int): Unit =

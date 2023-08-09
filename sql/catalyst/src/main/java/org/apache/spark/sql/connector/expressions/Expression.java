@@ -17,6 +17,10 @@
 
 package org.apache.spark.sql.connector.expressions;
 
+import java.util.Collections;
+import java.util.HashSet;
+import java.util.Set;
+
 import org.apache.spark.annotation.Evolving;
 
 /**
@@ -26,8 +30,35 @@ import org.apache.spark.annotation.Evolving;
  */
 @Evolving
 public interface Expression {
+  Expression[] EMPTY_EXPRESSION = new Expression[0];
+
+  /**
+   * `EMPTY_EXPRESSION` is only used as an input when the
+   * default `references` method builds the result array to avoid
+   * repeatedly allocating an empty array.
+   */
+  NamedReference[] EMPTY_NAMED_REFERENCE = new NamedReference[0];
+
   /**
    * Format the expression as a human readable SQL-like string.
    */
-  String describe();
+  default String describe() { return this.toString(); }
+
+  /**
+   * Returns an array of the children of this node. Children should not change.
+   */
+  Expression[] children();
+
+  /**
+   * List of fields or columns that are referenced by this expression.
+   */
+  default NamedReference[] references() {
+    // SPARK-40398: Replace `Arrays.stream()...distinct()`
+    // to this for perf gain, the result order is not important.
+    Set<NamedReference> set = new HashSet<>();
+    for (Expression e : children()) {
+      Collections.addAll(set, e.references());
+    }
+    return set.toArray(EMPTY_NAMED_REFERENCE);
+  }
 }

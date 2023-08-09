@@ -31,16 +31,17 @@ import org.apache.spark.ml.linalg.{Vectors, VectorUDT}
 import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.sql.{Row, SparkSession}
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.encoders.RowEncoder
+import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions.AttributeReference
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
+import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types._
 import org.apache.spark.util.SerializableConfiguration
 
 private[libsvm] class LibSVMOutputWriter(
-    path: String,
+    val path: String,
     dataSchema: StructType,
     context: TaskAttemptContext)
   extends OutputWriter {
@@ -80,8 +81,8 @@ private[libsvm] class LibSVMFileFormat
   private def verifySchema(dataSchema: StructType, forWriting: Boolean): Unit = {
     if (
       dataSchema.size != 2 ||
-        !dataSchema(0).dataType.sameType(DataTypes.DoubleType) ||
-        !dataSchema(1).dataType.sameType(new VectorUDT()) ||
+        !DataTypeUtils.sameType(dataSchema(0).dataType, DataTypes.DoubleType) ||
+        !DataTypeUtils.sameType(dataSchema(1).dataType, new VectorUDT()) ||
         !(forWriting || dataSchema(1).metadata.getLong(LibSVMOptions.NUM_FEATURES).toInt > 0)
     ) {
       throw new IOException(s"Illegal schema for libsvm data, schema=$dataSchema")
@@ -100,8 +101,8 @@ private[libsvm] class LibSVMFileFormat
         "though the input. If you know the number in advance, please specify it via " +
         "'numFeatures' option to avoid the extra scan.")
 
-      val paths = files.map(_.getPath.toUri.toString)
-      val parsed = MLUtils.parseLibSVMFile(sparkSession, paths)
+      val paths = files.map(_.getPath.toString)
+      val parsed = MLUtils.parseLibSVMFile(sparkSession, paths, options)
       MLUtils.computeNumFeatures(parsed)
     }
 
@@ -113,7 +114,7 @@ private[libsvm] class LibSVMFileFormat
     val attrGroup = new AttributeGroup(name = "features", numAttributes = numFeatures)
     val featuresField = attrGroup.toStructField(extraMetadata)
 
-    Some(StructType(labelField :: featuresField :: Nil))
+    Some(StructType(Array(labelField, featuresField)))
   }
 
   override def prepareWrite(
@@ -166,7 +167,7 @@ private[libsvm] class LibSVMFileFormat
             LabeledPoint(label, Vectors.sparse(numFeatures, indices, values))
           }
 
-      val toRow = RowEncoder(dataSchema).createSerializer()
+      val toRow = ExpressionEncoder(dataSchema).createSerializer()
       val fullOutput = dataSchema.map { f =>
         AttributeReference(f.name, f.dataType, f.nullable, f.metadata)()
       }

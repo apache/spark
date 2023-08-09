@@ -35,6 +35,7 @@ import org.apache.hadoop.mapreduce.task.{JobContextImpl, TaskAttemptContextImpl}
 import org.apache.spark._
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.deploy.SparkHadoopUtil
+import org.apache.spark.errors.SparkCoreErrors
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.rdd.NewHadoopRDD.NewHadoopMapPartitionsWithSplitRDD
@@ -122,6 +123,10 @@ class NewHadoopRDD[K, V](
 
   override def getPartitions: Array[Partition] = {
     val inputFormat = inputFormatClass.getConstructor().newInstance()
+    // setMinPartitions below will call FileInputFormat.listStatus(), which can be quite slow when
+    // traversing a large number of directories and files. Parallelize it.
+    _conf.setIfUnset(FileInputFormat.LIST_STATUS_NUM_THREADS,
+      Runtime.getRuntime.availableProcessors().toString)
     inputFormat match {
       case configurable: Configurable =>
         configurable.setConf(_conf)
@@ -151,7 +156,7 @@ class NewHadoopRDD[K, V](
       }
 
       val result = new Array[Partition](rawSplits.size)
-      for (i <- 0 until rawSplits.size) {
+      for (i <- rawSplits.indices) {
         result(i) =
             new NewHadoopPartition(id, i, rawSplits(i).asInstanceOf[InputSplit with Writable])
       }
@@ -239,7 +244,6 @@ class NewHadoopRDD[K, V](
       }
 
       private var havePair = false
-      private var recordsSinceMetricsUpdate = 0
 
       override def hasNext: Boolean = {
         if (!finished && !havePair) {
@@ -270,7 +274,7 @@ class NewHadoopRDD[K, V](
 
       override def next(): (K, V) = {
         if (!hasNext) {
-          throw new java.util.NoSuchElementException("End of stream")
+          throw SparkCoreErrors.endOfStreamError()
         }
         havePair = false
         if (!finished) {

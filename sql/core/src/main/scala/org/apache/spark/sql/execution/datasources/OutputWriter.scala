@@ -19,8 +19,7 @@ package org.apache.spark.sql.execution.datasources
 
 import org.apache.hadoop.mapreduce.TaskAttemptContext
 
-import org.apache.spark.sql.Row
-import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.types.StructType
 
 
@@ -58,7 +57,7 @@ abstract class OutputWriterFactory extends Serializable {
  */
 abstract class OutputWriter {
   /**
-   * Persists a single row.  Invoked on the executor side.  When writing to dynamically partitioned
+   * Persists a single row. Invoked on the executor side. When writing to dynamically partitioned
    * tables, dynamic partition columns are not included in rows to be written.
    */
   def write(row: InternalRow): Unit
@@ -68,4 +67,9 @@ abstract class OutputWriter {
    * the task output is committed.
    */
   def close(): Unit
+
+  /**
+   * The file path to write. Invoked on the executor side.
+   */
+  def path(): String
 }

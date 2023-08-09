@@ -99,7 +99,7 @@ class InputFormatInfo(val configuration: Configuration, val inputFormatClazz: Cl
     FileInputFormat.setInputPaths(conf, path)
 
     val instance: org.apache.hadoop.mapreduce.InputFormat[_, _] =
-      ReflectionUtils.newInstance(inputFormatClazz.asInstanceOf[Class[_]], conf).asInstanceOf[
+      ReflectionUtils.newInstance(inputFormatClazz, conf).asInstanceOf[
         org.apache.hadoop.mapreduce.InputFormat[_, _]]
     val job = Job.getInstance(conf)
 
@@ -119,7 +119,7 @@ class InputFormatInfo(val configuration: Configuration, val inputFormatClazz: Cl
     FileInputFormat.setInputPaths(jobConf, path)
 
     val instance: org.apache.hadoop.mapred.InputFormat[_, _] =
-      ReflectionUtils.newInstance(inputFormatClazz.asInstanceOf[Class[_]], jobConf).asInstanceOf[
+      ReflectionUtils.newInstance(inputFormatClazz, jobConf).asInstanceOf[
         org.apache.hadoop.mapred.InputFormat[_, _]]
 
     val retval = new ArrayBuffer[SplitInfo]()

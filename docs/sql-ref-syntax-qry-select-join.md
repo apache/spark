@@ -26,7 +26,7 @@ A SQL join is used to combine rows from two relations based on join criteria. Th
 ### Syntax
 
 ```sql
-relation { [ join_type ] JOIN relation [ join_criteria ] | NATURAL join_type JOIN relation }
+relation { [ join_type ] JOIN [ LATERAL ] relation [ join_criteria ] | NATURAL join_type JOIN [ LATERAL ] relation }
 ```
 
 ### Parameters
@@ -235,4 +235,5 @@ SELECT * FROM employee ANTI JOIN department ON employee.deptno = department.dept
 ### Related Statements
 
 * [SELECT](sql-ref-syntax-qry-select.html)
-* [Join Hints](sql-ref-syntax-qry-select-hints.html)
+* [Hints](sql-ref-syntax-qry-select-hints.html)
+* [LATERAL Subquery](sql-ref-syntax-qry-select-lateral-subquery.html)

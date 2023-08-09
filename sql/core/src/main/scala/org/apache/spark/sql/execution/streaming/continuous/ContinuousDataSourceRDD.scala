@@ -22,6 +22,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.connector.read.InputPartition
 import org.apache.spark.sql.connector.read.streaming.ContinuousPartitionReaderFactory
+import org.apache.spark.sql.execution.metric.{CustomMetrics, SQLMetric}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.NextIterator
 
@@ -52,7 +53,8 @@ class ContinuousDataSourceRDD(
     epochPollIntervalMs: Long,
     private val inputPartitions: Seq[InputPartition],
     schema: StructType,
-    partitionReaderFactory: ContinuousPartitionReaderFactory)
+    partitionReaderFactory: ContinuousPartitionReaderFactory,
+    customMetrics: Map[String, SQLMetric])
   extends RDD[InternalRow](sc, Nil) {
 
   override protected def getPartitions: Array[Partition] = {
@@ -88,8 +90,15 @@ class ContinuousDataSourceRDD(
       partition.queueReader
     }
 
+    val partitionReader = readerForPartition.getPartitionReader()
     new NextIterator[InternalRow] {
+      private var numRow = 0L
+
       override def getNext(): InternalRow = {
+        if (numRow % CustomMetrics.NUM_ROWS_PER_UPDATE == 0) {
+          CustomMetrics.updateMetrics(partitionReader.currentMetricsValues, customMetrics)
+        }
+        numRow += 1
         readerForPartition.next() match {
           case null =>
             finished = true

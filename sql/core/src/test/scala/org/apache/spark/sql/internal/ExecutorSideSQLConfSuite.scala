@@ -32,7 +32,9 @@ import org.apache.spark.sql.execution.adaptive.DisableAdaptiveExecution
 import org.apache.spark.sql.execution.debug.codegenStringSeq
 import org.apache.spark.sql.functions.col
 import org.apache.spark.sql.test.SQLTestUtils
+import org.apache.spark.tags.ExtendedSQLTest
 
+@ExtendedSQLTest
 class ExecutorSideSQLConfSuite extends SparkFunSuite with SQLTestUtils {
   import testImplicits._
 
@@ -81,7 +83,7 @@ class ExecutorSideSQLConfSuite extends SparkFunSuite with SQLTestUtils {
     withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
       withTempPath { path =>
         val pathString = path.getCanonicalPath
-        spark.range(10).select('id.as("ID")).write.json(pathString)
+        spark.range(10).select($"id".as("ID")).write.json(pathString)
         spark.range(10).write.mode("append").json(pathString)
         assert(spark.read.json(pathString).columns.toSet == Set("id", "ID"))
       }
@@ -108,7 +110,7 @@ class ExecutorSideSQLConfSuite extends SparkFunSuite with SQLTestUtils {
           .queryExecution.executedPlan)
         assert(res.length == 2)
         assert(res.forall { case (_, code, _) =>
-          (code.contains("* Codegend pipeline") == flag) &&
+          (code.contains("* Codegened pipeline") == flag) &&
             (code.contains("// input[") == flag)
         })
       }
@@ -139,9 +141,10 @@ class ExecutorSideSQLConfSuite extends SparkFunSuite with SQLTestUtils {
           Seq(true)
             .toDF()
             .mapPartitions { _ =>
-              TaskContext.get.getLocalProperty(confKey) == confValue match {
-                case true => Iterator(true)
-                case false => Iterator.empty
+              if (TaskContext.get.getLocalProperty(confKey) == confValue) {
+                Iterator(true)
+              } else {
+                Iterator.empty
               }
             }
         }
@@ -175,7 +178,7 @@ class ExecutorSideSQLConfSuite extends SparkFunSuite with SQLTestUtils {
         df.hint("broadcast")
       }
 
-      // set local propert and assert
+      // set local property and assert
       val df2 = generateBroadcastDataFrame(confKey, confValue1)
       spark.sparkContext.setLocalProperty(confKey, confValue1)
       val checks = df1.join(df2).collect()
@@ -192,8 +195,7 @@ class ExecutorSideSQLConfSuite extends SparkFunSuite with SQLTestUtils {
 
 case class SQLConfAssertPlan(confToCheck: Seq[(String, String)]) extends LeafExecNode {
   override protected def doExecute(): RDD[InternalRow] = {
-    sqlContext
-      .sparkContext
+    sparkContext
       .parallelize(0 until 2, 2)
       .mapPartitions { it =>
         val confs = SQLConf.get

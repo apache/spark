@@ -15,18 +15,21 @@
 # limitations under the License.
 #
 import os
+import pickle
 import random
 import time
 import tempfile
 import unittest
 
-from pyspark import SparkConf, SparkContext
+from py4j.protocol import Py4JJavaError
+
+from pyspark import SparkConf, SparkContext, Broadcast
 from pyspark.java_gateway import launch_gateway
 from pyspark.serializers import ChunkedStream
+from pyspark.sql import SparkSession, Row
 
 
 class BroadcastTest(unittest.TestCase):
-
     def tearDown(self):
         if getattr(self, "sc", None) is not None:
             self.sc.stop()
@@ -100,9 +103,45 @@ class BroadcastTest(unittest.TestCase):
         finally:
             b.destroy()
 
+    def test_broadcast_when_sc_none(self):
+        # SPARK-39029 : Test case to improve test coverage of broadcast.py
+        # It tests the case when SparkContext is none and Broadcast is called at executor
+        conf = SparkConf()
+        conf.setMaster("local-cluster[2,1,1024]")
+        self.sc = SparkContext(conf=conf)
+        bs = self.sc.broadcast([10])
+        bs_sc_none = Broadcast(sc=None, path=bs._path)
+        self.assertEqual(bs_sc_none.value, [10])
+
+    def test_broadcast_for_error_condition(self):
+        # SPARK-39029: Test case to improve test coverage of broadcast.py
+        # It tests the case when broadcast should raise error .
+        conf = SparkConf()
+        conf.setMaster("local-cluster[2,1,1024]")
+        self.sc = SparkContext(conf=conf)
+        bs = self.sc.broadcast([1])
+        with self.assertRaisesRegex(pickle.PickleError, "Could.*not.*serialize.*broadcast"):
+            self.sc.broadcast(self.sc)
+        with self.assertRaisesRegex(Py4JJavaError, "RuntimeError.*Broadcast.*destroyed.*driver"):
+            self.sc.parallelize([1]).map(lambda x: bs.destroy()).collect()
+        with self.assertRaisesRegex(Py4JJavaError, "RuntimeError.*Broadcast.*unpersisted.*driver"):
+            self.sc.parallelize([1]).map(lambda x: bs.unpersist()).collect()
+
+    def test_broadcast_in_udfs_with_encryption(self):
+        conf = SparkConf()
+        conf.set("spark.io.encryption.enabled", "true")
+        conf.setMaster("local-cluster[2,1,1024]")
+        self.sc = SparkContext(conf=conf)
+        bar = {"a": "aa", "b": "bb"}
+        foo = self.sc.broadcast(bar)
+        spark = SparkSession(self.sc)
+        spark.udf.register("MYUDF", lambda x: foo.value[x] if x else "")
+        sel = spark.sql("SELECT MYUDF('a') AS a, MYUDF('b') AS b")
+        self.assertEqual(sel.collect(), [Row(a="aa", b="bb")])
+        spark.stop()
+
 
 class BroadcastFrameProtocolTest(unittest.TestCase):
-
     @classmethod
     def setUpClass(cls):
         gateway = launch_gateway(SparkConf())
@@ -139,17 +178,19 @@ class BroadcastFrameProtocolTest(unittest.TestCase):
     def test_chunked_stream(self):
         def random_bytes(n):
             return bytearray(random.getrandbits(8) for _ in range(n))
+
         for data_length in [1, 10, 100, 10000]:
             for buffer_length in [1, 2, 5, 8192]:
                 self._test_chunked_stream(random_bytes(data_length), buffer_length)
 
 
-if __name__ == '__main__':
-    from pyspark.tests.test_broadcast import *
+if __name__ == "__main__":
+    from pyspark.tests.test_broadcast import *  # noqa: F401
 
     try:
         import xmlrunner
-        testRunner = xmlrunner.XMLTestRunner(output='target/test-reports', verbosity=2)
+
+        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
     except ImportError:
         testRunner = None
     unittest.main(testRunner=testRunner, verbosity=2)

@@ -2,44 +2,44 @@
 Hive UDAF vs Spark AF
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 11.0.5+10-post-Ubuntu-0ubuntu1.118.04 on Linux 4.15.0-1044-aws
-Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+OpenJDK 64-Bit Server VM 11.0.18+10 on Linux 5.15.0-1031-azure
+Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
 hive udaf vs spark af:                    Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-hive udaf w/o group by                             6492           7169         388          0.0       99066.1       1.0X
-spark af w/o group by                                58             88          24          1.1         890.2     111.3X
-hive udaf w/ group by                              4864           4888          33          0.0       74221.0       1.3X
-spark af w/ group by w/o fallback                    60             67           7          1.1         912.9     108.5X
-spark af w/ group by w/ fallback                    154            164          27          0.4        2348.2      42.2X
+hive udaf w/o group by                             6348           6413          73          0.0       96858.7       1.0X
+spark af w/o group by                                36             48          13          1.8         543.6     178.2X
+hive udaf w/ group by                              5243           5334         115          0.0       79997.2       1.2X
+spark af w/ group by w/o fallback                    39             45           7          1.7         602.2     160.8X
+spark af w/ group by w/ fallback                     47             56          16          1.4         717.9     134.9X
 
 
 ================================================================================================
 ObjectHashAggregateExec vs SortAggregateExec - typed_count
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 11.0.5+10-post-Ubuntu-0ubuntu1.118.04 on Linux 4.15.0-1044-aws
-Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+OpenJDK 64-Bit Server VM 11.0.18+10 on Linux 5.15.0-1031-azure
+Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
 object agg v.s. sort agg:                 Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-sort agg w/ group by                              51728          51728           0          2.0         493.3       1.0X
-object agg w/ group by w/o fallback               10174          10218          34         10.3          97.0       5.1X
-object agg w/ group by w/ fallback                29341          29537         277          3.6         279.8       1.8X
-sort agg w/o group by                              7541           7577          28         13.9          71.9       6.9X
-object agg w/o group by w/o fallback               5574           5620          38         18.8          53.2       9.3X
+sort agg w/ group by                              38088          38682         840          2.8         363.2       1.0X
+object agg w/ group by w/o fallback                8711           8729          13         12.0          83.1       4.4X
+object agg w/ group by w/ fallback                23137          25662         NaN          4.5         220.7       1.6X
+sort agg w/o group by                              5997           6011          15         17.5          57.2       6.4X
+object agg w/o group by w/o fallback               5448           5456           5         19.2          52.0       7.0X
 
 
 ================================================================================================
 ObjectHashAggregateExec vs SortAggregateExec - percentile_approx
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 11.0.5+10-post-Ubuntu-0ubuntu1.118.04 on Linux 4.15.0-1044-aws
-Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+OpenJDK 64-Bit Server VM 11.0.18+10 on Linux 5.15.0-1031-azure
+Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
 object agg v.s. sort agg:                 Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-sort agg w/ group by                                900            925          14          2.3         429.0       1.0X
-object agg w/ group by w/o fallback                 597            633          14          3.5         284.6       1.5X
-object agg w/ group by w/ fallback                  905            923          10          2.3         431.6       1.0X
-sort agg w/o group by                               611            631          10          3.4         291.4       1.5X
-object agg w/o group by w/o fallback                559            576          11          3.8         266.5       1.6X
+sort agg w/ group by                                775            873          74          2.7         369.6       1.0X
+object agg w/ group by w/o fallback                 655            812         216          3.2         312.2       1.2X
+object agg w/ group by w/ fallback                  816            866          43          2.6         388.9       1.0X
+sort agg w/o group by                               617            677          53          3.4         294.1       1.3X
+object agg w/o group by w/o fallback                636            708          62          3.3         303.1       1.2X
 
 

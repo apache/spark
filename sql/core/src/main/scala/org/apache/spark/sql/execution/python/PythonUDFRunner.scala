@@ -23,33 +23,43 @@ import java.util.concurrent.atomic.AtomicBoolean
 
 import org.apache.spark._
 import org.apache.spark.api.python._
+import org.apache.spark.sql.execution.metric.SQLMetric
+import org.apache.spark.sql.internal.SQLConf
 
 /**
  * A helper class to run Python UDFs in Spark.
  */
-class PythonUDFRunner(
+abstract class BasePythonUDFRunner(
     funcs: Seq[ChainedPythonFunctions],
     evalType: Int,
-    argOffsets: Array[Array[Int]])
+    argOffsets: Array[Array[Int]],
+    pythonMetrics: Map[String, SQLMetric],
+    jobArtifactUUID: Option[String])
   extends BasePythonRunner[Array[Byte], Array[Byte]](
-    funcs, evalType, argOffsets) {
+    funcs, evalType, argOffsets, jobArtifactUUID) {
 
-  protected override def newWriterThread(
+  override val pythonExec: String =
+    SQLConf.get.pysparkWorkerPythonExecutable.getOrElse(
+      funcs.head.funcs.head.pythonExec)
+
+  override val simplifiedTraceback: Boolean = SQLConf.get.pysparkSimplifiedTraceback
+
+  abstract class PythonUDFWriterThread(
       env: SparkEnv,
       worker: Socket,
       inputIterator: Iterator[Array[Byte]],
       partitionIndex: Int,
-      context: TaskContext): WriterThread = {
-    new WriterThread(env, worker, inputIterator, partitionIndex, context) {
+      context: TaskContext)
+    extends WriterThread(env, worker, inputIterator, partitionIndex, context) {
 
-      protected override def writeCommand(dataOut: DataOutputStream): Unit = {
-        PythonUDFRunner.writeUDFs(dataOut, funcs, argOffsets)
-      }
+    protected override def writeIteratorToStream(dataOut: DataOutputStream): Unit = {
+      val startData = dataOut.size()
 
-      protected override def writeIteratorToStream(dataOut: DataOutputStream): Unit = {
-        PythonRDD.writeIteratorToStream(inputIterator, dataOut)
-        dataOut.writeInt(SpecialLengths.END_OF_DATA_SECTION)
-      }
+      PythonRDD.writeIteratorToStream(inputIterator, dataOut)
+      dataOut.writeInt(SpecialLengths.END_OF_DATA_SECTION)
+
+      val deltaData = dataOut.size() - startData
+      pythonMetrics("pythonDataSent") += deltaData
     }
   }
 
@@ -59,9 +69,11 @@ class PythonUDFRunner(
       startTime: Long,
       env: SparkEnv,
       worker: Socket,
+      pid: Option[Int],
       releasedOrClosed: AtomicBoolean,
       context: TaskContext): Iterator[Array[Byte]] = {
-    new ReaderIterator(stream, writerThread, startTime, env, worker, releasedOrClosed, context) {
+    new ReaderIterator(
+      stream, writerThread, startTime, env, worker, pid, releasedOrClosed, context) {
 
       protected override def read(): Array[Byte] = {
         if (writerThread.exception.isDefined) {
@@ -72,6 +84,7 @@ class PythonUDFRunner(
             case length if length > 0 =>
               val obj = new Array[Byte](length)
               stream.readFully(obj)
+              pythonMetrics("pythonDataReceived") += length
               obj
             case 0 => Array.emptyByteArray
             case SpecialLengths.TIMING_DATA =>
@@ -85,6 +98,30 @@ class PythonUDFRunner(
           }
         } catch handleException
       }
+    }
+  }
+}
+
+class PythonUDFRunner(
+    funcs: Seq[ChainedPythonFunctions],
+    evalType: Int,
+    argOffsets: Array[Array[Int]],
+    pythonMetrics: Map[String, SQLMetric],
+    jobArtifactUUID: Option[String])
+  extends BasePythonUDFRunner(funcs, evalType, argOffsets, pythonMetrics, jobArtifactUUID) {
+
+  protected override def newWriterThread(
+      env: SparkEnv,
+      worker: Socket,
+      inputIterator: Iterator[Array[Byte]],
+      partitionIndex: Int,
+      context: TaskContext): WriterThread = {
+    new PythonUDFWriterThread(env, worker, inputIterator, partitionIndex, context) {
+
+      protected override def writeCommand(dataOut: DataOutputStream): Unit = {
+        PythonUDFRunner.writeUDFs(dataOut, funcs, argOffsets)
+      }
+
     }
   }
 }
@@ -104,7 +141,7 @@ object PythonUDFRunner {
       dataOut.writeInt(chained.funcs.length)
       chained.funcs.foreach { f =>
         dataOut.writeInt(f.command.length)
-        dataOut.write(f.command)
+        dataOut.write(f.command.toArray)
       }
     }
   }

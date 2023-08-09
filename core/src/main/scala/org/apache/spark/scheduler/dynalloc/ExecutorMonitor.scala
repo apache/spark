@@ -24,11 +24,12 @@ import scala.collection.JavaConverters._
 import scala.collection.mutable
 
 import org.apache.spark._
+import org.apache.spark.errors.SparkCoreErrors
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.resource.ResourceProfile.UNKNOWN_RESOURCE_PROFILE_ID
 import org.apache.spark.scheduler._
-import org.apache.spark.storage.RDDBlockId
+import org.apache.spark.storage.{RDDBlockId, ShuffleDataBlockId}
 import org.apache.spark.util.Clock
 
 /**
@@ -38,7 +39,9 @@ private[spark] class ExecutorMonitor(
     conf: SparkConf,
     client: ExecutorAllocationClient,
     listenerBus: LiveListenerBus,
-    clock: Clock) extends SparkListener with CleanerListener with Logging {
+    clock: Clock,
+    metrics: ExecutorAllocationManagerSource = null)
+  extends SparkListener with CleanerListener with Logging {
 
   private val idleTimeoutNs = TimeUnit.SECONDS.toNanos(
     conf.get(DYN_ALLOCATION_EXECUTOR_IDLE_TIMEOUT))
@@ -114,7 +117,8 @@ private[spark] class ExecutorMonitor(
 
       var newNextTimeout = Long.MaxValue
       timedOutExecs = executors.asScala
-        .filter { case (_, exec) => !exec.pendingRemoval && !exec.hasActiveShuffle }
+        .filter { case (_, exec) =>
+          !exec.pendingRemoval && !exec.hasActiveShuffle && !exec.decommissioning}
         .filter { case (_, exec) =>
           val deadline = exec.timeoutAt
           if (deadline > now) {
@@ -130,17 +134,31 @@ private[spark] class ExecutorMonitor(
         .toSeq
       updateNextTimeout(newNextTimeout)
     }
-    timedOutExecs
+    timedOutExecs.sortBy(_._1)
   }
 
   /**
    * Mark the given executors as pending to be removed. Should only be called in the EAM thread.
+   * This covers both kills and decommissions.
    */
   def executorsKilled(ids: Seq[String]): Unit = {
     ids.foreach { id =>
       val tracker = executors.get(id)
       if (tracker != null) {
         tracker.pendingRemoval = true
+      }
+    }
+
+    // Recompute timed out executors in the next EAM callback, since this call invalidates
+    // the current list.
+    nextTimeout.set(Long.MinValue)
+  }
+
+  private[spark] def executorsDecommissioned(ids: Seq[String]): Unit = {
+    ids.foreach { id =>
+      val tracker = executors.get(id)
+      if (tracker != null) {
+        tracker.decommissioning = true
       }
     }
 
@@ -168,7 +186,17 @@ private[spark] class ExecutorMonitor(
   def pendingRemovalCount: Int = executors.asScala.count { case (_, exec) => exec.pendingRemoval }
 
   def pendingRemovalCountPerResourceProfileId(id: Int): Int = {
-    executors.asScala.filter { case (k, v) => v.resourceProfileId == id && v.pendingRemoval }.size
+    executors.asScala.count { case (k, v) => v.resourceProfileId == id && v.pendingRemoval }
+  }
+
+  def decommissioningCount: Int = executors.asScala.count { case (_, exec) =>
+    exec.decommissioning
+  }
+
+  def decommissioningPerResourceProfileId(id: Int): Int = {
+    executors.asScala.count { case (k, v) =>
+      v.resourceProfileId == id && v.decommissioning
+    }
   }
 
   override def onJobStart(event: SparkListenerJobStart): Unit = {
@@ -202,7 +230,7 @@ private[spark] class ExecutorMonitor(
     }
 
     if (updateExecutors) {
-      val activeShuffleIds = shuffleStages.map(_._2).toSeq
+      val activeShuffleIds = shuffleStages.map(_._2)
       var needTimeoutUpdate = false
       val activatedExecs = new ExecutorIdCollector()
       executors.asScala.foreach { case (id, exec) =>
@@ -226,7 +254,7 @@ private[spark] class ExecutorMonitor(
     }
 
     stageToShuffleID ++= shuffleStages
-    jobToStageIDs(event.jobId) = shuffleStages.map(_._1).toSeq
+    jobToStageIDs(event.jobId) = shuffleStages.map(_._1)
   }
 
   override def onJobEnd(event: SparkListenerJobEnd): Unit = {
@@ -298,6 +326,7 @@ private[spark] class ExecutorMonitor(
       //
       // This means that an executor may be marked as having shuffle data, and thus prevented
       // from being removed, even though the data may not be used.
+      // TODO: Only track used files (SPARK-31974)
       if (shuffleTrackingEnabled && event.reason == Success) {
         stageToShuffleID.get(event.stageId).foreach { shuffleId =>
           exec.addShuffle(shuffleId)
@@ -326,18 +355,54 @@ private[spark] class ExecutorMonitor(
     val removed = executors.remove(event.executorId)
     if (removed != null) {
       decrementExecResourceProfileCount(removed.resourceProfileId)
-      if (!removed.pendingRemoval) {
+      if (event.reason == ExecutorLossMessage.decommissionFinished ||
+        (event.reason != null && event.reason.startsWith(ExecutorDecommission.msgPrefix))) {
+        metrics.gracefullyDecommissioned.inc()
+      } else if (removed.decommissioning) {
+          metrics.decommissionUnfinished.inc()
+      } else if (removed.pendingRemoval) {
+        metrics.driverKilled.inc()
+      } else {
+        metrics.exitedUnexpectedly.inc()
+      }
+      logInfo(s"Executor ${event.executorId} is removed. Remove reason statistics: (" +
+        s"gracefully decommissioned: ${metrics.gracefullyDecommissioned.getCount()}, " +
+        s"decommision unfinished: ${metrics.decommissionUnfinished.getCount()}, " +
+        s"driver killed: ${metrics.driverKilled.getCount()}, " +
+        s"unexpectedly exited: ${metrics.exitedUnexpectedly.getCount()}).")
+      if (!removed.pendingRemoval || !removed.decommissioning) {
         nextTimeout.set(Long.MinValue)
       }
     }
   }
 
   override def onBlockUpdated(event: SparkListenerBlockUpdated): Unit = {
-    if (!event.blockUpdatedInfo.blockId.isInstanceOf[RDDBlockId]) {
+    if (!client.isExecutorActive(event.blockUpdatedInfo.blockManagerId.executorId)) {
       return
     }
+
     val exec = ensureExecutorIsTracked(event.blockUpdatedInfo.blockManagerId.executorId,
       UNKNOWN_RESOURCE_PROFILE_ID)
+
+    // Check if it is a shuffle file, or RDD to pick the correct codepath for update
+    if (!event.blockUpdatedInfo.blockId.isInstanceOf[RDDBlockId]) {
+      if (event.blockUpdatedInfo.blockId.isInstanceOf[ShuffleDataBlockId] &&
+        shuffleTrackingEnabled) {
+        /**
+         * The executor monitor keeps track of locations of cache and shuffle blocks and this can
+         * be used to decide which executor(s) Spark should shutdown first. Since we move shuffle
+         * blocks around now this wires it up so that it keeps track of it. We only do this for
+         * data blocks as index and other blocks blocks do not necessarily mean the entire block
+         * has been committed.
+         */
+        event.blockUpdatedInfo.blockId match {
+          case ShuffleDataBlockId(shuffleId, _, _) => exec.addShuffle(shuffleId)
+          case _ => // For now we only update on data blocks
+        }
+      }
+      return
+    }
+
     val storageLevel = event.blockUpdatedInfo.storageLevel
     val blockId = event.blockUpdatedInfo.blockId.asInstanceOf[RDDBlockId]
 
@@ -398,8 +463,8 @@ private[spark] class ExecutorMonitor(
   override def checkpointCleaned(rddId: Long): Unit = { }
 
   // Visible for testing.
-  private[dynalloc] def isExecutorIdle(id: String): Boolean = {
-    Option(executors.get(id)).map(_.isIdle).getOrElse(throw new NoSuchElementException(id))
+  private[scheduler] def isExecutorIdle(id: String): Boolean = {
+    Option(executors.get(id)).map(_.isIdle).getOrElse(throw SparkCoreErrors.noExecutorIdleError(id))
   }
 
   // Visible for testing
@@ -410,8 +475,13 @@ private[spark] class ExecutorMonitor(
   }
 
   // Visible for testing
-  def executorsPendingToRemove(): Set[String] = {
+  private[spark] def executorsPendingToRemove(): Set[String] = {
     executors.asScala.filter { case (_, exec) => exec.pendingRemoval }.keys.toSet
+  }
+
+  // Visible for testing
+  private[spark] def executorsDecommissioning(): Set[String] = {
+    executors.asScala.filter { case (_, exec) => exec.decommissioning }.keys.toSet
   }
 
   /**
@@ -419,7 +489,9 @@ private[spark] class ExecutorMonitor(
    * which the `SparkListenerTaskStart` event is posted before the `SparkListenerBlockManagerAdded`
    * event, which is possible because these events are posted in different threads. (see SPARK-4951)
    */
-  private def ensureExecutorIsTracked(id: String, resourceProfileId: Int): Tracker = {
+  // Visible for testing.
+  private[scheduler] def ensureExecutorIsTracked(
+      id: String, resourceProfileId: Int) : Tracker = {
     val numExecsWithRpId = execResourceProfileCount.computeIfAbsent(resourceProfileId, _ => 0)
     val execTracker = executors.computeIfAbsent(id, _ => {
         val newcount = numExecsWithRpId + 1
@@ -458,7 +530,7 @@ private[spark] class ExecutorMonitor(
     }
   }
 
-  private class Tracker(var resourceProfileId: Int) {
+  private[scheduler] class Tracker(var resourceProfileId: Int) {
     @volatile var timeoutAt: Long = Long.MaxValue
 
     // Tracks whether this executor is thought to be timed out. It's used to detect when the list
@@ -466,6 +538,7 @@ private[spark] class ExecutorMonitor(
     @volatile var timedOut: Boolean = false
 
     var pendingRemoval: Boolean = false
+    var decommissioning: Boolean = false
     var hasActiveShuffle: Boolean = false
 
     private var idleStart: Long = -1
@@ -490,17 +563,14 @@ private[spark] class ExecutorMonitor(
     def updateTimeout(): Unit = {
       val oldDeadline = timeoutAt
       val newDeadline = if (idleStart >= 0) {
-        val timeout = if (cachedBlocks.nonEmpty || (shuffleIds != null && shuffleIds.nonEmpty)) {
-          val _cacheTimeout = if (cachedBlocks.nonEmpty) storageTimeoutNs else Long.MaxValue
-          val _shuffleTimeout = if (shuffleIds != null && shuffleIds.nonEmpty) {
-            shuffleTimeoutNs
-          } else {
-            Long.MaxValue
-          }
-          math.min(_cacheTimeout, _shuffleTimeout)
+        val _cacheTimeout = if (cachedBlocks.nonEmpty) storageTimeoutNs else 0
+        val _shuffleTimeout = if (shuffleIds != null && shuffleIds.nonEmpty) {
+          shuffleTimeoutNs
         } else {
-          idleTimeoutNs
+          0
         }
+        // timeout should be max of idleTimeout, storageTimeout and shuffleTimeout
+        val timeout = Seq(_cacheTimeout, _shuffleTimeout, idleTimeoutNs).max
         val deadline = idleStart + timeout
         if (deadline >= 0) deadline else Long.MaxValue
       } else {

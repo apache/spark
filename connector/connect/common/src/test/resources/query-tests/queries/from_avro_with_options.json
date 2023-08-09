@@ -1,0 +1,50 @@
+{
+  "common": {
+    "planId": "1"
+  },
+  "project": {
+    "input": {
+      "common": {
+        "planId": "0"
+      },
+      "localRelation": {
+        "schema": "struct\u003cid:bigint,bytes:binary\u003e"
+      }
+    },
+    "expressions": [{
+      "unresolvedFunction": {
+        "functionName": "from_avro",
+        "arguments": [{
+          "unresolvedAttribute": {
+            "unparsedIdentifier": "bytes"
+          }
+        }, {
+          "literal": {
+            "string": "{\"type\": \"int\", \"name\": \"id\"}"
+          }
+        }, {
+          "unresolvedFunction": {
+            "functionName": "map",
+            "arguments": [{
+              "literal": {
+                "string": "mode"
+              }
+            }, {
+              "literal": {
+                "string": "FAILFAST"
+              }
+            }, {
+              "literal": {
+                "string": "compression"
+              }
+            }, {
+              "literal": {
+                "string": "zstandard"
+              }
+            }]
+          }
+        }]
+      }
+    }]
+  }
+}

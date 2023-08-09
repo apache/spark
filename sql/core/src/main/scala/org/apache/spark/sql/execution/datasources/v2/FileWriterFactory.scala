@@ -24,23 +24,30 @@ import org.apache.hadoop.mapreduce.task.TaskAttemptContextImpl
 import org.apache.spark.internal.io.{FileCommitProtocol, SparkHadoopWriterUtils}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.connector.write.{DataWriter, DataWriterFactory}
-import org.apache.spark.sql.execution.datasources.{DynamicPartitionDataWriter, SingleDirectoryDataWriter, WriteJobDescription}
+import org.apache.spark.sql.execution.datasources.{DynamicPartitionDataSingleWriter, SingleDirectoryDataWriter, WriteJobDescription}
 
 case class FileWriterFactory (
     description: WriteJobDescription,
     committer: FileCommitProtocol) extends DataWriterFactory {
+
+  // SPARK-42478: jobId across tasks should be consistent to meet the contract
+  // expected by Hadoop committers, but `JobId` cannot be serialized.
+  // thus, persist the serializable jobTrackerID in the class and make jobId a
+  // transient lazy val which recreates it each time to ensure jobId is unique.
+  private[this] val jobTrackerID = SparkHadoopWriterUtils.createJobTrackerID(new Date)
+  @transient private lazy val jobId = SparkHadoopWriterUtils.createJobID(jobTrackerID, 0)
+
   override def createWriter(partitionId: Int, realTaskId: Long): DataWriter[InternalRow] = {
     val taskAttemptContext = createTaskAttemptContext(partitionId)
     committer.setupTask(taskAttemptContext)
     if (description.partitionColumns.isEmpty) {
       new SingleDirectoryDataWriter(description, taskAttemptContext, committer)
     } else {
-      new DynamicPartitionDataWriter(description, taskAttemptContext, committer)
+      new DynamicPartitionDataSingleWriter(description, taskAttemptContext, committer)
     }
   }
 
   private def createTaskAttemptContext(partitionId: Int): TaskAttemptContextImpl = {
-    val jobId = SparkHadoopWriterUtils.createJobID(new Date, 0)
     val taskId = new TaskID(jobId, TaskType.MAP, partitionId)
     val taskAttemptId = new TaskAttemptID(taskId, 0)
     // Set up the configuration object

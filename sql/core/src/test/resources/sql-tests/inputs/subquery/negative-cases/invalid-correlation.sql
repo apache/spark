@@ -71,3 +71,12 @@ WHERE  t1a IN (SELECT t2a
                WHERE  EXISTS (SELECT min(t2a) 
                               FROM   t3));
 
+CREATE TEMPORARY VIEW t1_copy AS SELECT * FROM VALUES
+  (1, 2, 3)
+AS t1(t1a, t1b, t1c);
+
+-- invalid because column name `t1a` is ambiguous in the subquery.
+SELECT t1.t1a
+FROM   t1
+JOIN   t1_copy
+ON     EXISTS (SELECT 1 FROM t2 WHERE t2a > t1a)

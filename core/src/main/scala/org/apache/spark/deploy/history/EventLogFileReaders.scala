@@ -27,6 +27,7 @@ import org.apache.hadoop.hdfs.DFSInputStream
 
 import org.apache.spark.SparkConf
 import org.apache.spark.deploy.history.EventLogFileWriter.codecName
+import org.apache.spark.internal.Logging
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.util.Utils
 
@@ -96,7 +97,7 @@ abstract class EventLogFileReader(
   def totalSize: Long
 }
 
-object EventLogFileReader {
+object EventLogFileReader extends Logging {
   // A cache for compression codecs to avoid creating the same codec many times
   private val codecMap = new ConcurrentHashMap[String, CompressionCodec]()
 
@@ -116,9 +117,14 @@ object EventLogFileReader {
 
   def apply(fs: FileSystem, status: FileStatus): Option[EventLogFileReader] = {
     if (isSingleEventLog(status)) {
-      Some(new SingleFileEventLogFileReader(fs, status.getPath))
+      Some(new SingleFileEventLogFileReader(fs, status.getPath, Option(status)))
     } else if (isRollingEventLogs(status)) {
-      Some(new RollingEventLogFilesFileReader(fs, status.getPath))
+      if (fs.listStatus(status.getPath).exists(RollingEventLogFilesWriter.isEventLogFile)) {
+        Some(new RollingEventLogFilesFileReader(fs, status.getPath))
+      } else {
+        logDebug(s"Rolling event log directory have no event log file at ${status.getPath}")
+        None
+      }
     } else {
       None
     }
@@ -164,10 +170,13 @@ object EventLogFileReader {
  * FileNotFoundException could occur if the log file is renamed before getting the
  * status of log file.
  */
-class SingleFileEventLogFileReader(
+private[history] class SingleFileEventLogFileReader(
     fs: FileSystem,
-    path: Path) extends EventLogFileReader(fs, path) {
-  private lazy val status = fileSystem.getFileStatus(rootPath)
+    path: Path,
+    maybeStatus: Option[FileStatus]) extends EventLogFileReader(fs, path) {
+  private lazy val status = maybeStatus.getOrElse(fileSystem.getFileStatus(rootPath))
+
+  def this(fs: FileSystem, path: Path) = this(fs, path, None)
 
   override def lastIndex: Option[Long] = None
 
@@ -203,7 +212,7 @@ class SingleFileEventLogFileReader(
  * This reader lists the files only once; if caller would like to play with updated list,
  * it needs to create another reader instance.
  */
-class RollingEventLogFilesFileReader(
+private[history] class RollingEventLogFilesFileReader(
     fs: FileSystem,
     path: Path) extends EventLogFileReader(fs, path) {
   import RollingEventLogFilesWriter._

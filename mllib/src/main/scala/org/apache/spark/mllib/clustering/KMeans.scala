@@ -210,29 +210,44 @@ class KMeans private (
   @Since("0.8.0")
   def run(data: RDD[Vector]): KMeansModel = {
     val instances = data.map(point => (point, 1.0))
-    runWithWeight(instances, None)
+    val handlePersistence = data.getStorageLevel == StorageLevel.NONE
+    runWithWeight(instances, handlePersistence, None)
   }
 
   private[spark] def runWithWeight(
-      data: RDD[(Vector, Double)],
+      instances: RDD[(Vector, Double)],
+      handlePersistence: Boolean,
       instr: Option[Instrumentation]): KMeansModel = {
+    val norms = instances.map { case (v, _) => Vectors.norm(v, 2.0) }
+    val vectors = instances.zip(norms)
+      .map { case ((v, w), norm) => new VectorWithNorm(v, norm, w) }
 
-    // Compute squared norms and cache them.
-    val norms = data.map { case (v, _) =>
-      Vectors.norm(v, 2.0)
+    if (handlePersistence) {
+      vectors.persist(StorageLevel.MEMORY_AND_DISK)
+    } else {
+      // Compute squared norms and cache them.
+      norms.persist(StorageLevel.MEMORY_AND_DISK)
     }
-
-    val zippedData = data.zip(norms).map { case ((v, w), norm) =>
-      new VectorWithNorm(v, norm, w)
-    }
-
-    if (data.getStorageLevel == StorageLevel.NONE) {
-      zippedData.persist(StorageLevel.MEMORY_AND_DISK)
-    }
-    val model = runAlgorithmWithWeight(zippedData, instr)
-    zippedData.unpersist()
+    val model = runAlgorithmWithWeight(vectors, instr)
+    if (handlePersistence) { vectors.unpersist() } else { norms.unpersist() }
 
     model
+  }
+
+  private[spark] def initialize(data: RDD[Vector]): Array[Vector] = {
+    val dataWithNorms = data.map(new VectorWithNorm(_))
+
+    val centers = initializationMode match {
+      case KMeans.RANDOM =>
+        initRandom(dataWithNorms)
+      case KMeans.K_MEANS_PARALLEL =>
+        val distanceMeasureInstance = DistanceMeasure.decodeFromString(this.distanceMeasure)
+        dataWithNorms.persist(StorageLevel.MEMORY_AND_DISK)
+        val centers = initKMeansParallel(dataWithNorms, distanceMeasureInstance)
+        dataWithNorms.unpersist()
+        centers
+    }
+    centers.map(_.vector)
   }
 
   /**
@@ -270,15 +285,22 @@ class KMeans private (
 
     instr.foreach(_.logNumFeatures(numFeatures))
 
-    val shouldDistributed = centers.length * centers.length * numFeatures.toLong > 1000000L
+    val shouldComputeStats =
+      DistanceMeasure.shouldComputeStatistics(centers.length)
+    val shouldComputeStatsLocally =
+      DistanceMeasure.shouldComputeStatisticsLocally(centers.length, numFeatures)
 
     // Execute iterations of Lloyd's algorithm until converged
     while (iteration < maxIterations && !converged) {
       val bcCenters = sc.broadcast(centers)
-      val stats = if (shouldDistributed) {
-        distanceMeasureInstance.computeStatisticsDistributedly(sc, bcCenters)
+      val stats = if (shouldComputeStats) {
+        if (shouldComputeStatsLocally) {
+          Some(distanceMeasureInstance.computeStatistics(centers))
+        } else {
+          Some(distanceMeasureInstance.computeStatisticsDistributedly(sc, bcCenters))
+        }
       } else {
-        distanceMeasureInstance.computeStatistics(centers)
+        None
       }
       val bcStats = sc.broadcast(stats)
 

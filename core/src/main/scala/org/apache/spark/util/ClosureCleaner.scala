@@ -19,14 +19,15 @@ package org.apache.spark.util
 
 import java.io.{ByteArrayInputStream, ByteArrayOutputStream}
 import java.lang.invoke.{MethodHandleInfo, SerializedLambda}
+import java.lang.reflect.{Field, Modifier}
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable.{Map, Set, Stack}
 
-import org.apache.commons.lang3.ClassUtils
-import org.apache.xbean.asm7.{ClassReader, ClassVisitor, Handle, MethodVisitor, Type}
-import org.apache.xbean.asm7.Opcodes._
-import org.apache.xbean.asm7.tree.{ClassNode, MethodNode}
+import org.apache.commons.lang3.{ClassUtils, JavaVersion, SystemUtils}
+import org.apache.xbean.asm9.{ClassReader, ClassVisitor, Handle, MethodVisitor, Type}
+import org.apache.xbean.asm9.Opcodes._
+import org.apache.xbean.asm9.tree.{ClassNode, MethodNode}
 
 import org.apache.spark.{SparkEnv, SparkException}
 import org.apache.spark.internal.Logging
@@ -285,7 +286,7 @@ private[spark] object ClosureCleaner extends Logging {
           logDebug(s" + outermost object is a closure, so we clone it: ${outermostClass}")
         } else if (outermostClass.getName.startsWith("$line")) {
           // SPARK-14558: if the outermost object is a REPL line object, we should clone
-          // and clean it as it may carray a lot of unnecessary information,
+          // and clean it as it may carry a lot of unnecessary information,
           // e.g. hadoop conf, spark conf, etc.
           logDebug(s" + outermost object is a REPL line object, so we clone it:" +
             s" ${outermostClass}")
@@ -394,8 +395,17 @@ private[spark] object ClosureCleaner extends Logging {
             parent = null, outerThis, capturingClass, accessedFields)
 
           val outerField = func.getClass.getDeclaredField("arg$1")
+          // SPARK-37072: When Java 17 is used and `outerField` is read-only,
+          // the content of `outerField` cannot be set by reflect api directly.
+          // But we can remove the `final` modifier of `outerField` before set value
+          // and reset the modifier after set value.
+          val modifiersField = getFinalModifiersFieldForJava17(outerField)
+          modifiersField
+            .foreach(m => m.setInt(outerField, outerField.getModifiers & ~Modifier.FINAL))
           outerField.setAccessible(true)
           outerField.set(func, clonedOuterThis)
+          modifiersField
+            .foreach(m => m.setInt(outerField, outerField.getModifiers | Modifier.FINAL))
         }
       }
 
@@ -405,6 +415,24 @@ private[spark] object ClosureCleaner extends Logging {
     if (checkSerializable) {
       ensureSerializable(func)
     }
+  }
+
+  /**
+   * This method is used to get the final modifier field when on Java 17.
+   */
+  private def getFinalModifiersFieldForJava17(field: Field): Option[Field] = {
+    if (SystemUtils.isJavaVersionAtLeast(JavaVersion.JAVA_17) &&
+        Modifier.isFinal(field.getModifiers)) {
+      val methodGetDeclaredFields0 = classOf[Class[_]]
+        .getDeclaredMethod("getDeclaredFields0", classOf[Boolean])
+      methodGetDeclaredFields0.setAccessible(true)
+      val fields = methodGetDeclaredFields0.invoke(classOf[Field], false.asInstanceOf[Object])
+        .asInstanceOf[Array[Field]]
+      val modifiersFieldOption = fields.find(field => "modifiers".equals(field.getName))
+      require(modifiersFieldOption.isDefined)
+      modifiersFieldOption.foreach(_.setAccessible(true))
+      modifiersFieldOption
+    } else None
   }
 
   private def ensureSerializable(func: AnyRef): Unit = {
@@ -664,7 +692,7 @@ private[spark] object IndylambdaScalaClosures extends Logging {
       val currentClass = currentId.cls
       val currentMethodNode = methodNodeById(currentId)
       logTrace(s"  scanning ${currentId.cls.getName}.${currentId.name}${currentId.desc}")
-      currentMethodNode.accept(new MethodVisitor(ASM7) {
+      currentMethodNode.accept(new MethodVisitor(ASM9) {
         val currentClassName = currentClass.getName
         val currentClassInternalName = currentClassName.replace('.', '/')
 
@@ -744,7 +772,7 @@ private[spark] class ReturnStatementInClosureException
   extends SparkException("Return statements aren't allowed in Spark closures")
 
 private class ReturnStatementFinder(targetMethodName: Option[String] = None)
-  extends ClassVisitor(ASM7) {
+  extends ClassVisitor(ASM9) {
   override def visitMethod(access: Int, name: String, desc: String,
       sig: String, exceptions: Array[String]): MethodVisitor = {
 
@@ -758,7 +786,7 @@ private class ReturnStatementFinder(targetMethodName: Option[String] = None)
       val isTargetMethod = targetMethodName.isEmpty ||
         name == targetMethodName.get || name == targetMethodName.get.stripSuffix("$adapted")
 
-      new MethodVisitor(ASM7) {
+      new MethodVisitor(ASM9) {
         override def visitTypeInsn(op: Int, tp: String): Unit = {
           if (op == NEW && tp.contains("scala/runtime/NonLocalReturnControl") && isTargetMethod) {
             throw new ReturnStatementInClosureException
@@ -766,7 +794,7 @@ private class ReturnStatementFinder(targetMethodName: Option[String] = None)
         }
       }
     } else {
-      new MethodVisitor(ASM7) {}
+      new MethodVisitor(ASM9) {}
     }
   }
 }
@@ -790,7 +818,7 @@ private[util] class FieldAccessFinder(
     findTransitively: Boolean,
     specificMethod: Option[MethodIdentifier[_]] = None,
     visitedMethods: Set[MethodIdentifier[_]] = Set.empty)
-  extends ClassVisitor(ASM7) {
+  extends ClassVisitor(ASM9) {
 
   override def visitMethod(
       access: Int,
@@ -805,7 +833,7 @@ private[util] class FieldAccessFinder(
       return null
     }
 
-    new MethodVisitor(ASM7) {
+    new MethodVisitor(ASM9) {
       override def visitFieldInsn(op: Int, owner: String, name: String, desc: String): Unit = {
         if (op == GETFIELD) {
           for (cl <- fields.keys if cl.getName == owner.replace('/', '.')) {
@@ -845,7 +873,7 @@ private[util] class FieldAccessFinder(
   }
 }
 
-private class InnerClosureFinder(output: Set[Class[_]]) extends ClassVisitor(ASM7) {
+private class InnerClosureFinder(output: Set[Class[_]]) extends ClassVisitor(ASM9) {
   var myName: String = null
 
   // TODO: Recursively find inner closures that we indirectly reference, e.g.
@@ -860,7 +888,7 @@ private class InnerClosureFinder(output: Set[Class[_]]) extends ClassVisitor(ASM
 
   override def visitMethod(access: Int, name: String, desc: String,
       sig: String, exceptions: Array[String]): MethodVisitor = {
-    new MethodVisitor(ASM7) {
+    new MethodVisitor(ASM9) {
       override def visitMethodInsn(
           op: Int, owner: String, name: String, desc: String, itf: Boolean): Unit = {
         val argTypes = Type.getArgumentTypes(desc)

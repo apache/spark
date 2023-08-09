@@ -19,7 +19,8 @@ package org.apache.spark.util.collection
 
 import scala.collection.mutable.HashSet
 
-import org.scalatest.Matchers
+import org.scalatest.matchers.must.Matchers
+import org.scalatest.matchers.should.Matchers._
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.util.SizeEstimator
@@ -229,5 +230,23 @@ class OpenHashMapSuite extends SparkFunSuite with Matchers {
     assert(map2("a") === 0.0)
     assert(map2("b") === 0.0)
     assert(map2("c") === null)
+  }
+
+  test("get") {
+    val map = new OpenHashMap[String, String]()
+
+    // Get with normal/null keys.
+    map("1") = "1"
+    assert(map.get("1") === Some("1"))
+    assert(map.get("2") === None)
+    assert(map.get(null) === None)
+    map(null) = "hello"
+    assert(map.get(null) === Some("hello"))
+
+    // Get with null values.
+    map("1") = null
+    assert(map.get("1") === Some(null))
+    map(null) = null
+    assert(map.get(null) === Some(null))
   }
 }

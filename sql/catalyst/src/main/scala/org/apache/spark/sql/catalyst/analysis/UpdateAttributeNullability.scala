@@ -20,19 +20,21 @@ package org.apache.spark.sql.catalyst.analysis
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.catalyst.trees.AlwaysProcess
 
 /**
  * Updates nullability of Attributes in a resolved LogicalPlan by using the nullability of
  * corresponding Attributes of its children output Attributes. This step is needed because
  * users can use a resolved AttributeReference in the Dataset API and outer joins
- * can change the nullability of an AttribtueReference. Without this rule, a nullable column's
+ * can change the nullability of an AttributeReference. Without this rule, a nullable column's
  * nullable field can be actually set as non-nullable, which cause illegal optimization
  * (e.g., NULL propagation) and wrong answers.
  * See SPARK-13484 and SPARK-13801 for the concrete queries of this case.
  */
 object UpdateAttributeNullability extends Rule[LogicalPlan] {
 
-  def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperatorsUp {
+  def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUpWithPruning(
+    AlwaysProcess.fn, ruleId) {
     // Skip unresolved nodes.
     case p if !p.resolved => p
     // Skip leaf node, as it has no child and no need to update nullability.

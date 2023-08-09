@@ -47,11 +47,11 @@ object RawTextHelper {
           i += 1
         }
       }
-      map.toIterator.map {
+      map.iterator.map {
         case (k, v) => (k, v)
       }
     }
-    map.toIterator.map{case (k, v) => (k, v)}
+    map.iterator.map{case (k, v) => (k, v)}
   }
 
   /**
@@ -89,11 +89,11 @@ object RawTextHelper {
         }
       }
     }
-    taken.toIterator
+    taken.iterator
   }
 
   /**
-   * Warms up the SparkContext in master and slave by running tasks to force JIT kick in
+   * Warms up the SparkContext in master and executor by running tasks to force JIT kick in
    * before real workload starts.
    */
   def warmUp(sc: SparkContext): Unit = {

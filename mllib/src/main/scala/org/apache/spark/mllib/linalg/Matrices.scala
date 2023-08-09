@@ -23,7 +23,6 @@ import scala.collection.mutable.{ArrayBuffer, ArrayBuilder => MArrayBuilder, Has
 import scala.language.implicitConversions
 
 import breeze.linalg.{CSCMatrix => BSM, DenseMatrix => BDM, Matrix => BM}
-import com.github.fommil.netlib.BLAS.{getInstance => blas}
 
 import org.apache.spark.annotation.Since
 import org.apache.spark.ml.{linalg => newlinalg}
@@ -186,7 +185,7 @@ private[spark] class MatrixUDT extends UserDefinedType[Matrix] {
     // be added for which values are not needed.
     // the sparse matrix needs colPtrs and rowIndices, which are set as
     // null, while building the dense matrix.
-    StructType(Seq(
+    StructType(Array(
       StructField("type", ByteType, nullable = false),
       StructField("numRows", IntegerType, nullable = false),
       StructField("numCols", IntegerType, nullable = false),
@@ -427,7 +426,7 @@ class DenseMatrix @Since("1.3.0") (
     if (isTransposed) {
       Iterator.tabulate(numCols) { j =>
         val col = new Array[Double](numRows)
-        blas.dcopy(numRows, values, j, numCols, col, 0, 1)
+        BLAS.nativeBLAS.dcopy(numRows, values, j, numCols, col, 0, 1)
         new DenseVector(col)
       }
     } else {
@@ -1175,7 +1174,7 @@ object Matrices {
     var hasSparse = false
     var numRows = 0
     matrices.foreach { mat =>
-      require(numCols == mat.numCols, "The number of rows of the matrices in this sequence, " +
+      require(numCols == mat.numCols, "The number of columns of the matrices in this sequence, " +
         "don't match!")
       mat match {
         case sparse: SparseMatrix => hasSparse = true

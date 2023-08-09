@@ -1,0 +1,20 @@
+WholeStageCodegen (3)
+  HashAggregate [sum,isEmpty,sum,isEmpty] [sum(CASE WHEN StartsWith(p_type, PROMO) THEN (l_extendedprice * (1 - l_discount)) ELSE 0 END),sum((l_extendedprice * (1 - l_discount))),promo_revenue,sum,isEmpty,sum,isEmpty]
+    InputAdapter
+      Exchange #1
+        WholeStageCodegen (2)
+          HashAggregate [p_type,l_extendedprice,l_discount] [sum,isEmpty,sum,isEmpty,sum,isEmpty,sum,isEmpty]
+            Project [l_extendedprice,l_discount,p_type]
+              BroadcastHashJoin [l_partkey,p_partkey]
+                Project [l_partkey,l_extendedprice,l_discount]
+                  Filter [l_shipdate,l_partkey]
+                    ColumnarToRow
+                      InputAdapter
+                        Scan parquet spark_catalog.default.lineitem [l_partkey,l_extendedprice,l_discount,l_shipdate]
+                InputAdapter
+                  BroadcastExchange #2
+                    WholeStageCodegen (1)
+                      Filter [p_partkey]
+                        ColumnarToRow
+                          InputAdapter
+                            Scan parquet spark_catalog.default.part [p_partkey,p_type]

@@ -1,2 +1,3 @@
 --SET spark.sql.legacy.timeParserPolicy=LEGACY
---IMPORT datetime.sql
+--IMPORT date.sql
+--IMPORT timestamp.sql

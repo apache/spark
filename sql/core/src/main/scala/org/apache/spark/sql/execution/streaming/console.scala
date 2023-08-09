@@ -19,14 +19,12 @@ package org.apache.spark.sql.execution.streaming
 
 import java.util
 
-import scala.collection.JavaConverters._
-
 import org.apache.spark.sql._
 import org.apache.spark.sql.connector.catalog.{SupportsWrite, Table, TableCapability}
-import org.apache.spark.sql.connector.write.{LogicalWriteInfo, SupportsTruncate, WriteBuilder}
+import org.apache.spark.sql.connector.write.{LogicalWriteInfo, SupportsTruncate, Write, WriteBuilder}
 import org.apache.spark.sql.connector.write.streaming.StreamingWrite
 import org.apache.spark.sql.execution.streaming.sources.ConsoleWrite
-import org.apache.spark.sql.internal.connector.{SimpleTableProvider, SupportsStreamingUpdate}
+import org.apache.spark.sql.internal.connector.{SimpleTableProvider, SupportsStreamingUpdateAsAppend}
 import org.apache.spark.sql.sources.{BaseRelation, CreatableRelationProvider, DataSourceRegister}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
@@ -69,20 +67,23 @@ object ConsoleTable extends Table with SupportsWrite {
   override def schema(): StructType = StructType(Nil)
 
   override def capabilities(): util.Set[TableCapability] = {
-    Set(TableCapability.STREAMING_WRITE).asJava
+    util.EnumSet.of(TableCapability.STREAMING_WRITE)
   }
 
   override def newWriteBuilder(info: LogicalWriteInfo): WriteBuilder = {
-    new WriteBuilder with SupportsTruncate with SupportsStreamingUpdate {
+    new WriteBuilder with SupportsTruncate with SupportsStreamingUpdateAsAppend {
       private val inputSchema: StructType = info.schema()
 
-      // Do nothing for truncate/update. Console sink is special and it just prints all the records.
+      // Do nothing for truncate. Console sink is special and it just prints all the records.
       override def truncate(): WriteBuilder = this
-      override def update(): WriteBuilder = this
 
-      override def buildForStreaming(): StreamingWrite = {
-        assert(inputSchema != null)
-        new ConsoleWrite(inputSchema, info.options)
+      override def build(): Write = {
+        new Write {
+          override def toStreaming: StreamingWrite = {
+            assert(inputSchema != null)
+            new ConsoleWrite(inputSchema, info.options)
+          }
+        }
       }
     }
   }

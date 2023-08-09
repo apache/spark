@@ -87,6 +87,11 @@ class GaussianMixtureSuite extends MLTest with DefaultReadWriteTest {
     assert(copiedModel.hasSummary)
   }
 
+  test("GaussianMixture validate input dataset") {
+    testInvalidWeights(new GaussianMixture().setWeightCol("weight").fit(_))
+    testInvalidVectors(new GaussianMixture().fit(_))
+  }
+
   test("set parameters") {
     val gm = new GaussianMixture()
       .setK(9)
@@ -181,7 +186,7 @@ class GaussianMixtureSuite extends MLTest with DefaultReadWriteTest {
     }
   }
 
-  test("multivariate data and check againt R mvnormalmixEM") {
+  test("multivariate data and check against R mvnormalmixEM") {
     /*
       Using the following R code to generate data and train the model using mixtools package.
       library(mvtnorm)
@@ -268,7 +273,7 @@ class GaussianMixtureSuite extends MLTest with DefaultReadWriteTest {
     val gm1 = new GaussianMixture().setK(k).setMaxIter(20).setSeed(seed)
     val gm2 = new GaussianMixture().setK(k).setMaxIter(20).setSeed(seed).setWeightCol("weight")
 
-    Seq(1.0, 10.0, 100.0).foreach { w =>
+    Seq(1.0, 10.0, 90.0).foreach { w =>
       val gmm1 = gm1.fit(dataset)
       val ds2 = dataset.select(col("features"), lit(w).as("weight"))
       val gmm2 = gm2.fit(ds2)
@@ -284,17 +289,6 @@ class GaussianMixtureSuite extends MLTest with DefaultReadWriteTest {
 
     testClusteringModelSingleProbabilisticPrediction(model, model.predictProbability, dataset,
       model.getFeaturesCol, model.getProbabilityCol)
-  }
-
-  test("GMM on blocks") {
-    Seq(dataset, sparseDataset, denseDataset, rDataset).foreach { dataset =>
-      val gmm = new GaussianMixture().setK(k).setMaxIter(20).setBlockSize(1).setSeed(seed)
-      val model = gmm.fit(dataset)
-      Seq(2, 4, 8, 16, 32).foreach { blockSize =>
-        val model2 = gmm.setBlockSize(blockSize).fit(dataset)
-        modelEquals(model, model2)
-      }
-    }
   }
 }
 

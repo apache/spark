@@ -17,12 +17,10 @@
 
 package org.apache.spark.ml.classification
 
-import com.github.fommil.netlib.BLAS
-
-import org.apache.spark.{SparkException, SparkFunSuite}
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.classification.LinearSVCSuite.generateSVMInput
 import org.apache.spark.ml.feature.{Instance, LabeledPoint}
-import org.apache.spark.ml.linalg.{Vector, Vectors}
+import org.apache.spark.ml.linalg.{BLAS, Vector, Vectors}
 import org.apache.spark.ml.param.ParamsSuite
 import org.apache.spark.ml.regression.DecisionTreeRegressionModel
 import org.apache.spark.ml.tree._
@@ -105,6 +103,12 @@ class GBTClassifierSuite extends MLTest with DefaultReadWriteTest {
     MLTestingUtils.checkCopyAndUids(gbt, model)
   }
 
+  test("GBTClassifier validate input dataset") {
+    testInvalidClassificationLabels(new GBTClassifier().fit(_), Some(2))
+    testInvalidWeights(new GBTClassifier().setWeightCol("weight").fit(_))
+    testInvalidVectors(new GBTClassifier().fit(_))
+  }
+
   test("setThreshold, getThreshold") {
     val gbt = new GBTClassifier
 
@@ -170,8 +174,6 @@ class GBTClassifierSuite extends MLTest with DefaultReadWriteTest {
     val numFeatures = trainingDataset.select(featuresCol).first().getAs[Vector](0).size
     assert(gbtModel.numFeatures === numFeatures)
 
-    val blas = BLAS.getInstance()
-
     val validationDataset = validationData.toDF(labelCol, featuresCol)
     testTransformer[(Double, Vector)](validationDataset, gbtModel,
       "rawPrediction", "features", "probability", "prediction") {
@@ -179,7 +181,7 @@ class GBTClassifierSuite extends MLTest with DefaultReadWriteTest {
         assert(raw.size === 2)
         // check that raw prediction is tree predictions dot tree weights
         val treePredictions = gbtModel.trees.map(_.rootNode.predictImpl(features).prediction)
-        val prediction = blas.ddot(gbtModel.getNumTrees, treePredictions, 1,
+        val prediction = BLAS.nativeBLAS.ddot(gbtModel.getNumTrees, treePredictions, 1,
           gbtModel.treeWeights, 1)
         assert(raw ~== Vectors.dense(-prediction, prediction) relTol eps)
 
@@ -306,36 +308,6 @@ class GBTClassifierSuite extends MLTest with DefaultReadWriteTest {
     val df: DataFrame = TreeTests.featureImportanceData(sc).toDF()
     val gbt = new GBTClassifier().setMaxDepth(1).setMaxIter(1)
     gbt.fit(df)
-  }
-
-  test("extractLabeledPoints with bad data") {
-    def getTestData(labels: Seq[Double]): DataFrame = {
-      labels.map { label: Double => LabeledPoint(label, Vectors.dense(0.0)) }.toDF()
-    }
-
-    val gbt = new GBTClassifier().setMaxDepth(1).setMaxIter(1)
-    // Invalid datasets
-    val df1 = getTestData(Seq(0.0, -1.0, 1.0, 0.0))
-    withClue("Classifier should fail if label is negative") {
-      val e: SparkException = intercept[SparkException] {
-        gbt.fit(df1)
-      }
-      assert(e.getMessage.contains("currently only supports binary classification"))
-    }
-    val df2 = getTestData(Seq(0.0, 0.1, 1.0, 0.0))
-    withClue("Classifier should fail if label is not an integer") {
-      val e: SparkException = intercept[SparkException] {
-        gbt.fit(df2)
-      }
-      assert(e.getMessage.contains("currently only supports binary classification"))
-    }
-    val df3 = getTestData(Seq(0.0, 2.0, 1.0, 0.0))
-    withClue("Classifier should fail if label is >= 2") {
-      val e: SparkException = intercept[SparkException] {
-        gbt.fit(df3)
-      }
-      assert(e.getMessage.contains("currently only supports binary classification"))
-    }
   }
 
   /////////////////////////////////////////////////////////////////////////////
@@ -544,6 +516,20 @@ class GBTClassifierSuite extends MLTest with DefaultReadWriteTest {
       TreeTests.setMetadata(rdd, Map.empty[Int, Int], numClasses = 2)
     testEstimatorAndModelReadWrite(gbt, continuousData, allParamSettings,
       allParamSettings, checkModelData)
+  }
+
+  test("SPARK-33398: Load GBTClassificationModel prior to Spark 3.0") {
+    val path = testFile("ml-models/gbtc-2.4.7")
+    val model = GBTClassificationModel.load(path)
+    assert(model.numClasses === 2)
+    assert(model.numFeatures === 692)
+    assert(model.getNumTrees === 2)
+    assert(model.totalNumNodes === 22)
+    assert(model.trees.map(_.numNodes) === Array(5, 17))
+
+    val metadata = spark.read.json(s"$path/metadata")
+    val sparkVersionStr = metadata.select("sparkVersion").first().getString(0)
+    assert(sparkVersionStr === "2.4.7")
   }
 }
 

@@ -20,6 +20,7 @@ package org.apache.spark.sql.execution.streaming.state
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.expressions.{Attribute, UnsafeRow}
 import org.apache.spark.sql.catalyst.expressions.codegen.{GenerateUnsafeProjection, GenerateUnsafeRowJoiner}
+import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.types.StructType
 
 /**
@@ -34,7 +35,7 @@ sealed trait StreamingAggregationStateManager extends Serializable {
   def getStateValueSchema: StructType
 
   /** Get the current value of a non-null key from the target state store. */
-  def get(store: StateStore, key: UnsafeRow): UnsafeRow
+  def get(store: ReadStateStore, key: UnsafeRow): UnsafeRow
 
   /**
    * Put a new value for a non-null key to the target state store. Note that key will be
@@ -52,13 +53,13 @@ sealed trait StreamingAggregationStateManager extends Serializable {
   def remove(store: StateStore, key: UnsafeRow): Unit
 
   /** Return an iterator containing all the key-value pairs in target state store. */
-  def iterator(store: StateStore): Iterator[UnsafeRowPair]
+  def iterator(store: ReadStateStore): Iterator[UnsafeRowPair]
 
   /** Return an iterator containing all the keys in target state store. */
-  def keys(store: StateStore): Iterator[UnsafeRow]
+  def keys(store: ReadStateStore): Iterator[UnsafeRow]
 
   /** Return an iterator containing all the values in target state store. */
-  def values(store: StateStore): Iterator[UnsafeRow]
+  def values(store: ReadStateStore): Iterator[UnsafeRow]
 }
 
 object StreamingAggregationStateManager extends Logging {
@@ -90,9 +91,9 @@ abstract class StreamingAggregationStateManagerBaseImpl(
 
   override def remove(store: StateStore, key: UnsafeRow): Unit = store.remove(key)
 
-  override def keys(store: StateStore): Iterator[UnsafeRow] = {
+  override def keys(store: ReadStateStore): Iterator[UnsafeRow] = {
     // discard and don't convert values to avoid computation
-    store.getRange(None, None).map(_.key)
+    store.iterator().map(_.key)
   }
 }
 
@@ -113,7 +114,7 @@ class StreamingAggregationStateManagerImplV1(
 
   override def getStateValueSchema: StructType = inputRowAttributes.toStructType
 
-  override def get(store: StateStore, key: UnsafeRow): UnsafeRow = {
+  override def get(store: ReadStateStore, key: UnsafeRow): UnsafeRow = {
     store.get(key)
   }
 
@@ -121,11 +122,11 @@ class StreamingAggregationStateManagerImplV1(
     store.put(getKey(row), row)
   }
 
-  override def iterator(store: StateStore): Iterator[UnsafeRowPair] = {
+  override def iterator(store: ReadStateStore): Iterator[UnsafeRowPair] = {
     store.iterator()
   }
 
-  override def values(store: StateStore): Iterator[UnsafeRow] = {
+  override def values(store: ReadStateStore): Iterator[UnsafeRow] = {
     store.iterator().map(_.value)
   }
 }
@@ -160,14 +161,14 @@ class StreamingAggregationStateManagerImplV2(
     GenerateUnsafeProjection.generate(valueExpressions, inputRowAttributes)
 
   @transient private lazy val joiner =
-    GenerateUnsafeRowJoiner.create(StructType.fromAttributes(keyExpressions),
-      StructType.fromAttributes(valueExpressions))
+    GenerateUnsafeRowJoiner.create(DataTypeUtils.fromAttributes(keyExpressions),
+      DataTypeUtils.fromAttributes(valueExpressions))
   @transient private lazy val restoreValueProjector = GenerateUnsafeProjection.generate(
     inputRowAttributes, keyValueJoinedExpressions)
 
   override def getStateValueSchema: StructType = valueExpressions.toStructType
 
-  override def get(store: StateStore, key: UnsafeRow): UnsafeRow = {
+  override def get(store: ReadStateStore, key: UnsafeRow): UnsafeRow = {
     val savedState = store.get(key)
     if (savedState == null) {
       return savedState
@@ -182,11 +183,11 @@ class StreamingAggregationStateManagerImplV2(
     store.put(key, value)
   }
 
-  override def iterator(store: StateStore): Iterator[UnsafeRowPair] = {
+  override def iterator(store: ReadStateStore): Iterator[UnsafeRowPair] = {
     store.iterator().map(rowPair => new UnsafeRowPair(rowPair.key, restoreOriginalRow(rowPair)))
   }
 
-  override def values(store: StateStore): Iterator[UnsafeRow] = {
+  override def values(store: ReadStateStore): Iterator[UnsafeRow] = {
     store.iterator().map(rowPair => restoreOriginalRow(rowPair))
   }
 

@@ -2,6 +2,7 @@
   "taskId" : 0,
   "index" : 0,
   "attempt" : 0,
+  "partitionId" : -1,
   "launchTime" : "2015-05-06T13:03:06.494GMT",
   "duration" : 435,
   "executorId" : "driver",
@@ -36,7 +37,19 @@
       "remoteBytesRead" : 0,
       "remoteBytesReadToDisk" : 0,
       "localBytesRead" : 0,
-      "recordsRead" : 0
+      "recordsRead" : 0,
+      "remoteReqsDuration" : 0,
+      "shufflePushReadMetrics" : {
+        "corruptMergedBlockChunks" : 0,
+        "mergedFetchFallbackCount" : 0,
+        "remoteMergedBlocksFetched": 0,
+        "localMergedBlocksFetched" :  0,
+        "remoteMergedChunksFetched": 0,
+        "localMergedChunksFetched": 0,
+        "remoteMergedBytesRead": 0,
+        "localMergedBytesRead" : 0,
+        "remoteMergedReqsDuration" : 0
+      }
     },
     "shuffleWriteMetrics" : {
       "bytesWritten" : 1710,
@@ -51,6 +64,7 @@
   "taskId" : 1,
   "index" : 1,
   "attempt" : 0,
+  "partitionId" : -1,
   "launchTime" : "2015-05-06T13:03:06.502GMT",
   "duration" : 421,
   "executorId" : "driver",
@@ -85,7 +99,19 @@
       "remoteBytesRead" : 0,
       "remoteBytesReadToDisk" : 0,
       "localBytesRead" : 0,
-      "recordsRead" : 0
+      "recordsRead" : 0,
+      "remoteReqsDuration" : 0,
+      "shufflePushReadMetrics" : {
+        "corruptMergedBlockChunks" : 0,
+        "mergedFetchFallbackCount" : 0,
+        "remoteMergedBlocksFetched": 0,
+        "localMergedBlocksFetched" :  0,
+        "remoteMergedChunksFetched": 0,
+        "localMergedChunksFetched": 0,
+        "remoteMergedBytesRead": 0,
+        "localMergedBytesRead" : 0,
+        "remoteMergedReqsDuration" : 0
+      }
     },
     "shuffleWriteMetrics" : {
       "bytesWritten" : 1710,
@@ -100,6 +126,7 @@
   "taskId" : 2,
   "index" : 2,
   "attempt" : 0,
+  "partitionId" : -1,
   "launchTime" : "2015-05-06T13:03:06.503GMT",
   "duration" : 419,
   "executorId" : "driver",
@@ -134,7 +161,19 @@
       "remoteBytesRead" : 0,
       "remoteBytesReadToDisk" : 0,
       "localBytesRead" : 0,
-      "recordsRead" : 0
+      "recordsRead" : 0,
+      "remoteReqsDuration" : 0,
+      "shufflePushReadMetrics" : {
+        "corruptMergedBlockChunks" : 0,
+        "mergedFetchFallbackCount" : 0,
+        "remoteMergedBlocksFetched": 0,
+        "localMergedBlocksFetched" :  0,
+        "remoteMergedChunksFetched": 0,
+        "localMergedChunksFetched": 0,
+        "remoteMergedBytesRead": 0,
+        "localMergedBytesRead" : 0,
+        "remoteMergedReqsDuration" : 0
+      }
     },
     "shuffleWriteMetrics" : {
       "bytesWritten" : 1710,
@@ -149,6 +188,8 @@
   "taskId" : 3,
   "index" : 3,
   "attempt" : 0,
+  "partitionId" : -1,
+"partitionId" : -1,
   "launchTime" : "2015-05-06T13:03:06.504GMT",
   "duration" : 423,
   "executorId" : "driver",
@@ -183,7 +224,19 @@
       "remoteBytesRead" : 0,
       "remoteBytesReadToDisk" : 0,
       "localBytesRead" : 0,
-      "recordsRead" : 0
+      "recordsRead" : 0,
+      "remoteReqsDuration" : 0,
+      "shufflePushReadMetrics" : {
+        "corruptMergedBlockChunks" : 0,
+        "mergedFetchFallbackCount" : 0,
+        "remoteMergedBlocksFetched": 0,
+        "localMergedBlocksFetched" :  0,
+        "remoteMergedChunksFetched": 0,
+        "localMergedChunksFetched": 0,
+        "remoteMergedBytesRead": 0,
+        "localMergedBytesRead" : 0,
+        "remoteMergedReqsDuration" : 0
+      }
     },
     "shuffleWriteMetrics" : {
       "bytesWritten" : 1710,
@@ -198,6 +251,7 @@
   "taskId" : 4,
   "index" : 4,
   "attempt" : 0,
+  "partitionId" : -1,
   "launchTime" : "2015-05-06T13:03:06.504GMT",
   "duration" : 419,
   "executorId" : "driver",
@@ -232,7 +286,19 @@
       "remoteBytesRead" : 0,
       "remoteBytesReadToDisk" : 0,
       "localBytesRead" : 0,
-      "recordsRead" : 0
+      "recordsRead" : 0,
+      "remoteReqsDuration" : 0,
+      "shufflePushReadMetrics" : {
+        "corruptMergedBlockChunks" : 0,
+        "mergedFetchFallbackCount" : 0,
+        "remoteMergedBlocksFetched": 0,
+        "localMergedBlocksFetched" :  0,
+        "remoteMergedChunksFetched": 0,
+        "localMergedChunksFetched": 0,
+        "remoteMergedBytesRead": 0,
+        "localMergedBytesRead" : 0,
+        "remoteMergedReqsDuration" : 0
+      }
     },
     "shuffleWriteMetrics" : {
       "bytesWritten" : 1710,
@@ -247,6 +313,7 @@
   "taskId" : 5,
   "index" : 5,
   "attempt" : 0,
+  "partitionId" : -1,
   "launchTime" : "2015-05-06T13:03:06.505GMT",
   "duration" : 414,
   "executorId" : "driver",
@@ -281,7 +348,19 @@
       "remoteBytesRead" : 0,
       "remoteBytesReadToDisk" : 0,
       "localBytesRead" : 0,
-      "recordsRead" : 0
+      "recordsRead" : 0,
+      "remoteReqsDuration" : 0,
+      "shufflePushReadMetrics" : {
+        "corruptMergedBlockChunks" : 0,
+        "mergedFetchFallbackCount" : 0,
+        "remoteMergedBlocksFetched": 0,
+        "localMergedBlocksFetched" :  0,
+        "remoteMergedChunksFetched": 0,
+        "localMergedChunksFetched": 0,
+        "remoteMergedBytesRead": 0,
+        "localMergedBytesRead" : 0,
+        "remoteMergedReqsDuration" : 0
+      }
     },
     "shuffleWriteMetrics" : {
       "bytesWritten" : 1710,
@@ -296,6 +375,7 @@
   "taskId" : 6,
   "index" : 6,
   "attempt" : 0,
+  "partitionId" : -1,
   "launchTime" : "2015-05-06T13:03:06.505GMT",
   "duration" : 419,
   "executorId" : "driver",
@@ -330,7 +410,19 @@
       "remoteBytesRead" : 0,
       "remoteBytesReadToDisk" : 0,
       "localBytesRead" : 0,
-      "recordsRead" : 0
+      "recordsRead" : 0,
+      "remoteReqsDuration" : 0,
+      "shufflePushReadMetrics" : {
+        "corruptMergedBlockChunks" : 0,
+        "mergedFetchFallbackCount" : 0,
+        "remoteMergedBlocksFetched": 0,
+        "localMergedBlocksFetched" :  0,
+        "remoteMergedChunksFetched": 0,
+        "localMergedChunksFetched": 0,
+        "remoteMergedBytesRead": 0,
+        "localMergedBytesRead" : 0,
+        "remoteMergedReqsDuration" : 0
+      }
     },
     "shuffleWriteMetrics" : {
       "bytesWritten" : 1710,
@@ -345,6 +437,7 @@
   "taskId" : 7,
   "index" : 7,
   "attempt" : 0,
+  "partitionId" : -1,
   "launchTime" : "2015-05-06T13:03:06.506GMT",
   "duration" : 423,
   "executorId" : "driver",
@@ -379,7 +472,19 @@
       "remoteBytesRead" : 0,
       "remoteBytesReadToDisk" : 0,
       "localBytesRead" : 0,
-      "recordsRead" : 0
+      "recordsRead" : 0,
+      "remoteReqsDuration" : 0,
+      "shufflePushReadMetrics" : {
+        "corruptMergedBlockChunks" : 0,
+        "mergedFetchFallbackCount" : 0,
+        "remoteMergedBlocksFetched": 0,
+        "localMergedBlocksFetched" :  0,
+        "remoteMergedChunksFetched": 0,
+        "localMergedChunksFetched": 0,
+        "remoteMergedBytesRead": 0,
+        "localMergedBytesRead" : 0,
+        "remoteMergedReqsDuration" : 0
+      }
     },
     "shuffleWriteMetrics" : {
       "bytesWritten" : 1710,
@@ -394,6 +499,7 @@
   "taskId" : 8,
   "index" : 8,
   "attempt" : 0,
+  "partitionId" : -1,
   "launchTime" : "2015-05-06T13:03:06.914GMT",
   "duration" : 88,
   "executorId" : "driver",
@@ -428,7 +534,19 @@
       "remoteBytesRead" : 0,
       "remoteBytesReadToDisk" : 0,
       "localBytesRead" : 0,
-      "recordsRead" : 0
+      "recordsRead" : 0,
+      "remoteReqsDuration" : 0,
+      "shufflePushReadMetrics" : {
+        "corruptMergedBlockChunks" : 0,
+        "mergedFetchFallbackCount" : 0,
+        "remoteMergedBlocksFetched": 0,
+        "localMergedBlocksFetched" :  0,
+        "remoteMergedChunksFetched": 0,
+        "localMergedChunksFetched": 0,
+        "remoteMergedBytesRead": 0,
+        "localMergedBytesRead" : 0,
+        "remoteMergedReqsDuration" : 0
+      }
     },
     "shuffleWriteMetrics" : {
       "bytesWritten" : 1710,
@@ -443,6 +561,7 @@
   "taskId" : 9,
   "index" : 9,
   "attempt" : 0,
+  "partitionId" : -1,
   "launchTime" : "2015-05-06T13:03:06.915GMT",
   "duration" : 101,
   "executorId" : "driver",
@@ -477,7 +596,19 @@
       "remoteBytesRead" : 0,
       "remoteBytesReadToDisk" : 0,
       "localBytesRead" : 0,
-      "recordsRead" : 0
+      "recordsRead" : 0,
+      "remoteReqsDuration" : 0,
+      "shufflePushReadMetrics" : {
+        "corruptMergedBlockChunks" : 0,
+        "mergedFetchFallbackCount" : 0,
+        "remoteMergedBlocksFetched": 0,
+        "localMergedBlocksFetched" :  0,
+        "remoteMergedChunksFetched": 0,
+        "localMergedChunksFetched": 0,
+        "remoteMergedBytesRead": 0,
+        "localMergedBytesRead" : 0,
+        "remoteMergedReqsDuration" : 0
+      }
     },
     "shuffleWriteMetrics" : {
       "bytesWritten" : 1710,
@@ -492,6 +623,7 @@
   "taskId" : 10,
   "index" : 10,
   "attempt" : 0,
+  "partitionId" : -1,
   "launchTime" : "2015-05-06T13:03:06.916GMT",
   "duration" : 99,
   "executorId" : "driver",
@@ -526,7 +658,19 @@
       "remoteBytesRead" : 0,
       "remoteBytesReadToDisk" : 0,
       "localBytesRead" : 0,
-      "recordsRead" : 0
+      "recordsRead" : 0,
+      "remoteReqsDuration" : 0,
+      "shufflePushReadMetrics" : {
+        "corruptMergedBlockChunks" : 0,
+        "mergedFetchFallbackCount" : 0,
+        "remoteMergedBlocksFetched": 0,
+        "localMergedBlocksFetched" :  0,
+        "remoteMergedChunksFetched": 0,
+        "localMergedChunksFetched": 0,
+        "remoteMergedBytesRead": 0,
+        "localMergedBytesRead" : 0,
+        "remoteMergedReqsDuration" : 0
+      }
     },
     "shuffleWriteMetrics" : {
       "bytesWritten" : 1710,
@@ -541,6 +685,7 @@
   "taskId" : 11,
   "index" : 11,
   "attempt" : 0,
+  "partitionId" : -1,
   "launchTime" : "2015-05-06T13:03:06.918GMT",
   "duration" : 89,
   "executorId" : "driver",
@@ -575,7 +720,19 @@
       "remoteBytesRead" : 0,
       "remoteBytesReadToDisk" : 0,
       "localBytesRead" : 0,
-      "recordsRead" : 0
+      "recordsRead" : 0,
+      "remoteReqsDuration" : 0,
+      "shufflePushReadMetrics" : {
+        "corruptMergedBlockChunks" : 0,
+        "mergedFetchFallbackCount" : 0,
+        "remoteMergedBlocksFetched": 0,
+        "localMergedBlocksFetched" :  0,
+        "remoteMergedChunksFetched": 0,
+        "localMergedChunksFetched": 0,
+        "remoteMergedBytesRead": 0,
+        "localMergedBytesRead" : 0,
+        "remoteMergedReqsDuration" : 0
+      }
     },
     "shuffleWriteMetrics" : {
       "bytesWritten" : 1710,
@@ -590,6 +747,7 @@
   "taskId" : 12,
   "index" : 12,
   "attempt" : 0,
+  "partitionId" : -1,
   "launchTime" : "2015-05-06T13:03:06.923GMT",
   "duration" : 93,
   "executorId" : "driver",
@@ -624,7 +782,19 @@
       "remoteBytesRead" : 0,
       "remoteBytesReadToDisk" : 0,
       "localBytesRead" : 0,
-      "recordsRead" : 0
+      "recordsRead" : 0,
+      "remoteReqsDuration" : 0,
+      "shufflePushReadMetrics" : {
+        "corruptMergedBlockChunks" : 0,
+        "mergedFetchFallbackCount" : 0,
+        "remoteMergedBlocksFetched": 0,
+        "localMergedBlocksFetched" :  0,
+        "remoteMergedChunksFetched": 0,
+        "localMergedChunksFetched": 0,
+        "remoteMergedBytesRead": 0,
+        "localMergedBytesRead" : 0,
+        "remoteMergedReqsDuration" : 0
+      }
     },
     "shuffleWriteMetrics" : {
       "bytesWritten" : 1710,
@@ -639,6 +809,7 @@
   "taskId" : 13,
   "index" : 13,
   "attempt" : 0,
+  "partitionId" : -1,
   "launchTime" : "2015-05-06T13:03:06.924GMT",
   "duration" : 138,
   "executorId" : "driver",
@@ -673,7 +844,19 @@
       "remoteBytesRead" : 0,
       "remoteBytesReadToDisk" : 0,
       "localBytesRead" : 0,
-      "recordsRead" : 0
+      "recordsRead" : 0,
+      "remoteReqsDuration" : 0,
+      "shufflePushReadMetrics" : {
+        "corruptMergedBlockChunks" : 0,
+        "mergedFetchFallbackCount" : 0,
+        "remoteMergedBlocksFetched": 0,
+        "localMergedBlocksFetched" :  0,
+        "remoteMergedChunksFetched": 0,
+        "localMergedChunksFetched": 0,
+        "remoteMergedBytesRead": 0,
+        "localMergedBytesRead" : 0,
+        "remoteMergedReqsDuration" : 0
+      }
     },
     "shuffleWriteMetrics" : {
       "bytesWritten" : 1710,
@@ -688,6 +871,7 @@
   "taskId" : 14,
   "index" : 14,
   "attempt" : 0,
+  "partitionId" : -1,
   "launchTime" : "2015-05-06T13:03:06.925GMT",
   "duration" : 94,
   "executorId" : "driver",
@@ -722,7 +906,19 @@
       "remoteBytesRead" : 0,
       "remoteBytesReadToDisk" : 0,
       "localBytesRead" : 0,
-      "recordsRead" : 0
+      "recordsRead" : 0,
+      "remoteReqsDuration" : 0,
+      "shufflePushReadMetrics" : {
+        "corruptMergedBlockChunks" : 0,
+        "mergedFetchFallbackCount" : 0,
+        "remoteMergedBlocksFetched": 0,
+        "localMergedBlocksFetched" :  0,
+        "remoteMergedChunksFetched": 0,
+        "localMergedChunksFetched": 0,
+        "remoteMergedBytesRead": 0,
+        "localMergedBytesRead" : 0,
+        "remoteMergedReqsDuration" : 0
+      }
     },
     "shuffleWriteMetrics" : {
       "bytesWritten" : 1710,
@@ -737,6 +933,7 @@
   "taskId" : 15,
   "index" : 15,
   "attempt" : 0,
+  "partitionId" : -1,
   "launchTime" : "2015-05-06T13:03:06.928GMT",
   "duration" : 83,
   "executorId" : "driver",
@@ -771,7 +968,19 @@
       "remoteBytesRead" : 0,
       "remoteBytesReadToDisk" : 0,
       "localBytesRead" : 0,
-      "recordsRead" : 0
+      "recordsRead" : 0,
+      "remoteReqsDuration" : 0,
+      "shufflePushReadMetrics" : {
+        "corruptMergedBlockChunks" : 0,
+        "mergedFetchFallbackCount" : 0,
+        "remoteMergedBlocksFetched": 0,
+        "localMergedBlocksFetched" :  0,
+        "remoteMergedChunksFetched": 0,
+        "localMergedChunksFetched": 0,
+        "remoteMergedBytesRead": 0,
+        "localMergedBytesRead" : 0,
+        "remoteMergedReqsDuration" : 0
+      }
     },
     "shuffleWriteMetrics" : {
       "bytesWritten" : 1710,
@@ -786,6 +995,7 @@
   "taskId" : 16,
   "index" : 16,
   "attempt" : 0,
+  "partitionId" : -1,
   "launchTime" : "2015-05-06T13:03:07.001GMT",
   "duration" : 98,
   "executorId" : "driver",
@@ -820,7 +1030,19 @@
       "remoteBytesRead" : 0,
       "remoteBytesReadToDisk" : 0,
       "localBytesRead" : 0,
-      "recordsRead" : 0
+      "recordsRead" : 0,
+      "remoteReqsDuration" : 0,
+      "shufflePushReadMetrics" : {
+        "corruptMergedBlockChunks" : 0,
+        "mergedFetchFallbackCount" : 0,
+        "remoteMergedBlocksFetched": 0,
+        "localMergedBlocksFetched" :  0,
+        "remoteMergedChunksFetched": 0,
+        "localMergedChunksFetched": 0,
+        "remoteMergedBytesRead": 0,
+        "localMergedBytesRead" : 0,
+        "remoteMergedReqsDuration" : 0
+      }
     },
     "shuffleWriteMetrics" : {
       "bytesWritten" : 1710,
@@ -835,6 +1057,7 @@
   "taskId" : 17,
   "index" : 17,
   "attempt" : 0,
+  "partitionId" : -1,
   "launchTime" : "2015-05-06T13:03:07.005GMT",
   "duration" : 123,
   "executorId" : "driver",
@@ -869,7 +1092,19 @@
       "remoteBytesRead" : 0,
       "remoteBytesReadToDisk" : 0,
       "localBytesRead" : 0,
-      "recordsRead" : 0
+      "recordsRead" : 0,
+      "remoteReqsDuration" : 0,
+      "shufflePushReadMetrics" : {
+        "corruptMergedBlockChunks" : 0,
+        "mergedFetchFallbackCount" : 0,
+        "remoteMergedBlocksFetched": 0,
+        "localMergedBlocksFetched" :  0,
+        "remoteMergedChunksFetched": 0,
+        "localMergedChunksFetched": 0,
+        "remoteMergedBytesRead": 0,
+        "localMergedBytesRead" : 0,
+        "remoteMergedReqsDuration" : 0
+      }
     },
     "shuffleWriteMetrics" : {
       "bytesWritten" : 1710,
@@ -884,6 +1119,7 @@
   "taskId" : 18,
   "index" : 18,
   "attempt" : 0,
+  "partitionId" : -1,
   "launchTime" : "2015-05-06T13:03:07.010GMT",
   "duration" : 105,
   "executorId" : "driver",
@@ -918,7 +1154,19 @@
       "remoteBytesRead" : 0,
       "remoteBytesReadToDisk" : 0,
       "localBytesRead" : 0,
-      "recordsRead" : 0
+      "recordsRead" : 0,
+      "remoteReqsDuration" : 0,
+      "shufflePushReadMetrics" : {
+        "corruptMergedBlockChunks" : 0,
+        "mergedFetchFallbackCount" : 0,
+        "remoteMergedBlocksFetched": 0,
+        "localMergedBlocksFetched" :  0,
+        "remoteMergedChunksFetched": 0,
+        "localMergedChunksFetched": 0,
+        "remoteMergedBytesRead": 0,
+        "localMergedBytesRead" : 0,
+        "remoteMergedReqsDuration" : 0
+      }
     },
     "shuffleWriteMetrics" : {
       "bytesWritten" : 1710,
@@ -933,6 +1181,7 @@
   "taskId" : 19,
   "index" : 19,
   "attempt" : 0,
+  "partitionId" : -1,
   "launchTime" : "2015-05-06T13:03:07.012GMT",
   "duration" : 94,
   "executorId" : "driver",
@@ -967,7 +1216,19 @@
       "remoteBytesRead" : 0,
       "remoteBytesReadToDisk" : 0,
       "localBytesRead" : 0,
-      "recordsRead" : 0
+      "recordsRead" : 0,
+      "remoteReqsDuration" : 0,
+      "shufflePushReadMetrics" : {
+        "corruptMergedBlockChunks" : 0,
+        "mergedFetchFallbackCount" : 0,
+        "remoteMergedBlocksFetched": 0,
+        "localMergedBlocksFetched" :  0,
+        "remoteMergedChunksFetched": 0,
+        "localMergedChunksFetched": 0,
+        "remoteMergedBytesRead": 0,
+        "localMergedBytesRead" : 0,
+        "remoteMergedReqsDuration" : 0
+      }
     },
     "shuffleWriteMetrics" : {
       "bytesWritten" : 1710,

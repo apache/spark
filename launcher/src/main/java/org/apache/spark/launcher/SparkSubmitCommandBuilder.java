@@ -22,6 +22,7 @@ import java.io.IOException;
 import java.util.*;
 
 import static org.apache.spark.launcher.CommandBuilderUtils.*;
+import static org.apache.spark.launcher.CommandBuilderUtils.checkState;
 
 /**
  * Special command builder for handling a CLI invocation of SparkSubmit.
@@ -86,6 +87,8 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
       SparkLauncher.NO_RESOURCE);
     specialClasses.put("org.apache.spark.sql.hive.thriftserver.HiveThriftServer2",
       SparkLauncher.NO_RESOURCE);
+    specialClasses.put("org.apache.spark.sql.connect.service.SparkConnectServer",
+      SparkLauncher.NO_RESOURCE);
   }
 
   final List<String> userArgs;
@@ -139,7 +142,7 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
 
         case RUN_EXAMPLE:
           isExample = true;
-          appResource = SparkLauncher.NO_RESOURCE;
+          appResource = findExamplesAppJar();
           submitArgs = args.subList(1, args.size());
       }
 
@@ -192,6 +195,11 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
       args.add(master);
     }
 
+    if (remote != null) {
+      args.add(parser.REMOTE);
+      args.add(remote);
+    }
+
     if (deployMode != null) {
       args.add(parser.DEPLOY_MODE);
       args.add(deployMode);
@@ -241,9 +249,11 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
     }
 
     args.addAll(parsedArgs);
+
     if (appResource != null) {
       args.add(appResource);
     }
+
     args.addAll(appArgs);
 
     return args;
@@ -259,8 +269,8 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
     String extraClassPath = isClientMode ? config.get(SparkLauncher.DRIVER_EXTRA_CLASSPATH) : null;
 
     List<String> cmd = buildJavaCommand(extraClassPath);
-    // Take Thrift Server as daemon
-    if (isThriftServer(mainClass)) {
+    // Take Thrift/Connect Server as daemon
+    if (isThriftServer(mainClass) || isConnectServer(mainClass)) {
       addOptionString(cmd, System.getenv("SPARK_DAEMON_JAVA_OPTS"));
     }
     addOptionString(cmd, System.getenv("SPARK_SUBMIT_OPTS"));
@@ -280,9 +290,10 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
       // - SPARK_DRIVER_MEMORY env variable
       // - SPARK_MEM env variable
       // - default value (1g)
-      // Take Thrift Server as daemon
+      // Take Thrift/Connect Server as daemon
       String tsMemory =
-        isThriftServer(mainClass) ? System.getenv("SPARK_DAEMON_MEMORY") : null;
+        isThriftServer(mainClass) || isConnectServer(mainClass) ?
+          System.getenv("SPARK_DAEMON_MEMORY") : null;
       String memory = firstNonEmpty(tsMemory, config.get(SparkLauncher.DRIVER_MEMORY),
         System.getenv("SPARK_DRIVER_MEMORY"), System.getenv("SPARK_MEM"), DEFAULT_MEM);
       cmd.add("-Xmx" + memory);
@@ -292,6 +303,8 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
         config.get(SparkLauncher.DRIVER_EXTRA_LIBRARY_PATH));
     }
 
+    // SPARK-36796: Always add default `--add-opens` to submit command
+    addOptionString(cmd, JavaModuleOptions.defaultModuleOptions());
     cmd.add("org.apache.spark.deploy.SparkSubmit");
     cmd.addAll(buildSparkSubmitArgs());
     return cmd;
@@ -334,12 +347,25 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
       conf.get(SparkLauncher.PYSPARK_PYTHON),
       System.getenv("PYSPARK_DRIVER_PYTHON"),
       System.getenv("PYSPARK_PYTHON"),
-      "python"));
+      "python3"));
     String pyOpts = System.getenv("PYSPARK_DRIVER_PYTHON_OPTS");
     if (conf.containsKey(SparkLauncher.PYSPARK_PYTHON)) {
       // pass conf spark.pyspark.python to python by environment variable.
       env.put("PYSPARK_PYTHON", conf.get(SparkLauncher.PYSPARK_PYTHON));
     }
+    String remoteStr = firstNonEmpty(remote, conf.getOrDefault(SparkLauncher.SPARK_REMOTE, null));
+    String masterStr = firstNonEmpty(master, conf.getOrDefault(SparkLauncher.SPARK_MASTER, null));
+    String deployStr = firstNonEmpty(
+      deployMode, conf.getOrDefault(SparkLauncher.DEPLOY_MODE, null));
+    if (!conf.containsKey(SparkLauncher.SPARK_LOCAL_REMOTE) &&
+        remoteStr != null && (masterStr != null || deployStr != null)) {
+      throw new IllegalStateException("Remote cannot be specified with master and/or deploy mode.");
+    }
+    if (remoteStr != null) {
+      env.put("SPARK_REMOTE", remoteStr);
+      env.put("SPARK_CONNECT_MODE_ENABLED", "1");
+    }
+
     if (!isEmpty(pyOpts)) {
       pyargs.addAll(parseOptionString(pyOpts));
     }
@@ -401,6 +427,28 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
       mainClass.equals("org.apache.spark.sql.hive.thriftserver.HiveThriftServer2"));
   }
 
+  /**
+   * Return whether the given main class represents a connect server.
+   */
+  private boolean isConnectServer(String mainClass) {
+    return (mainClass != null &&
+      mainClass.equals("org.apache.spark.sql.connect.service.SparkConnectServer"));
+  }
+
+  private String findExamplesAppJar() {
+    boolean isTesting = "1".equals(getenv("SPARK_TESTING"));
+    if (isTesting) {
+      return SparkLauncher.NO_RESOURCE;
+    } else {
+      for (String exampleJar : findExamplesJars()) {
+        if (new File(exampleJar).getName().startsWith("spark-examples")) {
+          return exampleJar;
+        }
+      }
+      throw new IllegalStateException("Failed to find examples' main app jar.");
+    }
+  }
+
   private List<String> findExamplesJars() {
     boolean isTesting = "1".equals(getenv("SPARK_TESTING"));
     List<String> examplesJars = new ArrayList<>();
@@ -440,6 +488,9 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
       switch (opt) {
         case MASTER:
           master = value;
+          break;
+        case REMOTE:
+          remote = value;
           break;
         case DEPLOY_MODE:
           deployMode = value;
@@ -513,7 +564,7 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
           className = EXAMPLE_CLASS_PREFIX + className;
         }
         mainClass = className;
-        appResource = SparkLauncher.NO_RESOURCE;
+        appResource = findExamplesAppJar();
         return false;
       } else if (errorOnUnknownArgs) {
         checkArgument(!opt.startsWith("-"), "Unrecognized option: %s", opt);

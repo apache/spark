@@ -24,18 +24,19 @@ import scala.util.Random
 import org.apache.spark.SparkConf
 import org.apache.spark.benchmark.Benchmark
 import org.apache.spark.sql.{DataFrame, SparkSession}
-import org.apache.spark.sql.functions.monotonically_increasing_id
+import org.apache.spark.sql.functions.{monotonically_increasing_id, timestamp_seconds}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.ParquetOutputTimestampType
-import org.apache.spark.sql.types.{ByteType, Decimal, DecimalType, TimestampType}
+import org.apache.spark.sql.types.{ByteType, Decimal, DecimalType}
 
 /**
  * Benchmark to measure read performance with Filter pushdown.
  * To run this benchmark:
  * {{{
- *   1. without sbt: bin/spark-submit --class <this class> <spark sql test jar>
- *   2. build/sbt "sql/test:runMain <this class>"
- *   3. generate result: SPARK_GENERATE_BENCHMARK_FILES=1 build/sbt "sql/test:runMain <this class>"
+ *   1. without sbt: bin/spark-submit --class <this class>
+ *      --jars <spark core test jar>,<spark catalyst test jar> <spark sql test jar>
+ *   2. build/sbt "sql/Test/runMain <this class>"
+ *   3. generate result: SPARK_GENERATE_BENCHMARK_FILES=1 build/sbt "sql/Test/runMain <this class>"
  *      Results will be written to "benchmarks/FilterPushdownBenchmark-results.txt".
  * }}}
  */
@@ -241,6 +242,38 @@ object FilterPushdownBenchmark extends SqlBasedBenchmark {
       }
     }
 
+    runBenchmark("Pushdown benchmark for StringEndsWith") {
+      withTempPath { dir =>
+        withTempTable("orcTable", "parquetTable") {
+          prepareStringDictTable(dir, numRows, 200, width)
+          Seq(
+            "value like '%10'",
+            "value like '%1000'",
+            s"value like '%${mid.toString.substring(0, mid.toString.length - 1)}'"
+          ).foreach { whereExpr =>
+            val title = s"StringEndsWith filter: ($whereExpr)"
+            filterPushDownBenchmark(numRows, title, whereExpr)
+          }
+        }
+      }
+    }
+
+    runBenchmark("Pushdown benchmark for StringContains") {
+      withTempPath { dir =>
+        withTempTable("orcTable", "parquetTable") {
+          prepareStringDictTable(dir, numRows, 200, width)
+          Seq(
+            "value like '%10%'",
+            "value like '%1000%'",
+            s"value like '%${mid.toString.substring(0, mid.toString.length - 1)}%'"
+          ).foreach { whereExpr =>
+            val title = s"StringContains filter: ($whereExpr)"
+            filterPushDownBenchmark(numRows, title, whereExpr)
+          }
+        }
+      }
+    }
+
     runBenchmark(s"Pushdown benchmark for ${DecimalType.simpleString}") {
       withTempPath { dir =>
         Seq(
@@ -332,11 +365,11 @@ object FilterPushdownBenchmark extends SqlBasedBenchmark {
             withSQLConf(SQLConf.PARQUET_OUTPUT_TIMESTAMP_TYPE.key -> fileType) {
               val columns = (1 to width).map(i => s"CAST(id AS string) c$i")
               val df = spark.range(numRows).selectExpr(columns: _*)
-                .withColumn("value", monotonically_increasing_id().cast(TimestampType))
+                .withColumn("value", timestamp_seconds(monotonically_increasing_id()))
               withTempTable("orcTable", "parquetTable") {
                 saveAsTable(df, dir)
 
-                Seq(s"value = CAST($mid AS timestamp)").foreach { whereExpr =>
+                Seq(s"value = timestamp_seconds($mid)").foreach { whereExpr =>
                   val title = s"Select 1 timestamp stored as $fileType row ($whereExpr)"
                     .replace("value AND value", "value")
                   filterPushDownBenchmark(numRows, title, whereExpr)
@@ -348,8 +381,8 @@ object FilterPushdownBenchmark extends SqlBasedBenchmark {
                   filterPushDownBenchmark(
                     numRows,
                     s"Select $percent% timestamp stored as $fileType rows " +
-                      s"(value < CAST(${numRows * percent / 100} AS timestamp))",
-                    s"value < CAST(${numRows * percent / 100} as timestamp)",
+                      s"(value < timestamp_seconds(${numRows * percent / 100}))",
+                    s"value < timestamp_seconds(${numRows * percent / 100})",
                     selectExpr
                   )
                 }

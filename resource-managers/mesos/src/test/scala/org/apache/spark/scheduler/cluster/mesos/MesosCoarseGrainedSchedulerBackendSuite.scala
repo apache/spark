@@ -105,7 +105,7 @@ class MesosCoarseGrainedSchedulerBackendSuite extends SparkFunSuite
     backend.statusUpdate(driver, status)
     verify(driver, times(1)).reviveOffers()
 
-    // Launches a new task on a valid offer from the same slave
+    // Launches a new task on a valid offer from the same agent
     offerResources(List(offer2))
     verifyTaskLaunched(driver, "o2")
   }
@@ -250,7 +250,7 @@ class MesosCoarseGrainedSchedulerBackendSuite extends SparkFunSuite
     verifyTaskLaunched(driver, "o2")
   }
 
-  test("mesos creates multiple executors on a single slave") {
+  test("mesos creates multiple executors on a single agent") {
     val executorCores = 4
     setBackend(Map(EXECUTOR_CORES.key -> executorCores.toString))
 
@@ -727,10 +727,10 @@ class MesosCoarseGrainedSchedulerBackendSuite extends SparkFunSuite
 
   private case class Resources(mem: Int, cpus: Int, gpus: Int = 0)
 
-  private def registerMockExecutor(executorId: String, slaveId: String, cores: Integer) = {
+  private def registerMockExecutor(executorId: String, agentId: String, cores: Integer) = {
     val mockEndpointRef = mock[RpcEndpointRef]
     val mockAddress = mock[RpcAddress]
-    val message = RegisterExecutor(executorId, mockEndpointRef, slaveId, cores, Map.empty,
+    val message = RegisterExecutor(executorId, mockEndpointRef, agentId, cores, Map.empty,
       Map.empty, Map.empty, ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID)
 
     backend.driverEndpoint.askSync[Boolean](message)
@@ -766,10 +766,10 @@ class MesosCoarseGrainedSchedulerBackendSuite extends SparkFunSuite
     }
   }
 
-  private def createTaskStatus(taskId: String, slaveId: String, state: TaskState): TaskStatus = {
+  private def createTaskStatus(taskId: String, agentId: String, state: TaskState): TaskStatus = {
     TaskStatus.newBuilder()
       .setTaskId(TaskID.newBuilder().setValue(taskId).build())
-      .setSlaveId(SlaveID.newBuilder().setValue(slaveId).build())
+      .setSlaveId(SlaveID.newBuilder().setValue(agentId).build())
       .setState(state)
       .build
   }
@@ -833,7 +833,7 @@ class MesosCoarseGrainedSchedulerBackendSuite extends SparkFunSuite
     when(driver.start()).thenReturn(Protos.Status.DRIVER_RUNNING)
 
     taskScheduler = mock[TaskSchedulerImpl]
-    when(taskScheduler.nodeBlacklist).thenReturn(Set[String]())
+    when(taskScheduler.excludedNodes).thenReturn(Set[String]())
     when(taskScheduler.sc).thenReturn(sc)
 
     externalShuffleClient = mock[MesosExternalBlockStoreClient]

@@ -18,12 +18,17 @@ package org.apache.spark.sql.execution.datasources.v2
 
 import java.util
 
+import scala.collection.JavaConverters._
+
 import com.fasterxml.jackson.databind.ObjectMapper
+import com.fasterxml.jackson.module.scala.DefaultScalaModule
+import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.connector.catalog.{Table, TableProvider}
 import org.apache.spark.sql.connector.expressions.Transform
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.sources.DataSourceRegister
 import org.apache.spark.sql.types.StructType
@@ -46,21 +51,29 @@ trait FileDataSourceV2 extends TableProvider with DataSourceRegister {
   lazy val sparkSession = SparkSession.active
 
   protected def getPaths(map: CaseInsensitiveStringMap): Seq[String] = {
-    val objectMapper = new ObjectMapper()
     val paths = Option(map.get("paths")).map { pathStr =>
-      objectMapper.readValue(pathStr, classOf[Array[String]]).toSeq
+      FileDataSourceV2.readPathsToSeq(pathStr)
     }.getOrElse(Seq.empty)
     paths ++ Option(map.get("path")).toSeq
   }
 
-  protected def getTableName(paths: Seq[String]): String = {
-    val name = shortName() + " " + paths.map(qualifiedPathName).mkString(",")
+  protected def getOptionsWithoutPaths(map: CaseInsensitiveStringMap): CaseInsensitiveStringMap = {
+    val withoutPath = map.asCaseSensitiveMap().asScala.filterKeys { k =>
+      !k.equalsIgnoreCase("path") && !k.equalsIgnoreCase("paths")
+    }
+    new CaseInsensitiveStringMap(withoutPath.toMap.asJava)
+  }
+
+  protected def getTableName(map: CaseInsensitiveStringMap, paths: Seq[String]): String = {
+    val hadoopConf = sparkSession.sessionState.newHadoopConfWithOptions(
+      map.asCaseSensitiveMap().asScala.toMap)
+    val name = shortName() + " " + paths.map(qualifiedPathName(_, hadoopConf)).mkString(",")
     Utils.redact(sparkSession.sessionState.conf.stringRedactionPattern, name)
   }
 
-  private def qualifiedPathName(path: String): String = {
+  private def qualifiedPathName(path: String, hadoopConf: Configuration): String = {
     val hdfsPath = new Path(path)
-    val fs = hdfsPath.getFileSystem(sparkSession.sessionState.newHadoopConf())
+    val fs = hdfsPath.getFileSystem(hadoopConf)
     hdfsPath.makeQualified(fs.getUri, fs.getWorkingDirectory).toString
   }
 
@@ -69,7 +82,7 @@ trait FileDataSourceV2 extends TableProvider with DataSourceRegister {
   //       implementation and directly implement the TableProvider APIs.
   protected def getTable(options: CaseInsensitiveStringMap): Table
   protected def getTable(options: CaseInsensitiveStringMap, schema: StructType): Table = {
-    throw new UnsupportedOperationException("user-specified schema")
+    throw QueryExecutionErrors.unsupportedUserSpecifiedSchemaError()
   }
 
   override def supportsExternalMetadata(): Boolean = true
@@ -77,8 +90,9 @@ trait FileDataSourceV2 extends TableProvider with DataSourceRegister {
   private var t: Table = null
 
   override def inferSchema(options: CaseInsensitiveStringMap): StructType = {
+    import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
     if (t == null) t = getTable(options)
-    t.schema()
+    t.columns.asSchema
   }
 
   // TODO: implement a light-weight partition inference which only looks at the path of one leaf
@@ -99,4 +113,10 @@ trait FileDataSourceV2 extends TableProvider with DataSourceRegister {
       getTable(new CaseInsensitiveStringMap(properties), schema)
     }
   }
+}
+
+private object FileDataSourceV2 {
+  private lazy val objectMapper = new ObjectMapper().registerModule(DefaultScalaModule)
+  private def readPathsToSeq(paths: String): Seq[String] =
+    objectMapper.readValue(paths, classOf[Seq[String]])
 }

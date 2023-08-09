@@ -23,53 +23,76 @@ import java.util
 import scala.collection.JavaConverters._
 import scala.collection.mutable
 
-import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.analysis.{NamespaceAlreadyExistsException, NoSuchNamespaceException, NoSuchTableException, TableAlreadyExistsException}
-import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogDatabase, CatalogTable, CatalogTableType, CatalogUtils, SessionCatalog}
-import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogV2Util, Identifier, NamespaceChange, SupportsNamespaces, Table, TableCatalog, TableChange, V1Table}
+import org.apache.spark.sql.catalyst.{FunctionIdentifier, SQLConfHelper, TableIdentifier}
+import org.apache.spark.sql.catalyst.analysis.{NoSuchDatabaseException, NoSuchTableException, TableAlreadyExistsException}
+import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, CatalogTable, CatalogTableType, CatalogUtils, SessionCatalog}
+import org.apache.spark.sql.catalyst.util.TypeUtils._
+import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogV2Util, Column, FunctionCatalog, Identifier, NamespaceChange, SupportsNamespaces, Table, TableCatalog, TableCatalogCapability, TableChange, V1Table}
 import org.apache.spark.sql.connector.catalog.NamespaceChange.RemoveProperty
-import org.apache.spark.sql.connector.expressions.{BucketTransform, FieldReference, IdentityTransform, Transform}
+import org.apache.spark.sql.connector.catalog.functions.UnboundFunction
+import org.apache.spark.sql.connector.expressions.Transform
+import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution.datasources.DataSource
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.connector.V1Function
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 /**
  * A [[TableCatalog]] that translates calls to the v1 SessionCatalog.
  */
-class V2SessionCatalog(catalog: SessionCatalog, conf: SQLConf)
-  extends TableCatalog with SupportsNamespaces {
-  import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.NamespaceHelper
+class V2SessionCatalog(catalog: SessionCatalog)
+  extends TableCatalog with FunctionCatalog with SupportsNamespaces with SQLConfHelper {
   import V2SessionCatalog._
 
-  override val defaultNamespace: Array[String] = Array("default")
+  override val defaultNamespace: Array[String] = Array(SQLConf.get.defaultDatabase)
 
   override def name: String = CatalogManager.SESSION_CATALOG_NAME
 
   // This class is instantiated by Spark, so `initialize` method will not be called.
   override def initialize(name: String, options: CaseInsensitiveStringMap): Unit = {}
 
+  override def capabilities(): util.Set[TableCatalogCapability] = {
+    Set(
+      TableCatalogCapability.SUPPORT_COLUMN_DEFAULT_VALUE
+    ).asJava
+  }
+
   override def listTables(namespace: Array[String]): Array[Identifier] = {
     namespace match {
       case Array(db) =>
         catalog
           .listTables(db)
-          .map(ident => Identifier.of(Array(ident.database.getOrElse("")), ident.table))
+          .map(ident => Identifier.of(ident.database.map(Array(_)).getOrElse(Array()), ident.table))
           .toArray
       case _ =>
-        throw new NoSuchNamespaceException(namespace)
+        throw QueryCompilationErrors.noSuchNamespaceError(namespace)
     }
   }
 
   override def loadTable(ident: Identifier): Table = {
-    val catalogTable = try {
-      catalog.getTableMetadata(ident.asTableIdentifier)
+    try {
+      V1Table(catalog.getTableMetadata(ident.asTableIdentifier))
     } catch {
-      case _: NoSuchTableException =>
-        throw new NoSuchTableException(ident)
+      case _: NoSuchDatabaseException =>
+        throw QueryCompilationErrors.noSuchTableError(ident)
     }
+  }
 
-    V1Table(catalogTable)
+  override def loadTable(ident: Identifier, timestamp: Long): Table = {
+    failTimeTravel(ident, loadTable(ident))
+  }
+
+  override def loadTable(ident: Identifier, version: String): Table = {
+    failTimeTravel(ident, loadTable(ident))
+  }
+
+  private def failTimeTravel(ident: Identifier, t: Table): Table = {
+    val nameParts = t match {
+      case V1Table(catalogTable) => catalogTable.identifier.nameParts
+      case _ => ident.asTableIdentifier.nameParts
+    }
+    throw QueryCompilationErrors.timeTravelUnsupportedError(toSQLId(nameParts))
   }
 
   override def invalidateTable(ident: Identifier): Unit = {
@@ -78,17 +101,31 @@ class V2SessionCatalog(catalog: SessionCatalog, conf: SQLConf)
 
   override def createTable(
       ident: Identifier,
+      columns: Array[Column],
+      partitions: Array[Transform],
+      properties: util.Map[String, String]): Table = {
+    createTable(ident, CatalogV2Util.v2ColumnsToStructType(columns), partitions, properties)
+  }
+
+  // TODO: remove it when no tests calling this deprecated method.
+  override def createTable(
+      ident: Identifier,
       schema: StructType,
       partitions: Array[Transform],
       properties: util.Map[String, String]): Table = {
-
-    val (partitionColumns, maybeBucketSpec) = V2SessionCatalog.convertTransforms(partitions)
+    import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.TransformHelper
+    val (partitionColumns, maybeBucketSpec) = partitions.toSeq.convertTransforms
     val provider = properties.getOrDefault(TableCatalog.PROP_PROVIDER, conf.defaultDataSourceName)
     val tableProperties = properties.asScala
     val location = Option(properties.get(TableCatalog.PROP_LOCATION))
-    val storage = DataSource.buildStorageFormatFromOptions(tableProperties.toMap)
+    val storage = DataSource.buildStorageFormatFromOptions(toOptions(tableProperties.toMap))
         .copy(locationUri = location.map(CatalogUtils.stringToURI))
-    val tableType = if (location.isDefined) CatalogTableType.EXTERNAL else CatalogTableType.MANAGED
+    val isExternal = properties.containsKey(TableCatalog.PROP_EXTERNAL)
+    val tableType = if (isExternal || location.isDefined) {
+      CatalogTableType.EXTERNAL
+    } else {
+      CatalogTableType.MANAGED
+    }
 
     val tableDesc = CatalogTable(
       identifier = ident.asTableIdentifier,
@@ -106,10 +143,16 @@ class V2SessionCatalog(catalog: SessionCatalog, conf: SQLConf)
       catalog.createTable(tableDesc, ignoreIfExists = false)
     } catch {
       case _: TableAlreadyExistsException =>
-        throw new TableAlreadyExistsException(ident)
+        throw QueryCompilationErrors.tableAlreadyExistsError(ident)
     }
 
     loadTable(ident)
+  }
+
+  private def toOptions(properties: Map[String, String]): Map[String, String] = {
+    properties.filterKeys(_.startsWith(TableCatalog.OPTION_PREFIX)).map {
+      case (key, value) => key.drop(TableCatalog.OPTION_PREFIX.length) -> value
+    }.toMap
   }
 
   override def alterTable(
@@ -119,36 +162,63 @@ class V2SessionCatalog(catalog: SessionCatalog, conf: SQLConf)
       catalog.getTableMetadata(ident.asTableIdentifier)
     } catch {
       case _: NoSuchTableException =>
-        throw new NoSuchTableException(ident)
+        throw QueryCompilationErrors.noSuchTableError(ident)
     }
 
     val properties = CatalogV2Util.applyPropertiesChanges(catalogTable.properties, changes)
-    val schema = CatalogV2Util.applySchemaChanges(catalogTable.schema, changes)
+    val schema = CatalogV2Util.applySchemaChanges(
+      catalogTable.schema, changes, catalogTable.provider, "ALTER TABLE")
     val comment = properties.get(TableCatalog.PROP_COMMENT)
     val owner = properties.getOrElse(TableCatalog.PROP_OWNER, catalogTable.owner)
+    val location = properties.get(TableCatalog.PROP_LOCATION).map(CatalogUtils.stringToURI)
+    val storage = if (location.isDefined) {
+      catalogTable.storage.copy(locationUri = location)
+    } else {
+      catalogTable.storage
+    }
 
     try {
       catalog.alterTable(
-        catalogTable
-          .copy(properties = properties, schema = schema, owner = owner, comment = comment))
+        catalogTable.copy(
+          properties = properties, schema = schema, owner = owner, comment = comment,
+          storage = storage))
     } catch {
       case _: NoSuchTableException =>
-        throw new NoSuchTableException(ident)
+        throw QueryCompilationErrors.noSuchTableError(ident)
     }
 
     loadTable(ident)
   }
 
+  override def purgeTable(ident: Identifier): Boolean = {
+    dropTableInternal(ident, purge = true)
+  }
+
   override def dropTable(ident: Identifier): Boolean = {
+    dropTableInternal(ident)
+  }
+
+  private def dropTableInternal(ident: Identifier, purge: Boolean = false): Boolean = {
     try {
-      if (loadTable(ident) != null) {
-        catalog.dropTable(
-          ident.asTableIdentifier,
-          ignoreIfNotExists = true,
-          purge = true /* skip HDFS trash */)
-        true
-      } else {
-        false
+      loadTable(ident) match {
+        case V1Table(v1Table) if v1Table.tableType == CatalogTableType.VIEW =>
+          throw QueryCompilationErrors.wrongCommandForObjectTypeError(
+            operation = "DROP TABLE",
+            requiredType = s"${CatalogTableType.EXTERNAL.name} or" +
+              s" ${CatalogTableType.MANAGED.name}",
+            objectName = v1Table.qualifiedName,
+            foundType = v1Table.tableType.name,
+            alternative = "DROP VIEW"
+          )
+        case null =>
+          false
+        case _ =>
+          catalog.invalidateCachedTable(ident.asTableIdentifier)
+          catalog.dropTable(
+            ident.asTableIdentifier,
+            ignoreIfNotExists = true,
+            purge = purge)
+          true
       }
     } catch {
       case _: NoSuchTableException =>
@@ -158,7 +228,7 @@ class V2SessionCatalog(catalog: SessionCatalog, conf: SQLConf)
 
   override def renameTable(oldIdent: Identifier, newIdent: Identifier): Unit = {
     if (tableExists(newIdent)) {
-      throw new TableAlreadyExistsException(newIdent)
+      throw QueryCompilationErrors.tableAlreadyExistsError(newIdent)
     }
 
     // Load table to make sure the table exists
@@ -167,15 +237,21 @@ class V2SessionCatalog(catalog: SessionCatalog, conf: SQLConf)
   }
 
   implicit class TableIdentifierHelper(ident: Identifier) {
-    import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.IdentifierHelper
-
     def asTableIdentifier: TableIdentifier = {
       ident.namespace match {
         case Array(db) =>
           TableIdentifier(ident.name, Some(db))
-        case _ =>
-          throw new NoSuchTableException(
-            s"V2 session catalog requires a single-part namespace: ${ident.quoted}")
+        case other =>
+          throw QueryCompilationErrors.requiresSinglePartNamespaceError(other)
+      }
+    }
+
+    def asFunctionIdentifier: FunctionIdentifier = {
+      ident.namespace match {
+        case Array(db) =>
+          FunctionIdentifier(ident.name, Some(db))
+        case other =>
+          throw QueryCompilationErrors.requiresSinglePartNamespaceError(other)
       }
     }
   }
@@ -198,17 +274,22 @@ class V2SessionCatalog(catalog: SessionCatalog, conf: SQLConf)
       case Array(db) if catalog.databaseExists(db) =>
         Array()
       case _ =>
-        throw new NoSuchNamespaceException(namespace)
+        throw QueryCompilationErrors.noSuchNamespaceError(namespace)
     }
   }
 
   override def loadNamespaceMetadata(namespace: Array[String]): util.Map[String, String] = {
     namespace match {
       case Array(db) =>
-        catalog.getDatabaseMetadata(db).toMetadata
+        try {
+          catalog.getDatabaseMetadata(db).toMetadata
+        } catch {
+          case _: NoSuchDatabaseException =>
+            throw QueryCompilationErrors.noSuchNamespaceError(namespace)
+        }
 
       case _ =>
-        throw new NoSuchNamespaceException(namespace)
+        throw QueryCompilationErrors.noSuchNamespaceError(namespace)
     }
   }
 
@@ -221,10 +302,10 @@ class V2SessionCatalog(catalog: SessionCatalog, conf: SQLConf)
         ignoreIfExists = false)
 
     case Array(_) =>
-      throw new NamespaceAlreadyExistsException(namespace)
+      throw QueryCompilationErrors.namespaceAlreadyExistsError(namespace)
 
     case _ =>
-      throw new IllegalArgumentException(s"Invalid namespace name: ${namespace.quoted}")
+      throw QueryExecutionErrors.invalidNamespaceNameError(namespace)
   }
 
   override def alterNamespace(namespace: Array[String], changes: NamespaceChange*): Unit = {
@@ -234,8 +315,7 @@ class V2SessionCatalog(catalog: SessionCatalog, conf: SQLConf)
         changes.foreach {
           case remove: RemoveProperty
             if CatalogV2Util.NAMESPACE_RESERVED_PROPERTIES.contains(remove.property) =>
-            throw new UnsupportedOperationException(
-              s"Cannot remove reserved property: ${remove.property}")
+            throw QueryExecutionErrors.cannotRemoveReservedPropertyError(remove.property)
           case _ =>
         }
 
@@ -244,16 +324,15 @@ class V2SessionCatalog(catalog: SessionCatalog, conf: SQLConf)
           toCatalogDatabase(db, CatalogV2Util.applyNamespaceChanges(metadata, changes)))
 
       case _ =>
-        throw new NoSuchNamespaceException(namespace)
+        throw QueryCompilationErrors.noSuchNamespaceError(namespace)
     }
   }
 
-  override def dropNamespace(namespace: Array[String]): Boolean = namespace match {
+  override def dropNamespace(
+      namespace: Array[String],
+      cascade: Boolean): Boolean = namespace match {
     case Array(db) if catalog.databaseExists(db) =>
-      if (catalog.listTables(db).nonEmpty) {
-        throw new IllegalStateException(s"Namespace ${namespace.quoted} is not empty")
-      }
-      catalog.dropDatabase(db, ignoreIfNotExists = false, cascade = false)
+      catalog.dropDatabase(db, ignoreIfNotExists = false, cascade)
       true
 
     case Array(_) =>
@@ -261,35 +340,37 @@ class V2SessionCatalog(catalog: SessionCatalog, conf: SQLConf)
       false
 
     case _ =>
-      throw new NoSuchNamespaceException(namespace)
+      throw QueryCompilationErrors.noSuchNamespaceError(namespace)
+  }
+
+  def isTempView(ident: Identifier): Boolean = {
+    catalog.isTempView(ident.namespace() :+ ident.name())
+  }
+
+  override def loadFunction(ident: Identifier): UnboundFunction = {
+    V1Function(catalog.lookupPersistentFunction(ident.asFunctionIdentifier))
+  }
+
+  override def listFunctions(namespace: Array[String]): Array[Identifier] = {
+    namespace match {
+      case Array(db) =>
+        catalog.listFunctions(db).filter(_._2 == "USER").map { case (funcIdent, _) =>
+          assert(funcIdent.database.isDefined)
+          Identifier.of(Array(funcIdent.database.get), funcIdent.identifier)
+        }.toArray
+      case _ =>
+        throw QueryCompilationErrors.noSuchNamespaceError(namespace)
+    }
+  }
+
+  override def functionExists(ident: Identifier): Boolean = {
+    catalog.isPersistentFunction(ident.asFunctionIdentifier)
   }
 
   override def toString: String = s"V2SessionCatalog($name)"
 }
 
 private[sql] object V2SessionCatalog {
-
-  /**
-   * Convert v2 Transforms to v1 partition columns and an optional bucket spec.
-   */
-  private def convertTransforms(partitions: Seq[Transform]): (Seq[String], Option[BucketSpec]) = {
-    val identityCols = new mutable.ArrayBuffer[String]
-    var bucketSpec = Option.empty[BucketSpec]
-
-    partitions.map {
-      case IdentityTransform(FieldReference(Seq(col))) =>
-        identityCols += col
-
-      case BucketTransform(numBuckets, FieldReference(Seq(col))) =>
-        bucketSpec = Some(BucketSpec(numBuckets, col :: Nil, Nil))
-
-      case transform =>
-        throw new UnsupportedOperationException(
-          s"SessionCatalog does not support partition transform: $transform")
-    }
-
-    (identityCols, bucketSpec)
-  }
 
   private def toCatalogDatabase(
       db: String,
@@ -301,7 +382,7 @@ private[sql] object V2SessionCatalog {
       locationUri = Option(metadata.get(SupportsNamespaces.PROP_LOCATION))
           .map(CatalogUtils.stringToURI)
           .orElse(defaultLocation)
-          .getOrElse(throw new IllegalArgumentException("Missing database location")),
+          .getOrElse(throw QueryExecutionErrors.missingDatabaseLocationError()),
       properties = metadata.asScala.toMap --
         Seq(SupportsNamespaces.PROP_COMMENT, SupportsNamespaces.PROP_LOCATION))
   }

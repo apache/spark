@@ -30,12 +30,12 @@ if "x%1"=="x" (
 
 rem Find Spark jars.
 if exist "%SPARK_HOME%\jars" (
-  set SPARK_JARS_DIR="%SPARK_HOME%\jars"
+  set SPARK_JARS_DIR=%SPARK_HOME%\jars
 ) else (
-  set SPARK_JARS_DIR="%SPARK_HOME%\assembly\target\scala-%SPARK_SCALA_VERSION%\jars"
+  set SPARK_JARS_DIR=%SPARK_HOME%\assembly\target\scala-%SPARK_SCALA_VERSION%\jars
 )
 
-if not exist "%SPARK_JARS_DIR%"\ (
+if not exist "%SPARK_JARS_DIR%" (
   echo Failed to find Spark jars directory.
   echo You need to build Spark before running this program.
   exit /b 1
@@ -69,6 +69,8 @@ rem SPARK-28302: %RANDOM% would return the same number if we call it instantly a
 rem so we should make it sure to generate unique file to avoid process collision of writing into
 rem the same file concurrently.
 if exist %LAUNCHER_OUTPUT% goto :gen
+rem unset SHELL to indicate non-bash environment to launcher/Main
+set SHELL=
 "%RUNNER%" -Xmx128m -cp "%LAUNCH_CLASSPATH%" org.apache.spark.launcher.Main %* > %LAUNCHER_OUTPUT%
 for /f "tokens=*" %%i in (%LAUNCHER_OUTPUT%) do (
   set SPARK_CMD=%%i

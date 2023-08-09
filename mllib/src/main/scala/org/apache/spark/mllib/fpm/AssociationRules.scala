@@ -88,8 +88,8 @@ class AssociationRules private[fpm] (
 
     // Join to get (X, ((Y, freq(X union Y)), freq(X))), generate rules, and filter by confidence
     candidates.join(freqItemsets.map(x => (x.items.toSeq, x.freq)))
-      .map { case (antecendent, ((consequent, freqUnion), freqAntecedent)) =>
-        new Rule(antecendent.toArray,
+      .map { case (antecedent, ((consequent, freqUnion), freqAntecedent)) =>
+        new Rule(antecedent.toArray,
           consequent.toArray,
           freqUnion,
           freqAntecedent,
@@ -124,7 +124,7 @@ object AssociationRules {
   class Rule[Item] private[fpm] (
       @Since("1.5.0") val antecedent: Array[Item],
       @Since("1.5.0") val consequent: Array[Item],
-      freqUnion: Double,
+      private[spark] val freqUnion: Double,
       freqAntecedent: Double,
       freqConsequent: Option[Double]) extends Serializable {
 

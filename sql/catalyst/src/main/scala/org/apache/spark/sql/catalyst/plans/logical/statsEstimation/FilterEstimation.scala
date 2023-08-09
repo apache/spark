@@ -106,7 +106,7 @@ case class FilterEstimation(plan: Filter) extends Logging {
       // The foldable Not has been processed in the ConstantFolding rule
       // This is a top-down traversal. The Not could be pushed down by the above two cases.
       case Not(l @ Literal(null, _)) =>
-        calculateSingleCondition(l, update = false)
+        calculateSingleCondition(l, update = false).map(boundProbability(_))
 
       case Not(cond) =>
         calculateFilterSelectivity(cond, update = false) match {
@@ -115,7 +115,7 @@ case class FilterEstimation(plan: Filter) extends Logging {
         }
 
       case _ =>
-        calculateSingleCondition(condition, update)
+        calculateSingleCondition(condition, update).map(boundProbability(_))
     }
   }
 
@@ -225,7 +225,7 @@ case class FilterEstimation(plan: Filter) extends Logging {
       attr: Attribute,
       isNull: Boolean,
       update: Boolean): Option[Double] = {
-    if (!colStatsMap.contains(attr) || !colStatsMap(attr).hasCountStats) {
+    if (!colStatsMap.contains(attr) || colStatsMap(attr).nullCount.isEmpty) {
       logDebug("[CBO] No statistics for " + attr)
       return None
     }
@@ -233,6 +233,8 @@ case class FilterEstimation(plan: Filter) extends Logging {
     val rowCountValue = childStats.rowCount.get
     val nullPercent: Double = if (rowCountValue == 0) {
       0
+    } else if (colStat.nullCount.get > rowCountValue) {
+      1
     } else {
       (BigDecimal(colStat.nullCount.get) / BigDecimal(rowCountValue)).toDouble
     }
@@ -854,6 +856,10 @@ case class FilterEstimation(plan: Filter) extends Logging {
     Some(percent)
   }
 
+  // Bound result in [0, 1]
+  private def boundProbability(p: Double): Double = {
+    Math.max(0.0, Math.min(1.0, p))
+  }
 }
 
 /**
@@ -907,27 +913,15 @@ case class ColumnStatsMap(originalMap: AttributeMap[ColumnStat]) {
   def update(a: Attribute, stats: ColumnStat): Unit = updatedMap.update(a.exprId, a -> stats)
 
   /**
-   * Collects updated column stats, and scales down ndv for other column stats if the number of rows
-   * decreases after this Filter operator.
+   * Collects updated column stats; scales down column count stats if the
+   * number of rows decreases after this Filter operator.
    */
   def outputColumnStats(rowsBeforeFilter: BigInt, rowsAfterFilter: BigInt)
     : AttributeMap[ColumnStat] = {
     val newColumnStats = originalMap.map { case (attr, oriColStat) =>
-      val colStat = updatedMap.get(attr.exprId).map(_._2).getOrElse(oriColStat)
-      val newNdv = if (colStat.distinctCount.isEmpty) {
-        // No NDV in the original stats.
-        None
-      } else if (colStat.distinctCount.get > 1) {
-        // Update ndv based on the overall filter selectivity: scale down ndv if the number of rows
-        // decreases; otherwise keep it unchanged.
-        Some(EstimationUtils.updateNdv(oldNumRows = rowsBeforeFilter,
-          newNumRows = rowsAfterFilter, oldNdv = oriColStat.distinctCount.get))
-      } else {
-        // no need to scale down since it is already down to 1 (for skewed distribution case)
-        colStat.distinctCount
-      }
-      attr -> colStat.copy(distinctCount = newNdv)
+      attr -> oriColStat.updateCountStats(
+        rowsBeforeFilter, rowsAfterFilter, updatedMap.get(attr.exprId).map(_._2))
     }
-    AttributeMap(newColumnStats.toSeq)
+    AttributeMap(newColumnStats)
   }
 }

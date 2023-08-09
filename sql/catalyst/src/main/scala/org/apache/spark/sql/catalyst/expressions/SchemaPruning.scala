@@ -17,29 +17,38 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import java.util.Locale
+
+import scala.collection.immutable.HashMap
+
+import org.apache.spark.sql.catalyst.SQLConfHelper
+import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.types._
 
-object SchemaPruning {
+object SchemaPruning extends SQLConfHelper {
   /**
-   * Filters the schema by the requested fields. For example, if the schema is struct<a:int, b:int>,
-   * and given requested field are "a", the field "b" is pruned in the returned schema.
-   * Note that schema field ordering at original schema is still preserved in pruned schema.
+   * Prunes the nested schema by the requested fields. For example, if the schema is:
+   * `id int, s struct<a:int, b:int>`, and given requested field "s.a", the inner field "b"
+   * is pruned in the returned schema: `id int, s struct<a:int>`.
+   * Note that:
+   *   1. The schema field ordering at original schema is still preserved in pruned schema.
+   *   2. The top-level fields are not pruned here.
    */
-  def pruneDataSchema(
-      dataSchema: StructType,
+  def pruneSchema(
+      schema: StructType,
       requestedRootFields: Seq[RootField]): StructType = {
+    val resolver = conf.resolver
     // Merge the requested root fields into a single schema. Note the ordering of the fields
     // in the resulting schema may differ from their ordering in the logical relation's
     // original schema
     val mergedSchema = requestedRootFields
-      .map { case root: RootField => StructType(Array(root.field)) }
+      .map { root: RootField => StructType(Array(root.field)) }
       .reduceLeft(_ merge _)
-    val dataSchemaFieldNames = dataSchema.fieldNames.toSet
     val mergedDataSchema =
-      StructType(mergedSchema.filter(f => dataSchemaFieldNames.contains(f.name)))
+      StructType(schema.map(d => mergedSchema.find(m => resolver(m.name, d.name)).getOrElse(d)))
     // Sort the fields of mergedDataSchema according to their order in dataSchema,
     // recursively. This makes mergedDataSchema a pruned schema of dataSchema
-    sortLeftFieldsByRight(mergedDataSchema, dataSchema).asInstanceOf[StructType]
+    sortLeftFieldsByRight(mergedDataSchema, schema).asInstanceOf[StructType]
   }
 
   /**
@@ -50,6 +59,7 @@ object SchemaPruning {
    */
   private def sortLeftFieldsByRight(left: DataType, right: DataType): DataType =
     (left, right) match {
+      case _ if left == right => left
       case (ArrayType(leftElementType, containsNull), ArrayType(rightElementType, _)) =>
         ArrayType(
           sortLeftFieldsByRight(leftElementType, rightElementType),
@@ -61,12 +71,23 @@ object SchemaPruning {
           sortLeftFieldsByRight(leftValueType, rightValueType),
           containsNull)
       case (leftStruct: StructType, rightStruct: StructType) =>
-        val filteredRightFieldNames = rightStruct.fieldNames.filter(leftStruct.fieldNames.contains)
-        val sortedLeftFields = filteredRightFieldNames.map { fieldName =>
-          val leftFieldType = leftStruct(fieldName).dataType
-          val rightFieldType = rightStruct(fieldName).dataType
-          val sortedLeftFieldType = sortLeftFieldsByRight(leftFieldType, rightFieldType)
-          StructField(fieldName, sortedLeftFieldType, nullable = leftStruct(fieldName).nullable)
+        val formatFieldName: String => String =
+          if (conf.caseSensitiveAnalysis) identity else _.toLowerCase(Locale.ROOT)
+
+        val leftStructHashMap =
+          HashMap(leftStruct.map(f => formatFieldName(f.name)).zip(leftStruct): _*)
+        val sortedLeftFields = rightStruct.fieldNames.flatMap { fieldName =>
+          val formattedFieldName = formatFieldName(fieldName)
+          if (leftStructHashMap.contains(formattedFieldName)) {
+            val resolvedLeftStruct = leftStructHashMap(formattedFieldName)
+            val leftFieldType = resolvedLeftStruct.dataType
+            val rightFieldType = rightStruct(fieldName).dataType
+            val sortedLeftFieldType = sortLeftFieldsByRight(leftFieldType, rightFieldType)
+            Some(StructField(fieldName, sortedLeftFieldType, nullable = resolvedLeftStruct.nullable,
+              metadata = resolvedLeftStruct.metadata))
+          } else {
+            None
+          }
         }
         StructType(sortedLeftFields)
       case _ => left
@@ -106,7 +127,7 @@ object SchemaPruning {
           val rootFieldType = StructType(Array(root.field))
           val optFieldType = StructType(Array(opt.field))
           val merged = optFieldType.merge(rootFieldType)
-          merged.sameType(optFieldType)
+          DataTypeUtils.sameType(merged, optFieldType)
         }
       }
     } ++ rootFields
@@ -117,10 +138,11 @@ object SchemaPruning {
    * When expr is an [[Attribute]], construct a field around it and indicate that that
    * field was derived from an attribute.
    */
-  private def getRootFields(expr: Expression): Seq[RootField] = {
+  private[catalyst] def getRootFields(expr: Expression): Seq[RootField] = {
     expr match {
       case att: Attribute =>
-        RootField(StructField(att.name, att.dataType, att.nullable), derivedFromAtt = true) :: Nil
+        RootField(StructField(att.name, att.dataType, att.nullable, att.metadata),
+          derivedFromAtt = true) :: Nil
       case SelectedField(field) => RootField(field, derivedFromAtt = false) :: Nil
       // Root field accesses by `IsNotNull` and `IsNull` are special cases as the expressions
       // don't actually use any nested fields. These root field accesses might be excluded later
@@ -131,6 +153,10 @@ object SchemaPruning {
         RootField(field, derivedFromAtt = false, prunedIfAnyChildAccessed = true) :: Nil
       case IsNotNull(_: Attribute) | IsNull(_: Attribute) =>
         expr.children.flatMap(getRootFields).map(_.copy(prunedIfAnyChildAccessed = true))
+      case s: SubqueryExpression =>
+        // use subquery references that only include outer attrs and
+        // ignore join conditions as those may include attributes from other tables
+        s.references.toSeq.flatMap(getRootFields)
       case _ =>
         expr.children.flatMap(getRootFields)
     }

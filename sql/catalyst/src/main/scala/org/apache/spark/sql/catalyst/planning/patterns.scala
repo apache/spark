@@ -21,49 +21,25 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
+import org.apache.spark.sql.catalyst.optimizer.JoinSelectionHelper
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.connector.catalog.Table
+import org.apache.spark.sql.connector.write.RowLevelOperation.Command.UPDATE
+import org.apache.spark.sql.errors.QueryCompilationErrors
+import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, DataSourceV2ScanRelation}
+import org.apache.spark.sql.internal.SQLConf
 
-trait OperationHelper {
-  type ReturnType = (Seq[NamedExpression], Seq[Expression], LogicalPlan)
+trait OperationHelper extends AliasHelper with PredicateHelper {
+  import org.apache.spark.sql.catalyst.optimizer.CollapseProject.canCollapseExpressions
 
-  protected def collectAliases(fields: Seq[Expression]): AttributeMap[Expression] =
-    AttributeMap(fields.collect {
-      case a: Alias => (a.toAttribute, a.child)
-    })
+  type IntermediateType =
+    (Option[Seq[NamedExpression]], Seq[Expression], LogicalPlan, AttributeMap[Alias])
 
-  protected def substitute(aliases: AttributeMap[Expression])(expr: Expression): Expression = {
-    // use transformUp instead of transformDown to avoid dead loop
-    // in case of there's Alias whose exprId is the same as its child attribute.
-    expr.transformUp {
-      case a @ Alias(ref: AttributeReference, name) =>
-        aliases.get(ref)
-          .map(Alias(_, name)(a.exprId, a.qualifier))
-          .getOrElse(a)
-
-      case a: AttributeReference =>
-        aliases.get(a)
-          .map(Alias(_, a.name)(a.exprId, a.qualifier)).getOrElse(a)
-    }
-  }
-}
-
-/**
- * A pattern that matches any number of project or filter operations on top of another relational
- * operator.  All filter operators are collected and their conditions are broken up and returned
- * together with the top project operator.
- * [[org.apache.spark.sql.catalyst.expressions.Alias Aliases]] are in-lined/substituted if
- * necessary.
- */
-object PhysicalOperation extends OperationHelper with PredicateHelper {
-
-  def unapply(plan: LogicalPlan): Option[ReturnType] = {
-    val (fields, filters, child, _) = collectProjectsAndFilters(plan)
-    Some((fields.getOrElse(child.output), filters, child))
-  }
+  protected def collectAllFilters: Boolean
 
   /**
-   * Collects all deterministic projects and filters, in-lining/substituting aliases if necessary.
+   * Collects all adjacent projects and filters, in-lining/substituting aliases if necessary.
    * Here are two examples for alias in-lining/substitution.
    * Before:
    * {{{
@@ -76,94 +52,117 @@ object PhysicalOperation extends OperationHelper with PredicateHelper {
    *   SELECT key AS c2 FROM t1 WHERE key > 10
    * }}}
    */
-  private def collectProjectsAndFilters(plan: LogicalPlan):
-      (Option[Seq[NamedExpression]], Seq[Expression], LogicalPlan, AttributeMap[Expression]) =
-    plan match {
-      case Project(fields, child) if fields.forall(_.deterministic) =>
-        val (_, filters, other, aliases) = collectProjectsAndFilters(child)
-        val substitutedFields = fields.map(substitute(aliases)).asInstanceOf[Seq[NamedExpression]]
-        (Some(substitutedFields), filters, other, collectAliases(substitutedFields))
+  protected def collectProjectsAndFilters(
+      plan: LogicalPlan,
+      alwaysInline: Boolean): IntermediateType = {
+    def empty: IntermediateType = (None, Nil, plan, AttributeMap.empty)
 
-      case Filter(condition, child) if condition.deterministic =>
-        val (fields, filters, other, aliases) = collectProjectsAndFilters(child)
-        val substitutedCondition = substitute(aliases)(condition)
-        (fields, filters ++ splitConjunctivePredicates(substitutedCondition), other, aliases)
-
-      case h: ResolvedHint =>
-        collectProjectsAndFilters(h.child)
-
-      case other =>
-        (None, Nil, other, AttributeMap(Seq()))
-    }
-}
-
-/**
- * A variant of [[PhysicalOperation]]. It matches any number of project or filter
- * operations even if they are non-deterministic, as long as they satisfy the
- * requirement of CollapseProject and CombineFilters.
- */
-object ScanOperation extends OperationHelper with PredicateHelper {
-  type ScanReturnType = Option[(Option[Seq[NamedExpression]],
-    Seq[Expression], LogicalPlan, AttributeMap[Expression])]
-
-  def unapply(plan: LogicalPlan): Option[ReturnType] = {
-    collectProjectsAndFilters(plan) match {
-      case Some((fields, filters, child, _)) =>
-        Some((fields.getOrElse(child.output), filters, child))
-      case None => None
-    }
-  }
-
-  private def hasCommonNonDeterministic(
-      expr: Seq[Expression],
-      aliases: AttributeMap[Expression]): Boolean = {
-    expr.exists(_.collect {
-      case a: AttributeReference if aliases.contains(a) => aliases(a)
-    }.exists(!_.deterministic))
-  }
-
-  private def collectProjectsAndFilters(plan: LogicalPlan): ScanReturnType = {
     plan match {
       case Project(fields, child) =>
-        collectProjectsAndFilters(child) match {
-          case Some((_, filters, other, aliases)) =>
-            // Follow CollapseProject and only keep going if the collected Projects
-            // do not have common non-deterministic expressions.
-            if (!hasCommonNonDeterministic(fields, aliases)) {
-              val substitutedFields =
-                fields.map(substitute(aliases)).asInstanceOf[Seq[NamedExpression]]
-              Some((Some(substitutedFields), filters, other, collectAliases(substitutedFields)))
-            } else {
-              None
-            }
-          case None => None
+        val (_, filters, other, aliases) = collectProjectsAndFilters(child, alwaysInline)
+        if (canCollapseExpressions(fields, aliases, alwaysInline)) {
+          val replaced = fields.map(replaceAliasButKeepName(_, aliases))
+          (Some(replaced), filters, other, getAliasMap(replaced))
+        } else {
+          empty
         }
 
       case Filter(condition, child) =>
-        collectProjectsAndFilters(child) match {
-          case Some((fields, filters, other, aliases)) =>
-            // Follow CombineFilters and only keep going if 1) the collected Filters
-            // and this filter are all deterministic or 2) if this filter is the first
-            // collected filter and doesn't have common non-deterministic expressions
-            // with lower Project.
-            val substitutedCondition = substitute(aliases)(condition)
-            val canCombineFilters = (filters.nonEmpty && filters.forall(_.deterministic) &&
-              substitutedCondition.deterministic) || filters.isEmpty
-            if (canCombineFilters && !hasCommonNonDeterministic(Seq(condition), aliases)) {
-              Some((fields, filters ++ splitConjunctivePredicates(substitutedCondition),
-                other, aliases))
-            } else {
-              None
-            }
-          case None => None
+        val (fields, filters, other, aliases) = collectProjectsAndFilters(child, alwaysInline)
+        // When collecting projects and filters, we effectively push down filters through
+        // projects. We need to meet the following conditions to do so:
+        //   1) no Project collected so far or the collected Projects are all deterministic
+        //   2) this filter does not repeat any expensive expressions from the collected
+        //      projects.
+        val canPushFilterThroughProject = fields.forall(_.forall(_.deterministic)) &&
+          canCollapseExpressions(Seq(condition), aliases, alwaysInline)
+        if (canPushFilterThroughProject) {
+          // Ideally we can't combine non-deterministic filters, but if `collectAllFilters` is true,
+          // we relax this restriction and assume the caller will take care of it.
+          val canIncludeThisFilter = filters.isEmpty || {
+            filters.last.deterministic && condition.deterministic
+          }
+          if (canIncludeThisFilter || collectAllFilters) {
+            (fields, filters :+ replaceAlias(condition, aliases), other, aliases)
+          } else {
+            empty
+          }
+        } else {
+          empty
         }
 
-      case h: ResolvedHint =>
-        collectProjectsAndFilters(h.child)
+      case h: ResolvedHint => collectProjectsAndFilters(h.child, alwaysInline)
 
-      case other =>
-        Some((None, Nil, other, AttributeMap(Seq())))
+      case _ => empty
     }
+  }
+}
+
+/**
+ * A pattern that matches any number of project or filter operations even if they are
+ * non-deterministic, as long as they satisfy the requirement of CollapseProject and CombineFilters.
+ * All filter operators are collected and their conditions are broken up and returned
+ * together with the top project operator. [[Alias Aliases]] are in-lined/substituted if
+ * necessary.
+ */
+object PhysicalOperation extends OperationHelper {
+  // Returns: (the final project list, filters to push down, relation)
+  type ReturnType = (Seq[NamedExpression], Seq[Expression], LogicalPlan)
+  override protected def collectAllFilters: Boolean = false
+
+  def unapply(plan: LogicalPlan): Option[ReturnType] = {
+    val alwaysInline = SQLConf.get.getConf(SQLConf.COLLAPSE_PROJECT_ALWAYS_INLINE)
+    val (fields, filters, child, _) = collectProjectsAndFilters(plan, alwaysInline)
+    // If more than 2 filters are collected, they must all be deterministic.
+    if (filters.length > 1) assert(filters.forall(_.deterministic))
+    Some((
+      fields.getOrElse(child.output),
+      filters.flatMap(splitConjunctivePredicates),
+      child))
+  }
+}
+
+/**
+ * A variant of [[PhysicalOperation]] which can match multiple Filters that are not combinable due
+ * to non-deterministic predicates. This is useful for scan operations as we need to match a bunch
+ * of adjacent Projects/Filters to apply column pruning, even if the Filters can't be combined,
+ * such as `Project(a, Filter(rand() > 0.5, Filter(rand() < 0.8, TableScan)))`, which we should
+ * only read column `a` from the relation.
+ */
+object ScanOperation extends OperationHelper {
+  // Returns: (the final project list, filters to stay up, filters to push down, relation)
+  type ReturnType = (Seq[NamedExpression], Seq[Expression], Seq[Expression], LogicalPlan)
+  override protected def collectAllFilters: Boolean = true
+
+  def unapply(plan: LogicalPlan): Option[ReturnType] = {
+    val alwaysInline = SQLConf.get.getConf(SQLConf.COLLAPSE_PROJECT_ALWAYS_INLINE)
+    val (fields, filters, child, _) = collectProjectsAndFilters(plan, alwaysInline)
+    // `collectProjectsAndFilters` transforms the plan bottom-up, so the bottom-most filter are
+    // placed at the beginning of `filters` list. According to the SQL semantic, we cannot merge
+    // Filters if one or more of them are nondeterministic. This means we can only push down the
+    // bottom-most Filter, or more following deterministic Filters if the bottom-most Filter is
+    // also deterministic.
+    if (filters.isEmpty) {
+      Some((fields.getOrElse(child.output), Nil, Nil, child))
+    } else if (filters.head.deterministic) {
+      val filtersCanPushDown = filters.takeWhile(_.deterministic)
+        .flatMap(splitConjunctivePredicates)
+      val filtersStayUp = filters.dropWhile(_.deterministic)
+      Some((fields.getOrElse(child.output), filtersStayUp, filtersCanPushDown, child))
+    } else {
+      val filtersCanPushDown = splitConjunctivePredicates(filters.head)
+      val filtersStayUp = filters.drop(1)
+      Some((fields.getOrElse(child.output), filtersStayUp, filtersCanPushDown, child))
+    }
+  }
+}
+
+object NodeWithOnlyDeterministicProjectAndFilter {
+  @scala.annotation.tailrec
+  def unapply(plan: LogicalPlan): Option[LogicalPlan] = plan match {
+    case Project(projectList, child) if projectList.forall(_.deterministic) => unapply(child)
+    case Filter(cond, child) if cond.deterministic => unapply(child)
+    case _ => Some(plan)
   }
 }
 
@@ -174,10 +173,16 @@ object ScanOperation extends OperationHelper with PredicateHelper {
  * value).
  */
 object ExtractEquiJoinKeys extends Logging with PredicateHelper {
-  /** (joinType, leftKeys, rightKeys, condition, leftChild, rightChild, joinHint) */
+  /** (joinType, leftKeys, rightKeys, otherCondition, conditionOnJoinKeys, leftChild,
+   * rightChild, joinHint).
+   */
+  // Note that `otherCondition` is NOT the original Join condition and it contains only
+  // the subset that is not handled by the 'leftKeys' to 'rightKeys' equijoin.
+  // 'conditionOnJoinKeys' is the subset of the original Join condition that corresponds to the
+  // 'leftKeys' to 'rightKeys' equijoin.
   type ReturnType =
     (JoinType, Seq[Expression], Seq[Expression],
-      Option[Expression], LogicalPlan, LogicalPlan, JoinHint)
+      Option[Expression], Option[Expression], LogicalPlan, LogicalPlan, JoinHint)
 
   def unapply(join: Join): Option[ReturnType] = join match {
     case Join(left, right, joinType, condition, hint) =>
@@ -195,15 +200,15 @@ object ExtractEquiJoinKeys extends Logging with PredicateHelper {
           Seq((Coalesce(Seq(l, Literal.default(l.dataType))),
             Coalesce(Seq(r, Literal.default(r.dataType)))),
             (IsNull(l), IsNull(r))
-          )
+          )  // (coalesce(l, default) = coalesce(r, default)) and (isnull(l) = isnull(r))
         case EqualNullSafe(l, r) if canEvaluate(l, right) && canEvaluate(r, left) =>
           Seq((Coalesce(Seq(r, Literal.default(r.dataType))),
             Coalesce(Seq(l, Literal.default(l.dataType)))),
             (IsNull(r), IsNull(l))
-          )
-        case other => None
+          )  // Same as above with left/right reversed.
+        case _ => None
       }
-      val otherPredicates = predicates.filterNot {
+      val (predicatesOfJoinKeys, otherPredicates) = predicates.partition {
         case EqualTo(l, r) if l.references.isEmpty || r.references.isEmpty => false
         case Equality(l, r) =>
           canEvaluate(l, left) && canEvaluate(r, right) ||
@@ -214,7 +219,8 @@ object ExtractEquiJoinKeys extends Logging with PredicateHelper {
       if (joinKeys.nonEmpty) {
         val (leftKeys, rightKeys) = joinKeys.unzip
         logDebug(s"leftKeys:$leftKeys | rightKeys:$rightKeys")
-        Some((joinType, leftKeys, rightKeys, otherPredicates.reduceOption(And), left, right, hint))
+        Some((joinType, leftKeys, rightKeys, otherPredicates.reduceOption(And),
+          predicatesOfJoinKeys.reduceOption(And), left, right, hint))
       } else {
         None
       }
@@ -282,7 +288,7 @@ object ExtractFiltersAndInnerJoins extends PredicateHelper {
 object PhysicalAggregation {
   // groupingExpressions, aggregateExpressions, resultExpressions, child
   type ReturnType =
-    (Seq[NamedExpression], Seq[Expression], Seq[NamedExpression], LogicalPlan)
+    (Seq[NamedExpression], Seq[AggregateExpression], Seq[NamedExpression], LogicalPlan)
 
   def unapply(a: Any): Option[ReturnType] = a match {
     case logical.Aggregate(groupingExpressions, resultExpressions, child) =>
@@ -295,11 +301,8 @@ object PhysicalAggregation {
       val aggregateExpressions = resultExpressions.flatMap { expr =>
         expr.collect {
           // addExpr() always returns false for non-deterministic expressions and do not add them.
-          case agg: AggregateExpression
-            if !equivalentAggregateExpressions.addExpr(agg) => agg
-          case udf: PythonUDF
-            if PythonUDF.isGroupedAggPandasUDF(udf) &&
-              !equivalentAggregateExpressions.addExpr(udf) => udf
+          case a: AggregateExpression if !equivalentAggregateExpressions.addExpr(a) =>
+            a
         }
       }
 
@@ -325,13 +328,9 @@ object PhysicalAggregation {
           case ae: AggregateExpression =>
             // The final aggregation buffer's attributes will be `finalAggregationAttributes`,
             // so replace each aggregate expression by its corresponding attribute in the set:
-            equivalentAggregateExpressions.getEquivalentExprs(ae).headOption
+            equivalentAggregateExpressions.getExprState(ae).map(_.expr)
               .getOrElse(ae).asInstanceOf[AggregateExpression].resultAttribute
-            // Similar to AggregateExpression
-          case ue: PythonUDF if PythonUDF.isGroupedAggPandasUDF(ue) =>
-            equivalentAggregateExpressions.getEquivalentExprs(ue).headOption
-              .getOrElse(ue).asInstanceOf[PythonUDF].resultAttribute
-          case expression =>
+          case expression if !expression.foldable =>
             // Since we're using `namedGroupingAttributes` to extract the grouping key
             // columns, we need to replace grouping key expressions with their corresponding
             // attributes. We do not rely on the equality check at here since attributes may
@@ -369,15 +368,14 @@ object PhysicalWindow {
 
       // The window expression should not be empty here, otherwise it's a bug.
       if (windowExpressions.isEmpty) {
-        throw new AnalysisException(s"Window expression is empty in $expr")
+        throw QueryCompilationErrors.emptyWindowExpressionError(expr)
       }
 
       val windowFunctionType = windowExpressions.map(WindowFunctionType.functionType)
         .reduceLeft { (t1: WindowFunctionType, t2: WindowFunctionType) =>
           if (t1 != t2) {
             // We shouldn't have different window function type here, otherwise it's a bug.
-            throw new AnalysisException(
-              s"Found different window function type in $windowExpressions")
+            throw QueryCompilationErrors.foundDifferentWindowFunctionTypeError(windowExpressions)
           } else {
             t1
           }
@@ -386,5 +384,101 @@ object PhysicalWindow {
       Some((windowFunctionType, windowExpressions, partitionSpec, orderSpec, child))
 
     case _ => None
+  }
+}
+
+object ExtractSingleColumnNullAwareAntiJoin extends JoinSelectionHelper with PredicateHelper {
+
+  // TODO support multi column NULL-aware anti join in future.
+  // See. http://www.vldb.org/pvldb/vol2/vldb09-423.pdf Section 6
+  // multi-column null aware anti join is much more complicated than single column ones.
+
+  // streamedSideKeys, buildSideKeys
+  private type ReturnType = (Seq[Expression], Seq[Expression])
+
+  /**
+   * See. [SPARK-32290]
+   * LeftAnti(condition: Or(EqualTo(a=b), IsNull(EqualTo(a=b)))
+   * will almost certainly be planned as a Broadcast Nested Loop join,
+   * which is very time consuming because it's an O(M*N) calculation.
+   * But if it's a single column case O(M*N) calculation could be optimized into O(M)
+   * using hash lookup instead of loop lookup.
+   */
+  def unapply(join: Join): Option[ReturnType] = join match {
+    case Join(left, right, LeftAnti,
+      Some(Or(e @ EqualTo(leftAttr: Expression, rightAttr: Expression),
+        IsNull(e2 @ EqualTo(_, _)))), _)
+        if SQLConf.get.optimizeNullAwareAntiJoin &&
+          e.semanticEquals(e2) =>
+      if (canEvaluate(leftAttr, left) && canEvaluate(rightAttr, right)) {
+        Some(Seq(leftAttr), Seq(rightAttr))
+      } else if (canEvaluate(leftAttr, right) && canEvaluate(rightAttr, left)) {
+        Some(Seq(rightAttr), Seq(leftAttr))
+      } else {
+        None
+      }
+    case _ => None
+  }
+}
+
+/**
+ * An extractor for row-level commands such as DELETE, UPDATE, MERGE that were rewritten using plans
+ * that operate on groups of rows.
+ *
+ * This class extracts the following entities:
+ *  - the group-based rewrite plan;
+ *  - the condition that defines matching groups;
+ *  - the group filter condition;
+ *  - the read relation that can be either [[DataSourceV2Relation]] or [[DataSourceV2ScanRelation]]
+ *  depending on whether the planning has already happened;
+ */
+object GroupBasedRowLevelOperation {
+  type ReturnType = (ReplaceData, Expression, Option[Expression], LogicalPlan)
+
+  def unapply(plan: LogicalPlan): Option[ReturnType] = plan match {
+    case rd @ ReplaceData(DataSourceV2Relation(table, _, _, _, _),
+        cond, query, _, groupFilterCond, _) =>
+      // group-based UPDATEs that are rewritten as UNION read the table twice
+      val allowMultipleReads = rd.operation.command == UPDATE
+      val readRelation = findReadRelation(table, query, allowMultipleReads)
+      readRelation.map((rd, cond, groupFilterCond, _))
+
+    case _ =>
+      None
+  }
+
+  private def findReadRelation(
+      table: Table,
+      plan: LogicalPlan,
+      allowMultipleReads: Boolean): Option[LogicalPlan] = {
+
+    val readRelations = plan.collect {
+      case r: DataSourceV2Relation if r.table eq table => r
+      case r: DataSourceV2ScanRelation if r.relation.table eq table => r
+    }
+
+    // in some cases, the optimizer replaces the v2 read relation with a local relation
+    // for example, there is no reason to query the table if the condition is always false
+    // that's why it is valid not to find the corresponding v2 read relation
+
+    readRelations match {
+      case relations if relations.isEmpty =>
+        None
+
+      case Seq(relation) =>
+        Some(relation)
+
+      case Seq(relation1: DataSourceV2Relation, relation2: DataSourceV2Relation)
+          if allowMultipleReads && (relation1.table eq relation2.table) =>
+        Some(relation1)
+
+      case Seq(relation1: DataSourceV2ScanRelation, relation2: DataSourceV2ScanRelation)
+          if allowMultipleReads && (relation1.scan eq relation2.scan) =>
+        Some(relation1)
+
+      case other =>
+        throw new AnalysisException(
+          s"Unexpected row-level read relations (allow multiple = $allowMultipleReads): $other")
+    }
   }
 }

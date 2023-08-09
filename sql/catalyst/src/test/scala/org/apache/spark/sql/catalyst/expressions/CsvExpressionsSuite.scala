@@ -73,7 +73,7 @@ class CsvExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper with P
     val schema = StructType(StructField("t", TimestampType) :: Nil)
 
     val csvData1 = "2016-01-01T00:00:00.123Z"
-    var c = Calendar.getInstance(DateTimeUtils.TimeZoneGMT)
+    var c = Calendar.getInstance(DateTimeUtils.TimeZoneUTC)
     c.set(2016, 0, 1, 0, 0, 0)
     c.set(Calendar.MILLISECOND, 123)
     checkEvaluation(
@@ -158,13 +158,13 @@ class CsvExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper with P
   }
 
   test("infer schema of CSV strings") {
-    checkEvaluation(new SchemaOfCsv(Literal.create("1,abc")), "struct<_c0:int,_c1:string>")
+    checkEvaluation(new SchemaOfCsv(Literal.create("1,abc")), "STRUCT<_c0: INT, _c1: STRING>")
   }
 
   test("infer schema of CSV strings by using options") {
     checkEvaluation(
       new SchemaOfCsv(Literal.create("1|abc"), Map("delimiter" -> "|")),
-      "struct<_c0:int,_c1:string>")
+      "STRUCT<_c0: INT, _c1: STRING>")
   }
 
   test("to_csv - struct") {
@@ -184,7 +184,7 @@ class CsvExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper with P
 
   test("to_csv with timestamp") {
     val schema = StructType(StructField("t", TimestampType) :: Nil)
-    val c = Calendar.getInstance(DateTimeUtils.TimeZoneGMT)
+    val c = Calendar.getInstance(DateTimeUtils.TimeZoneUTC)
     c.set(2016, 0, 1, 0, 0, 0)
     c.set(Calendar.MILLISECOND, 0)
     val struct = Literal.create(create_row(c.getTimeInMillis * 1000L), schema)
@@ -245,5 +245,12 @@ class CsvExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper with P
     checkEvaluation(
       CsvToStructs(schema, Map.empty, Literal.create("1 day")),
       InternalRow(new CalendarInterval(0, 1, 0)))
+  }
+
+  test("StructsToCsv should not generate codes beyond 64KB") {
+    val range = Range.inclusive(1, 5000)
+    val struct = CreateStruct.create(range.map(Literal.apply))
+    val expected = range.mkString(",")
+    checkEvaluation(StructsToCsv(Map.empty, struct), expected)
   }
 }

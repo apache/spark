@@ -104,6 +104,14 @@ private[spark] class HadoopConfDriverFeatureStep(conf: KubernetesConf)
     }
   }
 
+  override def getAdditionalPodSystemProperties(): Map[String, String] = {
+    if (hasHadoopConf) {
+      Map(HADOOP_CONFIG_MAP_NAME -> existingConfMap.getOrElse(newConfigMapName))
+    } else {
+      Map.empty
+    }
+  }
+
   override def getAdditionalKubernetesResources(): Seq[HasMetadata] = {
     if (confDir.isDefined) {
       val fileMap = confFiles.map { file =>
@@ -114,6 +122,7 @@ private[spark] class HadoopConfDriverFeatureStep(conf: KubernetesConf)
         .withNewMetadata()
           .withName(newConfigMapName)
           .endMetadata()
+        .withImmutable(true)
         .addToData(fileMap)
         .build())
     } else {

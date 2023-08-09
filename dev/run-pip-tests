@@ -25,6 +25,13 @@ shopt -s nullglob
 FWDIR="$(cd "$(dirname "$0")"/..; pwd)"
 cd "$FWDIR"
 
+# Clean ignored/untracked files that do not need
+# for pip packaging test. Machines in GitHub Action do not have
+# enough space, see also SPARK-44557.
+if [[ ! -z "${GITHUB_ACTIONS}" ]]; then
+  git clean -d -f -x -e assembly
+fi
+
 echo "Constructing virtual env for testing"
 VIRTUALENV_BASE=$(mktemp -d)
 
@@ -48,7 +55,7 @@ if hash virtualenv 2>/dev/null && [ ! -n "$USE_CONDA" ]; then
   fi
 elif hash conda 2>/dev/null; then
   echo "Using conda virtual environments"
-  PYTHON_EXECS=('3.6')
+  PYTHON_EXECS=('3.9')
   USE_CONDA=1
 else
   echo "Missing virtualenv & conda, skipping pip installability tests"
@@ -63,10 +70,14 @@ fi
 PYSPARK_VERSION=$(python3 -c "exec(open('python/pyspark/version.py').read());print(__version__)")
 PYSPARK_DIST="$FWDIR/python/dist/pyspark-$PYSPARK_VERSION.tar.gz"
 # The pip install options we use for all the pip commands
-PIP_OPTIONS="--upgrade --no-cache-dir --force-reinstall "
+PIP_OPTIONS="--upgrade --no-cache-dir --force-reinstall"
 # Test both regular user and edit/dev install modes.
 PIP_COMMANDS=("pip install $PIP_OPTIONS $PYSPARK_DIST"
 	      "pip install $PIP_OPTIONS -e python/")
+
+# Jenkins has PySpark installed under user sitepackages shared for some reasons.
+# In this test, explicitly exclude user sitepackages to prevent side effects
+export PYTHONNOUSERSITE=1
 
 for python in "${PYTHON_EXECS[@]}"; do
   for install_command in "${PIP_COMMANDS[@]}"; do
@@ -77,7 +88,7 @@ for python in "${PYTHON_EXECS[@]}"; do
     rm -rf "$VIRTUALENV_PATH"
     if [ -n "$USE_CONDA" ]; then
       conda create -y -p "$VIRTUALENV_PATH" python=$python numpy pandas pip setuptools
-      source activate "$VIRTUALENV_PATH"
+      source activate "$VIRTUALENV_PATH" || conda activate "$VIRTUALENV_PATH"
     else
       mkdir -p "$VIRTUALENV_PATH"
       virtualenv --python=$python "$VIRTUALENV_PATH"
@@ -120,7 +131,7 @@ for python in "${PYTHON_EXECS[@]}"; do
 
     # conda / virtualenv environments need to be deactivated differently
     if [ -n "$USE_CONDA" ]; then
-      source deactivate
+      source deactivate || conda deactivate
     else
       deactivate
     fi

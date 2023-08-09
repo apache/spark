@@ -17,10 +17,13 @@
 
 package org.apache.spark.sql
 
+import java.time.{Duration, LocalDateTime, Period}
+
 import scala.util.Random
 
-import org.scalatest.Matchers.the
+import org.scalatest.matchers.must.Matchers.the
 
+import org.apache.spark.{SparkException, SparkThrowable}
 import org.apache.spark.sql.execution.WholeStageCodegenExec
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.aggregate.{HashAggregateExec, ObjectHashAggregateExec, SortAggregateExec}
@@ -31,7 +34,8 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.test.SQLTestData.DecimalData
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.types.CalendarInterval
+import org.apache.spark.sql.types.DayTimeIntervalType.{DAY, HOUR, MINUTE, SECOND}
+import org.apache.spark.sql.types.YearMonthIntervalType.{MONTH, YEAR}
 
 case class Fact(date: Int, hour: Int, minute: Int, room_name: String, temp: Double)
 
@@ -187,16 +191,15 @@ class DataFrameAggregateSuite extends QueryTest
     )
 
     intercept[AnalysisException] {
-      courseSales.groupBy().agg(grouping("course")).explain()
+      courseSales.agg(grouping("course")).explain()
     }
+
     intercept[AnalysisException] {
-      courseSales.groupBy().agg(grouping_id("course")).explain()
+      courseSales.agg(grouping_id("course")).explain()
     }
   }
 
   test("grouping/grouping_id inside window function") {
-
-    val w = Window.orderBy(sum("earnings"))
     checkAnswer(
       courseSales.cube("course", "year")
         .agg(sum("earnings"),
@@ -298,7 +301,7 @@ class DataFrameAggregateSuite extends QueryTest
       Row(2.0, 2.0))
 
     checkAnswer(
-      testData2.agg(avg($"a"), sumDistinct($"a")), // non-partial
+      testData2.agg(avg($"a"), sumDistinct($"a")), // non-partial and test deprecated version
       Row(2.0, 6.0) :: Nil)
 
     checkAnswer(
@@ -306,7 +309,7 @@ class DataFrameAggregateSuite extends QueryTest
       Row(new java.math.BigDecimal(2)))
 
     checkAnswer(
-      decimalData.agg(avg($"a"), sumDistinct($"a")), // non-partial
+      decimalData.agg(avg($"a"), sum_distinct($"a")), // non-partial
       Row(new java.math.BigDecimal(2), new java.math.BigDecimal(6)) :: Nil)
 
     checkAnswer(
@@ -315,8 +318,12 @@ class DataFrameAggregateSuite extends QueryTest
     // non-partial
     checkAnswer(
       decimalData.agg(
-        avg($"a" cast DecimalType(10, 2)), sumDistinct($"a" cast DecimalType(10, 2))),
+        avg($"a" cast DecimalType(10, 2)), sum_distinct($"a" cast DecimalType(10, 2))),
       Row(new java.math.BigDecimal(2), new java.math.BigDecimal(6)) :: Nil)
+
+    checkAnswer(
+      emptyTestData.agg(avg($"key" cast DecimalType(10, 0))),
+      Row(null))
   }
 
   test("null average") {
@@ -325,11 +332,11 @@ class DataFrameAggregateSuite extends QueryTest
       Row(2.0))
 
     checkAnswer(
-      testData3.agg(avg($"b"), countDistinct($"b")),
+      testData3.agg(avg($"b"), count_distinct($"b")),
       Row(2.0, 1))
 
     checkAnswer(
-      testData3.agg(avg($"b"), sumDistinct($"b")), // non-partial
+      testData3.agg(avg($"b"), sum_distinct($"b")), // non-partial
       Row(2.0, 2.0))
   }
 
@@ -340,7 +347,7 @@ class DataFrameAggregateSuite extends QueryTest
       Row(null))
 
     checkAnswer(
-      emptyTableData.agg(avg($"a"), sumDistinct($"b")), // non-partial
+      emptyTableData.agg(avg($"a"), sum_distinct($"b")), // non-partial
       Row(null, null))
   }
 
@@ -348,7 +355,7 @@ class DataFrameAggregateSuite extends QueryTest
     assert(testData2.count() === testData2.rdd.map(_ => 1).count())
 
     checkAnswer(
-      testData2.agg(count($"a"), sumDistinct($"a")), // non-partial
+      testData2.agg(count($"a"), sum_distinct($"a")), // non-partial
       Row(6, 6.0))
   }
 
@@ -365,12 +372,12 @@ class DataFrameAggregateSuite extends QueryTest
 
     checkAnswer(
       testData3.agg(
-        count($"a"), count($"b"), count(lit(1)), countDistinct($"a"), countDistinct($"b")),
+        count($"a"), count($"b"), count(lit(1)), count_distinct($"a"), count_distinct($"b")),
       Row(2, 1, 2, 2, 1)
     )
 
     checkAnswer(
-      testData3.agg(count($"b"), countDistinct($"b"), sumDistinct($"b")), // non-partial
+      testData3.agg(count($"b"), count_distinct($"b"), sum_distinct($"b")), // non-partial
       Row(1, 1, 2)
     )
   }
@@ -385,17 +392,17 @@ class DataFrameAggregateSuite extends QueryTest
       .toDF("key1", "key2", "key3")
 
     checkAnswer(
-      df1.agg(countDistinct($"key1", $"key2")),
+      df1.agg(count_distinct($"key1", $"key2")),
       Row(3)
     )
 
     checkAnswer(
-      df1.agg(countDistinct($"key1", $"key2", $"key3")),
+      df1.agg(count_distinct($"key1", $"key2", $"key3")),
       Row(3)
     )
 
     checkAnswer(
-      df1.groupBy($"key1").agg(countDistinct($"key2", $"key3")),
+      df1.groupBy($"key1").agg(count_distinct($"key2", $"key3")),
       Seq(Row("a", 2), Row("x", 1))
     )
   }
@@ -403,7 +410,7 @@ class DataFrameAggregateSuite extends QueryTest
   test("zero count") {
     val emptyTableData = Seq.empty[(Int, Int)].toDF("a", "b")
     checkAnswer(
-      emptyTableData.agg(count($"a"), sumDistinct($"a")), // non-partial
+      emptyTableData.agg(count($"a"), sum_distinct($"a")), // non-partial
       Row(0, null))
   }
 
@@ -434,7 +441,7 @@ class DataFrameAggregateSuite extends QueryTest
   test("zero sum distinct") {
     val emptyTableData = Seq.empty[(Int, Int)].toDF("a", "b")
     checkAnswer(
-      emptyTableData.agg(sumDistinct($"a")),
+      emptyTableData.agg(sum_distinct($"a")),
       Row(null))
   }
 
@@ -456,26 +463,79 @@ class DataFrameAggregateSuite extends QueryTest
     checkAggregatesWithTol(sparkKurtosis, Row(-1.5), absTol)
   }
 
-  test("zero moments") {
-    val input = Seq((1, 2)).toDF("a", "b")
+  test("linear regression") {
+    checkAnswer(testData2.agg(regr_avgx($"a", $"b")), testData2.selectExpr("regr_avgx(a, b)"))
+    checkAnswer(testData2.agg(regr_avgy($"a", $"b")), testData2.selectExpr("regr_avgy(a, b)"))
+    checkAnswer(testData2.agg(regr_count($"a", $"b")), testData2.selectExpr("regr_count(a, b)"))
     checkAnswer(
-      input.agg(stddev($"a"), stddev_samp($"a"), stddev_pop($"a"), variance($"a"),
-        var_samp($"a"), var_pop($"a"), skewness($"a"), kurtosis($"a")),
-      Row(Double.NaN, Double.NaN, 0.0, Double.NaN, Double.NaN, 0.0,
-        Double.NaN, Double.NaN))
+      testData2.agg(regr_intercept($"a", $"b")), testData2.selectExpr("regr_intercept(a, b)"))
+    checkAnswer(testData2.agg(regr_r2($"a", $"b")), testData2.selectExpr("regr_r2(a, b)"))
+    checkAnswer(testData2.agg(regr_slope($"a", $"b")), testData2.selectExpr("regr_slope(a, b)"))
+    checkAnswer(testData2.agg(regr_sxx($"a", $"b")), testData2.selectExpr("regr_sxx(a, b)"))
+    checkAnswer(testData2.agg(regr_sxy($"a", $"b")), testData2.selectExpr("regr_sxy(a, b)"))
+    checkAnswer(testData2.agg(regr_syy($"a", $"b")), testData2.selectExpr("regr_syy(a, b)"))
+  }
 
-    checkAnswer(
-      input.agg(
-        expr("stddev(a)"),
-        expr("stddev_samp(a)"),
-        expr("stddev_pop(a)"),
-        expr("variance(a)"),
-        expr("var_samp(a)"),
-        expr("var_pop(a)"),
-        expr("skewness(a)"),
-        expr("kurtosis(a)")),
-      Row(Double.NaN, Double.NaN, 0.0, Double.NaN, Double.NaN, 0.0,
-        Double.NaN, Double.NaN))
+  test("every | bool_and | some | any | bool_or") {
+    checkAnswer(complexData.agg(every($"b")), complexData.selectExpr("every(b)"))
+    checkAnswer(complexData.agg(bool_and($"b")), complexData.selectExpr("bool_and(b)"))
+    checkAnswer(complexData.agg(some($"b")), complexData.selectExpr("some(b)"))
+    checkAnswer(complexData.agg(any($"b")), complexData.selectExpr("any(b)"))
+    checkAnswer(complexData.agg(bool_or($"b")), complexData.selectExpr("bool_or(b)"))
+  }
+
+  test("bit aggregate") {
+    checkAnswer(testData2.agg(bit_and($"b")), testData2.selectExpr("bit_and(b)"))
+    checkAnswer(testData2.agg(bit_or($"b")), testData2.selectExpr("bit_or(b)"))
+    checkAnswer(testData2.agg(bit_xor($"b")), testData2.selectExpr("bit_xor(b)"))
+  }
+
+  test("zero moments") {
+    withSQLConf(SQLConf.LEGACY_STATISTICAL_AGGREGATE.key -> "true") {
+      val input = Seq((1, 2)).toDF("a", "b")
+      checkAnswer(
+        input.agg(stddev($"a"), stddev_samp($"a"), stddev_pop($"a"), variance($"a"),
+          var_samp($"a"), var_pop($"a"), skewness($"a"), kurtosis($"a")),
+        Row(Double.NaN, Double.NaN, 0.0, Double.NaN, Double.NaN, 0.0,
+          Double.NaN, Double.NaN))
+
+      checkAnswer(
+        input.agg(
+          expr("stddev(a)"),
+          expr("stddev_samp(a)"),
+          expr("stddev_pop(a)"),
+          expr("variance(a)"),
+          expr("var_samp(a)"),
+          expr("var_pop(a)"),
+          expr("skewness(a)"),
+          expr("kurtosis(a)")),
+        Row(Double.NaN, Double.NaN, 0.0, Double.NaN, Double.NaN, 0.0,
+          Double.NaN, Double.NaN))
+    }
+  }
+
+  test("SPARK-13860: zero moments LEGACY_STATISTICAL_AGGREGATE off") {
+    withSQLConf(SQLConf.LEGACY_STATISTICAL_AGGREGATE.key -> "false") {
+      val input = Seq((1, 2)).toDF("a", "b")
+      checkAnswer(
+        input.agg(stddev($"a"), stddev_samp($"a"), stddev_pop($"a"), variance($"a"),
+          var_samp($"a"), var_pop($"a"), skewness($"a"), kurtosis($"a")),
+        Row(null, null, 0.0, null, null, 0.0,
+          null, null))
+
+      checkAnswer(
+        input.agg(
+          expr("stddev(a)"),
+          expr("stddev_samp(a)"),
+          expr("stddev_pop(a)"),
+          expr("variance(a)"),
+          expr("var_samp(a)"),
+          expr("var_pop(a)"),
+          expr("skewness(a)"),
+          expr("kurtosis(a)")),
+        Row(null, null, 0.0, null, null, 0.0,
+          null, null))
+    }
   }
 
   test("null moments") {
@@ -516,6 +576,18 @@ class DataFrameAggregateSuite extends QueryTest
       Seq(Set(1, 2, 3) -> Set(2, 4)): _*)
   }
 
+  test("array_agg function") {
+    val df = Seq((1, 2), (2, 2), (3, 4)).toDF("a", "b")
+    checkAnswer(
+      df.selectExpr("array_agg(a)", "array_agg(b)"),
+      Seq(Row(Seq(1, 2, 3), Seq(2, 2, 4)))
+    )
+    checkAnswer(
+      df.select(array_agg($"a"), array_agg($"b")),
+      Seq(Row(Seq(1, 2, 3), Seq(2, 2, 4)))
+    )
+  }
+
   test("collect functions structs") {
     val df = Seq((1, 2, 2), (2, 2, 2), (3, 4, 1))
       .toDF("a", "x", "y")
@@ -553,7 +625,15 @@ class DataFrameAggregateSuite extends QueryTest
     val error = intercept[AnalysisException] {
       df.select(collect_set($"a"), collect_set($"b"))
     }
-    assert(error.message.contains("collect_set() cannot have map type data"))
+    checkError(
+      exception = error,
+      errorClass = "DATATYPE_MISMATCH.UNSUPPORTED_INPUT_TYPE",
+      parameters = Map(
+        "functionName" -> "`collect_set`",
+        "dataType" -> "\"MAP\"",
+        "sqlExpr" -> "\"collect_set(b)\""
+      )
+    )
   }
 
   test("SPARK-17641: collect functions should not collect null values") {
@@ -597,7 +677,7 @@ class DataFrameAggregateSuite extends QueryTest
     val df = Seq((1, 3, "a"), (1, 2, "b"), (3, 4, "c"), (3, 4, "c"), (3, 5, "d"))
       .toDF("x", "y", "z")
     checkAnswer(
-      df.groupBy($"x").agg(countDistinct($"y"), sort_array(collect_list($"z"))),
+      df.groupBy($"x").agg(count_distinct($"y"), sort_array(collect_list($"z"))),
       Seq(Row(1, 2, Seq("a", "b")), Row(3, 2, Seq("c", "c", "d"))))
   }
 
@@ -620,10 +700,13 @@ class DataFrameAggregateSuite extends QueryTest
   }
 
   test("aggregate function in GROUP BY") {
-    val e = intercept[AnalysisException] {
-      testData.groupBy(sum($"key")).count()
-    }
-    assert(e.message.contains("aggregate functions are not allowed in GROUP BY"))
+    checkError(
+      exception = intercept[AnalysisException] {
+        testData.groupBy(sum($"key")).count()
+      },
+      errorClass = "GROUP_BY_AGGREGATE",
+      parameters = Map("sqlExpr" -> "sum(key)")
+    )
   }
 
   private def assertNoExceptions(c: Column): Unit = {
@@ -720,11 +803,11 @@ class DataFrameAggregateSuite extends QueryTest
     // explicit global aggregations
     val emptyAgg = Map.empty[String, String]
     checkAnswer(spark.emptyDataFrame.agg(emptyAgg), Seq(Row()))
-    checkAnswer(spark.emptyDataFrame.groupBy().agg(emptyAgg), Seq(Row()))
-    checkAnswer(spark.emptyDataFrame.groupBy().agg(count("*")), Seq(Row(0)))
+    checkAnswer(spark.emptyDataFrame.agg(emptyAgg), Seq(Row()))
+    checkAnswer(spark.emptyDataFrame.agg(count("*")), Seq(Row(0)))
     checkAnswer(spark.emptyDataFrame.dropDuplicates().agg(emptyAgg), Seq(Row()))
-    checkAnswer(spark.emptyDataFrame.dropDuplicates().groupBy().agg(emptyAgg), Seq(Row()))
-    checkAnswer(spark.emptyDataFrame.dropDuplicates().groupBy().agg(count("*")), Seq(Row(0)))
+    checkAnswer(spark.emptyDataFrame.dropDuplicates().agg(emptyAgg), Seq(Row()))
+    checkAnswer(spark.emptyDataFrame.dropDuplicates().agg(count("*")), Seq(Row(0)))
 
     // global aggregation is converted to grouping aggregation:
     assert(spark.emptyDataFrame.dropDuplicates().count() == 0)
@@ -812,7 +895,7 @@ class DataFrameAggregateSuite extends QueryTest
     )
   }
 
-  test("SPARK-27581: DataFrame countDistinct(\"*\") shouldn't fail with AnalysisException") {
+  test("SPARK-27581: DataFrame count_distinct(\"*\") shouldn't fail with AnalysisException") {
     val df = sql("select id % 100 from range(100000)")
     val distinctCount1 = df.select(expr("count(distinct(*))"))
     val distinctCount2 = df.select(countDistinct("*"))
@@ -826,6 +909,11 @@ class DataFrameAggregateSuite extends QueryTest
     val yearOfMaxEarnings =
       sql("SELECT course, max_by(year, earnings) FROM courseSales GROUP BY course")
     checkAnswer(yearOfMaxEarnings, Row("dotNET", 2013) :: Row("Java", 2013) :: Nil)
+
+    checkAnswer(
+      courseSales.groupBy("course").agg(max_by(col("year"), col("earnings"))),
+      Row("dotNET", 2013) :: Row("Java", 2013) :: Nil
+    )
 
     checkAnswer(
       sql("SELECT max_by(x, y) FROM VALUES (('a', 10)), (('b', 50)), (('c', 20)) AS tab(x, y)"),
@@ -873,8 +961,17 @@ class DataFrameAggregateSuite extends QueryTest
       val error = intercept[AnalysisException] {
         sql("SELECT max_by(x, y) FROM tempView").show
       }
-      assert(
-        error.message.contains("function max_by does not support ordering on type map<int,string>"))
+      checkError(
+        exception = error,
+        errorClass = "DATATYPE_MISMATCH.INVALID_ORDERING_TYPE",
+        sqlState = None,
+        parameters = Map(
+          "functionName" -> "`max_by`",
+          "dataType" -> "\"MAP<INT, STRING>\"",
+          "sqlExpr" -> "\"max_by(x, y)\""
+        ),
+        context = ExpectedContext(fragment = "max_by(x, y)", start = 7, stop = 18)
+      )
     }
   }
 
@@ -882,6 +979,11 @@ class DataFrameAggregateSuite extends QueryTest
     val yearOfMinEarnings =
       sql("SELECT course, min_by(year, earnings) FROM courseSales GROUP BY course")
     checkAnswer(yearOfMinEarnings, Row("dotNET", 2012) :: Row("Java", 2012) :: Nil)
+
+    checkAnswer(
+      courseSales.groupBy("course").agg(min_by(col("year"), col("earnings"))),
+      Row("dotNET", 2012) :: Row("Java", 2012) :: Nil
+    )
 
     checkAnswer(
       sql("SELECT min_by(x, y) FROM VALUES (('a', 10)), (('b', 50)), (('c', 20)) AS tab(x, y)"),
@@ -929,9 +1031,64 @@ class DataFrameAggregateSuite extends QueryTest
       val error = intercept[AnalysisException] {
         sql("SELECT min_by(x, y) FROM tempView").show
       }
-      assert(
-        error.message.contains("function min_by does not support ordering on type map<int,string>"))
+      checkError(
+        exception = error,
+        errorClass = "DATATYPE_MISMATCH.INVALID_ORDERING_TYPE",
+        sqlState = None,
+        parameters = Map(
+          "functionName" -> "`min_by`",
+          "dataType" -> "\"MAP<INT, STRING>\"",
+          "sqlExpr" -> "\"min_by(x, y)\""
+        ),
+        context = ExpectedContext(fragment = "min_by(x, y)", start = 7, stop = 18)
+      )
     }
+  }
+
+  test("percentile_like") {
+    // percentile
+    checkAnswer(
+      courseSales.groupBy("course").agg(
+        percentile(col("year"), lit(0.3)),
+        percentile(col("year"), lit(Array(0.25, 0.75))),
+        percentile(col("year"), lit(0.3), lit(2)),
+        percentile(col("year"), lit(Array(0.25, 0.75)), lit(2))
+      ),
+      Row("Java", 2012.2999999999997, Seq(2012.25, 2012.75), 2012.0, Seq(2012.0, 2013.0)) ::
+        Row("dotNET", 2012.0, Seq(2012.0, 2012.5), 2012.0, Seq(2012.0, 2012.75)) :: Nil
+    )
+
+    // median
+    checkAnswer(
+      courseSales.groupBy("course").agg(
+        median(col("year"))
+      ),
+      Row("Java", 2012.5) ::
+        Row("dotNET", 2012.0) :: Nil
+    )
+  }
+
+  test("any_value") {
+    checkAnswer(
+      courseSales.groupBy("course").agg(
+        any_value(col("year")),
+        any_value(col("year"), lit(true))
+      ),
+      Row("Java", 2012, 2012) :: Row("dotNET", 2012, 2012) :: Nil
+    )
+  }
+
+  test("approx_percentile") {
+    checkAnswer(
+      courseSales.groupBy("course").agg(
+        approx_percentile(col("earnings"), lit(0.3), lit(10000)),
+        approx_percentile(col("earnings"), array(lit(0.3), lit(0.6)), lit(10000)),
+        approx_percentile(col("earnings"), lit(0.3), lit(1)),
+        approx_percentile(col("earnings"), array(lit(0.3), lit(0.6)), lit(1))
+      ),
+      Row("Java", 20000.0, Seq(20000.0, 30000.0), 20000.0, Seq(20000.0, 20000.0)) ::
+        Row("dotNET", 5000.0, Seq(5000.0, 10000.0), 5000.0, Seq(5000.0, 5000.0)) :: Nil
+    )
   }
 
   test("count_if") {
@@ -967,16 +1124,68 @@ class DataFrameAggregateSuite extends QueryTest
         sql("SELECT x FROM tempView GROUP BY x HAVING COUNT_IF(NULL) > 0"),
         Nil)
 
-      val error = intercept[AnalysisException] {
-        sql("SELECT COUNT_IF(x) FROM tempView")
+      // When ANSI mode is on, it will implicit cast the string as boolean and throw a runtime
+      // error. Here we simply test with ANSI mode off.
+      if (!conf.ansiEnabled) {
+        checkError(
+          exception = intercept[AnalysisException] {
+            sql("SELECT COUNT_IF(x) FROM tempView")
+          },
+          errorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+          sqlState = None,
+          parameters = Map(
+            "sqlExpr" -> "\"count_if(x)\"",
+            "paramIndex" -> "1",
+            "inputSql" -> "\"x\"",
+            "inputType" -> "\"STRING\"",
+            "requiredType" -> "\"BOOLEAN\""),
+          context = ExpectedContext(fragment = "COUNT_IF(x)", start = 7, stop = 17))
       }
-      assert(error.message.contains("function count_if requires boolean type"))
     }
+
+    checkAnswer(
+      courseSales.groupBy("course").agg(
+        count_if((col("earnings").gt(10000))),
+        count_if(col("course").equalTo("Java").and(col("earnings").gt(10000)))
+      ),
+      Row("Java", 2, 2) :: Row("dotNET", 1, 0) :: Nil
+    )
+  }
+
+  test("first_value") {
+    checkAnswer(
+      nullStrings.orderBy(col("n").desc).agg(
+        first_value(col("s")),
+        first_value(col("s"), lit(true))
+      ),
+      Row(null, "ABC") :: Nil
+    )
+  }
+
+  test("last_value") {
+    checkAnswer(
+      nullStrings.agg(
+        last_value(col("s")),
+        last_value(col("s"), lit(true))
+      ),
+      Row(null, "ABC") :: Nil
+    )
+  }
+
+  test("histogram_numeric") {
+    checkAnswer(
+      courseSales.groupBy("course").agg(
+        histogram_numeric(col("earnings"), lit(5))
+      ),
+      Row("Java", Seq(Row(20000.0, 1.0), Row(30000.0, 1.0))) ::
+        Row("dotNET", Seq(Row(5000.0, 1.0), Row(10000.0, 1.0), Row(48000.0, 1.0))) :: Nil
+    )
   }
 
   Seq(true, false).foreach { value =>
     test(s"SPARK-31620: agg with subquery (whole-stage-codegen = $value)") {
-      withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> value.toString) {
+      withSQLConf(
+        SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> value.toString) {
         withTempView("t1", "t2") {
           sql("create temporary view t1 as select * from values (1, 2) as t1(a, b)")
           sql("create temporary view t2 as select * from values (3, 4) as t2(c, d)")
@@ -999,17 +1208,901 @@ class DataFrameAggregateSuite extends QueryTest
 
           // test SortAggregateExec
           var df = sql("select max(if(c > (select a from t1), 'str1', 'str2')) as csum from t2")
-          assert(df.queryExecution.executedPlan
-            .find { case _: SortAggregateExec => true }.isDefined)
+          assert(find(df.queryExecution.executedPlan)(_.isInstanceOf[SortAggregateExec]).isDefined)
           checkAnswer(df, Row("str1") :: Nil)
 
           // test ObjectHashAggregateExec
           df = sql("select collect_list(d), sum(if(c > (select a from t1), d, 0)) as csum from t2")
-          assert(df.queryExecution.executedPlan
-            .find { case _: ObjectHashAggregateExec => true }.isDefined)
+          assert(
+            find(df.queryExecution.executedPlan)(_.isInstanceOf[ObjectHashAggregateExec]).isDefined)
           checkAnswer(df, Row(Array(4), 4) :: Nil)
         }
       }
     }
   }
+
+  test("SPARK-32038: NormalizeFloatingNumbers should work on distinct aggregate") {
+    withTempView("view") {
+      val nan1 = java.lang.Float.intBitsToFloat(0x7f800001)
+      val nan2 = java.lang.Float.intBitsToFloat(0x7fffffff)
+
+      Seq(("mithunr", Float.NaN),
+        ("mithunr", nan1),
+        ("mithunr", nan2),
+        ("abellina", 1.0f),
+        ("abellina", 2.0f)).toDF("uid", "score").createOrReplaceTempView("view")
+
+      val df = spark.sql("select uid, count(distinct score) from view group by 1 order by 1 asc")
+      checkAnswer(df, Row("abellina", 2) :: Row("mithunr", 1) :: Nil)
+    }
+  }
+
+  test("SPARK-32136: NormalizeFloatingNumbers should work on null struct") {
+    val df = Seq(
+      A(None),
+      A(Some(B(None))),
+      A(Some(B(Some(1.0))))).toDF
+    val groupBy = df.groupBy("b").agg(count("*"))
+    checkAnswer(groupBy, Row(null, 1) :: Row(Row(null), 1) :: Row(Row(1.0), 1) :: Nil)
+  }
+
+  test("SPARK-32344: Unevaluable's set to FIRST/LAST ignoreNullsExpr in distinct aggregates") {
+    val queryTemplate = (agg: String) =>
+      s"SELECT $agg(DISTINCT v) FROM (SELECT v FROM VALUES 1, 2, 3 t(v) ORDER BY v)"
+    checkAnswer(sql(queryTemplate("FIRST")), Row(1))
+    checkAnswer(sql(queryTemplate("LAST")), Row(3))
+  }
+
+  test("SPARK-32906: struct field names should not change after normalizing floats") {
+    val df = Seq(Tuple1(Tuple2(-0.0d, Double.NaN)), Tuple1(Tuple2(0.0d, Double.NaN))).toDF("k")
+    val aggs = df.distinct().queryExecution.sparkPlan.collect { case a: HashAggregateExec => a }
+    assert(aggs.length == 2)
+    assert(aggs.head.output.map(_.dataType.simpleString).head ===
+      aggs.last.output.map(_.dataType.simpleString).head)
+  }
+
+  test("SPARK-33726: Aggregation on a table where a column name is reused") {
+    val query =
+      """|with T as (
+         |select id as a, -id as x from range(3)),
+         |U as (
+         |select id as b, cast(id as string) as x from range(3))
+         |select T.x, U.x, min(a) as ma, min(b) as mb
+         |from T join U on a=b
+         |group by U.x, T.x
+      """.stripMargin
+    val df = spark.sql(query)
+    checkAnswer(df, Row(0, "0", 0, 0) :: Row(-1, "1", 1, 1) :: Row(-2, "2", 2, 2) :: Nil)
+  }
+
+  test("SPARK-34713: group by CreateStruct with ExtractValue") {
+    val structDF = Seq(Tuple1(1 -> 1)).toDF("col")
+    checkAnswer(structDF.groupBy(struct($"col._1")).count().select("count"), Row(1))
+
+    val arrayOfStructDF = Seq(Tuple1(Seq(1 -> 1))).toDF("col")
+    checkAnswer(arrayOfStructDF.groupBy(struct($"col._1")).count().select("count"), Row(1))
+
+    val mapDF = Seq(Tuple1(Map("a" -> "a"))).toDF("col")
+    checkAnswer(mapDF.groupBy(struct($"col.a")).count().select("count"), Row(1))
+
+    if (!conf.ansiEnabled) {
+      val nonStringMapDF = Seq(Tuple1(Map(1 -> 1))).toDF("col")
+      // Spark implicit casts string literal "a" to int to match the key type.
+      checkAnswer(nonStringMapDF.groupBy(struct($"col.a")).count().select("count"), Row(1))
+    }
+
+    checkError(
+      exception = intercept[AnalysisException] {
+        Seq(Tuple1(Seq(1))).toDF("col").groupBy(struct($"col.a")).count()
+      },
+      errorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+      parameters = Map(
+        "sqlExpr" -> "\"col[a]\"",
+        "paramIndex" -> "2",
+        "inputSql" -> "\"a\"",
+        "inputType" -> "\"STRING\"",
+        "requiredType" -> "\"INTEGRAL\""))
+  }
+
+  test("SPARK-34716: Support ANSI SQL intervals by the aggregate function `sum`") {
+    val sumDF = intervalData.select(
+      sum($"year-month"),
+      sum($"year"),
+      sum($"month"),
+      sum($"day-second"),
+      sum($"day-minute"),
+      sum($"day-hour"),
+      sum($"day"),
+      sum($"hour-second"),
+      sum($"hour-minute"),
+      sum($"hour"),
+      sum($"minute-second"),
+      sum($"minute"),
+      sum($"second"))
+    checkAnswer(sumDF,
+      Row(
+        Period.of(2, 5, 0),
+        Period.ofYears(28),
+        Period.of(1, 1, 0),
+        Duration.ofDays(9).plusHours(23).plusMinutes(29).plusSeconds(4),
+        Duration.ofDays(23).plusHours(8).plusMinutes(27),
+        Duration.ofDays(-8).plusHours(-7),
+        Duration.ofDays(1),
+        Duration.ofDays(1).plusHours(12).plusMinutes(2).plusSeconds(33),
+        Duration.ofMinutes(43),
+        Duration.ofHours(12),
+        Duration.ofMinutes(18).plusSeconds(3),
+        Duration.ofMinutes(52),
+        Duration.ofSeconds(20)))
+    assert(find(sumDF.queryExecution.executedPlan)(_.isInstanceOf[HashAggregateExec]).isDefined)
+    assert(sumDF.schema == StructType(Seq(
+      StructField("sum(year-month)", YearMonthIntervalType()),
+      StructField("sum(year)", YearMonthIntervalType(YEAR)),
+      StructField("sum(month)", YearMonthIntervalType(MONTH)),
+      StructField("sum(day-second)", DayTimeIntervalType()),
+      StructField("sum(day-minute)", DayTimeIntervalType(DAY, MINUTE)),
+      StructField("sum(day-hour)", DayTimeIntervalType(DAY, HOUR)),
+      StructField("sum(day)", DayTimeIntervalType(DAY)),
+      StructField("sum(hour-second)", DayTimeIntervalType(HOUR, SECOND)),
+      StructField("sum(hour-minute)", DayTimeIntervalType(HOUR, MINUTE)),
+      StructField("sum(hour)", DayTimeIntervalType(HOUR)),
+      StructField("sum(minute-second)", DayTimeIntervalType(MINUTE, SECOND)),
+      StructField("sum(minute)", DayTimeIntervalType(MINUTE)),
+      StructField("sum(second)", DayTimeIntervalType(SECOND)))))
+
+    val sumDF2 =
+      intervalData.groupBy($"class").agg(
+        sum($"year-month"),
+        sum($"year"),
+        sum($"month"),
+        sum($"day-second"),
+        sum($"day-minute"),
+        sum($"day-hour"),
+        sum($"day"),
+        sum($"hour-second"),
+        sum($"hour-minute"),
+        sum($"hour"),
+        sum($"minute-second"),
+        sum($"minute"),
+        sum($"second"))
+    checkAnswer(sumDF2,
+      Row(1,
+        Period.ofMonths(10),
+        Period.ofYears(8),
+        Period.ofMonths(10),
+        Duration.ofDays(7).plusHours(13).plusMinutes(3).plusSeconds(18),
+        Duration.ofDays(5).plusHours(21).plusMinutes(12),
+        Duration.ofDays(1).plusHours(8),
+        Duration.ofDays(10),
+        Duration.ofHours(20).plusMinutes(11).plusSeconds(33),
+        Duration.ofHours(3).plusMinutes(18),
+        Duration.ofHours(13),
+        Duration.ofMinutes(2).plusSeconds(59),
+        Duration.ofMinutes(38),
+        Duration.ofSeconds(5)) ::
+      Row(2,
+        Period.ofMonths(1),
+        Period.ofYears(1),
+        Period.ofMonths(1),
+        Duration.ofSeconds(1),
+        Duration.ofMinutes(1),
+        Duration.ofHours(1),
+        Duration.ofDays(1),
+        Duration.ofSeconds(1),
+        Duration.ofMinutes(1),
+        Duration.ofHours(1),
+        Duration.ofSeconds(1),
+        Duration.ofMinutes(1),
+        Duration.ofSeconds(1)) ::
+      Row(3,
+        Period.of(1, 6, 0),
+        Period.ofYears(19),
+        Period.ofMonths(2),
+        Duration.ofDays(2).plusHours(10).plusMinutes(25).plusSeconds(45),
+        Duration.ofDays(17).plusHours(11).plusMinutes(14),
+        Duration.ofDays(-9).plusHours(-16),
+        Duration.ofDays(-10),
+        Duration.ofHours(15).plusMinutes(50).plusSeconds(59),
+        Duration.ofHours(-2).plusMinutes(-36),
+        Duration.ofHours(-2),
+        Duration.ofMinutes(15).plusSeconds(3),
+        Duration.ofMinutes(13),
+        Duration.ofSeconds(14)) ::
+      Nil)
+    assert(find(sumDF2.queryExecution.executedPlan)(_.isInstanceOf[HashAggregateExec]).isDefined)
+    assert(sumDF2.schema == StructType(Seq(StructField("class", IntegerType, false),
+      StructField("sum(year-month)", YearMonthIntervalType()),
+      StructField("sum(year)", YearMonthIntervalType(YEAR)),
+      StructField("sum(month)", YearMonthIntervalType(MONTH)),
+      StructField("sum(day-second)", DayTimeIntervalType()),
+      StructField("sum(day-minute)", DayTimeIntervalType(DAY, MINUTE)),
+      StructField("sum(day-hour)", DayTimeIntervalType(DAY, HOUR)),
+      StructField("sum(day)", DayTimeIntervalType(DAY)),
+      StructField("sum(hour-second)", DayTimeIntervalType(HOUR, SECOND)),
+      StructField("sum(hour-minute)", DayTimeIntervalType(HOUR, MINUTE)),
+      StructField("sum(hour)", DayTimeIntervalType(HOUR)),
+      StructField("sum(minute-second)", DayTimeIntervalType(MINUTE, SECOND)),
+      StructField("sum(minute)", DayTimeIntervalType(MINUTE)),
+      StructField("sum(second)", DayTimeIntervalType(SECOND)))))
+
+    val df2 = Seq((Period.ofMonths(Int.MaxValue), Duration.ofDays(106751991)),
+      (Period.ofMonths(10), Duration.ofDays(10)))
+      .toDF("year-month", "day")
+    val error = intercept[SparkException] {
+      checkAnswer(df2.select(sum($"year-month")), Nil)
+    }
+    assert(error.toString contains
+      "SparkArithmeticException: [INTERVAL_ARITHMETIC_OVERFLOW] integer overflow")
+
+    val error2 = intercept[SparkException] {
+      checkAnswer(df2.select(sum($"day")), Nil)
+    }
+    assert(error2.toString contains
+      "SparkArithmeticException: [INTERVAL_ARITHMETIC_OVERFLOW] long overflow")
+  }
+
+  test("SPARK-34837: Support ANSI SQL intervals by the aggregate function `avg`") {
+    val avgDF = intervalData.select(
+      avg($"year-month"),
+      avg($"year"),
+      avg($"month"),
+      avg($"day-second"),
+      avg($"day-minute"),
+      avg($"day-hour"),
+      avg($"day"),
+      avg($"hour-second"),
+      avg($"hour-minute"),
+      avg($"hour"),
+      avg($"minute-second"),
+      avg($"minute"),
+      avg($"second"))
+    checkAnswer(avgDF,
+      Row(Period.ofMonths(7),
+        Period.of(5, 7, 0),
+        Period.ofMonths(3),
+        Duration.ofDays(2).plusHours(11).plusMinutes(52).plusSeconds(16),
+        Duration.ofDays(4).plusHours(16).plusMinutes(5).plusSeconds(24),
+        Duration.ofDays(-1).plusHours(-15).plusMinutes(-48),
+        Duration.ofHours(4).plusMinutes(48),
+        Duration.ofHours(9).plusSeconds(38).plusMillis(250),
+        Duration.ofMinutes(8).plusSeconds(36),
+        Duration.ofHours(2).plusMinutes(24),
+        Duration.ofMinutes(4).plusSeconds(30).plusMillis(750),
+        Duration.ofMinutes(10).plusSeconds(24),
+        Duration.ofSeconds(5)))
+    assert(find(avgDF.queryExecution.executedPlan)(_.isInstanceOf[HashAggregateExec]).isDefined)
+    assert(avgDF.schema == StructType(Seq(
+      StructField("avg(year-month)", YearMonthIntervalType()),
+      StructField("avg(year)", YearMonthIntervalType()),
+      StructField("avg(month)", YearMonthIntervalType()),
+      StructField("avg(day-second)", DayTimeIntervalType()),
+      StructField("avg(day-minute)", DayTimeIntervalType()),
+      StructField("avg(day-hour)", DayTimeIntervalType()),
+      StructField("avg(day)", DayTimeIntervalType()),
+      StructField("avg(hour-second)", DayTimeIntervalType()),
+      StructField("avg(hour-minute)", DayTimeIntervalType()),
+      StructField("avg(hour)", DayTimeIntervalType()),
+      StructField("avg(minute-second)", DayTimeIntervalType()),
+      StructField("avg(minute)", DayTimeIntervalType()),
+      StructField("avg(second)", DayTimeIntervalType()))))
+
+    val avgDF2 =
+      intervalData.groupBy($"class").agg(
+        avg($"year-month"),
+        avg($"year"),
+        avg($"month"),
+        avg($"day-second"),
+        avg($"day-minute"),
+        avg($"day-hour"),
+        avg($"day"),
+        avg($"hour-second"),
+        avg($"hour-minute"),
+        avg($"hour"),
+        avg($"minute-second"),
+        avg($"minute"),
+        avg($"second"))
+    checkAnswer(avgDF2,
+      Row(1,
+        Period.ofMonths(10),
+        Period.ofYears(8),
+        Period.ofMonths(10),
+        Duration.ofDays(7).plusHours(13).plusMinutes(3).plusSeconds(18),
+        Duration.ofDays(5).plusHours(21).plusMinutes(12),
+        Duration.ofDays(1).plusHours(8),
+        Duration.ofDays(10),
+        Duration.ofHours(20).plusMinutes(11).plusSeconds(33),
+        Duration.ofHours(3).plusMinutes(18),
+        Duration.ofHours(13),
+        Duration.ofMinutes(2).plusSeconds(59),
+        Duration.ofMinutes(38),
+        Duration.ofSeconds(5)) ::
+      Row(2,
+        Period.ofMonths(1),
+        Period.ofYears(1),
+        Period.ofMonths(1),
+        Duration.ofSeconds(1),
+        Duration.ofMinutes(1),
+        Duration.ofHours(1),
+        Duration.ofDays(1),
+        Duration.ofSeconds(1),
+        Duration.ofMinutes(1),
+        Duration.ofHours(1),
+        Duration.ofSeconds(1),
+        Duration.ofMinutes(1),
+        Duration.ofSeconds(1)) ::
+      Row(3,
+        Period.ofMonths(9),
+        Period.of(6, 4, 0),
+        Period.ofMonths(1),
+        Duration.ofDays(1).plusHours(5).plusMinutes(12).plusSeconds(52).plusMillis(500),
+        Duration.ofDays(5).plusHours(19).plusMinutes(44).plusSeconds(40),
+        Duration.ofDays(-3).plusHours(-5).plusMinutes(-20),
+        Duration.ofDays(-3).plusHours(-8),
+        Duration.ofHours(7).plusMinutes(55).plusSeconds(29).plusMillis(500),
+        Duration.ofMinutes(-52),
+        Duration.ofMinutes(-40),
+        Duration.ofMinutes(7).plusSeconds(31).plusMillis(500),
+        Duration.ofMinutes(4).plusSeconds(20),
+        Duration.ofSeconds(7)) :: Nil)
+    assert(find(avgDF2.queryExecution.executedPlan)(_.isInstanceOf[HashAggregateExec]).isDefined)
+    assert(avgDF2.schema == StructType(Seq(
+      StructField("class", IntegerType, false),
+      StructField("avg(year-month)", YearMonthIntervalType()),
+      StructField("avg(year)", YearMonthIntervalType()),
+      StructField("avg(month)", YearMonthIntervalType()),
+      StructField("avg(day-second)", DayTimeIntervalType()),
+      StructField("avg(day-minute)", DayTimeIntervalType()),
+      StructField("avg(day-hour)", DayTimeIntervalType()),
+      StructField("avg(day)", DayTimeIntervalType()),
+      StructField("avg(hour-second)", DayTimeIntervalType()),
+      StructField("avg(hour-minute)", DayTimeIntervalType()),
+      StructField("avg(hour)", DayTimeIntervalType()),
+      StructField("avg(minute-second)", DayTimeIntervalType()),
+      StructField("avg(minute)", DayTimeIntervalType()),
+      StructField("avg(second)", DayTimeIntervalType()))))
+
+    val df2 = Seq((Period.ofMonths(Int.MaxValue), Duration.ofDays(106751991)),
+      (Period.ofMonths(10), Duration.ofDays(10)))
+      .toDF("year-month", "day")
+    val error = intercept[SparkException] {
+      checkAnswer(df2.select(avg($"year-month")), Nil)
+    }
+    assert(error.toString contains
+      "SparkArithmeticException: [INTERVAL_ARITHMETIC_OVERFLOW] integer overflow")
+
+    val error2 = intercept[SparkException] {
+      checkAnswer(df2.select(avg($"day")), Nil)
+    }
+    assert(error2.toString contains
+      "SparkArithmeticException: [INTERVAL_ARITHMETIC_OVERFLOW] long overflow")
+
+    val df3 = intervalData.filter($"class" > 4)
+    val avgDF3 = df3.select(avg($"year-month"), avg($"day"))
+    checkAnswer(avgDF3, Row(null, null) :: Nil)
+
+    val avgDF4 = df3.groupBy($"class").agg(avg($"year-month"), avg($"day"))
+    checkAnswer(avgDF4, Nil)
+  }
+
+  test("SPARK-35412: groupBy of year-month/day-time intervals should work") {
+    val df1 = Seq(Duration.ofDays(1)).toDF("a").groupBy("a").count()
+    checkAnswer(df1, Row(Duration.ofDays(1), 1))
+    val df2 = Seq(Period.ofYears(1)).toDF("a").groupBy("a").count()
+    checkAnswer(df2, Row(Period.ofYears(1), 1))
+  }
+
+  test("SPARK-36054: Support group by TimestampNTZ column") {
+    val ts1 = "2021-01-01T00:00:00"
+    val ts2 = "2021-01-01T00:00:01"
+    val localDateTime = Seq(ts1, ts1, ts2).map(LocalDateTime.parse)
+    val df = localDateTime.toDF("ts").groupBy("ts").count().orderBy("ts")
+    val expectedSchema =
+      new StructType().add(StructField("ts", TimestampNTZType)).add("count", LongType, false)
+    assert (df.schema == expectedSchema)
+    checkAnswer(df, Seq(Row(LocalDateTime.parse(ts1), 2), Row(LocalDateTime.parse(ts2), 1)))
+  }
+
+  test("SPARK-36926: decimal average mistakenly overflow") {
+    val df = (1 to 10).map(_ => "9999999999.99").toDF("d")
+    val res = df.select($"d".cast("decimal(12, 2)").as("d")).agg(avg($"d").cast("string"))
+    checkAnswer(res, Row("9999999999.990000"))
+  }
+
+  test("SPARK-38185: Fix data incorrect if aggregate function is empty") {
+    val emptyAgg = Map.empty[String, String]
+    assert(spark.range(2).where("id > 2").agg(emptyAgg).limit(1).count == 1)
+  }
+
+  test("SPARK-38221: group by stream of complex expressions should not fail") {
+    val df = Seq(1).toDF("id").groupBy(Stream($"id" + 1, $"id" + 2): _*).sum("id")
+    checkAnswer(df, Row(2, 3, 1))
+  }
+
+  test("SPARK-40382: Distinct aggregation expression grouping by semantic equivalence") {
+   Seq(
+      (1, 1, 3),
+      (1, 2, 3),
+      (1, 2, 3),
+      (2, 1, 1),
+      (2, 2, 5)
+    ).toDF("k", "c1", "c2").createOrReplaceTempView("df")
+
+    // all distinct aggregation children are semantically equivalent
+    val res1 = sql(
+      """select k, sum(distinct c1 + 1), avg(distinct 1 + c1), count(distinct 1 + C1)
+        |from df
+        |group by k
+        |""".stripMargin)
+    checkAnswer(res1, Row(1, 5, 2.5, 2) :: Row(2, 5, 2.5, 2) :: Nil)
+
+    // some distinct aggregation children are semantically equivalent
+    val res2 = sql(
+      """select k, sum(distinct c1 + 2), avg(distinct 2 + c1), count(distinct c2)
+        |from df
+        |group by k
+        |""".stripMargin)
+    checkAnswer(res2, Row(1, 7, 3.5, 1) :: Row(2, 7, 3.5, 2) :: Nil)
+
+    // no distinct aggregation children are semantically equivalent
+    val res3 = sql(
+      """select k, sum(distinct c1 + 2), avg(distinct 3 + c1), count(distinct c2)
+        |from df
+        |group by k
+        |""".stripMargin)
+    checkAnswer(res3, Row(1, 7, 4.5, 1) :: Row(2, 7, 4.5, 2) :: Nil)
+  }
+
+  test("SPARK-41035: Reuse of literal in distinct aggregations should work") {
+    val res = sql(
+      """select a, count(distinct 100), count(distinct b, 100)
+        |from values (1, 2), (4, 5), (4, 6) as data(a, b)
+        |group by a;
+        |""".stripMargin
+    )
+    checkAnswer(res, Row(1, 1, 1) :: Row(4, 1, 2) :: Nil)
+  }
+
+  test("SPARK-42851: common subexpression should consistently handle aggregate and result exprs") {
+    val res = sql(
+      "select max(transform(array(id), x -> x)), max(transform(array(id), x -> x)) from range(2)"
+    )
+    checkAnswer(res, Row(Array(1), Array(1)))
+  }
+
+  test("SPARK-16484: hll_*_agg + hll_union + hll_sketch_estimate positive tests") {
+
+    val df1 = Seq(
+      (1, "a"), (1, "a"), (1, "a"),
+      (1, "b"),
+      (1, "c"), (1, "c"),
+      (1, "d")
+    ).toDF("id", "value")
+    df1.createOrReplaceTempView("df1")
+
+    val df2 = Seq(
+      (1, "a"),
+      (1, "c"),
+      (1, "d"), (1, "d"), (1, "d"),
+      (1, "e"), (1, "e"),
+      (1, "f")
+    ).toDF("id", "value")
+    df2.createOrReplaceTempView("df2")
+
+    // first test hll_sketch_agg, hll_sketch_estimate via dataframe + sql,
+    // with and without configs, via both DF and SQL implementations
+    val res1 = df1.groupBy("id")
+      .agg(
+        count("value").as("count"),
+        hll_sketch_agg("value").as("sketch_1"),
+        hll_sketch_agg("value", 20).as("sketch_2")
+      )
+      .withColumn("distinct_count_1", hll_sketch_estimate("sketch_1"))
+      .withColumn("distinct_count_2", hll_sketch_estimate("sketch_2"))
+      .drop("sketch_1", "sketch_2")
+    checkAnswer(res1, Row(1, 7, 4, 4))
+
+    val res2 = sql(
+      """with sketches as (
+        |select
+        | id,
+        | count(value) as count,
+        | hll_sketch_agg(value) as sketch_1,
+        | hll_sketch_agg(value, 20) as sketch_2
+        |from df1
+        |group by 1
+        |)
+        |
+        |select
+        | id,
+        | count,
+        | hll_sketch_estimate(sketch_1) as distinct_count_1,
+        | hll_sketch_estimate(sketch_2) as distinct_count_2
+        |from
+        | sketches
+        |""".stripMargin)
+    checkAnswer(res2, Row(1, 7, 4, 4))
+
+    // now test hll_union_agg via dataframe + sql, with and without configs,
+    // unioning together sketches with default, non-default and different configurations
+    val df3 = df1.groupBy("id")
+      .agg(
+        count("value").as("count"),
+        hll_sketch_agg("value").as("hllsketch_1"),
+        hll_sketch_agg("value", 20).as("hllsketch_2"),
+        hll_sketch_agg("value").as("hllsketch_3")
+      )
+    df3.createOrReplaceTempView("df3")
+
+    val df4 = sql(
+      """select
+        | id,
+        | count(value) as count,
+        | hll_sketch_agg(value) as hllsketch_1,
+        | hll_sketch_agg(value, 20) as hllsketch_2,
+        | hll_sketch_agg(value, 20) as hllsketch_3
+        |from df2
+        |group by 1
+        |""".stripMargin)
+    df4.createOrReplaceTempView("df4")
+
+    val res3 = df3.union(df4).groupBy("id")
+      .agg(
+        sum("count").as("count"),
+        hll_sketch_estimate(hll_union_agg("hllsketch_1")).as("distinct_count_1"),
+        hll_sketch_estimate(hll_union_agg("hllsketch_2")).as("distinct_count_2"),
+        hll_sketch_estimate(hll_union_agg("hllsketch_3", true)).as("distinct_count_3")
+      )
+    checkAnswer(res3, Row(1, 15, 6, 6, 6))
+
+    val res4 = sql(
+      """select
+        | id,
+        | sum(count) as count,
+        | hll_sketch_estimate(hll_union_agg(hllsketch_1)) as distinct_count_1,
+        | hll_sketch_estimate(hll_union_agg(hllsketch_2)) as distinct_count_2,
+        | hll_sketch_estimate(hll_union_agg(hllsketch_3, true)) as distinct_count_3
+        |from (select * from df3 union all select * from df4)
+        |group by 1
+        |""".stripMargin)
+    checkAnswer(res4, Row(1, 15, 6, 6, 6))
+
+    // add tests to ensure hll_union works via both DF and SQL too
+    val df5 = df3.drop("count")
+    df5.createOrReplaceTempView("df5")
+
+    val df6 = df4.drop("count")
+      .withColumnRenamed("hllsketch_1", "hllsketch_4")
+      .withColumnRenamed("hllsketch_2", "hllsketch_5")
+      .withColumnRenamed("hllsketch_3", "hllsketch_6")
+    df6.createOrReplaceTempView("df6")
+
+    val res5 = df5.join(df6, "id")
+      .withColumn("distinct_count_1",
+        hll_sketch_estimate(hll_union("hllsketch_1", "hllsketch_4")))
+      .withColumn("distinct_count_2",
+        hll_sketch_estimate(hll_union("hllsketch_2", "hllsketch_5")))
+      .withColumn("distinct_count_3",
+        hll_sketch_estimate(hll_union("hllsketch_3", "hllsketch_6", true)))
+      .drop("hllsketch_1", "hllsketch_2", "hllsketch_3",
+        "hllsketch_4", "hllsketch_5", "hllsketch_6")
+    checkAnswer(res5, Row(1, 6, 6, 6))
+
+    val res6 = sql(
+      """with joined as (
+        |  select
+        |    l.id,
+        |    l.hllsketch_1,
+        |    l.hllsketch_2,
+        |    l.hllsketch_3,
+        |    r.hllsketch_4,
+        |    r.hllsketch_5,
+        |    r.hllsketch_6
+        |  from
+        |    df5 l
+        |    join
+        |    df6 r
+        |     on l.id = r.id
+        | )
+        |
+        |select
+        |  id,
+        |  hll_sketch_estimate(hll_union(hllsketch_1, hllsketch_4)) as distinct_count_1,
+        |  hll_sketch_estimate(hll_union(hllsketch_2, hllsketch_5)) as distinct_count_2,
+        |  hll_sketch_estimate(hll_union(hllsketch_3, hllsketch_6, true)) as distinct_count_3
+        |from
+        | joined
+        |""".stripMargin)
+    checkAnswer(res6, Row(1, 6, 6, 6))
+
+    val df7 = Seq(
+      (1, "a"), (1, "a"), (1, "a"),
+      (1, "b"),
+      (1, null),
+      (2, null), (2, null), (2, null)
+    ).toDF("id", "value")
+
+    // empty column test
+    val res7 = df7.where(expr("id = 2")).groupBy("id")
+      .agg(
+        hll_sketch_estimate(hll_sketch_agg("value")).as("distinct_count")
+      )
+    checkAnswer(res7, Row(2, 0))
+
+    // partial empty column test
+    val res8 = df7.groupBy("id")
+      .agg(
+        hll_sketch_estimate(hll_sketch_agg("value")).as("distinct_count")
+      )
+    checkAnswer(res8, Seq(Row(1, 2), Row(2, 0)))
+  }
+
+  test("SPARK-16484: hll_*_agg + hll_union negative tests") {
+
+    val df1 = Seq(
+      (1, "a"), (1, "a"), (1, "a"),
+      (1, "b"),
+      (1, "c"), (1, "c"),
+      (1, "d")
+    ).toDF("id", "value")
+    df1.createOrReplaceTempView("df1")
+
+    val df2 = Seq(
+      (1, "a"),
+      (1, "c"),
+      (1, "d"), (1, "d"), (1, "d"),
+      (1, "e"), (1, "e"),
+      (1, "f")
+    ).toDF("id", "value")
+    df2.createOrReplaceTempView("df2")
+
+    // validate that the functions error out when lgConfigK < 4 or > 24
+    checkError(
+      exception = intercept[SparkException] {
+        val res = df1.groupBy("id")
+          .agg(
+            hll_sketch_agg("value", 1).as("hllsketch")
+          )
+        checkAnswer(res, Nil)
+      }.getCause.asInstanceOf[SparkThrowable],
+      errorClass = "HLL_INVALID_LG_K",
+      parameters = Map(
+        "function" -> "`hll_sketch_agg`",
+        "min" -> "4",
+        "max" -> "21",
+        "value" -> "1"
+      ))
+
+    checkError(
+      exception = intercept[SparkException] {
+        val res = df1.groupBy("id")
+          .agg(
+            hll_sketch_agg("value", 25).as("hllsketch")
+          )
+        checkAnswer(res, Nil)
+      }.getCause.asInstanceOf[SparkThrowable],
+      errorClass = "HLL_INVALID_LG_K",
+      parameters = Map(
+        "function" -> "`hll_sketch_agg`",
+        "min" -> "4",
+        "max" -> "21",
+        "value" -> "25"
+      ))
+
+    // validate that unions error out by default for different lgConfigK sketches
+    checkError(
+      exception = intercept[SparkException] {
+        val i1 = df1.groupBy("id")
+          .agg(
+            hll_sketch_agg("value").as("hllsketch_left")
+          )
+        val i2 = df2.groupBy("id")
+          .agg(
+            hll_sketch_agg("value", 20).as("hllsketch_right")
+          )
+        val res = i1.join(i2).withColumn("union", hll_union("hllsketch_left", "hllsketch_right"))
+        checkAnswer(res, Nil)
+      }.getCause.asInstanceOf[SparkThrowable],
+      errorClass = "HLL_UNION_DIFFERENT_LG_K",
+      parameters = Map(
+        "left" -> "12",
+        "right" -> "20",
+        "function" -> "`hll_union`"
+      ))
+
+    checkError(
+      exception = intercept[SparkException] {
+        val i1 = df1.groupBy("id")
+          .agg(
+            hll_sketch_agg("value").as("hllsketch")
+          )
+        val i2 = df2.groupBy("id")
+          .agg(
+            hll_sketch_agg("value", 20).as("hllsketch")
+          )
+        val res = i1.union(i2).groupBy("id")
+          .agg(
+            hll_union_agg("hllsketch")
+          )
+        checkAnswer(res, Nil)
+      }.getCause.asInstanceOf[SparkThrowable],
+      errorClass = "HLL_UNION_DIFFERENT_LG_K",
+      parameters = Map(
+        "left" -> "12",
+        "right" -> "20",
+        "function" -> "`hll_union_agg`"
+      ))
+
+    // validate that the functions error out when provided unexpected types
+    checkError(
+      exception = intercept[AnalysisException] {
+        val res = sql(
+          """
+            |select
+            | id,
+            | hll_sketch_agg(value, 'text')
+            |from
+            | df1
+            |group by 1
+            |""".stripMargin)
+        checkAnswer(res, Nil)
+      },
+      errorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+      parameters = Map(
+        "sqlExpr" -> "\"hll_sketch_agg(value, text)\"",
+        "paramIndex" -> "2",
+        "inputSql" -> "\"text\"",
+        "inputType" -> "\"STRING\"",
+        "requiredType" -> "\"INT\""
+      ),
+      context = ExpectedContext(
+        fragment = "hll_sketch_agg(value, 'text')",
+        start = 14,
+        stop = 42))
+
+    checkError(
+      exception = intercept[AnalysisException] {
+        val res = sql(
+          """with sketch_cte as (
+            |select
+            | id,
+            | hll_sketch_agg(value) as sketch
+            |from
+            | df1
+            |group by 1
+            |)
+            |
+            |select hll_union_agg(sketch, 'Hll_4') from sketch_cte
+            |""".stripMargin)
+        checkAnswer(res, Nil)
+      },
+      errorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+      parameters = Map(
+        "sqlExpr" -> "\"hll_union_agg(sketch, Hll_4)\"",
+        "paramIndex" -> "2",
+        "inputSql" -> "\"Hll_4\"",
+        "inputType" -> "\"STRING\"",
+        "requiredType" -> "\"BOOLEAN\""
+      ),
+      context = ExpectedContext(
+        fragment = "hll_union_agg(sketch, 'Hll_4')",
+        start = 97,
+        stop = 126))
+
+    // validate that unions error out by default for different lgConfigK sketches
+    checkError(
+      exception = intercept[SparkException] {
+        val res = sql(
+          """with cte1 as (
+            |select
+            | id,
+            | hll_sketch_agg(value) as sketch
+            |from
+            | df1
+            |group by 1
+            |),
+            |
+            |cte2 as (
+            |select
+            | id,
+            | hll_sketch_agg(value, 20) as sketch
+            |from
+            | df2
+            |group by 1
+            |)
+            |
+            |select
+            | cte1.id,
+            | hll_union(cte1.sketch, cte2.sketch) as sketch
+            |from
+            | cte1 join cte2 on cte1.id = cte2.id
+            |""".stripMargin)
+        checkAnswer(res, Nil)
+      }.getCause.asInstanceOf[SparkThrowable],
+      errorClass = "HLL_UNION_DIFFERENT_LG_K",
+      parameters = Map(
+        "left" -> "12",
+        "right" -> "20",
+        "function" -> "`hll_union`"
+      ))
+
+    checkError(
+      exception = intercept[SparkException] {
+        val res = sql(
+          """with cte1 as (
+            |select
+            | id,
+            | hll_sketch_agg(value) as sketch
+            |from
+            | df1
+            |group by 1
+            |),
+            |
+            |cte2 as (
+            |select
+            | id,
+            | hll_sketch_agg(value, 20) as sketch
+            |from
+            | df2
+            |group by 1
+            |)
+            |
+            |select
+            | id,
+            | hll_union_agg(sketch) as sketch
+            |from
+            | (select * from cte1 union all select * from cte2)
+            |group by 1
+            |""".stripMargin)
+        checkAnswer(res, Nil)
+      }.getCause.asInstanceOf[SparkThrowable],
+      errorClass = "HLL_UNION_DIFFERENT_LG_K",
+      parameters = Map(
+        "left" -> "12",
+        "right" -> "20",
+        "function" -> "`hll_union_agg`"
+      ))
+  }
+
+  test("SPARK-43876: Enable fast hashmap for distinct queries") {
+    withSQLConf(SQLConf.ENABLE_TWOLEVEL_AGG_MAP.key -> "true") {
+      val df = testData2.distinct()
+      checkAnswer(df, testData2)
+      val output = new java.io.ByteArrayOutputStream()
+      Console.withOut(output) {
+        df.explain("codegen")
+      }
+      assert(output.toString().contains("public class hashAgg_FastHashMap_0"))
+    }
+  }
+
+  test("hll_sketch_agg") {
+    val df = Seq(1, 1, 2, 2, 3).toDF("col")
+    checkAnswer(
+      df.selectExpr("hll_sketch_estimate(hll_sketch_agg(col, 12))"),
+      Seq(Row(3))
+    )
+    checkAnswer(
+      df.select(hll_sketch_estimate(hll_sketch_agg(col("col"), lit(12)))),
+      Seq(Row(3))
+    )
+  }
+
+  test("hll_union_agg") {
+    val df = Seq(1).toDF("col")
+    checkAnswer(
+      df.selectExpr("hll_sketch_agg(col) as sketch").unionAll(
+        df.selectExpr("hll_sketch_agg(col, 20) as sketch")).
+        selectExpr("hll_sketch_estimate(hll_union_agg(sketch, true))"),
+      Seq(Row(1))
+    )
+    checkAnswer(
+      df.select(hll_sketch_agg(col("col")).as("sketch")).unionAll(
+        df.select(hll_sketch_agg(col("col"), lit(20)).as("sketch"))).
+        select(hll_sketch_estimate(hll_union_agg(col("sketch"), lit(true)))),
+      Seq(Row(1))
+    )
+  }
 }
+
+case class B(c: Option[Double])
+case class A(b: Option[B])

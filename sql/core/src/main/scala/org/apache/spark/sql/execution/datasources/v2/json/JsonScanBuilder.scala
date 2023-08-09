@@ -17,20 +17,38 @@
 package org.apache.spark.sql.execution.datasources.v2.json
 
 import org.apache.spark.sql.SparkSession
-import org.apache.spark.sql.connector.read.Scan
+import org.apache.spark.sql.catalyst.StructFilters
 import org.apache.spark.sql.execution.datasources.PartitioningAwareFileIndex
 import org.apache.spark.sql.execution.datasources.v2.FileScanBuilder
+import org.apache.spark.sql.sources.Filter
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
-class JsonScanBuilder (
+case class JsonScanBuilder (
     sparkSession: SparkSession,
     fileIndex: PartitioningAwareFileIndex,
     schema: StructType,
     dataSchema: StructType,
     options: CaseInsensitiveStringMap)
   extends FileScanBuilder(sparkSession, fileIndex, dataSchema) {
-  override def build(): Scan = {
-    JsonScan(sparkSession, fileIndex, dataSchema, readDataSchema(), readPartitionSchema(), options)
+  override def build(): JsonScan = {
+    JsonScan(
+      sparkSession,
+      fileIndex,
+      dataSchema,
+      readDataSchema(),
+      readPartitionSchema(),
+      options,
+      pushedDataFilters,
+      partitionFilters,
+      dataFilters)
+  }
+
+  override def pushDataFilters(dataFilters: Array[Filter]): Array[Filter] = {
+    if (sparkSession.sessionState.conf.jsonFilterPushDown) {
+      StructFilters.pushedFilters(dataFilters, dataSchema)
+    } else {
+      Array.empty[Filter]
+    }
   }
 }

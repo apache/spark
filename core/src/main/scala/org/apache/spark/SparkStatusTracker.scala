@@ -21,6 +21,7 @@ import java.util.Arrays
 
 import org.apache.spark.status.AppStatusStore
 import org.apache.spark.status.api.v1.StageStatus
+import org.apache.spark.util.Utils
 
 /**
  * Low-level status reporting APIs for monitoring job and stage progress.
@@ -49,6 +50,17 @@ class SparkStatusTracker private[spark] (sc: SparkContext, store: AppStatusStore
   def getJobIdsForGroup(jobGroup: String): Array[Int] = {
     val expected = Option(jobGroup)
     store.jobsList(null).filter(_.jobGroup == expected).map(_.jobId).toArray
+  }
+
+  /**
+   * Return a list of all known jobs with a particular tag.
+   *
+   * The returned list may contain running, failed, and completed jobs, and may vary across
+   * invocations of this method.  This method does not guarantee the order of the elements in
+   * its result.
+   */
+  def getJobIdsForTag(jobTag: String): Array[Int] = {
+    store.jobsList(null).filter(_.jobTags.contains(jobTag)).map(_.jobId).toArray
   }
 
   /**
@@ -103,10 +115,7 @@ class SparkStatusTracker private[spark] (sc: SparkContext, store: AppStatusStore
    */
   def getExecutorInfos: Array[SparkExecutorInfo] = {
     store.executorList(true).map { exec =>
-      val (host, port) = exec.hostPort.split(":", 2) match {
-        case Array(h, p) => (h, p.toInt)
-        case Array(h) => (h, -1)
-      }
+      val (host, port) = Utils.parseHostPort(exec.hostPort)
       val cachedMem = exec.memoryMetrics.map { mem =>
         mem.usedOnHeapStorageMemory + mem.usedOffHeapStorageMemory
       }.getOrElse(0L)
@@ -116,10 +125,10 @@ class SparkStatusTracker private[spark] (sc: SparkContext, store: AppStatusStore
         port,
         cachedMem,
         exec.activeTasks,
-        exec.memoryMetrics.map(_.usedOffHeapStorageMemory).getOrElse(0L),
         exec.memoryMetrics.map(_.usedOnHeapStorageMemory).getOrElse(0L),
-        exec.memoryMetrics.map(_.totalOffHeapStorageMemory).getOrElse(0L),
-        exec.memoryMetrics.map(_.totalOnHeapStorageMemory).getOrElse(0L))
+        exec.memoryMetrics.map(_.usedOffHeapStorageMemory).getOrElse(0L),
+        exec.memoryMetrics.map(_.totalOnHeapStorageMemory).getOrElse(0L),
+        exec.memoryMetrics.map(_.totalOffHeapStorageMemory).getOrElse(0L))
     }.toArray
   }
 }

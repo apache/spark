@@ -17,8 +17,12 @@
 
 package org.apache.spark.sql.catalyst.expressions.aggregate
 
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.trees.TreePattern.{COUNT, TreePattern}
+import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryErrorsBase}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
 // scalastyle:off line.size.limit
@@ -42,11 +46,29 @@ import org.apache.spark.sql.types._
   group = "agg_funcs",
   since = "1.0.0")
 // scalastyle:on line.size.limit
-case class Count(children: Seq[Expression]) extends DeclarativeAggregate {
+case class Count(children: Seq[Expression]) extends DeclarativeAggregate
+  with QueryErrorsBase {
+
   override def nullable: Boolean = false
+
+  final override val nodePatterns: Seq[TreePattern] = Seq(COUNT)
 
   // Return data type.
   override def dataType: DataType = LongType
+
+  override def checkInputDataTypes(): TypeCheckResult = {
+    if (children.isEmpty && !SQLConf.get.getConf(SQLConf.ALLOW_PARAMETERLESS_COUNT)) {
+      throw QueryCompilationErrors.wrongNumArgsError(
+        toSQLId(prettyName),
+        Seq(" >= 1"),
+        0,
+        "0",
+        toSQLConf(SQLConf.ALLOW_PARAMETERLESS_COUNT.key),
+        toSQLConfVal(true.toString))
+    } else {
+      TypeCheckResult.TypeCheckSuccess
+    }
+  }
 
   protected lazy val count = AttributeReference("count", LongType, nullable = false)()
 
@@ -76,6 +98,9 @@ case class Count(children: Seq[Expression]) extends DeclarativeAggregate {
       )
     }
   }
+
+  override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): Count =
+    copy(children = newChildren)
 }
 
 object Count {

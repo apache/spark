@@ -30,7 +30,7 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap;
  * @since 3.0.0
  */
 @Evolving
-public interface CatalogExtension extends TableCatalog, SupportsNamespaces {
+public interface CatalogExtension extends TableCatalog, FunctionCatalog, SupportsNamespaces {
 
   /**
    * This will be called only once by Spark to pass in the Spark built-in session catalog, after

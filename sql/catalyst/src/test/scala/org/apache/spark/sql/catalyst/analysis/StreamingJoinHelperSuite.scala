@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.analysis
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, AttributeSet}
 import org.apache.spark.sql.catalyst.optimizer.SimpleTestOptimizer
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
-import org.apache.spark.sql.catalyst.plans.logical.{EventTimeWatermark, Filter, LeafNode, LocalRelation}
+import org.apache.spark.sql.catalyst.plans.logical.{EventTimeWatermark, Filter, LeafNode, Statistics}
 import org.apache.spark.sql.types.{IntegerType, MetadataBuilder, TimestampType}
 
 class StreamingJoinHelperSuite extends AnalysisTest {
@@ -39,6 +39,8 @@ class StreamingJoinHelperSuite extends AnalysisTest {
     case class DummyLeafNode() extends LeafNode {
       override def output: Seq[Attribute] =
         attributesToFindConstraintFor ++ attributesWithWatermark
+      // override computeStats to avoid UnsupportedOperationException.
+      override def computeStats(): Statistics = Statistics(sizeInBytes = BigInt(0))
     }
 
     def watermarkFrom(
@@ -85,6 +87,18 @@ class StreamingJoinHelperSuite extends AnalysisTest {
     assert(watermarkFrom("rightTime < leftTime - interval 3 second") === Some(13000))
     assert(watermarkFrom("rightTime - interval 1 second < leftTime - interval 3 second")
       === Some(12000))
+
+    assert(watermarkFrom("leftTime > rightTime + interval '0 00:00:01' day to second")
+      === Some(11000))
+    assert(watermarkFrom("leftTime + interval '00:00:02' hour to second > rightTime ")
+      === Some(8000))
+    assert(watermarkFrom("leftTime > rightTime - interval '00:03' minute to second")
+      === Some(7000))
+    assert(watermarkFrom("rightTime < leftTime - interval '1 20:30:40' day to second")
+      === Some(160250000))
+    assert(watermarkFrom(
+      "rightTime - interval 1 second < leftTime - interval '20:15:32' hour to second")
+      === Some(72941000))
 
     // Test with casted long type + constants on either side of equation
     // Note: long type and constants commute, so more combinations to test.

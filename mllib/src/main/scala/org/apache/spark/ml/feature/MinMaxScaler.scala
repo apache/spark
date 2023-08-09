@@ -58,6 +58,8 @@ private[feature] trait MinMaxScalerParams extends Params with HasInputCol with H
   /** @group getParam */
   def getMax: Double = $(max)
 
+  setDefault(min -> 0.0, max -> 1.0)
+
   /** Validates and transforms the input schema. */
   protected def validateAndTransformSchema(schema: StructType): StructType = {
     require($(min) < $(max), s"The specified min(${$(min)}) is larger or equal to max(${$(max)})")
@@ -92,8 +94,6 @@ class MinMaxScaler @Since("1.5.0") (@Since("1.5.0") override val uid: String)
 
   @Since("1.5.0")
   def this() = this(Identifiable.randomUID("minMaxScal"))
-
-  setDefault(min -> 0.0, max -> 1.0)
 
   /** @group setParam */
   @Since("1.5.0")

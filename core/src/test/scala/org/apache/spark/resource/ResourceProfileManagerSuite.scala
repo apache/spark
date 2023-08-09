@@ -24,7 +24,7 @@ import org.apache.spark.scheduler.LiveListenerBus
 
 class ResourceProfileManagerSuite extends SparkFunSuite {
 
-  override def beforeAll() {
+  override def beforeAll(): Unit = {
     try {
       ResourceProfile.clearDefaultProfile()
     } finally {
@@ -32,7 +32,7 @@ class ResourceProfileManagerSuite extends SparkFunSuite {
     }
   }
 
-  override def afterEach() {
+  override def afterEach(): Unit = {
     try {
       ResourceProfile.clearDefaultProfile()
     } finally {
@@ -47,8 +47,8 @@ class ResourceProfileManagerSuite extends SparkFunSuite {
     val rpmanager = new ResourceProfileManager(conf, listenerBus)
     val defaultProf = rpmanager.defaultResourceProfile
     assert(defaultProf.id === ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID)
-    assert(defaultProf.executorResources.size === 2,
-      "Executor resources should contain cores and memory by default")
+    assert(defaultProf.executorResources.size === 3,
+      "Executor resources should contain cores, heap and offheap memory by default")
     assert(defaultProf.executorResources(ResourceProfile.CORES).amount === 4,
       s"Executor resources should have 4 cores")
   }
@@ -67,7 +67,9 @@ class ResourceProfileManagerSuite extends SparkFunSuite {
       rpmanager.isSupported(immrprof)
     }.getMessage()
 
-    assert(error.contains("ResourceProfiles are only supported on YARN with dynamic allocation"))
+    assert(error.contains(
+      "ResourceProfiles are only supported on YARN and Kubernetes and Standalone" +
+        " with dynamic allocation"))
   }
 
   test("isSupported yarn with dynamic allocation") {
@@ -84,7 +86,74 @@ class ResourceProfileManagerSuite extends SparkFunSuite {
     assert(rpmanager.isSupported(immrprof) == true)
   }
 
-  test("isSupported yarn with local mode") {
+  test("isSupported k8s with dynamic allocation") {
+    val conf = new SparkConf().setMaster("k8s://foo").set(EXECUTOR_CORES, 4)
+    conf.set(DYN_ALLOCATION_ENABLED, true)
+    conf.set(DYN_ALLOCATION_SHUFFLE_TRACKING_ENABLED, true)
+    conf.set(RESOURCE_PROFILE_MANAGER_TESTING.key, "true")
+    val rpmanager = new ResourceProfileManager(conf, listenerBus)
+    // default profile should always work
+    val defaultProf = rpmanager.defaultResourceProfile
+    val rprof = new ResourceProfileBuilder()
+    val gpuExecReq =
+      new ExecutorResourceRequests().resource("gpu", 2, "someScript", "nvidia")
+    val immrprof = rprof.require(gpuExecReq).build
+    assert(rpmanager.isSupported(immrprof) == true)
+  }
+
+  test("isSupported standalone with dynamic allocation") {
+    val conf = new SparkConf().setMaster("spark://foo").set(EXECUTOR_CORES, 4)
+    conf.set(DYN_ALLOCATION_ENABLED, true)
+    conf.set(DYN_ALLOCATION_SHUFFLE_TRACKING_ENABLED, true)
+    conf.set(RESOURCE_PROFILE_MANAGER_TESTING.key, "true")
+    val rpmanager = new ResourceProfileManager(conf, listenerBus)
+    // default profile should always work
+    val defaultProf = rpmanager.defaultResourceProfile
+    val rprof = new ResourceProfileBuilder()
+    val gpuExecReq =
+      new ExecutorResourceRequests().resource("gpu", 2, "someScript")
+    val immrprof = rprof.require(gpuExecReq).build()
+    assert(rpmanager.isSupported(immrprof))
+  }
+
+  test("isSupported task resource profiles with dynamic allocation disabled") {
+    val conf = new SparkConf().setMaster("spark://foo").set(EXECUTOR_CORES, 4)
+    conf.set(DYN_ALLOCATION_ENABLED, false)
+    conf.set(RESOURCE_PROFILE_MANAGER_TESTING.key, "true")
+
+    var rpmanager = new ResourceProfileManager(conf, listenerBus)
+    // default profile should always work
+    val defaultProf = rpmanager.defaultResourceProfile
+    assert(rpmanager.isSupported(defaultProf))
+
+    // task resource profile.
+    val gpuTaskReq = new TaskResourceRequests().resource("gpu", 1)
+    val taskProf = new TaskResourceProfile(gpuTaskReq.requests)
+    assert(rpmanager.isSupported(taskProf))
+
+    conf.setMaster("local")
+    rpmanager = new ResourceProfileManager(conf, listenerBus)
+    val error = intercept[SparkException] {
+      rpmanager.isSupported(taskProf)
+    }.getMessage
+    assert(error === "TaskResourceProfiles are only supported for Standalone " +
+      "cluster for now when dynamic allocation is disabled.")
+  }
+
+  test("isSupported task resource profiles with dynamic allocation enabled") {
+    val conf = new SparkConf().setMaster("spark://foo").set(EXECUTOR_CORES, 4)
+    conf.set(DYN_ALLOCATION_ENABLED, true)
+    conf.set(RESOURCE_PROFILE_MANAGER_TESTING.key, "true")
+
+    val rpmanager = new ResourceProfileManager(conf, listenerBus)
+
+    // task resource profile.
+    val gpuTaskReq = new TaskResourceRequests().resource("gpu", 1)
+    val taskProf = new TaskResourceProfile(gpuTaskReq.requests)
+    assert(rpmanager.isSupported(taskProf))
+  }
+
+  test("isSupported with local mode") {
     val conf = new SparkConf().setMaster("local").set(EXECUTOR_CORES, 4)
     conf.set(RESOURCE_PROFILE_MANAGER_TESTING.key, "true")
     val rpmanager = new ResourceProfileManager(conf, listenerBus)
@@ -94,11 +163,13 @@ class ResourceProfileManagerSuite extends SparkFunSuite {
     val gpuExecReq =
       new ExecutorResourceRequests().resource("gpu", 2, "someScript")
     val immrprof = rprof.require(gpuExecReq).build
-    var error = intercept[SparkException] {
+    val error = intercept[SparkException] {
       rpmanager.isSupported(immrprof)
     }.getMessage()
 
-    assert(error.contains("ResourceProfiles are only supported on YARN with dynamic allocation"))
+    assert(error.contains(
+      "ResourceProfiles are only supported on YARN and Kubernetes and Standalone" +
+        " with dynamic allocation"))
   }
 
   test("ResourceProfileManager has equivalent profile") {

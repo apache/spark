@@ -1,6 +1,7 @@
 ---
 layout: global
 title: SQL Reference
+redirect_from: /sql-reference
 displayTitle: SQL Reference
 license: |
   Licensed to the Apache Software Foundation (ASF) under one or more
@@ -24,6 +25,7 @@ Spark SQL is Apache Spark's module for working with structured data. This guide 
  * [ANSI Compliance](sql-ref-ansi-compliance.html)
  * [Data Types](sql-ref-datatypes.html)
  * [Datetime Pattern](sql-ref-datetime-pattern.html)
+ * [Number Pattern](sql-ref-number-pattern.html)
  * [Functions](sql-ref-functions.html)
    * [Built-in Functions](sql-ref-functions-builtin.html)
    * [Scalar User-Defined Functions (UDFs)](sql-ref-functions-udf-scalar.html)
@@ -31,9 +33,9 @@ Spark SQL is Apache Spark's module for working with structured data. This guide 
    * [Integration with Hive UDFs/UDAFs/UDTFs](sql-ref-functions-udf-hive.html)
  * [Identifiers](sql-ref-identifier.html)
  * [Literals](sql-ref-literals.html)
- * [Null Semanitics](sql-ref-null-semantics.html)
+ * [Null Semantics](sql-ref-null-semantics.html)
  * [SQL Syntax](sql-ref-syntax.html)
-   * [DDL Statements](sql-ref-syntax-ddl.html)
-   * [DML Statements](sql-ref-syntax-dml.html)
-   * [Data Retrieval Statements](sql-ref-syntax-qry.html)
-   * [Auxiliary Statements](sql-ref-syntax-aux.html)
+   * [DDL Statements](sql-ref-syntax.html#ddl-statements)
+   * [DML Statements](sql-ref-syntax.html#dml-statements)
+   * [Data Retrieval Statements](sql-ref-syntax.html#data-retrieval-statements)
+   * [Auxiliary Statements](sql-ref-syntax.html#auxiliary-statements)

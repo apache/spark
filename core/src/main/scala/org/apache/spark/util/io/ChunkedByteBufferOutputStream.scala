@@ -48,7 +48,7 @@ private[spark] class ChunkedByteBufferOutputStream(
    * This can also never be 0.
    */
   private[this] var position = chunkSize
-  private[this] var _size = 0
+  private[this] var _size = 0L
   private[this] var closed: Boolean = false
 
   def size: Long = _size
@@ -120,4 +120,5 @@ private[spark] class ChunkedByteBufferOutputStream(
       new ChunkedByteBuffer(ret)
     }
   }
+
 }

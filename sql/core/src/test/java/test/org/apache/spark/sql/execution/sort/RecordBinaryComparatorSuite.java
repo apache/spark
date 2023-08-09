@@ -37,6 +37,8 @@ import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
+import java.nio.ByteOrder;
+
 /**
  * Test the RecordBinaryComparator, which compares two UnsafeRows by their binary form.
  */
@@ -261,40 +263,74 @@ public class RecordBinaryComparatorSuite {
   public void testBinaryComparatorWhenSubtractionIsDivisibleByMaxIntValue() throws Exception {
     int numFields = 1;
 
+    // Place the following bytes (hex) into UnsafeRows for the comparison:
+    //
+    //   index | 00 01 02 03 04 05 06 07
+    //   ------+------------------------
+    //   row1  | 00 00 00 00 00 00 00 0b
+    //   row2  | 00 00 00 00 80 00 00 0a
+    //
+    // The byte layout needs to be identical on all platforms regardless of
+    // of endianness. To achieve this the bytes in each value are reversed
+    // on little-endian platforms.
+    long row1Data = 11L;
+    long row2Data = 11L + Integer.MAX_VALUE;
+    if (ByteOrder.nativeOrder().equals(ByteOrder.LITTLE_ENDIAN)) {
+      row1Data = Long.reverseBytes(row1Data);
+      row2Data = Long.reverseBytes(row2Data);
+    }
+
     UnsafeRow row1 = new UnsafeRow(numFields);
     byte[] data1 = new byte[100];
     row1.pointTo(data1, computeSizeInBytes(numFields * 8));
-    row1.setLong(0, 11);
+    row1.setLong(0, row1Data);
 
     UnsafeRow row2 = new UnsafeRow(numFields);
     byte[] data2 = new byte[100];
     row2.pointTo(data2, computeSizeInBytes(numFields * 8));
-    row2.setLong(0, 11L + Integer.MAX_VALUE);
+    row2.setLong(0, row2Data);
 
     insertRow(row1);
     insertRow(row2);
 
-    Assert.assertTrue(compare(0, 1) > 0);
+    Assert.assertTrue(compare(0, 1) < 0);
   }
 
   @Test
   public void testBinaryComparatorWhenSubtractionCanOverflowLongValue() throws Exception {
     int numFields = 1;
 
+    // Place the following bytes (hex) into UnsafeRows for the comparison:
+    //
+    //   index | 00 01 02 03 04 05 06 07
+    //   ------+------------------------
+    //   row1  | 80 00 00 00 00 00 00 00
+    //   row2  | 00 00 00 00 00 00 00 01
+    //
+    // The byte layout needs to be identical on all platforms regardless of
+    // of endianness. To achieve this the bytes in each value are reversed
+    // on little-endian platforms.
+    long row1Data = Long.MIN_VALUE;
+    long row2Data = 1L;
+    if (ByteOrder.nativeOrder().equals(ByteOrder.LITTLE_ENDIAN)) {
+      row1Data = Long.reverseBytes(row1Data);
+      row2Data = Long.reverseBytes(row2Data);
+    }
+
     UnsafeRow row1 = new UnsafeRow(numFields);
     byte[] data1 = new byte[100];
     row1.pointTo(data1, computeSizeInBytes(numFields * 8));
-    row1.setLong(0, Long.MIN_VALUE);
+    row1.setLong(0, row1Data);
 
     UnsafeRow row2 = new UnsafeRow(numFields);
     byte[] data2 = new byte[100];
     row2.pointTo(data2, computeSizeInBytes(numFields * 8));
-    row2.setLong(0, 1);
+    row2.setLong(0, row2Data);
 
     insertRow(row1);
     insertRow(row2);
 
-    Assert.assertTrue(compare(0, 1) < 0);
+    Assert.assertTrue(compare(0, 1) > 0);
   }
 
   @Test

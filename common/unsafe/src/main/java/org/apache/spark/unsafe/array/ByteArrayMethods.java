@@ -19,6 +19,8 @@ package org.apache.spark.unsafe.array;
 
 import org.apache.spark.unsafe.Platform;
 
+import static org.apache.spark.unsafe.Platform.BYTE_ARRAY_OFFSET;
+
 public class ByteArrayMethods {
 
   private ByteArrayMethods() {
@@ -37,19 +39,10 @@ public class ByteArrayMethods {
 
   public static long roundNumberOfBytesToNearestWord(long numBytes) {
     long remainder = numBytes & 0x07;  // This is equivalent to `numBytes % 8`
-    if (remainder == 0) {
-      return numBytes;
-    } else {
-      return numBytes + (8 - remainder);
-    }
+    return numBytes + ((8 - remainder) & 0x7);
   }
 
-  // Some JVMs can't allocate arrays of length Integer.MAX_VALUE; actual max is somewhat smaller.
-  // Be conservative and lower the cap a little.
-  // Refer to "http://hg.openjdk.java.net/jdk8/jdk8/jdk/file/tip/src/share/classes/java/util/ArrayList.java#l229"
-  // This value is word rounded. Use this value if the allocated byte arrays are used to store other
-  // types rather than bytes.
-  public static int MAX_ROUNDED_ARRAY_LENGTH = Integer.MAX_VALUE - 15;
+  public static final int MAX_ROUNDED_ARRAY_LENGTH = ByteArrayUtils.MAX_ROUNDED_ARRAY_LENGTH;
 
   private static final boolean unaligned = Platform.unaligned();
   /**
@@ -61,7 +54,7 @@ public class ByteArrayMethods {
     int i = 0;
 
     // check if stars align and we can get both offsets to be aligned
-    if ((leftOffset % 8) == (rightOffset % 8)) {
+    if (!unaligned && ((leftOffset % 8) == (rightOffset % 8))) {
       while ((leftOffset + i) % 8 != 0 && i < length) {
         if (Platform.getByte(leftBase, leftOffset + i) !=
             Platform.getByte(rightBase, rightOffset + i)) {
@@ -90,5 +83,40 @@ public class ByteArrayMethods {
       i += 1;
     }
     return true;
+  }
+
+  public static boolean contains(byte[] arr, byte[] sub) {
+    if (sub.length == 0) {
+      return true;
+    }
+    byte first = sub[0];
+    for (int i = 0; i <= arr.length - sub.length; i++) {
+      if (arr[i] == first && matchAt(arr, sub, i)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  public static boolean startsWith(byte[] array, byte[] target) {
+    if (target.length > array.length) {
+      return false;
+    }
+    return arrayEquals(array, BYTE_ARRAY_OFFSET, target, BYTE_ARRAY_OFFSET, target.length);
+  }
+
+  public static boolean endsWith(byte[] array, byte[] target) {
+    if (target.length > array.length) {
+      return false;
+    }
+    return arrayEquals(array, BYTE_ARRAY_OFFSET + array.length - target.length,
+      target, BYTE_ARRAY_OFFSET, target.length);
+  }
+
+  public static boolean matchAt(byte[] arr, byte[] sub, int pos) {
+    if (sub.length + pos > arr.length || pos < 0) {
+      return false;
+    }
+    return arrayEquals(arr, BYTE_ARRAY_OFFSET + pos, sub, BYTE_ARRAY_OFFSET, sub.length);
   }
 }

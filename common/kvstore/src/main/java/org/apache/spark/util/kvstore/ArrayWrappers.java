@@ -72,8 +72,8 @@ class ArrayWrappers {
     @Override
     public int hashCode() {
       int code = 0;
-      for (int i = 0; i < array.length; i++) {
-        code = (code * 31) + array[i];
+      for (int j : array) {
+        code = (code * 31) + j;
       }
       return code;
     }
@@ -111,8 +111,8 @@ class ArrayWrappers {
     @Override
     public int hashCode() {
       int code = 0;
-      for (int i = 0; i < array.length; i++) {
-        code = (code * 31) + (int) array[i];
+      for (long l : array) {
+        code = (code * 31) + (int) l;
       }
       return code;
     }
@@ -150,8 +150,8 @@ class ArrayWrappers {
     @Override
     public int hashCode() {
       int code = 0;
-      for (int i = 0; i < array.length; i++) {
-        code = (code * 31) + array[i];
+      for (byte b : array) {
+        code = (code * 31) + b;
       }
       return code;
     }
@@ -189,8 +189,8 @@ class ArrayWrappers {
     @Override
     public int hashCode() {
       int code = 0;
-      for (int i = 0; i < array.length; i++) {
-        code = (code * 31) + array[i].hashCode();
+      for (Object o : array) {
+        code = (code * 31) + o.hashCode();
       }
       return code;
     }
@@ -200,7 +200,7 @@ class ArrayWrappers {
     public int compareTo(ComparableObjectArray other) {
       int len = Math.min(array.length, other.array.length);
       for (int i = 0; i < len; i++) {
-        int diff = ((Comparable<Object>) array[i]).compareTo((Comparable<Object>) other.array[i]);
+        int diff = ((Comparable<Object>) array[i]).compareTo(other.array[i]);
         if (diff != 0) {
           return diff;
         }

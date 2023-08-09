@@ -39,7 +39,7 @@ private[streaming] object HdfsUtils {
           throw new IllegalStateException("File exists and there is no append support!")
         }
       } else {
-        // we dont' want to use hdfs erasure coding, as that lacks support for append and hflush
+        // we don't want to use hdfs erasure coding, as that lacks support for append and hflush
         SparkHadoopUtil.createFile(dfs, dfsPath, false)
       }
     }
@@ -58,7 +58,7 @@ private[streaming] object HdfsUtils {
         // If we are really unlucky, the file may be deleted as we're opening the stream.
         // This can happen as clean up is performed by daemon threads that may be left over from
         // previous runs.
-        if (!dfs.isFile(dfsPath)) null else throw e
+        if (!dfs.getFileStatus(dfsPath).isFile) null else throw e
     }
   }
 
@@ -92,6 +92,10 @@ private[streaming] object HdfsUtils {
   def checkFileExists(path: String, conf: Configuration): Boolean = {
     val hdpPath = new Path(path)
     val fs = getFileSystemForPath(hdpPath, conf)
-    fs.isFile(hdpPath)
+    try {
+      fs.getFileStatus(hdpPath).isFile
+    } catch {
+      case _: FileNotFoundException => false
+    }
   }
 }

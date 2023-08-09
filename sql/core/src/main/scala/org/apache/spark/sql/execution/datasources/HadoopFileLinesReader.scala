@@ -18,10 +18,8 @@
 package org.apache.spark.sql.execution.datasources
 
 import java.io.Closeable
-import java.net.URI
 
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.Path
 import org.apache.hadoop.io.Text
 import org.apache.hadoop.mapreduce._
 import org.apache.hadoop.mapreduce.lib.input.{FileSplit, LineRecordReader}
@@ -46,9 +44,9 @@ class HadoopFileLinesReader(
 
   def this(file: PartitionedFile, conf: Configuration) = this(file, None, conf)
 
-  private val iterator = {
+  private val _iterator = {
     val fileSplit = new FileSplit(
-      new Path(new URI(file.filePath)),
+      file.toPath,
       file.start,
       file.length,
       // The locality is decided by `getPreferredLocations` in `FileScanRDD`.
@@ -66,9 +64,9 @@ class HadoopFileLinesReader(
     new RecordReaderIterator(reader)
   }
 
-  override def hasNext: Boolean = iterator.hasNext
+  override def hasNext: Boolean = _iterator.hasNext
 
-  override def next(): Text = iterator.next()
+  override def next(): Text = _iterator.next()
 
-  override def close(): Unit = iterator.close()
+  override def close(): Unit = _iterator.close()
 }

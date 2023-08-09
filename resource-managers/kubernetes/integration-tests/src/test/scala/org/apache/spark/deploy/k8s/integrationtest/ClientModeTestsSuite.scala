@@ -16,8 +16,10 @@
  */
 package org.apache.spark.deploy.k8s.integrationtest
 
-import org.scalatest.concurrent.Eventually
 import scala.collection.JavaConverters._
+
+import io.fabric8.kubernetes.api.model.{PodBuilder, ServiceBuilder}
+import org.scalatest.concurrent.Eventually
 
 import org.apache.spark.deploy.k8s.integrationtest.KubernetesSuite.{k8sTestTag, INTERVAL, TIMEOUT}
 
@@ -32,7 +34,7 @@ private[spark] trait ClientModeTestsSuite { k8sSuite: KubernetesSuite =>
       .getKubernetesClient
       .services()
       .inNamespace(kubernetesTestComponents.namespace)
-      .createNew()
+      .create(new ServiceBuilder()
         .withNewMetadata()
           .withName(s"$driverPodName-svc")
           .endMetadata()
@@ -50,13 +52,12 @@ private[spark] trait ClientModeTestsSuite { k8sSuite: KubernetesSuite =>
             .withNewTargetPort(blockManagerPort)
             .endPort()
           .endSpec()
-        .done()
+        .build())
     try {
-      val driverPod = testBackend
-        .getKubernetesClient
+      val driverPod = testBackend.getKubernetesClient
         .pods()
         .inNamespace(kubernetesTestComponents.namespace)
-        .createNew()
+        .create(new PodBuilder()
           .withNewMetadata()
           .withName(driverPodName)
           .withLabels(labels.asJava)
@@ -93,10 +94,11 @@ private[spark] trait ClientModeTestsSuite { k8sSuite: KubernetesSuite =>
             .addToArgs("10")
             .endContainer()
           .endSpec()
-        .done()
+        .build())
       Eventually.eventually(TIMEOUT, INTERVAL) {
         assert(kubernetesTestComponents.kubernetesClient
           .pods()
+          .inNamespace(kubernetesTestComponents.namespace)
           .withName(driverPodName)
           .getLog
           .contains("Pi is roughly 3"), "The application did not complete.")
@@ -121,7 +123,8 @@ private[spark] trait ClientModeTestsSuite { k8sSuite: KubernetesSuite =>
         .kubernetesClient
         .services()
         .inNamespace(kubernetesTestComponents.namespace)
-        .delete(driverService)
+        .resource(driverService)
+        .delete()
       // Delete all executors, since the test explicitly asks them not to be deleted by the app.
       kubernetesTestComponents
         .kubernetesClient

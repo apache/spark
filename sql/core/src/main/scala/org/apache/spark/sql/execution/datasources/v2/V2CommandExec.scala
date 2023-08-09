@@ -19,6 +19,10 @@ package org.apache.spark.sql.execution.datasources.v2
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
+import org.apache.spark.sql.catalyst.expressions.{AttributeSet, GenericRowWithSchema}
+import org.apache.spark.sql.catalyst.trees.LeafLike
+import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.execution.SparkPlan
 
 /**
@@ -44,15 +48,25 @@ abstract class V2CommandExec extends SparkPlan {
    */
   override def executeCollect(): Array[InternalRow] = result.toArray
 
-  override def executeToIterator: Iterator[InternalRow] = result.toIterator
+  override def executeToIterator(): Iterator[InternalRow] = result.iterator
 
   override def executeTake(limit: Int): Array[InternalRow] = result.take(limit).toArray
 
   override def executeTail(limit: Int): Array[InternalRow] = result.takeRight(limit).toArray
 
   protected override def doExecute(): RDD[InternalRow] = {
-    sqlContext.sparkContext.parallelize(result, 1)
+    sparkContext.parallelize(result, 1)
   }
 
-  override def children: Seq[SparkPlan] = Nil
+  override def producedAttributes: AttributeSet = outputSet
+
+  protected def toCatalystRow(values: Any*): InternalRow = {
+    rowSerializer(new GenericRowWithSchema(values.toArray, schema)).copy()
+  }
+
+  private lazy val rowSerializer = {
+    ExpressionEncoder(DataTypeUtils.fromAttributes(output)).resolveAndBind().createSerializer()
+  }
 }
+
+trait LeafV2CommandExec extends V2CommandExec with LeafLike[SparkPlan]

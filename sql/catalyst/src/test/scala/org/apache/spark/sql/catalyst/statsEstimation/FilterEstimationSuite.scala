@@ -23,7 +23,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.Literal.{FalseLiteral, TrueLiteral}
 import org.apache.spark.sql.catalyst.plans.LeftOuter
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.{ColumnStatsMap, FilterEstimation}
+import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.ColumnStatsMap
 import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.EstimationUtils._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.types._
@@ -822,6 +822,41 @@ class FilterEstimationSuite extends StatsEstimationTestBase {
       expectedRowCount = 3)
   }
 
+  test("SPARK-36079: Null count should be no higher than row count after filter") {
+    val colStatNullableString = colStatString.copy(nullCount = Some(10))
+    val condition = Filter(EqualTo(attrBool, Literal(true)),
+      childStatsTestPlan(Seq(attrBool, attrString), tableRowCount = 10L,
+        attributeMap = AttributeMap(Seq(
+          attrBool -> colStatBool, attrString -> colStatNullableString))))
+    validateEstimatedStats(
+      condition,
+      Seq(attrBool -> colStatBool.copy(distinctCount = Some(1), min = Some(true)),
+        attrString -> colStatNullableString.copy(distinctCount = Some(5), nullCount = Some(5))),
+      expectedRowCount = 5)
+  }
+
+  test("SPARK-36079: Null count higher than row count") {
+    val colStatNullableString = colStatString.copy(nullCount = Some(15))
+    val condition = Filter(IsNotNull(attrString),
+      childStatsTestPlan(Seq(attrString), tableRowCount = 10L,
+        attributeMap = AttributeMap(Seq(attrString -> colStatNullableString))))
+    validateEstimatedStats(
+      condition,
+      Seq(attrString -> colStatNullableString),
+      expectedRowCount = 0)
+  }
+
+  test("SPARK-36079: Bound selectivity >= 0") {
+    val colStatNullableString = colStatString.copy(nullCount = Some(-1))
+    val condition = Filter(IsNotNull(attrString),
+      childStatsTestPlan(Seq(attrString), tableRowCount = 10L,
+        attributeMap = AttributeMap(Seq(attrString -> colStatNullableString))))
+    validateEstimatedStats(
+      condition,
+      Seq(attrString -> colStatString),
+      expectedRowCount = 10)
+  }
+
   test("ColumnStatsMap tests") {
     val attrNoDistinct = AttributeReference("att_without_distinct", IntegerType)()
     val attrNoCount = AttributeReference("att_without_count", BooleanType)()
@@ -848,7 +883,10 @@ class FilterEstimationSuite extends StatsEstimationTestBase {
     assert(!columnStatsMap.hasMinMaxStats(attrNoMinMax))
   }
 
-  private def childStatsTestPlan(outList: Seq[Attribute], tableRowCount: BigInt): StatsTestPlan = {
+  private def childStatsTestPlan(
+      outList: Seq[Attribute],
+      tableRowCount: BigInt,
+      attributeMap: AttributeMap[ColumnStat] = attributeMap): StatsTestPlan = {
     StatsTestPlan(
       outputList = outList,
       rowCount = tableRowCount,

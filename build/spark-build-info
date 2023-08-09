@@ -24,7 +24,7 @@
 
 RESOURCE_DIR="$1"
 mkdir -p "$RESOURCE_DIR"
-SPARK_BUILD_INFO="${RESOURCE_DIR}"/spark-version-info.properties
+SPARK_BUILD_INFO="${RESOURCE_DIR%/}"/spark-version-info.properties
 
 echo_build_properties() {
   echo version=$1
@@ -32,7 +32,8 @@ echo_build_properties() {
   echo revision=$(git rev-parse HEAD)
   echo branch=$(git rev-parse --abbrev-ref HEAD)
   echo date=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-  echo url=$(git config --get remote.origin.url)
+  echo url=$(git config --get remote.origin.url |  sed 's|https://\(.*\)@\(.*\)|https://\2|')
+  echo docroot=https://spark.apache.org/docs/latest
 }
 
 echo_build_properties $2 > "$SPARK_BUILD_INFO"

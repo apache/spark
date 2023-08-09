@@ -133,6 +133,12 @@ class GBTRegressorSuite extends MLTest with DefaultReadWriteTest {
     Utils.deleteRecursively(tempDir)
   }
 
+  test("GBTRegressor validate input dataset") {
+    testInvalidRegressionLabels(new GBTRegressor().fit(_))
+    testInvalidWeights(new GBTRegressor().setWeightCol("weight").fit(_))
+    testInvalidVectors(new GBTRegressor().fit(_))
+  }
+
   test("model support predict leaf index") {
     val model0 = new DecisionTreeRegressionModel("dtc", TreeTests.root0, 3)
     val model1 = new DecisionTreeRegressionModel("dtc", TreeTests.root1, 3)
@@ -369,6 +375,18 @@ class GBTRegressorSuite extends MLTest with DefaultReadWriteTest {
       TreeTests.setMetadata(rdd, Map.empty[Int, Int], numClasses = 0)
     testEstimatorAndModelReadWrite(gbt, continuousData, allParamSettings,
       allParamSettings, checkModelData)
+  }
+
+  test("SPARK-33398: Load GBTRegressionModel prior to Spark 3.0") {
+    val path = testFile("ml-models/gbtr-2.4.7")
+    val model = GBTRegressionModel.load(path)
+    assert(model.numFeatures === 692)
+    assert(model.totalNumNodes === 6)
+    assert(model.trees.map(_.numNodes) === Array(5, 1))
+
+    val metadata = spark.read.json(s"$path/metadata")
+    val sparkVersionStr = metadata.select("sparkVersion").first().getString(0)
+    assert(sparkVersionStr === "2.4.7")
   }
 }
 

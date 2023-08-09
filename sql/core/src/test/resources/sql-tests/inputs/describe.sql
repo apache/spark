@@ -1,8 +1,8 @@
 CREATE TABLE t (a STRING, b INT, c STRING, d STRING) USING parquet
-  OPTIONS (a '1', b '2')
+  OPTIONS (a '1', b '2', password 'password')
   PARTITIONED BY (c, d) CLUSTERED BY (a) SORTED BY (b ASC) INTO 2 BUCKETS
   COMMENT 'table_comment'
-  TBLPROPERTIES (t 'test');
+  TBLPROPERTIES (t 'test', password 'password');
 
 CREATE TEMPORARY VIEW temp_v AS SELECT * FROM t;
 
@@ -42,6 +42,8 @@ DESC t PARTITION (c='Us', d=1);
 DESC EXTENDED t PARTITION (c='Us', d=1);
 
 DESC FORMATTED t PARTITION (c='Us', d=1);
+
+DESC EXTENDED t PARTITION (C='Us', D=1);
 
 -- NoSuchPartitionException: Partition not found in table
 DESC t PARTITION (c='Us', d=2);
@@ -95,3 +97,25 @@ DROP VIEW temp_v;
 DROP VIEW temp_Data_Source_View;
 
 DROP VIEW v;
+
+-- Show column default values
+CREATE TABLE d (a STRING DEFAULT 'default-value', b INT DEFAULT 42) USING parquet COMMENT 'table_comment';
+
+DESC d;
+
+DESC EXTENDED d;
+
+DESC TABLE EXTENDED d;
+
+DESC FORMATTED d;
+
+-- Show column default values with newlines in the string
+CREATE TABLE e (a STRING DEFAULT CONCAT('a\n b\n ', 'c\n d'), b INT DEFAULT 42) USING parquet COMMENT 'table_comment';
+
+DESC e;
+
+DESC EXTENDED e;
+
+DESC TABLE EXTENDED e;
+
+DESC FORMATTED e;

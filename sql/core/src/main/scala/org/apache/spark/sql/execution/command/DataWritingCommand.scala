@@ -17,29 +17,33 @@
 
 package org.apache.spark.sql.execution.command
 
+import java.net.URI
+
 import org.apache.hadoop.conf.Configuration
 
-import org.apache.spark.sql.{Row, SparkSession}
+import org.apache.spark.SparkContext
+import org.apache.spark.sql.{Row, SaveMode, SparkSession}
 import org.apache.spark.sql.catalyst.expressions.Attribute
-import org.apache.spark.sql.catalyst.plans.logical.{Command, LogicalPlan}
-import org.apache.spark.sql.execution.SparkPlan
+import org.apache.spark.sql.catalyst.plans.logical.{CTEInChildren, LogicalPlan, UnaryCommand}
+import org.apache.spark.sql.errors.QueryCompilationErrors
+import org.apache.spark.sql.execution.{SparkPlan, SQLExecution}
 import org.apache.spark.sql.execution.datasources.BasicWriteJobStatsTracker
-import org.apache.spark.sql.execution.datasources.FileFormatWriter
-import org.apache.spark.sql.execution.metric.SQLMetric
+import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.util.SerializableConfiguration
 
 /**
  * A special `Command` which writes data out and updates metrics.
  */
-trait DataWritingCommand extends Command {
+trait DataWritingCommand extends UnaryCommand with CTEInChildren {
   /**
    * The input query plan that produces the data to be written.
    * IMPORTANT: the input query plan MUST be analyzed, so that we can carry its output columns
-   *            to [[FileFormatWriter]].
+   *            to [[org.apache.spark.sql.execution.datasources.FileFormatWriter]].
    */
   def query: LogicalPlan
 
-  override final def children: Seq[LogicalPlan] = query :: Nil
+  override final def child: LogicalPlan = query
 
   // Output column names of the analyzed input query plan.
   def outputColumnNames: Seq[String]
@@ -72,6 +76,48 @@ object DataWritingCommand {
       "The length of provided names doesn't match the length of output attributes.")
     outputAttributes.zip(names).map { case (attr, outputName) =>
       attr.withName(outputName)
+    }
+  }
+
+  /**
+   * When execute CTAS operators, Spark will use [[InsertIntoHadoopFsRelationCommand]]
+   * or [[InsertIntoHiveTable]] command to write data, they both inherit metrics from
+   * [[DataWritingCommand]], but after running [[InsertIntoHadoopFsRelationCommand]]
+   * or [[InsertIntoHiveTable]], we only update metrics in these two command through
+   * [[BasicWriteJobStatsTracker]], we also need to propogate metrics to the command
+   * that actually calls [[InsertIntoHadoopFsRelationCommand]] or [[InsertIntoHiveTable]].
+   *
+   * @param sparkContext Current SparkContext.
+   * @param command Command to execute writing data.
+   * @param metrics Metrics of real DataWritingCommand.
+   */
+  def propogateMetrics(
+      sparkContext: SparkContext,
+      command: DataWritingCommand,
+      metrics: Map[String, SQLMetric]): Unit = {
+    command.metrics.foreach { case (key, metric) => metrics(key).set(metric.value) }
+    SQLMetrics.postDriverMetricUpdates(sparkContext,
+      sparkContext.getLocalProperty(SQLExecution.EXECUTION_ID_KEY),
+      metrics.values.toSeq)
+  }
+  /**
+   * When execute CTAS operators, and the location is not empty, throw [[AnalysisException]].
+   * For CTAS, the SaveMode is always [[ErrorIfExists]]
+   *
+   * @param tablePath Table location.
+   * @param saveMode  Save mode of the table.
+   * @param hadoopConf Configuration.
+   */
+  def assertEmptyRootPath(tablePath: URI, saveMode: SaveMode, hadoopConf: Configuration): Unit = {
+    if (saveMode == SaveMode.ErrorIfExists && !SQLConf.get.allowNonEmptyLocationInCTAS) {
+      val filePath = new org.apache.hadoop.fs.Path(tablePath)
+      val fs = filePath.getFileSystem(hadoopConf)
+      if (fs.exists(filePath) &&
+          fs.getFileStatus(filePath).isDirectory &&
+          fs.listStatus(filePath).length != 0) {
+        throw QueryCompilationErrors.createTableAsSelectWithNonEmptyDirectoryError(
+          tablePath.toString)
+      }
     }
   }
 }

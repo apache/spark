@@ -22,7 +22,8 @@ import java.util.Random
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.commons.math3.distribution.PoissonDistribution
-import org.scalatest.Matchers
+import org.scalatest.matchers.must.Matchers
+import org.scalatest.matchers.should.Matchers._
 
 import org.apache.spark.SparkFunSuite
 
@@ -322,7 +323,7 @@ class RandomSamplerSuite extends SparkFunSuite with Matchers {
     RandomSampler.defaultMaxGapSamplingFraction should be (0.4)
 
     var d: Double = 0.0
-    var sampler = new BernoulliSampler[Int](0.1)
+    val sampler = new BernoulliSampler[Int](0.1)
     sampler.setSeed(rngSeed.nextLong)
 
     // Array iterator (indexable type)
@@ -546,7 +547,7 @@ class RandomSamplerSuite extends SparkFunSuite with Matchers {
     RandomSampler.defaultMaxGapSamplingFraction should be (0.4)
 
     var d: Double = 0.0
-    var sampler = new PoissonSampler[Int](0.1)
+    val sampler = new PoissonSampler[Int](0.1)
     sampler.setSeed(rngSeed.nextLong)
 
     // Array iterator (indexable type)

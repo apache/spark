@@ -16,9 +16,7 @@
  */
 package org.apache.spark.deploy.k8s.integrationtest.backend.cloud
 
-import java.nio.file.Paths
-
-import io.fabric8.kubernetes.client.{Config, DefaultKubernetesClient}
+import io.fabric8.kubernetes.client.{Config, KubernetesClient, KubernetesClientBuilder}
 import io.fabric8.kubernetes.client.utils.Utils
 import org.apache.commons.lang3.StringUtils
 
@@ -33,7 +31,7 @@ private[spark] class KubeConfigBackend(var context: String)
     s"${if (context != null) s"context ${context}" else "default context"}" +
     s" from users K8S config file")
 
-  private var defaultClient: DefaultKubernetesClient = _
+  private var defaultClient: KubernetesClient = _
 
   override def initialize(): Unit = {
     // Auto-configure K8S client from K8S config file
@@ -45,8 +43,7 @@ private[spark] class KubeConfigBackend(var context: String)
 
     // If an explicit master URL was specified then override that detected from the
     // K8S config if it is different
-    var masterUrl = Option(System.getProperty(TestConstants.CONFIG_KEY_KUBE_MASTER_URL))
-      .getOrElse(null)
+    var masterUrl = Option(System.getProperty(TestConstants.CONFIG_KEY_KUBE_MASTER_URL)).orNull
     if (StringUtils.isNotBlank(masterUrl)) {
       // Clean up master URL which would have been specified in Spark format into a normal
       // K8S master URL
@@ -58,14 +55,17 @@ private[spark] class KubeConfigBackend(var context: String)
       }
     }
 
-    defaultClient = new DefaultKubernetesClient(config)
+    defaultClient = new KubernetesClientBuilder().withConfig(config).build()
   }
 
   override def cleanUp(): Unit = {
+    if (defaultClient != null) {
+      defaultClient.close()
+    }
     super.cleanUp()
   }
 
-  override def getKubernetesClient: DefaultKubernetesClient = {
+  override def getKubernetesClient: KubernetesClient = {
     defaultClient
   }
 }

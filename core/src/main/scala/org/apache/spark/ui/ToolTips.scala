@@ -28,16 +28,12 @@ private[spark] object ToolTips {
     """Time spent deserializing the task closure on the executor, including the time to read the
        broadcasted task."""
 
-  val SHUFFLE_READ_BLOCKED_TIME =
+  val SHUFFLE_READ_FETCH_WAIT_TIME =
     "Time that the task spent blocked waiting for shuffle data to be read from remote machines."
 
   val INPUT = "Bytes read from Hadoop or from Spark storage."
 
   val OUTPUT = "Bytes written to Hadoop."
-
-  val STORAGE_MEMORY =
-    "Memory used / total available memory for storage of data " +
-      "like RDD partitions cached in memory. "
 
   val SHUFFLE_WRITE =
     "Bytes and records written to disk in order to be read by a shuffle in a future stage."
@@ -88,12 +84,6 @@ private[spark] object ToolTips {
        also create multiple RDDs internally. Cached RDDs are shown in green.
     """
 
-  val TASK_TIME =
-  "Shaded red when garbage collection (GC) time is over 10% of task time"
-
-  val BLACKLISTED =
-  "Shows if this executor has been blacklisted by the scheduler due to task failures."
-
   val APPLICATION_EXECUTOR_LIMIT =
     """Maximum number of executors that this application will use. This limit is finite only when
        dynamic allocation is enabled. The number of granted executors may exceed the limit
@@ -101,5 +91,7 @@ private[spark] object ToolTips {
     """
 
   val DURATION =
-    "Elapsed time since the stage was submitted until execution completion of all its tasks."
+    """Elapsed time since the first task of the stage was launched until execution completion of
+       all its tasks (Excluding the time of the stage waits to be launched after submitted).
+    """
 }

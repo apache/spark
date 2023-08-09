@@ -40,7 +40,7 @@ class ClusteringEvaluatorSuite
 
   override def beforeAll(): Unit = {
     super.beforeAll()
-    irisDataset = spark.read.format("libsvm").load("../data/mllib/iris_libsvm.txt")
+    irisDataset = spark.read.format("libsvm").load(getTestResourcePath("iris_libsvm.txt"))
     val datasets = MLTestingUtils.generateArrayFeatureDataset(irisDataset)
     newIrisDataset = datasets._1
     newIrisDatasetD = datasets._2
@@ -189,7 +189,7 @@ class ClusteringEvaluatorSuite
   }
 
   test("single-element clusters with weight") {
-    val singleItemClusters = spark.createDataFrame(spark.sparkContext.parallelize(Array(
+    val singleItemClusters = spark.createDataFrame(spark.sparkContext.parallelize(Seq(
       (0.0, Vectors.dense(5.1, 3.5, 1.4, 0.2), 6.0),
       (1.0, Vectors.dense(7.0, 3.2, 4.7, 1.4), 0.25),
       (2.0, Vectors.dense(6.3, 3.3, 6.0, 2.5), 9.99)))).toDF("label", "features", "weight")

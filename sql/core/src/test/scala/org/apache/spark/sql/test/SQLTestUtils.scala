@@ -22,6 +22,7 @@ import java.net.URI
 import java.nio.file.Files
 import java.util.{Locale, UUID}
 
+import scala.collection.JavaConverters._
 import scala.concurrent.duration._
 import scala.language.implicitConversions
 import scala.util.control.NonFatal
@@ -228,7 +229,7 @@ private[sql] trait SQLTestUtilsBase
   protected def sparkContext = spark.sparkContext
 
   // Shorthand for running a query using our SQLContext
-  protected lazy val sql = spark.sql _
+  protected lazy val sql: String => DataFrame = spark.sql _
 
   /**
    * A helper object for importing SQL implicits.
@@ -335,7 +336,7 @@ private[sql] trait SQLTestUtilsBase
   // Blocking uncache table for tests
   protected def uncacheTable(tableName: String): Unit = {
     val tableIdent = spark.sessionState.sqlParser.parseTableIdentifier(tableName)
-    val cascade = !spark.sessionState.catalog.isTemporaryTable(tableIdent)
+    val cascade = !spark.sessionState.catalog.isTempView(tableIdent)
     spark.sharedState.cacheManager.uncacheQuery(
       spark,
       spark.table(tableName).logicalPlan,
@@ -388,6 +389,17 @@ private[sql] trait SQLTestUtilsBase
       namespaces.foreach { name =>
         spark.sql(s"DROP NAMESPACE IF EXISTS $name CASCADE")
       }
+    }
+  }
+
+  /**
+   * Restores the current catalog/database after calling `f`.
+   */
+  protected def withCurrentCatalogAndNamespace(f: => Unit): Unit = {
+    val curCatalog = sql("select current_catalog()").head().getString(0)
+    val curDatabase = sql("select current_database()").head().getString(0)
+    Utils.tryWithSafeFinally(f) {
+      spark.sql(s"USE $curCatalog.$curDatabase")
     }
   }
 
@@ -459,7 +471,9 @@ private[sql] trait SQLTestUtilsBase
    */
   def getLocalDirSize(file: File): Long = {
     assert(file.isDirectory)
-    file.listFiles.filter(f => DataSourceUtils.isDataFile(f.getName)).map(_.length).sum
+    Files.walk(file.toPath).iterator().asScala
+      .filter(p => Files.isRegularFile(p) && DataSourceUtils.isDataFile(p.getFileName.toString))
+      .map(_.toFile.length).sum
   }
 }
 

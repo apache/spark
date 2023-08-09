@@ -79,3 +79,8 @@ if should_build "publish"; then
 else
   echo "Skipping publish step."
 fi
+
+if [ ! -z "$RELEASE_STEP" ] && [ "$RELEASE_STEP" = "finalize" ]; then
+  run_silent "Finalizing release" "finalize.log" \
+    "$SELF/release-build.sh" finalize
+fi

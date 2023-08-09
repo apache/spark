@@ -39,8 +39,9 @@ class DriverRunnerTest extends SparkFunSuite {
     val conf = new SparkConf()
     val worker = mock(classOf[RpcEndpointRef])
     doNothing().when(worker).send(any())
-    spy(new DriverRunner(conf, "driverId", new File("workDir"), new File("sparkHome"),
-      driverDescription, worker, "spark://1.2.3.4/worker/", new SecurityManager(conf)))
+    spy[DriverRunner](new DriverRunner(conf, "driverId", new File("workDir"), new File("sparkHome"),
+      driverDescription, worker, "spark://1.2.3.4/worker/", "http://publicAddress:80",
+      new SecurityManager(conf)))
   }
 
   private def createProcessBuilderAndProcess(): (ProcessBuilderLike, Process) = {

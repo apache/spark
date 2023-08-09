@@ -58,6 +58,7 @@ private[deploy] class ExecutorRunner(
     conf: SparkConf,
     val appLocalDirs: Seq[String],
     @volatile var state: ExecutorState.Value,
+    val rpId: Int,
     val resources: Map[String, ResourceInformation] = Map.empty)
   extends Logging {
 
@@ -83,7 +84,7 @@ private[deploy] class ExecutorRunner(
     shutdownHook = ShutdownHookManager.addShutdownHook { () =>
       // It's possible that we arrive here before calling `fetchAndRunExecutor`, then `state` will
       // be `ExecutorState.LAUNCHING`. In this case, we should set `state` to `FAILED`.
-      if (state == ExecutorState.LAUNCHING) {
+      if (state == ExecutorState.LAUNCHING || state == ExecutorState.RUNNING) {
         state = ExecutorState.FAILED
       }
       killProcess(Some("Worker shutting down")) }
@@ -139,6 +140,7 @@ private[deploy] class ExecutorRunner(
     case "{{HOSTNAME}}" => host
     case "{{CORES}}" => cores.toString
     case "{{APP_ID}}" => appId
+    case "{{RESOURCE_PROFILE_ID}}" => rpId.toString
     case other => other
   }
 
@@ -158,7 +160,7 @@ private[deploy] class ExecutorRunner(
       val builder = CommandUtils.buildProcessBuilder(subsCommand, new SecurityManager(conf),
         memory, sparkHome.getAbsolutePath, substituteVariables)
       val command = builder.command()
-      val redactedCommand = Utils.redactCommandLineArgs(conf, command.asScala)
+      val redactedCommand = Utils.redactCommandLineArgs(conf, command.asScala.toSeq)
         .mkString("\"", "\" \"", "\"")
       logInfo(s"Launch command: $redactedCommand")
 
@@ -171,7 +173,8 @@ private[deploy] class ExecutorRunner(
       // Add webUI log urls
       val baseUrl =
         if (conf.get(UI_REVERSE_PROXY)) {
-          s"/proxy/$workerId/logPage/?appId=$appId&executorId=$execId&logType="
+          conf.get(UI_REVERSE_PROXY_URL.key, "").stripSuffix("/") +
+            s"/proxy/$workerId/logPage/?appId=$appId&executorId=$execId&logType="
         } else {
           s"$webUiScheme$publicAddress:$webUiPort/logPage/?appId=$appId&executorId=$execId&logType="
         }
@@ -184,11 +187,11 @@ private[deploy] class ExecutorRunner(
 
       // Redirect its stdout and stderr to files
       val stdout = new File(executorDir, "stdout")
-      stdoutAppender = FileAppender(process.getInputStream, stdout, conf)
+      stdoutAppender = FileAppender(process.getInputStream, stdout, conf, true)
 
       val stderr = new File(executorDir, "stderr")
       Files.write(header, stderr, StandardCharsets.UTF_8)
-      stderrAppender = FileAppender(process.getErrorStream, stderr, conf)
+      stderrAppender = FileAppender(process.getErrorStream, stderr, conf, true)
 
       state = ExecutorState.RUNNING
       worker.send(ExecutorStateChanged(appId, execId, state, None, None))

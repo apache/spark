@@ -164,7 +164,7 @@ object DecisionTreeModel extends Loader[DecisionTreeModel] with Logging {
       }
 
       def apply(r: Row): SplitData = {
-        SplitData(r.getInt(0), r.getDouble(1), r.getInt(2), r.getAs[Seq[Double]](3))
+        SplitData(r.getInt(0), r.getDouble(1), r.getInt(2), r.getSeq[Double](3))
       }
     }
 

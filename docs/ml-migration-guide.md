@@ -223,6 +223,23 @@ for converting to `ml.linalg` types, and
 for converting to `mllib.linalg` types.
 
 <div class="codetabs">
+
+<div data-lang="python"  markdown="1">
+
+{% highlight python %}
+from pyspark.mllib.util import MLUtils
+
+# convert DataFrame columns
+convertedVecDF = MLUtils.convertVectorColumnsToML(vecDF)
+convertedMatrixDF = MLUtils.convertMatrixColumnsToML(matrixDF)
+# convert a single vector or matrix
+mlVec = mllibVec.asML()
+mlMat = mllibMat.asML()
+{% endhighlight %}
+
+Refer to the [`MLUtils` Python docs](api/python/reference/api/pyspark.mllib.util.MLUtils.html#pyspark.mllib.util.MLUtils) for further detail.
+</div>
+
 <div data-lang="scala"  markdown="1">
 
 {% highlight scala %}
@@ -256,21 +273,6 @@ org.apache.spark.ml.linalg.Matrix mlMat = mllibMat.asML();
 Refer to the [`MLUtils` Java docs](api/java/org/apache/spark/mllib/util/MLUtils.html) for further detail.
 </div>
 
-<div data-lang="python"  markdown="1">
-
-{% highlight python %}
-from pyspark.mllib.util import MLUtils
-
-# convert DataFrame columns
-convertedVecDF = MLUtils.convertVectorColumnsToML(vecDF)
-convertedMatrixDF = MLUtils.convertMatrixColumnsToML(matrixDF)
-# convert a single vector or matrix
-mlVec = mllibVec.asML()
-mlMat = mllibMat.asML()
-{% endhighlight %}
-
-Refer to the [`MLUtils` Python docs](api/python/pyspark.mllib.html#pyspark.mllib.util.MLUtils) for further detail.
-</div>
 </div>
 
 **Deprecated methods removed**
@@ -281,7 +283,7 @@ Several deprecated methods were removed in the `spark.mllib` and `spark.ml` pack
 * `weights` in `LinearRegression` and `LogisticRegression` in `spark.ml`
 * `setMaxNumIterations` in `mllib.optimization.LBFGS` (marked as `DeveloperApi`)
 * `treeReduce` and `treeAggregate` in `mllib.rdd.RDDFunctions` (these functions are available on `RDD`s directly, and were marked as `DeveloperApi`)
-* `defaultStategy` in `mllib.tree.configuration.Strategy`
+* `defaultStrategy` in `mllib.tree.configuration.Strategy`
 * `build` in `mllib.tree.Node`
 * libsvm loaders for multiclass and load/save labeledData methods in `mllib.util.MLUtils`
 

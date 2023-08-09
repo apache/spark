@@ -29,7 +29,8 @@ import org.apache.spark.unsafe.memory.MemoryBlock;
 import static org.apache.spark.shuffle.sort.PackedRecordPointer.MAXIMUM_PAGE_SIZE_BYTES;
 import static org.apache.spark.shuffle.sort.PackedRecordPointer.MAXIMUM_PARTITION_ID;
 import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotEquals;
+import static org.junit.Assert.assertThrows;
 
 public class PackedRecordPointerSuite {
 
@@ -85,13 +86,10 @@ public class PackedRecordPointerSuite {
   @Test
   public void partitionIdsGreaterThanMaximumPartitionIdWillOverflowOrTriggerError() {
     PackedRecordPointer packedPointer = new PackedRecordPointer();
-    try {
-      // Pointers greater than the maximum partition ID will overflow or trigger an assertion error
-      packedPointer.set(PackedRecordPointer.packPointer(0, MAXIMUM_PARTITION_ID + 1));
-      assertFalse(MAXIMUM_PARTITION_ID  + 1 == packedPointer.getPartitionId());
-    } catch (AssertionError e ) {
-      // pass
-    }
+    // Pointers greater than the maximum partition ID will overflow or trigger an assertion error
+    assertThrows(AssertionError.class,
+      () -> packedPointer.set(PackedRecordPointer.packPointer(0, MAXIMUM_PARTITION_ID + 1)));
+    assertNotEquals(MAXIMUM_PARTITION_ID + 1, packedPointer.getPartitionId());
   }
 
   @Test

@@ -418,4 +418,18 @@ class DatasetAggregatorSuite extends QueryTest with SharedSparkSession {
     assert(err.contains("cannot be passed in untyped `select` API. " +
       "Use the typed `Dataset.select` API instead."))
   }
+
+  test("SPARK-40906: Mode should copy keys before inserting into Map") {
+    val df = spark.sparkContext.parallelize(Seq.empty[Int], 4)
+      .mapPartitionsWithIndex { (idx, iter) =>
+        if (idx == 3) {
+          Iterator("3", "3", "3", "3", "4")
+        } else {
+          Iterator("0", "1", "2", "3", "4")
+        }
+      }.toDF("a")
+
+    val agg = df.select(mode(col("a"))).as[String]
+    checkDataset(agg, "3")
+  }
 }

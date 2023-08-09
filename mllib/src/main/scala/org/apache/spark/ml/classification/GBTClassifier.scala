@@ -17,24 +17,23 @@
 
 package org.apache.spark.ml.classification
 
-import com.github.fommil.netlib.BLAS.{getInstance => blas}
 import org.json4s.{DefaultFormats, JObject}
 import org.json4s.JsonDSL._
 
 import org.apache.spark.annotation.Since
 import org.apache.spark.internal.Logging
-import org.apache.spark.ml.feature.Instance
-import org.apache.spark.ml.linalg.{DenseVector, SparseVector, Vector, Vectors}
+import org.apache.spark.ml.linalg.{BLAS, DenseVector, SparseVector, Vector, Vectors}
 import org.apache.spark.ml.param.ParamMap
 import org.apache.spark.ml.regression.DecisionTreeRegressionModel
 import org.apache.spark.ml.tree._
 import org.apache.spark.ml.tree.impl.GradientBoostedTrees
 import org.apache.spark.ml.util._
+import org.apache.spark.ml.util.DatasetUtils.extractInstances
 import org.apache.spark.ml.util.DefaultParamsReader.Metadata
 import org.apache.spark.ml.util.Instrumentation.instrumented
 import org.apache.spark.mllib.tree.configuration.{Algo => OldAlgo}
 import org.apache.spark.mllib.tree.model.{GradientBoostedTreesModel => OldGBTModel}
-import org.apache.spark.sql.{DataFrame, Dataset}
+import org.apache.spark.sql._
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.StructType
 
@@ -170,19 +169,11 @@ class GBTClassifier @Since("1.4.0") (
   override protected def train(
       dataset: Dataset[_]): GBTClassificationModel = instrumented { instr =>
     val withValidation = isDefined(validationIndicatorCol) && $(validationIndicatorCol).nonEmpty
-
-    val validateInstance = (instance: Instance) => {
-      val label = instance.label
-      require(label == 0 || label == 1, s"GBTClassifier was given" +
-        s" dataset with invalid label $label.  Labels must be in {0,1}; note that" +
-        s" GBTClassifier currently only supports binary classification.")
-    }
-
     val (trainDataset, validationDataset) = if (withValidation) {
-      (extractInstances(dataset.filter(not(col($(validationIndicatorCol)))), validateInstance),
-        extractInstances(dataset.filter(col($(validationIndicatorCol))), validateInstance))
+      (extractInstances(this, dataset.filter(not(col($(validationIndicatorCol)))), Some(2)),
+        extractInstances(this, dataset.filter(col($(validationIndicatorCol))), Some(2)))
     } else {
-      (extractInstances(dataset, validateInstance), null)
+      (extractInstances(this, dataset, Some(2)), null)
     }
 
     val numClasses = 2
@@ -197,7 +188,7 @@ class GBTClassifier @Since("1.4.0") (
     instr.logParams(this, labelCol, weightCol, featuresCol, predictionCol, leafCol,
       impurity, lossType, maxDepth, maxBins, maxIter, maxMemoryInMB, minInfoGain,
       minInstancesPerNode, minWeightFractionPerNode, seed, stepSize, subsamplingRate, cacheNodeIds,
-      checkpointInterval, featureSubsetStrategy, validationIndicatorCol, validationTol)
+      checkpointInterval, featureSubsetStrategy, validationIndicatorCol, validationTol, thresholds)
     instr.logNumClasses(numClasses)
 
     val categoricalFeatures = MetadataUtils.getCategoricalFeatures(dataset.schema($(featuresCol)))
@@ -371,7 +362,7 @@ class GBTClassificationModel private[ml](
   /** Raw prediction for the positive class. */
   private def margin(features: Vector): Double = {
     val treePredictions = _trees.map(_.rootNode.predictImpl(features).prediction)
-    blas.ddot(getNumTrees, treePredictions, 1, _treeWeights, 1)
+    BLAS.nativeBLAS.ddot(getNumTrees, treePredictions, 1, _treeWeights, 1)
   }
 
   /** (private[ml]) Convert to a model in the old API */
@@ -389,7 +380,7 @@ class GBTClassificationModel private[ml](
    */
   @Since("2.4.0")
   def evaluateEachIteration(dataset: Dataset[_]): Array[Double] = {
-    val data = extractInstances(dataset)
+    val data = extractInstances(this, dataset, Some(2))
     GradientBoostedTrees.evaluateEachIteration(data, trees, treeWeights, loss,
       OldAlgo.Classification)
   }

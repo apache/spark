@@ -17,7 +17,6 @@
 
 package org.apache.spark.mllib.linalg
 
-import com.github.fommil.netlib.LAPACK.{getInstance => lapack}
 import org.netlib.util.intW
 
 import org.apache.spark.ml.optim.SingularMatrixException
@@ -37,7 +36,7 @@ private[spark] object CholeskyDecomposition {
   def solve(A: Array[Double], bx: Array[Double]): Array[Double] = {
     val k = bx.length
     val info = new intW(0)
-    lapack.dppsv("U", k, 1, A, bx, k, info)
+    LAPACK.nativeLAPACK.dppsv("U", k, 1, A, bx, k, info)
     checkReturnValue(info, "dppsv")
     bx
   }
@@ -52,7 +51,7 @@ private[spark] object CholeskyDecomposition {
    */
   def inverse(UAi: Array[Double], k: Int): Array[Double] = {
     val info = new intW(0)
-    lapack.dpptri("U", k, UAi, info)
+    LAPACK.nativeLAPACK.dpptri("U", k, UAi, info)
     checkReturnValue(info, "dpptri")
     UAi
   }

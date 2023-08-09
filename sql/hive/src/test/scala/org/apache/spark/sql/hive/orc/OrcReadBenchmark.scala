@@ -33,10 +33,9 @@ import org.apache.spark.sql.types._
  * {{{
  *   To run this benchmark:
  *   1. without sbt: bin/spark-submit --class <this class>
- *        --jars <catalyst test jar>,<core test jar>,<sql jar>,<hive-exec jar>,<spark-hive jar>
- *       <spark-hive test jar>
- *   2. build/sbt "hive/test:runMain <this class>"
- *   3. generate result: SPARK_GENERATE_BENCHMARK_FILES=1 build/sbt "hive/test:runMain <this class>"
+ *        --jars <catalyst test jar>,<core test jar>,<spark sql test jar> <spark-hive test jar>
+ *   2. build/sbt "hive/Test/runMain <this class>"
+ *   3. generate result: SPARK_GENERATE_BENCHMARK_FILES=1 build/sbt "hive/Test/runMain <this class>"
  *      Results will be written to "benchmarks/OrcReadBenchmark-results.txt".
  * }}}
  *
@@ -91,6 +90,10 @@ object OrcReadBenchmark extends SqlBasedBenchmark {
 
         prepareTable(dir, spark.sql(s"SELECT CAST(value as ${dataType.sql}) id FROM t1"))
 
+        benchmark.addCase("Hive built-in ORC") { _ =>
+          spark.sql("SELECT sum(id) FROM hiveOrcTable").noop()
+        }
+
         benchmark.addCase("Native ORC MR") { _ =>
           withSQLConf(SQLConf.ORC_VECTORIZED_READER_ENABLED.key -> "false") {
             spark.sql("SELECT sum(id) FROM nativeOrcTable").noop()
@@ -99,10 +102,6 @@ object OrcReadBenchmark extends SqlBasedBenchmark {
 
         benchmark.addCase("Native ORC Vectorized") { _ =>
           spark.sql("SELECT sum(id) FROM nativeOrcTable").noop()
-        }
-
-        benchmark.addCase("Hive built-in ORC") { _ =>
-          spark.sql("SELECT sum(id) FROM hiveOrcTable").noop()
         }
 
         benchmark.run()
@@ -122,6 +121,10 @@ object OrcReadBenchmark extends SqlBasedBenchmark {
           dir,
           spark.sql("SELECT CAST(value AS INT) AS c1, CAST(value as STRING) AS c2 FROM t1"))
 
+        benchmark.addCase("Hive built-in ORC") { _ =>
+          spark.sql("SELECT sum(c1), sum(length(c2)) FROM hiveOrcTable").noop()
+        }
+
         benchmark.addCase("Native ORC MR") { _ =>
           withSQLConf(SQLConf.ORC_VECTORIZED_READER_ENABLED.key -> "false") {
             spark.sql("SELECT sum(c1), sum(length(c2)) FROM nativeOrcTable").noop()
@@ -130,10 +133,6 @@ object OrcReadBenchmark extends SqlBasedBenchmark {
 
         benchmark.addCase("Native ORC Vectorized") { _ =>
           spark.sql("SELECT sum(c1), sum(length(c2)) FROM nativeOrcTable").noop()
-        }
-
-        benchmark.addCase("Hive built-in ORC") { _ =>
-          spark.sql("SELECT sum(c1), sum(length(c2)) FROM hiveOrcTable").noop()
         }
 
         benchmark.run()
@@ -151,6 +150,10 @@ object OrcReadBenchmark extends SqlBasedBenchmark {
 
         prepareTable(dir, spark.sql("SELECT value % 2 AS p, value AS id FROM t1"), Some("p"))
 
+        benchmark.addCase("Data column - Hive built-in ORC") { _ =>
+          spark.sql("SELECT sum(id) FROM hiveOrcTable").noop()
+        }
+
         benchmark.addCase("Data column - Native ORC MR") { _ =>
           withSQLConf(SQLConf.ORC_VECTORIZED_READER_ENABLED.key -> "false") {
             spark.sql("SELECT sum(id) FROM nativeOrcTable").noop()
@@ -161,8 +164,8 @@ object OrcReadBenchmark extends SqlBasedBenchmark {
           spark.sql("SELECT sum(id) FROM nativeOrcTable").noop()
         }
 
-        benchmark.addCase("Data column - Hive built-in ORC") { _ =>
-          spark.sql("SELECT sum(id) FROM hiveOrcTable").noop()
+        benchmark.addCase("Partition column - Hive built-in ORC") { _ =>
+          spark.sql("SELECT sum(p) FROM hiveOrcTable").noop()
         }
 
         benchmark.addCase("Partition column - Native ORC MR") { _ =>
@@ -175,8 +178,8 @@ object OrcReadBenchmark extends SqlBasedBenchmark {
           spark.sql("SELECT sum(p) FROM nativeOrcTable").noop()
         }
 
-        benchmark.addCase("Partition column - Hive built-in ORC") { _ =>
-          spark.sql("SELECT sum(p) FROM hiveOrcTable").noop()
+        benchmark.addCase("Both columns - Hive built-in ORC") { _ =>
+          spark.sql("SELECT sum(p), sum(id) FROM hiveOrcTable").noop()
         }
 
         benchmark.addCase("Both columns - Native ORC MR") { _ =>
@@ -187,10 +190,6 @@ object OrcReadBenchmark extends SqlBasedBenchmark {
 
         benchmark.addCase("Both columns - Native ORC Vectorized") { _ =>
           spark.sql("SELECT sum(p), sum(id) FROM nativeOrcTable").noop()
-        }
-
-        benchmark.addCase("Both columns - Hive built-in ORC") { _ =>
-          spark.sql("SELECT sum(p), sum(id) FROM hiveOrcTable").noop()
         }
 
         benchmark.run()
@@ -207,6 +206,10 @@ object OrcReadBenchmark extends SqlBasedBenchmark {
 
         prepareTable(dir, spark.sql("SELECT CAST((id % 200) + 10000 as STRING) AS c1 FROM t1"))
 
+        benchmark.addCase("Hive built-in ORC") { _ =>
+          spark.sql("SELECT sum(length(c1)) FROM hiveOrcTable").noop()
+        }
+
         benchmark.addCase("Native ORC MR") { _ =>
           withSQLConf(SQLConf.ORC_VECTORIZED_READER_ENABLED.key -> "false") {
             spark.sql("SELECT sum(length(c1)) FROM nativeOrcTable").noop()
@@ -215,10 +218,6 @@ object OrcReadBenchmark extends SqlBasedBenchmark {
 
         benchmark.addCase("Native ORC Vectorized") { _ =>
           spark.sql("SELECT sum(length(c1)) FROM nativeOrcTable").noop()
-        }
-
-        benchmark.addCase("Hive built-in ORC") { _ =>
-          spark.sql("SELECT sum(length(c1)) FROM hiveOrcTable").noop()
         }
 
         benchmark.run()
@@ -241,6 +240,11 @@ object OrcReadBenchmark extends SqlBasedBenchmark {
         val benchmark =
           new Benchmark(s"String with Nulls Scan ($percentageOfNulls%)", values, output = output)
 
+        benchmark.addCase("Hive built-in ORC") { _ =>
+          spark.sql("SELECT SUM(LENGTH(c2)) FROM hiveOrcTable " +
+            "WHERE c1 IS NOT NULL AND c2 IS NOT NULL").noop()
+        }
+
         benchmark.addCase("Native ORC MR") { _ =>
           withSQLConf(SQLConf.ORC_VECTORIZED_READER_ENABLED.key -> "false") {
             spark.sql("SELECT SUM(LENGTH(c2)) FROM nativeOrcTable " +
@@ -250,11 +254,6 @@ object OrcReadBenchmark extends SqlBasedBenchmark {
 
         benchmark.addCase("Native ORC Vectorized") { _ =>
           spark.sql("SELECT SUM(LENGTH(c2)) FROM nativeOrcTable " +
-            "WHERE c1 IS NOT NULL AND c2 IS NOT NULL").noop()
-        }
-
-        benchmark.addCase("Hive built-in ORC") { _ =>
-          spark.sql("SELECT SUM(LENGTH(c2)) FROM hiveOrcTable " +
             "WHERE c1 IS NOT NULL AND c2 IS NOT NULL").noop()
         }
 
@@ -276,6 +275,10 @@ object OrcReadBenchmark extends SqlBasedBenchmark {
 
         prepareTable(dir, spark.sql("SELECT * FROM t1"))
 
+        benchmark.addCase("Hive built-in ORC") { _ =>
+          spark.sql(s"SELECT sum(c$middle) FROM hiveOrcTable").noop()
+        }
+
         benchmark.addCase("Native ORC MR") { _ =>
           withSQLConf(SQLConf.ORC_VECTORIZED_READER_ENABLED.key -> "false") {
             spark.sql(s"SELECT sum(c$middle) FROM nativeOrcTable").noop()
@@ -286,8 +289,77 @@ object OrcReadBenchmark extends SqlBasedBenchmark {
           spark.sql(s"SELECT sum(c$middle) FROM nativeOrcTable").noop()
         }
 
+        benchmark.run()
+      }
+    }
+  }
+
+  def structBenchmark(values: Int, width: Int): Unit = {
+    val benchmark = new Benchmark(s"Single Struct Column Scan with $width Fields", values, output = output)
+
+    withTempPath { dir =>
+      withTempTable("t1", "nativeOrcTable", "hiveOrcTable") {
+        import spark.implicits._
+        val selectExprCore = (1 to width).map(i => s"'f$i', value").mkString(",")
+        val selectExpr = Seq(s"named_struct($selectExprCore) as c1")
+        spark.range(values).map(_ => Random.nextLong).toDF()
+          .selectExpr(selectExpr: _*).createOrReplaceTempView("t1")
+
+        prepareTable(dir, spark.sql("SELECT * FROM t1"))
+
         benchmark.addCase("Hive built-in ORC") { _ =>
-          spark.sql(s"SELECT sum(c$middle) FROM hiveOrcTable").noop()
+          spark.sql(s"SELECT * FROM hiveOrcTable").noop()
+        }
+
+        benchmark.addCase("Native ORC MR") { _ =>
+          withSQLConf(SQLConf.ORC_VECTORIZED_READER_ENABLED.key -> "false") {
+            spark.sql(s"SELECT * FROM nativeOrcTable").noop()
+          }
+        }
+
+        benchmark.addCase("Native ORC Vectorized") { _ =>
+          withSQLConf(SQLConf.ORC_VECTORIZED_READER_NESTED_COLUMN_ENABLED.key -> "true") {
+            spark.sql(s"SELECT * FROM nativeOrcTable").noop()
+          }
+        }
+
+        benchmark.run()
+      }
+    }
+  }
+
+  def nestedStructBenchmark(values: Int, elementCount: Int, structWidth: Int): Unit = {
+    val benchmark = new Benchmark(s"Nested Struct Scan with $elementCount Elements, " +
+      s"$structWidth Fields", values, output = output)
+
+    withTempPath { dir =>
+      withTempTable("t1", "nativeOrcTable", "hiveOrcTable") {
+        import spark.implicits._
+        val structExprFields = (1 to structWidth).map(i => s"'f$i', value").mkString(",")
+        val structExpr = s"named_struct($structExprFields)"
+        val arrayExprElements = (1 to elementCount)
+          .map(_ => s"$structExpr").mkString(",")
+        val selectExpr = Seq(s"array($arrayExprElements) as c1")
+        print(s"select expression is $selectExpr\n")
+        spark.range(values).map(_ => Random.nextLong).toDF()
+          .selectExpr(selectExpr: _*).createOrReplaceTempView("t1")
+
+        prepareTable(dir, spark.sql("SELECT * FROM t1"))
+
+        benchmark.addCase("Hive built-in ORC") { _ =>
+          spark.sql(s"SELECT * FROM hiveOrcTable").noop()
+        }
+
+        benchmark.addCase("Native ORC MR") { _ =>
+          withSQLConf(SQLConf.ORC_VECTORIZED_READER_ENABLED.key -> "false") {
+            spark.sql(s"SELECT * FROM nativeOrcTable").noop()
+          }
+        }
+
+        benchmark.addCase("Native ORC Vectorized") { _ =>
+          withSQLConf(SQLConf.ORC_VECTORIZED_READER_NESTED_COLUMN_ENABLED.key -> "true") {
+            spark.sql(s"SELECT * FROM nativeOrcTable").noop()
+          }
         }
 
         benchmark.run()
@@ -319,6 +391,19 @@ object OrcReadBenchmark extends SqlBasedBenchmark {
       columnsBenchmark(1024 * 1024 * 1, 100)
       columnsBenchmark(1024 * 1024 * 1, 200)
       columnsBenchmark(1024 * 1024 * 1, 300)
+    }
+
+    runBenchmark("Struct scan") {
+      structBenchmark(1024 * 1024 * 1, 10)
+      structBenchmark(1024 * 1024 * 1, 100)
+      structBenchmark(1024 * 1024 * 1, 300)
+      structBenchmark(1024 * 1024 * 1, 600)
+    }
+
+    runBenchmark("Nested Struct scan") {
+      nestedStructBenchmark(1024 * 1024 * 1, 10, 10)
+      nestedStructBenchmark(1024 * 1024 * 1, 30, 10)
+      nestedStructBenchmark(1024 * 1024 * 1, 10, 30)
     }
   }
 }

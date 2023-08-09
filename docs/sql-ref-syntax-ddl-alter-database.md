@@ -21,24 +21,46 @@ license: |
 
 ### Description
 
-You can alter metadata associated with a database by setting `DBPROPERTIES`.  The specified property
-values override any existing value with the same property name. Please note that the usage of 
-`SCHEMA` and `DATABASE` are interchangeable and one can be used in place of the other. An error message
-is issued if the database is not found in the system. This command is mostly used to record the metadata
-for a database and may be used for auditing purposes.
+`ALTER DATABASE` statement changes the properties or location of a database. Please note that the usage of
+`DATABASE`, `SCHEMA` and `NAMESPACE` are interchangeable and one can be used in place of the others. An error message
+is issued if the database is not found in the system.
 
-### Syntax
+### ALTER PROPERTIES
+`ALTER DATABASE SET DBPROPERTIES` statement changes the properties associated with a database.
+The specified property values override any existing value with the same property name. 
+This command is mostly used to record the metadata for a database and may be used for auditing purposes.
+
+#### Syntax
 
 ```sql
-ALTER { DATABASE | SCHEMA } database_name
-    SET DBPROPERTIES ( property_name = property_value [ , ... ] )
+ALTER { DATABASE | SCHEMA | NAMESPACE } database_name
+    SET { DBPROPERTIES | PROPERTIES } ( property_name = property_value [ , ... ] )
 ```
 
-### Parameters
+#### Parameters
 
 * **database_name**
 
     Specifies the name of the database to be altered.
+
+### ALTER LOCATION
+`ALTER DATABASE SET LOCATION` statement changes the default parent-directory where new tables will be added 
+for a database. Please note that it does not move the contents of the database's current directory to the newly 
+specified location or change the locations associated with any tables/partitions under the specified database 
+(available since Spark 3.0.0 with the Hive metastore version 3.0.0 and later).
+
+#### Syntax
+
+```sql
+ALTER { DATABASE | SCHEMA | NAMESPACE } database_name
+    SET LOCATION 'new_location'
+```
+
+#### Parameters
+
+* **database_name**
+
+  Specifies the name of the database to be altered.
 
 ### Examples
 
@@ -59,6 +81,20 @@ DESCRIBE DATABASE EXTENDED inventory;
 |                 Location|   file:/temp/spark-warehouse/inventory.db|
 |               Properties|((Edit-date,01/01/2001), (Edited-by,John))|
 +-------------------------+------------------------------------------+
+
+-- Alters the database to set a new location.
+ALTER DATABASE inventory SET LOCATION 'file:/temp/spark-warehouse/new_inventory.db';
+
+-- Verify that a new location is set.
+DESCRIBE DATABASE EXTENDED inventory;
++-------------------------+-------------------------------------------+
+|database_description_item|                 database_description_value|
++-------------------------+-------------------------------------------+
+|            Database Name|                                  inventory|
+|              Description|                                           |
+|                 Location|file:/temp/spark-warehouse/new_inventory.db|
+|               Properties| ((Edit-date,01/01/2001), (Edited-by,John))|
++-------------------------+-------------------------------------------+
 ```
 
 ### Related Statements

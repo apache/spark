@@ -53,7 +53,7 @@ class VarianceThresholdSelectorSuite extends MLTest with DefaultReadWriteTest {
     ParamsSuite.checkParams(new VarianceThresholdSelector)
   }
 
-  test("Test VarianceThresholdSelector: varainceThreshold not set") {
+  test("Test VarianceThresholdSelector: varianceThreshold not set") {
     val selector = new VarianceThresholdSelector().setOutputCol("filtered")
     val model = testSelector(selector, dataset)
     MLTestingUtils.checkCopyAndUids(selector, model)

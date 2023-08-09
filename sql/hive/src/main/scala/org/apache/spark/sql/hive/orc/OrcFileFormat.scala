@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.hive.orc
 
-import java.net.URI
-import java.nio.charset.StandardCharsets.UTF_8
 import java.util.Properties
 
 import scala.collection.JavaConverters._
@@ -32,24 +30,25 @@ import org.apache.hadoop.fs.{FileStatus, Path}
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 import org.apache.hadoop.hive.ql.io.orc._
 import org.apache.hadoop.hive.ql.io.sarg.SearchArgument
+import org.apache.hadoop.hive.serde2.objectinspector
 import org.apache.hadoop.hive.serde2.objectinspector.{SettableStructObjectInspector, StructObjectInspector}
 import org.apache.hadoop.hive.serde2.typeinfo.{StructTypeInfo, TypeInfoUtils}
 import org.apache.hadoop.io.{NullWritable, Writable}
 import org.apache.hadoop.mapred.{JobConf, OutputFormat => MapRedOutputFormat, RecordWriter, Reporter}
 import org.apache.hadoop.mapreduce._
 import org.apache.hadoop.mapreduce.lib.input.FileInputFormat
+import org.apache.orc.OrcConf
 import org.apache.orc.OrcConf.COMPRESS
 
-import org.apache.spark.{SPARK_VERSION_SHORT, TaskContext}
+import org.apache.spark.TaskContext
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.SPARK_VERSION_METADATA_KEY
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.execution.datasources._
-import org.apache.spark.sql.execution.datasources.orc.OrcOptions
+import org.apache.spark.sql.execution.datasources.orc.{OrcFilters, OrcOptions, OrcUtils}
 import org.apache.spark.sql.hive.{HiveInspectors, HiveShim}
-import org.apache.spark.sql.sources.{Filter, _}
+import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types._
 import org.apache.spark.util.SerializableConfiguration
 
@@ -70,14 +69,12 @@ class OrcFileFormat extends FileFormat with DataSourceRegister with Serializable
     val orcOptions = new OrcOptions(options, sparkSession.sessionState.conf)
     if (orcOptions.mergeSchema) {
       SchemaMergeUtils.mergeSchemasInParallel(
-        sparkSession,
-        files,
-        OrcFileOperator.readOrcSchemasInParallel)
+        sparkSession, options, files, OrcFileOperator.readOrcSchemasInParallel)
     } else {
       val ignoreCorruptFiles = sparkSession.sessionState.conf.ignoreCorruptFiles
       OrcFileOperator.readSchema(
         files.map(_.getPath.toString),
-        Some(sparkSession.sessionState.newHadoopConf()),
+        Some(sparkSession.sessionState.newHadoopConfWithOptions(options)),
         ignoreCorruptFiles
       )
     }
@@ -115,7 +112,7 @@ class OrcFileFormat extends FileFormat with DataSourceRegister with Serializable
       override def getFileExtension(context: TaskAttemptContext): String = {
         val compressionExtension: String = {
           val name = context.getConfiguration.get(COMPRESS.getAttribute)
-          OrcFileFormat.extensionsForCompressionCodecNames.getOrElse(name, "")
+          OrcUtils.extensionsForCompressionCodecNames.getOrElse(name, "")
         }
 
         compressionExtension + ".orc"
@@ -141,7 +138,7 @@ class OrcFileFormat extends FileFormat with DataSourceRegister with Serializable
 
     if (sparkSession.sessionState.conf.orcFilterPushDown) {
       // Sets pushed predicates
-      OrcFilters.createFilter(requiredSchema, filters.toArray).foreach { f =>
+      OrcFilters.createFilter(requiredSchema, filters).foreach { f =>
         hadoopConf.set(OrcFileFormat.SARG_PUSHDOWN, toKryo(f))
         hadoopConf.setBoolean(ConfVars.HIVEOPTINDEXFILTER.varname, true)
       }
@@ -154,7 +151,7 @@ class OrcFileFormat extends FileFormat with DataSourceRegister with Serializable
     (file: PartitionedFile) => {
       val conf = broadcastedHadoopConf.value.value
 
-      val filePath = new Path(new URI(file.filePath))
+      val filePath = file.toPath
 
       // SPARK-8501: Empty ORC files always have an empty schema stored in their footer. In this
       // case, `OrcFileOperator.readSchema` returns `None`, and we can't read the underlying file
@@ -168,7 +165,7 @@ class OrcFileFormat extends FileFormat with DataSourceRegister with Serializable
 
         val orcRecordReader = {
           val job = Job.getInstance(conf)
-          FileInputFormat.setInputPaths(job, file.filePath)
+          FileInputFormat.setInputPaths(job, file.urlEncodedPath)
 
           // Custom OrcRecordReader is used to get
           // ObjectInspector during recordReader creation itself and can
@@ -194,6 +191,8 @@ class OrcFileFormat extends FileFormat with DataSourceRegister with Serializable
   }
 
   override def supportDataType(dataType: DataType): Boolean = dataType match {
+    case _: AnsiIntervalType => false
+
     case _: AtomicType => true
 
     case st: StructType => st.forall { f => supportDataType(f.dataType) }
@@ -238,7 +237,7 @@ private[orc] class OrcSerializer(dataSchema: StructType, conf: Configuration)
   }
 
   // Object inspector converted from the schema of the relation to be serialized.
-  private[this] val structOI = {
+  val structOI = {
     val typeInfo = TypeInfoUtils.getTypeInfoFromTypeString(dataSchema.catalogString)
     OrcStruct.createObjectInspector(typeInfo.asInstanceOf[StructTypeInfo])
       .asInstanceOf[SettableStructObjectInspector]
@@ -271,19 +270,14 @@ private[orc] class OrcSerializer(dataSchema: StructType, conf: Configuration)
 }
 
 private[orc] class OrcOutputWriter(
-    path: String,
+    val path: String,
     dataSchema: StructType,
     context: TaskAttemptContext)
-  extends OutputWriter {
+  extends OutputWriter with Logging {
 
   private[this] val serializer = new OrcSerializer(dataSchema, context.getConfiguration)
 
-  // `OrcRecordWriter.close()` creates an empty file if no rows are written at all.  We use this
-  // flag to decide whether `OrcRecordWriter.close()` needs to be called.
-  private var recordWriterInstantiated = false
-
-  private lazy val recordWriter: RecordWriter[NullWritable, Writable] = {
-    recordWriterInstantiated = true
+  private val recordWriter: RecordWriter[NullWritable, Writable] = {
     new OrcOutputFormat().getRecordWriter(
       new Path(path).getFileSystem(context.getConfiguration),
       context.getConfiguration.asInstanceOf[JobConf],
@@ -297,24 +291,34 @@ private[orc] class OrcOutputWriter(
   }
 
   override def close(): Unit = {
-    if (recordWriterInstantiated) {
-      // Hive 1.2.1 ORC initializes its private `writer` field at the first write.
-      OrcFileFormat.addSparkVersionMetadata(recordWriter)
-      recordWriter.close(Reporter.NULL)
+    try {
+      OrcUtils.addSparkVersionMetadata(getOrCreateInternalWriter())
+    } catch {
+      case NonFatal(e) => log.warn(e.toString, e)
     }
+    recordWriter.close(Reporter.NULL)
+  }
+
+  private def getOrCreateInternalWriter(): Writer = {
+    val writerField = recordWriter.getClass.getDeclaredField("writer")
+    writerField.setAccessible(true)
+    var writer = writerField.get(recordWriter).asInstanceOf[Writer]
+    if (writer == null) {
+      // Hive ORC initializes its private `writer` field at the first write.
+      // For empty write task, we need to create it manually to record our meta.
+      val options = OrcFile.writerOptions(context.getConfiguration)
+      options.inspector(serializer.structOI)
+      writer = OrcFile.createWriter(new Path(path), options)
+      // set the writer to make it flush meta on close
+      writerField.set(recordWriter, writer)
+    }
+    writer
   }
 }
 
 private[orc] object OrcFileFormat extends HiveInspectors with Logging {
   // This constant duplicates `OrcInputFormat.SARG_PUSHDOWN`, which is unfortunately not public.
   private[orc] val SARG_PUSHDOWN = "sarg.pushdown"
-
-  // The extensions for ORC compression codecs
-  val extensionsForCompressionCodecNames = Map(
-    "NONE" -> "",
-    "SNAPPY" -> ".snappy",
-    "ZLIB" -> ".zlib",
-    "LZO" -> ".lzo")
 
   def unwrapOrcStructs(
       conf: Configuration,
@@ -325,13 +329,19 @@ private[orc] object OrcFileFormat extends HiveInspectors with Logging {
     val deserializer = new OrcSerde
     val mutableRow = new SpecificInternalRow(requiredSchema.map(_.dataType))
     val unsafeProjection = UnsafeProjection.create(requiredSchema)
+    val forcePositionalEvolution = OrcConf.FORCE_POSITIONAL_EVOLUTION.getBoolean(conf)
 
     def unwrap(oi: StructObjectInspector): Iterator[InternalRow] = {
       val (fieldRefs, fieldOrdinals) = requiredSchema.zipWithIndex.map {
         case (field, ordinal) =>
-          var ref = oi.getStructFieldRef(field.name)
-          if (ref == null) {
-            ref = oi.getStructFieldRef("_col" + dataSchema.fieldIndex(field.name))
+          var ref: objectinspector.StructField = null
+          if (forcePositionalEvolution) {
+            ref = oi.getAllStructFieldRefs.get(dataSchema.fieldIndex(field.name))
+          } else {
+            ref = oi.getStructFieldRef(field.name)
+            if (ref == null) {
+              ref = oi.getStructFieldRef("_col" + dataSchema.fieldIndex(field.name))
+            }
           }
           ref -> ordinal
       }.unzip
@@ -364,19 +374,5 @@ private[orc] object OrcFileFormat extends HiveInspectors with Logging {
     val ids = requestedSchema.map(a => dataSchema.fieldIndex(a.name): Integer)
     val (sortedIDs, sortedNames) = ids.zip(requestedSchema.fieldNames).sorted.unzip
     HiveShim.appendReadColumns(conf, sortedIDs, sortedNames)
-  }
-
-  /**
-   * Add a metadata specifying Spark version.
-   */
-  def addSparkVersionMetadata(recordWriter: RecordWriter[NullWritable, Writable]): Unit = {
-    try {
-      val writerField = recordWriter.getClass.getDeclaredField("writer")
-      writerField.setAccessible(true)
-      val writer = writerField.get(recordWriter).asInstanceOf[Writer]
-      writer.addUserMetadata(SPARK_VERSION_METADATA_KEY, UTF_8.encode(SPARK_VERSION_SHORT))
-    } catch {
-      case NonFatal(e) => log.warn(e.toString, e)
-    }
   }
 }

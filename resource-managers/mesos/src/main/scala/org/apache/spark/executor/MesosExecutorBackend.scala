@@ -26,18 +26,16 @@ import org.apache.mesos.Protos.{TaskStatus => MesosTaskStatus, _}
 import org.apache.mesos.protobuf.ByteString
 
 import org.apache.spark.{SparkConf, SparkEnv, TaskState}
-import org.apache.spark.TaskState
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.EXECUTOR_ID
 import org.apache.spark.resource.ResourceInformation
 import org.apache.spark.scheduler.TaskDescription
-import org.apache.spark.scheduler.cluster.mesos.MesosSchedulerUtils
+import org.apache.spark.scheduler.cluster.mesos.MesosSchedulerBackendUtil
 import org.apache.spark.util.Utils
 
 private[spark] class MesosExecutorBackend
   extends MesosExecutor
-  with MesosSchedulerUtils // TODO: fix
   with ExecutorBackend
   with Logging {
 
@@ -48,7 +46,7 @@ private[spark] class MesosExecutorBackend
     val mesosTaskId = TaskID.newBuilder().setValue(taskId.toString).build()
     driver.sendStatusUpdate(MesosTaskStatus.newBuilder()
       .setTaskId(mesosTaskId)
-      .setState(taskStateToMesos(state))
+      .setState(MesosSchedulerBackendUtil.taskStateToMesos(state))
       .setData(ByteString.copyFrom(data))
       .build())
   }
@@ -57,7 +55,7 @@ private[spark] class MesosExecutorBackend
       driver: ExecutorDriver,
       executorInfo: ExecutorInfo,
       frameworkInfo: FrameworkInfo,
-      slaveInfo: SlaveInfo): Unit = {
+      agentInfo: SlaveInfo): Unit = {
 
     // Get num cores for this task from ExecutorInfo, created in MesosSchedulerBackend.
     val cpusPerTask = executorInfo.getResourcesList.asScala
@@ -78,11 +76,11 @@ private[spark] class MesosExecutorBackend
     val conf = new SparkConf(loadDefaults = true).setAll(properties)
     conf.set(EXECUTOR_ID, executorId)
     val env = SparkEnv.createExecutorEnv(
-      conf, executorId, slaveInfo.getHostname, cpusPerTask, None, isLocal = false)
+      conf, executorId, agentInfo.getHostname, cpusPerTask, None, isLocal = false)
 
     executor = new Executor(
       executorId,
-      slaveInfo.getHostname,
+      agentInfo.getHostname,
       env,
       resources = Map.empty[String, ResourceInformation])
   }

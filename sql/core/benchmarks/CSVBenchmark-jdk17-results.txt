@@ -1,0 +1,70 @@
+================================================================================================
+Benchmark to measure CSV read/write performance
+================================================================================================
+
+OpenJDK 64-Bit Server VM 17.0.7+7 on Linux 5.15.0-1040-azure
+Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
+Parsing quoted values:                    Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+One quoted string                                 45085          45217         227          0.0      901702.6       1.0X
+
+OpenJDK 64-Bit Server VM 17.0.7+7 on Linux 5.15.0-1040-azure
+Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
+Wide rows with 1000 columns:              Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Select 1000 columns                               84298          84785         814          0.0       84297.9       1.0X
+Select 100 columns                                31424          31438          14          0.0       31424.4       2.7X
+Select one column                                 26201          26308         124          0.0       26200.9       3.2X
+count()                                            5215           5226          11          0.2        5214.8      16.2X
+Select 100 columns, one bad input field           47515          47615          98          0.0       47514.7       1.8X
+Select 100 columns, corrupt record field          52608          52658          62          0.0       52607.6       1.6X
+
+OpenJDK 64-Bit Server VM 17.0.7+7 on Linux 5.15.0-1040-azure
+Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
+Count a dataset with 10 columns:          Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Select 10 columns + count()                       15507          15522          14          0.6        1550.7       1.0X
+Select 1 column + count()                          9380           9397          15          1.1         938.0       1.7X
+count()                                            2932           2959          40          3.4         293.2       5.3X
+
+OpenJDK 64-Bit Server VM 17.0.7+7 on Linux 5.15.0-1040-azure
+Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
+Write dates and timestamps:               Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Create a dataset of timestamps                     1486           1495           8          6.7         148.6       1.0X
+to_csv(timestamp)                                  8333           8351          21          1.2         833.3       0.2X
+write timestamps to files                          8628           8633           7          1.2         862.8       0.2X
+Create a dataset of dates                          1698           1713          14          5.9         169.8       0.9X
+to_csv(date)                                       5566           5579          15          1.8         556.6       0.3X
+write dates to files                               5561           5585          21          1.8         556.1       0.3X
+
+OpenJDK 64-Bit Server VM 17.0.7+7 on Linux 5.15.0-1040-azure
+Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
+Read dates and timestamps:                                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+-----------------------------------------------------------------------------------------------------------------------------------------------------
+read timestamp text from files                                                  1910           1911           3          5.2         191.0       1.0X
+read timestamps from files                                                     26650          26657           7          0.4        2665.0       0.1X
+infer timestamps from files                                                    53172          53219          63          0.2        5317.2       0.0X
+read date text from files                                                       1859           1863           4          5.4         185.9       1.0X
+read date from files                                                           15246          15259          20          0.7        1524.6       0.1X
+infer date from files                                                          31002          31006           5          0.3        3100.2       0.1X
+timestamp strings                                                               2252           2257           5          4.4         225.2       0.8X
+parse timestamps from Dataset[String]                                          28833          28871          34          0.3        2883.3       0.1X
+infer timestamps from Dataset[String]                                          55417          55526         116          0.2        5541.7       0.0X
+date strings                                                                    2561           2568           6          3.9         256.1       0.7X
+parse dates from Dataset[String]                                               17580          17601          19          0.6        1758.0       0.1X
+from_csv(timestamp)                                                            26802          27121         280          0.4        2680.2       0.1X
+from_csv(date)                                                                 16119          16126           6          0.6        1611.9       0.1X
+infer error timestamps from Dataset[String] with default format                19595          19846         229          0.5        1959.5       0.1X
+infer error timestamps from Dataset[String] with user-provided format          19816          19854          37          0.5        1981.6       0.1X
+infer error timestamps from Dataset[String] with legacy format                 19810          19849          42          0.5        1981.0       0.1X
+
+OpenJDK 64-Bit Server VM 17.0.7+7 on Linux 5.15.0-1040-azure
+Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
+Filters pushdown:                         Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+w/o filters                                       16689          16693           5          0.0      166885.8       1.0X
+pushdown disabled                                 16610          16615           5          0.0      166095.3       1.0X
+w/ filters                                         1094           1096           2          0.1       10936.1      15.3X
+
+

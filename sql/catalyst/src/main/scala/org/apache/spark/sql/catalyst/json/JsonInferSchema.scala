@@ -17,19 +17,21 @@
 
 package org.apache.spark.sql.catalyst.json
 
+import java.io.CharConversionException
+import java.nio.charset.MalformedInputException
 import java.util.Comparator
 
 import scala.util.control.Exception.allCatch
 
 import com.fasterxml.jackson.core._
 
-import org.apache.spark.SparkException
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.analysis.TypeCoercion
 import org.apache.spark.sql.catalyst.expressions.ExprUtils
 import org.apache.spark.sql.catalyst.json.JacksonUtils.nextUntil
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.catalyst.util.LegacyDateFormats.FAST_DATE_FORMAT
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
@@ -39,11 +41,29 @@ private[sql] class JsonInferSchema(options: JSONOptions) extends Serializable {
   private val decimalParser = ExprUtils.getDecimalParser(options.locale)
 
   private val timestampFormatter = TimestampFormatter(
-    options.timestampFormat,
+    options.timestampFormatInRead,
     options.zoneId,
     options.locale,
     legacyFormat = FAST_DATE_FORMAT,
-    needVarLengthSecondFraction = true)
+    isParsing = true)
+  private val timestampNTZFormatter = TimestampFormatter(
+    options.timestampNTZFormatInRead,
+    options.zoneId,
+    legacyFormat = FAST_DATE_FORMAT,
+    isParsing = true,
+    forTimestampNTZ = true)
+
+  private def handleJsonErrorsByParseMode(parseMode: ParseMode,
+      columnNameOfCorruptRecord: String, e: Throwable): Option[StructType] = {
+    parseMode match {
+      case PermissiveMode =>
+        Some(StructType(Array(StructField(columnNameOfCorruptRecord, StringType))))
+      case DropMalformedMode =>
+        None
+      case FailFastMode =>
+        throw QueryExecutionErrors.malformedRecordsDetectedInSchemaInferenceError(e)
+    }
+  }
 
   /**
    * Infer the type of a collection of json records in three stages:
@@ -68,17 +88,19 @@ private[sql] class JsonInferSchema(options: JSONOptions) extends Serializable {
             Some(inferField(parser))
           }
         } catch {
-          case  e @ (_: RuntimeException | _: JsonProcessingException) => parseMode match {
-            case PermissiveMode =>
-              Some(StructType(Seq(StructField(columnNameOfCorruptRecord, StringType))))
-            case DropMalformedMode =>
-              None
-            case FailFastMode =>
-              throw new SparkException("Malformed records are detected in schema inference. " +
-                s"Parse Mode: ${FailFastMode.name}.", e)
-          }
+          case e @ (_: RuntimeException | _: JsonProcessingException |
+                    _: MalformedInputException) =>
+            handleJsonErrorsByParseMode(parseMode, columnNameOfCorruptRecord, e)
+          case e: CharConversionException if options.encoding.isEmpty =>
+            val msg =
+              """JSON parser cannot handle a character in its input.
+                |Specifying encoding as an input option explicitly might help to resolve the issue.
+                |""".stripMargin + e.getMessage
+            val wrappedCharException = new CharConversionException(msg)
+            wrappedCharException.initCause(e)
+            handleJsonErrorsByParseMode(parseMode, columnNameOfCorruptRecord, wrappedCharException)
         }
-      }.reduceOption(typeMerger).toIterator
+      }.reduceOption(typeMerger).iterator
     }
 
     // Here we manually submit a fold-like Spark job, so that we can set the SQLConf when running
@@ -129,7 +151,10 @@ private[sql] class JsonInferSchema(options: JSONOptions) extends Serializable {
         if (options.prefersDecimal && decimalTry.isDefined) {
           decimalTry.get
         } else if (options.inferTimestamp &&
-            (allCatch opt timestampFormatter.parse(field)).isDefined) {
+            timestampNTZFormatter.parseWithoutTimeZoneOptional(field, false).isDefined) {
+          SQLConf.get.timestampType
+        } else if (options.inferTimestamp &&
+            timestampFormatter.parseOptional(field).isDefined) {
           TimestampType
         } else {
           StringType
@@ -190,6 +215,9 @@ private[sql] class JsonInferSchema(options: JSONOptions) extends Serializable {
         }
 
       case VALUE_TRUE | VALUE_FALSE => BooleanType
+
+      case _ =>
+        throw QueryExecutionErrors.malformedJSONError()
     }
   }
 
@@ -271,9 +299,7 @@ object JsonInferSchema {
 
     case FailFastMode =>
       // If `other` is not struct type, consider it as malformed one and throws an exception.
-      throw new SparkException("Malformed records are detected in schema inference. " +
-        s"Parse Mode: ${FailFastMode.name}. Reasons: Failed to infer a common schema. " +
-        s"Struct types are expected, but `${other.catalogString}` was found.")
+      throw QueryExecutionErrors.malformedRecordsDetectedInSchemaInferenceError(other)
   }
 
   /**
@@ -375,6 +401,9 @@ object JsonInferSchema {
           compatibleType(DecimalType.forType(t1), t2)
         case (t1: DecimalType, t2: IntegralType) =>
           compatibleType(t1, DecimalType.forType(t2))
+
+        case (TimestampNTZType, TimestampType) | (TimestampType, TimestampNTZType) =>
+          TimestampType
 
         // strings and every string is a Json object.
         case (_, _) => StringType

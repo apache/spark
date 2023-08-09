@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.execution.datasources.parquet
 
-import java.io.FileNotFoundException
-
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, Path}
 import org.apache.hadoop.mapreduce.{JobContext, TaskAttemptContext}
@@ -29,10 +27,12 @@ import org.apache.spark.{LocalSparkContext, SparkFunSuite}
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SQLTestUtils
+import org.apache.spark.tags.ExtendedSQLTest
 
 /**
  * Test logic related to choice of output committers.
  */
+@ExtendedSQLTest
 class ParquetCommitterSuite extends SparkFunSuite with SQLTestUtils
   with LocalSparkContext {
 
@@ -149,7 +149,7 @@ private object MarkingFileOutput {
    * @param outputPath destination directory
    * @param conf configuration to create the FS with
    * @return the status of the marker
-   * @throws FileNotFoundException if the marker is absent
+   * @throws java.io.FileNotFoundException if the marker is absent
    */
   def checkMarker(outputPath: Path, conf: Configuration): FileStatus = {
     outputPath.getFileSystem(conf).getFileStatus(new Path(outputPath, "marker"))

@@ -17,16 +17,16 @@
 
 package org.apache.spark.mllib.linalg.distributed
 
-import breeze.linalg.{DenseMatrix => BDM, DenseVector => BDV, Matrix => BM}
 import scala.collection.mutable.ArrayBuffer
 
-import org.apache.spark.{Partitioner, SparkException}
+import breeze.linalg.{DenseMatrix => BDM, DenseVector => BDV, Matrix => BM}
+
+import org.apache.spark.{Partitioner, PartitionIdPassthrough, SparkException}
 import org.apache.spark.annotation.Since
 import org.apache.spark.internal.Logging
 import org.apache.spark.mllib.linalg._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
-
 
 /**
  * A grid partitioner, which uses a regular grid to partition coordinates.
@@ -520,10 +520,8 @@ class BlockMatrix @Since("1.3.0") (
         val destinations = rightDestinations.getOrElse((blockRowIndex, blockColIndex), Set.empty)
         destinations.map(j => (j, (blockRowIndex, blockColIndex, block)))
       }
-      val intermediatePartitioner = new Partitioner {
-        override def numPartitions: Int = resultPartitioner.numPartitions * numMidDimSplits
-        override def getPartition(key: Any): Int = key.asInstanceOf[Int]
-      }
+      val intermediatePartitioner = new PartitionIdPassthrough(
+        resultPartitioner.numPartitions * numMidDimSplits)
       val newBlocks = flatA.cogroup(flatB, intermediatePartitioner).flatMap { case (pId, (a, b)) =>
         a.flatMap { case (leftRowIndex, leftColIndex, leftBlock) =>
           b.filter(_._1 == leftColIndex).map { case (rightRowIndex, rightColIndex, rightBlock) =>

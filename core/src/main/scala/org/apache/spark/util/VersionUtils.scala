@@ -24,6 +24,7 @@ private[spark] object VersionUtils {
 
   private val majorMinorRegex = """^(\d+)\.(\d+)(\..*)?$""".r
   private val shortVersionRegex = """^(\d+\.\d+\.\d+)(.*)?$""".r
+  private val majorMinorPatchRegex = """^(\d+)(?:\.(\d+)(?:\.(\d+)(?:[.-].*)?)?)?$""".r
 
   /**
    * Given a Spark version string, return the major version number.
@@ -61,6 +62,38 @@ private[spark] object VersionUtils {
       case None =>
         throw new IllegalArgumentException(s"Spark tried to parse '$sparkVersion' as a Spark" +
           s" version string, but it could not find the major and minor version numbers.")
+    }
+  }
+
+  /**
+   * Extracts the major, minor and patch parts from the input `version`. Note that if minor or patch
+   * version is missing from the input, this will return 0 for these parts. Returns `None` if the
+   * input is not of a valid format.
+   *
+   * Examples of valid version:
+   *  - 1   (extracts to (1, 0, 0))
+   *  - 2.4   (extracts to (2, 4, 0))
+   *  - 3.2.2   (extracts to (3, 2, 2))
+   *  - 3.2.2.4   (extracts to 3, 2, 2))
+   *  - 3.3.1-SNAPSHOT   (extracts to (3, 3, 1))
+   *  - 3.2.2.4SNAPSHOT   (extracts to (3, 2, 2), only the first 3 components)
+   *
+   * Examples of invalid version:
+   *  - ABC
+   *  - 1X
+   *  - 2.4XYZ
+   *  - 2.4-SNAPSHOT
+   *  - 3.4.5ABC
+   *
+   *  @return A non-empty option containing a 3-value tuple (major, minor, patch) iff the
+   *          input is a valid version. `None` otherwise.
+   */
+  def majorMinorPatchVersion(version: String): Option[(Int, Int, Int)] = {
+    majorMinorPatchRegex.findFirstMatchIn(version).map { m =>
+      val major = m.group(1).toInt
+      val minor = Option(m.group(2)).map(_.toInt).getOrElse(0)
+      val patch = Option(m.group(3)).map(_.toInt).getOrElse(0)
+      (major, minor, patch)
     }
   }
 }

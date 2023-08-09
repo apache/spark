@@ -55,7 +55,7 @@ case class SortExec(
   override def requiredChildDistribution: Seq[Distribution] =
     if (global) OrderedDistribution(sortOrder) :: Nil else UnspecifiedDistribution :: Nil
 
-  private val enableRadixSort = sqlContext.conf.enableRadixSort
+  private val enableRadixSort = conf.enableRadixSort
 
   override lazy val metrics = Map(
     "sortTime" -> SQLMetrics.createTimingMetric(sparkContext, "sort time"),
@@ -202,4 +202,7 @@ case class SortExec(
     }
     super.cleanupResources()
   }
+
+  override protected def withNewChildInternal(newChild: SparkPlan): SortExec =
+    copy(child = newChild)
 }

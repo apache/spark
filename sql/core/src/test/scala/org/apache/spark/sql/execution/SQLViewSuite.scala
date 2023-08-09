@@ -17,10 +17,15 @@
 
 package org.apache.spark.sql.execution
 
+import org.apache.spark.{SparkArithmeticException, SparkException, SparkFileNotFoundException}
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.analysis.NoSuchTableException
-import org.apache.spark.sql.internal.SQLConf.MAX_NESTED_VIEW_DEPTH
+import org.apache.spark.sql.catalyst.expressions.{Add, Alias, Divide}
+import org.apache.spark.sql.catalyst.parser.ParseException
+import org.apache.spark.sql.catalyst.plans.logical.Project
+import org.apache.spark.sql.catalyst.trees.Origin
+import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
+import org.apache.spark.sql.internal.SQLConf._
 import org.apache.spark.sql.test.{SharedSparkSession, SQLTestUtils}
 
 class SimpleSQLViewSuite extends SQLViewSuite with SharedSparkSession
@@ -76,20 +81,28 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
       withTempView("temp_jtv1") {
         withGlobalTempView("global_temp_jtv1") {
           sql("CREATE TEMPORARY VIEW temp_jtv1 AS SELECT * FROM jt WHERE id > 3")
-          var e = intercept[AnalysisException] {
-            sql("CREATE VIEW jtv1 AS SELECT * FROM temp_jtv1 WHERE id < 6")
-          }.getMessage
-          assert(e.contains("Not allowed to create a permanent view `default`.`jtv1` by " +
-            "referencing a temporary view temp_jtv1. " +
-            "Please create a temp view instead by CREATE TEMP VIEW"))
-
+          checkError(
+            exception = intercept[AnalysisException] {
+              sql("CREATE VIEW jtv1 AS SELECT * FROM temp_jtv1 WHERE id < 6")
+            },
+            errorClass = "INVALID_TEMP_OBJ_REFERENCE",
+            parameters = Map(
+              "obj" -> "VIEW",
+              "objName" -> s"`$SESSION_CATALOG_NAME`.`default`.`jtv1`",
+              "tempObj" -> "VIEW",
+              "tempObjName" -> "`temp_jtv1`"))
           val globalTempDB = spark.sharedState.globalTempViewManager.database
           sql("CREATE GLOBAL TEMP VIEW global_temp_jtv1 AS SELECT * FROM jt WHERE id > 0")
-          e = intercept[AnalysisException] {
-            sql(s"CREATE VIEW jtv1 AS SELECT * FROM $globalTempDB.global_temp_jtv1 WHERE id < 6")
-          }.getMessage
-          assert(e.contains("Not allowed to create a permanent view `default`.`jtv1` by " +
-            "referencing a temporary view global_temp.global_temp_jtv1"))
+          checkError(
+            exception = intercept[AnalysisException] {
+              sql(s"CREATE VIEW jtv1 AS SELECT * FROM $globalTempDB.global_temp_jtv1 WHERE id < 6")
+            },
+            errorClass = "INVALID_TEMP_OBJ_REFERENCE",
+            parameters = Map(
+              "obj" -> "VIEW",
+              "objName" -> s"`$SESSION_CATALOG_NAME`.`default`.`jtv1`",
+              "tempObj" -> "VIEW",
+              "tempObjName" -> "`global_temp`.`global_temp_jtv1`"))
         }
       }
     }
@@ -98,18 +111,35 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
   test("error handling: existing a table with the duplicate name when creating/altering a view") {
     withTable("tab1") {
       sql("CREATE TABLE tab1 (id int) USING parquet")
-      var e = intercept[AnalysisException] {
-        sql("CREATE OR REPLACE VIEW tab1 AS SELECT * FROM jt")
-      }.getMessage
-      assert(e.contains("`tab1` is not a view"))
-      e = intercept[AnalysisException] {
-        sql("CREATE VIEW tab1 AS SELECT * FROM jt")
-      }.getMessage
-      assert(e.contains("`tab1` is not a view"))
-      e = intercept[AnalysisException] {
-        sql("ALTER VIEW tab1 AS SELECT * FROM jt")
-      }.getMessage
-      assert(e.contains("`tab1` is not a view"))
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql("CREATE OR REPLACE VIEW tab1 AS SELECT * FROM jt")
+        },
+        errorClass = "_LEGACY_ERROR_TEMP_1278",
+        parameters = Map("name" -> s"`$SESSION_CATALOG_NAME`.`default`.`tab1`")
+      )
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql("CREATE VIEW tab1 AS SELECT * FROM jt")
+        },
+        errorClass = "_LEGACY_ERROR_TEMP_1278",
+        parameters = Map("name" -> s"`$SESSION_CATALOG_NAME`.`default`.`tab1`")
+      )
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql("ALTER VIEW tab1 AS SELECT * FROM jt")
+        },
+        errorClass = "_LEGACY_ERROR_TEMP_1015",
+        parameters = Map(
+          "identifier" -> "default.tab1",
+          "cmd" -> "ALTER VIEW ... AS",
+          "hintStr" -> ""
+        ),
+        context = ExpectedContext(
+          fragment = "tab1",
+          start = 11,
+          stop = 14)
+      )
     }
   }
 
@@ -125,8 +155,12 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
     val viewName = "testView"
     withTempView(viewName) {
       spark.range(10).createTempView(viewName)
-      assertNoSuchTable(s"ALTER VIEW $viewName SET TBLPROPERTIES ('p' = 'an')")
-      assertNoSuchTable(s"ALTER VIEW $viewName UNSET TBLPROPERTIES ('p')")
+      assertAnalysisError(
+        s"ALTER VIEW $viewName SET TBLPROPERTIES ('p' = 'an')",
+        "testView is a temp view. 'ALTER VIEW ... SET TBLPROPERTIES' expects a permanent view.")
+      assertAnalysisError(
+        s"ALTER VIEW $viewName UNSET TBLPROPERTIES ('p')",
+        "testView is a temp view. 'ALTER VIEW ... UNSET TBLPROPERTIES' expects a permanent view.")
     }
   }
 
@@ -134,24 +168,50 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
     val viewName = "testView"
     withTempView(viewName) {
       spark.range(10).createTempView(viewName)
-      assertNoSuchTable(s"ALTER TABLE $viewName SET SERDE 'whatever'")
-      assertNoSuchTable(s"ALTER TABLE $viewName PARTITION (a=1, b=2) SET SERDE 'whatever'")
-      assertNoSuchTable(s"ALTER TABLE $viewName SET SERDEPROPERTIES ('p' = 'an')")
-      assertNoSuchTable(s"ALTER TABLE $viewName ADD IF NOT EXISTS PARTITION (a='4', b='8')")
-      assertNoSuchTable(s"ALTER TABLE $viewName DROP PARTITION (a='4', b='8')")
-      assertNoSuchTable(s"ALTER TABLE $viewName PARTITION (a='4') RENAME TO PARTITION (a='5')")
-      assertNoSuchTable(s"ALTER TABLE $viewName RECOVER PARTITIONS")
-
-      // For v2 ALTER TABLE statements, we have better error message saying view is not supported.
-      assertAnalysisError(
+      assertErrorForAlterTableOnTempView(
+        s"ALTER TABLE $viewName SET SERDE 'whatever'",
+        viewName,
+        "ALTER TABLE ... SET [SERDE|SERDEPROPERTIES]")
+      assertErrorForAlterTableOnTempView(
+        s"ALTER TABLE $viewName PARTITION (a=1, b=2) SET SERDE 'whatever'",
+        viewName,
+        "ALTER TABLE ... SET [SERDE|SERDEPROPERTIES]")
+      assertErrorForAlterTableOnTempView(
+        s"ALTER TABLE $viewName SET SERDEPROPERTIES ('p' = 'an')",
+        viewName,
+        "ALTER TABLE ... SET [SERDE|SERDEPROPERTIES]")
+      assertErrorForAlterTableOnTempView(
+        s"ALTER TABLE $viewName PARTITION (a='4') RENAME TO PARTITION (a='5')",
+        viewName,
+        "ALTER TABLE ... RENAME TO PARTITION")
+      assertErrorForAlterTableOnTempView(
+        s"ALTER TABLE $viewName RECOVER PARTITIONS",
+        viewName,
+        "ALTER TABLE ... RECOVER PARTITIONS")
+      assertErrorForAlterTableOnTempView(
         s"ALTER TABLE $viewName SET LOCATION '/path/to/your/lovely/heart'",
-        s"'$viewName' is a view not a table")
-
-      // For the following v2 ALERT TABLE statements, unsupported operations are checked first
-      // before resolving the relations.
-      assertAnalysisError(
+        viewName,
+        "ALTER TABLE ... SET LOCATION ...")
+      assertErrorForAlterTableOnTempView(
         s"ALTER TABLE $viewName PARTITION (a='4') SET LOCATION '/path/to/home'",
-        "ALTER TABLE SET LOCATION does not support partition for v2 tables")
+        viewName,
+        "ALTER TABLE ... SET LOCATION ...")
+      assertErrorForAlterTableOnTempView(
+        s"ALTER TABLE $viewName ADD IF NOT EXISTS PARTITION (a='4', b='8')",
+        viewName,
+        "ALTER TABLE ... ADD PARTITION ...")
+      assertErrorForAlterTableOnTempView(
+        s"ALTER TABLE $viewName DROP PARTITION (a='4', b='8')",
+        viewName,
+        "ALTER TABLE ... DROP PARTITION ...")
+      assertErrorForAlterTableOnTempView(
+        s"ALTER TABLE $viewName SET TBLPROPERTIES ('p' = 'an')",
+        viewName,
+        "ALTER TABLE ... SET TBLPROPERTIES")
+      assertErrorForAlterTableOnTempView(
+        s"ALTER TABLE $viewName UNSET TBLPROPERTIES ('p')",
+        viewName,
+        "ALTER TABLE ... UNSET TBLPROPERTIES")
     }
   }
 
@@ -160,28 +220,71 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
     withTempView(viewName) {
       spark.range(10).createTempView(viewName)
 
-      val e = intercept[AnalysisException] {
-        sql(s"INSERT INTO TABLE $viewName SELECT 1")
-      }.getMessage
-      assert(e.contains("Inserting into an RDD-based table is not allowed"))
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(s"INSERT INTO TABLE $viewName SELECT 1")
+        },
+        errorClass = "UNSUPPORTED_INSERT.RDD_BASED",
+        parameters = Map.empty
+      )
 
       val dataFilePath =
         Thread.currentThread().getContextClassLoader.getResource("data/files/employee.dat")
-      assertNoSuchTable(s"""LOAD DATA LOCAL INPATH "$dataFilePath" INTO TABLE $viewName""")
-      assertNoSuchTable(s"TRUNCATE TABLE $viewName")
-      val e2 = intercept[AnalysisException] {
-        sql(s"SHOW CREATE TABLE $viewName")
-      }.getMessage
-      assert(e2.contains("SHOW CREATE TABLE is not supported on a temporary view"))
-      assertNoSuchTable(s"SHOW PARTITIONS $viewName")
-      assertNoSuchTable(s"ANALYZE TABLE $viewName COMPUTE STATISTICS")
-      assertNoSuchTable(s"ANALYZE TABLE $viewName COMPUTE STATISTICS FOR COLUMNS id")
-    }
-  }
-
-  private def assertNoSuchTable(query: String): Unit = {
-    intercept[NoSuchTableException] {
-      sql(query)
+      val sqlText = s"""LOAD DATA LOCAL INPATH "$dataFilePath" INTO TABLE $viewName"""
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(sqlText)
+        },
+        errorClass = "_LEGACY_ERROR_TEMP_1013",
+        parameters = Map(
+          "nameParts" -> viewName,
+          "viewStr" -> "temp view",
+          "cmd" -> "LOAD DATA",
+          "hintStr" -> ""
+        ),
+        context = ExpectedContext(
+          fragment = viewName,
+          start = sqlText.length - 8,
+          stop = sqlText.length - 1
+        )
+      )
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(s"SHOW CREATE TABLE $viewName")
+        },
+        errorClass = "_LEGACY_ERROR_TEMP_1016",
+        parameters = Map(
+          "nameParts" -> "testView",
+          "cmd" -> "SHOW CREATE TABLE"
+        ),
+        context = ExpectedContext(
+          fragment = viewName,
+          start = 18,
+          stop = 25
+        )
+      )
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(s"ANALYZE TABLE $viewName COMPUTE STATISTICS")
+        },
+        errorClass = "_LEGACY_ERROR_TEMP_1016",
+        parameters = Map(
+          "nameParts" -> "testView",
+          "cmd" -> "ANALYZE TABLE"
+        ),
+        context = ExpectedContext(
+          fragment = viewName,
+          start = 14,
+          stop = 21
+        )
+      )
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(s"ANALYZE TABLE $viewName COMPUTE STATISTICS FOR COLUMNS id")
+        },
+        errorClass = "UNSUPPORTED_FEATURE.ANALYZE_UNCACHED_TEMP_VIEW",
+        parameters = Map("viewName" -> s"`$viewName`")
+      )
     }
   }
 
@@ -190,35 +293,68 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
     assert(e.message.contains(message))
   }
 
-  test("error handling: insert/load/truncate table commands against a view") {
+  private def assertAnalysisErrorClass(query: String,
+      errorClass: String,
+      parameters: Map[String, String],
+      context: ExpectedContext): Unit = {
+    val e = intercept[AnalysisException](sql(query))
+    checkError(e, errorClass = errorClass, parameters = parameters, context = context)
+  }
+
+  private def assertErrorForAlterTableOnTempView(
+    sqlText: String, viewName: String, cmdName: String): Unit = {
+    assertAnalysisError(
+      sqlText,
+      s"$viewName is a temp view. '$cmdName' expects a table. Please use ALTER VIEW instead.")
+  }
+
+  test("error handling: insert/load table commands against a view") {
     val viewName = "testView"
     withView(viewName) {
       sql(s"CREATE VIEW $viewName AS SELECT id FROM jt")
-      var e = intercept[AnalysisException] {
-        sql(s"INSERT INTO TABLE $viewName SELECT 1")
-      }.getMessage
-      assert(e.contains("Inserting into a view is not allowed. View: `default`.`testview`"))
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(s"INSERT INTO TABLE $viewName SELECT 1")
+        },
+        errorClass = "_LEGACY_ERROR_TEMP_1010",
+        parameters = Map("identifier" -> s"`$SESSION_CATALOG_NAME`.`default`.`testview`"),
+        context = ExpectedContext(fragment = viewName, start = 18, stop = 25)
+      )
 
       val dataFilePath =
         Thread.currentThread().getContextClassLoader.getResource("data/files/employee.dat")
-      e = intercept[AnalysisException] {
-        sql(s"""LOAD DATA LOCAL INPATH "$dataFilePath" INTO TABLE $viewName""")
-      }.getMessage
-      assert(e.contains(s"Target table in LOAD DATA cannot be a view: `default`.`testview`"))
-
-      e = intercept[AnalysisException] {
-        sql(s"TRUNCATE TABLE $viewName")
-      }.getMessage
-      assert(e.contains(s"Operation not allowed: TRUNCATE TABLE on views: `default`.`testview`"))
+      val sqlText = s"""LOAD DATA LOCAL INPATH "$dataFilePath" INTO TABLE $viewName"""
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(sqlText)
+        },
+        errorClass = "_LEGACY_ERROR_TEMP_1013",
+        parameters = Map(
+          "nameParts" -> "spark_catalog.default.testview",
+          "viewStr" -> "view",
+          "cmd" -> "LOAD DATA",
+          "hintStr" -> ""),
+        context = ExpectedContext(
+          fragment = viewName,
+          start = sqlText.length - 8,
+          stop = sqlText.length - 1
+        )
+      )
     }
   }
 
   test("error handling: fail if the view sql itself is invalid") {
     // A database that does not exist
-    assertInvalidReference("CREATE OR REPLACE VIEW myabcdview AS SELECT * FROM db_not_exist234.jt")
+    assertRelationNotFound(
+      "CREATE OR REPLACE VIEW myabcdview AS SELECT * FROM db_not_exist234.jt",
+      "`db_not_exist234`.`jt`",
+      ExpectedContext("db_not_exist234.jt", 51, 50 + "db_not_exist234.jt".length))
 
     // A table that does not exist
-    assertInvalidReference("CREATE OR REPLACE VIEW myabcdview AS SELECT * FROM table_not_exist345")
+    assertRelationNotFound(
+      "CREATE OR REPLACE VIEW myabcdview AS SELECT * FROM table_not_exist345",
+      "`table_not_exist345`",
+      ExpectedContext("table_not_exist345", 51, 50 + "table_not_exist345".length))
 
     // A column that does not exist
     intercept[AnalysisException] {
@@ -226,25 +362,34 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
     }
   }
 
-  private def assertInvalidReference(query: String): Unit = {
+  private def assertRelationNotFound(query: String, relation: String): Unit = {
     val e = intercept[AnalysisException] {
       sql(query)
-    }.getMessage
-    assert(e.contains("Table or view not found"))
+    }
+    checkErrorTableNotFound(e, relation)
+  }
+
+  private def assertRelationNotFound(query: String, relation: String, context: ExpectedContext):
+  Unit = {
+    val e = intercept[AnalysisException] {
+      sql(query)
+    }
+    checkErrorTableNotFound(e, relation, context)
   }
 
 
   test("error handling: fail if the temp view name contains the database prefix") {
     // Fully qualified table name like "database.table" is not allowed for temporary view
-    val e = intercept[AnalysisException] {
+    val e = intercept[ParseException] {
       sql("CREATE OR REPLACE TEMPORARY VIEW default.myabcdview AS SELECT * FROM jt")
     }
-    assert(e.message.contains("It is not allowed to add database prefix"))
+    assert(e.message.contains(
+      "CREATE TEMPORARY VIEW or the corresponding Dataset APIs only accept single-part view names"))
   }
 
   test("error handling: disallow IF NOT EXISTS for CREATE TEMPORARY VIEW") {
     withTempView("myabcdview") {
-      val e = intercept[AnalysisException] {
+      val e = intercept[ParseException] {
         sql("CREATE TEMPORARY VIEW IF NOT EXISTS myabcdview AS SELECT * FROM jt")
       }
       assert(e.message.contains("It is not allowed to define a TEMPORARY view with IF NOT EXISTS"))
@@ -253,16 +398,34 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
 
   test("error handling: fail if the temp view sql itself is invalid") {
     // A database that does not exist
-    assertInvalidReference(
-      "CREATE OR REPLACE TEMPORARY VIEW myabcdview AS SELECT * FROM db_not_exist234.jt")
+    assertAnalysisErrorClass(
+      "CREATE OR REPLACE TEMPORARY VIEW myabcdview AS SELECT * FROM db_not_exist234.jt",
+      "TABLE_OR_VIEW_NOT_FOUND",
+      Map("relationName" -> "`db_not_exist234`.`jt`"),
+      ExpectedContext("db_not_exist234.jt", 61, 60 + "db_not_exist234.jt".length))
 
     // A table that does not exist
-    assertInvalidReference(
-      "CREATE OR REPLACE TEMPORARY VIEW myabcdview AS SELECT * FROM table_not_exist1345")
+    assertRelationNotFound(
+      "CREATE OR REPLACE TEMPORARY VIEW myabcdview AS SELECT * FROM table_not_exist1345",
+      "`table_not_exist1345`",
+      ExpectedContext("table_not_exist1345", 61, 60 + "table_not_exist1345".length))
 
     // A column that does not exist, for temporary view
     intercept[AnalysisException] {
       sql("CREATE OR REPLACE TEMPORARY VIEW myabcdview AS SELECT random1234 FROM jt")
+    }
+  }
+
+  test("SPARK-32374: disallow setting properties for CREATE TEMPORARY VIEW") {
+    withTempView("myabcdview") {
+      val sqlText = "CREATE TEMPORARY VIEW myabcdview TBLPROPERTIES ('a' = 'b') AS SELECT * FROM jt"
+      checkError(
+        exception = intercept[ParseException] {
+          sql(sqlText)
+        },
+        errorClass = "_LEGACY_ERROR_TEMP_0035",
+        parameters = Map("message" -> "TBLPROPERTIES can't coexist with CREATE TEMPORARY VIEW"),
+        context = ExpectedContext(sqlText, 0, 77))
     }
   }
 
@@ -301,7 +464,6 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
       sql(
         """CREATE TEMPORARY VIEW
           |testView (c1 COMMENT 'blabla', c2 COMMENT 'blabla')
-          |TBLPROPERTIES ('a' = 'b')
           |AS SELECT * FROM jt
           |""".stripMargin)
       checkAnswer(sql("SELECT c1, c2 FROM testView ORDER BY c1"), (1 to 9).map(i => Row(i, i)))
@@ -316,7 +478,9 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
         sql("CREATE TEMPORARY VIEW testView AS SELECT id FROM jt")
       }
 
-      assert(e.message.contains("Temporary view") && e.message.contains("already exists"))
+      checkError(e,
+        "TEMP_TABLE_OR_VIEW_ALREADY_EXISTS",
+        parameters = Map("relationName" -> "`testView`"))
     }
   }
 
@@ -379,7 +543,7 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
 
       sql("DROP VIEW testView")
 
-      val e = intercept[AnalysisException] {
+      val e = intercept[ParseException] {
         sql("CREATE OR REPLACE VIEW IF NOT EXISTS testView AS SELECT id FROM jt")
       }
       assert(e.message.contains(
@@ -416,8 +580,15 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
   }
 
   test("should not allow ALTER VIEW AS when the view does not exist") {
-    assertNoSuchTable("ALTER VIEW testView AS SELECT 1, 2")
-    assertNoSuchTable("ALTER VIEW default.testView AS SELECT 1, 2")
+    assertRelationNotFound(
+      "ALTER VIEW testView AS SELECT 1, 2",
+      "`testView`",
+      ExpectedContext("testView", 11, 10 + "testView".length))
+
+    assertRelationNotFound(
+      "ALTER VIEW default.testView AS SELECT 1, 2",
+      "`default`.`testView`",
+      ExpectedContext("default.testView", 11, 10 + "default.testView".length))
   }
 
   test("ALTER VIEW AS should try to alter temp view first if view name has no database part") {
@@ -543,7 +714,8 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
       spark.range(10).write.saveAsTable("add_col")
       withView("v") {
         sql("CREATE VIEW v AS SELECT * FROM add_col")
-        spark.range(10).select('id, 'id as 'a).write.mode("overwrite").saveAsTable("add_col")
+        spark.range(10).select($"id", $"id" as Symbol("a"))
+          .write.mode("overwrite").saveAsTable("add_col")
         checkAnswer(sql("SELECT * FROM v"), spark.range(10).toDF())
       }
     }
@@ -560,21 +732,25 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
           }
         }
       }
-      assertInvalidReference("SELECT * FROM view1")
+      assertRelationNotFound("SELECT * FROM view1", "`table1`",
+        ExpectedContext("VIEW", "spark_catalog.default.view1", 14, 13 + "table1".length, "table1"))
 
       // Fail if the referenced table is invalid.
       withTable("table2") {
         sql("CREATE TABLE table2(a int, b string) USING parquet")
         sql("CREATE VIEW view2 AS SELECT * FROM table2")
       }
-      assertInvalidReference("SELECT * FROM view2")
+      assertRelationNotFound("SELECT * FROM view2", "`table2`",
+        ExpectedContext("VIEW", "spark_catalog.default.view2", 14, 13 + "table2".length, "table2"))
 
       // Fail if the referenced view is invalid.
       withView("testView") {
         sql("CREATE VIEW testView AS SELECT * FROM jt")
         sql("CREATE VIEW view3 AS SELECT * FROM testView")
       }
-      assertInvalidReference("SELECT * FROM view3")
+      assertRelationNotFound("SELECT * FROM view3", "`testView`",
+        ExpectedContext("VIEW", "spark_catalog.default.view3", 14,
+          13 + "testView".length, "testView"))
     }
   }
 
@@ -597,11 +773,16 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
         checkAnswer(sql("SELECT * FROM testView ORDER BY x"), (1 to 9).map(i => Row(i, i + 1)))
 
         // Throw an AnalysisException if the number of columns don't match up.
-        val e = intercept[AnalysisException] {
-          sql("CREATE VIEW testView2(x, y, z) AS SELECT * FROM tab1")
-        }.getMessage
-        assert(e.contains("The number of columns produced by the SELECT clause (num: `2`) does " +
-          "not match the number of column names specified by CREATE VIEW (num: `3`)."))
+        checkError(
+          exception = intercept[AnalysisException] {
+            sql("CREATE VIEW testView2(x, y, z) AS SELECT * FROM tab1")
+          },
+          errorClass = "CREATE_VIEW_COLUMN_ARITY_MISMATCH.NOT_ENOUGH_DATA_COLUMNS",
+          parameters = Map(
+            "viewName" -> s"`$SESSION_CATALOG_NAME`.`default`.`testView2`",
+            "viewColumns" -> "`x`, `y`, `z`",
+            "dataColumns" -> "`id`, `id1`")
+        )
 
         // Correctly resolve a view when the referenced table schema changes.
         spark.range(1, 10).selectExpr("id", "id + id dummy", "id + 1 id1")
@@ -611,7 +792,17 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
         // Throw an AnalysisException if the column name is not found.
         spark.range(1, 10).selectExpr("id", "id + 1 dummy")
           .write.mode(SaveMode.Overwrite).saveAsTable("tab1")
-        intercept[AnalysisException](sql("SELECT * FROM testView"))
+        checkError(
+          exception = intercept[AnalysisException](sql("SELECT * FROM testView")),
+          errorClass = "INCOMPATIBLE_VIEW_SCHEMA_CHANGE",
+          parameters = Map(
+            "viewName" -> s"`$SESSION_CATALOG_NAME`.`default`.`testview`",
+            "actualCols" -> "[]",
+            "colName" -> "id1",
+            "suggestion" -> ("CREATE OR REPLACE VIEW " +
+              s"$SESSION_CATALOG_NAME.default.testview (x, y) AS SELECT * FROM tab1"),
+            "expectedNum" -> "1")
+        )
       }
     }
   }
@@ -630,12 +821,34 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
         // Casting from DoubleType to LongType might truncate, throw an AnalysisException.
         val df2 = (1 until 10).map(i => (i.toDouble, i.toDouble)).toDF("id", "id1")
         df2.write.format("json").mode(SaveMode.Overwrite).saveAsTable("tab1")
-        intercept[AnalysisException](sql("SELECT * FROM testView"))
+        checkError(
+          exception = intercept[AnalysisException](sql("SELECT * FROM testView")),
+          errorClass = "CANNOT_UP_CAST_DATATYPE",
+          parameters = Map(
+            "expression" -> s"$SESSION_CATALOG_NAME.default.tab1.id",
+            "sourceType" -> "\"DOUBLE\"",
+            "targetType" -> "\"BIGINT\"",
+            "details" -> ("The type path of the target object is:\n\n" +
+              "You can either add an explicit cast to the input data or " +
+              "choose a higher precision type of the field in the target object")
+          )
+        )
 
         // Can't cast from ArrayType to LongType, throw an AnalysisException.
         val df3 = (1 until 10).map(i => (i, Seq(i))).toDF("id", "id1")
         df3.write.format("json").mode(SaveMode.Overwrite).saveAsTable("tab1")
-        intercept[AnalysisException](sql("SELECT * FROM testView"))
+        checkError(
+          exception = intercept[AnalysisException](sql("SELECT * FROM testView")),
+          errorClass = "CANNOT_UP_CAST_DATATYPE",
+          parameters = Map(
+            "expression" -> s"$SESSION_CATALOG_NAME.default.tab1.id1",
+            "sourceType" -> "\"ARRAY<INT>\"",
+            "targetType" -> "\"BIGINT\"",
+            "details" -> ("The type path of the target object is:\n\n" +
+              "You can either add an explicit cast to the input data or " +
+              "choose a higher precision type of the field in the target object")
+          )
+        )
       }
     }
   }
@@ -647,57 +860,60 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
       sql("CREATE VIEW view3 AS SELECT * FROM view2")
 
       // Detect cyclic view reference on ALTER VIEW.
-      val e1 = intercept[AnalysisException] {
-        sql("ALTER VIEW view1 AS SELECT * FROM view2")
-      }.getMessage
-      assert(e1.contains("Recursive view `default`.`view1` detected (cycle: `default`.`view1` " +
-        "-> `default`.`view2` -> `default`.`view1`)"))
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql("ALTER VIEW view1 AS SELECT * FROM view2")
+        },
+        errorClass = "RECURSIVE_VIEW",
+        parameters = Map(
+          "viewIdent" -> s"`$SESSION_CATALOG_NAME`.`default`.`view1`",
+          "newPath" -> (s"`$SESSION_CATALOG_NAME`.`default`.`view1` -> " +
+            s"`$SESSION_CATALOG_NAME`.`default`.`view2` -> " +
+            s"`$SESSION_CATALOG_NAME`.`default`.`view1`")
+        )
+      )
 
       // Detect the most left cycle when there exists multiple cyclic view references.
-      val e2 = intercept[AnalysisException] {
-        sql("ALTER VIEW view1 AS SELECT * FROM view3 JOIN view2")
-      }.getMessage
-      assert(e2.contains("Recursive view `default`.`view1` detected (cycle: `default`.`view1` " +
-        "-> `default`.`view3` -> `default`.`view2` -> `default`.`view1`)"))
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql("ALTER VIEW view1 AS SELECT * FROM view3 JOIN view2")
+        },
+        errorClass = "RECURSIVE_VIEW",
+        parameters = Map(
+          "viewIdent" -> s"`$SESSION_CATALOG_NAME`.`default`.`view1`",
+          "newPath" -> (s"`$SESSION_CATALOG_NAME`.`default`.`view1` -> " +
+            s"`$SESSION_CATALOG_NAME`.`default`.`view3` -> " +
+            s"`$SESSION_CATALOG_NAME`.`default`.`view2` -> " +
+            s"`$SESSION_CATALOG_NAME`.`default`.`view1`")
+        )
+      )
 
       // Detect cyclic view reference on CREATE OR REPLACE VIEW.
-      val e3 = intercept[AnalysisException] {
-        sql("CREATE OR REPLACE VIEW view1 AS SELECT * FROM view2")
-      }.getMessage
-      assert(e3.contains("Recursive view `default`.`view1` detected (cycle: `default`.`view1` " +
-        "-> `default`.`view2` -> `default`.`view1`)"))
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql("CREATE OR REPLACE VIEW view1 AS SELECT * FROM view2")
+        },
+        errorClass = "RECURSIVE_VIEW",
+        parameters = Map(
+          "viewIdent" -> s"`$SESSION_CATALOG_NAME`.`default`.`view1`",
+          "newPath" -> (s"`$SESSION_CATALOG_NAME`.`default`.`view1` -> " +
+            s"`$SESSION_CATALOG_NAME`.`default`.`view2` -> " +
+            s"`$SESSION_CATALOG_NAME`.`default`.`view1`")
+        )
+      )
 
       // Detect cyclic view reference from subqueries.
-      val e4 = intercept[AnalysisException] {
-        sql("ALTER VIEW view1 AS SELECT * FROM jt WHERE EXISTS (SELECT 1 FROM view2)")
-      }.getMessage
-      assert(e4.contains("Recursive view `default`.`view1` detected (cycle: `default`.`view1` " +
-        "-> `default`.`view2` -> `default`.`view1`)"))
-    }
-  }
-
-  test("restrict the nested level of a view") {
-    val viewNames = Array.range(0, 11).map(idx => s"view$idx")
-    withView(viewNames: _*) {
-      sql("CREATE VIEW view0 AS SELECT * FROM jt")
-      Array.range(0, 10).foreach { idx =>
-        sql(s"CREATE VIEW view${idx + 1} AS SELECT * FROM view$idx")
-      }
-
-      withSQLConf(MAX_NESTED_VIEW_DEPTH.key -> "10") {
-        val e = intercept[AnalysisException] {
-          sql("SELECT * FROM view10")
-        }.getMessage
-        assert(e.contains("The depth of view `default`.`view0` exceeds the maximum view " +
-          "resolution depth (10). Analysis is aborted to avoid errors. Increase the value " +
-          s"of ${MAX_NESTED_VIEW_DEPTH.key} to work around this."))
-      }
-
-      val e = intercept[IllegalArgumentException] {
-        withSQLConf(MAX_NESTED_VIEW_DEPTH.key -> "0") {}
-      }.getMessage
-      assert(e.contains("The maximum depth of a view reference in a nested view must be " +
-        "positive."))
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql("ALTER VIEW view1 AS SELECT * FROM jt WHERE EXISTS (SELECT 1 FROM view2)")
+        },
+        errorClass = "RECURSIVE_VIEW",
+        parameters = Map(
+          "viewIdent" -> s"`$SESSION_CATALOG_NAME`.`default`.`view1`",
+          "newPath" -> (s"`$SESSION_CATALOG_NAME`.`default`.`view1` -> " +
+            s"`$SESSION_CATALOG_NAME`.`default`.`view2` -> " +
+            s"`$SESSION_CATALOG_NAME`.`default`.`view1`"))
+      )
     }
   }
 
@@ -713,7 +929,7 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
 
   test("sparkSession API view resolution with different default database") {
     withDatabase("db2") {
-      withView("v1") {
+      withView("default.v1") {
         withTable("t1") {
           sql("USE default")
           sql("CREATE TABLE t1 USING parquet AS SELECT 1 AS c0")
@@ -732,6 +948,271 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
         sql("CREATE TABLE t23519 USING parquet AS SELECT 1 AS c1")
         sql("CREATE VIEW v23519 (c1, c2) AS SELECT c1, c1 FROM t23519")
         checkAnswer(sql("SELECT * FROM v23519"), Row(1, 1))
+      }
+    }
+  }
+
+  test("temporary view should ignore useCurrentSQLConfigsForView config") {
+    withTable("t") {
+      Seq(2, 3, 1).toDF("c1").write.format("parquet").saveAsTable("t")
+      withTempView("v1") {
+        withSQLConf(ANSI_ENABLED.key -> "false") {
+          sql("CREATE TEMPORARY VIEW v1 AS SELECT 1/0")
+        }
+        withSQLConf(
+          USE_CURRENT_SQL_CONFIGS_FOR_VIEW.key -> "true",
+          ANSI_ENABLED.key -> "true") {
+          checkAnswer(sql("SELECT * FROM v1"), Seq(Row(null)))
+        }
+      }
+    }
+  }
+
+  test("alter temporary view should follow current storeAnalyzedPlanForView config") {
+    withTable("t") {
+      Seq(2, 3, 1).toDF("c1").write.format("parquet").saveAsTable("t")
+      withView("v1") {
+        withSQLConf(STORE_ANALYZED_PLAN_FOR_VIEW.key -> "true") {
+          sql("CREATE TEMPORARY VIEW v1 AS SELECT * FROM t")
+          Seq(4, 6, 5).toDF("c1").write.mode("overwrite").format("parquet").saveAsTable("t")
+          checkErrorMatchPVals(
+            exception = intercept[SparkException] {
+              sql("SELECT * FROM v1").collect()
+            }.getCause.asInstanceOf[SparkFileNotFoundException],
+            errorClass = "_LEGACY_ERROR_TEMP_2055",
+            parameters = Map("message" -> ".* does not exist")
+          )
+        }
+
+        withSQLConf(STORE_ANALYZED_PLAN_FOR_VIEW.key -> "false") {
+          // alter view from legacy to non-legacy config
+          sql("ALTER VIEW v1 AS SELECT * FROM t")
+          Seq(1, 3, 5).toDF("c1").write.mode("overwrite").format("parquet").saveAsTable("t")
+          checkAnswer(sql("SELECT * FROM v1"), Seq(Row(1), Row(3), Row(5)))
+        }
+
+        withSQLConf(STORE_ANALYZED_PLAN_FOR_VIEW.key -> "true") {
+          // alter view from non-legacy to legacy config
+          sql("ALTER VIEW v1 AS SELECT * FROM t")
+          Seq(2, 4, 6).toDF("c1").write.mode("overwrite").format("parquet").saveAsTable("t")
+          checkErrorMatchPVals(
+            exception = intercept[SparkException] {
+              sql("SELECT * FROM v1").collect()
+            }.getCause.asInstanceOf[SparkFileNotFoundException],
+            errorClass = "_LEGACY_ERROR_TEMP_2055",
+            parameters = Map("message" -> ".* does not exist")
+          )
+        }
+      }
+    }
+  }
+
+  test("local temp view refers global temp view") {
+    withGlobalTempView("v1") {
+      withTempView("v2") {
+        val globalTempDB = spark.sharedState.globalTempViewManager.database
+        sql("CREATE GLOBAL TEMPORARY VIEW v1 AS SELECT 1")
+        sql(s"CREATE TEMPORARY VIEW v2 AS SELECT * FROM ${globalTempDB}.v1")
+        checkAnswer(sql("SELECT * FROM v2"), Seq(Row(1)))
+      }
+    }
+  }
+
+  test("global temp view refers local temp view") {
+    withTempView("v1") {
+      withGlobalTempView("v2") {
+        val globalTempDB = spark.sharedState.globalTempViewManager.database
+        sql("CREATE TEMPORARY VIEW v1 AS SELECT 1")
+        sql(s"CREATE GLOBAL TEMPORARY VIEW v2 AS SELECT * FROM v1")
+        checkAnswer(sql(s"SELECT * FROM ${globalTempDB}.v2"), Seq(Row(1)))
+      }
+    }
+  }
+
+  test("SPARK-33141: view should be parsed and analyzed with configs set when creating") {
+    withTable("t") {
+      withView("v1", "v2", "v3", "v4", "v5") {
+        Seq(2, 3, 1).toDF("c1").write.format("parquet").saveAsTable("t")
+        sql("CREATE VIEW v1 (c1) AS SELECT C1 FROM t")
+        sql("CREATE VIEW v2 (c1) AS SELECT c1 FROM t ORDER BY 1 ASC, c1 DESC")
+        sql("CREATE VIEW v3 (c1, count) AS SELECT c1, count(c1) AS cnt FROM t GROUP BY 1")
+        sql("CREATE VIEW v4 (a, count) AS SELECT c1 as a, count(c1) AS cnt FROM t GROUP BY a")
+        withSQLConf(ANSI_ENABLED.key -> "false") {
+          sql("CREATE VIEW v5 (c1) AS SELECT 1/0 AS invalid")
+        }
+
+        withSQLConf(CASE_SENSITIVE.key -> "true") {
+          checkAnswer(sql("SELECT * FROM v1"), Seq(Row(2), Row(3), Row(1)))
+        }
+        withSQLConf(ORDER_BY_ORDINAL.key -> "false") {
+          checkAnswer(sql("SELECT * FROM v2"), Seq(Row(1), Row(2), Row(3)))
+        }
+        withSQLConf(GROUP_BY_ORDINAL.key -> "false") {
+          checkAnswer(sql("SELECT * FROM v3"),
+            Seq(Row(1, 1), Row(2, 1), Row(3, 1)))
+        }
+        withSQLConf(GROUP_BY_ALIASES.key -> "false") {
+          checkAnswer(sql("SELECT * FROM v4"),
+            Seq(Row(1, 1), Row(2, 1), Row(3, 1)))
+        }
+        withSQLConf(ANSI_ENABLED.key -> "true") {
+          checkAnswer(sql("SELECT * FROM v5"), Seq(Row(null)))
+        }
+
+        withSQLConf(USE_CURRENT_SQL_CONFIGS_FOR_VIEW.key -> "true") {
+          withSQLConf(CASE_SENSITIVE.key -> "true") {
+            val e = intercept[AnalysisException] {
+              sql("SELECT * FROM v1")
+            }
+            checkError(e,
+              errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+              sqlState = None,
+              parameters = Map(
+                "objectName" -> "`C1`",
+                "proposal" -> "`c1`"),
+              context = ExpectedContext(
+                objectType = "VIEW",
+                objectName = "spark_catalog.default.v1",
+                startIndex = 7,
+                stopIndex = 8,
+                fragment = "C1"
+              ))
+          }
+          withSQLConf(ORDER_BY_ORDINAL.key -> "false") {
+            checkAnswer(sql("SELECT * FROM v2"), Seq(Row(3), Row(2), Row(1)))
+          }
+          withSQLConf(GROUP_BY_ORDINAL.key -> "false") {
+            val e = intercept[AnalysisException] {
+              sql("SELECT * FROM v3")
+            }
+            checkError(e,
+              errorClass = "MISSING_AGGREGATION",
+              parameters = Map(
+                "expression" -> "\"c1\"",
+                "expressionAnyValue" -> "\"any_value(c1)\""))
+          }
+          withSQLConf(GROUP_BY_ALIASES.key -> "false") {
+            val e = intercept[AnalysisException] {
+              sql("SELECT * FROM v4")
+            }
+            checkError(e,
+              errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+              sqlState = None,
+              parameters = Map(
+                "objectName" -> "`a`",
+                "proposal" -> "`c1`"),
+              context = ExpectedContext(
+                objectType = "VIEW",
+                objectName = "spark_catalog.default.v4",
+                startIndex = 49,
+                stopIndex = 49,
+                fragment = "a"
+            ))
+          }
+          withSQLConf(ANSI_ENABLED.key -> "true") {
+            checkError(
+              exception = intercept[SparkArithmeticException] {
+                sql("SELECT * FROM v5").collect()
+              },
+              errorClass = "DIVIDE_BY_ZERO",
+              parameters = Map("config" -> "\"spark.sql.ansi.enabled\""),
+              context = new ExpectedContext(
+                objectType = "VIEW",
+                objectName = s"$SESSION_CATALOG_NAME.default.v5",
+                fragment = "1/0",
+                startIndex = 7,
+                stopIndex = 9)
+            )
+          }
+        }
+
+        withSQLConf(ANSI_ENABLED.key -> "true") {
+          sql("ALTER VIEW v1 AS SELECT 1/0 AS invalid")
+        }
+        checkError(
+          exception = intercept[SparkArithmeticException] {
+            sql("SELECT * FROM v1").collect()
+          },
+          errorClass = "DIVIDE_BY_ZERO",
+          parameters = Map("config" -> "\"spark.sql.ansi.enabled\""),
+          context = new ExpectedContext(
+            objectType = "VIEW",
+            objectName = s"$SESSION_CATALOG_NAME.default.v1",
+            fragment = "1/0",
+            startIndex = 7,
+            stopIndex = 9)
+        )
+      }
+    }
+  }
+
+  test("CurrentOrigin is correctly set in and out of the View") {
+    withTable("t") {
+      Seq((1, 1), (2, 2)).toDF("a", "b").write.format("parquet").saveAsTable("t")
+      Seq("VIEW", "TEMPORARY VIEW").foreach { viewType =>
+        val viewId = "v"
+        withView(viewId) {
+          val viewText = "SELECT a + b c FROM t"
+          sql(
+            s"""
+              |CREATE $viewType $viewId AS
+              |-- the body of the view
+              |$viewText
+              |""".stripMargin)
+          val plan = sql("select c / 2.0D d from v").logicalPlan
+          val add = plan.collectFirst {
+            case Project(Seq(Alias(a: Add, _)), _) => a
+          }
+          assert(add.isDefined)
+          val qualifiedName = if (viewType == "VIEW") {
+            s"$SESSION_CATALOG_NAME.default.$viewId"
+          } else {
+            viewId
+          }
+          val expectedAddOrigin = Origin(
+            line = Some(1),
+            startPosition = Some(7),
+            startIndex = Some(7),
+            stopIndex = Some(11),
+            sqlText = Some("SELECT a + b c FROM t"),
+            objectType = Some("VIEW"),
+            objectName = Some(qualifiedName)
+          )
+          assert(add.get.origin == expectedAddOrigin)
+
+          val divide = plan.collectFirst {
+            case Project(Seq(Alias(d: Divide, _)), _) => d
+          }
+          assert(divide.isDefined)
+          val expectedDivideOrigin = Origin(
+            line = Some(1),
+            startPosition = Some(7),
+            startIndex = Some(7),
+            stopIndex = Some(14),
+            sqlText = Some("select c / 2.0D d from v"),
+            objectType = None,
+            objectName = None)
+          assert(divide.get.origin == expectedDivideOrigin)
+        }
+      }
+    }
+  }
+
+  test("SPARK-37932: view join with same view") {
+    withTable("t") {
+      withView("v1") {
+        Seq((1, "test1"), (2, "test2"), (1, "test2")).toDF("id", "name")
+          .write.format("parquet").saveAsTable("t")
+        sql("CREATE VIEW v1 (id, name) AS SELECT id, name FROM t")
+
+        checkAnswer(
+          sql("""SELECT l1.id FROM v1 l1
+                |INNER JOIN (
+                |   SELECT id FROM v1
+                |   GROUP BY id HAVING COUNT(DISTINCT name) > 1
+                | ) l2 ON l1.id = l2.id GROUP BY l1.name, l1.id;
+                |""".stripMargin),
+          Seq(Row(1), Row(1)))
       }
     }
   }

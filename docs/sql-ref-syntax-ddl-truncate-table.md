@@ -25,6 +25,8 @@ The `TRUNCATE TABLE` statement removes all the rows from a table or partition(s)
 or an external/temporary table. In order to truncate multiple partitions at once, the user can specify the partitions 
 in `partition_spec`. If no `partition_spec` is specified it will remove all partitions in the table.
 
+If the table is cached, the command clears cached data of the table and all its dependents that refer to it. The cache will be lazily filled when the next time the table or the dependents are accessed.
+
 ### Syntax
 
 ```sql

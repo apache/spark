@@ -17,17 +17,16 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.analysis.{EmptyFunctionRegistry, FakeV2SessionCatalog, UnresolvedAttribute}
 import org.apache.spark.sql.catalyst.catalog.{InMemoryCatalog, SessionCatalog}
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.errors.TreeNodeException
 import org.apache.spark.sql.catalyst.expressions.{Alias, Literal, NamedExpression}
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LocalRelation, LogicalPlan, OneRowRelation, Project}
 import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.connector.catalog.CatalogManager
-import org.apache.spark.sql.internal.SQLConf
 
 
 class OptimizerStructuralIntegrityCheckerSuite extends PlanTest {
@@ -45,9 +44,8 @@ class OptimizerStructuralIntegrityCheckerSuite extends PlanTest {
 
   object Optimize extends Optimizer(
     new CatalogManager(
-      new SQLConf(),
       FakeV2SessionCatalog,
-      new SessionCatalog(new InMemoryCatalog, EmptyFunctionRegistry, new SQLConf()))) {
+      new SessionCatalog(new InMemoryCatalog, EmptyFunctionRegistry))) {
     val newBatch = Batch("OptimizeRuleBreakSI", Once, OptimizeRuleBreakSI)
     override def defaultBatches: Seq[Batch] = Seq(newBatch) ++ super.defaultBatches
   }
@@ -55,27 +53,27 @@ class OptimizerStructuralIntegrityCheckerSuite extends PlanTest {
   test("check for invalid plan after execution of rule - unresolved attribute") {
     val analyzed = Project(Alias(Literal(10), "attr")() :: Nil, OneRowRelation()).analyze
     assert(analyzed.resolved)
-    val message = intercept[TreeNodeException[LogicalPlan]] {
+    val message = intercept[SparkException] {
       Optimize.execute(analyzed)
     }.getMessage
     val ruleName = OptimizeRuleBreakSI.ruleName
-    assert(message.contains(s"After applying rule $ruleName in batch OptimizeRuleBreakSI"))
-    assert(message.contains("the structural integrity of the plan is broken"))
+    assert(message.contains(s"Rule $ruleName in batch OptimizeRuleBreakSI"))
+    assert(message.contains("generated an invalid plan"))
   }
 
   test("check for invalid plan after execution of rule - special expression in wrong operator") {
     val analyzed =
-      Aggregate(Nil, Seq[NamedExpression](max('id) as 'm),
-        LocalRelation('id.long)).analyze
+      Aggregate(Nil, Seq[NamedExpression](max($"id") as "m"),
+        LocalRelation($"id".long)).analyze
     assert(analyzed.resolved)
 
     // Should fail verification with the OptimizeRuleBreakSI rule
-    val message = intercept[TreeNodeException[LogicalPlan]] {
+    val message = intercept[SparkException] {
       Optimize.execute(analyzed)
     }.getMessage
     val ruleName = OptimizeRuleBreakSI.ruleName
-    assert(message.contains(s"After applying rule $ruleName in batch OptimizeRuleBreakSI"))
-    assert(message.contains("the structural integrity of the plan is broken"))
+    assert(message.contains(s"Rule $ruleName in batch OptimizeRuleBreakSI"))
+    assert(message.contains("generated an invalid plan"))
 
     // Should not fail verification with the regular optimizer
     SimpleTestOptimizer.execute(analyzed)
@@ -83,14 +81,14 @@ class OptimizerStructuralIntegrityCheckerSuite extends PlanTest {
 
   test("check for invalid plan before execution of any rule") {
     val analyzed =
-      Aggregate(Nil, Seq[NamedExpression](max('id) as 'm),
-        LocalRelation('id.long)).analyze
+      Aggregate(Nil, Seq[NamedExpression](max($"id") as "m"),
+        LocalRelation($"id".long)).analyze
     val invalidPlan = OptimizeRuleBreakSI.apply(analyzed)
 
     // Should fail verification right at the beginning
-    val message = intercept[TreeNodeException[LogicalPlan]] {
+    val message = intercept[SparkException] {
       Optimize.execute(invalidPlan)
     }.getMessage
-    assert(message.contains("The structural integrity of the input plan is broken"))
+    assert(message.contains("The input plan of"))
   }
 }

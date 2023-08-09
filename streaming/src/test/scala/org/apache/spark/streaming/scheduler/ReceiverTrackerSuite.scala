@@ -203,7 +203,7 @@ private[streaming] object RateTestReceiver {
  */
 class StoppableReceiver extends Receiver[Int](StorageLevel.MEMORY_ONLY) {
 
-  var receivingThreadOption: Option[Thread] = None
+  val receivingThreadOption: Option[Thread] = None
 
   def onStart(): Unit = {
     val thread = new Thread() {

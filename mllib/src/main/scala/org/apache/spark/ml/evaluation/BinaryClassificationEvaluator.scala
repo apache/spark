@@ -21,7 +21,7 @@ import org.apache.spark.annotation.Since
 import org.apache.spark.ml.linalg.{Vector, VectorUDT}
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
-import org.apache.spark.ml.util.{DefaultParamsReadable, DefaultParamsWritable, Identifiable, MetadataUtils, SchemaUtils}
+import org.apache.spark.ml.util._
 import org.apache.spark.mllib.evaluation.BinaryClassificationMetrics
 import org.apache.spark.sql.{Dataset, Row}
 import org.apache.spark.sql.functions._
@@ -80,8 +80,6 @@ class BinaryClassificationEvaluator @Since("1.4.0") (@Since("1.4.0") override va
   @Since("3.0.0")
   def setNumBins(value: Int): this.type = set(numBins, value)
 
-  setDefault(numBins -> 1000)
-
   /** @group setParam */
   @Since("1.5.0")
   def setRawPredictionCol(value: String): this.type = set(rawPredictionCol, value)
@@ -94,7 +92,7 @@ class BinaryClassificationEvaluator @Since("1.4.0") (@Since("1.4.0") override va
   @Since("3.0.0")
   def setWeightCol(value: String): this.type = set(weightCol, value)
 
-  setDefault(metricName -> "areaUnderROC")
+  setDefault(metricName -> "areaUnderROC", numBins -> 1000)
 
   @Since("2.0.0")
   override def evaluate(dataset: Dataset[_]): Double = {
@@ -130,8 +128,8 @@ class BinaryClassificationEvaluator @Since("1.4.0") (@Since("1.4.0") override va
       dataset.select(
         col($(rawPredictionCol)),
         col($(labelCol)).cast(DoubleType),
-        if (!isDefined(weightCol) || $(weightCol).isEmpty) lit(1.0)
-        else col($(weightCol)).cast(DoubleType)).rdd.map {
+        DatasetUtils.checkNonNegativeWeights(get(weightCol))
+      ).rdd.map {
         case Row(rawPrediction: Vector, label: Double, weight: Double) =>
           (rawPrediction(1), label, weight)
         case Row(rawPrediction: Double, label: Double, weight: Double) =>

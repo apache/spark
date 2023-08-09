@@ -102,7 +102,7 @@ private[spark] class GraphUIData(
     val jsForLabels = operationLabels.toSeq.sorted.mkString("[\"", "\",\"", "\"]")
 
     val (maxX, minX, maxY, minY) = if (values != null && values.length > 0) {
-      val xValues = values.map(_._1.toLong)
+      val xValues = values.map(_._1)
       val yValues = values.map(_._2.asScala.toSeq.map(_._2.toLong).sum)
       (xValues.max, xValues.min, yValues.max, yValues.min)
     } else {

@@ -52,22 +52,22 @@ object ImageSchema {
   /**
    * Schema for the image column: Row(String, Int, Int, Int, Int, Array[Byte])
    */
-  val columnSchema = StructType(
-    StructField("origin", StringType, true) ::
-    StructField("height", IntegerType, false) ::
-    StructField("width", IntegerType, false) ::
-    StructField("nChannels", IntegerType, false) ::
+  val columnSchema = StructType(Array(
+    StructField("origin", StringType, true),
+    StructField("height", IntegerType, false),
+    StructField("width", IntegerType, false),
+    StructField("nChannels", IntegerType, false),
     // OpenCV-compatible type: CV_8UC3 in most cases
-    StructField("mode", IntegerType, false) ::
+    StructField("mode", IntegerType, false),
     // Bytes in OpenCV-compatible order: row-wise BGR in most cases
-    StructField("data", BinaryType, false) :: Nil)
+    StructField("data", BinaryType, false)))
 
   val imageFields: Array[String] = columnSchema.fieldNames
 
   /**
    * DataFrame with a single column of images named "image" (nullable)
    */
-  val imageSchema = StructType(StructField("image", columnSchema, true) :: Nil)
+  val imageSchema = StructType(Array(StructField("image", columnSchema, true)))
 
   /**
    * Gets the origin of the image
@@ -133,9 +133,12 @@ object ImageSchema {
     val img = try {
       ImageIO.read(new ByteArrayInputStream(bytes))
     } catch {
-      // Catch runtime exception because `ImageIO` may throw unexcepted `RuntimeException`.
-      // But do not catch the declared `IOException` (regarded as FileSystem failure)
-      case _: RuntimeException => null
+      // Note that:
+      // - At this point, the files are already read from the files as bytes. Therefore,
+      //   no real I/O exceptions are expected.
+      // - `ImageIO.read` can throw `javax.imageio.IIOException` that is technically
+      //   a runtime exception but it inherits IOException.
+      case _: Throwable => null
     }
 
     if (img == null) {

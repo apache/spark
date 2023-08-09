@@ -23,7 +23,8 @@ import org.apache.orc.mapred.{OrcList, OrcMap, OrcStruct, OrcTimestamp}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{SpecificInternalRow, UnsafeArrayData}
 import org.apache.spark.sql.catalyst.util._
-import org.apache.spark.sql.catalyst.util.RebaseDateTime.rebaseJulianToGregorianDays
+import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns._
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -31,23 +32,40 @@ import org.apache.spark.unsafe.types.UTF8String
  * A deserializer to deserialize ORC structs to Spark rows.
  */
 class OrcDeserializer(
-    dataSchema: StructType,
     requiredSchema: StructType,
     requestedColIds: Array[Int]) {
 
   private val resultRow = new SpecificInternalRow(requiredSchema.map(_.dataType))
+
+  private lazy val bitmask = ResolveDefaultColumns.existenceDefaultsBitmask(requiredSchema)
 
   // `fieldWriters(index)` is
   // - null if the respective source column is missing, since the output value
   //   is always null in this case
   // - a function that updates target column `index` otherwise.
   private val fieldWriters: Array[WritableComparable[_] => Unit] = {
+    // Assume we create a table backed by Orc files. Then if we later run a command "ALTER TABLE t
+    // ADD COLUMN c DEFAULT <value>" on the Orc table, this adds one field to the Catalyst schema.
+    // Then if we query the old files with the new Catalyst schema, we should only apply the
+    // existence default value to the columns whose IDs are not explicitly requested.
+    val existingValues = ResolveDefaultColumns.existenceDefaultValues(requiredSchema)
+    if (ResolveDefaultColumns.hasExistenceDefaultValues(requiredSchema)) {
+      for (i <- 0 until existingValues.size) {
+        bitmask(i) =
+          if (requestedColIds(i) != -1) {
+            false
+          } else {
+            existingValues(i) != null
+          }
+      }
+    }
     requiredSchema.zipWithIndex
       .map { case (f, index) =>
         if (requestedColIds(index) == -1) {
           null
         } else {
-          val writer = newWriter(f.dataType, new RowUpdater(resultRow))
+          val rowUpdater = new RowUpdater(resultRow)
+          val writer = newWriter(f.dataType, rowUpdater)
           (value: WritableComparable[_]) => writer(index, value)
         }
       }.toArray
@@ -66,6 +84,24 @@ class OrcDeserializer(
       }
       targetColumnIndex += 1
     }
+    applyExistenceDefaultValuesToRow(requiredSchema, resultRow, bitmask)
+    resultRow
+  }
+
+  def deserializeFromValues(orcValues: Seq[WritableComparable[_]]): InternalRow = {
+    var targetColumnIndex = 0
+    while (targetColumnIndex < fieldWriters.length) {
+      if (fieldWriters(targetColumnIndex) != null) {
+        val value = orcValues(requestedColIds(targetColumnIndex))
+        if (value == null) {
+          resultRow.setNullAt(targetColumnIndex)
+        } else {
+          fieldWriters(targetColumnIndex)(value)
+        }
+      }
+      targetColumnIndex += 1
+    }
+    applyExistenceDefaultValuesToRow(requiredSchema, resultRow, bitmask)
     resultRow
   }
 
@@ -87,10 +123,10 @@ class OrcDeserializer(
       case ShortType => (ordinal, value) =>
         updater.setShort(ordinal, value.asInstanceOf[ShortWritable].get)
 
-      case IntegerType => (ordinal, value) =>
+      case IntegerType | _: YearMonthIntervalType => (ordinal, value) =>
         updater.setInt(ordinal, value.asInstanceOf[IntWritable].get)
 
-      case LongType => (ordinal, value) =>
+      case LongType | _: DayTimeIntervalType | _: TimestampNTZType => (ordinal, value) =>
         updater.setLong(ordinal, value.asInstanceOf[LongWritable].get)
 
       case FloatType => (ordinal, value) =>
@@ -119,26 +155,38 @@ class OrcDeserializer(
         v.changePrecision(precision, scale)
         updater.set(ordinal, v)
 
-      case st: StructType => (ordinal, value) =>
+      case st: StructType =>
         val result = new SpecificInternalRow(st)
         val fieldUpdater = new RowUpdater(result)
         val fieldConverters = st.map(_.dataType).map { dt =>
           newWriter(dt, fieldUpdater)
         }.toArray
-        val orcStruct = value.asInstanceOf[OrcStruct]
 
-        var i = 0
-        while (i < st.length) {
-          val value = orcStruct.getFieldValue(i)
-          if (value == null) {
-            result.setNullAt(i)
-          } else {
-            fieldConverters(i)(i, value)
-          }
-          i += 1
+        val containerUpdater = updater match {
+          case r: RowUpdater => r
+          case _ =>
+            // If the struct is contained by an array or map, we cannot reuse the same result row.
+            // We must copy the result row before setting it into the array or map
+            new CatalystDataUpdater {
+              override def set(ordinal: Int, value: Any) = {
+                updater.set(ordinal, value.asInstanceOf[SpecificInternalRow].copy())
+              }
+            }
         }
 
-        updater.set(ordinal, result)
+        (ordinal, value) =>
+          val orcStruct = value.asInstanceOf[OrcStruct]
+          var i = 0
+          while (i < st.length) {
+            val value = orcStruct.getFieldValue(i)
+            if (value == null) {
+              result.setNullAt(i)
+            } else {
+              fieldConverters(i)(i, value)
+            }
+            i += 1
+          }
+          containerUpdater.set(ordinal, result)
 
       case ArrayType(elementType, _) => (ordinal, value) =>
         val orcArray = value.asInstanceOf[OrcList[WritableComparable[_]]]
@@ -191,15 +239,17 @@ class OrcDeserializer(
       case udt: UserDefinedType[_] => newWriter(udt.sqlType, updater)
 
       case _ =>
-        throw new UnsupportedOperationException(s"$dataType is not supported yet.")
+        throw QueryExecutionErrors.dataTypeUnsupportedYetError(dataType)
     }
 
   private def createArrayData(elementType: DataType, length: Int): ArrayData = elementType match {
     case BooleanType => UnsafeArrayData.fromPrimitiveArray(new Array[Boolean](length))
     case ByteType => UnsafeArrayData.fromPrimitiveArray(new Array[Byte](length))
     case ShortType => UnsafeArrayData.fromPrimitiveArray(new Array[Short](length))
-    case IntegerType => UnsafeArrayData.fromPrimitiveArray(new Array[Int](length))
-    case LongType => UnsafeArrayData.fromPrimitiveArray(new Array[Long](length))
+    case IntegerType | _: YearMonthIntervalType =>
+      UnsafeArrayData.fromPrimitiveArray(new Array[Int](length))
+    case LongType | _: DayTimeIntervalType =>
+      UnsafeArrayData.fromPrimitiveArray(new Array[Long](length))
     case FloatType => UnsafeArrayData.fromPrimitiveArray(new Array[Float](length))
     case DoubleType => UnsafeArrayData.fromPrimitiveArray(new Array[Double](length))
     case _ => new GenericArrayData(new Array[Any](length))
@@ -222,7 +272,7 @@ class OrcDeserializer(
     def setFloat(ordinal: Int, value: Float): Unit = set(ordinal, value)
   }
 
-  final class RowUpdater(row: InternalRow) extends CatalystDataUpdater {
+  class RowUpdater(row: InternalRow) extends CatalystDataUpdater {
     override def setNullAt(ordinal: Int): Unit = row.setNullAt(ordinal)
     override def set(ordinal: Int, value: Any): Unit = row.update(ordinal, value)
 

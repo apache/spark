@@ -19,10 +19,12 @@ package org.apache.spark.sql.execution
 
 import java.nio.charset.StandardCharsets
 import java.sql.{Date, Timestamp}
-import java.time.{Instant, LocalDate}
+import java.time.{Duration, Instant, LocalDate, LocalDateTime, Period}
 
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.util.{DateFormatter, DateTimeUtils, TimestampFormatter}
+import org.apache.spark.sql.catalyst.util.IntervalStringStyles.HIVE_STYLE
+import org.apache.spark.sql.catalyst.util.IntervalUtils.{durationToMicros, periodToMonths, toDayTimeIntervalString, toYearMonthIntervalString}
 import org.apache.spark.sql.execution.command.{DescribeCommandBase, ExecutedCommandExec, ShowTablesCommand, ShowViewsCommand}
 import org.apache.spark.sql.execution.datasources.v2.{DescribeTableExec, ShowTablesExec}
 import org.apache.spark.sql.internal.SQLConf
@@ -33,72 +35,101 @@ import org.apache.spark.unsafe.types.CalendarInterval
  * Runs a query returning the result in Hive compatible form.
  */
 object HiveResult {
+  case class TimeFormatters(date: DateFormatter, timestamp: TimestampFormatter)
+
+  def getTimeFormatters: TimeFormatters = {
+    val dateFormatter = DateFormatter()
+    val timestampFormatter = TimestampFormatter.getFractionFormatter(
+      DateTimeUtils.getZoneId(SQLConf.get.sessionLocalTimeZone))
+    TimeFormatters(dateFormatter, timestampFormatter)
+  }
+
+  private def stripRootCommandResult(executedPlan: SparkPlan): SparkPlan = executedPlan match {
+    case CommandResultExec(_, plan, _) => plan
+    case other => other
+  }
+
   /**
    * Returns the result as a hive compatible sequence of strings. This is used in tests and
    * `SparkSQLDriver` for CLI applications.
    */
-  def hiveResultString(executedPlan: SparkPlan): Seq[String] = executedPlan match {
-    case ExecutedCommandExec(_: DescribeCommandBase) =>
-      formatDescribeTableOutput(executedPlan.executeCollectPublic())
-    case _: DescribeTableExec =>
-      formatDescribeTableOutput(executedPlan.executeCollectPublic())
-    // SHOW TABLES in Hive only output table names while our v1 command outputs
-    // database, table name, isTemp.
-    case command @ ExecutedCommandExec(s: ShowTablesCommand) if !s.isExtended =>
-      command.executeCollect().map(_.getString(1))
-    // SHOW TABLES in Hive only output table names while our v2 command outputs
-    // namespace and table name.
-    case command : ShowTablesExec =>
-      command.executeCollect().map(_.getString(1))
-    // SHOW VIEWS in Hive only outputs view names while our v1 command outputs
-    // namespace, viewName, and isTemporary.
-    case command @ ExecutedCommandExec(_: ShowViewsCommand) =>
-      command.executeCollect().map(_.getString(1))
-    case other =>
-      val result: Seq[Seq[Any]] = other.executeCollectPublic().map(_.toSeq).toSeq
-      // We need the types so we can output struct field names
-      val types = executedPlan.output.map(_.dataType)
-      // Reformat to match hive tab delimited output.
-      result.map(_.zip(types).map(e => toHiveString(e)))
-        .map(_.mkString("\t"))
-  }
+  def hiveResultString(executedPlan: SparkPlan): Seq[String] =
+    stripRootCommandResult(executedPlan) match {
+      case ExecutedCommandExec(_: DescribeCommandBase) =>
+        formatDescribeTableOutput(executedPlan.executeCollectPublic())
+      case _: DescribeTableExec =>
+        formatDescribeTableOutput(executedPlan.executeCollectPublic())
+      // SHOW TABLES in Hive only output table names while our v1 command outputs
+      // database, table name, isTemp.
+      case ExecutedCommandExec(s: ShowTablesCommand) if !s.isExtended =>
+        executedPlan.executeCollect().map(_.getString(1))
+      // SHOW TABLES in Hive only output table names while our v2 command outputs
+      // namespace and table name.
+      case _ : ShowTablesExec =>
+        executedPlan.executeCollect().map(_.getString(1))
+      // SHOW VIEWS in Hive only outputs view names while our v1 command outputs
+      // namespace, viewName, and isTemporary.
+      case ExecutedCommandExec(_: ShowViewsCommand) =>
+        executedPlan.executeCollect().map(_.getString(1))
+      case other =>
+        val timeFormatters = getTimeFormatters
+        val result: Seq[Seq[Any]] = other.executeCollectPublic().map(_.toSeq).toSeq
+        // We need the types so we can output struct field names
+        val types = executedPlan.output.map(_.dataType)
+        // Reformat to match hive tab delimited output.
+        result.map(_.zip(types).map(e => toHiveString(e, false, timeFormatters)))
+          .map(_.mkString("\t"))
+    }
 
   private def formatDescribeTableOutput(rows: Array[Row]): Seq[String] = {
     rows.map {
       case Row(name: String, dataType: String, comment) =>
         Seq(name, dataType, Option(comment.asInstanceOf[String]).getOrElse(""))
-          .map(s => String.format(s"%-20s", s))
+          .map(s => String.format("%-20s", s))
           .mkString("\t")
     }
   }
 
-  private def zoneId = DateTimeUtils.getZoneId(SQLConf.get.sessionLocalTimeZone)
-  private def dateFormatter = DateFormatter(zoneId)
-  private def timestampFormatter = TimestampFormatter.getFractionFormatter(zoneId)
-
   /** Formats a datum (based on the given data type) and returns the string representation. */
-  def toHiveString(a: (Any, DataType), nested: Boolean = false): String = a match {
+  def toHiveString(
+      a: (Any, DataType),
+      nested: Boolean,
+      formatters: TimeFormatters): String = a match {
     case (null, _) => if (nested) "null" else "NULL"
     case (b, BooleanType) => b.toString
-    case (d: Date, DateType) => dateFormatter.format(d)
-    case (ld: LocalDate, DateType) => dateFormatter.format(ld)
-    case (t: Timestamp, TimestampType) => timestampFormatter.format(t)
-    case (i: Instant, TimestampType) => timestampFormatter.format(i)
+    case (d: Date, DateType) => formatters.date.format(d)
+    case (ld: LocalDate, DateType) => formatters.date.format(ld)
+    case (t: Timestamp, TimestampType) => formatters.timestamp.format(t)
+    case (i: Instant, TimestampType) => formatters.timestamp.format(i)
+    case (l: LocalDateTime, TimestampNTZType) => formatters.timestamp.format(l)
     case (bin: Array[Byte], BinaryType) => new String(bin, StandardCharsets.UTF_8)
     case (decimal: java.math.BigDecimal, DecimalType()) => decimal.toPlainString
     case (n, _: NumericType) => n.toString
     case (s: String, StringType) => if (nested) "\"" + s + "\"" else s
     case (interval: CalendarInterval, CalendarIntervalType) => interval.toString
-    case (seq: Seq[_], ArrayType(typ, _)) =>
-      seq.map(v => (v, typ)).map(e => toHiveString(e, true)).mkString("[", ",", "]")
+    case (seq: scala.collection.Seq[_], ArrayType(typ, _)) =>
+      seq.map(v => (v, typ)).map(e => toHiveString(e, true, formatters)).mkString("[", ",", "]")
     case (m: Map[_, _], MapType(kType, vType, _)) =>
       m.map { case (key, value) =>
-        toHiveString((key, kType), true) + ":" + toHiveString((value, vType), true)
+        toHiveString((key, kType), true, formatters) + ":" +
+          toHiveString((value, vType), true, formatters)
       }.toSeq.sorted.mkString("{", ",", "}")
     case (struct: Row, StructType(fields)) =>
       struct.toSeq.zip(fields).map { case (v, t) =>
-        s""""${t.name}":${toHiveString((v, t.dataType), true)}"""
+        s""""${t.name}":${toHiveString((v, t.dataType), true, formatters)}"""
       }.mkString("{", ",", "}")
+    case (period: Period, YearMonthIntervalType(startField, endField)) =>
+      toYearMonthIntervalString(
+        periodToMonths(period, endField),
+        HIVE_STYLE,
+        startField,
+        endField)
+    case (duration: Duration, DayTimeIntervalType(startField, endField)) =>
+      toDayTimeIntervalString(
+        durationToMicros(duration, endField),
+        HIVE_STYLE,
+        startField,
+        endField)
     case (other, _: UserDefinedType[_]) => other.toString
   }
 }

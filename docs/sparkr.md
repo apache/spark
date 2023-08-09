@@ -77,8 +77,8 @@ sparkR.session(master = "local[*]", sparkConfig = list(spark.driver.memory = "2g
 
 The following Spark driver properties can be set in `sparkConfig` with `sparkR.session` from RStudio:
 
-<table class="table">
-  <tr><th>Property Name</th><th>Property group</th><th><code>spark-submit</code> equivalent</th></tr>
+<table class="table table-striped">
+  <thead><tr><th>Property Name</th><th>Property group</th><th><code>spark-submit</code> equivalent</th></tr></thead>
   <tr>
     <td><code>spark.master</code></td>
     <td>Application Properties</td>
@@ -175,7 +175,7 @@ people <- read.json(c("./examples/src/main/resources/people.json", "./examples/s
 {% endhighlight %}
 </div>
 
-The data sources API natively supports CSV formatted input files. For more information please refer to SparkR [read.df](api/R/read.df.html) API documentation.
+The data sources API natively supports CSV formatted input files. For more information please refer to SparkR [read.df](api/R/reference/read.df.html) API documentation.
 
 <div data-lang="r"  markdown="1">
 {% highlight r %}
@@ -536,49 +536,49 @@ SparkR supports the following machine learning algorithms currently:
 
 #### Classification
 
-* [`spark.logit`](api/R/spark.logit.html): [`Logistic Regression`](ml-classification-regression.html#logistic-regression)
-* [`spark.mlp`](api/R/spark.mlp.html): [`Multilayer Perceptron (MLP)`](ml-classification-regression.html#multilayer-perceptron-classifier)
-* [`spark.naiveBayes`](api/R/spark.naiveBayes.html): [`Naive Bayes`](ml-classification-regression.html#naive-bayes)
-* [`spark.svmLinear`](api/R/spark.svmLinear.html): [`Linear Support Vector Machine`](ml-classification-regression.html#linear-support-vector-machine)
-* [`spark.fmClassifier`](api/R/fmClassifier.html): [`Factorization Machines classifier`](ml-classification-regression.html#factorization-machines-classifier)
+* [`spark.logit`](api/R/reference/spark.logit.html): [`Logistic Regression`](ml-classification-regression.html#logistic-regression)
+* [`spark.mlp`](api/R/reference/spark.mlp.html): [`Multilayer Perceptron (MLP)`](ml-classification-regression.html#multilayer-perceptron-classifier)
+* [`spark.naiveBayes`](api/R/reference/spark.naiveBayes.html): [`Naive Bayes`](ml-classification-regression.html#naive-bayes)
+* [`spark.svmLinear`](api/R/reference/spark.svmLinear.html): [`Linear Support Vector Machine`](ml-classification-regression.html#linear-support-vector-machine)
+* [`spark.fmClassifier`](api/R/reference/fmClassifier.html): [`Factorization Machines classifier`](ml-classification-regression.html#factorization-machines-classifier)
 
 #### Regression
 
-* [`spark.survreg`](api/R/spark.survreg.html): [`Accelerated Failure Time (AFT) Survival  Model`](ml-classification-regression.html#survival-regression)
-* [`spark.glm`](api/R/spark.glm.html) or [`glm`](api/R/glm.html): [`Generalized Linear Model (GLM)`](ml-classification-regression.html#generalized-linear-regression)
-* [`spark.isoreg`](api/R/spark.isoreg.html): [`Isotonic Regression`](ml-classification-regression.html#isotonic-regression)
-* [`spark.lm`](api/R/spark.lm.html): [`Linear Regression`](ml-classification-regression.html#linear-regression)
-* [`spark.fmRegressor`](api/R/spark.fmRegressor.html): [`Factorization Machines regressor`](ml-classification-regression.html#factorization-machines-regressor)
+* [`spark.survreg`](api/R/reference/spark.survreg.html): [`Accelerated Failure Time (AFT) Survival  Model`](ml-classification-regression.html#survival-regression)
+* [`spark.glm`](api/R/reference/spark.glm.html) or [`glm`](api/R/reference/glm.html): [`Generalized Linear Model (GLM)`](ml-classification-regression.html#generalized-linear-regression)
+* [`spark.isoreg`](api/R/reference/spark.isoreg.html): [`Isotonic Regression`](ml-classification-regression.html#isotonic-regression)
+* [`spark.lm`](api/R/reference/spark.lm.html): [`Linear Regression`](ml-classification-regression.html#linear-regression)
+* [`spark.fmRegressor`](api/R/reference/spark.fmRegressor.html): [`Factorization Machines regressor`](ml-classification-regression.html#factorization-machines-regressor)
 
 #### Tree
 
-* [`spark.decisionTree`](api/R/spark.decisionTree.html): `Decision Tree for` [`Regression`](ml-classification-regression.html#decision-tree-regression) `and` [`Classification`](ml-classification-regression.html#decision-tree-classifier)
-* [`spark.gbt`](api/R/spark.gbt.html): `Gradient Boosted Trees for` [`Regression`](ml-classification-regression.html#gradient-boosted-tree-regression) `and` [`Classification`](ml-classification-regression.html#gradient-boosted-tree-classifier)
-* [`spark.randomForest`](api/R/spark.randomForest.html): `Random Forest for` [`Regression`](ml-classification-regression.html#random-forest-regression) `and` [`Classification`](ml-classification-regression.html#random-forest-classifier)
+* [`spark.decisionTree`](api/R/reference/spark.decisionTree.html): `Decision Tree for` [`Regression`](ml-classification-regression.html#decision-tree-regression) `and` [`Classification`](ml-classification-regression.html#decision-tree-classifier)
+* [`spark.gbt`](api/R/reference/spark.gbt.html): `Gradient Boosted Trees for` [`Regression`](ml-classification-regression.html#gradient-boosted-tree-regression) `and` [`Classification`](ml-classification-regression.html#gradient-boosted-tree-classifier)
+* [`spark.randomForest`](api/R/reference/spark.randomForest.html): `Random Forest for` [`Regression`](ml-classification-regression.html#random-forest-regression) `and` [`Classification`](ml-classification-regression.html#random-forest-classifier)
 
 #### Clustering
 
-* [`spark.bisectingKmeans`](api/R/spark.bisectingKmeans.html): [`Bisecting k-means`](ml-clustering.html#bisecting-k-means)
-* [`spark.gaussianMixture`](api/R/spark.gaussianMixture.html): [`Gaussian Mixture Model (GMM)`](ml-clustering.html#gaussian-mixture-model-gmm)
-* [`spark.kmeans`](api/R/spark.kmeans.html): [`K-Means`](ml-clustering.html#k-means)
-* [`spark.lda`](api/R/spark.lda.html): [`Latent Dirichlet Allocation (LDA)`](ml-clustering.html#latent-dirichlet-allocation-lda)
-* [`spark.powerIterationClustering (PIC)`](api/R/spark.powerIterationClustering.html): [`Power Iteration Clustering (PIC)`](ml-clustering.html#power-iteration-clustering-pic)
+* [`spark.bisectingKmeans`](api/R/reference/spark.bisectingKmeans.html): [`Bisecting k-means`](ml-clustering.html#bisecting-k-means)
+* [`spark.gaussianMixture`](api/R/reference/spark.gaussianMixture.html): [`Gaussian Mixture Model (GMM)`](ml-clustering.html#gaussian-mixture-model-gmm)
+* [`spark.kmeans`](api/R/reference/spark.kmeans.html): [`K-Means`](ml-clustering.html#k-means)
+* [`spark.lda`](api/R/reference/spark.lda.html): [`Latent Dirichlet Allocation (LDA)`](ml-clustering.html#latent-dirichlet-allocation-lda)
+* [`spark.powerIterationClustering (PIC)`](api/R/reference/spark.powerIterationClustering.html): [`Power Iteration Clustering (PIC)`](ml-clustering.html#power-iteration-clustering-pic)
 
 #### Collaborative Filtering
 
-* [`spark.als`](api/R/spark.als.html): [`Alternating Least Squares (ALS)`](ml-collaborative-filtering.html#collaborative-filtering)
+* [`spark.als`](api/R/reference/spark.als.html): [`Alternating Least Squares (ALS)`](ml-collaborative-filtering.html#collaborative-filtering)
 
 #### Frequent Pattern Mining
 
-* [`spark.fpGrowth`](api/R/spark.fpGrowth.html) : [`FP-growth`](ml-frequent-pattern-mining.html#fp-growth)
-* [`spark.prefixSpan`](api/R/spark.prefixSpan.html) : [`PrefixSpan`](ml-frequent-pattern-mining.html#prefixSpan)
+* [`spark.fpGrowth`](api/R/reference/spark.fpGrowth.html) : [`FP-growth`](ml-frequent-pattern-mining.html#fp-growth)
+* [`spark.prefixSpan`](api/R/reference/spark.prefixSpan.html) : [`PrefixSpan`](ml-frequent-pattern-mining.html#prefixSpan)
 
 #### Statistics
 
-* [`spark.kstest`](api/R/spark.kstest.html): `Kolmogorov-Smirnov Test`
+* [`spark.kstest`](api/R/reference/spark.kstest.html): `Kolmogorov-Smirnov Test`
 
 Under the hood, SparkR uses MLlib to train the model. Please refer to the corresponding section of MLlib user guide for example code.
-Users can call `summary` to print a summary of the fitted model, [predict](api/R/predict.html) to make predictions on new data, and [write.ml](api/R/write.ml.html)/[read.ml](api/R/read.ml.html) to save/load fitted models.
+Users can call `summary` to print a summary of the fitted model, [predict](api/R/reference/predict.html) to make predictions on new data, and [write.ml](api/R/reference/write.ml.html)/[read.ml](api/R/reference/read.ml.html) to save/load fitted models.
 SparkR supports a subset of the available R formula operators for model fitting, including ‘~’, ‘.’, ‘:’, ‘+’, and ‘-‘.
 
 
@@ -588,8 +588,8 @@ The following example shows how to save/load a MLlib model by SparkR.
 {% include_example read_write r/ml/ml.R %}
 
 # Data type mapping between R and Spark
-<table class="table">
-<tr><th>R</th><th>Spark</th></tr>
+<table class="table table-striped">
+<thead><tr><th>R</th><th>Spark</th></tr></thead>
 <tr>
   <td>byte</td>
   <td>byte</td>
@@ -671,22 +671,22 @@ Arrow R library is available on CRAN and it can be installed as below.
 ```bash
 Rscript -e 'install.packages("arrow", repos="https://cloud.r-project.org/")'
 ```
-Please refer [the official documentation of Apache Arrow](https://arrow.apache.org/docs/r/) for more detials.
+Please refer [the official documentation of Apache Arrow](https://arrow.apache.org/docs/r/) for more details.
 
 Note that you must ensure that Arrow R package is installed and available on all cluster nodes.
-The current supported minimum version is 0.15.1; however, this might change between the minor releases since Arrow optimization in SparkR is experimental.
+The current supported minimum version is 1.0.0; however, this might change between the minor releases since Arrow optimization in SparkR is experimental.
 
 ## Enabling for Conversion to/from R DataFrame, `dapply` and `gapply`
 
 Arrow optimization is available when converting a Spark DataFrame to an R DataFrame using the call `collect(spark_df)`,
 when creating a Spark DataFrame from an R DataFrame with `createDataFrame(r_df)`, when applying an R native function to each partition
 via `dapply(...)` and when applying an R native function to grouped data via `gapply(...)`.
-To use Arrow when executing these calls, users need to first set the Spark configuration ‘spark.sql.execution.arrow.sparkr.enabled’
-to ‘true’. This is disabled by default.
+To use Arrow when executing these, users need to set the Spark configuration ‘spark.sql.execution.arrow.sparkr.enabled’
+to ‘true’ first. This is disabled by default.
 
-In addition, optimizations enabled by ‘spark.sql.execution.arrow.sparkr.enabled’ could fallback automatically to non-Arrow optimization
-implementation if an error occurs before the actual computation within Spark during converting a Spark DataFrame to/from an R
-DataFrame.
+Whether the optimization is enabled or not, SparkR produces the same results. In addition, the conversion
+between Spark DataFrame and R DataFrame falls back automatically to non-Arrow optimization implementation
+when the optimization fails for any reasons before the actual computation.
 
 <div data-lang="r" markdown="1">
 {% highlight r %}
@@ -713,9 +713,9 @@ collect(gapply(spark_df,
 {% endhighlight %}
 </div>
 
-Using the above optimizations with Arrow will produce the same results as when Arrow is not enabled. Note that even with Arrow,
-`collect(spark_df)` results in the collection of all records in the DataFrame to the driver program and should be done on a
-small subset of the data.
+Note that even with Arrow, `collect(spark_df)` results in the collection of all records in the DataFrame to
+the driver program and should be done on a small subset of the data. In addition, the specified output schema
+in `gapply(...)` and `dapply(...)` should be matched to the R DataFrame's returned by the given function.
 
 ## Supported SQL Types
 
@@ -728,8 +728,8 @@ function is masking another function.
 
 The following functions are masked by the SparkR package:
 
-<table class="table">
-  <tr><th>Masked function</th><th>How to Access</th></tr>
+<table class="table table-striped">
+  <thead><tr><th>Masked function</th><th>How to Access</th></tr></thead>
   <tr>
     <td><code>cov</code> in <code>package:stats</code></td>
     <td><code><pre>stats::cov(x, y = NULL, use = "everything",

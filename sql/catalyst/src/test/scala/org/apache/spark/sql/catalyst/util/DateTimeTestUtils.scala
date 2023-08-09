@@ -49,9 +49,9 @@ object DateTimeTestUtils {
     CET.getId,
     "Africa/Dakar",
     LA.getId,
-    "Antarctica/Vostok",
+    "Asia/Urumqi",
     "Asia/Hong_Kong",
-    "Europe/Amsterdam")
+    "Europe/Brussels")
   val outstandingZoneIds: Seq[ZoneId] = outstandingTimezonesIds.map(getZoneId)
 
   def withDefaultTimeZone[T](newDefaultTimeZone: ZoneId)(block: => T): T = {

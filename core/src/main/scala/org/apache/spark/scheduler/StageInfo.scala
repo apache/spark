@@ -39,10 +39,12 @@ class StageInfo(
     val taskMetrics: TaskMetrics = null,
     private[spark] val taskLocalityPreferences: Seq[Seq[TaskLocation]] = Seq.empty,
     private[spark] val shuffleDepId: Option[Int] = None,
-    val resourceProfileId: Int) {
+    val resourceProfileId: Int,
+    private[spark] var isShufflePushEnabled: Boolean = false,
+    private[spark] var shuffleMergerCount: Int = 0) {
   /** When this stage was submitted from the DAGScheduler to a TaskScheduler. */
   var submissionTime: Option[Long] = None
-  /** Time when all tasks in the stage completed or when the stage was cancelled. */
+  /** Time when the stage completed or when the stage was cancelled. */
   var completionTime: Option[Long] = None
   /** If the stage failed, the reason why. */
   var failureReason: Option[String] = None
@@ -72,6 +74,14 @@ class StageInfo(
     } else {
       "running"
     }
+  }
+
+  private[spark] def setShuffleMergerCount(mergers: Int): Unit = {
+    shuffleMergerCount = mergers
+  }
+
+  private[spark] def setPushBasedShuffleEnabled(pushBasedShuffleEnabled: Boolean): Unit = {
+    isShufflePushEnabled = pushBasedShuffleEnabled
   }
 }
 
@@ -108,6 +118,8 @@ private[spark] object StageInfo {
       taskMetrics,
       taskLocalityPreferences,
       shuffleDepId,
-      resourceProfileId)
+      resourceProfileId,
+      false,
+      0)
   }
 }

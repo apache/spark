@@ -16,66 +16,59 @@
  */
 package org.apache.spark.sql.execution
 
-import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeReference, Expression, NamedExpression, SortOrder}
-import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, Partitioning}
+import scala.collection.mutable
 
-/**
- * A trait that provides functionality to handle aliases in the `outputExpressions`.
- */
-trait AliasAwareOutputExpression extends UnaryExecNode {
-  protected def outputExpressions: Seq[NamedExpression]
-
-  protected def hasAlias: Boolean = outputExpressions.collectFirst { case _: Alias => }.isDefined
-
-  protected def replaceAliases(exprs: Seq[Expression]): Seq[Expression] = {
-    exprs.map {
-      case a: AttributeReference => replaceAlias(a).getOrElse(a)
-      case other => other
-    }
-  }
-
-  protected def replaceAlias(attr: AttributeReference): Option[Attribute] = {
-    outputExpressions.collectFirst {
-      case a @ Alias(child: AttributeReference, _) if child.semanticEquals(attr) =>
-        a.toAttribute
-    }
-  }
-}
+import org.apache.spark.sql.catalyst.expressions.{AttributeSet, Expression}
+import org.apache.spark.sql.catalyst.plans.{AliasAwareOutputExpression, AliasAwareQueryOutputOrdering}
+import org.apache.spark.sql.catalyst.plans.physical.{Partitioning, PartitioningCollection, UnknownPartitioning}
 
 /**
  * A trait that handles aliases in the `outputExpressions` to produce `outputPartitioning` that
  * satisfies distribution requirements.
  */
-trait AliasAwareOutputPartitioning extends AliasAwareOutputExpression {
+trait PartitioningPreservingUnaryExecNode extends UnaryExecNode
+  with AliasAwareOutputExpression {
   final override def outputPartitioning: Partitioning = {
-    if (hasAlias) {
-      child.outputPartitioning match {
-        case h: HashPartitioning => h.copy(expressions = replaceAliases(h.expressions))
-        case other => other
+    val partitionings: Seq[Partitioning] = if (hasAlias) {
+      flattenPartitioning(child.outputPartitioning).flatMap {
+        case e: Expression =>
+          // We need unique partitionings but if the input partitioning is
+          // `HashPartitioning(Seq(id + id))` and we have `id -> a` and `id -> b` aliases then after
+          // the projection we have 4 partitionings:
+          // `HashPartitioning(Seq(a + a))`, `HashPartitioning(Seq(a + b))`,
+          // `HashPartitioning(Seq(b + a))`, `HashPartitioning(Seq(b + b))`, but
+          // `HashPartitioning(Seq(a + b))` is the same as `HashPartitioning(Seq(b + a))`.
+          val partitioningSet = mutable.Set.empty[Expression]
+          projectExpression(e)
+            .filter(e => partitioningSet.add(e.canonicalized))
+            .take(aliasCandidateLimit)
+            .asInstanceOf[Stream[Partitioning]]
+        case o => Seq(o)
       }
     } else {
-      child.outputPartitioning
+      // Filter valid partitiongs (only reference output attributes of the current plan node)
+      val outputSet = AttributeSet(outputExpressions.map(_.toAttribute))
+      flattenPartitioning(child.outputPartitioning).filter {
+        case e: Expression => e.references.subsetOf(outputSet)
+        case _ => true
+      }
+    }
+    partitionings match {
+      case Seq() => UnknownPartitioning(child.outputPartitioning.numPartitions)
+      case Seq(p) => p
+      case ps => PartitioningCollection(ps)
+    }
+  }
+
+  private def flattenPartitioning(partitioning: Partitioning): Seq[Partitioning] = {
+    partitioning match {
+      case PartitioningCollection(childPartitionings) =>
+        childPartitionings.flatMap(flattenPartitioning)
+      case rest =>
+        rest +: Nil
     }
   }
 }
 
-/**
- * A trait that handles aliases in the `orderingExpressions` to produce `outputOrdering` that
- * satisfies ordering requirements.
- */
-trait AliasAwareOutputOrdering extends AliasAwareOutputExpression {
-  protected def orderingExpressions: Seq[SortOrder]
-
-  final override def outputOrdering: Seq[SortOrder] = {
-    if (hasAlias) {
-      orderingExpressions.map { s =>
-        s.child match {
-          case a: AttributeReference => s.copy(child = replaceAlias(a).getOrElse(a))
-          case _ => s
-        }
-      }
-    } else {
-      orderingExpressions
-    }
-  }
-}
+trait OrderPreservingUnaryExecNode
+  extends UnaryExecNode with AliasAwareQueryOutputOrdering[SparkPlan]

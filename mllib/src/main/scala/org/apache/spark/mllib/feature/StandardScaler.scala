@@ -83,7 +83,7 @@ class StandardScalerModel @Since("1.3.0") (
   /**
    */
   @Since("1.3.0")
-  def this(std: Vector, mean: Vector) {
+  def this(std: Vector, mean: Vector) = {
     this(std, mean, withStd = std != null, withMean = mean != null)
     require(this.withStd || this.withMean,
       "at least one of std or mean vectors must be provided")
@@ -167,6 +167,8 @@ class StandardScalerModel @Since("1.3.0") (
             val newValues = NewStandardScalerModel
               .transformSparseWithScale(localScale, indices, values.clone())
             Vectors.sparse(size, indices, newValues)
+          case v =>
+            throw new IllegalArgumentException(s"Unknown vector type ${v.getClass}.")
         }
 
       case _ => vector

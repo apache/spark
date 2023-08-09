@@ -17,11 +17,13 @@
 
 package org.apache.spark.sql.execution.datasources
 
+import scala.util.control.NonFatal
+
 import org.apache.spark.sql.{Dataset, Row, SaveMode, SparkSession}
 import org.apache.spark.sql.catalyst.plans.QueryPlan
-import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-import org.apache.spark.sql.execution.command.RunnableCommand
-import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.catalyst.plans.logical.{CTEInChildren, CTERelationDef, LogicalPlan, WithCTE}
+import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
+import org.apache.spark.sql.execution.command.LeafRunnableCommand
 import org.apache.spark.sql.sources.CreatableRelationProvider
 
 /**
@@ -37,19 +39,27 @@ case class SaveIntoDataSourceCommand(
     query: LogicalPlan,
     dataSource: CreatableRelationProvider,
     options: Map[String, String],
-    mode: SaveMode) extends RunnableCommand {
+    mode: SaveMode) extends LeafRunnableCommand with CTEInChildren {
 
   override def innerChildren: Seq[QueryPlan[_]] = Seq(query)
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
-    dataSource.createRelation(
+    val relation = dataSource.createRelation(
       sparkSession.sqlContext, mode, options, Dataset.ofRows(sparkSession, query))
+
+    try {
+      val logicalRelation = LogicalRelation(relation, toAttributes(relation.schema), None, false)
+      sparkSession.sharedState.cacheManager.recacheByPlan(sparkSession, logicalRelation)
+    } catch {
+      case NonFatal(_) =>
+        // some data source can not support return a valid relation, e.g. `KafkaSourceProvider`
+    }
 
     Seq.empty[Row]
   }
 
   override def simpleString(maxFields: Int): String = {
-    val redacted = SQLConf.get.redactOptions(options)
+    val redacted = conf.redactOptions(options)
     s"SaveIntoDataSourceCommand ${dataSource}, ${redacted}, ${mode}"
   }
 
@@ -57,5 +67,9 @@ case class SaveIntoDataSourceCommand(
   // map.
   override def clone(): LogicalPlan = {
     SaveIntoDataSourceCommand(query.clone(), dataSource, options, mode)
+  }
+
+  override def withCTEDefs(cteDefs: Seq[CTERelationDef]): LogicalPlan = {
+    copy(query = WithCTE(query, cteDefs))
   }
 }

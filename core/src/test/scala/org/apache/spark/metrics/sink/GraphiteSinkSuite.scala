@@ -23,7 +23,7 @@ import scala.collection.JavaConverters._
 
 import com.codahale.metrics._
 
-import org.apache.spark.{SecurityManager, SparkConf, SparkFunSuite}
+import org.apache.spark.{SparkException, SparkFunSuite}
 
 class GraphiteSinkSuite extends SparkFunSuite {
 
@@ -32,9 +32,8 @@ class GraphiteSinkSuite extends SparkFunSuite {
     props.put("host", "127.0.0.1")
     props.put("port", "54321")
     val registry = new MetricRegistry
-    val securityMgr = new SecurityManager(new SparkConf(false))
 
-    val sink = new GraphiteSink(props, registry, securityMgr)
+    val sink = new GraphiteSink(props, registry)
 
     val gauge = new Gauge[Double] {
       override def getValue: Double = 1.23
@@ -55,9 +54,8 @@ class GraphiteSinkSuite extends SparkFunSuite {
     props.put("port", "54321")
     props.put("regex", "local-[0-9]+.driver.(CodeGenerator|BlockManager)")
     val registry = new MetricRegistry
-    val securityMgr = new SecurityManager(new SparkConf(false))
 
-    val sink = new GraphiteSink(props, registry, securityMgr)
+    val sink = new GraphiteSink(props, registry)
 
     val gauge = new Gauge[Double] {
       override def getValue: Double = 1.23
@@ -80,5 +78,47 @@ class GraphiteSinkSuite extends SparkFunSuite {
 
     assert(metricKeys.equals(filteredMetricKeys),
       "Should contain only metrics matches regex filter")
+  }
+
+  test("GraphiteSink without host") {
+    val props = new Properties
+    props.put("port", "54321")
+    val registry = new MetricRegistry
+
+    val e = intercept[SparkException] {
+      new GraphiteSink(props, registry)
+    }
+    assert(e.getErrorClass === "GRAPHITE_SINK_PROPERTY_MISSING")
+    assert(e.getMessage ===
+      "[GRAPHITE_SINK_PROPERTY_MISSING] Graphite sink requires 'host' property.")
+  }
+
+  test("GraphiteSink without port") {
+    val props = new Properties
+    props.put("host", "127.0.0.1")
+    val registry = new MetricRegistry
+
+    val e = intercept[SparkException] {
+      new GraphiteSink(props, registry)
+    }
+    assert(e.getErrorClass === "GRAPHITE_SINK_PROPERTY_MISSING")
+    assert(e.getMessage ===
+      "[GRAPHITE_SINK_PROPERTY_MISSING] Graphite sink requires 'port' property.")
+  }
+
+  test("GraphiteSink with invalid protocol") {
+    val props = new Properties
+    props.put("host", "127.0.0.1")
+    props.put("port", "54321")
+    props.put("protocol", "http")
+    val registry = new MetricRegistry
+
+    checkError(
+      exception = intercept[SparkException] {
+        new GraphiteSink(props, registry)
+      },
+      errorClass = "GRAPHITE_SINK_INVALID_PROTOCOL",
+      parameters = Map("protocol" -> "http")
+    )
   }
 }

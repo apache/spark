@@ -77,12 +77,18 @@ public interface TableProvider {
 
   /**
    * Returns true if the source has the ability of accepting external table metadata when getting
-   * tables. The external table metadata includes user-specified schema from
-   * `DataFrameReader`/`DataStreamReader` and schema/partitioning stored in Spark catalog.
+   * tables. The external table metadata includes:
+   * <ol>
+   *   <li>For table reader: user-specified schema from {@code DataFrameReader}/{@code
+   *   DataStreamReader} and schema/partitioning stored in Spark catalog.</li>
+   *   <li>For table writer: the schema of the input {@code Dataframe} of
+   *   {@code DataframeWriter}/{@code DataStreamWriter}.</li>
+   * </ol>
    * <p>
    * By default this method returns false, which means the schema and partitioning passed to
-   * `getTable` are from the infer methods. Please override it if this source has expensive
-   * schema/partitioning inference and wants external table metadata to avoid inference.
+   * {@link #getTable(StructType, Transform[], Map)} are from the infer methods. Please override it
+   * if this source has expensive schema/partitioning inference and wants external table metadata
+   * to avoid inference.
    */
   default boolean supportsExternalMetadata() {
     return false;

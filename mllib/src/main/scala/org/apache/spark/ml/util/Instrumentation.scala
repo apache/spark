@@ -192,6 +192,8 @@ private[spark] object Instrumentation {
       case Failure(NonFatal(e)) =>
         instr.logFailure(e)
         throw e
+      case Failure(e) =>
+        throw e
       case Success(result) =>
         instr.logSuccess()
         result

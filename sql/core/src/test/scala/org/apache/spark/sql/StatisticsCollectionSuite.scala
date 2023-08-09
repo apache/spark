@@ -25,10 +25,12 @@ import java.util.concurrent.TimeUnit
 import scala.collection.mutable
 
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.analysis.NoSuchTableException
 import org.apache.spark.sql.catalyst.catalog.CatalogColumnStat
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.util.{DateTimeTestUtils, DateTimeUtils}
+import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.{withDefaultTimeZone, PST, UTC}
+import org.apache.spark.sql.catalyst.util.DateTimeUtils.{getZoneId, TimeZoneUTC}
+import org.apache.spark.sql.functions.timestamp_seconds
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.test.SQLTestData.ArrayData
@@ -61,21 +63,26 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
   }
 
   test("analyzing views is not supported") {
-    def assertAnalyzeUnsupported(analyzeCommand: String): Unit = {
-      val err = intercept[AnalysisException] {
-        sql(analyzeCommand)
-      }
-      assert(err.message.contains("ANALYZE TABLE is not supported"))
-    }
-
     val tableName = "tbl"
     withTable(tableName) {
       spark.range(10).write.saveAsTable(tableName)
       val viewName = "view"
       withView(viewName) {
         sql(s"CREATE VIEW $viewName AS SELECT * FROM $tableName")
-        assertAnalyzeUnsupported(s"ANALYZE TABLE $viewName COMPUTE STATISTICS")
-        assertAnalyzeUnsupported(s"ANALYZE TABLE $viewName COMPUTE STATISTICS FOR COLUMNS id")
+        checkError(
+          exception = intercept[AnalysisException] {
+            sql(s"ANALYZE TABLE $viewName COMPUTE STATISTICS")
+          },
+          errorClass = "UNSUPPORTED_FEATURE.ANALYZE_VIEW",
+          parameters = Map.empty
+        )
+        checkError(
+          exception = intercept[AnalysisException] {
+            sql(s"ANALYZE TABLE $viewName COMPUTE STATISTICS FOR COLUMNS id")
+          },
+          errorClass = "UNSUPPORTED_FEATURE.ANALYZE_VIEW",
+          parameters = Map.empty
+        )
       }
     }
   }
@@ -122,16 +129,29 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
       Seq(ArrayData(Seq(1, 2, 3), Seq(Seq(1, 2, 3)))).toDF().write.saveAsTable(tableName)
 
       // Test unsupported data types
-      val err1 = intercept[AnalysisException] {
-        sql(s"ANALYZE TABLE $tableName COMPUTE STATISTICS FOR COLUMNS data")
-      }
-      assert(err1.message.contains("does not support statistics collection"))
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(s"ANALYZE TABLE $tableName COMPUTE STATISTICS FOR COLUMNS data")
+        },
+        errorClass = "UNSUPPORTED_FEATURE.ANALYZE_UNSUPPORTED_COLUMN_TYPE",
+        parameters = Map(
+          "columnType" -> "\"ARRAY<INT>\"",
+          "columnName" -> "`data`",
+          "tableName" -> "`spark_catalog`.`default`.`column_stats_test1`"
+        )
+      )
 
       // Test invalid columns
-      val err2 = intercept[AnalysisException] {
-        sql(s"ANALYZE TABLE $tableName COMPUTE STATISTICS FOR COLUMNS some_random_column")
-      }
-      assert(err2.message.contains("does not exist"))
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(s"ANALYZE TABLE $tableName COMPUTE STATISTICS FOR COLUMNS some_random_column")
+        },
+        errorClass = "COLUMN_NOT_FOUND",
+        parameters = Map(
+          "colName" -> "`some_random_column`",
+          "caseSensitiveConfig" -> "\"spark.sql.caseSensitive\""
+        )
+      )
     }
   }
 
@@ -169,6 +189,15 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
           val roundtrip = CatalogColumnStat.fromMap("table_is_foo", field.name, v.toMap(k))
           assert(roundtrip == Some(v))
         }
+      }
+    }
+  }
+
+  test("SPARK-33812: column stats round trip serialization with splitting histogram property") {
+    withSQLConf(SQLConf.HIVE_TABLE_PROPERTY_LENGTH_THRESHOLD.key -> "10") {
+      statsWithHgms.foreach { case (k, v) =>
+        val roundtrip = CatalogColumnStat.fromMap("t", k, v.toMap(k))
+        assert(roundtrip == Some(v))
       }
     }
   }
@@ -244,24 +273,6 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
       val stats = Statistics(sizeInBytes = input, rowCount = Some(input))
       val expectedString = s"sizeInBytes=$expectedSize, rowCount=$expectedRows"
       assert(stats.simpleString == expectedString)
-    }
-  }
-
-  test("change stats after truncate command") {
-    val table = "change_stats_truncate_table"
-    withTable(table) {
-      spark.range(100).select($"id", $"id" % 5 as "value").write.saveAsTable(table)
-      // analyze to get initial stats
-      sql(s"ANALYZE TABLE $table COMPUTE STATISTICS FOR COLUMNS id, value")
-      val fetched1 = checkTableStats(table, hasSizeInBytes = true, expectedRowCounts = Some(100))
-      assert(fetched1.get.sizeInBytes > 0)
-      assert(fetched1.get.colStats.size == 2)
-
-      // truncate table command
-      sql(s"TRUNCATE TABLE $table")
-      val fetched2 = checkTableStats(table, hasSizeInBytes = true, expectedRowCounts = Some(0))
-      assert(fetched2.get.sizeInBytes == 0)
-      assert(fetched2.get.colStats.isEmpty)
     }
   }
 
@@ -375,22 +386,6 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
     }
   }
 
-  test("invalidation of tableRelationCache after table truncation") {
-    val table = "invalidate_catalog_cache_table"
-    Seq(false, true).foreach { autoUpdate =>
-      withSQLConf(SQLConf.AUTO_SIZE_UPDATE_ENABLED.key -> autoUpdate.toString) {
-        withTable(table) {
-          spark.range(100).write.saveAsTable(table)
-          sql(s"ANALYZE TABLE $table COMPUTE STATISTICS")
-          spark.table(table)
-          sql(s"TRUNCATE TABLE $table")
-          spark.table(table)
-          assert(getTableFromCatalogCache(table).stats.sizeInBytes == 0)
-        }
-      }
-    }
-  }
-
   test("invalidation of tableRelationCache after alter table add partition") {
     val table = "invalidate_catalog_cache_table"
     Seq(false, true).foreach { autoUpdate =>
@@ -429,10 +424,10 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
     withSQLConf(SQLConf.CBO_ENABLED.key -> "true") {
       withTable("TBL1", "TBL") {
         import org.apache.spark.sql.functions._
-        val df = spark.range(1000L).select('id,
-          'id * 2 as "FLD1",
-          'id * 12 as "FLD2",
-          lit("aaa") + 'id as "fld3")
+        val df = spark.range(1000L).select($"id",
+          $"id" * 2 as "FLD1",
+          $"id" * 12 as "FLD2",
+          lit(null).cast(DoubleType) + $"id" as "fld3")
         df.write
           .mode(SaveMode.Overwrite)
           .bucketBy(10, "id", "FLD1", "FLD2")
@@ -448,7 +443,7 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
              |WHERE  t1.fld3 IN (-123.23,321.23)
           """.stripMargin)
         df2.createTempView("TBL2")
-        sql("SELECT * FROM tbl2 WHERE fld3 IN ('qqq', 'qwe')  ").queryExecution.executedPlan
+        sql("SELECT * FROM tbl2 WHERE fld3 IN (0,1)  ").queryExecution.executedPlan
       }
     }
   }
@@ -467,7 +462,7 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
         withTable(table) {
           TimeZone.setDefault(srcTimeZone)
           spark.range(start, end)
-            .select('id.cast(TimestampType).cast(t).as(column))
+            .select(timestamp_seconds($"id").cast(t).as(column))
             .write.saveAsTable(table)
           sql(s"ANALYZE TABLE $table COMPUTE STATISTICS FOR COLUMNS $column")
 
@@ -483,18 +478,124 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
 
     DateTimeTestUtils.outstandingZoneIds.foreach { zid =>
       val timeZone = TimeZone.getTimeZone(zid)
-      checkTimestampStats(DateType, DateTimeUtils.TimeZoneUTC, timeZone) { stats =>
+      checkTimestampStats(DateType, TimeZoneUTC, timeZone) { stats =>
         assert(stats.min.get.asInstanceOf[Int] == TimeUnit.SECONDS.toDays(start))
         assert(stats.max.get.asInstanceOf[Int] == TimeUnit.SECONDS.toDays(end - 1))
       }
-      checkTimestampStats(TimestampType, DateTimeUtils.TimeZoneUTC, timeZone) { stats =>
+      checkTimestampStats(TimestampType, TimeZoneUTC, timeZone) { stats =>
         assert(stats.min.get.asInstanceOf[Long] == TimeUnit.SECONDS.toMicros(start))
         assert(stats.max.get.asInstanceOf[Long] == TimeUnit.SECONDS.toMicros(end - 1))
       }
     }
   }
 
-  def getStatAttrNames(tableName: String): Set[String] = {
+  private def checkDescTimestampColStats(
+      tableName: String,
+      timestampColumn: String,
+      expectedMinTimestamp: String,
+      expectedMaxTimestamp: String): Unit = {
+
+    def extractColumnStatsFromDesc(statsName: String, rows: Array[Row]): String = {
+      rows.collect {
+        case r: Row if r.getString(0) == statsName =>
+          r.getString(1)
+      }.head
+    }
+
+    val descTsCol = sql(s"DESC FORMATTED $tableName $timestampColumn").collect()
+    assert(extractColumnStatsFromDesc("min", descTsCol) == expectedMinTimestamp)
+    assert(extractColumnStatsFromDesc("max", descTsCol) == expectedMaxTimestamp)
+  }
+
+  test("SPARK-38140: describe column stats (min, max) for timestamp column: desc results should " +
+    "be consistent with the written value if writing and desc happen in the same time zone") {
+
+    val zoneIdAndOffsets =
+      Seq((UTC, "+0000"), (PST, "-0800"), (getZoneId("Asia/Hong_Kong"), "+0800"))
+
+    zoneIdAndOffsets.foreach { case (zoneId, offset) =>
+      withDefaultTimeZone(zoneId) {
+        val table = "insert_desc_same_time_zone"
+        val tsCol = "timestamp_typed_col"
+        withTable(table) {
+          val minTimestamp = "make_timestamp(2022, 1, 1, 0, 0, 1.123456)"
+          val maxTimestamp = "make_timestamp(2022, 1, 3, 0, 0, 2.987654)"
+          sql(s"CREATE TABLE $table ($tsCol Timestamp) USING parquet")
+          sql(s"INSERT INTO $table VALUES $minTimestamp, $maxTimestamp")
+          sql(s"ANALYZE TABLE $table COMPUTE STATISTICS FOR ALL COLUMNS")
+
+          checkDescTimestampColStats(
+            tableName = table,
+            timestampColumn = tsCol,
+            expectedMinTimestamp = "2022-01-01 00:00:01.123456 " + offset,
+            expectedMaxTimestamp = "2022-01-03 00:00:02.987654 " + offset)
+        }
+      }
+    }
+  }
+
+  test("SPARK-38140: describe column stats (min, max) for timestamp column: desc should show " +
+    "different results if writing in UTC and desc in other time zones") {
+
+    val table = "insert_desc_diff_time_zones"
+    val tsCol = "timestamp_typed_col"
+
+    withDefaultTimeZone(UTC) {
+      withTable(table) {
+        val minTimestamp = "make_timestamp(2022, 1, 1, 0, 0, 1.123456)"
+        val maxTimestamp = "make_timestamp(2022, 1, 3, 0, 0, 2.987654)"
+        sql(s"CREATE TABLE $table ($tsCol Timestamp) USING parquet")
+        sql(s"INSERT INTO $table VALUES $minTimestamp, $maxTimestamp")
+        sql(s"ANALYZE TABLE $table COMPUTE STATISTICS FOR ALL COLUMNS")
+
+        checkDescTimestampColStats(
+          tableName = table,
+          timestampColumn = tsCol,
+          expectedMinTimestamp = "2022-01-01 00:00:01.123456 +0000",
+          expectedMaxTimestamp = "2022-01-03 00:00:02.987654 +0000")
+
+        TimeZone.setDefault(DateTimeUtils.getTimeZone("PST"))
+        checkDescTimestampColStats(
+          tableName = table,
+          timestampColumn = tsCol,
+          expectedMinTimestamp = "2021-12-31 16:00:01.123456 -0800",
+          expectedMaxTimestamp = "2022-01-02 16:00:02.987654 -0800")
+
+        TimeZone.setDefault(DateTimeUtils.getTimeZone("Asia/Hong_Kong"))
+        checkDescTimestampColStats(
+          tableName = table,
+          timestampColumn = tsCol,
+          expectedMinTimestamp = "2022-01-01 08:00:01.123456 +0800",
+          expectedMaxTimestamp = "2022-01-03 08:00:02.987654 +0800")
+      }
+    }
+  }
+
+  test("SPARK-42777: describe column stats (min, max) for timestamp_ntz column") {
+    val table = "insert_desc_same_time_zone"
+    val tsCol = "timestamp_ntz_typed_col"
+    withTable(table) {
+      val minTimestamp = "make_timestamp_ntz(2022, 1, 1, 0, 0, 1.123456)"
+      val maxTimestamp = "make_timestamp_ntz(2022, 1, 3, 0, 0, 2.987654)"
+      sql(s"CREATE TABLE $table ($tsCol timestamp_ntz) USING parquet")
+      sql(s"INSERT INTO $table VALUES $minTimestamp, $maxTimestamp")
+      sql(s"ANALYZE TABLE $table COMPUTE STATISTICS FOR ALL COLUMNS")
+
+      checkDescTimestampColStats(
+        tableName = table,
+        timestampColumn = tsCol,
+        expectedMinTimestamp = "2022-01-01 00:00:01.123456",
+        expectedMaxTimestamp = "2022-01-03 00:00:02.987654")
+
+      // Converting TimestampNTZ catalog stats to plan stats
+      val columnStat = getCatalogTable(table)
+        .stats.get.colStats(tsCol).toPlanStat(tsCol, TimestampNTZType)
+      assert(columnStat.min.contains(1640995201123456L))
+      assert(columnStat.max.contains(1641168002987654L))
+    }
+  }
+
+  private def getStatAttrNames(tableName: String): Set[String] = {
     val queryStats = spark.table(tableName).queryExecution.optimizedPlan.stats.attributeStats
     queryStats.map(_._1.name).toSet
   }
@@ -521,11 +622,14 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
   test("analyzes column statistics in cached local temporary view") {
     withTempView("tempView") {
       // Analyzes in a temporary view
-      sql("CREATE TEMPORARY VIEW tempView AS SELECT * FROM range(1, 30)")
-      val errMsg = intercept[AnalysisException] {
-        sql("ANALYZE TABLE tempView COMPUTE STATISTICS FOR COLUMNS id")
-      }.getMessage
-      assert(errMsg.contains(s"Table or view 'tempView' not found in database 'default'"))
+      sql("CREATE TEMPORARY VIEW tempView AS SELECT 1 id")
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql("ANALYZE TABLE tempView COMPUTE STATISTICS FOR COLUMNS id")
+        },
+        errorClass = "UNSUPPORTED_FEATURE.ANALYZE_UNCACHED_TEMP_VIEW",
+        parameters = Map("viewName" -> "`tempView`")
+      )
 
       // Cache the view then analyze it
       sql("CACHE TABLE tempView")
@@ -538,16 +642,20 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
   test("analyzes column statistics in cached global temporary view") {
     withGlobalTempView("gTempView") {
       val globalTempDB = spark.sharedState.globalTempViewManager.database
-      val errMsg1 = intercept[NoSuchTableException] {
+      val e1 = intercept[AnalysisException] {
         sql(s"ANALYZE TABLE $globalTempDB.gTempView COMPUTE STATISTICS FOR COLUMNS id")
-      }.getMessage
-      assert(errMsg1.contains(s"Table or view 'gTempView' not found in database '$globalTempDB'"))
+      }
+      checkErrorTableNotFound(e1, s"`$globalTempDB`.`gTempView`",
+        ExpectedContext(s"$globalTempDB.gTempView", 14, 13 + s"$globalTempDB.gTempView".length))
       // Analyzes in a global temporary view
-      sql("CREATE GLOBAL TEMP VIEW gTempView AS SELECT * FROM range(1, 30)")
-      val errMsg2 = intercept[AnalysisException] {
-        sql(s"ANALYZE TABLE $globalTempDB.gTempView COMPUTE STATISTICS FOR COLUMNS id")
-      }.getMessage
-      assert(errMsg2.contains(s"Table or view 'gTempView' not found in database '$globalTempDB'"))
+      sql("CREATE GLOBAL TEMP VIEW gTempView AS SELECT 1 id")
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(s"ANALYZE TABLE $globalTempDB.gTempView COMPUTE STATISTICS FOR COLUMNS id")
+        },
+        errorClass = "UNSUPPORTED_FEATURE.ANALYZE_UNCACHED_TEMP_VIEW",
+        parameters = Map("viewName" -> "`global_temp`.`gTempView`")
+      )
 
       // Cache the view then analyze it
       sql(s"CACHE TABLE $globalTempDB.gTempView")
@@ -660,12 +768,96 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
         withTable(table) {
           sql(s"CREATE TABLE $table (value string, name string) USING PARQUET")
           val dupCol = if (caseSensitive) "value" else "VaLuE"
-          val errorMsg = intercept[AnalysisException] {
-            sql(s"ANALYZE TABLE $table COMPUTE STATISTICS FOR COLUMNS value, name, $dupCol")
-          }.getMessage
-          assert(errorMsg.contains("Found duplicate column(s)"))
+          checkError(
+            exception = intercept[AnalysisException] {
+              sql(s"ANALYZE TABLE $table COMPUTE STATISTICS FOR COLUMNS value, name, $dupCol")
+            },
+            errorClass = "COLUMN_ALREADY_EXISTS",
+            parameters = Map("columnName" -> "`value`"))
         }
       }
+    }
+  }
+
+  test("SPARK-34119: Keep necessary stats after PruneFileSourcePartitions") {
+    withTable("SPARK_34119") {
+      withSQLConf(SQLConf.CBO_ENABLED.key -> "true") {
+        sql(s"CREATE TABLE SPARK_34119 using parquet PARTITIONED BY (p) AS " +
+          "(SELECT id, CAST(id % 5 AS STRING) AS p FROM range(10))")
+        sql(s"ANALYZE TABLE SPARK_34119 COMPUTE STATISTICS FOR ALL COLUMNS")
+
+        checkOptimizedPlanStats(sql(s"SELECT id FROM SPARK_34119"),
+          160L,
+          Some(10),
+          Seq(ColumnStat(
+            distinctCount = Some(10),
+            min = Some(0),
+            max = Some(9),
+            nullCount = Some(0),
+            avgLen = Some(LongType.defaultSize),
+            maxLen = Some(LongType.defaultSize))))
+
+        checkOptimizedPlanStats(sql("SELECT id FROM SPARK_34119 WHERE p = '2'"),
+          32L,
+          Some(2),
+          Seq(ColumnStat(
+            distinctCount = Some(2),
+            min = Some(0),
+            max = Some(9),
+            nullCount = Some(0),
+            avgLen = Some(LongType.defaultSize),
+            maxLen = Some(LongType.defaultSize))))
+      }
+    }
+  }
+
+  test("SPARK-33687: analyze all tables in a specific database") {
+    withTempDatabase { database =>
+      spark.catalog.setCurrentDatabase(database)
+      withTempDir { dir =>
+        withTable("t1", "t2") {
+          spark.range(10).write.saveAsTable("t1")
+          sql(s"CREATE EXTERNAL TABLE t2 USING parquet LOCATION '${dir.toURI}' " +
+            "AS SELECT * FROM range(20)")
+          withView("v1", "v2") {
+            sql("CREATE VIEW v1 AS SELECT 1 c1")
+            sql("CREATE VIEW v2 AS SELECT 2 c2")
+            sql("CACHE TABLE v1")
+            sql("CACHE LAZY TABLE v2")
+
+            sql(s"ANALYZE TABLES IN $database COMPUTE STATISTICS NOSCAN")
+            checkTableStats("t1", hasSizeInBytes = true, expectedRowCounts = None)
+            checkTableStats("t2", hasSizeInBytes = true, expectedRowCounts = None)
+            assert(getCatalogTable("v1").stats.isEmpty)
+            checkOptimizedPlanStats(spark.table("v1"), 4, Some(1), Seq.empty)
+            checkOptimizedPlanStats(spark.table("v2"), 1, None, Seq.empty)
+
+            sql("ANALYZE TABLES COMPUTE STATISTICS")
+            checkTableStats("t1", hasSizeInBytes = true, expectedRowCounts = Some(10))
+            checkTableStats("t2", hasSizeInBytes = true, expectedRowCounts = Some(20))
+            checkOptimizedPlanStats(spark.table("v1"), 4, Some(1), Seq.empty)
+            checkOptimizedPlanStats(spark.table("v2"), 4, Some(1), Seq.empty)
+          }
+        }
+      }
+    }
+
+    val e = intercept[AnalysisException] {
+      sql(s"ANALYZE TABLES IN db_not_exists COMPUTE STATISTICS")
+    }
+    checkError(e,
+      errorClass = "SCHEMA_NOT_FOUND",
+      parameters = Map("schemaName" -> "`db_not_exists`"))
+  }
+
+  test("SPARK-43383: Add rowCount statistics to LocalRelation") {
+    withSQLConf("spark.sql.test.localRelationRowCount" -> "true") {
+      val optimizedPlan = spark.sql("select * from values(1),(2),(3),(4),(5),(6)")
+        .queryExecution.optimizedPlan
+      assert(optimizedPlan.isInstanceOf[LocalRelation])
+
+      val stats = optimizedPlan.stats
+      assert(stats.rowCount.isDefined && stats.rowCount.get == 6)
     }
   }
 }

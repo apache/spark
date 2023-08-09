@@ -21,13 +21,13 @@ import scala.reflect.ClassTag
 
 import org.apache.spark.{Partition, SparkContext, TaskContext}
 import org.apache.spark.internal.Logging
-import org.apache.spark.rdd.{RDD, ZippedPartitionsBaseRDD, ZippedPartitionsPartition, ZippedPartitionsRDD2}
+import org.apache.spark.rdd.{RDD, ZippedPartitionsBaseRDD, ZippedPartitionsPartition}
 import org.apache.spark.sql.catalyst.analysis.StreamingJoinHelper
 import org.apache.spark.sql.catalyst.expressions.{And, Attribute, AttributeSet, BoundReference, Expression, NamedExpression, PredicateHelper}
 import org.apache.spark.sql.catalyst.plans.logical.EventTimeWatermark._
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.streaming.WatermarkSupport.watermarkExpression
-import org.apache.spark.sql.execution.streaming.state.{StateStoreCoordinatorRef, StateStoreProvider, StateStoreProviderId}
+import org.apache.spark.sql.execution.streaming.state.{StateStoreCoordinatorRef, StateStoreProviderId}
 
 
 /**
@@ -130,6 +130,52 @@ object StreamingSymmetricHashJoinHelper extends Logging {
     }
   }
 
+  def getStateWatermark(
+      leftAttributes: Seq[Attribute],
+      rightAttributes: Seq[Attribute],
+      leftKeys: Seq[Expression],
+      rightKeys: Seq[Expression],
+      condition: Option[Expression],
+      eventTimeWatermarkForEviction: Option[Long],
+      allowMultipleEventTimeColumns: Boolean): (Option[Long], Option[Long]) = {
+
+    // Perform assertions against multiple event time columns in the same DataFrame. This method
+    // assumes there is only one event time column per each side (left / right) and it is not very
+    // clear to reason about the correctness if there are multiple event time columns. Disallow to
+    // be conservative.
+    WatermarkSupport.findEventTimeColumn(leftAttributes,
+      allowMultipleEventTimeColumns = allowMultipleEventTimeColumns)
+    WatermarkSupport.findEventTimeColumn(rightAttributes,
+      allowMultipleEventTimeColumns = allowMultipleEventTimeColumns)
+
+    val joinKeyOrdinalForWatermark: Option[Int] = findJoinKeyOrdinalForWatermark(
+      leftKeys, rightKeys)
+
+    def getOneSideStateWatermark(
+        oneSideInputAttributes: Seq[Attribute],
+        otherSideInputAttributes: Seq[Attribute]): Option[Long] = {
+      val isWatermarkDefinedOnInput = oneSideInputAttributes.exists(_.metadata.contains(delayKey))
+      val isWatermarkDefinedOnJoinKey = joinKeyOrdinalForWatermark.isDefined
+
+      if (isWatermarkDefinedOnJoinKey) { // case 1 and 3 in the StreamingSymmetricHashJoinExec docs
+        eventTimeWatermarkForEviction
+      } else if (isWatermarkDefinedOnInput) { // case 2 in the StreamingSymmetricHashJoinExec docs
+        StreamingJoinHelper.getStateValueWatermark(
+          attributesToFindStateWatermarkFor = AttributeSet(oneSideInputAttributes),
+          attributesWithEventWatermark = AttributeSet(otherSideInputAttributes),
+          condition,
+          eventTimeWatermarkForEviction)
+      } else {
+        None
+      }
+    }
+
+    val leftStateWatermark = getOneSideStateWatermark(leftAttributes, rightAttributes)
+    val rightStateWatermark = getOneSideStateWatermark(rightAttributes, leftAttributes)
+
+    (leftStateWatermark, rightStateWatermark)
+  }
+
   /** Get the predicates defining the state watermarks for both sides of the join */
   def getStateWatermarkPredicates(
       leftAttributes: Seq[Attribute],
@@ -137,28 +183,20 @@ object StreamingSymmetricHashJoinHelper extends Logging {
       leftKeys: Seq[Expression],
       rightKeys: Seq[Expression],
       condition: Option[Expression],
-      eventTimeWatermark: Option[Long]): JoinStateWatermarkPredicates = {
+      eventTimeWatermarkForEviction: Option[Long],
+      useFirstEventTimeColumn: Boolean): JoinStateWatermarkPredicates = {
 
+    // Perform assertions against multiple event time columns in the same DataFrame. This method
+    // assumes there is only one event time column per each side (left / right) and it is not very
+    // clear to reason about the correctness if there are multiple event time columns. Disallow to
+    // be conservative.
+    WatermarkSupport.findEventTimeColumn(leftAttributes,
+      allowMultipleEventTimeColumns = useFirstEventTimeColumn)
+    WatermarkSupport.findEventTimeColumn(rightAttributes,
+      allowMultipleEventTimeColumns = useFirstEventTimeColumn)
 
-    // Join keys of both sides generate rows of the same fields, that is, same sequence of data
-    // types. If one side (say left side) has a column (say timestamp) that has a watermark on it,
-    // then it will never consider joining keys that are < state key watermark (i.e. event time
-    // watermark). On the other side (i.e. right side), even if there is no watermark defined,
-    // there has to be an equivalent column (i.e., timestamp). And any right side data that has the
-    // timestamp < watermark will not match will not match with left side data, as the left side get
-    // filtered with the explicitly defined watermark. So, the watermark in timestamp column in
-    // left side keys effectively causes the timestamp on the right side to have a watermark.
-    // We will use the ordinal of the left timestamp in the left keys to find the corresponding
-    // right timestamp in the right keys.
-    val joinKeyOrdinalForWatermark: Option[Int] = {
-      leftKeys.zipWithIndex.collectFirst {
-        case (ne: NamedExpression, index) if ne.metadata.contains(delayKey) => index
-      } orElse {
-        rightKeys.zipWithIndex.collectFirst {
-          case (ne: NamedExpression, index) if ne.metadata.contains(delayKey) => index
-        }
-      }
-    }
+    val joinKeyOrdinalForWatermark: Option[Int] = findJoinKeyOrdinalForWatermark(
+      leftKeys, rightKeys)
 
     def getOneSideStateWatermarkPredicate(
         oneSideInputAttributes: Seq[Attribute],
@@ -172,7 +210,7 @@ object StreamingSymmetricHashJoinHelper extends Logging {
           joinKeyOrdinalForWatermark.get,
           oneSideJoinKeys(joinKeyOrdinalForWatermark.get).dataType,
           oneSideJoinKeys(joinKeyOrdinalForWatermark.get).nullable)
-        val expr = watermarkExpression(Some(keyExprWithWatermark), eventTimeWatermark)
+        val expr = watermarkExpression(Some(keyExprWithWatermark), eventTimeWatermarkForEviction)
         expr.map(JoinStateKeyWatermarkPredicate.apply _)
 
       } else if (isWatermarkDefinedOnInput) { // case 2 in the StreamingSymmetricHashJoinExec docs
@@ -180,7 +218,7 @@ object StreamingSymmetricHashJoinHelper extends Logging {
           attributesToFindStateWatermarkFor = AttributeSet(oneSideInputAttributes),
           attributesWithEventWatermark = AttributeSet(otherSideInputAttributes),
           condition,
-          eventTimeWatermark)
+          eventTimeWatermarkForEviction)
         val inputAttributeWithWatermark = oneSideInputAttributes.find(_.metadata.contains(delayKey))
         val expr = watermarkExpression(inputAttributeWithWatermark, stateValueWatermark)
         expr.map(JoinStateValueWatermarkPredicate.apply _)
@@ -197,11 +235,33 @@ object StreamingSymmetricHashJoinHelper extends Logging {
     JoinStateWatermarkPredicates(leftStateWatermarkPredicate, rightStateWatermarkPredicate)
   }
 
+  private def findJoinKeyOrdinalForWatermark(
+      leftKeys: Seq[Expression],
+      rightKeys: Seq[Expression]): Option[Int] = {
+    // Join keys of both sides generate rows of the same fields, that is, same sequence of data
+    // types. If one side (say left side) has a column (say timestamp) that has a watermark on it,
+    // then it will never consider joining keys that are < state key watermark (i.e. event time
+    // watermark). On the other side (i.e. right side), even if there is no watermark defined,
+    // there has to be an equivalent column (i.e., timestamp). And any right side data that has the
+    // timestamp < watermark will not match will not match with left side data, as the left side get
+    // filtered with the explicitly defined watermark. So, the watermark in timestamp column in
+    // left side keys effectively causes the timestamp on the right side to have a watermark.
+    // We will use the ordinal of the left timestamp in the left keys to find the corresponding
+    // right timestamp in the right keys.
+    leftKeys.zipWithIndex.collectFirst {
+      case (ne: NamedExpression, index) if ne.metadata.contains(delayKey) => index
+    } orElse {
+      rightKeys.zipWithIndex.collectFirst {
+        case (ne: NamedExpression, index) if ne.metadata.contains(delayKey) => index
+      }
+    }
+  }
+
   /**
    * A custom RDD that allows partitions to be "zipped" together, while ensuring the tasks'
    * preferred location is based on which executors have the required join state stores already
-   * loaded. This class is a variant of [[ZippedPartitionsRDD2]] which only changes signature
-   * of `f`.
+   * loaded. This class is a variant of [[org.apache.spark.rdd.ZippedPartitionsRDD2]] which only
+   * changes signature of `f`.
    */
   class StateStoreAwareZipPartitionsRDD[A: ClassTag, B: ClassTag, V: ClassTag](
       sc: SparkContext,

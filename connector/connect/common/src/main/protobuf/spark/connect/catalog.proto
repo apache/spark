@@ -1,0 +1,243 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+syntax = 'proto3';
+
+package spark.connect;
+
+import "spark/connect/common.proto";
+import "spark/connect/types.proto";
+
+option java_multiple_files = true;
+option java_package = "org.apache.spark.connect.proto";
+option go_package = "internal/generated";
+
+// Catalog messages are marked as unstable.
+message Catalog {
+  oneof cat_type {
+    CurrentDatabase current_database = 1;
+    SetCurrentDatabase set_current_database = 2;
+    ListDatabases list_databases = 3;
+    ListTables list_tables = 4;
+    ListFunctions list_functions = 5;
+    ListColumns list_columns = 6;
+    GetDatabase get_database = 7;
+    GetTable get_table = 8;
+    GetFunction get_function = 9;
+    DatabaseExists database_exists = 10;
+    TableExists table_exists = 11;
+    FunctionExists function_exists = 12;
+    CreateExternalTable create_external_table = 13;
+    CreateTable create_table = 14;
+    DropTempView drop_temp_view = 15;
+    DropGlobalTempView drop_global_temp_view = 16;
+    RecoverPartitions recover_partitions = 17;
+    IsCached is_cached = 18;
+    CacheTable cache_table = 19;
+    UncacheTable uncache_table = 20;
+    ClearCache clear_cache = 21;
+    RefreshTable refresh_table = 22;
+    RefreshByPath refresh_by_path = 23;
+    CurrentCatalog current_catalog = 24;
+    SetCurrentCatalog set_current_catalog = 25;
+    ListCatalogs list_catalogs = 26;
+  }
+}
+
+// See `spark.catalog.currentDatabase`
+message CurrentDatabase { }
+
+// See `spark.catalog.setCurrentDatabase`
+message SetCurrentDatabase {
+  // (Required)
+  string db_name = 1;
+}
+
+// See `spark.catalog.listDatabases`
+message ListDatabases {
+  // (Optional) The pattern that the database name needs to match
+  optional string pattern = 1;
+}
+
+// See `spark.catalog.listTables`
+message ListTables {
+  // (Optional)
+  optional string db_name = 1;
+  // (Optional) The pattern that the table name needs to match
+  optional string pattern = 2;
+}
+
+// See `spark.catalog.listFunctions`
+message ListFunctions {
+  // (Optional)
+  optional string db_name = 1;
+  // (Optional) The pattern that the function name needs to match
+  optional string pattern = 2;
+}
+
+// See `spark.catalog.listColumns`
+message ListColumns {
+  // (Required)
+  string table_name = 1;
+  // (Optional)
+  optional string db_name = 2;
+}
+
+// See `spark.catalog.getDatabase`
+message GetDatabase {
+  // (Required)
+  string db_name = 1;
+}
+
+// See `spark.catalog.getTable`
+message GetTable {
+  // (Required)
+  string table_name = 1;
+  // (Optional)
+  optional string db_name = 2;
+}
+
+// See `spark.catalog.getFunction`
+message GetFunction {
+  // (Required)
+  string function_name = 1;
+  // (Optional)
+  optional string db_name = 2;
+}
+
+// See `spark.catalog.databaseExists`
+message DatabaseExists {
+  // (Required)
+  string db_name = 1;
+}
+
+// See `spark.catalog.tableExists`
+message TableExists {
+  // (Required)
+  string table_name = 1;
+  // (Optional)
+  optional string db_name = 2;
+}
+
+// See `spark.catalog.functionExists`
+message FunctionExists {
+  // (Required)
+  string function_name = 1;
+  // (Optional)
+  optional string db_name = 2;
+}
+
+// See `spark.catalog.createExternalTable`
+message CreateExternalTable {
+  // (Required)
+  string table_name = 1;
+  // (Optional)
+  optional string path = 2;
+  // (Optional)
+  optional string source = 3;
+  // (Optional)
+  optional DataType schema = 4;
+  // Options could be empty for valid data source format.
+  // The map key is case insensitive.
+  map<string, string> options = 5;
+}
+
+// See `spark.catalog.createTable`
+message CreateTable {
+  // (Required)
+  string table_name = 1;
+  // (Optional)
+  optional string path = 2;
+  // (Optional)
+  optional string source = 3;
+  // (Optional)
+  optional string description = 4;
+  // (Optional)
+  optional DataType schema = 5;
+  // Options could be empty for valid data source format.
+  // The map key is case insensitive.
+  map<string, string> options = 6;
+}
+
+// See `spark.catalog.dropTempView`
+message DropTempView {
+  // (Required)
+  string view_name = 1;
+}
+
+// See `spark.catalog.dropGlobalTempView`
+message DropGlobalTempView {
+  // (Required)
+  string view_name = 1;
+}
+
+// See `spark.catalog.recoverPartitions`
+message RecoverPartitions {
+  // (Required)
+  string table_name = 1;
+}
+
+// See `spark.catalog.isCached`
+message IsCached {
+  // (Required)
+  string table_name = 1;
+}
+
+// See `spark.catalog.cacheTable`
+message CacheTable {
+  // (Required)
+  string table_name = 1;
+
+  // (Optional)
+  optional StorageLevel storage_level = 2;
+}
+
+// See `spark.catalog.uncacheTable`
+message UncacheTable {
+  // (Required)
+  string table_name = 1;
+}
+
+// See `spark.catalog.clearCache`
+message ClearCache { }
+
+// See `spark.catalog.refreshTable`
+message RefreshTable {
+  // (Required)
+  string table_name = 1;
+}
+
+// See `spark.catalog.refreshByPath`
+message RefreshByPath {
+  // (Required)
+  string path = 1;
+}
+
+// See `spark.catalog.currentCatalog`
+message CurrentCatalog { }
+
+// See `spark.catalog.setCurrentCatalog`
+message SetCurrentCatalog {
+  // (Required)
+  string catalog_name = 1;
+}
+
+// See `spark.catalog.listCatalogs`
+message ListCatalogs {
+  // (Optional) The pattern that the catalog name needs to match
+  optional string pattern = 1;
+}

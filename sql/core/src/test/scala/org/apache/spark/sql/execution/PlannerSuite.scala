@@ -22,13 +22,14 @@ import org.apache.spark.sql.{execution, DataFrame, Row}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans._
-import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan, Range, Repartition, Sort, Union}
+import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan, Range, Repartition, RepartitionOperation, Union}
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanHelper, DisableAdaptiveExecution}
 import org.apache.spark.sql.execution.aggregate.{HashAggregateExec, ObjectHashAggregateExec, SortAggregateExec}
 import org.apache.spark.sql.execution.columnar.{InMemoryRelation, InMemoryTableScanExec}
-import org.apache.spark.sql.execution.exchange.{EnsureRequirements, ReusedExchangeExec, ReuseExchange, ShuffleExchangeExec}
+import org.apache.spark.sql.execution.exchange.{EnsureRequirements, REPARTITION_BY_COL, ReusedExchangeExec, ShuffleExchangeExec}
 import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, SortMergeJoinExec}
+import org.apache.spark.sql.execution.reuse.ReuseExchangeAndSubquery
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
@@ -38,6 +39,8 @@ class PlannerSuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
   import testImplicits._
 
   setupTestData()
+
+  private val EnsureRequirements = new EnsureRequirements()
 
   private def testPartialAggregationPlan(query: LogicalPlan): Unit = {
     val planner = spark.sessionState.planner
@@ -56,18 +59,21 @@ class PlannerSuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
   }
 
   test("count is partially aggregated") {
-    val query = testData.groupBy('value).agg(count('key)).queryExecution.analyzed
+    val query = testData.groupBy($"value").agg(count($"key")).queryExecution.analyzed
     testPartialAggregationPlan(query)
   }
 
   test("count distinct is partially aggregated") {
-    val query = testData.groupBy('value).agg(countDistinct('key)).queryExecution.analyzed
+    val query = testData.groupBy($"value").agg(count_distinct($"key"))
+      .queryExecution.analyzed
     testPartialAggregationPlan(query)
   }
 
   test("mixed aggregates are partially aggregated") {
     val query =
-      testData.groupBy('value).agg(count('value), countDistinct('key)).queryExecution.analyzed
+      testData.groupBy($"value")
+        .agg(count($"value"), count_distinct($"key"))
+        .queryExecution.analyzed
     testPartialAggregationPlan(query)
   }
 
@@ -89,6 +95,10 @@ class PlannerSuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
       // 2 distinct columns with different order
       val query3 = sql("SELECT corr(DISTINCT j, k), count(DISTINCT k, j) FROM v GROUP BY i")
       assertNoExpand(query3.queryExecution.executedPlan)
+
+      // SPARK-40382: 1 distinct expression with cosmetic differences
+      val query4 = sql("SELECT sum(DISTINCT j), max(DISTINCT J) FROM v GROUP BY i")
+      assertNoExpand(query4.queryExecution.executedPlan)
     }
   }
 
@@ -190,61 +200,65 @@ class PlannerSuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
   }
 
   test("efficient terminal limit -> sort should use TakeOrderedAndProject") {
-    val query = testData.select('key, 'value).sort('key).limit(2)
+    val query = testData.select($"key", $"value").sort($"key").limit(2)
     val planned = query.queryExecution.executedPlan
     assert(planned.isInstanceOf[execution.TakeOrderedAndProjectExec])
-    assert(planned.output === testData.select('key, 'value).logicalPlan.output)
+    assert(planned.output === testData.select($"key", $"value").logicalPlan.output)
   }
 
   test("terminal limit -> project -> sort should use TakeOrderedAndProject") {
-    val query = testData.select('key, 'value).sort('key).select('value, 'key).limit(2)
+    val query = testData.select($"key", $"value").sort($"key")
+      .select($"value", $"key").limit(2)
     val planned = query.queryExecution.executedPlan
     assert(planned.isInstanceOf[execution.TakeOrderedAndProjectExec])
-    assert(planned.output === testData.select('value, 'key).logicalPlan.output)
+    assert(planned.output === testData.select($"value", $"key").logicalPlan.output)
   }
 
   test("terminal limits that are not handled by TakeOrderedAndProject should use CollectLimit") {
-    val query = testData.select('value).limit(2)
+    val query = testData.select($"value").limit(2)
     val planned = query.queryExecution.sparkPlan
     assert(planned.isInstanceOf[CollectLimitExec])
-    assert(planned.output === testData.select('value).logicalPlan.output)
+    assert(planned.output === testData.select($"value").logicalPlan.output)
   }
 
   test("TakeOrderedAndProject can appear in the middle of plans") {
-    val query = testData.select('key, 'value).sort('key).limit(2).filter('key === 3)
+    val query = testData.select($"key", $"value")
+      .sort($"key").limit(2).filter($"key" === 3)
     val planned = query.queryExecution.executedPlan
-    assert(planned.find(_.isInstanceOf[TakeOrderedAndProjectExec]).isDefined)
+    assert(planned.exists(_.isInstanceOf[TakeOrderedAndProjectExec]))
   }
 
   test("CollectLimit can appear in the middle of a plan when caching is used") {
-    val query = testData.select('key, 'value).limit(2).cache()
+    val query = testData.select($"key", $"value").limit(2).cache()
     val planned = query.queryExecution.optimizedPlan.asInstanceOf[InMemoryRelation]
     assert(planned.cachedPlan.isInstanceOf[CollectLimitExec])
   }
 
   test("TakeOrderedAndProjectExec appears only when number of limit is below the threshold.") {
     withSQLConf(SQLConf.TOP_K_SORT_FALLBACK_THRESHOLD.key -> "1000") {
-      val query0 = testData.select('value).orderBy('key).limit(100)
+      val query0 = testData.select($"value").orderBy($"key").limit(100)
       val planned0 = query0.queryExecution.executedPlan
-      assert(planned0.find(_.isInstanceOf[TakeOrderedAndProjectExec]).isDefined)
+      assert(planned0.exists(_.isInstanceOf[TakeOrderedAndProjectExec]))
 
-      val query1 = testData.select('value).orderBy('key).limit(2000)
+      val query1 = testData.select($"value").orderBy($"key").limit(2000)
       val planned1 = query1.queryExecution.executedPlan
-      assert(planned1.find(_.isInstanceOf[TakeOrderedAndProjectExec]).isEmpty)
+      assert(!planned1.exists(_.isInstanceOf[TakeOrderedAndProjectExec]))
     }
   }
 
-  test("SPARK-23375: Cached sorted data doesn't need to be re-sorted") {
-    val query = testData.select('key, 'value).sort('key.desc).cache()
-    assert(query.queryExecution.optimizedPlan.isInstanceOf[InMemoryRelation])
-    val resorted = query.sort('key.desc)
-    assert(resorted.queryExecution.optimizedPlan.collect { case s: Sort => s}.isEmpty)
-    assert(resorted.select('key).collect().map(_.getInt(0)).toSeq ==
-      (1 to 100).reverse)
-    // with a different order, the sort is needed
-    val sortedAsc = query.sort('key)
-    assert(sortedAsc.queryExecution.optimizedPlan.collect { case s: Sort => s}.size == 1)
-    assert(sortedAsc.select('key).collect().map(_.getInt(0)).toSeq == (1 to 100))
+  test("TakeOrderedAndProjectExec appears only when limit + offset is below the threshold.") {
+    withTempView("testLimitAndOffset") {
+      testData.createOrReplaceTempView("testLimitAndOffset")
+      withSQLConf(SQLConf.TOP_K_SORT_FALLBACK_THRESHOLD.key -> "1000") {
+        val query0 = sql("select value from testLimitAndOffset order by key limit 100 offset 100")
+        val planned0 = query0.queryExecution.executedPlan
+        assert(planned0.exists(_.isInstanceOf[TakeOrderedAndProjectExec]))
+
+        val query1 = sql("select value from testLimitAndOffset order by key limit 100 offset 1000")
+        val planned1 = query1.queryExecution.executedPlan
+        assert(!planned1.exists(_.isInstanceOf[TakeOrderedAndProjectExec]))
+      }
+    }
   }
 
   test("PartitioningCollection") {
@@ -342,7 +356,7 @@ class PlannerSuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
       requiredChildDistribution = Seq(distribution, distribution),
       requiredChildOrdering = Seq(Seq.empty, Seq.empty)
     )
-    val outputPlan = EnsureRequirements(spark.sessionState.conf).apply(inputPlan)
+    val outputPlan = EnsureRequirements.apply(inputPlan)
     assertDistributionRequirementsAreSatisfied(outputPlan)
   }
 
@@ -360,7 +374,7 @@ class PlannerSuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
       requiredChildDistribution = Seq(distribution, distribution),
       requiredChildOrdering = Seq(Seq.empty, Seq.empty)
     )
-    val outputPlan = EnsureRequirements(spark.sessionState.conf).apply(inputPlan)
+    val outputPlan = EnsureRequirements.apply(inputPlan)
     assertDistributionRequirementsAreSatisfied(outputPlan)
     if (outputPlan.collect { case e: ShuffleExchangeExec => true }.isEmpty) {
       fail(s"Exchange should have been added:\n$outputPlan")
@@ -380,7 +394,7 @@ class PlannerSuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
       requiredChildDistribution = Seq(distribution, distribution),
       requiredChildOrdering = Seq(Seq.empty, Seq.empty)
     )
-    val outputPlan = EnsureRequirements(spark.sessionState.conf).apply(inputPlan)
+    val outputPlan = EnsureRequirements.apply(inputPlan)
     assertDistributionRequirementsAreSatisfied(outputPlan)
     if (outputPlan.collect { case e: ShuffleExchangeExec => true }.nonEmpty) {
       fail(s"Exchange should not have been added:\n$outputPlan")
@@ -403,7 +417,7 @@ class PlannerSuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
       requiredChildDistribution = Seq(distribution, distribution),
       requiredChildOrdering = Seq(outputOrdering, outputOrdering)
     )
-    val outputPlan = EnsureRequirements(spark.sessionState.conf).apply(inputPlan)
+    val outputPlan = EnsureRequirements.apply(inputPlan)
     assertDistributionRequirementsAreSatisfied(outputPlan)
     if (outputPlan.collect { case e: ShuffleExchangeExec => true }.nonEmpty) {
       fail(s"No Exchanges should have been added:\n$outputPlan")
@@ -418,7 +432,7 @@ class PlannerSuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
     val inputPlan = ShuffleExchangeExec(
       partitioning,
       DummySparkPlan(outputPartitioning = partitioning))
-    val outputPlan = EnsureRequirements(spark.sessionState.conf).apply(inputPlan)
+    val outputPlan = EnsureRequirements.apply(inputPlan)
     assertDistributionRequirementsAreSatisfied(outputPlan)
     if (outputPlan.collect { case e: ShuffleExchangeExec => true }.size == 2) {
       fail(s"Topmost Exchange should have been eliminated:\n$outputPlan")
@@ -432,8 +446,9 @@ class PlannerSuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
 
     val inputPlan = ShuffleExchangeExec(
       partitioning,
-      DummySparkPlan(outputPartitioning = partitioning))
-    val outputPlan = EnsureRequirements(spark.sessionState.conf).apply(inputPlan)
+      DummySparkPlan(outputPartitioning = partitioning),
+      REPARTITION_BY_COL)
+    val outputPlan = EnsureRequirements.apply(inputPlan)
     assertDistributionRequirementsAreSatisfied(outputPlan)
     if (outputPlan.collect { case e: ShuffleExchangeExec => true }.size == 1) {
       fail(s"Topmost Exchange should not have been eliminated:\n$outputPlan")
@@ -441,7 +456,7 @@ class PlannerSuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
   }
 
   test("EnsureRequirements should respect ClusteredDistribution's num partitioning") {
-    val distribution = ClusteredDistribution(Literal(1) :: Nil, Some(13))
+    val distribution = ClusteredDistribution(Literal(1) :: Nil, requiredNumPartitions = Some(13))
     // Number of partitions differ
     val finalPartitioning = HashPartitioning(Literal(1) :: Nil, 13)
     val childPartitioning = HashPartitioning(Literal(1) :: Nil, 5)
@@ -451,7 +466,7 @@ class PlannerSuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
         requiredChildDistribution = Seq(distribution),
         requiredChildOrdering = Seq(Seq.empty))
 
-    val outputPlan = EnsureRequirements(spark.sessionState.conf).apply(inputPlan)
+    val outputPlan = EnsureRequirements.apply(inputPlan)
     val shuffle = outputPlan.collect { case e: ShuffleExchangeExec => e }
     assert(shuffle.size === 1)
     assert(shuffle.head.outputPartitioning === finalPartitioning)
@@ -474,9 +489,9 @@ class PlannerSuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
       Inner,
       None,
       shuffle,
-      shuffle)
+      shuffle.copy())
 
-    val outputPlan = ReuseExchange(spark.sessionState.conf).apply(inputPlan)
+    val outputPlan = ReuseExchangeAndSubquery.apply(inputPlan)
     if (outputPlan.collect { case e: ReusedExchangeExec => true }.size != 1) {
       fail(s"Should re-use the shuffle:\n$outputPlan")
     }
@@ -493,7 +508,7 @@ class PlannerSuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
       ShuffleExchangeExec(finalPartitioning, inputPlan),
       ShuffleExchangeExec(finalPartitioning, inputPlan))
 
-    val outputPlan2 = ReuseExchange(spark.sessionState.conf).apply(inputPlan2)
+    val outputPlan2 = ReuseExchangeAndSubquery.apply(inputPlan2)
     if (outputPlan2.collect { case e: ReusedExchangeExec => true }.size != 2) {
       fail(s"Should re-use the two shuffles:\n$outputPlan2")
     }
@@ -530,7 +545,7 @@ class PlannerSuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
       requiredChildOrdering = Seq(requiredOrdering),
       requiredChildDistribution = Seq(UnspecifiedDistribution)
     )
-    val outputPlan = EnsureRequirements(spark.sessionState.conf).apply(inputPlan)
+    val outputPlan = EnsureRequirements.apply(inputPlan)
     assertDistributionRequirementsAreSatisfied(outputPlan)
     if (shouldHaveSort) {
       if (outputPlan.collect { case s: SortExec => true }.isEmpty) {
@@ -691,7 +706,7 @@ class PlannerSuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
     val smjExec = SortMergeJoinExec(
       exprA :: exprA :: Nil, exprB :: exprC :: Nil, Inner, None, plan1, plan2)
 
-    val outputPlan = EnsureRequirements(spark.sessionState.conf).apply(smjExec)
+    val outputPlan = EnsureRequirements.apply(smjExec)
     outputPlan match {
       case SortMergeJoinExec(leftKeys, rightKeys, _, _, _, _, _) =>
         assert(leftKeys == Seq(exprA, exprA))
@@ -711,14 +726,14 @@ class PlannerSuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
       condition = None,
       left = plan1,
       right = plan2)
-    val outputPlan = EnsureRequirements(spark.sessionState.conf).apply(smjExec)
+    val outputPlan = EnsureRequirements.apply(smjExec)
     outputPlan match {
       case SortMergeJoinExec(leftKeys, rightKeys, _, _,
              SortExec(_, _,
-               ShuffleExchangeExec(HashPartitioning(leftPartitioningExpressions, _), _, _), _),
+               ShuffleExchangeExec(HashPartitioning(leftPartitioningExpressions, _), _, _, _), _),
              SortExec(_, _,
                ShuffleExchangeExec(HashPartitioning(rightPartitioningExpressions, _),
-               _, _), _), _) =>
+               _, _, _), _), _) =>
         assert(leftKeys === smjExec.leftKeys)
         assert(rightKeys === smjExec.rightKeys)
         assert(leftKeys === leftPartitioningExpressions)
@@ -741,8 +756,6 @@ class PlannerSuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
       case r: Range => r
     }
     assert(ranges.length == 2)
-    // Ensure the two Range instances are equal according to their equal method
-    assert(ranges.head == ranges.last)
     val execRanges = df.queryExecution.sparkPlan.collect {
       case r: RangeExec => r
     }
@@ -785,19 +798,19 @@ class PlannerSuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
     // when enable AQE, the reusedExchange is inserted when executed.
     withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
       // ReusedExchange is HashPartitioning
-      val df1 = Seq(1 -> "a").toDF("i", "j").repartition($"i")
-      val df2 = Seq(1 -> "a").toDF("i", "j").repartition($"i")
+      val df1 = Seq(1 -> "a", 2 -> "b").toDF("i", "j").repartition($"i")
+      val df2 = Seq(1 -> "a", 2 -> "b").toDF("i", "j").repartition($"i")
       checkReusedExchangeOutputPartitioningRewrite(df1.union(df2), classOf[HashPartitioning])
 
       // ReusedExchange is RangePartitioning
-      val df3 = Seq(1 -> "a").toDF("i", "j").orderBy($"i")
-      val df4 = Seq(1 -> "a").toDF("i", "j").orderBy($"i")
+      val df3 = Seq(1 -> "a", 2 -> "b").toDF("i", "j").orderBy($"i")
+      val df4 = Seq(1 -> "a", 2 -> "b").toDF("i", "j").orderBy($"i")
       checkReusedExchangeOutputPartitioningRewrite(df3.union(df4), classOf[RangePartitioning])
 
       // InMemoryTableScan is HashPartitioning
-      Seq(1 -> "a").toDF("i", "j").repartition($"i").persist()
+      Seq(1 -> "a", 2 -> "b").toDF("i", "j").repartition($"i").persist()
       checkInMemoryTableScanOutputPartitioningRewrite(
-        Seq(1 -> "a").toDF("i", "j").repartition($"i"), classOf[HashPartitioning])
+        Seq(1 -> "a", 2 -> "b").toDF("i", "j").repartition($"i"), classOf[HashPartitioning])
 
       // InMemoryTableScan is RangePartitioning
       spark.range(1, 100, 1, 10).toDF().persist()
@@ -807,9 +820,11 @@ class PlannerSuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
 
     // InMemoryTableScan is PartitioningCollection
     withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
-      Seq(1 -> "a").toDF("i", "j").join(Seq(1 -> "a").toDF("m", "n"), $"i" === $"m").persist()
+      Seq(1 -> "a", 2 -> "b").toDF("i", "j")
+        .join(Seq(1 -> "a", 2 -> "b").toDF("m", "n"), $"i" === $"m").persist()
       checkInMemoryTableScanOutputPartitioningRewrite(
-        Seq(1 -> "a").toDF("i", "j").join(Seq(1 -> "a").toDF("m", "n"), $"i" === $"m"),
+        Seq(1 -> "a", 2 -> "b").toDF("i", "j")
+          .join(Seq(1 -> "a", 2 -> "b").toDF("m", "n"), $"i" === $"m"),
         classOf[PartitioningCollection])
     }
   }
@@ -867,7 +882,7 @@ class PlannerSuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
 
   test("Do not analyze subqueries twice") {
     // Analyzing the subquery twice will result in stacked
-    // CheckOverflow & PromotePrecision expressions.
+    // CheckOverflow expressions.
     val df = sql(
       """
         |SELECT id,
@@ -879,8 +894,6 @@ class PlannerSuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
     subquery.foreach { node =>
       node.expressions.foreach { expression =>
         expression.foreach {
-          case PromotePrecision(_: PromotePrecision) =>
-            fail(s"$expression contains stacked PromotePrecision expressions.")
           case CheckOverflow(_: CheckOverflow, _, _) =>
             fail(s"$expression contains stacked CheckOverflow expressions.")
           case _ => // Ok
@@ -902,8 +915,225 @@ class PlannerSuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
             |  (SELECT key AS k from df2) t2
             |ON t1.k = t2.k
           """.stripMargin).queryExecution.executedPlan
-        val exchanges = planned.collect { case s: ShuffleExchangeExec => s }
+        val exchanges = collect(planned) { case s: ShuffleExchangeExec => s }
         assert(exchanges.size == 2)
+      }
+    }
+  }
+
+  test("SPARK-33399: aliases should be handled properly in PartitioningCollection output" +
+    " partitioning") {
+    withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+      withTempView("t1", "t2", "t3") {
+        spark.range(10).repartition($"id").createTempView("t1")
+        spark.range(20).repartition($"id").createTempView("t2")
+        spark.range(30).repartition($"id").createTempView("t3")
+        val planned = sql(
+          """
+            |SELECT t3.id as t3id
+            |FROM (
+            |    SELECT t1.id as t1id, t2.id as t2id
+            |    FROM t1, t2
+            |    WHERE t1.id = t2.id
+            |) t12, t3
+            |WHERE t1id = t3.id
+          """.stripMargin).queryExecution.executedPlan
+        val exchanges = collect(planned) { case s: ShuffleExchangeExec => s }
+        assert(exchanges.size == 3)
+
+        val projects = collect(planned) { case p: ProjectExec => p }
+        assert(projects.exists(_.outputPartitioning match {
+          case HashPartitioning(Seq(k1: AttributeReference), _) if k1.name == "t1id" =>
+            true
+          case _ =>
+            false
+        }))
+      }
+    }
+  }
+
+  test("SPARK-33399: aliases should be handled properly in HashPartitioning") {
+    withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+      withTempView("t1", "t2", "t3") {
+        spark.range(10).repartition($"id").createTempView("t1")
+        spark.range(20).repartition($"id").createTempView("t2")
+        spark.range(30).repartition($"id").createTempView("t3")
+        val planned = sql(
+          """
+            |SELECT t1id, t3.id as t3id
+            |FROM (
+            |    SELECT t1.id as t1id
+            |    FROM t1 LEFT SEMI JOIN t2
+            |    ON t1.id = t2.id
+            |) t12 INNER JOIN t3
+            |WHERE t1id = t3.id
+          """.stripMargin).queryExecution.executedPlan
+        val exchanges = collect(planned) { case s: ShuffleExchangeExec => s }
+        assert(exchanges.size == 3)
+
+        val projects = collect(planned) { case p: ProjectExec => p }
+        assert(projects.exists(_.outputPartitioning match {
+          case HashPartitioning(Seq(a: AttributeReference), _) => a.name == "t1id"
+          case _ => false
+        }))
+      }
+    }
+  }
+
+  test("SPARK-33399: alias handling should happen properly for RangePartitioning") {
+    withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+      val df = spark.range(1, 100)
+        .select(col("id").as("id1")).groupBy("id1").count()
+      // Plan for this will be Range -> ProjectWithAlias -> HashAggregate -> HashAggregate
+      // if Project normalizes alias in its Range outputPartitioning, then no Exchange should come
+      // in between HashAggregates
+      val planned = df.queryExecution.executedPlan
+      val exchanges = collect(planned) { case s: ShuffleExchangeExec => s }
+      assert(exchanges.isEmpty)
+
+      val projects = collect(planned) { case p: ProjectExec => p }
+      assert(projects.exists(_.outputPartitioning match {
+        case RangePartitioning(Seq(SortOrder(ar: AttributeReference, _, _, _)), _) =>
+          ar.name == "id1"
+        case _ => false
+      }))
+    }
+  }
+
+  test("SPARK-33399: aliased should be handled properly " +
+    "for partitioning and sortorder involving complex expressions") {
+    withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+      withTempView("t1", "t2", "t3") {
+        spark.range(10).select(col("id").as("id1")).createTempView("t1")
+        spark.range(20).select(col("id").as("id2")).createTempView("t2")
+        spark.range(30).select(col("id").as("id3")).createTempView("t3")
+        val planned = sql(
+          """
+            |SELECT t3.id3 as t3id
+            |FROM (
+            |    SELECT t1.id1 as t1id, t2.id2 as t2id
+            |    FROM t1, t2
+            |    WHERE t1.id1 * 10 = t2.id2 * 10
+            |) t12, t3
+            |WHERE t1id * 10 = t3.id3 * 10
+          """.stripMargin).queryExecution.executedPlan
+        val sortNodes = collect(planned) { case s: SortExec => s }
+        assert(sortNodes.size == 3)
+        val exchangeNodes = collect(planned) { case e: ShuffleExchangeExec => e }
+        assert(exchangeNodes.size == 3)
+
+        val projects = collect(planned) { case p: ProjectExec => p }
+        assert(projects.exists(_.outputPartitioning match {
+          case HashPartitioning(Seq(Multiply(ar1: AttributeReference, _, _)), _) =>
+            ar1.name == "t1id"
+          case _ =>
+            false
+        }))
+      }
+    }
+  }
+
+  test("SPARK-33399: alias handling should happen properly for SinglePartition") {
+    withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+      val df = spark.range(1, 100, 1, 1)
+        .select(col("id").as("id1")).groupBy("id1").count()
+      val planned = df.queryExecution.executedPlan
+      val exchanges = collect(planned) { case s: ShuffleExchangeExec => s }
+      assert(exchanges.isEmpty)
+
+      val projects = collect(planned) { case p: ProjectExec => p }
+      assert(projects.exists(_.outputPartitioning match {
+        case SinglePartition => true
+        case _ => false
+      }))
+    }
+  }
+
+  test("SPARK-33399: No extra exchanges in case of" +
+    " [Inner Join -> Project with aliases -> HashAggregate]") {
+    withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+      withTempView("t1", "t2") {
+        spark.range(10).repartition($"id").createTempView("t1")
+        spark.range(20).repartition($"id").createTempView("t2")
+        val planned = sql(
+          """
+            |SELECT t1id, t2id
+            |FROM (
+            |  SELECT t1.id as t1id, t2.id as t2id
+            |  FROM t1 INNER JOIN t2
+            |  WHERE t1.id = t2.id
+            |) t12
+            |GROUP BY t1id, t2id
+          """.stripMargin).queryExecution.executedPlan
+        val exchanges = collect(planned) { case s: ShuffleExchangeExec => s }
+        assert(exchanges.size == 2)
+
+        val projects = collect(planned) { case p: ProjectExec => p }
+        assert(projects.exists(_.outputPartitioning match {
+          case PartitioningCollection(Seq(HashPartitioning(Seq(k1: AttributeReference), _),
+          HashPartitioning(Seq(k2: AttributeReference), _))) =>
+            Set(k1.name, k2.name) == Set("t1id", "t2id")
+          case _ => false
+        }))
+      }
+    }
+  }
+
+  test("SPARK-33400: Normalization of sortOrder should take care of sameOrderExprs") {
+    withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+      withTempView("t1", "t2", "t3") {
+        spark.range(10).repartition($"id").createTempView("t1")
+        spark.range(20).repartition($"id").createTempView("t2")
+        spark.range(30).repartition($"id").createTempView("t3")
+        val planned = sql(
+          """
+            |SELECT t2id, t3.id as t3id
+            |FROM (
+            |    SELECT t1.id as t1id, t2.id as t2id
+            |    FROM t1, t2
+            |    WHERE t1.id = t2.id
+            |) t12, t3
+            |WHERE t2id = t3.id
+          """.stripMargin).queryExecution.executedPlan
+
+        val sortNodes = collect(planned) { case s: SortExec => s }
+        assert(sortNodes.size == 3)
+
+        val projects = collect(planned) { case p: ProjectExec => p }
+        assert(projects.exists(_.outputOrdering match {
+          case Seq(s @ SortOrder(_, Ascending, NullsFirst, _)) =>
+            s.children.map(_.asInstanceOf[AttributeReference].name).toSet == Set("t2id", "t3id")
+          case _ => false
+        }))
+      }
+    }
+  }
+
+  test("sort order doesn't have repeated expressions") {
+    withSQLConf(
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
+      withTempView("t1", "t2") {
+        spark.range(10).repartition($"id").createTempView("t1")
+        spark.range(20).repartition($"id").createTempView("t2")
+        val planned = sql(
+          """
+            | SELECT t12.id, t1.id
+            | FROM (SELECT t1.id FROM t1, t2 WHERE t1.id * 2 = t2.id) t12, t1
+            | where 2 * t12.id = t1.id
+        """.stripMargin).queryExecution.executedPlan
+
+        // t12 is already sorted on `t1.id * 2`. and we need to sort it on `2 * t12.id`
+        // for 2nd join. So sorting on t12 can be avoided
+        val sortNodes = planned.collect { case s: SortExec => s }
+        assert(sortNodes.size == 3)
+        val outputOrdering = planned.outputOrdering
+        assert(outputOrdering.size == 1)
+        // Sort order should have 2 childrens, not 4. This is because t1.id*2 and 2*t1.id are same
+        // and t2.id is not a valid ordering (the final plan doesn't output t2.id)
+        assert(outputOrdering.head.children.size == 2)
+        assert(outputOrdering.head.children.count(_.isInstanceOf[AttributeReference]) == 1)
+        assert(outputOrdering.head.children.count(_.isInstanceOf[Multiply]) == 1)
       }
     }
   }
@@ -921,7 +1151,7 @@ class PlannerSuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
             |  (SELECT key + 1 AS k2 from df2) t2
             |ON t1.k1 = t2.k2
             |""".stripMargin).queryExecution.executedPlan
-        val exchanges = planned.collect { case s: ShuffleExchangeExec => s }
+        val exchanges = collect(planned) { case s: ShuffleExchangeExec => s }
 
         // Make sure aliases to an expression (key + 1) are not replaced.
         Seq("k1", "k2").foreach { alias =>
@@ -944,9 +1174,9 @@ class PlannerSuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
 
       val planned = agg1.join(agg2, $"k1" === $"k3").queryExecution.executedPlan
 
-      assert(planned.collect { case h: HashAggregateExec => h }.nonEmpty)
+      assert(collect(planned) { case h: HashAggregateExec => h }.nonEmpty)
 
-      val exchanges = planned.collect { case s: ShuffleExchangeExec => s }
+      val exchanges = collect(planned) { case s: ShuffleExchangeExec => s }
       assert(exchanges.size == 2)
     }
   }
@@ -964,12 +1194,12 @@ class PlannerSuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
           val planned = agg1.join(agg2, $"k1" === $"k3").queryExecution.executedPlan
 
           if (useObjectHashAgg) {
-            assert(planned.collect { case o: ObjectHashAggregateExec => o }.nonEmpty)
+            assert(collect(planned) { case o: ObjectHashAggregateExec => o }.nonEmpty)
           } else {
-            assert(planned.collect { case s: SortAggregateExec => s }.nonEmpty)
+            assert(collect(planned) { case s: SortAggregateExec => s }.nonEmpty)
           }
 
-          val exchanges = planned.collect { case s: ShuffleExchangeExec => s }
+          val exchanges = collect(planned) { case s: ShuffleExchangeExec => s }
           assert(exchanges.size == 2)
         }
       }
@@ -977,21 +1207,169 @@ class PlannerSuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
   }
 
   test("aliases in the sort aggregate expressions should not introduce extra sort") {
-    withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
-      withSQLConf(SQLConf.USE_OBJECT_HASH_AGG.key -> "false") {
-        val t1 = spark.range(10).selectExpr("floor(id/4) as k1")
-        val t2 = spark.range(20).selectExpr("floor(id/4) as k2")
+    withSQLConf(
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+      SQLConf.USE_OBJECT_HASH_AGG.key -> "false") {
+      val t1 = spark.range(10).selectExpr("floor(id/4) as k1")
+      val t2 = spark.range(20).selectExpr("floor(id/4) as k2")
 
-        val agg1 = t1.groupBy("k1").agg(collect_list("k1")).withColumnRenamed("k1", "k3")
-        val agg2 = t2.groupBy("k2").agg(collect_list("k2"))
+      val agg1 = t1.groupBy("k1").agg(collect_list("k1")).withColumnRenamed("k1", "k3")
+      val agg2 = t2.groupBy("k2").agg(collect_list("k2"))
 
-        val planned = agg1.join(agg2, $"k3" === $"k2").queryExecution.executedPlan
-        assert(planned.collect { case s: SortAggregateExec => s }.nonEmpty)
+      val planned = agg1.join(agg2, $"k3" === $"k2").queryExecution.executedPlan
+      assert(collect(planned) { case s: SortAggregateExec => s }.nonEmpty)
 
-        // We expect two SortExec nodes on each side of join.
-        val sorts = planned.collect { case s: SortExec => s }
-        assert(sorts.size == 4)
+      // We expect two SortExec nodes on each side of join.
+      val sorts = collect(planned) { case s: SortExec => s }
+      assert(sorts.size == 4)
+    }
+  }
+
+  testWithWholeStageCodegenOnAndOff("Change the number of partitions to zero " +
+    "when a range is empty") { _ =>
+    val range = spark.range(1, 1, 1, 1000)
+    val numPartitions = range.rdd.getNumPartitions
+    assert(numPartitions == 0)
+  }
+
+  test("SPARK-33758: Prune unnecessary output partitioning") {
+    withSQLConf(
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
+      withTempView("t1", "t2") {
+        spark.range(10).repartition($"id").createTempView("t1")
+        spark.range(20).repartition($"id").createTempView("t2")
+        val planned = sql(
+          """
+            | SELECT t1.id as t1id, t2.id as t2id
+            | FROM t1, t2
+            | WHERE t1.id = t2.id
+          """.stripMargin).queryExecution.executedPlan
+
+        assert(planned.outputPartitioning match {
+          case PartitioningCollection(Seq(HashPartitioning(Seq(k1: AttributeReference), _),
+          HashPartitioning(Seq(k2: AttributeReference), _))) =>
+            Set(k1.name, k2.name) == Set("t1id", "t2id")
+        })
+
+        val planned2 = sql(
+          """
+            | SELECT t1.id as t1id
+            | FROM t1, t2
+            | WHERE t1.id = t2.id
+          """.stripMargin).queryExecution.executedPlan
+        assert(planned2.outputPartitioning match {
+          case HashPartitioning(Seq(k1: AttributeReference), _) if k1.name == "t1id" =>
+            true
+        })
       }
+    }
+  }
+
+  test("SPARK-34919: Change partitioning to SinglePartition if partition number is 1") {
+    def checkSinglePartitioning(df: DataFrame): Unit = {
+      assert(
+        df.queryExecution.analyzed.collect {
+          case r: RepartitionOperation => r
+        }.size == 1)
+      assert(
+        collect(df.queryExecution.executedPlan) {
+          case s: ShuffleExchangeExec if s.outputPartitioning == SinglePartition => s
+        }.size == 1)
+    }
+    checkSinglePartitioning(sql("SELECT /*+ REPARTITION(1) */ * FROM VALUES(1),(2),(3) AS t(c)"))
+    checkSinglePartitioning(sql("SELECT /*+ REPARTITION(1, c) */ * FROM VALUES(1),(2),(3) AS t(c)"))
+  }
+
+  test("SPARK-39397: Relax AliasAwareOutputExpression to support alias with expression") {
+    withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+      val df1 = Seq("a").toDF("c1")
+      val df2 = Seq("A").toDF("c2")
+      val df = df1.join(df2, upper($"c1") === $"c2").groupBy(upper($"c1")).agg(max($"c1"))
+      val numShuffles = collect(df.queryExecution.executedPlan) {
+        case e: ShuffleExchangeExec => e
+      }
+      val numSorts = collect(df.queryExecution.executedPlan) {
+        case e: SortExec => e
+      }
+      // before: numShuffles is 3, numSorts is 4
+      assert(numShuffles.size == 2)
+      assert(numSorts.size == 2)
+    }
+  }
+
+  test("SPARK-39890: Make TakeOrderedAndProjectExec inherit AliasAwareOutputOrdering") {
+    val df = spark.range(20).repartition($"id")
+      .orderBy("id")
+      .selectExpr("id as c")
+      .limit(10)
+      .orderBy("c")
+
+    val topKs = collect(df.queryExecution.executedPlan) {
+      case topK: TakeOrderedAndProjectExec => topK
+    }
+    val sorts = collect(df.queryExecution.executedPlan) {
+      case sort: SortExec => sort
+    }
+    assert(topKs.size == 1)
+    assert(sorts.isEmpty)
+  }
+
+  test("SPARK-40086: an attribute and its aliased version in aggregate expressions should not " +
+    "introduce extra shuffle") {
+    withTempView("df") {
+      spark.range(5).select(col("id"), col("id").as("value")).createTempView("df")
+      val df = sql("SELECT id, max(value) FROM df GROUP BY id")
+
+      val planned = df.queryExecution.executedPlan
+
+      assert(collect(planned) { case h: HashAggregateExec => h }.nonEmpty)
+
+      val exchanges = collect(planned) { case s: ShuffleExchangeExec => s }
+      assert(exchanges.size == 0)
+    }
+  }
+
+  test("SPARK-40086: multiple aliases to the same attribute in aggregate expressions should not " +
+    "introduce extra shuffle") {
+    withTempView("df") {
+      spark.range(5).select(col("id").as("key"), col("id").as("value")).createTempView("df")
+      val df = sql("SELECT key, max(value) FROM df GROUP BY key")
+
+      val planned = df.queryExecution.executedPlan
+
+      assert(collect(planned) { case h: HashAggregateExec => h }.nonEmpty)
+
+      val exchanges = collect(planned) { case s: ShuffleExchangeExec => s }
+      assert(exchanges.size == 0)
+    }
+  }
+
+  test("SPARK-40086: multiple aliases to the same attribute with complex required distribution " +
+    "should not introduce extra shuffle") {
+    withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+      val df = spark.range(5)
+      val df1 = df.repartition($"id" + $"id")
+        .select($"id".as("key1"), $"id".as("value1"), ($"id" + $"id").as("idPlusId1"))
+      val df2 = df.repartition($"id" + $"id")
+        .select($"id".as("key2"), $"id".as("value2"), ($"id" + $"id").as("idPlusId2"))
+      val df3 = df1.join(df2, $"key1" + $"value1" === $"idPlusId2")
+
+      val planned = df3.queryExecution.executedPlan
+
+      val numShuffles = collect(planned) {
+        case e: ShuffleExchangeExec => e
+      }
+      // before SPARK-40086: numShuffles is 4
+      assert(numShuffles.size == 2)
+      val numOutputPartitioning = collectFirst(planned) {
+        case e: SortMergeJoinExec => e.outputPartitioning match {
+          case PartitioningCollection(Seq(PartitioningCollection(l), PartitioningCollection(r))) =>
+            l ++ r
+          case _ => Seq.empty
+        }
+      }.get
+      assert(numOutputPartitioning.size == 8)
     }
   }
 }
@@ -1006,4 +1384,6 @@ private case class DummySparkPlan(
   ) extends SparkPlan {
   override protected def doExecute(): RDD[InternalRow] = throw new UnsupportedOperationException
   override def output: Seq[Attribute] = Seq.empty
+  override protected def withNewChildrenInternal(newChildren: IndexedSeq[SparkPlan]): SparkPlan =
+    copy(children = newChildren)
 }

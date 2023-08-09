@@ -24,7 +24,7 @@ import org.apache.spark.annotation.Evolving;
 /**
  * Used for per-partition offsets in continuous processing. ContinuousReader implementations will
  * provide a method to merge these into a global Offset.
- *
+ * <p>
  * These offsets must be serializable.
  *
  * @since 3.0.0

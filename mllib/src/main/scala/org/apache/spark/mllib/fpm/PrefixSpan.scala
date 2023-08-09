@@ -40,6 +40,7 @@ import org.apache.spark.sql.{DataFrame, Row, SparkSession}
 import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.types._
 import org.apache.spark.storage.StorageLevel
+import org.apache.spark.util.collection.Utils
 
 /**
  * A parallel PrefixSpan algorithm to mine frequent sequential patterns.
@@ -147,7 +148,7 @@ class PrefixSpan private (
     logInfo(s"number of frequent items: ${freqItems.length}")
 
     // Keep only frequent items from input sequences and convert them to internal storage.
-    val itemToInt = freqItems.zipWithIndex.toMap
+    val itemToInt = Utils.toMapWithIndex(freqItems)
     val dataInternalRepr = toDatabaseInternalRepr(data, itemToInt)
       .persist(StorageLevel.MEMORY_AND_DISK)
 
@@ -220,7 +221,7 @@ object PrefixSpan extends Logging {
     data.flatMap { itemsets =>
       val uniqItems = mutable.Set.empty[Item]
       itemsets.foreach(set => uniqItems ++= set)
-      uniqItems.toIterator.map((_, 1L))
+      uniqItems.iterator.map((_, 1L))
     }.reduceByKey(_ + _).filter { case (_, count) =>
       count >= minCount
     }.sortBy(-_._2).map(_._1).collect()
@@ -335,7 +336,7 @@ object PrefixSpan extends Logging {
       largePrefixes = newLargePrefixes
     }
 
-    var freqPatterns = sc.parallelize(localFreqPatterns, 1)
+    var freqPatterns = sc.parallelize(localFreqPatterns.toSeq, 1)
 
     val numSmallPrefixes = smallPrefixes.size
     logInfo(s"number of small prefixes for local processing: $numSmallPrefixes")
@@ -478,7 +479,7 @@ object PrefixSpan extends Logging {
         }
         i += 1
       }
-      prefixes.toIterator
+      prefixes.iterator
     }
 
     /** Tests whether this postfix is non-empty. */
@@ -683,7 +684,7 @@ object PrefixSpanModel extends Loader[PrefixSpanModel[_]] {
 
     def loadImpl[Item: ClassTag](freqSequences: DataFrame, sample: Item): PrefixSpanModel[Item] = {
       val freqSequencesRDD = freqSequences.select("sequence", "freq").rdd.map { x =>
-        val sequence = x.getAs[Seq[Seq[Item]]](0).map(_.toArray).toArray
+        val sequence = x.getSeq[scala.collection.Seq[Item]](0).map(_.toArray).toArray
         val freq = x.getLong(1)
         new PrefixSpan.FreqSequence(sequence, freq)
       }

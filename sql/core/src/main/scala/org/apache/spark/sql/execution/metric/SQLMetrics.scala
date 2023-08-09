@@ -22,11 +22,15 @@ import java.util.{Arrays, Locale}
 
 import scala.concurrent.duration._
 
+import com.google.common.cache.{CacheBuilder, CacheLoader, LoadingCache}
+
 import org.apache.spark.SparkContext
 import org.apache.spark.scheduler.AccumulableInfo
+import org.apache.spark.sql.connector.metric.CustomMetric
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.ui.SparkListenerDriverAccumUpdates
 import org.apache.spark.util.{AccumulatorContext, AccumulatorV2, Utils}
-
+import org.apache.spark.util.AccumulatorContext.internOption
 
 /**
  * A metric used in a SQL query plan. This is implemented as an [[AccumulatorV2]]. Updates on
@@ -51,10 +55,12 @@ class SQLMetric(val metricType: String, initValue: Long = 0L) extends Accumulato
 
   override def merge(other: AccumulatorV2[Long, Long]): Unit = other match {
     case o: SQLMetric =>
-      if (_value < 0) _value = 0
-      if (o.value > 0) _value += o.value
-    case _ => throw new UnsupportedOperationException(
-      s"Cannot merge ${this.getClass.getName} with ${other.getClass.getName}")
+      if (o.value > 0) {
+        if (_value < 0) _value = 0
+        _value += o.value
+      }
+    case _ => throw QueryExecutionErrors.cannotMergeClassWithOtherClassError(
+      this.getClass.getName, other.getClass.getName)
   }
 
   override def isZero(): Boolean = _value == _zeroValue
@@ -72,12 +78,17 @@ class SQLMetric(val metricType: String, initValue: Long = 0L) extends Accumulato
 
   def +=(v: Long): Unit = add(v)
 
-  override def value: Long = _value
+  // We may use -1 as initial value of the accumulator, so that the SQL UI can filter out
+  // invalid accumulator values (0 is a valid metric value) when calculating min, max, etc.
+  // However, users can also access the SQL metrics values programmatically via this method.
+  // We should be consistent with the SQL UI and don't expose -1 to users.
+  // See `SQLMetrics.stringValue`. When there is no valid accumulator values, 0 is the metric value.
+  override def value: Long = if (_value < 0) 0 else _value
 
   // Provide special identifier as metadata so we can tell that this is a `SQLMetric` later
   override def toInfo(update: Option[Any], value: Option[Any]): AccumulableInfo = {
-    new AccumulableInfo(
-      id, name, update, value, true, true, Some(AccumulatorContext.SQL_ACCUM_IDENTIFIER))
+    AccumulableInfo(id, name, internOption(update), internOption(value), true, true,
+      SQLMetrics.cachedSQLAccumIdentifier)
   }
 }
 
@@ -89,6 +100,16 @@ object SQLMetrics {
   private val AVERAGE_METRIC = "average"
 
   private val baseForAvgMetric: Int = 10
+
+  val cachedSQLAccumIdentifier = Some(AccumulatorContext.SQL_ACCUM_IDENTIFIER)
+
+  private val metricsCache: LoadingCache[String, Option[String]] =
+    CacheBuilder.newBuilder().maximumSize(10000)
+    .build(new CacheLoader[String, Option[String]] {
+      override def load(name: String): Option[String] = {
+        Option(name)
+      }
+    })
 
   /**
    * Converts a double value to long value by multiplying a base integer, so we can store it in
@@ -103,7 +124,16 @@ object SQLMetrics {
 
   def createMetric(sc: SparkContext, name: String): SQLMetric = {
     val acc = new SQLMetric(SUM_METRIC)
-    acc.register(sc, name = Some(name), countFailedValues = false)
+    acc.register(sc, name = metricsCache.get(name), countFailedValues = false)
+    acc
+  }
+
+  /**
+   * Create a metric to report data source v2 custom metric.
+   */
+  def createV2CustomMetric(sc: SparkContext, customMetric: CustomMetric): SQLMetric = {
+    val acc = new SQLMetric(CustomMetrics.buildV2CustomMetricTypeName(customMetric))
+    acc.register(sc, name = metricsCache.get(customMetric.description()), countFailedValues = false)
     acc
   }
 
@@ -111,28 +141,28 @@ object SQLMetrics {
    * Create a metric to report the size information (including total, min, med, max) like data size,
    * spill size, etc.
    */
-  def createSizeMetric(sc: SparkContext, name: String): SQLMetric = {
+  def createSizeMetric(sc: SparkContext, name: String, initValue: Long = -1): SQLMetric = {
     // The final result of this metric in physical operator UI may look like:
     // data size total (min, med, max):
     // 100GB (100MB, 1GB, 10GB)
-    val acc = new SQLMetric(SIZE_METRIC, -1)
-    acc.register(sc, name = Some(name), countFailedValues = false)
+    val acc = new SQLMetric(SIZE_METRIC, initValue)
+    acc.register(sc, name = metricsCache.get(name), countFailedValues = false)
     acc
   }
 
-  def createTimingMetric(sc: SparkContext, name: String): SQLMetric = {
+  def createTimingMetric(sc: SparkContext, name: String, initValue: Long = -1): SQLMetric = {
     // The final result of this metric in physical operator UI may looks like:
     // duration total (min, med, max):
     // 5s (800ms, 1s, 2s)
-    val acc = new SQLMetric(TIMING_METRIC, -1)
-    acc.register(sc, name = Some(name), countFailedValues = false)
+    val acc = new SQLMetric(TIMING_METRIC, initValue)
+    acc.register(sc, name = metricsCache.get(name), countFailedValues = false)
     acc
   }
 
-  def createNanoTimingMetric(sc: SparkContext, name: String): SQLMetric = {
+  def createNanoTimingMetric(sc: SparkContext, name: String, initValue: Long = -1): SQLMetric = {
     // Same with createTimingMetric, just normalize the unit of time to millisecond.
-    val acc = new SQLMetric(NS_TIMING_METRIC, -1)
-    acc.register(sc, name = Some(name), countFailedValues = false)
+    val acc = new SQLMetric(NS_TIMING_METRIC, initValue)
+    acc.register(sc, name = metricsCache.get(name), countFailedValues = false)
     acc
   }
 
@@ -147,7 +177,7 @@ object SQLMetrics {
     // probe avg (min, med, max):
     // (1.2, 2.2, 6.3)
     val acc = new SQLMetric(AVERAGE_METRIC)
-    acc.register(sc, name = Some(name), countFailedValues = false)
+    acc.register(sc, name = metricsCache.get(name), countFailedValues = false)
     acc
   }
 
@@ -200,7 +230,7 @@ object SQLMetrics {
       } else if (metricsType == NS_TIMING_METRIC) {
         duration => Utils.msDurationToString(duration.nanos.toMillis)
       } else {
-        throw new IllegalStateException("unexpected metrics type: " + metricsType)
+        throw new IllegalStateException(s"unexpected metrics type: $metricsType")
       }
 
       val validValues = values.filter(_ >= 0)

@@ -16,8 +16,9 @@
  */
 package org.apache.spark.sql.catalyst.parser
 
-import org.antlr.v4.runtime.{CharStreams, CommonTokenStream, ParserRuleContext}
 import scala.collection.JavaConverters._
+
+import org.antlr.v4.runtime.{CharStreams, CommonTokenStream, ParserRuleContext}
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.parser.SqlBaseParser._
@@ -51,6 +52,24 @@ class ParserUtilsSuite extends SparkFunSuite {
     """.stripMargin
   ) { parser =>
     parser.statement().asInstanceOf[CreateNamespaceContext]
+  }
+
+  val castClause =
+    """
+      |CAST(1 /* Convert
+      |   INT
+      |   AS
+      |   String */ as STRING)""".stripMargin.trim
+
+  val castQuery =
+    s"""
+       |SELECT
+       |$castClause /* SHOULD NOT INCLUDE THIS */
+       | AS s
+       |""".stripMargin
+
+  val castQueryContext = buildContext(castQuery) { parser =>
+    parser.statement().asInstanceOf[StatementDefaultContext]
   }
 
   val emptyContext = buildContext("") { parser =>
@@ -94,12 +113,24 @@ class ParserUtilsSuite extends SparkFunSuite {
     assert(unescapeSQLString(""""\256"""") == "256")
 
     // String including a '\u0000' style literal characters (\u732B is a cat in Kanji).
-    assert(unescapeSQLString(""""How cute \u732B are"""")  == "How cute \u732B are")
+    assert(unescapeSQLString("\"How cute \\u732B are\"")  == "How cute \u732B are")
 
     // String including a surrogate pair character
     // (\uD867\uDE3D is Okhotsk atka mackerel in Kanji).
-    assert(unescapeSQLString(""""\uD867\uDE3D is a fish"""") == "\uD867\uDE3D is a fish")
+    assert(unescapeSQLString("\"\\uD867\\uDE3D is a fish\"") == "\uD867\uDE3D is a fish")
 
+    // String including a '\U00000000' style literal characters (\u732B is a cat in Kanji).
+    assert(unescapeSQLString("\"\\U00000041B\\U000000312\\U0000732B\"") == "AB12\u732B")
+
+    // String including surrogate pair characters (U+1F408 is a cat and U+1F415 is a dog in Emoji).
+    assert(unescapeSQLString("\"\\U0001F408 \\U0001F415\"") == "\uD83D\uDC08 \uD83D\uDC15")
+
+    // String including escaped normal characters.
+    assert(unescapeSQLString(
+      """"ab\
+        |cd\ef"""".stripMargin) ==
+      """ab
+        |cdef""".stripMargin)
     // scalastyle:on nonascii
   }
 
@@ -112,11 +143,12 @@ class ParserUtilsSuite extends SparkFunSuite {
 
   test("operationNotAllowed") {
     val errorMessage = "parse.fail.operation.not.allowed.error.message"
-    val e = intercept[ParseException] {
-      operationNotAllowed(errorMessage, showFuncContext)
-    }.getMessage
-    assert(e.contains("Operation not allowed"))
-    assert(e.contains(errorMessage))
+    checkError(
+      exception = intercept[ParseException] {
+        operationNotAllowed(errorMessage, showFuncContext)
+      },
+      errorClass = "_LEGACY_ERROR_TEMP_0035",
+      parameters = Map("message" -> errorMessage))
   }
 
   test("checkDuplicateKeys") {
@@ -124,10 +156,12 @@ class ParserUtilsSuite extends SparkFunSuite {
     checkDuplicateKeys[String](properties, createDbContext)
 
     val properties2 = Seq(("a", "a"), ("b", "b"), ("a", "c"))
-    val e = intercept[ParseException] {
-      checkDuplicateKeys(properties2, createDbContext)
-    }.getMessage
-    assert(e.contains("Found duplicate keys"))
+    checkError(
+      exception = intercept[ParseException] {
+        checkDuplicateKeys(properties2, createDbContext)
+      },
+      errorClass = "DUPLICATE_KEY",
+      parameters = Map("keyColumn" -> "`a`"))
   }
 
   test("source") {
@@ -150,10 +184,12 @@ class ParserUtilsSuite extends SparkFunSuite {
   }
 
   test("string") {
-    assert(string(showDbsContext.pattern) == "identifier_with_wildcards")
-    assert(string(createDbContext.commentSpec().get(0).STRING()) == "database_comment")
+    assert(string(showDbsContext.pattern.STRING_LITERAL()) == "identifier_with_wildcards")
+    assert(string(createDbContext.commentSpec().get(0).stringLit().STRING_LITERAL()) ==
+      "database_comment")
 
-    assert(string(createDbContext.locationSpec.asScala.head.STRING) == "/home/user/db")
+    assert(string(createDbContext.locationSpec.asScala.head.stringLit().STRING_LITERAL()) ==
+      "/home/user/db")
   }
 
   test("position") {
@@ -171,20 +207,60 @@ class ParserUtilsSuite extends SparkFunSuite {
     val message = "ParserRuleContext should not be empty."
     validate(f1(showFuncContext), message, showFuncContext)
 
-    val e = intercept[ParseException] {
-      validate(f1(emptyContext), message, emptyContext)
-    }.getMessage
-    assert(e.contains(message))
+    checkError(
+      exception = intercept[ParseException] {
+        validate(f1(emptyContext), message, emptyContext)
+      },
+      errorClass = "_LEGACY_ERROR_TEMP_0064",
+      parameters = Map("msg" -> message))
   }
 
   test("withOrigin") {
     val ctx = createDbContext.locationSpec.asScala.head
     val current = CurrentOrigin.get
     val (location, origin) = withOrigin(ctx) {
-      (string(ctx.STRING), CurrentOrigin.get)
+      (string(ctx.stringLit().STRING_LITERAL), CurrentOrigin.get)
     }
     assert(location == "/home/user/db")
     assert(origin == Origin(Some(3), Some(27)))
     assert(CurrentOrigin.get == current)
+  }
+
+  private def findCastContext(ctx: ParserRuleContext): Option[CastContext] = {
+    ctx match {
+      case context: CastContext =>
+        Some(context)
+      case _ =>
+        val it = ctx.children.iterator()
+        while(it.hasNext) {
+          it.next() match {
+            case p: ParserRuleContext =>
+              val childResult = findCastContext(p)
+              if (childResult.isDefined) {
+                return childResult
+              }
+            case _ =>
+          }
+        }
+        None
+    }
+  }
+
+  test("withOrigin: setting SQL text") {
+    withOrigin(castQueryContext, Some(castQuery)) {
+      assert(CurrentOrigin.get.sqlText.contains(castQuery))
+      val castContext = findCastContext(castQueryContext)
+      assert(castContext.isDefined)
+      withOrigin(castContext.get) {
+        val current = CurrentOrigin.get
+        assert(current.sqlText.contains(castQuery))
+        assert(current.startIndex.isDefined)
+        assert(current.stopIndex.isDefined)
+        // With sqlText, startIndex, stopIndex, we can get the corresponding SQL text of the
+        // Cast clause.
+        assert(current.sqlText.get.substring(current.startIndex.get, current.stopIndex.get + 1) ==
+          castClause)
+      }
+    }
   }
 }

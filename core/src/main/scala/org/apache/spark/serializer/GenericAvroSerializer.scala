@@ -26,7 +26,7 @@ import scala.collection.mutable
 import com.esotericsoftware.kryo.{Kryo, Serializer => KSerializer}
 import com.esotericsoftware.kryo.io.{Input => KryoInput, Output => KryoOutput}
 import org.apache.avro.{Schema, SchemaNormalization}
-import org.apache.avro.generic.{GenericData, GenericRecord}
+import org.apache.avro.generic.{GenericContainer, GenericData}
 import org.apache.avro.io._
 import org.apache.commons.io.IOUtils
 
@@ -35,7 +35,7 @@ import org.apache.spark.io.CompressionCodec
 import org.apache.spark.util.Utils
 
 /**
- * Custom serializer used for generic Avro records. If the user registers the schemas
+ * Custom serializer used for generic Avro containers. If the user registers the schemas
  * ahead of time, then the schema's fingerprint will be sent with each message instead of the actual
  * schema, as to reduce network IO.
  * Actions like parsing or compressing schemas are computationally expensive so the serializer
@@ -43,9 +43,10 @@ import org.apache.spark.util.Utils
  * @param schemas a map where the keys are unique IDs for Avro schemas and the values are the
  *                string representation of the Avro schema, used to decrease the amount of data
  *                that needs to be serialized.
+ * @tparam D the subtype of [[GenericContainer]] handled by this serializer
  */
-private[serializer] class GenericAvroSerializer(schemas: Map[Long, String])
-  extends KSerializer[GenericRecord] {
+private[serializer] class GenericAvroSerializer[D <: GenericContainer]
+  (schemas: Map[Long, String]) extends KSerializer[D] {
 
   /** Used to reduce the amount of effort to compress the schema */
   private val compressCache = new mutable.HashMap[Schema, Array[Byte]]()
@@ -96,14 +97,14 @@ private[serializer] class GenericAvroSerializer(schemas: Map[Long, String])
     } {
       in.close()
     }
-    new Schema.Parser().parse(new String(bytes, StandardCharsets.UTF_8))
+    new Schema.Parser().setValidateDefaults(false).parse(new String(bytes, StandardCharsets.UTF_8))
   })
 
   /**
-   * Serializes a record to the given output stream. It caches a lot of the internal data as
-   * to not redo work
+   * Serializes a generic container to the given output stream. It caches a lot of the internal
+   * data as to not redo work
    */
-  def serializeDatum[R <: GenericRecord](datum: R, output: KryoOutput): Unit = {
+  def serializeDatum(datum: D, output: KryoOutput): Unit = {
     val encoder = EncoderFactory.get.binaryEncoder(output, null)
     val schema = datum.getSchema
     val fingerprint = fingerprintCache.getOrElseUpdate(schema, {
@@ -121,27 +122,27 @@ private[serializer] class GenericAvroSerializer(schemas: Map[Long, String])
     }
 
     writerCache.getOrElseUpdate(schema, GenericData.get.createDatumWriter(schema))
-      .asInstanceOf[DatumWriter[R]]
+      .asInstanceOf[DatumWriter[D]]
       .write(datum, encoder)
     encoder.flush()
   }
 
   /**
-   * Deserializes generic records into their in-memory form. There is internal
+   * Deserializes generic containers into their in-memory form. There is internal
    * state to keep a cache of already seen schemas and datum readers.
    */
-  def deserializeDatum(input: KryoInput): GenericRecord = {
+  def deserializeDatum(input: KryoInput): D = {
     val schema = {
       if (input.readBoolean()) {
         val fingerprint = input.readLong()
         schemaCache.getOrElseUpdate(fingerprint, {
           schemas.get(fingerprint) match {
-            case Some(s) => new Schema.Parser().parse(s)
+            case Some(s) => new Schema.Parser().setValidateDefaults(false).parse(s)
             case None =>
               throw new SparkException(
-                "Error reading attempting to read avro data -- encountered an unknown " +
-                  s"fingerprint: $fingerprint, not sure what schema to use.  This could happen " +
-                  "if you registered additional schemas after starting your spark context.")
+                errorClass = "ERROR_READING_AVRO_UNKNOWN_FINGERPRINT",
+                messageParameters = Map("fingerprint" -> fingerprint.toString),
+                cause = null)
           }
         })
       } else {
@@ -151,13 +152,13 @@ private[serializer] class GenericAvroSerializer(schemas: Map[Long, String])
     }
     val decoder = DecoderFactory.get.directBinaryDecoder(input, null)
     readerCache.getOrElseUpdate(schema, GenericData.get.createDatumReader(schema))
-      .asInstanceOf[DatumReader[GenericRecord]]
-      .read(null, decoder)
+      .asInstanceOf[DatumReader[D]]
+      .read(null.asInstanceOf[D], decoder)
   }
 
-  override def write(kryo: Kryo, output: KryoOutput, datum: GenericRecord): Unit =
+  override def write(kryo: Kryo, output: KryoOutput, datum: D): Unit =
     serializeDatum(datum, output)
 
-  override def read(kryo: Kryo, input: KryoInput, datumClass: Class[GenericRecord]): GenericRecord =
+  override def read(kryo: Kryo, input: KryoInput, datumClass: Class[D]): D =
     deserializeDatum(input)
 }

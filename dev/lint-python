@@ -17,14 +17,63 @@
 #
 # define test binaries + versions
 FLAKE8_BUILD="flake8"
-MINIMUM_FLAKE8="3.5.0"
+MINIMUM_FLAKE8="3.9.0"
+MINIMUM_MYPY="0.920"
+MYPY_BUILD="mypy"
+PYTEST_BUILD="pytest"
 
-PYCODESTYLE_BUILD="pycodestyle"
-MINIMUM_PYCODESTYLE="2.4.0"
+PYTHON_EXECUTABLE="${PYTHON_EXECUTABLE:-python3}"
 
-SPHINX_BUILD="sphinx-build"
+BLACK_BUILD="$PYTHON_EXECUTABLE -m black"
 
-PYTHON_EXECUTABLE="python3"
+function exit_with_usage {
+  set +x
+  echo "lint-python - linter for Python"
+  echo ""
+  echo "usage:"
+  cl_options="[--compile] [--black] [--flake8] [--mypy] [--mypy-examples] [--mypy-data]"
+  echo "lint-python $cl_options"
+  echo ""
+  exit 1
+}
+
+# Parse arguments
+while (( "$#" )); do
+  case $1 in
+    --compile)
+      COMPILE_TEST=true
+      ;;
+    --black)
+      BLACK_TEST=true
+      ;;
+    --flake8)
+      FLAKE8_TEST=true
+      ;;
+    --mypy)
+      MYPY_TEST=true
+      ;;
+    --mypy-examples)
+      MYPY_EXAMPLES_TEST=true
+      ;;
+    --mypy-data)
+      MYPY_DATA_TEST=true
+      ;;
+    *)
+      echo "Error: $1 is not supported"
+      exit_with_usage
+      ;;
+  esac
+  shift
+done
+
+if [[ -z "$COMPILE_TEST$BLACK_TEST$FLAKE8_TEST$MYPY_TEST$MYPY_EXAMPLES_TEST$MYPY_DATA_TEST" ]]; then
+  COMPILE_TEST=true
+  BLACK_TEST=true
+  FLAKE8_TEST=true
+  MYPY_TEST=true
+  MYPY_EXAMPLES_TEST=true
+  MYPY_DATA_TEST=true
+fi
 
 function satisfies_min_version {
     local provided_version="$1"
@@ -62,65 +111,117 @@ function compile_python_test {
     fi
 }
 
-function pycodestyle_test {
-    local PYCODESTYLE_STATUS=
-    local PYCODESTYLE_REPORT=
-    local RUN_LOCAL_PYCODESTYLE=
-    local PYCODESTYLE_VERSION=
-    local EXPECTED_PYCODESTYLE=
-    local PYCODESTYLE_SCRIPT_PATH="$SPARK_ROOT_DIR/dev/pycodestyle-$MINIMUM_PYCODESTYLE.py"
-    local PYCODESTYLE_SCRIPT_REMOTE_PATH="https://raw.githubusercontent.com/PyCQA/pycodestyle/$MINIMUM_PYCODESTYLE/pycodestyle.py"
 
-    if [[ ! "$1" ]]; then
-        echo "No python files found!  Something is very wrong -- exiting."
-        exit 1;
-    fi
+function mypy_annotation_test {
+    local MYPY_REPORT=
+    local MYPY_STATUS=
 
-    # check for locally installed pycodestyle & version
-    RUN_LOCAL_PYCODESTYLE="False"
-    if hash "$PYCODESTYLE_BUILD" 2> /dev/null; then
-        PYCODESTYLE_VERSION="$($PYCODESTYLE_BUILD --version)"
-        EXPECTED_PYCODESTYLE="$(satisfies_min_version $PYCODESTYLE_VERSION $MINIMUM_PYCODESTYLE)"
-        if [ "$EXPECTED_PYCODESTYLE" == "True" ]; then
-            RUN_LOCAL_PYCODESTYLE="True"
-        fi
-    fi
+    echo "starting mypy annotations test..."
+    MYPY_REPORT=$( ($MYPY_BUILD \
+      --namespace-packages \
+      --config-file python/mypy.ini \
+      --cache-dir /tmp/.mypy_cache/ \
+      python/pyspark) 2>&1)
+    MYPY_STATUS=$?
 
-    # download the right version or run locally
-    if [ $RUN_LOCAL_PYCODESTYLE == "False" ]; then
-        # Get pycodestyle at runtime so that we don't rely on it being installed on the build server.
-        # See: https://github.com/apache/spark/pull/1744#issuecomment-50982162
-        # Updated to the latest official version of pep8. pep8 is formally renamed to pycodestyle.
-        echo "downloading pycodestyle from $PYCODESTYLE_SCRIPT_REMOTE_PATH..."
-        if [ ! -e "$PYCODESTYLE_SCRIPT_PATH" ]; then
-            curl --silent -o "$PYCODESTYLE_SCRIPT_PATH" "$PYCODESTYLE_SCRIPT_REMOTE_PATH"
-            local curl_status="$?"
-
-            if [ "$curl_status" -ne 0 ]; then
-                echo "Failed to download pycodestyle.py from $PYCODESTYLE_SCRIPT_REMOTE_PATH"
-                exit "$curl_status"
-            fi
-        fi
-
-        echo "starting pycodestyle test..."
-        PYCODESTYLE_REPORT=$( ("$PYTHON_EXECUTABLE" "$PYCODESTYLE_SCRIPT_PATH" --config=dev/tox.ini $1) 2>&1)
-        PYCODESTYLE_STATUS=$?
+    if [ "$MYPY_STATUS" -ne 0 ]; then
+        echo "annotations failed mypy checks:"
+        echo "$MYPY_REPORT"
+        echo "$MYPY_STATUS"
+        exit "$MYPY_STATUS"
     else
-        # we have the right version installed, so run locally
-        echo "starting pycodestyle test..."
-        PYCODESTYLE_REPORT=$( ($PYCODESTYLE_BUILD --config=dev/tox.ini $1) 2>&1)
-        PYCODESTYLE_STATUS=$?
-    fi
-
-    if [ $PYCODESTYLE_STATUS -ne 0 ]; then
-        echo "pycodestyle checks failed:"
-        echo "$PYCODESTYLE_REPORT"
-        exit "$PYCODESTYLE_STATUS"
-    else
-        echo "pycodestyle checks passed."
+        echo "annotations passed mypy checks."
         echo
     fi
 }
+
+
+function mypy_data_test {
+    local PYTEST_REPORT=
+    local PYTEST_STATUS=
+
+    echo "starting mypy data test..."
+
+    $PYTHON_EXECUTABLE -c "import importlib.util; import sys; \
+               sys.exit(0 if importlib.util.find_spec('pytest_mypy_plugins') else 1)"
+
+    if [ $? -ne 0 ]; then
+      echo "pytest-mypy-plugins missing. Skipping for now."
+      return
+    fi
+
+    PYTEST_REPORT=$( (MYPYPATH=python $PYTEST_BUILD \
+      -c dev/pyproject.toml \
+      --rootdir python \
+      --mypy-only-local-stub \
+      --mypy-ini-file python/mypy.ini \
+      python/pyspark ) 2>&1)
+
+    PYTEST_STATUS=$?
+
+    if [ "$PYTEST_STATUS" -ne 0 ]; then
+        echo "annotations failed data checks:"
+        echo "$PYTEST_REPORT"
+        echo "$PYTEST_STATUS"
+        exit "$PYTEST_STATUS"
+    else
+      echo "annotations passed data checks."
+      echo
+    fi
+}
+
+function mypy_examples_test {
+    local MYPY_REPORT=
+    local MYPY_STATUS=
+
+    echo "starting mypy examples test..."
+
+    MYPY_REPORT=$( (MYPYPATH=python $MYPY_BUILD \
+      --namespace-packages \
+      --config-file python/mypy.ini \
+      --exclude "mllib/*" \
+      examples/src/main/python/) 2>&1)
+
+    MYPY_STATUS=$?
+
+    if [ "$MYPY_STATUS" -ne 0 ]; then
+        echo "examples failed mypy checks:"
+        echo "$MYPY_REPORT"
+        echo "$MYPY_STATUS"
+        exit "$MYPY_STATUS"
+    else
+      echo "examples passed mypy checks."
+      echo
+    fi
+}
+
+
+function mypy_test {
+    if ! hash "$MYPY_BUILD" 2> /dev/null; then
+        echo "The $MYPY_BUILD command was not found. Skipping for now."
+        return
+    fi
+
+    _MYPY_VERSION=($($MYPY_BUILD --version))
+    MYPY_VERSION="${_MYPY_VERSION[1]}"
+    EXPECTED_MYPY="$(satisfies_min_version $MYPY_VERSION $MINIMUM_MYPY)"
+
+    if [[ "$EXPECTED_MYPY" == "False" ]]; then
+        echo "The minimum mypy version needs to be $MINIMUM_MYPY. Your current version is $MYPY_VERSION. Skipping for now."
+        return
+    fi
+
+    if [[ "$MYPY_TEST" == "true" ]]; then
+        mypy_annotation_test
+    fi
+    if [[ "$MYPY_EXAMPLES_TEST" == "true" ]]; then
+        mypy_examples_test
+    fi
+    if [[ "$MYPY_DATA_TEST" == "true" ]]; then
+        mypy_data_test
+    fi
+}
+
 
 function flake8_test {
     local FLAKE8_VERSION=
@@ -129,9 +230,8 @@ function flake8_test {
     local FLAKE8_STATUS=
 
     if ! hash "$FLAKE8_BUILD" 2> /dev/null; then
-        echo "The flake8 command was not found."
-        echo "flake8 checks failed."
-        exit 1
+        echo "The flake8 command was not found. Skipping for now."
+        return
     fi
 
     _FLAKE8_VERSION=($($FLAKE8_BUILD --version))
@@ -147,8 +247,7 @@ flake8 checks failed."
     fi
 
     echo "starting $FLAKE8_BUILD test..."
-    FLAKE8_REPORT=$( ($FLAKE8_BUILD . --count --select=E901,E999,F821,F822,F823 \
-                     --max-line-length=100 --show-source --statistics) 2>&1)
+    FLAKE8_REPORT=$( ($FLAKE8_BUILD --append-config dev/tox.ini --count --show-source --statistics .) 2>&1)
     FLAKE8_STATUS=$?
 
     if [ "$FLAKE8_STATUS" -ne 0 ]; then
@@ -162,39 +261,32 @@ flake8 checks failed."
     fi
 }
 
-function sphinx_test {
-    local SPHINX_REPORT=
-    local SPHINX_STATUS=
+function black_test {
+    local BLACK_REPORT=
+    local BLACK_STATUS=
 
-    # Check that the documentation builds acceptably, skip check if sphinx is not installed.
-    if ! hash "$SPHINX_BUILD" 2> /dev/null; then
-        echo "The $SPHINX_BUILD command was not found. Skipping pydoc checks for now."
+    # Skip check if black is not installed.
+    $PYTHON_EXECUTABLE -c 'import black' &> /dev/null
+    if [ $? -ne 0 ]; then
+        echo "The Python library providing 'black' module was not found. Skipping black checks for now."
         echo
         return
     fi
 
-    echo "starting $SPHINX_BUILD tests..."
-    pushd python/docs &> /dev/null
-    make clean &> /dev/null
-    # Treat warnings as errors so we stop correctly
-    SPHINX_REPORT=$( (SPHINXOPTS="-a -W" make html) 2>&1)
-    SPHINX_STATUS=$?
+    echo "starting black test..."
+    BLACK_REPORT=$( ($BLACK_BUILD  --config dev/pyproject.toml --check python/pyspark dev python/setup.py) 2>&1)
+    BLACK_STATUS=$?
 
-    if [ "$SPHINX_STATUS" -ne 0 ]; then
-        echo "$SPHINX_BUILD checks failed:"
-        echo "$SPHINX_REPORT"
-        echo
-        echo "re-running make html to print full warning list:"
-        make clean &> /dev/null
-        SPHINX_REPORT=$( (SPHINXOPTS="-a" make html) 2>&1)
-        echo "$SPHINX_REPORT"
-        exit "$SPHINX_STATUS"
+    if [ "$BLACK_STATUS" -ne 0 ]; then
+        echo "black checks failed:"
+        echo "$BLACK_REPORT"
+        echo "Please run 'dev/reformat-python' script."
+        echo "$BLACK_STATUS"
+        exit "$BLACK_STATUS"
     else
-        echo "$SPHINX_BUILD checks passed."
+        echo "black checks passed."
         echo
     fi
-
-    popd &> /dev/null
 }
 
 SCRIPT_DIR="$( cd "$( dirname "$0" )" && pwd )"
@@ -202,12 +294,20 @@ SPARK_ROOT_DIR="$(dirname "${SCRIPT_DIR}")"
 
 pushd "$SPARK_ROOT_DIR" &> /dev/null
 
-PYTHON_SOURCE="$(find . -name "*.py")"
+PYTHON_SOURCE="$(git ls-files '*.py')"
 
-compile_python_test "$PYTHON_SOURCE"
-pycodestyle_test "$PYTHON_SOURCE"
-flake8_test
-sphinx_test
+if [[ "$COMPILE_TEST" == "true" ]]; then
+    compile_python_test "$PYTHON_SOURCE"
+fi
+if [[ "$BLACK_TEST" == "true" ]]; then
+    black_test
+fi
+if [[ "$FLAKE8_TEST" == "true" ]]; then
+    flake8_test
+fi
+if [[ "$MYPY_TEST" == "true" ]] || [[ "$MYPY_EXAMPLES_TEST" == "true" ]] || [[ "$MYPY_DATA_TEST" == "true" ]]; then
+    mypy_test
+fi
 
 echo
 echo "all lint-python tests passed!"

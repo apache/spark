@@ -21,6 +21,7 @@ import java.io.{File, FileNotFoundException}
 import java.net.URI
 
 import scala.collection.mutable
+import scala.concurrent.duration._
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{BlockLocation, FileStatus, LocatedFileStatus, Path, RawLocalFileSystem, RemoteIterator}
@@ -28,12 +29,12 @@ import org.apache.hadoop.fs.viewfs.ViewFileSystem
 import org.mockito.ArgumentMatchers.any
 import org.mockito.Mockito.{mock, when}
 
-import org.apache.spark.SparkException
+import org.apache.spark.{SparkException, SparkRuntimeException}
 import org.apache.spark.metrics.source.HiveCatalogMetrics
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.functions.col
-import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructType}
 import org.apache.spark.util.KnownSizeEstimation
@@ -132,10 +133,13 @@ class FileIndexSuite extends SharedSparkSession {
       val schema = StructType(Seq(StructField("a", IntegerType, false)))
       withSQLConf(SQLConf.VALIDATE_PARTITION_COLUMNS.key -> "true") {
         val fileIndex = new InMemoryFileIndex(spark, Seq(path), Map.empty, Some(schema))
-        val msg = intercept[RuntimeException] {
-          fileIndex.partitionSpec()
-        }.getMessage
-        assert(msg == "Failed to cast value `foo` to `IntegerType` for partition column `a`")
+        checkError(
+          exception = intercept[SparkRuntimeException] {
+            fileIndex.partitionSpec()
+          },
+          errorClass = "_LEGACY_ERROR_TEMP_2058",
+          parameters = Map("value" -> "foo", "dataType" -> "IntegerType", "columnName" -> "a")
+        )
       }
 
       withSQLConf(SQLConf.VALIDATE_PARTITION_COLUMNS.key -> "false") {
@@ -190,20 +194,27 @@ class FileIndexSuite extends SharedSparkSession {
         classOf[SubdirectoryDeletionRaceFileSystem],
         classOf[FileDeletionRaceFileSystem]
       );
-      ignoreMissingFiles <- Seq(true, false);
+      (ignoreMissingFiles, sqlConf, options) <- Seq(
+        (true, "true", Map.empty[String, String]),
+        // Explicitly set sqlConf to false, but data source options should take precedence
+        (true, "false", Map("ignoreMissingFiles" -> "true")),
+        (false, "false", Map.empty[String, String]),
+        // Explicitly set sqlConf to true, but data source options should take precedence
+        (false, "true", Map("ignoreMissingFiles" -> "false"))
+      );
       parDiscoveryThreshold <- Seq(0, 100)
     ) {
       withClue(s"raceCondition=$raceCondition, ignoreMissingFiles=$ignoreMissingFiles, " +
-        s"parDiscoveryThreshold=$parDiscoveryThreshold"
+        s"parDiscoveryThreshold=$parDiscoveryThreshold, sqlConf=$sqlConf, options=$options"
       ) {
         withSQLConf(
-          SQLConf.IGNORE_MISSING_FILES.key -> ignoreMissingFiles.toString,
+          SQLConf.IGNORE_MISSING_FILES.key -> sqlConf,
           SQLConf.PARALLEL_PARTITION_DISCOVERY_THRESHOLD.key -> parDiscoveryThreshold.toString,
           "fs.mockFs.impl" -> raceCondition.getName,
           "fs.mockFs.impl.disable.cache" -> "true"
         ) {
           def makeCatalog(): InMemoryFileIndex = new InMemoryFileIndex(
-            spark, Seq(rootDirPath), Map.empty, None)
+            spark, Seq(rootDirPath), options, None)
           if (ignoreMissingFiles) {
             // We're ignoring missing files, so catalog construction should succeed
             val catalog = makeCatalog()
@@ -296,17 +307,6 @@ class FileIndexSuite extends SharedSparkSession {
     }
   }
 
-  test("InMemoryFileIndex - file filtering") {
-    assert(!InMemoryFileIndex.shouldFilterOut("abcd"))
-    assert(InMemoryFileIndex.shouldFilterOut(".ab"))
-    assert(InMemoryFileIndex.shouldFilterOut("_cd"))
-    assert(!InMemoryFileIndex.shouldFilterOut("_metadata"))
-    assert(!InMemoryFileIndex.shouldFilterOut("_common_metadata"))
-    assert(InMemoryFileIndex.shouldFilterOut("_ab_metadata"))
-    assert(InMemoryFileIndex.shouldFilterOut("_cd_common_metadata"))
-    assert(InMemoryFileIndex.shouldFilterOut("a._COPYING_"))
-  }
-
   test("SPARK-17613 - PartitioningAwareFileIndex: base path w/o '/' at end") {
     class MockCatalog(
       override val rootPaths: Seq[Path])
@@ -366,13 +366,15 @@ class FileIndexSuite extends SharedSparkSession {
       val wrongBasePath = new File(dir, "unknown")
       // basePath must be a directory
       wrongBasePath.mkdir()
-      val parameters = Map("basePath" -> wrongBasePath.getCanonicalPath)
-      val fileIndex = new InMemoryFileIndex(spark, Seq(path), parameters, None)
-      val msg = intercept[IllegalArgumentException] {
-        // trigger inferPartitioning()
-        fileIndex.partitionSpec()
-      }.getMessage
-      assert(msg === s"Wrong basePath ${wrongBasePath.getCanonicalPath} for the root path: $path")
+      withClue("SPARK-32368: 'basePath' can be case insensitive") {
+        val parameters = Map("bAsepAtH" -> wrongBasePath.getCanonicalPath)
+        val fileIndex = new InMemoryFileIndex(spark, Seq(path), parameters, None)
+        val msg = intercept[IllegalArgumentException] {
+          // trigger inferPartitioning()
+          fileIndex.partitionSpec()
+        }.getMessage
+        assert(msg === s"Wrong basePath ${wrongBasePath.getCanonicalPath} for the root path: $path")
+      }
     }
   }
 
@@ -411,6 +413,21 @@ class FileIndexSuite extends SharedSparkSession {
     }
     val fileStatusCache = FileStatusCache.getOrCreate(spark)
     fileStatusCache.putLeafFiles(new Path("/tmp", "abc"), files.toArray)
+  }
+
+  test("SPARK-34075: InMemoryFileIndex filters out hidden file on partition inference") {
+    withTempPath { path =>
+      spark
+        .range(2)
+        .select(col("id").as("p"), col("id"))
+        .write
+        .partitionBy("p")
+        .parquet(path.getAbsolutePath)
+      val targetPath = new File(path, "p=1")
+      val hiddenPath = new File(path, "_hidden_path")
+      targetPath.renameTo(hiddenPath)
+      assert(spark.read.parquet(path.getAbsolutePath).count() == 1L)
+    }
   }
 
   test("SPARK-20367 - properly unescape column names in inferPartitioning") {
@@ -481,12 +498,61 @@ class FileIndexSuite extends SharedSparkSession {
             new Path("file")), Array(new BlockLocation()))
       )
     when(dfs.listLocatedStatus(path)).thenReturn(new RemoteIterator[LocatedFileStatus] {
-      val iter = statuses.toIterator
+      val iter = statuses.iterator
       override def hasNext: Boolean = iter.hasNext
       override def next(): LocatedFileStatus = iter.next
     })
     val fileIndex = new TestInMemoryFileIndex(spark, path)
     assert(fileIndex.leafFileStatuses.toSeq == statuses)
+  }
+
+  test("expire FileStatusCache if TTL is configured") {
+    val previousValue = SQLConf.get.getConf(StaticSQLConf.METADATA_CACHE_TTL_SECONDS)
+    try {
+      // using 'SQLConf.get.setConf' instead of 'withSQLConf' to set a static config at runtime
+      SQLConf.get.setConf(StaticSQLConf.METADATA_CACHE_TTL_SECONDS, 1L)
+
+      val path = new Path("/dummy_tmp", "abc")
+      val files = (1 to 3).map(_ => new FileStatus())
+
+      FileStatusCache.resetForTesting()
+      val fileStatusCache = FileStatusCache.getOrCreate(spark)
+      fileStatusCache.putLeafFiles(path, files.toArray)
+
+      // Exactly 3 files are cached.
+      assert(fileStatusCache.getLeafFiles(path).get.length === 3)
+      // Wait until the cache expiration.
+      eventually(timeout(3.seconds)) {
+        // And the cache is gone.
+        assert(fileStatusCache.getLeafFiles(path).isEmpty === true)
+      }
+    } finally {
+      SQLConf.get.setConf(StaticSQLConf.METADATA_CACHE_TTL_SECONDS, previousValue)
+    }
+  }
+
+  test("SPARK-38182: Fix NoSuchElementException if pushed filter does not contain any " +
+    "references") {
+    withTable("t") {
+      withSQLConf(SQLConf.OPTIMIZER_EXCLUDED_RULES.key ->
+        "org.apache.spark.sql.catalyst.optimizer.BooleanSimplification") {
+
+        sql("CREATE TABLE t (c1 int) USING PARQUET")
+        assert(sql("SELECT * FROM t WHERE c1 = 1 AND 2 > 1").count() == 0)
+      }
+    }
+  }
+
+  test("SPARK-40667: validate FileIndex Options") {
+    assert(FileIndexOptions.getAllOptions.size == 7)
+    // Please add validation on any new FileIndex options here
+    assert(FileIndexOptions.isValidOption("ignoreMissingFiles"))
+    assert(FileIndexOptions.isValidOption("timeZone"))
+    assert(FileIndexOptions.isValidOption("recursiveFileLookup"))
+    assert(FileIndexOptions.isValidOption("basePath"))
+    assert(FileIndexOptions.isValidOption("modifiedbefore"))
+    assert(FileIndexOptions.isValidOption("modifiedafter"))
+    assert(FileIndexOptions.isValidOption("pathglobfilter"))
   }
 }
 

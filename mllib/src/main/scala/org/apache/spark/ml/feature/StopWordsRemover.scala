@@ -25,6 +25,7 @@ import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared.{HasInputCol, HasInputCols, HasOutputCol, HasOutputCols}
 import org.apache.spark.ml.util._
 import org.apache.spark.sql.{DataFrame, Dataset}
+import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.functions.{col, udf}
 import org.apache.spark.sql.types.{ArrayType, StringType, StructField, StructType}
 
@@ -166,11 +167,11 @@ class StopWordsRemover @Since("1.5.0") (@Since("1.5.0") override val uid: String
     }
 
     val (inputColNames, outputColNames) = getInOutCols()
-    val ouputCols = inputColNames.map { inputColName =>
+    val outputCols = inputColNames.map { inputColName =>
       t(col(inputColName))
     }
-    val ouputMetadata = outputColNames.map(outputSchema(_).metadata)
-    dataset.withColumns(outputColNames, ouputCols, ouputMetadata)
+    val outputMetadata = outputColNames.map(outputSchema(_).metadata)
+    dataset.withColumns(outputColNames, outputCols, outputMetadata)
   }
 
   @Since("1.5.0")
@@ -191,7 +192,7 @@ class StopWordsRemover @Since("1.5.0") (@Since("1.5.0") override val uid: String
        require(!schema.fieldNames.contains(outputColName),
         s"Output Column $outputColName already exists.")
       val inputType = schema(inputColName).dataType
-      require(inputType.sameType(ArrayType(StringType)), "Input type must be " +
+      require(DataTypeUtils.sameType(inputType, ArrayType(StringType)), "Input type must be " +
         s"${ArrayType(StringType).catalogString} but got ${inputType.catalogString}.")
       StructField(outputColName, inputType, schema(inputColName).nullable)
     }

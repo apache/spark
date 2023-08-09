@@ -44,7 +44,7 @@ object PythonRunner {
       .orElse(sparkConf.get(PYSPARK_PYTHON))
       .orElse(sys.env.get("PYSPARK_DRIVER_PYTHON"))
       .orElse(sys.env.get("PYSPARK_PYTHON"))
-      .getOrElse("python")
+      .getOrElse("python3")
 
     // Format python file paths before adding them to the PYTHONPATH
     val formattedPythonFile = formatPath(pythonFile)
@@ -69,11 +69,12 @@ object PythonRunner {
     pathElements ++= formattedPyFiles
     pathElements += PythonUtils.sparkPythonPath
     pathElements += sys.env.getOrElse("PYTHONPATH", "")
-    val pythonPath = PythonUtils.mergePythonPaths(pathElements: _*)
+    val pythonPath = PythonUtils.mergePythonPaths(pathElements.toSeq: _*)
 
     // Launch Python process
     val builder = new ProcessBuilder((Seq(pythonExec, formattedPythonFile) ++ otherArgs).asJava)
     val env = builder.environment()
+    sparkConf.getOption("spark.remote").foreach(url => env.put("SPARK_REMOTE", url))
     env.put("PYTHONPATH", pythonPath)
     // This is equivalent to setting the -u flag; we use it because ipython doesn't support -u:
     env.put("PYTHONUNBUFFERED", "YES") // value is needed to be set to a non-empty string

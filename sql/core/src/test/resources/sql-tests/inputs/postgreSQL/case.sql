@@ -69,7 +69,6 @@ SELECT '7' AS `None`,
 SELECT CASE WHEN 1=0 THEN 1/0 WHEN 1=1 THEN 1 ELSE 2/0 END;
 SELECT CASE 1 WHEN 0 THEN 1/0 WHEN 1 THEN 1 ELSE 2/0 END;
 
--- [SPARK-27923] PostgreSQL throws an exception but Spark SQL is NULL
 -- However we do not currently suppress folding of potentially
 -- reachable subexpressions
 SELECT CASE WHEN i > 100 THEN 1/0 ELSE 0 END FROM case_tbl;

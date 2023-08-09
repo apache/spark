@@ -16,7 +16,11 @@
  */
 package org.apache.spark.memory;
 
+import org.apache.spark.SparkThrowable;
+import org.apache.spark.SparkThrowableHelper;
 import org.apache.spark.annotation.Private;
+
+import java.util.Map;
 
 /**
  * This exception is thrown when a task can not acquire memory from the Memory manager.
@@ -24,7 +28,9 @@ import org.apache.spark.annotation.Private;
  * we should use throw this exception, which just kills the current task.
  */
 @Private
-public final class SparkOutOfMemoryError extends OutOfMemoryError {
+public final class SparkOutOfMemoryError extends OutOfMemoryError implements SparkThrowable {
+    String errorClass;
+    Map<String, String> messageParameters;
 
     public SparkOutOfMemoryError(String s) {
         super(s);
@@ -32,5 +38,21 @@ public final class SparkOutOfMemoryError extends OutOfMemoryError {
 
     public SparkOutOfMemoryError(OutOfMemoryError e) {
         super(e.getMessage());
+    }
+
+    public SparkOutOfMemoryError(String errorClass, Map<String, String> messageParameters) {
+        super(SparkThrowableHelper.getMessage(errorClass, messageParameters));
+        this.errorClass = errorClass;
+        this.messageParameters = messageParameters;
+    }
+
+    @Override
+    public Map<String, String> getMessageParameters() {
+        return messageParameters;
+    }
+
+    @Override
+    public String getErrorClass() {
+        return errorClass;
     }
 }

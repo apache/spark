@@ -17,27 +17,24 @@
 
 package org.apache.spark.deploy.yarn
 
-import java.util.regex.{Matcher, Pattern}
-
+import scala.collection.immutable.{Map => IMap}
 import scala.collection.mutable.{HashMap, ListBuffer}
+import scala.util.matching.Regex
 
 import org.apache.hadoop.yarn.api.ApplicationConstants
 import org.apache.hadoop.yarn.api.records.{ApplicationAccessType, ContainerId, Priority}
-import org.apache.hadoop.yarn.util.ConverterUtils
 
 import org.apache.spark.{SecurityManager, SparkConf}
-import org.apache.spark.internal.config._
 import org.apache.spark.launcher.YarnCommandBuilderUtils
+import org.apache.spark.resource.ExecutorResourceRequest
 import org.apache.spark.util.Utils
 
 object YarnSparkHadoopUtil {
 
-  // Additional memory overhead
+  // Additional memory overhead for application masters in client mode.
   // 10% was arrived at experimentally. In the interest of minimizing memory waste while covering
   // the common cases. Memory overhead tends to grow with container size.
-
-  val MEMORY_OVERHEAD_FACTOR = 0.10
-  val MEMORY_OVERHEAD_MIN = 384L
+  val AM_MEMORY_OVERHEAD_FACTOR = 0.10
 
   val ANY_HOST = "*"
 
@@ -60,46 +57,67 @@ object YarnSparkHadoopUtil {
   }
 
   /**
-   * Set zero or more environment variables specified by the given input string.
-   * The input string is expected to take the form "KEY1=VAL1,KEY2=VAL2,KEY3=VAL3".
+   * Regex pattern to match the name of an environment variable. Note that Unix variable naming
+   * conventions (alphanumeric plus underscore, case-sensitive, can't start with a digit)
+   * are used for both Unix and Windows, following the convention of Hadoop's `Shell` class
+   * (see specifically [[org.apache.hadoop.util.Shell.getEnvironmentVariableRegex]]).
    */
-  def setEnvFromInputString(env: HashMap[String, String], inputString: String): Unit = {
-    if (inputString != null && inputString.length() > 0) {
-      val childEnvs = inputString.split(",")
-      val p = Pattern.compile(environmentVariableRegex)
-      for (cEnv <- childEnvs) {
-        val parts = cEnv.split("=") // split on '='
-        val m = p.matcher(parts(1))
-        val sb = new StringBuffer
-        while (m.find()) {
-          val variable = m.group(1)
-          var replace = ""
-          if (env.contains(variable)) {
-            replace = env(variable)
-          } else {
-            // if this key is not configured for the child .. get it from the env
-            replace = System.getenv(variable)
-            if (replace == null) {
-            // the env key is note present anywhere .. simply set it
-              replace = ""
-            }
-          }
-          m.appendReplacement(sb, Matcher.quoteReplacement(replace))
-        }
-        m.appendTail(sb)
-        // This treats the environment variable as path variable delimited by `File.pathSeparator`
-        // This is kept for backward compatibility and consistency with Hadoop's behavior
-        addPathToEnvironment(env, parts(0), sb.toString)
-      }
-    }
-  }
+  private val envVarNameRegex: String = "[A-Za-z_][A-Za-z0-9_]*"
 
-  private val environmentVariableRegex: String = {
-    if (Utils.isWindows) {
-      "%([A-Za-z_][A-Za-z0-9_]*?)%"
+  // scalastyle:off line.size.limit
+  /**
+   * Replace environment variables in a string according to the same rules as
+   * [[org.apache.hadoop.yarn.api.ApplicationConstants.Environment]]:
+   * `$VAR_NAME` for Unix, `%VAR_NAME%` for Windows, and `{{VAR_NAME}}` for all OS.
+   * The `${VAR_NAME}` syntax is also supported for Unix.
+   * This support escapes for `$` and `\` (on Unix) and `%` and `^` characters (on Windows), e.g.
+   * `\$FOO`, `^%FOO^%`, and `%%FOO%%` will be resolved to `$FOO`, `%FOO%`, and `%FOO%`,
+   * respectively, instead of being treated as variable names.
+   *
+   * @param unresolvedString The unresolved string which may contain variable references.
+   * @param env The System environment
+   * @param isWindows True iff running in a Windows environment
+   * @return The input string with variables replaced with their values from `env`
+   * @see [[https://pubs.opengroup.org/onlinepubs/000095399/basedefs/xbd_chap08.html Environment Variables (IEEE Std 1003.1-2017)]]
+   * @see [[https://en.wikibooks.org/wiki/Windows_Batch_Scripting#Quoting_and_escaping Windows Batch Scripting | Quoting and Escaping]]
+   */
+  // scalastyle:on line.size.limit
+  def replaceEnvVars(
+      unresolvedString: String,
+      env: IMap[String, String],
+      isWindows: Boolean = Utils.isWindows): String = {
+    val osResolvedString = if (isWindows) {
+      // ^% or %% can both be used as escapes for Windows
+      val windowsPattern = ("""(?i)(?:\^\^|\^%|%%|%(""" + envVarNameRegex + ")%)").r
+      windowsPattern.replaceAllIn(unresolvedString, m =>
+        Regex.quoteReplacement(m.matched match {
+          case "^^" => "^"
+          case "^%" => "%"
+          case "%%" => "%"
+          case _ => env.getOrElse(m.group(1), "")
+        })
+      )
     } else {
-      "\\$([A-Za-z_][A-Za-z0-9_]*)"
+      val unixPattern =
+        ("""(?i)(?:\\\\|\\\$|\$(""" + envVarNameRegex + """)|\$\{(""" + envVarNameRegex + ")})").r
+      unixPattern.replaceAllIn(unresolvedString, m =>
+        Regex.quoteReplacement(m.matched match {
+          case """\\""" => """\"""
+          case """\$""" => """$"""
+          case str if str.startsWith("${") => env.getOrElse(m.group(2), "")
+          case _ => env.getOrElse(m.group(1), "")
+        })
+      )
     }
+
+    // YARN uses `{{...}}` to represent OS-agnostic variable expansion strings. Normally the
+    // NodeManager would replace this string with an OS-specific replacement before launching
+    // the container. Here, it gets directly treated as an additional expansion string, which
+    // has the same net result.
+    // Ref: Javadoc for org.apache.hadoop.yarn.api.ApplicationConstants.Environment.$$()
+    val yarnPattern = ("""(?i)\{\{(""" + envVarNameRegex + ")}}").r
+    yarnPattern.replaceAllIn(osResolvedString,
+      m => Regex.quoteReplacement(env.getOrElse(m.group(1), "")))
   }
 
   /**
@@ -107,7 +125,7 @@ object YarnSparkHadoopUtil {
    * Not killing the task leaves various aspects of the executor and (to some extent) the jvm in
    * an inconsistent state.
    * TODO: If the OOM is not recoverable by rescheduling it on different node, then do
-   * 'something' to fail job ... akin to blacklisting trackers in mapred ?
+   * 'something' to fail job ... akin to unhealthy trackers in mapred ?
    *
    * The handler if an OOM Exception is thrown by the JVM must be configured on Windows
    * differently: the 'taskkill' command should be used, whereas Unix-based systems use 'kill'.
@@ -180,20 +198,15 @@ object YarnSparkHadoopUtil {
 
   def getContainerId: ContainerId = {
     val containerIdString = System.getenv(ApplicationConstants.Environment.CONTAINER_ID.name())
-    ConverterUtils.toContainerId(containerIdString)
+    ContainerId.fromString(containerIdString)
   }
 
   /**
-   * Convert MEMORY_OFFHEAP_SIZE to MB Unit, return 0 if MEMORY_OFFHEAP_ENABLED is false.
+   * Get offHeap memory size from [[ExecutorResourceRequest]]
+   * return 0 if MEMORY_OFFHEAP_ENABLED is false.
    */
-  def executorOffHeapMemorySizeAsMb(sparkConf: SparkConf): Int = {
-    if (sparkConf.get(MEMORY_OFFHEAP_ENABLED)) {
-      val sizeInMB = Utils.memoryStringToMb(sparkConf.get(MEMORY_OFFHEAP_SIZE).toString)
-      require(sizeInMB > 0,
-        s"${MEMORY_OFFHEAP_SIZE.key} must be > 0 when ${MEMORY_OFFHEAP_ENABLED.key} == true")
-      sizeInMB
-    } else {
-      0
-    }
+  def executorOffHeapMemorySizeAsMb(sparkConf: SparkConf,
+    execRequest: ExecutorResourceRequest): Long = {
+    Utils.checkOffHeapEnabled(sparkConf, execRequest.amount)
   }
 }

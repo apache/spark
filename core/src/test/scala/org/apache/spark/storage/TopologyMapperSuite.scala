@@ -19,7 +19,8 @@ package org.apache.spark.storage
 
 import java.io.{File, FileOutputStream}
 
-import org.scalatest.{BeforeAndAfter, Matchers}
+import org.scalatest.BeforeAndAfter
+import org.scalatest.matchers.must.Matchers
 
 import org.apache.spark._
 import org.apache.spark.internal.config.STORAGE_REPLICATION_TOPOLOGY_FILE

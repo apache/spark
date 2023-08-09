@@ -21,8 +21,9 @@ import java.util.Locale
 
 
 class TPCDSQueryBenchmarkArguments(val args: Array[String]) {
-  var dataLocation: String = null
+  var dataLocation: String = sys.env.getOrElse("SPARK_TPCDS_DATA", null)
   var queryFilter: Set[String] = Set.empty
+  var cboEnabled: Boolean = false
 
   parseArgs(args.toList)
   validateArguments()
@@ -44,6 +45,10 @@ class TPCDSQueryBenchmarkArguments(val args: Array[String]) {
           queryFilter = value.toLowerCase(Locale.ROOT).split(",").map(_.trim).toSet
           args = tail
 
+        case optName :: tail if optionMatch("--cbo", optName) =>
+          cboEnabled = true
+          args = tail
+
         case _ =>
           // scalastyle:off println
           System.err.println("Unknown/unsupported param " + args)
@@ -60,6 +65,7 @@ class TPCDSQueryBenchmarkArguments(val args: Array[String]) {
       |Options:
       |  --data-location      Path to TPCDS data
       |  --query-filter       Queries to filter, e.g., q3,q5,q13
+      |  --cbo                Whether to enable cost-based optimization
       |
       |------------------------------------------------------------------------------------------------------------------
       |In order to run this benchmark, please follow the instructions at

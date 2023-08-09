@@ -23,7 +23,6 @@ import java.util.concurrent.locks.ReentrantLock
 
 import scala.concurrent.{Awaitable, ExecutionContext, ExecutionContextExecutor, Future}
 import scala.concurrent.duration.{Duration, FiniteDuration}
-import scala.language.higherKinds
 import scala.util.control.NonFatal
 
 import com.google.common.util.concurrent.ThreadFactoryBuilder
@@ -163,9 +162,30 @@ private[spark] object ThreadUtils {
   /**
    * Wrapper over newSingleThreadExecutor.
    */
-  def newDaemonSingleThreadExecutor(threadName: String): ExecutorService = {
+  def newDaemonSingleThreadExecutor(threadName: String): ThreadPoolExecutor = {
     val threadFactory = new ThreadFactoryBuilder().setDaemon(true).setNameFormat(threadName).build()
-    Executors.newSingleThreadExecutor(threadFactory)
+    Executors.newFixedThreadPool(1, threadFactory).asInstanceOf[ThreadPoolExecutor]
+  }
+
+  /**
+   * Wrapper over newSingleThreadExecutor that allows the specification
+   * of a RejectedExecutionHandler
+   */
+  def newDaemonSingleThreadExecutorWithRejectedExecutionHandler(
+      threadName: String,
+      taskQueueCapacity: Int,
+      rejectedExecutionHandler: RejectedExecutionHandler): ThreadPoolExecutor = {
+
+    val threadFactory = new ThreadFactoryBuilder().setDaemon(true).setNameFormat(threadName).build()
+
+    new ThreadPoolExecutor(
+      1,
+      1,
+      0L,
+      TimeUnit.MILLISECONDS,
+      new ArrayBlockingQueue[Runnable](taskQueueCapacity),
+      threadFactory,
+      rejectedExecutionHandler)
   }
 
   /**
@@ -287,20 +307,7 @@ private[spark] object ThreadUtils {
    */
   @throws(classOf[SparkException])
   def awaitResult[T](awaitable: Awaitable[T], atMost: Duration): T = {
-    try {
-      // `awaitPermission` is not actually used anywhere so it's safe to pass in null here.
-      // See SPARK-13747.
-      val awaitPermission = null.asInstanceOf[scala.concurrent.CanAwait]
-      awaitable.result(atMost)(awaitPermission)
-    } catch {
-      case e: SparkFatalException =>
-        throw e.throwable
-      // TimeoutException and RpcAbortException is thrown in the current thread, so not need to warp
-      // the exception.
-      case NonFatal(t)
-          if !t.isInstanceOf[TimeoutException] =>
-        throw new SparkException("Exception thrown in awaitResult: ", t)
-    }
+    SparkThreadUtils.awaitResult(awaitable, atMost)
   }
   // scalastyle:on awaitresult
 

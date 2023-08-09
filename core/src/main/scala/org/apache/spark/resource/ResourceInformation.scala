@@ -55,7 +55,9 @@ class ResourceInformation(
 
   override def hashCode(): Int = Seq(name, addresses.toSeq).hashCode()
 
-  def toJson(): JValue = ResourceInformationJson(name, addresses).toJValue
+  // TODO(SPARK-39658): reconsider whether we want to expose a third-party library's
+  // symbols as part of a public API:
+  final def toJson(): JValue = ResourceInformationJson(name, addresses).toJValue
 }
 
 private[spark] object ResourceInformation {

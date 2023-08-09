@@ -18,15 +18,15 @@
 package org.apache.spark.sql.catalyst.expressions.aggregate
 
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, BinaryArithmetic, BitwiseAnd, BitwiseOr, BitwiseXor, ExpectsInputTypes, Expression, ExpressionDescription, If, IsNull, Literal}
+import org.apache.spark.sql.catalyst.trees.UnaryLike
 import org.apache.spark.sql.types.{AbstractDataType, DataType, IntegralType}
 
-abstract class BitAggregate extends DeclarativeAggregate with ExpectsInputTypes {
+abstract class BitAggregate extends DeclarativeAggregate with ExpectsInputTypes
+  with UnaryLike[Expression] {
 
   val child: Expression
 
   def bitOperator(left: Expression, right: Expression): BinaryArithmetic
-
-  override def children: Seq[Expression] = child :: Nil
 
   override def nullable: Boolean = true
 
@@ -60,6 +60,7 @@ abstract class BitAggregate extends DeclarativeAggregate with ExpectsInputTypes 
       > SELECT _FUNC_(col) FROM VALUES (3), (5) AS tab(col);
        1
   """,
+  group = "agg_funcs",
   since = "3.0.0")
 case class BitAndAgg(child: Expression) extends BitAggregate {
 
@@ -68,6 +69,9 @@ case class BitAndAgg(child: Expression) extends BitAggregate {
   override def bitOperator(left: Expression, right: Expression): BinaryArithmetic = {
     BitwiseAnd(left, right)
   }
+
+  override protected def withNewChildInternal(newChild: Expression): BitAndAgg =
+    copy(child = newChild)
 }
 
 @ExpressionDescription(
@@ -86,6 +90,9 @@ case class BitOrAgg(child: Expression) extends BitAggregate {
   override def bitOperator(left: Expression, right: Expression): BinaryArithmetic = {
     BitwiseOr(left, right)
   }
+
+  override protected def withNewChildInternal(newChild: Expression): BitOrAgg =
+    copy(child = newChild)
 }
 
 @ExpressionDescription(
@@ -104,4 +111,7 @@ case class BitXorAgg(child: Expression) extends BitAggregate {
   override def bitOperator(left: Expression, right: Expression): BinaryArithmetic = {
     BitwiseXor(left, right)
   }
+
+  override protected def withNewChildInternal(newChild: Expression): Expression =
+    copy(child = newChild)
 }

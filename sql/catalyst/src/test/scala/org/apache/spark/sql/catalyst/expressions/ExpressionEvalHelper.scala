@@ -24,7 +24,7 @@ import org.scalactic.TripleEqualsSupport.Spread
 import org.scalatest.exceptions.TestFailedException
 import org.scalatestplus.scalacheck.ScalaCheckDrivenPropertyChecks
 
-import org.apache.spark.{SparkConf, SparkFunSuite}
+import org.apache.spark.{SparkConf, SparkFunSuite, SparkThrowable}
 import org.apache.spark.serializer.JavaSerializer
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
@@ -36,10 +36,14 @@ import org.apache.spark.sql.catalyst.plans.logical.{OneRowRelation, Project}
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, ArrayData, MapData}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
-import org.apache.spark.util.Utils
 
 /**
  * A few helper functions for expression evaluation testing. Mixin this trait to use them.
+ *
+ * Note: when you write unit test for an expression and call `checkEvaluation` to check the result,
+ *       please make sure that you explore all the cases that can lead to null result (including
+ *       null in struct fields, array elements and map values). The framework will test the
+ *       nullability flag of the expression automatically.
  */
 trait ExpressionEvalHelper extends ScalaCheckDrivenPropertyChecks with PlanTestBase {
   self: SparkFunSuite =>
@@ -69,7 +73,7 @@ trait ExpressionEvalHelper extends ScalaCheckDrivenPropertyChecks with PlanTestB
 
   private def prepareEvaluation(expression: Expression): Expression = {
     val serializer = new JavaSerializer(new SparkConf()).newInstance
-    val resolver = ResolveTimeZone(new SQLConf)
+    val resolver = ResolveTimeZone
     val expr = resolver.resolveTimeZones(expression)
     assert(expr.resolved)
     serializer.deserialize(serializer.serialize(expr))
@@ -110,7 +114,7 @@ trait ExpressionEvalHelper extends ScalaCheckDrivenPropertyChecks with PlanTestB
       case (result: Array[Byte], expected: Array[Byte]) =>
         java.util.Arrays.equals(result, expected)
       case (result: Double, expected: Spread[Double @unchecked]) =>
-        expected.asInstanceOf[Spread[Double]].isWithin(result)
+        expected.isWithin(result)
       case (result: InternalRow, expected: InternalRow) =>
         val st = dataType.asInstanceOf[StructType]
         assert(result.numFields == st.length && expected.numFields == st.length)
@@ -143,6 +147,47 @@ trait ExpressionEvalHelper extends ScalaCheckDrivenPropertyChecks with PlanTestB
     }
   }
 
+  protected def checkErrorInExpression[T <: SparkThrowable : ClassTag](
+      expression: => Expression,
+      errorClass: String,
+      parameters: Map[String, String] = Map.empty): Unit = {
+    checkErrorInExpression[T](expression, InternalRow.empty, errorClass, parameters)
+  }
+
+  protected def checkErrorInExpression[T <: SparkThrowable : ClassTag](
+      expression: => Expression,
+      inputRow: InternalRow,
+      errorClass: String,
+      parameters: Map[String, String]): Unit = {
+
+    def checkException(eval: => Unit, testMode: String): Unit = {
+      val modes = Seq(CodegenObjectFactoryMode.CODEGEN_ONLY, CodegenObjectFactoryMode.NO_CODEGEN)
+      withClue(s"($testMode)") {
+        val e = intercept[T] {
+          for (fallbackMode <- modes) {
+            withSQLConf(SQLConf.CODEGEN_FACTORY_MODE.key -> fallbackMode.toString) {
+              eval
+            }
+          }
+        }
+        checkError(
+          exception = e,
+          errorClass = errorClass,
+          parameters = parameters
+        )
+      }
+    }
+
+    // Make it as method to obtain fresh expression everytime.
+    def expr = prepareEvaluation(expression)
+
+    checkException(evaluateWithoutCodegen(expr, inputRow), "non-codegen mode")
+    checkException(evaluateWithMutableProjection(expr, inputRow), "codegen mode")
+    if (GenerateUnsafeProjection.canSupport(expr.dataType)) {
+      checkException(evaluateWithUnsafeProjection(expr, inputRow), "unsafe mode")
+    }
+  }
+
   protected def checkExceptionInExpression[T <: Throwable : ClassTag](
       expression: => Expression,
       expectedErrMsg: String): Unit = {
@@ -155,11 +200,20 @@ trait ExpressionEvalHelper extends ScalaCheckDrivenPropertyChecks with PlanTestB
       expectedErrMsg: String): Unit = {
 
     def checkException(eval: => Unit, testMode: String): Unit = {
+      val modes = Seq(CodegenObjectFactoryMode.CODEGEN_ONLY, CodegenObjectFactoryMode.NO_CODEGEN)
       withClue(s"($testMode)") {
         val errMsg = intercept[T] {
-          eval
+          for (fallbackMode <- modes) {
+            withSQLConf(SQLConf.CODEGEN_FACTORY_MODE.key -> fallbackMode.toString) {
+              eval
+            }
+          }
         }.getMessage
-        if (!errMsg.contains(expectedErrMsg)) {
+        if (errMsg == null) {
+          if (expectedErrMsg != null) {
+            fail(s"Expected null error message, but `$errMsg` found")
+          }
+        } else if (!errMsg.contains(expectedErrMsg)) {
           fail(s"Expected error message is `$expectedErrMsg`, but `$errMsg` found")
         }
       }
@@ -181,22 +235,6 @@ trait ExpressionEvalHelper extends ScalaCheckDrivenPropertyChecks with PlanTestB
       case _ =>
     }
     expression.eval(inputRow)
-  }
-
-  protected def generateProject(
-      generator: => Projection,
-      expression: Expression): Projection = {
-    try {
-      generator
-    } catch {
-      case e: Throwable =>
-        fail(
-          s"""
-            |Code generation of $expression failed:
-            |$e
-            |${Utils.exceptionString(e)}
-          """.stripMargin)
-    }
   }
 
   protected def checkEvaluationWithoutCodegen(
@@ -235,9 +273,7 @@ trait ExpressionEvalHelper extends ScalaCheckDrivenPropertyChecks with PlanTestB
   protected def evaluateWithMutableProjection(
       expression: => Expression,
       inputRow: InternalRow = EmptyRow): Any = {
-    val plan = generateProject(
-      MutableProjection.create(Alias(expression, s"Optimized($expression)")() :: Nil),
-      expression)
+    val plan = MutableProjection.create(Alias(expression, s"Optimized($expression)")() :: Nil)
     plan.initialize(0)
 
     plan(inputRow).get(0, expression.dataType)
@@ -255,7 +291,7 @@ trait ExpressionEvalHelper extends ScalaCheckDrivenPropertyChecks with PlanTestB
 
         val dataType = expression.dataType
         if (!checkResult(unsafeRow.get(0, dataType), expected, dataType, expression.nullable)) {
-          fail("Incorrect evaluation in unsafe mode (fallback mode = $fallbackMode): " +
+          fail(s"Incorrect evaluation in unsafe mode (fallback mode = $fallbackMode): " +
             s"$expression, actual: $unsafeRow, expected: $expected, " +
             s"dataType: $dataType, nullable: ${expression.nullable}")
         }
@@ -283,11 +319,9 @@ trait ExpressionEvalHelper extends ScalaCheckDrivenPropertyChecks with PlanTestB
     // SPARK-16489 Explicitly doing code generation twice so code gen will fail if
     // some expression is reusing variable names across different instances.
     // This behavior is tested in ExpressionEvalHelperSuite.
-    val plan = generateProject(
-      UnsafeProjection.create(
-        Alias(expression, s"Optimized($expression)1")() ::
-          Alias(expression, s"Optimized($expression)2")() :: Nil),
-      expression)
+    val plan = UnsafeProjection.create(
+      Alias(expression, s"Optimized($expression)1")() ::
+        Alias(expression, s"Optimized($expression)2")() :: Nil)
 
     plan.initialize(0)
     plan(inputRow)
@@ -310,16 +344,13 @@ trait ExpressionEvalHelper extends ScalaCheckDrivenPropertyChecks with PlanTestB
     checkEvaluationWithMutableProjection(expression, expected)
     checkEvaluationWithOptimization(expression, expected)
 
-    var plan = generateProject(
-      GenerateMutableProjection.generate(Alias(expression, s"Optimized($expression)")() :: Nil),
-      expression)
+    var plan: Projection =
+      GenerateMutableProjection.generate(Alias(expression, s"Optimized($expression)")() :: Nil)
     plan.initialize(0)
     var actual = plan(inputRow).get(0, expression.dataType)
     assert(checkResult(actual, expected, expression))
 
-    plan = generateProject(
-      GenerateUnsafeProjection.generate(Alias(expression, s"Optimized($expression)")() :: Nil),
-      expression)
+    plan = GenerateUnsafeProjection.generate(Alias(expression, s"Optimized($expression)")() :: Nil)
     plan.initialize(0)
     val ref = new BoundReference(0, expression.dataType, nullable = true)
     actual = GenerateSafeProjection.generate(ref :: Nil)(plan(inputRow)).get(0, expression.dataType)
@@ -337,6 +368,21 @@ trait ExpressionEvalHelper extends ScalaCheckDrivenPropertyChecks with PlanTestB
       dataType: DataType): Unit = {
     forAll (LiteralGenerator.randomGen(dataType)) { (l: Literal) =>
       cmpInterpretWithCodegen(EmptyRow, c(l))
+    }
+  }
+
+  /**
+   * Test evaluation results between Interpreted mode and Codegen mode, making sure we have
+   * consistent result regardless of the evaluation method we use. If an exception is thrown,
+   * it checks that both modes throw the same exception.
+   *
+   * This method test against unary expressions by feeding them arbitrary literals of `dataType`.
+   */
+  def checkConsistencyBetweenInterpretedAndCodegenAllowingException(
+      c: Expression => Expression,
+      dataType: DataType): Unit = {
+    forAll (LiteralGenerator.randomGen(dataType)) { (l: Literal) =>
+      cmpInterpretWithCodegen(EmptyRow, c(l), true)
     }
   }
 
@@ -432,9 +478,7 @@ trait ExpressionEvalHelper extends ScalaCheckDrivenPropertyChecks with PlanTestB
       }
     }
 
-    val plan = generateProject(
-      GenerateMutableProjection.generate(Alias(expr, s"Optimized($expr)")() :: Nil),
-      expr)
+    val plan = GenerateMutableProjection.generate(Alias(expr, s"Optimized($expr)")() :: Nil)
     val (codegen, codegenExc) = try {
       (Some(plan(inputRow).get(0, expr.dataType)), None)
     } catch {
@@ -448,7 +492,7 @@ trait ExpressionEvalHelper extends ScalaCheckDrivenPropertyChecks with PlanTestB
     if (interpret.isDefined && codegen.isDefined && !compareResults(interpret.get, codegen.get)) {
       fail(s"Incorrect evaluation: $expr, interpret: ${interpret.get}, codegen: ${codegen.get}")
     } else if (interpretExc.isDefined && codegenExc.isEmpty) {
-      fail(s"Incorrect evaluation: $expr, interpet threw exception ${interpretExc.get}")
+      fail(s"Incorrect evaluation: $expr, interpret threw exception ${interpretExc.get}")
     } else if (interpretExc.isEmpty && codegenExc.isDefined) {
       fail(s"Incorrect evaluation: $expr, codegen threw exception ${codegenExc.get}")
     } else if (interpretExc.isDefined && codegenExc.isDefined

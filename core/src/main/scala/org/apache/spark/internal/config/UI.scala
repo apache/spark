@@ -17,7 +17,10 @@
 
 package org.apache.spark.internal.config
 
+import java.util.Locale
 import java.util.concurrent.TimeUnit
+
+import org.apache.commons.lang3.{JavaVersion, SystemUtils}
 
 import org.apache.spark.network.util.ByteUnit
 
@@ -78,6 +81,11 @@ private[spark] object UI {
       "reach your proxy.")
     .version("2.1.0")
     .stringConf
+    .checkValue ({ s =>
+      val words = s.split("/")
+      !words.contains("proxy") && !words.contains("history") },
+      "Cannot use the keyword 'proxy' or 'history' in reverse proxy URL. Spark UI relies on both " +
+        "keywords for getting REST API endpoints from URIs.")
     .createOptional
 
   val UI_KILL_ENABLED = ConfigBuilder("spark.ui.killEnabled")
@@ -90,6 +98,11 @@ private[spark] object UI {
     .version("1.2.0")
     .booleanConf
     .createWithDefault(true)
+
+  val UI_HEAP_HISTOGRAM_ENABLED = ConfigBuilder("spark.ui.heapHistogramEnabled")
+    .version("3.5.0")
+    .booleanConf
+    .createWithDefault(SystemUtils.isJavaVersionAtLeast(JavaVersion.JAVA_11))
 
   val UI_PROMETHEUS_ENABLED = ConfigBuilder("spark.ui.prometheus.enabled")
     .internal()
@@ -123,10 +136,31 @@ private[spark] object UI {
     .bytesConf(ByteUnit.BYTE)
     .createWithDefaultString("8k")
 
+  val UI_TIMELINE_ENABLED = ConfigBuilder("spark.ui.timelineEnabled")
+    .doc("Whether to display event timeline data on UI pages.")
+    .version("3.4.0")
+    .booleanConf
+    .createWithDefault(true)
+
   val UI_TIMELINE_TASKS_MAXIMUM = ConfigBuilder("spark.ui.timeline.tasks.maximum")
     .version("1.4.0")
     .intConf
     .createWithDefault(1000)
+
+  val UI_TIMELINE_JOBS_MAXIMUM = ConfigBuilder("spark.ui.timeline.jobs.maximum")
+    .version("3.2.0")
+    .intConf
+    .createWithDefault(500)
+
+  val UI_TIMELINE_STAGES_MAXIMUM = ConfigBuilder("spark.ui.timeline.stages.maximum")
+    .version("3.2.0")
+    .intConf
+    .createWithDefault(500)
+
+  val UI_TIMELINE_EXECUTORS_MAXIMUM = ConfigBuilder("spark.ui.timeline.executors.maximum")
+    .version("3.2.0")
+    .intConf
+    .createWithDefault(250)
 
   val ACLS_ENABLE = ConfigBuilder("spark.acls.enable")
     .version("1.1.0")
@@ -191,4 +225,22 @@ private[spark] object UI {
     .version("3.0.0")
     .stringConf
     .createOptional
+
+  val MASTER_UI_DECOMMISSION_ALLOW_MODE = ConfigBuilder("spark.master.ui.decommission.allow.mode")
+    .doc("Specifies the behavior of the Master Web UI's /workers/kill endpoint. Possible choices" +
+      " are: `LOCAL` means allow this endpoint from IP's that are local to the machine running" +
+      " the Master, `DENY` means to completely disable this endpoint, `ALLOW` means to allow" +
+      " calling this endpoint from any IP.")
+    .internal()
+    .version("3.1.0")
+    .stringConf
+    .transform(_.toUpperCase(Locale.ROOT))
+    .createWithDefault("LOCAL")
+
+  val UI_SQL_GROUP_SUB_EXECUTION_ENABLED = ConfigBuilder("spark.ui.groupSQLSubExecutionEnabled")
+    .doc("Whether to group sub executions together in SQL UI when they belong to the same " +
+      "root execution")
+    .version("3.4.0")
+    .booleanConf
+    .createWithDefault(true)
 }

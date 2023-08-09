@@ -1,0 +1,81 @@
+WholeStageCodegen (1)
+  Project
+    Subquery #1
+      WholeStageCodegen (2)
+        Project [count(1),avg(ss_ext_discount_amt),avg(ss_net_paid)]
+          HashAggregate [count,sum,count,sum,count] [count(1),avg(UnscaledValue(ss_ext_discount_amt)),avg(UnscaledValue(ss_net_paid)),count(1),avg(ss_ext_discount_amt),avg(ss_net_paid),count,sum,count,sum,count]
+            InputAdapter
+              Exchange #1
+                WholeStageCodegen (1)
+                  HashAggregate [ss_ext_discount_amt,ss_net_paid] [count,sum,count,sum,count,count,sum,count,sum,count]
+                    Project [ss_ext_discount_amt,ss_net_paid]
+                      Filter [ss_quantity]
+                        ColumnarToRow
+                          InputAdapter
+                            Scan parquet spark_catalog.default.store_sales [ss_quantity,ss_ext_discount_amt,ss_net_paid,ss_sold_date_sk]
+    ReusedSubquery [mergedValue] #1
+    ReusedSubquery [mergedValue] #1
+    Subquery #2
+      WholeStageCodegen (2)
+        Project [count(1),avg(ss_ext_discount_amt),avg(ss_net_paid)]
+          HashAggregate [count,sum,count,sum,count] [count(1),avg(UnscaledValue(ss_ext_discount_amt)),avg(UnscaledValue(ss_net_paid)),count(1),avg(ss_ext_discount_amt),avg(ss_net_paid),count,sum,count,sum,count]
+            InputAdapter
+              Exchange #2
+                WholeStageCodegen (1)
+                  HashAggregate [ss_ext_discount_amt,ss_net_paid] [count,sum,count,sum,count,count,sum,count,sum,count]
+                    Project [ss_ext_discount_amt,ss_net_paid]
+                      Filter [ss_quantity]
+                        ColumnarToRow
+                          InputAdapter
+                            Scan parquet spark_catalog.default.store_sales [ss_quantity,ss_ext_discount_amt,ss_net_paid,ss_sold_date_sk]
+    ReusedSubquery [mergedValue] #2
+    ReusedSubquery [mergedValue] #2
+    Subquery #3
+      WholeStageCodegen (2)
+        Project [count(1),avg(ss_ext_discount_amt),avg(ss_net_paid)]
+          HashAggregate [count,sum,count,sum,count] [count(1),avg(UnscaledValue(ss_ext_discount_amt)),avg(UnscaledValue(ss_net_paid)),count(1),avg(ss_ext_discount_amt),avg(ss_net_paid),count,sum,count,sum,count]
+            InputAdapter
+              Exchange #3
+                WholeStageCodegen (1)
+                  HashAggregate [ss_ext_discount_amt,ss_net_paid] [count,sum,count,sum,count,count,sum,count,sum,count]
+                    Project [ss_ext_discount_amt,ss_net_paid]
+                      Filter [ss_quantity]
+                        ColumnarToRow
+                          InputAdapter
+                            Scan parquet spark_catalog.default.store_sales [ss_quantity,ss_ext_discount_amt,ss_net_paid,ss_sold_date_sk]
+    ReusedSubquery [mergedValue] #3
+    ReusedSubquery [mergedValue] #3
+    Subquery #4
+      WholeStageCodegen (2)
+        Project [count(1),avg(ss_ext_discount_amt),avg(ss_net_paid)]
+          HashAggregate [count,sum,count,sum,count] [count(1),avg(UnscaledValue(ss_ext_discount_amt)),avg(UnscaledValue(ss_net_paid)),count(1),avg(ss_ext_discount_amt),avg(ss_net_paid),count,sum,count,sum,count]
+            InputAdapter
+              Exchange #4
+                WholeStageCodegen (1)
+                  HashAggregate [ss_ext_discount_amt,ss_net_paid] [count,sum,count,sum,count,count,sum,count,sum,count]
+                    Project [ss_ext_discount_amt,ss_net_paid]
+                      Filter [ss_quantity]
+                        ColumnarToRow
+                          InputAdapter
+                            Scan parquet spark_catalog.default.store_sales [ss_quantity,ss_ext_discount_amt,ss_net_paid,ss_sold_date_sk]
+    ReusedSubquery [mergedValue] #4
+    ReusedSubquery [mergedValue] #4
+    Subquery #5
+      WholeStageCodegen (2)
+        Project [count(1),avg(ss_ext_discount_amt),avg(ss_net_paid)]
+          HashAggregate [count,sum,count,sum,count] [count(1),avg(UnscaledValue(ss_ext_discount_amt)),avg(UnscaledValue(ss_net_paid)),count(1),avg(ss_ext_discount_amt),avg(ss_net_paid),count,sum,count,sum,count]
+            InputAdapter
+              Exchange #5
+                WholeStageCodegen (1)
+                  HashAggregate [ss_ext_discount_amt,ss_net_paid] [count,sum,count,sum,count,count,sum,count,sum,count]
+                    Project [ss_ext_discount_amt,ss_net_paid]
+                      Filter [ss_quantity]
+                        ColumnarToRow
+                          InputAdapter
+                            Scan parquet spark_catalog.default.store_sales [ss_quantity,ss_ext_discount_amt,ss_net_paid,ss_sold_date_sk]
+    ReusedSubquery [mergedValue] #5
+    ReusedSubquery [mergedValue] #5
+    Filter [r_reason_sk]
+      ColumnarToRow
+        InputAdapter
+          Scan parquet spark_catalog.default.reason [r_reason_sk]

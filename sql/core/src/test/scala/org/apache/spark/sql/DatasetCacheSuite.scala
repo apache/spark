@@ -25,8 +25,9 @@ import org.apache.spark.sql.execution.columnar.{InMemoryRelation, InMemoryTableS
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.storage.StorageLevel
+import org.apache.spark.tags.SlowSQLTest
 
-
+@SlowSQLTest
 class DatasetCacheSuite extends QueryTest
   with SharedSparkSession
   with TimeLimits
@@ -102,18 +103,19 @@ class DatasetCacheSuite extends QueryTest
   test("persist and then groupBy columns asKey, map") {
     val ds = Seq(("a", 10), ("a", 20), ("b", 1), ("b", 2), ("c", 1)).toDS()
     val grouped = ds.groupByKey(_._1)
-    val agged = grouped.mapGroups { (g, iter) => (g, iter.map(_._2).sum) }
-    agged.persist()
+    val aggregated = grouped.mapGroups { (g, iter) => (g, iter.map(_._2).sum) }
+    aggregated.persist()
 
     checkDataset(
-      agged.filter(_._1 == "b"),
+      aggregated.filter(_._1 == "b"),
       ("b", 3))
-    assertCached(agged.filter(_._1 == "b"))
+    assertCached(aggregated.filter(_._1 == "b"))
 
     ds.unpersist(blocking = true)
     assert(ds.storageLevel == StorageLevel.NONE, "The Dataset ds should not be cached.")
-    agged.unpersist(blocking = true)
-    assert(agged.storageLevel == StorageLevel.NONE, "The Dataset agged should not be cached.")
+    aggregated.unpersist(blocking = true)
+    assert(aggregated.storageLevel == StorageLevel.NONE,
+           "The Dataset aggregated should not be cached.")
   }
 
   test("persist and then withColumn") {
@@ -249,7 +251,7 @@ class DatasetCacheSuite extends QueryTest
       case i: InMemoryRelation => i.cacheBuilder.cachedPlan
     }
     assert(df2LimitInnerPlan.isDefined &&
-      df2LimitInnerPlan.get.find(_.isInstanceOf[InMemoryTableScanExec]).isEmpty)
+      !df2LimitInnerPlan.get.exists(_.isInstanceOf[InMemoryTableScanExec]))
   }
 
   test("SPARK-27739 Save stats from optimized plan") {
@@ -269,6 +271,27 @@ class DatasetCacheSuite extends QueryTest
           assert(i.statsOfPlanToCache.sizeInBytes !==
             df.sparkSession.sessionState.conf.defaultSizeInBytes)
       }
+    }
+  }
+
+  test("SPARK-44653: non-trivial DataFrame unions should not break caching") {
+    val df1 = Seq(1 -> 1).toDF("i", "j")
+    val df2 = Seq(2 -> 2).toDF("i", "j")
+    val df3 = Seq(3 -> 3).toDF("i", "j")
+
+    withClue("positive") {
+      val unionDf = df1.union(df2).select($"i")
+      unionDf.cache()
+      val finalDf = unionDf.union(df3.select($"i"))
+      assert(finalDf.queryExecution.executedPlan.exists(_.isInstanceOf[InMemoryTableScanExec]))
+    }
+
+    withClue("negative") {
+      val unionDf = df1.union(df2)
+      unionDf.cache()
+      val finalDf = unionDf.union(df3)
+      // It's by design to break caching here.
+      assert(!finalDf.queryExecution.executedPlan.exists(_.isInstanceOf[InMemoryTableScanExec]))
     }
   }
 }

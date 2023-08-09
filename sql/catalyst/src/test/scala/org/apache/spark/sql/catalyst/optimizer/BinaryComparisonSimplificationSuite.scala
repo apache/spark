@@ -26,9 +26,9 @@ import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{IntegerType, StructField, StructType}
+import org.apache.spark.sql.types.{BooleanType, IntegerType, StructField, StructType}
 
-class BinaryComparisonSimplificationSuite extends PlanTest with PredicateHelper {
+class BinaryComparisonSimplificationSuite extends PlanTest {
 
   object Optimize extends RuleExecutor[LogicalPlan] {
     val batches =
@@ -44,12 +44,17 @@ class BinaryComparisonSimplificationSuite extends PlanTest with PredicateHelper 
         PruneFilters) :: Nil
   }
 
-  val nullableRelation = LocalRelation('a.int.withNullability(true))
-  val nonNullableRelation = LocalRelation('a.int.withNullability(false))
+  private def checkCondition(rel: LocalRelation, input: Expression, expected: Expression): Unit =
+    comparePlans(Optimize.execute(rel.where(input).analyze), rel.where(expected).analyze)
+
+  val nullableRelation = LocalRelation($"a".int.withNullability(true))
+  val nonNullableRelation = LocalRelation($"a".int.withNullability(false))
+  val boolRelation = LocalRelation($"a".boolean, $"b".boolean)
+
 
   test("Preserve nullable exprs when constraintPropagation is false") {
     withSQLConf(SQLConf.CONSTRAINT_PROPAGATION_ENABLED.key -> "false") {
-      val a = Symbol("a")
+      val a = $"a"
       for (e <- Seq(a === a, a <= a, a >= a, a < a, a > a)) {
         val plan = nullableRelation.where(e).analyze
         val actual = Optimize.execute(plan)
@@ -68,7 +73,7 @@ class BinaryComparisonSimplificationSuite extends PlanTest with PredicateHelper 
   }
 
   test("Nullable Simplification Primitive: <=>") {
-    val plan = nullableRelation.select('a <=> 'a).analyze
+    val plan = nullableRelation.select($"a" <=> $"a").analyze
     val actual = Optimize.execute(plan)
     val correctAnswer = nullableRelation.select(Alias(TrueLiteral, "(a <=> a)")()).analyze
     comparePlans(actual, correctAnswer)
@@ -76,7 +81,8 @@ class BinaryComparisonSimplificationSuite extends PlanTest with PredicateHelper 
 
   test("Non-Nullable Simplification Primitive") {
     val plan = nonNullableRelation
-      .select('a === 'a, 'a <=> 'a, 'a <= 'a, 'a >= 'a, 'a < 'a, 'a > 'a).analyze
+      .select($"a" === $"a", $"a" <=> $"a", $"a" <= $"a", $"a" >= $"a", $"a" < $"a", $"a" > $"a")
+      .analyze
     val actual = Optimize.execute(plan)
     val correctAnswer = nonNullableRelation
       .select(
@@ -92,8 +98,8 @@ class BinaryComparisonSimplificationSuite extends PlanTest with PredicateHelper 
 
   test("Expression Normalization") {
     val plan = nonNullableRelation.where(
-      'a * Literal(100) + Pi() === Pi() + Literal(100) * 'a &&
-      DateAdd(CurrentDate(), 'a + Literal(2)) <= DateAdd(CurrentDate(), Literal(2) + 'a))
+      $"a" * Literal(100) + Pi() === Pi() + Literal(100) * $"a" &&
+      DateAdd(CurrentDate(), $"a" + Literal(2)) <= DateAdd(CurrentDate(), Literal(2) + $"a"))
       .analyze
     val actual = Optimize.execute(plan)
     val correctAnswer = nonNullableRelation.analyze
@@ -119,9 +125,7 @@ class BinaryComparisonSimplificationSuite extends PlanTest with PredicateHelper 
 
     // GetStructField with different names are semantically equal; thus, `EqualTo(fieldA1, fieldA2)`
     // will be optimized to `TrueLiteral` by `SimplifyBinaryComparison`.
-    val originalQuery = nonNullableRelation
-        .where(EqualTo(fieldA1, fieldA2))
-        .analyze
+    val originalQuery = nonNullableRelation.where(EqualTo(fieldA1, fieldA2))
 
     val optimized = Optimize.execute(originalQuery)
     val correctAnswer = nonNullableRelation.analyze
@@ -130,7 +134,7 @@ class BinaryComparisonSimplificationSuite extends PlanTest with PredicateHelper 
   }
 
   test("Simplify null and nonnull with filter constraints") {
-    val a = Symbol("a")
+    val a = $"a"
     Seq(a === a, a <= a, a >= a, a < a, a > a).foreach { condition =>
       val plan = nonNullableRelation.where(condition).analyze
       val actual = Optimize.execute(plan)
@@ -142,7 +146,7 @@ class BinaryComparisonSimplificationSuite extends PlanTest with PredicateHelper 
     Seq(a === a, a <= a, a >= a).foreach { condition =>
       val plan = nullableRelation.where(condition).analyze
       val actual = Optimize.execute(plan)
-      val correctAnswer = nullableRelation.where('a.isNotNull).analyze
+      val correctAnswer = nullableRelation.where($"a".isNotNull).analyze
       comparePlans(actual, correctAnswer)
     }
 
@@ -156,13 +160,13 @@ class BinaryComparisonSimplificationSuite extends PlanTest with PredicateHelper 
 
   test("Simplify nullable without constraints propagation") {
     withSQLConf(SQLConf.CONSTRAINT_PROPAGATION_ENABLED.key -> "false") {
-      val a = Symbol("a")
+      val a = $"a"
       Seq(And(a === a, a.isNotNull),
         And(a <= a, a.isNotNull),
         And(a >= a, a.isNotNull)).foreach { condition =>
         val plan = nullableRelation.where(condition).analyze
         val actual = Optimize.execute(plan)
-        val correctAnswer = nullableRelation.where('a.isNotNull).analyze
+        val correctAnswer = nullableRelation.where($"a".isNotNull).analyze
         comparePlans(actual, correctAnswer)
       }
 
@@ -174,5 +178,86 @@ class BinaryComparisonSimplificationSuite extends PlanTest with PredicateHelper 
         comparePlans(actual, correctAnswer)
       }
     }
+  }
+
+  test("SPARK-36359: Coalesce drop all expressions after the first non nullable expression") {
+    val testRelation = LocalRelation(
+      $"a".int.withNullability(false),
+      $"b".int.withNullability(true),
+      $"c".int.withNullability(false),
+      $"d".int.withNullability(true))
+
+    comparePlans(
+      Optimize.execute(testRelation.select(Coalesce(Seq($"a", $"b", $"c", $"d")).as("out"))
+        .analyze),
+      testRelation.select($"a".as("out")).analyze)
+    comparePlans(
+      Optimize.execute(testRelation.select(Coalesce(Seq($"a", $"c")).as("out")).analyze),
+      testRelation.select($"a".as("out")).analyze)
+    comparePlans(
+      Optimize.execute(testRelation.select(Coalesce(Seq($"b", $"c", $"d")).as("out")).analyze),
+      testRelation.select(Coalesce(Seq($"b", $"c")).as("out")).analyze)
+    comparePlans(
+      Optimize.execute(testRelation.select(Coalesce(Seq($"b", $"d")).as("out")).analyze),
+      testRelation.select(Coalesce(Seq($"b", $"d")).as("out")).analyze)
+  }
+
+  test("SPARK-36721: Simplify boolean equalities if one side is literal") {
+    checkCondition(boolRelation, And($"a", $"b") === TrueLiteral, And($"a", $"b"))
+    checkCondition(boolRelation, TrueLiteral === And($"a", $"b"), And($"a", $"b"))
+    checkCondition(boolRelation, And($"a", $"b") === FalseLiteral, Or(Not($"a"), Not($"b")))
+    checkCondition(boolRelation, FalseLiteral === And($"a", $"b"), Or(Not($"a"), Not($"b")))
+    checkCondition(boolRelation, IsNull($"a") <=> TrueLiteral, IsNull($"a"))
+    checkCondition(boolRelation, TrueLiteral <=> IsNull($"a"), IsNull($"a"))
+    checkCondition(boolRelation, IsNull($"a") <=> FalseLiteral, IsNotNull($"a"))
+    checkCondition(boolRelation, FalseLiteral <=> IsNull($"a"), IsNotNull($"a"))
+
+    // Should not optimize for nullable <=> Literal
+    checkCondition(boolRelation, And($"a", $"b") <=> TrueLiteral, And($"a", $"b") <=> TrueLiteral)
+    checkCondition(boolRelation, TrueLiteral <=> And($"a", $"b"), TrueLiteral <=> And($"a", $"b"))
+    checkCondition(boolRelation, And($"a", $"b") <=> FalseLiteral, And($"a", $"b") <=> FalseLiteral)
+    checkCondition(boolRelation, FalseLiteral <=> And($"a", $"b"), FalseLiteral <=> And($"a", $"b"))
+  }
+
+  test("Simplify binary comparison when literal is null") {
+    val nullLit = Literal.create(null, IntegerType)
+    Seq($"a" > nullLit, $"a" >= nullLit, $"a" === nullLit, $"a" < nullLit, $"a" <= nullLit)
+      .foreach { be =>
+        checkCondition(nullableRelation, be, Literal.create(null, BooleanType) && $"a".isNotNull)
+      }
+
+    checkCondition(nullableRelation, $"a" <=> nullLit, $"a".isNull)
+  }
+
+  test("SPARK-43413: IN subquery nullability") {
+    // The following cases are pairs of (relation, expression)
+    // Cases we should not optimize because the IN subquery is nullable
+    Seq(
+      // IN subquery right-hand-side (ListQuery) is nullable
+      (nonNullableRelation,
+        InSubquery(Seq($"a"), ListQuery(nullableRelation.select($"a"))) <=> TrueLiteral),
+      (nonNullableRelation,
+        InSubquery(Seq($"a"), ListQuery(nullableRelation.select($"a"))) <=> FalseLiteral),
+      // Left-hand-side of the IN is nullable
+      (nullableRelation,
+        InSubquery(Seq($"a"), ListQuery(nonNullableRelation.select($"a"))) <=> TrueLiteral),
+      (nullableRelation,
+        InSubquery(Seq($"a"), ListQuery(nonNullableRelation.select($"a"))) <=> FalseLiteral),
+      // Both sides of the IN are nullable
+      (nullableRelation,
+        InSubquery(Seq($"a"), ListQuery(nullableRelation.select($"a"))) <=> TrueLiteral),
+      (nullableRelation,
+        InSubquery(Seq($"a"), ListQuery(nullableRelation.select($"a"))) <=> FalseLiteral)
+    ).foreach {
+      case (relation, expr) =>
+      checkCondition(relation, expr, expr)
+    }
+
+    // Should optimize, since the IN is non-nullable
+    val inExpr = InSubquery(Seq($"a"), ListQuery(nonNullableRelation.select($"a")))
+    checkCondition(nonNullableRelation, inExpr <=> FalseLiteral, Not(inExpr))
+
+    val inExpr2 = InSubquery(Seq($"a"), ListQuery(nonNullableRelation.select($"a")))
+    checkCondition(nonNullableRelation, inExpr2 <=> TrueLiteral, inExpr2)
   }
 }

@@ -227,7 +227,7 @@ setMethod("cacheRDD",
 #'
 #' Persist this RDD with the specified storage level. For details of the
 #' supported storage levels, refer to
-#'\url{http://spark.apache.org/docs/latest/rdd-programming-guide.html#rdd-persistence}.
+#'\url{https://spark.apache.org/docs/latest/rdd-programming-guide.html#rdd-persistence}.
 #'
 #' @param x The RDD to persist
 #' @param newLevel The new storage level to be assigned
@@ -970,7 +970,7 @@ setMethod("takeSample", signature(x = "RDD", withReplacement = "logical",
                                                                   MAXINT)))))
             # If the first sample didn't turn out large enough, keep trying to
             # take samples; this shouldn't happen often because we use a big
-            # multiplier for thei initial size
+            # multiplier for the initial size
             while (length(samples) < total)
               samples <- collectRDD(sampleRDD(x, withReplacement, fraction,
                                            as.integer(ceiling(stats::runif(1,
@@ -1512,7 +1512,7 @@ setMethod("glom",
 #'
 #' @param x An RDD.
 #' @param y An RDD.
-#' @return a new RDD created by performing the simple union (witout removing
+#' @return a new RDD created by performing the simple union (without removing
 #' duplicates) of two input RDDs.
 #' @examples
 #'\dontrun{

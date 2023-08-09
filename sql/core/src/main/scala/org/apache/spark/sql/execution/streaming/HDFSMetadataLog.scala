@@ -19,19 +19,20 @@ package org.apache.spark.sql.execution.streaming
 
 import java.io._
 import java.nio.charset.StandardCharsets
-import java.util.{ConcurrentModificationException, EnumSet, UUID}
+import java.util.{Collections, LinkedHashMap => JLinkedHashMap}
 
+import scala.collection.JavaConverters._
 import scala.reflect.ClassTag
 
 import org.apache.commons.io.IOUtils
-import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs._
-import org.apache.hadoop.fs.permission.FsPermission
 import org.json4s.NoTypeHints
 import org.json4s.jackson.Serialization
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.errors.QueryExecutionErrors
+import org.apache.spark.sql.internal.SQLConf
 
 
 /**
@@ -65,6 +66,17 @@ class HDFSMetadataLog[T <: AnyRef : ClassTag](sparkSession: SparkSession, path: 
   if (!fileManager.exists(metadataPath)) {
     fileManager.mkdirs(metadataPath)
   }
+
+  protected val metadataCacheEnabled: Boolean
+    = sparkSession.sessionState.conf.getConf(SQLConf.STREAMING_METADATA_CACHE_ENABLED)
+
+  /**
+   * Cache the latest two batches. [[StreamExecution]] usually just accesses the latest two batches
+   * when committing offsets, this cache will save some file system operations.
+   */
+  protected[sql] val batchCache = Collections.synchronizedMap(new JLinkedHashMap[Long, T](2) {
+    override def removeEldestEntry(e: java.util.Map.Entry[Long, T]): Boolean = size > 2
+  })
 
   /**
    * A `PathFilter` to filter only batch files
@@ -115,42 +127,61 @@ class HDFSMetadataLog[T <: AnyRef : ClassTag](sparkSession: SparkSession, path: 
    */
   override def add(batchId: Long, metadata: T): Boolean = {
     require(metadata != null, "'null' metadata cannot written to a metadata log")
-    get(batchId).map(_ => false).getOrElse {
-      // Only write metadata when the batch has not yet been written
-      writeBatchToFile(metadata, batchIdToPath(batchId))
-      true
-    }
-  }
-
-  /** Write a batch to a temp file then rename it to the batch file.
-   *
-   * There may be multiple [[HDFSMetadataLog]] using the same metadata path. Although it is not a
-   * valid behavior, we still need to prevent it from destroying the files.
-   */
-  private def writeBatchToFile(metadata: T, path: Path): Unit = {
-    val output = fileManager.createAtomic(path, overwriteIfPossible = false)
-    try {
-      serialize(metadata, output)
-      output.close()
-    } catch {
-      case e: FileAlreadyExistsException =>
-        output.cancel()
-        // If next batch file already exists, then another concurrently running query has
-        // written it.
-        throw new ConcurrentModificationException(
-          s"Multiple streaming queries are concurrently using $path", e)
-      case e: Throwable =>
-        output.cancel()
-        throw e
-    }
+    val res = addNewBatchByStream(batchId) { output => serialize(metadata, output) }
+    if (metadataCacheEnabled && res) batchCache.put(batchId, metadata)
+    res
   }
 
   override def get(batchId: Long): Option[T] = {
+    if (metadataCacheEnabled && batchCache.containsKey(batchId)) {
+      val metadata = batchCache.get(batchId)
+      assert(metadata != null)
+      return Some(metadata)
+    }
+
+    try {
+      applyFnToBatchByStream(batchId) { input => Some(deserialize(input)) }
+    } catch {
+      case fne: FileNotFoundException =>
+        logDebug(fne.getMessage)
+        None
+    }
+  }
+
+  /**
+   * Get the id of the previous batch from storage
+   * @param batchId get the previous batch id of this batch with batchId
+   * @return
+   */
+  def getPrevBatchFromStorage(batchId: Long): Option[Long] = {
+    val batchFiles = listBatchesOnDisk
+
+    var prev: Option[Long] = None
+    for (file <- batchFiles.sorted) {
+      if (file >= batchId) {
+        return prev
+      }
+      prev = Some(file)
+    }
+    None
+  }
+
+  /**
+   * Apply provided function to each entry in the specific batch metadata log.
+   *
+   * Unlike get which will materialize all entries into memory, this method streamlines the process
+   * via READ-AND-PROCESS. This helps to avoid the memory issue on huge metadata log file.
+   *
+   * NOTE: This no longer fails early on corruption. The caller should handle the exception
+   * properly and make sure the logic is not affected by failing in the middle.
+   */
+  def applyFnToBatchByStream[RET](
+      batchId: Long, skipExistingCheck: Boolean = false)(fn: InputStream => RET): RET = {
     val batchMetadataFile = batchIdToPath(batchId)
-    if (fileManager.exists(batchMetadataFile)) {
+    if (skipExistingCheck || fileManager.exists(batchMetadataFile)) {
       val input = fileManager.open(batchMetadataFile)
       try {
-        Some(deserialize(input))
+        fn(input)
       } catch {
         case ise: IllegalStateException =>
           // re-throw the exception with the log file path added
@@ -160,47 +191,80 @@ class HDFSMetadataLog[T <: AnyRef : ClassTag](sparkSession: SparkSession, path: 
         IOUtils.closeQuietly(input)
       }
     } else {
-      logDebug(s"Unable to find batch $batchMetadataFile")
-      None
+      throw QueryExecutionErrors.batchMetadataFileNotFoundError(batchMetadataFile)
+    }
+  }
+
+  protected def write(batchMetadataFile: Path,
+                      fn: OutputStream => Unit): Unit = {
+    // Only write metadata when the batch has not yet been written
+    val output = fileManager.createAtomic(batchMetadataFile, overwriteIfPossible = false)
+    try {
+      fn(output)
+      output.close()
+    } catch {
+      case e: FileAlreadyExistsException =>
+        output.cancel()
+        // If next batch file already exists, then another concurrently running query has
+        // written it.
+        throw QueryExecutionErrors.multiStreamingQueriesUsingPathConcurrentlyError(path, e)
+      case e: Throwable =>
+        output.cancel()
+        throw e
+    }
+  }
+
+  /**
+   * Store the metadata for the specified batchId and return `true` if successful. This method
+   * fills the content of metadata via executing function. If the function throws an exception,
+   * writing will be automatically cancelled and this method will propagate the exception.
+   *
+   * If the batchId's metadata has already been stored, this method will return `false`.
+   *
+   * Writing the metadata is done by writing a batch to a temp file then rename it to the batch
+   * file.
+   *
+   * There may be multiple [[HDFSMetadataLog]] using the same metadata path. Although it is not a
+   * valid behavior, we still need to prevent it from destroying the files.
+   */
+  def addNewBatchByStream(batchId: Long)(fn: OutputStream => Unit): Boolean = {
+    val batchMetadataFile = batchIdToPath(batchId)
+
+    if ((metadataCacheEnabled && batchCache.containsKey(batchId))
+      || fileManager.exists(batchMetadataFile)) {
+      false
+    } else {
+      write(batchMetadataFile, fn)
+      true
+    }
+  }
+
+  private def getExistingBatch(batchId: Long): T = {
+    val metadata = batchCache.get(batchId)
+    if (metadata == null) {
+      applyFnToBatchByStream(batchId, skipExistingCheck = true) { input => deserialize(input) }
+    } else {
+      metadata
     }
   }
 
   override def get(startId: Option[Long], endId: Option[Long]): Array[(Long, T)] = {
     assert(startId.isEmpty || endId.isEmpty || startId.get <= endId.get)
-    val files = fileManager.list(metadataPath, batchFilesFilter)
-    val batchIds = files
-      .map(f => pathToBatchId(f.getPath))
-      .filter { batchId =>
-        (endId.isEmpty || batchId <= endId.get) && (startId.isEmpty || batchId >= startId.get)
+    val batchIds = listBatches.filter { batchId =>
+      (endId.isEmpty || batchId <= endId.get) && (startId.isEmpty || batchId >= startId.get)
     }.sorted
 
     HDFSMetadataLog.verifyBatchIds(batchIds, startId, endId)
-
-    batchIds.map(batchId => (batchId, get(batchId))).filter(_._2.isDefined).map {
-      case (batchId, metadataOption) =>
-        (batchId, metadataOption.get)
-    }
+    batchIds.map(batchId => (batchId, getExistingBatch(batchId)))
   }
 
-  /**
-   * Return the latest batch Id without reading the file. This method only checks for existence of
-   * file to avoid cost on reading and deserializing log file.
-   */
-  def getLatestBatchId(): Option[Long] = {
-    fileManager.list(metadataPath, batchFilesFilter)
-      .map(f => pathToBatchId(f.getPath))
-      .sorted(Ordering.Long.reverse)
-      .headOption
-  }
+  /** Return the latest batch id without reading the file. */
+  def getLatestBatchId(): Option[Long] = listBatches.sorted.lastOption
 
   override def getLatest(): Option[(Long, T)] = {
-    getLatestBatchId().map { batchId =>
-      val content = get(batchId).getOrElse {
-        // If we find the last batch file, we must read that file, other than failing back to
-        // old batches.
-        throw new IllegalStateException(s"failed to read log file for batch $batchId")
-      }
-      (batchId, content)
+    listBatches.sorted.lastOption.map { batchId =>
+      logInfo(s"Getting latest batch $batchId")
+      (batchId, getExistingBatch(batchId))
     }
   }
 
@@ -215,18 +279,32 @@ class HDFSMetadataLog[T <: AnyRef : ClassTag](sparkSession: SparkSession, path: 
       .reverse
   }
 
+  private var lastPurgedBatchId: Long = -1L
+
   /**
    * Removes all the log entry earlier than thresholdBatchId (exclusive).
    */
   override def purge(thresholdBatchId: Long): Unit = {
-    val batchIds = fileManager.list(metadataPath, batchFilesFilter)
-      .map(f => pathToBatchId(f.getPath))
-
-    for (batchId <- batchIds if batchId < thresholdBatchId) {
-      val path = batchIdToPath(batchId)
-      fileManager.delete(path)
-      logTrace(s"Removed metadata log file: $path")
+    val possibleTargetBatchIds = (lastPurgedBatchId + 1 until thresholdBatchId)
+    if (possibleTargetBatchIds.length <= 3) {
+      // avoid using list if we only need to purge at most 3 elements
+      possibleTargetBatchIds.foreach { batchId =>
+        val path = batchIdToPath(batchId)
+        fileManager.delete(path)
+        if (metadataCacheEnabled) batchCache.remove(batchId)
+        logTrace(s"Removed metadata log file: $path")
+      }
+    } else {
+      // using list to retrieve all elements
+      for (batchId <- listBatches if batchId < thresholdBatchId) {
+        val path = batchIdToPath(batchId)
+        fileManager.delete(path)
+        if (metadataCacheEnabled) batchCache.remove(batchId)
+        logTrace(s"Removed metadata log file: $path")
+      }
     }
+
+    lastPurgedBatchId = thresholdBatchId - 1
   }
 
   /**
@@ -239,40 +317,41 @@ class HDFSMetadataLog[T <: AnyRef : ClassTag](sparkSession: SparkSession, path: 
     for (batchId <- batchIds if batchId > thresholdBatchId) {
       val path = batchIdToPath(batchId)
       fileManager.delete(path)
+      if (metadataCacheEnabled) batchCache.remove(batchId)
       logTrace(s"Removed metadata log file: $path")
     }
   }
 
-  /**
-   * Parse the log version from the given `text` -- will throw exception when the parsed version
-   * exceeds `maxSupportedVersion`, or when `text` is malformed (such as "xyz", "v", "v-1",
-   * "v123xyz" etc.)
-   */
-  private[sql] def validateVersion(text: String, maxSupportedVersion: Int): Int = {
-    if (text.length > 0 && text(0) == 'v') {
-      val version =
-        try {
-          text.substring(1, text.length).toInt
-        } catch {
-          case _: NumberFormatException =>
-            throw new IllegalStateException(s"Log file was malformed: failed to read correct log " +
-              s"version from $text.")
-        }
-      if (version > 0) {
-        if (version > maxSupportedVersion) {
-          throw new IllegalStateException(s"UnsupportedLogVersion: maximum supported log version " +
-            s"is v${maxSupportedVersion}, but encountered v$version. The log file was produced " +
-            s"by a newer version of Spark and cannot be read by this version. Please upgrade.")
-        } else {
-          return version
-        }
+  /** List the available batches on file system. */
+  protected def listBatches: Array[Long] = {
+    val batchIds = fileManager.list(metadataPath, batchFilesFilter)
+      .map(f => pathToBatchId(f.getPath)) ++
+      // Iterate over keySet is not thread safe. We call `toArray` to make a copy in the lock to
+      // elimiate the race condition.
+      batchCache.synchronized {
+        batchCache.keySet.asScala.toArray
       }
-    }
+    logInfo("BatchIds found from listing: " + batchIds.sorted.mkString(", "))
 
-    // reaching here means we failed to read the correct log version
-    throw new IllegalStateException(s"Log file was malformed: failed to read correct log " +
-      s"version from $text.")
+    if (batchIds.isEmpty) {
+      Array.empty
+    } else {
+      // Assume batch ids are continuous
+      (batchIds.min to batchIds.max).toArray
+    }
   }
+
+  /**
+   * List the batches persisted to storage
+   * @return array of batches ids
+   */
+  def listBatchesOnDisk: Array[Long] = {
+    fileManager.list(metadataPath, batchFilesFilter)
+      .map(f => pathToBatchId(f.getPath)).sorted
+  }
+
+  private[sql] def validateVersion(text: String, maxSupportedVersion: Int): Int =
+    MetadataVersionUtil.validateVersion(text, maxSupportedVersion)
 }
 
 object HDFSMetadataLog {

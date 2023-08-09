@@ -17,6 +17,9 @@
 
 package org.apache.spark.sql.types
 
+import org.apache.spark.sql.types.DayTimeIntervalType.{DAY, HOUR, MINUTE, SECOND}
+import org.apache.spark.sql.types.YearMonthIntervalType.{MONTH, YEAR}
+
 /**
  * Utility functions for working with DataTypes in tests.
  */
@@ -47,34 +50,70 @@ object DataTypeTestUtils {
   val numericTypes: Set[NumericType] = integralType ++ fractionalTypes
 
   // TODO: remove this once we find out how to handle decimal properly in property check
-  val numericTypeWithoutDecimal: Set[DataType] = integralType ++ Set(DoubleType, FloatType)
+  val numericTypeWithoutDecimal: Set[NumericType] = integralType ++ Set(DoubleType, FloatType)
+
+  val dayTimeIntervalTypes: Seq[DayTimeIntervalType] = Seq(
+    DayTimeIntervalType(DAY),
+    DayTimeIntervalType(DAY, HOUR),
+    DayTimeIntervalType(DAY, MINUTE),
+    DayTimeIntervalType(DAY, SECOND),
+    DayTimeIntervalType(HOUR),
+    DayTimeIntervalType(HOUR, MINUTE),
+    DayTimeIntervalType(HOUR, SECOND),
+    DayTimeIntervalType(MINUTE),
+    DayTimeIntervalType(MINUTE, SECOND),
+    DayTimeIntervalType(SECOND))
+
+  val yearMonthIntervalTypes: Seq[YearMonthIntervalType] = Seq(
+    YearMonthIntervalType(YEAR, MONTH),
+    YearMonthIntervalType(YEAR),
+    YearMonthIntervalType(MONTH))
+
+  val unsafeRowMutableFieldTypes: Seq[DataType] = Seq(
+    NullType,
+    BooleanType,
+    ShortType,
+    IntegerType,
+    LongType,
+    FloatType,
+    DoubleType,
+    DateType,
+    TimestampType,
+    TimestampNTZType
+  )
 
   /**
    * Instances of all [[NumericType]]s and [[CalendarIntervalType]]
    */
-  val numericAndInterval: Set[DataType] = numericTypeWithoutDecimal + CalendarIntervalType
+  val numericAndInterval: Set[DataType] = numericTypeWithoutDecimal ++
+    Set(CalendarIntervalType) ++ dayTimeIntervalTypes ++ yearMonthIntervalTypes
 
   /**
    * All the types that support ordering
    */
-  val ordered: Set[DataType] =
-    numericTypeWithoutDecimal + BooleanType + TimestampType + DateType + StringType + BinaryType
+  val ordered: Set[AtomicType] = numericTypeWithoutDecimal ++ Set(
+    BooleanType,
+    TimestampType,
+    TimestampNTZType,
+    DateType,
+    StringType,
+    BinaryType) ++ dayTimeIntervalTypes ++ yearMonthIntervalTypes
 
   /**
    * All the types that we can use in a property check
    */
-  val propertyCheckSupported: Set[DataType] = ordered
+  val propertyCheckSupported: Set[AtomicType] = ordered
 
   /**
    * Instances of all [[AtomicType]]s.
    */
-  val atomicTypes: Set[DataType] = numericTypes ++ Set(
+  val atomicTypes: Set[AtomicType] = numericTypes ++ Set(
     BinaryType,
     BooleanType,
     DateType,
     StringType,
-    TimestampType
-  )
+    TimestampType,
+    TimestampNTZType) ++ dayTimeIntervalTypes ++ yearMonthIntervalTypes
 
   /**
    * Instances of [[ArrayType]] for all [[AtomicType]]s. Arrays of these types may contain null.

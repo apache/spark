@@ -25,14 +25,18 @@ import org.apache.spark.sql.execution.datasources.SchemaPruningSuite
 import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
 import org.apache.spark.sql.execution.datasources.v2.parquet.ParquetScan
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.tags.ExtendedSQLTest
 
 abstract class ParquetSchemaPruningSuite extends SchemaPruningSuite with AdaptiveSparkPlanHelper {
   override protected val dataSourceName: String = "parquet"
   override protected val vectorizedReaderEnabledKey: String =
     SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key
+  override protected val vectorizedReaderNestedEnabledKey: String =
+    SQLConf.PARQUET_VECTORIZED_READER_NESTED_COLUMN_ENABLED.key
 
 }
 
+@ExtendedSQLTest
 class ParquetV1SchemaPruningSuite extends ParquetSchemaPruningSuite {
   override protected def sparkConf: SparkConf =
     super
@@ -40,6 +44,7 @@ class ParquetV1SchemaPruningSuite extends ParquetSchemaPruningSuite {
       .set(SQLConf.USE_V1_SOURCE_LIST, "parquet")
 }
 
+@ExtendedSQLTest
 class ParquetV2SchemaPruningSuite extends ParquetSchemaPruningSuite {
   // TODO: enable Parquet V2 write path after file source V2 writers are workable.
   override protected def sparkConf: SparkConf =

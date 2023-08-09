@@ -19,8 +19,8 @@ package org.apache.spark.sql.execution.streaming.state
 
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.execution.ObjectOperator
-import org.apache.spark.sql.execution.streaming.GroupStateImpl
 import org.apache.spark.sql.execution.streaming.GroupStateImpl.NO_TIMESTAMP
 import org.apache.spark.sql.types._
 
@@ -77,7 +77,7 @@ object FlatMapGroupsWithStateExecHelper {
   // =========================== Private implementations of StateManager ===========================
   // ===============================================================================================
 
-  /** Commmon methods for StateManager implementations */
+  /** Common methods for StateManager implementations */
   private abstract class StateManagerImplBase(shouldStoreTimestamp: Boolean)
     extends StateManager {
 
@@ -104,14 +104,14 @@ object FlatMapGroupsWithStateExecHelper {
 
     override def getAllState(store: StateStore): Iterator[StateData] = {
       val stateData = StateData()
-      store.getRange(None, None).map { p =>
+      store.iterator().map { p =>
         stateData.withNew(p.key, p.value, getStateObject(p.value), getTimestamp(p.value))
       }
     }
 
     private lazy val stateSerializerFunc = ObjectOperator.serializeObjectToRow(stateSerializerExprs)
     private lazy val stateDeserializerFunc = {
-      ObjectOperator.deserializeRowToObject(stateDeserializerExpr, stateSchema.toAttributes)
+      ObjectOperator.deserializeRowToObject(stateDeserializerExpr, toAttributes(stateSchema))
     }
     private lazy val stateDataForGets = StateData()
 
@@ -155,7 +155,7 @@ object FlatMapGroupsWithStateExecHelper {
       AttributeReference("timeoutTimestamp", dataType = IntegerType, nullable = false)()
 
     private val stateAttributes: Seq[Attribute] = {
-      val encSchemaAttribs = stateEncoder.schema.toAttributes
+      val encSchemaAttribs = toAttributes(stateEncoder.schema)
       if (shouldStoreTimestamp) encSchemaAttribs :+ timestampTimeoutAttribute else encSchemaAttribs
     }
 
@@ -168,7 +168,7 @@ object FlatMapGroupsWithStateExecHelper {
     override val stateSerializerExprs: Seq[Expression] = {
       val encoderSerializer = stateEncoder.namedExpressions
       if (shouldStoreTimestamp) {
-        encoderSerializer :+ Literal(GroupStateImpl.NO_TIMESTAMP)
+        encoderSerializer :+ Literal(NO_TIMESTAMP)
       } else {
         encoderSerializer
       }
@@ -226,7 +226,7 @@ object FlatMapGroupsWithStateExecHelper {
       }
 
       if (shouldStoreTimestamp) {
-        Seq(nullSafeNestedStateSerExpr, Literal(GroupStateImpl.NO_TIMESTAMP))
+        Seq(nullSafeNestedStateSerExpr, Literal(NO_TIMESTAMP))
       } else {
         Seq(nullSafeNestedStateSerExpr)
       }

@@ -18,7 +18,7 @@
 package org.apache.spark.sql.streaming.ui
 
 import org.mockito.Mockito.{mock, when, RETURNS_SMART_NULLS}
-import org.scalatest.Matchers
+import org.scalatest.matchers.must.Matchers
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.streaming.StreamingQueryProgress

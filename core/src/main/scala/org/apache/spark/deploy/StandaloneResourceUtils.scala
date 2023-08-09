@@ -99,7 +99,7 @@ private[spark] object StandaloneResourceUtils extends Logging {
       ResourceAllocation(new ResourceID(componentName, rName), rInfo.addresses)
     }.toSeq
     try {
-      writeResourceAllocationJson(componentName, allocations, tmpFile)
+      writeResourceAllocationJson(allocations, tmpFile)
     } catch {
       case NonFatal(e) =>
         val errMsg = s"Exception threw while preparing resource file for $compShortName"
@@ -112,7 +112,6 @@ private[spark] object StandaloneResourceUtils extends Logging {
   }
 
   private def writeResourceAllocationJson[T](
-      componentName: String,
       allocations: Seq[T],
       jsonFile: File): Unit = {
     implicit val formats = DefaultFormats
@@ -149,11 +148,11 @@ private[spark] object StandaloneResourceUtils extends Logging {
 
   // used for UI
   def formatResourcesUsed(
-      resourcesTotal: Map[String, ResourceInformation],
-      resourcesUsed: Map[String, ResourceInformation]): String = {
-    resourcesTotal.map { case (rName, rInfo) =>
-      val used = resourcesUsed(rName).addresses.length
-      val total = rInfo.addresses.length
+      resourcesTotal: Map[String, Int],
+      resourcesUsed: Map[String, Int]): String = {
+    resourcesTotal.map { case (rName, totalSize) =>
+      val used = resourcesUsed(rName)
+      val total = totalSize
       s"$used / $total $rName"
     }.mkString(", ")
   }

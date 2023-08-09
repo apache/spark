@@ -1,0 +1,24 @@
+{
+  "common": {
+    "planId": "2"
+  },
+  "join": {
+    "left": {
+      "common": {
+        "planId": "0"
+      },
+      "localRelation": {
+        "schema": "struct\u003cid:bigint,a:int,b:double\u003e"
+      }
+    },
+    "right": {
+      "common": {
+        "planId": "1"
+      },
+      "localRelation": {
+        "schema": "struct\u003ca:int,id:bigint,payload:binary\u003e"
+      }
+    },
+    "joinType": "JOIN_TYPE_CROSS"
+  }
+}

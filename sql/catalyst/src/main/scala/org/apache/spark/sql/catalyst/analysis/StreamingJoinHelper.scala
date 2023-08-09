@@ -41,7 +41,7 @@ object StreamingJoinHelper extends PredicateHelper with Logging {
    */
   def isWatermarkInJoinKeys(plan: LogicalPlan): Boolean = {
     plan match {
-      case ExtractEquiJoinKeys(_, leftKeys, rightKeys, _, _, _, _) =>
+      case ExtractEquiJoinKeys(_, leftKeys, rightKeys, _, _, _, _, _) =>
         (leftKeys ++ rightKeys).exists {
           case a: AttributeReference => a.metadata.contains(EventTimeWatermark.delayKey)
           case _ => false
@@ -55,7 +55,7 @@ object StreamingJoinHelper extends PredicateHelper with Logging {
    * given the join condition and the event time watermark. This is how it works.
    * - The condition is split into conjunctive predicates, and we find the predicates of the
    *   form `leftTime + c1 < rightTime + c2`   (or <=, >, >=).
-   * - We canoncalize the predicate and solve it with the event time watermark value to find the
+   * - We canonicalize the predicate and solve it with the event time watermark value to find the
    *  value of the state watermark.
    * This function is supposed to make best-effort attempt to get the state watermark. If there is
    * any error, it will return None.
@@ -94,7 +94,7 @@ object StreamingJoinHelper extends PredicateHelper with Logging {
 
       // The generated the state watermark cleanup expression is inclusive of the state watermark.
       // If state watermark is W, all state where timestamp <= W will be cleaned up.
-      // Now when the canonicalized join condition solves to leftTime >= W, we dont want to clean
+      // Now when the canonicalized join condition solves to leftTime >= W, we don't want to clean
       // up leftTime <= W. Rather we should clean up leftTime <= W - 1. Hence the -1 below.
       val stateWatermark = predicate match {
         case LessThan(l, r) => getStateWatermarkSafely(l, r)
@@ -132,8 +132,8 @@ object StreamingJoinHelper extends PredicateHelper with Logging {
       leftExpr.collect { case a: AttributeReference => a } ++
       rightExpr.collect { case a: AttributeReference => a }
     )
-    if (attributesInCondition.filter { attributesToFindStateWatermarkFor.contains(_) }.size > 1 ||
-        attributesInCondition.filter { attributesWithEventWatermark.contains(_) }.size > 1) {
+    if (attributesInCondition.count(attributesToFindStateWatermarkFor.contains) > 1 ||
+        attributesInCondition.count(attributesWithEventWatermark.contains) > 1) {
       // If more than attributes present in condition from one side, then it cannot be solved
       return None
     }
@@ -169,7 +169,7 @@ object StreamingJoinHelper extends PredicateHelper with Logging {
       return None
     }
     val constraintTerm = constraintTerms.head
-    if (constraintTerm.collectFirst { case u: UnaryMinus => u }.isEmpty) {
+    if (!constraintTerm.exists(_.isInstanceOf[UnaryMinus])) {
       // Incorrect condition. We want the constraint term in canonical form to be `-leftTime`
       // so that resolve for it as `-leftTime + watermark + c < 0` ==> `watermark + c < leftTime`.
       // Now, if the original conditions is `rightTime-with-watermark > leftTime` and watermark
@@ -189,7 +189,7 @@ object StreamingJoinHelper extends PredicateHelper with Logging {
           if attributesWithEventWatermark.contains(a) && metadata.contains(delayKey) =>
           Multiply(Literal(eventWatermark.get.toDouble), Literal(1000.0))
       }
-    }.reduceLeft(Add)
+    }.reduceLeft(Add(_, _))
 
     // Calculate the constraint value
     logInfo(s"Final expression to evaluate constraint:\t$exprWithWatermarkSubstituted")
@@ -226,20 +226,18 @@ object StreamingJoinHelper extends PredicateHelper with Logging {
      */
     def collect(expr: Expression, negate: Boolean): Seq[Expression] = {
       expr match {
-        case Add(left, right) =>
+        case Add(left, right, _) =>
           collect(left, negate) ++ collect(right, negate)
-        case Subtract(left, right) =>
+        case Subtract(left, right, _) =>
           collect(left, negate) ++ collect(right, !negate)
         case TimeAdd(left, right, _) =>
           collect(left, negate) ++ collect(right, negate)
         case DatetimeSub(_, _, child) => collect(child, negate)
-        case UnaryMinus(child) =>
+        case UnaryMinus(child, _) =>
           collect(child, !negate)
         case CheckOverflow(child, _, _) =>
           collect(child, negate)
-        case PromotePrecision(child) =>
-          collect(child, negate)
-        case Cast(child, dataType, _) =>
+        case Cast(child, dataType, _, _) =>
           dataType match {
             case _: NumericType | _: TimestampType => collect(child, negate)
             case _ =>
@@ -266,6 +264,9 @@ object StreamingJoinHelper extends PredicateHelper with Logging {
                 Literal(calendarInterval.days * MICROS_PER_DAY.toDouble +
                   calendarInterval.microseconds.toDouble)
               }
+            case _: DayTimeIntervalType =>
+              // Unbox and then cast
+              Literal(lit.value.asInstanceOf[Long].toDouble)
             case DoubleType =>
               Multiply(lit, Literal(1000000.0))
             case _: NumericType =>

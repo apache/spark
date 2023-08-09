@@ -18,7 +18,6 @@
 package org.apache.spark.sql.hive.execution
 
 import org.apache.hadoop.conf.Configuration
-import org.scalatest.{BeforeAndAfterAll, BeforeAndAfterEach}
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.launcher.SparkLauncher
@@ -27,16 +26,16 @@ import org.apache.spark.sql.hive.{HiveExternalCatalog, HiveUtils}
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.internal.StaticSQLConf._
 import org.apache.spark.sql.types._
-import org.apache.spark.tags.ExtendedHiveTest
+import org.apache.spark.tags.{ExtendedHiveTest, SlowHiveTest}
 import org.apache.spark.util.Utils
 
 /**
  * A separate set of DDL tests that uses Hive 2.1 libraries, which behave a little differently
  * from the built-in ones.
  */
+@SlowHiveTest
 @ExtendedHiveTest
-class Hive_2_1_DDLSuite extends SparkFunSuite with TestHiveSingleton with BeforeAndAfterEach
-  with BeforeAndAfterAll {
+class Hive_2_1_DDLSuite extends SparkFunSuite with TestHiveSingleton {
 
   // Create a custom HiveExternalCatalog instance with the desired configuration. We cannot
   // use SparkSession here since there's already an active on managed by the TestHive object.
@@ -101,13 +100,16 @@ class Hive_2_1_DDLSuite extends SparkFunSuite with TestHiveSingleton with Before
   }
 
   test("SPARK-21617: ALTER TABLE with incompatible schema on Hive-compatible table") {
-    val exception = intercept[AnalysisException] {
-      testAlterTable(
-        "t1",
-        "CREATE TABLE t1 (c1 string) USING parquet",
-        StructType(Array(StructField("c2", IntegerType))))
-    }
-    assert(exception.getMessage().contains("types incompatible with the existing columns"))
+    checkError(
+      exception = intercept[AnalysisException] {
+        testAlterTable(
+          "t1",
+          "CREATE TABLE t1 (c1 string) USING parquet",
+          StructType(Array(StructField("c2", IntegerType))))
+      },
+      errorClass = null,
+      parameters = Map.empty
+    )
   }
 
   private def testAlterTable(

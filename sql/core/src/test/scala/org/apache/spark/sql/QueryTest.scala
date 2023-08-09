@@ -21,9 +21,9 @@ import java.util.TimeZone
 
 import scala.collection.JavaConverters._
 
-import org.junit.Assert
 import org.scalatest.Assertions
 
+import org.apache.spark.sql.catalyst.ExtendedAnalysisException
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.execution.SQLExecution
@@ -97,7 +97,7 @@ abstract class QueryTest extends PlanTest {
 
   private def getResult[T](ds: => Dataset[T]): Array[T] = {
     val analyzedDS = try ds catch {
-      case ae: AnalysisException =>
+      case ae: ExtendedAnalysisException =>
         if (ae.plan.isDefined) {
           fail(
             s"""
@@ -132,7 +132,7 @@ abstract class QueryTest extends PlanTest {
    */
   protected def checkAnswer(df: => DataFrame, expectedAnswer: Seq[Row]): Unit = {
     val analyzedDF = try df catch {
-      case ae: AnalysisException =>
+      case ae: ExtendedAnalysisException =>
         if (ae.plan.isDefined) {
           fail(
             s"""
@@ -207,11 +207,12 @@ abstract class QueryTest extends PlanTest {
    */
   def assertCached(query: Dataset[_], cachedName: String, storageLevel: StorageLevel): Unit = {
     val planWithCaching = query.queryExecution.withCachedData
-    val matched = planWithCaching.collectFirst { case cached: InMemoryRelation =>
-      val cacheBuilder = cached.asInstanceOf[InMemoryRelation].cacheBuilder
-      cachedName == cacheBuilder.tableName.get &&
-        (storageLevel == cacheBuilder.storageLevel)
-    }.getOrElse(false)
+    val matched = planWithCaching.exists {
+      case cached: InMemoryRelation =>
+        val cacheBuilder = cached.cacheBuilder
+        cachedName == cacheBuilder.tableName.get && (storageLevel == cacheBuilder.storageLevel)
+      case _ => false
+    }
 
     assert(matched, s"Expected query plan to hit cache $cachedName with storage " +
       s"level $storageLevel, but it doesn't.")
@@ -360,7 +361,7 @@ object QueryTest extends Assertions {
     None
   }
 
-  private def compare(obj1: Any, obj2: Any): Boolean = (obj1, obj2) match {
+  def compare(obj1: Any, obj2: Any): Boolean = (obj1, obj2) match {
     case (null, null) => true
     case (null, _) => false
     case (_, null) => false
@@ -418,8 +419,8 @@ object QueryTest extends Assertions {
   }
 
   def checkAnswer(df: DataFrame, expectedAnswer: java.util.List[Row]): Unit = {
-    getErrorMessageInCheckAnswer(df, expectedAnswer.asScala) match {
-      case Some(errorMessage) => Assert.fail(errorMessage)
+    getErrorMessageInCheckAnswer(df, expectedAnswer.asScala.toSeq) match {
+      case Some(errorMessage) => fail(errorMessage)
       case None =>
     }
   }

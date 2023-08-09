@@ -19,12 +19,12 @@ package org.apache.spark.sql.catalyst.util
 
 import java.util.regex.{Pattern, PatternSyntaxException}
 
-import scala.collection.mutable.ArrayBuffer
+import org.apache.commons.text.similarity.LevenshteinDistance
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.unsafe.array.ByteArrayMethods
 import org.apache.spark.unsafe.types.UTF8String
 
 object StringUtils extends Logging {
@@ -42,11 +42,8 @@ object StringUtils extends Logging {
    * @return the equivalent Java regular expression of the pattern
    */
   def escapeLikeRegex(pattern: String, escapeChar: Char): String = {
-    val in = pattern.toIterator
+    val in = pattern.iterator
     val out = new StringBuilder()
-
-    def fail(message: String) = throw new AnalysisException(
-      s"the pattern '$pattern' is invalid, $message")
 
     while (in.hasNext) {
       in.next match {
@@ -55,9 +52,11 @@ object StringUtils extends Logging {
           c match {
             case '_' | '%' => out ++= Pattern.quote(Character.toString(c))
             case c if c == escapeChar => out ++= Pattern.quote(Character.toString(c))
-            case _ => fail(s"the escape character is not allowed to precede '$c'")
+            case _ => throw QueryCompilationErrors.escapeCharacterInTheMiddleError(
+              pattern, Character.toString(c))
           }
-        case c if c == escapeChar => fail("it is not allowed to end with the escape character")
+        case c if c == escapeChar =>
+          throw QueryCompilationErrors.escapeCharacterAtTheEndError(pattern)
         case '_' => out ++= "."
         case '%' => out ++= ".*"
         case c => out ++= Pattern.quote(Character.toString(c))
@@ -66,11 +65,41 @@ object StringUtils extends Logging {
     "(?s)" + out.result() // (?s) enables dotall mode, causing "." to match new lines
   }
 
+  /**
+   * Returns a pretty string of the byte array which prints each byte as a hex digit and add spaces
+   * between them. For example, [1A C0].
+   */
+  def getHexString(bytes: Array[Byte]): String = bytes.map("%02X".format(_)).mkString("[", " ", "]")
+
   private[this] val trueStrings =
     Set("t", "true", "y", "yes", "1").map(UTF8String.fromString)
 
   private[this] val falseStrings =
     Set("f", "false", "n", "no", "0").map(UTF8String.fromString)
+
+  private[spark] def orderSuggestedIdentifiersBySimilarity(
+      baseString: String,
+      candidates: Seq[Seq[String]]): Seq[String] = {
+    val baseParts = UnresolvedAttribute.parseAttributeName(baseString)
+    val strippedCandidates =
+      // Group by the qualifier. If all identifiers have the same qualifier, strip it.
+      // For example: Seq(`abc`.`def`.`t1`, `abc`.`def`.`t2`) => Seq(`t1`, `t2`)
+      if (baseParts.size == 1 && candidates.groupBy(_.dropRight(1)).size == 1) {
+        candidates.map(_.takeRight(1))
+      // Group by the qualifier excluding table name. If all identifiers have the same prefix
+      // (namespace) excluding table names, strip this prefix.
+      // For example: Seq(`abc`.`def`.`t1`, `abc`.`xyz`.`t2`) => Seq(`def`.`t1`, `xyz`.`t2`)
+      } else if (baseParts.size <= 2 && candidates.groupBy(_.dropRight(2)).size == 1) {
+        candidates.map(_.takeRight(2))
+      } else {
+        // Some candidates have different qualifiers
+        candidates
+      }
+
+    strippedCandidates
+      .map(quoteNameParts)
+      .sortBy(LevenshteinDistance.getDefaultInstance.apply(_, baseString))
+  }
 
   // scalastyle:off caselocale
   def isTrueString(s: UTF8String): Boolean = trueStrings.contains(s.trimAll().toLowerCase)
@@ -100,46 +129,6 @@ object StringUtils extends Logging {
   }
 
   /**
-   * Concatenation of sequence of strings to final string with cheap append method
-   * and one memory allocation for the final string.  Can also bound the final size of
-   * the string.
-   */
-  class StringConcat(val maxLength: Int = ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH) {
-    protected val strings = new ArrayBuffer[String]
-    protected var length: Int = 0
-
-    def atLimit: Boolean = length >= maxLength
-
-    /**
-     * Appends a string and accumulates its length to allocate a string buffer for all
-     * appended strings once in the toString method.  Returns true if the string still
-     * has room for further appends before it hits its max limit.
-     */
-    def append(s: String): Unit = {
-      if (s != null) {
-        val sLen = s.length
-        if (!atLimit) {
-          val available = maxLength - length
-          val stringToAppend = if (available >= sLen) s else s.substring(0, available)
-          strings.append(stringToAppend)
-        }
-        length += sLen
-      }
-    }
-
-    /**
-     * The method allocates memory for all appended strings, writes them to the memory and
-     * returns concatenated string.
-     */
-    override def toString: String = {
-      val finalLength = if (atLimit) maxLength else length
-      val result = new java.lang.StringBuilder(finalLength)
-      strings.foreach(result.append)
-      result.toString
-    }
-  }
-
-  /**
    * A string concatenator for plan strings.  Uses length from a configured value, and
    *  prints a warning the first time a plan is truncated.
    */
@@ -156,7 +145,7 @@ object StringUtils extends Logging {
           s"... ${length - maxLength} more characters"
         }
         val result = new java.lang.StringBuilder(maxLength + truncateMsg.length)
-        strings.foreach(result.append)
+        strings.forEach(s => result.append(s))
         result.append(truncateMsg)
         result.toString
       } else {

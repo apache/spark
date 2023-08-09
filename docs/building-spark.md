@@ -27,14 +27,14 @@ license: |
 ## Apache Maven
 
 The Maven-based build is the build of reference for Apache Spark.
-Building Spark using Maven requires Maven 3.6.3 and Java 8.
-Spark requires Scala 2.12; support for Scala 2.11 was removed in Spark 3.0.0.
+Building Spark using Maven requires Maven 3.8.8 and Java 8/11/17.
+Spark requires Scala 2.12/2.13; support for Scala 2.11 was removed in Spark 3.0.0.
 
 ### Setting up Maven's Memory Usage
 
 You'll need to configure Maven to use more memory than usual by setting `MAVEN_OPTS`:
 
-    export MAVEN_OPTS="-Xmx2g -XX:ReservedCodeCacheSize=1g"
+    export MAVEN_OPTS="-Xss64m -Xmx2g -XX:ReservedCodeCacheSize=1g"
 
 (The `ReservedCodeCacheSize` setting is optional but recommended.)
 If you don't add these parameters to `MAVEN_OPTS`, you may see errors and warnings like the following:
@@ -47,11 +47,11 @@ You can fix these problems by setting the `MAVEN_OPTS` variable as discussed bef
 **Note:**
 
 * If using `build/mvn` with no `MAVEN_OPTS` set, the script will automatically add the above options to the `MAVEN_OPTS` environment variable.
-* The `test` phase of the Spark build will automatically add these options to `MAVEN_OPTS`, even when not using `build/mvn`.    
+* The `test` phase of the Spark build will automatically add these options to `MAVEN_OPTS`, even when not using `build/mvn`.
 
 ### build/mvn
 
-Spark now comes packaged with a self-contained Maven installation to ease building and deployment of Spark from source located under the `build/` directory. This script will automatically download and setup all necessary build requirements ([Maven](https://maven.apache.org/), [Scala](https://www.scala-lang.org/), and [Zinc](https://github.com/typesafehub/zinc)) locally within the `build/` directory itself. It honors any `mvn` binary if present already, however, will pull down its own copy of Scala and Zinc regardless to ensure proper version requirements are met. `build/mvn` execution acts as a pass through to the `mvn` call allowing easy transition from previous build methods. As an example, one can build a version of Spark as follows:
+Spark now comes packaged with a self-contained Maven installation to ease building and deployment of Spark from source located under the `build/` directory. This script will automatically download and setup all necessary build requirements ([Maven](https://maven.apache.org/), [Scala](https://www.scala-lang.org/)) locally within the `build/` directory itself. It honors any `mvn` binary if present already, however, will pull down its own copy of Scala regardless to ensure proper version requirements are met. `build/mvn` execution acts as a pass through to the `mvn` call allowing easy transition from previous build methods. As an example, one can build a version of Spark as follows:
 
     ./build/mvn -DskipTests clean package
 
@@ -77,15 +77,15 @@ from `hadoop.version`.
 
 Example:
 
-    ./build/mvn -Pyarn -Dhadoop.version=2.8.5 -DskipTests clean package
+    ./build/mvn -Pyarn -Dhadoop.version=3.3.0 -DskipTests clean package
 
 ## Building With Hive and JDBC Support
 
 To enable Hive integration for Spark SQL along with its JDBC server and CLI,
 add the `-Phive` and `-Phive-thriftserver` profiles to your existing build options.
-By default Spark will build with Hive 2.3.7.
+By default Spark will build with Hive 2.3.9.
 
-    # With Hive 2.3.7 support
+    # With Hive 2.3.9 support
     ./build/mvn -Pyarn -Phive -Phive-thriftserver -DskipTests clean package
 
 ## Packaging without Hadoop Dependencies for YARN
@@ -114,6 +114,10 @@ For instance, you can build the Spark Streaming module using:
     ./build/mvn -pl :spark-streaming_{{site.SCALA_BINARY_VERSION}} clean install
 
 where `spark-streaming_{{site.SCALA_BINARY_VERSION}}` is the `artifactId` as defined in `streaming/pom.xml` file.
+
+## Building with Spark Connect support
+
+    ./build/mvn -Pconnect -DskipTests clean package
 
 ## Continuous Compilation
 
@@ -163,9 +167,8 @@ For the meanings of these two options, please carefully read the [Setting up Mav
 
 ## Speeding up Compilation
 
-Developers who compile Spark frequently may want to speed up compilation; e.g., by using Zinc
-(for developers who build with Maven) or by avoiding re-compilation of the assembly JAR (for
-developers who build with SBT).  For more information about how to do this, refer to the
+Developers who compile Spark frequently may want to speed up compilation; e.g., by avoiding re-compilation of the
+assembly JAR (for developers who build with SBT).  For more information about how to do this, refer to the
 [Useful Developer Tools page](https://spark.apache.org/developer-tools.html#reducing-build-times).
 
 ## Encrypted Filesystems
@@ -265,17 +268,15 @@ Change the major Scala version using (e.g. 2.13):
 
     ./dev/change-scala-version.sh 2.13
 
-For Maven, please enable the profile (e.g. 2.13):
+Enable the profile (e.g. 2.13):
 
+    # For Maven
     ./build/mvn -Pscala-2.13 compile
 
-For SBT, specify a complete scala version using (e.g. 2.13.0):
+    # For sbt
+    ./build/sbt -Pscala-2.13 compile
 
-    ./build/sbt -Dscala.version=2.13.0
-
-Otherwise, the sbt-pom-reader plugin will use the `scala.version` specified in the spark-parent pom.
-
-## Running Jenkins tests with Github Enterprise
+## Running Jenkins tests with GitHub Enterprise
 
 To run tests with Jenkins:
 
@@ -285,8 +286,8 @@ If use an individual repository or a repository on GitHub Enterprise, export bel
 
 ### Related environment variables
 
-<table class="table">
-<tr><th>Variable Name</th><th>Default</th><th>Meaning</th></tr>
+<table class="table table-striped">
+<thead><tr><th>Variable Name</th><th>Default</th><th>Meaning</th></tr></thead>
 <tr>
   <td><code>SPARK_PROJECT_URL</code></td>
   <td>https://github.com/apache/spark</td>
@@ -302,3 +303,35 @@ If use an individual repository or a repository on GitHub Enterprise, export bel
   </td>
 </tr>
 </table>
+
+### Building and testing on IPv6-only environment
+
+Use Apache Spark GitBox URL because GitHub doesn't support IPv6 yet.
+
+    https://gitbox.apache.org/repos/asf/spark.git
+
+To build and run tests on IPv6-only environment, the following configurations are required.
+
+    export SPARK_LOCAL_HOSTNAME="your-IPv6-address" # e.g. '[2600:1700:232e:3de0:...]'
+    export DEFAULT_ARTIFACT_REPOSITORY=https://ipv6.repo1.maven.org/maven2/
+    export MAVEN_OPTS="-Djava.net.preferIPv6Addresses=true"
+    export SBT_OPTS="-Djava.net.preferIPv6Addresses=true"
+    export SERIAL_SBT_TESTS=1
+
+### Building with user-defined `protoc`
+
+When the user cannot use the official `protoc` binary files to build the `core` module in the compilation environment, for example, compiling `core` module on CentOS 6 or CentOS 7 which the default `glibc` version is less than 2.14, we can try to compile and test by specifying the user-defined `protoc` binary files as follows:
+
+```bash
+export SPARK_PROTOC_EXEC_PATH=/path-to-protoc-exe
+./build/mvn -Puser-defined-protoc -DskipDefaultProtoc clean package
+```
+
+or
+
+```bash
+export SPARK_PROTOC_EXEC_PATH=/path-to-protoc-exe
+./build/sbt -Puser-defined-protoc clean package
+```
+
+The user-defined `protoc` binary files can be produced in the user's compilation environment by source code compilation, for compilation steps, please refer to [protobuf](https://github.com/protocolbuffers/protobuf).

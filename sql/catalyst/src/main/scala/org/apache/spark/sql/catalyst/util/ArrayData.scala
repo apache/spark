@@ -19,10 +19,11 @@ package org.apache.spark.sql.catalyst.util
 
 import scala.reflect.ClassTag
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{SpecializedGetters, UnsafeArrayData}
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.Platform
 import org.apache.spark.unsafe.array.ByteArrayMethods
 
 object ArrayData {
@@ -55,10 +56,8 @@ object ArrayData {
     } else if (numElements <= ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH.toLong) {
       new GenericArrayData(new Array[Any](numElements.toInt))
     } else {
-      throw new RuntimeException(s"Cannot create array with $numElements " +
-        "elements of data due to exceeding the limit " +
-        s"${ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH} elements for ArrayData. " +
-        additionalErrorMessage)
+      throw QueryExecutionErrors.cannotCreateArrayWithElementsExceedLimitError(
+        numElements, additionalErrorMessage)
     }
   }
 }
@@ -202,7 +201,7 @@ class ArrayDataIndexedSeq[T](arrayData: ArrayData, dataType: DataType) extends I
     if (0 <= idx && idx < arrayData.numElements()) {
       accessor(arrayData, idx).asInstanceOf[T]
     } else {
-      throw new IndexOutOfBoundsException(
+      throw SparkException.internalError(
         s"Index $idx must be between 0 and the length of the ArrayData.")
     }
 

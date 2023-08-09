@@ -48,20 +48,22 @@ import org.apache.spark.util._
 private[spark] class PythonRDD(
     parent: RDD[_],
     func: PythonFunction,
-    preservePartitoning: Boolean,
+    preservePartitioning: Boolean,
     isFromBarrier: Boolean = false)
   extends RDD[Array[Byte]](parent) {
+
+  private[this] val jobArtifactUUID = JobArtifactSet.getCurrentJobArtifactState.map(_.uuid)
 
   override def getPartitions: Array[Partition] = firstParent.partitions
 
   override val partitioner: Option[Partitioner] = {
-    if (preservePartitoning) firstParent.partitioner else None
+    if (preservePartitioning) firstParent.partitioner else None
   }
 
   val asJavaRDD: JavaRDD[Array[Byte]] = JavaRDD.fromRDD(this)
 
   override def compute(split: Partition, context: TaskContext): Iterator[Array[Byte]] = {
-    val runner = PythonRunner(func)
+    val runner = PythonRunner(func, jobArtifactUUID)
     runner.compute(firstParent.iterator(split, context), split.index, context)
   }
 
@@ -73,14 +75,39 @@ private[spark] class PythonRDD(
  * A wrapper for a Python function, contains all necessary context to run the function in Python
  * runner.
  */
-private[spark] case class PythonFunction(
-    command: Array[Byte],
+private[spark] trait PythonFunction {
+  def command: Seq[Byte]
+  def envVars: JMap[String, String]
+  def pythonIncludes: JList[String]
+  def pythonExec: String
+  def pythonVer: String
+  def broadcastVars: JList[Broadcast[PythonBroadcast]]
+  def accumulator: PythonAccumulatorV2
+}
+
+/**
+ * A simple wrapper for a Python function created via pyspark.
+ */
+private[spark] case class SimplePythonFunction(
+    command: Seq[Byte],
     envVars: JMap[String, String],
     pythonIncludes: JList[String],
     pythonExec: String,
     pythonVer: String,
     broadcastVars: JList[Broadcast[PythonBroadcast]],
-    accumulator: PythonAccumulatorV2)
+    accumulator: PythonAccumulatorV2) extends PythonFunction {
+
+  def this(
+      command: Array[Byte],
+      envVars: JMap[String, String],
+      pythonIncludes: JList[String],
+      pythonExec: String,
+      pythonVer: String,
+      broadcastVars: JList[Broadcast[PythonBroadcast]],
+      accumulator: PythonAccumulatorV2) = {
+    this(command.toSeq, envVars, pythonIncludes, pythonExec, pythonVer, broadcastVars, accumulator)
+  }
+}
 
 /**
  * A wrapper for chained Python functions (from bottom to top).
@@ -151,7 +178,7 @@ private[spark] object PythonRDD extends Logging {
     type ByteArray = Array[Byte]
     type UnrolledPartition = Array[ByteArray]
     val allPartitions: Array[UnrolledPartition] =
-      sc.runJob(rdd, (x: Iterator[ByteArray]) => x.toArray, partitions.asScala)
+      sc.runJob(rdd, (x: Iterator[ByteArray]) => x.toArray, partitions.asScala.toSeq)
     val flattenedPartition: UnrolledPartition = Array.concat(allPartitions: _*)
     serveIterator(flattenedPartition.iterator,
       s"serve RDD ${rdd.id} with partitions ${partitions.asScala.mkString(",")}")
@@ -233,7 +260,7 @@ private[spark] object PythonRDD extends Logging {
             out.writeInt(1)
 
             // Write the next object and signal end of data for this iteration
-            writeIteratorToStream(partitionArray.toIterator, out)
+            writeIteratorToStream(partitionArray.iterator, out)
             out.writeInt(SpecialLengths.END_OF_DATA_SECTION)
             out.flush()
           } else {
@@ -460,9 +487,7 @@ private[spark] object PythonRDD extends Logging {
   }
 
   def writeUTF(str: String, dataOut: DataOutputStream): Unit = {
-    val bytes = str.getBytes(StandardCharsets.UTF_8)
-    dataOut.writeInt(bytes.length)
-    dataOut.write(bytes)
+    PythonWorkerUtils.writeUTF(str, dataOut)
   }
 
   /**
@@ -672,7 +697,7 @@ private[spark] class PythonAccumulatorV2(
     @transient private val serverHost: String,
     private val serverPort: Int,
     private val secretToken: String)
-  extends CollectionAccumulator[Array[Byte]] with Logging{
+  extends CollectionAccumulator[Array[Byte]] with Logging {
 
   Utils.checkHost(serverHost)
 
@@ -825,7 +850,7 @@ private[spark] class PythonBroadcast(@transient var path: String) extends Serial
  * We might be serializing a really large object from python -- we don't want
  * python to buffer the whole thing in memory, nor can it write to a file,
  * so we don't know the length in advance.  So python writes it in chunks, each chunk
- * preceeded by a length, till we get a "length" of -1 which serves as EOF.
+ * preceded by a length, till we get a "length" of -1 which serves as EOF.
  *
  * Tested from python tests.
  */
@@ -867,7 +892,7 @@ private[spark] class DechunkedInputStream(wrapped: InputStream) extends InputStr
       }
     }
     assert(destSpace == 0 || remainingInChunk == -1)
-    return destPos - off
+    destPos - off
   }
 
   override def close(): Unit = wrapped.close()

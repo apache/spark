@@ -22,15 +22,19 @@ import java.util.concurrent.atomic.AtomicInteger
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable
+import scala.util.control.NonFatal
 
 import org.apache.spark.{JobExecutionStatus, SparkConf}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.Status._
 import org.apache.spark.scheduler._
+import org.apache.spark.sql.connector.metric.CustomMetric
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.SQLExecution
 import org.apache.spark.sql.execution.metric._
 import org.apache.spark.sql.internal.StaticSQLConf._
 import org.apache.spark.status.{ElementTrackingStore, KVUtils, LiveEntity}
+import org.apache.spark.util.Utils
 import org.apache.spark.util.collection.OpenHashMap
 
 class SQLAppStatusListener(
@@ -86,9 +90,11 @@ class SQLAppStatusListener(
           // data corresponding to the execId.
           val sqlStoreData = kvstore.read(classOf[SQLExecutionUIData], executionId)
           val executionData = new LiveExecutionData(executionId)
+          executionData.rootExecutionId = sqlStoreData.rootExecutionId
           executionData.description = sqlStoreData.description
           executionData.details = sqlStoreData.details
           executionData.physicalPlanDescription = sqlStoreData.physicalPlanDescription
+          executionData.modifiedConfigs = sqlStoreData.modifiedConfigs
           executionData.metrics = sqlStoreData.metrics
           executionData.submissionTime = sqlStoreData.submissionTime
           executionData.completionTime = sqlStoreData.completionTime
@@ -183,7 +189,7 @@ class SQLAppStatusListener(
     } else {
       info.accumulables
     }
-    updateStageMetrics(event.stageId, event.stageAttemptId, info.taskId, info.index, accums,
+    updateStageMetrics(event.stageId, event.stageAttemptId, info.taskId, info.index, accums.toSeq,
       info.successful)
   }
 
@@ -198,7 +204,40 @@ class SQLAppStatusListener(
   }
 
   private def aggregateMetrics(exec: LiveExecutionData): Map[Long, String] = {
-    val metricTypes = exec.metrics.map { m => (m.accumulatorId, m.metricType) }.toMap
+    val accumIds = exec.metrics.map(_.accumulatorId).toSet
+
+    val metricAggregationMap = new mutable.HashMap[String, (Array[Long], Array[Long]) => String]()
+    val metricAggregationMethods = exec.metrics.map { m =>
+      val optClassName = CustomMetrics.parseV2CustomMetricType(m.metricType)
+      val metricAggMethod = optClassName.map { className =>
+        if (metricAggregationMap.contains(className)) {
+          metricAggregationMap(className)
+        } else {
+          // Try to initiate custom metric object
+          try {
+            val metric = Utils.loadExtensions(classOf[CustomMetric], Seq(className), conf).head
+            val method =
+              (metrics: Array[Long], _: Array[Long]) => metric.aggregateTaskMetrics(metrics)
+            metricAggregationMap.put(className, method)
+            method
+          } catch {
+            case NonFatal(e) =>
+              logWarning(s"Unable to load custom metric object for class `$className`. " +
+                "Please make sure that the custom metric class is in the classpath and " +
+                "it has 0-arg constructor.", e)
+              // Cannot initialize custom metric object, we might be in history server that does
+              // not have the custom metric class.
+              val defaultMethod = (_: Array[Long], _: Array[Long]) => "N/A"
+              metricAggregationMap.put(className, defaultMethod)
+              defaultMethod
+          }
+        }
+      }.getOrElse(
+        // Built-in SQLMetric
+        SQLMetrics.stringValue(m.metricType, _, _)
+      )
+      (m.accumulatorId, metricAggMethod)
+    }.toMap
 
     val liveStageMetrics = exec.stages.toSeq
       .flatMap { stageId => Option(stageMetrics.get(stageId)) }
@@ -211,7 +250,7 @@ class SQLAppStatusListener(
 
     val maxMetricsFromAllStages = new mutable.HashMap[Long, Array[Long]]()
 
-    taskMetrics.foreach { case (id, values) =>
+    taskMetrics.filter(m => accumIds.contains(m._1)).foreach { case (id, values) =>
       val prev = allMetrics.getOrElse(id, null)
       val updated = if (prev != null) {
         prev ++ values
@@ -222,7 +261,8 @@ class SQLAppStatusListener(
     }
 
     // Find the max for each metric id between all stages.
-    maxMetrics.foreach { case (id, value, taskId, stageId, attemptId) =>
+    val validMaxMetrics = maxMetrics.filter(m => accumIds.contains(m._1))
+    validMaxMetrics.foreach { case (id, value, taskId, stageId, attemptId) =>
       val updated = maxMetricsFromAllStages.getOrElse(id, Array(value, stageId, attemptId, taskId))
       if (value > updated(0)) {
         updated(0) = value
@@ -234,7 +274,7 @@ class SQLAppStatusListener(
     }
 
     exec.driverAccumUpdates.foreach { case (id, value) =>
-      if (metricTypes.contains(id)) {
+      if (accumIds.contains(id)) {
         val prev = allMetrics.getOrElse(id, null)
         val updated = if (prev != null) {
           // If the driver updates same metrics as tasks and has higher value then remove
@@ -254,7 +294,7 @@ class SQLAppStatusListener(
     }
 
     val aggregatedMetrics = allMetrics.map { case (id, values) =>
-      id -> SQLMetrics.stringValue(metricTypes(id), values, maxMetricsFromAllStages.getOrElse(id,
+      id -> metricAggregationMethods(id)(values, maxMetricsFromAllStages.getOrElse(id,
         Array.empty[Long]))
     }.toMap
 
@@ -283,14 +323,15 @@ class SQLAppStatusListener(
     }
   }
 
-  private def toStoredNodes(nodes: Seq[SparkPlanGraphNode]): Seq[SparkPlanGraphNodeWrapper] = {
+  private def toStoredNodes(
+      nodes: collection.Seq[SparkPlanGraphNode]): collection.Seq[SparkPlanGraphNodeWrapper] = {
     nodes.map {
       case cluster: SparkPlanGraphCluster =>
         val storedCluster = new SparkPlanGraphClusterWrapper(
           cluster.id,
           cluster.name,
           cluster.desc,
-          toStoredNodes(cluster.nodes),
+          toStoredNodes(cluster.nodes.toSeq),
           cluster.metrics)
         new SparkPlanGraphNodeWrapper(null, storedCluster)
 
@@ -300,8 +341,8 @@ class SQLAppStatusListener(
   }
 
   private def onExecutionStart(event: SparkListenerSQLExecutionStart): Unit = {
-    val SparkListenerSQLExecutionStart(executionId, description, details,
-      physicalPlanDescription, sparkPlanInfo, time) = event
+    val SparkListenerSQLExecutionStart(executionId, rootExecutionId, description, details,
+      physicalPlanDescription, sparkPlanInfo, time, modifiedConfigs, _) = event
 
     val planGraph = SparkPlanGraph(sparkPlanInfo)
     val sqlPlanMetrics = planGraph.allNodes.flatMap { node =>
@@ -315,9 +356,11 @@ class SQLAppStatusListener(
     kvstore.write(graphToStore)
 
     val exec = getOrCreateExecution(executionId)
+    exec.rootExecutionId = rootExecutionId.getOrElse(executionId)
     exec.description = description
     exec.details = details
     exec.physicalPlanDescription = physicalPlanDescription
+    exec.modifiedConfigs = modifiedConfigs
     exec.metrics = sqlPlanMetrics
     exec.submissionTime = time
     update(exec)
@@ -340,7 +383,7 @@ class SQLAppStatusListener(
 
     val exec = getOrCreateExecution(executionId)
     exec.physicalPlanDescription = physicalPlanDescription
-    exec.metrics = sqlPlanMetrics
+    exec.metrics ++= sqlPlanMetrics
     update(exec)
   }
 
@@ -348,14 +391,15 @@ class SQLAppStatusListener(
     val SparkListenerSQLAdaptiveSQLMetricUpdates(executionId, sqlPlanMetrics) = event
 
     val exec = getOrCreateExecution(executionId)
-    exec.metrics = exec.metrics ++ sqlPlanMetrics
+    exec.metrics ++= sqlPlanMetrics
     update(exec)
   }
 
   private def onExecutionEnd(event: SparkListenerSQLExecutionEnd): Unit = {
-    val SparkListenerSQLExecutionEnd(executionId, time) = event
+    val SparkListenerSQLExecutionEnd(executionId, time, errorMessage) = event
     Option(liveExecutions.get(executionId)).foreach { exec =>
       exec.completionTime = Some(new Date(time))
+      exec.errorMessage = errorMessage
       update(exec)
 
       // Aggregating metrics can be expensive for large queries, so do it asynchronously. The end
@@ -441,12 +485,15 @@ class SQLAppStatusListener(
 
 private class LiveExecutionData(val executionId: Long) extends LiveEntity {
 
+  var rootExecutionId: Long = _
   var description: String = null
   var details: String = null
   var physicalPlanDescription: String = null
-  var metrics = Seq[SQLPlanMetric]()
+  var modifiedConfigs: Map[String, String] = _
+  var metrics = collection.Seq[SQLPlanMetric]()
   var submissionTime = -1L
   var completionTime: Option[Date] = None
+  var errorMessage: Option[String] = None
 
   var jobs = Map[Int, JobExecutionStatus]()
   var stages = Set[Int]()
@@ -461,12 +508,15 @@ private class LiveExecutionData(val executionId: Long) extends LiveEntity {
   override protected def doUpdate(): Any = {
     new SQLExecutionUIData(
       executionId,
+      rootExecutionId,
       description,
       details,
       physicalPlanDescription,
+      modifiedConfigs,
       metrics,
       submissionTime,
       completionTime,
+      errorMessage,
       jobs,
       stages,
       metricsValues)
@@ -533,7 +583,7 @@ private class LiveStageMetrics(
         val value = acc.update.get match {
           case s: String => s.toLong
           case l: Long => l
-          case o => throw new IllegalArgumentException(s"Unexpected: $o")
+          case o => throw QueryExecutionErrors.unexpectedAccumulableUpdateValueError(o)
         }
 
         val metricValues = taskMetrics.computeIfAbsent(acc.id, _ => new Array(numTasks))

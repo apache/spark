@@ -20,7 +20,6 @@ package org.apache.spark
 import java.util.concurrent.{Executors, TimeUnit}
 
 import scala.collection.JavaConverters._
-import scala.concurrent.duration._
 import scala.util.{Random, Try}
 
 import com.esotericsoftware.kryo.Kryo
@@ -34,7 +33,7 @@ import org.apache.spark.resource.ResourceID
 import org.apache.spark.resource.ResourceUtils._
 import org.apache.spark.resource.TestResourceIDs._
 import org.apache.spark.serializer.{JavaSerializer, KryoRegistrator, KryoSerializer}
-import org.apache.spark.util.{ResetSystemProperties, RpcUtils, Utils}
+import org.apache.spark.util.{ResetSystemProperties, Utils}
 
 class SparkConfSuite extends SparkFunSuite with LocalSparkContext with ResetSystemProperties {
   test("Test byteString conversion") {
@@ -221,7 +220,7 @@ class SparkConfSuite extends SparkFunSuite with LocalSparkContext with ResetSyst
     conf.registerKryoClasses(Array(classOf[Class1]))
     assert(conf.get(KRYO_CLASSES_TO_REGISTER).toSet === Seq(classOf[Class1].getName).toSet)
 
-    conf.set(KRYO_USER_REGISTRATORS, classOf[CustomRegistrator].getName)
+    conf.set(KRYO_USER_REGISTRATORS, Seq(classOf[CustomRegistrator].getName))
 
     // Kryo doesn't expose a way to discover registered classes, but at least make sure this doesn't
     // blow up.
@@ -279,27 +278,6 @@ class SparkConfSuite extends SparkFunSuite with LocalSparkContext with ResetSyst
 
     conf.set("spark.yarn.access.hadoopFileSystems", "testNode")
     assert(conf.get(KERBEROS_FILESYSTEMS_TO_ACCESS) === Array("testNode"))
-  }
-
-  test("akka deprecated configs") {
-    val conf = new SparkConf()
-
-    assert(!conf.contains(RPC_NUM_RETRIES))
-    assert(!conf.contains(RPC_RETRY_WAIT))
-    assert(!conf.contains(RPC_ASK_TIMEOUT))
-    assert(!conf.contains(RPC_LOOKUP_TIMEOUT))
-
-    conf.set("spark.akka.num.retries", "1")
-    assert(RpcUtils.numRetries(conf) === 1)
-
-    conf.set("spark.akka.retry.wait", "2")
-    assert(RpcUtils.retryWaitMs(conf) === 2L)
-
-    conf.set("spark.akka.askTimeout", "3")
-    assert(RpcUtils.askRpcTimeout(conf).duration === 3.seconds)
-
-    conf.set("spark.akka.lookupTimeout", "4")
-    assert(RpcUtils.lookupRpcTimeout(conf).duration === 4.seconds)
   }
 
   test("SPARK-13727") {
@@ -461,7 +439,7 @@ class SparkConfSuite extends SparkFunSuite with LocalSparkContext with ResetSyst
     val conf = new SparkConf()
     conf.set(TASK_GPU_ID.amountConf, "2")
     conf.set(TASK_FPGA_ID.amountConf, "0")
-    var taskResourceRequirement =
+    val taskResourceRequirement =
       parseResourceRequirements(conf, SPARK_TASK_PREFIX)
         .map(req => (req.resourceName, req.amount)).toMap
 
@@ -518,6 +496,20 @@ class SparkConfSuite extends SparkFunSuite with LocalSparkContext with ResetSyst
           assert(reqs.head.amount == slots)
           assert(reqs.head.numParts == 1)
         }
+    }
+  }
+
+  test("SPARK-44650: spark.executor.defaultJavaOptions Check illegal java options") {
+    val conf = new SparkConf()
+    conf.validateSettings()
+    conf.set(EXECUTOR_JAVA_OPTIONS.key, "-Dspark.foo=bar")
+    intercept[Exception] {
+      conf.validateSettings()
+    }
+    conf.remove(EXECUTOR_JAVA_OPTIONS.key)
+    conf.set("spark.executor.defaultJavaOptions", "-Dspark.foo=bar")
+    intercept[Exception] {
+      conf.validateSettings()
     }
   }
 }

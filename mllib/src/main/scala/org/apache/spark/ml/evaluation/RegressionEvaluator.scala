@@ -20,7 +20,7 @@ package org.apache.spark.ml.evaluation
 import org.apache.spark.annotation.Since
 import org.apache.spark.ml.param.{BooleanParam, Param, ParamMap, ParamValidators}
 import org.apache.spark.ml.param.shared.{HasLabelCol, HasPredictionCol, HasWeightCol}
-import org.apache.spark.ml.util.{DefaultParamsReadable, DefaultParamsWritable, Identifiable, SchemaUtils}
+import org.apache.spark.ml.util._
 import org.apache.spark.mllib.evaluation.RegressionMetrics
 import org.apache.spark.sql.{Dataset, Row}
 import org.apache.spark.sql.functions._
@@ -79,8 +79,6 @@ final class RegressionEvaluator @Since("1.4.0") (@Since("1.4.0") override val ui
   @Since("3.0.0")
   def setThroughOrigin(value: Boolean): this.type = set(throughOrigin, value)
 
-  setDefault(throughOrigin -> false)
-
   /** @group setParam */
   @Since("1.4.0")
   def setPredictionCol(value: String): this.type = set(predictionCol, value)
@@ -93,7 +91,7 @@ final class RegressionEvaluator @Since("1.4.0") (@Since("1.4.0") override val ui
   @Since("3.0.0")
   def setWeightCol(value: String): this.type = set(weightCol, value)
 
-  setDefault(metricName -> "rmse")
+  setDefault(metricName -> "rmse", throughOrigin -> false)
 
   @Since("2.0.0")
   override def evaluate(dataset: Dataset[_]): Double = {
@@ -121,11 +119,13 @@ final class RegressionEvaluator @Since("1.4.0") (@Since("1.4.0") override val ui
     SchemaUtils.checkNumericType(schema, $(labelCol))
 
     val predictionAndLabelsWithWeights = dataset
-      .select(col($(predictionCol)).cast(DoubleType), col($(labelCol)).cast(DoubleType),
-        if (!isDefined(weightCol) || $(weightCol).isEmpty) lit(1.0) else col($(weightCol)))
-      .rdd
-      .map { case Row(prediction: Double, label: Double, weight: Double) =>
-        (prediction, label, weight) }
+      .select(
+        col($(predictionCol)).cast(DoubleType),
+        col($(labelCol)).cast(DoubleType),
+        DatasetUtils.checkNonNegativeWeights(get(weightCol))
+      ).rdd.map { case Row(prediction: Double, label: Double, weight: Double) =>
+        (prediction, label, weight)
+      }
     new RegressionMetrics(predictionAndLabelsWithWeights, $(throughOrigin))
   }
 

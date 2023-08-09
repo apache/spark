@@ -1,13 +1,12 @@
-/**
- * Licensed to the Apache Software Foundation (ASF) under one
- * or more contributor license agreements.  See the NOTICE file
- * distributed with this work for additional information
- * regarding copyright ownership.  The ASF licenses this file
- * to you under the Apache License, Version 2.0 (the
- * "License"); you may not use this file except in compliance
- * with the License.  You may obtain a copy of the License at
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
  *
- *     http://www.apache.org/licenses/LICENSE-2.0
+ *    http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -18,8 +17,8 @@
 
 package org.apache.hive.service.cli;
 
-import org.apache.log4j.Layout;
-import org.apache.log4j.PatternLayout;
+import org.apache.logging.log4j.core.StringLayout;
+import org.apache.logging.log4j.core.layout.PatternLayout;
 
 /**
  * CLIServiceUtils.
@@ -29,10 +28,10 @@ public class CLIServiceUtils {
 
 
   private static final char SEARCH_STRING_ESCAPE = '\\';
-  public static final Layout verboseLayout = new PatternLayout(
-    "%d{yy/MM/dd HH:mm:ss} %p %c{2}: %m%n");
-  public static final Layout nonVerboseLayout = new PatternLayout(
-    "%-5p : %m%n");
+  public static final StringLayout verboseLayout = PatternLayout.newBuilder().withPattern(
+    "%d{yy/MM/dd HH:mm:ss} %p %c{2}: %m%n%ex").build();
+  public static final StringLayout nonVerboseLayout = PatternLayout.newBuilder().withPattern(
+    "%-5p : %m%n%ex").build();
 
   /**
    * Convert a SQL search pattern into an equivalent Java Regex.

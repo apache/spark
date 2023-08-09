@@ -218,7 +218,6 @@ javax.jdo:jdo-api
 joda-time:joda-time
 net.sf.opencsv:opencsv
 org.apache.derby:derby
-org.ehcache:ehcache
 org.objenesis:objenesis
 org.roaringbitmap:RoaringBitmap
 org.scalanlp:breeze-macros_2.12
@@ -261,7 +260,6 @@ net.sf.supercsv:super-csv
 org.apache.arrow:arrow-format
 org.apache.arrow:arrow-memory
 org.apache.arrow:arrow-vector
-org.apache.commons:commons-configuration2
 org.apache.commons:commons-crypto
 org.apache.commons:commons-lang3
 org.apache.hadoop:hadoop-annotations
@@ -296,7 +294,6 @@ org.apache.kerby:kerby-config
 org.apache.kerby:kerby-pkix
 org.apache.kerby:kerby-util
 org.apache.kerby:kerby-xdr
-org.apache.kerby:token-provider
 org.apache.orc:orc-core
 org.apache.orc:orc-mapreduce
 org.mortbay.jetty:jetty
@@ -316,19 +313,15 @@ com.fasterxml.jackson.jaxrs:jackson-jaxrs-json-provider
 com.fasterxml.jackson.module:jackson-module-jaxb-annotations
 com.fasterxml.jackson.module:jackson-module-paranamer
 com.fasterxml.jackson.module:jackson-module-scala_2.12
-com.fasterxml.woodstox:woodstox-core
 com.github.mifmif:generex
-com.github.stephenc.jcip:jcip-annotations
 com.google.code.findbugs:jsr305
 com.google.code.gson:gson
 com.google.flatbuffers:flatbuffers-java
 com.google.guava:guava
 com.google.inject:guice
 com.google.inject.extensions:guice-servlet
-com.nimbusds:nimbus-jose-jwt
 com.twitter:parquet-hadoop-bundle
 commons-cli:commons-cli
-commons-daemon:commons-daemon
 commons-dbcp:commons-dbcp
 commons-io:commons-io
 commons-lang:commons-lang
@@ -340,8 +333,6 @@ javax.inject:javax.inject
 javax.validation:validation-api
 log4j:apache-log4j-extras
 log4j:log4j
-net.minidev:accessors-smart
-net.minidev:json-smart
 net.sf.jpam:jpam
 org.apache.avro:avro
 org.apache.avro:avro-ipc
@@ -357,7 +348,6 @@ org.apache.directory.server:apacheds-i18n
 org.apache.directory.server:apacheds-kerberos-codec
 org.apache.htrace:htrace-core
 org.apache.ivy:ivy
-org.apache.geronimo.specs:geronimo-jcache_1.0_spec
 org.apache.mesos:mesos
 org.apache.parquet:parquet-column
 org.apache.parquet:parquet-common
@@ -392,6 +382,10 @@ org.eclipse.jetty:jetty-servlets
 org.eclipse.jetty:jetty-util
 org.eclipse.jetty:jetty-webapp
 org.eclipse.jetty:jetty-xml
+org.scala-lang:scala-compiler
+org.scala-lang:scala-library
+org.scala-lang:scala-reflect
+org.scala-lang.modules:scala-parser-combinators_2.12
 org.scala-lang.modules:scala-xml_2.12
 com.github.joshelser:dropwizard-metrics-hadoop-metrics2-reporter
 com.zaxxer.HikariCP
@@ -414,10 +408,10 @@ org.datanucleus:javax.jdo
 com.tdunning:json
 org.apache.velocity:velocity
 org.apache.yetus:audience-annotations
+com.google.cloud.bigdataoss:gcs-connector
 
 core/src/main/java/org/apache/spark/util/collection/TimSort.java
 core/src/main/resources/org/apache/spark/ui/static/bootstrap*
-core/src/main/resources/org/apache/spark/ui/static/jsonFormatter*
 core/src/main/resources/org/apache/spark/ui/static/vis*
 docs/js/vendor/bootstrap.js
 
@@ -432,15 +426,12 @@ BSD 2-Clause
 ------------
 
 com.github.luben:zstd-jni
-dnsjava:dnsjava
 javolution:javolution
 com.esotericsoftware:kryo-shaded
 com.esotericsoftware:minlog
 com.esotericsoftware:reflectasm
-com.google.protobuf:protobuf-java
 org.codehaus.janino:commons-compiler
 org.codehaus.janino:janino
-org.codehaus.woodstox:stax2-api
 jline:jline
 org.jodd:jodd-core
 com.github.wendykierp:JTransforms
@@ -450,19 +441,14 @@ pl.edu.icm:JLargeArrays
 BSD 3-Clause
 ------------
 
+com.google.protobuf:protobuf-java
 dk.brics.automaton:automaton
 org.antlr:antlr-runtime
 org.antlr:ST4
 org.antlr:stringtemplate
 org.antlr:antlr4-runtime
 antlr:antlr
-com.github.fommil.netlib:core
-com.google.re2j:re2j
 com.thoughtworks.paranamer:paranamer
-org.scala-lang:scala-compiler
-org.scala-lang:scala-library
-org.scala-lang:scala-reflect
-org.scala-lang.modules:scala-parser-combinators_2.12
 org.fusesource.leveldbjni:leveldbjni-all
 net.sourceforge.f2j:arpack_combined_all
 xmlenc:xmlenc
@@ -470,6 +456,7 @@ net.sf.py4j:py4j
 org.jpmml:pmml-model
 org.jpmml:pmml-schema
 org.threeten:threeten-extra
+org.jdom:jdom2
 
 python/lib/py4j-*-src.zip
 python/pyspark/cloudpickle.py
@@ -492,12 +479,15 @@ org.typelevel:spire-util_2.12
 org.typelevel:algebra_2.12:jar
 org.typelevel:cats-kernel_2.12
 org.typelevel:machinist_2.12
-net.razorvine:pyrolite
+net.razorvine:pickle
 org.slf4j:jcl-over-slf4j
 org.slf4j:jul-to-slf4j
 org.slf4j:slf4j-api
 org.slf4j:slf4j-log4j12
 com.github.scopt:scopt_2.12
+dev.ludovic.netlib:blas
+dev.ludovic.netlib:arpack
+dev.ludovic.netlib:lapack
 
 core/src/main/resources/org/apache/spark/ui/static/dagre-d3.min.js
 core/src/main/resources/org/apache/spark/ui/static/*dataTables*
@@ -515,13 +505,13 @@ Common Development and Distribution License (CDDL) 1.0
 javax.activation:activation  http://www.oracle.com/technetwork/java/javase/tech/index-jsp-138795.html
 javax.xml.stream:stax-api    https://jcp.org/en/jsr/detail?id=173
 javax.transaction:javax.transaction-api
+javax.xml.bind:jaxb-api
 
 
 Common Development and Distribution License (CDDL) 1.1
 ------------------------------------------------------
 
 javax.el:javax.el-api	https://javaee.github.io/uel-ri/
-javax.servlet:javax.servlet-api   https://javaee.github.io/servlet-spec/
 javax.servlet.jsp:jsp-api
 javax.transaction:jta http://www.oracle.com/technetwork/java/index.html
 javax.xml.bind:jaxb-api    https://github.com/javaee/jaxb-v2
@@ -553,14 +543,10 @@ Eclipse Public License (EPL) 2.0
 --------------------------------
 
 jakarta.annotation:jakarta-annotation-api https://projects.eclipse.org/projects/ee4j.ca
+jakarta.servlet:jakarta.servlet-api https://projects.eclipse.org/projects/ee4j.servlet
 jakarta.ws.rs:jakarta.ws.rs-api https://github.com/eclipse-ee4j/jaxrs-api
 org.glassfish.hk2.external:jakarta.inject
-
-
-Python Software Foundation License
-----------------------------------
-
-pyspark/heapq3.py
+com.github.jnr:jnr-posix
 
 
 Public Domain

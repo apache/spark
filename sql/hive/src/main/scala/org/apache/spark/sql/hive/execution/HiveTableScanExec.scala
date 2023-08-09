@@ -20,12 +20,14 @@ package org.apache.spark.sql.hive.execution
 import scala.collection.JavaConverters._
 
 import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.hive.ql.io.{DelegateSymlinkTextInputFormat, SymlinkTextInputFormat}
 import org.apache.hadoop.hive.ql.metadata.{Partition => HivePartition}
 import org.apache.hadoop.hive.ql.plan.TableDesc
 import org.apache.hadoop.hive.serde.serdeConstants
 import org.apache.hadoop.hive.serde2.objectinspector._
 import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspectorUtils.ObjectInspectorCopyOption
 import org.apache.hadoop.hive.serde2.typeinfo.TypeInfoUtils
+import org.apache.hadoop.mapred.InputFormat
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.SparkSession
@@ -89,7 +91,7 @@ case class HiveTableScanExec(
 
   @transient private lazy val hiveQlTable = HiveClientImpl.toHiveTable(relation.tableMeta)
   @transient private lazy val tableDesc = new TableDesc(
-    hiveQlTable.getInputFormatClass,
+    getInputFormat(hiveQlTable.getInputFormatClass, conf),
     hiveQlTable.getOutputFormatClass,
     hiveQlTable.getMetadata)
 
@@ -117,8 +119,9 @@ case class HiveTableScanExec(
     // Specifies needed column IDs for those non-partitioning columns.
     val columnOrdinals = AttributeMap(relation.dataCols.zipWithIndex)
     val neededColumnIDs = output.flatMap(columnOrdinals.get).map(o => o: Integer)
+    val neededColumnNames = output.filter(columnOrdinals.contains).map(_.name)
 
-    HiveShim.appendReadColumns(hiveConf, neededColumnIDs, output.map(_.name))
+    HiveShim.appendReadColumns(hiveConf, neededColumnIDs, neededColumnNames)
 
     val deserializer = tableDesc.getDeserializerClass.getConstructor().newInstance()
     deserializer.initialize(hiveConf, tableDesc.getProperties)
@@ -156,7 +159,7 @@ case class HiveTableScanExec(
 
         // Only partitioned values are needed here, since the predicate has already been bound to
         // partition key attribute references.
-        val row = InternalRow.fromSeq(castedValues)
+        val row = InternalRow.fromSeq(castedValues.toSeq)
         shouldKeep.eval(row).asInstanceOf[Boolean]
       }
     }
@@ -202,11 +205,11 @@ case class HiveTableScanExec(
     // Using dummyCallSite, as getCallSite can turn out to be expensive with
     // multiple partitions.
     val rdd = if (!relation.isPartitioned) {
-      Utils.withDummyCallSite(sqlContext.sparkContext) {
+      Utils.withDummyCallSite(sparkContext) {
         hadoopReader.makeRDDForTable(hiveQlTable)
       }
     } else {
-      Utils.withDummyCallSite(sqlContext.sparkContext) {
+      Utils.withDummyCallSite(sparkContext) {
         hadoopReader.makeRDDForPartitionedTable(prunedPartitions)
       }
     }
@@ -223,12 +226,34 @@ case class HiveTableScanExec(
     }
   }
 
+  // Filters unused DynamicPruningExpression expressions - one which has been replaced
+  // with DynamicPruningExpression(Literal.TrueLiteral) during Physical Planning
+  private def filterUnusedDynamicPruningExpressions(
+      predicates: Seq[Expression]): Seq[Expression] = {
+    predicates.filterNot(_ == DynamicPruningExpression(Literal.TrueLiteral))
+  }
+
+  // Optionally returns a delegate input format based on the provided input format class.
+  // This is currently used to replace SymlinkTextInputFormat with DelegateSymlinkTextInputFormat
+  // in order to fix SPARK-40815.
+  private def getInputFormat(
+      inputFormatClass: Class[_ <: InputFormat[_, _]],
+      conf: SQLConf): Class[_ <: InputFormat[_, _]] = {
+    if (inputFormatClass == classOf[SymlinkTextInputFormat] &&
+        conf != null && conf.getConf(HiveUtils.USE_DELEGATE_FOR_SYMLINK_TEXT_INPUT_FORMAT)) {
+      classOf[DelegateSymlinkTextInputFormat]
+    } else {
+      inputFormatClass
+    }
+  }
+
   override def doCanonicalize(): HiveTableScanExec = {
     val input: AttributeSeq = relation.output
     HiveTableScanExec(
       requestedAttributes.map(QueryPlan.normalizeExpressions(_, input)),
       relation.canonicalized.asInstanceOf[HiveTableRelation],
-      QueryPlan.normalizePredicates(partitionPruningPred, input))(sparkSession)
+      QueryPlan.normalizePredicates(
+        filterUnusedDynamicPruningExpressions(partitionPruningPred), input))(sparkSession)
   }
 
   override def otherCopyArgs: Seq[AnyRef] = Seq(sparkSession)

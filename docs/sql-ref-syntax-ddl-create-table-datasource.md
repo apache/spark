@@ -55,6 +55,10 @@ as any order. For example, you can write COMMENT table_comment after TBLPROPERTI
 
     Data Source is the input format used to create the table. Data source can be CSV, TXT, ORC, JDBC, PARQUET, etc.
 
+* **OPTIONS**
+
+    Options of data source which will be injected to storage properties.
+
 * **PARTITIONED BY**
 
     Partitions are created on the table, based on the columns specified.
@@ -67,7 +71,12 @@ as any order. For example, you can write COMMENT table_comment after TBLPROPERTI
 
 * **SORTED BY**
 
-    Determines the order in which the data is stored in buckets. Default is Ascending order.
+    Specifies an ordering of bucket columns. Optionally, one can use ASC for an ascending order or DESC for a descending order after any column names in the SORTED BY clause.
+    If not specified, ASC is assumed by default.
+   
+* **INTO num_buckets BUCKETS**
+
+    Specifies buckets numbers, which is used in `CLUSTERED BY` clause.
 
 * **LOCATION**
 
@@ -112,6 +121,15 @@ CREATE TABLE student_copy USING CSV
 --Omit the USING clause, which uses the default data source (parquet by default)
 CREATE TABLE student (id INT, name STRING, age INT);
 
+--Use parquet data source with parquet storage options
+--The columns 'id' and 'name' enable the bloom filter during writing parquet file,
+--column 'age' does not enable
+CREATE TABLE student_parquet(id INT, name STRING, age INT) USING PARQUET
+    OPTIONS (
+      'parquet.bloom.filter.enabled'='true',
+      'parquet.bloom.filter.enabled#age'='false'
+    );
+
 --Specify table comment and properties
 CREATE TABLE student (id INT, name STRING, age INT) USING CSV
     COMMENT 'this is a comment'
@@ -127,6 +145,23 @@ CREATE TABLE student (id INT, name STRING, age INT)
     USING CSV
     PARTITIONED BY (age)
     CLUSTERED BY (Id) INTO 4 buckets;
+
+--Create partitioned and bucketed table through CTAS
+CREATE TABLE student_partition_bucket
+    USING parquet
+    PARTITIONED BY (age)
+    CLUSTERED BY (id) INTO 4 buckets
+    AS SELECT * FROM student;
+
+--Create bucketed table through CTAS and CTE
+CREATE TABLE student_bucket
+    USING parquet
+    CLUSTERED BY (id) INTO 4 buckets (
+    WITH tmpTable AS (
+        SELECT * FROM student WHERE id > 100
+    )
+    SELECT * FROM tmpTable
+);
 ```
 
 ### Related Statements

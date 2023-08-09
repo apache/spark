@@ -21,6 +21,7 @@ import java.util.concurrent.TimeUnit
 
 import scala.collection.mutable
 
+import com.codahale.metrics.Counter
 import org.mockito.ArgumentMatchers.any
 import org.mockito.Mockito.{doAnswer, mock, when}
 
@@ -57,6 +58,15 @@ class ExecutorMonitorSuite extends SparkFunSuite {
   // having to use mockito APIs directly in each test.
   private val knownExecs = mutable.HashSet[String]()
 
+  private def allocationManagerSource(): ExecutorAllocationManagerSource = {
+    val metricSource = mock(classOf[ExecutorAllocationManagerSource])
+    when(metricSource.driverKilled).thenReturn(new Counter)
+    when(metricSource.decommissionUnfinished).thenReturn(new Counter)
+    when(metricSource.gracefullyDecommissioned).thenReturn(new Counter)
+    when(metricSource.exitedUnexpectedly).thenReturn(new Counter)
+    metricSource
+  }
+
   override def beforeEach(): Unit = {
     super.beforeEach()
     knownExecs.clear()
@@ -65,7 +75,7 @@ class ExecutorMonitorSuite extends SparkFunSuite {
     when(client.isExecutorActive(any())).thenAnswer { invocation =>
       knownExecs.contains(invocation.getArguments()(0).asInstanceOf[String])
     }
-    monitor = new ExecutorMonitor(conf, client, null, clock)
+    monitor = new ExecutorMonitor(conf, client, null, clock, allocationManagerSource())
   }
 
   test("basic executor timeout") {
@@ -159,6 +169,8 @@ class ExecutorMonitorSuite extends SparkFunSuite {
   }
 
   test("keeps track of stored blocks for each rdd and split") {
+    knownExecs ++= Set("1", "2")
+
     monitor.onExecutorAdded(SparkListenerExecutorAdded(clock.getTimeMillis(), "1", execInfo))
 
     monitor.onBlockUpdated(rddUpdate(1, 0, "1"))
@@ -223,7 +235,23 @@ class ExecutorMonitorSuite extends SparkFunSuite {
     assert(monitor.timedOutExecutors(clock.nanoTime()).toSet === Set("1", "2", "3"))
   }
 
+  test("SPARK-38019: timedOutExecutors should be deterministic") {
+    knownExecs ++= Set("1", "2", "3")
+
+    // start exec 1, 2, 3 at 0s (should idle time out at 60s)
+    monitor.onExecutorAdded(SparkListenerExecutorAdded(clock.getTimeMillis(), "1", execInfo))
+    assert(monitor.isExecutorIdle("1"))
+    monitor.onExecutorAdded(SparkListenerExecutorAdded(clock.getTimeMillis(), "2", execInfo))
+    assert(monitor.isExecutorIdle("2"))
+    monitor.onExecutorAdded(SparkListenerExecutorAdded(clock.getTimeMillis(), "3", execInfo))
+    assert(monitor.isExecutorIdle("3"))
+
+    clock.setTime(TimeUnit.SECONDS.toMillis(150))
+    assert(monitor.timedOutExecutors().map(_._1) === Seq("1", "2", "3"))
+  }
+
   test("SPARK-27677: don't track blocks stored on disk when using shuffle service") {
+    knownExecs += "1"
     // First make sure that blocks on disk are counted when no shuffle service is available.
     monitor.onExecutorAdded(SparkListenerExecutorAdded(clock.getTimeMillis(), "1", execInfo))
     monitor.onBlockUpdated(rddUpdate(1, 0, "1", level = StorageLevel.DISK_ONLY))
@@ -231,7 +259,7 @@ class ExecutorMonitorSuite extends SparkFunSuite {
     assert(monitor.timedOutExecutors(storageDeadline) ===  Seq("1"))
 
     conf.set(SHUFFLE_SERVICE_ENABLED, true).set(SHUFFLE_SERVICE_FETCH_RDD_ENABLED, true)
-    monitor = new ExecutorMonitor(conf, client, null, clock)
+    monitor = new ExecutorMonitor(conf, client, null, clock, allocationManagerSource())
 
     monitor.onExecutorAdded(SparkListenerExecutorAdded(clock.getTimeMillis(), "1", execInfo))
     monitor.onBlockUpdated(rddUpdate(1, 0, "1", level = StorageLevel.MEMORY_ONLY))
@@ -257,7 +285,7 @@ class ExecutorMonitorSuite extends SparkFunSuite {
     knownExecs ++= Set("1", "2", "3")
 
     val execInfoRp1 = new ExecutorInfo("host1", 1, Map.empty,
-      Map.empty, Map.empty, 1)
+      Map.empty, Map.empty, 1, None, None)
 
     monitor.onExecutorAdded(SparkListenerExecutorAdded(clock.getTimeMillis(), "1", execInfo))
     monitor.onExecutorAdded(SparkListenerExecutorAdded(clock.getTimeMillis(), "2", execInfo))
@@ -292,7 +320,7 @@ class ExecutorMonitorSuite extends SparkFunSuite {
   test("shuffle block tracking") {
     val bus = mockListenerBus()
     conf.set(DYN_ALLOCATION_SHUFFLE_TRACKING_ENABLED, true).set(SHUFFLE_SERVICE_ENABLED, false)
-    monitor = new ExecutorMonitor(conf, client, bus, clock)
+    monitor = new ExecutorMonitor(conf, client, bus, clock, allocationManagerSource())
 
     // 3 jobs: 2 and 3 share a shuffle, 1 has a separate shuffle.
     val stage1 = stageInfo(1, shuffleId = 0)
@@ -360,7 +388,7 @@ class ExecutorMonitorSuite extends SparkFunSuite {
   test("SPARK-28839: Avoids NPE in context cleaner when shuffle service is on") {
     val bus = mockListenerBus()
     conf.set(DYN_ALLOCATION_SHUFFLE_TRACKING_ENABLED, true).set(SHUFFLE_SERVICE_ENABLED, true)
-    monitor = new ExecutorMonitor(conf, client, bus, clock) {
+    monitor = new ExecutorMonitor(conf, client, bus, clock, allocationManagerSource()) {
       override def onOtherEvent(event: SparkListenerEvent): Unit = {
         throw new IllegalStateException("No event should be sent.")
       }
@@ -372,7 +400,7 @@ class ExecutorMonitorSuite extends SparkFunSuite {
   test("shuffle tracking with multiple executors and concurrent jobs") {
     val bus = mockListenerBus()
     conf.set(DYN_ALLOCATION_SHUFFLE_TRACKING_ENABLED, true).set(SHUFFLE_SERVICE_ENABLED, false)
-    monitor = new ExecutorMonitor(conf, client, bus, clock)
+    monitor = new ExecutorMonitor(conf, client, bus, clock, allocationManagerSource())
 
     monitor.onExecutorAdded(SparkListenerExecutorAdded(clock.getTimeMillis(), "1", execInfo))
     monitor.onExecutorAdded(SparkListenerExecutorAdded(clock.getTimeMillis(), "2", execInfo))
@@ -417,7 +445,7 @@ class ExecutorMonitorSuite extends SparkFunSuite {
       .set(DYN_ALLOCATION_SHUFFLE_TRACKING_TIMEOUT, Long.MaxValue)
       .set(DYN_ALLOCATION_SHUFFLE_TRACKING_ENABLED, true)
       .set(SHUFFLE_SERVICE_ENABLED, false)
-    monitor = new ExecutorMonitor(conf, client, null, clock)
+    monitor = new ExecutorMonitor(conf, client, null, clock, allocationManagerSource())
 
     // Generate events that will make executor 1 be idle, while still holding shuffle data.
     // The executor should not be eligible for removal since the timeout is basically "infinite".
@@ -431,6 +459,50 @@ class ExecutorMonitorSuite extends SparkFunSuite {
     monitor.onJobEnd(SparkListenerJobEnd(1, clock.getTimeMillis(), JobSucceeded))
 
     assert(monitor.timedOutExecutors(idleDeadline).isEmpty)
+  }
+
+  test("SPARK-37688: ignore SparkListenerBlockUpdated event if executor was not active") {
+    conf
+      .set(DYN_ALLOCATION_SHUFFLE_TRACKING_TIMEOUT, Long.MaxValue)
+      .set(DYN_ALLOCATION_SHUFFLE_TRACKING_ENABLED, true)
+      .set(SHUFFLE_SERVICE_ENABLED, false)
+    monitor = new ExecutorMonitor(conf, client, null, clock, allocationManagerSource())
+
+    monitor.onExecutorAdded(SparkListenerExecutorAdded(clock.getTimeMillis(), "1", execInfo))
+    monitor.onExecutorRemoved(SparkListenerExecutorRemoved(clock.getTimeMillis(), "1",
+      "heartbeats timeout"))
+    monitor.onBlockUpdated(rddUpdate(1, 1, "1", level = StorageLevel.MEMORY_AND_DISK))
+
+    assert(monitor.executorCount == 0 )
+  }
+
+  for (isShuffleTrackingEnabled <- Seq(true, false)) {
+    test(s"SPARK-43398: executor timeout should be max of shuffle and rdd timeout with" +
+      s" shuffleTrackingEnabled as $isShuffleTrackingEnabled") {
+      conf
+        .set(DYN_ALLOCATION_SHUFFLE_TRACKING_TIMEOUT.key, "240s")
+        .set(DYN_ALLOCATION_SHUFFLE_TRACKING_ENABLED, isShuffleTrackingEnabled)
+        .set(SHUFFLE_SERVICE_ENABLED, false)
+      monitor = new ExecutorMonitor(conf, client, null, clock, allocationManagerSource())
+
+      monitor.onExecutorAdded(SparkListenerExecutorAdded(clock.getTimeMillis(), "1", execInfo))
+      knownExecs += "1"
+      val stage1 = stageInfo(1, shuffleId = 0)
+      monitor.onJobStart(SparkListenerJobStart(1, clock.getTimeMillis(), Seq(stage1)))
+      monitor.onBlockUpdated(rddUpdate(1, 0, "1"))
+      val t1 = taskInfo("1", 1)
+      monitor.onTaskStart(SparkListenerTaskStart(1, 1, t1))
+      monitor.onTaskEnd(SparkListenerTaskEnd(1, 1, "foo", Success, t1, new ExecutorMetrics, null))
+      monitor.onJobEnd(SparkListenerJobEnd(1, clock.getTimeMillis(), JobSucceeded))
+
+      if (isShuffleTrackingEnabled) {
+        assert(monitor.timedOutExecutors(storageDeadline).isEmpty)
+        assert(monitor.timedOutExecutors(shuffleDeadline) == Seq("1"))
+      } else {
+        assert(monitor.timedOutExecutors(idleDeadline).isEmpty)
+        assert(monitor.timedOutExecutors(storageDeadline) == Seq("1"))
+      }
+    }
   }
 
   private def idleDeadline: Long = clock.nanoTime() + idleTimeoutNs + 1
@@ -449,7 +521,8 @@ class ExecutorMonitorSuite extends SparkFunSuite {
       speculative: Boolean = false,
       duration: Long = -1L): TaskInfo = {
     val start = if (duration > 0) clock.getTimeMillis() - duration else clock.getTimeMillis()
-    val task = new TaskInfo(id, id, 1, start, execId, "foo.example.com",
+    val task = new TaskInfo(
+      id, id, 1, id, start, execId, "foo.example.com",
       TaskLocality.PROCESS_LOCAL, speculative)
     if (duration > 0) {
       task.markFinished(TaskState.FINISHED, math.max(1, clock.getTimeMillis()))

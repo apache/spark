@@ -20,7 +20,7 @@ package org.apache.spark.internal.io
 import java.text.SimpleDateFormat
 import java.util.{Date, Locale}
 
-import scala.util.DynamicVariable
+import scala.util.{DynamicVariable, Random}
 
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.mapred.{JobConf, JobID}
@@ -37,14 +37,46 @@ private[spark]
 object SparkHadoopWriterUtils {
 
   private val RECORDS_BETWEEN_BYTES_WRITTEN_METRIC_UPDATES = 256
+  private val RAND = new Random()
 
+  /**
+   * Create a job ID.
+   *
+   * @param time (current) time
+   * @param id job number
+   * @return a job ID
+   */
   def createJobID(time: Date, id: Int): JobID = {
-    val jobtrackerID = createJobTrackerID(time)
-    new JobID(jobtrackerID, id)
+    val jobTrackerID = createJobTrackerID(time)
+    createJobID(jobTrackerID, id)
   }
 
+  /**
+   * Create a job ID.
+   *
+   * @param jobTrackerID unique job track id
+   * @param id job number
+   * @return a job ID
+   */
+  def createJobID(jobTrackerID: String, id: Int): JobID = {
+    if (id < 0) {
+      throw new IllegalArgumentException("Job number is negative")
+    }
+    new JobID(jobTrackerID, id)
+  }
+
+  /**
+   * Generate an ID for a job tracker.
+   * @param time (current) time
+   * @return a string for a job ID
+   */
   def createJobTrackerID(time: Date): String = {
-    new SimpleDateFormat("yyyyMMddHHmmss", Locale.US).format(time)
+    val base = new SimpleDateFormat("yyyyMMddHHmmss", Locale.US).format(time)
+    var l1 = RAND.nextLong()
+    if (l1 < 0) {
+      l1 = -l1
+    }
+    base + l1
   }
 
   def createPathFromString(path: String, conf: JobConf): Path = {

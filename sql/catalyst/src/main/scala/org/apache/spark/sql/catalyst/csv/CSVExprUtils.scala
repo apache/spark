@@ -25,8 +25,13 @@ object CSVExprUtils {
    * This is currently being used in CSV reading path and CSV schema inference.
    */
   def filterCommentAndEmpty(iter: Iterator[String], options: CSVOptions): Iterator[String] = {
-    iter.filter { line =>
-      line.trim.nonEmpty && !line.startsWith(options.comment.toString)
+    if (options.isCommentSet) {
+      val commentPrefix = options.comment.toString
+      iter.filter { line =>
+        line.trim.nonEmpty && !line.startsWith(commentPrefix)
+      }
+    } else {
+      iter.filter(_.trim.nonEmpty)
     }
   }
 
@@ -34,7 +39,7 @@ object CSVExprUtils {
     if (options.isCommentSet) {
       val commentPrefix = options.comment.toString
       iter.dropWhile { line =>
-        line.trim.isEmpty || line.trim.startsWith(commentPrefix)
+        line.trim.isEmpty || line.startsWith(commentPrefix)
       }
     } else {
       iter.dropWhile(_.trim.isEmpty)
@@ -74,7 +79,7 @@ object CSVExprUtils {
       case Seq('\\', '\"') => '\"'
       case Seq('\\', '\'') => '\''
       case Seq('\\', '\\') => '\\'
-      case _ if str == """\u0000""" => '\u0000'
+      case _ if str == "\u0000" => '\u0000'
       case Seq('\\', _) =>
         throw new IllegalArgumentException(s"Unsupported special character for delimiter: $str")
       case _ =>

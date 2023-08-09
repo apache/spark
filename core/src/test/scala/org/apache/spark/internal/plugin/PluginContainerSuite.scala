@@ -20,6 +20,7 @@ package org.apache.spark.internal.plugin
 import java.io.File
 import java.nio.charset.StandardCharsets
 import java.util.{Map => JMap}
+import java.util.concurrent.atomic.AtomicInteger
 
 import scala.collection.JavaConverters._
 import scala.concurrent.duration._
@@ -28,7 +29,6 @@ import com.codahale.metrics.Gauge
 import com.google.common.io.Files
 import org.mockito.ArgumentMatchers.{any, eq => meq}
 import org.mockito.Mockito.{mock, spy, verify, when}
-import org.scalatest.BeforeAndAfterEach
 import org.scalatest.concurrent.Eventually.{eventually, interval, timeout}
 
 import org.apache.spark._
@@ -41,7 +41,7 @@ import org.apache.spark.resource.ResourceUtils.GPU
 import org.apache.spark.resource.TestResourceIDs.{DRIVER_GPU_ID, EXECUTOR_GPU_ID, WORKER_GPU_ID}
 import org.apache.spark.util.Utils
 
-class PluginContainerSuite extends SparkFunSuite with BeforeAndAfterEach with LocalSparkContext {
+class PluginContainerSuite extends SparkFunSuite with LocalSparkContext {
 
   override def afterEach(): Unit = {
     TestSparkPlugin.reset()
@@ -127,6 +127,40 @@ class PluginContainerSuite extends SparkFunSuite with BeforeAndAfterEach with Lo
     sc = new SparkContext(conf)
     // Just check plugin is loaded. The plugin code below checks whether a single copy was loaded.
     assert(TestSparkPlugin.driverPlugin != null)
+  }
+
+  test("SPARK-33088: executor tasks trigger plugin calls") {
+    val conf = new SparkConf()
+      .setAppName(getClass().getName())
+      .set(SparkLauncher.SPARK_MASTER, "local[1]")
+      .set(PLUGINS, Seq(classOf[TestSparkPlugin].getName()))
+
+    sc = new SparkContext(conf)
+    sc.parallelize(1 to 10, 2).count()
+
+    assert(TestSparkPlugin.executorPlugin.numOnTaskStart.get() == 2)
+    assert(TestSparkPlugin.executorPlugin.numOnTaskSucceeded.get() == 2)
+    assert(TestSparkPlugin.executorPlugin.numOnTaskFailed.get() == 0)
+  }
+
+  test("SPARK-33088: executor failed tasks trigger plugin calls") {
+    val conf = new SparkConf()
+      .setAppName(getClass().getName())
+      .set(SparkLauncher.SPARK_MASTER, "local[2]")
+      .set(PLUGINS, Seq(classOf[TestSparkPlugin].getName()))
+
+    sc = new SparkContext(conf)
+    try {
+      sc.parallelize(1 to 10, 2).foreach(i => throw new RuntimeException)
+    } catch {
+      case t: Throwable => // ignore exception
+    }
+
+    eventually(timeout(10.seconds), interval(100.millis)) {
+      assert(TestSparkPlugin.executorPlugin.numOnTaskStart.get() == 2)
+      assert(TestSparkPlugin.executorPlugin.numOnTaskSucceeded.get() == 0)
+      assert(TestSparkPlugin.executorPlugin.numOnTaskFailed.get() == 2)
+    }
   }
 
   test("plugin initialization in non-local mode") {
@@ -273,14 +307,14 @@ class TestSparkPlugin extends SparkPlugin {
   override def driverPlugin(): DriverPlugin = {
     val p = new TestDriverPlugin()
     require(TestSparkPlugin.driverPlugin == null, "Driver plugin already initialized.")
-    TestSparkPlugin.driverPlugin = spy(p)
+    TestSparkPlugin.driverPlugin = spy[TestDriverPlugin](p)
     TestSparkPlugin.driverPlugin
   }
 
   override def executorPlugin(): ExecutorPlugin = {
     val p = new TestExecutorPlugin()
     require(TestSparkPlugin.executorPlugin == null, "Executor plugin already initialized.")
-    TestSparkPlugin.executorPlugin = spy(p)
+    TestSparkPlugin.executorPlugin = spy[TestExecutorPlugin](p)
     TestSparkPlugin.executorPlugin
   }
 
@@ -309,6 +343,10 @@ private class TestDriverPlugin extends DriverPlugin {
 
 private class TestExecutorPlugin extends ExecutorPlugin {
 
+  val numOnTaskStart = new AtomicInteger(0)
+  val numOnTaskSucceeded = new AtomicInteger(0)
+  val numOnTaskFailed = new AtomicInteger(0)
+
   override def init(ctx: PluginContext, extraConf: JMap[String, String]): Unit = {
     ctx.metricRegistry().register("executorMetric", new Gauge[Int] {
       override def getValue(): Int = 84
@@ -316,6 +354,17 @@ private class TestExecutorPlugin extends ExecutorPlugin {
     TestSparkPlugin.executorContext = ctx
   }
 
+  override def onTaskStart(): Unit = {
+    numOnTaskStart.incrementAndGet()
+  }
+
+  override def onTaskSucceeded(): Unit = {
+    numOnTaskSucceeded.incrementAndGet()
+  }
+
+  override def onTaskFailed(failureReason: TaskFailedReason): Unit = {
+    numOnTaskFailed.incrementAndGet()
+  }
 }
 
 private object TestSparkPlugin {

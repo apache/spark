@@ -22,6 +22,7 @@ import java.util.concurrent.ConcurrentHashMap
 
 import scala.collection.JavaConverters._
 
+import org.apache.spark.annotation.{Evolving, Since}
 import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.resource.ResourceProfile._
 
@@ -29,20 +30,26 @@ import org.apache.spark.resource.ResourceProfile._
  * A set of Executor resource requests. This is used in conjunction with the ResourceProfile to
  * programmatically specify the resources needed for an RDD that will be applied at the
  * stage level.
- *
- * This api is currently private until the rest of the pieces are in place and then it
- * will become public.
  */
-private[spark] class ExecutorResourceRequests() extends Serializable {
+@Evolving
+@Since("3.1.0")
+class ExecutorResourceRequests() extends Serializable {
 
   private val _executorResources = new ConcurrentHashMap[String, ExecutorResourceRequest]()
 
+  /**
+   * Returns all the resource requests for the executor.
+   */
   def requests: Map[String, ExecutorResourceRequest] = _executorResources.asScala.toMap
 
+  /**
+   * (Java-specific) Returns all the resource requests for the executor.
+   */
   def requestsJMap: JMap[String, ExecutorResourceRequest] = requests.asJava
 
   /**
    * Specify heap memory. The value specified will be converted to MiB.
+   * This is a convenient API to add [[ExecutorResourceRequest]] for "memory" resource.
    *
    * @param amount Amount of memory. In the same format as JVM memory strings (e.g. 512m, 2g).
    *               Default unit is MiB if not specified.
@@ -55,7 +62,23 @@ private[spark] class ExecutorResourceRequests() extends Serializable {
   }
 
   /**
+   * Specify off heap memory. The value specified will be converted to MiB.
+   * This value only take effect when MEMORY_OFFHEAP_ENABLED is true.
+   * This is a convenient API to add [[ExecutorResourceRequest]] for "offHeap" resource.
+   *
+   * @param amount Amount of memory. In the same format as JVM memory strings (e.g. 512m, 2g).
+   *               Default unit is MiB if not specified.
+   */
+  def offHeapMemory(amount: String): this.type = {
+    val amountMiB = JavaUtils.byteStringAsMb(amount)
+    val req = new ExecutorResourceRequest(OFFHEAP_MEM, amountMiB)
+    _executorResources.put(OFFHEAP_MEM, req)
+    this
+  }
+
+  /**
    * Specify overhead memory. The value specified will be converted to MiB.
+   * This is a convenient API to add [[ExecutorResourceRequest]] for "memoryOverhead" resource.
    *
    * @param amount Amount of memory. In the same format as JVM memory strings (e.g. 512m, 2g).
    *               Default unit is MiB if not specified.
@@ -69,6 +92,7 @@ private[spark] class ExecutorResourceRequests() extends Serializable {
 
   /**
    * Specify pyspark memory. The value specified will be converted to MiB.
+   * This is a convenient API to add [[ExecutorResourceRequest]] for "pyspark.memory" resource.
    *
    * @param amount Amount of memory. In the same format as JVM memory strings (e.g. 512m, 2g).
    *               Default unit is MiB if not specified.
@@ -82,6 +106,7 @@ private[spark] class ExecutorResourceRequests() extends Serializable {
 
   /**
    * Specify number of cores per Executor.
+   * This is a convenient API to add [[ExecutorResourceRequest]] for "cores" resource.
    *
    * @param amount Number of cores to allocate per Executor.
    */
@@ -97,6 +122,7 @@ private[spark] class ExecutorResourceRequests() extends Serializable {
    *  like GPUs are gpu (spark configs spark.executor.resource.gpu.*). If you pass in a resource
    *  that the cluster manager doesn't support the result is undefined, it may error or may just
    *  be ignored.
+   *  This is a convenient API to add [[ExecutorResourceRequest]] for custom resources.
    *
    * @param resourceName Name of the resource.
    * @param amount amount of that resource per executor to use.

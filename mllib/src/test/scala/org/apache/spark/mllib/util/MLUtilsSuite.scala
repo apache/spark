@@ -22,11 +22,10 @@ import java.nio.charset.StandardCharsets
 
 import scala.io.Source
 
-import breeze.linalg.{squaredDistance => breezeSquaredDistance}
 import com.google.common.io.Files
 
 import org.apache.spark.{SparkException, SparkFunSuite}
-import org.apache.spark.mllib.linalg.{DenseVector, Matrices, SparseVector, Vectors}
+import org.apache.spark.mllib.linalg.{DenseVector, Matrices, SparseVector, Vector, Vectors}
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.util.MLUtils._
 import org.apache.spark.mllib.util.TestingUtils._
@@ -50,6 +49,12 @@ class MLUtilsSuite extends SparkFunSuite with MLlibTestSparkContext {
     val v1 = Vectors.dense(a)
     val norm1 = Vectors.norm(v1, 2.0)
     val precision = 1e-6
+
+    def squaredDistance(v1: Vector, v2: Vector): Double =
+      v1.toArray.zip(v2.toArray).map {
+        case (a, b) => (a - b) * (a - b)
+      }.sum
+
     for (m <- 0 until n) {
       val indices = (0 to m).toArray
       val values = indices.map(i => a(i))
@@ -57,13 +62,13 @@ class MLUtilsSuite extends SparkFunSuite with MLlibTestSparkContext {
       val norm2 = Vectors.norm(v2, 2.0)
       val v3 = Vectors.sparse(n, indices, indices.map(i => a(i) + 0.5))
       val norm3 = Vectors.norm(v3, 2.0)
-      val squaredDist = breezeSquaredDistance(v1.asBreeze, v2.asBreeze)
+      val squaredDist = squaredDistance(v1, v2)
       val fastSquaredDist1 = fastSquaredDistance(v1, norm1, v2, norm2, precision)
       assert((fastSquaredDist1 - squaredDist) <= precision * squaredDist, s"failed with m = $m")
       val fastSquaredDist2 =
         fastSquaredDistance(v1, norm1, Vectors.dense(v2.toArray), norm2, precision)
       assert((fastSquaredDist2 - squaredDist) <= precision * squaredDist, s"failed with m = $m")
-      val squaredDist2 = breezeSquaredDistance(v2.asBreeze, v3.asBreeze)
+      val squaredDist2 = squaredDistance(v2, v3)
       val fastSquaredDist3 =
         fastSquaredDistance(v2, norm2, v3, norm3, precision)
       assert((fastSquaredDist3 - squaredDist2) <= precision * squaredDist2, s"failed with m = $m")
@@ -71,7 +76,7 @@ class MLUtilsSuite extends SparkFunSuite with MLlibTestSparkContext {
         val v4 = Vectors.sparse(n, indices.slice(0, m - 10),
           indices.map(i => a(i) + 0.5).slice(0, m - 10))
         val norm4 = Vectors.norm(v4, 2.0)
-        val squaredDist = breezeSquaredDistance(v2.asBreeze, v4.asBreeze)
+        val squaredDist = squaredDistance(v2, v4)
         val fastSquaredDist =
           fastSquaredDistance(v2, norm2, v4, norm4, precision)
         assert((fastSquaredDist - squaredDist) <= precision * squaredDist, s"failed with m = $m")
@@ -352,5 +357,35 @@ class MLUtilsSuite extends SparkFunSuite with MLlibTestSparkContext {
     intercept[IllegalArgumentException] {
       convertMatrixColumnsFromML(df, "p._2")
     }
+  }
+
+  test("kFold with fold column") {
+    val data = sc.parallelize(1 to 100, 2).map(x => (x, if (x <= 50) 0 else 1)).toDF("i", "fold")
+    val collectedData = data.collect().map(_.getInt(0)).sorted
+    val twoFoldedRdd = kFold(data, 2, "fold")
+    assert(twoFoldedRdd(0)._1.collect().map(_.getInt(0)).sorted ===
+      twoFoldedRdd(1)._2.collect().map(_.getInt(0)).sorted)
+    assert(twoFoldedRdd(0)._2.collect().map(_.getInt(0)).sorted ===
+      twoFoldedRdd(1)._1.collect().map(_.getInt(0)).sorted)
+
+    val result1 = twoFoldedRdd(0)._1.union(twoFoldedRdd(0)._2).collect().map(_.getInt(0)).sorted
+    assert(result1 ===  collectedData,
+      "Each training+validation set combined should contain all of the data.")
+    val result2 = twoFoldedRdd(1)._1.union(twoFoldedRdd(1)._2).collect().map(_.getInt(0)).sorted
+    assert(result2 ===  collectedData,
+      "Each training+validation set combined should contain all of the data.")
+  }
+
+  test("kFold with fold column: invalid fold numbers") {
+    val data = sc.parallelize(Seq(0, 1, 2), 2).toDF( "fold")
+    val err1 = intercept[SparkException] {
+      kFold(data, 2, "fold")(0)._1.collect()
+    }
+    assert(err1.getMessage.contains("Fold number must be in range [0, 2), but got 2."))
+
+    val err2 = intercept[SparkException] {
+      kFold(data, 4, "fold")(0)._1.collect()
+    }
+    assert(err2.getMessage.contains("The validation data at fold 3 is empty."))
   }
 }

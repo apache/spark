@@ -20,14 +20,15 @@ package org.apache.spark.io
 import java.io._
 import java.util.Locale
 
-import com.github.luben.zstd.{ZstdInputStream, ZstdOutputStream}
+import com.github.luben.zstd.{NoPool, RecyclingBufferPool, ZstdInputStreamNoFinalizer, ZstdOutputStreamNoFinalizer}
 import com.ning.compress.lzf.{LZFInputStream, LZFOutputStream}
 import net.jpountz.lz4.{LZ4BlockInputStream, LZ4BlockOutputStream, LZ4Factory}
 import net.jpountz.xxhash.XXHashFactory
 import org.xerial.snappy.{Snappy, SnappyInputStream, SnappyOutputStream}
 
-import org.apache.spark.SparkConf
+import org.apache.spark.{SparkConf, SparkIllegalArgumentException}
 import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.errors.SparkCoreErrors.{toConf, toConfVal}
 import org.apache.spark.internal.config._
 import org.apache.spark.util.Utils
 
@@ -88,8 +89,12 @@ private[spark] object CompressionCodec {
     } catch {
       case _: ClassNotFoundException | _: IllegalArgumentException => None
     }
-    codec.getOrElse(throw new IllegalArgumentException(s"Codec [$codecName] is not available. " +
-      s"Consider setting $configKey=$FALLBACK_COMPRESSION_CODEC"))
+    codec.getOrElse(throw new SparkIllegalArgumentException(
+      errorClass = "CODEC_NOT_AVAILABLE",
+      messageParameters = Map(
+        "codecName" -> codecName,
+        "configKey" -> toConf(configKey),
+        "configVal" -> toConfVal(FALLBACK_COMPRESSION_CODEC))))
   }
 
   /**
@@ -102,12 +107,13 @@ private[spark] object CompressionCodec {
     } else {
       shortCompressionCodecNames
         .collectFirst { case (k, v) if v == codecName => k }
-        .getOrElse { throw new IllegalArgumentException(s"No short name for codec $codecName.") }
+        .getOrElse { throw new SparkIllegalArgumentException(
+          errorClass = "CODEC_SHORT_NAME_NOT_FOUND",
+          messageParameters = Map("codecName" -> codecName))}
     }
   }
 
   val FALLBACK_COMPRESSION_CODEC = "snappy"
-  val DEFAULT_COMPRESSION_CODEC = "lz4"
   val ALL_COMPRESSION_CODECS = shortCompressionCodecNames.values.toSeq
 }
 
@@ -133,9 +139,9 @@ class LZ4CompressionCodec(conf: SparkConf) extends CompressionCodec {
   @transient private[this] lazy val xxHashFactory: XXHashFactory = XXHashFactory.fastestInstance()
 
   private[this] val defaultSeed: Int = 0x9747b28c // LZ4BlockOutputStream.DEFAULT_SEED
+  private[this] val blockSize = conf.get(IO_COMPRESSION_LZ4_BLOCKSIZE).toInt
 
   override def compressedOutputStream(s: OutputStream): OutputStream = {
-    val blockSize = conf.get(IO_COMPRESSION_LZ4_BLOCKSIZE).toInt
     val syncFlush = false
     new LZ4BlockOutputStream(
       s,
@@ -192,9 +198,9 @@ class SnappyCompressionCodec(conf: SparkConf) extends CompressionCodec {
   } catch {
     case e: Error => throw new IllegalArgumentException(e)
   }
+  private[this] val blockSize = conf.get(IO_COMPRESSION_SNAPPY_BLOCKSIZE).toInt
 
   override def compressedOutputStream(s: OutputStream): OutputStream = {
-    val blockSize = conf.get(IO_COMPRESSION_SNAPPY_BLOCKSIZE).toInt
     new SnappyOutputStream(s, blockSize)
   }
 
@@ -218,22 +224,31 @@ class ZStdCompressionCodec(conf: SparkConf) extends CompressionCodec {
   // fastest of all with reasonably high compression ratio.
   private val level = conf.get(IO_COMPRESSION_ZSTD_LEVEL)
 
+  private val bufferPool = if (conf.get(IO_COMPRESSION_ZSTD_BUFFERPOOL_ENABLED)) {
+    RecyclingBufferPool.INSTANCE
+  } else {
+    NoPool.INSTANCE
+  }
+
   override def compressedOutputStream(s: OutputStream): OutputStream = {
     // Wrap the zstd output stream in a buffered output stream, so that we can
     // avoid overhead excessive of JNI call while trying to compress small amount of data.
-    new BufferedOutputStream(new ZstdOutputStream(s, level), bufferSize)
+    val os = new ZstdOutputStreamNoFinalizer(s, bufferPool).setLevel(level)
+    new BufferedOutputStream(os, bufferSize)
   }
 
   override private[spark] def compressedContinuousOutputStream(s: OutputStream) = {
     // SPARK-29322: Set "closeFrameOnFlush" to 'true' to let continuous input stream not being
     // stuck on reading open frame.
-    new BufferedOutputStream(new ZstdOutputStream(s, level).setCloseFrameOnFlush(true), bufferSize)
+    val os = new ZstdOutputStreamNoFinalizer(s, bufferPool)
+      .setLevel(level).setCloseFrameOnFlush(true)
+    new BufferedOutputStream(os, bufferSize)
   }
 
   override def compressedInputStream(s: InputStream): InputStream = {
     // Wrap the zstd input stream in a buffered input stream so that we can
     // avoid overhead excessive of JNI call while trying to uncompress small amount of data.
-    new BufferedInputStream(new ZstdInputStream(s), bufferSize)
+    new BufferedInputStream(new ZstdInputStreamNoFinalizer(s, bufferPool), bufferSize)
   }
 
   override def compressedContinuousInputStream(s: InputStream): InputStream = {
@@ -241,6 +256,7 @@ class ZStdCompressionCodec(conf: SparkConf) extends CompressionCodec {
     // Reading). By default `isContinuous` is false, and when we try to read from open frames,
     // `compressedInputStream` method above throws truncated error exception. This method set
     // `isContinuous` true to allow reading from open frames.
-    new BufferedInputStream(new ZstdInputStream(s).setContinuous(true), bufferSize)
+    new BufferedInputStream(
+      new ZstdInputStreamNoFinalizer(s, bufferPool).setContinuous(true), bufferSize)
   }
 }

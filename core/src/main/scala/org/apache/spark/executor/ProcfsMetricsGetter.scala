@@ -77,7 +77,7 @@ private[spark] class ProcfsMetricsGetter(procfsDir: String = "/proc/") extends L
     }
     catch {
       case e: SparkException =>
-        logWarning("Exception when trying to compute process tree." +
+        logDebug("Exception when trying to compute process tree." +
           " As a result reporting of ProcessTree metrics is stopped", e)
         isAvailable = false
         -1
@@ -94,14 +94,15 @@ private[spark] class ProcfsMetricsGetter(procfsDir: String = "/proc/") extends L
       Integer.parseInt(out.split("\n")(0))
     } catch {
       case e: Exception =>
-        logWarning("Exception when trying to compute pagesize, as a" +
+        logDebug("Exception when trying to compute pagesize, as a" +
           " result reporting of ProcessTree metrics is stopped")
         isAvailable = false
         0
     }
   }
 
-  private def computeProcessTree(): Set[Int] = {
+  // Exposed for testing
+  private[executor] def computeProcessTree(): Set[Int] = {
     if (!isAvailable || testing) {
       return Set()
     }
@@ -147,19 +148,21 @@ private[spark] class ProcfsMetricsGetter(procfsDir: String = "/proc/") extends L
       if (exitCode != 0 && exitCode > 2) {
         val cmd = builder.command().toArray.mkString(" ")
         logWarning(s"Process $cmd exited with code $exitCode and stderr: $errorString")
-        throw new SparkException(s"Process $cmd exited with code $exitCode")
+        throw SparkException.internalError(msg = s"Process $cmd exited with code $exitCode",
+          category = "EXECUTOR")
       }
       childPidsInInt
     } catch {
       case e: Exception =>
-        logWarning("Exception when trying to compute process tree." +
+        logDebug("Exception when trying to compute process tree." +
           " As a result reporting of ProcessTree metrics is stopped.", e)
         isAvailable = false
         mutable.ArrayBuffer.empty[Int]
     }
   }
 
-  def addProcfsMetricsFromOneProcess(
+  // Exposed for testing
+  private[executor] def addProcfsMetricsFromOneProcess(
       allMetrics: ProcfsMetrics,
       pid: Int): ProcfsMetrics = {
 
@@ -168,7 +171,7 @@ private[spark] class ProcfsMetricsGetter(procfsDir: String = "/proc/") extends L
     try {
       val pidDir = new File(procfsDir, pid.toString)
       def openReader(): BufferedReader = {
-        val f = new File(new File(procfsDir, pid.toString), procfsStatFile)
+        val f = new File(pidDir, procfsStatFile)
         new BufferedReader(new InputStreamReader(new FileInputStream(f), UTF_8))
       }
       Utils.tryWithResource(openReader) { in =>
@@ -197,9 +200,9 @@ private[spark] class ProcfsMetricsGetter(procfsDir: String = "/proc/") extends L
       }
     } catch {
       case f: IOException =>
-        logWarning("There was a problem with reading" +
+        logDebug("There was a problem with reading" +
           " the stat file of the process. ", f)
-        ProcfsMetrics(0, 0, 0, 0, 0, 0)
+        throw f
     }
   }
 
@@ -210,11 +213,16 @@ private[spark] class ProcfsMetricsGetter(procfsDir: String = "/proc/") extends L
     val pids = computeProcessTree
     var allMetrics = ProcfsMetrics(0, 0, 0, 0, 0, 0)
     for (p <- pids) {
-      allMetrics = addProcfsMetricsFromOneProcess(allMetrics, p)
-      // if we had an error getting any of the metrics, we don't want to report partial metrics, as
-      // that would be misleading.
-      if (!isAvailable) {
-        return ProcfsMetrics(0, 0, 0, 0, 0, 0)
+      try {
+        allMetrics = addProcfsMetricsFromOneProcess(allMetrics, p)
+        // if we had an error getting any of the metrics, we don't want to
+        // report partial metrics, as that would be misleading.
+        if (!isAvailable) {
+          return ProcfsMetrics(0, 0, 0, 0, 0, 0)
+        }
+      } catch {
+        case _: IOException =>
+          return ProcfsMetrics(0, 0, 0, 0, 0, 0)
       }
     }
     allMetrics

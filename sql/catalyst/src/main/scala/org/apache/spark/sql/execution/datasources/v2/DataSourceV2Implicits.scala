@@ -19,8 +19,13 @@ package org.apache.spark.sql.execution.datasources.v2
 
 import scala.collection.JavaConverters._
 
-import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.connector.catalog.{SupportsDelete, SupportsRead, SupportsWrite, Table, TableCapability}
+import org.apache.spark.sql.catalyst.analysis.{PartitionSpec, ResolvedPartitionSpec, UnresolvedPartitionSpec}
+import org.apache.spark.sql.catalyst.expressions.{AttributeReference, MetadataAttribute}
+import org.apache.spark.sql.catalyst.types.DataTypeUtils
+import org.apache.spark.sql.connector.catalog.{MetadataColumn, SupportsAtomicPartitionManagement, SupportsDeleteV2, SupportsPartitionManagement, SupportsRead, SupportsWrite, Table, TableCapability, TruncatableTable}
+import org.apache.spark.sql.connector.write.RowLevelOperationTable
+import org.apache.spark.sql.errors.QueryCompilationErrors
+import org.apache.spark.sql.types.{StructField, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 object DataSourceV2Implicits {
@@ -30,7 +35,7 @@ object DataSourceV2Implicits {
         case support: SupportsRead =>
           support
         case _ =>
-          throw new AnalysisException(s"Table does not support reads: ${table.name}")
+          throw QueryCompilationErrors.tableDoesNotSupportReadsError(table)
       }
     }
 
@@ -39,16 +44,51 @@ object DataSourceV2Implicits {
         case support: SupportsWrite =>
           support
         case _ =>
-          throw new AnalysisException(s"Table does not support writes: ${table.name}")
+          throw QueryCompilationErrors.tableDoesNotSupportWritesError(table)
       }
     }
 
-    def asDeletable: SupportsDelete = {
+    def asDeletable: SupportsDeleteV2 = {
       table match {
-        case support: SupportsDelete =>
+        case support: SupportsDeleteV2 =>
           support
         case _ =>
-          throw new AnalysisException(s"Table does not support deletes: ${table.name}")
+          throw QueryCompilationErrors.tableDoesNotSupportDeletesError(table)
+      }
+    }
+
+    def asTruncatable: TruncatableTable = {
+      table match {
+        case t: TruncatableTable => t
+        case _ =>
+          throw QueryCompilationErrors.tableDoesNotSupportTruncatesError(table)
+      }
+    }
+
+    def asPartitionable: SupportsPartitionManagement = {
+      table match {
+        case support: SupportsPartitionManagement =>
+          support
+        case _ =>
+          throw QueryCompilationErrors.tableDoesNotSupportPartitionManagementError(table)
+      }
+    }
+
+    def asAtomicPartitionable: SupportsAtomicPartitionManagement = {
+      table match {
+        case support: SupportsAtomicPartitionManagement =>
+          support
+        case _ =>
+          throw QueryCompilationErrors.tableDoesNotSupportAtomicPartitionManagementError(table)
+      }
+    }
+
+    def asRowLevelOperationTable: RowLevelOperationTable = {
+      table match {
+        case rowLevelOperationTable: RowLevelOperationTable =>
+          rowLevelOperationTable
+        case _ =>
+          throw QueryCompilationErrors.tableIsNotRowLevelOperationTableError(table)
       }
     }
 
@@ -57,9 +97,33 @@ object DataSourceV2Implicits {
     def supportsAny(capabilities: TableCapability*): Boolean = capabilities.exists(supports)
   }
 
+  implicit class MetadataColumnsHelper(metadata: Array[MetadataColumn]) {
+    def asStruct: StructType = {
+      val fields = metadata.map { metaCol =>
+        val field = StructField(
+          name = metaCol.name,
+          dataType = metaCol.dataType,
+          nullable = metaCol.isNullable,
+          metadata = MetadataAttribute.metadata(metaCol.name))
+        Option(metaCol.comment).map(field.withComment).getOrElse(field)
+      }
+      StructType(fields)
+    }
+
+    def toAttributes: Seq[AttributeReference] = DataTypeUtils.toAttributes(asStruct)
+  }
+
   implicit class OptionsHelper(options: Map[String, String]) {
     def asOptions: CaseInsensitiveStringMap = {
       new CaseInsensitiveStringMap(options.asJava)
     }
+  }
+
+  implicit class PartitionSpecsHelper(partSpecs: Seq[PartitionSpec]) {
+    def asUnresolvedPartitionSpecs: Seq[UnresolvedPartitionSpec] =
+      partSpecs.map(_.asInstanceOf[UnresolvedPartitionSpec])
+
+    def asResolvedPartitionSpecs: Seq[ResolvedPartitionSpec] =
+      partSpecs.map(_.asInstanceOf[ResolvedPartitionSpec])
   }
 }

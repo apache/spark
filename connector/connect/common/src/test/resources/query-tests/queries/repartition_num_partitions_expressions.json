@@ -1,0 +1,25 @@
+{
+  "common": {
+    "planId": "1"
+  },
+  "repartitionByExpression": {
+    "input": {
+      "common": {
+        "planId": "0"
+      },
+      "localRelation": {
+        "schema": "struct\u003cid:bigint,a:int,b:double\u003e"
+      }
+    },
+    "partitionExprs": [{
+      "unresolvedAttribute": {
+        "unparsedIdentifier": "a"
+      }
+    }, {
+      "unresolvedAttribute": {
+        "unparsedIdentifier": "id"
+      }
+    }],
+    "numPartitions": 22
+  }
+}

@@ -22,6 +22,7 @@ import java.util.concurrent.TimeUnit
 import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
 
+import org.apache.spark.{SparkException, SparkRuntimeException}
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.connector.read.streaming.{Offset, SparkDataStream}
@@ -83,7 +84,7 @@ class RateStreamProviderSuite extends StreamTest {
       .format("rate")
       .option("rowsPerSecond", "10")
       .load()
-      .select('value)
+      .select($"value")
 
     var streamDuration = 0
 
@@ -96,8 +97,13 @@ class RateStreamProviderSuite extends StreamTest {
 
     // We have to use the lambda version of CheckAnswer because we don't know the right range
     // until we see the last offset.
+    // SPARK-39242 - its possible that the next output to sink has happened
+    // since the last query progress and the output rows reflect that.
+    // We just need to compare for the saved stream duration here and hence
+    // we only use those number of sorted elements from output rows.
     def expectedResultsFromDuration(rows: Seq[Row]): Unit = {
-      assert(rows.map(_.getLong(0)).sorted == (0 until (streamDuration * 10)))
+      assert(rows.map(_.getLong(0)).sorted.take(streamDuration * 10)
+        == (0 until (streamDuration * 10)))
     }
 
     testStream(input)(
@@ -191,6 +197,46 @@ class RateStreamProviderSuite extends StreamTest {
     }
   }
 
+  testQuietly("microbatch - ramp up error") {
+    val e = intercept[SparkRuntimeException](
+      new RateStreamMicroBatchStream(
+        rowsPerSecond = Long.MaxValue,
+        rampUpTimeSeconds = 2,
+        options = CaseInsensitiveStringMap.empty(),
+        checkpointLocation = ""))
+
+    checkError(
+      exception = e,
+      errorClass = "INCORRECT_RAMP_UP_RATE",
+      parameters = Map(
+        "rowsPerSecond" -> Long.MaxValue.toString,
+        "maxSeconds" -> "1",
+        "rampUpTimeSeconds" -> "2"))
+  }
+
+  testQuietly("microbatch - end offset error") {
+    withTempDir { temp =>
+      val maxSeconds = (Long.MaxValue / 100)
+      val endSeconds = Long.MaxValue
+      val e = intercept[SparkException](
+        new RateStreamMicroBatchStream(
+          rowsPerSecond = 100,
+          rampUpTimeSeconds = 2,
+          options = CaseInsensitiveStringMap.empty(),
+          checkpointLocation = temp.getCanonicalPath)
+          .planInputPartitions(LongOffset(1), LongOffset(endSeconds)))
+
+      checkError(
+        exception = e,
+        errorClass = "INTERNAL_ERROR",
+        parameters = Map(
+          ("message" ->
+            ("Max offset with 100 rowsPerSecond is 92233720368547758, " +
+            "but it's 9223372036854775807 now.")
+            )))
+    }
+  }
+
   test("valueAtSecond") {
     import RateStreamProvider._
 
@@ -265,8 +311,8 @@ class RateStreamProviderSuite extends StreamTest {
       .distinct()
     testStream(input)(
       AdvanceRateManualClock(2),
-      ExpectFailure[ArithmeticException](t => {
-        Seq("overflow", "rowsPerSecond").foreach { msg =>
+      ExpectFailure[SparkException](t => {
+        Seq("INTERNAL_ERROR", "rowsPerSecond").foreach { msg =>
           assert(t.getMessage.contains(msg))
         }
       })

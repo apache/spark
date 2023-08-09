@@ -29,16 +29,22 @@ function codeTabs() {
     $(this).addClass("tab-content");
 
     // Insert the tab bar
-    var tabBar = $('<ul class="nav nav-tabs" data-tabs="tabs"></ul>');
+    var tabBar = $('<ul class="nav nav-tabs mb-3" data-tabs="tabs" role="tablist"></ul>');
     $(this).before(tabBar);
 
     // Add each code sample to the tab bar:
     var codeSamples = $(this).children("div");
-    codeSamples.each(function() {
+    codeSamples.each(function(idx) {
+
+      // The code becomes a tab-pane.
       $(this).addClass("tab-pane");
+      $(this).attr("role", "tabpanel");
+
       var lang = $(this).data("lang");
       var image = $(this).data("image");
       var notabs = $(this).data("notabs");
+
+      // Generating the labels
       var capitalizedLang = lang.substr(0, 1).toUpperCase() + lang.substr(1);
       var id = "tab_" + lang + "_" + counter;
       $(this).attr("id", id);
@@ -49,22 +55,21 @@ function codeTabs() {
       } else {
         var buttonLabel = ""
       }
+
+      // Add the link to the tab
+      var active = "";
+      if (idx == 0) {
+        active = "active ";
+        $(this).addClass("active");
+      }
+
       tabBar.append(
-        '<li><a class="tab_' + lang + '" href="#' + id + '">' + buttonLabel + '</a></li>'
+        '<li class="nav-item"><button class="' +
+        active + 'nav-link tab_' + lang + '" data-bs-target="#' + id +
+        '" data-bs-toggle="tab">' + buttonLabel + '</button></li>'
       );
     });
-
-    codeSamples.first().addClass("active");
-    tabBar.children("li").first().addClass("active");
     counter++;
-  });
-  $("ul.nav-tabs a").click(function (e) {
-    // Toggling a tab should switch all tabs corresponding to the same language
-    // while retaining the scroll position
-    e.preventDefault();
-    var scrollOffset = $(this).offset().top - $(document).scrollTop();
-    $("." + $(this).attr('class')).tab('show');
-    $(document).scrollTop($(this).offset().top - scrollOffset);
   });
 }
 
@@ -94,4 +99,32 @@ $(function() {
   // Scroll now too in case we had opened the page on a hash, but wait a bit because some browsers
   // will try to do *their* initial scroll after running the onReady handler.
   $(window).on('load', function() { setTimeout(function() { maybeScrollToHash(); }, 25); });
+
+  // Make dropdown menus in nav bars show on hover instead of click
+  // using solution at https://webdesign.tutsplus.com/tutorials/how-
+  // to-make-the-bootstrap-navbar-dropdown-work-on-hover--cms-33840
+  const $dropdown = $(".dropdown");
+  const $dropdownToggle = $(".dropdown-toggle");
+  const $dropdownMenu = $(".dropdown-menu");
+  const showClass = "show";
+  $(window).on("load resize", function() {
+    if (this.matchMedia("(min-width: 768px)").matches) {
+      $dropdown.hover(
+        function() {
+          const $this = $(this);
+          $this.addClass(showClass);
+          $this.find($dropdownToggle).attr("aria-expanded", "true");
+          $this.find($dropdownMenu).addClass(showClass);
+        },
+        function() {
+          const $this = $(this);
+          $this.removeClass(showClass);
+          $this.find($dropdownToggle).attr("aria-expanded", "false");
+          $this.find($dropdownMenu).removeClass(showClass);
+        }
+      );
+    } else {
+      $dropdown.off("mouseenter mouseleave");
+    }
+  });
 });

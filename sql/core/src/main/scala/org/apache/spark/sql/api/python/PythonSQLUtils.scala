@@ -18,25 +18,52 @@
 package org.apache.spark.sql.api.python
 
 import java.io.InputStream
+import java.net.Socket
 import java.nio.channels.Channels
+import java.util.Locale
 
-import scala.util.control.NonFatal
+import net.razorvine.pickle.{Pickler, Unpickler}
 
-import org.apache.spark.api.java.JavaRDD
-import org.apache.spark.api.python.PythonRDDServer
+import org.apache.spark.api.python.DechunkedInputStream
 import org.apache.spark.internal.Logging
-import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{DataFrame, SQLContext}
-import org.apache.spark.sql.catalyst.ScalaReflection
+import org.apache.spark.security.SocketAuthServer
+import org.apache.spark.sql.{Column, DataFrame, Row, SparkSession}
+import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
-import org.apache.spark.sql.catalyst.expressions.ExpressionInfo
+import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
+import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.execution.{ExplainMode, QueryExecution}
 import org.apache.spark.sql.execution.arrow.ArrowConverters
-import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
-import org.apache.spark.sql.types.DataType
+import org.apache.spark.sql.execution.python.EvaluatePython
+import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.types.{DataType, StructType}
+import org.apache.spark.util.{MutableURLClassLoader, Utils}
 
 private[sql] object PythonSQLUtils extends Logging {
+  private def withInternalRowPickler(f: Pickler => Array[Byte]): Array[Byte] = {
+    EvaluatePython.registerPicklers()
+    val pickler = new Pickler(true, false)
+    val ret = try {
+        f(pickler)
+      } finally {
+        pickler.close()
+      }
+    ret
+  }
+
+  private def withInternalRowUnpickler(f: Unpickler => Any): Any = {
+    EvaluatePython.registerPicklers()
+    val unpickler = new Unpickler
+    val ret = try {
+        f(unpickler)
+      } finally {
+        unpickler.close()
+      }
+    ret
+  }
+
   def parseDataType(typeText: String): DataType = CatalystSqlParser.parseDataType(typeText)
 
   // This is needed when generating SQL documentation for built-in functions.
@@ -46,63 +73,142 @@ private[sql] object PythonSQLUtils extends Logging {
 
   private def listAllSQLConfigs(): Seq[(String, String, String, String)] = {
     val conf = new SQLConf()
-    // Force to build static SQL configurations
-    StaticSQLConf
-    // Force to build SQL configurations from Hive module
-    try {
-      val symbol = ScalaReflection.mirror.staticModule("org.apache.spark.sql.hive.HiveUtils")
-      ScalaReflection.mirror.reflectModule(symbol).instance
-    } catch {
-      case NonFatal(e) =>
-        logWarning("Cannot generated sql configurations from hive module", e)
-    }
     conf.getAllDefinedConfs
   }
 
   def listRuntimeSQLConfigs(): Array[(String, String, String, String)] = {
     // Py4J doesn't seem to translate Seq well, so we convert to an Array.
-    listAllSQLConfigs().filterNot(p => SQLConf.staticConfKeys.contains(p._1)).toArray
+    listAllSQLConfigs().filterNot(p => SQLConf.isStaticConfigKey(p._1)).toArray
   }
 
   def listStaticSQLConfigs(): Array[(String, String, String, String)] = {
-    listAllSQLConfigs().filter(p => SQLConf.staticConfKeys.contains(p._1)).toArray
+    listAllSQLConfigs().filter(p => SQLConf.isStaticConfigKey(p._1)).toArray
   }
 
+  def isTimestampNTZPreferred: Boolean =
+    SQLConf.get.timestampType == org.apache.spark.sql.types.TimestampNTZType
+
   /**
-   * Python callable function to read a file in Arrow stream format and create a [[RDD]]
-   * using each serialized ArrowRecordBatch as a partition.
+   * Python callable function to read a file in Arrow stream format and create an iterator
+   * of serialized ArrowRecordBatches.
    */
-  def readArrowStreamFromFile(sqlContext: SQLContext, filename: String): JavaRDD[Array[Byte]] = {
-    ArrowConverters.readArrowStreamFromFile(sqlContext, filename)
+  def readArrowStreamFromFile(filename: String): Iterator[Array[Byte]] = {
+    ArrowConverters.readArrowStreamFromFile(filename).iterator
   }
 
   /**
    * Python callable function to read a file in Arrow stream format and create a [[DataFrame]]
-   * from an RDD.
+   * from the Arrow batch iterator.
    */
   def toDataFrame(
-      arrowBatchRDD: JavaRDD[Array[Byte]],
+      arrowBatches: Iterator[Array[Byte]],
       schemaString: String,
-      sqlContext: SQLContext): DataFrame = {
-    ArrowConverters.toDataFrame(arrowBatchRDD, schemaString, sqlContext)
+      session: SparkSession): DataFrame = {
+    ArrowConverters.toDataFrame(arrowBatches, schemaString, session)
   }
 
   def explainString(queryExecution: QueryExecution, mode: String): String = {
     queryExecution.explainString(ExplainMode.fromString(mode))
   }
+
+  def toPyRow(row: Row): Array[Byte] = {
+    assert(row.isInstanceOf[GenericRowWithSchema])
+    withInternalRowPickler(_.dumps(EvaluatePython.toJava(
+      CatalystTypeConverters.convertToCatalyst(row), row.schema)))
+  }
+
+  def toJVMRow(
+      arr: Array[Byte],
+      returnType: StructType,
+      deserializer: ExpressionEncoder.Deserializer[Row]): Row = {
+    val fromJava = EvaluatePython.makeFromJava(returnType)
+    val internalRow =
+        fromJava(withInternalRowUnpickler(_.loads(arr))).asInstanceOf[InternalRow]
+    deserializer(internalRow)
+  }
+
+  /**
+   * Internal-only helper for Spark Connect's local mode. This is only used for
+   * local development, not for production. This method should not be used in
+   * production code path.
+   */
+  def addJarToCurrentClassLoader(path: String): Unit = {
+    Utils.getContextOrSparkClassLoader match {
+      case cl: MutableURLClassLoader => cl.addURL(Utils.resolveURI(path).toURL)
+      case cl => logWarning(
+        s"Unsupported class loader $cl will not update jars in the thread class loader.")
+    }
+  }
+
+  def castTimestampNTZToLong(c: Column): Column = Column(CastTimestampNTZToLong(c.expr))
+
+  def ewm(e: Column, alpha: Double, ignoreNA: Boolean): Column =
+    Column(EWM(e.expr, alpha, ignoreNA))
+
+  def lastNonNull(e: Column): Column = Column(LastNonNull(e.expr))
+
+  def nullIndex(e: Column): Column = Column(NullIndex(e.expr))
+
+  def makeInterval(unit: String, e: Column): Column = {
+    val zero = MakeInterval(years = Literal(0), months = Literal(0), weeks = Literal(0),
+      days = Literal(0), hours = Literal(0), mins = Literal(0), secs = Literal(0))
+
+    unit.toUpperCase(Locale.ROOT) match {
+      case "YEAR" => Column(zero.copy(years = e.expr))
+      case "MONTH" => Column(zero.copy(months = e.expr))
+      case "WEEK" => Column(zero.copy(weeks = e.expr))
+      case "DAY" => Column(zero.copy(days = e.expr))
+      case "HOUR" => Column(zero.copy(hours = e.expr))
+      case "MINUTE" => Column(zero.copy(mins = e.expr))
+      case "SECOND" => Column(zero.copy(secs = e.expr))
+      case _ => throw new IllegalStateException(s"Got the unexpected unit '$unit'.")
+    }
+  }
+
+  def timestampDiff(unit: String, start: Column, end: Column): Column = {
+    Column(TimestampDiff(unit, start.expr, end.expr))
+  }
+
+  def pandasProduct(e: Column, ignoreNA: Boolean): Column = {
+    Column(PandasProduct(e.expr, ignoreNA).toAggregateExpression(false))
+  }
+
+  def pandasStddev(e: Column, ddof: Int): Column = {
+    Column(PandasStddev(e.expr, ddof).toAggregateExpression(false))
+  }
+
+  def pandasVariance(e: Column, ddof: Int): Column = {
+    Column(PandasVariance(e.expr, ddof).toAggregateExpression(false))
+  }
+
+  def pandasSkewness(e: Column): Column = {
+    Column(PandasSkewness(e.expr).toAggregateExpression(false))
+  }
+
+  def pandasKurtosis(e: Column): Column = {
+    Column(PandasKurtosis(e.expr).toAggregateExpression(false))
+  }
+
+  def pandasMode(e: Column, ignoreNA: Boolean): Column = {
+    Column(PandasMode(e.expr, ignoreNA).toAggregateExpression(false))
+  }
+
+  def pandasCovar(col1: Column, col2: Column, ddof: Int): Column = {
+    Column(PandasCovar(col1.expr, col2.expr, ddof).toAggregateExpression(false))
+  }
 }
 
 /**
- * Helper for making a dataframe from arrow data from data sent from python over a socket.  This is
+ * Helper for making a dataframe from Arrow data from data sent from python over a socket. This is
  * used when encryption is enabled, and we don't want to write data to a file.
  */
-private[sql] class ArrowRDDServer(sqlContext: SQLContext) extends PythonRDDServer {
+private[spark] class ArrowIteratorServer
+  extends SocketAuthServer[Iterator[Array[Byte]]]("pyspark-arrow-batches-server") {
 
-  override protected def streamToRDD(input: InputStream): RDD[Array[Byte]] = {
-    // Create array to consume iterator so that we can safely close the inputStream
-    val batches = ArrowConverters.getBatchesFromStream(Channels.newChannel(input)).toArray
-    // Parallelize the record batches to create an RDD
-    JavaRDD.fromRDD(sqlContext.sparkContext.parallelize(batches, batches.length))
+  def handleConnection(sock: Socket): Iterator[Array[Byte]] = {
+    val in = sock.getInputStream()
+    val dechunkedInput: InputStream = new DechunkedInputStream(in)
+    // Create array to consume iterator so that we can safely close the file
+    ArrowConverters.getBatchesFromStream(Channels.newChannel(dechunkedInput)).toArray.iterator
   }
-
 }

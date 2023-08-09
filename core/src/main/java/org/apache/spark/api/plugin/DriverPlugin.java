@@ -41,7 +41,7 @@ public interface DriverPlugin {
    * initialization.
    * <p>
    * It's recommended that plugins be careful about what operations are performed in this call,
-   * preferrably performing expensive operations in a separate thread, or postponing them until
+   * preferably performing expensive operations in a separate thread, or postponing them until
    * the application has fully started.
    *
    * @param sc The SparkContext loading the plugin.

@@ -1,5 +1,6 @@
 {
   "quantiles" : [ 0.05, 0.25, 0.5, 0.75, 0.95 ],
+  "duration" : [ 37.0, 81.0, 83.0, 84.0, 86.0 ],
   "executorDeserializeTime" : [ 1.0, 2.0, 2.0, 2.0, 3.0 ],
   "executorDeserializeCpuTime" : [ 0.0, 0.0, 0.0, 0.0, 0.0 ],
   "executorRunTime" : [ 30.0, 74.0, 75.0, 76.0, 79.0 ],
@@ -28,7 +29,19 @@
     "fetchWaitTime" : [ 0.0, 0.0, 0.0, 1.0, 1.0 ],
     "remoteBytesRead" : [ 0.0, 0.0, 0.0, 0.0, 0.0 ],
     "remoteBytesReadToDisk" : [ 0.0, 0.0, 0.0, 0.0, 0.0 ],
-    "totalBlocksFetched" : [ 100.0, 100.0, 100.0, 100.0, 100.0 ]
+    "totalBlocksFetched" : [ 100.0, 100.0, 100.0, 100.0, 100.0 ],
+    "remoteReqsDuration" : [ 0.0, 0.0, 0.0, 0.0, 0.0 ],
+    "shufflePushReadMetricsDist" : {
+      "corruptMergedBlockChunks" : [ 0.0, 0.0, 0.0, 0.0, 0.0 ],
+      "mergedFetchFallbackCount" : [ 0.0, 0.0, 0.0, 0.0, 0.0 ],
+      "remoteMergedBlocksFetched" : [ 0.0, 0.0, 0.0, 0.0, 0.0 ],
+      "localMergedBlocksFetched" : [ 0.0, 0.0, 0.0, 0.0, 0.0 ],
+      "remoteMergedChunksFetched" : [ 0.0, 0.0, 0.0, 0.0, 0.0 ],
+      "localMergedChunksFetched" : [ 0.0, 0.0, 0.0, 0.0, 0.0 ],
+      "remoteMergedBytesRead" : [ 0.0, 0.0, 0.0, 0.0, 0.0 ],
+      "localMergedBytesRead" : [ 0.0, 0.0, 0.0, 0.0, 0.0 ],
+      "remoteMergedReqsDuration" : [ 0.0, 0.0, 0.0, 0.0, 0.0 ]
+    }
   },
   "shuffleWriteMetrics" : {
     "writeBytes" : [ 0.0, 0.0, 0.0, 0.0, 0.0 ],

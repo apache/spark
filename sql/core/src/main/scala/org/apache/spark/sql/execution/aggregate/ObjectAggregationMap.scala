@@ -24,9 +24,8 @@ import org.apache.spark.internal.config
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Attribute, UnsafeProjection, UnsafeRow}
 import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateFunction, TypedImperativeAggregate}
+import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.execution.UnsafeKVExternalSorter
-import org.apache.spark.sql.types.StructType
-import org.apache.spark.util.collection.unsafe.sort.UnsafeExternalSorter
 
 /**
  * An aggregation map that supports using safe `SpecificInternalRow`s aggregation buffers, so that
@@ -46,7 +45,11 @@ class ObjectAggregationMap() {
 
   def size: Int = hashMap.size()
 
-  def iterator: Iterator[AggregationBufferEntry] = {
+  /**
+   * Returns a destructive iterator of AggregationBufferEntry.
+   * Notice: it is illegal to call any method after `destructiveIterator()` has been called.
+   */
+  def destructiveIterator(): Iterator[AggregationBufferEntry] = {
     val iter = hashMap.entrySet().iterator()
     new Iterator[AggregationBufferEntry] {
 
@@ -55,6 +58,7 @@ class ObjectAggregationMap() {
       }
       override def next(): AggregationBufferEntry = {
         val entry = iter.next()
+        iter.remove()
         new AggregationBufferEntry(entry.getKey, entry.getValue)
       }
     }
@@ -69,8 +73,8 @@ class ObjectAggregationMap() {
       aggregateFunctions: Seq[AggregateFunction]): UnsafeKVExternalSorter = {
     val aggBufferAttributes = aggregateFunctions.flatMap(_.aggBufferAttributes)
     val sorter = new UnsafeKVExternalSorter(
-      StructType.fromAttributes(groupingAttributes),
-      StructType.fromAttributes(aggBufferAttributes),
+      DataTypeUtils.fromAttributes(groupingAttributes),
+      DataTypeUtils.fromAttributes(aggBufferAttributes),
       SparkEnv.get.blockManager,
       SparkEnv.get.serializerManager,
       TaskContext.get().taskMemoryManager().pageSizeBytes,
@@ -78,7 +82,7 @@ class ObjectAggregationMap() {
       null
     )
 
-    val mapIterator = iterator
+    val mapIterator = destructiveIterator()
     val unsafeAggBufferProjection =
       UnsafeProjection.create(aggBufferAttributes.map(_.dataType).toArray)
 

@@ -19,10 +19,9 @@ package org.apache.spark.sql.execution.benchmark
 
 import java.io.File
 
-import org.scalatest.Assertions._
-
 import org.apache.spark.benchmark.Benchmark
 import org.apache.spark.sql.DataFrame
+import org.apache.spark.sql.functions.lit
 import org.apache.spark.util.Utils
 
 /**
@@ -30,9 +29,10 @@ import org.apache.spark.util.Utils
  * To run this benchmark:
  * {{{
  *   1. without sbt:
- *      bin/spark-submit --class <this class> --jars <spark core test jar> <spark sql test jar>
- *   2. build/sbt "sql/test:runMain <this class>"
- *   3. generate result: SPARK_GENERATE_BENCHMARK_FILES=1 build/sbt "sql/test:runMain <this class>"
+ *      bin/spark-submit --class <this class>
+ *        --jars <spark core test jar>,<spark catalyst test jar> <spark sql test jar>
+ *   2. build/sbt "sql/Test/runMain <this class>"
+ *   3. generate result: SPARK_GENERATE_BENCHMARK_FILES=1 build/sbt "sql/Test/runMain <this class>"
  *      Results will be written to "benchmarks/WideSchemaBenchmark-results.txt".
  * }}}
  */
@@ -90,6 +90,19 @@ object WideSchemaBenchmark extends SqlBasedBenchmark {
       val selectExpr = (1 to width).map(i => s"id as a_$i")
       benchmark.addCase(s"$width select expressions") { iter =>
         spark.range(1).toDF.selectExpr(selectExpr: _*)
+      }
+    }
+    benchmark.run()
+  }
+
+  def optimizeLargeSelectExpressions(): Unit = {
+    val benchmark = new Benchmark("optimize large select", 1, output = output)
+    Seq(100, 1000, 10000).foreach { width =>
+      val columns = (1 to width).map(i => s"id as c_$i")
+      val df = spark.range(1).selectExpr(columns: _*).cache()
+      df.count()  // force caching
+      benchmark.addCase(s"$width columns") { iter =>
+        df.withColumn("id", lit(1)).withColumn("name", lit("name")).queryExecution.optimizedPlan
       }
     }
     benchmark.run()
@@ -214,6 +227,10 @@ object WideSchemaBenchmark extends SqlBasedBenchmark {
 
     runBenchmarkWithDeleteTmpFiles("parsing large select expressions") {
       parsingLargeSelectExpressions()
+    }
+
+    runBenchmarkWithDeleteTmpFiles("optimize large select expressions") {
+      optimizeLargeSelectExpressions()
     }
 
     runBenchmarkWithDeleteTmpFiles("many column field read and write") {

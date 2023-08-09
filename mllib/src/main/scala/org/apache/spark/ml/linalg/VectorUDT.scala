@@ -22,7 +22,7 @@ import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, UnsafeArra
 import org.apache.spark.sql.types._
 
 /**
- * User-defined type for [[Vector]] in [[mllib-local]] which allows easy interaction with SQL
+ * User-defined type for [[Vector]] in mllib-local which allows easy interaction with SQL
  * via [[org.apache.spark.sql.Dataset]].
  */
 private[spark] class VectorUDT extends UserDefinedType[Vector] {
@@ -45,6 +45,8 @@ private[spark] class VectorUDT extends UserDefinedType[Vector] {
         row.setNullAt(2)
         row.update(3, UnsafeArrayData.fromPrimitiveArray(values))
         row
+      case v =>
+        throw new IllegalArgumentException(s"Unknown vector type ${v.getClass}.")
     }
   }
 
@@ -90,7 +92,7 @@ private[spark] class VectorUDT extends UserDefinedType[Vector] {
     // We only use "values" for dense vectors, and "size", "indices", and "values" for sparse
     // vectors. The "values" field is nullable because we might want to add binary vectors later,
     // which uses "size" and "indices", but not "values".
-    StructType(Seq(
+    StructType(Array(
       StructField("type", ByteType, nullable = false),
       StructField("size", IntegerType, nullable = true),
       StructField("indices", ArrayType(IntegerType, containsNull = false), nullable = true),

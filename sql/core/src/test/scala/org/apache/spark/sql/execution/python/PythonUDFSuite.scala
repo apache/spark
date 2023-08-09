@@ -28,7 +28,6 @@ class PythonUDFSuite extends QueryTest with SharedSparkSession {
 
   val scalaTestUDF = TestScalaUDF(name = "scalaUDF")
   val pythonTestUDF = TestPythonUDF(name = "pyUDF")
-  assume(shouldTestPythonUDFs)
 
   lazy val base = Seq(
     (Some(1), Some(1)), (Some(1), Some(2)), (Some(2), Some(1)),
@@ -36,6 +35,7 @@ class PythonUDFSuite extends QueryTest with SharedSparkSession {
     (None, Some(1)), (Some(3), None), (None, None)).toDF("a", "b")
 
   test("SPARK-28445: PythonUDF as grouping key and aggregate expressions") {
+    assume(shouldTestPythonUDFs)
     val df1 = base.groupBy(scalaTestUDF(base("a") + 1))
       .agg(scalaTestUDF(base("a") + 1), scalaTestUDF(count(base("b"))))
     val df2 = base.groupBy(pythonTestUDF(base("a") + 1))
@@ -44,6 +44,7 @@ class PythonUDFSuite extends QueryTest with SharedSparkSession {
   }
 
   test("SPARK-28445: PythonUDF as grouping key and used in aggregate expressions") {
+    assume(shouldTestPythonUDFs)
     val df1 = base.groupBy(scalaTestUDF(base("a") + 1))
       .agg(scalaTestUDF(base("a") + 1) + 1, scalaTestUDF(count(base("b"))))
     val df2 = base.groupBy(pythonTestUDF(base("a") + 1))
@@ -52,6 +53,7 @@ class PythonUDFSuite extends QueryTest with SharedSparkSession {
   }
 
   test("SPARK-28445: PythonUDF in aggregate expression has grouping key in its arguments") {
+    assume(shouldTestPythonUDFs)
     val df1 = base.groupBy(scalaTestUDF(base("a") + 1))
       .agg(scalaTestUDF(scalaTestUDF(base("a") + 1)), scalaTestUDF(count(base("b"))))
     val df2 = base.groupBy(pythonTestUDF(base("a") + 1))
@@ -60,6 +62,7 @@ class PythonUDFSuite extends QueryTest with SharedSparkSession {
   }
 
   test("SPARK-28445: PythonUDF over grouping key is argument to aggregate function") {
+    assume(shouldTestPythonUDFs)
     val df1 = base.groupBy(scalaTestUDF(base("a") + 1))
       .agg(scalaTestUDF(scalaTestUDF(base("a") + 1)),
         scalaTestUDF(count(scalaTestUDF(base("a") + 1))))
@@ -67,5 +70,45 @@ class PythonUDFSuite extends QueryTest with SharedSparkSession {
       .agg(pythonTestUDF(pythonTestUDF(base("a") + 1)),
         pythonTestUDF(count(pythonTestUDF(base("a") + 1))))
     checkAnswer(df1, df2)
+  }
+
+  test("SPARK-39962: Global aggregation of Pandas UDF should respect the column order") {
+    assume(shouldTestPandasUDFs)
+    val df = Seq[(java.lang.Integer, java.lang.Integer)]((1, null)).toDF("a", "b")
+
+    val pandasTestUDF = TestGroupedAggPandasUDF(name = "pandas_udf")
+    val reorderedDf = df.select("b", "a")
+    val actual = reorderedDf.agg(
+      pandasTestUDF(reorderedDf("a")), pandasTestUDF(reorderedDf("b")))
+    val expected = df.agg(pandasTestUDF(df("a")), pandasTestUDF(df("b")))
+
+    checkAnswer(actual, expected)
+  }
+
+  test("SPARK-34265: Instrument Python UDF execution using SQL Metrics") {
+    assume(shouldTestPythonUDFs)
+    val pythonSQLMetrics = List(
+      "data sent to Python workers",
+      "data returned from Python workers",
+      "number of output rows")
+
+    val df = base.groupBy(pythonTestUDF(base("a") + 1))
+      .agg(pythonTestUDF(pythonTestUDF(base("a") + 1)))
+    df.count()
+
+    val statusStore = spark.sharedState.statusStore
+    val lastExecId = statusStore.executionsList.last.executionId
+    val executionMetrics = statusStore.execution(lastExecId).get.metrics.mkString
+    for (metric <- pythonSQLMetrics) {
+      assert(executionMetrics.contains(metric))
+    }
+  }
+
+  test("PythonUDAF pretty name") {
+    assume(shouldTestPandasUDFs)
+    val udfName = "pandas_udf"
+    val df = spark.range(1)
+    val pandasTestUDF = TestGroupedAggPandasUDF(name = udfName)
+    assert(df.agg(pandasTestUDF(df("id"))).schema.fieldNames.exists(_.startsWith(udfName)))
   }
 }

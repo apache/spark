@@ -213,23 +213,21 @@ Apache Software Foundation License 2.0
 common/network-common/src/main/java/org/apache/spark/network/util/LimitedInputStream.java
 core/src/main/java/org/apache/spark/util/collection/TimSort.java
 core/src/main/resources/org/apache/spark/ui/static/bootstrap*
-core/src/main/resources/org/apache/spark/ui/static/jsonFormatter*
 core/src/main/resources/org/apache/spark/ui/static/vis*
 docs/js/vendor/bootstrap.js
-external/spark-ganglia-lgpl/src/main/java/com/codahale/metrics/ganglia/GangliaReporter.java
+connector/spark-ganglia-lgpl/src/main/java/com/codahale/metrics/ganglia/GangliaReporter.java
 
 
 Python Software Foundation License
 ----------------------------------
 
-pyspark/heapq3.py
-python/docs/_static/copybutton.js
+python/docs/source/_static/copybutton.js
 
 BSD 3-Clause
 ------------
 
 python/lib/py4j-*-src.zip
-python/pyspark/cloudpickle.py
+python/pyspark/cloudpickle/*.py
 python/pyspark/join.py
 core/src/main/resources/org/apache/spark/ui/static/d3.min.js
 

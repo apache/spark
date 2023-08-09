@@ -26,29 +26,47 @@ import scala.xml.{Node, NodeSeq}
 
 import org.apache.spark.JobExecutionStatus
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config.UI.UI_SQL_GROUP_SUB_EXECUTION_ENABLED
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.ui.{PagedDataSource, PagedTable, UIUtils, WebUIPage}
 import org.apache.spark.util.Utils
 
 private[ui] class AllExecutionsPage(parent: SQLTab) extends WebUIPage("") with Logging {
 
   private val sqlStore = parent.sqlStore
+  private val groupSubExecutionEnabled = parent.conf.get(UI_SQL_GROUP_SUB_EXECUTION_ENABLED)
 
   override def render(request: HttpServletRequest): Seq[Node] = {
     val currentTime = System.currentTimeMillis()
     val running = new mutable.ArrayBuffer[SQLExecutionUIData]()
     val completed = new mutable.ArrayBuffer[SQLExecutionUIData]()
     val failed = new mutable.ArrayBuffer[SQLExecutionUIData]()
+    val executionIdToSubExecutions =
+      new mutable.HashMap[Long, mutable.ArrayBuffer[SQLExecutionUIData]]()
 
     sqlStore.executionsList().foreach { e =>
-      val isRunning = e.completionTime.isEmpty ||
-        e.jobs.exists { case (_, status) => status == JobExecutionStatus.RUNNING }
-      val isFailed = e.jobs.exists { case (_, status) => status == JobExecutionStatus.FAILED }
-      if (isRunning) {
-        running += e
-      } else if (isFailed) {
-        failed += e
+      def processExecution(e: SQLExecutionUIData): Unit = e.executionStatus match {
+        case "RUNNING" => running += e
+        case "COMPLETED" => completed += e
+        case "FAILED" => failed += e
+      }
+
+      // group the sub execution only if the root execution will be displayed (i.e. not missing)
+      if (groupSubExecutionEnabled &&
+          e.executionId != e.rootExecutionId &&
+          executionIdToSubExecutions.contains(e.rootExecutionId)) {
+        executionIdToSubExecutions(e.rootExecutionId) += e
       } else {
-        completed += e
+        if (groupSubExecutionEnabled) {
+          // add the execution id to indicate it'll be displayed as root, so the executions with
+          // the same root execution id will be added here and displayed as sub execution.
+          // If the root execution is not found (e.g. event loss), then the sub executions will
+          // be displayed in the root list instead.
+          // NOTE: this code assumes the root execution id always comes first. which is guaranteed
+          // by the `sqlStore.executionsList()`
+          executionIdToSubExecutions(e.executionId) = new mutable.ArrayBuffer[SQLExecutionUIData]()
+        }
+        processExecution(e)
       }
     }
 
@@ -57,7 +75,16 @@ private[ui] class AllExecutionsPage(parent: SQLTab) extends WebUIPage("") with L
 
       if (running.nonEmpty) {
         val runningPageTable =
-          executionsTable(request, "running", running, currentTime, true, true, true)
+          executionsTable(
+            request,
+            "running",
+            running.toSeq,
+            executionIdToSubExecutions.mapValues(_.toSeq).toMap,
+            currentTime,
+            showErrorMessage = false,
+            showRunningJobs = true,
+            showSucceededJobs = true,
+            showFailedJobs = true)
 
         _content ++=
           <span id="running" class="collapse-aggregated-runningExecutions collapse-table"
@@ -74,8 +101,16 @@ private[ui] class AllExecutionsPage(parent: SQLTab) extends WebUIPage("") with L
       }
 
       if (completed.nonEmpty) {
-        val completedPageTable =
-          executionsTable(request, "completed", completed, currentTime, false, true, false)
+        val completedPageTable = executionsTable(
+          request,
+          "completed",
+          completed.toSeq,
+          executionIdToSubExecutions.mapValues(_.toSeq).toMap,
+          currentTime,
+          showErrorMessage = false,
+          showRunningJobs = false,
+          showSucceededJobs = true,
+          showFailedJobs = false)
 
         _content ++=
           <span id="completed" class="collapse-aggregated-completedExecutions collapse-table"
@@ -93,7 +128,16 @@ private[ui] class AllExecutionsPage(parent: SQLTab) extends WebUIPage("") with L
 
       if (failed.nonEmpty) {
         val failedPageTable =
-          executionsTable(request, "failed", failed, currentTime, false, true, true)
+          executionsTable(
+            request,
+            "failed",
+            failed.toSeq,
+            executionIdToSubExecutions.mapValues(_.toSeq).toMap,
+            currentTime,
+            showErrorMessage = true,
+            showRunningJobs = false,
+            showSucceededJobs = true,
+            showFailedJobs = true)
 
         _content ++=
           <span id="failed" class="collapse-aggregated-failedExecutions collapse-table"
@@ -146,14 +190,16 @@ private[ui] class AllExecutionsPage(parent: SQLTab) extends WebUIPage("") with L
         </ul>
       </div>
 
-    UIUtils.headerSparkPage(request, "SQL", summary ++ content, parent)
+    UIUtils.headerSparkPage(request, "SQL / DataFrame", summary ++ content, parent)
   }
 
   private def executionsTable(
     request: HttpServletRequest,
     executionTag: String,
     executionData: Seq[SQLExecutionUIData],
+    executionIdToSubExecutions: Map[Long, Seq[SQLExecutionUIData]],
     currentTime: Long,
+    showErrorMessage: Boolean,
     showRunningJobs: Boolean,
     showSucceededJobs: Boolean,
     showFailedJobs: Boolean): Seq[Node] = {
@@ -173,9 +219,11 @@ private[ui] class AllExecutionsPage(parent: SQLTab) extends WebUIPage("") with L
         UIUtils.prependBaseUri(request, parent.basePath),
         "SQL", // subPath
         currentTime,
+        showErrorMessage,
         showRunningJobs,
         showSucceededJobs,
-        showFailedJobs).table(executionPage)
+        showFailedJobs,
+        executionIdToSubExecutions).table(executionPage)
     } catch {
       case e@(_: IllegalArgumentException | _: IndexOutOfBoundsException) =>
         <div class="alert alert-error">
@@ -197,36 +245,39 @@ private[ui] class ExecutionPagedTable(
     basePath: String,
     subPath: String,
     currentTime: Long,
+    showErrorMessage: Boolean,
     showRunningJobs: Boolean,
     showSucceededJobs: Boolean,
-    showFailedJobs: Boolean) extends PagedTable[ExecutionTableRowData] {
+    showFailedJobs: Boolean,
+    subExecutions: Map[Long, Seq[SQLExecutionUIData]] = Map.empty)
+  extends PagedTable[ExecutionTableRowData] {
 
   private val (sortColumn, desc, pageSize) = getTableParameters(request, executionTag, "ID")
 
+  private val encodedSortColumn = URLEncoder.encode(sortColumn, UTF_8.name())
+
   override val dataSource = new ExecutionDataSource(
-    request,
-    parent,
     data,
-    basePath,
     currentTime,
     pageSize,
     sortColumn,
     desc,
     showRunningJobs,
     showSucceededJobs,
-    showFailedJobs)
+    showFailedJobs,
+    subExecutions)
 
   private val parameterPath =
     s"$basePath/$subPath/?${getParameterOtherTable(request, executionTag)}"
 
+  private val showSubExecutions = subExecutions.exists(_._2.nonEmpty)
+
   override def tableId: String = s"$executionTag-table"
 
   override def tableCssClass: String =
-    "table table-bordered table-sm table-striped " +
-      "table-head-clickable table-cell-width-limited"
+    "table table-bordered table-sm table-striped table-head-clickable table-cell-width-limited"
 
   override def pageLink(page: Int): String = {
-    val encodedSortColumn = URLEncoder.encode(sortColumn, UTF_8.name())
     parameterPath +
       s"&$pageNumberFormField=$page" +
       s"&$executionTag.sort=$encodedSortColumn" +
@@ -239,37 +290,48 @@ private[ui] class ExecutionPagedTable(
 
   override def pageNumberFormField: String = s"$executionTag.page"
 
-  override def goButtonFormPath: String = {
-    val encodedSortColumn = URLEncoder.encode(sortColumn, UTF_8.name())
+  override def goButtonFormPath: String =
     s"$parameterPath&$executionTag.sort=$encodedSortColumn&$executionTag.desc=$desc#$tableHeaderId"
+
+  // Information for each header: title, sortable, tooltip
+  private val headerInfo: Seq[(String, Boolean, Option[String])] = {
+    Seq(
+      ("ID", true, None),
+      ("Description", true, None),
+      ("Submitted", true, None),
+      ("Duration", true, Some("Time from query submission to completion (or if still executing," +
+        " time since submission)"))) ++ {
+      if (showRunningJobs && showSucceededJobs && showFailedJobs) {
+        Seq(
+          ("Running Job IDs", true, None),
+          ("Succeeded Job IDs", true, None),
+          ("Failed Job IDs", true, None))
+      } else if (showSucceededJobs && showFailedJobs) {
+        Seq(
+          ("Succeeded Job IDs", true, None),
+          ("Failed Job IDs", true, None))
+      } else {
+        Seq(("Job IDs", true, None))
+      }
+    } ++ {
+      if (showErrorMessage) {
+        Seq(("Error Message", true, None))
+      } else {
+        Nil
+      }
+    } ++ {
+      if (showSubExecutions) {
+        Seq(("Sub Execution IDs", true, None))
+      } else {
+        Nil
+      }
+    }
   }
 
   override def headers: Seq[Node] = {
-    // Information for each header: title, sortable, tooltip
-    val executionHeadersAndCssClasses: Seq[(String, Boolean, Option[String])] =
-      Seq(
-        ("ID", true, None),
-        ("Description", true, None),
-        ("Submitted", true, None),
-        ("Duration", true, Some("Time from query submission to completion (or if still executing," +
-          "time since submission)"))) ++ {
-        if (showRunningJobs && showSucceededJobs && showFailedJobs) {
-          Seq(
-            ("Running Job IDs", true, None),
-            ("Succeeded Job IDs", true, None),
-            ("Failed Job IDs", true, None))
-        } else if (showSucceededJobs && showFailedJobs) {
-          Seq(
-            ("Succeeded Job IDs", true, None),
-            ("Failed Job IDs", true, None))
-        } else {
-          Seq(("Job IDs", true, None))
-        }
-      }
+    isSortColumnValid(headerInfo, sortColumn)
 
-    isSortColumnValid(executionHeadersAndCssClasses, sortColumn)
-
-    headerRow(executionHeadersAndCssClasses, desc, pageSize, sortColumn, parameterPath,
+    headerRow(headerInfo, desc, pageSize, sortColumn, parameterPath,
       executionTag, tableHeaderId)
   }
 
@@ -284,35 +346,122 @@ private[ui] class ExecutionPagedTable(
       }
     }
 
-    <tr>
-      <td>
-        {executionUIData.executionId.toString}
-      </td>
-      <td>
-        {descriptionCell(executionUIData)}
-      </td>
-      <td sorttable_customkey={submissionTime.toString}>
-        {UIUtils.formatDate(submissionTime)}
-      </td>
-      <td sorttable_customkey={duration.toString}>
-        {UIUtils.formatDuration(duration)}
-      </td>
-      {if (showRunningJobs) {
+    def executionLinks(executionData: Seq[Long]): Seq[Node] = {
+      val details = if (executionData.nonEmpty) {
+        val onClickScript = "this.parentNode.parentNode.nextElementSibling.nextElementSibling" +
+          ".classList.toggle('collapsed')"
+        <span onclick={onClickScript} class="expand-details">
+          +details
+        </span>
+      } else {
+        Nil
+      }
+
+      <div>
+        {
+          executionData.map { executionId =>
+            <a href={executionURL(executionId)}>[{executionId.toString}]</a>
+          }
+        }
+      </div> ++ details
+    }
+
+    val baseRow: Seq[Node] = {
+      <tr>
         <td>
-          {jobLinks(executionTableRow.runningJobData)}
+          {executionUIData.executionId.toString}
         </td>
-      }}
-      {if (showSucceededJobs) {
         <td>
-          {jobLinks(executionTableRow.completedJobData)}
+          {descriptionCell(executionUIData)}
         </td>
-      }}
-      {if (showFailedJobs) {
-        <td>
-          {jobLinks(executionTableRow.failedJobData)}
+        <td sorttable_customkey={submissionTime.toString}>
+          {UIUtils.formatDate(submissionTime)}
         </td>
-      }}
-    </tr>
+        <td sorttable_customkey={duration.toString}>
+          {UIUtils.formatDuration(duration)}
+        </td>
+        {if (showRunningJobs) {
+          <td>
+            {jobLinks(executionTableRow.runningJobData)}
+          </td>
+        }}
+        {if (showSucceededJobs) {
+          <td>
+            {jobLinks(executionTableRow.completedJobData)}
+          </td>
+        }}
+        {if (showFailedJobs) {
+          <td>
+            {jobLinks(executionTableRow.failedJobData)}
+          </td>
+        }}
+        {if (showErrorMessage) {
+          UIUtils.errorMessageCell(executionUIData.errorMessage.getOrElse(""))
+        }}
+        {if (showSubExecutions) {
+          <td>
+            {executionLinks(executionTableRow.subExecutionData.map(_.executionUIData.executionId))}
+          </td>
+        }}
+      </tr>
+    }
+
+    val subRow: Seq[Node] = if (executionTableRow.subExecutionData.nonEmpty) {
+      <tr></tr>
+      <tr class="sub-execution-list collapsed">
+        <td></td>
+        <td colspan={s"${headerInfo.length - 1}"}>
+          <table class="table table-bordered table-sm table-cell-width-limited">
+            <thead>
+              <tr>
+                {headerInfo.dropRight(1).map(info => <th>{info._1}</th>)}
+              </tr>
+            </thead>
+            <tbody>
+              {
+                executionTableRow.subExecutionData.map { rowData =>
+                  val executionUIData = rowData.executionUIData
+                  val submissionTime = executionUIData.submissionTime
+                  val duration = rowData.duration
+                  <tr>
+                    <td>
+                      {executionUIData.executionId.toString}
+                    </td>
+                    <td>
+                      {descriptionCell(executionUIData)}
+                    </td>
+                    <td sorttable_customkey={submissionTime.toString}>
+                      {UIUtils.formatDate(submissionTime)}
+                    </td>
+                    <td sorttable_customkey={duration.toString}>
+                      {UIUtils.formatDuration(duration)}
+                    </td>
+                    {if (showRunningJobs) {
+                      <td>
+                        {jobLinks(rowData.runningJobData)}
+                      </td>
+                    }}
+                    {if (showSucceededJobs) {
+                      <td>
+                        {jobLinks(rowData.completedJobData)}
+                      </td>
+                    }}
+                    {if (showFailedJobs) {
+                      <td>
+                        {jobLinks(rowData.failedJobData)}
+                      </td>
+                    }}
+                  </tr>
+                }
+              }
+            </tbody>
+          </table>
+        </td>
+      </tr>
+    } else {
+      Nil
+    }
+    baseRow ++ subRow
   }
 
   private def descriptionCell(execution: SQLExecutionUIData): Seq[Node] = {
@@ -348,45 +497,37 @@ private[ui] class ExecutionPagedTable(
 
 
 private[ui] class ExecutionTableRowData(
-    val submissionTime: Long,
     val duration: Long,
     val executionUIData: SQLExecutionUIData,
     val runningJobData: Seq[Int],
     val completedJobData: Seq[Int],
-    val failedJobData: Seq[Int])
+    val failedJobData: Seq[Int],
+    val subExecutionData: Seq[ExecutionTableRowData])
 
 
 private[ui] class ExecutionDataSource(
-    request: HttpServletRequest,
-    parent: SQLTab,
     executionData: Seq[SQLExecutionUIData],
-    basePath: String,
     currentTime: Long,
     pageSize: Int,
     sortColumn: String,
     desc: Boolean,
     showRunningJobs: Boolean,
     showSucceededJobs: Boolean,
-    showFailedJobs: Boolean) extends PagedDataSource[ExecutionTableRowData](pageSize) {
+    showFailedJobs: Boolean,
+    subExecutions: Map[Long, Seq[SQLExecutionUIData]])
+  extends PagedDataSource[ExecutionTableRowData](pageSize) {
 
   // Convert ExecutionData to ExecutionTableRowData which contains the final contents to show
   // in the table so that we can avoid creating duplicate contents during sorting the data
   private val data = executionData.map(executionRow).sorted(ordering(sortColumn, desc))
 
-  private var _sliceExecutionIds: Set[Int] = _
-
   override def dataSize: Int = data.size
 
-  override def sliceData(from: Int, to: Int): Seq[ExecutionTableRowData] = {
-    val r = data.slice(from, to)
-    _sliceExecutionIds = r.map(_.executionUIData.executionId.toInt).toSet
-    r
-  }
+  override def sliceData(from: Int, to: Int): Seq[ExecutionTableRowData] = data.slice(from, to)
 
   private def executionRow(executionUIData: SQLExecutionUIData): ExecutionTableRowData = {
-    val submissionTime = executionUIData.submissionTime
     val duration = executionUIData.completionTime.map(_.getTime())
-      .getOrElse(currentTime) - submissionTime
+      .getOrElse(currentTime) - executionUIData.submissionTime
 
     val runningJobData = if (showRunningJobs) {
       executionUIData.jobs.filter {
@@ -406,13 +547,18 @@ private[ui] class ExecutionDataSource(
       }.map { case (jobId, _) => jobId }.toSeq.sorted
     } else Seq.empty
 
+    val executions = subExecutions.get(executionUIData.executionId) match {
+      case Some(executions) => executions.map(executionRow)
+      case _ => Seq.empty
+    }
+
     new ExecutionTableRowData(
-      submissionTime,
       duration,
       executionUIData,
       runningJobData,
       completedJobData,
-      failedJobData)
+      failedJobData,
+      executions)
   }
 
   /** Return Ordering according to sortColumn and desc. */
@@ -425,7 +571,8 @@ private[ui] class ExecutionDataSource(
       case "Job IDs" | "Succeeded Job IDs" => Ordering by (_.completedJobData.headOption)
       case "Running Job IDs" => Ordering.by(_.runningJobData.headOption)
       case "Failed Job IDs" => Ordering.by(_.failedJobData.headOption)
-      case unknownColumn => throw new IllegalArgumentException(s"Unknown column: $unknownColumn")
+      case "Error Message" => Ordering.by(_.executionUIData.errorMessage)
+      case unknownColumn => throw QueryExecutionErrors.unknownColumnError(unknownColumn)
     }
     if (desc) {
       ordering.reverse

@@ -22,10 +22,12 @@ import scala.collection.JavaConverters._
 import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.sql.hive.test.{TestHive, TestHiveQueryExecution}
+import org.apache.spark.tags.SlowHiveTest
 
 /**
  * A set of test cases that validate partition and column pruning.
  */
+@SlowHiveTest
 class PruningSuite extends HiveComparisonTest with BeforeAndAfter {
 
   override def beforeAll(): Unit = {

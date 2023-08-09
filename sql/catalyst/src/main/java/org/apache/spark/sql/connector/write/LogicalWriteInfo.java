@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.connector.write;
 
+import java.util.Optional;
+
 import org.apache.spark.annotation.Evolving;
 import org.apache.spark.sql.types.StructType;
 import org.apache.spark.sql.util.CaseInsensitiveStringMap;
@@ -35,7 +37,7 @@ public interface LogicalWriteInfo {
   CaseInsensitiveStringMap options();
 
   /**
-   * `queryId` is a unique string of the query. It's possible that there are many queries
+   * {@code queryId} is a unique string of the query. It's possible that there are many queries
    * running at the same time, or a query is restarted and resumed. {@link BatchWrite} can use
    * this id to identify the query.
    */
@@ -45,4 +47,20 @@ public interface LogicalWriteInfo {
    * the schema of the input data from Spark to data source.
    */
   StructType schema();
+
+  /**
+   * the schema of the ID columns from Spark to data source.
+   */
+  default Optional<StructType> rowIdSchema() {
+    throw new UnsupportedOperationException(
+        getClass().getName() + " does not implement rowIdSchema");
+  }
+
+  /**
+   * the schema of the input metadata from Spark to data source.
+   */
+  default Optional<StructType> metadataSchema() {
+    throw new UnsupportedOperationException(
+        getClass().getName() + " does not implement metadataSchema");
+  }
 }

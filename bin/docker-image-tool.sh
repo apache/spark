@@ -172,12 +172,18 @@ function build {
   local BASEDOCKERFILE=${BASEDOCKERFILE:-"kubernetes/dockerfiles/spark/Dockerfile"}
   local PYDOCKERFILE=${PYDOCKERFILE:-false}
   local RDOCKERFILE=${RDOCKERFILE:-false}
+  local ARCHS=${ARCHS:-"--platform linux/amd64,linux/arm64"}
 
   (cd $(img_ctx_dir base) && docker build $NOCACHEARG "${BUILD_ARGS[@]}" \
     -t $(image_ref spark) \
     -f "$BASEDOCKERFILE" .)
   if [ $? -ne 0 ]; then
     error "Failed to build Spark JVM Docker image, please refer to Docker build output for details."
+  fi
+  if [ "${CROSS_BUILD}" != "false" ]; then
+  (cd $(img_ctx_dir base) && docker buildx build $ARCHS $NOCACHEARG "${BUILD_ARGS[@]}" --push --provenance=false \
+    -t $(image_ref spark) \
+    -f "$BASEDOCKERFILE" .)
   fi
 
   if [ "${PYDOCKERFILE}" != "false" ]; then
@@ -187,6 +193,11 @@ function build {
       if [ $? -ne 0 ]; then
         error "Failed to build PySpark Docker image, please refer to Docker build output for details."
       fi
+      if [ "${CROSS_BUILD}" != "false" ]; then
+        (cd $(img_ctx_dir pyspark) && docker buildx build $ARCHS $NOCACHEARG "${BINDING_BUILD_ARGS[@]}" --push --provenance=false \
+          -t $(image_ref spark-py) \
+          -f "$PYDOCKERFILE" .)
+      fi
   fi
 
   if [ "${RDOCKERFILE}" != "false" ]; then
@@ -195,6 +206,11 @@ function build {
       -f "$RDOCKERFILE" .)
     if [ $? -ne 0 ]; then
       error "Failed to build SparkR Docker image, please refer to Docker build output for details."
+    fi
+    if [ "${CROSS_BUILD}" != "false" ]; then
+      (cd $(img_ctx_dir sparkr) && docker buildx build $ARCHS $NOCACHEARG "${BINDING_BUILD_ARGS[@]}" --push --provenance=false \
+        -t $(image_ref spark-r) \
+        -f "$RDOCKERFILE" .)
     fi
   fi
 }
@@ -216,7 +232,7 @@ Commands:
   push        Push a pre-built image to a registry. Requires a repository address to be provided.
 
 Options:
-  -f file               Dockerfile to build for JVM based Jobs. By default builds the Dockerfile shipped with Spark.
+  -f file               (Optional) Dockerfile to build for JVM based Jobs. By default builds the Dockerfile shipped with Spark.
   -p file               (Optional) Dockerfile to build for PySpark Jobs. Builds Python dependencies and ships with Spark.
                         Skips building PySpark docker image if not specified.
   -R file               (Optional) Dockerfile to build for SparkR Jobs. Builds R dependencies and ships with Spark.
@@ -227,6 +243,8 @@ Options:
   -n                    Build docker image with --no-cache
   -u uid                UID to use in the USER directive to set the user the main Spark process runs as inside the
                         resulting container
+  -X                    Use docker buildx to cross build. Automatically pushes.
+                        See https://docs.docker.com/buildx/working-with-buildx/ for steps to setup buildx.
   -b arg                Build arg to build or push the image. For multiple build args, this option needs to
                         be used separately for each build arg.
 
@@ -243,15 +261,21 @@ Examples:
     $0 -m -t testing build
 
   - Build PySpark docker image
-    $0 -r docker.io/myrepo -t v2.3.0 -p kubernetes/dockerfiles/spark/bindings/python/Dockerfile build
+    $0 -r docker.io/myrepo -t v3.4.0 -p kubernetes/dockerfiles/spark/bindings/python/Dockerfile build
 
-  - Build and push image with tag "v2.3.0" to docker.io/myrepo
-    $0 -r docker.io/myrepo -t v2.3.0 build
-    $0 -r docker.io/myrepo -t v2.3.0 push
+  - Build and push image with tag "v3.4.0" to docker.io/myrepo
+    $0 -r docker.io/myrepo -t v3.4.0 build
+    $0 -r docker.io/myrepo -t v3.4.0 push
 
-  - Build and push JDK11-based image with tag "v3.0.0" to docker.io/myrepo
-    $0 -r docker.io/myrepo -t v3.0.0 -b java_image_tag=11-jre-slim build
-    $0 -r docker.io/myrepo -t v3.0.0 push
+  - Build and push Java11-based image with tag "v3.4.0" to docker.io/myrepo
+    $0 -r docker.io/myrepo -t v3.4.0 -b java_image_tag=11-jre build
+    $0 -r docker.io/myrepo -t v3.4.0 push
+
+  - Build and push image for multiple archs to docker.io/myrepo
+    $0 -r docker.io/myrepo -t v3.4.0 -X build
+    # Note: buildx, which does cross building, needs to do the push during build
+    # So there is no separate push step with -X
+
 EOF
 }
 
@@ -268,7 +292,8 @@ RDOCKERFILE=
 NOCACHEARG=
 BUILD_PARAMS=
 SPARK_UID=
-while getopts f:p:R:mr:t:nb:u: option
+CROSS_BUILD="false"
+while getopts f:p:R:mr:t:Xnb:u: option
 do
  case "${option}"
  in
@@ -279,6 +304,7 @@ do
  t) TAG=${OPTARG};;
  n) NOCACHEARG="--no-cache";;
  b) BUILD_PARAMS=${BUILD_PARAMS}" --build-arg "${OPTARG};;
+ X) CROSS_BUILD=1;;
  m)
    if ! which minikube 1>/dev/null; then
      error "Cannot find minikube."

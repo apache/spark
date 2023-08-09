@@ -20,14 +20,19 @@ package org.apache.spark.sql
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.sql.catalyst.expressions.SubqueryExpression
-import org.apache.spark.sql.catalyst.plans.logical.{Join, LogicalPlan, Sort}
-import org.apache.spark.sql.execution.{ColumnarToRowExec, ExecSubqueryExpression, FileSourceScanExec, InputAdapter, ReusedSubqueryExec, ScalarSubquery, SubqueryExec, WholeStageCodegenExec}
+import org.apache.spark.sql.catalyst.plans.{LeftAnti, LeftSemi}
+import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, Join, LogicalPlan, Project, Sort, Union}
+import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanHelper, DisableAdaptiveExecution}
 import org.apache.spark.sql.execution.datasources.FileScanRDD
+import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
+import org.apache.spark.sql.execution.joins.{BaseJoinExec, BroadcastHashJoinExec, BroadcastNestedLoopJoinExec}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 
-class SubquerySuite extends QueryTest with SharedSparkSession with AdaptiveSparkPlanHelper {
+class SubquerySuite extends QueryTest
+  with SharedSparkSession
+  with AdaptiveSparkPlanHelper {
   import testImplicits._
 
   setupTestData()
@@ -60,6 +65,11 @@ class SubquerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
     l.createOrReplaceTempView("l")
     r.createOrReplaceTempView("r")
     t.createOrReplaceTempView("t")
+  }
+
+  private def checkNumJoins(plan: LogicalPlan, numJoins: Int): Unit = {
+    val joins = plan.collect { case j: Join => j }
+    assert(joins.size == numJoins)
   }
 
   test("SPARK-18854 numberedTreeString for subquery") {
@@ -140,15 +150,6 @@ class SubquerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
     checkAnswer(
       sql("select (select 's' as s limit 0) as b"),
       Array(Row(null))
-    )
-  }
-
-  test("runtime error when the number of rows is greater than 1") {
-    val error2 = intercept[RuntimeException] {
-      sql("select (select a from (select 1 as a union all select 2 as a) t) as b").collect()
-    }
-    assert(error2.getMessage.contains(
-      "more than one row returned by a subquery used as an expression")
     )
   }
 
@@ -511,37 +512,65 @@ class SubquerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
       Row(1, null) :: Row(2, 6.0) :: Row(3, 2.0) :: Row(null, null) :: Row(6, null) :: Nil)
   }
 
-  test("SPARK-18504 extra GROUP BY column in correlated scalar subquery is not permitted") {
-    withTempView("t") {
-      Seq((1, 1), (1, 2)).toDF("c1", "c2").createOrReplaceTempView("t")
-
-      val errMsg = intercept[AnalysisException] {
-        sql("select (select sum(-1) from t t2 where t1.c2 = t2.c1 group by t2.c2) sum from t t1")
+  test("SPARK-34269: correlated subquery with view in aggregate's grouping expression") {
+    withTable("tr") {
+      withView("vr") {
+        r.write.saveAsTable("tr")
+        sql("create view vr as select * from tr")
+        checkAnswer(
+          sql("select a, (select sum(d) from vr where a = c) sum_d from l l1 group by 1, 2"),
+          Row(1, null) :: Row(2, 6.0) :: Row(3, 2.0) :: Row(null, null) :: Row(6, null) :: Nil)
       }
-      assert(errMsg.getMessage.contains(
-        "A GROUP BY clause in a scalar correlated subquery cannot contain non-correlated columns:"))
     }
+  }
+
+  test("SPARK-18504 extra GROUP BY column in correlated scalar subquery is not permitted") {
+    withTempView("v") {
+      Seq((1, 1), (1, 2)).toDF("c1", "c2").createOrReplaceTempView("v")
+
+      val exception = intercept[AnalysisException] {
+        sql("select (select sum(-1) from v t2 where t1.c2 = t2.c1 group by t2.c2) sum from v t1")
+      }
+      checkError(
+        exception,
+        errorClass = "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY." +
+          "NON_CORRELATED_COLUMNS_IN_GROUP_BY",
+        parameters = Map("value" -> "c2"),
+        sqlState = None,
+        context = ExpectedContext(
+          fragment = "(select sum(-1) from v t2 where t1.c2 = t2.c1 group by t2.c2)",
+          start = 7, stop = 67)) }
   }
 
   test("non-aggregated correlated scalar subquery") {
-    val msg1 = intercept[AnalysisException] {
+    val exception1 = intercept[AnalysisException] {
       sql("select a, (select b from l l2 where l2.a = l1.a) sum_b from l l1")
     }
-    assert(msg1.getMessage.contains("Correlated scalar subqueries must be aggregated"))
-
-    val msg2 = intercept[AnalysisException] {
+    checkError(
+      exception1,
+      errorClass = "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY." +
+        "MUST_AGGREGATE_CORRELATED_SCALAR_SUBQUERY",
+      parameters = Map.empty,
+      context = ExpectedContext(
+        fragment = "(select b from l l2 where l2.a = l1.a)", start = 10, stop = 47))
+    val exception2 = intercept[AnalysisException] {
       sql("select a, (select b from l l2 where l2.a = l1.a group by 1) sum_b from l l1")
     }
-    assert(msg2.getMessage.contains(
-      "The output of a correlated scalar subquery must be aggregated"))
+    checkErrorMatchPVals(
+      exception2,
+      errorClass = "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY." +
+        "MUST_AGGREGATE_CORRELATED_SCALAR_SUBQUERY",
+      parameters = Map.empty[String, String],
+      sqlState = None,
+      context = ExpectedContext(
+        fragment = "(select b from l l2 where l2.a = l1.a group by 1)", start = 10, stop = 58))
   }
 
   test("non-equal correlated scalar subquery") {
-    val msg1 = intercept[AnalysisException] {
-      sql("select a, (select sum(b) from l l2 where l2.a < l1.a) sum_b from l l1")
-    }
-    assert(msg1.getMessage.contains(
-      "Correlated column is not allowed in a non-equality predicate:"))
+    checkAnswer(
+      sql("select a, (select sum(b) from l l2 where l2.a < l1.a) sum_b from l l1"),
+      Seq(Row(1, null), Row(1, null), Row(2, 4), Row(2, 4), Row(3, 6), Row(null, null),
+        Row(null, null), Row(6, 9)))
   }
 
   test("disjunctive correlated scalar subquery") {
@@ -634,12 +663,24 @@ class SubquerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
     checkAnswer(
       sql(
         """
+          |select l.b, (select (min(r.c) + count(*)) is null
+          |from r
+          |where l.a = r.c) from l
+        """.stripMargin),
+      Row(1.0, false) :: Row(1.0, false) :: Row(2.0, true) :: Row(2.0, true) ::
+        Row(3.0, false) :: Row(5.0, true) :: Row(null, false) :: Row(null, true) :: Nil)
+  }
+
+  test("SPARK-43098: no COUNT bug with group-by") {
+    checkAnswer(
+      sql(
+        """
           |select l.b, (select (r.c + count(*)) is null
           |from r
           |where l.a = r.c group by r.c) from l
         """.stripMargin),
-      Row(1.0, false) :: Row(1.0, false) :: Row(2.0, true) :: Row(2.0, true) ::
-        Row(3.0, false) :: Row(5.0, true) :: Row(null, false) :: Row(null, true) :: Nil)
+      Row(1.0, false) :: Row(1.0, false) :: Row(2.0, null) :: Row(2.0, null) ::
+        Row(3.0, false) :: Row(5.0, null) :: Row(null, false) :: Row(null, null) :: Nil)
   }
 
   test("SPARK-16804: Correlated subqueries containing LIMIT - 1") {
@@ -727,7 +768,7 @@ class SubquerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
       Seq((1, 1), (2, 2)).toDF("c1", "c2").createOrReplaceTempView("t4")
 
       // Simplest case
-      intercept[AnalysisException] {
+      val exception1 = intercept[AnalysisException] {
         sql(
           """
             | select t1.c1
@@ -736,9 +777,22 @@ class SubquerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
             |                  from   t2
             |                  where  t1.c2 >= t2.c2)""".stripMargin).collect()
       }
+      checkErrorMatchPVals(
+        exception1,
+        errorClass = "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY." +
+          "CORRELATED_COLUMN_IS_NOT_ALLOWED_IN_PREDICATE",
+        parameters = Map("treeNode" -> "(?s).*"),
+        sqlState = None,
+        context = ExpectedContext(
+          fragment =
+            """select max(t2.c1)
+              |                  from   t2
+              |                  where  t1.c2 >= t2.c2""".stripMargin,
+          start = 44,
+          stop = 128))
 
       // Add a HAVING on top and augmented within an OR predicate
-      intercept[AnalysisException] {
+      val exception2 = intercept[AnalysisException] {
         sql(
           """
             | select t1.c1
@@ -749,9 +803,23 @@ class SubquerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
             |                  having count(*) > 0 )
             |         or t1.c2 >= 0""".stripMargin).collect()
       }
+      checkErrorMatchPVals(
+        exception2,
+        errorClass = "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY." +
+          "CORRELATED_COLUMN_IS_NOT_ALLOWED_IN_PREDICATE",
+        parameters = Map("treeNode" -> "(?s).*"),
+        sqlState = None,
+        context = ExpectedContext(
+          fragment =
+            """select max(t2.c1)
+              |                  from   t2
+              |                  where  t1.c2 >= t2.c2
+              |                  having count(*) > 0""".stripMargin,
+          start = 44,
+          stop = 166))
 
       // Add a HAVING on top and augmented within an OR predicate
-      intercept[AnalysisException] {
+      val exception3 = intercept[AnalysisException] {
         sql(
           """
             | select t1.c1
@@ -763,10 +831,24 @@ class SubquerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
             |                          or t3.c2 = t2.c2)
             |        )""".stripMargin).collect()
       }
+      checkErrorMatchPVals(
+        exception3,
+        errorClass = "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY." +
+          "CORRELATED_COLUMN_IS_NOT_ALLOWED_IN_PREDICATE",
+        parameters = Map("treeNode" -> "(?s).*"),
+        sqlState = None,
+        context = ExpectedContext(
+          fragment =
+            """select max(t2.c1)
+              |                   from   t2
+              |                   where  t1.c2 = t2.c2
+              |                          or t3.c2 = t2.c2""".stripMargin,
+          start = 77,
+          stop = 205))
 
       // In Window expression: changing the data set to
       // demonstrate if this query ran, it would return incorrect result.
-      intercept[AnalysisException] {
+      val exception4 = intercept[AnalysisException] {
         sql(
           """
           | select c1
@@ -775,6 +857,19 @@ class SubquerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
           |               from   t4
           |               where t3.c2 >= t4.c2)""".stripMargin).collect()
       }
+      checkErrorMatchPVals(
+        exception4,
+        errorClass = "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY." +
+          "ACCESSING_OUTER_QUERY_COLUMN_IS_NOT_ALLOWED",
+        parameters = Map("treeNode" -> "(?s).*"),
+        sqlState = None,
+        context = ExpectedContext(
+          fragment =
+            """select max(t4.c1) over ()
+              |               from   t4
+              |               where t3.c2 >= t4.c2""".stripMargin,
+          start = 38,
+          stop = 123))
     }
   }
   // This restriction applies to
@@ -789,7 +884,7 @@ class SubquerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
       Seq(1).toDF("c1").createOrReplaceTempView("t3")
 
       // Left outer join (LOJ) in IN subquery context
-      intercept[AnalysisException] {
+      val exception1 = intercept[AnalysisException] {
         sql(
           """
             | select t1.c1
@@ -799,8 +894,19 @@ class SubquerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
             |                     (select c1 from t2 where t1.c1 = 2) t2
             |                     on t2.c1 = t3.c1)""".stripMargin).collect()
       }
+      checkErrorMatchPVals(
+        exception1,
+        errorClass = "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY." +
+          "ACCESSING_OUTER_QUERY_COLUMN_IS_NOT_ALLOWED",
+        parameters = Map("treeNode" -> "(?s).*"),
+        sqlState = None,
+        context = ExpectedContext(
+          fragment = "select c1 from t2 where t1.c1 = 2",
+          start = 111,
+          stop = 143))
+
       // Right outer join (ROJ) in EXISTS subquery context
-      intercept[AnalysisException] {
+      val exception2 = intercept[AnalysisException] {
         sql(
           """
             | select t1.c1
@@ -810,8 +916,19 @@ class SubquerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
             |                       right outer join t3
             |                       on t2.c1 = t3.c1)""".stripMargin).collect()
       }
+      checkErrorMatchPVals(
+        exception2,
+        errorClass = "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY." +
+          "ACCESSING_OUTER_QUERY_COLUMN_IS_NOT_ALLOWED",
+        parameters = Map("treeNode" -> "(?s).*"),
+        sqlState = None,
+        context = ExpectedContext(
+          fragment = "select c1 from t2 where t1.c1 = 2",
+          start = 75,
+          stop = 107))
+
       // SPARK-18578: Full outer join (FOJ) in scalar subquery context
-      intercept[AnalysisException] {
+      val exception3 = intercept[AnalysisException] {
         sql(
           """
             | select (select max(1)
@@ -819,6 +936,141 @@ class SubquerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
             |                full join t3
             |                on t2.c1=t3.c1)
             | from   t1""".stripMargin).collect()
+      }
+      checkErrorMatchPVals(
+        exception3,
+        errorClass = "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY." +
+          "ACCESSING_OUTER_QUERY_COLUMN_IS_NOT_ALLOWED",
+        parameters = Map("treeNode" -> "(?s).*"),
+        sqlState = None,
+        context = ExpectedContext(
+          fragment = "select c1 from  t2 where t1.c1 = 2 and t1.c1=t2.c1",
+          start = 41,
+          stop = 90))
+    }
+  }
+
+  test("SPARK-36124: Correlated subqueries with union") {
+    withTempView("t0", "t1", "t2") {
+      Seq((1, 1), (2, 0)).toDF("t0a", "t0b").createOrReplaceTempView("t0")
+      Seq((1, 1, 3)).toDF("t1a", "t1b", "t1c").createOrReplaceTempView("t1")
+      Seq((1, 1, 5), (2, 2, 7)).toDF("t2a", "t2b", "t2c").createOrReplaceTempView("t2")
+
+      // Union with different outer refs
+      val query =
+        """
+          | SELECT t0a, (SELECT sum(t1c) FROM
+          |   (SELECT t1c
+          |   FROM   t1
+          |   WHERE  t1a = t0a
+          |   UNION ALL
+          |   SELECT t2c
+          |   FROM   t2
+          |   WHERE  t2b = t0b)
+          | )
+          | FROM t0""".stripMargin
+
+      val df = sql(query)
+      checkAnswer(df,
+        Row(1, 8) :: Row(2, null) :: Nil)
+
+      val optimizedPlan = df.queryExecution.optimizedPlan
+      val aggregate = optimizedPlan.collectFirst { case a: Aggregate => a }.get
+      assert(aggregate.groupingExpressions.size == 2)
+      val union = optimizedPlan.collectFirst { case u: Union => u }.get
+      assert(union.output.size == 3)
+      assert(optimizedPlan.resolved)
+
+      withSQLConf(SQLConf.DECORRELATE_INNER_QUERY_ENABLED.key -> "false") {
+        val error = intercept[AnalysisException] { sql(query) }
+        assert(error.getErrorClass == "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY." +
+          "ACCESSING_OUTER_QUERY_COLUMN_IS_NOT_ALLOWED")
+      }
+      withSQLConf(SQLConf.DECORRELATE_SET_OPS_ENABLED.key -> "false") {
+        val error = intercept[AnalysisException] { sql(query) }
+        assert(error.getErrorClass == "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY." +
+          "ACCESSING_OUTER_QUERY_COLUMN_IS_NOT_ALLOWED")
+      }
+
+      {
+        // Union with same outer refs
+        val df = sql(
+            """
+              | SELECT t0a, (SELECT sum(t1c) FROM
+              |   (SELECT t1c
+              |   FROM   t1
+              |   WHERE  t1a = t0a
+              |   UNION ALL
+              |   SELECT t2c
+              |   FROM   t2
+              |   WHERE  t2a = t0a)
+              | )
+              | FROM t0""".stripMargin)
+        checkAnswer(df,
+          Row(1, 8) :: Row(2, 7) :: Nil)
+
+        val optimizedPlan = df.queryExecution.optimizedPlan
+        val aggregate = optimizedPlan.collectFirst { case a: Aggregate => a }.get
+        assert(aggregate.groupingExpressions.size == 1)
+        val union = optimizedPlan.collectFirst { case u: Union => u }.get
+        assert(union.output.size == 2)
+        assert(optimizedPlan.resolved)
+      }
+    }
+  }
+
+  test("SPARK-36124: Correlated subqueries with set ops") {
+    withTempView("t0", "t1", "t2") {
+      Seq((1, 1), (2, 0)).toDF("t0a", "t0b").createOrReplaceTempView("t0")
+      Seq((1, 1, 3)).toDF("t1a", "t1b", "t1c").createOrReplaceTempView("t1")
+      Seq((1, 1, 5), (2, 2, 7)).toDF("t2a", "t2b", "t2c").createOrReplaceTempView("t2")
+
+      // Union with different outer refs
+      for (setopType <- Seq("INTERSECT", "EXCEPT")) {
+        for (distinctness <- Seq("ALL", "DISTINCT")) {
+          val query =
+            s"""
+              | SELECT t0a, (SELECT sum(t1c) FROM
+              |   (SELECT t1c
+              |   FROM   t1
+              |   WHERE  t1a = t0a
+              |   ${setopType} ${distinctness}
+              |   SELECT t2c
+              |   FROM   t2
+              |   WHERE  t2b = t0b)
+              | )
+              | FROM t0""".stripMargin
+
+          val df = sql(query)
+          val optimizedPlan = df.queryExecution.optimizedPlan
+          val aggregate = optimizedPlan.collectFirst { case a: Aggregate => a }.get
+          assert(aggregate.groupingExpressions.size == 2)
+          if (distinctness == "DISTINCT") {
+            if (setopType == "INTERSECT") {
+              val join = optimizedPlan.collectFirst {
+                case j @ Join(_, _, LeftSemi, _, _) => j
+              }.get
+              assert(splitConjunctivePredicates(join.condition.get).size == 3)
+            } else {
+              val join = optimizedPlan.collectFirst {
+                case j @ Join(_, _, LeftAnti, _, _) => j
+              }.get
+              assert(splitConjunctivePredicates(join.condition.get).size == 3)
+            }
+          }
+          assert(optimizedPlan.resolved)
+
+          withSQLConf(SQLConf.DECORRELATE_INNER_QUERY_ENABLED.key -> "false") {
+            val error = intercept[AnalysisException] { sql(query) }
+            assert(error.getErrorClass == "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY." +
+              "ACCESSING_OUTER_QUERY_COLUMN_IS_NOT_ALLOWED")
+          }
+          withSQLConf(SQLConf.DECORRELATE_SET_OPS_ENABLED.key -> "false") {
+            val error = intercept[AnalysisException] { sql(query) }
+            assert(error.getErrorClass == "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY." +
+              "ACCESSING_OUTER_QUERY_COLUMN_IS_NOT_ALLOWED")
+          }
+        }
       }
     }
   }
@@ -839,7 +1091,7 @@ class SubquerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
                           WHERE t1.c1 = t2.c1)""".stripMargin),
         Row(1) :: Row(0) :: Nil)
 
-      val msg1 = intercept[AnalysisException] {
+      val exception1 = intercept[AnalysisException] {
         sql(
           """
             | SELECT c1
@@ -849,8 +1101,15 @@ class SubquerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
             |               WHERE t1.c1 = t2.c1)
           """.stripMargin)
       }
-      assert(msg1.getMessage.contains(
-        "Expressions referencing the outer query are not supported outside of WHERE/HAVING"))
+      checkError(
+        exception1,
+        errorClass = "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.CORRELATED_REFERENCE",
+        parameters = Map("sqlExprs" -> "\"explode(arr_c2)\""),
+        context = ExpectedContext(
+          fragment = "LATERAL VIEW explode(t2.arr_c2) q AS c2",
+          start = 68,
+          stop = 106)
+      )
     }
   }
 
@@ -879,11 +1138,33 @@ class SubquerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
   }
 
   test("SPARK-20688: correctly check analysis for scalar sub-queries") {
-    withTempView("t") {
-      Seq(1 -> "a").toDF("i", "j").createOrReplaceTempView("t")
-      val e = intercept[AnalysisException](sql("SELECT (SELECT count(*) FROM t WHERE a = 1)"))
-      assert(e.message.contains("cannot resolve '`a`' given input columns: [t.i, t.j]"))
+    withTempView("v") {
+      Seq(1 -> "a").toDF("i", "j").createOrReplaceTempView("v")
+      val query = "SELECT (SELECT count(*) FROM v WHERE a = 1)"
+      checkError(
+        exception =
+          intercept[AnalysisException](sql(query)),
+        errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+        sqlState = None,
+        parameters = Map(
+          "objectName" -> "`a`",
+          "proposal" -> "`i`, `j`"),
+        context = ExpectedContext(
+          fragment = "a",
+          start = 37,
+          stop = 37))
     }
+  }
+
+  test("SPARK-41912: Subquery does not validate CTE") {
+    val df = sql("""
+                   |    WITH
+                   |    cte1 as (SELECT 1 col1),
+                   |    cte2 as (SELECT (SELECT MAX(col1) FROM cte1))
+                   |    SELECT * FROM cte1
+                   |""".stripMargin
+    )
+    checkAnswer(df, Row(1) :: Nil)
   }
 
   test("SPARK-21835: Join in correlated subquery should be duplicateResolved: case 1") {
@@ -992,7 +1273,7 @@ class SubquerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
         subqueryExpressions ++= (getSubqueryExpressions(s.plan) :+ s)
         s
     }
-    subqueryExpressions
+    subqueryExpressions.toSeq
   }
 
   private def getNumSorts(plan: LogicalPlan): Int = {
@@ -1102,12 +1383,12 @@ class SubquerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
            |SELECT c1 FROM t1
            |WHERE
            |c1 IN ((
-           |        SELECT c1 FROM t2
+           |        SELECT c1 + 1 AS c1 FROM t2
            |        ORDER BY c1
            |       )
            |       UNION
            |       (
-           |         SELECT c1 FROM t2
+           |         SELECT c1 + 2 AS c1 FROM t2
            |         ORDER BY c1
            |       ))
         """.stripMargin
@@ -1291,18 +1572,6 @@ class SubquerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
     }
   }
 
-  test("SPARK-25482: Forbid pushdown to datasources of filters containing subqueries") {
-    withTempView("t1", "t2") {
-      sql("create temporary view t1(a int) using parquet")
-      sql("create temporary view t2(b int) using parquet")
-      val plan = sql("select * from t2 where b > (select max(a) from t1)")
-      val subqueries = stripAQEPlan(plan.queryExecution.executedPlan).collect {
-        case p => p.subqueries
-      }.flatten
-      assert(subqueries.length == 1)
-    }
-  }
-
   test("SPARK-26893: Allow pushdown of partition pruning subquery filters to file source") {
     withTable("a", "b") {
       spark.range(4).selectExpr("id", "id % 2 AS p").write.partitionBy("p").saveAsTable("a")
@@ -1313,11 +1582,11 @@ class SubquerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
       // need to execute the query before we can examine fs.inputRDDs()
       assert(stripAQEPlan(df.queryExecution.executedPlan) match {
         case WholeStageCodegenExec(ColumnarToRowExec(InputAdapter(
-            fs @ FileSourceScanExec(_, _, _, partitionFilters, _, _, _)))) =>
+            fs @ FileSourceScanExec(_, _, _, partitionFilters, _, _, _, _, _)))) =>
           partitionFilters.exists(ExecSubqueryExpression.hasSubquery) &&
             fs.inputRDDs().forall(
               _.asInstanceOf[FileScanRDD].filePartitions.forall(
-                _.files.forall(_.filePath.contains("p=0"))))
+                _.files.forall(_.urlEncodedPath.contains("p=0"))))
         case _ => false
       })
     }
@@ -1394,7 +1663,7 @@ class SubquerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
 
   test("Scalar subquery name should start with scalar-subquery#") {
     val df = sql("SELECT a FROM l WHERE a = (SELECT max(c) FROM r WHERE c = 1)".stripMargin)
-    var subqueryExecs: ArrayBuffer[SubqueryExec] = ArrayBuffer.empty
+    val subqueryExecs: ArrayBuffer[SubqueryExec] = ArrayBuffer.empty
     df.queryExecution.executedPlan.transformAllExpressions {
       case s @ ScalarSubquery(p: SubqueryExec, _) =>
         subqueryExecs += p
@@ -1575,8 +1844,8 @@ class SubquerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
           |  )
           |FROM l
         """.stripMargin),
-      Row(1.0, false) :: Row(1.0, false) :: Row(2.0, true) :: Row(2.0, true) ::
-        Row(3.0, false) :: Row(5.0, true) :: Row(null, false) :: Row(null, true) :: Nil)
+      Row(1.0, false) :: Row(1.0, false) :: Row(2.0, null) :: Row(2.0, null) ::
+        Row(3.0, false) :: Row(5.0, null) :: Row(null, false) :: Row(null, null) :: Nil)
   }
 
   test("SPARK-28441: COUNT bug with non-foldable expression") {
@@ -1645,5 +1914,847 @@ class SubquerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
                     |   ) = 2""".stripMargin)
     checkAnswer(df, df2)
     checkAnswer(df, Nil)
+  }
+
+  test("SPARK-32290: SingleColumn Null Aware Anti Join Optimize") {
+    Seq(true, false).foreach { enableNAAJ =>
+      Seq(true, false).foreach { enableAQE =>
+        Seq(true, false).foreach { enableCodegen =>
+          withSQLConf(
+            SQLConf.OPTIMIZE_NULL_AWARE_ANTI_JOIN.key -> enableNAAJ.toString,
+            SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> enableAQE.toString,
+            SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> enableCodegen.toString) {
+
+            def findJoinExec(df: DataFrame): BaseJoinExec = {
+              df.queryExecution.sparkPlan.collectFirst {
+                case j: BaseJoinExec => j
+              }.get
+            }
+
+            var df: DataFrame = null
+            var joinExec: BaseJoinExec = null
+
+            // single column not in subquery -- empty sub-query
+            df = sql("select * from l where a not in (select c from r where c > 10)")
+            checkAnswer(df, spark.table("l"))
+            if (enableNAAJ) {
+              joinExec = findJoinExec(df)
+              assert(joinExec.isInstanceOf[BroadcastHashJoinExec])
+              assert(joinExec.asInstanceOf[BroadcastHashJoinExec].isNullAwareAntiJoin)
+            } else {
+              assert(findJoinExec(df).isInstanceOf[BroadcastNestedLoopJoinExec])
+            }
+
+            // single column not in subquery -- sub-query include null
+            df = sql("select * from l where a not in (select c from r where d < 6.0)")
+            checkAnswer(df, Seq.empty)
+            if (enableNAAJ) {
+              joinExec = findJoinExec(df)
+              assert(joinExec.isInstanceOf[BroadcastHashJoinExec])
+              assert(joinExec.asInstanceOf[BroadcastHashJoinExec].isNullAwareAntiJoin)
+            } else {
+              assert(findJoinExec(df).isInstanceOf[BroadcastNestedLoopJoinExec])
+            }
+
+            // single column not in subquery -- streamedSide row is null
+            df =
+              sql("select * from l where b = 5.0 and a not in(select c from r where c is not null)")
+            checkAnswer(df, Seq.empty)
+            if (enableNAAJ) {
+              joinExec = findJoinExec(df)
+              assert(joinExec.isInstanceOf[BroadcastHashJoinExec])
+              assert(joinExec.asInstanceOf[BroadcastHashJoinExec].isNullAwareAntiJoin)
+            } else {
+              assert(findJoinExec(df).isInstanceOf[BroadcastNestedLoopJoinExec])
+            }
+
+            // single column not in subquery -- streamedSide row is not null, match found
+            df =
+              sql("select * from l where a = 6 and a not in (select c from r where c is not null)")
+            checkAnswer(df, Seq.empty)
+            if (enableNAAJ) {
+              joinExec = findJoinExec(df)
+              assert(joinExec.isInstanceOf[BroadcastHashJoinExec])
+              assert(joinExec.asInstanceOf[BroadcastHashJoinExec].isNullAwareAntiJoin)
+            } else {
+              assert(findJoinExec(df).isInstanceOf[BroadcastNestedLoopJoinExec])
+            }
+
+            // single column not in subquery -- streamedSide row is not null, match not found
+            df =
+              sql("select * from l where a = 1 and a not in (select c from r where c is not null)")
+            checkAnswer(df, Row(1, 2.0) :: Row(1, 2.0) :: Nil)
+            if (enableNAAJ) {
+              joinExec = findJoinExec(df)
+              assert(joinExec.isInstanceOf[BroadcastHashJoinExec])
+              assert(joinExec.asInstanceOf[BroadcastHashJoinExec].isNullAwareAntiJoin)
+            } else {
+              assert(findJoinExec(df).isInstanceOf[BroadcastNestedLoopJoinExec])
+            }
+
+            // single column not in subquery -- d = b + 10 joinKey found, match ExtractEquiJoinKeys
+            df = sql("select * from l where a not in (select c from r where d = b + 10)")
+            checkAnswer(df, spark.table("l"))
+            joinExec = findJoinExec(df)
+            assert(joinExec.isInstanceOf[BroadcastHashJoinExec])
+            assert(!joinExec.asInstanceOf[BroadcastHashJoinExec].isNullAwareAntiJoin)
+
+            // single column not in subquery -- d = b + 10 and b = 5.0 => d = 15, joinKey not found
+            // match ExtractSingleColumnNullAwareAntiJoin
+            df =
+              sql("select * from l where b = 5.0 and a not in (select c from r where d = b + 10)")
+            checkAnswer(df, Row(null, 5.0) :: Nil)
+            if (enableNAAJ) {
+              joinExec = findJoinExec(df)
+              assert(joinExec.isInstanceOf[BroadcastHashJoinExec])
+              assert(joinExec.asInstanceOf[BroadcastHashJoinExec].isNullAwareAntiJoin)
+            } else {
+              assert(findJoinExec(df).isInstanceOf[BroadcastNestedLoopJoinExec])
+            }
+
+            // multi column not in subquery
+            df = sql("select * from l where (a, b) not in (select c, d from r where c > 10)")
+            checkAnswer(df, spark.table("l"))
+            assert(findJoinExec(df).isInstanceOf[BroadcastNestedLoopJoinExec])
+          }
+        }
+      }
+    }
+  }
+
+  test("SPARK-28379: non-aggregated zero row scalar subquery") {
+    checkAnswer(
+      sql("select a, (select id from range(0) where id = a) from l where a = 3"),
+      Row(3, null))
+    checkAnswer(
+      sql("select a, (select c from (select * from r limit 0) where c = a) from l where a = 3"),
+      Row(3, null))
+  }
+
+  test("SPARK-28379: non-aggregated single row correlated scalar subquery") {
+    withTempView("v") {
+      Seq((0, 1), (1, 2)).toDF("c1", "c2").createOrReplaceTempView("v")
+      // inline table
+      checkAnswer(
+        sql("select c1, c2, (select col1 from values (0, 1) where col2 = c2) from v"),
+        Row(0, 1, 0) :: Row(1, 2, null) :: Nil)
+      // one row relation
+      checkAnswer(
+        sql("select c1, c2, (select a from (select 1 as a) where a = c2) from v"),
+        Row(0, 1, 1) :: Row(1, 2, null) :: Nil)
+      // limit 1 with order by
+      checkAnswer(
+        sql(
+          """
+            |select c1, c2, (
+            |  select b from (select * from l order by a asc nulls last limit 1) where a = c2
+            |) from v
+            |""".stripMargin),
+        Row(0, 1, 2.0) :: Row(1, 2, null) :: Nil)
+      // limit 1 with window
+      checkAnswer(
+        sql(
+          """
+            |select c1, c2, (
+            |  select w from (
+            |    select a, sum(b) over (partition by a) w from l order by a asc nulls last limit 1
+            |  ) where a = c1 + c2
+            |) from v
+            |""".stripMargin),
+        Row(0, 1, 4.0) :: Row(1, 2, null) :: Nil)
+      // set operations
+      checkAnswer(
+        sql(
+          """
+            |select c1, c2, (
+            |  select a from ((select 1 as a) intersect (select 1 as a)) where a = c2
+            |) from v
+            |""".stripMargin),
+        Row(0, 1, 1) :: Row(1, 2, null) :: Nil)
+      // join
+      checkAnswer(
+        sql(
+          """
+            |select c1, c2, (
+            |  select a from (select * from (select 1 as a) join (select 1 as b) on a = b)
+            |  where a = c2
+            |) from v
+            |""".stripMargin),
+        Row(0, 1, 1) :: Row(1, 2, null) :: Nil)
+    }
+  }
+
+  test("SPARK-35080: correlated equality predicates contain only outer references") {
+    withTempView("v") {
+      Seq((0, 1), (1, 1)).toDF("c1", "c2").createOrReplaceTempView("v")
+      checkAnswer(
+        sql("select c1, c2, (select count(*) from l where c1 = c2) from v"),
+        Row(0, 1, 0) :: Row(1, 1, 8) :: Nil)
+    }
+  }
+
+  test("Subquery reuse across the whole plan") {
+    withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
+      SQLConf.OPTIMIZE_ONE_ROW_RELATION_SUBQUERY.key -> "false") {
+      val df = sql(
+        """
+          |SELECT (SELECT avg(key) FROM testData), (SELECT (SELECT avg(key) FROM testData))
+          |FROM testData
+          |LIMIT 1
+      """.stripMargin)
+
+      // scalastyle:off
+      // CollectLimit 1
+      // +- *(1) Project [Subquery scalar-subquery#240, [id=#112] AS scalarsubquery()#248, Subquery scalar-subquery#242, [id=#183] AS scalarsubquery()#249]
+      //    :  :- Subquery scalar-subquery#240, [id=#112]
+      //    :  :  +- *(2) HashAggregate(keys=[], functions=[avg(cast(key#13 as bigint))])
+      //    :  :     +- Exchange SinglePartition, true, [id=#108]
+      //    :  :        +- *(1) HashAggregate(keys=[], functions=[partial_avg(cast(key#13 as bigint))])
+      //    :  :           +- *(1) SerializeFromObject [knownnotnull(assertnotnull(input[0, org.apache.spark.sql.test.SQLTestData$TestData, true])).key AS key#13]
+      //    :  :              +- Scan[obj#12]
+      //    :  +- Subquery scalar-subquery#242, [id=#183]
+      //    :     +- *(1) Project [ReusedSubquery Subquery scalar-subquery#240, [id=#112] AS scalarsubquery()#247]
+      //    :        :  +- ReusedSubquery Subquery scalar-subquery#240, [id=#112]
+      //    :        +- *(1) Scan OneRowRelation[]
+      //    +- *(1) SerializeFromObject
+      //      +- Scan[obj#12]
+      // scalastyle:on
+
+      val plan = df.queryExecution.executedPlan
+
+      val subqueryIds = plan.collectWithSubqueries { case s: SubqueryExec => s.id }
+      val reusedSubqueryIds = plan.collectWithSubqueries {
+        case rs: ReusedSubqueryExec => rs.child.id
+      }
+
+      assert(subqueryIds.size == 2, "Whole plan subquery reusing not working correctly")
+      assert(reusedSubqueryIds.size == 1, "Whole plan subquery reusing not working correctly")
+      assert(reusedSubqueryIds.forall(subqueryIds.contains(_)),
+        "ReusedSubqueryExec should reuse an existing subquery")
+    }
+  }
+
+  test("SPARK-36280: Remove redundant aliases after RewritePredicateSubquery") {
+    withTable("t1", "t2") {
+      sql("CREATE TABLE t1 USING parquet AS SELECT id AS a, id AS b, id AS c FROM range(10)")
+      sql("CREATE TABLE t2 USING parquet AS SELECT id AS x, id AS y FROM range(8)")
+      val df = sql(
+        """
+          |SELECT *
+          |FROM   t1
+          |WHERE  a IN (SELECT x
+          |             FROM   (SELECT x AS x,
+          |                            RANK() OVER (PARTITION BY x ORDER BY SUM(y) DESC) AS ranking
+          |                     FROM   t2
+          |                     GROUP  BY x) tmp1
+          |             WHERE  ranking <= 5)
+          |""".stripMargin)
+
+      df.collect()
+      val exchanges = collect(df.queryExecution.executedPlan) {
+        case s: ShuffleExchangeExec => s
+      }
+      assert(exchanges.size === 1)
+    }
+  }
+
+  test("SPARK-36747: should not combine Project with Aggregate") {
+    withTempView("v") {
+      Seq((0, 1), (1, 2)).toDF("c1", "c2").createOrReplaceTempView("v")
+      checkAnswer(
+        sql("""
+              |SELECT m, (SELECT SUM(c2) FROM v WHERE c1 = m)
+              |FROM (SELECT MIN(c2) AS m FROM v)
+              |""".stripMargin),
+        Row(1, 2) :: Nil)
+      checkAnswer(
+        sql("""
+              |SELECT c, (SELECT SUM(c2) FROM v WHERE c1 = c)
+              |FROM (SELECT c1 AS c FROM v GROUP BY c1)
+              |""".stripMargin),
+        Row(0, 1) :: Row(1, 2) :: Nil)
+    }
+  }
+
+  test("SPARK-36656: Do not collapse projects with correlate scalar subqueries") {
+    withTempView("t1", "t2") {
+      Seq((0, 1), (1, 2)).toDF("c1", "c2").createOrReplaceTempView("t1")
+      Seq((0, 2), (0, 3)).toDF("c1", "c2").createOrReplaceTempView("t2")
+      val correctAnswer = Row(0, 2, 20) :: Row(1, null, null) :: Nil
+      checkAnswer(
+        sql(
+          """
+            |SELECT c1, s, s * 10 FROM (
+            |  SELECT c1, (SELECT FIRST(c2) FROM t2 WHERE t1.c1 = t2.c1) s FROM t1)
+            |""".stripMargin),
+        correctAnswer)
+      checkAnswer(
+        sql(
+          """
+            |SELECT c1, s, s * 10 FROM (
+            |  SELECT c1, SUM((SELECT FIRST(c2) FROM t2 WHERE t1.c1 = t2.c1)) s
+            |  FROM t1 GROUP BY c1
+            |)
+            |""".stripMargin),
+        correctAnswer)
+    }
+  }
+
+  test("SPARK-37199: deterministic in QueryPlan considers subquery") {
+    val deterministicQueryPlan = sql("select (select 1 as b) as b")
+      .queryExecution.executedPlan
+    assert(deterministicQueryPlan.deterministic)
+
+    val nonDeterministicQueryPlan = sql("select (select rand(1) as b) as b")
+      .queryExecution.executedPlan
+    assert(!nonDeterministicQueryPlan.deterministic)
+  }
+
+  test("SPARK-38132: Not IN subquery correctness checks") {
+    val t = "test_table"
+    withTable(t) {
+      Seq[(Integer, Integer)](
+        (1, 1),
+        (2, 2),
+        (3, 3),
+        (4, null),
+        (null, 0))
+        .toDF("c1", "c2").write.saveAsTable(t)
+      val df = spark.table(t)
+
+      checkAnswer(df.where(s"(c1 NOT IN (SELECT c2 FROM $t)) = true"), Seq.empty)
+      checkAnswer(df.where(s"(c1 NOT IN (SELECT c2 FROM $t WHERE c2 IS NOT NULL)) = true"),
+        Row(4, null) :: Nil)
+      checkAnswer(df.where(s"(c1 NOT IN (SELECT c2 FROM $t)) <=> true"), Seq.empty)
+      checkAnswer(df.where(s"(c1 NOT IN (SELECT c2 FROM $t WHERE c2 IS NOT NULL)) <=> true"),
+        Row(4, null) :: Nil)
+      checkAnswer(df.where(s"(c1 NOT IN (SELECT c2 FROM $t)) != false"), Seq.empty)
+      checkAnswer(df.where(s"(c1 NOT IN (SELECT c2 FROM $t WHERE c2 IS NOT NULL)) != false"),
+        Row(4, null) :: Nil)
+      checkAnswer(df.where(s"NOT((c1 NOT IN (SELECT c2 FROM $t)) <=> false)"), Seq.empty)
+      checkAnswer(df.where(s"NOT((c1 NOT IN (SELECT c2 FROM $t WHERE c2 IS NOT NULL)) <=> false)"),
+        Row(4, null) :: Nil)
+    }
+  }
+
+  test("SPARK-36114: distinct aggregate in lateral subqueries") {
+    withTempView("t1", "t2") {
+      Seq((0, 1)).toDF("c1", "c2").createOrReplaceTempView("t1")
+      Seq((1, 2), (2, 2)).toDF("c1", "c2").createOrReplaceTempView("t2")
+      checkAnswer(
+        sql("SELECT * FROM t1 JOIN LATERAL (SELECT DISTINCT c2 FROM t2 WHERE c1 > t1.c1)"),
+        Row(0, 1, 2) :: Nil)
+    }
+  }
+
+  test("SPARK-38180, SPARK-36114: allow safe cast expressions in correlated equality conditions") {
+    withTempView("t1", "t2") {
+      Seq((0, 1), (1, 2)).toDF("c1", "c2").createOrReplaceTempView("t1")
+      Seq((0, 2), (0, 3)).toDF("c1", "c2").createOrReplaceTempView("t2")
+      checkAnswer(sql(
+        """
+          |SELECT (SELECT SUM(c2) FROM t2 WHERE c1 = a)
+          |FROM (SELECT CAST(c1 AS DOUBLE) a FROM t1)
+          |""".stripMargin),
+        Row(5) :: Row(null) :: Nil)
+      checkAnswer(sql(
+        """
+          |SELECT (SELECT SUM(c2) FROM t2 WHERE CAST(c1 AS STRING) = a)
+          |FROM (SELECT CAST(c1 AS STRING) a FROM t1)
+          |""".stripMargin),
+        Row(5) :: Row(null) :: Nil)
+      // SPARK-36114: we now allow non-safe cast expressions in correlated predicates.
+      val df = sql(
+        """SELECT (SELECT SUM(c2) FROM t2 WHERE CAST(c1 AS SHORT) = a)
+          |FROM (SELECT CAST(c1 AS SHORT) a FROM t1)
+          |""".stripMargin)
+      checkAnswer(df, Row(5) :: Row(null) :: Nil)
+      // The optimized plan should have one left outer join and one domain (inner) join.
+      checkNumJoins(df.queryExecution.optimizedPlan, 2)
+    }
+  }
+
+  test("Merge non-correlated scalar subqueries") {
+    Seq(false, true).foreach { enableAQE =>
+      withSQLConf(
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> enableAQE.toString) {
+        val df = sql(
+          """
+            |SELECT
+            |  (SELECT avg(key) FROM testData),
+            |  (SELECT sum(key) FROM testData),
+            |  (SELECT count(distinct key) FROM testData)
+          """.stripMargin)
+
+        checkAnswer(df, Row(50.5, 5050, 100) :: Nil)
+
+        val plan = df.queryExecution.executedPlan
+        val subqueryIds = collectWithSubqueries(plan) { case s: SubqueryExec => s.id }
+        val reusedSubqueryIds = collectWithSubqueries(plan) {
+          case rs: ReusedSubqueryExec => rs.child.id
+        }
+
+        assert(subqueryIds.size == 1, "Missing or unexpected SubqueryExec in the plan")
+        assert(reusedSubqueryIds.size == 2,
+          "Missing or unexpected reused ReusedSubqueryExec in the plan")
+      }
+    }
+  }
+
+  test("Merge non-correlated scalar subqueries in a subquery") {
+    Seq(false, true).foreach { enableAQE =>
+      withSQLConf(
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> enableAQE.toString) {
+        val df = sql(
+          """
+            |SELECT (
+            |  SELECT
+            |    SUM(
+            |      (SELECT avg(key) FROM testData) +
+            |      (SELECT sum(key) FROM testData) +
+            |      (SELECT count(distinct key) FROM testData))
+            |   FROM testData
+            |)
+          """.stripMargin)
+
+        checkAnswer(df, Row(520050.0) :: Nil)
+
+        val plan = df.queryExecution.executedPlan
+        val subqueryIds = collectWithSubqueries(plan) { case s: SubqueryExec => s.id }
+        val reusedSubqueryIds = collectWithSubqueries(plan) {
+          case rs: ReusedSubqueryExec => rs.child.id
+        }
+
+        assert(subqueryIds.size == 2, "Missing or unexpected SubqueryExec in the plan")
+        assert(reusedSubqueryIds.size == 5,
+          "Missing or unexpected reused ReusedSubqueryExec in the plan")
+      }
+    }
+  }
+
+  test("Merge non-correlated scalar subqueries from different levels") {
+    Seq(false, true).foreach { enableAQE =>
+      withSQLConf(
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> enableAQE.toString) {
+        val df = sql(
+          """
+            |SELECT
+            |  (SELECT avg(key) FROM testData),
+            |  (
+            |    SELECT
+            |      SUM(
+            |        (SELECT sum(key) FROM testData)
+            |      )
+            |    FROM testData
+            |  )
+          """.stripMargin)
+
+        checkAnswer(df, Row(50.5, 505000) :: Nil)
+
+        val plan = df.queryExecution.executedPlan
+        val subqueryIds = collectWithSubqueries(plan) { case s: SubqueryExec => s.id }
+        val reusedSubqueryIds = collectWithSubqueries(plan) {
+          case rs: ReusedSubqueryExec => rs.child.id
+        }
+
+        assert(subqueryIds.size == 2, "Missing or unexpected SubqueryExec in the plan")
+        assert(reusedSubqueryIds.size == 2,
+          "Missing or unexpected reused ReusedSubqueryExec in the plan")
+      }
+    }
+  }
+
+  test("Merge non-correlated scalar subqueries from different parent plans") {
+    Seq(false, true).foreach { enableAQE =>
+      withSQLConf(
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> enableAQE.toString) {
+        val df = sql(
+          """
+            |SELECT
+            |  (
+            |    SELECT
+            |      SUM(
+            |        (SELECT avg(key) FROM testData)
+            |      )
+            |    FROM testData
+            |  ),
+            |  (
+            |    SELECT
+            |      SUM(
+            |        (SELECT sum(key) FROM testData)
+            |      )
+            |    FROM testData
+            |  )
+          """.stripMargin)
+
+        checkAnswer(df, Row(5050.0, 505000) :: Nil)
+
+        val plan = df.queryExecution.executedPlan
+        val subqueryIds = collectWithSubqueries(plan) { case s: SubqueryExec => s.id }
+        val reusedSubqueryIds = collectWithSubqueries(plan) {
+          case rs: ReusedSubqueryExec => rs.child.id
+        }
+
+        assert(subqueryIds.size == 2, "Missing or unexpected SubqueryExec in the plan")
+        assert(reusedSubqueryIds.size == 4,
+          "Missing or unexpected reused ReusedSubqueryExec in the plan")
+      }
+    }
+  }
+
+  test("Merge non-correlated scalar subqueries with conflicting names") {
+    Seq(false, true).foreach { enableAQE =>
+      withSQLConf(
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> enableAQE.toString) {
+        val df = sql(
+          """
+            |SELECT
+            |  (SELECT avg(key) AS key FROM testData),
+            |  (SELECT sum(key) AS key FROM testData),
+            |  (SELECT count(distinct key) AS key FROM testData)
+          """.stripMargin)
+
+        checkAnswer(df, Row(50.5, 5050, 100) :: Nil)
+
+        val plan = df.queryExecution.executedPlan
+        val subqueryIds = collectWithSubqueries(plan) { case s: SubqueryExec => s.id }
+        val reusedSubqueryIds = collectWithSubqueries(plan) {
+          case rs: ReusedSubqueryExec => rs.child.id
+        }
+
+        assert(subqueryIds.size == 1, "Missing or unexpected SubqueryExec in the plan")
+        assert(reusedSubqueryIds.size == 2,
+          "Missing or unexpected reused ReusedSubqueryExec in the plan")
+      }
+    }
+  }
+
+  test("SPARK-39355: Single column uses quoted to construct UnresolvedAttribute") {
+    checkAnswer(
+      sql("""
+            |SELECT *
+            |FROM (
+            |    SELECT '2022-06-01' AS c1
+            |) a
+            |WHERE c1 IN (
+            |     SELECT date_add('2022-06-01', 0)
+            |)
+            |""".stripMargin),
+      Row("2022-06-01"))
+    checkAnswer(
+      sql("""
+            |SELECT *
+            |FROM (
+            |    SELECT '2022-06-01' AS c1
+            |) a
+            |WHERE c1 IN (
+            |    SELECT date_add(a.c1.k1, 0)
+            |    FROM (
+            |        SELECT named_struct('k1', '2022-06-01') AS c1
+            |    ) a
+            |)
+            |""".stripMargin),
+      Row("2022-06-01"))
+  }
+
+  test("SPARK-39511: Push limit 1 to right side if join type is Left Semi/Anti") {
+    withTable("t1", "t2") {
+      withTempView("v1") {
+        spark.sql("CREATE TABLE t1(id int) using parquet")
+        spark.sql("CREATE TABLE t2(id int, type string) using parquet")
+        spark.sql("CREATE TEMP VIEW v1 AS SELECT id, 't' AS type FROM t1")
+        val df = spark.sql("SELECT * FROM v1 WHERE type IN (SELECT type FROM t2)")
+        val join =
+          df.queryExecution.sparkPlan.collectFirst { case b: BroadcastNestedLoopJoinExec => b }
+        assert(join.nonEmpty)
+        assert(join.head.right.isInstanceOf[LocalLimitExec])
+        assert(join.head.right.asInstanceOf[LocalLimitExec].limit === 1)
+      }
+    }
+  }
+
+  test("SPARK-39672: Fix removing project before filter with correlated subquery") {
+    withTempView("v1", "v2") {
+      Seq((1, 2, 3), (4, 5, 6)).toDF("a", "b", "c").createTempView("v1")
+      Seq((1, 3, 5), (4, 5, 6)).toDF("a", "b", "c").createTempView("v2")
+
+      def findProject(df: DataFrame): Seq[Project] = {
+        df.queryExecution.optimizedPlan.collect {
+          case p: Project => p
+        }
+      }
+
+      // project before filter cannot be removed since subquery has conflicting attributes
+      // with outer reference
+      val df1 = sql(
+        """
+         |select * from
+         |(
+         |select
+         |v1.a,
+         |v1.b,
+         |v2.c
+         |from v1
+         |inner join v2
+         |on v1.a=v2.a) t3
+         |where not exists (
+         |  select 1
+         |  from v2
+         |  where t3.a=v2.a and t3.b=v2.b and t3.c=v2.c
+         |)
+         |""".stripMargin)
+      checkAnswer(df1, Row(1, 2, 5))
+      assert(findProject(df1).size == 4)
+
+      // project before filter can be removed when there are no conflicting attributes
+      val df2 = sql(
+        """
+         |select * from
+         |(
+         |select
+         |v1.b,
+         |v2.c
+         |from v1
+         |inner join v2
+         |on v1.b=v2.c) t3
+         |where not exists (
+         |  select 1
+         |  from v2
+         |  where t3.b=v2.b and t3.c=v2.c
+         |)
+         |""".stripMargin)
+
+      checkAnswer(df2, Row(5, 5))
+      assert(findProject(df2).size == 3)
+    }
+  }
+
+  test("SPARK-40618: Regression test for merging subquery bug with nested subqueries") {
+    // This test contains a subquery expression with another subquery expression nested inside.
+    // It acts as a regression test to ensure that the MergeScalarSubqueries rule does not attempt
+    // to merge them together.
+    withTable("t1", "t2") {
+      sql("create table t1(col int) using csv")
+      checkAnswer(sql("select(select sum((select sum(col) from t1)) from t1)"), Row(null))
+
+      checkAnswer(sql(
+        """
+          |select
+          |  (select sum(
+          |    (select sum(
+          |        (select sum(col) from t1))
+          |     from t1))
+          |  from t1)
+          |""".stripMargin),
+        Row(null))
+
+      sql("create table t2(col int) using csv")
+      checkAnswer(sql(
+        """
+          |select
+          |  (select sum(
+          |    (select sum(
+          |        (select sum(col) from t1))
+          |     from t2))
+          |  from t1)
+          |""".stripMargin),
+        Row(null))
+    }
+  }
+
+  test("SPARK-40615: Check unsupported data type when decorrelating subqueries") {
+    withTempView("v1", "v2") {
+      sql(
+        """
+          |create temp view v1(x) as values
+          |from_json('{"a":1, "b":2}', 'map<string,int>') t(x)
+          |""".stripMargin)
+
+      // Can use non-orderable data type in one row subquery that can be collapsed.
+      checkAnswer(
+        sql("select (select a + a from (select x['a'] as a)) from v1"),
+        Row(2))
+
+      // Cannot use non-orderable data type in one row subquery that cannot be collapsed.
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(
+            """select (
+              |  select concat(a, a) from
+              |  (select upper(x['a'] + rand()) as a)
+              |) from v1
+              |""".stripMargin
+          ).collect()
+        },
+        errorClass = "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY." +
+          "UNSUPPORTED_CORRELATED_REFERENCE_DATA_TYPE",
+        parameters = Map("expr" -> "v1.x", "dataType" -> "map"),
+        context = ExpectedContext(
+          fragment = "select upper(x['a'] + rand()) as a",
+          start = 39,
+          stop = 72)
+      )
+    }
+  }
+
+  test("SPARK-40800: always inline expressions in OptimizeOneRowRelationSubquery") {
+    withTempView("t1") {
+      sql("CREATE TEMP VIEW t1 AS SELECT ARRAY('a', 'b') a")
+      Seq(true, false).foreach { enabled =>
+        withSQLConf(SQLConf.ALWAYS_INLINE_ONE_ROW_RELATION_SUBQUERY.key -> enabled.toString) {
+          // Scalar subquery.
+          checkAnswer(sql(
+            """
+              |SELECT (
+              |  SELECT array_sort(a, (i, j) -> rank[i] - rank[j])[0] AS sorted
+              |  FROM (SELECT MAP('a', 1, 'b', 2) rank)
+              |) FROM t1
+              |""".stripMargin),
+            Row("a"))
+          // Lateral subquery.
+          checkAnswer(
+            sql("""
+                  |SELECT sorted[0] FROM t1
+                  |JOIN LATERAL (
+                  |  SELECT array_sort(a, (i, j) -> rank[i] - rank[j]) AS sorted
+                  |  FROM (SELECT MAP('a', 1, 'b', 2) rank)
+                  |)
+                  |""".stripMargin),
+            Row("a"))
+        }
+      }
+    }
+  }
+
+  test("SPARK-40862: correlated one-row subquery with non-deterministic expressions") {
+    import org.apache.spark.sql.functions.udf
+    withTempView("t1") {
+      sql("CREATE TEMP VIEW t1 AS SELECT ARRAY('a', 'b') a")
+      val func = udf(() => "a")
+      spark.udf.register("func", func.asNondeterministic())
+      checkAnswer(sql(
+        """
+          |SELECT (
+          |  SELECT array_sort(a, (i, j) -> rank[i] - rank[j])[0] || str AS sorted
+          |  FROM (SELECT MAP('a', 1, 'b', 2) rank, func() AS str)
+          |) FROM t1
+          |""".stripMargin),
+        Row("aa"))
+    }
+  }
+
+  test("SPARK-42346: Rewrite distinct aggregates after merging subqueries") {
+    withTempView("t1") {
+      Seq((1, 2), (3, 4)).toDF("c1", "c2").createOrReplaceTempView("t1")
+
+      checkAnswer(sql(
+        """
+          |SELECT
+          |  (SELECT count(distinct c1) FROM t1),
+          |  (SELECT count(distinct c2) FROM t1)
+          |""".stripMargin),
+        Row(2, 2))
+
+      // In this case we don't merge the subqueries as `RewriteDistinctAggregates` kicks off for the
+      // 2 subqueries first but `MergeScalarSubqueries` is not prepared for the `Expand` nodes that
+      // are inserted by the rewrite.
+      checkAnswer(sql(
+        """
+          |SELECT
+          |  (SELECT count(distinct c1) + sum(distinct c2) FROM t1),
+          |  (SELECT count(distinct c2) + sum(distinct c1) FROM t1)
+          |""".stripMargin),
+        Row(8, 6))
+    }
+  }
+
+  test("SPARK-42745: Improved AliasAwareOutputExpression works with DSv2") {
+    withSQLConf(
+      SQLConf.USE_V1_SOURCE_LIST.key -> "") {
+      withTempPath { path =>
+        spark.range(0)
+          .write
+          .mode("overwrite")
+          .parquet(path.getCanonicalPath)
+        withTempView("t1") {
+          spark.read.parquet(path.toString).createOrReplaceTempView("t1")
+          checkAnswer(sql("select (select sum(id) from t1)"), Row(null))
+        }
+      }
+    }
+  }
+
+  test("SPARK-42937: Outer join with subquery in condition") {
+    withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
+      SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "false") {
+      val expected = Row(1, 2.0d, null, null) :: Row(1, 2.0d, null, null) ::
+        Row(3, 3.0d, 3, 2.0d) :: Row(null, 5.0d, null, null) :: Nil
+      checkAnswer(sql(
+        """
+          |select *
+          |from l
+          |left outer join r
+          |on a = c
+          |and a in (select c from t where d in (1.0, 2.0))
+          |where b > 1.0""".stripMargin),
+        expected)
+    }
+  }
+
+  test("SPARK-43402: FileSourceScanExec supports push down data filter with scalar subquery") {
+    def checkFileSourceScan(query: String, answer: Seq[Row]): Unit = {
+      val df = sql(query)
+      checkAnswer(df, answer)
+      val fileSourceScanExec = collect(df.queryExecution.executedPlan) {
+        case f: FileSourceScanExec => f
+      }
+      sparkContext.listenerBus.waitUntilEmpty()
+      assert(fileSourceScanExec.size === 1)
+      val scalarSubquery = fileSourceScanExec.head.dataFilters.flatMap(_.collect {
+        case s: ScalarSubquery => s
+      })
+      assert(scalarSubquery.length === 1)
+      assert(scalarSubquery.head.plan.isInstanceOf[ReusedSubqueryExec])
+      assert(fileSourceScanExec.head.metrics("numFiles").value === 1)
+      assert(fileSourceScanExec.head.metrics("numOutputRows").value === answer.size)
+    }
+
+    withTable("t1", "t2") {
+      withSQLConf(SQLConf.LEAF_NODE_DEFAULT_PARALLELISM.key -> "1") {
+        Seq(1, 2, 3).toDF("c1").write.format("parquet").saveAsTable("t1")
+        Seq(4, 5, 6).toDF("c2").write.format("parquet").saveAsTable("t2")
+
+        checkFileSourceScan(
+          "SELECT * FROM t1 WHERE c1 > (SELECT min(c2) FROM t2)",
+          Seq.empty)
+        checkFileSourceScan(
+          "SELECT * FROM t1 WHERE c1 < (SELECT min(c2) FROM t2)",
+          Row(1) :: Row(2) :: Row(3) :: Nil)
+      }
+    }
+  }
+
+  test("SPARK-44562: Add OptimizeOneRowRelationSubquery in batch of Subquery") {
+    withTempView("v1", "v2") {
+      sql(
+        """
+          |CREATE temporary VIEW v1
+          |AS
+          |SELECT id, 'foo' AS kind FROM (SELECT 1 AS id) t
+          |""".stripMargin)
+      sql(
+        """
+          |CREATE temporary VIEW v2
+          |AS
+          |SELECT * FROM v1 WHERE kind = (SELECT kind FROM v1 WHERE kind = 'foo')
+          |""".stripMargin)
+      val df = sql("SELECT * FROM v1 JOIN v2 ON v1.id = v2.id")
+      val filter = df.queryExecution.optimizedPlan.collect {
+        case f: Filter => f
+      }
+      assert(filter.isEmpty,
+        "Filter should be removed after OptimizeSubqueries and OptimizeOneRowRelationSubquery")
+      checkAnswer(df, Row(1, "foo", 1, "foo"))
+    }
   }
 }

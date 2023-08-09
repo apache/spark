@@ -19,7 +19,7 @@ package org.apache.spark.scheduler
 
 import java.util.{List => JList}
 import java.util.concurrent._
-import java.util.concurrent.atomic.{AtomicBoolean, AtomicLong}
+import java.util.concurrent.atomic.AtomicBoolean
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable
@@ -29,6 +29,7 @@ import scala.util.DynamicVariable
 import com.codahale.metrics.{Counter, MetricRegistry, Timer}
 
 import org.apache.spark.{SparkConf, SparkContext}
+import org.apache.spark.errors.SparkCoreErrors
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.metrics.MetricsSystem
@@ -53,12 +54,6 @@ private[spark] class LiveListenerBus(conf: SparkConf) {
   private val started = new AtomicBoolean(false)
   // Indicate if `stop()` is called
   private val stopped = new AtomicBoolean(false)
-
-  /** A counter for dropped events. It will be reset every time we log it. */
-  private val droppedEventsCounter = new AtomicLong(0L)
-
-  /** When `droppedEventsCounter` was logged last time in milliseconds. */
-  @volatile private var lastReportTimestamp = 0L
 
   private val queues = new CopyOnWriteArrayList[AsyncEventQueue]()
 
@@ -208,7 +203,7 @@ private[spark] class LiveListenerBus(conf: SparkConf) {
     val deadline = System.currentTimeMillis + timeoutMillis
     queues.asScala.foreach { queue =>
       if (!queue.waitUntilEmpty(deadline)) {
-        throw new TimeoutException(s"The event queue is not empty after $timeoutMillis ms.")
+        throw SparkCoreErrors.nonEmptyEventQueueAfterTimeoutError(timeoutMillis)
       }
     }
   }
@@ -232,7 +227,7 @@ private[spark] class LiveListenerBus(conf: SparkConf) {
 
   // For testing only.
   private[spark] def findListenersByClass[T <: SparkListenerInterface : ClassTag](): Seq[T] = {
-    queues.asScala.flatMap { queue => queue.findListenersByClass[T]() }
+    queues.asScala.flatMap { queue => queue.findListenersByClass[T]() }.toSeq
   }
 
   // For testing only.
@@ -291,10 +286,14 @@ private[spark] class LiveListenerBusMetrics(conf: SparkConf)
       val maxTimed = conf.get(LISTENER_BUS_METRICS_MAX_LISTENER_CLASSES_TIMED)
       perListenerClassTimers.get(className).orElse {
         if (perListenerClassTimers.size == maxTimed) {
-          logError(s"Not measuring processing time for listener class $className because a " +
-            s"maximum of $maxTimed listener classes are already timed.")
+          if (maxTimed != 0) {
+            // Explicitly disabled.
+            logError(s"Not measuring processing time for listener class $className because a " +
+              s"maximum of $maxTimed listener classes are already timed.")
+          }
           None
         } else {
+          // maxTimed is either -1 (no limit), or an explicit number.
           perListenerClassTimers(className) =
             metricRegistry.timer(MetricRegistry.name("listenerProcessingTime", className))
           perListenerClassTimers.get(className)

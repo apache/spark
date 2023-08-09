@@ -127,6 +127,16 @@ public abstract class BloomFilter {
   public abstract BloomFilter mergeInPlace(BloomFilter other) throws IncompatibleMergeException;
 
   /**
+   * Combines this bloom filter with another bloom filter by performing a bitwise AND of the
+   * underlying data. The mutations happen to <b>this</b> instance. Callers must ensure the
+   * bloom filters are appropriately sized to avoid saturating them.
+   *
+   * @param other The bloom filter to combine this bloom filter with. It is not mutated.
+   * @throws IncompatibleMergeException if {@code isCompatible(other) == false}
+   */
+  public abstract BloomFilter intersectInPlace(BloomFilter other) throws IncompatibleMergeException;
+
+  /**
    * Returns {@code true} if the element <i>might</i> have been put in this Bloom filter,
    * {@code false} if this is <i>definitely</i> not the case.
    */
@@ -152,6 +162,13 @@ public abstract class BloomFilter {
    * responsibility to close the stream.
    */
   public abstract void writeTo(OutputStream out) throws IOException;
+
+  /**
+   * @return the number of set bits in this {@link BloomFilter}.
+   */
+  public long cardinality() {
+    throw new UnsupportedOperationException("Not implemented");
+  }
 
   /**
    * Reads in a {@link BloomFilter} from an input stream. It is the caller's responsibility to close
@@ -189,6 +206,15 @@ public abstract class BloomFilter {
   }
 
   static final double DEFAULT_FPP = 0.03;
+
+  /**
+   * Computes m (total bits of Bloom filter) which is expected to achieve.
+   * The smaller the expectedNumItems, the smaller the fpp.
+   */
+  public static long optimalNumOfBits(long expectedNumItems, long maxNumItems, long maxNumOfBits) {
+    double fpp = Math.min(expectedNumItems / (maxNumItems / DEFAULT_FPP), DEFAULT_FPP);
+    return Math.min(optimalNumOfBits(expectedNumItems, fpp), maxNumOfBits);
+  }
 
   /**
    * Creates a {@link BloomFilter} with the expected number of insertions and a default expected

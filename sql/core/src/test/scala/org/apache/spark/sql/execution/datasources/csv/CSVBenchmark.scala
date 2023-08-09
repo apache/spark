@@ -33,9 +33,9 @@ import org.apache.spark.sql.types._
  *   1. without sbt:
  *      bin/spark-submit --class <this class> --jars <spark core test jar>,
  *       <spark catalyst test jar> <spark sql test jar>
- *   2. build/sbt "sql/test:runMain <this class>"
+ *   2. build/sbt "sql/Test/runMain <this class>"
  *   3. generate result:
- *      SPARK_GENERATE_BENCHMARK_FILES=1 build/sbt "sql/test:runMain <this class>"
+ *      SPARK_GENERATE_BENCHMARK_FILES=1 build/sbt "sql/Test/runMain <this class>"
  *      Results will be written to "benchmarks/CSVBenchmark-results.txt".
  * }}}
  */
@@ -290,6 +290,36 @@ object CSVBenchmark extends SqlBasedBenchmark {
       readBench.addCase("from_csv(date)", numIters) { _ =>
         val ds = dateStr.select(from_csv($"date", dateSchema, Map.empty[String, String]))
         ds.noop()
+      }
+
+      def errorTimestampStr: Dataset[String] = {
+        spark.range(0, rowsNum, 1, 1).mapPartitions { iter =>
+          iter.map {
+            i => s"data${i % 200}"
+          }
+        }.select($"value".as("timestamp")).as[String]
+      }
+
+      readBench.addCase("infer error timestamps from Dataset[String] with default format",
+        numIters) { _ =>
+        spark.read.option("header", false)
+          .option("inferSchema", true)
+          .csv(errorTimestampStr).noop()
+      }
+
+      readBench.addCase("infer error timestamps from Dataset[String] with user-provided format",
+        numIters) { _ =>
+        spark.read.option("header", false)
+          .option("inferSchema", true).option("timestampFormat",
+          "yyyy-MM-dd'T'HH:mm:ss.SSS'Z'").csv(errorTimestampStr).noop()
+      }
+
+      readBench.addCase("infer error timestamps from Dataset[String] with legacy format",
+        numIters) { _ =>
+        withSQLConf(SQLConf.LEGACY_TIME_PARSER_POLICY.key -> "LEGACY") {
+          spark.read.option("header", false)
+            .option("inferSchema", true).csv(errorTimestampStr).noop()
+        }
       }
 
       readBench.run()

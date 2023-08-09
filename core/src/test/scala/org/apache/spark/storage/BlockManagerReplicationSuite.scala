@@ -26,8 +26,9 @@ import scala.language.implicitConversions
 
 import org.mockito.ArgumentMatchers.any
 import org.mockito.Mockito.{doAnswer, mock, spy, when}
-import org.scalatest.{BeforeAndAfter, Matchers}
+import org.scalatest.BeforeAndAfter
 import org.scalatest.concurrent.Eventually._
+import org.scalatest.matchers.must.Matchers
 
 import org.apache.spark._
 import org.apache.spark.broadcast.BroadcastManager
@@ -54,7 +55,7 @@ trait BlockManagerReplicationBehavior extends SparkFunSuite
   protected var rpcEnv: RpcEnv = null
   protected var master: BlockManagerMaster = null
   protected lazy val securityMgr = new SecurityManager(conf)
-  protected lazy val bcastManager = new BroadcastManager(true, conf, securityMgr)
+  protected lazy val bcastManager = new BroadcastManager(true, conf)
   protected lazy val mapOutputTracker = new MapOutputTrackerMaster(conf, bcastManager, true)
   protected lazy val shuffleManager = new SortShuffleManager(conf)
 
@@ -74,9 +75,10 @@ trait BlockManagerReplicationBehavior extends SparkFunSuite
       memoryManager: Option[UnifiedMemoryManager] = None): BlockManager = {
     conf.set(TEST_MEMORY, maxMem)
     conf.set(MEMORY_OFFHEAP_SIZE, maxMem)
-    val transfer = new NettyBlockTransferService(conf, securityMgr, "localhost", "localhost", 0, 1)
-    val memManager = memoryManager.getOrElse(UnifiedMemoryManager(conf, numCores = 1))
     val serializerManager = new SerializerManager(serializer, conf)
+    val transfer = new NettyBlockTransferService(
+      conf, securityMgr, serializerManager, "localhost", "localhost", 0, 1)
+    val memManager = memoryManager.getOrElse(UnifiedMemoryManager(conf, numCores = 1))
     val store = new BlockManager(name, rpcEnv, master, serializerManager, conf,
       memManager, mapOutputTracker, shuffleManager, transfer, securityMgr, None)
     memManager.setMemoryStore(store.memoryStore)
@@ -94,8 +96,6 @@ trait BlockManagerReplicationBehavior extends SparkFunSuite
     conf.set(MEMORY_STORAGE_FRACTION, 0.999)
     conf.set(STORAGE_UNROLL_MEMORY_THRESHOLD, 512L)
 
-    // to make a replication attempt to inactive store fail fast
-    conf.set("spark.core.connection.ack.wait.timeout", "1s")
     // to make cached peers refresh frequently
     conf.set(STORAGE_CACHED_PEERS_TTL, 10)
 
@@ -103,7 +103,8 @@ trait BlockManagerReplicationBehavior extends SparkFunSuite
     val blockManagerInfo = new mutable.HashMap[BlockManagerId, BlockManagerInfo]()
     master = new BlockManagerMaster(rpcEnv.setupEndpoint("blockmanager",
       new BlockManagerMasterEndpoint(rpcEnv, true, conf,
-        new LiveListenerBus(conf), None, blockManagerInfo)),
+        new LiveListenerBus(conf), None, blockManagerInfo, mapOutputTracker, sc.env.shuffleManager,
+        isDriver = true)),
       rpcEnv.setupEndpoint("blockmanagerHeartbeat",
       new BlockManagerMasterHeartbeatEndpoint(rpcEnv, true, blockManagerInfo)), conf, true)
     allStores.clear()
@@ -274,7 +275,7 @@ trait BlockManagerReplicationBehavior extends SparkFunSuite
 
       // create 1 faulty block manager by injecting faulty memory manager
       val memManager = UnifiedMemoryManager(conf, numCores = 1)
-      val mockedMemoryManager = spy(memManager)
+      val mockedMemoryManager = spy[UnifiedMemoryManager](memManager)
       doAnswer(_ => false).when(mockedMemoryManager).acquireStorageMemory(any(), any(), any())
       val store2 = makeBlockManager(10000, "host-2", Some(mockedMemoryManager))
 

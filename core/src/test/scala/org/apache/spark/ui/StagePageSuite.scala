@@ -17,7 +17,6 @@
 
 package org.apache.spark.ui
 
-import java.util.Locale
 import javax.servlet.http.HttpServletRequest
 
 import scala.xml.Node
@@ -31,7 +30,7 @@ import org.apache.spark.resource.ResourceProfile
 import org.apache.spark.scheduler._
 import org.apache.spark.status.AppStatusStore
 import org.apache.spark.status.api.v1.{AccumulableInfo => UIAccumulableInfo, StageData, StageStatus}
-import org.apache.spark.ui.jobs.{ApiHelper, StagePage, StagesTab, TaskPagedTable}
+import org.apache.spark.ui.jobs.{StagePage, StagesTab}
 
 class StagePageSuite extends SparkFunSuite with LocalSparkContext {
 
@@ -79,6 +78,16 @@ class StagePageSuite extends SparkFunSuite with LocalSparkContext {
         shuffleLocalBytesRead = 1L,
         shuffleReadBytes = 1L,
         shuffleReadRecords = 1L,
+        shuffleCorruptMergedBlockChunks = 1L,
+        shuffleMergedFetchFallbackCount = 1L,
+        shuffleMergedRemoteBlocksFetched = 1L,
+        shuffleMergedLocalBlocksFetched = 1L,
+        shuffleMergedRemoteChunksFetched = 1L,
+        shuffleMergedLocalChunksFetched = 1L,
+        shuffleMergedRemoteBytesRead = 1L,
+        shuffleMergedLocalBytesRead = 1L,
+        shuffleRemoteReqsDuration = 1L,
+        shuffleMergedRemoteReqsDuration = 1L,
         shuffleWriteBytes = 1L,
         shuffleWriteTime = 1L,
         shuffleWriteRecords = 1L,
@@ -92,20 +101,15 @@ class StagePageSuite extends SparkFunSuite with LocalSparkContext {
         accumulatorUpdates = Seq(new UIAccumulableInfo(0L, "acc", None, "value")),
         tasks = None,
         executorSummary = None,
+        speculationSummary = None,
         killedTasksSummary = Map.empty,
-        ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID
+        ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID,
+        peakExecutorMetrics = None,
+        taskMetricsDistributions = None,
+        executorMetricsDistributions = None,
+        isShufflePushEnabled = false,
+        shuffleMergersCount = 0
       )
-      val taskTable = new TaskPagedTable(
-        stageData,
-        basePath = "/a/b/c",
-        currentTime = 0,
-        pageSize = 10,
-        sortColumn = "Index",
-        desc = false,
-        store = statusStore
-      )
-      val columnNames = (taskTable.headers \ "th" \ "a").map(_.child(1).text).toSet
-      assert(columnNames === ApiHelper.COLUMN_TO_INDEX.keySet)
     } finally {
       statusStore.close()
     }
@@ -138,8 +142,8 @@ class StagePageSuite extends SparkFunSuite with LocalSparkContext {
       // Simulate two tasks to test PEAK_EXECUTION_MEMORY correctness
       (1 to 2).foreach {
         taskId =>
-          val taskInfo = new TaskInfo(taskId, taskId, 0, 0, "0", "localhost", TaskLocality.ANY,
-            false)
+          val taskInfo = new TaskInfo(taskId, taskId, 0, taskId, 0,
+            "0", "localhost", TaskLocality.ANY, false)
           listener.onStageSubmitted(SparkListenerStageSubmitted(stageInfo))
           listener.onTaskStart(SparkListenerTaskStart(0, 0, taskInfo))
           taskInfo.markFinished(TaskState.FINISHED, System.currentTimeMillis())

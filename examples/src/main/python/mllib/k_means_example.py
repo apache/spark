@@ -15,8 +15,6 @@
 # limitations under the License.
 #
 
-from __future__ import print_function
-
 # $example on$
 from numpy import array
 from math import sqrt

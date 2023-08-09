@@ -73,7 +73,7 @@ select max(min(unique1)) from tenk1;
 -- drop table t2;
 -- drop table t3;
 
--- [SPARK-27974] Add built-in Aggregate Function: array_agg
+-- [SPARK-28664] ORDER BY in aggregate function
 --
 -- Test combinations of DISTINCT and/or ORDER BY
 --
@@ -241,10 +241,9 @@ select sum(1/ten) filter (where ten > 0) from tenk1;
 -- select ten, sum(distinct four) filter (where four::text ~ '123') from onek a
 -- group by ten;
 
--- [SPARK-30276] Support Filter expression allows simultaneous use of DISTINCT
--- select ten, sum(distinct four) filter (where four > 10) from onek a
--- group by ten
--- having exists (select 1 from onek b where sum(distinct a.four) = b.four);
+select ten, sum(distinct four) filter (where four > 10) from onek a
+group by ten
+having exists (select 1 from onek b where sum(distinct a.four) = b.four);
 
 -- [SPARK-28682] ANSI SQL: Collation Support
 -- select max(foo COLLATE "C") filter (where (bar collate "POSIX") > '0')

@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution.python
 
+import org.apache.spark.sql.catalyst.plans.logical.{ArrowEvalPython, BatchEvalPython, Limit, LocalLimit}
 import org.apache.spark.sql.execution.{FileSourceScanExec, SparkPlan, SparkPlanTest}
 import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
 import org.apache.spark.sql.execution.datasources.v2.parquet.ParquetScan
@@ -28,6 +29,7 @@ class ExtractPythonUDFsSuite extends SparkPlanTest with SharedSparkSession {
   import testImplicits._
 
   val batchedPythonUDF = new MyDummyPythonUDF
+  val batchedNondeterministicPythonUDF = new MyDummyNondeterministicPythonUDF
   val scalarPandasUDF = new MyDummyScalarPandasUDF
 
   private def collectBatchExec(plan: SparkPlan): Seq[BatchEvalPythonExec] = plan.collect {
@@ -120,7 +122,7 @@ class ExtractPythonUDFsSuite extends SparkPlanTest with SharedSparkSession {
             case scan: FileSourceScanExec => scan
           }
           assert(scanNodes.length == 1)
-          // 'a is not null and 'a > 1
+          // $"a" is not null and $"a" > 1
           assert(scanNodes.head.dataFilters.length == 2)
           assert(scanNodes.head.dataFilters.flatMap(_.references.map(_.name)).distinct == Seq("a"))
         }
@@ -157,7 +159,7 @@ class ExtractPythonUDFsSuite extends SparkPlanTest with SharedSparkSession {
             case scan: BatchScanExec => scan
           }
           assert(scanNodes.length == 1)
-          // 'a is not null and 'a > 1
+          // $"a" is not null and $"a" > 1
           val filters = scanNodes.head.scan.asInstanceOf[ParquetScan].pushedFilters
           assert(filters.length == 2)
           assert(filters.flatMap(_.references).distinct === Array("a"))
@@ -166,5 +168,73 @@ class ExtractPythonUDFsSuite extends SparkPlanTest with SharedSparkSession {
     }
   }
 
+  test("SPARK-33303: Deterministic UDF calls are deduplicated") {
+    val df = Seq("Hello").toDF("a")
+
+    val df2 = df.withColumn("c", batchedPythonUDF(col("a"))).withColumn("d", col("c"))
+    val pythonEvalNodes2 = collectBatchExec(df2.queryExecution.executedPlan)
+    assert(pythonEvalNodes2.size == 1)
+    assert(pythonEvalNodes2.head.udfs.size == 1)
+
+    val df3 = df.withColumns(Seq("c", "d"),
+      Seq(batchedPythonUDF(col("a")), batchedPythonUDF(col("a"))))
+    val pythonEvalNodes3 = collectBatchExec(df3.queryExecution.executedPlan)
+    assert(pythonEvalNodes3.size == 1)
+    assert(pythonEvalNodes3.head.udfs.size == 1)
+
+    val df4 = df.withColumn("c", batchedNondeterministicPythonUDF(col("a")))
+      .withColumn("d", col("c"))
+    val pythonEvalNodes4 = collectBatchExec(df4.queryExecution.executedPlan)
+    assert(pythonEvalNodes4.size == 1)
+    assert(pythonEvalNodes4.head.udfs.size == 1)
+
+    val df5 = df.withColumns(Seq("c", "d"),
+      Seq(batchedNondeterministicPythonUDF(col("a")), batchedNondeterministicPythonUDF(col("a"))))
+    val pythonEvalNodes5 = collectBatchExec(df5.queryExecution.executedPlan)
+    assert(pythonEvalNodes5.size == 1)
+    assert(pythonEvalNodes5.head.udfs.size == 2)
+  }
+
+  test("Infers LocalLimit for Python evaluator") {
+    val df = Seq(("Hello", 4), ("World", 8)).toDF("a", "b")
+
+    // Check that PushProjectionThroughLimit brings GlobalLimit - LocalLimit to the top (for
+    // CollectLimit) and that LimitPushDown keeps LocalLimit under UDF.
+    val df2 = df.limit(1).select(batchedPythonUDF(col("b")))
+    assert(df2.queryExecution.optimizedPlan match {
+      case Limit(_, _) => true
+    })
+    assert(df2.queryExecution.optimizedPlan.find {
+      case b: BatchEvalPython => b.child.isInstanceOf[LocalLimit]
+      case _ => false
+    }.isDefined)
+
+    val df3 = df.limit(1).select(scalarPandasUDF(col("b")))
+    assert(df3.queryExecution.optimizedPlan match {
+      case Limit(_, _) => true
+    })
+    assert(df3.queryExecution.optimizedPlan.find {
+      case a: ArrowEvalPython => a.child.isInstanceOf[LocalLimit]
+      case _ => false
+    }.isDefined)
+
+    val df4 = df.limit(1).select(batchedPythonUDF(col("b")), scalarPandasUDF(col("b")))
+    assert(df4.queryExecution.optimizedPlan match {
+      case Limit(_, _) => true
+    })
+    val evalsWithLimit = df4.queryExecution.optimizedPlan.collect {
+      case b: BatchEvalPython if b.child.isInstanceOf[LocalLimit] => b
+      case a: ArrowEvalPython if a.child.isInstanceOf[LocalLimit] => a
+    }
+    assert(evalsWithLimit.length == 2)
+
+    // Check that LimitPushDown properly pushes LocalLimit past EvalPython operators.
+    val df5 = df.select(batchedPythonUDF(col("b")), scalarPandasUDF(col("b"))).limit(1)
+    df5.queryExecution.optimizedPlan.foreach {
+      case b: BatchEvalPython => assert(b.child.isInstanceOf[LocalLimit])
+      case a: ArrowEvalPython => assert(a.child.isInstanceOf[LocalLimit])
+      case _ =>
+    }
+  }
 }
 

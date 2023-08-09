@@ -107,7 +107,6 @@ public class JavaLogisticRegressionSuite extends SharedSparkSession {
     Assert.assertEquals("theProb", model2.getProbabilityCol());
   }
 
-  @SuppressWarnings("unchecked")
   @Test
   public void logisticRegressionPredictorClassifierMethods() {
     LogisticRegression lr = new LogisticRegression();
@@ -143,6 +142,6 @@ public class JavaLogisticRegressionSuite extends SharedSparkSession {
     LogisticRegressionModel model = lr.fit(dataset);
 
     LogisticRegressionTrainingSummary summary = model.summary();
-    Assert.assertEquals(summary.totalIterations(), summary.objectiveHistory().length);
+    Assert.assertEquals(summary.totalIterations(), summary.objectiveHistory().length - 1);
   }
 }

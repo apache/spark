@@ -20,9 +20,9 @@ package org.apache.spark.sql.execution.columnar
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, AttributeReference}
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
+import org.apache.spark.unsafe.types.UTF8String
 
-private[columnar] class ColumnStatisticsSchema(a: Attribute) extends Serializable {
+class ColumnStatisticsSchema(a: Attribute) extends Serializable {
   val upperBound = AttributeReference(a.name + ".upperBound", a.dataType, nullable = true)()
   val lowerBound = AttributeReference(a.name + ".lowerBound", a.dataType, nullable = true)()
   val nullCount = AttributeReference(a.name + ".nullCount", IntegerType, nullable = false)()
@@ -32,7 +32,7 @@ private[columnar] class ColumnStatisticsSchema(a: Attribute) extends Serializabl
   val schema = Seq(lowerBound, upperBound, nullCount, count, sizeInBytes)
 }
 
-private[columnar] class PartitionStatistics(tableSchema: Seq[Attribute]) extends Serializable {
+class PartitionStatistics(tableSchema: Seq[Attribute]) extends Serializable {
   val (forAttribute: AttributeMap[ColumnStatisticsSchema], schema: Seq[AttributeReference]) = {
     val allStats = tableSchema.map(a => a -> new ColumnStatisticsSchema(a))
     (AttributeMap(allStats), allStats.flatMap(_._2.schema))

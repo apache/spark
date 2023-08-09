@@ -21,19 +21,20 @@ import java.net.URI
 
 import org.scalatest.BeforeAndAfterAll
 
-import org.apache.spark.sql.{AnalysisException, SaveMode, SparkSession}
+import org.apache.spark.sql.{AnalysisException, SparkSession}
 import org.apache.spark.sql.catalyst.catalog.CatalogTable
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.execution.command.{CreateTableCommand, DDLUtils}
-import org.apache.spark.sql.execution.datasources.CreateTable
 import org.apache.spark.sql.execution.metric.InputOutputMetricsHelper
 import org.apache.spark.sql.hive.test.TestHive
 import org.apache.spark.sql.internal.{HiveSerDe, SQLConf}
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.tags.SlowHiveTest
 
 /**
  * A set of tests that validates support for Hive SerDe.
  */
+@SlowHiveTest
 class HiveSerDeSuite extends HiveComparisonTest with PlanTest with BeforeAndAfterAll {
   override def beforeAll(): Unit = {
     import TestHive._
@@ -71,8 +72,8 @@ class HiveSerDeSuite extends HiveComparisonTest with PlanTest with BeforeAndAfte
   }
 
   private def extractTableDesc(sql: String): (CatalogTable, Boolean) = {
-    TestHive.sessionState.sqlParser.parsePlan(sql).collect {
-      case CreateTable(tableDesc, mode, _) => (tableDesc, mode == SaveMode.Ignore)
+    TestHive.sessionState.analyzer.execute(TestHive.sessionState.sqlParser.parsePlan(sql)).collect {
+      case CreateTableCommand(tableDesc, ifNotExists) => (tableDesc, ifNotExists)
     }.head
   }
 
@@ -89,7 +90,7 @@ class HiveSerDeSuite extends HiveComparisonTest with PlanTest with BeforeAndAfte
   test("Test the default fileformat for Hive-serde tables") {
     withSQLConf("hive.default.fileformat" -> "orc") {
       val (desc, exists) = extractTableDesc(
-        "CREATE TABLE IF NOT EXISTS fileformat_test (id int)")
+        "CREATE TABLE IF NOT EXISTS fileformat_test (id int) USING hive")
       assert(exists)
       assert(desc.storage.inputFormat == Some("org.apache.hadoop.hive.ql.io.orc.OrcInputFormat"))
       assert(desc.storage.outputFormat == Some("org.apache.hadoop.hive.ql.io.orc.OrcOutputFormat"))
@@ -97,7 +98,8 @@ class HiveSerDeSuite extends HiveComparisonTest with PlanTest with BeforeAndAfte
     }
 
     withSQLConf("hive.default.fileformat" -> "parquet") {
-      val (desc, exists) = extractTableDesc("CREATE TABLE IF NOT EXISTS fileformat_test (id int)")
+      val (desc, exists) = extractTableDesc(
+        "CREATE TABLE IF NOT EXISTS fileformat_test (id int) USING hive")
       assert(exists)
       val input = desc.storage.inputFormat
       val output = desc.storage.outputFormat
@@ -143,7 +145,7 @@ class HiveSerDeSuite extends HiveComparisonTest with PlanTest with BeforeAndAfte
       .add("id", "int")
       .add("name", "string", nullable = true, comment = "blabla"))
     assert(table.provider == Some(DDLUtils.HIVE_PROVIDER))
-    assert(table.storage.locationUri == Some(new URI("/tmp/file")))
+    assert(table.storage.locationUri == Some(new URI("file:///tmp/file")))
     assert(table.storage.properties == Map("my_prop" -> "1"))
     assert(table.comment == Some("BLABLA"))
 

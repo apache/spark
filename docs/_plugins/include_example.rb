@@ -66,10 +66,10 @@ module Jekyll
       rendered_code + hint
     end
 
-    # Trim the code block so as to have the same indention, regardless of their positions in the
+    # Trim the code block so as to have the same indentation, regardless of their positions in the
     # code file.
     def trim_codeblock(lines)
-      # Select the minimum indention of the current code block.
+      # Select the minimum indentation of the current code block.
       min_start_spaces = lines
         .select { |l| l.strip.size !=0 }
         .map { |l| l[/\A */].size }

@@ -23,20 +23,18 @@ import java.io.FileOutputStream
 
 import scala.collection.immutable.IndexedSeq
 
+import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.io.Text
 import org.apache.hadoop.io.compress.{CompressionCodecFactory, GzipCodec}
-import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.{SparkConf, SparkContext, SparkFunSuite}
-import org.apache.spark.internal.Logging
-import org.apache.spark.util.Utils
 
 /**
  * Tests the correctness of
  * [[org.apache.spark.input.WholeTextFileRecordReader WholeTextFileRecordReader]]. A temporary
  * directory is created as fake input. Temporal storage would be deleted in the end.
  */
-class WholeTextFileRecordReaderSuite extends SparkFunSuite with BeforeAndAfterAll with Logging {
+class WholeTextFileRecordReaderSuite extends SparkFunSuite {
   private var sc: SparkContext = _
   private var factory: CompressionCodecFactory = _
 
@@ -71,6 +69,7 @@ class WholeTextFileRecordReaderSuite extends SparkFunSuite with BeforeAndAfterAl
                                compress: Boolean) = {
     val out = if (compress) {
       val codec = new GzipCodec
+      codec.setConf(new Configuration())
       val path = s"${inputDir.toString}/$fileName${codec.getDefaultExtension}"
       codec.createOutputStream(new DataOutputStream(new FileOutputStream(path)))
     } else {

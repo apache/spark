@@ -36,7 +36,7 @@ A string literal is used to specify a character string value.
 #### Syntax
 
 ```sql
-'char [ ... ]' | "char [ ... ]"
+[ r ] { 'char [ ... ]' | "char [ ... ]" }
 ```
 
 #### Parameters
@@ -44,6 +44,12 @@ A string literal is used to specify a character string value.
 * **char**
 
     One character from the character set. Use `\` to escape special characters (e.g., `'` or `\`).
+    To represent unicode characters, use 16-bit or 32-bit unicode escape of the form `\uxxxx` or `\Uxxxxxxxx`,
+    where xxxx and xxxxxxxx are 16-bit and 32-bit code points in hexadecimal respectively (e.g., `\u3042` for `あ` and `\U0001F44D` for `👍`).
+
+* **r**
+
+    Case insensitive, indicates `RAW`. If a string literal starts with `r` prefix, neither special characters nor unicode characters are escaped by `\`.
 
 #### Examples
 
@@ -68,6 +74,13 @@ SELECT 'it\'s $10.' AS col;
 +---------+
 |It's $10.|
 +---------+
+
+SELECT r"'\n' represents newline character." AS col;
++----------------------------------+
+|                               col|
++----------------------------------+
+|'\n' represents newline character.|
++----------------------------------+
 ```
 
 ### Binary Literal
@@ -142,16 +155,15 @@ SELECT TRUE AS col;
 ### Numeric Literal
 
 A numeric literal is used to specify a fixed or floating-point number.
+There are two kinds of numeric literals: integral literal and fractional literal.
 
-#### Integral Literal
-
-##### Syntax
+#### Integral Literal Syntax
 
 ```sql
 [ + | - ] digit [ ... ] [ L | S | Y ]
 ```
 
-##### Parameters
+#### Integral Literal Parameters
 
 * **digit**
 
@@ -173,7 +185,7 @@ A numeric literal is used to specify a fixed or floating-point number.
 
     Indicates a 4-byte signed integer number.
 
-##### Examples
+#### Integral Literal Examples
 
 ```sql
 SELECT -2147483648 AS col;
@@ -205,9 +217,7 @@ SELECT 482S AS col;
 +---+
 ```
 
-#### Fractional Literals
-
-##### Syntax
+#### Fractional Literals Syntax
 
 decimal literals:
 ```sql
@@ -217,6 +227,11 @@ decimal_digits { [ BD ] | [ exponent BD ] } | digit [ ... ] [ exponent ] BD
 double literals:
 ```sql
 decimal_digits  { D | exponent [ D ] }  | digit [ ... ] { exponent [ D ] | [ exponent ] D }
+```
+
+float literals:
+```sql
+decimal_digits  { F | exponent [ F ] }  | digit [ ... ] { exponent [ F ] | [ exponent ] F }
 ```
 
 While decimal_digits is defined as
@@ -229,7 +244,7 @@ and exponent is defined as
 E [ + | - ] digit [ ... ]
 ```
 
-##### Parameters
+#### Fractional Literals Parameters
 
 * **digit**
 
@@ -239,11 +254,15 @@ E [ + | - ] digit [ ... ]
 
     Case insensitive, indicates `DOUBLE`, which is an 8-byte double-precision floating point number.
 
+* **F**
+
+    Case insensitive, indicates `FLOAT`, which is a 4-byte single-precision floating point number.
+
 * **BD**
 
     Case insensitive, indicates `DECIMAL`, with the total number of digits as precision and the number of digits to right of decimal point as scale.
 
-##### Examples
+#### Fractional Literals Examples
 
 ```sql
 SELECT 12.578 AS col;
@@ -333,11 +352,9 @@ SELECT -3.E-3D AS col;
 
 ### Datetime Literal
 
-A Datetime literal is used to specify a datetime value.
+A datetime literal is used to specify a date or timestamp value.
 
-#### Date Literal
-
-##### Syntax
+#### Date Syntax
 
 ```sql
 DATE { 'yyyy' |
@@ -347,7 +364,7 @@ DATE { 'yyyy' |
 ```
 **Note:** defaults to `01` if month or day is not specified.
 
-##### Examples
+#### Date Examples
 
 ```sql
 SELECT DATE '1997' AS col;
@@ -372,9 +389,7 @@ SELECT DATE '2011-11-11' AS col;
 +----------+
 ```
 
-#### Timestamp Literal
-
-##### Syntax
+#### Timestamp Syntax
 
 ```sql
 TIMESTAMP { 'yyyy' |
@@ -399,7 +414,7 @@ TIMESTAMP { 'yyyy' |
 
 **Note:** defaults to the session local timezone (set via `spark.sql.session.timeZone`) if `zone_id` is not specified.
 
-##### Examples
+#### Timestamp Examples
 
 ```sql
 SELECT TIMESTAMP '1997-01-31 09:26:56.123' AS col;
@@ -427,24 +442,86 @@ SELECT TIMESTAMP '1997-01' AS col;
 ### Interval Literal
 
 An interval literal is used to specify a fixed period of time.
+The interval literal supports two syntaxes: ANSI syntax and multi-units syntax.
+
+#### ANSI Syntax
+
+The ANSI SQL standard defines interval literals in the form:
+```sql
+INTERVAL [ <sign> ] <interval string> <interval qualifier>
+```
+where `<interval qualifier>` can be a single field or in the field-to-field form:
+```sql
+<interval qualifier> ::= <start field> TO <end field> | <single field>
+```
+The field name is case-insensitive, and can be one of `YEAR`, `MONTH`, `DAY`, `HOUR`, `MINUTE` and `SECOND`.
+
+An interval literal can have either year-month or day-time interval type. The interval sub-type defines format of `<interval string>`:
+```sql
+<interval string> ::= <quote> [ <sign> ] { <year-month literal> | <day-time literal> } <quote>
+<year-month literal> ::= <years value> [ <minus sign> <months value> ] | <months value>
+<day-time literal> ::= <day-time interval> | <time interval>
+<day-time interval> ::= <days value> [ <space> <hours value> [ <colon> <minutes value> [ <colon> <seconds value> ] ] ]
+<time interval> ::= <hours value> [ <colon> <minutes value> [ <colon> <seconds value> ] ]
+  | <minutes value> [ <colon> <seconds value> ]
+  | <seconds value>
+```
+
+Supported year-month interval literals and theirs formats:
+
+|`<interval qualifier>`|Interval string pattern|An instance of the literal|
+|---------|-------|------------|
+|YEAR|`[+|-]'[+|-]y'`|`INTERVAL -'2021' YEAR`|
+|YEAR TO MONTH|`[+|-]'[+|-]y-m'`|`INTERVAL '-2021-07' YEAR TO MONTH`|
+|MONTH|`[+|-]'[+|-]m'`|`interval '10' month`|
+
+Formats of supported day-time interval literals:
+
+|`<interval qualifier>`|Interval string pattern|An instance of the literal|
+|---------|----|-------------------|
+|DAY|`[+|-]'[+|-]d'`|`INTERVAL -'100' DAY`|
+|DAY TO HOUR|`[+|-]'[+|-]d h'`|`INTERVAL '-100 10' DAY TO HOUR`|
+|DAY TO MINUTE|`[+|-]'[+|-]d h:m'`|`INTERVAL '100 10:30' DAY TO MINUTE`|
+|DAY TO SECOND|`[+|-]'[+|-]d h:m:s.n'`|`INTERVAL '100 10:30:40.999999' DAY TO SECOND`|
+|HOUR|`[+|-]'[+|-]h'`|`INTERVAL '123' HOUR`|
+|HOUR TO MINUTE|`[+|-]'[+|-]h:m'`|`INTERVAL -'-123:10' HOUR TO MINUTE`|
+|HOUR TO SECOND|`[+|-]'[+|-]h:m:s.n'`|`INTERVAL '123:10:59' HOUR TO SECOND`|
+|MINUTE|`[+|-]'[+|-]m'`|`interval '1000' minute`|
+|MINUTE TO SECOND|`[+|-]'[+|-]m:s.n'`|`INTERVAL '1000:01.001' MINUTE TO SECOND`|
+|SECOND|`[+|-]'[+|-]s.n'`|`INTERVAL '1000.000001' SECOND`|
+
+#### ANSI Examples
+
+```sql
+SELECT INTERVAL '2-3' YEAR TO MONTH AS col;
++----------------------------+
+|col                         |
++----------------------------+
+|INTERVAL '2-3' YEAR TO MONTH|
++----------------------------+
+
+SELECT INTERVAL -'20 15:40:32.99899999' DAY TO SECOND AS col;
++--------------------------------------------+
+|col                                         |
++--------------------------------------------+
+|INTERVAL '-20 15:40:32.998999' DAY TO SECOND|
++--------------------------------------------+
+```
+
+#### Multi-units Syntax
 
 ```sql
 INTERVAL interval_value interval_unit [ interval_value interval_unit ... ] |
 INTERVAL 'interval_value interval_unit [ interval_value interval_unit ... ]' |
-INTERVAL interval_string_value interval_unit TO interval_unit
 ```
 
-#### Parameters
+#### Multi-units Parameters
 
 * **interval_value**
 
     **Syntax:**
 
       [ + | - ] number_value | '[ + | - ] number_value'
-
-* **interval_string_value**
-
-     year-month/day-time interval string.
 
 * **interval_unit**
 
@@ -453,7 +530,9 @@ INTERVAL interval_string_value interval_unit TO interval_unit
       YEAR[S] | MONTH[S] | WEEK[S] | DAY[S] | HOUR[S] | MINUTE[S] | SECOND[S] |
       MILLISECOND[S] | MICROSECOND[S]
 
-#### Examples
+      Mix of the YEAR[S] or MONTH[S] interval units with other units is not allowed.
+
+#### Multi-units Examples
 
 ```sql
 SELECT INTERVAL 3 YEAR AS col;
@@ -484,18 +563,4 @@ SELECT INTERVAL 1 YEARS 2 MONTH 3 WEEK 4 DAYS 5 HOUR 6 MINUTES 7 SECOND 8
 +-----------------------------------------------------------+
 |1 years 2 months 25 days 5 hours 6 minutes 7.008009 seconds|
 +-----------------------------------------------------------+
-
-SELECT INTERVAL '2-3' YEAR TO MONTH AS col;
-+----------------+
-|             col|
-+----------------+
-|2 years 3 months|
-+----------------+
-
-SELECT INTERVAL '20 15:40:32.99899999' DAY TO SECOND AS col;
-+---------------------------------------------+
-|                                          col|
-+---------------------------------------------+
-|20 days 15 hours 40 minutes 32.998999 seconds|
-+---------------------------------------------+
 ```

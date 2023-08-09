@@ -23,6 +23,7 @@ import org.apache.spark.sql.catalyst.analysis.AnalysisTest
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
+import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.types._
 
 class SelectedFieldSuite extends AnalysisTest {
@@ -57,7 +58,7 @@ class SelectedFieldSuite extends AnalysisTest {
           MapType(StringType, IntegerType, valueContainsNull = false)) :: Nil)) :: Nil)
 
   test("SelectedField should not match an attribute reference") {
-    val testRelation = LocalRelation(nestedComplex.toAttributes)
+    val testRelation = LocalRelation(nestedComplex)
     assertResult(None)(unapplySelect("col1", testRelation))
     assertResult(None)(unapplySelect("col1 as foo", testRelation))
     assertResult(None)(unapplySelect("col2", testRelation))
@@ -95,6 +96,14 @@ class SelectedFieldSuite extends AnalysisTest {
 
   testSelect(structOfArray, "col2.field3.subfield3", "col2.field3[0].subfield3 as foo",
       "col2.field3.subfield3[0] as foo", "col2.field3[0].subfield3[0] as foo") {
+    StructField("col2", StructType(
+      StructField("field3", ArrayType(StructType(
+        StructField("subfield3", ArrayType(IntegerType)) :: Nil)), nullable = false) :: Nil))
+  }
+
+  testSelect(structOfArray, "element_at(col2.field3, 1).subfield3 as foo",
+    "element_at(col2.field3.subfield3, 0) as foo",
+    "element_at(element_at(col2.field3, 1).subfield3, 0) as foo") {
     StructField("col2", StructType(
       StructField("field3", ArrayType(StructType(
         StructField("subfield3", ArrayType(IntegerType)) :: Nil)), nullable = false) :: Nil))
@@ -143,6 +152,14 @@ class SelectedFieldSuite extends AnalysisTest {
 
   testSelect(structWithMap,
     "col2.field4['foo'].subfield2 as foo", "col2.field4['foo'].subfield2[0] as foo") {
+    StructField("col2", StructType(
+      StructField("field4", MapType(StringType, StructType(
+        StructField("subfield2", ArrayType(IntegerType, containsNull = false))
+          :: Nil), valueContainsNull = false)) :: Nil))
+  }
+
+  testSelect(structWithMap, "element_at(col2.field4, 'foo').subfield2 as foo",
+    "element_at(element_at(col2.field4, 'foo').subfield2, 1) as foo") {
     StructField("col2", StructType(
       StructField("field4", MapType(StringType, StructType(
         StructField("subfield2", ArrayType(IntegerType, containsNull = false))
@@ -254,13 +271,19 @@ class SelectedFieldSuite extends AnalysisTest {
     StructField("col3", ArrayType(StructType(
       StructField("field1", StructType(
         StructField("subfield1", IntegerType, nullable = false) :: Nil))
-        :: Nil), containsNull = false), nullable = false)
+        :: Nil), containsNull = true), nullable = false)
   }
 
   testSelect(arrayWithStructAndMap, "col3.field2['foo'] as foo") {
     StructField("col3", ArrayType(StructType(
       StructField("field2", MapType(StringType, IntegerType, valueContainsNull = false))
-        :: Nil), containsNull = false), nullable = false)
+        :: Nil), containsNull = true), nullable = false)
+  }
+
+  testSelect(arrayWithStructAndMap, "element_at(col3.field2, 'foo') as foo") {
+    StructField("col3", ArrayType(StructType(
+      StructField("field2", MapType(StringType, IntegerType, valueContainsNull = false))
+        :: Nil), containsNull = true), nullable = false)
   }
 
   //  |-- col1: string (nullable = false)
@@ -348,6 +371,12 @@ class SelectedFieldSuite extends AnalysisTest {
         StructField("subfield1", IntegerType) :: Nil)) :: Nil), containsNull = false)))
   }
 
+  testSelect(mapOfArray, "element_at(element_at(col6, 'foo'), 0).field1.subfield1 as foo") {
+    StructField("col6", MapType(StringType, ArrayType(StructType(
+      StructField("field1", StructType(
+        StructField("subfield1", IntegerType) :: Nil)) :: Nil), containsNull = false)))
+  }
+
   // An array with a struct with a different fields
   //  |-- col1: string (nullable = false)
   //  |-- col7: array (nullable = true)
@@ -368,6 +397,12 @@ class SelectedFieldSuite extends AnalysisTest {
 
   testSelect(arrayWithMultipleFields,
     "col7.field1", "col7[0].field1 as foo", "col7.field1[0] as foo") {
+    StructField("col7", ArrayType(StructType(
+      StructField("field1", IntegerType, nullable = false) :: Nil)))
+  }
+
+  testSelect(arrayWithMultipleFields,
+    "col7.field1", "element_at(col7, 0).field1 as foo", "element_at(col7.field1, 0) as foo") {
     StructField("col7", ArrayType(StructType(
       StructField("field1", IntegerType, nullable = false) :: Nil)))
   }
@@ -471,7 +506,7 @@ class SelectedFieldSuite extends AnalysisTest {
   testSelect(mapWithArrayOfStructKey, "map_keys(col2)[0].field1 as foo") {
     StructField("col2", MapType(
       ArrayType(StructType(
-        StructField("field1", StringType) :: Nil), containsNull = false),
+        StructField("field1", StringType) :: Nil), containsNull = true),
       ArrayType(StructType(
         StructField("field3", StructType(
           StructField("subfield3", IntegerType) ::
@@ -482,7 +517,7 @@ class SelectedFieldSuite extends AnalysisTest {
     StructField("col2", MapType(
       ArrayType(StructType(
         StructField("field2", StructType(
-          StructField("subfield1", IntegerType) :: Nil)) :: Nil), containsNull = false),
+          StructField("subfield1", IntegerType) :: Nil)) :: Nil), containsNull = true),
       ArrayType(StructType(
         StructField("field3", StructType(
           StructField("subfield3", IntegerType) ::
@@ -500,7 +535,7 @@ class SelectedFieldSuite extends AnalysisTest {
           indent("but it actually selected\n") +
           indent(StructType(actual :: Nil).treeString) +
           indent("Note that expected.dataType.sameType(actual.dataType) = " +
-          expected.dataType.sameType(actual.dataType)))
+          DataTypeUtils.sameType(expected.dataType, actual.dataType)))
         throw ex
     }
   }
@@ -518,7 +553,7 @@ class SelectedFieldSuite extends AnalysisTest {
   }
 
   private def assertSelect(expr: String, expected: StructField, inputSchema: StructType): Unit = {
-    val relation = LocalRelation(inputSchema.toAttributes)
+    val relation = LocalRelation(inputSchema)
     unapplySelect(expr, relation) match {
       case Some(field) =>
         assertResult(expected)(field)(expr)
@@ -534,7 +569,7 @@ class SelectedFieldSuite extends AnalysisTest {
   private def unapplySelect(expr: String, relation: LocalRelation) = {
     val parsedExpr = parseAsCatalystExpression(Seq(expr)).head
     val select = relation.select(parsedExpr)
-    val analyzed = caseSensitiveAnalyzer.execute(select)
+    val analyzed = getAnalyzer.execute(select)
     SelectedField.unapply(analyzed.expressions.head)
   }
 

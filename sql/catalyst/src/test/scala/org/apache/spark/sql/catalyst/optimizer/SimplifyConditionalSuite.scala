@@ -18,36 +18,35 @@
 package org.apache.spark.sql.catalyst.optimizer
 
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
+import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.Literal.{FalseLiteral, TrueLiteral}
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
-import org.apache.spark.sql.types.{IntegerType, NullType}
+import org.apache.spark.sql.types.{BooleanType, IntegerType}
 
 
-class SimplifyConditionalSuite extends PlanTest with PredicateHelper {
+class SimplifyConditionalSuite extends PlanTest with ExpressionEvalHelper {
 
   object Optimize extends RuleExecutor[LogicalPlan] {
     val batches = Batch("SimplifyConditionals", FixedPoint(50),
       BooleanSimplification, ConstantFolding, SimplifyConditionals) :: Nil
   }
 
+  private val relation = LocalRelation($"a".int, $"b".int, $"c".boolean)
+
   protected def assertEquivalent(e1: Expression, e2: Expression): Unit = {
-    val correctAnswer = Project(Alias(e2, "out")() :: Nil, OneRowRelation()).analyze
-    val actual = Optimize.execute(Project(Alias(e1, "out")() :: Nil, OneRowRelation()).analyze)
+    val correctAnswer = Project(Alias(e2, "out")() :: Nil, relation).analyze
+    val actual = Optimize.execute(Project(Alias(e1, "out")() :: Nil, relation).analyze)
     comparePlans(actual, correctAnswer)
   }
 
   private val trueBranch = (TrueLiteral, Literal(5))
   private val normalBranch = (NonFoldableLiteral(true), Literal(10))
   private val unreachableBranch = (FalseLiteral, Literal(20))
-  private val nullBranch = (Literal.create(null, NullType), Literal(30))
-
-  val isNotNullCond = IsNotNull(UnresolvedAttribute(Seq("a")))
-  val isNullCond = IsNull(UnresolvedAttribute("b"))
-  val notCond = Not(UnresolvedAttribute("c"))
+  private val nullBranch = (Literal.create(null, BooleanType), Literal(30))
 
   test("simplify if") {
     assertEquivalent(
@@ -59,7 +58,7 @@ class SimplifyConditionalSuite extends PlanTest with PredicateHelper {
       Literal(20))
 
     assertEquivalent(
-      If(Literal.create(null, NullType), Literal(10), Literal(20)),
+      If(Literal.create(null, BooleanType), Literal(10), Literal(20)),
       Literal(20))
   }
 
@@ -127,9 +126,9 @@ class SimplifyConditionalSuite extends PlanTest with PredicateHelper {
   test("simplify CaseWhen if all the outputs are semantic equivalence") {
     // When the conditions in `CaseWhen` are all deterministic, `CaseWhen` can be removed.
     assertEquivalent(
-      CaseWhen((isNotNullCond, Subtract(Literal(3), Literal(2))) ::
-        (isNullCond, Literal(1)) ::
-        (notCond, Add(Literal(6), Literal(-5))) ::
+      CaseWhen(($"a".isNotNull, Subtract(Literal(3), Literal(2))) ::
+        ($"b".isNull, Literal(1)) ::
+        (!$"c", Add(Literal(6), Literal(-5))) ::
         Nil,
         Add(Literal(2), Literal(-1))),
       Literal(1)
@@ -165,5 +164,133 @@ class SimplifyConditionalSuite extends PlanTest with PredicateHelper {
         Nil,
         Literal(1))
     )
+  }
+
+  test("simplify if when one clause is null and another is boolean") {
+    val p = IsNull($"a")
+    val nullLiteral = Literal(null, BooleanType)
+    assertEquivalent(If(p, nullLiteral, FalseLiteral), And(p, nullLiteral))
+    assertEquivalent(If(p, nullLiteral, TrueLiteral), Or(IsNotNull($"a"), nullLiteral))
+    assertEquivalent(If(p, FalseLiteral, nullLiteral), And(IsNotNull($"a"), nullLiteral))
+    assertEquivalent(If(p, TrueLiteral, nullLiteral), Or(p, nullLiteral))
+
+    // the rule should not apply to nullable predicate
+    Seq(TrueLiteral, FalseLiteral).foreach { b =>
+      assertEquivalent(If(GreaterThan($"a", 42), nullLiteral, b),
+        If(GreaterThan($"a", 42), nullLiteral, b))
+      assertEquivalent(If(GreaterThan($"a", 42), b, nullLiteral),
+        If(GreaterThan($"a", 42), b, nullLiteral))
+    }
+
+    // check evaluation also
+    Seq(TrueLiteral, FalseLiteral).foreach { b =>
+      checkEvaluation(If(b, nullLiteral, FalseLiteral), And(b, nullLiteral).eval(EmptyRow))
+      checkEvaluation(If(b, nullLiteral, TrueLiteral), Or(Not(b), nullLiteral).eval(EmptyRow))
+      checkEvaluation(If(b, FalseLiteral, nullLiteral), And(Not(b), nullLiteral).eval(EmptyRow))
+      checkEvaluation(If(b, TrueLiteral, nullLiteral), Or(b, nullLiteral).eval(EmptyRow))
+    }
+
+    // should have no effect on expressions with nullable if condition
+    assert((Factorial(5) > 100L).nullable)
+    Seq(TrueLiteral, FalseLiteral).foreach { b =>
+      checkEvaluation(If(Factorial(5) > 100L, nullLiteral, b),
+        If(Factorial(5) > 100L, nullLiteral, b).eval(EmptyRow))
+      checkEvaluation(If(Factorial(5) > 100L, b, nullLiteral),
+        If(Factorial(5) > 100L, b, nullLiteral).eval(EmptyRow))
+    }
+  }
+
+  test("SPARK-33845: remove unnecessary if when the outputs are boolean type") {
+    // verify the boolean equivalence of all transformations involved
+    val fields = Seq(
+      $"cond".boolean.notNull,
+      $"cond_nullable".boolean,
+      $"a".boolean,
+      $"b".boolean
+    )
+    val Seq(cond, cond_nullable, a, b) = fields.zipWithIndex.map { case (f, i) => f.at(i) }
+
+    val exprs = Seq(
+      // actual expressions of the transformations: original -> transformed
+      If(cond, true, false) -> cond,
+      If(cond, false, true) -> !cond,
+      If(cond_nullable, true, false) -> (cond_nullable <=> true),
+      If(cond_nullable, false, true) -> (!(cond_nullable <=> true)))
+
+    // check plans
+    for ((originalExpr, expectedExpr) <- exprs) {
+      assertEquivalent(originalExpr, expectedExpr)
+    }
+
+    // check evaluation
+    val binaryBooleanValues = Seq(true, false)
+    val ternaryBooleanValues = Seq(true, false, null)
+    for (condVal <- binaryBooleanValues;
+         condNullableVal <- ternaryBooleanValues;
+         aVal <- ternaryBooleanValues;
+         bVal <- ternaryBooleanValues;
+         (originalExpr, expectedExpr) <- exprs) {
+      val inputRow = create_row(condVal, condNullableVal, aVal, bVal)
+      val optimizedVal = evaluateWithoutCodegen(expectedExpr, inputRow)
+      checkEvaluation(originalExpr, optimizedVal, inputRow)
+    }
+  }
+
+  test("SPARK-33847: Remove the CaseWhen if elseValue is empty and other outputs are null") {
+    assertEquivalent(
+      CaseWhen((GreaterThan($"a", 1), Literal.create(null, IntegerType)) :: Nil, None),
+      Literal.create(null, IntegerType))
+
+    assertEquivalent(
+      CaseWhen((GreaterThan(Rand(0), 0.5), Literal.create(null, IntegerType)) :: Nil, None),
+      CaseWhen((GreaterThan(Rand(0), 0.5), Literal.create(null, IntegerType)) :: Nil, None))
+  }
+
+  test("SPARK-33884: simplify CaseWhen clauses with (true and false) and (false and true)") {
+    // verify the boolean equivalence of all transformations involved
+    val fields = Seq(
+      $"cond".boolean.notNull,
+      $"cond_nullable".boolean,
+      $"a".boolean,
+      $"b".boolean
+    )
+    val Seq(cond, cond_nullable, a, b) = fields.zipWithIndex.map { case (f, i) => f.at(i) }
+
+    val exprs = Seq(
+      // actual expressions of the transformations: original -> transformed
+      CaseWhen(Seq((cond, TrueLiteral)), FalseLiteral) -> cond,
+      CaseWhen(Seq((cond, FalseLiteral)), TrueLiteral) -> !cond,
+      CaseWhen(Seq((cond_nullable, TrueLiteral)), FalseLiteral) -> (cond_nullable <=> true),
+      CaseWhen(Seq((cond_nullable, FalseLiteral)), TrueLiteral) -> (!(cond_nullable <=> true)))
+
+    // check plans
+    for ((originalExpr, expectedExpr) <- exprs) {
+      assertEquivalent(originalExpr, expectedExpr)
+    }
+
+    // check evaluation
+    val binaryBooleanValues = Seq(true, false)
+    val ternaryBooleanValues = Seq(true, false, null)
+    for (condVal <- binaryBooleanValues;
+         condNullableVal <- ternaryBooleanValues;
+         aVal <- ternaryBooleanValues;
+         bVal <- ternaryBooleanValues;
+         (originalExpr, expectedExpr) <- exprs) {
+      val inputRow = create_row(condVal, condNullableVal, aVal, bVal)
+      val optimizedVal = evaluateWithoutCodegen(expectedExpr, inputRow)
+      checkEvaluation(originalExpr, optimizedVal, inputRow)
+    }
+  }
+
+  test("SPARK-37270: Remove elseValue if it is null Literal") {
+    assertEquivalent(
+      CaseWhen((GreaterThan($"a", Rand(1)), Literal.create(null, BooleanType)) :: Nil,
+        Some(Literal.create(null, BooleanType))),
+      CaseWhen((GreaterThan($"a", Rand(1)), Literal.create(null, BooleanType)) :: Nil))
+
+    assertEquivalent(
+      CaseWhen((GreaterThan($"a", 1), Literal.create(1, IntegerType)) :: Nil,
+        Some(Literal.create(null, IntegerType))),
+      CaseWhen((GreaterThan($"a", 1), Literal.create(1, IntegerType)) :: Nil))
   }
 }

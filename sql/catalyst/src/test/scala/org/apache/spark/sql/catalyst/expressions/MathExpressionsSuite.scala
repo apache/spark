@@ -18,12 +18,14 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import java.nio.charset.StandardCharsets
+import java.time.{Duration, Period}
+import java.time.temporal.ChronoUnit
 
 import com.google.common.math.LongMath
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.{SparkArithmeticException, SparkFunSuite}
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.analysis.TypeCoercion.ImplicitTypeCasts.implicitCast
+import org.apache.spark.sql.catalyst.analysis.TypeCoercion.implicitCast
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateMutableProjection
 import org.apache.spark.sql.catalyst.optimizer.SimpleTestOptimizer
@@ -138,9 +140,8 @@ class MathExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     expression: Expression,
     inputRow: InternalRow = EmptyRow): Unit = {
 
-    val plan = generateProject(
-      GenerateMutableProjection.generate(Alias(expression, s"Optimized($expression)")() :: Nil),
-      expression)
+    val plan =
+      GenerateMutableProjection.generate(Alias(expression, s"Optimized($expression)")() :: Nil)
 
     val actual = plan(inputRow).get(0, expression.dataType)
     if (!actual.asInstanceOf[Double].isNaN) {
@@ -157,22 +158,45 @@ class MathExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("conv") {
-    checkEvaluation(Conv(Literal("3"), Literal(10), Literal(2)), "11")
-    checkEvaluation(Conv(Literal("-15"), Literal(10), Literal(-16)), "-F")
-    checkEvaluation(Conv(Literal("-15"), Literal(10), Literal(16)), "FFFFFFFFFFFFFFF1")
-    checkEvaluation(Conv(Literal("big"), Literal(36), Literal(16)), "3A48")
-    checkEvaluation(Conv(Literal.create(null, StringType), Literal(36), Literal(16)), null)
-    checkEvaluation(Conv(Literal("3"), Literal.create(null, IntegerType), Literal(16)), null)
-    checkEvaluation(Conv(Literal("3"), Literal(16), Literal.create(null, IntegerType)), null)
-    checkEvaluation(
-      Conv(Literal("1234"), Literal(10), Literal(37)), null)
-    checkEvaluation(
-      Conv(Literal(""), Literal(10), Literal(16)), null)
-    checkEvaluation(
-      Conv(Literal("9223372036854775807"), Literal(36), Literal(16)), "FFFFFFFFFFFFFFFF")
-    // If there is an invalid digit in the number, the longest valid prefix should be converted.
-    checkEvaluation(
-      Conv(Literal("11abc"), Literal(10), Literal(16)), "B")
+    Seq(true, false).foreach { ansiEnabled =>
+      checkEvaluation(Conv(Literal("3"), Literal(10), Literal(2), ansiEnabled), "11")
+      checkEvaluation(Conv(Literal("-15"), Literal(10), Literal(-16), ansiEnabled), "-F")
+      checkEvaluation(
+        Conv(Literal("-15"), Literal(10), Literal(16), ansiEnabled), "FFFFFFFFFFFFFFF1")
+      checkEvaluation(Conv(Literal("big"), Literal(36), Literal(16), ansiEnabled), "3A48")
+      checkEvaluation(Conv(Literal.create(null, StringType), Literal(36), Literal(16), ansiEnabled),
+        null)
+      checkEvaluation(
+        Conv(Literal("3"), Literal.create(null, IntegerType), Literal(16), ansiEnabled), null)
+      checkEvaluation(
+        Conv(Literal("3"), Literal(16), Literal.create(null, IntegerType), ansiEnabled), null)
+      checkEvaluation(
+        Conv(Literal("1234"), Literal(10), Literal(37), ansiEnabled), null)
+      checkEvaluation(
+        Conv(Literal(""), Literal(10), Literal(16), ansiEnabled), null)
+
+      // If there is an invalid digit in the number, the longest valid prefix should be converted.
+      checkEvaluation(
+        Conv(Literal("11abc"), Literal(10), Literal(16), ansiEnabled), "B")
+    }
+  }
+
+  test("conv overflow") {
+    Seq(
+      ("9223372036854775807", 36, 16, "FFFFFFFFFFFFFFFF"),
+      ("92233720368547758070", 10, 16, "FFFFFFFFFFFFFFFF"),
+      ("-92233720368547758070", 10, 16, "FFFFFFFFFFFFFFFF"),
+      ("100000000000000000000000000000000000000000000000000000000000000000", 2, 10,
+        "18446744073709551615"),
+      ("100000000000000000000000000000000000000000000000000000000000000000", 2, 8,
+        "1777777777777777777777")
+    ).foreach { case (numExpr, fromBase, toBase, expected) =>
+      checkEvaluation(
+       Conv(Literal(numExpr), Literal(fromBase), Literal(toBase), ansiEnabled = false), expected)
+      checkExceptionInExpression[SparkArithmeticException](
+        Conv(Literal(numExpr), Literal(fromBase), Literal(toBase), ansiEnabled = true),
+        "Overflow in function conv()")
+    }
   }
 
   test("e") {
@@ -186,6 +210,20 @@ class MathExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   test("sin") {
     testUnary(Sin, math.sin)
     checkConsistencyBetweenInterpretedAndCodegen(Sin, DoubleType)
+  }
+
+  test("csc") {
+    def f: (Double) => Double = (x: Double) => 1 / math.sin(x)
+    testUnary(Csc, f)
+    checkConsistencyBetweenInterpretedAndCodegen(Csc, DoubleType)
+    val nullLit = Literal.create(null, NullType)
+    val intNullLit = Literal.create(null, IntegerType)
+    val intLit = Literal.create(1, IntegerType)
+    checkEvaluation(checkDataTypeAndCast(Csc(nullLit)), null, EmptyRow)
+    checkEvaluation(checkDataTypeAndCast(Csc(intNullLit)), null, EmptyRow)
+    checkEvaluation(checkDataTypeAndCast(Csc(intLit)), 1 / math.sin(1), EmptyRow)
+    checkEvaluation(checkDataTypeAndCast(Csc(-intLit)), 1 / math.sin(-1), EmptyRow)
+    checkEvaluation(checkDataTypeAndCast(Csc(0)), 1 / math.sin(0), EmptyRow)
   }
 
   test("asin") {
@@ -214,6 +252,20 @@ class MathExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   test("cos") {
     testUnary(Cos, math.cos)
     checkConsistencyBetweenInterpretedAndCodegen(Cos, DoubleType)
+  }
+
+  test("sec") {
+    def f: (Double) => Double = (x: Double) => 1 / math.cos(x)
+    testUnary(Sec, f)
+    checkConsistencyBetweenInterpretedAndCodegen(Sec, DoubleType)
+    val nullLit = Literal.create(null, NullType)
+    val intNullLit = Literal.create(null, IntegerType)
+    val intLit = Literal.create(1, IntegerType)
+    checkEvaluation(checkDataTypeAndCast(Sec(nullLit)), null, EmptyRow)
+    checkEvaluation(checkDataTypeAndCast(Sec(intNullLit)), null, EmptyRow)
+    checkEvaluation(checkDataTypeAndCast(Sec(intLit)), 1 / math.cos(1), EmptyRow)
+    checkEvaluation(checkDataTypeAndCast(Sec(-intLit)), 1 / math.cos(-1), EmptyRow)
+    checkEvaluation(checkDataTypeAndCast(Sec(0)), 1 / math.cos(0), EmptyRow)
   }
 
   test("acos") {
@@ -292,9 +344,19 @@ class MathExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkConsistencyBetweenInterpretedAndCodegen(Cbrt, DoubleType)
   }
 
-  def checkDataTypeAndCast(expression: UnaryMathExpression): Expression = {
+  def checkDataTypeAndCast(expression: Expression): Expression = expression match {
+    case e: UnaryMathExpression => checkDataTypeAndCastUnaryMathExpression(e)
+    case e: RoundBase => checkDataTypeAndCastRoundBase(e)
+  }
+
+  def checkDataTypeAndCastUnaryMathExpression(expression: UnaryMathExpression): Expression = {
     val expNew = implicitCast(expression.child, expression.inputTypes(0)).getOrElse(expression)
     expression.withNewChildren(Seq(expNew))
+  }
+
+  def checkDataTypeAndCastRoundBase(expression: RoundBase): Expression = {
+    val expNewLeft = implicitCast(expression.left, expression.inputTypes(0)).getOrElse(expression)
+    expression.withNewChildren(Seq(expNewLeft, expression.right))
   }
 
   test("ceil") {
@@ -409,11 +471,11 @@ class MathExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     testUnary(Bin, java.lang.Long.toBinaryString, (-20 to 20).map(_.toLong), evalType = LongType)
 
     val row = create_row(null, 12L, 123L, 1234L, -123L)
-    val l1 = 'a.long.at(0)
-    val l2 = 'a.long.at(1)
-    val l3 = 'a.long.at(2)
-    val l4 = 'a.long.at(3)
-    val l5 = 'a.long.at(4)
+    val l1 = $"a".long.at(0)
+    val l2 = $"a".long.at(1)
+    val l3 = $"a".long.at(2)
+    val l4 = $"a".long.at(3)
+    val l5 = $"a".long.at(4)
 
     checkEvaluation(Bin(l1), null, row)
     checkEvaluation(Bin(l2), java.lang.Long.toBinaryString(12), row)
@@ -551,12 +613,17 @@ class MathExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(Unhex(Literal("F")), Array[Byte](15))
     checkEvaluation(Unhex(Literal("ff")), Array[Byte](-1))
     checkEvaluation(Unhex(Literal("GG")), null)
+    checkEvaluation(Unhex(Literal("123")), Array[Byte](1, 35))
+    checkEvaluation(Unhex(Literal("12345")), Array[Byte](1, 35, 69))
+
+    // failOnError
+    checkEvaluation(Unhex(Literal("12345"), true), Array[Byte](1, 35, 69))
     // scalastyle:off
     // Turn off scala style for non-ascii chars
     checkEvaluation(Unhex(Literal("E4B889E9878DE79A84")), "三重的".getBytes(StandardCharsets.UTF_8))
     checkEvaluation(Unhex(Literal("三重的")), null)
     // scalastyle:on
-    checkConsistencyBetweenInterpretedAndCodegen(Unhex, StringType)
+    checkConsistencyBetweenInterpretedAndCodegen((e: Expression) => Unhex(e), StringType)
   }
 
   test("hypot") {
@@ -601,7 +668,7 @@ class MathExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkConsistencyBetweenInterpretedAndCodegen(Logarithm, DoubleType, DoubleType)
   }
 
-  test("round/bround") {
+  test("round/bround/floor/ceil") {
     val scales = -6 to 6
     val doublePi: Double = math.Pi
     val shortPi: Short = 31415
@@ -629,6 +696,66 @@ class MathExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     val intResultsB: Seq[Int] = Seq(314000000, 314200000, 314160000, 314159000, 314159300,
       314159260) ++ Seq.fill(7)(314159265)
 
+    def doubleResultsFloor(i: Int): Decimal = {
+      val results = Seq(0, 0, 0, 0, 0, 0, 3,
+        3.1, 3.14, 3.141, 3.1415, 3.14159, 3.141592)
+      Decimal(results(i))
+    }
+
+    def doubleResultsCeil(i: Int): Any = {
+      val results = Seq(1000000, 100000, 10000, 1000, 100, 10,
+        4, 3.2, 3.15, 3.142, 3.1416, 3.1416, 3.141593)
+      Decimal(results(i))
+    }
+
+    def floatResultsFloor(i: Int): Any = {
+      val results = Seq(0, 0, 0, 0, 0, 0, 3,
+        3.1, 3.14, 3.141, 3.1415, 3.1415, 3.1415)
+      Decimal(results(i))
+    }
+
+    def floatResultsCeil(i: Int): Any = {
+      val results = Seq(1000000, 100000, 10000, 1000, 100, 10, 4,
+        3.2, 3.15, 3.142, 3.1415, 3.1415, 3.1415)
+      Decimal(results(i))
+    }
+
+    def shortResultsFloor(i: Int): Decimal = {
+      val results = Seq(0, 0, 30000, 31000, 31400, 31410) ++ Seq.fill(7)(31415)
+      Decimal(results(i))
+    }
+
+    def shortResultsCeil(i: Int): Decimal = {
+      val results = Seq(1000000, 100000, 40000, 32000, 31500, 31420) ++ Seq.fill(7)(31415)
+      Decimal(results(i))
+    }
+
+    def longResultsFloor(i: Int): Decimal = {
+      val results = Seq(31415926535000000L, 31415926535800000L, 31415926535890000L,
+        31415926535897000L, 31415926535897900L, 31415926535897930L, 31415926535897932L) ++
+        Seq.fill(6)(31415926535897932L)
+      Decimal(results(i))
+    }
+
+    def longResultsCeil(i: Int): Decimal = {
+      val results = Seq(31415926536000000L, 31415926535900000L, 31415926535900000L,
+        31415926535898000L, 31415926535898000L, 31415926535897940L) ++
+        Seq.fill(7)(31415926535897932L)
+      Decimal(results(i))
+    }
+
+    def intResultsFloor(i: Int): Decimal = {
+      val results = Seq(314000000, 314100000, 314150000, 314159000,
+        314159200, 314159260) ++ Seq.fill(7)(314159265)
+      Decimal(results(i))
+    }
+
+    def intResultsCeil(i: Int): Decimal = {
+      val results = Seq(315000000, 314200000, 314160000, 314160000,
+        314159300, 314159270) ++ Seq.fill(7)(314159265)
+      Decimal(results(i))
+    }
+
     scales.zipWithIndex.foreach { case (scale, i) =>
       checkEvaluation(Round(doublePi, scale), doubleResults(i), EmptyRow)
       checkEvaluation(Round(shortPi, scale), shortResults(i), EmptyRow)
@@ -640,19 +767,52 @@ class MathExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       checkEvaluation(BRound(intPi, scale), intResultsB(i), EmptyRow)
       checkEvaluation(BRound(longPi, scale), longResults(i), EmptyRow)
       checkEvaluation(BRound(floatPi, scale), floatResults(i), EmptyRow)
+      checkEvaluation(checkDataTypeAndCast(
+        RoundFloor(Literal(doublePi), Literal(scale))), doubleResultsFloor(i), EmptyRow)
+      checkEvaluation(checkDataTypeAndCast(
+        RoundFloor(Literal(shortPi), Literal(scale))), shortResultsFloor(i), EmptyRow)
+      checkEvaluation(checkDataTypeAndCast(
+        RoundFloor(Literal(intPi), Literal(scale))), intResultsFloor(i), EmptyRow)
+      checkEvaluation(checkDataTypeAndCast(
+        RoundFloor(Literal(longPi), Literal(scale))), longResultsFloor(i), EmptyRow)
+      checkEvaluation(checkDataTypeAndCast(
+        RoundFloor(Literal(floatPi), Literal(scale))), floatResultsFloor(i), EmptyRow)
+      checkEvaluation(checkDataTypeAndCast(
+        RoundCeil(Literal(doublePi), Literal(scale))), doubleResultsCeil(i), EmptyRow)
+      checkEvaluation(checkDataTypeAndCast(
+        RoundCeil(Literal(shortPi), Literal(scale))), shortResultsCeil(i), EmptyRow)
+      checkEvaluation(checkDataTypeAndCast(
+        RoundCeil(Literal(intPi), Literal(scale))), intResultsCeil(i), EmptyRow)
+      checkEvaluation(checkDataTypeAndCast(
+        RoundCeil(Literal(longPi), Literal(scale))), longResultsCeil(i), EmptyRow)
+      checkEvaluation(checkDataTypeAndCast(
+        RoundCeil(Literal(floatPi), Literal(scale))), floatResultsCeil(i), EmptyRow)
     }
 
     val bdResults: Seq[BigDecimal] = Seq(BigDecimal(3), BigDecimal("3.1"), BigDecimal("3.14"),
       BigDecimal("3.142"), BigDecimal("3.1416"), BigDecimal("3.14159"),
       BigDecimal("3.141593"), BigDecimal("3.1415927"))
 
+    val bdResultsFloor: Seq[BigDecimal] =
+        Seq(BigDecimal(3), BigDecimal("3.1"), BigDecimal("3.14"),
+      BigDecimal("3.141"), BigDecimal("3.1415"), BigDecimal("3.14159"),
+      BigDecimal("3.141592"), BigDecimal("3.1415927"))
+
+    val bdResultsCeil: Seq[BigDecimal] = Seq(BigDecimal(4), BigDecimal("3.2"), BigDecimal("3.15"),
+      BigDecimal("3.142"), BigDecimal("3.1416"), BigDecimal("3.14160"),
+      BigDecimal("3.141593"), BigDecimal("3.1415927"))
+
     (0 to 7).foreach { i =>
       checkEvaluation(Round(bdPi, i), bdResults(i), EmptyRow)
       checkEvaluation(BRound(bdPi, i), bdResults(i), EmptyRow)
+      checkEvaluation(RoundFloor(bdPi, i), bdResultsFloor(i), EmptyRow)
+      checkEvaluation(RoundCeil(bdPi, i), bdResultsCeil(i), EmptyRow)
     }
     (8 to 10).foreach { scale =>
       checkEvaluation(Round(bdPi, scale), bdPi, EmptyRow)
       checkEvaluation(BRound(bdPi, scale), bdPi, EmptyRow)
+      checkEvaluation(RoundFloor(bdPi, scale), bdPi, EmptyRow)
+      checkEvaluation(RoundCeil(bdPi, scale), bdPi, EmptyRow)
     }
 
     DataTypeTestUtils.numericTypes.foreach { dataType =>
@@ -662,6 +822,10 @@ class MathExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       checkEvaluation(BRound(Literal.create(null, dataType), Literal(2)), null)
       checkEvaluation(BRound(Literal.create(null, dataType),
         Literal.create(null, IntegerType)), null)
+      checkEvaluation(checkDataTypeAndCast(
+        RoundFloor(Literal.create(null, dataType), Literal(2))), null)
+      checkEvaluation(checkDataTypeAndCast(
+        RoundCeil(Literal.create(null, dataType), Literal(2))), null)
     }
 
     checkEvaluation(Round(2.5, 0), 3.0)
@@ -670,11 +834,133 @@ class MathExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(Round(-3.5, 0), -4.0)
     checkEvaluation(Round(-0.35, 1), -0.4)
     checkEvaluation(Round(-35, -1), -40)
+    checkEvaluation(Round(BigDecimal("45.00"), -1), BigDecimal(50))
     checkEvaluation(BRound(2.5, 0), 2.0)
     checkEvaluation(BRound(3.5, 0), 4.0)
     checkEvaluation(BRound(-2.5, 0), -2.0)
     checkEvaluation(BRound(-3.5, 0), -4.0)
     checkEvaluation(BRound(-0.35, 1), -0.4)
     checkEvaluation(BRound(-35, -1), -40)
+    checkEvaluation(BRound(BigDecimal("45.00"), -1), BigDecimal(40))
+    checkEvaluation(checkDataTypeAndCast(RoundFloor(Literal(2.5), Literal(0))), Decimal(2))
+    checkEvaluation(checkDataTypeAndCast(RoundFloor(Literal(3.5), Literal(0))), Decimal(3))
+    checkEvaluation(checkDataTypeAndCast(RoundFloor(Literal(-2.5), Literal(0))), Decimal(-3L))
+    checkEvaluation(checkDataTypeAndCast(RoundFloor(Literal(-3.5), Literal(0))), Decimal(-4L))
+    checkEvaluation(checkDataTypeAndCast(RoundFloor(Literal(-0.35), Literal(1))), Decimal(-0.4))
+    checkEvaluation(checkDataTypeAndCast(RoundFloor(Literal(-35), Literal(-1))), Decimal(-40))
+    checkEvaluation(checkDataTypeAndCast(RoundFloor(Literal(-0.1), Literal(0))), Decimal(-1))
+    checkEvaluation(checkDataTypeAndCast(RoundFloor(Literal(5), Literal(0))), Decimal(5))
+    checkEvaluation(checkDataTypeAndCast(RoundFloor(Literal(3.1411), Literal(-3))), Decimal(0))
+    checkEvaluation(checkDataTypeAndCast(RoundFloor(Literal(135.135), Literal(-2))), Decimal(100))
+    checkEvaluation(checkDataTypeAndCast(RoundCeil(Literal(2.5), Literal(0))), Decimal(3))
+    checkEvaluation(checkDataTypeAndCast(RoundCeil(Literal(3.5), Literal(0))), Decimal(4L))
+    checkEvaluation(checkDataTypeAndCast(RoundCeil(Literal(-2.5), Literal(0))), Decimal(-2L))
+    checkEvaluation(checkDataTypeAndCast(RoundCeil(Literal(-3.5), Literal(0))), Decimal(-3L))
+    checkEvaluation(checkDataTypeAndCast(RoundCeil(Literal(-0.35), Literal(1))), Decimal(-0.3))
+    checkEvaluation(checkDataTypeAndCast(RoundCeil(Literal(-35), Literal(-1))), Decimal(-30))
+    checkEvaluation(checkDataTypeAndCast(RoundCeil(Literal(-0.1), Literal(0))), Decimal(0))
+    checkEvaluation(checkDataTypeAndCast(RoundCeil(Literal(5), Literal(0))), Decimal(5))
+    checkEvaluation(checkDataTypeAndCast(RoundCeil(Literal(3.1411), Literal(-3))), Decimal(1000))
+    checkEvaluation(checkDataTypeAndCast(RoundCeil(Literal(135.135), Literal(-2))), Decimal(200))
+  }
+
+  test("SPARK-42045: integer overflow in round/bround") {
+    Seq(
+      (Byte.MaxValue, ByteType, -1, -126.toByte),
+      (Short.MaxValue, ShortType, -1, -32766.toShort),
+      (Int.MaxValue, IntegerType, -1, -2147483646),
+      (Long.MaxValue, LongType, -1, -9223372036854775806L)
+    ).foreach { case (input, dt, scale, expected) =>
+      Seq(Round(Literal(input, dt), scale, ansiEnabled = true),
+        BRound(Literal(input, dt), scale, ansiEnabled = true)).foreach { expr =>
+        checkExceptionInExpression[SparkArithmeticException](expr, "Overflow")
+      }
+      Seq(Round(Literal(input, dt), scale, ansiEnabled = false),
+        BRound(Literal(input, dt), scale, ansiEnabled = false)).foreach { expr =>
+        checkEvaluation(expr, expected)
+      }
+    }
+  }
+
+  test("SPARK-36922: Support ANSI intervals for SIGN/SIGNUM") {
+    checkEvaluation(Signum(Literal(Period.ZERO)), 0.0)
+    checkEvaluation(Signum(Literal(Period.ofYears(10))), 1.0)
+    checkEvaluation(Signum(Literal(Period.ofMonths(10))), 1.0)
+    checkEvaluation(Signum(Literal(Period.ofYears(-10))), -1.0)
+    checkEvaluation(Signum(Literal(Period.ofMonths(-10))), -1.0)
+    checkEvaluation(Signum(Literal.create(null, YearMonthIntervalType())), null)
+    checkEvaluation(Signum(Literal(Period.ofMonths(Int.MaxValue))), 1.0)
+    checkEvaluation(Signum(Literal(Period.ofMonths(Int.MinValue))), -1.0)
+
+    checkEvaluation(Signum(Literal(Duration.ZERO)), 0.0)
+    checkEvaluation(Signum(Literal(Duration.ofDays(10))), 1.0)
+    checkEvaluation(Signum(Literal(Duration.ofDays(-10))), -1.0)
+    checkEvaluation(Signum(Literal(Duration.ofDays(-12345))), -1.0)
+    checkEvaluation(Signum(Literal.create(null, DayTimeIntervalType())), null)
+    checkEvaluation(Signum(Literal(Duration.of(Long.MaxValue, ChronoUnit.MICROS))), 1.0)
+    checkEvaluation(Signum(Literal(Duration.of(Long.MinValue, ChronoUnit.MICROS))), -1.0)
+  }
+
+  test("SPARK-35926: Support YearMonthIntervalType in width-bucket function") {
+    Seq(
+      (Period.ofMonths(-1), Period.ofYears(0), Period.ofYears(10), 10L) -> 0L,
+      (Period.ofMonths(0), Period.ofYears(0), Period.ofYears(10), 10L) -> 1L,
+      (Period.ofMonths(13), Period.ofYears(0), Period.ofYears(10), 10L) -> 2L,
+      (Period.ofYears(1), Period.ofYears(0), Period.ofYears(10), 10L) -> 2L,
+      (Period.ofYears(1), Period.ofYears(0), Period.ofYears(1), 10L) -> 11L,
+      (Period.ofMonths(Int.MaxValue), Period.ofYears(0), Period.ofYears(1), 10L) -> 11L,
+      (Period.ofMonths(0), Period.ofMonths(Int.MinValue), Period.ofMonths(Int.MaxValue), 10L) -> 6L,
+      (Period.ofMonths(-1), Period.ofMonths(Int.MinValue), Period.ofMonths(Int.MaxValue), 10L) -> 5L
+    ).foreach { case ((v, s, e, n), expected) =>
+      checkEvaluation(WidthBucket(Literal(v), Literal(s), Literal(e), Literal(n)), expected)
+    }
+  }
+
+  test("SPARK-35925: Support DayTimeIntervalType in width-bucket function") {
+    Seq(
+      (Duration.ofDays(-1), Duration.ofDays(0), Duration.ofDays(10), 10L) -> 0L,
+      (Duration.ofHours(0), Duration.ofDays(0), Duration.ofDays(10), 10L) -> 1L,
+      (Duration.ofHours(11), Duration.ofHours(0), Duration.ofHours(10), 10L) -> 11L,
+      (Duration.ofMinutes(1), Duration.ofMinutes(0), Duration.ofMinutes(60), 10L) -> 1L,
+      (Duration.ofSeconds(-30), Duration.ofSeconds(-59), Duration.ofSeconds(60), 10L) -> 3L,
+      (Duration.ofDays(0), Duration.of(Long.MinValue, ChronoUnit.MICROS),
+        Duration.of(Long.MaxValue, ChronoUnit.MICROS), 10L) -> 6L,
+      (Duration.ofDays(0), Duration.of(Long.MinValue, ChronoUnit.MICROS),
+        Duration.ofDays(0), 10L) -> 11L,
+      (Duration.of(Long.MinValue, ChronoUnit.MICROS), Duration.of(Long.MinValue, ChronoUnit.MICROS),
+        Duration.ofDays(0), 10L) -> 1L,
+      (Duration.ofDays(-1), Duration.ofDays(0),
+        Duration.of(Long.MaxValue, ChronoUnit.MICROS), 10L) -> 0L
+    ).foreach { case ((v, s, e, n), expected) =>
+      checkEvaluation(WidthBucket(Literal(v), Literal(s), Literal(e), Literal(n)), expected)
+    }
+  }
+
+  test("SPARK-37388: width_bucket") {
+    val nullDouble = Literal.create(null, DoubleType)
+    val nullLong = Literal.create(null, LongType)
+
+    checkEvaluation(WidthBucket(5.35, 0.024, 10.06, 5L), 3L)
+    checkEvaluation(WidthBucket(-2.1, 1.3, 3.4, 3L), 0L)
+    checkEvaluation(WidthBucket(8.1, 0.0, 5.7, 4L), 5L)
+    checkEvaluation(WidthBucket(-0.9, 5.2, 0.5, 2L), 3L)
+    checkEvaluation(WidthBucket(nullDouble, 0.024, 10.06, 5L), null)
+    checkEvaluation(WidthBucket(5.35, nullDouble, 10.06, 5L), null)
+    checkEvaluation(WidthBucket(5.35, 0.024, nullDouble, 5L), null)
+    checkEvaluation(WidthBucket(5.35, nullDouble, nullDouble, 5L), null)
+    checkEvaluation(WidthBucket(5.35, 0.024, 10.06, nullLong), null)
+    checkEvaluation(WidthBucket(nullDouble, nullDouble, nullDouble, nullLong), null)
+    checkEvaluation(WidthBucket(5.35, 0.024, 10.06, -5L), null)
+    checkEvaluation(WidthBucket(5.35, 0.024, 10.06, Long.MaxValue), null)
+    checkEvaluation(WidthBucket(Double.NaN, 0.024, 10.06, 5L), null)
+    checkEvaluation(WidthBucket(Double.NegativeInfinity, 0.024, 10.06, 5L), 0L)
+    checkEvaluation(WidthBucket(Double.PositiveInfinity, 0.024, 10.06, 5L), 6L)
+    checkEvaluation(WidthBucket(5.35, 0.024, 0.024, 5L), null)
+    checkEvaluation(WidthBucket(5.35, Double.NaN, 10.06, 5L), null)
+    checkEvaluation(WidthBucket(5.35, Double.NegativeInfinity, 10.06, 5L), null)
+    checkEvaluation(WidthBucket(5.35, Double.PositiveInfinity, 10.06, 5L), null)
+    checkEvaluation(WidthBucket(5.35, 0.024, Double.NaN, 5L), null)
+    checkEvaluation(WidthBucket(5.35, 0.024, Double.NegativeInfinity, 5L), null)
+    checkEvaluation(WidthBucket(5.35, 0.024, Double.PositiveInfinity, 5L), null)
   }
 }

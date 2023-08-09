@@ -125,7 +125,7 @@ The following tables illustrate the behavior of logical operators when one or bo
 |True|NULL|True|NULL|
 |False|NULL|NULL|False|
 |NULL|True|True|NULL|
-|NULL|False|NULL|NULL|
+|NULL|False|NULL|False|
 |NULL|NULL|NULL|NULL|
 
 |operand|NOT|
@@ -352,7 +352,7 @@ SELECT * FROM person WHERE age > 0 OR age IS NULL;
 +--------+----+
 
 -- Person with unknown(`NULL`) ages are skipped from processing.
-SELECT * FROM person GROUP BY age HAVING max(age) > 18;
+SELECT age, count(*) FROM person GROUP BY age HAVING max(age) > 18;
 +---+--------+
 |age|count(1)|
 +---+--------+

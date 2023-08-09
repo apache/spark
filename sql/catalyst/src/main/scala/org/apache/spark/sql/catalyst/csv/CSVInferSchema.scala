@@ -24,18 +24,33 @@ import scala.util.control.Exception.allCatch
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.analysis.TypeCoercion
 import org.apache.spark.sql.catalyst.expressions.ExprUtils
+import org.apache.spark.sql.catalyst.util.{DateFormatter, TimestampFormatter}
 import org.apache.spark.sql.catalyst.util.LegacyDateFormats.FAST_DATE_FORMAT
-import org.apache.spark.sql.catalyst.util.TimestampFormatter
+import org.apache.spark.sql.errors.QueryExecutionErrors
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
 class CSVInferSchema(val options: CSVOptions) extends Serializable {
 
   private val timestampParser = TimestampFormatter(
-    options.timestampFormat,
+    options.timestampFormatInRead,
     options.zoneId,
     options.locale,
     legacyFormat = FAST_DATE_FORMAT,
-    needVarLengthSecondFraction = true)
+    isParsing = true)
+
+  private val timestampNTZFormatter = TimestampFormatter(
+    options.timestampNTZFormatInRead,
+    options.zoneId,
+    legacyFormat = FAST_DATE_FORMAT,
+    isParsing = true,
+    forTimestampNTZ = true)
+
+  private lazy val dateFormatter = DateFormatter(
+    options.dateFormatInRead,
+    options.locale,
+    legacyFormat = FAST_DATE_FORMAT,
+    isParsing = true)
 
   private val decimalParser = if (options.locale == Locale.US) {
     // Special handling the default locale for backward compatibility
@@ -43,6 +58,13 @@ class CSVInferSchema(val options: CSVOptions) extends Serializable {
   } else {
     ExprUtils.getDecimalParser(options.locale)
   }
+
+  // Date formats that could be parsed in DefaultTimestampFormatter
+  // Reference: DateTimeUtils.parseTimestampString
+  // Used to determine inferring a column with mixture of dates and timestamps as TimestampType or
+  // StringType when no timestamp format is specified (the lenient timestamp formatter will be used)
+  private val LENIENT_TS_FORMATTER_SUPPORTED_DATE_FORMATS = Set(
+    "yyyy-MM-dd", "yyyy-M-d", "yyyy-M-dd", "yyyy-MM-d", "yyyy-MM", "yyyy-M", "yyyy")
 
   /**
    * Similar to the JSON schema inference
@@ -102,20 +124,21 @@ class CSVInferSchema(val options: CSVOptions) extends Serializable {
     if (field == null || field.isEmpty || field == options.nullValue) {
       typeSoFar
     } else {
-      typeSoFar match {
+      val typeElemInfer = typeSoFar match {
         case NullType => tryParseInteger(field)
         case IntegerType => tryParseInteger(field)
         case LongType => tryParseLong(field)
-        case _: DecimalType =>
-          // DecimalTypes have different precisions and scales, so we try to find the common type.
-          compatibleType(typeSoFar, tryParseDecimal(field)).getOrElse(StringType)
+        case _: DecimalType => tryParseDecimal(field)
         case DoubleType => tryParseDouble(field)
+        case DateType => tryParseDate(field)
+        case TimestampNTZType => tryParseTimestampNTZ(field)
         case TimestampType => tryParseTimestamp(field)
         case BooleanType => tryParseBoolean(field)
         case StringType => StringType
         case other: DataType =>
-          throw new UnsupportedOperationException(s"Unexpected data type $other")
+          throw QueryExecutionErrors.dataTypeUnexpectedError(other)
       }
+      compatibleType(typeSoFar, typeElemInfer).getOrElse(StringType)
     }
   }
 
@@ -144,7 +167,7 @@ class CSVInferSchema(val options: CSVOptions) extends Serializable {
       // The conversion can fail when the `field` is not a form of number.
       val bigDecimal = decimalParser(field)
       // Because many other formats do not support decimal, it reduces the cases for
-      // decimals by disallowing values having scale (eg. `1.1`).
+      // decimals by disallowing values having scale (e.g. `1.1`).
       if (bigDecimal.scale <= 0) {
         // `DecimalType` conversion can fail when
         //   1. The precision is bigger than 38.
@@ -160,6 +183,27 @@ class CSVInferSchema(val options: CSVOptions) extends Serializable {
   private def tryParseDouble(field: String): DataType = {
     if ((allCatch opt field.toDouble).isDefined || isInfOrNan(field)) {
       DoubleType
+    } else if (options.preferDate) {
+      tryParseDate(field)
+    } else {
+      tryParseTimestampNTZ(field)
+    }
+  }
+
+  private def tryParseDate(field: String): DataType = {
+    if ((allCatch opt dateFormatter.parse(field)).isDefined) {
+      DateType
+    } else {
+      tryParseTimestampNTZ(field)
+    }
+  }
+
+  private def tryParseTimestampNTZ(field: String): DataType = {
+    // We can only parse the value as TimestampNTZType if it does not have zone-offset or
+    // time-zone component and can be parsed with the timestamp formatter.
+    // Otherwise, it is likely to be a timestamp with timezone.
+    if (timestampNTZFormatter.parseWithoutTimeZoneOptional(field, false).isDefined) {
+      SQLConf.get.timestampType
     } else {
       tryParseTimestamp(field)
     }
@@ -167,7 +211,7 @@ class CSVInferSchema(val options: CSVOptions) extends Serializable {
 
   private def tryParseTimestamp(field: String): DataType = {
     // This case infers a custom `dataFormat` is set.
-    if ((allCatch opt timestampParser.parse(field)).isDefined) {
+    if (timestampParser.parseOptional(field).isDefined) {
       TimestampType
     } else {
       tryParseBoolean(field)
@@ -194,7 +238,40 @@ class CSVInferSchema(val options: CSVOptions) extends Serializable {
    * is compatible with both input data types.
    */
   private def compatibleType(t1: DataType, t2: DataType): Option[DataType] = {
-    TypeCoercion.findTightestCommonType(t1, t2).orElse(findCompatibleTypeForCSV(t1, t2))
+    (t1, t2) match {
+      case (DateType, TimestampType) | (DateType, TimestampNTZType) |
+           (TimestampNTZType, DateType) | (TimestampType, DateType) =>
+        // For a column containing a mixture of dates and timestamps, infer it as timestamp type
+        // if its dates can be inferred as timestamp type, otherwise infer it as StringType.
+        // This only happens when the timestamp pattern is not specified, as the default timestamp
+        // parser is very lenient and can parse date string as well.
+        val dateFormat = options.dateFormatInRead.getOrElse(DateFormatter.defaultPattern)
+        t1 match {
+          case DateType if canParseDateAsTimestamp(dateFormat, t2) =>
+            Some(t2)
+          case TimestampType | TimestampNTZType if canParseDateAsTimestamp(dateFormat, t1) =>
+            Some(t1)
+          case _ => Some(StringType)
+        }
+      case _ => TypeCoercion.findTightestCommonType(t1, t2).orElse(findCompatibleTypeForCSV(t1, t2))
+    }
+  }
+
+  /**
+   * Return true if strings of given date format can be parsed as timestamps
+   *  1. If user provides timestamp format, we will parse strings as timestamps using
+   *  Iso8601TimestampFormatter (with strict timestamp parsing). Any date string can not be parsed
+   *  as timestamp type in this case
+   *  2. Otherwise, we will use DefaultTimestampFormatter to parse strings as timestamps, which
+   *  is more lenient and can parse strings of some date formats as timestamps.
+   */
+  private def canParseDateAsTimestamp(dateFormat: String, tsType: DataType): Boolean = {
+    if ((tsType.isInstanceOf[TimestampType] && options.timestampFormatInRead.isEmpty) ||
+      (tsType.isInstanceOf[TimestampNTZType] && options.timestampNTZFormatInRead.isEmpty)) {
+      LENIENT_TS_FORMATTER_SUPPORTED_DATE_FORMATS.contains(dateFormat)
+    } else {
+      false
+    }
   }
 
   /**
@@ -225,6 +302,10 @@ class CSVInferSchema(val options: CSVOptions) extends Serializable {
       } else {
         Some(DecimalType(range + scale, scale))
       }
+
+    case (TimestampNTZType, TimestampType) | (TimestampType, TimestampNTZType) =>
+      Some(TimestampType)
+
     case _ => None
   }
 }

@@ -15,19 +15,25 @@
 # limitations under the License.
 #
 import sys
+from typing import Union, TYPE_CHECKING
 
-from pyspark import since
 from pyspark.rdd import PythonEvalType
+from pyspark.sql.types import StructType
+
+if TYPE_CHECKING:
+    from pyspark.sql.dataframe import DataFrame
+    from pyspark.sql.pandas._typing import PandasMapIterFunction, ArrowMapIterFunction
 
 
-class PandasMapOpsMixin(object):
+class PandasMapOpsMixin:
     """
     Min-in for pandas map operations. Currently, only :class:`DataFrame`
     can use this class.
     """
 
-    @since(3.0)
-    def mapInPandas(self, func, schema):
+    def mapInPandas(
+        self, func: "PandasMapIterFunction", schema: Union[StructType, str], barrier: bool = False
+    ) -> "DataFrame":
         """
         Maps an iterator of batches in the current :class:`DataFrame` using a Python native
         function that takes and outputs a pandas DataFrame, and returns the result as a
@@ -38,18 +44,36 @@ class PandasMapOpsMixin(object):
         together as an iterator of `pandas.DataFrame`\\s to the function and the
         returned iterator of `pandas.DataFrame`\\s are combined as a :class:`DataFrame`.
         Each `pandas.DataFrame` size can be controlled by
-        `spark.sql.execution.arrow.maxRecordsPerBatch`.
+        `spark.sql.execution.arrow.maxRecordsPerBatch`. The size of the function's input and
+        output can be different.
 
-        :param func: a Python native function that takes an iterator of `pandas.DataFrame`\\s, and
+        .. versionadded:: 3.0.0
+
+        .. versionchanged:: 3.4.0
+            Supports Spark Connect.
+
+        Parameters
+        ----------
+        func : function
+            a Python native function that takes an iterator of `pandas.DataFrame`\\s, and
             outputs an iterator of `pandas.DataFrame`\\s.
-        :param schema: the return type of the `func` in PySpark. The value can be either a
+        schema : :class:`pyspark.sql.types.DataType` or str
+            the return type of the `func` in PySpark. The value can be either a
             :class:`pyspark.sql.types.DataType` object or a DDL-formatted type string.
+        barrier : bool, optional, default True
+            Use barrier mode execution.
 
+            .. versionchanged: 3.5.0
+                Added ``barrier`` argument.
+
+        Examples
+        --------
         >>> from pyspark.sql.functions import pandas_udf
         >>> df = spark.createDataFrame([(1, 21), (2, 30)], ("id", "age"))
         >>> def filter_func(iterator):
         ...     for pdf in iterator:
         ...         yield pdf[pdf.id == 1]
+        ...
         >>> df.mapInPandas(filter_func, df.schema).show()  # doctest: +SKIP
         +---+---+
         | id|age|
@@ -57,35 +81,134 @@ class PandasMapOpsMixin(object):
         |  1| 21|
         +---+---+
 
-        .. seealso:: :meth:`pyspark.sql.functions.pandas_udf`
+        Set ``barrier`` to ``True`` to force the ``mapInPandas`` stage running in the
+        barrier mode, it ensures all Python workers in the stage will be
+        launched concurrently.
 
-        .. note:: Experimental
+        >>> df.mapInPandas(filter_func, df.schema, barrier=True).show()  # doctest: +SKIP
+        +---+---+
+        | id|age|
+        +---+---+
+        |  1| 21|
+        +---+---+
+
+        Notes
+        -----
+        This API is experimental
+
+        See Also
+        --------
+        pyspark.sql.functions.pandas_udf
         """
         from pyspark.sql import DataFrame
         from pyspark.sql.pandas.functions import pandas_udf
 
         assert isinstance(self, DataFrame)
 
+        # The usage of the pandas_udf is internal so type checking is disabled.
         udf = pandas_udf(
-            func, returnType=schema, functionType=PythonEvalType.SQL_MAP_PANDAS_ITER_UDF)
+            func, returnType=schema, functionType=PythonEvalType.SQL_MAP_PANDAS_ITER_UDF
+        )  # type: ignore[call-overload]
         udf_column = udf(*[self[col] for col in self.columns])
-        jdf = self._jdf.mapInPandas(udf_column._jc.expr())
-        return DataFrame(jdf, self.sql_ctx)
+        jdf = self._jdf.mapInPandas(udf_column._jc.expr(), barrier)
+        return DataFrame(jdf, self.sparkSession)
+
+    def mapInArrow(
+        self, func: "ArrowMapIterFunction", schema: Union[StructType, str], barrier: bool = False
+    ) -> "DataFrame":
+        """
+        Maps an iterator of batches in the current :class:`DataFrame` using a Python native
+        function that takes and outputs a PyArrow's `RecordBatch`, and returns the result as a
+        :class:`DataFrame`.
+
+        The function should take an iterator of `pyarrow.RecordBatch`\\s and return
+        another iterator of `pyarrow.RecordBatch`\\s. All columns are passed
+        together as an iterator of `pyarrow.RecordBatch`\\s to the function and the
+        returned iterator of `pyarrow.RecordBatch`\\s are combined as a :class:`DataFrame`.
+        Each `pyarrow.RecordBatch` size can be controlled by
+        `spark.sql.execution.arrow.maxRecordsPerBatch`. The size of the function's input and
+        output can be different.
+
+        .. versionadded:: 3.3.0
+
+        Parameters
+        ----------
+        func : function
+            a Python native function that takes an iterator of `pyarrow.RecordBatch`\\s, and
+            outputs an iterator of `pyarrow.RecordBatch`\\s.
+        schema : :class:`pyspark.sql.types.DataType` or str
+            the return type of the `func` in PySpark. The value can be either a
+            :class:`pyspark.sql.types.DataType` object or a DDL-formatted type string.
+        barrier : bool, optional, default True
+            Use barrier mode execution.
+
+            .. versionchanged: 3.5.0
+                Added ``barrier`` argument.
+
+        Examples
+        --------
+        >>> import pyarrow  # doctest: +SKIP
+        >>> df = spark.createDataFrame([(1, 21), (2, 30)], ("id", "age"))
+        >>> def filter_func(iterator):
+        ...     for batch in iterator:
+        ...         pdf = batch.to_pandas()
+        ...         yield pyarrow.RecordBatch.from_pandas(pdf[pdf.id == 1])
+        >>> df.mapInArrow(filter_func, df.schema).show()  # doctest: +SKIP
+        +---+---+
+        | id|age|
+        +---+---+
+        |  1| 21|
+        +---+---+
+
+        Set ``barrier`` to ``True`` to force the ``mapInArrow`` stage running in the
+        barrier mode, it ensures all Python workers in the stage will be
+        launched concurrently.
+
+        >>> df.mapInArrow(filter_func, df.schema, barrier=True).show()  # doctest: +SKIP
+        +---+---+
+        | id|age|
+        +---+---+
+        |  1| 21|
+        +---+---+
+
+        Notes
+        -----
+        This API is unstable, and for developers.
+
+        See Also
+        --------
+        pyspark.sql.functions.pandas_udf
+        pyspark.sql.DataFrame.mapInPandas
+        """
+        from pyspark.sql import DataFrame
+        from pyspark.sql.pandas.functions import pandas_udf
+
+        assert isinstance(self, DataFrame)
+
+        # The usage of the pandas_udf is internal so type checking is disabled.
+        udf = pandas_udf(
+            func, returnType=schema, functionType=PythonEvalType.SQL_MAP_ARROW_ITER_UDF
+        )  # type: ignore[call-overload]
+        udf_column = udf(*[self[col] for col in self.columns])
+        jdf = self._jdf.pythonMapInArrow(udf_column._jc.expr(), barrier)
+        return DataFrame(jdf, self.sparkSession)
 
 
-def _test():
+def _test() -> None:
     import doctest
     from pyspark.sql import SparkSession
     import pyspark.sql.pandas.map_ops
+
     globs = pyspark.sql.pandas.map_ops.__dict__.copy()
-    spark = SparkSession.builder\
-        .master("local[4]")\
-        .appName("sql.pandas.map_ops tests")\
-        .getOrCreate()
-    globs['spark'] = spark
+    spark = (
+        SparkSession.builder.master("local[4]").appName("sql.pandas.map_ops tests").getOrCreate()
+    )
+    globs["spark"] = spark
     (failure_count, test_count) = doctest.testmod(
-        pyspark.sql.pandas.map_ops, globs=globs,
-        optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE | doctest.REPORT_NDIFF)
+        pyspark.sql.pandas.map_ops,
+        globs=globs,
+        optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE | doctest.REPORT_NDIFF,
+    )
     spark.stop()
     if failure_count:
         sys.exit(-1)

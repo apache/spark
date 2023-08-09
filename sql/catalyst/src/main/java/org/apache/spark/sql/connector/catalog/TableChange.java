@@ -79,7 +79,7 @@ public interface TableChange {
    * @return a TableChange for the addition
    */
   static TableChange addColumn(String[] fieldNames, DataType dataType) {
-    return new AddColumn(fieldNames, dataType, true, null, null);
+    return new AddColumn(fieldNames, dataType, true, null, null, null);
   }
 
   /**
@@ -95,7 +95,7 @@ public interface TableChange {
    * @return a TableChange for the addition
    */
   static TableChange addColumn(String[] fieldNames, DataType dataType, boolean isNullable) {
-    return new AddColumn(fieldNames, dataType, isNullable, null, null);
+    return new AddColumn(fieldNames, dataType, isNullable, null, null, null);
   }
 
   /**
@@ -116,7 +116,7 @@ public interface TableChange {
       DataType dataType,
       boolean isNullable,
       String comment) {
-    return new AddColumn(fieldNames, dataType, isNullable, comment, null);
+    return new AddColumn(fieldNames, dataType, isNullable, comment, null, null);
   }
 
   /**
@@ -131,6 +131,7 @@ public interface TableChange {
    * @param isNullable whether the new column can contain null
    * @param comment the new field's comment string
    * @param position the new columns's position
+   * @param defaultValue default value to return when scanning from the new column, if any
    * @return a TableChange for the addition
    */
   static TableChange addColumn(
@@ -138,8 +139,9 @@ public interface TableChange {
       DataType dataType,
       boolean isNullable,
       String comment,
-      ColumnPosition position) {
-    return new AddColumn(fieldNames, dataType, isNullable, comment, position);
+      ColumnPosition position,
+      ColumnDefaultValue defaultValue) {
+    return new AddColumn(fieldNames, dataType, isNullable, comment, position, defaultValue);
   }
 
   /**
@@ -219,15 +221,31 @@ public interface TableChange {
   }
 
   /**
+   * Create a TableChange for updating the default value of a field.
+   * <p>
+   * The name is used to find the field to update.
+   * <p>
+   * If the field does not exist, the change will result in an {@link IllegalArgumentException}.
+   *
+   * @param fieldNames field names of the column to update
+   * @param newDefaultValue the new default value SQL string (Spark SQL dialect).
+   * @return a TableChange for the update
+   */
+  static TableChange updateColumnDefaultValue(String[] fieldNames, String newDefaultValue) {
+    return new UpdateColumnDefaultValue(fieldNames, newDefaultValue);
+  }
+
+  /**
    * Create a TableChange for deleting a field.
    * <p>
    * If the field does not exist, the change will result in an {@link IllegalArgumentException}.
    *
    * @param fieldNames field names of the column to delete
+   * @param ifExists   silence the error if column doesn't exist during drop
    * @return a TableChange for the delete
    */
-  static TableChange deleteColumn(String[] fieldNames) {
-    return new DeleteColumn(fieldNames);
+  static TableChange deleteColumn(String[] fieldNames, Boolean ifExists) {
+    return new DeleteColumn(fieldNames, ifExists);
   }
 
   /**
@@ -365,7 +383,9 @@ public interface TableChange {
   }
 
   /**
-   * A TableChange to add a field.
+   * A TableChange to add a field. The implementation may need to back-fill all the existing data
+   * to add this new column, or remember the column default value specified here and let the reader
+   * fill the column value when reading existing data that do not have this new column.
    * <p>
    * If the field already exists, the change must result in an {@link IllegalArgumentException}.
    * If the new field is nested and its parent does not exist or is not a struct, the change must
@@ -377,18 +397,21 @@ public interface TableChange {
     private final boolean isNullable;
     private final String comment;
     private final ColumnPosition position;
+    private final ColumnDefaultValue defaultValue;
 
     private AddColumn(
         String[] fieldNames,
         DataType dataType,
         boolean isNullable,
         String comment,
-        ColumnPosition position) {
+        ColumnPosition position,
+        ColumnDefaultValue defaultValue) {
       this.fieldNames = fieldNames;
       this.dataType = dataType;
       this.isNullable = isNullable;
       this.comment = comment;
       this.position = position;
+      this.defaultValue = defaultValue;
     }
 
     @Override
@@ -414,6 +437,9 @@ public interface TableChange {
       return position;
     }
 
+    @Nullable
+    public ColumnDefaultValue defaultValue() { return defaultValue; }
+
     @Override
     public boolean equals(Object o) {
       if (this == o) return true;
@@ -423,7 +449,8 @@ public interface TableChange {
         Arrays.equals(fieldNames, addColumn.fieldNames) &&
         dataType.equals(addColumn.dataType) &&
         Objects.equals(comment, addColumn.comment) &&
-        Objects.equals(position, addColumn.position);
+        Objects.equals(position, addColumn.position) &&
+        Objects.equals(defaultValue, addColumn.defaultValue);
     }
 
     @Override
@@ -535,6 +562,7 @@ public interface TableChange {
       this.nullable = nullable;
     }
 
+    @Override
     public String[] fieldNames() {
       return fieldNames;
     }
@@ -645,15 +673,19 @@ public interface TableChange {
   }
 
   /**
-   * A TableChange to delete a field.
+   * A TableChange to update the default value of a field.
+   * <p>
+   * The field names are used to find the field to update.
    * <p>
    * If the field does not exist, the change must result in an {@link IllegalArgumentException}.
    */
-  final class DeleteColumn implements ColumnChange {
+  final class UpdateColumnDefaultValue implements ColumnChange {
     private final String[] fieldNames;
+    private final String newDefaultValue;
 
-    private DeleteColumn(String[] fieldNames) {
+    private UpdateColumnDefaultValue(String[] fieldNames, String newDefaultValue) {
       this.fieldNames = fieldNames;
+      this.newDefaultValue = newDefaultValue;
     }
 
     @Override
@@ -661,12 +693,58 @@ public interface TableChange {
       return fieldNames;
     }
 
+    /**
+     * Returns the column default value SQL string (Spark SQL dialect). The default value literal
+     * is not provided as updating column default values does not need to back-fill existing data.
+     * Null means dropping the column default value.
+     */
+    @Nullable
+    public String newDefaultValue() { return newDefaultValue; }
+
+    @Override
+    public boolean equals(Object o) {
+      if (this == o) return true;
+      if (o == null || getClass() != o.getClass()) return false;
+      UpdateColumnDefaultValue that = (UpdateColumnDefaultValue) o;
+      return Arrays.equals(fieldNames, that.fieldNames) &&
+        newDefaultValue.equals(that.newDefaultValue());
+    }
+
+    @Override
+    public int hashCode() {
+      int result = Objects.hash(newDefaultValue);
+      result = 31 * result + Arrays.hashCode(fieldNames);
+      return result;
+    }
+  }
+
+  /**
+   * A TableChange to delete a field.
+   * <p>
+   * If the field does not exist, the change must result in an {@link IllegalArgumentException}.
+   */
+  final class DeleteColumn implements ColumnChange {
+    private final String[] fieldNames;
+    private final Boolean ifExists;
+
+    private DeleteColumn(String[] fieldNames, Boolean ifExists) {
+      this.fieldNames = fieldNames;
+      this.ifExists = ifExists;
+    }
+
+    @Override
+    public String[] fieldNames() {
+      return fieldNames;
+    }
+
+    public Boolean ifExists() { return ifExists; }
+
     @Override
     public boolean equals(Object o) {
       if (this == o) return true;
       if (o == null || getClass() != o.getClass()) return false;
       DeleteColumn that = (DeleteColumn) o;
-      return Arrays.equals(fieldNames, that.fieldNames);
+      return Arrays.equals(fieldNames, that.fieldNames) && that.ifExists() == this.ifExists();
     }
 
     @Override

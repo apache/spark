@@ -19,6 +19,7 @@ package org.apache.spark.deploy.yarn
 
 import java.io.{File, FileInputStream, FileNotFoundException, FileOutputStream}
 import java.net.URI
+import java.nio.file.Paths
 import java.util.Properties
 import java.util.concurrent.ConcurrentHashMap
 
@@ -38,15 +39,16 @@ import org.apache.hadoop.yarn.server.resourcemanager.{ClientRMService, RMAppMana
 import org.apache.hadoop.yarn.server.resourcemanager.ahs.RMApplicationHistoryWriter
 import org.apache.hadoop.yarn.server.resourcemanager.metrics.SystemMetricsPublisher
 import org.apache.hadoop.yarn.server.resourcemanager.rmapp.RMApp
+import org.apache.hadoop.yarn.server.resourcemanager.scheduler.YarnScheduler
 import org.apache.hadoop.yarn.server.security.ApplicationACLsManager
 import org.apache.hadoop.yarn.util.Records
-import org.mockito.ArgumentMatchers.{any, anyBoolean, anyShort, eq => meq}
+import org.mockito.ArgumentMatchers.{any, anyBoolean, eq => meq}
 import org.mockito.Mockito._
 import org.mockito.invocation.InvocationOnMock
-import org.scalatest.Matchers
+import org.scalatest.matchers.must.Matchers
+import org.scalatest.matchers.should.Matchers._
 
 import org.apache.spark.{SparkConf, SparkException, SparkFunSuite, TestUtils}
-import org.apache.spark.deploy.yarn.ResourceRequestHelper._
 import org.apache.spark.deploy.yarn.config._
 import org.apache.spark.internal.config._
 import org.apache.spark.resource.ResourceID
@@ -131,7 +133,7 @@ class ClientSuite extends SparkFunSuite with Matchers {
       .set("spark.yarn.dist.jars", ADDED)
     val client = createClient(sparkConf, args = Array("--jar", USER))
     doReturn(new Path("/")).when(client).copyFileToRemote(any(classOf[Path]),
-      any(classOf[Path]), anyShort(), any(classOf[MutableHashMap[URI, Path]]), anyBoolean(), any())
+      any(classOf[Path]), meq(None), any(classOf[MutableHashMap[URI, Path]]), anyBoolean(), any())
 
     val tempDir = Utils.createTempDir()
     try {
@@ -215,8 +217,6 @@ class ClientSuite extends SparkFunSuite with Matchers {
   }
 
   test("specify a more specific type for the application") {
-    // TODO (SPARK-31733) Make this test case pass with Hadoop-3.2
-    assume(!isYarnResourceTypesAvailable)
     // When the type exceeds 20 characters will be truncated by yarn
     val appTypes = Map(
       1 -> ("", ""),
@@ -228,7 +228,8 @@ class ClientSuite extends SparkFunSuite with Matchers {
       val sparkConf = new SparkConf().set("spark.yarn.applicationType", sourceType)
       val args = new ClientArguments(Array())
 
-      val appContext = spy(Records.newRecord(classOf[ApplicationSubmissionContext]))
+      val appContext = spy[ApplicationSubmissionContext](
+        Records.newRecord(classOf[ApplicationSubmissionContext]))
       val appId = ApplicationId.newInstance(123456, id)
       appContext.setApplicationId(appId)
       val getNewApplicationResponse = Records.newRecord(classOf[GetNewApplicationResponse])
@@ -243,11 +244,12 @@ class ClientSuite extends SparkFunSuite with Matchers {
       when(yarnClient.submitApplication(any())).thenAnswer((invocationOnMock: InvocationOnMock) => {
         val subContext = invocationOnMock.getArguments()(0)
           .asInstanceOf[ApplicationSubmissionContext]
+        when(subContext.getApplicationTags).thenReturn(Set.empty[String].asJava)
         val request = Records.newRecord(classOf[SubmitApplicationRequest])
         request.setApplicationSubmissionContext(subContext)
 
         val rmContext = mock(classOf[RMContext])
-        val conf = mock(classOf[Configuration])
+        val conf = spy[Configuration](classOf[Configuration])
         val map = new ConcurrentHashMap[ApplicationId, RMApp]()
         when(rmContext.getRMApps).thenReturn(map)
         val dispatcher = mock(classOf[Dispatcher])
@@ -262,18 +264,22 @@ class ClientSuite extends SparkFunSuite with Matchers {
         val publisher = mock(classOf[SystemMetricsPublisher])
         when(rmContext.getSystemMetricsPublisher).thenReturn(publisher)
         when(appContext.getUnmanagedAM).thenReturn(true)
+        val yarnConfiguration = mock(classOf[YarnConfiguration])
+        when(rmContext.getYarnConfiguration).thenReturn(yarnConfiguration)
+        val yarnScheduler = mock(classOf[YarnScheduler])
 
         val rmAppManager = new RMAppManager(rmContext,
-          null,
+          yarnScheduler,
           null,
           mock(classOf[ApplicationACLsManager]),
           conf)
         val clientRMService = new ClientRMService(rmContext,
-          null,
+          yarnScheduler,
           rmAppManager,
           null,
           null,
           null)
+        clientRMService.init(conf)
         clientRMService.submitApplication(request)
 
         assert(map.get(subContext.getApplicationId).getApplicationType === targetType)
@@ -307,12 +313,12 @@ class ClientSuite extends SparkFunSuite with Matchers {
     assert(sparkConf.get(SPARK_JARS) ===
       Some(Seq(s"local:${jar4.getPath()}", s"local:${single.getAbsolutePath()}/*")))
 
-    verify(client).copyFileToRemote(any(classOf[Path]), meq(new Path(jar1.toURI())), anyShort(),
-      any(classOf[MutableHashMap[URI, Path]]), anyBoolean(), any())
-    verify(client).copyFileToRemote(any(classOf[Path]), meq(new Path(jar2.toURI())), anyShort(),
-      any(classOf[MutableHashMap[URI, Path]]), anyBoolean(), any())
-    verify(client).copyFileToRemote(any(classOf[Path]), meq(new Path(jar3.toURI())), anyShort(),
-      any(classOf[MutableHashMap[URI, Path]]), anyBoolean(), any())
+    verify(client).copyFileToRemote(any(classOf[Path]), meq(new Path(jar1.toURI())),
+      meq(None), any(classOf[MutableHashMap[URI, Path]]), anyBoolean(), any())
+    verify(client).copyFileToRemote(any(classOf[Path]), meq(new Path(jar2.toURI())),
+      meq(None), any(classOf[MutableHashMap[URI, Path]]), anyBoolean(), any())
+    verify(client).copyFileToRemote(any(classOf[Path]), meq(new Path(jar3.toURI())),
+      meq(None), any(classOf[MutableHashMap[URI, Path]]), anyBoolean(), any())
 
     val cp = classpath(client)
     cp should contain (buildPath(PWD, LOCALIZED_LIB_DIR, "*"))
@@ -329,7 +335,7 @@ class ClientSuite extends SparkFunSuite with Matchers {
     val client = createClient(sparkConf)
     client.prepareLocalResources(new Path(temp.getAbsolutePath()), Nil)
 
-    verify(client).copyFileToRemote(any(classOf[Path]), meq(new Path(archive.toURI())), anyShort(),
+    verify(client).copyFileToRemote(any(classOf[Path]), meq(new Path(archive.toURI())), meq(None),
       any(classOf[MutableHashMap[URI, Path]]), anyBoolean(), any())
     classpath(client) should contain (buildPath(PWD, LOCALIZED_LIB_DIR, "*"))
 
@@ -337,6 +343,25 @@ class ClientSuite extends SparkFunSuite with Matchers {
     intercept[IllegalArgumentException] {
       client.prepareLocalResources(new Path(temp.getAbsolutePath()), Nil)
     }
+  }
+
+  test("SPARK-37239: distribute jars archive with set STAGING_FILE_REPLICATION") {
+    val temp = Utils.createTempDir()
+    val archive = TestUtils.createJarWithFiles(Map(), temp)
+    val replication = 5
+
+    val sparkConf = new SparkConf()
+      .set(SPARK_ARCHIVE, archive.getPath())
+      .set(STAGING_FILE_REPLICATION, replication)
+    val client = createClient(sparkConf)
+    client.prepareLocalResources(new Path(temp.getAbsolutePath()), Nil)
+
+    // It is difficult to assert the result of `setReplication` in UT because this method in
+    // `RawLocalFileSystem` always return true and not change the value of `replication`.
+    // So we can only assert the call of `client.copyFileToRemote` has passed in a non `None`.
+    verify(client).copyFileToRemote(any(classOf[Path]), meq(new Path(archive.toURI())),
+      meq(Some(replication.toShort)), any(classOf[MutableHashMap[URI, Path]]), anyBoolean(), any())
+    classpath(client) should contain (buildPath(PWD, LOCALIZED_LIB_DIR, "*"))
   }
 
   test("distribute archive multiple times") {
@@ -447,7 +472,6 @@ class ClientSuite extends SparkFunSuite with Matchers {
     "cluster" -> YARN_DRIVER_RESOURCE_TYPES_PREFIX
   ).foreach { case (deployMode, prefix) =>
     test(s"custom resource request ($deployMode mode)") {
-      assume(ResourceRequestHelper.isYarnResourceTypesAvailable())
       val resources = Map("fpga" -> 2, "gpu" -> 3)
       ResourceRequestTestHelper.initializeResourceTypes(resources.keys.toSeq)
 
@@ -466,17 +490,15 @@ class ClientSuite extends SparkFunSuite with Matchers {
         containerLaunchContext)
 
       resources.foreach { case (name, value) =>
-        ResourceRequestTestHelper.getRequestedValue(appContext.getResource, name) should be (value)
+        appContext.getResource.getResourceInformation(name).getValue should be (value)
       }
     }
   }
 
   test("custom driver resource request yarn config and spark config fails") {
-    assume(ResourceRequestHelper.isYarnResourceTypesAvailable())
-    val resources = Map(YARN_GPU_RESOURCE_CONFIG -> "gpu", YARN_FPGA_RESOURCE_CONFIG -> "fpga")
-    ResourceRequestTestHelper.initializeResourceTypes(resources.keys.toSeq)
-
     val conf = new SparkConf().set(SUBMIT_DEPLOY_MODE, "cluster")
+    val resources = Map(conf.get(YARN_GPU_DEVICE) -> "gpu", conf.get(YARN_FPGA_DEVICE) -> "fpga")
+    ResourceRequestTestHelper.initializeResourceTypes(resources.keys.toSeq)
     resources.keys.foreach { yarnName =>
       conf.set(s"${YARN_DRIVER_RESOURCE_TYPES_PREFIX}${yarnName}.${AMOUNT}", "2")
     }
@@ -495,11 +517,9 @@ class ClientSuite extends SparkFunSuite with Matchers {
   }
 
   test("custom executor resource request yarn config and spark config fails") {
-    assume(ResourceRequestHelper.isYarnResourceTypesAvailable())
-    val resources = Map(YARN_GPU_RESOURCE_CONFIG -> "gpu", YARN_FPGA_RESOURCE_CONFIG -> "fpga")
-    ResourceRequestTestHelper.initializeResourceTypes(resources.keys.toSeq)
-
     val conf = new SparkConf().set(SUBMIT_DEPLOY_MODE, "cluster")
+    val resources = Map(conf.get(YARN_GPU_DEVICE) -> "gpu", conf.get(YARN_FPGA_DEVICE) -> "fpga")
+    ResourceRequestTestHelper.initializeResourceTypes(resources.keys.toSeq)
     resources.keys.foreach { yarnName =>
       conf.set(s"${YARN_EXECUTOR_RESOURCE_TYPES_PREFIX}${yarnName}.${AMOUNT}", "2")
     }
@@ -519,14 +539,14 @@ class ClientSuite extends SparkFunSuite with Matchers {
 
 
   test("custom resources spark config mapped to yarn config") {
-    assume(ResourceRequestHelper.isYarnResourceTypesAvailable())
+    val conf = new SparkConf().set(SUBMIT_DEPLOY_MODE, "cluster")
     val yarnMadeupResource = "yarn.io/madeup"
-    val resources = Map(YARN_GPU_RESOURCE_CONFIG -> "gpu",
-      YARN_FPGA_RESOURCE_CONFIG -> "fpga",
+    val resources = Map(conf.get(YARN_GPU_DEVICE) -> "gpu",
+      conf.get(YARN_FPGA_DEVICE) -> "fpga",
       yarnMadeupResource -> "madeup")
+
     ResourceRequestTestHelper.initializeResourceTypes(resources.keys.toSeq)
 
-    val conf = new SparkConf().set(SUBMIT_DEPLOY_MODE, "cluster")
     resources.values.foreach { rName =>
       conf.set(new ResourceID(SPARK_DRIVER_PREFIX, rName).amountConf, "3")
     }
@@ -541,14 +561,44 @@ class ClientSuite extends SparkFunSuite with Matchers {
       new YarnClientApplication(getNewApplicationResponse, appContext),
       containerLaunchContext)
 
-    val yarnRInfo = ResourceRequestTestHelper.getResources(newContext.getResource)
-    val allResourceInfo = yarnRInfo.map(rInfo => (rInfo.name -> rInfo.value)).toMap
-    assert(allResourceInfo.get(YARN_GPU_RESOURCE_CONFIG).nonEmpty)
-    assert(allResourceInfo.get(YARN_GPU_RESOURCE_CONFIG).get === 3)
-    assert(allResourceInfo.get(YARN_FPGA_RESOURCE_CONFIG).nonEmpty)
-    assert(allResourceInfo.get(YARN_FPGA_RESOURCE_CONFIG).get === 3)
+    val yarnRInfo = newContext.getResource.getResources
+    val allResourceInfo = yarnRInfo.map(rInfo => (rInfo.getName -> rInfo.getValue)).toMap
+    assert(allResourceInfo.get(conf.get(YARN_GPU_DEVICE)).nonEmpty)
+    assert(allResourceInfo.get(conf.get(YARN_GPU_DEVICE)).get === 3)
+    assert(allResourceInfo.get(conf.get(YARN_FPGA_DEVICE)).nonEmpty)
+    assert(allResourceInfo.get(conf.get(YARN_FPGA_DEVICE)).get === 3)
     assert(allResourceInfo.get(yarnMadeupResource).nonEmpty)
     assert(allResourceInfo.get(yarnMadeupResource).get === 5)
+  }
+
+  test("gpu/fpga spark resources mapped to custom yarn resources") {
+    val conf = new SparkConf().set(SUBMIT_DEPLOY_MODE, "cluster")
+    val gpuCustomName = "custom/gpu"
+    val fpgaCustomName = "custom/fpga"
+    conf.set(YARN_GPU_DEVICE.key, gpuCustomName)
+    conf.set(YARN_FPGA_DEVICE.key, fpgaCustomName)
+    val resources = Map(gpuCustomName -> "gpu",
+      fpgaCustomName -> "fpga")
+
+    ResourceRequestTestHelper.initializeResourceTypes(resources.keys.toSeq)
+    resources.values.foreach { rName =>
+      conf.set(new ResourceID(SPARK_DRIVER_PREFIX, rName).amountConf, "3")
+    }
+    val appContext = Records.newRecord(classOf[ApplicationSubmissionContext])
+    val getNewApplicationResponse = Records.newRecord(classOf[GetNewApplicationResponse])
+    val containerLaunchContext = Records.newRecord(classOf[ContainerLaunchContext])
+
+    val client = new Client(new ClientArguments(Array()), conf, null)
+    val newContext = client.createApplicationSubmissionContext(
+      new YarnClientApplication(getNewApplicationResponse, appContext),
+      containerLaunchContext)
+
+    val yarnRInfo = newContext.getResource.getResources
+    val allResourceInfo = yarnRInfo.map(rInfo => (rInfo.getName -> rInfo.getValue)).toMap
+    assert(allResourceInfo.get(gpuCustomName).nonEmpty)
+    assert(allResourceInfo.get(gpuCustomName).get === 3)
+    assert(allResourceInfo.get(fpgaCustomName).nonEmpty)
+    assert(allResourceInfo.get(fpgaCustomName).get === 3)
   }
 
   test("test yarn jars path not exists") {
@@ -580,6 +630,40 @@ class ClientSuite extends SparkFunSuite with Matchers {
         }
       }
     }
+  }
+
+  test("SPARK-35672: test Client.getUserClasspathUrls") {
+    val gatewayRootPath = "/local/matching/replace"
+    val replacementRootPath = "/replaced/path"
+    val conf = new SparkConf()
+        .set(SECONDARY_JARS, Seq(
+          s"local:$gatewayRootPath/foo.jar",
+          "local:/local/not/matching/replace/foo.jar",
+          "file:/absolute/file/path/foo.jar",
+          s"$gatewayRootPath/but-not-actually-local/foo.jar",
+          "/absolute/path/foo.jar",
+          "relative/path/foo.jar"
+        ))
+        .set(GATEWAY_ROOT_PATH, gatewayRootPath)
+        .set(REPLACEMENT_ROOT_PATH, replacementRootPath)
+
+    def assertUserClasspathUrls(cluster: Boolean, expectedReplacementPath: String): Unit = {
+      val expectedUrls = Seq(
+        Paths.get(APP_JAR_NAME).toAbsolutePath.toUri.toString,
+        s"file:$expectedReplacementPath/foo.jar",
+        "file:/local/not/matching/replace/foo.jar",
+        "file:/absolute/file/path/foo.jar",
+        // since this path wasn't a local URI, it should never be replaced
+        s"file:$gatewayRootPath/but-not-actually-local/foo.jar",
+        "file:/absolute/path/foo.jar",
+        Paths.get("relative/path/foo.jar").toAbsolutePath.toUri.toString
+      ).map(URI.create(_).toURL).toArray
+      assert(Client.getUserClasspathUrls(conf, cluster) === expectedUrls)
+    }
+    // assert that no replacement happens when cluster = false by expecting the replacement
+    // path to be the same as the original path
+    assertUserClasspathUrls(cluster = false, gatewayRootPath)
+    assertUserClasspathUrls(cluster = true, replacementRootPath)
   }
 
   private val matching = Seq(
@@ -649,7 +733,7 @@ class ClientSuite extends SparkFunSuite with Matchers {
       sparkConf: SparkConf,
       args: Array[String] = Array()): Client = {
     val clientArgs = new ClientArguments(args)
-    spy(new Client(clientArgs, sparkConf, null))
+    spy[Client](new Client(clientArgs, sparkConf, null))
   }
 
   private def classpath(client: Client): Array[String] = {

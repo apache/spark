@@ -19,12 +19,12 @@ package org.apache.spark.sql.connector.catalog;
 
 import java.util.Arrays;
 import java.util.Objects;
-import java.util.stream.Collectors;
-import java.util.stream.Stream;
+import java.util.StringJoiner;
 
 import com.google.common.base.Preconditions;
 
 import org.apache.spark.annotation.Evolving;
+import org.apache.spark.sql.catalyst.util.package$;
 
 /**
  *  An {@link Identifier} implementation.
@@ -54,27 +54,26 @@ class IdentifierImpl implements Identifier {
 
   @Override
   public String toString() {
-    return Stream.concat(Stream.of(namespace), Stream.of(name))
-      .map(CatalogV2Implicits::quoteIfNeeded)
-      .collect(Collectors.joining("."));
+    StringJoiner joiner = new StringJoiner(".");
+    for (String p : namespace) {
+      joiner.add(package$.MODULE$.quoteIfNeeded(p));
+    }
+    joiner.add(package$.MODULE$.quoteIfNeeded(name));
+    return joiner.toString();
   }
 
   @Override
   public boolean equals(Object o) {
-    if (this == o) {
-      return true;
-    }
-
-    if (o == null || getClass() != o.getClass()) {
-      return false;
-    }
-
+    if (this == o) return true;
+    if (!(o instanceof IdentifierImpl)) return false;
     IdentifierImpl that = (IdentifierImpl) o;
     return Arrays.equals(namespace, that.namespace) && name.equals(that.name);
   }
 
   @Override
   public int hashCode() {
-    return Objects.hash(Arrays.hashCode(namespace), name);
+    int result = Objects.hash(name);
+    result = 31 * result + Arrays.hashCode(namespace);
+    return result;
   }
 }

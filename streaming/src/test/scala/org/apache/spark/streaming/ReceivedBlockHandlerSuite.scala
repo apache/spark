@@ -26,8 +26,10 @@ import scala.concurrent.duration._
 import scala.reflect.ClassTag
 
 import org.apache.hadoop.conf.Configuration
-import org.scalatest.{BeforeAndAfter, Matchers}
+import org.scalatest.BeforeAndAfter
 import org.scalatest.concurrent.Eventually._
+import org.scalatest.matchers.must.Matchers
+import org.scalatest.matchers.should.Matchers._
 
 import org.apache.spark._
 import org.apache.spark.broadcast.BroadcastManager
@@ -69,11 +71,11 @@ abstract class BaseReceivedBlockHandlerSuite(enableEncryption: Boolean)
   val hadoopConf = new Configuration()
   val streamId = 1
   val securityMgr = new SecurityManager(conf, encryptionKey)
-  val broadcastManager = new BroadcastManager(true, conf, securityMgr)
+  val broadcastManager = new BroadcastManager(true, conf)
   val mapOutputTracker = new MapOutputTrackerMaster(conf, broadcastManager, true)
   val shuffleManager = new SortShuffleManager(conf)
   val serializer = new KryoSerializer(conf)
-  var serializerManager = new SerializerManager(serializer, conf, encryptionKey)
+  val serializerManager = new SerializerManager(serializer, conf, encryptionKey)
   val manualClock = new ManualClock
   val blockManagerSize = 10000000
   val blockManagerBuffer = new ArrayBuffer[BlockManager]()
@@ -91,7 +93,8 @@ abstract class BaseReceivedBlockHandlerSuite(enableEncryption: Boolean)
     val blockManagerInfo = new mutable.HashMap[BlockManagerId, BlockManagerInfo]()
     blockManagerMaster = new BlockManagerMaster(rpcEnv.setupEndpoint("blockmanager",
       new BlockManagerMasterEndpoint(rpcEnv, true, conf,
-        new LiveListenerBus(conf), None, blockManagerInfo)),
+        new LiveListenerBus(conf), None, blockManagerInfo, mapOutputTracker, shuffleManager,
+        isDriver = true)),
       rpcEnv.setupEndpoint("blockmanagerHeartbeat",
       new BlockManagerMasterHeartbeatEndpoint(rpcEnv, true, blockManagerInfo)), conf, true)
 
@@ -285,7 +288,8 @@ abstract class BaseReceivedBlockHandlerSuite(enableEncryption: Boolean)
       conf: SparkConf,
       name: String = SparkContext.DRIVER_IDENTIFIER): BlockManager = {
     val memManager = new UnifiedMemoryManager(conf, maxMem, maxMem / 2, 1)
-    val transfer = new NettyBlockTransferService(conf, securityMgr, "localhost", "localhost", 0, 1)
+    val transfer = new NettyBlockTransferService(
+      conf, securityMgr, serializerManager, "localhost", "localhost", 0, 1)
     val blockManager = new BlockManager(name, rpcEnv, blockManagerMaster, serializerManager, conf,
       memManager, mapOutputTracker, shuffleManager, transfer, securityMgr, None)
     memManager.setMemoryStore(blockManager.memoryStore)
@@ -361,7 +365,7 @@ abstract class BaseReceivedBlockHandlerSuite(enableEncryption: Boolean)
 
     val blocks = data.grouped(10).toSeq
 
-    storeAndVerify(blocks.map { b => IteratorBlock(b.toIterator) })
+    storeAndVerify(blocks.map { b => IteratorBlock(b.iterator) })
     storeAndVerify(blocks.map { b => ArrayBufferBlock(new ArrayBuffer ++= b) })
     storeAndVerify(blocks.map { b => ByteBufferBlock(dataToByteBuffer(b).toByteBuffer) })
   }
@@ -370,7 +374,7 @@ abstract class BaseReceivedBlockHandlerSuite(enableEncryption: Boolean)
   private def testErrorHandling(receivedBlockHandler: ReceivedBlockHandler): Unit = {
     // Handle error in iterator (e.g. divide-by-zero error)
     intercept[Exception] {
-      val iterator = (10 to (-10, -1)).toIterator.map { _ / 0 }
+      val iterator = (10 to (-10, -1)).iterator.map { _ / 0 }
       receivedBlockHandler.storeBlock(StreamBlockId(1, 1), IteratorBlock(iterator))
     }
 

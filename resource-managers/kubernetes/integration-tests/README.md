@@ -17,7 +17,13 @@ To run tests with Java 11 instead of Java 8, use `--java-image-tag` to specify t
 
     ./dev/dev-run-integration-tests.sh --java-image-tag 11-jre-slim
 
-The minimum tested version of Minikube is 0.23.0. The kube-dns addon must be enabled. Minikube should
+To run tests with a custom docker image, use `--docker-file` to specify the Dockerfile.
+Note that if both `--docker-file` and `--java-image-tag` are used, `--docker-file` is preferred,
+and the custom Dockerfile need to include a Java installation by itself.
+
+    ./dev/dev-run-integration-tests.sh --docker-file ../docker/src/main/dockerfiles/spark/Dockerfile
+
+The minimum tested version of Minikube is 1.28.0. The kube-dns addon must be enabled. Minikube should
 run with a minimum of 4 CPUs and 6G of memory:
 
     minikube start --cpus 4 --memory 6144
@@ -36,15 +42,15 @@ default this is set to `minikube`, the available backends are their prerequisite
 
 ### `minikube`
 
-Uses the local `minikube` cluster, this requires that `minikube` 0.23.0 or greater be installed and that it be allocated 
+Uses the local `minikube` cluster, this requires that `minikube` 1.28.0 or greater be installed and that it be allocated
 at least 4 CPUs and 6GB memory (some users have reported success with as few as 3 CPUs and 4GB memory).  The tests will 
 check if `minikube` is started and abort early if it isn't currently running.
 
-### `docker-for-desktop`
+### `docker-desktop`
 
 Since July 2018 Docker for Desktop provide an optional Kubernetes cluster that can be enabled as described in this 
 [blog post](https://blog.docker.com/2018/07/kubernetes-is-now-available-in-docker-desktop-stable-channel/).  Assuming 
-this is enabled using this backend will auto-configure itself from the `docker-for-desktop` context that Docker creates 
+this is enabled using this backend will auto-configure itself from the `docker-desktop` context that Docker creates
 in your `~/.kube/config` file. If your config file is in a different location you should set the `KUBECONFIG` 
 environment variable appropriately.
 
@@ -122,13 +128,13 @@ If you prefer to run just the integration tests directly, then you can customise
 properties to Maven.  For example:
 
     mvn integration-test -am -pl :spark-kubernetes-integration-tests_2.12 \
-                            -Pkubernetes -Pkubernetes-integration-tests \ 
-                            -Phadoop-2.7 -Dhadoop.version=2.7.4 \
+                            -Pkubernetes -Pkubernetes-integration-tests \
+                            -Phadoop-3 -Dhadoop.version=3.3.6 \
                             -Dspark.kubernetes.test.sparkTgz=spark-3.0.0-SNAPSHOT-bin-example.tgz \
                             -Dspark.kubernetes.test.imageTag=sometag \
                             -Dspark.kubernetes.test.imageRepo=docker.io/somerepo \
                             -Dspark.kubernetes.test.namespace=spark-int-tests \
-                            -Dspark.kubernetes.test.deployMode=docker-for-desktop \
+                            -Dspark.kubernetes.test.deployMode=docker-desktop \
                             -Dtest.include.tags=k8s
                             
                             
@@ -161,7 +167,7 @@ to the wrapper scripts and using the wrapper scripts will simply set these appro
     <td><code>spark.kubernetes.test.deployMode</code></td>
     <td>
       The integration test backend to use.  Acceptable values are <code>minikube</code>, 
-      <code>docker-for-desktop</code> and <code>cloud</code>.
+      <code>docker-desktop</code> and <code>cloud</code>.
     <td><code>minikube</code></td>
   </tr>
   <tr>
@@ -176,7 +182,7 @@ to the wrapper scripts and using the wrapper scripts will simply set these appro
   <tr>
     <td><code>spark.kubernetes.test.master</code></td>
     <td>
-      When using the <code>cloud-url</code> backend must be specified to indicate the K8S master URL to communicate 
+      When using the <code>cloud</code> backend must be specified to indicate the K8S master URL to communicate
       with.
     </td>
     <td></td>
@@ -234,6 +240,13 @@ to the wrapper scripts and using the wrapper scripts will simply set these appro
     <td><code>spark-r</code></td>
   </tr>
   <tr>
+    <td><code>spark.kubernetes.test.dockerFile</code></td>
+    <td>
+      The path to the custom Dockerfile
+    </td>
+    <td><code>N/A</code></td>
+  </tr>
+  <tr>
     <td><code>spark.kubernetes.test.namespace</code></td>
     <td>
       A specific Kubernetes namespace to run the tests in.  If specified then the tests assume that this namespace 
@@ -250,4 +263,96 @@ to the wrapper scripts and using the wrapper scripts will simply set these appro
     </td>
     <td></td>
   </tr>
+  <tr>
+    <td><code>spark.kubernetes.test.driverRequestCores</code></td>
+    <td>
+      Set cpu resource for each driver pod in test, this is currently only for test on cpu resource limited cluster,
+      it's not recommended for other scenarios.
+    </td>
+    <td></td>
+  </tr>
+  <tr>
+    <td><code>spark.kubernetes.test.executorRequestCores</code></td>
+    <td>
+      Set cpu resource for each executor pod in test, this is currently only for test on cpu resource limited cluster,
+      it's not recommended for other scenarios.
+    </td>
+    <td></td>
+  </tr>
+  <tr>
+    <td><code>spark.kubernetes.test.volcanoMaxConcurrencyJobNum</code></td>
+    <td>
+      Set maximum number for concurrency jobs, It helps developers setting suitable resources according to test env in
+      volcano test.
+    </td>
+    <td></td>
+  </tr>
 </table>
+
+# Running the Kubernetes Integration Tests with SBT
+
+You can use SBT in the same way to build image and run all K8s integration tests except Minikube-only ones.
+
+    build/sbt -Psparkr -Pkubernetes -Pkubernetes-integration-tests \
+        -Dtest.exclude.tags=minikube \
+        -Dspark.kubernetes.test.deployMode=docker-desktop \
+        -Dspark.kubernetes.test.imageTag=2022-03-06 \
+        'kubernetes-integration-tests/test'
+
+The following is an example to rerun tests with the pre-built image.
+
+    build/sbt -Psparkr -Pkubernetes -Pkubernetes-integration-tests \
+        -Dtest.exclude.tags=minikube \
+        -Dspark.kubernetes.test.deployMode=docker-desktop \
+        -Dspark.kubernetes.test.imageTag=2022-03-06 \
+        'kubernetes-integration-tests/runIts'
+
+In addition, you can run a single test selectively.
+
+    build/sbt -Psparkr -Pkubernetes -Pkubernetes-integration-tests \
+        -Dspark.kubernetes.test.deployMode=docker-desktop \
+        -Dspark.kubernetes.test.imageTag=2022-03-06 \
+        'kubernetes-integration-tests/testOnly -- -z "Run SparkPi with a very long application name"'
+
+You can also specify your specific dockerfile to build JVM/Python/R based image to test.
+
+    build/sbt -Psparkr -Pkubernetes -Pkubernetes-integration-tests \
+        -Dtest.exclude.tags=minikube \
+        -Dspark.kubernetes.test.deployMode=docker-desktop \
+        -Dspark.kubernetes.test.imageTag=2022-03-06 \
+        -Dspark.kubernetes.test.dockerFile=/path/to/Dockerfile \
+        -Dspark.kubernetes.test.pyDockerFile=/path/to/py/Dockerfile \
+        -Dspark.kubernetes.test.rDockerFile=/path/to/r/Dockerfile \
+        'kubernetes-integration-tests/test'
+
+# Running the Volcano Integration Tests
+
+## Requirements
+- A minimum of 6 CPUs and 9G of memory is required to complete all Volcano test cases.
+- Volcano v1.7.0.
+
+## Installation
+
+    kubectl apply -f https://raw.githubusercontent.com/volcano-sh/volcano/v1.7.0/installer/volcano-development.yaml
+
+## Run tests
+
+You can specify `-Pvolcano` to enable volcano module to run all Kubernetes and Volcano tests
+
+    build/sbt -Pvolcano -Pkubernetes -Pkubernetes-integration-tests \
+        -Dtest.exclude.tags=minikube \
+        -Dspark.kubernetes.test.deployMode=docker-desktop \
+        'kubernetes-integration-tests/test'
+
+You can also specify `volcano` tag to only run Volcano test:
+
+    build/sbt -Pvolcano -Pkubernetes -Pkubernetes-integration-tests \
+        -Dtest.include.tags=volcano \
+        -Dtest.exclude.tags=minikube \
+        -Dspark.kubernetes.test.deployMode=docker-desktop \
+        'kubernetes-integration-tests/test'
+
+## Cleanup Volcano
+
+    kubectl delete -f https://raw.githubusercontent.com/volcano-sh/volcano/v1.7.0/installer/volcano-development.yaml
+

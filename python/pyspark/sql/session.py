@@ -14,145 +14,417 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-
-# To disallow implicit relative import. Remove this once we drop Python 2.
-from __future__ import absolute_import
-from __future__ import print_function
+import os
 import sys
 import warnings
+from collections.abc import Sized
 from functools import reduce
 from threading import RLock
+from types import TracebackType
+from typing import (
+    Any,
+    ClassVar,
+    Dict,
+    Iterable,
+    List,
+    Optional,
+    Tuple,
+    Type,
+    Union,
+    Set,
+    cast,
+    no_type_check,
+    overload,
+    TYPE_CHECKING,
+)
 
-if sys.version >= '3':
-    basestring = unicode = str
-    xrange = range
-else:
-    from itertools import imap as map
+from py4j.java_gateway import JavaObject
 
-from pyspark import since
-from pyspark.rdd import RDD, ignore_unicode_prefix
+from pyspark import SparkConf, SparkContext
+from pyspark.rdd import RDD
+from pyspark.sql.column import _to_java_column
 from pyspark.sql.conf import RuntimeConfig
 from pyspark.sql.dataframe import DataFrame
+from pyspark.sql.functions import lit
 from pyspark.sql.pandas.conversion import SparkConversionMixin
 from pyspark.sql.readwriter import DataFrameReader
+from pyspark.sql.sql_formatter import SQLStringFormatter
 from pyspark.sql.streaming import DataStreamReader
-from pyspark.sql.types import Row, DataType, StringType, StructType, \
-    _make_type_verifier, _infer_schema, _has_nulltype, _merge_type, _create_converter, \
-    _parse_datatype_string
-from pyspark.sql.utils import install_exception_handler
+from pyspark.sql.types import (
+    AtomicType,
+    DataType,
+    StructField,
+    StructType,
+    _make_type_verifier,
+    _infer_schema,
+    _has_nulltype,
+    _merge_type,
+    _create_converter,
+    _parse_datatype_string,
+    _from_numpy_type,
+)
+from pyspark.errors.exceptions.captured import install_exception_handler
+from pyspark.sql.utils import is_timestamp_ntz_preferred, to_str, try_remote_session_classmethod
+from pyspark.errors import PySparkValueError, PySparkTypeError, PySparkRuntimeError
+
+if TYPE_CHECKING:
+    from pyspark.sql._typing import AtomicValue, RowLike, OptionalPrimitiveType
+    from pyspark.sql.catalog import Catalog
+    from pyspark.sql.pandas._typing import ArrayLike, DataFrameLike as PandasDataFrameLike
+    from pyspark.sql.streaming import StreamingQueryManager
+    from pyspark.sql.udf import UDFRegistration
+    from pyspark.sql.udtf import UDTFRegistration
+
+    # Running MyPy type checks will always require pandas and
+    # other dependencies so importing here is fine.
+    from pyspark.sql.connect.client import SparkConnectClient
+
 
 __all__ = ["SparkSession"]
 
 
-def _monkey_patch_RDD(sparkSession):
+def _monkey_patch_RDD(sparkSession: "SparkSession") -> None:
+    @no_type_check
     def toDF(self, schema=None, sampleRatio=None):
         """
         Converts current :class:`RDD` into a :class:`DataFrame`
 
         This is a shorthand for ``spark.createDataFrame(rdd, schema, sampleRatio)``
 
-        :param schema: a :class:`pyspark.sql.types.StructType` or list of names of columns
-        :param samplingRatio: the sample ratio of rows used for inferring
-        :return: a DataFrame
+        Parameters
+        ----------
+        schema : :class:`pyspark.sql.types.DataType`, str or list, optional
+            a :class:`pyspark.sql.types.DataType` or a datatype string or a list of
+            column names, default is None.  The data type string format equals to
+            :class:`pyspark.sql.types.DataType.simpleString`, except that top level struct type can
+            omit the ``struct<>`` and atomic types use ``typeName()`` as their format, e.g. use
+            ``byte`` instead of ``tinyint`` for :class:`pyspark.sql.types.ByteType`.
+            We can also use ``int`` as a short name for :class:`pyspark.sql.types.IntegerType`.
+        sampleRatio : float, optional
+            the sample ratio of rows used for inferring
 
-        >>> rdd.toDF().collect()
-        [Row(name=u'Alice', age=1)]
+        Returns
+        -------
+        :class:`DataFrame`
+
+        Examples
+        --------
+        >>> rdd = spark.range(1).rdd.map(lambda x: tuple(x))
+        >>> rdd.collect()
+        [(0,)]
+        >>> rdd.toDF().show()
+        +---+
+        | _1|
+        +---+
+        |  0|
+        +---+
         """
         return sparkSession.createDataFrame(self, schema, sampleRatio)
 
-    RDD.toDF = toDF
+    RDD.toDF = toDF  # type: ignore[assignment]
+
+
+# TODO(SPARK-38912): This method can be dropped once support for Python 3.8 is dropped
+# In Python 3.9, the @property decorator has been made compatible with the
+# @classmethod decorator (https://docs.python.org/3.9/library/functions.html#classmethod)
+#
+# @classmethod + @property is also affected by a bug in Python's docstring which was backported
+# to Python 3.9.6 (https://github.com/python/cpython/pull/28838)
+class classproperty(property):
+    """Same as Python's @property decorator, but for class attributes.
+
+    Examples
+    --------
+    >>> class Builder:
+    ...    def build(self):
+    ...        return MyClass()
+    ...
+    >>> class MyClass:
+    ...     @classproperty
+    ...     def builder(cls):
+    ...         print("instantiating new builder")
+    ...         return Builder()
+    ...
+    >>> c1 = MyClass.builder
+    instantiating new builder
+    >>> c2 = MyClass.builder
+    instantiating new builder
+    >>> c1 == c2
+    False
+    >>> isinstance(c1.build(), MyClass)
+    True
+    """
+
+    def __get__(self, instance: Any, owner: Any = None) -> "SparkSession.Builder":
+        # The "type: ignore" below silences the following error from mypy:
+        # error: Argument 1 to "classmethod" has incompatible
+        # type "Optional[Callable[[Any], Any]]";
+        # expected "Callable[..., Any]"  [arg-type]
+        return classmethod(self.fget).__get__(None, owner)()  # type: ignore
 
 
 class SparkSession(SparkConversionMixin):
     """The entry point to programming Spark with the Dataset and DataFrame API.
 
-    A SparkSession can be used create :class:`DataFrame`, register :class:`DataFrame` as
+    A SparkSession can be used to create :class:`DataFrame`, register :class:`DataFrame` as
     tables, execute SQL over tables, cache tables, and read parquet files.
-    To create a SparkSession, use the following builder pattern:
+    To create a :class:`SparkSession`, use the following builder pattern:
 
-    >>> spark = SparkSession.builder \\
-    ...     .master("local") \\
-    ...     .appName("Word Count") \\
-    ...     .config("spark.some.config.option", "some-value") \\
-    ...     .getOrCreate()
+    .. versionchanged:: 3.4.0
+        Supports Spark Connect.
 
     .. autoattribute:: builder
        :annotation:
+
+    Examples
+    --------
+    Create a Spark session.
+
+    >>> spark = (
+    ...     SparkSession.builder
+    ...         .master("local")
+    ...         .appName("Word Count")
+    ...         .config("spark.some.config.option", "some-value")
+    ...         .getOrCreate()
+    ... )
+
+    Create a Spark session with Spark Connect.
+
+    >>> spark = (
+    ...     SparkSession.builder
+    ...         .remote("sc://localhost")
+    ...         .appName("Word Count")
+    ...         .config("spark.some.config.option", "some-value")
+    ...         .getOrCreate()
+    ... )  # doctest: +SKIP
     """
 
-    class Builder(object):
-        """Builder for :class:`SparkSession`.
-        """
+    class Builder:
+        """Builder for :class:`SparkSession`."""
 
         _lock = RLock()
-        _options = {}
-        _sc = None
 
-        @since(2.0)
-        def config(self, key=None, value=None, conf=None):
+        def __init__(self) -> None:
+            self._options: Dict[str, Any] = {}
+
+        @overload
+        def config(self, *, conf: SparkConf) -> "SparkSession.Builder":
+            ...
+
+        @overload
+        def config(self, key: str, value: Any) -> "SparkSession.Builder":
+            ...
+
+        @overload
+        def config(self, *, map: Dict[str, "OptionalPrimitiveType"]) -> "SparkSession.Builder":
+            ...
+
+        def config(
+            self,
+            key: Optional[str] = None,
+            value: Optional[Any] = None,
+            conf: Optional[SparkConf] = None,
+            *,
+            map: Optional[Dict[str, "OptionalPrimitiveType"]] = None,
+        ) -> "SparkSession.Builder":
             """Sets a config option. Options set using this method are automatically propagated to
             both :class:`SparkConf` and :class:`SparkSession`'s own configuration.
 
-            For an existing SparkConf, use `conf` parameter.
+            .. versionadded:: 2.0.0
+
+            .. versionchanged:: 3.4.0
+                Supports Spark Connect.
+
+            Parameters
+            ----------
+            key : str, optional
+                a key name string for configuration property
+            value : str, optional
+                a value for configuration property
+            conf : :class:`SparkConf`, optional
+                an instance of :class:`SparkConf`
+            map: dictionary, optional
+                a dictionary of configurations to set
+
+                .. versionadded:: 3.4.0
+
+            Returns
+            -------
+            :class:`SparkSession.Builder`
+
+            Examples
+            --------
+            For an existing class:`SparkConf`, use `conf` parameter.
 
             >>> from pyspark.conf import SparkConf
             >>> SparkSession.builder.config(conf=SparkConf())
-            <pyspark.sql.session...
+            <pyspark.sql.session.SparkSession.Builder...
 
             For a (key, value) pair, you can omit parameter names.
 
             >>> SparkSession.builder.config("spark.some.config.option", "some-value")
-            <pyspark.sql.session...
+            <pyspark.sql.session.SparkSession.Builder...
 
-            :param key: a key name string for configuration property
-            :param value: a value for configuration property
-            :param conf: an instance of :class:`SparkConf`
+            Additionally, you can pass a dictionary of configurations to set.
+
+            >>> SparkSession.builder.config(
+            ...     map={"spark.some.config.number": 123, "spark.some.config.float": 0.123})
+            <pyspark.sql.session.SparkSession.Builder...
             """
             with self._lock:
-                if conf is None:
-                    self._options[key] = str(value)
-                else:
+                if conf is not None:
                     for (k, v) in conf.getAll():
+                        self._validate_startup_urls()
                         self._options[k] = v
+                elif map is not None:
+                    for k, v in map.items():  # type: ignore[assignment]
+                        v = to_str(v)  # type: ignore[assignment]
+                        self._validate_startup_urls()
+                        self._options[k] = v
+                else:
+                    value = to_str(value)
+                    self._validate_startup_urls()
+                    self._options[cast(str, key)] = value
                 return self
 
-        @since(2.0)
-        def master(self, master):
+        def _validate_startup_urls(
+            self,
+        ) -> None:
+            """
+            Helper function that validates the combination of startup URLs and raises an exception
+            if incompatible options are selected.
+            """
+            if "spark.master" in self._options and (
+                "spark.remote" in self._options or "SPARK_REMOTE" in os.environ
+            ):
+                raise RuntimeError(
+                    "Spark master cannot be configured with Spark Connect server; "
+                    "however, found URL for Spark Connect [%s]"
+                    % self._options.get("spark.remote", os.environ.get("SPARK_REMOTE"))
+                )
+            if "spark.remote" in self._options and (
+                "spark.master" in self._options or "MASTER" in os.environ
+            ):
+                raise RuntimeError(
+                    "Spark Connect server cannot be configured with Spark master; "
+                    "however, found URL for Spark master [%s]"
+                    % self._options.get("spark.master", os.environ.get("MASTER"))
+                )
+
+            if "spark.remote" in self._options:
+                remote = cast(str, self._options.get("spark.remote"))
+                if ("SPARK_REMOTE" in os.environ and os.environ["SPARK_REMOTE"] != remote) and (
+                    "SPARK_LOCAL_REMOTE" in os.environ and not remote.startswith("local")
+                ):
+                    raise RuntimeError(
+                        "Only one Spark Connect client URL can be set; however, got a "
+                        "different URL [%s] from the existing [%s]"
+                        % (os.environ["SPARK_REMOTE"], remote)
+                    )
+
+        def master(self, master: str) -> "SparkSession.Builder":
             """Sets the Spark master URL to connect to, such as "local" to run locally, "local[4]"
             to run locally with 4 cores, or "spark://master:7077" to run on a Spark standalone
             cluster.
 
-            :param master: a url for spark master
+            .. versionadded:: 2.0.0
+
+            Parameters
+            ----------
+            master : str
+                a url for spark master
+
+            Returns
+            -------
+            :class:`SparkSession.Builder`
+
+            Examples
+            --------
+            >>> SparkSession.builder.master("local")
+            <pyspark.sql.session.SparkSession.Builder...
             """
             return self.config("spark.master", master)
 
-        @since(2.0)
-        def appName(self, name):
+        def remote(self, url: str) -> "SparkSession.Builder":
+            """Sets the Spark remote URL to connect to, such as "sc://host:port" to run
+            it via Spark Connect server.
+
+            .. versionadded:: 3.4.0
+
+            Parameters
+            ----------
+            url : str
+                URL to Spark Connect server
+
+            Returns
+            -------
+            :class:`SparkSession.Builder`
+
+            Examples
+            --------
+            >>> SparkSession.builder.remote("sc://localhost")  # doctest: +SKIP
+            <pyspark.sql.session.SparkSession.Builder...
+            """
+            return self.config("spark.remote", url)
+
+        def appName(self, name: str) -> "SparkSession.Builder":
             """Sets a name for the application, which will be shown in the Spark web UI.
 
             If no application name is set, a randomly generated name will be used.
 
-            :param name: an application name
+            .. versionadded:: 2.0.0
+
+            .. versionchanged:: 3.4.0
+                Supports Spark Connect.
+
+            Parameters
+            ----------
+            name : str
+                an application name
+
+            Returns
+            -------
+            :class:`SparkSession.Builder`
+
+            Examples
+            --------
+            >>> SparkSession.builder.appName("My app")
+            <pyspark.sql.session.SparkSession.Builder...
             """
             return self.config("spark.app.name", name)
 
-        @since(2.0)
-        def enableHiveSupport(self):
+        def enableHiveSupport(self) -> "SparkSession.Builder":
             """Enables Hive support, including connectivity to a persistent Hive metastore, support
             for Hive SerDes, and Hive user-defined functions.
+
+            .. versionadded:: 2.0.0
+
+            Returns
+            -------
+            :class:`SparkSession.Builder`
+
+            Examples
+            --------
+            >>> SparkSession.builder.enableHiveSupport()
+            <pyspark.sql.session.SparkSession.Builder...
             """
             return self.config("spark.sql.catalogImplementation", "hive")
 
-        def _sparkContext(self, sc):
-            with self._lock:
-                self._sc = sc
-                return self
-
-        @since(2.0)
-        def getOrCreate(self):
+        def getOrCreate(self) -> "SparkSession":
             """Gets an existing :class:`SparkSession` or, if there is no existing one, creates a
             new one based on the options set in this builder.
 
+            .. versionadded:: 2.0.0
+
+            .. versionchanged:: 3.4.0
+                Supports Spark Connect.
+
+            Returns
+            -------
+            :class:`SparkSession`
+
+            Examples
+            --------
             This method first checks whether there is a valid global default SparkSession, and if
             yes, return that one. If no valid global default SparkSession exists, the method
             creates a new SparkSession and assigns the newly created SparkSession as the global
@@ -162,86 +434,176 @@ class SparkSession(SparkConversionMixin):
             >>> s1.conf.get("k1") == "v1"
             True
 
+            The configuration of the SparkSession can be changed afterwards
+
+            >>> s1.conf.set("k1", "v1_new")
+            >>> s1.conf.get("k1") == "v1_new"
+            True
+
             In case an existing SparkSession is returned, the config options specified
             in this builder will be applied to the existing SparkSession.
 
             >>> s2 = SparkSession.builder.config("k2", "v2").getOrCreate()
-            >>> s1.conf.get("k1") == s2.conf.get("k1")
+            >>> s1.conf.get("k1") == s2.conf.get("k1") == "v1_new"
             True
-            >>> s1.conf.get("k2") == s2.conf.get("k2")
+            >>> s1.conf.get("k2") == s2.conf.get("k2") == "v2"
             True
             """
+            from pyspark.context import SparkContext
+            from pyspark.conf import SparkConf
+
+            opts = dict(self._options)
+
             with self._lock:
-                from pyspark.context import SparkContext
-                from pyspark.conf import SparkConf
+                if "SPARK_REMOTE" in os.environ or "spark.remote" in opts:
+                    with SparkContext._lock:
+                        from pyspark.sql.connect.session import SparkSession as RemoteSparkSession
+
+                        if (
+                            SparkContext._active_spark_context is None
+                            and SparkSession._instantiatedSession is None
+                        ):
+                            url = opts.get("spark.remote", os.environ.get("SPARK_REMOTE"))
+
+                            if url.startswith("local"):
+                                os.environ["SPARK_LOCAL_REMOTE"] = "1"
+                                RemoteSparkSession._start_connect_server(url, opts)
+                                url = "sc://localhost"
+
+                            os.environ["SPARK_CONNECT_MODE_ENABLED"] = "1"
+                            opts["spark.remote"] = url
+                            return RemoteSparkSession.builder.config(map=opts).getOrCreate()
+                        elif "SPARK_LOCAL_REMOTE" in os.environ:
+                            url = "sc://localhost"
+                            os.environ["SPARK_CONNECT_MODE_ENABLED"] = "1"
+                            opts["spark.remote"] = url
+                            return RemoteSparkSession.builder.config(map=opts).getOrCreate()
+                        else:
+                            raise RuntimeError(
+                                "Cannot start a remote Spark session because there "
+                                "is a regular Spark session already running."
+                            )
+
                 session = SparkSession._instantiatedSession
                 if session is None or session._sc._jsc is None:
-                    if self._sc is not None:
-                        sc = self._sc
-                    else:
-                        sparkConf = SparkConf()
-                        for key, value in self._options.items():
-                            sparkConf.set(key, value)
-                        # This SparkContext may be an existing one.
-                        sc = SparkContext.getOrCreate(sparkConf)
+                    sparkConf = SparkConf()
+                    for key, value in self._options.items():
+                        sparkConf.set(key, value)
+                    # This SparkContext may be an existing one.
+                    sc = SparkContext.getOrCreate(sparkConf)
                     # Do not update `SparkConf` for existing `SparkContext`, as it's shared
                     # by all sessions.
-                    session = SparkSession(sc)
-                for key, value in self._options.items():
-                    session._jsparkSession.sessionState().conf().setConfString(key, value)
+                    session = SparkSession(sc, options=self._options)
+                else:
+                    getattr(
+                        getattr(session._jvm, "SparkSession$"), "MODULE$"
+                    ).applyModifiableSettings(session._jsparkSession, self._options)
                 return session
 
-    builder = Builder()
-    """A class attribute having a :class:`Builder` to construct :class:`SparkSession` instances."""
+        # Spark Connect-specific API
+        def create(self) -> "SparkSession":
+            """Creates a new SparkSession. Can only be used in the context of Spark Connect
+            and will throw an exception otherwise.
 
-    _instantiatedSession = None
-    _activeSession = None
+            .. versionadded:: 3.5.0
 
-    @ignore_unicode_prefix
-    def __init__(self, sparkContext, jsparkSession=None):
-        """Creates a new SparkSession.
+            Returns
+            -------
+            :class:`SparkSession`
 
-        >>> from datetime import datetime
-        >>> spark = SparkSession(sc)
-        >>> allTypes = sc.parallelize([Row(i=1, s="string", d=1.0, l=1,
-        ...     b=True, list=[1, 2, 3], dict={"s": 0}, row=Row(a=1),
-        ...     time=datetime(2014, 8, 1, 14, 1, 5))])
-        >>> df = allTypes.toDF()
-        >>> df.createOrReplaceTempView("allTypes")
-        >>> spark.sql('select i+1, d+1, not b, list[1], dict["s"], time, row.a '
-        ...            'from allTypes where b and i > 0').collect()
-        [Row((i + CAST(1 AS BIGINT))=2, (d + CAST(1 AS DOUBLE))=2.0, (NOT b)=False, list[1]=2, \
-            dict[s]=0, time=datetime.datetime(2014, 8, 1, 14, 1, 5), a=1)]
-        >>> df.rdd.map(lambda x: (x.i, x.s, x.d, x.l, x.b, x.time, x.row.a, x.list)).collect()
-        [(1, u'string', 1.0, 1, True, datetime.datetime(2014, 8, 1, 14, 1, 5), 1, [1, 2, 3])]
+            Notes
+            -----
+            This method will update the default and/or active session if they are not set.
+            """
+            opts = dict(self._options)
+            if "SPARK_REMOTE" in os.environ or "spark.remote" in opts:
+                from pyspark.sql.connect.session import SparkSession as RemoteSparkSession
+
+                # Validate that no incompatible configuration options are selected.
+                self._validate_startup_urls()
+
+                url = opts.get("spark.remote", os.environ.get("SPARK_REMOTE"))
+                if url.startswith("local"):
+                    raise RuntimeError(
+                        "Creating new SparkSessions with `local` "
+                        "connection string is not supported."
+                    )
+
+                # Mark this Spark Session as Spark Connect. This prevents that local PySpark is
+                # used in conjunction with Spark Connect mode.
+                os.environ["SPARK_CONNECT_MODE_ENABLED"] = "1"
+                opts["spark.remote"] = url
+                return RemoteSparkSession.builder.config(map=opts).create()
+            else:
+                raise RuntimeError(
+                    "SparkSession.builder.create() can only be used with Spark Connect; "
+                    "however, spark.remote was not found."
+                )
+
+    # TODO(SPARK-38912): Replace @classproperty with @classmethod + @property once support for
+    # Python 3.8 is dropped.
+    #
+    # In Python 3.9, the @property decorator has been made compatible with the
+    # @classmethod decorator (https://docs.python.org/3.9/library/functions.html#classmethod)
+    #
+    # @classmethod + @property is also affected by a bug in Python's docstring which was backported
+    # to Python 3.9.6 (https://github.com/python/cpython/pull/28838)
+    @classproperty
+    def builder(cls) -> Builder:
+        """Creates a :class:`Builder` for constructing a :class:`SparkSession`.
+
+        .. versionchanged:: 3.4.0
+            Supports Spark Connect.
         """
-        from pyspark.sql.context import SQLContext
+        return cls.Builder()
+
+    _instantiatedSession: ClassVar[Optional["SparkSession"]] = None
+    _activeSession: ClassVar[Optional["SparkSession"]] = None
+
+    def __init__(
+        self,
+        sparkContext: SparkContext,
+        jsparkSession: Optional[JavaObject] = None,
+        options: Dict[str, Any] = {},
+    ):
         self._sc = sparkContext
         self._jsc = self._sc._jsc
         self._jvm = self._sc._jvm
+
+        assert self._jvm is not None
+
         if jsparkSession is None:
-            if self._jvm.SparkSession.getDefaultSession().isDefined() \
-                    and not self._jvm.SparkSession.getDefaultSession().get() \
-                        .sparkContext().isStopped():
+            if (
+                self._jvm.SparkSession.getDefaultSession().isDefined()
+                and not self._jvm.SparkSession.getDefaultSession().get().sparkContext().isStopped()
+            ):
                 jsparkSession = self._jvm.SparkSession.getDefaultSession().get()
+                getattr(getattr(self._jvm, "SparkSession$"), "MODULE$").applyModifiableSettings(
+                    jsparkSession, options
+                )
             else:
-                jsparkSession = self._jvm.SparkSession(self._jsc.sc())
+                jsparkSession = self._jvm.SparkSession(self._jsc.sc(), options)
+        else:
+            getattr(getattr(self._jvm, "SparkSession$"), "MODULE$").applyModifiableSettings(
+                jsparkSession, options
+            )
         self._jsparkSession = jsparkSession
-        self._jwrapped = self._jsparkSession.sqlContext()
-        self._wrapped = SQLContext(self._sc, self, self._jwrapped)
         _monkey_patch_RDD(self)
         install_exception_handler()
         # If we had an instantiated SparkSession attached with a SparkContext
         # which is stopped now, we need to renew the instantiated SparkSession.
         # Otherwise, we will use invalid SparkSession when we call Builder.getOrCreate.
-        if SparkSession._instantiatedSession is None \
-                or SparkSession._instantiatedSession._sc._jsc is None:
+        if (
+            SparkSession._instantiatedSession is None
+            or SparkSession._instantiatedSession._sc._jsc is None
+        ):
             SparkSession._instantiatedSession = self
             SparkSession._activeSession = self
+            assert self._jvm is not None
             self._jvm.SparkSession.setDefaultSession(self._jsparkSession)
             self._jvm.SparkSession.setActiveSession(self._jsparkSession)
 
-    def _repr_html_(self):
+    def _repr_html_(self) -> str:
         return """
             <div>
                 <p><b>SparkSession - {catalogImplementation}</b></p>
@@ -249,109 +611,306 @@ class SparkSession(SparkConversionMixin):
             </div>
         """.format(
             catalogImplementation=self.conf.get("spark.sql.catalogImplementation"),
-            sc_HTML=self.sparkContext._repr_html_()
+            sc_HTML=self.sparkContext._repr_html_(),
         )
 
-    @since(2.0)
-    def newSession(self):
+    @property
+    def _jconf(self) -> "JavaObject":
+        """Accessor for the JVM SQL-specific configurations"""
+        return self._jsparkSession.sessionState().conf()
+
+    def newSession(self) -> "SparkSession":
         """
-        Returns a new SparkSession as new session, that has separate SQLConf,
-        registered temporary views and UDFs, but shared SparkContext and
+        Returns a new :class:`SparkSession` as new session, that has separate SQLConf,
+        registered temporary views and UDFs, but shared :class:`SparkContext` and
         table cache.
+
+        .. versionadded:: 2.0.0
+
+        Returns
+        -------
+        :class:`SparkSession`
+            Spark session if an active session exists for the current thread
+
+        Examples
+        --------
+        >>> spark.newSession()
+        <...SparkSession object ...>
         """
         return self.__class__(self._sc, self._jsparkSession.newSession())
 
     @classmethod
-    @since(3.0)
-    def getActiveSession(cls):
+    @try_remote_session_classmethod
+    def getActiveSession(cls) -> Optional["SparkSession"]:
         """
-        Returns the active SparkSession for the current thread, returned by the builder.
+        Returns the active :class:`SparkSession` for the current thread, returned by the builder
+
+        .. versionadded:: 3.0.0
+
+        .. versionchanged:: 3.5.0
+            Supports Spark Connect.
+
+        Returns
+        -------
+        :class:`SparkSession`
+            Spark session if an active session exists for the current thread
+
+        Examples
+        --------
         >>> s = SparkSession.getActiveSession()
-        >>> l = [('Alice', 1)]
-        >>> rdd = s.sparkContext.parallelize(l)
-        >>> df = s.createDataFrame(rdd, ['name', 'age'])
-        >>> df.select("age").collect()
-        [Row(age=1)]
+        >>> df = s.createDataFrame([('Alice', 1)], ['name', 'age'])
+        >>> df.select("age").show()
+        +---+
+        |age|
+        +---+
+        |  1|
+        +---+
         """
         from pyspark import SparkContext
+
         sc = SparkContext._active_spark_context
         if sc is None:
             return None
         else:
+            assert sc._jvm is not None
             if sc._jvm.SparkSession.getActiveSession().isDefined():
                 SparkSession(sc, sc._jvm.SparkSession.getActiveSession().get())
                 return SparkSession._activeSession
             else:
                 return None
 
+    @classmethod
+    @try_remote_session_classmethod
+    def active(cls) -> "SparkSession":
+        """
+        Returns the active or default :class:`SparkSession` for the current thread, returned by
+        the builder.
+
+        .. versionadded:: 3.5.0
+
+        Returns
+        -------
+        :class:`SparkSession`
+            Spark session if an active or default session exists for the current thread.
+        """
+        session = cls.getActiveSession()
+        if session is None:
+            session = cls._instantiatedSession
+            if session is None:
+                raise PySparkRuntimeError(
+                    error_class="NO_ACTIVE_OR_DEFAULT_SESSION",
+                    message_parameters={},
+                )
+        return session
+
     @property
-    @since(2.0)
-    def sparkContext(self):
-        """Returns the underlying :class:`SparkContext`."""
+    def sparkContext(self) -> SparkContext:
+        """
+        Returns the underlying :class:`SparkContext`.
+
+        .. versionadded:: 2.0.0
+
+        Returns
+        -------
+        :class:`SparkContext`
+
+        Examples
+        --------
+        >>> spark.sparkContext
+        <SparkContext master=... appName=...>
+
+        Create an RDD from the Spark context
+
+        >>> rdd = spark.sparkContext.parallelize([1, 2, 3])
+        >>> rdd.collect()
+        [1, 2, 3]
+        """
         return self._sc
 
     @property
-    @since(2.0)
-    def version(self):
-        """The version of Spark on which this application is running."""
+    def version(self) -> str:
+        """
+        The version of Spark on which this application is running.
+
+        .. versionadded:: 2.0.0
+
+        .. versionchanged:: 3.4.0
+            Supports Spark Connect.
+
+        Returns
+        -------
+        str
+            the version of Spark in string.
+
+        Examples
+        --------
+        >>> _ = spark.version
+        """
         return self._jsparkSession.version()
 
     @property
-    @since(2.0)
-    def conf(self):
+    def conf(self) -> RuntimeConfig:
         """Runtime configuration interface for Spark.
 
         This is the interface through which the user can get and set all Spark and Hadoop
         configurations that are relevant to Spark SQL. When getting the value of a config,
         this defaults to the value set in the underlying :class:`SparkContext`, if any.
+
+        .. versionadded:: 2.0.0
+
+        .. versionchanged:: 3.4.0
+            Supports Spark Connect.
+
+        Returns
+        -------
+        :class:`pyspark.sql.conf.RuntimeConfig`
+
+        Examples
+        --------
+        >>> spark.conf
+        <pyspark...RuntimeConf...>
+
+        Set a runtime configuration for the session
+
+        >>> spark.conf.set("key", "value")
+        >>> spark.conf.get("key")
+        'value'
         """
         if not hasattr(self, "_conf"):
             self._conf = RuntimeConfig(self._jsparkSession.conf())
         return self._conf
 
     @property
-    @since(2.0)
-    def catalog(self):
+    def catalog(self) -> "Catalog":
         """Interface through which the user may create, drop, alter or query underlying
         databases, tables, functions, etc.
 
-        :return: :class:`Catalog`
+        .. versionadded:: 2.0.0
+
+        .. versionchanged:: 3.4.0
+            Supports Spark Connect.
+
+        Returns
+        -------
+        :class:`Catalog`
+
+        Examples
+        --------
+        >>> spark.catalog
+        <...Catalog object ...>
+
+        Create a temp view, show the list, and drop it.
+
+        >>> spark.range(1).createTempView("test_view")
+        >>> spark.catalog.listTables()
+        [Table(name='test_view', catalog=None, namespace=[], description=None, ...
+        >>> _ = spark.catalog.dropTempView("test_view")
         """
         from pyspark.sql.catalog import Catalog
+
         if not hasattr(self, "_catalog"):
             self._catalog = Catalog(self)
         return self._catalog
 
     @property
-    @since(2.0)
-    def udf(self):
+    def udf(self) -> "UDFRegistration":
         """Returns a :class:`UDFRegistration` for UDF registration.
 
-        :return: :class:`UDFRegistration`
+        .. versionadded:: 2.0.0
+
+        .. versionchanged:: 3.4.0
+            Supports Spark Connect.
+
+        Returns
+        -------
+        :class:`UDFRegistration`
+
+        Examples
+        --------
+        Register a Python UDF, and use it in SQL.
+
+        >>> strlen = spark.udf.register("strlen", lambda x: len(x))
+        >>> spark.sql("SELECT strlen('test')").show()
+        +------------+
+        |strlen(test)|
+        +------------+
+        |           4|
+        +------------+
         """
         from pyspark.sql.udf import UDFRegistration
+
         return UDFRegistration(self)
 
-    @since(2.0)
-    def range(self, start, end=None, step=1, numPartitions=None):
+    @property
+    def udtf(self) -> "UDTFRegistration":
+        """Returns a :class:`UDTFRegistration` for UDTF registration.
+
+        .. versionadded:: 3.5.0
+
+        .. versionchanged:: 3.5.0
+            Supports Spark Connect.
+
+        Returns
+        -------
+        :class:`UDTFRegistration`
+        """
+        from pyspark.sql.udtf import UDTFRegistration
+
+        return UDTFRegistration(self)
+
+    def range(
+        self,
+        start: int,
+        end: Optional[int] = None,
+        step: int = 1,
+        numPartitions: Optional[int] = None,
+    ) -> DataFrame:
         """
         Create a :class:`DataFrame` with single :class:`pyspark.sql.types.LongType` column named
         ``id``, containing elements in a range from ``start`` to ``end`` (exclusive) with
         step value ``step``.
 
-        :param start: the start value
-        :param end: the end value (exclusive)
-        :param step: the incremental step (default: 1)
-        :param numPartitions: the number of partitions of the DataFrame
-        :return: :class:`DataFrame`
+        .. versionadded:: 2.0.0
 
-        >>> spark.range(1, 7, 2).collect()
-        [Row(id=1), Row(id=3), Row(id=5)]
+        .. versionchanged:: 3.4.0
+            Supports Spark Connect.
+
+        Parameters
+        ----------
+        start : int
+            the start value
+        end : int, optional
+            the end value (exclusive)
+        step : int, optional
+            the incremental step (default: 1)
+        numPartitions : int, optional
+            the number of partitions of the DataFrame
+
+        Returns
+        -------
+        :class:`DataFrame`
+
+        Examples
+        --------
+        >>> spark.range(1, 7, 2).show()
+        +---+
+        | id|
+        +---+
+        |  1|
+        |  3|
+        |  5|
+        +---+
 
         If only one argument is specified, it will be used as the end value.
 
-        >>> spark.range(3).collect()
-        [Row(id=0), Row(id=1), Row(id=2)]
+        >>> spark.range(3).show()
+        +---+
+        | id|
+        +---+
+        |  0|
+        |  1|
+        |  2|
+        +---+
         """
         if numPartitions is None:
             numPartitions = self._sc.defaultParallelism
@@ -361,81 +920,162 @@ class SparkSession(SparkConversionMixin):
         else:
             jdf = self._jsparkSession.range(int(start), int(end), int(step), int(numPartitions))
 
-        return DataFrame(jdf, self._wrapped)
+        return DataFrame(jdf, self)
 
-    def _inferSchemaFromList(self, data, names=None):
+    def _inferSchemaFromList(
+        self, data: Iterable[Any], names: Optional[List[str]] = None
+    ) -> StructType:
         """
-        Infer schema from list of Row or tuple.
+        Infer schema from list of Row, dict, or tuple.
 
-        :param data: list of Row or tuple
-        :param names: list of column names
-        :return: :class:`pyspark.sql.types.StructType`
+        Parameters
+        ----------
+        data : iterable
+            list of Row, dict, or tuple
+        names : list, optional
+            list of column names
+
+        Returns
+        -------
+        :class:`pyspark.sql.types.StructType`
         """
         if not data:
-            raise ValueError("can not infer schema from empty dataset")
-        first = data[0]
-        if type(first) is dict:
-            warnings.warn("inferring schema from dict is deprecated,"
-                          "please use pyspark.sql.Row instead")
-        schema = reduce(_merge_type, (_infer_schema(row, names) for row in data))
+            raise PySparkValueError(
+                error_class="CANNOT_INFER_EMPTY_SCHEMA",
+                message_parameters={},
+            )
+        infer_dict_as_struct = self._jconf.inferDictAsStruct()
+        infer_array_from_first_element = self._jconf.legacyInferArrayTypeFromFirstElement()
+        prefer_timestamp_ntz = is_timestamp_ntz_preferred()
+        schema = reduce(
+            _merge_type,
+            (
+                _infer_schema(
+                    row,
+                    names,
+                    infer_dict_as_struct=infer_dict_as_struct,
+                    infer_array_from_first_element=infer_array_from_first_element,
+                    prefer_timestamp_ntz=prefer_timestamp_ntz,
+                )
+                for row in data
+            ),
+        )
         if _has_nulltype(schema):
-            raise ValueError("Some of types cannot be determined after inferring")
+            raise PySparkValueError(
+                error_class="CANNOT_DETERMINE_TYPE",
+                message_parameters={},
+            )
         return schema
 
-    def _inferSchema(self, rdd, samplingRatio=None, names=None):
+    def _inferSchema(
+        self,
+        rdd: RDD[Any],
+        samplingRatio: Optional[float] = None,
+        names: Optional[List[str]] = None,
+    ) -> StructType:
         """
-        Infer schema from an RDD of Row or tuple.
+        Infer schema from an RDD of Row, dict, or tuple.
 
-        :param rdd: an RDD of Row or tuple
-        :param samplingRatio: sampling ratio, or no sampling (default)
-        :return: :class:`pyspark.sql.types.StructType`
+        Parameters
+        ----------
+        rdd : :class:`RDD`
+            an RDD of Row, dict, or tuple
+        samplingRatio : float, optional
+            sampling ratio, or no sampling (default)
+        names : list, optional
+
+        Returns
+        -------
+        :class:`pyspark.sql.types.StructType`
         """
         first = rdd.first()
-        if not first:
-            raise ValueError("The first row in RDD is empty, "
-                             "can not infer schema")
-        if type(first) is dict:
-            warnings.warn("Using RDD of dict to inferSchema is deprecated. "
-                          "Use pyspark.sql.Row instead")
+        if isinstance(first, Sized) and len(first) == 0:
+            raise PySparkValueError(
+                error_class="CANNOT_INFER_EMPTY_SCHEMA",
+                message_parameters={},
+            )
 
+        infer_dict_as_struct = self._jconf.inferDictAsStruct()
+        infer_array_from_first_element = self._jconf.legacyInferArrayTypeFromFirstElement()
+        prefer_timestamp_ntz = is_timestamp_ntz_preferred()
         if samplingRatio is None:
-            schema = _infer_schema(first, names=names)
+            schema = _infer_schema(
+                first,
+                names=names,
+                infer_dict_as_struct=infer_dict_as_struct,
+                prefer_timestamp_ntz=prefer_timestamp_ntz,
+            )
             if _has_nulltype(schema):
                 for row in rdd.take(100)[1:]:
-                    schema = _merge_type(schema, _infer_schema(row, names=names))
+                    schema = _merge_type(
+                        schema,
+                        _infer_schema(
+                            row,
+                            names=names,
+                            infer_dict_as_struct=infer_dict_as_struct,
+                            infer_array_from_first_element=infer_array_from_first_element,
+                            prefer_timestamp_ntz=prefer_timestamp_ntz,
+                        ),
+                    )
                     if not _has_nulltype(schema):
                         break
                 else:
-                    raise ValueError("Some of types cannot be determined by the "
-                                     "first 100 rows, please try again with sampling")
+                    raise PySparkValueError(
+                        error_class="CANNOT_DETERMINE_TYPE",
+                        message_parameters={},
+                    )
         else:
             if samplingRatio < 0.99:
                 rdd = rdd.sample(False, float(samplingRatio))
-            schema = rdd.map(lambda row: _infer_schema(row, names)).reduce(_merge_type)
+            schema = rdd.map(
+                lambda row: _infer_schema(
+                    row,
+                    names,
+                    infer_dict_as_struct=infer_dict_as_struct,
+                    infer_array_from_first_element=infer_array_from_first_element,
+                    prefer_timestamp_ntz=prefer_timestamp_ntz,
+                )
+            ).reduce(_merge_type)
         return schema
 
-    def _createFromRDD(self, rdd, schema, samplingRatio):
+    def _createFromRDD(
+        self,
+        rdd: RDD[Any],
+        schema: Optional[Union[DataType, List[str]]],
+        samplingRatio: Optional[float],
+    ) -> Tuple[RDD[Tuple], StructType]:
         """
         Create an RDD for DataFrame from an existing RDD, returns the RDD and schema.
         """
         if schema is None or isinstance(schema, (list, tuple)):
             struct = self._inferSchema(rdd, samplingRatio, names=schema)
             converter = _create_converter(struct)
-            rdd = rdd.map(converter)
+            tupled_rdd = rdd.map(converter)
             if isinstance(schema, (list, tuple)):
                 for i, name in enumerate(schema):
                     struct.fields[i].name = name
                     struct.names[i] = name
-            schema = struct
 
-        elif not isinstance(schema, StructType):
-            raise TypeError("schema should be StructType or list or None, but got: %s" % schema)
+        elif isinstance(schema, StructType):
+            struct = schema
+            tupled_rdd = rdd
+
+        else:
+            raise PySparkTypeError(
+                error_class="NOT_LIST_OR_NONE_OR_STRUCT",
+                message_parameters={
+                    "arg_name": "schema",
+                    "arg_type": type(schema).__name__,
+                },
+            )
 
         # convert python objects to sql data
-        rdd = rdd.map(schema.toInternal)
-        return rdd, schema
+        internal_rdd = tupled_rdd.map(struct.toInternal)
+        return internal_rdd, struct
 
-    def _createFromLocal(self, data, schema):
+    def _createFromLocal(
+        self, data: Iterable[Any], schema: Optional[Union[DataType, List[str]]]
+    ) -> Tuple[RDD[Tuple], StructType]:
         """
         Create an RDD for DataFrame from a list or pandas.DataFrame, returns
         the RDD and schema.
@@ -447,114 +1087,237 @@ class SparkSession(SparkConversionMixin):
         if schema is None or isinstance(schema, (list, tuple)):
             struct = self._inferSchemaFromList(data, names=schema)
             converter = _create_converter(struct)
-            data = map(converter, data)
+            tupled_data: Iterable[Tuple] = map(converter, data)
             if isinstance(schema, (list, tuple)):
                 for i, name in enumerate(schema):
                     struct.fields[i].name = name
                     struct.names[i] = name
-            schema = struct
 
-        elif not isinstance(schema, StructType):
-            raise TypeError("schema should be StructType or list or None, but got: %s" % schema)
+        elif isinstance(schema, StructType):
+            struct = schema
+            tupled_data = data
+
+        else:
+            raise PySparkTypeError(
+                error_class="NOT_LIST_OR_NONE_OR_STRUCT",
+                message_parameters={
+                    "arg_name": "schema",
+                    "arg_type": type(schema).__name__,
+                },
+            )
 
         # convert python objects to sql data
-        data = [schema.toInternal(row) for row in data]
-        return self._sc.parallelize(data), schema
+        internal_data = [struct.toInternal(row) for row in tupled_data]
+        return self._sc.parallelize(internal_data), struct
 
     @staticmethod
-    def _create_shell_session():
+    def _create_shell_session() -> "SparkSession":
         """
-        Initialize a SparkSession for a pyspark shell session. This is called from shell.py
-        to make error handling simpler without needing to declare local variables in that
-        script, which would expose those to users.
+        Initialize a :class:`SparkSession` for a pyspark shell session. This is called from
+        shell.py to make error handling simpler without needing to declare local variables in
+        that script, which would expose those to users.
         """
         import py4j
         from pyspark.conf import SparkConf
         from pyspark.context import SparkContext
+
         try:
             # Try to access HiveConf, it will raise exception if Hive is not added
             conf = SparkConf()
-            if conf.get('spark.sql.catalogImplementation', 'hive').lower() == 'hive':
+            assert SparkContext._jvm is not None
+            if conf.get("spark.sql.catalogImplementation", "hive").lower() == "hive":
                 SparkContext._jvm.org.apache.hadoop.hive.conf.HiveConf()
-                return SparkSession.builder\
-                    .enableHiveSupport()\
-                    .getOrCreate()
+                return SparkSession.builder.enableHiveSupport().getOrCreate()
             else:
-                return SparkSession.builder.getOrCreate()
+                return SparkSession._getActiveSessionOrCreate()
         except (py4j.protocol.Py4JError, TypeError):
-            if conf.get('spark.sql.catalogImplementation', '').lower() == 'hive':
-                warnings.warn("Fall back to non-hive support because failing to access HiveConf, "
-                              "please make sure you build spark with hive")
+            if conf.get("spark.sql.catalogImplementation", "").lower() == "hive":
+                warnings.warn(
+                    "Fall back to non-hive support because failing to access HiveConf, "
+                    "please make sure you build spark with hive"
+                )
 
-        return SparkSession.builder.getOrCreate()
+        return SparkSession._getActiveSessionOrCreate()
 
-    @since(2.0)
-    @ignore_unicode_prefix
-    def createDataFrame(self, data, schema=None, samplingRatio=None, verifySchema=True):
+    @staticmethod
+    def _getActiveSessionOrCreate(**static_conf: Any) -> "SparkSession":
         """
-        Creates a :class:`DataFrame` from an :class:`RDD`, a list or a :class:`pandas.DataFrame`.
+        Returns the active :class:`SparkSession` for the current thread, returned by the builder,
+        or if there is no existing one, creates a new one based on the options set in the builder.
 
-        When ``schema`` is a list of column names, the type of each column
-        will be inferred from ``data``.
+        NOTE that 'static_conf' might not be set if there's an active or default Spark session
+        running.
+        """
+        spark = SparkSession.getActiveSession()
+        if spark is None:
+            builder = SparkSession.builder
+            for k, v in static_conf.items():
+                builder = builder.config(k, v)
+            spark = builder.getOrCreate()
+        return spark
 
-        When ``schema`` is ``None``, it will try to infer the schema (column names and types)
-        from ``data``, which should be an RDD of either :class:`Row`,
-        :class:`namedtuple`, or :class:`dict`.
+    @overload
+    def createDataFrame(
+        self,
+        data: Iterable["RowLike"],
+        schema: Union[List[str], Tuple[str, ...]] = ...,
+        samplingRatio: Optional[float] = ...,
+    ) -> DataFrame:
+        ...
 
-        When ``schema`` is :class:`pyspark.sql.types.DataType` or a datatype string, it must match
-        the real data, or an exception will be thrown at runtime. If the given schema is not
-        :class:`pyspark.sql.types.StructType`, it will be wrapped into a
-        :class:`pyspark.sql.types.StructType` as its only field, and the field name will be "value".
-        Each record will also be wrapped into a tuple, which can be converted to row later.
+    @overload
+    def createDataFrame(
+        self,
+        data: "RDD[RowLike]",
+        schema: Union[List[str], Tuple[str, ...]] = ...,
+        samplingRatio: Optional[float] = ...,
+    ) -> DataFrame:
+        ...
 
-        If schema inference is needed, ``samplingRatio`` is used to determined the ratio of
-        rows used for schema inference. The first row will be used if ``samplingRatio`` is ``None``.
+    @overload
+    def createDataFrame(
+        self,
+        data: Iterable["RowLike"],
+        schema: Union[StructType, str],
+        *,
+        verifySchema: bool = ...,
+    ) -> DataFrame:
+        ...
 
-        :param data: an RDD of any kind of SQL data representation (e.g. row, tuple, int, boolean,
-            etc.), :class:`list`, or :class:`pandas.DataFrame`.
-        :param schema: a :class:`pyspark.sql.types.DataType` or a datatype string or a list of
-            column names, default is ``None``.  The data type string format equals to
+    @overload
+    def createDataFrame(
+        self,
+        data: "RDD[RowLike]",
+        schema: Union[StructType, str],
+        *,
+        verifySchema: bool = ...,
+    ) -> DataFrame:
+        ...
+
+    @overload
+    def createDataFrame(
+        self,
+        data: "RDD[AtomicValue]",
+        schema: Union[AtomicType, str],
+        verifySchema: bool = ...,
+    ) -> DataFrame:
+        ...
+
+    @overload
+    def createDataFrame(
+        self,
+        data: Iterable["AtomicValue"],
+        schema: Union[AtomicType, str],
+        verifySchema: bool = ...,
+    ) -> DataFrame:
+        ...
+
+    @overload
+    def createDataFrame(
+        self, data: "PandasDataFrameLike", samplingRatio: Optional[float] = ...
+    ) -> DataFrame:
+        ...
+
+    @overload
+    def createDataFrame(
+        self,
+        data: "PandasDataFrameLike",
+        schema: Union[StructType, str],
+        verifySchema: bool = ...,
+    ) -> DataFrame:
+        ...
+
+    def createDataFrame(  # type: ignore[misc]
+        self,
+        data: Union[RDD[Any], Iterable[Any], "PandasDataFrameLike", "ArrayLike"],
+        schema: Optional[Union[AtomicType, StructType, str]] = None,
+        samplingRatio: Optional[float] = None,
+        verifySchema: bool = True,
+    ) -> DataFrame:
+        """
+        Creates a :class:`DataFrame` from an :class:`RDD`, a list, a :class:`pandas.DataFrame`
+        or a :class:`numpy.ndarray`.
+
+        .. versionadded:: 2.0.0
+
+        .. versionchanged:: 3.4.0
+            Supports Spark Connect.
+
+        Parameters
+        ----------
+        data : :class:`RDD` or iterable
+            an RDD of any kind of SQL data representation (:class:`Row`,
+            :class:`tuple`, ``int``, ``boolean``, etc.), or :class:`list`,
+            :class:`pandas.DataFrame` or :class:`numpy.ndarray`.
+        schema : :class:`pyspark.sql.types.DataType`, str or list, optional
+            a :class:`pyspark.sql.types.DataType` or a datatype string or a list of
+            column names, default is None.  The data type string format equals to
             :class:`pyspark.sql.types.DataType.simpleString`, except that top level struct type can
-            omit the ``struct<>`` and atomic types use ``typeName()`` as their format, e.g. use
-            ``byte`` instead of ``tinyint`` for :class:`pyspark.sql.types.ByteType`. We can also use
-            ``int`` as a short name for ``IntegerType``.
-        :param samplingRatio: the sample ratio of rows used for inferring
-        :param verifySchema: verify data types of every row against schema.
-        :return: :class:`DataFrame`
+            omit the ``struct<>``.
 
-        .. versionchanged:: 2.1
-           Added verifySchema.
+            When ``schema`` is a list of column names, the type of each column
+            will be inferred from ``data``.
 
-        .. note:: Usage with spark.sql.execution.arrow.pyspark.enabled=True is experimental.
+            When ``schema`` is ``None``, it will try to infer the schema (column names and types)
+            from ``data``, which should be an RDD of either :class:`Row`,
+            :class:`namedtuple`, or :class:`dict`.
 
-        .. note:: When Arrow optimization is enabled, strings inside Pandas DataFrame in Python
-            2 are converted into bytes as they are bytes in Python 2 whereas regular strings are
-            left as strings. When using strings in Python 2, use unicode `u""` as Python standard
-            practice.
+            When ``schema`` is :class:`pyspark.sql.types.DataType` or a datatype string, it must
+            match the real data, or an exception will be thrown at runtime. If the given schema is
+            not :class:`pyspark.sql.types.StructType`, it will be wrapped into a
+            :class:`pyspark.sql.types.StructType` as its only field, and the field name will be
+            "value". Each record will also be wrapped into a tuple, which can be converted to row
+            later.
+        samplingRatio : float, optional
+            the sample ratio of rows used for inferring. The first few rows will be used
+            if ``samplingRatio`` is ``None``.
+        verifySchema : bool, optional
+            verify data types of every row against schema. Enabled by default.
 
-        >>> l = [('Alice', 1)]
-        >>> spark.createDataFrame(l).collect()
-        [Row(_1=u'Alice', _2=1)]
-        >>> spark.createDataFrame(l, ['name', 'age']).collect()
-        [Row(name=u'Alice', age=1)]
+            .. versionadded:: 2.1.0
+
+        Returns
+        -------
+        :class:`DataFrame`
+
+        Notes
+        -----
+        Usage with `spark.sql.execution.arrow.pyspark.enabled=True` is experimental.
+
+        Examples
+        --------
+        Create a DataFrame from a list of tuples.
+
+        >>> spark.createDataFrame([('Alice', 1)]).collect()
+        [Row(_1='Alice', _2=1)]
+        >>> spark.createDataFrame([('Alice', 1)], ['name', 'age']).collect()
+        [Row(name='Alice', age=1)]
+
+        Create a DataFrame from a list of dictionaries
 
         >>> d = [{'name': 'Alice', 'age': 1}]
         >>> spark.createDataFrame(d).collect()
-        [Row(age=1, name=u'Alice')]
+        [Row(age=1, name='Alice')]
 
-        >>> rdd = sc.parallelize(l)
+        Create a DataFrame from an RDD.
+
+        >>> rdd = spark.sparkContext.parallelize([('Alice', 1)])
         >>> spark.createDataFrame(rdd).collect()
-        [Row(_1=u'Alice', _2=1)]
+        [Row(_1='Alice', _2=1)]
         >>> df = spark.createDataFrame(rdd, ['name', 'age'])
         >>> df.collect()
-        [Row(name=u'Alice', age=1)]
+        [Row(name='Alice', age=1)]
+
+        Create a DataFrame from Row instances.
 
         >>> from pyspark.sql import Row
         >>> Person = Row('name', 'age')
         >>> person = rdd.map(lambda r: Person(*r))
         >>> df2 = spark.createDataFrame(person)
         >>> df2.collect()
-        [Row(name=u'Alice', age=1)]
+        [Row(name='Alice', age=1)]
+
+        Create a DataFrame with the explicit schema specified.
 
         >>> from pyspark.sql.types import *
         >>> schema = StructType([
@@ -562,193 +1325,735 @@ class SparkSession(SparkConversionMixin):
         ...    StructField("age", IntegerType(), True)])
         >>> df3 = spark.createDataFrame(rdd, schema)
         >>> df3.collect()
-        [Row(name=u'Alice', age=1)]
+        [Row(name='Alice', age=1)]
+
+        Create a DataFrame from a pandas DataFrame.
 
         >>> spark.createDataFrame(df.toPandas()).collect()  # doctest: +SKIP
-        [Row(name=u'Alice', age=1)]
+        [Row(name='Alice', age=1)]
         >>> spark.createDataFrame(pandas.DataFrame([[1, 2]])).collect()  # doctest: +SKIP
         [Row(0=1, 1=2)]
 
+        Create  a DataFrame from an RDD with the schema in DDL formatted string.
+
         >>> spark.createDataFrame(rdd, "a: string, b: int").collect()
-        [Row(a=u'Alice', b=1)]
+        [Row(a='Alice', b=1)]
         >>> rdd = rdd.map(lambda row: row[1])
         >>> spark.createDataFrame(rdd, "int").collect()
         [Row(value=1)]
+
+        When the type is unmatched, it throws an exception.
+
         >>> spark.createDataFrame(rdd, "boolean").collect() # doctest: +IGNORE_EXCEPTION_DETAIL
         Traceback (most recent call last):
             ...
         Py4JJavaError: ...
         """
         SparkSession._activeSession = self
+        assert self._jvm is not None
         self._jvm.SparkSession.setActiveSession(self._jsparkSession)
         if isinstance(data, DataFrame):
-            raise TypeError("data is already a DataFrame")
+            raise PySparkTypeError(
+                error_class="SHOULD_NOT_DATAFRAME",
+                message_parameters={"arg_name": "data"},
+            )
 
-        if isinstance(schema, basestring):
-            schema = _parse_datatype_string(schema)
+        if isinstance(schema, str):
+            schema = cast(Union[AtomicType, StructType, str], _parse_datatype_string(schema))
         elif isinstance(schema, (list, tuple)):
             # Must re-encode any unicode strings to be consistent with StructField names
-            schema = [x.encode('utf-8') if not isinstance(x, str) else x for x in schema]
+            schema = [x.encode("utf-8") if not isinstance(x, str) else x for x in schema]
 
         try:
-            import pandas
+            import pandas as pd
+
             has_pandas = True
         except Exception:
             has_pandas = False
-        if has_pandas and isinstance(data, pandas.DataFrame):
-            # Create a DataFrame from pandas DataFrame.
-            return super(SparkSession, self).createDataFrame(
-                data, schema, samplingRatio, verifySchema)
-        return self._create_dataframe(data, schema, samplingRatio, verifySchema)
 
-    def _create_dataframe(self, data, schema, samplingRatio, verifySchema):
+        try:
+            import numpy as np
+
+            has_numpy = True
+        except Exception:
+            has_numpy = False
+
+        if has_numpy and isinstance(data, np.ndarray):
+            # `data` of numpy.ndarray type will be converted to a pandas DataFrame,
+            # so pandas is required.
+            from pyspark.sql.pandas.utils import require_minimum_pandas_version
+
+            require_minimum_pandas_version()
+            if data.ndim not in [1, 2]:
+                raise PySparkValueError(
+                    error_class="INVALID_NDARRAY_DIMENSION",
+                    message_parameters={"dimensions": "1 or 2"},
+                )
+
+            if data.ndim == 1 or data.shape[1] == 1:
+                column_names = ["value"]
+            else:
+                column_names = ["_%s" % i for i in range(1, data.shape[1] + 1)]
+
+            if schema is None and not self._jconf.arrowPySparkEnabled():
+                # Construct `schema` from `np.dtype` of the input NumPy array
+                # TODO: Apply the logic below when self._jconf.arrowPySparkEnabled() is True
+                spark_type = _from_numpy_type(data.dtype)
+                if spark_type is not None:
+                    schema = StructType(
+                        [StructField(name, spark_type, nullable=True) for name in column_names]
+                    )
+
+            data = pd.DataFrame(data, columns=column_names)
+
+        if has_pandas and isinstance(data, pd.DataFrame):
+            # Create a DataFrame from pandas DataFrame.
+            return super(SparkSession, self).createDataFrame(  # type: ignore[call-overload]
+                data, schema, samplingRatio, verifySchema
+            )
+        return self._create_dataframe(
+            data, schema, samplingRatio, verifySchema  # type: ignore[arg-type]
+        )
+
+    def _create_dataframe(
+        self,
+        data: Union[RDD[Any], Iterable[Any]],
+        schema: Optional[Union[DataType, List[str]]],
+        samplingRatio: Optional[float],
+        verifySchema: bool,
+    ) -> DataFrame:
         if isinstance(schema, StructType):
             verify_func = _make_type_verifier(schema) if verifySchema else lambda _: True
 
+            @no_type_check
             def prepare(obj):
                 verify_func(obj)
                 return obj
+
         elif isinstance(schema, DataType):
             dataType = schema
             schema = StructType().add("value", schema)
 
-            verify_func = _make_type_verifier(
-                dataType, name="field value") if verifySchema else lambda _: True
+            verify_func = (
+                _make_type_verifier(dataType, name="field value")
+                if verifySchema
+                else lambda _: True
+            )
 
+            @no_type_check
             def prepare(obj):
                 verify_func(obj)
-                return obj,
+                return (obj,)
+
         else:
-            prepare = lambda obj: obj
+
+            def prepare(obj: Any) -> Any:
+                return obj
 
         if isinstance(data, RDD):
-            rdd, schema = self._createFromRDD(data.map(prepare), schema, samplingRatio)
+            rdd, struct = self._createFromRDD(data.map(prepare), schema, samplingRatio)
         else:
-            rdd, schema = self._createFromLocal(map(prepare, data), schema)
+            rdd, struct = self._createFromLocal(map(prepare, data), schema)
+        assert self._jvm is not None
         jrdd = self._jvm.SerDeUtil.toJavaArray(rdd._to_java_object_rdd())
-        jdf = self._jsparkSession.applySchemaToPythonRDD(jrdd.rdd(), schema.json())
-        df = DataFrame(jdf, self._wrapped)
-        df._schema = schema
+        jdf = self._jsparkSession.applySchemaToPythonRDD(jrdd.rdd(), struct.json())
+        df = DataFrame(jdf, self)
+        df._schema = struct
         return df
 
-    @ignore_unicode_prefix
-    @since(2.0)
-    def sql(self, sqlQuery):
+    def sql(
+        self, sqlQuery: str, args: Optional[Union[Dict[str, Any], List]] = None, **kwargs: Any
+    ) -> DataFrame:
         """Returns a :class:`DataFrame` representing the result of the given query.
+        When ``kwargs`` is specified, this method formats the given string by using the Python
+        standard formatter. The method binds named parameters to SQL literals or
+        positional parameters from `args`. It doesn't support named and positional parameters
+        in the same SQL query.
 
-        :return: :class:`DataFrame`
+        .. versionadded:: 2.0.0
 
-        >>> df.createOrReplaceTempView("table1")
-        >>> df2 = spark.sql("SELECT field1 AS f1, field2 as f2 from table1")
-        >>> df2.collect()
-        [Row(f1=1, f2=u'row1'), Row(f1=2, f2=u'row2'), Row(f1=3, f2=u'row3')]
+        .. versionchanged:: 3.4.0
+            Supports Spark Connect and parameterized SQL.
+
+        .. versionchanged:: 3.5.0
+            Added positional parameters.
+
+        Parameters
+        ----------
+        sqlQuery : str
+            SQL query string.
+        args : dict or list
+            A dictionary of parameter names to Python objects or a list of Python objects
+            that can be converted to SQL literal expressions. See
+            <a href="https://spark.apache.org/docs/latest/sql-ref-datatypes.html">
+            Supported Data Types</a> for supported value types in Python.
+            For example, dictionary keys: "rank", "name", "birthdate";
+            dictionary or list values: 1, "Steven", datetime.date(2023, 4, 2).
+            A value can be also a `Column` of literal expression, in that case it is taken as is.
+
+            .. versionadded:: 3.4.0
+
+        kwargs : dict
+            Other variables that the user wants to set that can be referenced in the query
+
+            .. versionchanged:: 3.3.0
+               Added optional argument ``kwargs`` to specify the mapping of variables in the query.
+               This feature is experimental and unstable.
+
+        Returns
+        -------
+        :class:`DataFrame`
+
+        Examples
+        --------
+        Executing a SQL query.
+
+        >>> spark.sql("SELECT * FROM range(10) where id > 7").show()
+        +---+
+        | id|
+        +---+
+        |  8|
+        |  9|
+        +---+
+
+        Executing a SQL query with variables as Python formatter standard.
+
+        >>> spark.sql(
+        ...     "SELECT * FROM range(10) WHERE id > {bound1} AND id < {bound2}", bound1=7, bound2=9
+        ... ).show()
+        +---+
+        | id|
+        +---+
+        |  8|
+        +---+
+
+        >>> mydf = spark.range(10)
+        >>> spark.sql(
+        ...     "SELECT {col} FROM {mydf} WHERE id IN {x}",
+        ...     col=mydf.id, mydf=mydf, x=tuple(range(4))).show()
+        +---+
+        | id|
+        +---+
+        |  0|
+        |  1|
+        |  2|
+        |  3|
+        +---+
+
+        >>> spark.sql('''
+        ...   SELECT m1.a, m2.b
+        ...   FROM {table1} m1 INNER JOIN {table2} m2
+        ...   ON m1.key = m2.key
+        ...   ORDER BY m1.a, m2.b''',
+        ...   table1=spark.createDataFrame([(1, "a"), (2, "b")], ["a", "key"]),
+        ...   table2=spark.createDataFrame([(3, "a"), (4, "b"), (5, "b")], ["b", "key"])).show()
+        +---+---+
+        |  a|  b|
+        +---+---+
+        |  1|  3|
+        |  2|  4|
+        |  2|  5|
+        +---+---+
+
+        Also, it is possible to query using class:`Column` from :class:`DataFrame`.
+
+        >>> mydf = spark.createDataFrame([(1, 4), (2, 4), (3, 6)], ["A", "B"])
+        >>> spark.sql("SELECT {df.A}, {df[B]} FROM {df}", df=mydf).show()
+        +---+---+
+        |  A|  B|
+        +---+---+
+        |  1|  4|
+        |  2|  4|
+        |  3|  6|
+        +---+---+
+
+        And substitude named parameters with the `:` prefix by SQL literals.
+
+        >>> spark.sql("SELECT * FROM {df} WHERE {df[B]} > :minB", {"minB" : 5}, df=mydf).show()
+        +---+---+
+        |  A|  B|
+        +---+---+
+        |  3|  6|
+        +---+---+
+
+        Or positional parameters marked by `?` in the SQL query by SQL literals.
+
+        >>> spark.sql(
+        ...   "SELECT * FROM {df} WHERE {df[B]} > ? and ? < {df[A]}",
+        ...   args=[5, 2], df=mydf).show()
+        +---+---+
+        |  A|  B|
+        +---+---+
+        |  3|  6|
+        +---+---+
         """
-        return DataFrame(self._jsparkSession.sql(sqlQuery), self._wrapped)
 
-    @since(2.0)
-    def table(self, tableName):
+        formatter = SQLStringFormatter(self)
+        if len(kwargs) > 0:
+            sqlQuery = formatter.format(sqlQuery, **kwargs)
+        try:
+            if isinstance(args, Dict):
+                litArgs = {k: _to_java_column(lit(v)) for k, v in (args or {}).items()}
+            else:
+                assert self._jvm is not None
+                litArgs = self._jvm.PythonUtils.toArray(
+                    [_to_java_column(lit(v)) for v in (args or [])]
+                )
+            return DataFrame(self._jsparkSession.sql(sqlQuery, litArgs), self)
+        finally:
+            if len(kwargs) > 0:
+                formatter.clear()
+
+    def table(self, tableName: str) -> DataFrame:
         """Returns the specified table as a :class:`DataFrame`.
 
-        :return: :class:`DataFrame`
+        .. versionadded:: 2.0.0
 
-        >>> df.createOrReplaceTempView("table1")
-        >>> df2 = spark.table("table1")
-        >>> sorted(df.collect()) == sorted(df2.collect())
-        True
+        .. versionchanged:: 3.4.0
+            Supports Spark Connect.
+
+        Parameters
+        ----------
+        tableName : str
+            the table name to retrieve.
+
+        Returns
+        -------
+        :class:`DataFrame`
+
+        Examples
+        --------
+        >>> spark.range(5).createOrReplaceTempView("table1")
+        >>> spark.table("table1").sort("id").show()
+        +---+
+        | id|
+        +---+
+        |  0|
+        |  1|
+        |  2|
+        |  3|
+        |  4|
+        +---+
         """
-        return DataFrame(self._jsparkSession.table(tableName), self._wrapped)
+        return DataFrame(self._jsparkSession.table(tableName), self)
 
     @property
-    @since(2.0)
-    def read(self):
+    def read(self) -> DataFrameReader:
         """
         Returns a :class:`DataFrameReader` that can be used to read data
         in as a :class:`DataFrame`.
 
-        :return: :class:`DataFrameReader`
+        .. versionadded:: 2.0.0
+
+        .. versionchanged:: 3.4.0
+            Supports Spark Connect.
+
+        Returns
+        -------
+        :class:`DataFrameReader`
+
+        Examples
+        --------
+        >>> spark.read
+        <...DataFrameReader object ...>
+
+        Write a DataFrame into a JSON file and read it back.
+
+        >>> import tempfile
+        >>> with tempfile.TemporaryDirectory() as d:
+        ...     # Write a DataFrame into a JSON file
+        ...     spark.createDataFrame(
+        ...         [{"age": 100, "name": "Hyukjin Kwon"}]
+        ...     ).write.mode("overwrite").format("json").save(d)
+        ...
+        ...     # Read the JSON file as a DataFrame.
+        ...     spark.read.format('json').load(d).show()
+        +---+------------+
+        |age|        name|
+        +---+------------+
+        |100|Hyukjin Kwon|
+        +---+------------+
         """
-        return DataFrameReader(self._wrapped)
+        return DataFrameReader(self)
 
     @property
-    @since(2.0)
-    def readStream(self):
+    def readStream(self) -> DataStreamReader:
         """
         Returns a :class:`DataStreamReader` that can be used to read data streams
         as a streaming :class:`DataFrame`.
 
-        .. note:: Evolving.
+        .. versionadded:: 2.0.0
 
-        :return: :class:`DataStreamReader`
+        .. versionchanged:: 3.5.0
+            Supports Spark Connect.
+
+        Notes
+        -----
+        This API is evolving.
+
+        Returns
+        -------
+        :class:`DataStreamReader`
+
+        Examples
+        --------
+        >>> spark.readStream
+        <pyspark...DataStreamReader object ...>
+
+        The example below uses Rate source that generates rows continuously.
+        After that, we operate a modulo by 3, and then write the stream out to the console.
+        The streaming query stops in 3 seconds.
+
+        >>> import time
+        >>> df = spark.readStream.format("rate").load()
+        >>> df = df.selectExpr("value % 3 as v")
+        >>> q = df.writeStream.format("console").start()
+        >>> time.sleep(3)
+        >>> q.stop()
         """
-        return DataStreamReader(self._wrapped)
+        return DataStreamReader(self)
 
     @property
-    @since(2.0)
-    def streams(self):
+    def streams(self) -> "StreamingQueryManager":
         """Returns a :class:`StreamingQueryManager` that allows managing all the
         :class:`StreamingQuery` instances active on `this` context.
 
-        .. note:: Evolving.
+        .. versionadded:: 2.0.0
 
-        :return: :class:`StreamingQueryManager`
+        .. versionchanged:: 3.5.0
+            Supports Spark Connect.
+
+        Notes
+        -----
+        This API is evolving.
+
+        Returns
+        -------
+        :class:`StreamingQueryManager`
+
+        Examples
+        --------
+        >>> spark.streams
+        <pyspark...StreamingQueryManager object ...>
+
+        Get the list of active streaming queries
+
+        >>> sq = spark.readStream.format(
+        ...     "rate").load().writeStream.format('memory').queryName('this_query').start()
+        >>> sqm = spark.streams
+        >>> [q.name for q in sqm.active]
+        ['this_query']
+        >>> sq.stop()
         """
         from pyspark.sql.streaming import StreamingQueryManager
+
         return StreamingQueryManager(self._jsparkSession.streams())
 
-    @since(2.0)
-    def stop(self):
-        """Stop the underlying :class:`SparkContext`.
+    def stop(self) -> None:
+        """
+        Stop the underlying :class:`SparkContext`.
+
+        .. versionadded:: 2.0.0
+
+        .. versionchanged:: 3.4.0
+            Supports Spark Connect.
+
+        Examples
+        --------
+        >>> spark.stop()  # doctest: +SKIP
         """
         from pyspark.sql.context import SQLContext
+
         self._sc.stop()
         # We should clean the default session up. See SPARK-23228.
+        assert self._jvm is not None
         self._jvm.SparkSession.clearDefaultSession()
         self._jvm.SparkSession.clearActiveSession()
         SparkSession._instantiatedSession = None
         SparkSession._activeSession = None
         SQLContext._instantiatedContext = None
 
-    @since(2.0)
-    def __enter__(self):
+    def __enter__(self) -> "SparkSession":
         """
         Enable 'with SparkSession.builder.(...).getOrCreate() as session: app' syntax.
+
+        .. versionadded:: 2.0.0
+
+        Examples
+        --------
+        >>> with SparkSession.builder.master("local").getOrCreate() as session:
+        ...     session.range(5).show()  # doctest: +SKIP
+        +---+
+        | id|
+        +---+
+        |  0|
+        |  1|
+        |  2|
+        |  3|
+        |  4|
+        +---+
         """
         return self
 
-    @since(2.0)
-    def __exit__(self, exc_type, exc_val, exc_tb):
+    def __exit__(
+        self,
+        exc_type: Optional[Type[BaseException]],
+        exc_val: Optional[BaseException],
+        exc_tb: Optional[TracebackType],
+    ) -> None:
         """
         Enable 'with SparkSession.builder.(...).getOrCreate() as session: app' syntax.
 
         Specifically stop the SparkSession on exit of the with block.
+
+        .. versionadded:: 2.0.0
+
+        Examples
+        --------
+        >>> with SparkSession.builder.master("local").getOrCreate() as session:
+        ...     session.range(5).show()  # doctest: +SKIP
+        +---+
+        | id|
+        +---+
+        |  0|
+        |  1|
+        |  2|
+        |  3|
+        |  4|
+        +---+
         """
         self.stop()
 
+    # SparkConnect-specific API
+    @property
+    def client(self) -> "SparkConnectClient":
+        """
+        Gives access to the Spark Connect client. In normal cases this is not necessary to be used
+        and only relevant for testing.
 
-def _test():
+        .. versionadded:: 3.4.0
+
+        Returns
+        -------
+        :class:`SparkConnectClient`
+
+        Notes
+        -----
+        This API is unstable, and a developer API. It returns non-API instance
+        :class:`SparkConnectClient`.
+        This is an API dedicated to Spark Connect client only. With regular Spark Session, it throws
+        an exception.
+        """
+        raise RuntimeError(
+            "SparkSession.client is only supported with Spark Connect; "
+            "however, the current Spark session does not use Spark Connect."
+        )
+
+    def addArtifacts(
+        self, *path: str, pyfile: bool = False, archive: bool = False, file: bool = False
+    ) -> None:
+        """
+        Add artifact(s) to the client session. Currently only local files are supported.
+
+        .. versionadded:: 3.5.0
+
+        Parameters
+        ----------
+        *path : tuple of str
+            Artifact's URIs to add.
+        pyfile : bool
+            Whether to add them as Python dependencies such as .py, .egg, .zip or .jar files.
+            The pyfiles are directly inserted into the path when executing Python functions
+            in executors.
+        archive : bool
+            Whether to add them as archives such as .zip, .jar, .tar.gz, .tgz, or .tar files.
+            The archives are unpacked on the executor side automatically.
+        file : bool
+            Add a file to be downloaded with this Spark job on every node.
+            The ``path`` passed can only be a local file for now.
+
+        Notes
+        -----
+        This is an API dedicated to Spark Connect client only. With regular Spark Session, it throws
+        an exception.
+        """
+        raise RuntimeError(
+            "SparkSession.addArtifact(s) is only supported with Spark Connect; "
+            "however, the current Spark session does not use Spark Connect."
+        )
+
+    addArtifact = addArtifacts
+
+    def copyFromLocalToFs(self, local_path: str, dest_path: str) -> None:
+        """
+        Copy file from local to cloud storage file system.
+        If the file already exits in destination path, old file is overwritten.
+
+        .. versionadded:: 3.5.0
+
+        Parameters
+        ----------
+        local_path: str
+            Path to a local file. Directories are not supported.
+            The path can be either an absolute path or a relative path.
+        dest_path: str
+            The cloud storage path to the destination the file will
+            be copied to.
+            The path must be an an absolute path.
+
+        Notes
+        -----
+        This API is a developer API.
+        Also, this is an API dedicated to Spark Connect client only. With regular
+        Spark Session, it throws an exception.
+        """
+        raise RuntimeError(
+            "SparkSession.copyFromLocalToFs is only supported with Spark Connect; "
+            "however, the current Spark session does not use Spark Connect."
+        )
+
+    def interruptAll(self) -> List[str]:
+        """
+        Interrupt all operations of this session currently running on the connected server.
+
+        .. versionadded:: 3.5.0
+
+        Returns
+        -------
+        list of str
+            List of operationIds of interrupted operations.
+
+        Notes
+        -----
+        There is still a possibility of operation finishing just as it is interrupted.
+        """
+        raise RuntimeError(
+            "SparkSession.interruptAll is only supported with Spark Connect; "
+            "however, the current Spark session does not use Spark Connect."
+        )
+
+    def interruptTag(self, tag: str) -> List[str]:
+        """
+        Interrupt all operations of this session with the given operation tag.
+
+        .. versionadded:: 3.5.0
+
+        Returns
+        -------
+        list of str
+            List of operationIds of interrupted operations.
+
+        Notes
+        -----
+        There is still a possibility of operation finishing just as it is interrupted.
+        """
+        raise RuntimeError(
+            "SparkSession.interruptTag is only supported with Spark Connect; "
+            "however, the current Spark session does not use Spark Connect."
+        )
+
+    def interruptOperation(self, op_id: str) -> List[str]:
+        """
+        Interrupt an operation of this session with the given operationId.
+
+        .. versionadded:: 3.5.0
+
+        Returns
+        -------
+        list of str
+            List of operationIds of interrupted operations.
+
+        Notes
+        -----
+        There is still a possibility of operation finishing just as it is interrupted.
+        """
+        raise RuntimeError(
+            "SparkSession.interruptOperation is only supported with Spark Connect; "
+            "however, the current Spark session does not use Spark Connect."
+        )
+
+    def addTag(self, tag: str) -> None:
+        """
+        Add a tag to be assigned to all the operations started by this thread in this session.
+
+        .. versionadded:: 3.5.0
+
+        Parameters
+        ----------
+        tag : list of str
+            The tag to be added. Cannot contain ',' (comma) character or be an empty string.
+        """
+        raise RuntimeError(
+            "SparkSession.addTag is only supported with Spark Connect; "
+            "however, the current Spark session does not use Spark Connect."
+        )
+
+    def removeTag(self, tag: str) -> None:
+        """
+        Remove a tag previously added to be assigned to all the operations started by this thread in
+        this session. Noop if such a tag was not added earlier.
+
+        .. versionadded:: 3.5.0
+
+        Parameters
+        ----------
+        tag : list of str
+            The tag to be removed. Cannot contain ',' (comma) character or be an empty string.
+        """
+        raise RuntimeError(
+            "SparkSession.removeTag is only supported with Spark Connect; "
+            "however, the current Spark session does not use Spark Connect."
+        )
+
+    def getTags(self) -> Set[str]:
+        """
+        Get the tags that are currently set to be assigned to all the operations started by this
+        thread.
+
+        .. versionadded:: 3.5.0
+
+        Returns
+        -------
+        set of str
+            Set of tags of interrupted operations.
+        """
+        raise RuntimeError(
+            "SparkSession.getTags is only supported with Spark Connect; "
+            "however, the current Spark session does not use Spark Connect."
+        )
+
+    def clearTags(self) -> None:
+        """
+        Clear the current thread's operation tags.
+
+        .. versionadded:: 3.5.0
+        """
+        raise RuntimeError(
+            "SparkSession.clearTags is only supported with Spark Connect; "
+            "however, the current Spark session does not use Spark Connect."
+        )
+
+
+def _test() -> None:
     import os
     import doctest
-    from pyspark.context import SparkContext
-    from pyspark.sql import Row
     import pyspark.sql.session
 
     os.chdir(os.environ["SPARK_HOME"])
 
     globs = pyspark.sql.session.__dict__.copy()
-    sc = SparkContext('local[4]', 'PythonTest')
-    globs['sc'] = sc
-    globs['spark'] = SparkSession(sc)
-    globs['rdd'] = rdd = sc.parallelize(
-        [Row(field1=1, field2="row1"),
-         Row(field1=2, field2="row2"),
-         Row(field1=3, field2="row3")])
-    globs['df'] = rdd.toDF()
+    globs["spark"] = (
+        SparkSession.builder.master("local[4]").appName("sql.session tests").getOrCreate()
+    )
     (failure_count, test_count) = doctest.testmod(
-        pyspark.sql.session, globs=globs,
-        optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE)
-    globs['sc'].stop()
+        pyspark.sql.session,
+        globs=globs,
+        optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE,
+    )
+    globs["spark"].stop()
     if failure_count:
         sys.exit(-1)
+
 
 if __name__ == "__main__":
     _test()

@@ -23,16 +23,19 @@ import java.util.concurrent.atomic.AtomicInteger
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable
-import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet}
+import scala.collection.mutable.{HashMap, HashSet}
 import scala.concurrent.duration._
 import scala.io.Source
 import scala.reflect.ClassTag
 
 import org.json4s._
 import org.json4s.jackson.JsonMethods._
-import org.mockito.Mockito.{mock, when}
-import org.scalatest.{BeforeAndAfter, Matchers, PrivateMethodTester}
+import org.mockito.ArgumentMatchers.any
+import org.mockito.Mockito.{doNothing, mock, when}
+import org.scalatest.{BeforeAndAfter, PrivateMethodTester}
 import org.scalatest.concurrent.Eventually
+import org.scalatest.matchers.must.Matchers
+import org.scalatest.matchers.should.Matchers._
 import other.supplier.{CustomPersistenceEngine, CustomRecoveryModeFactory}
 
 import org.apache.spark.{SecurityManager, SparkConf, SparkFunSuite}
@@ -42,10 +45,12 @@ import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.Deploy._
 import org.apache.spark.internal.config.UI._
 import org.apache.spark.internal.config.Worker._
-import org.apache.spark.resource.{ResourceInformation, ResourceRequirement}
+import org.apache.spark.resource.{ResourceInformation, ResourceProfile, ResourceRequirement}
+import org.apache.spark.resource.ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID
 import org.apache.spark.resource.ResourceUtils.{FPGA, GPU}
 import org.apache.spark.rpc.{RpcAddress, RpcEndpoint, RpcEndpointRef, RpcEnv}
 import org.apache.spark.serializer
+import org.apache.spark.util.Utils
 
 object MockWorker {
   val counter = new AtomicInteger(10000)
@@ -56,7 +61,7 @@ class MockWorker(master: RpcEndpointRef, conf: SparkConf = new SparkConf) extend
   val id = seq.toString
   override val rpcEnv: RpcEnv = RpcEnv.create("worker", "localhost", seq,
     conf, new SecurityManager(conf))
-  var apps = new mutable.HashMap[String, String]()
+  val apps = new mutable.HashMap[String, String]()
   val driverIdToAppId = new mutable.HashMap[String, String]()
   def newDriver(driverId: String): RpcEndpointRef = {
     val name = s"driver_${drivers.size}"
@@ -70,15 +75,18 @@ class MockWorker(master: RpcEndpointRef, conf: SparkConf = new SparkConf) extend
     })
   }
 
+  var decommissioned = false
   var appDesc = DeployTestUtils.createAppDesc()
   val drivers = mutable.HashSet[String]()
   val driverResources = new mutable.HashMap[String, Map[String, Set[String]]]
   val execResources = new mutable.HashMap[String, Map[String, Set[String]]]
+  val launchedExecutors = new mutable.HashMap[String, LaunchExecutor]
   override def receive: PartialFunction[Any, Unit] = {
     case RegisteredWorker(masterRef, _, _, _) =>
       masterRef.send(WorkerLatestState(id, Nil, drivers.toSeq))
-    case LaunchExecutor(_, appId, execId, _, _, _, resources_) =>
+    case l @ LaunchExecutor(_, appId, execId, _, _, _, _, resources_) =>
       execResources(appId + "/" + execId) = resources_.map(r => (r._1, r._2.addresses.toSet))
+      launchedExecutors(appId + "/" + execId) = l
     case LaunchDriver(driverId, desc, resources_) =>
       drivers += driverId
       driverResources(driverId) = resources_.map(r => (r._1, r._2.addresses.toSet))
@@ -94,6 +102,8 @@ class MockWorker(master: RpcEndpointRef, conf: SparkConf = new SparkConf) extend
         case None =>
       }
       driverIdToAppId.remove(driverId)
+    case DecommissionWorker =>
+      decommissioned = true
   }
 }
 
@@ -120,7 +130,7 @@ class MockExecutorLaunchFailWorker(master: Master, conf: SparkConf = new SparkCo
       }
 
       appRegistered.countDown()
-    case LaunchExecutor(_, appId, execId, _, _, _, _) =>
+    case LaunchExecutor(_, appId, execId, _, _, _, _, _) =>
       assert(appRegistered.await(10, TimeUnit.SECONDS))
 
       if (failedCnt == 0) {
@@ -129,7 +139,8 @@ class MockExecutorLaunchFailWorker(master: Master, conf: SparkConf = new SparkCo
       assert(master.idToApp.contains(appId))
       appIdsToLaunchExecutor += appId
       failedCnt += 1
-      master.self.send(ExecutorStateChanged(appId, execId, ExecutorState.FAILED, None, None))
+      master.self.askSync(ExecutorStateChanged(appId, execId,
+        ExecutorState.FAILED, None, None))
 
     case otherMsg => super.receive(otherMsg)
   }
@@ -137,6 +148,10 @@ class MockExecutorLaunchFailWorker(master: Master, conf: SparkConf = new SparkCo
 
 class MasterSuite extends SparkFunSuite
   with Matchers with Eventually with PrivateMethodTester with BeforeAndAfter {
+
+  // regex to extract worker links from the master webui HTML
+  // groups represent URL and worker ID
+  val WORKER_LINK_RE = """<a href="(.+?)">\s*(worker-.+?)\s*</a>""".r
 
   private var _master: Master = _
 
@@ -171,12 +186,11 @@ class MasterSuite extends SparkFunSuite
       desc = new ApplicationDescription(
         name = "",
         maxCores = None,
-        memoryPerExecutorMB = 0,
         command = commandToPersist,
         appUiUrl = "",
+        defaultProfile = DeployTestUtils.defaultResourceProfile,
         eventLogDir = None,
-        eventLogCodec = None,
-        coresPerExecutor = None),
+        eventLogCodec = None),
       submitDate = new Date(),
       driver = null,
       defaultCores = 0
@@ -271,9 +285,10 @@ class MasterSuite extends SparkFunSuite
       master.workers should be(Set(fakeWorkerInfo))
 
       // Notify Master about the executor and driver info to make it correctly recovered.
+      val rpId = ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID
       val fakeExecutors = List(
-        new ExecutorDescription(fakeAppInfo.id, 0, 8, ExecutorState.RUNNING),
-        new ExecutorDescription(fakeAppInfo.id, 0, 7, ExecutorState.RUNNING))
+        new ExecutorDescription(fakeAppInfo.id, 0, rpId, 8, 1024, ExecutorState.RUNNING),
+        new ExecutorDescription(fakeAppInfo.id, 0, rpId, 7, 1024, ExecutorState.RUNNING))
 
       fakeAppInfo.state should be(ApplicationState.UNKNOWN)
       fakeWorkerInfo.coresFree should be(16)
@@ -313,19 +328,32 @@ class MasterSuite extends SparkFunSuite
   test("master/worker web ui available") {
     implicit val formats = org.json4s.DefaultFormats
     val conf = new SparkConf()
-    val localCluster = new LocalSparkCluster(2, 2, 512, conf)
+    val localCluster = LocalSparkCluster(2, 2, 512, conf)
     localCluster.start()
+    val masterUrl = s"http://${Utils.localHostNameForURI()}:${localCluster.masterWebUIPort}"
     try {
-      eventually(timeout(5.seconds), interval(100.milliseconds)) {
-        val json = Source.fromURL(s"http://localhost:${localCluster.masterWebUIPort}/json")
-          .getLines().mkString("\n")
+      eventually(timeout(50.seconds), interval(100.milliseconds)) {
+        val json = Utils
+          .tryWithResource(Source.fromURL(s"$masterUrl/json"))(_.getLines().mkString("\n"))
         val JArray(workers) = (parse(json) \ "workers")
         workers.size should be (2)
         workers.foreach { workerSummaryJson =>
           val JString(workerWebUi) = workerSummaryJson \ "webuiaddress"
-          val workerResponse = parse(Source.fromURL(s"${workerWebUi}/json")
-            .getLines().mkString("\n"))
+          val workerResponse = parse(Utils
+            .tryWithResource(Source.fromURL(s"$workerWebUi/json"))(_.getLines().mkString("\n")))
           (workerResponse \ "cores").extract[Int] should be (2)
+        }
+
+        val html = Utils
+          .tryWithResource(Source.fromURL(s"$masterUrl/"))(_.getLines().mkString("\n"))
+        html should include ("Spark Master at spark://")
+        val workerLinks = (WORKER_LINK_RE findAllMatchIn html).toList
+        workerLinks.size should be (2)
+        workerLinks foreach { case WORKER_LINK_RE(workerUrl, workerId) =>
+          val workerHtml = Utils
+            .tryWithResource(Source.fromURL(workerUrl))(_.getLines().mkString("\n"))
+          workerHtml should include ("Spark Worker at")
+          workerHtml should include ("Running Executors (0)")
         }
       }
     } finally {
@@ -335,29 +363,104 @@ class MasterSuite extends SparkFunSuite
 
   test("master/worker web ui available with reverseProxy") {
     implicit val formats = org.json4s.DefaultFormats
-    val reverseProxyUrl = "http://localhost:8080"
     val conf = new SparkConf()
     conf.set(UI_REVERSE_PROXY, true)
-    conf.set(UI_REVERSE_PROXY_URL, reverseProxyUrl)
-    val localCluster = new LocalSparkCluster(2, 2, 512, conf)
+    val localCluster = LocalSparkCluster(2, 2, 512, conf)
     localCluster.start()
+    val masterUrl = s"http://${Utils.localHostNameForURI()}:${localCluster.masterWebUIPort}"
     try {
-      eventually(timeout(5.seconds), interval(100.milliseconds)) {
-        val json = Source.fromURL(s"http://localhost:${localCluster.masterWebUIPort}/json")
-          .getLines().mkString("\n")
+      eventually(timeout(50.seconds), interval(100.milliseconds)) {
+        val json = Utils
+          .tryWithResource(Source.fromURL(s"$masterUrl/json"))(_.getLines().mkString("\n"))
         val JArray(workers) = (parse(json) \ "workers")
         workers.size should be (2)
         workers.foreach { workerSummaryJson =>
+          // the webuiaddress intentionally points to the local web ui.
+          // explicitly construct reverse proxy url targeting the master
           val JString(workerId) = workerSummaryJson \ "id"
-          val url = s"http://localhost:${localCluster.masterWebUIPort}/proxy/${workerId}/json"
-          val workerResponse = parse(Source.fromURL(url).getLines().mkString("\n"))
+          val url = s"$masterUrl/proxy/${workerId}/json"
+          val workerResponse = parse(
+            Utils.tryWithResource(Source.fromURL(url))(_.getLines().mkString("\n")))
           (workerResponse \ "cores").extract[Int] should be (2)
-          (workerResponse \ "masterwebuiurl").extract[String] should be (reverseProxyUrl)
         }
+
+        val html = Utils
+          .tryWithResource(Source.fromURL(s"$masterUrl/"))(_.getLines().mkString("\n"))
+        html should include ("Spark Master at spark://")
+        html should include ("""href="/static""")
+        html should include ("""src="/static""")
+        verifyWorkerUI(html, masterUrl)
       }
     } finally {
       localCluster.stop()
+      System.getProperties().remove("spark.ui.proxyBase")
     }
+  }
+
+  test("master/worker web ui available behind front-end reverseProxy") {
+    implicit val formats = org.json4s.DefaultFormats
+    val reverseProxyUrl = "http://proxyhost:8080/path/to/spark"
+    val conf = new SparkConf()
+    conf.set(UI_REVERSE_PROXY, true)
+    conf.set(UI_REVERSE_PROXY_URL, reverseProxyUrl)
+    val localCluster = LocalSparkCluster(2, 2, 512, conf)
+    localCluster.start()
+    val masterUrl = s"http://${Utils.localHostNameForURI()}:${localCluster.masterWebUIPort}"
+    try {
+      eventually(timeout(50.seconds), interval(100.milliseconds)) {
+        val json = Utils
+          .tryWithResource(Source.fromURL(s"$masterUrl/json"))(_.getLines().mkString("\n"))
+        val JArray(workers) = (parse(json) \ "workers")
+        workers.size should be (2)
+        workers.foreach { workerSummaryJson =>
+          // the webuiaddress intentionally points to the local web ui.
+          // explicitly construct reverse proxy url targeting the master
+          val JString(workerId) = workerSummaryJson \ "id"
+          val url = s"$masterUrl/proxy/${workerId}/json"
+          val workerResponse = parse(Utils
+            .tryWithResource(Source.fromURL(url))(_.getLines().mkString("\n")))
+          (workerResponse \ "cores").extract[Int] should be (2)
+          (workerResponse \ "masterwebuiurl").extract[String] should be (reverseProxyUrl + "/")
+        }
+
+        System.getProperty("spark.ui.proxyBase") should be (reverseProxyUrl)
+        val html = Utils
+          .tryWithResource(Source.fromURL(s"$masterUrl/"))(_.getLines().mkString("\n"))
+        html should include ("Spark Master at spark://")
+        verifyStaticResourcesServedByProxy(html, reverseProxyUrl)
+        verifyWorkerUI(html, masterUrl, reverseProxyUrl)
+      }
+    } finally {
+      localCluster.stop()
+      System.getProperties().remove("spark.ui.proxyBase")
+    }
+  }
+
+  private def verifyWorkerUI(masterHtml: String, masterUrl: String,
+      reverseProxyUrl: String = ""): Unit = {
+    val workerLinks = (WORKER_LINK_RE findAllMatchIn masterHtml).toList
+    workerLinks.size should be (2)
+    workerLinks foreach {
+      case WORKER_LINK_RE(workerUrl, workerId) =>
+        workerUrl should be (s"$reverseProxyUrl/proxy/$workerId")
+        // there is no real front-end proxy as defined in $reverseProxyUrl
+        // construct url directly targeting the master
+        val url = s"$masterUrl/proxy/$workerId/"
+        System.setProperty("spark.ui.proxyBase", workerUrl)
+        val workerHtml = Utils
+          .tryWithResource(Source.fromURL(url))(_.getLines().mkString("\n"))
+        workerHtml should include ("Spark Worker at")
+        workerHtml should include ("Running Executors (0)")
+        verifyStaticResourcesServedByProxy(workerHtml, workerUrl)
+      case _ => fail  // make sure we don't accidentially skip the tests
+    }
+  }
+
+  private def verifyStaticResourcesServedByProxy(html: String, proxyUrl: String): Unit = {
+    html should not include ("""href="/static""")
+    html should include (s"""href="$proxyUrl/static""")
+    html should not include ("""src="/static""")
+    html should include (s"""src="$proxyUrl/static""")
   }
 
   test("basic scheduling - spread out") {
@@ -432,6 +535,97 @@ class MasterSuite extends SparkFunSuite
     schedulingWithEverything(spreadOut = false)
   }
 
+  test("scheduling for app with multiple resource profiles") {
+    scheduleExecutorsForAppWithMultiRPs(withMaxCores = false)
+  }
+
+  test("scheduling for app with multiple resource profiles with max cores") {
+    scheduleExecutorsForAppWithMultiRPs(withMaxCores = true)
+  }
+
+  private def scheduleExecutorsForAppWithMultiRPs(withMaxCores: Boolean): Unit = {
+    val appInfo: ApplicationInfo = if (withMaxCores) {
+      makeAppInfo(
+        1024, maxCores = Some(30), initialExecutorLimit = Some(0))
+    } else {
+      makeAppInfo(
+        1024, maxCores = None, initialExecutorLimit = Some(0))
+    }
+
+    val master = makeAliveMaster()
+    val conf = new SparkConf()
+    val workers = (1 to 4).map { idx =>
+      val worker = new MockWorker(master.self, conf)
+      worker.rpcEnv.setupEndpoint(s"worker-$idx", worker)
+      val workerReg = RegisterWorker(
+        worker.id,
+        "localhost",
+        worker.self.address.port,
+        worker.self,
+        10,
+        4096,
+        "http://localhost:8080",
+        RpcAddress("localhost", 10000))
+      master.self.send(workerReg)
+      worker
+    }
+
+    // Register app and schedule.
+    master.registerApplication(appInfo)
+    startExecutorsOnWorkers(master)
+    assert(appInfo.executors.isEmpty)
+
+    // Request executors with multiple resource profile.
+    // rp1 with 15 cores per executor, rp2 with 8192MB memory per executor, no worker can
+    // fulfill the resource requirement.
+    val rp1 = DeployTestUtils.createResourceProfile(Some(2048), Map.empty, Some(15))
+    val rp2 = DeployTestUtils.createResourceProfile(Some(8192), Map.empty, Some(5))
+    val rp3 = DeployTestUtils.createResourceProfile(Some(2048), Map.empty, Some(5))
+    val rp4 = DeployTestUtils.createResourceProfile(Some(2048), Map.empty, Some(10))
+    val requests = Map(
+      appInfo.desc.defaultProfile -> 1,
+      rp1 -> 1,
+      rp2 -> 1,
+      rp3 -> 1,
+      rp4 -> 2
+    )
+    eventually(timeout(10.seconds)) {
+      master.self.askSync[Boolean](RequestExecutors(appInfo.id, requests))
+      assert(appInfo.executors.size === workers.map(_.launchedExecutors.size).sum)
+    }
+
+    if (withMaxCores) {
+      assert(appInfo.executors.size === 3)
+      assert(appInfo.getOrUpdateExecutorsForRPId(DEFAULT_RESOURCE_PROFILE_ID).size === 1)
+      assert(appInfo.getOrUpdateExecutorsForRPId(rp1.id).size === 0)
+      assert(appInfo.getOrUpdateExecutorsForRPId(rp2.id).size === 0)
+      assert(appInfo.getOrUpdateExecutorsForRPId(rp3.id).size === 1)
+      assert(appInfo.getOrUpdateExecutorsForRPId(rp4.id).size === 1)
+    } else {
+      assert(appInfo.executors.size === 4)
+      assert(appInfo.getOrUpdateExecutorsForRPId(DEFAULT_RESOURCE_PROFILE_ID).size === 1)
+      assert(appInfo.getOrUpdateExecutorsForRPId(rp1.id).size === 0)
+      assert(appInfo.getOrUpdateExecutorsForRPId(rp2.id).size === 0)
+      assert(appInfo.getOrUpdateExecutorsForRPId(rp3.id).size === 1)
+      assert(appInfo.getOrUpdateExecutorsForRPId(rp4.id).size === 2)
+    }
+
+    // Verify executor information.
+    val executorForRp3 = appInfo.executors(appInfo.getOrUpdateExecutorsForRPId(rp3.id).head)
+    assert(executorForRp3.cores === 5)
+    assert(executorForRp3.memory === 2048)
+    assert(executorForRp3.rpId === rp3.id)
+
+    // Verify LaunchExecutor message.
+    val launchExecutorMsg = workers
+      .find(_.id === executorForRp3.worker.id)
+      .map(_.launchedExecutors(appInfo.id + "/" + executorForRp3.id))
+      .get
+    assert(launchExecutorMsg.cores === 5)
+    assert(launchExecutorMsg.memory === 2048)
+    assert(launchExecutorMsg.rpId === rp3.id)
+  }
+
   private def basicScheduling(spreadOut: Boolean): Unit = {
     val master = makeMaster()
     val appInfo = makeAppInfo(1024)
@@ -497,11 +691,11 @@ class MasterSuite extends SparkFunSuite
   private def schedulingWithExecutorLimit(spreadOut: Boolean): Unit = {
     val master = makeMaster()
     val appInfo = makeAppInfo(256)
-    appInfo.executorLimit = 0
+    appInfo.requestExecutors(Map(appInfo.desc.defaultProfile -> 0))
     val scheduledCores1 = scheduleExecutorsOnWorkers(master, appInfo, workerInfos, spreadOut)
-    appInfo.executorLimit = 2
+    appInfo.requestExecutors(Map(appInfo.desc.defaultProfile -> 2))
     val scheduledCores2 = scheduleExecutorsOnWorkers(master, appInfo, workerInfos, spreadOut)
-    appInfo.executorLimit = 5
+    appInfo.requestExecutors(Map(appInfo.desc.defaultProfile -> 5))
     val scheduledCores3 = scheduleExecutorsOnWorkers(master, appInfo, workerInfos, spreadOut)
     assert(scheduledCores1 === Array(0, 0, 0))
     assert(scheduledCores2 === Array(10, 10, 0))
@@ -511,11 +705,11 @@ class MasterSuite extends SparkFunSuite
   private def schedulingWithExecutorLimitAndMaxCores(spreadOut: Boolean): Unit = {
     val master = makeMaster()
     val appInfo = makeAppInfo(256, maxCores = Some(16))
-    appInfo.executorLimit = 0
+    appInfo.requestExecutors(Map(appInfo.desc.defaultProfile -> 0))
     val scheduledCores1 = scheduleExecutorsOnWorkers(master, appInfo, workerInfos, spreadOut)
-    appInfo.executorLimit = 2
+    appInfo.requestExecutors(Map(appInfo.desc.defaultProfile -> 2))
     val scheduledCores2 = scheduleExecutorsOnWorkers(master, appInfo, workerInfos, spreadOut)
-    appInfo.executorLimit = 5
+    appInfo.requestExecutors(Map(appInfo.desc.defaultProfile -> 5))
     val scheduledCores3 = scheduleExecutorsOnWorkers(master, appInfo, workerInfos, spreadOut)
     assert(scheduledCores1 === Array(0, 0, 0))
     if (spreadOut) {
@@ -530,11 +724,11 @@ class MasterSuite extends SparkFunSuite
   private def schedulingWithExecutorLimitAndCoresPerExecutor(spreadOut: Boolean): Unit = {
     val master = makeMaster()
     val appInfo = makeAppInfo(256, coresPerExecutor = Some(4))
-    appInfo.executorLimit = 0
+    appInfo.requestExecutors(Map(appInfo.desc.defaultProfile -> 0))
     val scheduledCores1 = scheduleExecutorsOnWorkers(master, appInfo, workerInfos, spreadOut)
-    appInfo.executorLimit = 2
+    appInfo.requestExecutors(Map(appInfo.desc.defaultProfile -> 2))
     val scheduledCores2 = scheduleExecutorsOnWorkers(master, appInfo, workerInfos, spreadOut)
-    appInfo.executorLimit = 5
+    appInfo.requestExecutors(Map(appInfo.desc.defaultProfile -> 5))
     val scheduledCores3 = scheduleExecutorsOnWorkers(master, appInfo, workerInfos, spreadOut)
     assert(scheduledCores1 === Array(0, 0, 0))
     if (spreadOut) {
@@ -549,11 +743,11 @@ class MasterSuite extends SparkFunSuite
   private def schedulingWithEverything(spreadOut: Boolean): Unit = {
     val master = makeMaster()
     val appInfo = makeAppInfo(256, coresPerExecutor = Some(4), maxCores = Some(18))
-    appInfo.executorLimit = 0
+    appInfo.requestExecutors(Map(appInfo.desc.defaultProfile -> 0))
     val scheduledCores1 = scheduleExecutorsOnWorkers(master, appInfo, workerInfos, spreadOut)
-    appInfo.executorLimit = 2
+    appInfo.requestExecutors(Map(appInfo.desc.defaultProfile -> 2))
     val scheduledCores2 = scheduleExecutorsOnWorkers(master, appInfo, workerInfos, spreadOut)
-    appInfo.executorLimit = 5
+    appInfo.requestExecutors(Map(appInfo.desc.defaultProfile -> 5))
     val scheduledCores3 = scheduleExecutorsOnWorkers(master, appInfo, workerInfos, spreadOut)
     assert(scheduledCores1 === Array(0, 0, 0))
     if (spreadOut) {
@@ -571,6 +765,8 @@ class MasterSuite extends SparkFunSuite
 
   private val _scheduleExecutorsOnWorkers =
     PrivateMethod[Array[Int]](Symbol("scheduleExecutorsOnWorkers"))
+  private val _startExecutorsOnWorkers =
+    PrivateMethod[Unit](Symbol("startExecutorsOnWorkers"))
   private val _drivers = PrivateMethod[HashSet[DriverInfo]](Symbol("drivers"))
   private val _state = PrivateMethod[RecoveryState.Value](Symbol("state"))
 
@@ -598,13 +794,19 @@ class MasterSuite extends SparkFunSuite
   private def makeAppInfo(
       memoryPerExecutorMb: Int,
       coresPerExecutor: Option[Int] = None,
-      maxCores: Option[Int] = None): ApplicationInfo = {
+      maxCores: Option[Int] = None,
+      customResources: Map[String, Int] = Map.empty,
+      initialExecutorLimit: Option[Int] = None): ApplicationInfo = {
+    val rp = DeployTestUtils.createDefaultResourceProfile(
+      memoryPerExecutorMb, customResources, coresPerExecutor)
+
     val desc = new ApplicationDescription(
-      "test", maxCores, memoryPerExecutorMb, null, "", None, None, coresPerExecutor)
+      "test", maxCores, null, "", rp, None, None, initialExecutorLimit)
     val appId = System.currentTimeMillis.toString
     val endpointRef = mock(classOf[RpcEndpointRef])
     val mockAddress = mock(classOf[RpcAddress])
     when(endpointRef.address).thenReturn(mockAddress)
+    doNothing().when(endpointRef).send(any())
     new ApplicationInfo(0, appId, desc, new Date, endpointRef, Int.MaxValue)
   }
 
@@ -617,12 +819,19 @@ class MasterSuite extends SparkFunSuite
       endpointRef, "http://localhost:80", Map.empty)
   }
 
+  // Schedule executors for default resource profile.
   private def scheduleExecutorsOnWorkers(
       master: Master,
       appInfo: ApplicationInfo,
       workerInfos: Array[WorkerInfo],
       spreadOut: Boolean): Array[Int] = {
-    master.invokePrivate(_scheduleExecutorsOnWorkers(appInfo, workerInfos, spreadOut))
+    val defaultResourceDesc = appInfo.getResourceDescriptionForRpId(DEFAULT_RESOURCE_PROFILE_ID)
+    master.invokePrivate(_scheduleExecutorsOnWorkers(
+      appInfo, DEFAULT_RESOURCE_PROFILE_ID, defaultResourceDesc, workerInfos, spreadOut))
+  }
+
+  private def startExecutorsOnWorkers(master: Master): Unit = {
+    master.invokePrivate(_startExecutorsOnWorkers())
   }
 
   test("SPARK-13604: Master should ask Worker kill unknown executors and drivers") {
@@ -648,7 +857,8 @@ class MasterSuite extends SparkFunSuite
       "http://localhost:8080",
       RpcAddress("localhost", 9999)))
     val executors = (0 until 3).map { i =>
-      new ExecutorDescription(appId = i.toString, execId = i, 2, ExecutorState.RUNNING)
+      new ExecutorDescription(appId = i.toString, execId = i,
+        ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID, 2, 1024, ExecutorState.RUNNING)
     }
     master.self.send(WorkerLatestState("1", executors, driverIds = Seq("0", "1", "2")))
 
@@ -689,7 +899,16 @@ class MasterSuite extends SparkFunSuite
     val master = makeAliveMaster()
     var worker: MockExecutorLaunchFailWorker = null
     try {
-      worker = new MockExecutorLaunchFailWorker(master)
+      val conf = new SparkConf()
+      // SPARK-32250: When running test on GitHub Action machine, the available processors in JVM
+      // is only 2, while on Jenkins it's 32. For this specific test, 2 available processors, which
+      // also decides number of threads in Dispatcher, is not enough to consume the messages. In
+      // the worst situation, MockExecutorLaunchFailWorker would occupy these 2 threads for
+      // handling messages LaunchDriver, LaunchExecutor at the same time but leave no thread for
+      // the driver to handle the message RegisteredApplication. At the end, it results in the dead
+      // lock situation. Therefore, we need to set more threads to avoid the dead lock.
+      conf.set(Network.RPC_NETTY_DISPATCHER_NUM_THREADS, 6)
+      worker = new MockExecutorLaunchFailWorker(master, conf)
       worker.rpcEnv.setupEndpoint("worker", worker)
       val workerRegMsg = RegisterWorker(
         worker.id,
@@ -723,6 +942,68 @@ class MasterSuite extends SparkFunSuite
         master.rpcEnv.shutdown()
       }
     }
+  }
+
+  def testWorkerDecommissioning(
+      numWorkers: Int,
+      numWorkersExpectedToDecom: Int,
+      hostnames: Seq[String]): Unit = {
+    val conf = new SparkConf()
+    val master = makeAliveMaster(conf)
+    val workers = (1 to numWorkers).map { idx =>
+      val worker = new MockWorker(master.self, conf)
+      worker.rpcEnv.setupEndpoint(s"worker-$idx", worker)
+      val workerReg = RegisterWorker(
+        worker.id,
+        "localhost",
+        worker.self.address.port,
+        worker.self,
+        10,
+        1024,
+        "http://localhost:8080",
+        RpcAddress("localhost", 10000))
+      master.self.send(workerReg)
+      worker
+    }
+
+    eventually(timeout(10.seconds)) {
+      val masterState = master.self.askSync[MasterStateResponse](RequestMasterState)
+      assert(masterState.workers.length === numWorkers)
+      assert(masterState.workers.forall(_.state == WorkerState.ALIVE))
+      assert(masterState.workers.map(_.id).toSet == workers.map(_.id).toSet)
+    }
+
+    val decomWorkersCount = master.self.askSync[Integer](DecommissionWorkersOnHosts(hostnames))
+    assert(decomWorkersCount === numWorkersExpectedToDecom)
+
+    // Decommissioning is actually async ... wait for the workers to actually be decommissioned by
+    // polling the master's state.
+    eventually(timeout(30.seconds)) {
+      val masterState = master.self.askSync[MasterStateResponse](RequestMasterState)
+      assert(masterState.workers.length === numWorkers)
+      val workersActuallyDecomed = masterState.workers
+        .filter(_.state == WorkerState.DECOMMISSIONED).map(_.id)
+      val decommissionedWorkers = workers.filter(w => workersActuallyDecomed.contains(w.id))
+      assert(workersActuallyDecomed.length === numWorkersExpectedToDecom)
+      assert(decommissionedWorkers.forall(_.decommissioned))
+    }
+
+    // Decommissioning a worker again should return the same answer since we want this call to be
+    // idempotent.
+    val decomWorkersCountAgain = master.self.askSync[Integer](DecommissionWorkersOnHosts(hostnames))
+    assert(decomWorkersCountAgain === numWorkersExpectedToDecom)
+  }
+
+  test("All workers on a host should be decommissioned") {
+    testWorkerDecommissioning(2, 2, Seq("LoCalHost", "localHOST"))
+  }
+
+  test("No workers should be decommissioned with invalid host") {
+    testWorkerDecommissioning(2, 0, Seq("NoSuchHost1", "NoSuchHost2"))
+  }
+
+  test("Only worker on host should be decommissioned") {
+    testWorkerDecommissioning(1, 1, Seq("lOcalHost", "NoSuchHost"))
   }
 
   test("SPARK-19900: there should be a corresponding driver for the app after relaunching driver") {
@@ -857,7 +1138,7 @@ class MasterSuite extends SparkFunSuite
     val masterRef = master.self
     val resourceReqs = Seq(ResourceRequirement(GPU, 3), ResourceRequirement(FPGA, 3))
     val worker = makeWorkerAndRegister(masterRef, Map(GPU -> 6, FPGA -> 6))
-    worker.appDesc = worker.appDesc.copy(resourceReqsPerExecutor = resourceReqs)
+    worker.appDesc = DeployTestUtils.createAppDesc(Map(GPU -> 3, FPGA -> 3))
     val driver = DeployTestUtils.createDriverDesc().copy(resourceReqs = resourceReqs)
     val driverId = masterRef.askSync[SubmitDriverResponse](RequestSubmitDriver(driver)).driverId
     val status = masterRef.askSync[DriverStatusResponse](RequestDriverStatus(driverId.get))
@@ -882,6 +1163,37 @@ class MasterSuite extends SparkFunSuite
       assert(workerResources(GPU).availableAddrs.length === 6)
       assert(workerResources(FPGA).availableAddrs.length === 6)
     }
+  }
+
+  test("resource description with multiple resource profiles") {
+    val appInfo = makeAppInfo(1024, Some(4), None, Map(GPU -> 2))
+    val rp1 = DeployTestUtils.createResourceProfile(None, Map(FPGA -> 2), None)
+    val rp2 = DeployTestUtils.createResourceProfile(Some(2048), Map(GPU -> 3, FPGA -> 3), Some(2))
+
+    val resourceProfileToTotalExecs = Map(
+      appInfo.desc.defaultProfile -> 1,
+      rp1 -> 2,
+      rp2 -> 3
+    )
+    appInfo.requestExecutors(resourceProfileToTotalExecs)
+
+    // Default resource profile take it's own resource request.
+    var resourceDesc = appInfo.getResourceDescriptionForRpId(DEFAULT_RESOURCE_PROFILE_ID)
+    assert(resourceDesc.memoryMbPerExecutor === 1024)
+    assert(resourceDesc.coresPerExecutor === Some(4))
+    assert(resourceDesc.customResourcesPerExecutor === Seq(ResourceRequirement(GPU, 2)))
+
+    // Non-default resource profiles take cores and memory from default profile if not specified.
+    resourceDesc = appInfo.getResourceDescriptionForRpId(rp1.id)
+    assert(resourceDesc.memoryMbPerExecutor === 1024)
+    assert(resourceDesc.coresPerExecutor === Some(4))
+    assert(resourceDesc.customResourcesPerExecutor === Seq(ResourceRequirement(FPGA, 2)))
+
+    resourceDesc = appInfo.getResourceDescriptionForRpId(rp2.id)
+    assert(resourceDesc.memoryMbPerExecutor === 2048)
+    assert(resourceDesc.coresPerExecutor === Some(2))
+    assert(resourceDesc.customResourcesPerExecutor ===
+      Seq(ResourceRequirement(FPGA, 3), ResourceRequirement(GPU, 3)))
   }
 
   private def getDrivers(master: Master): HashSet[DriverInfo] = {

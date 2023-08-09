@@ -45,6 +45,11 @@ select 9223372036854775808, -9223372036854775809;
 select 1234567890123456789012345678901234567890;
 select 1234567890123456789012345678901234567890.0;
 
+-- float
+select 1F, 1.2F, .10f, 0.10f;
+select -1F, -1.2F, -.10F, -0.10F;
+select -3.4028235E39f;
+
 -- double
 select 1D, 1.2D, 1e10, 1.5e5, .10D, 0.10D, .1e5, .9e+2, 0.9e+2, 900e-1, 9.e+1;
 select -1D, -1.2D, -1e10, -1.5e5, -.10D, -0.10D, -.1e5;
@@ -55,6 +60,7 @@ select 1E309, -1E309;
 
 -- decimal parsing
 select 0.3, -0.8, .5, -.18, 0.1111, .1111;
+select 0.3 F, 0.4 D, 0.5 BD;
 
 -- super large scientific notation double literals should still be valid doubles
 select 123456789012345678901234567890123456789e10d, 123456789012345678901234567890123456789.1e10d;

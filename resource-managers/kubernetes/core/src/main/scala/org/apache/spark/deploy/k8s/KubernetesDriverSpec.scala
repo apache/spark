@@ -20,5 +20,6 @@ import io.fabric8.kubernetes.api.model.HasMetadata
 
 private[spark] case class KubernetesDriverSpec(
     pod: SparkPod,
+    driverPreKubernetesResources: Seq[HasMetadata],
     driverKubernetesResources: Seq[HasMetadata],
     systemProperties: Map[String, String])

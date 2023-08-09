@@ -17,9 +17,9 @@
 
 package org.apache.spark.sql.execution.streaming.sources
 
-import org.apache.spark.api.python.PythonException
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
+import org.apache.spark.sql.execution.LogicalRDD
 import org.apache.spark.sql.execution.streaming.Sink
 import org.apache.spark.sql.streaming.DataStreamWriter
 
@@ -27,18 +27,15 @@ class ForeachBatchSink[T](batchWriter: (Dataset[T], Long) => Unit, encoder: Expr
   extends Sink {
 
   override def addBatch(batchId: Long, data: DataFrame): Unit = {
-    val resolvedEncoder = encoder.resolveAndBind(
-      data.logicalPlan.output,
-      data.sparkSession.sessionState.analyzer)
-    val fromRow = resolvedEncoder.createDeserializer()
-    val rdd = data.queryExecution.toRdd.map[T](fromRow)(encoder.clsTag)
-    val ds = data.sparkSession.createDataset(rdd)(encoder)
+    val node = LogicalRDD.fromDataset(rdd = data.queryExecution.toRdd, originDataset = data,
+      isStreaming = false)
+    implicit val enc = encoder
+    val ds = Dataset.ofRows(data.sparkSession, node).as[T]
     batchWriter(ds, batchId)
   }
 
   override def toString(): String = "ForeachBatchSink"
 }
-
 
 /**
  * Interface that is meant to be extended by Python classes via Py4J.

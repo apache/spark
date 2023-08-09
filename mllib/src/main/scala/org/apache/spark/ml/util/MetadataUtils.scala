@@ -20,8 +20,7 @@ package org.apache.spark.ml.util
 import scala.collection.immutable.HashMap
 
 import org.apache.spark.ml.attribute._
-import org.apache.spark.ml.linalg.{Vector, VectorUDT}
-import org.apache.spark.sql.Dataset
+import org.apache.spark.ml.linalg.VectorUDT
 import org.apache.spark.sql.types.StructField
 
 
@@ -39,17 +38,6 @@ private[spark] object MetadataUtils {
       case binAttr: BinaryAttribute => Some(2)
       case nomAttr: NominalAttribute => nomAttr.getNumValues
       case _: NumericAttribute | UnresolvedAttribute => None
-    }
-  }
-
-  /**
-   * Obtain the number of features in a vector column.
-   * If no metadata is available, extract it from the dataset.
-   */
-  def getNumFeatures(dataset: Dataset[_], vectorCol: String): Int = {
-    getNumFeatures(dataset.schema(vectorCol)).getOrElse {
-      dataset.select(DatasetUtils.columnToVector(dataset, vectorCol))
-        .head.getAs[Vector](0).size
     }
   }
 

@@ -263,7 +263,19 @@ class LauncherServer implements Closeable {
 
   private long getConnectionTimeout() {
     String value = SparkLauncher.launcherConfig.get(SparkLauncher.CHILD_CONNECTION_TIMEOUT);
-    return (value != null) ? Long.parseLong(value) : DEFAULT_CONNECT_TIMEOUT;
+    if (value != null) {
+        return Long.parseLong(value);
+    }
+
+    value = SparkLauncher.launcherConfig.get(SparkLauncher.DEPRECATED_CHILD_CONNECTION_TIMEOUT);
+    if (value != null) {
+        LOG.log(Level.WARNING,
+                "Property '" + SparkLauncher.DEPRECATED_CHILD_CONNECTION_TIMEOUT +
+                "' is deprecated, please switch to '" + SparkLauncher.CHILD_CONNECTION_TIMEOUT +
+                "'.");
+        return Long.parseLong(value);
+    }
+    return DEFAULT_CONNECT_TIMEOUT;
   }
 
   private String createSecret() {
@@ -364,7 +376,7 @@ class LauncherServer implements Closeable {
      *
      * This method allows a short period for the above to happen (same amount of time as the
      * connection timeout, which is configurable). This should be fine for well-behaved
-     * applications, where they close the connection arond the same time the app handle detects the
+     * applications, where they close the connection around the same time the app handle detects the
      * app has finished.
      *
      * In case the connection is not closed within the grace period, this method forcefully closes

@@ -32,11 +32,11 @@ import org.apache.mesos.{MesosSchedulerDriver, Protos, Scheduler, SchedulerDrive
 import org.apache.mesos.Protos.{TaskState => MesosTaskState, _}
 import org.apache.mesos.Protos.FrameworkInfo.Capability
 import org.apache.mesos.Protos.Resource.ReservationInfo
-import org.apache.mesos.protobuf.{ByteString, GeneratedMessageV3}
+import org.apache.mesos.protobuf.GeneratedMessageV3
 
 import org.apache.spark.{SparkConf, SparkContext, SparkException}
 import org.apache.spark.TaskState
-import org.apache.spark.deploy.mesos.{config => mesosConfig}
+import org.apache.spark.deploy.mesos.{config => mesosConfig, MesosDriverDescription}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.{Status => _, _}
 import org.apache.spark.util.Utils
@@ -304,16 +304,15 @@ trait MesosSchedulerUtils extends Logging {
    * Match the requirements (if any) to the offer attributes.
    * if attribute requirements are not specified - return true
    * else if attribute is defined and no values are given, simple attribute presence is performed
-   * else if attribute name and value is specified, subset match is performed on slave attributes
+   * else if attribute name and value is specified, subset match is performed on agent attributes
    */
   def matchesAttributeRequirements(
-      slaveOfferConstraints: Map[String, Set[String]],
+      agentOfferConstraints: Map[String, Set[String]],
       offerAttributes: Map[String, GeneratedMessageV3]): Boolean = {
-    slaveOfferConstraints.forall {
+    agentOfferConstraints.forall {
       // offer has the required attribute and subsumes the required values for that attribute
       case (name, requiredValues) =>
         offerAttributes.get(name) match {
-          case None => false
           case Some(_) if requiredValues.isEmpty => true // empty value matches presence
           case Some(scalarValue: Value.Scalar) =>
             // check if provided values is less than equal to the offered values
@@ -332,6 +331,7 @@ trait MesosSchedulerUtils extends Logging {
             // check if the specified value is equal, if multiple values are specified
             // we succeed if any of them match.
             requiredValues.contains(textValue.getValue)
+          case _ => false
         }
     }
   }
@@ -356,7 +356,7 @@ trait MesosSchedulerUtils extends Logging {
    *                       https://github.com/apache/mesos/blob/master/src/common/values.cpp
    *                       https://github.com/apache/mesos/blob/master/src/common/attributes.cpp
    *
-   * @param constraintsVal constains string consisting of ';' separated key-value pairs (separated
+   * @param constraintsVal contains string consisting of ';' separated key-value pairs (separated
    *                       by ':')
    * @return  Map of constraints to match resources offers.
    */
@@ -379,7 +379,7 @@ trait MesosSchedulerUtils extends Logging {
           } else {
             v.split(',').toSet
           }
-        )
+        ).toMap
       } catch {
         case NonFatal(e) =>
           throw new IllegalArgumentException(s"Bad constraint string: $constraintsVal", e)
@@ -387,8 +387,7 @@ trait MesosSchedulerUtils extends Logging {
     }
   }
 
-  // These defaults copied from YARN
-  private val MEMORY_OVERHEAD_FRACTION = 0.10
+  // This default copied from YARN
   private val MEMORY_OVERHEAD_MINIMUM = 384
 
   /**
@@ -400,9 +399,26 @@ trait MesosSchedulerUtils extends Logging {
    *         (whichever is larger)
    */
   def executorMemory(sc: SparkContext): Int = {
+    val memoryOverheadFactor = sc.conf.get(EXECUTOR_MEMORY_OVERHEAD_FACTOR)
     sc.conf.get(mesosConfig.EXECUTOR_MEMORY_OVERHEAD).getOrElse(
-      math.max(MEMORY_OVERHEAD_FRACTION * sc.executorMemory, MEMORY_OVERHEAD_MINIMUM).toInt) +
+      math.max(memoryOverheadFactor * sc.executorMemory, MEMORY_OVERHEAD_MINIMUM).toInt) +
       sc.executorMemory
+  }
+
+  /**
+   * Return the amount of memory to allocate to each driver, taking into account
+   * container overheads.
+   *
+   * @param driverDesc used to get driver memory
+   * @return memory requirement defined as `DRIVER_MEMORY_OVERHEAD` if set in the config,
+   *         otherwise the larger of `MEMORY_OVERHEAD_MINIMUM (=384MB)` or
+   *         `MEMORY_OVERHEAD_FRACTION (=0.1) * driverMemory`
+   */
+  def driverContainerMemory(driverDesc: MesosDriverDescription): Int = {
+    val memoryOverheadFactor = driverDesc.conf.get(DRIVER_MEMORY_OVERHEAD_FACTOR)
+    val defaultMem = math.max(memoryOverheadFactor * driverDesc.mem, MEMORY_OVERHEAD_MINIMUM)
+    driverDesc.conf.get(mesosConfig.DRIVER_MEMORY_OVERHEAD).getOrElse(defaultMem.toInt) +
+      driverDesc.mem
   }
 
   def setupUris(uris: Seq[String],
@@ -574,15 +590,6 @@ trait MesosSchedulerUtils extends Logging {
          MesosTaskState.TASK_UNREACHABLE => TaskState.LOST
   }
 
-  def taskStateToMesos(state: TaskState.TaskState): MesosTaskState = state match {
-    case TaskState.LAUNCHING => MesosTaskState.TASK_STARTING
-    case TaskState.RUNNING => MesosTaskState.TASK_RUNNING
-    case TaskState.FINISHED => MesosTaskState.TASK_FINISHED
-    case TaskState.FAILED => MesosTaskState.TASK_FAILED
-    case TaskState.KILLED => MesosTaskState.TASK_KILLED
-    case TaskState.LOST => MesosTaskState.TASK_LOST
-  }
-
   protected def declineOffer(
     driver: org.apache.mesos.SchedulerDriver,
     offer: Offer,
@@ -612,4 +619,3 @@ trait MesosSchedulerUtils extends Logging {
     }
   }
 }
-

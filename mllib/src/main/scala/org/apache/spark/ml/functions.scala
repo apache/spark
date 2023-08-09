@@ -18,7 +18,7 @@
 package org.apache.spark.ml
 
 import org.apache.spark.annotation.Since
-import org.apache.spark.ml.linalg.{SparseVector, Vector}
+import org.apache.spark.ml.linalg.{SparseVector, Vector, Vectors}
 import org.apache.spark.mllib.linalg.{Vector => OldVector}
 import org.apache.spark.sql.Column
 import org.apache.spark.sql.functions.udf
@@ -27,7 +27,7 @@ import org.apache.spark.sql.functions.udf
 @Since("3.0.0")
 object functions {
 // scalastyle:on
-  private val vectorToArrayUdf = udf { vec: Any =>
+  private[spark] val vectorToArrayUdf = udf { vec: Any =>
     vec match {
       case v: Vector => v.toArray
       case v: OldVector => v.toArray
@@ -38,7 +38,7 @@ object functions {
     }
   }.asNonNullable()
 
-  private val vectorToArrayFloatUdf = udf { vec: Any =>
+  private[spark] val vectorToArrayFloatUdf = udf { vec: Any =>
     vec match {
       case v: SparseVector =>
         val data = new Array[Float](v.size)
@@ -70,5 +70,19 @@ object functions {
         s"Unsupported dtype: $dtype. Valid values: float64, float32."
       )
     }
+  }
+
+  private[spark] val arrayToVectorUdf = udf { array: Seq[Double] =>
+    Vectors.dense(array.toArray)
+  }
+
+  /**
+   * Converts a column of array of numeric type into a column of dense vectors in MLlib.
+   * @param v: the column of array&lt;NumericType&gt type
+   * @return a column of type `org.apache.spark.ml.linalg.Vector`
+   * @since 3.1.0
+   */
+  def array_to_vector(v: Column): Column = {
+    arrayToVectorUdf(v)
   }
 }

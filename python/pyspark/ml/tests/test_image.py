@@ -16,63 +16,67 @@
 #
 import unittest
 
-import py4j
-
 from pyspark.ml.image import ImageSchema
-from pyspark.testing.mlutils import PySparkTestCase, SparkSessionTestCase
+from pyspark.testing.mlutils import SparkSessionTestCase
 from pyspark.sql import Row
 from pyspark.testing.utils import QuietTest
 
 
 class ImageFileFormatTest(SparkSessionTestCase):
-
     def test_read_images(self):
-        data_path = 'data/mllib/images/origin/kittens'
-        df = self.spark.read.format("image") \
-            .option("dropInvalid", True) \
-            .option("recursiveFileLookup", True) \
+        data_path = "data/mllib/images/origin/kittens"
+        df = (
+            self.spark.read.format("image")
+            .option("dropInvalid", True)
+            .option("recursiveFileLookup", True)
             .load(data_path)
+        )
         self.assertEqual(df.count(), 4)
         first_row = df.take(1)[0][0]
         # compare `schema.simpleString()` instead of directly compare schema,
-        # because the df loaded from datasouce may change schema column nullability.
+        # because the df loaded from datasource may change schema column nullability.
         self.assertEqual(df.schema.simpleString(), ImageSchema.imageSchema.simpleString())
-        self.assertEqual(df.schema["image"].dataType.simpleString(),
-                         ImageSchema.columnSchema.simpleString())
+        self.assertEqual(
+            df.schema["image"].dataType.simpleString(), ImageSchema.columnSchema.simpleString()
+        )
         array = ImageSchema.toNDArray(first_row)
         self.assertEqual(len(array), first_row[1])
         self.assertEqual(ImageSchema.toImage(array, origin=first_row[0]), first_row)
-        expected = {'CV_8UC3': 16, 'Undefined': -1, 'CV_8U': 0, 'CV_8UC1': 0, 'CV_8UC4': 24}
+        expected = {"CV_8UC3": 16, "Undefined": -1, "CV_8U": 0, "CV_8UC1": 0, "CV_8UC4": 24}
         self.assertEqual(ImageSchema.ocvTypes, expected)
-        expected = ['origin', 'height', 'width', 'nChannels', 'mode', 'data']
+        expected = ["origin", "height", "width", "nChannels", "mode", "data"]
         self.assertEqual(ImageSchema.imageFields, expected)
         self.assertEqual(ImageSchema.undefinedImageType, "Undefined")
 
         with QuietTest(self.sc):
-            self.assertRaisesRegexp(
+            self.assertRaisesRegex(
                 TypeError,
                 "image argument should be pyspark.sql.types.Row; however",
-                lambda: ImageSchema.toNDArray("a"))
+                lambda: ImageSchema.toNDArray("a"),
+            )
 
         with QuietTest(self.sc):
-            self.assertRaisesRegexp(
+            self.assertRaisesRegex(
                 ValueError,
                 "image argument should have attributes specified in",
-                lambda: ImageSchema.toNDArray(Row(a=1)))
+                lambda: ImageSchema.toNDArray(Row(a=1)),
+            )
 
         with QuietTest(self.sc):
-            self.assertRaisesRegexp(
+            self.assertRaisesRegex(
                 TypeError,
                 "array argument should be numpy.ndarray; however, it got",
-                lambda: ImageSchema.toImage("a"))
+                lambda: ImageSchema.toImage("a"),
+            )
 
 
 if __name__ == "__main__":
-    from pyspark.ml.tests.test_image import *
+    from pyspark.ml.tests.test_image import *  # noqa: F401
 
     try:
         import xmlrunner
-        testRunner = xmlrunner.XMLTestRunner(output='target/test-reports', verbosity=2)
+
+        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
     except ImportError:
         testRunner = None
     unittest.main(testRunner=testRunner, verbosity=2)

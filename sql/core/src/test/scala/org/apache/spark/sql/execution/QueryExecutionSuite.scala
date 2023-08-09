@@ -18,12 +18,18 @@ package org.apache.spark.sql.execution
 
 import scala.io.Source
 
-import org.apache.spark.sql.{AnalysisException, FastOperator}
+import org.apache.spark.sql.{AnalysisException, Dataset, FastOperator}
+import org.apache.spark.sql.catalyst.{QueryPlanningTracker, QueryPlanningTrackerCallback}
+import org.apache.spark.sql.catalyst.analysis.UnresolvedNamespace
+import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.catalyst.plans.QueryPlan
-import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, OneRowRelation}
+import org.apache.spark.sql.catalyst.plans.logical.{CommandResult, LogicalPlan, OneRowRelation, Project, ShowTables, SubqueryAlias}
 import org.apache.spark.sql.catalyst.trees.TreeNodeTag
+import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
+import org.apache.spark.sql.execution.datasources.v2.ShowTablesExec
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.util.Utils
 
 case class QueryExecutionTestRecord(
     c0: Int, c1: Int, c2: Int, c3: Int, c4: Int,
@@ -36,8 +42,9 @@ case class QueryExecutionTestRecord(
 class QueryExecutionSuite extends SharedSparkSession {
   import testImplicits._
 
-  def checkDumpedPlans(path: String, expected: Int): Unit = {
-    assert(Source.fromFile(path).getLines.toList
+  def checkDumpedPlans(path: String, expected: Int): Unit = Utils.tryWithResource(
+    Source.fromFile(path)) { source =>
+    assert(source.getLines.toList
       .takeWhile(_ != "== Whole Stage Codegen ==") == List(
       "== Parsed Logical Plan ==",
       s"Range (0, $expected, step=1, splits=Some(2))",
@@ -99,7 +106,8 @@ class QueryExecutionSuite extends SharedSparkSession {
       val path = dir.getCanonicalPath + "/plans.txt"
       val df = spark.range(0, 10)
       df.queryExecution.debug.toFile(path, explainMode = Option("formatted"))
-      assert(Source.fromFile(path).getLines.toList
+      val lines = Utils.tryWithResource(Source.fromFile(path))(_.getLines().toList)
+      assert(lines
         .takeWhile(_ != "== Whole Stage Codegen ==").map(_.replaceAll("#\\d+", "#x")) == List(
         "== Physical Plan ==",
         s"* Range (1)",
@@ -135,9 +143,10 @@ class QueryExecutionSuite extends SharedSparkSession {
         0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15,
         16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26)))
       ds.queryExecution.debug.toFile(path)
-      val localRelations = Source.fromFile(path).getLines().filter(_.contains("LocalRelation"))
-
-      assert(!localRelations.exists(_.contains("more fields")))
+      Utils.tryWithResource(Source.fromFile(path)) { source =>
+        val localRelations = source.getLines().filter(_.contains("LocalRelation"))
+        assert(!localRelations.exists(_.contains("more fields")))
+      }
     }
   }
 
@@ -210,5 +219,195 @@ class QueryExecutionSuite extends SharedSparkSession {
     val tag5 = new TreeNodeTag[String]("e")
     df.queryExecution.executedPlan.setTagValue(tag5, "v")
     assertNoTag(tag5, df.queryExecution.sparkPlan)
+  }
+
+  test("Logging plan changes for execution") {
+    val testAppender = new LogAppender("plan changes")
+    withLogAppender(testAppender) {
+      withSQLConf(SQLConf.PLAN_CHANGE_LOG_LEVEL.key -> "INFO") {
+        spark.range(1).groupBy("id").count().queryExecution.executedPlan
+      }
+    }
+    Seq("=== Applying Rule org.apache.spark.sql.execution",
+        "=== Result of Batch Preparations ===").foreach { expectedMsg =>
+      assert(testAppender.loggingEvents.exists(
+        _.getMessage.getFormattedMessage.contains(expectedMsg)))
+    }
+  }
+
+  test("SPARK-34129: Add table name to LogicalRelation.simpleString") {
+    withTable("spark_34129") {
+      spark.sql("CREATE TABLE spark_34129(id INT) using parquet")
+      val df = spark.table("spark_34129")
+      assert(df.queryExecution.optimizedPlan.toString.startsWith(
+        s"Relation $SESSION_CATALOG_NAME.default.spark_34129["))
+    }
+  }
+
+  test("SPARK-35378: Eagerly execute non-root Command") {
+    val mockCallback1 = MockCallbackEagerCommand()
+    val mockCallback2 = MockCallbackEagerCommand()
+    def qe(logicalPlan: LogicalPlan, callback: QueryPlanningTrackerCallback): QueryExecution =
+      new QueryExecution(spark, logicalPlan, new QueryPlanningTracker(Some(callback)))
+
+    val showTables = ShowTables(UnresolvedNamespace(Seq.empty[String]), None)
+    val showTablesQe = qe(showTables, mockCallback1)
+    showTablesQe.assertAnalyzed
+    mockCallback1.assertAnalyzed
+    assert(showTablesQe.commandExecuted.isInstanceOf[CommandResult])
+    mockCallback1.assertCommandExecuted
+    assert(showTablesQe.executedPlan.isInstanceOf[CommandResultExec])
+    val showTablesResultExec = showTablesQe.executedPlan.asInstanceOf[CommandResultExec]
+    assert(showTablesResultExec.commandPhysicalPlan.isInstanceOf[ShowTablesExec])
+
+    val project = Project(showTables.output, SubqueryAlias("s", showTables))
+    val projectQe = qe(project, mockCallback2)
+    projectQe.assertAnalyzed
+    mockCallback2.assertAnalyzed
+    assert(projectQe.commandExecuted.isInstanceOf[Project])
+    mockCallback2.assertCommandExecuted
+    assert(projectQe.commandExecuted.children.length == 1)
+    assert(projectQe.commandExecuted.children(0).isInstanceOf[SubqueryAlias])
+    assert(projectQe.commandExecuted.children(0).children.length == 1)
+    assert(projectQe.commandExecuted.children(0).children(0).isInstanceOf[CommandResult])
+    assert(projectQe.executedPlan.isInstanceOf[CommandResultExec])
+    val cmdResultExec = projectQe.executedPlan.asInstanceOf[CommandResultExec]
+    assert(cmdResultExec.commandPhysicalPlan.isInstanceOf[ShowTablesExec])
+  }
+
+  test("SPARK-44145: non eagerly executed command setReadyForExecution") {
+    val mockCallback = MockCallback()
+
+    val showTables = ShowTables(UnresolvedNamespace(Seq.empty[String]), None)
+    val showTablesQe = new QueryExecution(
+      spark,
+      showTables,
+      new QueryPlanningTracker(Some(mockCallback)),
+      CommandExecutionMode.SKIP)
+    showTablesQe.assertAnalyzed
+    mockCallback.assertAnalyzed
+    showTablesQe.assertOptimized
+    mockCallback.assertOptimized
+    showTablesQe.assertSparkPlanPrepared
+    mockCallback.assertSparkPlanPrepared
+    showTablesQe.assertExecutedPlanPrepared
+    mockCallback.assertExecutedPlanPrepared
+  }
+
+  test("SPARK-44145: Plan setReadyForExecution") {
+    val mockCallback = MockCallback()
+    val plan: LogicalPlan = org.apache.spark.sql.catalyst.plans.logical.Range(0, 1, 1, 1)
+    val df = Dataset.ofRows(spark, plan, new QueryPlanningTracker(Some(mockCallback)))
+    df.queryExecution.assertAnalyzed
+    mockCallback.assertAnalyzed
+    df.queryExecution.assertOptimized
+    mockCallback.assertOptimized
+    df.queryExecution.assertSparkPlanPrepared
+    mockCallback.assertSparkPlanPrepared
+    df.queryExecution.assertExecutedPlanPrepared
+    mockCallback.assertExecutedPlanPrepared
+  }
+
+  test("SPARK-35378: Return UnsafeRow in CommandResultExecCheck execute methods") {
+    val plan = spark.sql("SHOW FUNCTIONS").queryExecution.executedPlan
+    assert(plan.isInstanceOf[CommandResultExec])
+    plan.executeCollect().foreach { row => assert(row.isInstanceOf[UnsafeRow]) }
+    plan.executeTake(10).foreach { row => assert(row.isInstanceOf[UnsafeRow]) }
+    plan.executeTail(10).foreach { row => assert(row.isInstanceOf[UnsafeRow]) }
+  }
+
+  test("SPARK-38198: check specify maxFields when call toFile method") {
+    withTempDir { dir =>
+      val path = dir.getCanonicalPath + "/plans.txt"
+      // Define a dataset with 6 columns
+      val ds = spark.createDataset(Seq((0, 1, 2, 3, 4, 5), (6, 7, 8, 9, 10, 11)))
+      // `CodegenMode` and `FormattedMode` doesn't use the maxFields, so not tested in this case
+      Seq(SimpleMode.name, ExtendedMode.name, CostMode.name).foreach { modeName =>
+        val maxFields = 3
+        ds.queryExecution.debug.toFile(path, explainMode = Some(modeName), maxFields = maxFields)
+        Utils.tryWithResource(Source.fromFile(path)) { source =>
+          val tableScan = source.getLines().filter(_.contains("LocalTableScan"))
+          assert(tableScan.exists(_.contains("more fields")),
+            s"Specify maxFields = $maxFields doesn't take effect when explainMode is $modeName")
+        }
+      }
+    }
+  }
+
+  case class MockCallbackEagerCommand(
+      var trackerAnalyzed: QueryPlanningTracker = null,
+      var trackerReadyForExecution: QueryPlanningTracker = null)
+      extends QueryPlanningTrackerCallback {
+    def analyzed(trackerFromCallback: QueryPlanningTracker, plan: LogicalPlan): Unit = {
+      trackerAnalyzed = trackerFromCallback
+      assert(trackerAnalyzed.phases.keySet.contains(QueryPlanningTracker.ANALYSIS))
+      assert(!trackerAnalyzed.phases.keySet.contains(QueryPlanningTracker.OPTIMIZATION))
+      assert(!trackerAnalyzed.phases.keySet.contains(QueryPlanningTracker.PLANNING))
+      assert(plan != null)
+    }
+    def readyForExecution(trackerFromCallback: QueryPlanningTracker): Unit = {
+      trackerReadyForExecution = trackerFromCallback
+      assert(trackerReadyForExecution.phases.keySet.contains(QueryPlanningTracker.ANALYSIS))
+      assert(!trackerReadyForExecution.phases.keySet.contains(QueryPlanningTracker.OPTIMIZATION))
+      assert(!trackerReadyForExecution.phases.keySet.contains(QueryPlanningTracker.PLANNING))
+    }
+    def assertAnalyzed(): Unit = {
+      assert(trackerAnalyzed != null)
+      assert(trackerReadyForExecution == null)
+    }
+    def assertCommandExecuted(): Unit = {
+      assert(trackerAnalyzed != null)
+      assert(trackerReadyForExecution != null)
+    }
+    def assertOptimized(): Unit = {
+      assert(trackerAnalyzed != null)
+      assert(trackerReadyForExecution != null)
+    }
+    def assertSparkPlanPrepared(): Unit = {
+      assert(trackerAnalyzed != null)
+      assert(trackerReadyForExecution != null)
+    }
+    def assertExecutedPlanPrepared(): Unit = {
+      assert(trackerAnalyzed != null)
+      assert(trackerReadyForExecution != null)
+    }
+  }
+  case class MockCallback(
+      var trackerAnalyzed: QueryPlanningTracker = null,
+      var trackerReadyForExecution: QueryPlanningTracker = null)
+      extends QueryPlanningTrackerCallback {
+    def analyzed(trackerFromCallback: QueryPlanningTracker, plan: LogicalPlan): Unit = {
+      trackerAnalyzed = trackerFromCallback
+      assert(trackerAnalyzed.phases.keySet.contains(QueryPlanningTracker.ANALYSIS))
+      assert(!trackerAnalyzed.phases.keySet.contains(QueryPlanningTracker.OPTIMIZATION))
+      assert(!trackerAnalyzed.phases.keySet.contains(QueryPlanningTracker.PLANNING))
+      assert(plan != null)
+    }
+    def readyForExecution(trackerFromCallback: QueryPlanningTracker): Unit = {
+      trackerReadyForExecution = trackerFromCallback
+      assert(trackerReadyForExecution.phases.keySet.contains(QueryPlanningTracker.ANALYSIS))
+      assert(trackerReadyForExecution.phases.keySet.contains(QueryPlanningTracker.OPTIMIZATION))
+      assert(trackerReadyForExecution.phases.keySet.contains(QueryPlanningTracker.PLANNING))
+    }
+    def assertAnalyzed(): Unit = {
+      assert(trackerAnalyzed != null)
+      assert(trackerReadyForExecution == null)
+    }
+    def assertCommandExecuted(): Unit = {
+      assert(trackerAnalyzed != null)
+      assert(trackerReadyForExecution == null)
+    }
+    def assertOptimized(): Unit = {
+      assert(trackerAnalyzed != null)
+      assert(trackerReadyForExecution == null)
+    }
+    def assertSparkPlanPrepared(): Unit = {
+      assert(trackerAnalyzed != null)
+      assert(trackerReadyForExecution == null)
+    }
+    def assertExecutedPlanPrepared(): Unit = {
+      assert(trackerAnalyzed != null)
+      assert(trackerReadyForExecution != null)
+    }
   }
 }

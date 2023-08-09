@@ -32,18 +32,18 @@ class OptimizeLimitZeroSuite extends PlanTest {
     val batches =
       Batch("OptimizeLimitZero", Once,
         ReplaceIntersectWithSemiJoin,
-        OptimizeLimitZero,
+        EliminateLimits,
         PropagateEmptyRelation) :: Nil
   }
 
-  val testRelation1 = LocalRelation.fromExternalRows(Seq('a.int), data = Seq(Row(1)))
-  val testRelation2 = LocalRelation.fromExternalRows(Seq('b.int), data = Seq(Row(1)))
+  val testRelation1 = LocalRelation.fromExternalRows(Seq($"a".int), data = Seq(Row(1)))
+  val testRelation2 = LocalRelation.fromExternalRows(Seq($"b".int), data = Seq(Row(1)))
 
   test("Limit 0: return empty local relation") {
     val query = testRelation1.limit(0)
 
     val optimized = Optimize.execute(query.analyze)
-    val correctAnswer = LocalRelation('a.int)
+    val correctAnswer = LocalRelation($"a".int)
 
     comparePlans(optimized, correctAnswer)
   }
@@ -52,7 +52,7 @@ class OptimizeLimitZeroSuite extends PlanTest {
     val query = LocalLimit(0, testRelation1)
 
     val optimized = Optimize.execute(query.analyze)
-    val correctAnswer = LocalRelation('a.int)
+    val correctAnswer = LocalRelation($"a".int)
 
     comparePlans(optimized, correctAnswer)
   }
@@ -61,20 +61,22 @@ class OptimizeLimitZeroSuite extends PlanTest {
     val query = GlobalLimit(0, testRelation1)
 
     val optimized = Optimize.execute(query.analyze)
-    val correctAnswer = LocalRelation('a.int)
+    val correctAnswer = LocalRelation($"a".int)
 
     comparePlans(optimized, correctAnswer)
   }
 
   Seq(
-    (Inner, LocalRelation('a.int, 'b.int)),
-    (LeftOuter, Project(Seq('a, Literal(null).cast(IntegerType).as('b)), testRelation1).analyze),
-    (RightOuter, LocalRelation('a.int, 'b.int)),
-    (FullOuter, Project(Seq('a, Literal(null).cast(IntegerType).as('b)), testRelation1).analyze)
+    (Inner, LocalRelation($"a".int, $"b".int)),
+    (LeftOuter, Project(Seq($"a", Literal(null).cast(IntegerType).as("b")), testRelation1)
+      .analyze),
+    (RightOuter, LocalRelation($"a".int, $"b".int)),
+    (FullOuter, Project(Seq($"a", Literal(null).cast(IntegerType).as("b")), testRelation1)
+      .analyze)
   ).foreach { case (jt, correctAnswer) =>
       test(s"Limit 0: for join type $jt") {
         val query = testRelation1
-          .join(testRelation2.limit(0), joinType = jt, condition = Some('a.attr == 'b.attr))
+          .join(testRelation2.limit(0), joinType = jt, condition = Some($"a".attr === $"b".attr))
 
         val optimized = Optimize.execute(query.analyze)
 
@@ -83,15 +85,15 @@ class OptimizeLimitZeroSuite extends PlanTest {
   }
 
   test("Limit 0: 3-way join") {
-    val testRelation3 = LocalRelation.fromExternalRows(Seq('c.int), data = Seq(Row(1)))
+    val testRelation3 = LocalRelation.fromExternalRows(Seq($"c".int), data = Seq(Row(1)))
 
     val subJoinQuery = testRelation1
-      .join(testRelation2, joinType = Inner, condition = Some('a.attr == 'b.attr))
+      .join(testRelation2, joinType = Inner, condition = Some($"a".attr === $"b".attr))
     val query = subJoinQuery
-      .join(testRelation3.limit(0), joinType = Inner, condition = Some('a.attr == 'c.attr))
+      .join(testRelation3.limit(0), joinType = Inner, condition = Some($"a".attr === $"c".attr))
 
     val optimized = Optimize.execute(query.analyze)
-    val correctAnswer = LocalRelation('a.int, 'b.int, 'c.int)
+    val correctAnswer = LocalRelation($"a".int, $"b".int, $"c".int)
 
     comparePlans(optimized, correctAnswer)
   }
@@ -101,7 +103,7 @@ class OptimizeLimitZeroSuite extends PlanTest {
       .intersect(testRelation1.limit(0), isAll = false)
 
     val optimized = Optimize.execute(query.analyze)
-    val correctAnswer = Distinct(LocalRelation('a.int))
+    val correctAnswer = Distinct(LocalRelation($"a".int))
 
     comparePlans(optimized, correctAnswer)
   }

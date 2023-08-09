@@ -17,11 +17,10 @@
 
 package org.apache.spark.streaming
 
-import java.io.{File, IOException, ObjectInputStream}
+import java.io.{IOException, ObjectInputStream}
 import java.util.concurrent.{ConcurrentLinkedQueue, TimeUnit}
 
 import scala.collection.JavaConverters._
-import scala.language.implicitConversions
 import scala.reflect.ClassTag
 
 import org.scalatest.BeforeAndAfterEach
@@ -469,7 +468,7 @@ trait TestSuiteBase extends SparkFunSuite with BeforeAndAfterEach with Logging {
     logInfo("--------------------------------")
 
     // Match the output with the expected output
-    for (i <- 0 until output.size) {
+    for (i <- output.indices) {
       if (useSet) {
         assert(
           output(i).toSet === expectedOutput(i).toSet,

@@ -15,10 +15,9 @@
 # limitations under the License.
 #
 
-from __future__ import print_function
-
 import sys
 from random import Random
+from typing import Set, Tuple
 
 from pyspark.sql import SparkSession
 
@@ -27,8 +26,8 @@ numVertices = 100
 rand = Random(42)
 
 
-def generateGraph():
-    edges = set()
+def generateGraph() -> Set[Tuple[int, int]]:
+    edges: Set[Tuple[int, int]] = set()
     while len(edges) < numEdges:
         src = rand.randrange(0, numVertices)
         dst = rand.randrange(0, numVertices)

@@ -16,19 +16,31 @@
  */
 package org.apache.spark.sql.execution.datasources.v2
 
-import org.apache.spark.sql.SparkSession
+import scala.collection.mutable
+
+import org.apache.spark.sql.{sources, SparkSession}
+import org.apache.spark.sql.catalyst.expressions.Expression
+import org.apache.spark.sql.connector.expressions.filter.Predicate
 import org.apache.spark.sql.connector.read.{ScanBuilder, SupportsPushDownRequiredColumns}
-import org.apache.spark.sql.execution.datasources.{PartitioningAwareFileIndex, PartitioningUtils}
+import org.apache.spark.sql.execution.datasources.{DataSourceStrategy, DataSourceUtils, PartitioningAwareFileIndex, PartitioningUtils}
+import org.apache.spark.sql.internal.connector.SupportsPushDownCatalystFilters
+import org.apache.spark.sql.sources.Filter
 import org.apache.spark.sql.types.StructType
 
 abstract class FileScanBuilder(
     sparkSession: SparkSession,
     fileIndex: PartitioningAwareFileIndex,
-    dataSchema: StructType) extends ScanBuilder with SupportsPushDownRequiredColumns {
+    dataSchema: StructType)
+  extends ScanBuilder
+    with SupportsPushDownRequiredColumns
+    with SupportsPushDownCatalystFilters {
   private val partitionSchema = fileIndex.partitionSchema
   private val isCaseSensitive = sparkSession.sessionState.conf.caseSensitiveAnalysis
   protected val supportsNestedSchemaPruning = false
   protected var requiredSchema = StructType(dataSchema.fields ++ partitionSchema.fields)
+  protected var partitionFilters = Seq.empty[Expression]
+  protected var dataFilters = Seq.empty[Expression]
+  protected var pushedDataFilters = Array.empty[Filter]
 
   override def pruneColumns(requiredSchema: StructType): Unit = {
     // [SPARK-30107] While `requiredSchema` might have pruned nested columns,
@@ -48,7 +60,7 @@ abstract class FileScanBuilder(
     StructType(fields)
   }
 
-  protected def readPartitionSchema(): StructType = {
+  def readPartitionSchema(): StructType = {
     val requiredNameSet = createRequiredNameSet()
     val fields = partitionSchema.fields.filter { field =>
       val colName = PartitioningUtils.getColName(field, isCaseSensitive)
@@ -57,9 +69,35 @@ abstract class FileScanBuilder(
     StructType(fields)
   }
 
+  override def pushFilters(filters: Seq[Expression]): Seq[Expression] = {
+    val (deterministicFilters, nonDeterminsticFilters) = filters.partition(_.deterministic)
+    val (partitionFilters, dataFilters) =
+      DataSourceUtils.getPartitionFiltersAndDataFilters(partitionSchema, deterministicFilters)
+    this.partitionFilters = partitionFilters
+    this.dataFilters = dataFilters
+    val translatedFilters = mutable.ArrayBuffer.empty[sources.Filter]
+    for (filterExpr <- dataFilters) {
+      val translated = DataSourceStrategy.translateFilter(filterExpr, true)
+      if (translated.nonEmpty) {
+        translatedFilters += translated.get
+      }
+    }
+    pushedDataFilters = pushDataFilters(translatedFilters.toArray)
+    dataFilters ++ nonDeterminsticFilters
+  }
+
+  override def pushedFilters: Array[Predicate] = pushedDataFilters.map(_.toV2)
+
+  /*
+   * Push down data filters to the file source, so the data filters can be evaluated there to
+   * reduce the size of the data to be read. By default, data filters are not pushed down.
+   * File source needs to implement this method to push down data filters.
+   */
+  protected def pushDataFilters(dataFilters: Array[Filter]): Array[Filter] = Array.empty[Filter]
+
   private def createRequiredNameSet(): Set[String] =
     requiredSchema.fields.map(PartitioningUtils.getColName(_, isCaseSensitive)).toSet
 
-  private val partitionNameSet: Set[String] =
+  val partitionNameSet: Set[String] =
     partitionSchema.fields.map(PartitioningUtils.getColName(_, isCaseSensitive)).toSet
 }

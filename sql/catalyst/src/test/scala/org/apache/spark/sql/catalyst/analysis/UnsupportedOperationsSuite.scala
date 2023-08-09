@@ -24,19 +24,19 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, MonotonicallyIncreasingID, NamedExpression}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, Expression, MonotonicallyIncreasingID, NamedExpression}
 import org.apache.spark.sql.catalyst.expressions.aggregate.Count
 import org.apache.spark.sql.catalyst.plans._
-import org.apache.spark.sql.catalyst.plans.logical.{FlatMapGroupsWithState, _}
+import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes._
-import org.apache.spark.sql.streaming.OutputMode
+import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.streaming.{GroupStateTimeout, OutputMode}
 import org.apache.spark.sql.types.{IntegerType, LongType, MetadataBuilder}
-import org.apache.spark.unsafe.types.CalendarInterval
 
 /** A dummy command for testing unsupported operations. */
-case class DummyCommand() extends Command
+case class DummyCommand() extends LeafCommand
 
-class UnsupportedOperationsSuite extends SparkFunSuite {
+class UnsupportedOperationsSuite extends SparkFunSuite with SQLHelper {
 
   val attribute = AttributeReference("a", IntegerType, nullable = true)()
   val watermarkMetadata = new MetadataBuilder()
@@ -62,7 +62,7 @@ class UnsupportedOperationsSuite extends SparkFunSuite {
 
   assertNotSupportedInBatchPlan(
     "select on streaming source",
-    streamRelation.select($"count(*)"),
+    streamRelation.select($"`count(*)`"),
     Seq("with streaming source", "start"))
 
 
@@ -76,7 +76,7 @@ class UnsupportedOperationsSuite extends SparkFunSuite {
   testError(
     "streaming plan - no streaming source",
     Seq("without streaming source", "start")) {
-    UnsupportedOperationChecker.checkForStreaming(batchRelation.select($"count(*)"), Append)
+    UnsupportedOperationChecker.checkForStreaming(batchRelation.select($"`count(*)`"), Append)
   }
 
   // Commands
@@ -99,12 +99,6 @@ class UnsupportedOperationsSuite extends SparkFunSuite {
     Aggregate(Nil, aggExprs("c"), batchRelation).join(
       Aggregate(Nil, aggExprs("d"), streamRelation), joinType = Inner),
     Update)
-
-  assertNotSupportedInStreamingPlan(
-    "aggregate - multiple streaming aggregations",
-    Aggregate(Nil, aggExprs("c"), Aggregate(Nil, aggExprs("d"), streamRelation)),
-    outputMode = Update,
-    expectedMsgs = Seq("multiple streaming aggregations"))
 
   assertSupportedInStreamingPlan(
     "aggregate - streaming aggregations in update mode",
@@ -145,15 +139,15 @@ class UnsupportedOperationsSuite extends SparkFunSuite {
   for (funcMode <- Seq(Append, Update)) {
     assertSupportedInBatchPlan(
       s"flatMapGroupsWithState - flatMapGroupsWithState($funcMode) on batch relation",
-      FlatMapGroupsWithState(
+      TestFlatMapGroupsWithState(
         null, att, att, Seq(att), Seq(att), att, null, funcMode, isMapGroupsWithState = false, null,
         batchRelation))
 
     assertSupportedInBatchPlan(
       s"flatMapGroupsWithState - multiple flatMapGroupsWithState($funcMode)s on batch relation",
-      FlatMapGroupsWithState(
+      TestFlatMapGroupsWithState(
         null, att, att, Seq(att), Seq(att), att, null, funcMode, isMapGroupsWithState = false, null,
-        FlatMapGroupsWithState(
+        TestFlatMapGroupsWithState(
           null, att, att, Seq(att), Seq(att), att, null, funcMode, isMapGroupsWithState = false,
           null, batchRelation)))
   }
@@ -162,7 +156,7 @@ class UnsupportedOperationsSuite extends SparkFunSuite {
   assertSupportedInStreamingPlan(
     "flatMapGroupsWithState - flatMapGroupsWithState(Update) " +
       "on streaming relation without aggregation in update mode",
-    FlatMapGroupsWithState(
+    TestFlatMapGroupsWithState(
       null, att, att, Seq(att), Seq(att), att, null, Update, isMapGroupsWithState = false, null,
       streamRelation),
     outputMode = Update)
@@ -170,7 +164,7 @@ class UnsupportedOperationsSuite extends SparkFunSuite {
   assertNotSupportedInStreamingPlan(
     "flatMapGroupsWithState - flatMapGroupsWithState(Update) " +
       "on streaming relation without aggregation in append mode",
-    FlatMapGroupsWithState(
+    TestFlatMapGroupsWithState(
       null, att, att, Seq(att), Seq(att), att, null, Update, isMapGroupsWithState = false, null,
       streamRelation),
     outputMode = Append,
@@ -179,7 +173,7 @@ class UnsupportedOperationsSuite extends SparkFunSuite {
   assertNotSupportedInStreamingPlan(
     "flatMapGroupsWithState - flatMapGroupsWithState(Update) " +
       "on streaming relation without aggregation in complete mode",
-    FlatMapGroupsWithState(
+    TestFlatMapGroupsWithState(
       null, att, att, Seq(att), Seq(att), att, null, Update, isMapGroupsWithState = false, null,
       streamRelation),
     outputMode = Complete,
@@ -192,7 +186,7 @@ class UnsupportedOperationsSuite extends SparkFunSuite {
     assertNotSupportedInStreamingPlan(
       "flatMapGroupsWithState - flatMapGroupsWithState(Update) on streaming relation " +
         s"with aggregation in $outputMode mode",
-      FlatMapGroupsWithState(
+      TestFlatMapGroupsWithState(
         null, att, att, Seq(att), Seq(att), att, null, Update, isMapGroupsWithState = false, null,
         Aggregate(Seq(attributeWithWatermark), aggExprs("c"), streamRelation)),
       outputMode = outputMode,
@@ -203,7 +197,7 @@ class UnsupportedOperationsSuite extends SparkFunSuite {
   assertSupportedInStreamingPlan(
     "flatMapGroupsWithState - flatMapGroupsWithState(Append) " +
       "on streaming relation without aggregation in append mode",
-    FlatMapGroupsWithState(
+    TestFlatMapGroupsWithState(
       null, att, att, Seq(att), Seq(att), att, null, Append, isMapGroupsWithState = false, null,
       streamRelation),
     outputMode = Append)
@@ -211,13 +205,14 @@ class UnsupportedOperationsSuite extends SparkFunSuite {
   assertNotSupportedInStreamingPlan(
     "flatMapGroupsWithState - flatMapGroupsWithState(Append) " +
       "on streaming relation without aggregation in update mode",
-    FlatMapGroupsWithState(
+    TestFlatMapGroupsWithState(
       null, att, att, Seq(att), Seq(att), att, null, Append, isMapGroupsWithState = false, null,
       streamRelation),
     outputMode = Update,
     expectedMsgs = Seq("flatMapGroupsWithState in append mode", "update"))
 
   // FlatMapGroupsWithState(Append) in streaming with aggregation
+  // Only supported when `spark.sql.streaming.statefulOperator.correctnessCheck` is disabled.
   for (outputMode <- Seq(Append, Update, Complete)) {
     assertSupportedInStreamingPlan(
       "flatMapGroupsWithState - flatMapGroupsWithState(Append) " +
@@ -225,27 +220,17 @@ class UnsupportedOperationsSuite extends SparkFunSuite {
       Aggregate(
         Seq(attributeWithWatermark),
         aggExprs("c"),
-        FlatMapGroupsWithState(
+        TestFlatMapGroupsWithState(
           null, att, att, Seq(att), Seq(att), att, null, Append, isMapGroupsWithState = false, null,
           streamRelation)),
-      outputMode = outputMode)
-  }
-
-  for (outputMode <- Seq(Append, Update)) {
-    assertNotSupportedInStreamingPlan(
-      "flatMapGroupsWithState - flatMapGroupsWithState(Append) " +
-        s"on streaming relation after aggregation in $outputMode mode",
-      FlatMapGroupsWithState(null, att, att, Seq(att), Seq(att), att, null, Append,
-        isMapGroupsWithState = false, null,
-        Aggregate(Seq(attributeWithWatermark), aggExprs("c"), streamRelation)),
       outputMode = outputMode,
-      expectedMsgs = Seq("flatMapGroupsWithState", "after aggregation"))
+      SQLConf.STATEFUL_OPERATOR_CHECK_CORRECTNESS_ENABLED.key -> "false")
   }
 
   assertNotSupportedInStreamingPlan(
     "flatMapGroupsWithState - " +
       "flatMapGroupsWithState(Update) on streaming relation in complete mode",
-    FlatMapGroupsWithState(
+    TestFlatMapGroupsWithState(
       null, att, att, Seq(att), Seq(att), att, null, Append, isMapGroupsWithState = false, null,
       streamRelation),
     outputMode = Complete,
@@ -259,7 +244,7 @@ class UnsupportedOperationsSuite extends SparkFunSuite {
       assertSupportedInStreamingPlan(
         s"flatMapGroupsWithState - flatMapGroupsWithState($funcMode) on batch relation inside " +
           s"streaming relation in $outputMode output mode",
-        FlatMapGroupsWithState(
+        TestFlatMapGroupsWithState(
           null, att, att, Seq(att), Seq(att), att, null, funcMode, isMapGroupsWithState = false,
           null, batchRelation),
         outputMode = outputMode
@@ -268,21 +253,23 @@ class UnsupportedOperationsSuite extends SparkFunSuite {
   }
 
   // multiple FlatMapGroupsWithStates
+  // Only supported when `spark.sql.streaming.statefulOperator.correctnessCheck` is disabled.
   assertSupportedInStreamingPlan(
     "flatMapGroupsWithState - multiple flatMapGroupsWithStates on streaming relation and all are " +
       "in append mode",
-    FlatMapGroupsWithState(null, att, att, Seq(att), Seq(att), att, null, Append,
+    TestFlatMapGroupsWithState(null, att, att, Seq(att), Seq(att), att, null, Append,
       isMapGroupsWithState = false, null,
-      FlatMapGroupsWithState(null, att, att, Seq(att), Seq(att), att, null, Append,
+      TestFlatMapGroupsWithState(null, att, att, Seq(att), Seq(att), att, null, Append,
         isMapGroupsWithState = false, null, streamRelation)),
-    outputMode = Append)
+    outputMode = Append,
+    SQLConf.STATEFUL_OPERATOR_CHECK_CORRECTNESS_ENABLED.key -> "false")
 
   assertNotSupportedInStreamingPlan(
     "flatMapGroupsWithState -  multiple flatMapGroupsWithStates on s streaming relation but some" +
       " are not in append mode",
-    FlatMapGroupsWithState(
+    TestFlatMapGroupsWithState(
       null, att, att, Seq(att), Seq(att), att, null, Update, isMapGroupsWithState = false, null,
-      FlatMapGroupsWithState(
+      TestFlatMapGroupsWithState(
         null, att, att, Seq(att), Seq(att), att, null, Append, isMapGroupsWithState = false, null,
         streamRelation)),
     outputMode = Append,
@@ -292,7 +279,7 @@ class UnsupportedOperationsSuite extends SparkFunSuite {
   assertNotSupportedInStreamingPlan(
     "mapGroupsWithState - mapGroupsWithState " +
       "on streaming relation without aggregation in append mode",
-    FlatMapGroupsWithState(
+    TestFlatMapGroupsWithState(
       null, att, att, Seq(att), Seq(att), att, null, Update, isMapGroupsWithState = true, null,
       streamRelation),
     outputMode = Append,
@@ -303,7 +290,7 @@ class UnsupportedOperationsSuite extends SparkFunSuite {
   assertNotSupportedInStreamingPlan(
     "mapGroupsWithState - mapGroupsWithState " +
       "on streaming relation without aggregation in complete mode",
-    FlatMapGroupsWithState(
+    TestFlatMapGroupsWithState(
       null, att, att, Seq(att), Seq(att), att, null, Update, isMapGroupsWithState = true, null,
       streamRelation),
     outputMode = Complete,
@@ -311,24 +298,13 @@ class UnsupportedOperationsSuite extends SparkFunSuite {
     // future.
     expectedMsgs = Seq("Complete"))
 
-  for (outputMode <- Seq(Append, Update, Complete)) {
-    assertNotSupportedInStreamingPlan(
-      "mapGroupsWithState - mapGroupsWithState on streaming relation " +
-        s"with aggregation in $outputMode mode",
-      FlatMapGroupsWithState(null, att, att, Seq(att), Seq(att), att, null, Update,
-        isMapGroupsWithState = true, null,
-        Aggregate(Seq(attributeWithWatermark), aggExprs("c"), streamRelation)),
-      outputMode = outputMode,
-      expectedMsgs = Seq("mapGroupsWithState", "with aggregation"))
-  }
-
   // multiple mapGroupsWithStates
   assertNotSupportedInStreamingPlan(
     "mapGroupsWithState - multiple mapGroupsWithStates on streaming relation and all are " +
       "in append mode",
-    FlatMapGroupsWithState(
+    TestFlatMapGroupsWithState(
       null, att, att, Seq(att), Seq(att), att, null, Update, isMapGroupsWithState = true, null,
-      FlatMapGroupsWithState(
+      TestFlatMapGroupsWithState(
         null, att, att, Seq(att), Seq(att), att, null, Update, isMapGroupsWithState = true, null,
         streamRelation)),
     outputMode = Append,
@@ -338,9 +314,9 @@ class UnsupportedOperationsSuite extends SparkFunSuite {
   assertNotSupportedInStreamingPlan(
     "mapGroupsWithState - " +
       "mixing mapGroupsWithStates and flatMapGroupsWithStates on streaming relation",
-    FlatMapGroupsWithState(
+    TestFlatMapGroupsWithState(
       null, att, att, Seq(att), Seq(att), att, null, Update, isMapGroupsWithState = true, null,
-      FlatMapGroupsWithState(
+      TestFlatMapGroupsWithState(
         null, att, att, Seq(att), Seq(att), att, null, Update, isMapGroupsWithState = false, null,
         streamRelation)
       ),
@@ -350,7 +326,7 @@ class UnsupportedOperationsSuite extends SparkFunSuite {
   // mapGroupsWithState with event time timeout + watermark
   assertNotSupportedInStreamingPlan(
     "mapGroupsWithState - mapGroupsWithState with event time timeout without watermark",
-    FlatMapGroupsWithState(
+    TestFlatMapGroupsWithState(
       null, att, att, Seq(att), Seq(att), att, null, Update, isMapGroupsWithState = true,
       EventTimeTimeout, streamRelation),
     outputMode = Update,
@@ -358,25 +334,19 @@ class UnsupportedOperationsSuite extends SparkFunSuite {
 
   assertSupportedInStreamingPlan(
     "mapGroupsWithState - mapGroupsWithState with event time timeout with watermark",
-    FlatMapGroupsWithState(
+    TestFlatMapGroupsWithState(
       null, att, att, Seq(att), Seq(att), att, null, Update, isMapGroupsWithState = true,
       EventTimeTimeout, new TestStreamingRelation(attributeWithWatermark)),
     outputMode = Update)
 
   // Deduplicate
   assertSupportedInStreamingPlan(
-    "Deduplicate - Deduplicate on streaming relation before aggregation",
+    "Deduplicate - Deduplicate on streaming relation before aggregation - append",
     Aggregate(
       Seq(attributeWithWatermark),
       aggExprs("c"),
       Deduplicate(Seq(att), streamRelation)),
     outputMode = Append)
-
-  assertNotSupportedInStreamingPlan(
-    "Deduplicate - Deduplicate on streaming relation after aggregation",
-    Deduplicate(Seq(att), Aggregate(Nil, aggExprs("c"), streamRelation)),
-    outputMode = Complete,
-    expectedMsgs = Seq("dropDuplicates"))
 
   assertSupportedInStreamingPlan(
     "Deduplicate - Deduplicate on batch relation inside a streaming query",
@@ -388,16 +358,14 @@ class UnsupportedOperationsSuite extends SparkFunSuite {
   testBinaryOperationInStreamingPlan(
     "single inner join in append mode",
     _.join(_, joinType = Inner),
-    outputMode = Append,
-    streamStreamSupported = true)
+    outputMode = Append)
 
   testBinaryOperationInStreamingPlan(
     "multiple inner joins in append mode",
     (x: LogicalPlan, y: LogicalPlan) => {
       x.join(y, joinType = Inner).join(streamRelation, joinType = Inner)
     },
-    outputMode = Append,
-    streamStreamSupported = true)
+    outputMode = Append)
 
   testBinaryOperationInStreamingPlan(
     "inner join in update mode",
@@ -406,155 +374,302 @@ class UnsupportedOperationsSuite extends SparkFunSuite {
     streamStreamSupported = false,
     expectedMsg = "is not supported in Update output mode")
 
-  // Full outer joins: only batch-batch is allowed
+  // Full outer joins: stream-batch/batch-stream join are not allowed,
+  // and stream-stream join is allowed 'conditionally' - see below check
   testBinaryOperationInStreamingPlan(
-    "full outer join",
+    "FullOuter join",
     _.join(_, joinType = FullOuter),
     streamStreamSupported = false,
     batchStreamSupported = false,
-    streamBatchSupported = false)
+    streamBatchSupported = false,
+    expectedMsg = "FullOuter join")
 
-  // Left outer joins: *-stream not allowed
-  testBinaryOperationInStreamingPlan(
-    "left outer join",
-    _.join(_, joinType = LeftOuter),
-    batchStreamSupported = false,
-    streamStreamSupported = false,
-    expectedMsg = "outer join")
-
-  // Left outer joins: update and complete mode not allowed
-  assertNotSupportedInStreamingPlan(
-    s"left outer join with stream-stream relations and update mode",
-    streamRelation.join(streamRelation, joinType = LeftOuter,
-      condition = Some(attribute === attribute)),
-    OutputMode.Update(),
-    Seq("is not supported in Update output mode"))
-  assertNotSupportedInStreamingPlan(
-    s"left outer join with stream-stream relations and complete mode",
-    Aggregate(Nil, aggExprs("d"), streamRelation.join(streamRelation, joinType = LeftOuter,
-      condition = Some(attribute === attribute))),
-    OutputMode.Complete(),
-    Seq("is not supported in Complete output mode"))
-
-  // Left outer joins: stream-stream allowed with join on watermark attribute
-  // Note that the attribute need not be watermarked on both sides.
-  assertSupportedInStreamingPlan(
-    s"left outer join with stream-stream relations and join on attribute with left watermark",
-    streamRelation.join(streamRelation, joinType = LeftOuter,
-      condition = Some(attributeWithWatermark === attribute)),
-    OutputMode.Append())
-  assertSupportedInStreamingPlan(
-    s"left outer join with stream-stream relations and join on attribute with right watermark",
-    streamRelation.join(streamRelation, joinType = LeftOuter,
-      condition = Some(attribute === attributeWithWatermark)),
-    OutputMode.Append())
-  assertNotSupportedInStreamingPlan(
-    s"left outer join with stream-stream relations and join on non-watermarked attribute",
-    streamRelation.join(streamRelation, joinType = LeftOuter,
-      condition = Some(attribute === attribute)),
-    OutputMode.Append(),
-    Seq("watermark in the join keys"))
-
-  // Left outer joins: stream-stream allowed with range condition yielding state value watermark
-  assertSupportedInStreamingPlan(
-    s"left outer join with stream-stream relations and state value watermark", {
-      val leftRelation = streamRelation
-      val rightTimeWithWatermark =
-        AttributeReference("b", IntegerType)().withMetadata(watermarkMetadata)
-      val rightRelation = new TestStreamingRelation(rightTimeWithWatermark)
-      leftRelation.join(
-        rightRelation,
-        joinType = LeftOuter,
-        condition = Some(attribute > rightTimeWithWatermark + 10))
-    },
-    OutputMode.Append())
-
-  // Left outer joins: stream-stream not allowed with insufficient range condition
-  assertNotSupportedInStreamingPlan(
-    s"left outer join with stream-stream relations and state value watermark", {
-      val leftRelation = streamRelation
-      val rightTimeWithWatermark =
-        AttributeReference("b", IntegerType)().withMetadata(watermarkMetadata)
-      val rightRelation = new TestStreamingRelation(rightTimeWithWatermark)
-      leftRelation.join(
-        rightRelation,
-        joinType = LeftOuter,
-        condition = Some(attribute < rightTimeWithWatermark + 10))
-    },
-    OutputMode.Append(),
-    Seq("appropriate range condition"))
-
-  // Left semi joins: stream-* not allowed
-  testBinaryOperationInStreamingPlan(
-    "left semi join",
-    _.join(_, joinType = LeftSemi),
-    streamStreamSupported = false,
-    batchStreamSupported = false,
-    expectedMsg = "left semi/anti joins")
-
-  // Left anti joins: stream-* not allowed
-  testBinaryOperationInStreamingPlan(
-    "left anti join",
-    _.join(_, joinType = LeftAnti),
-    streamStreamSupported = false,
-    batchStreamSupported = false,
-    expectedMsg = "left semi/anti joins")
+  // Left outer, left semi, left anti join: *-stream not allowed
+  Seq((LeftOuter, "LeftOuter join"), (LeftSemi, "LeftSemi join"), (LeftAnti, "LeftAnti join"))
+    .foreach { case (joinType, name) =>
+      testBinaryOperationInStreamingPlan(
+        name,
+        _.join(_, joinType = joinType),
+        batchStreamSupported = false,
+        streamStreamSupported = false,
+        expectedMsg = name)
+    }
 
   // Right outer joins: stream-* not allowed
   testBinaryOperationInStreamingPlan(
-    "right outer join",
+    "RightOuter join",
     _.join(_, joinType = RightOuter),
     streamBatchSupported = false,
     streamStreamSupported = false,
-    expectedMsg = "outer join")
+    expectedMsg = "RightOuter join")
 
-  // Right outer joins: stream-stream allowed with join on watermark attribute
-  // Note that the attribute need not be watermarked on both sides.
-  assertSupportedInStreamingPlan(
-    s"right outer join with stream-stream relations and join on attribute with left watermark",
-    streamRelation.join(streamRelation, joinType = RightOuter,
-      condition = Some(attributeWithWatermark === attribute)),
-    OutputMode.Append())
-  assertSupportedInStreamingPlan(
-    s"right outer join with stream-stream relations and join on attribute with right watermark",
-    streamRelation.join(streamRelation, joinType = RightOuter,
-      condition = Some(attribute === attributeWithWatermark)),
-    OutputMode.Append())
-  assertNotSupportedInStreamingPlan(
-    s"right outer join with stream-stream relations and join on non-watermarked attribute",
-    streamRelation.join(streamRelation, joinType = RightOuter,
-      condition = Some(attribute === attribute)),
-    OutputMode.Append(),
-    Seq("watermark in the join keys"))
+  // Left outer, right outer, full outer, left semi joins
+  Seq(LeftOuter, RightOuter, FullOuter, LeftSemi).foreach { joinType =>
+    // Update mode not allowed
+    assertNotSupportedInStreamingPlan(
+      s"$joinType join with stream-stream relations and update mode",
+      streamRelation.join(streamRelation, joinType = joinType,
+        condition = Some(attribute === attribute)),
+      OutputMode.Update(),
+      Seq("is not supported in Update output mode"))
 
-  // Right outer joins: stream-stream allowed with range condition yielding state value watermark
-  assertSupportedInStreamingPlan(
-    s"right outer join with stream-stream relations and state value watermark", {
-      val leftTimeWithWatermark =
-        AttributeReference("b", IntegerType)().withMetadata(watermarkMetadata)
-      val leftRelation = new TestStreamingRelation(leftTimeWithWatermark)
-      val rightRelation = streamRelation
-      leftRelation.join(
-        rightRelation,
-        joinType = RightOuter,
-        condition = Some(leftTimeWithWatermark + 10 < attribute))
-    },
-    OutputMode.Append())
+    // Complete mode not allowed
+    assertNotSupportedInStreamingPlan(
+      s"$joinType join with stream-stream relations and complete mode",
+      Aggregate(Nil, aggExprs("d"), streamRelation.join(streamRelation, joinType = joinType,
+        condition = Some(attribute === attribute))),
+      OutputMode.Complete(),
+      Seq("is not supported in Complete output mode"))
 
-  // Right outer joins: stream-stream not allowed with insufficient range condition
-  assertNotSupportedInStreamingPlan(
-    s"right outer join with stream-stream relations and state value watermark", {
-      val leftTimeWithWatermark =
-        AttributeReference("b", IntegerType)().withMetadata(watermarkMetadata)
-      val leftRelation = new TestStreamingRelation(leftTimeWithWatermark)
-      val rightRelation = streamRelation
-      leftRelation.join(
-        rightRelation,
-        joinType = RightOuter,
-        condition = Some(leftTimeWithWatermark + 10 > attribute))
-    },
-    OutputMode.Append(),
-    Seq("appropriate range condition"))
+    // Stream-stream allowed with join on watermark attribute
+    // Note that the attribute need not be watermarked on both sides.
+    assertSupportedInStreamingPlan(
+      s"$joinType join with stream-stream relations and join on attribute with left watermark",
+      streamRelation.join(streamRelation, joinType = joinType,
+        condition = Some(attributeWithWatermark === attribute)),
+      OutputMode.Append())
+    assertSupportedInStreamingPlan(
+      s"$joinType join with stream-stream relations and join on attribute with right watermark",
+      streamRelation.join(streamRelation, joinType = joinType,
+        condition = Some(attribute === attributeWithWatermark)),
+      OutputMode.Append())
+    assertNotSupportedInStreamingPlan(
+      s"$joinType join with stream-stream relations and join on non-watermarked attribute",
+      streamRelation.join(streamRelation, joinType = joinType,
+        condition = Some(attribute === attribute)),
+      OutputMode.Append(),
+      Seq("without a watermark in the join keys"))
+
+    val timeWithWatermark =
+      AttributeReference("b", IntegerType)().withMetadata(watermarkMetadata)
+    val relationWithWatermark = new TestStreamingRelation(timeWithWatermark)
+    val (leftRelation, rightRelation) =
+      if (joinType == RightOuter) {
+        (relationWithWatermark, streamRelation)
+      } else {
+        (streamRelation, relationWithWatermark)
+      }
+
+    // stream-stream allowed with range condition yielding state value watermark
+    assertSupportedInStreamingPlan(
+      s"$joinType join with stream-stream relations and state value watermark",
+      leftRelation.join(rightRelation, joinType = joinType,
+        condition = Some(attribute > timeWithWatermark + 10)),
+      OutputMode.Append())
+
+    // stream-stream not allowed with insufficient range condition
+    assertNotSupportedInStreamingPlan(
+      s"$joinType join with stream-stream relations and state value watermark",
+      leftRelation.join(rightRelation, joinType = joinType,
+        condition = Some(attribute < timeWithWatermark + 10)),
+      OutputMode.Append(),
+      Seq("is not supported without a watermark in the join keys, or a watermark on " +
+        "the nullable side and an appropriate range condition"))
+  }
+
+  // multi-aggregations only supported in Append mode
+  assertPassOnGlobalWatermarkLimit(
+    "aggregate - multiple streaming aggregations - append",
+    Aggregate(Nil, aggExprs("c"), Aggregate(Nil, aggExprs("d"), streamRelation)),
+    outputMode = Append)
+
+  assertFailOnGlobalWatermarkLimit(
+    "aggregate - multiple streaming aggregations - update",
+    Aggregate(Nil, aggExprs("c"), Aggregate(Nil, aggExprs("d"), streamRelation)),
+    outputMode = Update)
+
+  assertFailOnGlobalWatermarkLimit(
+    "aggregate - multiple streaming aggregations - complete",
+    Aggregate(Nil, aggExprs("c"), Aggregate(Nil, aggExprs("d"), streamRelation)),
+    outputMode = Complete)
+
+  assertPassOnGlobalWatermarkLimit(
+    "flatMapGroupsWithState - flatMapGroupsWithState(Append) " +
+      s"on streaming relation after aggregation in Append mode",
+    TestFlatMapGroupsWithState(null, att, att, Seq(att), Seq(att), att, null, Append,
+      isMapGroupsWithState = false, null,
+      Aggregate(Seq(attributeWithWatermark), aggExprs("c"), streamRelation)),
+    outputMode = Append)
+
+  // Aggregation not in Append mode followed by any stateful operators is disallowed
+  assertFailOnGlobalWatermarkLimit(
+    "flatMapGroupsWithState - flatMapGroupsWithState(Append) " +
+      s"on streaming relation after aggregation in Update mode",
+    TestFlatMapGroupsWithState(null, att, att, Seq(att), Seq(att), att, null, Append,
+      isMapGroupsWithState = false, null,
+      Aggregate(Seq(attributeWithWatermark), aggExprs("c"), streamRelation)),
+    outputMode = Update)
+
+  // Aggregation not in Append mode followed by any stateful operators is disallowed
+  assertFailOnGlobalWatermarkLimit(
+    "mapGroupsWithState - mapGroupsWithState on streaming relation " +
+      "after aggregation in Update mode",
+    TestFlatMapGroupsWithState(null, att, att, Seq(att), Seq(att), att, null, Update,
+      isMapGroupsWithState = true, null,
+      Aggregate(Seq(attributeWithWatermark), aggExprs("c"), streamRelation)),
+    outputMode = Update)
+
+  // FlatMapGroupsWithState followed by any stateful op not allowed, here test aggregation
+  assertFailOnGlobalWatermarkLimit(
+    "multiple stateful ops - FlatMapGroupsWithState followed by agg",
+    Aggregate(Nil, aggExprs("c"),
+      TestFlatMapGroupsWithState(null, att, att, Seq(att), Seq(att), att, null, Append,
+        isMapGroupsWithState = false, GroupStateTimeout.EventTimeTimeout(), streamRelation)),
+    outputMode = Append)
+
+  // But allows if the FlatMapGroupsWithState has timeout on processing time
+  assertPassOnGlobalWatermarkLimit(
+    "multiple stateful ops - FlatMapGroupsWithState(process time) followed by agg",
+    Aggregate(Nil, aggExprs("c"),
+      TestFlatMapGroupsWithState(null, att, att, Seq(att), Seq(att), att, null, Append,
+        isMapGroupsWithState = false, GroupStateTimeout.ProcessingTimeTimeout(), streamRelation)),
+    outputMode = Append)
+
+  // MapGroupsWithState followed by any stateful op not allowed, here test aggregation
+  assertFailOnGlobalWatermarkLimit(
+    "multiple stateful ops - MapGroupsWithState followed by agg",
+    Aggregate(Nil, aggExprs("c"),
+      TestFlatMapGroupsWithState(null, att, att, Seq(att), Seq(att), att, null, Update,
+        isMapGroupsWithState = true, GroupStateTimeout.EventTimeTimeout(), streamRelation)),
+    outputMode = Append)
+
+  // But allows if the MapGroupsWithState has timeout on processing time
+  assertPassOnGlobalWatermarkLimit(
+    "multiple stateful ops - MapGroupsWithState(process time) followed by agg",
+    Aggregate(Nil, aggExprs("c"),
+      TestFlatMapGroupsWithState(null, att, att, Seq(att), Seq(att), att, null, Update,
+        isMapGroupsWithState = true, GroupStateTimeout.ProcessingTimeTimeout(), streamRelation)),
+    outputMode = Append)
+
+  // stream-stream relation, time interval join can be followed by any stateful operators
+  assertPassOnGlobalWatermarkLimit(
+    "multiple stateful ops - stream-stream time-interval join followed by agg",
+    Aggregate(Nil, aggExprs("c"),
+      streamRelation.join(streamRelation, joinType = Inner,
+        condition = Some(attribute === attribute &&
+          attributeWithWatermark > attributeWithWatermark + 10))),
+    outputMode = Append)
+
+  // stream-stream relation, equality join can be followed by any stateful operators
+  assertPassOnGlobalWatermarkLimit(
+    "multiple stateful ops - stream-stream equality join followed by agg",
+    Aggregate(Nil, aggExprs("c"),
+      streamRelation.join(streamRelation, joinType = Inner,
+        condition = Some(attribute === attribute))),
+    outputMode = Append)
+
+  // Deduplication checks:
+  // Deduplication, if on event time column, is a stateful operator
+  // and cannot be placed after FlatMapGroupsWithState
+  assertFailOnGlobalWatermarkLimit(
+    "multiple stateful ops - FlatMapGroupsWithState followed by " +
+      "dedup (with event-time)",
+    Deduplicate(Seq(attributeWithWatermark),
+      TestFlatMapGroupsWithState(null, att, att, Seq(att), Seq(att), att, null, Append,
+        isMapGroupsWithState = false, GroupStateTimeout.EventTimeTimeout(), streamRelation)),
+    outputMode = Append)
+
+  // Deduplication, if not on event time column,
+  // although it is still a stateful operator,
+  // it can be placed after FlatMapGroupsWithState
+  assertPassOnGlobalWatermarkLimit(
+    "multiple stateful ops - FlatMapGroupsWithState followed by " +
+      "dedup (without event-time)",
+    Deduplicate(Seq(att),
+      TestFlatMapGroupsWithState(null, att, att, Seq(att), Seq(att), att, null, Append,
+        isMapGroupsWithState = false, null, streamRelation)),
+    outputMode = Append)
+
+  // Deduplication, if on event time column, is a stateful operator
+  // and cannot be placed after aggregation
+  for (outputMode <- Seq(Update, Complete)) {
+    assertFailOnGlobalWatermarkLimit(
+      s"multiple stateful ops - aggregation($outputMode mode) followed by " +
+        "dedup (with event-time)",
+      Deduplicate(Seq(attributeWithWatermark),
+        Aggregate(Seq(attributeWithWatermark), aggExprs("c"), streamRelation)),
+      outputMode = outputMode)
+
+    // Deduplication, if not on event time column,
+    // although it is still a stateful operator,
+    // it can be placed after aggregation
+    assertPassOnGlobalWatermarkLimit(
+      s"multiple stateful ops - aggregation($outputMode mode) followed by " +
+        "dedup (without event-time)",
+      Deduplicate(Seq(att),
+        Aggregate(Seq(attributeWithWatermark), aggExprs("c"), streamRelation)),
+      outputMode = outputMode)
+  }
+
+  assertPassOnGlobalWatermarkLimit(
+    "multiple stateful ops - stream-stream time interval join followed by " +
+      "dedup (with event-time)",
+    Deduplicate(Seq(attributeWithWatermark),
+      streamRelation.join(streamRelation, joinType = Inner,
+        condition = Some(attribute === attribute &&
+          attributeWithWatermark > attributeWithWatermark + 10))),
+    outputMode = Append)
+
+  assertPassOnGlobalWatermarkLimit(
+    "multiple stateful ops - stream-stream time interval join followed by " +
+      "dedup (without event-time)",
+    Deduplicate(Seq(att),
+      streamRelation.join(streamRelation, joinType = Inner,
+        condition = Some(attribute === attribute &&
+          attributeWithWatermark > attributeWithWatermark + 10))),
+    outputMode = Append)
+
+  Seq(Inner, LeftOuter, RightOuter, FullOuter).foreach {
+    joinType =>
+      assertPassOnGlobalWatermarkLimit(
+        s"streaming aggregation after " +
+          s"stream-stream $joinType join keyed on time interval in Append mode are not supported",
+        streamRelation.join(streamRelation, joinType = joinType,
+          condition = Some(attributeWithWatermark === attribute &&
+            attributeWithWatermark < attributeWithWatermark + 10))
+          .groupBy("a")(count("*")),
+        outputMode = Append)
+
+      assertPassOnGlobalWatermarkLimit(
+        s"single $joinType join in Append mode",
+        streamRelation.join(streamRelation, joinType = RightOuter,
+          condition = Some(attributeWithWatermark === attribute)),
+        outputMode = Append)
+
+      assertPassOnGlobalWatermarkLimit(
+        s"streaming aggregation after " +
+          s"stream-stream $joinType join keyed on time equality in Append mode are supported",
+        streamRelation.join(streamRelation, joinType = joinType,
+          condition = Some(attributeWithWatermark === attribute))
+          .groupBy("a")(count("*")),
+        outputMode = Append)
+
+      Seq(Inner, LeftOuter, RightOuter).foreach { joinType2 =>
+        assertPassOnGlobalWatermarkLimit(
+          s"streaming-stream $joinType2 after stream-stream $joinType join in Append mode",
+          streamRelation.join(
+            streamRelation.join(streamRelation, joinType = joinType,
+              condition = Some(attributeWithWatermark === attribute)),
+            joinType = joinType2,
+            condition = Some(attributeWithWatermark === attribute)),
+          outputMode = Append)
+      }
+
+      assertPassOnGlobalWatermarkLimit(
+        s"FlatMapGroupsWithState after stream-stream $joinType join in Append mode",
+        TestFlatMapGroupsWithState(
+          null, att, att, Seq(att), Seq(att), att, null, Append,
+          isMapGroupsWithState = false, null,
+          streamRelation.join(streamRelation, joinType = joinType,
+            condition = Some(attributeWithWatermark === attribute))),
+        outputMode = Append)
+
+      assertPassOnGlobalWatermarkLimit(
+        s"deduplicate after stream-stream $joinType join in Append mode",
+        Deduplicate(Seq(attribute), streamRelation.join(streamRelation, joinType = joinType,
+          condition = Some(attributeWithWatermark === attribute))),
+        outputMode = Append)
+  }
 
   // Cogroup: only batch-batch is allowed
   testBinaryOperationInStreamingPlan(
@@ -593,10 +708,12 @@ class UnsupportedOperationsSuite extends SparkFunSuite {
     streamStreamSupported = false,
     batchStreamSupported = false)
 
-  // Intersect: stream-stream not supported
+  // Intersect: not supported
   testBinaryOperationInStreamingPlan(
     "intersect",
     _.intersect(_, isAll = false),
+    batchStreamSupported = false,
+    streamBatchSupported = false,
     streamStreamSupported = false)
 
   // Sort: supported only on batch subplans and after aggregation on streaming plan + complete mode
@@ -621,7 +738,9 @@ class UnsupportedOperationsSuite extends SparkFunSuite {
   testUnaryOperatorInStreamingPlan(
     "sample", Sample(0.1, 1, true, 1L, _), expectedMsg = "sampling")
   testUnaryOperatorInStreamingPlan(
-    "window", Window(Nil, Nil, Nil, _), expectedMsg = "non-time-based windows")
+    "window",
+    Window(Nil, Nil, Nil, _),
+    errorClass = "NON_TIME_WINDOW_NOT_SUPPORTED_IN_STREAMING")
 
   // Output modes with aggregation and non-aggregation plans
   testOutputMode(Append, shouldSupportAggregation = false, shouldSupportNonAggregation = true)
@@ -641,153 +760,97 @@ class UnsupportedOperationsSuite extends SparkFunSuite {
       null,
       null,
       null,
-      new TestStreamingRelationV2(attribute)), OutputMode.Append())
+      new TestStreamingRelationV2(attribute)), outputMode = Append)
 
   // streaming aggregation
   {
     assertPassOnGlobalWatermarkLimit(
       "single streaming aggregation in Append mode",
-      streamRelation.groupBy("a")(count("*")),
-      OutputMode.Append())
+      streamRelation.groupBy("a")(count("*")), outputMode = Append)
 
-    assertFailOnGlobalWatermarkLimit(
+    assertPassOnGlobalWatermarkLimit(
       "chained streaming aggregations in Append mode",
-      streamRelation.groupBy("a")(count("*")).groupBy()(count("*")),
-      OutputMode.Append())
+      streamRelation.groupBy("a")(count("*")).groupBy()(count("*")), outputMode = Append)
 
     Seq(Inner, LeftOuter, RightOuter).foreach { joinType =>
       val plan = streamRelation.join(streamRelation.groupBy("a")(count("*")), joinType = joinType)
-      assertFailOnGlobalWatermarkLimit(
+      assertPassOnGlobalWatermarkLimit(
         s"$joinType join after streaming aggregation in Append mode",
         streamRelation.join(streamRelation.groupBy("a")(count("*")), joinType = joinType),
         OutputMode.Append())
     }
 
-    assertFailOnGlobalWatermarkLimit(
-      "deduplicate after streaming aggregation in Append mode",
-      Deduplicate(Seq(attribute), streamRelation.groupBy("a")(count("*"))),
-      OutputMode.Append())
-
-    assertFailOnGlobalWatermarkLimit(
-      "FlatMapGroupsWithState after streaming aggregation in Append mode",
-      FlatMapGroupsWithState(
-        null, att, att, Seq(att), Seq(att), att, null, Append,
-        isMapGroupsWithState = false, null,
-        streamRelation.groupBy("a")(count("*"))),
-      OutputMode.Append())
-  }
-
-  // stream-stream join
-  // stream-stream inner join doesn't emit late rows, whereas outer joins could
-  Seq((Inner, false), (LeftOuter, true), (RightOuter, true)).map { case (joinType, expectFailure) =>
     assertPassOnGlobalWatermarkLimit(
-      s"single $joinType join in Append mode",
-      streamRelation.join(streamRelation, joinType = RightOuter,
-        condition = Some(attributeWithWatermark === attribute)),
-      OutputMode.Append())
+      "deduplicate after streaming aggregation in Append mode",
+      Deduplicate(Seq(attribute), streamRelation.groupBy("a")(count("*"))), OutputMode.Append())
 
-    testGlobalWatermarkLimit(
-      s"streaming aggregation after stream-stream $joinType join in Append mode",
-      streamRelation.join(streamRelation, joinType = joinType,
-        condition = Some(attributeWithWatermark === attribute))
-        .groupBy("a")(count("*")),
-      OutputMode.Append(),
-      expectFailure = expectFailure)
-
-    Seq(Inner, LeftOuter, RightOuter).map { joinType2 =>
-      testGlobalWatermarkLimit(
-        s"streaming-stream $joinType2 after stream-stream $joinType join in Append mode",
-        streamRelation.join(
-          streamRelation.join(streamRelation, joinType = joinType,
-            condition = Some(attributeWithWatermark === attribute)),
-          joinType = joinType2,
-          condition = Some(attributeWithWatermark === attribute)),
-        OutputMode.Append(),
-        expectFailure = expectFailure)
-    }
-
-    testGlobalWatermarkLimit(
-      s"FlatMapGroupsWithState after stream-stream $joinType join in Append mode",
-      FlatMapGroupsWithState(
+    assertPassOnGlobalWatermarkLimit(
+      "FlatMapGroupsWithState after streaming aggregation in Append mode",
+      TestFlatMapGroupsWithState(
         null, att, att, Seq(att), Seq(att), att, null, Append,
         isMapGroupsWithState = false, null,
-        streamRelation.join(streamRelation, joinType = joinType,
-          condition = Some(attributeWithWatermark === attribute))),
-      OutputMode.Append(),
-      expectFailure = expectFailure)
-
-    testGlobalWatermarkLimit(
-      s"deduplicate after stream-stream $joinType join in Append mode",
-      Deduplicate(Seq(attribute), streamRelation.join(streamRelation, joinType = joinType,
-        condition = Some(attributeWithWatermark === attribute))),
-      OutputMode.Append(),
-      expectFailure = expectFailure)
+        streamRelation.groupBy("a")(count("*"))), outputMode = Append)
   }
 
   // FlatMapGroupsWithState
   {
     assertPassOnGlobalWatermarkLimit(
       "single FlatMapGroupsWithState in Append mode",
-      FlatMapGroupsWithState(
+      TestFlatMapGroupsWithState(
         null, att, att, Seq(att), Seq(att), att, null, Append,
-        isMapGroupsWithState = false, null, streamRelation),
-      OutputMode.Append())
+        isMapGroupsWithState = false, null, streamRelation), outputMode = Append)
 
     assertFailOnGlobalWatermarkLimit(
       "streaming aggregation after FlatMapGroupsWithState in Append mode",
-      FlatMapGroupsWithState(
+      TestFlatMapGroupsWithState(
         null, att, att, Seq(att), Seq(att), att, null, Append,
-        isMapGroupsWithState = false, null, streamRelation).groupBy("*")(count("*")),
-      OutputMode.Append())
+        isMapGroupsWithState = false, GroupStateTimeout.EventTimeTimeout(),
+        streamRelation).groupBy("*")(count("*")), outputMode = Append)
 
-    Seq(Inner, LeftOuter, RightOuter).map { joinType =>
+    Seq(Inner, LeftOuter, RightOuter).foreach { joinType =>
       assertFailOnGlobalWatermarkLimit(
         s"stream-stream $joinType after FlatMapGroupsWithState in Append mode",
         streamRelation.join(
-          FlatMapGroupsWithState(null, att, att, Seq(att), Seq(att), att, null, Append,
-          isMapGroupsWithState = false, null, streamRelation), joinType = joinType,
-          condition = Some(attributeWithWatermark === attribute)),
-        OutputMode.Append())
+          TestFlatMapGroupsWithState(null, att, att, Seq(att), Seq(att), att, null, Append,
+          isMapGroupsWithState = false, GroupStateTimeout.EventTimeTimeout(),
+            streamRelation), joinType = joinType,
+          condition = Some(attributeWithWatermark === attribute)), outputMode = Append)
     }
 
     assertFailOnGlobalWatermarkLimit(
       "FlatMapGroupsWithState after FlatMapGroupsWithState in Append mode",
-      FlatMapGroupsWithState(null, att, att, Seq(att), Seq(att), att, null, Append,
+      TestFlatMapGroupsWithState(null, att, att, Seq(att), Seq(att), att, null, Append,
         isMapGroupsWithState = false, null,
-        FlatMapGroupsWithState(null, att, att, Seq(att), Seq(att), att, null, Append,
-          isMapGroupsWithState = false, null, streamRelation)),
-      OutputMode.Append())
+        TestFlatMapGroupsWithState(null, att, att, Seq(att), Seq(att), att, null, Append,
+          isMapGroupsWithState = false, GroupStateTimeout.EventTimeTimeout(), streamRelation)),
+      outputMode = Append)
 
-    assertFailOnGlobalWatermarkLimit(
+    assertPassOnGlobalWatermarkLimit(
       s"deduplicate after FlatMapGroupsWithState in Append mode",
       Deduplicate(Seq(attribute),
-        FlatMapGroupsWithState(null, att, att, Seq(att), Seq(att), att, null, Append,
-          isMapGroupsWithState = false, null, streamRelation)),
-      OutputMode.Append())
+        TestFlatMapGroupsWithState(null, att, att, Seq(att), Seq(att), att, null, Append,
+          isMapGroupsWithState = false, null, streamRelation)), outputMode = Append)
   }
 
   // deduplicate
   {
     assertPassOnGlobalWatermarkLimit(
       "streaming aggregation after deduplicate in Append mode",
-      Deduplicate(Seq(attribute), streamRelation).groupBy("a")(count("*")),
-      OutputMode.Append())
+      Deduplicate(Seq(attribute), streamRelation).groupBy("a")(count("*")), outputMode = Append)
 
-    Seq(Inner, LeftOuter, RightOuter).map { joinType =>
+    Seq(Inner, LeftOuter, RightOuter).foreach { joinType =>
       assertPassOnGlobalWatermarkLimit(
         s"$joinType join after deduplicate in Append mode",
         streamRelation.join(Deduplicate(Seq(attribute), streamRelation), joinType = joinType,
-          condition = Some(attributeWithWatermark === attribute)),
-        OutputMode.Append())
+          condition = Some(attributeWithWatermark === attribute)), outputMode = Append)
     }
 
     assertPassOnGlobalWatermarkLimit(
       "FlatMapGroupsWithState after deduplicate in Append mode",
-      FlatMapGroupsWithState(
+      TestFlatMapGroupsWithState(
         null, att, att, Seq(att), Seq(att), att, null, Append,
         isMapGroupsWithState = false, null,
-        Deduplicate(Seq(attribute), streamRelation)),
-      OutputMode.Append())
+        Deduplicate(Seq(attribute), streamRelation)), outputMode = Append)
   }
 
   /*
@@ -809,7 +872,8 @@ class UnsupportedOperationsSuite extends SparkFunSuite {
     operationName: String,
     logicalPlanGenerator: LogicalPlan => LogicalPlan,
     outputMode: OutputMode = Append,
-    expectedMsg: String = ""): Unit = {
+    expectedMsg: String = "",
+    errorClass: String = ""): Unit = {
 
     val expectedMsgs = if (expectedMsg.isEmpty) Seq(operationName) else Seq(expectedMsg)
 
@@ -817,7 +881,8 @@ class UnsupportedOperationsSuite extends SparkFunSuite {
       s"$operationName with stream relation",
       wrapInStreaming(logicalPlanGenerator(streamRelation)),
       outputMode,
-      expectedMsgs)
+      expectedMsgs,
+      errorClass)
 
     assertSupportedInStreamingPlan(
       s"$operationName with batch relation",
@@ -933,13 +998,16 @@ class UnsupportedOperationsSuite extends SparkFunSuite {
   def assertSupportedInStreamingPlan(
       name: String,
       plan: LogicalPlan,
-      outputMode: OutputMode): Unit = {
+      outputMode: OutputMode,
+      configs: (String, String)*): Unit = {
     test(s"streaming plan - $name: supported") {
-      UnsupportedOperationChecker.checkForStreaming(wrapInStreaming(plan), outputMode)
+      withSQLConf(configs: _*) {
+        UnsupportedOperationChecker.checkForStreaming(wrapInStreaming(plan), outputMode)
+      }
     }
   }
 
-  /** Assert that the logical plan is supported for continuous procsssing mode */
+  /** Assert that the logical plan is supported for continuous processing mode */
   def assertSupportedForContinuousProcessing(
     name: String,
     plan: LogicalPlan,
@@ -961,10 +1029,12 @@ class UnsupportedOperationsSuite extends SparkFunSuite {
       name: String,
       plan: LogicalPlan,
       outputMode: OutputMode,
-      expectedMsgs: Seq[String]): Unit = {
+      expectedMsgs: Seq[String],
+      errorClass: String = ""): Unit = {
     testError(
       s"streaming plan - $name: not supported",
-      expectedMsgs :+ "streaming" :+ "DataFrame" :+ "Dataset" :+ "not supported") {
+      expectedMsgs :+ "streaming" :+ "DataFrame" :+ "Dataset" :+ "not supported",
+      errorClass) {
       UnsupportedOperationChecker.checkForStreaming(wrapInStreaming(plan), outputMode)
     }
   }
@@ -991,31 +1061,33 @@ class UnsupportedOperationsSuite extends SparkFunSuite {
       testNamePostfix: String,
       plan: LogicalPlan,
       outputMode: OutputMode): Unit = {
-    testGlobalWatermarkLimit(testNamePostfix, plan, outputMode, expectFailure = false)
+    testGlobalWatermarkLimit(testNamePostfix, plan, expectFailure = false, outputMode)
   }
 
   def assertFailOnGlobalWatermarkLimit(
       testNamePostfix: String,
       plan: LogicalPlan,
       outputMode: OutputMode): Unit = {
-    testGlobalWatermarkLimit(testNamePostfix, plan, outputMode, expectFailure = true)
+    testGlobalWatermarkLimit(testNamePostfix, plan, expectFailure = true, outputMode)
   }
 
   def testGlobalWatermarkLimit(
       testNamePostfix: String,
       plan: LogicalPlan,
-      outputMode: OutputMode,
-      expectFailure: Boolean): Unit = {
+      expectFailure: Boolean,
+      outputMode: OutputMode): Unit = {
     test(s"Global watermark limit - $testNamePostfix") {
       if (expectFailure) {
-        val e = intercept[AnalysisException] {
-          UnsupportedOperationChecker.checkStreamingQueryGlobalWatermarkLimit(
-            wrapInStreaming(plan), outputMode, failWhenDetected = true)
+        withSQLConf(SQLConf.STATEFUL_OPERATOR_CHECK_CORRECTNESS_ENABLED.key -> "true") {
+          val e = intercept[AnalysisException] {
+            UnsupportedOperationChecker.checkStreamingQueryGlobalWatermarkLimit(
+              wrapInStreaming(plan), outputMode)
+          }
+          assert(e.message.contains("Detected pattern of possible 'correctness' issue"))
         }
-        assert(e.message.contains("Detected pattern of possible 'correctness' issue"))
       } else {
         UnsupportedOperationChecker.checkStreamingQueryGlobalWatermarkLimit(
-          wrapInStreaming(plan), outputMode, failWhenDetected = true)
+          wrapInStreaming(plan), outputMode)
       }
     }
   }
@@ -1024,7 +1096,10 @@ class UnsupportedOperationsSuite extends SparkFunSuite {
    * Test whether the body of code will fail. If it does fail, then check if it has expected
    * messages.
    */
-  def testError(testName: String, expectedMsgs: Seq[String])(testBody: => Unit): Unit = {
+  def testError(
+      testName: String,
+      expectedMsgs: Seq[String],
+      errorClass: String = "")(testBody: => Unit): Unit = {
 
     test(testName) {
       val e = intercept[AnalysisException] {
@@ -1036,6 +1111,9 @@ class UnsupportedOperationsSuite extends SparkFunSuite {
             s"actual exception message:\n\t'${e.getMessage}'")
         }
       }
+      if (!errorClass.isEmpty) {
+        assert(e.getErrorClass == errorClass)
+      }
     }
   }
 
@@ -1046,6 +1124,8 @@ class UnsupportedOperationsSuite extends SparkFunSuite {
   case class StreamingPlanWrapper(child: LogicalPlan) extends UnaryNode {
     override def output: Seq[Attribute] = child.output
     override def isStreaming: Boolean = true
+    override protected def withNewChildInternal(newChild: LogicalPlan): StreamingPlanWrapper =
+      copy(child = newChild)
   }
 
   case class TestStreamingRelation(output: Seq[Attribute]) extends LeafNode {
@@ -1058,4 +1138,44 @@ class UnsupportedOperationsSuite extends SparkFunSuite {
     override def isStreaming: Boolean = true
     override def nodeName: String = "StreamingRelationV2"
   }
+}
+
+object TestFlatMapGroupsWithState {
+
+  // scalastyle:off
+  // Creating an apply constructor here as we changed the class by adding more fields
+  def apply(func: (Any, Iterator[Any], LogicalGroupState[Any]) => Iterator[Any],
+      keyDeserializer: Expression,
+      valueDeserializer: Expression,
+      groupingAttributes: Seq[Attribute],
+      dataAttributes: Seq[Attribute],
+      outputObjAttr: Attribute,
+      stateEncoder: ExpressionEncoder[Any],
+      outputMode: OutputMode,
+      isMapGroupsWithState: Boolean = false,
+      timeout: GroupStateTimeout,
+      child: LogicalPlan): FlatMapGroupsWithState = {
+
+    val attribute = AttributeReference("a", IntegerType, nullable = true)()
+    val batchRelation = LocalRelation(attribute)
+    new FlatMapGroupsWithState(
+      func,
+      keyDeserializer,
+      valueDeserializer,
+      groupingAttributes,
+      dataAttributes,
+      outputObjAttr,
+      stateEncoder,
+      outputMode,
+      isMapGroupsWithState,
+      timeout,
+      false,
+      groupingAttributes,
+      dataAttributes,
+      valueDeserializer,
+      batchRelation,
+      child
+    )
+  }
+  // scalastyle:on
 }

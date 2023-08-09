@@ -27,7 +27,7 @@ import org.apache.spark.SparkException
 import org.apache.spark.annotation.Since
 import org.apache.spark.internal.Logging
 import org.apache.spark.ml.PredictorParams
-import org.apache.spark.ml.feature.StandardScalerModel
+import org.apache.spark.ml.feature._
 import org.apache.spark.ml.linalg._
 import org.apache.spark.ml.optim.aggregator._
 import org.apache.spark.ml.optim.loss.RDDLossFunction
@@ -35,6 +35,7 @@ import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.stat._
 import org.apache.spark.ml.util._
+import org.apache.spark.ml.util.DatasetUtils._
 import org.apache.spark.ml.util.Instrumentation.instrumented
 import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.rdd.RDD
@@ -47,8 +48,8 @@ import org.apache.spark.storage.StorageLevel
  * Params for accelerated failure time (AFT) regression.
  */
 private[regression] trait AFTSurvivalRegressionParams extends PredictorParams
-  with HasMaxIter with HasTol with HasFitIntercept with HasAggregationDepth with HasBlockSize
-  with Logging {
+  with HasMaxIter with HasTol with HasFitIntercept with HasAggregationDepth
+  with HasMaxBlockSizeInMB with Logging {
 
   /**
    * Param for censor column name.
@@ -62,7 +63,6 @@ private[regression] trait AFTSurvivalRegressionParams extends PredictorParams
   /** @group getParam */
   @Since("1.6.0")
   def getCensorCol: String = $(censorCol)
-  setDefault(censorCol -> "censor")
 
   /**
    * Param for quantile probabilities array.
@@ -78,7 +78,6 @@ private[regression] trait AFTSurvivalRegressionParams extends PredictorParams
   /** @group getParam */
   @Since("1.6.0")
   def getQuantileProbabilities: Array[Double] = $(quantileProbabilities)
-  setDefault(quantileProbabilities -> Array(0.01, 0.05, 0.1, 0.25, 0.5, 0.75, 0.9, 0.95, 0.99))
 
   /**
    * Param for quantiles column name.
@@ -91,6 +90,11 @@ private[regression] trait AFTSurvivalRegressionParams extends PredictorParams
   /** @group getParam */
   @Since("1.6.0")
   def getQuantilesCol: String = $(quantilesCol)
+
+  setDefault(censorCol -> "censor",
+    quantileProbabilities -> Array(0.01, 0.05, 0.1, 0.25, 0.5, 0.75, 0.9, 0.95, 0.99),
+    fitIntercept -> true, maxIter -> 100, tol -> 1E-6, aggregationDepth -> 2,
+    maxBlockSizeInMB -> 0.0)
 
   /** Checks whether the input has quantiles column name. */
   private[regression] def hasQuantilesCol: Boolean = {
@@ -125,6 +129,10 @@ private[regression] trait AFTSurvivalRegressionParams extends PredictorParams
  * (see <a href="https://en.wikipedia.org/wiki/Accelerated_failure_time_model">
  * Accelerated failure time model (Wikipedia)</a>)
  * based on the Weibull distribution of the survival time.
+ *
+ * Since 3.1.0, it supports stacking instances into blocks and using GEMV for
+ * better performance.
+ * The block size will be 1.0 MB, if param maxBlockSizeInMB is set 0.0 by default.
  */
 @Since("1.6.0")
 class AFTSurvivalRegression @Since("1.6.0") (@Since("1.6.0") override val uid: String)
@@ -153,7 +161,6 @@ class AFTSurvivalRegression @Since("1.6.0") (@Since("1.6.0") override val uid: S
    */
   @Since("1.6.0")
   def setFitIntercept(value: Boolean): this.type = set(fitIntercept, value)
-  setDefault(fitIntercept -> true)
 
   /**
    * Set the maximum number of iterations.
@@ -162,7 +169,6 @@ class AFTSurvivalRegression @Since("1.6.0") (@Since("1.6.0") override val uid: S
    */
   @Since("1.6.0")
   def setMaxIter(value: Int): this.type = set(maxIter, value)
-  setDefault(maxIter -> 100)
 
   /**
    * Set the convergence tolerance of iterations.
@@ -172,7 +178,6 @@ class AFTSurvivalRegression @Since("1.6.0") (@Since("1.6.0") override val uid: S
    */
   @Since("1.6.0")
   def setTol(value: Double): this.type = set(tol, value)
-  setDefault(tol -> 1E-6)
 
   /**
    * Suggested depth for treeAggregate (greater than or equal to 2).
@@ -183,75 +188,65 @@ class AFTSurvivalRegression @Since("1.6.0") (@Since("1.6.0") override val uid: S
    */
   @Since("2.1.0")
   def setAggregationDepth(value: Int): this.type = set(aggregationDepth, value)
-  setDefault(aggregationDepth -> 2)
 
   /**
-   * Set block size for stacking input data in matrices.
-   * If blockSize == 1, then stacking will be skipped, and each vector is treated individually;
-   * If blockSize &gt; 1, then vectors will be stacked to blocks, and high-level BLAS routines
-   * will be used if possible (for example, GEMV instead of DOT, GEMM instead of GEMV).
-   * Recommended size is between 10 and 1000. An appropriate choice of the block size depends
-   * on the sparsity and dim of input datasets, the underlying BLAS implementation (for example,
-   * f2jBLAS, OpenBLAS, intel MKL) and its configuration (for example, number of threads).
-   * Note that existing BLAS implementations are mainly optimized for dense matrices, if the
-   * input dataset is sparse, stacking may bring no performance gain, the worse is possible
-   * performance regression.
-   * Default is 1.
+   * Sets the value of param [[maxBlockSizeInMB]].
+   * Default is 0.0, then 1.0 MB will be chosen.
    *
    * @group expertSetParam
    */
   @Since("3.1.0")
-  def setBlockSize(value: Int): this.type = set(blockSize, value)
-  setDefault(blockSize -> 1)
-
-  /**
-   * Extract [[featuresCol]], [[labelCol]] and [[censorCol]] from input dataset,
-   * and put it in an RDD with strong types.
-   */
-  protected[ml] def extractAFTPoints(dataset: Dataset[_]): RDD[AFTPoint] = {
-    dataset.select(col($(featuresCol)), col($(labelCol)).cast(DoubleType),
-      col($(censorCol)).cast(DoubleType)).rdd.map {
-        case Row(features: Vector, label: Double, censor: Double) =>
-          AFTPoint(features, label, censor)
-      }
-  }
+  def setMaxBlockSizeInMB(value: Double): this.type = set(maxBlockSizeInMB, value)
 
   override protected def train(
       dataset: Dataset[_]): AFTSurvivalRegressionModel = instrumented { instr =>
     instr.logPipelineStage(this)
     instr.logDataset(dataset)
     instr.logParams(this, labelCol, featuresCol, censorCol, predictionCol, quantilesCol,
-      fitIntercept, maxIter, tol, aggregationDepth, blockSize)
+      fitIntercept, maxIter, tol, aggregationDepth, maxBlockSizeInMB)
     instr.logNamedValue("quantileProbabilities.size", $(quantileProbabilities).length)
 
-    val instances = extractAFTPoints(dataset)
-      .setName("training instances")
-
-    if ($(blockSize) == 1 && dataset.storageLevel == StorageLevel.NONE) {
-      instances.persist(StorageLevel.MEMORY_AND_DISK)
+    if (dataset.storageLevel != StorageLevel.NONE) {
+      instr.logWarning(s"Input instances will be standardized, blockified to blocks, and " +
+        s"then cached during training. Be careful of double caching!")
     }
 
-    var requestedMetrics = Seq("mean", "std", "count")
-    if ($(blockSize) != 1) requestedMetrics +:= "numNonZeros"
+    val validatedCensorCol = {
+      val casted = col($(censorCol)).cast(DoubleType)
+      when(casted.isNull || casted.isNaN, raise_error(lit("Censors MUST NOT be Null or NaN")))
+        .when(casted =!= 0 && casted =!= 1,
+          raise_error(concat(lit("Censors MUST be in {0, 1}, but got "), casted)))
+        .otherwise(casted)
+    }
+
+    val instances = dataset.select(
+      checkRegressionLabels($(labelCol)),
+      validatedCensorCol,
+      checkNonNanVectors($(featuresCol))
+    ).rdd.map { case Row(l: Double, c: Double, v: Vector) =>
+      // AFT does not support instance weighting,
+      // here use Instance.weight to store censor for convenience
+      Instance(l, c, v)
+    }.setName("training instances")
+
     val summarizer = instances.treeAggregate(
-      Summarizer.createSummarizerBuffer(requestedMetrics: _*))(
-      seqOp = (c: SummarizerBuffer, v: AFTPoint) => c.add(v.features),
+      Summarizer.createSummarizerBuffer("mean", "std", "count"))(
+      seqOp = (c: SummarizerBuffer, i: Instance) => c.add(i.features),
       combOp = (c1: SummarizerBuffer, c2: SummarizerBuffer) => c1.merge(c2),
       depth = $(aggregationDepth)
     )
 
+    val featuresMean = summarizer.mean.toArray
     val featuresStd = summarizer.std.toArray
     val numFeatures = featuresStd.length
     instr.logNumFeatures(numFeatures)
     instr.logNumExamples(summarizer.count)
-    if ($(blockSize) > 1) {
-      val scale = 1.0 / summarizer.count / numFeatures
-      val sparsity = 1 - summarizer.numNonzeros.toArray.map(_ * scale).sum
-      instr.logNamedValue("sparsity", sparsity.toString)
-      if (sparsity > 0.5) {
-        instr.logWarning(s"sparsity of input dataset is $sparsity, " +
-          s"which may hurt performance in high-level BLAS.")
-      }
+
+    var actualBlockSizeInMB = $(maxBlockSizeInMB)
+    if (actualBlockSizeInMB == 0) {
+      actualBlockSizeInMB = InstanceBlock.DefaultBlockSizeInMB
+      require(actualBlockSizeInMB > 0, "inferred actual BlockSizeInMB must > 0")
+      instr.logNamedValue("actualBlockSizeInMB", actualBlockSizeInMB.toString)
     }
 
     if (!$(fitIntercept) && (0 until numFeatures).exists { i =>
@@ -269,14 +264,11 @@ class AFTSurvivalRegression @Since("1.6.0") (@Since("1.6.0") override val uid: S
        the second element: Double, intercept of the beta parameter
        the third to the end elements: Doubles, regression coefficients vector of the beta parameter
      */
-    val initialParameters = Vectors.zeros(numFeatures + 2)
+    val initialSolution = Array.ofDim[Double](numFeatures + 2)
 
-    val (rawCoefficients, objectiveHistory) = if ($(blockSize) == 1) {
-      trainOnRows(instances, featuresStd, optimizer, initialParameters)
-    } else {
-      trainOnBlocks(instances, featuresStd, optimizer, initialParameters)
-    }
-    if (instances.getStorageLevel != StorageLevel.NONE) instances.unpersist()
+    val (rawCoefficients, objectiveHistory) =
+      trainImpl(instances, actualBlockSizeInMB, featuresStd, featuresMean,
+        optimizer, initialSolution)
 
     if (rawCoefficients == null) {
       val msg = s"${optimizer.getClass.getName} failed."
@@ -293,53 +285,44 @@ class AFTSurvivalRegression @Since("1.6.0") (@Since("1.6.0") override val uid: S
     new AFTSurvivalRegressionModel(uid, coefficients, intercept, scale)
   }
 
-  private def trainOnRows(
-      instances: RDD[AFTPoint],
+  private def trainImpl(
+      instances: RDD[Instance],
+      actualBlockSizeInMB: Double,
       featuresStd: Array[Double],
+      featuresMean: Array[Double],
       optimizer: BreezeLBFGS[BDV[Double]],
-      initialParameters: Vector): (Array[Double], Array[Double]) = {
-    val bcFeaturesStd = instances.context.broadcast(featuresStd)
-    val getAggregatorFunc = new AFTAggregator(bcFeaturesStd, $(fitIntercept))(_)
-    val costFun = new RDDLossFunction(instances, getAggregatorFunc, None, $(aggregationDepth))
+      initialSolution: Array[Double]): (Array[Double], Array[Double]) = {
+    val numFeatures = featuresStd.length
+    val inverseStd = featuresStd.map(std => if (std != 0) 1.0 / std else 0.0)
+    val scaledMean = Array.tabulate(numFeatures)(i => inverseStd(i) * featuresMean(i))
+    val bcInverseStd = instances.context.broadcast(inverseStd)
+    val bcScaledMean = instances.context.broadcast(scaledMean)
 
-    val states = optimizer.iterations(new CachedDiffFunction(costFun),
-      initialParameters.asBreeze.toDenseVector)
-
-    val arrayBuilder = mutable.ArrayBuilder.make[Double]
-    var state: optimizer.State = null
-    while (states.hasNext) {
-      state = states.next()
-      arrayBuilder += state.adjustedValue
+    val scaled = instances.mapPartitions { iter =>
+      val func = StandardScalerModel.getTransformFunc(Array.empty, bcInverseStd.value, false, true)
+      iter.map { case Instance(label, weight, vec) => Instance(label, weight, func(vec)) }
     }
-    bcFeaturesStd.destroy()
 
-    (if (state != null) state.x.toArray else null, arrayBuilder.result)
-  }
+    val maxMemUsage = (actualBlockSizeInMB * 1024L * 1024L).ceil.toLong
+    val blocks = InstanceBlock.blokifyWithMaxMemUsage(scaled, maxMemUsage)
+      .persist(StorageLevel.MEMORY_AND_DISK)
+      .setName(s"training blocks (blockSizeInMB=$actualBlockSizeInMB)")
 
-  private def trainOnBlocks(
-      instances: RDD[AFTPoint],
-      featuresStd: Array[Double],
-      optimizer: BreezeLBFGS[BDV[Double]],
-      initialParameters: Vector): (Array[Double], Array[Double]) = {
-    val bcFeaturesStd = instances.context.broadcast(featuresStd)
-    val blocks = instances.mapPartitions { iter =>
-      val inverseStd = bcFeaturesStd.value.map { std => if (std != 0) 1.0 / std else 0.0 }
-      val func = StandardScalerModel.getTransformFunc(Array.empty, inverseStd, false, true)
-      iter.grouped($(blockSize)).map { seq =>
-        val matrix = Matrices.fromVectors(seq.map(point => func(point.features)))
-        val labels = seq.map(_.label).toArray
-        val censors = seq.map(_.censor).toArray
-        (matrix, labels, censors)
-      }
-    }
-    blocks.persist(StorageLevel.MEMORY_AND_DISK)
-      .setName(s"training blocks (blockSize=${$(blockSize)})")
-
-    val getAggregatorFunc = new BlockAFTAggregator($(fitIntercept))(_)
+    val getAggregatorFunc = new AFTBlockAggregator(bcScaledMean, $(fitIntercept))(_)
     val costFun = new RDDLossFunction(blocks, getAggregatorFunc, None, $(aggregationDepth))
 
+    if ($(fitIntercept)) {
+      // original `initialSolution` is for problem:
+      // y = f(w1 * x1 / std_x1, w2 * x2 / std_x2, ..., intercept)
+      // we should adjust it to the initial solution for problem:
+      // y = f(w1 * (x1 - avg_x1) / std_x1, w2 * (x2 - avg_x2) / std_x2, ..., intercept)
+      // NOTE: this is NOOP before we finally support model initialization
+      val adapt = BLAS.javaBLAS.ddot(numFeatures, initialSolution, 1, scaledMean, 1)
+      initialSolution(numFeatures) += adapt
+    }
+
     val states = optimizer.iterations(new CachedDiffFunction(costFun),
-      initialParameters.asBreeze.toDenseVector)
+      new BDV[Double](initialSolution))
 
     val arrayBuilder = mutable.ArrayBuilder.make[Double]
     var state: optimizer.State = null
@@ -348,9 +331,19 @@ class AFTSurvivalRegression @Since("1.6.0") (@Since("1.6.0") override val uid: S
       arrayBuilder += state.adjustedValue
     }
     blocks.unpersist()
-    bcFeaturesStd.destroy()
+    bcInverseStd.destroy()
+    bcScaledMean.destroy()
 
-    (if (state != null) state.x.toArray else null, arrayBuilder.result)
+    val solution = if (state == null) null else state.x.toArray
+    if ($(fitIntercept) && solution != null) {
+      // the final solution is for problem:
+      // y = f(w1 * (x1 - avg_x1) / std_x1, w2 * (x2 - avg_x2) / std_x2, ..., intercept)
+      // we should adjust it back for original problem:
+      // y = f(w1 * x1 / std_x1, w2 * x2 / std_x2, ..., intercept)
+      val adapt = BLAS.getBLAS(numFeatures).ddot(numFeatures, solution, 1, scaledMean, 1)
+      solution(numFeatures) -= adapt
+    }
+    (solution, arrayBuilder.result)
   }
 
   @Since("1.6.0")
@@ -392,16 +385,30 @@ class AFTSurvivalRegressionModel private[ml] (
   @Since("1.6.0")
   def setQuantilesCol(value: String): this.type = set(quantilesCol, value)
 
+  private var _quantiles: Vector = _
+
+  private[ml] override def onParamChange(param: Param[_]): Unit = {
+    if (param.name == "quantileProbabilities") {
+      if (isDefined(quantileProbabilities)) {
+        _quantiles = Vectors.dense(
+          $(quantileProbabilities).map(q => math.exp(math.log(-math.log1p(-q)) * scale)))
+      } else {
+        _quantiles = null
+      }
+    }
+  }
+
+  private def lambda2Quantiles(lambda: Double): Vector = {
+    val quantiles = _quantiles.copy
+    BLAS.scal(lambda, quantiles)
+    quantiles
+  }
+
   @Since("2.0.0")
   def predictQuantiles(features: Vector): Vector = {
     // scale parameter for the Weibull distribution of lifetime
-    val lambda = math.exp(BLAS.dot(coefficients, features) + intercept)
-    // shape parameter for the Weibull distribution of lifetime
-    val k = 1 / scale
-    val quantiles = $(quantileProbabilities).map {
-      q => lambda * math.exp(math.log(-math.log1p(-q)) / k)
-    }
-    Vectors.dense(quantiles)
+    val lambda = predict(features)
+    lambda2Quantiles(lambda)
   }
 
   @Since("2.0.0")
@@ -417,16 +424,20 @@ class AFTSurvivalRegressionModel private[ml] (
     var predictionColumns = Seq.empty[Column]
 
     if ($(predictionCol).nonEmpty) {
-      val predictUDF = udf { features: Vector => predict(features) }
+      val predCol = udf(predict _).apply(col($(featuresCol)))
       predictionColNames :+= $(predictionCol)
-      predictionColumns :+= predictUDF(col($(featuresCol)))
+      predictionColumns :+= predCol
         .as($(predictionCol), outputSchema($(predictionCol)).metadata)
     }
 
     if (hasQuantilesCol) {
-      val predictQuantilesUDF = udf { features: Vector => predictQuantiles(features)}
+      val quanCol = if ($(predictionCol).nonEmpty) {
+        udf(lambda2Quantiles _).apply(predictionColumns.head)
+      } else {
+        udf(predictQuantiles _).apply(col($(featuresCol)))
+      }
       predictionColNames :+= $(quantilesCol)
-      predictionColumns :+= predictQuantilesUDF(col($(featuresCol)))
+      predictionColumns :+= quanCol
         .as($(quantilesCol), outputSchema($(quantilesCol)).metadata)
     }
 

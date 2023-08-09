@@ -23,11 +23,10 @@ import javax.net.ssl.SSLContext
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.security.alias.{CredentialProvider, CredentialProviderFactory}
-import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.util.SparkConfWithEnv
 
-class SSLOptionsSuite extends SparkFunSuite with BeforeAndAfterAll {
+class SSLOptionsSuite extends SparkFunSuite {
 
   test("test resolving property file as spark conf ") {
     val keyStorePath = new File(this.getClass.getResource("/keystore").toURI).getAbsolutePath
@@ -110,7 +109,7 @@ class SSLOptionsSuite extends SparkFunSuite with BeforeAndAfterAll {
     val conf = new SparkConf
     val hadoopConf = new Configuration()
     conf.set("spark.ssl.enabled", "true")
-    conf.set("spark.ssl.ui.enabled", "false")
+    conf.set("spark.ssl.ui.enabled", "true")
     conf.set("spark.ssl.ui.port", "4242")
     conf.set("spark.ssl.keyStore", keyStorePath)
     conf.set("spark.ssl.keyStorePassword", "password")
@@ -126,7 +125,7 @@ class SSLOptionsSuite extends SparkFunSuite with BeforeAndAfterAll {
     val defaultOpts = SSLOptions.parse(conf, hadoopConf, "spark.ssl", defaults = None)
     val opts = SSLOptions.parse(conf, hadoopConf, "spark.ssl.ui", defaults = Some(defaultOpts))
 
-    assert(opts.enabled === false)
+    assert(opts.enabled === true)
     assert(opts.port === Some(4242))
     assert(opts.trustStore.isDefined)
     assert(opts.trustStore.get.getName === "truststore")
@@ -139,6 +138,20 @@ class SSLOptionsSuite extends SparkFunSuite with BeforeAndAfterAll {
     assert(opts.keyPassword === Some("password"))
     assert(opts.protocol === Some("SSLv3"))
     assert(opts.enabledAlgorithms === Set("ABC", "DEF"))
+  }
+
+  test("SPARK-41719: Skip ssl sub-settings if ssl is disabled") {
+    val keyStorePath = new File(this.getClass.getResource("/keystore").toURI).getAbsolutePath
+    val conf = new SparkConf
+    val hadoopConf = new Configuration()
+    conf.set("spark.ssl.enabled", "false")
+    conf.set("spark.ssl.keyStorePassword", "password")
+    conf.set("spark.ssl.keyStore", keyStorePath)
+    val sslOpts = SSLOptions.parse(conf, hadoopConf, "spark.ssl", defaults = None)
+
+    assert(sslOpts.enabled === false)
+    assert(sslOpts.keyStorePassword === None)
+    assert(sslOpts.keyStore === None)
   }
 
   test("variable substitution") {

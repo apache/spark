@@ -19,11 +19,14 @@ package org.apache.spark.sql.hive.execution
 
 import java.io.File
 
+import org.apache.spark.tags.SlowHiveTest
+
 
 /**
  * A set of test cases based on the big-data-benchmark.
  * https://amplab.cs.berkeley.edu/benchmark/
  */
+@SlowHiveTest
 class BigDataBenchmarkSuite extends HiveComparisonTest {
   import org.apache.spark.sql.hive.test.TestHive.sparkSession._
 
@@ -111,7 +114,7 @@ class BigDataBenchmarkSuite extends HiveComparisonTest {
         |DROP TABLE IF EXISTS url_counts_partial;
         |CREATE TABLE url_counts_partial AS
         |  SELECT TRANSFORM (line)
-        |  USING 'python target/url_count.py' as (sourcePage,
+        |  USING 'python3 target/url_count.py' as (sourcePage,
         |    destPage, count) from documents;
         |DROP TABLE IF EXISTS url_counts_total;
         |CREATE TABLE url_counts_total AS

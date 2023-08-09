@@ -17,51 +17,23 @@
 
 package org.apache.spark.sql.execution.command
 
-import java.net.URI
-import java.util.Locale
-
-import scala.reflect.{classTag, ClassTag}
-
-import org.apache.spark.sql.{AnalysisException, SaveMode}
-import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, UnresolvedAttribute}
-import org.apache.spark.sql.catalyst.catalog._
+import org.apache.spark.SparkThrowable
+import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, GlobalTempView, LocalTempView, UnresolvedAttribute, UnresolvedFunctionName, UnresolvedIdentifier}
+import org.apache.spark.sql.catalyst.catalog.{ArchiveResource, FileResource, FunctionResource, JarResource}
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans
 import org.apache.spark.sql.catalyst.dsl.plans.DslLogicalPlan
 import org.apache.spark.sql.catalyst.expressions.JsonTuple
-import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.connector.expressions.{FieldReference, IdentityTransform}
 import org.apache.spark.sql.execution.SparkSqlParser
-import org.apache.spark.sql.execution.datasources.CreateTable
-import org.apache.spark.sql.internal.{HiveSerDe, SQLConf}
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.{IntegerType, StructField, StructType}
 
 class DDLParserSuite extends AnalysisTest with SharedSparkSession {
-  private lazy val parser = new SparkSqlParser(new SQLConf)
+  import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
+  private lazy val parser = new SparkSqlParser()
 
-  private def assertUnsupported(sql: String, containsThesePhrases: Seq[String] = Seq()): Unit = {
-    val e = intercept[ParseException] {
-      parser.parsePlan(sql)
-    }
-    assert(e.getMessage.toLowerCase(Locale.ROOT).contains("operation not allowed"))
-    containsThesePhrases.foreach { p =>
-      assert(e.getMessage.toLowerCase(Locale.ROOT).contains(p.toLowerCase(Locale.ROOT)))
-    }
-  }
-
-  private def intercept(sqlCommand: String, messages: String*): Unit =
-    interceptParseException(parser.parsePlan)(sqlCommand, messages: _*)
-
-  private def parseAs[T: ClassTag](query: String): T = {
-    parser.parsePlan(query) match {
-      case t: T => t
-      case other =>
-        fail(s"Expected to parse ${classTag[T].runtimeClass} from query," +
-          s"got ${other.getClass.getName}: $query")
-    }
+  private def parseException(sqlText: String): SparkThrowable = {
+    super.parseException(parser.parsePlan)(sqlText)
   }
 
   private def compareTransformQuery(sql: String, expected: LogicalPlan): Unit = {
@@ -69,140 +41,10 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
     comparePlans(plan, expected, checkAnalysis = false)
   }
 
-  private def extractTableDesc(sql: String): (CatalogTable, Boolean) = {
-    parser.parsePlan(sql).collect {
-      case CreateTable(tableDesc, mode, _) => (tableDesc, mode == SaveMode.Ignore)
-    }.head
-  }
-
-  test("alter database - property values must be set") {
-    assertUnsupported(
-      sql = "ALTER DATABASE my_db SET DBPROPERTIES('key_without_value', 'key_with_value'='x')",
-      containsThesePhrases = Seq("key_without_value"))
-  }
-
-  test("create hive table - table file format") {
-    val allSources = Seq("parquet", "parquetfile", "orc", "orcfile", "avro", "avrofile",
-      "sequencefile", "rcfile", "textfile")
-
-    allSources.foreach { s =>
-      val query = s"CREATE TABLE my_tab STORED AS $s"
-      val ct = parseAs[CreateTable](query)
-      val hiveSerde = HiveSerDe.sourceToSerDe(s)
-      assert(hiveSerde.isDefined)
-      assert(ct.tableDesc.storage.serde ==
-        hiveSerde.get.serde.orElse(Some("org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe")))
-      assert(ct.tableDesc.storage.inputFormat == hiveSerde.get.inputFormat)
-      assert(ct.tableDesc.storage.outputFormat == hiveSerde.get.outputFormat)
-    }
-  }
-
-  test("create hive table - row format and table file format") {
-    val createTableStart = "CREATE TABLE my_tab ROW FORMAT"
-    val fileFormat = s"STORED AS INPUTFORMAT 'inputfmt' OUTPUTFORMAT 'outputfmt'"
-    val query1 = s"$createTableStart SERDE 'anything' $fileFormat"
-    val query2 = s"$createTableStart DELIMITED FIELDS TERMINATED BY ' ' $fileFormat"
-
-    // No conflicting serdes here, OK
-    val parsed1 = parseAs[CreateTable](query1)
-    assert(parsed1.tableDesc.storage.serde == Some("anything"))
-    assert(parsed1.tableDesc.storage.inputFormat == Some("inputfmt"))
-    assert(parsed1.tableDesc.storage.outputFormat == Some("outputfmt"))
-
-    val parsed2 = parseAs[CreateTable](query2)
-    assert(parsed2.tableDesc.storage.serde ==
-      Some("org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe"))
-    assert(parsed2.tableDesc.storage.inputFormat == Some("inputfmt"))
-    assert(parsed2.tableDesc.storage.outputFormat == Some("outputfmt"))
-  }
-
-  test("create hive table - row format serde and generic file format") {
-    val allSources = Seq("parquet", "orc", "avro", "sequencefile", "rcfile", "textfile")
-    val supportedSources = Set("sequencefile", "rcfile", "textfile")
-
-    allSources.foreach { s =>
-      val query = s"CREATE TABLE my_tab ROW FORMAT SERDE 'anything' STORED AS $s"
-      if (supportedSources.contains(s)) {
-        val ct = parseAs[CreateTable](query)
-        val hiveSerde = HiveSerDe.sourceToSerDe(s)
-        assert(hiveSerde.isDefined)
-        assert(ct.tableDesc.storage.serde == Some("anything"))
-        assert(ct.tableDesc.storage.inputFormat == hiveSerde.get.inputFormat)
-        assert(ct.tableDesc.storage.outputFormat == hiveSerde.get.outputFormat)
-      } else {
-        assertUnsupported(query, Seq("row format serde", "incompatible", s))
-      }
-    }
-  }
-
-  test("create hive table - row format delimited and generic file format") {
-    val allSources = Seq("parquet", "orc", "avro", "sequencefile", "rcfile", "textfile")
-    val supportedSources = Set("textfile")
-
-    allSources.foreach { s =>
-      val query = s"CREATE TABLE my_tab ROW FORMAT DELIMITED FIELDS TERMINATED BY ' ' STORED AS $s"
-      if (supportedSources.contains(s)) {
-        val ct = parseAs[CreateTable](query)
-        val hiveSerde = HiveSerDe.sourceToSerDe(s)
-        assert(hiveSerde.isDefined)
-        assert(ct.tableDesc.storage.serde ==
-          hiveSerde.get.serde.orElse(Some("org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe")))
-        assert(ct.tableDesc.storage.inputFormat == hiveSerde.get.inputFormat)
-        assert(ct.tableDesc.storage.outputFormat == hiveSerde.get.outputFormat)
-      } else {
-        assertUnsupported(query, Seq("row format delimited", "only compatible with 'textfile'", s))
-      }
-    }
-  }
-
-  test("create hive external table - location must be specified") {
-    assertUnsupported(
-      sql = "CREATE EXTERNAL TABLE my_tab STORED AS parquet",
-      containsThesePhrases = Seq("create external table", "location"))
-    val query = "CREATE EXTERNAL TABLE my_tab STORED AS parquet LOCATION '/something/anything'"
-    val ct = parseAs[CreateTable](query)
-    assert(ct.tableDesc.tableType == CatalogTableType.EXTERNAL)
-    assert(ct.tableDesc.storage.locationUri == Some(new URI("/something/anything")))
-  }
-
-  test("create hive table - property values must be set") {
-    assertUnsupported(
-      sql = "CREATE TABLE my_tab STORED AS parquet " +
-        "TBLPROPERTIES('key_without_value', 'key_with_value'='x')",
-      containsThesePhrases = Seq("key_without_value"))
-    assertUnsupported(
-      sql = "CREATE TABLE my_tab ROW FORMAT SERDE 'serde' " +
-        "WITH SERDEPROPERTIES('key_without_value', 'key_with_value'='x')",
-      containsThesePhrases = Seq("key_without_value"))
-  }
-
-  test("create hive table - location implies external") {
-    val query = "CREATE TABLE my_tab STORED AS parquet LOCATION '/something/anything'"
-    val ct = parseAs[CreateTable](query)
-    assert(ct.tableDesc.tableType == CatalogTableType.EXTERNAL)
-    assert(ct.tableDesc.storage.locationUri == Some(new URI("/something/anything")))
-  }
-
-  test("Duplicate clauses - create hive table") {
-    def createTableHeader(duplicateClause: String): String = {
-      s"CREATE TABLE my_tab(a INT, b STRING) STORED AS parquet $duplicateClause $duplicateClause"
-    }
-
-    intercept(createTableHeader("TBLPROPERTIES('test' = 'test2')"),
-      "Found duplicate clauses: TBLPROPERTIES")
-    intercept(createTableHeader("LOCATION '/tmp/file'"),
-      "Found duplicate clauses: LOCATION")
-    intercept(createTableHeader("COMMENT 'a table'"),
-      "Found duplicate clauses: COMMENT")
-    intercept(createTableHeader("CLUSTERED BY(b) INTO 256 BUCKETS"),
-      "Found duplicate clauses: CLUSTERED BY")
-    intercept(createTableHeader("PARTITIONED BY (k int)"),
-      "Found duplicate clauses: PARTITIONED BY")
-    intercept(createTableHeader("STORED AS parquet"),
-      "Found duplicate clauses: STORED AS/BY")
-    intercept(
-      createTableHeader("ROW FORMAT SERDE 'parquet.hive.serde.ParquetHiveSerDe'"),
-      "Found duplicate clauses: ROW FORMAT")
+  test("show current namespace") {
+    comparePlans(
+      parser.parsePlan("SHOW CURRENT NAMESPACE"),
+      ShowCurrentNamespaceCommand())
   }
 
   test("insert overwrite directory") {
@@ -216,11 +58,14 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
     }
 
     val v2 = "INSERT OVERWRITE DIRECTORY USING parquet SELECT 1 as a"
-    val e2 = intercept[ParseException] {
-      parser.parsePlan(v2)
-    }
-    assert(e2.message.contains(
-      "Directory path and 'path' in OPTIONS should be specified one, but not both"))
+    checkError(
+      exception = parseException(v2),
+      errorClass = "_LEGACY_ERROR_TEMP_0049",
+      parameters = Map.empty,
+      context = ExpectedContext(
+        fragment = "INSERT OVERWRITE DIRECTORY USING parquet",
+        start = 0,
+        stop = 39))
 
     val v3 =
       """
@@ -242,102 +87,271 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
     }
 
     val v4 =
-      """
-        | INSERT OVERWRITE DIRECTORY '/tmp/file' USING json
+      """INSERT OVERWRITE DIRECTORY '/tmp/file' USING json
         | OPTIONS ('path' '/tmp/file', a 1, b 0.1, c TRUE)
-        | SELECT 1 as a
-      """.stripMargin
-    val e4 = intercept[ParseException] {
-      parser.parsePlan(v4)
-    }
-    assert(e4.message.contains(
-      "Directory path and 'path' in OPTIONS should be specified one, but not both"))
+        | SELECT 1 as a""".stripMargin
+    val fragment4 =
+      """INSERT OVERWRITE DIRECTORY '/tmp/file' USING json
+        | OPTIONS ('path' '/tmp/file', a 1, b 0.1, c TRUE)""".stripMargin
+    checkError(
+      exception = parseException(v4),
+      errorClass = "_LEGACY_ERROR_TEMP_0049",
+      parameters = Map.empty,
+      context = ExpectedContext(
+        fragment = fragment4,
+        start = 0,
+        stop = 98))
   }
 
   test("alter table - property values must be set") {
-    assertUnsupported(
-      sql = "ALTER TABLE my_tab SET TBLPROPERTIES('key_without_value', 'key_with_value'='x')",
-      containsThesePhrases = Seq("key_without_value"))
+    val sql = "ALTER TABLE my_tab SET TBLPROPERTIES('key_without_value', 'key_with_value'='x')"
+    checkError(
+      exception = parseException(sql),
+      errorClass = "_LEGACY_ERROR_TEMP_0035",
+      parameters = Map("message" -> "Values must be specified for key(s): [key_without_value]"),
+      context = ExpectedContext(
+        fragment = sql,
+        start = 0,
+        stop = 78))
   }
 
   test("alter table unset properties - property values must NOT be set") {
-    assertUnsupported(
-      sql = "ALTER TABLE my_tab UNSET TBLPROPERTIES('key_without_value', 'key_with_value'='x')",
-      containsThesePhrases = Seq("key_with_value"))
-  }
-
-  test("alter table - SerDe property values must be set") {
-    assertUnsupported(
-      sql = "ALTER TABLE my_tab SET SERDE 'serde' " +
-        "WITH SERDEPROPERTIES('key_without_value', 'key_with_value'='x')",
-      containsThesePhrases = Seq("key_without_value"))
+    val sql = "ALTER TABLE my_tab UNSET TBLPROPERTIES('key_without_value', 'key_with_value'='x')"
+    checkError(
+      exception = parseException(sql),
+      errorClass = "_LEGACY_ERROR_TEMP_0035",
+      parameters = Map("message" -> "Values should not be specified for key(s): [key_with_value]"),
+      context = ExpectedContext(
+        fragment = sql,
+        start = 0,
+        stop = 80))
   }
 
   test("alter table: exchange partition (not supported)") {
-    assertUnsupported(
-      """
-       |ALTER TABLE table_name_1 EXCHANGE PARTITION
-       |(dt='2008-08-08', country='us') WITH TABLE table_name_2
-      """.stripMargin)
+    val sql =
+      """ALTER TABLE table_name_1 EXCHANGE PARTITION
+        |(dt='2008-08-08', country='us') WITH TABLE table_name_2""".stripMargin
+    checkError(
+      exception = parseException(sql),
+      errorClass = "_LEGACY_ERROR_TEMP_0035",
+      parameters = Map("message" -> "ALTER TABLE EXCHANGE PARTITION"),
+      context = ExpectedContext(
+        fragment = sql,
+        start = 0,
+        stop = 98))
   }
 
   test("alter table: archive partition (not supported)") {
-    assertUnsupported("ALTER TABLE table_name ARCHIVE PARTITION (dt='2008-08-08', country='us')")
+    val sql = "ALTER TABLE table_name ARCHIVE PARTITION (dt='2008-08-08', country='us')"
+    checkError(
+      exception = parseException(sql),
+      errorClass = "_LEGACY_ERROR_TEMP_0035",
+      parameters = Map("message" -> "ALTER TABLE ARCHIVE PARTITION"),
+      context = ExpectedContext(
+        fragment = sql,
+        start = 0,
+        stop = 71))
   }
 
   test("alter table: unarchive partition (not supported)") {
-    assertUnsupported("ALTER TABLE table_name UNARCHIVE PARTITION (dt='2008-08-08', country='us')")
+    val sql = "ALTER TABLE table_name UNARCHIVE PARTITION (dt='2008-08-08', country='us')"
+    checkError(
+      exception = parseException(sql),
+      errorClass = "_LEGACY_ERROR_TEMP_0035",
+      parameters = Map("message" -> "ALTER TABLE UNARCHIVE PARTITION"),
+      context = ExpectedContext(
+        fragment = sql,
+        start = 0,
+        stop = 73))
   }
 
   test("alter table: set file format (not allowed)") {
-    assertUnsupported(
-      "ALTER TABLE table_name SET FILEFORMAT INPUTFORMAT 'test' OUTPUTFORMAT 'test'")
-    assertUnsupported(
-      "ALTER TABLE table_name PARTITION (dt='2008-08-08', country='us') " +
-        "SET FILEFORMAT PARQUET")
+    val sql1 = "ALTER TABLE table_name SET FILEFORMAT INPUTFORMAT 'test' OUTPUTFORMAT 'test'"
+    checkError(
+      exception = parseException(sql1),
+      errorClass = "_LEGACY_ERROR_TEMP_0035",
+      parameters = Map("message" -> "ALTER TABLE SET FILEFORMAT"),
+      context = ExpectedContext(
+        fragment = sql1,
+        start = 0,
+        stop = 75))
+
+    val sql2 = "ALTER TABLE table_name PARTITION (dt='2008-08-08', country='us') " +
+      "SET FILEFORMAT PARQUET"
+    checkError(
+      exception = parseException(sql2),
+      errorClass = "_LEGACY_ERROR_TEMP_0035",
+      parameters = Map("message" -> "ALTER TABLE SET FILEFORMAT"),
+      context = ExpectedContext(
+        fragment = sql2,
+        start = 0,
+        stop = 86))
   }
 
   test("alter table: touch (not supported)") {
-    assertUnsupported("ALTER TABLE table_name TOUCH")
-    assertUnsupported("ALTER TABLE table_name TOUCH PARTITION (dt='2008-08-08', country='us')")
+    val sql1 = "ALTER TABLE table_name TOUCH"
+    checkError(
+      exception = parseException(sql1),
+      errorClass = "_LEGACY_ERROR_TEMP_0035",
+      parameters = Map("message" -> "ALTER TABLE TOUCH"),
+      context = ExpectedContext(
+        fragment = sql1,
+        start = 0,
+        stop = 27))
+
+    val sql2 = "ALTER TABLE table_name TOUCH PARTITION (dt='2008-08-08', country='us')"
+    checkError(
+      exception = parseException(sql2),
+      errorClass = "_LEGACY_ERROR_TEMP_0035",
+      parameters = Map("message" -> "ALTER TABLE TOUCH"),
+      context = ExpectedContext(
+        fragment = sql2,
+        start = 0,
+        stop = 69))
   }
 
   test("alter table: compact (not supported)") {
-    assertUnsupported("ALTER TABLE table_name COMPACT 'compaction_type'")
-    assertUnsupported(
-      """
-        |ALTER TABLE table_name PARTITION (dt='2008-08-08', country='us')
-        |COMPACT 'MAJOR'
-      """.stripMargin)
+    val sql1 = "ALTER TABLE table_name COMPACT 'compaction_type'"
+    checkError(
+      exception = parseException(sql1),
+      errorClass = "_LEGACY_ERROR_TEMP_0035",
+      parameters = Map("message" -> "ALTER TABLE COMPACT"),
+      context = ExpectedContext(
+        fragment = sql1,
+        start = 0,
+        stop = 47))
+
+    val sql2 =
+      """ALTER TABLE table_name PARTITION (dt='2008-08-08', country='us')
+        |COMPACT 'MAJOR'""".stripMargin
+    checkError(
+      exception = parseException(sql2),
+      errorClass = "_LEGACY_ERROR_TEMP_0035",
+      parameters = Map("message" -> "ALTER TABLE COMPACT"),
+      context = ExpectedContext(
+        fragment = sql2,
+        start = 0,
+        stop = 79))
   }
 
   test("alter table: concatenate (not supported)") {
-    assertUnsupported("ALTER TABLE table_name CONCATENATE")
-    assertUnsupported(
-      "ALTER TABLE table_name PARTITION (dt='2008-08-08', country='us') CONCATENATE")
+    val sql1 = "ALTER TABLE table_name CONCATENATE"
+    checkError(
+      exception = parseException(sql1),
+      errorClass = "_LEGACY_ERROR_TEMP_0035",
+      parameters = Map("message" -> "ALTER TABLE CONCATENATE"),
+      context = ExpectedContext(
+        fragment = sql1,
+        start = 0,
+        stop = 33))
+
+    val sql2 = "ALTER TABLE table_name PARTITION (dt='2008-08-08', country='us') CONCATENATE"
+    checkError(
+      exception = parseException(sql2),
+      errorClass = "_LEGACY_ERROR_TEMP_0035",
+      parameters = Map("message" -> "ALTER TABLE CONCATENATE"),
+      context = ExpectedContext(
+        fragment = sql2,
+        start = 0,
+        stop = 75))
   }
 
   test("alter table: cluster by (not supported)") {
-    assertUnsupported(
-      "ALTER TABLE table_name CLUSTERED BY (col_name) SORTED BY (col2_name) INTO 3 BUCKETS")
-    assertUnsupported("ALTER TABLE table_name CLUSTERED BY (col_name) INTO 3 BUCKETS")
-    assertUnsupported("ALTER TABLE table_name NOT CLUSTERED")
-    assertUnsupported("ALTER TABLE table_name NOT SORTED")
+    val sql1 = "ALTER TABLE table_name CLUSTERED BY (col_name) SORTED BY (col2_name) INTO 3 BUCKETS"
+    checkError(
+      exception = parseException(sql1),
+      errorClass = "_LEGACY_ERROR_TEMP_0035",
+      parameters = Map("message" -> "ALTER TABLE CLUSTERED BY"),
+      context = ExpectedContext(
+        fragment = sql1,
+        start = 0,
+        stop = 82))
+
+    val sql2 = "ALTER TABLE table_name CLUSTERED BY (col_name) INTO 3 BUCKETS"
+    checkError(
+      exception = parseException(sql2),
+      errorClass = "_LEGACY_ERROR_TEMP_0035",
+      parameters = Map("message" -> "ALTER TABLE CLUSTERED BY"),
+      context = ExpectedContext(
+        fragment = sql2,
+        start = 0,
+        stop = 60))
+
+    val sql3 = "ALTER TABLE table_name NOT CLUSTERED"
+    checkError(
+      exception = parseException(sql3),
+      errorClass = "_LEGACY_ERROR_TEMP_0035",
+      parameters = Map("message" -> "ALTER TABLE NOT CLUSTERED"),
+      context = ExpectedContext(
+        fragment = sql3,
+        start = 0,
+        stop = 35))
+
+    val sql4 = "ALTER TABLE table_name NOT SORTED"
+    checkError(
+      exception = parseException(sql4),
+      errorClass = "_LEGACY_ERROR_TEMP_0035",
+      parameters = Map("message" -> "ALTER TABLE NOT SORTED"),
+      context = ExpectedContext(
+        fragment = sql4,
+        start = 0,
+        stop = 32))
   }
 
   test("alter table: skewed by (not supported)") {
-    assertUnsupported("ALTER TABLE table_name NOT SKEWED")
-    assertUnsupported("ALTER TABLE table_name NOT STORED AS DIRECTORIES")
-    assertUnsupported("ALTER TABLE table_name SET SKEWED LOCATION (col_name1=\"location1\"")
-    assertUnsupported("ALTER TABLE table_name SKEWED BY (key) ON (1,5,6) STORED AS DIRECTORIES")
+    val sql1 = "ALTER TABLE table_name NOT SKEWED"
+    checkError(
+      exception = parseException(sql1),
+      errorClass = "_LEGACY_ERROR_TEMP_0035",
+      parameters = Map("message" -> "ALTER TABLE NOT SKEWED"),
+      context = ExpectedContext(
+        fragment = sql1,
+        start = 0,
+        stop = 32))
+
+    val sql2 = "ALTER TABLE table_name NOT STORED AS DIRECTORIES"
+    checkError(
+      exception = parseException(sql2),
+      errorClass = "_LEGACY_ERROR_TEMP_0035",
+      parameters = Map("message" -> "ALTER TABLE NOT STORED AS DIRECTORIES"),
+      context = ExpectedContext(
+        fragment = sql2,
+        start = 0,
+        stop = 47))
+
+    val sql3 = "ALTER TABLE table_name SET SKEWED LOCATION (col_name1=\"location1\""
+    checkError(
+      exception = parseException(sql3),
+      errorClass = "_LEGACY_ERROR_TEMP_0035",
+      parameters = Map("message" -> "ALTER TABLE SET SKEWED LOCATION"),
+      context = ExpectedContext(
+        fragment = sql3,
+        start = 0,
+        stop = 64))
+
+    val sql4 = "ALTER TABLE table_name SKEWED BY (key) ON (1,5,6) STORED AS DIRECTORIES"
+    checkError(
+      exception = parseException(sql4),
+      errorClass = "_LEGACY_ERROR_TEMP_0035",
+      parameters = Map("message" -> "ALTER TABLE SKEWED BY"),
+      context = ExpectedContext(
+        fragment = sql4,
+        start = 0,
+        stop = 70))
   }
 
   test("alter table: replace columns (not allowed)") {
-    assertUnsupported(
-      """
-       |ALTER TABLE table_name REPLACE COLUMNS (new_col1 INT
-       |COMMENT 'test_comment', new_col2 LONG COMMENT 'test_comment2') RESTRICT
-      """.stripMargin)
+    val sql =
+      """ALTER TABLE table_name REPLACE COLUMNS (new_col1 INT
+        |COMMENT 'test_comment', new_col2 LONG COMMENT 'test_comment2') RESTRICT""".stripMargin
+    checkError(
+      exception = parseException(sql),
+      errorClass = "_LEGACY_ERROR_TEMP_0035",
+      parameters = Map("message" -> "ALTER TABLE REPLACE COLUMNS"),
+      context = ExpectedContext(
+        fragment = sql,
+        start = 0,
+        stop = 123))
   }
 
   test("SPARK-14383: DISTRIBUTE and UNSET as non-keywords") {
@@ -346,257 +360,114 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
     assert(parsed.isInstanceOf[Project])
   }
 
-  test("duplicate keys in table properties") {
-    val e = intercept[ParseException] {
-      parser.parsePlan("ALTER TABLE dbx.tab1 SET TBLPROPERTIES ('key1' = '1', 'key1' = '2')")
-    }.getMessage
-    assert(e.contains("Found duplicate keys 'key1'"))
-  }
-
-  test("duplicate columns in partition specs") {
-    val e = intercept[ParseException] {
-      parser.parsePlan(
-        "ALTER TABLE dbx.tab1 PARTITION (a='1', a='2') RENAME TO PARTITION (a='100', a='200')")
-    }.getMessage
-    assert(e.contains("Found duplicate keys 'a'"))
-  }
-
-  test("empty values in non-optional partition specs") {
-    val e = intercept[ParseException] {
-      parser.parsePlan(
-        "SHOW PARTITIONS dbx.tab1 PARTITION (a='1', b)")
-    }.getMessage
-    assert(e.contains("Found an empty partition key 'b'"))
-  }
-
-  test("Test CTAS #1") {
-    val s1 =
-      """
-        |CREATE EXTERNAL TABLE IF NOT EXISTS mydb.page_view
-        |COMMENT 'This is the staging page view table'
-        |STORED AS RCFILE
-        |LOCATION '/user/external/page_view'
-        |TBLPROPERTIES ('p1'='v1', 'p2'='v2')
-        |AS SELECT * FROM src
-      """.stripMargin
-
-    val s2 =
-      """
-        |CREATE EXTERNAL TABLE IF NOT EXISTS mydb.page_view
-        |STORED AS RCFILE
-        |COMMENT 'This is the staging page view table'
-        |TBLPROPERTIES ('p1'='v1', 'p2'='v2')
-        |LOCATION '/user/external/page_view'
-        |AS SELECT * FROM src
-      """.stripMargin
-
-    val s3 =
-      """
-        |CREATE EXTERNAL TABLE IF NOT EXISTS mydb.page_view
-        |TBLPROPERTIES ('p1'='v1', 'p2'='v2')
-        |LOCATION '/user/external/page_view'
-        |STORED AS RCFILE
-        |COMMENT 'This is the staging page view table'
-        |AS SELECT * FROM src
-      """.stripMargin
-
-    checkParsing(s1)
-    checkParsing(s2)
-    checkParsing(s3)
-
-    def checkParsing(sql: String): Unit = {
-      val (desc, exists) = extractTableDesc(sql)
-      assert(exists)
-      assert(desc.identifier.database == Some("mydb"))
-      assert(desc.identifier.table == "page_view")
-      assert(desc.tableType == CatalogTableType.EXTERNAL)
-      assert(desc.storage.locationUri == Some(new URI("/user/external/page_view")))
-      assert(desc.schema.isEmpty) // will be populated later when the table is actually created
-      assert(desc.comment == Some("This is the staging page view table"))
-      // TODO will be SQLText
-      assert(desc.viewText.isEmpty)
-      assert(desc.viewCatalogAndNamespace.isEmpty)
-      assert(desc.viewQueryColumnNames.isEmpty)
-      assert(desc.partitionColumnNames.isEmpty)
-      assert(desc.storage.inputFormat == Some("org.apache.hadoop.hive.ql.io.RCFileInputFormat"))
-      assert(desc.storage.outputFormat == Some("org.apache.hadoop.hive.ql.io.RCFileOutputFormat"))
-      assert(desc.storage.serde ==
-        Some("org.apache.hadoop.hive.serde2.columnar.LazyBinaryColumnarSerDe"))
-      assert(desc.properties == Map("p1" -> "v1", "p2" -> "v2"))
-    }
-  }
-
-  test("Test CTAS #2") {
-    val s1 =
-      """
-        |CREATE EXTERNAL TABLE IF NOT EXISTS mydb.page_view
-        |COMMENT 'This is the staging page view table'
-        |ROW FORMAT SERDE 'parquet.hive.serde.ParquetHiveSerDe'
-        | STORED AS
-        | INPUTFORMAT 'parquet.hive.DeprecatedParquetInputFormat'
-        | OUTPUTFORMAT 'parquet.hive.DeprecatedParquetOutputFormat'
-        |LOCATION '/user/external/page_view'
-        |TBLPROPERTIES ('p1'='v1', 'p2'='v2')
-        |AS SELECT * FROM src
-      """.stripMargin
-
-    val s2 =
-      """
-        |CREATE EXTERNAL TABLE IF NOT EXISTS mydb.page_view
-        |LOCATION '/user/external/page_view'
-        |TBLPROPERTIES ('p1'='v1', 'p2'='v2')
-        |ROW FORMAT SERDE 'parquet.hive.serde.ParquetHiveSerDe'
-        | STORED AS
-        | INPUTFORMAT 'parquet.hive.DeprecatedParquetInputFormat'
-        | OUTPUTFORMAT 'parquet.hive.DeprecatedParquetOutputFormat'
-        |COMMENT 'This is the staging page view table'
-        |AS SELECT * FROM src
-      """.stripMargin
-
-    checkParsing(s1)
-    checkParsing(s2)
-
-    def checkParsing(sql: String): Unit = {
-      val (desc, exists) = extractTableDesc(sql)
-      assert(exists)
-      assert(desc.identifier.database == Some("mydb"))
-      assert(desc.identifier.table == "page_view")
-      assert(desc.tableType == CatalogTableType.EXTERNAL)
-      assert(desc.storage.locationUri == Some(new URI("/user/external/page_view")))
-      assert(desc.schema.isEmpty) // will be populated later when the table is actually created
-      // TODO will be SQLText
-      assert(desc.comment == Some("This is the staging page view table"))
-      assert(desc.viewText.isEmpty)
-      assert(desc.viewCatalogAndNamespace.isEmpty)
-      assert(desc.viewQueryColumnNames.isEmpty)
-      assert(desc.partitionColumnNames.isEmpty)
-      assert(desc.storage.properties == Map())
-      assert(desc.storage.inputFormat == Some("parquet.hive.DeprecatedParquetInputFormat"))
-      assert(desc.storage.outputFormat == Some("parquet.hive.DeprecatedParquetOutputFormat"))
-      assert(desc.storage.serde == Some("parquet.hive.serde.ParquetHiveSerDe"))
-      assert(desc.properties == Map("p1" -> "v1", "p2" -> "v2"))
-    }
-  }
-
-  test("Test CTAS #3") {
-    val s3 = """CREATE TABLE page_view AS SELECT * FROM src"""
-    val (desc, exists) = extractTableDesc(s3)
-    assert(exists == false)
-    assert(desc.identifier.database == None)
-    assert(desc.identifier.table == "page_view")
-    assert(desc.tableType == CatalogTableType.MANAGED)
-    assert(desc.storage.locationUri == None)
-    assert(desc.schema.isEmpty)
-    assert(desc.viewText == None) // TODO will be SQLText
-    assert(desc.viewQueryColumnNames.isEmpty)
-    assert(desc.storage.properties == Map())
-    assert(desc.storage.inputFormat == Some("org.apache.hadoop.mapred.TextInputFormat"))
-    assert(desc.storage.outputFormat ==
-      Some("org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat"))
-    assert(desc.storage.serde == Some("org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe"))
-    assert(desc.properties == Map())
-  }
-
-  test("Test CTAS #4") {
-    val s4 =
-      """CREATE TABLE page_view
-        |STORED BY 'storage.handler.class.name' AS SELECT * FROM src""".stripMargin
-    intercept[AnalysisException] {
-      extractTableDesc(s4)
-    }
-  }
-
-  test("Test CTAS #5") {
-    val s5 = """CREATE TABLE ctas2
-               | ROW FORMAT SERDE "org.apache.hadoop.hive.serde2.columnar.ColumnarSerDe"
-               | WITH SERDEPROPERTIES("serde_p1"="p1","serde_p2"="p2")
-               | STORED AS RCFile
-               | TBLPROPERTIES("tbl_p1"="p11", "tbl_p2"="p22")
-               | AS
-               |   SELECT key, value
-               |   FROM src
-               |   ORDER BY key, value""".stripMargin
-    val (desc, exists) = extractTableDesc(s5)
-    assert(exists == false)
-    assert(desc.identifier.database == None)
-    assert(desc.identifier.table == "ctas2")
-    assert(desc.tableType == CatalogTableType.MANAGED)
-    assert(desc.storage.locationUri == None)
-    assert(desc.schema.isEmpty)
-    assert(desc.viewText == None) // TODO will be SQLText
-    assert(desc.viewCatalogAndNamespace.isEmpty)
-    assert(desc.viewQueryColumnNames.isEmpty)
-    assert(desc.storage.properties == Map(("serde_p1" -> "p1"), ("serde_p2" -> "p2")))
-    assert(desc.storage.inputFormat == Some("org.apache.hadoop.hive.ql.io.RCFileInputFormat"))
-    assert(desc.storage.outputFormat == Some("org.apache.hadoop.hive.ql.io.RCFileOutputFormat"))
-    assert(desc.storage.serde == Some("org.apache.hadoop.hive.serde2.columnar.ColumnarSerDe"))
-    assert(desc.properties == Map(("tbl_p1" -> "p11"), ("tbl_p2" -> "p22")))
-  }
-
-  test("CTAS statement with a PARTITIONED BY clause is not allowed") {
-    assertUnsupported(s"CREATE TABLE ctas1 PARTITIONED BY (k int)" +
-      " AS SELECT key, value FROM (SELECT 1 as key, 2 as value) tmp")
-  }
-
-  test("CTAS statement with schema") {
-    assertUnsupported(s"CREATE TABLE ctas1 (age INT, name STRING) AS SELECT * FROM src")
-    assertUnsupported(s"CREATE TABLE ctas1 (age INT, name STRING) AS SELECT 1, 'hello'")
-  }
-
   test("unsupported operations") {
-    intercept[ParseException] {
-      parser.parsePlan(
-        """
-          |CREATE TEMPORARY TABLE ctas2
-          |ROW FORMAT SERDE "org.apache.hadoop.hive.serde2.columnar.ColumnarSerDe"
-          |WITH SERDEPROPERTIES("serde_p1"="p1","serde_p2"="p2")
-          |STORED AS RCFile
-          |TBLPROPERTIES("tbl_p1"="p11", "tbl_p2"="p22")
-          |AS SELECT key, value FROM src ORDER BY key, value
-        """.stripMargin)
-    }
-    intercept[ParseException] {
-      parser.parsePlan(
-        """
-          |CREATE TABLE user_info_bucketed(user_id BIGINT, firstname STRING, lastname STRING)
-          |CLUSTERED BY(user_id) INTO 256 BUCKETS
-          |AS SELECT key, value FROM src ORDER BY key, value
-        """.stripMargin)
-    }
-    intercept[ParseException] {
-      parser.parsePlan(
-        """
-          |CREATE TABLE user_info_bucketed(user_id BIGINT, firstname STRING, lastname STRING)
-          |SKEWED BY (key) ON (1,5,6)
-          |AS SELECT key, value FROM src ORDER BY key, value
-        """.stripMargin)
-    }
-    intercept[ParseException] {
-      parser.parsePlan(
-        """
-          |SELECT TRANSFORM (key, value) USING 'cat' AS (tKey, tValue)
-          |ROW FORMAT SERDE 'org.apache.hadoop.hive.contrib.serde2.TypedBytesSerDe'
-          |RECORDREADER 'org.apache.hadoop.hive.contrib.util.typedbytes.TypedBytesRecordReader'
-          |FROM testData
-        """.stripMargin)
-    }
+    val sql1 =
+      """CREATE TEMPORARY TABLE ctas2
+        |ROW FORMAT SERDE "org.apache.hadoop.hive.serde2.columnar.ColumnarSerDe"
+        |WITH SERDEPROPERTIES("serde_p1"="p1","serde_p2"="p2")
+        |STORED AS RCFile
+        |TBLPROPERTIES("tbl_p1"="p11", "tbl_p2"="p22")
+        |AS SELECT key, value FROM src ORDER BY key, value""".stripMargin
+
+    checkError(
+      exception = parseException(sql1),
+      errorClass = "_LEGACY_ERROR_TEMP_0035",
+      parameters = Map(
+        "message" -> "CREATE TEMPORARY TABLE ... AS ..., use CREATE TEMPORARY VIEW instead"),
+      context = ExpectedContext(
+        fragment = sql1,
+        start = 0,
+        stop = 266))
+
+    val sql2 =
+      """CREATE TABLE user_info_bucketed(user_id BIGINT, firstname STRING, lastname STRING)
+        |CLUSTERED BY(user_id) INTO 256 BUCKETS
+        |AS SELECT key, value FROM src ORDER BY key, value""".stripMargin
+    checkError(
+      exception = parseException(sql2),
+      errorClass = "_LEGACY_ERROR_TEMP_0035",
+      parameters = Map(
+        "message" -> "Schema may not be specified in a Create Table As Select (CTAS) statement"),
+      context = ExpectedContext(
+        fragment = sql2,
+        start = 0,
+        stop = 170))
+
+    val sql3 =
+      """CREATE TABLE user_info_bucketed(user_id BIGINT, firstname STRING, lastname STRING)
+        |SKEWED BY (key) ON (1,5,6)
+        |AS SELECT key, value FROM src ORDER BY key, value""".stripMargin
+    checkError(
+      exception = parseException(sql3),
+      errorClass = "_LEGACY_ERROR_TEMP_0035",
+      parameters = Map("message" -> "CREATE TABLE ... SKEWED BY"),
+      context = ExpectedContext(
+        fragment = sql3,
+        start = 0,
+        stop = 158))
+
+    val sql4 = """SELECT TRANSFORM (key, value) USING 'cat' AS (tKey, tValue)
+        |ROW FORMAT SERDE 'org.apache.hadoop.hive.contrib.serde2.TypedBytesSerDe'
+        |RECORDREADER 'org.apache.hadoop.hive.contrib.util.typedbytes.TypedBytesRecordReader'
+        |FROM testData""".stripMargin
+    checkError(
+      exception = parseException(sql4),
+      errorClass = "_LEGACY_ERROR_TEMP_0048",
+      parameters = Map.empty,
+      context = ExpectedContext(
+        fragment = sql4,
+        start = 0,
+        stop = 230))
   }
 
   test("Invalid interval term should throw AnalysisException") {
-    def assertError(sql: String, errorMessage: String): Unit = {
-      val e = intercept[AnalysisException] {
-        parser.parsePlan(sql)
-      }
-      assert(e.getMessage.contains(errorMessage))
-    }
-    assertError("select interval '42-32' year to month",
-      "month 32 outside range [0, 11]")
-    assertError("select interval '5 49:12:15' day to second",
-      "hour 49 outside range [0, 23]")
-    assertError("select interval '23:61:15' hour to second",
-      "minute 61 outside range [0, 59]")
-    assertError("select interval '.1111111111' second",
-      "'.1111111111' is out of range")
+    val sql1 = "select interval '42-32' year to month"
+    val value1 = "Error parsing interval year-month string: " +
+      "requirement failed: month 32 outside range [0, 11]"
+    val fragment1 = "'42-32' year to month"
+    checkError(
+      exception = parseException(sql1),
+      errorClass = "_LEGACY_ERROR_TEMP_0063",
+      parameters = Map("msg" -> value1),
+      context = ExpectedContext(
+        fragment = fragment1,
+        start = 16,
+        stop = 36))
+
+    val sql2 = "select interval '5 49:12:15' day to second"
+    val fragment2 = "'5 49:12:15' day to second"
+    checkError(
+      exception = parseException(sql2),
+      errorClass = "_LEGACY_ERROR_TEMP_0063",
+      parameters = Map("msg" -> "requirement failed: hour 49 outside range [0, 23]"),
+      context = ExpectedContext(
+        fragment = fragment2,
+        start = 16,
+        stop = 41))
+
+    val sql3 = "select interval '23:61:15' hour to second"
+    val fragment3 = "'23:61:15' hour to second"
+    checkError(
+      exception = parseException(sql3),
+      errorClass = "_LEGACY_ERROR_TEMP_0063",
+      parameters = Map("msg" -> "requirement failed: minute 61 outside range [0, 59]"),
+      context = ExpectedContext(
+        fragment = fragment3,
+        start = 16,
+        stop = 40))
+
+    val sql4 = "select interval '.1111111111' second"
+    val value4 = "Error parsing ' .1111111111 second' to interval, " +
+      "interval can only support nanosecond precision, '.1111111111' is out of range"
+    val fragment4 = "'.1111111111' second"
+    checkError(
+      exception = parseException(sql4),
+      errorClass = "_LEGACY_ERROR_TEMP_0062",
+      parameters = Map("msg" -> value4),
+      context = ExpectedContext(
+        fragment = fragment4,
+        start = 16,
+        stop = 35))
   }
 
   test("use native json_tuple instead of hive's UDTF in LATERAL VIEW") {
@@ -612,16 +483,16 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
   }
 
   test("transform query spec") {
-    val p = ScriptTransformation(
-      Seq(UnresolvedAttribute("a"), UnresolvedAttribute("b")),
-      "func", Seq.empty, plans.table("e"), null)
+    val p = Project(Seq(UnresolvedAttribute("a"), UnresolvedAttribute("b")), plans.table("e"))
+    val s = ScriptTransformation("func", Seq.empty, p, null)
 
     compareTransformQuery("select transform(a, b) using 'func' from e where f < 10",
-      p.copy(child = p.child.where('f < 10), output = Seq('key.string, 'value.string)))
+      s.copy(child = p.copy(child = p.child.where($"f" < 10)),
+        output = Seq($"key".string, $"value".string)))
     compareTransformQuery("map a, b using 'func' as c, d from e",
-      p.copy(output = Seq('c.string, 'd.string)))
+      s.copy(output = Seq($"c".string, $"d".string)))
     compareTransformQuery("reduce a, b using 'func' as (c int, d decimal(10, 0)) from e",
-      p.copy(output = Seq('c.int, 'd.decimal(10, 0))))
+      s.copy(output = Seq($"c".int, $"d".decimal(10, 0))))
   }
 
   test("use backticks in output of Script Transform") {
@@ -652,203 +523,233 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
       """.stripMargin)
   }
 
-  test("create table - basic") {
-    val query = "CREATE TABLE my_table (id int, name string)"
-    val (desc, allowExisting) = extractTableDesc(query)
-    assert(!allowExisting)
-    assert(desc.identifier.database.isEmpty)
-    assert(desc.identifier.table == "my_table")
-    assert(desc.tableType == CatalogTableType.MANAGED)
-    assert(desc.schema == new StructType().add("id", "int").add("name", "string"))
-    assert(desc.partitionColumnNames.isEmpty)
-    assert(desc.bucketSpec.isEmpty)
-    assert(desc.viewText.isEmpty)
-    assert(desc.viewQueryColumnNames.isEmpty)
-    assert(desc.storage.locationUri.isEmpty)
-    assert(desc.storage.inputFormat ==
-      Some("org.apache.hadoop.mapred.TextInputFormat"))
-    assert(desc.storage.outputFormat ==
-      Some("org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat"))
-    assert(desc.storage.serde == Some("org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe"))
-    assert(desc.storage.properties.isEmpty)
-    assert(desc.properties.isEmpty)
-    assert(desc.comment.isEmpty)
+  test("create view -- basic") {
+    val v1 = "CREATE VIEW view1 AS SELECT * FROM tab1"
+    val parsed1 = parser.parsePlan(v1)
+
+    val expected1 = CreateView(
+      UnresolvedIdentifier(Seq("view1")),
+      Seq.empty[(String, Option[String])],
+      None,
+      Map.empty[String, String],
+      Some("SELECT * FROM tab1"),
+      parser.parsePlan("SELECT * FROM tab1"),
+      false,
+      false)
+    comparePlans(parsed1, expected1)
+
+    val v2 = "CREATE TEMPORARY VIEW a AS SELECT * FROM tab1"
+    val parsed2 = parser.parsePlan(v2)
+
+    val expected2 = CreateViewCommand(
+      Seq("a").asTableIdentifier,
+      Seq.empty[(String, Option[String])],
+      None,
+      Map.empty[String, String],
+      Some("SELECT * FROM tab1"),
+      parser.parsePlan("SELECT * FROM tab1"),
+      false,
+      false,
+      LocalTempView)
+    comparePlans(parsed2, expected2)
+
+    val v3 = "CREATE TEMPORARY VIEW a.b AS SELECT 1"
+    checkError(
+      exception = parseException(v3),
+      errorClass = "TEMP_VIEW_NAME_TOO_MANY_NAME_PARTS",
+      parameters = Map("actualName" -> "`a`.`b`"),
+      context = ExpectedContext(
+        fragment = v3,
+        start = 0,
+        stop = 36))
   }
 
-  test("create table - with database name") {
-    val query = "CREATE TABLE dbx.my_table (id int, name string)"
-    val (desc, _) = extractTableDesc(query)
-    assert(desc.identifier.database == Some("dbx"))
-    assert(desc.identifier.table == "my_table")
-  }
-
-  test("create table - temporary") {
-    val query = "CREATE TEMPORARY TABLE tab1 (id int, name string)"
-    val e = intercept[ParseException] { parser.parsePlan(query) }
-    assert(e.message.contains("CREATE TEMPORARY TABLE is not supported yet"))
-  }
-
-  test("create table - external") {
-    val query = "CREATE EXTERNAL TABLE tab1 (id int, name string) LOCATION '/path/to/nowhere'"
-    val (desc, _) = extractTableDesc(query)
-    assert(desc.tableType == CatalogTableType.EXTERNAL)
-    assert(desc.storage.locationUri == Some(new URI("/path/to/nowhere")))
-  }
-
-  test("create table - if not exists") {
-    val query = "CREATE TABLE IF NOT EXISTS tab1 (id int, name string)"
-    val (_, allowExisting) = extractTableDesc(query)
-    assert(allowExisting)
-  }
-
-  test("create table - comment") {
-    val query = "CREATE TABLE my_table (id int, name string) COMMENT 'its hot as hell below'"
-    val (desc, _) = extractTableDesc(query)
-    assert(desc.comment == Some("its hot as hell below"))
-  }
-
-  test("create table - partitioned columns") {
-    val query = "CREATE TABLE my_table (id int, name string) PARTITIONED BY (month int)"
-    val (desc, _) = extractTableDesc(query)
-    assert(desc.schema == new StructType()
-      .add("id", "int")
-      .add("name", "string")
-      .add("month", "int"))
-    assert(desc.partitionColumnNames == Seq("month"))
-  }
-
-  test("create table - clustered by") {
-    val numBuckets = 10
-    val bucketedColumn = "id"
-    val sortColumn = "id"
-    val baseQuery =
-      s"""
-         CREATE TABLE my_table (
-           $bucketedColumn int,
-           name string)
-         CLUSTERED BY($bucketedColumn)
-       """
-
-    val query1 = s"$baseQuery INTO $numBuckets BUCKETS"
-    val (desc1, _) = extractTableDesc(query1)
-    assert(desc1.bucketSpec.isDefined)
-    val bucketSpec1 = desc1.bucketSpec.get
-    assert(bucketSpec1.numBuckets == numBuckets)
-    assert(bucketSpec1.bucketColumnNames.head.equals(bucketedColumn))
-    assert(bucketSpec1.sortColumnNames.isEmpty)
-
-    val query2 = s"$baseQuery SORTED BY($sortColumn) INTO $numBuckets BUCKETS"
-    val (desc2, _) = extractTableDesc(query2)
-    assert(desc2.bucketSpec.isDefined)
-    val bucketSpec2 = desc2.bucketSpec.get
-    assert(bucketSpec2.numBuckets == numBuckets)
-    assert(bucketSpec2.bucketColumnNames.head.equals(bucketedColumn))
-    assert(bucketSpec2.sortColumnNames.head.equals(sortColumn))
-  }
-
-  test("create table(hive) - skewed by") {
-    val baseQuery = "CREATE TABLE my_table (id int, name string) SKEWED BY"
-    val query1 = s"$baseQuery(id) ON (1, 10, 100)"
-    val query2 = s"$baseQuery(id, name) ON ((1, 'x'), (2, 'y'), (3, 'z'))"
-    val query3 = s"$baseQuery(id, name) ON ((1, 'x'), (2, 'y'), (3, 'z')) STORED AS DIRECTORIES"
-    val e1 = intercept[ParseException] { parser.parsePlan(query1) }
-    val e2 = intercept[ParseException] { parser.parsePlan(query2) }
-    val e3 = intercept[ParseException] { parser.parsePlan(query3) }
-    assert(e1.getMessage.contains("Operation not allowed"))
-    assert(e2.getMessage.contains("Operation not allowed"))
-    assert(e3.getMessage.contains("Operation not allowed"))
-  }
-
-  test("create table(hive) - row format") {
-    val baseQuery = "CREATE TABLE my_table (id int, name string) ROW FORMAT"
-    val query1 = s"$baseQuery SERDE 'org.apache.poof.serde.Baff'"
-    val query2 = s"$baseQuery SERDE 'org.apache.poof.serde.Baff' WITH SERDEPROPERTIES ('k1'='v1')"
-    val query3 =
-      s"""
-         |$baseQuery DELIMITED FIELDS TERMINATED BY 'x' ESCAPED BY 'y'
-         |COLLECTION ITEMS TERMINATED BY 'a'
-         |MAP KEYS TERMINATED BY 'b'
-         |LINES TERMINATED BY '\n'
-         |NULL DEFINED AS 'c'
-      """.stripMargin
-    val (desc1, _) = extractTableDesc(query1)
-    val (desc2, _) = extractTableDesc(query2)
-    val (desc3, _) = extractTableDesc(query3)
-    assert(desc1.storage.serde == Some("org.apache.poof.serde.Baff"))
-    assert(desc1.storage.properties.isEmpty)
-    assert(desc2.storage.serde == Some("org.apache.poof.serde.Baff"))
-    assert(desc2.storage.properties == Map("k1" -> "v1"))
-    assert(desc3.storage.properties == Map(
-      "field.delim" -> "x",
-      "escape.delim" -> "y",
-      "serialization.format" -> "x",
-      "line.delim" -> "\n",
-      "colelction.delim" -> "a", // yes, it's a typo from Hive :)
-      "mapkey.delim" -> "b"))
-  }
-
-  test("create table(hive) - file format") {
-    val baseQuery = "CREATE TABLE my_table (id int, name string) STORED AS"
-    val query1 = s"$baseQuery INPUTFORMAT 'winput' OUTPUTFORMAT 'wowput'"
-    val query2 = s"$baseQuery ORC"
-    val (desc1, _) = extractTableDesc(query1)
-    val (desc2, _) = extractTableDesc(query2)
-    assert(desc1.storage.inputFormat == Some("winput"))
-    assert(desc1.storage.outputFormat == Some("wowput"))
-    assert(desc1.storage.serde == Some("org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe"))
-    assert(desc2.storage.inputFormat == Some("org.apache.hadoop.hive.ql.io.orc.OrcInputFormat"))
-    assert(desc2.storage.outputFormat == Some("org.apache.hadoop.hive.ql.io.orc.OrcOutputFormat"))
-    assert(desc2.storage.serde == Some("org.apache.hadoop.hive.ql.io.orc.OrcSerde"))
-  }
-
-  test("create table(hive) - storage handler") {
-    val baseQuery = "CREATE TABLE my_table (id int, name string) STORED BY"
-    val query1 = s"$baseQuery 'org.papachi.StorageHandler'"
-    val query2 = s"$baseQuery 'org.mamachi.StorageHandler' WITH SERDEPROPERTIES ('k1'='v1')"
-    val e1 = intercept[ParseException] { parser.parsePlan(query1) }
-    val e2 = intercept[ParseException] { parser.parsePlan(query2) }
-    assert(e1.getMessage.contains("Operation not allowed"))
-    assert(e2.getMessage.contains("Operation not allowed"))
-  }
-
-  test("create table - properties") {
-    val query = "CREATE TABLE my_table (id int, name string) TBLPROPERTIES ('k1'='v1', 'k2'='v2')"
-    val (desc, _) = extractTableDesc(query)
-    assert(desc.properties == Map("k1" -> "v1", "k2" -> "v2"))
-  }
-
-  test("create table(hive) - everything!") {
-    val query =
+  test("create temp view - full") {
+    val v1 =
       """
-        |CREATE EXTERNAL TABLE IF NOT EXISTS dbx.my_table (id int, name string)
-        |COMMENT 'no comment'
-        |PARTITIONED BY (month int)
-        |ROW FORMAT SERDE 'org.apache.poof.serde.Baff' WITH SERDEPROPERTIES ('k1'='v1')
-        |STORED AS INPUTFORMAT 'winput' OUTPUTFORMAT 'wowput'
-        |LOCATION '/path/to/mercury'
-        |TBLPROPERTIES ('k1'='v1', 'k2'='v2')
+        |CREATE OR REPLACE VIEW view1
+        |(col1, col3 COMMENT 'hello')
+        |TBLPROPERTIES('prop1Key'="prop1Val")
+        |COMMENT 'BLABLA'
+        |AS SELECT * FROM tab1
       """.stripMargin
-    val (desc, allowExisting) = extractTableDesc(query)
-    assert(allowExisting)
-    assert(desc.identifier.database == Some("dbx"))
-    assert(desc.identifier.table == "my_table")
-    assert(desc.tableType == CatalogTableType.EXTERNAL)
-    assert(desc.schema == new StructType()
-      .add("id", "int")
-      .add("name", "string")
-      .add("month", "int"))
-    assert(desc.partitionColumnNames == Seq("month"))
-    assert(desc.bucketSpec.isEmpty)
-    assert(desc.viewText.isEmpty)
-    assert(desc.viewCatalogAndNamespace.isEmpty)
-    assert(desc.viewQueryColumnNames.isEmpty)
-    assert(desc.storage.locationUri == Some(new URI("/path/to/mercury")))
-    assert(desc.storage.inputFormat == Some("winput"))
-    assert(desc.storage.outputFormat == Some("wowput"))
-    assert(desc.storage.serde == Some("org.apache.poof.serde.Baff"))
-    assert(desc.storage.properties == Map("k1" -> "v1"))
-    assert(desc.properties == Map("k1" -> "v1", "k2" -> "v2"))
-    assert(desc.comment == Some("no comment"))
+    val parsed1 = parser.parsePlan(v1)
+    val expected1 = CreateView(
+      UnresolvedIdentifier(Seq("view1")),
+      Seq("col1" -> None, "col3" -> Some("hello")),
+      Some("BLABLA"),
+      Map("prop1Key" -> "prop1Val"),
+      Some("SELECT * FROM tab1"),
+      parser.parsePlan("SELECT * FROM tab1"),
+      false,
+      true)
+    comparePlans(parsed1, expected1)
+
+    val v2 =
+      """
+        |CREATE OR REPLACE GLOBAL TEMPORARY VIEW a
+        |(col1, col3 COMMENT 'hello')
+        |COMMENT 'BLABLA'
+        |AS SELECT * FROM tab1
+          """.stripMargin
+    val parsed2 = parser.parsePlan(v2)
+    val expected2 = CreateViewCommand(
+      Seq("a").asTableIdentifier,
+      Seq("col1" -> None, "col3" -> Some("hello")),
+      Some("BLABLA"),
+      Map(),
+      Some("SELECT * FROM tab1"),
+      parser.parsePlan("SELECT * FROM tab1"),
+      false,
+      true,
+      GlobalTempView)
+    comparePlans(parsed2, expected2)
+  }
+
+  test("create view -- partitioned view") {
+    val v1 = "CREATE VIEW view1 partitioned on (ds, hr) as select * from srcpart"
+    checkError(
+      exception = parseException(v1),
+      errorClass = "_LEGACY_ERROR_TEMP_0035",
+      parameters = Map("message" -> "CREATE VIEW ... PARTITIONED ON"),
+      context = ExpectedContext(
+        fragment = v1,
+        start = 0,
+        stop = 65))
+  }
+
+  test("create view - duplicate clauses") {
+    def createViewStatement(duplicateClause: String): String = {
+      s"""CREATE OR REPLACE VIEW view1
+         |(col1, col3 COMMENT 'hello')
+         |$duplicateClause
+         |$duplicateClause
+         |AS SELECT * FROM tab1""".stripMargin
+    }
+
+    val sql1 = createViewStatement("COMMENT 'BLABLA'")
+    checkError(
+      exception = parseException(sql1),
+      errorClass = "DUPLICATE_CLAUSES",
+      parameters = Map("clauseName" -> "COMMENT"),
+      context = ExpectedContext(
+        fragment = sql1,
+        start = 0,
+        stop = 112))
+
+    val sql2 = createViewStatement("TBLPROPERTIES('prop1Key'=\"prop1Val\")")
+    checkError(
+      exception = parseException(sql2),
+      errorClass = "DUPLICATE_CLAUSES",
+      parameters = Map("clauseName" -> "TBLPROPERTIES"),
+      context = ExpectedContext(
+        fragment = sql2,
+        start = 0,
+        stop = 152))
+  }
+
+  test("CREATE FUNCTION") {
+    comparePlans(parser.parsePlan("CREATE FUNCTION a as 'fun'"),
+      CreateFunction(UnresolvedIdentifier(Seq("a")), "fun", Seq(), false, false))
+
+    comparePlans(parser.parsePlan("CREATE FUNCTION a.b.c as 'fun'"),
+      CreateFunction(UnresolvedIdentifier(Seq("a", "b", "c")), "fun", Seq(), false, false))
+
+    comparePlans(parser.parsePlan("CREATE OR REPLACE FUNCTION a.b.c as 'fun'"),
+      CreateFunction(UnresolvedIdentifier(Seq("a", "b", "c")), "fun", Seq(), false, true))
+
+    comparePlans(parser.parsePlan("CREATE TEMPORARY FUNCTION a as 'fun'"),
+      CreateFunctionCommand(Seq("a").asFunctionIdentifier, "fun", Seq(), true, false, false))
+
+    comparePlans(parser.parsePlan("CREATE FUNCTION IF NOT EXISTS a.b.c as 'fun'"),
+      CreateFunction(UnresolvedIdentifier(Seq("a", "b", "c")), "fun", Seq(), true, false))
+
+    comparePlans(parser.parsePlan("CREATE FUNCTION a as 'fun' USING JAR 'j'"),
+      CreateFunction(UnresolvedIdentifier(Seq("a")), "fun",
+        Seq(FunctionResource(JarResource, "j")), false, false))
+
+    comparePlans(parser.parsePlan("CREATE FUNCTION a as 'fun' USING ARCHIVE 'a'"),
+      CreateFunction(UnresolvedIdentifier(Seq("a")), "fun",
+        Seq(FunctionResource(ArchiveResource, "a")), false, false))
+
+    comparePlans(parser.parsePlan("CREATE FUNCTION a as 'fun' USING FILE 'f'"),
+      CreateFunction(UnresolvedIdentifier(Seq("a")), "fun",
+        Seq(FunctionResource(FileResource, "f")), false, false))
+
+    comparePlans(
+      parser.parsePlan("CREATE FUNCTION a as 'fun' USING JAR 'j', ARCHIVE 'a', FILE 'f'"),
+      CreateFunction(UnresolvedIdentifier(Seq("a")), "fun",
+        Seq(FunctionResource(JarResource, "j"),
+          FunctionResource(ArchiveResource, "a"), FunctionResource(FileResource, "f")),
+        false, false))
+
+    val sql = "CREATE FUNCTION a as 'fun' USING OTHER 'o'"
+    checkError(
+      exception = parseException(sql),
+      errorClass = "_LEGACY_ERROR_TEMP_0035",
+      parameters = Map("message" -> "CREATE FUNCTION with resource type 'other'"),
+      context = ExpectedContext(
+        fragment = sql,
+        start = 0,
+        stop = 41))
+  }
+
+  test("DROP FUNCTION") {
+    def createFuncPlan(name: Seq[String]): UnresolvedFunctionName = {
+      UnresolvedFunctionName(name, "DROP FUNCTION", true,
+        Some("Please use fully qualified identifier to drop the persistent function."))
+    }
+    comparePlans(
+      parser.parsePlan("DROP FUNCTION a"),
+      DropFunction(createFuncPlan(Seq("a")), false))
+    comparePlans(
+      parser.parsePlan("DROP FUNCTION a.b.c"),
+      DropFunction(createFuncPlan(Seq("a", "b", "c")), false))
+    comparePlans(
+      parser.parsePlan("DROP TEMPORARY FUNCTION a"),
+      DropFunctionCommand(Seq("a").asFunctionIdentifier, false, true))
+    comparePlans(
+      parser.parsePlan("DROP FUNCTION IF EXISTS a.b.c"),
+      DropFunction(createFuncPlan(Seq("a", "b", "c")), true))
+    comparePlans(
+      parser.parsePlan("DROP TEMPORARY FUNCTION IF EXISTS a"),
+      DropFunctionCommand(Seq("a").asFunctionIdentifier, true, true))
+
+    val sql1 = "DROP TEMPORARY FUNCTION a.b"
+    checkError(
+      exception = parseException(sql1),
+      errorClass = "INVALID_SQL_SYNTAX.MULTI_PART_NAME",
+      parameters = Map("statement" -> "DROP TEMPORARY FUNCTION", "funcName" -> "`a`.`b`"),
+      context = ExpectedContext(
+        fragment = sql1,
+        start = 0,
+        stop = 26))
+
+    val sql2 = "DROP TEMPORARY FUNCTION IF EXISTS a.b"
+    checkError(
+      exception = parseException(sql2),
+      errorClass = "INVALID_SQL_SYNTAX.MULTI_PART_NAME",
+      parameters = Map("statement" -> "DROP TEMPORARY FUNCTION", "funcName" -> "`a`.`b`"),
+      context = ExpectedContext(
+        fragment = sql2,
+        start = 0,
+        stop = 36))
+  }
+
+  test("SPARK-32374: create temporary view with properties not allowed") {
+    val sql =
+      """CREATE OR REPLACE TEMPORARY VIEW a.b.c
+        |(col1, col3 COMMENT 'hello')
+        |TBLPROPERTIES('prop1Key'="prop1Val")
+        |AS SELECT * FROM tab1""".stripMargin
+    checkError(
+      exception = parseException(sql),
+      errorClass = "_LEGACY_ERROR_TEMP_0035",
+      parameters = Map("message" -> "TBLPROPERTIES can't coexist with CREATE TEMPORARY VIEW"),
+      context = ExpectedContext(
+        fragment = sql,
+        start = 0,
+        stop = 125))
   }
 
   test("create table like") {
@@ -929,5 +830,26 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
     assert(source6.table == "table2")
     assert(fileFormat6.locationUri.isEmpty)
     assert(provider6 == Some("ORC"))
+  }
+
+  test("SET CATALOG") {
+    comparePlans(
+      parser.parsePlan("SET CATALOG abc"),
+      SetCatalogCommand("abc"))
+    comparePlans(
+      parser.parsePlan("SET CATALOG 'a b c'"),
+      SetCatalogCommand("a b c"))
+    comparePlans(
+      parser.parsePlan("SET CATALOG `a b c`"),
+      SetCatalogCommand("a b c"))
+  }
+
+  test("SHOW CATALOGS") {
+    comparePlans(
+      parser.parsePlan("SHOW CATALOGS"),
+      ShowCatalogsCommand(None))
+    comparePlans(
+      parser.parsePlan("SHOW CATALOGS LIKE 'defau*'"),
+      ShowCatalogsCommand(Some("defau*")))
   }
 }

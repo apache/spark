@@ -33,9 +33,10 @@ public class OptionalSuite {
     Assert.assertEquals("foo", Optional.empty().orElse("foo"));
   }
 
-  @Test(expected = NullPointerException.class)
+  @Test
   public void testEmptyGet() {
-    Optional.empty().get();
+    Assert.assertThrows(NullPointerException.class,
+      () -> Optional.empty().get());
   }
 
   @Test
@@ -46,9 +47,10 @@ public class OptionalSuite {
     Assert.assertEquals("foo", Optional.absent().orElse("foo"));
   }
 
-  @Test(expected = NullPointerException.class)
+  @Test
   public void testAbsentGet() {
-    Optional.absent().get();
+    Assert.assertThrows(NullPointerException.class,
+      () -> Optional.absent().get());
   }
 
   @Test
@@ -60,9 +62,10 @@ public class OptionalSuite {
     Assert.assertEquals(Integer.valueOf(1), Optional.of(1).orElse(2));
   }
 
-  @Test(expected = NullPointerException.class)
+  @Test
   public void testOfWithNull() {
-    Optional.of(null);
+    Assert.assertThrows(NullPointerException.class,
+      () -> Optional.of(null));
   }
 
   @Test

@@ -22,12 +22,21 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.yarn.api.ApplicationConstants.Environment
 import org.apache.hadoop.yarn.api.records.{Container, ContainerId}
 import org.apache.hadoop.yarn.conf.YarnConfiguration
-import org.apache.hadoop.yarn.util.ConverterUtils
 
 import org.apache.spark.deploy.yarn.YarnSparkHadoopUtil
 import org.apache.spark.internal.Logging
 
 private[spark] object YarnContainerInfoHelper extends Logging {
+
+  private[this] val DRIVER_LOG_FILE_NAMES = Seq("stdout", "stderr")
+  private[this] val DRIVER_LOG_START_OFFSET = -4096
+
+  def getLogUrlsFromBaseUrl(baseUrl: String): Map[String, String] = {
+    DRIVER_LOG_FILE_NAMES.map { fname =>
+      fname -> s"$baseUrl/$fname?start=$DRIVER_LOG_START_OFFSET"
+    }.toMap
+  }
+
   def getLogUrls(
       conf: Configuration,
       container: Option[Container]): Option[Map[String, String]] = {
@@ -42,9 +51,7 @@ private[spark] object YarnContainerInfoHelper extends Logging {
       val baseUrl = s"$httpScheme$httpAddress/node/containerlogs/$containerId/$user"
       logDebug(s"Base URL for logs: $baseUrl")
 
-      Some(Map(
-        "stdout" -> s"$baseUrl/stdout?start=-4096",
-        "stderr" -> s"$baseUrl/stderr?start=-4096"))
+      Some(getLogUrlsFromBaseUrl(baseUrl))
     } catch {
       case e: Exception =>
         logInfo("Error while building executor logs - executor logs will not be available", e)
@@ -64,7 +71,7 @@ private[spark] object YarnContainerInfoHelper extends Logging {
         "NM_HTTP_PORT" -> getNodeManagerHttpPort(container),
         "NM_HTTP_ADDRESS" -> getNodeManagerHttpAddress(container),
         "CLUSTER_ID" -> getClusterId(yarnConf).getOrElse(""),
-        "CONTAINER_ID" -> ConverterUtils.toString(getContainerId(container)),
+        "CONTAINER_ID" -> convertToString(getContainerId(container)),
         "USER" -> Utils.getCurrentUserName(),
         "LOG_FILES" -> "stderr,stdout"
       ))
@@ -75,6 +82,10 @@ private[spark] object YarnContainerInfoHelper extends Logging {
         None
     }
   }
+
+  def convertToString(containerId: ContainerId): String = if (containerId != null) {
+    containerId.toString
+  } else null
 
   def getContainerId(container: Option[Container]): ContainerId = container match {
     case Some(c) => c.getId

@@ -17,29 +17,11 @@
 
 package org.apache.spark.sql.catalyst.util
 
+import org.apache.spark.sql.catalyst.trees.SQLQueryContext
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.unsafe.types.UTF8String
 
 object NumberConverter {
-
-  /**
-   * Divide x by m as if x is an unsigned 64-bit integer. Examples:
-   * unsignedLongDiv(-1, 2) == Long.MAX_VALUE unsignedLongDiv(6, 3) == 2
-   * unsignedLongDiv(0, 5) == 0
-   *
-   * @param x is treated as unsigned
-   * @param m is treated as signed
-   */
-  private def unsignedLongDiv(x: Long, m: Int): Long = {
-    if (x >= 0) {
-      x / m
-    } else {
-      // Let uval be the value of the unsigned long with the same bits as x
-      // Two's complement => x = uval - 2*MAX - 2
-      // => uval = x + 2*MAX + 2
-      // Now, use the fact: (a+b)/c = a/c + b/c + (a%c+b%c)/c
-      x / m + 2 * (Long.MaxValue / m) + 2 / m + (x % m + 2 * (Long.MaxValue % m) + 2 % m) / m
-    }
-  }
 
   /**
    * Decode v into value[].
@@ -52,7 +34,7 @@ object NumberConverter {
     java.util.Arrays.fill(value, 0.asInstanceOf[Byte])
     var i = value.length - 1
     while (tmpV != 0) {
-      val q = unsignedLongDiv(tmpV, radix)
+      val q = java.lang.Long.divideUnsigned(tmpV, radix)
       value(i) = (tmpV - q * radix).asInstanceOf[Byte]
       tmpV = q
       i -= 1
@@ -67,15 +49,40 @@ object NumberConverter {
    * @param fromPos is the first element that should be considered
    * @return the result should be treated as an unsigned 64-bit integer.
    */
-  private def encode(radix: Int, fromPos: Int, value: Array[Byte]): Long = {
+  private def encode(
+      radix: Int,
+      fromPos: Int,
+      value: Array[Byte],
+      ansiEnabled: Boolean,
+      context: SQLQueryContext): Long = {
     var v: Long = 0L
-    val bound = unsignedLongDiv(-1 - radix, radix) // Possible overflow once
+    // bound will always be positive since radix >= 2
+    // Note that: -1 is equivalent to 11111111...1111 which is the largest unsigned long value
+    val bound = java.lang.Long.divideUnsigned(-1 - radix, radix)
     var i = fromPos
     while (i < value.length && value(i) >= 0) {
-      if (v >= bound) {
-        // Check for overflow
-        if (unsignedLongDiv(-1 - value(i), radix) < v) {
+      // if v < 0, which mean its bit presentation starts with 1, so v * radix will cause
+      // overflow since radix is greater than 2
+      if (v < 0) {
+        if (ansiEnabled) {
+          throw QueryExecutionErrors.overflowInConvError(context)
+        } else {
           return -1
+        }
+      }
+      // check if v greater than bound
+      // if v is greater than bound, v * radix + radix will cause overflow.
+      if (v >= bound) {
+        // However our target is checking whether v * radix + value(i) can cause overflow or not.
+        // Because radix >= 2,so (-1 - value(i)) / radix will be positive (its bit presentation
+        // will start with 0) and we can easily checking for overflow by checking
+        // (-1 - value(i)) / radix < v or not
+        if (java.lang.Long.divideUnsigned(-1 - value(i), radix) < v) {
+          if (ansiEnabled) {
+            throw QueryExecutionErrors.overflowInConvError(context)
+          } else {
+            return -1
+          }
         }
       }
       v = v * radix + value(i)
@@ -99,8 +106,8 @@ object NumberConverter {
   }
 
   /**
-   * Convert the chars in value[] to the corresponding integers. Convert invalid
-   * characters to -1.
+   * Convert the chars in value[] to the corresponding integers. If invalid
+   * character is found, convert it to -1 and ignore the suffix starting there.
    *
    * @param radix must be between MIN_RADIX and MAX_RADIX
    * @param fromPos is the first nonzero element
@@ -109,6 +116,10 @@ object NumberConverter {
     var i = fromPos
     while (i < value.length) {
       value(i) = Character.digit(value(i), radix).asInstanceOf[Byte]
+      // if invalid characters are found, it no need to convert the suffix starting there
+      if (value(i) == -1) {
+        return
+      }
       i += 1
     }
   }
@@ -118,7 +129,12 @@ object NumberConverter {
    * unsigned, otherwise it is signed.
    * NB: This logic is borrowed from org.apache.hadoop.hive.ql.ud.UDFConv
    */
-  def convert(n: Array[Byte], fromBase: Int, toBase: Int ): UTF8String = {
+  def convert(
+      n: Array[Byte],
+      fromBase: Int,
+      toBase: Int,
+      ansiEnabled: Boolean,
+      context: SQLQueryContext): UTF8String = {
     if (fromBase < Character.MIN_RADIX || fromBase > Character.MAX_RADIX
         || Math.abs(toBase) < Character.MIN_RADIX
         || Math.abs(toBase) > Character.MAX_RADIX) {
@@ -132,16 +148,15 @@ object NumberConverter {
     var (negative, first) = if (n(0) == '-') (true, 1) else (false, 0)
 
     // Copy the digits in the right side of the array
-    val temp = new Array[Byte](64)
-    var i = 1
-    while (i <= n.length - first) {
-      temp(temp.length - i) = n(n.length - i)
-      i += 1
-    }
+    val temp = new Array[Byte](Math.max(n.length, 64))
+    var v: Long = -1
+
+    System.arraycopy(n, first, temp, temp.length - n.length + first, n.length - first)
     char2byte(fromBase, temp.length - n.length + first, temp)
 
     // Do the conversion by going through a 64 bit integer
-    var v = encode(fromBase, temp.length - n.length + first, temp)
+    v = encode(fromBase, temp.length - n.length + first, temp, ansiEnabled, context)
+
     if (negative && toBase > 0) {
       if (v < 0) {
         v = -1

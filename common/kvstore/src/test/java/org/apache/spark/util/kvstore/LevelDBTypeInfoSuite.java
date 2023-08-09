@@ -43,34 +43,40 @@ public class LevelDBTypeInfoSuite {
     assertEquals(t1.child, ti.getIndexValue("child", t1));
   }
 
-  @Test(expected = IllegalArgumentException.class)
-  public void testNoNaturalIndex() throws Exception {
-    newTypeInfo(NoNaturalIndex.class);
+  @Test
+  public void testNoNaturalIndex() {
+    assertThrows(IllegalArgumentException.class,
+      () -> newTypeInfo(NoNaturalIndex.class));
   }
 
-  @Test(expected = IllegalArgumentException.class)
-  public void testNoNaturalIndex2() throws Exception {
-    newTypeInfo(NoNaturalIndex2.class);
+  @Test
+  public void testNoNaturalIndex2() {
+    assertThrows(IllegalArgumentException.class,
+      () -> newTypeInfo(NoNaturalIndex2.class));
   }
 
-  @Test(expected = IllegalArgumentException.class)
-  public void testDuplicateIndex() throws Exception {
-    newTypeInfo(DuplicateIndex.class);
+  @Test
+  public void testDuplicateIndex() {
+    assertThrows(IllegalArgumentException.class,
+      () -> newTypeInfo(DuplicateIndex.class));
   }
 
-  @Test(expected = IllegalArgumentException.class)
-  public void testEmptyIndexName() throws Exception {
-    newTypeInfo(EmptyIndexName.class);
+  @Test
+  public void testEmptyIndexName() {
+    assertThrows(IllegalArgumentException.class,
+      () -> newTypeInfo(EmptyIndexName.class));
   }
 
-  @Test(expected = IllegalArgumentException.class)
-  public void testIllegalIndexName() throws Exception {
-    newTypeInfo(IllegalIndexName.class);
+  @Test
+  public void testIllegalIndexName() {
+    assertThrows(IllegalArgumentException.class,
+      () -> newTypeInfo(IllegalIndexName.class));
   }
 
-  @Test(expected = IllegalArgumentException.class)
-  public void testIllegalIndexMethod() throws Exception {
-    newTypeInfo(IllegalIndexMethod.class);
+  @Test
+  public void testIllegalIndexMethod() {
+    assertThrows(IllegalArgumentException.class,
+      () -> newTypeInfo(IllegalIndexMethod.class));
   }
 
   @Test

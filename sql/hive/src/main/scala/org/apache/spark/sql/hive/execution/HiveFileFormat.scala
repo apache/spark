@@ -22,9 +22,11 @@ import scala.collection.JavaConverters._
 import org.apache.hadoop.fs.{FileStatus, Path}
 import org.apache.hadoop.hive.ql.exec.Utilities
 import org.apache.hadoop.hive.ql.io.{HiveFileFormatUtils, HiveOutputFormat}
+import org.apache.hadoop.hive.ql.plan.FileSinkDesc
 import org.apache.hadoop.hive.serde2.Serializer
 import org.apache.hadoop.hive.serde2.objectinspector.{ObjectInspectorUtils, StructObjectInspector}
 import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspectorUtils.ObjectInspectorCopyOption
+import org.apache.hadoop.hive.serde2.typeinfo.TypeInfoUtils
 import org.apache.hadoop.io.Writable
 import org.apache.hadoop.mapred.{JobConf, Reporter}
 import org.apache.hadoop.mapreduce.{Job, TaskAttemptContext}
@@ -33,9 +35,9 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.SPECULATION_ENABLED
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.datasources.{FileFormat, OutputWriter, OutputWriterFactory}
 import org.apache.spark.sql.hive.{HiveInspectors, HiveTableUtil}
-import org.apache.spark.sql.hive.HiveShim.{ShimFileSinkDesc => FileSinkDesc}
 import org.apache.spark.sql.sources.DataSourceRegister
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.SerializableJobConf
@@ -56,7 +58,7 @@ class HiveFileFormat(fileSinkConf: FileSinkDesc)
       sparkSession: SparkSession,
       options: Map[String, String],
       files: Seq[FileStatus]): Option[StructType] = {
-    throw new UnsupportedOperationException(s"inferSchema is not supported for hive data source.")
+    throw QueryExecutionErrors.inferSchemaUnsupportedForHiveError()
   }
 
   override def prepareWrite(
@@ -105,10 +107,25 @@ class HiveFileFormat(fileSinkConf: FileSinkDesc)
       }
     }
   }
+
+  override def supportFieldName(name: String): Boolean = {
+    fileSinkConf.getTableInfo.getOutputFileFormatClassName match {
+      case "org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat" =>
+        !name.matches(".*[ ,;{}()\n\t=].*")
+      case "org.apache.hadoop.hive.ql.io.orc.OrcOutputFormat" =>
+        try {
+          TypeInfoUtils.getTypeInfoFromTypeString(s"struct<$name:int>")
+          true
+        } catch {
+          case _: IllegalArgumentException => false
+        }
+      case _ => true
+    }
+  }
 }
 
 class HiveOutputWriter(
-    path: String,
+    val path: String,
     fileSinkConf: FileSinkDesc,
     jobConf: JobConf,
     dataSchema: StructType) extends OutputWriter with HiveInspectors {

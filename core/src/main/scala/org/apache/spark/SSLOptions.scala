@@ -78,6 +78,12 @@ private[spark] case class SSLOptions(
         trustStore.foreach(file => sslContextFactory.setTrustStorePath(file.getAbsolutePath))
         trustStorePassword.foreach(sslContextFactory.setTrustStorePassword)
         trustStoreType.foreach(sslContextFactory.setTrustStoreType)
+        /*
+         * Need to pass needClientAuth flag to jetty for Jetty server to authenticate
+         * client certificates. This would help enable mTLS authentication.
+         */
+        sslContextFactory.setNeedClientAuth(needClientAuth)
+
       }
       protocol.foreach(sslContextFactory.setProtocol)
       if (supportedAlgorithms.nonEmpty) {
@@ -175,7 +181,9 @@ private[spark] object SSLOptions extends Logging {
       ns: String,
       defaults: Option[SSLOptions] = None): SSLOptions = {
     val enabled = conf.getBoolean(s"$ns.enabled", defaultValue = defaults.exists(_.enabled))
-
+    if (!enabled) {
+      return new SSLOptions()
+    }
     val port = conf.getWithSubstitution(s"$ns.port").map(_.toInt)
     port.foreach { p =>
       require(p >= 0, "Port number must be a non-negative value.")

@@ -17,18 +17,26 @@
 
 package org.apache.spark.deploy.yarn
 
+import java.util
 import java.util.Collections
+import java.util.concurrent.atomic.AtomicInteger
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable
 
+import org.apache.hadoop.net.{Node, NodeBase}
+import org.apache.hadoop.yarn.api.protocolrecords.AllocateResponse
 import org.apache.hadoop.yarn.api.records._
 import org.apache.hadoop.yarn.client.api.AMRMClient
 import org.apache.hadoop.yarn.client.api.AMRMClient.ContainerRequest
 import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.mockito.ArgumentCaptor
 import org.mockito.Mockito._
-import org.scalatest.{BeforeAndAfterEach, Matchers}
+import org.mockito.invocation.InvocationOnMock
+import org.mockito.stubbing.Answer
+import org.scalatest.PrivateMethodTester
+import org.scalatest.matchers.must.Matchers
+import org.scalatest.matchers.should.Matchers._
 
 import org.apache.spark.{SecurityManager, SparkConf, SparkFunSuite}
 import org.apache.spark.deploy.SparkHadoopUtil
@@ -40,6 +48,7 @@ import org.apache.spark.resource.ResourceUtils.{AMOUNT, GPU}
 import org.apache.spark.resource.TestResourceIDs._
 import org.apache.spark.rpc.RpcEndpointRef
 import org.apache.spark.scheduler.SplitInfo
+import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages.DecommissionExecutorsOnHost
 import org.apache.spark.util.ManualClock
 
 class MockResolver extends SparkRackResolver(SparkHadoopUtil.get.conf) {
@@ -48,15 +57,19 @@ class MockResolver extends SparkRackResolver(SparkHadoopUtil.get.conf) {
     if (hostName == "host3") "/rack2" else "/rack1"
   }
 
+  override def resolve(hostNames: Seq[String]): Seq[Node] =
+    hostNames.map(n => new NodeBase(n, resolve(n)))
+
 }
 
-class YarnAllocatorSuite extends SparkFunSuite with Matchers with BeforeAndAfterEach {
+class YarnAllocatorSuite extends SparkFunSuite with Matchers with PrivateMethodTester {
   val conf = new YarnConfiguration()
   val sparkConf = new SparkConf()
   sparkConf.set(DRIVER_HOST_ADDRESS, "localhost")
   sparkConf.set(DRIVER_PORT, 4040)
   sparkConf.set(SPARK_JARS, Seq("notarealjar.jar"))
   sparkConf.set("spark.yarn.launchContainers", "false")
+  sparkConf.set(DECOMMISSION_ENABLED.key, "true")
 
   val appAttemptId = ApplicationAttemptId.newInstance(ApplicationId.newInstance(0, 0), 0)
 
@@ -73,7 +86,9 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers with BeforeAndAfter
   // priority has to be 0 to match default profile id
   val RM_REQUEST_PRIORITY = Priority.newInstance(0)
   val defaultRPId = ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID
-  val defaultRP = ResourceProfile.getOrCreateDefaultProfile(sparkConf)
+  var defaultRP = ResourceProfile.getOrCreateDefaultProfile(sparkConf)
+
+  var rpcEndPoint: RpcEndpointRef = _
 
   override def beforeEach(): Unit = {
     super.beforeEach()
@@ -112,10 +127,14 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers with BeforeAndAfter
     for ((name, value) <- additionalConfigs) {
       sparkConfClone.set(name, value)
     }
+    // different spark confs means we need to reinit the default profile
+    ResourceProfile.clearDefaultProfile()
+    defaultRP = ResourceProfile.getOrCreateDefaultProfile(sparkConfClone)
 
+    rpcEndPoint = mock(classOf[RpcEndpointRef])
     val allocator = new YarnAllocator(
       "not used",
-      mock(classOf[RpcEndpointRef]),
+      rpcEndPoint,
       conf,
       sparkConfClone,
       rmClient,
@@ -171,8 +190,7 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers with BeforeAndAfter
   }
 
   test("single container allocated with ResourceProfile") {
-    assume(isYarnResourceTypesAvailable())
-    val yarnResources = Seq(YARN_GPU_RESOURCE_CONFIG)
+    val yarnResources = Seq(sparkConf.get(YARN_GPU_DEVICE))
     ResourceRequestTestHelper.initializeResourceTypes(yarnResources)
     // create default profile so we get a different id to test below
     val defaultRProf = ResourceProfile.getOrCreateDefaultProfile(sparkConf)
@@ -206,8 +224,7 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers with BeforeAndAfter
   }
 
   test("multiple containers allocated with ResourceProfiles") {
-    assume(isYarnResourceTypesAvailable())
-    val yarnResources = Seq(YARN_GPU_RESOURCE_CONFIG, YARN_FPGA_RESOURCE_CONFIG)
+    val yarnResources = Seq(sparkConf.get(YARN_GPU_DEVICE), sparkConf.get(YARN_FPGA_DEVICE))
     ResourceRequestTestHelper.initializeResourceTypes(yarnResources)
     // create default profile so we get a different id to test below
     val defaultRProf = ResourceProfile.getOrCreateDefaultProfile(sparkConf)
@@ -258,7 +275,6 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers with BeforeAndAfter
   }
 
   test("custom resource requested from yarn") {
-    assume(isYarnResourceTypesAvailable())
     ResourceRequestTestHelper.initializeResourceTypes(List("gpu"))
 
     val mockAmClient = mock(classOf[AMRMClient[ContainerRequest]])
@@ -266,12 +282,13 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers with BeforeAndAfter
       Map(s"${YARN_EXECUTOR_RESOURCE_TYPES_PREFIX}${GPU}.${AMOUNT}" -> "2G"))
 
     handler.updateResourceRequests()
-    val container = createContainer("host1", resource = handler.defaultResource)
+    val defaultResource = handler.rpIdToYarnResource.get(defaultRPId)
+    val container = createContainer("host1", resource = defaultResource)
     handler.handleAllocatedContainers(Array(container))
 
     // get amount of memory and vcores from resource, so effectively skipping their validation
-    val expectedResources = Resource.newInstance(handler.defaultResource.getMemory(),
-      handler.defaultResource.getVirtualCores)
+    val expectedResources = Resource.newInstance(defaultResource.getMemorySize(),
+      defaultResource.getVirtualCores)
     setResourceRequests(Map("gpu" -> "2G"), expectedResources)
     val captor = ArgumentCaptor.forClass(classOf[ContainerRequest])
 
@@ -281,9 +298,9 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers with BeforeAndAfter
   }
 
   test("custom spark resource mapped to yarn resource configs") {
-    assume(isYarnResourceTypesAvailable())
     val yarnMadeupResource = "yarn.io/madeup"
-    val yarnResources = Seq(YARN_GPU_RESOURCE_CONFIG, YARN_FPGA_RESOURCE_CONFIG, yarnMadeupResource)
+    val yarnResources = Seq(sparkConf.get(YARN_GPU_DEVICE), sparkConf.get(YARN_FPGA_DEVICE),
+      yarnMadeupResource)
     ResourceRequestTestHelper.initializeResourceTypes(yarnResources)
     val mockAmClient = mock(classOf[AMRMClient[ContainerRequest]])
     val madeupConfigName = s"${YARN_EXECUTOR_RESOURCE_TYPES_PREFIX}${yarnMadeupResource}.${AMOUNT}"
@@ -294,14 +311,45 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers with BeforeAndAfter
     val (handler, _) = createAllocator(1, mockAmClient, sparkResources)
 
     handler.updateResourceRequests()
-    val yarnRInfo = ResourceRequestTestHelper.getResources(handler.defaultResource)
-    val allResourceInfo = yarnRInfo.map( rInfo => (rInfo.name -> rInfo.value) ).toMap
-    assert(allResourceInfo.get(YARN_GPU_RESOURCE_CONFIG).nonEmpty)
-    assert(allResourceInfo.get(YARN_GPU_RESOURCE_CONFIG).get === 3)
-    assert(allResourceInfo.get(YARN_FPGA_RESOURCE_CONFIG).nonEmpty)
-    assert(allResourceInfo.get(YARN_FPGA_RESOURCE_CONFIG).get === 2)
+    val defaultResource = handler.rpIdToYarnResource.get(defaultRPId)
+    val yarnRInfo = defaultResource.getResources
+    val allResourceInfo = yarnRInfo.map( rInfo => (rInfo.getName -> rInfo.getValue) ).toMap
+    assert(allResourceInfo.get(sparkConf.get(YARN_GPU_DEVICE)).nonEmpty)
+    assert(allResourceInfo.get(sparkConf.get(YARN_GPU_DEVICE)).get === 3)
+    assert(allResourceInfo.get(sparkConf.get(YARN_FPGA_DEVICE)).nonEmpty)
+    assert(allResourceInfo.get(sparkConf.get(YARN_FPGA_DEVICE)).get === 2)
     assert(allResourceInfo.get(yarnMadeupResource).nonEmpty)
     assert(allResourceInfo.get(yarnMadeupResource).get === 5)
+  }
+
+  test("gpu/fpga spark resource mapped to custom yarn resource") {
+    val gpuCustomName = "custom/gpu"
+    val fpgaCustomName = "custom/fpga"
+    val originalGpu = sparkConf.get(YARN_GPU_DEVICE)
+    val originalFpga = sparkConf.get(YARN_FPGA_DEVICE)
+    try {
+      sparkConf.set(YARN_GPU_DEVICE.key, gpuCustomName)
+      sparkConf.set(YARN_FPGA_DEVICE.key, fpgaCustomName)
+      val yarnResources = Seq(gpuCustomName, fpgaCustomName)
+      ResourceRequestTestHelper.initializeResourceTypes(yarnResources)
+      val mockAmClient = mock(classOf[AMRMClient[ContainerRequest]])
+      val sparkResources =
+        Map(EXECUTOR_GPU_ID.amountConf -> "3",
+          EXECUTOR_FPGA_ID.amountConf -> "2")
+      val (handler, _) = createAllocator(1, mockAmClient, sparkResources)
+
+      handler.updateResourceRequests()
+      val defaultResource = handler.rpIdToYarnResource.get(defaultRPId)
+      val yarnRInfo = defaultResource.getResources
+      val allResourceInfo = yarnRInfo.map(rInfo => (rInfo.getName -> rInfo.getValue)).toMap
+      assert(allResourceInfo.get(gpuCustomName).nonEmpty)
+      assert(allResourceInfo.get(gpuCustomName).get === 3)
+      assert(allResourceInfo.get(fpgaCustomName).nonEmpty)
+      assert(allResourceInfo.get(fpgaCustomName).get === 2)
+    } finally {
+      sparkConf.set(YARN_GPU_DEVICE.key, originalGpu)
+      sparkConf.set(YARN_FPGA_DEVICE.key, originalFpga)
+    }
   }
 
   test("container should not be created if requested number if met") {
@@ -521,9 +569,10 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers with BeforeAndAfter
     handler.getNumUnexpectedContainerRelease should be (2)
   }
 
-  test("blacklisted nodes reflected in amClient requests") {
-    // Internally we track the set of blacklisted nodes, but yarn wants us to send *changes*
-    // to the blacklist.  This makes sure we are sending the right updates.
+  test("excluded nodes reflected in amClient requests") {
+    // Internally we track the set of excluded nodes, but yarn wants us to send *changes*
+    // to it. Note the YARN api uses the term blacklist for excluded nodes.
+    // This makes sure we are sending the right updates.
     val mockAmClient = mock(classOf[AMRMClient[ContainerRequest]])
     val (handler, _) = createAllocator(4, mockAmClient)
     val resourceProfileToTotalExecs = mutable.HashMap(defaultRP -> 1)
@@ -532,14 +581,14 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers with BeforeAndAfter
       numLocalityAwareTasksPerResourceProfileId.toMap, Map(), Set("hostA"))
     verify(mockAmClient).updateBlacklist(Seq("hostA").asJava, Seq[String]().asJava)
 
-    val blacklistedNodes = Set(
+    val excludedNodes = Set(
       "hostA",
       "hostB"
     )
 
     resourceProfileToTotalExecs(defaultRP) = 2
     handler.requestTotalExecutorsWithPreferredLocalities(resourceProfileToTotalExecs.toMap,
-      numLocalityAwareTasksPerResourceProfileId.toMap, Map(), blacklistedNodes)
+      numLocalityAwareTasksPerResourceProfileId.toMap, Map(), excludedNodes)
     verify(mockAmClient).updateBlacklist(Seq("hostB").asJava, Seq[String]().asJava)
     resourceProfileToTotalExecs(defaultRP) = 3
     handler.requestTotalExecutorsWithPreferredLocalities(resourceProfileToTotalExecs.toMap,
@@ -590,15 +639,15 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers with BeforeAndAfter
     handler.getNumExecutorsFailed should be (0)
   }
 
-  test("SPARK-26269: YarnAllocator should have same blacklist behaviour with YARN") {
-    val rmClientSpy = spy(rmClient)
+  test("SPARK-26269: YarnAllocator should have same excludeOnFailure behaviour with YARN") {
+    val rmClientSpy = spy[AMRMClient[ContainerRequest]](rmClient)
     val maxExecutors = 11
 
     val (handler, _) = createAllocator(
       maxExecutors,
       rmClientSpy,
       Map(
-        YARN_EXECUTOR_LAUNCH_BLACKLIST_ENABLED.key -> "true",
+        YARN_EXECUTOR_LAUNCH_EXCLUDE_ON_FAILURE_ENABLED.key -> "true",
         MAX_FAILED_EXEC_PER_NODE.key -> "0"))
     handler.updateResourceRequests()
 
@@ -606,7 +655,7 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers with BeforeAndAfter
     val ids = 0 to maxExecutors
     val containers = createContainers(hosts, ids)
 
-    val nonBlacklistedStatuses = Seq(
+    val nonExcludedStatuses = Seq(
       ContainerExitStatus.SUCCESS,
       ContainerExitStatus.PREEMPTED,
       ContainerExitStatus.KILLED_EXCEEDED_VMEM,
@@ -617,28 +666,50 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers with BeforeAndAfter
       ContainerExitStatus.ABORTED,
       ContainerExitStatus.DISKS_FAILED)
 
-    val nonBlacklistedContainerStatuses = nonBlacklistedStatuses.zipWithIndex.map {
+    val nonExcludedContainerStatuses = nonExcludedStatuses.zipWithIndex.map {
       case (exitStatus, idx) => createContainerStatus(containers(idx).getId, exitStatus)
     }
 
-    val BLACKLISTED_EXIT_CODE = 1
-    val blacklistedStatuses = Seq(ContainerExitStatus.INVALID, BLACKLISTED_EXIT_CODE)
+    val EXCLUDED_EXIT_CODE = 1
+    val excludedStatuses = Seq(ContainerExitStatus.INVALID, EXCLUDED_EXIT_CODE)
 
-    val blacklistedContainerStatuses = blacklistedStatuses.zip(9 until maxExecutors).map {
+    val excludedContainerStatuses = excludedStatuses.zip(9 until maxExecutors).map {
       case (exitStatus, idx) => createContainerStatus(containers(idx).getId, exitStatus)
     }
 
     handler.handleAllocatedContainers(containers.slice(0, 9))
-    handler.processCompletedContainers(nonBlacklistedContainerStatuses)
+    handler.processCompletedContainers(nonExcludedContainerStatuses)
     verify(rmClientSpy, never())
       .updateBlacklist(hosts.slice(0, 9).asJava, Collections.emptyList())
 
     handler.handleAllocatedContainers(containers.slice(9, 11))
-    handler.processCompletedContainers(blacklistedContainerStatuses)
+    handler.processCompletedContainers(excludedContainerStatuses)
     verify(rmClientSpy)
       .updateBlacklist(hosts.slice(9, 10).asJava, Collections.emptyList())
     verify(rmClientSpy)
       .updateBlacklist(hosts.slice(10, 11).asJava, Collections.emptyList())
+  }
+
+  test("SPARK-39601 YarnAllocator should not count executor failure after shutdown") {
+    val (handler, _) = createAllocator()
+    handler.updateResourceRequests()
+    handler.getNumExecutorsFailed should be(0)
+
+    val failedBeforeShutdown = createContainer("host1")
+    val failedAfterShutdown = createContainer("host2")
+    handler.handleAllocatedContainers(Seq(failedBeforeShutdown, failedAfterShutdown))
+
+    val failedBeforeShutdownStatus = ContainerStatus.newInstance(
+      failedBeforeShutdown.getId, ContainerState.COMPLETE, "Failed", -1)
+    val failedAfterShutdownStatus = ContainerStatus.newInstance(
+      failedAfterShutdown.getId, ContainerState.COMPLETE, "Failed", -1)
+
+    handler.processCompletedContainers(Seq(failedBeforeShutdownStatus))
+    handler.getNumExecutorsFailed should be(1)
+
+    handler.setShutdown(true)
+    handler.processCompletedContainers(Seq(failedAfterShutdownStatus))
+    handler.getNumExecutorsFailed should be(1)
   }
 
   test("SPARK-28577#YarnAllocator.resource.memory should include offHeapSize " +
@@ -653,12 +724,138 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers with BeforeAndAfter
       sparkConf.set(MEMORY_OFFHEAP_SIZE, offHeapMemoryInByte)
       val (handler, _) = createAllocator(maxExecutors = 1,
         additionalConfigs = Map(EXECUTOR_MEMORY.key -> executorMemory.toString))
-      val memory = handler.defaultResource.getMemory
+      val defaultResource = handler.rpIdToYarnResource.get(defaultRPId)
+      val memory = defaultResource.getMemorySize
       assert(memory ==
-        executorMemory + offHeapMemoryInMB + YarnSparkHadoopUtil.MEMORY_OVERHEAD_MIN)
+        executorMemory + offHeapMemoryInMB + ResourceProfile.MEMORY_OVERHEAD_MIN_MIB)
     } finally {
       sparkConf.set(MEMORY_OFFHEAP_ENABLED, originalOffHeapEnabled)
       sparkConf.set(MEMORY_OFFHEAP_SIZE, originalOffHeapSize)
     }
+  }
+
+  test("SPARK-38194: Configurable memory overhead factor") {
+    val executorMemory = sparkConf.get(EXECUTOR_MEMORY).toLong
+    try {
+      sparkConf.set(EXECUTOR_MEMORY_OVERHEAD_FACTOR, 0.5)
+      val (handler, _) = createAllocator(maxExecutors = 1,
+        additionalConfigs = Map(EXECUTOR_MEMORY.key -> executorMemory.toString))
+      val defaultResource = handler.rpIdToYarnResource.get(defaultRPId)
+      val memory = defaultResource.getMemorySize
+      assert(memory == (executorMemory * 1.5).toLong)
+    } finally {
+      sparkConf.set(EXECUTOR_MEMORY_OVERHEAD_FACTOR, 0.1)
+    }
+  }
+
+  test("SPARK-38194: Memory overhead takes precedence over factor") {
+    val executorMemory = sparkConf.get(EXECUTOR_MEMORY)
+    try {
+      sparkConf.set(EXECUTOR_MEMORY_OVERHEAD_FACTOR, 0.5)
+      sparkConf.set(EXECUTOR_MEMORY_OVERHEAD, (executorMemory * 0.4).toLong)
+      val (handler, _) = createAllocator(maxExecutors = 1,
+        additionalConfigs = Map(EXECUTOR_MEMORY.key -> executorMemory.toString))
+      val defaultResource = handler.rpIdToYarnResource.get(defaultRPId)
+      val memory = defaultResource.getMemorySize
+      assert(memory == (executorMemory * 1.4).toLong)
+    } finally {
+      sparkConf.set(EXECUTOR_MEMORY_OVERHEAD_FACTOR, 0.1)
+    }
+  }
+
+  test("Test YARN container decommissioning") {
+    val rmClient: AMRMClient[ContainerRequest] = AMRMClient.createAMRMClient()
+    val rmClientSpy = spy[AMRMClient[ContainerRequest]](rmClient)
+    val allocateResponse = mock(classOf[AllocateResponse])
+    val (handler, sparkConfClone) = createAllocator(3, rmClientSpy)
+
+    val container1 = createContainer("host1")
+    val container2 = createContainer("host2")
+    val container3 = createContainer("host3")
+    val containerList =
+      new util.ArrayList[Container](Seq(container1, container2, container3).asJava)
+
+    // Return 3 containers allocated by YARN for the first heart beat
+    when(allocateResponse.getAllocatedContainers).thenReturn(containerList)
+
+    // No nodes are in DECOMMISSIONING state in the first heart beat so return empty list
+    when(allocateResponse.getUpdatedNodes).thenReturn(new util.ArrayList[NodeReport]())
+    // when().thenReturn doesn't work on spied class. We will use doAnswer for this.
+    val allocateResponseAnswer = new Answer[AnyRef]() {
+      @throws[Throwable]
+      override def answer(invocationOnMock: InvocationOnMock): AllocateResponse = {
+        allocateResponse
+      }
+    }
+    doAnswer(allocateResponseAnswer).when(rmClientSpy)
+      .allocate(org.mockito.ArgumentMatchers.anyFloat())
+
+    handler.allocateResources()
+    // No DecommissionExecutor message should be sent
+    verify(rpcEndPoint, times(0)).
+      send(DecommissionExecutorsOnHost(org.mockito.ArgumentMatchers.any()))
+
+    handler.getNumExecutorsRunning should be (3)
+    handler.allocatedContainerToHostMap(container1.getId) should be ("host1")
+    handler.allocatedContainerToHostMap(container2.getId) should be ("host2")
+    handler.allocatedContainerToHostMap(container3.getId) should be ("host3")
+    val allocatedHostToContainersMap = handler.allocatedHostToContainersMapPerRPId(defaultRPId)
+    allocatedHostToContainersMap("host1") should contain (container1.getId)
+    allocatedHostToContainersMap("host2") should contain (container2.getId)
+    allocatedHostToContainersMap("host3") should contain (container3.getId)
+
+    // No new containers in this heartbeat
+    when(allocateResponse.getAllocatedContainers).thenReturn(new util.ArrayList[Container]())
+    val nodeReport = mock(classOf[NodeReport])
+    val nodeId = mock(classOf[NodeId])
+    val nodeReportList = new util.ArrayList[NodeReport](Seq(nodeReport).asJava)
+
+    // host1 is now in DECOMMISSIONING state
+    val httpAddress1 = "host1:420"
+    when(nodeReport.getNodeState).thenReturn(NodeState.DECOMMISSIONING)
+    when(nodeReport.getNodeId).thenReturn(nodeId)
+    when(nodeId.getHost).thenReturn("host1")
+    when(allocateResponse.getUpdatedNodes).thenReturn(nodeReportList)
+
+    handler.allocateResources()
+    verify(rpcEndPoint, times(1)).
+      send(DecommissionExecutorsOnHost(org.mockito.ArgumentMatchers.any()))
+
+    // Test with config disabled
+    sparkConf.remove(DECOMMISSION_ENABLED.key)
+
+    // host2 is now in DECOMMISSIONING state
+    val httpAddress2 = "host2:420"
+    when(nodeReport.getNodeId).thenReturn(nodeId)
+    when(nodeId.getHost).thenReturn("host2")
+    when(nodeReport.getNodeId).thenReturn(nodeId)
+
+    // No DecommissionExecutor message should be sent when config is set to false
+    verify(rpcEndPoint, times(1)).
+      send(DecommissionExecutorsOnHost(org.mockito.ArgumentMatchers.any()))
+  }
+
+  test("SPARK-43510: Running executors should be none when YarnAllocator adds running executors " +
+    "after processing completed containers") {
+    val (handler, _) = createAllocator(1)
+    handler.updateResourceRequests()
+    handler.getNumExecutorsRunning should be(0)
+    handler.getNumContainersPendingAllocate should be(1)
+
+    val container = createContainer("host1")
+    handler.handleAllocatedContainers(Array(container))
+    handler.getNumExecutorsRunning should be(1)
+    handler.getNumContainersPendingAllocate should be(0)
+
+    val status = ContainerStatus.newInstance(
+      container.getId, ContainerState.COMPLETE, "Finished", 0)
+    val getOrUpdateNumExecutorsStartingForRPId = PrivateMethod[AtomicInteger](
+      Symbol("getOrUpdateNumExecutorsStartingForRPId"))
+    handler.invokePrivate(getOrUpdateNumExecutorsStartingForRPId(0)).incrementAndGet()
+    handler.processCompletedContainers(Seq(status))
+    val updateInternalState = PrivateMethod[Unit](Symbol("updateInternalState"))
+    handler.invokePrivate(updateInternalState(0, "1", container))
+    handler.getNumExecutorsRunning should be(0)
+    handler.getNumExecutorsStarting should be(0)
   }
 }

@@ -26,6 +26,7 @@ import scala.collection.JavaConverters._
 import scala.collection.immutable
 import scala.collection.mutable.{ArrayBuffer, HashMap, Map}
 
+import org.apache.spark.{JobArtifactSet, JobArtifactState}
 import org.apache.spark.resource.ResourceInformation
 import org.apache.spark.util.{ByteBufferInputStream, ByteBufferOutputStream, Utils}
 
@@ -53,13 +54,15 @@ private[spark] class TaskDescription(
     val name: String,
     val index: Int,    // Index within this task's TaskSet
     val partitionId: Int,
-    val addedFiles: Map[String, Long],
-    val addedJars: Map[String, Long],
+    val artifacts: JobArtifactSet,
     val properties: Properties,
+    val cpus: Int,
     val resources: immutable.Map[String, ResourceInformation],
     val serializedTask: ByteBuffer) {
 
-  override def toString: String = "TaskDescription(TID=%d, index=%d)".format(taskId, index)
+  assert(cpus > 0, "CPUs per task should be > 0")
+
+  override def toString: String = s"TaskDescription($name)"
 }
 
 private[spark] object TaskDescription {
@@ -93,11 +96,8 @@ private[spark] object TaskDescription {
     dataOut.writeInt(taskDescription.index)
     dataOut.writeInt(taskDescription.partitionId)
 
-    // Write files.
-    serializeStringLongMap(taskDescription.addedFiles, dataOut)
-
-    // Write jars.
-    serializeStringLongMap(taskDescription.addedJars, dataOut)
+    // Write artifacts
+    serializeArtifacts(taskDescription.artifacts, dataOut)
 
     // Write properties.
     dataOut.writeInt(taskDescription.properties.size())
@@ -109,6 +109,9 @@ private[spark] object TaskDescription {
       dataOut.write(bytes)
     }
 
+    // Write cpus.
+    dataOut.writeInt(taskDescription.cpus)
+
     // Write resources.
     serializeResources(taskDescription.resources, dataOut)
 
@@ -118,6 +121,43 @@ private[spark] object TaskDescription {
     dataOut.close()
     bytesOut.close()
     bytesOut.toByteBuffer
+  }
+
+  private def deserializeOptionString(in: DataInputStream): Option[String] = {
+    if (in.readBoolean()) {
+      Some(in.readUTF())
+    } else {
+      None
+    }
+  }
+
+  private def deserializeArtifacts(dataIn: DataInputStream): JobArtifactSet = {
+    new JobArtifactSet(
+      state = deserializeOptionString(dataIn).map { uuid =>
+        JobArtifactState(
+          uuid = uuid,
+          replClassDirUri = deserializeOptionString(dataIn))
+      },
+      jars = immutable.Map(deserializeStringLongMap(dataIn).toSeq: _*),
+      files = immutable.Map(deserializeStringLongMap(dataIn).toSeq: _*),
+      archives = immutable.Map(deserializeStringLongMap(dataIn).toSeq: _*))
+  }
+
+  private def serializeOptionString(str: Option[String], out: DataOutputStream): Unit = {
+    out.writeBoolean(str.isDefined)
+    if (str.isDefined) {
+      out.writeUTF(str.get)
+    }
+  }
+
+  private def serializeArtifacts(artifacts: JobArtifactSet, dataOut: DataOutputStream): Unit = {
+    serializeOptionString(artifacts.state.map(_.uuid), dataOut)
+    artifacts.state.foreach { state =>
+      serializeOptionString(state.replClassDirUri, dataOut)
+    }
+    serializeStringLongMap(Map(artifacts.jars.toSeq: _*), dataOut)
+    serializeStringLongMap(Map(artifacts.files.toSeq: _*), dataOut)
+    serializeStringLongMap(Map(artifacts.archives.toSeq: _*), dataOut)
   }
 
   private def deserializeStringLongMap(dataIn: DataInputStream): HashMap[String, Long] = {
@@ -161,11 +201,8 @@ private[spark] object TaskDescription {
     val index = dataIn.readInt()
     val partitionId = dataIn.readInt()
 
-    // Read files.
-    val taskFiles = deserializeStringLongMap(dataIn)
-
-    // Read jars.
-    val taskJars = deserializeStringLongMap(dataIn)
+    // Read artifacts.
+    val artifacts = deserializeArtifacts(dataIn)
 
     // Read properties.
     val properties = new Properties()
@@ -178,13 +215,16 @@ private[spark] object TaskDescription {
       properties.setProperty(key, new String(valueBytes, StandardCharsets.UTF_8))
     }
 
+    // Read cpus.
+    val cpus = dataIn.readInt()
+
     // Read resources.
     val resources = deserializeResources(dataIn)
 
     // Create a sub-buffer for the serialized task into its own buffer (to be deserialized later).
     val serializedTask = byteBuffer.slice()
 
-    new TaskDescription(taskId, attemptNumber, executorId, name, index, partitionId, taskFiles,
-      taskJars, properties, resources, serializedTask)
+    new TaskDescription(taskId, attemptNumber, executorId, name, index, partitionId, artifacts,
+      properties, cpus, resources, serializedTask)
   }
 }

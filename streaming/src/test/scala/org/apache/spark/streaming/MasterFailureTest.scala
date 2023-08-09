@@ -284,7 +284,7 @@ object MasterFailureTest extends Logging {
         })
       }
     }
-    mergedOutput
+    mergedOutput.toSeq
   }
 
   /**
@@ -332,7 +332,7 @@ class KillingThread(ssc: StreamingContext, maxKillWaitTime: Long) extends Thread
   override def run(): Unit = {
     try {
       // If it is the first killing, then allow the first checkpoint to be created
-      var minKillWaitTime = if (MasterFailureTest.killCount == 0) 5000 else 2000
+      val minKillWaitTime = if (MasterFailureTest.killCount == 0) 5000 else 2000
       val killWaitTime = minKillWaitTime + math.abs(Random.nextLong % maxKillWaitTime)
       logInfo("Kill wait time = " + killWaitTime)
       Thread.sleep(killWaitTime)
@@ -369,7 +369,7 @@ class FileGeneratingThread(input: Seq[String], testDir: Path, interval: Long)
     val maxTries = 3
     try {
       Thread.sleep(5000) // To make sure that all the streaming context has been set up
-      for (i <- 0 until input.size) {
+      for (i <- input.indices) {
         // Write the data to a local file and then move it to the target test directory
         val localFile = new File(localTestDir, (i + 1).toString)
         val hadoopFile = new Path(testDir, (i + 1).toString)

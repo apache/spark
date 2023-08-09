@@ -20,10 +20,12 @@ package org.apache.spark.sql.execution.datasources.orc
 import java.io.File
 import java.nio.charset.StandardCharsets.UTF_8
 import java.sql.{Date, Timestamp}
+import java.time.{Duration, Period}
 import java.util.Locale
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, FileSystem, Path}
+import org.apache.logging.log4j.Level
 import org.apache.orc.OrcConf.COMPRESS
 import org.apache.orc.OrcFile
 import org.apache.orc.OrcProto.ColumnEncoding.Kind.{DICTIONARY_V2, DIRECT, DIRECT_V2}
@@ -31,18 +33,21 @@ import org.apache.orc.OrcProto.Stream.Kind
 import org.apache.orc.impl.RecordReaderImpl
 import org.scalatest.BeforeAndAfterAll
 
-import org.apache.spark.{SPARK_VERSION_SHORT, SparkException}
+import org.apache.spark.{SPARK_VERSION_SHORT, SparkConf, SparkException}
 import org.apache.spark.sql.{Row, SPARK_VERSION_METADATA_KEY}
-import org.apache.spark.sql.execution.datasources.SchemaMergeUtils
+import org.apache.spark.sql.execution.datasources.{CommonFileDataSourceSuite, SchemaMergeUtils}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.{LongType, StructField, StructType}
+import org.apache.spark.sql.test.{SharedSparkSession, SQLTestUtilsBase}
+import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
 case class OrcData(intField: Int, stringField: String)
 
-abstract class OrcSuite extends OrcTest with BeforeAndAfterAll {
+abstract class OrcSuite
+  extends OrcTest with BeforeAndAfterAll with CommonFileDataSourceSuite with SQLTestUtilsBase {
   import testImplicits._
+
+  override protected def dataSourceFormat = "orc"
 
   var orcTableDir: File = null
   var orcTableAsDir: File = null
@@ -120,8 +125,7 @@ abstract class OrcSuite extends OrcTest with BeforeAndAfterAll {
     }
   }
 
-  protected def testSelectiveDictionaryEncoding(isSelective: Boolean,
-      isHive23: Boolean = false): Unit = {
+  protected def testSelectiveDictionaryEncoding(isSelective: Boolean, isHiveOrc: Boolean): Unit = {
     val tableName = "orcTable"
 
     withTempDir { dir =>
@@ -174,7 +178,7 @@ abstract class OrcSuite extends OrcTest with BeforeAndAfterAll {
           // Hive 0.11 and RLE v2 is introduced in Hive 0.12 ORC with more improvements.
           // For more details, see https://orc.apache.org/specification/
           assert(stripe.getColumns(1).getKind === DICTIONARY_V2)
-          if (isSelective || isHive23) {
+          if (isSelective || isHiveOrc) {
             assert(stripe.getColumns(2).getKind === DIRECT_V2)
           } else {
             assert(stripe.getColumns(2).getKind === DICTIONARY_V2)
@@ -213,9 +217,7 @@ abstract class OrcSuite extends OrcTest with BeforeAndAfterAll {
           Seq(fs.listStatus(path1), fs.listStatus(path2), fs.listStatus(path3)).flatten
 
         val schema = SchemaMergeUtils.mergeSchemasInParallel(
-          spark,
-          fileStatuses,
-          schemaReader)
+          spark, Map.empty, fileStatuses, schemaReader)
 
         assert(schema.isDefined)
         assert(schema.get == StructType(Seq(
@@ -228,10 +230,14 @@ abstract class OrcSuite extends OrcTest with BeforeAndAfterAll {
   protected def testMergeSchemasInParallel(
       schemaReader: (Seq[FileStatus], Configuration, Boolean) => Seq[StructType]): Unit = {
     testMergeSchemasInParallel(true, schemaReader)
-    val exception = intercept[SparkException] {
-      testMergeSchemasInParallel(false, schemaReader)
-    }.getCause
-    assert(exception.getCause.getMessage.contains("Could not read footer for file"))
+    checkError(
+      exception = intercept[SparkException] {
+        testMergeSchemasInParallel(false, schemaReader)
+      }.getCause.getCause.asInstanceOf[SparkException],
+      errorClass = "CANNOT_READ_FILE_FOOTER",
+      parameters = Map("file" -> "file:.*"),
+      matchPVals = true
+    )
   }
 
   test("create temporary orc table") {
@@ -338,7 +344,7 @@ abstract class OrcSuite extends OrcTest with BeforeAndAfterAll {
     }
 
     // Test all the valid options of spark.sql.orc.compression.codec
-    Seq("NONE", "UNCOMPRESSED", "SNAPPY", "ZLIB", "LZO").foreach { c =>
+    Seq("NONE", "UNCOMPRESSED", "SNAPPY", "ZLIB", "LZO", "ZSTD", "LZ4").foreach { c =>
       withSQLConf(SQLConf.ORC_COMPRESSION.key -> c) {
         val expected = if (c == "UNCOMPRESSED") "NONE" else c
         assert(new OrcOptions(Map.empty[String, String], conf).compressionCodec == expected)
@@ -442,14 +448,15 @@ abstract class OrcSuite extends OrcTest with BeforeAndAfterAll {
           spark.read.orc(basePath).columns.length
         }.getCause
 
-        val innerMessage = orcImp match {
-          case "native" => exception.getMessage
-          case "hive" => exception.getCause.getMessage
+        val innerException = orcImp match {
+          case "native" => exception
+          case "hive" => exception.getCause
           case impl =>
             throw new UnsupportedOperationException(s"Unknown ORC implementation: $impl")
         }
 
-        assert(innerMessage.contains("Failed to merge incompatible data types"))
+        assert(innerException.asInstanceOf[SparkException].getErrorClass ===
+          "CANNOT_MERGE_INCOMPATIBLE_DATA_TYPE")
       }
 
       // it is ok if no schema merging
@@ -474,22 +481,24 @@ abstract class OrcSuite extends OrcTest with BeforeAndAfterAll {
 
         // don't ignore corrupt files
         withSQLConf(SQLConf.IGNORE_CORRUPT_FILES.key -> "false") {
-          val exception = intercept[SparkException] {
-            spark.read.orc(basePath).columns.length
-          }.getCause
-          assert(exception.getCause.getMessage.contains("Could not read footer for file"))
+          checkError(
+            exception = intercept[SparkException] {
+              spark.read.orc(basePath).columns.length
+            }.getCause.getCause.asInstanceOf[SparkException],
+            errorClass = "CANNOT_READ_FILE_FOOTER",
+            parameters = Map("file" -> "file:.*"),
+            matchPVals = true
+          )
         }
       }
     }
   }
 
   test("SPARK-31238: compatibility with Spark 2.4 in reading dates") {
-    Seq(false, true).foreach { vectorized =>
-      withSQLConf(SQLConf.ORC_VECTORIZED_READER_ENABLED.key -> vectorized.toString) {
-        checkAnswer(
-          readResourceOrcFile("test-data/before_1582_date_v2_4.snappy.orc"),
-          Row(java.sql.Date.valueOf("1200-01-01")))
-      }
+    withAllNativeOrcReaders {
+      checkAnswer(
+        readResourceOrcFile("test-data/before_1582_date_v2_4.snappy.orc"),
+        Row(java.sql.Date.valueOf("1200-01-01")))
     }
   }
 
@@ -501,23 +510,19 @@ abstract class OrcSuite extends OrcTest with BeforeAndAfterAll {
         .write
         .orc(path)
 
-      Seq(false, true).foreach { vectorized =>
-        withSQLConf(SQLConf.ORC_VECTORIZED_READER_ENABLED.key -> vectorized.toString) {
-          checkAnswer(
-            spark.read.orc(path),
-            Seq(Row(Date.valueOf("1001-01-01")), Row(Date.valueOf("1582-10-15"))))
-        }
+      withAllNativeOrcReaders {
+        checkAnswer(
+          spark.read.orc(path),
+          Seq(Row(Date.valueOf("1001-01-01")), Row(Date.valueOf("1582-10-15"))))
       }
     }
   }
 
   test("SPARK-31284: compatibility with Spark 2.4 in reading timestamps") {
-    Seq(false, true).foreach { vectorized =>
-      withSQLConf(SQLConf.ORC_VECTORIZED_READER_ENABLED.key -> vectorized.toString) {
-        checkAnswer(
-          readResourceOrcFile("test-data/before_1582_ts_v2_4.snappy.orc"),
-          Row(java.sql.Timestamp.valueOf("1001-01-01 01:02:03.123456")))
-      }
+    withAllNativeOrcReaders {
+      checkAnswer(
+        readResourceOrcFile("test-data/before_1582_ts_v2_4.snappy.orc"),
+        Row(java.sql.Timestamp.valueOf("1001-01-01 01:02:03.123456")))
     }
   }
 
@@ -529,20 +534,72 @@ abstract class OrcSuite extends OrcTest with BeforeAndAfterAll {
         .write
         .orc(path)
 
-      Seq(false, true).foreach { vectorized =>
-        withSQLConf(SQLConf.ORC_VECTORIZED_READER_ENABLED.key -> vectorized.toString) {
-          checkAnswer(
-            spark.read.orc(path),
-            Seq(
-              Row(java.sql.Timestamp.valueOf("1001-01-01 01:02:03.123456")),
-              Row(java.sql.Timestamp.valueOf("1582-10-15 11:12:13.654321"))))
+      withAllNativeOrcReaders {
+        checkAnswer(
+          spark.read.orc(path),
+          Seq(
+            Row(java.sql.Timestamp.valueOf("1001-01-01 01:02:03.123456")),
+            Row(java.sql.Timestamp.valueOf("1582-10-15 11:12:13.654321"))))
+      }
+    }
+  }
+
+  test("SPARK-35612: Support LZ4 compression in ORC data source") {
+    withTempPath { dir =>
+      val path = dir.getAbsolutePath
+      spark.range(3).write.option("compression", "lz4").orc(path)
+      checkAnswer(spark.read.orc(path), Seq(Row(0), Row(1), Row(2)))
+      val files = OrcUtils.listOrcFiles(path, spark.sessionState.newHadoopConf())
+      assert(files.nonEmpty && files.forall(_.getName.contains("lz4")))
+    }
+  }
+
+  test("SPARK-33978: Write and read a file with ZSTD compression") {
+    withTempPath { dir =>
+      val path = dir.getAbsolutePath
+      spark.range(3).write.option("compression", "zstd").orc(path)
+      checkAnswer(spark.read.orc(path), Seq(Row(0), Row(1), Row(2)))
+      val files = OrcUtils.listOrcFiles(path, spark.sessionState.newHadoopConf())
+      assert(files.nonEmpty && files.forall(_.getName.contains("zstd")))
+    }
+  }
+
+  test("SPARK-37841: Skip updating stats for files not been created") {
+    withTempPath { path =>
+      val logAppender = new LogAppender()
+
+      withLogAppender(logAppender, level = Option(Level.WARN)) {
+        spark.range(0, 3, 1, 4).write.orc(path.getCanonicalPath)
+      }
+      val events = logAppender.loggingEvents
+      assert {
+        !events.exists { _.getMessage.getFormattedMessage
+          .contains("This could be due to the output format not writing empty files")
         }
       }
     }
   }
+
+  test("SPARK-37841: ORC sources write empty file with schema") {
+    withTempPath { path =>
+      val canonicalPath = path.getCanonicalPath
+      // creates an empty data set
+      spark.range(1, 1, 1, 1).write.orc(canonicalPath)
+      assert(spark.read.orc(canonicalPath).isEmpty,
+        "ORC sources shall write an empty file contains meta if necessary")
+    }
+  }
+
+  test("SPARK-40667: validate Orc Options") {
+    assert(OrcOptions.getAllOptions.size == 3)
+    // Please add validation on any new Orc options here
+    assert(OrcOptions.isValidOption("mergeSchema"))
+    assert(OrcOptions.isValidOption("orc.compress"))
+    assert(OrcOptions.isValidOption("compression"))
+  }
 }
 
-class OrcSourceSuite extends OrcSuite with SharedSparkSession {
+abstract class OrcSourceSuite extends OrcSuite with SharedSparkSession {
 
   protected override def beforeAll(): Unit = {
     super.beforeAll()
@@ -583,7 +640,7 @@ class OrcSourceSuite extends OrcSuite with SharedSparkSession {
   }
 
   test("Enforce direct encoding column-wise selectively") {
-    testSelectiveDictionaryEncoding(isSelective = true)
+    testSelectiveDictionaryEncoding(isSelective = true, isHiveOrc = false)
   }
 
   test("SPARK-11412 read and merge orc schemas in parallel") {
@@ -595,4 +652,402 @@ class OrcSourceSuite extends OrcSuite with SharedSparkSession {
     val df = readResourceOrcFile("test-data/TestStringDictionary.testRowIndex.orc")
     assert(df.where("str < 'row 001000'").count() === 1000)
   }
+
+  test("SPARK-34897: Support reconcile schemas based on index after nested column pruning") {
+    withTable("t1") {
+      spark.sql(
+        """
+          |CREATE TABLE t1 (
+          |  _col0 INT,
+          |  _col1 STRING,
+          |  _col2 STRUCT<c1: STRING, c2: STRING, c3: STRING, c4: BIGINT>)
+          |USING ORC
+          |""".stripMargin)
+
+      spark.sql("INSERT INTO t1 values(1, '2', struct('a', 'b', 'c', 10L))")
+      checkAnswer(spark.sql("SELECT _col0, _col2.c1 FROM t1"), Seq(Row(1, "a")))
+    }
+  }
+
+  test("SPARK-36663: OrcUtils.toCatalystSchema should correctly handle " +
+    "a column name which consists of only numbers") {
+    withTempPath { dir =>
+      val path = dir.getAbsolutePath
+      spark.sql("SELECT 'a' as `1`, 'b' as `2`, 'c' as `3`").write.orc(path)
+      val df = spark.read.orc(path)
+      checkAnswer(df, Row("a", "b", "c"))
+      assert(df.schema.toArray ===
+        Array(
+          StructField("1", StringType),
+          StructField("2", StringType),
+          StructField("3", StringType)))
+    }
+
+    // test for struct in struct
+    withTempPath { dir =>
+      val path = dir.getAbsolutePath
+      spark.sql(
+        "SELECT 'a' as `10`, named_struct('20', 'b', '30', named_struct('40', 'c')) as `50`")
+        .write.orc(path)
+      val df = spark.read.orc(path)
+      checkAnswer(df, Row("a", Row("b", Row("c"))))
+      assert(df.schema.toArray === Array(
+        StructField("10", StringType),
+        StructField("50",
+          StructType(
+            StructField("20", StringType) ::
+            StructField("30",
+              StructType(
+                StructField("40", StringType) :: Nil)) :: Nil))))
+    }
+
+    // test for struct in array
+    withTempPath { dir =>
+      val path = dir.getAbsolutePath
+      spark.sql("SELECT array(array(named_struct('123', 'a'), named_struct('123', 'b'))) as `789`")
+        .write.orc(path)
+      val df = spark.read.orc(path)
+      checkAnswer(df, Row(Seq(Seq(Row("a"), Row("b")))))
+      assert(df.schema.toArray === Array(
+        StructField("789",
+          ArrayType(
+            ArrayType(
+              StructType(
+                StructField("123", StringType) :: Nil))))))
+    }
+
+    // test for struct in map
+    withTempPath { dir =>
+      val path = dir.getAbsolutePath
+      spark.sql(
+        """
+          |SELECT
+          |  map(
+          |    named_struct('123', 'a'),
+          |    map(
+          |      named_struct('456', 'b'),
+          |      named_struct('789', 'c'))) as `012`""".stripMargin).write.orc(path)
+      val df = spark.read.orc(path)
+      checkAnswer(df, Row(Map(Row("a") -> Map(Row("b") -> Row("c")))))
+      assert(df.schema.toArray === Array(
+        StructField("012",
+          MapType(
+            StructType(
+              StructField("123", StringType) :: Nil),
+            MapType(
+              StructType(
+                StructField("456", StringType) :: Nil),
+              StructType(
+                StructField("789", StringType) :: Nil))))))
+    }
+
+    // test for deeply nested struct with complex types
+    withTempPath { dir =>
+      val path = dir.getAbsolutePath
+      spark.sql(
+        """
+          |SELECT
+          |  named_struct('123',
+          |    array(
+          |      map(
+          |        named_struct('456', 'a'),
+          |        named_struct('789', 'b')))) as `1000`,
+          |  named_struct('123',
+          |    map(
+          |      array(named_struct('456', 'a')),
+          |      array(named_struct('789', 'b')))) as `2000`,
+          |  array(
+          |    named_struct('123',
+          |      map(
+          |        named_struct('456', 'a'),
+          |        named_struct('789', 'b')))) as `3000`,
+          |  array(
+          |    map(
+          |      named_struct('123', 'a'),
+          |      named_struct('456', 'b'))) as `4000`,
+          |  map(
+          |    named_struct('123',
+          |      array(
+          |        named_struct('456', 'a'))),
+          |    named_struct('789',
+          |      array(
+          |        named_struct('012', 'b')))) as `5000`,
+          |  map(
+          |    array(
+          |      named_struct('123', 'a')),
+          |    array(
+          |      named_struct('456', 'b'))) as `6000`
+        """.stripMargin).write.orc(path)
+      val df = spark.read.orc(path)
+      checkAnswer(df, Row(
+        Row(Seq(Map(Row("a") -> Row("b")))),
+        Row(Map(Seq(Row("a")) -> Seq(Row("b")))),
+        Seq(Row(Map(Row("a") -> Row("b")))),
+        Seq(Map(Row("a") -> Row("b"))),
+        Map(Row(Seq(Row("a"))) -> Row(Seq(Row("b")))),
+        Map(Seq(Row("a")) -> Seq(Row("b")))))
+      assert(df.schema.toArray === Array(
+        StructField("1000",
+          StructType(
+            StructField("123",
+              ArrayType(
+                MapType(
+                  StructType(
+                    StructField("456", StringType) :: Nil),
+                  StructType(
+                    StructField("789", StringType) :: Nil)))) :: Nil)),
+        StructField("2000",
+          StructType(
+            StructField("123",
+              MapType(
+                ArrayType(
+                  StructType(
+                    StructField("456", StringType) :: Nil)),
+                ArrayType(
+                  StructType(
+                    StructField("789", StringType) :: Nil)))) :: Nil)),
+        StructField("3000",
+          ArrayType(
+            StructType(
+              StructField("123",
+                MapType(
+                  StructType(
+                    StructField("456", StringType) :: Nil),
+                  StructType(
+                    StructField("789", StringType) :: Nil))) :: Nil))),
+        StructField("4000",
+          ArrayType(
+            MapType(
+              StructType(
+                StructField("123", StringType) :: Nil),
+              StructType(
+                StructField("456", StringType) :: Nil)))),
+        StructField("5000",
+          MapType(
+            StructType(
+              StructField("123",
+                ArrayType(
+                  StructType(
+                    StructField("456", StringType) :: Nil))) :: Nil),
+            StructType(
+              StructField("789",
+                ArrayType(
+                  StructType(
+                    StructField("012", StringType) :: Nil))) :: Nil))),
+        StructField("6000",
+          MapType(
+            ArrayType(
+              StructType(
+                StructField("123", StringType) :: Nil)),
+            ArrayType(
+              StructType(
+                StructField("456", StringType) :: Nil))))))
+    }
+  }
+
+  withAllNativeOrcReaders {
+    Seq(true, false).foreach { vecReaderNestedColEnabled =>
+      val vecReaderEnabled = SQLConf.get.orcVectorizedReaderEnabled
+      test("SPARK-36931: Support reading and writing ANSI intervals (" +
+        s"${SQLConf.ORC_VECTORIZED_READER_ENABLED.key}=$vecReaderEnabled, " +
+        s"${SQLConf.ORC_VECTORIZED_READER_NESTED_COLUMN_ENABLED.key}=$vecReaderNestedColEnabled)") {
+
+        withSQLConf(
+          SQLConf.ORC_VECTORIZED_READER_ENABLED.key ->
+            vecReaderEnabled.toString,
+          SQLConf.ORC_VECTORIZED_READER_NESTED_COLUMN_ENABLED.key ->
+            vecReaderNestedColEnabled.toString) {
+          Seq(
+            YearMonthIntervalType() -> ((i: Int) => Period.of(i, i, 0)),
+            DayTimeIntervalType() -> ((i: Int) => Duration.ofDays(i).plusSeconds(i))
+          ).foreach { case (it, f) =>
+            val data = (1 to 10).map(i => Row(i, f(i)))
+            val schema = StructType(Array(StructField("d", IntegerType, false),
+              StructField("i", it, false)))
+            withTempPath { file =>
+              val df = spark.createDataFrame(sparkContext.parallelize(data), schema)
+              df.write.orc(file.getCanonicalPath)
+              val df2 = spark.read.orc(file.getCanonicalPath)
+              checkAnswer(df2, df.collect().toSeq)
+            }
+          }
+
+          // Tests for ANSI intervals in complex types.
+          withTempPath { file =>
+            val df = spark.sql(
+              """SELECT
+                |  named_struct('interval', interval '1-2' year to month) a,
+                |  array(interval '1 2:3' day to minute) b,
+                |  map('key', interval '10' year) c,
+                |  map(interval '20' second, 'value') d""".stripMargin)
+            df.write.orc(file.getCanonicalPath)
+            val df2 = spark.read.orc(file.getCanonicalPath)
+            checkAnswer(df2, df.collect().toSeq)
+          }
+        }
+      }
+    }
+  }
+
+  test("SPARK-37812: Reuse result row when deserializing a struct") {
+    val queries = Seq(
+      // struct in an array
+      """SELECT
+        |  array(
+        |    named_struct(
+        |      'a1', 1,
+        |      'a2', 2),
+        |    named_struct(
+        |      'a1', 3,
+        |      'a2', 4)
+        |  ) as col1
+        |""".stripMargin,
+
+      // struct as values in a map
+      """SELECT
+        |  map(
+        |    'ns1',
+        |    named_struct(
+        |      'a1', 1,
+        |      'a2', 2),
+        |    'ns2',
+        |    named_struct(
+        |      'a1', 3,
+        |      'a2', 4)
+        |  ) as col1
+        |""".stripMargin,
+
+      // struct as keys in a map
+      """SELECT
+        |  map(
+        |    named_struct(
+        |      'a1', 1,
+        |      'a2', 2),
+        |    1,
+        |    named_struct(
+        |      'a1', 3,
+        |      'a2', 4),
+        |    2
+        |  ) as col1
+        |""".stripMargin,
+
+      // struct in a struct in an array
+      """SELECT
+        |  array(
+        |    named_struct(
+        |      'a', named_struct(
+        |        'a1', 1,
+        |        'a2', 2),
+        |      'b', named_struct(
+        |        'b1', 3,
+        |        'b2', 4)
+        |    ),
+        |    named_struct(
+        |      'a', named_struct(
+        |        'a1', 5,
+        |        'a2', 6),
+        |      'b', named_struct(
+        |        'b1', 7,
+        |        'b2', 8)
+        |    )
+        |  ) as col1
+        |""".stripMargin,
+
+      // struct in a struct as values in a map
+      """SELECT
+        |  map(
+        |    'ns1',
+        |    named_struct(
+        |      'a', named_struct(
+        |        'a1', 1,
+        |        'a2', 2),
+        |      'b', named_struct(
+        |        'b1', 3,
+        |        'b2', 4)
+        |    ),
+        |    'ns2',
+        |    named_struct(
+        |      'a', named_struct(
+        |        'a1', 5,
+        |        'a2', 6),
+        |      'b', named_struct(
+        |        'b1', 7,
+        |        'b2', 8)
+        |    )
+        |  ) as col1
+        |""".stripMargin,
+
+      // struct in a struct as keys in a map
+      """SELECT
+        |  map(
+        |    named_struct(
+        |      'a', named_struct(
+        |        'a1', 1,
+        |        'a2', 2),
+        |      'b', named_struct(
+        |        'b1', 3,
+        |        'b2', 4)
+        |    ),
+        |    1,
+        |    named_struct(
+        |      'a', named_struct(
+        |        'a1', 5,
+        |        'a2', 6),
+        |      'b', named_struct(
+        |        'b1', 7,
+        |        'b2', 8)
+        |    ),
+        |    2
+        |  ) as col1
+        |""".stripMargin,
+
+      // multi-row test
+      """SELECT * FROM VALUES
+        |  (named_struct(
+        |    'a', 1,
+        |    'b', 2)),
+        |  (named_struct(
+        |    'a', 3,
+        |    'b', 4)),
+        |  (named_struct(
+        |    'a', 5,
+        |    'b', 6))
+        |tbl(c1)
+        |""".stripMargin
+    )
+
+    queries.foreach { query =>
+      withAllNativeOrcReaders {
+        Seq(true, false).foreach { vecReaderNestedColEnabled =>
+          // SPARK-37812 only applies to the configuration where
+          // ORC_VECTORIZED_READER_NESTED_COLUMN_ENABLED is false. However, these
+          // are good general correctness tests for the other configurations as well.
+          withSQLConf(SQLConf.ORC_VECTORIZED_READER_NESTED_COLUMN_ENABLED.key ->
+            vecReaderNestedColEnabled.toString) {
+            withTempPath { file =>
+              val df = sql(query)
+              // use coalesce so we write just 1 file for the multi-row case
+              df.coalesce(1).write.orc(file.getCanonicalPath)
+              val df2 = spark.read.orc(file.getCanonicalPath)
+              checkAnswer(df2, df.collect().toSeq)
+            }
+          }
+        }
+      }
+    }
+  }
+}
+
+class OrcSourceV1Suite extends OrcSourceSuite {
+  override protected def sparkConf: SparkConf =
+    super
+      .sparkConf
+      .set(SQLConf.USE_V1_SOURCE_LIST, "orc")
+}
+
+class OrcSourceV2Suite extends OrcSourceSuite {
+  override protected def sparkConf: SparkConf =
+    super
+      .sparkConf
+      .set(SQLConf.USE_V1_SOURCE_LIST, "")
 }

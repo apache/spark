@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.types._
 
 /**
@@ -65,6 +65,7 @@ object SelectedField {
   /**
    * Convert an expression into the parts of the schema (the field) it accesses.
    */
+  @scala.annotation.tailrec
   private def selectField(expr: Expression, dataTypeOpt: Option[DataType]): Option[StructField] = {
     expr match {
       case a: Attribute =>
@@ -75,7 +76,11 @@ object SelectedField {
         val field = c.childSchema(c.ordinal)
         val newField = field.copy(dataType = dataTypeOpt.getOrElse(field.dataType))
         selectField(c.child, Option(struct(newField)))
-      case GetArrayStructFields(child, field, _, _, containsNull) =>
+      case GetArrayStructFields(child, _, ordinal, _, containsNull) =>
+        // For case-sensitivity aware field resolution, we should take `ordinal` which
+        // points to correct struct field.
+        val field = child.dataType.asInstanceOf[ArrayType]
+          .elementType.asInstanceOf[StructType](ordinal)
         val newFieldDataType = dataTypeOpt match {
           case None =>
             // GetArrayStructFields is the top level extractor. This means its result is
@@ -87,13 +92,14 @@ object SelectedField {
             dataType
           case Some(x) =>
             // This should not happen.
-            throw new AnalysisException(s"DataType '$x' is not supported by GetArrayStructFields.")
+            throw QueryCompilationErrors.dataTypeUnsupportedByClassError(x, "GetArrayStructFields")
         }
         val newField = StructField(field.name, newFieldDataType, field.nullable)
         selectField(child, Option(ArrayType(struct(newField), containsNull)))
-      case GetMapValue(child, _) =>
+      case GetMapValue(child, key) if key.foldable =>
         // GetMapValue does not select a field from a struct (i.e. prune the struct) so it can't be
         // the top-level extractor. However it can be part of an extractor chain.
+        // See comment on GetArrayItem regarding the need for key.foldable
         val MapType(keyType, _, valueContainsNull) = child.dataType
         val opt = dataTypeOpt.map(dt => MapType(keyType, dt, valueContainsNull))
         selectField(child, opt)
@@ -105,7 +111,7 @@ object SelectedField {
           case ArrayType(dataType, _) => MapType(keyType, dataType, valueContainsNull)
           case x =>
             // This should not happen.
-            throw new AnalysisException(s"DataType '$x' is not supported by MapValues.")
+            throw QueryCompilationErrors.dataTypeUnsupportedByClassError(x, "MapValues")
         }
         selectField(child, opt)
       case MapKeys(child) =>
@@ -116,15 +122,32 @@ object SelectedField {
           case ArrayType(dataType, _) => MapType(dataType, valueType, valueContainsNull)
           case x =>
             // This should not happen.
-            throw new AnalysisException(s"DataType '$x' is not supported by MapKeys.")
+            throw QueryCompilationErrors.dataTypeUnsupportedByClassError(x, "MapKeys")
         }
         selectField(child, opt)
-      case GetArrayItem(child, _) =>
+      case GetArrayItem(child, index, _) if index.foldable =>
         // GetArrayItem does not select a field from a struct (i.e. prune the struct) so it can't be
         // the top-level extractor. However it can be part of an extractor chain.
+        // If index is not foldable, we'd need to also return the field selected by index, which
+        // the SelectedField interface doesn't support, so only allow a foldable index for now.
         val ArrayType(_, containsNull) = child.dataType
         val opt = dataTypeOpt.map(dt => ArrayType(dt, containsNull))
         selectField(child, opt)
+      case ElementAt(left, right, _, _) if right.foldable =>
+        // ElementAt does not select a field from a struct (i.e. prune the struct) so it can't be
+        // the top-level extractor. However it can be part of an extractor chain.
+        // For example:
+        // For a column schema: `c: array<struct<s1: int, s2: string>>`
+        // With the query: `SELECT element_at(c, 1).s1`
+        // The final pruned schema should be `c: array<struct<s1: int>>`
+        left.dataType match {
+          case ArrayType(_, containsNull) =>
+            val opt = dataTypeOpt.map(dt => ArrayType(dt, containsNull))
+            selectField(left, opt)
+          case MapType(keyType, _, valueContainsNull) =>
+            val opt = dataTypeOpt.map(dt => MapType(keyType, dt, valueContainsNull))
+            selectField(left, opt)
+        }
       case _ =>
         None
     }

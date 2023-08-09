@@ -87,10 +87,14 @@ private[spark] class SecurityManager(
   private var secretKey: String = _
   logInfo("SecurityManager: authentication " + (if (authOn) "enabled" else "disabled") +
     "; ui acls " + (if (aclsOn) "enabled" else "disabled") +
-    "; users  with view permissions: " + viewAcls.toString() +
-    "; groups with view permissions: " + viewAclsGroups.toString() +
-    "; users  with modify permissions: " + modifyAcls.toString() +
-    "; groups with modify permissions: " + modifyAclsGroups.toString())
+    "; users with view permissions: " +
+    (if (viewAcls.nonEmpty) viewAcls.mkString(", ") else "EMPTY") +
+    "; groups with view permissions: " +
+    (if (viewAclsGroups.nonEmpty) viewAclsGroups.mkString(", ") else "EMPTY") +
+    "; users with modify permissions: " +
+    (if (modifyAcls.nonEmpty) modifyAcls.mkString(", ") else "EMPTY") +
+    "; groups with modify permissions: " +
+    (if (modifyAclsGroups.nonEmpty) modifyAclsGroups.mkString(", ") else "EMPTY"))
 
   private val hadoopConf = SparkHadoopUtil.get.newConfiguration(sparkConf)
   // the default SSL configuration - it will be used by all communication layers unless overwritten
@@ -324,7 +328,7 @@ private[spark] class SecurityManager(
       case "yarn" | "local" | LOCAL_N_REGEX(_) | LOCAL_N_FAILURES_REGEX(_, _) =>
         true
 
-      case k8sRegex() =>
+      case KUBERNETES_REGEX(_) =>
         // Don't propagate the secret through the user's credentials in kubernetes. That conflicts
         // with the way k8s handles propagation of delegation tokens.
         false
@@ -354,7 +358,7 @@ private[spark] class SecurityManager(
   private def secretKeyFromFile(): Option[String] = {
     sparkConf.get(authSecretFileConf).flatMap { secretFilePath =>
       sparkConf.getOption(SparkLauncher.SPARK_MASTER).map {
-        case k8sRegex() =>
+        case SparkMasterRegex.KUBERNETES_REGEX(_) =>
           val secretFile = new File(secretFilePath)
           require(secretFile.isFile, s"No file found containing the secret key at $secretFilePath.")
           val base64Key = Base64.getEncoder.encodeToString(Files.readAllBytes(secretFile.toPath))
@@ -391,7 +395,6 @@ private[spark] class SecurityManager(
 
 private[spark] object SecurityManager {
 
-  val k8sRegex = "k8s.*".r
   val SPARK_AUTH_CONF = NETWORK_AUTH_ENABLED.key
   val SPARK_AUTH_SECRET_CONF = AUTH_SECRET.key
   // This is used to set auth secret to an executor's env variable. It should have the same

@@ -26,20 +26,20 @@ import org.apache.hadoop.fs.{Path, PathFilter}
 import org.apache.hadoop.hive.metastore.api.hive_metastoreConstants._
 import org.apache.hadoop.hive.ql.exec.Utilities
 import org.apache.hadoop.hive.ql.metadata.{Partition => HivePartition, Table => HiveTable}
-import org.apache.hadoop.hive.ql.plan.TableDesc
+import org.apache.hadoop.hive.ql.plan.{PartitionDesc, TableDesc}
 import org.apache.hadoop.hive.serde2.Deserializer
+import org.apache.hadoop.hive.serde2.avro.AvroSerdeUtils.AvroTableProperties
 import org.apache.hadoop.hive.serde2.objectinspector.{ObjectInspectorConverters, StructObjectInspector}
 import org.apache.hadoop.hive.serde2.objectinspector.primitive._
 import org.apache.hadoop.io.Writable
 import org.apache.hadoop.mapred.{FileInputFormat, InputFormat => oldInputClass, JobConf}
 import org.apache.hadoop.mapreduce.{InputFormat => newInputClass}
 
-import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.{EmptyRDD, HadoopRDD, NewHadoopRDD, RDD, UnionRDD}
 import org.apache.spark.sql.SparkSession
-import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.{InternalRow, SQLConfHelper}
 import org.apache.spark.sql.catalyst.analysis.CastSupport
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
@@ -68,11 +68,11 @@ class HadoopTableReader(
     @transient private val tableDesc: TableDesc,
     @transient private val sparkSession: SparkSession,
     hadoopConf: Configuration)
-  extends TableReader with CastSupport with Logging {
+  extends TableReader with CastSupport with SQLConfHelper with Logging {
 
   // Hadoop honors "mapreduce.job.maps" as hint,
   // but will ignore when mapreduce.jobtracker.address is "local".
-  // https://hadoop.apache.org/docs/r2.7.6/hadoop-mapreduce-client/hadoop-mapreduce-client-core/
+  // https://hadoop.apache.org/docs/stable/hadoop-mapreduce-client/hadoop-mapreduce-client-core/
   // mapred-default.xml
   //
   // In order keep consistency with Hive, we will let it be 0 in local mode also.
@@ -200,7 +200,7 @@ class HadoopTableReader(
 
     val hivePartitionRDDs = verifyPartitionPath(partitionToDeserializer)
       .map { case (partition, partDeserializer) =>
-      val partDesc = Utilities.getPartitionDesc(partition)
+      val partDesc = Utilities.getPartitionDescFromTableDesc(tableDesc, partition, true)
       val partPath = partition.getDataLocation
       val inputPathStr = applyFilterIfNeeded(partPath, filterOpt)
       // Get partition field info
@@ -239,19 +239,27 @@ class HadoopTableReader(
       fillPartitionKeys(partValues, mutableRow)
 
       val tableProperties = tableDesc.getProperties
+      val avroSchemaProperties = Seq(AvroTableProperties.SCHEMA_LITERAL,
+        AvroTableProperties.SCHEMA_URL).map(_.getPropName())
 
       // Create local references so that the outer object isn't serialized.
       val localTableDesc = tableDesc
-      createHadoopRDD(localTableDesc, inputPathStr).mapPartitions { iter =>
+
+      createHadoopRDD(partDesc, inputPathStr).mapPartitions { iter =>
         val hconf = broadcastedHiveConf.value.value
         val deserializer = localDeserializer.getConstructor().newInstance()
         // SPARK-13709: For SerDes like AvroSerDe, some essential information (e.g. Avro schema
         // information) may be defined in table properties. Here we should merge table properties
         // and partition properties before initializing the deserializer. Note that partition
-        // properties take a higher priority here. For example, a partition may have a different
-        // SerDe as the one defined in table properties.
+        // properties take a higher priority here except for the Avro table properties
+        // to support schema evolution: in that case the properties given at table level will
+        // be used (for details please check SPARK-26836).
+        // For example, a partition may have a different SerDe as the one defined in table
+        // properties.
         val props = new Properties(tableProperties)
-        partProps.asScala.foreach {
+        partProps.asScala.filterNot { case (k, _) =>
+          avroSchemaProperties.contains(k) && tableProperties.containsKey(k)
+        }.foreach {
           case (key, value) => props.setProperty(key, value)
         }
         DeserializerLock.synchronized {
@@ -292,6 +300,16 @@ class HadoopTableReader(
   }
 
   /**
+   * True if the new org.apache.hadoop.mapreduce.InputFormat is implemented (except
+   * HiveHBaseTableInputFormat where although the new interface is implemented by base HBase class
+   * the table inicialization in the Hive layer only happens via the old interface methods -
+   * for more details see SPARK-32380).
+   */
+  private def compatibleWithNewHadoopRDD(inputClass: Class[_ <: oldInputClass[_, _]]): Boolean =
+    classOf[newInputClass[_, _]].isAssignableFrom(inputClass) &&
+      !inputClass.getName.equalsIgnoreCase("org.apache.hadoop.hive.hbase.HiveHBaseTableInputFormat")
+
+  /**
    * The entry of creating a RDD.
    * [SPARK-26630] Using which HadoopRDD will be decided by the input format of tables.
    * The input format of NewHadoopRDD is from `org.apache.hadoop.mapreduce` package while
@@ -299,25 +317,51 @@ class HadoopTableReader(
    */
   private def createHadoopRDD(localTableDesc: TableDesc, inputPathStr: String): RDD[Writable] = {
     val inputFormatClazz = localTableDesc.getInputFileFormatClass
-    if (classOf[newInputClass[_, _]].isAssignableFrom(inputFormatClazz)) {
+    if (compatibleWithNewHadoopRDD(inputFormatClazz)) {
       createNewHadoopRDD(localTableDesc, inputPathStr)
     } else {
       createOldHadoopRDD(localTableDesc, inputPathStr)
     }
   }
 
+  private def createHadoopRDD(partitionDesc: PartitionDesc, inputPathStr: String): RDD[Writable] = {
+    val inputFormatClazz = partitionDesc.getInputFileFormatClass
+    if (compatibleWithNewHadoopRDD(inputFormatClazz)) {
+      createNewHadoopRDD(partitionDesc, inputPathStr)
+    } else {
+      createOldHadoopRDD(partitionDesc, inputPathStr)
+    }
+  }
+
   /**
    * Creates a HadoopRDD based on the broadcasted HiveConf and other job properties that will be
-   * applied locally on each slave.
+   * applied locally on each executor.
    */
   private def createOldHadoopRDD(tableDesc: TableDesc, path: String): RDD[Writable] = {
     val initializeJobConfFunc = HadoopTableReader.initializeLocalJobConfFunc(path, tableDesc) _
     val inputFormatClass = tableDesc.getInputFileFormatClass
       .asInstanceOf[Class[oldInputClass[Writable, Writable]]]
+    createOldHadoopRDD(inputFormatClass, initializeJobConfFunc)
+  }
 
+  /**
+   * Creates a HadoopRDD based on the broadcasted HiveConf and other job properties that will be
+   * applied locally on each executor.
+   */
+  private def createOldHadoopRDD(partitionDesc: PartitionDesc, path: String): RDD[Writable] = {
+    val initializeJobConfFunc =
+      HadoopTableReader.initializeLocalJobConfFunc(path, partitionDesc.getTableDesc) _
+    val inputFormatClass = partitionDesc.getInputFileFormatClass
+      .asInstanceOf[Class[oldInputClass[Writable, Writable]]]
+    createOldHadoopRDD(inputFormatClass, initializeJobConfFunc)
+  }
+
+  private def createOldHadoopRDD(
+      inputFormatClass: Class[oldInputClass[Writable, Writable]],
+      initializeJobConfFunc: JobConf => Unit): RDD[Writable] = {
     val rdd = new HadoopRDD(
       sparkSession.sparkContext,
-      _broadcastedHadoopConf.asInstanceOf[Broadcast[SerializableConfiguration]],
+      _broadcastedHadoopConf,
       Some(initializeJobConfFunc),
       inputFormatClass,
       classOf[Writable],
@@ -330,20 +374,33 @@ class HadoopTableReader(
 
   /**
    * Creates a NewHadoopRDD based on the broadcasted HiveConf and other job properties that will be
-   * applied locally on each slave.
+   * applied locally on each executor.
    */
   private def createNewHadoopRDD(tableDesc: TableDesc, path: String): RDD[Writable] = {
     val newJobConf = new JobConf(hadoopConf)
     HadoopTableReader.initializeLocalJobConfFunc(path, tableDesc)(newJobConf)
     val inputFormatClass = tableDesc.getInputFileFormatClass
       .asInstanceOf[Class[newInputClass[Writable, Writable]]]
+    createNewHadoopRDD(inputFormatClass, newJobConf)
+  }
 
+  private def createNewHadoopRDD(partDesc: PartitionDesc, path: String): RDD[Writable] = {
+    val newJobConf = new JobConf(hadoopConf)
+    HadoopTableReader.initializeLocalJobConfFunc(path, partDesc.getTableDesc)(newJobConf)
+    val inputFormatClass = partDesc.getInputFileFormatClass
+      .asInstanceOf[Class[newInputClass[Writable, Writable]]]
+    createNewHadoopRDD(inputFormatClass, newJobConf)
+  }
+
+  private def createNewHadoopRDD(
+      inputFormatClass: Class[newInputClass[Writable, Writable]],
+      jobConf: JobConf): RDD[Writable] = {
     val rdd = new NewHadoopRDD(
       sparkSession.sparkContext,
       inputFormatClass,
       classOf[Writable],
       classOf[Writable],
-      newJobConf
+      jobConf
     )
 
     // Only take the value (skip the key) because Hive works only with values.
@@ -486,13 +543,19 @@ private[hive] object HadoopTableReader extends HiveInspectors with Logging {
       var i = 0
       val length = fieldRefs.length
       while (i < length) {
-        val fieldValue = soi.getStructFieldData(raw, fieldRefs(i))
-        if (fieldValue == null) {
-          mutableRow.setNullAt(fieldOrdinals(i))
-        } else {
-          unwrappers(i)(fieldValue, mutableRow, fieldOrdinals(i))
+        try {
+          val fieldValue = soi.getStructFieldData(raw, fieldRefs(i))
+          if (fieldValue == null) {
+            mutableRow.setNullAt(fieldOrdinals(i))
+          } else {
+            unwrappers(i)(fieldValue, mutableRow, fieldOrdinals(i))
+          }
+          i += 1
+        } catch {
+          case ex: Throwable =>
+            logError(s"Exception thrown in field <${fieldRefs(i).getFieldName}>")
+            throw ex
         }
-        i += 1
       }
 
       mutableRow: InternalRow

@@ -19,18 +19,187 @@ package org.apache.spark.sql.execution.adaptive
 
 import scala.collection.mutable.ArrayBuffer
 
-import org.apache.spark.MapOutputStatistics
+import org.apache.spark.{MapOutputStatistics, MapOutputTrackerMaster, SparkEnv}
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.execution.{CoalescedPartitionSpec, ShufflePartitionSpec}
+import org.apache.spark.sql.execution.{CoalescedPartitionSpec, PartialReducerPartitionSpec, ShufflePartitionSpec}
 
 object ShufflePartitionsUtil extends Logging {
   final val SMALL_PARTITION_FACTOR = 0.2
   final val MERGED_PARTITION_FACTOR = 1.2
 
   /**
-   * Coalesce the partitions from multiple shuffles. This method assumes that all the shuffles
-   * have the same number of partitions, and the partitions of same index will be read together
-   * by one task.
+   * Coalesce the partitions from multiple shuffles, either in their original states, or applied
+   * with skew handling partition specs. If called on partitions containing skew partition specs,
+   * this method will keep the skew partition specs intact and only coalesce the partitions outside
+   * the skew sections.
+   *
+   * This method will return an empty result if the shuffles have been coalesced already, or if
+   * they do not have the same number of partitions, or if the coalesced result is the same as the
+   * input partition layout.
+   *
+   * @return A sequence of sequence of [[ShufflePartitionSpec]]s, which each inner sequence as the
+   *         new partition specs for its corresponding shuffle after coalescing. If Nil is returned,
+   *         then no coalescing is applied.
+   */
+  def coalescePartitions(
+      mapOutputStatistics: Seq[Option[MapOutputStatistics]],
+      inputPartitionSpecs: Seq[Option[Seq[ShufflePartitionSpec]]],
+      advisoryTargetSize: Long,
+      minNumPartitions: Int,
+      minPartitionSize: Long): Seq[Seq[ShufflePartitionSpec]] = {
+    assert(mapOutputStatistics.length == inputPartitionSpecs.length)
+
+    if (mapOutputStatistics.isEmpty) {
+      return Seq.empty
+    }
+
+    // If `minNumPartitions` is very large, it is possible that we need to use a value less than
+    // `advisoryTargetSize` as the target size of a coalesced task.
+    val totalPostShuffleInputSize = mapOutputStatistics.flatMap(_.map(_.bytesByPartitionId.sum)).sum
+    val maxTargetSize = math.ceil(totalPostShuffleInputSize / minNumPartitions.toDouble).toLong
+    // It's meaningless to make target size smaller than minPartitionSize.
+    val targetSize = maxTargetSize.min(advisoryTargetSize).max(minPartitionSize)
+
+    val shuffleIds = mapOutputStatistics.flatMap(_.map(_.shuffleId)).mkString(", ")
+    logInfo(s"For shuffle($shuffleIds), advisory target size: $advisoryTargetSize, " +
+      s"actual target size $targetSize, minimum partition size: $minPartitionSize")
+
+    // If `inputPartitionSpecs` are all empty, it means skew join optimization is not applied.
+    if (inputPartitionSpecs.forall(_.isEmpty)) {
+      coalescePartitionsWithoutSkew(
+        mapOutputStatistics, targetSize, minPartitionSize)
+    } else {
+      coalescePartitionsWithSkew(
+        mapOutputStatistics, inputPartitionSpecs, targetSize, minPartitionSize)
+    }
+  }
+
+  private def coalescePartitionsWithoutSkew(
+      mapOutputStatistics: Seq[Option[MapOutputStatistics]],
+      targetSize: Long,
+      minPartitionSize: Long): Seq[Seq[ShufflePartitionSpec]] = {
+    // `ShuffleQueryStageExec#mapStats` returns None when the input RDD has 0 partitions,
+    // we should skip it when calculating the `partitionStartIndices`.
+    val validMetrics = mapOutputStatistics.flatten
+    val numShuffles = mapOutputStatistics.length
+    // If all input RDDs have 0 partition, we create an empty partition for every shuffle read.
+    if (validMetrics.isEmpty) {
+      return Seq.fill(numShuffles)(Seq(CoalescedPartitionSpec(0, 0, 0)))
+    }
+
+    // We may have different pre-shuffle partition numbers, don't reduce shuffle partition number
+    // in that case. For example when we union fully aggregated data (data is arranged to a single
+    // partition) and a result of a SortMergeJoin (multiple partitions).
+    if (validMetrics.map(_.bytesByPartitionId.length).distinct.length > 1) {
+      return Seq.empty
+    }
+
+    val numPartitions = validMetrics.head.bytesByPartitionId.length
+    val newPartitionSpecs = coalescePartitions(
+      0, numPartitions, validMetrics, targetSize, minPartitionSize)
+    if (newPartitionSpecs.length < numPartitions) {
+      attachDataSize(mapOutputStatistics, newPartitionSpecs)
+    } else {
+      Seq.empty
+    }
+  }
+
+  private def coalescePartitionsWithSkew(
+      mapOutputStatistics: Seq[Option[MapOutputStatistics]],
+      inputPartitionSpecs: Seq[Option[Seq[ShufflePartitionSpec]]],
+      targetSize: Long,
+      minPartitionSize: Long): Seq[Seq[ShufflePartitionSpec]] = {
+    // Do not coalesce if any of the map output stats are missing or if not all shuffles have
+    // partition specs, which should not happen in practice.
+    if (!mapOutputStatistics.forall(_.isDefined) || !inputPartitionSpecs.forall(_.isDefined)) {
+      logWarning("Could not apply partition coalescing because of missing MapOutputStatistics " +
+        "or shuffle partition specs.")
+      return Seq.empty
+    }
+
+    val validMetrics = mapOutputStatistics.map(_.get)
+    // Extract the start indices of each partition spec. Give invalid index -1 to unexpected
+    // partition specs. When we reach here, it means skew join optimization has been applied.
+    val partitionIndicesSeq = inputPartitionSpecs.map(_.get.map {
+      case CoalescedPartitionSpec(start, end, _) if start + 1 == end => start
+      case PartialReducerPartitionSpec(reducerId, _, _, _) => reducerId
+      case _ => -1 // invalid
+    })
+
+    // There should be no unexpected partition specs and the start indices should be identical
+    // across all different shuffles.
+    assert(partitionIndicesSeq.distinct.length == 1 && partitionIndicesSeq.head.forall(_ >= 0),
+      s"Invalid shuffle partition specs: $inputPartitionSpecs")
+
+    // The indices may look like [0, 1, 2, 2, 2, 3, 4, 4, 5], and the repeated `2` and `4` mean
+    // skewed partitions.
+    val partitionIndices = partitionIndicesSeq.head
+    // The fist index must be 0.
+    assert(partitionIndices.head == 0)
+    val newPartitionSpecsSeq = Seq.fill(mapOutputStatistics.length)(
+      ArrayBuffer.empty[ShufflePartitionSpec])
+    val numPartitions = partitionIndices.length
+    var i = 1
+    var start = 0
+    while (i < numPartitions) {
+      if (partitionIndices(i - 1) == partitionIndices(i)) {
+        // a skew section detected, starting from partition(i - 1).
+        val repeatValue = partitionIndices(i)
+        // coalesce any partitions before partition(i - 1) and after the end of latest skew section.
+        if (i - 1 > start) {
+          val partitionSpecs = coalescePartitions(
+            partitionIndices(start),
+            repeatValue,
+            validMetrics,
+            targetSize,
+            minPartitionSize,
+            allowReturnEmpty = true)
+          newPartitionSpecsSeq.zip(attachDataSize(mapOutputStatistics, partitionSpecs))
+            .foreach(spec => spec._1 ++= spec._2)
+        }
+        // find the end of this skew section, skipping partition(i - 1) and partition(i).
+        var repeatIndex = i + 1
+        while (repeatIndex < numPartitions && partitionIndices(repeatIndex) == repeatValue) {
+          repeatIndex += 1
+        }
+        // copy the partition specs in the skew section to the new partition specs.
+        newPartitionSpecsSeq.zip(inputPartitionSpecs).foreach { case (newSpecs, oldSpecs) =>
+          newSpecs ++= oldSpecs.get.slice(i - 1, repeatIndex)
+        }
+        // start from after the skew section
+        start = repeatIndex
+        i = repeatIndex
+      } else {
+        // Indices outside of the skew section should be larger than the previous one by 1.
+        assert(partitionIndices(i - 1) + 1 == partitionIndices(i))
+        // no skew section detected, advance to the next index.
+        i += 1
+      }
+    }
+    // coalesce any partitions after the end of last skew section.
+    if (numPartitions > start) {
+      val partitionSpecs = coalescePartitions(
+        partitionIndices(start),
+        partitionIndices.last + 1,
+        validMetrics,
+        targetSize,
+        minPartitionSize,
+        allowReturnEmpty = true)
+      newPartitionSpecsSeq.zip(attachDataSize(mapOutputStatistics, partitionSpecs))
+        .foreach(spec => spec._1 ++= spec._2)
+    }
+    // only return coalesced result if any coalescing has happened.
+    if (newPartitionSpecsSeq.head.length < numPartitions) {
+      newPartitionSpecsSeq.map(_.toSeq)
+    } else {
+      Seq.empty
+    }
+  }
+
+  /**
+   * Coalesce the partitions of [start, end) from multiple shuffles. This method assumes that all
+   * the shuffles have the same number of partitions, and the partitions of same index will be read
+   * together by one task.
    *
    * The strategy used to determine the number of coalesced partitions is described as follows.
    * To determine the number of coalesced partitions, we have a target size for a coalesced
@@ -53,53 +222,30 @@ object ShufflePartitionsUtil extends Logging {
    *          CoalescedPartitionSpec(0, 2), CoalescedPartitionSpec(2, 3) and
    *          CoalescedPartitionSpec(3, 5).
    */
-  def coalescePartitions(
-      mapOutputStatistics: Array[MapOutputStatistics],
-      advisoryTargetSize: Long,
-      minNumPartitions: Int): Seq[ShufflePartitionSpec] = {
-    // If `minNumPartitions` is very large, it is possible that we need to use a value less than
-    // `advisoryTargetSize` as the target size of a coalesced task.
-    val totalPostShuffleInputSize = mapOutputStatistics.map(_.bytesByPartitionId.sum).sum
-    // The max at here is to make sure that when we have an empty table, we only have a single
-    // coalesced partition.
-    // There is no particular reason that we pick 16. We just need a number to prevent
-    // `maxTargetSize` from being set to 0.
-    val maxTargetSize = math.max(
-      math.ceil(totalPostShuffleInputSize / minNumPartitions.toDouble).toLong, 16)
-    val targetSize = math.min(maxTargetSize, advisoryTargetSize)
-
-    val shuffleIds = mapOutputStatistics.map(_.shuffleId).mkString(", ")
-    logInfo(s"For shuffle($shuffleIds), advisory target size: $advisoryTargetSize, " +
-      s"actual target size $targetSize.")
-
-    // Make sure these shuffles have the same number of partitions.
-    val distinctNumShufflePartitions =
-      mapOutputStatistics.map(stats => stats.bytesByPartitionId.length).distinct
-    // The reason that we are expecting a single value of the number of shuffle partitions
-    // is that when we add Exchanges, we set the number of shuffle partitions
-    // (i.e. map output partitions) using a static setting, which is the value of
-    // `spark.sql.shuffle.partitions`. Even if two input RDDs are having different
-    // number of partitions, they will have the same number of shuffle partitions
-    // (i.e. map output partitions).
-    assert(
-      distinctNumShufflePartitions.length == 1,
-      "There should be only one distinct value of the number of shuffle partitions " +
-        "among registered Exchange operators.")
-
-    val numPartitions = distinctNumShufflePartitions.head
-    val partitionSpecs = ArrayBuffer[CoalescedPartitionSpec]()
-    var latestSplitPoint = 0
+  private def coalescePartitions(
+      start: Int,
+      end: Int,
+      mapOutputStatistics: Seq[MapOutputStatistics],
+      targetSize: Long,
+      minPartitionSize: Long,
+      allowReturnEmpty: Boolean = false): Seq[CoalescedPartitionSpec] = {
+    // `minPartitionSize` is useful for cases like [64MB, 0.5MB, 64MB]: we can't do coalesce,
+    // because merging 0.5MB to either the left or right partition will exceed the target size.
+    // If 0.5MB is smaller than `minPartitionSize`, we will force-merge it to the left/right side.
+    val partitionSpecs = ArrayBuffer.empty[CoalescedPartitionSpec]
     var coalescedSize = 0L
-    var i = 0
+    var i = start
+    var latestSplitPoint = i
+    var latestPartitionSize = 0L
 
-    def createPartitionSpec(): Unit = {
+    def createPartitionSpec(forceCreate: Boolean = false): Unit = {
       // Skip empty inputs, as it is a waste to launch an empty task.
-      if (coalescedSize > 0) {
+      if (coalescedSize > 0 || forceCreate) {
         partitionSpecs += CoalescedPartitionSpec(latestSplitPoint, i)
       }
     }
 
-    while (i < numPartitions) {
+    while (i < end) {
       // We calculate the total size of i-th shuffle partitions from all shuffles.
       var totalSizeOfCurrentPartition = 0L
       var j = 0
@@ -108,20 +254,60 @@ object ShufflePartitionsUtil extends Logging {
         j += 1
       }
 
-      // If including the `totalSizeOfCurrentPartition` would exceed the target size, then start a
-      // new coalesced partition.
+      // If including the `totalSizeOfCurrentPartition` would exceed the target size and the
+      // current size has reached the `minPartitionSize`, then start a new coalesced partition.
       if (i > latestSplitPoint && coalescedSize + totalSizeOfCurrentPartition > targetSize) {
-        createPartitionSpec()
-        latestSplitPoint = i
-        // reset postShuffleInputSize.
-        coalescedSize = totalSizeOfCurrentPartition
+        if (coalescedSize < minPartitionSize) {
+          // the current partition size is below `minPartitionSize`.
+          // pack it with the smaller one between the two adjacent partitions (before and after).
+          if (latestPartitionSize > 0 && latestPartitionSize < totalSizeOfCurrentPartition) {
+            // pack with the before partition.
+            partitionSpecs(partitionSpecs.length - 1) =
+              CoalescedPartitionSpec(partitionSpecs.last.startReducerIndex, i)
+            latestSplitPoint = i
+            latestPartitionSize += coalescedSize
+            // reset postShuffleInputSize.
+            coalescedSize = totalSizeOfCurrentPartition
+          } else {
+            // pack with the after partition.
+            coalescedSize += totalSizeOfCurrentPartition
+          }
+        } else {
+          createPartitionSpec()
+          latestSplitPoint = i
+          latestPartitionSize = coalescedSize
+          // reset postShuffleInputSize.
+          coalescedSize = totalSizeOfCurrentPartition
+        }
       } else {
         coalescedSize += totalSizeOfCurrentPartition
       }
       i += 1
     }
-    createPartitionSpec()
-    partitionSpecs
+
+    if (coalescedSize < minPartitionSize && latestPartitionSize > 0) {
+      // pack with the last partition.
+      partitionSpecs(partitionSpecs.length - 1) =
+        CoalescedPartitionSpec(partitionSpecs.last.startReducerIndex, end)
+    } else {
+      // If do not allowReturnEmpty, create at least one partition if all partitions are empty.
+      createPartitionSpec(!allowReturnEmpty && partitionSpecs.isEmpty)
+    }
+    partitionSpecs.toSeq
+  }
+
+  private def attachDataSize(
+      mapOutputStatistics: Seq[Option[MapOutputStatistics]],
+      partitionSpecs: Seq[CoalescedPartitionSpec]): Seq[Seq[CoalescedPartitionSpec]] = {
+    mapOutputStatistics.map {
+      case Some(mapStats) =>
+        partitionSpecs.map { spec =>
+          val dataSize = spec.startReducerIndex.until(spec.endReducerIndex)
+            .map(mapStats.bytesByPartitionId).sum
+          spec.copy(dataSize = Some(dataSize))
+        }
+      case None => partitionSpecs.map(_.copy(dataSize = Some(0)))
+    }
   }
 
   /**
@@ -129,7 +315,11 @@ object ShufflePartitionsUtil extends Logging {
    * so that the size sum of each partition is close to the target size. Each index indicates the
    * start of a partition.
    */
-  def splitSizeListByTargetSize(sizes: Seq[Long], targetSize: Long): Array[Int] = {
+  // Visible for testing
+  private[sql] def splitSizeListByTargetSize(
+      sizes: Array[Long],
+      targetSize: Long,
+      smallPartitionFactor: Double): Array[Int] = {
     val partitionStartIndices = ArrayBuffer[Int]()
     partitionStartIndices += 0
     var i = 0
@@ -142,8 +332,8 @@ object ShufflePartitionsUtil extends Logging {
       // the previous partition.
       val shouldMergePartitions = lastPartitionSize > -1 &&
         ((currentPartitionSize + lastPartitionSize) < targetSize * MERGED_PARTITION_FACTOR ||
-        (currentPartitionSize < targetSize * SMALL_PARTITION_FACTOR ||
-          lastPartitionSize < targetSize * SMALL_PARTITION_FACTOR))
+        (currentPartitionSize < targetSize * smallPartitionFactor ||
+          lastPartitionSize < targetSize * smallPartitionFactor))
       if (shouldMergePartitions) {
         // We decide to merge the current partition into the previous one, so the start index of
         // the current partition should be removed.
@@ -168,5 +358,52 @@ object ShufflePartitionsUtil extends Logging {
     }
     tryMergePartitions()
     partitionStartIndices.toArray
+  }
+
+  /**
+   * Get the map size of the specific shuffle and reduce ID. Note that, some map outputs can be
+   * missing due to issues like executor lost. The size will be -1 for missing map outputs and the
+   * caller side should take care of it.
+   */
+  private def getMapSizesForReduceId(shuffleId: Int, partitionId: Int): Array[Long] = {
+    val mapOutputTracker = SparkEnv.get.mapOutputTracker.asInstanceOf[MapOutputTrackerMaster]
+    mapOutputTracker.shuffleStatuses(shuffleId).withMapStatuses(_.map { stat =>
+      if (stat == null) -1 else stat.getSizeForBlock(partitionId)
+    })
+  }
+
+  /**
+   * Splits the skewed partition based on the map size and the target partition size
+   * after split, and create a list of `PartialReducerPartitionSpec`. Returns None if can't split.
+   */
+  def createSkewPartitionSpecs(
+      shuffleId: Int,
+      reducerId: Int,
+      targetSize: Long,
+      smallPartitionFactor: Double = SMALL_PARTITION_FACTOR)
+  : Option[Seq[PartialReducerPartitionSpec]] = {
+    val mapPartitionSizes = getMapSizesForReduceId(shuffleId, reducerId)
+    if (mapPartitionSizes.exists(_ < 0)) return None
+    val mapStartIndices = splitSizeListByTargetSize(
+      mapPartitionSizes, targetSize, smallPartitionFactor)
+    if (mapStartIndices.length > 1) {
+      Some(mapStartIndices.indices.map { i =>
+        val startMapIndex = mapStartIndices(i)
+        val endMapIndex = if (i == mapStartIndices.length - 1) {
+          mapPartitionSizes.length
+        } else {
+          mapStartIndices(i + 1)
+        }
+        var dataSize = 0L
+        var mapIndex = startMapIndex
+        while (mapIndex < endMapIndex) {
+          dataSize += mapPartitionSizes(mapIndex)
+          mapIndex += 1
+        }
+        PartialReducerPartitionSpec(reducerId, startMapIndex, endMapIndex, dataSize)
+      })
+    } else {
+      None
+    }
   }
 }

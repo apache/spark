@@ -20,20 +20,26 @@ package org.apache.spark.sql.catalyst.analysis
 import scala.util.control.NonFatal
 
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.expressions.AliasHelper
+import org.apache.spark.sql.catalyst.optimizer.ReplaceExpressions
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.catalyst.trees.AlwaysProcess
+import org.apache.spark.sql.catalyst.types.DataTypeUtils
+import org.apache.spark.sql.catalyst.util.TypeUtils.{toSQLExpr, toSQLId}
 import org.apache.spark.sql.types.{StructField, StructType}
 
 /**
  * An analyzer rule that replaces [[UnresolvedInlineTable]] with [[LocalRelation]].
  */
-case class ResolveInlineTables(conf: SQLConf) extends Rule[LogicalPlan] with CastSupport {
-  override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
+object ResolveInlineTables extends Rule[LogicalPlan] with CastSupport with AliasHelper {
+  override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsWithPruning(
+    AlwaysProcess.fn, ruleId) {
     case table: UnresolvedInlineTable if table.expressionsResolved =>
       validateInputDimension(table)
-      validateInputEvaluable(table)
-      convert(table)
+      val newTable = ReplaceExpressions(table).asInstanceOf[UnresolvedInlineTable]
+      validateInputEvaluable(newTable)
+      convert(newTable)
   }
 
   /**
@@ -46,9 +52,14 @@ case class ResolveInlineTables(conf: SQLConf) extends Rule[LogicalPlan] with Cas
   private[analysis] def validateInputDimension(table: UnresolvedInlineTable): Unit = {
     if (table.rows.nonEmpty) {
       val numCols = table.names.size
-      table.rows.zipWithIndex.foreach { case (row, ri) =>
+      table.rows.zipWithIndex.foreach { case (row, rowIndex) =>
         if (row.size != numCols) {
-          table.failAnalysis(s"expected $numCols columns but found ${row.size} columns in row $ri")
+          table.failAnalysis(
+            errorClass = "INVALID_INLINE_TABLE.NUM_COLUMNS_MISMATCH",
+            messageParameters = Map(
+              "expectedNumCols" -> numCols.toString,
+              "actualNumCols" -> row.size.toString,
+              "rowIndex" -> rowIndex.toString))
         }
       }
     }
@@ -64,8 +75,10 @@ case class ResolveInlineTables(conf: SQLConf) extends Rule[LogicalPlan] with Cas
     table.rows.foreach { row =>
       row.foreach { e =>
         // Note that nondeterministic expressions are not supported since they are not foldable.
-        if (!e.resolved || !e.foldable) {
-          e.failAnalysis(s"cannot evaluate expression ${e.sql} in inline table definition")
+        if (!e.resolved || !trimAliases(e).foldable) {
+          e.failAnalysis(
+            errorClass = "INVALID_INLINE_TABLE.CANNOT_EVALUATE_EXPRESSION_IN_INLINE_TABLE",
+            messageParameters = Map("expr" -> toSQLExpr(e)))
         }
       }
     }
@@ -84,18 +97,20 @@ case class ResolveInlineTables(conf: SQLConf) extends Rule[LogicalPlan] with Cas
     val fields = table.rows.transpose.zip(table.names).map { case (column, name) =>
       val inputTypes = column.map(_.dataType)
       val tpe = TypeCoercion.findWiderTypeWithoutStringPromotion(inputTypes).getOrElse {
-        table.failAnalysis(s"incompatible types found in column $name for inline table")
+        table.failAnalysis(
+          errorClass = "INVALID_INLINE_TABLE.INCOMPATIBLE_TYPES_IN_INLINE_TABLE",
+          messageParameters = Map("colName" -> toSQLId(name)))
       }
       StructField(name, tpe, nullable = column.exists(_.nullable))
     }
-    val attributes = StructType(fields).toAttributes
+    val attributes = DataTypeUtils.toAttributes(StructType(fields))
     assert(fields.size == table.names.size)
 
     val newRows: Seq[InternalRow] = table.rows.map { row =>
       InternalRow.fromSeq(row.zipWithIndex.map { case (e, ci) =>
         val targetType = fields(ci).dataType
         try {
-          val castedExpr = if (e.dataType.sameType(targetType)) {
+          val castedExpr = if (DataTypeUtils.sameType(e.dataType, targetType)) {
             e
           } else {
             cast(e, targetType)
@@ -103,7 +118,10 @@ case class ResolveInlineTables(conf: SQLConf) extends Rule[LogicalPlan] with Cas
           castedExpr.eval()
         } catch {
           case NonFatal(ex) =>
-            table.failAnalysis(s"failed to evaluate expression ${e.sql}: ${ex.getMessage}", ex)
+            table.failAnalysis(
+              errorClass = "INVALID_INLINE_TABLE.FAILED_SQL_EXPRESSION_EVALUATION",
+              messageParameters = Map("sqlExpr" -> toSQLExpr(e)),
+              cause = ex)
         }
       })
     }
