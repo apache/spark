@@ -124,10 +124,12 @@ object PythonUDTFRunner extends Logging {
     argOffsets.foreach { offset =>
       dataOut.writeInt(offset)
     }
-    udtf.pythonUDTFPartitionColumnIndexes.foreach { partitionColumnIndexes =>
-      dataOut.writeInt(partitionColumnIndexes.numTableArgumentColumns)
-      dataOut.writeInt(partitionColumnIndexes.numPartitionChildIndexes)
-      partitionColumnIndexes.partitionChildIndexes.foreach(dataOut.writeInt)
+    udtf.pythonUDTFPartitionColumnIndexes match {
+      case Some(partitionColumnIndexes) =>
+        dataOut.writeInt(partitionColumnIndexes.numPartitionChildIndexes)
+        partitionColumnIndexes.partitionChildIndexes.foreach(dataOut.writeInt)
+      case None =>
+        dataOut.writeInt(0)
     }
     dataOut.writeInt(udtf.func.command.length)
     dataOut.write(udtf.func.command.toArray)

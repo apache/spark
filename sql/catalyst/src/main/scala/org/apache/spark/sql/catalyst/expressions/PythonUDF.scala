@@ -180,12 +180,10 @@ case class PythonUDTF(
 
 /**
  * Holds the indexes of the TABLE argument to a Python UDTF call, if applicable.
- * @param numTableArgumentColumns The number of columns in the TABLE argument, if applicable.
  * @param numPartitionChildIndexes The number of partitioning columns in each TABLE argument.
  * @param partitionChildIndexes The indexes of the partitioning columns in each TABLE argument.
  */
 case class PythonUDTFPartitionColumnIndexes(
-    numTableArgumentColumns: Int,
     numPartitionChildIndexes: Int,
     partitionChildIndexes: Seq[Int])
 

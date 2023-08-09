@@ -2095,13 +2095,14 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
               // Propagate the column indexes for TABLE arguments to toe PythonUDTF instance.
               val tvfWithTableColumnIndexes: LogicalPlan = tvf match {
                 case g @ Generate(p: PythonUDTF, _, _, _, _, _) =>
-                  assert(functionTableSubqueryArgs.length == 1)
-                  val tableArg = functionTableSubqueryArgs.head
-                  val indexes = PythonUDTFPartitionColumnIndexes(
-                    numTableArgumentColumns = tableArg.plan.output.length,
-                    numPartitionChildIndexes = tableArg.partitioningExpressionIndexes.length,
-                    partitionChildIndexes = tableArg.partitioningExpressionIndexes)
-                  g.copy(generator = p.copy(pythonUDTFPartitionColumnIndexes = Some(indexes)))
+                  functionTableSubqueryArgs.headOption.map { tableArg =>
+                    val indexes = PythonUDTFPartitionColumnIndexes(
+                      numPartitionChildIndexes = tableArg.partitioningExpressionIndexes.length,
+                      partitionChildIndexes = tableArg.partitioningExpressionIndexes)
+                    g.copy(generator = p.copy(pythonUDTFPartitionColumnIndexes = Some(indexes)))
+                  }.getOrElse {
+                    g
+                  }
                 case _ =>
                   tvf
               }

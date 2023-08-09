@@ -60,7 +60,7 @@ from pyspark.sql.pandas.serializers import (
     ApplyInPandasWithStateSerializer,
 )
 from pyspark.sql.pandas.types import to_arrow_type
-from pyspark.sql.types import StructType, _parse_datatype_json_string
+from pyspark.sql.types import Row, StructType, _parse_datatype_json_string
 from pyspark.util import fail_on_stopiteration, try_simplify_traceback
 from pyspark import shuffle
 from pyspark.errors import PySparkRuntimeError, PySparkTypeError
@@ -557,7 +557,6 @@ def read_udtf(pickleSer, infile, eval_type):
     # See `PythonUDTFRunner.PythonUDFWriterThread.writeCommand'
     num_arg = read_int(infile)
     arg_offsets = [read_int(infile) for _ in range(num_arg)]
-    num_table_argument_columns = read_int(infile)
     num_partition_child_indexes = read_int(infile)
     partition_child_indexes = [read_int(infile) for i in range(num_partition_child_indexes)]
     handler = read_command(pickleSer, infile)
@@ -574,13 +573,16 @@ def read_udtf(pickleSer, infile, eval_type):
         )
 
     # Instantiate the UDTF class.
-    try:
-        udtf = handler()
-    except Exception as e:
-        raise PySparkRuntimeError(
-            error_class="UDTF_EXEC_ERROR",
-            message_parameters={"method_name": "__init__", "error": str(e)},
-        )
+    def create_udtf_class_instance():
+        try:
+            udtf = handler()
+        except Exception as e:
+            raise PySparkRuntimeError(
+                error_class="UDTF_EXEC_ERROR",
+                message_parameters={"method_name": "__init__", "error": str(e)},
+            )
+        return udtf
+    udtf = create_udtf_class_instance()
 
     # Validate the UDTF
     if not hasattr(udtf, "eval"):
@@ -594,19 +596,29 @@ def read_udtf(pickleSer, infile, eval_type):
     # When these values change, calls the 'terminate' method on the UDTF class
     # instance and then destroys it and creates a new one to implement the desired
     # partitioning semantics.
-    def check_partition_boundaries(arguments):
-        print(f'''ntac: {num_table_argument_columns},
-              npci: {num_partition_child_indexes},
+    def check_partition_boundaries(arguments, prev_arguments, udtf, terminate):
+        print(f'''npci: {num_partition_child_indexes},
               pci: {partition_child_indexes},
               arguments: {arguments}''')
-        if num_table_argument_columns > 0:
-            print('@@@ A')
-            table_arguments = (arguments[i] for i in partition_child_indexes)
-            prev_table_arguments = (prev_arguments[i] for i in partition_child_indexes)
-            if len([1 for (k, v) in zip(table_arguments, prev_table_arguments) if k != v]) > 0:
-                raise PySparkRuntimeError(
-                    f"Partition boundaries changed: {arguments}, {prev_arguments}")
-        prev_arguments = arguments
+        if num_partition_child_indexes == 0 or prev_arguments is None:
+            return udtf
+        cur_table_arg = [arg for arg in arguments if type(arg) is Row][0]
+        prev_table_arg = [arg for arg in prev_arguments if type(arg) is Row][0]
+        cur_partition_values = [cur_table_arg[i] for i in partition_child_indexes]
+        prev_partition_values = [prev_table_arg[i] for i in partition_child_indexes]
+        changed_partitions = False
+        for (k, v) in zip(cur_partition_values, prev_partition_values):
+            if k != v:
+                changed_partitions = True
+                break
+        if changed_partitions:
+            # Call 'terminate' on the UDTF class instance, if applicable.
+            if terminate is not None:
+                terminate()
+            # Destroy the UDTF class instance and create a new one.
+            return create_udtf_class_instance()
+        else:
+            return udtf
 
     if eval_type == PythonEvalType.SQL_ARROW_TABLE_UDF:
 
@@ -656,6 +668,7 @@ def read_udtf(pickleSer, infile, eval_type):
 
         def mapper(_, it):
             try:
+                prev_arguments = None
                 for a in it:
                     # The eval function yields an iterator. Each element produced by this
                     # iterator is a tuple in the form of (pandas.DataFrame, arrow_return_type).
@@ -664,7 +677,9 @@ def read_udtf(pickleSer, infile, eval_type):
                     # If any values change, call 'terminate' on the UDTF class instance,
                     # then destroy it and create a new one.
                     arguments = [a[o] for o in arg_offsets]
-                    check_partition_boundaries(arguments)
+                    global udtf
+                    udtf = check_partition_boundaries(arguments, prev_arguments, udtf, terminate)
+                    prev_arguments = arguments
                     yield from eval(*arguments)
             finally:
                 if terminate is not None:
@@ -722,12 +737,15 @@ def read_udtf(pickleSer, infile, eval_type):
         # Return an iterator of iterators.
         def mapper(_, it):
             try:
+                prev_arguments = None
                 for a in it:
                     # Compare adjacent PARTITION BY values in consecutive rows.
                     # If any values change, call 'terminate' on the UDTF class instance,
                     # then destroy it and create a new one.
                     arguments = [a[o] for o in arg_offsets]
-                    check_partition_boundaries(arguments)
+                    global udtf
+                    udtf = check_partition_boundaries(arguments, prev_arguments, udtf, terminate)
+                    prev_arguments = arguments
                     yield eval(*arguments)
             finally:
                 if terminate is not None:
