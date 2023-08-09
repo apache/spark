@@ -226,7 +226,7 @@ class SparkConnectClientSuite extends ConnectFunSuite with BeforeAndAfterEach {
     }
   }
 
-  test("Retry retries for long enough") {
+  test("Retries run for a minimum period") {
     // repeat test few times to avoid random flakes
     for (_ <- 1 to 10) {
       var totalSleepMs: Long = 0
