@@ -26,7 +26,6 @@ import net.razorvine.pickle.Unpickler
 
 import org.apache.spark.{JobArtifactSet, SparkEnv, TaskContext}
 import org.apache.spark.api.python.{ChainedPythonFunctions, PythonEvalType, PythonWorkerUtils}
-import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.util.GenericArrayData
@@ -117,7 +116,7 @@ class PythonUDTFRunner(
   }
 }
 
-object PythonUDTFRunner extends Logging {
+object PythonUDTFRunner {
 
   def writeUDTF(dataOut: DataOutputStream, udtf: PythonUDTF, argOffsets: Array[Int]): Unit = {
     dataOut.writeInt(argOffsets.length)
