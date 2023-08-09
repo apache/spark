@@ -1169,8 +1169,7 @@ object RelationWithOptions {
     val tableIdentifier = CatalystSqlParser.parseMultipartIdentifier(
       identifier.asInstanceOf[Literal].toString)
     val relationOptions = ExprUtils.convertToMapData(options)
-    UnresolvedRelation(tableIdentifier,
-      new CaseInsensitiveStringMap(relationOptions.asJava))
+    UnresolvedRelation(tableIdentifier, new CaseInsensitiveStringMap(relationOptions.asJava))
   }
 }
 

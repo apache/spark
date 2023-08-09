@@ -20,8 +20,10 @@ package org.apache.spark.sql.connector
 import java.sql.Timestamp
 import java.time.{Duration, LocalDate, Period}
 import java.util.Locale
+
 import scala.collection.JavaConverters._
 import scala.concurrent.duration.MICROSECONDS
+
 import org.apache.spark.{SparkException, SparkUnsupportedOperationException}
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.InternalRow
@@ -3299,14 +3301,13 @@ class DataSourceV2SQLSuiteV1Filter
       sql(s"CREATE TABLE $t1 (id bigint, data string) USING $v2Format")
       sql(s"INSERT INTO $t1 VALUES (1, 'a'), (2, 'b')")
 
-      val df = sql(s"SELECT * FROM with_options('$t1', map('foo','bar'))")
+      val df = sql(s"SELECT * FROM with_options('$t1', map('split-size', '5'))")
       val collected = df.queryExecution.optimizedPlan.collect {
         case scan: DataSourceV2ScanRelation =>
-          assert(scan.relation.options.get("foo") == "bar")
+          assert(scan.relation.options.get("split-size") == "5")
       }
       assert (collected.size == 1)
-      checkAnswer(sql(s"SELECT * FROM with_options('$t1', map('foo','bar'))"),
-        Seq(Row(1, "a"), Row(2, "b")))
+      checkAnswer(df, Seq(Row(1, "a"), Row(2, "b")))
     }
 
     // negative tests
@@ -3320,7 +3321,7 @@ class DataSourceV2SQLSuiteV1Filter
       val wrongFirstArg = intercept[AnalysisException](
         sql(s"SELECT * FROM with_options(foo, map('foo','bar'))"))
       assert(wrongFirstArg.message.contains(
-        "A column or function parameter with name `foo` cannot be resolved"
+        "A column, variable, or function parameter with name `foo` cannot be resolved"
       ))
 
       val wrongSecondArg = intercept[AnalysisException](
