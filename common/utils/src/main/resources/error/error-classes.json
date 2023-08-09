@@ -2567,10 +2567,10 @@
     "sqlState" : "21000"
   },
   "RULE_ID_NOT_FOUND" : {
-    "message": [
+    "message" : [
       "Not found an id for the rule name \"<ruleName>\". Please modify RuleIdCollection.scala if you are adding a new rule."
     ],
-    "sqlState": "22023"
+    "sqlState" : "22023"
   },
   "SCALAR_SUBQUERY_IS_IN_GROUP_BY_OR_AGGREGATE_FUNCTION" : {
     "message" : [

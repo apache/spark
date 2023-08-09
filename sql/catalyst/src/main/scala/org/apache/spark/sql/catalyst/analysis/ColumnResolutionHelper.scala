@@ -258,9 +258,7 @@ trait ColumnResolutionHelper extends Logging {
       } else {
         nameParts.last.toLowerCase(Locale.ROOT)
       }
-      val tempVarMgr = catalogManager.tempVariableManager
-      val tempVar = tempVarMgr.get(variableName)
-      tempVar.map { varDef =>
+      catalogManager.tempVariableManager.get(variableName).map { varDef =>
         VariableReference(
           nameParts,
           FakeSystemCatalog,
