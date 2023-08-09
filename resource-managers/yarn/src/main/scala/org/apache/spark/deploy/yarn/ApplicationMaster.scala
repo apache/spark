@@ -79,7 +79,7 @@ private[spark] class ApplicationMaster(
 
   private val isClusterMode = args.userClass != null
 
-  private val securityMgr = new SecurityManager(sparkConf)
+  private lazy val securityMgr = new SecurityManager(sparkConf)
 
   private var metricsSystem: Option[MetricsSystem] = None
 

@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.analysis
 
 import scala.collection.mutable
 
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.objects.AssertNotNull
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project}
@@ -34,6 +35,43 @@ import org.apache.spark.sql.internal.SQLConf.StoreAssignmentPolicy
 import org.apache.spark.sql.types.{ArrayType, DataType, DecimalType, IntegralType, MapType, StructType}
 
 object TableOutputResolver {
+
+  def resolveVariableOutputColumns(
+      expected: Seq[VariableReference],
+      query: LogicalPlan,
+      conf: SQLConf): LogicalPlan = {
+
+    if (expected.size != query.output.size) {
+      throw new AnalysisException(
+        errorClass = "ASSIGNMENT_ARITY_MISMATCH",
+        messageParameters = Map(
+          "numTarget" -> expected.size.toString,
+          "numExpr" -> query.output.size.toString))
+    }
+
+    val resolved: Seq[NamedExpression] = {
+      query.output.zip(expected).map { case (inputCol, expected) =>
+        if (DataTypeUtils.sameType(inputCol.dataType, expected.dataType)) {
+          inputCol
+        } else {
+          // SET VAR always uses the ANSI store assignment policy
+          val cast = Cast(
+            inputCol,
+            expected.dataType,
+            Option(conf.sessionLocalTimeZone),
+            ansiEnabled = true)
+          Alias(cast, expected.identifier.name)()
+        }
+      }
+    }
+
+    if (resolved == query.output) {
+      query
+    } else {
+      Project(resolved, query)
+    }
+  }
+
   def resolveOutputColumns(
       tableName: String,
       expected: Seq[Attribute],
