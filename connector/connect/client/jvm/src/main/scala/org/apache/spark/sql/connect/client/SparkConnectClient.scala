@@ -59,7 +59,7 @@ private[sql] class SparkConnectClient(
   private[sql] val sessionId: String = UUID.randomUUID.toString
 
   private[client] val artifactManager: ArtifactManager = {
-    new ArtifactManager(userContext, sessionId, bstub, stub)
+    new ArtifactManager(configuration, sessionId, bstub, stub)
   }
 
   /**
@@ -72,7 +72,14 @@ private[sql] class SparkConnectClient(
     bstub.analyzePlan(request)
   }
 
-  def execute(plan: proto.Plan): java.util.Iterator[proto.ExecutePlanResponse] = {
+  /**
+   * Execute the plan and return response iterator.
+   *
+   * It returns CloseableIterator. For resource management it is better to close it once you are
+   * done. If you don't close it, it and the underlying data will be cleaned up once the iterator
+   * is garbage collected.
+   */
+  def execute(plan: proto.Plan): CloseableIterator[proto.ExecutePlanResponse] = {
     artifactManager.uploadAllClassFileArtifacts()
     val request = proto.ExecutePlanRequest
       .newBuilder()
@@ -82,7 +89,11 @@ private[sql] class SparkConnectClient(
       .setClientType(userAgent)
       .addAllTags(tags.get.toSeq.asJava)
       .build()
-    bstub.executePlan(request)
+    if (configuration.useReattachableExecute) {
+      bstub.executePlanReattachable(request)
+    } else {
+      bstub.executePlan(request)
+    }
   }
 
   /**
@@ -529,6 +540,25 @@ object SparkConnectClient {
       this
     }
 
+    /**
+     * Disable reattachable execute.
+     */
+    def disableReattachableExecute(): Builder = {
+      _configuration = _configuration.copy(useReattachableExecute = false)
+      this
+    }
+
+    /**
+     * Enable reattachable execute.
+     *
+     * It makes client more robust, enabling reattaching to an ExecutePlanResponse stream in case
+     * of intermittent connection errors.
+     */
+    def enableReattachableExecute(): Builder = {
+      _configuration = _configuration.copy(useReattachableExecute = true)
+      this
+    }
+
     def build(): SparkConnectClient = _configuration.toSparkConnectClient
   }
 
@@ -545,6 +575,7 @@ object SparkConnectClient {
       metadata: Map[String, String] = Map.empty,
       userAgent: String = DEFAULT_USER_AGENT,
       retryPolicy: GrpcRetryHandler.RetryPolicy = GrpcRetryHandler.RetryPolicy(),
+      useReattachableExecute: Boolean = true,
       interceptors: List[ClientInterceptor] = List.empty) {
 
     def userContext: proto.UserContext = {

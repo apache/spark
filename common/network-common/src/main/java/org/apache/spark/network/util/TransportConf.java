@@ -106,7 +106,7 @@ public class TransportConf {
     return defaultTimeoutMs < 0 ? 0 : (int) defaultTimeoutMs;
   }
 
-  /** Connect creation timeout in milliseconds. Default 30 secs. */
+  /** Connect creation timeout in milliseconds. Default 120 secs. */
   public int connectionCreationTimeoutMs() {
     long connectionTimeoutS = TimeUnit.MILLISECONDS.toSeconds(connectionTimeoutMs());
     long defaultTimeoutMs = JavaUtils.timeStringAsSec(

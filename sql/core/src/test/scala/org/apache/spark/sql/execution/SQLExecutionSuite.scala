@@ -203,6 +203,36 @@ class SQLExecutionSuite extends SparkFunSuite {
       spark.stop()
     }
   }
+
+  test("SPARK-44591: jobTags property") {
+    val spark = SparkSession.builder.master("local[*]").appName("test").getOrCreate()
+    val jobTag = "jobTag"
+    try {
+      spark.sparkContext.addJobTag(jobTag)
+
+      var jobTags: Option[String] = None
+      var sqlJobTags: Set[String] = Set.empty
+      spark.sparkContext.addSparkListener(new SparkListener {
+        override def onJobStart(jobStart: SparkListenerJobStart): Unit = {
+          jobTags = Some(jobStart.properties.getProperty(SparkContext.SPARK_JOB_TAGS))
+        }
+        override def onOtherEvent(event: SparkListenerEvent): Unit = {
+          event match {
+            case e: SparkListenerSQLExecutionStart =>
+              sqlJobTags = e.jobTags
+          }
+        }
+      })
+
+      spark.range(1).collect()
+
+      assert(jobTags.contains(jobTag))
+      assert(sqlJobTags.contains(jobTag))
+    } finally {
+      spark.sparkContext.removeJobTag(jobTag)
+      spark.stop()
+    }
+  }
 }
 
 object SQLExecutionSuite {

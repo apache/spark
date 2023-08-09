@@ -65,3 +65,6 @@ torch
 torchvision
 torcheval
 
+# DeepspeedTorchDistributor dependencies
+deepspeed
+

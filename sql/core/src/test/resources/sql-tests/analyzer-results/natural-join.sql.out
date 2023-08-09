@@ -488,7 +488,7 @@ Project [v1#x, k#x]
 -- !query
 SELECT nt2.k FROM (SELECT * FROM nt1 natural join nt2)
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
   "sqlState" : "42703",

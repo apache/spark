@@ -53,10 +53,13 @@ trait ShowTablesSuiteBase extends command.ShowTablesSuiteBase with command.Tests
   }
 
   test("only support single-level namespace") {
-    val errMsg = intercept[AnalysisException] {
-      runShowTablesSql("SHOW TABLES FROM a.b", Seq())
-    }.getMessage
-    assert(errMsg.contains("Nested databases are not supported by v1 session catalog: a.b"))
+    checkError(
+      exception = intercept[AnalysisException] {
+        runShowTablesSql("SHOW TABLES FROM a.b", Seq())
+      },
+      errorClass = "_LEGACY_ERROR_TEMP_1126",
+      parameters = Map("catalog" -> "a.b")
+    )
   }
 
   test("SHOW TABLE EXTENDED from default") {
@@ -96,10 +99,13 @@ trait ShowTablesSuiteBase extends command.ShowTablesSuiteBase with command.Tests
     Seq(
       s"SHOW TABLES IN $catalog",
       s"SHOW TABLE EXTENDED IN $catalog LIKE '*tbl'").foreach { showTableCmd =>
-      val errMsg = intercept[AnalysisException] {
-        sql(showTableCmd)
-      }.getMessage
-      assert(errMsg.contains("Database from v1 session catalog is not specified"))
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(showTableCmd)
+        },
+        errorClass = "_LEGACY_ERROR_TEMP_1125",
+        parameters = Map.empty
+      )
     }
   }
 

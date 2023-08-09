@@ -1750,7 +1750,10 @@ class Dataset[T] private[sql] (
 
   private def checkSameSparkSession(other: Dataset[_]): Unit = {
     if (this.sparkSession.sessionId != other.sparkSession.sessionId) {
-      throw new SparkException("Both Datasets must belong to the same SparkSession")
+      throw new SparkException(
+        errorClass = "CONNECT.SESSION_NOT_SAME",
+        messageParameters = Map.empty,
+        cause = null)
     }
   }
 
@@ -2396,6 +2399,19 @@ class Dataset[T] private[sql] (
         .addAllColumnNames(cols.asJava)
   }
 
+  private def buildDropDuplicates(
+      columns: Option[Seq[String]],
+      withinWaterMark: Boolean): Dataset[T] = sparkSession.newDataset(encoder) { builder =>
+    val dropBuilder = builder.getDeduplicateBuilder
+      .setInput(plan.getRoot)
+      .setWithinWatermark(withinWaterMark)
+    if (columns.isDefined) {
+      dropBuilder.addAllColumnNames(columns.get.asJava)
+    } else {
+      dropBuilder.setAllColumnsAsKeys(true)
+    }
+  }
+
   /**
    * Returns a new Dataset that contains only the unique rows from this Dataset. This is an alias
    * for `distinct`.
@@ -2403,11 +2419,7 @@ class Dataset[T] private[sql] (
    * @group typedrel
    * @since 3.4.0
    */
-  def dropDuplicates(): Dataset[T] = sparkSession.newDataset(encoder) { builder =>
-    builder.getDeduplicateBuilder
-      .setInput(plan.getRoot)
-      .setAllColumnsAsKeys(true)
-  }
+  def dropDuplicates(): Dataset[T] = buildDropDuplicates(None, withinWaterMark = false)
 
   /**
    * (Scala-specific) Returns a new Dataset with duplicate rows removed, considering only the
@@ -2416,11 +2428,8 @@ class Dataset[T] private[sql] (
    * @group typedrel
    * @since 3.4.0
    */
-  def dropDuplicates(colNames: Seq[String]): Dataset[T] = sparkSession.newDataset(encoder) {
-    builder =>
-      builder.getDeduplicateBuilder
-        .setInput(plan.getRoot)
-        .addAllColumnNames(colNames.asJava)
+  def dropDuplicates(colNames: Seq[String]): Dataset[T] = {
+    buildDropDuplicates(Option(colNames), withinWaterMark = false)
   }
 
   /**
@@ -2440,16 +2449,14 @@ class Dataset[T] private[sql] (
    */
   @scala.annotation.varargs
   def dropDuplicates(col1: String, cols: String*): Dataset[T] = {
-    val colNames: Seq[String] = col1 +: cols
-    dropDuplicates(colNames)
+    dropDuplicates(col1 +: cols)
   }
 
-  def dropDuplicatesWithinWatermark(): Dataset[T] = {
-    dropDuplicatesWithinWatermark(this.columns)
-  }
+  def dropDuplicatesWithinWatermark(): Dataset[T] =
+    buildDropDuplicates(None, withinWaterMark = true)
 
   def dropDuplicatesWithinWatermark(colNames: Seq[String]): Dataset[T] = {
-    throw new UnsupportedOperationException("dropDuplicatesWithinWatermark is not implemented.")
+    buildDropDuplicates(Option(colNames), withinWaterMark = true)
   }
 
   def dropDuplicatesWithinWatermark(colNames: Array[String]): Dataset[T] = {
@@ -2458,8 +2465,7 @@ class Dataset[T] private[sql] (
 
   @scala.annotation.varargs
   def dropDuplicatesWithinWatermark(col1: String, cols: String*): Dataset[T] = {
-    val colNames: Seq[String] = col1 +: cols
-    dropDuplicatesWithinWatermark(colNames)
+    dropDuplicatesWithinWatermark(col1 +: cols)
   }
 
   /**
@@ -2829,7 +2835,7 @@ class Dataset[T] private[sql] (
   /**
    * Returns an iterator that contains all rows in this Dataset.
    *
-   * The returned iterator implements [[AutoCloseable]]. For memory management it is better to
+   * The returned iterator implements [[AutoCloseable]]. For resource management it is better to
    * close it once you are done. If you don't close it, it and the underlying data will be cleaned
    * up once the iterator is garbage collected.
    *
@@ -2837,7 +2843,7 @@ class Dataset[T] private[sql] (
    * @since 3.4.0
    */
   def toLocalIterator(): java.util.Iterator[T] = {
-    collectResult().destructiveIterator
+    collectResult().destructiveIterator.asJava
   }
 
   /**

@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution.datasources
 
 import java.util.Locale
 
+import scala.collection.immutable.ListMap
 import scala.collection.mutable
 
 import org.apache.hadoop.fs.Path
@@ -30,7 +31,7 @@ import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow, Quali
 import org.apache.spark.sql.catalyst.CatalystTypeConverters.convertToScala
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.catalog._
-import org.apache.spark.sql.catalyst.encoders.RowEncoder
+import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
@@ -670,9 +671,10 @@ object DataSourceStrategy
     // A map from original Catalyst expressions to corresponding translated data source filters.
     // If a predicate is not in this map, it means it cannot be pushed down.
     val supportNestedPredicatePushdown = DataSourceUtils.supportNestedPredicatePushdown(relation)
-    val translatedMap: Map[Expression, Filter] = predicates.flatMap { p =>
+    // SPARK-41636: we keep the order of the predicates to avoid CodeGenerator cache misses
+    val translatedMap: Map[Expression, Filter] = ListMap(predicates.flatMap { p =>
       translateFilter(p, supportNestedPredicatePushdown).map(f => p -> f)
-    }.toMap
+    }: _*)
 
     val pushedFilters: Seq[Filter] = translatedMap.values.toSeq
 
@@ -742,7 +744,7 @@ object DataSourceStrategy
       rdd: RDD[Row]): RDD[InternalRow] = {
     if (relation.needConversion) {
       val toRow =
-        RowEncoder(DataTypeUtils.fromAttributes(output), lenient = true).createSerializer()
+        ExpressionEncoder(DataTypeUtils.fromAttributes(output), lenient = true).createSerializer()
       rdd.mapPartitions { iterator =>
         iterator.map(toRow)
       }

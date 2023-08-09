@@ -160,7 +160,7 @@
     <aws.java.sdk.version>1.11.655</aws.java.sdk.version>
     <!-- the producer is used in tests -->
     <aws.kinesis.producer.version>0.12.8</aws.kinesis.producer.version>
-    <gcs-connector.version>hadoop3-2.2.14</gcs-connector.version>
+    <gcs-connector.version>hadoop3-2.2.16</gcs-connector.version>
     <!--  org.apache.httpcomponents/httpclient-->
     <commons.httpclient.version>4.5.14</commons.httpclient.version>
     <commons.httpcore.version>4.4.16</commons.httpcore.version>
@@ -190,7 +190,7 @@
     <!-- org.apache.commons/commons-lang/-->
     <commons-lang2.version>2.6</commons-lang2.version>
     <!-- org.apache.commons/commons-lang3/-->
-    <commons-lang3.version>3.12.0</commons-lang3.version>
+    <commons-lang3.version>3.13.0</commons-lang3.version>
     <!-- org.apache.commons/commons-pool2/-->
     <commons-pool2.version>2.11.1</commons-pool2.version>
     <datanucleus-core.version>4.1.17</datanucleus-core.version>
@@ -216,11 +216,7 @@
     <commons-cli.version>1.5.0</commons-cli.version>
     <bouncycastle.version>1.70</bouncycastle.version>
     <tink.version>1.9.0</tink.version>
-    <!--
-      Please don't upgrade the version to 4.1.94.Final,
-      it needs to wait for `arrow-memory-netty` to be greater than 12.0.1.
-    -->
-    <netty.version>4.1.93.Final</netty.version>
+    <netty.version>4.1.96.Final</netty.version>
     <!--
     If you are changing Arrow version specification, please check
     ./python/pyspark/sql/pandas/utils.py, and ./python/setup.py too.
@@ -230,7 +226,7 @@
 
     <!-- org.fusesource.leveldbjni will be used except on arm64 platform. -->
     <leveldbjni.group>org.fusesource.leveldbjni</leveldbjni.group>
-    <kubernetes-client.version>6.7.2</kubernetes-client.version>
+    <kubernetes-client.version>6.8.0</kubernetes-client.version>
 
     <test.java.home>${java.home}</test.java.home>
 
@@ -1089,7 +1085,7 @@
       <dependency>
         <groupId>org.scala-lang.modules</groupId>
         <artifactId>scala-xml_${scala.binary.version}</artifactId>
-        <version>2.1.0</version>
+        <version>2.2.0</version>
       </dependency>
       <dependency>
         <groupId>org.scala-lang</groupId>
@@ -3604,7 +3600,7 @@
     <profile>
       <id>scala-2.13</id>
       <properties>
-        <scala.version>2.13.11</scala.version>
+        <scala.version>2.13.8</scala.version>
         <scala.binary.version>2.13</scala.binary.version>
       </properties>
       <build>
@@ -3663,10 +3659,6 @@
                   -->
                   <arg>-Wconf:cat=unused-imports&amp;src=org\/apache\/spark\/graphx\/impl\/VertexPartitionBase.scala:s</arg>
                   <arg>-Wconf:cat=unused-imports&amp;src=org\/apache\/spark\/graphx\/impl\/VertexPartitionBaseOps.scala:s</arg>
-                  <!--
-                    SPARK-40497 Upgrade Scala to 2.13.11 and suppress `Implicit definition should have explicit type`
-                  -->
-                  <arg>-Wconf:msg=Implicit definition should have explicit type:s</arg>
                 </args>
                 <compilerPlugins combine.self="override">
                 </compilerPlugins>

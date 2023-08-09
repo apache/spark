@@ -1584,7 +1584,15 @@ class DataFrame:
                 error_class="NOT_IMPLEMENTED",
                 message_parameters={"feature": f"{name}()"},
             )
+
+        if name not in self.columns:
+            raise AttributeError(
+                "'%s' object has no attribute '%s'" % (self.__class__.__name__, name)
+            )
+
         return self[name]
+
+    __getattr__.__doc__ = PySparkDataFrame.__getattr__.__doc__
 
     @overload
     def __getitem__(self, item: Union[int, str]) -> Column:
@@ -1724,6 +1732,12 @@ class DataFrame:
     to.__doc__ = PySparkDataFrame.to.__doc__
 
     def toDF(self, *cols: str) -> "DataFrame":
+        for col_ in cols:
+            if not isinstance(col_, str):
+                raise PySparkTypeError(
+                    error_class="NOT_LIST_OF_STR",
+                    message_parameters={"arg_name": "cols", "arg_type": type(col_).__name__},
+                )
         return DataFrame.withPlan(plan.ToDF(self._plan, list(cols)), self._session)
 
     toDF.__doc__ = PySparkDataFrame.toDF.__doc__

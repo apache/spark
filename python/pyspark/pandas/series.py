@@ -492,8 +492,8 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         --------
 
         >>> psser = ps.Series([1, 2, 3])
-        >>> psser.axes  # doctest: +SKIP
-        [Int64Index([0, 1, 2], dtype='int64')]
+        >>> psser.axes
+        [Index([0, 1, 2], dtype='int64')]
         """
         return [self.index]
 
@@ -3584,71 +3584,6 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         """
         return self.sort_values(ascending=False).head(n)
 
-    def append(
-        self, to_append: "Series", ignore_index: bool = False, verify_integrity: bool = False
-    ) -> "Series":
-        """
-        Concatenate two or more Series.
-
-        .. deprecated:: 3.4.0
-
-        Parameters
-        ----------
-        to_append : Series or list/tuple of Series
-        ignore_index : boolean, default False
-            If True, do not use the index labels.
-        verify_integrity : boolean, default False
-            If True, raise Exception on creating index with duplicates
-
-        Returns
-        -------
-        appended : Series
-
-        Examples
-        --------
-        >>> s1 = ps.Series([1, 2, 3])
-        >>> s2 = ps.Series([4, 5, 6])
-        >>> s3 = ps.Series([4, 5, 6], index=[3,4,5])
-
-        >>> s1.append(s2)  # doctest: +SKIP
-        0    1
-        1    2
-        2    3
-        0    4
-        1    5
-        2    6
-        dtype: int64
-
-        >>> s1.append(s3)  # doctest: +SKIP
-        0    1
-        1    2
-        2    3
-        3    4
-        4    5
-        5    6
-        dtype: int64
-
-        With ignore_index set to True:
-
-        >>> s1.append(s2, ignore_index=True)  # doctest: +SKIP
-        0    1
-        1    2
-        2    3
-        3    4
-        4    5
-        5    6
-        dtype: int64
-        """
-        warnings.warn(
-            "The Series.append method is deprecated "
-            "and will be removed in 4.0.0. "
-            "Use pyspark.pandas.concat instead.",
-            FutureWarning,
-        )
-        return first_series(
-            self.to_frame().append(to_append.to_frame(), ignore_index, verify_integrity)
-        ).rename(self.name)
-
     def sample(
         self,
         n: Optional[int] = None,
@@ -5939,37 +5874,6 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
                 pdf.columns = pd.Index(where)
                 return first_series(DataFrame(pdf.transpose())).rename(self.name)
 
-    def mad(self) -> float:
-        """
-        Return the mean absolute deviation of values.
-
-        .. deprecated:: 3.4.0
-
-        Examples
-        --------
-        >>> s = ps.Series([1, 2, 3, 4])
-        >>> s
-        0    1
-        1    2
-        2    3
-        3    4
-        dtype: int64
-
-        >>> s.mad()
-        1.0
-        """
-        warnings.warn(
-            "The 'mad' method is deprecated and will be removed in 4.0.0. "
-            "To compute the same result, you may do `(series - series.mean()).abs().mean()`.",
-            FutureWarning,
-        )
-        sdf = self._internal.spark_frame
-        spark_column = self.spark.column
-        avg = unpack_scalar(sdf.select(F.avg(spark_column)))
-        mad = unpack_scalar(sdf.select(F.avg(F.abs(spark_column - avg))))
-
-        return mad
-
     def unstack(self, level: int = -1) -> DataFrame:
         """
         Unstack, a.k.a. pivot, Series with MultiIndex to produce DataFrame.
@@ -6083,7 +5987,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         This method returns an iterable tuple (index, value). This is
         convenient if you want to create a lazy iterator.
 
-        .. note:: Unlike pandas', the iteritems in pandas-on-Spark returns generator rather
+        .. note:: Unlike pandas', the itmes in pandas-on-Spark returns generator rather
             zip object
 
         Returns
@@ -6122,20 +6026,6 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
             extract_kv_from_spark_row, self._internal.resolved_copy.spark_frame.toLocalIterator()
         ):
             yield k, v
-
-    def iteritems(self) -> Iterable[Tuple[Name, Any]]:
-        """
-        This is an alias of ``items``.
-
-        .. deprecated:: 3.4.0
-            iteritems is deprecated and will be removed in a future version.
-            Use .items instead.
-        """
-        warnings.warn(
-            "Deprecated in 3.4, and will be removed in 4.0.0. Use Series.items instead.",
-            FutureWarning,
-        )
-        return self.items()
 
     def droplevel(self, level: Union[int, Name, List[Union[int, Name]]]) -> "Series":
         """
