@@ -43,9 +43,5 @@ class DSLHintSuite extends AnalysisTest {
       UnresolvedHint("hint1", Seq(1, $"a"), r1)
     )
 
-    comparePlans(
-      r1.hint("hint1", Seq(1, 2, 3), Seq($"a", $"b", $"c")),
-      UnresolvedHint("hint1", Seq(Seq(1, 2, 3), Seq($"a", $"b", $"c")), r1)
-    )
   }
 }

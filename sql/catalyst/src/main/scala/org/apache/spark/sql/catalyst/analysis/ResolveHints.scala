@@ -18,10 +18,8 @@
 package org.apache.spark.sql.catalyst.analysis
 
 import java.util.Locale
-
 import scala.collection.mutable
-
-import org.apache.spark.sql.catalyst.expressions.{Ascending, Expression, IntegerLiteral, SortOrder}
+import org.apache.spark.sql.catalyst.expressions.{Ascending, Expression, IntegerLiteral, SortOrder, StringLiteral}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.CurrentOrigin
@@ -153,7 +151,7 @@ object ResolveHints {
         } else {
           // Otherwise, find within the subtree query plans to apply the hint.
           val relationNamesInHint = h.parameters.map {
-            case tableName: String => UnresolvedAttribute.parseAttributeName(tableName)
+            case StringLiteral(tableName) => UnresolvedAttribute.parseAttributeName(tableName)
             case tableId: UnresolvedAttribute => tableId.nameParts
             case unsupported =>
               throw QueryCompilationErrors.joinStrategyHintParameterNotSupportedError(unsupported)
@@ -204,15 +202,11 @@ object ResolveHints {
       hint.parameters match {
         case Seq(IntegerLiteral(numPartitions)) =>
           Repartition(numPartitions, shuffle, hint.child)
-        case Seq(numPartitions: Int) =>
-          Repartition(numPartitions, shuffle, hint.child)
         // The "COALESCE" hint (shuffle = false) must have a partition number only
         case _ if !shuffle =>
           throw QueryCompilationErrors.invalidCoalesceHintParameterError(hintName)
 
         case param @ Seq(IntegerLiteral(numPartitions), _*) if shuffle =>
-          createRepartitionByExpression(Some(numPartitions), param.tail)
-        case param @ Seq(numPartitions: Int, _*) if shuffle =>
           createRepartitionByExpression(Some(numPartitions), param.tail)
         case param @ Seq(_*) if shuffle =>
           createRepartitionByExpression(None, param)
@@ -242,8 +236,6 @@ object ResolveHints {
       hint.parameters match {
         case param @ Seq(IntegerLiteral(numPartitions), _*) =>
           createRepartitionByExpression(Some(numPartitions), param.tail)
-        case param @ Seq(numPartitions: Int, _*) =>
-          createRepartitionByExpression(Some(numPartitions), param.tail)
         case param @ Seq(_*) =>
           createRepartitionByExpression(None, param)
       }
@@ -265,8 +257,6 @@ object ResolveHints {
 
       hint.parameters match {
         case param @ Seq(IntegerLiteral(numPartitions), _*) =>
-          createRebalancePartitions(param.tail, Some(numPartitions))
-        case param @ Seq(numPartitions: Int, _*) =>
           createRebalancePartitions(param.tail, Some(numPartitions))
         case partitionExprs @ Seq(_*) =>
           createRebalancePartitions(partitionExprs, None)

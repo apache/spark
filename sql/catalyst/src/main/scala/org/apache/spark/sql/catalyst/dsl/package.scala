@@ -521,8 +521,9 @@ package object dsl {
         EliminateSubqueryAliases(analyzed)
       }
 
-      def hint(name: String, parameters: Any*): LogicalPlan =
+      def hint(name: String, parameters: Expression*): LogicalPlan = {
         UnresolvedHint(name, parameters, logicalPlan)
+      }
 
       def sample(
           lowerBound: Double,

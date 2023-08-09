@@ -19,6 +19,7 @@ package org.apache.spark.sql
 
 import org.apache.spark.sql.catalyst.analysis.AnalysisTest
 import org.apache.spark.sql.catalyst.dsl.plans._
+import org.apache.spark.sql.catalyst.expressions.Literal
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.test.SharedSparkSession
 
@@ -43,36 +44,31 @@ class DataFrameHintSuite extends AnalysisTest with SharedSparkSession {
 
     check(
       df.hint("hint1", 1, "a"),
-      UnresolvedHint("hint1", Seq(1, $"a".expr), df.logicalPlan)
+      UnresolvedHint("hint1", Seq(Literal(1), $"a".expr), df.logicalPlan)
     )
 
     check(
       df.hint("hint1", 1, $"a"),
-      UnresolvedHint("hint1", Seq(1, $"a"),
+      UnresolvedHint("hint1", Seq(Literal(1), $"a".expr),
         df.logicalPlan
       )
     )
 
-    check(
-      df.hint("hint1", Seq(1, 2, 3), Seq($"a", $"b", $"c")),
-      UnresolvedHint("hint1", Seq(Seq(1, 2, 3), Seq($"a", $"b", $"c")),
-        df.logicalPlan
-      )
-    )
+    assertThrows(df.hint("hint1", Seq(1, 2, 3), Seq($"a", $"b", $"c")))
   }
 
   test("coalesce, repartition and rebalance hint") {
     check(
       df.hint("COALESCE", 10),
-      UnresolvedHint("COALESCE", Seq(10), df.logicalPlan))
+      UnresolvedHint("COALESCE", Seq(Literal(10)), df.logicalPlan))
 
     check(
       df.hint("REPARTITION", 100),
-      UnresolvedHint("REPARTITION", Seq(100), df.logicalPlan))
+      UnresolvedHint("REPARTITION", Seq(Literal(100)), df.logicalPlan))
 
     check(
       df.hint("REPARTITION", 10, $"id".expr),
-      UnresolvedHint("REPARTITION", Seq(10, $"id".expr), df.logicalPlan))
+      UnresolvedHint("REPARTITION", Seq(Literal(10), $"id".expr), df.logicalPlan))
 
     check(
       df.hint("REPARTITION_BY_RANGE", $"id".expr),
@@ -80,21 +76,21 @@ class DataFrameHintSuite extends AnalysisTest with SharedSparkSession {
 
     check(
       df.hint("REPARTITION_BY_RANGE", 10, $"id".expr),
-      UnresolvedHint("REPARTITION_BY_RANGE", Seq(10, $"id".expr), df.logicalPlan))
+      UnresolvedHint("REPARTITION_BY_RANGE", Seq(Literal(10), $"id".expr), df.logicalPlan))
 
     // simple column name should be accepted
     check(
       df.hint("REBALANCE", 10, "id"),
-      UnresolvedHint("REBALANCE", Seq(10, $"id".expr), df.logicalPlan))
+      UnresolvedHint("REBALANCE", Seq(Literal(10), $"id".expr), df.logicalPlan))
 
     check(
       df.hint("REBALANCE", 10, $"id".expr),
-      UnresolvedHint("REBALANCE", Seq(10, $"id".expr), df.logicalPlan))
+      UnresolvedHint("REBALANCE", Seq(Literal(10), $"id".expr), df.logicalPlan))
   }
 
   test("SPARK-40178: hint with string parameters should be supported") {
     checkAnalysisWithoutViewWrapper(
       df.hint("REBALANCE", 10, "id").logicalPlan,
-      UnresolvedHint("REBALANCE", Seq(10, $"id".expr), df.logicalPlan).analyze)
+      UnresolvedHint("REBALANCE", Seq(Literal(10), $"id".expr), df.logicalPlan).analyze)
   }
 }

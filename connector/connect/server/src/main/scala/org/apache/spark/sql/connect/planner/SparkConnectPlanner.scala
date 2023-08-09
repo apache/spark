@@ -992,21 +992,7 @@ class SparkConnectPlanner(val sessionHolder: SessionHolder) extends Logging {
 
   private def transformHint(rel: proto.Hint): LogicalPlan = {
 
-    def extractValue(expr: Expression): Any = {
-      expr match {
-        case Literal(s, StringType) if s != null =>
-          UnresolvedAttribute.quotedString(s.toString)
-        case literal: Literal => literal.value
-        case UnresolvedFunction(Seq("array"), arguments, _, _, _) =>
-          arguments.map(extractValue).toArray
-        case other =>
-          throw InvalidPlanInput(
-            s"Expression should be a Literal or CreateMap or CreateArray, " +
-              s"but got ${other.getClass} $other")
-      }
-    }
-
-    val params = rel.getParametersList.asScala.toSeq.map(transformExpression).map(extractValue)
+    val params = rel.getParametersList.asScala.toSeq.map(transformExpression)
     UnresolvedHint(rel.getName, params, transformRelation(rel.getInput))
   }
 

@@ -1405,17 +1405,22 @@ class Dataset[T] private[sql](
    * @group basic
    * @since 2.2.0
    */
+  @deprecated("use hint with Column input instead", "4.0.0")
   @scala.annotation.varargs
   def hint(name: String, parameters: Any*): Dataset[T] = withTypedPlan {
-    // parse string parameters into Expressions as ResolveHint requires all the parameters to be
-    // expressions except the first one could be numeric. This logic matches how sql hint is parsed
-    // and makes caller easier to pass string parameters in hint specification, especially for
-    // other language bindings, such as PySpark.
-    val pars = parameters.map {
-      case s: String => sparkSession.sessionState.sqlParser.parseExpression(s)
-      case p => p
-    }
-    UnresolvedHint(name, pars, logicalPlan)
+    val exprs = parameters.map {
+      case c: Column => c.expr
+      case s: Symbol => Column(s.name).expr
+      case e: Expression => e
+      case literal => Literal(literal)
+    }.toSeq
+    UnresolvedHint(name, exprs, logicalPlan)
+  }
+
+  @scala.annotation.varargs
+  def hint(name: String, head: Column, tail: Column*): Dataset[T] = withTypedPlan {
+    val parameters = head +: tail
+    UnresolvedHint(name, parameters.map(_.expr), logicalPlan)
   }
 
   /**
