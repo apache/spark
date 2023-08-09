@@ -22,11 +22,12 @@ import java.time.temporal.ChronoUnit
 import java.util.concurrent.atomic.AtomicLong
 
 import io.grpc.inprocess.InProcessChannelBuilder
+import org.apache.arrow.memory.RootAllocator
 import org.apache.commons.lang3.{JavaVersion, SystemUtils}
 import org.scalatest.BeforeAndAfterAll
 
-import org.apache.spark.sql.catalyst.encoders.{AgnosticEncoder, ExpressionEncoder}
 import org.apache.spark.sql.connect.client.SparkConnectClient
+import org.apache.spark.sql.connect.client.arrow.{ArrowDeserializers, ArrowSerializer}
 import org.apache.spark.sql.connect.client.util.ConnectFunSuite
 
 /**
@@ -54,12 +55,28 @@ class SQLImplicitsTestSuite extends ConnectFunSuite with BeforeAndAfterAll {
     val spark = session
     import spark.implicits._
     def testImplicit[T: Encoder](expected: T): Unit = {
-      val encoder = implicitly[Encoder[T]].asInstanceOf[AgnosticEncoder[T]]
-      val expressionEncoder = ExpressionEncoder(encoder).resolveAndBind()
-      val serializer = expressionEncoder.createSerializer()
-      val deserializer = expressionEncoder.createDeserializer()
-      val actual = deserializer(serializer(expected))
-      assert(actual === expected)
+      val encoder = encoderFor[T]
+      val allocator = new RootAllocator()
+      try {
+        val batch = ArrowSerializer.serialize(
+          input = Iterator.single(expected),
+          enc = encoder,
+          allocator = allocator,
+          timeZoneId = "UTC")
+        val fromArrow = ArrowDeserializers.deserializeFromArrow(
+          input = Iterator.single(batch.toByteArray),
+          encoder = encoder,
+          allocator = allocator,
+          timeZoneId = "UTC")
+        try {
+          assert(fromArrow.next() === expected)
+          assert(!fromArrow.hasNext)
+        } finally {
+          fromArrow.close()
+        }
+      } finally {
+        allocator.close()
+      }
     }
 
     val booleans = Array(false, true, false, false)

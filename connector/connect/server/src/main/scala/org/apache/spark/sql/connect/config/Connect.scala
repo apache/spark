@@ -16,12 +16,20 @@
  */
 package org.apache.spark.sql.connect.config
 
+import java.util.concurrent.TimeUnit
+
 import org.apache.spark.internal.config.ConfigBuilder
 import org.apache.spark.network.util.ByteUnit
 import org.apache.spark.sql.connect.common.config.ConnectCommon
 
 object Connect {
   import org.apache.spark.sql.internal.SQLConf.buildStaticConf
+
+  val CONNECT_GRPC_BINDING_ADDRESS =
+    ConfigBuilder("spark.connect.grpc.binding.address")
+      .version("4.0.0")
+      .stringConf
+      .createOptional
 
   val CONNECT_GRPC_BINDING_PORT =
     ConfigBuilder("spark.connect.grpc.binding.port")
@@ -41,12 +49,12 @@ object Connect {
   val CONNECT_GRPC_ARROW_MAX_BATCH_SIZE =
     ConfigBuilder("spark.connect.grpc.arrow.maxBatchSize")
       .doc(
-        "When using Apache Arrow, limit the maximum size of one arrow batch that " +
-          "can be sent from server side to client side. Currently, we conservatively use 70% " +
-          "of it because the size is not accurate but estimated.")
+        "When using Apache Arrow, limit the maximum size of one arrow batch, in bytes unless " +
+          "otherwise specified, that can be sent from server side to client side. Currently, we " +
+          "conservatively use 70% of it because the size is not accurate but estimated.")
       .version("3.4.0")
-      .bytesConf(ByteUnit.MiB)
-      .createWithDefaultString("4m")
+      .bytesConf(ByteUnit.BYTE)
+      .createWithDefault(4 * 1024 * 1024)
 
   val CONNECT_GRPC_MAX_INBOUND_MESSAGE_SIZE =
     ConfigBuilder("spark.connect.grpc.maxInboundMessageSize")
@@ -55,6 +63,60 @@ object Connect {
       .version("3.4.0")
       .bytesConf(ByteUnit.BYTE)
       .createWithDefault(ConnectCommon.CONNECT_GRPC_MAX_MESSAGE_SIZE)
+
+  val CONNECT_GRPC_MARSHALLER_RECURSION_LIMIT =
+    ConfigBuilder("spark.connect.grpc.marshallerRecursionLimit")
+      .internal()
+      .doc("""
+          |Sets the recursion limit to grpc protobuf messages.
+          |""".stripMargin)
+      .version("3.5.0")
+      .intConf
+      .createWithDefault(1024)
+
+  val CONNECT_EXECUTE_REATTACHABLE_ENABLED =
+    ConfigBuilder("spark.connect.execute.reattachable.enabled")
+      .internal()
+      .doc("Enables reattachable execution on the server. If disabled and a client requests it, " +
+        "non-reattachable execution will follow and should run until query completion. This will " +
+        "work, unless there is a GRPC stream error, in which case the client will discover that " +
+        "execution is not reattachable when trying to reattach fails.")
+      .version("3.5.0")
+      .booleanConf
+      .createWithDefault(true)
+
+  val CONNECT_EXECUTE_REATTACHABLE_SENDER_MAX_STREAM_DURATION =
+    ConfigBuilder("spark.connect.execute.reattachable.senderMaxStreamDuration")
+      .internal()
+      .doc("For reattachable execution, after this amount of time the response stream will be " +
+        "automatically completed and client needs to send a new ReattachExecute RPC to continue. " +
+        "Set to 0 for unlimited.")
+      .version("3.5.0")
+      .timeConf(TimeUnit.MILLISECONDS)
+      .createWithDefaultString("2m")
+
+  val CONNECT_EXECUTE_REATTACHABLE_SENDER_MAX_STREAM_SIZE =
+    ConfigBuilder("spark.connect.execute.reattachable.senderMaxStreamSize")
+      .internal()
+      .doc(
+        "For reattachable execution, after total responses size exceeds this value, the " +
+          "response stream will be automatically completed and client needs to send a new " +
+          "ReattachExecute RPC to continue. Set to 0 for unlimited.")
+      .version("3.5.0")
+      .bytesConf(ByteUnit.BYTE)
+      .createWithDefaultString("1g")
+
+  val CONNECT_EXECUTE_REATTACHABLE_OBSERVER_RETRY_BUFFER_SIZE =
+    ConfigBuilder("spark.connect.execute.reattachable.observerRetryBufferSize")
+      .internal()
+      .doc(
+        "For reattachable execution, the total size of responses that were already sent to be " +
+          "kept in the buffer in case of connection error and client needing to retry. " +
+          "Set 0 to don't buffer anything (even last sent response)." +
+          "With any value greater than 0, the last sent response will always be buffered.")
+      .version("3.5.0")
+      .bytesConf(ByteUnit.BYTE)
+      .createWithDefaultString("1m")
 
   val CONNECT_EXTENSIONS_RELATION_CLASSES =
     ConfigBuilder("spark.connect.extensions.relation.classes")
@@ -115,4 +177,17 @@ object Connect {
       .version("3.5.0")
       .booleanConf
       .createWithDefault(false)
+
+  val CONNECT_UI_STATEMENT_LIMIT =
+    ConfigBuilder("spark.sql.connect.ui.retainedStatements")
+      .doc("The number of statements kept in the Spark Connect UI history.")
+      .version("3.5.0")
+      .intConf
+      .createWithDefault(200)
+
+  val CONNECT_UI_SESSION_LIMIT = ConfigBuilder("spark.sql.connect.ui.retainedSessions")
+    .doc("The number of client sessions kept in the Spark Connect UI history.")
+    .version("3.5.0")
+    .intConf
+    .createWithDefault(200)
 }

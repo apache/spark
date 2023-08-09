@@ -31,6 +31,7 @@ import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.connect.artifact.SparkConnectArtifactManager
 import org.apache.spark.sql.connect.common.InvalidPlanInput
+import org.apache.spark.sql.connect.planner.PythonStreamingQueryListener
 import org.apache.spark.sql.streaming.StreamingQueryListener
 import org.apache.spark.util.{SystemClock}
 import org.apache.spark.util.Utils
@@ -56,26 +57,14 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
     new ConcurrentHashMap()
 
   private[connect] def createExecuteHolder(request: proto.ExecutePlanRequest): ExecuteHolder = {
-    val operationId = if (request.hasOperationId) {
-      try {
-        UUID.fromString(request.getOperationId).toString
-      } catch {
-        case _: IllegalArgumentException =>
-          throw new SparkSQLException(
-            errorClass = "INVALID_HANDLE.FORMAT",
-            messageParameters = Map("handle" -> request.getOperationId))
-      }
-    } else {
-      UUID.randomUUID().toString
-    }
-    val executePlanHolder = new ExecuteHolder(request, operationId, this)
-    val oldExecute = executions.putIfAbsent(operationId, executePlanHolder)
+    val executeHolder = new ExecuteHolder(request, this)
+    val oldExecute = executions.putIfAbsent(executeHolder.operationId, executeHolder)
     if (oldExecute != null) {
       throw new SparkSQLException(
-        errorClass = "INVALID_HANDLE.ALREADY_EXISTS",
-        messageParameters = Map("handle" -> operationId))
+        errorClass = "INVALID_HANDLE.OPERATION_ALREADY_EXISTS",
+        messageParameters = Map("handle" -> executeHolder.operationId))
     }
-    executePlanHolder
+    executeHolder
   }
 
   private[connect] def executeHolder(operationId: String): Option[ExecuteHolder] = {
@@ -165,6 +154,9 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
     logDebug(s"Expiring session with userId: $userId and sessionId: $sessionId")
     artifactManager.cleanUpResources()
     eventManager.postClosed()
+
+    // Clean up running queries
+    SparkConnectService.streamingSessionManager.cleanupRunningQueries(this)
   }
 
   /**
@@ -229,20 +221,22 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
   }
 
   /**
-   * Returns [[StreamingQueryListener]] cached for Listener ID `id`. If it is not found, throw
-   * [[InvalidPlanInput]].
+   * Returns [[StreamingQueryListener]] cached for Listener ID `id`. If it is not found, return
+   * None.
    */
-  private[connect] def getListenerOrThrow(id: String): StreamingQueryListener = {
+  private[connect] def getListener(id: String): Option[StreamingQueryListener] = {
     Option(listenerCache.get(id))
-      .getOrElse {
-        throw InvalidPlanInput(s"No listener with id $id is found in the session $sessionId")
-      }
   }
 
   /**
-   * Removes corresponding StreamingQueryListener by ID.
+   * Removes corresponding StreamingQueryListener by ID. Terminates the python process if it's a
+   * Spark Connect PythonStreamingQueryListener.
    */
-  private[connect] def removeCachedListener(id: String): StreamingQueryListener = {
+  private[connect] def removeCachedListener(id: String): Unit = {
+    listenerCache.get(id) match {
+      case pyListener: PythonStreamingQueryListener => pyListener.stopListenerProcess()
+      case _ => // do nothing
+    }
     listenerCache.remove(id)
   }
 

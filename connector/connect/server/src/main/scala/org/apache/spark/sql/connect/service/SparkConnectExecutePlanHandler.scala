@@ -31,22 +31,10 @@ class SparkConnectExecutePlanHandler(responseObserver: StreamObserver[proto.Exec
       .getOrCreateIsolatedSession(v.getUserContext.getUserId, v.getSessionId)
     val executeHolder = sessionHolder.createExecuteHolder(v)
 
-    try {
-      executeHolder.eventsManager.postStarted()
-      executeHolder.start()
-      val responseSender =
-        new ExecuteGrpcResponseSender[proto.ExecutePlanResponse](responseObserver)
-      val detached = executeHolder.attachAndRunGrpcResponseSender(responseSender, 0)
-      if (detached) {
-        // Detached before execution finished.
-        // TODO this doesn't happen yet without reattachable execution.
-        responseObserver.onCompleted()
-      }
-    } finally {
-      // TODO this will change with detachable execution.
-      executeHolder.join()
-      executeHolder.eventsManager.postClosed()
-      sessionHolder.removeExecuteHolder(executeHolder.operationId)
-    }
+    executeHolder.eventsManager.postStarted()
+    executeHolder.start()
+    val responseSender =
+      new ExecuteGrpcResponseSender[proto.ExecutePlanResponse](executeHolder, responseObserver)
+    executeHolder.attachAndRunGrpcResponseSender(responseSender)
   }
 }

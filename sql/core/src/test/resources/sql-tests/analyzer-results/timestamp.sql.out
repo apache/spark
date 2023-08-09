@@ -551,7 +551,7 @@ select timestamp'2019-10-06 10:11:12.345678' - date'2020-01-01'
 -- !query
 select timestamp'2011-11-11 11:11:11' - '2011-11-11 11:11:10'
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
   "sqlState" : "42K09",
@@ -575,7 +575,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 select '2011-11-11 11:11:11' - timestamp'2011-11-11 11:11:10'
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
   "sqlState" : "42K09",
@@ -619,7 +619,7 @@ CreateViewCommand `ts_view`, select '2011-11-11 11:11:11' str, false, false, Loc
 -- !query
 select str - timestamp'2011-11-11 11:11:11' from ts_view
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
   "sqlState" : "42K09",
@@ -643,7 +643,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 select timestamp'2011-11-11 11:11:11' - str from ts_view
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
   "sqlState" : "42K09",
@@ -667,7 +667,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 select timestamp'2011-11-11 11:11:11' + '1'
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
   "sqlState" : "42K09",
@@ -689,7 +689,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 select '1' + timestamp'2011-11-11 11:11:11'
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
   "sqlState" : "42K09",
@@ -711,7 +711,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 select timestamp'2011-11-11 11:11:11' + null
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
   "sqlState" : "42K09",
@@ -733,7 +733,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 select null + timestamp'2011-11-11 11:11:11'
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
   "sqlState" : "42K09",

@@ -18,15 +18,18 @@ package org.apache.spark.sql.expressions
 
 import scala.collection.JavaConverters._
 import scala.reflect.runtime.universe.TypeTag
+import scala.util.control.NonFatal
 
 import com.google.protobuf.ByteString
 
+import org.apache.spark.SparkException
 import org.apache.spark.connect.proto
 import org.apache.spark.sql.Column
 import org.apache.spark.sql.catalyst.ScalaReflection
-import org.apache.spark.sql.catalyst.encoders.AgnosticEncoder
+import org.apache.spark.sql.catalyst.encoders.{AgnosticEncoder, RowEncoder}
 import org.apache.spark.sql.connect.common.{DataTypeProtoConverter, UdfPacket}
-import org.apache.spark.util.SparkSerDeUtils
+import org.apache.spark.sql.types.DataType
+import org.apache.spark.util.{SparkClassUtils, SparkSerDeUtils}
 
 /**
  * A user-defined function. To create one, use the `udf` functions in `functions`.
@@ -92,7 +95,7 @@ sealed abstract class UserDefinedFunction {
 /**
  * Holder class for a scalar user-defined function and it's input/output encoder(s).
  */
-case class ScalarUserDefinedFunction private (
+case class ScalarUserDefinedFunction private[sql] (
     // SPARK-43198: Eagerly serialize to prevent the UDF from containing a reference to this class.
     serializedUdfPacket: Array[Byte],
     inputTypes: Seq[proto.DataType],
@@ -143,6 +146,25 @@ case class ScalarUserDefinedFunction private (
 }
 
 object ScalarUserDefinedFunction {
+  private val LAMBDA_DESERIALIZATION_ERR_MSG: String =
+    "cannot assign instance of java.lang.invoke.SerializedLambda to field"
+
+  private def checkDeserializable(bytes: Array[Byte]): Unit = {
+    try {
+      SparkSerDeUtils.deserialize(bytes, SparkClassUtils.getContextOrSparkClassLoader)
+    } catch {
+      case e: ClassCastException if e.getMessage.contains(LAMBDA_DESERIALIZATION_ERR_MSG) =>
+        throw new SparkException(
+          "UDF cannot be executed on a Spark cluster: it cannot be deserialized. " +
+            "This is very likely to be caused by the lambda function (the UDF) having a " +
+            "self-reference. This is not supported by java serialization.")
+      case NonFatal(e) =>
+        throw new SparkException(
+          "UDF cannot be executed on a Spark cluster: it cannot be deserialized.",
+          e)
+    }
+  }
+
   private[sql] def apply(
       function: AnyRef,
       returnType: TypeTag[_],
@@ -163,6 +185,7 @@ object ScalarUserDefinedFunction {
       outputEncoder: AgnosticEncoder[_]): ScalarUserDefinedFunction = {
     val udfPacketBytes =
       SparkSerDeUtils.serialize(UdfPacket(function, inputEncoders, outputEncoder))
+    checkDeserializable(udfPacketBytes)
     ScalarUserDefinedFunction(
       serializedUdfPacket = udfPacketBytes,
       inputTypes = inputEncoders.map(_.dataType).map(DataTypeProtoConverter.toConnectProtoType),
@@ -170,5 +193,12 @@ object ScalarUserDefinedFunction {
       name = None,
       nullable = true,
       deterministic = true)
+  }
+
+  private[sql] def apply(function: AnyRef, returnType: DataType): ScalarUserDefinedFunction = {
+    ScalarUserDefinedFunction(
+      function = function,
+      inputEncoders = Seq.empty[AgnosticEncoder[_]],
+      outputEncoder = RowEncoder.encoderForDataType(returnType, lenient = false))
   }
 }

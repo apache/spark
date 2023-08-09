@@ -18,8 +18,12 @@ package org.apache.spark.util
 
 import java.io.File
 import java.net.{URI, URISyntaxException}
+import java.nio.file.Files
 
-private[spark] object SparkFileUtils {
+import org.apache.spark.internal.Logging
+import org.apache.spark.network.util.JavaUtils
+
+private[spark] trait SparkFileUtils extends Logging {
   /**
    * Return a well-formed URI for the file described by a user input string.
    *
@@ -44,4 +48,78 @@ private[spark] object SparkFileUtils {
     }
     new File(path).getCanonicalFile().toURI()
   }
+
+  /**
+   * Lists files recursively.
+   */
+  def recursiveList(f: File): Array[File] = {
+    require(f.isDirectory)
+    val result = f.listFiles.toBuffer
+    val dirList = result.filter(_.isDirectory)
+    while (dirList.nonEmpty) {
+      val curDir = dirList.remove(0)
+      val files = curDir.listFiles()
+      result ++= files
+      dirList ++= files.filter(_.isDirectory)
+    }
+    result.toArray
+  }
+
+  /**
+   * Create a directory given the abstract pathname
+   * @return true, if the directory is successfully created; otherwise, return false.
+   */
+  def createDirectory(dir: File): Boolean = {
+    try {
+      // SPARK-35907: The check was required by File.mkdirs() because it could sporadically
+      // fail silently. After switching to Files.createDirectories(), ideally, there should
+      // no longer be silent fails. But the check is kept for the safety concern. We can
+      // remove the check when we're sure that Files.createDirectories() would never fail silently.
+      Files.createDirectories(dir.toPath)
+      if ( !dir.exists() || !dir.isDirectory) {
+        logError(s"Failed to create directory " + dir)
+      }
+      dir.isDirectory
+    } catch {
+      case e: Exception =>
+        logError(s"Failed to create directory " + dir, e)
+        false
+    }
+  }
+
+  /**
+   * Create a directory inside the given parent directory. The directory is guaranteed to be
+   * newly created, and is not marked for automatic deletion.
+   */
+  def createDirectory(root: String, namePrefix: String = "spark"): File = {
+    JavaUtils.createDirectory(root, namePrefix)
+  }
+
+  /**
+   * Create a temporary directory inside the `java.io.tmpdir` prefixed with `spark`.
+   * The directory will be automatically deleted when the VM shuts down.
+   */
+  def createTempDir(): File =
+    createTempDir(System.getProperty("java.io.tmpdir"), "spark")
+
+  /**
+   * Create a temporary directory inside the given parent directory. The directory will be
+   * automatically deleted when the VM shuts down.
+   */
+  def createTempDir(
+      root: String = System.getProperty("java.io.tmpdir"),
+      namePrefix: String = "spark"): File = {
+    createDirectory(root, namePrefix)
+  }
+
+  /**
+   * Delete a file or directory and its contents recursively.
+   * Don't follow directories if they are symlinks.
+   * Throws an exception if deletion is unsuccessful.
+   */
+  def deleteRecursively(file: File): Unit = {
+    JavaUtils.deleteRecursively(file)
+  }
 }
+
+private[spark] object SparkFileUtils extends SparkFileUtils
