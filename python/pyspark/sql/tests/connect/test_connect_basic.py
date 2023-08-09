@@ -3522,6 +3522,13 @@ class ChannelBuilderTests(unittest.TestCase):
         md = chan.metadata()
         self.assertEqual([("param1", "120 21"), ("x-my-header", "abcd")], md)
 
+    def test_metadata(self):
+        chan = ChannelBuilder("sc://host/;session_id=abcdefgh")
+        self.assertEqual("abcdefgh", chan.session_id)
+
+        chan = ChannelBuilder("sc://host/")
+        self.assertIsNone(chan.session_id)
+
 
 if __name__ == "__main__":
     from pyspark.sql.tests.connect.test_connect_basic import *  # noqa: F401

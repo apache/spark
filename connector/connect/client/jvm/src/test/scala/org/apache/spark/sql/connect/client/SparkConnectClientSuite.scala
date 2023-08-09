@@ -164,6 +164,9 @@ class SparkConnectClientSuite extends ConnectFunSuite with BeforeAndAfterEach {
       client => {
         assert(client.configuration.host == "localhost")
         assert(client.configuration.port == 1234)
+        assert(client.sessionId != null)
+        // Must be able to parse the UUID
+        assert(UUID.fromString(client.sessionId) != null)
       }),
     TestPackURI(
       "sc://localhost/;",
@@ -193,6 +196,11 @@ class SparkConnectClientSuite extends ConnectFunSuite with BeforeAndAfterEach {
     TestPackURI("sc://host:123/;use_ssl=true", isCorrect = true),
     TestPackURI("sc://host:123/;token=mySecretToken", isCorrect = true),
     TestPackURI("sc://host:123/;token=", isCorrect = false),
+    TestPackURI("sc://host:123/;session_id=", isCorrect = false),
+    TestPackURI(
+      "sc://host:123/;session_id=abcdefgh",
+      isCorrect = true,
+      client => assert(client.sessionId == "abcdefgh")),
     TestPackURI("sc://host:123/;use_ssl=true;token=mySecretToken", isCorrect = true),
     TestPackURI("sc://host:123/;token=mySecretToken;use_ssl=true", isCorrect = true),
     TestPackURI("sc://host:123/;use_ssl=false;token=mySecretToken", isCorrect = false),

@@ -91,6 +91,16 @@ sc://hostname:port/;param1=value;param2=value
     <i>Default: </i><pre>_SPARK_CONNECT_PYTHON</pre> in the Python client</td>
     <td><pre>user_agent=my_data_query_app</pre></td>
   </tr>
+  <tr>
+    <td>session_id</td>
+    <td>String</td>
+    <td>In addition to the user ID, the cache of Spark Sessions in the Spark Connect
+    server uses a session ID as the cache key. This option in the connection string
+    allows to provide this session ID to allow sharing Spark Sessions for the same users
+    for example across multiple languages.<br/>
+    <i>Default: A UUID generated randomly</td>
+    <td><pre>session_id=abcde-fgh-ihkl-mnop</pre></td>
+  </tr>
 </table>
 
 ## Examples

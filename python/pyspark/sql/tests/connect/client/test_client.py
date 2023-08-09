@@ -88,6 +88,11 @@ class SparkConnectClientTestCase(unittest.TestCase):
         client.close()
         self.assertTrue(client.is_closed)
 
+    def test_channel_builder_with_session(self):
+        chan = ChannelBuilder("sc://foo/;session_id=abcd")
+        client = SparkConnectClient(chan)
+        self.assertEqual(client._session_id, chan.session_id)
+
 
 class MockService:
     # Simplest mock of the SparkConnectService.

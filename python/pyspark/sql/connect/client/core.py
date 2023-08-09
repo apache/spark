@@ -156,6 +156,7 @@ class ChannelBuilder:
     PARAM_TOKEN = "token"
     PARAM_USER_ID = "user_id"
     PARAM_USER_AGENT = "user_agent"
+    PARAM_SESSION_ID = "session_id"
     MAX_MESSAGE_LENGTH = 128 * 1024 * 1024
 
     @staticmethod
@@ -353,6 +354,16 @@ class ChannelBuilder:
         The parameter value if present, raises exception otherwise.
         """
         return self.params[key]
+
+    @property
+    def session_id(self) -> Optional[str]:
+        """
+        Returns
+        -------
+        The session_id extracted from the parameters of the connection string or `None` if not
+        specified.
+        """
+        return self.params.get(ChannelBuilder.PARAM_SESSION_ID, None)
 
     def toChannel(self) -> grpc.Channel:
         """
@@ -628,10 +639,15 @@ class SparkConnectClient(object):
         if retry_policy:
             self._retry_policy.update(retry_policy)
 
-        # Generate a unique session ID for this client. This UUID must be unique to allow
-        # concurrent Spark sessions of the same user. If the channel is closed, creating
-        # a new client will create a new session ID.
-        self._session_id = str(uuid.uuid4())
+        if self._builder.session_id is None:
+            # Generate a unique session ID for this client. This UUID must be unique to allow
+            # concurrent Spark sessions of the same user. If the channel is closed, creating
+            # a new client will create a new session ID.
+            self._session_id = str(uuid.uuid4())
+        else:
+            # Use the pre-defined session ID.
+            self._session_id = str(self._builder.session_id)
+
         if self._builder.userId is not None:
             self._user_id = self._builder.userId
         elif user_id is not None:
