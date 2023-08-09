@@ -67,6 +67,7 @@ from pyspark.pandas.utils import (
     scol_for,
     verify_temp_column_name,
 )
+from pyspark.sql.utils import is_remote
 from pyspark.pandas.spark.functions import timestampdiff
 
 
@@ -144,15 +145,22 @@ class Resampler(Generic[FrameLike], metaclass=ABCMeta):
     def get_make_interval(  # type: ignore[return]
         self, unit: str, col: Union[Column, int, float]
     ) -> Column:
-        col = col if not isinstance(col, (int, float)) else F.lit(col)  # type: ignore[assignment]
-        if unit == "MONTH":
-            return F.make_interval(months=col)  # type: ignore
-        if unit == "HOUR":
-            return F.make_interval(hours=col)  # type: ignore
-        if unit == "MINUTE":
-            return F.make_interval(mins=col)  # type: ignore
-        if unit == "SECOND":
-            return F.make_interval(secs=col)  # type: ignore
+        if is_remote():
+            from pyspark.sql.connect.functions import lit, make_interval
+
+            col = col if not isinstance(col, (int, float)) else lit(col)  # type: ignore[assignment]
+            if unit == "MONTH":
+                return make_interval(months=col)  # type: ignore
+            if unit == "HOUR":
+                return make_interval(hours=col)  # type: ignore
+            if unit == "MINUTE":
+                return make_interval(mins=col)  # type: ignore
+            if unit == "SECOND":
+                return make_interval(secs=col)  # type: ignore
+        else:
+            sql_utils = SparkContext._active_spark_context._jvm.PythonSQLUtils
+            col = col._jc if isinstance(col, Column) else F.lit(col)._jc
+            return sql_utils.makeInterval(unit, col)
 
     def _bin_timestamp(self, origin: pd.Timestamp, ts_scol: Column) -> Column:
         key_type = self._resamplekey_type
