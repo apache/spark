@@ -97,7 +97,8 @@ sc://hostname:port/;param1=value;param2=value
     <td>In addition to the user ID, the cache of Spark Sessions in the Spark Connect
     server uses a session ID as the cache key. This option in the connection string
     allows to provide this session ID to allow sharing Spark Sessions for the same users
-    for example across multiple languages.<br/>
+    for example across multiple languages. The value must be provided in a valid UUID 
+    string format.<br/>
     <i>Default: A UUID generated randomly.</td>
     <td><pre>session_id=550e8400-e29b-41d4-a716-446655440000</pre></td>
   </tr>

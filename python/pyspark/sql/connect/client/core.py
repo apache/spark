@@ -368,7 +368,7 @@ class ChannelBuilder:
             try:
                 uuid.UUID(session_id, version=4)
             except ValueError as ve:
-                raise ValueError("Could not parse 'session_id' parameter for connection string", ve)
+                raise ValueError("Parameter value 'session_id' must be a valid UUID format.", ve)
         return session_id
 
     def toChannel(self) -> grpc.Channel:
