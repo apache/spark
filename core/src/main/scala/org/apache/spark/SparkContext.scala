@@ -2791,9 +2791,9 @@ object SparkContext extends Logging {
   private[spark] val RDD_SCOPE_NO_OVERRIDE_KEY = "spark.rdd.scope.noOverride"
 
   /**
-   * Executor id for the driver.  In earlier versions of Spark, this was `<driver>`, but this was
-   * changed to `driver` because the angle brackets caused escaping issues in URLs and XML (see
-   * SPARK-6716 for more details).
+   * Executor id for the driver.  In earlier versions of Spark, this was `&lt;driver&gt;`,
+   * but this was changed to `driver` because the angle brackets caused escaping issues in
+   * URLs and XML (see SPARK-6716 for more details).
    */
   val DRIVER_IDENTIFIER = "driver"
 
