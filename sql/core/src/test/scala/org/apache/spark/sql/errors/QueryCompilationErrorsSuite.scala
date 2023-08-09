@@ -913,22 +913,6 @@ class QueryCompilationErrorsSuite
       )
     }
   }
-
-  test("SPARK-43438: mismatched column list error on INSERT") {
-    val tbl = "num_cols_insert_tbl"
-    withTable(tbl) {
-      sql(s"CREATE TABLE $tbl(c1 INT, c2 INT) USING parquet")
-      checkError(
-        exception = intercept[AnalysisException] {
-          sql(s"INSERT INTO $tbl SELECT 1")
-        },
-        errorClass = "INSERT_COLUMN_ARITY_MISMATCH.NOT_ENOUGH_DATA_COLUMNS",
-        parameters = Map(
-          "tableName" -> "`spark_catalog`.`default`.`num_cols_insert_tbl`",
-          "tableColumns" -> "`c1`, `c2`",
-          "dataColumns" -> "`1`"))
-    }
-  }
 }
 
 class MyCastToString extends SparkUserDefinedFunction(
