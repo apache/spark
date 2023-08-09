@@ -416,8 +416,8 @@ case class EnsureRequirements(
         val partitionExprs = leftSpec.partitioning.expressions
 
         var mergedPartValues = InternalRowComparableWrapper
-          .mergePartitions(leftSpec.partitioning, rightSpec.partitioning, partitionExprs)
-          .map(v => (v, 1))
+            .mergePartitions(leftSpec.partitioning, rightSpec.partitioning, partitionExprs)
+            .map(v => (v, 1))
 
         logInfo(s"After merging, there are ${mergedPartValues.size} partitions")
 
@@ -432,7 +432,7 @@ case class EnsureRequirements(
         // final input partitions respectively.
         if (conf.v2BucketingPartiallyClusteredDistributionEnabled) {
           logInfo("Calculating partially clustered distribution for " +
-            "storage-partitioned join")
+              "storage-partitioned join")
 
           // Similar to `OptimizeSkewedJoin`, we need to check join type and decide
           // whether partially clustered distribution can be applied. For instance, the
@@ -444,15 +444,15 @@ case class EnsureRequirements(
 
           if (!canReplicateLeft && !canReplicateRight) {
             logInfo("Skipping partially clustered distribution as it cannot be applied for " +
-              s"join type '$joinType'")
+                s"join type '$joinType'")
           } else {
             val leftLink = left.logicalLink
             val rightLink = right.logicalLink
 
             replicateLeftSide = if (
               leftLink.isDefined && rightLink.isDefined &&
-                leftLink.get.stats.sizeInBytes > 1 &&
-                rightLink.get.stats.sizeInBytes > 1) {
+                  leftLink.get.stats.sizeInBytes > 1 &&
+                  rightLink.get.stats.sizeInBytes > 1) {
               logInfo(
                 s"""
                    |Using plan statistics to determine which side of join to fully
@@ -465,7 +465,7 @@ case class EnsureRequirements(
               // As a simple heuristic, we pick the side with fewer number of partitions
               // to apply the grouping & replication of partitions
               logInfo("Using number of partitions to determine which side of join " +
-                "to fully cluster partition values")
+                  "to fully cluster partition values")
               leftPartValues.size < rightPartValues.size
             }
 
@@ -476,11 +476,11 @@ case class EnsureRequirements(
             // the left-hand side of a right outer join.
             if (replicateLeftSide && !canReplicateLeft) {
               logInfo("Left-hand side is picked but cannot be applied to join type " +
-                s"'$joinType'. Skipping partially clustered distribution.")
+                  s"'$joinType'. Skipping partially clustered distribution.")
               replicateLeftSide = false
             } else if (replicateRightSide && !canReplicateRight) {
               logInfo("Right-hand side is picked but cannot be applied to join type " +
-                s"'$joinType'. Skipping partially clustered distribution.")
+                  s"'$joinType'. Skipping partially clustered distribution.")
               replicateRightSide = false
             } else {
               val partValues = if (replicateLeftSide) rightPartValues else leftPartValues
@@ -495,7 +495,7 @@ case class EnsureRequirements(
               }
 
               logInfo("After applying partially clustered distribution, there are " +
-                s"${mergedPartValues.map(_._2).sum} partitions.")
+                  s"${mergedPartValues.map(_._2).sum} partitions.")
               applyPartialClustering = true
             }
           }
