@@ -20,7 +20,7 @@ import java.util.Locale
 
 import org.apache.spark.QueryContext
 import org.apache.spark.sql.catalyst.trees.SQLQueryContext
-import org.apache.spark.sql.catalyst.util.{AttributeNameParser, QuotingUtils, SparkStringUtils}
+import org.apache.spark.sql.catalyst.util.{AttributeNameParser, QuotingUtils}
 import org.apache.spark.sql.types.{AbstractDataType, DataType, TypeCollection}
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -34,7 +34,7 @@ private[sql] trait DataTypeErrorsBase {
       case Seq("__auto_generated_subquery_name", rest @ _*) if rest != Nil => rest
       case other => other
     }
-    cleaned.map(SparkStringUtils.quoteIdentifier).mkString(".")
+    cleaned.map(QuotingUtils.quoteIdentifier).mkString(".")
   }
 
   def toSQLStmt(text: String): String = {
