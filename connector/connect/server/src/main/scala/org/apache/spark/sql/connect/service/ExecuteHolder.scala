@@ -183,7 +183,12 @@ private[connect] class ExecuteHolder(
     }
   }
 
-  def initialExecutePlanExit(): Unit = synchronized {
+  /**
+   * For a short period in ExecutePlan after creation and until runGrpcResponseSender is called,
+   * there is no attached response sender, but yet we start with lastAttachedRpcTime = None, so we
+   * don't get garbage collected. End this grace period when the initial ExecutePlan ends.
+   */
+  def afterInitialRPC(): Unit = synchronized {
     if (closedTime.isEmpty) {
       if (grpcResponseSenders.isEmpty) {
         lastAttachedRpcTime = Some(System.currentTimeMillis())
@@ -212,8 +217,8 @@ private[connect] class ExecuteHolder(
   /**
    * Interrupt (if still running) and close the execution.
    *
-   * Called only by SparkConnectExecutionManager.removeExecuteHolder, which then also removes
-   * the execution from global tracking and from its session.
+   * Called only by SparkConnectExecutionManager.removeExecuteHolder, which then also removes the
+   * execution from global tracking and from its session.
    */
   def close(): Unit = synchronized {
     if (closedTime.isEmpty) {
@@ -298,6 +303,7 @@ object ExecuteSessionTag {
   }
 }
 
+/** Information about an ExecuteHolder. */
 case class ExecuteInfo(
     request: proto.ExecutePlanRequest,
     userId: String,

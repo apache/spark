@@ -28,10 +28,14 @@ class SparkConnectExecutePlanHandler(responseObserver: StreamObserver[proto.Exec
 
   def handle(v: proto.ExecutePlanRequest): Unit = {
     val executeHolder = SparkConnectService.executionManager.createExecuteHolder(v)
-    executeHolder.eventsManager.postStarted()
-    executeHolder.start()
-    val responseSender =
-      new ExecuteGrpcResponseSender[proto.ExecutePlanResponse](executeHolder, responseObserver)
-    executeHolder.runGrpcResponseSender(responseSender)
+    try {
+      executeHolder.eventsManager.postStarted()
+      executeHolder.start()
+      val responseSender =
+        new ExecuteGrpcResponseSender[proto.ExecutePlanResponse](executeHolder, responseObserver)
+      executeHolder.runGrpcResponseSender(responseSender)
+    } finally {
+      executeHolder.afterInitialRPC()
+    }
   }
 }

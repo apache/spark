@@ -55,7 +55,8 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
   private lazy val listenerCache: ConcurrentMap[String, StreamingQueryListener] =
     new ConcurrentHashMap()
 
-  private[connect] def addExecuteHolder(executeHolder: ExecuteHolder): Unit = {
+  /** Add ExecuteHolder to this session. Called only by SparkConnectExecutionManager. */
+  private[service] def addExecuteHolder(executeHolder: ExecuteHolder): Unit = {
     val oldExecute = executions.putIfAbsent(executeHolder.operationId, executeHolder)
     if (oldExecute != null) {
       // the existance of this should alrady be checked by SparkConnectExecutionManager
@@ -64,12 +65,13 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
     }
   }
 
-  private[connect] def executeHolder(operationId: String): Option[ExecuteHolder] = {
-    Option(executions.get(operationId))
+  /** Remove ExecuteHolder to this session. Called only by SparkConnectExecutionManager. */
+  private[service] def removeExecuteHolder(operationId: String): Unit = {
+    executions.remove(operationId)
   }
 
-  private[connect] def removeExecuteHolder(operationId: String): Unit = {
-    executions.remove(operationId)
+  private[connect] def executeHolder(operationId: String): Option[ExecuteHolder] = {
+    Option(executions.get(operationId))
   }
 
   /**
@@ -77,7 +79,7 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
    * @return
    *   list of operationIds of interrupted executions
    */
-  private[connect] def interruptAll(): Seq[String] = {
+  private[service] def interruptAll(): Seq[String] = {
     val interruptedIds = new mutable.ArrayBuffer[String]()
     executions.asScala.values.foreach { execute =>
       if (execute.interrupt()) {
@@ -92,7 +94,7 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
    * @return
    *   list of operationIds of interrupted executions
    */
-  private[connect] def interruptTag(tag: String): Seq[String] = {
+  private[service] def interruptTag(tag: String): Seq[String] = {
     val interruptedIds = new mutable.ArrayBuffer[String]()
     executions.asScala.values.foreach { execute =>
       if (execute.sparkSessionTags.contains(tag)) {
@@ -109,7 +111,7 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
    * @return
    *   list of operationIds of interrupted executions (one element or empty)
    */
-  private[connect] def interruptOperation(operationId: String): Seq[String] = {
+  private[service] def interruptOperation(operationId: String): Seq[String] = {
     val interruptedIds = new mutable.ArrayBuffer[String]()
     Option(executions.get(operationId)).foreach { execute =>
       if (execute.interrupt()) {

@@ -85,7 +85,7 @@ object Connect {
   val CONNECT_EXECUTE_MANAGER_MAINTENANCE_INTERVAL =
     ConfigBuilder("spark.connect.execute.manager.maintenanceInterval")
       .internal()
-      .doc("Timeout after which executions without an attached RPC will be removed.")
+      .doc("Interval at which execution manager will search for abandoned executions to remove.")
       .version("3.5.0")
       .timeConf(TimeUnit.MILLISECONDS)
       .createWithDefaultString("30s")

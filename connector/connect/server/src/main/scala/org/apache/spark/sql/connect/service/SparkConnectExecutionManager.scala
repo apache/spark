@@ -30,6 +30,12 @@ import org.apache.spark.sql.connect.config.Connect.{CONNECT_EXECUTE_MANAGER_DETA
 // Unique key identifying execution by combination of user, session and operation id
 case class ExecuteKey(userId: String, sessionId: String, operationId: String)
 
+/**
+ * Global tracker of all ExecuteHolder executions.
+ *
+ * All ExecuteHolders are created, and removed through it. It keeps track of all the executions,
+ * and removes executions that have been abandoned.
+ */
 private[connect] class SparkConnectExecutionManager() extends Logging {
 
   /** Hash table containing all current executions. Guarded by executionsLock. */
@@ -37,9 +43,7 @@ private[connect] class SparkConnectExecutionManager() extends Logging {
     new mutable.HashMap[ExecuteKey, ExecuteHolder]()
   private val executionsLock = new Object
 
-  /**
-   * None if there are no executions. Otherwise, the time when the last execution was removed.
-   */
+  /** None if there are no executions. Otherwise, the time when the last execution was removed. */
   private var lastExecutionTime: Option[Long] = Some(System.currentTimeMillis())
 
   /** Executor for the periodic maintenance */
@@ -70,8 +74,8 @@ private[connect] class SparkConnectExecutionManager() extends Logging {
   }
 
   /**
-   * Remove an ExecuteHolder from this global manager and from its session. Interrupt the execution
-   * if still running, free all resources.
+   * Remove an ExecuteHolder from this global manager and from its session. Interrupt the
+   * execution if still running, free all resources.
    */
   private[connect] def removeExecuteHolder(key: ExecuteKey): Unit = {
     var executeHolder: Option[ExecuteHolder] = None
@@ -88,8 +92,8 @@ private[connect] class SparkConnectExecutionManager() extends Logging {
   }
 
   /**
-   * If there are no executions, return Left with System.currentTimeMillis of last active execution.
-   * Otherwise return Right with list of ExecuteInfo of all executions.
+   * If there are no executions, return Left with System.currentTimeMillis of last active
+   * execution. Otherwise return Right with list of ExecuteInfo of all executions.
    */
   def listAllExecutions: Either[Long, Seq[ExecuteInfo]] = executionsLock.synchronized {
     if (executions.isEmpty) {
