@@ -65,8 +65,8 @@ private[stat] object SpearmanCorrelation extends Correlation with Logging {
         output
       }
       iter.flatMap { case (((j, v), uid), rank) =>
-        // If we see a new value or cachedUids is too big, we flush ids with their average rank.
-        if (j != preCol || v != preVal || cachedUids.size >= 10000000) {
+        // If we see a new value, we flush ids with their average rank.
+        if (j != preCol || v != preVal) {
           val output = flush()
           preCol = j
           preVal = v

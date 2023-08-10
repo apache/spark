@@ -121,6 +121,15 @@ class CorrelationSuite extends SparkFunSuite with MLlibTestSparkContext {
     assert(matrixApproxEqual(spearmanMat.asBreeze, expected))
   }
 
+  test("SPARK-42905: spearman corr(x, y) when data has huge amount of ties") {
+    val N = 10000002
+    val x = sc.range(0, N).map(i => if (i < N - 1) 1.0 else 2.0)
+    val y = sc.range(0, N).map(i => if (i < N - 1) 2.0 else 1.0)
+    val expected = -1.0
+    val s1 = Statistics.corr(x, y, "spearman")
+    assert(expected ~== s1 absTol 1e-6)
+  }
+
   test("method identification") {
     val pearson = PearsonCorrelation
     val spearman = SpearmanCorrelation
