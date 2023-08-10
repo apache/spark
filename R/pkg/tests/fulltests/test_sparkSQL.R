@@ -2809,9 +2809,11 @@ test_that("test hint", {
   )
   expect_true(any(grepl("1.23456, aaaaaaaaaa", execution_plan_hint)))
 
+  a <- column("id")
   rebalance_plan_hint <- capture.output(
-      explain(hint(df, "rebalance", 1, column("a")), FALSE)
+      explain(hint(df, "rebalance", as.integer(2), a), TRUE)
   )
+  expect_true(any(grepl("RebalancePartitions", rebalance_plan_hint)))
 })
 
 test_that("toJSON() on DataFrame", {

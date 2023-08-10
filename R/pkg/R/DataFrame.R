@@ -4156,7 +4156,14 @@ setMethod("hint",
             }))) {
               stop("sql hint should be character, numeric, or list with character or numeric.")
             }
-            jdf <- callJMethod(x@sdf, "hint", name, parameters)
+            jparams <- lapply(parameters, function(c) {
+              if (is.character(c) || is.numeric(c) || is.list(c)) {
+                c
+              } else {
+                c@jc
+              }
+            })
+            jdf <- callJMethod(x@sdf, "hint", name, jparams)
             dataFrame(jdf)
           })
 
