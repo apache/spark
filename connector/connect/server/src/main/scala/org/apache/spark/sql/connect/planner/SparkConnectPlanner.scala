@@ -79,7 +79,7 @@ import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.storage.CacheId
 import org.apache.spark.util.Utils
-import org.apache.spark.util.sketch.BloomFilterHelper
+import org.apache.spark.util.sketch.BloomFilter
 
 final case class InvalidCommandInput(
     private val message: String = "",
@@ -1764,7 +1764,7 @@ class SparkConnectPlanner(val sessionHolder: SessionHolder) extends Logging {
             }
             // Calculate numBits through expectedNumItems and fpp,
             // refer to `BloomFilter.optimalNumOfBits(long, double)`.
-            val numBits = BloomFilterHelper.optimalNumOfBits(expectedNumItems, fpp)
+            val numBits = BloomFilter.optimalNumOfBits(expectedNumItems, fpp)
             if (numBits <= 0L) {
               throw InvalidPlanInput("Number of bits must be positive")
             }
