@@ -693,7 +693,7 @@ class ClientSuite extends SparkFunSuite with Matchers {
     when(fs.listStatus(new Path ("hdfs:/valid"))).thenReturn(Seq(
       new FileStatus(1, false, 1, 1, 1L, new Path("/valid/a.jar")),
       new FileStatus(1, false, 1, 1, 1L, new Path("/valid/b.jar")),
-      new FileStatus(1, false, 1, 1, 1L, new Path("/valid/c.jar"))).to[Array])
+      new FileStatus(1, false, 1, 1, 1L, new Path("/valid/c.jar"))).toArray)
     client.statCachePreload(fs, statCache)
     assert(statCache.size === 3)
   }
