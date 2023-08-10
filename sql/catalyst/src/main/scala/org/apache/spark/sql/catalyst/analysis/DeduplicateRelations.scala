@@ -223,11 +223,12 @@ object DeduplicateRelations extends Rule[LogicalPlan] {
             def rewriteAttrs[T <: Expression](
                 exprs: Seq[T],
                 attrMap: Map[Attribute, Attribute]): Seq[T] = {
-              exprs.map(expr =>
+              exprs.map { expr =>
                 expr.transformWithPruning(_.containsPattern(ATTRIBUTE_REFERENCE)) {
                   case a: AttributeReference =>
                     attrMap.getOrElse(a, a)
-                }.asInstanceOf[T])
+                }.asInstanceOf[T]
+              }
             }
 
             planWithNewChildren match {
