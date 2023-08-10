@@ -404,7 +404,8 @@ public class RetryingBlockTransferorSuite {
    * If mockInitiateRetryFailure is set to true, we mock initiateRetry() and throw an exception.
    */
   private static void performInteractions(List<? extends Map<String, Object>> interactions,
-                                          BlockFetchingListener listener, boolean mockInitiateRetryFailure)
+                                          BlockFetchingListener listener,
+                                          boolean mockInitiateRetryFailure)
     throws IOException, InterruptedException {
 
     MapConfigProvider provider = new MapConfigProvider(configMap);
