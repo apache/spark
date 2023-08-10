@@ -28,7 +28,6 @@ import scala.reflect.classTag
 
 import org.apache.arrow.memory.{BufferAllocator, RootAllocator}
 import org.apache.arrow.vector.VarBinaryVector
-import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.sql.{AnalysisException, Row}
@@ -43,13 +42,13 @@ import org.apache.spark.sql.catalyst.util.SparkDateTimeUtils._
 import org.apache.spark.sql.catalyst.util.SparkIntervalUtils._
 import org.apache.spark.sql.connect.client.CloseableIterator
 import org.apache.spark.sql.connect.client.arrow.FooEnum.FooEnum
-import org.apache.spark.sql.connect.client.util.ConnectFunSuite
+import org.apache.spark.sql.connect.client.util.ConnectInternalFunSuite
 import org.apache.spark.sql.types.{ArrayType, DataType, DayTimeIntervalType, Decimal, DecimalType, IntegerType, Metadata, SQLUserDefinedType, StructType, UserDefinedType, YearMonthIntervalType}
 
 /**
  * Tests for encoding external data to and from arrow.
  */
-class ArrowEncoderSuite extends ConnectFunSuite with BeforeAndAfterAll {
+class ArrowEncoderSuite extends ConnectInternalFunSuite {
   private val allocator = new RootAllocator()
 
   private def newAllocator(name: String): BufferAllocator = {

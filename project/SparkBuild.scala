@@ -55,6 +55,7 @@ object BuildCommons {
   val connectCommon = ProjectRef(buildLocation, "connect-common")
   val connect = ProjectRef(buildLocation, "connect")
   val connectClient = ProjectRef(buildLocation, "connect-client-jvm")
+  val connectClientInternal = ProjectRef(buildLocation, "connect-client-jvm-internal")
 
   val allProjects@Seq(
     core, graphx, mllib, mllibLocal, repl, networkCommon, networkShuffle, launcher, unsafe, tags, sketch, kvstore,
@@ -62,7 +63,8 @@ object BuildCommons {
   ) = Seq(
     "core", "graphx", "mllib", "mllib-local", "repl", "network-common", "network-shuffle", "launcher", "unsafe",
     "tags", "sketch", "kvstore", "common-utils", "sql-api"
-  ).map(ProjectRef(buildLocation, _)) ++ sqlProjects ++ streamingProjects ++ Seq(connectCommon, connect, connectClient)
+  ).map(ProjectRef(buildLocation, _)) ++ sqlProjects ++ streamingProjects ++
+    Seq(connectCommon, connect, connectClient, connectClientInternal)
 
   val optionallyEnabledProjects@Seq(kubernetes, mesos, yarn,
     sparkGangliaLgpl, streamingKinesisAsl,
@@ -413,7 +415,8 @@ object SparkBuild extends PomBuild {
   val mimaProjects = allProjects.filterNot { x =>
     Seq(
       spark, hive, hiveThriftServer, repl, networkCommon, networkShuffle, networkYarn,
-      unsafe, tags, tokenProviderKafka010, sqlKafka010, connectCommon, connect, connectClient,
+      unsafe, tags, tokenProviderKafka010, sqlKafka010,
+      connectCommon, connect, connectClient, connectClientInternal,
       commonUtils, sqlApi
     ).contains(x)
   }
@@ -460,6 +463,7 @@ object SparkBuild extends PomBuild {
   enable(SparkConnectCommon.settings)(connectCommon)
   enable(SparkConnect.settings)(connect)
   enable(SparkConnectClient.settings)(connectClient)
+  enable(SparkConnectClientInternal.settings)(connectClientInternal)
 
   /* Protobuf settings */
   enable(SparkProtobuf.settings)(protobuf)
@@ -932,6 +936,34 @@ object SparkConnectClient {
       )
     )
   }
+}
+
+object SparkConnectClientInternal {
+  import BuildCommons.protoVersion
+
+  lazy val settings = Seq(
+    // For some reason the resolution from the imported Maven build does not work for some
+    // of these dependendencies that we need to shade later on.
+    libraryDependencies ++= {
+      val guavaVersion =
+        SbtPomKeys.effectivePom.value.getProperties.get(
+          "connect.guava.version").asInstanceOf[String]
+      Seq(
+        "com.google.guava" % "guava" % guavaVersion,
+        "com.google.protobuf" % "protobuf-java" % protoVersion % "protobuf"
+      )
+    },
+
+    dependencyOverrides ++= {
+      val guavaVersion =
+        SbtPomKeys.effectivePom.value.getProperties.get(
+          "connect.guava.version").asInstanceOf[String]
+      Seq(
+        "com.google.guava" % "guava" % guavaVersion,
+        "com.google.protobuf" % "protobuf-java" % protoVersion
+      )
+    }
+  )
 }
 
 object SparkProtobuf {
@@ -1445,10 +1477,12 @@ object Unidoc {
 
     (ScalaUnidoc / unidoc / unidocProjectFilter) :=
       inAnyProject -- inProjects(OldDeps.project, repl, examples, tools, kubernetes,
-        yarn, tags, streamingKafka010, sqlKafka010, connectCommon, connect, connectClient, protobuf),
+        yarn, tags, streamingKafka010, sqlKafka010,
+        connectCommon, connect, connectClient, connectClientInternal, protobuf),
     (JavaUnidoc / unidoc / unidocProjectFilter) :=
       inAnyProject -- inProjects(OldDeps.project, repl, examples, tools, kubernetes,
-        yarn, tags, streamingKafka010, sqlKafka010, connectCommon, connect, connectClient, protobuf),
+        yarn, tags, streamingKafka010, sqlKafka010,
+        connectCommon, connect, connectClient, connectClientInternal, protobuf),
 
     (ScalaUnidoc / unidoc / unidocAllClasspaths) := {
       ignoreClasspaths((ScalaUnidoc / unidoc / unidocAllClasspaths).value)
