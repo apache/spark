@@ -1171,7 +1171,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         for p in parameters:
             if not isinstance(p, allowed_types):
                 raise PySparkTypeError(
-                    error_class="INVALID_ITEM_FOR_CONTAINER",
+                    error_class="DISALLOWED_TYPE_FOR_CONTAINER",
                     message_parameters={
                         "arg_name": "parameters",
                         "allowed_types": allowed_types_repr,
@@ -1181,7 +1181,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
             if isinstance(p, list):
                 if not all(isinstance(e, allowed_primitive_types) for e in p):
                     raise PySparkTypeError(
-                        error_class="INVALID_ITEM_FOR_CONTAINER",
+                        error_class="DISALLOWED_TYPE_FOR_CONTAINER",
                         message_parameters={
                             "arg_name": "parameters",
                             "allowed_types": allowed_types_repr,
