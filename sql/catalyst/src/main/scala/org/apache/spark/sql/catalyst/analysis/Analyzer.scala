@@ -2120,7 +2120,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
                   tableArgs.size)
               }
               val alias = SubqueryAlias.generateSubqueryName(s"_${tableArgs.size}")
-              // Propagate the column indexes for TABLE arguments to toe PythonUDTF instance.
+              // Propagate the column indexes for TABLE arguments to the PythonUDTF instance.
               val tvfWithTableColumnIndexes: LogicalPlan = tvf match {
                 case g @ Generate(p: PythonUDTF, _, _, _, _, _) =>
                   functionTableSubqueryArgs.headOption.map { tableArg =>
