@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
+import org.apache.spark.sql.catalyst.util.QuotingUtils.quoted
 
 
 /**
@@ -31,6 +31,6 @@ case class NonEmptyNamespaceException(
   extends AnalysisException(message, cause = cause) {
 
   def this(namespace: Array[String]) = {
-    this(s"Namespace '${namespace.quoted}' is non empty.")
+    this(s"Namespace '${quoted(namespace)}' is non empty.")
   }
 }
