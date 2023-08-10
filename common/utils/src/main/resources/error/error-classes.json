@@ -52,6 +52,12 @@
     ],
     "sqlState" : "22003"
   },
+  "ASSIGNMENT_ARITY_MISMATCH" : {
+    "message" : [
+      "The number of columns or variables assigned or aliased: <numTarget> does not match the number of source expressions: <numExpr>."
+    ],
+    "sqlState" : "42802"
+  },
   "AS_OF_JOIN" : {
     "message" : [
       "Invalid as-of join."
@@ -332,7 +338,7 @@
   },
   "CAST_OVERFLOW_IN_TABLE_INSERT" : {
     "message" : [
-      "Fail to insert a value of <sourceType> type into the <targetType> type column <columnName> due to an overflow. Use `try_cast` on the input value to tolerate overflow and return NULL instead."
+      "Fail to assign a value of <sourceType> type to the <targetType> type column or variable <columnName> due to an overflow. Use `try_cast` on the input value to tolerate overflow and return NULL instead."
     ],
     "sqlState" : "22003"
   },
@@ -764,6 +770,13 @@
     ],
     "sqlState" : "42704"
   },
+  "DEFAULT_PLACEMENT_INVALID" : {
+    "message" : [
+      "A DEFAULT keyword in a MERGE, INSERT, UPDATE, or SET VARIABLE command could not be directly assigned to a target column because it was part of an expression.",
+      "For example: `UPDATE SET c1 = DEFAULT` is allowed, but `UPDATE T SET c1 = DEFAULT + 1` is not allowed."
+    ],
+    "sqlState" : "42608"
+  },
   "DISTINCT_WINDOW_FUNCTION_UNSUPPORTED" : {
     "message" : [
       "Distinct window functions are not supported: <windowExpr>."
@@ -790,6 +803,12 @@
     "message" : [
       "The metric name is not unique: <metricName>. The same name cannot be used for metrics with different results. However multiple instances of metrics with with same result and name are allowed (e.g. self-joins)."
     ]
+  },
+  "DUPLICATE_ASSIGNMENTS" : {
+    "message" : [
+      "The columns or variables <nameList> appear more than once as assignment targets."
+    ],
+    "sqlState" : "42701"
   },
   "DUPLICATE_CLAUSES" : {
     "message" : [
@@ -1232,6 +1251,44 @@
     ],
     "sqlState" : "XX000"
   },
+  "INTERNAL_ERROR_METADATA_CATALOG" : {
+    "message" : [
+      "An object in the metadata catalog has been corrupted:"
+    ],
+    "subClass" : {
+      "SQL_CONFIG" : {
+        "message" : [
+          "Corrupted view SQL configs in catalog."
+        ]
+      },
+      "TABLE_NAME_CONTEXT" : {
+        "message" : [
+          "Corrupted table name context in catalog: <numParts> parts expected, but part <index> is missing."
+        ]
+      },
+      "TEMP_FUNCTION_REFERENCE" : {
+        "message" : [
+          "Corrupted view referred temp functions names in catalog."
+        ]
+      },
+      "TEMP_VARIABLE_REFERENCE" : {
+        "message" : [
+          "Corrupted view referred temp variable names in catalog."
+        ]
+      },
+      "TEMP_VIEW_REFERENCE" : {
+        "message" : [
+          "Corrupted view referred temp view names in catalog."
+        ]
+      },
+      "VIEW_QUERY_COLUMN_ARITY" : {
+        "message" : [
+          "Corrupted view query output column names in catalog: <numCols> parts expected, but part <index> is missing."
+        ]
+      }
+    },
+    "sqlState" : "XX000"
+  },
   "INTERNAL_ERROR_NETWORK" : {
     "message" : [
       "<message>"
@@ -1349,7 +1406,7 @@
   },
   "INVALID_DEFAULT_VALUE" : {
     "message" : [
-      "Failed to execute <statement> command because the destination table column <colName> has a DEFAULT value <defaultValue>,"
+      "Failed to execute <statement> command because the destination column or variable <colName> has a DEFAULT value <defaultValue>,"
     ],
     "subClass" : {
       "DATA_TYPE" : {
@@ -1916,6 +1973,12 @@
       "UNSUPPORTED_FUNC_NAME" : {
         "message" : [
           "Unsupported function name <funcName>."
+        ]
+      },
+      "VARIABLE_TYPE_OR_DEFAULT_REQUIRED" : {
+        "message" : [
+          "The definition of a SQL variable requires either a datatype or a DEFAULT clause.",
+          "For example, use `DECLARE name STRING` or `DECLARE name = 'SQL'` instead of `DECLARE name`."
         ]
       }
     },
@@ -2502,6 +2565,12 @@
     ],
     "sqlState" : "42883"
   },
+  "ROW_SUBQUERY_TOO_MANY_ROWS" : {
+    "message" : [
+      "More than one row returned by a subquery used as a row."
+    ],
+    "sqlState" : "21000"
+  },
   "RULE_ID_NOT_FOUND" : {
     "message" : [
       "Not found an id for the rule name \"<ruleName>\". Please modify RuleIdCollection.scala if you are adding a new rule."
@@ -2742,7 +2811,7 @@
   },
   "UNRESOLVED_COLUMN" : {
     "message" : [
-      "A column or function parameter with name <objectName> cannot be resolved."
+      "A column, variable, or function parameter with name <objectName> cannot be resolved."
     ],
     "subClass" : {
       "WITHOUT_SUGGESTION" : {
@@ -2805,6 +2874,12 @@
       "USING column <colName> cannot be resolved on the <side> side of the join. The <side>-side columns: [<suggestion>]."
     ],
     "sqlState" : "42703"
+  },
+  "UNRESOLVED_VARIABLE" : {
+    "message" : [
+      "Cannot resolve variable <variableName> on search path <searchPath>."
+    ],
+    "sqlState" : "42883"
   },
   "UNSET_NONEXISTENT_PROPERTIES" : {
     "message" : [
@@ -3102,6 +3177,11 @@
           "<property> is a reserved table property, <msg>."
         ]
       },
+      "SET_VARIABLE_USING_SET" : {
+        "message" : [
+          "<variableName> is a VARIABLE and cannot be updated using the SET statement. Use SET VARIABLE <variableName> = ... instead."
+        ]
+      },
       "TABLE_OPERATION" : {
         "message" : [
           "Table <tableName> does not support <operation>. Please check the current catalog and namespace to make sure the qualified table name is expected, and also check the catalog implementation which is configured by \"spark.sql.catalog\"."
@@ -3327,6 +3407,21 @@
       "2. use Java UDF APIs, e.g. `udf(new UDF1[String, Integer] { override def call(s: String): Integer = s.length() }, IntegerType)`, if input types are all non primitive.",
       "3. set \"spark.sql.legacy.allowUntypedScalaUDF\" to \"true\" and use this API with caution."
     ]
+  },
+  "VARIABLE_ALREADY_EXISTS" : {
+    "message" : [
+      "Cannot create the variable <variableName> because it already exists.",
+      "Choose a different name, or drop or replace the existing variable."
+    ],
+    "sqlState" : "42723"
+  },
+  "VARIABLE_NOT_FOUND" : {
+    "message" : [
+      "The variable <variableName> cannot be found. Verify the spelling and correctness of the schema and catalog.",
+      "If you did not qualify the name with a schema and catalog, verify the current_schema() output, or qualify the name with the correct schema and catalog.",
+      "To tolerate the error on drop use DROP VARIABLE IF EXISTS."
+    ],
+    "sqlState" : "42883"
   },
   "VIEW_ALREADY_EXISTS" : {
     "message" : [
@@ -3687,11 +3782,6 @@
       "FILTER expression contains window function. It cannot be used in an aggregate function."
     ]
   },
-  "_LEGACY_ERROR_TEMP_1028" : {
-    "message" : [
-      "Number of column aliases does not match number of columns. Number of column aliases: <columnSize>; number of columns: <outputSize>."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_1030" : {
     "message" : [
       "Window aggregate function with filter predicate is not supported yet."
@@ -3881,31 +3971,6 @@
   "_LEGACY_ERROR_TEMP_1083" : {
     "message" : [
       "Number of buckets should be greater than 0 but less than or equal to bucketing.maxBuckets (`<bucketingMaxBuckets>`). Got `<numBuckets>`."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1084" : {
-    "message" : [
-      "Corrupted table name context in catalog: <numParts> parts expected, but part <index> is missing."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1085" : {
-    "message" : [
-      "Corrupted view SQL configs in catalog."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1086" : {
-    "message" : [
-      "Corrupted view query output column names in catalog: <numCols> parts expected, but part <index> is missing."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1087" : {
-    "message" : [
-      "Corrupted view referred temp view names in catalog."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1088" : {
-    "message" : [
-      "Corrupted view referred temp functions names in catalog."
     ]
   },
   "_LEGACY_ERROR_TEMP_1089" : {
@@ -4788,21 +4853,6 @@
   "_LEGACY_ERROR_TEMP_1338" : {
     "message" : [
       "Sinks cannot request distribution and ordering in continuous execution mode."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1339" : {
-    "message" : [
-      "Failed to execute INSERT INTO command because the VALUES list contains a DEFAULT column reference as part of another expression; this is not allowed."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1340" : {
-    "message" : [
-      "Failed to execute UPDATE command because the SET list contains a DEFAULT column reference as part of another expression; this is not allowed."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1343" : {
-    "message" : [
-      "Failed to execute MERGE INTO command because one of its INSERT or UPDATE assignments contains a DEFAULT column reference as part of another expression; this is not allowed."
     ]
   },
   "_LEGACY_ERROR_TEMP_1344" : {

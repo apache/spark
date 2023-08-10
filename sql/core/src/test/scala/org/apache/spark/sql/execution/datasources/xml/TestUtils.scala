@@ -14,23 +14,24 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+package org.apache.spark.sql.execution.datasources.xml
 
-package org.apache.spark.sql.catalyst.analysis
+import org.apache.spark.sql.types.{ArrayType, DataType, StringType, StructField, StructType}
 
-import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
+private[xml] object TestUtils {
 
+  def buildSchema(fields: StructField*): StructType = StructType(fields)
 
-/**
- * Thrown by a catalog when an item already exists. The analyzer will rethrow the exception
- * as an [[org.apache.spark.sql.AnalysisException]] with the correct position information.
- */
-case class NonEmptyNamespaceException(
-    override val message: String,
-    override val cause: Option[Throwable] = None)
-  extends AnalysisException(message, cause = cause) {
+  def field(name: String, dataType: DataType = StringType, nullable: Boolean = true): StructField =
+    StructField(name, dataType, nullable)
 
-  def this(namespace: Array[String]) = {
-    this(s"Namespace '${namespace.quoted}' is non empty.")
-  }
+  def struct(fields: StructField*): StructType = buildSchema(fields: _*)
+
+  def struct(name: String, fields: StructField*): StructField = field(name, struct(fields: _*))
+
+  def structArray(name: String, fields: StructField*): StructField =
+    field(name, ArrayType(struct(fields: _*)))
+
+  def array(name: String, dataType: DataType): StructField = field(name, ArrayType(dataType))
+
 }

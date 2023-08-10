@@ -211,10 +211,8 @@ class ExecutePlanResponseReattachableIterator(
       iterFun(iter)
     } catch {
       case ex: StatusRuntimeException
-          if StatusProto
-            .fromThrowable(ex)
-            .getMessage
-            .contains("INVALID_HANDLE.OPERATION_NOT_FOUND") =>
+          if Option(StatusProto.fromThrowable(ex))
+            .exists(_.getMessage.contains("INVALID_HANDLE.OPERATION_NOT_FOUND")) =>
         if (lastReturnedResponseId.isDefined) {
           throw new IllegalStateException(
             "OPERATION_NOT_FOUND on the server but responses were already received from it.",
