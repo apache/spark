@@ -57,14 +57,14 @@ private[spark] object SparkKubernetesClientFactory extends Logging {
       .orElse(defaultServiceAccountToken)
     val oauthTokenValue = sparkConf.getOption(oauthTokenConf)
     val oauthTokenProviderConf = s"$kubernetesAuthConfPrefix.$OAUTH_TOKEN_PROVIDER_CONF_SUFFIX"
-    val oauthTokenProviderInstance = sparkConf.getOption(oauthTokenProviderConf)
+    val oauthTokenProvider = sparkConf.getOption(oauthTokenProviderConf)
       .map(Utils.classForName(_)
         .getDeclaredConstructor()
         .newInstance()
         .asInstanceOf[OAuthTokenProvider])
 
     require(
-      Seq(oauthTokenFile, oauthTokenValue, oauthTokenProviderInstance).count(_.isDefined) <= 1,
+      Seq(oauthTokenFile, oauthTokenValue, oauthTokenProvider).count(_.isDefined) <= 1,
       s"OAuth token should be specified via only one of $oauthTokenFileConf, $oauthTokenConf " +
         s"or $oauthTokenProviderConf."
     )
@@ -101,7 +101,7 @@ private[spark] object SparkKubernetesClientFactory extends Logging {
       .withRequestTimeout(clientType.requestTimeout(sparkConf))
       .withConnectionTimeout(clientType.connectionTimeout(sparkConf))
       .withTrustCerts(sparkConf.get(KUBERNETES_TRUST_CERTIFICATES))
-      .withOption(oauthTokenProviderInstance) {
+      .withOption(oauthTokenProvider) {
         (provider, configBuilder) => configBuilder.withOauthTokenProvider(provider)
       }.withOption(oauthTokenValue) {
         (token, configBuilder) => configBuilder.withOauthToken(token)
