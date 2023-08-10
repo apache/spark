@@ -231,7 +231,7 @@ object DeduplicateRelations extends Rule[LogicalPlan] {
             }
 
             planWithNewChildren match {
-              // TODO: we should handle all special cases here. SPARK-44754
+              // TODO (SPARK-44754): we should handle all special cases here.
               case c: CoGroup =>
                 // SPARK-43781: CoGroup is a special case, `rewriteAttrs` will incorrectly update
                 // some fields that do not need to be updated. We need to update the output
