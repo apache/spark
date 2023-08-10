@@ -1162,7 +1162,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
                 message_parameters={"arg_name": "name", "arg_type": type(name).__name__},
             )
 
-        allowed_types = (str, list, float, int)
+        allowed_types = (str, list, float, int, Column)
         for p in parameters:
             if not isinstance(p, allowed_types):
                 raise PySparkTypeError(
@@ -1175,7 +1175,12 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
                     },
                 )
 
-        jdf = self._jdf.hint(name, self._jseq(parameters))
+        def _converter(parameter: Union[str, list, float, int, Column]) -> Any:
+            if isinstance(parameter, Column):
+                return _to_java_column(parameter)
+            else:
+                return parameter
+        jdf = self._jdf.hint(name, self._jseq(parameters, _converter))
         return DataFrame(jdf, self.sparkSession)
 
     def count(self) -> int:

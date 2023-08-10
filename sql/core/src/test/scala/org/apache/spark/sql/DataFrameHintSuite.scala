@@ -18,9 +18,9 @@
 package org.apache.spark.sql
 
 import org.apache.spark.sql.catalyst.analysis.AnalysisTest
-import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions.Literal
 import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.functions.array
 import org.apache.spark.sql.test.SharedSparkSession
 
 class DataFrameHintSuite extends AnalysisTest with SharedSparkSession {
@@ -44,7 +44,7 @@ class DataFrameHintSuite extends AnalysisTest with SharedSparkSession {
 
     check(
       df.hint("hint1", 1, "a"),
-      UnresolvedHint("hint1", Seq(Literal(1), $"a".expr), df.logicalPlan)
+      UnresolvedHint("hint1", Seq(Literal(1), Literal("a")), df.logicalPlan)
     )
 
     check(
@@ -54,7 +54,12 @@ class DataFrameHintSuite extends AnalysisTest with SharedSparkSession {
       )
     )
 
-    assertThrows(df.hint("hint1", Seq(1, 2, 3), Seq($"a", $"b", $"c")))
+    check(
+      df.hint("hint1", Array(1, 2, 3), array($"a", $"b", $"c")),
+      UnresolvedHint("hint1", Seq(Literal(Array(1, 2, 3)), array($"a", $"b", $"c").expr),
+        df.logicalPlan
+      )
+    )
   }
 
   test("coalesce, repartition and rebalance hint") {
@@ -81,16 +86,11 @@ class DataFrameHintSuite extends AnalysisTest with SharedSparkSession {
     // simple column name should be accepted
     check(
       df.hint("REBALANCE", 10, "id"),
-      UnresolvedHint("REBALANCE", Seq(Literal(10), $"id".expr), df.logicalPlan))
+      UnresolvedHint("REBALANCE", Seq(Literal(10), Literal("id")), df.logicalPlan))
 
     check(
       df.hint("REBALANCE", 10, $"id".expr),
       UnresolvedHint("REBALANCE", Seq(Literal(10), $"id".expr), df.logicalPlan))
   }
 
-  test("SPARK-40178: hint with string parameters should be supported") {
-    checkAnalysisWithoutViewWrapper(
-      df.hint("REBALANCE", 10, "id").logicalPlan,
-      UnresolvedHint("REBALANCE", Seq(Literal(10), $"id".expr), df.logicalPlan).analyze)
-  }
 }

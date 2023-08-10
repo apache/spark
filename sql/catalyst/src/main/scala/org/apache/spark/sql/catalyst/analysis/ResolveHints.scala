@@ -18,7 +18,9 @@
 package org.apache.spark.sql.catalyst.analysis
 
 import java.util.Locale
+
 import scala.collection.mutable
+
 import org.apache.spark.sql.catalyst.expressions.{Ascending, Expression, IntegerLiteral, SortOrder, StringLiteral}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
@@ -263,17 +265,27 @@ object ResolveHints {
       }
     }
 
+    private def transformStringToAttribute(hint: UnresolvedHint): UnresolvedHint = {
+      // for all the coalesce hints, it's safe to transform the string literal to an attribute as
+      // all the parameters should be column names.
+      val parameters = hint.parameters.map {
+        case StringLiteral(name) => UnresolvedAttribute(name)
+        case e => e
+      }
+      hint.copy(parameters = parameters)
+    }
+
     def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsWithPruning(
       _.containsPattern(UNRESOLVED_HINT), ruleId) {
       case hint @ UnresolvedHint(hintName, _, _) => hintName.toUpperCase(Locale.ROOT) match {
           case "REPARTITION" =>
-            createRepartition(shuffle = true, hint)
+            createRepartition(shuffle = true, transformStringToAttribute(hint))
           case "COALESCE" =>
-            createRepartition(shuffle = false, hint)
+            createRepartition(shuffle = false, transformStringToAttribute(hint))
           case "REPARTITION_BY_RANGE" =>
-            createRepartitionByRange(hint)
+            createRepartitionByRange(transformStringToAttribute(hint))
           case "REBALANCE" if conf.adaptiveExecutionEnabled =>
-            createRebalance(hint)
+            createRebalance(transformStringToAttribute(hint))
           case _ => hint
         }
     }

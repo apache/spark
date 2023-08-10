@@ -1402,10 +1402,20 @@ class Dataset[T] private[sql](
    *   df1.join(df2.hint("broadcast"))
    * }}}
    *
+   * the following code specifies that this dataset could be rebalanced with given number of
+   * partitions:
+   *
+   * {{{
+   *    df1.hint("rebalance", 10)
+   * }}}
+   *
+   * @param name the name of the hint
+   * @param parameters the parameters of the hint, all the parameters should be a `Column` or
+   *                   `Expression` or `Symbol` or could be converted into a `Literal`
+   *
    * @group basic
    * @since 2.2.0
    */
-  @deprecated("use hint with Column input instead", "4.0.0")
   @scala.annotation.varargs
   def hint(name: String, parameters: Any*): Dataset[T] = withTypedPlan {
     val exprs = parameters.map {
@@ -1415,12 +1425,6 @@ class Dataset[T] private[sql](
       case literal => Literal(literal)
     }.toSeq
     UnresolvedHint(name, exprs, logicalPlan)
-  }
-
-  @scala.annotation.varargs
-  def hint(name: String, head: Column, tail: Column*): Dataset[T] = withTypedPlan {
-    val parameters = head +: tail
-    UnresolvedHint(name, parameters.map(_.expr), logicalPlan)
   }
 
   /**

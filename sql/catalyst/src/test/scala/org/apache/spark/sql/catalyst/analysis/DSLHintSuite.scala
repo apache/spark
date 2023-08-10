@@ -42,6 +42,5 @@ class DSLHintSuite extends AnalysisTest {
       r1.hint("hint1", 1, $"a"),
       UnresolvedHint("hint1", Seq(1, $"a"), r1)
     )
-
   }
 }
