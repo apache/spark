@@ -485,7 +485,7 @@ package object config extends Logging {
         " <code>spark.yarn.client.statCache.preloaded.enabled</code> option is enabled.")
       .version("3.5.0")
       .longConf
-      .createWithDefault(0)
+      .createWithDefault(0L)
 
   private[yarn] val YARN_EXECUTOR_RESOURCE_TYPES_PREFIX = "spark.yarn.executor.resource."
   private[yarn] val YARN_DRIVER_RESOURCE_TYPES_PREFIX = "spark.yarn.driver.resource."
