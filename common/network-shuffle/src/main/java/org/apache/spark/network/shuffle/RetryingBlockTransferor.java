@@ -149,6 +149,7 @@ public class RetryingBlockTransferor {
    * in the event of transient IOExceptions.
    */
   public void start() {
+    currentListener = new RetryingBlockTransferListener();
     transferAllOutstanding();
   }
 
@@ -196,7 +197,8 @@ public class RetryingBlockTransferor {
    * Lightweight method which initiates a retry in a different thread. The retry will involve
    * calling transferAllOutstanding() after a configured wait time.
    */
-  private synchronized void initiateRetry(Throwable e) {
+  @VisibleForTesting
+  public synchronized void initiateRetry(Throwable e) {
     if (enableSaslRetries && e instanceof SaslTimeoutException) {
       saslRetryCount += 1;
     }
