@@ -110,7 +110,7 @@ private[connect] class SparkConnectExecutionManager() extends Logging {
     executeHolder.foreach(_.close())
   }
 
-  /** Get info about abandonex execution, if there is one. */
+  /** Get info about abandoned execution, if there is one. */
   private[connect] def getAbandonedTombstone(key: ExecuteKey): Option[ExecuteInfo] = {
     Option(abandonedTombstones.getIfPresent(key))
   }

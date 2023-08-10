@@ -91,7 +91,7 @@ object Connect {
       .createWithDefaultString("30s")
 
   val CONNECT_EXECUTE_MANAGER_ABANDONED_TOMBSTONES_SIZE =
-    ConfigBuilder("spark.connect.execute.manager.abandonedTomstonesSize")
+    ConfigBuilder("spark.connect.execute.manager.abandonedTombstonesSize")
       .internal()
       .doc("Maximum size of the cache of abandoned executions.")
       .version("3.5.0")
