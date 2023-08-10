@@ -652,11 +652,7 @@ final class DataFrameStatFunctions private[sql] (sparkSession: SparkSession, roo
       numBits: Long,
       fpp: Double): BloomFilter = {
 
-    val agg = if (!fpp.isNaN) {
-      Column.fn("bloom_filter_agg", col, lit(expectedNumItems), lit(fpp))
-    } else {
-      Column.fn("bloom_filter_agg", col, lit(expectedNumItems), lit(numBits))
-    }
+    val agg = Column.fn("bloom_filter_agg", col, lit(expectedNumItems), lit(numBits), lit(fpp))
 
     val ds = sparkSession.newDataset(BinaryEncoder) { builder =>
       builder.getProjectBuilder
