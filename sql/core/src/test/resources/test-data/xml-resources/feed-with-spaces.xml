@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<feed>
+    <entry>
+        <id>A</id>
+    </entry>
+    <entry>
+        <id> B</id>
+    </entry>
+    <entry>
+        <id>C </id>
+    </entry>
+    <entry>
+        <id> D </id>
+    </entry>
+</feed>
