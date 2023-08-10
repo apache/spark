@@ -180,7 +180,7 @@ class ExecutePlanResponseReattachableIterator(
   private def releaseUntil(untilResponseId: String): Unit = {
     if (!resultComplete) {
       val request = createReleaseExecuteRequest(Some(untilResponseId))
-      rawAsyncStub.releaseExecute(request, createRetryingReleaseExecuteResponseObserevr(request))
+      rawAsyncStub.releaseExecute(request, createRetryingReleaseExecuteResponseObserver(request))
     }
   }
 
@@ -194,7 +194,7 @@ class ExecutePlanResponseReattachableIterator(
   private def releaseAll(): Unit = {
     if (!resultComplete) {
       val request = createReleaseExecuteRequest(None)
-      rawAsyncStub.releaseExecute(request, createRetryingReleaseExecuteResponseObserevr(request))
+      rawAsyncStub.releaseExecute(request, createRetryingReleaseExecuteResponseObserver(request))
       resultComplete = true
     }
   }
@@ -229,7 +229,7 @@ class ExecutePlanResponseReattachableIterator(
    * ReleaseExecute and continues with iteration, but if it fails with a retryable error, the
    * callback will retrigger the asynchronous ReleaseExecute.
    */
-  private def createRetryingReleaseExecuteResponseObserevr(
+  private def createRetryingReleaseExecuteResponseObserver(
       requestForRetry: proto.ReleaseExecuteRequest,
       currentRetryNum: Int = 0): StreamObserver[proto.ReleaseExecuteResponse] = {
     new StreamObserver[proto.ReleaseExecuteResponse] {
