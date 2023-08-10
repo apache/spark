@@ -1255,7 +1255,7 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
     checkError(
       exception = intercept[AnalysisException] {
         sql(
-          """INSERT INTO TABLE dp_test PARTITION(dp)
+          """INSERT INTO TABLE dp_test PARTITION(dp) (key, value, dp)
             |SELECT key, value, key % 5 FROM src""".stripMargin)
       },
       errorClass = "_LEGACY_ERROR_TEMP_1169",
