@@ -4146,7 +4146,7 @@ setMethod("hint",
           function(x, name, ...) {
             parameters <- list(...)
             if (!all(sapply(parameters, function(y) {
-              if (is.character(y) || is.numeric(y) || is(class(y), "characterOrColumn") {
+              if (is.character(y) || is.numeric(y) || is(class(y), "characterOrColumn")) {
                 TRUE
               } else if (is.list(y)) {
                 all(sapply(y, function(z) { is.character(z) || is.numeric(z) }))
