@@ -32,12 +32,22 @@ case class ExecuteKey(userId: String, sessionId: String, operationId: String)
 
 private[connect] class SparkConnectExecutionManager() extends Logging {
 
+  /** Hash table containing all current executions. Guarded by executionsLock. */
   private val executions: mutable.HashMap[ExecuteKey, ExecuteHolder] =
     new mutable.HashMap[ExecuteKey, ExecuteHolder]()
   private val executionsLock = new Object
 
+  /**
+   * None if there are no executions. Otherwise, the time when the last execution was removed.
+   */
+  private var lastExecutionTime: Option[Long] = Some(System.currentTimeMillis())
+
+  /** Executor for the periodic maintenance */
   private var scheduledExecutor: Option[ScheduledExecutorService] = None
 
+  /**
+   * Create a new ExecuteHolder and register it with this global manager and with its session.
+   */
   private[connect] def createExecuteHolder(request: proto.ExecutePlanRequest): ExecuteHolder = {
     val sessionHolder = SparkConnectService
       .getOrCreateIsolatedSession(request.getUserContext.getUserId, request.getSessionId)
@@ -50,23 +60,43 @@ private[connect] class SparkConnectExecutionManager() extends Logging {
       }
       sessionHolder.addExecuteHolder(executeHolder)
       executions.put(executeHolder.key, executeHolder)
+      lastExecutionTime = None
+      logInfo(s"ExecuteHolder ${executeHolder.key} is created.")
     }
 
-    schedulePeriodicChecks() // Starts the scheduler thread if it hasn't started.
+    schedulePeriodicChecks() // Starts the maintenance thread if it hasn't started.
 
-    logInfo(s"ExecuteHolder ${executeHolder.key} is created.")
     executeHolder
   }
 
+  /**
+   * Remove an ExecuteHolder from this global manager and from its session. Interrupt the execution
+   * if still running, free all resources.
+   */
   private[connect] def removeExecuteHolder(key: ExecuteKey): Unit = {
     var executeHolder: Option[ExecuteHolder] = None
     executionsLock.synchronized {
       executeHolder = executions.remove(key)
       executeHolder.foreach(e => e.sessionHolder.removeExecuteHolder(e.operationId))
+      if (executions.isEmpty) {
+        lastExecutionTime = Some(System.currentTimeMillis())
+      }
       logInfo(s"ExecuteHolder $key is removed.")
     }
     // close the execution outside the lock
     executeHolder.foreach(_.close())
+  }
+
+  /**
+   * If there are no executions, return Left with System.currentTimeMillis of last active execution.
+   * Otherwise return Right with list of ExecuteInfo of all executions.
+   */
+  def listAllExecutions: Either[Long, Seq[ExecuteInfo]] = executionsLock.synchronized {
+    if (executions.isEmpty) {
+      Left(lastExecutionTime.get)
+    } else {
+      Right(executions.values.map(_.getExecuteInfo).toSeq)
+    }
   }
 
   private[service] def shutdown(): Unit = executionsLock.synchronized {
@@ -77,9 +107,15 @@ private[connect] class SparkConnectExecutionManager() extends Logging {
     scheduledExecutor = None
   }
 
-  /** Schedules periodic checks if it is not already scheduled */
+  /**
+   * Schedules periodic maintenance checks if it is not already scheduled. The checks are looking
+   * for executions that have not been closed, but are left with no RPC attached to them, and
+   * removes them after a timeout.
+   */
   private def schedulePeriodicChecks(): Unit = executionsLock.synchronized {
     val interval = SparkEnv.get.conf.get(CONNECT_EXECUTE_MANAGER_MAINTENANCE_INTERVAL).toLong
+    val timeout = SparkEnv.get.conf.get(CONNECT_EXECUTE_MANAGER_DETACHED_TIMEOUT).toLong
+
     scheduledExecutor match {
       case Some(_) => // Already running.
       case None =>
@@ -87,7 +123,7 @@ private[connect] class SparkConnectExecutionManager() extends Logging {
         scheduledExecutor = Some(Executors.newSingleThreadScheduledExecutor())
         scheduledExecutor.get.scheduleAtFixedRate(
           () => {
-            try periodicMaintenance()
+            try periodicMaintenance(timeout)
             catch {
               case NonFatal(ex) => logWarning("Unexpected exception in periodic task", ex)
             }
@@ -98,28 +134,30 @@ private[connect] class SparkConnectExecutionManager() extends Logging {
     }
   }
 
-  private def periodicMaintenance(): Unit = {
-    val timeout = SparkEnv.get.conf.get(CONNECT_EXECUTE_MANAGER_DETACHED_TIMEOUT).toLong
-    val toRemove = new mutable.ArrayBuffer[ExecuteKey]()
-
+  // Visible for testing.
+  private[connect] def periodicMaintenance(timeout: Long): Unit = {
     logInfo("Started periodic run of SparkConnectExecutionManager maintenance.")
+
     // Find any detached executions that expired and should be removed.
+    val toRemove = new mutable.ArrayBuffer[ExecuteKey]()
     executionsLock.synchronized {
       val nowMs = System.currentTimeMillis()
 
-      for ((key, executeHolder) <- executions) {
+      executions.values.foreach { executeHolder =>
         executeHolder.lastAttachedRpcTime match {
           case Some(detached) =>
             if (detached + timeout < nowMs) {
-              logInfo (s"ExecuteHolder $key was abandoned and expired and will be removed.")
               toRemove += executeHolder.key
             }
           case _ => // execution is active
         }
       }
     }
-    // .. and remove them.
-    toRemove.foreach(removeExecuteHolder(_))
+    if (!toRemove.isEmpty) {
+      logInfo(s"Found executions $toRemove that were abandoned and expired and will be removed.")
+      // .. and remove them.
+      toRemove.foreach(removeExecuteHolder(_))
+    }
     logInfo("Finished periodic run of SparkConnectExecutionManager maintenance.")
   }
 }

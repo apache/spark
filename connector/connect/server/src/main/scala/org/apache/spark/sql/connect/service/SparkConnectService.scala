@@ -423,6 +423,8 @@ object SparkConnectService extends Logging {
         server.shutdownNow()
       }
     }
+    streamingSessionManager.shutdown()
+    executionManager.shutdown()
     userSessionMapping.invalidateAll()
     uiTab.foreach(_.detach())
   }

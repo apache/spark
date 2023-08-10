@@ -54,11 +54,6 @@ private[connect] class ExecuteHolder(
   }
 
   /**
-   * Globally unique identifier of this ExecuteHolder used by SparkConnectExecutionManager.
-   */
-  val key = ExecuteKey(sessionHolder.userId, sessionHolder.sessionId, operationId)
-
-  /**
    * Tag that is set for this execution on SparkContext, via SparkContext.addJobTag. Used
    * (internally) for cancellation of the Spark Jobs ran by this execution.
    */
@@ -96,12 +91,18 @@ private[connect] class ExecuteHolder(
 
   private val runner: ExecuteThreadRunner = new ExecuteThreadRunner(this)
 
+  /** System.currentTimeMillis when this ExecuteHolder was created. */
+  val creationTime = System.currentTimeMillis()
+
   /**
-   * None if there is currently an attached RPC (grpcResponseSenders not empty or during
-   * initial ExecutePlan handler). Otherwise, the System.currentTimeMillis when the last RPC
-   * detached (grpcResponseSenders became empty).
+   * None if there is currently an attached RPC (grpcResponseSenders not empty or during initial
+   * ExecutePlan handler). Otherwise, the System.currentTimeMillis when the last RPC detached
+   * (grpcResponseSenders became empty).
    */
   @volatile var lastAttachedRpcTime: Option[Long] = None
+
+  /** System.currentTimeMillis when this ExecuteHolder was closed. */
+  private var closedTime: Option[Long] = None
 
   /**
    * Attached ExecuteGrpcResponseSenders that send the GRPC responses.
@@ -112,8 +113,6 @@ private[connect] class ExecuteHolder(
   private val grpcResponseSenders
       : mutable.ArrayBuffer[ExecuteGrpcResponseSender[proto.ExecutePlanResponse]] =
     new mutable.ArrayBuffer[ExecuteGrpcResponseSender[proto.ExecutePlanResponse]]()
-
-  private var closed = false
 
   /**
    * Start the execution. The execution is started in a background thread in ExecuteThreadRunner.
@@ -164,7 +163,7 @@ private[connect] class ExecuteHolder(
 
   private def addGrpcResponseSender(
       sender: ExecuteGrpcResponseSender[proto.ExecutePlanResponse]) = synchronized {
-    if (!closed) {
+    if (closedTime.isEmpty) {
       grpcResponseSenders += sender
       lastAttachedRpcTime = None
     } else {
@@ -175,7 +174,7 @@ private[connect] class ExecuteHolder(
 
   def removeGrpcResponseSender[_](sender: ExecuteGrpcResponseSender[_]): Unit = synchronized {
     // if closed, we are shutting down and interrupting all senders already
-    if (!closed) {
+    if (closedTime.isEmpty) {
       grpcResponseSenders -=
         sender.asInstanceOf[ExecuteGrpcResponseSender[proto.ExecutePlanResponse]]
       if (grpcResponseSenders.isEmpty) {
@@ -185,7 +184,7 @@ private[connect] class ExecuteHolder(
   }
 
   def initialExecutePlanExit(): Unit = synchronized {
-    if (!closed) {
+    if (closedTime.isEmpty) {
       if (grpcResponseSenders.isEmpty) {
         lastAttachedRpcTime = Some(System.currentTimeMillis())
       }
@@ -213,19 +212,27 @@ private[connect] class ExecuteHolder(
   /**
    * Interrupt (if still running) and close the execution.
    *
-   * Called only by SparkConnectExecutionManager.removeExecuteHolder
+   * Called only by SparkConnectExecutionManager.removeExecuteHolder, which then also removes
+   * the execution from global tracking and from its session.
    */
   def close(): Unit = synchronized {
-    if (!closed) {
-      closed = true
+    if (closedTime.isEmpty) {
       // interrupt execution, if still running.
       runner.interrupt()
       // wait for execution to finish, to make sure no more results get pushed to responseObserver
       runner.join()
       // interrupt any attached grpcResponseSenders
       grpcResponseSenders.foreach(_.interrupt())
+      // if there were still any grpcResponseSenders, register detach time
+      if (grpcResponseSenders.nonEmpty) {
+        lastAttachedRpcTime = Some(System.currentTimeMillis())
+        grpcResponseSenders.clear()
+      }
+      // remove all cached responses from observer
       responseObserver.removeAll()
+      // post closed to UI
       eventsManager.postClosed()
+      closedTime = Some(System.currentTimeMillis())
     }
   }
 
@@ -237,6 +244,25 @@ private[connect] class ExecuteHolder(
     "SparkConnect_Execute_" +
       s"User_${sessionHolder.userId}_Session_${sessionHolder.sessionId}_Tag_${tag}"
   }
+
+  /** Get ExecuteInfo with information about this ExecuteHolder. */
+  def getExecuteInfo: ExecuteInfo = synchronized {
+    ExecuteInfo(
+      request = request,
+      userId = sessionHolder.userId,
+      sessionId = sessionHolder.sessionId,
+      operationId = operationId,
+      jobTag = jobTag,
+      sparkSessionTags = sparkSessionTags,
+      reattachable = reattachable,
+      status = eventsManager.status,
+      creationTime = creationTime,
+      lastAttachedRpcTime = lastAttachedRpcTime,
+      closedTime = closedTime)
+  }
+
+  /** Get key used by SparkConnectExecutionManager global tracker. */
+  def key: ExecuteKey = ExecuteKey(sessionHolder.userId, sessionHolder.sessionId, operationId)
 }
 
 /** Used to identify ExecuteHolder jobTag among SparkContext.SPARK_JOB_TAGS. */
@@ -271,3 +297,16 @@ object ExecuteSessionTag {
     if (sessionTag.startsWith(prefix)) Some(sessionTag) else None
   }
 }
+
+case class ExecuteInfo(
+    request: proto.ExecutePlanRequest,
+    userId: String,
+    sessionId: String,
+    operationId: String,
+    jobTag: String,
+    sparkSessionTags: Set[String],
+    reattachable: Boolean,
+    status: ExecuteStatus,
+    creationTime: Long,
+    lastAttachedRpcTime: Option[Long],
+    closedTime: Option[Long])

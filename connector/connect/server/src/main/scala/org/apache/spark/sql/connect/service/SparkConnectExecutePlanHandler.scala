@@ -27,8 +27,6 @@ class SparkConnectExecutePlanHandler(responseObserver: StreamObserver[proto.Exec
     extends Logging {
 
   def handle(v: proto.ExecutePlanRequest): Unit = {
-    val sessionHolder = SparkConnectService
-      .getOrCreateIsolatedSession(v.getUserContext.getUserId, v.getSessionId)
     val executeHolder = SparkConnectService.executionManager.createExecuteHolder(v)
     executeHolder.eventsManager.postStarted()
     executeHolder.start()
