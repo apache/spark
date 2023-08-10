@@ -177,11 +177,17 @@ public class RetryingBlockTransferor {
         numRetries > 0 ? "(after " + numRetries + " retries)" : ""), e);
 
       if (shouldRetry(e)) {
-        initiateRetry(e);
-      } else {
-        for (String bid : blockIdsToTransfer) {
-          listener.onBlockTransferFailure(bid, e);
+        try {
+          initiateRetry(e);
+          return;
+        } catch (Throwable t) {
+          logger.error("Exception while trying to initiate retry", t);
         }
+      }
+
+      // retry is not possible, so fail remaining blocks
+      for (String bid : blockIdsToTransfer) {
+        listener.onBlockTransferFailure(bid, e);
       }
     }
   }
@@ -274,7 +280,13 @@ public class RetryingBlockTransferor {
       synchronized (RetryingBlockTransferor.this) {
         if (this == currentListener && outstandingBlocksIds.contains(blockId)) {
           if (shouldRetry(exception)) {
-            initiateRetry(exception);
+            try {
+              initiateRetry(exception);
+            } catch (Throwable t) {
+              logger.error("Exception while trying to initiate retry", t);
+              outstandingBlocksIds.remove(blockId);
+              shouldForwardFailure = true;
+            }
           } else {
             if (errorHandler.shouldLogError(exception)) {
               logger.error(
