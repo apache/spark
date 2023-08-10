@@ -200,7 +200,7 @@ private[client] object GrpcRetryHandler extends Logging {
     }
 
     throw new SparkException(
-      errorClass = "EXCEED_RETRY",
+      errorClass = "EXCEED_RETRY_JVM",
       messageParameters = Map.empty,
       cause = lastException)
   }
