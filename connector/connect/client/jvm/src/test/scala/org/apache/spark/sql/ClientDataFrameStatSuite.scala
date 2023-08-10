@@ -180,50 +180,60 @@ class ClientDataFrameStatSuite extends RemoteSparkSession {
   test("Bloom filter -- Long Column") {
     val session = spark
     import session.implicits._
-    val data = Range(0, 1000).map(_.toLong)
+    val data = Seq(-143, -32, -5, 1, 17, 39, 43, 101, 127, 997).map(_.toLong)
     val df = data.toDF("id")
-    checkBloomFilter(data, df)
+    val negativeValues = Seq(-11, 1021, 32767).map(_.toLong)
+    checkBloomFilter(data, negativeValues, df)
   }
 
   test("Bloom filter -- Int Column") {
     val session = spark
     import session.implicits._
-    val data = Range(0, 1000)
+    val data = Seq(-143, -32, -5, 1, 17, 39, 43, 101, 127, 997)
     val df = data.toDF("id")
-    checkBloomFilter(data, df)
+    val negativeValues = Seq(-11, 1021, 32767)
+    checkBloomFilter(data, negativeValues, df)
   }
 
   test("Bloom filter -- Short Column") {
     val session = spark
     import session.implicits._
-    val data = Range(0, 1000).map(_.toShort)
+    val data = Seq(-143, -32, -5, 1, 17, 39, 43, 101, 127, 997).map(_.toShort)
     val df = data.toDF("id")
-    checkBloomFilter(data, df)
+    val negativeValues = Seq(-11, 1021, 32767).map(_.toShort)
+    checkBloomFilter(data, negativeValues, df)
   }
 
   test("Bloom filter -- Byte Column") {
     val session = spark
     import session.implicits._
-    val data = Range(0, 1000).map(_.toByte)
+    val data = Seq(-32, -5, 1, 17, 39, 43, 101, 127).map(_.toByte)
     val df = data.toDF("id")
-    checkBloomFilter(data, df)
+    val negativeValues = Seq(-101, 55, 113).map(_.toByte)
+    checkBloomFilter(data, negativeValues, df)
   }
 
   test("Bloom filter -- String Column") {
     val session = spark
     import session.implicits._
-    val data = Range(0, 1000).map(_.toString)
+    val data = Seq(-143, -32, -5, 1, 17, 39, 43, 101, 127, 997).map(_.toString)
     val df = data.toDF("id")
-    checkBloomFilter(data, df)
+    val negativeValues = Seq(-11, 1021, 32767).map(_.toString)
+    checkBloomFilter(data, negativeValues, df)
   }
 
-  private def checkBloomFilter(data: Seq[Any], df: DataFrame) = {
+  private def checkBloomFilter(
+      data: Seq[Any],
+      notContainValues: Seq[Any],
+      df: DataFrame): Unit = {
     val filter1 = df.stat.bloomFilter("id", 1000, 0.03)
     assert(filter1.expectedFpp() - 0.03 < 1e-3)
     assert(data.forall(filter1.mightContain))
+    assert(notContainValues.forall(n => !filter1.mightContain(n)))
     val filter2 = df.stat.bloomFilter("id", 1000, 64 * 5)
     assert(filter2.bitSize() == 64 * 5)
     assert(data.forall(filter2.mightContain))
+    assert(notContainValues.forall(n => !filter2.mightContain(n)))
   }
 
   test("Bloom filter -- Wrong dataType Column") {
