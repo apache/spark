@@ -239,7 +239,8 @@ public class BroadcastedJoinKeysWrapperTest {
     int indexOfAttrib =  sp.output().indexWhere(attr -> attr.dataType().equals(dataType));
     Expression expr = new BoundReference(indexOfAttrib, sp.output().apply(indexOfAttrib).dataType(),
         false);
-    scala.collection.mutable.Buffer<Expression> temp = new scala.collection.mutable.ArrayBuffer();
+    scala.collection.mutable.ArrayBuffer<Expression> temp =
+        new scala.collection.mutable.ArrayBuffer();
     temp.$plus$eq(expr);
     final HashedRelation hr = HashedRelation.apply(sp.executeToIterator(), temp.toSeq(),
         64, null, false, false,
