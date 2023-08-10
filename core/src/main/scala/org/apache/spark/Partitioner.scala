@@ -138,7 +138,10 @@ private[spark] class PartitionIdPassthrough(override val numPartitions: Int) ext
 }
 
 /**
- * A [[org.apache.spark.Partitioner]] that partitions all records use partition value map
+ * A [[org.apache.spark.Partitioner]] that partitions all records use partition value map.
+ * The valueMap is a map that contains tuples of (partition value, partition id). It generated
+ * by [[org.apache.spark.sql.catalyst.plans.physical.KeyGroupedPartitioning]], used to partition
+ * another side to make sure records with same partition value are in same partition.
  */
 private[spark] class KeyGroupedPartitioner(
     valueMap: mutable.Map[Seq[Any], Int],
