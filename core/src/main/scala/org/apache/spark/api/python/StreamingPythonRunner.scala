@@ -50,6 +50,7 @@ private[spark] class StreamingPythonRunner(
   private val envVars: java.util.Map[String, String] = func.envVars
   private val pythonExec: String = func.pythonExec
   private var pythonWorker: Option[PythonWorker] = None
+  private var pythonWorkerFactory: Option[PythonWorkerFactory] = None
   protected val pythonVer: String = func.pythonVer
 
   /**
@@ -70,9 +71,11 @@ private[spark] class StreamingPythonRunner(
     val prevConf = conf.get(PYTHON_USE_DAEMON)
     conf.set(PYTHON_USE_DAEMON, false)
     try {
-      val (worker, _) = env.createPythonWorker(
-        pythonExec, workerModule, envVars.asScala.toMap)
+      val workerFactory =
+        new PythonWorkerFactory(pythonExec, workerModule, envVars.asScala.toMap)
+      val (worker: PythonWorker, _) = workerFactory.createSimpleWorker(blockingMode = true)
       pythonWorker = Some(worker)
+      pythonWorkerFactory = Some(workerFactory)
     } finally {
       conf.set(PYTHON_USE_DAEMON, prevConf)
     }

@@ -102,7 +102,7 @@ private[spark] class PythonWorkerFactory(
       }
       createThroughDaemon()
     } else {
-      createSimpleWorker()
+      createSimpleWorker(blockingMode = false)
     }
   }
 
@@ -153,7 +153,7 @@ private[spark] class PythonWorkerFactory(
   /**
    * Launch a worker by executing worker.py (by default) directly and telling it to connect to us.
    */
-  private[spark] def createSimpleWorker(): (PythonWorker, Option[Int]) = {
+  private[spark] def createSimpleWorker(blockingMode: Boolean): (PythonWorker, Option[Int]) = {
     var serverSocketChannel: ServerSocketChannel = null
     try {
       serverSocketChannel = ServerSocketChannel.open()
@@ -194,10 +194,15 @@ private[spark] class PythonWorkerFactory(
         if (pid < 0) {
           throw new IllegalStateException("Python failed to launch worker with code " + pid)
         }
-        socketChannel.configureBlocking(false)
+        if (!blockingMode) {
+          socketChannel.configureBlocking(false)
+        }
         val selector = Selector.open()
-        val selectionKey = socketChannel.register(selector,
-          SelectionKey.OP_READ | SelectionKey.OP_WRITE)
+        val selectionKey = if (blockingMode) {
+          null
+        } else {
+          socketChannel.register(selector, SelectionKey.OP_READ | SelectionKey.OP_WRITE)
+        }
         val worker = PythonWorker(socketChannel, selector, selectionKey)
         self.synchronized {
           simpleWorkers.put(worker, workerProcess)
