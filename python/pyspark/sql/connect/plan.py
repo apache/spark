@@ -578,7 +578,7 @@ class Hint(LogicalPlan):
         self._name = name
 
         for param in parameters:
-            assert isinstance(param, (list, str, float, int))
+            assert isinstance(param, (list, str, float, int, Column))
             if isinstance(param, list):
                 assert all(isinstance(p, (str, float, int)) for p in param)
 
