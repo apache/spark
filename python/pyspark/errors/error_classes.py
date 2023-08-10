@@ -853,6 +853,11 @@ ERROR_CLASSES_JSON = """
       "Value `<value>` cannot be accessed inside tasks."
     ]
   },
+  "VALUE_NOT_ALLOWED" : {
+    "message" : [
+      "Value for `<arg_name>` has to be amongst the following values: <allowed_values>."
+    ]
+  },
   "VALUE_NOT_ANY_OR_ALL" : {
     "message" : [
       "Value for `<arg_name>` must be 'any' or 'all', got '<arg_value>'."

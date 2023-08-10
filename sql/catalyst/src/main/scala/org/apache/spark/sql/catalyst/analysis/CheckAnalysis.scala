@@ -1080,13 +1080,13 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
     def check(plan: LogicalPlan): Unit = plan.foreach { node =>
       node match {
         case metrics @ CollectMetrics(name, _, _) =>
-          val simplifiedMetrics = simplifyPlanForCollectedMetrics(metrics)
+          val simplifiedMetrics = simplifyPlanForCollectedMetrics(metrics.canonicalized)
           metricsMap.get(name) match {
             case Some(other) =>
-              val simplifiedOther = simplifyPlanForCollectedMetrics(other)
+              val simplifiedOther = simplifyPlanForCollectedMetrics(other.canonicalized)
               // Exact duplicates are allowed. They can be the result
               // of a CTE that is used multiple times or a self join.
-              if (!simplifiedMetrics.sameResult(simplifiedOther)) {
+              if (simplifiedMetrics != simplifiedOther) {
                 failAnalysis(
                   errorClass = "DUPLICATED_METRICS_NAME",
                   messageParameters = Map("metricName" -> name))
@@ -1111,7 +1111,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
    * duplicates metric definition.
    */
   private def simplifyPlanForCollectedMetrics(plan: LogicalPlan): LogicalPlan = {
-    plan.transformUpWithNewOutput {
+    plan.resolveOperators {
       case p: Project if p.projectList.size == p.child.output.size =>
         val assignExprIdOnly = p.projectList.zip(p.child.output).forall {
           case (left: Alias, right: Attribute) =>
@@ -1119,9 +1119,9 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
           case _ => false
         }
         if (assignExprIdOnly) {
-          (p.child, p.output.zip(p.child.output))
+          p.child
         } else {
-          (p, Nil)
+          p
         }
     }
   }
