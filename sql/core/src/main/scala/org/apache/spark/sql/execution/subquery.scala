@@ -81,7 +81,7 @@ case class ScalarSubquery(
   def updateResult(): Unit = {
     val rows = plan.executeCollect()
     if (rows.length > 1) {
-      throw QueryExecutionErrors.multipleRowSubqueryError(getContextOrNull())
+      throw QueryExecutionErrors.multipleRowScalarSubqueryError(getContextOrNull())
     }
     if (rows.length == 1) {
       assert(rows(0).numFields == 1,
@@ -100,8 +100,12 @@ case class ScalarSubquery(
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    toLiteral.doGenCode(ctx, ev)
+  }
+
+  def toLiteral: Literal = {
     require(updated, s"$this has not finished")
-    Literal.create(result, dataType).doGenCode(ctx, ev)
+    Literal.create(result, dataType)
   }
 }
 

@@ -16,6 +16,7 @@
  */
 package org.apache.spark.sql.connect.client
 
+import java.util.UUID
 import java.util.concurrent.TimeUnit
 
 import scala.collection.JavaConverters._
@@ -163,6 +164,9 @@ class SparkConnectClientSuite extends ConnectFunSuite with BeforeAndAfterEach {
       client => {
         assert(client.configuration.host == "localhost")
         assert(client.configuration.port == 1234)
+        assert(client.sessionId != null)
+        // Must be able to parse the UUID
+        assert(UUID.fromString(client.sessionId) != null)
       }),
     TestPackURI(
       "sc://localhost/;",
@@ -192,6 +196,9 @@ class SparkConnectClientSuite extends ConnectFunSuite with BeforeAndAfterEach {
     TestPackURI("sc://host:123/;use_ssl=true", isCorrect = true),
     TestPackURI("sc://host:123/;token=mySecretToken", isCorrect = true),
     TestPackURI("sc://host:123/;token=", isCorrect = false),
+    TestPackURI("sc://host:123/;session_id=", isCorrect = false),
+    TestPackURI("sc://host:123/;session_id=abcdefgh", isCorrect = false),
+    TestPackURI(s"sc://host:123/;session_id=${UUID.randomUUID().toString}", isCorrect = true),
     TestPackURI("sc://host:123/;use_ssl=true;token=mySecretToken", isCorrect = true),
     TestPackURI("sc://host:123/;token=mySecretToken;use_ssl=true", isCorrect = true),
     TestPackURI("sc://host:123/;use_ssl=false;token=mySecretToken", isCorrect = false),
@@ -292,12 +299,30 @@ class DummySparkConnectService() extends SparkConnectServiceGrpc.SparkConnectSer
       responseObserver: StreamObserver[ExecutePlanResponse]): Unit = {
     // Reply with a dummy response using the same client ID
     val requestSessionId = request.getSessionId
+    val operationId = if (request.hasOperationId) {
+      request.getOperationId
+    } else {
+      UUID.randomUUID().toString
+    }
     inputPlan = request.getPlan
     val response = ExecutePlanResponse
       .newBuilder()
       .setSessionId(requestSessionId)
+      .setOperationId(operationId)
       .build()
     responseObserver.onNext(response)
+    // Reattachable execute must end with ResultComplete
+    if (request.getRequestOptionsList.asScala.exists { option =>
+        option.hasReattachOptions && option.getReattachOptions.getReattachable == true
+      }) {
+      val resultComplete = ExecutePlanResponse
+        .newBuilder()
+        .setSessionId(requestSessionId)
+        .setOperationId(operationId)
+        .setResultComplete(proto.ExecutePlanResponse.ResultComplete.newBuilder().build())
+        .build()
+      responseObserver.onNext(resultComplete)
+    }
     responseObserver.onCompleted()
   }
 
@@ -360,6 +385,39 @@ class DummySparkConnectService() extends SparkConnectServiceGrpc.SparkConnectSer
       builder.putStatuses(name, status.setExists(exists).build())
     }
     responseObserver.onNext(builder.build())
+    responseObserver.onCompleted()
+  }
+
+  override def interrupt(
+      request: proto.InterruptRequest,
+      responseObserver: StreamObserver[proto.InterruptResponse]): Unit = {
+    val response = proto.InterruptResponse.newBuilder().setSessionId(request.getSessionId).build()
+    responseObserver.onNext(response)
+    responseObserver.onCompleted()
+  }
+
+  override def reattachExecute(
+      request: proto.ReattachExecuteRequest,
+      responseObserver: StreamObserver[proto.ExecutePlanResponse]): Unit = {
+    // Reply with a dummy response using the same client ID
+    val requestSessionId = request.getSessionId
+    val response = ExecutePlanResponse
+      .newBuilder()
+      .setSessionId(requestSessionId)
+      .build()
+    responseObserver.onNext(response)
+    responseObserver.onCompleted()
+  }
+
+  override def releaseExecute(
+      request: proto.ReleaseExecuteRequest,
+      responseObserver: StreamObserver[proto.ReleaseExecuteResponse]): Unit = {
+    val response = proto.ReleaseExecuteResponse
+      .newBuilder()
+      .setSessionId(request.getSessionId)
+      .setOperationId(request.getOperationId)
+      .build()
+    responseObserver.onNext(response)
     responseObserver.onCompleted()
   }
 }

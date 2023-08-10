@@ -141,6 +141,14 @@ PIVOT clause following a GROUP BY clause. Consider pushing the GROUP BY into a s
 
 Pivoting by the value '`<value>`' of the column data type `<type>`.
 
+## PURGE_PARTITION
+
+Partition purge.
+
+## PURGE_TABLE
+
+Purge table.
+
 ## PYTHON_UDF_IN_ON_CLAUSE
 
 Python UDF in the ON clause of a `<joinType>` JOIN. In case of an INNNER JOIN consider rewriting to a CROSS JOIN with a WHERE clause.
@@ -168,6 +176,10 @@ set PROPERTIES and DBPROPERTIES at the same time.
 ## SET_TABLE_PROPERTY
 
 `<property>` is a reserved table property, `<msg>`.
+
+## SET_VARIABLE_USING_SET
+
+`<variableName>` is a VARIABLE and cannot be updated using the SET statement. Use SET VARIABLE `<variableName>` = ... instead.
 
 ## TABLE_OPERATION
 

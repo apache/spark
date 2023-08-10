@@ -21,26 +21,16 @@ Worker that receives input from Piped RDD.
 import os
 import sys
 import time
-from inspect import currentframe, getframeinfo, getfullargspec
-import importlib
+from inspect import getfullargspec
 import json
-from typing import Iterator
+from typing import Iterable, Iterator
 
-# 'resource' is a Unix specific module.
-has_resource_module = True
-try:
-    import resource
-except ImportError:
-    has_resource_module = False
 import traceback
-import warnings
 import faulthandler
 
 from pyspark.accumulators import _accumulatorRegistry
-from pyspark.broadcast import Broadcast, _broadcastRegistry
 from pyspark.java_gateway import local_connect_and_auth
 from pyspark.taskcontext import BarrierTaskContext, TaskContext
-from pyspark.files import SparkFiles
 from pyspark.resource import ResourceInformation
 from pyspark.rdd import PythonEvalType
 from pyspark.serializers import (
@@ -67,9 +57,16 @@ from pyspark.sql.types import StructType, _parse_datatype_json_string
 from pyspark.util import fail_on_stopiteration, try_simplify_traceback
 from pyspark import shuffle
 from pyspark.errors import PySparkRuntimeError, PySparkTypeError
-
-pickleSer = CPickleSerializer()
-utf8_deserializer = UTF8Deserializer()
+from pyspark.worker_util import (
+    check_python_version,
+    read_command,
+    pickleSer,
+    send_accumulator_updates,
+    setup_broadcasts,
+    setup_memory_limits,
+    setup_spark_files,
+    utf8_deserializer,
+)
 
 
 def report_times(outfile, boot, init, finish):
@@ -77,20 +74,6 @@ def report_times(outfile, boot, init, finish):
     write_long(int(1000 * boot), outfile)
     write_long(int(1000 * init), outfile)
     write_long(int(1000 * finish), outfile)
-
-
-def add_path(path):
-    # worker can be used, so do not add path multiple times
-    if path not in sys.path:
-        # overwrite system packages
-        sys.path.insert(1, path)
-
-
-def read_command(serializer, file):
-    command = serializer._read_with_length(file)
-    if isinstance(command, Broadcast):
-        command = serializer.loads(command.value)
-    return command
 
 
 def chain(f, g):
@@ -602,6 +585,7 @@ def read_udtf(pickleSer, infile, eval_type):
 
         def wrap_arrow_udtf(f, return_type):
             arrow_return_type = to_arrow_type(return_type)
+            return_type_size = len(return_type)
 
             def verify_result(result):
                 import pandas as pd
@@ -610,18 +594,21 @@ def read_udtf(pickleSer, infile, eval_type):
                     raise PySparkTypeError(
                         error_class="INVALID_ARROW_UDTF_RETURN_TYPE",
                         message_parameters={
-                            "type_name": type(result).__name_,
+                            "type_name": type(result).__name__,
                             "value": str(result),
                         },
                     )
 
-                # Check when the dataframe has both rows and columns.
-                if not result.empty or len(result.columns) != 0:
-                    if len(result.columns) != len(return_type):
+                # Validate the output schema when the result dataframe has either output
+                # rows or columns. Note that we avoid using `df.empty` here because the
+                # result dataframe may contain an empty row. For example, when a UDTF is
+                # defined as follows: def eval(self): yield tuple().
+                if len(result) > 0 or len(result.columns) > 0:
+                    if len(result.columns) != return_type_size:
                         raise PySparkRuntimeError(
                             error_class="UDTF_RETURN_SCHEMA_MISMATCH",
                             message_parameters={
-                                "expected": str(len(return_type)),
+                                "expected": str(return_type_size),
                                 "actual": str(len(result.columns)),
                             },
                         )
@@ -649,13 +636,7 @@ def read_udtf(pickleSer, infile, eval_type):
                     yield from eval(*[a[o] for o in arg_offsets])
             finally:
                 if terminate is not None:
-                    try:
-                        yield from terminate()
-                    except BaseException as e:
-                        raise PySparkRuntimeError(
-                            error_class="UDTF_EXEC_ERROR",
-                            message_parameters={"method_name": "terminate", "error": str(e)},
-                        )
+                    yield from terminate()
 
         return mapper, None, ser, ser
 
@@ -664,19 +645,52 @@ def read_udtf(pickleSer, infile, eval_type):
         def wrap_udtf(f, return_type):
             assert return_type.needConversion()
             toInternal = return_type.toInternal
+            return_type_size = len(return_type)
+
+            def verify_and_convert_result(result):
+                if result is not None:
+                    if hasattr(result, "__len__") and len(result) != return_type_size:
+                        raise PySparkRuntimeError(
+                            error_class="UDTF_RETURN_SCHEMA_MISMATCH",
+                            message_parameters={
+                                "expected": str(return_type_size),
+                                "actual": str(len(result)),
+                            },
+                        )
+
+                    if not (isinstance(result, (list, dict, tuple)) or hasattr(result, "__dict__")):
+                        raise PySparkRuntimeError(
+                            error_class="UDTF_INVALID_OUTPUT_ROW_TYPE",
+                            message_parameters={"type": type(result).__name__},
+                        )
+
+                return toInternal(result)
 
             # Evaluate the function and return a tuple back to the executor.
             def evaluate(*a) -> tuple:
-                res = f(*a)
+                try:
+                    res = f(*a)
+                except Exception as e:
+                    raise PySparkRuntimeError(
+                        error_class="UDTF_EXEC_ERROR",
+                        message_parameters={"method_name": f.__name__, "error": str(e)},
+                    )
+
                 if res is None:
                     # If the function returns None or does not have an explicit return statement,
                     # an empty tuple is returned to the executor.
                     # This is because directly constructing tuple(None) results in an exception.
                     return tuple()
-                else:
-                    # If the function returns a result, we map it to the internal representation and
-                    # returns the results as a tuple.
-                    return tuple(map(toInternal, res))
+
+                if not isinstance(res, Iterable):
+                    raise PySparkRuntimeError(
+                        error_class="UDTF_RETURN_NOT_ITERABLE",
+                        message_parameters={"type": type(res).__name__},
+                    )
+
+                # If the function returns a result, we map it to the internal representation and
+                # returns the results as a tuple.
+                return tuple(map(verify_and_convert_result, res))
 
             return evaluate
 
@@ -694,13 +708,7 @@ def read_udtf(pickleSer, infile, eval_type):
                     yield eval(*[a[o] for o in arg_offsets])
             finally:
                 if terminate is not None:
-                    try:
-                        yield terminate()
-                    except BaseException as e:
-                        raise PySparkRuntimeError(
-                            error_class="UDTF_EXEC_ERROR",
-                            message_parameters={"method_name": "terminate", "error": str(e)},
-                        )
+                    yield terminate()
 
         return mapper, None, ser, ser
 
@@ -983,53 +991,15 @@ def main(infile, outfile):
         if split_index == -1:  # for unit tests
             sys.exit(-1)
 
-        version = utf8_deserializer.loads(infile)
-        if version != "%d.%d" % sys.version_info[:2]:
-            raise PySparkRuntimeError(
-                error_class="PYTHON_VERSION_MISMATCH",
-                message_parameters={
-                    "worker_version": str(sys.version_info[:2]),
-                    "driver_version": str(version),
-                },
-            )
+        check_python_version(infile)
 
         # read inputs only for a barrier task
         isBarrier = read_bool(infile)
         boundPort = read_int(infile)
         secret = UTF8Deserializer().loads(infile)
 
-        # set up memory limits
         memory_limit_mb = int(os.environ.get("PYSPARK_EXECUTOR_MEMORY_MB", "-1"))
-        if memory_limit_mb > 0 and has_resource_module:
-            total_memory = resource.RLIMIT_AS
-            try:
-                (soft_limit, hard_limit) = resource.getrlimit(total_memory)
-                msg = "Current mem limits: {0} of max {1}\n".format(soft_limit, hard_limit)
-                print(msg, file=sys.stderr)
-
-                # convert to bytes
-                new_limit = memory_limit_mb * 1024 * 1024
-
-                if soft_limit == resource.RLIM_INFINITY or new_limit < soft_limit:
-                    msg = "Setting mem limits to {0} of max {1}\n".format(new_limit, new_limit)
-                    print(msg, file=sys.stderr)
-                    resource.setrlimit(total_memory, (new_limit, new_limit))
-
-            except (resource.error, OSError, ValueError) as e:
-                # not all systems support resource limits, so warn instead of failing
-                lineno = (
-                    getframeinfo(currentframe()).lineno + 1 if currentframe() is not None else 0
-                )
-                if "__file__" in globals():
-                    print(
-                        warnings.formatwarning(
-                            "Failed to set memory limit: {0}".format(e),
-                            ResourceWarning,
-                            __file__,
-                            lineno,
-                        ),
-                        file=sys.stderr,
-                    )
+        setup_memory_limits(memory_limit_mb)
 
         # initialize global state
         taskContext = None
@@ -1067,47 +1037,8 @@ def main(infile, outfile):
         shuffle.DiskBytesSpilled = 0
         _accumulatorRegistry.clear()
 
-        # fetch name of workdir
-        spark_files_dir = utf8_deserializer.loads(infile)
-        SparkFiles._root_directory = spark_files_dir
-        SparkFiles._is_running_on_worker = True
-
-        # fetch names of includes (*.zip and *.egg files) and construct PYTHONPATH
-        add_path(spark_files_dir)  # *.py files that were added will be copied here
-        num_python_includes = read_int(infile)
-        for _ in range(num_python_includes):
-            filename = utf8_deserializer.loads(infile)
-            add_path(os.path.join(spark_files_dir, filename))
-
-        importlib.invalidate_caches()
-
-        # fetch names and values of broadcast variables
-        needs_broadcast_decryption_server = read_bool(infile)
-        num_broadcast_variables = read_int(infile)
-        if needs_broadcast_decryption_server:
-            # read the decrypted data from a server in the jvm
-            port = read_int(infile)
-            auth_secret = utf8_deserializer.loads(infile)
-            (broadcast_sock_file, _) = local_connect_and_auth(port, auth_secret)
-
-        for _ in range(num_broadcast_variables):
-            bid = read_long(infile)
-            if bid >= 0:
-                if needs_broadcast_decryption_server:
-                    read_bid = read_long(broadcast_sock_file)
-                    assert read_bid == bid
-                    _broadcastRegistry[bid] = Broadcast(sock_file=broadcast_sock_file)
-                else:
-                    path = utf8_deserializer.loads(infile)
-                    _broadcastRegistry[bid] = Broadcast(path=path)
-
-            else:
-                bid = -bid - 1
-                _broadcastRegistry.pop(bid)
-
-        if needs_broadcast_decryption_server:
-            broadcast_sock_file.write(b"1")
-            broadcast_sock_file.close()
+        setup_spark_files(infile)
+        setup_broadcasts(infile)
 
         _accumulatorRegistry.clear()
         eval_type = read_int(infile)
@@ -1171,9 +1102,7 @@ def main(infile, outfile):
 
     # Mark the beginning of the accumulators section of the output
     write_int(SpecialLengths.END_OF_DATA_SECTION, outfile)
-    write_int(len(_accumulatorRegistry), outfile)
-    for (aid, accum) in _accumulatorRegistry.items():
-        pickleSer._write_with_length((aid, accum._value), outfile)
+    send_accumulator_updates(outfile)
 
     # check end of stream
     if read_int(infile) == SpecialLengths.END_OF_STREAM:

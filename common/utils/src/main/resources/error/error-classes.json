@@ -52,6 +52,12 @@
     ],
     "sqlState" : "22003"
   },
+  "ASSIGNMENT_ARITY_MISMATCH" : {
+    "message" : [
+      "The number of columns or variables assigned or aliased: <numTarget> does not match the number of source expressions: <numExpr>."
+    ],
+    "sqlState" : "42802"
+  },
   "AS_OF_JOIN" : {
     "message" : [
       "Invalid as-of join."
@@ -142,6 +148,65 @@
     "message" : [
       "Could not load Protobuf class with name <protobufClassName>. <explanation>."
     ]
+  },
+  "CANNOT_LOAD_STATE_STORE" : {
+    "message" : [
+      "An error occurred during loading state."
+    ],
+    "subClass" : {
+      "CANNOT_READ_CHECKPOINT" : {
+        "message" : [
+          "Cannot read RocksDB checkpoint metadata. Expected <expectedVersion>, but found <actualVersion>."
+        ]
+      },
+      "CANNOT_READ_DELTA_FILE_KEY_SIZE" : {
+        "message" : [
+          "Error reading delta file <fileToRead> of <clazz>: key size cannot be <keySize>."
+        ]
+      },
+      "CANNOT_READ_DELTA_FILE_NOT_EXISTS" : {
+        "message" : [
+          "Error reading delta file <fileToRead> of <clazz>: <fileToRead> does not exist."
+        ]
+      },
+      "CANNOT_READ_SNAPSHOT_FILE_KEY_SIZE" : {
+        "message" : [
+          "Error reading snapshot file <fileToRead> of <clazz>: key size cannot be <keySize>."
+        ]
+      },
+      "CANNOT_READ_SNAPSHOT_FILE_VALUE_SIZE" : {
+        "message" : [
+          "Error reading snapshot file <fileToRead> of <clazz>: value size cannot be <valueSize>."
+        ]
+      },
+      "CANNOT_READ_STREAMING_STATE_FILE" : {
+        "message" : [
+          "Error reading streaming state file of <fileToRead> does not exist. If the stream job is restarted with a new or updated state operation, please create a new checkpoint location or clear the existing checkpoint location."
+        ]
+      },
+      "UNCATEGORIZED" : {
+        "message" : [
+          ""
+        ]
+      },
+      "UNEXPECTED_FILE_SIZE" : {
+        "message" : [
+          "Copied <dfsFile> to <localFile>, expected <expectedSize> bytes, found <localFileSize> bytes."
+        ]
+      },
+      "UNEXPECTED_VERSION" : {
+        "message" : [
+          "Version cannot be <version> because it is less than 0."
+        ]
+      },
+      "UNRELEASED_THREAD_ERROR" : {
+        "message" : [
+          "<loggingId>: RocksDB instance could not be acquired by <newAcquiredThreadInfo> as it was not released by <acquiredThreadInfo> after <timeWaitedMs> ms.",
+          "Thread holding the lock has trace: <stackTraceOutput>"
+        ]
+      }
+    },
+    "sqlState" : "58030"
   },
   "CANNOT_MERGE_INCOMPATIBLE_DATA_TYPE" : {
     "message" : [
@@ -273,7 +338,7 @@
   },
   "CAST_OVERFLOW_IN_TABLE_INSERT" : {
     "message" : [
-      "Fail to insert a value of <sourceType> type into the <targetType> type column <columnName> due to an overflow. Use `try_cast` on the input value to tolerate overflow and return NULL instead."
+      "Fail to assign a value of <sourceType> type to the <targetType> type column or variable <columnName> due to an overflow. Use `try_cast` on the input value to tolerate overflow and return NULL instead."
     ],
     "sqlState" : "22003"
   },
@@ -349,6 +414,11 @@
       "PLUGIN_RUNTIME_ERROR" : {
         "message" : [
           "Error instantiating Spark Connect plugin: <msg>"
+        ]
+      },
+      "SESSION_NOT_SAME" : {
+        "message" : [
+          "Both Datasets must belong to the same SparkSession."
         ]
       }
     }
@@ -700,6 +770,13 @@
     ],
     "sqlState" : "42704"
   },
+  "DEFAULT_PLACEMENT_INVALID" : {
+    "message" : [
+      "A DEFAULT keyword in a MERGE, INSERT, UPDATE, or SET VARIABLE command could not be directly assigned to a target column because it was part of an expression.",
+      "For example: `UPDATE SET c1 = DEFAULT` is allowed, but `UPDATE T SET c1 = DEFAULT + 1` is not allowed."
+    ],
+    "sqlState" : "42608"
+  },
   "DISTINCT_WINDOW_FUNCTION_UNSUPPORTED" : {
     "message" : [
       "Distinct window functions are not supported: <windowExpr>."
@@ -727,6 +804,12 @@
       "The metric name is not unique: <metricName>. The same name cannot be used for metrics with different results. However multiple instances of metrics with with same result and name are allowed (e.g. self-joins)."
     ]
   },
+  "DUPLICATE_ASSIGNMENTS" : {
+    "message" : [
+      "The columns or variables <nameList> appear more than once as assignment targets."
+    ],
+    "sqlState" : "42701"
+  },
   "DUPLICATE_CLAUSES" : {
     "message" : [
       "Found duplicate clauses: <clauseName>. Please, remove one of them."
@@ -745,12 +828,12 @@
     "subClass" : {
       "BOTH_POSITIONAL_AND_NAMED" : {
         "message" : [
-          "A positional argument and named argument both referred to the same parameter."
+          "A positional argument and named argument both referred to the same parameter. Please remove the named argument referring to this parameter."
         ]
       },
       "DOUBLE_NAMED_ARGUMENT_REFERENCE" : {
         "message" : [
-          "More than one named argument referred to the same parameter."
+          "More than one named argument referred to the same parameter. Please assign a value only once."
         ]
       }
     },
@@ -765,6 +848,11 @@
   "ENCODER_NOT_FOUND" : {
     "message" : [
       "Not found an encoder of the type <typeName> to Spark SQL internal representation. Consider to change the input type to one of supported at '<docroot>/sql-ref-datatypes.html'."
+    ]
+  },
+  "ERROR_READING_AVRO_UNKNOWN_FINGERPRINT" : {
+    "message" : [
+      "Error reading avro data -- encountered an unknown fingerprint: <fingerprint>, not sure what schema to use. This could happen if you registered additional schemas after starting your spark context."
     ]
   },
   "EVENT_TIME_IS_NOT_ON_TIMESTAMP_TYPE" : {
@@ -799,6 +887,11 @@
       "Failed parsing struct: <raw>."
     ],
     "sqlState" : "22018"
+  },
+  "FAILED_REGISTER_CLASS_WITH_KRYO" : {
+    "message" : [
+      "Failed to register classes with Kryo."
+    ]
   },
   "FAILED_RENAME_PATH" : {
     "message" : [
@@ -1153,6 +1246,44 @@
     ],
     "sqlState" : "XX000"
   },
+  "INTERNAL_ERROR_METADATA_CATALOG" : {
+    "message" : [
+      "An object in the metadata catalog has been corrupted:"
+    ],
+    "subClass" : {
+      "SQL_CONFIG" : {
+        "message" : [
+          "Corrupted view SQL configs in catalog."
+        ]
+      },
+      "TABLE_NAME_CONTEXT" : {
+        "message" : [
+          "Corrupted table name context in catalog: <numParts> parts expected, but part <index> is missing."
+        ]
+      },
+      "TEMP_FUNCTION_REFERENCE" : {
+        "message" : [
+          "Corrupted view referred temp functions names in catalog."
+        ]
+      },
+      "TEMP_VARIABLE_REFERENCE" : {
+        "message" : [
+          "Corrupted view referred temp variable names in catalog."
+        ]
+      },
+      "TEMP_VIEW_REFERENCE" : {
+        "message" : [
+          "Corrupted view referred temp view names in catalog."
+        ]
+      },
+      "VIEW_QUERY_COLUMN_ARITY" : {
+        "message" : [
+          "Corrupted view query output column names in catalog: <numCols> parts expected, but part <index> is missing."
+        ]
+      }
+    },
+    "sqlState" : "XX000"
+  },
   "INTERNAL_ERROR_NETWORK" : {
     "message" : [
       "<message>"
@@ -1240,9 +1371,37 @@
     ],
     "sqlState" : "42000"
   },
+  "INVALID_CURSOR" : {
+    "message" : [
+      "The cursor is invalid."
+    ],
+    "subClass" : {
+      "DISCONNECTED" : {
+        "message" : [
+          "The cursor has been disconnected by the server."
+        ]
+      },
+      "NOT_REATTACHABLE" : {
+        "message" : [
+          "The cursor is not reattachable."
+        ]
+      },
+      "POSITION_NOT_AVAILABLE" : {
+        "message" : [
+          "The cursor position id <responseId> is no longer available at index <index>."
+        ]
+      },
+      "POSITION_NOT_FOUND" : {
+        "message" : [
+          "The cursor position id <responseId> is not found."
+        ]
+      }
+    },
+    "sqlState" : "HY109"
+  },
   "INVALID_DEFAULT_VALUE" : {
     "message" : [
-      "Failed to execute <statement> command because the destination table column <colName> has a DEFAULT value <defaultValue>,"
+      "Failed to execute <statement> command because the destination column or variable <colName> has a DEFAULT value <defaultValue>,"
     ],
     "subClass" : {
       "DATA_TYPE" : {
@@ -1383,6 +1542,39 @@
     ],
     "sqlState" : "22023"
   },
+  "INVALID_HANDLE" : {
+    "message" : [
+      "The handle <handle> is invalid."
+    ],
+    "subClass" : {
+      "FORMAT" : {
+        "message" : [
+          "Handle must be an UUID string of the format '00112233-4455-6677-8899-aabbccddeeff'"
+        ]
+      },
+      "OPERATION_ALREADY_EXISTS" : {
+        "message" : [
+          "Operation already exists."
+        ]
+      },
+      "OPERATION_NOT_FOUND" : {
+        "message" : [
+          "Operation not found."
+        ]
+      },
+      "SESSION_ALREADY_EXISTS" : {
+        "message" : [
+          "Session already exists."
+        ]
+      },
+      "SESSION_NOT_FOUND" : {
+        "message" : [
+          "Session not found."
+        ]
+      }
+    },
+    "sqlState" : "HY000"
+  },
   "INVALID_HIVE_COLUMN_NAME" : {
     "message" : [
       "Cannot create the table <tableName> having the nested column <columnName> whose name contains invalid characters <invalidChars> in Hive metastore."
@@ -1438,6 +1630,12 @@
       "Input schema <jsonSchema> can only contain STRING as a key type for a MAP."
     ],
     "sqlState" : "22032"
+  },
+  "INVALID_KRYO_SERIALIZER_BUFFER_SIZE" : {
+    "message" : [
+      "The value of the config \"<bufferSizeConfKey>\" must be less than 2048 MiB, but got <bufferSizeConfValue> MiB."
+    ],
+    "sqlState" : "F0000"
   },
   "INVALID_LAMBDA_FUNCTION_CALL" : {
     "message" : [
@@ -1771,6 +1969,12 @@
         "message" : [
           "Unsupported function name <funcName>."
         ]
+      },
+      "VARIABLE_TYPE_OR_DEFAULT_REQUIRED" : {
+        "message" : [
+          "The definition of a SQL variable requires either a datatype or a DEFAULT clause.",
+          "For example, use `DECLARE name STRING` or `DECLARE name = 'SQL'` instead of `DECLARE name`."
+        ]
       }
     },
     "sqlState" : "42000"
@@ -1881,6 +2085,11 @@
       "The join condition <joinCondition> has the invalid type <conditionType>, expected \"BOOLEAN\"."
     ]
   },
+  "KRYO_BUFFER_OVERFLOW" : {
+    "message" : [
+      "Kryo serialization failed: <exceptionMsg>. To avoid this, increase \"<bufferSizeConfKey>\" value."
+    ]
+  },
   "LOAD_DATA_PATH_NOT_EXISTS" : {
     "message" : [
       "LOAD DATA input path does not exist: <path>."
@@ -1916,6 +2125,11 @@
       "CANNOT_PARSE_JSON_ARRAYS_AS_STRUCTS" : {
         "message" : [
           "Parsing JSON arrays as structs is forbidden."
+        ]
+      },
+      "CANNOT_PARSE_STRING_AS_DATATYPE" : {
+        "message" : [
+          "Cannot parse the value <fieldValue> of the field <fieldName> as target spark data type <targetType> from the input type <inputType>."
         ]
       },
       "WITHOUT_SUGGESTION" : {
@@ -2321,7 +2535,7 @@
   },
   "REQUIRED_PARAMETER_NOT_FOUND" : {
     "message" : [
-      "Cannot invoke function <functionName> because the parameter named <parameterName> is required, but the function call did not supply a value. Please update the function call to supply an argument value (either positionally or by name) and retry the query again."
+      "Cannot invoke function <functionName> because the parameter named <parameterName> is required, but the function call did not supply a value. Please update the function call to supply an argument value (either positionally at index <index> or by name) and retry the query again."
     ],
     "sqlState" : "4274K"
   },
@@ -2345,6 +2559,18 @@
       "To tolerate the error on drop use DROP FUNCTION IF EXISTS."
     ],
     "sqlState" : "42883"
+  },
+  "ROW_SUBQUERY_TOO_MANY_ROWS" : {
+    "message" : [
+      "More than one row returned by a subquery used as a row."
+    ],
+    "sqlState" : "21000"
+  },
+  "RULE_ID_NOT_FOUND" : {
+    "message" : [
+      "Not found an id for the rule name \"<ruleName>\". Please modify RuleIdCollection.scala if you are adding a new rule."
+    ],
+    "sqlState" : "22023"
   },
   "SCALAR_SUBQUERY_IS_IN_GROUP_BY_OR_AGGREGATE_FUNCTION" : {
     "message" : [
@@ -2446,6 +2672,11 @@
     ],
     "sqlState" : "42P01"
   },
+  "TABLE_VALUED_FUNCTION_FAILED_TO_ANALYZE_IN_PYTHON" : {
+    "message" : [
+      "Failed to analyze the Python user defined table function: <msg>"
+    ]
+  },
   "TABLE_VALUED_FUNCTION_TOO_MANY_TABLE_ARGUMENTS" : {
     "message" : [
       "There are too many table arguments for table-valued function. It allows one table argument, but got: <num>. If you want to allow it, please set \"spark.sql.allowMultipleTableArguments.enabled\" to \"true\""
@@ -2517,7 +2748,7 @@
   },
   "UNEXPECTED_POSITIONAL_ARGUMENT" : {
     "message" : [
-      "Cannot invoke function <functionName> because it contains positional argument(s) following named argument(s); please rearrange them so the positional arguments come first and then retry the query again."
+      "Cannot invoke function <functionName> because it contains positional argument(s) following the named argument assigned to <parameterName>; please rearrange them so the positional arguments come first and then retry the query again."
     ],
     "sqlState" : "4274K"
   },
@@ -2575,7 +2806,7 @@
   },
   "UNRESOLVED_COLUMN" : {
     "message" : [
-      "A column or function parameter with name <objectName> cannot be resolved."
+      "A column, variable, or function parameter with name <objectName> cannot be resolved."
     ],
     "subClass" : {
       "WITHOUT_SUGGESTION" : {
@@ -2639,6 +2870,12 @@
     ],
     "sqlState" : "42703"
   },
+  "UNRESOLVED_VARIABLE" : {
+    "message" : [
+      "Cannot resolve variable <variableName> on search path <searchPath>."
+    ],
+    "sqlState" : "42883"
+  },
   "UNSET_NONEXISTENT_PROPERTIES" : {
     "message" : [
       "Attempted to unset non-existent properties [<properties>] in table <table>."
@@ -2682,11 +2919,6 @@
       "Unsupported data type <typeName>."
     ],
     "sqlState" : "0A000"
-  },
-  "UNSUPPORTED_DATA_SOURCE_FOR_DIRECT_QUERY" : {
-    "message" : [
-      "The direct query on files does not support the data source type: <className>. Please try a different data source type or consider using a different query method."
-    ]
   },
   "UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE" : {
     "message" : [
@@ -2895,6 +3127,16 @@
           "Pivoting by the value '<value>' of the column data type <type>."
         ]
       },
+      "PURGE_PARTITION" : {
+        "message" : [
+          "Partition purge."
+        ]
+      },
+      "PURGE_TABLE" : {
+        "message" : [
+          "Purge table."
+        ]
+      },
       "PYTHON_UDF_IN_ON_CLAUSE" : {
         "message" : [
           "Python UDF in the ON clause of a <joinType> JOIN. In case of an INNNER JOIN consider rewriting to a CROSS JOIN with a WHERE clause."
@@ -2928,6 +3170,11 @@
       "SET_TABLE_PROPERTY" : {
         "message" : [
           "<property> is a reserved table property, <msg>."
+        ]
+      },
+      "SET_VARIABLE_USING_SET" : {
+        "message" : [
+          "<variableName> is a VARIABLE and cannot be updated using the SET statement. Use SET VARIABLE <variableName> = ... instead."
         ]
       },
       "TABLE_OPERATION" : {
@@ -3155,6 +3402,21 @@
       "2. use Java UDF APIs, e.g. `udf(new UDF1[String, Integer] { override def call(s: String): Integer = s.length() }, IntegerType)`, if input types are all non primitive.",
       "3. set \"spark.sql.legacy.allowUntypedScalaUDF\" to \"true\" and use this API with caution."
     ]
+  },
+  "VARIABLE_ALREADY_EXISTS" : {
+    "message" : [
+      "Cannot create the variable <variableName> because it already exists.",
+      "Choose a different name, or drop or replace the existing variable."
+    ],
+    "sqlState" : "42723"
+  },
+  "VARIABLE_NOT_FOUND" : {
+    "message" : [
+      "The variable <variableName> cannot be found. Verify the spelling and correctness of the schema and catalog.",
+      "If you did not qualify the name with a schema and catalog, verify the current_schema() output, or qualify the name with the correct schema and catalog.",
+      "To tolerate the error on drop use DROP VARIABLE IF EXISTS."
+    ],
+    "sqlState" : "42883"
   },
   "VIEW_ALREADY_EXISTS" : {
     "message" : [
@@ -3515,11 +3777,6 @@
       "FILTER expression contains window function. It cannot be used in an aggregate function."
     ]
   },
-  "_LEGACY_ERROR_TEMP_1028" : {
-    "message" : [
-      "Number of column aliases does not match number of columns. Number of column aliases: <columnSize>; number of columns: <outputSize>."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_1030" : {
     "message" : [
       "Window aggregate function with filter predicate is not supported yet."
@@ -3709,31 +3966,6 @@
   "_LEGACY_ERROR_TEMP_1083" : {
     "message" : [
       "Number of buckets should be greater than 0 but less than or equal to bucketing.maxBuckets (`<bucketingMaxBuckets>`). Got `<numBuckets>`."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1084" : {
-    "message" : [
-      "Corrupted table name context in catalog: <numParts> parts expected, but part <index> is missing."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1085" : {
-    "message" : [
-      "Corrupted view SQL configs in catalog."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1086" : {
-    "message" : [
-      "Corrupted view query output column names in catalog: <numCols> parts expected, but part <index> is missing."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1087" : {
-    "message" : [
-      "Corrupted view referred temp view names in catalog."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1088" : {
-    "message" : [
-      "Corrupted view referred temp functions names in catalog."
     ]
   },
   "_LEGACY_ERROR_TEMP_1089" : {
@@ -4618,21 +4850,6 @@
       "Sinks cannot request distribution and ordering in continuous execution mode."
     ]
   },
-  "_LEGACY_ERROR_TEMP_1339" : {
-    "message" : [
-      "Failed to execute INSERT INTO command because the VALUES list contains a DEFAULT column reference as part of another expression; this is not allowed."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1340" : {
-    "message" : [
-      "Failed to execute UPDATE command because the SET list contains a DEFAULT column reference as part of another expression; this is not allowed."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1343" : {
-    "message" : [
-      "Failed to execute MERGE INTO command because one of its INSERT or UPDATE assignments contains a DEFAULT column reference as part of another expression; this is not allowed."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_1344" : {
     "message" : [
       "Invalid DEFAULT value for column <fieldName>: <defaultValue> fails to parse as a valid literal value."
@@ -5177,11 +5394,6 @@
       "Exception when registering StreamingQueryListener."
     ]
   },
-  "_LEGACY_ERROR_TEMP_2133" : {
-    "message" : [
-      "Cannot parse field name <fieldName>, field value <fieldValue>, [<token>] as target spark data type [<dataType>]."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_2134" : {
     "message" : [
       "Cannot parse field value <value> for pattern <pattern> as target spark data type [<dataType>]."
@@ -5352,11 +5564,6 @@
     "message" : [
       "Once strategy's idempotence is broken for batch <batchName>",
       "<plan>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2175" : {
-    "message" : [
-      "Rule id not found for <ruleName>. Please modify RuleIdCollection.scala if you are adding a new rule."
     ]
   },
   "_LEGACY_ERROR_TEMP_2176" : {
@@ -5742,16 +5949,6 @@
   "_LEGACY_ERROR_TEMP_2256" : {
     "message" : [
       "Foreach writer has been aborted due to a task failure."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2258" : {
-    "message" : [
-      "Error reading delta file <fileToRead> of <clazz>: key size cannot be <keySize>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2259" : {
-    "message" : [
-      "Error reading snapshot file <fileToRead> of <clazz>: <message>"
     ]
   },
   "_LEGACY_ERROR_TEMP_2260" : {

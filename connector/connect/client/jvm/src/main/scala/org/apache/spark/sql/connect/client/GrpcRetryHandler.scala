@@ -24,35 +24,15 @@ import scala.util.control.NonFatal
 import io.grpc.{Status, StatusRuntimeException}
 import io.grpc.stub.StreamObserver
 
+import org.apache.spark.internal.Logging
+
 private[client] class GrpcRetryHandler(private val retryPolicy: GrpcRetryHandler.RetryPolicy) {
 
   /**
    * Retries the given function with exponential backoff according to the client's retryPolicy.
-   * @param fn
-   *   The function to retry.
-   * @param currentRetryNum
-   *   Current number of retries.
-   * @tparam T
-   *   The return type of the function.
-   * @return
-   *   The result of the function.
    */
-  @tailrec final def retry[T](fn: => T, currentRetryNum: Int = 0): T = {
-    if (currentRetryNum > retryPolicy.maxRetries) {
-      throw new IllegalArgumentException(
-        s"The number of retries ($currentRetryNum) must not exceed " +
-          s"the maximum number of retires (${retryPolicy.maxRetries}).")
-    }
-    try {
-      return fn
-    } catch {
-      case NonFatal(e) if retryPolicy.canRetry(e) && currentRetryNum < retryPolicy.maxRetries =>
-        Thread.sleep(
-          (retryPolicy.maxBackoff min retryPolicy.initialBackoff * Math
-            .pow(retryPolicy.backoffMultiplier, currentRetryNum)).toMillis)
-    }
-    retry(fn, currentRetryNum + 1)
-  }
+  def retry[T](fn: => T, currentRetryNum: Int = 0): T =
+    GrpcRetryHandler.retry(retryPolicy)(fn, currentRetryNum)
 
   /**
    * Generalizes the retry logic for RPC calls that return an iterator.
@@ -65,13 +45,13 @@ private[client] class GrpcRetryHandler(private val retryPolicy: GrpcRetryHandler
    * @tparam U
    *   The type of the response.
    */
-  class RetryIterator[T, U](request: T, call: T => java.util.Iterator[U])
-      extends java.util.Iterator[U] {
+  class RetryIterator[T, U](request: T, call: T => CloseableIterator[U])
+      extends CloseableIterator[U] {
 
     private var opened = false // we only retry if it fails on first call when using the iterator
-    private var iterator = call(request)
+    private var iter = call(request)
 
-    private def retryIter[V](f: java.util.Iterator[U] => V) = {
+    private def retryIter[V](f: Iterator[U] => V) = {
       if (!opened) {
         opened = true
         var firstTry = true
@@ -81,26 +61,30 @@ private[client] class GrpcRetryHandler(private val retryPolicy: GrpcRetryHandler
             firstTry = false
           } else {
             // on retry, we need to call the RPC again.
-            iterator = call(request)
+            iter = call(request)
           }
-          f(iterator)
+          f(iter)
         }
       } else {
-        f(iterator)
+        f(iter)
       }
     }
 
     override def next: U = {
-      retryIter(_.next())
+      retryIter(_.next)
     }
 
     override def hasNext: Boolean = {
-      retryIter(_.hasNext())
+      retryIter(_.hasNext)
+    }
+
+    override def close(): Unit = {
+      iter.close()
     }
   }
 
   object RetryIterator {
-    def apply[T, U](request: T, call: T => java.util.Iterator[U]): RetryIterator[T, U] =
+    def apply[T, U](request: T, call: T => CloseableIterator[U]): RetryIterator[T, U] =
       new RetryIterator(request, call)
   }
 
@@ -119,6 +103,9 @@ private[client] class GrpcRetryHandler(private val retryPolicy: GrpcRetryHandler
       extends StreamObserver[U] {
 
     private var opened = false // only retries on first call
+
+    // Note: This is not retried, because no error would ever be thrown here, and GRPC will only
+    // throw error on first iterator.hasNext() or iterator.next()
     private var streamObserver = call(request)
 
     override def onNext(v: U): Unit = {
@@ -157,7 +144,42 @@ private[client] class GrpcRetryHandler(private val retryPolicy: GrpcRetryHandler
   }
 }
 
-private[client] object GrpcRetryHandler {
+private[client] object GrpcRetryHandler extends Logging {
+
+  /**
+   * Retries the given function with exponential backoff according to the client's retryPolicy.
+   * @param retryPolicy
+   *   The retry policy
+   * @param fn
+   *   The function to retry.
+   * @param currentRetryNum
+   *   Current number of retries.
+   * @tparam T
+   *   The return type of the function.
+   * @return
+   *   The result of the function.
+   */
+  @tailrec final def retry[T](retryPolicy: RetryPolicy)(fn: => T, currentRetryNum: Int = 0): T = {
+    if (currentRetryNum > retryPolicy.maxRetries) {
+      throw new IllegalArgumentException(
+        s"The number of retries ($currentRetryNum) must not exceed " +
+          s"the maximum number of retires (${retryPolicy.maxRetries}).")
+    }
+    try {
+      return fn
+    } catch {
+      case NonFatal(e)
+          if (retryPolicy.canRetry(e) || e.isInstanceOf[RetryException])
+            && currentRetryNum < retryPolicy.maxRetries =>
+        logWarning(
+          s"Non fatal error during RPC execution: $e, " +
+            s"retrying (currentRetryNum=$currentRetryNum)")
+        Thread.sleep(
+          (retryPolicy.maxBackoff min retryPolicy.initialBackoff * Math
+            .pow(retryPolicy.backoffMultiplier, currentRetryNum)).toMillis)
+    }
+    retry(retryPolicy)(fn, currentRetryNum + 1)
+  }
 
   /**
    * Default canRetry in [[RetryPolicy]].
@@ -193,4 +215,10 @@ private[client] object GrpcRetryHandler {
       maxBackoff: FiniteDuration = FiniteDuration(1, "min"),
       backoffMultiplier: Double = 4.0,
       canRetry: Throwable => Boolean = retryException) {}
+
+  /**
+   * An exception that can be thrown upstream when inside retry and which will be retryable
+   * regardless of policy.
+   */
+  class RetryException extends Throwable
 }

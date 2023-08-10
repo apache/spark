@@ -1709,4 +1709,24 @@ class JoinSuite extends QueryTest with SharedSparkSession with AdaptiveSparkPlan
       checkAnswer(sql(query), expected)
     }
   }
+
+  test("SPARK-44132: FULL OUTER JOIN by streamed column name fails with NPE") {
+    val dsA = Seq((1, "a")).toDF("id", "c1")
+    val dsB = Seq((2, "b")).toDF("id", "c2")
+    val dsC = Seq((3, "c")).toDF("id", "c3")
+    val joined = dsA.join(dsB, Stream("id"), "full_outer").join(dsC, Stream("id"), "full_outer")
+
+    val expected = Seq(Row(1, "a", null, null), Row(2, null, "b", null), Row(3, null, null, "c"))
+
+    checkAnswer(joined, expected)
+  }
+
+  test("SPARK-44132: FULL OUTER JOIN by streamed column name fails with invalid access") {
+    val ds = Seq((1, "a")).toDF("id", "c1")
+    val joined = ds.join(ds, Stream("id"), "full_outer").join(ds, Stream("id"), "full_outer")
+
+    val expected = Seq(Row(1, "a", "a", "a"))
+
+    checkAnswer(joined, expected)
+  }
 }

@@ -18,6 +18,7 @@
 package org.apache.spark.sql.connect.execution
 
 import scala.collection.JavaConverters._
+import scala.concurrent.duration.Duration
 import scala.util.{Failure, Success}
 
 import com.google.protobuf.ByteString
@@ -69,7 +70,6 @@ private[execution] class SparkConnectPlanExecution(executeHolder: ExecuteHolder)
     if (dataframe.queryExecution.observedMetrics.nonEmpty) {
       responseObserver.onNext(createObservedMetricsResponse(request.getSessionId, dataframe))
     }
-    responseObserver.onCompleted()
   }
 
   type Batch = (Array[Byte], Long)
@@ -153,23 +153,23 @@ private[execution] class SparkConnectPlanExecution(executeHolder: ExecuteHolder)
               ()
             }
 
-            val future = spark.sparkContext.submitJob(
-              rdd = batches,
-              processPartition = (iter: Iterator[Batch]) => iter.toArray,
-              partitions = Seq.range(0, numPartitions),
-              resultHandler = resultHandler,
-              resultFunc = () => ())
-
-            // Collect errors and propagate them to the main thread.
-            future.onComplete {
-              case Success(_) =>
-                executePlan.eventsManager.postFinished()
-              case Failure(throwable) =>
-                signal.synchronized {
-                  error = Some(throwable)
-                  signal.notify()
-                }
-            }(ThreadUtils.sameThread)
+            val future = spark.sparkContext
+              .submitJob(
+                rdd = batches,
+                processPartition = (iter: Iterator[Batch]) => iter.toArray,
+                partitions = Seq.range(0, numPartitions),
+                resultHandler = resultHandler,
+                resultFunc = () => ())
+              // Collect errors and propagate them to the main thread.
+              .andThen {
+                case Success(_) =>
+                  executePlan.eventsManager.postFinished()
+                case Failure(throwable) =>
+                  signal.synchronized {
+                    error = Some(throwable)
+                    signal.notify()
+                  }
+              }(ThreadUtils.sameThread)
 
             // The main thread will wait until 0-th partition is available,
             // then send it to client and wait for the next partition.
@@ -199,6 +199,9 @@ private[execution] class SparkConnectPlanExecution(executeHolder: ExecuteHolder)
 
               currentPartitionId += 1
             }
+            ThreadUtils.awaitReady(future, Duration.Inf)
+          } else {
+            executePlan.eventsManager.postFinished()
           }
         }
     }

@@ -79,6 +79,12 @@ Ambiguous reference to the field `<field>`. It appears `<count>` times in the sc
 
 `<message>`.`<alternative>` If necessary set `<config>` to "false" to bypass this error.
 
+### ASSIGNMENT_ARITY_MISMATCH
+
+[SQLSTATE: 42802](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+The number of columns or variables assigned or aliased: `<numTarget>` does not match the number of source expressions: `<numExpr>`.
+
 ### [AS_OF_JOIN](sql-error-conditions-as-of-join-error-class.html)
 
 SQLSTATE: none assigned
@@ -170,6 +176,14 @@ Cannot load class `<className>` when registering the function `<functionName>`, 
 SQLSTATE: none assigned
 
 Could not load Protobuf class with name `<protobufClassName>`. `<explanation>`.
+
+### [CANNOT_LOAD_STATE_STORE](sql-error-conditions-cannot-load-state-store-error-class.html)
+
+SQLSTATE: 58030
+
+An error occurred during loading state.
+
+For more details see [CANNOT_LOAD_STATE_STORE](sql-error-conditions-cannot-load-state-store-error-class.html)
 
 ### CANNOT_MERGE_INCOMPATIBLE_DATA_TYPE
 
@@ -285,7 +299,7 @@ The value `<value>` of the type `<sourceType>` cannot be cast to `<targetType>` 
 
 [SQLSTATE: 22003](sql-error-conditions-sqlstates.html#class-22-data-exception)
 
-Fail to insert a value of `<sourceType>` type into the `<targetType>` type column `<columnName>` due to an overflow. Use `try_cast` on the input value to tolerate overflow and return NULL instead.
+Fail to assign a value of `<sourceType>` type to the `<targetType>` type column or variable `<columnName>` due to an overflow. Use `try_cast` on the input value to tolerate overflow and return NULL instead.
 
 ### CODEC_NOT_AVAILABLE
 
@@ -414,6 +428,13 @@ Decimal precision `<precision>` exceeds max precision `<maxPrecision>`.
 
 Default database `<defaultDatabase>` does not exist, please create it first or change default database to ``<defaultDatabase>``.
 
+### DEFAULT_PLACEMENT_INVALID
+
+[SQLSTATE: 42608](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+A DEFAULT keyword in a MERGE, INSERT, UPDATE, or SET VARIABLE command could not be directly assigned to a target column because it was part of an expression.
+For example: `UPDATE SET c1 = DEFAULT` is allowed, but `UPDATE T SET c1 = DEFAULT + 1` is not allowed.
+
 ### DISTINCT_WINDOW_FUNCTION_UNSUPPORTED
 
 SQLSTATE: none assigned
@@ -443,6 +464,12 @@ Duplicate map key `<key>` was found, please check the input data. If you want to
 SQLSTATE: none assigned
 
 The metric name is not unique: `<metricName>`. The same name cannot be used for metrics with different results. However multiple instances of metrics with with same result and name are allowed (e.g. self-joins).
+
+### DUPLICATE_ASSIGNMENTS
+
+[SQLSTATE: 42701](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+The columns or variables `<nameList>` appear more than once as assignment targets.
 
 ### DUPLICATE_CLAUSES
 
@@ -475,6 +502,12 @@ Failed to parse an empty string for data type `<dataType>`.
 SQLSTATE: none assigned
 
 Not found an encoder of the type `<typeName>` to Spark SQL internal representation. Consider to change the input type to one of supported at '`<docroot>`/sql-ref-datatypes.html'.
+
+### ERROR_READING_AVRO_UNKNOWN_FINGERPRINT
+
+SQLSTATE: none assigned
+
+Error reading avro data -- encountered an unknown fingerprint: `<fingerprint>`, not sure what schema to use. This could happen if you registered additional schemas after starting your spark context.
 
 ### EVENT_TIME_IS_NOT_ON_TIMESTAMP_TYPE
 
@@ -511,6 +544,12 @@ Failed preparing of the function `<funcName>` for call. Please, double check fun
 [SQLSTATE: 22018](sql-error-conditions-sqlstates.html#class-22-data-exception)
 
 Failed parsing struct: `<raw>`.
+
+### FAILED_REGISTER_CLASS_WITH_KRYO
+
+SQLSTATE: none assigned
+
+Failed to register classes with Kryo.
 
 ### FAILED_RENAME_PATH
 
@@ -754,6 +793,14 @@ For more details see [INSUFFICIENT_TABLE_PROPERTY](sql-error-conditions-insuffic
 
 `<message>`
 
+### [INTERNAL_ERROR_METADATA_CATALOG](sql-error-conditions-internal-error-metadata-catalog-error-class.html)
+
+[SQLSTATE: XX000](sql-error-conditions-sqlstates.html#class-XX-internal-error)
+
+An object in the metadata catalog has been corrupted:
+
+For more details see [INTERNAL_ERROR_METADATA_CATALOG](sql-error-conditions-internal-error-metadata-catalog-error-class.html)
+
 ### INTERNAL_ERROR_NETWORK
 
 [SQLSTATE: XX000](sql-error-conditions-sqlstates.html#class-XX-internal-error)
@@ -834,11 +881,19 @@ The datasource `<datasource>` cannot save the column `<columnName>` because its 
 
 Column or field `<name>` is of type `<type>` while it's required to be `<expectedType>`.
 
+### [INVALID_CURSOR](sql-error-conditions-invalid-cursor-error-class.html)
+
+[SQLSTATE: HY109](sql-error-conditions-sqlstates.html#class-HY-cli-specific-condition)
+
+The cursor is invalid.
+
+For more details see [INVALID_CURSOR](sql-error-conditions-invalid-cursor-error-class.html)
+
 ### [INVALID_DEFAULT_VALUE](sql-error-conditions-invalid-default-value-error-class.html)
 
 SQLSTATE: none assigned
 
-Failed to execute `<statement>` command because the destination table column `<colName>` has a DEFAULT value `<defaultValue>`,
+Failed to execute `<statement>` command because the destination column or variable `<colName>` has a DEFAULT value `<defaultValue>`,
 
 For more details see [INVALID_DEFAULT_VALUE](sql-error-conditions-invalid-default-value-error-class.html)
 
@@ -910,6 +965,14 @@ For more details see [INVALID_FORMAT](sql-error-conditions-invalid-format-error-
 
 The fraction of sec must be zero. Valid range is [0, 60]. If necessary set `<ansiConfig>` to "false" to bypass this error.
 
+### [INVALID_HANDLE](sql-error-conditions-invalid-handle-error-class.html)
+
+[SQLSTATE: HY000](sql-error-conditions-sqlstates.html#class-HY-cli-specific-condition)
+
+The handle `<handle>` is invalid.
+
+For more details see [INVALID_HANDLE](sql-error-conditions-invalid-handle-error-class.html)
+
 ### INVALID_HIVE_COLUMN_NAME
 
 SQLSTATE: none assigned
@@ -947,6 +1010,12 @@ Cannot convert JSON root field to target Spark type.
 [SQLSTATE: 22032](sql-error-conditions-sqlstates.html#class-22-data-exception)
 
 Input schema `<jsonSchema>` can only contain STRING as a key type for a MAP.
+
+### INVALID_KRYO_SERIALIZER_BUFFER_SIZE
+
+SQLSTATE: F0000
+
+The value of the config "`<bufferSizeConfKey>`" must be less than 2048 MiB, but got `<bufferSizeConfValue>` MiB.
 
 ### [INVALID_LAMBDA_FUNCTION_CALL](sql-error-conditions-invalid-lambda-function-call-error-class.html)
 
@@ -1138,6 +1207,12 @@ For more details see [INVALID_WRITE_DISTRIBUTION](sql-error-conditions-invalid-w
 SQLSTATE: none assigned
 
 The join condition `<joinCondition>` has the invalid type `<conditionType>`, expected "BOOLEAN".
+
+### KRYO_BUFFER_OVERFLOW
+
+SQLSTATE: none assigned
+
+Kryo serialization failed: `<exceptionMsg>`. To avoid this, increase "`<bufferSizeConfKey>`" value.
 
 ### LOAD_DATA_PATH_NOT_EXISTS
 
@@ -1539,7 +1614,7 @@ The `<clause>` clause may be used at most once per `<operation>` operation.
 
 [SQLSTATE: 4274K](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
 
-Cannot invoke function `<functionName>` because the parameter named `<parameterName>` is required, but the function call did not supply a value. Please update the function call to supply an argument value (either positionally or by name) and retry the query again.
+Cannot invoke function `<functionName>` because the parameter named `<parameterName>` is required, but the function call did not supply a value. Please update the function call to supply an argument value (either positionally at index `<index>` or by name) and retry the query again.
 
 ### REQUIRES_SINGLE_PART_NAMESPACE
 
@@ -1561,6 +1636,18 @@ Choose a different name, drop or replace the existing function, or add the IF NO
 The function `<routineName>` cannot be found. Verify the spelling and correctness of the schema and catalog.
 If you did not qualify the name with a schema and catalog, verify the current_schema() output, or qualify the name with the correct schema and catalog.
 To tolerate the error on drop use DROP FUNCTION IF EXISTS.
+
+### ROW_SUBQUERY_TOO_MANY_ROWS
+
+[SQLSTATE: 21000](sql-error-conditions-sqlstates.html#class-21-cardinality-violation)
+
+More than one row returned by a subquery used as a row.
+
+### RULE_ID_NOT_FOUND
+
+[SQLSTATE: 22023](sql-error-conditions-sqlstates.html#class-22-data-exception)
+
+Not found an id for the rule name "`<ruleName>`". Please modify RuleIdCollection.scala if you are adding a new rule.
 
 ### SCALAR_SUBQUERY_IS_IN_GROUP_BY_OR_AGGREGATE_FUNCTION
 
@@ -1671,6 +1758,12 @@ The table or view `<relationName>` cannot be found. Verify the spelling and corr
 If you did not qualify the name with a schema, verify the current_schema() output, or qualify the name with the correct schema and catalog.
 To tolerate the error on drop use DROP VIEW IF EXISTS or DROP TABLE IF EXISTS.
 
+### TABLE_VALUED_FUNCTION_FAILED_TO_ANALYZE_IN_PYTHON
+
+SQLSTATE: none assigned
+
+Failed to analyze the Python user defined table function: `<msg>`
+
 ### TABLE_VALUED_FUNCTION_TOO_MANY_TABLE_ARGUMENTS
 
 SQLSTATE: none assigned
@@ -1748,7 +1841,7 @@ Parameter `<paramIndex>` of function `<functionName>` requires the `<requiredTyp
 
 [SQLSTATE: 4274K](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
 
-Cannot invoke function `<functionName>` because it contains positional argument(s) following named argument(s); please rearrange them so the positional arguments come first and then retry the query again.
+Cannot invoke function `<functionName>` because it contains positional argument(s) following the named argument assigned to `<parameterName>`; please rearrange them so the positional arguments come first and then retry the query again.
 
 ### UNKNOWN_PROTOBUF_MESSAGE_TYPE
 
@@ -1808,7 +1901,7 @@ Cannot infer grouping columns for GROUP BY ALL based on the select clause. Pleas
 
 [SQLSTATE: 42703](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
 
-A column or function parameter with name `<objectName>` cannot be resolved.
+A column, variable, or function parameter with name `<objectName>` cannot be resolved.
 
 For more details see [UNRESOLVED_COLUMN](sql-error-conditions-unresolved-column-error-class.html)
 
@@ -1839,6 +1932,12 @@ Cannot resolve function `<routineName>` on search path `<searchPath>`.
 [SQLSTATE: 42703](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
 
 USING column `<colName>` cannot be resolved on the `<side>` side of the join. The `<side>`-side columns: [`<suggestion>`].
+
+### UNRESOLVED_VARIABLE
+
+[SQLSTATE: 42883](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+Cannot resolve variable `<variableName>` on search path `<searchPath>`.
 
 ### UNSET_NONEXISTENT_PROPERTIES
 
@@ -1877,12 +1976,6 @@ Unsupported data source type for direct query on files: `<dataSourceType>`
 [SQLSTATE: 0A000](sql-error-conditions-sqlstates.html#class-0A-feature-not-supported)
 
 Unsupported data type `<typeName>`.
-
-### UNSUPPORTED_DATA_SOURCE_FOR_DIRECT_QUERY
-
-SQLSTATE: none assigned
-
-The direct query on files does not support the data source type: `<className>`. Please try a different data source type or consider using a different query method.
 
 ### UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE
 
@@ -2001,6 +2094,21 @@ You're using untyped Scala UDF, which does not have the input type information. 
 1. use typed Scala UDF APIs(without return type parameter), e.g. `udf((x: Int) => x)`.
 2. use Java UDF APIs, e.g. `udf(new UDF1[String, Integer] { override def call(s: String): Integer = s.length() }, IntegerType)`, if input types are all non primitive.
 3. set "spark.sql.legacy.allowUntypedScalaUDF" to "true" and use this API with caution.
+
+### VARIABLE_ALREADY_EXISTS
+
+[SQLSTATE: 42723](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+Cannot create the variable `<variableName>` because it already exists.
+Choose a different name, or drop or replace the existing variable.
+
+### VARIABLE_NOT_FOUND
+
+[SQLSTATE: 42883](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+The variable `<variableName>` cannot be found. Verify the spelling and correctness of the schema and catalog.
+If you did not qualify the name with a schema and catalog, verify the current_schema() output, or qualify the name with the correct schema and catalog.
+To tolerate the error on drop use DROP VARIABLE IF EXISTS.
 
 ### VIEW_ALREADY_EXISTS
 

@@ -38,7 +38,6 @@ import org.apache.spark.sql.execution.streaming.OneTimeTrigger
 import org.apache.spark.sql.execution.streaming.ProcessingTimeTrigger
 import org.apache.spark.sql.types.NullType
 import org.apache.spark.util.SparkSerDeUtils
-import org.apache.spark.util.Utils
 
 /**
  * Interface used to write a streaming `Dataset` to external storage systems (e.g. file systems,
@@ -217,7 +216,7 @@ final class DataStreamWriter[T] private[sql] (ds: Dataset[T]) extends Logging {
    * @since 3.5.0
    */
   def foreach(writer: ForeachWriter[T]): DataStreamWriter[T] = {
-    val serialized = SparkSerDeUtils.serialize(ForeachWriterPacket(writer, ds.encoder))
+    val serialized = SparkSerDeUtils.serialize(ForeachWriterPacket(writer, ds.agnosticEncoder))
     val scalaWriterBuilder = proto.ScalarScalaUDF
       .newBuilder()
       .setPayload(ByteString.copyFrom(serialized))
@@ -240,7 +239,7 @@ final class DataStreamWriter[T] private[sql] (ds: Dataset[T]) extends Logging {
    */
   @Evolving
   def foreachBatch(function: (Dataset[T], Long) => Unit): DataStreamWriter[T] = {
-    val serializedFn = Utils.serialize(function)
+    val serializedFn = SparkSerDeUtils.serialize(function)
     sinkBuilder.getForeachBatchBuilder.getScalaFunctionBuilder
       .setPayload(ByteString.copyFrom(serializedFn))
       .setOutputType(DataTypeProtoConverter.toConnectProtoType(NullType)) // Unused.
