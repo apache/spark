@@ -221,6 +221,31 @@ class NamespaceTestsMixin:
             pd.date_range(start="1/1/2018", periods=5, freq=pd.offsets.MonthEnd(3)),
         )
 
+        self.assert_eq(
+            ps.date_range(start="2017-01-01", end="2017-01-04", inclusive="left"),
+            pd.date_range(start="2017-01-01", end="2017-01-04", inclusive="left"),
+        )
+
+        self.assert_eq(
+            ps.date_range(start="2017-01-01", end="2017-01-04", inclusive="right"),
+            pd.date_range(start="2017-01-01", end="2017-01-04", inclusive="right"),
+        )
+
+        self.assert_eq(
+            ps.date_range(start="2017-01-01", end="2017-01-04", inclusive="both"),
+            pd.date_range(start="2017-01-01", end="2017-01-04", inclusive="both"),
+        )
+
+        self.assert_eq(
+            ps.date_range(start="2017-01-01", end="2017-01-04", inclusive="neither"),
+            pd.date_range(start="2017-01-01", end="2017-01-04", inclusive="neither"),
+        )
+
+        with self.assertRaisesRegex(
+            ValueError, "Inclusive has to be either 'both', 'neither', 'left' or 'right'"
+        ):
+            ps.date_range(start="2017-01-01", end="2017-01-04", inclusive="test")
+
         self.assertRaises(
             AssertionError, lambda: ps.date_range(start="1/1/2018", periods=5, tz="Asia/Tokyo")
         )
