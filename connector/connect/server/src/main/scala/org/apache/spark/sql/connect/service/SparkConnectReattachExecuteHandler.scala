@@ -48,10 +48,10 @@ class SparkConnectReattachExecuteHandler(
       new ExecuteGrpcResponseSender[proto.ExecutePlanResponse](executeHolder, responseObserver)
     if (v.hasLastResponseId) {
       // start from response after lastResponseId
-      executeHolder.attachAndRunGrpcResponseSender(responseSender, v.getLastResponseId)
+      executeHolder.runGrpcResponseSender(responseSender, v.getLastResponseId)
     } else {
       // start from the start of the stream.
-      executeHolder.attachAndRunGrpcResponseSender(responseSender)
+      executeHolder.runGrpcResponseSender(responseSender)
     }
   }
 }

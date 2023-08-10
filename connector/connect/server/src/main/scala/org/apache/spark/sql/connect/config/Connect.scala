@@ -74,6 +74,22 @@ object Connect {
       .intConf
       .createWithDefault(1024)
 
+  val CONNECT_EXECUTE_MANAGER_DETACHED_TIMEOUT =
+    ConfigBuilder("spark.connect.execute.manager.detachedTimeout")
+      .internal()
+      .doc("Timeout after which executions without an attached RPC will be removed.")
+      .version("3.5.0")
+      .timeConf(TimeUnit.MILLISECONDS)
+      .createWithDefaultString("5m")
+
+  val CONNECT_EXECUTE_MANAGER_MAINTENANCE_INTERVAL =
+    ConfigBuilder("spark.connect.execute.manager.maintenanceInterval")
+      .internal()
+      .doc("Timeout after which executions without an attached RPC will be removed.")
+      .version("3.5.0")
+      .timeConf(TimeUnit.MILLISECONDS)
+      .createWithDefaultString("30s")
+
   val CONNECT_EXECUTE_REATTACHABLE_ENABLED =
     ConfigBuilder("spark.connect.execute.reattachable.enabled")
       .internal()

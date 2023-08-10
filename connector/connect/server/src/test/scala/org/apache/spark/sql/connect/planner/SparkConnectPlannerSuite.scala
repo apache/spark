@@ -131,9 +131,10 @@ trait SparkConnectPlanTest extends SharedSparkSession {
     val request = proto.ExecutePlanRequest
       .newBuilder()
       .setPlan(plan)
+      .setSessionId(sessionHolder.sessionId)
       .setUserContext(context)
       .build()
-    val executeHolder = sessionHolder.createExecuteHolder(request)
+    val executeHolder = SparkConnectService.executionManager.createExecuteHolder(request)
     executeHolder.eventsManager.status_(ExecuteStatus.Started)
     executeHolder
   }

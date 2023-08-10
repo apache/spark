@@ -42,7 +42,9 @@ class SparkConnectReleaseExecuteHandler(
     }
 
     if (v.hasReleaseAll) {
-      executeHolder.close()
+      // Note: may be that it was just remove in between the checks above and here, in which
+      // case this will be just noop.
+      SparkConnectService.executionManager.removeExecuteHolder(executeHolder.key)
     } else if (v.hasReleaseUntil) {
       val responseId = v.getReleaseUntil.getResponseId
       executeHolder.releaseUntilResponseId(responseId)
