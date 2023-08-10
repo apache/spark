@@ -31,7 +31,7 @@ class PythonUDTFSuite extends QueryTest with SharedSparkSession {
 
   import IntegratedUDFTestUtils._
 
-  private val pythonScriptTwoIntegers: String =
+  private val pythonScript: String =
     """
       |class SimpleUDTF:
       |    def eval(self, a: int, b: int):
@@ -40,7 +40,7 @@ class PythonUDTFSuite extends QueryTest with SharedSparkSession {
       |        yield a, b, b - a
       |""".stripMargin
 
-  private val arrowPythonScriptTwoIntegers: String =
+  private val arrowPythonScript: String =
     """
       |import pandas as pd
       |class VectorizedUDTF:
@@ -53,31 +53,28 @@ class PythonUDTFSuite extends QueryTest with SharedSparkSession {
       |        yield pd.DataFrame(data)
       |""".stripMargin
 
-  private val returnTypeTwoIntegers: StructType = StructType.fromDDL("a int, b int, c int")
+  private val returnType: StructType = StructType.fromDDL("a int, b int, c int")
 
-  private val pythonUDTFTwoIntegers: UserDefinedPythonTableFunction =
-    createUserDefinedPythonTableFunction(
-      "SimpleUDTF",
-      pythonScriptTwoIntegers,
-      returnTypeTwoIntegers)
+  private val pythonUDTF: UserDefinedPythonTableFunction =
+    createUserDefinedPythonTableFunction("SimpleUDTF", pythonScript, returnType)
 
-  private val arrowPythonUDTFTwoIntegers: UserDefinedPythonTableFunction =
+  private val arrowPythonUDTF: UserDefinedPythonTableFunction =
     createUserDefinedPythonTableFunction(
       "VectorizedUDTF",
-      arrowPythonScriptTwoIntegers,
-      returnTypeTwoIntegers,
+      arrowPythonScript,
+      returnType,
       evalType = PythonEvalType.SQL_ARROW_TABLE_UDF)
 
   test("Simple PythonUDTF") {
     assume(shouldTestPythonUDFs)
-    val df = pythonUDTFTwoIntegers(spark, lit(1), lit(2))
+    val df = pythonUDTF(spark, lit(1), lit(2))
     checkAnswer(df, Seq(Row(1, 2, -1), Row(1, 2, 1), Row(1, 2, 3)))
   }
 
   test("PythonUDTF with lateral join") {
     assume(shouldTestPythonUDFs)
     withTempView("t") {
-      spark.udtf.registerPython("testUDTF", pythonUDTFTwoIntegers)
+      spark.udtf.registerPython("testUDTF", pythonUDTF)
       Seq((0, 1), (1, 2)).toDF("a", "b").createOrReplaceTempView("t")
       checkAnswer(
         sql("SELECT f.* FROM t, LATERAL testUDTF(a, b) f"),
@@ -88,7 +85,7 @@ class PythonUDTFSuite extends QueryTest with SharedSparkSession {
   test("PythonUDTF in correlated subquery") {
     assume(shouldTestPythonUDFs)
     withTempView("t") {
-      spark.udtf.registerPython("testUDTF", pythonUDTFTwoIntegers)
+      spark.udtf.registerPython("testUDTF", pythonUDTF)
       Seq((0, 1), (1, 2)).toDF("a", "b").createOrReplaceTempView("t")
       checkAnswer(
         sql("SELECT (SELECT sum(f.b) AS r FROM testUDTF(1, 2) f WHERE f.a = t.a) FROM t"),
@@ -98,14 +95,14 @@ class PythonUDTFSuite extends QueryTest with SharedSparkSession {
 
   test("Arrow optimized UDTF") {
     assume(shouldTestPandasUDFs)
-    val df = arrowPythonUDTFTwoIntegers(spark, lit(1), lit(2))
+    val df = arrowPythonUDTF(spark, lit(1), lit(2))
     checkAnswer(df, Seq(Row(1, 2, -1), Row(1, 2, 1), Row(1, 2, 3)))
   }
 
   test("arrow optimized UDTF with lateral join") {
     assume(shouldTestPandasUDFs)
     withTempView("t") {
-      spark.udtf.registerPython("testUDTF", arrowPythonUDTFTwoIntegers)
+      spark.udtf.registerPython("testUDTF", arrowPythonUDTF)
       Seq((0, 1), (1, 2)).toDF("a", "b").createOrReplaceTempView("t")
       checkAnswer(
         sql("SELECT t.*, f.c FROM t, LATERAL testUDTF(a, b) f"),
