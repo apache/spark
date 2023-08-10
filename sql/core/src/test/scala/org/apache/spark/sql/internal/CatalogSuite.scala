@@ -716,8 +716,7 @@ class CatalogSuite extends SharedSparkSession with AnalysisTest with BeforeAndAf
       errorClass = "UNSUPPORTED_TEMP_VIEW_OPERATION.WITH_SUGGESTION",
       parameters = Map(
         "tempViewName" -> "`my_temp_table`",
-        "operation" -> "recoverPartitions()",
-        "suggestion" -> "")
+        "operation" -> "recoverPartitions()")
     )
   }
 

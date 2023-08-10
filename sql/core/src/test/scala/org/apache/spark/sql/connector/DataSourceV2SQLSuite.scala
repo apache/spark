@@ -2604,8 +2604,7 @@ class DataSourceV2SQLSuiteV1Filter
         errorClass = "UNSUPPORTED_TEMP_VIEW_OPERATION.WITH_SUGGESTION",
         parameters = Map(
           "tempViewName" -> "`global_temp`.`v`",
-          "operation" -> "COMMENT ON TABLE",
-          "suggestion" -> ""),
+          "operation" -> "COMMENT ON TABLE"),
         context = ExpectedContext(fragment = "global_temp.v", start = 17, stop = 29))
     }
   }

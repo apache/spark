@@ -184,8 +184,7 @@ trait TruncateTableSuiteBase extends QueryTest with DDLCommandTestUtils {
           errorClass = "UNSUPPORTED_VIEW_OPERATION.WITH_SUGGESTION",
           parameters = Map(
             "viewName" -> "`spark_catalog`.`default`.`v0`",
-            "operation" -> "TRUNCATE TABLE",
-            "suggestion" -> ""),
+            "operation" -> "TRUNCATE TABLE"),
           context = ExpectedContext(
             fragment = "v0",
             start = 15,
@@ -202,8 +201,7 @@ trait TruncateTableSuiteBase extends QueryTest with DDLCommandTestUtils {
           errorClass = "UNSUPPORTED_TEMP_VIEW_OPERATION.WITH_SUGGESTION",
           parameters = Map(
             "tempViewName" -> "`v1`",
-            "operation" -> "TRUNCATE TABLE",
-            "suggestion" -> ""),
+            "operation" -> "TRUNCATE TABLE"),
           context = ExpectedContext(fragment = "v1", start = 15, stop = 16)
         )
       }
@@ -218,8 +216,7 @@ trait TruncateTableSuiteBase extends QueryTest with DDLCommandTestUtils {
           errorClass = "UNSUPPORTED_TEMP_VIEW_OPERATION.WITH_SUGGESTION",
           parameters = Map(
             "tempViewName" -> "`global_temp`.`v2`",
-            "operation" -> "TRUNCATE TABLE",
-            "suggestion" -> ""),
+            "operation" -> "TRUNCATE TABLE"),
           context = ExpectedContext(fragment = v2, start = 15, stop = 28)
         )
       }

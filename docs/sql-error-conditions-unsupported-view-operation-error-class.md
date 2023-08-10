@@ -21,7 +21,7 @@ license: |
 
 SQLSTATE: none assigned
 
-View `<viewName>` does not support `<operation>`.
+The view `<viewName>` does not support `<operation>`.
 
 This error class has the following derived error classes:
 
@@ -31,6 +31,6 @@ This error class has the following derived error classes:
 
 ## WITH_SUGGESTION
 
-`<suggestion>`.
+Please use ALTER VIEW instead.
 
 

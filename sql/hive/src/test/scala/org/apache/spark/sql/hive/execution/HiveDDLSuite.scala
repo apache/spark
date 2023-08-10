@@ -910,8 +910,7 @@ class HiveDDLSuite
           errorClass = "UNSUPPORTED_VIEW_OPERATION.WITH_SUGGESTION",
           parameters = Map(
             "viewName" -> s"`$SESSION_CATALOG_NAME`.`default`.`$oldViewName`",
-            "operation" -> "ALTER TABLE ... SET TBLPROPERTIES",
-            "suggestion" -> " Please use ALTER VIEW instead."),
+            "operation" -> "ALTER TABLE ... SET TBLPROPERTIES"),
           context = ExpectedContext(fragment = oldViewName, start = 12, stop = 16)
         )
 
@@ -933,8 +932,7 @@ class HiveDDLSuite
           errorClass = "UNSUPPORTED_VIEW_OPERATION.WITH_SUGGESTION",
           parameters = Map(
             "viewName" -> s"`$SESSION_CATALOG_NAME`.`default`.`$oldViewName`",
-            "operation" -> "ALTER TABLE ... UNSET TBLPROPERTIES",
-            "suggestion" -> " Please use ALTER VIEW instead."),
+            "operation" -> "ALTER TABLE ... UNSET TBLPROPERTIES"),
           context = ExpectedContext(fragment = oldViewName, start = 12, stop = 16)
         )
 
@@ -945,8 +943,7 @@ class HiveDDLSuite
           errorClass = "UNSUPPORTED_VIEW_OPERATION.WITH_SUGGESTION",
           parameters = Map(
             "viewName" -> s"`$SESSION_CATALOG_NAME`.`default`.`$oldViewName`",
-            "operation" -> "ALTER TABLE ... SET LOCATION ...",
-            "suggestion" -> " Please use ALTER VIEW instead."),
+            "operation" -> "ALTER TABLE ... SET LOCATION ..."),
           context = ExpectedContext(fragment = oldViewName, start = 12, stop = 16)
         )
 
@@ -957,8 +954,7 @@ class HiveDDLSuite
           errorClass = "UNSUPPORTED_VIEW_OPERATION.WITH_SUGGESTION",
           parameters = Map(
             "viewName" -> s"`$SESSION_CATALOG_NAME`.`default`.`$oldViewName`",
-            "operation" -> "ALTER TABLE ... SET [SERDE|SERDEPROPERTIES]",
-            "suggestion" -> " Please use ALTER VIEW instead."),
+            "operation" -> "ALTER TABLE ... SET [SERDE|SERDEPROPERTIES]"),
           context = ExpectedContext(fragment = oldViewName, start = 12, stop = 16)
         )
 
@@ -969,8 +965,7 @@ class HiveDDLSuite
           errorClass = "UNSUPPORTED_VIEW_OPERATION.WITH_SUGGESTION",
           parameters = Map(
             "viewName" -> s"`$SESSION_CATALOG_NAME`.`default`.`$oldViewName`",
-            "operation" -> "ALTER TABLE ... SET [SERDE|SERDEPROPERTIES]",
-            "suggestion" -> " Please use ALTER VIEW instead."),
+            "operation" -> "ALTER TABLE ... SET [SERDE|SERDEPROPERTIES]"),
           context = ExpectedContext(fragment = oldViewName, start = 12, stop = 16)
         )
 
@@ -981,8 +976,7 @@ class HiveDDLSuite
           errorClass = "UNSUPPORTED_VIEW_OPERATION.WITH_SUGGESTION",
           parameters = Map(
             "viewName" -> s"`$SESSION_CATALOG_NAME`.`default`.`$oldViewName`",
-            "operation" -> "ALTER TABLE ... SET [SERDE|SERDEPROPERTIES]",
-            "suggestion" -> " Please use ALTER VIEW instead."),
+            "operation" -> "ALTER TABLE ... SET [SERDE|SERDEPROPERTIES]"),
           context = ExpectedContext(fragment = oldViewName, start = 12, stop = 16)
         )
 
@@ -993,8 +987,7 @@ class HiveDDLSuite
           errorClass = "UNSUPPORTED_VIEW_OPERATION.WITH_SUGGESTION",
           parameters = Map(
             "viewName" -> s"`$SESSION_CATALOG_NAME`.`default`.`$oldViewName`",
-            "operation" -> "ALTER TABLE ... RECOVER PARTITIONS",
-            "suggestion" -> " Please use ALTER VIEW instead."),
+            "operation" -> "ALTER TABLE ... RECOVER PARTITIONS"),
           context = ExpectedContext(fragment = oldViewName, start = 12, stop = 16)
         )
 
@@ -1005,8 +998,7 @@ class HiveDDLSuite
           errorClass = "UNSUPPORTED_VIEW_OPERATION.WITH_SUGGESTION",
           parameters = Map(
             "viewName" -> s"`$SESSION_CATALOG_NAME`.`default`.`$oldViewName`",
-            "operation" -> "ALTER TABLE ... RENAME TO PARTITION",
-            "suggestion" -> " Please use ALTER VIEW instead."),
+            "operation" -> "ALTER TABLE ... RENAME TO PARTITION"),
           context = ExpectedContext(fragment = oldViewName, start = 12, stop = 16)
         )
 
@@ -1017,8 +1009,7 @@ class HiveDDLSuite
           errorClass = "UNSUPPORTED_VIEW_OPERATION.WITH_SUGGESTION",
           parameters = Map(
             "viewName" -> s"`$SESSION_CATALOG_NAME`.`default`.`$oldViewName`",
-            "operation" -> "ALTER TABLE ... ADD PARTITION ...",
-            "suggestion" -> " Please use ALTER VIEW instead."),
+            "operation" -> "ALTER TABLE ... ADD PARTITION ..."),
           context = ExpectedContext(fragment = oldViewName, start = 12, stop = 16)
         )
 
@@ -1029,8 +1020,7 @@ class HiveDDLSuite
           errorClass = "UNSUPPORTED_VIEW_OPERATION.WITH_SUGGESTION",
           parameters = Map(
             "viewName" -> s"`$SESSION_CATALOG_NAME`.`default`.`$oldViewName`",
-            "operation" -> "ALTER TABLE ... DROP PARTITION ...",
-            "suggestion" -> " Please use ALTER VIEW instead."),
+            "operation" -> "ALTER TABLE ... DROP PARTITION ..."),
           context = ExpectedContext(fragment = oldViewName, start = 12, stop = 16)
         )
 

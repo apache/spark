@@ -202,8 +202,7 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
         errorClass = "UNSUPPORTED_TEMP_VIEW_OPERATION.WITH_SUGGESTION",
         parameters = Map(
           "tempViewName" -> s"`$viewName`",
-          "operation" -> "ALTER TABLE ... SET [SERDE|SERDEPROPERTIES]",
-          "suggestion" -> " Please use ALTER VIEW instead."
+          "operation" -> "ALTER TABLE ... SET [SERDE|SERDEPROPERTIES]"
         ),
         context = ExpectedContext(fragment = viewName, start = 12, stop = 19)
       )
@@ -214,8 +213,7 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
         errorClass = "UNSUPPORTED_TEMP_VIEW_OPERATION.WITH_SUGGESTION",
         parameters = Map(
           "tempViewName" -> s"`$viewName`",
-          "operation" -> "ALTER TABLE ... SET [SERDE|SERDEPROPERTIES]",
-          "suggestion" -> " Please use ALTER VIEW instead."
+          "operation" -> "ALTER TABLE ... SET [SERDE|SERDEPROPERTIES]"
         ),
         context = ExpectedContext(fragment = viewName, start = 12, stop = 19)
       )
@@ -226,8 +224,7 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
         errorClass = "UNSUPPORTED_TEMP_VIEW_OPERATION.WITH_SUGGESTION",
         parameters = Map(
           "tempViewName" -> s"`$viewName`",
-          "operation" -> "ALTER TABLE ... SET [SERDE|SERDEPROPERTIES]",
-          "suggestion" -> " Please use ALTER VIEW instead."
+          "operation" -> "ALTER TABLE ... SET [SERDE|SERDEPROPERTIES]"
         ),
         context = ExpectedContext(fragment = viewName, start = 12, stop = 19)
       )
@@ -238,8 +235,7 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
         errorClass = "UNSUPPORTED_TEMP_VIEW_OPERATION.WITH_SUGGESTION",
         parameters = Map(
           "tempViewName" -> s"`$viewName`",
-          "operation" -> "ALTER TABLE ... RENAME TO PARTITION",
-          "suggestion" -> " Please use ALTER VIEW instead."
+          "operation" -> "ALTER TABLE ... RENAME TO PARTITION"
         ),
         context = ExpectedContext(fragment = viewName, start = 12, stop = 19)
       )
@@ -250,8 +246,7 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
         errorClass = "UNSUPPORTED_TEMP_VIEW_OPERATION.WITH_SUGGESTION",
         parameters = Map(
           "tempViewName" -> s"`$viewName`",
-          "operation" -> "ALTER TABLE ... RECOVER PARTITIONS",
-          "suggestion" -> " Please use ALTER VIEW instead."
+          "operation" -> "ALTER TABLE ... RECOVER PARTITIONS"
         ),
         context = ExpectedContext(fragment = viewName, start = 12, stop = 19)
       )
@@ -262,8 +257,7 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
         errorClass = "UNSUPPORTED_TEMP_VIEW_OPERATION.WITH_SUGGESTION",
         parameters = Map(
           "tempViewName" -> s"`$viewName`",
-          "operation" -> "ALTER TABLE ... SET LOCATION ...",
-          "suggestion" -> " Please use ALTER VIEW instead."
+          "operation" -> "ALTER TABLE ... SET LOCATION ..."
         ),
         context = ExpectedContext(fragment = viewName, start = 12, stop = 19)
       )
@@ -274,8 +268,7 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
         errorClass = "UNSUPPORTED_TEMP_VIEW_OPERATION.WITH_SUGGESTION",
         parameters = Map(
           "tempViewName" -> s"`$viewName`",
-          "operation" -> "ALTER TABLE ... SET LOCATION ...",
-          "suggestion" -> " Please use ALTER VIEW instead."
+          "operation" -> "ALTER TABLE ... SET LOCATION ..."
         ),
         context = ExpectedContext(fragment = viewName, start = 12, stop = 19)
       )
@@ -286,8 +279,7 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
         errorClass = "UNSUPPORTED_TEMP_VIEW_OPERATION.WITH_SUGGESTION",
         parameters = Map(
           "tempViewName" -> s"`$viewName`",
-          "operation" -> "ALTER TABLE ... ADD PARTITION ...",
-          "suggestion" -> " Please use ALTER VIEW instead."
+          "operation" -> "ALTER TABLE ... ADD PARTITION ..."
         ),
         context = ExpectedContext(fragment = viewName, start = 12, stop = 19)
       )
@@ -298,8 +290,7 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
         errorClass = "UNSUPPORTED_TEMP_VIEW_OPERATION.WITH_SUGGESTION",
         parameters = Map(
           "tempViewName" -> s"`$viewName`",
-          "operation" -> "ALTER TABLE ... DROP PARTITION ...",
-          "suggestion" -> " Please use ALTER VIEW instead."
+          "operation" -> "ALTER TABLE ... DROP PARTITION ..."
         ),
         context = ExpectedContext(fragment = viewName, start = 12, stop = 19)
       )
@@ -310,8 +301,7 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
         errorClass = "UNSUPPORTED_TEMP_VIEW_OPERATION.WITH_SUGGESTION",
         parameters = Map(
           "tempViewName" -> s"`$viewName`",
-          "operation" -> "ALTER TABLE ... SET TBLPROPERTIES",
-          "suggestion" -> " Please use ALTER VIEW instead."
+          "operation" -> "ALTER TABLE ... SET TBLPROPERTIES"
         ),
         context = ExpectedContext(fragment = viewName, start = 12, stop = 19)
       )
@@ -322,8 +312,7 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
         errorClass = "UNSUPPORTED_TEMP_VIEW_OPERATION.WITH_SUGGESTION",
         parameters = Map(
           "tempViewName" -> s"`$viewName`",
-          "operation" -> "ALTER TABLE ... UNSET TBLPROPERTIES",
-          "suggestion" -> " Please use ALTER VIEW instead."
+          "operation" -> "ALTER TABLE ... UNSET TBLPROPERTIES"
         ),
         context = ExpectedContext(fragment = viewName, start = 12, stop = 19)
       )
@@ -353,8 +342,7 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
         errorClass = "UNSUPPORTED_TEMP_VIEW_OPERATION.WITH_SUGGESTION",
         parameters = Map(
           "tempViewName" -> s"`$viewName`",
-          "operation" -> "LOAD DATA",
-          "suggestion" -> ""
+          "operation" -> "LOAD DATA"
         ),
         context = ExpectedContext(
           fragment = viewName,
@@ -436,8 +424,7 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
         errorClass = "UNSUPPORTED_VIEW_OPERATION.WITH_SUGGESTION",
         parameters = Map(
           "viewName" -> s"`$SESSION_CATALOG_NAME`.`default`.`testview`",
-          "operation" -> "LOAD DATA",
-          "suggestion" -> ""),
+          "operation" -> "LOAD DATA"),
         context = ExpectedContext(
           fragment = viewName,
           start = sqlText.length - 8,

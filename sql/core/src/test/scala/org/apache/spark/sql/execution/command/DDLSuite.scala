@@ -2071,8 +2071,7 @@ abstract class DDLSuite extends QueryTest with DDLSuiteBase {
         errorClass = "UNSUPPORTED_TEMP_VIEW_OPERATION.WITH_SUGGESTION",
         parameters = Map(
           "tempViewName" -> "`tmp_v`",
-          "operation" -> "ALTER TABLE ... ADD COLUMNS",
-          "suggestion" -> ""),
+          "operation" -> "ALTER TABLE ... ADD COLUMNS"),
         context = ExpectedContext(
           fragment = "tmp_v",
           start = 12,
@@ -2091,8 +2090,7 @@ abstract class DDLSuite extends QueryTest with DDLSuiteBase {
         errorClass = "UNSUPPORTED_VIEW_OPERATION.WITH_SUGGESTION",
         parameters = Map(
           "viewName" -> s"`$SESSION_CATALOG_NAME`.`default`.`v1`",
-          "operation" -> "ALTER TABLE ... ADD COLUMNS",
-          "suggestion" -> ""),
+          "operation" -> "ALTER TABLE ... ADD COLUMNS"),
         context = ExpectedContext(
           fragment = "v1",
           start = 12,

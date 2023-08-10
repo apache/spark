@@ -60,8 +60,7 @@ trait ShowPartitionsSuiteBase extends command.ShowPartitionsSuiteBase {
           errorClass = "UNSUPPORTED_VIEW_OPERATION.WITH_SUGGESTION",
           parameters = Map(
             "viewName" -> s"`spark_catalog`.`default`.`view1`",
-            "operation" -> "SHOW PARTITIONS",
-            "suggestion" -> ""
+            "operation" -> "SHOW PARTITIONS"
           ),
           context = ExpectedContext(
             fragment = view,
@@ -84,8 +83,7 @@ trait ShowPartitionsSuiteBase extends command.ShowPartitionsSuiteBase {
         errorClass = "UNSUPPORTED_TEMP_VIEW_OPERATION.WITH_SUGGESTION",
         parameters = Map(
           "tempViewName" -> "`test_view`",
-          "operation" -> "SHOW PARTITIONS",
-          "suggestion" -> ""
+          "operation" -> "SHOW PARTITIONS"
         ),
         context = ExpectedContext(
           fragment = viewName,
@@ -129,8 +127,7 @@ class ShowPartitionsSuite extends ShowPartitionsSuiteBase with CommandSuiteBase 
         errorClass = "UNSUPPORTED_TEMP_VIEW_OPERATION.WITH_SUGGESTION",
         parameters = Map(
           "tempViewName" -> "`test_view`",
-          "operation" -> "SHOW PARTITIONS",
-          "suggestion" -> ""
+          "operation" -> "SHOW PARTITIONS"
         ),
         context = ExpectedContext(
           fragment = viewName,

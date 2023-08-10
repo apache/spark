@@ -21,7 +21,7 @@ license: |
 
 SQLSTATE: none assigned
 
-Temp view `<tempViewName>` does not support `<operation>`.
+The temp view `<tempViewName>` does not support `<operation>`.
 
 This error class has the following derived error classes:
 
@@ -31,6 +31,6 @@ This error class has the following derived error classes:
 
 ## WITH_SUGGESTION
 
-`<suggestion>`.
+Please use ALTER VIEW instead.
 
 

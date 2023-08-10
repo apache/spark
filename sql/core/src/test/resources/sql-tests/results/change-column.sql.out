@@ -273,7 +273,6 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "UNSUPPORTED_TEMP_VIEW_OPERATION.WITH_SUGGESTION",
   "messageParameters" : {
     "operation" : "ALTER TABLE ... CHANGE COLUMN",
-    "suggestion" : "",
     "tempViewName" : "`temp_view`"
   },
   "queryContext" : [ {
@@ -304,7 +303,6 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "UNSUPPORTED_TEMP_VIEW_OPERATION.WITH_SUGGESTION",
   "messageParameters" : {
     "operation" : "ALTER TABLE ... CHANGE COLUMN",
-    "suggestion" : "",
     "tempViewName" : "`global_temp`.`global_temp_view`"
   },
   "queryContext" : [ {

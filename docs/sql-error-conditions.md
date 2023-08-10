@@ -2045,7 +2045,7 @@ For more details see [UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY](sql-error-condit
 
 SQLSTATE: none assigned
 
-Table `<tableName>` does not support `<operation>`.
+The table `<tableName>` does not support `<operation>`.
 
 For more details see [UNSUPPORTED_TABLE_OPERATION](sql-error-conditions-unsupported-table-operation-error-class.html)
 
@@ -2053,7 +2053,7 @@ For more details see [UNSUPPORTED_TABLE_OPERATION](sql-error-conditions-unsuppor
 
 SQLSTATE: none assigned
 
-Temp view `<tempViewName>` does not support `<operation>`.
+The temp view `<tempViewName>` does not support `<operation>`.
 
 For more details see [UNSUPPORTED_TEMP_VIEW_OPERATION](sql-error-conditions-unsupported-temp-view-operation-error-class.html)
 
@@ -2067,7 +2067,7 @@ Literals of the type `<unsupportedType>` are not supported. Supported types are 
 
 SQLSTATE: none assigned
 
-View `<viewName>` does not support `<operation>`.
+The view `<viewName>` does not support `<operation>`.
 
 For more details see [UNSUPPORTED_VIEW_OPERATION](sql-error-conditions-unsupported-view-operation-error-class.html)
 
