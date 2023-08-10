@@ -387,6 +387,10 @@ private[sql] class AvroDeserializer(
       case (LONG, _: DayTimeIntervalType) => (updater, ordinal, value) =>
         updater.setLong(ordinal, value.asInstanceOf[Long])
 
+      case (LONG, _: DecimalType) => (updater, ordinal, value) =>
+        val d = avroType.getLogicalType.asInstanceOf[CustomDecimal]
+        updater.setDecimal(ordinal, Decimal(value.asInstanceOf[Long], d.precision, d.scale))
+
       case _ => throw new IncompatibleSchemaException(incompatibleMsg)
     }
   }
