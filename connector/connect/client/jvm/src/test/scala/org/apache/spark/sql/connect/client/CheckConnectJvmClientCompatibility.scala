@@ -340,6 +340,9 @@ object CheckConnectJvmClientCompatibility {
       ProblemFilters.exclude[MissingClassProblem](
         "org.apache.spark.sql.application.ConnectRepl$" // developer API
       ),
+      ProblemFilters.exclude[MissingClassProblem](
+        "org.apache.spark.sql.connect.client.AmmoniteClassFinder" // developer API
+      ),
 
       // SparkSession
       // developer API
