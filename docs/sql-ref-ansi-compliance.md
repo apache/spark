@@ -636,6 +636,7 @@ Below is a list of all the keywords in Spark SQL.
 |TERMINATED|non-reserved|non-reserved|non-reserved|
 |THEN|reserved|non-reserved|reserved|
 |TIME|reserved|non-reserved|reserved|
+|TIMEDIFF|non-reserved|non-reserved|non-reserved|
 |TIMESTAMP|non-reserved|non-reserved|non-reserved|
 |TIMESTAMP_LTZ|non-reserved|non-reserved|non-reserved|
 |TIMESTAMP_NTZ|non-reserved|non-reserved|non-reserved|
