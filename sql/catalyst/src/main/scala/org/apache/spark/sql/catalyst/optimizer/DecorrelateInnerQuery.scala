@@ -810,9 +810,21 @@ object DecorrelateInnerQuery extends PredicateHelper {
             // outer (correlated) references. Furthermore, correlated conjuncts are split
             // into 'equalityCond' (those that are equalities) and all rest ('predicates').
             // 'equivalences' track equivalent attributes given 'equalityCond'.
-            def splitCorrelatedPredicate(condition: Option[Expression],
-                                         isInnerJoin: Boolean,
-                                         shouldDecorrelatePredicates: Boolean):
+            // The split is only performed if 'shouldDecorrelatePredicates' is true.
+            // The input parameter 'isInnerJoin' is set to true for INNER joins and helps
+            // determine whether some predicates can be lifted up from the join (this is only
+            // valid for inner joins).
+            // Example: For a 'condition' A = outer(X) AND B > outer(Y) AND C = D, the output
+            // would be:
+            // correlated = (A = outer(X), B > outer(Y))
+            // uncorrelated = (C = D)
+            // equalityCond = (A = outer(X))
+            // predicates = (B > outer(Y))
+            // equivalences: (A -> outer(X))
+            def splitCorrelatedPredicate(
+                condition: Option[Expression],
+                isInnerJoin: Boolean,
+                shouldDecorrelatePredicates: Boolean):
             (Seq[Expression], Seq[Expression], Seq[Expression],
               Seq[Expression], AttributeMap[Attribute]) = {
               // Similar to Filters above, we split the join condition (if present) into correlated

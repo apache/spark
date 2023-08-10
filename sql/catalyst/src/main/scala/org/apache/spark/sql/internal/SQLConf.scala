@@ -4271,8 +4271,9 @@ object SQLConf {
   val DECORRELATE_JOIN_PREDICATE_ENABLED =
     buildConf("spark.sql.optimizer.decorrelateJoinPredicate.enabled")
       .internal()
-      .doc("Decorrelate subqueries with correlated references in join predicates.")
-      .version("3.5.0")
+      .doc("Decorrelate scalar and lateral subqueries with correlated references in join " +
+        "predicates. Only enabled if DECORRELATE_INNER_QUERY_ENABLED is enabled")
+      .version("4.0.0")
       .booleanConf
       .createWithDefault(true)
 
