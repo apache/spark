@@ -79,7 +79,6 @@ import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.storage.CacheId
 import org.apache.spark.util.Utils
-import org.apache.spark.util.sketch.BloomFilter
 
 final case class InvalidCommandInput(
     private val message: String = "",
@@ -1733,11 +1732,10 @@ class SparkConnectPlanner(val sessionHolder: SessionHolder) extends Logging {
         Some(Lead(children.head, children(1), children(2), ignoreNulls))
 
       case "bloom_filter_agg" if fun.getArgumentsCount == 3 =>
-        // [col, expectedNumItems: Long, numBits: Long] or
-        // [col, expectedNumItems: Long, fpp: Double]
+        // [col, expectedNumItems: Long, numBits: Long]
         val children = fun.getArgumentsList.asScala.map(transformExpression)
 
-        // Check expectedNumItems > 0L
+        // Check expectedNumItems is LongType and value greater than 0L
         val expectedNumItemsExpr = children(1)
         val expectedNumItems = expectedNumItemsExpr match {
           case Literal(l: Long, LongType) => l
@@ -1748,30 +1746,17 @@ class SparkConnectPlanner(val sessionHolder: SessionHolder) extends Logging {
           throw InvalidPlanInput("Expected insertions must be positive.")
         }
 
-        val numberBitsOrFpp = children(2)
-
-        val numBitsExpr = numberBitsOrFpp match {
+        val numBitsExpr = children(2)
+        // Check numBits is LongType and value greater than 0L
+        numBitsExpr match {
           case Literal(numBits: Long, LongType) =>
-            // Check numBits > 0L
             if (numBits <= 0L) {
               throw InvalidPlanInput("Number of bits must be positive.")
             }
-            numberBitsOrFpp
-          case DoubleLiteral(fpp) =>
-            // Check fpp not NaN and in  (0.0, 1.0).
-            if (fpp.isNaN || fpp <= 0d || fpp >= 1d) {
-              throw InvalidPlanInput("False positive probability must be within range (0.0, 1.0)")
-            }
-            // Calculate numBits through expectedNumItems and fpp,
-            // refer to `BloomFilter.optimalNumOfBits(long, double)`.
-            val numBits = BloomFilter.optimalNumOfBits(expectedNumItems, fpp)
-            if (numBits <= 0L) {
-              throw InvalidPlanInput("Number of bits must be positive")
-            }
-            Literal(numBits, LongType)
           case _ =>
-            throw InvalidPlanInput("The 3rd parameter must be double or long literal.")
+            throw InvalidPlanInput("Number of bits must be long literal.")
         }
+
         Some(
           new BloomFilterAggregate(children.head, expectedNumItemsExpr, numBitsExpr)
             .toAggregateExpression())

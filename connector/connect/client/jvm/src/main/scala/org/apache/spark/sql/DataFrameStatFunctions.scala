@@ -22,6 +22,7 @@ import java.io.ByteArrayInputStream
 
 import scala.collection.JavaConverters._
 
+import org.apache.spark.SparkException
 import org.apache.spark.connect.proto.{Relation, StatSampleBy}
 import org.apache.spark.sql.DataFrameStatFunctions.approxQuantileResultEncoder
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{ArrayEncoder, BinaryEncoder, PrimitiveDoubleEncoder}
@@ -651,12 +652,16 @@ final class DataFrameStatFunctions private[sql] (sparkSession: SparkSession, roo
       expectedNumItems: Long,
       numBits: Long,
       fpp: Double): BloomFilter = {
-
-    val agg = if (!fpp.isNaN) {
-      Column.fn("bloom_filter_agg", col, lit(expectedNumItems), lit(fpp))
+    def numBitsValue: Long = if (!fpp.isNaN) {
+      BloomFilter.optimalNumOfBits(expectedNumItems, fpp)
     } else {
-      Column.fn("bloom_filter_agg", col, lit(expectedNumItems), lit(numBits))
+      numBits
     }
+
+    if (fpp <= 0d || fpp >= 1d) {
+      throw new SparkException("False positive probability must be within range (0.0, 1.0)")
+    }
+    val agg = Column.fn("bloom_filter_agg", col, lit(expectedNumItems), lit(numBitsValue))
 
     val ds = sparkSession.newDataset(BinaryEncoder) { builder =>
       builder.getProjectBuilder
