@@ -39,9 +39,7 @@ object TableOutputResolver {
       expected: Seq[Attribute],
       query: LogicalPlan,
       byName: Boolean,
-      conf: SQLConf,
-      // TODO: Only DS v1 writing will set it to true. We should enable in for DS v2 as well.
-      supportColDefaultValue: Boolean = false): LogicalPlan = {
+      conf: SQLConf): LogicalPlan = {
 
     val actualExpectedCols = expected.map { attr =>
       attr.withDataType(CharVarcharUtils.getRawType(attr.metadata).getOrElse(attr.dataType))
@@ -50,37 +48,24 @@ object TableOutputResolver {
     if (actualExpectedCols.size < query.output.size) {
       throw QueryCompilationErrors.cannotWriteTooManyColumnsToTableError(
         tableName, actualExpectedCols.map(_.name), query)
+    } else if (actualExpectedCols.size > query.output.size && !byName) {
+      throw QueryCompilationErrors.cannotWriteNotEnoughColumnsToTableError(
+        tableName, actualExpectedCols.map(_.name), query)
     }
 
     val errors = new mutable.ArrayBuffer[String]()
     val resolved: Seq[NamedExpression] = if (byName) {
       // If a top-level column does not have a corresponding value in the input query, fill with
-      // the column's default value. We need to pass `fillDefaultValue` as true here, if the
-      // `supportColDefaultValue` parameter is also true.
+      // the column's default value.
       reorderColumnsByName(
         tableName,
         query.output,
         actualExpectedCols,
         conf,
         errors += _,
-        fillDefaultValue = supportColDefaultValue)
+        fillDefaultValue = true)
     } else {
-      // If the target table needs more columns than the input query, fill them with
-      // the columns' default values, if the `supportColDefaultValue` parameter is true.
-      val fillDefaultValue = supportColDefaultValue && actualExpectedCols.size > query.output.size
-      val queryOutputCols = if (fillDefaultValue) {
-        query.output ++ actualExpectedCols.drop(query.output.size).flatMap { expectedCol =>
-          getDefaultValueExprOrNullLit(expectedCol, conf.useNullsForMissingDefaultColumnValues)
-        }
-      } else {
-        query.output
-      }
-      if (actualExpectedCols.size > queryOutputCols.size) {
-        throw QueryCompilationErrors.cannotWriteNotEnoughColumnsToTableError(
-          tableName, actualExpectedCols.map(_.name), query)
-      }
-
-      resolveColumnsByPosition(tableName, queryOutputCols, actualExpectedCols, conf, errors += _)
+      resolveColumnsByPosition(tableName, query.output, actualExpectedCols, conf, errors += _)
     }
 
     if (errors.nonEmpty) {
