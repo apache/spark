@@ -225,13 +225,13 @@ object DeduplicateRelations extends Rule[LogicalPlan] {
                 attrMap: Map[Attribute, Attribute]): Seq[T] = {
               exprs.map { expr =>
                 expr.transformWithPruning(_.containsPattern(ATTRIBUTE_REFERENCE)) {
-                  case a: AttributeReference =>
-                    attrMap.getOrElse(a, a)
+                  case a: AttributeReference => attrMap.getOrElse(a, a)
                 }.asInstanceOf[T]
               }
             }
 
             planWithNewChildren match {
+              // TODO: we should handle all special cases here. SPARK-44754
               case c: CoGroup =>
                 // SPARK-43781: CoGroup is a special case, `rewriteAttrs` will incorrectly update
                 // some fields that do not need to be updated. We need to update the output
