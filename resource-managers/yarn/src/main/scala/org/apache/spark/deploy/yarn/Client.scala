@@ -27,6 +27,7 @@ import java.util.zip.{ZipEntry, ZipOutputStream}
 
 import scala.collection.JavaConverters._
 import scala.collection.immutable.{Map => IMap}
+import scala.collection.mutable
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet, ListBuffer, Map}
 import scala.util.control.NonFatal
 
@@ -470,7 +471,7 @@ private[spark] class Client(
    * @param jars : the list of jars to upload
    * @return a list of directories to be preloaded
    * */
-  def directoriesToBePreloaded(jars: Seq[String]): ArrayBuffer[URI] = {
+  def directoriesToBePreloaded(jars: Seq[String]): mutable.Iterable[URI] = {
     val directoryCounter = new HashMap[URI, Int]()
     jars.foreach { jar =>
       if (!Utils.isLocalUri(jar) && !new GlobPattern(jar).hasWildcard) {
@@ -481,7 +482,7 @@ private[spark] class Client(
     }
     directoryCounter.collect {
       case (uri, count) if count >= perDirectoryThreshold => uri
-    }.to[ArrayBuffer]
+    }
   }
 
   /**

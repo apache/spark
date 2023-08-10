@@ -24,7 +24,7 @@ import java.util.Properties
 import java.util.concurrent.ConcurrentHashMap
 
 import scala.collection.JavaConverters._
-import scala.collection.mutable.{ArrayBuffer, HashMap => MutableHashMap}
+import scala.collection.mutable.{HashMap => MutableHashMap}
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, FileSystem, Path}
@@ -681,7 +681,7 @@ class ClientSuite extends SparkFunSuite with Matchers {
       "local:/local/b.jar",
       "local:/local/c.jar"
     ))
-    assert(directories === Seq(new URI("hdfs:/valid")).to[ArrayBuffer])
+    assert(directories.seq === Seq(new URI("hdfs:/valid")))
   }
 
   test("SPARK-44306: test statCachePreload") {
