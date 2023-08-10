@@ -251,4 +251,14 @@ class SparkSessionSuite extends ConnectFunSuite {
       executor.shutdown()
     }
   }
+
+  test("deprecated methods") {
+    SparkSession
+      .builder()
+      .master("yayay")
+      .appName("bob")
+      .enableHiveSupport()
+      .create()
+      .close()
+  }
 }
