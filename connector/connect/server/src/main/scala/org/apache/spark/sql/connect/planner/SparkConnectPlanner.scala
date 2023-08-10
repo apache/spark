@@ -3062,7 +3062,7 @@ class SparkConnectPlanner(val sessionHolder: SessionHolder) extends Logging {
 
       case StreamingQueryManagerCommand.CommandCase.GET_QUERY =>
         val query = Option(session.streams.get(command.getGetQuery))
-        query.foreach{q => respBuilder.setQuery(buildStreamingQueryInstance(q))}
+        query.foreach { q => respBuilder.setQuery(buildStreamingQueryInstance(q)) }
 
       case StreamingQueryManagerCommand.CommandCase.AWAIT_ANY_TERMINATION =>
         if (command.getAwaitAnyTermination.hasTimeoutMs) {

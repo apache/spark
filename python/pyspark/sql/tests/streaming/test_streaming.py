@@ -328,7 +328,6 @@ class StreamingTestsMixin:
 
         self.assertIsNone(self.spark.streams.get(q.id))
 
-
     def test_query_manager_await_termination(self):
         df = self.spark.readStream.format("text").load("python/test_support/sql/streaming")
         for q in self.spark.streams.active:
