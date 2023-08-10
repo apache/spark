@@ -607,10 +607,10 @@ def read_udtf(pickleSer, infile, eval_type):
             "the query again."
         )
 
-    # Inspects the values of the projected PARTITION BY expressions, if any.
-    # Returns true when these values change, in which case the caller should invoke
-    # the 'terminate' method on the UDTF class instance and then destroy it and
-    # creates a new one to implement the desired partitioning semantics.
+    # Inspects the values of the projected PARTITION BY expressions, if any. Returns true when
+    # these values change, in which case the caller should invoke the 'terminate' method on the
+    # UDTF class instance and then destroy it and creates a new one to implement the desired
+    # partitioning semantics.
     def check_partition_boundaries(arguments):
         if num_partition_child_indexes == 0 or udtf_state.prev_arguments is None:
             udtf_state.prev_arguments = arguments
@@ -757,11 +757,10 @@ def read_udtf(pickleSer, infile, eval_type):
                         # Call 'terminate' on the UDTF class instance, if applicable.
                         # Then destroy the UDTF class instance and create a new one.
                         if udtf_state.terminate is not None:
-                            result = udtf_state.terminate()
-                            # yield udtf_state.terminate()
-                            yield result
+                            yield udtf_state.terminate()
                         create_udtf_class_instance(return_type)
-                        udtf_state.eval = wrap_udtf(getattr(udtf_state.udtf, "eval"), return_type)
+                        udtf_state.eval = wrap_udtf(
+                            getattr(udtf_state.udtf, "eval"), return_type)
                         udtf_state.set_terminate(wrap_udtf, return_type)
                     yield udtf_state.eval(*arguments)
             finally:
