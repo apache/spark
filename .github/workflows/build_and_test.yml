@@ -378,6 +378,7 @@ jobs:
       SKIP_MIMA: true
       SKIP_PACKAGING: true
       METASPACE_SIZE: 1g
+      BRANCH: ${{ inputs.branch }}
     steps:
     - name: Checkout Spark repository
       uses: actions/checkout@v3
@@ -418,7 +419,7 @@ jobs:
     - name: Free up disk space
       shell: 'script -q -e -c "bash {0}"'
       run: |
-        if [[ "$MODULES_TO_TEST" != *"pyspark-ml"* ]]; then
+        if [[ "$MODULES_TO_TEST" != *"pyspark-ml"* ]] && [[ "$BRANCH" != "branch-3.5" ]]; then
           # uninstall libraries dedicated for ML testing
           python3.9 -m pip uninstall -y torch torchvision torcheval torchtnt tensorboard mlflow
         fi
