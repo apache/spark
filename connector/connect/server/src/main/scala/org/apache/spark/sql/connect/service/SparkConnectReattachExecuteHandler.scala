@@ -32,10 +32,21 @@ class SparkConnectReattachExecuteHandler(
     val sessionHolder = SparkConnectService
       .getIsolatedSession(v.getUserContext.getUserId, v.getSessionId)
     val executeHolder = sessionHolder.executeHolder(v.getOperationId).getOrElse {
-      logDebug(s"Reattach operation not found: ${v.getOperationId}")
-      throw new SparkSQLException(
-        errorClass = "INVALID_HANDLE.OPERATION_NOT_FOUND",
-        messageParameters = Map("handle" -> v.getOperationId))
+      if (SparkConnectService.executionManager
+          .getAbandonedTombstone(
+            ExecuteKey(sessionHolder.userId, sessionHolder.sessionId, v.getOperationId))
+          .isDefined) {
+        logDebug(s"Reattach operation abandoned: ${v.getOperationId}")
+        throw new SparkSQLException(
+          errorClass = "INVALID_HANDLE.OPERATION_ABANDONED",
+          messageParameters = Map("handle" -> v.getOperationId))
+
+      } else {
+        logDebug(s"Reattach operation not found: ${v.getOperationId}")
+        throw new SparkSQLException(
+          errorClass = "INVALID_HANDLE.OPERATION_NOT_FOUND",
+          messageParameters = Map("handle" -> v.getOperationId))
+      }
     }
     if (!executeHolder.reattachable) {
       logWarning(s"Reattach to not reattachable operation.")

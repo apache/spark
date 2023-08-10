@@ -90,6 +90,14 @@ object Connect {
       .timeConf(TimeUnit.MILLISECONDS)
       .createWithDefaultString("30s")
 
+  val CONNECT_EXECUTE_MANAGER_ABANDONED_TOMBSTONES_SIZE =
+    ConfigBuilder("spark.connect.execute.manager.abandonedTomstonesSize")
+      .internal()
+      .doc("Maximum size of the cache of abandoned executions.")
+      .version("3.5.0")
+      .intConf
+      .createWithDefaultString("10000")
+
   val CONNECT_EXECUTE_REATTACHABLE_ENABLED =
     ConfigBuilder("spark.connect.execute.reattachable.enabled")
       .internal()

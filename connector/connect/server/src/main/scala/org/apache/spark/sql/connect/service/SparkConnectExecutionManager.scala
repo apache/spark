@@ -19,13 +19,16 @@ package org.apache.spark.sql.connect.service
 
 import java.util.concurrent.{Executors, ScheduledExecutorService, TimeUnit}
 
+import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.util.control.NonFatal
+
+import com.google.common.cache.CacheBuilder
 
 import org.apache.spark.{SparkEnv, SparkSQLException}
 import org.apache.spark.connect.proto
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.connect.config.Connect.{CONNECT_EXECUTE_MANAGER_DETACHED_TIMEOUT, CONNECT_EXECUTE_MANAGER_MAINTENANCE_INTERVAL}
+import org.apache.spark.sql.connect.config.Connect.{CONNECT_EXECUTE_MANAGER_ABANDONED_TOMBSTONES_SIZE, CONNECT_EXECUTE_MANAGER_DETACHED_TIMEOUT, CONNECT_EXECUTE_MANAGER_MAINTENANCE_INTERVAL}
 
 // Unique key identifying execution by combination of user, session and operation id
 case class ExecuteKey(userId: String, sessionId: String, operationId: String)
@@ -43,6 +46,12 @@ private[connect] class SparkConnectExecutionManager() extends Logging {
     new mutable.HashMap[ExecuteKey, ExecuteHolder]()
   private val executionsLock = new Object
 
+  /** Graveyard of tombstones of executions that were abandoned and removed. */
+  private val abandonedTombstones = CacheBuilder
+    .newBuilder()
+    .maximumSize(SparkEnv.get.conf.get(CONNECT_EXECUTE_MANAGER_ABANDONED_TOMBSTONES_SIZE))
+    .build[ExecuteKey, ExecuteInfo]()
+
   /** None if there are no executions. Otherwise, the time when the last execution was removed. */
   private var lastExecutionTime: Option[Long] = Some(System.currentTimeMillis())
 
@@ -57,10 +66,20 @@ private[connect] class SparkConnectExecutionManager() extends Logging {
       .getOrCreateIsolatedSession(request.getUserContext.getUserId, request.getSessionId)
     val executeHolder = new ExecuteHolder(request, sessionHolder)
     executionsLock.synchronized {
+      // Check if the operation already exists, both in active executions, and in the graveyard
+      // of tombstones of executions that have been abandoned.
+      // The latter is to prevent double execution when a client retries execution, thinking it
+      // never reached the server, but in fact it did, and already got removed as abandoned.
       if (executions.get(executeHolder.key).isDefined) {
-        throw new SparkSQLException(
-          errorClass = "INVALID_HANDLE.OPERATION_ALREADY_EXISTS",
-          messageParameters = Map("handle" -> executeHolder.operationId))
+        if (getAbandonedTombstone(executeHolder.key).isDefined) {
+          throw new SparkSQLException(
+            errorClass = "INVALID_HANDLE.OPERATION_ABANDONED",
+            messageParameters = Map("handle" -> executeHolder.operationId))
+        } else {
+          throw new SparkSQLException(
+            errorClass = "INVALID_HANDLE.OPERATION_ALREADY_EXISTS",
+            messageParameters = Map("handle" -> executeHolder.operationId))
+        }
       }
       sessionHolder.addExecuteHolder(executeHolder)
       executions.put(executeHolder.key, executeHolder)
@@ -91,16 +110,29 @@ private[connect] class SparkConnectExecutionManager() extends Logging {
     executeHolder.foreach(_.close())
   }
 
+  /** Get info about abandonex execution, if there is one. */
+  private[connect] def getAbandonedTombstone(key: ExecuteKey): Option[ExecuteInfo] = {
+    Option(abandonedTombstones.getIfPresent(key))
+  }
+
   /**
    * If there are no executions, return Left with System.currentTimeMillis of last active
    * execution. Otherwise return Right with list of ExecuteInfo of all executions.
    */
-  def listAllExecutions: Either[Long, Seq[ExecuteInfo]] = executionsLock.synchronized {
+  def listActiveExecutions: Either[Long, Seq[ExecuteInfo]] = executionsLock.synchronized {
     if (executions.isEmpty) {
       Left(lastExecutionTime.get)
     } else {
-      Right(executions.values.map(_.getExecuteInfo).toSeq)
+      Right(executions.values.map(_.getExecuteInfo).toBuffer.toSeq)
     }
+  }
+
+  /**
+   * Return list of executions that got abandoned and removed by periodic maintenance. This is a
+   * cache, and the tombstones will be eventually removed.
+   */
+  def listAbandonedExecutions: Seq[ExecuteInfo] = {
+    abandonedTombstones.asMap.asScala.values.toBuffer.toSeq
   }
 
   private[service] def shutdown(): Unit = executionsLock.synchronized {
@@ -143,7 +175,7 @@ private[connect] class SparkConnectExecutionManager() extends Logging {
     logInfo("Started periodic run of SparkConnectExecutionManager maintenance.")
 
     // Find any detached executions that expired and should be removed.
-    val toRemove = new mutable.ArrayBuffer[ExecuteKey]()
+    val toRemove = new mutable.ArrayBuffer[ExecuteHolder]()
     executionsLock.synchronized {
       val nowMs = System.currentTimeMillis()
 
@@ -151,16 +183,20 @@ private[connect] class SparkConnectExecutionManager() extends Logging {
         executeHolder.lastAttachedRpcTime match {
           case Some(detached) =>
             if (detached + timeout < nowMs) {
-              toRemove += executeHolder.key
+              toRemove += executeHolder
             }
           case _ => // execution is active
         }
       }
     }
     if (!toRemove.isEmpty) {
-      logInfo(s"Found executions $toRemove that were abandoned and expired and will be removed.")
       // .. and remove them.
-      toRemove.foreach(removeExecuteHolder(_))
+      toRemove.foreach { executeHolder =>
+        val info = executeHolder.getExecuteInfo
+        logInfo(s"Found execution $info that was abandoned and expired and will be removed.")
+        removeExecuteHolder(executeHolder.key)
+        abandonedTombstones.put(executeHolder.key, info)
+      }
     }
     logInfo("Finished periodic run of SparkConnectExecutionManager maintenance.")
   }
