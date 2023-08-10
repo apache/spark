@@ -94,7 +94,7 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
       ConstantFolding(ColumnPruning(Aggregate(Nil, Seq(alias), filterCreationSidePlan)))
     val bloomFilterSubquery = if (canReuseExchange) {
       // Try to reuse the results of broadcast exchange.
-      RuntimeFilterSubquery(filterApplicationSideExp, aggregate, Seq(filterCreationSideExp), 0)
+      RuntimeFilterSubquery(filterApplicationSideExp, aggregate, filterCreationSideExp)
     } else {
       ScalarSubquery(aggregate, Nil)
     }

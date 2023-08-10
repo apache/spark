@@ -38,15 +38,14 @@ case class PlanRuntimeFilterFilters(sparkSession: SparkSession) extends Rule[Spa
     }
 
     plan.transformAllExpressionsWithPruning(_.containsPattern(RUNTIME_FILTER_SUBQUERY)) {
-      case RuntimeFilterSubquery(
-      _, buildPlan, buildKeys, broadcastKeyIndex, exprId, _) =>
+      case RuntimeFilterSubquery(_, buildPlan, buildKey, exprId, _) =>
         val sparkPlan = QueryExecution.createSparkPlan(
           sparkSession, sparkSession.sessionState.planner, buildPlan)
         val filterCreationSidePlan = getFilterCreationSidePlan(sparkPlan)
 
         // Using `sparkPlan` is a little hacky as it is based on the assumption that this rule is
         // the first to be applied (apart from `InsertAdaptiveSparkPlan`).
-        val canReuseExchange = conf.exchangeReuseEnabled && buildKeys.nonEmpty &&
+        val canReuseExchange = conf.exchangeReuseEnabled &&
           plan.exists {
             case BroadcastHashJoinExec(_, _, _, BuildLeft, _, left, _, _) =>
               left.sameResult(filterCreationSidePlan)
@@ -60,12 +59,12 @@ case class PlanRuntimeFilterFilters(sparkSession: SparkSession) extends Rule[Spa
         val bloomFilterSubquery = if (canReuseExchange) {
           val executedFilterCreationSidePlan = getFilterCreationSidePlan(executedPlan)
           val packedKeys = BindReferences.bindReferences(
-            HashJoin.rewriteKeyExpr(buildKeys), executedFilterCreationSidePlan.output)
+            HashJoin.rewriteKeyExpr(Seq(buildKey)), executedFilterCreationSidePlan.output)
           val mode = HashedRelationBroadcastMode(packedKeys)
           // plan a broadcast exchange of the build side of the join
           val exchange = BroadcastExchangeExec(mode, executedFilterCreationSidePlan)
           val name = s"runtimefilter#${exprId.id}"
-          val broadcastValues = SubqueryBroadcastExec(name, broadcastKeyIndex, buildKeys, exchange)
+          val broadcastValues = SubqueryBroadcastExec(name, 0, Seq(buildKey), exchange)
           val broadcastProxy =
             BroadcastExchangeExecProxy(broadcastValues, executedFilterCreationSidePlan.output)
 

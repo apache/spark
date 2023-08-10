@@ -53,10 +53,10 @@ case class PlanAdaptiveSubqueries(
           buildPlan, buildKeys, subqueryMap(exprId.id))
         DynamicPruningExpression(InSubqueryExec(value, subquery, exprId))
       case expressions.RuntimeFilterSubquery(_, buildPlan,
-          buildKeys, broadcastKeyIndex, exprId, _) =>
+          buildKey, exprId, _) =>
         val name = s"runtimefilter#${exprId.id}"
         val subquery = SubqueryAdaptiveBroadcastExec(
-          name, broadcastKeyIndex, true, buildPlan, buildKeys, subqueryMap(exprId.id))
+          name, 0, true, buildPlan, Seq(buildKey), subqueryMap(exprId.id))
         RuntimeFilterExpression(SubqueryWrapper(subquery, exprId))
     }
   }
