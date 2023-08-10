@@ -31,14 +31,6 @@ class PythonUDTFSuite extends QueryTest with SharedSparkSession {
 
   import IntegratedUDFTestUtils._
 
-  private val pythonScriptReturnTrue: String =
-    """
-      |from pyspark.sql.types import Row
-      |class ReturnTrueUDTF:
-      |    def eval(self, row: Row):
-      |        yield True,
-      |""".stripMargin
-
   private val pythonScriptTwoIntegers: String =
     """
       |class SimpleUDTF:
@@ -61,14 +53,7 @@ class PythonUDTFSuite extends QueryTest with SharedSparkSession {
       |        yield pd.DataFrame(data)
       |""".stripMargin
 
-  private val returnTypeBoolean: StructType = StructType.fromDDL("result boolean")
   private val returnTypeTwoIntegers: StructType = StructType.fromDDL("a int, b int, c int")
-
-  private val pythonUDTFReturnTrue: UserDefinedPythonTableFunction =
-    createUserDefinedPythonTableFunction(
-      "ReturnTrueUDTF",
-      pythonScriptReturnTrue,
-      returnTypeBoolean)
 
   private val pythonUDTFTwoIntegers: UserDefinedPythonTableFunction =
     createUserDefinedPythonTableFunction(
