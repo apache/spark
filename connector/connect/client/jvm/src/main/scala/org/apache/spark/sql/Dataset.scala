@@ -2752,7 +2752,7 @@ class Dataset[T] private[sql] (
    * @group untypedrel
    * @since 3.5.0
    */
-  @deprecated("use flatMap() or select() with functions.explode() instead", "2.0.0")
+  @deprecated("use flatMap() or select() with functions.explode() instead", "3.5.0")
   def explode[A <: Product: TypeTag](input: Column*)(f: Row => TraversableOnce[A]): DataFrame = {
     select(input: _*).flatMap(f)(Encoders.product[A]).toDF()
   }
