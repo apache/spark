@@ -31,6 +31,7 @@ import org.apache.spark._
 import org.apache.spark.errors.SparkCoreErrors
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.Python._
+import org.apache.spark.internal.plugin.WorkerPluginContainer
 import org.apache.spark.security.SocketAuthHelper
 import org.apache.spark.util.{RedirectThread, Utils}
 
@@ -178,6 +179,10 @@ private[spark] class PythonWorkerFactory(
       if (Utils.preferIPv6) {
         workerEnv.put("SPARK_PREFER_IPV6", "True")
       }
+
+      // Apply overrides from worker plugins
+      WorkerPluginContainer(SparkEnv.get.conf)(pb)
+
       val workerProcess = pb.start()
 
       // Redirect worker stdout and stderr
@@ -246,6 +251,10 @@ private[spark] class PythonWorkerFactory(
         }
         // This is equivalent to setting the -u flag; we use it because ipython doesn't support -u:
         workerEnv.put("PYTHONUNBUFFERED", "YES")
+
+        // Apply overrides from worker plugins
+        WorkerPluginContainer(SparkEnv.get.conf)(pb)
+
         daemon = pb.start()
 
         val in = new DataInputStream(daemon.getInputStream)

@@ -29,6 +29,7 @@ import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.BUFFER_SIZE
 import org.apache.spark.internal.config.R._
+import org.apache.spark.internal.plugin.WorkerPluginContainer
 import org.apache.spark.util.Utils
 
 /**
@@ -312,6 +313,10 @@ private[r] object BaseRRunner {
     pb.environment().put("SPARKR_IS_RUNNING_ON_WORKER", "TRUE")
     pb.environment().put("SPARKR_WORKER_SECRET", authHelper.secret)
     pb.redirectErrorStream(true)  // redirect stderr into stdout
+
+    // Apply overrides from worker plugins
+    WorkerPluginContainer(SparkEnv.get.conf)(pb)
+
     val proc = pb.start()
     val errThread = startStdoutThread(proc)
     errThread

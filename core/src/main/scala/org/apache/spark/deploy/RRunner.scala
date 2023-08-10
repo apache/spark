@@ -24,10 +24,11 @@ import scala.collection.JavaConverters._
 
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.{SparkException, SparkUserAppException}
+import org.apache.spark.{SparkConf, SparkException, SparkUserAppException}
 import org.apache.spark.api.r.{RBackend, RUtils}
 import org.apache.spark.internal.config.R._
 import org.apache.spark.internal.config.SUBMIT_DEPLOY_MODE
+import org.apache.spark.internal.plugin.WorkerPluginContainer
 import org.apache.spark.util.RedirectThread
 
 /**
@@ -98,6 +99,10 @@ object RRunner {
           Seq(rPackageDir(0), "SparkR", "profile", "general.R").mkString(File.separator))
         env.put("SPARKR_BACKEND_AUTH_SECRET", sparkRBackendSecret)
         builder.redirectErrorStream(true) // Ugly but needed for stdout and stderr to synchronize
+
+        // Apply overrides from worker plugins
+        WorkerPluginContainer(new SparkConf())(builder)
+
         val process = builder.start()
 
         new RedirectThread(process.getInputStream, System.out, "redirect R output").start()

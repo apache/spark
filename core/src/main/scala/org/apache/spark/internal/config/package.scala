@@ -1756,6 +1756,15 @@ package object config {
       .toSequence
       .createWithDefault(Nil)
 
+  private[spark] val SUBPROCESS_PLUGINS =
+    ConfigBuilder("spark.worker.plugins")
+      .doc("Comma-separated list of class names implementing " +
+        "org.apache.spark.api.plugin.SparkSubprocessPlugin to apply when " +
+        "creating Python and R subprocesses.")
+      .stringConf
+      .toSequence
+      .createWithDefault(Nil)
+
   private[spark] val CLEANER_PERIODIC_GC_INTERVAL =
     ConfigBuilder("spark.cleaner.periodicGC.interval")
       .version("1.6.0")
