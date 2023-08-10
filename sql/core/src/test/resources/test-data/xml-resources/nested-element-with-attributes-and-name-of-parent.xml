@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<people>
+    <parent ID="1"><parent ID="1.1"><child>Child 1.1</child></parent><child>Child 1.2</child></parent>
+    <parent ID="2"><parent ID="2.1"><child>Child 2.1</child></parent><child>Child 2.2</child></parent>
+</people>

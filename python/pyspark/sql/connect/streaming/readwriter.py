@@ -31,6 +31,7 @@ from pyspark.sql.streaming.readwriter import (
     DataStreamReader as PySparkDataStreamReader,
     DataStreamWriter as PySparkDataStreamWriter,
 )
+from pyspark.sql.connect.utils import get_python_ver
 from pyspark.sql.types import Row, StructType
 from pyspark.errors import PySparkTypeError, PySparkValueError
 
@@ -499,7 +500,7 @@ class DataStreamWriter:
         self._write_proto.foreach_batch.python_function.command = CloudPickleSerializer().dumps(
             func
         )
-        self._write_proto.foreach_batch.python_function.python_ver = "%d.%d" % sys.version_info[:2]
+        self._write_proto.foreach_batch.python_function.python_ver = get_python_ver()
         return self
 
     foreachBatch.__doc__ = PySparkDataStreamWriter.foreachBatch.__doc__

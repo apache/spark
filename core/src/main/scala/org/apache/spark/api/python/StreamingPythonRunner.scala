@@ -81,7 +81,7 @@ private[spark] class StreamingPythonRunner(
       pythonWorker.get.channel.socket().getOutputStream, bufferSize)
     val dataOut = new DataOutputStream(stream)
 
-    // TODO(SPARK-44461): verify python version
+    PythonWorkerUtils.writePythonVersion(pythonVer, dataOut)
 
     // Send sessionId
     PythonRDD.writeUTF(sessionId, dataOut)

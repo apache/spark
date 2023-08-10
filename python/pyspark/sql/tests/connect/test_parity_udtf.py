@@ -45,6 +45,9 @@ class UDTFParityTests(BaseUDTFTestsMixin, ReusedConnectTestCase):
 
     # TODO: use PySpark error classes instead of SparkConnectGrpcException
 
+    def test_struct_output_type_casting_row(self):
+        self.check_struct_output_type_casting_row(SparkConnectGrpcException)
+
     def test_udtf_with_invalid_return_type(self):
         @udtf(returnType="int")
         class TestUDTF:
