@@ -1799,28 +1799,59 @@ class BaseUDTFTestsMixin:
         class TestUDTF:
             def __init__(self):
                 self._sum = 0
+                self._partition_col = None
 
             def eval(self, row: Row):
-                self._sum += row["id"]
+                self._sum += row["input"]
+                if self._partition_col is not None and self._partition_col != row["partition_col"]:
+                    # Make sure that all values of the partitioning column are the same
+                    # for each row consumed by this method for this instance of the class.
+                    raise Exception(
+                        f"self._partition_col was {self._partition_col} but the row " +
+                        f"value was {row['partition_col']}")
+                self._partition_col = row["partition_col"]
 
             def terminate(self):
-                yield self._sum,
+                yield self._partition_col, self._sum
 
-        func = udtf(TestUDTF, returnType="a: int")
+        func = udtf(TestUDTF, returnType="partition_col: int, total: int")
         self.spark.udtf.register("test_udtf", func)
         self.assertEqual(
             self.spark.sql(
                 """
                 WITH t AS (
-                  SELECT 0 AS partition_col, id FROM range(0, 2)
+                  SELECT id AS partition_col, 1 AS input FROM range(1, 21)
                   UNION ALL
-                  SELECT 1 AS partition_col, id FROM range(0, 3)
+                  SELECT id AS partition_col, 2 AS input FROM range(1, 21)
                 )
-                SELECT * FROM test_udtf(TABLE(t) PARTITION BY partition_col)
+                SELECT partition_col, total
+                FROM test_udtf(TABLE(t) PARTITION BY partition_col - 1)
+                ORDER BY 1, 2
                 """
             ).collect(),
-            [Row(a=1), Row(a=3)],
+            [Row(partition_col=x, total=3) for x in range(1, 21)]
         )
+
+        for str_first, str_second, result_first, result_second in (
+            ("123", "456", 123, 456),
+            ("123", "NULL", 123, None),
+            ("True", "False", True, False)):
+            self.assertEqual(
+                self.spark.sql(
+                    f"""
+                    WITH t AS (
+                      SELECT {str_first} AS partition_col, id AS input FROM range(0, 2)
+                      UNION ALL
+                      SELECT {str_second} AS partition_col, id AS input FROM range(0, 2)
+                    )
+                    SELECT partition_col, total
+                    FROM test_udtf(TABLE(t) PARTITION BY partition_col)
+                    ORDER BY 1, 2
+                    """
+                ).collect(),
+                [Row(partition_col=result_first, total=1),
+                 Row(partition_col=result_second, total=1)]
+            )
 
 
 class UDTFTests(BaseUDTFTestsMixin, ReusedSQLTestCase):

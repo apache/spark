@@ -31,7 +31,15 @@ class PythonUDTFSuite extends QueryTest with SharedSparkSession {
 
   import IntegratedUDFTestUtils._
 
-  private val pythonScript: String =
+  private val pythonScriptReturnTrue: String =
+    """
+      |from pyspark.sql.types import Row
+      |class ReturnTrueUDTF:
+      |    def eval(self, row: Row):
+      |        yield True,
+      |""".stripMargin
+
+  private val pythonScriptTwoIntegers: String =
     """
       |class SimpleUDTF:
       |    def eval(self, a: int, b: int):
@@ -40,7 +48,7 @@ class PythonUDTFSuite extends QueryTest with SharedSparkSession {
       |        yield a, b, b - a
       |""".stripMargin
 
-  private val arrowPythonScript: String =
+  private val arrowPythonScriptTwoIntegers: String =
     """
       |import pandas as pd
       |class VectorizedUDTF:
@@ -53,28 +61,38 @@ class PythonUDTFSuite extends QueryTest with SharedSparkSession {
       |        yield pd.DataFrame(data)
       |""".stripMargin
 
-  private val returnType: StructType = StructType.fromDDL("a int, b int, c int")
+  private val returnTypeBoolean: StructType = StructType.fromDDL("result boolean")
+  private val returnTypeTwoIntegers: StructType = StructType.fromDDL("a int, b int, c int")
 
-  private val pythonUDTF: UserDefinedPythonTableFunction =
-    createUserDefinedPythonTableFunction("SimpleUDTF", pythonScript, returnType)
+  private val pythonUDTFReturnTrue: UserDefinedPythonTableFunction =
+    createUserDefinedPythonTableFunction(
+      "ReturnTrueUDTF",
+      pythonScriptReturnTrue,
+      returnTypeBoolean)
 
-  private val arrowPythonUDTF: UserDefinedPythonTableFunction =
+  private val pythonUDTFTwoIntegers: UserDefinedPythonTableFunction =
+    createUserDefinedPythonTableFunction(
+      "SimpleUDTF",
+      pythonScriptTwoIntegers,
+      returnTypeTwoIntegers)
+
+  private val arrowPythonUDTFTwoIntegers: UserDefinedPythonTableFunction =
     createUserDefinedPythonTableFunction(
       "VectorizedUDTF",
-      arrowPythonScript,
-      returnType,
+      arrowPythonScriptTwoIntegers,
+      returnTypeTwoIntegers,
       evalType = PythonEvalType.SQL_ARROW_TABLE_UDF)
 
   test("Simple PythonUDTF") {
     assume(shouldTestPythonUDFs)
-    val df = pythonUDTF(spark, lit(1), lit(2))
+    val df = pythonUDTFTwoIntegers(spark, lit(1), lit(2))
     checkAnswer(df, Seq(Row(1, 2, -1), Row(1, 2, 1), Row(1, 2, 3)))
   }
 
   test("PythonUDTF with lateral join") {
     assume(shouldTestPythonUDFs)
     withTempView("t") {
-      spark.udtf.registerPython("testUDTF", pythonUDTF)
+      spark.udtf.registerPython("testUDTF", pythonUDTFTwoIntegers)
       Seq((0, 1), (1, 2)).toDF("a", "b").createOrReplaceTempView("t")
       checkAnswer(
         sql("SELECT f.* FROM t, LATERAL testUDTF(a, b) f"),
@@ -85,7 +103,7 @@ class PythonUDTFSuite extends QueryTest with SharedSparkSession {
   test("PythonUDTF in correlated subquery") {
     assume(shouldTestPythonUDFs)
     withTempView("t") {
-      spark.udtf.registerPython("testUDTF", pythonUDTF)
+      spark.udtf.registerPython("testUDTF", pythonUDTFTwoIntegers)
       Seq((0, 1), (1, 2)).toDF("a", "b").createOrReplaceTempView("t")
       checkAnswer(
         sql("SELECT (SELECT sum(f.b) AS r FROM testUDTF(1, 2) f WHERE f.a = t.a) FROM t"),
@@ -95,14 +113,14 @@ class PythonUDTFSuite extends QueryTest with SharedSparkSession {
 
   test("Arrow optimized UDTF") {
     assume(shouldTestPandasUDFs)
-    val df = arrowPythonUDTF(spark, lit(1), lit(2))
+    val df = arrowPythonUDTFTwoIntegers(spark, lit(1), lit(2))
     checkAnswer(df, Seq(Row(1, 2, -1), Row(1, 2, 1), Row(1, 2, 3)))
   }
 
   test("arrow optimized UDTF with lateral join") {
     assume(shouldTestPandasUDFs)
     withTempView("t") {
-      spark.udtf.registerPython("testUDTF", arrowPythonUDTF)
+      spark.udtf.registerPython("testUDTF", arrowPythonUDTFTwoIntegers)
       Seq((0, 1), (1, 2)).toDF("a", "b").createOrReplaceTempView("t")
       checkAnswer(
         sql("SELECT t.*, f.c FROM t, LATERAL testUDTF(a, b) f"),
@@ -172,7 +190,6 @@ class PythonUDTFSuite extends QueryTest with SharedSparkSession {
       case other =>
         failure(other)
     }
-    // Negative tests
     withTable("t") {
       sql("create table t(col array<int>) using parquet")
       val query = "select * from explode(table(t))"

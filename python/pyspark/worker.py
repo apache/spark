@@ -620,7 +620,9 @@ def read_udtf(pickleSer, infile, eval_type):
         cur_partition_values = [cur_table_arg[i] for i in partition_child_indexes]
         prev_partition_values = [prev_table_arg[i] for i in partition_child_indexes]
         udtf_state.prev_arguments = arguments
-        any(((k, v) in zip(cur_partition_values, prev_partition_values) if k != v))
+        change_partitions = any(
+            (1 for k, v in zip(cur_partition_values, prev_partition_values) if k != v))
+        return change_partitions
 
     if eval_type == PythonEvalType.SQL_ARROW_TABLE_UDF:
 
@@ -663,7 +665,7 @@ def read_udtf(pickleSer, infile, eval_type):
             return lambda *a: map(lambda res: (res, arrow_return_type), map(verify_result, f(*a)))
 
         udtf_state.eval = wrap_arrow_udtf(getattr(udtf_state.udtf, "eval"), return_type)
-        udtf_state.set_terminate(wrap_udtf, return_type)
+        udtf_state.set_terminate(wrap_arrow_udtf, return_type)
 
         def mapper(_, it):
             try:
@@ -755,7 +757,9 @@ def read_udtf(pickleSer, infile, eval_type):
                         # Call 'terminate' on the UDTF class instance, if applicable.
                         # Then destroy the UDTF class instance and create a new one.
                         if udtf_state.terminate is not None:
-                            yield udtf_state.terminate()
+                            result = udtf_state.terminate()
+                            # yield udtf_state.terminate()
+                            yield result
                         create_udtf_class_instance(return_type)
                         udtf_state.eval = wrap_udtf(getattr(udtf_state.udtf, "eval"), return_type)
                         udtf_state.set_terminate(wrap_udtf, return_type)
