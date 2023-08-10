@@ -143,15 +143,15 @@ class Resampler(Generic[FrameLike], metaclass=ABCMeta):
     def get_make_interval(  # type: ignore[return]
         self, unit: str, col: Union[Column, int, float]
     ) -> Column:
-        col = col if not isinstance(col, (int, float)) else F.lit(col)  # type: ignore[assignment]
+        col = col if not isinstance(col, (int, float)) else F.lit(col)
         if unit == "MONTH":
-            return F.make_interval(months=col)  # type: ignore
+            return F.make_interval(months=col)
         if unit == "HOUR":
-            return F.make_interval(hours=col)  # type: ignore
+            return F.make_interval(hours=col)
         if unit == "MINUTE":
-            return F.make_interval(mins=col)  # type: ignore
+            return F.make_interval(mins=col)
         if unit == "SECOND":
-            return F.make_interval(secs=col)  # type: ignore
+            return F.make_interval(secs=col)
 
     def _bin_timestamp(self, origin: pd.Timestamp, ts_scol: Column) -> Column:
         key_type = self._resamplekey_type
