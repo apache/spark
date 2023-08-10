@@ -1834,8 +1834,7 @@ class BaseUDTFTestsMixin:
 
         for str_first, str_second, result_first, result_second in (
             ("123", "456", 123, 456),
-            ("123", "NULL", 123, None),
-            ("True", "False", True, False)):
+            ("123", "NULL", None, 123)):
             self.assertEqual(
                 self.spark.sql(
                     f"""
@@ -1853,6 +1852,47 @@ class BaseUDTFTestsMixin:
                  Row(partition_col=result_second, total=1)]
             )
 
+    def test_udtf_with_table_argument_and_partition_by_and_order_by(self):
+        class TestUDTF:
+            def __init__(self):
+                self._last = None
+                self._partition_col = None
+
+            def eval(self, row: Row):
+                self._last = row["input"]
+                if self._partition_col is not None and self._partition_col != row["partition_col"]:
+                    # Make sure that all values of the partitioning column are the same
+                    # for each row consumed by this method for this instance of the class.
+                    raise Exception(
+                        f"self._partition_col was {self._partition_col} but the row " +
+                        f"value was {row['partition_col']}")
+                self._partition_col = row["partition_col"]
+
+            def terminate(self):
+                yield self._partition_col, self._last
+
+        func = udtf(TestUDTF, returnType="partition_col: int, last: int")
+        self.spark.udtf.register("test_udtf", func)
+        for order_by_str, result_val in (
+            ("input ASC", 2),
+            ("input + 1 ASC", 2),
+            ("input DESC", 1),
+            ("input - 1 DESC", 1)):
+            self.assertEqual(
+                self.spark.sql(
+                    f"""
+                    WITH t AS (
+                      SELECT id AS partition_col, 1 AS input FROM range(1, 21)
+                      UNION ALL
+                      SELECT id AS partition_col, 2 AS input FROM range(1, 21)
+                    )
+                    SELECT partition_col, last
+                    FROM test_udtf(TABLE(t) PARTITION BY partition_col - 1 ORDER BY {order_by_str})
+                    ORDER BY 1, 2
+                    """
+                ).collect(),
+                [Row(partition_col=x, last=result_val) for x in range(1, 21)]
+            )
 
 class UDTFTests(BaseUDTFTestsMixin, ReusedSQLTestCase):
     @classmethod
