@@ -479,14 +479,12 @@ package object config extends Logging {
     ConfigBuilder("spark.yarn.client.statCache.preloaded.perDirectoryThreshold")
       .doc("This configuration defines the threshold for the number of resources in a directory" +
         " that triggers the activation of the statCache preloading. When the count of individual" +
-        " resources specified by <code>spark.yarn.jars</code> within a directory exceeds this" +
-        " threshold or is unknown due to globs in the path, the statCache preloading for that" +
-        " directory will be activated. It's important to note that this configuration will only" +
-        " take effect when the <code>spark.yarn.client.statCache.preloaded.enabled</code> option" +
-        " is enabled.")
+        " resources specified by <code>spark.yarn.jars</code> within a directory is no less than" +
+        " this threshold, the statCache preloading for that directory will be activated. It's" +
+        " important to note that this configuration will only take effect when the" +
+        " <code>spark.yarn.client.statCache.preloaded.enabled</code> option is enabled.")
       .version("3.5.0")
       .longConf
-      .toSequence
       .createWithDefault(0)
 
   private[yarn] val YARN_EXECUTOR_RESOURCE_TYPES_PREFIX = "spark.yarn.executor.resource."

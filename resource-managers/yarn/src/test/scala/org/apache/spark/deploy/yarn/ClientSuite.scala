@@ -24,10 +24,10 @@ import java.util.Properties
 import java.util.concurrent.ConcurrentHashMap
 
 import scala.collection.JavaConverters._
-import scala.collection.mutable.{HashMap => MutableHashMap}
+import scala.collection.mutable.{ArrayBuffer, HashMap => MutableHashMap}
 
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.Path
+import org.apache.hadoop.fs.{FileStatus, FileSystem, Path}
 import org.apache.hadoop.mapreduce.MRJobConfig
 import org.apache.hadoop.yarn.api.ApplicationConstants.Environment
 import org.apache.hadoop.yarn.api.protocolrecords.{GetNewApplicationResponse, SubmitApplicationRequest}
@@ -664,6 +664,38 @@ class ClientSuite extends SparkFunSuite with Matchers {
     // path to be the same as the original path
     assertUserClasspathUrls(cluster = false, gatewayRootPath)
     assertUserClasspathUrls(cluster = true, replacementRootPath)
+  }
+
+  test("SPARK-44306: test directoriesToBePreloaded") {
+    val sparkConf = new SparkConf()
+      .set(YARN_CLIENT_STAT_CACHE_PRELOADED_PER_DIRECTORY_THRESHOLD, 3L)
+    val client = createClient(sparkConf, args = Array("--jar", USER))
+    val directories = client.directoriesToBePreloaded(Seq(
+      "hdfs:/valid/a.jar",
+      "hdfs:/valid/b.jar",
+      "hdfs:/valid/c.jar",
+      "hdfs:/glob/*",
+      "hdfs:/fewer/a.jar",
+      "hdfs:/fewer/b.jar",
+      "local:/local/a.jar",
+      "local:/local/b.jar",
+      "local:/local/c.jar"
+    ))
+    assert(directories === Seq(new URI("hdfs:/valid")).to[ArrayBuffer])
+  }
+
+  test("SPARK-44306: test statCachePreload") {
+    val sparkConf = new SparkConf()
+      .set(SPARK_JARS, Seq("hdfs:/valid/a.jar", "hdfs:/valid/b.jar", "hdfs:/valid/c.jar"))
+    val client = createClient(sparkConf, args = Array("--jar", USER))
+    val fs = mock(classOf[FileSystem])
+    val statCache: MutableHashMap[URI, FileStatus] = MutableHashMap[URI, FileStatus]()
+    when(fs.listStatus(new Path ("hdfs:/valid"))).thenReturn(Seq(
+      new FileStatus(1, false, 1, 1, 1L, new Path("/valid/a.jar")),
+      new FileStatus(1, false, 1, 1, 1L, new Path("/valid/b.jar")),
+      new FileStatus(1, false, 1, 1, 1L, new Path("/valid/c.jar"))).to[Array])
+    client.statCachePreload(fs, statCache)
+    assert(statCache.size === 3)
   }
 
   private val matching = Seq(

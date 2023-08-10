@@ -462,6 +462,51 @@ private[spark] class Client(
   }
 
   /**
+   * For each non-local and non-glob resource, we will count its parent directory. If its
+   * frequency is larger than the threshold specified by
+   * spark.yarn.client.statCache.preloaded.perDirectoryThreshold, all the file status from the
+   * directory will be preloaded.
+   *
+   * @param jars : the list of jars to upload
+   * @return a list of directories to be preloaded
+   * */
+  def directoriesToBePreloaded(jars: Seq[String]): ArrayBuffer[URI] = {
+    val directoryCounter = new HashMap[URI, Int]()
+    jars.foreach { jar =>
+      if (!Utils.isLocalUri(jar) && !new GlobPattern(jar).hasWildcard) {
+        val path = getQualifiedLocalPath(Utils.resolveURI(jar), hadoopConf)
+        val parentUri = path.getParent.toUri
+        directoryCounter.update(parentUri, directoryCounter.getOrElse(parentUri, 0) + 1)
+      }
+    }
+    directoryCounter.collect {
+      case (uri, count) if count >= perDirectoryThreshold => uri
+    }.to[ArrayBuffer]
+  }
+
+  /**
+   * Preload the statCache with file status. For each directory in the list, we will list all
+   * files from that directory and add them to the statCache.
+   *
+   * @param fs : the target file system
+   * @param statCache : stat cache to be preloaded with fileStatus
+   */
+  def statCachePreload(fs: FileSystem, statCache: Map[URI, FileStatus]): Unit = {
+    logDebug("Preload the following directories")
+    val directory = sparkConf.get(SPARK_JARS)
+      .map(directoriesToBePreloaded)
+      .getOrElse(ArrayBuffer.empty[URI])
+
+    directory.foreach { dir =>
+      fs.listStatus(new Path(dir)).filter(_.isFile()).foreach { fileStatus =>
+        val uri = fileStatus.getPath.toUri
+        logDebug(s"add ${uri} plan to added to stat cache.")
+        statCache.put(uri, fileStatus)
+      }
+    }
+  }
+
+  /**
    * Upload any resources to the distributed cache if needed. If a resource is intended to be
    * consumed locally, set up the appropriate config for downstream code to handle it properly.
    * This is used for setting up a container launch context for our ApplicationMaster.
@@ -506,64 +551,6 @@ private[spark] class Client(
         true
       }
     }
-
-    /**
-     * Checked whether the given path contains glob pattern or not.
-     * */
-    def containsGlobPattern(path: String): Boolean = {
-      """.*[*?\\[{].*""".matches(path)
-    }
-
-    /**
-     * For each non-local and non-glob resource, we will extract its parent directory, and increase
-     * the corresponding frequency. If its frequency is larger than the threshold specified by
-     * spark.yarn.client.statCache.preloaded.perDirectoryThreshold, the corresponding directory
-     * should be preloaded.
-     * @param jars: the list of jars to upload
-     * @return a list of directories to be preloaded
-     * */
-    def directoryToBePreloaded(jars: Seq[String]): ArrayBuffer[URI] = {
-      val directoryCounter = new HashMap[URI, Int]()
-      jars.foreach { jar =>
-        if (!Utils.isLocalUri(jar) && !containsGlobPattern(jar)) {
-          val path = getQualifiedLocalPath(Utils.resolveURI(jar), hadoopConf)
-          val parentUri = path.getParent.toUri
-          directoryCounter.getOrElseUpdate(parentUri,
-            directoryCounter.getOrElse(parentUri, 0) + 1)
-        }
-      }
-      val directory = new ArrayBuffer[URI]()
-      directoryCounter.foreach( counter =>
-        if ( counter._2 > perDirectoryThreshold) {
-          directory += counter._1
-        }
-      )
-      directory
-    }
-
-    /**
-     * Preload the stat cache with the files in the jars specified by spark.jars.
-     */
-    def statCachePreload: Unit = {
-      if (statCachePreloadedEnabled) {
-        logDebug("Preload the following directories")
-        var directory = new ArrayBuffer[URI]()
-        sparkConf.get(SPARK_JARS) match {
-          case Some(jars) =>
-            directory = directoryToBePreloaded(jars)
-        }
-
-        directory.foreach { dir =>
-          fs.listStatus(new Path(dir.getPath))
-            .foreach { fileStatus =>
-              logDebug(s"add ${fileStatus.getPath.toUri} plan to added to stat cache.")
-              statCache.put(fileStatus.getPath.toUri, fileStatus)
-            }
-        }
-      }
-    }
-
-    statCachePreload
 
     /*
      * Distribute a file to the cluster.
@@ -644,6 +631,9 @@ private[spark] class Client(
       case _ => None
     }
 
+    // If preload is enabled, preload the statCache with the files in the directories
+    if (statCachePreloadedEnabled) { statCachePreload(fs, statCache) }
+
     /**
      * Add Spark to the cache. There are two settings that control what files to add to the cache:
      * - if a Spark archive is defined, use the archive. The archive is expected to contain
@@ -670,7 +660,9 @@ private[spark] class Client(
             if (!Utils.isLocalUri(jar)) {
               val path = getQualifiedLocalPath(Utils.resolveURI(jar), hadoopConf)
               val pathFs = FileSystem.get(path.toUri(), hadoopConf)
-              if (!statCache.contains(path.toUri)) {
+              if (statCache.contains(path.toUri)) {
+                distribute(path.toUri.toString, targetDir = Some(LOCALIZED_LIB_DIR))
+              } else {
                 val fss = pathFs.globStatus(path)
                 if (fss == null) {
                   throw new FileNotFoundException(s"Path ${path.toString} does not exist")
@@ -680,8 +672,6 @@ private[spark] class Client(
                   statCache.update(uri, entry)
                   distribute(uri.toString(), targetDir = Some(LOCALIZED_LIB_DIR))
                 }
-              } else {
-                distribute(path.toUri.toString, targetDir = Some(LOCALIZED_LIB_DIR))
               }
             } else {
               localJars += jar
