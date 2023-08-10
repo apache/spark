@@ -61,7 +61,7 @@ class StatsdSinkSuite extends SparkFunSuite {
     val props = new Properties
     defaultProps.foreach(e => props.put(e._1, e._2))
     props.put(STATSD_KEY_PORT, socket.getLocalPort.toString)
-    props.put(STATSD_KEY_REGEX, "test-[0-9]+.driver.(CodeGenerator|BlockManager)")
+    props.put(STATSD_KEY_REGEX, "counter|gauge|histogram|timer")
     val registry = new MetricRegistry
     val sink = new StatsdSink(props, registry)
     try {
@@ -183,13 +183,13 @@ class StatsdSinkSuite extends SparkFunSuite {
       }
 
       val filteredMetricKeys = Set(
-        "test-123.driver.CodeGenerator.generatedMethodSize",
-        "test-123.driver.CodeGenerator.generatedMethodSize"
+        "gauge",
+        "gauge-1"
       )
 
       filteredMetricKeys.foreach(sink.registry.register(_, gauge))
 
-      sink.registry.register("test-123.driver.spark.streaming.local.latency", gauge)
+      sink.registry.register("excluded-metric", gauge)
       sink.report()
 
       val p = new DatagramPacket(new Array[Byte](maxPayloadSize), maxPayloadSize)
