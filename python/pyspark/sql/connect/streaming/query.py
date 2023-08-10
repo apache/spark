@@ -23,7 +23,6 @@ from pyspark.errors import StreamingQueryException, PySparkValueError
 import pyspark.sql.connect.proto as pb2
 from pyspark.serializers import CloudPickleSerializer
 from pyspark.sql.connect import proto
-from pyspark.sql.connect.utils import get_python_ver
 from pyspark.sql.streaming import StreamingQueryListener
 from pyspark.sql.streaming.query import (
     StreamingQuery as PySparkStreamingQuery,
@@ -238,7 +237,7 @@ class StreamingQueryManager:
         cmd = pb2.StreamingQueryManagerCommand()
         expr = proto.PythonUDF()
         expr.command = CloudPickleSerializer().dumps(listener)
-        expr.python_ver = get_python_ver()
+        expr.python_ver = "%d.%d" % sys.version_info[:2]
         cmd.add_listener.python_listener_payload.CopyFrom(expr)
         cmd.add_listener.id = listener._id
         self._execute_streaming_query_manager_cmd(cmd)

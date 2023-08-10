@@ -39,15 +39,12 @@ from pyspark.sql.streaming.listener import (
     QueryTerminatedEvent,
     QueryIdleEvent,
 )
-from pyspark.worker_util import check_python_version
 
 pickle_ser = CPickleSerializer()
 utf8_deserializer = UTF8Deserializer()
 
 
 def main(infile: IO, outfile: IO) -> None:
-    check_python_version(infile)
-
     connect_url = os.environ["SPARK_CONNECT_LOCAL_URL"]
     session_id = utf8_deserializer.loads(infile)
 
