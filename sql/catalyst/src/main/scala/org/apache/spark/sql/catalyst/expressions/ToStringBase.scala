@@ -302,6 +302,7 @@ trait ToStringBase { self: UnaryExpression with TimeZoneAwareExpression =>
        |  for (int $loopIndex = 1; $loopIndex < $array.numElements(); $loopIndex++) {
        |    $buffer.append(",");
        |    if ($array.isNullAt($loopIndex)) {
+       |      $buffer.append(" ");
        |      ${appendNull(buffer, isFirstElement = false)}
        |    } else {
        |      $buffer.append(" ");
