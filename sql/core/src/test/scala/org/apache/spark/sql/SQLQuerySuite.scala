@@ -4669,6 +4669,12 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
         |""".stripMargin).collect()
   }
 
+  test("SPARK-44763: Do not promote strings in binary arithmetic with intervals") {
+    val df = sql("SELECT concat(DATE'2020-12-31', ' 09:03:00') +" +
+      " (INTERVAL '03' HOUR)")
+    checkAnswer(df, Row("2020-12-31 12:03:00"))
+  }
+
   test("SPARK-43979: CollectedMetrics should be treated as the same one for self-join") {
     spark.range(1, 5).toDF("age")
       .withColumn("customer_id", lit(1))
