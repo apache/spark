@@ -26,8 +26,19 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.execution.UnaryExecNode
+import org.apache.spark.sql.execution.python.EvalPythonUDTFExec.ArgumentMetadata
 import org.apache.spark.sql.types.{DataType, StructField, StructType}
 import org.apache.spark.util.Utils
+
+object EvalPythonUDTFExec {
+  /**
+   * Metadata for arguments of Python UDTF.
+   *
+   * @param offset the offset of the argument
+   * @param name the name of the argument if it's a `NamedArgumentExpression`
+   */
+  case class ArgumentMetadata(offset: Int, name: Option[String])
+}
 
 /**
  * A physical plan that evaluates a [[PythonUDTF]], one partition of tuples at a time.
@@ -45,8 +56,7 @@ trait EvalPythonUDTFExec extends UnaryExecNode {
   override def producedAttributes: AttributeSet = AttributeSet(resultAttrs)
 
   protected def evaluate(
-      argOffsets: Array[Int],
-      argNames: Array[Option[String]],
+      argMetas: Array[ArgumentMetadata],
       iter: Iterator[InternalRow],
       schema: StructType,
       context: TaskContext): Iterator[Iterator[InternalRow]]
@@ -69,7 +79,7 @@ trait EvalPythonUDTFExec extends UnaryExecNode {
       // flatten all the arguments
       val allInputs = new ArrayBuffer[Expression]
       val dataTypes = new ArrayBuffer[DataType]
-      val (argOffsets, argNames) = udtf.children.map { e =>
+      val argMetas = udtf.children.map { e =>
         val (key, value) = e match {
           case NamedArgumentExpression(key, value) =>
             (Some(key), value)
@@ -77,13 +87,13 @@ trait EvalPythonUDTFExec extends UnaryExecNode {
             (None, e)
         }
         if (allInputs.exists(_.semanticEquals(value))) {
-          (allInputs.indexWhere(_.semanticEquals(value)), key)
+          ArgumentMetadata(allInputs.indexWhere(_.semanticEquals(value)), key)
         } else {
           allInputs += value
           dataTypes += value.dataType
-          (allInputs.length - 1, key)
+          ArgumentMetadata(allInputs.length - 1, key)
         }
-      }.toArray.unzip
+      }.toArray
       val projection = MutableProjection.create(allInputs.toSeq, child.output)
       projection.initialize(context.partitionId())
       val schema = StructType(dataTypes.zipWithIndex.map { case (dt, i) =>
@@ -100,7 +110,7 @@ trait EvalPythonUDTFExec extends UnaryExecNode {
         projection(inputRow)
       }
 
-      val outputRowIterator = evaluate(argOffsets, argNames, projectedRowIter, schema, context)
+      val outputRowIterator = evaluate(argMetas, projectedRowIter, schema, context)
 
       val pruneChildForResult: InternalRow => InternalRow =
         if (child.outputSet == AttributeSet(requiredChildOutput)) {

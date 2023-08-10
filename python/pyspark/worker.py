@@ -550,10 +550,16 @@ def read_udtf(pickleSer, infile, eval_type):
 
     # See `PythonUDTFRunner.PythonUDFWriterThread.writeCommand'
     num_arg = read_int(infile)
-    offsets = [read_int(infile) for _ in range(num_arg)]
-    names = [utf8_deserializer.loads(infile) if read_bool(infile) else None for _ in range(num_arg)]
-    args_offsets = [offset for offset, name in zip(offsets, names) if name is None]
-    kwargs_offsets = {name: offset for offset, name in zip(offsets, names) if name is not None}
+    args_offsets = []
+    kwargs_offsets = {}
+    for _ in range(num_arg):
+        offset = read_int(infile)
+        if read_bool(infile):
+            name = utf8_deserializer.loads(infile)
+            kwargs_offsets[name] = offset
+        else:
+            args_offsets.append(offset)
+
     handler = read_command(pickleSer, infile)
     if not isinstance(handler, type):
         raise PySparkRuntimeError(

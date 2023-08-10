@@ -31,6 +31,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.util.GenericArrayData
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.metric.SQLMetric
+import org.apache.spark.sql.execution.python.EvalPythonUDTFExec.ArgumentMetadata
 import org.apache.spark.sql.types.StructType
 
 /**
@@ -56,8 +57,7 @@ case class BatchEvalPythonUDTFExec(
    * an iterator of internal rows for every input row.
    */
   override protected def evaluate(
-      argOffsets: Array[Int],
-      argNames: Array[Option[String]],
+      argMetas: Array[ArgumentMetadata],
       iter: Iterator[InternalRow],
       schema: StructType,
       context: TaskContext): Iterator[Iterator[InternalRow]] = {
@@ -68,7 +68,7 @@ case class BatchEvalPythonUDTFExec(
 
     // Output iterator for results from Python.
     val outputIterator =
-      new PythonUDTFRunner(udtf, argOffsets, argNames, pythonMetrics, jobArtifactUUID)
+      new PythonUDTFRunner(udtf, argMetas, pythonMetrics, jobArtifactUUID)
         .compute(inputIterator, context.partitionId(), context)
 
     val unpickle = new Unpickler
@@ -95,13 +95,12 @@ case class BatchEvalPythonUDTFExec(
 
 class PythonUDTFRunner(
     udtf: PythonUDTF,
-    argOffsets: Array[Int],
-    argNames: Array[Option[String]],
+    argMetas: Array[ArgumentMetadata],
     pythonMetrics: Map[String, SQLMetric],
     jobArtifactUUID: Option[String])
   extends BasePythonUDFRunner(
     Seq(ChainedPythonFunctions(Seq(udtf.func))),
-    PythonEvalType.SQL_TABLE_UDF, Array(argOffsets), pythonMetrics, jobArtifactUUID) {
+    PythonEvalType.SQL_TABLE_UDF, Array(argMetas.map(_.offset)), pythonMetrics, jobArtifactUUID) {
 
   protected override def newWriterThread(
       env: SparkEnv,
@@ -112,7 +111,7 @@ class PythonUDTFRunner(
     new PythonUDFWriterThread(env, worker, inputIterator, partitionIndex, context) {
 
       protected override def writeCommand(dataOut: DataOutputStream): Unit = {
-        PythonUDTFRunner.writeUDTF(dataOut, udtf, argOffsets, argNames)
+        PythonUDTFRunner.writeUDTF(dataOut, udtf, argMetas)
       }
     }
   }
@@ -123,19 +122,18 @@ object PythonUDTFRunner {
   def writeUDTF(
       dataOut: DataOutputStream,
       udtf: PythonUDTF,
-      argOffsets: Array[Int],
-      argNames: Array[Option[String]]): Unit = {
-    dataOut.writeInt(argOffsets.length)
-    argOffsets.foreach { offset =>
-      dataOut.writeInt(offset)
-    }
-    assert(argOffsets.length == argNames.length)
-    argNames.foreach {
-      case Some(name) =>
-        dataOut.writeBoolean(true)
-        PythonWorkerUtils.writeUTF(name, dataOut)
-      case _ =>
-        dataOut.writeBoolean(false)
+      argMetas: Array[ArgumentMetadata]): Unit = {
+    dataOut.writeInt(argMetas.length)
+    argMetas.foreach {
+      case ArgumentMetadata(offset, name) =>
+        dataOut.writeInt(offset)
+        name match {
+          case Some(name) =>
+            dataOut.writeBoolean(true)
+            PythonWorkerUtils.writeUTF(name, dataOut)
+          case _ =>
+            dataOut.writeBoolean(false)
+        }
     }
     dataOut.writeInt(udtf.func.command.length)
     dataOut.write(udtf.func.command.toArray)
