@@ -781,6 +781,7 @@ object SparkSession extends Logging {
   class Builder() extends Logging {
     private val builder = SparkConnectClient.builder()
     private var client: SparkConnectClient = _
+    private[this] val options = new scala.collection.mutable.HashMap[String, String]
 
     def remote(connectionString: String): Builder = {
       builder.connectionString(connectionString)
@@ -804,11 +805,95 @@ object SparkSession extends Logging {
       this
     }
 
+    /**
+     * Sets a config option. Options set using this method are automatically propagated to the
+     * Spark Connect session. Only runtime options are supported.
+     *
+     * @since 3.5.0
+     */
+    def config(key: String, value: String): Builder = synchronized {
+      options += key -> value
+      this
+    }
+
+    /**
+     * Sets a config option. Options set using this method are automatically propagated to the
+     * Spark Connect session. Only runtime options are supported.
+     *
+     * @since 3.5.0
+     */
+    def config(key: String, value: Long): Builder = synchronized {
+      options += key -> value.toString
+      this
+    }
+
+    /**
+     * Sets a config option. Options set using this method are automatically propagated to the
+     * Spark Connect session. Only runtime options are supported.
+     *
+     * @since 3.5.0
+     */
+    def config(key: String, value: Double): Builder = synchronized {
+      options += key -> value.toString
+      this
+    }
+
+    /**
+     * Sets a config option. Options set using this method are automatically propagated to the
+     * Spark Connect session. Only runtime options are supported.
+     *
+     * @since 3.5.0
+     */
+    def config(key: String, value: Boolean): Builder = synchronized {
+      options += key -> value.toString
+      this
+    }
+
+    /**
+     * Sets a config a map of options. Options set using this method are automatically propagated
+     * to the Spark Connect session. Only runtime options are supported.
+     *
+     * @since 3.5.0
+     */
+    def config(map: Map[String, Any]): Builder = synchronized {
+      map.foreach { kv: (String, Any) =>
+        {
+          options += kv._1 -> kv._2.toString
+        }
+      }
+      this
+    }
+
+    /**
+     * Sets a config option. Options set using this method are automatically propagated to both
+     * `SparkConf` and SparkSession's own configuration.
+     *
+     * @since 3.5.0
+     */
+    def config(map: java.util.Map[String, Any]): Builder = synchronized {
+      config(map.asScala.toMap)
+    }
+
+    @deprecated("enableHiveSupport does not work in Spark Connect")
+    def enableHiveSupport(): Builder = this
+
+    @deprecated("master does not work in Spark Connect, please use remote instead")
+    def master(master: String): Builder = this
+
+    @deprecated("appName does not work in Spark Connect")
+    def appName(name: String): Builder = this
+
     private def tryCreateSessionFromClient(): Option[SparkSession] = {
       if (client != null) {
         Option(new SparkSession(client, cleaner, planIdGenerator))
       } else {
         None
+      }
+    }
+
+    private def applyOptions(session: SparkSession): Unit = {
+      options.foreach { case (key, value) =>
+        session.conf.set(key, value)
       }
     }
 
@@ -833,6 +918,7 @@ object SparkSession extends Logging {
       val session = tryCreateSessionFromClient()
         .getOrElse(SparkSession.this.create(builder.configuration))
       setDefaultAndActiveSession(session)
+      applyOptions(session)
       session
     }
 
@@ -842,7 +928,9 @@ object SparkSession extends Logging {
      * If a session exist with the same configuration that is returned instead of creating a new
      * session.
      *
-     * This method will update the default and/or active session if they are not set.
+     * This method will update the default and/or active session if they are not set. This method
+     * will always set the specified configuration options on the session, even when it is not
+     * newly created.
      *
      * @since 3.5.0
      */
@@ -850,6 +938,7 @@ object SparkSession extends Logging {
       val session = tryCreateSessionFromClient()
         .getOrElse(sessions.get(builder.configuration))
       setDefaultAndActiveSession(session)
+      applyOptions(session)
       session
     }
   }
