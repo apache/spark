@@ -2210,7 +2210,7 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
     val column = expression(ctx.aggEpxr)
     val sortOrder = visitSortItem(ctx.sortItem)
     if (!column.semanticEquals(sortOrder.child)) {
-      throw QueryCompilationErrors.functionAndOrderExpressionMismatchError("list_agg", column,
+      throw QueryCompilationErrors.functionAndOrderExpressionMismatchError("LISTAGG", column,
         sortOrder.child)
     }
     val listAgg = if (ctx.delimiter != null) {

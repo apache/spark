@@ -581,7 +581,7 @@ No such struct field `<fieldName>` in `<fields>`.
 
 The operation `<statement>` is not allowed on the `<objectType>`: `<objectName>`.
 
-### FUNCTION_AND_ORDER_EXPRESSION_MISMATCH_ERROR
+### FUNCTION_AND_ORDER_EXPRESSION_MISMATCH
 
 SQLSTATE: none assigned
 

@@ -921,7 +921,7 @@
     ],
     "sqlState" : "42809"
   },
-  "FUNCTION_AND_ORDER_EXPRESSION_MISMATCH_ERROR" : {
+  "FUNCTION_AND_ORDER_EXPRESSION_MISMATCH" : {
     "message" : [
       "The function <functionName> arguments <functionExpr> should match the order by expression <orderExpr>."
     ]

@@ -195,9 +195,9 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
         exception = intercept[AnalysisException] {
           sql("SELECT LISTAGG(a) WITHIN GROUP (ORDER BY b) FROM df")
         },
-        errorClass = "FUNCTION_AND_ORDER_EXPRESSION_MISMATCH_ERROR",
+        errorClass = "FUNCTION_AND_ORDER_EXPRESSION_MISMATCH",
         parameters = Map(
-          "functionName" -> "list_agg",
+          "functionName" -> "LISTAGG",
           "functionExpr" -> "\"a\"",
           "orderExpr" -> "\"b\""))
 
