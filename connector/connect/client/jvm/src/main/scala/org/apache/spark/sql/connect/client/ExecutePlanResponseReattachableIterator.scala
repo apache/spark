@@ -230,8 +230,8 @@ class ExecutePlanResponseReattachableIterator(
    * callback will retrigger the asynchronous ReleaseExecute.
    */
   private def createRetryingReleaseExecuteResponseObserver(
-      requestForRetry: proto.ReleaseExecuteRequest,
-      currentRetryNum: Int = 0): StreamObserver[proto.ReleaseExecuteResponse] = {
+      requestForRetry: proto.ReleaseExecuteRequest)
+      : StreamObserver[proto.ReleaseExecuteResponse] = {
     new StreamObserver[proto.ReleaseExecuteResponse] {
       override def onNext(v: proto.ReleaseExecuteResponse): Unit = {}
       override def onCompleted(): Unit = {}
