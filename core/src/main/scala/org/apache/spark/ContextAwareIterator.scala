@@ -30,7 +30,7 @@ import org.apache.spark.annotation.DeveloperApi
  * Thus, we should use [[ContextAwareIterator]] to stop consuming after the task ends.
  *
  * @since 3.1.0
- * @deprecated since 3.5.0 as its only usage for Python evaluation is now extinct
+ * @deprecated since 4.0.0 as its only usage for Python evaluation is now extinct
  */
 @DeveloperApi
 @deprecated("Only usage for Python evaluation is now extinct", "3.5.0")
