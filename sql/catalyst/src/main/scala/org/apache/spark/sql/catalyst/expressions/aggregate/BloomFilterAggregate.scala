@@ -152,7 +152,7 @@ case class BloomFilterAggregate(
       SQLConf.get.getConf(RUNTIME_BLOOM_FILTER_MAX_NUM_BITS))
 
   // Mark as lazy so that `updater` is not evaluated during tree transformation.
-  private lazy val updater: BloomFilterUpdater = first.dataType match {
+  private lazy val updater: BloomFilterUpdater = child.dataType match {
     case LongType => LongUpdater
     case IntegerType => IntUpdater
     case ShortType => ShortUpdater
