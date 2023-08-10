@@ -49,7 +49,6 @@ from pyspark.ml.torch.log_communication import (  # type: ignore
     LogStreamingServer,
 )
 from pyspark.ml.dl_util import FunctionPickler
-from pyspark.ml.util import _get_active_session
 
 
 def _get_resources(session: SparkSession) -> Dict[str, ResourceInformation]:
@@ -165,7 +164,7 @@ class Distributor:
         from pyspark.sql.utils import is_remote
 
         self.is_remote = is_remote()
-        self.spark = _get_active_session(self.is_remote)
+        self.spark = SparkSession.active()
 
         # indicate whether the server side is local mode
         self.is_spark_local_master = False

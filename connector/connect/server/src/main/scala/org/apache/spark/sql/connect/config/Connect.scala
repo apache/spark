@@ -49,12 +49,12 @@ object Connect {
   val CONNECT_GRPC_ARROW_MAX_BATCH_SIZE =
     ConfigBuilder("spark.connect.grpc.arrow.maxBatchSize")
       .doc(
-        "When using Apache Arrow, limit the maximum size of one arrow batch that " +
-          "can be sent from server side to client side. Currently, we conservatively use 70% " +
-          "of it because the size is not accurate but estimated.")
+        "When using Apache Arrow, limit the maximum size of one arrow batch, in bytes unless " +
+          "otherwise specified, that can be sent from server side to client side. Currently, we " +
+          "conservatively use 70% of it because the size is not accurate but estimated.")
       .version("3.4.0")
-      .bytesConf(ByteUnit.MiB)
-      .createWithDefaultString("4m")
+      .bytesConf(ByteUnit.BYTE)
+      .createWithDefault(4 * 1024 * 1024)
 
   val CONNECT_GRPC_MAX_INBOUND_MESSAGE_SIZE =
     ConfigBuilder("spark.connect.grpc.maxInboundMessageSize")
@@ -74,6 +74,17 @@ object Connect {
       .intConf
       .createWithDefault(1024)
 
+  val CONNECT_EXECUTE_REATTACHABLE_ENABLED =
+    ConfigBuilder("spark.connect.execute.reattachable.enabled")
+      .internal()
+      .doc("Enables reattachable execution on the server. If disabled and a client requests it, " +
+        "non-reattachable execution will follow and should run until query completion. This will " +
+        "work, unless there is a GRPC stream error, in which case the client will discover that " +
+        "execution is not reattachable when trying to reattach fails.")
+      .version("3.5.0")
+      .booleanConf
+      .createWithDefault(true)
+
   val CONNECT_EXECUTE_REATTACHABLE_SENDER_MAX_STREAM_DURATION =
     ConfigBuilder("spark.connect.execute.reattachable.senderMaxStreamDuration")
       .internal()
@@ -82,7 +93,7 @@ object Connect {
         "Set to 0 for unlimited.")
       .version("3.5.0")
       .timeConf(TimeUnit.MILLISECONDS)
-      .createWithDefaultString("5m")
+      .createWithDefaultString("2m")
 
   val CONNECT_EXECUTE_REATTACHABLE_SENDER_MAX_STREAM_SIZE =
     ConfigBuilder("spark.connect.execute.reattachable.senderMaxStreamSize")

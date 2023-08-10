@@ -135,7 +135,9 @@ class ExecutePlanResponseReattachableIterator(Generator):
                         if not attempt.is_first_try():
                             # on retry, the iterator is borked, so we need a new one
                             self._iterator = iter(
-                                self._stub.ReattachExecute(self._create_reattach_execute_request())
+                                self._stub.ReattachExecute(
+                                    self._create_reattach_execute_request(), metadata=self._metadata
+                                )
                             )
 
                         if self._current is None:
@@ -154,7 +156,8 @@ class ExecutePlanResponseReattachableIterator(Generator):
                             while not has_next:
                                 self._iterator = iter(
                                     self._stub.ReattachExecute(
-                                        self._create_reattach_execute_request()
+                                        self._create_reattach_execute_request(),
+                                        metadata=self._metadata,
                                     )
                                 )
                                 # shouldn't change
@@ -192,7 +195,7 @@ class ExecutePlanResponseReattachableIterator(Generator):
                     can_retry=SparkConnectClient.retry_exception, **self._retry_policy
                 ):
                     with attempt:
-                        self._stub.ReleaseExecute(request)
+                        self._stub.ReleaseExecute(request, metadata=self._metadata)
             except Exception as e:
                 warnings.warn(f"ReleaseExecute failed with exception: {e}.")
 
@@ -220,7 +223,7 @@ class ExecutePlanResponseReattachableIterator(Generator):
                     can_retry=SparkConnectClient.retry_exception, **self._retry_policy
                 ):
                     with attempt:
-                        self._stub.ReleaseExecute(request)
+                        self._stub.ReleaseExecute(request, metadata=self._metadata)
             except Exception as e:
                 warnings.warn(f"ReleaseExecute failed with exception: {e}.")
 
@@ -239,7 +242,7 @@ class ExecutePlanResponseReattachableIterator(Generator):
             return iter_fun()
         except grpc.RpcError as e:
             status = rpc_status.from_call(cast(grpc.Call, e))
-            if "INVALID_HANDLE.OPERATION_NOT_FOUND" in status.message:
+            if status is not None and "INVALID_HANDLE.OPERATION_NOT_FOUND" in status.message:
                 if self._last_returned_response_id is not None:
                     raise RuntimeError(
                         "OPERATION_NOT_FOUND on the server but "

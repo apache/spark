@@ -190,10 +190,6 @@ class NamespaceTestsMixin:
         self.assert_eq(pd.to_datetime(pdf), ps.to_datetime(psdf))
         self.assert_eq(pd.to_datetime(dict_from_pdf), ps.to_datetime(dict_from_pdf))
 
-    @unittest.skipIf(
-        LooseVersion(pd.__version__) >= LooseVersion("2.0.0"),
-        "TODO(SPARK-43709): Enable NamespaceTests.test_date_range for pandas 2.0.0.",
-    )
     def test_date_range(self):
         self.assert_eq(
             ps.date_range(start="1/1/2018", end="1/08/2018"),
@@ -226,14 +222,29 @@ class NamespaceTestsMixin:
         )
 
         self.assert_eq(
-            ps.date_range(start="2017-01-01", end="2017-01-04", closed="left"),
-            pd.date_range(start="2017-01-01", end="2017-01-04", closed="left"),
+            ps.date_range(start="2017-01-01", end="2017-01-04", inclusive="left"),
+            pd.date_range(start="2017-01-01", end="2017-01-04", inclusive="left"),
         )
 
         self.assert_eq(
-            ps.date_range(start="2017-01-01", end="2017-01-04", closed="right"),
-            pd.date_range(start="2017-01-01", end="2017-01-04", closed="right"),
+            ps.date_range(start="2017-01-01", end="2017-01-04", inclusive="right"),
+            pd.date_range(start="2017-01-01", end="2017-01-04", inclusive="right"),
         )
+
+        self.assert_eq(
+            ps.date_range(start="2017-01-01", end="2017-01-04", inclusive="both"),
+            pd.date_range(start="2017-01-01", end="2017-01-04", inclusive="both"),
+        )
+
+        self.assert_eq(
+            ps.date_range(start="2017-01-01", end="2017-01-04", inclusive="neither"),
+            pd.date_range(start="2017-01-01", end="2017-01-04", inclusive="neither"),
+        )
+
+        with self.assertRaisesRegex(
+            ValueError, "Inclusive has to be either 'both', 'neither', 'left' or 'right'"
+        ):
+            ps.date_range(start="2017-01-01", end="2017-01-04", inclusive="test")
 
         self.assertRaises(
             AssertionError, lambda: ps.date_range(start="1/1/2018", periods=5, tz="Asia/Tokyo")

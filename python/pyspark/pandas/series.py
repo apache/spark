@@ -492,8 +492,8 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         --------
 
         >>> psser = ps.Series([1, 2, 3])
-        >>> psser.axes  # doctest: +SKIP
-        [Int64Index([0, 1, 2], dtype='int64')]
+        >>> psser.axes
+        [Index([0, 1, 2], dtype='int64')]
         """
         return [self.index]
 
@@ -6718,14 +6718,11 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
 
         return (left_ser.copy(), right.copy()) if copy else (left_ser, right)
 
-    # TODO(SPARK-42620): Add `inclusive` parameter and replace `include_start` & `include_end`.
-    # See https://github.com/pandas-dev/pandas/issues/43248
     def between_time(
         self,
         start_time: Union[datetime.time, str],
         end_time: Union[datetime.time, str],
-        include_start: bool = True,
-        include_end: bool = True,
+        inclusive: str = "both",
         axis: Axis = 0,
     ) -> "Series":
         """
@@ -6740,15 +6737,10 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
             Initial time as a time filter limit.
         end_time : datetime.time or str
             End time as a time filter limit.
-        include_start : bool, default True
-            Whether the start time needs to be included in the result.
+        inclusive : {"both", "neither", "left", "right"}, default "both"
+            Include boundaries; whether to set each bound as closed or open.
 
-            .. deprecated:: 3.4.0
-
-        include_end : bool, default True
-            Whether the end time needs to be included in the result.
-
-            .. deprecated:: 3.4.0
+            .. versionadded:: 4.0.0
 
         axis : {0 or 'index', 1 or 'columns'}, default 0
             Determine range time on index or columns value.
@@ -6787,7 +6779,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         dtype: int64
         """
         return first_series(
-            self.to_frame().between_time(start_time, end_time, include_start, include_end, axis)
+            self.to_frame().between_time(start_time, end_time, inclusive, axis)
         ).rename(self.name)
 
     def at_time(

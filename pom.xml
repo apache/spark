@@ -160,7 +160,7 @@
     <aws.java.sdk.version>1.11.655</aws.java.sdk.version>
     <!-- the producer is used in tests -->
     <aws.kinesis.producer.version>0.12.8</aws.kinesis.producer.version>
-    <gcs-connector.version>hadoop3-2.2.14</gcs-connector.version>
+    <gcs-connector.version>hadoop3-2.2.16</gcs-connector.version>
     <!--  org.apache.httpcomponents/httpclient-->
     <commons.httpclient.version>4.5.14</commons.httpclient.version>
     <commons.httpcore.version>4.4.16</commons.httpcore.version>
@@ -182,6 +182,8 @@
     <codehaus.jackson.version>1.9.13</codehaus.jackson.version>
     <fasterxml.jackson.version>2.15.2</fasterxml.jackson.version>
     <fasterxml.jackson.databind.version>2.15.2</fasterxml.jackson.databind.version>
+    <ws.xmlschema.version>2.3.0</ws.xmlschema.version>
+    <org.glassfish.jaxb.txw2.version>3.0.2</org.glassfish.jaxb.txw2.version>
     <snappy.version>1.1.10.3</snappy.version>
     <netlib.ludovic.dev.version>3.0.3</netlib.ludovic.dev.version>
     <commons-codec.version>1.16.0</commons-codec.version>
@@ -985,6 +987,16 @@
         <groupId>com.fasterxml.jackson.module</groupId>
         <artifactId>jackson-module-jaxb-annotations</artifactId>
         <version>${fasterxml.jackson.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.ws.xmlschema</groupId>
+        <artifactId>xmlschema-core</artifactId>
+        <version>${ws.xmlschema.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.glassfish.jaxb</groupId>
+        <artifactId>txw2</artifactId>
+        <version>${org.glassfish.jaxb.txw2.version}</version>
       </dependency>
       <dependency>
         <groupId>org.glassfish.jersey.core</groupId>
@@ -3600,7 +3612,7 @@
     <profile>
       <id>scala-2.13</id>
       <properties>
-        <scala.version>2.13.11</scala.version>
+        <scala.version>2.13.8</scala.version>
         <scala.binary.version>2.13</scala.binary.version>
       </properties>
       <build>
@@ -3659,10 +3671,6 @@
                   -->
                   <arg>-Wconf:cat=unused-imports&amp;src=org\/apache\/spark\/graphx\/impl\/VertexPartitionBase.scala:s</arg>
                   <arg>-Wconf:cat=unused-imports&amp;src=org\/apache\/spark\/graphx\/impl\/VertexPartitionBaseOps.scala:s</arg>
-                  <!--
-                    SPARK-40497 Upgrade Scala to 2.13.11 and suppress `Implicit definition should have explicit type`
-                  -->
-                  <arg>-Wconf:msg=Implicit definition should have explicit type:s</arg>
                 </args>
                 <compilerPlugins combine.self="override">
                 </compilerPlugins>
