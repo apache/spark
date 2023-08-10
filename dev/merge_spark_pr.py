@@ -272,7 +272,11 @@ def resolve_jira_issue(merge_branches, comment, default_jira_id=""):
 
     versions = asf_jira.project_versions("SPARK")
     # Consider only x.y.z, unreleased, unarchived versions
-    versions = [x for x in versions if not x.raw["released"] and not x.raw["archived"] and re.match(r"\d+\.\d+\.\d+", x.name)]
+    versions = [
+        x
+        for x in versions
+        if not x.raw["released"] and not x.raw["archived"] and re.match(r"\d+\.\d+\.\d+", x.name)
+    ]
     versions = sorted(versions, key=lambda x: x.name, reverse=True)
 
     default_fix_versions = []
@@ -288,7 +292,8 @@ def resolve_jira_issue(merge_branches, comment, default_jira_id=""):
             if not found:
                 print(
                     "Target version for %s is not found on JIRA, it may be archived or "
-                    "not created. Skipping it." % b)
+                    "not created. Skipping it." % b
+                )
 
     for v in default_fix_versions:
         # Handles the case where we have forked a release branch but not yet made the release.
