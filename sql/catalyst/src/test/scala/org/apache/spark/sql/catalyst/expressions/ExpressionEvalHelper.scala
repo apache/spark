@@ -85,9 +85,10 @@ trait ExpressionEvalHelper extends ScalaCheckDrivenPropertyChecks with PlanTestB
     // Make it as method to obtain fresh expression everytime.
     def expr = prepareEvaluation(expression)
     val catalystValue = CatalystTypeConverters.convertToCatalyst(expected)
-    checkEvaluationWithoutCodegen(expr, catalystValue, inputRow)
     if (withCodegen) {
       checkEvaluation(expr, catalystValue, inputRow)
+    } else {
+      checkEvaluationWithoutCodegen(expr, catalystValue, inputRow)
     }
     checkEvaluationWithMutableProjection(expr, catalystValue, inputRow)
     if (GenerateUnsafeProjection.canSupport(expr.dataType)) {
