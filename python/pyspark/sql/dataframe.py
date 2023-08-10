@@ -3753,12 +3753,15 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         Notes
         -----
-            * This method performs a SQL-style set union of the rows from both `DataFrame` objects,
+        This method performs a SQL-style set union of the rows from both `DataFrame` objects,
         with no automatic deduplication of elements.
-            * Use the `distinct()` method to perform deduplication of rows.
-            * The method resolves columns by position (not by name), following the standard behavior
+
+        Use the `distinct()` method to perform deduplication of rows.
+
+        The method resolves columns by position (not by name), following the standard behavior
         in SQL.
-            * Alias: The `union` method was previously named `unionAll` in versions before 2.0.0.
+
+        Alias: The `union` method was previously named `unionAll` in versions before 2.0.0.
 
         Examples
         --------
@@ -3846,10 +3849,12 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         Notes
         -----
-            * This method combines all rows from both `DataFrame` objects with no automatic
+        This method combines all rows from both `DataFrame` objects with no automatic
         deduplication of elements.
-            * Use the `distinct()` method to perform deduplication of rows.
-            * :func:`unionAll` is an alias to :func:`union`
+
+        Use the `distinct()` method to perform deduplication of rows.
+
+        :func:`unionAll` is an alias to :func:`union`
 
         See Also
         --------
