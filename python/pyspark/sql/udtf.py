@@ -29,7 +29,7 @@ from py4j.java_gateway import JavaObject
 
 from pyspark.errors import PySparkAttributeError, PySparkRuntimeError, PySparkTypeError
 from pyspark.rdd import PythonEvalType
-from pyspark.sql.column import _to_java_column, _to_seq
+from pyspark.sql.column import Column, _to_java_column, _to_java_expr, _to_seq
 from pyspark.sql.pandas.utils import require_minimum_pandas_version, require_minimum_pyarrow_version
 from pyspark.sql.types import DataType, StructType, _parse_datatype_string
 from pyspark.sql.udf import _wrap_function
@@ -343,14 +343,24 @@ class UserDefinedTableFunction:
             )
         return judtf
 
-    def __call__(self, *cols: "ColumnOrName") -> "DataFrame":
+    def __call__(self, *args: "ColumnOrName", **kwargs: "ColumnOrName") -> "DataFrame":
         from pyspark.sql import DataFrame, SparkSession
 
         spark = SparkSession._getActiveSessionOrCreate()
         sc = spark.sparkContext
 
+        assert sc._jvm is not None
+        jcols = [_to_java_column(arg) for arg in args] + [
+            sc._jvm.Column(
+                sc._jvm.org.apache.spark.sql.catalyst.expressions.NamedArgumentExpression(
+                    key, _to_java_expr(value)
+                )
+            )
+            for key, value in kwargs.items()
+        ]
+
         judtf = self._judtf
-        jPythonUDTF = judtf.apply(spark._jsparkSession, _to_seq(sc, cols, _to_java_column))
+        jPythonUDTF = judtf.apply(spark._jsparkSession, _to_seq(sc, jcols))
         return DataFrame(jPythonUDTF, spark)
 
     def asNondeterministic(self) -> "UserDefinedTableFunction":

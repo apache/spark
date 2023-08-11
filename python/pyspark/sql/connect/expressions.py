@@ -1051,3 +1051,23 @@ class CallFunction(Expression):
             return f"CallFunction('{self._name}', {', '.join([str(arg) for arg in self._args])})"
         else:
             return f"CallFunction('{self._name}')"
+
+
+class NamedArgumentExpression(Expression):
+    def __init__(self, key: str, value: Expression):
+        super().__init__()
+
+        assert isinstance(key, str)
+        self._key = key
+
+        assert isinstance(value, Expression)
+        self._value = value
+
+    def to_plan(self, session: "SparkConnectClient") -> "proto.Expression":
+        expr = proto.Expression()
+        expr.named_argument_expression.key = self._key
+        expr.named_argument_expression.value.CopyFrom(self._value.to_plan(session))
+        return expr
+
+    def __repr__(self) -> str:
+        return f"{self._key} => {self._value}"

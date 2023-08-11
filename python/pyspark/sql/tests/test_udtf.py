@@ -1808,6 +1808,8 @@ class BaseUDTFTestsMixin:
             [
                 self.spark.sql("SELECT * FROM test_udtf(a=>10, b=>'x')"),
                 self.spark.sql("SELECT * FROM test_udtf(b=>'x', a=>10)"),
+                TestUDTF(a=lit(10), b=lit("x")),
+                TestUDTF(b=lit("x"), a=lit(10)),
             ]
         ):
             with self.subTest(query_no=i):
