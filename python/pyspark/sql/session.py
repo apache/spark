@@ -64,7 +64,7 @@ from pyspark.sql.types import (
     _from_numpy_type,
 )
 from pyspark.errors.exceptions.captured import install_exception_handler
-from pyspark.sql.utils import is_timestamp_ntz_preferred, to_str, try_remote_session_classmethod
+from pyspark.sql.utils import is_timestamp_ntz_preferred, to_str, try_remote_session_classmethod, is_remote
 from pyspark.errors import PySparkValueError, PySparkTypeError, PySparkRuntimeError
 
 if TYPE_CHECKING:
@@ -455,7 +455,17 @@ class SparkSession(SparkConversionMixin):
             opts = dict(self._options)
 
             with self._lock:
-                if "SPARK_REMOTE" in os.environ or "spark.remote" in opts:
+                configures_spark_connect = "SPARK_REMOTE" in os.environ or "spark.remote" in opts
+
+                # For the case, when users want to create a default session, we explicitly retrieve the
+                # currently active session.
+                if is_remote() and not configures_spark_connect:
+                    from pyspark.sql.connect.session import SparkSession as RemoteSparkSession
+                    this_spark = RemoteSparkSession.getActiveSession()
+                    if this_spark is not None:
+                        return this_spark
+
+                if configures_spark_connect:
                     with SparkContext._lock:
                         from pyspark.sql.connect.session import SparkSession as RemoteSparkSession
 
