@@ -258,7 +258,7 @@ final class DataStreamWriter[T] private[sql] (ds: Dataset[T]) extends Logging {
    * provided Dataset) to external systems. The output Dataset is guaranteed to be exactly the
    * same for the same batchId (assuming all operations are deterministic in the query).
    *
-   * @since 2.5.0
+   * @since 3.5.0
    */
   @Evolving
   def foreachBatch(function: VoidFunction2[Dataset[T], java.lang.Long]): DataStreamWriter[T] = {
