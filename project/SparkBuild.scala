@@ -55,6 +55,7 @@ object BuildCommons {
   val connectCommon = ProjectRef(buildLocation, "connect-common")
   val connect = ProjectRef(buildLocation, "connect")
   val connectClient = ProjectRef(buildLocation, "connect-client-jvm")
+  val connectClientShaded = ProjectRef(buildLocation, "connect-client-jvm-shaded")
 
   val allProjects@Seq(
     core, graphx, mllib, mllibLocal, repl, networkCommon, networkShuffle, launcher, unsafe, tags, sketch, kvstore,
@@ -62,7 +63,8 @@ object BuildCommons {
   ) = Seq(
     "core", "graphx", "mllib", "mllib-local", "repl", "network-common", "network-shuffle", "launcher", "unsafe",
     "tags", "sketch", "kvstore", "common-utils", "sql-api"
-  ).map(ProjectRef(buildLocation, _)) ++ sqlProjects ++ streamingProjects ++ Seq(connectCommon, connect, connectClient)
+  ).map(ProjectRef(buildLocation, _)) ++ sqlProjects ++ streamingProjects ++
+    Seq(connectCommon, connect, connectClient, connectClientShaded)
 
   val optionallyEnabledProjects@Seq(kubernetes, mesos, yarn,
     sparkGangliaLgpl, streamingKinesisAsl,
@@ -413,7 +415,8 @@ object SparkBuild extends PomBuild {
   val mimaProjects = allProjects.filterNot { x =>
     Seq(
       spark, hive, hiveThriftServer, repl, networkCommon, networkShuffle, networkYarn,
-      unsafe, tags, tokenProviderKafka010, sqlKafka010, connectCommon, connect, connectClient,
+      unsafe, tags, tokenProviderKafka010, sqlKafka010,
+      connectCommon, connect, connectClient, connectClientShaded,
       commonUtils, sqlApi
     ).contains(x)
   }
@@ -460,6 +463,7 @@ object SparkBuild extends PomBuild {
   enable(SparkConnectCommon.settings)(connectCommon)
   enable(SparkConnect.settings)(connect)
   enable(SparkConnectClient.settings)(connectClient)
+  enable(SparkConnectClientShaded.settings)(connectClientShaded)
 
   /* Protobuf settings */
   enable(SparkProtobuf.settings)(protobuf)
@@ -932,6 +936,29 @@ object SparkConnectClient {
       )
     )
   }
+}
+
+object SparkConnectClientShaded {
+  import BuildCommons.protoVersion
+  val buildTestDeps = TaskKey[Unit]("buildTestDeps", "Build needed dependencies for test.")
+
+  lazy val settings = Seq(
+    (assembly / test) := { },
+
+    (assembly / logLevel) := Level.Info,
+
+    // Exclude `scala-library` from assembly.
+    (assembly / assemblyPackageScala / assembleArtifact) := false,
+
+    (assembly / assemblyShadeRules) := Seq(
+      ShadeRule.rename("org.apache.spark.**" -> "org.apache.sparkconnectclient.@1").inAll,
+    ),
+
+    (assembly / assemblyMergeStrategy) := {
+      case m if m.toLowerCase(Locale.ROOT).endsWith("manifest.mf") => MergeStrategy.discard
+      case _ => MergeStrategy.first
+    }
+  )
 }
 
 object SparkProtobuf {
@@ -1445,10 +1472,12 @@ object Unidoc {
 
     (ScalaUnidoc / unidoc / unidocProjectFilter) :=
       inAnyProject -- inProjects(OldDeps.project, repl, examples, tools, kubernetes,
-        yarn, tags, streamingKafka010, sqlKafka010, connectCommon, connect, connectClient, protobuf),
+        yarn, tags, streamingKafka010, sqlKafka010,
+        connectCommon, connect, connectClient, connectClientShaded, protobuf),
     (JavaUnidoc / unidoc / unidocProjectFilter) :=
       inAnyProject -- inProjects(OldDeps.project, repl, examples, tools, kubernetes,
-        yarn, tags, streamingKafka010, sqlKafka010, connectCommon, connect, connectClient, protobuf),
+        yarn, tags, streamingKafka010, sqlKafka010,
+        connectCommon, connect, connectClient, connectClientShaded, protobuf),
 
     (ScalaUnidoc / unidoc / unidocAllClasspaths) := {
       ignoreClasspaths((ScalaUnidoc / unidoc / unidocAllClasspaths).value)
