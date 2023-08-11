@@ -462,21 +462,21 @@ package object config extends Logging {
     .stringConf
     .createWithDefault("yarn.io/fpga")
 
-  private[spark] val YARN_CLIENT_STAT_CACHE_PRELOADED_ENABLED =
-    ConfigBuilder("spark.yarn.client.statCache.preloaded.enabled")
-    .doc("This configuration enables statCache to be preloaded at YARN client side. This feature " +
-      "analyzes the pattern of resources paths. If multiple resources shared the same parent " +
-      "directory, a single <code>listStatus</code> will be invoked on the parent directory " +
-      "instead of multiple <code>getFileStatus</code> performed on each individual resources. " +
-      "If most resources are from the same directory, this feature greatly reduces the RPC call, " +
-      "reduce job runtime, and improve the job runtime variation due to network delays. " +
-      "Noticing, this could potentially increase the memory overhead at client side.")
+  private[spark] val YARN_CLIENT_STAT_CACHE_PRELOAD_ENABLED =
+    ConfigBuilder("spark.yarn.client.statCache.preload.enabled")
+    .doc("This configuration enables statCache to be preloaded at YARN client side. This feature" +
+      " analyzes the pattern of resources paths. If multiple resources shared the same parent" +
+      " directory, a single <code>listStatus</code> will be invoked on the parent directory" +
+      " instead of multiple <code>getFileStatus</code> performed on each individual resources." +
+      " If most resources from a small set of directories, this can substantially improve job" +
+      " submission time. Noticing, this could potentially increase the memory overhead at client" +
+      " side.")
     .version("3.5.0")
     .booleanConf
     .createWithDefault(false)
 
-  private[spark] val YARN_CLIENT_STAT_CACHE_PRELOADED_PER_DIRECTORY_THRESHOLD =
-    ConfigBuilder("spark.yarn.client.statCache.preloaded.perDirectoryThreshold")
+  private[spark] val YARN_CLIENT_STAT_CACHE_PRELOAD_PER_DIRECTORY_THRESHOLD =
+    ConfigBuilder("spark.yarn.client.statCache.preload.perDirectoryThreshold")
       .doc("This configuration defines the threshold for the number of resources in a directory" +
         " that triggers the activation of the statCache preloading. When the count of individual" +
         " resources specified by <code>spark.yarn.jars</code> within a directory is no less than" +
@@ -484,8 +484,8 @@ package object config extends Logging {
         " important to note that this configuration will only take effect when the" +
         " <code>spark.yarn.client.statCache.preloaded.enabled</code> option is enabled.")
       .version("3.5.0")
-      .longConf
-      .createWithDefault(0L)
+      .intConf
+      .createWithDefault(5)
 
   private[yarn] val YARN_EXECUTOR_RESOURCE_TYPES_PREFIX = "spark.yarn.executor.resource."
   private[yarn] val YARN_DRIVER_RESOURCE_TYPES_PREFIX = "spark.yarn.driver.resource."

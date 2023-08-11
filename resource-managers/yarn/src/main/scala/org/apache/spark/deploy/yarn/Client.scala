@@ -27,7 +27,6 @@ import java.util.zip.{ZipEntry, ZipOutputStream}
 
 import scala.collection.JavaConverters._
 import scala.collection.immutable.{Map => IMap}
-import scala.collection.mutable
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet, ListBuffer, Map}
 import scala.util.control.NonFatal
 
@@ -78,9 +77,9 @@ private[spark] class Client(
   private val isClusterMode = sparkConf.get(SUBMIT_DEPLOY_MODE) == "cluster"
 
   private val isClientUnmanagedAMEnabled = sparkConf.get(YARN_UNMANAGED_AM) && !isClusterMode
-  private val statCachePreloadedEnabled = sparkConf.get(YARN_CLIENT_STAT_CACHE_PRELOADED_ENABLED)
-  private val perDirectoryThreshold =
-    sparkConf.get(YARN_CLIENT_STAT_CACHE_PRELOADED_PER_DIRECTORY_THRESHOLD)
+  private val statCachePreloadEnabled = sparkConf.get(YARN_CLIENT_STAT_CACHE_PRELOAD_ENABLED)
+  private val statCachePreloadDirectoryCountThreshold: Int =
+    sparkConf.get(YARN_CLIENT_STAT_CACHE_PRELOAD_PER_DIRECTORY_THRESHOLD)
   private var appMaster: ApplicationMaster = _
   private var stagingDirPath: Path = _
 
@@ -471,38 +470,40 @@ private[spark] class Client(
    * @param jars : the list of jars to upload
    * @return a list of directories to be preloaded
    * */
-  def directoriesToBePreloaded(jars: Seq[String]): mutable.Iterable[URI] = {
+  private[yarn] def directoriesToBePreloaded(jars: Seq[String]): List[URI] = {
     val directoryCounter = new HashMap[URI, Int]()
     jars.foreach { jar =>
       if (!Utils.isLocalUri(jar) && !new GlobPattern(jar).hasWildcard) {
-        val path = getQualifiedLocalPath(Utils.resolveURI(jar), hadoopConf)
-        val parentUri = path.getParent.toUri
+        val parentUri = new Path (Utils.resolveURI(jar)).getParent.toUri
         directoryCounter.update(parentUri, directoryCounter.getOrElse(parentUri, 0) + 1)
       }
     }
-    directoryCounter.filter(_._2 >= perDirectoryThreshold).keys
+    directoryCounter.filter(_._2 >= statCachePreloadDirectoryCountThreshold).keys.toList
   }
 
   /**
    * Preload the statCache with file status. For each directory in the list, we will list all
    * files from that directory and add them to the statCache.
-   *
-   * @param fs : the target file system
-   * @param statCache : stat cache to be preloaded with fileStatus
+   * @param testFS : the file system to be used for testing only (optional)
+   * @return A preloaded statCache with fileStatus
    */
-  def statCachePreload(fs: FileSystem, statCache: Map[URI, FileStatus]): Unit = {
-    logDebug("Preload the following directories")
-    val directory = sparkConf.get(SPARK_JARS)
-      .map(directoriesToBePreloaded)
-      .getOrElse(ArrayBuffer.empty[URI])
+  private[yarn] def getPreloadedStatCache(testFS: Option[FileSystem]):
+  HashMap[URI, FileStatus] = {
+    val statCache = HashMap[URI, FileStatus]()
+    val jars = sparkConf.get(SPARK_JARS)
+    val directories = jars.map(directoriesToBePreloaded).getOrElse(ArrayBuffer.empty[URI])
 
-    directory.foreach { dir =>
-      fs.listStatus(new Path(dir)).filter(_.isFile()).foreach { fileStatus =>
-        val uri = fileStatus.getPath.toUri
-        logDebug(s"add ${uri} plan to added to stat cache.")
-        statCache.put(uri, fileStatus)
-      }
+    directories.foreach { dir =>
+      testFS.getOrElse(FileSystem.get(dir, hadoopConf)).listStatus(new Path(dir)).filter(_.isFile())
+        .foreach { fileStatus =>
+          val uri = fileStatus.getPath.toUri
+          if (jars.exists(_.contains(uri.toString))) {
+            logDebug(s"Add ${uri} file status to statCache.")
+            statCache.put(uri, fileStatus)
+          }
+        }
     }
+    statCache
   }
 
   /**
@@ -532,7 +533,12 @@ private[spark] class Client(
     val localResources = HashMap[String, LocalResource]()
     FileSystem.mkdirs(fs, destDir, new FsPermission(STAGING_DIR_PERMISSION))
 
-    val statCache: Map[URI, FileStatus] = HashMap[URI, FileStatus]()
+    // If preload is enabled, preload the statCache with the files in the directories
+    val statCache = if (statCachePreloadEnabled) {
+      getPreloadedStatCache(None)
+    } else {
+      HashMap[URI, FileStatus]()
+    }
     val symlinkCache: Map[URI, Path] = HashMap[URI, Path]()
 
     def addDistributedUri(uri: URI): Boolean = {
@@ -629,9 +635,6 @@ private[spark] class Client(
         }
       case _ => None
     }
-
-    // If preload is enabled, preload the statCache with the files in the directories
-    if (statCachePreloadedEnabled) { statCachePreload(fs, statCache) }
 
     /**
      * Add Spark to the cache. There are two settings that control what files to add to the cache:

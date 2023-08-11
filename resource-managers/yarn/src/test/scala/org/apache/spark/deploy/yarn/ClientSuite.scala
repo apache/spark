@@ -668,34 +668,37 @@ class ClientSuite extends SparkFunSuite with Matchers {
 
   test("SPARK-44306: test directoriesToBePreloaded") {
     val sparkConf = new SparkConf()
-      .set(YARN_CLIENT_STAT_CACHE_PRELOADED_PER_DIRECTORY_THRESHOLD, 3L)
+      .set(YARN_CLIENT_STAT_CACHE_PRELOAD_PER_DIRECTORY_THRESHOLD, 3)
     val client = createClient(sparkConf, args = Array("--jar", USER))
     val directories = client.directoriesToBePreloaded(Seq(
       "hdfs:/valid/a.jar",
       "hdfs:/valid/b.jar",
       "hdfs:/valid/c.jar",
+      "s3:/valid/a.jar",
+      "s3:/valid/b.jar",
+      "s3:/valid/c.jar",
       "hdfs:/glob/*",
       "hdfs:/fewer/a.jar",
       "hdfs:/fewer/b.jar",
       "local:/local/a.jar",
       "local:/local/b.jar",
-      "local:/local/c.jar"
-    ))
-    assert(directories.seq === Seq(new URI("hdfs:/valid")))
+      "local:/local/c.jar"))
+    assert(directories.size == 2 && directories.contains(new URI("hdfs:/valid"))
+      && directories.contains(new URI("s3:/valid")))
   }
 
   test("SPARK-44306: test statCachePreload") {
     val sparkConf = new SparkConf()
-      .set(SPARK_JARS, Seq("hdfs:/valid/a.jar", "hdfs:/valid/b.jar", "hdfs:/valid/c.jar"))
+      .set(YARN_CLIENT_STAT_CACHE_PRELOAD_PER_DIRECTORY_THRESHOLD, 2)
+      .set(SPARK_JARS, Seq("hdfs:/valid/a.jar", "hdfs:/valid/b.jar"))
     val client = createClient(sparkConf, args = Array("--jar", USER))
     val fs = mock(classOf[FileSystem])
-    val statCache: MutableHashMap[URI, FileStatus] = MutableHashMap[URI, FileStatus]()
     when(fs.listStatus(new Path ("hdfs:/valid"))).thenReturn(Seq(
-      new FileStatus(1, false, 1, 1, 1L, new Path("/valid/a.jar")),
-      new FileStatus(1, false, 1, 1, 1L, new Path("/valid/b.jar")),
-      new FileStatus(1, false, 1, 1, 1L, new Path("/valid/c.jar"))).toArray)
-    client.statCachePreload(fs, statCache)
-    assert(statCache.size === 3)
+      new FileStatus(1, false, 1, 1, 1L, new Path("hdfs:/valid/a.jar")),
+      new FileStatus(1, false, 1, 1, 1L, new Path("hdfs:/valid/b.jar")),
+      new FileStatus(1, false, 1, 1, 1L, new Path("hdfs:/valid/c.jar"))).toArray)
+    // Expect only a.jar and b.jar to be preloaded
+    assert(client.getPreloadedStatCache(Some(fs)).size === 2)
   }
 
   private val matching = Seq(
