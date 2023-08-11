@@ -3528,6 +3528,21 @@ class ChannelBuilderTests(unittest.TestCase):
         chan = ChannelBuilder(f"sc://host/;session_id={id}")
         self.assertEqual(id, chan.session_id)
 
+        chan = ChannelBuilder(f"sc://host/;session_id={id};user_agent=acbd;token=abcd;use_ssl=true")
+        md = chan.metadata()
+        for kv in md:
+            self.assertNotIn(
+                kv[0],
+                [
+                    ChannelBuilder.PARAM_SESSION_ID,
+                    ChannelBuilder.PARAM_TOKEN,
+                    ChannelBuilder.PARAM_USER_ID,
+                    ChannelBuilder.PARAM_USER_AGENT,
+                    ChannelBuilder.PARAM_USE_SSL,
+                ],
+                "Metadata must not contain fixed params",
+            )
+
         with self.assertRaises(ValueError) as ve:
             chan = ChannelBuilder("sc://host/;session_id=abcd")
             SparkConnectClient(chan)
