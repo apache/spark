@@ -277,6 +277,8 @@ object SparkConnectService extends Logging {
   private val userSessionMapping =
     cacheBuilder(CACHE_SIZE, CACHE_TIMEOUT_SECONDS).build[SessionCacheKey, SessionHolder]()
 
+  private[connect] val executionManager = new SparkConnectExecutionManager()
+
   private[connect] val streamingSessionManager =
     new SparkConnectStreamingQueryCache()
 
@@ -352,6 +354,13 @@ object SparkConnectService extends Logging {
     userSessionMapping.invalidateAll()
   }
 
+  /**
+   * Used for testing.
+   */
+  private[connect] def putSessionForTesting(sessionHolder: SessionHolder): Unit = {
+    userSessionMapping.put((sessionHolder.userId, sessionHolder.sessionId), sessionHolder)
+  }
+
   private def newIsolatedSession(): SparkSession = {
     SparkSession.active.newSession()
   }
@@ -408,6 +417,8 @@ object SparkConnectService extends Logging {
         server.shutdownNow()
       }
     }
+    streamingSessionManager.shutdown()
+    executionManager.shutdown()
     userSessionMapping.invalidateAll()
     uiTab.foreach(_.detach())
   }
