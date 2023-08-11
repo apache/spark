@@ -480,9 +480,7 @@ private[spark] class Client(
         directoryCounter.update(parentUri, directoryCounter.getOrElse(parentUri, 0) + 1)
       }
     }
-    directoryCounter.collect {
-      case (uri, count) if count >= perDirectoryThreshold => uri
-    }
+    directoryCounter.filter(_._2 >= perDirectoryThreshold).keys
   }
 
   /**
