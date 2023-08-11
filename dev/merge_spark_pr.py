@@ -585,7 +585,7 @@ def main():
             print("JIRA_USERNAME and JIRA_PASSWORD not set")
             print("Exiting without trying to close the associated JIRA.")
     else:
-        print("Could not find jira-python library. Run 'sudo pip3 install jira' to install.")
+        print("Could not find jira-python library. Run 'pip3 install jira' to install.")
         print("Exiting without trying to close the associated JIRA.")
 
 
