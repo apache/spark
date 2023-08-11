@@ -113,7 +113,12 @@ private[connect] class SparkConnectStreamingQueryCache(
       if (v.userId.equals(sessionHolder.userId) && v.sessionId.equals(sessionHolder.sessionId)) {
         if (v.query.isActive && Option(v.session.streams.get(k.queryId)).nonEmpty) {
           logInfo(s"Stopping the query with id ${k.queryId} since the session has timed out")
-          v.query.stop()
+          try {
+            v.query.stop()
+          } catch {
+            case NonFatal(ex) =>
+              logWarning(s"Failed to stop the query ${k.queryId}. Error is ignored.", ex)
+          }
         }
       }
     }
@@ -180,13 +185,16 @@ private[connect] class SparkConnectStreamingQueryCache(
           case Some(_) => // Inactive query waiting for expiration. Do nothing.
             logInfo(s"Waiting for the expiration for $id in session ${v.sessionId}")
 
-          case None => // Active query, check if it is stopped. Keep the session alive.
+          case None => // Active query, check if it is stopped. Enable timeout if it is stopped.
             val isActive = v.query.isActive && Option(v.session.streams.get(id)).nonEmpty
 
             if (!isActive) {
               logInfo(s"Marking query $id in session ${v.sessionId} inactive.")
               val expiresAtMs = nowMs + stoppedQueryInactivityTimeout.toMillis
               queryCache.put(k, v.copy(expiresAtMs = Some(expiresAtMs)))
+              // To consider: Clean up any runner registered for this query with the session holder
+              // for this session. Useful in case listener events are delayed (such delays are
+              // seen in practice, especially when users have heavy processing inside listeners).
             }
         }
       }
@@ -195,9 +203,6 @@ private[connect] class SparkConnectStreamingQueryCache(
 }
 
 private[connect] object SparkConnectStreamingQueryCache {
-
-  case class SessionCacheKey(userId: String, sessionId: String)
-  case class SessionCacheValue(session: SparkSession)
 
   case class QueryCacheKey(queryId: String, runId: String)
 

@@ -25,6 +25,7 @@ import scala.collection.JavaConverters._
 import scala.collection.mutable
 
 import org.apache.spark.{JobArtifactSet, SparkException, SparkSQLException}
+
 import org.apache.spark.connect.proto
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.DataFrame
@@ -32,8 +33,9 @@ import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.connect.artifact.SparkConnectArtifactManager
 import org.apache.spark.sql.connect.common.InvalidPlanInput
 import org.apache.spark.sql.connect.planner.PythonStreamingQueryListener
+import org.apache.spark.sql.connect.planner.StreamingForeachBatchHelper
 import org.apache.spark.sql.streaming.StreamingQueryListener
-import org.apache.spark.util.{SystemClock}
+import org.apache.spark.util.SystemClock
 import org.apache.spark.util.Utils
 
 /**
@@ -55,6 +57,10 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
   // StreamingQueryManager.
   private lazy val listenerCache: ConcurrentMap[String, StreamingQueryListener] =
     new ConcurrentHashMap()
+
+  // Handles Python process clean up for streaming queries. Initialized on first use in a query.
+  private[connect] lazy val streamingRunnerCleanerCache =
+    new StreamingForeachBatchHelper.CleanerCache(this)
 
   private[connect] def createExecuteHolder(request: proto.ExecutePlanRequest): ExecuteHolder = {
     val executeHolder = new ExecuteHolder(request, this)
@@ -154,7 +160,7 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
     logDebug(s"Expiring session with userId: $userId and sessionId: $sessionId")
     artifactManager.cleanUpResources()
     eventManager.postClosed()
-
+    streamingRunnerCleanerCache.cleanUpAll()
     // Clean up running queries
     SparkConnectService.streamingSessionManager.cleanupRunningQueries(this)
   }
