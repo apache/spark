@@ -141,9 +141,9 @@ def is_timestamp_ntz_preferred() -> bool:
     Return a bool if TimestampNTZType is preferred according to the SQL configuration set.
     """
     if is_remote():
-        from pyspark.sql.connect.session import SparkSession
+        from pyspark.sql.connect.session import SparkSession as ConnectSparkSession
 
-        session = SparkSession.getActiveSession()
+        session = ConnectSparkSession.getActiveSession()
         if session is None:
             return False
         else:
