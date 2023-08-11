@@ -21,7 +21,7 @@ license: |
 
 SQLSTATE: none assigned
 
-Failed to execute `<statement>` command because the destination table column `<colName>` has a DEFAULT value `<defaultValue>`,
+Failed to execute `<statement>` command because the destination column or variable `<colName>` has a DEFAULT value `<defaultValue>`,
 
 This error class has the following derived error classes:
 

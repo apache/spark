@@ -22,6 +22,7 @@ import numpy as np
 import pandas as pd
 
 from pyspark import pandas as ps
+from pyspark.errors import PySparkValueError
 from pyspark.testing.pandasutils import ComparisonTestBase
 from pyspark.testing.sqlutils import SQLTestUtils
 
@@ -407,10 +408,6 @@ class SeriesComputeMixin:
         self.assert_eq(abs(psser), abs(pser))
         self.assert_eq(np.abs(psser), np.abs(pser))
 
-    @unittest.skipIf(
-        LooseVersion(pd.__version__) >= LooseVersion("2.0.0"),
-        "TODO(SPARK-43550): Enable SeriesTests.test_factorize for pandas 2.0.0.",
-    )
     def test_factorize(self):
         pser = pd.Series(["a", "b", "a", "b"])
         psser = ps.from_pandas(pser)
@@ -492,27 +489,27 @@ class SeriesComputeMixin:
         pser = pd.Series(["a", "b", "a", np.nan, None])
         psser = ps.from_pandas(pser)
 
-        pcodes, puniques = pser.factorize(sort=True, na_sentinel=-2)
-        kcodes, kuniques = psser.factorize(na_sentinel=-2)
+        pcodes, puniques = pser.factorize(sort=True, use_na_sentinel=-2)
+        kcodes, kuniques = psser.factorize(use_na_sentinel=-2)
         self.assert_eq(pcodes.tolist(), kcodes.to_list())
         self.assert_eq(puniques, kuniques)
 
-        pcodes, puniques = pser.factorize(sort=True, na_sentinel=2)
-        kcodes, kuniques = psser.factorize(na_sentinel=2)
+        pcodes, puniques = pser.factorize(sort=True, use_na_sentinel=2)
+        kcodes, kuniques = psser.factorize(use_na_sentinel=2)
         self.assert_eq(pcodes.tolist(), kcodes.to_list())
         self.assert_eq(puniques, kuniques)
 
         if not pd_below_1_1_2:
-            pcodes, puniques = pser.factorize(sort=True, na_sentinel=None)
-            kcodes, kuniques = psser.factorize(na_sentinel=None)
+            pcodes, puniques = pser.factorize(sort=True, use_na_sentinel=None)
+            kcodes, kuniques = psser.factorize(use_na_sentinel=None)
             self.assert_eq(pcodes.tolist(), kcodes.to_list())
             # puniques is Index(['a', 'b', nan], dtype='object')
             self.assert_eq(ps.Index(["a", "b", None]), kuniques)
 
             psser = ps.Series([1, 2, np.nan, 4, 5])  # Arrow takes np.nan as null
             psser.loc[3] = np.nan  # Spark takes np.nan as NaN
-            kcodes, kuniques = psser.factorize(na_sentinel=None)
-            pcodes, puniques = psser._to_pandas().factorize(sort=True, na_sentinel=None)
+            kcodes, kuniques = psser.factorize(use_na_sentinel=None)
+            pcodes, puniques = psser._to_pandas().factorize(sort=True, use_na_sentinel=None)
             self.assert_eq(pcodes.tolist(), kcodes.to_list())
             self.assert_eq(puniques, kuniques)
 
@@ -559,10 +556,6 @@ class SeriesComputeMixin:
         with self.assertWarns(FutureWarning):
             psser.between(1, 4, inclusive=True)
 
-    @unittest.skipIf(
-        LooseVersion(pd.__version__) >= LooseVersion("2.0.0"),
-        "TODO(SPARK-43479): Enable SeriesTests.test_between_time for pandas 2.0.0.",
-    )
     def test_between_time(self):
         idx = pd.date_range("2018-04-09", periods=4, freq="1D20min")
         pser = pd.Series([1, 2, 3, 4], index=idx)
@@ -584,6 +577,33 @@ class SeriesComputeMixin:
         self.assert_eq(
             pser.between_time("0:15", "0:45").sort_index(),
             psser.between_time("0:15", "0:45").sort_index(),
+        )
+
+        self.assert_eq(
+            pser.between_time("0:15", "0:45", inclusive="neither").sort_index(),
+            psser.between_time("0:15", "0:45", inclusive="neither").sort_index(),
+        )
+
+        self.assert_eq(
+            pser.between_time("0:15", "0:45", inclusive="left").sort_index(),
+            psser.between_time("0:15", "0:45", inclusive="left").sort_index(),
+        )
+
+        self.assert_eq(
+            pser.between_time("0:15", "0:45", inclusive="right").sort_index(),
+            psser.between_time("0:15", "0:45", inclusive="right").sort_index(),
+        )
+
+        with self.assertRaises(PySparkValueError) as ctx:
+            psser.between_time("0:15", "0:45", inclusive="")
+
+        self.check_error(
+            exception=ctx.exception,
+            error_class="VALUE_NOT_ALLOWED",
+            message_parameters={
+                "arg_name": "inclusive",
+                "allowed_values": str(["left", "right", "both", "neither"]),
+            },
         )
 
     def test_at_time(self):

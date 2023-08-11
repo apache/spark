@@ -180,7 +180,7 @@ class ExecutePlanResponseReattachableIterator(
   private def releaseUntil(untilResponseId: String): Unit = {
     if (!resultComplete) {
       val request = createReleaseExecuteRequest(Some(untilResponseId))
-      rawAsyncStub.releaseExecute(request, createRetryingReleaseExecuteResponseObserer(request))
+      rawAsyncStub.releaseExecute(request, createRetryingReleaseExecuteResponseObserver(request))
     }
   }
 
@@ -194,7 +194,7 @@ class ExecutePlanResponseReattachableIterator(
   private def releaseAll(): Unit = {
     if (!resultComplete) {
       val request = createReleaseExecuteRequest(None)
-      rawAsyncStub.releaseExecute(request, createRetryingReleaseExecuteResponseObserer(request))
+      rawAsyncStub.releaseExecute(request, createRetryingReleaseExecuteResponseObserver(request))
       resultComplete = true
     }
   }
@@ -211,10 +211,8 @@ class ExecutePlanResponseReattachableIterator(
       iterFun(iter)
     } catch {
       case ex: StatusRuntimeException
-          if StatusProto
-            .fromThrowable(ex)
-            .getMessage
-            .contains("INVALID_HANDLE.OPERATION_NOT_FOUND") =>
+          if Option(StatusProto.fromThrowable(ex))
+            .exists(_.getMessage.contains("INVALID_HANDLE.OPERATION_NOT_FOUND")) =>
         if (lastReturnedResponseId.isDefined) {
           throw new IllegalStateException(
             "OPERATION_NOT_FOUND on the server but responses were already received from it.",
@@ -231,22 +229,28 @@ class ExecutePlanResponseReattachableIterator(
    * ReleaseExecute and continues with iteration, but if it fails with a retryable error, the
    * callback will retrigger the asynchronous ReleaseExecute.
    */
-  private def createRetryingReleaseExecuteResponseObserer(
-      requestForRetry: proto.ReleaseExecuteRequest,
-      currentRetryNum: Int = 0): StreamObserver[proto.ReleaseExecuteResponse] = {
+  private def createRetryingReleaseExecuteResponseObserver(
+      requestForRetry: proto.ReleaseExecuteRequest)
+      : StreamObserver[proto.ReleaseExecuteResponse] = {
     new StreamObserver[proto.ReleaseExecuteResponse] {
       override def onNext(v: proto.ReleaseExecuteResponse): Unit = {}
       override def onCompleted(): Unit = {}
-      override def onError(t: Throwable): Unit = t match {
-        case NonFatal(e) if retryPolicy.canRetry(e) && currentRetryNum < retryPolicy.maxRetries =>
-          Thread.sleep(
-            (retryPolicy.maxBackoff min retryPolicy.initialBackoff * Math
-              .pow(retryPolicy.backoffMultiplier, currentRetryNum)).toMillis)
-          rawAsyncStub.releaseExecute(
-            requestForRetry,
-            createRetryingReleaseExecuteResponseObserer(requestForRetry, currentRetryNum + 1))
-        case _ =>
-          logWarning(s"ReleaseExecute failed with exception: $t.")
+      override def onError(t: Throwable): Unit = {
+        var firstTry = true
+        try {
+          retry {
+            if (firstTry) {
+              firstTry = false
+              throw t // we already failed once, handle first retry
+            } else {
+              // we already are in async execution thread, can execute further retries sync
+              rawBlockingStub.releaseExecute(requestForRetry)
+            }
+          }
+        } catch {
+          case NonFatal(e) =>
+            logWarning(s"ReleaseExecute failed with exception: $e.")
+        }
       }
     }
   }

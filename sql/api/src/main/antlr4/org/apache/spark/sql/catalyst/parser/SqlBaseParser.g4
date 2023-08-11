@@ -165,7 +165,10 @@ statement
     | CREATE (OR REPLACE)? TEMPORARY? FUNCTION (IF NOT EXISTS)?
         identifierReference AS className=stringLit
         (USING resource (COMMA resource)*)?                            #createFunction
-    | DROP TEMPORARY? FUNCTION (IF EXISTS)? identifierReference      #dropFunction
+    | DROP TEMPORARY? FUNCTION (IF EXISTS)? identifierReference        #dropFunction
+    | DECLARE (OR REPLACE)? VARIABLE?
+        identifierReference dataType? variableDefaultExpression?       #createVariable
+    | DROP TEMPORARY VARIABLE (IF EXISTS)? identifierReference         #dropVariable
     | EXPLAIN (LOGICAL | FORMATTED | EXTENDED | CODEGEN | COST)?
         statement                                                      #explain
     | SHOW TABLES ((FROM | IN) identifierReference)?
@@ -210,6 +213,9 @@ statement
     | SET TIME ZONE interval                                           #setTimeZone
     | SET TIME ZONE timezone                                           #setTimeZone
     | SET TIME ZONE .*?                                                #setTimeZone
+    | SET (VARIABLE | VAR) assignmentList                              #setVariable
+    | SET (VARIABLE | VAR) LEFT_PAREN multipartIdentifierList RIGHT_PAREN EQ
+          LEFT_PAREN query RIGHT_PAREN                                 #setVariable
     | SET configKey EQ configValue                                     #setQuotedConfiguration
     | SET configKey (EQ .*?)?                                          #setConfiguration
     | SET .*? EQ configValue                                           #setQuotedConfiguration
@@ -1113,6 +1119,10 @@ defaultExpression
     : DEFAULT expression
     ;
 
+variableDefaultExpression
+    : (DEFAULT | EQ) expression
+    ;
+
 colTypeList
     : colType (COMMA colType)*
     ;
@@ -1339,6 +1349,7 @@ ansiNonReserved
     | DBPROPERTIES
     | DEC
     | DECIMAL
+    | DECLARE
     | DEFAULT
     | DEFINED
     | DELETE
@@ -1530,6 +1541,8 @@ ansiNonReserved
     | USE
     | VALUES
     | VARCHAR
+    | VAR
+    | VARIABLE
     | VERSION
     | VIEW
     | VIEWS
@@ -1645,6 +1658,7 @@ nonReserved
     | DBPROPERTIES
     | DEC
     | DECIMAL
+    | DECLARE
     | DEFAULT
     | DEFINED
     | DELETE
@@ -1875,6 +1889,8 @@ nonReserved
     | USER
     | VALUES
     | VARCHAR
+    | VAR
+    | VARIABLE
     | VERSION
     | VIEW
     | VIEWS

@@ -25,7 +25,7 @@ import org.mockito.invocation.InvocationOnMock
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, Analyzer, FunctionRegistry, NoSuchTableException, ResolveSessionCatalog}
-import org.apache.spark.sql.catalyst.catalog.{InMemoryCatalog, SessionCatalog}
+import org.apache.spark.sql.catalyst.catalog.{InMemoryCatalog, SessionCatalog, TempVariableManager}
 import org.apache.spark.sql.catalyst.expressions.objects.AssertNotNull
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
@@ -169,6 +169,8 @@ abstract class AlignAssignmentsSuiteBase extends AnalysisTest {
 
   private val v2SessionCatalog = new V2SessionCatalog(v1SessionCatalog)
 
+  private val tempVariableManager = new TempVariableManager
+
   private val catalogManager = {
     val manager = mock(classOf[CatalogManager])
     when(manager.catalog(any())).thenAnswer((invocation: InvocationOnMock) => {
@@ -182,6 +184,7 @@ abstract class AlignAssignmentsSuiteBase extends AnalysisTest {
     when(manager.currentNamespace).thenReturn(Array.empty[String])
     when(manager.v1SessionCatalog).thenReturn(v1SessionCatalog)
     when(manager.v2SessionCatalog).thenReturn(v2SessionCatalog)
+    when(manager.tempVariableManager).thenReturn(tempVariableManager)
     manager
   }
 
