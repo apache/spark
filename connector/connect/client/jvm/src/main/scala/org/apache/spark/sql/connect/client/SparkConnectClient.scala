@@ -56,7 +56,7 @@ private[sql] class SparkConnectClient(
   // Generate a unique session ID for this client. This UUID must be unique to allow
   // concurrent Spark sessions of the same user. If the channel is closed, creating
   // a new client will create a new session ID.
-  private[sql] val sessionId: String = UUID.randomUUID.toString
+  private[sql] val sessionId: String = configuration.sessionId.getOrElse(UUID.randomUUID.toString)
 
   private[client] val artifactManager: ArtifactManager = {
     new ArtifactManager(configuration, sessionId, bstub, stub)
@@ -432,6 +432,7 @@ object SparkConnectClient {
       val PARAM_USE_SSL = "use_ssl"
       val PARAM_TOKEN = "token"
       val PARAM_USER_AGENT = "user_agent"
+      val PARAM_SESSION_ID = "session_id"
     }
 
     private def verifyURI(uri: URI): Unit = {
@@ -463,6 +464,21 @@ object SparkConnectClient {
       this
     }
 
+    def sessionId(value: String): Builder = {
+      try {
+        UUID.fromString(value).toString
+      } catch {
+        case e: IllegalArgumentException =>
+          throw new IllegalArgumentException(
+            "Parameter value 'session_id' must be a valid UUID format.",
+            e)
+      }
+      _configuration = _configuration.copy(sessionId = Some(value))
+      this
+    }
+
+    def sessionId: Option[String] = _configuration.sessionId
+
     def userAgent: String = _configuration.userAgent
 
     def option(key: String, value: String): Builder = {
@@ -490,6 +506,7 @@ object SparkConnectClient {
           case URIParams.PARAM_TOKEN => token(value)
           case URIParams.PARAM_USE_SSL =>
             if (java.lang.Boolean.valueOf(value)) enableSsl() else disableSsl()
+          case URIParams.PARAM_SESSION_ID => sessionId(value)
           case _ => option(key, value)
         }
       }
@@ -576,7 +593,8 @@ object SparkConnectClient {
       userAgent: String = DEFAULT_USER_AGENT,
       retryPolicy: GrpcRetryHandler.RetryPolicy = GrpcRetryHandler.RetryPolicy(),
       useReattachableExecute: Boolean = true,
-      interceptors: List[ClientInterceptor] = List.empty) {
+      interceptors: List[ClientInterceptor] = List.empty,
+      sessionId: Option[String] = None) {
 
     def userContext: proto.UserContext = {
       val builder = proto.UserContext.newBuilder()
