@@ -24,8 +24,7 @@ from pyspark.testing.pandasutils import PandasOnSparkTestUtils
 class DiffFramesParitySetItemSeriesTests(
     DiffFramesSetItemSeriesMixin, PandasOnSparkTestUtils, ReusedConnectTestCase
 ):
-    def test_series_iloc_setitem(self):
-        super().test_series_iloc_setitem()
+    pass
 
 
 if __name__ == "__main__":
