@@ -249,4 +249,50 @@ class SparkSessionE2ESuite extends RemoteSparkSession {
     }
     assert(e.getMessage contains "OPERATION_CANCELED")
   }
+
+  test("option propagation") {
+    val remote = s"sc://localhost:$serverPort"
+    val session1 = SparkSession
+      .builder()
+      .remote(remote)
+      .config("foo", 12L)
+      .config("bar", value = true)
+      .config("bob", 12.0)
+      .config("heading", "north")
+      .getOrCreate()
+    assert(session1.conf.get("foo") == "12")
+    assert(session1.conf.get("bar") == "true")
+    assert(session1.conf.get("bob") == String.valueOf(12.0))
+    assert(session1.conf.get("heading") == "north")
+
+    // Check if new options are applied to an existing session.
+    val session2 = SparkSession
+      .builder()
+      .remote(remote)
+      .config("heading", "south")
+      .getOrCreate()
+    assert(session2 == session1)
+    assert(session2.conf.get("heading") == "south")
+
+    // Create a completely different session, confs are not support to leak.
+    val session3 = SparkSession
+      .builder()
+      .remote(remote)
+      .config(Map("foo" -> "13", "baar" -> "false", "heading" -> "east"))
+      .create()
+    assert(session3 != session1)
+    assert(session3.conf.get("foo") == "13")
+    assert(session3.conf.get("baar") == "false")
+    assert(session3.conf.getOption("bob").isEmpty)
+    assert(session3.conf.get("heading") == "east")
+
+    // Try to set a static conf.
+    intercept[Exception] {
+      SparkSession
+        .builder()
+        .remote(remote)
+        .config("spark.sql.globalTempDatabase", "not_gonna_happen")
+        .create()
+    }
+  }
 }

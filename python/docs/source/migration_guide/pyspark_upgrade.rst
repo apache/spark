@@ -30,6 +30,11 @@ Upgrading from PySpark 3.5 to 4.0
 * In Spark 4.0, ``DataFrame.mad`` has been removed from pandas API on Spark.
 * In Spark 4.0, ``Series.mad`` has been removed from pandas API on Spark.
 * In Spark 4.0, ``na_sentinel`` parameter from ``Index.factorize`` and `Series.factorize`` has been removed from pandas API on Spark, use ``use_na_sentinel`` instead.
+* In Spark 4.0, ``inplace`` parameter from ``Categorical.add_categories``, ``Categorical.remove_categories``, ``Categorical.set_categories``, ``Categorical.rename_categories``, ``Categorical.reorder_categories``, ``Categorical.as_ordered``, ``Categorical.as_unordered`` have been removed from pandas API on Spark.
+* In Spark 4.0, ``closed`` parameter from ``ps.date_range`` has been removed from pandas API on Spark.
+* In Spark 4.0, ``include_start`` and ``include_end`` parameters from ``DataFrame.between_time`` have been removed from pandas API on Spark, use ``inclusive`` instead.
+* In Spark 4.0, ``include_start`` and ``include_end`` parameters from ``Series.between_time`` have been removed from pandas API on Spark, use ``inclusive`` instead.
+* In Spark 4.0, the various datetime attributes of ``DatetimeIndex`` (``day``, ``month``, ``year`` etc.) are now ``int32`` instead of ``int64`` from pandas API on Spark.
 
 
 Upgrading from PySpark 3.3 to 3.4
