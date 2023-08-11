@@ -29,7 +29,7 @@ from py4j.java_gateway import JavaObject
 
 from pyspark.errors import PySparkAttributeError, PySparkRuntimeError, PySparkTypeError
 from pyspark.rdd import PythonEvalType
-from pyspark.sql.column import Column, _to_java_column, _to_java_expr, _to_seq
+from pyspark.sql.column import _to_java_column, _to_java_expr, _to_seq
 from pyspark.sql.pandas.utils import require_minimum_pandas_version, require_minimum_pyarrow_version
 from pyspark.sql.types import DataType, StructType, _parse_datatype_string
 from pyspark.sql.udf import _wrap_function
