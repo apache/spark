@@ -1974,6 +1974,20 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
     )
   }
 
+  def withOptionsExpectedSimpleTableError(actual: String): Throwable = {
+    new AnalysisException(
+      errorClass = "WITH_OPTIONS_EXPECTED_SIMPLE_TABLE",
+      messageParameters = Map.empty
+    )
+  }
+
+  def withOptionsExpectedTableError(actual: String): Throwable = {
+    new AnalysisException(
+      errorClass = "WITH_OPTIONS_EXPECTED_TABLE",
+      messageParameters = Map.empty
+    )
+  }
+
   def identifierTooManyNamePartsError(originalIdentifier: String): Throwable = {
     new AnalysisException(
       errorClass = "IDENTIFIER_TOO_MANY_NAME_PARTS",

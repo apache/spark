@@ -3301,7 +3301,7 @@ class DataSourceV2SQLSuiteV1Filter
       sql(s"CREATE TABLE $t1 (id bigint, data string) USING $v2Format")
       sql(s"INSERT INTO $t1 VALUES (1, 'a'), (2, 'b')")
 
-      val df = sql(s"SELECT * FROM with_options('$t1', map('split-size', '5'))")
+      val df = sql(s"SELECT * FROM with_options(TABLE ($t1), map('split-size', '5'))")
       val collected = df.queryExecution.optimizedPlan.collect {
         case scan: DataSourceV2ScanRelation =>
           assert(scan.relation.options.get("split-size") == "5")
@@ -3319,15 +3319,27 @@ class DataSourceV2SQLSuiteV1Filter
         "The `with_options` requires 2 parameters but the actual number is 1"))
 
       val wrongFirstArg = intercept[AnalysisException](
-        sql(s"SELECT * FROM with_options(foo, map('foo','bar'))"))
+        sql(s"SELECT * FROM with_options(foo, map('split-size','5'))"))
       assert(wrongFirstArg.message.contains(
         "A column, variable, or function parameter with name `foo` cannot be resolved"
       ))
 
+      val wrongFirstArg2 = intercept[AnalysisException](
+        sql(s"SELECT * FROM with_options(array('$t1'), map('split-size','5'))"))
+      assert(wrongFirstArg2.message.contains(
+        "`with_options` function requires a table argument, \"TABLE($t)\""
+      ))
+
       val wrongSecondArg = intercept[AnalysisException](
-        sql(s"SELECT * FROM with_options('$t1', array('foo'))"))
+        sql(s"SELECT * FROM with_options(TABLE ($t1), array('split-size', '5'))"))
       assert(wrongSecondArg.message.contains(
         "Must use the `map()` function for options"))
+
+      val unsupportedTableCall = intercept[AnalysisException](
+        sql(s"SELECT * FROM with_options(TABLE (SELECT * FROM range(0,1))" +
+          s", map('split-size','5'))"))
+      assert(unsupportedTableCall.message.contains(
+        "`with_options` function only handles a simple table argument, \"TABLE($t)\""))
     }
   }
 
