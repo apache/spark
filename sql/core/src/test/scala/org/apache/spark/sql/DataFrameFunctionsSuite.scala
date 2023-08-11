@@ -24,6 +24,8 @@ import java.sql.{Date, Timestamp}
 
 import scala.util.Random
 
+import org.apache.logging.log4j.Level
+
 import org.apache.spark.{SPARK_DOC_ROOT, SparkException, SparkRuntimeException}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, UnresolvedAttribute}
@@ -31,7 +33,7 @@ import org.apache.spark.sql.catalyst.expressions.{Alias, ArraysZip, AttributeRef
 import org.apache.spark.sql.catalyst.expressions.Cast._
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
 import org.apache.spark.sql.catalyst.plans.logical.OneRowRelation
-import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.{withDefaultTimeZone, UTC}
+import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.{UTC, withDefaultTimeZone}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
@@ -5937,7 +5939,27 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
           call_function("spark_catalog.default.custom_sum", $"a")),
         Row(12.0, 12.0, 12.0))
     }
+  }
 
+  test("WholeStageCodegen for CodegenFallback expression if it contains nullSafeEval method") {
+    val logAppender = new LogAppender("Gen code collector")
+    logAppender.setThreshold(Level.DEBUG)
+    withLogAppender(logAppender,
+      loggerNames = Seq("org.apache.spark.sql.execution.WholeStageCodegenExec"),
+      level = Some(Level.DEBUG)) {
+      sql(
+        s"""SELECT from_json(regexp_replace(s, 'a', 'x'), 'x INT, b DOUBLE').x,
+           |       from_json(regexp_replace(s, 'a', 'x'), 'x INT, b DOUBLE').b
+           |FROM values('{"a":1, "b":0.8}') t(s)
+           |""".stripMargin).explain("codegen")
+    }
+    val logMsgs =
+      logAppender.loggingEvents.map(_.getMessage.getFormattedMessage).flatten(_.split("\n"))
+
+    // Execute expr.nullSafeEval() method in wholeStageCodegen
+    assert(logMsgs.filter(_.contains(".nullSafeEval(")).length === 2)
+    // Subexpression regexp_replace(s, 'a', 'x') will only be executed once.
+    assert(logMsgs.filter(_.contains("project_subExpr_0(project_expr_0_0);")).length == 1)
   }
 }
 

@@ -150,7 +150,7 @@ class EquivalentExpressions(
   //   1. CodegenFallback: it's children will not be used to generate code (call eval() instead)
   //   2. ConditionalExpression: use its children that will always be evaluated.
   private def childrenToRecurse(expr: Expression): Seq[Expression] = expr match {
-    case _: CodegenFallback => Nil
+    case e: CodegenFallback if !e.supportWholeStageCodegen() => Nil
     case c: ConditionalExpression => c.alwaysEvaluatedInputs.map(skipForShortcut)
     case other => skipForShortcut(other).children
   }
@@ -158,7 +158,7 @@ class EquivalentExpressions(
   // For some special expressions we cannot just recurse into all of its children, but we can
   // recursively add the common expressions shared between all of its children.
   private def commonChildrenToRecurse(expr: Expression): Seq[Seq[Expression]] = expr match {
-    case _: CodegenFallback => Nil
+    case e: CodegenFallback if !e.supportWholeStageCodegen() => Nil
     case c: ConditionalExpression => c.branchGroups
     case _ => Nil
   }

@@ -46,21 +46,57 @@ trait CodegenFallback extends Expression {
     val objectTerm = ctx.freshName("obj")
     val placeHolder = ctx.registerComment(this.toString)
     val javaType = CodeGenerator.javaType(this.dataType)
-    if (nullable) {
-      ev.copy(code = code"""
-        $placeHolder
-        Object $objectTerm = ((Expression) references[$idx]).eval($input);
-        boolean ${ev.isNull} = $objectTerm == null;
-        $javaType ${ev.value} = ${CodeGenerator.defaultValue(this.dataType)};
-        if (!${ev.isNull}) {
-          ${ev.value} = (${CodeGenerator.boxedType(this.dataType)}) $objectTerm;
-        }""")
+    val childrenGen = children.map(_.genCode(ctx))
+    val childrenCode = childrenGen.map(_.code).mkString("\n")
+    val childrenParameter = childrenGen.map(_.value).mkString(", ")
+    val clazz = this.getClass.getName
+    if (supportWholeStageCodegen) {
+      if (nullable) {
+        ev.copy(code =
+          code"""
+          $placeHolder
+          ${childrenCode}
+          Object $objectTerm = null;
+          if(${childrenGen.map(_.isNull).mkString(" || ")}) {
+            $objectTerm = null;
+          } else {
+            $objectTerm = (($clazz) references[$idx]).nullSafeEval(${childrenParameter});
+          }
+          boolean ${ev.isNull} = $objectTerm == null;
+          $javaType ${ev.value} = ${CodeGenerator.defaultValue(this.dataType)};
+          if (!${ev.isNull}) {
+            ${ev.value} = (${CodeGenerator.boxedType(this.dataType)}) $objectTerm;
+          }""")
+      } else {
+        ev.copy(code =
+          code"""
+          $placeHolder
+          ${childrenCode}
+          Object $objectTerm = (($clazz) references[$idx]).nullSafeEval(${childrenParameter});
+          $javaType ${ev.value} = (${CodeGenerator.boxedType(this.dataType)}) $objectTerm;
+          """, isNull = FalseLiteral)
+      }
     } else {
-      ev.copy(code = code"""
-        $placeHolder
-        Object $objectTerm = ((Expression) references[$idx]).eval($input);
-        $javaType ${ev.value} = (${CodeGenerator.boxedType(this.dataType)}) $objectTerm;
-        """, isNull = FalseLiteral)
+      if (nullable) {
+        ev.copy(code = code"""
+          $placeHolder
+          Object $objectTerm = ((Expression) references[$idx]).eval($input);
+          boolean ${ev.isNull} = $objectTerm == null;
+          $javaType ${ev.value} = ${CodeGenerator.defaultValue(this.dataType)};
+          if (!${ev.isNull}) {
+            ${ev.value} = (${CodeGenerator.boxedType(this.dataType)}) $objectTerm;
+          }""")
+      } else {
+        ev.copy(code = code"""
+          $placeHolder
+          Object $objectTerm = ((Expression) references[$idx]).eval($input);
+          $javaType ${ev.value} = (${CodeGenerator.boxedType(this.dataType)}) $objectTerm;
+          """, isNull = FalseLiteral)
+      }
     }
+  }
+
+  def supportWholeStageCodegen(): Boolean = {
+    this.getClass.getDeclaredMethods.exists(_.getName == "nullSafeEval")
   }
 }
