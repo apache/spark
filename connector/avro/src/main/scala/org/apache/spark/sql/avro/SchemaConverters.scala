@@ -140,11 +140,23 @@ object SchemaConverters {
 
       case UNION =>
         if (avroSchema.getTypes.asScala.exists(_.getType == NULL)) {
-          // In case of a union with null, eliminate it and make a recursive call
           val remainingUnionTypes = AvroUtils.nonNullUnionBranches(avroSchema)
           if (remainingUnionTypes.size == 1) {
-            toSqlTypeHelper(remainingUnionTypes.head, existingRecordNames, avroOptions)
-              .copy(nullable = true)
+
+            // TODO: wrap this around in a config, and only enable this conversion if
+            // the config is set
+
+            val singleton = remainingUnionTypes.head
+            val schemaType = toSqlTypeHelper(singleton, existingRecordNames, avroOptions)
+            val fieldName = if (avroOptions.useStableIdForUnionType) {
+              s"member_${singleton.getName.toLowerCase(Locale.ROOT)}"
+            } else {
+              s"member0"
+            }
+            val field = StructField(fieldName, schemaType.dataType, nullable = true)
+            // Wrapping the field in a StructType
+            val structType = StructType(Seq(field))
+            SchemaType(structType, nullable = true)
           } else {
             toSqlTypeHelper(
               Schema.createUnion(remainingUnionTypes.asJava),
