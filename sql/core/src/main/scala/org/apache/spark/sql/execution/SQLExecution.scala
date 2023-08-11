@@ -133,8 +133,7 @@ object SQLExecution {
             case e: SparkThrowable =>
               SparkThrowableHelper.getMessage(e, ErrorMessageFormat.PRETTY)
             case e =>
-              // unexpected behavior
-              SparkThrowableHelper.getMessage(e)
+              Utils.exceptionString(e)
           }
           val event = SparkListenerSQLExecutionEnd(
             executionId,
