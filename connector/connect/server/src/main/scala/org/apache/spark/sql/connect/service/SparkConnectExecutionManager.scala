@@ -61,7 +61,7 @@ private[connect] class SparkConnectExecutionManager() extends Logging {
   /**
    * Create a new ExecuteHolder and register it with this global manager and with its session.
    */
-  private[connect] def createExecuteHolder(request: proto.ExecutePlanRequest): ExecuteHolder = {
+  private[service] def createExecuteHolder(request: proto.ExecutePlanRequest): ExecuteHolder = {
     val sessionHolder = SparkConnectService
       .getOrCreateIsolatedSession(request.getUserContext.getUserId, request.getSessionId)
     val executeHolder = new ExecuteHolder(request, sessionHolder)
@@ -108,6 +108,12 @@ private[connect] class SparkConnectExecutionManager() extends Logging {
     }
     // close the execution outside the lock
     executeHolder.foreach(_.close())
+  }
+
+  private[service] def getExecuteHolder(key: ExecuteKey): Option[ExecuteHolder] = {
+    executionsLock.synchronized {
+      executions.get(key)
+    }
   }
 
   /** Get info about abandoned execution, if there is one. */
