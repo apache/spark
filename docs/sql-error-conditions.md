@@ -2137,6 +2137,18 @@ SQLSTATE: none assigned
 
 Window function `<funcName>` requires an OVER clause.
 
+### WITH_OPTIONS_EXPECTED_SIMPLE_TABLE
+
+SQLSTATE: none assigned
+
+`with_options` function only handles a simple table argument, "TABLE($t)".
+
+### WITH_OPTIONS_EXPECTED_TABLE
+
+SQLSTATE: none assigned
+
+`with_options` function requires a table argument, "TABLE($t)".
+
 ### WRITE_STREAM_NOT_ALLOWED
 
 SQLSTATE: none assigned

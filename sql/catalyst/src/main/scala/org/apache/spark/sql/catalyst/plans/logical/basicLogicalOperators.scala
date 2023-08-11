@@ -1186,8 +1186,8 @@ object RelationWithOptions {
 
   def merge(original: CaseInsensitiveStringMap, newMap: Map[String, String]):
     CaseInsensitiveStringMap = {
-    val map = new java.util.HashMap[String, String](newMap.asJava)
-    map.putAll(original)
+    val map = new java.util.HashMap[String, String](original)
+    map.putAll(newMap.asJava)
     new CaseInsensitiveStringMap(map)
   }
 }
