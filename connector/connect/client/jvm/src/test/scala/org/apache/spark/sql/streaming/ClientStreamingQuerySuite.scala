@@ -268,6 +268,8 @@ class ClientStreamingQuerySuite extends QueryTest with SQLHelper with Logging {
 
     q.stop()
     assert(!q1.isActive)
+
+    assert(spark.streams.get(q.id) == null)
   }
 
   test("streaming query listener") {

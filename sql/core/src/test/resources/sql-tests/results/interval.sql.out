@@ -194,7 +194,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
   "sqlState" : "42K09",
   "messageParameters" : {
-    "left" : "\"DOUBLE\"",
+    "left" : "\"STRING\"",
     "right" : "\"INTERVAL SECOND\"",
     "sqlExpr" : "\"(2 / INTERVAL '02' SECOND)\""
   },
@@ -218,7 +218,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
   "sqlState" : "42K09",
   "messageParameters" : {
-    "left" : "\"DOUBLE\"",
+    "left" : "\"STRING\"",
     "right" : "\"INTERVAL YEAR\"",
     "sqlExpr" : "\"(2 / INTERVAL '2' YEAR)\""
   },
@@ -1744,7 +1744,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "sqlState" : "42K09",
   "messageParameters" : {
     "left" : "\"INTERVAL YEAR\"",
-    "right" : "\"DOUBLE\"",
+    "right" : "\"STRING\"",
     "sqlExpr" : "\"(INTERVAL '2' YEAR + 3-3 year to month)\""
   },
   "queryContext" : [ {
@@ -1784,7 +1784,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "sqlState" : "42K09",
   "messageParameters" : {
     "left" : "\"INTERVAL YEAR\"",
-    "right" : "\"DOUBLE\"",
+    "right" : "\"STRING\"",
     "sqlExpr" : "\"(INTERVAL '2' YEAR + 3-3)\""
   },
   "queryContext" : [ {
@@ -1808,7 +1808,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "sqlState" : "42K09",
   "messageParameters" : {
     "left" : "\"INTERVAL YEAR\"",
-    "right" : "\"DOUBLE\"",
+    "right" : "\"STRING\"",
     "sqlExpr" : "\"(INTERVAL '2' YEAR - 4)\""
   },
   "queryContext" : [ {
@@ -1856,7 +1856,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "sqlState" : "42K09",
   "messageParameters" : {
     "left" : "\"INTERVAL YEAR\"",
-    "right" : "\"DOUBLE\"",
+    "right" : "\"STRING\"",
     "sqlExpr" : "\"(INTERVAL '2' YEAR + str)\""
   },
   "queryContext" : [ {
@@ -1880,7 +1880,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "sqlState" : "42K09",
   "messageParameters" : {
     "left" : "\"INTERVAL YEAR\"",
-    "right" : "\"DOUBLE\"",
+    "right" : "\"STRING\"",
     "sqlExpr" : "\"(INTERVAL '2' YEAR - str)\""
   },
   "queryContext" : [ {
