@@ -1648,17 +1648,35 @@ abstract class RDD[T: ClassTag](
    * RDDs will be removed. This function must be called before any job has been
    * executed on this RDD. It is strongly recommended that this RDD is persisted in
    * memory, otherwise saving it on a file will require recomputation.
+   *
+   * @param eager Whether to checkpoint this RDD immediately or not.
    */
-  def checkpoint(): Unit = RDDCheckpointData.synchronized {
+  def checkpoint(eager: Boolean): this.type = {
     // NOTE: we use a global lock here due to complexities downstream with ensuring
     // children RDD partitions point to the correct parent partitions. In the future
     // we should revisit this consideration.
-    if (context.checkpointDir.isEmpty) {
-      throw SparkCoreErrors.checkpointDirectoryHasNotBeenSetInSparkContextError()
-    } else if (checkpointData.isEmpty) {
-      checkpointData = Some(new ReliableRDDCheckpointData(this))
+    RDDCheckpointData.synchronized {
+      if (context.checkpointDir.isEmpty) {
+        throw SparkCoreErrors.checkpointDirectoryHasNotBeenSetInSparkContextError()
+      } else if (checkpointData.isEmpty) {
+        checkpointData = Some(new ReliableRDDCheckpointData(this))
+      }
     }
+
+    if (eager) {
+      doCheckpoint()
+    }
+    this
   }
+
+  /**
+   * Mark this RDD for checkpointing. It will be saved to a file inside the checkpoint
+   * directory set with `SparkContext#setCheckpointDir` and all references to its parent
+   * RDDs will be removed. This function must be called before any job has been
+   * executed on this RDD. It is strongly recommended that this RDD is persisted in
+   * memory, otherwise saving it on a file will require recomputation.
+   */
+  def checkpoint(): Unit = checkpoint(eager = false)
 
   /**
    * Mark this RDD for local checkpointing using Spark's existing caching layer.
@@ -1677,8 +1695,31 @@ abstract class RDD[T: ClassTag](
    * `spark.dynamicAllocation.cachedExecutorIdleTimeout` to a high value.
    *
    * The checkpoint directory set through `SparkContext#setCheckpointDir` is not used.
+   *
    */
-  def localCheckpoint(): this.type = RDDCheckpointData.synchronized {
+  def localCheckpoint(): this.type = localCheckpoint(eager = false)
+
+  /**
+   * Mark this RDD for local checkpointing using Spark's existing caching layer.
+   *
+   * This method is for users who wish to truncate RDD lineages while skipping the expensive
+   * step of replicating the materialized data in a reliable distributed file system. This is
+   * useful for RDDs with long lineages that need to be truncated periodically (e.g. GraphX).
+   *
+   * Local checkpointing sacrifices fault-tolerance for performance. In particular, checkpointed
+   * data is written to ephemeral local storage in the executors instead of to a reliable,
+   * fault-tolerant storage. The effect is that if an executor fails during the computation,
+   * the checkpointed data may no longer be accessible, causing an irrecoverable job failure.
+   *
+   * This is NOT safe to use with dynamic allocation, which removes executors along
+   * with their cached blocks. If you must use both features, you are advised to set
+   * `spark.dynamicAllocation.cachedExecutorIdleTimeout` to a high value.
+   *
+   * The checkpoint directory set through `SparkContext#setCheckpointDir` is not used.
+   *
+   * @param eager Whether to checkpoint this RDD immediately or not.
+   */
+  def localCheckpoint(eager: Boolean): this.type = {
     if (Utils.isDynamicAllocationEnabled(conf) &&
       conf.contains(DYN_ALLOCATION_CACHED_EXECUTOR_IDLE_TIMEOUT)) {
       logWarning("Local checkpointing is NOT safe to use with dynamic allocation, " +
@@ -1702,21 +1743,28 @@ abstract class RDD[T: ClassTag](
       persist(LocalRDDCheckpointData.transformStorageLevel(storageLevel), allowOverride = true)
     }
 
-    // If this RDD is already checkpointed and materialized, its lineage is already truncated.
-    // We must not override our `checkpointData` in this case because it is needed to recover
-    // the checkpointed data. If it is overridden, next time materializing on this RDD will
-    // cause error.
-    if (isCheckpointedAndMaterialized) {
-      logWarning("Not marking RDD for local checkpoint because it was already " +
-        "checkpointed and materialized")
-    } else {
-      // Lineage is not truncated yet, so just override any existing checkpoint data with ours
-      checkpointData match {
-        case Some(_: ReliableRDDCheckpointData[_]) => logWarning(
-          "RDD was already marked for reliable checkpointing: overriding with local checkpoint.")
-        case _ =>
-      }
+
+    RDDCheckpointData.synchronized {
+      // If this RDD is already checkpointed and materialized, its lineage is already truncated.
+      // We must not override our `checkpointData` in this case because it is needed to recover
+      // the checkpointed data. If it is overridden, next time materializing on this RDD will
+      // cause error.
+      if (isCheckpointedAndMaterialized) {
+        logWarning("Not marking RDD for local checkpoint because it was already " +
+          "checkpointed and materialized")
+      } else {
+        // Lineage is not truncated yet, so just override any existing checkpoint data with ours
+        checkpointData match {
+          case Some(_: ReliableRDDCheckpointData[_]) => logWarning(
+            "RDD was already marked for reliable checkpointing: overriding with local checkpoint.")
+          case _ =>
+        }
       checkpointData = Some(new LocalRDDCheckpointData(this))
+      }
+    }
+
+    if (eager) {
+      doCheckpoint()
     }
     this
   }

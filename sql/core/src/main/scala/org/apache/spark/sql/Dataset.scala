@@ -727,13 +727,9 @@ class Dataset[T] private[sql](
     withAction(actionName, queryExecution) { physicalPlan =>
       val internalRdd = physicalPlan.execute().map(_.copy())
       if (reliableCheckpoint) {
-        internalRdd.checkpoint()
+        internalRdd.checkpoint(eager)
       } else {
-        internalRdd.localCheckpoint()
-      }
-
-      if (eager) {
-        internalRdd.doCheckpoint()
+        internalRdd.localCheckpoint(eager)
       }
 
       Dataset.ofRows(

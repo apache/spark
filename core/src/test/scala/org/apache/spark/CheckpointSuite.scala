@@ -538,6 +538,13 @@ class CheckpointSuite extends SparkFunSuite with RDDCheckpointTester with LocalS
       sc.setLocalProperty(RDD.CHECKPOINT_ALL_MARKED_ANCESTORS, null)
     }
   }
+
+  runTest("eager checkpointing") { reliableCheckpoint: Boolean =>
+    val rdd = sc.makeRDD(1 to 4)
+    rdd.checkpoint(eager = true)
+    assert(rdd.isCheckpointed)
+    assert(rdd.isCheckpointedAndMaterialized)
+  }
 }
 
 /** RDD partition that has large serialized size. */
