@@ -597,6 +597,7 @@ def read_udtf(pickleSer, infile, eval_type):
                 error_class="UDTF_EXEC_ERROR",
                 message_parameters={"method_name": "__init__", "error": str(e)},
             )
+
     create_udtf_class_instance(return_type)
 
     # Validate the UDTF
@@ -621,7 +622,8 @@ def read_udtf(pickleSer, infile, eval_type):
         prev_partition_values = [prev_table_arg[i] for i in partition_child_indexes]
         udtf_state.prev_arguments = arguments
         change_partitions = any(
-            (1 for k, v in zip(cur_partition_values, prev_partition_values) if k != v))
+            (1 for k, v in zip(cur_partition_values, prev_partition_values) if k != v)
+        )
         return change_partitions
 
     if eval_type == PythonEvalType.SQL_ARROW_TABLE_UDF:
@@ -681,7 +683,8 @@ def read_udtf(pickleSer, infile, eval_type):
                             yield from udtf_state.terminate()
                         create_udtf_classs_instance(return_type)
                         udtf_state.eval = wrap_arrow_udtf(
-                            getattr(udtf_state.udtf, "eval"), return_type)
+                            getattr(udtf_state.udtf, "eval"), return_type
+                        )
                         udtf_state.set_terminate(wrap_udtf, return_type)
                     yield from udtf_state.eval(*arguments)
             finally:
@@ -759,8 +762,7 @@ def read_udtf(pickleSer, infile, eval_type):
                         if udtf_state.terminate is not None:
                             yield udtf_state.terminate()
                         create_udtf_class_instance(return_type)
-                        udtf_state.eval = wrap_udtf(
-                            getattr(udtf_state.udtf, "eval"), return_type)
+                        udtf_state.eval = wrap_udtf(getattr(udtf_state.udtf, "eval"), return_type)
                         udtf_state.set_terminate(wrap_udtf, return_type)
                     yield udtf_state.eval(*arguments)
             finally:

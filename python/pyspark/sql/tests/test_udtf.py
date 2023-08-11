@@ -1807,8 +1807,9 @@ class BaseUDTFTestsMixin:
                     # Make sure that all values of the partitioning column are the same
                     # for each row consumed by this method for this instance of the class.
                     raise Exception(
-                        f"self._partition_col was {self._partition_col} but the row " +
-                        f"value was {row['partition_col']}")
+                        f"self._partition_col was {self._partition_col} but the row "
+                        + f"value was {row['partition_col']}"
+                    )
                 self._partition_col = row["partition_col"]
 
             def terminate(self):
@@ -1829,12 +1830,13 @@ class BaseUDTFTestsMixin:
                 ORDER BY 1, 2
                 """
             ).collect(),
-            [Row(partition_col=x, total=3) for x in range(1, 21)]
+            [Row(partition_col=x, total=3) for x in range(1, 21)],
         )
 
         for str_first, str_second, result_first, result_second in (
             ("123", "456", 123, 456),
-            ("123", "NULL", None, 123)):
+            ("123", "NULL", None, 123),
+        ):
             self.assertEqual(
                 self.spark.sql(
                     f"""
@@ -1848,8 +1850,10 @@ class BaseUDTFTestsMixin:
                     ORDER BY 1, 2
                     """
                 ).collect(),
-                [Row(partition_col=result_first, total=1),
-                 Row(partition_col=result_second, total=1)]
+                [
+                    Row(partition_col=result_first, total=1),
+                    Row(partition_col=result_second, total=1),
+                ],
             )
 
     def test_udtf_with_table_argument_and_partition_by_and_order_by(self):
@@ -1864,8 +1868,9 @@ class BaseUDTFTestsMixin:
                     # Make sure that all values of the partitioning column are the same
                     # for each row consumed by this method for this instance of the class.
                     raise Exception(
-                        f"self._partition_col was {self._partition_col} but the row " +
-                        f"value was {row['partition_col']}")
+                        f"self._partition_col was {self._partition_col} but the row "
+                        + f"value was {row['partition_col']}"
+                    )
                 self._partition_col = row["partition_col"]
 
             def terminate(self):
@@ -1877,7 +1882,8 @@ class BaseUDTFTestsMixin:
             ("input ASC", 2),
             ("input + 1 ASC", 2),
             ("input DESC", 1),
-            ("input - 1 DESC", 1)):
+            ("input - 1 DESC", 1),
+        ):
             self.assertEqual(
                 self.spark.sql(
                     f"""
@@ -1891,8 +1897,9 @@ class BaseUDTFTestsMixin:
                     ORDER BY 1, 2
                     """
                 ).collect(),
-                [Row(partition_col=x, last=result_val) for x in range(1, 21)]
+                [Row(partition_col=x, last=result_val) for x in range(1, 21)],
             )
+
 
 class UDTFTests(BaseUDTFTestsMixin, ReusedSQLTestCase):
     @classmethod
