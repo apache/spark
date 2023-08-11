@@ -277,7 +277,7 @@ object SparkConnectService extends Logging {
   private val userSessionMapping =
     cacheBuilder(CACHE_SIZE, CACHE_TIMEOUT_SECONDS).build[SessionCacheKey, SessionHolder]()
 
-  private[connect] val executionManager = new SparkConnectExecutionManager()
+  private[connect] lazy val executionManager = new SparkConnectExecutionManager()
 
   private[connect] val streamingSessionManager =
     new SparkConnectStreamingQueryCache()
