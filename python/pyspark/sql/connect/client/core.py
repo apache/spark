@@ -92,7 +92,7 @@ from pyspark.sql.pandas.types import _create_converter_to_pandas, from_arrow_sch
 from pyspark.sql.types import DataType, StructType, TimestampType, _has_type
 from pyspark.rdd import PythonEvalType
 from pyspark.storagelevel import StorageLevel
-from pyspark.errors import PySparkValueError, PySparkRuntimeError
+from pyspark.errors import PySparkValueError
 
 
 if TYPE_CHECKING:
