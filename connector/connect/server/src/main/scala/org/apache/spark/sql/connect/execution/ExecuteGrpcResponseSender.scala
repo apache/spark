@@ -25,6 +25,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.connect.common.ProtoUtils
 import org.apache.spark.sql.connect.config.Connect.{CONNECT_EXECUTE_REATTACHABLE_SENDER_MAX_STREAM_DURATION, CONNECT_EXECUTE_REATTACHABLE_SENDER_MAX_STREAM_SIZE}
 import org.apache.spark.sql.connect.service.{ExecuteHolder, SparkConnectService}
+import org.apache.spark.sql.connect.utils.ErrorUtils
 
 /**
  * ExecuteGrpcResponseSender sends responses to the GRPC stream. It consumes responses from
@@ -84,6 +85,14 @@ private[connect] class ExecuteGrpcResponseSender[T <: Message](
           override def run(): Unit = {
             try {
               execute(lastConsumedStreamIndex)
+            } catch {
+              // This is executing in it's own thread, so need to handle RPC error like the
+              // SparkConnectService handlers do.
+              ErrorUtils.handleError(
+                "async-grpc-response-sender",
+                observer = grpcObserver,
+                userId = executeHolder.request.getUserContext.getUserId,
+                sessionId = executeHolder.request.getSessionId)
             } finally {
               executeHolder.removeGrpcResponseSender(self)
             }
