@@ -455,7 +455,11 @@ class SparkSession(SparkConversionMixin):
             opts = dict(self._options)
 
             with self._lock:
-                if "SPARK_REMOTE" in os.environ or "spark.remote" in opts:
+                if (
+                    "SPARK_CONNECT_MODE_ENABLED" in os.environ
+                    or "SPARK_REMOTE" in os.environ
+                    or "spark.remote" in opts
+                ):
                     with SparkContext._lock:
                         from pyspark.sql.connect.session import SparkSession as RemoteSparkSession
 
