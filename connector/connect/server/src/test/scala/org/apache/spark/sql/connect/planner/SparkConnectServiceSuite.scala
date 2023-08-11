@@ -190,7 +190,7 @@ class SparkConnectServiceSuite extends SharedSparkSession with MockitoSugar with
             done = true
           }
         })
-      verifyEvents.onCompleted()
+      verifyEvents.onCompleted(Some(100))
       // The current implementation is expected to be blocking. This is here to make sure it is.
       assert(done)
 
@@ -788,8 +788,9 @@ class SparkConnectServiceSuite extends SharedSparkSession with MockitoSugar with
       assert(executeHolder.eventsManager.hasCanceled.isEmpty)
       assert(executeHolder.eventsManager.hasError.isDefined)
     }
-    def onCompleted(): Unit = {
+    def onCompleted(producedRowCount: Option[Long] = None): Unit = {
       assert(executeHolder.eventsManager.status == ExecuteStatus.Closed)
+      assert(executeHolder.eventsManager.getProducedRowCount == producedRowCount)
     }
     def onCanceled(): Unit = {
       assert(executeHolder.eventsManager.hasCanceled.contains(true))

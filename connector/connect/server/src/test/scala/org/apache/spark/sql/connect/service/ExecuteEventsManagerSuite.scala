@@ -141,6 +141,19 @@ class ExecuteEventsManagerSuite
           DEFAULT_CLOCK.getTimeMillis()))
   }
 
+  test("SPARK-44776: post finished with row number") {
+    val events = setupEvents(ExecuteStatus.Started)
+    events.postFinished(Some(100))
+    verify(events.executeHolder.sessionHolder.session.sparkContext.listenerBus, times(1))
+      .post(
+        SparkListenerConnectOperationFinished(
+          events.executeHolder.jobTag,
+          DEFAULT_QUERY_ID,
+          DEFAULT_CLOCK.getTimeMillis(),
+          Some(100)
+        ))
+  }
+
   test("SPARK-43923: post closed") {
     val events = setupEvents(ExecuteStatus.Finished)
     events.postClosed()

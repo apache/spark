@@ -110,6 +110,7 @@ private[execution] class SparkConnectPlanExecution(executeHolder: ExecuteHolder)
       errorOnDuplicatedFieldNames = false)
 
     var numSent = 0
+    var totalNumRows: Long = 0
     def sendBatch(bytes: Array[Byte], count: Long): Unit = {
       val response = proto.ExecutePlanResponse.newBuilder().setSessionId(sessionId)
       val batch = proto.ExecutePlanResponse.ArrowBatch
@@ -120,11 +121,12 @@ private[execution] class SparkConnectPlanExecution(executeHolder: ExecuteHolder)
       response.setArrowBatch(batch)
       responseObserver.onNext(response.build())
       numSent += 1
+      totalNumRows += count
     }
 
     dataframe.queryExecution.executedPlan match {
       case LocalTableScanExec(_, rows) =>
-        executePlan.eventsManager.postFinished()
+        executePlan.eventsManager.postFinished(Some(totalNumRows))
         converter(rows.iterator).foreach { case (bytes, count) =>
           sendBatch(bytes, count)
         }
@@ -163,7 +165,7 @@ private[execution] class SparkConnectPlanExecution(executeHolder: ExecuteHolder)
               // Collect errors and propagate them to the main thread.
               .andThen {
                 case Success(_) =>
-                  executePlan.eventsManager.postFinished()
+                  executePlan.eventsManager.postFinished(Some(totalNumRows))
                 case Failure(throwable) =>
                   signal.synchronized {
                     error = Some(throwable)
@@ -201,7 +203,7 @@ private[execution] class SparkConnectPlanExecution(executeHolder: ExecuteHolder)
             }
             ThreadUtils.awaitReady(future, Duration.Inf)
           } else {
-            executePlan.eventsManager.postFinished()
+            executePlan.eventsManager.postFinished(Some(totalNumRows))
           }
         }
     }

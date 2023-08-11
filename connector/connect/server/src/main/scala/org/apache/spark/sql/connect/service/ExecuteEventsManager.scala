@@ -75,6 +75,8 @@ case class ExecuteEventsManager(executeHolder: ExecuteHolder, clock: Clock) {
 
   private var canceled = Option.empty[Boolean]
 
+  private var producedRowCount = Option.empty[Long]
+
   /**
    * @return
    *   Last event posted by the Connect request
@@ -94,6 +96,13 @@ case class ExecuteEventsManager(executeHolder: ExecuteHolder, clock: Clock) {
    *   org.apache.spark.sql.connect.service.SparkListenerConnectOperationFailed
    */
   private[connect] def hasError: Option[Boolean] = error
+
+  /**
+   * @return
+   * How many rows the Connect request has produced @link
+   * org.apache.spark.sql.connect.service.SparkListenerConnectOperationFinished
+   */
+  private[connect] def getProducedRowCount: Option[Long] = producedRowCount
 
   /**
    * Post @link org.apache.spark.sql.connect.service.SparkListenerConnectOperationStarted.
@@ -193,12 +202,21 @@ case class ExecuteEventsManager(executeHolder: ExecuteHolder, clock: Clock) {
   /**
    * Post @link org.apache.spark.sql.connect.service.SparkListenerConnectOperationFinished.
    */
-  def postFinished(): Unit = {
+  def postFinished(totalNumRowsOpt: Option[Long] = None): Unit = {
     assertStatus(
       List(ExecuteStatus.Started, ExecuteStatus.ReadyForExecution),
       ExecuteStatus.Finished)
+    producedRowCount = totalNumRowsOpt
+
     listenerBus
-      .post(SparkListenerConnectOperationFinished(jobTag, operationId, clock.getTimeMillis()))
+      .post(
+        SparkListenerConnectOperationFinished(
+          jobTag,
+          operationId,
+          clock.getTimeMillis(),
+          producedRowCount
+        )
+      )
   }
 
   /**
@@ -402,6 +420,7 @@ case class SparkListenerConnectOperationFinished(
     jobTag: String,
     operationId: String,
     eventTime: Long,
+    producedRowCount: Option[Long] = None,
     extraTags: Map[String, String] = Map.empty)
     extends SparkListenerEvent
 
