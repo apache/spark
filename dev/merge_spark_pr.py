@@ -237,6 +237,15 @@ def cherry_pick(pr_num, merge_hash, default_branch):
     return pick_ref
 
 
+def fix_version_from_branch(branch, versions):
+    # Note: Assumes this is a sorted (newest->oldest) list of un-released versions
+    if branch == "master":
+        return versions[0]
+    else:
+        branch_ver = branch.replace("branch-", "")
+        return list(filter(lambda x: x.name.startswith(branch_ver), versions))[-1]
+
+
 def resolve_jira_issue(merge_branches, comment, default_jira_id=""):
     asf_jira = jira.client.JIRA(
         {"server": JIRA_API_BASE}, basic_auth=(JIRA_USERNAME, JIRA_PASSWORD)
@@ -271,30 +280,14 @@ def resolve_jira_issue(merge_branches, comment, default_jira_id=""):
     )
 
     versions = asf_jira.project_versions("SPARK")
-    # Consider only x.y.z, unreleased, unarchived versions
-    versions = [
-        x
-        for x in versions
-        if not x.raw["released"] and not x.raw["archived"] and re.match(r"\d+\.\d+\.\d+", x.name)
-    ]
     versions = sorted(versions, key=lambda x: x.name, reverse=True)
+    versions = list(filter(lambda x: x.raw["released"] is False, versions))
+    # Consider only x.y.z versions
+    versions = list(filter(lambda x: re.match(r"\d+\.\d+\.\d+", x.name), versions))
 
-    default_fix_versions = []
-    for b in merge_branches:
-        if b == "master":
-            default_fix_versions.append(versions[0])
-        else:
-            found = False
-            for v in versions:
-                if v.name.startswith(b.replace("branch-", "")):
-                    default_fix_versions.append(v)
-                    found = True
-            if not found:
-                print(
-                    "Target version for %s is not found on JIRA, it may be archived or "
-                    "not created. Skipping it." % b
-                )
-
+    default_fix_versions = list(
+        map(lambda x: fix_version_from_branch(x, versions).name, merge_branches)
+    )
     for v in default_fix_versions:
         # Handles the case where we have forked a release branch but not yet made the release.
         # In this case, if the PR is committed to the master branch and the release branch, we
