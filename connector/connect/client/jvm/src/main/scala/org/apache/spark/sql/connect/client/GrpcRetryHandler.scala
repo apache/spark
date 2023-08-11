@@ -175,10 +175,11 @@ private[client] object GrpcRetryHandler extends Logging {
     while (currentRetryNum <= retryPolicy.maxRetries) {
       if (currentRetryNum != 0) {
         var currentBackoff = nextBackoff
+        nextBackoff = nextBackoff * retryPolicy.backoffMultiplier min retryPolicy.maxBackoff
+
         if (currentBackoff >= retryPolicy.minJitterThreshold) {
           currentBackoff += Random.nextDouble() * retryPolicy.jitter
         }
-        nextBackoff = nextBackoff * retryPolicy.backoffMultiplier min retryPolicy.maxBackoff
 
         sleep(currentBackoff.toMillis)
       }

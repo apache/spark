@@ -1653,10 +1653,10 @@ class Retrying:
             if retry_state.count() > 0:
                 # Randomize backoff for this iteration
                 backoff = next_backoff
+                next_backoff = min(self._max_backoff, next_backoff * self._backoff_multiplier)
+
                 if backoff >= self._min_jitter_threshold:
                     backoff += random.uniform(0, self._jitter)
-
-                next_backoff = min(self._max_backoff, next_backoff * self._backoff_multiplier)
 
                 logger.debug(f"Retrying call after {backoff} ms sleep")
                 self._sleep(backoff / 1000.0)
