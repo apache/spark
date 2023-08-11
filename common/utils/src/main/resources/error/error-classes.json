@@ -865,11 +865,6 @@
       "Exceeds char/varchar type length limitation: <limit>."
     ]
   },
-  "EXCEED_RETRY_JVM" : {
-    "message" : [
-      "Retries exceeded but no exception caught."
-    ]
-  },
   "EXPRESSION_TYPE_IS_NOT_ORDERABLE" : {
     "message" : [
       "Column expression <expr> cannot be sorted because its type <exprType> is not orderable."

@@ -1645,21 +1645,10 @@ class Retrying:
         retry_state = RetryState()
         next_backoff: float = self._initial_backoff
 
-        while True:
-            # Check if the operation was completed successfully.
-            if retry_state.done():
-                break
-            # If the number of retries have exceeded the maximum allowed retries.
-            if retry_state.count() > self._max_retries:
-                e = retry_state.exception()
-                if e is not None:
-                    raise e
-                else:
-                    raise PySparkRuntimeError(
-                        error_class="EXCEED_RETRY",
-                        message_parameters={},
-                    )
+        if self._max_retries < 0:
+            raise ValueError("Can't have negative number of retries")
 
+        while not retry_state.done() and retry_state.count() <= self._max_retries:
             # Do backoff
             if retry_state.count() > 0:
                 # Randomize backoff for this iteration
@@ -1672,3 +1661,7 @@ class Retrying:
                 logger.debug(f"Retrying call after {backoff} ms sleep")
                 self._sleep(backoff / 1000.0)
             yield AttemptManager(self._can_retry, retry_state)
+
+        if not retry_state.done():
+            # Exceeded number of retries, throw last exception we had
+            raise retry_state.exception()

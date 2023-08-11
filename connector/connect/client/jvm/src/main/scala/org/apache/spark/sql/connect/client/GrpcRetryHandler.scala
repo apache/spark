@@ -24,7 +24,6 @@ import scala.util.control.NonFatal
 import io.grpc.{Status, StatusRuntimeException}
 import io.grpc.stub.StreamObserver
 
-import org.apache.spark.SparkException
 import org.apache.spark.internal.Logging
 
 private[client] class GrpcRetryHandler(
@@ -166,8 +165,12 @@ private[client] object GrpcRetryHandler extends Logging {
   final def retry[T](retryPolicy: RetryPolicy, sleep: Long => Unit = Thread.sleep)(
       fn: => T): T = {
     var currentRetryNum = 0
-    var lastException: Throwable = null
+    var exceptionList: Seq[Throwable] = Seq.empty
     var nextBackoff: Duration = retryPolicy.initialBackoff
+
+    if (retryPolicy.maxRetries < 0) {
+      throw new IllegalArgumentException("Can't have negative number of retries")
+    }
 
     while (currentRetryNum <= retryPolicy.maxRetries) {
       if (currentRetryNum != 0) {
@@ -185,7 +188,7 @@ private[client] object GrpcRetryHandler extends Logging {
       } catch {
         case NonFatal(e) if retryPolicy.canRetry(e) && currentRetryNum < retryPolicy.maxRetries =>
           currentRetryNum += 1
-          lastException = e
+          exceptionList = e +: exceptionList
 
           if (currentRetryNum <= retryPolicy.maxRetries) {
             logWarning(
@@ -199,10 +202,9 @@ private[client] object GrpcRetryHandler extends Logging {
       }
     }
 
-    throw new SparkException(
-      errorClass = "EXCEED_RETRY_JVM",
-      messageParameters = Map.empty,
-      cause = lastException)
+    val exception = exceptionList.head
+    exceptionList.tail.foreach(exception.addSuppressed(_))
+    throw exception
   }
 
   /**
