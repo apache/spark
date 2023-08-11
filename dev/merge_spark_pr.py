@@ -282,14 +282,21 @@ def resolve_jira_issue(merge_branches, comment, default_jira_id=""):
     default_fix_versions = []
     for b in merge_branches:
         if b == "master":
-            default_fix_versions.append(versions[0])
+            default_fix_versions.append(versions[0].name)
         else:
             found = False
+            found_versions = []
             for v in versions:
                 if v.name.startswith(b.replace("branch-", "")):
-                    default_fix_versions.append(v)
+                    found_versions.append(v.name)
                     found = True
-            if not found:
+            if found:
+                # There might be several unreleased versions for specific branches
+                # For example, assuming
+                # versions = ['4.0.0', '3.5.1', '3.5.0', '3.4.2', '3.3.4', '3.3.3']
+                # we've found two candidates for branch-3.5, we pick the last/smallest one
+                default_fix_versions.append(found_versions[-1])
+            else:
                 print(
                     "Target version for %s is not found on JIRA, it may be archived or "
                     "not created. Skipping it." % b
