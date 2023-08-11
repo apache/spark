@@ -21,13 +21,6 @@ Util functions for workers.
 import sys
 from typing import IO
 
-# 'resource' is a Unix specific module.
-has_resource_module = True
-try:
-    import resource
-except ImportError:
-    has_resource_module = False
-
 from pyspark.errors import PySparkRuntimeError
 from pyspark.serializers import (
     UTF8Deserializer,
