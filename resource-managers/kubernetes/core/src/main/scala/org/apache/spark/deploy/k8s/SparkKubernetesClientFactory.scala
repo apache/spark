@@ -21,7 +21,7 @@ import java.io.File
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.google.common.base.Charsets
 import com.google.common.io.Files
-import io.fabric8.kubernetes.client.{ConfigBuilder, KubernetesClient, KubernetesClientBuilder}
+import io.fabric8.kubernetes.client.{ConfigBuilder, KubernetesClient, KubernetesClientBuilder, OAuthTokenProvider}
 import io.fabric8.kubernetes.client.Config.KUBERNETES_REQUEST_RETRY_BACKOFFLIMIT_SYSTEM_PROPERTY
 import io.fabric8.kubernetes.client.Config.autoConfigure
 import io.fabric8.kubernetes.client.okhttp.OkHttpClientFactory
@@ -33,7 +33,7 @@ import org.apache.spark.SparkConf
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.ConfigEntry
-import org.apache.spark.util.ThreadUtils
+import org.apache.spark.util.{ThreadUtils, Utils}
 
 /**
  * Spark-opinionated builder for Kubernetes clients. It uses a prefix plus common suffixes to
@@ -56,11 +56,18 @@ private[spark] object SparkKubernetesClientFactory extends Logging {
       .map(new File(_))
       .orElse(defaultServiceAccountToken)
     val oauthTokenValue = sparkConf.getOption(oauthTokenConf)
-    KubernetesUtils.requireNandDefined(
-      oauthTokenFile,
-      oauthTokenValue,
-      s"Cannot specify OAuth token through both a file $oauthTokenFileConf and a " +
-        s"value $oauthTokenConf.")
+    val oauthTokenProviderConf = s"$kubernetesAuthConfPrefix.$OAUTH_TOKEN_PROVIDER_CONF_SUFFIX"
+    val oauthTokenProvider = sparkConf.getOption(oauthTokenProviderConf)
+      .map(Utils.classForName(_)
+        .getDeclaredConstructor()
+        .newInstance()
+        .asInstanceOf[OAuthTokenProvider])
+
+    require(
+      Seq(oauthTokenFile, oauthTokenValue, oauthTokenProvider).count(_.isDefined) <= 1,
+      s"OAuth token should be specified via only one of $oauthTokenFileConf, $oauthTokenConf " +
+        s"or $oauthTokenProviderConf."
+    )
 
     val caCertFile = sparkConf
       .getOption(s"$kubernetesAuthConfPrefix.$CA_CERT_FILE_CONF_SUFFIX")
@@ -94,7 +101,9 @@ private[spark] object SparkKubernetesClientFactory extends Logging {
       .withRequestTimeout(clientType.requestTimeout(sparkConf))
       .withConnectionTimeout(clientType.connectionTimeout(sparkConf))
       .withTrustCerts(sparkConf.get(KUBERNETES_TRUST_CERTIFICATES))
-      .withOption(oauthTokenValue) {
+      .withOption(oauthTokenProvider) {
+        (provider, configBuilder) => configBuilder.withOauthTokenProvider(provider)
+      }.withOption(oauthTokenValue) {
         (token, configBuilder) => configBuilder.withOauthToken(token)
       }.withOption(oauthTokenFile) {
         (file, configBuilder) =>

@@ -722,6 +722,16 @@ See the [configuration page](configuration.html) for information on Spark config
   <td>2.3.0</td>
 </tr>
 <tr>
+  <td><code>spark.kubernetes.authenticate.submission.oauthTokenProvider</code></td>
+  <td>(none)</td>
+  <td>
+    The name of the class that implements OAuthTokenProvider interface to provide an OAuth token refresh mechanism for
+    long-running jobs. The class will be used to fetch the OAuth token to use when authenticating against the Kubernetes
+    API server when starting the driver. The class must be in a driver's classpath.
+  </td>
+  <td>4.0.0</td>
+</tr>
+<tr>
   <td><code>spark.kubernetes.authenticate.driver.caCertFile</code></td>
   <td>(none)</td>
   <td>
@@ -775,6 +785,16 @@ See the [configuration page](configuration.html) for information on Spark config
     <code>spark.kubernetes.authenticate.oauthTokenFile</code> instead.
   </td>
   <td>2.3.0</td>
+</tr>
+<tr>
+  <td><code>spark.kubernetes.authenticate.driver.oauthTokenProvider</code></td>
+  <td>(none)</td>
+  <td>
+    The name of the class that implements OAuthTokenProvider interface to provide an OAuth token refresh mechanism for
+    long running jobs. The class will be used to fetch the OAuth token to use when authenticating against the Kubernetes
+    API server from the driver pod when requesting executors. The class must be in a driver's classpath.
+  </td>
+  <td>4.0.0</td>
 </tr>
 <tr>
   <td><code>spark.kubernetes.authenticate.driver.mounted.caCertFile</code></td>
@@ -884,6 +904,15 @@ See the [configuration page](configuration.html) for information on Spark config
     server when requesting executors.
   </td>
   <td>2.4.0</td>
+</tr>
+<tr>
+  <td><code>spark.kubernetes.authenticate.oauthTokenProvider</code></td>
+  <td>(none)</td>
+  <td>
+    In client mode, the name of a class that implements OAuthTokenProvider interface to provide an OAuth token refresh
+    mechanism for long running jobs. The class must be in a driver's classpath.
+  </td>
+  <td>4.0.0</td>
 </tr>
 <tr>
   <td><code>spark.kubernetes.driver.label.[LabelName]</code></td>
