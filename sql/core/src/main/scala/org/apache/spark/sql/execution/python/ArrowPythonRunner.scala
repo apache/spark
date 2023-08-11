@@ -31,8 +31,8 @@ class ArrowPythonRunner(
     funcs: Seq[ChainedPythonFunctions],
     evalType: Int,
     argOffsets: Array[Array[Int]],
-    protected override val schema: StructType,
-    protected override val timeZoneId: String,
+    _schema: StructType,
+    _timeZoneId: String,
     protected override val largeVarTypes: Boolean,
     protected override val workerConf: Map[String, String],
     val pythonMetrics: Map[String, SQLMetric],
@@ -50,6 +50,10 @@ class ArrowPythonRunner(
 
   override val simplifiedTraceback: Boolean = SQLConf.get.pysparkSimplifiedTraceback
 
+  // Use lazy val to initialize the fields before these are accessed in [[PythonArrowInput]]'s
+  // constructor.
+  override protected lazy val timeZoneId: String = _timeZoneId
+  override protected lazy val schema: StructType = _schema
   override val bufferSize: Int = SQLConf.get.pandasUDFBufferSize
   require(
     bufferSize >= 4,
