@@ -1836,9 +1836,15 @@
       <!-- Hive 2.3 need this to init Hive's FunctionRegistry -->
       <dependency>
         <groupId>org.codehaus.jackson</groupId>
+        <artifactId>jackson-core-asl</artifactId>
+        <version>${codehaus.jackson.version}</version>
+        <scope>${hive.deps.scope}</scope>
+      </dependency>
+      <dependency>
+        <groupId>org.codehaus.jackson</groupId>
         <artifactId>jackson-mapper-asl</artifactId>
         <version>${codehaus.jackson.version}</version>
-        <scope>test</scope>
+        <scope>${hive.deps.scope}</scope>
       </dependency>
       <dependency>
         <groupId>${hive.group}</groupId>
