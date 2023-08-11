@@ -828,11 +828,7 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
         val ret2 = cast(
           Literal.create(Map("1" -> null, "2" -> "a".getBytes, "3" -> "c".getBytes)),
           StringType)
-        // test with and without codegen
-        Seq(false, true).foreach { withCodegen =>
-          checkEvaluation(ret2, s"${lb}1 ->${if (legacyCast) "" else " null"}, 2 -> a, 3 -> c$rb",
-            withCodegen = withCodegen)
-        }
+        checkEvaluation(ret2, s"${lb}1 ->${if (legacyCast) "" else " null"}, 2 -> a, 3 -> c$rb")
         val ret3 = cast(
           Literal.create(Map(
             1 -> Date.valueOf("2014-12-03"),

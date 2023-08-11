@@ -80,16 +80,11 @@ trait ExpressionEvalHelper extends ScalaCheckDrivenPropertyChecks with PlanTestB
   }
 
   protected def checkEvaluation(
-      expression: => Expression, expected: Any, inputRow: InternalRow = EmptyRow,
-      withCodegen: Boolean = false): Unit = {
+      expression: => Expression, expected: Any, inputRow: InternalRow = EmptyRow): Unit = {
     // Make it as method to obtain fresh expression everytime.
     def expr = prepareEvaluation(expression)
     val catalystValue = CatalystTypeConverters.convertToCatalyst(expected)
-    if (withCodegen) {
-      checkEvaluation(expr, catalystValue, inputRow)
-    } else {
-      checkEvaluationWithoutCodegen(expr, catalystValue, inputRow)
-    }
+    checkEvaluationWithoutCodegen(expr, catalystValue, inputRow)
     checkEvaluationWithMutableProjection(expr, catalystValue, inputRow)
     if (GenerateUnsafeProjection.canSupport(expr.dataType)) {
       checkEvaluationWithUnsafeProjection(expr, catalystValue, inputRow)
