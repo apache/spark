@@ -285,6 +285,7 @@ class ChannelBuilder:
                 ChannelBuilder.PARAM_USE_SSL,
                 ChannelBuilder.PARAM_USER_ID,
                 ChannelBuilder.PARAM_USER_AGENT,
+                ChannelBuilder.PARAM_SESSION_ID,
             ]
         ]
 

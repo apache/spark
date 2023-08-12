@@ -15,7 +15,6 @@
 # limitations under the License.
 #
 
-import warnings
 from distutils.version import LooseVersion
 
 import matplotlib as mat
@@ -750,7 +749,6 @@ def plot_frame(
     yerr=None,
     xerr=None,
     secondary_y=False,
-    sort_columns=False,
     **kwds,
 ):
     """
@@ -836,11 +834,6 @@ def plot_frame(
     mark_right : boolean, default True
         When using a secondary_y axis, automatically mark the column
         labels with "(right)" in the legend
-    sort_columns: bool, default is False
-        When True, will sort values on plots.
-
-        .. deprecated:: 3.4.0
-
     **kwds : keywords
         Options to pass to matplotlib plotting method
 
@@ -856,11 +849,6 @@ def plot_frame(
       for bar plot layout by `position` keyword.
       From 0 (left/bottom-end) to 1 (right/top-end). Default is 0.5 (center)
     """
-    warnings.warn(
-        "Argument `sort_columns` will be removed in 4.0.0.",
-        FutureWarning,
-    )
-
     return _plot(
         data,
         kind=kind,
@@ -891,7 +879,6 @@ def plot_frame(
         sharey=sharey,
         secondary_y=secondary_y,
         layout=layout,
-        sort_columns=sort_columns,
         **kwds,
     )
 
