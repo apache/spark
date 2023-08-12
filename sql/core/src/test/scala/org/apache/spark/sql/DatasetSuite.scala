@@ -916,6 +916,32 @@ class DatasetSuite extends QueryTest
     }
   }
 
+  test("SPARK-43781: cogroup two datasets derived from the same source") {
+    val inputType = StructType(Array(StructField("id", LongType, false),
+      StructField("type", StringType, false)))
+    val keyType = StructType(Array(StructField("id", LongType, false)))
+
+    val inputRows = new java.util.ArrayList[Row]()
+    inputRows.add(Row(1L, "foo"))
+    inputRows.add(Row(1L, "bar"))
+    inputRows.add(Row(2L, "foo"))
+    val input = spark.createDataFrame(inputRows, inputType)
+    val fooGroups = input.filter("type = 'foo'").groupBy("id").as(ExpressionEncoder(keyType),
+      ExpressionEncoder(inputType))
+    val barGroups = input.filter("type = 'bar'").groupBy("id").as(ExpressionEncoder(keyType),
+      ExpressionEncoder(inputType))
+
+    val result = fooGroups.cogroup(barGroups) { case (row, iterator, iterator1) =>
+      iterator.toSeq ++ iterator1.toSeq
+    }(ExpressionEncoder(inputType)).collect()
+    assert(result.length == 3)
+
+    val result2 = fooGroups.cogroupSorted(barGroups)($"id")($"id") {
+      case (row, iterator, iterator1) => iterator.toSeq ++ iterator1.toSeq
+    }(ExpressionEncoder(inputType)).collect()
+    assert(result2.length == 3)
+  }
+
   test("SPARK-34806: observation on datasets") {
     val namedObservation = Observation("named")
     val unnamedObservation = Observation()

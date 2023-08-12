@@ -74,6 +74,30 @@ object Connect {
       .intConf
       .createWithDefault(1024)
 
+  val CONNECT_EXECUTE_MANAGER_DETACHED_TIMEOUT =
+    ConfigBuilder("spark.connect.execute.manager.detachedTimeout")
+      .internal()
+      .doc("Timeout after which executions without an attached RPC will be removed.")
+      .version("3.5.0")
+      .timeConf(TimeUnit.MILLISECONDS)
+      .createWithDefaultString("5m")
+
+  val CONNECT_EXECUTE_MANAGER_MAINTENANCE_INTERVAL =
+    ConfigBuilder("spark.connect.execute.manager.maintenanceInterval")
+      .internal()
+      .doc("Interval at which execution manager will search for abandoned executions to remove.")
+      .version("3.5.0")
+      .timeConf(TimeUnit.MILLISECONDS)
+      .createWithDefaultString("30s")
+
+  val CONNECT_EXECUTE_MANAGER_ABANDONED_TOMBSTONES_SIZE =
+    ConfigBuilder("spark.connect.execute.manager.abandonedTombstonesSize")
+      .internal()
+      .doc("Maximum size of the cache of abandoned executions.")
+      .version("3.5.0")
+      .intConf
+      .createWithDefaultString("10000")
+
   val CONNECT_EXECUTE_REATTACHABLE_ENABLED =
     ConfigBuilder("spark.connect.execute.reattachable.enabled")
       .internal()

@@ -7758,6 +7758,7 @@ def session_window(timeColumn: "ColumnOrName", gapDuration: Union[Column, str]) 
     return _invoke_function("session_window", time_col, gap_duration)
 
 
+@try_remote_functions
 def to_unix_timestamp(
     timestamp: "ColumnOrName",
     format: Optional["ColumnOrName"] = None,
@@ -7766,6 +7767,9 @@ def to_unix_timestamp(
     Returns the UNIX timestamp of the given time.
 
     .. versionadded:: 3.5.0
+
+    .. versionchanged:: 3.5.0
+        Supports Spark Connect.
 
     Parameters
     ----------
@@ -7794,6 +7798,7 @@ def to_unix_timestamp(
         return _invoke_function_over_columns("to_unix_timestamp", timestamp)
 
 
+@try_remote_functions
 def to_timestamp_ltz(
     timestamp: "ColumnOrName",
     format: Optional["ColumnOrName"] = None,
@@ -7803,6 +7808,9 @@ def to_timestamp_ltz(
     Returns null with invalid input.
 
     .. versionadded:: 3.5.0
+
+    .. versionchanged:: 3.5.0
+        Supports Spark Connect.
 
     Parameters
     ----------
@@ -7831,6 +7839,7 @@ def to_timestamp_ltz(
         return _invoke_function_over_columns("to_timestamp_ltz", timestamp)
 
 
+@try_remote_functions
 def to_timestamp_ntz(
     timestamp: "ColumnOrName",
     format: Optional["ColumnOrName"] = None,
@@ -7840,6 +7849,9 @@ def to_timestamp_ntz(
     Returns null with invalid input.
 
     .. versionadded:: 3.5.0
+
+    .. versionchanged:: 3.5.0
+        Supports Spark Connect.
 
     Parameters
     ----------
