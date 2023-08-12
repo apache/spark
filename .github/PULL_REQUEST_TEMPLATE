@@ -47,3 +47,12 @@ If it was tested in a way different from regular unit tests, please clarify how 
 If tests were not added, please describe why they were not added and/or why it was difficult to add.
 If benchmark tests were added, please run the benchmarks in GitHub Actions for the consistent environment, and the instructions could accord to: https://spark.apache.org/developer-tools.html#github-workflow-benchmarks.
 -->
+
+
+### Was this patch authored or co-authored using generative AI tooling?
+<!--
+If a generative AI tooling has been used in the process of authoring this patch, please include
+frase 'Generated-by: ' followed by the name of the tool and its version.
+If no, write 'No'.
+Please refer to the [ASF Generative Tooling Guidance](https://www.apache.org/legal/generative-tooling.html) for details.
+-->
