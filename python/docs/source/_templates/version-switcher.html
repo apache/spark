@@ -1,0 +1,60 @@
+<div id="version-button" class="dropdown">
+    <button type="button" class="btn btn-secondary btn-sm navbar-btn dropdown-toggle" id="version_switcher_button" data-toggle="dropdown">
+        {{ release }}
+        <span class="caret"></span>
+    </button>
+    <div id="version_switcher" class="dropdown-menu list-group-flush py-0" aria-labelledby="version_switcher_button">
+    <!-- dropdown will be populated by javascript on page load -->
+    </div>
+</div>
+
+<script type="text/javascript">
+// Function to construct the target URL from the JSON components
+function buildURL(entry) {
+    var template = "{{ switcher_template_url }}";  // supplied by jinja
+    template = template.replace("{version}", entry.version);
+    return template;
+}
+
+// Function to check if corresponding page path exists in other version of docs
+// and, if so, go there instead of the homepage of the other docs version
+function checkPageExistsAndRedirect(event) {
+    const currentFilePath = "{{ pagename }}.html",
+          otherDocsHomepage = event.target.getAttribute("href");
+    let tryUrl = `${otherDocsHomepage}${currentFilePath}`;
+    $.ajax({
+        type: 'HEAD',
+        url: tryUrl,
+        // if the page exists, go there
+        success: function() {
+            location.href = tryUrl;
+        }
+    }).fail(function() {
+        location.href = otherDocsHomepage;
+    });
+    return false;
+}
+
+// Function to populate the version switcher
+(function () {
+    // get JSON config
+    $.getJSON("{{ switcher_json_url }}", function(data, textStatus, jqXHR) {
+        // create the nodes first (before AJAX calls) to ensure the order is
+        // correct (for now, links will go to doc version homepage)
+        $.each(data, function(index, entry) {
+            // if no custom name specified (e.g., "latest"), use version string
+            if (!("name" in entry)) {
+                entry.name = entry.version;
+            }
+            // construct the appropriate URL, and add it to the dropdown
+            entry.url = buildURL(entry);
+            const node = document.createElement("a");
+            node.setAttribute("class", "list-group-item list-group-item-action py-1");
+            node.setAttribute("href", `${entry.url}`);
+            node.textContent = `${entry.name}`;
+            node.onclick = checkPageExistsAndRedirect;
+            $("#version_switcher").append(node);
+        });
+    });
+})();
+</script>
