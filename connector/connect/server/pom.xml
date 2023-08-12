@@ -141,6 +141,21 @@
       </exclusions>
     </dependency>
     <dependency>
+      <!--
+      We only need classes from org.apache.spark.sql.connect for testing.
+      spark-connect-client-jvm also contain the client versions of org.apache.spark.sql classes
+      that are also present in spark-sql,
+      e.g. org.apache.spark.sql.SparkSession, org.apache.spark.sql.Dataset.
+      However, since Maven 2.0.9, Maven uses the order of dependencies in the POM to build the
+      classpath, so this dependency is below spark-sql dependency is above, the classes from the
+      server should take precedence.
+      -->
+      <groupId>org.apache.spark</groupId>
+      <artifactId>spark-connect-client-jvm_${scala.binary.version}</artifactId>
+      <version>${project.version}</version>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
       <groupId>org.apache.spark</groupId>
       <artifactId>spark-tags_${scala.binary.version}</artifactId>
       <version>${project.version}</version>
