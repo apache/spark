@@ -1141,9 +1141,9 @@ case class Range(
 }
 
 @ExpressionDescription(
-  usage = "_FUNC_(identifier: String, options: Map) - " +
-    "Returns the data source relation with the given options.  " +
-    "The first argument must be a simple TABLE() parameter.",
+  usage = """_FUNC_(table: String, options: Map) -
+    Returns the data source relation with the given options.
+    table must be a simple TABLE() parameter.""",
   examples = """
     Examples:
       > SELECT * FROM _FUNC_(TABLE(cat.db.table), map('split-size','5'));
@@ -1171,7 +1171,7 @@ object RelationWithOptions {
     val relationOptions = ExprUtils.convertToMapData(options)
 
     if (!tableExpr.isInstanceOf[FunctionTableSubqueryArgumentExpression]) {
-      throw QueryCompilationErrors.withOptionsExpectedTableError(tableExpr.sql)
+      throw QueryCompilationErrors.withOptionsExpectedTableError()
     }
     val table = tableExpr.asInstanceOf[FunctionTableSubqueryArgumentExpression]
 
@@ -1180,7 +1180,7 @@ object RelationWithOptions {
       // Support only DataSourceV2Relation as its the only relation with options
       case t @ SubqueryAlias(_, r @ DataSourceV2Relation(_, _, _, _, options))
         => t.copy(child = r.copy(options = merge(options, relationOptions)))
-      case _ => throw QueryCompilationErrors.withOptionsExpectedSimpleTableError(table.toString)
+      case _ => throw QueryCompilationErrors.withOptionsExpectedSimpleTableError()
     }
   }
 
