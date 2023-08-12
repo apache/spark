@@ -471,7 +471,7 @@ package object config extends Logging {
       " If most resources from a small set of directories, this can substantially improve job" +
       " submission time. Noticing, this could potentially increase the memory overhead at client" +
       " side.")
-    .version("3.5.0")
+    .version("4.0.0")
     .booleanConf
     .createWithDefault(false)
 
@@ -483,7 +483,7 @@ package object config extends Logging {
         " this threshold, the statCache preloading for that directory will be activated. It's" +
         " important to note that this configuration will only take effect when the" +
         " <code>spark.yarn.client.statCache.preloaded.enabled</code> option is enabled.")
-      .version("3.5.0")
+      .version("4.0.0")
       .intConf
       .createWithDefault(5)
 
