@@ -472,29 +472,17 @@ private[spark] class Client(
    * */
   private[yarn] def directoriesToBePreloaded(jars: Seq[String]): List[URI] = {
     val directoryCounter = new HashMap[URI, Int]()
-    jars.foreach { jar =>
-      if (!Utils.isLocalUri(jar) && !new GlobPattern(jar).hasWildcard) {
-        val parentUri = new Path (Utils.resolveURI(jar)).getParent.toUri
-        directoryCounter.update(parentUri, directoryCounter.getOrElse(parentUri, 0) + 1)
-      }
-    }
-    directoryCounter.filter(_._2 >= statCachePreloadDirectoryCountThreshold).keys.toList
-  }
-
-  /**
-   * Preload the statCache with file status. For each directory in the list, we will list all
-   * files from that directory and add them to the statCache.
-   * @param testFS : the file system to be used for testing only (optional)
+   * @param fsLookup: Function for looking up an FS based on a URI; override for testing
    * @return A preloaded statCache with fileStatus
    */
-  private[yarn] def getPreloadedStatCache(testFS: Option[FileSystem]):
-  HashMap[URI, FileStatus] = {
+  private[yarn] def getPreloadedStatCache(
+      fsLookup: URI => FileSystem = FileSystem.get(_, hadoopConf)): HashMap[URI, FileStatus] = {
     val statCache = HashMap[URI, FileStatus]()
     val jars = sparkConf.get(SPARK_JARS)
     val directories = jars.map(directoriesToBePreloaded).getOrElse(ArrayBuffer.empty[URI])
 
     directories.foreach { dir =>
-      testFS.getOrElse(FileSystem.get(dir, hadoopConf)).listStatus(new Path(dir)).filter(_.isFile())
+      fsLookup(dir).listStatus(new Path(dir)).filter(_.isFile())
         .foreach { fileStatus =>
           val uri = fileStatus.getPath.toUri
           if (jars.exists(_.contains(uri.toString))) {
