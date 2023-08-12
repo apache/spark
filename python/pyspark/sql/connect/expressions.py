@@ -15,6 +15,7 @@
 # limitations under the License.
 #
 from pyspark.sql.connect.utils import check_dependencies
+from pyspark.sql.utils import is_timestamp_ntz_preferred
 
 check_dependencies(__name__)
 
@@ -295,6 +296,8 @@ class LiteralExpression(Expression):
             return StringType()
         elif isinstance(value, decimal.Decimal):
             return DecimalType()
+        elif isinstance(value, datetime.datetime) and is_timestamp_ntz_preferred():
+            return TimestampNTZType()
         elif isinstance(value, datetime.datetime):
             return TimestampType()
         elif isinstance(value, datetime.date):
