@@ -96,7 +96,4 @@ trait CodegenFallback extends Expression {
     }
   }
 
-  def supportWholeStageCodegen(): Boolean = {
-    this.getClass.getDeclaredMethods.exists(_.getName == "nullSafeEval")
-  }
 }
