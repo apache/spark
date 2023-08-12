@@ -63,8 +63,8 @@ private[client] object GrpcExceptionConverter extends JsonUtils {
   }
 
   private def errorConstructor[T <: Throwable: ClassTag](
-      throwableCtr: (String, Option[Throwable]) => T
-  ): (String, (String, Option[Throwable]) => Throwable) = {
+      throwableCtr: (String, Option[Throwable]) => T)
+      : (String, (String, Option[Throwable]) => Throwable) = {
     val className = implicitly[reflect.ClassTag[T]].runtimeClass.getName
     (className, throwableCtr)
   }
@@ -76,8 +76,7 @@ private[client] object GrpcExceptionConverter extends JsonUtils {
     errorConstructor((message, cause) => new TableAlreadyExistsException(message, cause)),
     errorConstructor((message, cause) => new TempTableAlreadyExistsException(message, cause)),
     errorConstructor((message, cause) => new NoSuchDatabaseException(message, cause)),
-    errorConstructor((message, cause) => new NoSuchTableException(message, cause))
-  )
+    errorConstructor((message, cause) => new NoSuchTableException(message, cause)))
 
   private def errorInfoToThrowable(info: ErrorInfo, message: String): Option[Throwable] = {
     val classes =
