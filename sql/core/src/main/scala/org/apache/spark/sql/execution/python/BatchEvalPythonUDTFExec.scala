@@ -125,7 +125,7 @@ object PythonUDTFRunner {
     }
     udtf.pythonUDTFPartitionColumnIndexes match {
       case Some(partitionColumnIndexes) =>
-        dataOut.writeInt(partitionColumnIndexes.numPartitionChildIndexes)
+        dataOut.writeInt(partitionColumnIndexes.partitionChildIndexes.length)
         partitionColumnIndexes.partitionChildIndexes.foreach(dataOut.writeInt)
       case None =>
         dataOut.writeInt(0)

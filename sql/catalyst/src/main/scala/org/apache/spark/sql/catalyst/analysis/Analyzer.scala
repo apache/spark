@@ -2125,8 +2125,15 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
                 case g @ Generate(p: PythonUDTF, _, _, _, _, _) =>
                   functionTableSubqueryArgs.headOption.map { tableArg =>
                     val indexes = PythonUDTFPartitionColumnIndexes(
-                      numPartitionChildIndexes = tableArg.partitioningExpressionIndexes.length,
-                      partitionChildIndexes = tableArg.partitioningExpressionIndexes)
+                      tableArg.partitioningExpressionIndexes)
+                    g.copy(generator = p.copy(pythonUDTFPartitionColumnIndexes = Some(indexes)))
+                  }.getOrElse {
+                    g
+                  }
+                case g @ Generate(p: UnresolvedPolymorphicPythonUDTF, _, _, _, _, _) =>
+                  functionTableSubqueryArgs.headOption.map { tableArg =>
+                    val indexes = PythonUDTFPartitionColumnIndexes(
+                      tableArg.partitioningExpressionIndexes)
                     g.copy(generator = p.copy(pythonUDTFPartitionColumnIndexes = Some(indexes)))
                   }.getOrElse {
                     g
@@ -2216,7 +2223,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
           case u: UnresolvedPolymorphicPythonUDTF => withPosition(u) {
             val elementSchema = u.resolveElementSchema(u.func, u.children)
             PythonUDTF(u.name, u.func, elementSchema, u.children,
-              u.evalType, u.udfDeterministic, u.resultId)
+              u.evalType, u.udfDeterministic, u.resultId, u.pythonUDTFPartitionColumnIndexes)
           }
         }
     }

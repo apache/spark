@@ -586,7 +586,7 @@ def read_udtf(pickleSer, infile, eval_type):
     udtf_state = UdtfState()
 
     # Instantiate the UDTF class.
-    def create_udtf_class_instance(return_type):
+    def create_udtf_class_instance():
         try:
             if udtf_state.udtf is not None:
                 del udtf_state.udtf
@@ -598,7 +598,7 @@ def read_udtf(pickleSer, infile, eval_type):
                 message_parameters={"method_name": "__init__", "error": str(e)},
             )
 
-    create_udtf_class_instance(return_type)
+    create_udtf_class_instance()
 
     # Validate the UDTF
     if not hasattr(udtf_state.udtf, "eval"):
@@ -621,10 +621,7 @@ def read_udtf(pickleSer, infile, eval_type):
         cur_partition_values = [cur_table_arg[i] for i in partition_child_indexes]
         prev_partition_values = [prev_table_arg[i] for i in partition_child_indexes]
         udtf_state.prev_arguments = arguments
-        change_partitions = any(
-            (1 for k, v in zip(cur_partition_values, prev_partition_values) if k != v)
-        )
-        return change_partitions
+        return any(k != v in zip(cur_partition_values, prev_partition_values))
 
     if eval_type == PythonEvalType.SQL_ARROW_TABLE_UDF:
 
@@ -761,7 +758,7 @@ def read_udtf(pickleSer, infile, eval_type):
                         # Then destroy the UDTF class instance and create a new one.
                         if udtf_state.terminate is not None:
                             yield udtf_state.terminate()
-                        create_udtf_class_instance(return_type)
+                        create_udtf_class_instance()
                         udtf_state.eval = wrap_udtf(getattr(udtf_state.udtf, "eval"), return_type)
                         udtf_state.set_terminate(wrap_udtf, return_type)
                     yield udtf_state.eval(*arguments)
