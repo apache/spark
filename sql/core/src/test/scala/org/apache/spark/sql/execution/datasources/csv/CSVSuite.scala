@@ -18,8 +18,7 @@
 package org.apache.spark.sql.execution.datasources.csv
 
 import java.io.{ByteArrayOutputStream, EOFException, File, FileOutputStream}
-import java.nio.charset.{Charset, StandardCharsets}
-// , UnsupportedCharsetException}
+import java.nio.charset.{Charset, StandardCharsets, UnsupportedCharsetException}
 import java.nio.file.{Files, StandardOpenOption}
 import java.sql.{Date, Timestamp}
 import java.text.SimpleDateFormat
@@ -257,11 +256,10 @@ abstract class CSVSuite
   }
 
   test("bad encoding name") {
-    val exception = intercept[AnalysisException] { // UnsupportedCharsetException
+    val exception = intercept[UnsupportedCharsetException] {
       spark
         .read
         .format("csv")
-        .option("multiLine", "true")
         .option("charset", "1-9588-osi")
         .load(testFile(carsFile8859))
     }

@@ -188,7 +188,7 @@ object MultiLineCSVDataSource extends CSVDataSource {
       sparkSession: SparkSession,
       inputPaths: Seq[FileStatus],
       parsedOptions: CSVOptions): StructType = {
-    val  csv = createBaseRdd(sparkSession, inputPaths, parsedOptions)
+    val csv = createBaseRdd(sparkSession, inputPaths, parsedOptions)
     csv.flatMap { lines =>
       val path = new Path(lines.getPath())
       UnivocityParser.tokenizeStream(
