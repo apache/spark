@@ -220,8 +220,6 @@ object UserDefinedPythonTableFunction {
     val bufferStream = new DirectByteBufferOutputStream()
     try {
       val dataOut = new DataOutputStream(new BufferedOutputStream(bufferStream, bufferSize))
-      val dataIn = new DataInputStream(new BufferedInputStream(
-        new WorkerInputStream(worker, bufferStream), bufferSize))
 
       PythonWorkerUtils.writePythonVersion(pythonVer, dataOut)
       PythonWorkerUtils.writeSparkFiles(jobArtifactUUID, pythonIncludes, dataOut)
@@ -256,6 +254,9 @@ object UserDefinedPythonTableFunction {
 
       dataOut.writeInt(SpecialLengths.END_OF_STREAM)
       dataOut.flush()
+
+      val dataIn = new DataInputStream(new BufferedInputStream(
+        new WorkerInputStream(worker, bufferStream.toByteBuffer), bufferSize))
 
       // Receive the schema
       val schema = dataIn.readInt() match {
@@ -307,11 +308,9 @@ object UserDefinedPythonTableFunction {
    * This is a port and simplified version of `PythonRunner.ReaderInputStream`,
    * and only supports to write all at once and then read all.
    */
-  private class WorkerInputStream(
-      worker: PythonWorker, bufferStream: DirectByteBufferOutputStream) extends InputStream {
+  private class WorkerInputStream(worker: PythonWorker, buffer: ByteBuffer) extends InputStream {
 
     private[this] val temp = new Array[Byte](1)
-    private[this] var buffer: ByteBuffer = _
 
     override def read(): Int = {
       val n = read(temp)
@@ -324,9 +323,6 @@ object UserDefinedPythonTableFunction {
     }
 
     override def read(b: Array[Byte], off: Int, len: Int): Int = {
-      if (buffer == null) {
-        buffer = bufferStream.toByteBuffer
-      }
       val buf = ByteBuffer.wrap(b, off, len)
       var n = 0
       while (n == 0) {
