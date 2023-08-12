@@ -421,9 +421,9 @@ class InjectRuntimeFilterSuite extends QueryTest with SQLTestUtils with SharedSp
       assertRewroteWithBloomFilter("select * from (select * from bf1 left anti join bf2 on " +
         "bf1.c1 = bf2.c2 where bf1.a1 = 5) as a join bf3 on bf3.c3 = a.c1")
       assertRewroteWithBloomFilter("select * from (select * from bf1 left semi join bf2 on " +
-        "(bf1.c1 = bf2.c2 and bf2.a2 = 5)) as a join bf3 on bf3.c3 = a.c1")
+        "(bf1.c1 = bf2.c2 and bf2.a2 = 5)) as a join bf3 on bf3.c3 = a.c1", 2)
       assertRewroteWithBloomFilter("select * from (select * from bf1 left anti join bf2 on " +
-        "(bf1.c1 = bf2.c2 and bf2.a2 = 5)) as a join bf3 on bf3.c3 = a.c1", 0)
+        "(bf1.c1 = bf2.c2 and bf2.a2 = 5)) as a join bf3 on bf3.c3 = a.c1")
     }
   }
 

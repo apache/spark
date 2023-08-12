@@ -48,18 +48,14 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
       filterApplicationSideExp: Expression,
       filterApplicationSidePlan: LogicalPlan,
       filterCreationSideExp: Expression,
-      filterCreationSidePlan: LogicalPlan,
-      hint: JoinHint): LogicalPlan = {
+      filterCreationSidePlan: LogicalPlan): LogicalPlan = {
     require(conf.runtimeFilterBloomFilterEnabled || conf.runtimeFilterSemiJoinReductionEnabled)
     if (conf.runtimeFilterBloomFilterEnabled) {
-      val canReuseExchange = conf.exchangeReuseEnabled &&
-        (canBroadcastBySize(filterCreationSidePlan, conf) || hintToBroadcastRight(hint))
       injectBloomFilter(
         filterApplicationSideExp,
         filterApplicationSidePlan,
         filterCreationSideExp,
-        filterCreationSidePlan,
-        canReuseExchange
+        filterCreationSidePlan
       )
     } else {
       injectInSubqueryFilter(
@@ -75,10 +71,10 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
       filterApplicationSideExp: Expression,
       filterApplicationSidePlan: LogicalPlan,
       filterCreationSideExp: Expression,
-      filterCreationSidePlan: LogicalPlan,
-      canReuseExchange: Boolean): LogicalPlan = {
+      filterCreationSidePlan: LogicalPlan): LogicalPlan = {
     // Skip if the filter creation side is too big
-    if (filterCreationSidePlan.stats.sizeInBytes > conf.runtimeFilterCreationSideThreshold) {
+    if (!filterCreationSidePlan.isInstanceOf[Join] &&
+      filterCreationSidePlan.stats.sizeInBytes > conf.runtimeFilterCreationSideThreshold) {
       return filterApplicationSidePlan
     }
     val rowCount = filterCreationSidePlan.stats.rowCount
@@ -92,11 +88,11 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
     val alias = Alias(bloomFilterAgg.toAggregateExpression(), "bloomFilter")()
     val aggregate =
       ConstantFolding(ColumnPruning(Aggregate(Nil, Seq(alias), filterCreationSidePlan)))
-    val bloomFilterSubquery = if (canReuseExchange) {
-      // Try to reuse the results of broadcast exchange.
-      RuntimeFilterSubquery(filterApplicationSideExp, aggregate, filterCreationSideExp)
-    } else {
-      ScalarSubquery(aggregate, Nil)
+    val bloomFilterSubquery = filterCreationSidePlan match {
+      case _: Join if conf.exchangeReuseEnabled =>
+        RuntimeFilterSubquery(filterApplicationSideExp, aggregate, filterCreationSideExp)
+      case _ =>
+        ScalarSubquery(aggregate, Nil)
     }
     val filter = BloomFilterMightContain(bloomFilterSubquery,
       new XxHash64(Seq(filterApplicationSideExp)))
@@ -131,14 +127,16 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
    */
   private def extractSelectiveFilterOverScan(
       plan: LogicalPlan,
-      filterCreationSideExp: Expression): Option[LogicalPlan] = {
-    @tailrec
+      filterCreationSideExp: Expression,
+      hint: JoinHint): Option[LogicalPlan] = {
+
     def extract(
         p: LogicalPlan,
         predicateReference: AttributeSet,
         hasHitFilter: Boolean,
         hasHitSelectiveFilter: Boolean,
-        currentPlan: LogicalPlan): Option[LogicalPlan] = p match {
+        currentPlan: LogicalPlan,
+        currentHint: JoinHint): Option[LogicalPlan] = p match {
       case Project(projectList, child) if hasHitFilter =>
         // We need to make sure all expressions referenced by filter predicates are simple
         // expressions.
@@ -149,30 +147,50 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
             referencedExprs.map(_.references).foldLeft(AttributeSet.empty)(_ ++ _),
             hasHitFilter,
             hasHitSelectiveFilter,
-            currentPlan)
+            currentPlan,
+            currentHint)
         } else {
           None
         }
       case Project(_, child) =>
         assert(predicateReference.isEmpty && !hasHitSelectiveFilter)
-        extract(child, predicateReference, hasHitFilter, hasHitSelectiveFilter, currentPlan)
+        extract(
+          child,
+          predicateReference,
+          hasHitFilter,
+          hasHitSelectiveFilter,
+          currentPlan,
+          currentHint)
       case Filter(condition, child) if isSimpleExpression(condition) =>
         extract(
           child,
           predicateReference ++ condition.references,
           hasHitFilter = true,
           hasHitSelectiveFilter = hasHitSelectiveFilter || isLikelySelective(condition),
-          currentPlan)
-      case ExtractEquiJoinKeys(_, _, _, _, _, left, right, _) =>
+          currentPlan,
+          currentHint)
+      case join @ ExtractEquiJoinKeys(_, _, _, _, _, left, right, hint) =>
         // Runtime filters use one side of the [[Join]] to build a set of join key values and prune
         // the other side of the [[Join]]. It's also OK to use a superset of the join key values
         // (ignore null values) to do the pruning.
         if (left.output.exists(_.semanticEquals(filterCreationSideExp))) {
-          extract(left, AttributeSet.empty,
-            hasHitFilter = false, hasHitSelectiveFilter = false, currentPlan = left)
+          val extracted = extract(left, AttributeSet.empty, hasHitFilter = false,
+            hasHitSelectiveFilter = false, currentPlan = left, currentHint = hint)
+          if (extracted.isEmpty && conf.exchangeReuseEnabled &&
+            !hintToBroadcastRight(currentHint) && !canBroadcastBySize(join, conf)) {
+            val hasSelectiveFilter = extract(right, AttributeSet.empty, hasHitFilter = false,
+              hasHitSelectiveFilter = false, currentPlan = right, currentHint = hint).isDefined
+            if (hasSelectiveFilter) {
+              Some(join)
+            } else {
+              None
+            }
+          } else {
+            extracted
+          }
         } else if (right.output.exists(_.semanticEquals(filterCreationSideExp))) {
-          extract(right, AttributeSet.empty,
-            hasHitFilter = false, hasHitSelectiveFilter = false, currentPlan = right)
+          extract(right, AttributeSet.empty, hasHitFilter = false,
+            hasHitSelectiveFilter = false, currentPlan = right, currentHint = hint)
         } else {
           None
         }
@@ -182,8 +200,8 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
     }
 
     if (!plan.isStreaming) {
-      extract(plan, AttributeSet.empty,
-        hasHitFilter = false, hasHitSelectiveFilter = false, currentPlan = plan)
+      extract(plan, AttributeSet.empty, hasHitFilter = false, hasHitSelectiveFilter = false,
+        currentPlan = plan, currentHint = hint)
     } else {
       None
     }
@@ -253,7 +271,7 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
       (isProbablyShuffleJoin(filterApplicationSide, filterCreationSide, hint) ||
         probablyHasShuffle(filterApplicationSide)) &&
       satisfyByteSizeRequirement(filterApplicationSide)) {
-      extractSelectiveFilterOverScan(filterCreationSide, filterCreationSideExp)
+      extractSelectiveFilterOverScan(filterCreationSide, filterCreationSideExp, hint)
     } else {
       None
     }
@@ -339,14 +357,14 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
             if (canPruneLeft(joinType)) {
               extractBeneficialFilterCreatePlan(left, right, l, r, hint).foreach {
                 filterCreationSidePlan =>
-                  newLeft = injectFilter(l, newLeft, r, filterCreationSidePlan, hint)
+                  newLeft = injectFilter(l, newLeft, r, filterCreationSidePlan)
               }
             }
             // Did we actually inject on the left? If not, try on the right
             if (newLeft.fastEquals(oldLeft) && canPruneRight(joinType)) {
               extractBeneficialFilterCreatePlan(right, left, r, l, hint).foreach {
                 filterCreationSidePlan =>
-                  newRight = injectFilter(r, newRight, l, filterCreationSidePlan, hint)
+                  newRight = injectFilter(r, newRight, l, filterCreationSidePlan)
               }
             }
             if (!newLeft.fastEquals(oldLeft) || !newRight.fastEquals(oldRight)) {

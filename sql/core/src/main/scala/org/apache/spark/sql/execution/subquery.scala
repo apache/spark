@@ -19,7 +19,9 @@ package org.apache.spark.sql.execution
 
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.sql.SparkSession
-import org.apache.spark.sql.catalyst.{expressions, InternalRow}
+import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.analysis.UnresolvedException
+import org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.catalyst.expressions.{CreateNamedStruct, Expression, ExprId, InSet, ListQuery, Literal, PlanExpression, Predicate, SupportQueryContext}
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
 import org.apache.spark.sql.catalyst.rules.Rule
@@ -174,43 +176,35 @@ case class InSubqueryExec(
     copy(child = newChild)
 }
 
+/**
+ * A wrapper for a subquery.
+ *
+ * This is only used for
+ */
 case class SubqueryWrapper(
     plan: BaseSubqueryExec,
     exprId: ExprId)
   extends ExecSubqueryExpression with LeafLike[Expression] {
 
-  override def dataType: DataType = plan.schema.fields.head.dataType
-  override def nullable: Boolean = true
-  override def toString: String = s"${plan.name}"
-  override def withNewPlan(plan: BaseSubqueryExec): SubqueryWrapper = copy(plan = plan)
+  override def dataType: DataType = throw new UnresolvedException("dataType")
+  override def nullable: Boolean = throw new UnresolvedException("nullable")
+
   final override def nodePatternsInternal: Seq[TreePattern] = Seq(SUBQUERY_WRAPPER)
 
-  override lazy val canonicalized: Expression = {
-    SubqueryWrapper(plan.canonicalized.asInstanceOf[BaseSubqueryExec], ExprId(0))
-  }
+  override def toString: String = s"${plan.name}"
 
-  @transient private var result: Array[Any] = null
-  @volatile private var updated: Boolean = false
+  override def withNewPlan(plan: BaseSubqueryExec): SubqueryWrapper = copy(plan = plan)
 
   def updateResult(): Unit = {
-    val rows = plan.executeCollect()
-    result = if (plan.output.length > 1) {
-      rows.asInstanceOf[Array[Any]]
-    } else {
-      rows.map(_.get(0, plan.schema.fields.head.dataType))
-    }
-
-    updated = true
+    throw new IllegalStateException("SubqueryWrapper.updateResult should never be called")
   }
 
   override def eval(input: InternalRow): Array[Any] = {
-    require(updated, s"$this has not finished")
-    result
+    throw new IllegalStateException("SubqueryWrapper.eval should never be called")
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    require(updated, s"$this has not finished")
-    Literal.create(result, dataType).doGenCode(ctx, ev)
+    throw new IllegalStateException("SubqueryWrapper.doGenCode should never be called")
   }
 }
 

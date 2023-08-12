@@ -118,7 +118,7 @@ Input [9]: [wr_item_sk#10, wr_refunded_cdemo_sk#11, wr_refunded_addr_sk#12, wr_r
 
 (14) Filter [codegen id : 4]
 Input [9]: [wr_item_sk#10, wr_refunded_cdemo_sk#11, wr_refunded_addr_sk#12, wr_returning_cdemo_sk#13, wr_reason_sk#14, wr_order_number#15, wr_fee#16, wr_refunded_cash#17, wr_returned_date_sk#18]
-Condition : (((((((isnotnull(wr_item_sk#10) AND isnotnull(wr_order_number#15)) AND isnotnull(wr_refunded_cdemo_sk#11)) AND isnotnull(wr_returning_cdemo_sk#13)) AND isnotnull(wr_refunded_addr_sk#12)) AND isnotnull(wr_reason_sk#14)) AND might_contain(runtimefilterexpression(Subquery scalar-subquery#19, [id=#20]), xxhash64(wr_refunded_cdemo_sk#11, 42))) AND might_contain(runtimefilterexpression(Subquery scalar-subquery#21, [id=#22]), xxhash64(wr_refunded_addr_sk#12, 42)))
+Condition : (((((((isnotnull(wr_item_sk#10) AND isnotnull(wr_order_number#15)) AND isnotnull(wr_refunded_cdemo_sk#11)) AND isnotnull(wr_returning_cdemo_sk#13)) AND isnotnull(wr_refunded_addr_sk#12)) AND isnotnull(wr_reason_sk#14)) AND might_contain(Subquery scalar-subquery#19, [id=#20], xxhash64(wr_refunded_cdemo_sk#11, 42))) AND might_contain(Subquery scalar-subquery#21, [id=#22], xxhash64(wr_refunded_addr_sk#12, 42)))
 
 (15) Project [codegen id : 4]
 Output [8]: [wr_item_sk#10, wr_refunded_cdemo_sk#11, wr_refunded_addr_sk#12, wr_returning_cdemo_sk#13, wr_reason_sk#14, wr_order_number#15, wr_fee#16, wr_refunded_cash#17]

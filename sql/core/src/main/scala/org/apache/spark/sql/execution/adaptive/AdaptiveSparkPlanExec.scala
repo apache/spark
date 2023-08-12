@@ -130,6 +130,8 @@ case class AdaptiveSparkPlanExec(
       RemoveRedundantWindowGroupLimits,
       DisableUnnecessaryBucketedScan,
       OptimizeSkewedJoin(ensureRequirements)
+//      ApplyColumnarRulesAndInsertTransitions(
+//        context.session.sessionState.columnarRules, supportsColumnar)
     ) ++ context.session.sessionState.adaptiveRulesHolder.queryStagePrepRules
   }
 
@@ -823,7 +825,9 @@ object AdaptiveSparkPlanExec {
       rules: Seq[Rule[SparkPlan]],
       loggerAndBatchName: Option[(PlanChangeLogger[SparkPlan], String)] = None): SparkPlan = {
     if (loggerAndBatchName.isEmpty) {
-      rules.foldLeft(plan) { case (sp, rule) => rule.apply(sp) }
+      rules.foldLeft(plan) { case (sp, rule) =>
+        rule.apply(sp)
+      }
     } else {
       val (logger, batchName) = loggerAndBatchName.get
       val newPlan = rules.foldLeft(plan) { case (sp, rule) =>

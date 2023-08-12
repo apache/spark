@@ -17,17 +17,16 @@
 
 package org.apache.spark.sql.execution.adaptive
 
-import org.apache.spark.sql.catalyst.expressions.{BindReferences, RuntimeFilterExpression}
-import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight}
+import org.apache.spark.sql.catalyst.expressions.{AttributeSet, NamedExpression, RuntimeFilterExpression}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.{RUNTIME_FILTER_EXPRESSION, SUBQUERY_WRAPPER}
-import org.apache.spark.sql.execution.{QueryExecution, ScalarSubquery, SparkPlan, SubqueryAdaptiveBroadcastExec, SubqueryBroadcastExec, SubqueryExec, SubqueryWrapper}
+import org.apache.spark.sql.execution.{FilterExec, ProjectExec, ScalarSubquery, SparkPlan, SubqueryAdaptiveBroadcastExec, SubqueryExec, SubqueryWrapper}
 import org.apache.spark.sql.execution.aggregate.ObjectHashAggregateExec
-import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, BroadcastExchangeExecProxy, ShuffleExchangeExec}
-import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, HashedRelationBroadcastMode, HashJoin}
+import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExecProxy, ShuffleExchangeExec}
+import org.apache.spark.sql.execution.joins.BroadcastHashJoinExec
 
 /**
- * A rule to insert runtime filter in order to reuse the results of broadcast.
+ * A rule to insert runtime filter in order to reuse exchange.
  */
 case class PlanAdaptiveRuntimeFilterFilters(
     rootPlan: AdaptiveSparkPlanExec) extends Rule[SparkPlan] with AdaptiveSparkPlanHelper {
@@ -40,30 +39,21 @@ case class PlanAdaptiveRuntimeFilterFilters(
     plan.transformAllExpressionsWithPruning(
       _.containsAllPatterns(RUNTIME_FILTER_EXPRESSION, SUBQUERY_WRAPPER)) {
       case RuntimeFilterExpression(SubqueryWrapper(
-      SubqueryAdaptiveBroadcastExec(name, index, true, _, buildKeys,
-      adaptivePlan: AdaptiveSparkPlanExec), exprId)) =>
+          SubqueryAdaptiveBroadcastExec(_, _, true, _, buildKeys,
+          adaptivePlan: AdaptiveSparkPlanExec), exprId)) =>
         val filterCreationSidePlan = getFilterCreationSidePlan(adaptivePlan.executedPlan)
-        val executedFilterCreationSidePlan =
-          QueryExecution.prepareExecutedPlan(adaptivePlan.session, filterCreationSidePlan)
-        val packedKeys = BindReferences.bindReferences(
-          HashJoin.rewriteKeyExpr(buildKeys), executedFilterCreationSidePlan.output)
-        val mode = HashedRelationBroadcastMode(packedKeys)
-        // plan a broadcast exchange of the build side of the join
-        val exchange = BroadcastExchangeExec(mode, executedFilterCreationSidePlan)
 
+        var exchange = filterCreationSidePlan
         val canReuseExchange = conf.exchangeReuseEnabled && buildKeys.nonEmpty &&
           find(rootPlan) {
-            case BroadcastHashJoinExec(_, _, _, BuildLeft, _, left, _, _) =>
-              if (left.isInstanceOf[BroadcastQueryStageExec]) {
-                left.asInstanceOf[BroadcastQueryStageExec].plan.sameResult(exchange)
+            case e: ShuffleExchangeExec =>
+              val newPlan = adaptPlan(filterCreationSidePlan, e.child)
+              if (newPlan.isDefined && e.child.sameResult(newPlan.get)) {
+                exchange = ShuffleExchangeExec(e.outputPartitioning,
+                  newPlan.get, e.shuffleOrigin, e.advisoryPartitionSize)
+                true
               } else {
-                left.sameResult(exchange)
-              }
-            case BroadcastHashJoinExec(_, _, _, BuildRight, _, _, right, _) =>
-              if (right.isInstanceOf[BroadcastQueryStageExec]) {
-                right.asInstanceOf[BroadcastQueryStageExec].plan.sameResult(exchange)
-              } else {
-                right.sameResult(exchange)
+                false
               }
             case _ => false
           }.isDefined
@@ -71,9 +61,9 @@ case class PlanAdaptiveRuntimeFilterFilters(
         val bloomFilterSubquery = if (canReuseExchange) {
           exchange.setLogicalLink(filterCreationSidePlan.logicalLink.get)
 
-          val broadcastValues = SubqueryBroadcastExec(name, index, buildKeys, exchange)
+          val newProject = ProjectExec(buildKeys.asInstanceOf[Seq[NamedExpression]], exchange)
           val broadcastProxy =
-            BroadcastExchangeExecProxy(broadcastValues, executedFilterCreationSidePlan.output)
+            BroadcastExchangeExecProxy(newProject, filterCreationSidePlan.output)
 
           val newExecutedPlan = adaptivePlan.executedPlan transformUp {
             case hashAggregateExec: ObjectHashAggregateExec
@@ -106,6 +96,45 @@ case class PlanAdaptiveRuntimeFilterFilters(
       case queryStageExec: ShuffleQueryStageExec =>
         getFilterCreationSidePlan(queryStageExec.plan)
       case other => other
+    }
+  }
+
+  private def adaptPlan(current: SparkPlan, target: SparkPlan): Option[SparkPlan] = {
+    (current, target) match {
+      case (cp: ProjectExec, tp: ProjectExec) =>
+        val newChild = adaptPlan(cp.child, tp.child)
+        if (newChild.isDefined) {
+          val cpSet = AttributeSet(cp.projectList.flatMap(_.references))
+          val tpSet = AttributeSet(tp.projectList.flatMap(_.references))
+          if (cpSet.subsetOf(tpSet)) {
+            return Some(tp.withNewChildren(Seq(newChild.get)))
+          }
+        }
+        None
+      case (cj: BroadcastHashJoinExec, tj: BroadcastHashJoinExec)
+        if cj.buildSide == tj.buildSide && cj.leftKeys.length == tj.leftKeys.length &&
+          cj.rightKeys.length == tj.rightKeys.length =>
+
+        val keysEquals = cj.leftKeys.zip(tj.leftKeys).forall { case (l, r) =>
+          l.semanticEquals(r)
+        } && cj.rightKeys.zip(tj.rightKeys).forall { case (l, r) =>
+          l.semanticEquals(r)
+        }
+        if (keysEquals) {
+          val newLeft = adaptPlan(cj.left, tj.left)
+          val newRight = adaptPlan(cj.right, tj.right)
+          if (newLeft.isDefined && newRight.isDefined) {
+            return Some(cj.withNewChildren(Seq(newLeft.get, newRight.get)))
+          }
+        }
+
+        None
+      case (ProjectExec(_, cf: FilterExec), tf: FilterExec) =>
+        adaptPlan(cf, tf)
+      case (c, t) if c.canonicalized == t.canonicalized =>
+        Some(t)
+      case _ =>
+        None
     }
   }
 }
