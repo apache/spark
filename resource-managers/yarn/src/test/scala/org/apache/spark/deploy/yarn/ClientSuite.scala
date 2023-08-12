@@ -692,13 +692,14 @@ class ClientSuite extends SparkFunSuite with Matchers {
       .set(YARN_CLIENT_STAT_CACHE_PRELOAD_PER_DIRECTORY_THRESHOLD, 2)
       .set(SPARK_JARS, Seq("hdfs:/valid/a.jar", "hdfs:/valid/b.jar"))
     val client = createClient(sparkConf, args = Array("--jar", USER))
-    val fs = mock(classOf[FileSystem])
-    when(fs.listStatus(new Path ("hdfs:/valid"))).thenReturn(Seq(
+    val mockFileSystem = mock(classOf[FileSystem])
+    val mockFsLookup: URI => FileSystem = _ => mockFileSystem
+    when(mockFileSystem.listStatus(new Path ("hdfs:/valid"))).thenReturn(Seq(
       new FileStatus(1, false, 1, 1, 1L, new Path("hdfs:/valid/a.jar")),
       new FileStatus(1, false, 1, 1, 1L, new Path("hdfs:/valid/b.jar")),
       new FileStatus(1, false, 1, 1, 1L, new Path("hdfs:/valid/c.jar"))).toArray)
     // Expect only a.jar and b.jar to be preloaded
-    assert(client.getPreloadedStatCache(Some(fs)).size === 2)
+    assert(client.getPreloadedStatCache(mockFsLookup).size === 2)
   }
 
   private val matching = Seq(

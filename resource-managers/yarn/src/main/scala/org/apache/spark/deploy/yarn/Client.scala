@@ -472,6 +472,19 @@ private[spark] class Client(
    * */
   private[yarn] def directoriesToBePreloaded(jars: Seq[String]): List[URI] = {
     val directoryCounter = new HashMap[URI, Int]()
+    jars.foreach { jar =>
+      if (!Utils.isLocalUri(jar) && !new GlobPattern(jar).hasWildcard) {
+        val parentUri = new Path(Utils.resolveURI(jar)).getParent.toUri
+        directoryCounter.update(parentUri, directoryCounter.getOrElse(parentUri, 0) + 1)
+      }
+    }
+    directoryCounter.filter(_._2 >= statCachePreloadDirectoryCountThreshold).keys.toList
+  }
+
+  /**
+   * Preload the statCache with file status. For each directory in the list, we will list all
+   * files from that directory and add them to the statCache.
+   *
    * @param fsLookup: Function for looking up an FS based on a URI; override for testing
    * @return A preloaded statCache with fileStatus
    */
@@ -523,7 +536,7 @@ private[spark] class Client(
 
     // If preload is enabled, preload the statCache with the files in the directories
     val statCache = if (statCachePreloadEnabled) {
-      getPreloadedStatCache(None)
+      getPreloadedStatCache()
     } else {
       HashMap[URI, FileStatus]()
     }
