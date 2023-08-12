@@ -735,7 +735,7 @@ case class KeyGroupedShuffleSpec(
       case _ => false
     }
 
-  override def canCreatePartitioning: Boolean = SQLConf.get.v2BucketingShuffleOneSideEnabled &&
+  override def canCreatePartitioning: Boolean = SQLConf.get.v2BucketingShuffleEnabled &&
     // Only support partition expressions are AttributeReference for now
     partitioning.expressions.forall(_.isInstanceOf[AttributeReference])
 

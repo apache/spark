@@ -1054,14 +1054,14 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase {
       "(1, 42.0, cast('2020-01-01' as timestamp)), " +
       "(3, 19.5, cast('2020-02-01' as timestamp))")
 
-    Seq(true, false).foreach { shuffleOneSide =>
-      withSQLConf(SQLConf.V2_BUCKETING_SHUFFLE_ONE_SIDE_ENABLED.key -> shuffleOneSide.toString) {
+    Seq(true, false).foreach { shuffle =>
+      withSQLConf(SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> shuffle.toString) {
         val df = sql("SELECT id, name, i.price as purchase_price, p.price as sale_price " +
           s"FROM testcat.ns.$items i JOIN testcat.ns.$purchases p " +
           "ON i.id = p.item_id ORDER BY id, purchase_price, sale_price")
 
         val shuffles = collectShuffles(df.queryExecution.executedPlan)
-        if (shuffleOneSide) {
+        if (shuffle) {
           assert(shuffles.size == 1, "only shuffle one side not report partitioning")
         } else {
           assert(shuffles.size == 2, "should add two side shuffle when bucketing shuffle one side" +
@@ -1089,15 +1089,15 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase {
       "(5, 26.0, cast('2023-01-01' as timestamp)), " +
       "(6, 50.0, cast('2023-02-01' as timestamp))")
 
-    Seq(true, false).foreach { shuffleOneSide =>
-      withSQLConf(SQLConf.V2_BUCKETING_SHUFFLE_ONE_SIDE_ENABLED.key -> shuffleOneSide.toString) {
+    Seq(true, false).foreach { shuffle =>
+      withSQLConf(SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> shuffle.toString) {
         Seq("JOIN", "LEFT OUTER JOIN", "RIGHT OUTER JOIN", "FULL OUTER JOIN").foreach { joinType =>
           val df = sql(s"SELECT id, name, i.price as purchase_price, p.price as sale_price " +
             s"FROM testcat.ns.$items i $joinType testcat.ns.$purchases p " +
             "ON i.id = p.item_id ORDER BY id, purchase_price, sale_price")
 
           val shuffles = collectShuffles(df.queryExecution.executedPlan)
-          if (shuffleOneSide) {
+          if (shuffle) {
             assert(shuffles.size == 1, "only shuffle one side not report partitioning")
           } else {
             assert(shuffles.size == 2, "should add two side shuffle when bucketing shuffle one " +
@@ -1136,14 +1136,14 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase {
       "(1, 42.0, cast('2020-01-01' as timestamp)), " +
       "(3, 19.5, cast('2020-02-01' as timestamp))")
 
-    Seq(true, false).foreach { shuffleOneSide =>
-      withSQLConf(SQLConf.V2_BUCKETING_SHUFFLE_ONE_SIDE_ENABLED.key -> shuffleOneSide.toString) {
+    Seq(true, false).foreach { shuffle =>
+      withSQLConf(SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> shuffle.toString) {
         val df = sql("SELECT id, name, i.price as purchase_price, p.price as sale_price " +
           s"FROM testcat.ns.$items i JOIN testcat.ns.$purchases p " +
           "ON i.id = p.item_id and i.arrive_time = p.time ORDER BY id, purchase_price, sale_price")
 
         val shuffles = collectShuffles(df.queryExecution.executedPlan)
-        if (shuffleOneSide) {
+        if (shuffle) {
           assert(shuffles.size == 1, "only shuffle one side not report partitioning")
         } else {
           assert(shuffles.size == 2, "should add two side shuffle when bucketing shuffle one side" +
@@ -1169,14 +1169,14 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase {
       "(1, 42.0, cast('2020-01-01' as timestamp)), " +
       "(3, 19.5, cast('2021-02-01' as timestamp))")
 
-    Seq(true, false).foreach { shuffleOneSide =>
-      withSQLConf(SQLConf.V2_BUCKETING_SHUFFLE_ONE_SIDE_ENABLED.key -> shuffleOneSide.toString) {
+    Seq(true, false).foreach { shuffle =>
+      withSQLConf(SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> shuffle.toString) {
         val df = sql("SELECT id, name, i.price as purchase_price, p.price as sale_price " +
           s"FROM testcat.ns.$items i JOIN testcat.ns.$purchases p " +
           "ON i.arrive_time = p.time ORDER BY id, purchase_price, sale_price")
 
         val shuffles = collectShuffles(df.queryExecution.executedPlan)
-        if (shuffleOneSide) {
+        if (shuffle) {
           assert(shuffles.size == 2, "partitioning with transform not work now")
         } else {
           assert(shuffles.size == 2, "should add two side shuffle when bucketing shuffle one side" +

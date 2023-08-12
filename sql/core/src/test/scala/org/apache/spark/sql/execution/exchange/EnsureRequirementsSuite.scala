@@ -1112,8 +1112,8 @@ class EnsureRequirementsSuite extends SharedSparkSession {
   }
 
   test(s"SPARK-41471: shuffle right side when" +
-    s" spark.sql.sources.v2.bucketing.shuffleOneSide.enabled is true") {
-    withSQLConf(SQLConf.V2_BUCKETING_SHUFFLE_ONE_SIDE_ENABLED.key -> "true") {
+    s" spark.sql.sources.v2.bucketing.shuffle.enabled is true") {
+    withSQLConf(SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true") {
 
       val a1 = AttributeReference("a1", IntegerType)()
 
