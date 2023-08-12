@@ -621,7 +621,7 @@ def read_udtf(pickleSer, infile, eval_type):
         cur_partition_values = [cur_table_arg[i] for i in partition_child_indexes]
         prev_partition_values = [prev_table_arg[i] for i in partition_child_indexes]
         udtf_state.prev_arguments = arguments
-        return any(k != v in zip(cur_partition_values, prev_partition_values))
+        return any(k != v for k, v in zip(cur_partition_values, prev_partition_values))
 
     if eval_type == PythonEvalType.SQL_ARROW_TABLE_UDF:
 
