@@ -311,6 +311,7 @@ object UserDefinedPythonTableFunction {
       worker: PythonWorker, bufferStream: DirectByteBufferOutputStream) extends InputStream {
 
     private[this] val temp = new Array[Byte](1)
+    private[this] var buffer: ByteBuffer = _
 
     override def read(): Int = {
       val n = read(temp)
@@ -323,6 +324,9 @@ object UserDefinedPythonTableFunction {
     }
 
     override def read(b: Array[Byte], off: Int, len: Int): Int = {
+      if (buffer == null) {
+        buffer = bufferStream.toByteBuffer
+      }
       val buf = ByteBuffer.wrap(b, off, len)
       var n = 0
       while (n == 0) {
@@ -331,14 +335,15 @@ object UserDefinedPythonTableFunction {
           n = worker.channel.read(buf)
         }
         if (worker.selectionKey.isWritable) {
-          val buffer = bufferStream.toByteBuffer
           var acceptsInput = true
           while (acceptsInput && buffer.hasRemaining) {
             val n = worker.channel.write(buffer)
             acceptsInput = n > 0
           }
-          // We no longer have any data to write to the socket.
-          worker.selectionKey.interestOps(SelectionKey.OP_READ)
+          if (!buffer.hasRemaining) {
+            // We no longer have any data to write to the socket.
+            worker.selectionKey.interestOps(SelectionKey.OP_READ)
+          }
         }
       }
       n
