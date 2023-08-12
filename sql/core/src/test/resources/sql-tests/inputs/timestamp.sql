@@ -161,3 +161,11 @@ select timestampdiff(SECOND, date'2022-02-15', timestamp'2022-02-14 23:59:59');
 
 select timestampdiff('MINUTE', timestamp'2022-02-14 01:02:03', timestamp'2022-02-14 02:00:03');
 select timestampdiff('YEAR', date'2022-02-15', date'2023-02-15');
+
+select timediff(QUARTER, timestamp'2023-08-10 01:02:03', timestamp'2022-01-14 01:02:03');
+select timediff(HOUR, timestamp'2022-02-14 01:02:03', timestamp'2022-02-14 12:00:03');
+select timediff(DAY, date'2022-02-15', date'2023-02-15');
+select timediff(SECOND, date'2022-02-15', timestamp'2022-02-14 23:59:59');
+
+select timediff('MINUTE', timestamp'2023-02-14 01:02:03', timestamp'2023-02-14 02:00:03');
+select timediff('YEAR', date'2020-02-15', date'2023-02-15');
