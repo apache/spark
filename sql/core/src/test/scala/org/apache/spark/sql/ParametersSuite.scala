@@ -503,7 +503,7 @@ class ParametersSuite extends QueryTest with SharedSparkSession {
         stop = 36))
   }
 
-  test("arrays as parameters") {
+  test("SPARK-44783: arrays as parameters") {
     checkAnswer(
       spark.sql("SELECT array_position(:arrParam, 'abc')", Map("arrParam" -> Array.empty[String])),
       Row(0))
