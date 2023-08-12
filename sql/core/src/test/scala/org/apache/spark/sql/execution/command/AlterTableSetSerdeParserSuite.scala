@@ -24,8 +24,6 @@ import org.apache.spark.sql.test.SharedSparkSession
 
 class AlterTableSetSerdeParserSuite extends AnalysisTest with SharedSparkSession {
 
-  private val HINT = Some("Please use ALTER VIEW instead.")
-
   test("SerDe property values must be set") {
     val sql = "ALTER TABLE table_name SET SERDE 'serde' " +
       "WITH SERDEPROPERTIES('key_without_value', 'key_with_value'='x')"
@@ -43,7 +41,7 @@ class AlterTableSetSerdeParserSuite extends AnalysisTest with SharedSparkSession
     val sql = "ALTER TABLE table_name SET SERDE 'org.apache.class'"
     val parsed = parsePlan(sql)
     val expected = SetTableSerDeProperties(
-      UnresolvedTable(Seq("table_name"), "ALTER TABLE ... SET [SERDE|SERDEPROPERTIES]", HINT),
+      UnresolvedTable(Seq("table_name"), "ALTER TABLE ... SET [SERDE|SERDEPROPERTIES]", true),
       Some("org.apache.class"),
       None,
       None)
@@ -58,7 +56,7 @@ class AlterTableSetSerdeParserSuite extends AnalysisTest with SharedSparkSession
       """.stripMargin
     val parsed = parsePlan(sql)
     val expected = SetTableSerDeProperties(
-      UnresolvedTable(Seq("table_name"), "ALTER TABLE ... SET [SERDE|SERDEPROPERTIES]", HINT),
+      UnresolvedTable(Seq("table_name"), "ALTER TABLE ... SET [SERDE|SERDEPROPERTIES]", true),
       Some("org.apache.class"),
       Some(Map("columns" -> "foo,bar", "field.delim" -> ",")),
       None)
@@ -73,7 +71,7 @@ class AlterTableSetSerdeParserSuite extends AnalysisTest with SharedSparkSession
       """.stripMargin
     val parsed = parsePlan(sql)
     val expected = SetTableSerDeProperties(
-      UnresolvedTable(Seq("table_name"), "ALTER TABLE ... SET [SERDE|SERDEPROPERTIES]", HINT),
+      UnresolvedTable(Seq("table_name"), "ALTER TABLE ... SET [SERDE|SERDEPROPERTIES]", true),
       None,
       Some(Map("columns" -> "foo,bar", "field.delim" -> ",")),
       None)
@@ -89,7 +87,7 @@ class AlterTableSetSerdeParserSuite extends AnalysisTest with SharedSparkSession
       """.stripMargin
     val parsed = parsePlan(sql)
     val expected = SetTableSerDeProperties(
-      UnresolvedTable(Seq("table_name"), "ALTER TABLE ... SET [SERDE|SERDEPROPERTIES]", HINT),
+      UnresolvedTable(Seq("table_name"), "ALTER TABLE ... SET [SERDE|SERDEPROPERTIES]", true),
       Some("org.apache.class"),
       Some(Map("columns" -> "foo,bar", "field.delim" -> ",")),
       Some(Map("test" -> "1", "dt" -> "2008-08-08", "country" -> "us")))
@@ -104,7 +102,7 @@ class AlterTableSetSerdeParserSuite extends AnalysisTest with SharedSparkSession
       """.stripMargin
     val parsed = parsePlan(sql)
     val expected = SetTableSerDeProperties(
-      UnresolvedTable(Seq("table_name"), "ALTER TABLE ... SET [SERDE|SERDEPROPERTIES]", HINT),
+      UnresolvedTable(Seq("table_name"), "ALTER TABLE ... SET [SERDE|SERDEPROPERTIES]", true),
       None,
       Some(Map("columns" -> "foo,bar", "field.delim" -> ",")),
       Some(Map("test" -> "1", "dt" -> "2008-08-08", "country" -> "us")))
@@ -120,7 +118,7 @@ class AlterTableSetSerdeParserSuite extends AnalysisTest with SharedSparkSession
       """.stripMargin
     val parsed = parsePlan(sql)
     val expected = SetTableSerDeProperties(
-      UnresolvedTable(Seq("a", "b", "c"), "ALTER TABLE ... SET [SERDE|SERDEPROPERTIES]", HINT),
+      UnresolvedTable(Seq("a", "b", "c"), "ALTER TABLE ... SET [SERDE|SERDEPROPERTIES]", true),
       Some("org.apache.class"),
       Some(Map("columns" -> "foo,bar", "field.delim" -> ",")),
       None)
@@ -136,7 +134,7 @@ class AlterTableSetSerdeParserSuite extends AnalysisTest with SharedSparkSession
       """.stripMargin
     val parsed = parsePlan(sql)
     val expected = SetTableSerDeProperties(
-      UnresolvedTable(Seq("a", "b", "c"), "ALTER TABLE ... SET [SERDE|SERDEPROPERTIES]", HINT),
+      UnresolvedTable(Seq("a", "b", "c"), "ALTER TABLE ... SET [SERDE|SERDEPROPERTIES]", true),
       None,
       Some(Map("columns" -> "foo,bar", "field.delim" -> ",")),
       Some(Map("test" -> "1", "dt" -> "2008-08-08", "country" -> "us")))

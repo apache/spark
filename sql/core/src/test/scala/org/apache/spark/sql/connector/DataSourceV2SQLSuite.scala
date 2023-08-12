@@ -2601,11 +2601,10 @@ class DataSourceV2SQLSuiteV1Filter
       sql("create global temp view v as select 1")
       checkError(
         exception = intercept[AnalysisException](sql("COMMENT ON TABLE global_temp.v IS NULL")),
-        errorClass = "_LEGACY_ERROR_TEMP_1013",
+        errorClass = "UNSUPPORTED_TEMP_VIEW_OPERATION.WITH_SUGGESTION",
         parameters = Map(
-          "nameParts" -> "global_temp.v",
-          "viewStr" -> "temp view",
-          "cmd" -> "COMMENT ON TABLE", "hintStr" -> ""),
+          "tempViewName" -> "`global_temp`.`v`",
+          "operation" -> "COMMENT ON TABLE"),
         context = ExpectedContext(fragment = "global_temp.v", start = 17, stop = 29))
     }
   }
