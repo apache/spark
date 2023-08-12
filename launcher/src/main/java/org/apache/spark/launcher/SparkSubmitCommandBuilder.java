@@ -311,11 +311,15 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
   }
 
   private void checkJavaOptions(String javaOptions) {
-    if (!isEmpty(javaOptions) && javaOptions.contains("Xmx")) {
-      String msg = String.format("Not allowed to specify max heap(Xmx) memory settings through " +
-        "java options (was %s). Use the corresponding --driver-memory or " +
-        "spark.driver.memory configuration instead.", javaOptions);
-      throw new IllegalArgumentException(msg);
+    if (!isEmpty(javaOptions)) {
+      for (String javaOption: CommandBuilderUtils.parseOptionString(javaOptions)) {
+        if (javaOption.startsWith("-Xmx")) {
+            String msg = String.format("Not allowed to specify max heap(Xmx) memory settings " +
+              "through java options (was %s). Use the corresponding --driver-memory or " +
+              "spark.driver.memory configuration instead.", javaOptions);
+            throw new IllegalArgumentException(msg);
+        }
+      }
     }
   }
 
