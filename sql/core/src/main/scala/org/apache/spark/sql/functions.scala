@@ -7442,7 +7442,7 @@ object functions {
   /**
    * @param xml     XML document to parse, as string
    * @param schema  the schema to use when parsing the XML string
-   * @param options key-value pairs that correspond to those supported by [[XmlOptions]]
+   * @param options key-value pairs that correspond to those supported by `XmlOptions`
    * @return [[Row]] representing the parsed XML structure
    */
   def from_xml_string(xml: String, schema: StructType,
