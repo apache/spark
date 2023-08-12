@@ -100,12 +100,6 @@ object SparkStringUtils extends Logging {
     truncatedString(seq, "", sep, "", maxFields)
   }
 
-  def quoteIdentifier(name: String): String = {
-    // Escapes back-ticks within the identifier name with double-back-ticks, and then quote the
-    // identifier with back-ticks.
-    "`" + name.replace("`", "``") + "`"
-  }
-
   /**
    * Returns a pretty string of the byte array which prints each byte as a hex digit and add spaces
    * between them. For example, [1A C0].

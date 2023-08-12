@@ -27,24 +27,15 @@ class SparkConnectExecutePlanHandler(responseObserver: StreamObserver[proto.Exec
     extends Logging {
 
   def handle(v: proto.ExecutePlanRequest): Unit = {
-    val sessionHolder = SparkConnectService
-      .getOrCreateIsolatedSession(v.getUserContext.getUserId, v.getSessionId)
-    val executeHolder = sessionHolder.createExecuteHolder(v)
-
+    val executeHolder = SparkConnectService.executionManager.createExecuteHolder(v)
     try {
       executeHolder.eventsManager.postStarted()
       executeHolder.start()
       val responseSender =
         new ExecuteGrpcResponseSender[proto.ExecutePlanResponse](executeHolder, responseObserver)
-      executeHolder.attachAndRunGrpcResponseSender(responseSender)
+      executeHolder.runGrpcResponseSender(responseSender)
     } finally {
-      if (!executeHolder.reattachable) {
-        // Non reattachable executions release here immediately.
-        executeHolder.close()
-      } else {
-        // Reattachable executions close release with ReleaseExecute RPC.
-        // TODO We mark in the ExecuteHolder that RPC detached.
-      }
+      executeHolder.afterInitialRPC()
     }
   }
 }

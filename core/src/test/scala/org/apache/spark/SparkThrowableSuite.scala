@@ -383,7 +383,7 @@ class SparkThrowableSuite extends SparkFunSuite {
         "UNRESOLVED_COLUMN.WITH_SUGGESTION",
         Map("objectName" -> "`foo`", "proposal" -> "`bar`, `baz`")
       ) ==
-      "[UNRESOLVED_COLUMN.WITH_SUGGESTION] A column or function parameter with " +
+      "[UNRESOLVED_COLUMN.WITH_SUGGESTION] A column, variable, or function parameter with " +
         "name `foo` cannot be resolved. Did you mean one of the following? [`bar`, `baz`]."
     )
 
@@ -395,7 +395,7 @@ class SparkThrowableSuite extends SparkFunSuite {
           "proposal" -> "`bar`, `baz`"),
         ""
       ) ==
-      "[UNRESOLVED_COLUMN.WITH_SUGGESTION] A column or function parameter with " +
+      "[UNRESOLVED_COLUMN.WITH_SUGGESTION] A column, variable, or function parameter with " +
         "name `foo` cannot be resolved. Did you mean one of the following? [`bar`, `baz`]."
     )
   }
@@ -406,7 +406,7 @@ class SparkThrowableSuite extends SparkFunSuite {
         "UNRESOLVED_COLUMN.WITH_SUGGESTION",
         Map("objectName" -> "`foo`", "proposal" -> "`${bar}`, `baz`")
       ) ==
-        "[UNRESOLVED_COLUMN.WITH_SUGGESTION] A column or function parameter with " +
+        "[UNRESOLVED_COLUMN.WITH_SUGGESTION] A column, variable, or function parameter with " +
           "name `foo` cannot be resolved. Did you mean one of the following? [`${bar}`, `baz`]."
     )
   }

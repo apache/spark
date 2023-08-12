@@ -20,11 +20,13 @@ package org.apache.spark.sql.connect.service
 import java.util.UUID
 
 import scala.collection.JavaConverters._
+import scala.collection.mutable
 
-import org.apache.spark.SparkSQLException
+import org.apache.spark.{SparkEnv, SparkSQLException}
 import org.apache.spark.connect.proto
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.connect.common.ProtoUtils
+import org.apache.spark.sql.connect.config.Connect.CONNECT_EXECUTE_REATTACHABLE_ENABLED
 import org.apache.spark.sql.connect.execution.{ExecuteGrpcResponseSender, ExecuteResponseObserver, ExecuteThreadRunner}
 import org.apache.spark.util.SystemClock
 
@@ -35,6 +37,8 @@ private[connect] class ExecuteHolder(
     val request: proto.ExecutePlanRequest,
     val sessionHolder: SessionHolder)
     extends Logging {
+
+  val session = sessionHolder.session
 
   val operationId = if (request.hasOperationId) {
     try {
@@ -73,17 +77,12 @@ private[connect] class ExecuteHolder(
    * If execution is reattachable, it's life cycle is not limited to a single ExecutePlanRequest,
    * but can be reattached with ReattachExecute, and released with ReleaseExecute
    */
-  val reattachable: Boolean = request.getRequestOptionsList.asScala.exists { option =>
-    option.hasReattachOptions && option.getReattachOptions.getReattachable == true
+  val reattachable: Boolean = {
+    SparkEnv.get.conf.get(CONNECT_EXECUTE_REATTACHABLE_ENABLED) &&
+    request.getRequestOptionsList.asScala.exists { option =>
+      option.hasReattachOptions && option.getReattachOptions.getReattachable == true
+    }
   }
-
-  /**
-   * True if there is currently an RPC (ExecutePlanRequest, ReattachExecute) attached to this
-   * execution.
-   */
-  var attached: Boolean = true
-
-  val session = sessionHolder.session
 
   val responseObserver: ExecuteResponseObserver[proto.ExecutePlanResponse] =
     new ExecuteResponseObserver[proto.ExecutePlanResponse](this)
@@ -92,12 +91,35 @@ private[connect] class ExecuteHolder(
 
   private val runner: ExecuteThreadRunner = new ExecuteThreadRunner(this)
 
+  /** System.currentTimeMillis when this ExecuteHolder was created. */
+  val creationTime = System.currentTimeMillis()
+
+  /**
+   * None if there is currently an attached RPC (grpcResponseSenders not empty or during initial
+   * ExecutePlan handler). Otherwise, the System.currentTimeMillis when the last RPC detached
+   * (grpcResponseSenders became empty).
+   */
+  @volatile var lastAttachedRpcTime: Option[Long] = None
+
+  /** System.currentTimeMillis when this ExecuteHolder was closed. */
+  private var closedTime: Option[Long] = None
+
+  /**
+   * Attached ExecuteGrpcResponseSenders that send the GRPC responses.
+   *
+   * In most situations at most one, except network hang issues where temporarily there would be a
+   * stale one, before being interrupted by a new one in ReattachExecute.
+   */
+  private val grpcResponseSenders
+      : mutable.ArrayBuffer[ExecuteGrpcResponseSender[proto.ExecutePlanResponse]] =
+    new mutable.ArrayBuffer[ExecuteGrpcResponseSender[proto.ExecutePlanResponse]]()
+
   /**
    * Start the execution. The execution is started in a background thread in ExecuteThreadRunner.
    * Responses are produced and cached in ExecuteResponseObserver. A GRPC thread consumes the
    * responses by attaching an ExecuteGrpcResponseSender,
    * @see
-   *   attachAndRunGrpcResponseSender.
+   *   runGrpcResponseSender.
    */
   def start(): Unit = {
     runner.start()
@@ -116,8 +138,9 @@ private[connect] class ExecuteHolder(
    * @param responseSender
    *   the ExecuteGrpcResponseSender
    */
-  def attachAndRunGrpcResponseSender(
+  def runGrpcResponseSender(
       responseSender: ExecuteGrpcResponseSender[proto.ExecutePlanResponse]): Unit = {
+    addGrpcResponseSender(responseSender)
     responseSender.run(0)
   }
 
@@ -130,11 +153,47 @@ private[connect] class ExecuteHolder(
    *   the last response that was already consumed. The sender will start from response after
    *   that.
    */
-  def attachAndRunGrpcResponseSender(
+  def runGrpcResponseSender(
       responseSender: ExecuteGrpcResponseSender[proto.ExecutePlanResponse],
       lastConsumedResponseId: String): Unit = {
     val lastConsumedIndex = responseObserver.getResponseIndexById(lastConsumedResponseId)
+    addGrpcResponseSender(responseSender)
     responseSender.run(lastConsumedIndex)
+  }
+
+  private def addGrpcResponseSender(
+      sender: ExecuteGrpcResponseSender[proto.ExecutePlanResponse]) = synchronized {
+    if (closedTime.isEmpty) {
+      grpcResponseSenders += sender
+      lastAttachedRpcTime = None
+    } else {
+      // execution is closing... interrupt it already.
+      sender.interrupt()
+    }
+  }
+
+  def removeGrpcResponseSender[_](sender: ExecuteGrpcResponseSender[_]): Unit = synchronized {
+    // if closed, we are shutting down and interrupting all senders already
+    if (closedTime.isEmpty) {
+      grpcResponseSenders -=
+        sender.asInstanceOf[ExecuteGrpcResponseSender[proto.ExecutePlanResponse]]
+      if (grpcResponseSenders.isEmpty) {
+        lastAttachedRpcTime = Some(System.currentTimeMillis())
+      }
+    }
+  }
+
+  /**
+   * For a short period in ExecutePlan after creation and until runGrpcResponseSender is called,
+   * there is no attached response sender, but yet we start with lastAttachedRpcTime = None, so we
+   * don't get garbage collected. End this grace period when the initial ExecutePlan ends.
+   */
+  def afterInitialRPC(): Unit = synchronized {
+    if (closedTime.isEmpty) {
+      if (grpcResponseSenders.isEmpty) {
+        lastAttachedRpcTime = Some(System.currentTimeMillis())
+      }
+    }
   }
 
   /**
@@ -156,14 +215,30 @@ private[connect] class ExecuteHolder(
   }
 
   /**
-   * Close the execution and remove it from the session. Note: it first interrupts the runner if
-   * it's still running, and it waits for it to finish.
+   * Interrupt (if still running) and close the execution.
+   *
+   * Called only by SparkConnectExecutionManager.removeExecuteHolder, which then also removes the
+   * execution from global tracking and from its session.
    */
-  def close(): Unit = {
-    runner.interrupt()
-    runner.join()
-    eventsManager.postClosed()
-    sessionHolder.removeExecuteHolder(operationId)
+  def close(): Unit = synchronized {
+    if (closedTime.isEmpty) {
+      // interrupt execution, if still running.
+      runner.interrupt()
+      // wait for execution to finish, to make sure no more results get pushed to responseObserver
+      runner.join()
+      // interrupt any attached grpcResponseSenders
+      grpcResponseSenders.foreach(_.interrupt())
+      // if there were still any grpcResponseSenders, register detach time
+      if (grpcResponseSenders.nonEmpty) {
+        lastAttachedRpcTime = Some(System.currentTimeMillis())
+        grpcResponseSenders.clear()
+      }
+      // remove all cached responses from observer
+      responseObserver.removeAll()
+      // post closed to UI
+      eventsManager.postClosed()
+      closedTime = Some(System.currentTimeMillis())
+    }
   }
 
   /**
@@ -174,6 +249,25 @@ private[connect] class ExecuteHolder(
     "SparkConnect_Execute_" +
       s"User_${sessionHolder.userId}_Session_${sessionHolder.sessionId}_Tag_${tag}"
   }
+
+  /** Get ExecuteInfo with information about this ExecuteHolder. */
+  def getExecuteInfo: ExecuteInfo = synchronized {
+    ExecuteInfo(
+      request = request,
+      userId = sessionHolder.userId,
+      sessionId = sessionHolder.sessionId,
+      operationId = operationId,
+      jobTag = jobTag,
+      sparkSessionTags = sparkSessionTags,
+      reattachable = reattachable,
+      status = eventsManager.status,
+      creationTime = creationTime,
+      lastAttachedRpcTime = lastAttachedRpcTime,
+      closedTime = closedTime)
+  }
+
+  /** Get key used by SparkConnectExecutionManager global tracker. */
+  def key: ExecuteKey = ExecuteKey(sessionHolder.userId, sessionHolder.sessionId, operationId)
 }
 
 /** Used to identify ExecuteHolder jobTag among SparkContext.SPARK_JOB_TAGS. */
@@ -208,3 +302,17 @@ object ExecuteSessionTag {
     if (sessionTag.startsWith(prefix)) Some(sessionTag) else None
   }
 }
+
+/** Information about an ExecuteHolder. */
+case class ExecuteInfo(
+    request: proto.ExecutePlanRequest,
+    userId: String,
+    sessionId: String,
+    operationId: String,
+    jobTag: String,
+    sparkSessionTags: Set[String],
+    reattachable: Boolean,
+    status: ExecuteStatus,
+    creationTime: Long,
+    lastAttachedRpcTime: Option[Long],
+    closedTime: Option[Long])
