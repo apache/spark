@@ -26,12 +26,23 @@ import org.apache.spark.util.SparkClassUtils
 
 object OuterScopes {
   private[this] val queue = new ReferenceQueue[AnyRef]
-  private class HashableWeakReference(val v: AnyRef) extends WeakReference[AnyRef](v, queue) {
+  private class HashableWeakReference(v: AnyRef) extends WeakReference[AnyRef](v, queue) {
     private[this] val hash = v.hashCode()
     override def hashCode(): Int = hash
-    override def equals(obj: Any): Boolean = obj match {
-      case ref: HashableWeakReference =>
-        (this eq ref) || Objects.equals(get(), ref.get())
+    override def equals(obj: Any): Boolean = {
+      obj match {
+        case other: HashableWeakReference =>
+          // Note that referential equality is used to identify & purge
+          // references from the map whose' referent went out of scope.
+          if (this eq other) {
+            true
+          } else {
+            val referent = get()
+            val otherReferent = other.get()
+            referent != null && otherReferent != null && Objects.equals(referent, otherReferent)
+          }
+        case _ => false
+      }
     }
   }
 
