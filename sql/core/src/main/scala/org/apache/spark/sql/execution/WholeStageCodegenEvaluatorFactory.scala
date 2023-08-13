@@ -41,7 +41,7 @@ class WholeStageCodegenEvaluatorFactory(
       new Iterator[InternalRow] {
         override def hasNext: Boolean = {
           val v = buffer.hasNext
-          if (!v) durationMs += buffer.durationMs()
+          if (!v) durationMs.set(buffer.durationMs())
           v
         }
         override def next: InternalRow = buffer.next()
