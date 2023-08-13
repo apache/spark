@@ -1557,6 +1557,11 @@
           "Handle must be an UUID string of the format '00112233-4455-6677-8899-aabbccddeeff'"
         ]
       },
+      "OPERATION_ABANDONED" : {
+        "message" : [
+          "Operation was considered abandoned because of inactivity and removed."
+        ]
+      },
       "OPERATION_ALREADY_EXISTS" : {
         "message" : [
           "Operation already exists."
@@ -3394,11 +3399,62 @@
     },
     "sqlState" : "0A000"
   },
+  "UNSUPPORTED_TABLE_OPERATION" : {
+    "message" : [
+      "The table <tableName> does not support <operation>."
+    ],
+    "subClass" : {
+      "WITHOUT_SUGGESTION" : {
+        "message" : [
+          ""
+        ]
+      },
+      "WITH_SUGGESTION" : {
+        "message" : [
+          "Please use ALTER TABLE instead."
+        ]
+      }
+    }
+  },
+  "UNSUPPORTED_TEMP_VIEW_OPERATION" : {
+    "message" : [
+      "The temp view <tempViewName> does not support <operation>."
+    ],
+    "subClass" : {
+      "WITHOUT_SUGGESTION" : {
+        "message" : [
+          ""
+        ]
+      },
+      "WITH_SUGGESTION" : {
+        "message" : [
+          "Please use ALTER VIEW instead."
+        ]
+      }
+    }
+  },
   "UNSUPPORTED_TYPED_LITERAL" : {
     "message" : [
       "Literals of the type <unsupportedType> are not supported. Supported types are <supportedTypes>."
     ],
     "sqlState" : "0A000"
+  },
+  "UNSUPPORTED_VIEW_OPERATION" : {
+    "message" : [
+      "The view <viewName> does not support <operation>."
+    ],
+    "subClass" : {
+      "WITHOUT_SUGGESTION" : {
+        "message" : [
+          ""
+        ]
+      },
+      "WITH_SUGGESTION" : {
+        "message" : [
+          "Please use ALTER VIEW instead."
+        ]
+      }
+    }
   },
   "UNTYPED_SCALA_UDF" : {
     "message" : [
@@ -3429,6 +3485,11 @@
       "Choose a different name, drop or replace the existing object, or add the IF NOT EXISTS clause to tolerate pre-existing objects."
     ],
     "sqlState" : "42P07"
+  },
+  "VIEW_EXCEED_MAX_NESTED_DEPTH" : {
+    "message" : [
+      "The depth of view <viewName> exceeds the maximum view resolution depth (<maxNestedDepth>). Analysis is aborted to avoid errors. If you want to work around this, please try to increase the value of \"spark.sql.view.maxNestedViewDepth\"."
+    ]
   },
   "VIEW_NOT_FOUND" : {
     "message" : [
@@ -3702,16 +3763,6 @@
       "<quoted> is not a temp view of streaming logical plan, please use batch API such as `DataFrameReader.table` to read it."
     ]
   },
-  "_LEGACY_ERROR_TEMP_1009" : {
-    "message" : [
-      "The depth of view <identifier> exceeds the maximum view resolution depth (<maxNestedViewDepth>). Analysis is aborted to avoid errors. Increase the value of <config> to work around this."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1010" : {
-    "message" : [
-      "Inserting into a view is not allowed. View: <identifier>."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_1011" : {
     "message" : [
       "Writing into a view is not allowed. View: <identifier>."
@@ -3720,26 +3771,6 @@
   "_LEGACY_ERROR_TEMP_1012" : {
     "message" : [
       "Cannot write into v1 table: <identifier>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1013" : {
-    "message" : [
-      "<nameParts> is a <viewStr>. '<cmd>' expects a table.<hintStr>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1014" : {
-    "message" : [
-      "<nameParts> is a temp view. '<cmd>' expects a permanent view."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1015" : {
-    "message" : [
-      "<identifier> is a table. '<cmd>' expects a view.<hintStr>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1016" : {
-    "message" : [
-      "<nameParts> is a temp view. '<cmd>' expects a table or permanent view."
     ]
   },
   "_LEGACY_ERROR_TEMP_1017" : {
@@ -4640,11 +4671,6 @@
   "_LEGACY_ERROR_TEMP_1276" : {
     "message" : [
       "The logical plan that represents the view is not analyzed."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1278" : {
-    "message" : [
-      "<name> is not a view."
     ]
   },
   "_LEGACY_ERROR_TEMP_1280" : {

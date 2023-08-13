@@ -2844,8 +2844,8 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
   private def createUnresolvedTable(
       ctx: IdentifierReferenceContext,
       commandName: String,
-      relationTypeMismatchHint: Option[String] = None): LogicalPlan = withOrigin(ctx) {
-    withIdentClause(ctx, UnresolvedTable(_, commandName, relationTypeMismatchHint))
+      hint: Boolean = false): LogicalPlan = withOrigin(ctx) {
+    withIdentClause(ctx, UnresolvedTable(_, commandName, hint))
   }
 
   /**
@@ -2855,8 +2855,8 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
       ctx: IdentifierReferenceContext,
       commandName: String,
       allowTemp: Boolean = true,
-      relationTypeMismatchHint: Option[String] = None): LogicalPlan = withOrigin(ctx) {
-    withIdentClause(ctx, UnresolvedView(_, commandName, allowTemp, relationTypeMismatchHint))
+      hint: Boolean = false): LogicalPlan = withOrigin(ctx) {
+    withIdentClause(ctx, UnresolvedView(_, commandName, allowTemp, hint))
   }
 
   /**
@@ -4391,14 +4391,14 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
           ctx.identifierReference,
           commandName = "ALTER VIEW ... SET TBLPROPERTIES",
           allowTemp = false,
-          relationTypeMismatchHint = alterViewTypeMismatchHint),
+          hint = true),
         cleanedTableProperties)
     } else {
       SetTableProperties(
         createUnresolvedTable(
           ctx.identifierReference,
           "ALTER TABLE ... SET TBLPROPERTIES",
-          alterTableTypeMismatchHint),
+          true),
         cleanedTableProperties)
     }
   }
@@ -4424,7 +4424,7 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
           ctx.identifierReference,
           commandName = "ALTER VIEW ... UNSET TBLPROPERTIES",
           allowTemp = false,
-          relationTypeMismatchHint = alterViewTypeMismatchHint),
+          hint = true),
         cleanedProperties,
         ifExists)
     } else {
@@ -4432,7 +4432,7 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
         createUnresolvedTable(
           ctx.identifierReference,
           "ALTER TABLE ... UNSET TBLPROPERTIES",
-          alterTableTypeMismatchHint),
+          true),
         cleanedProperties,
         ifExists)
     }
@@ -4451,7 +4451,7 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
       createUnresolvedTable(
         ctx.identifierReference,
         "ALTER TABLE ... SET LOCATION ...",
-        alterTableTypeMismatchHint),
+        true),
       Option(ctx.partitionSpec).map(visitNonOptionalPartitionSpec),
       visitLocationSpec(ctx.locationSpec))
   }
@@ -4748,7 +4748,7 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
       createUnresolvedTable(
         ctx.identifierReference,
         "ALTER TABLE ... RECOVER PARTITIONS",
-        alterTableTypeMismatchHint))
+        true))
   }
 
   /**
@@ -4778,7 +4778,7 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
       createUnresolvedTable(
         ctx.identifierReference,
         "ALTER TABLE ... ADD PARTITION ...",
-        alterTableTypeMismatchHint),
+        true),
       specsAndLocs.toSeq,
       ctx.EXISTS != null)
   }
@@ -4797,7 +4797,7 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
       createUnresolvedTable(
         ctx.identifierReference,
         "ALTER TABLE ... RENAME TO PARTITION",
-        alterTableTypeMismatchHint),
+        true),
       UnresolvedPartitionSpec(visitNonOptionalPartitionSpec(ctx.from)),
       UnresolvedPartitionSpec(visitNonOptionalPartitionSpec(ctx.to)))
   }
@@ -4826,7 +4826,7 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
       createUnresolvedTable(
         ctx.identifierReference,
         "ALTER TABLE ... DROP PARTITION ...",
-        alterTableTypeMismatchHint),
+        true),
       partSpecs.toSeq,
       ifExists = ctx.EXISTS != null,
       purge = ctx.PURGE != null)
@@ -4847,7 +4847,7 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
       createUnresolvedTable(
         ctx.identifierReference,
         "ALTER TABLE ... SET [SERDE|SERDEPROPERTIES]",
-        alterTableTypeMismatchHint),
+        true),
       Option(ctx.stringLit).map(x => string(visitStringLit(x))),
       Option(ctx.propertyList).map(visitPropertyKeyValues),
       // TODO a partition spec is allowed to have optional values. This is currently violated.
@@ -5039,10 +5039,6 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
       indexName,
       ctx.EXISTS != null)
   }
-
-  private def alterViewTypeMismatchHint: Option[String] = Some("Please use ALTER TABLE instead.")
-
-  private def alterTableTypeMismatchHint: Option[String] = Some("Please use ALTER VIEW instead.")
 
   /**
    * Create a TimestampAdd expression.

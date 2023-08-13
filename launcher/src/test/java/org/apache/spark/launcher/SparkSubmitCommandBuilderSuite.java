@@ -73,6 +73,36 @@ public class SparkSubmitCommandBuilderSuite extends BaseSuite {
   }
 
   @Test
+  public void testCheckJavaOptionsThrowException() throws Exception {
+    Map<String, String> env = new HashMap<>();
+    List<String> sparkSubmitArgs = Arrays.asList(
+      parser.MASTER,
+      "local",
+      parser.DRIVER_CLASS_PATH,
+      "/driverCp",
+      parser.DRIVER_JAVA_OPTIONS,
+      "-Xmx64g -Dprop=Other -Dprop1=\"-Xmx -Xmx\" -Dprop2=\"-Xmx '-Xmx\" " +
+        "-Dprop3='-Xmx -Xmx' -Dprop4='-Xmx \"-Xmx'",
+      SparkLauncher.NO_RESOURCE);
+    assertThrows(IllegalArgumentException.class, () -> buildCommand(sparkSubmitArgs, env));
+  }
+
+  @Test
+  public void testCheckJavaOptions() throws Exception {
+    Map<String, String> env = new HashMap<>();
+    List<String> sparkSubmitArgs = Arrays.asList(
+      parser.MASTER,
+      "local",
+      parser.DRIVER_CLASS_PATH,
+      "/driverCp",
+      parser.DRIVER_JAVA_OPTIONS,
+      "-Dprop=-Xmx -Dprop1=\"-Xmx -Xmx\" -Dprop2=\"-Xmx '-Xmx\" " +
+        "-Dprop3='-Xmx -Xmx' -Dprop4='-Xmx \"-Xmx'",
+      SparkLauncher.NO_RESOURCE);
+    buildCommand(sparkSubmitArgs, env);
+  }
+
+  @Test
   public void testCliKillAndStatus() throws Exception {
     List<String> params = Arrays.asList("driver-20160531171222-0000");
     testCLIOpts(null, parser.STATUS, params);

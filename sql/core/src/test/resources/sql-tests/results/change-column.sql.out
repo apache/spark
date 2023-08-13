@@ -270,12 +270,10 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_1013",
+  "errorClass" : "UNSUPPORTED_TEMP_VIEW_OPERATION.WITH_SUGGESTION",
   "messageParameters" : {
-    "cmd" : "ALTER TABLE ... CHANGE COLUMN",
-    "hintStr" : "",
-    "nameParts" : "temp_view",
-    "viewStr" : "temp view"
+    "operation" : "ALTER TABLE ... CHANGE COLUMN",
+    "tempViewName" : "`temp_view`"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -302,12 +300,10 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_1013",
+  "errorClass" : "UNSUPPORTED_TEMP_VIEW_OPERATION.WITH_SUGGESTION",
   "messageParameters" : {
-    "cmd" : "ALTER TABLE ... CHANGE COLUMN",
-    "hintStr" : "",
-    "nameParts" : "global_temp.global_temp_view",
-    "viewStr" : "temp view"
+    "operation" : "ALTER TABLE ... CHANGE COLUMN",
+    "tempViewName" : "`global_temp`.`global_temp_view`"
   },
   "queryContext" : [ {
     "objectType" : "",

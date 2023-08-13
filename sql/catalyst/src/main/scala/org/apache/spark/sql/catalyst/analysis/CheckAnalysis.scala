@@ -1080,13 +1080,13 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
     def check(plan: LogicalPlan): Unit = plan.foreach { node =>
       node match {
         case metrics @ CollectMetrics(name, _, _) =>
-          val simplifiedMetrics = simplifyPlanForCollectedMetrics(metrics)
+          val simplifiedMetrics = simplifyPlanForCollectedMetrics(metrics.canonicalized)
           metricsMap.get(name) match {
             case Some(other) =>
-              val simplifiedOther = simplifyPlanForCollectedMetrics(other)
+              val simplifiedOther = simplifyPlanForCollectedMetrics(other.canonicalized)
               // Exact duplicates are allowed. They can be the result
               // of a CTE that is used multiple times or a self join.
-              if (!simplifiedMetrics.sameResult(simplifiedOther)) {
+              if (simplifiedMetrics != simplifiedOther) {
                 failAnalysis(
                   errorClass = "DUPLICATED_METRICS_NAME",
                   messageParameters = Map("metricName" -> name))
@@ -1111,17 +1111,20 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
    * duplicates metric definition.
    */
   private def simplifyPlanForCollectedMetrics(plan: LogicalPlan): LogicalPlan = {
-    plan.transformUpWithNewOutput {
+    plan.resolveOperators {
       case p: Project if p.projectList.size == p.child.output.size =>
-        val assignExprIdOnly = p.projectList.zip(p.child.output).forall {
-          case (left: Alias, right: Attribute) =>
-            left.child.semanticEquals(right) && right.name == left.name
+        val assignExprIdOnly = p.projectList.zipWithIndex.forall {
+          case (Alias(attr: AttributeReference, _), index) =>
+            // The input plan of this method is already canonicalized. The attribute id becomes the
+            // ordinal of this attribute in the child outputs. So an alias-only Project means the
+            // the id of the aliased attribute is the same as its index in the project list.
+            attr.exprId.id == index
           case _ => false
         }
         if (assignExprIdOnly) {
-          (p.child, p.output.zip(p.child.output))
+          p.child
         } else {
-          (p, Nil)
+          p
         }
     }
   }

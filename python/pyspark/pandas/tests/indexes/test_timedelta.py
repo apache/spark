@@ -98,10 +98,6 @@ class TimedeltaIndexTestsMixin:
         ):
             psidx.all()
 
-    @unittest.skipIf(
-        LooseVersion(pd.__version__) >= LooseVersion("2.0.0"),
-        "TODO(SPARK-43705): Enable TimedeltaIndexTests.test_properties for pandas 2.0.0.",
-    )
     def test_properties(self):
         self.assert_eq(self.psidx.days, self.pidx.days)
         self.assert_eq(self.psidx.seconds, self.pidx.seconds)
