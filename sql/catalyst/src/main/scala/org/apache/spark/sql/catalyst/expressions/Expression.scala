@@ -372,7 +372,7 @@ abstract class Expression extends TreeNode[Expression] {
 
   def supportWholeStageCodegen(): Boolean = {
     this.getClass.getDeclaredMethods.exists(_.getName == "nullSafeEval") &&
-      !this.exists(e => !e.supportWholeStageCodegen())
+      !this.children.exists(e => !e.supportWholeStageCodegen())
   }
 }
 
