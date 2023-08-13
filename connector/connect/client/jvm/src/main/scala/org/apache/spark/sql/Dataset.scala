@@ -28,6 +28,7 @@ import org.apache.spark.SparkException
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.api.java.function._
 import org.apache.spark.connect.proto
+import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoder
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders._
 import org.apache.spark.sql.catalyst.expressions.OrderUtils
@@ -2758,7 +2759,43 @@ class Dataset[T] private[sql] (
    */
   @deprecated("use flatMap() or select() with functions.explode() instead", "3.5.0")
   def explode[A <: Product: TypeTag](input: Column*)(f: Row => TraversableOnce[A]): DataFrame = {
-    select(input: _*).flatMap(f)(Encoders.product[A]).toDF()
+    val generator = ScalarUserDefinedFunction(
+      UdfUtils.traversableOnceToSeq(f),
+      UnboundRowEncoder :: Nil,
+      ScalaReflection.encoderFor[Seq[A]])
+    select(col("*"), functions.inline(generator(struct(input: _*))))
+  }
+
+  /**
+   * (Scala-specific) Returns a new Dataset where a single column has been expanded to zero or
+   * more rows by the provided function. This is similar to a `LATERAL VIEW` in HiveQL. All
+   * columns of the input row are implicitly joined with each value that is output by the
+   * function.
+   *
+   * Given that this is deprecated, as an alternative, you can explode columns either using
+   * `functions.explode()`:
+   *
+   * {{{
+   *   ds.select(explode(split($"words", " ")).as("word"))
+   * }}}
+   *
+   * or `flatMap()`:
+   *
+   * {{{
+   *   ds.flatMap(_.words.split(" "))
+   * }}}
+   *
+   * @group untypedrel
+   * @since 3.5.0
+   */
+  @deprecated("use flatMap() or select() with functions.explode() instead", "3.5.0")
+  def explode[A, B: TypeTag](inputColumn: String, outputColumn: String)(
+      f: A => TraversableOnce[B]): DataFrame = {
+    val generator = ScalarUserDefinedFunction(
+      UdfUtils.traversableOnceToSeq(f),
+      Nil,
+      ScalaReflection.encoderFor[Seq[B]])
+    select(col("*"), functions.explode(generator(col(inputColumn))).as((outputColumn)))
   }
 
   /**

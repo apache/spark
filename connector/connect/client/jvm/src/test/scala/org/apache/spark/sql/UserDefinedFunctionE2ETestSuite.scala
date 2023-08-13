@@ -95,16 +95,64 @@ class UserDefinedFunctionE2ETestSuite extends QueryTest {
     rows.forEach(x => assert(x == 42))
   }
 
-  test("Dataset explode") {
-    val rows = spark
+  test("(deprecated) Dataset explode") {
+    val session: SparkSession = spark
+    import session.implicits._
+    val result1 = spark
       .range(3)
+      .filter(col("id") =!= 1L)
       .explode(col("id") + 41, col("id") + 10) { case Row(x: Long, y: Long) =>
         Iterator((x, x - 1), (y, y + 1))
       }
-      .as(spark.implicits.newProductEncoder[(Long, Long)])
+      .as[(Long, Long, Long)]
       .collect()
       .toSeq
-    assert(rows === Seq((41L, 40L), (10L, 11L), (42L, 41L), (11L, 12L), (43L, 42L), (12L, 13L)))
+    assert(result1 === Seq((0L, 41L, 40L), (0L, 10L, 11L), (2L, 43L, 42L), (2L, 12L, 13L)))
+
+    val result2 = Seq((1, "a b c"), (2, "a b"), (3, "a"))
+      .toDF("number", "letters")
+      .explode('letters) { case Row(letters: String) =>
+        letters.split(' ').map(Tuple1.apply).toSeq
+      }
+      .as[(Int, String, String)]
+      .collect()
+      .toSeq
+    assert(
+      result2 === Seq(
+        (1, "a b c", "a"),
+        (1, "a b c", "b"),
+        (1, "a b c", "c"),
+        (2, "a b", "a"),
+        (2, "a b", "b"),
+        (3, "a", "a")))
+
+    val result3 = Seq("a b c", "d e")
+      .toDF("words")
+      .explode("words", "word") { word: String =>
+        word.split(' ').toSeq
+      }
+      .select(col("word"))
+      .as[String]
+      .collect()
+      .toSeq
+    assert(result3 === Seq("a", "b", "c", "d", "e"))
+
+    val result4 = Seq("a b c", "d e")
+      .toDF("words")
+      .explode("words", "word") { word: String =>
+        word.split(' ').map(s => s -> s.head.toInt).toSeq
+      }
+      .select(col("word"), col("words"))
+      .as[((String, Int), String)]
+      .collect()
+      .toSeq
+    assert(
+      result4 === Seq(
+        (("a", 97), "a b c"),
+        (("b", 98), "a b c"),
+        (("c", 99), "a b c"),
+        (("d", 100), "d e"),
+        (("e", 101), "d e")))
   }
 
   test("Dataset typed flat map - java") {
