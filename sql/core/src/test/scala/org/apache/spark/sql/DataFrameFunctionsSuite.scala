@@ -5951,7 +5951,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
         s"""SELECT from_json(regexp_replace(s, 'a', 'x'), 'x INT, b DOUBLE').x,
            |       from_json(regexp_replace(s, 'a', 'x'), 'x INT, b DOUBLE').b
            |FROM values('{"a":1, "b":0.8}') t(s)
-           |""".stripMargin).explain("codegen")
+           |""".stripMargin).collect()
     }
     val logMsgs =
       logAppender.loggingEvents.map(_.getMessage.getFormattedMessage).flatten(_.split("\n"))
