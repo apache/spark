@@ -72,7 +72,7 @@ public class SparkSubmitCommandBuilderSuite extends BaseSuite {
       cmd.contains("org.apache.spark.deploy.SparkSubmit"));
   }
 
-  @Test(expected = IllegalArgumentException.class)
+  @Test
   public void testCheckJavaOptionsThrowException() throws Exception {
     Map<String, String> env = new HashMap<>();
     List<String> sparkSubmitArgs = Arrays.asList(
@@ -84,7 +84,7 @@ public class SparkSubmitCommandBuilderSuite extends BaseSuite {
       "-Xmx64g -Dprop=Other -Dprop1=\"-Xmx -Xmx\" -Dprop2=\"-Xmx '-Xmx\" " +
         "-Dprop3='-Xmx -Xmx' -Dprop4='-Xmx \"-Xmx'",
       SparkLauncher.NO_RESOURCE);
-    buildCommand(sparkSubmitArgs, env);
+    assertThrows(IllegalArgumentException.class, () -> buildCommand(sparkSubmitArgs, env));
   }
 
   @Test
