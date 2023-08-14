@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution.exchange
 import org.apache.spark.api.python.PythonEvalType
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.Sum
-import org.apache.spark.sql.catalyst.plans.Inner
+import org.apache.spark.sql.catalyst.plans.{Inner, LeftOuter, RightOuter}
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.catalyst.statsEstimation.StatsTestPlan
 import org.apache.spark.sql.connector.catalog.functions._
@@ -1158,6 +1158,43 @@ class EnsureRequirementsSuite extends SharedSparkSession {
         assert(rightKeys.map(k => SortOrder(k, Ascending)) === rightOrder)
       case other => fail(other.toString)
     }
+  }
+
+  test("SPARK-44804: SortMergeJoin should respect the streamed side ordering") {
+    val col_a = AttributeReference("a", IntegerType)()
+    val col_b = AttributeReference("b", IntegerType)()
+    val col_c = AttributeReference("c", IntegerType)()
+    val col_d = AttributeReference("d", IntegerType)()
+    val col_e = AttributeReference("e", IntegerType)()
+
+    val r = DummySparkPlan()
+    val w = WindowExec(
+      Alias(
+        WindowExpression(
+          RowNumber().toAggregateExpression(),
+          WindowSpecDefinition(
+            Seq(col_a),
+            Seq(SortOrder(col_a, Ascending), SortOrder(col_b, Ascending)),
+            SpecifiedWindowFrame(RowFrame, UnboundedPreceding, UnboundedFollowing)
+          )
+        ), "rn")() :: Nil,
+      Seq(col_a),
+      Seq(SortOrder(col_b, Ascending)),
+      DummySparkPlan()
+    )
+
+    assert(applyEnsureRequirementsWithSubsetKeys(
+      SortMergeJoinExec(col_a :: col_b :: Nil, col_d :: col_e :: Nil, Inner, None,
+        SortMergeJoinExec(col_a :: Nil, col_c :: Nil, Inner, None, w, r), r)
+    ).collect { case s: SortExec => s }.length == 3)
+    assert(applyEnsureRequirementsWithSubsetKeys(
+      SortMergeJoinExec(col_a :: col_b :: Nil, col_d :: col_e :: Nil, Inner, None,
+        SortMergeJoinExec(col_a :: Nil, col_c :: Nil, LeftOuter, None, w, r), r)
+    ).collect { case s: SortExec => s }.length == 3)
+    assert(applyEnsureRequirementsWithSubsetKeys(
+      SortMergeJoinExec(col_a :: col_b :: Nil, col_d :: col_e :: Nil, Inner, None,
+        SortMergeJoinExec(col_a :: Nil, col_c :: Nil, RightOuter, None, w, r), r)
+    ).collect { case s: SortExec => s }.length == 4)
   }
 
   def bucket(numBuckets: Int, expr: Expression): TransformExpression = {

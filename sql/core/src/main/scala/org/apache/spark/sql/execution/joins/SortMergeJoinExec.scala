@@ -49,6 +49,13 @@ case class SortMergeJoinExec(
     "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"),
     "spillSize" -> SQLMetrics.createSizeMetric(sparkContext, "spill size"))
 
+  def streamedOrdering(): Seq[SortOrder] = {
+    val ordering = streamedPlan.outputOrdering
+    if (ordering.length >= streamedKeys.length) {
+      ordering.takeRight(ordering.length - streamedKeys.length)
+    } else Nil
+  }
+
   override def outputOrdering: Seq[SortOrder] = joinType match {
     // For inner join, orders of both sides keys should be kept.
     case _: InnerLike =>
@@ -58,10 +65,10 @@ case class SortMergeJoinExec(
         // Also add expressions from right side sort order
         val sameOrderExpressions = ExpressionSet(lKey.sameOrderExpressions ++ rKey.children)
         SortOrder(lKey.child, Ascending, sameOrderExpressions.toSeq)
-      }
+      } ++ streamedOrdering()
     // For left and right outer joins, the output is ordered by the streamed input's join keys.
-    case LeftOuter => getKeyOrdering(leftKeys, left.outputOrdering)
-    case RightOuter => getKeyOrdering(rightKeys, right.outputOrdering)
+    case LeftOuter => getKeyOrdering(leftKeys, left.outputOrdering) ++ streamedOrdering()
+    case RightOuter => getKeyOrdering(rightKeys, right.outputOrdering) ++ streamedOrdering()
     // There are null rows in both streams, so there is no order.
     case FullOuter => Nil
     case LeftExistence(_) => getKeyOrdering(leftKeys, left.outputOrdering)
