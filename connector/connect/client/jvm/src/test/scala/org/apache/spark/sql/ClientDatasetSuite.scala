@@ -25,8 +25,8 @@ import io.grpc.inprocess.{InProcessChannelBuilder, InProcessServerBuilder}
 import org.scalatest.BeforeAndAfterEach
 
 import org.apache.spark.connect.proto
-import org.apache.spark.sql.connect.client.{DummySparkConnectService, SparkConnectClient}
-import org.apache.spark.sql.connect.client.util.ConnectFunSuite
+import org.apache.spark.sql.connect.client.SparkConnectClient
+import org.apache.spark.sql.connect.client.util.{ConnectFunSuite, DummySparkConnectService}
 import org.apache.spark.sql.functions._
 
 // Add sample tests.

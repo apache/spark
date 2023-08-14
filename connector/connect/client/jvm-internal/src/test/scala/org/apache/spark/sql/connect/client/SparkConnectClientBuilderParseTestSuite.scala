@@ -18,12 +18,12 @@ package org.apache.spark.sql.connect.client
 
 import java.util.UUID
 
-import org.apache.spark.sql.connect.client.util.ConnectInternalFunSuite
+import org.apache.spark.sql.connect.client.util.ConnectFunSuite
 
 /**
  * Test suite for [[SparkConnectClient.Builder]] parsing and configuration.
  */
-class SparkConnectClientBuilderParseTestSuite extends ConnectInternalFunSuite {
+class SparkConnectClientBuilderParseTestSuite extends ConnectFunSuite {
   private def build(args: String*): SparkConnectClient.Builder = {
     SparkConnectClient.builder().parse(args.toArray)
   }
