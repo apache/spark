@@ -128,8 +128,8 @@ object RewritePredicateSubquery extends Rule[LogicalPlan] with PredicateHelper {
           val inConditions = values.zip(newSub.output).map(EqualTo.tupled)
           val (joinCond, outerPlan) = rewriteExistentialExpr(inConditions ++ conditions, p)
           val inSubqueryThreshold = SQLConf.get.getConf(SQLConf.IN_SUBQUERY_CONVERT_JOIN_THRESHOLD)
-          if (newSub.maxRows.exists(_ <= inSubqueryThreshold)) {
-            Filter(condition, child)
+          if (newSub.maxRows.exists(_ <= inSubqueryThreshold) && withSubquery.size == 1) {
+            Project(p.output, Filter(condition, outerPlan))
           } else {
             Join(outerPlan, newSub, LeftSemi, joinCond, JoinHint(None, subHint))
           }
