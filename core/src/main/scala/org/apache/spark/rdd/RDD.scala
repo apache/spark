@@ -1672,14 +1672,14 @@ abstract class RDD[T: ClassTag](
   /**
    * Mark this RDD for lazy checkpointing.
    *
-   * @see [[RDD#checkpoint(eager:Boolean):RDD\.this\.type*]].
+   * @see [[RDD#checkpoint]]
    */
   def checkpoint(): Unit = checkpoint(eager = false)
 
   /**
    * Mark this RDD for lazy local checkpointing.
    *
-   * @see [[RDD#localCheckpoint(eager:Boolean):RDD\.this\.type*]].
+   * @see [[RDD#localCheckpoint]]
    */
   def localCheckpoint(): this.type = localCheckpoint(eager = false)
 
