@@ -279,4 +279,32 @@ class ReplE2ESuite extends RemoteSparkSession with BeforeAndAfterEach {
     val output = runCommandsInShell(input)
     assertContains("Array[org.apache.spark.sql.Row] = Array([id1,1], [id2,16], [id3,25])", output)
   }
+
+  test("streaming works with REPL generated code") {
+    val input =
+      """
+        |val add1 = udf((i: Long) => i + 1)
+        |val query = {
+        |  spark.readStream
+        |      .format("rate")
+        |      .option("rowsPerSecond", "10")
+        |      .option("numPartitions", "1")
+        |      .load()
+        |      .withColumn("value", add1($"value"))
+        |      .writeStream
+        |      .format("memory")
+        |      .queryName("my_sink")
+        |      .start()
+        |}
+        |var progress = query.lastProgress
+        |while (query.isActive && (progress == null || progress.numInputRows == 0)) {
+        |  query.awaitTermination(100)
+        |  progress = query.lastProgress
+        |}
+        |val noException = query.exception.isEmpty
+        |query.stop()
+        |""".stripMargin
+    val output = runCommandsInShell(input)
+    assertContains("noException: Boolean = true", output)
+  }
 }
