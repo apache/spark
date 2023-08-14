@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution.python
 
 import java.io._
+import java.net._
 import java.util.concurrent.atomic.AtomicBoolean
 
 import org.apache.spark._
@@ -43,42 +44,40 @@ abstract class BasePythonUDFRunner(
 
   override val simplifiedTraceback: Boolean = SQLConf.get.pysparkSimplifiedTraceback
 
-  abstract class PythonUDFWriter(
+  abstract class PythonUDFWriterThread(
       env: SparkEnv,
-      worker: PythonWorker,
+      worker: Socket,
       inputIterator: Iterator[Array[Byte]],
       partitionIndex: Int,
       context: TaskContext)
-    extends Writer(env, worker, inputIterator, partitionIndex, context) {
+    extends WriterThread(env, worker, inputIterator, partitionIndex, context) {
 
-    override def writeNextInputToStream(dataOut: DataOutputStream): Boolean = {
+    protected override def writeIteratorToStream(dataOut: DataOutputStream): Unit = {
       val startData = dataOut.size()
-      val wroteData = PythonRDD.writeNextElementToStream(inputIterator, dataOut)
-      if (!wroteData) {
-        // Reached the end of input.
-        dataOut.writeInt(SpecialLengths.END_OF_DATA_SECTION)
-      }
+
+      PythonRDD.writeIteratorToStream(inputIterator, dataOut)
+      dataOut.writeInt(SpecialLengths.END_OF_DATA_SECTION)
+
       val deltaData = dataOut.size() - startData
       pythonMetrics("pythonDataSent") += deltaData
-      wroteData
     }
   }
 
   protected override def newReaderIterator(
       stream: DataInputStream,
-      writer: Writer,
+      writerThread: WriterThread,
       startTime: Long,
       env: SparkEnv,
-      worker: PythonWorker,
+      worker: Socket,
       pid: Option[Int],
       releasedOrClosed: AtomicBoolean,
       context: TaskContext): Iterator[Array[Byte]] = {
     new ReaderIterator(
-      stream, writer, startTime, env, worker, pid, releasedOrClosed, context) {
+      stream, writerThread, startTime, env, worker, pid, releasedOrClosed, context) {
 
       protected override def read(): Array[Byte] = {
-        if (writer.exception.isDefined) {
-          throw writer.exception.get
+        if (writerThread.exception.isDefined) {
+          throw writerThread.exception.get
         }
         try {
           stream.readInt() match {
@@ -111,13 +110,13 @@ class PythonUDFRunner(
     jobArtifactUUID: Option[String])
   extends BasePythonUDFRunner(funcs, evalType, argOffsets, pythonMetrics, jobArtifactUUID) {
 
-  protected override def newWriter(
+  protected override def newWriterThread(
       env: SparkEnv,
-      worker: PythonWorker,
+      worker: Socket,
       inputIterator: Iterator[Array[Byte]],
       partitionIndex: Int,
-      context: TaskContext): Writer = {
-    new PythonUDFWriter(env, worker, inputIterator, partitionIndex, context) {
+      context: TaskContext): WriterThread = {
+    new PythonUDFWriterThread(env, worker, inputIterator, partitionIndex, context) {
 
       protected override def writeCommand(dataOut: DataOutputStream): Unit = {
         PythonUDFRunner.writeUDFs(dataOut, funcs, argOffsets)
