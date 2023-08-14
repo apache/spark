@@ -688,7 +688,7 @@ def read_udtf(pickleSer, infile, eval_type):
                 for a in it:
                     # The eval function yields an iterator. Each element produced by this
                     # iterator is a tuple in the form of (pandas.DataFrame, arrow_return_type).
-                    arguments = [a[o] for o in arg_offsets]
+                    arguments = [a[o] for o in args_offsets]
                     kw_arguments = {k: a[o] for k, o in kwargs_offsets.items()}
                     changed_partitions = check_partition_boundaries(
                         arguments + kw_arguments.values())
@@ -770,7 +770,7 @@ def read_udtf(pickleSer, infile, eval_type):
         def mapper(_, it):
             try:
                 for a in it:
-                    arguments = [a[o] for o in arg_offsets]
+                    arguments = [a[o] for o in args_offsets]
                     kw_arguments = {k: a[o] for k, o in kwargs_offsets.items()}
                     changed_partitions = check_partition_boundaries(
                         arguments + kw_arguments.values())
