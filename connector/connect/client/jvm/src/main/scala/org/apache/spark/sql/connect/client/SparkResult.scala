@@ -60,14 +60,14 @@ private[sql] class SparkResult[T](
         RowEncoder
           .encoderFor(dataType.asInstanceOf[StructType])
           .asInstanceOf[AgnosticEncoder[E]]
-      case ProductEncoder(clsTag, fields, outer) if ProductEncoder.isTuple(clsTag) =>
+      case ProductEncoder(clsTag, fields) if ProductEncoder.isTuple(clsTag) =>
         // Recursively continue updating the tuple product encoder
         val schema = dataType.asInstanceOf[StructType]
         assert(fields.length <= schema.fields.length)
         val updatedFields = fields.zipWithIndex.map { case (f, id) =>
           f.copy(enc = createEncoder(f.enc, schema.fields(id).dataType))
         }
-        ProductEncoder(clsTag, updatedFields, outer)
+        ProductEncoder(clsTag, updatedFields)
       case _ =>
         enc
     }

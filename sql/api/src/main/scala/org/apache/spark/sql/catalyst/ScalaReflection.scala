@@ -28,7 +28,7 @@ import org.apache.commons.lang3.reflect.ConstructorUtils
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.Row
-import org.apache.spark.sql.catalyst.encoders.{AgnosticEncoder, OuterScopes}
+import org.apache.spark.sql.catalyst.encoders.AgnosticEncoder
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders._
 import org.apache.spark.sql.errors.ExecutionErrors
 import org.apache.spark.sql.types._
@@ -394,8 +394,7 @@ object ScalaReflection extends ScalaReflection {
               isRowEncoderSupported)
             EncoderField(fieldName, encoder, encoder.nullable, Metadata.empty)
         }
-        val cls = getClassFromType(t)
-        ProductEncoder(ClassTag(cls), params, Option(OuterScopes.getOuterScope(cls)))
+        ProductEncoder(ClassTag(getClassFromType(t)), params)
       case _ =>
         throw ExecutionErrors.cannotFindEncoderForTypeError(tpe.toString)
     }

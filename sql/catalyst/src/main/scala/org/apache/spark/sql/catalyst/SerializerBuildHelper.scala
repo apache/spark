@@ -347,7 +347,7 @@ object SerializerBuildHelper {
           validateAndSerializeElement(valueEncoder, valueContainsNull))
       )
 
-    case ProductEncoder(_, fields, _) =>
+    case ProductEncoder(_, fields) =>
       val serializedFields = fields.map { field =>
         // SPARK-26730 inputObject won't be null with If's guard below. And KnownNotNul
         // is necessary here. Because for a nullable nested inputObject with struct data

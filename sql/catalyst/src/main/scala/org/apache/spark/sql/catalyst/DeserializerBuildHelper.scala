@@ -350,7 +350,7 @@ object DeserializerBuildHelper {
         createDeserializer(valueEncoder, _, newTypePath),
         tag.runtimeClass)
 
-    case ProductEncoder(tag, fields, outerPointerGetter) =>
+    case ProductEncoder(tag, fields) =>
       val cls = tag.runtimeClass
       val dt = ObjectType(cls)
       val isTuple = cls.getName.startsWith("scala.Tuple")
@@ -373,7 +373,7 @@ object DeserializerBuildHelper {
       exprs.If(
         IsNull(path),
         exprs.Literal.create(null, dt),
-        NewInstance(cls, arguments, Nil, propagateNull = false, dt, outerPointerGetter))
+        NewInstance(cls, arguments, dt, propagateNull = false))
 
     case AgnosticEncoders.RowEncoder(fields) =>
       val convertedFields = fields.zipWithIndex.map { case (f, i) =>

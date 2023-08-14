@@ -883,8 +883,7 @@ class Dataset[T] private[sql] (
         ClassTag(SparkClassUtils.getContextOrSparkClassLoader.loadClass(s"scala.Tuple2")),
         Seq(
           EncoderField(s"_1", this.agnosticEncoder, leftNullable, Metadata.empty),
-          EncoderField(s"_2", other.agnosticEncoder, rightNullable, Metadata.empty)),
-        None)
+          EncoderField(s"_2", other.agnosticEncoder, rightNullable, Metadata.empty)))
 
     sparkSession.newDataset(tupleEncoder) { builder =>
       val joinBuilder = builder.getJoinBuilder

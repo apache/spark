@@ -611,8 +611,7 @@ class ScalaReflectionSuite extends SparkFunSuite {
     assert(encoderForWithRowEncoderSupport[MyClass] ===
       ProductEncoder(
         ClassTag(getClassFromType(typeTag[MyClass].tpe)),
-        Seq(EncoderField("row", UnboundRowEncoder, true, Metadata.empty)),
-        None))
+        Seq(EncoderField("row", UnboundRowEncoder, true, Metadata.empty))))
   }
 
   case class MyClass(row: Row)
