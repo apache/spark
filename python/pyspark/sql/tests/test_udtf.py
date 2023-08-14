@@ -1982,7 +1982,7 @@ class BaseUDTFTestsMixin:
                     )
                     SELECT partition_col, last
                     FROM test_udtf(
-                      TABLE(t) PARTITION BY partition_col - 1 ORDER BY {order_by_str},
+                      row => TABLE(t) PARTITION BY partition_col - 1 ORDER BY {order_by_str},
                       partition_col => 'partition_col')
                     ORDER BY 1, 2
                     """
