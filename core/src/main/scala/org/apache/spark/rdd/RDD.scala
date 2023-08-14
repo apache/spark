@@ -1670,32 +1670,16 @@ abstract class RDD[T: ClassTag](
   }
 
   /**
-   * Mark this RDD for checkpointing. It will be saved to a file inside the checkpoint
-   * directory set with `SparkContext#setCheckpointDir` and all references to its parent
-   * RDDs will be removed. This function must be called before any job has been
-   * executed on this RDD. It is strongly recommended that this RDD is persisted in
-   * memory, otherwise saving it on a file will require recomputation.
+   * Mark this RDD for lazy checkpointing.
+   *
+   * @see [[RDD#checkpoint(eager:Boolean):RDD\.this\.type*]].
    */
   def checkpoint(): Unit = checkpoint(eager = false)
 
   /**
-   * Mark this RDD for local checkpointing using Spark's existing caching layer.
+   * Mark this RDD for lazy local checkpointing.
    *
-   * This method is for users who wish to truncate RDD lineages while skipping the expensive
-   * step of replicating the materialized data in a reliable distributed file system. This is
-   * useful for RDDs with long lineages that need to be truncated periodically (e.g. GraphX).
-   *
-   * Local checkpointing sacrifices fault-tolerance for performance. In particular, checkpointed
-   * data is written to ephemeral local storage in the executors instead of to a reliable,
-   * fault-tolerant storage. The effect is that if an executor fails during the computation,
-   * the checkpointed data may no longer be accessible, causing an irrecoverable job failure.
-   *
-   * This is NOT safe to use with dynamic allocation, which removes executors along
-   * with their cached blocks. If you must use both features, you are advised to set
-   * `spark.dynamicAllocation.cachedExecutorIdleTimeout` to a high value.
-   *
-   * The checkpoint directory set through `SparkContext#setCheckpointDir` is not used.
-   *
+   * @see [[RDD#localCheckpoint(eager:Boolean):RDD\.this\.type*]].
    */
   def localCheckpoint(): this.type = localCheckpoint(eager = false)
 
