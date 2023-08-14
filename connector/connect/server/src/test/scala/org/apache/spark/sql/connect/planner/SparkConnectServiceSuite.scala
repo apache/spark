@@ -39,6 +39,7 @@ import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.CreateDataFrameViewCommand
 import org.apache.spark.internal.Logging
 import org.apache.spark.scheduler.{SparkListener, SparkListenerEvent}
+import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, UnsafeProjection}
 import org.apache.spark.sql.connect.common.DataTypeProtoConverter
 import org.apache.spark.sql.connect.config.Connect
 import org.apache.spark.sql.connect.dsl.MockRemoteSession
@@ -49,13 +50,18 @@ import org.apache.spark.sql.connect.service.{ExecuteHolder, ExecuteStatus, Sessi
 import org.apache.spark.sql.connector.catalog.InMemoryPartitionTableCatalog
 import org.apache.spark.sql.streaming.StreamingQuery
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.IntegerType
+import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.Utils
 
 /**
  * Testing Connect Service implementation.
  */
-class SparkConnectServiceSuite extends SharedSparkSession with MockitoSugar with Logging {
+class SparkConnectServiceSuite
+  extends SharedSparkSession
+    with MockitoSugar
+    with Logging
+    with SparkConnectPlanTest{
 
   private def sparkSessionHolder = SessionHolder.forTesting(spark)
   private def DEFAULT_UUID = UUID.fromString("89ea6117-1f45-4c03-ae27-f47c6aded093")
@@ -238,6 +244,79 @@ class SparkConnectServiceSuite extends SharedSparkSession with MockitoSugar with
     }
   }
 
+  test("SPARK-44776: LocalTableScanExec") {
+    withEvents { verifyEvents =>
+      // TODO(SPARK-44121) Renable Arrow-based connect tests in Java 21
+      assume(SystemUtils.isJavaVersionAtMost(JavaVersion.JAVA_17))
+      val instance = new SparkConnectService(false)
+      val connect = new MockRemoteSession()
+      val context = proto.UserContext
+        .newBuilder()
+        .setUserId("c1")
+        .build()
+
+      val rows = (0L to 5L).map { i =>
+        new GenericInternalRow(Array(i, UTF8String.fromString("" + (i - 1 + 'a').toChar)))
+      }
+
+      val schema = StructType(Array(StructField("id", LongType), StructField("data", StringType)))
+      val inputRows = rows.map { row =>
+        val proj = UnsafeProjection.create(schema)
+        proj(row).copy()
+      }
+
+      val localRelation = createLocalRelationProto(schema, inputRows)
+      val plan = proto.Plan
+        .newBuilder()
+        .setRoot(
+          localRelation
+        )
+        .build()
+
+      val request = proto.ExecutePlanRequest
+        .newBuilder()
+        .setPlan(plan)
+        .setUserContext(context)
+        .setSessionId(UUID.randomUUID.toString())
+        .build()
+
+      // Execute plan.
+      @volatile var done = false
+      val responses = mutable.Buffer.empty[proto.ExecutePlanResponse]
+      instance.executePlan(
+        request,
+        new StreamObserver[proto.ExecutePlanResponse] {
+          override def onNext(v: proto.ExecutePlanResponse): Unit = {
+            responses += v
+            verifyEvents.onNext(v)
+          }
+
+          override def onError(throwable: Throwable): Unit = {
+            verifyEvents.onError(throwable)
+            throw throwable
+          }
+
+          override def onCompleted(): Unit = {
+            done = true
+          }
+        })
+      verifyEvents.onCompleted(Some(6))
+      // The current implementation is expected to be blocking. This is here to make sure it is.
+      assert(done)
+
+      // 1 Partitions + Metrics
+      assert(responses.size == 3)
+
+      // Make sure the first response is schema only
+      val head = responses.head
+      assert(head.hasSchema && !head.hasArrowBatch && !head.hasMetrics)
+
+      // Make sure the last response is metrics only
+      val last = responses.last
+      assert(last.hasMetrics && !last.hasSchema && !last.hasArrowBatch)
+    }
+  }
+
   test("SPARK-44657: Arrow batches respect max batch size limit") {
     // Set 10 KiB as the batch size limit
     val batchSize = 10 * 1024
@@ -301,13 +380,20 @@ class SparkConnectServiceSuite extends SharedSparkSession with MockitoSugar with
 
   gridTest("SPARK-43923: commands send events")(
     Seq(
-      proto.Command
+      (
+        proto.Command
         .newBuilder()
         .setSqlCommand(proto.SqlCommand.newBuilder().setSql("select 1").build()),
-      proto.Command
+        Some(0L)
+      ),
+      (
+        proto.Command
         .newBuilder()
-        .setSqlCommand(proto.SqlCommand.newBuilder().setSql("show tables").build()),
-      proto.Command
+        .setSqlCommand(proto.SqlCommand.newBuilder().setSql("show databases").build()),
+        Some(1L)
+      ),
+      (
+        proto.Command
         .newBuilder()
         .setWriteOperation(
           proto.WriteOperation
@@ -316,7 +402,10 @@ class SparkConnectServiceSuite extends SharedSparkSession with MockitoSugar with
               proto.Relation.newBuilder().setSql(proto.SQL.newBuilder().setQuery("select 1")))
             .setPath(Utils.createTempDir().getAbsolutePath)
             .setMode(proto.WriteOperation.SaveMode.SAVE_MODE_OVERWRITE)),
-      proto.Command
+        None
+      ),
+      (
+        proto.Command
         .newBuilder()
         .setWriteOperationV2(
           proto.WriteOperationV2
@@ -325,7 +414,10 @@ class SparkConnectServiceSuite extends SharedSparkSession with MockitoSugar with
               proto.Range.newBuilder().setStart(0).setEnd(2).setStep(1L)))
             .setTableName("testcat.testtable")
             .setMode(proto.WriteOperationV2.Mode.MODE_CREATE)),
-      proto.Command
+        None
+      ),
+      (
+        proto.Command
         .newBuilder()
         .setCreateDataframeView(
           CreateDataFrameViewCommand
@@ -333,10 +425,14 @@ class SparkConnectServiceSuite extends SharedSparkSession with MockitoSugar with
             .setName("testview")
             .setInput(
               proto.Relation.newBuilder().setSql(proto.SQL.newBuilder().setQuery("select 1")))),
-      proto.Command
+        None
+      ),
+      (proto.Command
         .newBuilder()
         .setGetResourcesCommand(proto.GetResourcesCommand.newBuilder()),
-      proto.Command
+        None),
+      (
+        proto.Command
         .newBuilder()
         .setExtension(
           protobuf.Any.pack(
@@ -344,7 +440,10 @@ class SparkConnectServiceSuite extends SharedSparkSession with MockitoSugar with
               .newBuilder()
               .setCustomField("SPARK-43923")
               .build())),
-      proto.Command
+        None
+      ),
+      (
+        proto.Command
         .newBuilder()
         .setWriteStreamOperationStart(
           proto.WriteStreamOperationStart
@@ -365,7 +464,10 @@ class SparkConnectServiceSuite extends SharedSparkSession with MockitoSugar with
             .putOptions("checkpointLocation", Utils.createTempDir().getAbsolutePath)
             .setPath("test-path")
             .build()),
-      proto.Command
+        None
+      ),
+      (
+        proto.Command
         .newBuilder()
         .setStreamingQueryCommand(
           proto.StreamingQueryCommand
@@ -377,12 +479,18 @@ class SparkConnectServiceSuite extends SharedSparkSession with MockitoSugar with
                 .setRunId(DEFAULT_UUID.toString)
                 .build())
             .setStop(true)),
-      proto.Command
+        None
+      ),
+      (
+        proto.Command
         .newBuilder()
         .setStreamingQueryManagerCommand(proto.StreamingQueryManagerCommand
           .newBuilder()
           .setListListeners(true)),
-      proto.Command
+        None
+      ),
+      (
+        proto.Command
         .newBuilder()
         .setRegisterFunction(
           proto.CommonInlineUserDefinedFunction
@@ -395,7 +503,11 @@ class SparkConnectServiceSuite extends SharedSparkSession with MockitoSugar with
                 .setOutputType(DataTypeProtoConverter.toConnectProtoType(IntegerType))
                 .setCommand(ByteString.copyFrom("command".getBytes()))
                 .setPythonVer("3.10")
-                .build())))) { command =>
+                .build())),
+        None
+      )
+    )
+  ) { case (command, producedNumRows) =>
     val sessionId = UUID.randomUUID.toString()
     withCommandTest(sessionId) { verifyEvents =>
       val instance = new SparkConnectService(false)
@@ -435,7 +547,7 @@ class SparkConnectServiceSuite extends SharedSparkSession with MockitoSugar with
             done = true
           }
         })
-      verifyEvents.onCompleted()
+      verifyEvents.onCompleted(producedNumRows)
       // The current implementation is expected to be blocking.
       // This is here to make sure it is.
       assert(done)

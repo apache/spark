@@ -2480,7 +2480,7 @@ class SparkConnectPlanner(val sessionHolder: SessionHolder) extends Logging {
               .putAllArgs(getSqlCommand.getArgsMap)
               .addAllPosArgs(getSqlCommand.getPosArgsList)))
     }
-    executeHolder.eventsManager.postFinished()
+    executeHolder.eventsManager.postFinished(Some(rows.size))
     // Exactly one SQL Command Result Batch
     responseObserver.onNext(
       ExecutePlanResponse

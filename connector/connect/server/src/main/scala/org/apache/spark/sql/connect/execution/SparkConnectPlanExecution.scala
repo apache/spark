@@ -126,10 +126,10 @@ private[execution] class SparkConnectPlanExecution(executeHolder: ExecuteHolder)
 
     dataframe.queryExecution.executedPlan match {
       case LocalTableScanExec(_, rows) =>
-        executePlan.eventsManager.postFinished(Some(totalNumRows))
         converter(rows.iterator).foreach { case (bytes, count) =>
           sendBatch(bytes, count)
         }
+        executePlan.eventsManager.postFinished(Some(totalNumRows))
       case _ =>
         SQLExecution.withNewExecutionId(dataframe.queryExecution, Some("collectArrow")) {
           val rows = dataframe.queryExecution.executedPlan.execute()
