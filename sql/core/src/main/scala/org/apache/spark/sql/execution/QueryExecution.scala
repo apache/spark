@@ -63,7 +63,16 @@ class QueryExecution(
   // TODO: Move the planner an optimizer into here from SessionState.
   protected def planner = sparkSession.sessionState.planner
 
-  def assertAnalyzed(): Unit = analyzed
+  def assertAnalyzed(): Unit = {
+    try {
+      analyzed
+    } catch {
+      case e: AnalysisException =>
+        SQLExecution.withNewExecutionId(this, Some("analyze"), Some(e)) {
+          throw e
+        }
+    }
+  }
 
   def assertSupported(): Unit = {
     if (sparkSession.sessionState.conf.isUnsupportedOperationCheckEnabled) {

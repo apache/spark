@@ -65,7 +65,8 @@ object SQLExecution {
    */
   def withNewExecutionId[T](
       queryExecution: QueryExecution,
-      name: Option[String] = None)(body: => T): T = queryExecution.sparkSession.withActive {
+      name: Option[String] = None,
+      error: Option[Throwable] = None)(body: => T): T = queryExecution.sparkSession.withActive {
     val sparkSession = queryExecution.sparkSession
     val sc = sparkSession.sparkContext
     val oldExecutionId = sc.getLocalProperty(EXECUTION_ID_KEY)
@@ -113,9 +114,14 @@ object SQLExecution {
       val redactedConfigs = sparkSession.sessionState.conf.redactOptions(modifiedConfigs)
 
       withSQLConfPropagated(sparkSession) {
-        var ex: Option[Throwable] = None
+        var ex: Option[Throwable] = error
         val startTime = System.nanoTime()
         try {
+          val planInfo = if (ex.isEmpty) {
+            SparkPlanInfo.fromSparkPlan(queryExecution.executedPlan)
+          } else {
+            SparkPlanInfo.EMPTY
+          }
           sc.listenerBus.post(SparkListenerSQLExecutionStart(
             executionId = executionId,
             rootExecutionId = Some(rootExecutionId),
@@ -124,7 +130,7 @@ object SQLExecution {
             physicalPlanDescription = queryExecution.explainString(planDescriptionMode),
             // `queryExecution.executedPlan` triggers query planning. If it fails, the exception
             // will be caught and reported in the `SparkListenerSQLExecutionEnd`
-            sparkPlanInfo = SparkPlanInfo.fromSparkPlan(queryExecution.executedPlan),
+            sparkPlanInfo = planInfo,
             time = System.currentTimeMillis(),
             modifiedConfigs = redactedConfigs,
             jobTags = sc.getJobTags()
