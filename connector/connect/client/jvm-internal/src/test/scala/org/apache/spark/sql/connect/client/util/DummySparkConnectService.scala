@@ -177,7 +177,7 @@ class DummySparkConnectService() extends SparkConnectServiceGrpc.SparkConnectSer
 
 object DummySparkConnectService {
   def withNettyDummySparkConnectService(port: Int)(
-      f: (DummySparkConnectService, Server) => Unit) {
+      f: (DummySparkConnectService, Server) => Unit): Unit = {
     val service = new DummySparkConnectService
     val server = NettyServerBuilder
       .forPort(port)
