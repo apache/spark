@@ -696,3 +696,4 @@ SELECT * FROM t0 WHERE t0a <
 struct<t0a:int,t0b:int>
 -- !query output
 1	1
+2	0

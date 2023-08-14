@@ -512,11 +512,11 @@ class DecorrelateInnerQuerySuite extends PlanTest {
 
     val correctAnswer =
       Aggregate(
-        Seq(y), Seq(Alias(count(Literal(1)), "a")(), y),
-        Project(Seq(x, y, a3, b3),
-          Join(testRelation2, testRelation3, LeftOuter,
-            Some(And(y === y, x === a3)), JoinHint.NONE)))
-    check(innerPlan, outerPlan, correctAnswer, Seq(y === a))
+        Seq(a), Seq(Alias(count(Literal(1)), "a")(), a),
+        Project(Seq(x, y, a3, b3, a),
+          Join(DomainJoin(Seq(a), testRelation2), testRelation3, LeftOuter,
+            Some(And(y === a, x === a3)), JoinHint.NONE)))
+    check(innerPlan, outerPlan, correctAnswer, Seq(a <=> a))
   }
 
   test("SPARK-43780: aggregation in subquery with correlated left join, " +
@@ -533,11 +533,11 @@ class DecorrelateInnerQuerySuite extends PlanTest {
 
     val correctAnswer =
       Aggregate(
-        Seq(b3), Seq(Alias(count(Literal(1)), "a")(), b3),
-        Project(Seq(x, y, a3, b3),
-          Join(testRelation2, testRelation3, LeftOuter,
-            Some(And(b3 === b3, x === a3)), JoinHint.NONE)))
-    check(innerPlan, outerPlan, correctAnswer, Seq(b === b3))
+        Seq(b), Seq(Alias(count(Literal(1)), "a")(), b),
+        Project(Seq(x, y, a3, b3, b),
+          Join(DomainJoin(Seq(b), testRelation2), testRelation3, LeftOuter,
+            Some(And(b === b3, x === a3)), JoinHint.NONE)))
+    check(innerPlan, outerPlan, correctAnswer, Seq(b <=> b))
   }
 
   test("SPARK-43780: correlated left join preserves the join predicates") {
@@ -553,10 +553,10 @@ class DecorrelateInnerQuerySuite extends PlanTest {
     val correctAnswer =
       Filter(
         IsNotNull(c3),
-        Project(Seq(x, y, a3, b3, c3),
-          Join(testRelation2, testRelation3, LeftOuter,
-            Some(And(b3 === b3, x === a3)), JoinHint.NONE)))
-    check(innerPlan, outerPlan, correctAnswer, Seq(b === b3))
+        Project(Seq(x, y, a3, b3, c3, b),
+          Join(DomainJoin(Seq(b), testRelation2), testRelation3, LeftOuter,
+            Some(And(x === a3, b === b3)), JoinHint.NONE)))
+    check(innerPlan, outerPlan, correctAnswer, Seq(b <=> b))
   }
 
   test("SPARK-43780: union all in subquery with correlated join") {
