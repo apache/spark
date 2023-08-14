@@ -34,7 +34,7 @@ import org.apache.arrow.vector.ipc.ArrowReader
 import org.apache.arrow.vector.util.Text
 
 import org.apache.spark.sql.catalyst.ScalaReflection
-import org.apache.spark.sql.catalyst.encoders.{AgnosticEncoder, OuterScopes}
+import org.apache.spark.sql.catalyst.encoders.AgnosticEncoder
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders._
 import org.apache.spark.sql.catalyst.expressions.GenericRowWithSchema
 import org.apache.spark.sql.connect.client.CloseableIterator
@@ -288,9 +288,9 @@ object ArrowDeserializers {
           throw unsupportedCollectionType(tag.runtimeClass)
         }
 
-      case (ProductEncoder(tag, fields), StructVectors(struct, vectors)) =>
+      case (ProductEncoder(tag, fields, outerPointerGetter), StructVectors(struct, vectors)) =>
+        val outer = outerPointerGetter.map(_()).toSeq
         // We should try to make this work with MethodHandles.
-        val outer = Option(OuterScopes.getOuterScope(tag.runtimeClass)).map(_()).toSeq
         val Some(constructor) =
           ScalaReflection.findConstructor(
             tag.runtimeClass,
