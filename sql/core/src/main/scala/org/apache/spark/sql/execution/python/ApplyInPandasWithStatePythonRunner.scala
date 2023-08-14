@@ -55,7 +55,7 @@ class ApplyInPandasWithStatePythonRunner(
     evalType: Int,
     argOffsets: Array[Array[Int]],
     inputSchema: StructType,
-    _timeZoneId: String,
+    override protected val timeZoneId: String,
     initialWorkerConf: Map[String, String],
     stateEncoder: ExpressionEncoder[Row],
     keySchema: StructType,
@@ -73,10 +73,8 @@ class ApplyInPandasWithStatePythonRunner(
 
   private val sqlConf = SQLConf.get
 
-  // Use lazy val to initialize the fields before these are accessed in [[PythonArrowInput]]'s
-  // constructor.
-  override protected lazy val schema: StructType = inputSchema.add("__state", STATE_METADATA_SCHEMA)
-  override protected lazy val timeZoneId: String = _timeZoneId
+  override protected val schema: StructType = inputSchema.add("__state", STATE_METADATA_SCHEMA)
+
   override val errorOnDuplicatedFieldNames: Boolean = true
 
   override val simplifiedTraceback: Boolean = sqlConf.pysparkSimplifiedTraceback
@@ -115,41 +113,37 @@ class ApplyInPandasWithStatePythonRunner(
     // Also write the schema for state value
     PythonRDD.writeUTF(stateValueSchema.json, stream)
   }
-  private var pandasWriter: ApplyInPandasWithStateWriter = _
+
   /**
    * Read the (key, state, values) from input iterator and construct Arrow RecordBatches, and
    * write constructed RecordBatches to the writer.
    *
    * See [[ApplyInPandasWithStateWriter]] for more details.
    */
-  protected def writeNextInputToArrowStream(
+  protected def writeIteratorToArrowStream(
       root: VectorSchemaRoot,
       writer: ArrowStreamWriter,
       dataOut: DataOutputStream,
-      inputIterator: Iterator[InType]): Boolean = {
-    if (pandasWriter == null) {
-      pandasWriter = new ApplyInPandasWithStateWriter(root, writer, arrowMaxRecordsPerBatch)
-    }
-    if (inputIterator.hasNext) {
+      inputIterator: Iterator[InType]): Unit = {
+    val w = new ApplyInPandasWithStateWriter(root, writer, arrowMaxRecordsPerBatch)
+
+    while (inputIterator.hasNext) {
       val startData = dataOut.size()
       val (keyRow, groupState, dataIter) = inputIterator.next()
       assert(dataIter.hasNext, "should have at least one data row!")
-      pandasWriter.startNewGroup(keyRow, groupState)
+      w.startNewGroup(keyRow, groupState)
 
       while (dataIter.hasNext) {
         val dataRow = dataIter.next()
-        pandasWriter.writeRow(dataRow)
+        w.writeRow(dataRow)
       }
 
-      pandasWriter.finalizeGroup()
+      w.finalizeGroup()
       val deltaData = dataOut.size() - startData
       pythonMetrics("pythonDataSent") += deltaData
-      true
-    } else {
-      pandasWriter.finalizeData()
-      super[PythonArrowInput].close()
-      false
     }
+
+    w.finalizeData()
   }
 
   /**
