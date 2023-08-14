@@ -691,7 +691,7 @@ def read_udtf(pickleSer, infile, eval_type):
                     arguments = [a[o] for o in args_offsets]
                     kw_arguments = {k: a[o] for k, o in kwargs_offsets.items()}
                     changed_partitions = check_partition_boundaries(
-                        arguments + kw_arguments.values())
+                        arguments + list(kw_arguments.values()))
                     if changed_partitions:
                         # Call 'terminate' on the UDTF class instance, if applicable.
                         # Then destroy the UDTF class instance and create a new one.
@@ -773,7 +773,7 @@ def read_udtf(pickleSer, infile, eval_type):
                     arguments = [a[o] for o in args_offsets]
                     kw_arguments = {k: a[o] for k, o in kwargs_offsets.items()}
                     changed_partitions = check_partition_boundaries(
-                        arguments + kw_arguments.values())
+                        arguments + list(kw_arguments.values()))
                     if changed_partitions:
                         # Call 'terminate' on the UDTF class instance, if applicable.
                         # Then destroy the UDTF class instance and create a new one.
