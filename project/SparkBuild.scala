@@ -945,11 +945,7 @@ object SparkConnectClientInternal {
     // For some reason the resolution from the imported Maven build does not work for some
     // of these dependendencies that we need to shade later on.
     libraryDependencies ++= {
-      val guavaVersion =
-        SbtPomKeys.effectivePom.value.getProperties.get(
-          "connect.guava.version").asInstanceOf[String]
       Seq(
-        "com.google.guava" % "guava" % guavaVersion,
         "com.google.protobuf" % "protobuf-java" % protoVersion % "protobuf"
       )
     },

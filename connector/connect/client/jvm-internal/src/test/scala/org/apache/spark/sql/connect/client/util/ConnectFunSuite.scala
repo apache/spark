@@ -25,9 +25,9 @@ import org.scalatest.funsuite.AnyFunSuite // scalastyle:ignore funsuite
  * The basic testsuite the client tests should extend from.
  */
 trait ConnectFunSuite
-  extends AnyFunSuite // scalastyle:ignore funsuite
-  with BeforeAndAfterAll
-  with BeforeAndAfterEach {
+    extends AnyFunSuite // scalastyle:ignore funsuite
+    with BeforeAndAfterAll
+    with BeforeAndAfterEach {
 
   // Borrowed from SparkFunSuite
   protected def getWorkspaceFilePath(first: String, more: String*): Path = {

@@ -17,10 +17,13 @@
 package org.apache.spark.sql.connect.client.util
 
 import java.util.UUID
+import java.util.concurrent.TimeUnit
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable
 
+import io.grpc.Server
+import io.grpc.netty.NettyServerBuilder
 import io.grpc.stub.StreamObserver
 
 import org.apache.spark.connect.proto
@@ -45,8 +48,8 @@ class DummySparkConnectService() extends SparkConnectServiceGrpc.SparkConnectSer
   }
 
   override def executePlan(
-    request: ExecutePlanRequest,
-    responseObserver: StreamObserver[ExecutePlanResponse]): Unit = {
+      request: ExecutePlanRequest,
+      responseObserver: StreamObserver[ExecutePlanResponse]): Unit = {
     // Reply with a dummy response using the same client ID
     val requestSessionId = request.getSessionId
     val operationId = if (request.hasOperationId) {
@@ -63,8 +66,8 @@ class DummySparkConnectService() extends SparkConnectServiceGrpc.SparkConnectSer
     responseObserver.onNext(response)
     // Reattachable execute must end with ResultComplete
     if (request.getRequestOptionsList.asScala.exists { option =>
-      option.hasReattachOptions && option.getReattachOptions.getReattachable == true
-    }) {
+        option.hasReattachOptions && option.getReattachOptions.getReattachable == true
+      }) {
       val resultComplete = ExecutePlanResponse
         .newBuilder()
         .setSessionId(requestSessionId)
@@ -77,8 +80,8 @@ class DummySparkConnectService() extends SparkConnectServiceGrpc.SparkConnectSer
   }
 
   override def analyzePlan(
-    request: AnalyzePlanRequest,
-    responseObserver: StreamObserver[AnalyzePlanResponse]): Unit = {
+      request: AnalyzePlanRequest,
+      responseObserver: StreamObserver[AnalyzePlanResponse]): Unit = {
     // Reply with a dummy response using the same client ID
     val requestSessionId = request.getSessionId
     request.getAnalyzeCase match {
@@ -105,7 +108,7 @@ class DummySparkConnectService() extends SparkConnectServiceGrpc.SparkConnectSer
   }
 
   override def addArtifacts(responseObserver: StreamObserver[AddArtifactsResponse])
-  : StreamObserver[AddArtifactsRequest] = new StreamObserver[AddArtifactsRequest] {
+      : StreamObserver[AddArtifactsRequest] = new StreamObserver[AddArtifactsRequest] {
     override def onNext(v: AddArtifactsRequest): Unit = inputArtifactRequests.append(v)
 
     override def onError(throwable: Throwable): Unit = responseObserver.onError(throwable)
@@ -117,8 +120,8 @@ class DummySparkConnectService() extends SparkConnectServiceGrpc.SparkConnectSer
   }
 
   override def artifactStatus(
-    request: ArtifactStatusesRequest,
-    responseObserver: StreamObserver[ArtifactStatusesResponse]): Unit = {
+      request: ArtifactStatusesRequest,
+      responseObserver: StreamObserver[ArtifactStatusesResponse]): Unit = {
     val builder = proto.ArtifactStatusesResponse.newBuilder()
     request.getNamesList().iterator().asScala.foreach { name =>
       val status = proto.ArtifactStatusesResponse.ArtifactStatus.newBuilder()
@@ -139,16 +142,16 @@ class DummySparkConnectService() extends SparkConnectServiceGrpc.SparkConnectSer
   }
 
   override def interrupt(
-    request: proto.InterruptRequest,
-    responseObserver: StreamObserver[proto.InterruptResponse]): Unit = {
+      request: proto.InterruptRequest,
+      responseObserver: StreamObserver[proto.InterruptResponse]): Unit = {
     val response = proto.InterruptResponse.newBuilder().setSessionId(request.getSessionId).build()
     responseObserver.onNext(response)
     responseObserver.onCompleted()
   }
 
   override def reattachExecute(
-    request: proto.ReattachExecuteRequest,
-    responseObserver: StreamObserver[proto.ExecutePlanResponse]): Unit = {
+      request: proto.ReattachExecuteRequest,
+      responseObserver: StreamObserver[proto.ExecutePlanResponse]): Unit = {
     // Reply with a dummy response using the same client ID
     val requestSessionId = request.getSessionId
     val response = ExecutePlanResponse
@@ -160,8 +163,8 @@ class DummySparkConnectService() extends SparkConnectServiceGrpc.SparkConnectSer
   }
 
   override def releaseExecute(
-    request: proto.ReleaseExecuteRequest,
-    responseObserver: StreamObserver[proto.ReleaseExecuteResponse]): Unit = {
+      request: proto.ReleaseExecuteRequest,
+      responseObserver: StreamObserver[proto.ReleaseExecuteResponse]): Unit = {
     val response = proto.ReleaseExecuteResponse
       .newBuilder()
       .setSessionId(request.getSessionId)
@@ -169,5 +172,23 @@ class DummySparkConnectService() extends SparkConnectServiceGrpc.SparkConnectSer
       .build()
     responseObserver.onNext(response)
     responseObserver.onCompleted()
+  }
+}
+
+object DummySparkConnectService {
+  def withNettyDummySparkConnectService(port: Int)(
+      f: (DummySparkConnectService, Server) => Unit) {
+    val service = new DummySparkConnectService
+    val server = NettyServerBuilder
+      .forPort(port)
+      .addService(service)
+      .build()
+    try {
+      server.start()
+      f(service, server)
+    } finally {
+      server.shutdownNow()
+      assert(server.awaitTermination(5, TimeUnit.SECONDS), "server failed to shutdown")
+    }
   }
 }

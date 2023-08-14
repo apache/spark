@@ -17,46 +17,25 @@
 package org.apache.spark.sql.connect.client
 
 import java.util.UUID
-import java.util.concurrent.TimeUnit
 
-import io.grpc.{CallOptions, Channel, ClientCall, ClientInterceptor, MethodDescriptor, Server, Status, StatusRuntimeException}
-import io.grpc.netty.NettyServerBuilder
+import io.grpc.{Status, StatusRuntimeException}
 import org.scalatest.BeforeAndAfterEach
 
 import org.apache.spark.SparkException
 import org.apache.spark.connect.proto
-import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.connect.client.util.{ConnectFunSuite, DummySparkConnectService}
 import org.apache.spark.sql.connect.common.config.ConnectCommon
 
 class SparkConnectClientSuite extends ConnectFunSuite with BeforeAndAfterEach {
 
   private var client: SparkConnectClient = _
-  private var service: DummySparkConnectService = _
-  private var server: Server = _
-
-  private def startDummyServer(port: Int): Unit = {
-    service = new DummySparkConnectService
-    server = NettyServerBuilder
-      .forPort(port)
-      .addService(service)
-      .build()
-    server.start()
-  }
 
   override def beforeEach(): Unit = {
     super.beforeEach()
     client = null
-    server = null
-    service = null
   }
 
   override def afterEach(): Unit = {
-    if (server != null) {
-      server.shutdownNow()
-      assert(server.awaitTermination(5, TimeUnit.SECONDS), "server failed to shutdown")
-    }
-
     if (client != null) {
       client.shutdown()
     }
@@ -70,15 +49,16 @@ class SparkConnectClientSuite extends ConnectFunSuite with BeforeAndAfterEach {
   // Use 0 to start the server at a random port
   private def testClientConnection(serverPort: Int = 0)(
       clientBuilder: Int => SparkConnectClient): Unit = {
-    startDummyServer(serverPort)
-    client = clientBuilder(server.getPort)
-    val request = proto.AnalyzePlanRequest
-      .newBuilder()
-      .setSessionId("abc123")
-      .build()
+    DummySparkConnectService.withNettyDummySparkConnectService(serverPort) { (service, server) =>
+      client = clientBuilder(server.getPort)
+      val request = proto.AnalyzePlanRequest
+        .newBuilder()
+        .setSessionId("abc123")
+        .build()
 
-    val response = client.analyze(request)
-    assert(response.getSessionId === "abc123")
+      val response = client.analyze(request)
+      assert(response.getSessionId === "abc123")
+    }
   }
 
   test("Test connection") {
@@ -92,53 +72,19 @@ class SparkConnectClientSuite extends ConnectFunSuite with BeforeAndAfterEach {
   }
 
   test("Test encryption") {
-    startDummyServer(0)
-    client = SparkConnectClient
-      .builder()
-      .connectionString(s"sc://localhost:${server.getPort}/;use_ssl=true")
-      .retryPolicy(GrpcRetryHandler.RetryPolicy(maxRetries = 0))
-      .build()
+    DummySparkConnectService.withNettyDummySparkConnectService(0) { (service, server) =>
+      client = SparkConnectClient
+        .builder()
+        .connectionString(s"sc://localhost:${server.getPort}/;use_ssl=true")
+        .retryPolicy(GrpcRetryHandler.RetryPolicy(maxRetries = 0))
+        .build()
 
-    val request = proto.AnalyzePlanRequest.newBuilder().setSessionId("abc123").build()
+      val request = proto.AnalyzePlanRequest.newBuilder().setSessionId("abc123").build()
 
-    // Failed the ssl handshake as the dummy server does not have any server credentials installed.
-    assertThrows[SparkException] {
-      client.analyze(request)
-    }
-  }
-
-  test("SparkSession initialisation with connection string") {
-    startDummyServer(0)
-    client = SparkConnectClient
-      .builder()
-      .connectionString(s"sc://localhost:${server.getPort}")
-      .build()
-
-    val session = SparkSession.builder().client(client).create()
-    val df = session.range(10)
-    df.analyze // Trigger RPC
-    assert(df.plan === service.getAndClearLatestInputPlan())
-  }
-
-  test("Custom Interceptor") {
-    startDummyServer(0)
-    client = SparkConnectClient
-      .builder()
-      .connectionString(s"sc://localhost:${server.getPort}")
-      .interceptor(new ClientInterceptor {
-        override def interceptCall[ReqT, RespT](
-            methodDescriptor: MethodDescriptor[ReqT, RespT],
-            callOptions: CallOptions,
-            channel: Channel): ClientCall[ReqT, RespT] = {
-          throw new RuntimeException("Blocked")
-        }
-      })
-      .build()
-
-    val session = SparkSession.builder().client(client).create()
-
-    assertThrows[RuntimeException] {
-      session.range(10).count()
+      // Failed the ssl handshake as the dummy server does not have any server credentials installed
+      assertThrows[SparkException] {
+        client.analyze(request)
+      }
     }
   }
 
