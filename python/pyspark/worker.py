@@ -591,7 +591,6 @@ def read_udtf(pickleSer, infile, eval_type):
             if udtf_state.udtf is not None:
                 del udtf_state.udtf
             udtf_state.udtf = handler()
-            udtf_state.prev_arguments = None
         except Exception as e:
             raise PySparkRuntimeError(
                 error_class="UDTF_EXEC_ERROR",
@@ -599,6 +598,7 @@ def read_udtf(pickleSer, infile, eval_type):
             )
 
     create_udtf_class_instance()
+    udtf_state.prev_arguments = None
 
     # Validate the UDTF
     if not hasattr(udtf_state.udtf, "eval"):
@@ -678,7 +678,7 @@ def read_udtf(pickleSer, infile, eval_type):
                         # Then destroy the UDTF class instance and create a new one.
                         if udtf_state.terminate is not None:
                             yield from udtf_state.terminate()
-                        create_udtf_classs_instance(return_type)
+                        create_udtf_class_instance()
                         udtf_state.eval = wrap_arrow_udtf(
                             getattr(udtf_state.udtf, "eval"), return_type
                         )
