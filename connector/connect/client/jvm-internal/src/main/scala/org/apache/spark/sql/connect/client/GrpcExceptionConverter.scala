@@ -16,7 +16,7 @@
  */
 package org.apache.spark.sql.connect.client
 
-import scala.jdk.CollectionConverters._
+import scala.collection.JavaConverters._
 import scala.reflect.ClassTag
 
 import com.google.rpc.ErrorInfo
