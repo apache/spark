@@ -2080,11 +2080,35 @@ Unsupported subquery expression:
 
 For more details see [UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY](sql-error-conditions-unsupported-subquery-expression-category-error-class.html)
 
+### [UNSUPPORTED_TABLE_OPERATION](sql-error-conditions-unsupported-table-operation-error-class.html)
+
+SQLSTATE: none assigned
+
+The table `<tableName>` does not support `<operation>`.
+
+For more details see [UNSUPPORTED_TABLE_OPERATION](sql-error-conditions-unsupported-table-operation-error-class.html)
+
+### [UNSUPPORTED_TEMP_VIEW_OPERATION](sql-error-conditions-unsupported-temp-view-operation-error-class.html)
+
+SQLSTATE: none assigned
+
+The temp view `<tempViewName>` does not support `<operation>`.
+
+For more details see [UNSUPPORTED_TEMP_VIEW_OPERATION](sql-error-conditions-unsupported-temp-view-operation-error-class.html)
+
 ### UNSUPPORTED_TYPED_LITERAL
 
 [SQLSTATE: 0A000](sql-error-conditions-sqlstates.html#class-0A-feature-not-supported)
 
 Literals of the type `<unsupportedType>` are not supported. Supported types are `<supportedTypes>`.
+
+### [UNSUPPORTED_VIEW_OPERATION](sql-error-conditions-unsupported-view-operation-error-class.html)
+
+SQLSTATE: none assigned
+
+The view `<viewName>` does not support `<operation>`.
+
+For more details see [UNSUPPORTED_VIEW_OPERATION](sql-error-conditions-unsupported-view-operation-error-class.html)
 
 ### UNTYPED_SCALA_UDF
 
@@ -2116,6 +2140,12 @@ To tolerate the error on drop use DROP VARIABLE IF EXISTS.
 
 Cannot create view `<relationName>` because it already exists.
 Choose a different name, drop or replace the existing object, or add the IF NOT EXISTS clause to tolerate pre-existing objects.
+
+### VIEW_EXCEED_MAX_NESTED_DEPTH
+
+SQLSTATE: none assigned
+
+The depth of view `<viewName>` exceeds the maximum view resolution depth (`<maxNestedDepth>`). Analysis is aborted to avoid errors. If you want to work around this, please try to increase the value of "spark.sql.view.maxNestedViewDepth".
 
 ### VIEW_NOT_FOUND
 

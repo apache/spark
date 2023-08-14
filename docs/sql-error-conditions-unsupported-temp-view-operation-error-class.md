@@ -1,7 +1,7 @@
 ---
 layout: global
-title: INVALID_HANDLE error class
-displayTitle: INVALID_HANDLE error class
+title: UNSUPPORTED_TEMP_VIEW_OPERATION error class
+displayTitle: UNSUPPORTED_TEMP_VIEW_OPERATION error class
 license: |
   Licensed to the Apache Software Foundation (ASF) under one or more
   contributor license agreements.  See the NOTICE file distributed with
@@ -19,34 +19,18 @@ license: |
   limitations under the License.
 ---
 
-[SQLSTATE: HY000](sql-error-conditions-sqlstates.html#class-HY-cli-specific-condition)
+SQLSTATE: none assigned
 
-The handle `<handle>` is invalid.
+The temp view `<tempViewName>` does not support `<operation>`.
 
 This error class has the following derived error classes:
 
-## FORMAT
+## WITHOUT_SUGGESTION
 
-Handle must be an UUID string of the format '00112233-4455-6677-8899-aabbccddeeff'
 
-## OPERATION_ABANDONED
 
-Operation was considered abandoned because of inactivity and removed.
+## WITH_SUGGESTION
 
-## OPERATION_ALREADY_EXISTS
-
-Operation already exists.
-
-## OPERATION_NOT_FOUND
-
-Operation not found.
-
-## SESSION_ALREADY_EXISTS
-
-Session already exists.
-
-## SESSION_NOT_FOUND
-
-Session not found.
+Please use ALTER VIEW instead.
 
 

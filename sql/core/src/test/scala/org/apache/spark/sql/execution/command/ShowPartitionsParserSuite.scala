@@ -25,18 +25,18 @@ class ShowPartitionsParserSuite extends AnalysisTest {
   test("SHOW PARTITIONS") {
     val commandName = "SHOW PARTITIONS"
     Seq(
-      "SHOW PARTITIONS t1" -> ShowPartitions(UnresolvedTable(Seq("t1"), commandName, None), None),
+      "SHOW PARTITIONS t1" -> ShowPartitions(UnresolvedTable(Seq("t1"), commandName), None),
       "SHOW PARTITIONS db1.t1" -> ShowPartitions(
-        UnresolvedTable(Seq("db1", "t1"), commandName, None), None),
+        UnresolvedTable(Seq("db1", "t1"), commandName), None),
       "SHOW PARTITIONS t1 PARTITION(partcol1='partvalue', partcol2='partvalue')" ->
         ShowPartitions(
-          UnresolvedTable(Seq("t1"), commandName, None),
+          UnresolvedTable(Seq("t1"), commandName),
           Some(UnresolvedPartitionSpec(Map("partcol1" -> "partvalue", "partcol2" -> "partvalue")))),
       "SHOW PARTITIONS a.b.c" -> ShowPartitions(
-        UnresolvedTable(Seq("a", "b", "c"), commandName, None), None),
+        UnresolvedTable(Seq("a", "b", "c"), commandName), None),
       "SHOW PARTITIONS a.b.c PARTITION(ds='2017-06-10')" ->
         ShowPartitions(
-          UnresolvedTable(Seq("a", "b", "c"), commandName, None),
+          UnresolvedTable(Seq("a", "b", "c"), commandName),
           Some(UnresolvedPartitionSpec(Map("ds" -> "2017-06-10"))))
     ).foreach { case (sql, expected) =>
       val parsed = parsePlan(sql)
