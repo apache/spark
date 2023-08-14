@@ -464,8 +464,8 @@ private[spark] class Client(
   /**
    * For each non-local and non-glob resource, we will count its parent directory. If its
    * frequency is larger than the threshold specified by
-   * spark.yarn.client.statCache.preloaded.perDirectoryThreshold, all the file status from the
-   * directory will be preloaded.
+   * spark.yarn.client.statCache.preloaded.perDirectoryThreshold, the corresponding file status
+   * from the directory will be preloaded.
    *
    * @param jars : the list of jars to upload
    * @return a list of directories to be preloaded
@@ -482,8 +482,8 @@ private[spark] class Client(
   }
 
   /**
-   * Preload the statCache with file status. For each directory in the list, we will list all
-   * files from that directory and add them to the statCache.
+   * Preload the statCache with file status. List all files from that directory and add them to the
+   * statCache.
    *
    * @param fsLookup: Function for looking up an FS based on a URI; override for testing
    * @return A preloaded statCache with fileStatus

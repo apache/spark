@@ -469,8 +469,7 @@ package object config extends Logging {
       " directory, a single <code>listStatus</code> will be invoked on the parent directory" +
       " instead of multiple <code>getFileStatus</code> performed on each individual resources." +
       " If most resources from a small set of directories, this can substantially improve job" +
-      " submission time. Noticing, this could potentially increase the memory overhead at client" +
-      " side.")
+      " submission time. Enabling this feature may potentially increase client memory overhead.")
     .version("4.0.0")
     .booleanConf
     .createWithDefault(false)
