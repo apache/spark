@@ -17,15 +17,11 @@
 
 package org.apache.spark.sql.connect.client
 
-import java.net.URL
 import java.nio.file.{Files, LinkOption, Path, Paths}
 
 import scala.collection.JavaConverters._
 
-import ammonite.repl.api.Session
-import ammonite.runtime.SpecialClassLoader
-
-import org.apache.spark.sql.connect.client.Artifact.{InMemory, LocalFile}
+import org.apache.spark.sql.connect.client.Artifact.LocalFile
 
 trait ClassFinder {
   def findClasses(): Iterator[Artifact]
@@ -56,25 +52,4 @@ class REPLClassDirMonitor(_rootDir: String) extends ClassFinder {
   }
 
   private def isClass(path: Path): Boolean = path.toString.endsWith(".class")
-}
-
-/**
- * A special [[ClassFinder]] for the Ammonite REPL to handle in-memory class files.
- * @param session
- */
-class AmmoniteClassFinder(session: Session) extends ClassFinder {
-
-  override def findClasses(): Iterator[Artifact] = {
-    session.frames.iterator.flatMap { frame =>
-      val classloader = frame.classloader.asInstanceOf[SpecialClassLoader]
-      val signatures: Seq[(Either[String, URL], Long)] = classloader.classpathSignature
-      signatures.iterator.collect { case (Left(name), _) =>
-        val parts = name.split('.')
-        parts(parts.length - 1) += ".class"
-        val path = Paths.get(parts.head, parts.tail: _*)
-        val bytes = classloader.newFileDict(name)
-        Artifact.newClassArtifact(path, new InMemory(bytes))
-      }
-    }
-  }
 }

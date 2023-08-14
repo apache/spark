@@ -63,12 +63,6 @@
       <version>${connect.guava.version}</version>
       <scope>compile</scope>
     </dependency>
-    <dependency>
-      <groupId>com.lihaoyi</groupId>
-      <artifactId>ammonite_${scala.version}</artifactId>
-      <version>${ammonite.version}</version>
-      <scope>provided</scope>
-    </dependency>
   </dependencies>
   <build>
     <outputDirectory>target/scala-${scala.binary.version}/classes</outputDirectory>
