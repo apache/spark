@@ -1950,16 +1950,16 @@ class BaseUDTFTestsMixin:
                 self._last = None
                 self._partition_col = None
 
-            def eval(self, row: Row):
+            def eval(self, row: Row, partition_col: str):
                 self._last = row["input"]
-                if self._partition_col is not None and self._partition_col != row["partition_col"]:
+                if self._partition_col is not None and self._partition_col != row[partition_col]:
                     # Make sure that all values of the partitioning column are the same
                     # for each row consumed by this method for this instance of the class.
                     raise Exception(
                         f"self._partition_col was {self._partition_col} but the row "
-                        + f"value was {row['partition_col']}"
+                        + f"value was {row[partition_col]}"
                     )
-                self._partition_col = row["partition_col"]
+                self._partition_col = row[partition_col]
 
             def terminate(self):
                 yield self._partition_col, self._last
@@ -1981,7 +1981,9 @@ class BaseUDTFTestsMixin:
                       SELECT id AS partition_col, 2 AS input FROM range(1, 21)
                     )
                     SELECT partition_col, last
-                    FROM test_udtf(TABLE(t) PARTITION BY partition_col - 1 ORDER BY {order_by_str})
+                    FROM test_udtf(
+                      TABLE(t) PARTITION BY partition_col - 1 ORDER BY {order_by_str},
+                      partition_col => 'partition_col')
                     ORDER BY 1, 2
                     """
                 ).collect(),
