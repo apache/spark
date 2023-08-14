@@ -274,12 +274,11 @@ class ReplE2ESuite extends RemoteSparkSession with BeforeAndAfterEach {
         |  collect()
       """.stripMargin
     val output = runCommandsInShell(input)
-    if (Properties.versionNumberString.startsWith("2.13")) {
-      assertContains(
-        "Array[MyTestClass] = Array(MyTestClass(value = 1), MyTestClass(value = 3))",
-        output)
-    } else {
-      assertContains("Array[MyTestClass] = Array(MyTestClass(1), MyTestClass(3))", output)
-    }
+    // SPARK-44791: The result printed by Scala 2.13 is
+    // `Array[MyTestClass] = Array(MyTestClass(value = 1), MyTestClass(value = 3))`,
+    // remove all `value =` from output to keep it the same as the result of Scala 2.12.
+    assertContains(
+      "Array[MyTestClass] = Array(MyTestClass(1), MyTestClass(3))",
+      output.replaceAll("value = ", ""))
   }
 }
