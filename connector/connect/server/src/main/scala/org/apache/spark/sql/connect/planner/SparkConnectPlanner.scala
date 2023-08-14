@@ -508,7 +508,8 @@ class SparkConnectPlanner(val sessionHolder: SessionHolder) extends Logging {
     val commonUdf = rel.getFunc
     commonUdf.getFunctionCase match {
       case proto.CommonInlineUserDefinedFunction.FunctionCase.SCALAR_SCALA_UDF =>
-        transformTypedMapPartitions(commonUdf, baseRel)
+        val analyzed = session.sessionState.executePlan(baseRel).analyzed
+        transformTypedMapPartitions(commonUdf, analyzed)
       case proto.CommonInlineUserDefinedFunction.FunctionCase.PYTHON_UDF =>
         val pythonUdf = transformPythonUDF(commonUdf)
         val isBarrier = if (rel.hasIsBarrier) rel.getIsBarrier else false
