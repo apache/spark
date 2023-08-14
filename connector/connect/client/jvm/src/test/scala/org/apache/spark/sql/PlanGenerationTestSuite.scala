@@ -44,6 +44,7 @@ import org.apache.spark.sql.functions.lit
 import org.apache.spark.sql.protobuf.{functions => pbFn}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.CalendarInterval
+import org.apache.spark.util.SparkFileUtils
 
 // scalastyle:off
 /**
@@ -61,6 +62,14 @@ import org.apache.spark.unsafe.types.CalendarInterval
  *   SPARK_GENERATE_GOLDEN_FILES=1 build/sbt "connect-client-jvm/testOnly org.apache.spark.sql.PlanGenerationTestSuite"
  * }}}
  *
+ * If you need to clean the orphaned golden files, you need to set the
+ * SPARK_CLEAN_ORPHANED_GOLDEN_FILES=1 environment variable before running this test, e.g.:
+ * {{{
+ *   SPARK_CLEAN_ORPHANED_GOLDEN_FILES=1 build/sbt "connect-client-jvm/testOnly org.apache.spark.sql.PlanGenerationTestSuite"
+ * }}}
+ * Note: not all orphaned golden files should be cleaned, some are reserved for testing backups
+ * compatibility.
+ *
  * Note that the plan protos are used as the input for the `ProtoToParsedPlanTestSuite` in the
  * `connector/connect/server` module
  */
@@ -73,6 +82,9 @@ class PlanGenerationTestSuite
 
   // Borrowed from SparkFunSuite
   private val regenerateGoldenFiles: Boolean = System.getenv("SPARK_GENERATE_GOLDEN_FILES") == "1"
+
+  private val cleanOrphanedGoldenFiles: Boolean =
+    System.getenv("SPARK_CLEAN_ORPHANED_GOLDEN_FILES") == "1"
 
   protected val queryFilePath: Path = commonResourcePath.resolve("query-tests/queries")
 
@@ -111,7 +123,23 @@ class PlanGenerationTestSuite
 
   override protected def afterAll(): Unit = {
     session.close()
+    if (cleanOrphanedGoldenFiles) {
+      cleanOrphanedGoldenFile()
+    }
     super.afterAll()
+  }
+
+  private def cleanOrphanedGoldenFile(): Unit = {
+    val allTestNames = testNames.map(_.replace(' ', '_'))
+    val orphans = SparkFileUtils
+      .recursiveList(queryFilePath.toFile)
+      .filter(g =>
+        g.getAbsolutePath.endsWith(".proto.bin") ||
+          g.getAbsolutePath.endsWith(".json"))
+      .filter(g =>
+        !allTestNames.contains(g.getName.stripSuffix(".proto.bin")) &&
+          !allTestNames.contains(g.getName.stripSuffix(".json")))
+    orphans.foreach(SparkFileUtils.deleteRecursively)
   }
 
   private def test(name: String)(f: => Dataset[_]): Unit = super.test(name) {
@@ -1153,6 +1181,10 @@ class PlanGenerationTestSuite
     boolean.select(fn.some(fn.col("flag")))
   }
 
+  test("function any") {
+    boolean.select(fn.any(fn.col("flag")))
+  }
+
   test("function bool_or") {
     boolean.select(fn.bool_or(fn.col("flag")))
   }
@@ -1601,6 +1633,10 @@ class PlanGenerationTestSuite
     fn.length(fn.col("g"))
   }
 
+  functionTest("len") {
+    fn.len(fn.col("g"))
+  }
+
   functionTest("lower") {
     fn.lower(fn.col("g"))
   }
@@ -1941,6 +1977,26 @@ class PlanGenerationTestSuite
 
   functionTest("row_number") {
     fn.row_number().over(Window.partitionBy(Column("a")).orderBy(Column("id")))
+  }
+
+  functionTest("bitmap_bucket_number") {
+    fn.bitmap_bit_position(fn.col("id"))
+  }
+
+  functionTest("bitmap_bit_position") {
+    fn.bitmap_bit_position(fn.col("id"))
+  }
+
+  functionTest("bitmap_construct_agg") {
+    fn.bitmap_construct_agg(fn.col("id"))
+  }
+
+  test("function bitmap_count") {
+    binary.select(fn.bitmap_count(fn.col("bytes")))
+  }
+
+  test("function bitmap_or_agg") {
+    binary.select(fn.bitmap_or_agg(fn.col("bytes")))
   }
 
   private def temporalFunctionTest(name: String)(f: => Column): Unit = {
@@ -2494,6 +2550,10 @@ class PlanGenerationTestSuite
     fn.to_char(fn.col("b"), lit("$99.99"))
   }
 
+  functionTest("to_varchar") {
+    fn.to_varchar(fn.col("b"), lit("$99.99"))
+  }
+
   functionTest("to_number") {
     fn.to_number(fn.col("g"), lit("$99.99"))
   }
@@ -2668,6 +2728,193 @@ class PlanGenerationTestSuite
 
   functionTest("right") {
     fn.right(fn.col("g"), fn.col("g"))
+  }
+
+  functionTest("array_agg") {
+    fn.array_agg(fn.col("a"))
+  }
+
+  functionTest("array_size") {
+    fn.array_size(fn.col("e"))
+  }
+
+  functionTest("cardinality") {
+    fn.cardinality(fn.col("f"))
+  }
+
+  functionTest("count_min_sketch") {
+    fn.count_min_sketch(fn.col("a"), fn.lit(0.1), fn.lit(0.95), fn.lit(11))
+  }
+
+  functionTest("named_struct") {
+    fn.named_struct(fn.lit("x"), fn.col("a"), fn.lit("y"), fn.col("id"))
+  }
+
+  functionTest("json_array_length") {
+    fn.json_array_length(fn.col("g"))
+  }
+
+  functionTest("json_object_keys") {
+    fn.json_object_keys(fn.col("g"))
+  }
+
+  functionTest("mask with specific upperChar lowerChar digitChar otherChar") {
+    fn.mask(fn.col("g"), fn.lit('X'), fn.lit('x'), fn.lit('n'), fn.lit('*'))
+  }
+
+  functionTest("mask with specific upperChar lowerChar digitChar") {
+    fn.mask(fn.col("g"), fn.lit('X'), fn.lit('x'), fn.lit('n'))
+  }
+
+  functionTest("mask with specific upperChar lowerChar") {
+    fn.mask(fn.col("g"), fn.lit('X'), fn.lit('x'))
+  }
+
+  functionTest("mask with specific upperChar") {
+    fn.mask(fn.col("g"), fn.lit('X'))
+  }
+
+  functionTest("mask") {
+    fn.mask(fn.col("g"))
+  }
+
+  functionTest("aes_encrypt with mode padding iv aad") {
+    fn.aes_encrypt(
+      fn.col("g"),
+      fn.col("g"),
+      fn.col("g"),
+      fn.col("g"),
+      fn.lit(Array(67.toByte, 68.toByte, 69.toByte)),
+      fn.col("g"))
+  }
+
+  functionTest("aes_encrypt with mode padding iv") {
+    fn.aes_encrypt(
+      fn.col("g"),
+      fn.col("g"),
+      fn.col("g"),
+      fn.col("g"),
+      fn.lit(Array(67.toByte, 68.toByte, 69.toByte)))
+  }
+
+  functionTest("aes_encrypt with mode padding") {
+    fn.aes_encrypt(fn.col("g"), fn.col("g"), fn.col("g"), fn.col("g"))
+  }
+
+  functionTest("aes_encrypt with mode") {
+    fn.aes_encrypt(fn.col("g"), fn.col("g"), fn.col("g"))
+  }
+
+  functionTest("aes_encrypt") {
+    fn.aes_encrypt(fn.col("g"), fn.col("g"))
+  }
+
+  functionTest("aes_decrypt with mode padding aad") {
+    fn.aes_decrypt(fn.col("g"), fn.col("g"), fn.col("g"), fn.col("g"), fn.col("g"))
+  }
+
+  functionTest("aes_decrypt with mode padding") {
+    fn.aes_decrypt(fn.col("g"), fn.col("g"), fn.col("g"), fn.col("g"))
+  }
+
+  functionTest("aes_decrypt with mode") {
+    fn.aes_decrypt(fn.col("g"), fn.col("g"), fn.col("g"))
+  }
+
+  functionTest("aes_decrypt") {
+    fn.aes_decrypt(fn.col("g"), fn.col("g"))
+  }
+
+  functionTest("try_aes_decrypt with mode padding aad") {
+    fn.try_aes_decrypt(fn.col("g"), fn.col("g"), fn.col("g"), fn.col("g"), fn.col("g"))
+  }
+
+  functionTest("try_aes_decrypt with mode padding") {
+    fn.try_aes_decrypt(fn.col("g"), fn.col("g"), fn.col("g"), fn.col("g"))
+  }
+
+  functionTest("try_aes_decrypt with mode") {
+    fn.try_aes_decrypt(fn.col("g"), fn.col("g"), fn.col("g"))
+  }
+
+  functionTest("try_aes_decrypt") {
+    fn.try_aes_decrypt(fn.col("g"), fn.col("g"))
+  }
+
+  functionTest("sha") {
+    fn.sha(fn.col("g"))
+  }
+
+  functionTest("input_file_block_length") {
+    fn.input_file_block_length()
+  }
+
+  functionTest("input_file_block_start") {
+    fn.input_file_block_start()
+  }
+
+  functionTest("reflect") {
+    fn.reflect(lit("java.util.UUID"), lit("fromString"), fn.col("g"))
+  }
+
+  functionTest("java_method") {
+    fn.java_method(lit("java.util.UUID"), lit("fromString"), fn.col("g"))
+  }
+
+  functionTest("typeof") {
+    fn.typeof(fn.col("g"))
+  }
+
+  functionTest("stack") {
+    fn.stack(lit(2), fn.col("g"), fn.col("g"), fn.col("g"))
+  }
+
+  functionTest("random with seed") {
+    fn.random(lit(1))
+  }
+
+  functionTest("call_function") {
+    fn.call_function("lower", fn.col("g"))
+  }
+
+  test("hll_sketch_agg with column lgConfigK") {
+    binary.select(fn.hll_sketch_agg(fn.col("bytes"), lit(0)))
+  }
+
+  test("hll_sketch_agg with column lgConfigK_int") {
+    binary.select(fn.hll_sketch_agg(fn.col("bytes"), 0))
+  }
+
+  test("hll_sketch_agg with columnName lgConfigK_int") {
+    binary.select(fn.hll_sketch_agg("bytes", 0))
+  }
+
+  test("hll_sketch_agg") {
+    binary.select(fn.hll_sketch_agg(fn.col("bytes")))
+  }
+
+  test("hll_sketch_agg with columnName") {
+    binary.select(fn.hll_sketch_agg("bytes"))
+  }
+
+  test("hll_union_agg with column allowDifferentLgConfigK") {
+    binary.select(fn.hll_union_agg(fn.col("bytes"), lit(false)))
+  }
+
+  test("hll_union_agg with column allowDifferentLgConfigK_boolean") {
+    binary.select(fn.hll_union_agg(fn.col("bytes"), false))
+  }
+
+  test("hll_union_agg with columnName allowDifferentLgConfigK_boolean") {
+    binary.select(fn.hll_union_agg("bytes", false))
+  }
+
+  test("hll_union_agg") {
+    binary.select(fn.hll_union_agg(fn.col("bytes")))
+  }
+
+  test("hll_union_agg with columnName") {
+    binary.select(fn.hll_union_agg("bytes"))
   }
 
   test("groupby agg") {

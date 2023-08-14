@@ -14,6 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+import inspect
 import functools
 import os
 from typing import Any, Callable, Optional, Sequence, TYPE_CHECKING, cast, TypeVar, Union, Type
@@ -46,6 +47,7 @@ if TYPE_CHECKING:
     from pyspark.sql.session import SparkSession
     from pyspark.sql.dataframe import DataFrame
     from pyspark.sql.column import Column
+    from pyspark.sql.window import Window
     from pyspark.pandas._typing import IndexOpsLike, SeriesOrIndex
 
 has_numpy = False
@@ -138,13 +140,41 @@ def is_timestamp_ntz_preferred() -> bool:
     """
     Return a bool if TimestampNTZType is preferred according to the SQL configuration set.
     """
-    jvm = SparkContext._jvm
-    return jvm is not None and jvm.PythonSQLUtils.isTimestampNTZPreferred()
+    if is_remote():
+        from pyspark.sql.connect.session import SparkSession as ConnectSparkSession
+
+        session = ConnectSparkSession.getActiveSession()
+        if session is None:
+            return False
+        else:
+            return session.conf.get("spark.sql.timestampType", None) == "TIMESTAMP_NTZ"
+    else:
+        jvm = SparkContext._jvm
+        return jvm is not None and jvm.PythonSQLUtils.isTimestampNTZPreferred()
 
 
 def is_remote() -> bool:
     """
     Returns if the current running environment is for Spark Connect.
+
+    .. versionadded:: 4.0.0
+
+    Notes
+    -----
+    This will only return ``True`` if there is a remote session running.
+    Otherwise, it returns ``False``.
+
+    This API is unstable, and for developers.
+
+    Returns
+    -------
+    bool
+
+    Examples
+    --------
+    >>> from pyspark.sql import is_remote
+    >>> is_remote()
+    False
     """
     return "SPARK_CONNECT_MODE_ENABLED" in os.environ
 
@@ -188,7 +218,7 @@ def try_remote_window(f: FuncT) -> FuncT:
     def wrapped(*args: Any, **kwargs: Any) -> Any:
 
         if is_remote() and "PYSPARK_NO_NAMESPACE_SHARE" not in os.environ:
-            from pyspark.sql.connect.window import Window
+            from pyspark.sql.connect.window import Window  # type: ignore[misc]
 
             return getattr(Window, f.__name__)(*args, **kwargs)
         else:
@@ -238,6 +268,23 @@ def try_remote_observation(f: FuncT) -> FuncT:
     return cast(FuncT, wrapped)
 
 
+def try_remote_session_classmethod(f: FuncT) -> FuncT:
+    """Mark API supported from Spark Connect."""
+
+    @functools.wraps(f)
+    def wrapped(*args: Any, **kwargs: Any) -> Any:
+
+        if is_remote() and "PYSPARK_NO_NAMESPACE_SHARE" not in os.environ:
+            from pyspark.sql.connect.session import SparkSession  # type: ignore[misc]
+
+            assert inspect.isclass(args[0])
+            return getattr(SparkSession, f.__name__)(*args[1:], **kwargs)
+        else:
+            return f(*args, **kwargs)
+
+    return cast(FuncT, wrapped)
+
+
 def pyspark_column_op(
     func_name: str, left: "IndexOpsLike", right: Any, fillna: Any = None
 ) -> Union["SeriesOrIndex", None]:
@@ -282,3 +329,14 @@ def get_dataframe_class() -> Type["DataFrame"]:
         return ConnectDataFrame  # type: ignore[return-value]
     else:
         return PySparkDataFrame
+
+
+def get_window_class() -> Type["Window"]:
+    from pyspark.sql.window import Window as PySparkWindow
+
+    if is_remote():
+        from pyspark.sql.connect.window import Window as ConnectWindow
+
+        return ConnectWindow  # type: ignore[return-value]
+    else:
+        return PySparkWindow

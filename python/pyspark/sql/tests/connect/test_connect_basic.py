@@ -23,11 +23,11 @@ import random
 import shutil
 import string
 import tempfile
+import uuid
 from collections import defaultdict
 
 from pyspark.errors import (
     PySparkAttributeError,
-    PySparkNotImplementedError,
     PySparkTypeError,
     PySparkException,
     PySparkValueError,
@@ -77,7 +77,7 @@ if should_test_connect:
     from pyspark.sql.connect.dataframe import DataFrame as CDataFrame
     from pyspark.sql import functions as SF
     from pyspark.sql.connect import functions as CF
-    from pyspark.sql.connect.client.core import Retrying
+    from pyspark.sql.connect.client.core import Retrying, SparkConnectClient
 
 
 class SparkConnectSQLTestCase(ReusedConnectTestCase, SQLTestUtils, PandasOnSparkTestUtils):
@@ -158,6 +158,19 @@ class SparkConnectSQLTestCase(ReusedConnectTestCase, SQLTestUtils, PandasOnSpark
 
 
 class SparkConnectBasicTests(SparkConnectSQLTestCase):
+    def test_df_getattr_behavior(self):
+        cdf = self.connect.range(10)
+        sdf = self.spark.range(10)
+
+        sdf._simple_extension = 10
+        cdf._simple_extension = 10
+
+        self.assertEqual(sdf._simple_extension, cdf._simple_extension)
+        self.assertEqual(type(sdf._simple_extension), type(cdf._simple_extension))
+
+        self.assertTrue(hasattr(cdf, "_simple_extension"))
+        self.assertFalse(hasattr(cdf, "_simple_extension_does_not_exsit"))
+
     def test_df_get_item(self):
         # SPARK-41779: test __getitem__
 
@@ -1223,9 +1236,14 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
         pdf = self.connect.sql("SELECT 1").toPandas()
         self.assertEqual(1, len(pdf.index))
 
-    def test_sql_with_args(self):
+    def test_sql_with_named_args(self):
         df = self.connect.sql("SELECT * FROM range(10) WHERE id > :minId", args={"minId": 7})
         df2 = self.spark.sql("SELECT * FROM range(10) WHERE id > :minId", args={"minId": 7})
+        self.assert_eq(df.toPandas(), df2.toPandas())
+
+    def test_sql_with_pos_args(self):
+        df = self.connect.sql("SELECT * FROM range(10) WHERE id > ?", args=[7])
+        df2 = self.spark.sql("SELECT * FROM range(10) WHERE id > ?", args=[7])
         self.assert_eq(df.toPandas(), df2.toPandas())
 
     def test_head(self):
@@ -1292,8 +1310,8 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
             sdf.drop("a", "x").toPandas(),
         )
         self.assert_eq(
-            cdf.drop(cdf.a, cdf.x).toPandas(),
-            sdf.drop("a", "x").toPandas(),
+            cdf.drop(cdf.a, "x").toPandas(),
+            sdf.drop(sdf.a, "x").toPandas(),
         )
 
     def test_subquery_alias(self) -> None:
@@ -3027,9 +3045,6 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
         # SPARK-41934: Disable unsupported functions.
 
         with self.assertRaises(NotImplementedError):
-            RemoteSparkSession.getActiveSession()
-
-        with self.assertRaises(NotImplementedError):
             RemoteSparkSession.builder.enableHiveSupport()
 
         for f in (
@@ -3181,16 +3196,6 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
         rows = [cols] * row_count
         self.assertEqual(row_count, self.connect.createDataFrame(data=rows).count())
 
-    def test_unsupported_udtf(self):
-        with self.assertRaises(PySparkNotImplementedError) as e:
-            self.connect.udtf.register()
-
-        self.check_error(
-            exception=e.exception,
-            error_class="NOT_IMPLEMENTED",
-            message_parameters={"feature": "udtf()"},
-        )
-
     def test_unsupported_jvm_attribute(self):
         # Unsupported jvm attributes for Spark session.
         unsupported_attrs = ["_jsc", "_jconf", "_jvm", "_jsparkSession"]
@@ -3324,14 +3329,15 @@ class SparkConnectSessionTests(ReusedConnectTestCase):
         spark.stop()
 
     def test_can_create_multiple_sessions_to_different_remotes(self):
+        self.spark.stop()
         self.assertIsNotNone(self.spark._client)
         # Creates a new remote session.
         other = PySparkSession.builder.remote("sc://other.remote:114/").create()
         self.assertNotEquals(self.spark, other)
 
-        # Reuses an active session that was previously created.
+        # Gets currently active session.
         same = PySparkSession.builder.remote("sc://other.remote.host:114/").getOrCreate()
-        self.assertEquals(self.spark, same)
+        self.assertEquals(other, same)
         same.stop()
 
         # Make sure the environment is clean.
@@ -3516,6 +3522,36 @@ class ChannelBuilderTests(unittest.TestCase):
         chan = ChannelBuilder("sc://host/;use_ssl=true;token=abc;param1=120%2021;x-my-header=abcd")
         md = chan.metadata()
         self.assertEqual([("param1", "120 21"), ("x-my-header", "abcd")], md)
+
+    def test_metadata(self):
+        id = str(uuid.uuid4())
+        chan = ChannelBuilder(f"sc://host/;session_id={id}")
+        self.assertEqual(id, chan.session_id)
+
+        chan = ChannelBuilder(f"sc://host/;session_id={id};user_agent=acbd;token=abcd;use_ssl=true")
+        md = chan.metadata()
+        for kv in md:
+            self.assertNotIn(
+                kv[0],
+                [
+                    ChannelBuilder.PARAM_SESSION_ID,
+                    ChannelBuilder.PARAM_TOKEN,
+                    ChannelBuilder.PARAM_USER_ID,
+                    ChannelBuilder.PARAM_USER_AGENT,
+                    ChannelBuilder.PARAM_USE_SSL,
+                ],
+                "Metadata must not contain fixed params",
+            )
+
+        with self.assertRaises(ValueError) as ve:
+            chan = ChannelBuilder("sc://host/;session_id=abcd")
+            SparkConnectClient(chan)
+        self.assertIn(
+            "Parameter value 'session_id' must be a valid UUID format.", str(ve.exception)
+        )
+
+        chan = ChannelBuilder("sc://host/")
+        self.assertIsNone(chan.session_id)
 
 
 if __name__ == "__main__":

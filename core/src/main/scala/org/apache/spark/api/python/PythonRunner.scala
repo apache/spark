@@ -19,6 +19,8 @@ package org.apache.spark.api.python
 
 import java.io._
 import java.net._
+import java.nio.ByteBuffer
+import java.nio.channels.SelectionKey
 import java.nio.charset.StandardCharsets
 import java.nio.charset.StandardCharsets.UTF_8
 import java.nio.file.{Files => JavaFiles, Path}
@@ -32,6 +34,7 @@ import org.apache.spark._
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.{BUFFER_SIZE, EXECUTOR_CORES}
 import org.apache.spark.internal.config.Python._
+import org.apache.spark.rdd.InputFileBlockHolder
 import org.apache.spark.resource.ResourceProfile.{EXECUTOR_CORES_LOCAL_PROPERTY, PYSPARK_MEMORY_LOCAL_PROPERTY}
 import org.apache.spark.security.SocketAuthHelper
 import org.apache.spark.util._
@@ -57,6 +60,7 @@ private[spark] object PythonEvalType {
   val SQL_GROUPED_MAP_PANDAS_UDF_WITH_STATE = 208
 
   val SQL_TABLE_UDF = 300
+  val SQL_ARROW_TABLE_UDF = 301
 
   def toString(pythonEvalType: Int): String = pythonEvalType match {
     case NON_UDF => "NON_UDF"
@@ -72,6 +76,7 @@ private[spark] object PythonEvalType {
     case SQL_MAP_ARROW_ITER_UDF => "SQL_MAP_ARROW_ITER_UDF"
     case SQL_GROUPED_MAP_PANDAS_UDF_WITH_STATE => "SQL_GROUPED_MAP_PANDAS_UDF_WITH_STATE"
     case SQL_TABLE_UDF => "SQL_TABLE_UDF"
+    case SQL_ARROW_TABLE_UDF => "SQL_ARROW_TABLE_UDF"
   }
 }
 
@@ -93,13 +98,16 @@ private object BasePythonRunner {
 private[spark] abstract class BasePythonRunner[IN, OUT](
     protected val funcs: Seq[ChainedPythonFunctions],
     protected val evalType: Int,
-    protected val argOffsets: Array[Array[Int]])
+    protected val argOffsets: Array[Array[Int]],
+    protected val jobArtifactUUID: Option[String])
   extends Logging {
 
   require(funcs.length == argOffsets.length, "argOffsets should have the same length as funcs")
 
   private val conf = SparkEnv.get.conf
   protected val bufferSize: Int = conf.get(BUFFER_SIZE)
+  protected val timelyFlushEnabled: Boolean = false
+  protected val timelyFlushTimeoutNanos: Long = 0
   protected val authSocketTimeout = conf.get(PYTHON_AUTH_SOCKET_TIMEOUT)
   private val reuseWorker = conf.get(PYTHON_WORKER_REUSE)
   private val faultHandlerEnabled = conf.get(PYTHON_WORKER_FAULTHANLDER_ENABLED)
@@ -110,13 +118,38 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
   protected val pythonExec: String = funcs.head.funcs.head.pythonExec
   protected val pythonVer: String = funcs.head.funcs.head.pythonVer
 
+  // WARN: Both configurations, 'spark.python.daemon.module' and 'spark.python.worker.module' are
+  // for very advanced users and they are experimental. This should be considered
+  // as expert-only option, and shouldn't be used before knowing what it means exactly.
+
+  // This configuration indicates the module to run the daemon to execute its Python workers.
+  private val daemonModule =
+    conf.get(PYTHON_DAEMON_MODULE).map { value =>
+      logInfo(
+        s"Python daemon module in PySpark is set to [$value] in '${PYTHON_DAEMON_MODULE.key}', " +
+        "using this to start the daemon up. Note that this configuration only has an effect when " +
+        s"'${PYTHON_USE_DAEMON.key}' is enabled and the platform is not Windows.")
+      value
+    }.getOrElse("pyspark.daemon")
+
+  // This configuration indicates the module to run each Python worker.
+  private val workerModule =
+    conf.get(PYTHON_WORKER_MODULE).map { value =>
+      logInfo(
+        s"Python worker module in PySpark is set to [$value] in '${PYTHON_WORKER_MODULE.key}', " +
+        "using this to start the worker up. Note that this configuration only has an effect when " +
+        s"'${PYTHON_USE_DAEMON.key}' is disabled or the platform is Windows.")
+      value
+    }.getOrElse("pyspark.worker")
+
   // TODO: support accumulator in multiple UDF
   protected val accumulator: PythonAccumulatorV2 = funcs.head.funcs.head.accumulator
 
   // Python accumulator is always set in production except in tests. See SPARK-27893
   private val maybeAccumulator: Option[PythonAccumulatorV2] = Option(accumulator)
 
-  // Expose a ServerSocket to support method calls via socket from Python side.
+  // Expose a ServerSocket to support method calls via socket from Python side. Only relevant for
+  // for tasks that are a part of barrier stage, refer [[BarrierTaskContext]] for details.
   private[spark] var serverSocket: Option[ServerSocket] = None
 
   // Authentication helper used when serving method calls via socket from Python side.
@@ -165,30 +198,29 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
       envVars.put("PYTHON_FAULTHANDLER_DIR", BasePythonRunner.faultHandlerLogDir.toString)
     }
 
-    val (worker: Socket, pid: Option[Int]) = env.createPythonWorker(
-      pythonExec, envVars.asScala.toMap)
+    envVars.put("SPARK_JOB_ARTIFACT_UUID", jobArtifactUUID.getOrElse("default"))
+
+    val (worker: PythonWorker, pid: Option[Int]) = env.createPythonWorker(
+      pythonExec, workerModule, daemonModule, envVars.asScala.toMap)
     // Whether is the worker released into idle pool or closed. When any codes try to release or
     // close a worker, they should use `releasedOrClosed.compareAndSet` to flip the state to make
     // sure there is only one winner that is going to release or close the worker.
     val releasedOrClosed = new AtomicBoolean(false)
 
     // Start a thread to feed the process input from our parent's iterator
-    val writerThread = newWriterThread(env, worker, inputIterator, partitionIndex, context)
+    val writer = newWriter(env, worker, inputIterator, partitionIndex, context)
 
     context.addTaskCompletionListener[Unit] { _ =>
-      writerThread.shutdownOnTaskCompletion()
       if (!reuseWorker || releasedOrClosed.compareAndSet(false, true)) {
         try {
-          worker.close()
+          worker.stop()
         } catch {
           case e: Exception =>
-            logWarning("Failed to close worker socket", e)
+            logWarning("Failed to stop worker")
         }
       }
     }
 
-    writerThread.start()
-    new WriterMonitorThread(SparkEnv.get, worker, writerThread, context).start()
     if (reuseWorker) {
       val key = (worker, context.taskAttemptId)
       // SPARK-35009: avoid creating multiple monitor threads for the same python worker
@@ -201,67 +233,48 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
     }
 
     // Return an iterator that read lines from the process's stdout
-    val stream = new DataInputStream(new BufferedInputStream(worker.getInputStream, bufferSize))
-
+    val dataIn = new DataInputStream(
+      new BufferedInputStream(new ReaderInputStream(worker, writer), bufferSize))
     val stdoutIterator = newReaderIterator(
-      stream, writerThread, startTime, env, worker, pid, releasedOrClosed, context)
+      dataIn, writer, startTime, env, worker, pid, releasedOrClosed, context)
     new InterruptibleIterator(context, stdoutIterator)
   }
 
-  protected def newWriterThread(
+  protected def newWriter(
       env: SparkEnv,
-      worker: Socket,
+      worker: PythonWorker,
       inputIterator: Iterator[IN],
       partitionIndex: Int,
-      context: TaskContext): WriterThread
+      context: TaskContext): Writer
 
   protected def newReaderIterator(
       stream: DataInputStream,
-      writerThread: WriterThread,
+      writer: Writer,
       startTime: Long,
       env: SparkEnv,
-      worker: Socket,
+      worker: PythonWorker,
       pid: Option[Int],
       releasedOrClosed: AtomicBoolean,
       context: TaskContext): Iterator[OUT]
 
   /**
-   * The thread responsible for writing the data from the PythonRDD's parent iterator to the
+   * Responsible for writing the data from the PythonRDD's parent iterator to the
    * Python process.
    */
-  abstract class WriterThread(
+  abstract class Writer(
       env: SparkEnv,
-      worker: Socket,
+      worker: PythonWorker,
       inputIterator: Iterator[IN],
       partitionIndex: Int,
-      context: TaskContext)
-    extends Thread(s"stdout writer for $pythonExec") {
+      context: TaskContext) {
 
-    @volatile private var _exception: Throwable = null
+    @volatile private var _exception: Throwable = _
 
     private val pythonIncludes = funcs.flatMap(_.funcs.flatMap(_.pythonIncludes.asScala)).toSet
     private val broadcastVars = funcs.flatMap(_.funcs.flatMap(_.broadcastVars.asScala))
 
-    setDaemon(true)
-
     /** Contains the throwable thrown while writing the parent iterator to the Python process. */
     def exception: Option[Throwable] = Option(_exception)
-
-    /**
-     * Terminates the writer thread and waits for it to exit, ignoring any exceptions that may occur
-     * due to cleanup.
-     */
-    def shutdownOnTaskCompletion(): Unit = {
-      assert(context.isCompleted)
-      this.interrupt()
-      // Task completion listeners that run after this method returns may invalidate
-      // `inputIterator`. For example, when `inputIterator` was generated by the off-heap vectorized
-      // reader, a task completion listener will free the underlying off-heap buffers. If the writer
-      // thread is still running when `inputIterator` is invalidated, it can cause a use-after-free
-      // bug that crashes the executor (SPARK-33277). Therefore this method must wait for the writer
-      // thread to exit before returning.
-      this.join()
-    }
 
     /**
      * Writes a command section to the stream connected to the Python worker.
@@ -270,18 +283,17 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
 
     /**
      * Writes input data to the stream connected to the Python worker.
+     * Returns true if any data was written to the stream, false if the input is exhausted.
      */
-    protected def writeIteratorToStream(dataOut: DataOutputStream): Unit
+    def writeNextInputToStream(dataOut: DataOutputStream): Boolean
 
-    override def run(): Unit = Utils.logUncaughtExceptions {
+    def open(dataOut: DataOutputStream): Unit = Utils.logUncaughtExceptions {
       try {
-        TaskContext.setTaskContext(context)
-        val stream = new BufferedOutputStream(worker.getOutputStream, bufferSize)
-        val dataOut = new DataOutputStream(stream)
         // Partition index
         dataOut.writeInt(partitionIndex)
-        // Python version of driver
-        PythonRDD.writeUTF(pythonVer, dataOut)
+
+        PythonWorkerUtils.writePythonVersion(pythonVer, dataOut)
+
         // Init a ServerSocket to accept method calls from Python side.
         val isBarrier = context.isInstanceOf[BarrierTaskContext]
         if (isBarrier) {
@@ -337,21 +349,25 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
         } else {
           ""
         }
-        // Close ServerSocket on task completion.
-        serverSocket.foreach { server =>
-          context.addTaskCompletionListener[Unit](_ => server.close())
-        }
-        val boundPort: Int = serverSocket.map(_.getLocalPort).getOrElse(0)
-        if (boundPort == -1) {
-          val message = "ServerSocket failed to bind to Java side."
-          logError(message)
-          throw new SparkException(message)
-        } else if (isBarrier) {
+        if (isBarrier) {
+          // Close ServerSocket on task completion.
+          serverSocket.foreach { server =>
+            context.addTaskCompletionListener[Unit](_ => server.close())
+          }
+          val boundPort: Int = serverSocket.map(_.getLocalPort).getOrElse(0)
+          if (boundPort == -1) {
+            val message = "ServerSocket failed to bind to Java side."
+            logError(message)
+            throw new SparkException(message)
+          }
           logDebug(s"Started ServerSocket on port $boundPort.")
+          dataOut.writeBoolean(/* isBarrier = */true)
+          dataOut.writeInt(boundPort)
+        } else {
+          dataOut.writeBoolean(/* isBarrier = */false)
+          dataOut.writeInt(0)
         }
         // Write out the TaskContextInfo
-        dataOut.writeBoolean(isBarrier)
-        dataOut.writeInt(boundPort)
         val secretBytes = secret.getBytes(UTF_8)
         dataOut.writeInt(secretBytes.length)
         dataOut.write(secretBytes, 0, secretBytes.length)
@@ -377,91 +393,36 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
           PythonRDD.writeUTF(v, dataOut)
         }
 
-        // sparkFilesDir
-        PythonRDD.writeUTF(SparkFiles.getRootDirectory(), dataOut)
-        // Python includes (*.zip and *.egg files)
-        dataOut.writeInt(pythonIncludes.size)
-        for (include <- pythonIncludes) {
-          PythonRDD.writeUTF(include, dataOut)
-        }
-        // Broadcast variables
-        val oldBids = PythonRDD.getWorkerBroadcasts(worker)
-        val newBids = broadcastVars.map(_.id).toSet
-        // number of different broadcasts
-        val toRemove = oldBids.diff(newBids)
-        val addedBids = newBids.diff(oldBids)
-        val cnt = toRemove.size + addedBids.size
-        val needsDecryptionServer = env.serializerManager.encryptionEnabled && addedBids.nonEmpty
-        dataOut.writeBoolean(needsDecryptionServer)
-        dataOut.writeInt(cnt)
-        def sendBidsToRemove(): Unit = {
-          for (bid <- toRemove) {
-            // remove the broadcast from worker
-            dataOut.writeLong(-bid - 1) // bid >= 0
-            oldBids.remove(bid)
-          }
-        }
-        if (needsDecryptionServer) {
-          // if there is encryption, we setup a server which reads the encrypted files, and sends
-          // the decrypted data to python
-          val idsAndFiles = broadcastVars.flatMap { broadcast =>
-            if (!oldBids.contains(broadcast.id)) {
-              oldBids.add(broadcast.id)
-              Some((broadcast.id, broadcast.value.path))
-            } else {
-              None
-            }
-          }
-          val server = new EncryptedPythonBroadcastServer(env, idsAndFiles)
-          dataOut.writeInt(server.port)
-          logTrace(s"broadcast decryption server setup on ${server.port}")
-          PythonRDD.writeUTF(server.secret, dataOut)
-          sendBidsToRemove()
-          idsAndFiles.foreach { case (id, _) =>
-            // send new broadcast
-            dataOut.writeLong(id)
-          }
-          dataOut.flush()
-          logTrace("waiting for python to read decrypted broadcast data from server")
-          server.waitTillBroadcastDataSent()
-          logTrace("done sending decrypted data to python")
-        } else {
-          sendBidsToRemove()
-          for (broadcast <- broadcastVars) {
-            if (!oldBids.contains(broadcast.id)) {
-              // send new broadcast
-              dataOut.writeLong(broadcast.id)
-              PythonRDD.writeUTF(broadcast.value.path, dataOut)
-              oldBids.add(broadcast.id)
-            }
-          }
-        }
-        dataOut.flush()
+        PythonWorkerUtils.writeSparkFiles(jobArtifactUUID, pythonIncludes, dataOut)
+        PythonWorkerUtils.writeBroadcasts(broadcastVars, worker, env, dataOut)
 
         dataOut.writeInt(evalType)
         writeCommand(dataOut)
-        writeIteratorToStream(dataOut)
 
-        dataOut.writeInt(SpecialLengths.END_OF_STREAM)
         dataOut.flush()
       } catch {
-        case t: Throwable if (NonFatal(t) || t.isInstanceOf[Exception]) =>
+        case t: Throwable if NonFatal(t) || t.isInstanceOf[Exception] =>
           if (context.isCompleted || context.isInterrupted) {
             logDebug("Exception/NonFatal Error thrown after task completion (likely due to " +
               "cleanup)", t)
-            if (!worker.isClosed) {
-              Utils.tryLog(worker.shutdownOutput())
+            if (worker.channel.isConnected) {
+              Utils.tryLog(worker.channel.shutdownOutput())
             }
           } else {
             // We must avoid throwing exceptions/NonFatals here, because the thread uncaught
             // exception handler will kill the whole executor (see
             // org.apache.spark.executor.Executor).
             _exception = t
-            if (!worker.isClosed) {
-              Utils.tryLog(worker.shutdownOutput())
+            if (worker.channel.isConnected) {
+              Utils.tryLog(worker.channel.shutdownOutput())
             }
           }
       }
+    }
+
+    def close(dataOut: DataOutputStream): Unit = {
+      dataOut.writeInt(SpecialLengths.END_OF_STREAM)
+      dataOut.flush()
     }
 
     /**
@@ -492,18 +453,16 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
     }
 
     def writeUTF(str: String, dataOut: DataOutputStream): Unit = {
-      val bytes = str.getBytes(UTF_8)
-      dataOut.writeInt(bytes.length)
-      dataOut.write(bytes)
+      PythonWorkerUtils.writeUTF(str, dataOut)
     }
   }
 
   abstract class ReaderIterator(
       stream: DataInputStream,
-      writerThread: WriterThread,
+      writer: Writer,
       startTime: Long,
       env: SparkEnv,
-      worker: Socket,
+      worker: PythonWorker,
       pid: Option[Int],
       releasedOrClosed: AtomicBoolean,
       context: TaskContext)
@@ -561,23 +520,19 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
       val obj = new Array[Byte](exLength)
       stream.readFully(obj)
       new PythonException(new String(obj, StandardCharsets.UTF_8),
-        writerThread.exception.orNull)
+        writer.exception.orNull)
     }
 
     protected def handleEndOfDataSection(): Unit = {
       // We've finished the data section of the output, but we can still
       // read some accumulator updates:
-      val numAccumulatorUpdates = stream.readInt()
-      (1 to numAccumulatorUpdates).foreach { _ =>
-        val updateLen = stream.readInt()
-        val update = new Array[Byte](updateLen)
-        stream.readFully(update)
-        maybeAccumulator.foreach(_.add(update))
-      }
+      PythonWorkerUtils.receiveAccumulatorUpdates(maybeAccumulator, stream)
+
       // Check whether the worker is ready to be re-used.
       if (stream.readInt() == SpecialLengths.END_OF_STREAM) {
         if (reuseWorker && releasedOrClosed.compareAndSet(false, true)) {
-          env.releasePythonWorker(pythonExec, envVars.asScala.toMap, worker)
+          env.releasePythonWorker(
+            pythonExec, workerModule, daemonModule, envVars.asScala.toMap, worker)
         }
       }
       eos = true
@@ -588,10 +543,10 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
         logDebug("Exception thrown after task interruption", e)
         throw new TaskKilledException(context.getKillReason().getOrElse("unknown reason"))
 
-      case e: Exception if writerThread.exception.isDefined =>
+      case e: Exception if writer.exception.isDefined =>
         logError("Python worker exited unexpectedly (crashed)", e)
-        logError("This may have been caused by a prior exception:", writerThread.exception.get)
-        throw writerThread.exception.get
+        logError("This may have been caused by a prior exception:", writer.exception.get)
+        throw writer.exception.get
 
       case eof: EOFException if faultHandlerEnabled && pid.isDefined &&
           JavaFiles.exists(BasePythonRunner.faultHandlerLogPath(pid.get)) =>
@@ -610,7 +565,7 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
    * interrupts disabled. In that case we will need to explicitly kill the worker, otherwise the
    * threads can block indefinitely.
    */
-  class MonitorThread(env: SparkEnv, worker: Socket, context: TaskContext)
+  class MonitorThread(env: SparkEnv, worker: PythonWorker, context: TaskContext)
     extends Thread(s"Worker Monitor for $pythonExec") {
 
     /** How long to wait before killing the python worker if a task cannot be interrupted. */
@@ -632,7 +587,8 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
             val taskName = s"${context.partitionId}.${context.attemptNumber} " +
               s"in stage ${context.stageId} (TID ${context.taskAttemptId})"
             logWarning(s"Incomplete task $taskName interrupted: Attempting to kill Python Worker")
-            env.destroyPythonWorker(pythonExec, envVars.asScala.toMap, worker)
+            env.destroyPythonWorker(
+              pythonExec, workerModule, daemonModule, envVars.asScala.toMap, worker)
           } catch {
             case e: Exception =>
               logError("Exception when trying to kill worker", e)
@@ -653,79 +609,211 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
     }
   }
 
-  /**
-   * This thread monitors the WriterThread and kills it in case of deadlock.
-   *
-   * A deadlock can arise if the task completes while the writer thread is sending input to the
-   * Python process (e.g. due to the use of `take()`), and the Python process is still producing
-   * output. When the inputs are sufficiently large, this can result in a deadlock due to the use of
-   * blocking I/O (SPARK-38677). To resolve the deadlock, we need to close the socket.
-   */
-  class WriterMonitorThread(
-      env: SparkEnv, worker: Socket, writerThread: WriterThread, context: TaskContext)
-    extends Thread(s"Writer Monitor for $pythonExec (writer thread id ${writerThread.getId})") {
-
+  class ReaderInputStream(worker: PythonWorker, writer: Writer) extends InputStream {
+    private[this] var writerIfbhThreadLocalValue: Object = null
+    private[this] val temp = new Array[Byte](1)
+    private[this] val bufferStream = new DirectByteBufferOutputStream()
     /**
-     * How long to wait before closing the socket if the writer thread has not exited after the task
-     * ends.
+     * Buffers data to be written to the Python worker until the socket is
+     * available for write.
+     * A best-effort attempt is made to not grow the buffer beyond "spark.buffer.size". See
+     * `writeAdditionalInputToPythonWorker()` for details.
      */
-    private val taskKillTimeout = env.conf.get(PYTHON_TASK_KILL_TIMEOUT)
+    private[this] var buffer: ByteBuffer = _
+    private[this] var hasInput = true
 
-    setDaemon(true)
+    writer.open(new DataOutputStream(bufferStream))
+    buffer = bufferStream.toByteBuffer
 
-    override def run(): Unit = {
-      // Wait until the task is completed (or the writer thread exits, in which case this thread has
-      // nothing to do).
-      while (!context.isCompleted && writerThread.isAlive) {
-        Thread.sleep(2000)
+    override def read(): Int = {
+      val n = read(temp)
+      if (n <= 0) {
+        -1
+      } else {
+        // Signed byte to unsigned integer
+        temp(0) & 0xff
       }
-      if (writerThread.isAlive) {
-        Thread.sleep(taskKillTimeout)
-        // If the writer thread continues running, this indicates a deadlock. Kill the worker to
-        // resolve the deadlock.
-        if (writerThread.isAlive) {
-          try {
-            // Mimic the task name used in `Executor` to help the user find out the task to blame.
-            val taskName = s"${context.partitionId}.${context.attemptNumber} " +
-              s"in stage ${context.stageId} (TID ${context.taskAttemptId})"
-            logWarning(
-              s"Detected deadlock while completing task $taskName: " +
-                "Attempting to kill Python Worker")
-            env.destroyPythonWorker(pythonExec, envVars.asScala.toMap, worker)
-          } catch {
-            case e: Exception =>
-              logError("Exception when trying to kill worker", e)
+    }
+
+    override def read(b: Array[Byte], off: Int, len: Int): Int = {
+      // The code below manipulates the InputFileBlockHolder thread local in order
+      // to prevent behavior changes in the input_file_name() expression due to the switch from
+      // multi-threaded to single-threaded Python execution (SPARK-44705).
+      //
+      // Prior to that change, scan operations feeding into PythonRunner would be evaluated in
+      // "writer" threads that were child threads of the main task thread. As a result, when
+      // a scan operation hit end-of-input and called InputFileBlockHolder.unset(), the effects
+      // of unset() would only occur in the writer thread and not the main task thread: this
+      // meant that code "downstream" of a PythonRunner would continue to observe the writer's
+      // last pre-unset() value (i.e. the last read filename).
+      //
+      // Switching to a single-threaded Python runner changed this behavior: now, unset() would
+      // impact operators both upstream and downstream of the PythonRunner and this would cause
+      // unset()'s effects to be immediately visible to downstream operators, in turn causing the
+      // input_file_name() expression to return empty filenames in situations where it previously
+      // would have returned the last non-empty filename.
+      //
+      // To avoid this behavior change, the code below simulates the behavior of the
+      // InputFileBlockHolder's inheritable thread local:
+      //
+      //  - Detect whether code that previously would have run in the writer thread has changed
+      //    the thread local value itself. Note that the thread local holds a mutable
+      //    AtomicReference, so the thread local's value only changes objects when unset() is
+      //    called.
+      //  - If an object change was detected, then henceforth we will swap between the "main"
+      //    and "writer" thread local values when context switching between upstream and
+      //    downstream operator execution.
+      //
+      // This issue is subtle and several other alternative approaches were considered
+      val buf = ByteBuffer.wrap(b, off, len)
+      var n = 0
+      while (n == 0) {
+        worker.selector.select()
+        if (worker.selectionKey.isReadable) {
+          n = worker.channel.read(buf)
+        }
+        if (worker.selectionKey.isWritable) {
+          val mainIfbhThreadLocalValue = InputFileBlockHolder.getThreadLocalValue()
+          // Check whether the writer's thread local value has diverged from its parent's value:
+          if (writerIfbhThreadLocalValue eq null) {
+            // Default case (which is why it appears first): the writer's thread local value
+            // is the same object as the main code, so no need to swap before executing the
+            // writer code.
+            try {
+              // Execute the writer code:
+              writeAdditionalInputToPythonWorker()
+            } finally {
+              // Check whether the writer code changed the thread local value:
+              val maybeNewIfbh = InputFileBlockHolder.getThreadLocalValue()
+              if (maybeNewIfbh ne mainIfbhThreadLocalValue) {
+                // The writer thread change the thread local, so henceforth we need to
+                // swap. Store the writer thread's value and restore the old main thread
+                // value:
+                writerIfbhThreadLocalValue = maybeNewIfbh
+                InputFileBlockHolder.setThreadLocalValue(mainIfbhThreadLocalValue)
+              }
+            }
+          } else {
+            // The writer thread and parent thread have different values, so we must swap
+            // them when switching between writer and parent code:
+            try {
+              // Swap in the writer value:
+              InputFileBlockHolder.setThreadLocalValue(writerIfbhThreadLocalValue)
+              try {
+                // Execute the writer code:
+                writeAdditionalInputToPythonWorker()
+              } finally {
+                // Store an updated writer thread value:
+                writerIfbhThreadLocalValue = InputFileBlockHolder.getThreadLocalValue()
+              }
+            } finally {
+              // Restore the main thread's value:
+              InputFileBlockHolder.setThreadLocalValue(mainIfbhThreadLocalValue)
+            }
           }
         }
       }
+      n
+    }
+
+    private var lastFlushTime = System.nanoTime()
+
+    /**
+     * Returns false if `timelyFlushEnabled` is disabled.
+     *
+     * Otherwise, returns true if `buffer` should be flushed before any additional data is
+     * written to it.
+     * For small input rows the data might stay in the buffer for long before it is sent to the
+     * Python worker. We should flush the buffer periodically so that the downstream can make
+     * continued progress.
+     */
+    private def shouldFlush(): Boolean = {
+      if (!timelyFlushEnabled) {
+        false
+      } else {
+        val currentTime = System.nanoTime()
+        if (currentTime - lastFlushTime > timelyFlushTimeoutNanos) {
+          lastFlushTime = currentTime
+          bufferStream.size() > 0
+        } else {
+          false
+        }
+      }
+    }
+
+    /**
+     * Reads input data from `writer.inputIterator` into `buffer` and writes the buffer to the
+     * Python worker if the socket is available for writing.
+     */
+    private def writeAdditionalInputToPythonWorker(): Unit = {
+      var acceptsInput = true
+      while (acceptsInput && (hasInput || buffer.hasRemaining)) {
+        if (!buffer.hasRemaining && hasInput) {
+          // No buffered data is available. Try to read input into the buffer.
+          bufferStream.reset()
+          // Set the `buffer` to null to make it eligible for GC
+          buffer = null
+
+          val dataOut = new DataOutputStream(bufferStream)
+          // Try not to grow the buffer much beyond `bufferSize`. This is inevitable for large
+          // input rows.
+          while (bufferStream.size() < bufferSize && hasInput && !shouldFlush()) {
+            hasInput = writer.writeNextInputToStream(dataOut)
+          }
+          if (!hasInput) {
+            // Reached the end of the input.
+            writer.close(dataOut)
+          }
+          buffer = bufferStream.toByteBuffer
+        }
+
+        // Try to write as much buffered data as possible to the socket.
+        while (buffer.hasRemaining && acceptsInput) {
+          val n = worker.channel.write(buffer)
+          acceptsInput = n > 0
+        }
+      }
+
+      if (!hasInput && !buffer.hasRemaining) {
+        // We no longer have any data to write to the socket.
+        worker.selectionKey.interestOps(SelectionKey.OP_READ)
+        bufferStream.close()
+      }
     }
   }
+
 }
 
 private[spark] object PythonRunner {
 
   // already running worker monitor threads for worker and task attempts ID pairs
-  val runningMonitorThreads = ConcurrentHashMap.newKeySet[(Socket, Long)]()
+  val runningMonitorThreads = ConcurrentHashMap.newKeySet[(PythonWorker, Long)]()
 
-  def apply(func: PythonFunction): PythonRunner = {
-    new PythonRunner(Seq(ChainedPythonFunctions(Seq(func))))
+  private var printPythonInfo: AtomicBoolean = new AtomicBoolean(true)
+
+  def apply(func: PythonFunction, jobArtifactUUID: Option[String]): PythonRunner = {
+    if (printPythonInfo.compareAndSet(true, false)) {
+      PythonUtils.logPythonInfo(func.pythonExec)
+    }
+    new PythonRunner(Seq(ChainedPythonFunctions(Seq(func))), jobArtifactUUID)
   }
 }
 
 /**
  * A helper class to run Python mapPartition in Spark.
  */
-private[spark] class PythonRunner(funcs: Seq[ChainedPythonFunctions])
+private[spark] class PythonRunner(
+    funcs: Seq[ChainedPythonFunctions], jobArtifactUUID: Option[String])
   extends BasePythonRunner[Array[Byte], Array[Byte]](
-    funcs, PythonEvalType.NON_UDF, Array(Array(0))) {
+    funcs, PythonEvalType.NON_UDF, Array(Array(0)), jobArtifactUUID) {
 
-  protected override def newWriterThread(
+  protected override def newWriter(
       env: SparkEnv,
-      worker: Socket,
+      worker: PythonWorker,
       inputIterator: Iterator[Array[Byte]],
       partitionIndex: Int,
-      context: TaskContext): WriterThread = {
-    new WriterThread(env, worker, inputIterator, partitionIndex, context) {
+      context: TaskContext): Writer = {
+    new Writer(env, worker, inputIterator, partitionIndex, context) {
 
       protected override def writeCommand(dataOut: DataOutputStream): Unit = {
         val command = funcs.head.funcs.head.command
@@ -733,28 +821,32 @@ private[spark] class PythonRunner(funcs: Seq[ChainedPythonFunctions])
         dataOut.write(command.toArray)
       }
 
-      protected override def writeIteratorToStream(dataOut: DataOutputStream): Unit = {
-        PythonRDD.writeIteratorToStream(inputIterator, dataOut)
-        dataOut.writeInt(SpecialLengths.END_OF_DATA_SECTION)
+      override def writeNextInputToStream(dataOut: DataOutputStream): Boolean = {
+        if (PythonRDD.writeNextElementToStream(inputIterator, dataOut)) {
+          true
+        } else {
+          dataOut.writeInt(SpecialLengths.END_OF_DATA_SECTION)
+          false
+        }
       }
     }
   }
 
   protected override def newReaderIterator(
       stream: DataInputStream,
-      writerThread: WriterThread,
+      writer: Writer,
       startTime: Long,
       env: SparkEnv,
-      worker: Socket,
+      worker: PythonWorker,
       pid: Option[Int],
       releasedOrClosed: AtomicBoolean,
       context: TaskContext): Iterator[Array[Byte]] = {
     new ReaderIterator(
-      stream, writerThread, startTime, env, worker, pid, releasedOrClosed, context) {
+      stream, writer, startTime, env, worker, pid, releasedOrClosed, context) {
 
       protected override def read(): Array[Byte] = {
-        if (writerThread.exception.isDefined) {
-          throw writerThread.exception.get
+        if (writer.exception.isDefined) {
+          throw writer.exception.get
         }
         try {
           stream.readInt() match {
@@ -785,6 +877,7 @@ private[spark] object SpecialLengths {
   val END_OF_STREAM = -4
   val NULL = -5
   val START_ARROW_STREAM = -6
+  val END_OF_MICRO_BATCH = -7
 }
 
 private[spark] object BarrierTaskContextMessageProtocol {

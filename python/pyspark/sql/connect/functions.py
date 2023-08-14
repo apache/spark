@@ -31,6 +31,7 @@ from typing import (
     overload,
     Optional,
     Tuple,
+    Type,
     Callable,
     ValuesView,
     cast,
@@ -50,8 +51,11 @@ from pyspark.sql.connect.expressions import (
     SQLExpression,
     LambdaFunction,
     UnresolvedNamedLambdaVariable,
+    CallFunction,
 )
 from pyspark.sql.connect.udf import _create_py_udf
+from pyspark.sql.connect.udtf import AnalyzeArgument, AnalyzeResult  # noqa: F401
+from pyspark.sql.connect.udtf import _create_py_udtf
 from pyspark.sql import functions as pysparkfuncs
 from pyspark.sql.types import _from_numpy_type, DataType, StructType, ArrayType, StringType
 
@@ -67,6 +71,7 @@ if TYPE_CHECKING:
         UserDefinedFunctionLike,
     )
     from pyspark.sql.connect.dataframe import DataFrame
+    from pyspark.sql.connect.udtf import UserDefinedTableFunction
 
 
 def _to_col_with_plan_id(col: str, plan_id: Optional[int]) -> Column:
@@ -195,7 +200,7 @@ def _invoke_higher_order_function(
 
     :param name: Name of the expression
     :param cols: a list of columns
-    :param funs: a list of((*Column) -> Column functions.
+    :param funs: a list of (*Column) -> Column functions.
 
     :return: a Column
     """
@@ -954,6 +959,13 @@ def collect_list(col: "ColumnOrName") -> Column:
 collect_list.__doc__ = pysparkfuncs.collect_list.__doc__
 
 
+def array_agg(col: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("array_agg", col)
+
+
+array_agg.__doc__ = pysparkfuncs.array_agg.__doc__
+
+
 def collect_set(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("collect_set", col)
 
@@ -1023,6 +1035,18 @@ def grouping_id(*cols: "ColumnOrName") -> Column:
 
 
 grouping_id.__doc__ = pysparkfuncs.grouping_id.__doc__
+
+
+def count_min_sketch(
+    col: "ColumnOrName",
+    eps: "ColumnOrName",
+    confidence: "ColumnOrName",
+    seed: "ColumnOrName",
+) -> Column:
+    return _invoke_function_over_columns("count_min_sketch", col, eps, confidence, seed)
+
+
+count_min_sketch.__doc__ = pysparkfuncs.count_min_sketch.__doc__
 
 
 def kurtosis(col: "ColumnOrName") -> Column:
@@ -1593,6 +1617,20 @@ def array_min(col: "ColumnOrName") -> Column:
 array_min.__doc__ = pysparkfuncs.array_min.__doc__
 
 
+def array_size(col: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("array_size", col)
+
+
+array_size.__doc__ = pysparkfuncs.array_size.__doc__
+
+
+def cardinality(col: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("cardinality", col)
+
+
+cardinality.__doc__ = pysparkfuncs.cardinality.__doc__
+
+
 def array_position(col: "ColumnOrName", value: Any) -> Column:
     return _invoke_function("array_position", _to_col(col), lit(value))
 
@@ -1797,6 +1835,20 @@ def get_json_object(col: "ColumnOrName", path: str) -> Column:
 
 
 get_json_object.__doc__ = pysparkfuncs.get_json_object.__doc__
+
+
+def json_array_length(col: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("json_array_length", col)
+
+
+json_array_length.__doc__ = pysparkfuncs.json_array_length.__doc__
+
+
+def json_object_keys(col: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("json_object_keys", col)
+
+
+json_object_keys.__doc__ = pysparkfuncs.json_object_keys.__doc__
 
 
 def inline(col: "ColumnOrName") -> Column:
@@ -2037,6 +2089,13 @@ def struct(
 
 
 struct.__doc__ = pysparkfuncs.struct.__doc__
+
+
+def named_struct(*cols: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("named_struct", *cols)
+
+
+named_struct.__doc__ = pysparkfuncs.named_struct.__doc__
 
 
 def to_csv(col: "ColumnOrName", options: Optional[Dict[str, str]] = None) -> Column:
@@ -2442,6 +2501,13 @@ def to_char(col: "ColumnOrName", format: "ColumnOrName") -> Column:
 to_char.__doc__ = pysparkfuncs.to_char.__doc__
 
 
+def to_varchar(col: "ColumnOrName", format: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("to_varchar", col, format)
+
+
+to_varchar.__doc__ = pysparkfuncs.to_varchar.__doc__
+
+
 def to_number(col: "ColumnOrName", format: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("to_number", col, format)
 
@@ -2665,6 +2731,26 @@ def right(str: "ColumnOrName", len: "ColumnOrName") -> Column:
 
 
 right.__doc__ = pysparkfuncs.right.__doc__
+
+
+def mask(
+    col: "ColumnOrName",
+    upperChar: Optional["ColumnOrName"] = None,
+    lowerChar: Optional["ColumnOrName"] = None,
+    digitChar: Optional["ColumnOrName"] = None,
+    otherChar: Optional["ColumnOrName"] = None,
+) -> Column:
+    _upperChar = lit("X") if upperChar is None else upperChar
+    _lowerChar = lit("x") if lowerChar is None else lowerChar
+    _digitChar = lit("n") if digitChar is None else digitChar
+    _otherChar = lit(None) if otherChar is None else otherChar
+
+    return _invoke_function_over_columns(
+        "mask", col, _upperChar, _lowerChar, _digitChar, _otherChar
+    )
+
+
+mask.__doc__ = pysparkfuncs.mask.__doc__
 
 
 # Date/Timestamp functions
@@ -3517,21 +3603,27 @@ def sha2(col: "ColumnOrName", numBits: int) -> Column:
 sha2.__doc__ = pysparkfuncs.sha2.__doc__
 
 
-def hll_sketch_agg(col: "ColumnOrName", lgConfigK: Optional[int] = None) -> Column:
-    if lgConfigK is not None:
-        return _invoke_function("hll_sketch_agg", _to_col(col), lit(lgConfigK))
+def hll_sketch_agg(col: "ColumnOrName", lgConfigK: Optional[Union[int, Column]] = None) -> Column:
+    if lgConfigK is None:
+        return _invoke_function_over_columns("hll_sketch_agg", col)
     else:
-        return _invoke_function("hll_sketch_agg", _to_col(col))
+        _lgConfigK = lit(lgConfigK) if isinstance(lgConfigK, int) else lgConfigK
+        return _invoke_function_over_columns("hll_sketch_agg", col, _lgConfigK)
 
 
 hll_sketch_agg.__doc__ = pysparkfuncs.hll_sketch_agg.__doc__
 
 
 def hll_union_agg(col: "ColumnOrName", allowDifferentLgConfigK: Optional[bool] = None) -> Column:
-    if allowDifferentLgConfigK is not None:
-        return _invoke_function("hll_union_agg", _to_col(col), lit(allowDifferentLgConfigK))
+    if allowDifferentLgConfigK is None:
+        return _invoke_function_over_columns("hll_union_agg", col)
     else:
-        return _invoke_function("hll_union_agg", _to_col(col))
+        _allowDifferentLgConfigK = (
+            lit(allowDifferentLgConfigK)
+            if isinstance(allowDifferentLgConfigK, bool)
+            else allowDifferentLgConfigK
+        )
+        return _invoke_function_over_columns("hll_union_agg", col, _allowDifferentLgConfigK)
 
 
 hll_union_agg.__doc__ = pysparkfuncs.hll_union_agg.__doc__
@@ -3603,7 +3695,170 @@ def nvl2(col1: "ColumnOrName", col2: "ColumnOrName", col3: "ColumnOrName") -> Co
 nvl2.__doc__ = pysparkfuncs.nvl2.__doc__
 
 
-# User Defined Function
+def uuid() -> Column:
+    return _invoke_function_over_columns("uuid")
+
+
+uuid.__doc__ = pysparkfuncs.uuid.__doc__
+
+
+def aes_encrypt(
+    input: "ColumnOrName",
+    key: "ColumnOrName",
+    mode: Optional["ColumnOrName"] = None,
+    padding: Optional["ColumnOrName"] = None,
+    iv: Optional["ColumnOrName"] = None,
+    aad: Optional["ColumnOrName"] = None,
+) -> Column:
+    _mode = lit("GCM") if mode is None else _to_col(mode)
+    _padding = lit("DEFAULT") if padding is None else _to_col(padding)
+    _iv = lit("") if iv is None else _to_col(iv)
+    _aad = lit("") if aad is None else _to_col(aad)
+
+    return _invoke_function_over_columns("aes_encrypt", input, key, _mode, _padding, _iv, _aad)
+
+
+aes_encrypt.__doc__ = pysparkfuncs.aes_encrypt.__doc__
+
+
+def aes_decrypt(
+    input: "ColumnOrName",
+    key: "ColumnOrName",
+    mode: Optional["ColumnOrName"] = None,
+    padding: Optional["ColumnOrName"] = None,
+    aad: Optional["ColumnOrName"] = None,
+) -> Column:
+    _mode = lit("GCM") if mode is None else _to_col(mode)
+    _padding = lit("DEFAULT") if padding is None else _to_col(padding)
+    _aad = lit("") if aad is None else _to_col(aad)
+
+    return _invoke_function_over_columns("aes_decrypt", input, key, _mode, _padding, _aad)
+
+
+aes_decrypt.__doc__ = pysparkfuncs.aes_decrypt.__doc__
+
+
+def try_aes_decrypt(
+    input: "ColumnOrName",
+    key: "ColumnOrName",
+    mode: Optional["ColumnOrName"] = None,
+    padding: Optional["ColumnOrName"] = None,
+    aad: Optional["ColumnOrName"] = None,
+) -> Column:
+    _mode = lit("GCM") if mode is None else _to_col(mode)
+    _padding = lit("DEFAULT") if padding is None else _to_col(padding)
+    _aad = lit("") if aad is None else _to_col(aad)
+
+    return _invoke_function_over_columns("try_aes_decrypt", input, key, _mode, _padding, _aad)
+
+
+try_aes_decrypt.__doc__ = pysparkfuncs.try_aes_decrypt.__doc__
+
+
+def sha(col: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("sha", col)
+
+
+sha.__doc__ = pysparkfuncs.sha.__doc__
+
+
+def input_file_block_length() -> Column:
+    return _invoke_function_over_columns("input_file_block_length")
+
+
+input_file_block_length.__doc__ = pysparkfuncs.input_file_block_length.__doc__
+
+
+def input_file_block_start() -> Column:
+    return _invoke_function_over_columns("input_file_block_start")
+
+
+input_file_block_start.__doc__ = pysparkfuncs.input_file_block_start.__doc__
+
+
+def reflect(*cols: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("reflect", *cols)
+
+
+reflect.__doc__ = pysparkfuncs.reflect.__doc__
+
+
+def java_method(*cols: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("java_method", *cols)
+
+
+java_method.__doc__ = pysparkfuncs.java_method.__doc__
+
+
+def version() -> Column:
+    return _invoke_function_over_columns("version")
+
+
+version.__doc__ = pysparkfuncs.version.__doc__
+
+
+def typeof(col: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("typeof", col)
+
+
+typeof.__doc__ = pysparkfuncs.typeof.__doc__
+
+
+def stack(*cols: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("stack", *cols)
+
+
+stack.__doc__ = pysparkfuncs.stack.__doc__
+
+
+def random(
+    seed: Optional["ColumnOrName"] = None,
+) -> Column:
+    if seed is not None:
+        return _invoke_function_over_columns("random", seed)
+    else:
+        return _invoke_function_over_columns("random")
+
+
+random.__doc__ = pysparkfuncs.random.__doc__
+
+
+def bitmap_bit_position(col: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("bitmap_bit_position", col)
+
+
+bitmap_bit_position.__doc__ = pysparkfuncs.bitmap_bit_position.__doc__
+
+
+def bitmap_bucket_number(col: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("bitmap_bucket_number", col)
+
+
+bitmap_bucket_number.__doc__ = pysparkfuncs.bitmap_bucket_number.__doc__
+
+
+def bitmap_construct_agg(col: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("bitmap_construct_agg", col)
+
+
+bitmap_construct_agg.__doc__ = pysparkfuncs.bitmap_construct_agg.__doc__
+
+
+def bitmap_count(col: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("bitmap_count", col)
+
+
+bitmap_count.__doc__ = pysparkfuncs.bitmap_count.__doc__
+
+
+def bitmap_or_agg(col: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("bitmap_or_agg", col)
+
+
+bitmap_or_agg.__doc__ = pysparkfuncs.bitmap_or_agg.__doc__
+
+
+# Call Functions
 
 
 def call_udf(udfName: str, *cols: "ColumnOrName") -> Column:
@@ -3639,6 +3894,29 @@ def udf(
 
 
 udf.__doc__ = pysparkfuncs.udf.__doc__
+
+
+def udtf(
+    cls: Optional[Type] = None,
+    *,
+    returnType: Optional[Union[StructType, str]] = None,
+    useArrow: Optional[bool] = None,
+) -> Union["UserDefinedTableFunction", Callable[[Type], "UserDefinedTableFunction"]]:
+    if cls is None:
+        return functools.partial(_create_py_udtf, returnType=returnType, useArrow=useArrow)
+    else:
+        return _create_py_udtf(cls=cls, returnType=returnType, useArrow=useArrow)
+
+
+udtf.__doc__ = pysparkfuncs.udtf.__doc__
+
+
+def call_function(funcName: str, *cols: "ColumnOrName") -> Column:
+    expressions = [_to_col(c)._expr for c in cols]
+    return Column(CallFunction(funcName, expressions))
+
+
+call_function.__doc__ = pysparkfuncs.call_function.__doc__
 
 
 def _test() -> None:

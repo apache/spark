@@ -31,33 +31,35 @@ import scala.util.control.NonFatal
 
 import Artifact._
 import com.google.protobuf.ByteString
-import io.grpc.ManagedChannel
 import io.grpc.stub.StreamObserver
 import org.apache.commons.codec.digest.DigestUtils.sha256Hex
 
 import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.AddArtifactsResponse
 import org.apache.spark.connect.proto.AddArtifactsResponse.ArtifactSummary
-import org.apache.spark.util.{ThreadUtils, Utils}
+import org.apache.spark.util.{SparkFileUtils, SparkThreadUtils}
 
 /**
  * The Artifact Manager is responsible for handling and transferring artifacts from the local
  * client to the server (local/remote).
- * @param userContext
+ * @param clientConfig
+ *   The configuration of the client that the artifact manager operates in.
  * @param sessionId
  *   An unique identifier of the session which the artifact manager belongs to.
- * @param channel
+ * @param bstub
+ *   A blocking stub to the server.
+ * @param stub
+ *   An async stub to the server.
  */
 class ArtifactManager(
-    userContext: proto.UserContext,
+    clientConfig: SparkConnectClient.Configuration,
     sessionId: String,
-    channel: ManagedChannel) {
+    bstub: CustomSparkConnectBlockingStub,
+    stub: CustomSparkConnectStub) {
   // Using the midpoint recommendation of 32KiB for chunk size as specified in
   // https://github.com/grpc/grpc.github.io/issues/371.
   private val CHUNK_SIZE: Int = 32 * 1024
 
-  private[this] val stub = proto.SparkConnectServiceGrpc.newStub(channel)
-  private[this] val bstub = proto.SparkConnectServiceGrpc.newBlockingStub(channel)
   private[this] val classFinders = new CopyOnWriteArrayList[ClassFinder]
 
   /**
@@ -71,7 +73,7 @@ class ArtifactManager(
    * Currently only local files with extensions .jar and .class are supported.
    */
   def addArtifact(path: String): Unit = {
-    addArtifact(Utils.resolveURI(path))
+    addArtifact(SparkFileUtils.resolveURI(path))
   }
 
   private def parseArtifacts(uri: URI): Seq[Artifact] = {
@@ -112,7 +114,8 @@ class ArtifactManager(
     val artifactName = CACHE_PREFIX + "/" + hash
     val request = proto.ArtifactStatusesRequest
       .newBuilder()
-      .setUserContext(userContext)
+      .setUserContext(clientConfig.userContext)
+      .setClientType(clientConfig.userAgent)
       .setSessionId(sessionId)
       .addAllNames(Arrays.asList(artifactName))
       .build()
@@ -201,7 +204,7 @@ class ArtifactManager(
       writeBatch()
     }
     stream.onCompleted()
-    ThreadUtils.awaitResult(promise.future, Duration.Inf)
+    SparkThreadUtils.awaitResult(promise.future, Duration.Inf)
     // TODO(SPARK-42658): Handle responses containing CRC failures.
   }
 
@@ -214,10 +217,11 @@ class ArtifactManager(
       stream: StreamObserver[proto.AddArtifactsRequest]): Unit = {
     val builder = proto.AddArtifactsRequest
       .newBuilder()
-      .setUserContext(userContext)
+      .setUserContext(clientConfig.userContext)
+      .setClientType(clientConfig.userAgent)
       .setSessionId(sessionId)
     artifacts.foreach { artifact =>
-      val in = new CheckedInputStream(artifact.storage.asInstanceOf[LocalData].stream, new CRC32)
+      val in = new CheckedInputStream(artifact.storage.stream, new CRC32)
       try {
         val data = proto.AddArtifactsRequest.ArtifactChunk
           .newBuilder()
@@ -269,10 +273,11 @@ class ArtifactManager(
       stream: StreamObserver[proto.AddArtifactsRequest]): Unit = {
     val builder = proto.AddArtifactsRequest
       .newBuilder()
-      .setUserContext(userContext)
+      .setUserContext(clientConfig.userContext)
+      .setClientType(clientConfig.userAgent)
       .setSessionId(sessionId)
 
-    val in = new CheckedInputStream(artifact.storage.asInstanceOf[LocalData].stream, new CRC32)
+    val in = new CheckedInputStream(artifact.storage.stream, new CRC32)
     try {
       // First RPC contains the `BeginChunkedArtifact` payload (`begin_chunk`).
       // Subsequent RPCs contains the `ArtifactChunk` payload (`chunk`).

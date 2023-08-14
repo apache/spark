@@ -19,13 +19,13 @@ from functools import partial
 
 import pandas as pd
 from pandas.api.types import is_hashable  # type: ignore[attr-defined]
+import numpy as np
 
 from pyspark import pandas as ps
 from pyspark._globals import _NoValue
 from pyspark.pandas.indexes.base import Index
 from pyspark.pandas.missing.indexes import MissingPandasLikeTimedeltaIndex
 from pyspark.pandas.series import Series
-from pyspark.pandas.spark import functions as SF
 from pyspark.sql import functions as F
 
 
@@ -137,7 +137,7 @@ class TimedeltaIndex(Index):
         Number of days for each element.
         """
 
-        def pandas_days(x) -> int:  # type: ignore[no-untyped-def]
+        def pandas_days(x) -> np.int64:  # type: ignore[no-untyped-def]
             return x.days
 
         return Index(self.to_series().transform(pandas_days))
@@ -150,9 +150,9 @@ class TimedeltaIndex(Index):
 
         @no_type_check
         def get_seconds(scol):
-            hour_scol = F.date_part("HOUR", scol)
-            minute_scol = F.date_part("MINUTE", scol)
-            second_scol = F.date_part("SECOND", scol)
+            hour_scol = F.date_part(F.lit("HOUR"), scol)
+            minute_scol = F.date_part(F.lit("MINUTE"), scol)
+            second_scol = F.date_part(F.lit("SECOND"), scol)
             return (
                 F.when(
                     hour_scol < 0,
@@ -178,7 +178,7 @@ class TimedeltaIndex(Index):
 
         @no_type_check
         def get_microseconds(scol):
-            second_scol = SF.date_part("SECOND", scol)
+            second_scol = F.date_part(F.lit("SECOND"), scol)
             return (
                 (
                     F.when(

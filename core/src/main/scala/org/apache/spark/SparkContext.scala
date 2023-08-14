@@ -19,7 +19,6 @@ package org.apache.spark
 
 import java.io._
 import java.net.URI
-import java.nio.file.Files
 import java.util.{Arrays, Locale, Properties, ServiceLoader, UUID}
 import java.util.concurrent.{ConcurrentHashMap, ConcurrentMap}
 import java.util.concurrent.atomic.{AtomicBoolean, AtomicInteger, AtomicReference}
@@ -27,6 +26,7 @@ import javax.ws.rs.core.UriBuilder
 
 import scala.collection.JavaConverters._
 import scala.collection.Map
+import scala.collection.concurrent.{Map => ScalaConcurrentMap}
 import scala.collection.immutable
 import scala.collection.mutable.HashMap
 import scala.language.implicitConversions
@@ -40,11 +40,11 @@ import org.apache.hadoop.io.{ArrayWritable, BooleanWritable, BytesWritable, Doub
 import org.apache.hadoop.mapred.{FileInputFormat, InputFormat, JobConf, SequenceFileInputFormat, TextInputFormat}
 import org.apache.hadoop.mapreduce.{InputFormat => NewInputFormat, Job => NewHadoopJob}
 import org.apache.hadoop.mapreduce.lib.input.{FileInputFormat => NewFileInputFormat}
-import org.apache.logging.log4j.Level
 
-import org.apache.spark.annotation.{DeveloperApi, Experimental, Private}
+import org.apache.spark.annotation.{DeveloperApi, Experimental}
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.deploy.{LocalSparkCluster, SparkHadoopUtil}
+import org.apache.spark.errors.SparkCoreErrors
 import org.apache.spark.executor.{Executor, ExecutorMetrics, ExecutorMetricsSource}
 import org.apache.spark.input.{FixedLengthBinaryInputFormat, PortableDataStream, StreamInputFormat, WholeTextFileInputFormat}
 import org.apache.spark.internal.Logging
@@ -194,6 +194,9 @@ class SparkContext(config: SparkConf) extends Logging {
 
   // log out Spark Version in Spark driver log
   logInfo(s"Running Spark version $SPARK_VERSION")
+  logInfo(s"OS info ${System.getProperty("os.name")}, ${System.getProperty("os.version")}, " +
+    s"${System.getProperty("os.arch")}")
+  logInfo(s"Java version ${System.getProperty("java.version")}")
 
   /* ------------------------------------------------------------------------------------- *
    | Private variables. These variables keep the internal state of the context, and are    |
@@ -287,10 +290,18 @@ class SparkContext(config: SparkConf) extends Logging {
 
   private[spark] def env: SparkEnv = _env
 
-  // Used to store a URL for each static file/jar together with the file's local timestamp
-  private[spark] val addedFiles = new ConcurrentHashMap[String, Long]().asScala
-  private[spark] val addedArchives = new ConcurrentHashMap[String, Long]().asScala
-  private[spark] val addedJars = new ConcurrentHashMap[String, Long]().asScala
+  // Used to store session UUID with a URL for each static file/jar together and
+  // the file's local timestamp. It's session uuid -> (URL -> timestamp).
+  private[spark] val addedFiles = new ConcurrentHashMap[
+    String, ScalaConcurrentMap[String, Long]]().asScala
+  private[spark] val addedArchives = new ConcurrentHashMap[
+    String, ScalaConcurrentMap[String, Long]]().asScala
+  private[spark] val addedJars = new ConcurrentHashMap[
+    String, ScalaConcurrentMap[String, Long]]().asScala
+
+  private[spark] def allAddedFiles = addedFiles.values.flatten.toMap
+  private[spark] def allAddedArchives = addedArchives.values.flatten.toMap
+  private[spark] def allAddedJars = addedJars.values.flatten.toMap
 
   // Keeps track of all persisted RDDs
   private[spark] val persistentRdds = {
@@ -384,15 +395,11 @@ class SparkContext(config: SparkConf) extends Logging {
     require(SparkContext.VALID_LOG_LEVELS.contains(upperCased),
       s"Supplied level $logLevel did not match one of:" +
         s" ${SparkContext.VALID_LOG_LEVELS.mkString(",")}")
-    Utils.setLogLevel(Level.toLevel(upperCased))
+    Utils.setLogLevelIfNeeded(upperCased)
+    if (conf.get(EXECUTOR_ALLOW_SYNC_LOG_LEVEL) && _schedulerBackend != null) {
+      _schedulerBackend.updateExecutorsLogLevel(upperCased)
+    }
   }
-
-  /**
-   * :: Private ::
-   * Returns the directory that stores artifacts transferred through Spark Connect.
-   */
-  @Private
-  private[spark] lazy val sparkConnectArtifactDirectory: File = Utils.createTempDir("artifacts")
 
   try {
     _conf = config.clone()
@@ -479,18 +486,7 @@ class SparkContext(config: SparkConf) extends Logging {
     SparkEnv.set(_env)
 
     // If running the REPL, register the repl's output dir with the file server.
-    _conf.getOption("spark.repl.class.outputDir").orElse {
-      if (_conf.get(PLUGINS).contains("org.apache.spark.sql.connect.SparkConnectPlugin")) {
-        // For Spark Connect, we piggyback on the existing REPL integration to load class
-        // files on the executors.
-        // This is a temporary intermediate step due to unavailable classloader isolation.
-        val classDirectory = sparkConnectArtifactDirectory.toPath.resolve("classes")
-        Files.createDirectories(classDirectory)
-        Some(classDirectory.toString)
-      } else {
-        None
-      }
-    }.foreach { path =>
+    _conf.getOption("spark.repl.class.outputDir").foreach { path =>
       val replUri = _env.rpcEnv.fileServer.addDirectory("/classes", new File(path))
       _conf.set("spark.repl.class.uri", replUri)
     }
@@ -530,22 +526,22 @@ class SparkContext(config: SparkConf) extends Logging {
     // Add each JAR given through the constructor
     if (jars != null) {
       jars.foreach(jar => addJar(jar, true))
-      if (addedJars.nonEmpty) {
-        _conf.set("spark.app.initial.jar.urls", addedJars.keys.toSeq.mkString(","))
+      if (allAddedJars.nonEmpty) {
+        _conf.set("spark.app.initial.jar.urls", allAddedJars.keys.toSeq.mkString(","))
       }
     }
 
     if (files != null) {
       files.foreach(file => addFile(file, false, true))
-      if (addedFiles.nonEmpty) {
-        _conf.set("spark.app.initial.file.urls", addedFiles.keys.toSeq.mkString(","))
+      if (allAddedFiles.nonEmpty) {
+        _conf.set("spark.app.initial.file.urls", allAddedFiles.keys.toSeq.mkString(","))
       }
     }
 
     if (archives != null) {
       archives.foreach(file => addFile(file, false, true, isArchive = true))
-      if (addedArchives.nonEmpty) {
-        _conf.set("spark.app.initial.archive.urls", addedArchives.keys.toSeq.mkString(","))
+      if (allAddedArchives.nonEmpty) {
+        _conf.set("spark.app.initial.archive.urls", allAddedArchives.keys.toSeq.mkString(","))
       }
     }
 
@@ -590,6 +586,11 @@ class SparkContext(config: SparkConf) extends Logging {
     _taskScheduler = ts
     _dagScheduler = new DAGScheduler(this)
     _heartbeatReceiver.ask[Boolean](TaskSchedulerIsSet)
+
+    if (_conf.get(EXECUTOR_ALLOW_SYNC_LOG_LEVEL)) {
+      _conf.get(SPARK_LOG_LEVEL)
+        .foreach(logLevel => _schedulerBackend.updateExecutorsLogLevel(logLevel))
+    }
 
     val _executorMetricsSource =
       if (_conf.get(METRICS_EXECUTORMETRICS_SOURCE_ENABLED)) {
@@ -677,7 +678,7 @@ class SparkContext(config: SparkConf) extends Logging {
     postApplicationStart()
 
     // After application started, attach handlers to started server and start handler.
-    _ui.foreach(_.attachAllHandler())
+    _ui.foreach(_.attachAllHandlers())
     // Attach the driver metrics servlet handler to the web ui after the metrics system is started.
     _env.metricsSystem.getServletHandlers.foreach(handler => ui.foreach(_.attachHandler(handler)))
 
@@ -860,6 +861,8 @@ class SparkContext(config: SparkConf) extends Logging {
    * being called on the job's executor threads. This is useful to help ensure that the tasks
    * are actually stopped in a timely manner, but is off by default due to HDFS-1208, where HDFS
    * may respond to Thread.interrupt() by marking nodes as dead.
+   *
+   * @since 3.5.0
    */
   def setInterruptOnCancel(interruptOnCancel: Boolean): Unit = {
     setLocalProperty(SparkContext.SPARK_JOB_INTERRUPT_ON_CANCEL, interruptOnCancel.toString)
@@ -869,6 +872,8 @@ class SparkContext(config: SparkConf) extends Logging {
    * Add a tag to be assigned to all the jobs started by this thread.
    *
    * @param tag The tag to be added. Cannot contain ',' (comma) character.
+   *
+   * @since 3.5.0
    */
   def addJobTag(tag: String): Unit = {
     SparkContext.throwIfInvalidTag(tag)
@@ -882,22 +887,37 @@ class SparkContext(config: SparkConf) extends Logging {
    * Noop if such a tag was not added earlier.
    *
    * @param tag The tag to be removed. Cannot contain ',' (comma) character.
+   *
+   * @since 3.5.0
    */
   def removeJobTag(tag: String): Unit = {
     SparkContext.throwIfInvalidTag(tag)
     val existingTags = getJobTags()
     val newTags = (existingTags - tag).mkString(SparkContext.SPARK_JOB_TAGS_SEP)
-    setLocalProperty(SparkContext.SPARK_JOB_TAGS, newTags)
+    if (newTags.isEmpty) {
+      clearJobTags()
+    } else {
+      setLocalProperty(SparkContext.SPARK_JOB_TAGS, newTags)
+    }
   }
 
-  /** Get the tags that are currently set to be assigned to all the jobs started by this thread. */
+  /**
+   * Get the tags that are currently set to be assigned to all the jobs started by this thread.
+   *
+   * @since 3.5.0
+   */
   def getJobTags(): Set[String] = {
     Option(getLocalProperty(SparkContext.SPARK_JOB_TAGS))
       .map(_.split(SparkContext.SPARK_JOB_TAGS_SEP).toSet)
       .getOrElse(Set())
+      .filter(!_.isEmpty) // empty string tag should not happen, but be defensive
   }
 
-  /** Clear the current thread's job tags. */
+  /**
+   * Clear the current thread's job tags.
+   *
+   * @since 3.5.0
+   */
   def clearJobTags(): Unit = {
     setLocalProperty(SparkContext.SPARK_JOB_TAGS, null)
   }
@@ -1671,7 +1691,7 @@ class SparkContext(config: SparkConf) extends Logging {
   /**
    * Returns a list of file paths that are added to resources.
    */
-  def listFiles(): Seq[String] = addedFiles.keySet.toSeq
+  def listFiles(): Seq[String] = allAddedFiles.keySet.toSeq
 
   /**
    * :: Experimental ::
@@ -1701,7 +1721,7 @@ class SparkContext(config: SparkConf) extends Logging {
    * @since 3.1.0
    */
   @Experimental
-  def listArchives(): Seq[String] = addedArchives.keySet.toSeq
+  def listArchives(): Seq[String] = allAddedArchives.keySet.toSeq
 
   /**
    * Add a file to be downloaded with this Spark job on every node.
@@ -1723,6 +1743,8 @@ class SparkContext(config: SparkConf) extends Logging {
   private def addFile(
       path: String, recursive: Boolean, addedOnSubmit: Boolean, isArchive: Boolean = false
     ): Unit = {
+    val jobArtifactUUID = JobArtifactSet
+      .getCurrentJobArtifactState.map(_.uuid).getOrElse("default")
     val uri = Utils.resolveURI(path)
     val schemeCorrectedURI = uri.getScheme match {
       case null => new File(path).getCanonicalFile.toURI
@@ -1735,16 +1757,14 @@ class SparkContext(config: SparkConf) extends Logging {
 
     val hadoopPath = new Path(schemeCorrectedURI)
     val scheme = schemeCorrectedURI.getScheme
-    if (!Array("http", "https", "ftp").contains(scheme) && !isArchive) {
+    if (!Array("http", "https", "ftp", "spark").contains(scheme) && !isArchive) {
       val fs = hadoopPath.getFileSystem(hadoopConfiguration)
       val isDir = fs.getFileStatus(hadoopPath).isDirectory
       if (!isLocal && scheme == "file" && isDir) {
-        throw new SparkException(s"addFile does not support local directories when not running " +
-          "local mode.")
+        throw SparkCoreErrors.addLocalDirectoryError(hadoopPath)
       }
       if (!recursive && isDir) {
-        throw new SparkException(s"Added file $hadoopPath is a directory and recursive is not " +
-          "turned on.")
+        throw SparkCoreErrors.addDirectoryError(hadoopPath)
       }
     } else {
       // SPARK-17650: Make sure this is a valid URL before adding it to the list of dependencies
@@ -1760,16 +1780,32 @@ class SparkContext(config: SparkConf) extends Logging {
     }
 
     val timestamp = if (addedOnSubmit) startTime else System.currentTimeMillis
-    if (!isArchive && addedFiles.putIfAbsent(key, timestamp).isEmpty) {
+    // If the session ID was specified from SparkSession, it's from a Spark Connect client.
+    // Specify a dedicated directory for Spark Connect client.
+    // We're running Spark Connect as a service so regular PySpark path
+    // is not affected.
+    lazy val root = if (jobArtifactUUID != "default") {
+      val newDest = new File(SparkFiles.getRootDirectory(), jobArtifactUUID)
+      newDest.mkdir()
+      newDest
+    } else {
+      new File(SparkFiles.getRootDirectory())
+    }
+    if (
+      !isArchive &&
+        addedFiles
+          .getOrElseUpdate(jobArtifactUUID, new ConcurrentHashMap[String, Long]().asScala)
+          .putIfAbsent(key, timestamp).isEmpty) {
       logInfo(s"Added file $path at $key with timestamp $timestamp")
       // Fetch the file locally so that closures which are run on the driver can still use the
       // SparkFiles API to access files.
-      Utils.fetchFile(uri.toString, new File(SparkFiles.getRootDirectory()), conf,
-        hadoopConfiguration, timestamp, useCache = false)
+      Utils.fetchFile(uri.toString, root, conf, hadoopConfiguration, timestamp, useCache = false)
       postEnvironmentUpdate()
     } else if (
       isArchive &&
-        addedArchives.putIfAbsent(
+        addedArchives
+          .getOrElseUpdate(jobArtifactUUID, new ConcurrentHashMap[String, Long]().asScala)
+          .putIfAbsent(
           UriBuilder.fromUri(new URI(key)).fragment(uri.getFragment).build().toString,
           timestamp).isEmpty) {
       logInfo(s"Added archive $path at $key with timestamp $timestamp")
@@ -1779,7 +1815,7 @@ class SparkContext(config: SparkConf) extends Logging {
       val source = Utils.fetchFile(uriToDownload.toString, Utils.createTempDir(), conf,
         hadoopConfiguration, timestamp, useCache = false, shouldUntar = false)
       val dest = new File(
-        SparkFiles.getRootDirectory(),
+        root,
         if (uri.getFragment != null) uri.getFragment else source.getName)
       logInfo(
         s"Unpacking an archive $path from ${source.getAbsolutePath} to ${dest.getAbsolutePath}")
@@ -2063,6 +2099,8 @@ class SparkContext(config: SparkConf) extends Logging {
   }
 
   private def addJar(path: String, addedOnSubmit: Boolean): Unit = {
+    val jobArtifactUUID = JobArtifactSet
+      .getCurrentJobArtifactState.map(_.uuid).getOrElse("default")
     def addLocalJarFile(file: File): Seq[String] = {
       try {
         if (!file.exists()) {
@@ -2072,6 +2110,7 @@ class SparkContext(config: SparkConf) extends Logging {
           throw new IllegalArgumentException(
             s"Directory ${file.getAbsoluteFile} is not allowed for addJar")
         }
+
         Seq(env.rpcEnv.fileServer.addJar(file))
       } catch {
         case NonFatal(e) =>
@@ -2083,7 +2122,7 @@ class SparkContext(config: SparkConf) extends Logging {
     def checkRemoteJarFile(path: String): Seq[String] = {
       val hadoopPath = new Path(path)
       val scheme = hadoopPath.toUri.getScheme
-      if (!Array("http", "https", "ftp").contains(scheme)) {
+      if (!Array("http", "https", "ftp", "spark").contains(scheme)) {
         try {
           val fs = hadoopPath.getFileSystem(hadoopConfiguration)
           if (!fs.exists(hadoopPath)) {
@@ -2135,7 +2174,9 @@ class SparkContext(config: SparkConf) extends Logging {
       }
       if (keys.nonEmpty) {
         val timestamp = if (addedOnSubmit) startTime else System.currentTimeMillis
-        val (added, existed) = keys.partition(addedJars.putIfAbsent(_, timestamp).isEmpty)
+        val (added, existed) = keys.partition(addedJars
+          .getOrElseUpdate(jobArtifactUUID, new ConcurrentHashMap[String, Long]().asScala)
+          .putIfAbsent(_, timestamp).isEmpty)
         if (added.nonEmpty) {
           val jarMessage = if (scheme != "ivy") "JAR" else "dependency jars of Ivy URI"
           logInfo(s"Added $jarMessage $path at ${added.mkString(",")} with timestamp $timestamp")
@@ -2153,7 +2194,7 @@ class SparkContext(config: SparkConf) extends Logging {
   /**
    * Returns a list of jar files that are added to resources.
    */
-  def listJars(): Seq[String] = addedJars.keySet.toSeq
+  def listJars(): Seq[String] = allAddedJars.keySet.toSeq
 
   /**
    * When stopping SparkContext inside Spark components, it's easy to cause dead-lock since Spark
@@ -2547,7 +2588,9 @@ class SparkContext(config: SparkConf) extends Logging {
   /**
    * Cancel active jobs that have the specified tag. See `org.apache.spark.SparkContext.addJobTag`.
    *
-   * @param tag The tag to be added. Cannot contain ',' (comma) character.
+   * @param tag The tag to be cancelled. Cannot contain ',' (comma) character.
+   *
+   * @since 3.5.0
    */
   def cancelJobsWithTag(tag: String): Unit = {
     SparkContext.throwIfInvalidTag(tag)
@@ -2734,9 +2777,9 @@ class SparkContext(config: SparkConf) extends Logging {
   private def postEnvironmentUpdate(): Unit = {
     if (taskScheduler != null) {
       val schedulingMode = getSchedulingMode.toString
-      val addedJarPaths = addedJars.keys.toSeq
-      val addedFilePaths = addedFiles.keys.toSeq
-      val addedArchivePaths = addedArchives.keys.toSeq
+      val addedJarPaths = allAddedJars.keys.toSeq
+      val addedFilePaths = allAddedFiles.keys.toSeq
+      val addedArchivePaths = allAddedArchives.keys.toSeq
       val environmentDetails = SparkEnv.environmentDetails(conf, hadoopConfiguration,
         schedulingMode, addedJarPaths, addedFilePaths, addedArchivePaths,
         env.metricsSystem.metricsProperties.asScala.toMap)
@@ -2939,6 +2982,7 @@ object SparkContext extends Logging {
   /** Separator of tags in SPARK_JOB_TAGS property */
   private[spark] val SPARK_JOB_TAGS_SEP = ","
 
+  // Same rules apply to Spark Connect execution tags, see ExecuteHolder.throwIfInvalidTag
   private[spark] def throwIfInvalidTag(tag: String) = {
     if (tag == null) {
       throw new IllegalArgumentException("Spark job tag cannot be null.")

@@ -28,12 +28,13 @@ import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.sql.{AnalysisException, SaveMode}
 import org.apache.spark.sql.catalyst.{AliasIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.{AnalysisContext, AnalysisTest, Analyzer, EmptyFunctionRegistry, NoSuchTableException, ResolvedFieldName, ResolvedIdentifier, ResolvedTable, ResolveSessionCatalog, UnresolvedAttribute, UnresolvedInlineTable, UnresolvedRelation, UnresolvedSubqueryColumnAliases, UnresolvedTable}
-import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogStorageFormat, CatalogTable, CatalogTableType, InMemoryCatalog, SessionCatalog}
+import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogStorageFormat, CatalogTable, CatalogTableType, InMemoryCatalog, SessionCatalog, TempVariableManager}
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Cast, EqualTo, Expression, InSubquery, IntegerLiteral, ListQuery, Literal, StringLiteral}
 import org.apache.spark.sql.catalyst.expressions.objects.StaticInvoke
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParseException}
 import org.apache.spark.sql.catalyst.plans.logical.{AlterColumn, AnalysisOnlyCommand, AppendData, Assignment, CreateTable, CreateTableAsSelect, DeleteAction, DeleteFromTable, DescribeRelation, DropTable, InsertAction, InsertIntoStatement, LocalRelation, LogicalPlan, MergeIntoTable, OneRowRelation, OverwriteByExpression, OverwritePartitionsDynamic, Project, SetTableLocation, SetTableProperties, ShowTableProperties, SubqueryAlias, UnsetTableProperties, UpdateAction, UpdateTable}
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.catalyst.util.TypeUtils.toSQLId
 import org.apache.spark.sql.connector.FakeV2Provider
 import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogNotFoundException, Column, ColumnDefaultValue, Identifier, SupportsDelete, Table, TableCapability, TableCatalog, V1Table}
 import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
@@ -183,6 +184,8 @@ class PlanResolutionSuite extends AnalysisTest {
     new SQLConf().copy(SQLConf.CASE_SENSITIVE -> true))
   createTempView(v1SessionCatalog, "v", LocalRelation(Nil), false)
 
+  private val tempVariableManager = new TempVariableManager
+
   private val catalogManagerWithDefault = {
     val manager = mock(classOf[CatalogManager])
     when(manager.catalog(any())).thenAnswer((invocation: InvocationOnMock) => {
@@ -198,6 +201,7 @@ class PlanResolutionSuite extends AnalysisTest {
     when(manager.currentCatalog).thenReturn(testCat)
     when(manager.currentNamespace).thenReturn(Array.empty[String])
     when(manager.v1SessionCatalog).thenReturn(v1SessionCatalog)
+    when(manager.tempVariableManager).thenReturn(tempVariableManager)
     manager
   }
 
@@ -214,6 +218,7 @@ class PlanResolutionSuite extends AnalysisTest {
     when(manager.currentCatalog).thenReturn(v2SessionCatalog)
     when(manager.currentNamespace).thenReturn(Array("default"))
     when(manager.v1SessionCatalog).thenReturn(v1SessionCatalog)
+    when(manager.tempVariableManager).thenReturn(tempVariableManager)
     manager
   }
 
@@ -406,7 +411,7 @@ class PlanResolutionSuite extends AnalysisTest {
         |OPTIONS (path '/tmp/file')
         |LOCATION '/tmp/file'""".stripMargin
     checkError(
-      exception = intercept[AnalysisException] {
+      exception = intercept[ParseException] {
         parseAndResolve(v2)
       },
       errorClass = "_LEGACY_ERROR_TEMP_0032",
@@ -1394,7 +1399,7 @@ class PlanResolutionSuite extends AnalysisTest {
   test("alter table: alter column action is not specified") {
     val sql = "ALTER TABLE v1Table ALTER COLUMN i"
     checkError(
-      exception = intercept[AnalysisException] {
+      exception = intercept[ParseException] {
         parseAndResolve(sql)
       },
       errorClass = "_LEGACY_ERROR_TEMP_0035",
@@ -1956,7 +1961,7 @@ class PlanResolutionSuite extends AnalysisTest {
       exception = intercept[AnalysisException] {
         parseAndResolve(mergeWithDefaultReferenceAsPartOfComplexExpression)
       },
-      errorClass = "_LEGACY_ERROR_TEMP_1343",
+      errorClass = "DEFAULT_PLACEMENT_INVALID",
       parameters = Map.empty)
 
     val mergeWithDefaultReferenceForNonNullableCol =
@@ -2177,8 +2182,14 @@ class PlanResolutionSuite extends AnalysisTest {
            |WHEN NOT MATCHED BY SOURCE THEN UPDATE SET $target.s = $source.s
          """.stripMargin
       // update value in not matched by source clause can only reference the target table.
-      val e7 = intercept[AnalysisException](parseAndResolve(sql7))
-      assert(e7.message.contains(s"cannot resolve $source.s in MERGE command"))
+      checkError(
+        exception = intercept[AnalysisException](parseAndResolve(sql7)),
+        errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+        parameters = Map("objectName" -> s"${toSQLId(source)}.`s`", "proposal" -> "`i`, `s`"),
+        context = ExpectedContext(
+          fragment = s"$source.s",
+          start = 77 + target.length * 2 + source.length,
+          stop = 78 + target.length * 2 + source.length * 2))
     }
 
     val sql1 =
@@ -2206,8 +2217,8 @@ class PlanResolutionSuite extends AnalysisTest {
          |WHEN MATCHED THEN UPDATE SET *""".stripMargin
     checkError(
       exception = intercept[AnalysisException](parseAndResolve(sql2)),
-      errorClass = "_LEGACY_ERROR_TEMP_2309",
-      parameters = Map("sqlExpr" -> "s", "cols" -> "testcat.tab2.i, testcat.tab2.x"),
+      errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+      parameters = Map("objectName" -> "`s`", "proposal" -> "`i`, `x`"),
       context = ExpectedContext(fragment = sql2, start = 0, stop = 80))
 
     // INSERT * with incompatible schema between source and target tables.
@@ -2218,8 +2229,8 @@ class PlanResolutionSuite extends AnalysisTest {
         |WHEN NOT MATCHED THEN INSERT *""".stripMargin
     checkError(
       exception = intercept[AnalysisException](parseAndResolve(sql3)),
-      errorClass = "_LEGACY_ERROR_TEMP_2309",
-      parameters = Map("sqlExpr" -> "s", "cols" -> "testcat.tab2.i, testcat.tab2.x"),
+      errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+      parameters = Map("objectName" -> "`s`", "proposal" -> "`i`, `x`"),
       context = ExpectedContext(fragment = sql3, start = 0, stop = 80))
 
     val sql4 =
@@ -2739,7 +2750,7 @@ class PlanResolutionSuite extends AnalysisTest {
       """CREATE TABLE page_view
         |STORED BY 'storage.handler.class.name' AS SELECT * FROM src""".stripMargin
     checkError(
-      exception = intercept[AnalysisException] {
+      exception = intercept[ParseException] {
         extractTableDesc(s4)
       },
       errorClass = "_LEGACY_ERROR_TEMP_0035",

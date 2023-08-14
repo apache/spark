@@ -1584,7 +1584,15 @@ class DataFrame:
                 error_class="NOT_IMPLEMENTED",
                 message_parameters={"feature": f"{name}()"},
             )
+
+        if name not in self.columns:
+            raise AttributeError(
+                "'%s' object has no attribute '%s'" % (self.__class__.__name__, name)
+            )
+
         return self[name]
+
+    __getattr__.__doc__ = PySparkDataFrame.__getattr__.__doc__
 
     @overload
     def __getitem__(self, item: Union[int, str]) -> Column:
@@ -1724,6 +1732,12 @@ class DataFrame:
     to.__doc__ = PySparkDataFrame.to.__doc__
 
     def toDF(self, *cols: str) -> "DataFrame":
+        for col_ in cols:
+            if not isinstance(col_, str):
+                raise PySparkTypeError(
+                    error_class="NOT_LIST_OF_STR",
+                    message_parameters={"arg_name": "cols", "arg_type": type(col_).__name__},
+                )
         return DataFrame.withPlan(plan.ToDF(self._plan, list(cols)), self._session)
 
     toDF.__doc__ = PySparkDataFrame.toDF.__doc__
@@ -2009,21 +2023,9 @@ class DataFrame:
 
     # SparkConnect specific API
     def offset(self, n: int) -> "DataFrame":
-        """Returns a new :class: `DataFrame` by skipping the first `n` rows.
-
-        .. versionadded:: 3.4.0
-
-        Parameters
-        ----------
-        num : int
-            Number of records to skip.
-
-        Returns
-        -------
-        :class:`DataFrame`
-            Subset of the records
-        """
         return DataFrame.withPlan(plan.Offset(child=self._plan, offset=n), session=self._session)
+
+    offset.__doc__ = PySparkDataFrame.offset.__doc__
 
     @classmethod
     def withPlan(cls, plan: plan.LogicalPlan, session: "SparkSession") -> "DataFrame":

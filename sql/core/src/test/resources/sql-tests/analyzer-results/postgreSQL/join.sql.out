@@ -3008,7 +3008,7 @@ org.apache.spark.sql.AnalysisException
 select * from
   int8_tbl x join (int4_tbl x cross join int4_tbl y) j on q1 = y.f1
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
   "sqlState" : "42703",
@@ -3065,7 +3065,7 @@ Project [q1#xL, q2#xL, f1#x, ff#x]
 select t1.uunique1 from
   tenk1 t1 join tenk2 t2 on t1.two = t2.two
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
   "sqlState" : "42703",
@@ -3087,7 +3087,7 @@ org.apache.spark.sql.AnalysisException
 select t2.uunique1 from
   tenk1 t1 join tenk2 t2 on t1.two = t2.two
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
   "sqlState" : "42703",
@@ -3109,7 +3109,7 @@ org.apache.spark.sql.AnalysisException
 select uunique1 from
   tenk1 t1 join tenk2 t2 on t1.two = t2.two
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
   "sqlState" : "42703",
@@ -3433,7 +3433,7 @@ Project [q1#xL, q2#xL, bq1#xL, cq1#xL, least(outer(a.q1), q1, q1)#xL]
 -- !query
 select f1,g from int4_tbl a, (select f1 as g) ss
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
   "sqlState" : "42703",
@@ -3453,7 +3453,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 select f1,g from int4_tbl a, (select a.f1 as g) ss
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
   "sqlState" : "42703",
@@ -3473,7 +3473,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 select f1,g from int4_tbl a cross join (select f1 as g) ss
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
   "sqlState" : "42703",
@@ -3493,7 +3493,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 select f1,g from int4_tbl a cross join (select a.f1 as g) ss
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
   "sqlState" : "42703",

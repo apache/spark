@@ -77,6 +77,7 @@ DAYS	false
 DBPROPERTIES	false
 DEC	false
 DECIMAL	false
+DECLARE	false
 DEFAULT	false
 DEFINED	false
 DELETE	false
@@ -258,6 +259,7 @@ SET	false
 SETS	false
 SHORT	false
 SHOW	false
+SINGLE	false
 SKEWED	false
 SMALLINT	false
 SOME	true
@@ -283,6 +285,7 @@ TBLPROPERTIES	false
 TERMINATED	false
 THEN	true
 TIME	true
+TIMEDIFF	false
 TIMESTAMP	false
 TIMESTAMPADD	false
 TIMESTAMPDIFF	false
@@ -314,7 +317,9 @@ USE	false
 USER	true
 USING	true
 VALUES	false
+VAR	false
 VARCHAR	false
+VARIABLE	false
 VERSION	false
 VIEW	false
 VIEWS	false

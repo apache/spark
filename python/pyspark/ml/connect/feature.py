@@ -33,6 +33,28 @@ class MaxAbsScaler(Estimator, HasInputCol, HasOutputCol, ParamsReadWrite):
     Rescale each feature individually to range [-1, 1] by dividing through the largest maximum
     absolute value in each feature. It does not shift/center the data, and thus does not destroy
     any sparsity.
+
+    .. versionadded:: 3.5.0
+
+    Examples
+    --------
+    >>> from pyspark.ml.connect.feature import MaxAbsScaler
+    >>> scaler = MaxAbsScaler(inputCol='features', outputCol='scaled_features')
+    >>> dataset = spark.createDataFrame([
+    ...     ([1.0, 2.0],),
+    ...     ([2.0, -1.0],),
+    ...     ([-3.0, -2.0],),
+    ... ], schema=['features'])
+    >>> scaler_model = scaler.fit(dataset)
+    >>> transformed_dataset = scaler_model.transform(dataset)
+    >>> transformed_dataset.show(truncate=False)
+    +------------+--------------------------+
+    |features    |scaled_features           |
+    +------------+--------------------------+
+    |[1.0, 2.0]  |[0.3333333333333333, 1.0] |
+    |[2.0, -1.0] |[0.6666666666666666, -0.5]|
+    |[-3.0, -2.0]|[-1.0, -1.0]              |
+    +------------+--------------------------+
     """
 
     _input_kwargs: Dict[str, Any]
@@ -62,6 +84,12 @@ class MaxAbsScaler(Estimator, HasInputCol, HasOutputCol, ParamsReadWrite):
 
 
 class MaxAbsScalerModel(Model, HasInputCol, HasOutputCol, ParamsReadWrite, CoreModelReadWrite):
+    """
+    Model fitted by MaxAbsScaler.
+
+    .. versionadded:: 3.5.0
+    """
+
     def __init__(
         self, max_abs_values: Optional["np.ndarray"] = None, n_samples_seen: Optional[int] = None
     ) -> None:
@@ -117,6 +145,28 @@ class StandardScaler(Estimator, HasInputCol, HasOutputCol, ParamsReadWrite):
     """
     Standardizes features by removing the mean and scaling to unit variance using column summary
     statistics on the samples in the training set.
+
+    .. versionadded:: 3.5.0
+
+    Examples
+    --------
+    >>> from pyspark.ml.connect.feature import StandardScaler
+    >>> scaler = StandardScaler(inputCol='features', outputCol='scaled_features')
+    >>> dataset = spark.createDataFrame([
+    ...     ([1.0, 2.0],),
+    ...     ([2.0, -1.0],),
+    ...     ([-3.0, -2.0],),
+    ... ], schema=['features'])
+    >>> scaler_model = scaler.fit(dataset)
+    >>> transformed_dataset = scaler_model.transform(dataset)
+    >>> transformed_dataset.show(truncate=False)
+    +------------+------------------------------------------+
+    |features    |scaled_features                           |
+    +------------+------------------------------------------+
+    |[1.0, 2.0]  |[0.3779644730092272, 1.1208970766356101]  |
+    |[2.0, -1.0] |[0.7559289460184544, -0.3202563076101743] |
+    |[-3.0, -2.0]|[-1.1338934190276817, -0.8006407690254358]|
+    +------------+------------------------------------------+
     """
 
     _input_kwargs: Dict[str, Any]
@@ -144,6 +194,12 @@ class StandardScaler(Estimator, HasInputCol, HasOutputCol, ParamsReadWrite):
 
 
 class StandardScalerModel(Model, HasInputCol, HasOutputCol, ParamsReadWrite, CoreModelReadWrite):
+    """
+    Model fitted by StandardScaler.
+
+    .. versionadded:: 3.5.0
+    """
+
     def __init__(
         self,
         mean_values: Optional["np.ndarray"] = None,

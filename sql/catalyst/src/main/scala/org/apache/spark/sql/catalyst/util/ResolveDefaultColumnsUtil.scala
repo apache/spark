@@ -41,29 +41,7 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap
 /**
  * This object contains fields to help process DEFAULT columns.
  */
-object ResolveDefaultColumns extends QueryErrorsBase {
-  // This column metadata indicates the default value associated with a particular table column that
-  // is in effect at any given time. Its value begins at the time of the initial CREATE/REPLACE
-  // TABLE statement with DEFAULT column definition(s), if any. It then changes whenever an ALTER
-  // TABLE statement SETs the DEFAULT. The intent is for this "current default" to be used by
-  // UPDATE, INSERT and MERGE, which evaluate each default expression for each row.
-  val CURRENT_DEFAULT_COLUMN_METADATA_KEY = "CURRENT_DEFAULT"
-  // This column metadata represents the default value for all existing rows in a table after a
-  // column has been added. This value is determined at time of CREATE TABLE, REPLACE TABLE, or
-  // ALTER TABLE ADD COLUMN, and never changes thereafter. The intent is for this "exist default" to
-  // be used by any scan when the columns in the source row are missing data. For example, consider
-  // the following sequence:
-  // CREATE TABLE t (c1 INT)
-  // INSERT INTO t VALUES (42)
-  // ALTER TABLE t ADD COLUMNS (c2 INT DEFAULT 43)
-  // SELECT c1, c2 FROM t
-  // In this case, the final query is expected to return 42, 43. The ALTER TABLE ADD COLUMNS command
-  // executed after there was already data in the table, so in order to enforce this invariant, we
-  // need either (1) an expensive backfill of value 43 at column c2 into all previous rows, or (2)
-  // indicate to each data source that selected columns missing data are to generate the
-  // corresponding DEFAULT value instead. We choose option (2) for efficiency, and represent this
-  // value as the text representation of a folded constant in the "EXISTS_DEFAULT" column metadata.
-  val EXISTS_DEFAULT_COLUMN_METADATA_KEY = "EXISTS_DEFAULT"
+object ResolveDefaultColumns extends QueryErrorsBase with ResolveDefaultColumnsUtils {
   // Name of attributes representing explicit references to the value stored in the above
   // CURRENT_DEFAULT_COLUMN_METADATA.
   val CURRENT_DEFAULT_COLUMN_NAME = "DEFAULT"
@@ -396,27 +374,30 @@ object ResolveDefaultColumns extends QueryErrorsBase {
    * above, for convenience.
    */
   def getExistenceDefaultsBitmask(schema: StructType): Array[Boolean] = {
-    Array.fill[Boolean](schema.existenceDefaultValues.size)(true)
+    Array.fill[Boolean](existenceDefaultValues(schema).size)(true)
   }
 
   /**
    * Resets the elements of the array initially returned from [[getExistenceDefaultsBitmask]] above.
    * Afterwards, set element(s) to false before calling [[applyExistenceDefaultValuesToRow]] below.
    */
-  def resetExistenceDefaultsBitmask(schema: StructType): Unit = {
-    for (i <- 0 until schema.existenceDefaultValues.size) {
-      schema.existenceDefaultsBitmask(i) = (schema.existenceDefaultValues(i) != null)
+  def resetExistenceDefaultsBitmask(schema: StructType, bitmask: Array[Boolean]): Unit = {
+    val defaultValues = existenceDefaultValues(schema)
+    for (i <- 0 until defaultValues.size) {
+      bitmask(i) = (defaultValues(i) != null)
     }
   }
 
   /**
    * Updates a subset of columns in the row with default values from the metadata in the schema.
    */
-  def applyExistenceDefaultValuesToRow(schema: StructType, row: InternalRow): Unit = {
-    if (schema.hasExistenceDefaultValues) {
-      for (i <- 0 until schema.existenceDefaultValues.size) {
-        if (schema.existenceDefaultsBitmask(i)) {
-          row.update(i, schema.existenceDefaultValues(i))
+  def applyExistenceDefaultValuesToRow(schema: StructType, row: InternalRow,
+      bitmask: Array[Boolean]): Unit = {
+    val existingValues = existenceDefaultValues(schema)
+    if (hasExistenceDefaultValues(schema)) {
+      for (i <- 0 until existingValues.size) {
+        if (bitmask(i)) {
+          row.update(i, existingValues(i))
         }
       }
     }
@@ -436,6 +417,17 @@ object ResolveDefaultColumns extends QueryErrorsBase {
     }
     rows.toSeq
   }
+
+  /**
+   * These define existence default values for the struct fields for efficiency purposes.
+   * The caller should avoid using such methods in a loop for efficiency.
+   */
+  def existenceDefaultValues(schema: StructType): Array[Any] =
+    getExistenceDefaultValues(schema)
+  def existenceDefaultsBitmask(schema: StructType): Array[Boolean] =
+    getExistenceDefaultsBitmask(schema)
+  def hasExistenceDefaultValues(schema: StructType): Boolean =
+    existenceDefaultValues(schema).exists(_ != null)
 
   /**
    * This is an Analyzer for processing default column values using built-in functions only.

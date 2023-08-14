@@ -26,7 +26,7 @@
   </parent>
   <groupId>org.apache.spark</groupId>
   <artifactId>spark-parent_2.12</artifactId>
-  <version>3.5.0-SNAPSHOT</version>
+  <version>4.0.0-SNAPSHOT</version>
   <packaging>pom</packaging>
   <name>Spark Project Parent POM</name>
   <url>https://spark.apache.org/</url>
@@ -122,13 +122,13 @@
     <slf4j.version>2.0.7</slf4j.version>
     <log4j.version>2.20.0</log4j.version>
     <!-- make sure to update IsolatedClientLoader whenever this version is changed -->
-    <hadoop.version>3.3.5</hadoop.version>
+    <hadoop.version>3.3.6</hadoop.version>
     <!-- SPARK-41247: When updating `protobuf.version`, also need to update `protoVersion` in `SparkBuild.scala` -->
-    <protobuf.version>3.23.2</protobuf.version>
+    <protobuf.version>3.23.4</protobuf.version>
     <protoc-jar-maven-plugin.version>3.11.4</protoc-jar-maven-plugin.version>
     <yarn.version>${hadoop.version}</yarn.version>
     <zookeeper.version>3.6.3</zookeeper.version>
-    <curator.version>2.13.0</curator.version>
+    <curator.version>5.2.0</curator.version>
     <hive.group>org.apache.hive</hive.group>
     <hive.classifier>core</hive.classifier>
     <!-- Version used in Maven Hive dependency -->
@@ -137,11 +137,11 @@
     <!-- Version used for internal directory structure -->
     <hive.version.short>2.3</hive.version.short>
     <!-- note that this should be compatible with Kafka brokers version 0.10 and up -->
-    <kafka.version>3.4.0</kafka.version>
+    <kafka.version>3.4.1</kafka.version>
     <!-- After 10.15.1.3, the minimum required version is JDK9 -->
     <derby.version>10.14.2.0</derby.version>
     <parquet.version>1.13.1</parquet.version>
-    <orc.version>1.8.4</orc.version>
+    <orc.version>1.9.0</orc.version>
     <orc.classifier>shaded-protobuf</orc.classifier>
     <jetty.version>9.4.51.v20230217</jetty.version>
     <jakartaservlet.version>4.0.3</jakartaservlet.version>
@@ -152,15 +152,15 @@
     If you changes codahale.metrics.version, you also need to change
     the link to metrics.dropwizard.io in docs/monitoring.md.
     -->
-    <codahale.metrics.version>4.2.18</codahale.metrics.version>
+    <codahale.metrics.version>4.2.19</codahale.metrics.version>
     <!-- Should be consistent with SparkBuild.scala and docs -->
-    <avro.version>1.11.1</avro.version>
+    <avro.version>1.11.2</avro.version>
     <aws.kinesis.client.version>1.12.0</aws.kinesis.client.version>
     <!-- Should be consistent with Kinesis client dependency -->
     <aws.java.sdk.version>1.11.655</aws.java.sdk.version>
     <!-- the producer is used in tests -->
     <aws.kinesis.producer.version>0.12.8</aws.kinesis.producer.version>
-    <gcs-connector.version>hadoop3-2.2.14</gcs-connector.version>
+    <gcs-connector.version>hadoop3-2.2.16</gcs-connector.version>
     <!--  org.apache.httpcomponents/httpclient-->
     <commons.httpclient.version>4.5.14</commons.httpclient.version>
     <commons.httpcore.version>4.4.16</commons.httpcore.version>
@@ -182,7 +182,9 @@
     <codehaus.jackson.version>1.9.13</codehaus.jackson.version>
     <fasterxml.jackson.version>2.15.2</fasterxml.jackson.version>
     <fasterxml.jackson.databind.version>2.15.2</fasterxml.jackson.databind.version>
-    <snappy.version>1.1.10.1</snappy.version>
+    <ws.xmlschema.version>2.3.0</ws.xmlschema.version>
+    <org.glassfish.jaxb.txw2.version>3.0.2</org.glassfish.jaxb.txw2.version>
+    <snappy.version>1.1.10.3</snappy.version>
     <netlib.ludovic.dev.version>3.0.3</netlib.ludovic.dev.version>
     <commons-codec.version>1.16.0</commons-codec.version>
     <commons-compress.version>1.23.0</commons-compress.version>
@@ -190,13 +192,17 @@
     <!-- org.apache.commons/commons-lang/-->
     <commons-lang2.version>2.6</commons-lang2.version>
     <!-- org.apache.commons/commons-lang3/-->
-    <commons-lang3.version>3.12.0</commons-lang3.version>
+    <commons-lang3.version>3.13.0</commons-lang3.version>
     <!-- org.apache.commons/commons-pool2/-->
     <commons-pool2.version>2.11.1</commons-pool2.version>
     <datanucleus-core.version>4.1.17</datanucleus-core.version>
     <guava.version>14.0.1</guava.version>
     <janino.version>3.1.9</janino.version>
-    <jersey.version>2.36</jersey.version>
+    <!--
+      Please don't upgrade the version to 3.0.0+,
+      Because it transition Jakarta REST API from javax to jakarta package.
+    -->
+    <jersey.version>2.40</jersey.version>
     <joda.version>2.12.5</joda.version>
     <jodd.version>3.5.2</jodd.version>
     <jsr305.version>3.0.0</jsr305.version>
@@ -210,9 +216,9 @@
     <maven-antrun.version>3.1.0</maven-antrun.version>
     <commons-crypto.version>1.1.0</commons-crypto.version>
     <commons-cli.version>1.5.0</commons-cli.version>
-    <bouncycastle.version>1.60</bouncycastle.version>
+    <bouncycastle.version>1.70</bouncycastle.version>
     <tink.version>1.9.0</tink.version>
-    <netty.version>4.1.92.Final</netty.version>
+    <netty.version>4.1.96.Final</netty.version>
     <!--
     If you are changing Arrow version specification, please check
     ./python/pyspark/sql/pandas/utils.py, and ./python/setup.py too.
@@ -222,7 +228,7 @@
 
     <!-- org.fusesource.leveldbjni will be used except on arm64 platform. -->
     <leveldbjni.group>org.fusesource.leveldbjni</leveldbjni.group>
-    <kubernetes-client.version>6.7.2</kubernetes-client.version>
+    <kubernetes-client.version>6.8.0</kubernetes-client.version>
 
     <test.java.home>${java.home}</test.java.home>
 
@@ -280,8 +286,8 @@
     <!-- Version used in Connect -->
     <connect.guava.version>32.0.1-jre</connect.guava.version>
     <guava.failureaccess.version>1.0.1</guava.failureaccess.version>
-    <io.grpc.version>1.47.0</io.grpc.version>
-    <mima.version>1.1.2</mima.version>
+    <io.grpc.version>1.56.0</io.grpc.version>
+    <mima.version>1.1.3</mima.version>
     <tomcat.annotations.api.version>6.0.53</tomcat.annotations.api.version>
 
     <CodeCacheSize>128m</CodeCacheSize>
@@ -671,7 +677,7 @@
       <dependency>
         <groupId>org.rocksdb</groupId>
         <artifactId>rocksdbjni</artifactId>
-        <version>8.1.1.1</version>
+        <version>8.3.2</version>
       </dependency>
       <dependency>
         <groupId>${leveldbjni.group}</groupId>
@@ -789,7 +795,7 @@
       <dependency>
         <groupId>com.github.luben</groupId>
         <artifactId>zstd-jni</artifactId>
-        <version>1.5.5-4</version>
+        <version>1.5.5-5</version>
       </dependency>
       <dependency>
         <groupId>com.clearspring.analytics</groupId>
@@ -818,7 +824,7 @@
       <dependency>
         <groupId>org.roaringbitmap</groupId>
         <artifactId>RoaringBitmap</artifactId>
-        <version>0.9.44</version>
+        <version>0.9.45</version>
       </dependency>
 
       <!-- Netty Begin -->
@@ -983,6 +989,16 @@
         <version>${fasterxml.jackson.version}</version>
       </dependency>
       <dependency>
+        <groupId>org.apache.ws.xmlschema</groupId>
+        <artifactId>xmlschema-core</artifactId>
+        <version>${ws.xmlschema.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.glassfish.jaxb</groupId>
+        <artifactId>txw2</artifactId>
+        <version>${org.glassfish.jaxb.txw2.version}</version>
+      </dependency>
+      <dependency>
         <groupId>org.glassfish.jersey.core</groupId>
         <artifactId>jersey-server</artifactId>
         <version>${jersey.version}</version>
@@ -1030,6 +1046,15 @@
         <groupId>org.glassfish.jersey.test-framework.providers</groupId>
         <artifactId>jersey-test-framework-provider-simple</artifactId>
         <version>${jersey.version}</version>
+        <!--
+          TODO(SPARK-44170): Remove the exclusion of jupiter after Spark migrates to Junit5.
+        -->
+        <exclusions>
+          <exclusion>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>*</artifactId>
+          </exclusion>
+        </exclusions>
         <scope>test</scope>
       </dependency>
       <dependency>
@@ -1072,7 +1097,7 @@
       <dependency>
         <groupId>org.scala-lang.modules</groupId>
         <artifactId>scala-xml_${scala.binary.version}</artifactId>
-        <version>2.1.0</version>
+        <version>2.2.0</version>
       </dependency>
       <dependency>
         <groupId>org.scala-lang</groupId>
@@ -1098,7 +1123,7 @@
       <dependency>
         <groupId>org.scala-lang.modules</groupId>
         <artifactId>scala-parser-combinators_${scala.binary.version}</artifactId>
-        <version>2.2.0</version>
+        <version>2.3.0</version>
       </dependency>
       <dependency>
         <groupId>jline</groupId>
@@ -1811,9 +1836,15 @@
       <!-- Hive 2.3 need this to init Hive's FunctionRegistry -->
       <dependency>
         <groupId>org.codehaus.jackson</groupId>
+        <artifactId>jackson-core-asl</artifactId>
+        <version>${codehaus.jackson.version}</version>
+        <scope>${hive.deps.scope}</scope>
+      </dependency>
+      <dependency>
+        <groupId>org.codehaus.jackson</groupId>
         <artifactId>jackson-mapper-asl</artifactId>
         <version>${codehaus.jackson.version}</version>
-        <scope>test</scope>
+        <scope>${hive.deps.scope}</scope>
       </dependency>
       <dependency>
         <groupId>${hive.group}</groupId>
@@ -3075,7 +3106,7 @@
         <plugin>
           <groupId>org.apache.maven.plugins</groupId>
           <artifactId>maven-clean-plugin</artifactId>
-          <version>3.2.0</version>
+          <version>3.3.1</version>
           <configuration>
             <filesets>
               <fileset>
@@ -3158,7 +3189,7 @@
         <plugin>
           <groupId>org.apache.maven.plugins</groupId>
           <artifactId>maven-shade-plugin</artifactId>
-          <version>3.4.1</version>
+          <version>3.5.0</version>
           <dependencies>
             <dependency>
               <groupId>org.ow2.asm</groupId>
@@ -3587,7 +3618,7 @@
     <profile>
       <id>scala-2.13</id>
       <properties>
-        <scala.version>2.13.11</scala.version>
+        <scala.version>2.13.8</scala.version>
         <scala.binary.version>2.13</scala.binary.version>
       </properties>
       <build>
@@ -3646,10 +3677,6 @@
                   -->
                   <arg>-Wconf:cat=unused-imports&amp;src=org\/apache\/spark\/graphx\/impl\/VertexPartitionBase.scala:s</arg>
                   <arg>-Wconf:cat=unused-imports&amp;src=org\/apache\/spark\/graphx\/impl\/VertexPartitionBaseOps.scala:s</arg>
-                  <!--
-                    SPARK-40497 Upgrade Scala to 2.13.11 and suppress `Implicit definition should have explicit type`
-                  -->
-                  <arg>-Wconf:msg=Implicit definition should have explicit type:s</arg>
                 </args>
                 <compilerPlugins combine.self="override">
                 </compilerPlugins>

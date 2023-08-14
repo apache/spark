@@ -96,7 +96,7 @@ abstract class MaxMinBy extends DeclarativeAggregate with BinaryLike[Expression]
   usage = "_FUNC_(x, y) - Returns the value of `x` associated with the maximum value of `y`.",
   examples = """
     Examples:
-      > SELECT _FUNC_(x, y) FROM VALUES (('a', 10)), (('b', 50)), (('c', 20)) AS tab(x, y);
+      > SELECT _FUNC_(x, y) FROM VALUES ('a', 10), ('b', 50), ('c', 20) AS tab(x, y);
        b
   """,
   group = "agg_funcs",
@@ -119,7 +119,7 @@ case class MaxBy(valueExpr: Expression, orderingExpr: Expression) extends MaxMin
   usage = "_FUNC_(x, y) - Returns the value of `x` associated with the minimum value of `y`.",
   examples = """
     Examples:
-      > SELECT _FUNC_(x, y) FROM VALUES (('a', 10)), (('b', 50)), (('c', 20)) AS tab(x, y);
+      > SELECT _FUNC_(x, y) FROM VALUES ('a', 10), ('b', 50), ('c', 20) AS tab(x, y);
        a
   """,
   group = "agg_funcs",

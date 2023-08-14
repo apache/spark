@@ -95,6 +95,8 @@ trait PlanTestBase extends PredicateHelper with SQLHelper with SQLConfHelper { s
         udf.copy(resultId = ExprId(0))
       case udaf: PythonUDAF =>
         udaf.copy(resultId = ExprId(0))
+      case a: FunctionTableSubqueryArgumentExpression =>
+        a.copy(plan = normalizeExprIds(a.plan), exprId = ExprId(0))
     }
   }
 

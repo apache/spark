@@ -33,7 +33,7 @@ import org.apache.hadoop.hive.metastore.TableType
 import org.apache.hadoop.hive.metastore.api.{Database, EnvironmentContext, Function => HiveFunction, FunctionType, Index, MetaException, PrincipalType, ResourceType, ResourceUri}
 import org.apache.hadoop.hive.ql.Driver
 import org.apache.hadoop.hive.ql.io.AcidUtils
-import org.apache.hadoop.hive.ql.metadata.{Hive, Partition, Table}
+import org.apache.hadoop.hive.ql.metadata.{Hive, HiveException, Partition, Table}
 import org.apache.hadoop.hive.ql.plan.AddPartitionDesc
 import org.apache.hadoop.hive.ql.processors.{CommandProcessor, CommandProcessorFactory}
 import org.apache.hadoop.hive.ql.session.SessionState
@@ -50,7 +50,7 @@ import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, DateFormatter, Type
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution.datasources.PartitioningUtils
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{AtomicType, DateType, IntegralType, StringType}
+import org.apache.spark.sql.types.{AtomicType, DateType, IntegralType, IntegralTypeExpression, StringType}
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.Utils
 
@@ -987,7 +987,7 @@ private[client] class Shim_v0_13 extends Shim_v0_12 {
       def unapply(expr: Expression): Option[Attribute] = {
         expr match {
           case attr: Attribute => Some(attr)
-          case Cast(child @ IntegralType(), dt: IntegralType, _, _)
+          case Cast(child @ IntegralTypeExpression(), dt: IntegralType, _, _)
               if Cast.canUpCast(child.dataType.asInstanceOf[AtomicType], dt) => unapply(child)
           case _ => None
         }
@@ -1180,6 +1180,7 @@ private[client] class Shim_v0_13 extends Shim_v0_12 {
           })
         }
 
+        recordHiveCall()
         val allPartitionNames = hive.getPartitionNames(
           table.getDbName, table.getTableName, -1).asScala
         val partNames = allPartitionNames.filter { p =>
@@ -1633,8 +1634,23 @@ private[client] class Shim_v2_3 extends Shim_v2_1 {
       pattern: String,
       tableType: TableType): Seq[String] = {
     recordHiveCall()
-    getTablesByTypeMethod.invoke(hive, dbName, pattern, tableType)
-      .asInstanceOf[JList[String]].asScala.toSeq
+    try {
+      getTablesByTypeMethod.invoke(hive, dbName, pattern, tableType)
+        .asInstanceOf[JList[String]].asScala.toSeq
+    } catch {
+      case ex: InvocationTargetException if ex.getCause.isInstanceOf[HiveException] =>
+        val cause = ex.getCause.getCause
+        if (cause != null && cause.isInstanceOf[MetaException] &&
+          cause.getMessage != null &&
+          cause.getMessage.contains("Invalid method name: 'get_tables_by_type'")) {
+          // SparkUnsupportedOperationException (inherited from UnsupportedOperationException)
+          // is thrown when the Shim_v2_3#getTablesByType call returns no get_tables_by_type method.
+          // HiveClientImpl#listTablesByType will have fallback processing.
+          throw QueryExecutionErrors.getTablesByTypeUnsupportedByHiveVersionError()
+        } else {
+          throw ex
+        }
+    }
   }
 }
 

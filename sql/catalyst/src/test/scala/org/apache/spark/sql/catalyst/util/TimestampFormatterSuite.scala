@@ -24,8 +24,7 @@ import org.apache.commons.lang3.{JavaVersion, SystemUtils}
 import org.apache.spark.SparkUpgradeException
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils._
-import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.internal.SQLConf.LegacyBehaviorPolicy
+import org.apache.spark.sql.internal.{LegacyBehaviorPolicy, SQLConf}
 import org.apache.spark.unsafe.types.UTF8String
 
 class TimestampFormatterSuite extends DatetimeFormatterSuite {
@@ -412,7 +411,7 @@ class TimestampFormatterSuite extends DatetimeFormatterSuite {
     assert(formatter.format(date(1970, 1, 3)) == "03")
     assert(formatter.format(date(1970, 4, 9)) == "99")
 
-    if (System.getProperty("java.version").split("\\D+")(0).toInt < 9) {
+    if (SystemUtils.isJavaVersionAtMost(JavaVersion.JAVA_1_8)) {
       // https://bugs.openjdk.java.net/browse/JDK-8079628
       intercept[SparkUpgradeException] {
         formatter.format(date(1970, 4, 10))

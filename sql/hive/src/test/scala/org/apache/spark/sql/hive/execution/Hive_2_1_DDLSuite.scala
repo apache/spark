@@ -100,13 +100,16 @@ class Hive_2_1_DDLSuite extends SparkFunSuite with TestHiveSingleton {
   }
 
   test("SPARK-21617: ALTER TABLE with incompatible schema on Hive-compatible table") {
-    val exception = intercept[AnalysisException] {
-      testAlterTable(
-        "t1",
-        "CREATE TABLE t1 (c1 string) USING parquet",
-        StructType(Array(StructField("c2", IntegerType))))
-    }
-    assert(exception.getMessage().contains("types incompatible with the existing columns"))
+    checkError(
+      exception = intercept[AnalysisException] {
+        testAlterTable(
+          "t1",
+          "CREATE TABLE t1 (c1 string) USING parquet",
+          StructType(Array(StructField("c2", IntegerType))))
+      },
+      errorClass = null,
+      parameters = Map.empty
+    )
   }
 
   private def testAlterTable(

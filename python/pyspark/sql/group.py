@@ -32,7 +32,7 @@ if TYPE_CHECKING:
 __all__ = ["GroupedData"]
 
 
-def dfapi(f: Callable) -> Callable:
+def dfapi(f: Callable[..., DataFrame]) -> Callable[..., DataFrame]:
     def _api(self: "GroupedData") -> DataFrame:
         name = f.__name__
         jdf = getattr(self._jgd, name)()
@@ -43,7 +43,7 @@ def dfapi(f: Callable) -> Callable:
     return _api
 
 
-def df_varargs_api(f: Callable) -> Callable:
+def df_varargs_api(f: Callable[..., DataFrame]) -> Callable[..., DataFrame]:
     def _api(self: "GroupedData", *cols: str) -> DataFrame:
         name = f.__name__
         jdf = getattr(self._jgd, name)(_to_seq(self.session._sc, cols))

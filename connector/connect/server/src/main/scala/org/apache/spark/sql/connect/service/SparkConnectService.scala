@@ -17,34 +17,34 @@
 
 package org.apache.spark.sql.connect.service
 
-import java.util.concurrent.TimeUnit
+import java.net.InetSocketAddress
+import java.util.UUID
+import java.util.concurrent.{Callable, TimeUnit}
 
-import scala.annotation.tailrec
-import scala.collection.mutable.ArrayBuffer
-import scala.util.control.NonFatal
+import scala.jdk.CollectionConverters._
 
 import com.google.common.base.Ticker
 import com.google.common.cache.{CacheBuilder, RemovalListener, RemovalNotification}
-import com.google.protobuf.{Any => ProtoAny}
-import com.google.rpc.{Code => RPCCode, ErrorInfo, Status => RPCStatus}
-import io.grpc.{Server, Status}
+import com.google.protobuf.MessageLite
+import io.grpc.{BindableService, MethodDescriptor, Server, ServerMethodDefinition, ServerServiceDefinition}
+import io.grpc.MethodDescriptor.PrototypeMarshaller
 import io.grpc.netty.NettyServerBuilder
-import io.grpc.protobuf.StatusProto
+import io.grpc.protobuf.lite.ProtoLiteUtils
 import io.grpc.protobuf.services.ProtoReflectionService
 import io.grpc.stub.StreamObserver
 import org.apache.commons.lang3.StringUtils
-import org.apache.commons.lang3.exception.ExceptionUtils
-import org.json4s.JsonDSL._
-import org.json4s.jackson.JsonMethods.{compact, render}
 
-import org.apache.spark.{SparkEnv, SparkException, SparkThrowable}
-import org.apache.spark.api.python.PythonException
+import org.apache.spark.{SparkContext, SparkEnv, SparkSQLException}
 import org.apache.spark.connect.proto
-import org.apache.spark.connect.proto.{AddArtifactsRequest, AddArtifactsResponse}
+import org.apache.spark.connect.proto.{AddArtifactsRequest, AddArtifactsResponse, SparkConnectServiceGrpc}
+import org.apache.spark.connect.proto.SparkConnectServiceGrpc.AsyncService
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config.UI.UI_ENABLED
 import org.apache.spark.sql.SparkSession
-import org.apache.spark.sql.connect.config.Connect.{CONNECT_GRPC_BINDING_PORT, CONNECT_GRPC_MAX_INBOUND_MESSAGE_SIZE, CONNECT_JVM_STACK_TRACE_MAX_SIZE}
-import org.apache.spark.sql.internal.SQLConf.PYSPARK_JVM_STACKTRACE_ENABLED
+import org.apache.spark.sql.connect.config.Connect.{CONNECT_GRPC_BINDING_ADDRESS, CONNECT_GRPC_BINDING_PORT, CONNECT_GRPC_MARSHALLER_RECURSION_LIMIT, CONNECT_GRPC_MAX_INBOUND_MESSAGE_SIZE}
+import org.apache.spark.sql.connect.ui.{SparkConnectServerAppStatusStore, SparkConnectServerListener, SparkConnectServerTab}
+import org.apache.spark.sql.connect.utils.ErrorUtils
+import org.apache.spark.status.ElementTrackingStore
 
 /**
  * The SparkConnectService implementation.
@@ -54,105 +54,12 @@ import org.apache.spark.sql.internal.SQLConf.PYSPARK_JVM_STACKTRACE_ENABLED
  * @param debug
  *   delegates debug behavior to the handlers.
  */
-class SparkConnectService(debug: Boolean)
-    extends proto.SparkConnectServiceGrpc.SparkConnectServiceImplBase
-    with Logging {
-
-  private def allClasses(cl: Class[_]): Seq[Class[_]] = {
-    val classes = ArrayBuffer.empty[Class[_]]
-    if (cl != null && !cl.equals(classOf[java.lang.Object])) {
-      classes.append(cl) // Includes itself.
-    }
-
-    @tailrec
-    def appendSuperClasses(clazz: Class[_]): Unit = {
-      if (clazz == null || clazz.equals(classOf[java.lang.Object])) return
-      classes.append(clazz.getSuperclass)
-      appendSuperClasses(clazz.getSuperclass)
-    }
-
-    appendSuperClasses(cl)
-    classes.toSeq
-  }
-
-  private def buildStatusFromThrowable(st: Throwable, stackTraceEnabled: Boolean): RPCStatus = {
-    val errorInfo = ErrorInfo
-      .newBuilder()
-      .setReason(st.getClass.getName)
-      .setDomain("org.apache.spark")
-      .putMetadata("classes", compact(render(allClasses(st.getClass).map(_.getName))))
-
-    lazy val stackTrace = Option(ExceptionUtils.getStackTrace(st))
-    val withStackTrace = if (stackTraceEnabled && stackTrace.nonEmpty) {
-      val maxSize = SparkEnv.get.conf.get(CONNECT_JVM_STACK_TRACE_MAX_SIZE)
-      errorInfo.putMetadata("stackTrace", StringUtils.abbreviate(stackTrace.get, maxSize))
-    } else {
-      errorInfo
-    }
-
-    RPCStatus
-      .newBuilder()
-      .setCode(RPCCode.INTERNAL_VALUE)
-      .addDetails(ProtoAny.pack(withStackTrace.build()))
-      .setMessage(SparkConnectService.extractErrorMessage(st))
-      .build()
-  }
-
-  private def isPythonExecutionException(se: SparkException): Boolean = {
-    // See also pyspark.errors.exceptions.captured.convert_exception in PySpark.
-    se.getCause != null && se.getCause
-      .isInstanceOf[PythonException] && se.getCause.getStackTrace
-      .exists(_.toString.contains("org.apache.spark.sql.execution.python"))
-  }
-
-  /**
-   * Common exception handling function for the Analysis and Execution methods. Closes the stream
-   * after the error has been sent.
-   *
-   * @param opType
-   *   String value indicating the operation type (analysis, execution)
-   * @param observer
-   *   The GRPC response observer.
-   * @tparam V
-   * @return
-   */
-  private def handleError[V](
-      opType: String,
-      observer: StreamObserver[V],
-      userId: String,
-      sessionId: String): PartialFunction[Throwable, Unit] = {
-    val session =
-      SparkConnectService
-        .getOrCreateIsolatedSession(userId, sessionId)
-        .session
-    val stackTraceEnabled = session.conf.get(PYSPARK_JVM_STACKTRACE_ENABLED)
-
-    {
-      case se: SparkException if isPythonExecutionException(se) =>
-        logError(s"Error during: $opType. UserId: $userId. SessionId: $sessionId.", se)
-        observer.onError(
-          StatusProto.toStatusRuntimeException(
-            buildStatusFromThrowable(se.getCause, stackTraceEnabled)))
-
-      case e: Throwable if e.isInstanceOf[SparkThrowable] || NonFatal.apply(e) =>
-        logError(s"Error during: $opType. UserId: $userId. SessionId: $sessionId.", e)
-        observer.onError(
-          StatusProto.toStatusRuntimeException(buildStatusFromThrowable(e, stackTraceEnabled)))
-
-      case e: Throwable =>
-        logError(s"Error during: $opType. UserId: $userId. SessionId: $sessionId.", e)
-        observer.onError(
-          Status.UNKNOWN
-            .withCause(e)
-            .withDescription(StringUtils.abbreviate(e.getMessage, 2048))
-            .asRuntimeException())
-    }
-  }
+class SparkConnectService(debug: Boolean) extends AsyncService with BindableService with Logging {
 
   /**
    * This is the main entry method for Spark Connect and all calls to execute a plan.
    *
-   * The plan execution is delegated to the [[SparkConnectStreamHandler]]. All error handling
+   * The plan execution is delegated to the [[SparkConnectExecutePlanHandler]]. All error handling
    * should be directly implemented in the deferred implementation. But this method catches
    * generic errors.
    *
@@ -163,9 +70,9 @@ class SparkConnectService(debug: Boolean)
       request: proto.ExecutePlanRequest,
       responseObserver: StreamObserver[proto.ExecutePlanResponse]): Unit = {
     try {
-      new SparkConnectStreamHandler(responseObserver).handle(request)
+      new SparkConnectExecutePlanHandler(responseObserver).handle(request)
     } catch {
-      handleError(
+      ErrorUtils.handleError(
         "execute",
         observer = responseObserver,
         userId = request.getUserContext.getUserId,
@@ -191,7 +98,7 @@ class SparkConnectService(debug: Boolean)
     try {
       new SparkConnectAnalyzeHandler(responseObserver).handle(request)
     } catch {
-      handleError(
+      ErrorUtils.handleError(
         "analyze",
         observer = responseObserver,
         userId = request.getUserContext.getUserId,
@@ -212,7 +119,7 @@ class SparkConnectService(debug: Boolean)
     try {
       new SparkConnectConfigHandler(responseObserver).handle(request)
     } catch {
-      handleError(
+      ErrorUtils.handleError(
         "config",
         observer = responseObserver,
         userId = request.getUserContext.getUserId,
@@ -239,7 +146,7 @@ class SparkConnectService(debug: Boolean)
     try {
       new SparkConnectArtifactStatusesHandler(responseObserver).handle(request)
     } catch
-      handleError(
+      ErrorUtils.handleError(
         "artifactStatus",
         observer = responseObserver,
         userId = request.getUserContext.getUserId,
@@ -255,11 +162,87 @@ class SparkConnectService(debug: Boolean)
     try {
       new SparkConnectInterruptHandler(responseObserver).handle(request)
     } catch
-      handleError(
+      ErrorUtils.handleError(
         "interrupt",
         observer = responseObserver,
         userId = request.getUserContext.getUserId,
         sessionId = request.getSessionId)
+  }
+
+  /**
+   * Reattach and continue an ExecutePlan reattachable execution.
+   */
+  override def reattachExecute(
+      request: proto.ReattachExecuteRequest,
+      responseObserver: StreamObserver[proto.ExecutePlanResponse]): Unit = {
+    try {
+      new SparkConnectReattachExecuteHandler(responseObserver).handle(request)
+    } catch
+      ErrorUtils.handleError(
+        "reattachExecute",
+        observer = responseObserver,
+        userId = request.getUserContext.getUserId,
+        sessionId = request.getSessionId)
+  }
+
+  /**
+   * Release reattachable execution - either part of buffered response, or finish and release all.
+   */
+  override def releaseExecute(
+      request: proto.ReleaseExecuteRequest,
+      responseObserver: StreamObserver[proto.ReleaseExecuteResponse]): Unit = {
+    try {
+      new SparkConnectReleaseExecuteHandler(responseObserver).handle(request)
+    } catch
+      ErrorUtils.handleError(
+        "reattachExecute",
+        observer = responseObserver,
+        userId = request.getUserContext.getUserId,
+        sessionId = request.getSessionId)
+  }
+
+  private def methodWithCustomMarshallers(methodDesc: MethodDescriptor[MessageLite, MessageLite])
+      : MethodDescriptor[MessageLite, MessageLite] = {
+    val recursionLimit =
+      SparkEnv.get.conf.get(CONNECT_GRPC_MARSHALLER_RECURSION_LIMIT)
+    val requestMarshaller =
+      ProtoLiteUtils.marshallerWithRecursionLimit(
+        methodDesc.getRequestMarshaller
+          .asInstanceOf[PrototypeMarshaller[MessageLite]]
+          .getMessagePrototype,
+        recursionLimit)
+    val responseMarshaller =
+      ProtoLiteUtils.marshallerWithRecursionLimit(
+        methodDesc.getResponseMarshaller
+          .asInstanceOf[PrototypeMarshaller[MessageLite]]
+          .getMessagePrototype,
+        recursionLimit)
+    methodDesc.toBuilder
+      .setRequestMarshaller(requestMarshaller)
+      .setResponseMarshaller(responseMarshaller)
+      .build()
+  }
+
+  override def bindService(): ServerServiceDefinition = {
+    // First, get the SparkConnectService ServerServiceDefinition.
+    val serviceDef = SparkConnectServiceGrpc.bindService(this)
+
+    // Create a new ServerServiceDefinition builder
+    // using the name of the original service definition.
+    val builder = io.grpc.ServerServiceDefinition.builder(serviceDef.getServiceDescriptor.getName)
+
+    // Iterate through all the methods of the original service definition.
+    // For each method, add a customized method descriptor (with updated marshallers)
+    // and the original server call handler to the builder.
+    serviceDef.getMethods.asScala
+      .asInstanceOf[Iterable[ServerMethodDefinition[MessageLite, MessageLite]]]
+      .foreach(method =>
+        builder.addMethod(
+          methodWithCustomMarshallers(method.getMethodDescriptor),
+          method.getServerCallHandler))
+
+    // Build the final ServerServiceDefinition and return it.
+    builder.build()
   }
 }
 
@@ -269,7 +252,7 @@ class SparkConnectService(debug: Boolean)
  * Used to start the overall SparkConnect service and provides global state to manage the
  * different SparkSession from different users connecting to the cluster.
  */
-object SparkConnectService {
+object SparkConnectService extends Logging {
 
   private val CACHE_SIZE = 100
 
@@ -281,10 +264,13 @@ object SparkConnectService {
 
   private[connect] var server: Server = _
 
+  private[connect] var uiTab: Option[SparkConnectServerTab] = None
+  private[connect] var listener: SparkConnectServerListener = _
+
   // For testing purpose, it's package level private.
   private[connect] def localPort: Int = {
     assert(server != null)
-    // Return the actual local port being used. This can be different from the csonfigured port
+    // Return the actual local port being used. This can be different from the configured port
     // when the server binds to the port 0 as an example.
     server.getPort
   }
@@ -292,18 +278,15 @@ object SparkConnectService {
   private val userSessionMapping =
     cacheBuilder(CACHE_SIZE, CACHE_TIMEOUT_SECONDS).build[SessionCacheKey, SessionHolder]()
 
+  private[connect] lazy val executionManager = new SparkConnectExecutionManager()
+
   private[connect] val streamingSessionManager =
-    new SparkConnectStreamingQueryCache(sessionKeepAliveFn = { case (userId, sessionId) =>
-      // Use getIfPresent() rather than get() to prevent accidental loading.
-      userSessionMapping.getIfPresent((userId, sessionId))
-    })
+    new SparkConnectStreamingQueryCache()
 
   private class RemoveSessionListener extends RemovalListener[SessionCacheKey, SessionHolder] {
     override def onRemoval(
         notification: RemovalNotification[SessionCacheKey, SessionHolder]): Unit = {
-      val SessionHolder(userId, sessionId, session) = notification.getValue
-      val blockManager = session.sparkContext.env.blockManager
-      blockManager.removeCache(userId, sessionId)
+      notification.getValue.expireSession()
     }
   }
 
@@ -321,29 +304,96 @@ object SparkConnectService {
   }
 
   /**
-   * Based on the `key` find or create a new SparkSession.
+   * Based on the userId and sessionId, find or create a new SparkSession.
    */
   def getOrCreateIsolatedSession(userId: String, sessionId: String): SessionHolder = {
-    userSessionMapping.get(
-      (userId, sessionId),
+    getSessionOrDefault(
+      userId,
+      sessionId,
       () => {
-        SessionHolder(userId, sessionId, newIsolatedSession())
+        val holder = SessionHolder(userId, sessionId, newIsolatedSession())
+        holder.initializeSession()
+        holder
       })
+  }
+
+  /**
+   * Based on the userId and sessionId, find an existing SparkSession or throw error.
+   */
+  def getIsolatedSession(userId: String, sessionId: String): SessionHolder = {
+    getSessionOrDefault(
+      userId,
+      sessionId,
+      () => {
+        logDebug(s"Session not found: ($userId, $sessionId)")
+        throw new SparkSQLException(
+          errorClass = "INVALID_HANDLE.SESSION_NOT_FOUND",
+          messageParameters = Map("handle" -> sessionId))
+      })
+  }
+
+  private def getSessionOrDefault(
+      userId: String,
+      sessionId: String,
+      default: Callable[SessionHolder]): SessionHolder = {
+    // Validate that sessionId is formatted like UUID before creating session.
+    try {
+      UUID.fromString(sessionId).toString
+    } catch {
+      case _: IllegalArgumentException =>
+        throw new SparkSQLException(
+          errorClass = "INVALID_HANDLE.FORMAT",
+          messageParameters = Map("handle" -> sessionId))
+    }
+    userSessionMapping.get((userId, sessionId), default)
+  }
+
+  /**
+   * Used for testing
+   */
+  private[connect] def invalidateAllSessions(): Unit = {
+    userSessionMapping.invalidateAll()
+  }
+
+  /**
+   * Used for testing.
+   */
+  private[connect] def putSessionForTesting(sessionHolder: SessionHolder): Unit = {
+    userSessionMapping.put((sessionHolder.userId, sessionHolder.sessionId), sessionHolder)
   }
 
   private def newIsolatedSession(): SparkSession = {
     SparkSession.active.newSession()
   }
 
+  private def createListenerAndUI(sc: SparkContext): Unit = {
+    val kvStore = sc.statusStore.store.asInstanceOf[ElementTrackingStore]
+    listener = new SparkConnectServerListener(kvStore, sc.conf)
+    sc.listenerBus.addToStatusQueue(listener)
+    uiTab = if (sc.getConf.get(UI_ENABLED)) {
+      Some(
+        new SparkConnectServerTab(
+          new SparkConnectServerAppStatusStore(kvStore),
+          SparkConnectServerTab.getSparkUI(sc)))
+    } else {
+      None
+    }
+  }
+
   /**
-   * Starts the GRPC Serivce.
+   * Starts the GRPC Service.
    */
   private def startGRPCService(): Unit = {
     val debugMode = SparkEnv.get.conf.getBoolean("spark.connect.grpc.debug.enabled", true)
+    val bindAddress = SparkEnv.get.conf.get(CONNECT_GRPC_BINDING_ADDRESS)
     val port = SparkEnv.get.conf.get(CONNECT_GRPC_BINDING_PORT)
-    val sb = NettyServerBuilder
-      .forPort(port)
-      .maxInboundMessageSize(SparkEnv.get.conf.get(CONNECT_GRPC_MAX_INBOUND_MESSAGE_SIZE).toInt)
+    val sb = bindAddress match {
+      case Some(hostname) =>
+        logInfo(s"start GRPC service at: $hostname")
+        NettyServerBuilder.forAddress(new InetSocketAddress(hostname, port))
+      case _ => NettyServerBuilder.forPort(port)
+    }
+    sb.maxInboundMessageSize(SparkEnv.get.conf.get(CONNECT_GRPC_MAX_INBOUND_MESSAGE_SIZE).toInt)
       .addService(new SparkConnectService(debugMode))
 
     // Add all registered interceptors to the server builder.
@@ -359,8 +409,9 @@ object SparkConnectService {
   }
 
   // Starts the service
-  def start(): Unit = {
+  def start(sc: SparkContext): Unit = {
     startGRPCService()
+    createListenerAndUI(sc)
   }
 
   def stop(timeout: Option[Long] = None, unit: Option[TimeUnit] = None): Unit = {
@@ -372,7 +423,10 @@ object SparkConnectService {
         server.shutdownNow()
       }
     }
+    streamingSessionManager.shutdown()
+    executionManager.shutdown()
     userSessionMapping.invalidateAll()
+    uiTab.foreach(_.detach())
   }
 
   def extractErrorMessage(st: Throwable): String = {

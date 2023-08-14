@@ -38,7 +38,7 @@ def determine_modules_for_files(filenames):
     and `README.md` is always ignored too.
 
     >>> sorted(x.name for x in determine_modules_for_files(["python/pyspark/a.py", "sql/core/foo"]))
-    ['pyspark-core', 'sql']
+    ['pyspark-core', 'pyspark-errors', 'sql']
     >>> [x.name for x in determine_modules_for_files(["file_not_matched_by_any_subproject"])]
     ['root']
     >>> [x.name for x in determine_modules_for_files(["appveyor.yml", "sql/README.md"])]
@@ -112,25 +112,28 @@ def determine_modules_to_test(changed_modules, deduplicated=True):
     >>> sorted([x.name for x in determine_modules_to_test([modules.sql])])
     ... # doctest: +NORMALIZE_WHITESPACE
     ['avro', 'connect', 'docker-integration-tests', 'examples', 'hive', 'hive-thriftserver',
-     'mllib', 'protobuf', 'pyspark-connect', 'pyspark-ml', 'pyspark-mllib', 'pyspark-pandas',
-     'pyspark-pandas-connect', 'pyspark-pandas-slow', 'pyspark-pandas-slow-connect', 'pyspark-sql',
-     'repl', 'sparkr', 'sql', 'sql-kafka-0-10']
+     'mllib', 'protobuf', 'pyspark-connect', 'pyspark-ml', 'pyspark-ml-connect', 'pyspark-mllib',
+     'pyspark-pandas', 'pyspark-pandas-connect', 'pyspark-pandas-slow',
+     'pyspark-pandas-slow-connect', 'pyspark-sql', 'pyspark-testing', 'repl', 'sparkr', 'sql',
+     'sql-kafka-0-10']
     >>> sorted([x.name for x in determine_modules_to_test(
     ...     [modules.sparkr, modules.sql], deduplicated=False)])
     ... # doctest: +NORMALIZE_WHITESPACE
     ['avro', 'connect', 'docker-integration-tests', 'examples', 'hive', 'hive-thriftserver',
-     'mllib', 'protobuf', 'pyspark-connect', 'pyspark-ml', 'pyspark-mllib', 'pyspark-pandas',
-     'pyspark-pandas-connect', 'pyspark-pandas-slow', 'pyspark-pandas-slow-connect', 'pyspark-sql',
-     'repl', 'sparkr', 'sql', 'sql-kafka-0-10']
+     'mllib', 'protobuf', 'pyspark-connect', 'pyspark-ml', 'pyspark-ml-connect', 'pyspark-mllib',
+     'pyspark-pandas', 'pyspark-pandas-connect', 'pyspark-pandas-slow',
+     'pyspark-pandas-slow-connect', 'pyspark-sql', 'pyspark-testing', 'repl', 'sparkr', 'sql',
+     'sql-kafka-0-10']
     >>> sorted([x.name for x in determine_modules_to_test(
     ...     [modules.sql, modules.core], deduplicated=False)])
     ... # doctest: +NORMALIZE_WHITESPACE
     ['avro', 'catalyst', 'connect', 'core', 'docker-integration-tests', 'examples', 'graphx',
      'hive', 'hive-thriftserver', 'mllib', 'mllib-local', 'protobuf', 'pyspark-connect',
-     'pyspark-core', 'pyspark-ml', 'pyspark-mllib', 'pyspark-pandas', 'pyspark-pandas-connect',
-     'pyspark-pandas-slow', 'pyspark-pandas-slow-connect', 'pyspark-resource', 'pyspark-sql',
-     'pyspark-streaming', 'repl', 'root', 'sparkr', 'sql', 'sql-kafka-0-10', 'streaming',
-     'streaming-kafka-0-10', 'streaming-kinesis-asl']
+     'pyspark-core', 'pyspark-ml', 'pyspark-ml-connect', 'pyspark-mllib', 'pyspark-pandas',
+     'pyspark-pandas-connect', 'pyspark-pandas-slow', 'pyspark-pandas-slow-connect',
+     'pyspark-resource', 'pyspark-sql', 'pyspark-streaming', 'pyspark-testing', 'repl',
+     'root', 'sparkr', 'sql', 'sql-kafka-0-10', 'streaming', 'streaming-kafka-0-10',
+     'streaming-kinesis-asl']
     """
     modules_to_test = set()
     for module in changed_modules:

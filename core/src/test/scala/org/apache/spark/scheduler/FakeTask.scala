@@ -30,7 +30,7 @@ class FakeTask(
     serializedTaskMetrics: Array[Byte] =
       SparkEnv.get.closureSerializer.newInstance().serialize(TaskMetrics.registered).array(),
     isBarrier: Boolean = false)
-  extends Task[Int](stageId, 0, partitionId, 1, JobArtifactSet.defaultArtifactSet(),
+  extends Task[Int](stageId, 0, partitionId, 1, JobArtifactSet.defaultJobArtifactSet,
     new Properties, serializedTaskMetrics, isBarrier = isBarrier) {
 
   override def runTask(context: TaskContext): Int = 0
@@ -96,7 +96,7 @@ object FakeTask {
     val tasks = Array.tabulate[Task[_]](numTasks) { i =>
       new ShuffleMapTask(stageId, stageAttemptId, null, new Partition {
         override def index: Int = i
-      }, 1, prefLocs(i), JobArtifactSet.defaultArtifactSet(), new Properties,
+      }, 1, prefLocs(i), JobArtifactSet.defaultJobArtifactSet, new Properties,
         SparkEnv.get.closureSerializer.newInstance().serialize(TaskMetrics.registered).array())
     }
     new TaskSet(tasks, stageId, stageAttemptId, priority = priority, null,

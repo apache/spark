@@ -22,6 +22,7 @@ import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.{Attribute, LeafExpression, Unevaluable}
 import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, Statistics}
 import org.apache.spark.sql.catalyst.trees.TreePattern.{TreePattern, UNRESOLVED_FUNC}
+import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.connector.catalog.{CatalogPlugin, FunctionCatalog, Identifier, Table, TableCatalog}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
@@ -43,7 +44,7 @@ case class UnresolvedNamespace(multipartIdentifier: Seq[String]) extends Unresol
 case class UnresolvedTable(
     multipartIdentifier: Seq[String],
     commandName: String,
-    relationTypeMismatchHint: Option[String]) extends UnresolvedLeafNode
+    hint: Boolean = false) extends UnresolvedLeafNode
 
 /**
  * Holds the name of a view that has yet to be looked up. It will be resolved to
@@ -53,7 +54,7 @@ case class UnresolvedView(
     multipartIdentifier: Seq[String],
     commandName: String,
     allowTemp: Boolean,
-    relationTypeMismatchHint: Option[String]) extends UnresolvedLeafNode
+    hint: Boolean) extends UnresolvedLeafNode
 
 /**
  * Holds the name of a table or view that has yet to be looked up in a catalog. It will
@@ -162,7 +163,7 @@ object ResolvedTable {
       identifier: Identifier,
       table: Table): ResolvedTable = {
     val schema = CharVarcharUtils.replaceCharVarcharWithStringInSchema(table.columns.asSchema)
-    ResolvedTable(catalog, identifier, table, schema.toAttributes)
+    ResolvedTable(catalog, identifier, table, toAttributes(schema))
   }
 }
 
@@ -231,5 +232,5 @@ case class ResolvedIdentifier(
 // A fake v2 catalog to hold temp views.
 object FakeSystemCatalog extends CatalogPlugin {
   override def initialize(name: String, options: CaseInsensitiveStringMap): Unit = {}
-  override def name(): String = "SYSTEM"
+  override def name(): String = "system"
 }

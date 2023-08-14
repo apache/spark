@@ -1042,6 +1042,14 @@ Apart from these, the following properties are also available, and may be useful
   <td>1.2.0</td>
 </tr>
 <tr>
+  <td><code>spark.shuffle.io.connectionCreationTimeout</code></td>
+  <td>value of <code>spark.shuffle.io.connectionTimeout</code></td>
+  <td>
+    Timeout for establishing a connection between the shuffle servers and clients.
+  </td>
+  <td>3.2.0</td>
+</tr>
+<tr>
   <td><code>spark.shuffle.service.enabled</code></td>
   <td>false</td>
   <td>
@@ -1216,6 +1224,14 @@ Apart from these, the following properties are also available, and may be useful
     for at least `connectionTimeout`.
   </td>
   <td>1.6.0</td>
+</tr>
+<tr>
+  <td><code>spark.files.io.connectionCreationTimeout</code></td>
+  <td>value of <code>spark.files.io.connectionTimeout</code></td>
+  <td>
+    Timeout for establishing a connection for fetching files in Spark RPC environments.
+  </td>
+  <td>3.2.0</td>
 </tr>
 <tr>
   <td><code>spark.shuffle.checksum.enabled</code></td>
@@ -2382,6 +2398,14 @@ Apart from these, the following properties are also available, and may be useful
   <td>1.3.0</td>
 </tr>
 <tr>
+  <td><code>spark.network.timeoutInterval</code></td>
+  <td>60s</td>
+  <td>
+    Interval for the driver to check and expire dead executors.
+  </td>
+  <td>1.3.2</td>
+</tr>
+<tr>
   <td><code>spark.network.io.preferDirectBufs</code></td>
   <td>true</td>
   <td>
@@ -2441,6 +2465,14 @@ Apart from these, the following properties are also available, and may be useful
     `connectionTimeout`.
   </td>
   <td>1.2.0</td>
+</tr>
+<tr>
+  <td><code>spark.rpc.io.connectionCreationTimeout</code></td>
+  <td>value of <code>spark.rpc.io.connectionTimeout</code></td>
+  <td>
+    Timeout for establishing a connection between RPC peers.
+  </td>
+  <td>3.2.0</td>
 </tr>
 </table>
 
@@ -2988,8 +3020,11 @@ Apart from these, the following properties are also available, and may be useful
     For more detail, see the description
     <a href="job-scheduling.html#dynamic-resource-allocation">here</a>.
     <br><br>
-    This requires <code>spark.shuffle.service.enabled</code> or
-    <code>spark.dynamicAllocation.shuffleTracking.enabled</code> to be set.
+    This requires one of the following conditions: 
+    1) enabling external shuffle service through <code>spark.shuffle.service.enabled</code>, or
+    2) enabling shuffle tracking through <code>spark.dynamicAllocation.shuffleTracking.enabled</code>, or
+    3) enabling shuffle blocks decommission through <code>spark.decommission.enabled</code> and <code>spark.storage.decommission.shuffleBlocks.enabled</code>, or
+    4) (Experimental) configuring <code>spark.shuffle.sort.io.plugin.class</code> to use a custom <code>ShuffleDataIO</code> who's <code>ShuffleDriverComponents</code> supports reliable storage.
     The following configurations are also relevant:
     <code>spark.dynamicAllocation.minExecutors</code>,
     <code>spark.dynamicAllocation.maxExecutors</code>, and
