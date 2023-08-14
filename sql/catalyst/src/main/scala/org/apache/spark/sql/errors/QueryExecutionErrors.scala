@@ -1422,13 +1422,6 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
         "objSerializer" -> objSerializer.toString()))
   }
 
-  def cannotGetOuterPointerForInnerClassError(innerCls: Class[_]): SparkRuntimeException = {
-    new SparkRuntimeException(
-      errorClass = "_LEGACY_ERROR_TEMP_2154",
-      messageParameters = Map(
-        "innerCls" -> innerCls.getName))
-  }
-
   def unsupportedOperandTypeForSizeFunctionError(
       dataType: DataType): SparkUnsupportedOperationException = {
     new SparkUnsupportedOperationException(
