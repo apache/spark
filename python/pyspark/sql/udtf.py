@@ -29,7 +29,7 @@ from py4j.java_gateway import JavaObject
 
 from pyspark.errors import PySparkAttributeError, PySparkRuntimeError, PySparkTypeError
 from pyspark.rdd import PythonEvalType
-from pyspark.sql.column import _to_java_column, _to_seq
+from pyspark.sql.column import _to_java_column, _to_java_expr, _to_seq
 from pyspark.sql.pandas.utils import require_minimum_pandas_version, require_minimum_pyarrow_version
 from pyspark.sql.types import DataType, StructType, _parse_datatype_string
 from pyspark.sql.udf import _wrap_function
@@ -148,9 +148,9 @@ def _vectorize_udtf(cls: Type) -> Type:
     # Wrap the exception thrown from the UDTF in a PySparkRuntimeError.
     def wrap_func(f: Callable[..., Any]) -> Callable[..., Any]:
         @wraps(f)
-        def evaluate(*a: Any) -> Any:
+        def evaluate(*a: Any, **kw: Any) -> Any:
             try:
-                return f(*a)
+                return f(*a, **kw)
             except Exception as e:
                 raise PySparkRuntimeError(
                     error_class="UDTF_EXEC_ERROR",
@@ -168,18 +168,22 @@ def _vectorize_udtf(cls: Type) -> Type:
         ):
 
             @staticmethod
-            def analyze(*args: AnalyzeArgument) -> AnalyzeResult:
-                return cls.analyze(*args)
+            def analyze(*args: AnalyzeArgument, **kwargs: AnalyzeArgument) -> AnalyzeResult:
+                return cls.analyze(*args, **kwargs)
 
-        def eval(self, *args: pd.Series) -> Iterator[pd.DataFrame]:
-            if len(args) == 0:
+        def eval(self, *args: pd.Series, **kwargs: pd.Series) -> Iterator[pd.DataFrame]:
+            if len(args) == 0 and len(kwargs) == 0:
                 yield pd.DataFrame(wrap_func(self.func.eval)())
             else:
                 # Create tuples from the input pandas Series, each tuple
                 # represents a row across all Series.
-                row_tuples = zip(*args)
+                keys = list(kwargs.keys())
+                len_args = len(args)
+                row_tuples = zip(*args, *[kwargs[key] for key in keys])
                 for row in row_tuples:
-                    res = wrap_func(self.func.eval)(*row)
+                    res = wrap_func(self.func.eval)(
+                        *row[:len_args], **{key: row[len_args + i] for i, key in enumerate(keys)}
+                    )
                     if res is not None and not isinstance(res, Iterable):
                         raise PySparkRuntimeError(
                             error_class="UDTF_RETURN_NOT_ITERABLE",
@@ -339,14 +343,24 @@ class UserDefinedTableFunction:
             )
         return judtf
 
-    def __call__(self, *cols: "ColumnOrName") -> "DataFrame":
+    def __call__(self, *args: "ColumnOrName", **kwargs: "ColumnOrName") -> "DataFrame":
         from pyspark.sql import DataFrame, SparkSession
 
         spark = SparkSession._getActiveSessionOrCreate()
         sc = spark.sparkContext
 
+        assert sc._jvm is not None
+        jcols = [_to_java_column(arg) for arg in args] + [
+            sc._jvm.Column(
+                sc._jvm.org.apache.spark.sql.catalyst.expressions.NamedArgumentExpression(
+                    key, _to_java_expr(value)
+                )
+            )
+            for key, value in kwargs.items()
+        ]
+
         judtf = self._judtf
-        jPythonUDTF = judtf.apply(spark._jsparkSession, _to_seq(sc, cols, _to_java_column))
+        jPythonUDTF = judtf.apply(spark._jsparkSession, _to_seq(sc, jcols))
         return DataFrame(jPythonUDTF, spark)
 
     def asNondeterministic(self) -> "UserDefinedTableFunction":

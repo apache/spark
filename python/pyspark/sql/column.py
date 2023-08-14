@@ -73,9 +73,23 @@ def _to_java_expr(col: "ColumnOrName") -> JavaObject:
     return _to_java_column(col).expr()
 
 
+@overload
+def _to_seq(sc: SparkContext, cols: Iterable[JavaObject]) -> JavaObject:
+    pass
+
+
+@overload
 def _to_seq(
     sc: SparkContext,
     cols: Iterable["ColumnOrName"],
+    converter: Optional[Callable[["ColumnOrName"], JavaObject]],
+) -> JavaObject:
+    pass
+
+
+def _to_seq(
+    sc: SparkContext,
+    cols: Union[Iterable["ColumnOrName"], Iterable[JavaObject]],
     converter: Optional[Callable[["ColumnOrName"], JavaObject]] = None,
 ) -> JavaObject:
     """
