@@ -276,4 +276,17 @@ class ReplE2ESuite extends RemoteSparkSession with BeforeAndAfterEach {
     val output = runCommandsInShell(input)
     assertContains("Array[MyTestClass] = Array(MyTestClass(1), MyTestClass(3))", output)
   }
+
+  test("REPL class in encoder") {
+    val input = """
+        |case class MyTestClass(value: Int)
+        |spark.range(3).
+        |  select(col("id").cast("int").as("value")).
+        |  as[MyTestClass].
+        |  map(mtc => mtc.value).
+        |  collect()
+      """.stripMargin
+    val output = runCommandsInShell(input)
+    assertContains("Array[Int] = Array(0, 1, 2)", output)
+  }
 }
