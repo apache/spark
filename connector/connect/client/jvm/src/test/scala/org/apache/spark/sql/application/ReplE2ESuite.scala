@@ -265,8 +265,7 @@ class ReplE2ESuite extends RemoteSparkSession with BeforeAndAfterEach {
   }
 
   test("Collect REPL generated class") {
-    val input =
-      """
+    val input = """
         |case class MyTestClass(value: Int)
         |spark.range(4).
         |  filter($"id" % 2 === 1).
