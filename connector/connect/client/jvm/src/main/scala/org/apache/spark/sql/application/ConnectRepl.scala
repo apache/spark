@@ -85,7 +85,7 @@ object ConnectRepl {
         |import org.apache.spark.sql.functions._
         |import spark.implicits._
         |import spark.sql
-        |import org.apache.spark.sql.application.AmmoniteClassFinder
+        |import org.apache.spark.sql.connect.client.AmmoniteClassFinder
         |
         |spark.registerClassFinder(new AmmoniteClassFinder(repl.sess))
         |""".stripMargin

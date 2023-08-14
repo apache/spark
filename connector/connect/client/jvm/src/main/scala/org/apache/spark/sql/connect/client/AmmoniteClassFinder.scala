@@ -14,15 +14,13 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.sql.application
+package org.apache.spark.sql.connect.client
 
 import java.net.URL
 import java.nio.file.Paths
 
 import ammonite.repl.api.Session
 import ammonite.runtime.SpecialClassLoader
-
-import org.apache.spark.sql.connect.client.{Artifact, ClassFinder}
 
 /**
  * A special [[ClassFinder]] for the Ammonite REPL to handle in-memory class files.
