@@ -387,7 +387,7 @@ object SetMetastoreURLTest extends Logging {
     val builder = SparkSession.builder()
       .config(sparkConf)
       .config(UI_ENABLED.key, "false")
-      .config(HiveUtils.HIVE_METASTORE_VERSION.key, "2.3.9")
+      .config(HiveUtils.HIVE_METASTORE_VERSION.key, "2.3.101")
       // The issue described in SPARK-16901 only appear when
       // spark.sql.hive.metastore.jars is not set to builtin.
       .config(HiveUtils.HIVE_METASTORE_JARS.key, "maven")
@@ -698,7 +698,7 @@ object SparkSQLConfTest extends Logging {
         val filteredSettings = super.getAll.filterNot(e => isMetastoreSetting(e._1))
 
         // Always add these two metastore settings at the beginning.
-        (HiveUtils.HIVE_METASTORE_VERSION.key -> "2.3.9") +:
+        (HiveUtils.HIVE_METASTORE_VERSION.key -> "2.3.101") +:
         (HiveUtils.HIVE_METASTORE_JARS.key -> "maven") +:
         filteredSettings
       }
@@ -726,7 +726,7 @@ object SPARK_9757 extends QueryTest {
     val hiveWarehouseLocation = Utils.createTempDir()
     val sparkContext = new SparkContext(
       new SparkConf()
-        .set(HiveUtils.HIVE_METASTORE_VERSION.key, "2.3.9")
+        .set(HiveUtils.HIVE_METASTORE_VERSION.key, "2.3.101")
         .set(HiveUtils.HIVE_METASTORE_JARS.key, "maven")
         .set(UI_ENABLED, false)
         .set(WAREHOUSE_PATH.key, hiveWarehouseLocation.toString))

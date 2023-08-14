@@ -132,8 +132,8 @@
     <hive.group>org.apache.hive</hive.group>
     <hive.classifier>core</hive.classifier>
     <!-- Version used in Maven Hive dependency -->
-    <hive.version>2.3.9</hive.version>
-    <hive23.version>2.3.9</hive23.version>
+    <hive.version>2.3.101</hive.version>
+    <hive23.version>2.3.101</hive23.version>
     <!-- Version used for internal directory structure -->
     <hive.version.short>2.3</hive.version.short>
     <!-- note that this should be compatible with Kafka brokers version 0.10 and up -->
@@ -199,14 +199,14 @@
     <!-- org.apache.commons/commons-pool2/-->
     <commons-pool2.version>2.12.0</commons-pool2.version>
     <datanucleus-core.version>4.1.17</datanucleus-core.version>
-    <guava.version>14.0.1</guava.version>
+    <guava.version>33.0.0-jre</guava.version>
     <janino.version>3.1.9</janino.version>
     <jersey.version>3.0.12</jersey.version>
     <joda.version>2.12.7</joda.version>
     <jodd.version>3.5.2</jodd.version>
     <jsr305.version>3.0.0</jsr305.version>
     <jaxb.version>2.2.11</jaxb.version>
-    <libthrift.version>0.12.0</libthrift.version>
+    <libthrift.version>0.16.0</libthrift.version>
     <antlr4.version>4.13.1</antlr4.version>
     <jpam.version>1.1</jpam.version>
     <selenium.version>4.17.0</selenium.version>
@@ -1951,19 +1951,6 @@
           </exclusion>
         </exclusions>
       </dependency>
-      <!-- Hive 2.3 need this to init Hive's FunctionRegistry -->
-      <dependency>
-        <groupId>org.codehaus.jackson</groupId>
-        <artifactId>jackson-core-asl</artifactId>
-        <version>${codehaus.jackson.version}</version>
-        <scope>${hive.jackson.scope}</scope>
-      </dependency>
-      <dependency>
-        <groupId>org.codehaus.jackson</groupId>
-        <artifactId>jackson-mapper-asl</artifactId>
-        <version>${codehaus.jackson.version}</version>
-        <scope>${hive.jackson.scope}</scope>
-      </dependency>
       <dependency>
         <groupId>${hive.group}</groupId>
         <artifactId>hive-beeline</artifactId>
@@ -2300,8 +2287,8 @@
             <artifactId>janino</artifactId>
           </exclusion>
           <exclusion>
-            <groupId>org.pentaho</groupId>
-            <artifactId>pentaho-aggdesigner-algorithm</artifactId>
+            <groupId>net.hydromatic</groupId>
+            <artifactId>aggdesigner-algorithm</artifactId>
           </exclusion>
           <!-- End of Hive 2.3 exclusion -->
         </exclusions>
@@ -2370,6 +2357,10 @@
           <exclusion>
             <groupId>org.codehaus.groovy</groupId>
             <artifactId>groovy-all</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>com.lmax</groupId>
+            <artifactId>disruptor</artifactId>
           </exclusion>
         </exclusions>
       </dependency>
@@ -2821,6 +2812,10 @@
           <exclusion>
             <groupId>org.slf4j</groupId>
             <artifactId>slf4j-api</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>javax.annotation</groupId>
+            <artifactId>javax.annotation-api</artifactId>
           </exclusion>
         </exclusions>
       </dependency>
@@ -3461,6 +3456,7 @@
             <includes>
               <include>org.spark-project.spark:unused</include>
               <include>com.google.guava:guava</include>
+              <include>com.google.guava:failureaccess</include>
               <include>org.jpmml:*</include>
             </includes>
           </artifactSet>
