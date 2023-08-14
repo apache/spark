@@ -554,7 +554,7 @@ class RDD(Generic[T_co]):
         self._jrdd.unpersist(blocking)
         return self
 
-    def checkpoint(self) -> None:
+    def checkpoint(self, eager: bool = False) -> None:
         """
         Mark this RDD for checkpointing. It will be saved to a file inside the
         checkpoint directory set with :meth:`SparkContext.setCheckpointDir` and
@@ -564,6 +564,13 @@ class RDD(Generic[T_co]):
         on a file will require recomputation.
 
         .. versionadded:: 0.7.0
+
+        Parameters
+        ----------
+        eager : bool, optional, default False
+            Whether to checkpoint this :class:`RDD` immediately.
+
+            .. versionadded:: 4.0.0
 
         See Also
         --------
@@ -593,9 +600,16 @@ class RDD(Generic[T_co]):
         True
         >>> rdd.getCheckpointFile() == None
         False
+
+        >>> rdd2 = sc.range(5)
+        >>> rdd2.checkpoint(True)
+        >>> rdd2.is_checkpointed
+        True
+        >>> rdd2.getCheckpointFile() == None
+        False
         """
         self.is_checkpointed = True
-        self._jrdd.rdd().checkpoint()
+        self._jrdd.rdd().checkpoint(eager)
 
     def isCheckpointed(self) -> bool:
         """
