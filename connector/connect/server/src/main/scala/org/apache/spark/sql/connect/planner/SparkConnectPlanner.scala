@@ -508,7 +508,8 @@ class SparkConnectPlanner(val sessionHolder: SessionHolder) extends Logging {
     val commonUdf = rel.getFunc
     commonUdf.getFunctionCase match {
       case proto.CommonInlineUserDefinedFunction.FunctionCase.SCALAR_SCALA_UDF =>
-        transformTypedMapPartitions(commonUdf, baseRel)
+        val analyzed = session.sessionState.executePlan(baseRel).analyzed
+        transformTypedMapPartitions(commonUdf, analyzed)
       case proto.CommonInlineUserDefinedFunction.FunctionCase.PYTHON_UDF =>
         val pythonUdf = transformPythonUDF(commonUdf)
         val isBarrier = if (rel.hasIsBarrier) rel.getIsBarrier else false
@@ -3061,8 +3062,9 @@ class SparkConnectPlanner(val sessionHolder: SessionHolder) extends Logging {
             .asJava)
 
       case StreamingQueryManagerCommand.CommandCase.GET_QUERY =>
-        val query = session.streams.get(command.getGetQuery)
-        respBuilder.setQuery(buildStreamingQueryInstance(query))
+        Option(session.streams.get(command.getGetQuery)).foreach { q =>
+          respBuilder.setQuery(buildStreamingQueryInstance(q))
+        }
 
       case StreamingQueryManagerCommand.CommandCase.AWAIT_ANY_TERMINATION =>
         if (command.getAwaitAnyTermination.hasTimeoutMs) {

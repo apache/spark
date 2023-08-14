@@ -24,7 +24,8 @@ import org.apache.spark.{SparkEnv, SparkSQLException}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.connect.common.ProtoUtils
 import org.apache.spark.sql.connect.config.Connect.{CONNECT_EXECUTE_REATTACHABLE_SENDER_MAX_STREAM_DURATION, CONNECT_EXECUTE_REATTACHABLE_SENDER_MAX_STREAM_SIZE}
-import org.apache.spark.sql.connect.service.ExecuteHolder
+import org.apache.spark.sql.connect.service.{ExecuteHolder, SparkConnectService}
+import org.apache.spark.sql.connect.utils.ErrorUtils
 
 /**
  * ExecuteGrpcResponseSender sends responses to the GRPC stream. It consumes responses from
@@ -37,12 +38,14 @@ import org.apache.spark.sql.connect.service.ExecuteHolder
 private[connect] class ExecuteGrpcResponseSender[T <: Message](
     val executeHolder: ExecuteHolder,
     grpcObserver: StreamObserver[T])
-    extends Logging {
+    extends Logging { self =>
 
+  // the executionObserver object is used as a synchronization lock between the
+  // ExecuteGrpcResponseSender consumer and ExecuteResponseObserver producer.
   private var executionObserver = executeHolder.responseObserver
     .asInstanceOf[ExecuteResponseObserver[T]]
 
-  private var detached = false
+  private var interrupted = false
 
   // Signal to wake up when grpcCallObserver.isReady()
   private val grpcCallObserverReadySignal = new Object
@@ -51,42 +54,50 @@ private[connect] class ExecuteGrpcResponseSender[T <: Message](
   private var consumeSleep = 0L
   private var sendSleep = 0L
 
+  // Thread handling the processing, in case it's done in the background.
+  private var backgroundThread: Option[Thread] = None
+
   /**
-   * Detach this sender from executionObserver. Called only from executionObserver that this
-   * sender is attached to. Lock on executionObserver is held, and notifyAll will wake up this
-   * sender if sleeping.
+   * Interrupt this sender and make it exit.
    */
-  def detach(): Unit = executionObserver.synchronized {
-    if (detached == true) {
-      throw new IllegalStateException("ExecuteGrpcResponseSender already detached!")
-    }
-    detached = true
+  def interrupt(): Unit = executionObserver.synchronized {
+    interrupted = true
     executionObserver.notifyAll()
   }
 
   def run(lastConsumedStreamIndex: Long): Unit = {
     if (executeHolder.reattachable) {
-      // In reattachable execution, check if grpcObserver is ready for sending, by using
-      // setOnReadyHandler of the ServerCallStreamObserver. Otherwise, calling grpcObserver.onNext
-      // can queue the responses without sending them, and it is unknown how far behind it is, and
-      // hence how much the executionObserver needs to buffer.
+      // In reattachable execution we use setOnReadyHandler and grpcCallObserver.isReady to control
+      // backpressure. See sendResponse.
       //
-      // Because OnReady events get queued on the same GRPC inboud queue as the executePlan or
-      // reattachExecute RPC handler that this is executing in, OnReady events will not arrive and
-      // not trigger the OnReadyHandler unless this thread returns from executePlan/reattachExecute.
+      // Because calls to OnReadyHandler get queued on the same GRPC inboud queue as the executePlan
+      // or reattachExecute RPC handler that this is executing in, they will not arrive and not
+      // trigger the OnReadyHandler unless this thread returns from executePlan/reattachExecute.
       // Therefore, we launch another thread to operate on the grpcObserver and send the responses,
       // while this thread will exit from the executePlan/reattachExecute call, allowing GRPC
       // to send the OnReady events.
       // See https://github.com/grpc/grpc-java/issues/7361
 
-      val t = new Thread(
-        s"SparkConnectGRPCSender_" +
-          s"opId=${executeHolder.operationId}_startIndex=$lastConsumedStreamIndex") {
-        override def run(): Unit = {
-          execute(lastConsumedStreamIndex)
-        }
-      }
-      executeHolder.grpcSenderThreads += t
+      backgroundThread = Some(
+        new Thread(
+          s"SparkConnectGRPCSender_" +
+            s"opId=${executeHolder.operationId}_startIndex=$lastConsumedStreamIndex") {
+          override def run(): Unit = {
+            try {
+              execute(lastConsumedStreamIndex)
+            } catch {
+              // This is executing in it's own thread, so need to handle RPC error like the
+              // SparkConnectService handlers do.
+              ErrorUtils.handleError(
+                "async-grpc-response-sender",
+                observer = grpcObserver,
+                userId = executeHolder.request.getUserContext.getUserId,
+                sessionId = executeHolder.request.getSessionId)
+            } finally {
+              executeHolder.removeGrpcResponseSender(self)
+            }
+          }
+        })
 
       val grpcCallObserver = grpcObserver.asInstanceOf[ServerCallStreamObserver[T]]
       grpcCallObserver.setOnReadyHandler(() => {
@@ -97,16 +108,17 @@ private[connect] class ExecuteGrpcResponseSender[T <: Message](
       })
 
       // Start the thread and exit
-      t.start()
+      backgroundThread.foreach(_.start())
     } else {
       // Non reattachable execute runs directly in the GRPC thread.
       try {
         execute(lastConsumedStreamIndex)
       } finally {
+        executeHolder.removeGrpcResponseSender(this)
         if (!executeHolder.reattachable) {
           // Non reattachable executions release here immediately.
           // (Reattachable executions release with ReleaseExecute RPC.)
-          executeHolder.close()
+          SparkConnectService.executionManager.removeExecuteHolder(executeHolder.key)
         }
       }
     }
@@ -159,9 +171,8 @@ private[connect] class ExecuteGrpcResponseSender[T <: Message](
     while (!finished) {
       var response: Option[CachedStreamResponse[T]] = None
 
-      // Conditions for exiting the inner loop:
-      // 1. was detached from response observer
-      def detachedFromObserver = detached
+      // Conditions for exiting the inner loop (and helpers to compute them):
+      // 1. was interrupted
       // 2. has a response to send
       def gotResponse = response.nonEmpty
       // 3. sent everything from the stream and the stream is finished
@@ -170,24 +181,21 @@ private[connect] class ExecuteGrpcResponseSender[T <: Message](
       def deadlineLimitReached =
         sentResponsesSize > maximumResponseSize || deadlineTimeMillis < System.currentTimeMillis()
 
-      // Get next available response.
-      // Wait until either this sender got detached or next response is ready,
-      // or the stream is complete and it had already sent all responses.
       logTrace(s"Trying to get next response with index=$nextIndex.")
       executionObserver.synchronized {
         logTrace(s"Acquired executionObserver lock.")
         val sleepStart = System.nanoTime()
         var sleepEnd = 0L
-        while (!detachedFromObserver &&
+        while (!interrupted &&
           !gotResponse &&
           !streamFinished &&
           !deadlineLimitReached) {
           logTrace(s"Try to get response with index=$nextIndex from observer.")
           response = executionObserver.consumeResponse(nextIndex)
           logTrace(s"Response index=$nextIndex from observer: ${response.isDefined}")
-          // If response is empty, release executionObserver lock and wait to get notified.
-          // The state of detached, response and lastIndex are change under lock in
-          // executionObserver, and will notify upon state change.
+          // If response is empty, release executionObserver monitor and wait to get notified.
+          // The state of interrupted, response and lastIndex are changed under executionObserver
+          // monitor, and will notify upon state change.
           if (response.isEmpty) {
             val timeout = Math.max(1, deadlineTimeMillis - System.currentTimeMillis())
             logTrace(s"Wait for response to become available with timeout=$timeout ms.")
@@ -197,7 +205,7 @@ private[connect] class ExecuteGrpcResponseSender[T <: Message](
           }
         }
         logTrace(
-          s"Exiting loop: detached=$detached, " +
+          s"Exiting loop: interrupted=$interrupted, " +
             s"response=${response.map(r => ProtoUtils.abbreviate(r.response))}, " +
             s"lastIndex=${executionObserver.getLastResponseIndex()}, " +
             s"deadline=${deadlineLimitReached}")
@@ -208,10 +216,8 @@ private[connect] class ExecuteGrpcResponseSender[T <: Message](
       }
 
       // Process the outcome of the inner loop.
-      if (detachedFromObserver) {
-        // This sender got detached by the observer.
-        // This only happens if this RPC is actually dead, and the client already came back with
-        // a ReattachExecute RPC. Kill this RPC.
+      if (interrupted) {
+        // This sender got interrupted. Kill this RPC.
         logWarning(
           s"Got detached from opId=${executeHolder.operationId} at index ${nextIndex - 1}." +
             s"totalTime=${System.nanoTime - startTime}ns " +
@@ -256,12 +262,11 @@ private[connect] class ExecuteGrpcResponseSender[T <: Message](
   }
 
   /**
-   * Send the response to the grpcCallObserver. In reattachable execution, we control the flow,
-   * and only pass the response to the grpcCallObserver when it's ready to send. Otherwise,
-   * grpcCallObserver.onNext() would return in a non-blocking way, but could queue responses
-   * without sending them if the client doesn't keep up receiving them. When pushing more
-   * responses to onNext(), there is no insight how far behind the service is in actually sending
-   * them out.
+   * Send the response to the grpcCallObserver.
+   *
+   * In reattachable execution, we control the backpressure and only send when the
+   * grpcCallObserver is in fact ready to send.
+   *
    * @param deadlineTimeMillis
    *   when reattachable, wait for ready stream until this deadline.
    * @return
@@ -278,12 +283,12 @@ private[connect] class ExecuteGrpcResponseSender[T <: Message](
       grpcObserver.onNext(response.response)
       true
     } else {
-      // In reattachable execution, we control the flow, and only pass the response to the
+      // In reattachable execution, we control the backpressure, and only pass the response to the
       // grpcCallObserver when it's ready to send.
       // Otherwise, grpcCallObserver.onNext() would return in a non-blocking way, but could queue
       // responses without sending them if the client doesn't keep up receiving them.
       // When pushing more responses to onNext(), there is no insight how far behind the service is
-      // in actually sending them out.
+      // in actually sending them out. See https://github.com/grpc/grpc-java/issues/1549
       // By sending responses only when grpcCallObserver.isReady(), we control that the actual
       // sending doesn't fall behind what we push from here.
       // By using the deadline, we exit the RPC if the responses aren't picked up by the client.
@@ -295,7 +300,13 @@ private[connect] class ExecuteGrpcResponseSender[T <: Message](
         logTrace(s"Acquired grpcCallObserverReadySignal lock.")
         val sleepStart = System.nanoTime()
         var sleepEnd = 0L
-        while (!grpcCallObserver.isReady() && deadlineTimeMillis >= System.currentTimeMillis()) {
+        // Conditions for exiting the inner loop
+        // 1. was detached
+        // 2. grpcCallObserver is ready to send more data
+        // 3. time deadline is reached
+        while (!interrupted &&
+          !grpcCallObserver.isReady() &&
+          deadlineTimeMillis >= System.currentTimeMillis()) {
           val timeout = Math.max(1, deadlineTimeMillis - System.currentTimeMillis())
           var sleepStart = System.nanoTime()
           logTrace(s"Wait for grpcCallObserver to become ready with timeout=$timeout ms.")
@@ -303,7 +314,7 @@ private[connect] class ExecuteGrpcResponseSender[T <: Message](
           logTrace(s"Reacquired grpcCallObserverReadySignal lock after waiting.")
           sleepEnd = System.nanoTime()
         }
-        if (grpcCallObserver.isReady()) {
+        if (!interrupted && grpcCallObserver.isReady()) {
           val sleepTime = if (sleepEnd > 0L) sleepEnd - sleepStart else 0L
           logDebug(
             s"SEND opId=${executeHolder.operationId} responseId=${response.responseId} " +
@@ -313,7 +324,7 @@ private[connect] class ExecuteGrpcResponseSender[T <: Message](
           grpcCallObserver.onNext(response.response)
           true
         } else {
-          logTrace(s"grpcCallObserver is not ready, exiting.")
+          logTrace(s"exiting sendResponse without sending")
           false
         }
       }

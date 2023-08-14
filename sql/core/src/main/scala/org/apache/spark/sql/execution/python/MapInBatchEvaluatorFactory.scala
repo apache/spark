@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.python
 
 import scala.collection.JavaConverters._
 
-import org.apache.spark.{ContextAwareIterator, PartitionEvaluator, PartitionEvaluatorFactory, TaskContext}
+import org.apache.spark.{PartitionEvaluator, PartitionEvaluatorFactory, TaskContext}
 import org.apache.spark.api.python.ChainedPythonFunctions
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
@@ -52,11 +52,10 @@ class MapInBatchEvaluatorFactory(
       // Single function with one struct.
       val argOffsets = Array(Array(0))
       val context = TaskContext.get()
-      val contextAwareIterator = new ContextAwareIterator(context, inputIter)
 
       // Here we wrap it via another row so that Python sides understand it
       // as a DataFrame.
-      val wrappedIter = contextAwareIterator.map(InternalRow(_))
+      val wrappedIter = inputIter.map(InternalRow(_))
 
       // DO NOT use iter.grouped(). See BatchIterator.
       val batchIter =
