@@ -508,7 +508,8 @@ class SparkConnectPlanner(val sessionHolder: SessionHolder) extends Logging {
     val commonUdf = rel.getFunc
     commonUdf.getFunctionCase match {
       case proto.CommonInlineUserDefinedFunction.FunctionCase.SCALAR_SCALA_UDF =>
-        transformTypedMapPartitions(commonUdf, baseRel)
+        val analyzed = session.sessionState.executePlan(baseRel).analyzed
+        transformTypedMapPartitions(commonUdf, analyzed)
       case proto.CommonInlineUserDefinedFunction.FunctionCase.PYTHON_UDF =>
         val pythonUdf = transformPythonUDF(commonUdf)
         val isBarrier = if (rel.hasIsBarrier) rel.getIsBarrier else false
@@ -1383,6 +1384,8 @@ class SparkConnectPlanner(val sessionHolder: SessionHolder) extends Logging {
         transformCommonInlineUserDefinedFunction(exp.getCommonInlineUserDefinedFunction)
       case proto.Expression.ExprTypeCase.CALL_FUNCTION =>
         transformCallFunction(exp.getCallFunction)
+      case proto.Expression.ExprTypeCase.NAMED_ARGUMENT_EXPRESSION =>
+        transformNamedArgumentExpression(exp.getNamedArgumentExpression)
       case _ =>
         throw InvalidPlanInput(
           s"Expression with ID: ${exp.getExprTypeCase.getNumber} is not supported")
@@ -1502,6 +1505,11 @@ class SparkConnectPlanner(val sessionHolder: SessionHolder) extends Logging {
       nameParts,
       fun.getArgumentsList.asScala.map(transformExpression).toSeq,
       false)
+  }
+
+  private def transformNamedArgumentExpression(
+      namedArg: proto.NamedArgumentExpression): Expression = {
+    NamedArgumentExpression(namedArg.getKey, transformExpression(namedArg.getValue))
   }
 
   private def unpackUdf(fun: proto.CommonInlineUserDefinedFunction): UdfPacket = {
@@ -3061,8 +3069,9 @@ class SparkConnectPlanner(val sessionHolder: SessionHolder) extends Logging {
             .asJava)
 
       case StreamingQueryManagerCommand.CommandCase.GET_QUERY =>
-        val query = session.streams.get(command.getGetQuery)
-        respBuilder.setQuery(buildStreamingQueryInstance(query))
+        Option(session.streams.get(command.getGetQuery)).foreach { q =>
+          respBuilder.setQuery(buildStreamingQueryInstance(q))
+        }
 
       case StreamingQueryManagerCommand.CommandCase.AWAIT_ANY_TERMINATION =>
         if (command.getAwaitAnyTermination.hasTimeoutMs) {

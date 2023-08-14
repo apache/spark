@@ -110,11 +110,11 @@ package object util extends Logging {
   }
 
   def quoteIdentifier(name: String): String = {
-    SparkStringUtils.quoteIdentifier(name)
+    QuotingUtils.quoteIdentifier(name)
   }
 
   def quoteNameParts(name: Seq[String]): String = {
-    name.map(part => quoteIdentifier(part)).mkString(".")
+    QuotingUtils.quoteNameParts(name)
   }
 
   def quoteIfNeeded(part: String): String = {
