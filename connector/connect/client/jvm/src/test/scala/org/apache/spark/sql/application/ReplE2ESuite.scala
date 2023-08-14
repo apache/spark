@@ -274,6 +274,12 @@ class ReplE2ESuite extends RemoteSparkSession with BeforeAndAfterEach {
         |  collect()
       """.stripMargin
     val output = runCommandsInShell(input)
-    assertContains("Array[MyTestClass] = Array(MyTestClass(1), MyTestClass(3))", output)
+    if (Properties.versionNumberString.startsWith("2.13")) {
+      assertContains(
+        "Array[MyTestClass] = Array(MyTestClass(value = 1), MyTestClass(value = 3))",
+        output)
+    } else {
+      assertContains("Array[MyTestClass] = Array(MyTestClass(1), MyTestClass(3))", output)
+    }
   }
 }
