@@ -77,6 +77,18 @@ trait ConstraintHelper {
         inferredConstraints ++= replaceConstraints(predicates - eq - EqualNullSafe(l, r), l, r)
       case _ => // No inference
     }
+
+    constraints.foreach {
+      case eq @ EqualNullSafe(l: Attribute, r: Attribute) =>
+        val candidateConstraints = constraints - eq
+        inferredConstraints ++= replaceConstraints(candidateConstraints, l, r)
+        inferredConstraints ++= replaceConstraints(candidateConstraints, r, l)
+      case eq @ EqualNullSafe(l @ Cast(_: Attribute, _, _, _), r: Attribute) =>
+        inferredConstraints ++= replaceConstraints(constraints - eq, r, l)
+      case eq @ EqualNullSafe(l: Attribute, r @ Cast(_: Attribute, _, _, _)) =>
+        inferredConstraints ++= replaceConstraints(constraints - eq, l, r)
+      case _ => // No inference
+    }
     inferredConstraints -- constraints
   }
 

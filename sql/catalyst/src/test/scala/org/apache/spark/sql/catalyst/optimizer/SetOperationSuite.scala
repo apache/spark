@@ -17,13 +17,15 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
+import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.analysis.EliminateSubqueryAliases
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.expressions.{And, GreaterThan, GreaterThanOrEqual, If, Literal, Rand, ReplicateRows}
+import org.apache.spark.sql.catalyst.expressions.{And, EqualTo, GreaterThan, GreaterThanOrEqual, If, IsNotNull, Literal, Rand, ReplicateRows}
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{BooleanType, DecimalType}
 
 class SetOperationSuite extends PlanTest {
@@ -390,5 +392,37 @@ class SetOperationSuite extends PlanTest {
       Distinct(Union(Seq(optimizedRelation1, optimizedRelation2, optimizedRelation3,
         optimizedRelation4, optimizedRelation5))).select($"a").analyze)
 
+  }
+
+  test("SPARK-44812: push filters through join generated from intersect") {
+    val a = LocalRelation.fromExternalRows(Seq($"a".int), Seq(Row(1), Row(2), Row(3)))
+    val b = LocalRelation.fromExternalRows(Seq($"b".int), Seq(Row(2), Row(3), Row(4)))
+
+    withSQLConf(SQLConf.OPTIMIZER_EXCLUDED_RULES.key -> ConvertToLocalRelation.ruleName) {
+      val optimizer = new SimpleTestOptimizer
+      val plan = a.intersect(b, isAll = false).where($"a" > 2)
+      val optimized = optimizer.execute(plan.analyze)
+      val le = a.where(IsNotNull($"a") && $"a" > 2).analyze
+      val re = b.where(IsNotNull($"b") && $"b" > 2).analyze
+      comparePlans(optimized.children.head.children(0), le)
+      comparePlans(optimized.children.head.children(1), re)
+    }
+  }
+
+  test("SPARK-44812: push predicates through join generated from intersect") {
+    val a = LocalRelation.fromExternalRows(Seq($"a".int), Seq(Row(1), Row(2), Row(3)))
+    val b = LocalRelation.fromExternalRows(Seq($"b".int), Seq(Row(2), Row(3), Row(4)))
+    withSQLConf(SQLConf.OPTIMIZER_EXCLUDED_RULES.key -> ConvertToLocalRelation.ruleName) {
+      val optimizer = new SimpleTestOptimizer
+      val plan = a.intersect(b, isAll = false).join(b, condition = Some(EqualTo($"a", $"b")))
+      val optimized = optimizer.execute(plan.analyze)
+
+      val optimizedLeftSemi = optimized.children.head.children.head
+      val expectedFilterA = a.where(IsNotNull($"a")).analyze
+      val expectedFilterB = b.where(IsNotNull($"b")).analyze
+      comparePlans(optimizedLeftSemi.children(0), expectedFilterA)
+      comparePlans(optimizedLeftSemi.children(1), expectedFilterB)
+      comparePlans(optimized.children(1), expectedFilterB)
+    }
   }
 }
