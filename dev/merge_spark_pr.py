@@ -248,7 +248,7 @@ def resolve_jira_issue(merge_branches, comment, default_jira_id=""):
     if JIRA_ACCESS_TOKEN is not None:
         asf_jira = jira.client.JIRA(jira_server, token_auth=JIRA_ACCESS_TOKEN)
     else:
-        asf_jira = jira.client.JIRA(jira_server, token_auth=(JIRA_USERNAME, JIRA_PASSWORD))
+        asf_jira = jira.client.JIRA(jira_server, basic_auth=(JIRA_USERNAME, JIRA_PASSWORD))
 
     jira_id = input("Enter a JIRA id [%s]: " % default_jira_id)
     if jira_id == "":
