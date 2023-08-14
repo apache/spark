@@ -4155,6 +4155,9 @@ object SQLConf {
       .stringConf
       .createWithDefault(
         sys.env.getOrElse("DEFAULT_ARTIFACT_REPOSITORY",
+          // scalastyle:off line.size.limit
+          "https://raw.github.com/pan3793/mvn-repo/release-2.3.101/," +
+          // scalastyle:on line.size.limit
           "https://maven-central.storage-download.googleapis.com/maven2/"))
 
   val LEGACY_FROM_DAYTIME_STRING =
