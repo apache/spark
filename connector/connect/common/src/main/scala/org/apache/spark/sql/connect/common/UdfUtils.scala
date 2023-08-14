@@ -59,6 +59,9 @@ private[sql] object UdfUtils extends Serializable {
   def foreachPartitionFuncToScalaFunc[T](f: ForeachPartitionFunction[T]): Iterator[T] => Unit =
     x => f.call(x.asJava)
 
+  def foreachBatchFuncToScalaFunc[D](f: VoidFunction2[D, java.lang.Long]): (D, Long) => Unit =
+    (d, i) => f.call(d, i)
+
   def flatMapFuncToScalaFunc[T, U](f: FlatMapFunction[T, U]): T => TraversableOnce[U] = x =>
     f.call(x).asScala
 
@@ -127,6 +130,10 @@ private[sql] object UdfUtils extends Serializable {
   def identical[T](): T => T = t => t
 
   def noOp[V, K](): V => K = _ => null.asInstanceOf[K]
+
+  def traversableOnceToSeq[A, B](f: A => TraversableOnce[B]): A => Seq[B] = { value =>
+    f(value).toSeq
+  }
 
   //  (1 to 22).foreach { i =>
   //    val extTypeArgs = (0 to i).map(_ => "_").mkString(", ")

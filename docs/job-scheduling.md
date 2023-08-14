@@ -89,11 +89,15 @@ This feature is disabled by default and available on all coarse-grained cluster 
 
 ### Configuration and Setup
 
-There are two ways for using this feature.
-First, your application must set both `spark.dynamicAllocation.enabled` and `spark.dynamicAllocation.shuffleTracking.enabled` to `true`.
-Second, your application must set both `spark.dynamicAllocation.enabled` and `spark.shuffle.service.enabled` to `true`
-after you set up an *external shuffle service* on each worker node in the same cluster.
-The purpose of the shuffle tracking or the external shuffle service is to allow executors to be removed
+There are several ways for using this feature.
+Regardless of which approach you choose, your application must set `spark.dynamicAllocation.enabled` to `true` first, additionally, 
+
+- your application must set `spark.shuffle.service.enabled` to `true` after you set up an *external shuffle service* on each worker node in the same cluster, or
+- your application must set `spark.dynamicAllocation.shuffleTracking.enabled` to `true`, or
+- your application must set both `spark.decommission.enabled` and `spark.storage.decommission.shuffleBlocks.enabled` to `true`, or
+- your application must configure `spark.shuffle.sort.io.plugin.class` to use a custom `ShuffleDataIO` who's `ShuffleDriverComponents` supports reliable storage.
+
+The purpose of the external shuffle service or the shuffle tracking or the `ShuffleDriverComponents` supports reliable storage is to allow executors to be removed
 without deleting shuffle files written by them (more detail described
 [below](job-scheduling.html#graceful-decommission-of-executors)). While it is simple to enable shuffle tracking, the way to set up the external shuffle service varies across cluster managers:
 

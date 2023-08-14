@@ -16,6 +16,7 @@
 #
 
 import unittest
+import uuid
 from typing import Optional
 
 from pyspark.sql.connect.client import SparkConnectClient, ChannelBuilder
@@ -87,6 +88,12 @@ class SparkConnectClientTestCase(unittest.TestCase):
         self.assertFalse(client.is_closed)
         client.close()
         self.assertTrue(client.is_closed)
+
+    def test_channel_builder_with_session(self):
+        dummy = str(uuid.uuid4())
+        chan = ChannelBuilder(f"sc://foo/;session_id={dummy}")
+        client = SparkConnectClient(chan)
+        self.assertEqual(client._session_id, chan.session_id)
 
 
 class MockService:

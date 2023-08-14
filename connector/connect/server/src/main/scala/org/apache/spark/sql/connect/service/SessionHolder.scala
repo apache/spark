@@ -24,9 +24,7 @@ import java.util.concurrent.{ConcurrentHashMap, ConcurrentMap}
 import scala.collection.JavaConverters._
 import scala.collection.mutable
 
-import org.apache.spark.{JobArtifactSet, SparkException, SparkSQLException}
-
-import org.apache.spark.connect.proto
+import org.apache.spark.{JobArtifactSet, SparkException}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.SparkSession
@@ -44,7 +42,7 @@ import org.apache.spark.util.Utils
 case class SessionHolder(userId: String, sessionId: String, session: SparkSession)
     extends Logging {
 
-  val executions: ConcurrentMap[String, ExecuteHolder] =
+  private val executions: ConcurrentMap[String, ExecuteHolder] =
     new ConcurrentHashMap[String, ExecuteHolder]()
 
   val eventManager: SessionEventsManager = SessionEventsManager(this, new SystemClock())
@@ -62,23 +60,23 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
   private[connect] lazy val streamingRunnerCleanerCache =
     new StreamingForeachBatchHelper.CleanerCache(this)
 
-  private[connect] def createExecuteHolder(request: proto.ExecutePlanRequest): ExecuteHolder = {
-    val executeHolder = new ExecuteHolder(request, this)
+  /** Add ExecuteHolder to this session. Called only by SparkConnectExecutionManager. */
+  private[service] def addExecuteHolder(executeHolder: ExecuteHolder): Unit = {
     val oldExecute = executions.putIfAbsent(executeHolder.operationId, executeHolder)
     if (oldExecute != null) {
-      throw new SparkSQLException(
-        errorClass = "INVALID_HANDLE.OPERATION_ALREADY_EXISTS",
-        messageParameters = Map("handle" -> executeHolder.operationId))
+      // the existance of this should alrady be checked by SparkConnectExecutionManager
+      throw new IllegalStateException(
+        s"ExecuteHolder with opId=${executeHolder.operationId} already exists!")
     }
-    executeHolder
+  }
+
+  /** Remove ExecuteHolder to this session. Called only by SparkConnectExecutionManager. */
+  private[service] def removeExecuteHolder(operationId: String): Unit = {
+    executions.remove(operationId)
   }
 
   private[connect] def executeHolder(operationId: String): Option[ExecuteHolder] = {
     Option(executions.get(operationId))
-  }
-
-  private[connect] def removeExecuteHolder(operationId: String): Unit = {
-    executions.remove(operationId)
   }
 
   /**
@@ -86,7 +84,7 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
    * @return
    *   list of operationIds of interrupted executions
    */
-  private[connect] def interruptAll(): Seq[String] = {
+  private[service] def interruptAll(): Seq[String] = {
     val interruptedIds = new mutable.ArrayBuffer[String]()
     executions.asScala.values.foreach { execute =>
       if (execute.interrupt()) {
@@ -101,7 +99,7 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
    * @return
    *   list of operationIds of interrupted executions
    */
-  private[connect] def interruptTag(tag: String): Seq[String] = {
+  private[service] def interruptTag(tag: String): Seq[String] = {
     val interruptedIds = new mutable.ArrayBuffer[String]()
     executions.asScala.values.foreach { execute =>
       if (execute.sparkSessionTags.contains(tag)) {
@@ -118,7 +116,7 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
    * @return
    *   list of operationIds of interrupted executions (one element or empty)
    */
-  private[connect] def interruptOperation(operationId: String): Seq[String] = {
+  private[service] def interruptOperation(operationId: String): Seq[String] = {
     val interruptedIds = new mutable.ArrayBuffer[String]()
     Option(executions.get(operationId)).foreach { execute =>
       if (execute.interrupt()) {
@@ -258,6 +256,12 @@ object SessionHolder {
 
   /** Creates a dummy session holder for use in tests. */
   def forTesting(session: SparkSession): SessionHolder = {
-    SessionHolder(userId = "testUser", sessionId = UUID.randomUUID().toString, session = session)
+    val ret =
+      SessionHolder(
+        userId = "testUser",
+        sessionId = UUID.randomUUID().toString,
+        session = session)
+    SparkConnectService.putSessionForTesting(ret)
+    ret
   }
 }
