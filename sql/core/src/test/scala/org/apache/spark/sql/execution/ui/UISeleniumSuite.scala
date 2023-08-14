@@ -50,7 +50,12 @@ class UISeleniumSuite extends SparkFunSuite with WebBrowser {
     findAll(cssSelector("""#failed-table td .stacktrace-details""")).map(_.text).toList
   }
 
-
+  private def findExecutionIDOnSQLUI(): Int = {
+    val webUrl = spark.sparkContext.uiWebUrl
+    assert(webUrl.isDefined, "please turn on spark.ui.enabled")
+    go to s"${webUrl.get}/SQL"
+    findAll(cssSelector("""#failed-table td""")).map(_.text).toList.head.toInt
+  }
 
   override def afterAll(): Unit = {
     try {
@@ -88,6 +93,14 @@ class UISeleniumSuite extends SparkFunSuite with WebBrowser {
       val sd = findErrorMessageOnSQLUI()
       assert(sd.size === 1, "Analyze fail shall show the query in failed table")
       assert(sd.head.startsWith("[TABLE_OR_VIEW_NOT_FOUND]"))
+
+      val id = findExecutionIDOnSQLUI()
+      // check query detail page
+      go to s"${spark.sparkContext.uiWebUrl.get}/SQL/execution/?id=$id"
+      val planDot = findAll(cssSelector(""".dot-file""")).map(_.text).toList
+      assert(planDot.head.startsWith("digraph G {"))
+      val planDetails = findAll(cssSelector("""#physical-plan-details""")).map(_.text).toList
+      assert(planDetails.head.contains("TABLE_OR_VIEW_NOT_FOUND"))
     }
   }
 }
