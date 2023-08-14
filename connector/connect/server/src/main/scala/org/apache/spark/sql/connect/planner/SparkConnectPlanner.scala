@@ -2870,13 +2870,12 @@ class SparkConnectPlanner(val sessionHolder: SessionHolder) extends Logging {
           throw ex
       }
 
-    // Register the new query so that the session and query references are cached.
+    // Register the new query so that its reference is cached and is stopped on session timeout.
     SparkConnectService.streamingSessionManager.registerNewStreamingQuery(sessionHolder, query)
     // Register the runner with the query if Python foreachBatch is enabled.
     foreachBatchRunnerCleaner.foreach { cleaner =>
       sessionHolder.streamingRunnerCleanerCache.registerCleanerForQuery(query, cleaner)
     }
-    // Register the new query so that the session and query references are cached.
     executeHolder.eventsManager.postFinished()
 
     val result = WriteStreamOperationStartResult

@@ -42,9 +42,8 @@ object StreamingForeachBatchHelper extends Logging {
     override def close(): Unit = {
       try runner.stop()
       catch {
-        case NonFatal(ex) =>
+        case NonFatal(ex) => // Exception is not propagated.
           logWarning("Error while stopping streaming Python worker", ex)
-        // Exception is not propagated.
       }
     }
   }

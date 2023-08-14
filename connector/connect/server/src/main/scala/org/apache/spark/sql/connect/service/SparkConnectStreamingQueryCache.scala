@@ -195,6 +195,7 @@ private[connect] class SparkConnectStreamingQueryCache(
               // To consider: Clean up any runner registered for this query with the session holder
               // for this session. Useful in case listener events are delayed (such delays are
               // seen in practice, especially when users have heavy processing inside listeners).
+              // Currently such workers would be cleaned up when the connect session expires.
             }
         }
       }
