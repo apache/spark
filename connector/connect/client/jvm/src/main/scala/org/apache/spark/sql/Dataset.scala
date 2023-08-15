@@ -1043,6 +1043,22 @@ class Dataset[T] private[sql] (
   }
 
   /**
+   * Selects a metadata column based on its logical column name, and returns it as a [[Column]].
+   *
+   * A metadata column can be accessed this way even if the underlying data source defines a data
+   * column with a conflicting name.
+   *
+   * @group untypedrel
+   * @since 3.5.0
+   */
+  def metadataColumn(colName: String): Column = Column { builder =>
+    val attributeBuilder = builder.getUnresolvedAttributeBuilder
+      .setUnparsedIdentifier(colName)
+      .setIsMetadataColumn(true)
+    getPlanId.foreach(attributeBuilder.setPlanId)
+  }
+
+  /**
    * Selects column based on the column name specified as a regex and returns it as [[Column]].
    * @group untypedrel
    * @since 3.4.0

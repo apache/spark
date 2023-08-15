@@ -223,6 +223,9 @@ message Expression {
 
     // (Optional) The id of corresponding connect plan.
     optional int64 plan_id = 2;
+
+    // (Optional) The requested column is a metadata column.
+    optional bool is_metadata_column = 3;
   }
 
   // An unresolved function is not explicitly bound to one explicit function, but the function
