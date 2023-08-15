@@ -48,6 +48,7 @@ import org.apache.spark.sql.catalyst.analysis.{GlobalTempView, LocalTempView, Mu
 import org.apache.spark.sql.catalyst.encoders.{AgnosticEncoder, ExpressionEncoder, RowEncoder}
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.UnboundRowEncoder
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.aggregate.BloomFilterAggregate
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParseException, ParserUtils}
 import org.apache.spark.sql.catalyst.plans.{Cross, FullOuter, Inner, JoinType, LeftAnti, LeftOuter, LeftSemi, RightOuter, UsingJoin}
 import org.apache.spark.sql.catalyst.plans.logical
@@ -1737,6 +1738,36 @@ class SparkConnectPlanner(val sessionHolder: SessionHolder) extends Logging {
         val children = fun.getArgumentsList.asScala.map(transformExpression)
         val ignoreNulls = extractBoolean(children(3), "ignoreNulls")
         Some(Lead(children.head, children(1), children(2), ignoreNulls))
+
+      case "bloom_filter_agg" if fun.getArgumentsCount == 3 =>
+        // [col, expectedNumItems: Long, numBits: Long]
+        val children = fun.getArgumentsList.asScala.map(transformExpression)
+
+        // Check expectedNumItems is LongType and value greater than 0L
+        val expectedNumItemsExpr = children(1)
+        val expectedNumItems = expectedNumItemsExpr match {
+          case Literal(l: Long, LongType) => l
+          case _ =>
+            throw InvalidPlanInput("Expected insertions must be long literal.")
+        }
+        if (expectedNumItems <= 0L) {
+          throw InvalidPlanInput("Expected insertions must be positive.")
+        }
+
+        val numBitsExpr = children(2)
+        // Check numBits is LongType and value greater than 0L
+        numBitsExpr match {
+          case Literal(numBits: Long, LongType) =>
+            if (numBits <= 0L) {
+              throw InvalidPlanInput("Number of bits must be positive.")
+            }
+          case _ =>
+            throw InvalidPlanInput("Number of bits must be long literal.")
+        }
+
+        Some(
+          new BloomFilterAggregate(children.head, expectedNumItemsExpr, numBitsExpr)
+            .toAggregateExpression())
 
       case "window" if Seq(2, 3, 4).contains(fun.getArgumentsCount) =>
         val children = fun.getArgumentsList.asScala.map(transformExpression)
