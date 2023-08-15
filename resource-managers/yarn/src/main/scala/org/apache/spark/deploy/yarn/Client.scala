@@ -494,14 +494,11 @@ private[spark] class Client(
     val jars = sparkConf.get(SPARK_JARS)
     val directories = jars.map(directoriesToBePreloaded).getOrElse(ArrayBuffer.empty[URI])
 
-    directories.foreach { dir =>
-      fsLookup(dir).listStatus(new Path(dir)).filter(_.isFile())
-        .foreach { fileStatus =>
+    directoryToFiles.foreach { case (dir: String, filesInDir: Set[String]) =>
+      fsLookup(dir).listStatus(new Path(dir)).filter(_.isFile()).
+        filter(f => filesInDir.contains(f.getPath.getName)).foreach { fileStatus =>
           val uri = fileStatus.getPath.toUri
-          if (jars.exists(_.contains(uri.toString))) {
-            logDebug(s"Add ${uri} file status to statCache.")
-            statCache.put(uri, fileStatus)
-          }
+          statCache.put(uri, fileStatus)
         }
     }
     statCache
