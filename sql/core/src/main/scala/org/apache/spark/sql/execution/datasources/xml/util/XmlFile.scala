@@ -26,8 +26,6 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.execution.datasources.xml.XmlInputFormat
 
 private[xml] object XmlFile {
-  val DEFAULT_INDENT = "    "
-
   def withCharset(
       context: SparkContext,
       location: String,

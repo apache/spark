@@ -484,12 +484,12 @@ final class DataFrameWriter[T] private[sql] (ds: Dataset[T]) {
    * {@code fieldA [[data1, data2]]}
    *
    * would produce a XML file below.
-   * {@code
+   * { @code
    * <fieldA>
-   * <item>data1</item>
+   *     <item>data1</item>
    * </fieldA>
    * <fieldA>
-   * <item>data2</item>
+   *     <item>data2</item>
    * </fieldA>}
    *
    * Namely, roundtrip in writing and reading can end up in different schema structure.

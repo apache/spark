@@ -40,9 +40,9 @@ private[sql] class XmlOptions(
   import XmlOptions._
 
   def this(
-    parameters: Map[String, String] = Map.empty,
-    defaultTimeZoneId: String = SQLConf.get.sessionLocalTimeZone,
-    defaultColumnNameOfCorruptRecord: String = "") = {
+      parameters: Map[String, String] = Map.empty,
+      defaultTimeZoneId: String = SQLConf.get.sessionLocalTimeZone,
+      defaultColumnNameOfCorruptRecord: String = "") = {
     this(
       CaseInsensitiveMap(parameters),
       defaultTimeZoneId,

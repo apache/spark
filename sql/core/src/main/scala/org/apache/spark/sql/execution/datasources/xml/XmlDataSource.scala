@@ -41,7 +41,7 @@ import org.apache.spark.sql.types.StructType
 /**
  * Common functions for parsing XML files
  */
-abstract class XMLDataSource extends Serializable {
+abstract class XmlDataSource extends Serializable {
   def isSplitable: Boolean
 
   /**
@@ -73,17 +73,17 @@ abstract class XMLDataSource extends Serializable {
       parsedOptions: XmlOptions): StructType
 }
 
-object XMLDataSource extends Logging {
-  def apply(options: XmlOptions): XMLDataSource = {
+object XmlDataSource extends Logging {
+  def apply(options: XmlOptions): XmlDataSource = {
     if (options.multiLine) {
-      MultiLineXMLDataSource
+      MultiLineXmlDataSource$
     } else {
-      TextInputXMLDataSource
+      TextInputXmlDataSource$
     }
   }
 }
 
-object TextInputXMLDataSource extends XMLDataSource {
+object TextInputXmlDataSource$ extends XmlDataSource {
   override val isSplitable: Boolean = true
 
   override def readFile(
@@ -151,7 +151,7 @@ object TextInputXMLDataSource extends XMLDataSource {
   }
 }
 
-object MultiLineXMLDataSource extends XMLDataSource {
+object MultiLineXmlDataSource$ extends XmlDataSource {
   override val isSplitable: Boolean = false
 
   override def readFile(

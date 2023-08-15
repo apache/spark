@@ -144,8 +144,8 @@ case class XmlToStructs(
   since = "4.0.0",
   group = "xml_funcs")
 case class SchemaOfXml(
-  child: Expression,
-  options: Map[String, String])
+    child: Expression,
+    options: Map[String, String])
   extends UnaryExpression with CodegenFallback with QueryErrorsBase {
 
   def this(child: Expression) = this(child, Map.empty[String, String])

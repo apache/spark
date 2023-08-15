@@ -33,9 +33,9 @@ import org.apache.spark.sql.types._
 import org.apache.spark.util.SerializableConfiguration
 
 /**
- * Provides access to CSV data from pure SQL statements.
+ * Provides access to XML data from pure SQL statements.
  */
-class XMLFileFormat extends TextBasedFileFormat with DataSourceRegister {
+class XmlFileFormat extends TextBasedFileFormat with DataSourceRegister {
 
   override def shortName(): String = "xml"
 
@@ -47,7 +47,7 @@ class XMLFileFormat extends TextBasedFileFormat with DataSourceRegister {
       options,
       sparkSession.sessionState.conf.sessionLocalTimeZone,
       sparkSession.sessionState.conf.columnNameOfCorruptRecord)
-    val xmlDataSource = XMLDataSource(parsedOptions)
+    val xmlDataSource = XmlDataSource(parsedOptions)
     xmlDataSource.isSplitable && super.isSplitable(sparkSession, options, path)
   }
 
@@ -60,7 +60,7 @@ class XMLFileFormat extends TextBasedFileFormat with DataSourceRegister {
       sparkSession.sessionState.conf.sessionLocalTimeZone,
       sparkSession.sessionState.conf.columnNameOfCorruptRecord)
 
-    XMLDataSource(parsedOptions).inferSchema(
+    XmlDataSource(parsedOptions).inferSchema(
       sparkSession, files, parsedOptions)
   }
 
@@ -83,7 +83,7 @@ class XMLFileFormat extends TextBasedFileFormat with DataSourceRegister {
           path: String,
           dataSchema: StructType,
           context: TaskAttemptContext): OutputWriter = {
-        new XMLOutputWriter(path, dataSchema, context, xmlOptions)
+        new XmlOutputWriter(path, dataSchema, context, xmlOptions)
       }
 
       override def getFileExtension(context: TaskAttemptContext): String = {
@@ -108,16 +108,17 @@ class XMLFileFormat extends TextBasedFileFormat with DataSourceRegister {
       sparkSession.sessionState.conf.sessionLocalTimeZone,
       sparkSession.sessionState.conf.columnNameOfCorruptRecord)
 
+    val columnNameOfCorruptRecord = parsedOptions.columnNameOfCorruptRecord
     // Check a field requirement for corrupt records here to throw an exception in a driver side
-    ExprUtils.verifyColumnNameOfCorruptRecord(dataSchema, parsedOptions.columnNameOfCorruptRecord)
+    ExprUtils.verifyColumnNameOfCorruptRecord(dataSchema, columnNameOfCorruptRecord)
     // Don't push any filter which refers to the "virtual" column which cannot present in the input.
     // Such filters will be applied later on the upper layer.
     val actualFilters =
-      filters.filterNot(_.references.contains(parsedOptions.columnNameOfCorruptRecord))
+      filters.filterNot(_.references.contains(columnNameOfCorruptRecord))
     val actualRequiredSchema = StructType(
-      requiredSchema.filterNot(_.name == parsedOptions.columnNameOfCorruptRecord))
+      requiredSchema.filterNot(_.name == columnNameOfCorruptRecord))
     if (requiredSchema.length == 1 &&
-      requiredSchema.head.name == parsedOptions.columnNameOfCorruptRecord) {
+      requiredSchema.head.name == columnNameOfCorruptRecord) {
       throw QueryCompilationErrors.queryFromRawFilesIncludeCorruptRecordColumnError()
     }
 
@@ -126,7 +127,7 @@ class XMLFileFormat extends TextBasedFileFormat with DataSourceRegister {
         actualRequiredSchema,
         parsedOptions,
         actualFilters)
-      XMLDataSource(parsedOptions).readFile(
+      XmlDataSource(parsedOptions).readFile(
         broadcastedHadoopConf.value.value,
         file,
         parser,
@@ -138,7 +139,7 @@ class XMLFileFormat extends TextBasedFileFormat with DataSourceRegister {
 
   override def hashCode(): Int = getClass.hashCode()
 
-  override def equals(other: Any): Boolean = other.isInstanceOf[XMLFileFormat]
+  override def equals(other: Any): Boolean = other.isInstanceOf[XmlFileFormat]
 
   override def supportDataType(dataType: DataType): Boolean = dataType match {
     case _: AtomicType => true

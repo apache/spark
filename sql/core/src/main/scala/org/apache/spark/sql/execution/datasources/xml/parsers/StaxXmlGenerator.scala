@@ -73,10 +73,8 @@ private[xml] object StaxXmlGenerator {
 
         // For ArrayType, we just need to write each as XML element.
         case (ArrayType(ty, _), v: ArrayData) =>
-          var i = 0;
-          while (i < v.numElements()) {
+          (0 until v.numElements()).foreach { i =>
             writeChildElement(name, ty, v.get(i, ty))
-            i += 1;
           }
         // For other datatypes, we just write normal elements.
         case _ =>
@@ -110,10 +108,8 @@ private[xml] object StaxXmlGenerator {
       // When [[ArrayType]] has [[ArrayType]] as elements, it is confusing what is element name
       // for XML file.
       case (ArrayType(ty, _), v: ArrayData) =>
-        var i = 0;
-        while (i < v.numElements()) {
+        (0 until v.numElements()).foreach { i =>
           writeChild(options.arrayElementName, ty, v.get(i, ty))
-          i += 1;
         }
 
       case (MapType(_, vt, _), mv: Map[_, _]) =>
@@ -148,14 +144,12 @@ private[xml] object StaxXmlGenerator {
       val valueArray = map.valueArray()
       // write attributes first
       Seq (true, false).foreach { writeAttribute =>
-        var i = 0
-        while (i < map.numElements()) {
+        (0 until map.numElements()).foreach { i =>
           val key = keyArray.get(i, mapType.keyType).toString
           val isAttribute = key.startsWith(options.attributePrefix) && key != options.valueTag
           if (writeAttribute == isAttribute) {
             writeChild(key, mapType.valueType, valueArray.get(i, mapType.valueType))
           }
-          i += 1
         }
       }
     }

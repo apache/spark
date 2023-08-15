@@ -82,8 +82,8 @@ class StaxXmlParser(
   }
 
   def parseStream(
-    inputStream: InputStream,
-    schema: StructType): Iterator[InternalRow] = {
+      inputStream: InputStream,
+      schema: StructType): Iterator[InternalRow] = {
     val xsdSchema = Option(options.rowValidationXSDPath).map(ValidatorUtil.getSchema)
     val safeParser = new FailureSafeParser[String](
       input => doParseColumn(input, options.parseMode, xsdSchema),

@@ -96,7 +96,7 @@ private[sql] object CreateXmlParser extends Serializable {
   }
 
   def inputStream(enc: String, xmlInputFactory: XMLInputFactory,
-    is: InputStream): XMLEventReader = {
+      is: InputStream): XMLEventReader = {
     val eventReader = xmlInputFactory.createXMLEventReader(new InputStreamReader(is, enc))
     xmlInputFactory.createFilteredReader(eventReader, filter)
   }
@@ -111,7 +111,7 @@ private[sql] object CreateXmlParser extends Serializable {
   }
 
   def internalRow(enc: String, xmlInputFactory: XMLInputFactory,
-    row: InternalRow): XMLEventReader = {
+      row: InternalRow): XMLEventReader = {
     val binary = row.getBinary(0)
     val sd = getStreamDecoder(enc, binary, binary.length)
 

@@ -29,7 +29,7 @@ import org.apache.spark.sql.execution.datasources.{CodecStreams, OutputWriter}
 import org.apache.spark.sql.execution.datasources.xml.parsers.StaxXmlGenerator
 import org.apache.spark.sql.types.StructType
 
-class XMLOutputWriter(
+class XmlOutputWriter(
     val path: String,
     dataSchema: StructType,
     context: TaskAttemptContext,
