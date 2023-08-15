@@ -2023,21 +2023,9 @@ class DataFrame:
 
     # SparkConnect specific API
     def offset(self, n: int) -> "DataFrame":
-        """Returns a new :class: `DataFrame` by skipping the first `n` rows.
-
-        .. versionadded:: 3.4.0
-
-        Parameters
-        ----------
-        num : int
-            Number of records to skip.
-
-        Returns
-        -------
-        :class:`DataFrame`
-            Subset of the records
-        """
         return DataFrame.withPlan(plan.Offset(child=self._plan, offset=n), session=self._session)
+
+    offset.__doc__ = PySparkDataFrame.offset.__doc__
 
     @classmethod
     def withPlan(cls, plan: plan.LogicalPlan, session: "SparkSession") -> "DataFrame":

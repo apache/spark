@@ -15547,6 +15547,12 @@ def udtf(
 
     .. versionadded:: 3.5.0
 
+    .. versionchanged:: 4.0.0
+        Supports Python side analysis.
+
+    .. versionchanged:: 4.0.0
+        Supports keyword-arguments.
+
     Parameters
     ----------
     cls : class
@@ -15622,6 +15628,38 @@ def udtf(
     +---+---+
     |  1|  x|
     +---+---+
+
+    UDTF can use keyword arguments:
+
+    >>> @udtf
+    ... class TestUDTFWithKwargs:
+    ...     @staticmethod
+    ...     def analyze(
+    ...         a: AnalyzeArgument, b: AnalyzeArgument, **kwargs: AnalyzeArgument
+    ...     ) -> AnalyzeResult:
+    ...         return AnalyzeResult(
+    ...             StructType().add("a", a.data_type)
+    ...                 .add("b", b.data_type)
+    ...                 .add("x", kwargs["x"].data_type)
+    ...         )
+    ...
+    ...     def eval(self, a, b, **kwargs):
+    ...         yield a, b, kwargs["x"]
+    ...
+    >>> TestUDTFWithKwargs(lit(1), x=lit("x"), b=lit("b")).show()
+    +---+---+---+
+    |  a|  b|  x|
+    +---+---+---+
+    |  1|  b|  x|
+    +---+---+---+
+
+    >>> _ = spark.udtf.register("test_udtf", TestUDTFWithKwargs)
+    >>> spark.sql("SELECT * FROM test_udtf(1, x => 'x', b => 'b')").show()
+    +---+---+---+
+    |  a|  b|  x|
+    +---+---+---+
+    |  1|  b|  x|
+    +---+---+---+
 
     Arrow optimization can be explicitly enabled when creating UDTFs:
 

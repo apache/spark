@@ -34,7 +34,7 @@ import org.apache.arrow.vector.ipc.ArrowReader
 import org.apache.arrow.vector.util.Text
 
 import org.apache.spark.sql.catalyst.ScalaReflection
-import org.apache.spark.sql.catalyst.encoders.AgnosticEncoder
+import org.apache.spark.sql.catalyst.encoders.{AgnosticEncoder, OuterScopes}
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders._
 import org.apache.spark.sql.catalyst.expressions.GenericRowWithSchema
 import org.apache.spark.sql.connect.client.CloseableIterator
@@ -290,15 +290,23 @@ object ArrowDeserializers {
 
       case (ProductEncoder(tag, fields), StructVectors(struct, vectors)) =>
         // We should try to make this work with MethodHandles.
+        val outer = Option(OuterScopes.getOuterScope(tag.runtimeClass)).map(_()).toSeq
         val Some(constructor) =
-          ScalaReflection.findConstructor(tag.runtimeClass, fields.map(_.enc.clsTag.runtimeClass))
+          ScalaReflection.findConstructor(
+            tag.runtimeClass,
+            outer.map(_.getClass) ++ fields.map(_.enc.clsTag.runtimeClass))
         val deserializers = if (isTuple(tag.runtimeClass)) {
           fields.zip(vectors).map { case (field, vector) =>
             deserializerFor(field.enc, vector, timeZoneId)
           }
         } else {
+          val outerDeserializer = outer.map { value =>
+            new Deserializer[Any] {
+              override def get(i: Int): Any = value
+            }
+          }
           val lookup = createFieldLookup(vectors)
-          fields.map { field =>
+          outerDeserializer ++ fields.map { field =>
             deserializerFor(field.enc, lookup(field.name), timeZoneId)
           }
         }
