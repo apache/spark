@@ -4288,18 +4288,6 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
-  val LEGACY_AVRO_ALLOW_INCOMPATIBLE_SCHEMA =
-    buildConf("spark.sql.legacy.avro.allowIncompatibleSchema")
-      .internal()
-      .doc("When set to false, if types in Avro are encoded in the same format, but " +
-        "the type in the Avro schema explicitly says that the data types are different, " +
-        "reject reading the data type in the format to avoid returning incorrect results. " +
-        "When set to true, it restores the legacy behavior of allow reading the data in the" +
-        " format, which may return incorrect results.")
-      .version("3.5.0")
-      .booleanConf
-      .createWithDefault(false)
-
   val LEGACY_NON_IDENTIFIER_OUTPUT_CATALOG_NAME =
     buildConf("spark.sql.legacy.v1IdentifierNoCatalog")
       .internal()
@@ -4369,6 +4357,16 @@ object SQLConf {
       .intConf
       .checkValue(_ >= 0, "The threshold of cached local relations must not be negative")
       .createWithDefault(64 * 1024 * 1024)
+
+  val DECORRELATE_JOIN_PREDICATE_ENABLED =
+    buildConf("spark.sql.optimizer.decorrelateJoinPredicate.enabled")
+      .internal()
+      .doc("Decorrelate scalar and lateral subqueries with correlated references in join " +
+        "predicates. This configuration is only effective when " +
+        "'${DECORRELATE_INNER_QUERY_ENABLED.key}' is true.")
+      .version("4.0.0")
+      .booleanConf
+      .createWithDefault(true)
 
   /**
    * Holds information about keys that have been deprecated.

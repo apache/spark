@@ -22,11 +22,11 @@ from pyspark.sql.connect.utils import check_dependencies
 check_dependencies(__name__)
 
 import warnings
-from typing import Type, TYPE_CHECKING, Optional, Union
+from typing import List, Type, TYPE_CHECKING, Optional, Union
 
 from pyspark.rdd import PythonEvalType
 from pyspark.sql.connect.column import Column
-from pyspark.sql.connect.expressions import ColumnReference
+from pyspark.sql.connect.expressions import ColumnReference, Expression, NamedArgumentExpression
 from pyspark.sql.connect.plan import (
     CommonInlineUserDefinedTableFunction,
     PythonUDTF,
@@ -146,12 +146,14 @@ class UserDefinedTableFunction:
         self.deterministic = deterministic
 
     def _build_common_inline_user_defined_table_function(
-        self, *cols: "ColumnOrName"
+        self, *args: "ColumnOrName", **kwargs: "ColumnOrName"
     ) -> CommonInlineUserDefinedTableFunction:
-        arg_cols = [
-            col if isinstance(col, Column) else Column(ColumnReference(col)) for col in cols
+        def to_expr(col: "ColumnOrName") -> Expression:
+            return col._expr if isinstance(col, Column) else ColumnReference(col)
+
+        arg_exprs: List[Expression] = [to_expr(arg) for arg in args] + [
+            NamedArgumentExpression(key, to_expr(value)) for key, value in kwargs.items()
         ]
-        arg_exprs = [col._expr for col in arg_cols]
 
         udtf = PythonUDTF(
             func=self.func,
@@ -166,13 +168,13 @@ class UserDefinedTableFunction:
             arguments=arg_exprs,
         )
 
-    def __call__(self, *cols: "ColumnOrName") -> "DataFrame":
+    def __call__(self, *args: "ColumnOrName", **kwargs: "ColumnOrName") -> "DataFrame":
         from pyspark.sql.connect.session import SparkSession
         from pyspark.sql.connect.dataframe import DataFrame
 
         session = SparkSession.active()
 
-        plan = self._build_common_inline_user_defined_table_function(*cols)
+        plan = self._build_common_inline_user_defined_table_function(*args, **kwargs)
         return DataFrame.withPlan(plan, session)
 
     def asNondeterministic(self) -> "UserDefinedTableFunction":

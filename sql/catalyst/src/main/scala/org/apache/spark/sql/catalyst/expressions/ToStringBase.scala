@@ -352,7 +352,7 @@ trait ToStringBase { self: UnaryExpression with TimeZoneAwareExpression =>
        |  $buffer.append($keyToStringFunc($getMapFirstKey));
        |  $buffer.append(" ->");
        |  if ($map.valueArray().isNullAt(0)) {
-       |    ${appendNull(buffer, isFirstElement = true)}
+       |    ${appendNull(buffer, isFirstElement = false)}
        |  } else {
        |    $buffer.append(" ");
        |    $buffer.append($valueToStringFunc($getMapFirstValue));

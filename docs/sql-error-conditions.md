@@ -93,18 +93,6 @@ Invalid as-of join.
 
 For more details see [AS_OF_JOIN](sql-error-conditions-as-of-join-error-class.html)
 
-### AVRO_INCORRECT_TYPE
-
-SQLSTATE: none assigned
-
-Cannot convert Avro `<avroPath>` to SQL `<sqlPath>` because the original encoded data type is `<avroType>`, however you're trying to read the field as `<sqlType>`, which would lead to an incorrect answer. To allow reading this field, enable the SQL configuration: `<key>`.
-
-### AVRO_LOWER_PRECISION
-
-SQLSTATE: none assigned
-
-Cannot convert Avro `<avroPath>` to SQL `<sqlPath>` because the original encoded data type is `<avroType>`, however you're trying to read the field as `<sqlType>`, which leads to data being read as null. Please provide a wider decimal type to get the correct result. To allow reading null to this field, enable the SQL configuration: `<key>`.
-
 ### BATCH_METADATA_NOT_FOUND
 
 [SQLSTATE: 42K03](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
@@ -2186,5 +2174,3 @@ The operation `<operation>` requires a `<requiredType>`. But `<objectName>` is a
 The `<functionName>` requires `<expectedNum>` parameters but the actual number is `<actualNum>`.
 
 For more details see [WRONG_NUM_ARGS](sql-error-conditions-wrong-num-args-error-class.html)
-
-
