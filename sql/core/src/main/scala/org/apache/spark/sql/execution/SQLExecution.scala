@@ -62,11 +62,16 @@ object SQLExecution {
   /**
    * Wrap an action that will execute "queryExecution" to track all Spark jobs in the body so that
    * we can connect them with an execution.
+   *
+   * @param queryExecution the query execution for the `body` function to run on
+   * @param name the query execution
+   * @param errored indicates whether the query execution is already errored
+   * @param body the function runs on the query execution
    */
   def withNewExecutionId[T](
       queryExecution: QueryExecution,
       name: Option[String] = None,
-      error: Option[Throwable] = None)(body: => T): T = queryExecution.sparkSession.withActive {
+      errored: Boolean = false)(body: => T): T = queryExecution.sparkSession.withActive {
     val sparkSession = queryExecution.sparkSession
     val sc = sparkSession.sparkContext
     val oldExecutionId = sc.getLocalProperty(EXECUTION_ID_KEY)
@@ -114,12 +119,14 @@ object SQLExecution {
       val redactedConfigs = sparkSession.sessionState.conf.redactOptions(modifiedConfigs)
 
       withSQLConfPropagated(sparkSession) {
-        var ex: Option[Throwable] = error
+        var ex: Option[Throwable] = None
         val startTime = System.nanoTime()
         try {
-          val planInfo = if (ex.isEmpty) {
+          val planInfo = if (!errored) {
             SparkPlanInfo.fromSparkPlan(queryExecution.executedPlan)
           } else {
+            // If the queryExecution already failed before this, we are not able to generate the
+            // the plan info, so we use and empty graphviz node to make the UI happy
             SparkPlanInfo.EMPTY
           }
           sc.listenerBus.post(SparkListenerSQLExecutionStart(

@@ -68,7 +68,7 @@ class QueryExecution(
       analyzed
     } catch {
       case e: AnalysisException =>
-        SQLExecution.withNewExecutionId(this, Some("analyze"), Some(e)) {
+        SQLExecution.withNewExecutionId(this, Some("analyze"), errored = true) {
           throw e
         }
     }
