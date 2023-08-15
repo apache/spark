@@ -48,12 +48,6 @@
     </dependency>
     <dependency>
       <groupId>org.apache.spark</groupId>
-      <artifactId>spark-connect-client-jvm-internal_${scala.binary.version}</artifactId>
-      <version>${project.version}</version>
-      <scope>provided</scope>
-    </dependency>
-    <dependency>
-      <groupId>org.apache.spark</groupId>
       <artifactId>spark-sql-api_${scala.binary.version}</artifactId>
       <version>${project.version}</version>
       <scope>provided</scope>
