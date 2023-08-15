@@ -1891,6 +1891,7 @@ class BaseUDTFTestsMixin:
 
             def eval(self, row: Row):
                 self._sum += row["input"]
+                      + f'row partition col = {row["partition_col"]}')
                 if self._partition_col is not None and self._partition_col != row["partition_col"]:
                     # Make sure that all values of the partitioning column are the same
                     # for each row consumed by this method for this instance of the class.
