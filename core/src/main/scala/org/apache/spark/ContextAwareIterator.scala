@@ -33,7 +33,7 @@ import org.apache.spark.annotation.DeveloperApi
  * @deprecated since 4.0.0 as its only usage for Python evaluation is now extinct
  */
 @DeveloperApi
-@deprecated("Only usage for Python evaluation is now extinct", "3.5.0")
+@deprecated("Only usage for Python evaluation is now extinct", "4.0.0")
 class ContextAwareIterator[+T](val context: TaskContext, val delegate: Iterator[T])
   extends Iterator[T] {
 
