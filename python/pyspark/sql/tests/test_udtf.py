@@ -1565,6 +1565,7 @@ class BaseUDTFTestsMixin:
         expected = [Row(c1="hello", c2="world")]
         assertDataFrameEqual(TestUDTF(), expected)
         assertDataFrameEqual(self.spark.sql("SELECT * FROM test_udtf()"), expected)
+        assertDataFrameEqual(self.spark.sql("SELECT * FROM test_udtf(a=>1)"), expected)
 
         with self.assertRaisesRegex(
             AnalysisException, r"analyze\(\) takes 0 positional arguments but 1 was given"
@@ -1794,6 +1795,163 @@ class BaseUDTFTestsMixin:
                 with self.subTest(query_no=i):
                     assertSchemaEqual(df.schema, StructType().add("col1", IntegerType()))
                     assertDataFrameEqual(df, [Row(col1=10), Row(col1=100)])
+
+    def test_udtf_with_named_arguments(self):
+        @udtf(returnType="a: int")
+        class TestUDTF:
+            def eval(self, a, b):
+                yield a,
+
+        self.spark.udtf.register("test_udtf", TestUDTF)
+
+        for i, df in enumerate(
+            [
+                self.spark.sql("SELECT * FROM test_udtf(a => 10, b => 'x')"),
+                self.spark.sql("SELECT * FROM test_udtf(b => 'x', a => 10)"),
+                TestUDTF(a=lit(10), b=lit("x")),
+                TestUDTF(b=lit("x"), a=lit(10)),
+            ]
+        ):
+            with self.subTest(query_no=i):
+                assertDataFrameEqual(df, [Row(a=10)])
+
+    def test_udtf_with_named_arguments_negative(self):
+        @udtf(returnType="a: int")
+        class TestUDTF:
+            def eval(self, a, b):
+                yield a,
+
+        self.spark.udtf.register("test_udtf", TestUDTF)
+
+        with self.assertRaisesRegex(
+            AnalysisException,
+            "DUPLICATE_ROUTINE_PARAMETER_ASSIGNMENT.DOUBLE_NAMED_ARGUMENT_REFERENCE",
+        ):
+            self.spark.sql("SELECT * FROM test_udtf(a => 10, a => 100)").show()
+
+        with self.assertRaisesRegex(AnalysisException, "UNEXPECTED_POSITIONAL_ARGUMENT"):
+            self.spark.sql("SELECT * FROM test_udtf(a => 10, 'x')").show()
+
+        with self.assertRaisesRegex(
+            PythonException, r"eval\(\) got an unexpected keyword argument 'c'"
+        ):
+            self.spark.sql("SELECT * FROM test_udtf(c => 'x')").show()
+
+    def test_udtf_with_kwargs(self):
+        @udtf(returnType="a: int, b: string")
+        class TestUDTF:
+            def eval(self, **kwargs):
+                yield kwargs["a"], kwargs["b"]
+
+        self.spark.udtf.register("test_udtf", TestUDTF)
+
+        for i, df in enumerate(
+            [
+                self.spark.sql("SELECT * FROM test_udtf(a => 10, b => 'x')"),
+                self.spark.sql("SELECT * FROM test_udtf(b => 'x', a => 10)"),
+                TestUDTF(a=lit(10), b=lit("x")),
+                TestUDTF(b=lit("x"), a=lit(10)),
+            ]
+        ):
+            with self.subTest(query_no=i):
+                assertDataFrameEqual(df, [Row(a=10, b="x")])
+
+    def test_udtf_with_analyze_kwargs(self):
+        @udtf
+        class TestUDTF:
+            @staticmethod
+            def analyze(**kwargs: AnalyzeArgument) -> AnalyzeResult:
+                return AnalyzeResult(
+                    StructType(
+                        [StructField(key, arg.data_type) for key, arg in sorted(kwargs.items())]
+                    )
+                )
+
+            def eval(self, **kwargs):
+                yield tuple(value for _, value in sorted(kwargs.items()))
+
+        self.spark.udtf.register("test_udtf", TestUDTF)
+
+        for i, df in enumerate(
+            [
+                self.spark.sql("SELECT * FROM test_udtf(a => 10, b => 'x')"),
+                self.spark.sql("SELECT * FROM test_udtf(b => 'x', a => 10)"),
+                TestUDTF(a=lit(10), b=lit("x")),
+                TestUDTF(b=lit("x"), a=lit(10)),
+            ]
+        ):
+            with self.subTest(query_no=i):
+                assertDataFrameEqual(df, [Row(a=10, b="x")])
+
+    def test_udtf_with_named_arguments_lateral_join(self):
+        @udtf
+        class TestUDTF:
+            @staticmethod
+            def analyze(a, b):
+                return AnalyzeResult(StructType().add("a", a.data_type))
+
+            def eval(self, a, b):
+                yield a,
+
+        self.spark.udtf.register("test_udtf", TestUDTF)
+
+        # lateral join
+        for i, df in enumerate(
+            [
+                self.spark.sql(
+                    "SELECT f.* FROM "
+                    "VALUES (0, 'x'), (1, 'y') t(a, b), LATERAL test_udtf(a => a, b => b) f"
+                ),
+                self.spark.sql(
+                    "SELECT f.* FROM "
+                    "VALUES (0, 'x'), (1, 'y') t(a, b), LATERAL test_udtf(b => b, a => a) f"
+                ),
+            ]
+        ):
+            with self.subTest(query_no=i):
+                assertDataFrameEqual(df, [Row(a=0), Row(a=1)])
+
+    def test_udtf_with_named_arguments_and_defaults(self):
+        @udtf
+        class TestUDTF:
+            @staticmethod
+            def analyze(a, b=None):
+                schema = StructType().add("a", a.data_type)
+                if b is None:
+                    return AnalyzeResult(schema.add("b", IntegerType()))
+                else:
+                    return AnalyzeResult(schema.add("b", b.data_type))
+
+            def eval(self, a, b=100):
+                yield a, b
+
+        self.spark.udtf.register("test_udtf", TestUDTF)
+
+        # without "b"
+        for i, df in enumerate(
+            [
+                self.spark.sql("SELECT * FROM test_udtf(10)"),
+                self.spark.sql("SELECT * FROM test_udtf(a => 10)"),
+                TestUDTF(lit(10)),
+                TestUDTF(a=lit(10)),
+            ]
+        ):
+            with self.subTest(query_no=i):
+                assertDataFrameEqual(df, [Row(a=10, b=100)])
+
+        # with "b"
+        for i, df in enumerate(
+            [
+                self.spark.sql("SELECT * FROM test_udtf(10, b => 'z')"),
+                self.spark.sql("SELECT * FROM test_udtf(a => 10, b => 'z')"),
+                self.spark.sql("SELECT * FROM test_udtf(b => 'z', a => 10)"),
+                TestUDTF(lit(10), b=lit("z")),
+                TestUDTF(a=lit(10), b=lit("z")),
+                TestUDTF(b=lit("z"), a=lit(10)),
+            ]
+        ):
+            with self.subTest(query_no=i):
+                assertDataFrameEqual(df, [Row(a=10, b="z")])
 
 
 class UDTFTests(BaseUDTFTestsMixin, ReusedSQLTestCase):

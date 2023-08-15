@@ -33,7 +33,7 @@ import org.apache.spark.internal.config.BUFFER_SIZE
 import org.apache.spark.internal.config.Python._
 import org.apache.spark.sql.{Column, DataFrame, Dataset, SparkSession}
 import org.apache.spark.sql.catalyst.expressions.{Expression, FunctionTableSubqueryArgumentExpression, NamedArgumentExpression, PythonUDAF, PythonUDF, PythonUDTF, UnresolvedPolymorphicPythonUDTF}
-import org.apache.spark.sql.catalyst.plans.logical.{Generate, LogicalPlan, OneRowRelation}
+import org.apache.spark.sql.catalyst.plans.logical.{Generate, LogicalPlan, NamedParametersSupport, OneRowRelation}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DataType, StructType}
@@ -101,6 +101,13 @@ case class UserDefinedPythonTableFunction(
   }
 
   def builder(exprs: Seq[Expression]): LogicalPlan = {
+    /*
+     * Check if the named arguments:
+     * - don't have duplicated names
+     * - don't contain positional arguments
+     */
+    NamedParametersSupport.splitAndCheckNamedArguments(exprs, name)
+
     val udtf = returnType match {
       case Some(rt) =>
         PythonUDTF(
@@ -213,8 +220,6 @@ object UserDefinedPythonTableFunction {
     val bufferStream = new DirectByteBufferOutputStream()
     try {
       val dataOut = new DataOutputStream(new BufferedOutputStream(bufferStream, bufferSize))
-      val dataIn = new DataInputStream(new BufferedInputStream(
-        new WorkerInputStream(worker, bufferStream), bufferSize))
 
       PythonWorkerUtils.writePythonVersion(pythonVer, dataOut)
       PythonWorkerUtils.writeSparkFiles(jobArtifactUUID, pythonIncludes, dataOut)
@@ -237,10 +242,21 @@ object UserDefinedPythonTableFunction {
           dataOut.writeBoolean(false)
         }
         dataOut.writeBoolean(is_table)
+        // If the expr is NamedArgumentExpression, send its name.
+        expr match {
+          case NamedArgumentExpression(key, _) =>
+            dataOut.writeBoolean(true)
+            PythonWorkerUtils.writeUTF(key, dataOut)
+          case _ =>
+            dataOut.writeBoolean(false)
+        }
       }
 
       dataOut.writeInt(SpecialLengths.END_OF_STREAM)
       dataOut.flush()
+
+      val dataIn = new DataInputStream(new BufferedInputStream(
+        new WorkerInputStream(worker, bufferStream.toByteBuffer), bufferSize))
 
       // Receive the schema
       val schema = dataIn.readInt() match {
@@ -273,9 +289,13 @@ object UserDefinedPythonTableFunction {
       case eof: EOFException =>
         throw new SparkException("Python worker exited unexpectedly (crashed)", eof)
     } finally {
-      if (!releasedOrClosed) {
-        // An error happened. Force to close the worker.
-        env.destroyPythonWorker(pythonExec, workerModule, envVars.asScala.toMap, worker)
+      try {
+        bufferStream.close()
+      } finally {
+        if (!releasedOrClosed) {
+          // An error happened. Force to close the worker.
+          env.destroyPythonWorker(pythonExec, workerModule, envVars.asScala.toMap, worker)
+        }
       }
     }
   }
@@ -288,8 +308,7 @@ object UserDefinedPythonTableFunction {
    * This is a port and simplified version of `PythonRunner.ReaderInputStream`,
    * and only supports to write all at once and then read all.
    */
-  private class WorkerInputStream(
-      worker: PythonWorker, bufferStream: DirectByteBufferOutputStream) extends InputStream {
+  private class WorkerInputStream(worker: PythonWorker, buffer: ByteBuffer) extends InputStream {
 
     private[this] val temp = new Array[Byte](1)
 
@@ -312,14 +331,15 @@ object UserDefinedPythonTableFunction {
           n = worker.channel.read(buf)
         }
         if (worker.selectionKey.isWritable) {
-          val buffer = bufferStream.toByteBuffer
           var acceptsInput = true
           while (acceptsInput && buffer.hasRemaining) {
             val n = worker.channel.write(buffer)
             acceptsInput = n > 0
           }
-          // We no longer have any data to write to the socket.
-          worker.selectionKey.interestOps(SelectionKey.OP_READ)
+          if (!buffer.hasRemaining) {
+            // We no longer have any data to write to the socket.
+            worker.selectionKey.interestOps(SelectionKey.OP_READ)
+          }
         }
       }
       n
