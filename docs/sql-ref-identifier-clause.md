@@ -21,7 +21,7 @@ license: |
 
 ### Description
 
-Convert a constant `STRING` expression into a SQL object name.
+Converts a constant `STRING` expression into a SQL object name.
 The purpose of this clause is to allow for templating of identifiers in SQL statements without opening up the risk of SQL injection attacks.
 Typically, this clause is used with a parameter marker as argument.
 
@@ -33,7 +33,7 @@ IDENTIFIER ( strExpr )
 
 ### Parameters
 
-- strExpr: A constant STRING expression. Typically, the expression includes a parameter marker.
+- **strExpr**: A constant `STRING` expression. Typically, the expression includes a parameter marker.
 
 ### Returns
 
@@ -46,25 +46,61 @@ A (qualified) identifier which can be used as a:
 
 ### Examples
 
+These examples use named parameter markers to templatize queries.
+
 ```scala
--- Using IDENTIFIER() on a namepace
-spark.sql("CREATE SCHEMA IDENTIFIER(:namespace)", args = Map("namespace" -> "mychema")
+// Creation of a table using parameter marker.
+spark.sql("CREATE TABLE IDENTIFIER(:mytab)(c1 INT)", args = Map("mytab" -> "tab1")).show()
 
--- Using IDENTIFIER() on table DDL
-spark.sql("CREATE TABLE IDENTIFIER('myschema.' || :tabname) (c1 INT)", args = Map("tabname" -> "mytable")
+spark.sql("DESCRIBE IDENTIFIER(:mytab)", args = Map("mytab" -> "tab1")).show()
++--------+---------+-------+
+|col_name|data_type|comment|
++--------+---------+-------+
+|      c1|      int|   NULL|
++--------+---------+-------+
 
--- Using IDENTIFIER() on table DML
-spark.sql("INSERT INTO IDENTIFIER(:tabname) VALUES (1)", args = Map("tabname" -> "myschema.mytable")
+// Altering a table with a fixed schema and a parameterized table name. 
+spark.sql("ALTER TABLE IDENTIFIER('default.' || :mytab) ADD COLUMN c2 INT", args = Map("mytab" -> "tab1")).show()
 
--- Using IDENTIFIER() on a table reference 
-spark.sql("SELECT * FROM IDENTIFIER(:tabname)", args = Map("tabname" -> "myschema.mytable")
+spark.sql("DESCRIBE IDENTIFIER(:mytab)", args = Map("mytab" -> "default.tab1")).show()
++--------+---------+-------+
+|col_name|data_type|comment|
++--------+---------+-------+
+|      c1|      int|   NULL|
+|      c2|      int|   NULL|
++--------+---------+-------+
 
--- Using IDENTIFIER() on a column reference 
-spark.sql("SELECT IDENTIFIER(:colname) FROM mychema.mytable WHERE IDENTIFIER(:colname) IS NOT NULL", args = Map("colname" -> "`c1`")
+// A parameterized reference to a table in a query. This table name is qualified and uses back-ticks.
+spark.sql("SELECT * FROM IDENTIFIER(:mytab)", args = Map("mytab" -> "`default`.`tab1`")).show()
++---+---+
+| c1| c2|
++---+---+
++---+---+
 
--- Using IDENTIFIER() on a function reference 
-spark.sql("SELECT IDENTIFIER(:aggFunc)(c1) FROM myschema.mytable", args = Map("aggFunc" -> "sum")
 
--- Using IDENTIFIER() on SHOW
-spark.sql("SHOW TABLES IN IDENTIFIER(:namespace)", args = Map("namespace" -> "mychema")
+// You cannot qualify the IDENTIFIER clause or use it as a qualifier itself.
+spark.sql("SELECT * FROM myschema.IDENTIFIER(:mytab)", args = Map("mytab" -> "`tab1`")).show()
+[INVALID_SQL_SYNTAX.INVALID_TABLE_VALUED_FUNC_NAME] `myschema`.`IDENTIFIER`.
+
+spark.sql("SELECT * FROM IDENTIFIER(:myschema).mytab", args = Map("mychema" -> "`default`")).show()
+[PARSE_SYNTAX_ERROR]
+
+// Dropping a table with separate schema and table parameters.
+spark.sql("DROP TABLE IDENTIFIER(:myschema || '.' || :mytab)", args = Map("myschema" -> "default", "mytab" -> "tab1")).show()
+
+// A parameterized column reference
+spark.sql("SELECT IDENTIFIER(:col) FROM VALUES(1) AS T(c1)", args = Map("col" -> "t.c1")).show()
++---+
+| c1|
++---+
+|  1|
++---+
+
+// Passing in a function name as a parameter
+spark.sql("SELECT IDENTIFIER(:func)(-1)", args = Map("func" -> "abs")).show();
++-------+
+|abs(-1)|
++-------+
+|      1|
++-------+
 ```
