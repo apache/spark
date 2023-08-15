@@ -3249,6 +3249,17 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
         self.assert_eq(10, df.count())
         self.assertTrue(df.is_cached)
 
+    def test_deep_recursion_of_proto_messages(self):
+        """SPARK-44814 - Test to trigger a crash in protobuf 4.23.3."""
+        df_base = self.connect.createDataFrame(("a", "b"), ["colA", "colB"])
+        df_other = self.connect.createDataFrame(("a", "b"), ["colA", "colB"])
+        for x in range(60):
+            df_base = df_base.union(df_other)
+
+        # Trigger the proto serialization that will in turn trigger the
+        # segmentation fault in protobuf 4.23.3.
+        self.assertGreater(df_base._plan.to_proto(self.connect).SerializeToString(), 0)
+
 
 class SparkConnectSessionTests(ReusedConnectTestCase):
     def setUp(self) -> None:
