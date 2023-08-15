@@ -99,8 +99,8 @@ case class ExecuteEventsManager(executeHolder: ExecuteHolder, clock: Clock) {
 
   /**
    * @return
-   * How many rows the Connect request has produced @link
-   * org.apache.spark.sql.connect.service.SparkListenerConnectOperationFinished
+   *   How many rows the Connect request has produced @link
+   *   org.apache.spark.sql.connect.service.SparkListenerConnectOperationFinished
    */
   private[connect] def getProducedRowCount: Option[Long] = producedRowCount
 
@@ -201,12 +201,15 @@ case class ExecuteEventsManager(executeHolder: ExecuteHolder, clock: Clock) {
 
   /**
    * Post @link org.apache.spark.sql.connect.service.SparkListenerConnectOperationFinished.
+   * @param producedRowsCountOpt
+   *   Number of rows that are returned to the user. None is expected when the operation does not
+   *   return any rows.
    */
-  def postFinished(totalNumRowsOpt: Option[Long] = None): Unit = {
+  def postFinished(producedRowsCountOpt: Option[Long] = None): Unit = {
     assertStatus(
       List(ExecuteStatus.Started, ExecuteStatus.ReadyForExecution),
       ExecuteStatus.Finished)
-    producedRowCount = totalNumRowsOpt
+    producedRowCount = producedRowsCountOpt
 
     listenerBus
       .post(
@@ -214,9 +217,7 @@ case class ExecuteEventsManager(executeHolder: ExecuteHolder, clock: Clock) {
           jobTag,
           operationId,
           clock.getTimeMillis(),
-          producedRowCount
-        )
-      )
+          producedRowCount))
   }
 
   /**
@@ -415,6 +416,9 @@ case class SparkListenerConnectOperationFailed(
  *   The time in ms when the event was generated.
  * @param extraTags:
  *   Additional metadata during the request.
+ * @param producedRowCount:
+ *   Number of rows that are returned to the user. None is expected when the operation does not
+ *   return any rows.
  */
 case class SparkListenerConnectOperationFinished(
     jobTag: String,

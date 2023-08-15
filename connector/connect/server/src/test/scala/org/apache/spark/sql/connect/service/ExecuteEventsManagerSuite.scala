@@ -150,8 +150,7 @@ class ExecuteEventsManagerSuite
           events.executeHolder.jobTag,
           DEFAULT_QUERY_ID,
           DEFAULT_CLOCK.getTimeMillis(),
-          Some(100)
-        ))
+          Some(100)))
   }
 
   test("SPARK-43923: post closed") {

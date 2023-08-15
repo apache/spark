@@ -165,7 +165,6 @@ private[execution] class SparkConnectPlanExecution(executeHolder: ExecuteHolder)
               // Collect errors and propagate them to the main thread.
               .andThen {
                 case Success(_) =>
-                  executePlan.eventsManager.postFinished(Some(totalNumRows))
                 case Failure(throwable) =>
                   signal.synchronized {
                     error = Some(throwable)
@@ -202,6 +201,7 @@ private[execution] class SparkConnectPlanExecution(executeHolder: ExecuteHolder)
               currentPartitionId += 1
             }
             ThreadUtils.awaitReady(future, Duration.Inf)
+            executePlan.eventsManager.postFinished(Some(totalNumRows))
           } else {
             executePlan.eventsManager.postFinished(Some(totalNumRows))
           }
