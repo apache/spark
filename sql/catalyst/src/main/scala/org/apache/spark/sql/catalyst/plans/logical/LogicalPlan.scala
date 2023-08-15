@@ -156,15 +156,6 @@ abstract class LogicalPlan
       .orElse(outputMetadataAttributes.resolve(nameParts, resolver))
 
   /**
-   * Optionally resolves the given strings to a [[NamedExpression]] based on the metadata of this
-   * LogicalPlan. The attribute is expressed as string in the following form:
-   * `[scope].AttributeName.[nested].[fields]...`.
-   */
-  def resolveMetadata(nameParts: Seq[String], resolver: Resolver): Option[NamedExpression] = {
-    outputMetadataAttributes.resolve(nameParts, resolver)
-  }
-
-  /**
    * Given an attribute name, split it to name parts by dot, but
    * don't split the name parts quoted by backticks, for example,
    * `ab.cd`.`efg` should be split into two parts "ab.cd" and "efg".
