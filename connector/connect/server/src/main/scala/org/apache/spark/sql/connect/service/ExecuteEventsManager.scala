@@ -414,11 +414,11 @@ case class SparkListenerConnectOperationFailed(
  *   36 characters UUID assigned by Connect during a request.
  * @param eventTime:
  *   The time in ms when the event was generated.
- * @param extraTags:
- *   Additional metadata during the request.
  * @param producedRowCount:
  *   Number of rows that are returned to the user. None is expected when the operation does not
  *   return any rows.
+ * @param extraTags:
+ *   Additional metadata during the request.
  */
 case class SparkListenerConnectOperationFinished(
     jobTag: String,

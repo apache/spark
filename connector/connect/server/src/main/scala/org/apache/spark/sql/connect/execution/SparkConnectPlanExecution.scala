@@ -164,7 +164,7 @@ private[execution] class SparkConnectPlanExecution(executeHolder: ExecuteHolder)
                 resultFunc = () => ())
               // Collect errors and propagate them to the main thread.
               .andThen {
-                case Success(_) =>
+                case Success(_) => // do nothing
                 case Failure(throwable) =>
                   signal.synchronized {
                     error = Some(throwable)
