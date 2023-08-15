@@ -265,20 +265,18 @@ class ReplE2ESuite extends RemoteSparkSession with BeforeAndAfterEach {
   }
 
   test("Collect REPL generated class") {
-    val input = """
+    val input =
+      """
         |case class MyTestClass(value: Int)
         |spark.range(4).
         |  filter($"id" % 2 === 1).
         |  select($"id".cast("int").as("value")).
         |  as[MyTestClass].
-        |  collect()
-      """.stripMargin
+        |  collect().
+        |  map(mtc => s"MyTestClass(${mtc.value})").
+        |  mkString("[", ", ", "]")
+          """.stripMargin
     val output = runCommandsInShell(input)
-    // SPARK-44791: The result printed by Scala 2.13 is
-    // `Array[MyTestClass] = Array(MyTestClass(value = 1), MyTestClass(value = 3))`,
-    // remove all `value =` from output to keep it the same as the result of Scala 2.12.
-    assertContains(
-      "Array[MyTestClass] = Array(MyTestClass(1), MyTestClass(3))",
-      output.replaceAll("value = ", ""))
+    assertContains("""String = "[MyTestClass(1), MyTestClass(3)]"""", output)
   }
 }
