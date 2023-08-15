@@ -302,11 +302,10 @@ object ShuffleExchangeExec {
           samplePointsPerPartitionHint = SQLConf.get.rangeExchangeSampleSizePerPartition)
       case SinglePartition => new ConstantPartitioner
       case KeyGroupedPartitioning(expressions, n, partitionValues) =>
-        val partitionValueMap = mutable.Map[Seq[Any], Int]()
-        partitionValues.zipWithIndex.foreach(partAndIndex => {
-          partitionValueMap(partAndIndex._1.toSeq(expressions.map(_.dataType))) = partAndIndex._2
-        })
-        new KeyGroupedPartitioner(partitionValueMap, n)
+        val valueMap = partitionValues.zipWithIndex.map {
+          case (partition, index) => (partition.toSeq(expressions.map(_.dataType)), index)
+        }.toMap
+        new KeyGroupedPartitioner(mutable.Map(valueMap.toSeq: _*), n)
       case _ => throw new IllegalStateException(s"Exchange not implemented for $newPartitioning")
       // TODO: Handle BroadcastPartitioning.
     }
