@@ -26,28 +26,9 @@ import org.apache.spark.util.SparkClassUtils
 
 object OuterScopes {
   private[this] val queue = new ReferenceQueue[AnyRef]
-  private class HashableWeakReference(v: AnyRef) extends WeakReference[AnyRef](v, queue) {
-    private[this] val hash = v.hashCode()
-    override def hashCode(): Int = hash
-    override def equals(obj: Any): Boolean = {
-      obj match {
-        case other: HashableWeakReference =>
-          // Note that referential equality is used to identify & purge
-          // references from the map whose' referent went out of scope.
-          if (this eq other) {
-            true
-          } else {
-            val referent = get()
-            val otherReferent = other.get()
-            referent != null && otherReferent != null && Objects.equals(referent, otherReferent)
-          }
-        case _ => false
-      }
-    }
-  }
 
   private def classLoaderRef(c: Class[_]): HashableWeakReference = {
-    new HashableWeakReference(c.getClassLoader)
+    new HashableWeakReference(c.getClassLoader, queue)
   }
 
   private[this] val outerScopes = {
@@ -153,4 +134,32 @@ object OuterScopes {
   // The format of ammonite REPL generated wrapper class's name,
   // e.g. `ammonite.$sess.cmd8$Helper$Foo` -> `ammonite.$sess.cmd8.instance.Foo`
   private[this] val AmmoniteREPLClass = """^(ammonite\.\$sess\.cmd(?:\d+)\$).*""".r
+}
+
+/**
+ * A [[WeakReference]] that has a stable hash-key. When the referent is still alive we will use
+ * the referent for equality, once it is dead it we will fallback to referential equality. This
+ * way you can still do lookups in a map when the referent is alive, and are capable of removing
+ * dead entries after GC (using a [[ReferenceQueue]]).
+ */
+private[catalyst] class HashableWeakReference(v: AnyRef, queue: ReferenceQueue[AnyRef])
+  extends WeakReference[AnyRef](v, queue) {
+  def this(v: AnyRef) = this(v, null)
+  private[this] val hash = v.hashCode()
+  override def hashCode(): Int = hash
+  override def equals(obj: Any): Boolean = {
+    obj match {
+      case other: HashableWeakReference =>
+        // Note that referential equality is used to identify & purge
+        // references from the map whose' referent went out of scope.
+        if (this eq other) {
+          true
+        } else {
+          val referent = get()
+          val otherReferent = other.get()
+          referent != null && otherReferent != null && Objects.equals(referent, otherReferent)
+        }
+      case _ => false
+    }
+  }
 }

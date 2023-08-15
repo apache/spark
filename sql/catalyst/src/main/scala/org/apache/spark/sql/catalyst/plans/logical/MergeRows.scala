@@ -21,7 +21,7 @@ import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeSet, Expre
 import org.apache.spark.sql.catalyst.plans.logical.MergeRows.{Instruction, ROW_ID}
 import org.apache.spark.sql.catalyst.trees.UnaryLike
 import org.apache.spark.sql.catalyst.util.truncatedString
-import org.apache.spark.sql.types.DataType
+import org.apache.spark.sql.types.{DataType, NullType}
 
 case class MergeRows(
     isSourceRowPresent: Expression,
@@ -74,7 +74,11 @@ object MergeRows {
     def condition: Expression
     def outputs: Seq[Seq[Expression]]
     override def nullable: Boolean = false
-    override def dataType: DataType = throw new UnsupportedOperationException("dataType")
+    // We return NullType here as only the `MergeRows` operator can contain `Instruction`
+    // expressions and it doesn't care about the data type. Some external optimizer rules may
+    // assume optimized plan is always resolved and Expression#dataType is always available, so
+    // we can't just fail here.
+    override def dataType: DataType = NullType
   }
 
   case class Keep(condition: Expression, output: Seq[Expression]) extends Instruction {

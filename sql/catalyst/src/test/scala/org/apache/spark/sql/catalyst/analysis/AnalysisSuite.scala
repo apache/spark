@@ -1658,4 +1658,21 @@ class AnalysisSuite extends AnalysisTest with Matchers {
       plan.join(plan).analyze
     }
   }
+
+  test("IDENTIFIER with alias and RuntimeReplaceable") {
+    val name = Literal("a").as("name")
+    val replaceable = new Nvl(Literal("a"), Literal("b"))
+    withClue("IDENTIFIER as column") {
+      val ident = ExpressionWithUnresolvedIdentifier(name, UnresolvedAttribute.apply)
+      checkAnalysis(testRelation.select(ident), testRelation.select($"a").analyze)
+      val ident2 = ExpressionWithUnresolvedIdentifier(replaceable, UnresolvedAttribute.apply)
+      checkAnalysis(testRelation.select(ident2), testRelation.select($"a").analyze)
+    }
+    withClue("IDENTIFIER as table") {
+      val ident = PlanWithUnresolvedIdentifier(name, _ => testRelation)
+      checkAnalysis(ident.select($"a"), testRelation.select($"a").analyze)
+      val ident2 = PlanWithUnresolvedIdentifier(replaceable, _ => testRelation)
+      checkAnalysis(ident2.select($"a"), testRelation.select($"a").analyze)
+    }
+  }
 }

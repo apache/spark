@@ -804,17 +804,87 @@ object DecorrelateInnerQuery extends PredicateHelper {
             (d.copy(child = newChild), joinCond, outerReferenceMap)
 
           case j @ Join(left, right, joinType, condition, _) =>
-            val outerReferences = collectOuterReferences(j.expressions)
-            // Join condition containing outer references is not supported.
-            assert(outerReferences.isEmpty, s"Correlated column is not allowed in join: $j")
-            val newOuterReferences = parentOuterReferences ++ outerReferences
-            val shouldPushToLeft = joinType match {
+            // Given 'condition', computes the tuple of
+            // (correlated, uncorrelated, equalityCond, predicates, equivalences).
+            // 'correlated' and 'uncorrelated' are the conjuncts with (resp. without)
+            // outer (correlated) references. Furthermore, correlated conjuncts are split
+            // into 'equalityCond' (those that are equalities) and all rest ('predicates').
+            // 'equivalences' track equivalent attributes given 'equalityCond'.
+            // The split is only performed if 'shouldDecorrelatePredicates' is true.
+            // The input parameter 'isInnerJoin' is set to true for INNER joins and helps
+            // determine whether some predicates can be lifted up from the join (this is only
+            // valid for inner joins).
+            // Example: For a 'condition' A = outer(X) AND B > outer(Y) AND C = D, the output
+            // would be:
+            // correlated = (A = outer(X), B > outer(Y))
+            // uncorrelated = (C = D)
+            // equalityCond = (A = outer(X))
+            // predicates = (B > outer(Y))
+            // equivalences: (A -> outer(X))
+            def splitCorrelatedPredicate(
+                condition: Option[Expression],
+                isInnerJoin: Boolean,
+                shouldDecorrelatePredicates: Boolean):
+            (Seq[Expression], Seq[Expression], Seq[Expression],
+              Seq[Expression], AttributeMap[Attribute]) = {
+              // Similar to Filters above, we split the join condition (if present) into correlated
+              // and uncorrelated predicates, and separately handle joins under set and aggregation
+              // operations.
+              if (shouldDecorrelatePredicates) {
+                val conditions =
+                  if (condition.isDefined) splitConjunctivePredicates(condition.get)
+                  else Seq.empty[Expression]
+                val (correlated, uncorrelated) = conditions.partition(containsOuter)
+                var equivalences =
+                  if (underSetOp) AttributeMap.empty[Attribute]
+                  else collectEquivalentOuterReferences(correlated)
+                var (equalityCond, predicates) =
+                  if (underSetOp) (Seq.empty[Expression], correlated)
+                  else correlated.partition(canPullUpOverAgg)
+                // Fully preserve the join predicate for non-inner joins.
+                if (!isInnerJoin) {
+                  predicates = correlated
+                  equalityCond = Seq.empty[Expression]
+                  equivalences = AttributeMap.empty[Attribute]
+                }
+                (correlated, uncorrelated, equalityCond, predicates, equivalences)
+              } else {
+                (Seq.empty[Expression],
+                  if (condition.isEmpty) Seq.empty[Expression] else Seq(condition.get),
+                  Seq.empty[Expression],
+                  Seq.empty[Expression],
+                  AttributeMap.empty[Attribute])
+              }
+            }
+
+            val shouldDecorrelatePredicates =
+              SQLConf.get.getConf(SQLConf.DECORRELATE_JOIN_PREDICATE_ENABLED)
+            if (!shouldDecorrelatePredicates) {
+              val outerReferences = collectOuterReferences(j.expressions)
+              // Join condition containing outer references is not supported.
+              assert(outerReferences.isEmpty, s"Correlated column is not allowed in join: $j")
+            }
+            val (correlated, uncorrelated, equalityCond, predicates, equivalences) =
+              splitCorrelatedPredicate(condition, joinType == Inner, shouldDecorrelatePredicates)
+            val outerReferences = collectOuterReferences(j.expressions) ++
+              collectOuterReferences(predicates)
+            val newOuterReferences =
+              parentOuterReferences ++ outerReferences -- equivalences.keySet
+            var shouldPushToLeft = joinType match {
               case LeftOuter | LeftSemiOrAnti(_) | FullOuter => true
               case _ => hasOuterReferences(left)
             }
             val shouldPushToRight = joinType match {
               case RightOuter | FullOuter => true
               case _ => hasOuterReferences(right)
+            }
+            if (shouldDecorrelatePredicates && !shouldPushToLeft && !shouldPushToRight
+              && !predicates.isEmpty) {
+              // Neither left nor right children of the join have correlations, but the join
+              // predicate does, and the correlations can not be replaced via equivalences.
+              // Introduce a domain join on the left side of the join
+              // (chosen arbitrarily) to provide values for the correlated attribute reference.
+              shouldPushToLeft = true;
             }
             val (newLeft, leftJoinCond, leftOuterReferenceMap) = if (shouldPushToLeft) {
               decorrelate(left, newOuterReferences, aggregated, underSetOp)
@@ -826,8 +896,13 @@ object DecorrelateInnerQuery extends PredicateHelper {
             } else {
               (right, Nil, AttributeMap.empty[Attribute])
             }
-            val newOuterReferenceMap = leftOuterReferenceMap ++ rightOuterReferenceMap
-            val newJoinCond = leftJoinCond ++ rightJoinCond
+            val newOuterReferenceMap = leftOuterReferenceMap ++ rightOuterReferenceMap ++
+              equivalences
+            val newCorrelated =
+              if (shouldDecorrelatePredicates) {
+                replaceOuterReferences(correlated, newOuterReferenceMap)
+              } else Seq.empty[Expression]
+            val newJoinCond = leftJoinCond ++ rightJoinCond ++ equalityCond
             // If we push the dependent join to both sides, we can augment the join condition
             // such that both sides are matched on the domain attributes. For example,
             // - Left Map: {outer(c1) = c1}
@@ -836,7 +911,8 @@ object DecorrelateInnerQuery extends PredicateHelper {
             val augmentedConditions = leftOuterReferenceMap.flatMap {
               case (outer, inner) => rightOuterReferenceMap.get(outer).map(EqualNullSafe(inner, _))
             }
-            val newCondition = (condition ++ augmentedConditions).reduceOption(And)
+            val newCondition = (newCorrelated ++ uncorrelated
+              ++ augmentedConditions).reduceOption(And)
             val newJoin = j.copy(left = newLeft, right = newRight, condition = newCondition)
             (newJoin, newJoinCond, newOuterReferenceMap)
 
