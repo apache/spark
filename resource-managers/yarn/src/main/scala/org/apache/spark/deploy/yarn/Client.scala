@@ -468,17 +468,19 @@ private[spark] class Client(
    * from the directory will be preloaded.
    *
    * @param jars : the list of jars to upload
-   * @return a list of directories to be preloaded
+   * @return a hashmap contains directories to be preloaded and all file URIs in that directory
    * */
-  private[yarn] def directoriesToBePreloaded(jars: Seq[String]): List[URI] = {
-    val directoryCounter = new HashMap[URI, Int]()
+  private[yarn] def directoriesToBePreloaded(jars: Seq[String]): HashMap[URI, Set[URI]] = {
+    val directoryToFiles = new HashMap[URI, Set[URI]]()
     jars.foreach { jar =>
       if (!Utils.isLocalUri(jar) && !new GlobPattern(jar).hasWildcard) {
-        val parentUri = new Path(Utils.resolveURI(jar)).getParent.toUri
-        directoryCounter.update(parentUri, directoryCounter.getOrElse(parentUri, 0) + 1)
+        val currentUri = Utils.resolveURI(jar)
+        val parentUri = new Path(currentUri).getParent.toUri
+        directoryToFiles.update(parentUri, directoryToFiles.getOrElse(parentUri, Set.empty)
+          .union(Set(currentUri.normalize())))
       }
     }
-    directoryCounter.filter(_._2 >= statCachePreloadDirectoryCountThreshold).keys.toList
+    directoryToFiles.filter(_._2.size >= statCachePreloadDirectoryCountThreshold)
   }
 
   /**
@@ -492,11 +494,11 @@ private[spark] class Client(
       fsLookup: URI => FileSystem = FileSystem.get(_, hadoopConf)): HashMap[URI, FileStatus] = {
     val statCache = HashMap[URI, FileStatus]()
     val jars = sparkConf.get(SPARK_JARS)
-    val directories = jars.map(directoriesToBePreloaded).getOrElse(ArrayBuffer.empty[URI])
+    val directoryToFiles = jars.map(directoriesToBePreloaded).getOrElse(HashMap.empty)
 
-    directoryToFiles.foreach { case (dir: String, filesInDir: Set[String]) =>
+    directoryToFiles.foreach { case (dir: URI, filesInDir: Set[URI]) =>
       fsLookup(dir).listStatus(new Path(dir)).filter(_.isFile()).
-        filter(f => filesInDir.contains(f.getPath.getName)).foreach { fileStatus =>
+        filter(f => filesInDir.contains(f.getPath.toUri)).foreach { fileStatus =>
           val uri = fileStatus.getPath.toUri
           statCache.put(uri, fileStatus)
         }

@@ -690,7 +690,7 @@ class ClientSuite extends SparkFunSuite with Matchers {
   test("SPARK-44306: test statCachePreload") {
     val sparkConf = new SparkConf()
       .set(YARN_CLIENT_STAT_CACHE_PRELOAD_PER_DIRECTORY_THRESHOLD, 2)
-      .set(SPARK_JARS, Seq("hdfs:/valid/a.jar", "hdfs:/valid/b.jar"))
+      .set(SPARK_JARS, Seq("hdfs:/valid/a.jar", "hdfs:/valid/sub/../b.jar"))
     val client = createClient(sparkConf, args = Array("--jar", USER))
     val mockFileSystem = mock(classOf[FileSystem])
     val mockFsLookup: URI => FileSystem = _ => mockFileSystem
