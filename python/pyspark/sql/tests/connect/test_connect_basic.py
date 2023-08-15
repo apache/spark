@@ -3251,8 +3251,8 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
 
     def test_deep_recursion_of_proto_messages(self):
         """SPARK-44814 - Test to trigger a crash in protobuf 4.23.3."""
-        df_base = self.connect.createDataFrame(("a", "b"), ["colA", "colB"])
-        df_other = self.connect.createDataFrame(("a", "b"), ["colA", "colB"])
+        df_base = self.connect.createDataFrame((("a", "b"),), ["colA", "colB"])
+        df_other = self.connect.createDataFrame((("a", "b"),), ["colA", "colB"])
         for x in range(60):
             df_base = df_base.union(df_other)
 
