@@ -495,7 +495,9 @@ def main():
 
     # Check this up front to avoid failing the JIRA update at the very end
     if not JIRA_ACCESS_TOKEN and (not JIRA_USERNAME or not JIRA_PASSWORD):
-        continue_maybe("The env-vars JIRA_ACCESS_TOKEN, JIRA_USERNAME and/or JIRA_PASSWORD are not set. Continue?")
+        continue_maybe(
+            "The env-vars JIRA_ACCESS_TOKEN, JIRA_USERNAME and/or JIRA_PASSWORD are not set. Continue?"
+        )
 
     branches = get_json("%s/branches" % GITHUB_API_BASE)
     branch_names = list(filter(lambda x: x.startswith("branch-"), [x["name"] for x in branches]))
