@@ -65,16 +65,10 @@ object SQLExecution extends Logging {
   /**
    * Wrap an action that will execute "queryExecution" to track all Spark jobs in the body so that
    * we can connect them with an execution.
-   *
-   * @param queryExecution the query execution for the `body` function to run on
-   * @param name the query execution
-   * @param errored indicates whether the query execution is already errored
-   * @param body the function runs on the query execution
    */
   def withNewExecutionId[T](
       queryExecution: QueryExecution,
-      name: Option[String] = None,
-      errored: Boolean = false)(body: => T): T = queryExecution.sparkSession.withActive {
+      name: Option[String] = None)(body: => T): T = queryExecution.sparkSession.withActive {
     val sparkSession = queryExecution.sparkSession
     val sc = sparkSession.sparkContext
     val oldExecutionId = sc.getLocalProperty(EXECUTION_ID_KEY)
