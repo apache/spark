@@ -680,7 +680,8 @@ def read_udtf(pickleSer, infile, eval_type):
                 return result
 
             return lambda *a, **kw: map(
-                lambda res: (res, arrow_return_type), map(verify_result, f(a, kw)))
+                lambda res: (res, arrow_return_type), map(verify_result, f(*a, *kw))
+            )
 
         eval = wrap_arrow_udtf(getattr(udtf, "eval"), return_type)
 
@@ -771,7 +772,8 @@ def read_udtf(pickleSer, infile, eval_type):
                 for a in it:
                     yield eval(
                         *[a[o] for o in args_offsets],
-                        *{k: a[o] for k, o in kwargs_offsets.items()})
+                        *{k: a[o] for k, o in kwargs_offsets.items()},
+                    )
             finally:
                 if terminate is not None:
                     yield terminate()
