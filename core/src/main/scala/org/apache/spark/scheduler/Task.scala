@@ -195,6 +195,12 @@ private[spark] abstract class Task[T](
   def reasonIfKilled: Option[String] = Option(_reasonIfKilled)
 
   /**
+   * If true, this task has been killed with interruptThread = true, however the interrupt was
+   * not serviced since taskThread could be null.
+   */
+  @volatile @transient private var _pendingInterrupt: Boolean = false
+
+  /**
    * Returns the amount of time spent deserializing the RDD and function to be run.
    */
   def executorDeserializeTimeNs: Long = _executorDeserializeTimeNs
@@ -218,8 +224,7 @@ private[spark] abstract class Task[T](
 
   /**
    * Kills a task by setting the interrupted flag to true. This relies on the upper level Spark
-   * code and user code to properly handle the flag. This function should be idempotent so it can
-   * be called multiple times.
+   * code and user code to properly handle the flag.
    * If interruptThread is true, we will also call Thread.interrupt() on the Task's executor thread.
    */
   def kill(interruptThread: Boolean, reason: String): Unit = {
@@ -228,7 +233,15 @@ private[spark] abstract class Task[T](
     if (context != null) {
       context.markInterrupted(reason)
     }
-    if (interruptThread && taskThread != null) {
+
+    // Its possible that taskThread has not been initialized when kill is called.
+    // We will try to kill this thread later since _reasonIfKilled is set. However, we need to
+    // explicitly interrupt the thread to serve the previously pending interrupt, if any.
+    if (interruptThread) {
+      _pendingInterrupt = true
+    }
+
+    if ((interruptThread || _pendingInterrupt) && taskThread != null) {
       taskThread.interrupt()
     }
   }
