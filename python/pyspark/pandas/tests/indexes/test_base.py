@@ -42,10 +42,6 @@ class IndexesTestsMixin:
             index=[0, 1, 3, 5, 6, 8, 9, 9, 9],
         )
 
-    @unittest.skipIf(
-        LooseVersion(pd.__version__) >= LooseVersion("2.0.0"),
-        "TODO(SPARK-43606): Enable IndexesTests.test_index_basic for pandas 2.0.0.",
-    )
     def test_index_basic(self):
         for pdf in [
             pd.DataFrame(np.random.randn(10, 5), index=np.random.randint(100, size=10)),
@@ -70,22 +66,12 @@ class IndexesTestsMixin:
                 self.assert_eq(type(psdf.index).__name__, type(pdf.index).__name__)
 
         self.assert_eq(ps.Index([])._summary(), "Index: 0 entries")
-        if LooseVersion(pd.__version__) >= LooseVersion("2.0.0"):
-            with self.assertRaisesRegexp(ValueError, "The truth value of a Index is ambiguous."):
-                bool(ps.Index([1]))
-            with self.assertRaisesRegexp(TypeError, "Index.name must be a hashable type"):
-                ps.Index([1, 2, 3], name=[(1, 2, 3)])
-            with self.assertRaisesRegexp(TypeError, "Index.name must be a hashable type"):
-                ps.Index([1.0, 2.0, 3.0], name=[(1, 2, 3)])
-        else:
-            with self.assertRaisesRegexp(
-                ValueError, "The truth value of a Int64Index is ambiguous."
-            ):
-                bool(ps.Index([1]))
-            with self.assertRaisesRegexp(TypeError, "Index.name must be a hashable type"):
-                ps.Int64Index([1, 2, 3], name=[(1, 2, 3)])
-            with self.assertRaisesRegexp(TypeError, "Index.name must be a hashable type"):
-                ps.Float64Index([1.0, 2.0, 3.0], name=[(1, 2, 3)])
+        with self.assertRaisesRegexp(ValueError, "The truth value of a Index is ambiguous."):
+            bool(ps.Index([1]))
+        with self.assertRaisesRegexp(TypeError, "Index.name must be a hashable type"):
+            ps.Index([1, 2, 3], name=[(1, 2, 3)])
+        with self.assertRaisesRegexp(TypeError, "Index.name must be a hashable type"):
+            ps.Index([1.0, 2.0, 3.0], name=[(1, 2, 3)])
 
     def test_index_from_series(self):
         pser = pd.Series([1, 2, 3], name="a", index=[10, 20, 30])
@@ -95,15 +81,8 @@ class IndexesTestsMixin:
         self.assert_eq(ps.Index(psser, dtype="float"), pd.Index(pser, dtype="float"))
         self.assert_eq(ps.Index(psser, name="x"), pd.Index(pser, name="x"))
 
-        if LooseVersion(pd.__version__) >= LooseVersion("2.0.0"):
-            self.assert_eq(ps.Index(psser, dtype="int64"), pd.Index(pser, dtype="int64"))
-            self.assert_eq(ps.Index(psser, dtype="float64"), pd.Index(pser, dtype="float64"))
-        elif LooseVersion(pd.__version__) >= LooseVersion("1.1"):
-            self.assert_eq(ps.Int64Index(psser), pd.Int64Index(pser))
-            self.assert_eq(ps.Float64Index(psser), pd.Float64Index(pser))
-        else:
-            self.assert_eq(ps.Int64Index(psser), pd.Int64Index(pser).rename("a"))
-            self.assert_eq(ps.Float64Index(psser), pd.Float64Index(pser).rename("a"))
+        self.assert_eq(ps.Index(psser, dtype="int64"), pd.Index(pser, dtype="int64"))
+        self.assert_eq(ps.Index(psser, dtype="float64"), pd.Index(pser, dtype="float64"))
 
         pser = pd.Series([datetime(2021, 3, 1), datetime(2021, 3, 2)], name="x", index=[10, 20])
         psser = ps.from_pandas(pser)
@@ -120,12 +99,8 @@ class IndexesTestsMixin:
         self.assert_eq(ps.Index(psidx, name="x"), pd.Index(pidx, name="x"))
         self.assert_eq(ps.Index(psidx, copy=True), pd.Index(pidx, copy=True))
 
-        if LooseVersion(pd.__version__) >= LooseVersion("2.0.0"):
-            self.assert_eq(ps.Index(psidx, dtype="int64"), pd.Index(pidx, dtype="int64"))
-            self.assert_eq(ps.Index(psidx, dtype="float64"), pd.Index(pidx, dtype="float64"))
-        else:
-            self.assert_eq(ps.Int64Index(psidx), pd.Int64Index(pidx))
-            self.assert_eq(ps.Float64Index(psidx), pd.Float64Index(pidx))
+        self.assert_eq(ps.Index(psidx, dtype="int64"), pd.Index(pidx, dtype="int64"))
+        self.assert_eq(ps.Index(psidx, dtype="float64"), pd.Index(pidx, dtype="float64"))
 
         pidx = pd.DatetimeIndex(["2021-03-01", "2021-03-02"])
         psidx = ps.from_pandas(pidx)

@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution.command.v2
 
+import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.util.quoteIdentifier
@@ -56,10 +57,13 @@ class AlterTableDropPartitionSuite
       sql(s"CREATE TABLE $t (id bigint, data string) $defaultUsing PARTITIONED BY (id)")
       sql(s"ALTER TABLE $t ADD PARTITION (id=1)")
       try {
-        val errMsg = intercept[UnsupportedOperationException] {
-          sql(s"ALTER TABLE $t DROP PARTITION (id=1) PURGE")
-        }.getMessage
-        assert(errMsg.contains("purge is not supported"))
+        checkError(
+          exception = intercept[SparkUnsupportedOperationException] {
+            sql(s"ALTER TABLE $t DROP PARTITION (id=1) PURGE")
+          },
+          errorClass = "UNSUPPORTED_FEATURE.PURGE_PARTITION",
+          parameters = Map.empty
+        )
       } finally {
         sql(s"ALTER TABLE $t DROP PARTITION (id=1)")
       }

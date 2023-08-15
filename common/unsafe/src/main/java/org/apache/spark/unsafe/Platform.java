@@ -68,14 +68,9 @@ public final class Platform {
     }
     try {
       Class<?> cls = Class.forName("java.nio.DirectByteBuffer");
-      Constructor<?> constructor;
-      try {
-        constructor = cls.getDeclaredConstructor(Long.TYPE, Integer.TYPE);
-      } catch (NoSuchMethodException e) {
-        // DirectByteBuffer(long,int) was removed in
-        // https://github.com/openjdk/jdk/commit/a56598f5a534cc9223367e7faa8433ea38661db9
-        constructor = cls.getDeclaredConstructor(Long.TYPE, Long.TYPE);
-      }
+      Constructor<?> constructor = (majorVersion < 21) ?
+        cls.getDeclaredConstructor(Long.TYPE, Integer.TYPE) :
+        cls.getDeclaredConstructor(Long.TYPE, Long.TYPE);
       Field cleanerField = cls.getDeclaredField("cleaner");
       try {
         constructor.setAccessible(true);

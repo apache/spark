@@ -531,6 +531,10 @@ class StringFunctionsSuite extends QueryTest with SharedSparkSession {
       df.select(length($"a"), length($"b")),
       Row(3, 4))
 
+    checkAnswer(
+      df.select(len($"a"), len($"b")),
+      Row(3, 4))
+
     Seq("length", "len").foreach { len =>
       checkAnswer(df.selectExpr(s"$len(a)", s"$len(b)"), Row(3, 4))
       checkAnswer(df.selectExpr(s"$len(c)", s"$len(d)", s"$len(e)"), Row(3, 3, 5))
@@ -857,6 +861,18 @@ class StringFunctionsSuite extends QueryTest with SharedSparkSession {
     )
     checkAnswer(
       df.select(to_char(col("a"), lit("$99.99"))),
+      Seq(Row("$78.12"))
+    )
+  }
+
+  test("to_varchar") {
+    val df = Seq(78.12).toDF("a")
+    checkAnswer(
+      df.selectExpr("to_varchar(a, '$99.99')"),
+      Seq(Row("$78.12"))
+    )
+    checkAnswer(
+      df.select(to_varchar(col("a"), lit("$99.99"))),
       Seq(Row("$78.12"))
     )
   }

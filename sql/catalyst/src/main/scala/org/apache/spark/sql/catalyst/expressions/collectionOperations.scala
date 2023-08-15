@@ -2141,12 +2141,15 @@ case class ArrayMax(child: Expression)
  */
 @ExpressionDescription(
   usage = """
-    _FUNC_(array, element) - Returns the (1-based) index of the first element of the array as long.
+    _FUNC_(array, element) - Returns the (1-based) index of the first matching element of
+      the array as long, or 0 if no match is found.
   """,
   examples = """
     Examples:
-      > SELECT _FUNC_(array(3, 2, 1), 1);
+      > SELECT _FUNC_(array(312, 773, 708, 708), 708);
        3
+      > SELECT _FUNC_(array(312, 773, 708, 708), 414);
+       0
   """,
   group = "array_funcs",
   since = "2.4.0")

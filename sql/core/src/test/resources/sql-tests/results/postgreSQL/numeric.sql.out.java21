@@ -4697,11 +4697,12 @@ struct<>
 -- !query output
 org.apache.spark.SparkIllegalArgumentException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2278",
+  "errorClass" : "INVALID_FORMAT.MISMATCH_INPUT",
+  "sqlState" : "42601",
   "messageParameters" : {
     "format" : "99G999G999",
     "input" : "-34,338,492",
-    "valueType" : "string"
+    "inputType" : "\"STRING\""
   }
 }
 
@@ -4797,11 +4798,12 @@ struct<>
 -- !query output
 org.apache.spark.SparkIllegalArgumentException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2278",
+  "errorClass" : "INVALID_FORMAT.MISMATCH_INPUT",
+  "sqlState" : "42601",
   "messageParameters" : {
     "format" : "999G999",
     "input" : "123456",
-    "valueType" : "string"
+    "inputType" : "\"STRING\""
   }
 }
 

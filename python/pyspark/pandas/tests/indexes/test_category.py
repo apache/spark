@@ -210,10 +210,6 @@ class CategoricalIndexTestsMixin:
 
         self.assert_eq(pscidx.astype(str), pcidx.astype(str))
 
-    @unittest.skipIf(
-        LooseVersion(pd.__version__) >= LooseVersion("2.0.0"),
-        "TODO(SPARK-43567): Enable CategoricalIndexTests.test_factorize for pandas 2.0.0.",
-    )
     def test_factorize(self):
         pidx = pd.CategoricalIndex([1, 2, 3, None])
         psidx = ps.from_pandas(pidx)
@@ -224,8 +220,8 @@ class CategoricalIndexTestsMixin:
         self.assert_eq(kcodes.tolist(), pcodes.tolist())
         self.assert_eq(kuniques, puniques)
 
-        pcodes, puniques = pidx.factorize(na_sentinel=-2)
-        kcodes, kuniques = psidx.factorize(na_sentinel=-2)
+        pcodes, puniques = pidx.factorize(use_na_sentinel=-2)
+        kcodes, kuniques = psidx.factorize(use_na_sentinel=-2)
 
         self.assert_eq(kcodes.tolist(), pcodes.tolist())
         self.assert_eq(kuniques, puniques)

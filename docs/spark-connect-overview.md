@@ -93,7 +93,7 @@ the release drop down at the top of the page. Then choose your package type, typ
 Now extract the Spark package you just downloaded on your computer, for example:
 
 {% highlight bash %}
-tar -xvf spark-3.4.0-bin-hadoop3.tgz
+tar -xvf spark-{{site.SPARK_VERSION_SHORT}}-bin-hadoop3.tgz
 {% endhighlight %}
 
 In a terminal window, go to the `spark` folder in the location where you extracted
@@ -101,13 +101,13 @@ Spark before and run the `start-connect-server.sh` script to start Spark server 
 Spark Connect, like in this example:
 
 {% highlight bash %}
-./sbin/start-connect-server.sh --packages org.apache.spark:spark-connect_2.12:3.4.0
+./sbin/start-connect-server.sh --packages org.apache.spark:spark-connect_2.12:{{site.SPARK_VERSION_SHORT}}
 {% endhighlight %}
 
-Note that we include a Spark Connect package (`spark-connect_2.12:3.4.0`), when starting
+Note that we include a Spark Connect package (`spark-connect_2.12:{{site.SPARK_VERSION_SHORT}}`), when starting
 Spark server. This is required to use Spark Connect. Make sure to use the same version
 of the package as the Spark version you downloaded previously. In this example,
-Spark 3.4.0 with Scala 2.12.
+Spark {{site.SPARK_VERSION_SHORT}} with Scala 2.12.
 
 Now Spark server is running and ready to accept Spark Connect sessions from client
 applications. In the next section we will walk through how to use Spark Connect

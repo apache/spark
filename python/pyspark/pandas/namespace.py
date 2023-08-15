@@ -1751,8 +1751,6 @@ def to_datetime(
     )
 
 
-# TODO(SPARK-42621): Add `inclusive` parameter and replace `closed`.
-# See https://github.com/pandas-dev/pandas/issues/40245
 def date_range(
     start: Union[str, Any] = None,
     end: Union[str, Any] = None,
@@ -1761,7 +1759,7 @@ def date_range(
     tz: Optional[Union[str, tzinfo]] = None,
     normalize: bool = False,
     name: Optional[str] = None,
-    closed: Optional[str] = None,
+    inclusive: str = "both",
     **kwargs: Any,
 ) -> DatetimeIndex:
     """
@@ -1785,11 +1783,10 @@ def date_range(
         Normalize start/end dates to midnight before generating date range.
     name : str, default None
         Name of the resulting DatetimeIndex.
-    closed : {None, 'left', 'right'}, optional
-        Make the interval closed with respect to the given frequency to
-        the 'left', 'right', or both sides (None, the default).
+    inclusive : {"both", "neither", "left", "right"}, default "both"
+        Include boundaries; Whether to set each bound as closed or open.
 
-        .. deprecated:: 3.4.0
+        .. versionadded:: 4.0.0
 
     **kwargs
         For compatibility. Has no effect on the result.
@@ -1875,36 +1872,31 @@ def date_range(
                    '2019-01-31'],
                   dtype='datetime64[ns]', freq=None)
 
-    `closed` controls whether to include `start` and `end` that are on the
+    `inclusive` controls whether to include `start` and `end` that are on the
     boundary. The default includes boundary points on either end.
 
     >>> ps.date_range(
-    ...     start='2017-01-01', end='2017-01-04', closed=None
-    ... )  # doctest: +SKIP
+    ...     start='2017-01-01', end='2017-01-04', inclusive="both"
+    ... )  # doctest: +NORMALIZE_WHITESPACE
     DatetimeIndex(['2017-01-01', '2017-01-02', '2017-01-03', '2017-01-04'],
                    dtype='datetime64[ns]', freq=None)
 
-    Use ``closed='left'`` to exclude `end` if it falls on the boundary.
+    Use ``inclusive='left'`` to exclude `end` if it falls on the boundary.
 
     >>> ps.date_range(
-    ...     start='2017-01-01', end='2017-01-04', closed='left'
-    ... )  # doctest: +SKIP
+    ...     start='2017-01-01', end='2017-01-04', inclusive='left'
+    ... )  # doctest: +NORMALIZE_WHITESPACE
     DatetimeIndex(['2017-01-01', '2017-01-02', '2017-01-03'], dtype='datetime64[ns]', freq=None)
 
-    Use ``closed='right'`` to exclude `start` if it falls on the boundary.
+    Use ``inclusive='right'`` to exclude `start` if it falls on the boundary.
 
     >>> ps.date_range(
-    ...     start='2017-01-01', end='2017-01-04', closed='right'
-    ... )  # doctest: +SKIP
+    ...     start='2017-01-01', end='2017-01-04', inclusive='right'
+    ... )  # doctest: +NORMALIZE_WHITESPACE
     DatetimeIndex(['2017-01-02', '2017-01-03', '2017-01-04'], dtype='datetime64[ns]', freq=None)
     """
     assert freq not in ["N", "ns"], "nanoseconds is not supported"
     assert tz is None, "Localized DatetimeIndex is not supported"
-    if closed is not None:
-        warnings.warn(
-            "Argument `closed` is deprecated in 3.4.0 and will be removed in 4.0.0.",
-            FutureWarning,
-        )
 
     return cast(
         DatetimeIndex,
@@ -1917,7 +1909,7 @@ def date_range(
                 tz=tz,
                 normalize=normalize,
                 name=name,
-                closed=closed,
+                inclusive=inclusive,
                 **kwargs,
             )
         ),
@@ -2365,7 +2357,6 @@ def concat(
 
     See Also
     --------
-    Series.append : Concatenate Series.
     DataFrame.join : Join DataFrames using indexes.
     DataFrame.merge : Merge DataFrames by indexes or columns.
 

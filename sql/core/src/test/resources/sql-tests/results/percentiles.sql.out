@@ -177,7 +177,7 @@ ORDER BY salary
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "INVALID_WINDOW_SPEC_FOR_AGGREGATION_FUNC",
   "messageParameters" : {
@@ -205,7 +205,7 @@ ORDER BY salary
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "INVALID_WINDOW_SPEC_FOR_AGGREGATION_FUNC",
   "messageParameters" : {
@@ -232,7 +232,7 @@ ORDER BY salary
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "INVALID_WINDOW_SPEC_FOR_AGGREGATION_FUNC",
   "messageParameters" : {
@@ -260,7 +260,7 @@ ORDER BY salary
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "INVALID_WINDOW_SPEC_FOR_AGGREGATION_FUNC",
   "messageParameters" : {
@@ -288,7 +288,7 @@ ORDER BY salary
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "INVALID_WINDOW_SPEC_FOR_AGGREGATION_FUNC",
   "messageParameters" : {
@@ -315,7 +315,7 @@ ORDER BY salary
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "INVALID_WINDOW_SPEC_FOR_AGGREGATION_FUNC",
   "messageParameters" : {
@@ -407,7 +407,7 @@ ORDER BY salary
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "INVALID_WINDOW_SPEC_FOR_AGGREGATION_FUNC",
   "messageParameters" : {
@@ -436,7 +436,7 @@ ORDER BY salary
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "INVALID_WINDOW_SPEC_FOR_AGGREGATION_FUNC",
   "messageParameters" : {
@@ -464,7 +464,7 @@ ORDER BY salary
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "INVALID_WINDOW_SPEC_FOR_AGGREGATION_FUNC",
   "messageParameters" : {
@@ -493,7 +493,7 @@ ORDER BY salary
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "INVALID_WINDOW_SPEC_FOR_AGGREGATION_FUNC",
   "messageParameters" : {
@@ -522,7 +522,7 @@ ORDER BY salary
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "INVALID_WINDOW_SPEC_FOR_AGGREGATION_FUNC",
   "messageParameters" : {
@@ -550,7 +550,7 @@ ORDER BY salary
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "INVALID_WINDOW_SPEC_FOR_AGGREGATION_FUNC",
   "messageParameters" : {

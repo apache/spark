@@ -52,7 +52,7 @@ echo "finish connect-client-jvm module mima check ..."
 
 RESULT_SIZE=$(wc -l .connect-mima-check-result | awk '{print $1}')
 
-# The the file has no content if check passed.
+# The file has no content if check passed.
 if [[ $RESULT_SIZE -eq "0" ]]; then
   ERRORS=""
 else

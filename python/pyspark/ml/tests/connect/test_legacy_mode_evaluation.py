@@ -17,8 +17,13 @@
 #
 import unittest
 import numpy as np
+import tempfile
 
-from pyspark.ml.connect.evaluation import RegressionEvaluator
+from pyspark.ml.connect.evaluation import (
+    RegressionEvaluator,
+    BinaryClassificationEvaluator,
+    MulticlassClassificationEvaluator,
+)
 from pyspark.sql import SparkSession
 
 
@@ -54,6 +59,18 @@ class EvaluationTestsMixin:
         np.testing.assert_almost_equal(mse, expected_mse)
         np.testing.assert_almost_equal(mse_local, expected_mse)
 
+        rmse_evaluator = RegressionEvaluator(
+            metricName="rmse",
+            labelCol="label",
+            predictionCol="prediction",
+        )
+
+        expected_rmse = 0.6683312709480042
+        rmse = rmse_evaluator.evaluate(df1)
+        rmse_local = rmse_evaluator.evaluate(local_df1)
+        np.testing.assert_almost_equal(rmse, expected_rmse)
+        np.testing.assert_almost_equal(rmse_local, expected_rmse)
+
         r2_evaluator = RegressionEvaluator(
             metricName="r2",
             labelCol="label",
@@ -65,6 +82,95 @@ class EvaluationTestsMixin:
         r2_local = r2_evaluator.evaluate(local_df1)
         np.testing.assert_almost_equal(r2, expected_r2)
         np.testing.assert_almost_equal(r2_local, expected_r2)
+
+        # Test save / load
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            r2_evaluator.saveToLocal(f"{tmp_dir}/ev")
+            loaded_evaluator = RegressionEvaluator.loadFromLocal(f"{tmp_dir}/ev")
+            assert loaded_evaluator.getMetricName() == "r2"
+
+    def test_binary_classifier_evaluator(self):
+        df1 = self.spark.createDataFrame(
+            [
+                (1, 0.2, [0.8, 0.2]),
+                (0, 0.6, [0.4, 0.6]),
+                (1, 0.8, [0.2, 0.8]),
+                (1, 0.7, [0.3, 0.7]),
+                (0, 0.4, [0.6, 0.4]),
+                (0, 0.3, [0.7, 0.3]),
+            ],
+            schema=["label", "prob", "prob2"],
+        )
+
+        local_df1 = df1.toPandas()
+
+        for prob_col in ["prob", "prob2"]:
+            auroc_evaluator = BinaryClassificationEvaluator(
+                metricName="areaUnderROC",
+                labelCol="label",
+                probabilityCol=prob_col,
+            )
+
+            expected_auroc = 0.6667
+            auroc = auroc_evaluator.evaluate(df1)
+            auroc_local = auroc_evaluator.evaluate(local_df1)
+            np.testing.assert_almost_equal(auroc, expected_auroc, decimal=2)
+            np.testing.assert_almost_equal(auroc_local, expected_auroc, decimal=2)
+
+            auprc_evaluator = BinaryClassificationEvaluator(
+                metricName="areaUnderPR",
+                labelCol="label",
+                probabilityCol=prob_col,
+            )
+
+            expected_auprc = 0.8333
+            auprc = auprc_evaluator.evaluate(df1)
+            auprc_local = auprc_evaluator.evaluate(local_df1)
+            np.testing.assert_almost_equal(auprc, expected_auprc, decimal=2)
+            np.testing.assert_almost_equal(auprc_local, expected_auprc, decimal=2)
+
+        # Test save / load
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            auprc_evaluator.saveToLocal(f"{tmp_dir}/ev")
+            loaded_evaluator = RegressionEvaluator.loadFromLocal(f"{tmp_dir}/ev")
+            assert loaded_evaluator.getMetricName() == "areaUnderPR"
+
+    def test_multiclass_classifier_evaluator(self):
+        df1 = self.spark.createDataFrame(
+            [
+                (1, 1),
+                (1, 1),
+                (2, 3),
+                (0, 0),
+                (0, 1),
+                (3, 1),
+                (3, 3),
+                (2, 2),
+                (1, 0),
+                (2, 2),
+            ],
+            schema=["label", "prediction"],
+        )
+
+        local_df1 = df1.toPandas()
+
+        accuracy_evaluator = MulticlassClassificationEvaluator(
+            metricName="accuracy",
+            labelCol="label",
+            predictionCol="prediction",
+        )
+
+        expected_accuracy = 0.600
+        accuracy = accuracy_evaluator.evaluate(df1)
+        accuracy_local = accuracy_evaluator.evaluate(local_df1)
+        np.testing.assert_almost_equal(accuracy, expected_accuracy, decimal=2)
+        np.testing.assert_almost_equal(accuracy_local, expected_accuracy, decimal=2)
+
+        # Test save / load
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            accuracy_evaluator.saveToLocal(f"{tmp_dir}/ev")
+            loaded_evaluator = RegressionEvaluator.loadFromLocal(f"{tmp_dir}/ev")
+            assert loaded_evaluator.getMetricName() == "accuracy"
 
 
 @unittest.skipIf(not have_torcheval, "torcheval is required")

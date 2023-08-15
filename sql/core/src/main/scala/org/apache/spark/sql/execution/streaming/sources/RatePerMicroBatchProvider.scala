@@ -34,11 +34,11 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap
  *  with 0L.
  *
  *  This source supports the following options:
- *  - `rowsPerMicroBatch` (e.g. 100): How many rows should be generated per micro-batch.
+ *  - `rowsPerBatch` (e.g. 100): How many rows should be generated per micro-batch.
  *  - `numPartitions` (e.g. 10, default: Spark's default parallelism): The partition number for the
  *    generated rows.
  *  - `startTimestamp` (e.g. 1000, default: 0): starting value of generated time
- *  - `advanceMillisPerMicroBatch` (e.g. 1000, default: 1000): the amount of time being advanced in
+ *  - `advanceMillisPerBatch` (e.g. 1000, default: 1000): the amount of time being advanced in
  *    generated time on each micro-batch.
  *
  *  Unlike `rate` data source, this data source provides a consistent set of input rows per

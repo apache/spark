@@ -1472,6 +1472,8 @@ test_that("column functions", {
   c29 <- acosh(c1) + asinh(c1) + atanh(c1)
   c30 <- product(c1) + product(c1 * 0.5)
   c31 <- sec(c1) + csc(c1) + cot(c1)
+  c32 <- ln(c1) + positive(c2) + negative(c3)
+  c33 <- width_bucket(lit(2.5), lit(2.0), lit(3.0), lit(10L))
 
   # Test if base::is.nan() is exposed
   expect_equal(is.nan(c("a", "b")), c(FALSE, FALSE))
@@ -4191,8 +4193,7 @@ test_that("catalog APIs, listTables, getTable, listColumns, listFunctions, funct
 
   # recoverPartitions does not work with temporary view
   expect_error(recoverPartitions("cars"),
-               paste("Error in recoverPartitions : analysis error - cars is a temp view.",
-                     "'recoverPartitions()' expects a table"), fixed = TRUE)
+               "[UNSUPPORTED_TEMP_VIEW_OPERATION.WITH_SUGGESTION]*`cars`*")
   expect_error(refreshTable("cars"), NA)
   expect_error(refreshByPath("/"), NA)
 

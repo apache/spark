@@ -20,40 +20,40 @@ import time
 from pyspark.testing.sqlutils import ReusedSQLTestCase
 
 
-class StreamingTestsForeachBatch(ReusedSQLTestCase):
+class StreamingTestsForeachBatchMixin:
     def test_streaming_foreachBatch(self):
         q = None
-        collected = dict()
 
         def collectBatch(batch_df, batch_id):
-            collected[batch_id] = batch_df.collect()
+            batch_df.createOrReplaceGlobalTempView("test_view")
 
         try:
             df = self.spark.readStream.format("text").load("python/test_support/sql/streaming")
             q = df.writeStream.foreachBatch(collectBatch).start()
             q.processAllAvailable()
-            self.assertTrue(0 in collected)
-            self.assertTrue(len(collected[0]), 2)
+            collected = self.spark.sql("select * from global_temp.test_view").collect()
+            self.assertTrue(len(collected), 2)
         finally:
             if q:
                 q.stop()
 
     def test_streaming_foreachBatch_tempview(self):
         q = None
-        collected = dict()
 
         def collectBatch(batch_df, batch_id):
             batch_df.createOrReplaceTempView("updates")
             # it should use the spark session within given DataFrame, as microbatch execution will
             # clone the session which is no longer same with the session used to start the
             # streaming query
-            collected[batch_id] = batch_df.sparkSession.sql("SELECT * FROM updates").collect()
+            assert len(batch_df.sparkSession.sql("SELECT * FROM updates").collect()) == 2
+            # Write to a global view verify on the repl/client side.
+            batch_df.createOrReplaceGlobalTempView("temp_view")
 
         try:
             df = self.spark.readStream.format("text").load("python/test_support/sql/streaming")
             q = df.writeStream.foreachBatch(collectBatch).start()
             q.processAllAvailable()
-            self.assertTrue(0 in collected)
+            collected = self.spark.sql("SELECT * FROM global_temp.temp_view").collect()
             self.assertTrue(len(collected[0]), 2)
         finally:
             if q:
@@ -87,6 +87,10 @@ class StreamingTestsForeachBatch(ReusedSQLTestCase):
         time.sleep(3)  # 'rowsPerSecond' defaults to 1. Waits 3 secs out for the input.
         q.stop()
         self.assertIsNone(q.exception(), "No exception has to be propagated.")
+
+
+class StreamingTestsForeachBatch(StreamingTestsForeachBatchMixin, ReusedSQLTestCase):
+    pass
 
 
 if __name__ == "__main__":

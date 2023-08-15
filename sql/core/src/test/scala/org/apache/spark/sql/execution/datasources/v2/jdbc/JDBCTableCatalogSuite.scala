@@ -189,10 +189,20 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
       expectedSchema = expectedSchema.add("c3", DoubleType, true, defaultMetadata)
       assert(t.schema === expectedSchema)
       // Add already existing column
-      val msg = intercept[AnalysisException] {
-        sql(s"ALTER TABLE $tableName ADD COLUMNS (c3 DOUBLE)")
-      }.getMessage
-      assert(msg.contains("Cannot add column, because c3 already exists"))
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(s"ALTER TABLE $tableName ADD COLUMNS (c3 DOUBLE)")
+        },
+        errorClass = "FIELDS_ALREADY_EXISTS",
+        parameters = Map(
+          "op" -> "add",
+          "fieldNames" -> "`c3`",
+          "struct" -> "\"STRUCT<ID: INT, C1: INT, C2: STRING, c3: DOUBLE>\""),
+        context = ExpectedContext(
+          fragment = s"ALTER TABLE $tableName ADD COLUMNS (c3 DOUBLE)",
+          start = 0,
+          stop = 52)
+      )
     }
     // Add a column to not existing table and namespace
     Seq(
@@ -218,10 +228,20 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
         .add("C0", IntegerType, true, defaultMetadata)
       assert(t.schema === expectedSchema)
       // Rename to already existing column
-      val msg = intercept[AnalysisException] {
-        sql(s"ALTER TABLE $tableName RENAME COLUMN C TO C0")
-      }.getMessage
-      assert(msg.contains("Cannot rename column, because C0 already exists"))
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(s"ALTER TABLE $tableName RENAME COLUMN C TO C0")
+        },
+        errorClass = "FIELDS_ALREADY_EXISTS",
+        parameters = Map(
+          "op" -> "rename",
+          "fieldNames" -> "`C0`",
+          "struct" -> "\"STRUCT<C: INT, C0: INT>\""),
+        context = ExpectedContext(
+          fragment = s"ALTER TABLE $tableName RENAME COLUMN C TO C0",
+          start = 0,
+          stop = 50)
+      )
     }
     // Rename a column in not existing table and namespace
     Seq(

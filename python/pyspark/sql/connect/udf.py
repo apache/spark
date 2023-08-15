@@ -35,10 +35,9 @@ from pyspark.sql.connect.expressions import (
 )
 from pyspark.sql.connect.column import Column
 from pyspark.sql.connect.types import UnparsedDataType
-from pyspark.sql.types import ArrayType, DataType, MapType, StringType, StructType
+from pyspark.sql.types import DataType, StringType
 from pyspark.sql.udf import UDFRegistration as PySparkUDFRegistration
-from pyspark.errors import PySparkTypeError
-
+from pyspark.errors import PySparkTypeError, PySparkRuntimeError
 
 if TYPE_CHECKING:
     from pyspark.sql.connect._typing import (
@@ -56,30 +55,32 @@ def _create_py_udf(
     useArrow: Optional[bool] = None,
 ) -> "UserDefinedFunctionLike":
     from pyspark.sql.udf import _create_arrow_py_udf
-    from pyspark.sql.connect.session import _active_spark_session
 
-    if _active_spark_session is None:
+    if useArrow is None:
         is_arrow_enabled = False
+        try:
+            from pyspark.sql.connect.session import SparkSession
+
+            session = SparkSession.active()
+            is_arrow_enabled = (
+                str(session.conf.get("spark.sql.execution.pythonUDF.arrow.enabled")).lower()
+                == "true"
+            )
+        except PySparkRuntimeError as e:
+            if e.error_class == "NO_ACTIVE_OR_DEFAULT_SESSION":
+                pass  # Just uses the default if no session found.
+            else:
+                raise e
     else:
-        is_arrow_enabled = (
-            _active_spark_session.conf.get("spark.sql.execution.pythonUDF.arrow.enabled") == "true"
-            if useArrow is None
-            else useArrow
-        )
+        is_arrow_enabled = useArrow
 
     regular_udf = _create_udf(f, returnType, PythonEvalType.SQL_BATCHED_UDF)
-    return_type = regular_udf.returnType
     try:
         is_func_with_args = len(getfullargspec(f).args) > 0
     except TypeError:
         is_func_with_args = False
-    is_output_atomic_type = (
-        not isinstance(return_type, StructType)
-        and not isinstance(return_type, MapType)
-        and not isinstance(return_type, ArrayType)
-    )
     if is_arrow_enabled:
-        if is_output_atomic_type and is_func_with_args:
+        if is_func_with_args:
             return _create_arrow_py_udf(regular_udf)
         else:
             warnings.warn(

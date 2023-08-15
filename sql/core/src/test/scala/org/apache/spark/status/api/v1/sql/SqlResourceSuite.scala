@@ -68,18 +68,17 @@ object SqlResourceSuite {
       SQLPlanMetric(SIZE_OF_FILES_READ, 5, ""))
   }
 
-  val sqlExecutionUIData: SQLExecutionUIData = {
-    def getMetricValues() = {
-      Map[Long, String](
-        0L -> "0 ms",
-        1L -> "1",
-        2L -> "2 ms",
-        3L -> "1",
-        4L -> "1",
-        5L -> "330.0 B"
-      )
-    }
+  private def getMetricValues() = {
+    Map[Long, String](
+      0L -> "0 ms",
+      1L -> "1",
+      2L -> "2 ms",
+      3L -> "1",
+      4L -> "1",
+      5L -> "330.0 B")
+  }
 
+  val sqlExecutionUIData: SQLExecutionUIData = {
     new SQLExecutionUIData(
       executionId = 0,
       rootExecutionId = 1,
@@ -204,4 +203,25 @@ class SqlResourceSuite extends SparkFunSuite with PrivateMethodTester {
     assert(wholeStageCodegenId == Some(1))
   }
 
+  test("SPARK-44334: Status of execution w/ error and w/o jobs shall be FAILED not COMPLETED") {
+    val d = new SQLExecutionUIData(
+      0,
+      1,
+      DESCRIPTION,
+      details = "",
+      PLAN_DESCRIPTION,
+      Map.empty,
+      metrics = metrics,
+      submissionTime = 1586768888233L,
+      completionTime = Some(new Date(1586768888999L)),
+      jobs = Map.empty[Int, JobExecutionStatus],
+      stages = Set[Int](),
+      metricValues = getMetricValues(),
+      errorMessage = Some("now you see me, now you don't"))
+    val executionData =
+      sqlResource invokePrivate prepareExecutionData(
+        d,
+        SparkPlanGraph(nodes, edges), true, true)
+    assert(executionData.status == "FAILED")
+  }
 }

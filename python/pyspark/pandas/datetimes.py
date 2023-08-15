@@ -27,7 +27,7 @@ from pandas.tseries.offsets import DateOffset
 
 import pyspark.pandas as ps
 import pyspark.sql.functions as F
-from pyspark.sql.types import DateType, TimestampType, TimestampNTZType, LongType
+from pyspark.sql.types import DateType, TimestampType, TimestampNTZType, LongType, IntegerType
 
 
 class DatetimeMethods:
@@ -64,42 +64,42 @@ class DatetimeMethods:
         """
         The year of the datetime.
         """
-        return self._data.spark.transform(lambda c: F.year(c).cast(LongType()))
+        return self._data.spark.transform(lambda c: F.year(c).cast(IntegerType()))
 
     @property
     def month(self) -> "ps.Series":
         """
         The month of the timestamp as January = 1 December = 12.
         """
-        return self._data.spark.transform(lambda c: F.month(c).cast(LongType()))
+        return self._data.spark.transform(lambda c: F.month(c).cast(IntegerType()))
 
     @property
     def day(self) -> "ps.Series":
         """
         The days of the datetime.
         """
-        return self._data.spark.transform(lambda c: F.dayofmonth(c).cast(LongType()))
+        return self._data.spark.transform(lambda c: F.dayofmonth(c).cast(IntegerType()))
 
     @property
     def hour(self) -> "ps.Series":
         """
         The hours of the datetime.
         """
-        return self._data.spark.transform(lambda c: F.hour(c).cast(LongType()))
+        return self._data.spark.transform(lambda c: F.hour(c).cast(IntegerType()))
 
     @property
     def minute(self) -> "ps.Series":
         """
         The minutes of the datetime.
         """
-        return self._data.spark.transform(lambda c: F.minute(c).cast(LongType()))
+        return self._data.spark.transform(lambda c: F.minute(c).cast(IntegerType()))
 
     @property
     def second(self) -> "ps.Series":
         """
         The seconds of the datetime.
         """
-        return self._data.spark.transform(lambda c: F.second(c).cast(LongType()))
+        return self._data.spark.transform(lambda c: F.second(c).cast(IntegerType()))
 
     @property
     def microsecond(self) -> "ps.Series":
@@ -107,7 +107,7 @@ class DatetimeMethods:
         The microseconds of the datetime.
         """
 
-        def pandas_microsecond(s) -> ps.Series[np.int64]:  # type: ignore[no-untyped-def]
+        def pandas_microsecond(s) -> ps.Series[np.int32]:  # type: ignore[no-untyped-def]
             return s.dt.microsecond
 
         return self._data.pandas_on_spark.transform_batch(pandas_microsecond)
@@ -171,10 +171,10 @@ class DatetimeMethods:
         2017-01-06    4
         2017-01-07    5
         2017-01-08    6
-        dtype: int64
+        dtype: int32
         """
 
-        def pandas_dayofweek(s) -> ps.Series[np.int64]:  # type: ignore[no-untyped-def]
+        def pandas_dayofweek(s) -> ps.Series[np.int32]:  # type: ignore[no-untyped-def]
             return s.dt.dayofweek
 
         return self._data.pandas_on_spark.transform_batch(pandas_dayofweek)
@@ -191,7 +191,7 @@ class DatetimeMethods:
         The ordinal day of the year.
         """
 
-        def pandas_dayofyear(s) -> ps.Series[np.int64]:  # type: ignore[no-untyped-def]
+        def pandas_dayofyear(s) -> ps.Series[np.int32]:  # type: ignore[no-untyped-def]
             return s.dt.dayofyear
 
         return self._data.pandas_on_spark.transform_batch(pandas_dayofyear)
@@ -202,7 +202,7 @@ class DatetimeMethods:
         The quarter of the date.
         """
 
-        def pandas_quarter(s) -> ps.Series[np.int64]:  # type: ignore[no-untyped-def]
+        def pandas_quarter(s) -> ps.Series[np.int32]:  # type: ignore[no-untyped-def]
             return s.dt.quarter
 
         return self._data.pandas_on_spark.transform_batch(pandas_quarter)
@@ -320,7 +320,7 @@ class DatetimeMethods:
         1    1
         2    2
         3    2
-        Name: dates, dtype: int64
+        Name: dates, dtype: int32
 
         >>> df.dates.dt.is_quarter_start
         0    False
@@ -370,7 +370,7 @@ class DatetimeMethods:
         1    1
         2    2
         3    2
-        Name: dates, dtype: int64
+        Name: dates, dtype: int32
 
         >>> df.dates.dt.is_quarter_start
         0    False
@@ -508,7 +508,7 @@ class DatetimeMethods:
         The number of days in the month.
         """
 
-        def pandas_daysinmonth(s) -> ps.Series[np.int64]:  # type: ignore[no-untyped-def]
+        def pandas_daysinmonth(s) -> ps.Series[np.int32]:  # type: ignore[no-untyped-def]
             return s.dt.daysinmonth
 
         return self._data.pandas_on_spark.transform_batch(pandas_daysinmonth)

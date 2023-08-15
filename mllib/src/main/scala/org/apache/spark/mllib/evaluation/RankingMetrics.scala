@@ -140,6 +140,9 @@ class RankingMetrics[T: ClassTag] @Since("1.2.0") (predictionAndLabels: RDD[_ <:
    * and the NDCG is obtained by dividing the DCG value on the ground truth set. In the current
    * implementation, the relevance value is binary if the relevance value is empty.
 
+   * If the relevance value is not empty but its size doesn't match the ground truth set size,
+   * a log warning is generated.
+   *
    * If a query has an empty ground truth set, zero will be used as ndcg together with
    * a log warning.
    *
@@ -157,7 +160,7 @@ class RankingMetrics[T: ClassTag] @Since("1.2.0") (predictionAndLabels: RDD[_ <:
       val useBinary = rel.isEmpty
       val labSet = lab.toSet
       val relMap = Utils.toMap(lab, rel)
-      if (useBinary && lab.size != rel.size) {
+      if (!useBinary && lab.size != rel.size) {
         logWarning(
           "# of ground truth set and # of relevance value set should be equal, " +
             "check input data")

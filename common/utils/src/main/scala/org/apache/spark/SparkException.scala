@@ -58,6 +58,15 @@ class SparkException(
       errorClass = Some(errorClass),
       messageParameters = messageParameters)
 
+  def this(errorClass: String, messageParameters: Map[String, String], cause: Throwable,
+      context: Array[QueryContext]) =
+    this(
+      message = SparkThrowableHelper.getMessage(errorClass, messageParameters),
+      cause = cause,
+      errorClass = Some(errorClass),
+      messageParameters = messageParameters,
+      context = context)
+
   override def getMessageParameters: java.util.Map[String, String] = messageParameters.asJava
 
   override def getErrorClass: String = errorClass.orNull

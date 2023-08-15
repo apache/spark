@@ -24,10 +24,12 @@ import scala.collection.immutable
 
 import com.google.common.collect.{Iterators => GuavaIterators, Ordering => GuavaOrdering}
 
+import org.apache.spark.sql.catalyst.util.SparkCollectionUtils
+
 /**
  * Utility functions for collections.
  */
-private[spark] object Utils {
+private[spark] object Utils extends SparkCollectionUtils {
 
   /**
    * Returns the first K elements from the input as defined by the specified implicit Ordering[T]
@@ -75,20 +77,6 @@ private[spark] object Utils {
     val valueIter = values.iterator
     while (keyIter.hasNext && valueIter.hasNext) {
       builder += (keyIter.next(), valueIter.next()).asInstanceOf[(K, V)]
-    }
-    builder.result()
-  }
-
-  /**
-   * Same function as `keys.zipWithIndex.toMap`, but has perf gain.
-   */
-  def toMapWithIndex[K](keys: Iterable[K]): Map[K, Int] = {
-    val builder = immutable.Map.newBuilder[K, Int]
-    val keyIter = keys.iterator
-    var idx = 0
-    while (keyIter.hasNext) {
-      builder += (keyIter.next(), idx).asInstanceOf[(K, Int)]
-      idx = idx + 1
     }
     builder.result()
   }

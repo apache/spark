@@ -27,21 +27,9 @@ class FrameParityComputeTests(FrameComputeMixin, PandasOnSparkTestUtils, ReusedC
     def psdf(self):
         return ps.from_pandas(self.pdf)
 
-    @unittest.skip(
-        "TODO(SPARK-43611): Fix unexpected `AnalysisException` from Spark Connect client."
-    )
-    def test_diff(self):
-        super().test_diff()
-
     @unittest.skip("Spark Connect does not support RDD but the tests depend on them.")
     def test_mode(self):
         super().test_mode()
-
-    @unittest.skip(
-        "TODO(SPARK-43611): Fix unexpected `AnalysisException` from Spark Connect client."
-    )
-    def test_pct_change(self):
-        super().test_pct_change()
 
     @unittest.skip("TODO(SPARK-43618): Fix pyspark.sq.column._unary_op to work with Spark Connect.")
     def test_rank(self):

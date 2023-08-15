@@ -71,6 +71,9 @@ private[sql] object SparkConnectClientParser {
       case "--user_agent" :: tail =>
         val (value, remainder) = extract("--user_agent", tail)
         parse(remainder, builder.userAgent(value))
+      case "--session_id" :: tail =>
+        val (value, remainder) = extract("--session_id", tail)
+        parse(remainder, builder.sessionId(value))
       case "--option" :: tail =>
         if (args.isEmpty) {
           throw new IllegalArgumentException("--option requires a key-value pair")

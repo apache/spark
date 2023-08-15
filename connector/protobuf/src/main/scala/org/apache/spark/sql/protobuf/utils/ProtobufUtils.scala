@@ -266,7 +266,16 @@ private[sql] object ProtobufUtils extends Logging {
     val fileDescriptorList = fileDescriptorProto.getDependencyList().asScala.map { dependency =>
       fileDescriptorProtoMap.get(dependency) match {
         case Some(dependencyProto) =>
-          buildFileDescriptor(dependencyProto, fileDescriptorProtoMap)
+          if (dependencyProto.getName == "google/protobuf/any.proto"
+            && dependencyProto.getPackage == "google.protobuf") {
+            // For Any, use the descriptor already included as part of the Java dependency.
+            // Without this, JsonFormat used for converting Any fields fails when
+            // an Any field in input is set to `Any.getDefaultInstance()`.
+            com.google.protobuf.AnyProto.getDescriptor
+            // Should we do the same for timestamp.proto and empty.proto?
+          } else {
+            buildFileDescriptor(dependencyProto, fileDescriptorProtoMap)
+          }
         case None =>
           throw QueryCompilationErrors.protobufDescriptorDependencyError(dependency)
       }

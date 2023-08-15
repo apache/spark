@@ -36,7 +36,8 @@ class StreamingQueryException private[sql] (
     message: String,
     errorClass: String,
     stackTrace: String)
-    extends SparkThrowable {
+    extends Exception(message)
+    with SparkThrowable {
 
   override def getErrorClass: String = errorClass
 

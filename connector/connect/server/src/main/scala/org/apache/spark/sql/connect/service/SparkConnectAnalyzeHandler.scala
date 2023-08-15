@@ -38,7 +38,7 @@ private[connect] class SparkConnectAnalyzeHandler(
       request.getSessionId)
     // `withSession` ensures that session-specific artifacts (such as JARs and class files) are
     // available during processing (such as deserialization).
-    sessionHolder.withSessionHolder { sessionHolder =>
+    sessionHolder.withSession { _ =>
       val response = process(request, sessionHolder)
       responseObserver.onNext(response)
       responseObserver.onCompleted()

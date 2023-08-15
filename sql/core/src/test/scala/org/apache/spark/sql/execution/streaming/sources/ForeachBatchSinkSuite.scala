@@ -21,7 +21,7 @@ import scala.collection.mutable
 import scala.language.implicitConversions
 
 import org.apache.spark.sql._
-import org.apache.spark.sql.catalyst.encoders.RowEncoder
+import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.execution.SerializeFromObjectExec
 import org.apache.spark.sql.execution.streaming.MemoryStream
 import org.apache.spark.sql.functions._
@@ -49,7 +49,7 @@ class ForeachBatchSinkSuite extends StreamTest {
     val mem = MemoryStream[Int]
     val ds = mem.toDF.selectExpr("value + 1 as value")
 
-    val tester = new ForeachBatchTester[Row](mem)(RowEncoder.apply(ds.schema))
+    val tester = new ForeachBatchTester[Row](mem)(ExpressionEncoder(ds.schema))
     val writer = (df: DataFrame, batchId: Long) =>
       tester.record(batchId, df.selectExpr("value + 1"))
 

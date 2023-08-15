@@ -52,3 +52,7 @@ def require_minimum_grpc_version() -> None:
             "grpcio >= %s must be installed; however, "
             "your version was %s." % (minimum_grpc_version, grpc.__version__)
         )
+
+
+def get_python_ver() -> str:
+    return "%d.%d" % sys.version_info[:2]

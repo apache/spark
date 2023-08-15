@@ -117,6 +117,6 @@ spark-warehouse/
 node_modules
 
 # For Antlr
-sql/catalyst/gen/
-sql/catalyst/src/main/antlr4/org/apache/spark/sql/catalyst/parser/SqlBaseLexer.tokens
-sql/catalyst/src/main/antlr4/org/apache/spark/sql/catalyst/parser/gen/
+sql/api/gen/
+sql/api/src/main/antlr4/org/apache/spark/sql/catalyst/parser/SqlBaseLexer.tokens
+sql/api/src/main/antlr4/org/apache/spark/sql/catalyst/parser/gen/

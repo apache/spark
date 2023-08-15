@@ -27,8 +27,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.{DataSourceOptions, FileSourceOptions}
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.errors.QueryExecutionErrors
-import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.internal.SQLConf.LegacyBehaviorPolicy
+import org.apache.spark.sql.internal.{LegacyBehaviorPolicy, SQLConf}
 
 class CSVOptions(
     @transient val parameters: CaseInsensitiveMap[String],
@@ -254,6 +253,7 @@ class CSVOptions(
    * A string between two consecutive JSON records.
    */
   val lineSeparator: Option[String] = parameters.get(LINE_SEP).map { sep =>
+    require(sep != null, "'lineSep' cannot be a null value.")
     require(sep.nonEmpty, "'lineSep' cannot be an empty string.")
     // Intentionally allow it up to 2 for Window's CRLF although multiple
     // characters have an issue with quotes. This is intentionally undocumented.

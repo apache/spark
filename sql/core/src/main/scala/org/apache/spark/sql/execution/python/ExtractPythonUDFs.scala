@@ -316,8 +316,12 @@ object ExtractPythonUDTFs extends Rule[LogicalPlan] {
     case s: Subquery if s.correlated => plan
 
     case _ => plan.transformUpWithPruning(_.containsPattern(GENERATE)) {
-      case g @ Generate(func: PythonUDTF, _, _, _, _, child) =>
-        BatchEvalPythonUDTF(func, g.requiredChildOutput, g.generatorOutput, child)
+      case g @ Generate(func: PythonUDTF, _, _, _, _, child) => func.evalType match {
+        case PythonEvalType.SQL_TABLE_UDF =>
+          BatchEvalPythonUDTF(func, g.requiredChildOutput, g.generatorOutput, child)
+        case PythonEvalType.SQL_ARROW_TABLE_UDF =>
+          ArrowEvalPythonUDTF(func, g.requiredChildOutput, g.generatorOutput, child, func.evalType)
+      }
     }
   }
 }

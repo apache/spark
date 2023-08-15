@@ -41,46 +41,26 @@ class FrameCombineMixin:
         psdf = ps.from_pandas(pdf)
         return pdf, psdf
 
-    @unittest.skipIf(
-        LooseVersion(pd.__version__) >= LooseVersion("2.0.0"),
-        "TODO(SPARK-43562): Enable DataFrameTests.test_append for pandas 2.0.0.",
-    )
-    def test_append(self):
+    def test_concat(self):
         pdf = pd.DataFrame([[1, 2], [3, 4]], columns=list("AB"))
         psdf = ps.from_pandas(pdf)
         other_pdf = pd.DataFrame([[3, 4], [5, 6]], columns=list("BC"), index=[2, 3])
         other_psdf = ps.from_pandas(other_pdf)
 
-        self.assert_eq(psdf.append(psdf), pdf.append(pdf))
-        self.assert_eq(psdf.append(psdf, ignore_index=True), pdf.append(pdf, ignore_index=True))
+        self.assert_eq(ps.concat([psdf, psdf]), pd.concat([pdf, pdf]))
+        self.assert_eq(
+            ps.concat([psdf, psdf], ignore_index=True), pd.concat([pdf, pdf], ignore_index=True)
+        )
 
         # Assert DataFrames with non-matching columns
-        self.assert_eq(psdf.append(other_psdf), pdf.append(other_pdf))
+        self.assert_eq(ps.concat([psdf, other_psdf]), pd.concat([pdf, other_pdf]))
 
-        # Assert appending a Series fails
-        msg = "DataFrames.append() does not support appending Series to DataFrames"
-        with self.assertRaises(TypeError, msg=msg):
-            psdf.append(psdf["A"])
+        ps.concat([psdf, psdf["A"]])
+        # Assert appending a Series
+        self.assert_eq(ps.concat([psdf, psdf["A"]]), pd.concat([pdf, pdf["A"]]))
 
-        # Assert using the sort parameter raises an exception
-        msg = "The 'sort' parameter is currently not supported"
-        with self.assertRaises(NotImplementedError, msg=msg):
-            psdf.append(psdf, sort=True)
-
-        # Assert using 'verify_integrity' only raises an exception for overlapping indices
-        self.assert_eq(
-            psdf.append(other_psdf, verify_integrity=True),
-            pdf.append(other_pdf, verify_integrity=True),
-        )
-        msg = "Indices have overlapping values"
-        with self.assertRaises(ValueError, msg=msg):
-            psdf.append(psdf, verify_integrity=True)
-
-        # Skip integrity verification when ignore_index=True
-        self.assert_eq(
-            psdf.append(psdf, ignore_index=True, verify_integrity=True),
-            pdf.append(pdf, ignore_index=True, verify_integrity=True),
-        )
+        # Assert using the sort parameter
+        self.assert_eq(ps.concat([psdf, psdf], sort=True), pd.concat([pdf, pdf], sort=True))
 
         # Assert appending multi-index DataFrames
         multi_index_pdf = pd.DataFrame([[1, 2], [3, 4]], columns=list("AB"), index=[[2, 3], [4, 5]])
@@ -91,45 +71,32 @@ class FrameCombineMixin:
         other_multi_index_psdf = ps.from_pandas(other_multi_index_pdf)
 
         self.assert_eq(
-            multi_index_psdf.append(multi_index_psdf), multi_index_pdf.append(multi_index_pdf)
+            ps.concat([multi_index_psdf, multi_index_psdf]),
+            pd.concat([multi_index_pdf, multi_index_pdf]),
         )
 
         # Assert DataFrames with non-matching columns
         self.assert_eq(
-            multi_index_psdf.append(other_multi_index_psdf),
-            multi_index_pdf.append(other_multi_index_pdf),
-        )
-
-        # Assert using 'verify_integrity' only raises an exception for overlapping indices
-        self.assert_eq(
-            multi_index_psdf.append(other_multi_index_psdf, verify_integrity=True),
-            multi_index_pdf.append(other_multi_index_pdf, verify_integrity=True),
-        )
-        with self.assertRaises(ValueError, msg=msg):
-            multi_index_psdf.append(multi_index_psdf, verify_integrity=True)
-
-        # Skip integrity verification when ignore_index=True
-        self.assert_eq(
-            multi_index_psdf.append(multi_index_psdf, ignore_index=True, verify_integrity=True),
-            multi_index_pdf.append(multi_index_pdf, ignore_index=True, verify_integrity=True),
+            ps.concat([multi_index_psdf, other_multi_index_psdf]),
+            pd.concat([multi_index_pdf, other_multi_index_pdf]),
         )
 
         # Assert trying to append DataFrames with different index levels
         msg = "Both DataFrames have to have the same number of index levels"
         with self.assertRaises(ValueError, msg=msg):
-            psdf.append(multi_index_psdf)
+            ps.concat([psdf, multi_index_psdf])
 
         # Skip index level check when ignore_index=True
         self.assert_eq(
-            psdf.append(multi_index_psdf, ignore_index=True),
-            pdf.append(multi_index_pdf, ignore_index=True),
+            ps.concat([psdf, other_multi_index_psdf], ignore_index=True),
+            pd.concat([pdf, other_multi_index_pdf], ignore_index=True),
         )
 
         columns = pd.MultiIndex.from_tuples([("A", "X"), ("A", "Y")])
         pdf.columns = columns
         psdf.columns = columns
 
-        self.assert_eq(psdf.append(psdf), pdf.append(pdf))
+        self.assert_eq(ps.concat([psdf, psdf]), pd.concat([pdf, pdf]))
 
     def test_merge(self):
         left_pdf = pd.DataFrame(

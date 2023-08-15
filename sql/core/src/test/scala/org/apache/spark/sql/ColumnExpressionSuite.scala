@@ -721,11 +721,21 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
         data.write.saveAsTable("tab1")
         data.write.saveAsTable("tab2")
         data.createOrReplaceTempView("tempView1")
-        Seq("input_file_name", "input_file_block_start", "input_file_block_length").foreach { f =>
-          val e = intercept[AnalysisException] {
-            sql(s"SELECT *, $f() FROM tab1 JOIN tab2 ON tab1.id = tab2.id")
-          }.getMessage
-          assert(e.contains(s"'$f' does not support more than one source"))
+        Seq(
+          ("input_file_name", 26),
+          ("input_file_block_start", 33),
+          ("input_file_block_length", 34)).foreach { case (f, e) =>
+          checkError(
+            exception = intercept[AnalysisException] {
+              sql(s"SELECT *, $f() FROM tab1 JOIN tab2 ON tab1.id = tab2.id")
+            },
+            errorClass = "MULTI_SOURCES_UNSUPPORTED_FOR_EXPRESSION",
+            parameters = Map("expr" -> s""""$f()""""),
+            context = ExpectedContext(
+              fragment = s"$f()",
+              start = 10,
+              stop = e)
+          )
         }
 
         def checkResult(
@@ -734,8 +744,17 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
             numExpectedRows: Int = 0): Unit = {
           val stmt = s"SELECT *, input_file_name() FROM ($fromClause)"
           if (exceptionExpected) {
-            val e = intercept[AnalysisException](sql(stmt)).getMessage
-            assert(e.contains("'input_file_name' does not support more than one source"))
+            checkError(
+              exception = intercept[AnalysisException] {
+                sql(stmt)
+              },
+              errorClass = "MULTI_SOURCES_UNSUPPORTED_FOR_EXPRESSION",
+              parameters = Map("expr" -> """"input_file_name()""""),
+              context = ExpectedContext(
+                fragment = s"input_file_name()",
+                start = 10,
+                stop = 26)
+            )
           } else {
             assert(sql(stmt).count() == numExpectedRows)
           }

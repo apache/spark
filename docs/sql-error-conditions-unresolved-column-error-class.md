@@ -21,7 +21,7 @@ license: |
 
 [SQLSTATE: 42703](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
 
-A column or function parameter with name `<objectName>` cannot be resolved.
+A column, variable, or function parameter with name `<objectName>` cannot be resolved.
 
 This error class has the following derived error classes:
 

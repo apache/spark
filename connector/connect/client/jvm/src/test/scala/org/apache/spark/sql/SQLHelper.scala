@@ -21,8 +21,7 @@ import java.util.UUID
 
 import org.scalatest.Assertions.fail
 
-import org.apache.spark.sql.catalyst.catalog.SessionCatalog.DEFAULT_DATABASE
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{SparkErrorUtils, SparkFileUtils}
 
 trait SQLHelper {
 
@@ -77,7 +76,7 @@ trait SQLHelper {
     try f(dbName)
     finally {
       if (spark.catalog.currentDatabase == dbName) {
-        spark.sql(s"USE $DEFAULT_DATABASE")
+        spark.sql(s"USE default")
       }
       spark.sql(s"DROP DATABASE $dbName CASCADE")
     }
@@ -88,17 +87,17 @@ trait SQLHelper {
    * If a file/directory is created there by `f`, it will be delete after `f` returns.
    */
   protected def withTempPath(f: File => Unit): Unit = {
-    val path = Utils.createTempDir()
+    val path = SparkFileUtils.createTempDir()
     path.delete()
     try f(path)
-    finally Utils.deleteRecursively(path)
+    finally SparkFileUtils.deleteRecursively(path)
   }
 
   /**
    * Drops table `tableName` after calling `f`.
    */
   protected def withTable(tableNames: String*)(f: => Unit): Unit = {
-    Utils.tryWithSafeFinally(f) {
+    SparkErrorUtils.tryWithSafeFinally(f) {
       tableNames.foreach { name =>
         spark.sql(s"DROP TABLE IF EXISTS $name").collect()
       }

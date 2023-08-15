@@ -24,7 +24,7 @@ import org.apache.spark.connect.proto.Expression.SortOrder.NullOrdering
 import org.apache.spark.connect.proto.Expression.SortOrder.SortDirection
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoder
-import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
+import org.apache.spark.sql.catalyst.parser.DataTypeParser
 import org.apache.spark.sql.connect.common.DataTypeProtoConverter
 import org.apache.spark.sql.expressions.Window
 import org.apache.spark.sql.functions.lit
@@ -1087,7 +1087,7 @@ class Column private[sql] (@DeveloperApi val expr: proto.Expression) extends Log
    * @group expr_ops
    * @since 3.4.0
    */
-  def cast(to: String): Column = cast(CatalystSqlParser.parseDataType(to))
+  def cast(to: String): Column = cast(DataTypeParser.parseDataType(to))
 
   /**
    * Returns a sort expression based on the descending order of the column.

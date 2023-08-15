@@ -42,6 +42,7 @@ import org.apache.spark.sql.catalyst.catalog.ExternalCatalogUtils._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, CharVarcharUtils}
+import org.apache.spark.sql.catalyst.util.TypeUtils.toSQLId
 import org.apache.spark.sql.execution.command.DDLUtils
 import org.apache.spark.sql.execution.datasources.{PartitioningUtils, SourceOptions}
 import org.apache.spark.sql.hive.client.HiveClient
@@ -156,10 +157,13 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
           case st: StructType => verifyNestedColumnNames(st)
           case _ if invalidChars.exists(f.name.contains) =>
             val invalidCharsString = invalidChars.map(c => s"'$c'").mkString(", ")
-            val errMsg = "Cannot create a table having a nested column whose name contains " +
-              s"invalid characters ($invalidCharsString) in Hive metastore. Table: $tableName; " +
-              s"Column: ${f.name}"
-            throw new AnalysisException(errMsg)
+            throw new AnalysisException(
+              errorClass = "INVALID_HIVE_COLUMN_NAME",
+              messageParameters = Map(
+                "invalidChars" -> invalidCharsString,
+                "tableName" -> toSQLId(tableName.nameParts),
+                "columnName" -> toSQLId(f.name)
+              ))
           case _ =>
         }
       }

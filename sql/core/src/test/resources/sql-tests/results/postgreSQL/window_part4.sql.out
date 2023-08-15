@@ -499,7 +499,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "FAILED_SQL_EXPRESSION_EVALUATION",
+  "errorClass" : "INVALID_INLINE_TABLE.FAILED_SQL_EXPRESSION_EVALUATION",
   "messageParameters" : {
     "sqlExpr" : "\"CAST(nan AS INT)\""
   },

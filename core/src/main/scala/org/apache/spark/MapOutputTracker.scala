@@ -171,7 +171,10 @@ private class ShuffleStatus(
    * Get the map output that corresponding to a given mapId.
    */
   def getMapStatus(mapId: Long): Option[MapStatus] = withReadLock {
-    mapIdToMapIndex.get(mapId).map(mapStatuses(_))
+    mapIdToMapIndex.get(mapId).map(mapStatuses(_)) match {
+      case Some(null) => None
+      case m => m
+    }
   }
 
   /**

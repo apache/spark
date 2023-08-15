@@ -882,6 +882,22 @@ class BaseUDFTestsMixin(object):
         row = df.select(f("nested_array")).first()
         self.assertEquals(row[0], [[1, 2], [3, 4], [4, 5]])
 
+    def test_complex_return_types(self):
+        row = (
+            self.spark.range(1)
+            .selectExpr("array(1, 2, 3) as array", "map('a', 'b') as map", "struct(1, 2) as struct")
+            .select(
+                udf(lambda x: x, "array<int>")("array"),
+                udf(lambda x: x, "map<string,string>")("map"),
+                udf(lambda x: x, "struct<col1:int,col2:int>")("struct"),
+            )
+            .first()
+        )
+
+        self.assertEquals(row[0], [1, 2, 3])
+        self.assertEquals(row[1], {"a": "b"})
+        self.assertEquals(row[2], Row(col1=1, col2=2))
+
 
 class UDFTests(BaseUDFTestsMixin, ReusedSQLTestCase):
     @classmethod

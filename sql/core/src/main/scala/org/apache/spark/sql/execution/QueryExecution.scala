@@ -71,9 +71,13 @@ class QueryExecution(
     }
   }
 
-  lazy val analyzed: LogicalPlan = executePhase(QueryPlanningTracker.ANALYSIS) {
-    // We can't clone `logical` here, which will reset the `_analyzed` flag.
-    sparkSession.sessionState.analyzer.executeAndCheck(logical, tracker)
+  lazy val analyzed: LogicalPlan = {
+    val plan = executePhase(QueryPlanningTracker.ANALYSIS) {
+      // We can't clone `logical` here, which will reset the `_analyzed` flag.
+      sparkSession.sessionState.analyzer.executeAndCheck(logical, tracker)
+    }
+    tracker.setAnalyzed(plan)
+    plan
   }
 
   lazy val commandExecuted: LogicalPlan = mode match {
@@ -93,6 +97,11 @@ class QueryExecution(
 
   private def eagerlyExecuteCommands(p: LogicalPlan) = p transformDown {
     case c: Command =>
+      // Since Command execution will eagerly take place here,
+      // and in most cases be the bulk of time and effort,
+      // with the rest of processing of the root plan being just outputting command results,
+      // for eagerly executed commands we mark this place as beginning of execution.
+      tracker.setReadyForExecution()
       val qe = sparkSession.sessionState.executePlan(c, CommandExecutionMode.NON_ROOT)
       val result = SQLExecution.withNewExecutionId(qe, Some(commandExecutionName(c))) {
         qe.executedPlan.executeCollect()
@@ -150,7 +159,7 @@ class QueryExecution(
     }
   }
 
-  private def assertOptimized(): Unit = optimizedPlan
+  def assertOptimized(): Unit = optimizedPlan
 
   lazy val sparkPlan: SparkPlan = {
     // We need to materialize the optimizedPlan here because sparkPlan is also tracked under
@@ -163,18 +172,26 @@ class QueryExecution(
     }
   }
 
+  def assertSparkPlanPrepared(): Unit = sparkPlan
+
   // executedPlan should not be used to initialize any SparkPlan. It should be
   // only used for execution.
   lazy val executedPlan: SparkPlan = {
     // We need to materialize the optimizedPlan here, before tracking the planning phase, to ensure
     // that the optimization time is not counted as part of the planning phase.
     assertOptimized()
-    executePhase(QueryPlanningTracker.PLANNING) {
+    val plan = executePhase(QueryPlanningTracker.PLANNING) {
       // clone the plan to avoid sharing the plan instance between different stages like analyzing,
       // optimizing and planning.
       QueryExecution.prepareForExecution(preparations, sparkPlan.clone())
     }
+    // Note: For eagerly executed command it might have already been called in
+    // `eagerlyExecutedCommand` and is a noop here.
+    tracker.setReadyForExecution()
+    plan
   }
+
+  def assertExecutedPlanPrepared(): Unit = executedPlan
 
   /**
    * Internal version of the RDD. Avoids copies and has no schema.

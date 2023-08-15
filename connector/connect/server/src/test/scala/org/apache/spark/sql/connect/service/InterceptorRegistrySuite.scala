@@ -184,4 +184,14 @@ class InterceptorRegistrySuite extends SharedSparkSession {
       assert(interceptors.head.isInstanceOf[LoggingInterceptor])
     }
   }
+
+  test("LocalPropertiesCleanupInterceptor initializes when configured in spark conf") {
+    withSparkConf(
+      Connect.CONNECT_GRPC_INTERCEPTOR_CLASSES.key ->
+        "org.apache.spark.sql.connect.service.LocalPropertiesCleanupInterceptor") {
+      val interceptors = SparkConnectInterceptorRegistry.createConfiguredInterceptors()
+      assert(interceptors.size == 1)
+      assert(interceptors.head.isInstanceOf[LocalPropertiesCleanupInterceptor])
+    }
+  }
 }

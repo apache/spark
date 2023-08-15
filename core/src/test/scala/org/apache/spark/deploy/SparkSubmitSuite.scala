@@ -510,8 +510,19 @@ class SparkSubmitSuite
         "my.great.lib.MyLib", "my.great.dep.MyLib")
 
       val appArgs = new SparkSubmitArguments(clArgs)
-      val (_, _, sparkConf, _) = submit.prepareSubmitEnvironment(appArgs)
-      sparkConf.get("spark.jars").contains("mylib") shouldBe true
+      try {
+        val (_, _, sparkConf, _) = submit.prepareSubmitEnvironment(appArgs)
+        sparkConf.get("spark.jars").contains("mylib") shouldBe true
+      } finally {
+        val mainJarPath = Paths.get("my.great.dep_mylib-0.1.jar")
+        val depJarPath = Paths.get("my.great.lib_mylib-0.1.jar")
+        if (Files.exists(mainJarPath)) {
+          Files.delete(mainJarPath)
+        }
+        if (Files.exists(depJarPath)) {
+          Files.delete(depJarPath)
+        }
+      }
     }
   }
 

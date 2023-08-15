@@ -32,6 +32,7 @@ import org.apache.spark.sql.connector.catalog.{CatalogPlugin, CatalogV2Implicits
 import org.apache.spark.sql.connector.catalog.TableCapability._
 import org.apache.spark.sql.connector.expressions.{FieldReference, IdentityTransform, Transform}
 import org.apache.spark.sql.errors.QueryCompilationErrors
+import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.execution.command.DDLUtils
 import org.apache.spark.sql.execution.datasources.{CreateTable, DataSource, DataSourceUtils, LogicalRelation}
 import org.apache.spark.sql.execution.datasources.v2._
@@ -854,7 +855,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    * user-registered callback functions.
    */
   private def runCommand(session: SparkSession)(command: LogicalPlan): Unit = {
-    val qe = session.sessionState.executePlan(command)
+    val qe = new QueryExecution(session, command, df.queryExecution.tracker)
     qe.assertCommandExecuted()
   }
 
