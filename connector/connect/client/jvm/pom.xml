@@ -115,13 +115,6 @@
       </exclusions>
     </dependency>
     <dependency>
-      <groupId>org.apache.spark</groupId>
-      <artifactId>spark-connect-client-jvm-internal_${scala.binary.version}</artifactId>
-      <version>${project.version}</version>
-      <type>test-jar</type>
-      <scope>test</scope>
-    </dependency>
-    <dependency>
       <groupId>org.scalacheck</groupId>
       <artifactId>scalacheck_${scala.binary.version}</artifactId>
       <scope>test</scope>
@@ -165,7 +158,6 @@
               <include>io.perfmark:*</include>
               <include>org.codehaus.mojo:*</include>
               <include>org.checkerframework:*</include>
-              <include>org.apache.spark:spark-connect-client-jvm-internal_${scala.binary.version}</include>
               <include>org.apache.spark:spark-connect-common_${scala.binary.version}</include>
               <include>org.apache.spark:spark-common-utils_${scala.binary.version}</include>
               <include>org.apache.spark:spark-sql-api_${scala.binary.version}</include>
