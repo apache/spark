@@ -468,16 +468,16 @@ private[spark] class Client(
    * from the directory will be preloaded.
    *
    * @param jars : the list of jars to upload
-   * @return a hashmap contains directories to be preloaded and all file URIs in that directory
+   * @return a hashmap contains directories to be preloaded and all file names in that directory
    * */
-  private[yarn] def directoriesToBePreloaded(jars: Seq[String]): HashMap[URI, Set[URI]] = {
-    val directoryToFiles = new HashMap[URI, Set[URI]]()
+  private[yarn] def directoriesToBePreloaded(jars: Seq[String]): HashMap[URI, Set[String]] = {
+    val directoryToFiles = new HashMap[URI, Set[String]]()
     jars.foreach { jar =>
       if (!Utils.isLocalUri(jar) && !new GlobPattern(jar).hasWildcard) {
         val currentUri = Utils.resolveURI(jar)
         val parentUri = new Path(currentUri).getParent.toUri
         directoryToFiles.update(parentUri, directoryToFiles.getOrElse(parentUri, Set.empty)
-          .union(Set(currentUri.normalize())))
+          .union(Set(currentUri.normalize().toString)))
       }
     }
     directoryToFiles.filter(_._2.size >= statCachePreloadDirectoryCountThreshold)
@@ -496,9 +496,9 @@ private[spark] class Client(
     val jars = sparkConf.get(SPARK_JARS)
     val directoryToFiles = jars.map(directoriesToBePreloaded).getOrElse(HashMap.empty)
 
-    directoryToFiles.foreach { case (dir: URI, filesInDir: Set[URI]) =>
+    directoryToFiles.foreach { case (dir: URI, filesInDir: Set[String]) =>
       fsLookup(dir).listStatus(new Path(dir)).filter(_.isFile()).
-        filter(f => filesInDir.contains(f.getPath.toUri)).foreach { fileStatus =>
+        filter(f => filesInDir.contains(f.getPath.toString)).foreach { fileStatus =>
           val uri = fileStatus.getPath.toUri
           statCache.put(uri, fileStatus)
         }
