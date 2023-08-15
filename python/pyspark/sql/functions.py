@@ -15654,7 +15654,7 @@ def udtf(
     +---+---+---+
 
     >>> _ = spark.udtf.register("test_udtf", TestUDTFWithKwargs)
-    >>> spark.sql("SELECT * FROM test_udtf(1, x=>'x', b=>'b')").show()
+    >>> spark.sql("SELECT * FROM test_udtf(1, x => 'x', b => 'b')").show()
     +---+---+---+
     |  a|  b|  x|
     +---+---+---+
