@@ -406,8 +406,9 @@ def choose_jira_assignee(issue, asf_jira):
 def assign_issue(client: jira.client.JIRA, issue: int, assignee: str) -> bool:
     """
     Assign an issue to a user, which is a shorthand for jira.client.JIRA.assign_issue.
-    The original one has an issue that it will search users again and only choose the assignee from 20 candidates.
-    If it's unmatched, it picks the head blindly. In our case, the assignee is already resolved.
+    The original one has an issue that it will search users again and only choose the assignee
+    from 20 candidates. If it's unmatched, it picks the head blindly. In our case, the assignee
+    is already resolved.
     """
     url = getattr(client, "_get_latest_url")(f"issue/{issue}/assignee")
     payload = {"name": assignee}
