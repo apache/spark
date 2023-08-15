@@ -20,8 +20,11 @@ package org.apache.spark.sql.execution
 import java.util.concurrent.{ConcurrentHashMap, ExecutorService, Future => JFuture}
 import java.util.concurrent.atomic.AtomicLong
 
+import scala.util.control.NonFatal
+
 import org.apache.spark.{ErrorMessageFormat, SparkThrowable, SparkThrowableHelper}
 import org.apache.spark.SparkContext.{SPARK_JOB_DESCRIPTION, SPARK_JOB_INTERRUPT_ON_CANCEL}
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.{SPARK_DRIVER_PREFIX, SPARK_EXECUTOR_PREFIX}
 import org.apache.spark.internal.config.Tests.IS_TESTING
 import org.apache.spark.sql.SparkSession
@@ -30,7 +33,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.StaticSQLConf.SQL_EVENT_TRUNCATE_LENGTH
 import org.apache.spark.util.Utils
 
-object SQLExecution {
+object SQLExecution extends Logging {
 
   val EXECUTION_ID_KEY = "spark.sql.execution.id"
   val EXECUTION_ROOT_ID_KEY = "spark.sql.execution.root.id"
@@ -122,12 +125,14 @@ object SQLExecution {
         var ex: Option[Throwable] = None
         val startTime = System.nanoTime()
         try {
-          val planInfo = if (!errored) {
+          val planInfo = try {
             SparkPlanInfo.fromSparkPlan(queryExecution.executedPlan)
-          } else {
-            // If the queryExecution already failed before this, we are not able to generate the
-            // the plan info, so we use and empty graphviz node to make the UI happy
-            SparkPlanInfo.EMPTY
+          } catch {
+            case NonFatal(e) =>
+              logDebug("Failed to generate SparkPlanInfo", e)
+              // If the queryExecution already failed before this, we are not able to generate the
+              // the plan info, so we use and empty graphviz node to make the UI happy
+              SparkPlanInfo.EMPTY
           }
           sc.listenerBus.post(SparkListenerSQLExecutionStart(
             executionId = executionId,
