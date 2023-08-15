@@ -76,14 +76,14 @@ abstract class XmlDataSource extends Serializable {
 object XmlDataSource extends Logging {
   def apply(options: XmlOptions): XmlDataSource = {
     if (options.multiLine) {
-      MultiLineXmlDataSource$
+      MultiLineXmlDataSource
     } else {
-      TextInputXmlDataSource$
+      TextInputXmlDataSource
     }
   }
 }
 
-object TextInputXmlDataSource$ extends XmlDataSource {
+object TextInputXmlDataSource extends XmlDataSource {
   override val isSplitable: Boolean = true
 
   override def readFile(
@@ -151,7 +151,7 @@ object TextInputXmlDataSource$ extends XmlDataSource {
   }
 }
 
-object MultiLineXmlDataSource$ extends XmlDataSource {
+object MultiLineXmlDataSource extends XmlDataSource {
   override val isSplitable: Boolean = false
 
   override def readFile(

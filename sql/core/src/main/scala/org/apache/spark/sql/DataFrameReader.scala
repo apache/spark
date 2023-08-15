@@ -39,7 +39,7 @@ import org.apache.spark.sql.execution.datasources.jdbc._
 import org.apache.spark.sql.execution.datasources.json.JsonUtils.checkJsonSchema
 import org.apache.spark.sql.execution.datasources.json.TextInputJsonDataSource
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Utils
-import org.apache.spark.sql.execution.datasources.xml.{TextInputXmlDataSource$, XmlOptions}
+import org.apache.spark.sql.execution.datasources.xml.{TextInputXmlDataSource, XmlOptions}
 import org.apache.spark.sql.execution.datasources.xml.parsers.StaxXmlParser
 import org.apache.spark.sql.execution.datasources.xml.util.XmlUtils.checkXmlSchema
 import org.apache.spark.sql.internal.SQLConf
@@ -589,7 +589,7 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
         SQLConf.LEGACY_RESPECT_NULLABILITY_IN_TEXT_DATASET_CONVERSION) => s.asNullable
       case other => other
     }.getOrElse {
-      TextInputXmlDataSource$.inferFromDataset(xmlDataset, parsedOptions)
+      TextInputXmlDataSource.inferFromDataset(xmlDataset, parsedOptions)
     }
 
     ExprUtils.verifyColumnNameOfCorruptRecord(schema, parsedOptions.columnNameOfCorruptRecord)
