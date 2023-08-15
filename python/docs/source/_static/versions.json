@@ -68,14 +68,6 @@
         "version": "3.0.0"
     },
     {
-        "name": "3.0.0 (preview2)",
-        "version": "3.0.0-preview2"
-    },
-    {
-        "name": "3.0.0 (preview)",
-        "version": "3.0.0-preview"
-    },
-    {
         "name": "2.4.8",
         "version": "2.4.8"
     },
@@ -174,10 +166,6 @@
     {
         "name": "2.0.0",
         "version": "2.0.0"
-    },
-    {
-        "name": "2.0.0 (preview)",
-        "version": "2.0.0-preview"
     },
     {
         "name": "1.6.3",
