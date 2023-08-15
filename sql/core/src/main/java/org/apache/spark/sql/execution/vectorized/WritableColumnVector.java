@@ -21,6 +21,8 @@ import java.math.BigInteger;
 import java.nio.ByteBuffer;
 import java.util.Optional;
 
+import com.google.common.annotations.VisibleForTesting;
+
 import org.apache.spark.sql.catalyst.expressions.GenericInternalRow;
 import org.apache.spark.sql.catalyst.util.ArrayBasedMapData;
 import org.apache.spark.sql.catalyst.util.GenericArrayData;
@@ -29,6 +31,7 @@ import org.apache.spark.sql.types.*;
 import org.apache.spark.sql.vectorized.ColumnVector;
 import org.apache.spark.sql.vectorized.ColumnarArray;
 import org.apache.spark.sql.vectorized.ColumnarMap;
+import org.apache.spark.unsafe.array.ByteArrayMethods;
 import org.apache.spark.unsafe.types.CalendarInterval;
 import org.apache.spark.unsafe.types.UTF8String;
 
@@ -92,7 +95,11 @@ public abstract class WritableColumnVector extends ColumnVector {
     if (requiredCapacity < 0) {
       throwUnsupportedException(requiredCapacity, null);
     } else if (requiredCapacity > capacity) {
-      int newCapacity = reservePolicy.nextCapacity(requiredCapacity);
+      int newCapacity =
+          hugeVectorThreshold < 0 || requiredCapacity < hugeVectorThreshold ?
+              (int) Math.min(MAX_CAPACITY, requiredCapacity * 2L) :
+              (int) Math.min(MAX_CAPACITY, (requiredCapacity - hugeVectorThreshold) *
+                  hugeVectorReserveRatio + hugeVectorThreshold * 2L);
       if (requiredCapacity <= newCapacity) {
         try {
           reserveInternal(newCapacity);
@@ -851,7 +858,7 @@ public abstract class WritableColumnVector extends ColumnVector {
         c.setHasDefaultValue();
       }
     }
-    reservePolicy.hasDefaultValue = true;
+    hasDefaultValue = true;
   }
 
   /**
@@ -873,7 +880,27 @@ public abstract class WritableColumnVector extends ColumnVector {
    */
   protected int capacity;
 
-  public VectorReservePolicy reservePolicy;
+  /**
+   * The default number of rows that can be stored in this column.
+   */
+  protected int defaultCapacity;
+
+  /**
+   * Upper limit for the maximum capacity for this column.
+   */
+  @VisibleForTesting
+  protected int MAX_CAPACITY = ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH;
+
+  /**
+   * True if this column has default values. Return the default values instead of NULL when the
+   * corresponding columns are not present in storage. We can not reset the data of column vectors
+   * that has default values.
+   */
+  protected boolean hasDefaultValue = false;
+
+  protected int hugeVectorThreshold;
+
+  protected double hugeVectorReserveRatio;
 
   /**
    * Number of nulls in this column. This is an optimization for the reader, to skip NULL checks.
@@ -924,7 +951,9 @@ public abstract class WritableColumnVector extends ColumnVector {
   protected WritableColumnVector(int capacity, DataType dataType) {
     super(dataType);
     this.capacity = capacity;
-    this.reservePolicy = new DefaultVectorReservePolicy(capacity);
+    this.defaultCapacity = capacity;
+    this.hugeVectorThreshold = SQLConf.get().vectorizedHugeVectorThreshold();
+    this.hugeVectorReserveRatio = SQLConf.get().vectorizedHugeVectorReserveRatio();
 
     if (isArray()) {
       DataType childType;

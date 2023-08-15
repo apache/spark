@@ -83,8 +83,9 @@ public final class OnHeapColumnVector extends WritableColumnVector {
   @Override
   public void reset() {
     super.reset();
-    if (!isConstant && reservePolicy.shouldCleanData()) {
-      capacity = reservePolicy.defaultCapacity;
+    if (!isConstant && !hasDefaultValue && hugeVectorThreshold > 0 &&
+        capacity > hugeVectorThreshold) {
+      capacity = defaultCapacity;
       nulls = null;
       byteData = null;
       shortData = null;

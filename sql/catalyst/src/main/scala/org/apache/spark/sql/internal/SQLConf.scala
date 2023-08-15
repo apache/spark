@@ -503,7 +503,7 @@ object SQLConf {
         "free this column vector before reading next batch data. -1 means disabling the " +
         "optimization.")
       .version("3.5.0")
-      .intConf
+      .bytesConf(ByteUnit.BYTE)
       .createWithDefault(-1)
 
   val IN_MEMORY_PARTITION_PRUNING =
@@ -4649,7 +4649,7 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def columnBatchSize: Int = getConf(COLUMN_BATCH_SIZE)
 
-  def vectorizedHugeVectorThreshold: Int = getConf(VECTORIZED_HUGE_VECTOR_THRESHOLD)
+  def vectorizedHugeVectorThreshold: Int = getConf(VECTORIZED_HUGE_VECTOR_THRESHOLD).toInt
 
   def vectorizedHugeVectorReserveRatio: Double = getConf(VECTORIZED_HUGE_VECTOR_RESERVE_RATIO)
 

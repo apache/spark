@@ -23,9 +23,9 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSessionBase
 import org.apache.spark.sql.types.ByteType
 
-class VectorReservePolicySuite extends SparkFunSuite with SharedSparkSessionBase {
+class VectorReserveSuite extends SparkFunSuite with SharedSparkSessionBase {
 
-  test("Test column vector reserve policy") {
+  test("SPARK-44239: Test column vector reserve policy") {
     withSQLConf(
       SQLConf.VECTORIZED_HUGE_VECTOR_THRESHOLD.key -> "300",
       SQLConf.VECTORIZED_HUGE_VECTOR_RESERVE_RATIO.key -> "1.2") {
