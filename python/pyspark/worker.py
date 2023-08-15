@@ -624,8 +624,10 @@ def read_udtf(pickleSer, infile, eval_type):
         if num_partition_child_indexes == 0 or udtf_state.prev_arguments is None:
             udtf_state.prev_arguments = arguments
             return False
+
         def get_table_arg(inputs):
             return [x for x in inputs if type(x) is Row][0]
+
         cur_table_arg = get_table_arg(arguments)
         prev_table_arg = get_table_arg(udtf_state.prev_arguments)
 
@@ -691,7 +693,8 @@ def read_udtf(pickleSer, infile, eval_type):
                     arguments = [a[o] for o in args_offsets]
                     kw_arguments = {k: a[o] for k, o in kwargs_offsets.items()}
                     changed_partitions = check_partition_boundaries(
-                        arguments + list(kw_arguments.values()))
+                        arguments + list(kw_arguments.values())
+                    )
                     if changed_partitions:
                         # Call 'terminate' on the UDTF class instance, if applicable.
                         # Then destroy the UDTF class instance and create a new one.
@@ -773,7 +776,8 @@ def read_udtf(pickleSer, infile, eval_type):
                     arguments = [a[o] for o in args_offsets]
                     kw_arguments = {k: a[o] for k, o in kwargs_offsets.items()}
                     changed_partitions = check_partition_boundaries(
-                        arguments + list(kw_arguments.values()))
+                        arguments + list(kw_arguments.values())
+                    )
                     if changed_partitions:
                         # Call 'terminate' on the UDTF class instance, if applicable.
                         # Then destroy the UDTF class instance and create a new one.
