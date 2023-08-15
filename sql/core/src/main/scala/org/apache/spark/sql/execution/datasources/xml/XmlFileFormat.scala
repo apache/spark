@@ -43,11 +43,8 @@ class XmlFileFormat extends TextBasedFileFormat with DataSourceRegister {
       sparkSession: SparkSession,
       options: Map[String, String],
       path: Path): Boolean = {
-    val parsedOptions = new XmlOptions(
-      options,
-      sparkSession.sessionState.conf.sessionLocalTimeZone,
-      sparkSession.sessionState.conf.columnNameOfCorruptRecord)
-    val xmlDataSource = XmlDataSource(parsedOptions)
+    val xmlOptions = XmlOptions(options, sparkSession)
+    val xmlDataSource = XmlDataSource(xmlOptions)
     xmlDataSource.isSplitable && super.isSplitable(sparkSession, options, path)
   }
 
@@ -55,13 +52,10 @@ class XmlFileFormat extends TextBasedFileFormat with DataSourceRegister {
       sparkSession: SparkSession,
       options: Map[String, String],
       files: Seq[FileStatus]): Option[StructType] = {
-    val parsedOptions = new XmlOptions(
-      options,
-      sparkSession.sessionState.conf.sessionLocalTimeZone,
-      sparkSession.sessionState.conf.columnNameOfCorruptRecord)
+    val xmlOptions = XmlOptions(options, sparkSession)
 
-    XmlDataSource(parsedOptions).inferSchema(
-      sparkSession, files, parsedOptions)
+    XmlDataSource(xmlOptions).inferSchema(
+      sparkSession, files, xmlOptions)
   }
 
   override def prepareWrite(
@@ -70,10 +64,7 @@ class XmlFileFormat extends TextBasedFileFormat with DataSourceRegister {
       options: Map[String, String],
       dataSchema: StructType): OutputWriterFactory = {
     val conf = job.getConfiguration
-    val xmlOptions = new XmlOptions(
-      options,
-      sparkSession.sessionState.conf.sessionLocalTimeZone,
-      sparkSession.sessionState.conf.columnNameOfCorruptRecord)
+    val xmlOptions = XmlOptions(options, sparkSession)
     xmlOptions.compressionCodec.foreach { codec =>
       CompressionCodecs.setCodecConfiguration(conf, codec)
     }
@@ -103,12 +94,9 @@ class XmlFileFormat extends TextBasedFileFormat with DataSourceRegister {
     val broadcastedHadoopConf =
       sparkSession.sparkContext.broadcast(new SerializableConfiguration(hadoopConf))
 
-    val parsedOptions = new XmlOptions(
-      options,
-      sparkSession.sessionState.conf.sessionLocalTimeZone,
-      sparkSession.sessionState.conf.columnNameOfCorruptRecord)
+    val xmlOptions = XmlOptions(options, sparkSession)
 
-    val columnNameOfCorruptRecord = parsedOptions.columnNameOfCorruptRecord
+    val columnNameOfCorruptRecord = xmlOptions.columnNameOfCorruptRecord
     // Check a field requirement for corrupt records here to throw an exception in a driver side
     ExprUtils.verifyColumnNameOfCorruptRecord(dataSchema, columnNameOfCorruptRecord)
     // Don't push any filter which refers to the "virtual" column which cannot present in the input.
@@ -125,9 +113,9 @@ class XmlFileFormat extends TextBasedFileFormat with DataSourceRegister {
     (file: PartitionedFile) => {
       val parser = new StaxXmlParser(
         actualRequiredSchema,
-        parsedOptions,
+        xmlOptions,
         actualFilters)
-      XmlDataSource(parsedOptions).readFile(
+      XmlDataSource(xmlOptions).readFile(
         broadcastedHadoopConf.value.value,
         file,
         parser,

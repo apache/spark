@@ -85,7 +85,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       "collect_top_k",
       // TODO: XML functions will soon be added to SQL Function registry and removed from this list
       // https://issues.apache.org/jira/browse/SPARK-44787
-      "from_xml", "schema_of_xml_df", "schema_of_xml", "schema_of_xml_array", "from_xml_string"
+      "from_xml", "schema_of_xml"
     )
 
     // We only consider functions matching this pattern, this excludes symbolic and other

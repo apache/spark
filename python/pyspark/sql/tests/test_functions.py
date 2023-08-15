@@ -81,7 +81,7 @@ class FunctionsTestsMixin:
         expected_missing_in_py = {
             # TODO: XML functions will soon be added and removed from this list
             # https://issues.apache.org/jira/browse/SPARK-44788
-            "from_xml", "schema_of_xml", "from_xml_string", "schema_of_xml_array", "schema_of_xml_df",
+            "from_xml", "schema_of_xml",
         }
 
         self.assertEqual(

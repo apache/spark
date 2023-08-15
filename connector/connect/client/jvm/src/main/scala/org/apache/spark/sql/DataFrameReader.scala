@@ -393,8 +393,8 @@ class DataFrameReader private[sql] (sparkSession: SparkSession) extends Logging 
     parse(csvDataset, ParseFormat.PARSE_FORMAT_CSV)
 
   /**
-   * Loads a XML file and returns the result as a `DataFrame`. See the documentation on the
-   * other overloaded `xml()` method for more details.
+   * Loads a XML file and returns the result as a `DataFrame`. See the documentation on the other
+   * overloaded `xml()` method for more details.
    *
    * @since 4.0.0
    */
@@ -410,8 +410,8 @@ class DataFrameReader private[sql] (sparkSession: SparkSession) extends Logging 
    * is enabled. To avoid going through the entire data once, disable `inferSchema` option or
    * specify the schema explicitly using `schema`.
    *
-   * You can find the XML-specific options for reading XML files in
-   * <a href="https://spark.apache.org/docs/latest/sql-data-sources-xml.html#data-source-option">
+   * You can find the XML-specific options for reading XML files in <a
+   * href="https://spark.apache.org/docs/latest/sql-data-sources-xml.html#data-source-option">
    * Data Source Option</a> in the version you use.
    *
    * @since 4.0.0
@@ -425,7 +425,8 @@ class DataFrameReader private[sql] (sparkSession: SparkSession) extends Logging 
    * If the schema is not specified using `schema` function and `inferSchema` option is enabled,
    * this function goes through the input once to determine the input schema.
    *
-   * @param xmlDataset input Dataset with one XML object per record
+   * @param xmlDataset
+   *   input Dataset with one XML object per record
    * @since 4.0.0
    */
   def xml(xmlDataset: Dataset[String]): DataFrame =

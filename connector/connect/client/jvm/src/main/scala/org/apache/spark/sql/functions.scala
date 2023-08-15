@@ -7232,14 +7232,15 @@ object functions {
    * Parses a column containing a XML string into a `StructType` with the specified schema.
    * Returns `null`, in the case of an unparseable string.
    *
-   * @param e       a string column containing XML data.
-   * @param schema  the schema to use when parsing the XML string
-   * @param options options to control how the XML is parsed. accepts the same options and the
-   *                XML data source.
-   *                See
-   *                <a href=
-   *                "https://spark.apache.org/docs/latest/sql-data-sources-xml.html#data-source-option">
-   *                Data Source Option</a> in the version you use.
+   * @param e
+   *   a string column containing XML data.
+   * @param schema
+   *   the schema to use when parsing the XML string
+   * @param options
+   *   options to control how the XML is parsed. accepts the same options and the XML data source.
+   *   See <a href=
+   *   "https://spark.apache.org/docs/latest/sql-data-sources-xml.html#data-source-option"> Data
+   *   Source Option</a> in the version you use.
    * @group collection_funcs
    *
    * @since 4.0.0
@@ -7254,14 +7255,15 @@ object functions {
    * Parses a column containing a XML string into a `StructType` with the specified schema.
    * Returns `null`, in the case of an unparseable string.
    *
-   * @param e       a string column containing XML data.
-   * @param schema  the schema to use when parsing the xml string
-   * @param options options to control how the xml is parsed. accepts the same options and the
-   *                XML data source.
-   *                See
-   *                <a href=
-   *                "https://spark.apache.org/docs/latest/sql-data-sources-xml.html#data-source-option">
-   *                Data Source Option</a> in the version you use.
+   * @param e
+   *   a string column containing XML data.
+   * @param schema
+   *   the schema to use when parsing the xml string
+   * @param options
+   *   options to control how the xml is parsed. accepts the same options and the XML data source.
+   *   See <a href=
+   *   "https://spark.apache.org/docs/latest/sql-data-sources-xml.html#data-source-option"> Data
+   *   Source Option</a> in the version you use.
    * @group collection_funcs
    *
    * @since 4.0.0
@@ -7273,20 +7275,21 @@ object functions {
   // scalastyle:off line.size.limit
 
   /**
-   * (Java-specific) Parses a column containing a XML string into a `StructType`
-   * with the specified schema. Returns `null`, in the case of an unparseable string.
+   * (Java-specific) Parses a column containing a XML string into a `StructType` with the
+   * specified schema. Returns `null`, in the case of an unparseable string.
    *
-   * @param e       a string column containing XML data.
-   * @param schema  the schema to use when parsing the XML string
-   * @param options options to control how the XML is parsed. accepts the same options and the
-   *                XML data source.
-   *                See
-   *                <a href=
-   *                "https://spark.apache.org/docs/latest/sql-data-sources-xml.html#data-source-option">
-   *                Data Source Option</a> in the version you use.
+   * @param e
+   *   a string column containing XML data.
+   * @param schema
+   *   the schema to use when parsing the XML string
+   * @param options
+   *   options to control how the XML is parsed. accepts the same options and the XML data source.
+   *   See <a href=
+   *   "https://spark.apache.org/docs/latest/sql-data-sources-xml.html#data-source-option"> Data
+   *   Source Option</a> in the version you use.
    * @group collection_funcs
    *
-   *  @since 4.0.0
+   * @since 4.0.0
    */
   // scalastyle:on line.size.limit
   def from_xml(e: Column, schema: Column, options: java.util.Map[String, String]): Column =
@@ -7296,8 +7299,10 @@ object functions {
    * Parses a column containing a XML string into a `StructType` with the specified schema.
    * Returns `null`, in the case of an unparseable string.
    *
-   * @param e      a string column containing XML data.
-   * @param schema the schema to use when parsing the XML string
+   * @param e
+   *   a string column containing XML data.
+   * @param schema
+   *   the schema to use when parsing the XML string
    * @group collection_funcs
    *
    * @since 4.0.0
@@ -7309,8 +7314,10 @@ object functions {
    * Parses a column containing a XML string into a `StructType` with the specified schema.
    * Returns `null`, in the case of an unparseable string.
    *
-   * @param e      a string column containing XML data.
-   * @param schema the schema to use when parsing the XML string
+   * @param e
+   *   a string column containing XML data.
+   * @param schema
+   *   the schema to use when parsing the XML string
    * @group collection_funcs
    *
    * @since 4.0.0
@@ -7318,17 +7325,15 @@ object functions {
   def from_xml(e: Column, schema: DataType): Column =
     from_xml(e, schema, Map.empty[String, String])
 
-  private def from_xml(
-      e: Column,
-      schema: Column,
-      options: Iterator[(String, String)]): Column = {
+  private def from_xml(e: Column, schema: Column, options: Iterator[(String, String)]): Column = {
     fnWithOptions("from_xml", options, e, schema)
   }
 
   /**
    * Parses a XML string and infers its schema in DDL format.
    *
-   * @param xml a XML string.
+   * @param xml
+   *   a XML string.
    * @group collection_funcs
    * @since 4.0.0
    */
@@ -7337,7 +7342,8 @@ object functions {
   /**
    * Parses a XML string and infers its schema in DDL format.
    *
-   * @param xml a foldable string column containing a XML string.
+   * @param xml
+   *   a foldable string column containing a XML string.
    * @group collection_funcs
    * @since 4.0.0
    */
@@ -7348,14 +7354,15 @@ object functions {
   /**
    * Parses a XML string and infers its schema in DDL format using options.
    *
-   * @param xml     a foldable string column containing XML data.
-   * @param options options to control how the xml is parsed. accepts the same options and the
-   *                XML data source.
-   *                See
-   *                <a href=
-   *                "https://spark.apache.org/docs/latest/sql-data-sources-xml.html#data-source-option">
-   *                Data Source Option</a> in the version you use.
-   * @return a column with string literal containing schema in DDL format.
+   * @param xml
+   *   a foldable string column containing XML data.
+   * @param options
+   *   options to control how the xml is parsed. accepts the same options and the XML data source.
+   *   See <a href=
+   *   "https://spark.apache.org/docs/latest/sql-data-sources-xml.html#data-source-option"> Data
+   *   Source Option</a> in the version you use.
+   * @return
+   *   a column with string literal containing schema in DDL format.
    * @group collection_funcs
    * @since 4.0.0
    */
@@ -7363,6 +7370,7 @@ object functions {
   def schema_of_xml(xml: Column, options: java.util.Map[String, String]): Column = {
     fnWithOptions("schema_of_xml", options.asScala.iterator, xml)
   }
+
   /**
    * Returns the total number of elements in the array. The function returns null for null input.
    *
