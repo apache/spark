@@ -141,7 +141,7 @@ class ArtifactManager(
    *
    * The registered [[ClassFinder]]s are traversed to retrieve the class file artifacts.
    */
-  private[client] def uploadAllClassFileArtifacts(): Unit = {
+  private[sql] def uploadAllClassFileArtifacts(): Unit = {
     addArtifacts(classFinders.asScala.flatMap(_.findClasses()))
   }
 
