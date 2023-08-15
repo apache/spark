@@ -243,7 +243,9 @@ class Dataset[T] private[sql] (
    * @group basic
    * @since 3.4.0
    */
-  def schema: StructType = {
+  def schema: StructType = cachedSchema
+
+  private lazy val cachedSchema: StructType = {
     DataTypeProtoConverter
       .toCatalystType(
         sparkSession

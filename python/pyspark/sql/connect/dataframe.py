@@ -105,6 +105,7 @@ class DataFrame:
         # Check whether _repr_html is supported or not, we use it to avoid calling RPC twice
         # by __repr__ and _repr_html_ while eager evaluation opens.
         self._support_repr_html = False
+        self._cached_schema: Optional[StructType] = None
 
     def __repr__(self) -> str:
         if not self._support_repr_html:
@@ -1667,10 +1668,12 @@ class DataFrame:
     @property
     def schema(self) -> StructType:
         if self._plan is not None:
-            query = self._plan.to_proto(self._session.client)
-            if self._session is None:
-                raise Exception("Cannot analyze without SparkSession.")
-            return self._session.client.schema(query)
+            if self._cached_schema is None:
+                query = self._plan.to_proto(self._session.client)
+                if self._session is None:
+                    raise Exception("Cannot analyze without SparkSession.")
+                self._cached_schema = self._session.client.schema(query)
+            return self._cached_schema
         else:
             raise Exception("Empty plan.")
 
