@@ -78,7 +78,11 @@ class FunctionsTestsMixin:
         missing_in_py = jvm_fn_set.difference(py_fn_set)
 
         # Functions that we expect to be missing in python until they are added to pyspark
-        expected_missing_in_py = set()
+        expected_missing_in_py = {
+            # TODO: XML functions will soon be added and removed from this list
+            # https://issues.apache.org/jira/browse/SPARK-44788
+            "from_xml", "schema_of_xml", "from_xml_string", "schema_of_xml_array", "schema_of_xml_df",
+        }
 
         self.assertEqual(
             expected_missing_in_py, missing_in_py, "Missing functions in pyspark not as expected"

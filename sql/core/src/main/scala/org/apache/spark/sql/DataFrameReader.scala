@@ -544,6 +544,7 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    * Loads a XML file and returns the result as a `DataFrame`. See the documentation on the
    * other overloaded `xml()` method for more details.
    *
+   * @since 4.0.0
    */
   def xml(path: String): DataFrame = {
     // This method ensures that calls that explicit need single argument works, see SPARK-16009
@@ -561,23 +562,10 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    * <a href="https://spark.apache.org/docs/latest/sql-data-sources-xml.html#data-source-option">
    * Data Source Option</a> in the version you use.
    *
+   * @since 4.0.0
    */
   @scala.annotation.varargs
   def xml(paths: String*): DataFrame = format("xml").load(paths: _*)
-
-  /**
-   * Loads an `RDD[String]` storing XML objects and returns the result as a `DataFrame`.
-   *
-   * Unless the schema is specified using `schema` function, this function goes through the
-   * input once to determine the input schema.
-   *
-   * @param xmlRDD input RDD with one XML object per record
-   * @since
-   */
-  // @deprecated("Use xml(Dataset[String]) instead.", "2.2.0")
-  def xml(xmlRDD: RDD[String]): DataFrame = {
-    xml(sparkSession.createDataset(xmlRDD)(Encoders.STRING))
-  }
 
   /**
    * Loads an `Dataset[String]` storing XML object and returns the result as a `DataFrame`.
@@ -586,6 +574,7 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    * this function goes through the input once to determine the input schema.
    *
    * @param xmlDataset input Dataset with one XML object per record
+   * @since 4.0.0
    */
   def xml(xmlDataset: Dataset[String]): DataFrame = {
     val parsedOptions: XmlOptions = new XmlOptions(

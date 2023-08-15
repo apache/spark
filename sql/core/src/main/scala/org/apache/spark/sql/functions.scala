@@ -33,9 +33,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{BROADCAST, HintInfo, Resolve
 import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, TimestampFormatter}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.SparkSqlParser
-import org.apache.spark.sql.execution.datasources.xml.{XmlOptions, XmlToStructs}
-import org.apache.spark.sql.execution.datasources.xml.parsers.StaxXmlParser
-import org.apache.spark.sql.execution.datasources.xml.util.InferSchema
+import org.apache.spark.sql.execution.datasources.xml.{SchemaOfXml, XmlToStructs}
 import org.apache.spark.sql.expressions.{Aggregator, SparkUserDefinedFunction, UserDefinedAggregator, UserDefinedFunction}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -7409,46 +7407,42 @@ object functions {
     from_xml(e, schema, Map.empty[String, String])
 
   /**
-   * Infers the schema of XML documents as strings.
+   * Parses a XML string and infers its schema in DDL format.
    *
-   * @param ds      Dataset of XML strings
-   * @param options additional XML parsing options
-   * @return inferred schema for XML
+   * @param xml a XML string.
+   * @group collection_funcs
+   * @since 4.0.0
    */
-  def schema_of_xml(ds: Dataset[String], options: Map[String, String] = Map.empty): StructType =
-    InferSchema.infer(ds.rdd, XmlOptions(options))
+  def schema_of_xml(xml: String): Column = schema_of_xml(lit(xml))
 
   /**
-   * Infers the schema of XML documents as strings.
+   * Parses a XML string and infers its schema in DDL format.
    *
-   * @param df      one-column DataFrame of XML strings
-   * @param options additional XML parsing options
-   * @return inferred schema for XML
+   * @param xml a foldable string column containing a XML string.
+   * @group collection_funcs
+   * @since 4.0.0
    */
-  def schema_of_xml_df(df: DataFrame, options: Map[String, String] = Map.empty): StructType =
-    schema_of_xml(df.as[String](Encoders.STRING), options)
+  def schema_of_xml(xml: Column): Column = withExpr(new SchemaOfXml(xml.expr))
+
+  // scalastyle:off line.size.limit
 
   /**
-   * Infers the schema of XML documents when inputs are arrays of strings, each an XML doc.
+   * Parses a XML string and infers its schema in DDL format using options.
    *
-   * @param ds      Dataset of XML strings
-   * @param options additional XML parsing options
-   * @return inferred schema for XML. Will be an ArrayType[StructType].
+   * @param xml    a foldable string column containing XML data.
+   * @param options options to control how the xml is parsed. accepts the same options and the
+   *                XML data source.
+   *                See
+   *                <a href=
+   *                "https://spark.apache.org/docs/latest/sql-data-sources-xml.html#data-source-option">
+   *                Data Source Option</a> in the version you use.
+   * @return a column with string literal containing schema in DDL format.
+   * @group collection_funcs
+   * @since 4.0.0
    */
-  def schema_of_xml_array(ds: Dataset[Array[String]],
-                          options: Map[String, String] = Map.empty): ArrayType =
-    ArrayType(InferSchema.infer(ds.rdd.flatMap(a => a), XmlOptions(options)))
-
-  /**
-   * @param xml     XML document to parse, as string
-   * @param schema  the schema to use when parsing the XML string
-   * @param options key-value pairs that correspond to those supported by `XmlOptions`
-   * @return [[Row]] representing the parsed XML structure
-   */
-  def from_xml_string(xml: String, schema: StructType,
-                      options: Map[String, String] = Map.empty): Row = {
-    val internalRow = new StaxXmlParser(schema, XmlOptions(options)).parseColumn(xml, schema)
-    Row.fromSeq(internalRow.toSeq(schema))
+  // scalastyle:on line.size.limit
+  def schema_of_xml(xml: Column, options: java.util.Map[String, String]): Column = {
+    withExpr(SchemaOfXml(xml.expr, options.asScala.toMap))
   }
 
   /**

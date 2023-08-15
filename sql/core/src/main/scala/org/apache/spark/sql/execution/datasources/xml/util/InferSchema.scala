@@ -20,6 +20,7 @@ import java.io.StringReader
 import javax.xml.stream.XMLEventReader
 import javax.xml.stream.events.{Attribute, Characters, EndElement, StartElement, XMLEvent}
 import javax.xml.transform.stream.StreamSource
+import javax.xml.validation.Schema
 
 import scala.annotation.tailrec
 import scala.collection.JavaConverters._
@@ -78,18 +79,7 @@ private[sql] object InferSchema {
       val xsdSchema = Option(options.rowValidationXSDPath).map(ValidatorUtil.getSchema)
 
       iter.flatMap { xml =>
-        try {
-          xsdSchema.foreach { schema =>
-            schema.newValidator().validate(new StreamSource(new StringReader(xml)))
-          }
-
-          Some(infer(xml, options))
-        } catch {
-          case NonFatal(_) if options.parseMode == PermissiveMode =>
-            Some(StructType(Seq(StructField(options.columnNameOfCorruptRecord, StringType))))
-          case NonFatal(_) =>
-            None
-        }
+        infer(xml, options, xsdSchema)
       }
     }.fold(StructType(Seq()))(compatibleType(options))
 
@@ -101,10 +91,23 @@ private[sql] object InferSchema {
     }
   }
 
-  def infer(xml: String, options: XmlOptions): DataType = {
-    val parser = StaxXmlParserUtils.filteredReader(xml)
-    val rootAttributes = StaxXmlParserUtils.gatherRootAttributes(parser)
-    inferObject(parser, options, rootAttributes)
+  def infer(xml: String,
+      options: XmlOptions,
+      xsdSchema: Option[Schema] = None): Option[DataType] = {
+    try {
+      val xsd = xsdSchema.orElse(Option(options.rowValidationXSDPath).map(ValidatorUtil.getSchema))
+      xsd.foreach { schema =>
+        schema.newValidator().validate(new StreamSource(new StringReader(xml)))
+      }
+      val parser = StaxXmlParserUtils.filteredReader(xml)
+      val rootAttributes = StaxXmlParserUtils.gatherRootAttributes(parser)
+      Some(inferObject(parser, options, rootAttributes))
+    } catch {
+      case NonFatal(_) if options.parseMode == PermissiveMode =>
+        Some(StructType(Seq(StructField(options.columnNameOfCorruptRecord, StringType))))
+      case NonFatal(_) =>
+        None
+    }
   }
 
   private def inferFrom(datum: String, options: XmlOptions): DataType = {

@@ -999,5 +999,6 @@ message Parse {
     PARSE_FORMAT_UNSPECIFIED = 0;
     PARSE_FORMAT_CSV = 1;
     PARSE_FORMAT_JSON = 2;
+    PARSE_FORMAT_XML = 3;
   }
 }

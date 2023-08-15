@@ -21,7 +21,7 @@ import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.expressions.{ExpectsInputTypes, Expression, ExpressionDescription, ExprUtils, NullIntolerant, TimeZoneAwareExpression, UnaryExpression}
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
-import org.apache.spark.sql.catalyst.util.{FailFastMode, FailureSafeParser, GenericArrayData, PermissiveMode}
+import org.apache.spark.sql.catalyst.util.{ArrayData, FailFastMode, FailureSafeParser, GenericArrayData, PermissiveMode}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryErrorsBase}
 import org.apache.spark.sql.execution.datasources.xml.parsers.StaxXmlParser
 import org.apache.spark.sql.execution.datasources.xml.util.{InferSchema, ValidatorUtil}
@@ -69,6 +69,7 @@ case class XmlToStructs(
     case _: StructType =>
       (rows: Iterator[InternalRow]) => if (rows.hasNext) rows.next() else null
     case _: ArrayType =>
+      (rows: Iterator[InternalRow]) => if (rows.hasNext) rows.next().getArray(0) else null
       (rows: Iterator[InternalRow]) => if (rows.hasNext) rows.next() else null
     case _: MapType =>
       (rows: Iterator[InternalRow]) => if (rows.hasNext) rows.next().getMap(0) else null
@@ -112,6 +113,8 @@ case class XmlToStructs(
   override def nullSafeEval(xml: Any): Any = xml match {
     case arr: GenericArrayData =>
       new GenericArrayData(arr.array.map(s => converter(parser.parse(s.toString))))
+    case arr: ArrayData =>
+      new GenericArrayData(arr.array.map(s => converter(parser.parse(s.toString))))
     case _ =>
       val str = xml.asInstanceOf[UTF8String].toString
       converter(parser.parse(str))
@@ -132,17 +135,17 @@ case class XmlToStructs(
  * A function infers schema of XML string.
  */
 @ExpressionDescription(
-  usage = "_FUNC_(csv[, options]) - Returns schema in the DDL format of XML string.",
+  usage = "_FUNC_(xml[, options]) - Returns schema in the DDL format of XML string.",
   examples = """
     Examples:
       > SELECT _FUNC_('1,abc');
        STRUCT<_c0: INT, _c1: STRING>
   """,
-  since = "3.0.0",
-  group = "csv_funcs")
-case class SchemaOfCsv(
-                        child: Expression,
-                        options: Map[String, String])
+  since = "4.0.0",
+  group = "xml_funcs")
+case class SchemaOfXml(
+  child: Expression,
+  options: Map[String, String])
   extends UnaryExpression with CodegenFallback with QueryErrorsBase {
 
   def this(child: Expression) = this(child, Map.empty[String, String])
@@ -182,7 +185,7 @@ case class SchemaOfCsv(
   }
 
   override def eval(v: InternalRow): Any = {
-    val dataType = InferSchema.infer(xml.toString, xmlOptions) match {
+    val dataType = InferSchema.infer(xml.toString, xmlOptions).get match {
       case st: StructType =>
         InferSchema.canonicalizeType(st).getOrElse(StructType(Nil))
       case at: ArrayType if at.elementType.isInstanceOf[StructType] =>
@@ -199,6 +202,6 @@ case class SchemaOfCsv(
 
   override def prettyName: String = "schema_of_xml"
 
-  override protected def withNewChildInternal(newChild: Expression): SchemaOfCsv =
+  override protected def withNewChildInternal(newChild: Expression): SchemaOfXml =
     copy(child = newChild)
 }

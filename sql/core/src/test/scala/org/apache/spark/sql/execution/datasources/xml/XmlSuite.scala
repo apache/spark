@@ -31,7 +31,7 @@ import org.apache.hadoop.io.{LongWritable, Text}
 import org.apache.hadoop.io.compress.GzipCodec
 
 import org.apache.spark.SparkException
-import org.apache.spark.sql.{AnalysisException, Row, SaveMode}
+import org.apache.spark.sql.{AnalysisException, Encoders, QueryTest, Row, SaveMode}
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.execution.datasources.xml.TestUtils._
 import org.apache.spark.sql.execution.datasources.xml.XmlOptions._
@@ -39,9 +39,8 @@ import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.types.UTF8String
 
-final class XmlSuite extends SharedSparkSession {
+class XmlSuite extends QueryTest with SharedSparkSession {
   import testImplicits._
 
   private val resDir = "test-data/xml-resources/"
@@ -1171,13 +1170,14 @@ final class XmlSuite extends SharedSparkSession {
       rec.endsWith("</basket>"))
   }
 
-  test("test xmlRdd") {
+  test("test xmlDataset") {
     val data = Seq(
       "<ROW><year>2012</year><make>Tesla</make><model>S</model><comment>No comment</comment></ROW>",
       "<ROW><year>1997</year><make>Ford</make><model>E350</model><comment>Get one</comment></ROW>",
       "<ROW><year>2015</year><make>Chevy</make><model>Volt</model><comment>No</comment></ROW>")
-    val rdd = spark.sparkContext.parallelize(data)
-    assert(spark.read.xml(rdd).collect().length === 3)
+    val xmlRDD = spark.sparkContext.parallelize(data)
+    val ds = spark.createDataset(xmlRDD)(Encoders.STRING)
+    assert(spark.read.xml(ds).collect().length === 3)
   }
 
   import testImplicits._
@@ -1188,29 +1188,36 @@ final class XmlSuite extends SharedSparkSession {
         |</parent>
        """.stripMargin
     val df = Seq((8, xmlData)).toDF("number", "payload")
-    val xmlSchema = schema_of_xml_df(df.select("payload"))
-    val expectedSchema = df.schema.add("decoded", xmlSchema)
-    val result = df.withColumn("decoded", from_xml(df.col("payload"), xmlSchema))
+    val xmlSchema = schema_of_xml(xmlData)
+    val schema = buildSchema(
+      field("_foo", StringType),
+      field("name", StringType),
+      field("pid", StringType))
+    val expectedSchema = df.schema.add("decoded", schema)
+    val result = df.withColumn("decoded",
+      from_xml(df.col("payload"), xmlSchema, Map[String, String]().asJava))
 
     assert(expectedSchema === result.schema)
     assert(result.select("decoded.pid").head().getString(0) === "14ft3")
     assert(result.select("decoded._foo").head().getString(0) === "bar")
   }
 
-
   test("from_xml array basic test") {
-    val xmlData = Array(
-      "<parent><pid>14ft3</pid><name>dave guy</name></parent>",
-      "<parent><pid>12345</pid><name>other guy</name></parent>")
+    val xmlData = Seq(
+      """<parent><pid>12345</pid><name>dave guy</name></parent>
+        |<parent><pid>67890</pid><name>other guy</name></parent>""".stripMargin)
     val df = Seq((8, xmlData)).toDF("number", "payload")
-    val xmlSchema = schema_of_xml_array(df.select("payload").as[Array[String]])
+    val xmlSchema = ArrayType(
+      StructType(
+        StructField("pid", IntegerType) ::
+          StructField("name", StringType) :: Nil))
     val expectedSchema = df.schema.add("decoded", xmlSchema)
-    val result = df.withColumn("decoded", from_xml(df.col("payload"), xmlSchema))
+    val result = df.withColumn("decoded",
+      from_xml(df.col("payload"), xmlSchema))
     assert(expectedSchema === result.schema)
-    // TBD: Following asserts fail when SharedSparkSession was used instead of SQLTestUtils
-    // Disabling them for now
-    // assert(result.selectExpr("decoded[0].pid").head().getString(0) === "14ft3")
-    // assert(result.selectExpr("decoded[1].pid").head().getString(0) === "12345")
+    // TODO: ArrayType and MapType support in from_xml
+    // assert(result.selectExpr("decoded[0].pid").head().getInt(0) === 12345)
+    // assert(result.selectExpr("decoded[1].pid").head().getInt(1) === 67890)
   }
 
   test("from_xml error test") {
@@ -1221,24 +1228,10 @@ final class XmlSuite extends SharedSparkSession {
         |</parent>
        """.stripMargin
     val df = spark.createDataFrame(Seq((8, xmlData))).toDF("number", "payload")
-    val xmlSchema = schema_of_xml_df(df.select("payload"))
-    val result = df.withColumn("decoded", from_xml(df.col("payload"), xmlSchema))
+    val xmlSchema = schema_of_xml(xmlData)
+    val result = df.withColumn("decoded",
+      from_xml(df.col("payload"), xmlSchema, Map[String, String]().asJava))
     assert(result.select("decoded._corrupt_record").head().getString(0).nonEmpty)
-  }
-
-  test("from_xml_string basic test") {
-    val xmlData =
-      """<parent foo="bar"><pid>14ft3</pid>
-        |  <name>dave guy</name>
-        |</parent>
-       """.stripMargin
-    val df = spark.createDataFrame(Seq((8, xmlData))).toDF("number", "payload")
-    val xmlSchema = schema_of_xml_df(df.select("payload"))
-    val result = from_xml_string(xmlData, xmlSchema)
-
-    assert(result.getAs[UTF8String](0).toString === "bar")
-    assert(result.getAs[UTF8String](1).toString === "dave guy")
-    assert(result.getAs[UTF8String](2).toString === "14ft3")
   }
 
   test("from_xml with PERMISSIVE parse mode with no corrupt col schema") {
@@ -1254,9 +1247,10 @@ final class XmlSuite extends SharedSparkSession {
         |</parent>
        """.stripMargin
     val dfNoError = spark.createDataFrame(Seq((8, xmlDataNoError))).toDF("number", "payload")
-    val xmlSchema = schema_of_xml_df(dfNoError.select("payload"))
+    val xmlSchema = schema_of_xml(xmlDataNoError)
     val df = spark.createDataFrame(Seq((8, xmlData))).toDF("number", "payload")
-    val result = df.withColumn("decoded", from_xml(df.col("payload"), xmlSchema))
+    val result = df.withColumn("decoded",
+      from_xml(df.col("payload"), xmlSchema, Map[String, String]().asJava))
     assert(result.select("decoded").head().get(0) === Row(null, null))
   }
 
