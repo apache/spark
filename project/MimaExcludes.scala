@@ -78,7 +78,9 @@ object MimaExcludes {
     ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.api.java.function.FlatMapGroupsWithStateFunction"),
     ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.api.java.function.MapGroupsWithStateFunction"),
     ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.SaveMode"),
-    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.streaming.GroupState")
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.streaming.GroupState"),
+    // [SPARK-44705][PYTHON] Make PythonRunner single-threaded
+    ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.api.python.BasePythonRunner#ReaderIterator.this")
   )
 
   // Default exclude rules
