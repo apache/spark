@@ -513,10 +513,10 @@ object SQLConf {
   val COLUMN_VECTOR_OFFHEAP_ENABLED =
     buildConf("spark.sql.columnVector.offheap.enabled")
       .internal()
-      .doc("When true, use OffHeapColumnVector in ColumnarBatch.")
+      .doc("When true, use OffHeapColumnVector in ColumnarBatch. " +
+        s"Defaults to $MEMORY_OFFHEAP_ENABLED.")
       .version("2.3.0")
-      .booleanConf
-      .createWithDefault(false)
+      .fallbackConf(MEMORY_OFFHEAP_ENABLED)
 
   val PREFER_SORTMERGEJOIN = buildConf("spark.sql.join.preferSortMergeJoin")
     .internal()
