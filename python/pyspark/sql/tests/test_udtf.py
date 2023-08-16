@@ -1960,7 +1960,6 @@ class BaseUDTFTestsMixin:
                 self._partition_col = None
 
             def eval(self, row: Row):
-                print(f'''@@@ input row = {row}''')
                 self._sum += row["input"]
                 if self._partition_col is not None and self._partition_col != row["partition_col"]:
                     # Make sure that all values of the partitioning column are the same
@@ -2022,7 +2021,6 @@ class BaseUDTFTestsMixin:
                 self._partition_col = None
 
             def eval(self, row: Row, partition_col: str):
-                print(f'''@@@ input row = {row}, partition_col = {partition_col}''')
                 self._last = row["input"]
                 if self._partition_col is not None and self._partition_col != row[partition_col]:
                     # Make sure that all values of the partitioning column are the same
