@@ -413,7 +413,7 @@ object ArrowSerializer {
               serializerFor(value, structVector.getChild(MapVector.VALUE_NAME))) :: Nil)
         new ArraySerializer(v, extractor, structSerializer)
 
-      case (ProductEncoder(tag, fields), StructVectors(struct, vectors)) =>
+      case (ProductEncoder(tag, fields, _), StructVectors(struct, vectors)) =>
         if (isSubClass(classOf[Product], tag)) {
           structSerializerFor(fields, struct, vectors) { (_, i) => p =>
             p.asInstanceOf[Product].productElement(i)
