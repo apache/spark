@@ -14,7 +14,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.sql.execution.datasources.xml
+package org.apache.spark.sql.catalyst.xml
 
 import java.nio.charset.StandardCharsets
 import java.time.ZoneId
@@ -22,7 +22,6 @@ import java.util.Locale
 import javax.xml.stream.XMLInputFactory
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.{DataSourceOptions, FileSourceOptions}
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, CompressionCodecs, DateFormatter, DateTimeUtils, ParseMode, PermissiveMode, TimestampFormatter}
 import org.apache.spark.sql.catalyst.util.LegacyDateFormats.FAST_DATE_FORMAT
@@ -221,11 +220,6 @@ private[sql] object XmlOptions extends DataSourceOptions {
   newOption(ENCODING, CHARSET)
   val TIME_ZONE = "timezone"
   newOption(DateTimeUtils.TIMEZONE_OPTION, TIME_ZONE)
-
-  def apply(parameters: Map[String, String], sparkSession: SparkSession): XmlOptions =
-    new XmlOptions(parameters,
-      sparkSession.sessionState.conf.sessionLocalTimeZone,
-      sparkSession.sessionState.conf.columnNameOfCorruptRecord)
 
   def apply(parameters: Map[String, String]): XmlOptions =
     new XmlOptions(parameters, SQLConf.get.sessionLocalTimeZone)

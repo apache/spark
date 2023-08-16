@@ -14,11 +14,11 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.sql.execution.datasources.xml.util
+package org.apache.spark.sql.catalyst.xml
 
 import java.io.StringReader
 import javax.xml.stream.XMLEventReader
-import javax.xml.stream.events.{Attribute, Characters, EndElement, StartElement, XMLEvent}
+import javax.xml.stream.events._
 import javax.xml.transform.stream.StreamSource
 import javax.xml.validation.Schema
 
@@ -29,12 +29,10 @@ import scala.util.control.NonFatal
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.util.PermissiveMode
-import org.apache.spark.sql.execution.datasources.xml.XmlOptions
-import org.apache.spark.sql.execution.datasources.xml.parsers.StaxXmlParserUtils
-import org.apache.spark.sql.execution.datasources.xml.util.TypeCast._
+import org.apache.spark.sql.catalyst.xml.TypeCast._
 import org.apache.spark.sql.types._
 
-private[sql] object InferSchema {
+private[sql] object XmlInferSchema {
 
   /**
    * Copied from internal Spark api
@@ -231,7 +229,7 @@ private[sql] object InferSchema {
     // This can be inferred as ArrayType.
     nameToDataType.foreach {
       case (field, dataTypes) if dataTypes.length > 1 =>
-        val elementType = dataTypes.reduceLeft(InferSchema.compatibleType(options))
+        val elementType = dataTypes.reduceLeft(XmlInferSchema.compatibleType(options))
         builder += StructField(field, ArrayType(elementType), nullable = true)
       case (field, dataTypes) =>
         builder += StructField(field, dataTypes.head, nullable = true)

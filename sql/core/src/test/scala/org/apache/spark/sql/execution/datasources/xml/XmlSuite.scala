@@ -33,8 +33,9 @@ import org.apache.hadoop.io.compress.GzipCodec
 import org.apache.spark.SparkException
 import org.apache.spark.sql.{AnalysisException, Encoders, QueryTest, Row, SaveMode}
 import org.apache.spark.sql.catalyst.util._
+import org.apache.spark.sql.catalyst.xml.XmlOptions
+import org.apache.spark.sql.catalyst.xml.XmlOptions._
 import org.apache.spark.sql.execution.datasources.xml.TestUtils._
-import org.apache.spark.sql.execution.datasources.xml.XmlOptions._
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
@@ -1619,4 +1620,27 @@ class XmlSuite extends QueryTest with SharedSparkSession {
     }
   }
 
+  test("read utf-8 encoded file") {
+    val df = spark.read
+      .option("charset", StandardCharsets.UTF_8.name)
+      .option("rowTag", "book")
+      .xml(getTestResourcePath(resDir + "books.xml"))
+    assert(df.collect().length === 12)
+  }
+
+  test("read file with unicode chars in row tag name") {
+    val df = spark.read
+      .option("charset", StandardCharsets.UTF_8.name)
+      .option("rowTag", "\u66F8") // scalastyle:ignore
+      .xml(getTestResourcePath(resDir + "books-unicode-in-tag-name.xml"))
+    assert(df.collect().length === 3)
+  }
+
+  test("read utf-8 encoded file with empty tag 2") {
+    val df = spark.read
+      .option("charset", StandardCharsets.UTF_8.name)
+      .option("rowTag", "House")
+      .xml(getTestResourcePath(resDir + "fias_house.xml"))
+    assert(df.collect().length === 37)
+  }
 }

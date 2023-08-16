@@ -25,9 +25,9 @@ import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.ExprUtils
 import org.apache.spark.sql.catalyst.util.CompressionCodecs
+import org.apache.spark.sql.catalyst.xml.{StaxXmlParser, XmlOptions}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources._
-import org.apache.spark.sql.execution.datasources.xml.parsers.StaxXmlParser
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types._
 import org.apache.spark.util.SerializableConfiguration
@@ -39,11 +39,19 @@ class XmlFileFormat extends TextBasedFileFormat with DataSourceRegister {
 
   override def shortName(): String = "xml"
 
+  def getXmlOptions(
+      sparkSession: SparkSession,
+      parameters: Map[String, String]): XmlOptions = {
+    new XmlOptions(parameters,
+      sparkSession.sessionState.conf.sessionLocalTimeZone,
+      sparkSession.sessionState.conf.columnNameOfCorruptRecord)
+  }
+
   override def isSplitable(
       sparkSession: SparkSession,
       options: Map[String, String],
       path: Path): Boolean = {
-    val xmlOptions = XmlOptions(options, sparkSession)
+    val xmlOptions = getXmlOptions(sparkSession, options)
     val xmlDataSource = XmlDataSource(xmlOptions)
     xmlDataSource.isSplitable && super.isSplitable(sparkSession, options, path)
   }
@@ -52,7 +60,7 @@ class XmlFileFormat extends TextBasedFileFormat with DataSourceRegister {
       sparkSession: SparkSession,
       options: Map[String, String],
       files: Seq[FileStatus]): Option[StructType] = {
-    val xmlOptions = XmlOptions(options, sparkSession)
+    val xmlOptions = getXmlOptions(sparkSession, options)
 
     XmlDataSource(xmlOptions).inferSchema(
       sparkSession, files, xmlOptions)
@@ -64,7 +72,8 @@ class XmlFileFormat extends TextBasedFileFormat with DataSourceRegister {
       options: Map[String, String],
       dataSchema: StructType): OutputWriterFactory = {
     val conf = job.getConfiguration
-    val xmlOptions = XmlOptions(options, sparkSession)
+    val xmlOptions = getXmlOptions(sparkSession, options)
+
     xmlOptions.compressionCodec.foreach { codec =>
       CompressionCodecs.setCodecConfiguration(conf, codec)
     }
@@ -94,7 +103,7 @@ class XmlFileFormat extends TextBasedFileFormat with DataSourceRegister {
     val broadcastedHadoopConf =
       sparkSession.sparkContext.broadcast(new SerializableConfiguration(hadoopConf))
 
-    val xmlOptions = XmlOptions(options, sparkSession)
+    val xmlOptions = getXmlOptions(sparkSession, options)
 
     val columnNameOfCorruptRecord = xmlOptions.columnNameOfCorruptRecord
     // Check a field requirement for corrupt records here to throw an exception in a driver side

@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.execution.datasources.xml.util
+package org.apache.spark.sql.catalyst.xml
 
 import java.io.{ByteArrayInputStream, InputStream, InputStreamReader, StringReader}
 import java.nio.channels.Channels

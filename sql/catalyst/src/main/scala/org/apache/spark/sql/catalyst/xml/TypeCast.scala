@@ -14,7 +14,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.sql.execution.datasources.xml.util
+package org.apache.spark.sql.catalyst.xml
 
 import java.math.BigDecimal
 import java.text.NumberFormat
@@ -25,7 +25,6 @@ import scala.util.control.Exception._
 import scala.util.control.NonFatal
 
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
-import org.apache.spark.sql.execution.datasources.xml.XmlOptions
 import org.apache.spark.sql.internal.{LegacyBehaviorPolicy, SQLConf}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
@@ -33,7 +32,7 @@ import org.apache.spark.unsafe.types.UTF8String
 /**
  * Utility functions for type casting
  */
-private[xml] object TypeCast {
+private[sql] object TypeCast {
 
   /**
    * Casts given string datum to specified type.
@@ -45,7 +44,7 @@ private[xml] object TypeCast {
    * @param datum string value
    * @param castType SparkSQL type
    */
-  private[xml] def castTo(
+  private[sql] def castTo(
       datum: String,
       castType: DataType,
       options: XmlOptions): Any = {
@@ -108,7 +107,7 @@ private[xml] object TypeCast {
   }
 
   // TODO: This function unnecessarily does type dispatch. Should merge it with `castTo`.
-  private[xml] def convertTo(
+  private[sql] def convertTo(
       datum: String,
       dataType: DataType,
       options: XmlOptions): Any = {
@@ -143,14 +142,14 @@ private[xml] object TypeCast {
   /**
    * Helper method that checks and cast string representation of a numeric types.
    */
-  private[xml] def isBoolean(value: String): Boolean = {
+  private[sql] def isBoolean(value: String): Boolean = {
     value.toLowerCase(Locale.ROOT) match {
       case "true" | "false" => true
       case _ => false
     }
   }
 
-  private[xml] def isDouble(value: String): Boolean = {
+  private[sql] def isDouble(value: String): Boolean = {
     val signSafeValue = if (value.startsWith("+") || value.startsWith("-")) {
       value.substring(1)
     } else {
@@ -166,7 +165,7 @@ private[xml] object TypeCast {
     (allCatch opt signSafeValue.toDouble).isDefined
   }
 
-  private[xml] def isInteger(value: String): Boolean = {
+  private[sql] def isInteger(value: String): Boolean = {
     val signSafeValue = if (value.startsWith("+") || value.startsWith("-")) {
       value.substring(1)
     } else {
@@ -175,7 +174,7 @@ private[xml] object TypeCast {
     (allCatch opt signSafeValue.toInt).isDefined
   }
 
-  private[xml] def isLong(value: String): Boolean = {
+  private[sql] def isLong(value: String): Boolean = {
     val signSafeValue = if (value.startsWith("+") || value.startsWith("-")) {
       value.substring(1)
     } else {
@@ -184,7 +183,7 @@ private[xml] object TypeCast {
     (allCatch opt signSafeValue.toLong).isDefined
   }
 
-  private[xml] def isTimestamp(value: String, options: XmlOptions): Boolean = {
+  private[sql] def isTimestamp(value: String, options: XmlOptions): Boolean = {
     try {
       options.timestampFormatter.parseOptional(value).isDefined
     } catch {
@@ -192,11 +191,11 @@ private[xml] object TypeCast {
     }
   }
 
-  private[xml] def isDate(value: String, options: XmlOptions): Boolean = {
+  private[sql] def isDate(value: String, options: XmlOptions): Boolean = {
     (allCatch opt options.dateFormatter.parse(value)).isDefined
   }
 
-  private[xml] def signSafeToLong(value: String, options: XmlOptions): Long = {
+  private[sql] def signSafeToLong(value: String, options: XmlOptions): Long = {
     if (value.startsWith("+")) {
       val data = value.substring(1)
       TypeCast.castTo(data, LongType, options).asInstanceOf[Long]
@@ -209,7 +208,7 @@ private[xml] object TypeCast {
     }
   }
 
-  private[xml] def signSafeToDouble(value: String, options: XmlOptions): Double = {
+  private[sql] def signSafeToDouble(value: String, options: XmlOptions): Double = {
     if (value.startsWith("+")) {
       val data = value.substring(1)
       TypeCast.castTo(data, DoubleType, options).asInstanceOf[Double]
@@ -222,7 +221,7 @@ private[xml] object TypeCast {
     }
   }
 
-  private[xml] def signSafeToInt(value: String, options: XmlOptions): Int = {
+  private[sql] def signSafeToInt(value: String, options: XmlOptions): Int = {
     if (value.startsWith("+")) {
       val data = value.substring(1)
       TypeCast.castTo(data, IntegerType, options).asInstanceOf[Int]
@@ -235,7 +234,7 @@ private[xml] object TypeCast {
     }
   }
 
-  private[xml] def signSafeToFloat(value: String, options: XmlOptions): Float = {
+  private[sql] def signSafeToFloat(value: String, options: XmlOptions): Float = {
     if (value.startsWith("+")) {
       val data = value.substring(1)
       TypeCast.castTo(data, FloatType, options).asInstanceOf[Float]

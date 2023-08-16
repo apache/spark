@@ -31,7 +31,7 @@ import org.junit.Test;
 import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.Row;
 import org.apache.spark.sql.SparkSession;
-import org.apache.spark.sql.execution.datasources.xml.XmlOptions;
+import org.apache.spark.sql.catalyst.xml.XmlOptions;
 
 public final class JavaXmlSuite {
 

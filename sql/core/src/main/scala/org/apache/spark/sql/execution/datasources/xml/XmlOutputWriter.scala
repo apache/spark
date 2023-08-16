@@ -24,9 +24,9 @@ import org.apache.hadoop.fs.Path
 import org.apache.hadoop.mapreduce.TaskAttemptContext
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.{xml, InternalRow}
+import org.apache.spark.sql.catalyst.xml.XmlOptions
 import org.apache.spark.sql.execution.datasources.{CodecStreams, OutputWriter}
-import org.apache.spark.sql.execution.datasources.xml.parsers.StaxXmlGenerator
 import org.apache.spark.sql.types.StructType
 
 class XmlOutputWriter(
@@ -77,7 +77,7 @@ class XmlOutputWriter(
       }
       firstRow = false
     }
-    StaxXmlGenerator(
+    xml.StaxXmlGenerator(
       dataSchema,
       indentingXmlWriter,
       options)(row)

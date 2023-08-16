@@ -14,12 +14,12 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.sql.execution.datasources.xml.parsers
+package org.apache.spark.sql.catalyst.xml
 
 import java.io.{CharConversionException, InputStream, InputStreamReader, StringReader}
 import java.nio.charset.{Charset, MalformedInputException}
 import javax.xml.stream.{XMLEventReader, XMLStreamException}
-import javax.xml.stream.events.{Attribute, Characters, EndElement, StartElement, XMLEvent}
+import javax.xml.stream.events._
 import javax.xml.transform.stream.StreamSource
 import javax.xml.validation.Schema
 
@@ -32,11 +32,9 @@ import org.apache.spark.SparkUpgradeException
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, BadRecordException, DropMalformedMode, FailureSafeParser, GenericArrayData, MapData, ParseMode, PartialResultArrayException, PartialResultException, PermissiveMode}
+import org.apache.spark.sql.catalyst.xml.StaxXmlParser.convertStream
+import org.apache.spark.sql.catalyst.xml.TypeCast._
 import org.apache.spark.sql.errors.QueryExecutionErrors
-import org.apache.spark.sql.execution.datasources.xml.XmlOptions
-import org.apache.spark.sql.execution.datasources.xml.parsers.StaxXmlParser.convertStream
-import org.apache.spark.sql.execution.datasources.xml.util._
-import org.apache.spark.sql.execution.datasources.xml.util.TypeCast._
 import org.apache.spark.sql.internal.{LegacyBehaviorPolicy, SQLConf}
 import org.apache.spark.sql.sources.Filter
 import org.apache.spark.sql.types._

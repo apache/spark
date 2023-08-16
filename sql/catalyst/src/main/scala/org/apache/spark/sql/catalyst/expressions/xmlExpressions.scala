@@ -14,7 +14,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.sql.execution.datasources.xml
+package org.apache.spark.sql.catalyst.expressions.xml
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
@@ -22,9 +22,8 @@ import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.expressions.{ExpectsInputTypes, Expression, ExpressionDescription, ExprUtils, NullIntolerant, TimeZoneAwareExpression, UnaryExpression}
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
 import org.apache.spark.sql.catalyst.util.{ArrayData, FailFastMode, FailureSafeParser, GenericArrayData, PermissiveMode}
+import org.apache.spark.sql.catalyst.xml.{StaxXmlParser, ValidatorUtil, XmlInferSchema, XmlOptions}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryErrorsBase}
-import org.apache.spark.sql.execution.datasources.xml.parsers.StaxXmlParser
-import org.apache.spark.sql.execution.datasources.xml.util.{InferSchema, ValidatorUtil}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
@@ -185,16 +184,16 @@ case class SchemaOfXml(
   }
 
   override def eval(v: InternalRow): Any = {
-    val dataType = InferSchema.infer(xml.toString, xmlOptions).get match {
+    val dataType = XmlInferSchema.infer(xml.toString, xmlOptions).get match {
       case st: StructType =>
-        InferSchema.canonicalizeType(st).getOrElse(StructType(Nil))
+        XmlInferSchema.canonicalizeType(st).getOrElse(StructType(Nil))
       case at: ArrayType if at.elementType.isInstanceOf[StructType] =>
-        InferSchema
+        XmlInferSchema
           .canonicalizeType(at.elementType)
           .map(ArrayType(_, containsNull = at.containsNull))
           .getOrElse(ArrayType(StructType(Nil), containsNull = at.containsNull))
       case other: DataType =>
-        InferSchema.canonicalizeType(other).getOrElse(StringType)
+        XmlInferSchema.canonicalizeType(other).getOrElse(StringType)
     }
 
     UTF8String.fromString(dataType.sql)

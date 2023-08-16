@@ -31,11 +31,10 @@ import org.apache.spark.rdd.{BinaryFileRDD, RDD}
 import org.apache.spark.sql.{Dataset, Encoders, SparkSession}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.util.FailureSafeParser
+import org.apache.spark.sql.catalyst.xml.{StaxXmlParser, XmlInferSchema, XmlOptions}
 import org.apache.spark.sql.execution.SQLExecution
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.execution.datasources.text.TextFileFormat
-import org.apache.spark.sql.execution.datasources.xml.parsers.StaxXmlParser
-import org.apache.spark.sql.execution.datasources.xml.util.InferSchema
 import org.apache.spark.sql.types.StructType
 
 /**
@@ -122,7 +121,7 @@ object TextInputXmlDataSource extends XmlDataSource {
   def inferFromDataset(
       xml: Dataset[String],
       parsedOptions: XmlOptions): StructType = {
-    InferSchema.infer(xml.rdd, parsedOptions)
+    XmlInferSchema.infer(xml.rdd, parsedOptions)
   }
 
   private def createBaseDataset(
@@ -178,7 +177,7 @@ object MultiLineXmlDataSource extends XmlDataSource {
         parsedOptions)
     }
     SQLExecution.withSQLConfPropagated(sparkSession) {
-      val schema = InferSchema.infer(tokenRDD, parsedOptions)
+      val schema = XmlInferSchema.infer(tokenRDD, parsedOptions)
       schema
     }
   }

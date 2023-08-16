@@ -14,7 +14,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.sql.execution.datasources.xml.parsers
+package org.apache.spark.sql.catalyst.xml
 
 import java.sql.Timestamp
 import javax.xml.stream.XMLStreamWriter
@@ -23,34 +23,36 @@ import scala.collection.Map
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.util.{ArrayData, MapData}
-import org.apache.spark.sql.execution.datasources.xml.XmlOptions
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
 // This class is borrowed from Spark json datasource.
-private[xml] object StaxXmlGenerator {
+private[sql] object StaxXmlGenerator {
 
   /**
    * Transforms a single Row to XML
    *
-   * @param schema  the schema object used for conversion
-   * @param writer  a XML writer object
-   * @param options options for XML datasource.
-   * @param row     The row to convert
+   * @param schema
+   *   the schema object used for conversion
+   * @param writer
+   *   a XML writer object
+   * @param options
+   *   options for XML datasource.
+   * @param row
+   *   The row to convert
    */
-  def apply(
-      schema: StructType,
-      writer: XMLStreamWriter,
-      options: XmlOptions)(row: InternalRow): Unit = {
+  def apply(schema: StructType, writer: XMLStreamWriter, options: XmlOptions)(
+      row: InternalRow): Unit = {
 
-    require(options.attributePrefix.nonEmpty,
+    require(
+      options.attributePrefix.nonEmpty,
       "'attributePrefix' option should not be empty string.")
 
     def writeChildElement(name: String, dt: DataType, v: Any): Unit = (name, dt, v) match {
       // If this is meant to be value but in no child, write only a value
       case (_, _, null) | (_, NullType, _) if options.nullValue == null =>
-        // Because usually elements having `null` do not exist, just do not write
-        // elements when given values are `null`.
+      // Because usually elements having `null` do not exist, just do not write
+      // elements when given values are `null`.
       case (_, _, _) if name == options.valueTag =>
         // If this is meant to be value but in no child, write only a value
         writeElement(dt, v, options)
@@ -64,7 +66,7 @@ private[xml] object StaxXmlGenerator {
       (dt, v) match {
         // If this is meant to be attribute, write an attribute
         case (_, null) | (NullType, _)
-          if name.startsWith(options.attributePrefix) && name != options.valueTag =>
+            if name.startsWith(options.attributePrefix) && name != options.valueTag =>
           Option(options.nullValue).foreach {
             writer.writeAttribute(name.substring(options.attributePrefix.length), _)
           }
@@ -117,9 +119,8 @@ private[xml] object StaxXmlGenerator {
           f.toString.startsWith(options.attributePrefix) && f.toString != options.valueTag
         }
         // We need to write attributes first before the value.
-        (attributes ++ elements).foreach {
-          case (k, v) =>
-            writeChild(k.toString, vt, v)
+        (attributes ++ elements).foreach { case (k, v) =>
+          writeChild(k.toString, vt, v)
         }
 
       case (mt: MapType, mv: MapData) => writeMapData(mt, mv)
@@ -129,9 +130,8 @@ private[xml] object StaxXmlGenerator {
           f.name.startsWith(options.attributePrefix) && f.name != options.valueTag
         }
         // We need to write attributes first before the value.
-        (attributes ++ elements).foreach {
-          case (field, value) =>
-            writeChild(field.name, field.dataType, value)
+        (attributes ++ elements).foreach { case (field, value) =>
+          writeChild(field.name, field.dataType, value)
         }
 
       case (_, _) =>
@@ -143,7 +143,7 @@ private[xml] object StaxXmlGenerator {
       val keyArray = map.keyArray()
       val valueArray = map.valueArray()
       // write attributes first
-      Seq (true, false).foreach { writeAttribute =>
+      Seq(true, false).foreach { writeAttribute =>
         (0 until map.numElements()).foreach { i =>
           val key = keyArray.get(i, mapType.keyType).toString
           val isAttribute = key.startsWith(options.attributePrefix) && key != options.valueTag
