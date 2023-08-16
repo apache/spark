@@ -593,12 +593,12 @@ def read_udtf(pickleSer, infile, eval_type):
     if eval_type == PythonEvalType.SQL_ARROW_TABLE_UDF:
 
         def wrap_arrow_udtf(f, return_type):
+            import pandas as pd
+
             arrow_return_type = to_arrow_type(return_type)
             return_type_size = len(return_type)
 
             def verify_result(result):
-                import pandas as pd
-
                 if not isinstance(result, pd.DataFrame):
                     raise PySparkTypeError(
                         error_class="INVALID_ARROW_UDTF_RETURN_TYPE",
@@ -628,9 +628,36 @@ def read_udtf(pickleSer, infile, eval_type):
                 )
                 return result
 
-            return lambda *a, **kw: map(
-                lambda res: (res, arrow_return_type), map(verify_result, f(*a, **kw))
-            )
+            def evaluate(*args: pd.Series, **kwargs: pd.Series):
+                try:
+                    if len(args) == 0 and len(kwargs) == 0:
+                        yield verify_result(pd.DataFrame(f())), arrow_return_type
+                    else:
+                        # Create tuples from the input pandas Series, each tuple
+                        # represents a row across all Series.
+                        keys = list(kwargs.keys())
+                        len_args = len(args)
+                        row_tuples = zip(*args, *[kwargs[key] for key in keys])
+                        for row in row_tuples:
+                            res = f(
+                                *row[:len_args],
+                                **{key: row[len_args + i] for i, key in enumerate(keys)},
+                            )
+                            if res is not None and not isinstance(res, Iterable):
+                                raise PySparkRuntimeError(
+                                    error_class="UDTF_RETURN_NOT_ITERABLE",
+                                    message_parameters={
+                                        "type": type(res).__name__,
+                                    },
+                                )
+                            yield verify_result(pd.DataFrame(res)), arrow_return_type
+                except Exception as e:
+                    raise PySparkRuntimeError(
+                        error_class="UDTF_EXEC_ERROR",
+                        message_parameters={"method_name": f.__name__, "error": str(e)},
+                    )
+
+            return evaluate
 
         eval = wrap_arrow_udtf(getattr(udtf, "eval"), return_type)
 
