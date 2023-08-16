@@ -63,6 +63,12 @@ private[sql] class SparkConnectClient(
   }
 
   /**
+   * Manually triggers upload of all classfile artifacts to the Spark Connect Server
+   */
+  private[sql] def uploadAllClassFileArtifacts(): Unit =
+    artifactManager.uploadAllClassFileArtifacts()
+
+  /**
    * Dispatch the [[proto.AnalyzePlanRequest]] to the Spark Connect server.
    * @return
    *   A [[proto.AnalyzePlanResponse]] from the Spark Connect server.
