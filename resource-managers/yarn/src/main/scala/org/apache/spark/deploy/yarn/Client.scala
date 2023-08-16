@@ -474,10 +474,9 @@ private[spark] class Client(
     val directoryToFiles = new HashMap[URI, Set[String]]()
     jars.foreach { jar =>
       if (!Utils.isLocalUri(jar) && !new GlobPattern(jar).hasWildcard) {
-        val currentUri = Utils.resolveURI(jar)
-        val parentUri = new Path(currentUri).getParent.toUri
-        directoryToFiles.update(parentUri, directoryToFiles.getOrElse(parentUri, Set.empty)
-          .union(Set(currentUri.normalize().toString)))
+        val currentPath = new Path(Utils.resolveURI(jar))
+        val parentUri = currentPath.getParent.toUri
+        directoryToFiles.getOrElseUpdate(parentUri, new HashSet[String]()) += currentPath.getName
       }
     }
     directoryToFiles.filter(_._2.size >= statCachePreloadDirectoryCountThreshold)
