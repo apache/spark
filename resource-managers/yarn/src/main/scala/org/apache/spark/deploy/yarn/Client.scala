@@ -469,7 +469,7 @@ private[spark] class Client(
    *
    * @param jars : the list of jars to upload
    * @return a hashmap contains directories to be preloaded and all file names in that directory
-   * */
+   */
   private[yarn] def directoriesToBePreloaded(jars: Seq[String]): HashMap[URI, Set[String]] = {
     val directoryToFiles = new HashMap[URI, Set[String]]()
     jars.foreach { jar =>
