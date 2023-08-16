@@ -132,6 +132,9 @@ def get_streaming_query_progress_schema():
             StructField("numInputRows", IntegerType(), False),
             StructField("inputRowsPerSecond", FloatType(), False),
             StructField("processedRowsPerSecond", FloatType(), False),
+            # it's difficult to get the schema of observed metrics.
+            # Just serialize the row to string for now.
+            # Things would be easier if there is a method to get the schema of Row in PySpark
             StructField("observedMetrics", MapType(StringType(), StringType()), True),
         ]
     )
