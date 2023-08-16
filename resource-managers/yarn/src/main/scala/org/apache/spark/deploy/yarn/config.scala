@@ -465,7 +465,7 @@ package object config extends Logging {
   private[spark] val YARN_CLIENT_STAT_CACHE_PRELOAD_ENABLED =
     ConfigBuilder("spark.yarn.client.statCache.preload.enabled")
     .doc("This configuration enables statCache to be preloaded at YARN client side. This feature" +
-      " analyzes the pattern of resources paths. If multiple resources shared the same parent" +
+      " analyzes the pattern of resources paths, and if multiple resources shared the same parent" +
       " directory, a single <code>listStatus</code> will be invoked on the parent directory" +
       " instead of multiple <code>getFileStatus</code> performed on each individual resources." +
       " If most resources from a small set of directories, this can substantially improve job" +
