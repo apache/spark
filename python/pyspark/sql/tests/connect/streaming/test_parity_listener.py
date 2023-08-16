@@ -153,7 +153,6 @@ class TestListener(StreamingQueryListener):
         df.write.saveAsTable("listener_start_events")
 
     def onQueryProgress(self, event):
-        print(event.asDict())
         df = self.spark.createDataFrame(
             data=[event.asDict()],
             schema=get_progress_event_schema(),
