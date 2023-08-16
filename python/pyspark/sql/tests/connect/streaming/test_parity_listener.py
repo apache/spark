@@ -128,11 +128,11 @@ def get_streaming_query_progress_schema():
             StructField("eventTime", MapType(StringType(), StringType(), True), True),
             StructField("stateOperators", ArrayType(get_state_operators_progress_schema()), True),
             StructField("sources", ArrayType(get_source_progress_schema()), True),
-            StructField("sink", get_sink_progress_schema(), True),  # TODO: false?
+            StructField("sink", get_sink_progress_schema(), True),
             StructField("numInputRows", IntegerType(), False),
             StructField("inputRowsPerSecond", FloatType(), False),
             StructField("processedRowsPerSecond", FloatType(), False),
-            StructField("observedMetrics", MapType(StringType(), StringType()), False),
+            StructField("observedMetrics", MapType(StringType(), StringType()), True),
         ]
     )
 
