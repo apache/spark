@@ -476,8 +476,9 @@ package object config extends Logging {
 
   private[spark] val YARN_CLIENT_STAT_CACHE_PRELOAD_PER_DIRECTORY_THRESHOLD =
     ConfigBuilder("spark.yarn.client.statCache.preload.perDirectoryThreshold")
-      .doc("This configuration defines the threshold for the number of resources in a directory" +
-        " that triggers the activation of the statCache preloading. When the count of individual" +
+      .doc("This configuration defines the threshold for the number of resources in a directory " +
+        "that triggers the activation of the statCache preloading. When the count of individual " +
+        <snip>
         " resources specified by <code>spark.yarn.jars</code> within a directory is no less than" +
         " this threshold, the statCache preloading for that directory will be activated. It's" +
         " important to note that this configuration will only take effect when the" +
