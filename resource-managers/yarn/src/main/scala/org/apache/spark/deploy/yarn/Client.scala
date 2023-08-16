@@ -497,7 +497,7 @@ private[spark] class Client(
 
     directoryToFiles.foreach { case (dir: URI, filesInDir: Set[String]) =>
       fsLookup(dir).listStatus(new Path(dir)).filter(_.isFile()).
-        filter(f => filesInDir.contains(f.getPath.toString)).foreach { fileStatus =>
+        filter(f => filesInDir.contains(f.getPath.getName)).foreach { fileStatus =>
           val uri = fileStatus.getPath.toUri
           statCache.put(uri, fileStatus)
         }
