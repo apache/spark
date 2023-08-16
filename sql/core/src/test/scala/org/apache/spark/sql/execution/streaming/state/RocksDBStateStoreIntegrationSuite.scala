@@ -94,8 +94,8 @@ class RocksDBStateStoreIntegrationSuite extends StreamTest
             val stateOperatorMetrics = nextProgress.stateOperators(0)
             assert(JavaConverters.asScalaSet(stateOperatorMetrics.customMetrics.keySet) === Set(
               "rocksdbGetLatency", "rocksdbCommitCompactLatency", "rocksdbBytesCopied",
-              "rocksdbPutLatency", "rocksdbCommitPauseLatency", "rocksdbFilesReused",
-              "rocksdbCommitWriteBatchLatency", "rocksdbFilesCopied", "rocksdbSstFileSize",
+              "rocksdbPutLatency", "rocksdbFilesReused",
+              "rocksdbFilesCopied", "rocksdbSstFileSize",
               "rocksdbCommitCheckpointLatency", "rocksdbZipFileBytesUncompressed",
               "rocksdbCommitFlushLatency", "rocksdbCommitFileSyncLatencyMs", "rocksdbGetCount",
               "rocksdbPutCount", "rocksdbTotalBytesRead", "rocksdbTotalBytesWritten",

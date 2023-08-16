@@ -52,6 +52,11 @@ PUSH_REMOTE_NAME = os.environ.get("PUSH_REMOTE_NAME", "apache")
 JIRA_USERNAME = os.environ.get("JIRA_USERNAME", "")
 # ASF JIRA password
 JIRA_PASSWORD = os.environ.get("JIRA_PASSWORD", "")
+# ASF JIRA access token
+# If it is configured, username and password are dismissed
+# Go to https://issues.apache.org/jira/secure/ViewProfile.jspa -> Personal Access Tokens for
+# your own token management.
+JIRA_ACCESS_TOKEN = os.environ.get("JIRA_ACCESS_TOKEN")
 # OAuth key used for issuing requests against the GitHub API. If this is not defined, then requests
 # will be unauthenticated. You should only need to configure this if you find yourself regularly
 # exceeding your IP's unauthenticated request rate limit. You can create an OAuth key at
@@ -238,9 +243,12 @@ def cherry_pick(pr_num, merge_hash, default_branch):
 
 
 def resolve_jira_issue(merge_branches, comment, default_jira_id=""):
-    asf_jira = jira.client.JIRA(
-        {"server": JIRA_API_BASE}, basic_auth=(JIRA_USERNAME, JIRA_PASSWORD)
-    )
+    jira_server = {"server": JIRA_API_BASE}
+
+    if JIRA_ACCESS_TOKEN is not None:
+        asf_jira = jira.client.JIRA(jira_server, token_auth=JIRA_ACCESS_TOKEN)
+    else:
+        asf_jira = jira.client.JIRA(jira_server, basic_auth=(JIRA_USERNAME, JIRA_PASSWORD))
 
     jira_id = input("Enter a JIRA id [%s]: " % default_jira_id)
     if jira_id == "":
