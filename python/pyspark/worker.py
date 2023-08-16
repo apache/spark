@@ -574,31 +574,23 @@ def read_udtf(pickleSer, infile, eval_type):
             f"The return type of a UDTF must be a struct type, but got {type(return_type)}."
         )
 
-    # Instantiate the UDTF class.
-    try:
-        udtf = handler()
-    except Exception as e:
-        raise PySparkRuntimeError(
-            error_class="UDTF_EXEC_ERROR",
-            message_parameters={"method_name": "__init__", "error": str(e)},
-        )
-
-    """
-    This implements the logic of a UDTF that accepts an input TABLE argument with one or more
-    PARTITION BY expressions.
-
-    Parameters
-    ----------
-    create_udtf: function
-        Function to create a new instance of the UDTF to be invoked.
-    partition_child_indexes: list
-        List of integers identifying zero-based indexes of the columns of the input table that
-        contain projected partitioning expressions. This class will inspect these values for each
-        pair of consecutive input rows. When they change, this indicates the boundary between two
-        partitions, and we will invoke the 'terminate' method on the UDTF class instance and then
-        destroy it and create a new one to implement the desired partitioning semantics.
-    """
     class UDTFWithPartitions:
+        """
+        This implements the logic of a UDTF that accepts an input TABLE argument with one or more
+        PARTITION BY expressions.
+
+        Parameters
+        ----------
+        create_udtf: function
+            Function to create a new instance of the UDTF to be invoked.
+        partition_child_indexes: list
+            List of integers identifying zero-based indexes of the columns of the input table that
+            contain projected partitioning expressions. This class will inspect these values for
+            each pair of consecutive input rows. When they change, this indicates the boundary
+            between two partitions, and we will invoke the 'terminate' method on the UDTF class
+            instance and then destroy it and create a new one to implement the desired partitioning
+            semantics.
+        """
         def __init__(self, create_udtf, partition_child_indexes):
             self._create_udtf = create_udtf
             self._udtf = create_udtf()
@@ -606,11 +598,24 @@ def read_udtf(pickleSer, infile, eval_type):
             self._partition_child_indexes = partition_child_indexes
 
         def eval(self, *args, **kwargs):
-            changed_partitions = _check_partition_boundaries(args + list(kwargs.values()))
+            changed_partitions = self._check_partition_boundaries(
+                list(args) + list(kwargs.values()))
             if changed_partitions:
-                yield self._udtf.terminate()
+                if self._udtf.terminate is not None:
+                    result = self._udtf.terminate()
+                    if result is not None:
+                        for row in result:
+                            yield row
                 self._udtf = self._create_udtf()
-            return self._udtf.eval(args, kwargs)
+            if self._udtf.eval is not None:
+                result = self._udtf.eval(*args, **kwargs)
+                if result is not None:
+                    for row in result:
+                        yield row
+
+        def terminate(self):
+            if self._udtf.terminate is not None:
+                return self._udtf.terminate()
 
         def _check_partition_boundaries(self, arguments):
             result = False
@@ -630,8 +635,17 @@ def read_udtf(pickleSer, infile, eval_type):
         def _get_table_arg(self, inputs):
             return [x for x in inputs if type(x) is Row][0]
 
-    if len(partition_child_indexes) > 0:
-        udtf = UDTFWithPartitions(handler, partition_child_indexes)
+    # Instantiate the UDTF class.
+    try:
+        if len(partition_child_indexes) > 0:
+            udtf = UDTFWithPartitions(handler, partition_child_indexes)
+        else:
+            udtf = handler()
+    except Exception as e:
+        raise PySparkRuntimeError(
+            error_class="UDTF_EXEC_ERROR",
+            message_parameters={"method_name": "__init__", "error": str(e)},
+        )
 
     # Validate the UDTF
     if not hasattr(udtf, "eval"):
@@ -735,6 +749,7 @@ def read_udtf(pickleSer, infile, eval_type):
             def evaluate(*a, **kw) -> tuple:
                 try:
                     res = f(*a, **kw)
+
                 except Exception as e:
                     raise PySparkRuntimeError(
                         error_class="UDTF_EXEC_ERROR",
