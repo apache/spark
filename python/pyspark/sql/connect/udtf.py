@@ -129,7 +129,7 @@ class UserDefinedTableFunction:
         returnType: Optional[Union[StructType, str]],
         name: Optional[str] = None,
         evalType: int = PythonEvalType.SQL_TABLE_UDF,
-        deterministic: bool = True,
+        deterministic: bool = False,
     ) -> None:
         _validate_udtf_handler(func, returnType)
 
@@ -175,8 +175,8 @@ class UserDefinedTableFunction:
         plan = self._build_common_inline_user_defined_table_function(*cols)
         return DataFrame.withPlan(plan, session)
 
-    def asNondeterministic(self) -> "UserDefinedTableFunction":
-        self.deterministic = False
+    def asDeterministic(self) -> "UserDefinedTableFunction":
+        self.deterministic = True
         return self
 
 
