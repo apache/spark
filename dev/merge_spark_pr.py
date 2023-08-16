@@ -495,10 +495,7 @@ def main():
 
     # Check this up front to avoid failing the JIRA update at the very end
     if not JIRA_ACCESS_TOKEN and (not JIRA_USERNAME or not JIRA_PASSWORD):
-        msg = (
-            "The env-vars JIRA_ACCESS_TOKEN or JIRA_USERNAME/JIRA_PA
-SSWORD are not set. Continue?"
-        )
+        msg = "The env-vars JIRA_ACCESS_TOKEN or JIRA_USERNAME/JIRA_PASSWORD are not set. Continue?"
         continue_maybe(msg)
 
     branches = get_json("%s/branches" % GITHUB_API_BASE)
@@ -608,7 +605,7 @@ SSWORD are not set. Continue?"
             )
             resolve_jira_issues(title, merged_refs, jira_comment)
         else:
-            print("JIRA_USERNAME and JIRA_PASSWORD not set")
+            print("Neither JIRA_ACCESS_TOKEN nor JIRA_USERNAME/JIRA_PASSWORD are set.")
             print("Exiting without trying to close the associated JIRA.")
     else:
         print("Could not find jira-python library. Run 'pip3 install jira' to install.")
