@@ -286,10 +286,14 @@ class ReplE2ESuite extends RemoteSparkSession with BeforeAndAfterEach {
   test("REPL class in UDF") {
     val input = """
         |case class MyTestClass(value: Int)
-        |spark.range(2).map(i => MyTestClass(i.toInt)).collect()
+        |spark.range(2).
+        |  map(i => MyTestClass(i.toInt)).
+        |  collect().
+        |  map(mtc => s"MyTestClass(${mtc.value})").
+        |  mkString("[", ", ", "]")
       """.stripMargin
     val output = runCommandsInShell(input)
-    assertContains("Array[MyTestClass] = Array(MyTestClass(0), MyTestClass(1))", output)
+    assertContains("""String = "[MyTestClass(0), MyTestClass(1)]"""", output)
   }
 
   test("streaming works with REPL generated code") {
