@@ -83,6 +83,9 @@ class ReplE2ESuite extends RemoteSparkSession with BeforeAndAfterEach {
 
   override def afterEach(): Unit = {
     semaphore.drainPermits()
+    if (ammoniteOut != null) {
+      ammoniteOut.reset()
+    }
   }
 
   def runCommandsInShell(input: String): String = {
