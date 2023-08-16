@@ -58,7 +58,7 @@ case class SortMergeJoinExec(
         // Also add expressions from right side sort order
         val sameOrderExpressions = ExpressionSet(lKey.sameOrderExpressions ++ rKey.children)
         SortOrder(lKey.child, Ascending, sameOrderExpressions.toSeq)
-      }
+      } ++ leftKeyOrdering.drop(rightKeyOrdering.size)
     // For left and right outer joins, the output is ordered by the streamed input's join keys.
     case LeftOuter => getKeyOrdering(leftKeys, left.outputOrdering)
     case RightOuter => getKeyOrdering(rightKeys, right.outputOrdering)
