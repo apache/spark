@@ -46,7 +46,7 @@ jira
 PyGithub
 
 # pandas API on Spark Code formatter.
-black==22.6.0
+black==23.7.0
 py
 
 # Spark Connect (required)

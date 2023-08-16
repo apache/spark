@@ -53,7 +53,6 @@ def stddev(col: Column, ddof: int) -> Column:
         )
 
     else:
-
         sc = SparkContext._active_spark_context
         return Column(sc._jvm.PythonSQLUtils.pandasStddev(col._jc, ddof))
 
@@ -69,7 +68,6 @@ def var(col: Column, ddof: int) -> Column:
         )
 
     else:
-
         sc = SparkContext._active_spark_context
         return Column(sc._jvm.PythonSQLUtils.pandasVariance(col._jc, ddof))
 
@@ -84,7 +82,6 @@ def skew(col: Column) -> Column:
         )
 
     else:
-
         sc = SparkContext._active_spark_context
         return Column(sc._jvm.PythonSQLUtils.pandasSkewness(col._jc))
 
@@ -99,7 +96,6 @@ def kurt(col: Column) -> Column:
         )
 
     else:
-
         sc = SparkContext._active_spark_context
         return Column(sc._jvm.PythonSQLUtils.pandasKurtosis(col._jc))
 

@@ -50,7 +50,6 @@ if TYPE_CHECKING:
 
 
 class LogicalPlan:
-
     _lock: Lock = Lock()
     _nextPlanId: int = 0
 

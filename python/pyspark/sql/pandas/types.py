@@ -574,7 +574,6 @@ def _create_converter_to_pandas(
     def _converter(
         dt: DataType, _struct_in_pandas: Optional[str], _ndarray_as_list: bool
     ) -> Optional[Callable[[Any], Any]]:
-
         if isinstance(dt, ArrayType):
             _element_conv = _converter(dt.elementType, _struct_in_pandas, _ndarray_as_list)
 
@@ -791,7 +790,6 @@ def _create_converter_from_pandas(
         return correct_timestamp
 
     def _converter(dt: DataType) -> Optional[Callable[[Any], Any]]:
-
         if isinstance(dt, ArrayType):
             _element_conv = _converter(dt.elementType) or (lambda x: x)
 
@@ -842,7 +840,6 @@ def _create_converter_from_pandas(
             return convert_map
 
         elif isinstance(dt, StructType):
-
             field_names = dt.names
 
             if error_on_duplicated_field_names and len(set(field_names)) != len(field_names):

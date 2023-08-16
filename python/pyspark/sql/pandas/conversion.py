@@ -98,7 +98,6 @@ class PandasConversionMixin:
                 require_minimum_pyarrow_version()
                 to_arrow_schema(self.schema)
             except Exception as e:
-
                 if jconf.arrowPySparkFallbackEnabled():
                     msg = (
                         "toPandas attempted Arrow optimization because "

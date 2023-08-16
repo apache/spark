@@ -273,7 +273,7 @@ class SparkSession(SparkConversionMixin):
             """
             with self._lock:
                 if conf is not None:
-                    for (k, v) in conf.getAll():
+                    for k, v in conf.getAll():
                         self._validate_startup_urls()
                         self._options[k] = v
                 elif map is not None:

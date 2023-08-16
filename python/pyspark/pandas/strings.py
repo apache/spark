@@ -1157,6 +1157,7 @@ class StringMethods:
         2    [b, b]
         dtype: object
         """
+
         # type hint does not support to specify array type yet.
         @pandas_udf(  # type: ignore[call-overload]
             returnType=ArrayType(StringType(), containsNull=True)

@@ -176,7 +176,6 @@ class ChannelBuilder:
 
             # 'spark.local.connect' is set when we use the local mode in Spark Connect.
             if session is not None and session.conf.get("spark.local.connect", "0") == "1":
-
                 jvm = PySparkSession._instantiatedSession._jvm  # type: ignore[union-attr]
                 return getattr(
                     getattr(
