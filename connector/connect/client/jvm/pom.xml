@@ -50,7 +50,6 @@
       <groupId>org.apache.spark</groupId>
       <artifactId>spark-sql-api_${scala.binary.version}</artifactId>
       <version>${project.version}</version>
-      <scope>provided</scope>
     </dependency>
     <dependency>
       <groupId>org.apache.spark</groupId>
@@ -60,19 +59,16 @@
     <dependency>
       <groupId>com.google.protobuf</groupId>
       <artifactId>protobuf-java</artifactId>
-      <scope>compile</scope>
     </dependency>
     <dependency>
       <groupId>com.google.guava</groupId>
       <artifactId>guava</artifactId>
       <version>${connect.guava.version}</version>
-      <scope>compile</scope>
     </dependency>
     <dependency>
       <groupId>com.google.guava</groupId>
       <artifactId>failureaccess</artifactId>
       <version>${guava.failureaccess.version}</version>
-      <scope>compile</scope>
     </dependency>
     <dependency>
       <groupId>io.netty</groupId>
@@ -153,7 +149,6 @@
               <include>org.codehaus.mojo:*</include>
               <include>org.checkerframework:*</include>
               <include>org.apache.spark:spark-connect-common_${scala.binary.version}</include>
-              <include>org.apache.spark:spark-common-utils_${scala.binary.version}</include>
             </includes>
           </artifactSet>
           <relocations>
