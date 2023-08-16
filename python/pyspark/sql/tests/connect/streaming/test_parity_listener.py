@@ -19,38 +19,151 @@ import unittest
 import time
 
 from pyspark.sql.tests.streaming.test_streaming_listener import StreamingListenerTestsMixin
-from pyspark.sql.streaming.listener import StreamingQueryListener, QueryStartedEvent
-from pyspark.sql.types import StructType, StructField, StringType
+from pyspark.sql.streaming.listener import (
+    StreamingQueryListener,
+    QueryStartedEvent,
+    QueryProgressEvent,
+    QueryIdleEvent,
+    QueryTerminatedEvent,
+)
+from pyspark.sql.types import (
+    ArrayType,
+    StructType,
+    StructField,
+    StringType,
+    IntegerType,
+    FloatType,
+    MapType,
+)
+from pyspark.sql.functions import count, lit
 from pyspark.testing.connectutils import ReusedConnectTestCase
 
 
 def get_start_event_schema():
     return StructType(
         [
-            StructField("id", StringType(), True),
-            StructField("runId", StringType(), True),
+            StructField("id", StringType(), False),
+            StructField("runId", StringType(), False),
             StructField("name", StringType(), True),
-            StructField("timestamp", StringType(), True),
+            StructField("timestamp", StringType(), False),
+        ]
+    )
+
+def get_idle_event_schema():
+    return StructType(
+        [
+            StructField("id", StringType(), False),
+            StructField("runId", StringType(), False),
+            StructField("timestamp", StringType(), False),
+        ]
+    )
+
+def get_terminated_event_schema():
+    return StructType(
+        [
+            StructField("id", StringType(), False),
+            StructField("runId", StringType(), False),
+            StructField("exception", StringType(), True),
+            StructField("errorClassOnException", StringType(), True),
+        ]
+    )
+
+def get_state_operators_progress_schema():
+    return StructType(
+        [
+            StructField("operatorName", StringType(), False),
+            StructField("numRowsTotal", IntegerType(), False),
+            StructField("numRowsUpdated", IntegerType(), False),
+            StructField("numRowsRemoved", IntegerType(), False),
+            StructField("allUpdatesTimeMs", IntegerType(), False),
+            StructField("allRemovalsTimeMs", IntegerType(), False),
+            StructField("commitTimeMs", IntegerType(), False),
+            StructField("memoryUsedBytes", IntegerType(), False),
+            StructField("numRowsDroppedByWatermark", IntegerType(), False),
+            StructField("numShufflePartitions", IntegerType(), False),
+            StructField("numStateStoreInstances", IntegerType(), False),
+            StructField("customMetrics", MapType(StringType(), IntegerType(), True), True),
         ]
     )
 
 
+def get_source_progress_schema():
+    return StructType(
+        [
+            StructField("description", StringType(), False),
+            StructField("startOffset", StringType(), False),
+            StructField("endOffset", StringType(), False),
+            StructField("latestOffset", StringType(), False),
+            StructField("numInputRows", IntegerType(), False),
+            StructField("inputRowsPerSecond", FloatType(), False),
+            StructField("processedRowsPerSecond", FloatType(), False),
+            StructField("metrics", MapType(StringType(), StringType(), True), True),
+        ]
+    )
+
+
+def get_sink_progress_schema():
+    return StructType(
+        [
+            StructField("description", StringType(), False),
+            StructField("numOutputRows", IntegerType(), False),
+            StructField("metrics", MapType(StringType(), StringType(), True), True),
+        ]
+    )
+
+
+def get_streaming_query_progress_schema():
+    return StructType(
+        [
+            StructField("id", StringType(), False),
+            StructField("runId", StringType(), False),
+            StructField("name", StringType(), True),
+            StructField("timestamp", StringType(), False),
+            StructField("batchId", IntegerType(), False),
+            StructField("batchDuration", IntegerType(), False),
+            StructField("durationMs", MapType(StringType(), IntegerType(), True), True),
+            StructField("eventTime", MapType(StringType(), StringType(), True), True),
+            StructField("stateOperators", ArrayType(get_state_operators_progress_schema()), True),
+            StructField("sources", ArrayType(get_source_progress_schema()), True),
+            StructField("sink", get_sink_progress_schema(), True), # TODO: false?
+            StructField("numInputRows", IntegerType(), False),
+            StructField("inputRowsPerSecond", FloatType(), False),
+            StructField("processedRowsPerSecond", FloatType(), False),
+            StructField("observedMetrics", MapType(StringType(), StringType()), False),
+        ]
+    )
+
+
+def get_progress_event_schema():
+    return StructType([StructField("progress", get_streaming_query_progress_schema(), False)])
+
+
 class TestListener(StreamingQueryListener):
+
     def onQueryStarted(self, event):
         df = self.spark.createDataFrame(
-            data=[(str(event.id), str(event.runId), event.name, event.timestamp)],
-            schema=get_start_event_schema(),
+            data=[(event.asDict())],
+            schema=event.schema(),
         )
         df.write.saveAsTable("listener_start_events")
 
     def onQueryProgress(self, event):
-        pass
+        print(event.asDict())
+        df = self.spark.createDataFrame(
+            data=[event.asDict()],
+            schema=get_progress_event_schema(),
+        )
+        df.write.mode("append").saveAsTable("listener_progress_events")
 
     def onQueryIdle(self, event):
         pass
 
     def onQueryTerminated(self, event):
-        pass
+        df = self.spark.createDataFrame(
+            data=[event.asDict()],
+            schema=get_terminated_event_schema(),
+        )
+        df.write.saveAsTable("listener_terminated_events")
 
 
 class StreamingListenerParityTests(StreamingListenerTestsMixin, ReusedConnectTestCase):
@@ -62,20 +175,39 @@ class StreamingListenerParityTests(StreamingListenerTestsMixin, ReusedConnectTes
 
             # This ensures the read socket on the server won't crash (i.e. because of timeout)
             # when there hasn't been a new event for a long time
-            time.sleep(30)
+            # time.sleep(30)
 
             df = self.spark.readStream.format("rate").option("rowsPerSecond", 10).load()
-            q = df.writeStream.format("noop").queryName("test").start()
+            df_observe = df.observe("my_event", count(lit(1)).alias("rc"))
+            df_stateful = df_observe.groupBy().count()  # make query stateful
+            q = (
+                df_stateful.writeStream.format("noop")
+                .queryName("test")
+                .outputMode("complete")
+                .start()
+            )
 
             self.assertTrue(q.isActive)
             time.sleep(10)
+            self.assertTrue(q.lastProgress["batchId"] > 0)  # ensure at least one batch is ran
             q.stop()
+            self.assertFalse(q.isActive)
 
             start_event = QueryStartedEvent.fromJson(
                 self.spark.read.table("listener_start_events").collect()[0].asDict()
             )
 
+            progress_event = QueryProgressEvent.fromJson(
+                self.spark.read.table("listener_progress_events").collect()[0].asDict()
+            )
+
+            terminated_event = QueryTerminatedEvent.fromJson(
+                self.spark.read.table("listener_terminated_events").collect()[0].asDict()
+            )
+
             self.check_start_event(start_event)
+            self.check_progress_event(progress_event)
+            self.check_terminated_event(terminated_event)
 
         finally:
             self.spark.streams.removeListener(test_listener)

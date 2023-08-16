@@ -22,6 +22,15 @@ from abc import ABC, abstractmethod
 from py4j.java_gateway import JavaObject
 
 from pyspark.sql import Row
+from pyspark.sql.types import (
+    ArrayType,
+    StructType,
+    StructField,
+    StringType,
+    IntegerType,
+    FloatType,
+    MapType,
+)
 from pyspark import cloudpickle
 
 __all__ = ["StreamingQueryListener"]
@@ -197,6 +206,26 @@ class QueryStartedEvent:
             timestamp=j["timestamp"],
         )
 
+    def asDict(self) -> Dict[str, Any]:
+        def conv(obj: Any) -> Any:
+            if isinstance(obj, uuid.UUID):
+                return str(obj)
+            else:
+                return obj
+
+        return {k[1:]: conv(v) for k, v in self.__dict__.items()}
+
+    @staticmethod
+    def schema():
+        return StructType(
+            [
+                StructField("id", StringType(), False),
+                StructField("runId", StringType(), False),
+                StructField("name", StringType(), True),
+                StructField("timestamp", StringType(), False),
+            ]
+        )
+
     @property
     def id(self) -> uuid.UUID:
         """
@@ -257,6 +286,9 @@ class QueryProgressEvent:
         """
         return self._progress
 
+    def asDict(self) -> Dict[str, Any]:
+        return {"progress": self.progress.asDict()}
+
 
 class QueryIdleEvent:
     """
@@ -285,6 +317,15 @@ class QueryIdleEvent:
     @classmethod
     def fromJson(cls, j: Dict[str, Any]) -> "QueryIdleEvent":
         return cls(id=uuid.UUID(j["id"]), runId=uuid.UUID(j["runId"]), timestamp=j["timestamp"])
+
+    def asDict(self) -> Dict[str, Any]:
+        def conv(obj: Any) -> Any:
+            if isinstance(obj, uuid.UUID):
+                return str(obj)
+            else:
+                return obj
+
+        return {k[1:]: conv(v) for k, v in self.__dict__.items()}
 
     @property
     def id(self) -> uuid.UUID:
@@ -352,6 +393,15 @@ class QueryTerminatedEvent:
             exception=j["exception"],
             errorClassOnException=j["errorClassOnException"],
         )
+
+    def asDict(self) -> Dict[str, Any]:
+        def conv(obj: Any) -> Any:
+            if isinstance(obj, uuid.UUID):
+                return str(obj)
+            else:
+                return obj
+
+        return {k[1:]: conv(v) for k, v in self.__dict__.items()}
 
     @property
     def id(self) -> uuid.UUID:
@@ -487,12 +537,30 @@ class StreamingQueryProgress:
             inputRowsPerSecond=j["inputRowsPerSecond"],
             processedRowsPerSecond=j["processedRowsPerSecond"],
             observedMetrics={
-                k: Row(*row_dict.keys())(*row_dict.values())  # Assume no nested rows
-                for k, row_dict in j["observedMetrics"].items()
+                k: Row(row) if isinstance(row, str) else
+                Row(*row.keys())(*row.values())  # Assume no nested rows
+                for k, row in j["observedMetrics"].items()
             }
             if "observedMetrics" in j
             else {},
         )
+
+    def asDict(self) -> Dict[str, Any]:
+        def conv(obj: Any) -> Any:
+            if isinstance(obj, uuid.UUID):
+                return str(obj)
+            elif isinstance(obj, (SourceProgress, SinkProgress, StateOperatorProgress)):
+                return obj.asDict()
+            elif isinstance(obj, Row):
+                return json.dumps(obj.asDict())  # Assume no nested row in observed metrics
+            elif isinstance(obj, list):
+                return [conv(o) for o in obj]
+            elif isinstance(obj, dict):
+                return dict((k, conv(v)) for k, v in obj.items())
+            else:
+                return obj
+
+        return {k[1:]: conv(v) for k, v in self.__dict__.items() if k not in ["_jprogress", "_jdict"]}
 
     @property
     def id(self) -> uuid.UUID:
@@ -716,6 +784,9 @@ class StateOperatorProgress:
             customMetrics=dict(j["customMetrics"]) if "customMetrics" in j else {},
         )
 
+    def asDict(self) -> Dict[str, Any]:
+        return {k[1:]: v for k, v in self.__dict__.items() if k not in ["_jprogress", "_jdict"]}
+
     @property
     def operatorName(self) -> str:
         return self._operatorName
@@ -851,6 +922,9 @@ class SourceProgress:
             metrics=dict(j["metrics"]) if "metrics" in j else {},
         )
 
+    def asDict(self) -> Dict[str, Any]:
+        return {k[1:]: v for k, v in self.__dict__.items() if k not in ["_jprogress", "_jdict"]}
+
     @property
     def description(self) -> str:
         """
@@ -961,6 +1035,9 @@ class SinkProgress:
             numOutputRows=jprogress.numOutputRows(),
             metrics=dict(jprogress.metrics()),
         )
+
+    def asDict(self) -> Dict[str, Any]:
+        return {k[1:]: v for k, v in self.__dict__.items() if k not in ["_jprogress", "_jdict"]}
 
     @classmethod
     def fromJson(cls, j: Dict[str, Any]) -> "SinkProgress":
